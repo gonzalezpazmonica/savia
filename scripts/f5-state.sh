@@ -15,7 +15,15 @@ case "$CMD" in
       st=$(jq -r .state "$F")
       if [[ "$st" == "closed" ]]; then echo "ALREADY_EXECUTED: $OP/$KEY closed — no se repite"; exit 3; fi
       # submitted/reserved: reanudar; si el PR ya está MERGED externamente, cerrar
-      if [[ "$(pr_state)" == "MERGED" ]]; then "$0" close "$OP" "$KEY" >/dev/null; echo "ALREADY_EXECUTED: PR ya mergeado externamente"; exit 3; fi
+      real=$(pr_state)
+      if [[ "$real" == "MERGED" ]]; then
+        "$0" close "$OP" "$KEY" >/dev/null 2>&1
+        echo "ALREADY_EXECUTED: efecto ya consumado (PR MERGED, receipt cerrado)"; exit 3
+      fi
+      if [[ "$st" == "submitted" && "$real" != "MERGED" ]]; then
+        echo "resume: $OP/$KEY submitted y PR aún ${real:-pendiente} — NO se solicita otro efecto"
+        exit 0
+      fi
       echo "resume: $OP/$KEY (state=$st) — completion permitida exactamente una vez"; exit 0
     fi
     printf '{"op":"%s","key":"%s","state":"reserved","ts":"%s"}\n' "$OP" "$KEY" "$(date -u +%FT%TZ)" > "$F"
@@ -25,6 +33,11 @@ case "$CMD" in
     jq -c '.state="submitted"' "$F" > "$F.tmp" && mv "$F.tmp" "$F"; echo "submitted: $OP/$KEY"; exit 0 ;;
   close)
     [[ -f "$F" ]] || { echo "FAIL: sin reservation"; exit 1; }
+    # SE-387 B (revisión operadora): close IMPOSIBLE si el estado remoto real no es MERGED.
+    real=$(pr_state)
+    if [[ "$real" != "MERGED" ]]; then
+      echo "BLOCK: close de $OP/$KEY denegado — PR real=${real:-desconocido} (requerido: MERGED)"; exit 2
+    fi
     jq -c '.state="closed" | .closed_at=(now|todate)' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     echo "closed (receipt): $OP/$KEY"; exit 0 ;;
   status)

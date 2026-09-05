@@ -184,6 +184,7 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
   # SE-387 C/F5 — reservation SOLO tras pasar grant y risk-tier:
   # una operación correctamente rechazada nunca deja reservation "reserved".
   PR_NUM_RES="${PR_URL##*/}"
+  if [[ -z "$PR_NUM_RES" ]]; then echo "ERROR F5: sin número de PR — fail-explicit" >&2; exit 1; fi
   RES_FILE="$HOME/.savia/reservations/pr.merge__${PR_NUM_RES}.json"
   mkdir -p "$(dirname "$RES_FILE")"
   bash "$ROOT/scripts/f5-state.sh" reserve pr.merge "$PR_NUM_RES" || exit 3
@@ -210,7 +211,11 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
   fi
   # F5: cerrar reservation solo tras merge real; en fallo queda "reserved"
   # (crash-safe: retry tras crash permite completar; retry tras close => ALREADY_EXECUTED)
-  bash "$ROOT/scripts/f5-state.sh" close pr.merge "$PR_NUM_RES" && echo "F5 receipt: pr.merge/$PR_NUM_RES closed"
+  if [[ "$MERGED" == "true" ]]; then
+    bash "$ROOT/scripts/f5-state.sh" close pr.merge "$PR_NUM_RES" && echo "F5 receipt: pr.merge/$PR_NUM_RES closed"
+  elif [[ -f "$HOME/.savia/reservations/pr.merge__${PR_NUM_RES}.json" ]]; then
+    echo "F5 PENDING/SUBMITTED: merge solicitado sin efecto consumado — reservation NO se cierra"
+  fi
 
   # Check if merge completed (for release step)
   if $USE_GH_CLI; then
