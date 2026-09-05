@@ -5,6 +5,7 @@ description: Usar cuando se audita el rendimiento estático de código para dete
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: quality
+  savia.maturity: stable
   savia.context_cost: medium
   savia.developer_type: all
   savia.maturity: stable

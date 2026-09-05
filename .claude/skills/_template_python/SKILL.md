@@ -2,6 +2,8 @@
 layer: peripheral
 name: _template_python
 description: "TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una skill que expone funcionalidad invocable con run(). NO se carga en runtime."
+metadata:
+  savia.maturity: stable
 ---
 
 # _template_python — Template de skill Python-backed (SE-347 lección PMA)

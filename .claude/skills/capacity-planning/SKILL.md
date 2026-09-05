@@ -5,6 +5,7 @@ description: Usar cuando se calcula la capacidad del equipo para un sprint o per
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: azure-devops-operator
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: fork
   savia.context_cost: medium

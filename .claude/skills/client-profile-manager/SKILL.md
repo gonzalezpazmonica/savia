@@ -5,6 +5,7 @@ description: "Usar cuando se crean, actualizan o consultan perfiles de cliente e
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: pm-operations
+  savia.maturity: stable
   savia.context_cost: medium
   savia.dependencies: savia-hub-sync
   savia.maturity: stable

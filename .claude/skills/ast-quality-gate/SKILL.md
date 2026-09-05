@@ -6,6 +6,7 @@ allowed-tools: [Bash, Read, Glob, Grep, Write]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: code-reviewer
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.maturity: experimental

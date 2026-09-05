@@ -6,6 +6,7 @@ allowed-tools: [Read, Bash]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.argument-hint: "[--port 9222|9223] [--out-dir DIR] [--batch | --substring TEXT]"
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: "Activar cuando el PM pide extraer transcripciones de reuniones Teams, digerir reuniones pendientes, o leer transcripts. Útil post-/project-update cuando hay reuniones sin digest."
   savia.context_cost: low

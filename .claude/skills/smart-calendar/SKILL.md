@@ -6,6 +6,7 @@ allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: pm-operations
+  savia.maturity: stable
   savia.disable-model-invocation: false
   savia.maturity: experimental
   savia.priority: high

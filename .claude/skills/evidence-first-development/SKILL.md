@@ -5,6 +5,7 @@ description: "Desarrollo evidence-first: rodea la implementación con un SPEC ap
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: sdd-framework
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: high
   savia.maturity: beta

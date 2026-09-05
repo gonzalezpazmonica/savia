@@ -6,6 +6,7 @@ allowed-tools: [Read, Bash, Glob, Grep]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: communication
+  savia.maturity: stable
   savia.disable-model-invocation: false
   savia.maturity: 
   savia.priority: medium

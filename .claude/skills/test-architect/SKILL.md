@@ -5,6 +5,7 @@ description: Usar cuando se diseñan o generan tests de alta calidad en cualquie
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: test-architect
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.context_cost: high

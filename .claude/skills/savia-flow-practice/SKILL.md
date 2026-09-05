@@ -5,6 +5,7 @@ description: Usar cuando se implementa Savia Flow con dual-track y métricas de 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: pm-operations
+  savia.maturity: stable
   savia.consumes: "task, pbi"
   savia.globs: 
   savia.maturity: stable

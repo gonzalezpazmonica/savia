@@ -6,6 +6,7 @@ allowed-tools: [Read, Glob, Grep]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: governance
+  savia.maturity: stable
   savia.context_cost: medium
   savia.disable-model-invocation: false
   savia.maturity: stable
@@ -14,7 +15,6 @@ metadata:
   savia.tags: "reflection, meta-cognitive, system2, assumptions"
   savia.user-invocable: False
 ---
-
 # Reflection Validation — System 2 Protocol
 
 > Thinking fast catches the obvious. Thinking slow catches the real.

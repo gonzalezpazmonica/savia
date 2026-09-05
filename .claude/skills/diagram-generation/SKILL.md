@@ -5,6 +5,7 @@ description: Usar cuando se necesita generar diagramas de arquitectura o flujo d
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: diagram-architect
+  savia.maturity: stable
   savia.category: devops
   savia.context: fork
   savia.context_cost: medium

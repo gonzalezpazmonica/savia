@@ -5,6 +5,7 @@ description: Usar cuando se monitorizan señales de bienestar individual en el e
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: communication
+  savia.maturity: stable
   savia.context_cost: low
   savia.dependencies: 
   savia.maturity: stable

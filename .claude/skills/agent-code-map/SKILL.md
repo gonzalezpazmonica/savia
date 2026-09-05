@@ -6,6 +6,7 @@ allowed-tools: [Bash, Read, Glob, Grep, Write, Edit]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: sdd-framework
   savia.context: project
   savia.maturity: experimental
@@ -14,7 +15,6 @@ metadata:
   savia.tags: "acm, agent-maps, codemap, context, sdd, architecture"
   savia.user-invocable: True
 ---
-
 # Agent Code Map — Mapas Estructurales Persistentes
 
 Genera ficheros `.acm` (Agent Code Map) pre-calculados que los agentes cargan

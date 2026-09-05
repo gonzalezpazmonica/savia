@@ -5,6 +5,7 @@ description: "Usar cuando se gestionan timesheets, presupuestos, facturas o fore
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: reporting
   savia.context: fork
   savia.context_cost: medium

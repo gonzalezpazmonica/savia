@@ -5,6 +5,7 @@ description: Usar cuando se diseña o revisa la arquitectura de un proyecto nuev
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: quality
+  savia.maturity: stable
   savia.context_cost: medium
   savia.developer_type: all
   savia.maturity: stable

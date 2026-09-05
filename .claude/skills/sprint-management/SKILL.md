@@ -5,6 +5,7 @@ description: "Usar cuando se consulta el estado del sprint, se actualizan items 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: azure-devops-operator
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: fork
   savia.context_cost: medium

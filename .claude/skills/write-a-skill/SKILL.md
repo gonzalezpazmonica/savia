@@ -5,6 +5,7 @@ description: Guia para crear una nueva skill correctamente en pm-workspace. Usar
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: meta
+  savia.maturity: stable
   savia.context: standalone
   savia.context_cost: low
   savia.maturity: stable

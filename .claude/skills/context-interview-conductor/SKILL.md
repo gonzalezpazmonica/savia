@@ -5,6 +5,7 @@ description: Usar cuando se necesita recopilar contexto estructurado de un usuar
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: communication
+  savia.maturity: stable
   savia.context_cost: high
   savia.dependencies: "savia-hub-sync, client-profile-manager"
   savia.maturity: stable

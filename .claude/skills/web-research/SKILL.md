@@ -6,6 +6,7 @@ allowed-tools: [Read, Bash, WebSearch, WebFetch, Write]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.disable-model-invocation: false

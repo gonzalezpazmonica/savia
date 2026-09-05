@@ -5,6 +5,7 @@ description: Usar cuando se verifica TLS/SSL o security headers HTTP de un servi
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: security
+  savia.maturity: stable
   savia.context: skill
   savia.maturity: stable
   savia.priority: high

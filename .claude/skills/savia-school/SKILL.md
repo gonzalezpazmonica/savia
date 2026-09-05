@@ -6,6 +6,7 @@ allowed-tools: [Read, Write, Edit, Bash, Glob, Grep]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.maturity: experimental

@@ -5,6 +5,7 @@ description: "Usar cuando se necesitan consultas WIQL, actualización de work it
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: azure-devops-operator
+  savia.maturity: stable
   savia.category: devops
   savia.context: fork
   savia.context_cost: medium

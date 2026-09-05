@@ -5,6 +5,7 @@ description: "Usar cuando se necesita extraer o consolidar el glosario de térmi
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.attribution: "Clean-room re-implementation of mattpocock/skills/ubiquitous-language + domain-model (MIT, 26.4k*). Prose and process are original."
+  savia.maturity: stable
   savia.category: ddd
   savia.context: project
   savia.context_cost: low

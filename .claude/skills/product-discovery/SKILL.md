@@ -5,6 +5,7 @@ description: "Usar antes de descomponer PBIs, cuando se necesita análisis JTBD 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.maturity: stable

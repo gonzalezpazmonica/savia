@@ -5,6 +5,7 @@ description: "Usar cuando se gestionan roles, permisos o se audita el acceso de 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.maturity: stable

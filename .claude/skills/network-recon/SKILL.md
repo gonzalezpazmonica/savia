@@ -5,6 +5,7 @@ description: "Reconocimiento de red: port scan con nmap/RustScan + HTTP detectio
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.authorization_required: true
+  savia.maturity: stable
   savia.category: security
   savia.context: fork
   savia.context_cost: medium

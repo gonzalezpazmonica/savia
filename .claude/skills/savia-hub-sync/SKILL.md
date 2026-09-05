@@ -5,6 +5,7 @@ description: Usar cuando se sincroniza el repositorio SaviaHub con el workspace 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: 
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: fork
   savia.context_cost: low

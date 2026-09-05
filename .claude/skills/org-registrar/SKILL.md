@@ -3,6 +3,7 @@ name: org-registrar
 description: "Gestiona el grafo de entidades organizacionales (Company as Code, SE-365): valida entidades, indexa el grafo, consulta dependencias y prepara propuestas de escritura mediada. Usar cuando se consultan roles/unidades/personas/políticas/proyectos/recursos, o se propone una entidad nueva."
 metadata:
   savia.category: governance
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: low
   savia.maturity: stable

@@ -5,6 +5,7 @@ description: Usar cuando se necesita auditar la seguridad de un proyecto con pip
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: security-attacker
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.context_cost: medium

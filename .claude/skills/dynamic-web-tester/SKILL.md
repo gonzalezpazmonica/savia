@@ -5,6 +5,7 @@ description: "Testing dinámico de endpoints web: XSS (DalFox), SQLi (sqlmap), N
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.authorization_required: true
+  savia.maturity: stable
   savia.category: security
   savia.context: fork
   savia.context_cost: medium

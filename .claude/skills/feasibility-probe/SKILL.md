@@ -6,6 +6,7 @@ allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: sdd-framework
+  savia.maturity: stable
   savia.disable-model-invocation: false
   savia.priority: high
   savia.summary: "Valida viabilidad de un spec con prototipo time-boxed. Intenta implementar las secciones criticas, mide bloqueos. Output: score de viabilidad + secciones problematicas."

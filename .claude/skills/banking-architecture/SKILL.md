@@ -5,6 +5,7 @@ description: Usar cuando se diseña o revisa arquitectura para proyectos del sec
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: governance
+  savia.maturity: stable
   savia.maturity: beta
   savia.priority: low
   savia.summary: "Validacion de arquitectura bancaria contra estandar BIAN. Detecta entidades BIAN, Kafka, Snowflake, SWIFT en el codigo. Output: diagramas ArchiMate, gaps de compliance, recomendaciones."

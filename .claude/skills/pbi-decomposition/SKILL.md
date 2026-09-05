@@ -5,6 +5,7 @@ description: Usar cuando se descompone un PBI en tasks y se estiman las horas.
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: fork
   savia.context_cost: high

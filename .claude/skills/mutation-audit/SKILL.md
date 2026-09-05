@@ -6,6 +6,7 @@ allowed-tools: [Read, Bash, Glob]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: test-engineer
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.disable-model-invocation: false

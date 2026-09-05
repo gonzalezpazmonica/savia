@@ -5,6 +5,7 @@ description: Usar cuando se gestiona o depura CI/CD con Azure Pipelines.
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: azure-devops-operator
+  savia.maturity: stable
   savia.category: devops
   savia.context: fork
   savia.maturity: stable

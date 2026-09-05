@@ -5,6 +5,7 @@ description: Usar cuando se ha completado una implementación SDD y se necesita 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: sdd-framework
   savia.context: fork
   savia.maturity: stable

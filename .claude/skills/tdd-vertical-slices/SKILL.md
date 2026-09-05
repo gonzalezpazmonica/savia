@@ -5,6 +5,7 @@ description: "Test-driven development with vertical-slice red-green-refactor cyc
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: any
+  savia.maturity: stable
   savia.context: fork
   savia.maturity: stable
   savia.summary: "Disciplina TDD por slices verticales: 1 test → 1 implementación → repeat. El anti-pattern de horizontal slicing (todos los tests primero, luego todo el código) produce tests acoplados a implementación; aquí se prohíbe explícitamente."

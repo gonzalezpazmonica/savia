@@ -5,6 +5,7 @@ description: "Usar cuando se coordinan múltiples equipos, se asignan miembros o
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: fork
   savia.context_cost: medium
