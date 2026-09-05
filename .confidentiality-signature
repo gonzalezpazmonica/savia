@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=05f6b0b6859908a5b170c9cecb538fca659d38fe4ed7753bb54216005e49c08d
-timestamp=2026-09-05T21:16:16Z
-branch=agent/impl-20260905-se388-codex
-head_commit=1b05e3ef
-signature=bffdf483d8e83b9d1d817eff50bbefc9af541f77cdc2ea862e2f40aecee0697d
+diff_hash=23c1b24f622c4016ff9548239269e58b2596eeb913c5c9e52fb2fa82dcb7fb11
+timestamp=2026-09-05T21:31:10Z
+branch=agent/impl-20260905-closure-se387-se388
+head_commit=3ac12293
+signature=e11cb449ca4d3428792276a86a83bc14f05f445e047a54045e1beb3a61444580
