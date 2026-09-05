@@ -8,3 +8,10 @@ waves:
   2: 40
   final: 0                 # o excepciones aprobadas con owner + re-evaluation date
 inventory: docs/propuestas/SE-376-debt-inventory.tsv
+
+# Justificación stubs (SE-376 AC §7.5, 2026-09-05): los 6 "Stub" del auditor
+# son skills reales registradas en SKILLS.md con <50 líneas de SKILL.md
+# (weekly-report, tabular-intelligence, professional-domain, +3 según kanban).
+# Tratamiento: wave 2 calibración (DOMAIN+tests), NO borrado (RN-01 SE-380:
+# ninguna eliminación automática de capabilities).
+stubs_justificados: "wave 2 calibración — sin borrado automático (RN-01)"

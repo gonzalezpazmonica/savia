@@ -1,6 +1,6 @@
 # SE-388 — Savia ↔ Codex Frontend Adapter
 
-**Estado:** PROPOSED (§31: aprobación humana antes de implementar; enforcement L3/L4 → human gate)
+**Estado:** APPROVED + P0/P1 implementados — Codex DEGRADED_SAFE, max_verified_risk L2, L3/L4 BLOCKED_OR_HUMAN_REROUTE (Mónica 2026-09-05: "Los dos últimos specs son accepted, para que los implementes"). Codex=UNKNOWN hasta probe con CLI instalado; P2+ tras aprobación.
 **Fecha:** 2026-09-05 · **Prioridad:** P1 · **Predecesora:** SPEC-127 (provider-agnostic compatibility)
 **Principio:** ONE SAVIA · MULTIPLE FRONTENDS · ZERO DUPLICATED TRUTH
 **Origen:** spec de la operadora (2026-09-05, pedro-aaron/agentic-planning-kit review). ID asignado tras reconciliación §0.
