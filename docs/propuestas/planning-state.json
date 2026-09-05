@@ -99,7 +99,7 @@
       "priority": "P1",
       "title": "Savia ↔ Codex Frontend Adapter",
       "note": "persistida 2026-09-05; renumerada/asignada tras reconciliacion. EXTEND de SPEC-127/SE-047/SE-375. Prerequisito: Codex CLI para probe real (§4/§6). Implementacion tras aprobacion humana; enforcement L3/L4 -> human gate",
-      "evidence": "P0-P1 implementados: probe+matrix+doctor (frontend-probe.sh, frontend-doctor). Codex=UNKNOWN (CLI ausente). P2+ requiere Codex instalado"
+      "evidence": "P0/P1 + ceiling: DEGRADED_SAFE APPROVED WITH L2 CEILING; L3/L4=BLOCKED_OR_HUMAN_REROUTE; Codex CLI 0.153.4 presente, sin credenciales (auth x)"
     }
   ]
 }

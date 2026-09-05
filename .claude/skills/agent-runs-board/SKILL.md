@@ -8,7 +8,7 @@ metadata:
   savia.category: pm-operations
   savia.context: fork
   savia.loop_level: L0  # L0=draft | L1=report-only | L2=assisted | L3=unattended — ver docs/rules/domain/loop-phasing.md
-  savia.maturity: experimental
+  savia.maturity: stable
   savia.priority: medium
   savia.summary: "Ledger operativo de runs autónomos (SE-349): hechos durables + estado derivado en lectura + board Working/Needs you/In review/Ready to merge/Done. Guardrail: un run con PR vivo no es terminable."
   savia.tags: "autonomous, observability, ledger, board, se-349"

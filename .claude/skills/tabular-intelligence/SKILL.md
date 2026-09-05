@@ -6,7 +6,7 @@ metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: analysis
   savia.context: project
-  savia.maturity: experimental
+  savia.maturity: stable
   savia.priority: high
   savia.tags: "tabular, datos, estadistica, analytics, csv, excel, perfil, metricas"
 ---
