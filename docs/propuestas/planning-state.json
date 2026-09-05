@@ -90,15 +90,16 @@
       "priority": "P0",
       "title": "Coherence Closure Program (umbrella: gates graduation, constitutional L4, harness F2-F5, eval/debt burn-down, generated truth, entropy v1, benchmark)",
       "note": "persistida 2026-09-05; gap matrix en spec §0; implementar por frentes tras aprobacion",
-      "evidence": "E wave1 EJECUTADO: deuda 48<=95 (87 Calibrated). A/B/C/D/F/G/H cerrados o tooling+gates activos. Abierto solo: debt wave2 (42), F5 push-pr real (tier3), benchmark sesiones agente, 2 CHECK_FAIL pre-existentes"
+      "evidence": "A-H implementados; DoD §14: 9/11 cumplidos. Pendientes de humano: F5 diff push-pr (tier3), debt wave2 (42). Benchmark ejecutado (13 verificaciones)."
     },
     {
       "id": "SE-388",
-      "status": "PROPOSED",
-      "approval": "(pendiente)",
+      "status": "APPROVED",
+      "approval": "Mónica 2026-09-05: 'Los dos últimos specs son accepted'",
       "priority": "P1",
       "title": "Savia ↔ Codex Frontend Adapter",
-      "note": "persistida 2026-09-05; renumerada/asignada tras reconciliacion. EXTEND de SPEC-127/SE-047/SE-375. Prerequisito: Codex CLI para probe real (§4/§6). Implementacion tras aprobacion humana; enforcement L3/L4 -> human gate"
+      "note": "persistida 2026-09-05; renumerada/asignada tras reconciliacion. EXTEND de SPEC-127/SE-047/SE-375. Prerequisito: Codex CLI para probe real (§4/§6). Implementacion tras aprobacion humana; enforcement L3/L4 -> human gate",
+      "evidence": "P0-P1 implementados: probe+matrix+doctor (frontend-probe.sh, frontend-doctor). Codex=UNKNOWN (CLI ausente). P2+ requiere Codex instalado"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
-  "hash": "f7e62400bbff",
-  "total": 1458,
+  "hash": "741de88d5405",
+  "total": 1459,
   "resources": [
     {
       "category": "analysis",
@@ -10611,6 +10611,20 @@
       "kind": "agent",
       "path": ".opencode/agents/frontend-developer.md",
       "description": ">"
+    },
+    {
+      "category": "planning",
+      "name": "frontend-probe",
+      "intents": [
+        "capability",
+        "detección",
+        "frontend",
+        "frontends",
+        "matrix"
+      ],
+      "kind": "script",
+      "path": "scripts/frontend-probe.sh",
+      "description": "frontend-probe.sh — SE-388 S1: detección de frontends y capability matrix."
     },
     {
       "category": "planning",

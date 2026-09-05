@@ -16381,6 +16381,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/frontend-probe",
+      "intents": [
+        "capability",
+        "detección",
+        "frontend",
+        "frontends",
+        "matrix"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/frontend-probe.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/frontier-strategy",
       "intents": [
         "frontier",
@@ -29770,7 +29791,7 @@
       "tests": []
     }
   ],
-  "content_hash": "f7e62400bbff",
+  "content_hash": "741de88d5405",
   "deferred_kinds": [
     "rule",
     "hook"
