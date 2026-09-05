@@ -91,6 +91,14 @@
       "title": "Coherence Closure Program (umbrella: gates graduation, constitutional L4, harness F2-F5, eval/debt burn-down, generated truth, entropy v1, benchmark)",
       "note": "persistida 2026-09-05; gap matrix en spec §0; implementar por frentes tras aprobacion",
       "evidence": "E wave1 EJECUTADO: deuda 48<=95 (87 Calibrated). A/B/C/D/F/G/H cerrados o tooling+gates activos. Abierto solo: debt wave2 (42), F5 push-pr real (tier3), benchmark sesiones agente, 2 CHECK_FAIL pre-existentes"
+    },
+    {
+      "id": "SE-388",
+      "status": "PROPOSED",
+      "approval": "(pendiente)",
+      "priority": "P1",
+      "title": "Savia ↔ Codex Frontend Adapter",
+      "note": "persistida 2026-09-05; renumerada/asignada tras reconciliacion. EXTEND de SPEC-127/SE-047/SE-375. Prerequisito: Codex CLI para probe real (§4/§6). Implementacion tras aprobacion humana; enforcement L3/L4 -> human gate"
     }
   ]
 }
