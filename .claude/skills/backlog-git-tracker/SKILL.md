@@ -5,6 +5,7 @@ description: Usar cuando se capturan o comparan snapshots del backlog para detec
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: pm-operations
+  savia.maturity: stable
   savia.context_cost: medium
   savia.dependencies: "savia-hub-sync, client-profile-manager"
   savia.maturity: stable

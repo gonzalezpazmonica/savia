@@ -5,6 +5,7 @@ description: Usar cuando se genera un informe ejecutivo multi-proyecto para dire
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: tech-writer
+  savia.maturity: stable
   savia.category: reporting
   savia.context: fork
   savia.context_cost: medium

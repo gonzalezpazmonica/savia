@@ -4,6 +4,7 @@ name: obscura-browser
 description: "Navegador headless nativo de Savia para fetch/scrape (Rust, sin Chromium, 41MB RAM, sin telemetria). Usar cuando se navega a, se extrae contenido de, se scrapea, se renderiza JS, o se necesita CDP/MCP headless. NO para e2e (usar Playwright)."
 metadata:
   savia.category: tool
+  savia.maturity: stable
   savia.context: project
   savia.maturity: experimental
   savia.priority: high

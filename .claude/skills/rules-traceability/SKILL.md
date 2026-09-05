@@ -5,6 +5,7 @@ description: Usar cuando se mapean reglas de negocio a PBIs para trazabilidad co
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.context_cost: high

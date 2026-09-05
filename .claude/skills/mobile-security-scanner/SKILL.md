@@ -5,6 +5,7 @@ description: Usar cuando se escanea un APK/AAB Android en busca de vulnerabilida
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: security
+  savia.maturity: stable
   savia.context: skill
   savia.maturity: stable
   savia.priority: high

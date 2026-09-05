@@ -5,6 +5,7 @@ description: "Usar cuando se audita compliance, se registran decisiones o se cer
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.context_cost: medium

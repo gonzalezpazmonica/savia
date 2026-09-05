@@ -8,6 +8,7 @@ description: >
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: knowledge-management
+  savia.maturity: stable
   savia.context: L2
   savia.maturity: calibrated
   savia.se: SE-252

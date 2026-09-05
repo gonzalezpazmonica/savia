@@ -5,6 +5,7 @@ description: "Usar cuando se escribe, valida o implementa una spec ejecutable SD
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: sdd-framework
   savia.context: fork
   savia.context_cost: high

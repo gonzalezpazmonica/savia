@@ -5,6 +5,7 @@ description: Usar cuando se procesan mensajes de voz para transcribirlos y conve
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: communication
   savia.context: fork
   savia.context_cost: medium

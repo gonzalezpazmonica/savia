@@ -5,6 +5,7 @@ description: Usar cuando un agente debe enviar un mensaje a otro agente con role
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: orchestration
+  savia.maturity: stable
   savia.context: standalone
   savia.context_cost: low
   savia.maturity: beta

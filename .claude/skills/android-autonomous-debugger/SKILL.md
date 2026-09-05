@@ -5,6 +5,7 @@ description: Usar cuando se depuran o testean apps Android contra dispositivos f
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: quality
+  savia.maturity: stable
   savia.context: fork
   savia.maturity: stable
   savia.priority: medium

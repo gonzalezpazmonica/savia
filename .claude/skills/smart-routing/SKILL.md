@@ -5,6 +5,7 @@ description: Usar cuando se necesita descubrir o enrutar a un comando específic
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: sdd-framework
+  savia.maturity: stable
   savia.context_cost: medium
   savia.maturity: stable
   savia.memory: project

@@ -5,6 +5,7 @@ description: Usar cuando se valida el cumplimiento de marcos regulatorios sector
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: governance
+  savia.maturity: stable
   savia.context_cost: medium
   savia.developer_type: all
   savia.maturity: stable

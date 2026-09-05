@@ -5,6 +5,7 @@ description: "Usar cuando se necesitan métricas SPACE, aggregación de portfoli
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: reporting
   savia.context: fork
   savia.context_cost: medium

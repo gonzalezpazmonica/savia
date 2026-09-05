@@ -5,6 +5,7 @@ description: Usar cuando se necesita seleccionar el skill más apropiado para un
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: reporting
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: low
   savia.maturity: stable

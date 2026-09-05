@@ -5,6 +5,7 @@ description: "Mapeador de Stakeholders y Decisores: extrae roles formales y real
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: org-intelligence
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: medium
   savia.context_tier: L3

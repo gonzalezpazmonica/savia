@@ -5,6 +5,7 @@ description: Usar cuando se incorpora un desarrollador nuevo al proyecto y neces
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: tech-writer
+  savia.maturity: stable
   savia.category: sdd-framework
   savia.context: fork
   savia.maturity: experimental

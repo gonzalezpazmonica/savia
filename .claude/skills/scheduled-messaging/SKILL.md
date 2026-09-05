@@ -5,6 +5,7 @@ description: Usar cuando se configuran mensajes automáticos programados a plata
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: communication
+  savia.maturity: stable
   savia.context: fork
   savia.maturity: stable
   savia.priority: medium

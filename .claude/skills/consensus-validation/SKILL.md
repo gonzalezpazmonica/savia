@@ -5,6 +5,7 @@ description: Usar cuando una decisión técnica o recomendación necesita valida
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: consensus-orchestrator
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.context_cost: medium

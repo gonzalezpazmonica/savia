@@ -6,6 +6,7 @@ allowed-tools: [Bash, Read, Glob, Grep, Write, Edit]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: pm-operations
+  savia.maturity: stable
   savia.context: project
   savia.maturity: experimental
   savia.priority: high

@@ -5,6 +5,7 @@ description: Usar cuando se analiza el impacto de la IA en el trabajo del equipo
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.context_cost: medium

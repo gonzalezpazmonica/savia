@@ -5,6 +5,7 @@ description: "Usar cuando se escanean vulnerabilidades en dependencias de proyec
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: security
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: low
   savia.maturity: stable

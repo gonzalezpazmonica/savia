@@ -5,6 +5,7 @@ description: Usar cuando se importa un diagrama existente para extraer entidades
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: business-analyst
+  savia.maturity: stable
   savia.category: devops
   savia.context: fork
   savia.context_cost: high

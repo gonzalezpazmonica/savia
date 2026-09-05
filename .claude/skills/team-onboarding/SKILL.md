@@ -5,6 +5,7 @@ description: Usar cuando se incorpora un nuevo miembro al equipo y se evalúan s
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: tech-writer
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: fork
   savia.maturity: stable

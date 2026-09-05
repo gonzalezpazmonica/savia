@@ -5,6 +5,7 @@ description: "Usar cuando se escanea IaC (Terraform, Bicep, Dockerfile, docker-c
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: security
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: low
   savia.maturity: stable

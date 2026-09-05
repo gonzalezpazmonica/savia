@@ -5,6 +5,7 @@ description: Usar cuando se necesitan referencias a recursos y plantillas del wo
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: devops
+  savia.maturity: stable
   savia.maturity: beta
   savia.priority: low
   savia.summary: "Resolucion lazy de referencias @ (azure:workitem, project, spec, team, rules, memory). Cache por sesion. Max 5 simultaneas. Permite referenciar recursos externos en prompts."

@@ -6,6 +6,7 @@ allowed-tools: [Read, Grep, Bash]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: any
+  savia.maturity: stable
   savia.category: quality
   savia.context: workspace
   savia.context_cost: low

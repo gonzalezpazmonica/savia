@@ -6,6 +6,7 @@ metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: governance
   savia.maturity: stable
+  savia.maturity: stable
   savia.priority: medium
   savia.summary: "Gestiona secciones auto-generadas con marcadores safe-regeneration. Permite actualizar contenido automatico sin tocar contenido manual. Comandos: /managed-sync, /managed-scan."
   savia.tags: "managed-content, markers, auto-generated, sync"

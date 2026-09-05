@@ -5,6 +5,7 @@ description: Usar cuando se conecta un proyecto nuevo a Azure DevOps para valida
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: azure-devops-operator
+  savia.maturity: stable
   savia.category: devops
   savia.context: fork
   savia.context_cost: low

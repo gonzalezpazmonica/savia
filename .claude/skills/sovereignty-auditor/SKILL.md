@@ -5,6 +5,7 @@ description: Usar cuando se audita el grado de dependencia cognitiva del equipo 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: governance
+  savia.maturity: stable
   savia.context_cost: medium
   savia.dependencies: 
   savia.maturity: stable

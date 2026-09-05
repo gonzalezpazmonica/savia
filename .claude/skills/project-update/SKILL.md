@@ -6,6 +6,7 @@ allowed-tools: [Bash, Read, Write, Edit, Glob, Grep, Task]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.argument-hint: "--slug {codename} [--only {refresh|digest}] [--skip {source}] [--skip-auth] [--dry-run]"
+  savia.maturity: stable
   savia.category: pm-operations
   savia.context: "Activar cuando el PM pide \"actualizar proyecto\", \"refrescar contexto\", \"digerir información\", \"pon al día\", \"update completo\"."
   savia.context_cost: low

@@ -5,6 +5,7 @@ description: Usar cuando se quiere ejecutar tareas de bajo riesgo de forma autó
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: dev-orchestrator
+  savia.maturity: stable
   savia.category: sdd-framework
   savia.context: fork
     savia.loop_level: L2  # L0=draft | L1=report-only | L2=assisted | L3=unattended — ver docs/rules/domain/loop-phasing.md
@@ -13,7 +14,6 @@ metadata:
   savia.summary: "Sprint autonomo nocturno: ejecuta tareas de bajo riesgo en bucle. Genera PRs Draft en ramas agent/overnight-*. Revision humana obligatoria al dia siguiente."
   savia.tags: "autonomous, overnight, batch, low-risk"
 ---
-
 ## Subagent Scope Guard
 
 > Subagente delegado: ejecuta SOLO la tarea asignada, reporta

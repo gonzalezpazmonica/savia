@@ -5,6 +5,7 @@ description: Escanea el historial git o los commits pendientes de push buscando 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: security
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: low
   savia.maturity: stable

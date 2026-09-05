@@ -5,6 +5,7 @@ description: Usar cuando se calcula el riesgo de una tarea para decidir el nivel
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.maturity: beta

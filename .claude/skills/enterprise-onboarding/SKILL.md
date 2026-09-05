@@ -5,6 +5,7 @@ description: Usar cuando se incorporan múltiples personas a la organización de
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: quality
   savia.context: fork
   savia.context_cost: medium

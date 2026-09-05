@@ -5,6 +5,7 @@ description: Usar cuando se orquestan múltiples agentes SDD con dependencias en
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: developer
+  savia.maturity: stable
   savia.category: sdd-framework
   savia.context: fork
   savia.context_cost: high

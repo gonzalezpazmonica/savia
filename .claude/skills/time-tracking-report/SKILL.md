@@ -5,6 +5,7 @@ description: Usar cuando se generan informes de imputación de horas en Excel o 
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: tech-writer
+  savia.maturity: stable
   savia.category: reporting
   savia.context: fork
   savia.context_cost: medium

@@ -5,6 +5,7 @@ description: Usar cuando se construye o consulta el grafo de conocimiento de ent
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
+  savia.maturity: stable
   savia.category: communication
   savia.consumes: workspace_files
   savia.context: fork

@@ -5,6 +5,7 @@ description: "Captura de Conocimiento Tácito de Reunión: extrae decisores, acu
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: org-intelligence
+  savia.maturity: stable
   savia.context: fork
   savia.context_cost: medium
   savia.context_tier: L3
