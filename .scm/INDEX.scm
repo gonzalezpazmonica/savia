@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 76c7951b0cff | resources: 1460
-> 295 commands · 136 skills · 89 agents · 940 scripts
+> hash: eeeb92319752 | resources: 1461
+> 295 commands · 136 skills · 89 agents · 941 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -778,6 +778,7 @@
 [planning] ext-platform-export-gate — export,external,gate,platform,platforms — script:scripts/ext-platform-export-gate.sh
 [planning] ext-platform-gate — asymmetry,enforce,external,gate,platform — script:scripts/ext-platform-gate.sh
 [planning] ext-platform-resilience — external,platform,platforms,resilience,slice — script:scripts/ext-platform-resilience.sh
+[planning] f5-state — estados,exactly,merge,máquina,once — script:scripts/f5-state.sh
 [planning] factuality-judge — accuracy,against,claims,factual,judge — agent:.opencode/agents/factuality-judge.md
 [planning] federation-discover — auto,descubrimiento,discover,federadas,federation — script:scripts/federation-discover.sh
 [planning] federation-drill — compromised,drill,federation,instance — script:scripts/federation-drill.sh

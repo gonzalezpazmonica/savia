@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-if [ "$1" = "pr" ]; then echo MERGED; exit 0; fi
-exit 0

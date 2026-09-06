@@ -1,6 +1,6 @@
 {
-  "hash": "e7c6f5a3e830",
-  "total": 1460,
+  "hash": "0b2349be4fa8",
+  "total": 1461,
   "resources": [
     {
       "category": "analysis",
@@ -10304,6 +10304,20 @@
       "kind": "script",
       "path": "scripts/ext-platform-resilience.sh",
       "description": "ext-platform-resilience.sh — SE-272 Slice 4: Resilience for external platforms"
+    },
+    {
+      "category": "planning",
+      "name": "f5-state",
+      "intents": [
+        "estados",
+        "exactly",
+        "merge",
+        "máquina",
+        "once"
+      ],
+      "kind": "script",
+      "path": "scripts/f5-state.sh",
+      "description": "f5-state.sh — SE-387 C/F5: máquina de estados exactly-once para pr.merge."
     },
     {
       "category": "planning",

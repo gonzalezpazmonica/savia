@@ -15898,6 +15898,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/f5-state",
+      "intents": [
+        "estados",
+        "exactly",
+        "merge",
+        "máquina",
+        "once"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/f5-state.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "agent:.opencode/agents/factuality-judge",
       "intents": [
         "accuracy",
@@ -29812,7 +29833,7 @@
       "tests": []
     }
   ],
-  "content_hash": "e7c6f5a3e830",
+  "content_hash": "0b2349be4fa8",
   "deferred_kinds": [
     "rule",
     "hook"
