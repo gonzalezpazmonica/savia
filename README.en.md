@@ -46,6 +46,30 @@ Savia adapts to your role — PM, developer, QA, Product Owner, CEO — and your
 
 ---
 
+## Why Savia exists
+
+AI-assisted execution is growing faster than trust in it. Savia exists so that this execution is governed: the AI can progressively take on more execution without appropriating authority.
+
+## Principles
+
+Human authority by design · sovereignty with technical meaning · evidence over claims · policy-as-code · safe delegation.
+
+## What Savia does
+
+Govern (risk L0-L4, gates, receipts) · execute (agents, commands, skills, SDD) · remember (bitemporal memory) · evaluate (baseline evals) · specialized domains.
+
+## Architecture
+
+Governance (Policy/Risk/Gates) + Execution (Agents/Skills/Tools) + Memory (Context/Knowledge/History) → Evidence/Evals → Frontends + Providers.
+
+## Frontends and providers
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, L2 ceiling). Model and provider independence by design.
+
+## Governance and safety
+
+Human gates per risk level (L0-L4). Compliance-as-code as a direction: Savia produces evidence of executed controls; it does not declare definitive legal compliance.
+
 ## Capabilities
 
 | Area | What it does |

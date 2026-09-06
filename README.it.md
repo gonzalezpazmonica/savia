@@ -46,6 +46,30 @@ Savia si adatta al tuo ruolo — PM, developer, QA, Product Owner, CEO — e all
 
 ---
 
+## Perché esiste Savia
+
+L'esecuzione IA deve essere governata — esecuzione progressiva senza appropriazione di autorità.
+
+## Principi
+
+Autorità umana by design · sovranità tecnica · evidenza · policy-as-code · delegazione sicura.
+
+## Cosa fa Savia
+
+Governare (L0-L4, gates, receipt) · eseguire · ricordare · valutare · domini.
+
+## Architettura
+
+Governance + Esecuzione + Memoria → Evidence/Evals → Frontend + Provider.
+
+## Frontend e fornitori
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, tetto L2).
+
+## Governance e sicurezza
+
+Human gate L0-L4. Compliance-as-code: evidenza, non dichiarazione legale definitiva.
+
 ## Capacita
 
 | Area | Cosa fa |

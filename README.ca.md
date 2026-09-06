@@ -46,6 +46,30 @@ Savia s'adapta al teu rol — PM, developer, QA, Product Owner, CEO — i al teu
 
 ---
 
+## Per què existeix Savia
+
+L'execució assistida per IA creix més ràpid que la confiança sobre ella. Savia existeix perquè aquesta execució sigui governada.
+
+## Principis
+
+Autoritat humana per disseny · sobirania tècnica · evidència sobre claims · policy-as-code · delegació segura.
+
+## Què fa Savia
+
+Gobernar (risc L0-L4, gates, receipts) · executar · recordar · avaluar · dominis.
+
+## Arquitectura
+
+Govern + Execució + Memòria → Evidence/Evals → Frontends + Providers.
+
+## Frontends i proveïdors
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, sostre L2).
+
+## Governança i seguretat
+
+Human gates L0-L4. Compliance-as-code: evidència, no declaració legal definitiva.
+
 ## Capacitats
 
 | Area | Que fa |

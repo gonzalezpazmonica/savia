@@ -42,6 +42,30 @@ A Savia adapta-se ao seu papel — PM, developer, QA, Product Owner, CEO — e a
 
 ---
 
+## Por que existe a Savia
+
+A execução assistida por IA cresce mais rápido que a confiança sobre ela. A Savia existe para que essa execução seja governada: a IA pode assumir progressivamente mais execução sem se apropriar da autoridade.
+
+## Princípios
+
+Autoridade humana por design · soberania com significado técnico · evidência sobre claims · policy-as-code · delegação segura.
+
+## O que a Savia faz
+
+Governar (risco L0-L4, gates, receipts) · executar (agents, commands, skills, SDD) · lembrar (memória bitemporal) · avaliar (evals com baseline) · domínios especializados.
+
+## Arquitetura
+
+Governança (Policy/Risk/Gates) + Execução (Agents/Skills/Tools) + Memória (Context/Knowledge/History) → Evidence/Evals → Frontends + Providers.
+
+## Frontends e provedores
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, teto L2). Independência de modelo e provedor por design.
+
+## Governança e segurança
+
+Human gates por nível de risco (L0-L4). Compliance-as-code como direção: a Savia produz evidência de controles executados; não declara conformidade legal definitiva.
+
 ## Capacidades
 
 | Area | O que faz |
