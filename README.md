@@ -2,18 +2,84 @@
 
 **Español** | [English](README.en.md) | [Galego](README.gl.md) | [Euskara](README.eu.md) | [Català](README.ca.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
-# PM-Workspace
+# Savia
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/savia/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/savia?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-## Workspace de desarrollo multi-agente
+**Sistema agéntico soberano para gobernar y ejecutar trabajo con IA, independiente de modelo, proveedor y frontend, con criterio humano por diseño.**
 
 **567 comandos · 89 agentes · 136 skills · 124 hooks · 16 lenguajes · 283+ test suites**
 
-pm-workspace convierte Claude Code y OpenCode en un entorno de ingeniería multi-agente. Orquesta agentes especializados para gestión de proyectos, desarrollo con specs ejecutables, auditoría de seguridad y revisión de código. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
+Savia es un sistema agéntico soberano para gobernar y ejecutar trabajo asistido por IA. Integra agentes, memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts, evaluación y dominios especializados — gestión de proyectos, ingeniería de software y más — sobre una arquitectura independiente de modelo, proveedor y frontend. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
+
+## Por qué Savia existe
+
+La ejecución asistida por IA crece más rápido que la confianza sobre ella. Savia existe para que esa ejecución sea **gobernada**: la IA puede asumir progresivamente más ejecución sin apropiarse de la autoridad.
+
+> **Se delega la ejecución, nunca el criterio.**
+
+## Principios
+
+- **Autoridad humana por diseño** — execution authority ≠ decision authority: risk levels, human gates, receipts y provenance hacen verificable quién decide.
+- **Soberanía con significado técnico** — independencia de modelo, proveedor y frontend; datos y control en infraestructura propia; políticas inspeccionables.
+- **Evidencia sobre claims** — cada acción gobernada produce receipts, provenance y evaluación verificable.
+- **Policy-as-code** — las políticas se convierten en reglas machine-readable con enforcement determinista.
+- **Delegación segura** — la autonomía es graduada y gobernada: capability + authority + risk + context + human gates.
+
+## Qué hace Savia
+
+- **Gobernar** — riesgo (L0-L4), human gates, policy-as-code, receipts y provenance de cada acción.
+- **Ejecutar** — 89 agentes, 567 comandos, 136 skills con specs ejecutables (SDD), auditoría de seguridad y revisión de código.
+- **Recordar** — memoria persistente bitemporal con provenance y trust-gates.
+- **Evaluar** — evals con baseline, paired-delta regression y canaries multi-frontend.
+- **Dominios** — gestión de proyectos (dominio de origen), ingeniería de software y dominios especializados.
+
+## Arquitectura
+
+```text
+        HUMAN
+   criterio · autoridad
+          │
+       ┌──▼───┐
+       │SAVIA │
+       └──┬───┘
+   ┌──────┼──────────┐
+Governance Execution Memory
+Policy    Agents   Context
+Risk      Skills   Knowledge
+Gates     Tools    History
+   └──────┼──────────┘
+    Evidence / Evals
+   ┌────┴─────┐
+Frontends  Providers
+```
+
+Frontends (Claude Code, OpenCode, Codex), modelos y proveedores son interfaces e infraestructura mediante las que Savia opera — **ninguno de ellos es Savia**.
+
+## Cómo funciona
+
+Savia evoluciona mediante mecanismos explícitos: propuesta/spec → implementación → evaluación → evidencia → enforcement. El cumplimiento de políticas es ejecutable: policy document → machine-readable rule → runtime enforcement → evidence.
+
+## Frontends y proveedores soportados
+
+| Frontend | Estado |
+|---|---|
+| Claude Code | SUPPORTED |
+| OpenCode | SUPPORTED |
+| Codex | DEGRADED_SAFE (techo L2, en remediación — SE-388) |
+
+Independencia de modelo y proveedor por diseño; cada frontend pasa canaries de parity antes de declararse soportado.
+
+## Gobernanza y seguridad
+
+- Human gates por nivel de riesgo (L0-L4) — la autoridad final es humana.
+- Receipts y provenance de cada acción gobernada.
+- Compliance-as-code como dirección: la regulación es fuente, la interpretación es humana, el enforcement es ejecutable. Savia produce evidencia de controles ejecutados; no declara cumplimiento legal definitivo.
+
+<!-- COUNTS-AUTO (SE-379): la línea de contadores se valida contra el repo -->
 
 ---
 
@@ -22,18 +88,18 @@ pm-workspace convierte Claude Code y OpenCode en un entorno de ingeniería multi
 ```bash
 # 1. Instala
 
-curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.sh | bash
 
 # 2. Abre el workspace
 
-cd pm-workspace && opencode
+cd savia && opencode
 
 # 3. Savia te saluda y te pregunta tu nombre. Después:
 
 /sprint-status          # ← tu primer comando
 ```
 
-**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.ps1 | iex`
+**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
 Savia se adapta a tu rol — PM, developer, QA, Product Owner, CEO — y a tu idioma. Compatible con Azure DevOps, Jira y Git-native (Savia Flow).
 

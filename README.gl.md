@@ -11,8 +11,8 @@ lang: gl
 > Traducion de cortesia. Version de referencia: [espanol](README.md).
 > Ultima sincronizacion: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -20,7 +20,7 @@ lang: gl
 
 **532 comandos · 65 axentes · 86 skills · 58 hooks · 16 linguaxes · 283+ suites de test**
 
-pm-workspace converte Claude Code e OpenCode nun entorno de enxeneria multi-axente. Orquestra axentes especializados para xestion de proxectos, desenvolvemento con specs executabeis, auditoria de seguridade e revision de codigo. Funciona en local con soberania de datos e inferencia, en 9 idiomas.
+Sistema axente soberano para gobernar e executar traballo con IA, independente de modelo, provedor e frontend, con criterio humano por deseño. Integra axentes, memoria, seguridade, políticas executables, trazabilidade e dominios especializados. Funciona en local con soberanía de datos e inferencia, en 9 idiomas.
 
 ---
 
@@ -45,6 +45,30 @@ cd pm-workspace && opencode
 Savia adaptase ao teu rol — PM, developer, QA, Product Owner, CEO — e a tua lingua. Compatible con Azure DevOps, Jira e Git-native (Savia Flow).
 
 ---
+
+## Por que existe Savia
+
+A execución asistida por IA crece máis rápido que a confianza sobre ela. Savia existe para que esa execución sexa gobernada: a IA pode asumir progresivamente máis execución sen apropiarse da autoridade.
+
+## Principios
+
+Autoridade humana por deseño · soberanía con significado técnico · evidencia sobre claims · policy-as-code · delegación segura.
+
+## Que fai Savia
+
+Gobernar (risco L0-L4, gates, receipts) · executar (agents, commands, skills, SDD) · recordar (memoria bitemporal) · avaliar (evals con baseline) · dominios especializados.
+
+## Arquitectura
+
+Goberno (Policy/Risk/Gates) + Execución (Agents/Skills/Tools) + Memoria (Context/Knowledge/History) → Evidence/Evals → Frontends + Providers.
+
+## Frontends e provedores
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, teito L2). Independencia de modelo e provedor por deseño.
+
+## Gobernanza e seguridade
+
+Human gates por nivel de risco (L0-L4). Compliance-as-code como dirección: Savia produce evidencia de controls executados; non declara cumprimento legal definitivo.
 
 ## Capacidades
 

@@ -11,8 +11,8 @@ lang: en
 > Courtesy translation. Reference version: [Spanish](README.md).
 > Last sync: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -45,6 +45,30 @@ cd pm-workspace && opencode
 Savia adapts to your role — PM, developer, QA, Product Owner, CEO — and your language. Works with Azure DevOps, Jira, and Git-native (Savia Flow).
 
 ---
+
+## Why Savia exists
+
+AI-assisted execution is growing faster than trust in it. Savia exists so that this execution is governed: the AI can progressively take on more execution without appropriating authority.
+
+## Principles
+
+Human authority by design · sovereignty with technical meaning · evidence over claims · policy-as-code · safe delegation.
+
+## What Savia does
+
+Govern (risk L0-L4, gates, receipts) · execute (agents, commands, skills, SDD) · remember (bitemporal memory) · evaluate (baseline evals) · specialized domains.
+
+## Architecture
+
+Governance (Policy/Risk/Gates) + Execution (Agents/Skills/Tools) + Memory (Context/Knowledge/History) → Evidence/Evals → Frontends + Providers.
+
+## Frontends and providers
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, L2 ceiling). Model and provider independence by design.
+
+## Governance and safety
+
+Human gates per risk level (L0-L4). Compliance-as-code as a direction: Savia produces evidence of executed controls; it does not declare definitive legal compliance.
 
 ## Capabilities
 

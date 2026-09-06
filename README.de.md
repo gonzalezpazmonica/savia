@@ -7,8 +7,8 @@
 > Uebersetzung aus Hoeflichkeit. Referenzversion: [Spanisch](README.md).
 > Letzte Synchronisation: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -16,7 +16,7 @@
 
 **532 Befehle · 65 Agenten · 86 Skills · 58 Hooks · 16 Sprachen · 283+ Test-Suiten**
 
-pm-workspace verwandelt Claude Code und OpenCode in eine Multi-Agenten-Entwicklungsumgebung. Sie orchestriert spezialisierte Agenten fuer Projektmanagement, Spec-getriebene Entwicklung, Sicherheitspruefung und Code-Review. Laeuft lokal mit Daten- und Inferenzsouveraenitaet, in 9 Sprachen.
+Agentisches souveränes System zur Steuerung und Ausführung von KI-Arbeit, unabhängig von Modell, Anbieter und Frontend, mit menschlicher Kontrolle by Design. Integriert Agenten, Gedächtnis, Sicherheit, ausführbare Richtlinien, Nachvollziehbarkeit und spezialisierte Domänen. Läuft lokal mit Daten- und Inferenzsouveränität, in 9 Sprachen.
 
 ---
 
@@ -41,6 +41,30 @@ cd pm-workspace && opencode
 Savia passt sich an deine Rolle an — PM, Entwickler, QA, Product Owner, CEO — und an deine Sprache. Kompatibel mit Azure DevOps, Jira und Git-native (Savia Flow).
 
 ---
+
+## Warum Savia existiert
+
+KI-Ausführung regiert werden soll — progressive Ausführung ohne Aneignung der Autorität.
+
+## Prinzipien
+
+Menschliche Autorität by design · Souveränität · Evidenz · Policy-as-code · sichere Delegation.
+
+## Was Savia tut
+
+Govern (L0-L4, Gates, Receipts) · Ausführen · Erinnern · Evaluieren · Domänen.
+
+## Architektur
+
+Governance + Ausführung + Memory → Evidence/Evals → Frontends + Providers.
+
+## Frontends und Anbieter
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, L2).
+
+## Governance und Sicherheit
+
+Human Gates L0-L4. Compliance-as-code: Evidenz, keine definitive Rechtsaussage.
 
 ## Faehigkeiten
 
