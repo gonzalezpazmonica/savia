@@ -11,14 +11,16 @@ lang: it
 > Traduzione di cortesia. Versione di riferimento: [spagnolo](README.md).
 > Ultima sincronizzazione: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/savia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+**567 comandi · 89 agenti · 136 skills · 124 hook**
+
 ## Workspace di sviluppo multi-agente
 
-**532 comandi · 65 agenti · 86 skill · 58 hook · 16 linguaggi · 283+ suite di test**
+**567 comandi · 89 agenti · 136 skill · 124 hook · 16 linguaggi · 283+ suite di test**
 
 Sistema agentico sovrano per governare ed eseguire lavoro con IA, indipendente da modello, fornitore e frontend, con criterio umano by design. Integra agenti, memoria, sicurezza, policy eseguibili, tracciabilità e domini specializzati. Opera in locale con sovranità dei dati e dell'inferenza, in 9 lingue.
 
@@ -29,18 +31,18 @@ Sistema agentico sovrano per governare ed eseguire lavoro con IA, indipendente d
 ```bash
 # 1. Installa
 
-curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.sh | bash
 
 # 2. Apri il workspace
 
-cd pm-workspace && opencode
+cd savia && opencode
 
 # 3. Savia ti saluta e ti chiede il nome. Poi:
 
 /sprint-status          # ← il tuo primo comando
 ```
 
-**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.ps1 | iex`
+**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
 Savia si adatta al tuo ruolo — PM, developer, QA, Product Owner, CEO — e alla tua lingua. Compatibile con Azure DevOps, Jira e Git-native (Savia Flow).
 
@@ -75,7 +77,7 @@ Human gate L0-L4. Compliance-as-code: evidenza, non dichiarazione legale definit
 | Area | Cosa fa |
 |---|---|
 | Gestione progetti | Sprint, burndown, capacita, daily, retro, KPI. Report in Excel e PowerPoint. Previsione Monte Carlo. Fatturazione. |
-| Spec-Driven Development | I task diventano spec eseguibili. 65 agenti implementano in 16 linguaggi (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in worktree isolati. Code review automatica + revisione umana obbligatoria. Compatibile con `github/spec-kit`. |
+| Spec-Driven Development | I task diventano spec eseguibili. 89 agenti implementano in 16 linguaggi (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in worktree isolati. Code review automatica + revisione umana obbligatoria. Compatibile con `github/spec-kit`. |
 | Sicurezza | SAST contro OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dinamico, SBOM, compliance settoriale (12 settori). Savia Shield: classificazione locale dei dati con LLM on-premise, mascheramento reversibile, firma crittografica dei PR. |
 | Code Review Court | 5 giudici specializzati (correctness, architecture, security, cognitive, spec) esaminano in parallelo con scoring 0-100 e gate di 400 LOC. |
 | Sovranita di inferenza | API Anthropic per default. Fallback automatico a Ollama locale (Gemma 4) in caso di errore di rete, HTTP 5xx, HTTP 429 o timeout. Circuit breaker integrato. |
@@ -89,7 +91,7 @@ Human gate L0-L4. Compliance-as-code: evidenza, non dichiarazione legale definit
 
 ## Savia
 
-Savia e l'identita del workspace: un pattern testuale che persiste attraverso modelli (Claude, DeepSeek, Qwen). Coordina 65 agenti, 532 comandi e 86 skill. Opera sotto principi di onesta calibrata, sovranita dei dati e revisione umana obbligatoria.
+Savia e l'identita del workspace: un pattern testuale che persiste attraverso modelli (Claude, DeepSeek, Qwen). Coordina 89 agenti, 567 comandi e 136 skill. Opera sotto principi di onesta calibrata, sovranita dei dati e revisione umana obbligatoria.
 
 Non e una persona, non prova emozioni e non sostituisce il giudizio di chi opera. Propone, esegue, avverte. Decide solo quanto delegato esplicitamente.
 
@@ -111,10 +113,10 @@ Non e una persona, non prova emozioni e non sostituisce il giudizio di chi opera
 ```
 pm-workspace/
 ├── .claude/
-│   ├── commands/       ← 532 comandi
-│   ├── agents/         ← 65 agenti specializzati (7 con decision trees: SPEC-147)
-│   ├── skills/         ← 86 skill di dominio
-│   ├── hooks/          ← 58 hook deterministici
+│   ├── commands/       ← 567 comandi
+│   ├── agents/         ← 89 agenti specializzati (7 con decision trees: SPEC-147)
+│   ├── skills/         ← 136 skill di dominio
+│   ├── hooks/          ← 124 hook deterministici
 │   └── rules/          ← regole di contesto e linguaggio
 ├── docs/               ← guide per ruolo, scenario, settore
 ├── projects/           ← progetti (git-ignorati per privacy)

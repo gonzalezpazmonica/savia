@@ -11,14 +11,14 @@ lang: en
 > Courtesy translation. Reference version: [Spanish](README.md).
 > Last sync: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/savia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ## Multi-agent development workspace
 
-**532 commands · 65 agents · 86 skills · 58 hooks · 16 languages · 283+ test suites**
+**567 commands · 89 agents · 136 skills · 124 hooks**
 
 pm-workspace turns Claude Code and OpenCode into a multi-agent engineering environment. It orchestrates specialized agents for project management, spec-driven development, security auditing, and code review. Runs locally with data and inference sovereignty, in 9 languages.
 
@@ -29,18 +29,18 @@ pm-workspace turns Claude Code and OpenCode into a multi-agent engineering envir
 ```bash
 # 1. Install
 
-curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.sh | bash
 
 # 2. Open the workspace
 
-cd pm-workspace && opencode
+cd savia && opencode
 
 # 3. Savia greets you and asks your name. Then:
 
 /sprint-status          # ← your first command
 ```
 
-**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.ps1 | iex`
+**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
 Savia adapts to your role — PM, developer, QA, Product Owner, CEO — and your language. Works with Azure DevOps, Jira, and Git-native (Savia Flow).
 
@@ -75,7 +75,7 @@ Human gates per risk level (L0-L4). Compliance-as-code as a direction: Savia pro
 | Area | What it does |
 |---|---|
 | Project management | Sprints, burndown, capacity, dailies, retros, KPIs. Excel and PowerPoint reports. Monte Carlo forecasting. Billing. |
-| Spec-Driven Development | Tasks become executable specs. 65 agents implement in 16 languages (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in isolated worktrees. Automated code review + mandatory human review. Compatible with `github/spec-kit`. |
+| Spec-Driven Development | Tasks become executable specs. 89 agents implement in 16 languages (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in isolated worktrees. Automated code review + mandatory human review. Compatible with `github/spec-kit`. |
 | Security | SAST against OWASP Top 10, Red Team / Blue Team / Auditor pipeline, dynamic pentesting, SBOM, sector compliance (12 sectors). Savia Shield: local data classification with on-premise LLM, reversible masking, cryptographic PR signing. |
 | Code Review Court | 5 specialized judges (correctness, architecture, security, cognitive, spec) review in parallel with 0-100 scoring and a 400 LOC gate. |
 | Inference sovereignty | Anthropic API by default. Automatic fallback to local Ollama (Gemma 4) on network error, HTTP 5xx, HTTP 429, or timeout. Integrated circuit breaker. |
@@ -89,7 +89,7 @@ Human gates per risk level (L0-L4). Compliance-as-code as a direction: Savia pro
 
 ## Savia
 
-Savia is the identity of the workspace: a text pattern that persists across models (Claude, DeepSeek, Qwen). She coordinates 65 agents, 532 commands, and 86 skills. She operates under principles of calibrated honesty, data sovereignty, and mandatory human review.
+Savia is the identity of the workspace: a text pattern that persists across models (Claude, DeepSeek, Qwen). She coordinates 89 agents, 567 commands, and 136 skills. She operates under principles of calibrated honesty, data sovereignty, and mandatory human review.
 
 She is not a person, does not feel, and does not replace the operator's judgment. She proposes, executes, warns. She only decides what is explicitly delegated.
 
@@ -111,10 +111,10 @@ She is not a person, does not feel, and does not replace the operator's judgment
 ```
 pm-workspace/
 ├── .claude/
-│   ├── commands/       ← 532 commands
-│   ├── agents/         ← 65 specialized agents (7 with decision trees: SPEC-147)
-│   ├── skills/         ← 86 domain skills
-│   ├── hooks/          ← 58 deterministic hooks
+│   ├── commands/       ← 567 commands
+│   ├── agents/         ← 89 specialized agents (7 with decision trees: SPEC-147)
+│   ├── skills/         ← 136 domain skills
+│   ├── hooks/          ← 124 deterministic hooks
 │   └── rules/          ← context and language rules
 ├── docs/               ← guides by role, scenario, sector
 ├── projects/           ← projects (git-ignored for privacy)

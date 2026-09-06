@@ -92,9 +92,12 @@ jobs:
 
           if [ -n "$EXISTING_PR" ]; then
             echo "Reusing existing PR #$EXISTING_PR on $BRANCH"
-            git push --force origin "$BRANCH"
+            git push --force-with-lease origin "$BRANCH"
           else
-            git push origin "$BRANCH"
+            # SE-390 B: la rama puede quedar stale de un PR previo mergeado/cerrado sin
+            # delete (auto-rebase). La rama se recrea siempre desde origin/main, asi que
+            # force-with-lease es seguro y protege la carrera con otro run del bot.
+            git push --force-with-lease origin "$BRANCH"
             BODY="Auto-generated consolidation of CHANGELOG.d fragments into CHANGELOG.md (SE-053 Slice 2).
             Fragments consolidated: ${COUNT}
             Threshold: 20

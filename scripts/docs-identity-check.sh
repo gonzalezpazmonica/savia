@@ -48,6 +48,28 @@ if echo "$head15" | grep -qi "pm-workspace es\|pm-workspace convierte" && ! echo
   echo "FAIL: README first-screen usa identidad legacy como actual"; FAILS=$((FAILS+1))
 fi
 
+
+# ── 7. URLs operativas legacy NO permitidas (raw / actions / clone / cd) ──
+LEG=$(grep -rn "github.com/gonzalezpazmonica/pm-workspace" "$ROOT"/README*.md 2>/dev/null | grep -viE "histor|origin|legacy|antes|nac|born|nacio" | head -3)
+[[ -n "$LEG" ]] && { echo "FAIL: URLs operativas legacy pm-workspace en README*:"; echo "$LEG"; FAILS=$((FAILS+1)); }
+
+# ── 8. Contadores uniformes: las 9 traducciones == canonical de README.md ──
+CANON=$(grep -m1 -oP '\*\*[0-9]+ [a-zç]+[^\*]{0,80}\[0-9]+\|hooks[^\*]{0,20}\*\*' "$ROOT/README.md" 2>/dev/null | head -1)
+for f in "$ROOT"/README.en.md "$ROOT"/README.ca.md "$ROOT"/README.gl.md "$ROOT"/README.eu.md "$ROOT"/README.fr.md "$ROOT"/README.de.md "$ROOT"/README.pt.md "$ROOT"/README.it.md; do
+  [[ -f "$f" ]] || continue
+  # canonical numbers presentes y sin numeros stale 532/65/86/58
+  if grep -qE "532|65 agents|65 agents|86 skills|58 hooks" "$f"; then
+    echo "FAIL: contadores stale en $(basename "$f")"; FAILS=$((FAILS+1))
+  fi
+done
+# canonical: README y traducciones deben tener 567 ... 89 ... 136 ... 124
+for f in "$ROOT"/README*.md; do
+  [[ -f "$f" ]] || continue
+  if ! grep -qE "567" "$f"; then
+    echo "FAIL: $(basename "$f") sin contador canonical 567"; FAILS=$((FAILS+1))
+  fi
+done
+
 if [[ $FAILS -gt 0 ]]; then echo "-- docs-identity-check: $FAILS fallo(s)"; exit 1; fi
 echo "PASS: identidad documental consistente (Savia)"
 exit 0
