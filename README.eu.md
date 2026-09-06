@@ -6,13 +6,13 @@ lang: eu
 
 **Euskara** | [Gaztelania](README.md) | [English](README.en.md) | [Galego](README.gl.md) | [Catala](README.ca.md) | [Francais](README.fr.md) | [Deutsch](README.de.md) | [Portugues](README.pt.md) | [Italiano](README.it.md)
 
-# PM-Workspace
+# Savia
 
 > Kortesiazko itzulpena. Erreferentziazko bertsioa: [gaztelania](README.md).
 > Azken sinkronizazioa: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -45,6 +45,30 @@ cd pm-workspace && opencode
 Savia zure rolera moldatzen da — PM, developer, QA, Product Owner, CEO — eta zure hizkuntzara. Azure DevOps, Jira eta Git-native (Savia Flow) bateragarria.
 
 ---
+
+## Zergatik existitzen da Savia
+
+IA lagundutako exekuzioa confiantza baino azkarrago hazten da. Savia existitzen da exekuzio hori gobernatua izan dadin: IA-k gero eta gehiago exekutatu dezake, agintea bereganatu gabe.
+
+## Printzipioak
+
+Giza autoritatea by design · subiranotasun teknikoa · evidencia claims-en gainetik · policy-as-code · delegazio segurua.
+
+## Zer egiten du Savia-k
+
+Gobernatu (arriskua L0-L4, gates, receipts) · exekutatu · gogoratu · ebaluatu · domeinu espezializatuak.
+
+## Arkitektura
+
+Gobernua + Exekuzioa + Memoria → Evidence/Evals → Frontend + Hornitzaileak.
+
+## Frontend eta hornitzaileak
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, L2 takoa).
+
+## Gobernantza eta segurtasuna
+
+Human gates L0-L4. Compliance-as-code: exekutatutako kontrolen ebidentzia, ez legelama definitiborik.
 
 ## Gaitasunak
 
