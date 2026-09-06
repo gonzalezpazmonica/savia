@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=0a779e4ca01d68d28488d9afad1b06e56aae443fd549719bface01efb33fc65c
-timestamp=2026-09-06T18:45:58Z
-branch=agent/codex-day1-graduation
-head_commit=7778270d
-signature=87f1442848e5fa545ae2164857c4194420094d019df41c691a81301b1b2e4faf
+diff_hash=b712f45fa45847158bcf71edb57342ed602b89e091d18376bb3ad8cb0b4e45ed
+timestamp=2026-09-06T20:16:23Z
+branch=agent/pre-day1-cleanup
+head_commit=393fea37
+signature=374d7e748111153e42f3422cff2c93de888afbdde0ce2a8856ebd521c395e0be
