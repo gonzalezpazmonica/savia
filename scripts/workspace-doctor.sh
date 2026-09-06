@@ -21,10 +21,16 @@ else
   fail "git_repo" "No es un repositorio git — ejecuta: git init"
 fi
 
-# 2. Rama != main
+# 2. Rama != main — SE-388 F: resultado según intención/riesgo.
+#    read-only sobre main => WARN; mutación sobre main => FAIL (protección intacta).
+INTENT="${SAVIA_INTENT:-mutating}"
 BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
-  fail "branch_not_main" "Rama actual: $BRANCH — cambia: git checkout -b feat/..."
+  if [[ "$INTENT" == "read-only" ]]; then
+    warn "branch_main_readonly" "Rama $BRANCH con intención read-only — permitido con aviso (SE-388 F)"
+  else
+    fail "branch_not_main" "Rama actual: $BRANCH — operación con mutación exige rama/worktree (git checkout -b feat/...)"
+  fi
 else
   ok "branch_not_main" "Rama: $BRANCH"
 fi

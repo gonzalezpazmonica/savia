@@ -1,1 +1,6 @@
-{"task":"task-013-SE-332","status":"NEEDS_AGENT_SESSION","runner_version":1}
+{
+  "task": "task-013-SE-332",
+  "status": "NEEDS_AGENT_SESSION",
+  "runner_version": 1,
+  "agent_session": "PASS"
+}

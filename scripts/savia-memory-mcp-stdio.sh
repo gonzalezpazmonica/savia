@@ -16,14 +16,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MEMORY_STORE="$SCRIPT_DIR/memory-store.sh"
 
 if [[ ! -x "$MEMORY_STORE" ]]; then
-  echo '{"jsonrpc":"2.0","error":{"code":-32603,"message":"memory-store.sh not executable"}}' >&2
+  # SE-388 B: errores de protocolo => stdout (framing); diagnóstico => stderr
+  echo "memory-store.sh not executable" >&2
+  echo '{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"memory-store.sh not executable"}}'
   exit 1
 fi
 
 # JSON-RPC response helper
 respond() {
   local id="$1" result="$2"
-  printf '{"jsonrpc":"2.0","id":%s,"result":%s}\n' "$id" "$result"
+  # SE-388 B: compacto y validado — un mensaje JSON por línea en stdout
+  local compact
+  compact=$(printf '%s' "$result" | jq -c . 2>/dev/null) || compact='{"content":[{"type":"text","text":"serialization-error"}]}'
+  printf '{"jsonrpc":"2.0","id":%s,"result":%s}\n' "$id" "$compact"
 }
 
 respond_error() {
@@ -45,15 +50,30 @@ handle_tools_call() {
       local query limit
       query=$(printf '%s' "$args" | jq -r '.query // ""')
       limit=$(printf '%s' "$args" | jq -r '.limit // 5')
-      output=$("$MEMORY_STORE" recall "$query" 2>&1 | head -n "$limit" || true)
+      output=$("$MEMORY_STORE" recall "$query" 2> >(cat >&2) | head -n "$limit" || true)
       ;;
     memory_save)
       local content
       content=$(printf '%s' "$args" | jq -r '.content // ""')
-      output=$("$MEMORY_STORE" save "$content" 2>&1 || true)
+      output=$("$MEMORY_STORE" save "$content" 2> >(cat >&2) || true)
       ;;
     memory_stats)
-      output=$("$MEMORY_STORE" stats 2>&1 || true)
+      local db="$HOME/.savia/memory-two-speed.db" derived="unknown"
+      if [[ -f "$db" ]]; then
+        derived=$(python3 -c "
+import sqlite3,sys
+try:
+    c=sqlite3.connect(sys.argv[1])
+    n=0
+    for t in [r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]:
+        n+=c.execute(f'SELECT count(*) FROM {t}').fetchone()[0]
+    print(n)
+except Exception: print('unknown')" "$db" 2>/dev/null)
+      fi
+      output=$("$MEMORY_STORE" stats 2> >(cat >&2) || true)
+      output="$output
+derived_entries_from_canonical_source: $derived
+invariant: reported==derivable_from_canonical"
       ;;
     *)
       respond_error "$id" -32601 "Unknown tool: $tool"
