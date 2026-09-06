@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=b5a2285e5b0a62add3a877702c821bd03ef435f532d165cb3179e3a62a1e6548
-timestamp=2026-09-06T09:22:27Z
-branch=agent/impl-20260905-se390-identity
-head_commit=6b2fc1bb
-signature=2dcd1fb983a5a6f4a39897db2afb9e865590f576343ae6a280e9980306636670
+diff_hash=ec75d9819113a112586f4545a4162a46295e85315b3a24ec1a88c26ed64253f3
+timestamp=2026-09-06T15:40:15Z
+branch=agent/f5-exactly-once-pushpr
+head_commit=eb2ecd8e
+signature=fbca16bd7a5299cf88844611dd603605cd43a29fe859acd8601f042f6f6524d9
