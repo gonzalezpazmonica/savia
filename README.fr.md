@@ -2,13 +2,13 @@
 
 **Francais** | [Espagnol](README.md) | [English](README.en.md) | [Galego](README.gl.md) | [Euskara](README.eu.md) | [Catala](README.ca.md) | [Deutsch](README.de.md) | [Portugues](README.pt.md) | [Italiano](README.it.md)
 
-# PM-Workspace
+# Savia
 
 > Traduction de courtoisie. Version de reference : [espagnol](README.md).
 > Derniere synchronisation : 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -16,7 +16,7 @@
 
 **532 commandes · 65 agents · 86 skills · 58 hooks · 16 langages · 283+ suites de tests**
 
-pm-workspace transforme Claude Code et OpenCode en un environnement d'ingenierie multi-agent. Elle orchestre des agents specialises pour la gestion de projets, le developpement avec specs executables, l'audit de securite et la revue de code. Fonctionne en local avec souverainete des donnees et de l'inference, en 9 langues.
+Système agentique souverain pour gouverner et exécuter le travail assisté par IA, indépendant du modèle, du fournisseur et du frontend, avec le critère humain by design.
 
 ---
 
@@ -41,6 +41,30 @@ cd pm-workspace && opencode
 Savia s'adapte a votre role — PM, developpeur, QA, Product Owner, CEO — et a votre langue. Compatible avec Azure DevOps, Jira et Git-native (Savia Flow).
 
 ---
+
+## Pourquoi Savia existe
+
+L'exécution assistée par IA croît plus vite que la confiance qu'elle inspire. Savia existe pour que cette exécution soit gouvernée : l'IA peut prendre progressivement plus d'exécution sans s'approprier l'autorité.
+
+## Principes
+
+Autorité humaine by design · souveraineté à sens technique · preuve plutôt que promesses · policy-as-code · délégation sûre.
+
+## Ce que fait Savia
+
+Gouverner (risque L0-L4, gates, receipts) · exécuter (agents, commands, skills, SDD) · mémoriser (mémoire bitemporale) · évaluer (evals avec baseline) · domaines spécialisés.
+
+## Architecture
+
+Gouvernance (Policy/Risk/Gates) + Exécution (Agents/Skills/Tools) + Mémoire (Context/Knowledge/History) → Evidence/Evals → Frontends + Providers.
+
+## Frontends et fournisseurs
+
+Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, plafond L2). Indépendance du modèle et du fournisseur by design.
+
+## Gouvernance et sécurité
+
+Human gates par niveau de risque (L0-L4). Compliance-as-code comme direction : Savia produit des preuves des contrôles exécutés ; ne déclare pas de conformité légale définitive.
 
 ## Capacites
 

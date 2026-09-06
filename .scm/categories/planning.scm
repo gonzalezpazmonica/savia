@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 635 resources
+> 637 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
@@ -158,6 +158,7 @@
 - **diagram-status** (cmd): >
 - **doc-counts-check** (script): scripts/doc-counts-check.sh — SE-253 Slice 5
 - **doc-quality-feedback** (skill): Usar cuando se recopila feedback de calidad de documentación tras usar skills y reglas.
+- **docs-identity-check** (script): docs-identity-check.sh — SE-390 §34: drift gate de identidad documental.
 - **dotnet-developer** (agent): >
 - **dual-estimate** (script): dual-estimate.sh — Dual estimation engine: agent-time vs human-time
 - **ecosystem-watcher** (skill): Usar una vez al mes para detectar cambios relevantes en el ecosistema de herramientas externas.
@@ -218,6 +219,7 @@
 - **ext-platform-export-gate** (script): ext-platform-export-gate.sh — SE-272 Slice 4: Export gate for external platforms
 - **ext-platform-gate** (script): ext-platform-gate.sh — SE-272 Slice 4: Enforce asymmetry for external platforms
 - **ext-platform-resilience** (script): ext-platform-resilience.sh — SE-272 Slice 4: Resilience for external platforms
+- **f5-state** (script): f5-state.sh — SE-387 C/F5: máquina de estados exactly-once para pr.merge.
 - **factuality-judge** (agent): Truth Tribunal judge — factual accuracy of claims against verifiable sources
 - **federation-discover** (script): federation-discover.sh — SCL-009: auto-descubrimiento de instancias federadas.
 - **federation-drill** (script): federation-drill.sh — SE-263 S7: Compromised instance drill

@@ -1,6 +1,6 @@
 {
-  "hash": "741de88d5405",
-  "total": 1459,
+  "hash": "0b2349be4fa8",
+  "total": 1461,
   "resources": [
     {
       "category": "analysis",
@@ -9504,6 +9504,20 @@
     },
     {
       "category": "planning",
+      "name": "docs-identity-check",
+      "intents": [
+        "check",
+        "docs",
+        "documental",
+        "drift",
+        "gate"
+      ],
+      "kind": "script",
+      "path": "scripts/docs-identity-check.sh",
+      "description": "docs-identity-check.sh — SE-390 §34: drift gate de identidad documental."
+    },
+    {
+      "category": "planning",
       "name": "dotnet-developer",
       "intents": [],
       "kind": "agent",
@@ -10290,6 +10304,20 @@
       "kind": "script",
       "path": "scripts/ext-platform-resilience.sh",
       "description": "ext-platform-resilience.sh — SE-272 Slice 4: Resilience for external platforms"
+    },
+    {
+      "category": "planning",
+      "name": "f5-state",
+      "intents": [
+        "estados",
+        "exactly",
+        "merge",
+        "máquina",
+        "once"
+      ],
+      "kind": "script",
+      "path": "scripts/f5-state.sh",
+      "description": "f5-state.sh — SE-387 C/F5: máquina de estados exactly-once para pr.merge."
     },
     {
       "category": "planning",

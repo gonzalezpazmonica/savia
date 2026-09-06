@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 4fc017d8827e | resources: 1459
-> 295 commands · 136 skills · 89 agents · 939 scripts
+> hash: eeeb92319752 | resources: 1461
+> 295 commands · 136 skills · 89 agents · 941 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -717,6 +717,7 @@
 [planning] diagram-status —  — cmd:.claude/commands/diagram-status.md
 [planning] doc-counts-check — check,counts,scripts,slice — script:scripts/doc-counts-check.sh
 [planning] doc-quality-feedback — calidad,documentación,feedback,recopila,reglas — skill:.claude/skills/doc-quality-feedback/SKILL.md
+[planning] docs-identity-check — check,docs,documental,drift,gate — script:scripts/docs-identity-check.sh
 [planning] dotnet-developer —  — agent:.opencode/agents/dotnet-developer.md
 [planning] dual-estimate — agent,dual,engine,estimate,estimation — script:scripts/dual-estimate.sh
 [planning] ecosystem-watcher — cambios,detectar,ecosistema,externas,herramientas — skill:.claude/skills/ecosystem-watcher/SKILL.md
@@ -777,6 +778,7 @@
 [planning] ext-platform-export-gate — export,external,gate,platform,platforms — script:scripts/ext-platform-export-gate.sh
 [planning] ext-platform-gate — asymmetry,enforce,external,gate,platform — script:scripts/ext-platform-gate.sh
 [planning] ext-platform-resilience — external,platform,platforms,resilience,slice — script:scripts/ext-platform-resilience.sh
+[planning] f5-state — estados,exactly,merge,máquina,once — script:scripts/f5-state.sh
 [planning] factuality-judge — accuracy,against,claims,factual,judge — agent:.opencode/agents/factuality-judge.md
 [planning] federation-discover — auto,descubrimiento,discover,federadas,federation — script:scripts/federation-discover.sh
 [planning] federation-drill — compromised,drill,federation,instance — script:scripts/federation-drill.sh
