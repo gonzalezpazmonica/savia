@@ -1,0 +1,16 @@
+policy_id: EU-AIA-ART50-TEST-FIXTURE
+framework: EU_AI_ACT
+jurisdiction: EU
+version: 1
+status: EXECUTABLE
+legal_source:
+  regulation: "EU 2024/1689"
+  article: "50"
+trigger:
+  actor_role: [provider, deployer]
+  human_facing: true
+obligations:
+  - transparency_notice
+enforcement:
+  missing_context: UNKNOWN
+  unmet_obligation: BLOCK_OR_HUMAN_GATE

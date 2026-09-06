@@ -1,0 +1,36 @@
+policy_id: EU-AIA-ART50-HUMAN-INTERACTION
+framework: EU_AI_ACT
+jurisdiction: EU
+version: 1
+status: LEGAL_REVIEW_PENDING
+
+legal_source:
+  regulation: "EU 2024/1689"
+  article: "50"
+  amended_by:
+    - "EU 2026/1744"
+  source_url: "https://eur-lex.europa.eu/eli/reg/2024/1689/oj"
+
+interpretation:
+  status: LEGAL_REVIEW_PENDING
+  validated_by: null
+  validated_at: null
+  version: 1
+  note: >
+    Interpretación candidata derivada de la spec aportada por la operadora
+    (SE-389 §5). Requiere HUMAN_VALIDATED antes de EXECUTABLE (SE-389 §18).
+
+trigger:
+  actor_role: [provider, deployer]
+  human_facing: true
+
+obligations:
+  - transparency_notice
+
+enforcement:
+  missing_context: UNKNOWN
+  unmet_obligation: BLOCK_OR_HUMAN_GATE
+
+evidence:
+  - runtime_context
+  - disclosure_receipt

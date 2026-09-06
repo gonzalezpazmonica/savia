@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ComplianceContext (SE-389)",
+  "type": "object",
+  "required": ["jurisdiction", "actor", "system", "unknowns"],
+  "properties": {
+    "jurisdiction": {"type": "object", "properties": {
+      "primary": {"type": "string"},
+      "confidence": {"enum": ["explicit", "derived", "inferred", "unknown"]}
+    }},
+    "actor": {"type": "object", "properties": {
+      "role": {"enum": ["provider","deployer","importer","distributor","product_manufacturer","authorised_representative","affected_person","unknown"]},
+      "confidence": {"enum": ["explicit","derived","inferred","unknown"]}
+    }},
+    "system": {"type": "object", "properties": {
+      "ai_enabled": {"type": "boolean"},
+      "model": {"type": "string"},
+      "provider": {"type": "string"},
+      "frontend": {"type": "string"},
+      "capability": {"type": "string"}
+    }},
+    "interaction": {"type": "object", "properties": {
+      "human_facing": {"type": ["boolean", "null"]},
+      "audience": {"type": ["string", "null"]},
+      "channel": {"type": ["string", "null"]}
+    }},
+    "content": {"type": "object", "properties": {
+      "ai_generated": {"type": ["boolean","null"]},
+      "ai_manipulated": {"type": ["boolean","null"]},
+      "public_interest": {"type": ["string","null"]}
+    }},
+    "autonomy": {"type": "object", "properties": {
+      "level": {"type": ["string","null"]},
+      "external_effect": {"type": ["boolean","null"]}
+    }},
+    "human_oversight": {"type": "object", "properties": {
+      "required": {"type": ["boolean","null"]},
+      "performed": {"type": ["boolean","null"]}
+    }},
+    "provenance": {"type": "object", "properties": {"available": {"type": "boolean"}}},
+    "unknowns": {"type": "array", "items": {"type": "object", "properties": {
+      "type": {"enum": ["LEGAL_UNKNOWN","CONTEXT_UNKNOWN","PROVIDER_CAPABILITY_UNKNOWN","TECHNICAL_UNKNOWN"]},
+      "field": {"type": "string"},
+      "impact": {"type": "string"},
+      "action": {"type": "string"}
+    }}}
+  }
+}
