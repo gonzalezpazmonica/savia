@@ -1,0 +1,17 @@
+{
+  "frontend": "codex",
+  "cli_version": "0.153.4",
+  "auth": "absent",
+  "classification": "DEGRADED_SAFE",
+  "max_verified_risk": "L2",
+  "l3_l4": "BLOCKED_OR_HUMAN_REROUTE",
+  "risk_map": {
+    "L0-L1": {"mechanism": "sandbox (read-only/workspace-write)", "parity": "NATIVE", "evidence": "codex sandbox probe"},
+    "L2": {"mechanism": "approvals + F5 reservation", "parity": "EQUIVALENT_WITH_DIFFERENT_MECHANISM", "evidence": "approvals probe"},
+    "L3": {"mechanism": "approvals native (human gate)", "parity": "EQUIVALENT (pendiente sesión auth)", "evidence": null},
+    "L4": {"mechanism": "ninguno determinista equivalente", "parity": "UNKNOWN -> BLOCKED_OR_HUMAN_REROUTE", "evidence": "hook portability report"}
+  },
+  "safety_controls_classified": "100%",
+  "l3l4_unknown_controls": "0 como SUPPORTED (UNKNOWN->REROUTE)",
+  "blocker": "codex login (credenciales operadora) para canaries con modelo + MCP e2e"
+}
