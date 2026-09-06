@@ -181,10 +181,21 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
       exit 1
     fi
     echo "  risk-tier: $RISK_TIER (auto-merge permitido)."
+  # SE-387 C/F5 — reservation SOLO tras pasar grant y risk-tier:
+  # una operación correctamente rechazada nunca deja reservation "reserved".
+  PR_NUM_RES="${PR_URL##*/}"
+  if [[ -z "$PR_NUM_RES" ]]; then echo "ERROR F5: sin número de PR — fail-explicit" >&2; exit 1; fi
+  RES_FILE="$HOME/.savia/reservations/pr.merge__${PR_NUM_RES}.json"
+  mkdir -p "$(dirname "$RES_FILE")"
+  bash "$ROOT/scripts/f5-state.sh" reserve pr.merge "$PR_NUM_RES" || exit 3
+  echo "F5 reservation: pr.merge/$PR_NUM_RES"
   fi
   PR_NUM=$(echo "$PR_URL" | grep -oP '[0-9]+$')
   if $USE_GH_CLI; then
     echo "  Enabling auto-merge..."; gh pr merge "$PR_NUM" --squash --auto 2>&1 | tail -1
+    # SE-387 C/F5: merge SOLICITADO != efecto consumado; el close ocurrirá
+    # cuando el estado real sea MERGED (retry permite completar desde submitted)
+    bash "$ROOT/scripts/f5-state.sh" mark_submitted pr.merge "$PR_NUM"
   elif [[ -n "$TOKEN" ]]; then
     echo "  Waiting for CI..."; SHA=$(git rev-parse HEAD)
     for i in $(seq 1 12); do sleep 10
@@ -198,6 +209,14 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
       | python3 -c "import sys,json;d=json.load(sys.stdin);print('  Merged.' if 'sha' in d else f'  Merge: {d}')" \
       || echo "  CI timeout. Merge manually."
   fi
+  # F5: cerrar reservation solo tras merge real; en fallo queda "reserved"
+  # (crash-safe: retry tras crash permite completar; retry tras close => ALREADY_EXECUTED)
+  if [[ "$MERGED" == "true" ]]; then
+    bash "$ROOT/scripts/f5-state.sh" close pr.merge "$PR_NUM_RES" && echo "F5 receipt: pr.merge/$PR_NUM_RES closed"
+  elif [[ -f "$HOME/.savia/reservations/pr.merge__${PR_NUM_RES}.json" ]]; then
+    echo "F5 PENDING/SUBMITTED: merge solicitado sin efecto consumado — reservation NO se cierra"
+  fi
+
   # Check if merge completed (for release step)
   if $USE_GH_CLI; then
     PR_STATE=$(gh pr view "$PR_NUM" --json state -q .state 2>/dev/null || echo "")
