@@ -1,6 +1,6 @@
 {
-  "hash": "741de88d5405",
-  "total": 1459,
+  "hash": "e7c6f5a3e830",
+  "total": 1460,
   "resources": [
     {
       "category": "analysis",
@@ -9501,6 +9501,20 @@
       "kind": "skill",
       "path": ".claude/skills/doc-quality-feedback/SKILL.md",
       "description": "Usar cuando se recopila feedback de calidad de documentación tras usar skills y reglas."
+    },
+    {
+      "category": "planning",
+      "name": "docs-identity-check",
+      "intents": [
+        "check",
+        "docs",
+        "documental",
+        "drift",
+        "gate"
+      ],
+      "kind": "script",
+      "path": "scripts/docs-identity-check.sh",
+      "description": "docs-identity-check.sh — SE-390 §34: drift gate de identidad documental."
     },
     {
       "category": "planning",

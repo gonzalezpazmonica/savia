@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 4fc017d8827e | resources: 1459
-> 295 commands · 136 skills · 89 agents · 939 scripts
+> hash: 76c7951b0cff | resources: 1460
+> 295 commands · 136 skills · 89 agents · 940 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -717,6 +717,7 @@
 [planning] diagram-status —  — cmd:.claude/commands/diagram-status.md
 [planning] doc-counts-check — check,counts,scripts,slice — script:scripts/doc-counts-check.sh
 [planning] doc-quality-feedback — calidad,documentación,feedback,recopila,reglas — skill:.claude/skills/doc-quality-feedback/SKILL.md
+[planning] docs-identity-check — check,docs,documental,drift,gate — script:scripts/docs-identity-check.sh
 [planning] dotnet-developer —  — agent:.opencode/agents/dotnet-developer.md
 [planning] dual-estimate — agent,dual,engine,estimate,estimation — script:scripts/dual-estimate.sh
 [planning] ecosystem-watcher — cambios,detectar,ecosistema,externas,herramientas — skill:.claude/skills/ecosystem-watcher/SKILL.md

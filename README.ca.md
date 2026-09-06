@@ -11,8 +11,8 @@ lang: ca
 > Traduccio de cortesia. Versio de referencia: [espanyol](README.md).
 > Ultima sincronitzacio: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -20,7 +20,7 @@ lang: ca
 
 **567 comandos · 89 agents · 136 skills · 124 hooks · 16 llenguatges · 283+ suites de test**
 
-pm-workspace converteix Claude Code i OpenCode en un entorn d'enginyeria multi-agent. Orquestra agents especialitzats per a gestio de projectes, desenvolupament amb specs executables, auditoria de seguretat i revisio de codi. Funciona en local amb sobirania de dades i inferencia, en 9 idiomes.
+Sistema agèntic sobirà per governar i executar treball amb IA, independent de model, proveïdor i frontend, amb criteri humà per disseny. Integra agents, memòria, seguretat, polítiques executables, traçabilitat i dominis especialitzats. Funciona en local amb sobirania de dades i inferència, en 9 idiomes.
 
 ---
 

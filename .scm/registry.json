@@ -14664,6 +14664,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/docs-identity-check",
+      "intents": [
+        "check",
+        "docs",
+        "documental",
+        "drift",
+        "gate"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/docs-identity-check.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "agent:.opencode/agents/dotnet-developer",
       "intents": [],
       "kind": "agent",
@@ -29791,7 +29812,7 @@
       "tests": []
     }
   ],
-  "content_hash": "741de88d5405",
+  "content_hash": "e7c6f5a3e830",
   "deferred_kinds": [
     "rule",
     "hook"

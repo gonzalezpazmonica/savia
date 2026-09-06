@@ -1,0 +1,20 @@
+# Savia
+
+> Sistema agéntico soberano para gobernar y ejecutar trabajo con IA, independiente de modelo, proveedor y frontend, con criterio humano por diseño.
+
+Savia es un sistema agéntico soberano para gobernar y ejecutar trabajo asistido por IA. Integra agentes, memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts, evaluación y dominios especializados sobre una arquitectura independiente de modelo, proveedor y frontend. Se delega la ejecución, nunca el criterio.
+
+## Identity
+
+- Project: Savia (antes "pm-workspace" — identidad histórica/compatibilidad)
+- Repository: gonzalezpazmonica/savia
+- Frontends: Claude Code, OpenCode, Codex (DEGRADED_SAFE, techo L2)
+- Risk model: L0-L4 con human gates
+- Principle: execution authority ≠ decision authority
+
+## Docs
+
+- README: README.md
+- Specs: docs/specs/
+- Policy-as-code: laws/, contracts/, regulatory/
+- Capability registry: .scm/registry.json

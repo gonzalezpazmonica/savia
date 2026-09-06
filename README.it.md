@@ -6,13 +6,13 @@ lang: it
 
 **Italiano** | [Spagnolo](README.md) | [English](README.en.md) | [Galego](README.gl.md) | [Euskara](README.eu.md) | [Catala](README.ca.md) | [Francais](README.fr.md) | [Deutsch](README.de.md) | [Portugues](README.pt.md)
 
-# PM-Workspace
+# Savia
 
 > Traduzione di cortesia. Versione di riferimento: [spagnolo](README.md).
 > Ultima sincronizzazione: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/pm-workspace/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
@@ -20,7 +20,7 @@ lang: it
 
 **532 comandi · 65 agenti · 86 skill · 58 hook · 16 linguaggi · 283+ suite di test**
 
-pm-workspace trasforma Claude Code e OpenCode in un ambiente di ingegneria multi-agente. Orchestra agenti specializzati per gestione progetti, sviluppo con spec eseguibili, auditing di sicurezza e revisione del codice. Funziona in locale con sovranita di dati e inferenza, in 9 lingue.
+Sistema agentico sovrano per governare ed eseguire lavoro con IA, indipendente da modello, fornitore e frontend, con criterio umano by design. Integra agenti, memoria, sicurezza, policy eseguibili, tracciabilità e domini specializzati. Opera in locale con sovranità dei dati e dell'inferenza, in 9 lingue.
 
 ---
 
