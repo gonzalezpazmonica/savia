@@ -1,6 +1,6 @@
 {
-  "hash": "0b2349be4fa8",
-  "total": 1461,
+  "hash": "2a80860fce1c",
+  "total": 1462,
   "resources": [
     {
       "category": "analysis",
@@ -2955,6 +2955,19 @@
       "kind": "skill",
       "path": ".claude/skills/codegraph/SKILL.md",
       "description": "Usar cuando se necesita indexación AST persistente para navegación de callers/callees en el código."
+    },
+    {
+      "category": "development",
+      "name": "codex-day1-canaries",
+      "intents": [
+        "autenticada",
+        "canaries",
+        "codex",
+        "graduación"
+      ],
+      "kind": "script",
+      "path": "scripts/codex-day1-canaries.sh",
+      "description": "codex-day1-canaries.sh — SE-388 Day-1 graduación autenticada."
     },
     {
       "category": "development",

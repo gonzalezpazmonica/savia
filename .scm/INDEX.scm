@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: eeeb92319752 | resources: 1461
-> 295 commands · 136 skills · 89 agents · 941 scripts
+> hash: 8970d5762076 | resources: 1462
+> 295 commands · 136 skills · 89 agents · 942 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -229,6 +229,7 @@
 [development] codebase-map — agentes,comandos,dependencias,generar,internas — cmd:.claude/commands/codebase-map.md
 [development] codebase-map — agentes,comandos,dependencias,mapa,reglas — skill:.claude/skills/codebase-map/SKILL.md
 [development] codegraph — callees,callers,código,indexación,navegación — skill:.claude/skills/codegraph/SKILL.md
+[development] codex-day1-canaries — autenticada,canaries,codex,graduación — script:scripts/codex-day1-canaries.sh
 [development] cognitive-debt — cognitive,debt,entry,phase,point — script:scripts/cognitive-debt.sh
 [development] competitive-design — competitive,design,generation,parallel,philosophies — script:scripts/competitive-design.sh
 [development] comprehension-report — architectural,debugging,decisions,documents,failure — cmd:.claude/commands/comprehension-report.md

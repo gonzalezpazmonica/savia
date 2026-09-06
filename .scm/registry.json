@@ -4605,6 +4605,26 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/codex-day1-canaries",
+      "intents": [
+        "autenticada",
+        "canaries",
+        "codex",
+        "graduación"
+      ],
+      "kind": "script",
+      "owner_domain": "development",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/codex-day1-canaries.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/cognitive-debt",
       "intents": [
         "cognitive",
@@ -29833,7 +29853,7 @@
       "tests": []
     }
   ],
-  "content_hash": "0b2349be4fa8",
+  "content_hash": "2a80860fce1c",
   "deferred_kinds": [
     "rule",
     "hook"
