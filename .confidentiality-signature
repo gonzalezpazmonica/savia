@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=424e16e79f30b7c556ceb9dfe9e1a96ac6edb534420952e7785122a929954291
-timestamp=2026-09-06T09:32:37Z
+diff_hash=1592bb03f07af11de67fefd6eab0035dadb138780d12a41ae0c2c3366b67b378
+timestamp=2026-09-06T16:44:15Z
 branch=agent/impl-20260905-se389-policy-code
-head_commit=3bc89239
-signature=475194398ebe8c65efaab0c4473f104a484acb0aff91e4c947ca19dee43f0911
+head_commit=ed9f4955
+signature=12ddcc1caaa8b352ea6f74c2b4e8ea4cd68bf87fbdd87491fe3a80e8dabff8d5
