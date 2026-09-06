@@ -143,6 +143,52 @@ judges:
     escalation: null
     rationale: "Manual via truth-tribunal-orchestrator"
 
+  - agent: coherence-court-orchestrator
+    trigger_event: PreToolUse
+    condition: "Coherence Court flow invoked via coherence-court-orchestrator"
+    mode: on-demand
+    model_tier: mid
+    latency_budget_ms: 0
+    blocking: false
+    escalation: null
+    rationale: "SE-350 Coherence Court - wiring registrada en SE-387 closure (faltaba fila desde creacion de los agentes)"
+  - agent: coherence-factual-judge
+    trigger_event: PreToolUse
+    condition: "Coherence Court flow invoked via coherence-court-orchestrator"
+    mode: on-demand
+    model_tier: mid
+    latency_budget_ms: 0
+    blocking: false
+    escalation: null
+    rationale: "SE-350 Coherence Court - wiring registrada en SE-387 closure (faltaba fila desde creacion de los agentes)"
+  - agent: coherence-objectives-judge
+    trigger_event: PreToolUse
+    condition: "Coherence Court flow invoked via coherence-court-orchestrator"
+    mode: on-demand
+    model_tier: mid
+    latency_budget_ms: 0
+    blocking: false
+    escalation: null
+    rationale: "SE-350 Coherence Court - wiring registrada en SE-387 closure (faltaba fila desde creacion de los agentes)"
+  - agent: coherence-premise-drift-judge
+    trigger_event: PreToolUse
+    condition: "Coherence Court flow invoked via coherence-court-orchestrator"
+    mode: on-demand
+    model_tier: mid
+    latency_budget_ms: 0
+    blocking: false
+    escalation: null
+    rationale: "SE-350 Coherence Court - wiring registrada en SE-387 closure (faltaba fila desde creacion de los agentes)"
+  - agent: coherence-scope-judge
+    trigger_event: PreToolUse
+    condition: "Coherence Court flow invoked via coherence-court-orchestrator"
+    mode: on-demand
+    model_tier: mid
+    latency_budget_ms: 0
+    blocking: false
+    escalation: null
+    rationale: "SE-350 Coherence Court - wiring registrada en SE-387 closure (faltaba fila desde creacion de los agentes)"
+
   - agent: calibration-judge
     trigger_event: PostToolUse
     condition: "Output containing confidence statements (percentages, 'likely', 'probably')"
