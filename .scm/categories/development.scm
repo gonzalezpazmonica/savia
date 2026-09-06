@@ -1,5 +1,5 @@
 # development — Savia Capability Map (L1)
-> 227 resources
+> 228 resources
 
 - **/speckit.checklist** (cmd): Alias spec-kit compatible. Gate de calidad final con verification-lattice multi-capa. Invoca skill verification-lattice. Compatible con github/spec-kit.
 - **/speckit.clarify** (cmd): Alias spec-kit compatible. Preguntas dirigidas para cerrar ambigüedad en una spec. Invoca skill context-interview-conductor. Compatible con github/spec-kit.
@@ -41,6 +41,7 @@
 - **codebase-map** (cmd): Generar mapa de dependencias internas del workspace: comandos → agentes → reglas → skills
 - **codebase-map** (skill): Usar cuando se necesita un mapa de dependencias del workspace (comandos→agentes→reglas→skills).
 - **codegraph** (skill): Usar cuando se necesita indexación AST persistente para navegación de callers/callees en el código.
+- **codex-day1-canaries** (script): codex-day1-canaries.sh — SE-388 Day-1 graduación autenticada.
 - **cognitive-debt** (script): cognitive-debt.sh — SPEC-107 Phase 1 entry point.
 - **competitive-design** (script): competitive-design.sh — Parallel design generation with 3 philosophies
 - **comprehension-report** (cmd): Generate mental model report for an implemented task. Documents architectural decisions, failure heuristics, and 3AM debugging guide.

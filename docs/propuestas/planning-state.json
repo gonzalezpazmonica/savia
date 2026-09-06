@@ -94,12 +94,12 @@
     },
     {
       "id": "SE-388",
-      "status": "APPROVED",
+      "status": "IMPLEMENTING",
       "approval": "Mónica 2026-09-05: 'Los dos últimos specs son accepted'",
       "priority": "P1",
       "title": "Savia ↔ Codex Frontend Adapter",
       "note": "persistida 2026-09-05; renumerada/asignada tras reconciliacion. EXTEND de SPEC-127/SE-047/SE-375. Prerequisito: Codex CLI para probe real (§4/§6). Implementacion tras aprobacion humana; enforcement L3/L4 -> human gate",
-      "evidence": "P0/P1 + ceiling: DEGRADED_SAFE APPROVED WITH L2 CEILING; L3/L4=BLOCKED_OR_HUMAN_REROUTE; Codex CLI 0.153.4 presente, sin credenciales (auth x)"
+      "evidence": "Day-1 2026-09-06: AUTHENTICATED (ChatGPT) + PROBED + L0-L2 CANARIES EVIDENCED (5/5; L1 write filesystem-verified; dogfood receipted). DEGRADED_SAFE max_verified_risk=L2, L3/L4 BLOCKED_OR_HUMAN_REROUTE. P2 no-auth mergeado (#1105). P3 pendiente: MCP e2e wire + L4 enforcement equivalente (no existe PreToolUse-equivalente)."
     }
   ]
 }

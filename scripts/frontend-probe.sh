@@ -23,10 +23,17 @@ probe_opencode() {
 
 probe_codex() {
   if ! command -v codex >/dev/null 2>&1; then
-    echo '{"frontend":"codex","present":false,"status":"UNKNOWN","l4_unknown":true,"note":"Codex CLI no instalado en este entorno — probe requiere instalación (§4: UNKNOWN nunca es soportado)"}'
-  else
-    echo '{"frontend":"codex","present":true,"status":"UNKNOWN","note":"CLI presente; probes de capabilities pendientes (P2)"}'
+    echo '{"frontend":"codex","present":false,"status":"UNKNOWN","l4_unknown":true,"note":"Codex CLI no instalado"}'
+    return
   fi
+  local ver auth="absent" sandbox_m="?" mcp="?"
+  ver=$(codex --version 2>/dev/null | head -1)
+  if ls ~/.codex/auth.json >/dev/null 2>&1 && codex login status 2>&1 | grep -qE "Logged in"; then
+    auth="authenticated"
+  fi
+  if timeout 40 codex sandbox echo day1-probe >/dev/null 2>&1; then sandbox_m="native-ok"; else sandbox_m="degraded"; fi
+  mcp=$(codex mcp list 2>/dev/null | head -1 | tr -d '"')
+  echo "{\"frontend\":\"codex\",\"present\":true,\"cli_version\":\"${ver#codex-cli }\",\"auth\":\"$auth\",\"status\":\"DEGRADED_SAFE\",\"max_verified_risk\":\"L2\",\"l3_l4\":\"BLOCKED_OR_HUMAN_REROUTE\",\"sandbox\":\"$sandbox_m\",\"mcp_client\":\"$mcp\",\"capabilities\":{\"workspace_resolution\":\"NATIVE\",\"hierarchical_project_instructions\":\"NATIVE (AGENTS.md)\",\"generated_instruction_projection\":\"ADAPTABLE\",\"shell_execution\":\"NATIVE (codex exec)\",\"filesystem_access\":\"NATIVE\",\"tool_call_hooks\":\"UNKNOWN (sin PreToolUse equivalente)\",\"pre_tool_enforcement\":\"PARTIAL (sandbox+approvals; L4 requiere reroute)\",\"post_tool_receipts\":\"ADAPTABLE\",\"subagent_fan_out\":\"PARTIAL\",\"command_discovery\":\"UNKNOWN\",\"mcp_client\":\"NATIVE\",\"approvals\":\"NATIVE\",\"sandbox\":\"$sandbox_m\",\"network_policy\":\"PARTIAL\",\"credential_policy\":\"NATIVE\",\"external_effect_control\":\"ADAPTABLE\",\"durable_handoff\":\"ADAPTABLE\"}}"
 }
 
 {
