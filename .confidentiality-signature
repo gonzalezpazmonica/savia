@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=cf0d1caf64c423a3c92d64bb0cdd9784393fdd569b3c302e9b05d8a45c442774
-timestamp=2026-09-07T07:21:03Z
-branch=se391-codex-autonomy
-head_commit=aa3b9f7e
-signature=9a103969c8709d51a5c5c7ec2900ac11a417c8a5de2c6e60d0172aecc1056615
+diff_hash=6b31ef25db57f5ceab973cdcd552c0b9a511f0966c1a980e747a530d795dc3af
+timestamp=2026-09-07T09:22:41Z
+branch=chore/reconcile-pending-sessions
+head_commit=9e73ed50
+signature=e9124d76fd0b1cb9027ba016b472c5b8f757906962a73eb3a4d21f776a555147
