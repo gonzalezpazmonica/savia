@@ -34,6 +34,11 @@ enabled = false
 '''
 
 def run(command):
+    if os.environ.get("SAVIA_CODEX_TEST_MODE") == "1" and command and command[0] == "codex":
+        if command[1:2] == ["--version"]:
+            return subprocess.CompletedProcess(command, 0, "codex-cli test\n", "")
+        if command[1:2] == ["--help"]:
+            return subprocess.CompletedProcess(command, 0, "workspace-write --ask-for-approval\n", "")
     try: return subprocess.run(command, capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.TimeoutExpired): return None
 

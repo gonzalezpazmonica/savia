@@ -291,6 +291,8 @@ jobs:
           git config --global user.name "CI Runner"
 
       - name: Run dual-cli contract tests
+        env:
+          SAVIA_CODEX_TEST_MODE: "1"
         run: python3 -m unittest discover -s tests/dual-cli -v
 
       - name: Generate BATS dependency map
