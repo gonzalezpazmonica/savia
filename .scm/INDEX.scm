@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 8970d5762076 | resources: 1462
-> 295 commands · 136 skills · 89 agents · 942 scripts
+> hash: 8587656a0527 | resources: 1464
+> 295 commands · 136 skills · 89 agents · 944 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -234,6 +234,7 @@
 [development] competitive-design — competitive,design,generation,parallel,philosophies — script:scripts/competitive-design.sh
 [development] comprehension-report — architectural,debugging,decisions,documents,failure — cmd:.claude/commands/comprehension-report.md
 [development] concession-judge — changes,detects,evidence,judge,position — agent:.opencode/agents/concession-judge.md
+[development] configure-codex — codex,enforcement,generates,only,pass — script:scripts/configure-codex.sh
 [development] dag-execute — agentes,ejecutar,paralelo,pipeline,según — cmd:.claude/commands/dag-execute.md
 [development] dag-gate-cost-checker — checker,cost,gate — script:scripts/dag-gate-cost-checker.sh
 [development] dag-plan — ahorro,camino,crítico,ejecución,tiempo — cmd:.claude/commands/dag-plan.md
@@ -1218,6 +1219,7 @@
 [quality] ci-bats-deps — bats,dependency,deps,dynamic,generate — script:scripts/ci-bats-deps.sh
 [quality] ci-select-bats — based,bats,changed,dynamic,files — script:scripts/ci-select-bats.sh
 [quality] ci-test-quality-gate — coverage,gate,quality,test — script:scripts/ci-test-quality-gate.sh
+[quality] codex-autonomy-canaries — contract,frontend,graduation,only,pass — script:scripts/codex-autonomy-canaries.sh
 [quality] cognitive-judge — code,complexity,court,debuggability,judge — agent:.opencode/agents/cognitive-judge.md
 [quality] command-tier-audit — audit,command,scripts,slice,tier — script:scripts/command-tier-audit.sh
 [quality] comprehension-audit — comprehension,coverage,identify,implementations,lack — cmd:.claude/commands/comprehension-audit.md

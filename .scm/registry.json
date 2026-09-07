@@ -4708,6 +4708,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "opencode"
+      ],
+      "id": "script:scripts/configure-codex",
+      "intents": [
+        "codex",
+        "enforcement",
+        "generates",
+        "only",
+        "pass"
+      ],
+      "kind": "script",
+      "owner_domain": "development",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/configure-codex.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "claude",
         "opencode"
       ],
@@ -24879,6 +24900,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/codex-autonomy-canaries",
+      "intents": [
+        "contract",
+        "frontend",
+        "graduation",
+        "only",
+        "pass"
+      ],
+      "kind": "script",
+      "owner_domain": "quality",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/codex-autonomy-canaries.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "agent:.opencode/agents/cognitive-judge",
       "intents": [
         "code",
@@ -29853,7 +29895,7 @@
       "tests": []
     }
   ],
-  "content_hash": "2a80860fce1c",
+  "content_hash": "a0de0dd6a204",
   "deferred_kinds": [
     "rule",
     "hook"

@@ -1,5 +1,5 @@
 # development — Savia Capability Map (L1)
-> 228 resources
+> 229 resources
 
 - **/speckit.checklist** (cmd): Alias spec-kit compatible. Gate de calidad final con verification-lattice multi-capa. Invoca skill verification-lattice. Compatible con github/spec-kit.
 - **/speckit.clarify** (cmd): Alias spec-kit compatible. Preguntas dirigidas para cerrar ambigüedad en una spec. Invoca skill context-interview-conductor. Compatible con github/spec-kit.
@@ -46,6 +46,7 @@
 - **competitive-design** (script): competitive-design.sh — Parallel design generation with 3 philosophies
 - **comprehension-report** (cmd): Generate mental model report for an implemented task. Documents architectural decisions, failure heuristics, and 3AM debugging guide.
 - **concession-judge** (agent): Recommendation Tribunal judge — detects position changes without new evidence (SPEC-192)
+- **configure-codex** (script): Generates a private Codex profile only after sandbox and enforcement probes pass.
 - **dag-execute** (cmd): Ejecutar pipeline SDD con agentes en paralelo según DAG
 - **dag-gate-cost-checker** (script): dag-gate-cost-checker.sh
 - **dag-plan** (cmd): Visualizar DAG de ejecución, camino crítico y ahorro de tiempo
