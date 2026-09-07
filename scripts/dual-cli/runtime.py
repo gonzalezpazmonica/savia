@@ -11,12 +11,14 @@ import stat
 import struct
 from protocol import MAX_BYTES, ProtocolError, canonical, decode_event, decode_json, identifier
 from state import Store
+from contracts import execution_request, execution_result, AdapterRegistry
 
 
 class Runtime:
-    def __init__(self, store):
+    def __init__(self, store, adapters=()):
         self.store = store
         self.sessions = {}
+        self.adapters = AdapterRegistry(adapters)
 
     def handle(self, request):
         if not isinstance(request, dict):
@@ -59,6 +61,18 @@ class Runtime:
         consumer = next(c for c in status["consumers"] if c["session_id"] == session)
         if event["revision"] != status["revision"] or consumer["revision"] != status["revision"]:
             raise ProtocolError("STALE_REVISION")
+        payload = event.get("payload")
+        if isinstance(payload, dict) and payload.get("schema") == 2:
+            adapter = self.adapters.get(payload.get("adapter_id"))
+            request = execution_request(payload.get("request"))
+            if request["external_effect_intent"]:
+                raise ProtocolError("EXTERNAL_EFFECT")
+            context = {"request_id": request["request_id"], "capability_id": request["capability_id"]}
+            if adapter.preflight(context).get("ok") is not True:
+                raise ProtocolError("UNSUPPORTED_CAPABILITY")
+            result = execution_result(adapter.execute(request))
+            result["sequence"] = self.store.record(event, result)
+            return result
         result = {"action": "deny", "reason": "UNSUPPORTED_CAPABILITY",
                   "revision": status["revision"], "context": None,
                   "updated_input": None, "lease": None}

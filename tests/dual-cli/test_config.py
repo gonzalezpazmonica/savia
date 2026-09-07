@@ -310,6 +310,21 @@ class PreflightTests(unittest.TestCase):
             sandbox_passed=True)
         self.assertTrue(report["certified"])
 
+    def test_v2_evidence_rejects_duplicate_adapter_or_truthy_certification(self):
+        evidence = self.complete_evidence()
+        evidence["schema"] = 2
+        evidence["adapters"] = [
+            {"id": "codex", "version": "0.153.4"},
+            {"id": "codex", "version": "0.153.4"},
+        ]
+        evidence["trust"]["codex"]["verified"] = "yes"
+        report = self.preflight.validate(self.root, self.target, evidence,
+            runtime_status={"revision": self.revision, "certified": "yes", "gaps": []},
+            observed_versions={"codex":"0.153.4"}, sandbox_passed=True)
+        self.assertFalse(report["certified"])
+        self.assertIn("NATIVE_TRUST_UNVERIFIED", report["gaps"])
+        self.assertIn("RUNTIME_UNCERTIFIED", report["gaps"])
+
     def test_stale_generated_config_or_evidence_is_rejected(self):
         (self.root / "scripts/gate.sh").write_text("changed\n")
         report = self.preflight.validate(self.root, self.target, self.complete_evidence(),

@@ -32,12 +32,12 @@ export interface HookResult {
 export async function loadHookMap(projectRoot: string): Promise<HookMap> {
   const settingsPath = `${projectRoot}/.claude/settings.json`
   const raw = await readFile(settingsPath, "utf-8").catch(() => "")
-  if (!raw) return {}
+  if (!raw) return { __configuration__: [{ command: "", declared_event: "configuration", unsupported: true }] }
   let parsed: any = {}
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return {}
+    return { __configuration__: [{ command: "", declared_event: "configuration", unsupported: true }] }
   }
   const out: HookMap = {}
   const events = parsed.hooks || {}
@@ -369,6 +369,11 @@ export async function runHooksForEvent(
   payload: string,
 ): Promise<HookResult> {
   const result: HookResult = { blocked: false, stderr: "", stdout: "" }
+  if (hookMap.__configuration__?.length) {
+    result.blocked = true
+    result.stderr = "INVALID_HOOK_CONFIGURATION"
+    return result
+  }
   const hooks = hookMap[event] || []
   for (const h of hooks) {
     if (!matcherApplies(h.matcher, tool, payload)) continue

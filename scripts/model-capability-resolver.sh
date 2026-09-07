@@ -29,6 +29,7 @@ QUALIFIED_MODEL="$MODEL"
 # ── Locate config file ──────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config/model-capabilities.yaml"
+REGISTRY_FILE="${SCRIPT_DIR}/../config/model-registry.json"
 
 if [ ! -f "$CONFIG_FILE" ]; then
   # Missing metadata does not authorize optimistic planning.
@@ -40,6 +41,9 @@ if [ ! -f "$CONFIG_FILE" ]; then
   echo "export SAVIA_MODEL_PROVIDER=${PROVIDER}"
   echo "export SAVIA_MODEL_ID=${MODEL_ID}"
   echo "export SAVIA_MODEL_METADATA_STATUS=unknown"
+  echo "export SAVIA_MODEL_METADATA_SOURCE=${CONFIG_FILE}"
+  echo "export SAVIA_MODEL_REGISTRY_SOURCE=${REGISTRY_FILE}"
+  echo "export SAVIA_MODEL_METADATA_REVISION=unknown"
   exit 0
 fi
 
@@ -72,6 +76,9 @@ else
   CONTEXT_WINDOW=""; TIER=""; COMPACT_PCT=""; THINKING=""
 fi
 STATUS=verified
+if [ -n "$PROVIDER" ] && { [ ! -f "$REGISTRY_FILE" ] || ! grep -Fq '"'"${PROVIDER}/${MODEL_ID}"'"' "$REGISTRY_FILE"; }; then
+  CONTEXT_WINDOW=""; TIER=""; COMPACT_PCT=""; THINKING=""; STATUS=unknown
+fi
 if [ "$MODEL_ID" = "default" ] || [ -z "$CONTEXT_WINDOW" ] || [ -z "$TIER" ] || [ -z "$COMPACT_PCT" ] || [ -z "$THINKING" ]; then
   CONTEXT_WINDOW=0; TIER=unknown; COMPACT_PCT=0; THINKING=false; STATUS=unknown
 fi
@@ -85,3 +92,10 @@ echo "export SAVIA_DETECTED_MODEL=${QUALIFIED_MODEL}"
 echo "export SAVIA_MODEL_PROVIDER=${PROVIDER}"
 echo "export SAVIA_MODEL_ID=${MODEL_ID}"
 echo "export SAVIA_MODEL_METADATA_STATUS=${STATUS}"
+echo "export SAVIA_MODEL_METADATA_SOURCE=${CONFIG_FILE}"
+echo "export SAVIA_MODEL_REGISTRY_SOURCE=${REGISTRY_FILE}"
+if [ -f "$CONFIG_FILE" ] && [ -f "$REGISTRY_FILE" ]; then
+  echo "export SAVIA_MODEL_METADATA_REVISION=$(sha256sum "$CONFIG_FILE" "$REGISTRY_FILE" | sha256sum | cut -d' ' -f1)"
+else
+  echo "export SAVIA_MODEL_METADATA_REVISION=unknown"
+fi

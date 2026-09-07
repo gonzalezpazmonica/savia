@@ -23,4 +23,13 @@ class DomainPackTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolError, "CONFIG_CONFLICT"):
             activate(packs,["core-local","other"])
 
+    def test_dependencies_are_resolved_and_missing_dependencies_block(self):
+        packs=load(Path(__file__).resolve().parents[2] / "config/domain-packs.json")
+        self.assertEqual([p["id"] for p in activate(packs,["pm-sdd-legacy"])],
+                         ["core-local", "pm-sdd-legacy"])
+        broken=dict(packs["pm-sdd-legacy"], dependencies=["missing@1"])
+        packs["broken"]=dict(broken, id="broken", memory_namespace="broken")
+        with self.assertRaisesRegex(ProtocolError, "CONFIG_CONFLICT"):
+            activate(packs,["broken"])
+
 if __name__ == "__main__": unittest.main()

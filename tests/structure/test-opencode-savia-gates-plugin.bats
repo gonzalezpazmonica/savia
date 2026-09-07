@@ -233,8 +233,8 @@ setup() {
 }
 
 @test "edge: empty agents-md doesn't crash plugin loader" {
-  # The plugin's loadHookMap returns {} when settings.json is empty/absent — sanity grep
-  grep -q "return {}" "$PLUGIN_DIR/lib/shell-bridge.ts"
+  # Missing settings are represented as a blocking configuration state.
+  grep -q "INVALID_HOOK_CONFIGURATION" "$PLUGIN_DIR/lib/shell-bridge.ts"
 }
 
 @test "edge: large hookMap (>50 entries) supported without recursion" {

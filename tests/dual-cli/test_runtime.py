@@ -12,6 +12,18 @@ import unittest
 CORE = Path(__file__).resolve().parents[2] / "scripts/dual-cli"
 sys.path.insert(0, str(CORE))
 from state import Store
+from runtime import Runtime
+from contracts import execution_result
+from protocol import ProtocolError
+
+class FixtureAdapter:
+    def describe(self): return {"id":"fixture","version":"1","capability_ids":["local"]}
+    def preflight(self, context): return {"ok": True}
+    def execute(self, request):
+        return {"request_id": request["request_id"], "state":"succeeded", "reason":"fixture",
+                "artifacts":[], "usage":None, "external_effect_observed":False}
+    def cancel(self, request_id): return {"request_id":request_id,"state":"cancelled"}
+    def observe(self, request_id): return None
 
 
 class RuntimeTests(unittest.TestCase):
@@ -100,6 +112,25 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(first["reason"], "UNSUPPORTED_CAPABILITY")
         self.assertEqual(first, self.request(request))
         self.assertNotIn("sensitive", json.dumps(self.request({"op": "status"})))
+
+    def test_registered_adapter_executes_only_a_valid_local_request(self):
+        store=Store(self.root / "direct.db", "repo")
+        store.publish("r1", expected=None)
+        runtime=Runtime(store, [FixtureAdapter()])
+        hello=runtime.handle({"op":"hello","session_id":"direct"})
+        runtime.handle({"op":"ack","session_id":"direct","session_token":hello["session_token"],"revision":"r1"})
+        request={"request_id":"req","capability_id":"local","context_ref":"ctx",
+                 "scope_ref":"scope","input_ref":"input","required_capabilities":[],
+                 "deadline_ms":1000,"external_effect_intent":False}
+        event=dict(version=1, repo_id="repo", frontend="codex", session_id="direct",
+                   actor_id="test", event_id="e2", call_id="c2", kind="PreToolUse",
+                   revision="r1", payload={"schema":2,"adapter_id":"fixture",
+                                           "request":request})
+        result=runtime.handle({"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":event})
+        self.assertEqual(result["state"], "succeeded")
+        self.assertEqual(result["request_id"], "req")
+        with self.assertRaisesRegex(ProtocolError, "UNKNOWN_ADAPTER"):
+            runtime.handle({"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":dict(event, event_id="e3", payload={"schema":2,"adapter_id":"missing","request":request})})
 
 
 class CrashTests(unittest.TestCase):
