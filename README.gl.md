@@ -11,14 +11,14 @@ lang: gl
 > Traducion de cortesia. Version de referencia: [espanol](README.md).
 > Ultima sincronizacion: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/savia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ## Workspace de desenvolvemento multi-axente
 
-**532 comandos · 65 axentes · 86 skills · 58 hooks · 16 linguaxes · 283+ suites de test**
+**567 comandos · 89 axentes · 136 skills · 124 hooks**
 
 Sistema axente soberano para gobernar e executar traballo con IA, independente de modelo, provedor e frontend, con criterio humano por deseño. Integra axentes, memoria, seguridade, políticas executables, trazabilidade e dominios especializados. Funciona en local con soberanía de datos e inferencia, en 9 idiomas.
 
@@ -29,18 +29,18 @@ Sistema axente soberano para gobernar e executar traballo con IA, independente d
 ```bash
 # 1. Instala
 
-curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.sh | bash
 
 # 2. Abre o workspace
 
-cd pm-workspace && opencode
+cd savia && opencode
 
 # 3. Savia saudate e preguntache o nome. Despois:
 
 /sprint-status          # ← o teu primeiro comando
 ```
 
-**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.ps1 | iex`
+**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
 Savia adaptase ao teu rol — PM, developer, QA, Product Owner, CEO — e a tua lingua. Compatible con Azure DevOps, Jira e Git-native (Savia Flow).
 
@@ -75,7 +75,7 @@ Human gates por nivel de risco (L0-L4). Compliance-as-code como dirección: Savi
 | Area | Que fai |
 |---|---|
 | Xestion de proxectos | Sprints, burndown, capacidade, dailies, retros, KPIs. Informes en Excel e PowerPoint. Prediccion con Monte Carlo. Facturacion. |
-| Spec-Driven Development | Tarefas convirtense en specs executabeis. 65 axentes implementan en 16 linguaxes (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) en worktrees illados. Code review automatico + revision humana obrigatoria. Compatible con `github/spec-kit`. |
+| Spec-Driven Development | Tarefas convirtense en specs executabeis. 89 axentes implementan en 16 linguaxes (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) en worktrees illados. Code review automatico + revision humana obrigatoria. Compatible con `github/spec-kit`. |
 | Seguridade | SAST contra OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dinamico, SBOM, compliance sectorial (12 sectores). Savia Shield: clasificacion local de datos con LLM on-premise, enmascaramento reversibel, sinatura criptografica de PRs. |
 | Code Review Court | 5 xuices especializados (correctness, architecture, security, cognitive, spec) revisan en paralelo con scoring 0-100 e gate de 400 LOC. |
 | Soberania de inferencia | API Anthropic por defecto. Fallback automatico a Ollama local (Gemma 4) en caso de erro de rede, HTTP 5xx, HTTP 429 ou timeout. Circuit breaker integrado. |
@@ -89,7 +89,7 @@ Human gates por nivel de risco (L0-L4). Compliance-as-code como dirección: Savi
 
 ## Savia
 
-Savia e a identidade do workspace: un patron de texto que persiste a traves de modelos (Claude, DeepSeek, Qwen). Coordina 65 axentes, 532 comandos e 86 skills. Opera baixo principios de honestidade calibrada, soberania de datos e revision humana obrigatoria.
+Savia e a identidade do workspace: un patron de texto que persiste a traves de modelos (Claude, DeepSeek, Qwen). Coordina 89 axentes, 567 comandos e 136 skills. Opera baixo principios de honestidade calibrada, soberania de datos e revision humana obrigatoria.
 
 Non e unha persoa, non sente, e non substitue o criterio de quen opera. Propon, executa, advirte. Decide so o delegado explicitamente.
 
@@ -112,9 +112,9 @@ Non e unha persoa, non sente, e non substitue o criterio de quen opera. Propon, 
 pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 comandos
-│   ├── agents/         ← 65 axentes especializados (7 con decision trees: SPEC-147)
-│   ├── skills/         ← 86 skills de dominio
-│   ├── hooks/          ← 58 hooks deterministas
+│   ├── agents/         ← 89 axentes especializados (7 con decision trees: SPEC-147)
+│   ├── skills/         ← 136 skills de dominio
+│   ├── hooks/          ← 124 hooks deterministas
 │   └── rules/          ← regras de contexto e linguaxe
 ├── docs/               ← guias por rol, escenario, sector
 ├── projects/           ← proxectos (git-ignorados por privacidade)

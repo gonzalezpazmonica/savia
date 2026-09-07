@@ -11,14 +11,16 @@ lang: eu
 > Kortesiazko itzulpena. Erreferentziazko bertsioa: [gaztelania](README.md).
 > Azken sinkronizazioa: 2026-07-25.
 
-[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/pm-workspace/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/savia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+**567 komandoak · 89 agenteak · 136 skills · 124 hooks**
+
 ## Garapen workspace multi-agentea
 
-**532 komando · 65 agente · 86 skill · 58 hook · 16 hizkuntza · 283+ test suite**
+**567 komando · 89 agente · 136 skill · 124 hook · 16 hizkuntza · 283+ test suite**
 
 pm-workspace-k Claude Code eta OpenCode ingeniaritza multi-agente ingurune bihurtzen ditu. Agente espezializatuak orkestratzen ditu proiektuen kudeaketarako, spec exekutagarriekin garapenerako, segurtasun auditoriarako eta kode berrikusketarako. Lokalean funtzionatzen du datu eta inferentzia subiranotasunarekin, 9 hizkuntzatan.
 
@@ -29,18 +31,18 @@ pm-workspace-k Claude Code eta OpenCode ingeniaritza multi-agente ingurune bihur
 ```bash
 # 1. Instalatu
 
-curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.sh | bash
 
 # 2. Ireki workspace-a
 
-cd pm-workspace && opencode
+cd savia && opencode
 
 # 3. Saviak agurtzen zaitu eta izena galdetzen dizu. Gero:
 
 /sprint-status          # ← zure lehen komandoa
 ```
 
-**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/pm-workspace/main/install.ps1 | iex`
+**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
 Savia zure rolera moldatzen da — PM, developer, QA, Product Owner, CEO — eta zure hizkuntzara. Azure DevOps, Jira eta Git-native (Savia Flow) bateragarria.
 
@@ -75,7 +77,7 @@ Human gates L0-L4. Compliance-as-code: exekutatutako kontrolen ebidentzia, ez le
 | Arloa | Zer egiten duen |
 |---|---|
 | Proiektuen kudeaketa | Sprint-ak, burndown-a, ahalmena, dailyak, retroak, KPIak. Excel eta PowerPoint txostenak. Monte Carlo iragarpena. Fakturazioa. |
-| Spec-Driven Development | Zereginak spec exekutagarri bihurtzen dira. 65 agentek 16 hizkuntzatan inplementatzen dute (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) worktree isolatuetan. Kode berrikusketa automatikoa + giza berrikusketa derrigorrezkoa. `github/spec-kit` bateragarria. |
+| Spec-Driven Development | Zereginak spec exekutagarri bihurtzen dira. 89 agentek 16 hizkuntzatan inplementatzen dute (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) worktree isolatuetan. Kode berrikusketa automatikoa + giza berrikusketa derrigorrezkoa. `github/spec-kit` bateragarria. |
 | Segurtasuna | SAST OWASP Top 10-aren aurka, Red Team / Blue Team / Auditor pipeline-a, pentesting dinamikoa, SBOM, sektore-compliance (12 sektore). Savia Shield: datuen sailkapen lokala on-premise LLMarekin, maskaratze itzulgarria, PR sinadura kriptografikoa. |
 | Code Review Court | 5 epaile espezializatu (correctness, architecture, security, cognitive, spec) paraleloan berrikusten dute 0-100 puntuazioarekin eta 400 LOC gatearekin. |
 | Inferentzia subiranotasuna | Anthropic API lehenespenez. Ollama lokalera (Gemma 4) fallback automatikoa sare errorea, HTTP 5xx, HTTP 429 edo timeout kasuetan. Circuit breaker integratua. |
@@ -89,7 +91,7 @@ Human gates L0-L4. Compliance-as-code: exekutatutako kontrolen ebidentzia, ez le
 
 ## Savia
 
-Savia workspace-aren identitatea da: modeloetan zehar irauten duen testu patrola (Claude, DeepSeek, Qwen). 65 agente, 532 komando eta 86 skill koordinatzen ditu. Zintzotasun kalibratu, datu subiranotasun eta giza berrikusketa derrigorrezko printzipioen pean jarduten du.
+Savia workspace-aren identitatea da: modeloetan zehar irauten duen testu patrola (Claude, DeepSeek, Qwen). 89 agente, 567 komando eta 136 skill koordinatzen ditu. Zintzotasun kalibratu, datu subiranotasun eta giza berrikusketa derrigorrezko printzipioen pean jarduten du.
 
 Ez da pertsona, ez du sentitzen, eta ez du operatzen duenaren irizpidea ordezkatzen. Proposatu, exekutatu, ohartarazi. Esplizituki delegatutakoa bakarrik erabakitzen du.
 
@@ -111,10 +113,10 @@ Ez da pertsona, ez du sentitzen, eta ez du operatzen duenaren irizpidea ordezkat
 ```
 pm-workspace/
 ├── .claude/
-│   ├── commands/       ← 532 komando
-│   ├── agents/         ← 65 agente espezializatu (7 decision tree-rekin: SPEC-147)
-│   ├── skills/         ← 86 domeinu skill
-│   ├── hooks/          ← 58 hook deterministiko
+│   ├── commands/       ← 567 komando
+│   ├── agents/         ← 89 agente espezializatu (7 decision tree-rekin: SPEC-147)
+│   ├── skills/         ← 136 domeinu skill
+│   ├── hooks/          ← 124 hook deterministiko
 │   └── rules/          ← testuinguru eta hizkuntza arauak
 ├── docs/               ← gidak rolaren, eszenarioaren, sektorearen arabera
 ├── projects/           ← proiektuak (git-ignoratuak pribatutasunagatik)
