@@ -295,6 +295,21 @@ class PreflightTests(unittest.TestCase):
             sandbox_passed=True)
         self.assertEqual(report, {"certified": True, "revision": self.revision, "gaps": []})
 
+    def test_v2_evidence_accepts_an_explicit_third_adapter(self):
+        evidence = self.complete_evidence()
+        evidence["schema"] = 2
+        evidence["adapters"] = [
+            {"id": "codex", "version": "0.153.4"},
+            {"id": "opencode", "version": "1.18.21"},
+            {"id": "fixture-cli", "version": "1"},
+        ]
+        evidence["trust"]["fixture-cli"] = {"verified": True, "revision": self.revision}
+        report = self.preflight.validate(self.root, self.target, evidence,
+            runtime_status={"revision": self.revision, "certified": True, "gaps": []},
+            observed_versions={"codex":"0.153.4", "opencode":"1.18.21", "fixture-cli":"1"},
+            sandbox_passed=True)
+        self.assertTrue(report["certified"])
+
     def test_stale_generated_config_or_evidence_is_rejected(self):
         (self.root / "scripts/gate.sh").write_text("changed\n")
         report = self.preflight.validate(self.root, self.target, self.complete_evidence(),

@@ -16,6 +16,7 @@ export interface HookEntry {
   timeout?: number
   async?: boolean
   declared_event: string  // SessionStart / PreToolUse / etc.
+  unsupported?: boolean   // a declared hook we cannot safely translate
 }
 
 export type HookMap = Record<string, HookEntry[]>
@@ -47,7 +48,14 @@ export async function loadHookMap(projectRoot: string): Promise<HookMap> {
       const matcher = entry.matcher
       const hooks = entry.hooks || []
       for (const h of hooks) {
-        if (h.type !== "command" || typeof h.command !== "string") continue
+        // A configured synchronous gate must never disappear merely because
+        // this adapter cannot execute its hook type.  Async hooks are
+        // telemetry by contract and remain non-blocking.
+        if (h.type !== "command" || typeof h.command !== "string") {
+          if (!h.async) out[eventName].push({ command: "", matcher, async: false,
+            declared_event: eventName, unsupported: true })
+          continue
+        }
         const cmd = h.command
           .replace(/"\$CLAUDE_PROJECT_DIR"/g, projectRoot)
           .replace(/\$CLAUDE_PROJECT_DIR/g, projectRoot)
@@ -247,7 +255,7 @@ async function runHookOnce(
       proc.exited,
     ])
     if (timedOut) {
-      return { exit: 0, stdout: "", stderr: `${h.command} timed out after ${cap}ms` }
+      return { exit: BLOCK_EXIT, stdout: "", stderr: `${h.command} timed out after ${cap}ms` }
     }
     return { exit: typeof exitCode === "number" ? exitCode : 0, stdout, stderr }
   } finally {
@@ -364,6 +372,11 @@ export async function runHooksForEvent(
   const hooks = hookMap[event] || []
   for (const h of hooks) {
     if (!matcherApplies(h.matcher, tool, payload)) continue
+    if (h.unsupported) {
+      result.blocked = true
+      result.stderr = "UNSUPPORTED_CRITICAL_HOOK"
+      return result
+    }
     try {
       // `async: true` hooks are fire-and-forget (Claude Code semantics):
       // their exit code and output are ignored, and the caller never waits.
@@ -401,9 +414,10 @@ export async function runHooksForEvent(
         }
       }
     } catch (err) {
-      // Hook crashed — log but don't block by default. Pre-event hooks
-      // declared as critical can opt-in via exit code 2 explicitly.
-      result.stderr = String(err)
+      // Synchronous hook failures are policy uncertainty, not permission.
+      result.blocked = true
+      result.stderr = String(err) || "HOOK_EXECUTION_FAILED"
+      return result
     }
   }
   return result

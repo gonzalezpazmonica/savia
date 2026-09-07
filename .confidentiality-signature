@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=6b31ef25db57f5ceab973cdcd552c0b9a511f0966c1a980e747a530d795dc3af
-timestamp=2026-09-07T09:22:41Z
-branch=chore/reconcile-pending-sessions
-head_commit=9e73ed50
-signature=e9124d76fd0b1cb9027ba016b472c5b8f757906962a73eb3a4d21f776a555147
+diff_hash=caf2a3d9cd8ab11f9cf6a557b5c5c4a9f25e034caa4c00bce770db3c1bb0e38b
+timestamp=2026-09-07T12:10:39Z
+branch=agent/se393-20260907-agnostic-harness
+head_commit=adbfe9f8
+signature=79fe3c3ba99dad47d45636d176caca5bbbfa7b819dc50e68fec1d617249be1b1

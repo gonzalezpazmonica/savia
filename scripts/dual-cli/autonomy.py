@@ -45,8 +45,24 @@ def scope_hash(allowed, forbidden):
     data=json.dumps({"allowed":sorted(allowed),"forbidden":sorted(forbidden)},separators=(',',':'))
     return hashlib.sha256(data.encode()).hexdigest()
 
-def write_receipt(path, decision, scope_digest, revision, actions):
-    receipt={"schema":1,"frontend":"codex","profile":"autonomous-l2",
+def write_receipt(path, decision, scope_digest, revision, actions, *, frontend="unknown", execution=None,
+                  request_id=None, event_id=None, decision_id=None, observation_refs=()):
+    # schema 2 distinguishes a policy decision from an observed execution.
+    # Keep schema 1 shape for callers that do not supply execution correlation.
+    if execution is not None or request_id or event_id or decision_id:
+        receipt={"schema":2,"context":{"schema":2,"run_id":request_id or "local",
+            "session_id":"unknown","repo_id":"unknown","frontend_id":frontend,
+            "adapter_version":"unknown","policy_revision":revision,
+            "effective_config_hash":scope_digest,"provider_id":None,"model_id":None,
+            "model_revision":None,"inference_mode":"cli_managed","domain_ids":[],
+            "authority_ceiling":"L2"},"request_id":request_id or "local",
+            "event_id":event_id or "local","decision_id":decision_id or "local",
+            "decision":"proceed" if decision["decision"]=="PROCEED" else "needs_human",
+            "execution":execution,"observation_refs":list(observation_refs),
+            "human_gate_count":int(decision["human_gate"]),"delegated_execution":True,
+            "decision_authority":"human"}
+    else:
+        receipt={"schema":1,"frontend":frontend,"profile":"autonomous-l2",
              "risk":decision["risk"],"authority":"delegated_execution_only",
              "scope_hash":scope_digest,"policy_revision":revision,
              "actions":list(actions),"external_effects":decision["external_effects"],

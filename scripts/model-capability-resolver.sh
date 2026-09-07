@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # model-capability-resolver.sh — Resolve model capabilities from YAML registry
-# Outputs SAVIA_* env vars for the given model. Falls back to default.
+# Outputs SAVIA_* env vars for the given model. Unknown metadata is explicit:
+# a plausible default context window is not evidence of a model capability.
 # Usage: source <(./scripts/model-capability-resolver.sh [--model name])
 # ─────────────────────────────────────────────────────────────────────────────
 set -uo pipefail
@@ -17,21 +18,28 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 MODEL="${MODEL:-default}"
-# Normalize provider-prefixed IDs (deepseek/deepseek-v4-pro → deepseek-v4-pro)
-# so the YAML registry key matches and the sed pattern is not broken by a slash.
-MODEL="${MODEL##*/}"
+PROVIDER=""
+MODEL_ID="$MODEL"
+if [[ "$MODEL" == */* ]]; then
+  PROVIDER="${MODEL%%/*}"
+  MODEL_ID="${MODEL#*/}"
+fi
+QUALIFIED_MODEL="$MODEL"
 
 # ── Locate config file ──────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config/model-capabilities.yaml"
 
 if [ ! -f "$CONFIG_FILE" ]; then
-  # Fallback defaults if config missing
-  echo "export SAVIA_CONTEXT_WINDOW=200000"
-  echo "export SAVIA_MODEL_TIER=fast"
-  echo "export SAVIA_COMPACT_THRESHOLD=50"
+  # Missing metadata does not authorize optimistic planning.
+  echo "export SAVIA_CONTEXT_WINDOW=0"
+  echo "export SAVIA_MODEL_TIER=unknown"
+  echo "export SAVIA_COMPACT_THRESHOLD=0"
   echo "export SAVIA_SUPPORTS_THINKING=false"
-  echo "export SAVIA_DETECTED_MODEL=default"
+  echo "export SAVIA_DETECTED_MODEL=${QUALIFIED_MODEL}"
+  echo "export SAVIA_MODEL_PROVIDER=${PROVIDER}"
+  echo "export SAVIA_MODEL_ID=${MODEL_ID}"
+  echo "export SAVIA_MODEL_METADATA_STATUS=unknown"
   exit 0
 fi
 
@@ -55,14 +63,25 @@ extract_field() {
   echo "${value:-$fallback}"
 }
 
-CONTEXT_WINDOW=$(extract_field "$MODEL" "context_window" "200000")
-TIER=$(extract_field "$MODEL" "tier" "fast")
-COMPACT_PCT=$(extract_field "$MODEL" "recommended_compact_threshold_pct" "50")
-THINKING=$(extract_field "$MODEL" "supports_extended_thinking" "false")
+if grep -Fqx "  ${MODEL_ID}:" "$CONFIG_FILE"; then
+  CONTEXT_WINDOW=$(extract_field "$MODEL_ID" "context_window" "")
+  TIER=$(extract_field "$MODEL_ID" "tier" "")
+  COMPACT_PCT=$(extract_field "$MODEL_ID" "recommended_compact_threshold_pct" "")
+  THINKING=$(extract_field "$MODEL_ID" "supports_extended_thinking" "")
+else
+  CONTEXT_WINDOW=""; TIER=""; COMPACT_PCT=""; THINKING=""
+fi
+STATUS=verified
+if [ "$MODEL_ID" = "default" ] || [ -z "$CONTEXT_WINDOW" ] || [ -z "$TIER" ] || [ -z "$COMPACT_PCT" ] || [ -z "$THINKING" ]; then
+  CONTEXT_WINDOW=0; TIER=unknown; COMPACT_PCT=0; THINKING=false; STATUS=unknown
+fi
 
 # ── Output env vars ──────────────────────────────────────────────────────────
 echo "export SAVIA_CONTEXT_WINDOW=${CONTEXT_WINDOW}"
 echo "export SAVIA_MODEL_TIER=${TIER}"
 echo "export SAVIA_COMPACT_THRESHOLD=${COMPACT_PCT}"
 echo "export SAVIA_SUPPORTS_THINKING=${THINKING}"
-echo "export SAVIA_DETECTED_MODEL=${MODEL}"
+echo "export SAVIA_DETECTED_MODEL=${QUALIFIED_MODEL}"
+echo "export SAVIA_MODEL_PROVIDER=${PROVIDER}"
+echo "export SAVIA_MODEL_ID=${MODEL_ID}"
+echo "export SAVIA_MODEL_METADATA_STATUS=${STATUS}"
