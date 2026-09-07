@@ -100,6 +100,14 @@
       "title": "Savia ↔ Codex Frontend Adapter",
       "note": "persistida 2026-09-05; renumerada/asignada tras reconciliacion. EXTEND de SPEC-127/SE-047/SE-375. Prerequisito: Codex CLI para probe real (§4/§6). Implementacion tras aprobacion humana; enforcement L3/L4 -> human gate",
       "evidence": "Day-1 2026-09-06: AUTHENTICATED (ChatGPT) + PROBED + L0-L2 CANARIES EVIDENCED (5/5; L1 write filesystem-verified; dogfood receipted). DEGRADED_SAFE max_verified_risk=L2, L3/L4 BLOCKED_OR_HUMAN_REROUTE. P2 no-auth mergeado (#1105). P3 pendiente: MCP e2e wire + L4 enforcement equivalente (no existe PreToolUse-equivalente)."
+    },
+    {
+      "id": "SE-392",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Runtime común de Savia para Codex y OpenCode",
+      "note": "Recuperada de cambios pendientes de sesión 2026-09-07; requiere aprobación humana antes de implementación.",
+      "evidence": "Spec persistida; equivalencia funcional y E2E aún no demostradas."
     }
   ]
 }

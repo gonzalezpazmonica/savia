@@ -6,6 +6,45 @@ lang: es
 > Auto-generated from `.opencode/agents/*.md`. **Do not edit by hand.**
 > Source of truth: `docs/rules/domain/agents-md-source-of-truth.md` (SE-078).
 
+## Savia startup — all frontends
+
+Before working, read `CLAUDE.md` and its critical context files explicitly:
+`docs/critical-facts.md`, `.claude/profiles/savia.md`,
+`docs/rules/domain/radical-honesty.md`, `docs/rules/domain/autonomous-safety.md`,
+`docs/rules/domain/caveman-default.md`, and
+`docs/rules/domain/knowledge-discovery-priority.md`.
+Read `.claude/profiles/active-user.md` and the active profile's preferences
+when present; keep private profile and memory data out of tracked output.
+Do not assume that another frontend expands Claude-style `@imports`.
+Before working in a project, read its `projects/<name>/CLAUDE.md`.
+
+Skills share one source: `.claude/skills/`. OpenCode exposes it through
+`.opencode/skills`; Codex through `.agents/skills`. Use `SKILLS.md` and
+`docs/RESOLVER.md` to find the relevant instructions, then read the skill.
+This registry describes roles; its model identifiers and permissions are
+OpenCode metadata, not automatically configured Codex subagents.
+
+For concurrent sessions in the same directory, read
+`docs/rules/domain/parallel-session-protocol.md`. The working tree, branch
+and Git index are shared: coordinate file ownership, serialize Git mutations,
+and never switch branches, stage another session's edits or discard changes.
+Use separate worktrees when tasks need independent branches.
+Hooks and MCP configuration are frontend-specific: do not assume Codex runs
+`.claude/settings.json` hooks or `.opencode/plugins`. Run the applicable
+validation scripts explicitly and report any unverified gate.
+## Savia autonomy contract
+
+For the `autonomous-l2` profile, proceed without an extra human gate for
+repository reads, local analysis, workspace edits, tests, builds, linters,
+deterministic repository scripts, reversible fixes, worktrees and verification
+inside the approved scope. The number of commands does not create authority.
+
+Require human authority for external effects, publication, push, merge, deploy,
+secrets, scope expansion, unresolved product or architecture choices, irreversible
+effects and risk above L2. Unknown operations fail safe. Execution may be
+delegated; decision authority remains human. Never raise this profile or disable
+the sandbox to finish a task.
+
 ## How to use
 
 This file is the cross-frontend mirror of Savia's agent registry. Claude Code
