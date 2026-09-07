@@ -27,9 +27,29 @@ def load(path):
 def activate(packs, ids):
     selected = []
     namespaces = set()
+    visiting = set()
+    resolved = []
+    def add(pack_id):
+        if pack_id in visiting:
+            raise ProtocolError("CONFIG_CONFLICT")
+        if pack_id not in packs:
+            raise ProtocolError("CONFIG_CONFLICT")
+        if any(pack["id"] == pack_id for pack in resolved):
+            return
+        visiting.add(pack_id)
+        for dependency in packs[pack_id]["dependencies"]:
+            if "@" not in dependency:
+                raise ProtocolError("CONFIG_CONFLICT")
+            dependency_id, version = dependency.rsplit("@", 1)
+            if dependency_id not in packs or packs[dependency_id]["version"] != version:
+                raise ProtocolError("CONFIG_CONFLICT")
+            add(dependency_id)
+        visiting.remove(pack_id)
+        resolved.append(packs[pack_id])
     for pack_id in ids:
-        if pack_id not in packs: raise ProtocolError("CONFIG_CONFLICT")
-        pack = packs[pack_id]
-        if pack["memory_namespace"] in namespaces: raise ProtocolError("CONFIG_CONFLICT")
-        namespaces.add(pack["memory_namespace"]); selected.append(pack)
-    return selected
+        add(pack_id)
+    for pack in resolved:
+        if pack["memory_namespace"] in namespaces:
+            raise ProtocolError("CONFIG_CONFLICT")
+        namespaces.add(pack["memory_namespace"])
+    return resolved

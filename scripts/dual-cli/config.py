@@ -6,7 +6,9 @@ def _safe(root,rel):
  p=root/rel
  try:r=p.resolve(strict=True)
  except OSError:raise ConfigError('UNTRUSTED_SOURCE')
- if r!=p.absolute() or not r.is_file():raise ConfigError('UNTRUSTED_SOURCE')
+ # Repository-internal projections (for example .opencode/hooks) may be
+ # symlinks; external targets remain untrusted and are rejected.
+ if (root not in r.parents and r != root) or not r.is_file():raise ConfigError('UNTRUSTED_SOURCE')
  return p
 def build_manifest(root):
  root=Path(root).resolve()
@@ -23,10 +25,18 @@ def build_manifest(root):
    paths.add(x)
   if i.get('kind')=='script' and x.endswith('.sh'):
    alt='.opencode/hooks/'+Path(x).name
-   if (root/alt).exists(): paths.add(alt)
+   if (root/alt).is_file() and not (root/alt).is_symlink(): paths.add(alt)
   if i.get('kind')=='skill':
    d=root/Path(x).parent
    if d.is_dir():paths.update(str(y.relative_to(root)) for y in d.rglob('*') if y.is_file())
+ # Security and execution code is part of effective policy even when it is
+ # not advertised as a public capability in .scm.  Only regular files count.
+ for required in ('scripts/dual-cli/contracts.py', 'scripts/dual-cli/policy.py',
+                  'scripts/dual-cli/runtime.py', 'scripts/dual-cli/preflight.py',
+                  'scripts/opencode-plugin/savia-gates/lib/shell-bridge.ts',
+                  'config/model-capabilities.yaml', 'config/model-registry.json'):
+  candidate = root / required
+  if candidate.is_file() and not candidate.is_symlink(): paths.add(required)
  src=[]
  for x in sorted(paths):
   q=_safe(root,Path(x));src.append({'path':x,'sha256':hashlib.sha256(q.read_bytes()).hexdigest()})

@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/dual-cli"))
-from contracts import AdapterRegistry, capability_observation, execution_context, execution_request, execution_result, receipt
+from contracts import AdapterRegistry, capability_observation, execution_context, execution_request, execution_result, receipt, verify_observation
 from protocol import ProtocolError
 from autonomy import AutonomyPolicy, write_receipt
 
@@ -16,6 +16,10 @@ RESULT = {"request_id":"request","state":"succeeded","reason":"ok","artifacts":[
 class FixtureAdapter:
     def __init__(self, name): self.name = name
     def describe(self): return {"id":self.name,"version":"1","capability_ids":["edit"]}
+    def preflight(self, context): return {"ok": True}
+    def execute(self, request): return None
+    def cancel(self, request_id): return None
+    def observe(self, request_id): return None
 
 class ContractsTests(unittest.TestCase):
     def test_context_request_result_and_receipt_are_explicit(self):
@@ -56,5 +60,38 @@ class ContractsTests(unittest.TestCase):
         self.assertEqual(value["decision"], "proceed")
         self.assertEqual(value["execution"]["state"], "failed")
         receipt(value)
+
+    def test_v2_rejects_bool_as_integer_and_requires_zoned_timestamp(self):
+        with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_SCHEMA"):
+            execution_context(dict(CONTEXT, schema=2.0))
+        with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_SCHEMA"):
+            execution_result(dict(RESULT, external_effect_observed=1))
+        observation = {"capability_id":"edit","status":"verified","mechanism":"native",
+                       "observed_at":"2026-09-07","environment_hash":"env",
+                       "subject_version":"1","evidence_ref":"evidence"}
+        with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_SCHEMA"):
+            capability_observation(observation)
+
+    def test_receipt_requires_correlated_execution_and_valid_transition(self):
+        value={"schema":2,"context":CONTEXT,"request_id":"request","event_id":"event",
+               "decision_id":"decision","decision":"deny",
+               "execution":dict(RESULT, request_id="other"),"observation_refs":[],
+               "human_gate_count":1,"delegated_execution":True,"decision_authority":"human"}
+        with self.assertRaisesRegex(ProtocolError, "INCONSISTENT_RECEIPT"):
+            receipt(value)
+
+    def test_adapter_without_execution_ports_is_rejected(self):
+        class DescriptorOnly:
+            def describe(self): return {"id":"fixture","version":"1","capability_ids":["edit"]}
+        with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_ADAPTER"):
+            AdapterRegistry([DescriptorOnly()])
+
+    def test_verified_observation_requires_matching_evidence(self):
+        value={"capability_id":"edit","status":"verified","mechanism":"native",
+               "observed_at":"2026-09-07T00:00:00Z","environment_hash":"env",
+               "subject_version":"1","evidence_ref":"run"}
+        with self.assertRaisesRegex(ProtocolError, "STALE_EVIDENCE"):
+            verify_observation(value, {})
+        self.assertEqual(verify_observation(value, {"run":{"verified":True}}), value)
 
 if __name__ == "__main__": unittest.main()
