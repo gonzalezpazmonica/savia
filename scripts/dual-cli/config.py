@@ -13,6 +13,8 @@ def build_manifest(root):
  try: reg=json.loads(_safe(root,Path('.scm/resources.json')).read_text())
  except Exception: raise ConfigError('UNTRUSTED_SOURCE')
  paths={'.scm/resources.json','.scm/INDEX.scm','.scm/categories/quality.scm','.claude/settings.json'}
+ # Domain packs are an optional projection: legacy repositories remain valid.
+ if (root/'config/domain-packs.json').is_file(): paths.add('config/domain-packs.json')
  for i in reg.get('resources',[]):
   if not isinstance(i,dict):raise ConfigError('UNTRUSTED_SOURCE')
   x=i.get('path')

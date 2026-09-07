@@ -68,10 +68,10 @@ def seed_history():
 
 def decide(model_std: float) -> str:
     if model_std < THRESHOLD_BARATO:
-        return "CLAUDE_MODEL_FAST"
+        return "fast"
     if model_std >= THRESHOLD_CARO:
-        return "CLAUDE_MODEL_AGENT"
-    return "CLAUDE_MODEL_MID"
+        return "agent"
+    return "mid"
 
 
 def verdict_for(std: float) -> str:

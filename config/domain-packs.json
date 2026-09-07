@@ -1,0 +1,27 @@
+{
+  "schema": 2,
+  "packs": [
+    {
+      "id": "core-local",
+      "version": "1",
+      "capability_ids": ["read", "plan", "edit", "test", "verify"],
+      "rule_refs": [],
+      "context_refs": [],
+      "test_refs": ["tests/dual-cli/test_domain_packs.py"],
+      "memory_namespace": "core-local",
+      "dependencies": [],
+      "compatibility_schema": 2
+    },
+    {
+      "id": "pm-sdd-legacy",
+      "version": "1",
+      "capability_ids": ["read", "plan", "edit", "test", "verify"],
+      "rule_refs": ["docs/rules/domain/autonomous-safety.md"],
+      "context_refs": ["CLAUDE.md"],
+      "test_refs": ["tests/dual-cli/test_domain_packs.py"],
+      "memory_namespace": "pm-sdd-legacy",
+      "dependencies": ["core-local@1"],
+      "compatibility_schema": 2
+    }
+  ]
+}
