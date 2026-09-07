@@ -228,3 +228,13 @@ EOF
 @test "safety: no destructive git commands" {
   ! grep -E '^[^#]*git\s+(push|reset\s+--hard|branch\s+-D)' "$SCRIPT"
 }
+
+@test "agents-md: startup exposes shared context and frontend boundaries" {
+  make_agent "alpha" "L1"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'read `CLAUDE.md`'* ]]
+  [[ "$output" == *'.agents/skills'* ]]
+  [[ "$output" == *'parallel-session-protocol.md'* ]]
+  [[ "$output" == *'do not assume Codex runs'* ]]
+}

@@ -1,6 +1,6 @@
 {
-  "hash": "2a80860fce1c",
-  "total": 1462,
+  "hash": "a0de0dd6a204",
+  "total": 1464,
   "resources": [
     {
       "category": "analysis",
@@ -3024,6 +3024,20 @@
       "kind": "agent",
       "path": ".opencode/agents/concession-judge.md",
       "description": "Recommendation Tribunal judge — detects position changes without new evidence (SPEC-192)"
+    },
+    {
+      "category": "development",
+      "name": "configure-codex",
+      "intents": [
+        "codex",
+        "enforcement",
+        "generates",
+        "only",
+        "pass"
+      ],
+      "kind": "script",
+      "path": "scripts/configure-codex.sh",
+      "description": "Generates a private Codex profile only after sandbox and enforcement probes pass."
     },
     {
       "category": "development",
@@ -16088,6 +16102,20 @@
       "kind": "script",
       "path": "scripts/ci-test-quality-gate.sh",
       "description": "ci-test-quality-gate.sh — CI gate: test quality + coverage"
+    },
+    {
+      "category": "quality",
+      "name": "codex-autonomy-canaries",
+      "intents": [
+        "contract",
+        "frontend",
+        "graduation",
+        "only",
+        "pass"
+      ],
+      "kind": "script",
+      "path": "scripts/codex-autonomy-canaries.sh",
+      "description": "Contract tests plus real frontend probes. A policy-only PASS is not graduation."
     },
     {
       "category": "quality",

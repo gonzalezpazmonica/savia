@@ -6,6 +6,9 @@ set -uo pipefail
 
 QUICK=false
 [ "${1:-}" = "--quick" ] && QUICK=true
+if [ "${1:-}" = "--codex-autonomy" ]; then
+  exec python3 "$(dirname "$0")/dual-cli/autonomy_doctor.py"
+fi
 
 OK=0; WARN=0; FAIL=0; RESULTS=()
 ok()   { ((OK++));   RESULTS+=("OK   | $1 | $2"); }

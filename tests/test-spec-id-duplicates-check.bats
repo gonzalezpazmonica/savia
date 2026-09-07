@@ -139,6 +139,19 @@ EOF
   [[ "$output" == *"SPEC-777"* ]]
 }
 
+@test "docs/specs: duplicate numeric SE ID in filenames is detected" {
+  local root="$BATS_TEST_TMPDIR/dup-modern-spec"
+  mkdir -p "$root/docs/propuestas" "$root/docs/specs" "$root/scripts"
+  touch "$root/docs/specs/SE-777-alpha.spec.md"
+  touch "$root/docs/specs/SE-777-beta.spec.md"
+  cp "$SCRIPT" "$root/scripts/"
+  cd "$root"
+  run bash scripts/spec-id-duplicates-check.sh
+  cd "$BATS_TEST_DIRNAME/.."
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-777"* ]]
+}
+
 # ── Negative ────────────────────────────────────────────
 
 @test "negative: spec without id field ignored" {
