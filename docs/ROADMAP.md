@@ -1701,3 +1701,17 @@ SE-334 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
 > issues/alertas y captura SCL. La telemetría ya alimenta el bucle de
 > aprendizaje (SE-335/336 Turn-SDLC). Siguiente prioridad: L13 metacognición
 > (cierre) + L14 circuit-closing deuda estructural.
+
+---
+
+## Era 208 — Architectural Self-Knowledge & Operational Excellence (2026-09-08)
+
+| Spec | Prioridad | Estado | Ejecución autorizada |
+|---|---|---|---|
+| SE-397 — Savia Architecture Model | P0 | APPROVED por operadora | F0 únicamente; F1–F10 requieren revisión humana del F0 |
+
+SE-397 reutiliza `.scm`, Vaults, los modelos de knowledge/dependency graph y
+los contratos SE-393–SE-396. Su entrada en el ciclo nocturno es condicional a
+los gates canónicos de doble opt-in y reviewer; mientras falten, el estado es
+`NOT_STARTED_PREREQUISITES_MISSING`, no PASS. La primera salida es una
+reconciliación arquitectónica report-only, sin nueva implementación de SAM.
