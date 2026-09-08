@@ -49,6 +49,32 @@ class ContractsTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_SCHEMA"):
             capability_observation(dict(value, status="pass"))
 
+    def test_observation_rejects_non_scalar_status_with_stable_error(self):
+        value={"capability_id":"edit","status":["verified"],"mechanism":"native","observed_at":"2026-09-07T00:00:00Z","environment_hash":"env","subject_version":"1","evidence_ref":"private-evidence"}
+        with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_SCHEMA"):
+            capability_observation(value)
+
+    def test_all_enum_fields_reject_non_scalars_with_stable_error(self):
+        observation={"capability_id":"edit","status":"verified","mechanism":["native"],"observed_at":"2026-09-07T00:00:00Z","environment_hash":"env","subject_version":"1","evidence_ref":"private-evidence"}
+        result=dict(RESULT, state=["succeeded"])
+        value={"schema":2,"context":CONTEXT,"request_id":"request","event_id":"event","decision_id":"decision","decision":["proceed"],"execution":RESULT,"observation_refs":[],"human_gate_count":0,"delegated_execution":True,"decision_authority":"human"}
+        cases=(
+            (execution_context, dict(CONTEXT, inference_mode=["cli_managed"])),
+            (execution_context, dict(CONTEXT, authority_ceiling=["L2"])),
+            (capability_observation, observation),
+            (execution_result, result),
+            (receipt, value),
+        )
+        for validator, malformed in cases:
+            with self.subTest(validator=validator.__name__, malformed=malformed):
+                with self.assertRaisesRegex(ProtocolError, "UNSUPPORTED_SCHEMA"):
+                    validator(malformed)
+
+    def test_result_accepts_namespaced_usage_extensions(self):
+        value=dict(RESULT, usage={"input_tokens":3,"output_tokens":2,
+                                  "extensions":{"savia:cached_tokens":1}})
+        self.assertEqual(execution_result(value), value)
+
     def test_v2_writer_never_marks_a_failed_execution_as_pass(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:

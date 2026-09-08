@@ -95,3 +95,20 @@ CI verde y revisión requerida antes del cierre; seguir lifecycle canónico.
 La spec por sí sola no autoriza publicación, push ni merge; esas operaciones
 requieren la autoridad externa correspondiente. AGENTS.md sigue protocolo
 SE-371; no regenerar durante una sesión que provoca defer.
+
+## Registro de implementación I07 — 2026-09-08
+
+Estado: implementado y verificado localmente, pendiente de revisión humana E1.
+Autoridad de ejecución: instrucción explícita de la operadora para continuar el
+roadmap y reparar de forma autónoma errores L0–L2; no equivale a autoaprobación
+del PR ni a graduación operacional.
+
+Causa raíz H06: los campos enum se consultaban en sets antes de validar que el
+valor fuese texto, por lo que arrays JSON escapaban como `TypeError`. Además,
+`execution_result` iteraba todas las claves de `usage`, incluida la extensión
+opcional, y exigía que su objeto fuese un entero. El contrato ahora valida enums
+con una primitiva común y limita los contadores a `input_tokens/output_tokens`.
+
+Evidencia: regresiones públicas para enums no escalares y extensiones namespaced;
+12 tests de contrato y 83 tests del dual CLI correctos. No se modifican formatos,
+autoridad, adapters ni efectos externos.

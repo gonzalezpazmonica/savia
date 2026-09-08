@@ -34,6 +34,12 @@ def _nullable_identifier(value):
     return value
 
 
+def _enum(value, allowed):
+    if not isinstance(value, str) or value not in allowed:
+        raise ProtocolError("UNSUPPORTED_SCHEMA")
+    return value
+
+
 def _strings(value):
     if not isinstance(value, list):
         raise ProtocolError("UNSUPPORTED_SCHEMA")
@@ -48,8 +54,10 @@ def execution_context(value):
               "provider_id", "model_id", "model_revision", "inference_mode",
               "domain_ids", "authority_ceiling"}
     _object(value, fields, optional={"extensions"})
-    if type(value["schema"]) is not int or value["schema"] != 2 or value["inference_mode"] not in _MODES or value["authority_ceiling"] not in _LEVELS:
+    if type(value["schema"]) is not int or value["schema"] != 2:
         raise ProtocolError("UNSUPPORTED_SCHEMA")
+    _enum(value["inference_mode"], _MODES)
+    _enum(value["authority_ceiling"], _LEVELS)
     for key in fields - {"schema", "provider_id", "model_id", "model_revision", "domain_ids", "inference_mode", "authority_ceiling"}:
         identifier(value[key])
     for key in ("provider_id", "model_id", "model_revision"):
@@ -61,8 +69,8 @@ def execution_context(value):
 def capability_observation(value):
     fields = {"capability_id", "status", "mechanism", "observed_at", "environment_hash", "subject_version", "evidence_ref"}
     _object(value, fields, optional={"extensions"})
-    if value["status"] not in _OBSERVATION or value["mechanism"] not in {"native", "mediated"}:
-        raise ProtocolError("UNSUPPORTED_SCHEMA")
+    _enum(value["status"], _OBSERVATION)
+    _enum(value["mechanism"], {"native", "mediated"})
     for key in fields - {"status", "mechanism", "observed_at"}:
         identifier(value[key])
     try:
@@ -90,12 +98,14 @@ def execution_result(value):
     _object(value, fields, optional={"extensions"})
     identifier(value["request_id"])
     identifier(value["reason"])
-    if value["state"] not in _STATES or (value["external_effect_observed"] is not None and type(value["external_effect_observed"]) is not bool):
+    _enum(value["state"], _STATES)
+    if value["external_effect_observed"] is not None and type(value["external_effect_observed"]) is not bool:
         raise ProtocolError("UNSUPPORTED_SCHEMA")
     _strings(value["artifacts"])
     if value["usage"] is not None:
         _object(value["usage"], {"input_tokens", "output_tokens"}, optional={"extensions"})
-        if any(type(value["usage"][k]) is not int or value["usage"][k] < 0 for k in value["usage"]):
+        if any(type(value["usage"][k]) is not int or value["usage"][k] < 0
+               for k in ("input_tokens", "output_tokens")):
             raise ProtocolError("UNSUPPORTED_SCHEMA")
     return value
 
@@ -103,8 +113,10 @@ def execution_result(value):
 def receipt(value):
     fields = {"schema", "context", "request_id", "event_id", "decision_id", "decision", "execution", "observation_refs", "human_gate_count", "delegated_execution", "decision_authority"}
     _object(value, fields, optional={"extensions"})
-    if type(value["schema"]) is not int or value["schema"] != 2 or value["decision"] not in _DECISIONS or value["decision_authority"] != "human":
+    if type(value["schema"]) is not int or value["schema"] != 2:
         raise ProtocolError("UNSUPPORTED_SCHEMA")
+    _enum(value["decision"], _DECISIONS)
+    _enum(value["decision_authority"], {"human"})
     for key in ("request_id", "event_id", "decision_id"):
         identifier(value[key])
     execution_context(value["context"])
