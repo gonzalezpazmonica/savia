@@ -47,6 +47,9 @@ export async function writeManifest(hookMap: HookMap): Promise<void> {
     const eventHandlers = HANDLERS[event]
     if (!eventHandlers) continue
     for (const e of entries) {
+      // The parity inventory compares command hook basenames. HTTP Shield
+      // hooks have no command basename and are exercised by runtime tests.
+      if (e.type !== "command") continue
       // Extract the .sh basename the same way opencode-parity-audit.sh does
       // (regex over the command path), so manifest claudeHook matches the CC
       // binding even when the command carries args like "$CLAUDE_JSON_INPUT".

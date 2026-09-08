@@ -3,6 +3,7 @@
 Persistent log of corrections and patterns discovered during sessions.
 Reviewed at session start to prevent recurrence. Newest entries first.
 
+| 2026-09-08 | Skills | Frontmatter migrations must parse every `SKILL.md` as YAML after rewriting it. Grep-only checks missed invalid nesting below scalar metadata and unquoted colons in descriptions. Keep a repository-wide YAML regression test. | Codex skipped invalid skills at startup |
 | 2026-03-28 | Git | ALWAYS run /pr-plan before creating any PR. NEVER call push-pr.sh directly — it bypasses 10 pre-flight gates and the confidentiality signing protocol, causing CI failures (diff hash mismatch). Structural guard: push-pr.sh now requires .pr-plan-ok sentinel or exits with error. Rule #25. | CI failure PR #441 + user correction |
 | 2026-03-25 | Comms | When told to improve a response, ACTUALLY improve it. Don't resend the same quality. Re-read the original feedback, address every point, improve depth and tone. | User correction |
 | 2026-03-25 | Comms | Follow directives precisely. If user says "improve the email", the next version MUST be measurably better. Track directives as checklist, verify before executing. | User correction |

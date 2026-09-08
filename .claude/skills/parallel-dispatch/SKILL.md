@@ -1,14 +1,13 @@
 ---
 layer: peripheral
 name: parallel-dispatch
-description: Usar cuando se necesitan subagentes en paralelo con admission-handle — lanza N tareas en background y recoge resultados después, sin bloquear el turno padre. Triggers: lanza subagentes en paralelo, paraleliza esto, admission-handle, recoge resultados.
+description: "Usar cuando se necesitan subagentes en paralelo con admission-handle — lanza N tareas en background y recoge resultados después, sin bloquear el turno padre. Triggers: lanza subagentes en paralelo, paraleliza esto, admission-handle, recoge resultados."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: orchestration
   savia.maturity: stable
   savia.context: standalone
   savia.context_cost: low
-  savia.maturity: beta
   savia.priority: medium
   savia.tags: "parallel, subagents, admission-handle, orchestration"
   savia.trigger_keywords: "paralelo, parallel, subagentes, lanza en background"

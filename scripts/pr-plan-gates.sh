@@ -240,7 +240,19 @@ g6() {
   command -v bats >/dev/null 2>&1 || { echo "WARN: bats not installed"; return; }
   # Windows Git Bash: BATS has path issues, degrade to WARN
   [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]] && { echo "WARN: Windows — BATS deferred to CI"; return; }
+  # Some hook tests legitimately exercise branch switching, whose production
+  # hook clears this per-branch ephemeral file. G11 still needs the caller's
+  # original summary after G6, so isolate it from suite side effects.
+  local summary_snapshot=""
+  if [[ -f "$ROOT/.pr-summary.md" ]]; then
+    summary_snapshot=$(mktemp)
+    cp "$ROOT/.pr-summary.md" "$summary_snapshot"
+  fi
   local out; out=$(timeout 300 bash tests/run-all.sh 2>&1) || true
+  if [[ -n "$summary_snapshot" ]]; then
+    cp "$summary_snapshot" "$ROOT/.pr-summary.md"
+    rm -f "$summary_snapshot"
+  fi
   local fails; fails=$(echo "$out" | grep '❌' | sed 's/.*❌ //' | tr '\n' ', ' | sed 's/, $//') || true
   [[ -n "$fails" ]] && echo "FAIL: $fails" && return
   local p; p=$(echo "$out" | grep -oP '[0-9]+/[0-9]+ suites' | tail -1)

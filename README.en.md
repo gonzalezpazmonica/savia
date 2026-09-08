@@ -62,6 +62,8 @@ Govern (risk L0-L4, gates, receipts) · execute (agents, commands, skills, SDD) 
 
 Governance (Policy/Risk/Gates) + Execution (Agents/Skills/Tools) + Memory (Context/Knowledge/History) → Evidence/Evals → Frontends + Providers.
 
+CI parses the complete skill catalog as YAML so metadata migrations cannot silently make capabilities disappear at startup.
+
 ## Frontends and providers
 
 Claude Code (SUPPORTED) · OpenCode (SUPPORTED) · Codex (DEGRADED_SAFE, L2 ceiling). Model and provider independence by design.

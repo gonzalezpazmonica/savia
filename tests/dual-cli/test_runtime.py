@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -131,6 +132,81 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(result["request_id"], "req")
         with self.assertRaisesRegex(ProtocolError, "UNKNOWN_ADAPTER"):
             runtime.handle({"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":dict(event, event_id="e3", payload={"schema":2,"adapter_id":"missing","request":request})})
+
+    def test_registered_adapter_is_not_reexecuted_for_same_event(self):
+        class CountingAdapter(FixtureAdapter):
+            count = 0
+            def execute(self, request):
+                self.count += 1
+                return super().execute(request)
+        store=Store(self.root / "dedupe.db", "repo")
+        store.publish("r1", expected=None)
+        adapter=CountingAdapter()
+        runtime=Runtime(store, [adapter])
+        hello=runtime.handle({"op":"hello","session_id":"direct"})
+        runtime.handle({"op":"ack","session_id":"direct","session_token":hello["session_token"],"revision":"r1"})
+        request={"request_id":"req","capability_id":"local","context_ref":"ctx","scope_ref":"scope","input_ref":"input","required_capabilities":[],"deadline_ms":1000,"external_effect_intent":False}
+        event=dict(version=1, repo_id="repo", frontend="codex", session_id="direct", actor_id="test", event_id="same", call_id="call", kind="PreToolUse", revision="r1", payload={"schema":2,"adapter_id":"fixture","request":request})
+        dispatch={"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":event}
+        first=runtime.handle(dispatch)
+        second=runtime.handle(dispatch)
+        self.assertEqual(first, second)
+        self.assertEqual(adapter.count, 1)
+        self.assertEqual(store.status()["reservations"], 0)
+
+    def test_result_request_id_mismatch_keeps_reservation(self):
+        class BadAdapter(FixtureAdapter):
+            def execute(self, request):
+                result=super().execute(request)
+                result["request_id"]="other"
+                return result
+        store=Store(self.root / "mismatch.db", "repo")
+        store.publish("r1", expected=None)
+        runtime=Runtime(store, [BadAdapter()])
+        hello=runtime.handle({"op":"hello","session_id":"direct"})
+        runtime.handle({"op":"ack","session_id":"direct","session_token":hello["session_token"],"revision":"r1"})
+        request={"request_id":"req","capability_id":"local","context_ref":"ctx","scope_ref":"scope","input_ref":"input","required_capabilities":[],"deadline_ms":1000,"external_effect_intent":False}
+        event=dict(version=1, repo_id="repo", frontend="codex", session_id="direct", actor_id="test", event_id="bad", call_id="call", kind="PreToolUse", revision="r1", payload={"schema":2,"adapter_id":"fixture","request":request})
+        with self.assertRaisesRegex(ProtocolError, "INCONSISTENT_RESULT"):
+            runtime.handle({"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":event})
+        self.assertEqual(store.status()["reservations"], 1)
+        with self.assertRaisesRegex(ProtocolError, "AMBIGUOUS_EXECUTION"):
+            runtime.handle({"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":event})
+
+    def test_concurrent_dispatch_reserves_before_execute(self):
+        entered = threading.Event()
+        unblock = threading.Event()
+
+        class BlockingAdapter(FixtureAdapter):
+            count = 0
+            def execute(self, request):
+                self.count += 1
+                entered.set()
+                self.assert_unblocked = unblock.wait(timeout=5)
+                return super().execute(request)
+
+        store=Store(self.root / "concurrent.db", "repo")
+        store.publish("r1", expected=None)
+        adapter=BlockingAdapter()
+        runtime=Runtime(store, [adapter])
+        hello=runtime.handle({"op":"hello","session_id":"direct"})
+        runtime.handle({"op":"ack","session_id":"direct","session_token":hello["session_token"],"revision":"r1"})
+        request={"request_id":"req","capability_id":"local","context_ref":"ctx","scope_ref":"scope","input_ref":"input","required_capabilities":[],"deadline_ms":1000,"external_effect_intent":False}
+        event=dict(version=1, repo_id="repo", frontend="codex", session_id="direct", actor_id="test", event_id="same", call_id="call", kind="PreToolUse", revision="r1", payload={"schema":2,"adapter_id":"fixture","request":request})
+        dispatch={"op":"dispatch","session_id":"direct","session_token":hello["session_token"],"event":event}
+        outcomes=[]
+        worker=threading.Thread(target=lambda: outcomes.append(runtime.handle(dispatch)))
+        worker.start()
+        self.assertTrue(entered.wait(timeout=5), "first execution did not start")
+        with self.assertRaisesRegex(ProtocolError, "AMBIGUOUS_EXECUTION"):
+            runtime.handle(dispatch)
+        unblock.set()
+        worker.join(timeout=5)
+        self.assertFalse(worker.is_alive())
+        self.assertTrue(adapter.assert_unblocked)
+        self.assertEqual(adapter.count, 1)
+        self.assertEqual(outcomes[0]["state"], "succeeded")
+        self.assertEqual(store.status()["reservations"], 0)
 
 
 class CrashTests(unittest.TestCase):

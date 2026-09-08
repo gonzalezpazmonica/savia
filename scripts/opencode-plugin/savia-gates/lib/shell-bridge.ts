@@ -1,4 +1,5 @@
-// shell-bridge.ts — runs Claude Code bash hooks from OpenCode plugin
+// shell-bridge.ts — runs Claude Code command hooks and the local HTTP Shield
+// gate from the OpenCode plugin
 //
 // Reads .claude/settings.json once, builds an event → hook[] map keyed by
 // the same matcher Claude Code uses (tool name regex / glob), then on each
@@ -10,14 +11,29 @@ import { readFile, readdir, readlink, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { auditLog } from "./audit"
 
-export interface HookEntry {
-  command: string         // resolved absolute path of the .sh
+interface HookEntryBase {
   matcher?: string         // optional matcher (tool name regex)
   timeout?: number
   async?: boolean
   declared_event: string  // SessionStart / PreToolUse / etc.
-  unsupported?: boolean   // a declared hook we cannot safely translate
 }
+
+export interface CommandHookEntry extends HookEntryBase {
+  type: "command"
+  command: string         // resolved absolute path of the .sh
+}
+
+export interface HttpHookEntry extends HookEntryBase {
+  type: "http"
+  url: string
+  tokenEnv?: string
+}
+
+export interface UnsupportedHookEntry extends HookEntryBase {
+  type: "unsupported"
+}
+
+export type HookEntry = CommandHookEntry | HttpHookEntry | UnsupportedHookEntry
 
 export type HookMap = Record<string, HookEntry[]>
 
@@ -29,15 +45,66 @@ export interface HookResult {
   injectedContext?: string
 }
 
+function unsupportedHook(eventName: string, matcher: string | undefined): UnsupportedHookEntry {
+  return { type: "unsupported", matcher, async: false, declared_event: eventName }
+}
+
+function loadHttpHook(
+  hook: Record<string, unknown>,
+  eventName: string,
+  matcher: string | undefined,
+): HttpHookEntry | null {
+  if (typeof hook.url !== "string") return null
+  let url: URL
+  try {
+    url = new URL(hook.url)
+  } catch {
+    return null
+  }
+  // This adapter is intentionally only a client for the local Shield gate.
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port ||
+      url.pathname !== "/gate" || url.username || url.password || url.search || url.hash) {
+    return null
+  }
+
+  const headers = hook.headers
+  if (headers !== undefined && (typeof headers !== "object" || headers === null || Array.isArray(headers))) {
+    return null
+  }
+  const headerEntries = Object.entries(headers ?? {})
+  if (headerEntries.some(([name]) => name.toLowerCase() !== "x-shield-token")) return null
+  const tokenValue = headerEntries.find(([name]) => name.toLowerCase() === "x-shield-token")?.[1]
+  let tokenEnv: string | undefined
+  if (tokenValue !== undefined) {
+    if (typeof tokenValue !== "string") return null
+    const match = /^\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))$/.exec(tokenValue)
+    tokenEnv = match?.[1] ?? match?.[2]
+    if (!tokenEnv || !Array.isArray(hook.allowedEnvVars) || !hook.allowedEnvVars.includes(tokenEnv)) {
+      return null
+    }
+  }
+  return {
+    type: "http",
+    url: url.href,
+    tokenEnv,
+    matcher,
+    timeout: hook.timeout,
+    // Shield is an authorization gate. Treating it as telemetry would let the
+    // tool execute before a BLOCK verdict arrives.
+    async: false,
+    declared_event: eventName,
+  }
+}
+
 export async function loadHookMap(projectRoot: string): Promise<HookMap> {
   const settingsPath = `${projectRoot}/.claude/settings.json`
   const raw = await readFile(settingsPath, "utf-8").catch(() => "")
-  if (!raw) return { __configuration__: [{ command: "", declared_event: "configuration", unsupported: true }] }
+  if (!raw) return { __configuration__: [{ type: "unsupported", declared_event: "configuration" }] }
   let parsed: any = {}
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return { __configuration__: [{ command: "", declared_event: "configuration", unsupported: true }] }
+    return { __configuration__: [{ type: "unsupported", declared_event: "configuration" }] }
   }
   const out: HookMap = {}
   const events = parsed.hooks || {}
@@ -48,12 +115,17 @@ export async function loadHookMap(projectRoot: string): Promise<HookMap> {
       const matcher = entry.matcher
       const hooks = entry.hooks || []
       for (const h of hooks) {
+        if (h.type === "http") {
+          const httpHook = loadHttpHook(h, eventName, matcher)
+          if (httpHook) out[eventName].push(httpHook)
+          else if (!h.async) out[eventName].push(unsupportedHook(eventName, matcher))
+          continue
+        }
         // A configured synchronous gate must never disappear merely because
         // this adapter cannot execute its hook type.  Async hooks are
         // telemetry by contract and remain non-blocking.
         if (h.type !== "command" || typeof h.command !== "string") {
-          if (!h.async) out[eventName].push({ command: "", matcher, async: false,
-            declared_event: eventName, unsupported: true })
+          if (!h.async) out[eventName].push(unsupportedHook(eventName, matcher))
           continue
         }
         const cmd = h.command
@@ -68,6 +140,7 @@ export async function loadHookMap(projectRoot: string): Promise<HookMap> {
           // `echo "…"`), or `bash -c` breaks on unbalanced quotes.
           .replace(/^"([^"]*)"$/, "$1")
         out[eventName].push({
+          type: "command",
           command: cmd,
           matcher,
           timeout: h.timeout,
@@ -168,7 +241,7 @@ function hookRegistryPath(owner: number, hookPid: number): string {
 
 async function spawnHook(
   projectRoot: string,
-  h: HookEntry,
+  h: CommandHookEntry,
   payload: string,
   ignoreOutput: boolean,
 ): Promise<{ proc: any; pid: number; cleanup: () => Promise<void> }> {
@@ -237,7 +310,7 @@ const readStreamText = (s: any): Promise<string> =>
  */
 async function runHookOnce(
   projectRoot: string,
-  h: HookEntry,
+  h: CommandHookEntry,
   payload: string,
   fireAndForget = false,
 ): Promise<{ exit: number; stdout: string; stderr: string }> {
@@ -261,6 +334,78 @@ async function runHookOnce(
   } finally {
     clearTimeout(killTimer)
     void cleanup()
+  }
+}
+
+async function resolveShieldToken(h: HttpHookEntry): Promise<string> {
+  if (!h.tokenEnv) return ""
+  const configured = process.env[h.tokenEnv]?.trim()
+  if (configured) return configured
+  if (h.tokenEnv !== "SHIELD_TOKEN") return ""
+  const home = process.env.HOME
+  if (!home) return ""
+  return (await readFile(`${home}/.savia/shield-token`, "utf8").catch(() => "")).trim()
+}
+
+async function runHttpHookOnce(
+  h: HttpHookEntry,
+  payload: string,
+): Promise<{ exit: number; stdout: string; stderr: string }> {
+  const token = await resolveShieldToken(h)
+  if (!token) return { exit: BLOCK_EXIT, stdout: "", stderr: "HTTP_GATE_MISSING_TOKEN" }
+
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutFor(h))
+  try {
+    let response: Response
+    try {
+      response = await Bun.fetch(h.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shield-Token": token,
+        },
+        body: payload,
+        redirect: "error",
+        signal: controller.signal,
+      })
+    } catch {
+      return {
+        exit: BLOCK_EXIT,
+        stdout: "",
+        stderr: timedOut ? "HTTP_GATE_TIMEOUT" : "HTTP_GATE_UNREACHABLE",
+      }
+    }
+    if (!response.ok) {
+      return { exit: BLOCK_EXIT, stdout: "", stderr: `HTTP_GATE_STATUS_${response.status}` }
+    }
+    let parsed: unknown
+    try {
+      parsed = await response.json()
+    } catch {
+      return {
+        exit: BLOCK_EXIT,
+        stdout: "",
+        stderr: timedOut ? "HTTP_GATE_TIMEOUT" : "HTTP_GATE_INVALID_RESPONSE",
+      }
+    }
+    const verdict = parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>).verdict
+      : undefined
+    if (typeof verdict !== "string") {
+      return { exit: BLOCK_EXIT, stdout: "", stderr: "HTTP_GATE_INVALID_RESPONSE" }
+    }
+    if (verdict === "ALLOW") return { exit: 0, stdout: "", stderr: "" }
+    if (verdict === "BLOCK") {
+      return { exit: BLOCK_EXIT, stdout: "", stderr: "HTTP_GATE_BLOCK" }
+    }
+    return { exit: BLOCK_EXIT, stdout: "", stderr: "HTTP_GATE_UNKNOWN_VERDICT" }
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -377,7 +522,7 @@ export async function runHooksForEvent(
   const hooks = hookMap[event] || []
   for (const h of hooks) {
     if (!matcherApplies(h.matcher, tool, payload)) continue
-    if (h.unsupported) {
+    if (h.type === "unsupported") {
       result.blocked = true
       result.stderr = "UNSUPPORTED_CRITICAL_HOOK"
       return result
@@ -386,13 +531,18 @@ export async function runHooksForEvent(
       // `async: true` hooks are fire-and-forget (Claude Code semantics):
       // their exit code and output are ignored, and the caller never waits.
       if (h.async) {
-        void runHookOnce(projectRoot, h, payload, true).catch(() => {})
+        if (h.type === "command") void runHookOnce(projectRoot, h, payload, true).catch(() => {})
+        else void runHttpHookOnce(h, payload).catch(() => {})
         continue
       }
-      const { exit, stdout, stderr } = await runHookOnce(projectRoot, h, payload, false)
+      const { exit, stdout, stderr } = h.type === "command"
+        ? await runHookOnce(projectRoot, h, payload, false)
+        : await runHttpHookOnce(h, payload)
       if (exit === BLOCK_EXIT) {
         result.blocked = true
-        result.stderr = stderr.trim() || `${h.command} exited ${BLOCK_EXIT}`
+        result.stderr = stderr.trim() || (h.type === "command"
+          ? `${h.command} exited ${BLOCK_EXIT}`
+          : "HTTP_GATE_BLOCK")
         return result
       }
       // Claude Code block contract #2: exit 0 + stdout JSON `{"decision":"block"}`
@@ -406,8 +556,8 @@ export async function runHooksForEvent(
       }
       if (parsed?.decision === "block") {
         result.blocked = true
-        result.stderr = String(parsed.reason ?? "") || `${h.command} blocked via {decision:block}`
-        await auditLog({ event: "hook-json-block", command: h.command, reason: result.stderr })
+        result.stderr = String(parsed.reason ?? "") || `${h.type === "command" ? h.command : h.url} blocked via {decision:block}`
+        await auditLog({ event: "hook-json-block", command: h.type === "command" ? h.command : h.url, reason: result.stderr })
         return result
       }
       // If a hook prints structured JSON on stdout, treat it as arg/context mutation.
