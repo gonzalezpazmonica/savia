@@ -1,7 +1,7 @@
 ---
 id: SE-397-F0
 parent: SE-397
-status: NEEDS_HUMAN_REVIEW
+status: APPROVED
 created: 2026-09-08
 evidence_type: static-reconciliation
 head: 0120cfbce9adaa9f4ab9cab1f6efdc4425229908
@@ -11,9 +11,9 @@ head: 0120cfbce9adaa9f4ab9cab1f6efdc4425229908
 
 ## Estado
 
-`DONE_WITH_CONCERNS`. F0 es inventario y reconciliación estática. No se ha
-implementado SAM ni ninguna fase F1–F10. El siguiente paso requiere revisión
-humana de este informe.
+`APPROVED_WITH_CONCERNS` por la operadora el 2026-09-09. F0 es inventario y
+reconciliación estática. No se ha implementado SAM ni ninguna fase F1–F10.
+Las fases siguientes quedan autorizadas, pero conservan sus gates y límites.
 
 | Campo | Valor |
 |---|---|
@@ -122,7 +122,7 @@ humana de este informe.
 | Vistas | `foundation`, `capabilities`, `structural`, `runtime`, `authority`, `evidence`, `failure`, más Mermaid scoped, todas GENERATED FROM SAM. |
 | No duplicar | `.scm`, planning/LOG, laws, descriptors, receipts/evals, memory, telemetry/journal, diagrams ni impact tools. |
 
-## F1 mínimo propuesto — no autorizado aún
+## F1 mínimo aprobado — pendiente de ejecución
 
 **Slice:** schema/proyección mínima read-only con `SYSTEM`, `SUBSYSTEM`,
 `COMPONENT`, `CAPABILITY`, `POLICY`, `ADAPTER`, `FRONTEND`, `STORE`, `EVIDENCE`;
@@ -153,18 +153,21 @@ externos.
 
 ## Decisiones humanas requeridas
 
-1. Aceptar o corregir esta reconciliación antes de F1.
-2. Elegir si la proyección SAM versionada vive bajo `.scm/` o en otra ubicación
-   existente; no crear storage paralelo sin esta decisión.
-3. Resolver autoridad/canonicalidad de los IDs duplicados SE-260 y SE-309.
-4. Priorizar SE-396 H02–H12 frente a F1; recomendación: completar integridad
-   crítica primero.
-5. Decidir qué docs/maps stale se regeneran, archivan o conservan.
-6. No promover drift/impact a blocking ni claims a SUPPORTED en esta fase.
+Decisiones resueltas por aprobación operadora de 2026-09-09:
+
+1. F0 aceptado con sus concerns explícitos.
+2. Proyección versionada inicial bajo `.scm/`; SQLite solo cache regenerable.
+3. SE-396 H02–H12 mantiene prioridad y puede avanzar en paralelo con slices
+   read-only/reversibles de F1.
+4. Docs/maps stale se conservan hasta disponer de regeneración verificable.
+5. Drift/impact continúan report-only; no se declaran claims `SUPPORTED`.
+
+Pendiente no delegable a automatización: canonicalidad/renumeración de IDs
+históricos duplicados SE-260 y SE-309. Los resolvers deben fallar closed.
 
 ## Veredicto
 
-`NEEDS_HUMAN_REVIEW`. Existe base reutilizable suficiente para investigar F1,
+`GO_WITH_CONCERNS`. Existe base reutilizable suficiente para ejecutar F1,
 pero no existe hoy SAM ni evidencia operacional sistémica. La arquitectura
 correcta es una proyección derivada y consultable sobre autoridades existentes,
 no una nueva fuente de policy, planning, memory o evidence.

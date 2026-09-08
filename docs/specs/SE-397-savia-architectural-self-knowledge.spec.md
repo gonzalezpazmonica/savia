@@ -22,7 +22,7 @@ related_specs:
 risk: L2
 type: architectural-evolution
 working_title: Savia Self-Knowledge and Operational Excellence
-execution_scope: F0_ONLY_PENDING_HUMAN_REVIEW
+execution_scope: F1_TO_F10_APPROVED_SUBJECT_TO_PHASE_GATES
 ---
 
 # SE-397 — Savia Architectural Self-Knowledge & Operational Excellence
@@ -751,12 +751,13 @@ No implementación funcional posterior hasta revisión humana del F0.
 
 - Aprobación humana de la spec: **sí**, 2026-09-08.
 - Trabajo admisible: **solo F0**, read-only salvo sus artefactos de informe.
-- F1–F10: excluidas hasta revisión humana del F0.
+- Revisión humana de F0: **aprobada por la operadora, 2026-09-09**.
+- F1–F10: autorizadas, sujetas a sus gates de fase y límites de riesgo.
 - Riesgo efectivo de F0: L1; riesgo arquitectónico global: L2.
-- Estado del runner: `NOT_STARTED_PREREQUISITES_MISSING`.
-- Prerrequisitos pendientes en runtime: doble opt-in y
-  `AUTONOMOUS_REVIEWER`; su ausencia no se convierte en aprobación implícita.
-- Salida permitida: PR Draft con spec + reconciliación F0; nunca auto-merge.
+- Estado del runner: `ACTIVE_LOW_RISK_TASKS_ONLY`, grant local temporal de 12h.
+- Reviewer resoluble y doble opt-in comprobados en runtime; esos valores son
+  locales y no se persisten en el repositorio público.
+- Salida nocturna permitida: un PR Draft por tarea L0–L2; nunca auto-merge.
 
 ## 64. Criterio de arquitectura
 

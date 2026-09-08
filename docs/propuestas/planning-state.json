@@ -115,8 +115,8 @@
       "approval": "Operadora 2026-09-08: aprobación explícita para añadir la spec al ciclo autónomo nocturno",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "note": "Ejecución inmediata limitada a F0; F1-F10 requieren revisión humana del informe F0",
-      "evidence": "docs/specs/SE-397-savia-architectural-self-knowledge.spec.md; ID libre verificado 2026-09-08"
+      "note": "F0 aprobado 2026-09-09; F1-F10 autorizadas con gates de fase, sin elevar authority",
+      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; ID libre verificado 2026-09-08"
     }
   ]
 }
