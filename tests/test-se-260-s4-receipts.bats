@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
-# tests/test-se-260-s4-receipts.bats — Tests for receipt-v2.sh (SE-260 S4)
+# tests/test-se-260-s4-receipts.bats — Tests for receipt-v2.sh.
+# Ref: docs/specs/SE-260-gentle-patterns.spec.md (S4)
 
 SCRIPT="${BATS_TEST_DIRNAME}/../scripts/receipt-v2.sh"
 TMP_REPO=""
@@ -49,7 +50,7 @@ teardown() {
   [[ "$output" =~ "RECEIPT STALE" ]]
 }
 
-@test "S4-T05: verify passes when no receipt exists" {
+@test "S4-T05: nonexistent receipt is graceful" {
   run bash "$SCRIPT" verify --project "$TMP_REPO" --branch no-receipt
   [[ "$status" -eq 0 ]]
   [[ "$output" =~ "no receipt found" ]]
@@ -87,8 +88,26 @@ teardown() {
   [[ "$output" =~ "Usage" ]]
 }
 
-@test "S4-T10: no command shows error" {
+@test "S4-T10: no arg shows error" {
   run bash "$SCRIPT"
   [[ "$status" -eq 1 ]]
   [[ "$output" =~ "command required" ]]
+}
+
+@test "invalid command is rejected" {
+  run bash "$SCRIPT" invalid
+  [[ "$status" -eq 1 ]]
+  [[ "$output" == *"unknown option"* ]]
+}
+
+@test "safety: receipt enables nounset and pipefail" {
+  run grep -q '^set -uo pipefail' "$SCRIPT"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "AC-4.7: G0b runs under nounset using the pr-plan ROOT" {
+  run bash -c 'set -u; ROOT="$1"; BRANCH=no-receipt; source "$1/scripts/pr-plan-gates.sh"; g0b' _ \
+    "$BATS_TEST_DIRNAME/.."
+  [[ "$status" -eq 0 ]]
+  [[ "$output" != *"unbound variable"* ]]
 }

@@ -113,6 +113,22 @@ o justify (comentario en PR).
 - [ ] AC-S3.4: 5 PRs históricos probados producen veredicto coherente con
   inspección manual (documentado en spec o reporte).
 
+### Delta correctivo 2026-09-08 — resolución consistente de specs
+
+**RCA:** G17 local y el job CI solo buscaban en `docs/propuestas/` y después
+en `projects/*/specs/`; omitían `docs/specs/` y elegían silenciosamente la
+primera coincidencia. El gate de aprobación ya usa los tres espacios y falla
+ante IDs ambiguos, por lo que los diagnósticos divergían.
+
+- [x] AC-S3.5: un único resolver cubre `docs/propuestas/`, `docs/specs/` y
+  `projects/*/specs/` tanto en G17 como en CI.
+- [x] AC-S3.6: un ID duplicado produce `AMBIGUOUS` y nunca selección por orden.
+- [x] AC-S3.7: una referencia de ruta exacta desambigua de forma explícita.
+
+**Implantación:** `scripts/spec-resolve.sh` es la fuente compartida para G17,
+CI y el gate de aprobación. Pruebas: `tests/test-spec-resolve.bats` y
+`tests/test-spec-approval-gate.bats` (2026-09-08). Revisión E1 pendiente.
+
 ---
 
 ## Ref

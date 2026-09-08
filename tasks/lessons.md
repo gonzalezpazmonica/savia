@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- Los IDs de spec históricos no son necesariamente únicos: un resolver de
+  gobernanza debe fallar ante ambigüedad y aceptar una ruta explícita validada;
+  elegir el primer resultado convierte el orden del filesystem en autoridad.
+
 Persistent log of corrections and patterns discovered during sessions.
 Reviewed at session start to prevent recurrence. Newest entries first.
 
