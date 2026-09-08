@@ -61,6 +61,11 @@ class Runtime:
         consumer = next(c for c in status["consumers"] if c["session_id"] == session)
         if event["revision"] != status["revision"] or consumer["revision"] != status["revision"]:
             raise ProtocolError("STALE_REVISION")
+        prior = self.store.prior_record(event)
+        if prior is not None:
+            sequence, decision = prior
+            decision["sequence"] = sequence
+            return decision
         payload = event.get("payload")
         if isinstance(payload, dict) and payload.get("schema") == 2:
             adapter = self.adapters.get(payload.get("adapter_id"))
@@ -70,8 +75,17 @@ class Runtime:
             context = {"request_id": request["request_id"], "capability_id": request["capability_id"]}
             if adapter.preflight(context).get("ok") is not True:
                 raise ProtocolError("UNSUPPORTED_CAPABILITY")
+            lease, replay = self.store.admit(
+                event, session, event["revision"], event["call_id"]
+            )
+            if replay is not None:
+                sequence, decision = replay
+                decision["sequence"] = sequence
+                return decision
             result = execution_result(adapter.execute(request))
-            result["sequence"] = self.store.record(event, result)
+            if result["request_id"] != request["request_id"]:
+                raise ProtocolError("INCONSISTENT_RESULT")
+            result["sequence"] = self.store.complete(event, result, session, lease)
             return result
         result = {"action": "deny", "reason": "UNSUPPORTED_CAPABILITY",
                   "revision": status["revision"], "context": None,

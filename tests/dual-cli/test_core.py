@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -137,6 +138,22 @@ class StateTests(unittest.TestCase):
         output = json.dumps(self.store.status())
         self.assertNotIn("PRIVATE_SENTINEL", output)
         self.assertNotIn(token, output)
+
+    def test_completion_rolls_back_journal_when_release_fails(self):
+        reserved_event = event(call_id="call")
+        token, replay = self.store.admit(reserved_event, "one", "r1", "call")
+        self.assertIsNone(replay)
+        with self.store.connection() as db:
+            db.execute(
+                "CREATE TRIGGER fail_release BEFORE DELETE ON lease "
+                "BEGIN SELECT RAISE(ABORT, 'injected release failure'); END"
+            )
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.complete(reserved_event, {"action": "deny"}, "one", token)
+
+        self.assertIsNone(self.store.prior_record(reserved_event))
+        self.assertEqual(self.store.status()["reservations"], 1)
 
 
 if __name__ == "__main__":
