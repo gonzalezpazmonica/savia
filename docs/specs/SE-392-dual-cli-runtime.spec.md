@@ -1,6 +1,7 @@
 ---
 id: SE-392
-status: PROPOSED
+status: APPROVED
+approval: "Operadora 2026-09-09: aprobación global de trabajo pendiente"
 priority: P0
 created: 2026-09-07
 developer_type: agent-single

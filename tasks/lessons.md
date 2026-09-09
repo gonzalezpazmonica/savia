@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- Un registro canónico no es completo sólo porque sus entradas sean válidas:
+  debe declarar el universo que pretende cubrir y fallar cuando una fuente de
+  ese universo queda omitida. El suelo de cobertura evita confundir legacy no
+  migrado con iniciativas actuales desaparecidas.
 - Nunca neutralizar el exit code de `timeout` antes de clasificarlo. Un runner
   que expira sin imprimir marcadores de fallo no ha pasado: los gates deben
   exigir exit 0 y una señal positiva de finalización, y mantener acotada la

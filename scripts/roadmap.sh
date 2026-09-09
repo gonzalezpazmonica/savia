@@ -4,7 +4,7 @@
 # Fuente de estado: docs/propuestas/planning-state.json (única representación actual).
 # Transiciones: docs/propuestas/LOG.md (append-only, SE-222).
 set -uo pipefail
-ROOT="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
+ROOT="${REPO_ROOT:-$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)}"
 STATE="$ROOT/docs/propuestas/planning-state.json"
 [[ -f "$STATE" ]] || { echo "ERROR: falta $STATE" >&2; exit 1; }
 CMD="${1:-current}"
@@ -40,11 +40,28 @@ case "$CMD" in
     # 4. APPROVED requiere aprobación
     NOAP=$(jq -r '.initiatives[] | select(.status=="APPROVED") | select((.approval // "") == "") | .id' "$STATE")
     [[ -n "$NOAP" ]] && { echo "FAIL: APPROVED sin aprobación registrada: $NOAP"; ERR=1; }
-    # 5. Estado del spec en docs/specs vs state
+    # 5. Cobertura explícita del registro para la era canónica.
+    FLOOR=$(jq -r '.tracked_spec_floor // empty' "$STATE")
+    if ! [[ "$FLOOR" =~ ^[0-9]+$ ]]; then
+      echo "FAIL: tracked_spec_floor ausente o inválido"
+      ERR=1
+    else
+      OMITTED=""
+      while IFS= read -r spec; do
+        ID=$(basename "$spec" | grep -oP '^SE-\d+')
+        NUM=${ID#SE-}
+        (( 10#$NUM < FLOOR )) && continue
+        if ! jq -e --arg id "$ID" '.initiatives[] | select(.id==$id)' "$STATE" >/dev/null; then
+          OMITTED="${OMITTED}${OMITTED:+ }$ID"
+        fi
+      done < <(find "$ROOT/docs/specs" -name 'SE-*.spec.md' | sort -V)
+      [[ -n "$OMITTED" ]] && { echo "FAIL: specs omitidas de planning-state: $OMITTED"; ERR=1; }
+    fi
+    # 6. Estado del spec en docs/specs vs state (YAML o Markdown legacy).
     while IFS= read -r spec; do
       ID=$(basename "$spec" | grep -oP '^SE-\d+')
       [[ -z "$ID" ]] && continue
-      SPEC_STATUS=$(grep -m1 -oP '^\*\*Estado:\*\*\s*\K[A-Z]+' "$spec" 2>/dev/null || echo "")
+      SPEC_STATUS=$(grep -m1 -oP '^(?:status:\s*|\*\*Estado:\*\*\s*)\K[A-Z_]+' "$spec" 2>/dev/null || echo "")
       STATE_STATUS=$(jq -r --arg id "$ID" '.initiatives[] | select(.id==$id) | .status' "$STATE" 2>/dev/null | head -1)
       if [[ -n "$STATE_STATUS" && -n "$SPEC_STATUS" && "$SPEC_STATUS" != "$STATE_STATUS" ]]; then
         COMPAT=0
