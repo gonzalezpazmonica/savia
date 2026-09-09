@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=0e6520ea5a6f3ea98f166148c6065bd1093224b081737550eac35fe285b9997c
-timestamp=2026-09-09T18:08:10Z
-branch=agent/overnight-20260909-planning-omissions
-head_commit=20d9de50
-signature=08e842cb355b2c52ffad64688a53c3f8f7e2b5602eeb662700e68db54dfc64a7
+diff_hash=0b4f61de4be4e93f2643b8fe51733ed8a4e6599c5b47080b9093643d0623b6b6
+timestamp=2026-09-09T18:25:01Z
+branch=agent/overnight-20260909-chaos-verdict
+head_commit=07ef6efc
+signature=6b0bd9d61bf9e9b29b673d4cfa3a862f9843485531451e39224e923e4b6346c5
