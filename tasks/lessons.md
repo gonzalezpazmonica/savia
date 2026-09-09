@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- Un benchmark de inventario debe afirmar su cardinalidad mínima y probar la
+  topología real del repositorio. `find` no sigue por defecto un directorio que
+  es enlace simbólico; sin `-L`, “cero elementos, cero fallos” puede producir un
+  PASS vacío y ocultar que no se midió nada.
 - Con `set -o pipefail`, `producer | grep -q` puede fallar cuando `grep` encuentra
   pronto una coincidencia y cierra el pipe. En validadores, consultar el fichero
   directamente evita que un SIGPIPE convierta coincidencias reales en falsos

@@ -73,6 +73,12 @@ teardown() {
   [[ "$output" -ge 1 ]]
 }
 
+@test "check #9 does not ignore hook benchmark execution failures" {
+  run grep -F '"$hook_script" --runs 5 --quiet >/dev/null 2>&1 || true' scripts/ci-extended-checks.sh
+  [ "$status" -ne 0 ]
+  grep -q 'Hook benchmark execution failed' scripts/ci-extended-checks.sh
+}
+
 @test "check #10 BATS Auditor Compliance Floor is present" {
   run grep -c "10. BATS Auditor Compliance Floor\|BATS Auditor Compliance Floor" "scripts/ci-extended-checks.sh"
   [[ "$output" -ge 1 ]]
@@ -122,7 +128,6 @@ teardown() {
 }
 
 @test "regression: check #9 fails if baseline is artificially low" {
-  skip "baseline=0, violations=0 — check always passes ((le))"
   local f=".ci-baseline/hook-critical-violations.count"
   local original
   original=$(cat "$f")
@@ -131,6 +136,7 @@ teardown() {
   local status_captured=$status
   echo "$original" > "$f"
   [ "$status_captured" -ne 0 ]
+  [[ "$output" == *"Hook latency:"*"regression"* ]]
 }
 
 # ── Stale baseline detection (improvement hint) ────────────────────────────
