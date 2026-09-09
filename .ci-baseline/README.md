@@ -35,3 +35,13 @@ git add .ci-baseline/agent-size-violations.count
 - Never increase a baseline number. Baselines only ratchet down.
 - Never add to `.gitignore`: these files MUST travel with the repo.
 - Never skip updating the baseline after remediation — that leaves slack the next contributor will consume.
+
+## Provenance exception — 2026-09-09
+
+The hook baseline was restored from 0 to the last valid value, 5. Commit
+`a67571fe` changed discovery from the real `.claude/hooks` directory to the
+`.opencode/hooks` symlink without enabling link traversal, then recorded 0 from
+an empty measurement. Three repeated five-run measurements after repairing
+discovery found the same five registered hot-path violations. This is a
+measurement-universe correction, not ratchet slack; future updates remain
+decrease-only.

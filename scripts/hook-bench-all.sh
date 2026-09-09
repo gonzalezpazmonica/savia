@@ -6,9 +6,9 @@
 # table sorted by p95 descending, plus a summary of violations against
 # the SLA 20ms p50 for critical hooks.
 #
-# Hooks are classified by name prefix convention:
-#   session-*, memory-*, claude-*, pre-*, post-*  → critical (hot path)
-#   *                                             → analysis (cold path, <100ms)
+# Hooks matching the established critical-name convention must also be
+# registered for SessionStart or a per-turn event. Unregistered and
+# lifecycle-only scripts are analysis/cold path.
 #
 # Ref: SE-037, ROADMAP.md §Tier 1.1
 # Safety: `set -uo pipefail`. No network. No destructive ops.
@@ -53,16 +53,33 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 
+# Resolve hot-path membership from the runtime registry instead of filenames.
+declare -A CRITICAL_HOOKS=()
+SETTINGS_FILE="$REPO_ROOT/.claude/settings.json"
+if [[ -f "$SETTINGS_FILE" ]] && command -v jq >/dev/null 2>&1; then
+  while IFS= read -r command; do
+    hook_name=$(printf '%s\n' "$command" | sed -E 's#.*[/]([^/" ]+)\.sh.*#\1#')
+    [[ -n "$hook_name" ]] && CRITICAL_HOOKS["$hook_name"]=1
+  done < <(jq -r '
+    .hooks | to_entries[]
+    | select(.key | test("^(SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|Stop)$"))
+    | .value[]?.hooks[]?.command // empty
+  ' "$SETTINGS_FILE" 2>/dev/null)
+fi
+
 # Classify hook as critical or analysis.
 classify_hook() {
   local name
   name=$(basename "$1" .sh)
   case "$name" in
     session-*|memory-*|claude-*|pre-*|post-*|user-prompt-*|tool-*)
-      echo "critical" ;;
-    *)
-      echo "analysis" ;;
+      if [[ -n "${CRITICAL_HOOKS[$name]+x}" ]]; then
+        echo "critical"
+        return
+      fi
+      ;;
   esac
+  echo "analysis"
 }
 
 # Median from sorted numbers in stdin.
@@ -137,7 +154,12 @@ while IFS= read -r hook; do
   fi
 
   RESULTS+=("$p95|$p50|$p95|$p99|$category|$name")
-done < <(find "$HOOKS_DIR" -maxdepth 1 -type f -name '*.sh' | sort)
+done < <(find -L "$HOOKS_DIR" -maxdepth 1 -type f -name '*.sh' | sort)
+
+if [[ "$total" -eq 0 ]]; then
+  echo "ERROR: no hook scripts found in $HOOKS_DIR" >&2
+  exit 2
+fi
 
 # Sort results by p95 descending for the report.
 SORTED=$(printf '%s\n' "${RESULTS[@]}" | sort -t'|' -k1 -n -r)

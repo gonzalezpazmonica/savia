@@ -159,8 +159,14 @@ hook_baseline="$ROOT/.ci-baseline/hook-critical-violations.count"
 hook_script="$ROOT/scripts/hook-bench-all.sh"
 if [[ -f "$hook_baseline" && -x "$hook_script" ]]; then
   hook_base=$(cat "$hook_baseline" | tr -d '[:space:]')
-  "$hook_script" --runs 5 --quiet >/dev/null 2>&1 || true
-  hook_report=$(ls -t "$ROOT/output/hook-bench-report-"*.md 2>/dev/null | head -1)
+  hook_run_ok=0
+  if "$hook_script" --runs 5 --quiet >/dev/null 2>&1; then
+    hook_run_ok=1
+    hook_report=$(ls -t "$ROOT/output/hook-bench-report-"*.md 2>/dev/null | head -1)
+  else
+    hook_report=""
+    fail "Hook benchmark execution failed"
+  fi
   if [[ -n "$hook_report" ]]; then
     hook_cur=$(grep -oP 'Critical hooks: [0-9]+ \(violations: \K\d+' "$hook_report" | head -1)
     hook_cur="${hook_cur:-999}"
@@ -172,7 +178,7 @@ if [[ -f "$hook_baseline" && -x "$hook_script" ]]; then
     else
       fail "Hook latency: $hook_cur critical violations > baseline $hook_base (regression)"
     fi
-  else
+  elif [[ "$hook_run_ok" -eq 1 ]]; then
     fail "Hook bench report not generated"
   fi
 else
