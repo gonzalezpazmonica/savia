@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=9d71133a82a8187a371b22f97fbdfd7327e5103f93136bf41c635be92dbc95c7
-timestamp=2026-09-09T06:20:55Z
-branch=agent/overnight-20260909-hook-bench-nonempty
-head_commit=b9f6dafb
-signature=e82c6fb00a93ce6b7f5e71d0e2a2afde1a1728361b59e45e10accee24f285803
+diff_hash=9ddeb6411ab7153c11728a7eedc17213da3cbc05e50cc4f579acc3d83ec034ad
+timestamp=2026-09-09T14:30:05Z
+branch=agent/overnight-20260909-pr-plan-timeout
+head_commit=84f86a60
+signature=c54a2f5956ebba60770f3a82ce48b6224037f83b4b4ef5631ec84c988022dd73
