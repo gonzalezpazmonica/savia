@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=9ddeb6411ab7153c11728a7eedc17213da3cbc05e50cc4f579acc3d83ec034ad
-timestamp=2026-09-09T14:30:05Z
-branch=agent/overnight-20260909-pr-plan-timeout
-head_commit=84f86a60
-signature=c54a2f5956ebba60770f3a82ce48b6224037f83b4b4ef5631ec84c988022dd73
+diff_hash=0b4f61de4be4e93f2643b8fe51733ed8a4e6599c5b47080b9093643d0623b6b6
+timestamp=2026-09-09T18:25:01Z
+branch=agent/overnight-20260909-chaos-verdict
+head_commit=07ef6efc
+signature=6b0bd9d61bf9e9b29b673d4cfa3a862f9843485531451e39224e923e4b6346c5
