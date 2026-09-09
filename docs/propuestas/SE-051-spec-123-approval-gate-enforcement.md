@@ -42,3 +42,18 @@ Unico y medible: cerrar el gap descrito con Slice 1 scaffolding + BATS tests.
 - audit-arquitectura-20260420.md §Matriz de desincronizaciones
 - audit-new-specs-20260420.md §SE-051
 - audit-roadmap-reprioritization-20260420.md
+
+## Delta correctiva — resolución canónica (2026-09-08)
+
+Causa raíz: `spec_status()` sólo buscaba en `docs/propuestas`, aunque las specs
+canónicas también viven en `docs/specs` y `projects/*/specs`. Esto producía
+`NOT_FOUND` al modificar código correctamente trazado. Además, los estados
+`IMPLEMENTING` e `IN_PROGRESS`, posteriores a una aprobación, no se reconocían.
+
+Criterios añadidos:
+
+- GIVEN una única spec `IMPLEMENTING` en `docs/specs`, WHEN se audita un script
+  staged que la referencia, THEN el gate resuelve la spec y permite continuar.
+- GIVEN el mismo ID en dos ubicaciones canónicas, WHEN se audita su referencia,
+  THEN el gate devuelve `AMBIGUOUS` y bloquea, aunque ambas copias estén aprobadas.
+- La resolución permanece read-only y no amplía el allow-list explícito.
