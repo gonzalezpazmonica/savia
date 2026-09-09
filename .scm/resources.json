@@ -1,6 +1,6 @@
 {
-  "hash": "a0de0dd6a204",
-  "total": 1464,
+  "hash": "dc9f5706632a",
+  "total": 1465,
   "resources": [
     {
       "category": "analysis",
@@ -5104,6 +5104,20 @@
       "kind": "script",
       "path": "scripts/spec-quality-auditor.sh",
       "description": "spec-quality-auditor.sh — Deterministic quality scorer for SDD specs"
+    },
+    {
+      "category": "development",
+      "name": "spec-resolve",
+      "intents": [
+        "deterministic",
+        "gates",
+        "governance",
+        "resolver",
+        "shared"
+      ],
+      "kind": "script",
+      "path": "scripts/spec-resolve.sh",
+      "description": "Deterministic spec resolver shared by governance gates."
     },
     {
       "category": "development",

@@ -24,8 +24,6 @@ score_spec() {
   local file="$1"
   [[ ! -f "$file" ]] && echo '{"error":"file not found"}' && return
 
-  local content
-  content=$(cat "$file")
   local lines
   lines=$(wc -l < "$file")
   local name
@@ -33,51 +31,51 @@ score_spec() {
 
   # C1: Header (10 pts) — has title with SPEC number
   local c1=0
-  echo "$content" | grep -qiE '^#.*SPEC-[0-9]+' && c1=10 || {
-    echo "$content" | grep -qiE '^#' && c1=5
+  grep -qiE '^#.*SPEC-[0-9]+' "$file" && c1=10 || {
+    grep -qiE '^#' "$file" && c1=5
   }
 
   # C2: Metadata (10 pts) — Status, Date, Author/Era
   local c2=0
-  echo "$content" | grep -qiE '(status|estado)\s*[:=]' && ((c2+=4)) || true
-  echo "$content" | grep -qiE '(date|fecha)\s*[:=]|[0-9]{4}-[0-9]{2}-[0-9]{2}' && ((c2+=3)) || true
-  echo "$content" | grep -qiE '(author|era|autor)\s*[:=]' && ((c2+=3)) || true
+  grep -qiE '(status|estado)\s*[:=]' "$file" && ((c2+=4)) || true
+  grep -qiE '(date|fecha)\s*[:=]|[0-9]{4}-[0-9]{2}-[0-9]{2}' "$file" && ((c2+=3)) || true
+  grep -qiE '(author|era|autor)\s*[:=]' "$file" && ((c2+=3)) || true
 
   # C3: Problem statement (15 pts)
   local c3=0
-  echo "$content" | grep -qiE '^##.*problem|^##.*problema' && c3=15 || {
-    echo "$content" | grep -qiE 'problem|issue|challenge|problema' && c3=8
+  grep -qiE '^##.*problem|^##.*problema' "$file" && c3=15 || {
+    grep -qiE 'problem|issue|challenge|problema' "$file" && c3=8
   }
 
   # C4: Solution (15 pts)
   local c4=0
-  echo "$content" | grep -qiE '^##.*solution|^##.*soluci' && c4=15 || {
-    echo "$content" | grep -qiE 'solution|approach|propuesta|soluci' && c4=8
+  grep -qiE '^##.*solution|^##.*soluci' "$file" && c4=15 || {
+    grep -qiE 'solution|approach|propuesta|soluci' "$file" && c4=8
   }
 
   # C5: Acceptance criteria (15 pts) — measurable, testable
   local c5=0
   local ac_count
-  ac_count=$(echo "$content" | grep -ciE '(acceptance|criterio|criteria|AC-[0-9]|given.*when.*then|\- \[[ x]\])' || true)
+  ac_count=$(grep -ciE '(acceptance|criterio|criteria|AC-[0-9]|given.*when.*then|\- \[[ x]\])' "$file" || true)
   [[ -z "$ac_count" ]] && ac_count=0
   [[ $ac_count -ge 3 ]] && c5=15 || { [[ $ac_count -ge 1 ]] && c5=8; }
 
   # C6: Effort estimation (10 pts)
   local c6=0
-  echo "$content" | grep -qiE '(effort|esfuerzo|estimat|hours|horas|story.points|SP\b|[0-9]+h\b)' && c6=10
+  grep -qiE '(effort|esfuerzo|estimat|hours|horas|story.points|SP\b|[0-9]+h\b)' "$file" && c6=10
 
   # C7: Dependencies (5 pts)
   local c7=0
-  echo "$content" | grep -qiE '(depend|require|prerequis|SPEC-[0-9]+|blocker)' && c7=5
+  grep -qiE '(depend|require|prerequis|SPEC-[0-9]+|blocker)' "$file" && c7=5
 
   # C8: Testability (10 pts) — mentions tests, verification
   local c8=0
-  echo "$content" | grep -qiE '(test|verificat|validat|assert|expect|bats|jest|pytest)' && c8=10
+  grep -qiE '(test|verificat|validat|assert|expect|bats|jest|pytest)' "$file" && c8=10
 
   # C9: Clarity (10 pts) — not too short, not too long, has structure
   local c9=0
   local section_count
-  section_count=$(echo "$content" | grep -c '^##' || true)
+  section_count=$(grep -c '^##' "$file" || true)
   [[ -z "$section_count" ]] && section_count=0
   [[ $lines -ge 20 && $lines -le 200 ]] && ((c9+=5)) || true
   [[ $section_count -ge 3 ]] && ((c9+=5)) || { [[ $section_count -ge 2 ]] && ((c9+=3)) || true; }

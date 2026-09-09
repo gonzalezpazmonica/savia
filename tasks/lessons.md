@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- Con `set -o pipefail`, `producer | grep -q` puede fallar cuando `grep` encuentra
+  pronto una coincidencia y cierra el pipe. En validadores, consultar el fichero
+  directamente evita que un SIGPIPE convierta coincidencias reales en falsos
+  negativos silenciosos.
 - Los IDs de spec históricos no son necesariamente únicos: un resolver de
   gobernanza debe fallar ante ambigüedad y aceptar una ruta explícita validada;
   elegir el primer resultado convierte el orden del filesystem en autoridad.

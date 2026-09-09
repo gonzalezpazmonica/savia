@@ -165,6 +165,39 @@ MD
   [ "$score" -ge 50 ]
 }
 
+@test "spec-auditor: long spec does not lose matched criteria to broken pipe" {
+  local spec="$TMPDIR_TEST/specs/SE-999-long.spec.md"
+  {
+    echo '# SE-999: Long specification'
+    echo 'status: APPROVED'
+    echo 'date: 2026-09-09'
+    echo 'author: operator'
+    echo '## Problem'
+    echo 'A reproducible problem.'
+    echo '## Solution'
+    echo 'A deterministic solution.'
+    echo '## Acceptance Criteria'
+    echo '- AC-1: verified with tests'
+    echo '## Effort'
+    echo 'Estimated: 2h'
+    echo '## Dependencies'
+    echo 'Requires SE-051'
+    seq 1 3000 | sed 's/^/filler line /'
+  } > "$spec"
+
+  run bash "$SCRIPT" "$spec"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Broken pipe"* ]]
+  echo "$output" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert d["criteria"]["header"] == 5, d
+assert d["criteria"]["problem"] == 15, d
+assert d["criteria"]["dependencies"] == 5, d
+'
+}
+
 @test "spec-auditor: detects acceptance criteria" {
   grep -q 'acceptance\|criterio\|AC-' "$SCRIPT"
 }
