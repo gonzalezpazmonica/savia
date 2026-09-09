@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=570f6f7f0f7066fdac1011e15c479f915715888a5abb6603c79ee715e019fed5
-timestamp=2026-09-09T05:17:55Z
-branch=agent/gate-resolver-consistency-20260908
-head_commit=6f244aeb
-signature=1413d86553595f8e8648788bb6309a8ee61ddbae8670d1d667ba1e9abd1ce16f
+diff_hash=9d71133a82a8187a371b22f97fbdfd7327e5103f93136bf41c635be92dbc95c7
+timestamp=2026-09-09T06:20:55Z
+branch=agent/overnight-20260909-hook-bench-nonempty
+head_commit=b9f6dafb
+signature=e82c6fb00a93ce6b7f5e71d0e2a2afde1a1728361b59e45e10accee24f285803
