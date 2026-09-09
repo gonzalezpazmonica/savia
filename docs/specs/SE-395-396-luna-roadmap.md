@@ -186,3 +186,14 @@ dejar un handoff ejecutable y marcar ese gate pendiente.
 Entrega final: matriz AC completa, tests/CI, receipts operacionales, benchmark,
 GO/NO-GO por experimento, limitaciones y lifecycle actualizado sin saltos.
 Codex mantiene DEGRADED_SAFE/L2; adaptive default-off y producción one-hop.
+
+## Avance de ejecución — 2026-09-08
+
+- I01: implementado en PR #1112, pendiente de revisión humana E1.
+- I07: implementado y verificado localmente; enums no escalares fallan con
+  `ProtocolError` estable y `usage.extensions` conserva su contrato opcional.
+- I02: no iniciado. Bloqueado por una decisión de contrato aún ausente: autoridad
+  y resolución exactas de `context_ref`, `scope_ref` e `input_ref`. No se elige
+  una implementación implícita para evitar crear una segunda fuente de verdad.
+- Incidente Vaults MCP: RCA operacional persistido directamente en SaviaLabs;
+  handler sano (5–93 ms), fallo atribuido a IPC `tsx` bloqueado por sandbox.

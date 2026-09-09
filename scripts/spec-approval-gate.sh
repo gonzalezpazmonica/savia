@@ -42,7 +42,8 @@ AGAINST="main"
 JSON=0
 ALLOW_LIST=()
 
-APPROVED_STATUSES=("APPROVED" "ACCEPTED" "Implemented" "IMPLEMENTED" "DONE" "Done")
+APPROVED_STATUSES=("APPROVED" "ACCEPTED" "IMPLEMENTING" "IN_PROGRESS"
+                   "Implemented" "IMPLEMENTED" "DONE" "Done")
 
 usage() {
   cat <<EOF
@@ -98,9 +99,17 @@ extract_spec() {
 # Get status of spec
 spec_status() {
   local id="$1"
-  local sf
-  sf=$(ls "$PROJECT_ROOT"/docs/propuestas/${id}-*.md 2>/dev/null | head -1)
-  [[ -z "$sf" ]] && { echo "NOT_FOUND"; return; }
+  local sf matches count
+  matches=$(
+    compgen -G "$PROJECT_ROOT/docs/propuestas/${id}-*.md"
+    compgen -G "$PROJECT_ROOT/docs/specs/${id}-*.md"
+    compgen -G "$PROJECT_ROOT/projects/*/specs/${id}-*.md"
+  )
+  matches=$(printf '%s\n' "$matches" | sed '/^$/d' | sort -u)
+  count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l)
+  [[ "$count" -eq 0 ]] && { echo "NOT_FOUND"; return; }
+  [[ "$count" -gt 1 ]] && { echo "AMBIGUOUS"; return; }
+  sf="$matches"
   # Try YAML frontmatter
   local yaml_status
   yaml_status=$(awk 'NR==1{if($0=="---") f=1; next} f && /^status:/{print $2; exit} f && /^---$/{exit}' "$sf" 2>/dev/null | tr -d '"')
