@@ -32,6 +32,21 @@ token_budget: 1200
 | G13 | Scope-trace audit | g13_scope_trace | WARN | era 199 |
 | G14 | Skill catalog audit | g14_skill_catalog | FAIL/WARN | era 200 |
 
+## G6 — changed BATS suites, fail closed
+
+G6 ejecuta los ficheros `.bats` añadidos o modificados respecto a
+`PR_PLAN_BASE_REF` (por defecto `origin/main`). Un flujo apilado debe declarar
+su rama base mediante esa variable. El gate exige simultáneamente:
+
+- código de salida 0;
+- plan TAP de finalización;
+- terminación antes de 300 segundos.
+
+Timeout, crash y salida incompleta son `FAIL`. Si no hay tests BATS modificados,
+G6 emite `WARN` y delega la selección por impacto al job BATS de CI. Para tests
+aislados del propio gate, `PR_PLAN_BATS_FILES` permite inyectar una lista
+explícita sin alterar el comportamiento de producción.
+
 ## G13 -- Scope-trace audit (SE-079)
 
 Pattern: Genesis B9 GOAL STEWARD + B8 ATTENTION ANCHOR

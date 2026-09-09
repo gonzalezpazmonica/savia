@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- Nunca neutralizar el exit code de `timeout` antes de clasificarlo. Un runner
+  que expira sin imprimir marcadores de fallo no ha pasado: los gates deben
+  exigir exit 0 y una señal positiva de finalización, y mantener acotada la
+  selección local cuando el corpus completo excede su presupuesto.
 - Un benchmark de inventario debe afirmar su cardinalidad mínima y probar la
   topología real del repositorio. `find` no sigue por defecto un directorio que
   es enlace simbólico; sin `-L`, “cero elementos, cero fallos” puede producir un
