@@ -1,5 +1,8 @@
 # Lessons Learned
 
+- Un runner agregado debe decidir por fallos, no por éxitos: `PASS > 0` sólo
+  demuestra que algún componente funcionó. El contrato sistémico correcto es
+  `FAIL == 0 && PASS > 0`, con corpus vacío tratado como fallo de evidencia.
 - Un registro canónico no es completo sólo porque sus entradas sean válidas:
   debe declarar el universo que pretende cubrir y fallar cuando una fuente de
   ese universo queda omitida. El suelo de cobertura evita confundir legacy no
