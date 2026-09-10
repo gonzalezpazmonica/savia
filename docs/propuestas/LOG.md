@@ -6,6 +6,16 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-09 SE-397 F0 APPROVED_WITH_CONCERNS
+La operadora aprueba F0 y el trabajo pendiente. F1–F10 quedan autorizadas con
+sus gates de fase; `.scm/` será la proyección inicial, SQLite seguirá siendo
+cache y drift/impact permanecen report-only. Sin elevación de authority.
+
+## 2026-09-08 SE-397 PROPOSED→APPROVED
+Savia Architectural Self-Knowledge & Operational Excellence. Aprobación humana
+explícita; ejecución inmediata limitada a F0 (reconciliación report-only).
+F1–F10 conservan gate humano tras revisar el informe F0.
+
 ## 2026-09-01 SE-365 APPROVED→IMPLEMENTED
 Company as Code (renumerado de SE-265, que colisionaba con court-model-tiers):
 estándar de entidades organizacionales como código. org-registrar.py valida
