@@ -96,26 +96,37 @@ extract_spec() {
   head -30 "$f" 2>/dev/null | grep -oE '(SPEC|SE)-[0-9]+[a-z]?' | head -1
 }
 
+extract_spec_reference() {
+  local f="$1"
+  head -30 "$f" 2>/dev/null \
+    | grep -oE '(docs/(propuestas|specs)|projects/[^/]+/specs)/[A-Za-z0-9._/-]+\.md' \
+    | head -1
+}
+
 # Get status of spec
 spec_status() {
-  local id="$1"
-  local sf matches count
-  matches=$(
-    compgen -G "$PROJECT_ROOT/docs/propuestas/${id}-*.md"
-    compgen -G "$PROJECT_ROOT/docs/specs/${id}-*.md"
-    compgen -G "$PROJECT_ROOT/projects/*/specs/${id}-*.md"
-  )
-  matches=$(printf '%s\n' "$matches" | sed '/^$/d' | sort -u)
-  count=$(printf '%s\n' "$matches" | sed '/^$/d' | wc -l)
-  [[ "$count" -eq 0 ]] && { echo "NOT_FOUND"; return; }
-  [[ "$count" -gt 1 ]] && { echo "AMBIGUOUS"; return; }
-  sf="$matches"
+  local id="$1" reference="${2:-}"
+  local sf result status
+  local resolver="$PROJECT_ROOT/scripts/spec-resolve.sh"
+  if [[ -n "$reference" ]]; then
+    result=$(bash "$resolver" --root "$PROJECT_ROOT" --id "$id" \
+      --reference "$reference" 2>&1)
+  else
+    result=$(bash "$resolver" --root "$PROJECT_ROOT" --id "$id" 2>&1)
+  fi
+  status=$?
+  case "$status" in
+    0) sf="$result" ;;
+    1) echo "NOT_FOUND"; return ;;
+    3) echo "AMBIGUOUS"; return ;;
+    *) echo "UNKNOWN"; return ;;
+  esac
   # Try YAML frontmatter
   local yaml_status
   yaml_status=$(awk 'NR==1{if($0=="---") f=1; next} f && /^status:/{print $2; exit} f && /^---$/{exit}' "$sf" 2>/dev/null | tr -d '"')
   if [[ -z "$yaml_status" ]]; then
-    # Try "> Status: X" line
-    yaml_status=$(grep -oE 'Status: *[A-Za-z]+' "$sf" 2>/dev/null | head -1 | awk '{print $2}')
+    # Try Markdown fields such as "**Status:** IMPLEMENTED".
+    yaml_status=$(sed -nE 's/^[[:space:]]*(\*\*)?(Status|Estado):(\*\*)?[[:space:]]*([A-Za-z_]+).*/\4/p' "$sf" 2>/dev/null | head -1)
   fi
   echo "${yaml_status:-UNKNOWN}"
 }
@@ -145,7 +156,8 @@ for f in "${FILES[@]}"; do
     continue
   fi
 
-  status=$(spec_status "$spec_id")
+  spec_reference=$(extract_spec_reference "$f")
+  status=$(spec_status "$spec_id" "$spec_reference")
 
   # Approved?
   if in_array "$status" "${APPROVED_STATUSES[@]}"; then

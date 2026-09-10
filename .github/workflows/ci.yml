@@ -193,10 +193,8 @@ jobs:
             echo "::notice::Scope Creep: sin ref de spec en commits (se omite)"
             exit 0
           fi
-          SPEC=$(find docs/propuestas -maxdepth 1 -type f -name "${SID}*.md" 2>/dev/null | head -1)
-          [[ -z "$SPEC" ]] && SPEC=$(find projects -maxdepth 3 -type f -name "${SID}*.spec.md" 2>/dev/null | head -1)
-          if [[ -z "$SPEC" ]]; then
-            echo "::notice::Scope Creep: spec ${SID} no encontrada (se omite)"
+          if ! SPEC=$(bash scripts/spec-resolve.sh --root "$PWD" --id "$SID" 2>&1); then
+            echo "::notice::Scope Creep: ${SPEC} (se omite)"
             exit 0
           fi
           bash scripts/scope-creep-check.sh --spec "$SPEC" \

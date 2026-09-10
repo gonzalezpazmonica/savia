@@ -1,5 +1,5 @@
 # development — Savia Capability Map (L1)
-> 229 resources
+> 230 resources
 
 - **/speckit.checklist** (cmd): Alias spec-kit compatible. Gate de calidad final con verification-lattice multi-capa. Invoca skill verification-lattice. Compatible con github/spec-kit.
 - **/speckit.clarify** (cmd): Alias spec-kit compatible. Preguntas dirigidas para cerrar ambigüedad en una spec. Invoca skill context-interview-conductor. Compatible con github/spec-kit.
@@ -200,6 +200,7 @@
 - **spec-lifecycle** (script): spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only LOG.md
 - **spec-opencode-plan-audit** (script): Audit: every APPROVED/IMPLEMENTED spec post-2026-04-26 must include
 - **spec-quality-auditor** (script): spec-quality-auditor.sh — Deterministic quality scorer for SDD specs
+- **spec-resolve** (script): Deterministic spec resolver shared by governance gates.
 - **spec-slice** (cmd): Analizar un spec y dividirlo en slices de implementación optimizados para contexto
 - **spec-status-drift-audit** (script): spec-status-drift-audit.sh — Detect specs marked PROPOSED but implemented on disk.
 - **spec-status-normalize** (script): spec-status-normalize.sh — audit and normalize `status:` field across all

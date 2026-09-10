@@ -15,11 +15,12 @@ g0() {
   echo "resolved — $ff modified"; rm -f "$FAILURE_FILE"
 }
 
-# SE-260 S4: Content-bound receipt verification gate
+# Content-bound receipt verification gate.
+# Ref: docs/specs/SE-260-gentle-patterns.spec.md (S4, AC-4.7)
 # If a receipt v2 exists for this branch and its content hasn't changed,
 # skip content gates. If receipt is stale (content changed), full plan required.
 g0b() {
-  local receipt_script="$PRJ/scripts/receipt-v2.sh"
+  local receipt_script="$ROOT/scripts/receipt-v2.sh"
   [[ ! -x "$receipt_script" ]] && return  # no receipt script, pass through
   local result
   result=$(bash "$receipt_script" verify --branch "$BRANCH" 2>&1) || true
@@ -620,7 +621,8 @@ g16_eval_lint() {
 g17_scope_creep() {
   local checker="scripts/scope-creep-check.sh"
   local declarer="scripts/scope-declare.sh"
-  if [[ ! -f "$checker" || ! -f "$declarer" ]]; then
+  local resolver="$ROOT/scripts/spec-resolve.sh"
+  if [[ ! -f "$checker" || ! -f "$declarer" || ! -f "$resolver" ]]; then
     echo "WARN: scope-creep scripts missing (SE-315 not installed)"
     return
   fi
@@ -635,12 +637,14 @@ g17_scope_creep() {
     echo "WARN: no spec ref en summary/commits/branch (gate skipped)"
     return
   fi
-  spec_file=$(find "$ROOT/docs/propuestas" -maxdepth 1 -type f -name "${sid}*.md" 2>/dev/null | head -1)
-  [[ -z "$spec_file" ]] && spec_file=$(find "$ROOT/projects" -maxdepth 3 -type f -name "${sid}*.spec.md" 2>/dev/null | head -1)
-  if [[ -z "$spec_file" ]]; then
-    echo "WARN: spec ${sid} no encontrada (gate skipped)"
+  local resolution
+  resolution=$(bash "$resolver" --root "$ROOT" --id "$sid" 2>&1)
+  local resolution_status=$?
+  if [[ $resolution_status -ne 0 ]]; then
+    echo "WARN: ${resolution} (gate skipped)"
     return
   fi
+  spec_file="$resolution"
 
   local verdict
   verdict=$(bash "$checker" --spec "$spec_file" --base origin/main --head HEAD --verdict 2>&1)

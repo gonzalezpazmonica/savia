@@ -1,6 +1,6 @@
 # Spec: SE-260 — gentle-ai v1.49 Patterns (4 slices)
 
-**Status:** PROPOSED
+**Status:** IMPLEMENTED (PR #903, 2026-07-11)
 **Fecha:** 2026-07-11
 **Area:** Review lifecycle / Delegation economics / Artifact lifecycle / Gates
 **Branch:** agent/se260-gentle-patterns
@@ -9,7 +9,7 @@
 
 **Developer Type:** agent-team
 **Asignado a:** claude-agent-team
-**Estado:** Pendiente
+**Estado:** Implementado
 
 **Effort Estimation (Dual Model):**
 | Dimension | Value |
@@ -86,6 +86,23 @@ durables por contenido (S4).
 ---
 
 ## Slice 4 — Recibos de revision ligados a contenido (PRIMERO: 4h)
+
+### Delta correctivo 2026-09-08 — raiz del gate G0b
+
+**RCA:** `pr-plan.sh` define `ROOT`, pero `g0b()` construye la ruta del
+verificador con la variable inexistente `PRJ`. Bajo `set -u`, el gate emite
+`PRJ: unbound variable` y el wrapper lo interpreta como salida no bloqueante.
+
+**Criterio adicional AC-4.7:** G0b debe resolver `receipt-v2.sh` desde `ROOT`,
+ejecutarse sin variables no ligadas y conservar el flujo compatible cuando no
+existe recibo.
+
+**Implantación:** corregido en `scripts/pr-plan-gates.sh`; regresión ejecutable
+en `tests/test-se-260-s4-receipts.bats` (2026-09-08). Revisión E1 pendiente.
+
+El encabezado seguía marcando `PROPOSED/Pendiente` aunque las cuatro slices
+se integraron en PR #903 y el roadmap ya las registra como implementadas; se
+reconcilia ese drift documental sin crear una aprobación nueva.
 
 **Problema:** `.pr-plan-ok` es un fichero vacio que se invalida con cualquier
 rebase/amend aunque el contenido revisado no cambie. Re-revisiones sin cambio

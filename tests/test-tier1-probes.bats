@@ -250,12 +250,47 @@ teardown() {
   [ "$status" -eq 2 ]
 }
 
-@test "negative: empty hooks dir reports total=0" {
+@test "negative: empty hooks dir fails explicitly" {
   local fake="$BATS_TEST_TMPDIR/empty-hooks"
-  mkdir -p "$fake/.claude/hooks"
+  mkdir -p "$fake/.opencode/hooks"
+  run env REPO_ROOT="$fake" bash scripts/hook-bench-all.sh --runs 1
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"ERROR: no hook scripts found"* ]]
+}
+
+@test "hook-bench-all follows an in-repo hooks symlink" {
+  local fake="$BATS_TEST_TMPDIR/symlink-hooks"
+  mkdir -p "$fake/.claude/hooks" "$fake/.opencode"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fake/.claude/hooks/one.sh"
+  chmod +x "$fake/.claude/hooks/one.sh"
+  ln -s ../.claude/hooks "$fake/.opencode/hooks"
+
   run env REPO_ROOT="$fake" bash scripts/hook-bench-all.sh --runs 1
   [ "$status" -eq 0 ]
-  [[ "$output" == *"total=0"* ]]
+  [[ "$output" == *"total=1"* ]]
+}
+
+@test "hook-bench-all requires both critical convention and hot-path registration" {
+  local fake="$BATS_TEST_TMPDIR/registered-hooks"
+  mkdir -p "$fake/.claude/hooks" "$fake/.opencode"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fake/.claude/hooks/post-registered.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fake/.claude/hooks/pre-unregistered.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$fake/.claude/hooks/neutral-registered.sh"
+  chmod +x "$fake/.claude/hooks/"*.sh
+  ln -s ../.claude/hooks "$fake/.opencode/hooks"
+  cat > "$fake/.claude/settings.json" <<'JSON'
+{"hooks":{"PreToolUse":[{"hooks":[
+  {"command":"$CLAUDE_PROJECT_DIR/.opencode/hooks/post-registered.sh"},
+  {"command":"$CLAUDE_PROJECT_DIR/.opencode/hooks/neutral-registered.sh"}
+]}]}}
+JSON
+
+  run env REPO_ROOT="$fake" bash scripts/hook-bench-all.sh --runs 1
+
+  [ "$status" -eq 0 ]
+  grep -q '| `post-registered` | critical |' "$fake/output/hook-bench-report-"*.md
+  grep -q '| `pre-unregistered` | analysis |' "$fake/output/hook-bench-report-"*.md
+  grep -q '| `neutral-registered` | analysis |' "$fake/output/hook-bench-report-"*.md
 }
 
 @test "negative: empty agents dir produces report with 0 agents" {

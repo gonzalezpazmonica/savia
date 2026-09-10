@@ -121,7 +121,7 @@ EOF
 @test "staged gate resolves an IMPLEMENTING spec from docs/specs" {
   local repo="$BATS_TEST_TMPDIR/repo-docs-specs"
   mkdir -p "$repo/scripts" "$repo/docs/specs"
-  cp "$SCRIPT" "$repo/scripts/spec-approval-gate.sh"
+  cp "$SCRIPT" scripts/spec-resolve.sh "$repo/scripts/"
   printf '# Ref: SE-999\n' > "$repo/scripts/fixture.sh"
   cat > "$repo/docs/specs/SE-999-contract.spec.md" <<'EOF'
 ---
@@ -141,7 +141,7 @@ EOF
 @test "staged gate fails closed when a spec ID is ambiguous" {
   local repo="$BATS_TEST_TMPDIR/repo-ambiguous-spec"
   mkdir -p "$repo/scripts" "$repo/docs/specs" "$repo/docs/propuestas"
-  cp "$SCRIPT" "$repo/scripts/spec-approval-gate.sh"
+  cp "$SCRIPT" scripts/spec-resolve.sh "$repo/scripts/"
   printf '# Ref: SE-999\n' > "$repo/scripts/fixture.sh"
   printf '%s\n' '---' 'status: APPROVED' '---' '# SE-999 A' > "$repo/docs/specs/SE-999-a.md"
   printf '%s\n' '---' 'status: APPROVED' '---' '# SE-999 B' > "$repo/docs/propuestas/SE-999-b.md"
@@ -154,6 +154,21 @@ EOF
   [[ "$output" == *"status: AMBIGUOUS"* ]]
 }
 
+@test "staged gate accepts an exact approved spec path despite duplicate ID" {
+  local repo="$BATS_TEST_TMPDIR/repo-exact-spec"
+  mkdir -p "$repo/scripts" "$repo/docs/specs" "$repo/docs/propuestas"
+  cp "$SCRIPT" scripts/spec-resolve.sh "$repo/scripts/"
+  printf '# Ref: docs/specs/SE-999-approved.spec.md\n' > "$repo/scripts/fixture.sh"
+  printf '%s\n' '---' 'status: IMPLEMENTED' '---' '# SE-999 A' > "$repo/docs/specs/SE-999-approved.spec.md"
+  printf '%s\n' '---' 'status: PROPOSED' '---' '# SE-999 B' > "$repo/docs/propuestas/SE-999-proposed.md"
+  git -C "$repo" init -q
+  git -C "$repo" add scripts/fixture.sh
+
+  run bash "$repo/scripts/spec-approval-gate.sh" --staged
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"VERDICT: PASS"* ]]
+}
 # ── Isolation ────────────────────────────────────────────
 
 @test "isolation: does not modify any file" {
