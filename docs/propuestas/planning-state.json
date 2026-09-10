@@ -173,7 +173,8 @@
       "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "evidence": "F0 reconciliado en PR #1114; F1-F10 sujetos a gates de fase y evidencia."
+      "note": "F0 aprobado 2026-09-09; F1-F10 autorizadas con gates de fase, sin elevar authority",
+      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; F0 mergeado en PR #1114; ID libre verificado 2026-09-08"
     }
   ]
 }

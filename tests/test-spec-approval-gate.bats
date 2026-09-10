@@ -169,7 +169,6 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"VERDICT: PASS"* ]]
 }
-
 # ── Isolation ────────────────────────────────────────────
 
 @test "isolation: does not modify any file" {
