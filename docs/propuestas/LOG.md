@@ -6,6 +6,20 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-10 SE-400 PROPOSED→APPROVED; F0 READY_FOR_HUMAN_REVIEW
+
+La operadora ordena añadir SE-400 al roadmap e implementarla. Su instrucción
+inmediata limita el trabajo a un inventario model-agnostic F0: sin delete,
+move, deprecation, pack migration ni F1. Las clasificaciones son provisionales
+y no autorizan retirada física.
+
+## 2026-09-10 SE-398/SE-399 PROPOSED→APPROVED; F0 READY_FOR_HUMAN_REVIEW
+
+La operadora ordena persistir e implementar ambas specs. Su instrucción
+inmediata limita la ejecución a F0: se completaron la reconciliación de
+runtimes/surfaces Desktop y el inventario del instalador. SAM continúa sin F1,
+ninguna Desktop se declara SUPPORTED y no se implementó engine, GUI ni adapter.
+
 ## 2026-09-09 SE-397 F0 APPROVED_WITH_CONCERNS
 La operadora aprueba F0 y el trabajo pendiente. F1–F10 quedan autorizadas con
 sus gates de fase; `.scm/` será la proyección inicial, SQLite seguirá siendo
