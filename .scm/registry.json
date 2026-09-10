@@ -7888,6 +7888,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "opencode"
+      ],
+      "id": "script:scripts/spec-resolve",
+      "intents": [
+        "deterministic",
+        "gates",
+        "governance",
+        "resolver",
+        "shared"
+      ],
+      "kind": "script",
+      "owner_domain": "development",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/spec-resolve.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "claude",
         "opencode"
       ],
@@ -29895,7 +29916,7 @@
       "tests": []
     }
   ],
-  "content_hash": "a0de0dd6a204",
+  "content_hash": "dc9f5706632a",
   "deferred_kinds": [
     "rule",
     "hook"
