@@ -117,6 +117,33 @@
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
       "note": "F0 aprobado 2026-09-09; F1-F10 autorizadas con gates de fase, sin elevar authority",
       "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; ID libre verificado 2026-09-08"
+    },
+    {
+      "id": "SE-398",
+      "status": "APPROVED",
+      "approval": "Operadora 2026-09-10: 'Continúa hasta terminar y luego implementa este spec'",
+      "priority": "P0",
+      "title": "Savia Desktop Runtime & Surface Support",
+      "note": "F0 completado y pendiente de revisión; F1-F9 bloqueadas por la instrucción inmediata de la spec",
+      "evidence": "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    },
+    {
+      "id": "SE-399",
+      "status": "APPROVED",
+      "approval": "Operadora 2026-09-10: 'Continúa hasta terminar y luego implementa este spec'",
+      "priority": "P0",
+      "title": "Savia Visual Installer & Environment Bootstrap",
+      "note": "F0 completado y pendiente de revisión; F1-F13 bloqueadas por la instrucción inmediata de la spec",
+      "evidence": "docs/specs/SE-399-f0-installer-discovery.md"
+    },
+    {
+      "id": "SE-400",
+      "status": "APPROVED",
+      "approval": "Operadora 2026-09-10: 'añade a roadmap e implementa'",
+      "priority": "P0",
+      "title": "Model-Agnostic Savia Ablation & Minimal Sufficient Kernel",
+      "note": "F0 completado y pendiente de revisión; no delete/move/deprecation/pack migration ni F1",
+      "evidence": "docs/specs/SE-400-f0-model-agnostic-ablation-inventory.md"
     }
   ]
 }
