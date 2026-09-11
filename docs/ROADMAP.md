@@ -2,6 +2,19 @@
 
 **Updated:** 2026-06-24 | **Version:** v6.24.4 | **562 commands · 75 agents · 104 skills · 81 hooks · 1653 tests · 245 specs IMPLEMENTED (78%)** — ver `## Estado final — 2026-06-24`
 
+## P0 — Architecture, runtime surfaces and distribution (2026-09)
+
+- **SE-397**: F0 aprobado; SAM F1 todavía no implementado.
+- **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
+  Ninguna surface Desktop está graduada como SUPPORTED.
+- **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.
+  Provisioning Core, manifests y wizard todavía no implementados.
+- **SE-400**: spec aprobada; F0 de ablación model-agnostic listo para revisión.
+  No se ha retirado, movido, deprecado ni empaquetado ningún artefacto.
+- Orden: integridad SE-396 → SAM SE-397 → runtime/surface SE-398 → installer
+  SE-399; SE-400 normaliza kernel/packs/projections cuando SAM lo permita.
+  Las fases posteriores conservan sus gates y no elevan authority.
+
 ---
 
 ## Done — Eras 1-124 (v0.1 → v3.24)
