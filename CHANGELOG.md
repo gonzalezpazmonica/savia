@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.18.0] — 2026-09-11
+
+### Added
+
+- **SE-391 Savia Codex Autonomy Profile**: ejecución autónoma L0-L2 con
+- **SE-392 Runtime común de Savia para Codex y OpenCode**: persiste la spec
+
+
 ## [6.17.12] — 2026-09-04
 
 ### Added
@@ -13211,6 +13219,7 @@ Initial public release of PM-Workspace.
 
 - **Documentation** with methodology
 
+[6.18.0]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.12...v6.18.0
 [6.17.12]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.11...v6.17.12
 [6.17.11]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.10...v6.17.11
 [6.17.10]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.9...v6.17.10
