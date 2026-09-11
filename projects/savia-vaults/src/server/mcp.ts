@@ -29,11 +29,6 @@ export class MCPVaultServer {
   private storage: VaultStorage;
   private search: SearchEngine;
   private security: VaultSecurity;
-  private introspector: Introspector | undefined;
-  private graph: KnowledgeGraph | undefined;
-  private queryEngine: QueryEngine | undefined;
-  private quality: QualityEngine | undefined;
-  private graphBuilt = false;
 
   private domeRegistry: DomeRegistry | undefined;
   private userStore: UserStore | undefined;
@@ -69,13 +64,6 @@ export class MCPVaultServer {
       }
     }
 
-    if (config.schemaDir) {
-      this.introspector = new Introspector(config);
-      this.graph = new KnowledgeGraph(config);
-      this.queryEngine = new QueryEngine(config);
-      this.quality = new QualityEngine(config);
-    }
-
     if (!domeRegistry) {
       this.initVault();
     }
@@ -83,7 +71,7 @@ export class MCPVaultServer {
 
   private getInstance(vaultName?: string): VaultInstance {
     if (!this.domeRegistry) {
-      return { dome: { name: this.config.name, path: this.config.path, description: '', confidentiality: 'N2', active: true }, storage: this.storage, search: this.search, security: this.security };
+      return { config: this.config, dome: { name: this.config.name, path: this.config.path, description: '', confidentiality: 'N2', active: true }, storage: this.storage, search: this.search, security: this.security };
     }
     const name = vaultName || this.domeRegistry.getDefaultName();
     const inst = this.instances.get(name);
@@ -94,10 +82,6 @@ export class MCPVaultServer {
   private getDomeName(vaultName?: string): string {
     if (!this.domeRegistry) return this.config.name;
     return vaultName || this.domeRegistry.getDefaultName();
-  }
-
-  private async ensureGraph(): Promise<void> {
-    if (!this.graphBuilt && this.graph) { await this.graph.build(); this.graphBuilt = true; }
   }
 
   private async authorize(dome: string, action: AuthAction, tool?: string): Promise<void> {
@@ -378,12 +362,13 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_introspect'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            if (!this.introspector) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            const introspector = new Introspector(inst.config);
             if (args.entity) {
-              const entity = await this.introspector.introspectEntity(args.entity as string);
+              const entity = await introspector.introspectEntity(args.entity as string);
               return { content: [{ type: 'text', text: JSON.stringify(entity, null, 2) }] };
             }
-            const vault = await this.introspector.introspectVault();
+            const vault = await introspector.introspectVault();
             return { content: [{ type: 'text', text: JSON.stringify(vault, null, 2) }] };
           }
 
@@ -391,17 +376,18 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_graph'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            if (!this.graph) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
-            await this.ensureGraph();
+            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            const graph = new KnowledgeGraph(inst.config);
+            await graph.build();
             const action = args.action as string;
             if (action === 'traverse') {
-              const result = this.graph.traverse(args.id as string, (args.depth as number) || 3);
+              const result = graph.traverse(args.id as string, (args.depth as number) || 3);
               return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
             } else if (action === 'search') {
-              const nodes = this.graph.searchNodes(args.query as string);
+              const nodes = graph.searchNodes(args.query as string);
               return { content: [{ type: 'text', text: JSON.stringify(nodes.map(n => ({ id: n.id, type: n.type, path: n.path, outgoing: n.outgoing.length, incoming: n.incoming.length })), null, 2) }] };
             } else {
-              const stats = this.graph.getStats();
+              const stats = graph.getStats();
               return { content: [{ type: 'text', text: JSON.stringify(stats, null, 2) }] };
             }
           }
@@ -410,10 +396,10 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_query'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            if (!this.queryEngine) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
-            await this.ensureGraph();
-            await this.queryEngine.ensureLoaded();
-            const result = await this.queryEngine.query(args.expression as string);
+            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            const queryEngine = new QueryEngine(inst.config);
+            await queryEngine.ensureLoaded();
+            const result = await queryEngine.query(args.expression as string);
             return { content: [{ type: 'text', text: result.outputMarkdown }] };
           }
 
@@ -443,9 +429,10 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_health'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            if (!this.quality) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
-            const indicators = await this.quality.assess();
-            return { content: [{ type: 'text', text: this.quality.formatReport(indicators) }] };
+            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            const quality = new QualityEngine(inst.config);
+            const indicators = await quality.assess();
+            return { content: [{ type: 'text', text: quality.formatReport(indicators) }] };
           }
 
           default:

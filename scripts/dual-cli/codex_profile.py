@@ -34,11 +34,6 @@ enabled = false
 '''
 
 def run(command):
-    if os.environ.get("SAVIA_CODEX_TEST_MODE") == "1" and command and command[0] == "codex":
-        if command[1:2] == ["--version"]:
-            return subprocess.CompletedProcess(command, 0, "codex-cli test\n", "")
-        if command[1:2] == ["--help"]:
-            return subprocess.CompletedProcess(command, 0, "workspace-write --ask-for-approval\n", "")
     try: return subprocess.run(command, capture_output=True, text=True, timeout=20)
     except (OSError, subprocess.TimeoutExpired): return None
 
@@ -63,50 +58,78 @@ def real_enforcement_probe():
     except (OSError, ValueError): return None
 
 def real_l4_probe():
-    secret=Path.home()/".codex"/"auth.json"
-    if not secret.is_file(): return False
-    config='permissions.savia_probe={extends=":workspace",filesystem={"~/.codex/auth.json"="deny"}}'
-    base=["codex","sandbox","-c",config,"-P","savia_probe","--"]
-    quoted=shlex.quote(str(secret))
-    with tempfile.TemporaryDirectory() as folder:
-        link=Path(folder)/"auth-link";link.symlink_to(secret)
-        commands=[
-            ["/bin/cat",str(secret)],
-            ["/bin/sh","-c",f"IFS= read -r value < {quoted}"],
-            ["/usr/bin/python3","-c",f'open({str(secret)!r}).read()'],
-            ["/bin/sh","-c",f"/bin/cat {quoted} >/dev/null"],
-            ["/bin/cat",str(link)],
-            ["/bin/sh","-c",f"cd {shlex.quote(str(Path.home()))} && /bin/cat .codex/auth.json >/dev/null"],
-            ["/bin/cat",str(secret.parent/".."/".codex"/"auth.json")],
-        ]
-        results=[run(base+command) for command in commands]
-    return all(result is not None and result.returncode != 0 for result in results)
+    # Exercise protected *test data*, never read authentication credentials.
+    with tempfile.TemporaryDirectory(prefix='.savia-boundary-', dir=Path.cwd()) as folder:
+        root=Path(folder); secret=root/'protected.txt'; allowed=root/'allowed.txt'
+        secret.write_text('protected-test-fixture\n');allowed.write_text('public-control\n')
+        config='permissions.savia_probe={extends=":workspace",filesystem={'+json.dumps(str(secret))+ '="deny"},network={enabled=false}}'
+        base=['codex','sandbox','--include-managed-config','-C',str(root),'-c',config,'-P','savia_probe','--']
+        def commands(target):
+            quoted=shlex.quote(str(target))
+            link=root/(target.stem+'-link');link.symlink_to(target)
+            return [
+                ['/bin/cat',str(target)],
+                ['/bin/sh','-c',f'IFS= read -r value < {quoted}'],
+                [sys.executable,'-c',f'open({str(target)!r}).read()'],
+                [sys.executable,'-c',f'import subprocess,sys; sys.exit(subprocess.run(["/bin/cat",{str(target)!r}]).returncode)'],
+                ['/bin/cat',str(link)],
+                ['/bin/sh','-c',f'cd {shlex.quote(str(root))} && /bin/cat {target.name}'],
+                ['/bin/cat',str(root/'..'/root.name/target.name)],
+            ]
+        for positive, negative in zip(commands(allowed),commands(secret)):
+            control=run(base+positive)
+            if control is None or control.returncode != 0:return False
+            denied=run(base+negative)
+            if denied is None or denied.returncode == 0:return False
+            if not any(message in denied.stderr.lower() for message in ('permission denied','operation not permitted')):return False
+    return True
+
+def real_workspace_probe():
+    with tempfile.TemporaryDirectory(prefix='.savia-write-', dir=Path.cwd()) as folder:
+        target=Path(folder)/'control.txt'
+        command=['codex','sandbox','--include-managed-config','-c','permissions.savia_probe={extends=":workspace",network={enabled=false}}','-P','savia_probe','-C',folder,'--',sys.executable,
+                 '-c',f'from pathlib import Path; Path({str(target)!r}).write_text("workspace-control")']
+        result=run(command)
+        return bool(result and result.returncode==0 and target.is_file() and target.read_text()=='workspace-control')
 
 def probe(sandbox_probe, enforcement_probe=None):
+    if os.environ.get('SAVIA_CODEX_TEST_MODE')=='1' or sandbox_probe or enforcement_probe:
+        return {'frontend':'codex','version':None,'evidence_type':'SYNTHETIC',
+                'capabilities':{'workspace_write':False,'approval_policy':False,'dangerous_bypass_default':False},
+                'authentication':{'passed':False},'sandbox':{'passed':False},'enforcement':{'passed':False},
+                'autonomy_l0_l2':{'passed':False},'l4_blocking':{'passed':False},
+                'status':'DEGRADED_SAFE','max_verified_risk':None,'passed':False,'configuration_ready':False,
+                'gaps':['SYNTHETIC_NOT_OPERATIONAL','REAL_SESSION_CANARIES_MISSING']}
     version=run(["codex","--version"]); help_result=run(["codex","--help"])
-    sandbox=synthetic_probe(sandbox_probe) if sandbox_probe else run(["codex","sandbox","--","/usr/bin/true"])
+    sandbox=run(["codex","sandbox","--include-managed-config",'-c','permissions.savia_probe={extends=":workspace",network={enabled=false}}','-P','savia_probe',"--","/usr/bin/true"])
+    authentication=run(['codex','login','status'])
     help_text=(help_result.stdout if help_result else "")
-    capabilities={"workspace_write":"workspace-write" in help_text,
+    capabilities={"workspace_write":real_workspace_probe() if sandbox and sandbox.returncode==0 else False,
                   "approval_policy":"--ask-for-approval" in help_text,
                   "dangerous_bypass_default":False}
-    enforcement=(synthetic_probe(enforcement_probe) if enforcement_probe else
-                 None if os.environ.get("SAVIA_CODEX_TEST_MODE")=="1" else real_enforcement_probe())
+    enforcement=real_enforcement_probe()
     autonomy_passed=bool(version and version.returncode==0
                 and capabilities["workspace_write"] and capabilities["approval_policy"]
                 and not capabilities["dangerous_bypass_default"]
                 and sandbox and sandbox.returncode==0
                 and (enforcement.returncode==0 if hasattr(enforcement,"returncode") else enforcement is True))
-    l4_blocking=(bool(autonomy_passed) if os.environ.get("SAVIA_CODEX_TEST_MODE")=="1"
-                 else real_l4_probe())
-    return {"frontend":"codex","version":version.stdout.strip() if version else None,
+    l4_blocking=real_l4_probe() if sandbox and sandbox.returncode==0 else False
+    configuration_ready=bool(autonomy_passed and l4_blocking and authentication and authentication.returncode==0)
+    gaps=['REAL_SESSION_CANARIES_MISSING']
+    if not sandbox or sandbox.returncode!=0:gaps.append('SANDBOX_UNAVAILABLE')
+    if not capabilities['workspace_write']:gaps.append('WORKSPACE_WRITE_UNVERIFIED')
+    if not l4_blocking:gaps.append('SECRET_BOUNDARY_UNVERIFIED')
+    return {"frontend":"codex","version":version.stdout.strip() if version and version.returncode==0 else None,
+            'evidence_type':'OPERATIONAL_PROBE','authentication':{'passed':bool(authentication and authentication.returncode==0)},
             "capabilities":capabilities,"sandbox":{"passed":bool(sandbox and sandbox.returncode==0)},
             "enforcement":{"passed":bool(enforcement.returncode==0 if hasattr(enforcement,"returncode") else enforcement is True)},
-            "autonomy_l0_l2":{"passed":autonomy_passed},"l4_blocking":{"passed":l4_blocking},
-            "status":"DEGRADED_SAFE","max_verified_risk":"L2","passed":autonomy_passed and l4_blocking}
+            "autonomy_l0_l2":{"passed":False},"l4_blocking":{"passed":l4_blocking},
+            'configuration_ready':configuration_ready,'gaps':gaps,
+            "status":"DEGRADED_SAFE","max_verified_risk":None,"passed":False}
 
 def configure(target, sandbox_probe=None, enforcement_probe=None):
     evidence=probe(sandbox_probe, enforcement_probe)
-    if not evidence["passed"]: return evidence,2
+    if evidence.get('configuration_ready') is not True or evidence.get('evidence_type') != 'OPERATIONAL_PROBE': return evidence,2
     target=Path(target);target.parent.mkdir(parents=True,exist_ok=True)
     marker=target.with_name(target.name+".savia.json")
     if target.exists():
@@ -176,6 +199,8 @@ def main():
     if a.command=="configure": result,code=configure(a.target,a.sandbox_probe,a.enforcement_probe)
     elif a.command=="rollback": result,code=rollback(a.target)
     elif a.command=="evidence": result,code=evidence_package(a.output,a.sandbox_probe,a.enforcement_probe)
-    else: result,code=probe(a.sandbox_probe,a.enforcement_probe),0
+    else:
+        result=probe(a.sandbox_probe,a.enforcement_probe)
+        code=0 if result['passed'] else 2
     print(json.dumps(result,sort_keys=True));return code
 if __name__=="__main__":raise SystemExit(main())
