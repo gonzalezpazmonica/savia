@@ -84,6 +84,23 @@ class ManifestTests(unittest.TestCase):
         after = self.config.build_manifest(self.root)["revision"]
         self.assertNotEqual(before, after)
 
+    def test_execution_and_domain_rule_closure_are_hashed(self):
+        fixture = RepoFixture(self.root)
+        for name in ('state', 'autonomy', 'codex_profile', 'domain_packs', 'config', 'protocol'):
+            fixture.write('scripts/dual-cli/' + name + '.py', '# fixture\n')
+        fixture.write('scripts/opencode-plugin/savia-gates/lib/hook-decision.ts', '// fixture\n')
+        fixture.write('docs/rules/domain/example.md', 'deny\n')
+        fixture.write_json('config/domain-packs.json', {'schema': 2, 'packs': [
+            {'rule_refs': ['docs/rules/domain/example.md'], 'context_refs': [], 'test_refs': []}]})
+        before = self.config.build_manifest(self.root)
+        paths = {entry['path'] for entry in before['sources']}
+        self.assertIn('scripts/dual-cli/state.py', paths)
+        self.assertIn('scripts/dual-cli/config.py', paths)
+        self.assertIn('scripts/opencode-plugin/savia-gates/lib/hook-decision.ts', paths)
+        self.assertIn('docs/rules/domain/example.md', paths)
+        fixture.write('docs/rules/domain/example.md', 'changed\n')
+        self.assertNotEqual(before['revision'], self.config.build_manifest(self.root)['revision'])
+
     def test_invalid_registry_paths_fail_closed(self):
         RepoFixture(self.root).write_json(".scm/resources.json", {"resources": [
             {"kind": "script", "path": "../escape.sh"}]})
@@ -288,12 +305,13 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("RUNTIME_UNCERTIFIED", report["gaps"])
         self.assertIn("EXECUTION_ADAPTERS_UNIMPLEMENTED", report["gaps"])
 
-    def test_complete_current_revision_evidence_can_pass_only_with_runtime(self):
+    def test_self_asserted_evidence_cannot_certify_without_verifier(self):
         report = self.preflight.validate(self.root, self.target, self.complete_evidence(),
             runtime_status={"revision": self.revision, "certified": True, "gaps": []},
             observed_versions={"codex": "0.153.4", "opencode": "1.18.21"},
             sandbox_passed=True)
-        self.assertEqual(report, {"certified": True, "revision": self.revision, "gaps": []})
+        self.assertFalse(report['certified'])
+        self.assertIn('EVIDENCE_VERIFIER_UNAVAILABLE', report['gaps'])
 
     def test_v2_evidence_accepts_an_explicit_third_adapter(self):
         evidence = self.complete_evidence()
@@ -308,7 +326,19 @@ class PreflightTests(unittest.TestCase):
             runtime_status={"revision": self.revision, "certified": True, "gaps": []},
             observed_versions={"codex":"0.153.4", "opencode":"1.18.21", "fixture-cli":"1"},
             sandbox_passed=True)
-        self.assertTrue(report["certified"])
+        self.assertFalse(report["certified"])
+        self.assertNotIn('CLI_VERSION_MISMATCH', report['gaps'])
+        self.assertIn('NATIVE_EVIDENCE_INVALID', report['gaps'])
+
+    def test_truthy_probe_strings_are_not_passes(self):
+        evidence = self.complete_evidence()
+        evidence['replay']['passed'] = 'false'
+        evidence['e2e']['passed'] = 'false'
+        report = self.preflight.validate(self.root, self.target, evidence,
+            runtime_status={'revision': self.revision, 'certified': True, 'gaps': []},
+            observed_versions={'codex':'0.153.4', 'opencode':'1.18.21'}, sandbox_passed='false')
+        self.assertIn('SANDBOX_UNAVAILABLE', report['gaps'])
+        self.assertIn('NATIVE_EVIDENCE_INVALID', report['gaps'])
 
     def test_v2_evidence_rejects_duplicate_adapter_or_truthy_certification(self):
         evidence = self.complete_evidence()
