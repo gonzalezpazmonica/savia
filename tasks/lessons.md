@@ -1,5 +1,16 @@
 # Lessons Learned
 
+- Un runner agregado debe decidir por fallos, no por éxitos: `PASS > 0` sólo
+  demuestra que algún componente funcionó. El contrato sistémico correcto es
+  `FAIL == 0 && PASS > 0`, con corpus vacío tratado como fallo de evidencia.
+- Un registro canónico no es completo sólo porque sus entradas sean válidas:
+  debe declarar el universo que pretende cubrir y fallar cuando una fuente de
+  ese universo queda omitida. El suelo de cobertura evita confundir legacy no
+  migrado con iniciativas actuales desaparecidas.
+- Nunca neutralizar el exit code de `timeout` antes de clasificarlo. Un runner
+  que expira sin imprimir marcadores de fallo no ha pasado: los gates deben
+  exigir exit 0 y una señal positiva de finalización, y mantener acotada la
+  selección local cuando el corpus completo excede su presupuesto.
 - Un benchmark de inventario debe afirmar su cardinalidad mínima y probar la
   topología real del repositorio. `find` no sigue por defecto un directorio que
   es enlace simbólico; sin `-L`, “cero elementos, cero fallos” puede producir un

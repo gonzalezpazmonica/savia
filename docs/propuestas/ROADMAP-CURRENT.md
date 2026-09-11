@@ -9,4 +9,14 @@
 - SE-384 [APPROVED] Savia Self-Evolution Benchmark (pilot) — evidencia: PR #1086 (runner+3 pilotos) + dataset ampliado a 20 tareas en PR en curso
 - SE-385 [IMPLEMENTING] LinkedIn Integration — Social Networks Agent + LinkedIn Skill — evidencia: PR en curso (MVP1: agent+skill+import+digest+status+tests 4/4); feasibility GO-partial en docs/propuestas/SE-385-feasibility.md
 - SE-386 [IMPLEMENTING] Constitutional Runtime Contracts (LAWS + Capability Contracts + Safety Metadata) — evidencia: PR en curso (F1+F2 MVP: laws+registry+descriptors+checks)
-- SE-387 [IMPLEMENTING] Coherence Closure Program (umbrella: gates graduation, constitutional L4, harness F2-F5, eval/debt burn-down, generated truth, entropy v1, benchmark) — evidencia: E wave1 EJECUTADO: deuda 48<=95 (87 Calibrated). A/B/C/D/F/G/H cerrados o tooling+gates activos. Abierto solo: debt wave2 (42), F5 push-pr real (tier3), benchmark sesiones agente, 2 CHECK_FAIL pre-existentes
+- SE-387 [IMPLEMENTING] Coherence Closure Program (umbrella: gates graduation, constitutional L4, harness F2-F5, eval/debt burn-down, generated truth, entropy v1, benchmark) — evidencia: A-H implementados; DoD §14: 9/11 cumplidos. Pendientes de humano: F5 diff push-pr (tier3), debt wave2 (42). Benchmark ejecutado (13 verificaciones).
+- SE-388 [IMPLEMENTING] Savia ↔ Codex Frontend Adapter — evidencia: Day-1 2026-09-06: AUTHENTICATED (ChatGPT) + PROBED + L0-L2 CANARIES EVIDENCED (5/5; L1 write filesystem-verified; dogfood receipted). DEGRADED_SAFE max_verified_risk=L2, L3/L4 BLOCKED_OR_HUMAN_REROUTE. P2 no-auth mergeado (#1105). P3 pendiente: MCP e2e wire + L4 enforcement equivalente (no existe PreToolUse-equivalente).
+- SE-389 [IMPLEMENTING] Regulatory Policy-as-Code & Compliance Context — evidencia: MVP en implementación; validación legal y promoción a EXECUTABLE permanecen como gates humanos.
+- SE-390 [IMPLEMENTING] Savia Documentation & Identity Evolution — evidencia: Migración documental incremental; claims fuertes continúan ligados a evidencia.
+- SE-391 [IMPLEMENTING] Savia Codex Autonomy Profile — evidencia: Perfil autonomous-l2 en implementación; efectos externos y L3/L4 conservan gate humano.
+- SE-392 [APPROVED] Runtime común de Savia para Codex y OpenCode — evidencia: Spec persistida; equivalencia funcional y E2E aún no demostradas.
+- SE-393 [IMPLEMENTING] Contratos de un harness agnóstico — evidencia: Contratos y tests locales parciales; sustitución operacional aún no graduada.
+- SE-394 [IMPLEMENTING] Harness agnóstico: integración y evidencia verificable — evidencia: Remediación incremental; claims de sustitución permanecen limitados por evidencia operacional.
+- SE-395 [APPROVED] Savia Vaults Adaptive Connectivity — evidencia: Research autorizado; activación y authority changes fuera de alcance.
+- SE-396 [IMPLEMENTING] Harness operational integrity & verifiable substitution — evidencia: H01/H07 e I07 parciales; H02-H12 y graduación permanecen pendientes.
+- SE-397 [APPROVED] Savia Architectural Self-Knowledge & Operational Excellence — evidencia: F0 reconciliado en PR #1114; F1-F10 sujetos a gates de fase y evidencia.

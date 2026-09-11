@@ -11,6 +11,21 @@ PASS=0; FAIL=0; RESULTS=""
 record() { RESULTS+="$1
 "; }
 
+aggregate_verdict() {
+  local pass_count="$1" fail_count="$2"
+  echo "-- chaos suite: $pass_count PASS / $fail_count FAIL-RED"
+  [[ "$fail_count" -eq 0 && "$pass_count" -gt 0 ]]
+}
+
+if [[ "${1:-}" == "--aggregate" ]]; then
+  if [[ $# -ne 3 ]] || ! [[ "$2" =~ ^[0-9]+$ && "$3" =~ ^[0-9]+$ ]]; then
+    echo "usage: $0 --aggregate PASS_COUNT FAIL_COUNT" >&2
+    exit 2
+  fi
+  aggregate_verdict "$2" "$3"
+  exit $?
+fi
+
 assert_clean_exit() { # nombre, exit_code, stdout, condiciones: no traceback, exit en {0,1,2}
   local name="$1" rc="$2" out="$3"
   if [[ $rc -gt 2 ]] || echo "$out" | grep -qiE "traceback|syntax error|bad substitution|unbound variable"; then
@@ -88,5 +103,5 @@ fi
 
 rm -rf "$S" "$S6"
 echo "$RESULTS"
-echo "-- chaos suite: $PASS PASS / $FAIL FAIL-RED"
-[[ $PASS -gt 0 ]] && exit 0 || exit 1
+aggregate_verdict "$PASS" "$FAIL"
+exit $?

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "era": "Coherence Before Capability",
+  "tracked_spec_floor": 375,
   "initiatives": [
     {
       "id": "SE-374",
@@ -102,21 +103,78 @@
       "evidence": "Day-1 2026-09-06: AUTHENTICATED (ChatGPT) + PROBED + L0-L2 CANARIES EVIDENCED (5/5; L1 write filesystem-verified; dogfood receipted). DEGRADED_SAFE max_verified_risk=L2, L3/L4 BLOCKED_OR_HUMAN_REROUTE. P2 no-auth mergeado (#1105). P3 pendiente: MCP e2e wire + L4 enforcement equivalente (no existe PreToolUse-equivalente)."
     },
     {
+      "id": "SE-389",
+      "status": "IMPLEMENTING",
+      "approval": "Operadora 2026-09-05: implementación autorizada con revisión humana para L3/L4",
+      "priority": "P1",
+      "title": "Regulatory Policy-as-Code & Compliance Context",
+      "evidence": "MVP en implementación; validación legal y promoción a EXECUTABLE permanecen como gates humanos."
+    },
+    {
+      "id": "SE-390",
+      "status": "IMPLEMENTING",
+      "approval": "Operadora 2026-09-05: implementación autorizada",
+      "priority": "P1",
+      "title": "Savia Documentation & Identity Evolution",
+      "evidence": "Migración documental incremental; claims fuertes continúan ligados a evidencia."
+    },
+    {
+      "id": "SE-391",
+      "status": "IMPLEMENTING",
+      "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
+      "priority": "P1",
+      "title": "Savia Codex Autonomy Profile",
+      "evidence": "Perfil autonomous-l2 en implementación; efectos externos y L3/L4 conservan gate humano."
+    },
+    {
       "id": "SE-392",
-      "status": "PROPOSED",
+      "status": "APPROVED",
+      "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Runtime común de Savia para Codex y OpenCode",
-      "note": "Recuperada de cambios pendientes de sesión 2026-09-07; requiere aprobación humana antes de implementación.",
+      "note": "Recuperada de cambios pendientes de sesión 2026-09-07; implementación autorizada con gates de arquitectura y autoridad.",
       "evidence": "Spec persistida; equivalencia funcional y E2E aún no demostradas."
+    },
+    {
+      "id": "SE-393",
+      "status": "IMPLEMENTING",
+      "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
+      "priority": "P0",
+      "title": "Contratos de un harness agnóstico",
+      "evidence": "Contratos y tests locales parciales; sustitución operacional aún no graduada."
+    },
+    {
+      "id": "SE-394",
+      "status": "IMPLEMENTING",
+      "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
+      "priority": "P0",
+      "title": "Harness agnóstico: integración y evidencia verificable",
+      "evidence": "Remediación incremental; claims de sustitución permanecen limitados por evidencia operacional."
+    },
+    {
+      "id": "SE-395",
+      "status": "APPROVED",
+      "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
+      "priority": "P1",
+      "title": "Savia Vaults Adaptive Connectivity",
+      "evidence": "Research autorizado; activación y authority changes fuera de alcance."
+    },
+    {
+      "id": "SE-396",
+      "status": "IMPLEMENTING",
+      "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
+      "priority": "P0",
+      "title": "Harness operational integrity & verifiable substitution",
+      "evidence": "H01/H07 e I07 parciales; H02-H12 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",
       "status": "APPROVED",
-      "approval": "Operadora 2026-09-08: aprobación explícita para añadir la spec al ciclo autónomo nocturno",
+      "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
       "note": "F0 aprobado 2026-09-09; F1-F10 autorizadas con gates de fase, sin elevar authority",
-      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; ID libre verificado 2026-09-08"
+      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; F0 mergeado en PR #1114; ID libre verificado 2026-09-08"
     },
     {
       "id": "SE-398",

@@ -249,15 +249,47 @@ g6() {
     summary_snapshot=$(mktemp)
     cp "$ROOT/.pr-summary.md" "$summary_snapshot"
   fi
-  local out; out=$(timeout 300 bash tests/run-all.sh 2>&1) || true
+  local -a suite_files=()
+  if [[ -n "${PR_PLAN_BATS_FILES:-}" ]]; then
+    read -r -a suite_files <<< "$PR_PLAN_BATS_FILES"
+  else
+    local base_ref="${PR_PLAN_BASE_REF:-origin/main}"
+    mapfile -t suite_files < <(git diff "$base_ref"..HEAD --name-only --diff-filter=AM 2>/dev/null \
+      | grep -E '^tests/.*\.bats$' || true)
+  fi
+  if [[ "${#suite_files[@]}" -eq 0 ]]; then
+    if [[ -n "$summary_snapshot" ]]; then
+      rm -f "$summary_snapshot"
+    fi
+    echo "WARN: no changed BATS suites; deferred to CI impact selection"
+    return
+  fi
+  local out suite_status
+  out=$(timeout 300 bats "${suite_files[@]}" 2>&1)
+  suite_status=$?
   if [[ -n "$summary_snapshot" ]]; then
     cp "$summary_snapshot" "$ROOT/.pr-summary.md"
     rm -f "$summary_snapshot"
   fi
   local fails; fails=$(echo "$out" | grep '❌' | sed 's/.*❌ //' | tr '\n' ', ' | sed 's/, $//') || true
+  if [[ "$suite_status" -eq 124 ]]; then
+    echo "FAIL: BATS suite timed out after 300s"
+    return
+  fi
+  if [[ "$suite_status" -ne 0 ]]; then
+    if [[ -n "$fails" ]]; then
+      echo "FAIL: $fails"
+    else
+      echo "FAIL: BATS suite runner exited with exit $suite_status"
+    fi
+    return
+  fi
   [[ -n "$fails" ]] && echo "FAIL: $fails" && return
-  local p; p=$(echo "$out" | grep -oP '[0-9]+/[0-9]+ suites' | tail -1)
-  echo "${p:-ok}"
+  if ! grep -qE '^1\.\.[0-9]+' <<< "$out"; then
+    echo "FAIL: BATS completed without a TAP completion plan"
+    return
+  fi
+  echo "${#suite_files[@]}/${#suite_files[@]} changed suites"
 }
 g7() {
   local out; out=$(bash scripts/confidentiality-scan.sh --pr 2>&1) || true
