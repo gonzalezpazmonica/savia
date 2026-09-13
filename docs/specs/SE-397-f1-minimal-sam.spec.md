@@ -1,7 +1,7 @@
 ---
 id: SE-397-F1
 parent: SE-397
-status: PENDING_APPROVAL
+status: APPROVED
 priority: P0
 developer_type: agent-single
 created: 2026-09-13
@@ -322,3 +322,11 @@ Implementation state: `NOT_STARTED_PENDING_EXPLICIT_APPROVAL`.
 None inside F1. Any request to add runtime traces, drift severity, enforcement,
 SQLite, MCP/API exposure, Mermaid generation, authority evaluation or frontend
 support claims belongs to a later delta spec and requires its own gate.
+
+## 12. Approval record — append only
+
+- Contract revision approved: commit `70131682`.
+- Operator response: `si` on 2026-09-13, in direct response to the explicit
+  question asking approval of revision `70131682` for tests and implementation.
+- Scope authorized: tests and implementation of this F1 contract only.
+- Implementation state after approval: `APPROVED_NOT_STARTED`.
