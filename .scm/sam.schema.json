@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://savia.local/schemas/sam.schema.json",
+  "title": "Savia Architecture Model F1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "model_id",
+    "model_revision",
+    "inputs",
+    "nodes",
+    "edges",
+    "known_unknowns"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "model_id": {"const": "savia-architecture-model"},
+    "model_revision": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "inputs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/inputRecord"}
+    },
+    "nodes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/node"}
+    },
+    "edges": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/edge"}
+    },
+    "known_unknowns": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9._:/-]{2,255}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
+    },
+    "sourceCommit": {
+      "oneOf": [
+        {"const": "NOT_AVAILABLE"},
+        {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      ]
+    },
+    "inputRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "source_commit", "status"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_commit": {"$ref": "#/$defs/sourceCommit"},
+        "status": {"const": "PRESENT"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_kind", "source_path", "sha256", "source_commit"],
+      "properties": {
+        "source_kind": {"enum": ["DECLARED", "DISCOVERED"]},
+        "source_path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_commit": {"$ref": "#/$defs/sourceCommit"}
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "label", "provenance"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "type": {
+          "enum": [
+            "SYSTEM",
+            "SUBSYSTEM",
+            "COMPONENT",
+            "CAPABILITY",
+            "POLICY",
+            "ADAPTER",
+            "FRONTEND",
+            "STORE",
+            "EVIDENCE"
+          ]
+        },
+        "label": {"type": "string", "minLength": 1},
+        "provenance": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/provenance"}
+        }
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "relation", "target", "provenance"],
+      "properties": {
+        "source": {"$ref": "#/$defs/identifier"},
+        "relation": {
+          "enum": [
+            "CONTAINS",
+            "IMPLEMENTS",
+            "USES",
+            "DEPENDS_ON",
+            "ENFORCES",
+            "PRODUCES",
+            "REQUIRES_AUTHORITY"
+          ]
+        },
+        "target": {"$ref": "#/$defs/identifier"},
+        "provenance": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/provenance"}
+        }
+      }
+    }
+  }
+}

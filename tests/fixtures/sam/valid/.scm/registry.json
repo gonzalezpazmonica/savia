@@ -1,0 +1,21 @@
+{
+  "registry_version": 1,
+  "content_hash": "fixture-registry-v1",
+  "kinds_included": ["script"],
+  "deferred_kinds": ["rule", "hook"],
+  "capabilities": [
+    {
+      "id": "script:scripts/tool",
+      "kind": "script",
+      "source": "scripts/tool.sh",
+      "status": "active",
+      "owner_domain": "development",
+      "intents": ["fixture"],
+      "risk_level": null,
+      "frontend_support": ["opencode"],
+      "depends_on": [],
+      "tests": [],
+      "replaced_by": null
+    }
+  ]
+}
