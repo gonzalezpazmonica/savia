@@ -330,3 +330,21 @@ support claims belongs to a later delta spec and requires its own gate.
   question asking approval of revision `70131682` for tests and implementation.
 - Scope authorized: tests and implementation of this F1 contract only.
 - Implementation state after approval: `APPROVED_NOT_STARTED`.
+
+## 13. Implementation evidence — append only
+
+- F1 implementation commit: `82fa911a`.
+- Red gate observed before production code: unit import failed with
+  `ModuleNotFoundError: sam_model`; BATS failed because CLI, schema and committed
+  projection did not exist.
+- Generated projection: 2,939 nodes, 1,473 edges and 1,474 source inputs;
+  deterministic revision `b6a566107ddc` (short form).
+- Unit gate: 11/11 tests pass, including malformed types, path escape,
+  corruption, stale inputs and forbidden evidence graduation.
+- Acceptance gate: 5/5 BATS tests pass.
+- JSON Schema gate: Draft 2020-12 schema and generated model validate.
+- Capability dependency: existing `.scm/registry.json` remains `SCM: FRESH`;
+  F1 consumes it without rewriting it.
+- Scope result: no runtime, SQLite, authority decision, telemetry, memory or
+  frontend-support claim was added. F2–F10 remain pending.
+- F1 implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.

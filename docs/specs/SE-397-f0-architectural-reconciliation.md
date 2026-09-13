@@ -171,3 +171,12 @@ históricos duplicados SE-260 y SE-309. Los resolvers deben fallar closed.
 pero no existe hoy SAM ni evidencia operacional sistémica. La arquitectura
 correcta es una proyección derivada y consultable sobre autoridades existentes,
 no una nueva fuente de policy, planning, memory o evidence.
+
+## Handoff F1 — 2026-09-13 (append only)
+
+F1 materializa el mínimo SAM read-only aprobado mediante
+`.scm/sam.schema.json`, declaraciones por referencia, una proyección
+determinista y tres vistas report-only. Reutiliza el capability registry fresco
+y conserva como `known_unknowns` las dependencias/tests incompletos y la falta
+de arquitectura runtime/evidencia operacional. F2–F10 y la resolución de IDs
+históricos continúan pendientes; no se eleva authority.
