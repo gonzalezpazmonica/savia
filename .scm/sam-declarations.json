@@ -14,16 +14,16 @@
       "source_paths": ["docs/specs/SE-397-savia-architectural-self-knowledge.spec.md"]
     },
     {
-      "id": "component:capability-map-generator",
+      "id": "component:sam-generator",
       "type": "COMPONENT",
-      "label": "Capability map generator",
-      "source_paths": ["scripts/generate-capability-map.py"]
+      "label": "SAM generator",
+      "source_paths": ["scripts/sam.py"]
     },
     {
-      "id": "evidence:scm-determinism-tests",
+      "id": "evidence:sam-contract-tests",
       "type": "EVIDENCE",
-      "label": "SCM determinism tests",
-      "source_paths": ["tests/test-scm-determinism.bats"]
+      "label": "SAM contract tests",
+      "source_paths": ["tests/test-se397-sam.bats"]
     },
     {
       "id": "frontend:codex",
@@ -64,16 +64,16 @@
       "source_paths": ["AGENTS.md", "laws/human-control.md"]
     },
     {
-      "source": "component:capability-map-generator",
+      "source": "component:sam-generator",
       "relation": "IMPLEMENTS",
       "target": "capability:architectural-self-knowledge",
-      "source_paths": ["docs/specs/SE-397-savia-architectural-self-knowledge.spec.md", "scripts/generate-capability-map.py"]
+      "source_paths": ["docs/specs/SE-397-savia-architectural-self-knowledge.spec.md", "scripts/sam.py"]
     },
     {
-      "source": "component:capability-map-generator",
-      "relation": "PRODUCES",
+      "source": "component:sam-generator",
+      "relation": "USES",
       "target": "store:scm",
-      "source_paths": [".scm/registry.json", "scripts/generate-capability-map.py"]
+      "source_paths": [".scm/registry.json", "scripts/sam.py"]
     },
     {
       "source": "frontend:codex",
@@ -100,10 +100,10 @@
       "source_paths": ["CLAUDE.md", "laws/index.yaml"]
     },
     {
-      "source": "store:scm",
-      "relation": "PRODUCES",
-      "target": "evidence:scm-determinism-tests",
-      "source_paths": [".scm/registry.json", "tests/test-scm-determinism.bats"]
+      "source": "evidence:sam-contract-tests",
+      "relation": "DEPENDS_ON",
+      "target": "component:sam-generator",
+      "source_paths": ["scripts/sam.py", "tests/test-se397-sam.bats"]
     }
   ]
 }
