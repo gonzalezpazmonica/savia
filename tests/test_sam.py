@@ -334,6 +334,17 @@ class SamTest(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertIn("INVALID_MODEL", result.stderr)
 
+    def test_known_unknowns_cannot_be_silently_downgraded(self):
+        model = build_model(self.root)
+        model["known_unknowns"].remove("AUTHORITY_PATHS_DECLARED_NOT_ENFORCED")
+        payload = {key: model[key] for key in (
+            "inputs", "nodes", "edges", "known_unknowns",
+        )}
+        model["model_revision"] = hashlib.sha256(canonical_json(payload)).hexdigest()
+        with self.assertRaises(SamValidationError) as raised:
+            validate_model(model, self.root)
+        self.assertEqual("INVALID_MODEL", raised.exception.code)
+
     def test_stale_or_malformed_registry_fails_without_rewrite(self):
         registry = self.root / ".scm/registry.json"
         original = registry.read_bytes()

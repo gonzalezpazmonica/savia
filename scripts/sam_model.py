@@ -565,7 +565,7 @@ def _validate_model(model: object, root: Path, verify_sources: bool) -> dict:
         raise SamValidationError("INVALID_MODEL", "$")
     if any(not isinstance(item, str) or not item for item in document["known_unknowns"]):
         raise SamValidationError("INVALID_MODEL", "$/known_unknowns")
-    if document["known_unknowns"] != sorted(set(document["known_unknowns"])):
+    if document["known_unknowns"] != sorted(KNOWN_UNKNOWNS):
         raise SamValidationError("INVALID_MODEL", "$/known_unknowns")
 
     inputs: dict[str, dict] = {}
