@@ -1,7 +1,7 @@
 ---
 id: SE-397-F2
 parent: SE-397
-status: DRAFT_PENDING_APPROVAL
+status: APPROVED
 priority: P0
 developer_type: agent-single
 created: 2026-09-14
@@ -382,7 +382,7 @@ no migration, external recovery or authority rollback is required.
 | Agent capable | yes, serial implementation because schema/model/tests overlap |
 | Fallback | human resumes from approved contract and red tests |
 
-Implementation state: `NOT_STARTED_PENDING_EXPLICIT_APPROVAL`.
+Implementation state: `APPROVED_PENDING_TDD_RED`.
 
 ## 10. Acceptance checklist
 
@@ -404,3 +404,41 @@ None inside this minimal F2 contract. Runtime observation, receipts, evidence
 graduation, enforcement, per-frontend support, path ordering beyond direct
 classification, automatic YAML ingestion, drift severity and MCP/API exposure
 belong to later phases and require their own phase gate.
+
+## 12. Approval and authority/security review evidence
+
+### 12.1 Operator approval
+
+- Approved revision: `cf3ffadc`.
+- Approval: operator response `si` on 2026-09-14, directly following the exact
+  revision and F2-only scope request.
+- Authorized scope: the tests, implementation, generated artifacts and evidence
+  enumerated in section 6; no F3+ work, publication, push or merge.
+
+### 12.2 Mandatory pre-implementation review
+
+Verdict: `APPROVED_WITH_CONSTRAINTS`.
+
+The review compared this contract with `scripts/dual-cli/autonomy.py`,
+`scripts/dual-cli/contracts.py`, `scripts/dual-cli/runtime.py`,
+`laws/human-control.md` and
+`docs/rules/domain/autonomous-safety.md`. The referenced files exist, are
+repository-relative N1 material, and the contract introduces no secret, PII,
+internal-infrastructure or absolute-path disclosure.
+
+No blocking authority escalation was found. The implementation remains approved
+only while all of these constraints hold:
+
+- SAM remains read-only, report-only and never calls policy/authority decision
+  code or emits an operational receipt.
+- Every flow points to delegated execution only; the external-effect flow also
+  retains explicit human decision authority.
+- Dynamic WRITE, BASH and MCP classifications remain context/policy dependent
+  and cannot acquire a permissive default.
+- `ALLOWS`, `DENIES`, `VERIFIES`, `OBSERVES` and `GRANTS_AUTHORITY` remain
+  rejected vocabulary.
+- Missing, malformed or stale authority inputs fail closed without partial
+  generated writes.
+
+The security review authorizes entry into the TDD red gate; it does not
+authorize publication or any external effect.
