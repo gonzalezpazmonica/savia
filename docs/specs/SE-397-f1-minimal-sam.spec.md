@@ -348,3 +348,12 @@ support claims belongs to a later delta spec and requires its own gate.
 - Scope result: no runtime, SQLite, authority decision, telemetry, memory or
   frontend-support claim was added. F2–F10 remain pending.
 - F1 implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.
+
+## 14. F2 handoff — append only
+
+- F1 was merged in PR #1123 and remains the immutable foundation declaration
+  schema (`schema_version: 1`).
+- F2 extends the generated model and views to schema v2 through the independent
+  `.scm/sam-runtime-declarations.json`; it does not rewrite F1 declarations.
+- F2 implementation commit: `799485fc`; review evidence lives in
+  `docs/specs/SE-397-f2-runtime-authority-model.spec.md`.

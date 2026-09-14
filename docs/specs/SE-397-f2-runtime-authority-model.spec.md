@@ -442,3 +442,32 @@ only while all of these constraints hold:
 
 The security review authorizes entry into the TDD red gate; it does not
 authorize publication or any external effect.
+
+## 13. Implementation evidence — append only
+
+- Implementation commit: `799485fc` (schema, declaration, code and tests before
+  generated artifacts).
+- Acceptance assertion correction: `144696d2` aligns BATS with the CLI's valid
+  spaced JSON serialization; it changes no production behavior.
+- Fail-closed hardening: `b491a7f9` prevents a recomputed model revision from
+  silently deleting contractual known unknowns; its focused test was observed
+  red before the validator change.
+- Red gate observed before production changes: 8/16 unit tests failed on the
+  absent schema-v2/runtime behavior while all remaining F1 tests passed; 5/6
+  BATS scenarios failed on the absent manifest, views, freshness and query.
+- Green unit gate: 17/17 tests pass, including authority removal, permissive
+  dynamic-flow substitutions, cross-manifest duplicates, path escape, stale v1
+  model and forbidden relation cases.
+- Generated projection: 2,962 nodes, 1,504 edges and 1,479 source inputs;
+  deterministic revision `50b9e717bf4e` (short form).
+- Runtime closure: exactly 23 declared runtime nodes, 31 classification edges,
+  six golden flows and three new declared-not-observed/report-only views.
+- Authority result: every flow retains delegated execution only;
+  `flow:external-effect` additionally requires `authority:human-decision`.
+- Validation result: 6/6 BATS, capability freshness, SAM freshness, Draft
+  2020-12 JSON Schema, planning/roadmap and local CI pass. Local CI reports two
+  advisory warnings (broad secret-pattern heuristic and coherence advisory);
+  staged gitleaks, confidentiality and sovereignty gates remain clean.
+- Scope result: no policy call, enforcement, receipt, telemetry, secret read,
+  external read/write or support claim was introduced. F3–F10 remain pending.
+- F2 implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.

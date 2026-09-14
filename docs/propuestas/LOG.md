@@ -6,6 +6,13 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-14 SE-397 F2 IMPLEMENTED_PENDING_HUMAN_REVIEW
+
+Implementado el Runtime & Authority Model declarado y report-only: seis flujos,
+efectos, riesgos, autoridad de ejecución delegada, gates humanos y estados de
+fallo bajo schema SAM v2. 17 unit + 6 BATS verdes; sin enforcement, decisiones,
+receipts ni observación runtime. F3–F10 permanecen pendientes.
+
 ## 2026-09-13 SE-397 F1 IMPLEMENTED_PENDING_HUMAN_REVIEW
 
 Implementado el SAM mínimo read-only: contrato y schema cerrados, declaraciones
