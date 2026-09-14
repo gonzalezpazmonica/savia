@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.17.13] — 2026-09-14
+
 ### Added
 
 - SE-397 F2: modelo declarado de runtime y autoridad para seis golden flows,
