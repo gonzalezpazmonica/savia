@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI adapter for the SE-397 F1 read-only Savia Architecture Model."""
+"""CLI adapter for the SE-397 read-only Savia Architecture Model."""
 from __future__ import annotations
 
 import argparse
@@ -86,7 +86,7 @@ def _query(root: Path, node_id: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="SE-397 F1 Savia Architecture Model")
+    parser = argparse.ArgumentParser(description="SE-397 Savia Architecture Model")
     commands = parser.add_subparsers(dest="command", required=True)
     _root_parser(commands, "generate", "generate deterministic SAM artifacts")
     _root_parser(commands, "check", "check committed artifacts without writing")

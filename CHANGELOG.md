@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.17.13] — 2026-09-14
+
 ### Added
 
+- Era 208 — SE-397 F2: modelo declarado de runtime y autoridad para seis golden flows,
+  con gates humanos fail-closed, estados de degradación y vistas
+  runtime/authority/failure report-only bajo schema SAM v2.
 - SE-397 F1: modelo arquitectónico mínimo read-only y determinista bajo `.scm`,
   con procedencia declarada/descubierta, schema cerrado, tres vistas report-only
   y consultas que representan explícitamente lo desconocido.
@@ -13219,6 +13224,7 @@ Initial public release of PM-Workspace.
 
 - **Documentation** with methodology
 
+[6.17.13]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.12...v6.17.13
 [6.17.12]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.11...v6.17.12
 [6.17.11]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.10...v6.17.11
 [6.17.10]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.9...v6.17.10
