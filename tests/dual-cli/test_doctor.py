@@ -8,12 +8,12 @@ class DoctorTests(unittest.TestCase):
  def test_real_shape_and_fail_closed(self):
   p=subprocess.run([sys.executable,str(CORE/'autonomy_doctor.py'),
       '--sandbox-probe','/bin/true'],capture_output=True,text=True)
-  self.assertEqual(p.returncode,2);self.assertIn('L3 blocking               FAIL',p.stdout)
+  self.assertEqual(p.returncode,2);self.assertIn('L3 blocking               NOT_VERIFIED',p.stdout)
   self.assertIn('Status                    DEGRADED_SAFE',p.stdout)
  def test_all_local_probes_pass_but_ceiling_stays_l2(self):
   p=subprocess.run([sys.executable,str(CORE/'autonomy_doctor.py'),
       '--sandbox-probe','/bin/true','--enforcement-probe','/bin/true'],capture_output=True,text=True)
-  self.assertEqual(p.returncode,0);self.assertIn('Autonomy L2               PASS',p.stdout)
+  self.assertEqual(p.returncode,2);self.assertIn('Autonomy L2               NOT_VERIFIED',p.stdout)
   self.assertIn('Authority escalation      BLOCKED',p.stdout)
-  self.assertIn('Max verified risk         L2',p.stdout)
+  self.assertIn('Max verified risk         NOT_VERIFIED',p.stdout)
 if __name__=='__main__':unittest.main()

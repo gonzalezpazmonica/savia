@@ -177,10 +177,12 @@ export class VaultInstance {
   public readonly storage: VaultStorage;
   public readonly search: SearchEngine;
   public readonly security: VaultSecurity;
+  public readonly config: VaultConfig;
 
   constructor(dome: DomeInfo) {
     this.dome = dome;
     const config = makeConfig(dome);
+    this.config = config;
     this.storage = new VaultStorage(config);
     this.search = new SearchEngine(config);
     this.security = new VaultSecurity(config);

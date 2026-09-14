@@ -16,7 +16,19 @@ def build_manifest(root):
  except Exception: raise ConfigError('UNTRUSTED_SOURCE')
  paths={'.scm/resources.json','.scm/INDEX.scm','.scm/categories/quality.scm','.claude/settings.json'}
  # Domain packs are an optional projection: legacy repositories remain valid.
- if (root/'config/domain-packs.json').is_file(): paths.add('config/domain-packs.json')
+ if (root/'config/domain-packs.json').is_file():
+  paths.add('config/domain-packs.json')
+  try:
+   packs=json.loads(_safe(root,Path('config/domain-packs.json')).read_text())['packs']
+   if not isinstance(packs,list):raise ValueError
+   for pack in packs:
+    for field in ('rule_refs','context_refs','test_refs'):
+     refs=pack.get(field,[])
+     if not isinstance(refs,list):raise ValueError
+     for ref in refs:
+      if not isinstance(ref,str) or Path(ref).is_absolute() or '..' in Path(ref).parts:raise ValueError
+      paths.add(ref)
+  except (ValueError,KeyError,TypeError,AttributeError):raise ConfigError('UNTRUSTED_SOURCE')
  for i in reg.get('resources',[]):
   if not isinstance(i,dict):raise ConfigError('UNTRUSTED_SOURCE')
   x=i.get('path')
@@ -31,12 +43,12 @@ def build_manifest(root):
    if d.is_dir():paths.update(str(y.relative_to(root)) for y in d.rglob('*') if y.is_file())
  # Security and execution code is part of effective policy even when it is
  # not advertised as a public capability in .scm.  Only regular files count.
- for required in ('scripts/dual-cli/contracts.py', 'scripts/dual-cli/policy.py',
-                  'scripts/dual-cli/runtime.py', 'scripts/dual-cli/preflight.py',
-                  'scripts/opencode-plugin/savia-gates/lib/shell-bridge.ts',
-                  'config/model-capabilities.yaml', 'config/model-registry.json'):
+ for folder, pattern in (('scripts/dual-cli','*.py'),
+                         ('scripts/opencode-plugin/savia-gates','*.ts')):
+  paths.update(str(p.relative_to(root)) for p in (root/folder).rglob(pattern) if p.is_file())
+ for required in ('config/model-capabilities.yaml', 'config/model-registry.json'):
   candidate = root / required
-  if candidate.is_file() and not candidate.is_symlink(): paths.add(required)
+  if candidate.is_file(): paths.add(required)
  src=[]
  for x in sorted(paths):
   q=_safe(root,Path(x));src.append({'path':x,'sha256':hashlib.sha256(q.read_bytes()).hexdigest()})

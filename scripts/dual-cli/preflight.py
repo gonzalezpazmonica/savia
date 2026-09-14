@@ -14,7 +14,18 @@ def _required_adapters(evidence, observed_versions):
  return {name:{'version':version} for name,version in observed_versions.items()} if observed_versions else None
 
 def validate(root,target,evidence,*,runtime_status,observed_versions,sandbox_passed):
- m=build_manifest(root);r=m['revision'];g=[]
+ m=build_manifest(root);r=m['revision'];g=['EVIDENCE_VERIFIER_UNAVAILABLE']
+ # Native observations currently arrive as caller-owned dictionaries. Until
+ # an authorized verifier is connected they can be inspected, not certified.
+ if evidence is not None and not isinstance(evidence,dict):
+  evidence=None;g.append('NATIVE_EVIDENCE_INVALID')
+ if not isinstance(runtime_status,dict):runtime_status={}
+ if evidence:
+  for field in ('trust','replay','e2e','capabilities'):
+   if not isinstance(evidence.get(field,{}),dict):
+    return {'certified':False,'revision':r,'gaps':sorted(set(g+['NATIVE_EVIDENCE_INVALID']))}
+  if any(not isinstance(item,dict) for item in evidence.get('trust',{}).values()):
+   return {'certified':False,'revision':r,'gaps':sorted(set(g+['NATIVE_EVIDENCE_INVALID']))}
  try:
   import json
   generated=json.loads((__import__('pathlib').Path(target)/'manifest.json').read_text())
@@ -29,13 +40,14 @@ def validate(root,target,evidence,*,runtime_status,observed_versions,sandbox_pas
  elif not required or set(required) != set(observed_versions or {}):g+=['CLI_VERSION_MISMATCH']
  elif any(required[name].get('version') != version for name,version in observed_versions.items()):g+=['CLI_VERSION_MISMATCH']
  if not evidence or not required or any(type(evidence.get('trust',{}).get(k,{}).get('verified')) is not bool or not evidence.get('trust',{}).get(k,{}).get('verified') or evidence.get('trust',{}).get(k,{}).get('revision')!=r for k in required):g+=['NATIVE_TRUST_UNVERIFIED']
- if not sandbox_passed:g+=['SANDBOX_UNAVAILABLE']
+ if sandbox_passed is not True:g+=['SANDBOX_UNAVAILABLE']
  if runtime_status.get('revision')!=r or runtime_status.get('certified') is not True:g+=['RUNTIME_UNCERTIFIED']
- g+=runtime_status.get('gaps',[])
- if evidence and (evidence.get('replay',{}).get('revision')!=r or not evidence.get('replay',{}).get('passed') or evidence.get('e2e',{}).get('revision')!=r or not evidence.get('e2e',{}).get('passed') or evidence.get('capabilities',{}).get('gaps')):g+=['NATIVE_EVIDENCE_INVALID']
+ runtime_gaps=runtime_status.get('gaps',[])
+ g+=runtime_gaps if isinstance(runtime_gaps,list) and all(isinstance(x,str) for x in runtime_gaps) else ['RUNTIME_UNCERTIFIED']
+ if evidence and (evidence.get('replay',{}).get('revision')!=r or evidence.get('replay',{}).get('passed') is not True or evidence.get('e2e',{}).get('revision')!=r or evidence.get('e2e',{}).get('passed') is not True or evidence.get('capabilities',{}).get('gaps')):g+=['NATIVE_EVIDENCE_INVALID']
  if evidence and evidence.get('schema') == 2:
   observations=evidence.get('observations', [])
-  if not isinstance(observations,list):
+  if not isinstance(observations,list) or not observations:
    g+=['NATIVE_EVIDENCE_INVALID']
   else:
    evidence_refs=evidence.get('evidence_refs', {})

@@ -6,12 +6,14 @@ import sys
 import tempfile
 import tomllib
 import unittest
+from unittest.mock import patch
 
 CORE = Path(__file__).resolve().parents[2] / "scripts/dual-cli"
 sys.path.insert(0, str(CORE))
 from autonomy import AutonomyPolicy, PolicyError, write_receipt
 from autonomy import agents_contract
 from codex_profile import PROFILE
+import codex_profile
 
 
 class AutonomyCanaries(unittest.TestCase):
@@ -59,6 +61,13 @@ class AutonomyCanaries(unittest.TestCase):
 
 
 class ProfileGeneratorTests(unittest.TestCase):
+    def configure_fixture(self, target):
+        # Unit-only dependency injection; CLI test mode cannot configure.
+        evidence = {'evidence_type':'OPERATIONAL_PROBE','configuration_ready':True,'version':'fixture-cli',
+                    'passed':False,'max_verified_risk':None}
+        with patch.object(codex_profile, 'probe', return_value=evidence):
+            return codex_profile.configure(target)
+
     def setUp(self):
         self.old_test_mode=os.environ.get("SAVIA_CODEX_TEST_MODE")
         os.environ["SAVIA_CODEX_TEST_MODE"]="1"
@@ -81,12 +90,9 @@ class ProfileGeneratorTests(unittest.TestCase):
     def test_generation_is_idempotent_and_avoids_dangerous_flags(self):
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "profile.toml"
-            command = [sys.executable, str(CORE / "codex_profile.py"), "configure",
-                       "--target", str(target), "--sandbox-probe", "/bin/true",
-                       "--enforcement-probe", "/bin/true"]
-            self.assertEqual(subprocess.run(command).returncode, 0)
+            self.assertEqual(self.configure_fixture(target)[1], 0)
             before = target.read_bytes()
-            self.assertEqual(subprocess.run(command).returncode, 0)
+            self.assertEqual(self.configure_fixture(target)[1], 0)
             self.assertEqual(before, target.read_bytes())
             content = target.read_text()
             self.assertNotIn('sandbox_mode', content)
@@ -99,9 +105,7 @@ class ProfileGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target=Path(folder)/"profile.toml"
             base=[sys.executable,str(CORE/"codex_profile.py")]
-            configured=subprocess.run(base+["configure","--target",str(target),
-                "--sandbox-probe","/bin/true","--enforcement-probe","/bin/true"])
-            self.assertEqual(configured.returncode,0)
+            self.assertEqual(self.configure_fixture(target)[1],0)
             target.write_text(target.read_text()+"# operator change\n")
             rolled=subprocess.run(base+["rollback","--target",str(target)],capture_output=True,text=True)
             self.assertEqual(rolled.returncode,2);self.assertTrue(target.exists())
@@ -110,8 +114,7 @@ class ProfileGeneratorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             target=Path(folder)/"profile.toml"
             base=[sys.executable,str(CORE/"codex_profile.py")]
-            subprocess.run(base+["configure","--target",str(target),
-                "--sandbox-probe","/bin/true","--enforcement-probe","/bin/true"],check=True)
+            self.assertEqual(self.configure_fixture(target)[1],0)
             rolled=subprocess.run(base+["rollback","--target",str(target)],capture_output=True,text=True)
             self.assertEqual(rolled.returncode,0);self.assertFalse(target.exists())
 

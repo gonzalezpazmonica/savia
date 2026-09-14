@@ -81,6 +81,7 @@ class ContractsTests(unittest.TestCase):
             decision=AutonomyPolicy([], []).decide("edit")
             value=write_receipt(Path(tmp) / "receipt.json", decision, "scope", "policy", ["edit"],
                 frontend="fixture-cli", request_id="request", event_id="event", decision_id="decision",
+                context=dict(CONTEXT, policy_revision="policy"),
                 execution={"request_id":"request","state":"failed","reason":"test-failure","artifacts":[],"usage":None,"external_effect_observed":False})
         self.assertEqual(value["schema"], 2)
         self.assertEqual(value["decision"], "proceed")
@@ -118,6 +119,7 @@ class ContractsTests(unittest.TestCase):
                "subject_version":"1","evidence_ref":"run"}
         with self.assertRaisesRegex(ProtocolError, "STALE_EVIDENCE"):
             verify_observation(value, {})
-        self.assertEqual(verify_observation(value, {"run":{"verified":True}}), value)
+        with self.assertRaisesRegex(ProtocolError, "EVIDENCE_VERIFIER_UNAVAILABLE"):
+            verify_observation(value, {"run":{"verified":True}})
 
 if __name__ == "__main__": unittest.main()

@@ -5,6 +5,7 @@ or execute adapters: a name on disk is never evidence or authority.
 """
 from datetime import datetime
 from collections.abc import Mapping
+import re
 
 from protocol import ProtocolError, identifier
 
@@ -74,6 +75,9 @@ def capability_observation(value):
     for key in fields - {"status", "mechanism", "observed_at"}:
         identifier(value[key])
     try:
+        if not isinstance(value['observed_at'], str) or not re.fullmatch(
+                r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)', value['observed_at']):
+            raise ValueError
         parsed = datetime.fromisoformat(value["observed_at"].replace("Z", "+00:00"))
         if parsed.tzinfo is None:
             raise ValueError
@@ -173,4 +177,7 @@ def verify_observation(value, evidence, *, expected_subject_version=None,
     reference = evidence.get(value["evidence_ref"])
     if not isinstance(reference, Mapping) or reference.get("verified") is not True:
         raise ProtocolError("STALE_EVIDENCE")
-    return value
+    # A caller-controlled dictionary is not an attestation authority. The
+    # repository has no operational verifier bound to this contract yet.
+    # Keep shape validation usable; fail closed at the certification boundary.
+    raise ProtocolError("EVIDENCE_VERIFIER_UNAVAILABLE")
