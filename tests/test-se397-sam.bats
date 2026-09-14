@@ -40,7 +40,7 @@ setup() {
 @test "SE-397 F2 external effects retain human decision authority" {
   run python3 scripts/sam.py query --node flow:external-effect
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"status":"FOUND"'* ]]
-  [[ "$output" == *'"relation":"REQUIRES_HUMAN"'* ]]
-  [[ "$output" == *'"target":"authority:human-decision"'* ]]
+  [[ "$output" == *'"status": "FOUND"'* ]]
+  [[ "$output" == *'"relation": "REQUIRES_HUMAN"'* ]]
+  [[ "$output" == *'"target": "authority:human-decision"'* ]]
 }
