@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SE-397 F1: deterministic, read-only Savia Architecture Model core."""
+"""SE-397 F1/F2: deterministic, read-only Savia Architecture Model core."""
 from __future__ import annotations
 
 import copy
@@ -11,26 +11,120 @@ import subprocess
 import sys
 from typing import Iterable
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+DECLARATION_SCHEMA_VERSION = 1
 MODEL_ID = "savia-architecture-model"
 NODE_TYPES = frozenset({
     "SYSTEM", "SUBSYSTEM", "COMPONENT", "CAPABILITY", "POLICY",
     "ADAPTER", "FRONTEND", "STORE", "EVIDENCE",
+    "FLOW", "EFFECT", "RISK", "AUTHORITY", "HUMAN_GATE", "FAILURE_STATE",
 })
 RELATIONS = frozenset({
     "CONTAINS", "IMPLEMENTS", "USES", "DEPENDS_ON", "ENFORCES",
     "PRODUCES", "REQUIRES_AUTHORITY",
+    "HAS_EFFECT", "HAS_RISK", "HAS_EXECUTION_AUTHORITY", "REQUIRES_HUMAN",
+    "GATES", "DEGRADES_TO",
+})
+F1_NODE_TYPES = frozenset({
+    "SYSTEM", "SUBSYSTEM", "COMPONENT", "CAPABILITY", "POLICY",
+    "ADAPTER", "FRONTEND", "STORE", "EVIDENCE",
+})
+F1_RELATIONS = frozenset({
+    "CONTAINS", "IMPLEMENTS", "USES", "DEPENDS_ON", "ENFORCES",
+    "PRODUCES", "REQUIRES_AUTHORITY",
+})
+RUNTIME_RELATIONS = frozenset({
+    "HAS_EFFECT", "HAS_RISK", "HAS_EXECUTION_AUTHORITY", "REQUIRES_HUMAN",
+    "GATES", "DEGRADES_TO",
 })
 SOURCE_KINDS = frozenset({"DECLARED", "DISCOVERED"})
 KNOWN_UNKNOWNS = [
+    "AUTHORITY_PATHS_DECLARED_NOT_ENFORCED",
     "CAPABILITY_DEPENDENCIES_INCOMPLETE",
     "CAPABILITY_TEST_LINKS_INCOMPLETE",
+    "FAILURE_PATHS_INCOMPLETE",
     "OPERATIONAL_EVIDENCE_NOT_MODELLED",
-    "RUNTIME_ARCHITECTURE_NOT_MODELLED",
+    "RUNTIME_ARCHITECTURE_DECLARED_NOT_OBSERVED",
 ]
 ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9._:/-]{2,255}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+
+GOLDEN_FLOWS = [
+    "flow:bash", "flow:edit", "flow:external-effect",
+    "flow:mcp", "flow:read", "flow:write",
+]
+RUNTIME_MATRIX = {
+    "flow:bash": (
+        "effect:context-dependent", "risk:context-dependent",
+        "human-gate:policy-dependent", "failure:unknown-effect",
+    ),
+    "flow:edit": (
+        "effect:workspace-mutation", "risk:L1",
+        "human-gate:not-required-within-approved-scope", "failure:needs-human",
+    ),
+    "flow:external-effect": (
+        "effect:external", "risk:human-review-required",
+        "human-gate:required", "failure:unknown-effect",
+    ),
+    "flow:mcp": (
+        "effect:context-dependent", "risk:context-dependent",
+        "human-gate:policy-dependent", "failure:unavailable",
+    ),
+    "flow:read": (
+        "effect:local-read", "risk:L0",
+        "human-gate:not-required-within-approved-scope", "failure:blocked",
+    ),
+    "flow:write": (
+        "effect:workspace-mutation", "risk:context-dependent",
+        "human-gate:policy-dependent", "failure:needs-human",
+    ),
+}
+_AUTONOMY = "scripts/dual-cli/autonomy.py"
+_CONTRACTS = "scripts/dual-cli/contracts.py"
+_RUNTIME = "scripts/dual-cli/runtime.py"
+_SAFETY = "docs/rules/domain/autonomous-safety.md"
+_PARENT_SPEC = "docs/specs/SE-397-savia-architectural-self-knowledge.spec.md"
+_HUMAN_CONTROL = "laws/human-control.md"
+RUNTIME_NODE_CONTRACT = {
+    "authority:delegated-execution-only": (
+        "AUTHORITY", "Delegated execution only", [_SAFETY, _AUTONOMY]),
+    "authority:human-decision": (
+        "AUTHORITY", "Human decision authority", [_HUMAN_CONTROL, _AUTONOMY]),
+    "effect:context-dependent": (
+        "EFFECT", "Context-dependent effect", [_SAFETY, _PARENT_SPEC]),
+    "effect:external": (
+        "EFFECT", "External effect", [_HUMAN_CONTROL, _AUTONOMY]),
+    "effect:local-read": ("EFFECT", "Local read", [_AUTONOMY]),
+    "effect:workspace-mutation": (
+        "EFFECT", "Workspace mutation", [_SAFETY, _AUTONOMY]),
+    "failure:blocked": (
+        "FAILURE_STATE", "Blocked", [_CONTRACTS, _RUNTIME]),
+    "failure:needs-human": (
+        "FAILURE_STATE", "Needs human", [_AUTONOMY, _CONTRACTS]),
+    "failure:unavailable": ("FAILURE_STATE", "Unavailable", [_RUNTIME]),
+    "failure:unknown-effect": (
+        "FAILURE_STATE", "Unknown effect", [_SAFETY, _CONTRACTS]),
+    "flow:bash": ("FLOW", "BASH", [_SAFETY, _PARENT_SPEC, _AUTONOMY]),
+    "flow:edit": ("FLOW", "EDIT", [_PARENT_SPEC, _AUTONOMY]),
+    "flow:external-effect": (
+        "FLOW", "EXTERNAL_EFFECT", [_PARENT_SPEC, _HUMAN_CONTROL, _AUTONOMY]),
+    "flow:mcp": ("FLOW", "MCP", [_SAFETY, _PARENT_SPEC, _CONTRACTS]),
+    "flow:read": ("FLOW", "READ", [_PARENT_SPEC, _AUTONOMY]),
+    "flow:write": ("FLOW", "WRITE", [_SAFETY, _PARENT_SPEC, _AUTONOMY]),
+    "human-gate:not-required-within-approved-scope": (
+        "HUMAN_GATE", "Not required within approved L0-L2 scope", [_SAFETY, _AUTONOMY]),
+    "human-gate:policy-dependent": (
+        "HUMAN_GATE", "Policy dependent", [_SAFETY, _AUTONOMY]),
+    "human-gate:required": (
+        "HUMAN_GATE", "Human gate required", [_HUMAN_CONTROL, _AUTONOMY]),
+    "risk:L0": ("RISK", "L0", [_AUTONOMY]),
+    "risk:L1": ("RISK", "L1", [_AUTONOMY]),
+    "risk:context-dependent": (
+        "RISK", "Context-dependent risk", [_SAFETY, _AUTONOMY]),
+    "risk:human-review-required": (
+        "RISK", "Human review required", [_HUMAN_CONTROL, _AUTONOMY]),
+}
 
 
 class SamValidationError(ValueError):
@@ -162,7 +256,7 @@ def _load_declarations(root: Path) -> tuple[list[dict], list[dict]]:
         _read_json(path, "MISSING_INPUT"),
         {"schema_version", "nodes", "edges"}, "$",
     )
-    if document["schema_version"] != SCHEMA_VERSION:
+    if document["schema_version"] != DECLARATION_SCHEMA_VERSION:
         raise SamValidationError("INVALID_TOP_LEVEL", "$/schema_version")
     if not isinstance(document["nodes"], list) or not isinstance(document["edges"], list):
         raise SamValidationError("INVALID_TOP_LEVEL", "$/nodes")
@@ -172,7 +266,7 @@ def _load_declarations(root: Path) -> tuple[list[dict], list[dict]]:
         node = _closed(raw, {"id", "type", "label", "source_paths"}, item_path)
         if not isinstance(node["id"], str) or not ID_RE.fullmatch(node["id"]):
             raise SamValidationError("INVALID_ID", f"{item_path}/id")
-        if not isinstance(node["type"], str) or node["type"] not in NODE_TYPES:
+        if not isinstance(node["type"], str) or node["type"] not in F1_NODE_TYPES:
             raise SamValidationError("UNKNOWN_NODE_TYPE", f"{item_path}/type")
         if not isinstance(node["label"], str) or not node["label"].strip():
             raise SamValidationError("INVALID_TOP_LEVEL", f"{item_path}/label")
@@ -182,11 +276,90 @@ def _load_declarations(root: Path) -> tuple[list[dict], list[dict]]:
     ids = [node["id"] for node in nodes]
     if len(ids) != len(set(ids)):
         raise SamValidationError("DUPLICATE_ID", "$/nodes")
-    missing_types = NODE_TYPES - {node["type"] for node in nodes}
+    missing_types = F1_NODE_TYPES - {node["type"] for node in nodes}
     if missing_types:
         raise SamValidationError("UNKNOWN_NODE_TYPE", f"$/nodes/{sorted(missing_types)[0]}")
     edges: list[dict] = []
     keys: set[tuple[str, str, str]] = set()
+    for index, raw in enumerate(document["edges"]):
+        item_path = f"$/edges/{index}"
+        edge = _closed(raw, {"source", "relation", "target", "source_paths"}, item_path)
+        for field in ("source", "target"):
+            if not isinstance(edge[field], str) or not ID_RE.fullmatch(edge[field]):
+                raise SamValidationError("INVALID_ID", f"{item_path}/{field}")
+        if not isinstance(edge["relation"], str) or edge["relation"] not in F1_RELATIONS:
+            raise SamValidationError("UNKNOWN_RELATION", f"{item_path}/relation")
+        if edge["source"] not in ids or edge["target"] not in ids:
+            raise SamValidationError("DANGLING_EDGE", item_path)
+        key = (edge["source"], edge["relation"], edge["target"])
+        if key in keys:
+            raise SamValidationError("DUPLICATE_EDGE", item_path)
+        keys.add(key)
+        edges.append({**edge, "source_paths": _validate_source_paths(
+            root, edge["source_paths"], f"{item_path}/source_paths"
+        )})
+    return nodes, edges
+
+
+def _expected_runtime_edges() -> set[tuple[str, str, str]]:
+    expected: set[tuple[str, str, str]] = set()
+    for flow, (effect, risk, gate, failure) in RUNTIME_MATRIX.items():
+        expected.update({
+            (flow, "HAS_EFFECT", effect),
+            (flow, "HAS_RISK", risk),
+            (flow, "HAS_EXECUTION_AUTHORITY", "authority:delegated-execution-only"),
+            (gate, "GATES", flow),
+            (flow, "DEGRADES_TO", failure),
+        })
+    expected.add((
+        "flow:external-effect", "REQUIRES_HUMAN", "authority:human-decision",
+    ))
+    return expected
+
+
+def _load_runtime_declarations(
+        root: Path, reserved_ids: set[str]) -> tuple[list[dict], list[dict]]:
+    path = root / ".scm/sam-runtime-declarations.json"
+    document = _closed(
+        _read_json(path, "MISSING_INPUT"),
+        {"schema_version", "golden_flows", "nodes", "edges"}, "$",
+    )
+    if document["schema_version"] != DECLARATION_SCHEMA_VERSION:
+        raise SamValidationError("INVALID_RUNTIME_DECLARATION", "$/schema_version")
+    if document["golden_flows"] != GOLDEN_FLOWS:
+        raise SamValidationError("INVALID_RUNTIME_DECLARATION", "$/golden_flows")
+    if not isinstance(document["nodes"], list) or not isinstance(document["edges"], list):
+        raise SamValidationError("INVALID_RUNTIME_DECLARATION", "$/nodes")
+
+    nodes: list[dict] = []
+    ids: set[str] = set()
+    for index, raw in enumerate(document["nodes"]):
+        item_path = f"$/nodes/{index}"
+        node = _closed(raw, {"id", "type", "label", "source_paths"}, item_path)
+        if not isinstance(node["id"], str) or not ID_RE.fullmatch(node["id"]):
+            raise SamValidationError("INVALID_ID", f"{item_path}/id")
+        if node["id"] in ids or node["id"] in reserved_ids:
+            raise SamValidationError("DUPLICATE_ID", f"{item_path}/id")
+        ids.add(node["id"])
+        if not isinstance(node["type"], str) or node["type"] not in NODE_TYPES:
+            raise SamValidationError("UNKNOWN_NODE_TYPE", f"{item_path}/type")
+        if not isinstance(node["label"], str) or not node["label"].strip():
+            raise SamValidationError("INVALID_TOP_LEVEL", f"{item_path}/label")
+        nodes.append({**node, "source_paths": _validate_source_paths(
+            root, node["source_paths"], f"{item_path}/source_paths"
+        )})
+
+    if ids != set(RUNTIME_NODE_CONTRACT):
+        raise SamValidationError("INVALID_RUNTIME_DECLARATION", "$/nodes")
+    for node in nodes:
+        expected_type, expected_label, expected_sources = RUNTIME_NODE_CONTRACT[node["id"]]
+        if (node["type"], node["label"], node["source_paths"]) != (
+                expected_type, expected_label, expected_sources):
+            raise SamValidationError("INVALID_RUNTIME_DECLARATION", f"$/nodes/{node['id']}")
+
+    edges: list[dict] = []
+    keys: set[tuple[str, str, str]] = set()
+    nodes_by_id = {node["id"]: node for node in nodes}
     for index, raw in enumerate(document["edges"]):
         item_path = f"$/edges/{index}"
         edge = _closed(raw, {"source", "relation", "target", "source_paths"}, item_path)
@@ -201,9 +374,26 @@ def _load_declarations(root: Path) -> tuple[list[dict], list[dict]]:
         if key in keys:
             raise SamValidationError("DUPLICATE_EDGE", item_path)
         keys.add(key)
-        edges.append({**edge, "source_paths": _validate_source_paths(
+        source_paths = _validate_source_paths(
             root, edge["source_paths"], f"{item_path}/source_paths"
-        )})
+        )
+        expected_sources = sorted(set(
+            nodes_by_id[edge["source"]]["source_paths"]
+            + nodes_by_id[edge["target"]]["source_paths"]
+        ))
+        if source_paths != expected_sources:
+            raise SamValidationError("INVALID_RUNTIME_DECLARATION", f"{item_path}/source_paths")
+        edges.append({**edge, "source_paths": source_paths})
+
+    expected_keys = _expected_runtime_edges()
+    if keys != expected_keys:
+        differences = keys.symmetric_difference(expected_keys)
+        touches_flow = any(
+            source in GOLDEN_FLOWS or target in GOLDEN_FLOWS
+            for source, _relation, target in differences
+        )
+        code = "INCOMPLETE_FLOW" if touches_flow else "INVALID_RUNTIME_DECLARATION"
+        raise SamValidationError(code, "$/edges")
     return nodes, edges
 
 
@@ -259,14 +449,24 @@ def _provenance(inputs: dict[str, dict], kind: str, source_paths: Iterable[str])
 
 
 def build_model(root: Path) -> dict:
-    """Build the F1 projection from declarations and the existing SCM registry."""
+    """Build the F1/F2 projection from declarations and the SCM registry."""
     root = Path(root).resolve()
     declared_nodes, declared_edges = _load_declarations(root)
     capabilities = _load_registry(root)
-    all_sources = {".scm/sam-declarations.json", ".scm/registry.json"}
-    for node in declared_nodes:
+    reserved_ids = {node["id"] for node in declared_nodes}
+    for capability in capabilities:
+        reserved_ids.update({
+            f"capability/{capability['id']}",
+            f"component/{capability['source']}",
+        })
+    runtime_nodes, runtime_edges = _load_runtime_declarations(root, reserved_ids)
+    all_sources = {
+        ".scm/sam-declarations.json", ".scm/sam-runtime-declarations.json",
+        ".scm/registry.json",
+    }
+    for node in [*declared_nodes, *runtime_nodes]:
         all_sources.update(node["source_paths"])
-    for edge in declared_edges:
+    for edge in [*declared_edges, *runtime_edges]:
         all_sources.update(edge["source_paths"])
     for capability in capabilities:
         all_sources.add(capability["source"])
@@ -275,14 +475,14 @@ def build_model(root: Path) -> dict:
     inputs = {item["path"]: item for item in inputs_list}
 
     nodes: dict[str, dict] = {}
-    for declared in declared_nodes:
+    for declared in [*declared_nodes, *runtime_nodes]:
         nodes[declared["id"]] = {
             "id": declared["id"], "type": declared["type"],
             "label": declared["label"],
             "provenance": _provenance(inputs, "DECLARED", declared["source_paths"]),
         }
     edges: dict[tuple[str, str, str], dict] = {}
-    for declared in declared_edges:
+    for declared in [*declared_edges, *runtime_edges]:
         key = (declared["source"], declared["relation"], declared["target"])
         edges[key] = {
             "source": key[0], "relation": key[1], "target": key[2],
@@ -324,6 +524,30 @@ def build_model(root: Path) -> dict:
     revision_payload = {key: model[key] for key in ("inputs", "nodes", "edges", "known_unknowns")}
     model["model_revision"] = hashlib.sha256(canonical_json(revision_payload)).hexdigest()
     return validate_model(model, root)
+
+
+def _validate_runtime_projection(nodes: list[dict], edges: list[dict]) -> None:
+    runtime_ids = set(RUNTIME_NODE_CONTRACT)
+    projected = {node["id"]: node for node in nodes if node["id"] in runtime_ids}
+    f2_types = NODE_TYPES - F1_NODE_TYPES
+    if set(projected) != runtime_ids or any(
+            node["type"] in f2_types and node["id"] not in runtime_ids for node in nodes):
+        raise SamValidationError("INVALID_MODEL", "$/nodes")
+    for node_id, node in projected.items():
+        expected_type, expected_label, expected_sources = RUNTIME_NODE_CONTRACT[node_id]
+        actual_sources = [item["source_path"] for item in node["provenance"]]
+        if (node["type"], node["label"], actual_sources) != (
+                expected_type, expected_label, expected_sources):
+            raise SamValidationError("INVALID_MODEL", f"$/nodes/{node_id}")
+        if any(item["source_kind"] != "DECLARED" for item in node["provenance"]):
+            raise SamValidationError("INVALID_MODEL", f"$/nodes/{node_id}/provenance")
+    incident = {
+        (edge["source"], edge["relation"], edge["target"])
+        for edge in edges
+        if edge["source"] in runtime_ids or edge["target"] in runtime_ids
+    }
+    if incident != _expected_runtime_edges():
+        raise SamValidationError("INVALID_MODEL", "$/edges")
 
 
 def _validate_model(model: object, root: Path, verify_sources: bool) -> dict:
@@ -411,6 +635,7 @@ def _validate_model(model: object, root: Path, verify_sources: bool) -> dict:
             raise SamValidationError("DUPLICATE_EDGE", path)
         validate_provenance(edge["provenance"], f"{path}/provenance")
         last_edge = key
+    _validate_runtime_projection(document["nodes"], document["edges"])
     payload = {key: document[key] for key in ("inputs", "nodes", "edges", "known_unknowns")}
     if hashlib.sha256(canonical_json(payload)).hexdigest() != document["model_revision"]:
         raise SamValidationError("INVALID_MODEL", "$/model_revision")
@@ -425,11 +650,14 @@ def validate_model(model: object, root: Path) -> dict:
 
 
 def build_views(model: dict) -> dict[str, dict]:
-    """Build deterministic report-only F1 views referencing model IDs."""
+    """Build deterministic report-only F1/F2 views referencing model IDs."""
     definitions = {
         "foundation": {"SYSTEM", "POLICY", "EVIDENCE"},
         "capabilities": {"CAPABILITY", "COMPONENT"},
         "structural": {"SYSTEM", "SUBSYSTEM", "COMPONENT", "ADAPTER", "FRONTEND", "STORE"},
+        "runtime": {"FLOW", "EFFECT", "RISK", "AUTHORITY", "HUMAN_GATE", "FAILURE_STATE"},
+        "authority": {"FLOW", "AUTHORITY", "HUMAN_GATE", "POLICY"},
+        "failure": {"FLOW", "FAILURE_STATE"},
     }
     views = {}
     for name, types in definitions.items():
@@ -440,13 +668,16 @@ def build_views(model: dict) -> dict[str, dict]:
             for edge in model["edges"]
             if edge["source"] in selected and edge["target"] in selected
         )
+        limitations = ["GENERATED_FROM_SAM", "REPORT_ONLY"]
+        if name in {"runtime", "authority", "failure"}:
+            limitations = ["DECLARED_NOT_OBSERVED", *limitations]
         views[name] = {
             "schema_version": SCHEMA_VERSION,
             "view": name,
             "model_revision": model["model_revision"],
             "node_ids": node_ids,
             "edge_ids": edge_ids,
-            "limitations": ["GENERATED_FROM_SAM", "REPORT_ONLY"],
+            "limitations": limitations,
         }
     return views
 
@@ -462,7 +693,7 @@ def query_node(model: dict, node_id: str) -> dict:
 
 
 def serialized_outputs(model: dict) -> dict[str, bytes]:
-    """Return every generated F1 artifact as stable newline-terminated bytes."""
+    """Return every generated SAM artifact as stable newline-terminated bytes."""
     outputs = {".scm/sam.json": canonical_json(model) + b"\n"}
     for name, view in build_views(model).items():
         outputs[f".scm/views/{name}.json"] = canonical_json(view) + b"\n"
