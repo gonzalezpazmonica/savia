@@ -6,6 +6,13 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-13 SE-397 F1 IMPLEMENTED_PENDING_HUMAN_REVIEW
+
+Implementado el SAM mínimo read-only: contrato y schema cerrados, declaraciones
+por referencia, proyección determinista sobre el capability registry y vistas
+foundation/capabilities/structural report-only. 11 unit + 5 BATS verdes. No
+modela runtime ni gradúa evidencia/authority; F2–F10 permanecen pendientes.
+
 ## 2026-09-10 SE-400 PROPOSED→APPROVED; F0 READY_FOR_HUMAN_REVIEW
 
 La operadora ordena añadir SE-400 al roadmap e implementarla. Su instrucción

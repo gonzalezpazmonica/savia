@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    {"id": "adapter:cli", "type": "ADAPTER", "label": "CLI adapter", "source_paths": ["scripts/tool.sh"]},
+    {"id": "capability:declared-tool", "type": "CAPABILITY", "label": "Declared tool", "source_paths": ["scripts/tool.sh"]},
+    {"id": "component:tool", "type": "COMPONENT", "label": "Tool component", "source_paths": ["scripts/tool.sh"]},
+    {"id": "evidence:sam-tests", "type": "EVIDENCE", "label": "SAM fixture evidence", "source_paths": ["tests/evidence.txt"]},
+    {"id": "frontend:cli", "type": "FRONTEND", "label": "CLI frontend", "source_paths": ["CLAUDE.md"]},
+    {"id": "policy:human-control", "type": "POLICY", "label": "Human control", "source_paths": ["laws/human-control.md"]},
+    {"id": "store:scm", "type": "STORE", "label": "SCM store", "source_paths": [".scm/registry.json"]},
+    {"id": "subsystem:execution", "type": "SUBSYSTEM", "label": "Execution subsystem", "source_paths": ["scripts/tool.sh"]},
+    {"id": "system:savia", "type": "SYSTEM", "label": "Savia", "source_paths": ["CLAUDE.md"]}
+  ],
+  "edges": [
+    {"source": "adapter:cli", "relation": "USES", "target": "component:tool", "source_paths": ["scripts/tool.sh"]},
+    {"source": "capability:declared-tool", "relation": "REQUIRES_AUTHORITY", "target": "policy:human-control", "source_paths": ["laws/human-control.md"]},
+    {"source": "component:tool", "relation": "IMPLEMENTS", "target": "capability:declared-tool", "source_paths": ["scripts/tool.sh"]},
+    {"source": "component:tool", "relation": "PRODUCES", "target": "evidence:sam-tests", "source_paths": ["tests/evidence.txt"]},
+    {"source": "frontend:cli", "relation": "USES", "target": "adapter:cli", "source_paths": ["CLAUDE.md"]},
+    {"source": "policy:human-control", "relation": "ENFORCES", "target": "subsystem:execution", "source_paths": ["laws/human-control.md"]},
+    {"source": "store:scm", "relation": "DEPENDS_ON", "target": "component:tool", "source_paths": [".scm/registry.json"]},
+    {"source": "subsystem:execution", "relation": "CONTAINS", "target": "component:tool", "source_paths": ["scripts/tool.sh"]},
+    {"source": "system:savia", "relation": "CONTAINS", "target": "subsystem:execution", "source_paths": ["CLAUDE.md"]}
+  ]
+}

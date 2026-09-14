@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    {
+      "id": "adapter:codex",
+      "type": "ADAPTER",
+      "label": "Codex adapter",
+      "source_paths": ["AGENTS.md"]
+    },
+    {
+      "id": "capability:architectural-self-knowledge",
+      "type": "CAPABILITY",
+      "label": "Architectural self-knowledge",
+      "source_paths": ["docs/specs/SE-397-savia-architectural-self-knowledge.spec.md"]
+    },
+    {
+      "id": "component:sam-generator",
+      "type": "COMPONENT",
+      "label": "SAM generator",
+      "source_paths": ["scripts/sam.py"]
+    },
+    {
+      "id": "evidence:sam-contract-tests",
+      "type": "EVIDENCE",
+      "label": "SAM contract tests",
+      "source_paths": ["tests/test-se397-sam.bats"]
+    },
+    {
+      "id": "frontend:codex",
+      "type": "FRONTEND",
+      "label": "Codex frontend",
+      "source_paths": ["AGENTS.md"]
+    },
+    {
+      "id": "policy:human-control",
+      "type": "POLICY",
+      "label": "Human control policy",
+      "source_paths": ["laws/human-control.md"]
+    },
+    {
+      "id": "store:scm",
+      "type": "STORE",
+      "label": "Savia Capability Model store",
+      "source_paths": [".scm/registry.json"]
+    },
+    {
+      "id": "subsystem:governance",
+      "type": "SUBSYSTEM",
+      "label": "Governance subsystem",
+      "source_paths": ["laws/index.yaml"]
+    },
+    {
+      "id": "system:savia",
+      "type": "SYSTEM",
+      "label": "Savia",
+      "source_paths": ["CLAUDE.md"]
+    }
+  ],
+  "edges": [
+    {
+      "source": "adapter:codex",
+      "relation": "REQUIRES_AUTHORITY",
+      "target": "policy:human-control",
+      "source_paths": ["AGENTS.md", "laws/human-control.md"]
+    },
+    {
+      "source": "component:sam-generator",
+      "relation": "IMPLEMENTS",
+      "target": "capability:architectural-self-knowledge",
+      "source_paths": ["docs/specs/SE-397-savia-architectural-self-knowledge.spec.md", "scripts/sam.py"]
+    },
+    {
+      "source": "component:sam-generator",
+      "relation": "USES",
+      "target": "store:scm",
+      "source_paths": [".scm/registry.json", "scripts/sam.py"]
+    },
+    {
+      "source": "frontend:codex",
+      "relation": "USES",
+      "target": "adapter:codex",
+      "source_paths": ["AGENTS.md"]
+    },
+    {
+      "source": "subsystem:governance",
+      "relation": "DEPENDS_ON",
+      "target": "store:scm",
+      "source_paths": [".scm/registry.json", "laws/index.yaml"]
+    },
+    {
+      "source": "subsystem:governance",
+      "relation": "ENFORCES",
+      "target": "policy:human-control",
+      "source_paths": ["laws/human-control.md", "laws/index.yaml"]
+    },
+    {
+      "source": "system:savia",
+      "relation": "CONTAINS",
+      "target": "subsystem:governance",
+      "source_paths": ["CLAUDE.md", "laws/index.yaml"]
+    },
+    {
+      "source": "evidence:sam-contract-tests",
+      "relation": "DEPENDS_ON",
+      "target": "component:sam-generator",
+      "source_paths": ["scripts/sam.py", "tests/test-se397-sam.bats"]
+    }
+  ]
+}

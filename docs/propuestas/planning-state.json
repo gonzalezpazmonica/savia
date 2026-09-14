@@ -169,12 +169,12 @@
     },
     {
       "id": "SE-397",
-      "status": "APPROVED",
+      "status": "IMPLEMENTING",
       "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "note": "F0 aprobado 2026-09-09; F1-F10 autorizadas con gates de fase, sin elevar authority",
-      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; F0 mergeado en PR #1114; ID libre verificado 2026-09-08"
+      "note": "F0 aprobado 2026-09-09; F1 implementado y pendiente de revisión humana; F2-F10 pendientes con gates de fase, sin elevar authority",
+      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; docs/specs/SE-397-f1-minimal-sam.spec.md; F0 mergeado en PR #1114; F1: 11 unit + 5 BATS verdes, SAM revision b6a566107ddc"
     },
     {
       "id": "SE-398",
