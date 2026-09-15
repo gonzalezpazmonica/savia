@@ -480,9 +480,11 @@ authorize publication or any external effect.
   source paths. The input SHA-256 values and source bytes were unchanged; the
   failure was provenance instability, not model drift.
 - Correction: when an existing generated input has the same current SHA-256,
-  generation preserves its recorded `source_commit`; changed content still
-  receives the current repository commit. This keeps provenance descriptive
-  while making the projection stable across squash/rebase history rewrites.
+  generation preserves its recorded `source_commit` only when that commit is
+  also resolvable with the same content (or the historical commit is no longer
+  available after a rewrite); changed content still receives the current
+  repository commit. This keeps provenance descriptive while making the
+  projection stable across squash/rebase history rewrites.
 - Regression evidence: `tests/test_sam.py` now reproduces an implementation
   commit followed by `git commit --amend` and proves `check` remains fresh.
 - Validation: 18/18 unit tests, 6/6 F2 BATS, `SCM: FRESH (1465 resources)` and

@@ -455,7 +455,24 @@ def _input_records(root: Path, source_paths: Iterable[str],
         digest = _sha256(resolved)
         prior = previous.get(relative)
         source_commit = commits.get(relative, "NOT_AVAILABLE")
+        prior_content_matches = None
         if prior is not None and prior.get("sha256") == digest:
+            prior_commit = prior.get("source_commit")
+            if prior_commit and prior_commit != "NOT_AVAILABLE":
+                try:
+                    prior_blob = subprocess.run(
+                        ["git", "show", f"{prior_commit}:{relative}"], cwd=root,
+                        check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                    )
+                    prior_content_matches = (
+                        prior_blob.returncode == 0
+                        and hashlib.sha256(prior_blob.stdout).hexdigest() == digest
+                    )
+                except OSError:
+                    prior_content_matches = None
+            else:
+                prior_content_matches = True
+        if prior is not None and prior.get("sha256") == digest and prior_content_matches is not False:
             # Commit IDs are not stable across squash/rebase. Preserve the
             # provenance already attached to identical content so a rewrite
             # of history cannot make an unchanged projection stale.
