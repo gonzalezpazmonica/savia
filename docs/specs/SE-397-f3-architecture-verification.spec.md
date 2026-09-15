@@ -467,4 +467,6 @@ later phases and require independent approval.
 - Scope result: no policy call, enforcement, receipt, telemetry, secret read,
   external read/write or authority escalation was introduced. F4–F10 remain
   pending.
+- Implementation commits: `56e992d0` (contract, code and tests), `5b4e798b`
+  (history-rewrite hardening) and `2edcf701` (derived SAM/reports).
 - Implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.
