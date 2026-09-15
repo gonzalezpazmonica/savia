@@ -9,6 +9,7 @@ setup() {
   [ -f scripts/sam_model.py ]
   [ -f .scm/sam.schema.json ]
   [ -f .scm/sam-runtime-declarations.json ]
+  [ -f .scm/sam-verification-declarations.json ]
 }
 
 @test "SE-397 F2 committed projection is fresh" {
@@ -35,6 +36,9 @@ setup() {
   [ -f .scm/views/runtime.json ]
   [ -f .scm/views/authority.json ]
   [ -f .scm/views/failure.json ]
+  [ -f .scm/reports/drift.json ]
+  [ -f .scm/reports/claim-evidence.json ]
+  [ -f .scm/reports/impact.json ]
 }
 
 @test "SE-397 F2 external effects retain human decision authority" {
@@ -43,4 +47,11 @@ setup() {
   [[ "$output" == *'"status": "FOUND"'* ]]
   [[ "$output" == *'"relation": "REQUIRES_HUMAN"'* ]]
   [[ "$output" == *'"target": "authority:human-decision"'* ]]
+}
+
+@test "SE-397 F3 impact query is report-only" {
+  run python3 scripts/sam.py impact --node flow:external-effect --depth 1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"depth": 1'* ]]
+  [[ "$output" == *'"limitations"'* ]]
 }

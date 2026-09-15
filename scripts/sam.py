@@ -49,14 +49,14 @@ def _atomic_write(root: Path, outputs: dict[str, bytes]) -> None:
 
 def _generate(root: Path) -> int:
     model = build_model(root)
-    _atomic_write(root, serialized_outputs(model))
+    _atomic_write(root, serialized_outputs(model, root))
     print(f"SAM: GENERATED ({len(model['nodes'])} nodes, revision {model['model_revision'][:12]})")
     return 0
 
 
 def _check(root: Path) -> int:
     expected_model = build_model(root)
-    expected = serialized_outputs(expected_model)
+    expected = serialized_outputs(expected_model, root)
     for relative in expected:
         path = root / relative
         if not path.is_file():
@@ -85,6 +85,18 @@ def _query(root: Path, node_id: str) -> int:
     return 0
 
 
+def _impact(root: Path, node_id: str, depth: int) -> int:
+    from sam_model import impact_node
+
+    model = _read_json(root / ".scm/sam.json", "INVALID_MODEL")
+    try:
+        validated = validate_model(model, root)
+    except SamValidationError as exc:
+        raise SamValidationError("INVALID_MODEL", exc.path) from exc
+    print(json.dumps(impact_node(validated, node_id, depth), ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SE-397 Savia Architecture Model")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -92,6 +104,9 @@ def main(argv: list[str] | None = None) -> int:
     _root_parser(commands, "check", "check committed artifacts without writing")
     query = _root_parser(commands, "query", "query a committed SAM node")
     query.add_argument("--node", required=True)
+    impact = _root_parser(commands, "impact", "query bounded SAM graph impact")
+    impact.add_argument("--node", required=True)
+    impact.add_argument("--depth", type=int, choices=(1, 2), default=2)
     args = parser.parse_args(argv)
     root = args.root.resolve()
     try:
@@ -99,6 +114,8 @@ def main(argv: list[str] | None = None) -> int:
             return _generate(root)
         if args.command == "check":
             return _check(root)
+        if args.command == "impact":
+            return _impact(root, args.node, args.depth)
         return _query(root, args.node)
     except SamValidationError as exc:
         print(f"SAM ERROR {exc.code}: {exc.path}", file=sys.stderr)

@@ -4,9 +4,9 @@
 
 ## P0 — Architecture, runtime surfaces and distribution (2026-09)
 
-- **SE-397**: F0 aprobado; SAM F1 mergeado; F2 Runtime & Authority Model
-  implementado y pendiente de revisión humana. F3–F10 permanecen pendientes y
-  ninguna vista eleva authority.
+- **SE-397**: F0 aprobado; SAM F1 mergeado; F2 Runtime & Authority Model y F3
+  Architecture Verification implementados, ambos pendientes de revisión
+  humana. F4–F10 permanecen pendientes y ninguna vista eleva authority.
 - **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
   Ninguna surface Desktop está graduada como SUPPORTED.
 - **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.
