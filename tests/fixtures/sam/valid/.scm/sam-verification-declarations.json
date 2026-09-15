@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "bindings": [
+    {
+      "id": "binding:tool",
+      "declared_node_id": "component:tool",
+      "discovered_node_id": "component/scripts/tool.sh",
+      "basis": "SAME_REPOSITORY_PATH"
+    }
+  ],
+  "impact_roots": [
+    "component:tool",
+    "policy:human-control",
+    "store:scm"
+  ]
+}

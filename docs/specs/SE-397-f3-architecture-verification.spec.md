@@ -1,7 +1,7 @@
 ---
 id: SE-397-F3
 parent: SE-397
-status: PROPOSED
+status: APPROVED
 priority: P0
 developer_type: agent-single
 created: 2026-09-15
@@ -442,3 +442,29 @@ later phases and require independent approval.
 - [ ] **PURE_BASH**
 - [ ] **SINGLE_BINDING_DEFERRED**
 - [ ] **CLAUDE_CODE_ONLY**
+
+## 12. Approval and implementation evidence — append only
+
+### 12.1 Operator approval
+
+- Approved revision: `2521ee0d`.
+- Approval: operator response `si` on 2026-09-16, directly following the
+  exact F3 revision and the F2 provenance-repair gate.
+- Authorized scope: F2 provenance stability correction, then the exact F3
+  contract in this document; no F4+ work, publication, push or merge.
+
+### 12.2 Implementation evidence
+
+- TDD red gate: the three F3 tests initially failed because reports and the
+  `impact` command did not exist.
+- F2 repair: unchanged-content provenance survives history rewrite; 18/18
+  unit tests and 6/6 F2 BATS pass.
+- F3 local result: 21/21 unit tests and 7/7 BATS pass; `SAM: FRESH (2962
+  nodes)` and `SCM: FRESH (1465 resources)`.
+- Real report result: drift has `0` corroborations, `32` declared-only nodes and
+  `2930` discovered-only nodes; claim/evidence reports `1` static path and
+  `1472` explicit gaps. These are report facts, not support or quality grades.
+- Scope result: no policy call, enforcement, receipt, telemetry, secret read,
+  external read/write or authority escalation was introduced. F4–F10 remain
+  pending.
+- Implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.

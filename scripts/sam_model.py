@@ -125,6 +125,12 @@ RUNTIME_NODE_CONTRACT = {
     "risk:human-review-required": (
         "RISK", "Human review required", [_HUMAN_CONTROL, _AUTONOMY]),
 }
+VERIFICATION_SCHEMA_VERSION = 1
+VERIFICATION_BASIS = "SAME_REPOSITORY_PATH"
+DRIFT_LIMITATIONS = ["NO_SEMANTIC_INFERENCE", "REPORT_ONLY", "STATIC_REPOSITORY_EVIDENCE"]
+CLAIM_LIMITATIONS = ["NO_RUNTIME_EVIDENCE", "REPORT_ONLY", "STATIC_GRAPH_PATHS_ONLY"]
+IMPACT_LIMITATIONS = ["GRAPH_REACHABILITY_ONLY", "REPORT_ONLY"]
+CLAIM_TYPES = frozenset({"CAPABILITY", "POLICY", "FLOW"})
 
 
 class SamValidationError(ValueError):
@@ -427,13 +433,37 @@ def _load_registry(root: Path) -> list[dict]:
 
 def _input_records(root: Path, source_paths: Iterable[str],
                    commits: dict[str, str]) -> list[dict]:
+    previous: dict[str, dict[str, str]] = {}
+    previous_path = root / ".scm/sam.json"
+    try:
+        previous_document = json.loads(previous_path.read_text(encoding="utf-8"))
+        previous_inputs = previous_document.get("inputs", [])
+        if isinstance(previous_inputs, list):
+            for item in previous_inputs:
+                if isinstance(item, dict) and {
+                    "path", "sha256", "source_commit"
+                } <= set(item):
+                    previous[item["path"]] = item
+    except (OSError, UnicodeError, json.JSONDecodeError, AttributeError):
+        # A missing or malformed committed model is validated by the caller;
+        # generation must still be able to rebuild it from repository state.
+        previous = {}
+
     records = []
     for source in sorted(set(source_paths)):
         relative, resolved = _safe_source(root, source, source)
+        digest = _sha256(resolved)
+        prior = previous.get(relative)
+        source_commit = commits.get(relative, "NOT_AVAILABLE")
+        if prior is not None and prior.get("sha256") == digest:
+            # Commit IDs are not stable across squash/rebase. Preserve the
+            # provenance already attached to identical content so a rewrite
+            # of history cannot make an unchanged projection stale.
+            source_commit = prior["source_commit"]
         records.append({
             "path": relative,
-            "sha256": _sha256(resolved),
-            "source_commit": commits.get(relative, "NOT_AVAILABLE"),
+            "sha256": digest,
+            "source_commit": source_commit,
             "status": "PRESENT",
         })
     return records
@@ -692,9 +722,171 @@ def query_node(model: dict, node_id: str) -> dict:
     return {"status": "FOUND", "node": node, "edges": edges}
 
 
-def serialized_outputs(model: dict) -> dict[str, bytes]:
+def _provenance_kinds(node: dict) -> set[str]:
+    return {item["source_kind"] for item in node["provenance"]}
+
+
+def _node_source_paths(node: dict) -> set[str]:
+    return {item["source_path"] for item in node["provenance"]}
+
+
+def load_verification_declarations(root: Path, model: dict) -> dict:
+    path = Path(root).resolve() / ".scm/sam-verification-declarations.json"
+    document = _closed(_read_json(path, "MISSING_INPUT"),
+                       {"schema_version", "bindings", "impact_roots"}, "$")
+    if document["schema_version"] != VERIFICATION_SCHEMA_VERSION:
+        raise SamValidationError("INVALID_VERIFICATION_DECLARATION", "$/schema_version")
+    bindings, roots = document["bindings"], document["impact_roots"]
+    if not isinstance(bindings, list) or not isinstance(roots, list):
+        raise SamValidationError("INVALID_VERIFICATION_DECLARATION", "$")
+    if roots != sorted(set(roots)) or not roots:
+        raise SamValidationError("INVALID_VERIFICATION_DECLARATION", "$/impact_roots")
+    node_by_id = {node["id"]: node for node in model["nodes"]}
+    if any(not isinstance(item, str) or item not in node_by_id for item in roots):
+        raise SamValidationError("INVALID_VERIFICATION_DECLARATION", "$/impact_roots")
+    seen_ids: set[str] = set()
+    seen_nodes: set[str] = set()
+    previous_id = ""
+    validated = []
+    for index, raw in enumerate(bindings):
+        item_path = f"$/bindings/{index}"
+        item = _closed(raw, {"id", "declared_node_id", "discovered_node_id", "basis"}, item_path)
+        binding_id = item["id"]
+        if (not isinstance(binding_id, str) or not ID_RE.fullmatch(binding_id)
+                or binding_id <= previous_id or binding_id in seen_ids):
+            raise SamValidationError("INVALID_VERIFICATION_DECLARATION", f"{item_path}/id")
+        previous_id = binding_id
+        seen_ids.add(binding_id)
+        declared_id, discovered_id = item["declared_node_id"], item["discovered_node_id"]
+        declared, discovered = node_by_id.get(declared_id), node_by_id.get(discovered_id)
+        valid = (
+            isinstance(declared_id, str) and isinstance(discovered_id, str)
+            and declared_id != discovered_id and declared is not None and discovered is not None
+            and declared_id not in seen_nodes and discovered_id not in seen_nodes
+            and declared["type"] == discovered["type"] == "COMPONENT"
+            and _provenance_kinds(declared) == {"DECLARED"}
+            and _provenance_kinds(discovered) == {"DISCOVERED"}
+            and len(_node_source_paths(declared)) == 1
+            and next(iter(_node_source_paths(declared))) == discovered["label"]
+            and discovered["label"] in _node_source_paths(discovered)
+            and item["basis"] == VERIFICATION_BASIS
+        )
+        if not valid:
+            raise SamValidationError("INVALID_VERIFICATION_DECLARATION", item_path)
+        seen_nodes.update({declared_id, discovered_id})
+        validated.append({"id": binding_id, "declared_node_id": declared_id,
+                          "discovered_node_id": discovered_id, "basis": VERIFICATION_BASIS})
+    return {"bindings": validated, "impact_roots": roots}
+
+
+def build_drift_report(model: dict, verification: dict) -> dict:
+    node_by_id = {node["id"]: node for node in model["nodes"]}
+    bound = {endpoint for binding in verification["bindings"]
+             for endpoint in (binding["declared_node_id"], binding["discovered_node_id"])}
+    items = []
+    for binding in verification["bindings"]:
+        declared = node_by_id[binding["declared_node_id"]]
+        discovered = node_by_id[binding["discovered_node_id"]]
+        items.append({"node_id": binding["declared_node_id"], "status": "CORROBORATED",
+                      "counterpart_id": binding["discovered_node_id"],
+                      "source_paths": sorted(_node_source_paths(declared) | _node_source_paths(discovered))})
+    for node in model["nodes"]:
+        if node["id"] in bound:
+            continue
+        kinds = _provenance_kinds(node)
+        status = ("MIXED_UNBOUND" if kinds == {"DECLARED", "DISCOVERED"}
+                  else "DECLARED_ONLY" if kinds == {"DECLARED"}
+                  else "DISCOVERED_ONLY" if kinds == {"DISCOVERED"}
+                  else "MIXED_UNBOUND")
+        items.append({"node_id": node["id"], "status": status, "counterpart_id": None,
+                      "source_paths": sorted(_node_source_paths(node))})
+    items.sort(key=lambda item: item["node_id"])
+    summary = {key: 0 for key in ("corroborated", "declared_only", "discovered_only", "mixed_unbound")}
+    for item in items:
+        summary[item["status"].lower()] += 1
+    return {"schema_version": 1, "report": "architecture-drift",
+            "model_revision": model["model_revision"], "summary": summary,
+            "items": items, "limitations": DRIFT_LIMITATIONS}
+
+
+def build_claim_evidence_report(model: dict) -> dict:
+    node_by_id = {node["id"]: node for node in model["nodes"]}
+    incoming: dict[str, list[dict]] = {}
+    for edge in model["edges"]:
+        incoming.setdefault(edge["target"], []).append(edge)
+    items = []
+    for claim in model["nodes"]:
+        if claim["type"] not in CLAIM_TYPES:
+            continue
+        paths = []
+        if claim["type"] == "CAPABILITY":
+            for component_edge in incoming.get(claim["id"], []):
+                if component_edge["relation"] != "IMPLEMENTS":
+                    continue
+                component = node_by_id.get(component_edge["source"])
+                if component is None or component["type"] != "COMPONENT":
+                    continue
+                for evidence_edge in incoming.get(component["id"], []):
+                    if evidence_edge["relation"] != "DEPENDS_ON":
+                        continue
+                    evidence = node_by_id.get(evidence_edge["source"])
+                    if evidence is not None and evidence["type"] == "EVIDENCE":
+                        paths.append((evidence["id"], component["id"], claim["id"]))
+        paths = sorted(set(paths))
+        items.append({"claim_id": claim["id"],
+                      "status": "STATIC_PATH_PRESENT" if paths else "NO_STATIC_EVIDENCE_PATH",
+                      "evidence_paths": [list(path) for path in paths]})
+    items.sort(key=lambda item: item["claim_id"])
+    return {"schema_version": 1, "report": "claim-evidence",
+            "model_revision": model["model_revision"],
+            "summary": {"claims": len(items),
+                        "static_path_present": sum(item["status"] == "STATIC_PATH_PRESENT" for item in items),
+                        "no_static_evidence_path": sum(item["status"] == "NO_STATIC_EVIDENCE_PATH" for item in items)},
+            "items": items, "limitations": CLAIM_LIMITATIONS}
+
+
+def impact_node(model: dict, node_id: str, depth: int = 2) -> dict:
+    node = next((item for item in model["nodes"] if item["id"] == node_id), None)
+    if node is None:
+        return {"status": "UNKNOWN", "node": None, "edges": []}
+    if depth not in {1, 2}:
+        raise SamValidationError("INVALID_MODEL", "$/impact/depth")
+    outgoing: dict[str, set[str]] = {}
+    incoming: dict[str, set[str]] = {}
+    for edge in model["edges"]:
+        outgoing.setdefault(edge["source"], set()).add(edge["target"])
+        incoming.setdefault(edge["target"], set()).add(edge["source"])
+
+    def reachable(graph: dict[str, set[str]]) -> list[str]:
+        found: set[str] = set()
+        frontier = {node_id}
+        for _ in range(depth):
+            next_frontier = {target for source in frontier for target in graph.get(source, set())} - found - {node_id}
+            found.update(next_frontier)
+            frontier = next_frontier
+        return sorted(found)
+
+    return {"root_id": node_id, "depth": depth, "upstream": reachable(incoming),
+            "downstream": reachable(outgoing), "limitations": IMPACT_LIMITATIONS}
+
+
+def build_impact_report(model: dict, verification: dict) -> dict:
+    return {"schema_version": 1, "report": "impact", "model_revision": model["model_revision"],
+            "items": [impact_node(model, root, 2) for root in verification["impact_roots"]],
+            "limitations": IMPACT_LIMITATIONS}
+
+
+def serialized_outputs(model: dict, root: Path) -> dict[str, bytes]:
     """Return every generated SAM artifact as stable newline-terminated bytes."""
     outputs = {".scm/sam.json": canonical_json(model) + b"\n"}
     for name, view in build_views(model).items():
         outputs[f".scm/views/{name}.json"] = canonical_json(view) + b"\n"
+    verification = load_verification_declarations(root, model)
+    reports = {
+        "drift": build_drift_report(model, verification),
+        "claim-evidence": build_claim_evidence_report(model),
+        "impact": build_impact_report(model, verification),
+    }
+    for name, report in reports.items():
+        outputs[f".scm/reports/{name}.json"] = canonical_json(report) + b"\n"
     return outputs

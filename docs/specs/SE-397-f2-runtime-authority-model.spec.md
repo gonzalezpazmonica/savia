@@ -471,3 +471,21 @@ authorize publication or any external effect.
 - Scope result: no policy call, enforcement, receipt, telemetry, secret read,
   external read/write or support claim was introduced. F3–F10 remain pending.
 - F2 implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.
+
+## 14. Post-merge provenance repair — append only
+
+- Review date: 2026-09-16.
+- Finding: after the F2 squash merge, `scripts/sam.py check` reported
+  `STALE (.scm/sam.json)` because Git rewrote the commit IDs for unchanged
+  source paths. The input SHA-256 values and source bytes were unchanged; the
+  failure was provenance instability, not model drift.
+- Correction: when an existing generated input has the same current SHA-256,
+  generation preserves its recorded `source_commit`; changed content still
+  receives the current repository commit. This keeps provenance descriptive
+  while making the projection stable across squash/rebase history rewrites.
+- Regression evidence: `tests/test_sam.py` now reproduces an implementation
+  commit followed by `git commit --amend` and proves `check` remains fresh.
+- Validation: 18/18 unit tests, 6/6 F2 BATS, `SCM: FRESH (1465 resources)` and
+  `SAM: FRESH (2962 nodes)`.
+- Scope: no authority, policy, runtime, registry or generated topology changed;
+  F3 remains pending implementation and review.

@@ -62,6 +62,16 @@ class SamTest(unittest.TestCase):
             (self.root / ".scm/sam-runtime-declarations.json").read_text()
         )
 
+    def _verification_declarations(self) -> dict:
+        return json.loads(
+            (self.root / ".scm/sam-verification-declarations.json").read_text()
+        )
+
+    def _write_verification_declarations(self, value: dict) -> None:
+        (self.root / ".scm/sam-verification-declarations.json").write_text(
+            json.dumps(value, indent=2) + "\n", encoding="utf-8"
+        )
+
     def _write_runtime_declarations(self, value: dict) -> None:
         (self.root / ".scm/sam-runtime-declarations.json").write_text(
             json.dumps(value, indent=2) + "\n", encoding="utf-8"
@@ -92,6 +102,88 @@ class SamTest(unittest.TestCase):
         self.assertEqual(first_bytes, second_bytes)
         payload = {k: first[k] for k in ("inputs", "nodes", "edges", "known_unknowns")}
         self.assertEqual(hashlib.sha256(canonical_json(payload)).hexdigest(), first["model_revision"])
+
+    def test_history_rewrite_does_not_make_unchanged_projection_stale(self):
+        tool = self.root / "scripts/tool.sh"
+        tool.write_bytes(tool.read_bytes() + b"# implementation\n")
+        self._git("add", "scripts/tool.sh")
+        self._git("commit", "-qm", "implementation")
+        generated = self._generate()
+        prior_commit = next(
+            item["source_commit"] for item in generated["inputs"]
+            if item["path"] == "scripts/tool.sh"
+        )
+
+        # A squash/amend rewrites the commit containing both source and
+        # generated artifacts. The source bytes and digest remain identical.
+        self._git("add", ".scm")
+        self._git("commit", "--amend", "-qm", "squashed implementation")
+        self.assertEqual(0, self._cli("check").returncode)
+        current = json.loads((self.root / ".scm/sam.json").read_text())
+        current_commit = next(
+            item["source_commit"] for item in current["inputs"]
+            if item["path"] == "scripts/tool.sh"
+        )
+        self.assertEqual(prior_commit, current_commit)
+
+    def test_f3_reports_are_deterministic_and_trace_static_evidence(self):
+        self._generate()
+        reports = {
+            path.name: path.read_bytes()
+            for path in (self.root / ".scm/reports").glob("*.json")
+        }
+        self.assertEqual({"drift.json", "claim-evidence.json", "impact.json"}, set(reports))
+        drift = json.loads(reports["drift.json"])
+        self.assertEqual(1, drift["summary"]["corroborated"])
+        self.assertEqual("CORROBORATED", next(
+            item["status"] for item in drift["items"]
+            if item["node_id"] == "component:tool"
+        ))
+        claims = json.loads(reports["claim-evidence.json"])
+        declared_claim = next(
+            item for item in claims["items"]
+            if item["claim_id"] == "capability:declared-tool"
+        )
+        self.assertEqual("STATIC_PATH_PRESENT", declared_claim["status"])
+        self.assertEqual(
+            ["evidence:sam-tests", "component:tool", "capability:declared-tool"],
+            declared_claim["evidence_paths"][0],
+        )
+        first = reports
+        self.assertEqual(0, self._cli("generate").returncode)
+        second = {
+            path.name: path.read_bytes()
+            for path in (self.root / ".scm/reports").glob("*.json")
+        }
+        self.assertEqual(first, second)
+
+    def test_f3_invalid_binding_fails_closed_without_report_rewrite(self):
+        self._generate()
+        before = {
+            path: (self.root / ".scm/reports" / path).read_bytes()
+            for path in ("drift.json", "claim-evidence.json", "impact.json")
+        }
+        declarations = self._verification_declarations()
+        declarations["bindings"][0]["discovered_node_id"] = "component:missing"
+        self._write_verification_declarations(declarations)
+        result = self._cli("generate")
+        self.assertEqual(2, result.returncode)
+        self.assertIn("INVALID_VERIFICATION_DECLARATION", result.stderr)
+        self.assertEqual(
+            before,
+            {path: (self.root / ".scm/reports" / path).read_bytes() for path in before},
+        )
+
+    def test_f3_impact_is_bounded_and_unknown_is_explicit(self):
+        self._generate()
+        result = self._cli("impact", "--node", "flow:external-effect", "--depth", "1")
+        self.assertEqual(0, result.returncode, result.stderr)
+        impact = json.loads(result.stdout)
+        self.assertEqual(1, impact["depth"])
+        self.assertNotIn("flow:external-effect", impact["upstream"] + impact["downstream"])
+        unknown = self._cli("impact", "--node", "component:missing")
+        self.assertEqual(0, unknown.returncode)
+        self.assertEqual({"status": "UNKNOWN", "node": None, "edges": []}, json.loads(unknown.stdout))
 
     def test_registry_capability_is_reused_with_component_and_edge(self):
         model = build_model(self.root)
