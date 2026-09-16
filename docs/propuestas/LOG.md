@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-16 SE-397 F3 IMPLEMENTED_PENDING_HUMAN_REVIEW
+
+Implementada la verificación arquitectónica report-only: drift declarado vs
+descubierto con bindings explícitos, claim/evidence con gaps visibles e impacto
+de grafo acotado. Se corrigió además la provenance inestable tras squash/rebase.
+21 unit + 7 BATS verdes; sin inferencia semántica, enforcement ni elevación de
+authority. F4–F10 permanecen pendientes.
+
 ## 2026-09-14 SE-397 F2 IMPLEMENTED_PENDING_HUMAN_REVIEW
 
 Implementado el Runtime & Authority Model declarado y report-only: seis flujos,

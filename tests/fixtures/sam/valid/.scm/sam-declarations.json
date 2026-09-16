@@ -15,7 +15,7 @@
     {"source": "adapter:cli", "relation": "USES", "target": "component:tool", "source_paths": ["scripts/tool.sh"]},
     {"source": "capability:declared-tool", "relation": "REQUIRES_AUTHORITY", "target": "policy:human-control", "source_paths": ["laws/human-control.md"]},
     {"source": "component:tool", "relation": "IMPLEMENTS", "target": "capability:declared-tool", "source_paths": ["scripts/tool.sh"]},
-    {"source": "component:tool", "relation": "PRODUCES", "target": "evidence:sam-tests", "source_paths": ["tests/evidence.txt"]},
+    {"source": "evidence:sam-tests", "relation": "DEPENDS_ON", "target": "component:tool", "source_paths": ["scripts/tool.sh", "tests/evidence.txt"]},
     {"source": "frontend:cli", "relation": "USES", "target": "adapter:cli", "source_paths": ["CLAUDE.md"]},
     {"source": "policy:human-control", "relation": "ENFORCES", "target": "subsystem:execution", "source_paths": ["laws/human-control.md"]},
     {"source": "store:scm", "relation": "DEPENDS_ON", "target": "component:tool", "source_paths": [".scm/registry.json"]},
