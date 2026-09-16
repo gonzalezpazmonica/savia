@@ -6,6 +6,13 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-16 SE-397 F4 PROPOSED
+
+Propuesto Operational Trace local y report-only: observaciones separadas del
+SAM, paths formados solo por nodos existentes, gaps explícitos y baseline
+end-to-end controlado para reconciliar SE-037. Sin instrumentación nativa de
+frontends, SLO, optimización, export, enforcement ni elevación de authority.
+
 ## 2026-09-16 SE-397 F3 IMPLEMENTED_PENDING_HUMAN_REVIEW
 
 Implementada la verificación arquitectónica report-only: drift declarado vs
