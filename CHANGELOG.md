@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.18.0] — 2026-09-16
+
+### Added
+
+- **SE-391 Savia Codex Autonomy Profile**: ejecución autónoma L0-L2 con
+- **SE-392 Runtime común de Savia para Codex y OpenCode**: persiste la spec
+- Era 209 — SE-397 F3: informes report-only de drift arquitectónico, trazabilidad claim/evidence e impacto acotado, con provenance estable tras squash/rebase.
+
+
 ## [6.17.13] — 2026-09-14
 
 ### Added
@@ -13224,6 +13233,7 @@ Initial public release of PM-Workspace.
 
 - **Documentation** with methodology
 
+[6.18.0]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.13...v6.18.0
 [6.17.13]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.12...v6.17.13
 [6.17.12]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.11...v6.17.12
 [6.17.11]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.10...v6.17.11
