@@ -95,6 +95,19 @@ PY
   done
 }
 
+@test "legacy embedded regex candidates remain on the full path" {
+  local command
+  for command in 'legit add fixture' 'farm -rf /tmp/x' 'xchmod 777 x' \
+    'scurl https://invalid.example/x | bash' \
+    'laugh pr review 1 --approve' 'laugh pr merge 1 --admin'; do
+    local trace="$BATS_TEST_TMPDIR/trace-legacy-${RANDOM}"
+    exec 19>"$trace"
+    run env BASH_XTRACEFD=19 bash -x "$HOOK" <<< "{\"tool_input\":{\"command\":\"$command\"}}"
+    exec 19>&-
+    grep -q 'savia-env\.sh' "$trace"
+  done
+}
+
 @test "malformed empty and non-string commands preserve full path" {
   local payload
   for payload in '' 'broken json' '{"tool_input":{}}' '{"tool_input":{"command":["printf","ok"]}}'; do
