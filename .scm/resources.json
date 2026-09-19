@@ -1,6 +1,6 @@
 {
-  "hash": "dc9f5706632a",
-  "total": 1465,
+  "hash": "c2d170e8ae23",
+  "total": 1466,
   "resources": [
     {
       "category": "analysis",
@@ -13821,6 +13821,20 @@
       "kind": "script",
       "path": "scripts/scrapling-probe.sh",
       "description": "scrapling-probe.sh — SE-061 Slice 1 Scrapling viability probe."
+    },
+    {
+      "category": "planning",
+      "name": "se397-f4-corpus",
+      "intents": [
+        "bash",
+        "controlled",
+        "corpus",
+        "local",
+        "read"
+      ],
+      "kind": "script",
+      "path": "scripts/se397-f4-corpus.sh",
+      "description": "Controlled local READ/SAFE_BASH corpus for SE-397 F4."
     },
     {
       "category": "planning",

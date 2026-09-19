@@ -470,3 +470,11 @@ later phases and require independent approval.
 - Implementation commits: `56e992d0` (contract, code and tests), `5b4e798b`
   (history-rewrite hardening) and `2edcf701` (derived SAM/reports).
 - Implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`.
+
+## 13. F4 handoff — append only
+
+- F4 revision `823cd67b` and derived-artifact correction `0eec646e` were
+  explicitly approved by the operator on 2026-09-19.
+- Operational observations remain separate from F3 reports and reference the
+  committed SAM revision; they do not alter claims, drift or impact semantics.
+- F4 is `IMPLEMENTED_PENDING_HUMAN_REVIEW`; F5–F10 remain pending.

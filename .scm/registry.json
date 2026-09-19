@@ -21379,6 +21379,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/se397-f4-corpus",
+      "intents": [
+        "bash",
+        "controlled",
+        "corpus",
+        "local",
+        "read"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/se397-f4-corpus.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/setup-merge-drivers",
       "intents": [
         "configure",
@@ -29916,7 +29937,7 @@
       "tests": []
     }
   ],
-  "content_hash": "dc9f5706632a",
+  "content_hash": "c2d170e8ae23",
   "deferred_kinds": [
     "rule",
     "hook"

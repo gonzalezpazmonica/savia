@@ -7,7 +7,7 @@
   "properties": {
     "schema": { "const": "savia.event/1.0" },
     "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
-    "event": { "type": "string", "enum": ["session.started", "agent.started", "agent.completed", "dispatch.resolved", "dispatch.failed", "tool.executed", "tribunal.verdict", "sdd.phase", "memory.stored", "digest.completed", "classifier.verdict", "classifier.block", "classifier.false_positive"] },
+    "event": { "type": "string", "enum": ["session.started", "agent.started", "agent.completed", "dispatch.resolved", "dispatch.failed", "tool.executed", "tribunal.verdict", "sdd.phase", "memory.stored", "digest.completed", "classifier.verdict", "classifier.block", "classifier.false_positive", "operation.started", "operation.segment", "operation.completed"] },
     "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
     "span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
     "parent_span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
@@ -53,9 +53,73 @@
       }
     },
     "duration_ms": { "type": "number" },
-    "outcome": { "type": "string", "enum": ["success", "failure", "partial"] },
+    "outcome": { "type": "string", "enum": ["success", "failure", "partial", "blocked", "unknown"] },
+    "operation_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "request_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "flow_id": { "type": "string", "enum": ["flow:bash", "flow:edit", "flow:external-effect", "flow:mcp", "flow:read", "flow:write"] },
+    "model_revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "frontend_id": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$" },
+    "phase": { "type": "string", "enum": ["INTENT", "CONTEXT", "ROUTING", "GOVERNANCE", "EXECUTION", "EVIDENCE", "RESULT"] },
+    "architecture_node_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "evidence_ref": { "type": ["string", "null"], "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$" },
     "error_summary": { "type": "string" },
     "retention_days": { "type": "number" }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "enum": ["operation.started", "operation.segment", "operation.completed"] } }, "required": ["event"] },
+      "then": {
+        "required": ["schema", "ts", "event", "trace_id", "span_id", "operation_id", "request_id", "flow_id", "model_revision", "frontend_id", "sequence"],
+        "properties": {
+          "schema": { "const": "savia.event/1.0" },
+          "ts": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$" },
+          "event": { "enum": ["operation.started", "operation.segment", "operation.completed"] },
+          "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+          "span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+          "parent_span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+          "session_id": { "type": "string", "maxLength": 8 },
+          "operation_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+          "request_id": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+          "flow_id": { "enum": ["flow:bash", "flow:edit", "flow:external-effect", "flow:mcp", "flow:read", "flow:write"] },
+          "model_revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "frontend_id": { "type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$" },
+          "phase": { "enum": ["INTENT", "CONTEXT", "ROUTING", "GOVERNANCE", "EXECUTION", "EVIDENCE", "RESULT"] },
+          "architecture_node_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" },
+          "sequence": { "type": "integer", "minimum": 0 },
+          "duration_ms": { "type": "integer", "minimum": 0 },
+          "outcome": { "enum": ["success", "failure", "partial", "blocked", "unknown"] },
+          "evidence_ref": { "type": ["string", "null"], "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$" }
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "properties": { "event": { "const": "operation.started" }, "sequence": { "const": 0 }, "outcome": { "const": "unknown" } },
+            "required": ["outcome"],
+            "not": { "anyOf": [
+              { "required": ["phase"] },
+              { "required": ["architecture_node_id"] },
+              { "required": ["duration_ms"] },
+              { "required": ["evidence_ref"] }
+            ] }
+          },
+          {
+            "properties": { "event": { "const": "operation.segment" }, "sequence": { "minimum": 1 } },
+            "required": ["phase", "architecture_node_id", "duration_ms", "evidence_ref"],
+            "not": { "required": ["outcome"] }
+          },
+          {
+            "properties": { "event": { "const": "operation.completed" }, "sequence": { "minimum": 1 }, "outcome": { "enum": ["success", "failure", "partial", "blocked"] } },
+            "required": ["duration_ms", "outcome"],
+            "not": { "anyOf": [
+              { "required": ["phase"] },
+              { "required": ["architecture_node_id"] },
+              { "required": ["evidence_ref"] }
+            ] }
+          }
+        ]
+      }
+    }
+  ],
   "additionalProperties": true
 }
