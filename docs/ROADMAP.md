@@ -6,8 +6,8 @@
 
 - **SE-397**: F0 aprobado; SAM F1 mergeado; F2 Runtime & Authority Model y F3
   Architecture Verification implementados, ambos pendientes de revisión
-  humana. Contrato F4 Operational Trace propuesto; F5–F10 permanecen pendientes
-  y ninguna vista eleva authority.
+  humana. F4 Operational Trace implementado y pendiente de revisión humana;
+  F5–F10 permanecen pendientes y ninguna vista eleva authority.
 - **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
   Ninguna surface Desktop está graduada como SUPPORTED.
 - **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.

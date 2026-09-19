@@ -97,6 +97,24 @@ def _impact(root: Path, node_id: str, depth: int) -> int:
     return 0
 
 
+def _trace(root: Path, events: Path, receipts: Path | None) -> int:
+    from sam_model import canonical_json
+    from sam_trace import build_trace
+
+    report = build_trace(root, events, receipts)
+    sys.stdout.buffer.write(canonical_json(report) + b"\n")
+    return 0
+
+
+def _baseline(root: Path, events: Path, receipts: Path | None) -> int:
+    from sam_model import canonical_json
+    from sam_trace import build_baseline
+
+    report = build_baseline(root, events, receipts)
+    sys.stdout.buffer.write(canonical_json(report) + b"\n")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SE-397 Savia Architecture Model")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -107,6 +125,12 @@ def main(argv: list[str] | None = None) -> int:
     impact = _root_parser(commands, "impact", "query bounded SAM graph impact")
     impact.add_argument("--node", required=True)
     impact.add_argument("--depth", type=int, choices=(1, 2), default=2)
+    trace = _root_parser(commands, "trace", "project local operational trace events")
+    trace.add_argument("--events", type=Path, required=True)
+    trace.add_argument("--receipts", type=Path)
+    baseline = _root_parser(commands, "baseline", "aggregate local operational traces")
+    baseline.add_argument("--events", type=Path, required=True)
+    baseline.add_argument("--receipts", type=Path)
     args = parser.parse_args(argv)
     root = args.root.resolve()
     try:
@@ -116,6 +140,10 @@ def main(argv: list[str] | None = None) -> int:
             return _check(root)
         if args.command == "impact":
             return _impact(root, args.node, args.depth)
+        if args.command == "trace":
+            return _trace(root, args.events, args.receipts)
+        if args.command == "baseline":
+            return _baseline(root, args.events, args.receipts)
         return _query(root, args.node)
     except SamValidationError as exc:
         print(f"SAM ERROR {exc.code}: {exc.path}", file=sys.stderr)

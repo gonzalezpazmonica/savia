@@ -173,8 +173,8 @@
       "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "note": "F0 aprobado 2026-09-09; F1 mergeado en PR #1123; F2 y F3 implementados pendientes de revisión humana; contrato F4 propuesto; F5-F10 pendientes con gates de fase, sin elevar authority",
-      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; docs/specs/SE-397-f1-minimal-sam.spec.md; docs/specs/SE-397-f2-runtime-authority-model.spec.md; docs/specs/SE-397-f3-architecture-verification.spec.md; F3: 21 unit + 7 BATS verdes, PR #1125"
+      "note": "F0 aprobado 2026-09-09; F1 mergeado en PR #1123; F2, F3 y F4 implementados pendientes de revisión humana; F5-F10 pendientes con gates de fase, sin elevar authority",
+      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; docs/specs/SE-397-f1-minimal-sam.spec.md; docs/specs/SE-397-f2-runtime-authority-model.spec.md; docs/specs/SE-397-f3-architecture-verification.spec.md; docs/specs/SE-397-f4-operational-trace.spec.md; F4: 17 unit + 9 SAM BATS + 17 telemetry BATS verdes; SAM 2964 nodes; SCM 1466 resources"
     },
     {
       "id": "SE-398",

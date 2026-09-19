@@ -55,3 +55,44 @@ setup() {
   [[ "$output" == *'"depth": 1'* ]]
   [[ "$output" == *'"limitations"'* ]]
 }
+
+@test "SE-397 F4 controlled corpus executes READ, SAFE_BASH and a registered hook" {
+  events="output/.test-se397-f4-${BATS_TEST_NUMBER}.jsonl"
+  rm -f "$events"
+  before=$(git diff --no-ext-diff -- . ':!output' | sha256sum)
+
+  run bash scripts/se397-f4-corpus.sh --events "$events"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"READ_COMMAND_EXECUTED=1"* ]]
+  [[ "$output" == *"SAFE_BASH_COMMAND_EXECUTED=1"* ]]
+  [[ "$output" == *"REGISTERED_HOOK_EXECUTED=1"* ]]
+  [ -s "$events" ]
+  run python3 scripts/sam.py trace --events "$events"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"operations":2'* ]]
+  [[ "$output" == *'"complete":2'* ]]
+  [[ "$output" == *'"flow_id":"flow:read"'* ]]
+  [[ "$output" == *'"flow_id":"flow:bash"'* ]]
+  after=$(git diff --no-ext-diff -- . ':!output' | sha256sum)
+  [ "$before" = "$after" ]
+  rm -f "$events"
+}
+
+@test "SE-397 F4 controlled corpus is semantically repeatable" {
+  first="output/.test-se397-f4-repeat-a-${BATS_TEST_NUMBER}.jsonl"
+  second="output/.test-se397-f4-repeat-b-${BATS_TEST_NUMBER}.jsonl"
+  rm -f "$first" "$second"
+  bash scripts/se397-f4-corpus.sh --events "$first" >/dev/null
+  bash scripts/se397-f4-corpus.sh --events "$second" >/dev/null
+
+  first_trace=$(python3 scripts/sam.py trace --events "$first" | \
+    jq -S '(.operations[] | .duration_ms) = 0 | (.operations[].segments[] | .duration_ms) = 0')
+  second_trace=$(python3 scripts/sam.py trace --events "$second" | \
+    jq -S '(.operations[] | .duration_ms) = 0 | (.operations[].segments[] | .duration_ms) = 0')
+  [ "$first_trace" = "$second_trace" ]
+  first_revision=$(python3 scripts/sam.py baseline --events "$first" | jq -r .corpus_revision)
+  second_revision=$(python3 scripts/sam.py baseline --events "$second" | jq -r .corpus_revision)
+  [ "$first_revision" = "$second_revision" ]
+  rm -f "$first" "$second"
+}

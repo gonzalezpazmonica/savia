@@ -523,3 +523,36 @@ This correction does not add declarations, nodes, relations, authority,
 policy, observations or manual content to `.scm`; it refreshes provenance and
 the generated index only. Regeneration remains blocked until the operator
 explicitly approves the exact committed revision containing this appendix.
+
+## 18. Corrected-scope approval and implementation evidence — append only
+
+### 18.1 Operator approval
+
+- The operator explicitly approved revision `0eec646e` on 2026-09-19 for the
+  `.scm` paths enumerated in Section 17.
+- Publication, push and merge remain excluded; human code review is pending.
+
+### 18.2 TDD and implementation result
+
+- RED evidence included the absent F4 schema, incorrect nullable/hex emitter
+  typing, cross-event schema leakage, stale-source trace rejection and absent
+  controlled corpus; each behavior was made green as a vertical slice.
+- `trace` validates committed SAM structure without conflating observation
+  projection with working-tree freshness; `sam.py check` remains the separate
+  freshness gate.
+- The controlled corpus executes a real SAM READ, the registered
+  `validate-bash-global.sh` hook and a fixed SAFE_BASH command with temporary
+  outputs and no network-capable or workspace-writing command path.
+- Deterministic regeneration added only `se397-f4-corpus` to the Capability
+  Map and its capability/component nodes to SAM: 1466 resources, 2964 nodes,
+  zero removed nodes and no authority change.
+
+### 18.3 Verification result
+
+- 17/17 F4 unit tests and 21/21 F1–F3 unit tests pass.
+- 9/9 SAM BATS and 17/17 telemetry/trace BATS pass.
+- `sam.py check`, Capability Map freshness, OpenCode plan audit and roadmap
+  validation pass.
+- Local CI reports 6 passed, 0 failed and 2 advisory warnings.
+- Implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`; F5–F10 remain
+  pending and no SLO, support graduation, export or enforcement was added.

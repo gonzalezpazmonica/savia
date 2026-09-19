@@ -1,0 +1,48 @@
+[
+  {
+    "schema": "savia.event/1.0",
+    "ts": "2026-09-16T08:00:00Z",
+    "event": "operation.started",
+    "trace_id": "11111111111111111111111111111111",
+    "span_id": "aaaaaaaaaaaaaaaa",
+    "operation_id": "22222222222222222222222222222222",
+    "request_id": null,
+    "flow_id": "flow:read",
+    "model_revision": "MODEL_REVISION",
+    "frontend_id": "fixture",
+    "sequence": 0,
+    "outcome": "unknown"
+  },
+  {
+    "schema": "savia.event/1.0",
+    "ts": "2026-09-16T08:00:01Z",
+    "event": "operation.segment",
+    "trace_id": "11111111111111111111111111111111",
+    "span_id": "bbbbbbbbbbbbbbbb",
+    "operation_id": "22222222222222222222222222222222",
+    "request_id": null,
+    "flow_id": "flow:read",
+    "model_revision": "MODEL_REVISION",
+    "frontend_id": "fixture",
+    "sequence": 1,
+    "phase": "EXECUTION",
+    "architecture_node_id": "flow:read",
+    "duration_ms": 5,
+    "evidence_ref": null
+  },
+  {
+    "schema": "savia.event/1.0",
+    "ts": "2026-09-16T08:00:02Z",
+    "event": "operation.completed",
+    "trace_id": "11111111111111111111111111111111",
+    "span_id": "cccccccccccccccc",
+    "operation_id": "22222222222222222222222222222222",
+    "request_id": null,
+    "flow_id": "flow:read",
+    "model_revision": "MODEL_REVISION",
+    "frontend_id": "fixture",
+    "sequence": 2,
+    "duration_ms": 5,
+    "outcome": "success"
+  }
+]

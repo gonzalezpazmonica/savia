@@ -21,7 +21,8 @@ EVENT_NAME="${1:-}"
 shift
 
 # ── Destino ──────────────────────────────────────────────────────────────────
-OUTPUT_FILE="${SAVIA_TELEMETRY_FILE:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)/output/telemetry-events.jsonl}"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+OUTPUT_FILE="${SAVIA_TELEMETRY_FILE:-$REPO_ROOT/output/telemetry-events.jsonl}"
 mkdir -p "$(dirname "$OUTPUT_FILE")" 2>/dev/null || true
 
 # ── Timestamp ISO 8601 UTC ───────────────────────────────────────────────────
@@ -75,13 +76,31 @@ for pair in "$@"; do
   # Escape básico de comillas para valores string
   VAL_ESC="${VAL//\\/\\\\}"
   VAL_ESC="${VAL_ESC//\"/\\\"}"
-  if [[ "$VAL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+  if [[ "$VAL" == "null" && "$KEY" =~ ^(request_id|evidence_ref)$ ]]; then
+    JSON="${JSON},\"${KEY}\":null"
+  elif [[ "$KEY" =~ ^(operation_id|request_id|flow_id|model_revision|frontend_id|phase|architecture_node_id|evidence_ref|outcome)$ ]]; then
+    JSON="${JSON},\"${KEY}\":\"${VAL_ESC}\""
+  elif [[ "$VAL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
     JSON="${JSON},\"${KEY}\":${VAL}"
   else
     JSON="${JSON},\"${KEY}\":\"${VAL_ESC}\""
   fi
 done
 JSON="${JSON}}"
+
+# ── SE-397 F4: los eventos operacionales son un contrato cerrado ───────────
+case "$EVENT_NAME" in
+  operation.started|operation.segment|operation.completed)
+    if ! printf '%s' "$JSON" | PYTHONPATH="$REPO_ROOT/scripts" python3 -c '
+import json, sys
+from sam_trace import validate_operation_event
+validate_operation_event(json.load(sys.stdin))
+' >/dev/null 2>&1; then
+      echo "INVALID_OPERATION_EVENT" >&2
+      exit 2
+    fi
+    ;;
+esac
 
 # ── Append (async, nunca bloquea) ────────────────────────────────────────────
 # SE-334 S1: --fingerprint adjunta huella normalizada para agrupación de issues

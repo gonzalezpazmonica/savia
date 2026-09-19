@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-19 SE-397 F4 IMPLEMENTED_PENDING_HUMAN_REVIEW
+
+Implementado Operational Trace local y report-only: eventos cerrados,
+proyección determinista, gaps explícitos, correlación opcional de receipts y
+baseline READ/SAFE_BASH controlado. 17 unit + 26 BATS verdes; SAM/SCM frescos.
+Sin SLO, export, enforcement, instrumentación nativa ni elevación de authority.
+F5–F10 permanecen pendientes.
+
 ## 2026-09-16 SE-397 F4 PROPOSED
 
 Propuesto Operational Trace local y report-only: observaciones separadas del
