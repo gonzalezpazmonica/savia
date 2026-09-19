@@ -556,3 +556,11 @@ explicitly approves the exact committed revision containing this appendix.
 - Local CI reports 6 passed, 0 failed and 2 advisory warnings.
 - Implementation state: `IMPLEMENTED_PENDING_HUMAN_REVIEW`; F5–F10 remain
   pending and no SLO, support graduation, export or enforcement was added.
+
+## 19. Merge and F5A handoff — append only
+
+- F4 merged to `main` in PR #1127 on 2026-09-19.
+- Post-merge local evidence measured SAFE_BASH at 54 ms total, with 52 ms in
+  the registered Bash governance hook and 2 ms in fixed command execution.
+- F5A is proposed as a bounded relevance fast exit with effect parity and an
+  explicit NO_GO path; this handoff does not approve implementation.
