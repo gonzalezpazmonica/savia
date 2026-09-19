@@ -298,14 +298,14 @@ Implementation state: `PROPOSED_PENDING_EXPLICIT_APPROVAL`.
 
 ## 12. Acceptance checklist
 
-- [ ] Operator explicitly approved the exact committed F5A revision.
-- [ ] Characterization exists before the hook optimization.
-- [ ] Every prior block remains a block with the same observable reason.
-- [ ] Irrelevant commands prove the fast path without policy setup.
-- [ ] Pre/post 30-run evidence satisfies GO or records NO_GO.
-- [ ] No new false allow, authority escalation or security regression exists.
-- [ ] SAM/SCM and F1–F4 regressions remain fresh and green.
-- [ ] SE-397 remains `IMPLEMENTING`; remaining F5 work and F6–F10 stay pending.
+- [x] Operator explicitly approved the exact committed F5A revision.
+- [x] Characterization exists before the hook optimization.
+- [x] Every prior block remains a block with the same observable reason.
+- [x] Irrelevant commands prove the fast path without policy setup.
+- [x] Pre/post 30-run evidence satisfies GO or records NO_GO.
+- [x] No new false allow, authority escalation or security regression exists.
+- [x] SAM/SCM and F1–F4 regressions remain fresh and green.
+- [x] SE-397 remains `IMPLEMENTING`; remaining F5 work and F6–F10 stay pending.
 - [ ] Human code review occurs before merge.
 
 ## 13. Deferred F5 work
@@ -326,9 +326,9 @@ does not claim Hot Path Excellence complete.
 
 ### Verification protocol
 
-- [ ] The same fixture corpus produces semantic parity in both frontend-neutral invocations.
-- [ ] No settings, plugin registration or routing table changes are introduced.
-- [ ] Native frontend wall time is not inferred from the local runner.
+- [x] The same fixture corpus produces semantic parity in both frontend-neutral invocations.
+- [x] No settings, plugin registration or routing table changes are introduced.
+- [x] Native frontend wall time is not inferred from the local runner.
 
 ### Portability classification
 
@@ -345,3 +345,28 @@ does not claim Hot Path Excellence complete.
 - Approval covers the files, GO/NO_GO thresholds and authority boundary in
   this contract. It does not approve merge, publication or deferred F5 work.
 - Implementation state: `APPROVED_CHARACTERIZATION_IN_PROGRESS`.
+
+## 15. Implementation and verification evidence — append only
+
+- Characterization commit: `1d85f4bb`; optimization commit: `b3a97fd3`.
+- The registered `.opencode/hooks/validate-bash-global.sh` path resolves through
+  the repository symlink `.opencode/hooks -> ../.claude/hooks`; the tracked
+  target changed is `.claude/hooks/validate-bash-global.sh`, not an additional
+  hook or binding.
+- The immutable oracle covers 13 observable classes. Pre and post reports both
+  record `MATCH` for 13/13 cases with identical status and normalized stderr.
+- Thirty-run controlled evidence over 300 safe samples measured p50 `49 -> 6`
+  ms (87.76% improvement) and p95 `50 -> 7` ms (no regression). This is local
+  corpus evidence only, not a production or native-frontend SLO.
+- The generic hook benchmark sends empty stdin, which intentionally retains the
+  full path; its timing is not evidence for or against the safe-command exit.
+- The fast exit applies only to non-empty string commands without a closed
+  relevance token. Malformed, empty, non-string, relevant and legacy embedded
+  regex candidates retain the full environment/profile path.
+- 26/26 F5A plus legacy Bash-validator BATS, 38/38 F1–F4 unit tests and 9/9
+  SAM BATS pass. Local CI reports 6 passed, 0 failed and 2 advisory warnings.
+- Capability Map and SAM regenerate deterministically to 1467 resources and
+  2966 nodes. Settings, routing, rule regexes, timeouts and authority are
+  unchanged.
+- GO decision: accepted. Implementation state:
+  `IMPLEMENTED_PENDING_HUMAN_REVIEW`; merge and publication remain excluded.

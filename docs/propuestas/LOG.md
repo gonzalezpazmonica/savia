@@ -6,6 +6,13 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-19 SE-397 F5A IMPLEMENTED_PENDING_HUMAN_REVIEW
+
+Fast exit implementado con oracle 13/13, p50 local `49 -> 6` ms y p95
+`50 -> 7` ms. Entradas ambiguas, relevantes y coincidencias históricas
+embebidas conservan la ruta completa. 26 BATS, 38 unit y 9 SAM BATS verdes;
+sin cambios de reglas, settings, authority ni SLO. Merge pendiente de revisión.
+
 ## 2026-09-19 SE-397 F5A APPROVED
 
 Aprobada explícitamente la revisión `0024781c`. Autoriza caracterización,

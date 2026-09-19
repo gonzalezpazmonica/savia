@@ -5,8 +5,9 @@
 ## P0 — Architecture, runtime surfaces and distribution (2026-09)
 
 - **SE-397**: F0 aprobado; F1–F4 mergeados. F5A Hot-Path Relevance Fast Exit
-  aprobado en revisión `0024781c`; el resto de F5 y F6–F10 permanecen
-  pendientes y ninguna vista eleva authority.
+  implementado y pendiente de revisión humana, con paridad 13/13 y p50 local
+  `49 -> 6` ms; el resto de F5 y F6–F10 permanece pendiente y ninguna vista
+  eleva authority.
 - **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
   Ninguna surface Desktop está graduada como SUPPORTED.
 - **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.
@@ -1723,7 +1724,7 @@ SE-334 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
 
 | Spec | Prioridad | Estado | Ejecución autorizada |
 |---|---|---|---|
-| SE-397 — Savia Architecture Model | P0 | F1–F4 MERGED; F5A APPROVED | F5A revisión `0024781c`; resto de F5 y F6–F10 conserva sus gates; SE-396 mantiene prioridad |
+| SE-397 — Savia Architecture Model | P0 | F1–F4 MERGED; F5A IMPLEMENTED_PENDING_HUMAN_REVIEW | F5A revisión `0024781c`; resto de F5 y F6–F10 conserva sus gates; SE-396 mantiene prioridad |
 
 SE-397 reutiliza `.scm`, Vaults, los modelos de knowledge/dependency graph y
 los contratos SE-393–SE-396. Su entrada en el ciclo nocturno es condicional a
