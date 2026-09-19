@@ -6,6 +6,12 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-19 SE-397 F5A APPROVED
+
+Aprobada explícitamente la revisión `0024781c`. Autoriza caracterización,
+benchmark local y fast exit solo bajo paridad completa y umbrales GO/NO_GO; no
+autoriza merge, publicación, cambios de authority ni el resto de F5.
+
 ## 2026-09-19 SE-397 F5A PROPOSED
 
 Propuesto fast exit por relevancia para `validate-bash-global.sh`, condicionado

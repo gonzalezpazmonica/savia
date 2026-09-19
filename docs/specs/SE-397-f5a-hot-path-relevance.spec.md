@@ -1,7 +1,7 @@
 ---
 id: SE-397-F5A
 parent: SE-397
-status: PROPOSED
+status: APPROVED
 priority: P0
 developer_type: agent-single
 created: 2026-09-19
@@ -336,3 +336,12 @@ does not claim Hot Path Excellence complete.
 - [ ] **PURE_BASH**
 - [ ] **SINGLE_BINDING_DEFERRED**
 - [ ] **CLAUDE_CODE_ONLY**
+
+## 14. Approval record — append only
+
+- Approved revision: `0024781c`.
+- Operator approval received on 2026-09-19: “Apruebo implementar SE-397 F5A
+  revisión 0024781c”.
+- Approval covers the files, GO/NO_GO thresholds and authority boundary in
+  this contract. It does not approve merge, publication or deferred F5 work.
+- Implementation state: `APPROVED_CHARACTERIZATION_IN_PROGRESS`.

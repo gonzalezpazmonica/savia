@@ -173,7 +173,7 @@
       "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "note": "F0 aprobado 2026-09-09; F1-F4 mergeados (PRs #1123-#1125 y #1127); F5A propuesto; resto de F5 y F6-F10 pendientes con gates de fase, sin elevar authority",
+      "note": "F0 aprobado 2026-09-09; F1-F4 mergeados (PRs #1123-#1125 y #1127); F5A revisión 0024781c aprobada; resto de F5 y F6-F10 pendientes con gates de fase, sin elevar authority",
       "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; docs/specs/SE-397-f1-minimal-sam.spec.md; docs/specs/SE-397-f2-runtime-authority-model.spec.md; docs/specs/SE-397-f3-architecture-verification.spec.md; docs/specs/SE-397-f4-operational-trace.spec.md; docs/specs/SE-397-f5a-hot-path-relevance.spec.md; F4 merged PR #1127: 17 unit + 26 BATS; F5A probe: SAFE_BASH 54 ms total, governance 52 ms"
     },
     {
