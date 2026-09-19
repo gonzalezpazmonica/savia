@@ -21400,6 +21400,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/se397-f5-hot-path-bench",
+      "intents": [
+        "benchmark",
+        "controlled",
+        "effect",
+        "local",
+        "parity"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/se397-f5-hot-path-bench.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/setup-merge-drivers",
       "intents": [
         "configure",
@@ -29937,7 +29958,7 @@
       "tests": []
     }
   ],
-  "content_hash": "c2d170e8ae23",
+  "content_hash": "7524c4e4c5da",
   "deferred_kinds": [
     "rule",
     "hook"

@@ -6,6 +6,31 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-09-19 SE-397 F5A IMPLEMENTED_PENDING_HUMAN_REVIEW
+
+Fast exit implementado con oracle 13/13, p50 local `49 -> 6` ms y p95
+`50 -> 7` ms. Entradas ambiguas, relevantes y coincidencias históricas
+embebidas conservan la ruta completa. 26 BATS, 38 unit y 9 SAM BATS verdes;
+sin cambios de reglas, settings, authority ni SLO. Merge pendiente de revisión.
+
+## 2026-09-19 SE-397 F5A APPROVED
+
+Aprobada explícitamente la revisión `0024781c`. Autoriza caracterización,
+benchmark local y fast exit solo bajo paridad completa y umbrales GO/NO_GO; no
+autoriza merge, publicación, cambios de authority ni el resto de F5.
+
+## 2026-09-19 SE-397 F5A PROPOSED
+
+Propuesto fast exit por relevancia para `validate-bash-global.sh`, condicionado
+a paridad completa del corpus y mejora p50 mínima del 30%. La evidencia local
+sitúa gobernanza en 52 de 54 ms de SAFE_BASH. Sin cambio de reglas, settings,
+authority ni SLO; el resto de F5 y F6–F10 permanece pendiente.
+
+## 2026-09-19 SE-397 F4 MERGED
+
+Operational Trace integrado en `main` mediante PR #1127. SAM/SCM frescos,
+observaciones report-only y sin elevación de authority.
+
 ## 2026-09-19 SE-397 F4 IMPLEMENTED_PENDING_HUMAN_REVIEW
 
 Implementado Operational Trace local y report-only: eventos cerrados,

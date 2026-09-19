@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 638 resources
+> 639 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
@@ -487,6 +487,7 @@
 - **scrapling-fetch** (script): scrapling-fetch.sh — SE-061 Slice 2 adaptive fetch wrapper.
 - **scrapling-probe** (script): scrapling-probe.sh — SE-061 Slice 1 Scrapling viability probe.
 - **se397-f4-corpus** (script): Controlled local READ/SAFE_BASH corpus for SE-397 F4.
+- **se397-f5-hot-path-bench** (script): SE-397 F5A: controlled effect-parity and local hot-path benchmark.
 - **setup-merge-drivers** (script): setup-merge-drivers.sh — configure local git with the custom merge drivers
 - **setup-savia-dual** (script): setup-savia-dual.sh — Installer for Savia Dual (Linux/macOS)
 - **setup-savia-remote** (script): setup-savia-remote.sh — Run ONCE on the remote server as root/sudo.

@@ -1,6 +1,6 @@
 {
-  "hash": "c2d170e8ae23",
-  "total": 1466,
+  "hash": "7524c4e4c5da",
+  "total": 1467,
   "resources": [
     {
       "category": "analysis",
@@ -13835,6 +13835,20 @@
       "kind": "script",
       "path": "scripts/se397-f4-corpus.sh",
       "description": "Controlled local READ/SAFE_BASH corpus for SE-397 F4."
+    },
+    {
+      "category": "planning",
+      "name": "se397-f5-hot-path-bench",
+      "intents": [
+        "benchmark",
+        "controlled",
+        "effect",
+        "local",
+        "parity"
+      ],
+      "kind": "script",
+      "path": "scripts/se397-f5-hot-path-bench.sh",
+      "description": "SE-397 F5A: controlled effect-parity and local hot-path benchmark."
     },
     {
       "category": "planning",

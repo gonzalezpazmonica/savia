@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "normalization": "workspace-and-fixture-paths",
+  "cases": [
+    {"id": "empty_stdin", "exit": 0, "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"id": "malformed_json", "exit": 0, "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"id": "missing_command", "exit": 0, "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"id": "harmless_printf", "exit": 0, "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"id": "harmless_python", "exit": 0, "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"id": "git_status", "exit": 0, "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    {"id": "git_add_main", "exit": 2, "stderr_sha256": "6a4413e6cb0b531a285a1c4d80fe517beb8380d38238617c48464a36a1006f82"},
+    {"id": "rm_root", "exit": 2, "stderr_sha256": "41e90b6b5b93d9f3bd720c14221366dba28f7241b4cf6749c66f90366bb78ce0"},
+    {"id": "chmod_777", "exit": 2, "stderr_sha256": "aeab8bef26ad4eb72bd7c52e92634e1deac5c46d3e0d04937b75fc9c971ba0d3"},
+    {"id": "curl_bash", "exit": 2, "stderr_sha256": "04825bad2321d57589e525c4a0cb59a6b0dbe7c0b65a54019d67af7fe3170df8"},
+    {"id": "gh_approve", "exit": 2, "stderr_sha256": "48d6829242546d5519a62802d61b0444fc187bdcc9fbe27d3b47be2086b79704"},
+    {"id": "gh_admin_merge", "exit": 2, "stderr_sha256": "19b1ee9806b90dfd53af990bdf768a7c0c08f8dcb02815c7c86a37183ae9cdeb"},
+    {"id": "sudo_true", "exit": 2, "stderr_sha256": "015285fe35f18a3e212371ba7bc9edf703c510b20e95b4e627c3e6556cd4418d"}
+  ]
+}
