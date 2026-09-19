@@ -494,3 +494,32 @@ graduation belong to F5-F10 and require independent evidence and approval.
 - [ ] **SINGLE_BINDING_DEFERRED**
 
 - [ ] **CLAUDE_CODE_ONLY**
+
+## 16. Approval evidence — append only
+
+### 16.1 Operator approval of revision `823cd67b`
+
+- On 2026-09-19 the operator explicitly stated: “Acepto F3 mergeado y apruebo
+  implementar SE-397 F4 revisión 823cd67b”.
+- This satisfies both approval gates for the original Section 10 scope.
+- Publication, push, merge and any scope beyond that section remain excluded.
+
+## 17. Proposed derived-artifact scope correction — pending approval
+
+Implementation exposed a contradiction in the approved contract. The required
+`scripts/se397-f4-corpus.sh` is automatically indexed by the committed
+Capability Map, while every committed F4 source changes SAM provenance. The
+Section 11 freshness checks therefore cannot pass without regenerating derived
+artifacts that Section 10 omitted and then explicitly excluded.
+
+Proposed additional paths, generated only by existing deterministic tools:
+
+- `.scm/INDEX.scm`, `.scm/resources.json`, `.scm/registry.json` and
+  `.scm/categories/*.scm` via `generate-capability-map.py`;
+- `.scm/sam.json`, `.scm/views/*.json` and `.scm/reports/*.json` via `sam.py
+  generate` after the Capability Map is fresh.
+
+This correction does not add declarations, nodes, relations, authority,
+policy, observations or manual content to `.scm`; it refreshes provenance and
+the generated index only. Regeneration remains blocked until the operator
+explicitly approves the exact committed revision containing this appendix.
