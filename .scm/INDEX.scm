@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: bb6f954568f0 | resources: 1465
-> 295 commands · 136 skills · 89 agents · 945 scripts
+> hash: 423be7ae8a5a | resources: 1466
+> 295 commands · 136 skills · 89 agents · 946 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -1048,6 +1048,7 @@
 [planning] score-diff —  — cmd:.claude/commands/score-diff.md
 [planning] scrapling-fetch — adaptive,fetch,scrapling,slice,wrapper — script:scripts/scrapling-fetch.sh
 [planning] scrapling-probe — probe,scrapling,slice,viability — script:scripts/scrapling-probe.sh
+[planning] se397-f4-corpus — bash,controlled,corpus,local,read — script:scripts/se397-f4-corpus.sh
 [planning] setup-merge-drivers — configure,custom,drivers,local,merge — script:scripts/setup-merge-drivers.sh
 [planning] setup-savia-dual — dual,installer,linux,macos,savia — script:scripts/setup-savia-dual.sh
 [planning] setup-savia-remote — once,remote,root,savia,server — script:scripts/setup-savia-remote.sh
