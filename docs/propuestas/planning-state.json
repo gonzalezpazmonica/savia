@@ -166,7 +166,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122: base H01, integridad H03-H06/H08 y aislamiento parcial H12 mergeados. H07 implementado localmente con 26 tests Bun + 96 dual-CLI, pendiente de revisión/publicación; H02, H09-H11, cache/principal/revisión H12 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122: base H01, integridad H03-H06/H08 y aislamiento parcial H12; PR #1129: H07 mergeado. I03 deadline/cancel implementado localmente con TDD y 98 tests dual-CLI, pendiente de revisión/publicación; H02, H09-H11, cache/principal/revisión H12 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",

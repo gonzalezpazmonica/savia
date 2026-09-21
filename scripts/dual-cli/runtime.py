@@ -9,9 +9,39 @@ import secrets
 import socket
 import stat
 import struct
+import threading
 from protocol import MAX_BYTES, ProtocolError, canonical, decode_event, decode_json, identifier
 from state import Store
 from contracts import execution_request, execution_result, AdapterRegistry
+
+
+def _execute_with_deadline(adapter, request):
+    """Run once; timeout or adapter failure leaves reconciliation to a human."""
+    completed = threading.Event()
+    outcome = {}
+
+    def execute():
+        try:
+            outcome["result"] = adapter.execute(request)
+        except BaseException as error:  # worker failures must not escape untyped
+            outcome["error"] = error
+        finally:
+            completed.set()
+
+    worker = threading.Thread(target=execute, daemon=True, name="savia-adapter-execute")
+    worker.start()
+    if not completed.wait(request["deadline_ms"] / 1000):
+        def cancel():
+            try:
+                adapter.cancel(request["request_id"])
+            except BaseException:
+                pass
+
+        threading.Thread(target=cancel, daemon=True, name="savia-adapter-cancel").start()
+        raise ProtocolError("AMBIGUOUS_EXECUTION")
+    if "error" in outcome:
+        raise ProtocolError("AMBIGUOUS_EXECUTION")
+    return outcome["result"]
 
 
 class Runtime:
@@ -82,7 +112,7 @@ class Runtime:
                 sequence, decision = replay
                 decision["sequence"] = sequence
                 return decision
-            result = execution_result(adapter.execute(request))
+            result = execution_result(_execute_with_deadline(adapter, request))
             if result["request_id"] != request["request_id"]:
                 raise ProtocolError("INCONSISTENT_RESULT")
             result["sequence"] = self.store.complete(event, result, session, lease)
