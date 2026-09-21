@@ -18,7 +18,7 @@
     {
       "id": "SE-376",
       "status": "IMPLEMENTING",
-      "evidence": "PR #1082 (budget wave 0 + inventario); curation waves 1-2 pendientes",
+      "evidence": "PRs #1097 y #1100: waves 1-2 redujeron deuda 133→48; objetivo final 0 o excepciones aprobadas permanece pendiente",
       "title": "Quality Debt Burn-down"
     },
     {
@@ -30,7 +30,7 @@
     {
       "id": "SE-378",
       "status": "IMPLEMENTING",
-      "evidence": "PR en curso (planning state + CLI)",
+      "evidence": "PR #1085: planning-state canónico, CLI roadmap y vista generada mergeados; reconciliación factual continua pendiente",
       "title": "Planning State Machine",
       "approval": "Mónica 2026-09-05: 'Apruebo todas, implementa, pr y merge'"
     },
@@ -43,7 +43,7 @@
     {
       "id": "SE-380",
       "status": "IMPLEMENTING",
-      "evidence": "PR en curso (entropy v0 + usage + advisor + lifecycle)",
+      "evidence": "PR #1085: entropy v0, usage report y consolidation advisor mergeados; lifecycle completo y calibración permanecen pendientes",
       "title": "Capability Lifecycle, Usage & Complexity Budget",
       "approval": "Mónica 2026-09-05: 'Apruebo todas, implementa, pr y merge'"
     },
@@ -55,16 +55,17 @@
     },
     {
       "id": "SE-383",
-      "status": "APPROVED",
+      "status": "IMPLEMENTING",
       "approval": "Mónica 2026-09-05: 'Apruebo todas, implementa, pr y merge'",
-      "title": "Harness Adversarial / Chaos Suite"
+      "title": "Harness Adversarial / Chaos Suite",
+      "evidence": "PR #1087: runner y fixture fundador worktree-aware mergeados; matriz completa y requisito CI L3/L4 permanecen pendientes"
     },
     {
       "id": "SE-384",
-      "status": "APPROVED",
+      "status": "IMPLEMENTING",
       "approval": "Mónica 2026-09-05: 'Apruebo todas, implementa, pr y merge'",
       "title": "Savia Self-Evolution Benchmark (pilot)",
-      "evidence": "PR #1086 (runner+3 pilotos) + dataset ampliado a 20 tareas en PR en curso"
+      "evidence": "PR #1086: runner y 3 pilotos; PR #1088: dataset ampliado a 20 tareas. Baseline de ciclo completo y graduación permanecen pendientes"
     },
     {
       "id": "SE-385",
@@ -73,7 +74,7 @@
       "priority": "P1",
       "title": "LinkedIn Integration — Social Networks Agent + LinkedIn Skill",
       "note": "implementación en cola tras SE-383/384; primer paso: feasibility probe §38",
-      "evidence": "PR en curso (MVP1: agent+skill+import+digest+status+tests 4/4); feasibility GO-partial en docs/propuestas/SE-385-feasibility.md"
+      "evidence": "PR #1088: MVP1 agent+skill+import+digest+status y tests; feasibility GO-partial. OAuth/publicación y resto del lifecycle permanecen pendientes"
     },
     {
       "id": "SE-386",
@@ -82,7 +83,7 @@
       "priority": "P1",
       "title": "Constitutional Runtime Contracts (LAWS + Capability Contracts + Safety Metadata)",
       "note": "persistida 2026-09-05; renumerada de SE-265 (ocupado). Implementar F1+F2 tras aprobacion",
-      "evidence": "PR en curso (F1+F2 MVP: laws+registry+descriptors+checks)"
+      "evidence": "PR #1090: F1+F2 laws, registry, descriptors y checks mergeados; F3-F5 permanecen pendientes"
     },
     {
       "id": "SE-387",
@@ -91,7 +92,7 @@
       "priority": "P0",
       "title": "Coherence Closure Program (umbrella: gates graduation, constitutional L4, harness F2-F5, eval/debt burn-down, generated truth, entropy v1, benchmark)",
       "note": "persistida 2026-09-05; gap matrix en spec §0; implementar por frentes tras aprobacion",
-      "evidence": "A-H implementados; DoD §14: 9/11 cumplidos. Pendientes de humano: F5 diff push-pr (tier3), debt wave2 (42). Benchmark ejecutado (13 verificaciones)."
+      "evidence": "PR #1099 cerró el bloque funcional y PR #1104 reparó exactly-once; no está graduado: cierre humano, calibración y gaps residuales siguen pendientes"
     },
     {
       "id": "SE-388",
@@ -124,7 +125,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P1",
       "title": "Savia Codex Autonomy Profile",
-      "evidence": "Perfil autonomous-l2 en implementación; efectos externos y L3/L4 conservan gate humano."
+      "evidence": "PR #1108: perfil autonomous-l2 mergeado; cold-start y efectos externos/L3/L4 conservan gates y evidencia separada."
     },
     {
       "id": "SE-392",
@@ -141,7 +142,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Contratos de un harness agnóstico",
-      "evidence": "Contratos y tests locales parciales; sustitución operacional aún no graduada."
+      "evidence": "PR #1110: contratos del harness agnóstico mergeados; sustitución operacional aún no graduada."
     },
     {
       "id": "SE-394",
@@ -157,7 +158,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P1",
       "title": "Savia Vaults Adaptive Connectivity",
-      "evidence": "Research autorizado; activación y authority changes fuera de alcance."
+      "evidence": "PR #1122: aislamiento de grafo por dome mergeado; cache por principal/policy/revisión y experimento adaptativo permanecen pendientes."
     },
     {
       "id": "SE-396",
@@ -165,7 +166,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "H01/H07 e I07 parciales; H02-H12 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122: base H01, integridad H03-H06/H08 y aislamiento parcial H12 mergeados. H07 implementado localmente con 26 tests Bun + 96 dual-CLI, pendiente de revisión/publicación; H02, H09-H11, cache/principal/revisión H12 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",
@@ -173,8 +174,8 @@
       "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
       "priority": "P0",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "note": "F0 aprobado 2026-09-09; F1-F4 mergeados (PRs #1123-#1125 y #1127); F5A implementado pendiente de revisión humana; resto de F5 y F6-F10 pendientes con gates de fase, sin elevar authority",
-      "evidence": "docs/specs/SE-397-f0-architectural-reconciliation.md; docs/specs/SE-397-f1-minimal-sam.spec.md; docs/specs/SE-397-f2-runtime-authority-model.spec.md; docs/specs/SE-397-f3-architecture-verification.spec.md; docs/specs/SE-397-f4-operational-trace.spec.md; docs/specs/SE-397-f5a-hot-path-relevance.spec.md; F4 merged PR #1127; F5A revision 0024781c: parity 13/13, p50 49->6 ms, p95 50->7 ms, 26 BATS + 38 unit + 9 SAM BATS"
+      "note": "F0 aprobado; F1-F4 y F5A mergeados (PRs #1123-#1125, #1127 y #1128); resto de F5 y F6-F10 pendientes con gates de fase, sin elevar authority",
+      "evidence": "F4 PR #1127; F5A PR #1128 mergeado 2026-09-20 con CI verde, paridad 13/13, p50 49→6 ms y p95 50→7 ms. No existe review formal registrado en GitHub; no equivale a graduación operacional"
     },
     {
       "id": "SE-398",

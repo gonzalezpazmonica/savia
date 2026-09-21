@@ -22,12 +22,15 @@ No promover Codex de DEGRADED_SAFE ni superar L2 por esta spec.
 
 ## Avance implementado
 
-Esta entrega cubre únicamente la base de H01 y la ruta HTTP local de H07. El
+Las entregas acumuladas cubren la base de H01 y la ruta HTTP local de H07. El
 runtime reserva antes de invocar el adapter, reproduce eventos ya confirmados,
 conserva como ambigua una ejecución interrumpida y confirma journal/liberación
 en una sola transacción. El bridge de OpenCode ejecuta el Shield HTTP local con
 token, timeout y semántica fail-closed, incluso si se configura como asíncrono.
-Los demás hallazgos continúan abiertos; este avance no completa ni aprueba la
+La paridad restante de H07 está implementada localmente y pendiente de revisión:
+nonzero, JSON inválido, `continue:false`, `deny`/`ask` y gates de autoridad
+marcados por error como asíncronos fallan cerrados. Los demás hallazgos continúan
+abiertos; este avance no completa ni aprueba la
 spec, no cambia el nivel de autonomía y requiere los gates y revisión habituales.
 
 Mejoras existentes que se conservan: puertos de adapter, filtrado de proveedor
@@ -113,3 +116,17 @@ con una primitiva común y limita los contadores a `input_tokens/output_tokens`.
 Evidencia: regresiones públicas para enums no escalares y extensiones namespaced;
 12 tests de contrato y 83 tests del dual CLI correctos. No se modifican formatos,
 autoridad, adapters ni efectos externos.
+
+## Registro de implementación H07 — 2026-09-20
+
+Estado: implementado localmente, pendiente de revisión humana y publicación.
+El bridge TypeScript normaliza la salida de hooks con la misma postura
+fail-closed que `scripts/dual-cli/policy.py`: cualquier exit no cero, JSON no
+vacío malformado, tipos inválidos, `continue:false`, `decision:block` y
+`permissionDecision:deny/ask` bloquean. Los eventos de autoridad `PreToolUse` y
+`PermissionRequest` no pueden degradarse a fire-and-forget mediante `async:true`;
+los eventos posteriores y de telemetría conservan su asincronía explícita.
+
+Evidencia local: 26 tests Bun del plugin y 96 tests Python del dual CLI. Esta
+evidencia es de regresión local, no acredita revisión E1, CI ni graduación
+operacional.

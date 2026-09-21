@@ -29,12 +29,12 @@ async function listen(
   return { server, url: `http://127.0.0.1:${address.port}/gate` }
 }
 
-async function projectWithHook(hook: Record<string, unknown>): Promise<string> {
+async function projectWithHook(hook: Record<string, unknown>, eventName = "PreToolUse"): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "savia-http-gate-test-"))
   roots.push(root)
   await mkdir(join(root, ".claude"))
   await writeFile(join(root, ".claude", "settings.json"), JSON.stringify({
-    hooks: { PreToolUse: [{ matcher: "Edit|Write", hooks: [hook] }] },
+    hooks: { [eventName]: [{ matcher: "Edit|Write", hooks: [hook] }] },
   }))
   return root
 }
@@ -49,18 +49,22 @@ function httpHook(url: string, tokenEnv: string, timeout = 1): Record<string, un
   }
 }
 
-async function run(root: string) {
+async function runEvent(root: string, eventName = "PreToolUse") {
   const hookMap = await loadHookMap(root)
   const payload = JSON.stringify({
-    hook_event_name: "PreToolUse",
+    hook_event_name: eventName,
     tool_name: "Edit",
     tool_input: { file_path: "src/example.ts", new_string: "safe content" },
   })
   return {
     hookMap,
     payload,
-    result: await runHooksForEvent(root, hookMap, "PreToolUse", "Edit", payload),
+    result: await runHooksForEvent(root, hookMap, eventName, "Edit", payload),
   }
+}
+
+async function run(root: string) {
+  return runEvent(root)
 }
 
 function token(name: string): string {
@@ -258,4 +262,91 @@ test("command hook hard-block exit regression blocks", async () => {
   const root = await projectWithHook({ type: "command", command: "exit 2" })
 
   expect((await run(root)).result.blocked).toBe(true)
+})
+
+test("command hook any nonzero exit blocks", async () => {
+  const root = await projectWithHook({ type: "command", command: "exit 1" })
+
+  expect((await run(root)).result).toMatchObject({ blocked: true, stderr: "HOOK_EXIT_1" })
+})
+
+test("command hook malformed nonempty JSON blocks", async () => {
+  const root = await projectWithHook({ type: "command", command: "printf 'not-json'" })
+
+  expect((await run(root)).result).toMatchObject({ blocked: true, stderr: "INVALID_HOOK_OUTPUT" })
+})
+
+for (const output of [
+  { continue: false },
+  { hookSpecificOutput: { permissionDecision: "deny" } },
+  { hookSpecificOutput: { permissionDecision: "ask" } },
+]) {
+  test(`command hook policy denial blocks: ${JSON.stringify(output)}`, async () => {
+    const root = await projectWithHook({
+      type: "command",
+      command: `printf '%s' '${JSON.stringify(output)}'`,
+    })
+
+    expect((await run(root)).result.blocked).toBe(true)
+  })
+}
+
+test("command hook invalid policy types block", async () => {
+  const root = await projectWithHook({
+    type: "command",
+    command: `printf '%s' '{"continue":"false"}'`,
+  })
+
+  expect((await run(root)).result).toMatchObject({ blocked: true, stderr: "INVALID_HOOK_OUTPUT" })
+})
+
+test("command hook canonical allow preserves context and input mutation", async () => {
+  const output = {
+    continue: true,
+    decision: "approve",
+    hookSpecificOutput: {
+      permissionDecision: "allow",
+      additionalContext: "verified locally",
+      updatedInput: { file: "safe.ts" },
+    },
+  }
+  const root = await projectWithHook({
+    type: "command",
+    command: `printf '%s' '${JSON.stringify(output)}'`,
+  })
+
+  expect((await run(root)).result).toMatchObject({
+    blocked: false,
+    injectedContext: "verified locally",
+    mutatedArgs: { file: "safe.ts" },
+  })
+})
+
+test("PreToolUse gate cannot be downgraded to fire-and-forget", async () => {
+  const root = await projectWithHook({ type: "command", command: "exit 2", async: true })
+
+  const { hookMap, result } = await run(root)
+
+  expect(hookMap.PreToolUse[0].async).toBe(false)
+  expect(result.blocked).toBe(true)
+})
+
+test("PermissionRequest gate cannot be downgraded to fire-and-forget", async () => {
+  const root = await projectWithHook(
+    { type: "command", command: "exit 2", async: true },
+    "PermissionRequest",
+  )
+
+  const { hookMap, result } = await runEvent(root, "PermissionRequest")
+
+  expect(hookMap.PermissionRequest[0].async).toBe(false)
+  expect(result.blocked).toBe(true)
+})
+
+test("non-authority command hook preserves explicit fire-and-forget", async () => {
+  const root = await projectWithHook({ type: "command", command: "exit 2", async: true }, "PostToolUse")
+
+  const hookMap = await loadHookMap(root)
+
+  expect(hookMap.PostToolUse[0].async).toBe(true)
 })

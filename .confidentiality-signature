@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=7b696fff467f2f94d9a9f8e841abb02a7e74489bbae53b8a963a3d631dc4729e
-timestamp=2026-09-19T21:52:01Z
-branch=agent/se397-f5-hot-path-20260919
-head_commit=21dfc276
-signature=9f7c58bcb4cfb1882f056213096f1eea805ace9439d890855ac25b90ee4b3b63
+diff_hash=a94015eae8449829ea0124414468dc2e0d38d04f58a59a9bca72f9f883b18281
+timestamp=2026-09-21T09:54:52Z
+branch=agent/se396-h07-hook-parity-20260921
+head_commit=1f29e571
+signature=cd6545a5574dd843a1b26815dae55dffd0d392c93858aea57d9a1207f42d3b8f
