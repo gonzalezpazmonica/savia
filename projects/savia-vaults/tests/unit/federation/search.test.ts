@@ -3,7 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { FederatedSearchEngine } from '../../../src/federation/search.js';
 import { FederationRegistry } from '../../../src/federation/registry.js';
 import { SearchEngine } from '../../../src/search/index.js';
-import type { FederatedSearchResult } from '../../../src/federation/types.js';
+import type { FederatedSearchContext, FederatedSearchResult } from '../../../src/federation/types.js';
+
+const context = { principalId: 'alice', policyRevision: 'p1', contentRevision: 'c1', allowedDomeIds: ['local'] };
 
 function fakeResult(path: string, snippet: string, source: string = 'local'): FederatedSearchResult {
   let hash = 0;
@@ -45,7 +47,7 @@ describe('FederatedSearchEngine — merge logic', () => {
       fakeResult('b.md', 'beta', 'local'),
     ]);
 
-    const response = await engine.search('test');
+    const response = await engine.search('test', context);
     expect(response.results.length).toBe(2);
     expect(response.results[0].source).toBe('local');
     expect(response.sources[0].id).toBe('local');
@@ -66,7 +68,7 @@ describe('FederatedSearchEngine — merge logic', () => {
 
     // Since the A2A client is real, this will try to connect and fail
     // The test verifies local results are always included
-    const response = await engine.search('test');
+    const response = await engine.search('test', context);
     expect(response.results.length).toBeGreaterThanOrEqual(1);
     expect(response.results[0].source).toBe('local');
   });
@@ -74,9 +76,69 @@ describe('FederatedSearchEngine — merge logic', () => {
   it('caches results', async () => {
     const { engine } = createEngine([fakeResult('cached.md', 'cache me')]);
 
-    await engine.search('cache query');
-    const response2 = await engine.search('cache query');
+    const response1 = await engine.search('cache query', context);
+    const response2 = await engine.search('cache query', context);
     // Second call should use cache (totalMs = 0)
     expect(response2.totalMs).toBe(0);
+    expect(response2.sources).toEqual(response1.sources);
+  });
+
+  it('enforces maxTotalResults on cache miss and hit', async () => {
+    const tmpDir = '/tmp/fake-federation-limit-test';
+    const registry = new FederationRegistry(tmpDir);
+    registry.clear();
+    const local = {
+      search: vi.fn().mockReturnValue([
+        fakeResult('a.md', 'alpha'),
+        fakeResult('b.md', 'beta'),
+        fakeResult('c.md', 'gamma'),
+      ].map(({ path, score, snippet, tags }) => ({ path, score, snippet, tags }))),
+    } as unknown as SearchEngine;
+    const engine = new FederatedSearchEngine(local, registry, { maxTotalResults: 2 });
+    expect((await engine.search('limited', context, 10)).results).toHaveLength(2);
+    expect((await engine.search('limited', context, 10)).results).toHaveLength(2);
+  });
+
+  it('rejects incomplete cache context before local search', async () => {
+    const { engine } = createEngine([fakeResult('a.md', 'alpha')]);
+    await expect(engine.search('test', { ...context, policyRevision: '' })).rejects.toThrow('policyRevision');
+    const local = (engine as unknown as { local: { search: ReturnType<typeof vi.fn> } }).local;
+    expect(local.search).not.toHaveBeenCalled();
+  });
+
+  it('does not query a remote dome outside the authorized set', async () => {
+    const { engine, registry } = createEngine([fakeResult('local.md', 'local')]);
+    registry.add({
+      id: 'secret', name: 'Secret', url: 'http://secret.invalid',
+      timeout: 5000, enabled: true, weight: 1, tags: [], status: 'healthy',
+    });
+    const remoteSearch = vi.fn().mockResolvedValue({ results: [], status: 'ok', latencyMs: 1 });
+    (engine as unknown as { client: { search: typeof remoteSearch } }).client.search = remoteSearch;
+    const response = await engine.search('test', context);
+    expect(remoteSearch).not.toHaveBeenCalled();
+    expect(response.sources.map(source => source.id)).toEqual(['local']);
+  });
+
+  it('snapshots authorization context before asynchronous remote work', async () => {
+    const { engine, registry } = createEngine([]);
+    registry.add({
+      id: 'remote', name: 'Remote', url: 'http://remote.invalid',
+      timeout: 5000, enabled: true, weight: 1, tags: [], status: 'healthy',
+    });
+    let completeFirst!: (value: { results: FederatedSearchResult[]; status: 'ok'; latencyMs: number }) => void;
+    const remoteSearch = vi.fn()
+      .mockImplementationOnce(() => new Promise(resolve => { completeFirst = resolve; }))
+      .mockResolvedValue({ results: [], status: 'ok', latencyMs: 1 });
+    (engine as unknown as { client: { search: typeof remoteSearch } }).client.search = remoteSearch;
+    const mutableContext: FederatedSearchContext = {
+      principalId: 'alice', policyRevision: 'p1', contentRevision: 'c1', allowedDomeIds: ['local', 'remote'],
+    };
+    const first = engine.search('mutable', mutableContext);
+    await vi.waitFor(() => expect(remoteSearch).toHaveBeenCalledTimes(1));
+    mutableContext.policyRevision = 'p2';
+    completeFirst({ results: [], status: 'ok', latencyMs: 1 });
+    await first;
+    await engine.search('mutable', mutableContext);
+    expect(remoteSearch).toHaveBeenCalledTimes(2);
   });
 });

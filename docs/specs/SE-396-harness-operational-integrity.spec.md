@@ -147,3 +147,19 @@ Evidencia TDD: los dos tests nuevos fallaron contra el runtime anterior (timeout
 terminaba como éxito tardío y la excepción escapaba sin normalizar) y pasan tras
 el cambio. Suite completa: 98 tests del dual CLI correctos. Evidencia local/de
 integración; no acredita graduación operacional.
+
+## Registro de implementación V02 — 2026-09-21
+
+Estado: implementado y verificado localmente, pendiente de revisión humana E1
+y publicación. Contrato ejecutable:
+`SE-396-v02-vault-cache-isolation.spec.md`.
+
+La parte restante de H12 queda reparada en la cache federada: clave aislada por
+principal, revisiones de policy/contenido, domes efectivos y límite solicitado;
+selección autorizada antes de lookup/ejecución; attribution preservada en hits;
+`maxTotalResults` aplicado como límite duro. Una revisión nueva tras revoke no
+puede reutilizar el hit anterior.
+
+Evidencia TDD: fallos reproducidos antes del cambio y 18/18 tests dirigidos tras
+él; suite SaviaVaults 349/349, typecheck/build/lint correctos. Esto completa las
+regresiones H12 previstas, no la graduación operacional de SE-396.

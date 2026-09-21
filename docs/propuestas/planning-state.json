@@ -158,7 +158,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P1",
       "title": "Savia Vaults Adaptive Connectivity",
-      "evidence": "PR #1122: aislamiento de grafo por dome mergeado; cache por principal/policy/revisión y experimento adaptativo permanecen pendientes."
+      "evidence": "PR #1122: aislamiento de grafo por dome mergeado. V02 cache por principal/policy/contenido, provenance y límites implementada localmente con 349 tests SaviaVaults; pendiente de revisión/publicación. Experimento adaptativo permanece pendiente."
     },
     {
       "id": "SE-396",
@@ -166,7 +166,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122: base H01, integridad H03-H06/H08 y aislamiento parcial H12; PR #1129: H07 mergeado. I03 deadline/cancel implementado localmente con TDD y 98 tests dual-CLI, pendiente de revisión/publicación; H02, H09-H11, cache/principal/revisión H12 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130: H01, H03-H08, I03 y aislamiento de grafo mergeados. V02 completa localmente las regresiones H12 de cache/principal/policy/contenido con 349 tests SaviaVaults; pendiente de revisión/publicación. H02, H09-H11 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",
@@ -203,6 +203,14 @@
       "title": "Model-Agnostic Savia Ablation & Minimal Sufficient Kernel",
       "note": "F0 completado y pendiente de revisión; no delete/move/deprecation/pack migration ni F1",
       "evidence": "docs/specs/SE-400-f0-model-agnostic-ablation-inventory.md"
+    },
+    {
+      "id": "SE-401",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Intent-to-Effect Execution Architecture (I2E)",
+      "note": "Prioridad arquitectónica tras cerrar integridad SE-396 y antes de expandir runtime/surfaces; requiere reconciliación SE-386/393-397/400 y frontera AEK/Savia aprobada.",
+      "evidence": "docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md"
     }
   ]
 }

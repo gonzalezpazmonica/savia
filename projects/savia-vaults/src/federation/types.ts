@@ -8,6 +8,12 @@ export interface FederationConfig {
   domes: FederatedDome[]; localTimeout: number; maxTotalResults: number;
   dedupByContent: boolean; cacheTtlMs: number;
 }
+export interface FederatedSearchContext {
+  principalId: string;
+  policyRevision: string;
+  contentRevision: string;
+  allowedDomeIds: string[];
+}
 export interface FederatedSearchResult {
   path: string; score: number; snippet: string; tags: string[];
   source: string; contentHash: string;
