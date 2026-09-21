@@ -1,6 +1,6 @@
 {
-  "hash": "7524c4e4c5da",
-  "total": 1467,
+  "hash": "d8c688e006da",
+  "total": 1468,
   "resources": [
     {
       "category": "analysis",
@@ -4351,15 +4351,15 @@
       "category": "development",
       "name": "planning-transition",
       "intents": [
-        "checkable",
-        "evidencia",
-        "implemented",
-        "implementing",
-        "machine"
+        "graduation",
+        "inspect",
+        "mutating",
+        "readiness",
+        "state"
       ],
       "kind": "script",
       "path": "scripts/planning-transition.sh",
-      "description": "SE-387 F — Transición IMPLEMENTING->IMPLEMENTED solo si evidencia machine-checkable."
+      "description": "SE-387 F / SE-396 P01 — inspect graduation readiness without mutating state."
     },
     {
       "category": "development",
@@ -11730,6 +11730,19 @@
       "kind": "script",
       "path": "scripts/lib/os-detect.sh",
       "description": "scripts/lib/os-detect.sh — Portable OS detection and path defaults"
+    },
+    {
+      "category": "planning",
+      "name": "lib/planning-completion",
+      "intents": [
+        "completion",
+        "evidence",
+        "shared",
+        "validation"
+      ],
+      "kind": "script",
+      "path": "scripts/lib/planning-completion.sh",
+      "description": "Shared completion-evidence validation for SE-396 P01."
     },
     {
       "category": "planning",

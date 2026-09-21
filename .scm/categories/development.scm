@@ -145,7 +145,7 @@
 - **pipeline-stage-runner** (script): pipeline-stage-runner.sh — Execute a single pipeline stage
 - **pipeline-status** (cmd): >
 - **pipeline-view** (cmd): ASCII table of all active pursuits with stage, value, and probability
-- **planning-transition** (script): SE-387 F — Transición IMPLEMENTING->IMPLEMENTED solo si evidencia machine-checkable.
+- **planning-transition** (script): SE-387 F / SE-396 P01 — inspect graduation readiness without mutating state.
 - **portfolio-contention** (script): portfolio-contention.sh — SPEC-SE-020 Slice 4 contention detector.
 - **portfolio-critical-path** (script): portfolio-critical-path.sh — SPEC-SE-020 Slice 3 critical path analyzer.
 - **portfolio-deps-status** (script): portfolio-deps-status.sh — SPEC-SE-020 Slice 5 project status dashboard.

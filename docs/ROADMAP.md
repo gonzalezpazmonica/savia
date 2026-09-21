@@ -7,8 +7,10 @@
 - **SE-396**: H07 e I03 mergeados en PRs #1129 y #1130. V02 completa localmente
   las regresiones H12: cache aislada por principal/policy/contenido, selección
   autorizada antes de lookup, provenance conservada y límite total duro. Pasan
-  349 tests SaviaVaults; V02 sigue pendiente de revisión/publicación. H02,
-  H09-H11 y graduación operacional continúan abiertos.
+  349 tests SaviaVaults. P01 cierra localmente la regresión H11: PR, evidencia
+  AC y revisión humana son señales separadas y un merge nunca autogradúa. V02 y
+  P01 siguen pendientes de revisión/publicación. H02, H09-H10 y graduación
+  operacional continúan abiertos.
 - **SE-397**: F0 aprobado; F1–F4 y F5A mergeados. F5A Hot-Path Relevance Fast
   Exit entró en `main` mediante PR #1128 con CI verde, paridad 13/13 y p50
   local `49 -> 6` ms. GitHub no registra review formal: el merge no equivale a

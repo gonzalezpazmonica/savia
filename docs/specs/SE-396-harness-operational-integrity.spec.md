@@ -163,3 +163,20 @@ puede reutilizar el hit anterior.
 Evidencia TDD: fallos reproducidos antes del cambio y 18/18 tests dirigidos tras
 él; suite SaviaVaults 349/349, typecheck/build/lint correctos. Esto completa las
 regresiones H12 previstas, no la graduación operacional de SE-396.
+
+## Registro de implementación P01/H11 — 2026-09-21
+
+Estado: implementado y verificado localmente, pendiente de revisión humana E1
+y publicación. Contrato ejecutable:
+`SE-396-p01-planning-integrity.spec.md`.
+
+El estado canónico conserva una única autoridad (`planning-state.json`) y fija
+una frontera de migración. Los cierres gobernados requieren PR estructurado,
+mapa criterio→evidencia repo-relative existente y revisión humana aprobada.
+`planning-transition.sh` sólo puede devolver `NEEDS_HUMAN_REVIEW`; no muta ni
+gradúa una iniciativa al encontrar un merge. El texto narrativo deja de actuar
+como autoridad de cierre.
+
+Evidencia TDD: 8 fallos esperados contra el comportamiento anterior y 22/22
+tests dirigidos tras el cambio. El estado real valida y SE-396 permanece
+`IMPLEMENTING`; P01 no implica graduación del umbrella.

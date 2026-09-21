@@ -8,10 +8,17 @@ setup() {
   FIXTURE="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$FIXTURE/docs/propuestas" "$FIXTURE/docs/specs"
   cat > "$FIXTURE/docs/propuestas/planning-state.json" <<'JSON'
-{"version":1,"tracked_spec_floor":375,"initiatives":[
+{"version":2,"tracked_spec_floor":375,"completion_contract_floor":396,"initiatives":[
   {"id":"SE-375","status":"APPROVED","approval":"human approval"}
 ]}
 JSON
+  git -C "$FIXTURE" init -q
+  git -C "$FIXTURE" config user.email test@example.invalid
+  git -C "$FIXTURE" config user.name "Planning Test"
+  git -C "$FIXTURE" add .
+  git -C "$FIXTURE" commit -qm 'baseline'
+  git -C "$FIXTURE" commit --allow-empty -qm 'feat: implementation (#42)'
+  git -C "$FIXTURE" update-ref refs/remotes/origin/main HEAD
 }
 
 @test "roadmap validator exists and is executable" {
@@ -96,4 +103,14 @@ JSON
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL: APPROVED sin aprobación registrada: SE-375"* ]]
+}
+
+@test "validate rejects missing completion contract floor" {
+  jq 'del(.completion_contract_floor)' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FAIL: completion_contract_floor ausente o inválido"* ]]
 }

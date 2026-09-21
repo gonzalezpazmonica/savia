@@ -6,7 +6,9 @@
 set -uo pipefail
 ROOT="${REPO_ROOT:-$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)}"
 STATE="$ROOT/docs/propuestas/planning-state.json"
+MAIN_REF="${PLANNING_MAIN_REF:-origin/main}"
 [[ -f "$STATE" ]] || { echo "ERROR: falta $STATE" >&2; exit 1; }
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/planning-completion.sh"
 CMD="${1:-current}"
 
 case "$CMD" in
@@ -40,6 +42,31 @@ case "$CMD" in
     # 4. APPROVED requiere aprobación
     NOAP=$(jq -r '.initiatives[] | select(.status=="APPROVED") | select((.approval // "") == "") | .id' "$STATE")
     [[ -n "$NOAP" ]] && { echo "FAIL: APPROVED sin aprobación registrada: $NOAP"; ERR=1; }
+    # 4b. Nuevos cierres requieren PR estructurado, evidencia AC y revisión humana.
+    COMPLETION_FLOOR=$(jq -r '.completion_contract_floor // empty' "$STATE")
+    if ! [[ "$COMPLETION_FLOOR" =~ ^[0-9]+$ ]]; then
+      echo "FAIL: completion_contract_floor ausente o inválido"
+      ERR=1
+    else
+      while IFS= read -r ID; do
+        NUM=${ID#SE-}
+        (( 10#$NUM < COMPLETION_FLOOR )) && continue
+        COMPLETION=$(jq -c --arg id "$ID" '.initiatives[] | select(.id==$id) | .completion // null' "$STATE")
+        if ! planning_acceptance_evidence_valid "$ROOT" "$COMPLETION"; then
+          echo "FAIL: evidencia AC inválida para $ID"
+          ERR=1
+        fi
+        PR=$(jq -r '.merge_pr // empty' <<<"$COMPLETION")
+        if [[ -z "$PR" ]] || ! planning_pr_merged "$ROOT" "$MAIN_REF" "$PR"; then
+          echo "FAIL: IMPLEMENTED sin PR mergeado verificable: $ID"
+          ERR=1
+        fi
+        if ! planning_human_review_approved "$COMPLETION"; then
+          echo "FAIL: IMPLEMENTED sin revisión humana aprobada: $ID"
+          ERR=1
+        fi
+      done < <(jq -r '.initiatives[] | select(.status=="IMPLEMENTED") | .id | select(test("^SE-[0-9]+$"))' "$STATE")
+    fi
     # 5. Cobertura explícita del registro para la era canónica.
     FLOOR=$(jq -r '.tracked_spec_floor // empty' "$STATE")
     if ! [[ "$FLOOR" =~ ^[0-9]+$ ]]; then

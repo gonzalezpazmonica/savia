@@ -6744,11 +6744,11 @@
       ],
       "id": "script:scripts/planning-transition",
       "intents": [
-        "checkable",
-        "evidencia",
-        "implemented",
-        "implementing",
-        "machine"
+        "graduation",
+        "inspect",
+        "mutating",
+        "readiness",
+        "state"
       ],
       "kind": "script",
       "owner_domain": "development",
@@ -18105,6 +18105,26 @@
       "replaced_by": null,
       "risk_level": null,
       "source": "scripts/lib/os-detect.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
+      "id": "script:scripts/lib/planning-completion",
+      "intents": [
+        "completion",
+        "evidence",
+        "shared",
+        "validation"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/lib/planning-completion.sh",
       "status": "active",
       "tests": []
     },
@@ -29958,7 +29978,7 @@
       "tests": []
     }
   ],
-  "content_hash": "7524c4e4c5da",
+  "content_hash": "d8c688e006da",
   "deferred_kinds": [
     "rule",
     "hook"
