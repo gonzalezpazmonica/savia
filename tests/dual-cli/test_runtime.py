@@ -208,6 +208,95 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(outcomes[0]["state"], "succeeded")
         self.assertEqual(store.status()["reservations"], 0)
 
+    def test_deadline_requests_cancel_and_late_result_stays_ambiguous(self):
+        entered = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        cancelled = threading.Event()
+
+        class SlowAdapter(FixtureAdapter):
+            execute_count = 0
+            cancel_count = 0
+
+            def execute(self, request):
+                self.execute_count += 1
+                entered.set()
+                release.wait(timeout=5)
+                finished.set()
+                return super().execute(request)
+
+            def cancel(self, request_id):
+                self.cancel_count += 1
+                cancelled.set()
+                return super().cancel(request_id)
+
+        store = Store(self.root / "deadline.db", "repo")
+        store.publish("r1", expected=None)
+        adapter = SlowAdapter()
+        runtime = Runtime(store, [adapter])
+        hello = runtime.handle({"op":"hello","session_id":"direct"})
+        runtime.handle({"op":"ack","session_id":"direct",
+                        "session_token":hello["session_token"],"revision":"r1"})
+        request = {"request_id":"req","capability_id":"local","context_ref":"ctx",
+                   "scope_ref":"scope","input_ref":"input","required_capabilities":[],
+                   "deadline_ms":20,"external_effect_intent":False}
+        event = dict(version=1, repo_id="repo", frontend="codex", session_id="direct",
+                     actor_id="test", event_id="deadline", call_id="call",
+                     kind="PreToolUse", revision="r1",
+                     payload={"schema":2,"adapter_id":"fixture","request":request})
+        dispatch = {"op":"dispatch","session_id":"direct",
+                    "session_token":hello["session_token"],"event":event}
+
+        try:
+            with self.assertRaisesRegex(ProtocolError, "AMBIGUOUS_EXECUTION"):
+                runtime.handle(dispatch)
+            self.assertTrue(entered.is_set())
+            self.assertTrue(cancelled.wait(timeout=1), "cancel was not requested")
+            self.assertEqual(adapter.execute_count, 1)
+            self.assertEqual(adapter.cancel_count, 1)
+            self.assertEqual(store.status()["reservations"], 1)
+        finally:
+            release.set()
+        self.assertTrue(finished.wait(timeout=1), "late execution did not finish")
+        self.assertIsNone(store.prior_record(event))
+        self.assertEqual(store.status()["reservations"], 1)
+        with self.assertRaisesRegex(ProtocolError, "AMBIGUOUS_EXECUTION"):
+            Store(self.root / "deadline.db", "repo").admit(event, "direct", "r1", "call")
+        self.assertEqual(adapter.execute_count, 1)
+        self.assertEqual(adapter.cancel_count, 1)
+
+    def test_execute_exception_stays_ambiguous_and_is_not_retried(self):
+        class RaisingAdapter(FixtureAdapter):
+            count = 0
+
+            def execute(self, request):
+                self.count += 1
+                raise RuntimeError("fixture failure")
+
+        store = Store(self.root / "exception.db", "repo")
+        store.publish("r1", expected=None)
+        adapter = RaisingAdapter()
+        runtime = Runtime(store, [adapter])
+        hello = runtime.handle({"op":"hello","session_id":"direct"})
+        runtime.handle({"op":"ack","session_id":"direct",
+                        "session_token":hello["session_token"],"revision":"r1"})
+        request = {"request_id":"req","capability_id":"local","context_ref":"ctx",
+                   "scope_ref":"scope","input_ref":"input","required_capabilities":[],
+                   "deadline_ms":1000,"external_effect_intent":False}
+        event = dict(version=1, repo_id="repo", frontend="codex", session_id="direct",
+                     actor_id="test", event_id="exception", call_id="call",
+                     kind="PreToolUse", revision="r1",
+                     payload={"schema":2,"adapter_id":"fixture","request":request})
+        dispatch = {"op":"dispatch","session_id":"direct",
+                    "session_token":hello["session_token"],"event":event}
+
+        with self.assertRaisesRegex(ProtocolError, "AMBIGUOUS_EXECUTION"):
+            runtime.handle(dispatch)
+        self.assertEqual(store.status()["reservations"], 1)
+        with self.assertRaisesRegex(ProtocolError, "AMBIGUOUS_EXECUTION"):
+            runtime.handle(dispatch)
+        self.assertEqual(adapter.count, 1)
+
 
 class CrashTests(unittest.TestCase):
     def test_sigkill_retains_committed_reservation(self):

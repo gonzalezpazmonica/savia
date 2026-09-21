@@ -130,3 +130,20 @@ los eventos posteriores y de telemetría conservan su asincronía explícita.
 Evidencia local: 26 tests Bun del plugin y 96 tests Python del dual CLI. Esta
 evidencia es de regresión local, no acredita revisión E1, CI ni graduación
 operacional.
+
+## Registro de implementación I03 — 2026-09-21
+
+Estado: implementado y verificado localmente, pendiente de revisión humana E1
+y publicación. Contrato ejecutable: `SE-396-i03-deadline-cancel.spec.md`.
+
+El runtime aplica `deadline_ms` como presupuesto relativo de ejecución. El
+adapter se invoca una sola vez; al vencer el plazo se solicita `cancel` en un
+worker separado sin interpretar su respuesta como prueba de cancelación. Timeout,
+excepción y resultado tardío conservan la reserva como efecto ambiguo. Un retry,
+incluso tras reabrir el store, falla antes de volver a ejecutar. La slice no añade
+una operación pública de cancelación ni promete exactly-once.
+
+Evidencia TDD: los dos tests nuevos fallaron contra el runtime anterior (timeout
+terminaba como éxito tardío y la excepción escapaba sin normalizar) y pasan tras
+el cambio. Suite completa: 98 tests del dual CLI correctos. Evidencia local/de
+integración; no acredita graduación operacional.
