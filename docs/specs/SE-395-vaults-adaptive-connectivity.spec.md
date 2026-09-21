@@ -167,3 +167,19 @@ distribuciones, receipts, tests, limitaciones y decisión humana.
 Luna ejecutará slices y gates de `SE-395-396-luna-roadmap.md`, WIP=1. Decisiones
 no determinadas, nuevo storage/cloud/LLM obligatorio, cambio de autoridad/trust,
 default-on, multihop real o efectos externos → NEEDS_HUMAN_DECISION.
+
+## Registro de implementación V02 — 2026-09-21
+
+Estado: implementado y verificado localmente, pendiente de revisión humana E1
+y publicación. Contrato ejecutable:
+`SE-396-v02-vault-cache-isolation.spec.md`.
+
+La búsqueda federada exige contexto autorizado con principal, revisiones de
+policy/contenido y domes permitidos. La selección filtra antes del cache lookup
+y de cualquier llamada remota; principal o revisión distintos producen miss.
+Hits conservan `sources` completos y `maxTotalResults` limita tanto miss como hit.
+El cambio no activa routing adaptativo ni eleva authority.
+
+Evidencia TDD: 14 fallos iniciales y un fallo adicional de selección autorizada;
+18 tests dirigidos y 349 tests SaviaVaults pasan. Typecheck, build y lint pasan.
+Evidencia local/de integración; V02 no acredita R01 ni canary de SE-395.

@@ -4,11 +4,11 @@
 
 ## P0 — Architecture, runtime surfaces and distribution (2026-09)
 
-- **SE-396**: H07 mergeado en PR #1129. I03 deadline/cancel implementado
-  localmente con 98 tests dual-CLI: timeout, excepción y resultado tardío
-  conservan una reserva ambigua y nunca provocan reejecución automática. Sigue
-  pendiente de revisión/publicación; H02, H09-H11, H12 restante y graduación
-  operacional continúan abiertos.
+- **SE-396**: H07 e I03 mergeados en PRs #1129 y #1130. V02 completa localmente
+  las regresiones H12: cache aislada por principal/policy/contenido, selección
+  autorizada antes de lookup, provenance conservada y límite total duro. Pasan
+  349 tests SaviaVaults; V02 sigue pendiente de revisión/publicación. H02,
+  H09-H11 y graduación operacional continúan abiertos.
 - **SE-397**: F0 aprobado; F1–F4 y F5A mergeados. F5A Hot-Path Relevance Fast
   Exit entró en `main` mediante PR #1128 con CI verde, paridad 13/13 y p50
   local `49 -> 6` ms. GitHub no registra review formal: el merge no equivale a
@@ -20,8 +20,15 @@
   Provisioning Core, manifests y wizard todavía no implementados.
 - **SE-400**: spec aprobada; F0 de ablación model-agnostic listo para revisión.
   No se ha retirado, movido, deprecado ni empaquetado ningún artefacto.
-- Orden: integridad SE-396 → SAM SE-397 → runtime/surface SE-398 → installer
-  SE-399; SE-400 normaliza kernel/packs/projections cuando SAM lo permita.
+- **SE-401**: I2E añadida como propuesta P0. Define Intent → Reasoning →
+  Decision → Authority → Execution → Effect → Verification → Evidence → State
+  Transition, con AEK como semántica/gobernanza y Savia como runtime. Antes de
+  implementar requiere reconciliación sin duplicados y aprobar la frontera
+  AEK/Savia; el repositorio AEK no está presente en este checkout.
+- Orden: cerrar integridad SE-396 → reconciliar/aprobar SE-401 → continuar SAM
+  SE-397 y normalización SE-400 → runtime/surface SE-398 → installer SE-399.
+  SE-401 no interrumpe la revisión/publicación de slices ya terminadas; condiciona
+  nuevas expansiones de arquitectura y no eleva authority.
   Las fases posteriores conservan sus gates y no elevan authority.
 
 ---
