@@ -45,6 +45,10 @@ export interface HookResult {
   injectedContext?: string
 }
 
+function isAuthorityEvent(eventName: string): boolean {
+  return eventName === "PreToolUse" || eventName === "PermissionRequest"
+}
+
 function unsupportedHook(eventName: string, matcher: string | undefined): UnsupportedHookEntry {
   return { type: "unsupported", matcher, async: false, declared_event: eventName }
 }
@@ -118,14 +122,14 @@ export async function loadHookMap(projectRoot: string): Promise<HookMap> {
         if (h.type === "http") {
           const httpHook = loadHttpHook(h, eventName, matcher)
           if (httpHook) out[eventName].push(httpHook)
-          else if (!h.async) out[eventName].push(unsupportedHook(eventName, matcher))
+          else if (!h.async || isAuthorityEvent(eventName)) out[eventName].push(unsupportedHook(eventName, matcher))
           continue
         }
         // A configured synchronous gate must never disappear merely because
         // this adapter cannot execute its hook type.  Async hooks are
         // telemetry by contract and remain non-blocking.
         if (h.type !== "command" || typeof h.command !== "string") {
-          if (!h.async) out[eventName].push(unsupportedHook(eventName, matcher))
+          if (!h.async || isAuthorityEvent(eventName)) out[eventName].push(unsupportedHook(eventName, matcher))
           continue
         }
         const cmd = h.command
@@ -144,7 +148,9 @@ export async function loadHookMap(projectRoot: string): Promise<HookMap> {
           command: cmd,
           matcher,
           timeout: h.timeout,
-          async: h.async,
+          // An event that can authorize a tool call is a gate even if its
+          // configuration incorrectly asks for fire-and-forget execution.
+          async: isAuthorityEvent(eventName) ? false : h.async,
           declared_event: eventName,
         })
       }
@@ -502,9 +508,59 @@ export async function sweepOrphanedHooks(): Promise<{ killed: number; removed: n
   return { killed, removed }
 }
 
-// Exit code 2 == hard block (Claude Code contract). Anything else (including
-// hook crashes / timeouts) passes through — logging the cause when present.
+// Exit code 2 is Claude Code's explicit hard block. Any other nonzero exit is
+// still policy uncertainty and therefore fails closed in this adapter.
 const BLOCK_EXIT = 2
+
+function parseCommandHookOutput(stdout: string): {
+  blocked: boolean
+  reason?: string
+  mutatedArgs?: any
+  injectedContext?: string
+} {
+  if (!stdout.trim()) return { blocked: false }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stdout)
+  } catch {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  const value = parsed as Record<string, any>
+  if (value.continue !== undefined && typeof value.continue !== "boolean") {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  if (value.decision !== undefined && !["approve", "block"].includes(value.decision)) {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  const specific = value.hookSpecificOutput ?? {}
+  if (typeof specific !== "object" || specific === null || Array.isArray(specific)) {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  const permission = specific.permissionDecision
+  if (permission !== undefined && !["allow", "deny", "ask"].includes(permission)) {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  if (value.decision === "block" || value.continue === false || permission === "deny" || permission === "ask") {
+    return {
+      blocked: true,
+      reason: permission === "ask"
+        ? "HUMAN_PERMISSION_REQUIRED"
+        : String(value.reason ?? "") || "HOOK_BLOCK",
+    }
+  }
+  const context = specific.additionalContext ?? value.injectedContext
+  const mutation = specific.updatedInput ?? value.mutatedArgs
+  if (context !== undefined && typeof context !== "string") {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  if (mutation !== undefined && (typeof mutation !== "object" || mutation === null || Array.isArray(mutation))) {
+    return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
+  }
+  return { blocked: false, injectedContext: context, mutatedArgs: mutation }
+}
 
 export async function runHooksForEvent(
   projectRoot: string,
@@ -538,36 +594,20 @@ export async function runHooksForEvent(
       const { exit, stdout, stderr } = h.type === "command"
         ? await runHookOnce(projectRoot, h, payload, false)
         : await runHttpHookOnce(h, payload)
-      if (exit === BLOCK_EXIT) {
+      if (exit !== 0) {
         result.blocked = true
-        result.stderr = stderr.trim() || (h.type === "command"
-          ? `${h.command} exited ${BLOCK_EXIT}`
-          : "HTTP_GATE_BLOCK")
+        result.stderr = stderr.trim() || (h.type === "command" ? `HOOK_EXIT_${exit}` : "HTTP_GATE_BLOCK")
         return result
       }
-      // Claude Code block contract #2: exit 0 + stdout JSON `{"decision":"block"}`
-      // (used by SE-337 commit guard and the Stop gates). Parse BEFORE mutation
-      // so a block is not swallowed by the mutatedArgs/injectedContext handling.
-      let parsed: any = null
-      try {
-        parsed = JSON.parse(stdout)
-      } catch {
-        /* not JSON — ignore stdout */
-      }
-      if (parsed?.decision === "block") {
+      const decision = parseCommandHookOutput(stdout)
+      if (decision.blocked) {
         result.blocked = true
-        result.stderr = String(parsed.reason ?? "") || `${h.type === "command" ? h.command : h.url} blocked via {decision:block}`
+        result.stderr = decision.reason ?? "HOOK_BLOCK"
         await auditLog({ event: "hook-json-block", command: h.type === "command" ? h.command : h.url, reason: result.stderr })
         return result
       }
-      // If a hook prints structured JSON on stdout, treat it as arg/context mutation.
-      if (parsed) {
-        if (parsed.mutatedArgs) result.mutatedArgs = parsed.mutatedArgs
-        if (parsed.injectedContext) result.injectedContext = parsed.injectedContext
-        if (parsed?.hookSpecificOutput?.additionalContext) {
-          result.injectedContext = parsed.hookSpecificOutput.additionalContext
-        }
-      }
+      if (decision.mutatedArgs !== undefined) result.mutatedArgs = decision.mutatedArgs
+      if (decision.injectedContext !== undefined) result.injectedContext = decision.injectedContext
     } catch (err) {
       // Synchronous hook failures are policy uncertainty, not permission.
       result.blocked = true

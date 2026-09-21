@@ -294,7 +294,7 @@ artifacts are regenerated from the reverted content. Reports under
 | Agent capable | yes, serial TDD |
 | Fallback | retain report-only runner and record NO_GO |
 
-Implementation state: `PROPOSED_PENDING_EXPLICIT_APPROVAL`.
+Implementation state: `MERGED_NOT_OPERATIONALLY_GRADUATED`.
 
 ## 12. Acceptance checklist
 
@@ -370,3 +370,7 @@ does not claim Hot Path Excellence complete.
   unchanged.
 - GO decision: accepted. Implementation state:
   `IMPLEMENTED_PENDING_HUMAN_REVIEW`; merge and publication remain excluded.
+- PR #1128 merged as `ba6fc121a47b0338481779842046458865153b6c` on
+  2026-09-20 with all reported CI checks green. GitHub records no formal review;
+  therefore the unchecked human-review criterion above remains unresolved and
+  this merge is not evidence of operational graduation.

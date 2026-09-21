@@ -4,10 +4,11 @@
 
 ## P0 — Architecture, runtime surfaces and distribution (2026-09)
 
-- **SE-397**: F0 aprobado; F1–F4 mergeados. F5A Hot-Path Relevance Fast Exit
-  implementado y pendiente de revisión humana, con paridad 13/13 y p50 local
-  `49 -> 6` ms; el resto de F5 y F6–F10 permanece pendiente y ninguna vista
-  eleva authority.
+- **SE-397**: F0 aprobado; F1–F4 y F5A mergeados. F5A Hot-Path Relevance Fast
+  Exit entró en `main` mediante PR #1128 con CI verde, paridad 13/13 y p50
+  local `49 -> 6` ms. GitHub no registra review formal: el merge no equivale a
+  graduación operacional. El resto de F5 y F6–F10 permanece pendiente y
+  ninguna vista eleva authority.
 - **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
   Ninguna surface Desktop está graduada como SUPPORTED.
 - **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.
