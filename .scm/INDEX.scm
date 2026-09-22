@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: d5c5a831ed2f | resources: 1467
-> 295 commands · 136 skills · 89 agents · 947 scripts
+> hash: b65327381a60 | resources: 1468
+> 295 commands · 136 skills · 89 agents · 948 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -333,7 +333,7 @@
 [development] pipeline-stage-runner — execute,pipeline,runner,single,stage — script:scripts/pipeline-stage-runner.sh
 [development] pipeline-status —  — cmd:.claude/commands/pipeline-status.md
 [development] pipeline-view — active,ascii,probability,pursuits,stage — cmd:.claude/commands/pipeline-view.md
-[development] planning-transition — checkable,evidencia,implemented,implementing,machine — script:scripts/planning-transition.sh
+[development] planning-transition — graduation,inspect,mutating,readiness,state — script:scripts/planning-transition.sh
 [development] portfolio-contention — contention,detector,portfolio,slice,spec — script:scripts/portfolio-contention.sh
 [development] portfolio-critical-path — analyzer,critical,path,portfolio,slice — script:scripts/portfolio-critical-path.sh
 [development] portfolio-deps-status — dashboard,deps,portfolio,project,slice — script:scripts/portfolio-deps-status.sh
@@ -887,6 +887,7 @@
 [planning] lib/llm-healer — healer,slice — script:scripts/lib/llm-healer.sh
 [planning] lib/mock-env — environment,library,mock,reusable,scripts — script:scripts/lib/mock-env.sh
 [planning] lib/os-detect — defaults,detect,detection,path,portable — script:scripts/lib/os-detect.sh
+[planning] lib/planning-completion — completion,evidence,shared,validation — script:scripts/lib/planning-completion.sh
 [planning] lib/slm-common — common,helpers,shared,slice,subcommands — script:scripts/lib/slm-common.sh
 [planning] lightpanda-browser — agpl,apache,browser,casos,cero — skill:.claude/skills/lightpanda-browser/SKILL.md
 [planning] llms-txt-generate — docs,full,generate,llms — script:scripts/llms-txt-generate.sh

@@ -1,7 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "era": "Coherence Before Capability",
   "tracked_spec_floor": 375,
+  "completion_contract_floor": 396,
   "initiatives": [
     {
       "id": "SE-374",
@@ -166,7 +167,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122/#1129/#1130: H01, H03-H08, I03 y aislamiento de grafo mergeados. V02 completa localmente las regresiones H12 de cache/principal/policy/contenido con 349 tests SaviaVaults; pendiente de revisión/publicación. H02, H09-H11 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130: H01, H03-H08, I03 y aislamiento de grafo mergeados. V02 completa localmente H12 con 349 tests SaviaVaults. P01 implementa localmente H11 con evidencia AC estructurada y cierre humano separado. V02/P01 pendientes de revisión/publicación; H02, H09-H10 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",

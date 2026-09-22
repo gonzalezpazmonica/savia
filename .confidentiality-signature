@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=18ba1ee67ca749551d739ca5732ce901176d95917b484db11e273c05aa0ac5b1
-timestamp=2026-09-21T19:51:05Z
-branch=agent/se396-v02-cache-isolation-20260921
-head_commit=8c990121
-signature=aad0b8cd01561bbd9b265ad1977b57cd4e6f5ff29000f4707ecf78d31513a535
+diff_hash=f6ff8eaa509489a22114e479fdad173e891dd6de0d848cd413bd2f9b28724915
+timestamp=2026-09-22T05:39:16Z
+branch=agent/se396-p01-planning-integrity-20260921
+head_commit=c5598d00
+signature=3be56777f8d16ffda87018a1ddda1e8f80f0880f9262f9c1ba8d232fa151c2da
