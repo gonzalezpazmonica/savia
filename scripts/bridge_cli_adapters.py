@@ -120,6 +120,10 @@ class OpenCodeCliAdapter(_CliAdapter):
     adapter_id = "opencode"
     command = "opencode"
 
+    def preflight(self):
+        status = "NOT_VERIFIED" if self.binary else "UNAVAILABLE"
+        return {"status": status, "adapter_id": self.adapter_id}
+
     def start_command(self, request: BridgeRequest):
         return [self._require_binary(), "run", "--pure", "--format", "json",
                 "--dir", request.workdir, self._prompt(request)]

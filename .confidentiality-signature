@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f4aab135001e18f6cc2c498e5a484a00500ad0f681c733917cc3df0dd915c5e5
-timestamp=2026-09-22T13:06:00Z
-branch=agent/se396-a01-adapter-substitution-20260922
-head_commit=4370c2ea
-signature=5e4b002843c0b4360fb51199d309985b5958882798b1657ae7ee465a890d3efc
+diff_hash=5f36da7febae2e705fd971260de0fd81bfdc7a6a3869c5e33b0fec1d15b55f24
+timestamp=2026-09-22T20:14:47Z
+branch=agent/se396-a01b-bridge-injection-20260922
+head_commit=76365231
+signature=8f12b0d67c5fa4fe25fbffcabbdd1890a67edb8c75236a6ed40e00c7b1be8ead

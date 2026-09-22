@@ -167,7 +167,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132: H01, H03-H08, H11-H12, I03 y aislamiento de grafo mergeados. A01a implementa localmente el contrato Codex/OpenCode con 11 tests; A01b/A01c, H02, H09-H10 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133: H01, H03-H08, H11-H12, I03, aislamiento de grafo y contrato A01a mergeados. A01b integra localmente selección/inyección fail-closed con 20 tests; A01c, H02, cierre H09, H10 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",
