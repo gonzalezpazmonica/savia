@@ -180,3 +180,19 @@ como autoridad de cierre.
 Evidencia TDD: 8 fallos esperados contra el comportamiento anterior y 22/22
 tests dirigidos tras el cambio. El estado real valida y SE-396 permanece
 `IMPLEMENTING`; P01 no implica graduación del umbrella.
+
+## Registro de implementación A01a/H09 — 2026-09-22
+
+Estado: contrato y parsers implementados localmente, pendientes de revisión
+humana y publicación. Contrato ejecutable:
+`SE-396-a01-cli-adapter-substitution.spec.md`.
+
+Codex y OpenCode quedan detrás de builders explícitos sin flags de bypass ni
+autoaprobación. Codex traduce únicamente eventos observados; su `thread_id` no
+se confunde con la sesión del bridge. OpenCode conserva `NOT_VERIFIED` porque su
+sonda no produjo stream observable. A01b (inyección en bridge) y A01c
+(certificación operacional de dos adapters) permanecen abiertos.
+
+Evidencia local: 11/11 tests dirigidos. La suite dual completa fue inconclusa en
+este sandbox porque no permitió bind de sockets Unix; no se reclama sustitución
+operacional ni cierre H09.
