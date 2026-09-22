@@ -159,7 +159,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P1",
       "title": "Savia Vaults Adaptive Connectivity",
-      "evidence": "PR #1122: aislamiento de grafo por dome mergeado. V02 cache por principal/policy/contenido, provenance y límites implementada localmente con 349 tests SaviaVaults; pendiente de revisión/publicación. Experimento adaptativo permanece pendiente."
+      "evidence": "PR #1122: aislamiento de grafo por dome. PR #1131: V02 de cache por principal/policy/contenido, provenance y límites mergeada con 349 tests SaviaVaults. Experimento adaptativo permanece pendiente."
     },
     {
       "id": "SE-396",
@@ -167,7 +167,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122/#1129/#1130: H01, H03-H08, I03 y aislamiento de grafo mergeados. V02 completa localmente H12 con 349 tests SaviaVaults. P01 implementa localmente H11 con evidencia AC estructurada y cierre humano separado. V02/P01 pendientes de revisión/publicación; H02, H09-H10 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132: H01, H03-H08, H11-H12, I03 y aislamiento de grafo mergeados. A01a implementa localmente el contrato Codex/OpenCode con 11 tests; A01b/A01c, H02, H09-H10 y graduación permanecen pendientes."
     },
     {
       "id": "SE-397",

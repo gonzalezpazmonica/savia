@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f6ff8eaa509489a22114e479fdad173e891dd6de0d848cd413bd2f9b28724915
-timestamp=2026-09-22T05:39:16Z
-branch=agent/se396-p01-planning-integrity-20260921
-head_commit=c5598d00
-signature=3be56777f8d16ffda87018a1ddda1e8f80f0880f9262f9c1ba8d232fa151c2da
+diff_hash=f4aab135001e18f6cc2c498e5a484a00500ad0f681c733917cc3df0dd915c5e5
+timestamp=2026-09-22T13:06:00Z
+branch=agent/se396-a01-adapter-substitution-20260922
+head_commit=4370c2ea
+signature=5e4b002843c0b4360fb51199d309985b5958882798b1657ae7ee465a890d3efc
