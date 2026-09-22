@@ -2,7 +2,7 @@
 spec_id: SE-396-A01
 title: CLI-managed adapter substitution for Savia Bridge
 status: APPROVED
-implementation_state: A01A_IMPLEMENTED_PENDING_HUMAN_REVIEW
+implementation_state: A01B_IMPLEMENTED_PENDING_HUMAN_REVIEW
 parent: SE-396
 approval: "Inherited from SE-396 approval recorded in planning-state.json"
 date: 2026-09-22
@@ -143,3 +143,16 @@ translation. OpenCode event translation deliberately returns `NOT_VERIFIED`.
 Eleven focused tests pass without invoking a provider. The broader dual-cli suite
 could not bind Unix sockets under the current sandbox; those environment failures
 do not certify or invalidate A01a. A01b/A01c and A01/H09 closure remain open.
+
+## A01b implementation record — 2026-09-22
+
+A01a entered `main` through PR #1133. A01b adds explicit `--cli-adapter`
+selection while retaining Claude as the compatibility default. Startup preflights
+only the selected adapter; Codex can therefore start without Claude discovery.
+Non-interactive chat uses the normalized adapter stream and keeps the Codex
+thread reference separate from the bridge session ID.
+
+Unknown events, missing completion, unavailable adapters and non-zero exits do
+not emit `done`. OpenCode selection remains `NOT_VERIFIED`, and interactive
+permission relay is rejected outside Claude. Twenty focused tests pass without
+provider calls. A01c and operational closure of A01/H09 remain open.

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Savia Bridge — HTTPS Server Bridging Savia Mobile and Claude Code CLI.
+Savia Bridge — HTTPS server bridging Savia Mobile and a selected CLI adapter.
 
 Module Purpose:
     This module implements a lightweight Python HTTPS server that acts as a bridge
-    between the Savia Mobile Android app and the Claude Code CLI. It provides:
+    between the Savia Mobile Android app and a CLI-managed provider. It provides:
 
     1. HTTPS endpoints for chat, health checks, and session management
     2. Server-Sent Events (SSE) streaming of Claude responses
@@ -19,9 +19,9 @@ Architecture:
             ↓
     Savia Bridge (Python HTTPS server, this module)
             ↓ stdio pipes
-        Claude Code CLI
+        Selected CLI Adapter
             ↓
-    Claude API (api.anthropic.com)
+    Provider selected by the CLI adapter
 
 Endpoints:
     POST   /chat              Send message, receive SSE stream response
@@ -57,7 +57,7 @@ Configuration Files (created automatically):
     ~/.savia/bridge/apk/                    APK files for distribution
 
 Usage:
-    python3 savia-bridge.py [--port 8922] [--host 0.0.0.0] [--auth-token TOKEN]
+    python3 savia-bridge.py [--port 8922] [--cli-adapter claude|codex|opencode]
 
 Design Principles:
     - Zero external dependencies (stdlib only)
@@ -84,6 +84,12 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+
+from bridge_cli_adapters import (
+    AdapterContractError,
+    BridgeRequest,
+    adapter_by_id,
+)
 
 # --- Configuration ---
 
@@ -812,6 +818,40 @@ def find_claude_cli() -> str:
 
 # The main workspace directory (where the bridge was started)
 _workspace_dir = os.getcwd()
+
+# Selected provider boundary. Claude remains the compatibility default until
+# A01c proves two operational adapters.
+_selected_cli_adapter_id = "claude"
+_selected_cli_adapter = None
+_selected_cli_status = {"status": "NOT_VERIFIED", "adapter_id": "claude"}
+_adapter_native_sessions: dict[tuple[str, str], str] = {}
+_adapter_native_sessions_lock = threading.Lock()
+
+
+def configure_cli_adapter(adapter_id: str, adapter_factory=adapter_by_id) -> dict:
+    """Preflight only the explicitly selected CLI adapter."""
+    global _selected_cli_adapter_id, _selected_cli_adapter, _selected_cli_status
+    if adapter_id == "claude":
+        binary = find_claude_cli()
+        status = {"status": "AVAILABLE", "adapter_id": "claude", "binary": binary}
+        adapter = None
+    else:
+        try:
+            adapter = adapter_factory(adapter_id)
+            status = adapter.preflight()
+        except AdapterContractError as error:
+            raise RuntimeError(str(error)) from error
+        if status.get("status") != "AVAILABLE":
+            raise RuntimeError(f"{adapter_id}: {status.get('status', 'NOT_VERIFIED')}")
+    _selected_cli_adapter_id = adapter_id
+    _selected_cli_adapter = adapter
+    _selected_cli_status = status
+    return status
+
+
+def cli_adapter_supports_interactive(adapter_id: str | None = None) -> bool:
+    """Permission relay is a legacy Claude-only capability in A01b."""
+    return (adapter_id or _selected_cli_adapter_id) == "claude"
 
 
 def _get_session_workdir(session_id: str, user_slug: str = None) -> str:
@@ -1758,6 +1798,109 @@ def stream_claude_response(message: str, session_id: str = None, system_prompt: 
             session_lock.release()
             chat_log(f"[req:{request_id}] Session lock released")
 
+
+def _adapter_message(message: str, user_slug: str | None, is_new: bool) -> str:
+    """Preserve bridge identity context without leaking it into the adapter API."""
+    if user_slug:
+        profile = _get_user_profile(user_slug)
+        if profile:
+            name = profile.get("name", user_slug)
+            role = profile.get("role", "user")
+            return f"[Contexto: usuario={name} (@{user_slug}), rol={role}]\n{message}"
+    elif not is_new:
+        try:
+            profile = json.loads(PROFILE_FILE.read_text()) if PROFILE_FILE.exists() else {}
+            return f"[Contexto: usuario={profile.get('name', 'Admin')}, rol=admin]\n{message}"
+        except Exception:
+            pass
+    return message
+
+
+def stream_cli_response(message: str, session_id: str = None,
+                        system_prompt: str = None, request_id: str = "?",
+                        user_slug: str = None):
+    """Stream the selected adapter; success requires a verified done event."""
+    if _selected_cli_adapter_id == "claude":
+        yield from stream_claude_response(
+            message, session_id, system_prompt, request_id, user_slug
+        )
+        return
+    if _selected_cli_adapter is None:
+        yield {"type": "error", "text": "CLI adapter NOT_VERIFIED"}
+        return
+
+    key = (_selected_cli_adapter_id, session_id) if session_id else None
+    session_lock = _get_session_lock(session_id) if session_id else None
+    pending_native_ref = None
+    saw_done = False
+    saw_error = False
+    lock_acquired = False
+    try:
+        if session_lock:
+            session_lock.acquire()
+            lock_acquired = True
+        with _adapter_native_sessions_lock:
+            native_ref = _adapter_native_sessions.get(key) if key else None
+        # Alternative adapters operate on the bridge workspace. Claude's
+        # provider-specific isolated directory remains in the legacy path.
+        workdir = _workspace_dir
+        request = BridgeRequest(
+            message=_adapter_message(message, user_slug, native_ref is None),
+            system_prompt=system_prompt if native_ref is None else None,
+            bridge_session_id=session_id,
+            workdir=str(Path(workdir).resolve()),
+            authority_ceiling="L2",
+            request_id=request_id,
+            persistent=bool(session_id),
+        )
+        command = (_selected_cli_adapter.resume_command(request, native_ref)
+                   if native_ref else _selected_cli_adapter.start_command(request))
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            bufsize=1, cwd=workdir,
+        )
+        chat_log(f"[req:{request_id}] Adapter process started: {_selected_cli_adapter_id}")
+        for line in process.stdout:
+            try:
+                batch = _selected_cli_adapter.translate(line.strip())
+            except AdapterContractError as error:
+                saw_error = True
+                yield {"type": "error", "text": str(error)}
+                process.kill()
+                break
+            pending_native_ref = batch.native_session_ref or pending_native_ref
+            for event in batch.events:
+                if event.get("type") == "done":
+                    saw_done = True
+                elif event.get("type") == "error":
+                    saw_error = True
+                    yield event
+                else:
+                    yield event
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            saw_error = True
+            yield {"type": "error", "text": "CLI process did not exit"}
+        stderr_output = process.stderr.read().strip()
+        if process.returncode != 0 and not saw_error:
+            saw_error = True
+            yield {"type": "error", "text": stderr_output or "CLI process failed"}
+        if saw_done and not saw_error:
+            if key and pending_native_ref:
+                with _adapter_native_sessions_lock:
+                    _adapter_native_sessions[key] = pending_native_ref
+            yield {"type": "done"}
+        elif not saw_error:
+            yield {"type": "error", "text": "NOT_VERIFIED: missing completion event"}
+    except (AdapterContractError, OSError, subprocess.SubprocessError) as error:
+        yield {"type": "error", "text": str(error)}
+    finally:
+        if session_lock and lock_acquired:
+            session_lock.release()
+
 # --- HTTP Server ---
 
 class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
@@ -1887,19 +2030,19 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
 
         if parsed.path == "/health":
-            try:
-                claude_bin = find_claude_cli()
+            if _selected_cli_status.get("status") == "AVAILABLE":
                 self._send_json({
                     "status": "ok",
-                    "claude_cli": claude_bin,
+                    "cli_adapter": _selected_cli_adapter_id,
+                    "adapter_status": "AVAILABLE",
                     "version": BRIDGE_VERSION,
                     "tls": True,
                     "timestamp": datetime.now().isoformat()
                 })
-            except FileNotFoundError:
+            else:
                 self._send_json({
                     "status": "error",
-                    "message": "Claude Code CLI not found"
+                    "message": "Selected CLI adapter is not verified"
                 }, 503)
             return
 
@@ -2922,6 +3065,12 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
         session_id = data.get("session_id")
         interactive = data.get("interactive", False)  # Enable permission popups
+        if interactive and not cli_adapter_supports_interactive():
+            self._send_json({
+                "error": "Interactive permission relay is unsupported for selected adapter",
+                "status": "NOT_VERIFIED",
+            }, 501)
+            return
 
         # Build per-user system prompt with clear identity
         system_prompt = data.get("system_prompt")
@@ -2994,7 +3143,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 # Use one-shot streaming for reliability.
                 # Interactive mode (stream-json stdin/stdout) can hang
                 # when Claude CLI is slow to init or running nested.
-                stream = stream_claude_response(message, session_id, system_prompt, request_id, self._auth_user)
+                stream = stream_cli_response(message, session_id, system_prompt, request_id, self._auth_user)
 
                 for chunk in stream:
                     event_data = json.dumps(chunk)
@@ -3017,7 +3166,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             full_text = ""
             error = None
 
-            for chunk in stream_claude_response(message, session_id, system_prompt, request_id, self._auth_user):
+            for chunk in stream_cli_response(message, session_id, system_prompt, request_id, self._auth_user):
                 if chunk["type"] == "text":
                     full_text += chunk["text"]
                 elif chunk["type"] == "error":
@@ -3490,6 +3639,26 @@ class InstallHandler(http.server.BaseHTTPRequestHandler):
 
 # --- Main ---
 
+def build_argument_parser() -> argparse.ArgumentParser:
+    """Build the stable bridge CLI, including explicit provider selection."""
+    parser = argparse.ArgumentParser(
+        description=f"Savia Bridge v{BRIDGE_VERSION} — CLI-managed AI bridge"
+    )
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port (default: {DEFAULT_PORT})")
+    parser.add_argument("--host", type=str, default=DEFAULT_HOST, help=f"Host (default: {DEFAULT_HOST})")
+    parser.add_argument("--auth-token", type=str, help="Auth token (auto-generated if not set)")
+    parser.add_argument("--no-auth", action="store_true", help="Disable authentication (not recommended)")
+    parser.add_argument("--no-tls", action="store_true", help="Disable TLS (not recommended)")
+    parser.add_argument("--system-prompt", type=str, help="Default system prompt")
+    parser.add_argument("--cli-adapter", choices=("claude", "codex", "opencode"),
+                        default="claude", help="CLI adapter (default: claude)")
+    parser.add_argument("--print-token", action="store_true", help="Print the auth token and exit")
+    parser.add_argument("--print-fingerprint", action="store_true", help="Print the TLS cert fingerprint and exit")
+    parser.add_argument("--install-port", type=int, default=DEFAULT_INSTALL_PORT, help=f"HTTP port for install page (default: {DEFAULT_INSTALL_PORT})")
+    parser.add_argument("--no-install-server", action="store_true", help="Disable the HTTP install server")
+    return parser
+
+
 def main():
     """
     Main entry point for Savia Bridge server.
@@ -3503,7 +3672,8 @@ def main():
         --auth-token TOKEN       Bearer token (auto-generated if not provided)
         --no-auth                Disable authentication (not recommended)
         --no-tls                 Run over HTTP instead of HTTPS (not recommended)
-        --system-prompt PROMPT   Default system prompt for Claude messages
+        --system-prompt PROMPT   Default system prompt for messages
+        --cli-adapter NAME       Explicit CLI adapter; default: claude
         --print-token            Print auth token to stdout and exit
         --print-fingerprint      Print TLS cert SHA-256 fingerprint and exit
         --install-port PORT      HTTP port for /install page (default: 8080)
@@ -3514,7 +3684,7 @@ def main():
         2. Create configuration directories (~/.savia/bridge/, sessions/)
         3. Generate or load auth token (unless --no-auth)
         4. Generate or load TLS certificate and key (unless --no-tls)
-        5. Verify Claude Code CLI is installed
+        5. Verify only the selected CLI adapter
         6. Load user profile from ~/.savia/bridge/profile.json
         7. Start HTTPS server on specified port and host
         8. (Optionally) Start HTTP install server on port 8080
@@ -3533,7 +3703,7 @@ def main():
 
     Exit Codes:
         0: Normal exit (server stopped)
-        1: Error (missing Claude CLI, TLS error, port in use, etc.)
+        1: Error (missing/unverified adapter, TLS error, port in use, etc.)
 
     Example Usage:
         python3 savia-bridge.py                              # Default: HTTPS on 0.0.0.0:8922
@@ -3541,18 +3711,7 @@ def main():
         python3 savia-bridge.py --print-token                # Get auth token
         python3 savia-bridge.py --no-auth --no-tls          # HTTP without auth (dev only)
     """
-    parser = argparse.ArgumentParser(description=f"Savia Bridge v{BRIDGE_VERSION} — HTTPS bridge to Claude Code CLI")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port (default: {DEFAULT_PORT})")
-    parser.add_argument("--host", type=str, default=DEFAULT_HOST, help=f"Host (default: {DEFAULT_HOST})")
-    parser.add_argument("--auth-token", type=str, help="Auth token (auto-generated if not set)")
-    parser.add_argument("--no-auth", action="store_true", help="Disable authentication (not recommended)")
-    parser.add_argument("--no-tls", action="store_true", help="Disable TLS (not recommended)")
-    parser.add_argument("--system-prompt", type=str, help="Default system prompt for Claude")
-    parser.add_argument("--print-token", action="store_true", help="Print the auth token and exit")
-    parser.add_argument("--print-fingerprint", action="store_true", help="Print the TLS cert fingerprint and exit")
-    parser.add_argument("--install-port", type=int, default=DEFAULT_INSTALL_PORT, help=f"HTTP port for install page (default: {DEFAULT_INSTALL_PORT})")
-    parser.add_argument("--no-install-server", action="store_true", help="Disable the HTTP install server")
-    args = parser.parse_args()
+    args = build_argument_parser().parse_args()
 
     # Setup directories
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -3592,11 +3751,11 @@ def main():
             print("(no TLS)")
         sys.exit(0)
 
-    # Verify claude CLI
+    # Verify only the explicitly selected CLI adapter.
     try:
-        claude_bin = find_claude_cli()
-        log(f"Claude CLI found: {claude_bin}")
-    except FileNotFoundError as e:
+        adapter_status = configure_cli_adapter(args.cli_adapter)
+        log(f"CLI adapter available: {args.cli_adapter} ({adapter_status['status']})")
+    except (FileNotFoundError, RuntimeError) as e:
         log(str(e), "ERROR")
         sys.exit(1)
 
@@ -3614,7 +3773,7 @@ def main():
 
     # Start server
     # ThreadingHTTPServer: each request runs in its own thread so /chat (which
-    # blocks while Claude CLI streams) never prevents /health, /dashboard, etc.
+    # blocks while the selected CLI streams) never prevents /health, /dashboard, etc.
     server = http.server.ThreadingHTTPServer((args.host, args.port), SaviaBridgeHandler)
 
     protocol = "HTTP"

@@ -183,8 +183,7 @@ tests dirigidos tras el cambio. El estado real valida y SE-396 permanece
 
 ## Registro de implementación A01a/H09 — 2026-09-22
 
-Estado: contrato y parsers implementados localmente, pendientes de revisión
-humana y publicación. Contrato ejecutable:
+Estado: contrato y parsers mergeados mediante PR #1133. Contrato ejecutable:
 `SE-396-a01-cli-adapter-substitution.spec.md`.
 
 Codex y OpenCode quedan detrás de builders explícitos sin flags de bypass ni
@@ -193,6 +192,17 @@ se confunde con la sesión del bridge. OpenCode conserva `NOT_VERIFIED` porque s
 sonda no produjo stream observable. A01b (inyección en bridge) y A01c
 (certificación operacional de dos adapters) permanecen abiertos.
 
-Evidencia local: 11/11 tests dirigidos. La suite dual completa fue inconclusa en
+Evidencia de A01a: 11/11 tests dirigidos. La suite dual completa fue inconclusa en
 este sandbox porque no permitió bind de sockets Unix; no se reclama sustitución
 operacional ni cierre H09.
+
+## Registro de implementación A01b/H09 — 2026-09-22
+
+Estado: inyección en bridge implementada y verificada localmente, pendiente de
+revisión humana. `--cli-adapter` conserva Claude por defecto y preflights sólo el
+adapter seleccionado. Codex recorre el flujo no interactivo sin descubrir
+Claude; su referencia nativa se mantiene fuera de la sesión del bridge.
+
+OpenCode, eventos desconocidos, ausencia de completion y salidas nonzero fallan
+cerrado. El relay interactivo continúa siendo Claude-only. Evidencia local:
+20/20 tests focales sin llamadas a proveedores. A01c y cierre H09 siguen abiertos.
