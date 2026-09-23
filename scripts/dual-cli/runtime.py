@@ -45,10 +45,11 @@ def _execute_with_deadline(adapter, request):
 
 
 class Runtime:
-    def __init__(self, store, adapters=()):
+    def __init__(self, store, adapters=(), *, authority=None):
         self.store = store
         self.sessions = {}
         self.adapters = AdapterRegistry(adapters)
+        self._authority = authority
 
     def handle(self, request):
         if not isinstance(request, dict):
@@ -99,12 +100,21 @@ class Runtime:
         payload = event.get("payload")
         if isinstance(payload, dict) and payload.get("schema") == 2:
             adapter = self.adapters.get(payload.get("adapter_id"))
+            descriptor = self.adapters.descriptor(payload.get("adapter_id"))
             request = execution_request(payload.get("request"))
             if request["external_effect_intent"]:
                 raise ProtocolError("EXTERNAL_EFFECT")
-            context = {"request_id": request["request_id"], "capability_id": request["capability_id"]}
-            if adapter.preflight(context).get("ok") is not True:
+            if self._authority is None:
+                raise ProtocolError("AUTHORITY_REQUIRED")
+            context = self._authority.authorize(event, request, descriptor)
+            preflight = adapter.preflight(context)
+            if not isinstance(preflight, dict) or preflight.get("ok") is not True:
                 raise ProtocolError("UNSUPPORTED_CAPABILITY")
+            expected = {"request_id":context["request_id"],
+                        "policy_revision":context["policy_revision"],
+                        "capability_ids":context["capability_ids"]}
+            if any(preflight.get(key) != value for key, value in expected.items()):
+                raise ProtocolError("INCONSISTENT_PREFLIGHT")
             lease, replay = self.store.admit(
                 event, session, event["revision"], event["call_id"]
             )

@@ -87,10 +87,28 @@ class CliAdapterTests(unittest.TestCase):
         self.assertIn("json", cmd)
         self.assertNotIn("--auto", cmd)
 
-    def test_opencode_stream_stays_not_verified(self):
+    def test_opencode_translates_observed_jsonl(self):
         adapter = OpenCodeCliAdapter(binary="/bin/opencode")
-        with self.assertRaisesRegex(AdapterContractError, "NOT_VERIFIED"):
-            adapter.translate('{"type":"text","text":"guessed"}')
+        started = adapter.translate(
+            '{"type":"step_start","sessionID":"native-1","part":{"type":"step-start"}}'
+        )
+        self.assertEqual(started.native_session_ref, "native-1")
+        message = adapter.translate(
+            '{"type":"text","sessionID":"native-1","part":{"type":"text","text":"ok"}}'
+        )
+        self.assertEqual(message.events, ({"type":"text","text":"ok"},))
+        done = adapter.translate(
+            '{"type":"step_finish","sessionID":"native-1","part":{"type":"step-finish","reason":"stop","tokens":{"input":2,"output":1}}}'
+        )
+        self.assertEqual(done.events, ({"type":"done","usage":{"input":2,"output":1}},))
+
+    def test_malformed_or_unknown_opencode_event_never_synthesizes_success(self):
+        adapter = OpenCodeCliAdapter(binary="/bin/opencode")
+        for line in ("not-json", '{"type":"future.event"}',
+                     '{"type":"text","part":{"type":"text"}}'):
+            with self.subTest(line=line):
+                with self.assertRaises(AdapterContractError):
+                    adapter.translate(line)
 
     def test_opencode_resume_uses_native_not_bridge_session(self):
         adapter = OpenCodeCliAdapter(binary="/bin/opencode")
@@ -102,6 +120,10 @@ class CliAdapterTests(unittest.TestCase):
     def test_missing_binary_is_unavailable_not_verified(self):
         adapter = CodexCliAdapter(which=lambda _name: None)
         self.assertEqual(adapter.preflight()["status"], "UNAVAILABLE")
+
+    def test_observed_opencode_binary_is_available(self):
+        adapter = OpenCodeCliAdapter(binary="/bin/opencode")
+        self.assertEqual(adapter.preflight()["status"], "AVAILABLE")
 
 
 if __name__ == "__main__":

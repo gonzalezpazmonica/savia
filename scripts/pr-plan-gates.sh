@@ -223,8 +223,9 @@ g6b() {
   while IFS= read -r f; do
     [[ -z "$f" || ! -f "$f" ]] && continue
     local score; score=$(bash scripts/test-auditor.sh "$f" 2>/dev/null \
-      | python3 -c "import json,sys; print(json.load(sys.stdin).get('total',0))" 2>/dev/null || echo 0)
-    if [[ -n "$score" ]] && [[ "$score" -lt 80 ]]; then
+      | python3 -c "import json,sys; print(json.load(sys.stdin).get('total',0))" 2>/dev/null) || score=0
+    if [[ ! "$score" =~ ^[0-9]+$ ]]; then score=0; fi
+    if [[ "$score" -lt 80 ]]; then
       low="${low} ${f}=${score}"
     fi
   done <<< "$changed"

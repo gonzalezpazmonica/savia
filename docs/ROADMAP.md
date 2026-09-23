@@ -9,24 +9,30 @@
   autorizada antes de lookup, provenance conservada y límite total duro. Pasan
   349 tests SaviaVaults. PR #1132 cierra H11: PR, evidencia AC y revisión humana
   son señales separadas y un merge nunca autogradúa. PR #1133 incorpora A01a.
-  A01b integra localmente selección e inyección fail-closed con Claude como
-  default; A01c, H02, cierre H09, H10 y graduación continúan abiertos.
+  A01b, H02, H10 y A01c están implementados localmente: autoridad previa al
+  executor, composición aislada de dominios y sustitución operacional real
+  Codex/OpenCode con 126 tests y gate canónico 6/6. H09 queda implementado;
+  revisión humana y graduación explícita de SE-396 continúan abiertas.
 - **SE-397**: F0 aprobado; F1–F4 y F5A mergeados. F5A Hot-Path Relevance Fast
   Exit entró en `main` mediante PR #1128 con CI verde, paridad 13/13 y p50
   local `49 -> 6` ms. GitHub no registra review formal: el merge no equivale a
   graduación operacional. El resto de F5 y F6–F10 permanece pendiente y
   ninguna vista eleva authority.
 - **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
-  Ninguna surface Desktop está graduada como SUPPORTED.
+  Se absorben para F1 isolated-home, version gate, RPC humano tipado y
+  freshness sólo tras sync correcto. Ninguna surface Desktop está graduada
+  como SUPPORTED.
 - **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.
-  Provisioning Core, manifests y wizard todavía no implementados.
+  F1 incorpora transacción/compensación, ownership-aware merge y reemplazo
+  atómico. Provisioning Core, manifests y wizard todavía no implementados.
 - **SE-400**: spec aprobada; F0 de ablación model-agnostic listo para revisión.
   No se ha retirado, movido, deprecado ni empaquetado ningún artefacto.
 - **SE-401**: I2E añadida como propuesta P0. Define Intent → Reasoning →
   Decision → Authority → Execution → Effect → Verification → Evidence → State
   Transition, con AEK como semántica/gobernanza y Savia como runtime. Antes de
-  implementar requiere reconciliación sin duplicados y aprobar la frontera
-  AEK/Savia; el repositorio AEK no está presente en este checkout.
+  implementar. El mapa de no duplicación y el delta Gentle 3.5 están
+  reconciliados localmente; falta aprobar la frontera AEK/Savia contra el repo
+  canónico AEK, que no está presente en este checkout.
 - Orden: cerrar integridad SE-396 → reconciliar/aprobar SE-401 → continuar SAM
   SE-397 y normalización SE-400 → runtime/surface SE-398 → installer SE-399.
   SE-401 no interrumpe la revisión/publicación de slices ya terminadas; condiciona

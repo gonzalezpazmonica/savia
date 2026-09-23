@@ -140,6 +140,7 @@ class AdapterRegistry:
     """Explicit, inert adapter registry; all lookups fail closed."""
     def __init__(self, adapters=()):
         self._adapters = {}
+        self._descriptors = {}
         for adapter in adapters:
             self.register(adapter)
 
@@ -153,6 +154,10 @@ class AdapterRegistry:
         if descriptor["id"] in self._adapters:
             raise ProtocolError("CONFIG_CONFLICT")
         self._adapters[descriptor["id"]] = adapter
+        self._descriptors[descriptor["id"]] = {
+            "id": descriptor["id"], "version": descriptor["version"],
+            "capability_ids": tuple(descriptor["capability_ids"]),
+        }
 
     def get(self, adapter_id):
         identifier(adapter_id)
@@ -160,8 +165,75 @@ class AdapterRegistry:
             raise ProtocolError("UNKNOWN_ADAPTER")
         return self._adapters[adapter_id]
 
+    def descriptor(self, adapter_id):
+        self.get(adapter_id)
+        descriptor = self._descriptors[adapter_id]
+        return {**descriptor, "capability_ids": list(descriptor["capability_ids"])}
+
     def describe(self):
-        return [self._adapters[k].describe() for k in sorted(self._adapters)]
+        return [self.descriptor(k) for k in sorted(self._descriptors)]
+
+
+class ExecutionAuthority:
+    """Deterministic ref/capability/policy boundary for runtime dispatch."""
+    def __init__(self, references, capability_ids, policy_revision, *, domain_policy=None):
+        identifier(policy_revision)
+        capabilities = list(capability_ids)
+        _strings(capabilities)
+        self.policy_revision = policy_revision
+        self.capability_ids = frozenset(capabilities)
+        domain_policy = domain_policy or {"domain_ids":[],
+                                          "memory_namespaces":[]}
+        self.domain_policy = {
+            "domain_ids": tuple(domain_policy["domain_ids"]),
+            "memory_namespaces": tuple(domain_policy["memory_namespaces"]),
+        }
+        self.references = {}
+        fields = {"ref_id", "kind", "repo_id", "session_id",
+                  "policy_revision", "capability_ids"}
+        for raw in references:
+            reference = _object(raw, fields)
+            for key in fields - {"kind", "capability_ids"}:
+                identifier(reference[key])
+            _enum(reference["kind"], {"context", "scope", "input"})
+            _strings(reference["capability_ids"])
+            if reference["ref_id"] in self.references:
+                raise ProtocolError("CONFIG_CONFLICT")
+            self.references[reference["ref_id"]] = {
+                **reference, "capability_ids": tuple(reference["capability_ids"])
+            }
+
+    @classmethod
+    def for_domains(cls, references, capability_ids, policy_revision, packs, domain_ids):
+        from domain_packs import compose
+        policy = compose(packs, domain_ids, capability_ceiling=capability_ids)
+        return cls(references, policy["capability_ids"], policy_revision,
+                   domain_policy=policy)
+
+    def authorize(self, event, request, adapter_descriptor):
+        if event["revision"] != self.policy_revision:
+            raise ProtocolError("STALE_POLICY")
+        requested = {request["capability_id"], *request["required_capabilities"]}
+        effective = set(self.capability_ids) & set(adapter_descriptor["capability_ids"])
+        resolved = {}
+        for field, kind in (("context_ref", "context"), ("scope_ref", "scope"),
+                            ("input_ref", "input")):
+            reference = self.references.get(request[field])
+            if (reference is None or reference["kind"] != kind
+                    or reference["repo_id"] != event["repo_id"]
+                    or reference["session_id"] != event["session_id"]):
+                raise ProtocolError("UNTRUSTED_REFERENCE")
+            if reference["policy_revision"] != self.policy_revision:
+                raise ProtocolError("STALE_POLICY")
+            effective &= set(reference["capability_ids"])
+            resolved[field] = reference["ref_id"]
+        if not requested.issubset(effective):
+            raise ProtocolError("UNSUPPORTED_CAPABILITY")
+        return {"request_id":request["request_id"],
+                "policy_revision":self.policy_revision,
+                "capability_ids":sorted(requested), "resolved_refs":resolved,
+                "domain_ids":list(self.domain_policy["domain_ids"]),
+                "memory_namespaces":list(self.domain_policy["memory_namespaces"])}
 
 
 def verify_observation(value, evidence, *, expected_subject_version=None,

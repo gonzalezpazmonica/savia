@@ -120,10 +120,6 @@ class OpenCodeCliAdapter(_CliAdapter):
     adapter_id = "opencode"
     command = "opencode"
 
-    def preflight(self):
-        status = "NOT_VERIFIED" if self.binary else "UNAVAILABLE"
-        return {"status": status, "adapter_id": self.adapter_id}
-
     def start_command(self, request: BridgeRequest):
         return [self._require_binary(), "run", "--pure", "--format", "json",
                 "--dir", request.workdir, self._prompt(request)]
@@ -135,8 +131,27 @@ class OpenCodeCliAdapter(_CliAdapter):
                 "--dir", request.workdir, "--session", native_session_ref,
                 self._prompt(request)]
 
-    def translate(self, _line: str):
-        raise AdapterContractError("NOT_VERIFIED")
+    def translate(self, line: str):
+        try:
+            event = json.loads(line)
+        except (TypeError, json.JSONDecodeError) as error:
+            raise AdapterContractError("MALFORMED_EVENT") from error
+        if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+            raise AdapterContractError("MALFORMED_EVENT")
+        kind = event["type"]
+        session_ref = event.get("sessionID")
+        part = event.get("part")
+        if kind == "step_start" and isinstance(session_ref, str):
+            return TranslationBatch(native_session_ref=session_ref)
+        if kind == "text" and isinstance(part, dict) and isinstance(part.get("text"), str):
+            return TranslationBatch(({"type": "text", "text": part["text"]},))
+        if kind == "step_finish" and isinstance(part, dict):
+            if part.get("reason") != "stop" or not isinstance(part.get("tokens"), dict):
+                raise AdapterContractError("MALFORMED_EVENT")
+            return TranslationBatch(({"type": "done", "usage": part["tokens"]},))
+        if kind == "error":
+            return TranslationBatch(({"type": "error", "text": "provider error"},))
+        raise AdapterContractError("UNKNOWN_EVENT")
 
 
 def adapter_by_id(adapter_id: str, **kwargs):

@@ -2,7 +2,7 @@
 spec_id: SE-396-A01
 title: CLI-managed adapter substitution for Savia Bridge
 status: APPROVED
-implementation_state: A01B_IMPLEMENTED_PENDING_HUMAN_REVIEW
+implementation_state: A01C_IMPLEMENTED_PENDING_HUMAN_REVIEW
 parent: SE-396
 approval: "Inherited from SE-396 approval recorded in planning-state.json"
 date: 2026-09-22
@@ -21,9 +21,9 @@ remain `NOT_VERIFIED`; a fixture never certifies operational substitution.
 
 | Candidate | Local version | Observation | Classification |
 |---|---:|---|---|
-| Codex | 0.155.1 | Ephemeral read-only probe emitted `thread.started`, `turn.started`, `item.completed(agent_message)` and `turn.completed(usage)` | Start stream `VERIFIED`; operational receipt not persisted in repo |
+| Codex | 0.156.1 | Persistent L2 probe emitted the declared lifecycle, resumed the native thread and terminated under a bounded cancellation | Start, stream, persistent resume and cancel `VERIFIED` |
 | Codex resume | 0.155.1 | Resume of the ephemeral `thread_id` failed with `no rollout found` | Ephemeral resume `UNSUPPORTED`; persistent mode required |
-| OpenCode | 1.18.32 | `run --help` exposes `--format json`, `--session`, `--pure`, `--dir`; bounded probe produced no observable stream/result | Contract declared; execution `NOT_VERIFIED` |
+| OpenCode | 1.18.32 | Persistent L2 probe emitted `step_start`, `text` and `step_finish`, resumed by native session and terminated under a bounded cancellation | Start, stream, persistent resume and cancel `VERIFIED` |
 | Claude | unavailable | Existing bridge adapter calls `claude -p --output-format stream-json` directly | Legacy compatibility; current environment `NOT_VERIFIED` |
 
 No prompt, response, session identifier, credential or private path from these
@@ -62,7 +62,8 @@ as opaque diagnostics. Hidden reasoning is ignored and never used as evidence.
    unsupported resume or process failure returns `NOT_VERIFIED`/error and never a
    successful `done` event.
 4. Adapters may not add unsafe approval flags. Codex uses a declared sandbox;
-   OpenCode never adds `--auto`; Claude retains its existing permission relay.
+   OpenCode never adds `--auto` and translates only observed event shapes;
+   Claude retains its existing permission relay.
 5. Provider/model identity remains unknown unless the native stream exposes it;
    executable name or configured alias is not evidence of provider identity.
 6. Cancellation acknowledges only process termination request, not absence of an
@@ -73,9 +74,9 @@ as opaque diagnostics. Hidden reasoning is ignored and never used as evidence.
 ### A01a — Contract and parsers
 
 Add one adapter module and contract tests using captured synthetic JSON lines.
-Codex parsing is based on the verified event names above. OpenCode parsing remains
-`NOT_VERIFIED` until an observed stream is available; its parser must reject
-unknown shapes rather than guess.
+Codex parsing is based on the verified event names above. OpenCode parsing is
+fail-closed: its parser accepts only observed shapes and rejects unknown shapes
+rather than guessing.
 
 ### A01b — Bridge injection
 
@@ -97,8 +98,8 @@ no prompts, responses, credentials or native session IDs. Two independent
 - **AC-02:** Codex JSONL maps agent messages to `text`, usage completion to
   `done`, and preserves its native thread reference outside the bridge ID.
 - **AC-03:** Ephemeral Codex resume is rejected before execution as unsupported.
-- **AC-04:** Selecting OpenCode never adds `--auto`; without an observed stream
-  its operational status remains `NOT_VERIFIED`.
+- **AC-04:** Selecting OpenCode never adds `--auto`; only observed native event
+  shapes may produce normalized events and unknown shapes fail closed.
 - **AC-05:** Malformed/unknown native events emit an error and cannot synthesize
   success.
 - **AC-06:** Default selection remains Claude-compatible; explicit alternative
@@ -156,3 +157,19 @@ Unknown events, missing completion, unavailable adapters and non-zero exits do
 not emit `done`. OpenCode selection remains `NOT_VERIFIED`, and interactive
 permission relay is rejected outside Claude. Twenty focused tests pass without
 provider calls. A01c and operational closure of A01/H09 remain open.
+
+## A01c implementation record — 2026-09-23
+
+With explicit operator authority, the same non-sensitive L2 scenario was run
+through Codex 0.156.1 and OpenCode 1.18.32. Both adapters produced observable
+start/stream events, resumed a persistent native session and terminated under a
+bounded cancellation (exit 124). Cancellation was not interpreted as success or
+as proof that no external effect occurred.
+
+The OpenCode translator now recognizes only the observed `step_start`, `text`
+and `step_finish` shapes and fails closed for malformed or unknown events. The
+metadata-only receipt is stored at
+`docs/evidence/SE-396-a01c-operational-receipts.json`; prompts, responses,
+credentials, private paths and native session identifiers are not persisted.
+A01/H09 are implemented pending mandatory human review; this record does not by
+itself graduate SE-396.

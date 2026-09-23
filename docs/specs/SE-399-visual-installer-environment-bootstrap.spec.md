@@ -238,6 +238,25 @@ PATH/config global, container/WSL, project/profile destructive removal,
 credential/provider activation, UI technology ADR, supported OS/component y
 release channel mantienen sus gates explícitos. No auto-graduation.
 
+## 16.1 Absorbed provisioning delta — 2026-09-23
+
+Provisioning F1 SHALL model each mutation as prepare → verify → commit or
+compensate. A registration error must roll back both registration and any host
+file that may already have landed, including ambiguous “write succeeded then
+errored” windows. Executables are staged, provenance-verified and atomically
+renamed; destinations are never truncated in place.
+
+Configuration reconciliation is ownership-aware: an absent managed overlay
+field preserves the user's value, while explicit managed values may replace
+only fields declared in the manifest. Isolated home is the default; link mode
+requires explicit consent and must leave the linked configuration byte-stable
+unless the preview separately authorizes a change. `last_successful_sync_at`
+advances only after the entire transaction and verification succeed.
+
+F1 schemas SHALL represent minimum runtime version, owned fields, compensation,
+atomic replacement, previous successful sync and freshness. These additions do
+not authorize functional installation or global configuration changes.
+
 ## 17. Instrucción inmediata
 
 Persistir la spec y ejecutar **solo F0**. Entregar inventario de activos,
