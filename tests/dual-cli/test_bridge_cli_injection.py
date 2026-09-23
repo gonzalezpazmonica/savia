@@ -61,12 +61,13 @@ class BridgeCliInjectionTests(unittest.TestCase):
                 "codex", adapter_factory=lambda _adapter_id: adapter
             )
 
-    def test_uncertified_opencode_selection_remains_not_verified(self):
+    def test_operationally_certified_opencode_selection_is_available(self):
         adapter = OpenCodeCliAdapter(binary="/bin/opencode")
-        with self.assertRaisesRegex(RuntimeError, "NOT_VERIFIED"):
-            bridge.configure_cli_adapter(
-                "opencode", adapter_factory=lambda _adapter_id: adapter
-            )
+        result = bridge.configure_cli_adapter(
+            "opencode", adapter_factory=lambda _adapter_id: adapter
+        )
+        self.assertEqual(result["status"], "AVAILABLE")
+        self.assertEqual(bridge._selected_cli_adapter_id, "opencode")
 
     def test_parser_exposes_explicit_adapter_with_claude_default(self):
         parser = bridge.build_argument_parser()

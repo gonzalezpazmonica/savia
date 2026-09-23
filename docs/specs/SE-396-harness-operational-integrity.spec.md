@@ -206,3 +206,24 @@ Claude; su referencia nativa se mantiene fuera de la sesión del bridge.
 OpenCode, eventos desconocidos, ausencia de completion y salidas nonzero fallan
 cerrado. El relay interactivo continúa siendo Claude-only. Evidencia local:
 20/20 tests focales sin llamadas a proveedores. A01c y cierre H09 siguen abiertos.
+
+## Registro de implementación H02/H10/A01c — 2026-09-23
+
+Estado: implementado y verificado localmente, pendiente de revisión humana E1.
+H02 introduce una autoridad de ejecución determinista antes del lease y del
+adapter: resuelve referencias por tipo/repo/sesión/policy, intersecta las
+capabilities de policy, adapter y referencias, bloquea elevación y exige que el
+preflight correlacione request, revisión de policy y capabilities. Un rechazo no
+alcanza el executor.
+
+H10 añade composición ordenada de domain packs con intersección restrictiva de
+capabilities, referencias deduplicadas y namespaces explícitos. Dos dominios se
+consumen productivamente por el runtime sin fuga cruzada de reglas o memoria.
+
+A01c certifica el mismo escenario L2 de start/stream/cancel/resume persistente
+con Codex 0.156.1 y OpenCode 1.18.32. El recibo metadata-only está en
+`docs/evidence/SE-396-a01c-operational-receipts.json`; no conserva prompts,
+respuestas, credenciales, rutas privadas ni identificadores nativos. La suite
+dual-cli pasa 126/126 y el gate canónico local pasa 6/6. H02, H09 y H10 quedan
+implementados, pero SE-396 continúa `IMPLEMENTING` hasta revisión humana y
+graduación explícita.

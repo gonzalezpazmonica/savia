@@ -495,3 +495,31 @@ This proposal does not approve implementation. Before code:
 
 STOP on unresolved ownership, a second authority/policy truth, provider leakage
 into semantic contracts, an incompatible recovery model or any L4 regression.
+
+## 21. Reconciliation map and absorbed delta — 2026-09-23
+
+This section satisfies the pre-code no-duplication step; it does not approve L4
+implementation.
+
+| I2E responsibility | Reuse from | New delta | Owner candidate |
+|---|---|---|---|
+| Laws, principal, capability, policy and authority vocabulary | SE-386 and AEK | Action/effect-scoped authorization validity | AEK |
+| Adapter descriptor, execution request, lease, cancellation and observation | SE-393–396 | AuthorizedAction boundary and effect-aware receipt | Savia Runtime |
+| Runtime/surface/provider separation | SE-397/398/400 | Decision/verification provider roles without vendor primitives | Savia Runtime + SAM projection |
+| Evidence and content-bound review receipts | SE-260/387/396 | Complete I2E evidence chain and terminal transition | Savia Runtime |
+| Recovery and retries | SE-387/394/396 | Only verified checkpoints may resume; replan invalidates authority | Savia Runtime governed by AEK policy |
+| Flow composition | existing Savia Flow contracts | Verified effects/evidence on edges and scoped child intent | Savia Runtime; AEK semantics |
+
+The first executable delta SHALL also distinguish typed refusal/failure causes:
+authority refusal, provider refusal, transport failure, malformed envelope and
+inconclusive assessment cannot collapse into one generic error. Assessment
+failure is fail-closed and MUST NOT produce a low-risk decision. Review
+candidates, when used as evidence, are frozen once, corrected within an
+explicit budget and closed by a terminal receipt; this reuses SE-260 rather
+than creating a second review lifecycle.
+
+Unresolved gate: the canonical AEK repository and final ownership of
+Intent/Effect/Evidence primitives are still not available in this checkout.
+Consequently no new I2E runtime implementation begins until the operadora
+approves this ownership table against AEK. Existing SE-396 authority work is a
+reused prerequisite, not an implicit approval of SE-401.

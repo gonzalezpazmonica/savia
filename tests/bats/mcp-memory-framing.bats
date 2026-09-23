@@ -2,10 +2,16 @@
 # SE-388 B/D — framing MCP memoria: stdout solo protocolo, e2e real, drift del índice.
 W="scripts/savia-memory-mcp-stdio.sh"
 
+setup() {
+  export SAVIA_TEST_MODE=true
+  export PROJECT_ROOT="$BATS_TEST_TMPDIR/project"
+  mkdir -p "$PROJECT_ROOT/output"
+}
+
 @test "initialize responde JSON válido de UNA línea" {
   run bash -c "printf '%s\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}' | bash $W 2>/dev/null"
   [ "$status" -eq 0 ]
-  [ "$(printf '%s' "$output" | wc -l)" -eq 1 ]
+  [ "$(printf '%s\n' "$output" | jq -s 'length')" -eq 1 ]
   echo "$output" | jq -e '.result.protocolVersion' >/dev/null
 }
 

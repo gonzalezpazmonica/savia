@@ -43,6 +43,12 @@ class ContractsTests(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolError, "UNKNOWN_ADAPTER"):
             registry.get("unregistered")
 
+    def test_adapter_descriptor_snapshot_cannot_be_mutated_by_a_caller(self):
+        registry = AdapterRegistry([FixtureAdapter("one")])
+        exposed = registry.descriptor("one")
+        exposed["capability_ids"].append("admin")
+        self.assertEqual(["edit"], registry.descriptor("one")["capability_ids"])
+
     def test_observation_requires_its_subject_and_evidence(self):
         value={"capability_id":"edit","status":"verified","mechanism":"native","observed_at":"2026-09-07T00:00:00Z","environment_hash":"env","subject_version":"1","evidence_ref":"private-evidence"}
         self.assertEqual(capability_observation(value), value)

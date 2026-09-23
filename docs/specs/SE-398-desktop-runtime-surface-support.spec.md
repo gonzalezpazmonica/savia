@@ -210,6 +210,23 @@ reuse/gaps/blockers, slice F1 y decisiones humanas. No F1 hasta revisión.
 
 ## OpenCode Implementation Plan
 
+## Absorbed runtime/surface delta — 2026-09-23
+
+F1 SHALL make isolated runtime home the default projection. Linking an existing
+home is explicit, previewed and must not mutate its settings merely to launch a
+surface. Runtime discovery includes a minimum-version gate, signal/exit
+propagation and effective provider resolution from the live registry; adapter
+code must not synthesize credentials or infer provider identity from a binary.
+
+Human-question/RPC projection uses a typed, bounded contract: 1–4 questions,
+single/multi/free-text response, session and request correlation, payload-size
+limits, cancellation and a clear terminal result. It is a Human Gate transport,
+never authority by itself. Successful projection records freshness only after
+completion; failed/interrupted refresh preserves the previous successful time.
+
+These requirements extend the proposed read-only F1 schema. They do not
+authorize a Desktop adapter or change any surface support state.
+
 ### Bindings touched
 
 | Componente | Claude Code | OpenCode | Codex |

@@ -53,3 +53,31 @@ def activate(packs, ids):
             raise ProtocolError("CONFIG_CONFLICT")
         namespaces.add(pack["memory_namespace"])
     return resolved
+
+
+def compose(packs, ids, *, capability_ceiling):
+    """Compose active packs as restrictions beneath an explicit ceiling."""
+    ceiling = list(capability_ceiling)
+    for capability_id in ceiling:
+        identifier(capability_id)
+    active = activate(packs, ids)
+    effective = set(ceiling)
+    for pack in active:
+        effective &= set(pack["capability_ids"])
+
+    def ordered_unique(field):
+        seen = set()
+        values = []
+        for pack in active:
+            for value in pack[field]:
+                if value not in seen:
+                    seen.add(value)
+                    values.append(value)
+        return values
+
+    return {"domain_ids":[pack["id"] for pack in active],
+            "capability_ids":sorted(effective),
+            "rule_refs":ordered_unique("rule_refs"),
+            "context_refs":ordered_unique("context_refs"),
+            "test_refs":ordered_unique("test_refs"),
+            "memory_namespaces":[pack["memory_namespace"] for pack in active]}

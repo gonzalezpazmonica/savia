@@ -1,0 +1,31 @@
+{
+  "schema": "savia.a01c-operational-evidence/v1",
+  "observed_at": "2026-09-23T12:47:09Z",
+  "evidence_kind": "OPERATIONAL",
+  "scenario_digest": "sha256:92009589a7b16d701fed1efd141b29fb0a8236fc8a53abc813dba2d3d1a9c6bf",
+  "authority_source": "operator-express-request",
+  "content_persisted": false,
+  "native_session_ids_persisted": false,
+  "receipts": [
+    {
+      "adapter_id": "codex",
+      "adapter_version": "0.156.1",
+      "start": "VERIFIED",
+      "stream": "VERIFIED",
+      "cancel": "VERIFIED",
+      "persistent_resume": "VERIFIED",
+      "cancel_exit": 124,
+      "unsafe_approval_flags": false
+    },
+    {
+      "adapter_id": "opencode",
+      "adapter_version": "1.18.32",
+      "start": "VERIFIED",
+      "stream": "VERIFIED",
+      "cancel": "VERIFIED",
+      "persistent_resume": "VERIFIED",
+      "cancel_exit": 124,
+      "unsafe_approval_flags": false
+    }
+  ]
+}

@@ -167,7 +167,7 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133: H01, H03-H08, H11-H12, I03, aislamiento de grafo y contrato A01a mergeados. A01b integra localmente selección/inyección fail-closed con 20 tests; A01c, H02, cierre H09, H10 y graduación permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133: base mergeada. H02/H10/A01b/A01c implementados localmente con autoridad previa al executor, composición aislada y sustitución operacional Codex/OpenCode; 126 tests dual-cli y gate canónico 6/6. H09 implementado; revisión humana y graduación explícita permanecen pendientes."
     },
     {
       "id": "SE-397",
@@ -184,7 +184,7 @@
       "approval": "Operadora 2026-09-10: 'Continúa hasta terminar y luego implementa este spec'",
       "priority": "P0",
       "title": "Savia Desktop Runtime & Surface Support",
-      "note": "F0 completado y pendiente de revisión; F1-F9 bloqueadas por la instrucción inmediata de la spec",
+      "note": "F0 completado y pendiente de revisión; F1 absorbe isolated-home, version gate, RPC humano tipado y freshness post-éxito, pero F1-F9 continúan bloqueadas por revisión",
       "evidence": "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
     },
     {
@@ -193,7 +193,7 @@
       "approval": "Operadora 2026-09-10: 'Continúa hasta terminar y luego implementa este spec'",
       "priority": "P0",
       "title": "Savia Visual Installer & Environment Bootstrap",
-      "note": "F0 completado y pendiente de revisión; F1-F13 bloqueadas por la instrucción inmediata de la spec",
+      "note": "F0 completado y pendiente de revisión; F1 absorbe transacción/compensación, merge ownership-aware y reemplazo atómico, pero F1-F13 continúan bloqueadas por revisión",
       "evidence": "docs/specs/SE-399-f0-installer-discovery.md"
     },
     {
@@ -210,7 +210,7 @@
       "status": "PROPOSED",
       "priority": "P0",
       "title": "Intent-to-Effect Execution Architecture (I2E)",
-      "note": "Prioridad arquitectónica tras cerrar integridad SE-396 y antes de expandir runtime/surfaces; requiere reconciliación SE-386/393-397/400 y frontera AEK/Savia aprobada.",
+      "note": "Prioridad arquitectónica tras cerrar integridad SE-396 y antes de expandir runtime/surfaces; mapa de no duplicación reconciliado localmente, pendiente de validar y aprobar la frontera AEK/Savia contra el repositorio canónico AEK.",
       "evidence": "docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md"
     }
   ]
