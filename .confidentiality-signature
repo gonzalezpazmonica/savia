@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=033ad61140f9e883f3475a394d6587a8f4c72cb66af90c6fe7e2b4045c142f91
-timestamp=2026-09-23T13:06:13Z
+diff_hash=b36d1cf78225317af5ad459b599556215a889d80a306ddfe2391dfa624fec9ef
+timestamp=2026-09-23T13:06:51Z
 branch=agent/overnight-20260923-baseline-repair
-head_commit=0db80cff
-signature=1707c96f41bd7c88be9871b64fd93d3b6cc240cb2a56b04dd8336339dfdd08c8
+head_commit=a49676e8
+signature=50dcd5beb2232cae36dc7c2301d88a3b2e536d717f5d034a51016123729b845a
