@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=90b7f57b248f50d1ffded2d853db27b4509a70d847dc5ae1183ccde8b6e4f44c
-timestamp=2026-09-24T17:49:39Z
-branch=agent/contract-pin-se369-20260924
-head_commit=b563cb47
-signature=94674085b3dc93186d3b215e69f099df499c08ddbcddb211f2d8627af6700d07
+diff_hash=3e575e080e6aba5aea230cdd6193725256c27359ee47d4bdf66a7b3d878edc52
+timestamp=2026-09-24T21:55:28Z
+branch=agent/overnight-20260924-se396-evidence
+head_commit=1ca0b5b5
+signature=56d7175d563e7c36279faf2d2a24db2b34a4a16ed77ad526b74e5bf0fd97e085
