@@ -2,42 +2,36 @@
 
 **Updated:** 2026-06-24 | **Version:** v6.24.4 | **562 commands · 75 agents · 104 skills · 81 hooks · 1653 tests · 245 specs IMPLEMENTED (78%)** — ver `## Estado final — 2026-06-24`
 
-## P0 — Architecture, runtime surfaces and distribution (2026-09)
+## Repriorización operativa — 2026-09-24
 
-- **SE-396**: H07 e I03 mergeados en PRs #1129 y #1130. PR #1131 completa
-  las regresiones H12: cache aislada por principal/policy/contenido, selección
-  autorizada antes de lookup, provenance conservada y límite total duro. Pasan
-  349 tests SaviaVaults. PR #1132 cierra H11: PR, evidencia AC y revisión humana
-  son señales separadas y un merge nunca autogradúa. PR #1133 incorpora A01a.
-  A01b, H02, H10 y A01c están implementados localmente: autoridad previa al
-  executor, composición aislada de dominios y sustitución operacional real
-  Codex/OpenCode con 126 tests y gate canónico 6/6. H09 queda implementado;
-  revisión humana y graduación explícita de SE-396 continúan abiertas.
-- **SE-397**: F0 aprobado; F1–F4 y F5A mergeados. F5A Hot-Path Relevance Fast
-  Exit entró en `main` mediante PR #1128 con CI verde, paridad 13/13 y p50
-  local `49 -> 6` ms. GitHub no registra review formal: el merge no equivale a
-  graduación operacional. El resto de F5 y F6–F10 permanece pendiente y
-  ninguna vista eleva authority.
-- **SE-398**: spec aprobada; F0 Desktop Runtime Discovery listo para revisión.
-  Se absorben para F1 isolated-home, version gate, RPC humano tipado y
-  freshness sólo tras sync correcto. Ninguna surface Desktop está graduada
-  como SUPPORTED.
-- **SE-399**: spec aprobada; F0 Installer Discovery listo para revisión.
-  F1 incorpora transacción/compensación, ownership-aware merge y reemplazo
-  atómico. Provisioning Core, manifests y wizard todavía no implementados.
-- **SE-400**: spec aprobada; F0 de ablación model-agnostic listo para revisión.
-  No se ha retirado, movido, deprecado ni empaquetado ningún artefacto.
-- **SE-401**: I2E añadida como propuesta P0. Define Intent → Reasoning →
-  Decision → Authority → Execution → Effect → Verification → Evidence → State
-  Transition, con AEK como semántica/gobernanza y Savia como runtime. Antes de
-  implementar. El mapa de no duplicación y el delta Gentle 3.5 están
-  reconciliados localmente; falta aprobar la frontera AEK/Savia contra el repo
-  canónico AEK, que no está presente en este checkout.
-- Orden: cerrar integridad SE-396 → reconciliar/aprobar SE-401 → continuar SAM
-  SE-397 y normalización SE-400 → runtime/surface SE-398 → installer SE-399.
-  SE-401 no interrumpe la revisión/publicación de slices ya terminadas; condiciona
-  nuevas expansiones de arquitectura y no eleva authority.
-  Las fases posteriores conservan sus gates y no elevan authority.
+Se pausa la expansión funcional. El merge de una PR acredita integración, no
+revisión humana ni cumplimiento integral de una spec. Los rangos siguientes son
+estimaciones de trabajo activo, no fechas ni promesas de graduación; cualquier
+evidencia operacional ausente mantiene el gate cerrado.
+
+| Orden | Objetivo y decisión de salida | Esfuerzo orientativo | Gate |
+|---|---|---|---|
+| **P0 · siguiente** | **SE-396: resolver cierre verificable**. El mapa de criterios está en `docs/evidence/SE-396-closure-review-20260924.md`; completar canaries reales y revisar la procedencia del recibo operacional. | Revisión y evidencia restante por estimar | Sigue `IMPLEMENTING` hasta decisión explícita; PR #1135 mergeada no autogradúa. |
+| **P0 · después** | **SE-401 I2E / L31 F0: decisión de frontera AEK↔Savia**. La propuesta READ_ONLY está documentada en el entorno privado y en SaviaLabs; revisar titularidad semántica, autoridad y pruebas negativas. | Revisión humana de arquitectura; el tope L31 F0 sigue en 120k tokens/16 h | SE-401 Savia permanece `PROPOSED`; ninguna ejecución I2E nueva antes de aprobar frontera y spec. |
+| **P1** | **SE-397 F5/F6 + SE-400 F0**: revisar primero la ablación F0 y el extractor SAM de solo lectura; después elegir una slice medida de paridad/provenance. | 1–2 h de revisión F0; 1–3 días por slice aprobada | Sin authority implícita ni retirada de artefactos por inferencia. |
+| **P2** | **SE-398 Desktop**: resolver revisión F0 antes de F1 isolated-home/version gate/RPC humano. | 1–2 h de revisión; F1 requiere estimación tras gate | Sin claim `SUPPORTED` antes de canary y evidencia. |
+| **P3** | **SE-399 Installer**: revisar F0; posponer provisioning y wizard hasta estabilizar runtime/surface. | 1–2 h de revisión; implementación por estimar | Transacción/compensación y ownership explícitos antes de mutaciones. |
+
+AEK tiene repositorio canónico privado propio y un programa SE-401–SE-416 ya
+aprobado/en implementación para contratos sintéticos. Su SE-401 es el programa
+de investigación AEK, mientras que el SE-401 de Savia es la propuesta I2E:
+**la colisión inter-repositorio no se resuelve renumerando unilateralmente**.
+AEK declara aún ausentes el verificador operacional, pilotos y evidencia
+longitudinal; los tests de contratos no prueban efectos reales. La reconciliación
+F0 debe preservar una única fuente de autoridad y semántica, con Savia como
+runtime/adaptador, sin un segundo issuer ni promesas de producción.
+
+Estado inmediato: SE-396 H07/I03/H11/H12 y A01a–A01c/H02/H09/H10 están
+integrados, incluida PR #1135 con 127 tests dual-cli y gate canónico 6/6;
+revisión de criterios y graduación siguen abiertas. SE-397 F1–F4/F5A están
+mergeados, resto F5/F6–F10 pendiente. Los F0 de SE-398/399/400 esperan revisión.
+La investigación Labs L31 comparte la frontera F0; L14 (integridad de evidencia)
+y L28 (ablación acotada) siguen después como soporte, no como expansión paralela.
 
 ---
 

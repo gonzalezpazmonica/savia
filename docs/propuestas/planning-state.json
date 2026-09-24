@@ -167,22 +167,23 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133: base mergeada. H02/H10/A01b/A01c implementados localmente con autoridad previa al executor, composición aislada y sustitución operacional Codex/OpenCode; 126 tests dual-cli y gate canónico 6/6. H09 implementado; revisión humana y graduación explícita permanecen pendientes."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133/#1135 mergeadas. H02/H10/A01b/A01c: autoridad previa al executor, composición aislada y sustitución operacional Codex/OpenCode. Auditoría AC local: docs/evidence/SE-396-closure-review-20260924.md; 127 tests dual-cli, 18 de planificación y gate canónico previo 6/6. Doctor nativo permanece DEGRADED_SAFE; recibo A01c requiere revisión de procedencia.",
+      "note": "Paquete de revisión preparado 2026-09-24. H04 requiere canaries reales y H09 validación humana de evidencia operacional; falta baseline global verde. El merge no autogradúa."
     },
     {
       "id": "SE-397",
       "status": "IMPLEMENTING",
       "approval": "Operadora 2026-09-09: F0 y fases posteriores autorizadas con gates",
-      "priority": "P0",
+      "priority": "P1",
       "title": "Savia Architectural Self-Knowledge & Operational Excellence",
-      "note": "F0 aprobado; F1-F4 y F5A mergeados (PRs #1123-#1125, #1127 y #1128); resto de F5 y F6-F10 pendientes con gates de fase, sin elevar authority",
+      "note": "Repriorizado 2026-09-24 tras cierre SE-396 y reconciliación I2E/AEK F0. F0 aprobado; F1-F4 y F5A mergeados (PRs #1123-#1125, #1127 y #1128); resto de F5 y F6-F10 pendientes con gates de fase, sin elevar authority",
       "evidence": "F4 PR #1127; F5A PR #1128 mergeado 2026-09-20 con CI verde, paridad 13/13, p50 49→6 ms y p95 50→7 ms. No existe review formal registrado en GitHub; no equivale a graduación operacional"
     },
     {
       "id": "SE-398",
       "status": "APPROVED",
       "approval": "Operadora 2026-09-10: 'Continúa hasta terminar y luego implementa este spec'",
-      "priority": "P0",
+      "priority": "P2",
       "title": "Savia Desktop Runtime & Surface Support",
       "note": "F0 completado y pendiente de revisión; F1 absorbe isolated-home, version gate, RPC humano tipado y freshness post-éxito, pero F1-F9 continúan bloqueadas por revisión",
       "evidence": "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
@@ -191,7 +192,7 @@
       "id": "SE-399",
       "status": "APPROVED",
       "approval": "Operadora 2026-09-10: 'Continúa hasta terminar y luego implementa este spec'",
-      "priority": "P0",
+      "priority": "P3",
       "title": "Savia Visual Installer & Environment Bootstrap",
       "note": "F0 completado y pendiente de revisión; F1 absorbe transacción/compensación, merge ownership-aware y reemplazo atómico, pero F1-F13 continúan bloqueadas por revisión",
       "evidence": "docs/specs/SE-399-f0-installer-discovery.md"
@@ -200,7 +201,7 @@
       "id": "SE-400",
       "status": "APPROVED",
       "approval": "Operadora 2026-09-10: 'añade a roadmap e implementa'",
-      "priority": "P0",
+      "priority": "P1",
       "title": "Model-Agnostic Savia Ablation & Minimal Sufficient Kernel",
       "note": "F0 completado y pendiente de revisión; no delete/move/deprecation/pack migration ni F1",
       "evidence": "docs/specs/SE-400-f0-model-agnostic-ablation-inventory.md"
@@ -210,7 +211,7 @@
       "status": "PROPOSED",
       "priority": "P0",
       "title": "Intent-to-Effect Execution Architecture (I2E)",
-      "note": "Prioridad arquitectónica tras cerrar integridad SE-396 y antes de expandir runtime/surfaces; mapa de no duplicación reconciliado localmente, pendiente de validar y aprobar la frontera AEK/Savia contra el repositorio canónico AEK.",
+      "note": "Tras cierre verificable SE-396, F0 de solo lectura con L31: validar frontera contra repositorio canónico AEK y resolver colisión inter-repositorio SE-401; 8-16 h combinadas, tope 120k tokens/16 h. No implementar ni graduar antes de aprobación explícita. AEK SE-401 es otro programa; no renumerar unilateralmente.",
       "evidence": "docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md"
     }
   ]
