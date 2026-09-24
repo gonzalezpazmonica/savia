@@ -167,8 +167,8 @@
       "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
       "priority": "P0",
       "title": "Harness operational integrity & verifiable substitution",
-      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133/#1135 mergeadas. H02/H10/A01b/A01c: autoridad previa al executor, composición aislada y sustitución operacional Codex/OpenCode; 127 tests dual-cli y gate canónico 6/6. H09 implementado. Pendiente: auditoría AC, revisión humana y graduación explícita.",
-      "note": "Siguiente objetivo 2026-09-24: paquete de cierre verificable, 4-8 h de análisis/verificación más revisión humana; el merge no autogradúa."
+      "evidence": "PRs #1112/#1113/#1122/#1129/#1130/#1131/#1132/#1133/#1135 mergeadas. H02/H10/A01b/A01c: autoridad previa al executor, composición aislada y sustitución operacional Codex/OpenCode. Auditoría AC local: docs/evidence/SE-396-closure-review-20260924.md; 127 tests dual-cli, 18 de planificación y gate canónico previo 6/6. Doctor nativo permanece DEGRADED_SAFE; recibo A01c requiere revisión de procedencia.",
+      "note": "Paquete de revisión preparado 2026-09-24. H04 requiere canaries reales y H09 validación humana de evidencia operacional; falta baseline global verde. El merge no autogradúa."
     },
     {
       "id": "SE-397",
