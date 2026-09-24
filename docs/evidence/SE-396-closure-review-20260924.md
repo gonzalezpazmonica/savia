@@ -10,7 +10,7 @@ revisión humana del cumplimiento y de la evidencia operacional.
 | H01, reserva antes de ejecutar y efecto ambiguo | `tests/dual-cli/test_runtime.py` (replay, concurrencia, SIGKILL, deadline) | Regresión local: pasa |
 | H02, referencias y autoridad previa al executor | `tests/dual-cli/test_runtime.py` (refs, elevación, policy/preflight) | Regresión local: pasa |
 | H03, observación confiable y preflight estricto | `tests/dual-cli/test_harness_contracts.py`, `tests/dual-cli/test_config.py` | Controles negativos locales: pasan |
-| H04, probe sintético sin graduación L2 | `tests/dual-cli/test_doctor_integrity.py` | Controles negativos: pasan; falta adjuntar doctor real con control positivo y negativo verificable |
+| H04, probe sintético sin graduación L2 | `tests/dual-cli/test_doctor_integrity.py`, doctor real descrito abajo | Controles negativos y sandbox nativo: pasan; faltan canaries de sesión real |
 | H05, recibo inmutable y correlacionado | `tests/dual-cli/test_evidence_integrity.py`, `tests/dual-cli/test_harness_contracts.py` | Regresión local: pasa |
 | H06, input inválido y extensiones | `tests/dual-cli/test_evidence_integrity.py`, `tests/dual-cli/test_harness_contracts.py` | Regresión local: pasa |
 | H07, paridad y bloqueo de hooks | `scripts/opencode-plugin/savia-gates/__tests__/http-gate.test.ts` | Existe suite dirigida; no se ha repetido en esta revisión |
@@ -32,12 +32,18 @@ revisión humana del cumplimiento y de la evidencia operacional.
 - `bash scripts/roadmap.sh validate`: correcto.
 - `bash scripts/planning-transition.sh check SE-396`: `NOT_READY` porque
   aún no existe `completion` con el mapa de aceptación final.
+- `codex_profile.py probe` con Codex CLI 0.156.1: en el sandbox exterior el
+  sandbox anidado no arrancó. Repetido con permiso fuera del sandbox exterior,
+  usando el sandbox nativo de Codex y sólo fixtures temporales: autenticación,
+  política, escritura de control y bloqueo L4 verdaderos. El doctor devolvió
+  `DEGRADED_SAFE`, `max_verified_risk=null`, `passed=false` y
+  `REAL_SESSION_CANARIES_MISSING`. No se elevó autoridad ni se configuró perfil.
 
 ## Lagunas de cierre
 
-1. H04: conservar un recibo de doctor real, con controles positivo y negativo,
-   y verificar que corresponde a la configuración efectiva. Los tests
-   sintéticos sólo prueban que una fixture no eleva autoridad.
+1. H04: el doctor real prueba controles del sandbox nativo, pero no una sesión
+   de ejecución completa. Adjuntar canaries positivos y negativos de la sesión
+   efectiva antes de cualquier claim L2; el resultado actual sigue degradado.
 2. H09: el JSON de A01c declara resultados `VERIFIED`; su test comprueba
    estructura y minimización de datos, pero no verifica independientemente
    el origen de los efectos. Revisar el recibo operacional y su método de
