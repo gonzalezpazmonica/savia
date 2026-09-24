@@ -19,7 +19,7 @@ metadata:
 > DONE/DONE_WITH_CONCERNS/BLOCKED, y retorna. Previene activación runaway.
 # Skill: Overnight Sprint
 
-> **Regla de seguridad**: `@docs/rules/domain/autonomous-safety.md` — NUNCA merge, SIEMPRE PR Draft con reviewer humano.
+> **Regla de seguridad**: `@docs/rules/domain/autonomous-safety.md` — PR Draft; merge solo con grant expreso, CI y gates de riesgo. La operadora única puede revisar sus PRs.
 
 ## Cuándo usar esta skill
 
@@ -29,7 +29,7 @@ metadata:
 
 ## Qué produce
 
-1. **PRs en Draft** — uno por tarea completada, asignados a `AUTONOMOUS_REVIEWER`
+1. **PRs en Draft** — uno por tarea; solicitar reviewer distinto si existe, o entregar a la operadora única
 2. **results.tsv** — registro de cada intento: `output/overnight-results-{YYYYMMDD}.tsv`
 3. **Informe resumen** — `output/overnight-summary-{YYYYMMDD}.md`
 4. **Audit log** — `output/agent-runs/overnight-{YYYYMMDD}-audit.log`
@@ -37,7 +37,8 @@ metadata:
 ## Prerequisitos (gate de arranque)
 
 ```
-1. AUTONOMOUS_REVIEWER configurado en pm-config.local.md    → si no: ❌ ABORT
+1. Operadora identificada o reviewer distinto elegible       → si no: ❌ ABORT
+   Si `AUTONOMOUS_REVIEWER` es la operadora única, no pedir self-review a GitHub.
 2. Doble opt-in (SPEC-186):                                  → si no: ❌ ABORT
    bash scripts/savia-double-optin-check.sh \
      --skill overnight-sprint --confirm-autonomous
@@ -57,7 +58,7 @@ Complementa `autonomous-safety.md` — no lo reemplaza.
 ```
 Humano ejecuta /overnight-sprint
     ↓
-Validar prerequisitos (reviewer, enabled, tareas, baseline tests)
+Validar prerequisitos (ruta de revisión, enabled, tareas, baseline tests)
     ↓
 Mostrar lista de tareas candidatas → PEDIR CONFIRMACIÓN HUMANA
     ↓
@@ -76,13 +77,13 @@ LOOP (hasta max_tasks o max_failures o fin de tareas):
   Coherence (SE-350): `bash scripts/coherence-court.sh premises overnight-{fecha} add decision "task {id} done: {desc}" --stage task-{id}`
   ↓ crash/timeout → contador fallos
   ↓ fallos >= MAX → ABORT
-  ↓ Siguiente tarea → … → Informe → Notificar AUTONOMOUS_REVIEWER
+  ↓ Siguiente tarea → … → Informe → Notificar operadora/reviewer elegible
 ```
 
 ## Cuándo NO usar
 
 - Tareas de alto riesgo (arquitectura, migraciones, API pública)
-- Sin reviewer humano configurado / baseline roto
+- Sin ruta de revisión humana / baseline roto
 - Tareas que requieren decisiones de diseño
 
 ## Formato de results.tsv
@@ -95,13 +96,13 @@ timestamp  tarea_id  rama  status  tests_pass  pr_url
 ## Restricciones estrictas
 
 ```
-NUNCA → Hacer merge de un PR
+NUNCA → Hacer merge sin grant expreso, CI verde y gates de riesgo
 NUNCA → Aprobar un PR
 NUNCA → Hacer commit en rama de humano (main, develop, feature/*)
 NUNCA → Crear tareas en el backlog
 NUNCA → Modificar configuración del proyecto
 NUNCA → Instalar dependencias nuevas sin que estén en la tarea
-SIEMPRE → PR en Draft con AUTONOMOUS_REVIEWER asignado
+SIEMPRE → PR en Draft; reviewer distinto si es elegible, o revisión de la operadora única
 SIEMPRE → Ramas agent/overnight-*
 SIEMPRE → Registrar CADA intento en results.tsv
 SIEMPRE → Generar audit log

@@ -18,7 +18,7 @@ Cuando integramos con OpenCode (SE-077), Codex u otros frontends que adopten el 
 | **B8 ATTENTION ANCHOR** | `skills/genesis/assets/design-patterns.md` | Re-inyección del goal en cada worker spawn (`SPEC_WORKER_ID` + `Spec ref:` line en `.pr-summary.md`) |
 | **B9 GOAL STEWARD** | `skills/genesis/assets/design-patterns.md` | `radical-honesty.md` Rule #24 + G13 scope-trace gate (SE-079) |
 | **A7 ADVERSARIAL REVIEW** | `skills/genesis/assets/architectural-patterns.md` | Code Review Court — 5 jueces consensus (SPEC-124) |
-| **A9 SUPERVISED EXECUTION** | `skills/genesis/assets/architectural-patterns.md` | `autonomous-safety.md` — AUTONOMOUS_REVIEWER, draft PRs, agent/* branches |
+| **A9 SUPERVISED EXECUTION** | `skills/genesis/assets/architectural-patterns.md` | `autonomous-safety.md` — revisión humana, draft PRs, agent/* branches |
 
 ## B8 — ATTENTION ANCHOR
 
@@ -49,10 +49,10 @@ Panel adversarial pre-merge donde múltiples jueces evalúan independientemente.
 
 Humano siempre en el loop para acciones irreversibles. Nuestra implementación:
 
-- **Política**: `autonomous-safety.md` — AUTONOMOUS_REVIEWER configurado en `pm-config.local.md`
+- **Política**: `autonomous-safety.md` — `AUTONOMOUS_REVIEWER` distinto si es elegible; operadora única puede revisar sus PRs
 - **Boundaries**: NEVER auto-merge, NEVER force-push, NEVER aprobar PR autónomamente
 - **Branches**: agentes operan SOLO en `agent/*` — main/develop intocables
-- **PRs**: SIEMPRE en estado Draft con AUTONOMOUS_REVIEWER asignado
+- **PRs**: SIEMPRE Draft; reviewer distinto elegible u operadora única, merge con grant expreso y gates
 
 ## Adopciones futuras
 

@@ -38,7 +38,7 @@ read -r -d '' NEW_CONTENT <<EOF || true
 - **Usuario activo**: $USER_SLUG · profile slug \`$USER_SLUG\` · activated $ACTIVATED
 - **Frontend**: $FRONTEND · provider $PROVIDER · model $MODEL
 - **Sprint**: $SPRINT
-- **Gates inmutables**: Rule 1 PAT via \$(cat \$PAT_FILE) · Rule 3 confirmar antes de escribir Azure DevOps · Rule 8 NUNCA merge/approve autónomo · autonomous-safety: rama \`agent/*\` + PR Draft + AUTONOMOUS_REVIEWER obligatorio
+- **Gates inmutables**: Rule 1 PAT via \$(cat \$PAT_FILE) · Rule 3 confirmar antes de escribir Azure DevOps · Rule 8 sin autoaprobación; merge con grant expreso · autonomous-safety: rama \`agent/*\` + PR Draft + revisión de la operadora única o reviewer elegible
 - **Tono**: Radical Honesty (Rule 24) · sin filler · femenino siempre (Savia)
 EOF
 
