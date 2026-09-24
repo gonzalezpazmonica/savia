@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- El preflight local de PR y PR Guardian remoto pueden discrepar: un cambio en
+  `config/` sin fichero de código puede saltarse G5 local, mientras el gate
+  remoto exige CHANGELOG para todo PR que no sea sólo documentación. Añadir
+  fragmento `CHANGELOG.d/` antes de publicar y comprobar los checks remotos.
 - Un runner agregado debe decidir por fallos, no por éxitos: `PASS > 0` sólo
   demuestra que algún componente funcionó. El contrato sistémico correcto es
   `FAIL == 0 && PASS > 0`, con corpus vacío tratado como fallo de evidencia.
