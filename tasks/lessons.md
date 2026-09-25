@@ -1,5 +1,9 @@
 # Lessons Learned
 
+- Un reviewer configurado que coincide con la única colaboradora no es una
+  ruta de revisión externa: GitHub rechaza self-review. Comprobar la topología
+  real del repositorio antes de exigir una aprobación distinta; en modo de
+  operadora única, conservar PR Draft, CI, grant expreso y gates de riesgo.
 - El preflight local de PR y PR Guardian remoto pueden discrepar: un cambio en
   `config/` sin fichero de código puede saltarse G5 local, mientras el gate
   remoto exige CHANGELOG para todo PR que no sea sólo documentación. Añadir

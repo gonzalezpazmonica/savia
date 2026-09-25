@@ -6,7 +6,7 @@ tier: core
 
 # /overnight-sprint
 
-Lanza un sprint nocturno autónomo que ejecuta tareas de bajo riesgo en bucle y genera PRs pendientes de revisión humana.
+Lanza un sprint nocturno autónomo que ejecuta tareas de bajo riesgo en bucle y genera PRs Draft. La operadora única puede revisar y mergear sus PRs bajo grant expreso.
 
 ## 1. Cargar configuración
 
@@ -29,8 +29,8 @@ Lanza un sprint nocturno autónomo que ejecuta tareas de bajo riesgo en bucle y 
 Verificar en orden estricto:
 
 ```
-✅ AUTONOMOUS_REVIEWER configurado    → si no: ❌ "Configura AUTONOMOUS_REVIEWER en pm-config.local.md"
-✅ OVERNIGHT_SPRINT_ENABLED = true    → si no: ❌ "Modo nocturno desactivado. Activa OVERNIGHT_SPRINT_ENABLED"
+✅ Operadora identificada o reviewer distinto elegible → si no: ❌ "Falta ruta de revisión humana"
+✅ Doble opt-in (env o grant + --confirm-autonomous) → si no: ❌ "Modo nocturno desactivado"
 ✅ Tests del proyecto pasan            → si no: ❌ "Baseline roto. Corrige tests antes de lanzar"
 ✅ Hay tareas overnight-safe           → si no: ⚠️ "No hay tareas candidatas"
 ```
@@ -43,7 +43,7 @@ Mostrar:
 🌙 Overnight Sprint — {proyecto}
 
 📋 Tareas candidatas: {n}
-👤 Reviewer: {AUTONOMOUS_REVIEWER}
+👤 Revisión: {reviewer elegible u operadora única}
 ⏱️ Time-box por tarea: {AGENT_TASK_TIMEOUT_MINUTES} min
 🛑 Max fallos consecutivos: {AGENT_MAX_CONSECUTIVE_FAILURES}
 
@@ -69,7 +69,7 @@ Al completar, mostrar:
 ```
 🌙 Overnight Sprint — Completado
 
-✅ PRs creados: {n} (pendientes de review por {AUTONOMOUS_REVIEWER})
+✅ PRs creados: {n} (ruta de revisión: {reviewer u operadora única})
 ⚠️ Descartados: {n}
 ❌ Crashes: {n}
 ⏱️ Duración total: {hh:mm}

@@ -65,7 +65,7 @@ NUNCA activar preventivamente — requiere trigger real.
 
 **CRITICAL**: emergency-mode NO relaja `autonomous-safety.md`:
 
-- `AUTONOMOUS_REVIEWER` sigue siendo obligatorio para PRs
+- La ruta de revisión sigue siendo obligatoria: reviewer distinto elegible o revisión de la operadora única; nunca solicitar self-review a GitHub
 - Rule #8 (human E1) sigue aplicando
 - Ninguna regla crítica (1-8 de CLAUDE.md) se bypasses
 - Receipts protocol (SE-030) sigue vigente

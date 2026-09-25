@@ -8,9 +8,9 @@ El equipo acumula tareas de bajo riesgo (lint, tests, docs, refactoring menor) q
 
 - **Tarea overnight-safe**: Work item etiquetado como apto para ejecución autónoma (bajo riesgo, sin decisiones de diseño)
 - **Baseline de tests**: Estado actual de tests pasando que sirve como referencia mínima — si un cambio rompe el baseline, se descarta
-- **PR en Draft**: Pull request no mergeable que requiere aprobación humana explícita
+- **PR en Draft**: Pull request que espera CI y la ruta de revisión humana aplicable
 - **results.tsv**: Registro de cada intento con estado (pr-created, discarded, crash, timeout)
-- **Autonomous reviewer**: Humano designado obligatorio que revisa toda la producción autónoma
+- **Ruta de revisión**: Reviewer distinto si es elegible; en repositorio de una sola colaboradora, la operadora puede revisar y mergear sus PRs bajo grant expreso
 
 ## Reglas de negocio que implementa
 
@@ -26,6 +26,6 @@ El equipo acumula tareas de bajo riesgo (lint, tests, docs, refactoring menor) q
 
 ## Decisiones clave
 
-- Se eligió PR Draft (no merge automático) priorizando seguridad sobre velocidad
+- Se eligió PR Draft; un merge posterior exige grant expreso, CI y gates de riesgo
 - Se usa worktree aislado por tarea para evitar interferencia entre experimentos
 - El patrón de bucle viene de autoresearch (Karpathy) adaptado con guardarraíles PM
