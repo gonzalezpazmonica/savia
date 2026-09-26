@@ -6,7 +6,7 @@ allowed-tools:
   - Read
   - Glob
   - Grep
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: medium
 tier: core
 ---

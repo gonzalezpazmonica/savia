@@ -1,7 +1,7 @@
 ---
 name: client-profile
 description: "Gestión de perfiles de cliente en SaviaHub"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 allowed_tools: ["Bash", "Read", "Write", "Edit", "Task"]
 tier: core

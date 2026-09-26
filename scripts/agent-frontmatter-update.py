@@ -290,7 +290,7 @@ def process_agents(dry_run=False):
             yaml_text, body = parse_frontmatter(content)
             fm = parse_yaml_simple(yaml_text)
 
-            model = fm.get('model', 'unknown')
+            model = fm.get('model_tier', fm.get('model', 'unknown'))
             max_turns = fm.get('maxTurns', None)
             has_max_steps = 'maxSteps' in fm
             has_permission_task = 'permission.task' in fm

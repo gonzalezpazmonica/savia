@@ -3,7 +3,7 @@ name: school-progress
 description: View student progress and portfolio
 argument-hint: "<alias> [--portfolio]"
 allowed-tools: [Read, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

@@ -1,7 +1,7 @@
 ---
 name: sprint-review
 description: Genera el resumen para la Sprint Review con todos los datos del sprint cerrado.
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

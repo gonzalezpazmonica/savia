@@ -34,7 +34,10 @@ enabled = false
 '''
 
 def run(command):
-    try: return subprocess.run(command, capture_output=True, text=True, timeout=20)
+    # C locale: probes match OS error text ("permission denied"); localized
+    # messages (e.g. "Permiso denegado") made the L4 secret boundary look unverified.
+    env={**os.environ,"LC_ALL":"C","LANG":"C","LANGUAGE":"C"}
+    try: return subprocess.run(command, capture_output=True, text=True, timeout=20, env=env)
     except (OSError, subprocess.TimeoutExpired): return None
 
 def synthetic_probe(command):

@@ -4,7 +4,7 @@ description: Grooming asistido — detectar items obsoletos, duplicados, sin cri
 developer_type: all
 agent: task
 context_cost: medium
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

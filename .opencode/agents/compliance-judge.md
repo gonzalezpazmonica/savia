@@ -1,7 +1,7 @@
 ---
 name: compliance-judge
 description: Truth Tribunal judge — PII, N1-N4b levels, format rules, confidentiality
-model: opencode-go/glm-5.3
+model_tier: heavy
 permission_level: L1
 tools:
   read: true

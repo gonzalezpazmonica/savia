@@ -1,7 +1,7 @@
 ---
 name: accessibility-mode
 description: Toggle rápido de accesibilidad — activa, desactiva o muestra el estado
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 allowed_tools: ["Read", "Write", "Edit"]
 tier: core

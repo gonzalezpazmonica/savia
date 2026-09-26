@@ -3,7 +3,7 @@ name: calendar-deadlines
 description: "Deadlines proximos con estado de preparacion — nada se queda atras"
 argument-hint: "[--days 14] [--project nombre]"
 allowed-tools: [Read, Glob, Grep, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

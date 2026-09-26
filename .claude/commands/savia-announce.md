@@ -5,7 +5,7 @@ description: >
   Solo admins pueden publicar anuncios.
 argument-hint: "[--priority high]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

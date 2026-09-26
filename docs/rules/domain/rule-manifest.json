@@ -1,8 +1,8 @@
 {
-  "generated": "2026-08-30T18:30:39Z",
-  "total": 305,
+  "generated": "2026-09-26T17:00:31Z",
+  "total": 308,
   "tier1_count": 6,
-  "tier2_count": 285,
+  "tier2_count": 288,
   "dormant_count": 14,
   "rules": {
     "accessibility-output.md": {
@@ -114,6 +114,10 @@
       "consumers": ""
     },
     "attention-anchor.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "audit-non-claims.md": {
       "tier": "tier2",
       "consumers": ""
     },
@@ -521,6 +525,10 @@
       "tier": "tier2",
       "consumers": ""
     },
+    "governance-records.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
     "graphrag-quality-gates.md": {
       "tier": "tier2",
       "consumers": ""
@@ -918,6 +926,10 @@
       "consumers": ""
     },
     "risk-escalation.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "risk-tiering.md": {
       "tier": "tier2",
       "consumers": ""
     },

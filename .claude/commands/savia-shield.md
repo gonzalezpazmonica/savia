@@ -3,7 +3,7 @@ name: savia-shield
 description: "Gestión de Savia Shield: activar, desactivar y comprobar instalación del sistema de soberanía de datos. Desactivado por defecto."
 allowed-tools: [Read, Edit, Write, Bash]
 argument-hint: "[enable|disable|status]"
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 complexity_tier: mode2
 tier: core

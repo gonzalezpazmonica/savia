@@ -1,5 +1,5 @@
 # development — Savia Capability Map (L1)
-> 230 resources
+> 231 resources
 
 - **/speckit.checklist** (cmd): Alias spec-kit compatible. Gate de calidad final con verification-lattice multi-capa. Invoca skill verification-lattice. Compatible con github/spec-kit.
 - **/speckit.clarify** (cmd): Alias spec-kit compatible. Preguntas dirigidas para cerrar ambigüedad en una spec. Invoca skill context-interview-conductor. Compatible con github/spec-kit.
@@ -179,6 +179,7 @@
 - **setup-claude-permissions** (script): DEPRECATED: use setup-opencode-permissions.sh instead. This file kept for backward compatibility.
 - **setup-opencode-permissions** (script): setup-claude-permissions.sh — Genera settings.local.json con permisos recomendados
 - **setup-savia-web** (script): Setup, build, and serve savia-web on http://localhost:8081
+- **skill-listing-overrides** (script): skill-listing-overrides.sh — Project the SE-253 load tier into Claude Code's
 - **skill-loader** (script): skill-loader.sh — SPEC-144: Context-Aware Skill Loading
 - **skill-pattern-detector** (script): scripts/skill-pattern-detector.sh — SPEC-SE-030 Phase 1: Pattern Detection
 - **sldc-context-loop** (cmd): Cerrar el ciclo de conocimiento tras un merge — alimenta las cupulas de SaviaVaults (specs/ADRs/releases) y ejecuta la compuerta de estandares (SE-311)

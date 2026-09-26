@@ -11,7 +11,7 @@ description: >
 tools:
   - Bash
   - Read
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 color: bright-white
 maxTurns: 20
 max_context_tokens: 2000

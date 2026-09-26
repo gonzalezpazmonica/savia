@@ -14,30 +14,38 @@ set -uo pipefail
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
 SCRIPT="$ROOT/scripts/judge-trigger-detector.sh"
-INPUT="$1"
-
-# Extract tool name from the JSON envelope or from context
-TOOL=""
-if echo "$INPUT" | grep -q '"tool_name"' 2>/dev/null; then
-  TOOL=$(echo "$INPUT" | grep -oP '"tool_name"\s*:\s*"\K[^"]+' 2>/dev/null || echo "")
+# Claude Code sends the hook payload on stdin; $1 kept for legacy callers.
+INPUT="${1:-}"
+if [[ -z "$INPUT" && ! -t 0 ]]; then
+  INPUT=$(timeout 3 cat 2>/dev/null) || true
 fi
-[[ -z "$TOOL" ]] && TOOL="${SAVIA_LAST_TOOL:-unknown}"
+[[ -z "$INPUT" ]] && exit 0
 
-# Extract tool output for content scanning
-OUTPUT=""
-if echo "$INPUT" | grep -q '"output"' 2>/dev/null; then
-  OUTPUT=$(echo "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('output',''))" 2>/dev/null || echo "")
-fi
+# Extract tool name and tool output (tool_response; legacy key: output)
+read -r TOOL OUTPUT_FILE < <(HOOK_INPUT="$INPUT" python3 - <<'PY' 2>/dev/null
+import json, os, sys, tempfile
+try:
+    d = json.loads(os.environ["HOOK_INPUT"])
+except ValueError:
+    sys.exit(0)
+out = d.get("tool_response", d.get("output", ""))
+if not isinstance(out, str):
+    out = json.dumps(out, ensure_ascii=False)
+fd, path = tempfile.mkstemp()
+with os.fdopen(fd, "w") as fh:
+    fh.write(out)
+print(d.get("tool_name") or os.environ.get("SAVIA_LAST_TOOL", "unknown"), path)
+PY
+)
+[[ -z "${OUTPUT_FILE:-}" || ! -f "$OUTPUT_FILE" ]] && exit 0
+trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 # Skip if no content to scan
-[[ -z "$OUTPUT" || "$OUTPUT" == "null" ]] && exit 0
+[[ -s "$OUTPUT_FILE" ]] || exit 0
 
 # Run detection
-TMP_INPUT=$(mktemp)
-echo "$OUTPUT" > "$TMP_INPUT"
-bash "$SCRIPT" "$TOOL" "$TMP_INPUT" 2>&1
+bash "$SCRIPT" "$TOOL" "$OUTPUT_FILE" 2>&1
 DETECTOR_EXIT=$?
-rm -f "$TMP_INPUT"
 
 # If rule-violation was detected (blocking), the detector exits with
 # non-zero. Forward the block signal.

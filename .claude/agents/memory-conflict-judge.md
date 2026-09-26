@@ -1,7 +1,7 @@
 ---
 name: memory-conflict-judge
 description: Recommendation Tribunal judge — detects when a draft recommendation contradicts the active user's auto-memory (feedback_*, user_*)
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools: [Read, Glob, Grep]
 token_budget:

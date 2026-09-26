@@ -3,7 +3,7 @@ name: rbac-manager
 description: "Role-based access control — grant, revoke, audit roles and permissions"
 allowed-tools: [Read, Glob, Grep, Write, Edit, Bash]
 argument-hint: "[grant|revoke|audit|check] {user} {role} [--project proj] [--reason motivo]"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

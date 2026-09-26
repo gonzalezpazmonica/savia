@@ -1,7 +1,7 @@
 ---
 name: accessibility-setup
 description: Configura las preferencias de accesibilidad de Savia para adaptarse a tus necesidades
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 allowed_tools: ["Read", "Write", "Edit"]
 tier: core

@@ -185,6 +185,38 @@ savia_resolve_model() {
     fi
   }
 
+  # Per-frontend local tier definition wins over legacy model_<tier>:
+  #   tiers:
+  #     <frontend>:        # claude-code | opencode | codex
+  #       heavy: <model>
+  # Precedence: explicit SAVIA_MODEL_<TIER> env > tiers.<frontend> > default/legacy.
+  local _explicit_var="SAVIA_MODEL_${tier^^}"
+  case "$tier" in heavy|mid|fast)
+    local _fe_skip=0; [[ -n "${!_explicit_var:-}" ]] && _fe_skip=1
+    local _fe="${SAVIA_TIER_FRONTEND:-${SAVIA_FRONTEND:-}}"
+    [[ "$_fe_skip" == 1 ]] && _fe=""
+    [[ "$_fe" == "claude" ]] && _fe="claude-code"
+    if [[ -n "$_fe" && "$_fe" != "unknown" && -f "$prefs_file" ]]; then
+      local _scoped
+      _scoped="$(awk -v fe="$_fe" -v t="$tier" '
+        /^[[:space:]]*(#|$)/ { next }
+        /^[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*:/ { intiers = ($0 ~ /^tiers[[:space:]]*:/); infe = 0; next }
+        !intiers { next }
+        /^  [A-Za-z0-9_-]+[[:space:]]*:[[:space:]]*$/ { k = $0; sub(/^  /, "", k); sub(/[[:space:]]*:.*/, "", k); infe = (k == fe); next }
+        infe && $0 ~ ("^    " t "[[:space:]]*:") { v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v); gsub(/^["\047]|["\047]$/, "", v); print v; exit }
+      ' "$prefs_file" 2>/dev/null)"
+      if [[ "$_fe" == "claude-code" && ! "$_scoped" =~ ^(opus|sonnet|haiku|fable|claude-.+)$ ]]; then
+        _scoped=""  # not a Claude Code selector → default below
+      fi
+      [[ -n "$_scoped" ]] && { echo "$_scoped"; return 0; }
+    fi
+    # Claude Code default selectors; never the other providers' model_<tier>.
+    if [[ "$_fe" == "claude-code" && "$_fe_skip" == 0 ]]; then
+      case "$tier" in heavy) echo "opus" ;; mid) echo "sonnet" ;; fast) echo "haiku" ;; esac
+      return 0
+    fi ;;
+  esac
+
   case "$tier" in
     heavy)
       if [[ -z "${SAVIA_MODEL_HEAVY:-}" && -f "$prefs_file" ]]; then
@@ -603,6 +635,38 @@ savia_resolve_model() {
       fi
     fi
   }
+
+  # Per-frontend local tier definition wins over legacy model_<tier>:
+  #   tiers:
+  #     <frontend>:        # claude-code | opencode | codex
+  #       heavy: <model>
+  # Precedence: explicit SAVIA_MODEL_<TIER> env > tiers.<frontend> > default/legacy.
+  local _explicit_var="SAVIA_MODEL_${tier^^}"
+  case "$tier" in heavy|mid|fast)
+    local _fe_skip=0; [[ -n "${!_explicit_var:-}" ]] && _fe_skip=1
+    local _fe="${SAVIA_TIER_FRONTEND:-${SAVIA_FRONTEND:-}}"
+    [[ "$_fe_skip" == 1 ]] && _fe=""
+    [[ "$_fe" == "claude" ]] && _fe="claude-code"
+    if [[ -n "$_fe" && "$_fe" != "unknown" && -f "$prefs_file" ]]; then
+      local _scoped
+      _scoped="$(awk -v fe="$_fe" -v t="$tier" '
+        /^[[:space:]]*(#|$)/ { next }
+        /^[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*:/ { intiers = ($0 ~ /^tiers[[:space:]]*:/); infe = 0; next }
+        !intiers { next }
+        /^  [A-Za-z0-9_-]+[[:space:]]*:[[:space:]]*$/ { k = $0; sub(/^  /, "", k); sub(/[[:space:]]*:.*/, "", k); infe = (k == fe); next }
+        infe && $0 ~ ("^    " t "[[:space:]]*:") { v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v); gsub(/^["\047]|["\047]$/, "", v); print v; exit }
+      ' "$prefs_file" 2>/dev/null)"
+      if [[ "$_fe" == "claude-code" && ! "$_scoped" =~ ^(opus|sonnet|haiku|fable|claude-.+)$ ]]; then
+        _scoped=""  # not a Claude Code selector → default below
+      fi
+      [[ -n "$_scoped" ]] && { echo "$_scoped"; return 0; }
+    fi
+    # Claude Code default selectors; never the other providers' model_<tier>.
+    if [[ "$_fe" == "claude-code" && "$_fe_skip" == 0 ]]; then
+      case "$tier" in heavy) echo "opus" ;; mid) echo "sonnet" ;; fast) echo "haiku" ;; esac
+      return 0
+    fi ;;
+  esac
 
   case "$tier" in
     heavy)

@@ -3,7 +3,7 @@ name: rpi-status
 description: Track progress of active RPI (Research → Plan → Implement) workflows.
 argument-hint: "[feature-name] [--all]"
 allowed-tools: [Read, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

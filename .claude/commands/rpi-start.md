@@ -4,7 +4,7 @@ description: >
   Start a Research → Plan → Implement workflow for a feature with GO/NO-GO gates.
 argument-hint: "{feature-name} [--project name] [--skip-research]"
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

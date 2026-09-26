@@ -1,7 +1,7 @@
 ---
 name: backlog-sync
 description: "Sync local backlog with external PM tools (Azure DevOps, Jira, GitHub Issues)"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 allowed-tools: [Read, Bash, Glob, Grep]
 argument-hint: "<pull|push|diff> --project <name> [--provider <azure-devops|jira|github>]"

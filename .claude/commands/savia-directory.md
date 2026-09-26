@@ -4,7 +4,7 @@ description: >
   Listar miembros de la empresa con @handles, roles y disponibilidad.
 argument-hint: "[--filter <role>]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

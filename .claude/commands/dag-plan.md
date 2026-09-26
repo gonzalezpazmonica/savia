@@ -4,7 +4,7 @@ description: Visualizar DAG de ejecución, camino crítico y ahorro de tiempo
 context_cost: medium
 developer_type: all
 agent: business-analyst
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

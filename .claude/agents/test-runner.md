@@ -12,7 +12,7 @@ tools:
   - Glob
   - Grep
   - Task
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 color: magenta
 maxTurns: 40
 max_context_tokens: 8000

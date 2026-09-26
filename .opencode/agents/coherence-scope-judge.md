@@ -1,7 +1,7 @@
 ---
 name: coherence-scope-judge
 description: Coherence Court judge — stage output violates scope/constraints fixed earlier
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

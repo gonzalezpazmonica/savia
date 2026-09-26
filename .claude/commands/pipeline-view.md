@@ -3,7 +3,7 @@ name: pipeline-view
 description: ASCII table of all active pursuits with stage, value, and probability
 argument-hint: "[--stage qualification|proposal|won] [--tenant tenant-id]"
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 allowed-tools: [Bash, Read, Glob, Grep]
 tier: core
 ---

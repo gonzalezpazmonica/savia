@@ -13,7 +13,7 @@ Los modelos con ventanas grandes (1M tokens, Opus 4.7) no escalan su atencion li
 
 ## Por que ahora (Era 186)
 
-Opus 4.7 introduce la ventana de 1M tokens como default para sesiones IA (en OpenCode-Copilot accesible como `github-copilot/claude-opus-4.7`, tier `heavy` resuelto via `~/.savia/preferences.yaml`). Antes, las sesiones de 200K se cortaban solas por limite fisico. Ahora, el limite fisico esta tan lejos que la calidad se degrada antes de tocarlo.
+Opus 4.7 introduce la ventana de 1M tokens como default para sesiones IA (tier `heavy`; el modelo concreto se resuelve en la definición local de tiers, `~/.savia/preferences.yaml`). Antes, las sesiones de 200K se cortaban solas por limite fisico. Ahora, el limite fisico esta tan lejos que la calidad se degrada antes de tocarlo.
 
 Sin una estrategia explicita, los usuarios:
 1. Siguen trabajando en una sesion porque "aun cabe"

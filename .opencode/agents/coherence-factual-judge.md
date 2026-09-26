@@ -1,7 +1,7 @@
 ---
 name: coherence-factual-judge
 description: Coherence Court judge — stage output contradicts facts fixed in earlier stages
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

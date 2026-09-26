@@ -4,7 +4,7 @@ description: >
   GDPR-compliant memory pruning — remove specific entries from Savia's memory.
 argument-hint: "[topic|--all] [--scope section] [--dry-run]"
 allowed-tools: [Read, Write, Edit, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

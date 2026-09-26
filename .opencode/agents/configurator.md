@@ -5,7 +5,7 @@ description: "Centralizes workspace dispatch decisions: selects skills, agents, 
 tools:
   read: true
   glob: true
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 permissionMode: plan
 maxSteps: 8
 color: "#9966FF"

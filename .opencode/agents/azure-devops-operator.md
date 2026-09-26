@@ -11,7 +11,7 @@ description: >
 tools:
   bash: true
   read: true
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 color: "#808080"
 maxSteps: 8
 max_context_tokens: 2000

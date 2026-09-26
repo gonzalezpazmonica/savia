@@ -1,7 +1,7 @@
 ---
 name: spec-design
 description: Genera diseño técnico a partir de una spec existente — decisiones, flujo de datos, estrategia de testing.
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

@@ -3,7 +3,7 @@ name: lesson-extract
 description: Extract a cross-project lesson from the current task
 argument-hint: "[--domain domain --problem \"...\" --solution \"...\"]"
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 allowed-tools: [Bash, Read]
 tier: core
 ---

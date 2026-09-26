@@ -8,7 +8,7 @@ description: >
   saber si el twin está sincronizado, o se necesita explorar el código
   via proxy de baja latencia sin leer el fuente completo.
 permission_level: L1
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 maxSteps: 15
 max_context_tokens: 6000
 output_max_tokens: 800

@@ -3,7 +3,7 @@ name: skill-propose
 description: "Proponer nuevo skill desde un workflow repetitivo — auto-genera scaffold si 3+ observaciones"
 argument-hint: "{nombre} [--from-pattern descripcion]"
 allowed-tools: [Read, Write, Glob, Grep, Bash, Task]
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

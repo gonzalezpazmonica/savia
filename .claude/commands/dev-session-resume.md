@@ -3,7 +3,7 @@ name: dev-session-resume
 description: "Reanudar una dev-session interrumpida desde el ultimo checkpoint"
 argument-hint: "{session-id}"
 allowed-tools: [Read, Glob, Grep, Bash, Write, Edit, Task]
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

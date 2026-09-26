@@ -38,7 +38,7 @@ teardown() { cd /; }
   run bash "$SCRIPT" --generate
   [ "$status" -eq 0 ]
   [[ "$output" == *"| Agent"* ]]
-  [[ "$output" == *"| Model"* ]]
+  [[ "$output" == *"| Tier"* ]]
 }
 
 @test "--generate includes all agents from disk" {

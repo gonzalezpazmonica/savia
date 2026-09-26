@@ -1,7 +1,7 @@
 ---
 name: project-activate
 description: "Activa un proyecto como contexto activo en Savia: actualiza active-user.md y crea el directorio de memoria por proyecto si no existe. (SPEC-SE-093-ZERO-LEAK)"
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 context_cost: low
 tier: core
 ---

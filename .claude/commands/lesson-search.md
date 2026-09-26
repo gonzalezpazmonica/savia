@@ -3,7 +3,7 @@ name: lesson-search
 description: Search cross-project lessons by keyword or domain
 argument-hint: "[--query keyword] [--domain domain]"
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 allowed-tools: [Bash, Read]
 tier: core
 ---

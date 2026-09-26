@@ -69,7 +69,7 @@ fi
 if echo "$COMMAND" | grep -iE 'git[[:space:]]+(commit|add)' > /dev/null; then
   GIT_DIR_TARGET="${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-$PWD}}"
   CD_PATH=$(echo "$COMMAND" | sed -n 's/^[[:space:]]*cd[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null)
-  if [[ -n "$CD_PATH" ]] && [[ -d "$CD_PATH/.git" ]]; then
+  if [[ -n "$CD_PATH" ]] && [[ -e "$CD_PATH/.git" ]]; then  # -e: in a worktree .git is a file
     GIT_DIR_TARGET="$CD_PATH"
   elif git -C "$ENTRY_PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # SE-383 P8 (worktree-aware): si el cwd del comando pertenece a otro

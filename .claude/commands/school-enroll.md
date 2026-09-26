@@ -3,7 +3,7 @@ name: school-enroll
 description: Enroll student using alias (NO real names — privacy-first)
 argument-hint: "<alias>"
 allowed-tools: [Read, Bash, Write]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

@@ -4,7 +4,7 @@ description: >
   Recommend MCP servers based on team profile, project stack, and workflow needs.
 argument-hint: "[--stack dotnet|python|node] [--role pm|dev|qa]"
 allowed-tools: [Read, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

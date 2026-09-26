@@ -13,7 +13,7 @@ tools:
   - Bash
   - Glob
   - Grep
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 token_budget: {per_invocation: 60000, context_window_target: 15000, escalation_policy: escalate}
 color: violet
 maxTurns: 25

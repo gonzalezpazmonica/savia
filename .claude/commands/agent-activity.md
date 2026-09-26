@@ -1,7 +1,7 @@
 ---
 name: agent-activity
 description: "Show structured activity log of recent agent executions"
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 allowed-tools: [Read, Bash, Glob]
 argument-hint: "[--last N] [--format table|json]"

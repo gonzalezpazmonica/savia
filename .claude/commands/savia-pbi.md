@@ -5,7 +5,7 @@ description: >
   Sin dependencia de Azure DevOps.
 argument-hint: "[create|view|list] [--project <name>]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

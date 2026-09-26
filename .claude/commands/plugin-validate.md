@@ -7,7 +7,7 @@ allowed-tools:
   - Glob
   - Grep
   - Bash
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

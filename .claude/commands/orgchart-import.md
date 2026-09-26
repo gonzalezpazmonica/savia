@@ -4,7 +4,7 @@ description: >
   Importa un organigrama (Mermaid, Draw.io XML o Miro) y genera/actualiza
   la estructura teams/ con departamentos, equipos y miembros.
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 argument-hint: "{source} --dept {name} [--mode create|merge|overwrite] [--dry-run]"
 tier: core

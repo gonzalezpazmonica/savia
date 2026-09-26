@@ -5,7 +5,7 @@ description: >
   specs, and timesheets to reconstruct TSV lookup tables.
 argument-hint: "[--all|--profiles|--messages|--projects|--specs|--timesheets]"
 allowed-tools: [Bash, Read, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

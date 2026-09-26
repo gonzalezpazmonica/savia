@@ -4,7 +4,7 @@ description: Modo focus — identifica el item más prioritario y carga todo su 
 developer_type: all
 agent: none
 context_cost: medium
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 complexity_tier: mode1
 tier: core
 ---

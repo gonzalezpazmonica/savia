@@ -71,7 +71,7 @@ cmd_compile() {
 
 ## Quick Routing (task → agent)
 
-| Task type | Agent | Model | Budget |
+| Task type | Agent | Tier | Budget |
 |-----------|-------|-------|--------|
 HEADER
 
@@ -90,7 +90,7 @@ HEADER
             local model="-"
             local budget="-"
             if [[ -f "$agent_file" ]]; then
-              model=$(extract_field "$agent_file" "model")
+              model=$(extract_field "$agent_file" "model_tier")
               budget=$(extract_field "$agent_file" "token_budget")
               [[ -z "$model" ]] && model="-"
               [[ -z "$budget" ]] && budget="-"
@@ -114,7 +114,7 @@ Digest:   meeting-digest → confidentiality-judge → risk-analyst
 
 ## All Agents
 
-| # | Agent | Model | Permission | Specialty |
+| # | Agent | Tier | Permission | Specialty |
 |---|-------|-------|------------|-----------|
 FLOWS
 
@@ -129,7 +129,7 @@ FLOWS
       [[ -z "$name" ]] && name=$(basename "$agent_file" .md)
 
       local model
-      model=$(extract_field "$agent_file" "model")
+      model=$(extract_field "$agent_file" "model_tier")
       [[ -z "$model" ]] && model="-"
 
       local perm
@@ -206,7 +206,7 @@ cmd_stats() {
     total=$((total + 1))
 
     local model
-    model=$(extract_field "$agent_file" "model")
+    model=$(extract_field "$agent_file" "model_tier")
     [[ -z "$model" ]] && model="unspecified"
     models[$model]=$(( ${models[$model]:-0} + 1 ))
 

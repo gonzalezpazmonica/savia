@@ -3,7 +3,7 @@ name: flow-burndown
 description: Show sprint burndown chart data
 argument-hint: "<sprint_id>"
 allowed-tools: [Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

@@ -7,7 +7,7 @@ description: >
 developer_type: agent-single
 agent: architect
 context_cost: high
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

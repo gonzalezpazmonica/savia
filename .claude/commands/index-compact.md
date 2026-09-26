@@ -5,7 +5,7 @@ description: >
   source files no longer exist, and repairs inconsistencies.
 argument-hint: "[--all|--profiles|--messages|--projects|--specs|--timesheets]"
 allowed-tools: [Bash, Read]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 complexity_tier: mode1
 tier: core

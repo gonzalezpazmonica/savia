@@ -3,7 +3,7 @@ name: agent-memory
 description: Inspect and manage persistent memory fragments for subagents.
 argument-hint: "[agent-name] [--clear] [--list]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

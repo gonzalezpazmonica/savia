@@ -1,7 +1,7 @@
 ---
 name: truth-tribunal-orchestrator
 description: Truth Tribunal orchestrator — convenes 7 judges, aggregates scores, applies vetos, drives iteration
-model: opencode-go/glm-5.3
+model_tier: heavy
 permission_level: L2
 tools:
   read: true

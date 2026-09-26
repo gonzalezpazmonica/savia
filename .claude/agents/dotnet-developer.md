@@ -15,7 +15,7 @@ tools:
   - Bash
   - Glob
   - Grep
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 color: green
 maxTurns: 40
 max_context_tokens: 8000

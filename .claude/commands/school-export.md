@@ -3,7 +3,7 @@ name: school-export
 description: GDPR Article 15 — Export all student data in portable format
 argument-hint: "<alias>"
 allowed-tools: [Read, Bash, Write]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

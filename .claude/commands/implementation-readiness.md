@@ -1,7 +1,7 @@
 ---
 name: implementation-readiness
 description: Gate previo a codificar — verifica que una spec esta lista para implementacion con veredicto ternario PASA/RESERVAS/FALLA (SE-269 S2)
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

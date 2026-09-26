@@ -3,7 +3,7 @@ name: flow-sprint-board
 description: Display sprint board with task counts by column
 argument-hint: "<sprint_id>"
 allowed-tools: [Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

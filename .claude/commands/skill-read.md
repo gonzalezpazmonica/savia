@@ -2,7 +2,7 @@
 name: skill-read
 description: Carga el contenido completo de un skill bajo demanda (progressive disclosure)
 allowed-tools: [Read, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 tier: core
 ---
 

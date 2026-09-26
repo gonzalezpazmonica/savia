@@ -10,6 +10,7 @@ set -uo pipefail
 trap 'printf "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Shield autostart: ERR line %s\"}}\n" "$LINENO"; exit 0' ERR
 
 LOG="$HOME/.savia/shield-autostart.log"
+mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
 echo "[$(date +%H:%M:%S)] shield-autostart: starting" >> "$LOG"
 
 # PATH ampliado para WSL (hooks SessionStart no cargan .bashrc)
@@ -28,9 +29,13 @@ if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
   exit 0
 fi
 
-# Non-interactive (benchmark/pipe): skip fast
-if [[ ! -t 0 ]]; then
-  echo "non-interactive stdin, skipping" >> "$LOG"
+# Opt-in: the NER layer still yields false positives on technical prose, so the
+# daemon only autostarts with SAVIA_SHIELD_AUTOSTART=on. Without it,
+# data-sovereignty-gate.sh keeps the regex fallback. Headless runs always skip.
+# Note: hooks ALWAYS receive the payload on a stdin pipe, so `-t 0` cannot
+# tell interactive sessions apart (it made autostart a permanent no-op).
+if [[ "${SAVIA_SHIELD_AUTOSTART:-off}" != "on" || "${CLAUDE_CODE_ENTRYPOINT:-}" == sdk-* ]]; then
+  echo "autostart off (SAVIA_SHIELD_AUTOSTART=${SAVIA_SHIELD_AUTOSTART:-off}, entrypoint=${CLAUDE_CODE_ENTRYPOINT:-}), skipping" >> "$LOG"
   exit 0
 fi
 

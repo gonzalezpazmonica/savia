@@ -37,7 +37,7 @@ teardown() {
   [ -f "$SPEC" ]
 }
 @test "agent specifies capable model for test strategy" {
-  grep -qE "^model: (heavy|mid|fast)" "$AGENT"
+  grep -qE "^model_tier: (heavy|mid|fast)" "$AGENT"
 }
 @test "agent contains all 8 excellence patterns" {
   grep -q "setup.*teardown" "$AGENT"
@@ -88,10 +88,10 @@ teardown() {
   grep -q "SPEC.*doc.*exists\|SPEC-NNN\|docs/propuestas" "$TEMPLATE"
 }
 @test "fails if agent file is missing required frontmatter" {
-  # Agent must have name, description, model, tools in frontmatter
+  # Agent must have name, description, model_tier, tools in frontmatter
   head -20 "$AGENT" | grep -q "name:"
   head -20 "$AGENT" | grep -q "description:"
-  head -20 "$AGENT" | grep -q "model:"
+  head -20 "$AGENT" | grep -q "^model_tier:"
   head -20 "$AGENT" | grep -q "tools:"
 }
 

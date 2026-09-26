@@ -3,7 +3,7 @@ name: daily-plan
 description: Generate or show today's agent activation plan with token budgets
 argument-hint: "[generate|show|status]"
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 allowed-tools: [Bash, Read]
 tier: core
 ---

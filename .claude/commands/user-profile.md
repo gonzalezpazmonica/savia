@@ -2,7 +2,7 @@
 name: user-profile
 description: Gestiona perfiles de miembros del equipo — ver, crear o editar.
 argument-hint: "@handle [--edit] [--section skills|vacations|locality]"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

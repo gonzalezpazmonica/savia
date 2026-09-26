@@ -7,7 +7,7 @@ description: Gestiona la memoria persistente de pm-workspace via lenguaje natura
              haber recordado antes, o cuando quiere guardar información para el futuro.
              Ejemplos: "¿qué decidimos sobre X?", "recuerda que Y", "¿qué sé de Z?"
 tools: [Read, Bash, Glob, Grep, Write]
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 token_budget:
   per_invocation: 30000
   context_window_target: 2200

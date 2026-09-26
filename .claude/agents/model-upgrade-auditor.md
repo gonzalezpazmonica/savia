@@ -3,7 +3,7 @@ name: model-upgrade-auditor
 permission_level: L1
 description: "Audits agents, skills, and prompts for workarounds that newer models may no longer need. Proposes simplifications with eval-backed evidence."
 tools: [Read, Write, Glob, Grep, Bash, Task]
-model: opencode-go/glm-5.3
+model_tier: heavy
 token_budget:
   per_invocation: 100000
   context_window_target: 20000

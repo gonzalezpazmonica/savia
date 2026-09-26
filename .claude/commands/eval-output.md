@@ -3,7 +3,7 @@ name: eval-output
 description: >
   LLM-as-a-Judge — Evalúa la calidad de un output de agente/comando
   con scoring G-Eval (1-10), comparación A/B Arena, y análisis de tool selection.
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

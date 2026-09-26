@@ -8,7 +8,7 @@ description: >
 tools:
   read: true
   grep: true
-model: opencode-go/glm-5.3
+model_tier: heavy
 color: "#808080"
 maxSteps: 10
 max_context_tokens: 12000

@@ -106,9 +106,9 @@ Ref: anthropic.com/engineering/claude-code-auto-mode
 ## Escalamiento de modelo
 
 Si un agente falla consecutivamente en una tarea:
-- Intento 1: CLAUDE_MODEL_FAST (haiku)
-- Intento 2: CLAUDE_MODEL_MID (sonnet)
-- Intento 3: CLAUDE_MODEL_AGENT (opus)
+- Intento 1: tier `fast`
+- Intento 2: tier `mid`
+- Intento 3: tier `heavy`
 - Intento 4+: ABORT — registrar como "requiere intervención humana"
 
 OOM, timeout o error de infra: NO escalar — descartar y continuar.

@@ -3,7 +3,7 @@ name: codebase-map
 description: "Generar mapa de dependencias internas del workspace: comandos → agentes → reglas → skills"
 argument-hint: "[--focus commands|agents|rules|skills] [--orphans]"
 allowed-tools: [Read, Glob, Grep, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

@@ -4,7 +4,7 @@ description: "Auditoría de exposición IA por rol — observed exposure, riesgo
 developer_type: all
 agent: task
 context_cost: high
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 argument-hint: "[--team equipo] [--role rol] [--threshold 50] [--lang es|en]"
 tier: core
 ---

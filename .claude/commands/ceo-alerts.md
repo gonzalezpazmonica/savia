@@ -4,7 +4,7 @@ description: Panel de alertas estratégicas para dirección — solo decisiones 
 developer_type: all
 agent: none
 context_cost: medium
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

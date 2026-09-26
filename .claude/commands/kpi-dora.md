@@ -3,7 +3,7 @@ name: kpi-dora
 description: >
   Dashboard de métricas DORA: deployment frequency, lead time for changes,
   change failure rate, MTTR y reliability.
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

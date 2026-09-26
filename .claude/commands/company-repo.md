@@ -5,7 +5,7 @@ description: >
   El repositorio compartido de la empresa para conocimiento, mensajería y estado.
 argument-hint: "[create|connect|status|sync]"
 allowed-tools: [Read, Write, Bash, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

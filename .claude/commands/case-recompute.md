@@ -3,7 +3,7 @@ name: case-recompute
 description: Recompute NPV, IRR, and risk-adjusted NPV for a business case
 argument-hint: "BC-YYYY-NNN"
 context_cost: medium
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 allowed-tools: [Read, Write, Bash, Glob, Grep]
 tier: core
 ---

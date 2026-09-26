@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: b65327381a60 | resources: 1468
-> 295 commands · 136 skills · 89 agents · 948 scripts
+> hash: dc8556ffebdd | resources: 1470
+> 295 commands · 136 skills · 89 agents · 950 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -367,6 +367,7 @@
 [development] setup-claude-permissions — backward,compatibility,deprecated,file,instead — script:scripts/setup-claude-permissions.sh
 [development] setup-opencode-permissions — claude,json,local,permisos,permissions — script:scripts/setup-opencode-permissions.sh
 [development] setup-savia-web — build,http,localhost,savia,serve — script:scripts/setup-savia-web.sh
+[development] skill-listing-overrides — claude,code,listing,load,overrides — script:scripts/skill-listing-overrides.sh
 [development] skill-loader — aware,context,loader,loading,skill — script:scripts/skill-loader.sh
 [development] skill-pattern-detector — detection,detector,pattern,phase,scripts — script:scripts/skill-pattern-detector.sh
 [development] sldc-context-loop — adrs,alimenta,cerrar,ciclo,compuerta — cmd:.claude/commands/sldc-context-loop.md
@@ -1120,7 +1121,7 @@
 [planning] sync-adapters/jira-adapter — adapter,backlog,cloud,jira,local — script:scripts/sync-adapters/jira-adapter.sh
 [planning] sync-calendars — calendarios,disponibilidad,microsoft,sincronizar,tenants — cmd:.claude/commands/sync-calendars.md
 [planning] sync-github-metadata — github,metadata,repo,sync,update — script:scripts/sync-github-metadata.sh
-[planning] sync-model-tiers — abstract,fast,heavy,model,provider — script:scripts/sync-model-tiers.sh
+[planning] sync-model-tiers — model,retired,sync,tiers — script:scripts/sync-model-tiers.sh
 [planning] sync-tags-from-changelog — changelog,create,missing,sync,tags — script:scripts/sync-tags-from-changelog.sh
 [planning] tabular-analyst — analisis,arrays,datos,estadistico,excel — agent:.opencode/agents/tabular-analyst.md
 [planning] tabular-intelligence — analiza,analizan,correlacion,datos,distribucion — skill:.claude/skills/tabular-intelligence/SKILL.md
@@ -1284,6 +1285,7 @@
 [quality] mcp-security-audit — audit,chain,config,security,slice — script:scripts/mcp-security-audit.sh
 [quality] mobile-security-scan — mobile,scan,security — script:scripts/mobile-security-scan.sh
 [quality] mobile-security-scanner — android,análisis,busca,básico,docker — skill:.claude/skills/mobile-security-scanner/SKILL.md
+[quality] model-tier-lint — agnostic,guard,lint,model,provider — script:scripts/model-tier-lint.sh
 [quality] model-upgrade-audit — audit,components,debt,models,need — cmd:.claude/commands/model-upgrade-audit.md
 [quality] model-upgrade-audit — debt,detectar,disponible,modelo,nuevo — skill:.claude/skills/model-upgrade-audit/SKILL.md
 [quality] model-upgrade-auditor — agents,audits,backed,eval,evidence — agent:.opencode/agents/model-upgrade-auditor.md

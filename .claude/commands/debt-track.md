@@ -4,7 +4,7 @@ description: >
   Registro y seguimiento manual de deuda técnica por proyecto.
   Ratio de deuda, tendencia por sprint, integración con SonarQube.
   NOTA: Para análisis automatizado, ver /debt-analyze, /debt-prioritize, /debt-budget
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

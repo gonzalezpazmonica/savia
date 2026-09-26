@@ -6,7 +6,7 @@ description: >
   to detect when a task's framing may be wrong. NOT real judgment; explicit
   heuristic-pause simulation. Output: verdict FRAME_OK|FRAME_DOUBT|FRAME_REJECT
   + banner_text + confidence. NEVER blocks execution; challenges the frame visibly.
-model: opencode-go/glm-5.3
+model_tier: heavy
 permission_level: L1
 context_cost: high
 tags: ["criterion-simulation", "meta-reflection", "spec-194", "governance"]

@@ -1,7 +1,7 @@
 ---
 name: context-status
 description: "Show context window usage, model tier, and optimization recommendations"
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 allowed-tools: [Read, Bash, Glob]
 argument-hint: "[--json]"

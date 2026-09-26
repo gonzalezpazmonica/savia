@@ -1,7 +1,7 @@
 ---
 name: forge-idea
 description: Forja una idea mediante interrogatorio socratico con veredicto ternario ENDURECIDA/MAS_CLARA/MUERTA (SE-269 S1)
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

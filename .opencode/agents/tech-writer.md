@@ -13,7 +13,7 @@ tools:
   edit: true
   glob: true
   bash: true
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 color: "#FFFFFF"
 maxSteps: 8
 max_context_tokens: 8000

@@ -9,7 +9,7 @@ tools:
   bash: true
   glob: true
   grep: true
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permissionMode: default
 maxSteps: 30
 color: "#FF8800"

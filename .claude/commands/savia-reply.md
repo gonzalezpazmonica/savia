@@ -4,7 +4,7 @@ description: >
   Responder a un mensaje en Company Savia con threading automático.
 argument-hint: "<msg_id> [--encrypt]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

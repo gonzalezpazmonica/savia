@@ -3,7 +3,7 @@ name: calendar-rebalance
 description: "Rebalancear focus blocks tras cambio de prioridades o calendario"
 argument-hint: "[--reason 'nueva reunion'] [--project nombre]"
 allowed-tools: [Read, Write, Bash, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

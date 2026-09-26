@@ -3,7 +3,7 @@ name: web-research
 description: Search the web to resolve context gaps — documentation, versions, CVEs, best practices. Auto-starts SearxNG Docker if available, falls back to WebSearch.
 argument-hint: "<query> [--cache-only] [--cache-stats] [--cache-clear] [--searxng-status]"
 allowed-tools: [Read, Bash, WebSearch, WebFetch, Write]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

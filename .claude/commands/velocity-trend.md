@@ -4,7 +4,7 @@ description: Tendencia de velocity con media móvil, detección de anomalías y 
 developer_type: agent-single
 agent: azure-devops-operator
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

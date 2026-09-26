@@ -3,7 +3,7 @@ name: dev-session
 description: Orquestar desarrollo de un spec mediante 5 fases con aislamiento de contexto y persistencia en disco
 argument-hint: "start <spec-path> | next | status | review | abort"
 allowed-tools: [Read, Write, Bash, Glob, Grep, Task]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: high
 tier: core
 ---

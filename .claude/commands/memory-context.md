@@ -2,7 +2,7 @@
 name: memory-context
 description: >
   Muestra las últimas observaciones de memoria para el proyecto activo. Útil al inicio de sesión o tras /compact.
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

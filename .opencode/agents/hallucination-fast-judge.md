@@ -1,7 +1,7 @@
 ---
 name: hallucination-fast-judge
 description: Recommendation Tribunal judge — verifies that entities cited in a draft (files, functions, flags, libs, paths, commands) actually exist via tool calls
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 permission_level: L1
 tools:
   read: true

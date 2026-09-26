@@ -3,7 +3,7 @@ name: school-project
 description: Student creates a new project from template
 argument-hint: "<alias> <project_name>"
 allowed-tools: [Read, Bash, Write]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

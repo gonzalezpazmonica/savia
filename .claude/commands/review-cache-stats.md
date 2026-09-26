@@ -4,7 +4,7 @@ description: Estadísticas de la caché de code review
 agent-single: azure-devops-operator
 skills:
   - azure-devops-queries
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

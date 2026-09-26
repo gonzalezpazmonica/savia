@@ -1,7 +1,7 @@
 ---
 name: sprint-plan
 description: Asiste en el Sprint Planning calculando capacity disponible y proponiendo la carga de trabajo.
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

@@ -18,13 +18,13 @@ REGISTRY="$REPO_ROOT/config/model-registry.json"
 EMIT="$REPO_ROOT/scripts/otel-emit.sh"
 
 # Si no llega tier/model explicito, derivar el tier del frontmatter del agente
-# (.opencode/agents/{name}.md -> model: mid|heavy|fast). Fallback: mid.
+# (.opencode/agents/{name}.md -> model_tier: mid|heavy|fast). Fallback: mid.
 derive_tier() {
   local agent="$1"
   local mdfile="$REPO_ROOT/.opencode/agents/${agent}.md"
   if [[ -f "$mdfile" ]]; then
     local t
-    t="$(grep -m1 '^model:' "$mdfile" | sed 's/^model:[[:space:]]*//' | tr -d '"' )"
+    t="$(grep -m1 -E '^model(_tier)?:' "$mdfile" | sed -E 's/^model(_tier)?:[[:space:]]*//' | tr -d '"' )"
     case "$t" in
       heavy|mid|fast) echo "$t"; return ;;
     esac

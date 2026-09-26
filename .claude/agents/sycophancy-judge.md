@@ -1,7 +1,7 @@
 ---
 name: sycophancy-judge
 description: Recommendation Tribunal judge — detects empty social validation in conversational drafts (SPEC-192)
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

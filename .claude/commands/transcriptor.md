@@ -1,7 +1,7 @@
 ---
 name: transcriptor
 description: Gestionar Savia Transcriptor — escanear reuniones capturadas, digerir transcripciones y capturas, marcar como digeridas.
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 context_cost: medium
 complexity_tier: mode1
 tier: core

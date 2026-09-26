@@ -327,23 +327,6 @@
         ]
       },
       {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "http",
-            "url": "http://127.0.0.1:8444/gate",
-            "headers": {
-              "X-Shield-Token": "$SHIELD_TOKEN"
-            },
-            "allowedEnvVars": [
-              "SHIELD_TOKEN"
-            ],
-            "timeout": 5,
-            "statusMessage": "Savia Shield HTTP gate..."
-          }
-        ]
-      },
-      {
         "matcher": "Read",
         "hooks": [
           {
@@ -392,6 +375,17 @@
         ]
       },
       {
+        "matcher": "Agent|Task",
+        "_comment": "model-tier-inject: SPEC-127 — resolves agent model_tier to the local tiers.claude-code selector. Master switch: SAVIA_MODEL_TIER_INJECT=off",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/model-tier-inject.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "Task",
         "hooks": [
           {
@@ -408,8 +402,7 @@
             "type": "prompt",
             "prompt": "A git commit command is about to run. Evaluate if the commit message accurately describes the intent of the changes based on the command context.\n\nCommand: $ARGUMENTS\n\nRespond with {\"ok\": true} if the message is descriptive and follows conventional commit format (type(scope): description). Respond with {\"ok\": false, \"reason\": \"brief explanation\"} if the message is misleading, too vague, or does not match what the changes seem to do.",
             "timeout": 10,
-            "model": "deepseek/deepseek-v4-flash",
-            "statusMessage": "Semantic commit validation (DeepSeek flash)..."
+            "statusMessage": "Semantic commit validation (fast model)..."
           }
         ]
       },
@@ -711,7 +704,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/speculative-pre-execute.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/speculative-pre-execute.sh"
           }
         ],
         "_comment": "Fires after any tool call (SE-220)"
@@ -721,7 +714,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/memory-origin-gate.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/memory-origin-gate.sh"
           }
         ],
         "_comment": "SE-352 taint de turno por origen de red (memory provenance)"
@@ -731,7 +724,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/criterion-simulation-challenge.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/criterion-simulation-challenge.sh"
           }
         ],
         "_comment": "Evalúa framing de sub-tareas delegadas (SPEC-194)"
@@ -741,7 +734,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/router-mode-dispatch.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/router-mode-dispatch.sh"
           }
         ],
         "_comment": "Clasifica Task calls mode1/mode2 (SPEC-163)"
@@ -751,7 +744,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/speculative-skill-preload.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/speculative-skill-preload.sh"
           }
         ],
         "_comment": "Hint de skill al input de sub-agente (SE-220 S3)"
@@ -761,7 +754,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/memory-feedback-task.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/memory-feedback-task.sh"
           }
         ],
         "_comment": "Extrae outcomes de agentes (SPEC-164)"
@@ -771,7 +764,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/cognitive-debt-check.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/cognitive-debt-check.sh"
           }
         ],
         "_comment": "Mide duración de sesión (SPEC-107)"
@@ -781,7 +774,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/live-progress-emitter.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/live-progress-emitter.sh"
           }
         ],
         "_comment": "Progreso por cada tool call (SPEC-042)"
@@ -791,11 +784,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/decision-trace-capture.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/decision-trace-capture.sh"
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/learning-capture-hook.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/learning-capture-hook.sh"
           }
         ],
         "_comment": "Detecta decisiones (SPEC-188 F3) + errores reconocidos para el bucle SCL-001"
@@ -818,7 +811,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/twin-posttooluse.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/twin-posttooluse.sh"
           }
         ]
       },
@@ -828,7 +821,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/.claude/hooks/judge-auto-router.sh\" \"$CLAUDE_JSON_INPUT\""
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/judge-auto-router.sh"
           }
         ]
       },
@@ -993,7 +986,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/recommendation-tribunal-followup.sh"
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/recommendation-tribunal-followup.sh"
           }
         ]
       }
@@ -1150,5 +1143,279 @@
     "TASK_MAX_OUTPUT_LENGTH": "80000",
     "ENABLE_TOOL_SEARCH": "auto",
     "CLAUDE_CODE_NO_FLICKER": "1"
+  },
+  "skillOverrides": {
+    "a11y-audit": "name-only",
+    "a11y-fix": "name-only",
+    "a11y-monitor": "name-only",
+    "a11y-report": "name-only",
+    "accreditation-track": "name-only",
+    "adoption-assess": "name-only",
+    "adoption-plan": "name-only",
+    "adoption-sandbox": "name-only",
+    "adoption-track": "name-only",
+    "adr-create": "name-only",
+    "agent-efficiency": "name-only",
+    "agent-notes-archive": "name-only",
+    "agent-trace": "name-only",
+    "ai-audit-log": "name-only",
+    "ai-boundary": "name-only",
+    "ai-confidence": "name-only",
+    "ai-incident": "name-only",
+    "ai-risk-assessment": "name-only",
+    "ai-safety-config": "name-only",
+    "arch-compare": "name-only",
+    "arch-detect": "name-only",
+    "arch-fitness": "name-only",
+    "arch-health": "name-only",
+    "arch-recommend": "name-only",
+    "arch-suggest": "name-only",
+    "async-standup": "name-only",
+    "audit-alert": "name-only",
+    "audit-export": "name-only",
+    "audit-search": "name-only",
+    "audit-trail": "name-only",
+    "bias-check": "name-only",
+    "biblio-search": "name-only",
+    "billing-rate": "name-only",
+    "burnout-radar": "name-only",
+    "cache-invalidate": "name-only",
+    "cache-optimize": "name-only",
+    "cache-strategy": "name-only",
+    "cache-warm": "name-only",
+    "capacity-forecast-telco": "name-only",
+    "changelog-update": "name-only",
+    "chat-notify": "name-only",
+    "chat-setup": "name-only",
+    "code-patterns": "name-only",
+    "cognitive-status": "name-only",
+    "company-edit": "name-only",
+    "company-setup": "name-only",
+    "company-vertical": "name-only",
+    "compliance-matrix": "name-only",
+    "component-search": "name-only",
+    "confidentiality-check": "name-only",
+    "conflict-check": "name-only",
+    "confluence-publish": "name-only",
+    "context-age": "name-only",
+    "context-benchmark": "name-only",
+    "context-compress": "name-only",
+    "context-defer": "name-only",
+    "context-load": "name-only",
+    "context-optimize": "name-only",
+    "context-profile": "name-only",
+    "contribute": "name-only",
+    "court-calendar": "name-only",
+    "credential-scan": "name-only",
+    "cross-project-search": "name-only",
+    "dataset-version": "name-only",
+    "debt-budget": "name-only",
+    "debt-prioritize": "name-only",
+    "deep-work": "name-only",
+    "dependencies-audit": "name-only",
+    "devops-validate": "name-only",
+    "diagram-config": "name-only",
+    "drift-check": "name-only",
+    "drive-setup": "name-only",
+    "drive-sync": "name-only",
+    "dx-core4": "name-only",
+    "dx-dashboard": "name-only",
+    "dx-recommendations": "name-only",
+    "dx-survey": "name-only",
+    "emergency-plan": "name-only",
+    "epic-plan": "name-only",
+    "error-investigate": "name-only",
+    "ethics-protocol": "name-only",
+    "eval-create": "name-only",
+    "eval-report": "name-only",
+    "eval-run": "name-only",
+    "excel-report": "name-only",
+    "experiment-log": "name-only",
+    "feature-impact": "name-only",
+    "feedback": "name-only",
+    "figma-extract": "name-only",
+    "flow-board": "name-only",
+    "flow-intake": "name-only",
+    "flow-protect": "name-only",
+    "flow-setup": "name-only",
+    "flow-spec": "name-only",
+    "gdrive-upload": "name-only",
+    "github-activity": "name-only",
+    "github-issues": "name-only",
+    "github-projects": "name-only",
+    "governance-certify": "name-only",
+    "governance-policy": "name-only",
+    "governance-report": "name-only",
+    "grant-track": "name-only",
+    "graph-impact": "name-only",
+    "headroom-analyze": "name-only",
+    "headroom-apply": "name-only",
+    "health-kpi": "name-only",
+    "hw-bom": "name-only",
+    "hw-revision": "name-only",
+    "impact-metric": "name-only",
+    "incident-correlate": "name-only",
+    "incident-postmortem": "name-only",
+    "incident-register": "name-only",
+    "instinct-manage": "name-only",
+    "insurance-claim": "name-only",
+    "insurance-policy": "name-only",
+    "inventory-manage": "name-only",
+    "jira-connect": "name-only",
+    "jira-sync": "name-only",
+    "knowledge-prime": "name-only",
+    "legal-deadline": "name-only",
+    "legal-template": "name-only",
+    "linear-sync": "name-only",
+    "marketplace-search": "name-only",
+    "mcp-browse": "name-only",
+    "mcp-server": "name-only",
+    "mcp-server-config": "name-only",
+    "mcp-server-start": "name-only",
+    "mcp-server-status": "name-only",
+    "meeting-agenda": "name-only",
+    "meeting-summarize": "name-only",
+    "memory-compress": "name-only",
+    "memory-graph": "name-only",
+    "memory-importance": "name-only",
+    "memory-index": "name-only",
+    "memory-prune": "name-only",
+    "memory-save": "name-only",
+    "memory-search": "name-only",
+    "memory-stats": "name-only",
+    "memory-sync": "name-only",
+    "my-learning": "name-only",
+    "nctalk-search": "name-only",
+    "network-incident": "name-only",
+    "notify-nctalk": "name-only",
+    "notify-slack": "name-only",
+    "notify-whatsapp": "name-only",
+    "notion-sync": "name-only",
+    "obs-connect": "name-only",
+    "obs-dashboard": "name-only",
+    "obs-query": "name-only",
+    "okr-align": "name-only",
+    "okr-define": "name-only",
+    "okr-track": "name-only",
+    "order-track": "name-only",
+    "org-metrics": "name-only",
+    "outcome-track": "name-only",
+    "pbi-assign": "name-only",
+    "pbi-decompose-batch": "name-only",
+    "pbi-from-rules": "name-only",
+    "pbi-from-rules-report": "name-only",
+    "pbi-plan-sprint": "name-only",
+    "pdca-cycle": "name-only",
+    "platform-migrate": "name-only",
+    "playbook-create": "name-only",
+    "playbook-evolve": "name-only",
+    "playbook-library": "name-only",
+    "playbook-reflect": "name-only",
+    "po-wizard": "name-only",
+    "portfolio-deps": "name-only",
+    "portfolio-overview": "name-only",
+    "postmortem-create": "name-only",
+    "postmortem-heuristics": "name-only",
+    "postmortem-review": "name-only",
+    "prevention-metrics": "name-only",
+    "product-catalog": "name-only",
+    "profile-edit": "name-only",
+    "project-kickoff": "name-only",
+    "promotion-engine": "name-only",
+    "qa-bug-triage": "name-only",
+    "qa-dashboard": "name-only",
+    "qa-regression-plan": "name-only",
+    "qa-wizard": "name-only",
+    "record-export": "name-only",
+    "record-replay": "name-only",
+    "record-start": "name-only",
+    "record-stop": "name-only",
+    "ref-list": "name-only",
+    "ref-resolve": "name-only",
+    "release-readiness": "name-only",
+    "repos-branches": "name-only",
+    "repos-pr-create": "name-only",
+    "repos-pr-list": "name-only",
+    "repos-pr-review": "name-only",
+    "repos-search": "name-only",
+    "retro-actions": "name-only",
+    "retro-patterns": "name-only",
+    "review-cache-clear": "name-only",
+    "review-community": "name-only",
+    "risk-assess": "name-only",
+    "risk-log": "name-only",
+    "risk-policy": "name-only",
+    "savia-hub": "name-only",
+    "savia-persona-tune": "name-only",
+    "savia-status": "name-only",
+    "sbom-generate": "name-only",
+    "scheduled-create": "name-only",
+    "scheduled-list": "name-only",
+    "scheduled-setup": "name-only",
+    "scheduled-test": "name-only",
+    "sdlc-advance": "name-only",
+    "sdlc-policy": "name-only",
+    "sdlc-status": "name-only",
+    "security-alerts": "name-only",
+    "security-audit": "name-only",
+    "security-auto-remediation": "name-only",
+    "security-pipeline": "name-only",
+    "self-audit": "name-only",
+    "sentry-bugs": "name-only",
+    "sentry-health": "name-only",
+    "service-catalog-telco": "name-only",
+    "session-save": "name-only",
+    "sheets-report": "name-only",
+    "sheets-setup": "name-only",
+    "sheets-sync": "name-only",
+    "slack-search": "name-only",
+    "solvency-report": "name-only",
+    "spec-explore": "name-only",
+    "spec-review": "name-only",
+    "spec-status": "name-only",
+    "spec-verify": "name-only",
+    "stakeholder-align": "name-only",
+    "stakeholder-report": "name-only",
+    "stakeholder-view": "name-only",
+    "strategy-map": "name-only",
+    "subscriber-lifecycle": "name-only",
+    "sustainable-pace": "name-only",
+    "team-sentiment": "name-only",
+    "team-skills-matrix": "name-only",
+    "tenant-create": "name-only",
+    "tenant-share": "name-only",
+    "testplan-generate": "name-only",
+    "testplan-results": "name-only",
+    "testplan-status": "name-only",
+    "threat-model": "name-only",
+    "trace-analyze": "name-only",
+    "trace-search": "name-only",
+    "training-compliance": "name-only",
+    "travel-clean": "name-only",
+    "travel-pack": "name-only",
+    "travel-sync": "name-only",
+    "travel-unpack": "name-only",
+    "travel-verify": "name-only",
+    "underwriting-rule": "name-only",
+    "validate-consensus": "name-only",
+    "value-stream-map": "name-only",
+    "vault-export": "name-only",
+    "vault-init": "name-only",
+    "vault-restore": "name-only",
+    "vault-status": "name-only",
+    "vault-sync": "name-only",
+    "verify-full": "name-only",
+    "verify-layer": "name-only",
+    "vertical-propose": "name-only",
+    "visual-qa": "name-only",
+    "visual-regression": "name-only",
+    "volunteer-manage": "name-only",
+    "webhook-config": "name-only",
+    "whatsapp-search": "name-only",
+    "wiki-publish": "name-only",
+    "wiki-sync": "name-only",
+    "wireframe-check": "name-only",
+    "workload-balance": "name-only",
+    "worktree-setup": "name-only"
   }
 }

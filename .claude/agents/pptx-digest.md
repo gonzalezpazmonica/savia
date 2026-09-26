@@ -7,7 +7,7 @@ description: >
   proyecto. Actualiza documentos de contexto vivos. Usar PROACTIVELY cuando se detectan
   PPTX nuevos en carpetas de proyecto o SharePoint.
 tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permissionMode: plan
 maxTurns: 30
 max_context_tokens: 80000
