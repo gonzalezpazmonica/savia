@@ -3,7 +3,7 @@ name: skill-optimize
 description: "Auto-optimizar el prompt de un skill o agente con bucle AutoResearch"
 argument-hint: "{skill-name|agent-name} [--fixture nombre] [--max-iterations 10]"
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

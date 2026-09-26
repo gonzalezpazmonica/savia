@@ -1,6 +1,6 @@
 ---
 name: tabular-analyst
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L2
 tools:
   read: true

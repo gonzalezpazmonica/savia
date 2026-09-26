@@ -1,7 +1,7 @@
 ---
 name: pr-agent-judge
 description: External 5th judge of the Code Review Court — wraps qodo-ai/pr-agent OSS (SPEC-124). Opt-in via COURT_INCLUDE_PR_AGENT=true.
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools: [Read, Bash, Grep]
 token_budget:

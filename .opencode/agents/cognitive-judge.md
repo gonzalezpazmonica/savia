@@ -1,7 +1,7 @@
 ---
 name: cognitive-judge
 description: Code Review Court judge — debuggability at 3AM, naming, complexity, logs
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

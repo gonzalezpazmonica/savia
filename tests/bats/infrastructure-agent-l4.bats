@@ -8,7 +8,7 @@ E="tests/evals/infrastructure-agent"
   [ -f "$A" ]
   grep -q "^name: infrastructure-agent$" "$A"
   grep -q "^permission_level: L4" "$A"
-  grep -q "^model:" "$A"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$A"
 }
 
 @test "[infrastructure-agent] golden: descriptor con cadena laws->enforcement->receipt" {

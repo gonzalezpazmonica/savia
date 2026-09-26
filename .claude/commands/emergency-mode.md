@@ -4,7 +4,7 @@ description: Gestionar el modo emergencia con LLM local cuando el proveedor clou
 developer_type: all
 agent: none
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 tier: core
 ---
 

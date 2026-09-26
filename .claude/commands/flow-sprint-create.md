@@ -3,7 +3,7 @@ name: flow-sprint-create
 description: Create a new sprint with goal and dates
 argument-hint: "<goal> <start_date> <end_date> [capacity_h]"
 allowed-tools: [Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

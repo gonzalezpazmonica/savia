@@ -8,7 +8,7 @@ E="tests/evals/coherence-court-orchestrator"
   [ -f "$A" ]
   grep -q "^name: coherence-court-orchestrator$" "$A"
   grep -q "^permission_level: L4" "$A"
-  grep -q "^model:" "$A"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$A"
 }
 
 @test "[coherence-court-orchestrator] golden: descriptor con cadena laws->enforcement->receipt" {

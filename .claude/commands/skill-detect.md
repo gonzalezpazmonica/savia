@@ -3,7 +3,7 @@ name: skill-detect
 description: Detect repeated patterns and propose new skills automatically
 argument-hint: "[scan|propose|refine|status]"
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 allowed-tools: [Bash, Read]
 tier: core
 ---

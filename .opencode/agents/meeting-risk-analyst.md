@@ -10,7 +10,7 @@ tools:
   read: true
   glob: true
   grep: true
-model: opencode-go/glm-5.3
+model_tier: heavy
 color: "#FF0000"
 maxSteps: 20
 max_context_tokens: 12000

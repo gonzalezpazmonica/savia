@@ -5,7 +5,7 @@ description: >
   Muestra mensajes sin leer, permite leer mensajes individuales.
 argument-hint: "[--unread-only] [read <msg_id>]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

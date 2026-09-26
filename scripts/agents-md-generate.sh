@@ -60,7 +60,8 @@ done
 # siguiente turno. Los runs autónomos/cron sin sesión viva regeneran normal.
 # Sesión activa = env SAVIA_SESSION_ACTIVE=1 o marker del hook cache-hygiene.
 if [[ "${MODE:-print}" == "apply" ]]; then
-  _cache_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  # PROJECT_ROOT scopes the marker (tests/sandboxes use their own root).
+  _cache_root="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
   if [[ "${SAVIA_SESSION_ACTIVE:-0}" == "1" || -f "$_cache_root/data/.cache-session-active" ]]; then
     echo "SKIP: sesión activa (SE-371) — regeneración de AGENTS.md congelada." >&2
     exit 3
@@ -166,17 +167,18 @@ Before working in a project, read its `projects/<name>/CLAUDE.md`.
 Skills share one source: `.claude/skills/`. OpenCode exposes it through
 `.opencode/skills`; Codex through `.agents/skills`. Use `SKILLS.md` and
 `docs/RESOLVER.md` to find the relevant instructions, then read the skill.
-This registry describes roles; its model identifiers and permissions are
-OpenCode metadata, not automatically configured Codex subagents.
+Agents declare a provider-agnostic `model_tier` (heavy|mid|fast), resolved
+per frontend from `~/.savia/preferences.yaml` → `tiers.<frontend>`.
+Permissions are OpenCode metadata, not configured Codex subagents.
 
 For concurrent sessions in the same directory, read
 `docs/rules/domain/parallel-session-protocol.md`. The working tree, branch
 and Git index are shared: coordinate file ownership, serialize Git mutations,
 and never switch branches, stage another session's edits or discard changes.
 Use separate worktrees when tasks need independent branches.
-Hooks and MCP configuration are frontend-specific: do not assume Codex runs
-`.claude/settings.json` hooks or `.opencode/plugins`. Run the applicable
-validation scripts explicitly and report any unverified gate.
+Hooks and MCP are frontend-specific: Codex runs only the Bash gates in
+`.codex/hooks.json` (trusted via `/hooks`). Run the applicable validation
+scripts explicitly and report any unverified gate.
 HEADER
   python3 "${ROOT}/scripts/dual-cli/autonomy.py" contract
   cat <<'HEADER'
@@ -191,7 +193,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 
 ## Agents
 
-| Name | Model | Permission | Tools | Description |
+| Name | Tier | Permission | Tools | Description |
 |---|---|---|---|---|
 HEADER
   # Iterate agents alphabetically — sort -V for stable output
@@ -204,7 +206,7 @@ HEADER
     [[ -z "$name" ]] && { echo "WARN: skipping ${f}: no name field" >&2; continue; }
     perm=$(extract_field "$f" "permission_level")
     [[ -z "$perm" ]] && perm="—"
-    model=$(extract_field "$f" "model")
+    model=$(extract_field "$f" "model_tier")
     [[ -z "$model" ]] && model="—"
     desc=$(extract_field "$f" "description")
     desc=$(sanitise_description "$desc")
@@ -223,10 +225,10 @@ case "$MODE" in
     if [[ "${SENTINEL_MODE:-0}" == "1" ]]; then
       # SPEC-180 piloto: write only the agents-table block via sentinel
       # primitive, preserving any @user blocks present in the file.
-      table_content=$(printf '%s' "$GENERATED" | awk '/^\| Name \| Model \|/{flag=1} flag')
+      table_content=$(printf '%s' "$GENERATED" | awk '/^\| Name \| Tier \|/{flag=1} flag')
       [[ -f "$TARGET" ]] || {
         # First-time bootstrap: write header-only file (without table)
-        printf '%s' "$GENERATED" | awk '/^\| Name \| Model \|/{exit} {print}' > "$TARGET"
+        printf '%s' "$GENERATED" | awk '/^\| Name \| Tier \|/{exit} {print}' > "$TARGET"
       }
       printf '%s' "$table_content" | bash "$(dirname "$0")/sentinel-regen.sh" inject "$TARGET" agents-table
       echo "wrote (sentinel) ${TARGET} ($(wc -l < "$TARGET") lines)"

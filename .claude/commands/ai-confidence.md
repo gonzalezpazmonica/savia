@@ -1,6 +1,6 @@
 ---
 name: ai-confidence
-description: Transparencia: Savia muestra confianza, razonamiento, datos y limitaciones de cada recomendación
+description: "Transparencia: Savia muestra confianza, razonamiento, datos y limitaciones de cada recomendación"
 developer_type: all
 agent: task
 context_cost: low

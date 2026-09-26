@@ -3,7 +3,7 @@ name: docs-quality-audit
 description: "Auditar calidad de documentacion basada en feedback de agentes"
 argument-hint: "[--threshold 30] [--period 30d]"
 allowed-tools: [Read, Glob, Grep, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

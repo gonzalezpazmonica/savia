@@ -1,7 +1,7 @@
 ---
 name: source-traceability-judge
 description: Truth Tribunal judge — every claim must have a verifiable @ref citation
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

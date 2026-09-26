@@ -34,6 +34,7 @@ import { validateBashGlobal } from "./guards/validate-bash-global.ts";
 import { autoRedactSecrets } from "./guards/auto-redact-credentials.ts";
 import { blockCredentialLeak } from "./guards/block-credential-leak.ts";
 import { blockForcePush } from "./guards/block-force-push.ts";
+import { applyModelTiers } from "./lib/model-tiers.ts";
 import { blockBranchSwitchDirty } from "./guards/block-branch-switch-dirty.ts";
 import { blockCommitToMain } from "./guards/block-commit-to-main.ts";
 import { blockInfraDestructive } from "./guards/block-infra-destructive.ts";
@@ -93,72 +94,11 @@ const AFTER_GUARDS = [
   sycophancyGuard,
 ] as const;
 
-// Model tier mapping for provider-agnostic agents (SPEC-127 / model-alias-schema.md)
-// PV-06: NO vendor names hardcoded here. The map is loaded at runtime from
-// ~/.savia/preferences.yaml (model_heavy, model_mid, model_fast). The user
-// declares their own provider+model_id pairs in that file. The framework
-// stays neutral. See docs/rules/domain/model-alias-schema.md.
-import { readFileSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import { statSync } from "node:fs";
-
-let _tierMapLastMtime = 0;
-let _tierMapCache: Record<string, string> = {};
-
-function loadModelTierMap(): Record<string, string> {
-  const prefsPath = join(homedir(), ".savia", "preferences.yaml");
-  if (!existsSync(prefsPath)) return {};
-  try {
-    const raw = readFileSync(prefsPath, "utf8");
-    const map: Record<string, string> = {};
-    for (const line of raw.split(/\r?\n/)) {
-      const m = line.match(/^\s*(model_heavy|model_mid|model_fast)\s*:\s*(.+?)\s*$/);
-      if (m) {
-        const tier = m[1].replace("model_", "");
-        const id = m[2].replace(/^["\']|["\']$/g, "");
-        if (id) map[tier] = id;
-      }
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
-
-function getModelTierMap(): Record<string, string> {
-  const prefsPath = join(homedir(), ".savia", "preferences.yaml");
-  try {
-    const mtime = statSync(prefsPath).mtimeMs;
-    if (mtime > _tierMapLastMtime) {
-      _tierMapCache = loadModelTierMap();
-      _tierMapLastMtime = mtime;
-    }
-  } catch {
-    _tierMapCache = {};
-  }
-  return _tierMapCache;
-}
-
-const MODEL_TIER_MAP: Record<string, string> = loadModelTierMap();
-_tierMapLastMtime = (() => {
-  try { return statSync(join(homedir(), ".savia", "preferences.yaml")).mtimeMs; } catch { return 0; }
-})();
-_tierMapCache = { ...MODEL_TIER_MAP };
-
 export const SaviaFoundationPlugin: Plugin = async ({ project, $, directory }) => {
   return {
     config: (cfg: any) => {
-      // Resolve abstract model tiers in agent definitions so the provider
-      // never receives an unknown model ID like "heavy" or "mid".
-      if (cfg.agent && typeof cfg.agent === "object") {
-        const tierMap = getModelTierMap();
-        for (const agentDef of Object.values(cfg.agent) as any[]) {
-          if (agentDef?.model && tierMap[agentDef.model]) {
-            agentDef.model = tierMap[agentDef.model];
-          }
-        }
-      }
+      // Provider-agnostic tiers: model_tier → local tier definition (lib/model-tiers.ts).
+      applyModelTiers(cfg, directory);
     },
     "tool.execute.before": async (input: any, output: any) => {
       for (const guard of BEFORE_GUARDS) {

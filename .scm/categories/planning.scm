@@ -558,7 +558,7 @@
 - **sync-adapters/jira-adapter** (script): jira-adapter.sh — Sync local backlog with Jira Cloud
 - **sync-calendars** (cmd): Sincronizar disponibilidad entre calendarios de dos tenants Microsoft 365
 - **sync-github-metadata** (script): sync-github-metadata.sh — Update GitHub repo metadata
-- **sync-model-tiers** (script): sync-model-tiers.sh — Resolve abstract model tiers (heavy|mid|fast) to provider-
+- **sync-model-tiers** (script): sync-model-tiers.sh — RETIRED (2026-09-26).
 - **sync-tags-from-changelog** (script): sync-tags-from-changelog.sh — Create missing git tags from CHANGELOG.md
 - **tabular-analyst** (agent): Analisis estadistico de datos tabulares. Usar PROACTIVELY cuando: se reciben datos en CSV, Excel, tablas markdown, o JSON arrays con >5 filas. Produce perfil estadistico y resumen para LLM.
 - **tabular-intelligence** (skill): Usar cuando se analizan datos tabulares (CSV, Excel, tablas, metricas). Triggers: 'analiza esta tabla', 'metricas del sprint', 'tendencia de', 'distribucion de', 'correlacion entre', 'KPIs', 'datos financieros', 'perfil estadistico', 'resum

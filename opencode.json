@@ -26,7 +26,6 @@
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "task": "allow",
@@ -54,21 +53,21 @@
           "bash *": "allow",
           "*": "allow"
         }
-      }
+      },
+      "model_tier": "fast"
     },
     "plan": {
       "mode": "primary",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "deny",
         "bash": "deny",
         "task": "deny"
-      }
+      },
+      "model_tier": "fast"
     },
     "code-reviewer": {
       "description": "Revisión de código .NET como quality gate antes de merge. Focus: SOLID, OWASP, performance.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3",
       "permission": {
         "edit": "deny",
         "bash": {
@@ -85,7 +84,6 @@
     "architect": {
       "description": "Diseño de arquitectura .NET y decisiones técnicas de alto nivel. SOLID, DDD, Clean Architecture.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3",
       "permission": {
         "edit": "deny",
         "bash": {
@@ -100,7 +98,6 @@
     "security-guardian": {
       "description": "Auditor de seguridad pre-commit. Detecta credenciales, OWASP, CWE Top 25, datos sensibles.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3",
       "permission": {
         "edit": "deny",
         "bash": {
@@ -113,7 +110,6 @@
     "business-analyst": {
       "description": "Análisis de reglas de negocio, descomposición de PBIs, criterios de aceptación.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3",
       "permission": {
         "edit": "deny",
         "bash": "deny"
@@ -122,7 +118,6 @@
     "test-runner": {
       "description": "Ejecuta suite completa de tests y verifica cobertura >= 80%.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "deny",
         "bash": {
@@ -138,7 +133,6 @@
     "commit-guardian": {
       "description": "Verifica cambios staged antes de commit: branch, tests, formato, credenciales.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "deny",
         "bash": {
@@ -151,7 +145,6 @@
     "typescript-developer": {
       "description": "Implementacion TypeScript/Node.js siguiendo specs SDD.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -170,7 +163,6 @@
     "infrastructure-agent": {
       "description": "Infraestructura cloud, contenedores, scripts bash.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -182,7 +174,6 @@
     "dotnet-developer": {
       "description": "Implementacion C#/.NET siguiendo specs SDD.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -198,7 +189,6 @@
     "frontend-developer": {
       "description": "Implementacion frontend Angular/React siguiendo specs SDD.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -215,7 +205,6 @@
     "python-developer": {
       "description": "Implementacion Python/FastAPI/Django siguiendo specs SDD.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -233,7 +222,6 @@
     "sdd-spec-writer": {
       "description": "Generacion y validacion de specs SDD como contratos ejecutables.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -247,7 +235,6 @@
     "dev-orchestrator": {
       "description": "Analiza specs y crea planes de implementacion con slices.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "write": "allow",
@@ -257,24 +244,24 @@
     "explore": {
       "description": "Fast agent for exploring codebases.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "deny",
         "write": "deny",
         "bash": "deny"
-      }
+      },
+      "model_tier": "fast"
     },
     "general": {
       "description": "General-purpose agent for complex multi-step tasks.",
       "mode": "subagent",
-      "model": "zai-coding-plan/glm-5.3-flash",
       "permission": {
         "edit": "allow",
         "write": "allow",
         "bash": {
           "*": "allow"
         }
-      }
+      },
+      "model_tier": "fast"
     }
   },
   "command": {

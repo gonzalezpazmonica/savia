@@ -6,7 +6,7 @@
 
 | Total hooks | TS Guards | Git Hook mitigated | CI Job mitigated | NONE |
 |---|---|---|---|---|
-| 121 | 18 (14.9%) | 4 | 5 | 94 |
+| 122 | 18 (14.8%) | 4 | 5 | 95 |
 
 ## Bloqueantes sin cobertura ni mitigacion
 
@@ -14,8 +14,8 @@ Ninguno — AC-2.2 satisfecho.
 
 ## Cobertura real OpenCode
 
-- **TS Guards activos**: 18/121 (14.9%)
-- **Hooks sin cobertura TS**: 94 (77.7%)
+- **TS Guards activos**: 18/122 (14.8%)
+- **Hooks sin cobertura TS**: 95 (77.9%)
   - De los cuales son bloqueantes sin ninguna mitigacion: 0
   - Eventos no disponibles en OpenCode (degradacion aceptada): 33
 
@@ -115,6 +115,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | auto-grill-me.sh | si | TS_GUARD | warning | autoGrillMe |
 | PreToolUse | auto-zoom-out.sh | si | TS_GUARD | warning | autoZoomOut |
 | PreToolUse | blast-radius-hook.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
+| PreToolUse | model-tier-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PreToolUse | plan-gate.sh | no | CI_JOB | warning | CI validate-ci-local.sh |
 | SessionEnd | cache-hygiene-hook.sh | no | NONE | telemetria | evento SessionEnd no disponible en OpenCode — degradacion_documentada |
 | SessionEnd | session-end-memory.sh | no | NONE | telemetria | evento SessionEnd no disponible en OpenCode — degradacion_documentada |

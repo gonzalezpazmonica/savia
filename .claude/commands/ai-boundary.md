@@ -1,6 +1,6 @@
 ---
 name: ai-boundary
-description: Definir matriz de límites explícitos: qué puede hacer Savia autónomamente vs requiere aprobación
+description: "Definir matriz de límites explícitos: qué puede hacer Savia autónomamente vs requiere aprobación"
 developer_type: all
 agent: none
 context_cost: low

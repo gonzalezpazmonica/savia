@@ -1,7 +1,7 @@
 ---
 name: profile-show
 description: Savia muestra tu perfil actual.
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

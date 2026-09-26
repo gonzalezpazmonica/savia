@@ -60,7 +60,7 @@ EOF
   run bash "$SCRIPT"
   [ "$status" -eq 0 ]
   [[ "$output" == *"# AGENTS.md"* ]]
-  [[ "$output" == *"| Name | Model | Permission | Tools | Description |"* ]]
+  [[ "$output" == *"| Name | Tier | Permission | Tools | Description |"* ]]
   [[ "$output" == *"| alpha |"* ]]
 }
 
@@ -236,5 +236,7 @@ EOF
   [[ "$output" == *'read `CLAUDE.md`'* ]]
   [[ "$output" == *'.agents/skills'* ]]
   [[ "$output" == *'parallel-session-protocol.md'* ]]
-  [[ "$output" == *'do not assume Codex runs'* ]]
+  [[ "$output" == *'Codex runs only the Bash gates in'* ]]
+  [[ "$output" == *'.codex/hooks.json'* ]]
+  [[ "$output" == *'model_tier'* ]]
 }

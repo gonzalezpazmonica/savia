@@ -5,7 +5,7 @@ description: >
   environments, memory, and CLAUDE.local.md entry. Asks all data step by step.
 argument-hint: "<nombre-proyecto>"
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

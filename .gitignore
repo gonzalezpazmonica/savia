@@ -185,3 +185,14 @@ scripts/opencode-plugin/savia-gates/manifest.json
 
 # SE-357: artefactos de test de control bands (recreados por bats)
 intent/intent-control-band-*
+
+# Claude Code Bash-sandbox placeholders (0-byte, read-only) + local MCP config
+/.bash_profile
+/.bashrc
+/.gitconfig
+/.idea
+/.profile
+/.ripgreprc
+/.zprofile
+/.zshrc
+/.mcp.json

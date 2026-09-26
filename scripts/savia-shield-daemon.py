@@ -198,10 +198,14 @@ def scan(text, th=None, file_path=""):
                     continue
                 # Filter 1: allow-list of technical terms
                 # Check both exact match and all-words-in-allowlist
+                # Markdown/punctuation (e.g. "## Qué", "**Sonnet**") is stripped per
+                # word so mandated headings don't defeat the allow-list.
                 et_lower = entity_text.lower()
                 if et_lower in NER_ALLOW_LOWER:
                     continue
-                if all(w in NER_ALLOW_LOWER for w in et_lower.split()):
+                words = [w.strip("#*`>_:-.,;!?¿¡()[]\"'") for w in et_lower.split()]
+                words = [w for w in words if w]
+                if words and all(w in NER_ALLOW_LOWER for w in words):
                     continue
                 # Filter 2: soft types in docs — warn only
                 if is_docs and r.entity_type in NER_SOFT_TYPES:

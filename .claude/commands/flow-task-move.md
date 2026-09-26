@@ -3,7 +3,7 @@ name: flow-task-move
 description: Move task between board columns (todo, in-progress, review, done)
 argument-hint: "<task_id> <new_status>"
 allowed-tools: [Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

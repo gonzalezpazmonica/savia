@@ -1,7 +1,7 @@
 ---
 name: architecture-judge
 description: Code Review Court judge — boundaries, coupling, layer violations, patterns
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

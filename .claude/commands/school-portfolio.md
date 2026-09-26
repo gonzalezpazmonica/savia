@@ -3,7 +3,7 @@ name: school-portfolio
 description: Student portfolio view and learning journey showcase
 argument-hint: "<alias> [--export pdf|html]"
 allowed-tools: [Read, Write, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

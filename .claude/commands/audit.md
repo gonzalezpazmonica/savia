@@ -1,7 +1,7 @@
 ---
 name: audit
 description: Generate professional executive audit report for workspace reliability assessment
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

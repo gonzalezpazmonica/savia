@@ -227,3 +227,18 @@ cúpula
 señales
 escenario
 recomendación
+
+# ── 2026-09-26: frontends y términos de runtime (falsos positivos PERSON/ORG/LOC) ──
+Claude Code
+Claude
+OpenCode
+Codex
+LC_ALL
+stdin
+stdout
+stderr
+Opus
+Sonnet
+Haiku
+Fable
+Qué

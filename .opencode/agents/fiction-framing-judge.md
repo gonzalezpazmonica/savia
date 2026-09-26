@@ -1,7 +1,7 @@
 ---
 name: fiction-framing-judge
 description: Recommendation Tribunal judge — detects persona-shift plus content-equivalent framing over sensitive domain (SPEC-193)
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

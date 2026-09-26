@@ -8,7 +8,7 @@ E="tests/evals/test-runner"
   [ -f "$A" ]
   grep -q "^name: test-runner$" "$A"
   grep -q "^permission_level: L4" "$A"
-  grep -q "^model:" "$A"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$A"
 }
 
 @test "[test-runner] golden: descriptor con cadena laws->enforcement->receipt" {

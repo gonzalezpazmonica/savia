@@ -14,7 +14,7 @@ tools:
   bash: true
   glob: true
   grep: true
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 color: "#FFD700"
 maxSteps: 15
 max_context_tokens: 8000

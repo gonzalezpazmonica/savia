@@ -13,7 +13,7 @@ tools:
   - Bash
   - Glob
   - Grep
-model: opencode-go/glm-5.3
+model_tier: heavy
 color: orange
 maxTurns: 35
 max_context_tokens: 2000

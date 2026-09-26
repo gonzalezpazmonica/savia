@@ -66,7 +66,7 @@ teardown() {
 @test "orchestrator agent: exists with frontmatter" {
   [ -f "$ORCH_ABS" ]
   grep -q "^name: recommendation-tribunal-orchestrator" "$ORCH_ABS"
-  grep -q "^model:" "$ORCH_ABS"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$ORCH_ABS"
 }
 
 @test "memory-conflict-judge agent: exists with correct name" {
@@ -89,9 +89,9 @@ teardown() {
   grep -q "^name: expertise-asymmetry-judge" "$JUDGE_DIR/expertise-asymmetry-judge.md"
 }
 
-@test "all 4 judges + orchestrator declare model in frontmatter" {
+@test "all 4 judges + orchestrator declare model_tier in frontmatter" {
   for j in memory-conflict-judge rule-violation-judge hallucination-fast-judge expertise-asymmetry-judge recommendation-tribunal-orchestrator; do
-    grep -qE "^model: (heavy|mid|fast)" "$JUDGE_DIR/$j.md"
+    grep -qE "^model_tier: (heavy|mid|fast)" "$JUDGE_DIR/$j.md"
   done
 }
 

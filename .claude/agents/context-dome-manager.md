@@ -11,7 +11,7 @@ tools:
   edit: true
   task: true
   skill: true
-model: opencode-go/glm-5.3
+model_tier: heavy
 permissionMode: plan
 maxSteps: 30
 color: "#7B4FBF"

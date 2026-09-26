@@ -4,9 +4,10 @@ token_budget: 1340
 ---
 # Model alias schema — user-extensible mappings (SPEC-127 Slice 1)
 
-> **Rule** — Agents and commands declare abstract capability tiers (`model: heavy|mid|fast`)
-> in their frontmatter. The runtime maps those tiers to the user's provider-specific
-> model id via `~/.savia/preferences.yaml`. Zero vendor names in source-controlled files.
+> **Rule** — Agents and commands declare abstract capability tiers (`model_tier: heavy|mid|fast`)
+> in their frontmatter — never `model:`. Each frontend maps the tier to a concrete model
+> from the LOCAL tier definition in `~/.savia/preferences.yaml`. Zero vendor names in
+> source-controlled files; `scripts/model-tier-lint.sh` enforces it.
 > PV-06: cero vendor lock-in.
 
 ## Why a user-managed table
@@ -20,7 +21,7 @@ commands stay clean; the repo stays neutral.
 
 ## Tier definitions
 
-| Tier | `model:` value | Semantic | Example tasks |
+| Tier | `model_tier:` value | Semantic | Example tasks |
 |---|---|---|---|
 | Heavy | `heavy` | Deep reasoning, architectural decisions | Spec writing, code review, security audit |
 | Mid | `mid` | Balanced — implementation, testing | Feature development, refactoring, test writing |
@@ -39,11 +40,25 @@ version: 1                  # schema version (current: 1)
 frontend: <free-form>       # e.g. claude-code | opencode | codex | cursor | other
 provider: <free-form>       # e.g. vendor name | "localai" | "ollama" | "custom-corp"
 
-# Model aliases — three tiers. MUST be provider-prefixed (`deepseek/deepseek-v4-pro`)
-# matching the runtime registry; missing prefix = unresolvable subagent (SE-313).
-model_heavy: <provider>/<model-id>   # heavy-tier model id (deep reasoning, slow)
-model_mid:   <provider>/<model-id>   # mid-tier model id (balanced)
-model_fast:  <provider>/<model-id>   # fast-tier model id (low-latency, low-cost)
+# Local tier definition, per frontend (each frontend may use another provider).
+tiers:
+  opencode:                          # provider-prefixed ids (SE-313)
+    heavy: <provider>/<model-id>
+    mid:   <provider>/<model-id>
+    fast:  <provider>/<model-id>
+  claude-code:                       # opus|sonnet|haiku|fable (default opus/sonnet/haiku)
+    heavy: <selector>                # pin versions via ANTHROPIC_DEFAULT_*_MODEL (local env)
+    mid:   <selector>
+    fast:  <selector>
+  codex:
+    heavy: <model-id>
+    mid:   <model-id>
+    fast:  <model-id>
+
+# Legacy fallback (not for claude-code) when tiers.<frontend> lacks a tier.
+model_heavy: <provider>/<model-id>
+model_mid:   <provider>/<model-id>
+model_fast:  <provider>/<model-id>
 
 # Capability declarations — yes / no / autodetect. autodetect uses env-var
 # heuristics in scripts/savia-env.sh.
@@ -73,20 +88,25 @@ will refuse to load preferences containing them.
 
 ## Resolution function (provider-agnostic)
 
-Agents and commands declare `model: heavy|mid|fast` in their frontmatter.
-The runtime resolves to the user's provider-specific model id:
+Agents and commands declare `model_tier: heavy|mid|fast` in their frontmatter.
+Each frontend resolves it at runtime:
 
 ```
-resolve_model(tier) → effective_id
+resolve_model(frontend, tier) → effective_id
   preferences = read $HOME/.savia/preferences.yaml
-  if tier == "heavy": return preferences.model_heavy
-  if tier == "mid":   return preferences.model_mid
-  if tier == "fast":  return preferences.model_fast
-  else:               return tier  # passthrough (log warning)
+  if preferences.tiers[frontend][tier]: return it
+  if frontend != "claude-code":         return preferences.model_<tier>
+  else:                                 return {heavy: opus, mid: sonnet, fast: haiku}[tier]
 ```
 
-No vendor names anywhere in the resolution path. The user controls
-`~/.savia/preferences.yaml` — swap providers by changing three lines.
+| Frontend | Adapter |
+|---|---|
+| Claude Code | `.claude/hooks/model-tier-inject.sh` (PreToolUse `Agent`) injects the selector as the per-invocation `model`; `claude --agent X` uses the session model |
+| OpenCode | `.opencode/plugins/savia-foundation.ts` config hook sets `model` for agents and commands |
+| Scripts | `savia_resolve_model <tier>` in `scripts/savia-env.sh` (frontend from `SAVIA_FRONTEND`) |
+| Codex | Model from `~/.codex/config.toml`; `tiers.codex` feeds scripts that launch `codex exec` |
+
+No vendor names in the resolution path; never rewrite sources with concrete ids.
 
 ## Examples — illustrative, NOT presets
 
@@ -96,46 +116,26 @@ No vendor names anywhere in the resolution path. The user controls
 version: 1
 frontend: opencode
 provider: deepseek
-model_heavy: deepseek-v4-pro
-model_mid:   deepseek-v4-pro
-model_fast:  deepseek-v4-flash
-has_hooks: yes
-has_task_fan_out: yes
-has_slash_commands: yes
-budget_kind: none
-auth_kind: api-key
+model_heavy: deepseek/deepseek-v4-pro   # legacy fallback form
+model_mid:   deepseek/deepseek-v4-pro
+model_fast:  deepseek/deepseek-v4-flash
 ```
 
-### B — Anthropic API direct
+### B — Claude Code + OpenCode on different providers
 
 ```yaml
 version: 1
 frontend: claude-code
 provider: anthropic
-model_heavy: claude-opus-4-7
-model_mid:   claude-sonnet-4-6
-model_fast:  claude-haiku-4-5-20251001
-has_hooks: yes
-has_task_fan_out: yes
-has_slash_commands: yes
-budget_kind: token-count
-auth_kind: api-key
-```
-
-### C — local OSS (LocalAI / Ollama)
-
-```yaml
-version: 1
-frontend: opencode
-provider: localai
-model_heavy: qwen3-72b-coder
-model_mid:   qwen3-32b-coder
-model_fast:  qwen3-7b
-has_hooks: yes
-has_task_fan_out: no
-has_slash_commands: yes
-budget_kind: none
-auth_kind: none
+tiers:                     # block style only (2/4-space indent)
+  claude-code:
+    heavy: opus
+    mid: sonnet
+    fast: haiku
+  opencode:
+    heavy: deepseek/deepseek-v4-pro
+    mid: deepseek/deepseek-v4-pro
+    fast: deepseek/deepseek-v4-flash
 ```
 
 ## What this schema does NOT do

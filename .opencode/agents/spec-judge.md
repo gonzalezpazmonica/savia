@@ -1,7 +1,7 @@
 ---
 name: spec-judge
 description: Code Review Court judge — implementation vs approved spec, acceptance criteria
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools:
   read: true

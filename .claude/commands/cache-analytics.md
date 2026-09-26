@@ -4,7 +4,7 @@ description: Métricas de hit rate, tokens ahorrados, latencia, ahorro de costes
 developer_type: all
 agent: none
 context_cost: high
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 tier: core
 ---
 

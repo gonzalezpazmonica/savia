@@ -4,7 +4,7 @@ description: Previsión de capacidad a medio plazo — planifica recursos para l
 developer_type: all
 agent: task
 context_cost: high
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

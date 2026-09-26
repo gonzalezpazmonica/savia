@@ -4,7 +4,7 @@ description: Detecta PBIs duplicados o similares entre proyectos del portfolio
 developer_type: all
 agent: task
 context_cost: high
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 tier: core
 ---
 

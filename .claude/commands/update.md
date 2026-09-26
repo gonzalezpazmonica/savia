@@ -4,7 +4,7 @@ description: Comprobar y aplicar actualizaciones de pm-workspace desde GitHub, p
 developer_type: all
 agent: none
 context_cost: low
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 tier: core
 ---
 

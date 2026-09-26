@@ -2,7 +2,7 @@
 name: cost-center
 description: "Cost management and billing — timesheets, budgets, forecasting, invoicing"
 allowed-tools: [Read, Write, Glob, Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

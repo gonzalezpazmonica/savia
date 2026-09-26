@@ -3,7 +3,7 @@ name: project-audit
 description: >
   Phase 1 — Deep audit of a newly onboarded project: code quality,
   architecture, debt, security, CI/CD. Prioritized action report.
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: high
 tier: core
 ---

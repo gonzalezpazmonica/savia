@@ -1,7 +1,7 @@
 ---
 name: factuality-judge
 description: Truth Tribunal judge — factual accuracy of claims against verifiable sources
-model: opencode-go/glm-5.3
+model_tier: heavy
 permission_level: L1
 tools: [Read, Glob, Grep, Bash]
 token_budget:

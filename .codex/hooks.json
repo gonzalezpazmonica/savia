@@ -1,0 +1,48 @@
+{
+  "description": "Savia safety gates for Codex — same scripts as .claude/settings.json (Bash PreToolUse contract is shared). Trust once via /hooks.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/validate-bash-global.sh\"",
+            "timeout": 10,
+            "statusMessage": "Savia gate: validate-bash-global"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-credential-leak.sh\"",
+            "timeout": 10,
+            "statusMessage": "Savia gate: block-credential-leak"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-force-push.sh\"",
+            "timeout": 10,
+            "statusMessage": "Savia gate: block-force-push"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-infra-destructive.sh\"",
+            "timeout": 10,
+            "statusMessage": "Savia gate: block-infra-destructive"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-branch-switch-dirty.sh\"",
+            "timeout": 10,
+            "statusMessage": "Savia gate: block-branch-switch-dirty"
+          },
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/block-commit-to-main.sh\"",
+            "timeout": 10,
+            "statusMessage": "Savia gate: block-commit-to-main"
+          }
+        ]
+      }
+    ]
+  }
+}

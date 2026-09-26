@@ -1,7 +1,7 @@
 ---
 name: compliance-check
 description: Ejecuta todas las verificaciones de compliance de reglas
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 allowed-tools: ["Bash"]
 context_cost: low
 tier: core

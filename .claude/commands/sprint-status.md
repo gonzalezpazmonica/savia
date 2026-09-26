@@ -1,7 +1,7 @@
 ---
 name: sprint-status
 description: Estado del sprint actual — progreso, burndown, alertas.
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 context_cost: medium
 complexity_tier: mode1
 tier: core

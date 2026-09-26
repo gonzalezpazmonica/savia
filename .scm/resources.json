@@ -1,6 +1,6 @@
 {
-  "hash": "d8c688e006da",
-  "total": 1468,
+  "hash": "f35db89802af",
+  "total": 1470,
   "resources": [
     {
       "category": "analysis",
@@ -4811,6 +4811,20 @@
       "kind": "script",
       "path": "scripts/setup-savia-web.sh",
       "description": "Setup, build, and serve savia-web on http://localhost:8081"
+    },
+    {
+      "category": "development",
+      "name": "skill-listing-overrides",
+      "intents": [
+        "claude",
+        "code",
+        "listing",
+        "load",
+        "overrides"
+      ],
+      "kind": "script",
+      "path": "scripts/skill-listing-overrides.sh",
+      "description": "skill-listing-overrides.sh — Project the SE-253 load tier into Claude Code's"
     },
     {
       "category": "development",
@@ -14797,15 +14811,14 @@
       "category": "planning",
       "name": "sync-model-tiers",
       "intents": [
-        "abstract",
-        "fast",
-        "heavy",
         "model",
-        "provider"
+        "retired",
+        "sync",
+        "tiers"
       ],
       "kind": "script",
       "path": "scripts/sync-model-tiers.sh",
-      "description": "sync-model-tiers.sh — Resolve abstract model tiers (heavy|mid|fast) to provider-"
+      "description": "sync-model-tiers.sh — RETIRED (2026-09-26)."
     },
     {
       "category": "planning",
@@ -17000,6 +17013,20 @@
       "kind": "skill",
       "path": ".claude/skills/mobile-security-scanner/SKILL.md",
       "description": "Usar cuando se escanea un APK/AAB Android en busca de vulnerabilidades de seguridad. Integra con MobSF (Docker) y análisis básico como fallback."
+    },
+    {
+      "category": "quality",
+      "name": "model-tier-lint",
+      "intents": [
+        "agnostic",
+        "guard",
+        "lint",
+        "model",
+        "provider"
+      ],
+      "kind": "script",
+      "path": "scripts/model-tier-lint.sh",
+      "description": "model-tier-lint.sh — Guard for provider-agnostic model tiers (SPEC-127 / PV-06)."
     },
     {
       "category": "quality",

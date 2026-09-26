@@ -3,7 +3,7 @@ name: hook-profile
 description: View or change the active SAVIA_HOOK_PROFILE (minimal/standard/strict/ci)
 argument-hint: "[get|set <profile>|list]"
 allowed-tools: [Bash, Read]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

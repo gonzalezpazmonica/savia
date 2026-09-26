@@ -5,7 +5,7 @@ description: >
   counts entries, and detects orphaned data.
 argument-hint: "[--detailed]"
 allowed-tools: [Bash, Read]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

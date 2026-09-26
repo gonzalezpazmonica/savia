@@ -1,7 +1,7 @@
 ---
 name: rule-violation-judge
 description: Recommendation Tribunal judge — detects when a draft recommendation violates canonical rules (CLAUDE.md, autonomous-safety, radical-honesty, domain rules)
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools: [Read, Glob, Grep]
 token_budget:

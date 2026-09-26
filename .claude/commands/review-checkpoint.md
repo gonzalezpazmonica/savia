@@ -1,7 +1,7 @@
 ---
 name: review-checkpoint
-description: Genera paquete de revision humana en 5 secciones: cambio, orden de lectura, hallazgos, verificacion manual, cierre (SE-269 S3)
-model: github-copilot/claude-sonnet-4.5
+description: "Genera paquete de revision humana en 5 secciones: cambio, orden de lectura, hallazgos, verificacion manual, cierre (SE-269 S3)"
+model_tier: mid
 context_cost: low
 tier: core
 ---

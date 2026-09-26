@@ -3,7 +3,7 @@ name: pipeline-status
 description: >
   Estado de pipelines del proyecto: últimas builds, % éxito,
   duración media y alertas de fallos recientes.
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

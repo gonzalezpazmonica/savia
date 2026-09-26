@@ -12,7 +12,7 @@ tools:
   grep: true
   bash: true
   write: true
-model: opencode-go/glm-5.3
+model_tier: heavy
 color: "#808080"
 maxSteps: 30
 max_context_tokens: 12000

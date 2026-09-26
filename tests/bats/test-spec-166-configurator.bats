@@ -3,7 +3,7 @@
 #
 # Tests:
 # 1. configurator.md exists in .opencode/agents/
-# 2. Agent has required frontmatter fields (name, model, permission_level)
+# 2. Agent has required frontmatter fields (name, model_tier, permission_level)
 # 3. Agent body documents JSON output schema
 # 4. Agent is under 100 lines (spec constraint)
 # 5. Fallback behavior documented
@@ -17,9 +17,9 @@ setup() {
   [ -f "$AGENT_FILE" ]
 }
 
-@test "agent has required frontmatter: name, model, permission_level" {
+@test "agent has required frontmatter: name, model_tier, permission_level" {
   grep -q "^name:" "$AGENT_FILE"
-  grep -q "^model:" "$AGENT_FILE"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$AGENT_FILE"
   grep -q "^permission_level:" "$AGENT_FILE"
 }
 

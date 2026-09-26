@@ -1,5 +1,5 @@
 # quality — Savia Capability Map (L1)
-> 267 resources
+> 268 resources
 
 - **/speckit.analyze** (cmd): Alias spec-kit compatible. Review cruzado de una spec antes de implementar. Invoca skill consensus-validation. Compatible con github/spec-kit.
 - **Coherence Court** (cmd): Audit consistency of a stage output against premises fixed in earlier stages of the same flow (SE-350)
@@ -82,6 +82,7 @@
 - **mcp-security-audit** (script): mcp-security-audit.sh — SE-058 Slice 1 MCP supply-chain + config audit.
 - **mobile-security-scan** (script): SE-240 — Mobile Security Scan
 - **mobile-security-scanner** (skill): Usar cuando se escanea un APK/AAB Android en busca de vulnerabilidades de seguridad. Integra con MobSF (Docker) y análisis básico como fallback.
+- **model-tier-lint** (script): model-tier-lint.sh — Guard for provider-agnostic model tiers (SPEC-127 / PV-06).
 - **model-upgrade-audit** (cmd): Audit workspace components for prompt debt that newer models may not need
 - **model-upgrade-audit** (skill): Usar cuando hay un modelo nuevo disponible y se quiere detectar prompt debt en el workspace.
 - **model-upgrade-auditor** (agent): Audits agents, skills, and prompts for workarounds that newer models may no longer need. Proposes simplifications with eval-backed evidence.

@@ -32,11 +32,11 @@ agents_on_disk() {
   ls "$AGENTS_DIR"/*.md 2>/dev/null | xargs -n1 basename | sed 's/\.md$//' | sort
 }
 agents_in_md() {
-  awk -F'|' '/^\|/ && !/Name.*Model/ && !/^\|---/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' \
+  awk -F'|' '/^\|/ && !/Name.*Tier/ && !/^\|---/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' \
     "$1" 2>/dev/null | sort
 }
 agents_in_catalog() {
-  awk -F'|' '/^\|/ && !/Agent.*Model/ && !/^\|---/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' \
+  awk -F'|' '/^\|/ && !/Agent.*Tier/ && !/^\|---/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' \
     "$1" 2>/dev/null | sort
 }
 
@@ -89,7 +89,7 @@ agents_in_catalog() {
 @test "SPEC-220 AC-13: --generate produces valid markdown table" {
   run bash "$SCRIPT" --generate
   [ "$status" -eq 0 ]
-  [[ "$output" == *"| Agent | Model |"* ]]
+  [[ "$output" == *"| Agent | Tier |"* ]]
   [[ "$output" == *"|---|---|"* ]]
 }
 
@@ -146,7 +146,7 @@ EOF
   AGENTS_DIR="$empty_dir" run bash "$SCRIPT" --generate
   [ "$status" -eq 0 ]
   # El header está siempre, el cuerpo vacío
-  [[ "$output" == *"| Agent | Model |"* ]]
+  [[ "$output" == *"| Agent | Tier |"* ]]
 }
 
 @test "SPEC-220 AC-13: EDGE — large agents dir (50+ files) handled" {

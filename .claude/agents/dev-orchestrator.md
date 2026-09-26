@@ -4,7 +4,7 @@ decision_tree: decision-trees/dev-orchestrator-decisions.md
 permission_level: L4
 description: Analiza specs y crea planes de implementación con slices, dependencias y presupuestos de contexto
 tools: [Read, Glob, Grep, Bash]
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permissionMode: plan
 maxTurns: 20
 color: cyan

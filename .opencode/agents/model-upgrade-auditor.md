@@ -9,7 +9,7 @@ tools:
   grep: true
   bash: true
   task: true
-model: opencode-go/glm-5.3
+model_tier: heavy
 token_budget:
   per_invocation: 100000
   context_window_target: 20000

@@ -3,7 +3,7 @@ name: scale-optimizer
 description: "Scaling optimization — analyze, benchmark, recommend improvements for growing organizations"
 allowed-tools: [Read, Glob, Grep, Write, Edit, Bash]
 argument-hint: "[analyze|benchmark|recommend|knowledge-search] [--search query]"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

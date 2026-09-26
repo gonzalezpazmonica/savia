@@ -8,7 +8,7 @@ description: >-
   de proveedor, distingue operaciones read-only de write, invoca gates de
   publicación externa y genera receipts. Jamás publica sin aprobación humana
   explícita con approval hash. Ref: docs/specs/SE-385-linkedin-integration.spec.md
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 ---
 
 # SocialNetworks Agent

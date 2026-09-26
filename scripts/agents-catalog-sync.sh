@@ -74,7 +74,7 @@ extract_field() {
 }
 
 # Build table
-TABLE_HEADER="| Agent | Model | Description |"
+TABLE_HEADER="| Agent | Tier | Description |"
 TABLE_SEP="|---|---|---|"
 
 generate_table() {
@@ -84,7 +84,7 @@ generate_table() {
     [[ -f "$f" ]] || continue
     local name model desc
     name=$(extract_field "$f" "name")
-    model=$(extract_field "$f" "model")
+    model=$(extract_field "$f" "model_tier")
     desc=$(extract_field "$f" "description")
     # Fallback: filename
     name="${name:-$(basename "$f" .md)}"

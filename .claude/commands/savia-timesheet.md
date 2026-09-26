@@ -5,7 +5,7 @@ description: >
   Entradas almacenadas en team/{handle}/savia-flow/timesheet/.
 argument-hint: "[log|view] [--project <name>]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

@@ -5,7 +5,7 @@ description: >
   Checks deps, installs Claude Code, restores profiles.
 argument-hint: "[path-to-savia-portable]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: low
 tier: core
 ---

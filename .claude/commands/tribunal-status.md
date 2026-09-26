@@ -3,7 +3,7 @@ name: tribunal-status
 description: Show Truth Tribunal queue depth, recent verdicts, and pending evaluations
 argument-hint: "[--clean] [--process N]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

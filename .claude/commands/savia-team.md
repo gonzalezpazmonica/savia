@@ -4,7 +4,7 @@ description: >
   Gestionar equipos en Savia Flow: ver miembros, roles, velocidad.
 argument-hint: "[show|init] [--team <name>]"
 allowed-tools: [Read, Bash, Glob]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

@@ -66,8 +66,8 @@ detect_factual_assertion() {
 '\bhttps?://[^\s]+|'\
 '\b[\w/.-]+\.(md|ts|sh|yaml|json|py|cs|go|rs|java)\b|'\
 '\bAPI\s+(endpoint|call|version)|'\
-'\b(config|env|settings)\.[a-z]+\b)' 2>/dev/null || echo 0)
-  [[ "$factual_count" -ge 3 ]] && return 0
+'\b(config|env|settings)\.[a-z]+\b)' 2>/dev/null || true)
+  [[ "${factual_count:-0}" -ge 3 ]] && return 0
   return 1
 }
 

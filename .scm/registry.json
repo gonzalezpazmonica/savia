@@ -7446,6 +7446,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/skill-listing-overrides",
+      "intents": [
+        "claude",
+        "code",
+        "listing",
+        "load",
+        "overrides"
+      ],
+      "kind": "script",
+      "owner_domain": "development",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/skill-listing-overrides.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/skill-loader",
       "intents": [
         "aware",
@@ -22869,11 +22890,10 @@
       ],
       "id": "script:scripts/sync-model-tiers",
       "intents": [
-        "abstract",
-        "fast",
-        "heavy",
         "model",
-        "provider"
+        "retired",
+        "sync",
+        "tiers"
       ],
       "kind": "script",
       "owner_domain": "planning",
@@ -26250,6 +26270,27 @@
       "replaced_by": null,
       "risk_level": null,
       "source": ".claude/skills/mobile-security-scanner/SKILL.md",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
+      "id": "script:scripts/model-tier-lint",
+      "intents": [
+        "agnostic",
+        "guard",
+        "lint",
+        "model",
+        "provider"
+      ],
+      "kind": "script",
+      "owner_domain": "quality",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/model-tier-lint.sh",
       "status": "active",
       "tests": []
     },
@@ -29978,7 +30019,7 @@
       "tests": []
     }
   ],
-  "content_hash": "d8c688e006da",
+  "content_hash": "f35db89802af",
   "deferred_kinds": [
     "rule",
     "hook"

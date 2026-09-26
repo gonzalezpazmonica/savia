@@ -3,7 +3,7 @@ name: sync-calendars
 description: "Sincronizar disponibilidad entre calendarios de dos tenants Microsoft 365"
 argument-hint: "[setup|status|conflicts|clean] [--days 14] [--busy]"
 allowed-tools: [Read, Write, Bash, Glob, Grep]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

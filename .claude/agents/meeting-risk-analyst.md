@@ -10,7 +10,7 @@ tools:
   - Read
   - Glob
   - Grep
-model: opencode-go/glm-5.3
+model_tier: heavy
 color: red
 maxTurns: 20
 max_context_tokens: 12000

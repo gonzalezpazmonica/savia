@@ -3,7 +3,7 @@ name: visual-digest
 permission_level: L2
 description: "Digestión de imágenes con OCR contextual — 5 pasadas. Fotos de pizarras, notas manuscritas, diagramas en papel, capturas de reuniones. Usa contexto REAL del proyecto para resolver ambigüedades. PROACTIVELY cuando se detectan imágenes en carpetas de reuniones o documentos."
 tools: [Read, Write, Edit, Bash, Glob, Grep]
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permissionMode: default
 maxTurns: 30
 color: orange

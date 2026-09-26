@@ -4,7 +4,7 @@ description: >
   Health check del entorno pm-workspace. Verifica settings, hooks, CLIs,
   permisos y configuracion. 14 checks con acciones correctivas.
   Inspirado en jato doctor (SPEC-031).
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 allowed-tools:
   - Bash

@@ -11,7 +11,7 @@ tools:
   - Bash
   - Write
   - Edit
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 color: teal
 maxTurns: 25
 max_context_tokens: 4000

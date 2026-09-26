@@ -3,7 +3,7 @@ name: onboard-enterprise
 description: "Enterprise onboarding at scale — batch import, per-role checklists, knowledge transfer"
 allowed-tools: [Read, Glob, Grep, Write, Edit, Bash]
 argument-hint: "[import|checklist|progress|knowledge-transfer] [--file data.csv] [--person nombre] [--project proyecto]"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

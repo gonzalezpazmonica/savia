@@ -3,7 +3,7 @@ name: report-verify
 description: Convene the Truth Tribunal (7 judges) to evaluate a report's reliability
 argument-hint: "<report-path> [--force]"
 allowed-tools: [Read, Write, Bash, Task, Glob, Grep]
-model: github-copilot/claude-opus-4.7
+model_tier: heavy
 context_cost: medium
 tier: core
 ---

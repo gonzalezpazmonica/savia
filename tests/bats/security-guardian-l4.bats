@@ -8,7 +8,7 @@ E="tests/evals/security-guardian"
   [ -f "$A" ]
   grep -q "^name: security-guardian$" "$A"
   grep -q "^permission_level: L4" "$A"
-  grep -q "^model:" "$A"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$A"
 }
 
 @test "[security-guardian] golden: descriptor con cadena laws->enforcement->receipt" {

@@ -1,7 +1,7 @@
 ---
 name: pipeline-local-run
 description: "Run a local pipeline defined as YAML — no Jenkins/Azure Pipelines needed"
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 allowed-tools: [Read, Bash, Glob]
 argument-hint: "<pipeline.yaml> [--dry-run]"

@@ -3,7 +3,7 @@ name: zeroclaw-meeting
 description: "Live meeting transcription via ZeroClaw — speaker diarization, voice identification, and digest."
 argument-hint: "start | stop | voice enroll <name> | voice list | voice delete <name> | status"
 allowed-tools: [Read, Bash, Write]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

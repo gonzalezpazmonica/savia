@@ -63,9 +63,9 @@ WIP_LIMIT_PER_PERSON        = 2
 WIP_LIMIT_PER_COLUMN        = 5
 
 # ── Spec-Driven Development (SDD) ─────────────────────────────────────────────
-CLAUDE_MODEL_AGENT          = "claude-opus-4-7"                   # modelo para agentes de implementación
-CLAUDE_MODEL_MID            = "claude-sonnet-4-6"                 # modelo para tareas medianas/balanceadas
-CLAUDE_MODEL_FAST           = "claude-haiku-4-5-20251001"         # modelo para agentes de tests/scaffolding
+CLAUDE_MODEL_AGENT          = "heavy"                             # tier; modelo en ~/.savia/preferences.yaml (tiers.<frontend>)
+CLAUDE_MODEL_MID            = "mid"                               # tier para tareas medianas/balanceadas
+CLAUDE_MODEL_FAST           = "fast"                              # tier para agentes de tests/scaffolding
 AGENT_LOGS_DIR              = "./output/agent-runs"
 SPECS_BASE_DIR              = "./projects"
 SPEC_EXTENSION              = ".spec.md"
@@ -137,6 +137,6 @@ MIRO_TOKEN_FILE             = "$HOME/.azure/miro-token"            # fichero con
 # ── Code Review Court (SPEC-124) ────────────────────────────────────────────
 COURT_INCLUDE_PR_AGENT      = false                               # opt-in: añade pr-agent como 5º juez externo
 PR_AGENT_VERSION            = "0.27"                              # pinear versión qodo-ai/pr-agent
-PR_AGENT_MODEL              = "claude-sonnet-4-6"                 # modelo usado por pr-agent
+PR_AGENT_MODEL              = "mid"                               # tier usado por pr-agent (savia_resolve_model)
 PR_AGENT_MAX_LINES          = 1000                                # skip PRs > N líneas (coste token)
 ```

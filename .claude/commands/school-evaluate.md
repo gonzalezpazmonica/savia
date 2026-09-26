@@ -3,7 +3,7 @@ name: school-evaluate
 description: Teacher evaluates student project using encrypted rubric
 argument-hint: "<alias> <project_name> <rubric_name>"
 allowed-tools: [Bash, Read, Write]
-model: github-copilot/claude-sonnet-4.5
+model_tier: mid
 context_cost: medium
 tier: core
 ---

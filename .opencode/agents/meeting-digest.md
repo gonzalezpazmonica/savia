@@ -14,7 +14,7 @@ tools:
   task: true
   write: true
   edit: true
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 color: "#008080"
 maxSteps: 15
 max_context_tokens: 80000

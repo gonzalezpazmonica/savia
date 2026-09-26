@@ -2,7 +2,7 @@
 name: coherence-court-orchestrator
 decision_tree: decision-trees/coherence-court-orchestrator-decisions.md
 description: Convenes the Coherence Court, consolidates .coherence.crc, applies human gate
-model: opencode-go/glm-5.3
+model_tier: heavy
 permission_level: L4
 tools:
   read: true

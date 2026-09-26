@@ -1,7 +1,7 @@
 ---
 name: correctness-judge
 description: Code Review Court judge — logic, tests, edge cases, error paths
-model: opencode-go/deepseek-v4-flash
+model_tier: mid
 permission_level: L1
 tools: [Read, Glob, Grep]
 token_budget:

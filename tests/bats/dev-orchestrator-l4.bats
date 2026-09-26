@@ -8,7 +8,7 @@ E="tests/evals/dev-orchestrator"
   [ -f "$A" ]
   grep -q "^name: dev-orchestrator$" "$A"
   grep -q "^permission_level: L4" "$A"
-  grep -q "^model:" "$A"
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$A"
 }
 
 @test "[dev-orchestrator] golden: descriptor con cadena laws->enforcement->receipt" {

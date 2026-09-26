@@ -3,7 +3,7 @@ name: diagram-status
 description: >
   Lista diagramas por proyecto y su estado de sincronización
   con Draw.io/Miro. Muestra links y metadata.
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

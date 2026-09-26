@@ -82,12 +82,12 @@ Save to: `output/scores/YYYYMMDD-score-diff.md`
 ## Subagent Config
 
 ```yaml
-model: opencode-go/deepseek-v4-flash
+model_tier: fast
 memory: project
 permissionMode: plan
 ```
 
-Use Haiku — this is a data-collection task, not reasoning.
+Use the fast tier — this is a data-collection task, not reasoning.
 
 ## Scheduling
 

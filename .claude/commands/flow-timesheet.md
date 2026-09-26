@@ -3,7 +3,7 @@ name: flow-timesheet
 description: Log hours spent on a task
 argument-hint: "<@handle> <task_id> <hours> [notes]"
 allowed-tools: [Bash]
-model: github-copilot/claude-sonnet-4.5
+model_tier: fast
 context_cost: low
 tier: core
 ---

@@ -2,7 +2,7 @@
 name: court-orchestrator
 decision_tree: decision-trees/court-orchestrator-decisions.md
 description: Convenes the Code Review Court, manages fix cycles, produces .review.crc
-model: opencode-go/glm-5.3
+model_tier: heavy
 permission_level: L4
 tools:
   read: true
