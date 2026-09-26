@@ -4,6 +4,61 @@ A=".opencode/agents/security-guardian.md"
 D="contracts/capabilities/agent.security-guardian.yaml"
 E="tests/evals/security-guardian"
 
+# Ref: docs/rules/domain/model-alias-schema.md (provider-agnostic model tiers)
+setup() {
+  set -o pipefail
+  TMP=$(mktemp -d)
+}
+
+teardown() {
+  rm -rf "$TMP"
+}
+
+_fixture_agent() { # <frontmatter-line> -> PROJECT_ROOT tree with one agent
+  mkdir -p "$TMP/.opencode/agents"
+  sed -E "s/^model_tier:.*/$1/" "$A" > "$TMP/.opencode/agents/security-guardian.md"
+}
+
+@test "[security-guardian] tier: model_tier es neutro y no hay model: de proveedor" {
+  grep -qE "^model_tier: (heavy|mid|fast)$" "$A"
+  ! grep -qE "^model:" "$A"
+}
+
+@test "[security-guardian] reject: model: de proveedor en el agente falla el lint de tiers" {
+  _fixture_agent "model: vendor\/model-x"
+  run env PROJECT_ROOT="$TMP" bash scripts/model-tier-lint.sh
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"security-guardian.md"* ]]
+}
+
+@test "[security-guardian] invalid: model_tier fuera de heavy|mid|fast falla el lint" {
+  _fixture_agent "model_tier: ultra"
+  run env PROJECT_ROOT="$TMP" bash scripts/model-tier-lint.sh
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"model_tier inválido 'ultra'"* ]]
+}
+
+@test "[security-guardian] empty: model_tier vacio falla el lint" {
+  _fixture_agent "model_tier:"
+  run env PROJECT_ROOT="$TMP" bash scripts/model-tier-lint.sh
+  [ "$status" -ne 0 ]
+}
+
+@test "[security-guardian] nonexistent: agente inexistente => sin inyeccion (null output)" {
+  run bash -c "printf '%s' '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"security-guardian-nonexistent\"}}' | CLAUDE_PROJECT_DIR='$TMP' bash .claude/hooks/model-tier-inject.sh"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "[security-guardian] zero-config: sin prefs locales se inyecta el default del tier" {
+  mkdir -p "$TMP/.claude/agents" && cp "$A" "$TMP/.claude/agents/security-guardian.md"
+  tier=$(sed -nE 's/^model_tier: (heavy|mid|fast)$/\1/p' "$A")
+  declare -A def=([heavy]=opus [mid]=sonnet [fast]=haiku)
+  run bash -c "printf '%s' '{\"tool_name\":\"Agent\",\"tool_input\":{\"subagent_type\":\"security-guardian\"}}' | SAVIA_PREFS_FILE='$TMP/none.yaml' CLAUDE_PROJECT_DIR='$TMP' bash .claude/hooks/model-tier-inject.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"\"model\": \"${def[$tier]}\""* ]]
+}
+
 @test "[security-guardian] smoke: agente existe con frontmatter completo" {
   [ -f "$A" ]
   grep -q "^name: security-guardian$" "$A"

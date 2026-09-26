@@ -1,10 +1,16 @@
 #!/usr/bin/env bats
 # BATS tests for the 2026-09-26 multi-frontend audit fixes (Claude Code, Codex, OpenCode).
 # Ref: docs/rules/domain/model-alias-schema.md
+SCRIPT="scripts/skill-listing-overrides.sh"
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
-  TMP="${BATS_TEST_TMPDIR:-$(mktemp -d)}"
+  set -o pipefail
+  TMP="$(mktemp -d)"
+}
+
+teardown() {
+  rm -rf "$TMP"
 }
 
 @test "settings.json: every command hook uses CLAUDE_PROJECT_DIR and resolves to a runnable script" {
@@ -133,4 +139,31 @@ PY
   [ "$status" -eq 0 ]
   run bash -c "cd '$TMP/main/savia' && printf '%s' '$(mk "$TMP/main/savia")' | CLAUDE_PROJECT_DIR='$TMP/main/savia' bash '$HOOK'"
   [ "$status" -eq 2 ]
+}
+
+@test "safety: new scripts run under set -uo pipefail" {
+  grep -q '^set -uo pipefail' scripts/skill-listing-overrides.sh
+  grep -q '^set -uo pipefail' scripts/model-tier-lint.sh
+  grep -q '^set -uo pipefail' .claude/hooks/judge-auto-router.sh
+}
+
+@test "edge: skill-listing-overrides with no args fails with usage" {
+  run bash scripts/skill-listing-overrides.sh
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage"* ]]
+}
+
+@test "edge: skill-listing-overrides keeps manual off entries and adds zero stale name-only" {
+  mkdir -p "$TMP/p/.claude/commands"
+  printf -- '---\nname: a\ntier: extended\n---\n' > "$TMP/p/.claude/commands/a.md"
+  printf '{"skillOverrides":{"manual":"off","gone":"name-only"}}' > "$TMP/p/.claude/settings.json"
+  PROJECT_ROOT="$TMP/p" run bash scripts/skill-listing-overrides.sh --apply
+  [ "$status" -eq 0 ]
+  run python3 -c "import json;print(json.load(open('$TMP/p/.claude/settings.json'))['skillOverrides'])"
+  [ "$output" = "{'a': 'name-only', 'manual': 'off'}" ]
+}
+
+@test "edge: codex gates ignore an empty payload" {
+  run bash -c "printf '' | env -u CLAUDE_PROJECT_DIR bash .claude/hooks/block-force-push.sh"
+  [ "$status" -eq 0 ]
 }

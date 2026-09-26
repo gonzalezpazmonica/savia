@@ -28,6 +28,10 @@ EOF
   export CLAUDE_PROJECT_DIR="$REPO"
 }
 
+teardown() {
+  rm -rf "$TMP/r" "$TMP/home"
+}
+
 hook() { printf '%s' "$1" | bash "$HOOK"; }
 
 @test "lint and hook exist, are executable and parse" {
@@ -122,4 +126,30 @@ hook() { printf '%s' "$1" | bash "$HOOK"; }
   run bash scripts/sync-model-tiers.sh
   [ "$status" -eq 1 ]
   [[ "$output" == *"retirado"* ]]
+}
+
+@test "safety: lint and hook run under set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$LINT"
+  grep -q '^set -uo pipefail' "$HOOK"
+}
+
+@test "edge: empty stdin and null tool_input are ignored" {
+  run bash -c "printf '' | bash '$HOOK'"
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+  run hook '{"tool_name":"Agent","tool_input":null}'
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+
+@test "edge: nonexistent prefs and empty tiers block fall back to defaults" {
+  printf 'tiers:\n' > "$PREFS"
+  run hook '{"tool_name":"Agent","tool_input":{"subagent_type":"tech-writer"}}'
+  [[ "$output" == *'"model": "haiku"'* ]]
+  SAVIA_PREFS_FILE="$TMP/nonexistent.yaml" run hook '{"tool_name":"Agent","tool_input":{"subagent_type":"architect"}}'
+  [[ "$output" == *'"model": "opus"'* ]]
+}
+
+@test "edge: lint on an empty project root passes (zero sources)" {
+  mkdir -p "$TMP/r"
+  PROJECT_ROOT="$TMP/r" run bash "$LINT"
+  [ "$status" -eq 0 ]
 }
