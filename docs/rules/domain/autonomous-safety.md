@@ -35,16 +35,18 @@ SIEMPRE → Prefijo de commit: agent({modo}): descripción
 NUNCA  → Aprobar un PR (ni propio ni ajeno)
 NUNCA  → Hacer merge de un PR sin permiso expreso REGISTRADO de la operadora
 NUNCA  → Auto-asignar como reviewer
-NUNCA  → Marcar un PR como "ready for merge"
+NUNCA  → Marcar un PR como "ready for merge" sin grant expreso y gates de riesgo/CI
 
 SIEMPRE → Crear PR en estado Draft
-SIEMPRE → Asignar AUTONOMOUS_REVIEWER como reviewer obligatorio
+SIEMPRE → Si hay reviewer distinto y elegible, solicitar su revisión
+SIEMPRE → Si la operadora es la única colaboradora, dejar PR Draft para su revisión sin solicitar self-review a GitHub
 SIEMPRE → Incluir en el PR body: métricas antes/después, descripción del cambio, riesgo estimado
-SIEMPRE → Esperar aprobación humana — el agente NO hace seguimiento ni insiste
+SIEMPRE → Tier 3/4: esperar revisión humana explícita del PR concreto
+SIEMPRE → Tier 1/2: exigir grant de merge expreso antes de promover o mergear
 ```
 
-Merge bajo permiso expreso (SE-343): `push-pr.sh --merge` no mergea sin grant
-`merge` vigente emitido a peticion expresa (apendice: `autonomous-safety-merge-grant.md`).
+Merge: grant vigente (SE-343), CI y riesgo; tier 3/4 exige revisión explícita
+del PR concreto (SE-362). Ver `autonomous-safety-merge-grant.md`.
 
 ## Reglas de investigación — Notificación humana
 
@@ -72,15 +74,9 @@ desde **fuentes locales gitignored** (NUNCA del repo público — Rule #20):
 scripts/savia-env.sh expone `savia_autonomous_reviewer()` que aplica esta cadena.
 ### Gate de arranque
 
-**Si tras la cadena no hay valor resoluble, el modo autónomo NO arranca.**
-
-```
-ERROR: AUTONOMOUS_REVIEWER no resoluble.
-   Configura UNO de:
-   - .claude/rules/pm-config.local.md (gitignored): AUTONOMOUS_REVIEWER = "@tu-handle"
-   - ~/.savia/preferences.yaml: autonomous_reviewer: "@tu-handle"
-   Tu handle NUNCA debe ir en ficheros versionados del repo público.
-```
+Reviewer distinto elegible: solicitar revisión. Si la operadora autenticada es
+la única colaboradora, usar PR Draft y revisión propia con CI y grant expreso;
+GitHub rechaza self-review. Sin operadora ni reviewer elegible: abortar.
 
 ## Reglas de fail-safe
 
@@ -119,7 +115,7 @@ OOM, timeout o error de infra: NO escalar — descartar y continuar.
 
 ## Emergency-mode (LocalAI fallback) — SPEC-122
 
-`/emergency-mode` cambia SOLO el endpoint (`ANTHROPIC_BASE_URL` → LocalAI), **no bypassa** los gates. AUTONOMOUS_REVIEWER, rama `agent/*`, PR Draft siguen obligatorios. Si el revisor no está disponible, el agente **espera**. Ver `emergency-mode/SKILL.md` y `emergency-mode-protocol.md`.
+`/emergency-mode` cambia SOLO el endpoint (`ANTHROPIC_BASE_URL` → LocalAI), **no bypassa** los gates. Rama `agent/*`, PR Draft y revisión de la operadora o reviewer elegible siguen obligatorios. Ver `emergency-mode/SKILL.md` y `emergency-mode-protocol.md`.
 
 ## Subagent Scope Guard — SE-146
 

@@ -89,7 +89,7 @@ Ejemplos inválidos: `feature/rama1`, `fix/cosas`, `feature/12345-algo` (falta e
 2. **Título**: igual que el commit principal (convencional, en inglés)
 3. **Descripción**: qué cambia y por qué; si cierra un PBI incluir `Closes #N`. Incluir **dos secciones de resumen**: `## Resumen` (español, para el digest que recibe la PM por email) y `## Summary` (inglés, para la comunidad internacional). El digest de PR Guardian prioriza `## Resumen`
 4. **Reviewer asignado por tarea**: si la tarea de DevOps que originó el cambio tiene un programador humano asignado (`System.AssignedTo`), ese programador se añade automáticamente como reviewer del PR. Esto garantiza que quien conoce el contexto de la tarea valide el código
-5. **Revisión**: al menos una aprobación antes de mergear. **NUNCA auto-aprobar** (`gh pr review --approve` sobre PR propio) — GitHub lo bloquea y es mala práctica. Si no hay reviewer humano, el PR espera
+5. **Revisión**: con varios colaboradores, solicitar aprobación de un reviewer distinto. Si la operadora es la única colaboradora, puede revisar y mergear su propio PR tras CI y los gates aplicables; GitHub no permite aprobar el PR propio con `gh pr review --approve`. Un agente requiere además grant de merge expreso; tier 3/4 exige revisión humana del PR concreto
 6. **Merge**: Squash merge para commits pequeños, Merge commit para features completas. **NUNCA** usar `--admin` para bypass de branch protection
 7. **Delete branch**: eliminar la rama tras el merge
 
@@ -99,7 +99,7 @@ Ejemplos inválidos: `feature/rama1`, `fix/cosas`, `feature/12345-algo` (falta e
 
 Configurar en GitHub → Settings → Branches → Branch protection rules:
 
-- OK Require pull request reviews before merging (1 aprobación mínima)
+- Require pull request reviews before merging (1 aprobación) solo si existe reviewer distinto elegible; en un repositorio de una sola colaboradora, este ajuste bloquearía todos sus PRs
 - OK Require status checks to pass (build, tests si aplica)
 - OK Include administrators (aplica las reglas también al owner)
 - OK Delete head branches automatically on merge

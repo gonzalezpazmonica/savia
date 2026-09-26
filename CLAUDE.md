@@ -42,7 +42,7 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 5. **Informes** en `output/` con `YYYYMMDD-tipo-proyecto.ext`
 6. **Repetición 2+** → documentar en skill
 7. **PBIs**: propuesta completa antes de tasks; NUNCA sin confirmación
-8. **SDD**: NUNCA agente sin Spec aprobada; Code Review (E1) SIEMPRE humano; NUNCA merge/approve autónomo
+8. **SDD**: NUNCA agente sin Spec aprobada; Code Review (E1) SIEMPRE humano; NUNCA autoaprobar. Merge solo con grant expreso y gates de riesgo (SE-343/362); la operadora única puede revisar y mergear sus PRs.
 
 ## Lazy Reference — leer bajo demanda
 

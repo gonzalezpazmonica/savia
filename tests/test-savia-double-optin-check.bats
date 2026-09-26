@@ -7,7 +7,9 @@ SCRIPT="scripts/savia-double-optin-check.sh"
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
   TMP_AUDIT="$(mktemp -t optin-audit.XXXXXX)"
+  TMP_GRANTS="$(mktemp -d -t optin-grants.XXXXXX)"
   export SAVIA_OPTIN_AUDIT_LOG="$TMP_AUDIT"
+  export SAVIA_GRANTS_DIR="$TMP_GRANTS"
   # Clean any inherited gate vars to keep tests deterministic.
   unset OVERNIGHT_SPRINT_ENABLED CODE_IMPROVEMENT_LOOP_ENABLED \
         ADVERSARIAL_SECURITY_ENABLED TECH_RESEARCH_AGENT_ENABLED \
@@ -16,6 +18,7 @@ setup() {
 
 teardown() {
   [[ -n "${TMP_AUDIT:-}" && -f "$TMP_AUDIT" ]] && rm -f "$TMP_AUDIT"
+  [[ -n "${TMP_GRANTS:-}" && -d "$TMP_GRANTS" ]] && rm -rf "$TMP_GRANTS"
   cd /
 }
 
