@@ -17,6 +17,8 @@ set -uo pipefail
 # The only action it takes is: emit a banner (advise/interrupt) and log.
 #
 # Telemetry: output/criterion-simulation/events.jsonl
+#   Each event carries signals_degraded (sources that failed and counted as 0)
+#   and priors_source, because the trigger's stderr is discarded below.
 #
 # Ref: SPEC-194 docs/propuestas/SPEC-194-criterion-simulation-layer.md
 
@@ -50,6 +52,8 @@ TRIGGER_SCRIPT="${PROJECT_DIR}/scripts/criterion-simulation/trigger-evaluator.py
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 
 # ── Telemetry helper ──────────────────────────────────────────────────────────
+SIGNALS_DEGRADED="[]"
+PRIORS_SOURCE="none"
 log_event() {
   local verdict="${1:-BYPASS}" score="${2:-0}" reasons="${3:-[]}" banner_emitted="${4:-false}"
   local ts
@@ -62,7 +66,9 @@ log_event() {
       --arg mode      "$MODE" \
       --argjson reasons    "$reasons" \
       --argjson banner_emitted "$banner_emitted" \
-      '{ts:$ts, verdict:$verdict, score:($score|tonumber? // 0), reasons:$reasons, mode:$mode, banner_emitted:$banner_emitted}' \
+      --argjson signals_degraded "$SIGNALS_DEGRADED" \
+      --arg priors_source "$PRIORS_SOURCE" \
+      '{ts:$ts, verdict:$verdict, score:($score|tonumber? // 0), reasons:$reasons, mode:$mode, banner_emitted:$banner_emitted, signals_degraded:$signals_degraded, priors_source:$priors_source}' \
       >> "$LOG_FILE" 2>/dev/null || true
   fi
 }
@@ -107,6 +113,8 @@ fi
 ACTIVATE=$(printf "%s" "$TRIGGER_OUTPUT" | jq -r '.activate // false')
 SCORE=$(printf "%s" "$TRIGGER_OUTPUT" | jq -r '.score // 0')
 REASONS=$(printf "%s" "$TRIGGER_OUTPUT" | jq -c '.reasons // []')
+SIGNALS_DEGRADED=$(printf "%s" "$TRIGGER_OUTPUT" | jq -c '.signals_degraded // []')
+PRIORS_SOURCE=$(printf "%s" "$TRIGGER_OUTPUT" | jq -r '.priors.source // "unknown"')
 
 if [[ "$ACTIVATE" != "true" ]]; then
   log_event "BYPASS_LOW_SCORE" "$SCORE" "$REASONS" "false"

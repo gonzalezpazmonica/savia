@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Guardrail: no socket calls ever ──────────────────────────────────────────
@@ -29,8 +30,15 @@ SCRIPT_DIR    = Path(__file__).resolve().parent
 WORKSPACE     = Path(os.environ.get("CLAUDE_PROJECT_DIR", SCRIPT_DIR.parent.parent))
 PREFS_FILE    = Path.home() / ".savia" / "preferences.yaml"
 
+# Same log that reaffirmation-log.py writes (and the same env override).
+REAFFIRMATION_LOG = Path(os.environ.get(
+    "SAVIA_CS_REAFFIRMATION_LOG",
+    str(WORKSPACE / "output" / "criterion-simulation" / "reaffirmations.jsonl")
+))
+
 # Env configuration
 FATIGUE_BAND  = os.environ.get("SAVIA_CS_FATIGUE_HOUR_BAND", "22:00-06:00")
+OVERRIDE_LOOKBACK_DAYS = 90
 
 
 def _parse_hour_band(band: str) -> tuple[int, int]:
@@ -52,13 +60,19 @@ def _is_in_hour_band(hour: int, start: int, end: int) -> bool:
     return hour >= start or hour <= end
 
 
+def _hour_distance(a: int, b: int) -> int:
+    """Circular distance between two hours (23 and 1 are 2 hours apart)."""
+    d = abs(a - b) % 24
+    return min(d, 24 - d)
+
+
 def _compute_fatigue_score(now_hour: int) -> tuple[int, str]:
     """0-30 based on whether current hour is in the atypical band."""
     start, end = _parse_hour_band(FATIGUE_BAND)
     if _is_in_hour_band(now_hour, start, end):
         fatigue = 30
         band    = "atypical"
-    elif abs(now_hour - start) <= 2 or abs(now_hour - end) <= 2:
+    elif _hour_distance(now_hour, start) <= 2 or _hour_distance(now_hour, end) <= 2:
         fatigue = 15
         band    = "transition"
     else:
@@ -69,7 +83,7 @@ def _compute_fatigue_score(now_hour: int) -> tuple[int, str]:
 
 def _compute_pressure_score(deadline_proximity: float | None) -> int:
     """0-20 heuristic from deadline_proximity (0.0-1.0 float from preferences.yaml)."""
-    if deadline_proximity is None:
+    if deadline_proximity is None or not math.isfinite(deadline_proximity):
         return 0
     # Clamp to [0,1]
     p = max(0.0, min(1.0, float(deadline_proximity)))
@@ -77,66 +91,78 @@ def _compute_pressure_score(deadline_proximity: float | None) -> int:
 
 
 def _compute_override_rate() -> int:
-    """0-20 based on reaffirmations log history.
+    """0-20: share of challenges the operator overrode in the last 90 days.
 
-    Reads output/criterion-simulation/reaffirmations.jsonl if it exists.
-    Counts reaffirmations in last 90 days vs. total tasks to estimate override rate.
-    Graceful: returns 0 if file absent.
+    Reads the reaffirmation log written by reaffirmation-log.py. Within the
+    lookback window, override rate = reaffirms / (reaffirms + reframes): a
+    reaffirm keeps the challenged frame, a reframe reconsiders it. 100% of
+    reaffirms scores 20; only reframes (or no entries) scores 0.
+    Graceful: returns 0 if the log is absent or unreadable.
     """
-    log_path = WORKSPACE / "output" / "criterion-simulation" / "reaffirmations.jsonl"
+    log_path = REAFFIRMATION_LOG
     if not log_path.exists():
         return 0
 
-    now = datetime.now(tz=timezone.utc)
-    from datetime import timedelta
-    cutoff = now - timedelta(days=90)
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=OVERRIDE_LOOKBACK_DAYS)
 
-    count = 0
-    total = 0
+    reaffirms = 0
+    decisions = 0
     try:
-        with log_path.open() as f:
+        with log_path.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 try:
                     entry = json.loads(line)
+                    kind = entry.get("type")
                     ts_str = entry.get("ts", "")
-                    if not ts_str:
+                    if kind not in ("reaffirm", "reframe") or not ts_str:
                         continue
-                    # Parse ISO timestamp
-                    ts = datetime.fromisoformat(ts_str.rstrip("Z").replace("Z", "+00:00"))
+                    ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                     if ts.tzinfo is None:
                         ts = ts.replace(tzinfo=timezone.utc)
-                    total += 1
-                    if ts >= cutoff:
-                        count += 1
-                except (json.JSONDecodeError, ValueError):
+                except (json.JSONDecodeError, ValueError, AttributeError) as exc:
+                    print(f"operator-state-signals: linea ignorada en {log_path.name} ({exc})", file=sys.stderr)
                     continue
-    except OSError:
+                if ts < cutoff:
+                    continue
+                decisions += 1
+                if kind == "reaffirm":
+                    reaffirms += 1
+    except OSError as exc:
+        print(f"operator-state-signals: log no legible ({exc}); override_rate=0", file=sys.stderr)
         return 0
 
-    if total == 0:
+    if decisions == 0:
         return 0
-    # Scale: if 100% of lookback are reaffirmations, score is 20
-    rate  = count / max(total, 1)
-    return int(round(rate * 20))
+    return int(round(reaffirms / decisions * 20))
 
 
 def _read_deadline_proximity() -> float | None:
-    """Read deadline_proximity from ~/.savia/preferences.yaml. Returns None if absent."""
+    """Read deadline_proximity from ~/.savia/preferences.yaml. Returns None if absent.
+
+    Accepts a trailing comment, quotes and the es_ES decimal comma ("0,8").
+    Only the exact key counts (not deadline_proximity_days); nan/inf -> None.
+    """
     if not PREFS_FILE.exists():
         return None
     try:
-        with PREFS_FILE.open() as f:
+        with PREFS_FILE.open(encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line.startswith("deadline_proximity"):
-                    parts = line.split(":", 1)
-                    if len(parts) == 2:
-                        return float(parts[1].strip())
-    except (OSError, ValueError):
-        pass
+                parts = line.split(":", 1)
+                if len(parts) != 2 or parts[0].strip() != "deadline_proximity":
+                    continue
+                value = parts[1].split("#", 1)[0].strip().strip("'\"").replace(",", ".")
+                proximity = float(value)
+                if not math.isfinite(proximity):
+                    print(f"operator-state-signals: deadline_proximity={value!r} no es finito; presion=0",
+                          file=sys.stderr)
+                    return None
+                return proximity
+    except (OSError, ValueError) as exc:
+        print(f"operator-state-signals: deadline_proximity ilegible ({exc}); presion=0", file=sys.stderr)
     return None
 
 

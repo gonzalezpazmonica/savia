@@ -4,10 +4,11 @@
 Searches for similar tasks that were reverted or failed in the KG
 (knowledge-graph SQLite DB) within a configurable lookback window.
 
-Graceful degradation: returns {count: 0, priors: []} if KG is absent
-or inaccessible. NEVER raises; NEVER makes network calls.
+Graceful degradation: returns count 0 if KG is absent or inaccessible,
+with `source` telling which case applies. NEVER raises; NEVER makes
+network calls. A task without tags matches nothing (source no_tags).
 
-Output: JSON {count: int, priors: [{id, summary, date}]}
+Output: JSON {count: int, priors: [{id, summary, date}], source: str}
 
 Usage:
     python3 scripts/criterion-simulation/historical-priors.py
@@ -21,6 +22,7 @@ import json
 import os
 import sqlite3
 import sys
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -31,10 +33,21 @@ DEFAULT_DB  = Path(os.environ.get(
     "SAVIA_KG_DB",
     str(WORKSPACE / ".savia-kg" / "graph.db")
 ))
-LOOKBACK_DAYS = int(os.environ.get("SAVIA_CS_LOOKBACK_DAYS", 90))
 
-EMPTY_RESULT: dict = {"count": 0, "priors": []}
 
+def _env_int(name: str, default: int) -> int:
+    """Read an int env var; on invalid value warn on stderr and use default."""
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(f"historical-priors: {name}={raw!r} no es entero; uso {default}", file=sys.stderr)
+        return default
+
+
+LOOKBACK_DAYS = _env_int("SAVIA_CS_LOOKBACK_DAYS", 90)
 
 def _table_exists(cursor: sqlite3.Cursor, table: str) -> bool:
     cursor.execute(
@@ -64,62 +77,68 @@ def _extract_tags(task_context: dict) -> list[str]:
     return [t.lower() for t in tags if t]
 
 
-def get_recent_failed_frames(task_context: dict, lookback_days: int = LOOKBACK_DAYS) -> dict:
-    """Return {count: int, priors: [{id, summary, date}]} from local KG.
+def _like_escape(tag: str) -> str:
+    """Escape LIKE wildcards so '_' or '%' in a tag match literally."""
+    return tag.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _result(source: str, priors: list | None = None) -> dict:
+    """Build the output; `source` says why count is what it is.
+
+    absent     KG file does not exist
+    no_table   KG without frame_reaffirmations
+    no_tags    task without tags/flags, or table without a tags column:
+               there is nothing to compare, so no prior counts as "similar"
+    ok         query ran (count may be 0)
+    unreadable KG corrupt or unreadable (also warned on stderr)
+    """
+    priors = priors or []
+    return {"count": len(priors), "priors": priors, "source": source}
+
+
+def get_recent_failed_frames(task_context: dict, lookback_days: int = LOOKBACK_DAYS,
+                             db_path: Path | None = None) -> dict:
+    """Return {count: int, priors: [{id, summary, date}], source: str} from local KG.
 
     Searches frame_reaffirmations table for reverted/failed tasks with
-    tags matching task_context within lookback_days.
+    tags matching task_context within lookback_days. Similarity needs tags:
+    without them the result is empty (source no_tags), never "any row".
 
-    Graceful: returns EMPTY_RESULT if KG absent or table missing.
+    Graceful: returns count 0 if KG absent, table missing or unreadable.
     """
-    db_path = DEFAULT_DB
+    db_path = Path(db_path) if db_path is not None else DEFAULT_DB
 
     if not db_path.exists():
-        return dict(EMPTY_RESULT)
+        return _result("absent")
 
     cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=lookback_days)).isoformat()
     tags   = _extract_tags(task_context)
 
     try:
-        conn   = sqlite3.connect(str(db_path))
-        cursor = conn.cursor()
+        with closing(sqlite3.connect(str(db_path))) as conn:
+            cursor = conn.cursor()
 
-        # Graceful: table may not exist yet
-        if not _table_exists(cursor, "frame_reaffirmations"):
-            conn.close()
-            return dict(EMPTY_RESULT)
+            # Graceful: table may not exist yet
+            if not _table_exists(cursor, "frame_reaffirmations"):
+                return _result("no_table")
 
-        has_tags_col = _column_exists(cursor, "frame_reaffirmations", "tags")
+            if not tags or not _column_exists(cursor, "frame_reaffirmations", "tags"):
+                return _result("no_tags")
 
-        if tags and has_tags_col:
             # Match any record whose tags overlap with task_context tags
-            placeholders = ",".join("?" * len(tags))
             query = f"""
                 SELECT task_id, reason, ts, verdict_before
                 FROM frame_reaffirmations
                 WHERE ts >= ?
                   AND verdict_before IN ('FRAME_DOUBT', 'FRAME_REJECT')
                   AND (
-                    {" OR ".join(["tags LIKE ?" for _ in tags])}
+                    {" OR ".join(["tags LIKE ? ESCAPE '\\'" for _ in tags])}
                   )
                 ORDER BY ts DESC
                 LIMIT 10
             """
-            like_params = [f"%{t}%" for t in tags]
+            like_params = [f"%{_like_escape(t)}%" for t in tags]
             rows = cursor.execute(query, [cutoff] + like_params).fetchall()
-        else:
-            # No tags: return any recent doubt/reject frames
-            query = """
-                SELECT task_id, reason, ts, verdict_before
-                FROM frame_reaffirmations
-                WHERE ts >= ?
-                  AND verdict_before IN ('FRAME_DOUBT', 'FRAME_REJECT')
-                ORDER BY ts DESC
-                LIMIT 10
-            """
-            rows = cursor.execute(query, [cutoff]).fetchall()
-
-        conn.close()
 
         priors = [
             {
@@ -129,10 +148,13 @@ def get_recent_failed_frames(task_context: dict, lookback_days: int = LOOKBACK_D
             }
             for row in rows
         ]
-        return {"count": len(priors), "priors": priors}
+        return _result("ok", priors)
 
-    except (sqlite3.Error, OSError):
-        return dict(EMPTY_RESULT)
+    except (sqlite3.Error, OSError) as exc:
+        # Degradacion declarada: KG ilegible equivale a "sin precedentes",
+        # pero queda marcada en source para que el trigger la propague.
+        print(f"historical-priors: KG no legible ({exc}); sin precedentes", file=sys.stderr)
+        return _result("unreadable")
 
 
 def main() -> None:
@@ -153,10 +175,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    # Allow overriding DB path
-    global DEFAULT_DB  # noqa: PLW0603
-    DEFAULT_DB = Path(args.db)
-
     if args.task_json:
         raw = args.task_json
     elif not sys.stdin.isatty():
@@ -166,10 +184,16 @@ def main() -> None:
 
     try:
         task_context = json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        print(f"historical-priors: contexto JSON invalido ({exc}); uso contexto vacio", file=sys.stderr)
         task_context = {}
 
-    result = get_recent_failed_frames(task_context, lookback_days=args.lookback)
+    if not isinstance(task_context, dict):
+        print("historical-priors: el contexto no es un objeto JSON; uso contexto vacio", file=sys.stderr)
+        task_context = {}
+
+    result = get_recent_failed_frames(task_context, lookback_days=args.lookback,
+                                      db_path=Path(args.db))
     print(json.dumps(result))
 
 

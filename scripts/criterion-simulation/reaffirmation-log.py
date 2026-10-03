@@ -41,23 +41,33 @@ MIN_REASON_LEN = 20
 
 def _append_entry(entry: dict) -> None:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with LOG_PATH.open("a") as f:
+    with LOG_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
+
+
+def _require_task(task_id: str) -> None:
+    if not task_id.strip():
+        print("Error: --task cannot be empty.", file=sys.stderr)
+        sys.exit(2)
 
 
 def cmd_reaffirm(task_id: str, reason: str, operator: str = "default") -> None:
     """Register a conscious reaffirmation of the task frame."""
-    if len(reason) < MIN_REASON_LEN:
+    _require_task(task_id)
+    # Whitespace padding is not deliberate thought: measure the trimmed reason
+    # with internal runs of blanks collapsed.
+    meaningful = " ".join(reason.split())
+    if len(meaningful) < MIN_REASON_LEN:
         print(
             f"Error: --reason must be >= {MIN_REASON_LEN} characters "
-            f"(got {len(reason)}). Reaffirmation requires deliberate thought.",
+            f"(got {len(meaningful)} without padding). Reaffirmation requires deliberate thought.",
             file=sys.stderr,
         )
         sys.exit(2)
 
     entry = {
         "type":     "reaffirm",
-        "task_id":  task_id,
+        "task_id":  task_id.strip(),
         "ts":       datetime.now(tz=timezone.utc).isoformat(),
         "operator": operator,
         "reason":   reason,
@@ -68,6 +78,7 @@ def cmd_reaffirm(task_id: str, reason: str, operator: str = "default") -> None:
 
 def cmd_reframe(task_id: str, new_statement: str, operator: str = "default") -> None:
     """Register a redefinition of the problem statement."""
+    _require_task(task_id)
     if not new_statement.strip():
         print(
             "Error: --new-statement cannot be empty.",
@@ -77,7 +88,7 @@ def cmd_reframe(task_id: str, new_statement: str, operator: str = "default") -> 
 
     entry = {
         "type":          "reframe",
-        "task_id":       task_id,
+        "task_id":       task_id.strip(),
         "ts":            datetime.now(tz=timezone.utc).isoformat(),
         "operator":      operator,
         "new_statement": new_statement,
