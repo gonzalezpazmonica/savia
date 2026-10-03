@@ -29,7 +29,10 @@
 set -uo pipefail
 
 VERSION="1.0.0"
-AUDIT_LOG="${SAVIA_OPTIN_AUDIT_LOG:-output/agent-runs/optin-audit.log}"
+# Rutas ancladas a la raíz del repo, nunca al cwd: un scripts/operator-grant.sh
+# plantado en el directorio de trabajo concedería el factor "intent".
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+AUDIT_LOG="${SAVIA_OPTIN_AUDIT_LOG:-$REPO_ROOT/output/agent-runs/optin-audit.log}"
 
 usage() {
   cat <<'USAGE'
@@ -112,7 +115,7 @@ fi
 # Scopes map: skill X -> autonomy:X.
 if [[ $HAS_ENV -eq 0 ]]; then
   GRANT_SCOPE="autonomy:${SKILL}"
-  if bash scripts/operator-grant.sh check --scope "$GRANT_SCOPE" >/dev/null 2>&1; then
+  if bash "$REPO_ROOT/scripts/operator-grant.sh" check --scope "$GRANT_SCOPE" >/dev/null 2>&1; then
     HAS_ENV=1
   fi
 fi

@@ -45,7 +45,7 @@ Exit codes: `0` ambos OK · `1` falta factor · `2` invocación inválida.
 
 ## Auditoría
 
-Cada intento (aceptado o denegado) se registra en `output/agent-runs/optin-audit.log` con campos: `timestamp`, `user`, `skill`, `env=0|1`, `flag=0|1`, `verdict=ok|denied`. Override: `SAVIA_OPTIN_AUDIT_LOG`.
+Cada intento (aceptado o denegado) se registra en `<raíz del repo>/output/agent-runs/optin-audit.log` (anclado al repo, no al cwd; igual que la consulta a `scripts/operator-grant.sh`, para que un script plantado en el directorio de trabajo no conceda el factor 1) con campos: `timestamp`, `user`, `skill`, `env=0|1`, `flag=0|1`, `verdict=ok|denied`. Override: `SAVIA_OPTIN_AUDIT_LOG`.
 
 ## Bypass de tests
 

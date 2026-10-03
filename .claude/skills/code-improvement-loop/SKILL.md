@@ -38,8 +38,8 @@ metadata:
 
 ```
 1. AUTONOMOUS_REVIEWER configurado            → si no: ❌ ABORT
-2. Doble opt-in SPEC-186 (env CODE_IMPROVEMENT_LOOP_ENABLED=true + flag): → si no: ❌ ABORT
-   bash scripts/savia-double-optin-check.sh --skill code-improvement-loop --confirm-autonomous
+2. Doble opt-in SPEC-186: intención (env CODE_IMPROVEMENT_LOOP_ENABLED=true exacto, o grant SE-343 autonomy:code-improvement-loop) + flag → si no: ❌ ABORT
+   bash scripts/savia-double-optin-check.sh --skill code-improvement-loop --confirm-autonomous  (exit 0 ok · 1 falta factor · 2 inválida)
 3. Tests pasan (baseline sano)                → si no: ❌ ABORT
 4. Métricas baseline capturadas               → si no: capturar antes de empezar
 5. Auto Mode activado (claude --enable-auto-mode) → si no: ⚠️ warning, continuar
@@ -146,4 +146,5 @@ SIEMPRE → Ramas agent/improve-*
 Cada mejora que pasa las métricas se registra como premisa (determinista, sin
 LLM, JSONL local). **NUNCA** la auditoría LLM (4 jueces) por mejora — satura.
 La auditoría completa `/coherence-court --flow code-improve-{fecha}` va al final
-(o E1 humana), opt-in `COHERENCE_AUDIT_JUDGES=1`. Policy: gate determinista
+(o E1 humana), opt-in `COHERENCE_AUDIT_JUDGES=1`. Registro gitignored
+`data/coherence-premises-<flujo>.jsonl` (flujo sin `/`). Policy: gate determinista

@@ -28,6 +28,25 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 _py3() { command -v python3 &>/dev/null; }
 
+# Enteros no negativos validados ANTES de cualquier contexto aritmético:
+# $(( )) y [[ -ge ]] evalúan subíndices, así que "HOME[$(cmd)]" ejecutaría cmd.
+_require_uint() {
+  local name="$1" value="$2"
+  [[ "$value" =~ ^[0-9]+$ ]] || die "$name must be a non-negative integer: '$value'"
+}
+
+# El flujo forma parte del nombre de fichero: sin "/" no puede salir del directorio.
+_require_flow() {
+  local flow="$1"
+  [[ -n "$flow" ]] || die "flow name is required"
+  [[ "$flow" != */* && "$flow" != *$'\n'* ]] || die "invalid flow name '$flow' (no '/' or newlines)"
+}
+
+# Valor obligatorio de una opción: evita el aborto opaco de set -u con "$2".
+_need_value() {
+  [[ $# -ge 2 && -n "$2" ]] || die "$1 requires a value"
+}
+
 _premises_file() {
   local flow="$1"
   echo "$COHERENCE_PREMISES_DIR/coherence-premises-${flow}.jsonl"
@@ -64,8 +83,8 @@ cmd_check() {
   local flow="" stage_output=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --flow)        flow="$2"; shift 2 ;;
-      --stage-output) stage_output="$2"; shift 2 ;;
+      --flow)        _need_value "$@"; flow="$2"; shift 2 ;;
+      --stage-output) _need_value "$@"; stage_output="$2"; shift 2 ;;
       --help|-h)     usage; exit 0 ;;
       *)             die "Unknown arg: $1" ;;
     esac
@@ -73,6 +92,7 @@ cmd_check() {
   [[ -z "$flow" ]] && die "check requires --flow"
   [[ -z "$stage_output" ]] && die "check requires --stage-output"
   [[ -f "$stage_output" ]] || die "stage_output not found: $stage_output"
+  _require_flow "$flow"
 
   local n
   n="$(_count_premises "$flow")"
@@ -87,6 +107,7 @@ cmd_check() {
 cmd_premises() {
   local flow="${1:-}" sub="${2:-}"
   [[ -z "$flow" ]] && die "Usage: coherence-court.sh premises <flow> init|add|list|show|clear"
+  _require_flow "$flow"
   local file
   file="$(_premises_file "$flow")"
 
@@ -100,9 +121,9 @@ cmd_premises() {
       shift 4 || shift "$#"
       while [[ $# -gt 0 ]]; do
         case "$1" in
-          --stage) stage="$2"; shift 2 ;;
-          --source) source="$2"; shift 2 ;;
-          --id) premise_id="$2"; shift 2 ;;
+          --stage) _need_value "$@"; stage="$2"; shift 2 ;;
+          --source) _need_value "$@"; source="$2"; shift 2 ;;
+          --id) _need_value "$@"; premise_id="$2"; shift 2 ;;
           *) die "Unknown arg: $1" ;;
         esac
       done
@@ -192,11 +213,17 @@ PY
   esac
 }
 
+# Cadena YAML segura: JSON es un subconjunto de YAML y escapa comillas y saltos.
+_yaml_str() {
+  python3 -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$1"
+}
+
 cmd_skeleton() {
   local flow="${1:-}" stage_output="${2:-}"
   [[ -z "$flow" ]] && die "skeleton requires <flow>"
   [[ -z "$stage_output" ]] && die "skeleton requires <stage_output>"
   [[ -f "$stage_output" ]] || die "stage_output not found: $stage_output"
+  _require_flow "$flow"
 
   local sha
   sha=$(sha256sum "$stage_output" 2>/dev/null | awk '{print $1}') || sha="unknown"
@@ -206,13 +233,13 @@ cmd_skeleton() {
   cat <<EOF
 ---
 court_id: "COH-$(date +%Y-%m%d)-001"
-flow_ref: "$flow"
+flow_ref: $(_yaml_str "$flow")
 stage_ref: "current"
 premises_count: $n
 checked_at: "$(date -Iseconds)"
 court_round: 1
 stage_output:
-  - path: "$stage_output"
+  - path: $(_yaml_str "$stage_output")
     sha256: "$sha"
     findings: []
     status: "pending"
@@ -239,7 +266,8 @@ try:
             if not line: continue
             try:
                 r = json.loads(line)
-                out.append(f"  - id: \"{r.get('premise_id','')}\"\n    kind: \"{r.get('kind','')}\"\n    content: \"{r.get('content','')}\"")
+                q = lambda v: json.dumps(str(v), ensure_ascii=False)
+                out.append(f"  - id: {q(r.get('premise_id',''))}\n    kind: {q(r.get('kind',''))}\n    content: {q(r.get('content',''))}")
             except Exception: pass
 except Exception: pass
 print("\n".join(out) if out else "  []")
@@ -255,6 +283,9 @@ EOF
 
 cmd_score() {
   local c="${1:-0}" h="${2:-0}" m="${3:-0}" l="${4:-0}"
+  _require_uint C "$c"; _require_uint H "$h"; _require_uint M "$m"; _require_uint L "$l"
+  _require_uint COHERENCE_SCORE_PASS "$COHERENCE_SCORE_PASS"
+  _require_uint COHERENCE_SCORE_CONDITIONAL "$COHERENCE_SCORE_CONDITIONAL"
   local score=$((100 - c * 25 - h * 10 - m * 3 - l * 1))
   [[ "$score" -lt 0 ]] && score=0
 
@@ -274,14 +305,17 @@ cmd_gate() {
   local score="${1:-}" threshold="$COHERENCE_SCORE_PASS" conditional="$COHERENCE_SCORE_CONDITIONAL"
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --threshold)   threshold="$2"; shift 2 ;;
-      --conditional) conditional="$2"; shift 2 ;;
+      --threshold)   _need_value "$@"; threshold="$2"; shift 2 ;;
+      --conditional) _need_value "$@"; conditional="$2"; shift 2 ;;
       --help|-h)     echo "Usage: coherence-court.sh gate <score> [--threshold N] [--conditional N]"; exit 0 ;;
       *) score="$1"; shift ;;
     esac
   done
   [[ -z "$score" ]] && die "gate requires <score>"
   [[ "$score" =~ ^[0-9]+$ ]] || die "score must be an integer: '$score'"
+  _require_uint threshold "$threshold"
+  _require_uint conditional "$conditional"
+  [[ "$conditional" -le "$threshold" ]] || die "conditional threshold ($conditional) must be <= pass threshold ($threshold)"
 
   if [[ "$score" -ge "$threshold" ]]; then
     echo "PASS: score=$score >= $threshold — coherent. Continuar el flujo (revisión humana ligera)."
