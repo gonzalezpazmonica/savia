@@ -17,6 +17,7 @@ import { decidePermission } from "./lib/permission"
 import { auditLog } from "./lib/audit"
 import { guardVariants } from "./lib/sandbox"
 import { writeManifest } from "./lib/manifest"
+import { patchPaths, pinFor, protectsPath, verifyPin } from "./lib/guard-pin"
 
 function resolveProjectRoot(directory: string | undefined): string {
   if (directory) return directory
@@ -28,6 +29,29 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
   const root = resolveProjectRoot(directory)
   const hookMap = await loadHookMap(root)
   let lastCwd: string | null = null
+  // T1: con SAVIA_GATES_PIN=1 (Space en modo mediado) los guards se fijan la primera vez que se
+  // carga este directorio y se verifican antes de cada decisión (lib/guard-pin.ts).
+  const pin = process.env.SAVIA_GATES_PIN === "1" ? await pinFor(root, hookMap) : null
+
+  async function pinViolation(tool: string | null, args: Record<string, unknown> | undefined): Promise<string | null> {
+    if (!pin) return null
+    const changed = await verifyPin(pin)
+    if (changed.length > 0) {
+      await auditLog({ event: "guards-modified", root, changed: changed.slice(0, 20) })
+      return `GUARDS_MODIFIED: ${changed.slice(0, 5).join(", ")}${changed.length > 5 ? ` (+${changed.length - 5})` : ""} — reinicia el motor desde una copia de confianza`
+    }
+    const targets: string[] = []
+    for (const k of ["filePath", "file_path", "path"]) {
+      if (typeof args?.[k] === "string") targets.push(args[k] as string)
+    }
+    if (typeof args?.patchText === "string") targets.push(...patchPaths(args.patchText as string))
+    const hit = tool && tool !== "bash" ? targets.find((t) => protectsPath(pin, root, t)) : undefined
+    if (hit) {
+      await auditLog({ event: "guard-protected", tool, path: hit })
+      return `GUARD_PROTECTED: ${hit}`
+    }
+    return null
+  }
 
   await writeManifest(hookMap)
   await auditLog({ event: "plugin-loaded", root, events: Object.keys(hookMap).length })
@@ -44,6 +68,8 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
 
   return {
     "tool.execute.before": async (input, output) => {
+      const pinned = await pinViolation(input.tool, output.args)
+      if (pinned) throw new Error(`savia-gates: ${pinned}`)
       // A sandbox plugin may already have wrapped the command: hooks see the
       // original and the unwrapped form, and any block wins (lib/sandbox.ts).
       const variants = guardVariants(input.tool, output.args)
@@ -83,6 +109,8 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
     },
 
     "chat.message": async (input, output) => {
+      const pinned = await pinViolation(null, undefined)
+      if (pinned) throw new Error(`savia-gates: prompt blocked — ${pinned}`)
       const payload = JSON.stringify({
         hook_event_name: "UserPromptSubmit",
         session_id: input.sessionID,
@@ -115,6 +143,10 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
     },
 
     "permission.ask": async (input, output) => {
+      if (await pinViolation(null, undefined)) {
+        output.status = "deny"
+        return
+      }
       const decision = await decidePermission($, root, input)
       if (decision !== "ask") {
         output.status = decision
@@ -123,6 +155,8 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
     },
 
     "command.execute.before": async (input, output) => {
+      const pinned = await pinViolation(null, undefined)
+      if (pinned) throw new Error(`savia-gates: command ${input.command} blocked — ${pinned}`)
       // Slash commands are gated through the same PreToolUse pipeline so
       // credential-leak / branch-safety checks apply uniformly.
       const payload = JSON.stringify({
