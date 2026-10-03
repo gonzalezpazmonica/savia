@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: design-an-interface
-description: "Design-an-interface skill with N=3 parallel alternatives and architectural vocabulary. Use when designing a new module interface, when user mentions 'varias alternativas', 'design this module', or '/design-interface'."
+description: "Design-an-interface skill with N=3 parallel alternatives and architectural vocabulary. Use when designing a new module interface, when user mentions 'varias alternativas', 'design this module', or '/design-an-interface'."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.attribution: "Clean-room re-implementation of mattpocock/skills/design-an-interface (MIT, 26.4k*). Prose and process are original."
@@ -56,9 +56,11 @@ Genera 3 disenos alternativos de interfaz en paralelo y consolida en tabla compa
 
 ## Workflow
 
-`Recibir → Lanzar 3 sub-agentes paralelos (Task tool) → Consolidar tabla → Recomendar`
+`Recibir → Lanzar 3 sub-agentes paralelos → Consolidar tabla → Recomendar`
 
 ### Sub-agentes en paralelo (mismo mensaje, sin dependencias)
+
+Agent tool (Task en OpenCode) con `subagent_type=architect`; cada prompt incluye el vocabulario de SE-082.
 
 **A — Maxima simplicidad**: minimo metodos, sin estado, facilidad de uso.
 **B — Maxima flexibilidad**: extensible, plugin-friendly, facil de mockear.
@@ -93,15 +95,26 @@ Un parrafo usando vocabulario de `docs/rules/domain/architectural-vocabulary.md`
 - Tabla comparativa de los 3 disenos.
 - Recomendacion con justificacion en vocabulario arquitectonico.
 - Opcionalmente: fichero `docs/propuestas/<modulo>-interface-design.md` si se requiere trazabilidad.
+  Sin frontmatter no entra en `INDEX.md`. Con frontmatter, regenera el indice o el gate `--check` de validate-ci-local falla:
+
+```bash
+bash scripts/propuestas-index-gen.sh
+```
 
 ## Memory hooks
 
-- Diseno completado: guardar en memoria con tipo decision y titulo "interface design: modulo".
+Cuando la usuaria elige diseno, guardarlo (`--source` es obligatorio por SE-072; sin el, exit 1 y no se guarda nada):
+
+```bash
+bash scripts/memory-store.sh save --type decision --title "interface design: <modulo>" \
+  --content "<diseno elegido y por que>" --source user:explicit
+```
 
 ## Related
 
 - Rule: `docs/rules/domain/architectural-vocabulary.md` (SE-082 — vocabulary obligatorio en outputs)
-- SE-074: `scripts/parallel-specs-orchestrator.sh` — para disenos grandes (>1h por agente), delegar coordinacion al orquestador paralelo en lugar de sub-agentes intra-sesion
+- SE-074: `scripts/parallel-specs-orchestrator.sh` — disenos grandes (>1h por agente). Solo acepta IDs de spec en `docs/propuestas/` (no hay "design tracks"): escribir cada alternativa como spec y planificar antes de lanzar:
+  `bash scripts/parallel-specs-orchestrator.sh --dry-run <SPEC-A> <SPEC-B> <SPEC-C>`
 - Skill: `.opencode/skills/spec-driven-development/SKILL.md`
 - Agent: `.opencode/agents/architect.md`
 - Roadmap: `docs/ROADMAP.md`

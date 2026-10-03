@@ -1,5 +1,5 @@
 {
-  "hash": "15c0024a7faa",
+  "hash": "9523bcc98aa0",
   "total": 1450,
   "resources": [
     {
@@ -3075,7 +3075,7 @@
       ],
       "kind": "skill",
       "path": ".claude/skills/design-an-interface/SKILL.md",
-      "description": "Design-an-interface skill with N=3 parallel alternatives and architectural vocabulary. Use when designing a new module interface, when user mentions 'varias alternativas', 'design this module', or '/design-interface'."
+      "description": "Design-an-interface skill with N=3 parallel alternatives and architectural vocabulary. Use when designing a new module interface, when user mentions 'varias alternativas', 'design this module', or '/design-an-interface'."
     },
     {
       "category": "development",

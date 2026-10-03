@@ -54,7 +54,7 @@
 - **dag-typing-validate** (script): dag-typing-validate.sh — SE-034 Slice 1 prototype validator.
 - **decide-architecture** (script): decide-architecture.sh — SPEC-158
 - **deps-validate** (script): deps-validate.sh — SPEC-SE-020 Slice 1 schema validator for deps.yaml.
-- **design-an-interface** (skill): Design-an-interface skill with N=3 parallel alternatives and architectural vocabulary. Use when designing a new module interface, when user mentions 'varias alternativas', 'design this module', or '/design-interface'.
+- **design-an-interface** (skill): Design-an-interface skill with N=3 parallel alternatives and architectural vocabulary. Use when designing a new module interface, when user mentions 'varias alternativas', 'design this module', or '/design-an-interface'.
 - **detect-frontend** (script): detect-frontend.sh — SPEC-INSTALLER-OPENCODE-MIGRATION
 - **dev-orchestrator** (agent): Analiza specs y crea planes de implementación con slices, dependencias y presupuestos de contexto
 - **dev-session** (cmd): Orquestar desarrollo de un spec mediante 5 fases con aislamiento de contexto y persistencia en disco
