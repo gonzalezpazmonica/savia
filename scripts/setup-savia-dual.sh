@@ -6,32 +6,45 @@
 # added. Use --force to rewrite config, or --reconfigure to regenerate
 # only the config without touching Ollama/models.
 #
+# Persistent activation (systemd/launchd service and the ~/.bashrc/~/.zshrc
+# block that exports ANTHROPIC_BASE_URL in every shell) requires the double
+# opt-in of SPEC-186: SAVIA_DUAL_FAILOVER_ENABLED=true AND --confirm-autonomous.
+# Without both, only ~/.savia/dual/{config.json,env} are written.
+#
 # Usage:
-#   ./scripts/setup-savia-dual.sh              # install + configure + launch claude
+#   ./scripts/setup-savia-dual.sh              # install + configure (+ launch claude on a TTY)
 #   ./scripts/setup-savia-dual.sh --no-launch  # install only, do not exec claude
-#   ./scripts/setup-savia-dual.sh --dry-run    # show what would happen
+#   ./scripts/setup-savia-dual.sh --dry-run    # show what would happen, write nothing
 #   ./scripts/setup-savia-dual.sh --reconfigure # regenerate config only
 #   ./scripts/setup-savia-dual.sh --force      # rewrite config even if present
+#   SAVIA_DUAL_FAILOVER_ENABLED=true ./scripts/setup-savia-dual.sh --confirm-autonomous
+#                                              # also install service + shell integration
 #   ./scripts/setup-savia-dual.sh -- --resume  # pass args after -- to claude
+#
+# Exit codes: 0 ok · 1 install step failed · 2 invalid argument
 set -uo pipefail
 
 DRY_RUN=0
 RECONFIG_ONLY=0
 FORCE=0
 NO_LAUNCH=0
+CONFIRM_AUTONOMOUS=0
 CLAUDE_ARGS=()
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --reconfigure) RECONFIG_ONLY=1; FORCE=1 ;;
     --force) FORCE=1 ;;
     --no-launch) NO_LAUNCH=1 ;;
+    --confirm-autonomous) CONFIRM_AUTONOMOUS=1 ;;
     --) shift; CLAUDE_ARGS=("$@"); break ;;
     -h|--help)
-      grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -25
+      grep '^#' "$0" | sed 's/^# \{0,1\}//' | head -27
       exit 0
       ;;
+    *) printf '[savia-dual] Unknown argument: %s (see --help)\n' "$1" >&2; exit 2 ;;
   esac
+  shift
 done
 
 say() { printf '\033[0;36m[savia-dual]\033[0m %s\n' "$*"; }
@@ -172,7 +185,8 @@ choose_from_installed() {
   [[ $has_26b -eq 1 ]] && { echo "gemma4:26b"; return; }
   [[ $has_e4b -eq 1 ]] && { echo "gemma4:e4b"; return; }
   [[ $has_e2b -eq 1 ]] && { echo "gemma4:e2b"; return; }
-  echo ""
+  # Another gemma4 tag (e.g. gemma4:12b): still usable, never leave it empty.
+  printf '%s\n' "$installed" | sed '/^$/d' | head -1
 }
 
 if echo "$INSTALLED" | grep -qx "$IDEAL"; then
@@ -385,34 +399,58 @@ $endmark"
   done
 }
 
-install_systemd_system_service || warn "System service install failed — you can run the proxy manually."
-install_launchd_agent || true
-install_shell_integration
+# ── Double opt-in (SPEC-186) for anything outside ~/.savia/dual ────────────
+# The gate prints its own diagnostics; here they are folded into one notice.
+GLOBAL_OK=0
+optin_args=(--skill savia-dual)
+[[ $CONFIRM_AUTONOMOUS -eq 1 ]] && optin_args+=(--confirm-autonomous)
+if (cd "$SCRIPT_DIR/.." && bash scripts/savia-double-optin-check.sh "${optin_args[@]}") >/dev/null 2>&1; then
+  GLOBAL_OK=1
+fi
+
+SERVICE_STATE="not installed (double opt-in missing)"
+INSTALL_FAILED=0
+if [[ $GLOBAL_OK -eq 1 ]]; then
+  if [[ "$PLATFORM" == "linux" ]]; then
+    if install_systemd_system_service; then
+      SERVICE_STATE="savia-dual-proxy.service (enabled at boot)"
+    else
+      warn "System service install failed — you can run the proxy manually."
+      SERVICE_STATE="install FAILED"; INSTALL_FAILED=1
+    fi
+  else
+    if install_launchd_agent; then
+      SERVICE_STATE="launchd agent com.savia.dual.proxy"
+    else
+      SERVICE_STATE="install FAILED"; INSTALL_FAILED=1
+    fi
+  fi
+  install_shell_integration
+else
+  warn "Double opt-in missing: service and shell rc integration skipped."
+  warn "To enable them: SAVIA_DUAL_FAILOVER_ENABLED=true $0 --confirm-autonomous"
+fi
 
 # ── Health check ────────────────────────────────────────────────────────────
+PROXY_STATE="not checked (dry-run)"
 if [[ $DRY_RUN -eq 0 ]]; then
-  sleep 1
   if curl -fsS --max-time 3 http://127.0.0.1:8787/health >/dev/null 2>&1; then
-    say "Proxy health check: OK (http://127.0.0.1:8787/health)"
+    PROXY_STATE="running (health OK)"
   else
-    warn "Proxy health check failed — review: sudo journalctl -u savia-dual-proxy -n 50"
+    PROXY_STATE="not running — start it: $PYTHON_BIN $PROXY_PATH"
   fi
 fi
 
-# ── Final summary ───────────────────────────────────────────────────────────
+# ── Final summary (states what actually happened, nothing more) ─────────────
 cat <<EOF
 
-Savia Dual is installed and running.
+Savia Dual setup finished.
 
-  Service:  savia-dual-proxy.service  (enabled at boot)
-  Proxy:    http://127.0.0.1:8787
+  Service:  $SERVICE_STATE
+  Proxy:    http://127.0.0.1:8787 — $PROXY_STATE
+  Config:   $CONFIG_PATH
   Events:   $HOME/.savia/dual/events.jsonl
   Model:    $MODEL
-
-Manage the service:
-  sudo systemctl status savia-dual-proxy
-  sudo systemctl restart savia-dual-proxy
-  sudo journalctl -u savia-dual-proxy -f
 
 Reconfigure:  ./scripts/setup-savia-dual.sh --reconfigure
 EOF
@@ -428,7 +466,7 @@ if [[ $DRY_RUN -eq 0 && $NO_LAUNCH -eq 0 ]]; then
     . "$ENV_PATH"
     say "Launching Claude Code with Savia Dual active (ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL)"
     echo
-    exec claude "${CLAUDE_ARGS[@]}"
+    exec claude ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
   else
     cat <<EOF
 
@@ -440,3 +478,5 @@ Or open a NEW terminal (shell integration will load it automatically):
 EOF
   fi
 fi
+
+exit "$INSTALL_FAILED"

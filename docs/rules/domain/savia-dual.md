@@ -45,11 +45,23 @@ eventos en la petición a Anthropic:
 | `network_error` | DNS, conexión rechazada, cable caído | sí |
 | `http_5xx` | Error del servidor Anthropic | sí |
 | `http_429` | Cuota de tokens agotada | sí |
-| `timeout_seconds` | Respuesta más lenta que N segundos | sí (default 30) |
+| `timeout_seconds` | N segundos sin cabeceras o sin bytes (timeout de socket, no total) | sí (default 30) |
 
 Además, un **circuit breaker** evita martillear Anthropic cuando está
 caído: tras N fallos consecutivos (default 3), el proxy va directo a
 Ollama durante `cooldown_seconds` (default 60) antes de volver a probar.
+
+Límites del failover (verificados en `tests/test-savia-dual.bats`):
+
+- Solo `POST /v1/messages` cae a Ollama. Otras rutas reciben la respuesta
+  del primario (`"fallback": "not_allowed"` en el log): nada con efectos
+  se repite contra otro upstream.
+- Un 4xx del primario se devuelve al cliente y no cuenta para el breaker.
+- A Ollama solo viajan cabeceras de protocolo (allowlist); nunca
+  `x-api-key`, `authorization` ni cookies.
+- Respuestas en streaming: tras el primer byte no hay failover; un corte
+  cierra con evento SSE `error` y `"stream_interrupted": true` en el log.
+- El proxy rechaza escuchar fuera de loopback (exit 2).
 
 ## Modelo local por hardware
 
@@ -76,6 +88,7 @@ en memoria durante la ejecución del installer.
 | `scripts/setup-savia-dual.ps1` | Installer Windows | N1 versionado |
 | `~/.savia/dual/config.json` | Config local del usuario | N3 local |
 | `~/.savia/dual/env` (`env.ps1`) | Export de `ANTHROPIC_BASE_URL` | N3 local |
+| servicio systemd/launchd, bloque en `~/.bashrc`/`~/.zshrc` | Activación persistente; solo con doble opt-in (SPEC-186) | global |
 | `~/.savia/dual/events.jsonl` | Log append-only de routing decisions | N3 local |
 
 ## Formato de events.jsonl (auditoría)

@@ -49,12 +49,16 @@ pwsh .\scripts\setup-savia-dual.ps1     # Windows
 ```
 
 El installer:
-1. Instala o actualiza Ollama
+1. Instala Ollama si falta (installer oficial; puede pedir sudo)
 2. Detecta RAM y VRAM del equipo (datos locales, no se persisten)
-3. Elige la variante de gemma4 más adecuada
-4. Descarga el modelo
+3. Elige la variante de gemma4 más adecuada (o reutiliza la ya instalada)
+4. Descarga el modelo si no está
 5. Escribe `~/.savia/dual/config.json` y `~/.savia/dual/env`
-6. Deja instrucciones para arrancar el proxy
+6. Solo con doble opt-in (`SAVIA_DUAL_FAILOVER_ENABLED=true` y
+   `--confirm-autonomous`): servicio systemd/launchd y bloque en
+   `~/.bashrc`/`~/.zshrc`. Sin él no toca nada fuera de `~/.savia/dual`.
+7. Resume el estado real (servicio, salud del proxy) y sale con 0 (ok),
+   1 (falló un paso pedido) o 2 (argumento inválido)
 
 ## Flujo de uso diario
 
@@ -79,8 +83,20 @@ la nube responde bien. Cuando hay fallback, puede ver el motivo en
 - **Sin bypass**: el proxy no expone ningún modo para forzar fallback
   manualmente; la única forma de usar local es parar el proxy o
   desactivar `ANTHROPIC_BASE_URL`.
-- **Circuit breaker**: 3 fallos consecutivos → 60s solo local → reintenta
-  Anthropic. Evita martillear el upstream caído.
+- **Circuit breaker**: 3 fallos consecutivos (5xx, 429, red, timeout) →
+  60s solo local → reintenta Anthropic. Un 4xx no cuenta como fallo.
+- **Solo `POST /v1/messages` cae a local**. Cualquier otra ruta (batches,
+  files, models) recibe la respuesta del primario: una petición con efectos
+  nunca se repite contra otro upstream.
+- **4xx se devuelve tal cual** (401, 400...): es error del cliente, no caída.
+- **Credenciales**: a Ollama solo viajan `content-type`, `accept`,
+  `anthropic-version`, `anthropic-beta` y `user-agent`; nunca `x-api-key`,
+  `authorization` ni cookies.
+- **Streaming**: la respuesta se reenvía en streaming (SSE). Tras el primer
+  byte no hay failover; un stream cortado termina con un evento SSE
+  `error` y `"stream_interrupted": true` en `events.jsonl`.
+- **Solo loopback**: `listen_host` distinto de 127.0.0.1/::1/localhost →
+  exit 2. Config ilegible → exit 2. Puerto ocupado → exit 1.
 
 ## Límites honestos
 

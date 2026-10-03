@@ -31,7 +31,9 @@ Instala desde cero:
 
 El installer detecta OS, instala Ollama si falta, detecta RAM/VRAM,
 selecciona la variante de gemma4 adecuada, la descarga y escribe la
-configuracion en `~/.savia/dual/`.
+configuracion en `~/.savia/dual/`. El servicio y el bloque de shell solo
+se instalan con doble opt-in (`SAVIA_DUAL_FAILOVER_ENABLED=true` y
+`--confirm-autonomous`).
 
 ### `/savia-dual start`
 
@@ -52,7 +54,7 @@ claude
 ### `/savia-dual stop`
 
 Detiene el proxy (Ctrl+C si esta en primer plano, o
-`pkill -f savia-dual-proxy`). Al parar el proxy, Claude Code vuelve
+`systemctl stop savia-dual-proxy` si se instalo como servicio). Al parar el proxy, Claude Code vuelve
 a apuntar al valor previo de `ANTHROPIC_BASE_URL` si existia.
 
 ### `/savia-dual status`

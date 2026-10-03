@@ -41,8 +41,14 @@ El proxy habla protocolo Anthropic `/v1/messages` a ambos lados — Ollama
 | Error de red | No hay DNS, conexión rechazada, cable caído |
 | HTTP 5xx | El servidor de Anthropic devuelve error |
 | HTTP 429 | Cuota de tokens agotada |
-| Timeout | Anthropic tarda más de N segundos (default 30) |
+| Timeout | N segundos sin cabeceras ni bytes de Anthropic (default 30) |
 | Circuit breaker | Tras 3 fallos seguidos, 60 s sólo local |
+
+Sólo `POST /v1/messages` cae a local. Un 4xx (clave inválida, petición
+mal formada) se devuelve tal cual. A Ollama nunca viajan `x-api-key`,
+`authorization` ni cookies. Las respuestas se reenvían en streaming; si
+un stream se corta a medias no se repite en local: el cliente recibe un
+evento SSE `error` y el log registra `"stream_interrupted": true`.
 
 ## Instalación
 
@@ -69,7 +75,14 @@ El installer:
    - `gemma4:26b` — 24+ GB de RAM y 12+ GB de VRAM
 5. Descarga el modelo
 6. Escribe `~/.savia/dual/config.json` y `~/.savia/dual/env`
-7. Deja instrucciones para arrancar el proxy
+7. Con doble opt-in, instala el servicio y el bloque de shell:
+
+   ```bash
+   SAVIA_DUAL_FAILOVER_ENABLED=true bash scripts/setup-savia-dual.sh --confirm-autonomous
+   ```
+
+   Sin él, no toca nada fuera de `~/.savia/dual` y explica cómo arrancar
+   el proxy a mano. Salida: 0 ok, 1 paso fallido, 2 argumento inválido.
 
 Los datos de hardware detectados permanecen en memoria durante el
 installer. Nunca se escriben a ficheros versionados ni se transmiten
@@ -115,6 +128,7 @@ No contiene prompts ni respuestas — sólo metadatos de enrutamiento.
 
 | Campo | Default | Descripción |
 |---|---|---|
+| `listen_host` | `127.0.0.1` | Solo loopback; otro valor → exit 2 |
 | `listen_port` | 8787 | Puerto local del proxy |
 | `anthropic_upstream` | `https://api.anthropic.com` | Upstream primario |
 | `ollama_upstream` | `http://127.0.0.1:11434` | Upstream de fallback |
