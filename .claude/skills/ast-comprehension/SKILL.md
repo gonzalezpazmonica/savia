@@ -127,13 +127,12 @@ activo, todo sigue funcionando con grep.
 
 ## Extracción monolítica (fallback para legacy assessment)
 
-Si la tarea es *inventariar* un codebase entero (no responder una pregunta), entonces sí corresponde el dump completo. Ver `references/extraction-commands.md` para el pipeline de 3 capas (tree-sitter + semgrep + native tooling) y `references/comprehension-schema.md` para el JSON schema.
+Para *inventariar* un codebase entero: `bash scripts/ast-comprehend.sh <fichero|dir> [--surface-only] [--output <ruta>]`. Fichero → objeto `{meta, structure{classes,functions,imports[,error]}, complexity, summary}`; directorio → array (excluye `node_modules`, `.git`, `vendor`, `dist`). Capas: tree-sitter → nativa (python-ast, ts-morph, gopls; solo si están instaladas) → grep-structural; `meta.tool` dice cuál respondió. `--surface-only` salta a grep-structural; `--legacy-mode` se acepta pero no cambia nada. `complexity.hotspots[0].warn` = más de 15 puntos de decisión. Exit 0 ok, 1 sin target o inexistente (error JSON en stderr) o `--output` no escribible, 2 argumento inválido (incluido `--output` que apunta a un directorio), 3 algún fichero ilegible: su `structure.error` vale `unreadable` y `meta.tool` `none`; en modo directorio el array sale completo igualmente. Con python-ast, `structure.functions` incluye también los métodos de clase, ordenados por línea. `references/comprehension-schema.md` describe el schema objetivo (superconjunto).
 
 ## Prerrequisitos
 
-- `tree-sitter-cli` (opcional): `npm install -g tree-sitter-cli` — mejora `impl` y `grep-code`.
-- `jq` para normalización JSON de tree-sitter output.
-- `awk` / `sed` / `grep` (siempre disponibles) — fallback suficiente para las 6 queries.
+- `python3` (obligatorio para el script; también hace el fallback grep-structural sin gawk).
+- `tree-sitter-cli`, `ts-morph`, `gopls` (opcionales) — mejoran `impl` y la extracción.
 
 ## Referencias
 

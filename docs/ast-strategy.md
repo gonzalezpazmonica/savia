@@ -169,8 +169,13 @@ bash scripts/ast-comprehend.sh src/Legacy/ --legacy-mode --output output/legacy-
 bash scripts/ast-comprehend.sh src/OldModule.cs --output output/old-module-map.json
 ```
 
-En modo legacy, no se aplica el threshold de 50 líneas ni la advertencia de complejidad.
+El script nunca aplica el umbral de 50 líneas (era del hook) y siempre emite `hotspots[0].warn`;
+`--legacy-mode` se acepta por compatibilidad pero hoy no cambia la salida.
 El objetivo es documentar todo, sin filtros.
+
+> Calibración SE-376 (2026-10-03): el hook actual (`.claude/hooks/ast-comprehend-hook.sh`) filtra
+> `Grep|Glob`, pero está registrado con matcher `Edit`; el flujo pre-edición descrito arriba no se
+> ejecuta hoy.
 
 ---
 

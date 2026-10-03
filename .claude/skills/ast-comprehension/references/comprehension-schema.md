@@ -1,5 +1,11 @@
 # Comprehension Report Schema — AST Comprehension
 
+> Schema objetivo. `scripts/ast-comprehend.sh` emite hoy un subconjunto:
+> `meta{file,language,lines,tool}`, `structure{classes[{name,line,methods?}],functions[{name,line}],imports,error?}`,
+> `complexity{total_decision_points,hotspots[{warn,total}]}` y `summary`. `error` vale `unreadable`
+> o `extraction failed` (exit 3) o el mensaje de `SyntaxError` de python-ast (exit 0). Sin `end_line`, modificadores,
+> tipos ni `analyzed_at`.
+
 ## Schema JSON Completo
 
 ```json
