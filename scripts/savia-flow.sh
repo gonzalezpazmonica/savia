@@ -65,6 +65,7 @@ do_sprint_start() {
   local repo_dir; repo_dir=$(get_repo)
   local team; team=$(get_team)
   validate_project "$repo_dir" "$project"
+  do_ensure_orphan "$repo_dir" "team/$team" "init: team/$team" >/dev/null 2>&1
   local sprint_path="projects/$project/sprints/${name}/sprint.md"
   local sprint_content="---
 id: $name
@@ -86,11 +87,17 @@ do_sprint_close() {
   local team; team=$(get_team)
   local sprints_list; sprints_list=$(do_list "$repo_dir" "team/$team" "projects/$project/sprints")
   [ -z "$sprints_list" ] && { echo "❌ No sprints found"; return 1; }
-  local current; current=$(echo "$sprints_list" | head -1)
+  # El sprint activo, no el primero del listado (orden alfabetico = el mas antiguo)
+  local current="" s content=""
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    s=$(basename "$s")
+    content=$(do_read "$repo_dir" "team/$team" "projects/$project/sprints/$s/sprint.md") || continue
+    if echo "$content" | grep -qE '^status: *"?active"?$'; then current="$s"; break; fi
+  done <<< "$sprints_list"
   [ -n "$current" ] || { echo "❌ No active sprint"; return 1; }
   local sprint_path="projects/$project/sprints/${current}/sprint.md"
-  local content; content=$(do_read "$repo_dir" "team/$team" "$sprint_path") || { echo "❌ Sprint file not found"; return 1; }
-  content=$(echo "$content" | sed 's/status: "active"/status: "closed"/')
+  content=$(echo "$content" | sed -E 's/^status: *"?active"?$/status: "closed"/')
   do_write "$repo_dir" "team/$team" "$sprint_path" "$content" "[flow: sprint-close] $project/$current"
   echo "✅ Sprint $current closed"
 }
@@ -100,16 +107,18 @@ do_metrics() {
   local repo_dir; repo_dir=$(get_repo)
   local team; team=$(get_team)
   validate_project "$repo_dir" "$project"
+  do_fetch_branch "$repo_dir" "team/$team"
   local pbis; pbis=$(do_list "$repo_dir" "team/$team" "projects/$project/backlog")
   [ -z "$pbis" ] && { echo "📊 Metrics: $project (no PBIs)"; return 0; }
-  local total=0 done_count=0
-  echo "$pbis" | while read -r pbi; do
-    [ -z "$pbi" ] && continue
+  # Sin pipe: el bucle corre en este shell y los contadores sobreviven
+  local total=0 done_count=0 pbi content status
+  while IFS= read -r pbi; do
+    [ -n "$pbi" ] || continue
+    content=$(do_read "$repo_dir" "team/$team" "projects/$project/backlog/$(basename "$pbi")") || continue
     total=$((total + 1))
-    local content; content=$(do_read "$repo_dir" "team/$team" "projects/$project/backlog/$pbi") || continue
-    local status; status=$(echo "$content" | grep "^status:" | cut -d: -f2 | xargs)
-    [ "$status" = "done" ] && done_count=$((done_count + 1))
-  done
+    status=$(echo "$content" | grep -m1 "^status:" | cut -d: -f2 | tr -d ' "')
+    if [ "$status" = "done" ]; then done_count=$((done_count + 1)); fi
+  done <<< "$pbis"
   echo "📊 Metrics: $project | Total: $total | Done: $done_count"
 }
 

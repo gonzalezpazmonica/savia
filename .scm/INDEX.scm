@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 1f0ca37df75b | resources: 1450
+> hash: ed925f15607a | resources: 1450
 > 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -116,7 +116,7 @@
 [communication] savia-flow-ops — assignments,branch,crud,flow,isolation — script:scripts/savia-flow-ops.sh
 [communication] savia-flow-practice — dual,flow,flujo,implementa,métricas — skill:.claude/skills/savia-flow-practice/SKILL.md
 [communication] savia-flow-sprint — branch,flow,isolation,lifecycle,savia — script:scripts/savia-flow-sprint.sh
-[communication] savia-flow-tasks — delegates,flow,management,savia,task — script:scripts/savia-flow-tasks.sh
+[communication] savia-flow-tasks — branch,flow,isolation,management,savia — script:scripts/savia-flow-tasks.sh
 [communication] savia-flow-templates — branch,flow,isolation,member,project — script:scripts/savia-flow-templates.sh
 [communication] savia-flow-timesheet — branch,flow,savia,time,timesheet — script:scripts/savia-flow-timesheet.sh
 [communication] savia-forget —  — cmd:.claude/commands/savia-forget.md

@@ -25,12 +25,13 @@ tier: core
 ## Ejecución
 
 1. Banner: `🆕 Creating Task`
-2. Execute: `bash scripts/savia-flow-tasks.sh create <type> <title> <@assigned> <sprint> [priority]`
+2. Execute: `bash scripts/savia-flow-tasks.sh create <type> <title> [@assigned] [sprint] [priority]`
+   (posicionales: usar `""` para saltar assigned o sprint). ID `TASK-NNNN` = max + 1.
 3. Mostrar resultado + ID de task
 4. Banner de finalización
 
 ## Restricciones
 
 - Title ≤ 100 caracteres
-- Sprint debe existir
+- Sprint debe existir si se indica (si no: exit 1)
 - Handle debe ser válido

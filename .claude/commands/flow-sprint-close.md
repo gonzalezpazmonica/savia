@@ -18,11 +18,12 @@ tier: core
 
 ## Ejecución
 
-1. Move incomplete tasks to backlog
-2. Calculate velocity
-3. Generate summary report
-4. Display final stats
+1. Execute: `bash scripts/savia-flow-sprint.sh close <sprint_id>`
+2. Marca `status: closed` y `closed: <hoy>`. Cerrar un sprint ya cerrado no cambia nada
+   (conserva la fecha original). Sprint inexistente: exit 1; ID mal formado: exit 2.
 
-## Resultado
+## Limitaciones (no implementado)
 
-📄 Report guardado en: reports/{sprint_id}-summary.md
+El script NO mueve tareas pendientes, NO calcula velocity ni genera informe:
+las tareas no enlazan con el sprint de forma fiable. Hacerlo a mano con
+`/flow-velocity` y `/flow-task-move`.

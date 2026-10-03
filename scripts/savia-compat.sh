@@ -8,6 +8,7 @@
 #   portable_sed_i          — sed -i '' (macOS) vs sed -i (Linux)
 #   portable_read_config    — grep+cut replacement for grep -oP
 #   portable_yaml_field     — extract YAML frontmatter value
+#   portable_valid_date     — YYYY-MM-DD real (GNU o BSD date)
 #   portable_wc_l           — wc -l without leading spaces
 
 # ── Base64 encode (no line wrapping) ─────────────────────────────
@@ -50,6 +51,13 @@ portable_yaml_field() {
     | head -1 \
     | sed 's/.*'"${field}"':[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}/\1/' \
     || echo ""
+}
+
+# ── Fecha YYYY-MM-DD real (rechaza 2026-02-30); GNU date o BSD date
+portable_valid_date() {
+  [[ "${1:-}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || return 1
+  [ "$(date -d "$1" +%Y-%m-%d 2>/dev/null)" = "$1" ] \
+    || [ "$(date -j -f %Y-%m-%d "$1" +%Y-%m-%d 2>/dev/null)" = "$1" ]
 }
 
 # ── wc -l without leading spaces ────────────────────────────────

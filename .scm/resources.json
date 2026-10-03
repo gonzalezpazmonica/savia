@@ -1,5 +1,5 @@
 {
-  "hash": "15c0024a7faa",
+  "hash": "426d46b413db",
   "total": 1450,
   "resources": [
     {
@@ -1475,15 +1475,15 @@
       "category": "communication",
       "name": "savia-flow-tasks",
       "intents": [
-        "delegates",
+        "branch",
         "flow",
+        "isolation",
         "management",
-        "savia",
-        "task"
+        "savia"
       ],
       "kind": "script",
       "path": "scripts/savia-flow-tasks.sh",
-      "description": "savia-flow-tasks.sh — Task management (delegates to savia-flow-ops.sh)"
+      "description": "savia-flow-tasks.sh — Task management via branch isolation (PBI = task)"
     },
     {
       "category": "communication",

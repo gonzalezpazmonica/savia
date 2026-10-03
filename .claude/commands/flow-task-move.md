@@ -12,11 +12,11 @@ tier: core
 
 **Arguments:** $ARGUMENTS
 
-> Uso: `/flow-task-move TASK-2026-0001 in-progress`
+> Uso: `/flow-task-move TASK-0001 in-progress`
 
 ## Parámetros
 
-- `<task_id>` — Task identifier (TASK-YYYY-NNNN)
+- `<task_id>` — Task identifier (TASK-NNNN). Inexistente: exit 1; estado invalido: exit 2
 - `<new_status>` — todo|in-progress|review|done
 
 ## Ejecución

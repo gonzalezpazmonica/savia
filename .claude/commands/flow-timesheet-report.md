@@ -21,4 +21,6 @@ tier: core
 ## Ejecución
 
 1. Execute: `bash scripts/savia-flow-timesheet.sh report <@handle> <from_date> <to_date>`
-2. Aggregate and display totals
+2. El script ya agrega: lista las entradas del rango (inclusivo, cruza meses),
+   total por tarea y `Total: X.XX h`. Entradas con horas no numericas se ignoran
+   y se cuentan (`Entradas ignoradas: N`). Fechas invalidas o desde > hasta: exit 2.

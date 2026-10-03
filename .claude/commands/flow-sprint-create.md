@@ -22,4 +22,5 @@ tier: core
 ## Ejecución
 
 1. Execute: `bash scripts/savia-flow-sprint.sh create <goal> <start_date> <end_date> [capacity_h]`
-2. Sprint created with folder structure
+2. Crea `SPR-YYYY-NN` (YYYY = anio de `start_date`, NN = max + 1) con `status: active`.
+   Valida fechas reales, fin >= inicio, `capacity_h` entero > 0 y goal no vacio (exit 2).

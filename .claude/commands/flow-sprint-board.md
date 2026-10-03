@@ -15,15 +15,14 @@ tier: core
 ## Parámetros
 
 - `<sprint_id>` — Sprint identifier
-- `--ready` — Show only PBIs with no open blockers (ready-to-start queue)
+- `--ready` — NO implementado en el script (SPEC-112 pendiente); no pasarlo
 
 ## Ejecución
 
 - Default: `bash scripts/savia-flow-sprint.sh board <sprint_id>`
-- Con `--ready`: `bash scripts/savia-flow-sprint.sh board --ready <sprint_id>`
+
 
 ## Output
 
-**Default**: Shows board columns with counts per state.
-
-**`--ready`** (SPEC-112): PBIs del sprint sin `blockedBy` abierto, listos para empezar.
+Metadatos del sprint: goal, status, start_date, end_date, capacity_h, closed.
+El script no cuenta tareas por columna. Sprint inexistente: exit 1.

@@ -22,4 +22,5 @@ Execute: `bash scripts/savia-flow-sprint.sh burndown <sprint_id>`
 
 ## Output
 
-Shows daily task counts by column (todo, in-progress, review, done)
+NO implementado: el script responde exit 2. Las tareas no registran historico
+diario por columna; no inventar datos de burndown.

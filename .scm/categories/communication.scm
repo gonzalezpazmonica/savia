@@ -41,7 +41,7 @@
 - **savia-flow-ops** (script): savia-flow-ops.sh — CRUD operations for PBIs and assignments via branch isolation
 - **savia-flow-practice** (skill): Usar cuando se implementa Savia Flow con dual-track y métricas de flujo en un proyecto.
 - **savia-flow-sprint** (script): savia-flow-sprint.sh — Sprint lifecycle via branch isolation
-- **savia-flow-tasks** (script): savia-flow-tasks.sh — Task management (delegates to savia-flow-ops.sh)
+- **savia-flow-tasks** (script): savia-flow-tasks.sh — Task management via branch isolation (PBI = task)
 - **savia-flow-templates** (script): savia-flow-templates.sh — Project/team/member scaffolding via branch isolation
 - **savia-flow-timesheet** (script): savia-flow-timesheet.sh — Time tracking via user branch
 - **savia-forget** (cmd): >

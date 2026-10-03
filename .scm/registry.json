@@ -2299,11 +2299,11 @@
       ],
       "id": "script:scripts/savia-flow-tasks",
       "intents": [
-        "delegates",
+        "branch",
         "flow",
+        "isolation",
         "management",
-        "savia",
-        "task"
+        "savia"
       ],
       "kind": "script",
       "owner_domain": "communication",
@@ -29604,7 +29604,7 @@
       "tests": []
     }
   ],
-  "content_hash": "15c0024a7faa",
+  "content_hash": "426d46b413db",
   "deferred_kinds": [
     "rule",
     "hook"

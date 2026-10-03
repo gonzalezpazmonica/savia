@@ -7,7 +7,7 @@
 # Commands: read, list, write, exists, ensure-orphan, check-permission, fetch-messages
 
 set -euo pipefail
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPTS_DIR/savia-compat.sh"
 
 # ── Read file from branch without checkout ─────────────────────
@@ -79,6 +79,120 @@ do_ensure_orphan() {
   cd "$repo_dir"
   git -C "$repo_dir" worktree remove "$wtdir" 2>/dev/null || rm -rf "$wtdir"
   git -C "$repo_dir" fetch origin "$branch" 2>/dev/null || true
+}
+
+# ── Run a read-modify-write under an exclusive per-branch lock ──
+# Serializa escrituras concurrentes sobre la misma rama: sin lock, dos
+# procesos leen la misma version y el ultimo do_write pisa al primero.
+do_with_lock() {
+  local repo_dir="$1" name="$2"; shift 2
+  local common; common=$(git -C "$repo_dir" rev-parse --git-common-dir) || return 1
+  case "$common" in /*) ;; *) common="$repo_dir/$common" ;; esac
+  local lock="$common/savia-lock-${name//\//_}"
+  if command -v flock >/dev/null 2>&1; then
+    ( flock -w 60 9 || { echo "ERR lock timeout: $name" >&2; exit 75; }; "$@" ) 9>"$lock"
+    return
+  fi
+  # Sin flock (macOS): lock por mkdir con PID; un dueño muerto libera el lock
+  local tries=0 owner
+  until mkdir "$lock.d" 2>/dev/null; do
+    owner=$(cat "$lock.d/pid" 2>/dev/null || true)
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "!! lock huerfano de PID $owner liberado: $name" >&2
+      mv "$lock.d" "$lock.stale.$$" 2>/dev/null && rm -rf "$lock.stale.$$"
+      continue
+    fi
+    tries=$((tries + 1))
+    [ "$tries" -ge 600 ] && { echo "ERR lock timeout: $name" >&2; return 75; }
+    sleep 0.1
+  done
+  echo "$$" > "$lock.d/pid"
+  local rc=0
+  # En segundo plano + wait: el subshell conserva set -e (con `|| rc=` se desactivaria)
+  ( "$@" ) &
+  wait "$!" || rc=$?
+  rm -rf "$lock.d"
+  return "$rc"
+}
+
+# ── Transaccion contra origin: fetch, editar, commit y push verificado ──
+# do_txn <repo> <rama> <mensaje> <fn> [args...]
+# Ejecuta <fn> con cwd en un worktree temporal sobre origin/<rama> recien
+# traida (o vacio si la rama aun no existe). Si el push se rechaza porque
+# otro clon escribio antes, repite sobre la version nueva. Nunca informa
+# exito sin push confirmado: remoto inaccesible o push fallido -> rc 1.
+# La salida de <fn> solo se emite si la transaccion se publica.
+SAVIA_TXN_ATTEMPTS="${SAVIA_TXN_ATTEMPTS:-6}"
+
+_txn_once() {  # 0 publicado · 10 reintentar · otro = fallo
+  local repo_dir="$1" branch="$2" msg="$3" outf="$4"; shift 4
+  local lr=0 wt parent="" rc=0 tree commit out
+  git -C "$repo_dir" ls-remote --exit-code origin "refs/heads/$branch" >/dev/null 2>&1 || lr=$?
+  case "$lr" in
+    0) git -C "$repo_dir" fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null \
+         || { echo "ERR no se pudo traer origin/$branch" >&2; return 1; }
+       parent=$(git -C "$repo_dir" rev-parse "refs/remotes/origin/$branch") ;;
+    2) ;;
+    *) echo "ERR remoto origin inaccesible: no se escribe nada en $branch" >&2; return 1 ;;
+  esac
+  wt=$(mktemp -d)
+  if ! git -C "$repo_dir" worktree add -q --detach "$wt" ${parent:+"$parent"} >/dev/null 2>&1; then
+    rm -rf "$wt"; echo "ERR no se pudo crear el worktree temporal" >&2; return 1
+  fi
+  if [ -z "$parent" ]; then
+    git -C "$wt" rm -rqf --ignore-unmatch . >/dev/null 2>&1 || true  # rama nueva: arbol vacio
+    find "$wt" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+    echo "# $branch" > "$wt/README.md"
+  fi
+  ( cd "$wt" && "$@" ) > "$outf" &
+  wait "$!" || rc=$?  # segundo plano + wait: <fn> conserva set -e
+  if [ "$rc" -eq 0 ]; then
+    git -C "$wt" add -A
+    if [ -n "$parent" ] && git -C "$wt" diff --cached --quiet "$parent"; then
+      rc=0  # sin cambios: nada que publicar
+    else
+      tree=$(git -C "$wt" write-tree) \
+        && commit=$(git -C "$wt" commit-tree "$tree" ${parent:+-p "$parent"} -m "$msg") \
+        || { echo "ERR commit fallido en $branch" >&2; rc=1; }
+      if [ "$rc" -eq 0 ]; then
+        out=$(git -C "$repo_dir" push --porcelain origin "$commit:refs/heads/$branch" 2>&1) || {
+          if echo "$out" | grep -qE '^!.*(fetch first|non-fast-forward|stale info|failed to update ref|cannot lock ref|already exists)'; then rc=10
+          else  # rechazo del servidor (hook, permisos) o red: reintentar no sirve
+            echo "ERR push a origin/$branch fallido: $(echo "$out" | grep -m1 '^!' || echo "$out" | tail -1)" >&2; rc=1
+          fi
+        }
+      fi
+    fi
+  fi
+  git -C "$repo_dir" worktree remove --force "$wt" >/dev/null 2>&1 || rm -rf "$wt"
+  git -C "$repo_dir" worktree prune >/dev/null 2>&1 || true
+  [ "$rc" -eq 0 ] && git -C "$repo_dir" fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+  return "$rc"
+}
+
+do_txn() {
+  local repo_dir="$1" branch="$2" msg="$3"; shift 3
+  local outf attempt rc
+  outf=$(mktemp)
+  for ((attempt = 1; attempt <= SAVIA_TXN_ATTEMPTS; attempt++)); do
+    rc=0
+    _txn_once "$repo_dir" "$branch" "$msg" "$outf" "$@" || rc=$?
+    if [ "$rc" -eq 0 ]; then cat "$outf"; rm -f "$outf"; return 0; fi
+    [ "$rc" -eq 10 ] || { rm -f "$outf"; return "$rc"; }
+    sleep "0.$((RANDOM % 5 + 1))"  # otro clon publico antes: reintentar sobre su version
+  done
+  rm -f "$outf"
+  echo "ERR $branch: push rechazado $SAVIA_TXN_ATTEMPTS veces por escrituras concurrentes" >&2
+  return 1
+}
+
+# ── Lectura fresca: fetch de la rama antes de do_read/do_list ──
+do_fetch_branch() {
+  local repo_dir="$1" branch="$2"
+  git -C "$repo_dir" fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null && return 0
+  git -C "$repo_dir" ls-remote origin >/dev/null 2>&1 \
+    || echo "!! origin inaccesible: se leen datos locales de $branch, posiblemente desfasados" >&2
+  return 0
 }
 
 # ── Validate write permission for handle on branch ─────────────
