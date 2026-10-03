@@ -3,7 +3,9 @@
 
 Wrapper stdin -> stdout. Input JSON con query + candidates, output top-K reordenados
 por relevance score del cross-encoder. Fallback: si sentence-transformers no esta
-instalado, devuelve orden original sin modificar (no-op safe).
+instalado o el modelo falla al cargar/predecir, ordena por `cosine` (si todos los
+candidatos lo traen) o conserva el orden original. El campo `backend` dice siempre
+cual se uso; en fallback `relevance` es null (no hay score del cross-encoder).
 
 Usage:
     echo '{"query":"Q","candidates":[{"id":"a","text":"..."},...]}' | python3 scripts/rerank.py --top-k 5
@@ -21,23 +23,26 @@ Output schema:
       "query": "...",
       "reranked": [
         {"id":"a", "text":"...", "cosine": 0.85, "relevance": 0.92, "rank": 1}
-      ],
-      "backend": "cross-encoder|fallback-cosine|fallback-identity",
+      ],                      # relevance = null salvo backend cross-encoder
+      "backend": "cross-encoder|fallback-cosine|fallback-identity|empty-input",
       "model": "BAAI/bge-reranker-base|null",
       "latency_ms": int
     }
 
 Exit codes:
     0 - OK (rerank done or fallback applied)
-    1 - parse error
+    1 - parse error / invalid input (JSON, UTF-8, tipos de campo)
     2 - usage error
 
 Ref: SE-032, docs/propuestas/SE-032-reranker-layer.md
-Safety: read-only. Zero egress. No credential handling.
+Safety: read-only. No credential handling. Egress: solo si el cross-encoder
+esta instalado y el modelo no esta en cache (sentence-transformers lo descarga
+del HF Hub); HF_HUB_OFFLINE=1 lo impide y fuerza el fallback.
 """
 
 import argparse
 import json
+import math
 import sys
 import time
 
@@ -59,11 +64,21 @@ def parse_args():
 
 
 def fallback_cosine(candidates):
-    """Sort by existing cosine score if present, else preserve order."""
+    """Sort by existing cosine score if all have it, else preserve order.
+
+    Stable sort: ties keep input order. relevance=None marks that no
+    cross-encoder score exists (thresholds do not apply).
+    """
+    for c in candidates:
+        c["relevance"] = None
     has_cosine = all("cosine" in c for c in candidates)
     if has_cosine:
-        return sorted(candidates, key=lambda c: -c.get("cosine", 0.0)), "fallback-cosine"
+        return sorted(candidates, key=lambda c: -c["cosine"]), "fallback-cosine"
     return candidates, "fallback-identity"
+
+
+def is_number(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
 def try_cross_encode(query, candidates, model_id):
@@ -89,8 +104,8 @@ def try_cross_encode(query, candidates, model_id):
             c["relevance"] = float(s)
         ranked = sorted(candidates, key=lambda c: -c["relevance"])
         return ranked, "cross-encoder", model_id
-    except (OSError, RuntimeError, ValueError) as e:
-        sys.stderr.write(f"rerank: cross-encoder failed: {e}\n")
+    except Exception as e:  # backend opcional: cualquier fallo -> fallback, registrado
+        sys.stderr.write(f"rerank: cross-encoder failed ({type(e).__name__}): {e}\n")
         return None, "fallback", None
 
 
@@ -102,14 +117,27 @@ def main():
         return 2
 
     try:
-        data = json.load(sys.stdin)
+        # The text wrapper may use surrogateescape and accept invalid bytes.
+        # Decode strictly, independently of PYTHONIOENCODING and locale.
+        data = json.loads(sys.stdin.buffer.read().decode("utf-8"))
     except json.JSONDecodeError as e:
         sys.stderr.write(f"ERROR: invalid JSON input: {e}\n")
         return 1
+    except UnicodeDecodeError as e:
+        sys.stderr.write(f"ERROR: input is not valid UTF-8: {e}\n")
+        return 1
 
-    query = data.get("query", "").strip()
+    if not isinstance(data, dict):
+        sys.stderr.write("ERROR: input must be a JSON object with 'query' and 'candidates'\n")
+        return 1
+
+    query = data.get("query", "")
     candidates = data.get("candidates", [])
 
+    if not isinstance(query, str):
+        sys.stderr.write("ERROR: 'query' must be a string\n")
+        return 1
+    query = query.strip()
     if not query:
         sys.stderr.write("ERROR: 'query' field required\n")
         return 1
@@ -120,6 +148,12 @@ def main():
     for i, c in enumerate(candidates):
         if not isinstance(c, dict) or "id" not in c or "text" not in c:
             sys.stderr.write(f"ERROR: candidate[{i}] must have 'id' and 'text'\n")
+            return 1
+        if not isinstance(c["text"], str):
+            sys.stderr.write(f"ERROR: candidate[{i}].text must be a string\n")
+            return 1
+        if "cosine" in c and not is_number(c["cosine"]):
+            sys.stderr.write(f"ERROR: candidate[{i}].cosine must be a finite number\n")
             return 1
 
     start = time.time()

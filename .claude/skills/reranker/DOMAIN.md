@@ -47,14 +47,15 @@ Cross-encoder: modelo pequeño (~560MB) que evalúa cada par `(query, candidate)
 | cross-project-search | Busqueda cross-repo | 50 → 5 |
 | knowledge-graph query | Retrieval de nodos relacionados | 50 → 10 |
 
-Integracion: cada consumer pipes su JSON output a `rerank.py`. Sin cambio de interface.
+Estado: planificada (Slice 4). Ningun consumer emite hoy el JSON de entrada de
+`rerank.py`; hay que construirlo (ver SKILL.md, Integracion).
 
 ## Tradeoffs
 
 **Pros**:
 - Filtra ruido cuantitativamente
 - Zero-install default (fallback identity/cosine)
-- Zero egress una vez modelo descargado
+- Zero egress una vez modelo descargado (`HF_HUB_OFFLINE=1` lo garantiza)
 - Score 0-1 expone calidad de retrieval (observability)
 
 **Contras**:

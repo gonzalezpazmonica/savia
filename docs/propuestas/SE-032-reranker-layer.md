@@ -160,6 +160,15 @@ Este spec esta escrito aplicando las lecciones del research Spec Ops (2026-04-18
 - **Speed/Slicing**: 3 slices de 1 sprint cada uno. Un spec que tarda >1 sprint en empezar es vulnerable.
 - **Theory of Relative Superiority**: campo `expires: 2026-05-16` (2 sprints tras approved). Si no se implementa para esa fecha, re-review automatico. Ningun spec vive "approved" indefinidamente.
 
+## Calibracion 2026-10-03 (SE-376)
+
+Contraste con el codigo real (`tests/test-reranker.bats`). Divergencias que siguen abiertas:
+
+- El campo de salida es `relevance`, no `rerank_score`; en los fallbacks vale `null`.
+- La integracion piloto de Slice 2 (`--rerank-top` en memory-recall) no existe, ni `docs/rules/domain/reranker-protocol.md`. Ningun script de recall emite el JSON de entrada; el `status: IMPLEMENTED` cubre solo el wrapper y la skill.
+- El modelo por defecto es `BAAI/bge-reranker-base`, no v2-m3.
+- La escala [0,1] y la latencia por par no se han medido: la calibracion usa un cross-encoder stub.
+
 ## Referencias
 
 - Hands-On Large Language Models cap. 8 (Alammar & Grootendorst, O'Reilly 2024) — Semantic Search + Reranking

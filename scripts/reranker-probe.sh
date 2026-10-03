@@ -4,7 +4,7 @@
 # Evalúa preconditions para integrar un reranker (cross-encoder) sobre
 # outputs de memoria/búsqueda. No instala nada — solo reporta.
 #
-# Modelo candidato referencia: BAAI/bge-reranker-v2-m3 (small, multilingüe).
+# Modelo por defecto de scripts/rerank.py: BAAI/bge-reranker-base (--model lo cambia).
 #
 # Usage:
 #   reranker-probe.sh
@@ -77,7 +77,8 @@ if [[ "$PYTHON_MAJOR" -lt 3 ]]; then
 fi
 
 if [[ "$PIP_OK" -eq 0 ]]; then
-  VERDICT="NEEDS_INSTALL"
+  # BLOCKED (sin Python) prevalece: instalar con pip no lo resuelve.
+  [[ "$VERDICT" == "VIABLE" ]] && VERDICT="NEEDS_INSTALL"
   [[ "$EXIT_CODE" -eq 0 ]] && EXIT_CODE=1
   REASONS+=("pip3 not available")
 fi
@@ -127,10 +128,9 @@ else
   done
   echo ""
   if [[ "$VERDICT" == "VIABLE" ]]; then
-    echo "Next steps (manual, SE-032 Slice 2):"
-    echo "  1. Download BAAI/bge-reranker-v2-m3 (~600MB)"
-    echo "  2. Create scripts/reranker-score.sh wrapper"
-    echo "  3. Integrate into memory/search pipelines"
+    echo "Next steps:"
+    echo "  python3 scripts/rerank.py usara el backend cross-encoder."
+    echo "  La primera invocacion descarga BAAI/bge-reranker-base (~560MB) del HF Hub."
   elif [[ "$VERDICT" == "NEEDS_INSTALL" ]]; then
     echo "Install:"
     echo "  pip install sentence-transformers torch"
