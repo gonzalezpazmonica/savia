@@ -15,7 +15,7 @@ Los agentes gastan entre 30-60% de sus tokens explorando la arquitectura de un p
 ## Reglas de negocio que implementa
 
 - Maximo 150 lineas por fichero .acm; si crece, dividir en subdirectorios
-- Hash SHA-256 del codigo fuente para detectar obsolescencia
+- Hash SHA-256 del codigo fuente para detectar obsolescencia (lo calcula el agente al redactar; `scripts/refresh-agent-maps.sh` solo marca `refreshed:` y `stale-no-checkout`)
 - Los .acm viven dentro del proyecto, nunca en la raiz del workspace
 - Si un .acm cambia, el .hcm correspondiente se marca como stale
 

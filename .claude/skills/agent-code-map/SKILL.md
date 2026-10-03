@@ -10,7 +10,7 @@ metadata:
   savia.category: sdd-framework
   savia.context: project
   savia.priority: high
-  savia.summary: "Genera INDEX.acm + mapas por capa (domain, infra, api) desde el código fuente. Valida frescura por hash. Carga progresiva con @include. Integrado en SDD step [0]. Elimina 30–60% de exploración ciega al inicio de cada sesión de agente."
+  savia.summary: "Formato .acm que el agente redacta y carga por capas. refresh-agent-maps.sh refresca cabeceras por repo y emite JSON; hash y generacion son manuales."
   savia.tags: "acm, agent-maps, codemap, context, sdd, architecture"
   savia.user-invocable: True
 ---
@@ -21,20 +21,32 @@ al inicio de cada sesión. Elimina la exploración ciega de arquitectura.
 
 ## Cuándo usar
 
-- **Inicio de pipeline SDD** (`/codemap:load`): dar contexto de arquitectura al agente
-- **Post-sprint** (`/codemap:refresh`): mantener mapas actualizados tras cambios
-- **Nuevo proyecto** (`/codemap:generate`): generar mapas iniciales desde cero
-- **Verificación** (`/codemap:check`): detectar mapas obsoletos o rotos
+Inicio de pipeline SDD (leer `INDEX.acm` y cargar solo las capas necesarias),
+post-sprint o tras `/project-update` (refrescar cabeceras), proyecto nuevo
+(redactar los `.acm` iniciales) y verificación (repos sin checkout o sin `.acm`).
 
-## Comandos slash
+## Qué es ejecutable hoy
 
-| Comando | Descripción |
-|---------|-------------|
-| `/codemap:generate [scope]` | Genera todos los .acm para el proyecto o scope |
-| `/codemap:check` | Verifica frescura de todos los .acm (fresco/obsoleto/roto) |
-| `/codemap:load <scope>` | Carga los .acm relevantes en el contexto del agente |
-| `/codemap:refresh --incremental` | Regenera solo los .acm cuyo código fuente cambió |
-| `/codemap:stats` | Muestra: total .acm, líneas, estado de frescura, cobertura |
+No existen comandos `/codemap:*`: la generación, la carga y la verificación de
+frescura por hash son procedimiento del agente (leer código, escribir el `.acm`
+con el formato de abajo). Lo único ejecutable es el refresco de cabeceras:
+
+```bash
+bash scripts/refresh-agent-maps.sh <slug>          # todos los repos de projects/<slug>_main/<slug>/repos/
+bash scripts/refresh-agent-maps.sh <slug> <repo>   # un solo repo
+```
+
+- Lee `projects/<slug>_main/<slug>/repos/*` y `.agent-maps/repos/*.acm`; casa repo y `.acm`
+  ignorando mayúsculas, `-` y `_` (`Api_Core` → `api-core.acm`).
+- Reescribe solo la **primera línea `> `** (cabecera): `refreshed: AAAA-MM-DD`; repo con solo
+  `.git` → `status: stale-no-checkout`. El cuerpo no se toca. Escritura atómica (segura en concurrencia).
+- Actualiza `refreshed:` en `INDEX.acm` (también atómico). **No** calcula hash ni crea `.acm`: sin `.acm` → `missing-acm`.
+- stdout: JSON válido `{"slug","ts","repos":[{"repo","status","acm","counts":{cs,vue,sql,tf,csproj,controllers},"last_commit"}]}`.
+  `status` ∈ `refreshed | missing-acm | stale-no-checkout | missing-repo | error`.
+- Exit: `0` ok · `1` falta `repos/` o `.agent-maps/repos/`, algún repo en `missing-repo` o `error` (.acm no escribible;
+  no toca `INDEX.acm` ni imprime `OK`) · `2` slug o repo inválido (solo `[A-Za-z0-9._-]`, sin `..`).
+
+Tests: `tests/test-agent-code-map.bats`.
 
 ## Formato .acm
 
@@ -68,12 +80,6 @@ Cada fichero `.acm` es Markdown con estructura fija:
 | Domain Services | domain/services.acm | N servicios | 🔴 Alta |
 | Infrastructure | infrastructure/repositories.acm | N repos | 🟡 Media |
 | API | api/controllers.acm | N controllers | 🟡 Media |
-
-## Cargar por scope
-
-- Todo: `@include domain/entities.acm`, `@include domain/services.acm`, ...
-- Solo dominio: `@include domain/entities.acm`, `@include domain/services.acm`
-- Solo API: `@include api/controllers.acm`
 ```
 
 ## Estructura en disco
@@ -98,30 +104,26 @@ Cada fichero `.acm` es Markdown con estructura fija:
 | `obsoleto` | Cambios internos, estructura intacta | Usar con aviso |
 | `roto` | Ficheros eliminados o firmas públicas cambiadas | Regenerar antes de usar |
 
-Cálculo de hash: `sha256` del contenido de todos los ficheros fuente del scope.
+Cálculo de hash (manual, lo hace el agente al redactar el `.acm`): `sha256` del contenido
+de todos los ficheros fuente del scope. `refresh-agent-maps.sh` no lo recalcula; solo
+marca `refreshed:` y `stale-no-checkout`.
 
 ## Sistema @include
 
-Los agentes cargan .acm bajo demanda para minimizar tokens:
-
-```markdown
-@include domain/entities.acm     ← Se resuelve en runtime
-@include domain/services.acm     ← Solo si el agente lo necesita
-```
-
-Reglas: máximo 150 líneas por .acm. Si crece, dividir en subdirectorios:
-`domain/entities/user.acm`, `domain/entities/order.acm`, etc.
+Carga bajo demanda (`@include domain/entities.acm`): el agente lo resuelve leyendo
+el fichero. Máximo 150 líneas por .acm; si crece, dividir en subdirectorios
+(`domain/entities/user.acm`, `domain/entities/order.acm`, etc.).
 
 ## Integración en pipeline SDD
 
 ```
-[0] CARGAR  — /codemap:check && /codemap:load <scope>
+[0] CARGAR  — leer INDEX.acm y las capas del scope
 [1] Análisis — business-analyst lee spec + mapas
 [2] Arquitectura — architect planifica con contexto real
 [3] Spec    — sdd-spec-writer genera spec ejecutable
 [4] Impl    — {lang}-developer implementa con mapas cargados
 [5] QA      — test-engineer valida cobertura
-[post-SDD]  ACTUALIZAR — /codemap:refresh --incremental
+[post-SDD]  ACTUALIZAR — bash scripts/refresh-agent-maps.sh <slug> + revisar .acm afectados
 ```
 
 ## Gemelo humano: .hcm
@@ -129,15 +131,14 @@ Reglas: máximo 150 líneas por .acm. Si crece, dividir en subdirectorios:
 Cada `.acm` tiene un gemelo narrativo `.hcm` en `.human-maps/` (skill
 `human-code-map`). `.acm` responde *qué existe y dónde* para agentes;
 `.hcm` responde *por qué existe y cómo pensarlo* para humanos. Si el
-hash del `.acm` cambia, el `.hcm` se marca automáticamente como stale.
-
+hash del `.acm` cambia, el `.hcm` debe marcarse stale (a mano: no hay automatismo).
 
 ## Motor opcional: CodeGraph MCP
 
 Si el MCP `codegraph` está activo (ver `.claude/skills/codegraph/SKILL.md`),
-`/codemap:generate` invoca `codegraph index` y proyecta el índice SQLite
-a `.acm` por capa; `/codemap:check` lee `codegraph status --json` para
-frescura. Sin CodeGraph, cae a grep + tree-sitter ad-hoc sin error.
+el agente puede usar su índice para redactar los `.acm` por capa y
+`codegraph status --json` para juzgar frescura. No hay proyección automática
+índice → `.acm`: es trabajo del agente. Sin CodeGraph, grep + lectura dirigida.
 Confidencialidad: `.codegraph/` debe estar gitignored. Prohibido en N4b
 (ver `docs/rules/domain/codegraph-confidentiality.md`).
 
