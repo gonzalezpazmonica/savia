@@ -57,6 +57,8 @@ Si falla, pr-plan se detiene con mensaje pidiendo que se cree el fichero.
 
 `scripts/push-pr.sh` lee `.pr-summary.md` y lo prepend al PR body antes de la sección Summary auto-generada.
 
+El hook `.opencode/hooks/pr-summary-gate.sh` (PreToolUse sobre `gh pr create`) repite las comprobaciones locales (existencia, título, menos de 24 h) y añade una revisión LLM vía `ANTHROPIC_BASE_URL`. La red está acotada: conexión ≤ 3 s y respuesta ≤ `PR_SUMMARY_LLM_TIMEOUT` segundos (90 por defecto, entero 1-90). Si el proxy rechaza la conexión, no contesta a tiempo o devuelve algo no parseable, el hook avisa (`ADVERTENCIA … gate omitido`) y deja pasar: la revisión LLM es fail-open; las comprobaciones locales bloquean siempre.
+
 `.pr-summary.md` está gitignored — vive solo en local. Lo escribe el agente (o el humano) antes de cada PR. Se sobrescribe entre PRs.
 
 ## Excepciones

@@ -208,7 +208,7 @@ for script_path in "$HOME/claude/scripts/context-tracker.sh" "$HOME/scripts/cont
   fi
 done
 if [ -n "$TRACKER_SCRIPT" ]; then
-  bash "$TRACKER_SCRIPT" log "session-init" "identity.md" "50" 2>/dev/null &
+  bash "$TRACKER_SCRIPT" log "session-init" "identity.md" "50" >/dev/null 2>&1 &
 fi
 
 # ── Readiness check (ligero: solo verifica stamp) ─────────────────────────────
@@ -224,16 +224,61 @@ else
   fi
 fi
 
-# ── Ollama pre-warm (Era 149: Data Sovereignty) ───────────────────────────────
+# ── Servicios locales: Ollama + Shield (Era 149, SPEC-071) ───────────────────
+# Arranque blindado: ninguna espera de red en primer plano. El banner muestra el
+# resultado del sondeo ANTERIOR (fichero de estado clave=valor, nunca se ejecuta
+# con source) y este arranque lanza en segundo plano el sondeo siguiente y la
+# pre-carga del modelo de Ollama. Un servicio colgado ya no retrasa la sesión.
 check_timeout
-if command -v curl >/dev/null 2>&1; then
-  if curl -s --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
-    # Ollama running — pre-warm model to avoid 9s cold-start on first classify
-    curl -s --max-time 3 http://127.0.0.1:11434/api/generate \
-      -d '{"model":"qwen2.5:7b","prompt":"hi","stream":false,"options":{"num_predict":1}}' \
-      >/dev/null 2>&1 &
-    ITEMS+=("Ollama: modelo pre-cargado en RAM")
+PROBE_STATE="${SAVIA_PROBE_STATE:-$HOME/.savia/session-probes.state}"
+OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
+SHIELD_PORT="${SAVIA_SHIELD_PORT:-8444}"
+SHIELD_PROXY_PORT="${SAVIA_SHIELD_PROXY_PORT:-8443}"
+_pr_ts=""; _pr_ollama=""; _pr_daemon=""; _pr_proxy=""
+if [ -f "$PROBE_STATE" ]; then
+  while IFS='=' read -r _k _v; do
+    case "$_k=$_v" in
+      ts=[0-9]*)              [[ "$_v" =~ ^[0-9]+$ ]] && _pr_ts="$_v" ;;
+      ollama=up|ollama=down)  _pr_ollama="$_v" ;;
+      shield_daemon=up|shield_daemon=down) _pr_daemon="$_v" ;;
+      shield_proxy=up|shield_proxy=down)   _pr_proxy="$_v" ;;
+    esac
+  done < "$PROBE_STATE"
+fi
+if [ -n "$_pr_ts" ]; then
+  _pr_age=$(( $(date +%s) - _pr_ts )); [ "$_pr_age" -lt 0 ] && _pr_age=0
+  if   [ "$_pr_age" -lt 120 ];  then _pr_when="${_pr_age}s"
+  elif [ "$_pr_age" -lt 7200 ]; then _pr_when="$(( _pr_age / 60 ))min"
+  else                               _pr_when="$(( _pr_age / 3600 ))h"; fi
+  if [ "$_pr_age" -gt 86400 ]; then
+    # Un sondeo de más de 24 h no prueba nada sobre el estado actual
+    ITEMS+=("Servicios locales: último sondeo caducado (hace $_pr_when); nuevo sondeo en segundo plano")
+  else
+    [ "$_pr_ollama" = "up" ] && ITEMS+=("Ollama: activo (sondeo de hace $_pr_when; pre-carga en segundo plano)")
+    [ "$_pr_daemon" = "up" ] && ITEMS+=("Shield: daemon activo (sondeo de hace $_pr_when)")
+    [ "$_pr_proxy" = "up" ]  && ITEMS+=("Shield proxy: activo (localhost:$SHIELD_PROXY_PORT, sondeo de hace $_pr_when)")
   fi
+else
+  ITEMS+=("Servicios locales: sondeo en segundo plano (resultado en el próximo arranque)")
+fi
+if command -v curl >/dev/null 2>&1; then
+  (
+    trap '' HUP
+    _o=down; _d=down; _p=down
+    if curl -s --max-time 2 "$OLLAMA_URL/api/tags" >/dev/null 2>&1; then
+      _o=up
+      # Pre-carga del modelo para evitar ~9 s de arranque en frío al clasificar
+      curl -s --max-time 3 "$OLLAMA_URL/api/generate" \
+        -d '{"model":"qwen2.5:7b","prompt":"hi","stream":false,"options":{"num_predict":1}}' \
+        >/dev/null 2>&1 &
+    fi
+    curl -sf --max-time 2 "http://127.0.0.1:$SHIELD_PORT/health" >/dev/null 2>&1 && _d=up
+    curl -sf --max-time 2 "http://127.0.0.1:$SHIELD_PROXY_PORT/health" >/dev/null 2>&1 && _p=up
+    mkdir -p "$(dirname "$PROBE_STATE")" 2>/dev/null
+    _tmp="$PROBE_STATE.$BASHPID"
+    printf 'ts=%s\nollama=%s\nshield_daemon=%s\nshield_proxy=%s\n' \
+      "$(date +%s)" "$_o" "$_d" "$_p" > "$_tmp" && mv -f "$_tmp" "$PROBE_STATE"
+  ) </dev/null >/dev/null 2>&1 &
 fi
 
 # ── Learning recall ready (SPEC-CONSOLIDACION R6) ────────────────────────────
@@ -248,7 +293,7 @@ if [ -x "${_si_dir}/../../scripts/learning-recall.sh" ]; then
 fi
 
 # ── Automations due-run (SPEC-CONSOLIDACION R2: loops saltan solos) ──────────
-# Tras el prewarm de Ollama, ejecuta las tareas programadas atrasadas
+# Tras lanzar el sondeo de servicios locales, ejecuta las tareas programadas atrasadas
 # (orquestador diario, morning brief, etc.) SIN bloquear el arranque.
 # CRIT-001: las tareas usan LLM local (Ollama); si no hay, fallan abierto.
 check_timeout
@@ -256,19 +301,6 @@ if [ -x "${_si_dir}/../../scripts/savia-automations.sh" ]; then
   timeout 4 bash "${_si_dir}/../../scripts/savia-automations.sh" run-due --max 2 \
     >/dev/null 2>&1 &
   ITEMS+=("Automations: due-run programado (loops autónomos)")
-fi
-
-# ── Shield auto-start + health check (SPEC-071) ─────────────────────────────
-check_timeout
-SHIELD_PORT="${SAVIA_SHIELD_PORT:-8444}"
-SHIELD_PROXY_PORT="${SAVIA_SHIELD_PROXY_PORT:-8443}"
-if command -v curl >/dev/null 2>&1; then
-  if curl -sf --max-time 2 "http://127.0.0.1:$SHIELD_PORT/health" >/dev/null 2>&1; then
-    ITEMS+=("Shield: daemon activo")
-  fi
-  if curl -sf --max-time 2 "http://127.0.0.1:$SHIELD_PROXY_PORT/health" >/dev/null 2>&1; then
-    ITEMS+=("Shield proxy: activo (localhost:$SHIELD_PROXY_PORT)")
-  fi
 fi
 
 # ── Variables de entorno ─────────────────────────────────────────────────────
@@ -308,7 +340,7 @@ fi
           \( -name "*.md" -o -name "*.sh" \) -newer "$SCM_INDEX" -print -quit 2>/dev/null | grep -q .; then
     python3 scripts/generate-capability-map.py >/dev/null 2>&1
   fi
-) &
+) </dev/null >/dev/null 2>&1 &
 disown 2>/dev/null || true
 
 # Limpieza de auto-memory en background (SPEC-142, SE-073).
@@ -351,7 +383,7 @@ for ms_path in "$HOME/claude/scripts/memory-store.sh" "./scripts/memory-store.sh
       [[ -x "$memory_python" ]] || exit 0
       "$memory_python" -c "import sentence_transformers; import faiss" 2>/dev/null || exit 0
       SAVIA_MEMORY_PYTHON="$memory_python" bash "$ms_path" rebuild-index >/dev/null 2>&1 || true
-    ) &
+    ) </dev/null >/dev/null 2>&1 &
     break
   fi
 done

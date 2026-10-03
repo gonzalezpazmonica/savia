@@ -4,6 +4,10 @@ set -uo pipefail
 # Ref: docs/rules/domain/pr-natural-language-summary.md
 # Hook type: command (PreToolUse, matcher: Bash(gh pr create*))
 # Exits: 0 = ok (o skip), 2 = blocked
+# Red acotada: conexion <= 3s (un proxy inexistente o caido no bloquea) y
+# respuesta <= PR_SUMMARY_LLM_TIMEOUT (90s por defecto, entero 1-90: sin datos
+# de latencia del proxy no se acorta el plazo del modelo). Si el proxy no contesta a tiempo, el gate se omite con
+# ADVERTENCIA (fail-open); las comprobaciones locales 1-3 siempre bloquean.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/savia-env.sh"
 export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$SAVIA_WORKSPACE_DIR}"
@@ -16,6 +20,10 @@ fi
 ROOT="${CLAUDE_PROJECT_DIR:-.}"
 SUMMARY_FILE="$ROOT/.pr-summary.md"
 PROXY_URL="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+LLM_TIMEOUT="${PR_SUMMARY_LLM_TIMEOUT:-90}"
+if ! [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] || (( LLM_TIMEOUT < 1 || LLM_TIMEOUT > 90 )); then
+  LLM_TIMEOUT=90
+fi
 
 # ── 0. Solo actuar en gh pr create ────────────────────────────────────────
 INPUT="${CLAUDE_TOOL_INPUT:-}"
@@ -69,12 +77,12 @@ section = m.group(1).strip()[:600] if m else text[:600]
 print(section)
 " "$SUMMARY_FILE" 2>/dev/null || head -c 600 "$SUMMARY_FILE")
 
-printf '%s' "$SECTION" > /tmp/_pr_summary_section.txt
-
-# Construir payload — prompt compacto para reducir thinking en modelos locales
-PAYLOAD=$(python3 << 'INNERPY'
-import json
-section = open("/tmp/_pr_summary_section.txt").read()
+# Construir payload — prompt compacto para reducir thinking en modelos locales.
+# La seccion viaja por entorno: un fichero fijo en /tmp lo compartian (y se
+# pisaban) todas las sesiones concurrentes.
+PAYLOAD=$(PR_SUMMARY_SECTION="$SECTION" python3 << 'INNERPY'
+import json, os
+section = os.environ.get("PR_SUMMARY_SECTION", "")
 prompt = (
     "PR summary reviewer. Output ONLY valid JSON, no other text.\n\n"
     "FAILS if text contains: spec IDs (SE-nnn, SPEC-nnn), script/tool names "
@@ -101,15 +109,20 @@ if [[ -z "$PAYLOAD" ]]; then
   exit 0
 fi
 
-LLM_RESPONSE=$(curl -s --max-time 90 \
+LLM_RESPONSE=$(curl -s --connect-timeout 3 --max-time "$LLM_TIMEOUT" \
   "${PROXY_URL}/v1/messages" \
   -H "Content-Type: application/json" \
   -H "x-api-key: ${ANTHROPIC_API_KEY:-placeholder}" \
   -H "anthropic-version: 2023-06-01" \
-  -d "$PAYLOAD" 2>/dev/null || true)
+  -d "$PAYLOAD" 2>/dev/null)
+CURL_RC=$?
 
 if [[ -z "$LLM_RESPONSE" ]]; then
-  echo "ADVERTENCIA: proxy LLM no respondio — gate omitido." >&2
+  case "$CURL_RC" in
+    28) echo "ADVERTENCIA: proxy LLM no respondio en ${LLM_TIMEOUT}s — gate omitido." >&2 ;;
+    7)  echo "ADVERTENCIA: proxy LLM no accesible (${PROXY_URL}, conexion rechazada) — gate omitido." >&2 ;;
+    *)  echo "ADVERTENCIA: proxy LLM no respondio (curl ${CURL_RC}) — gate omitido." >&2 ;;
+  esac
   exit 0
 fi
 
