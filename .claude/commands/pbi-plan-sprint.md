@@ -42,15 +42,19 @@ Flujo completo de Sprint Planning asistido por IA: calcula capacity, propone qu�
 ### Paso 1 — Obtener Capacity del Equipo
 
 ```bash
-# Capacity por persona para el sprint objetivo
-# (misma lógica que /report-capacity)
-./scripts/azdevops-queries.sh capacities {proyecto} "{equipo}"
+# Capacity por persona para el sprint objetivo (misma lógica que /report-capacity).
+# azdevops-queries.sh lee la iteración ACTUAL: si el objetivo es el siguiente sprint,
+# exportar sus capacidades por API (capacity-planning, Flujo 2 con su ITER_ID).
+./scripts/azdevops-queries.sh capacities {proyecto} "{equipo}" > /tmp/capacities.json
+echo '[]' > /tmp/sprint-items.json   # sprint objetivo aún sin items asignados
 python3 scripts/capacity-calculator.py \
+  --items /tmp/sprint-items.json --capacities /tmp/capacities.json \
   --sprint-start {fecha_inicio} \
-  --sprint-end {fecha_fin}
+  --sprint-end {fecha_fin} --output-json
 ```
 
-Resultado: `{persona: horas_disponibles}` para cada miembro.
+Resultado: `carga_por_persona.{persona}.horas_disponibles` para cada miembro de
+`/tmp/capacities.json` (con carga 0 si aún no tiene items).
 
 ### Paso 2 — Obtener PBIs Candidatos del Backlog
 

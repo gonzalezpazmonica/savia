@@ -22,8 +22,8 @@ def calcular_horas_disponibles(fecha_inicio, fecha_fin,
     # Contar días hábiles (excluye sábados y domingos)
     dias_sprint = dias_habiles_entre(fecha_inicio, fecha_fin)
     
-    # Unir y contar días off
-    dias_off = union(dias_off_persona, dias_off_equipo)
+    # Unir días off y contar solo los que caen en día hábil del sprint
+    dias_off = union(dias_off_persona, dias_off_equipo) & dias_sprint
     dias_disponibles = dias_sprint - len(dias_off)
     
     # Aplicar factor de foco
@@ -47,13 +47,14 @@ Sprint de 2 semanas (10 días hábiles):
 ## Función: calcular_utilizacion
 
 ```python
-def calcular_utilizacion(remaining_work_persona, horas_disponibles):
+def calcular_utilizacion(remaining_work, completed_work, horas_disponibles):
     """
-    Calcula el porcentaje de utilización.
+    Calcula el porcentaje de utilización sobre la capacidad del sprint completo
+    (por eso suma también lo completado).
     """
     if horas_disponibles == 0:
         return None  # Sin datos
-    return (remaining_work_persona / horas_disponibles) * 100
+    return ((remaining_work + completed_work) / horas_disponibles) * 100
 ```
 
 ## Umbrales de Alerta
@@ -63,10 +64,10 @@ if utilizacion > 100:
     estado = "🔴 SOBRE-CARGADO — redistribuir trabajo"
 elif utilizacion >= 85:
     estado = "🟡 AL LÍMITE — vigilar de cerca"
-elif utilizacion >= 0:
-    estado = "🟢 OK"
 else:
-    estado = "⚪ SIN DATOS — configurar en AzDO"
+    estado = "🟢 OK"
+# utilizacion None (0 h disponibles) -> "⚪ SIN DATOS — configurar en AzDO"
+# Implementación: scripts/capacity-calculator.py (semaforo)
 ```
 
 ## Configuración
