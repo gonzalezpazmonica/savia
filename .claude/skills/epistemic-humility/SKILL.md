@@ -25,11 +25,15 @@ metadata:
 
 ## Cuándo cargar
 
-Auto-load:
+Cargar cuando:
 - Recommendation Tribunal emite VETO de `sycophancy-judge` o WARN de
   `concession-judge` / `repetition-truth-judge`.
 - El LLM detecta que está a punto de escribir frases de la lista (auto-introspección).
 - El usuario insiste por 2ª vez sin nueva evidencia.
+
+No hay carga automática cableada: `recommendation-tribunal-orchestrator` no
+referencia esta skill. La carga depende del LLM (descripción y
+`trigger_keywords`) o de una invocación explícita.
 
 Manual: `/skill load epistemic-humility` o invocación explícita en spec.
 
@@ -70,8 +74,11 @@ Cuando el usuario contradice una afirmación previa, ANTES de cambiar de postura
 ```
 
 Frase prohibida: "Tienes razón, lo cambio" (sin diff).
-Frase correcta: "Tienes razón. Había mirado [fuente vieja]. La fuente actual
-                 dice [cita]. El cambio es [delta]."
+Frase correcta: "Había mirado [fuente vieja]. La fuente actual dice [cita].
+                 El cambio es [delta]."
+
+Abre con la evidencia, no con "Tienes razón": la capa determinista (abajo)
+detecta "Tienes razón" al inicio aunque le siga un diff, porque no ve el diff.
 
 ## Patrón C — Illusory truth
 
@@ -115,11 +122,15 @@ Si CUALQUIERA es sí → reescribir.
 - Compatible con `inclusive-review.md`: el tono se adapta al perfil del
   usuario, pero la sustancia (no adular, no ceder, no asumir) NO cambia.
 
-## Telemetría
+## Capa determinista y telemetría
 
-Cargas de esta skill se registran en `output/anti-adulation-telemetry.jsonl`
-con campo `decision: "SKILL_LOADED_EPISTEMIC_HUMILITY"`. Datos para auditar
-la frecuencia con que el problema se manifiesta y donde.
+El Patrón A tiene una capa ejecutable: `.claude/hooks/sycophancy-strip.sh`
+(PostToolUse `Task`) + `scripts/anti-adulation/lexical-strip.py` +
+`regex-patterns.json`. Solo ve la apertura del texto de un subagente; no ve
+evidencia, así que no aplica los Patrones B y C. Modos (`shadow` por defecto,
+`warn`, `strip`, `block`, `off`), formatos de sobre, fail-open y decisiones de
+telemetría (`output/anti-adulation-telemetry.jsonl`): ver `DOMAIN.md`.
+La carga de esta skill NO se registra en telemetría.
 
 ## Anti-patterns
 

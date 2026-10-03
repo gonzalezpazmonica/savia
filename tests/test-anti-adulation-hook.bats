@@ -8,8 +8,10 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   export HOOK="$REPO_ROOT/.opencode/hooks/sycophancy-strip.sh"
-  export CLAUDE_PROJECT_DIR="$REPO_ROOT"
   TMPDIR_AA=$(mktemp -d)
+  # Telemetry goes to a temp project: never append test runs to the real
+  # output/anti-adulation-telemetry.jsonl (it skewed the shadow-mode data).
+  export CLAUDE_PROJECT_DIR="$TMPDIR_AA"
   unset SAVIA_ANTIADULATION SAVIA_ANTIADULATION_LAYER1 SAVIA_ANTIADULATION_PATTERNS
 }
 
@@ -35,7 +37,8 @@ teardown() {
 }
 
 @test "no stdin returns 0 silently" {
-  run bash "$HOOK"
+  # /dev/null: an inherited open pipe (agent shells) would make cat wait forever
+  run bash "$HOOK" < /dev/null
   [[ "$status" -eq 0 ]]
 }
 
@@ -126,7 +129,7 @@ teardown() {
 
 @test "shadow: writes telemetry to JSONL" {
   unset SAVIA_ANTIADULATION_LAYER1
-  log="$REPO_ROOT/output/anti-adulation-telemetry.jsonl"
+  log="$CLAUDE_PROJECT_DIR/output/anti-adulation-telemetry.jsonl"
   before=$(wc -l < "$log" 2>/dev/null || echo 0)
   bash -c "echo 'Buena pregunta sobre eso.' | bash '$HOOK'" >/dev/null 2>&1
   after=$(wc -l < "$log" 2>/dev/null || echo 0)
@@ -178,7 +181,7 @@ assert d['category'] in ('obvious', 'subtle')
 @test "coverage: log_telemetry function defined and writes JSONL" {
   # Exercises log_telemetry() function via shadow mode invocation.
   export SAVIA_ANTIADULATION_LAYER1=shadow
-  log="$REPO_ROOT/output/anti-adulation-telemetry.jsonl"
+  log="$CLAUDE_PROJECT_DIR/output/anti-adulation-telemetry.jsonl"
   before=$(wc -l < "$log" 2>/dev/null || echo 0)
   echo "Buena pregunta sobre eso." | bash "$HOOK" >/dev/null 2>&1
   after=$(wc -l < "$log" 2>/dev/null || echo 0)

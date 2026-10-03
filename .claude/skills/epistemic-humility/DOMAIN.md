@@ -47,11 +47,12 @@ judges fire.
 
 ## Integration with Savia
 
-- Loaded automatically by `recommendation-tribunal-orchestrator` when
-  any of the 3 SPEC-192 judges emits WARN ≥ 60.
+- Intended to load when any of the 3 SPEC-192 judges emits WARN ≥ 60, but
+  no automatic loading is wired: `recommendation-tribunal-orchestrator` does
+  not reference this skill. Loading relies on the LLM or an explicit call.
 - Loadable manually: `/skill load epistemic-humility`.
-- Telemetry: each load logs to `output/anti-adulation-telemetry.jsonl`
-  with `decision: "SKILL_LOADED_EPISTEMIC_HUMILITY"`.
+- Telemetry: skill loads are NOT logged. `output/anti-adulation-telemetry.jsonl`
+  is written only by the Layer 1 hook (`.claude/hooks/sycophancy-strip.sh`).
 
 ## Anti-patterns
 
@@ -68,3 +69,38 @@ judges fire.
 - Tribunal: SPEC-125 (Recommendation Tribunal extended)
 - Hook: `.opencode/hooks/sycophancy-strip.sh` (Layer 1 deterministic)
 - Sibling skills: `caveman` (extreme brevity), `grill-me` (adversarial review)
+
+## Capa determinista (hook Layer 1, SE-376)
+
+La parte ejecutable del Patrón A es `.claude/hooks/sycophancy-strip.sh`
+(PostToolUse, matcher `Task`; `.opencode/hooks` es un enlace al mismo
+directorio) con el detector `scripts/anti-adulation/lexical-strip.py` y los
+patrones `scripts/anti-adulation/regex-patterns.json`.
+
+- Inspecciona el texto que devuelve un subagente: `tool_response` como cadena,
+  como lista de bloques `{type, text}` o como objeto con `content[]`, `output`
+  o `text`; `tool_input.text` como legado. Un sobre JSON sin texto (p. ej. un
+  agente lanzado en segundo plano) no se escanea y registra `NO_TEXT`.
+  Texto no JSON por stdin se analiza tal cual.
+- Patrones `obvious` anclados al inicio; toleran espacios, `¡` y marcas
+  markdown (`*`, `_`). "Absolutamente"/"absolutely" solo cuentan seguidos de
+  puntuación o fin ("Absolutamente todos los tests fallan" no es adulación).
+  Patrones `subtle` en cualquier posición: puntúan 50 y nunca bloquean.
+- Modo `SAVIA_ANTIADULATION_LAYER1`: `shadow` (por defecto, solo telemetría),
+  `warn` (aviso por stderr), `strip` (imprime el texto sin la apertura),
+  `block` (exit 2 si score ≥ 85 y posición < 50), `off`. Un valor desconocido
+  cae a `shadow`. `SAVIA_ANTIADULATION=off` lo apaga todo.
+- Fail-open: si falta el detector o los patrones, o el detector falla (JSON
+  o regex inválidos), sale 0 pero registra `FAIL_OPEN`; sin `jq` sale 0 sin
+  rastro. El borrador llega al detector por stdin, sin límite de ARG_MAX.
+- No ve evidencia ni contexto: no aplica los Patrones B y C (eso es de los
+  jueces del Recommendation Tribunal, SPEC-192).
+
+### Telemetría
+
+El hook escribe una línea JSON por invocación en
+`output/anti-adulation-telemetry.jsonl` (`decision`: `PASS`,
+`SHADOW_DETECTED`, `WARN`, `STRIPPED`, `BLOCKED`, `BELOW_BLOCK_THRESHOLD`,
+`NO_TEXT`, `FAIL_OPEN`; `draft_len` mide el texto del agente, no el sobre).
+La carga de esta skill NO se registra: no hay ningún código que emita
+`SKILL_LOADED_EPISTEMIC_HUMILITY`.

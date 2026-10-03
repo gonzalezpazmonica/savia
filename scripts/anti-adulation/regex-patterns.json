@@ -1,21 +1,21 @@
 {
   "version": 1,
   "obvious": [
-    "^\\s*(buena|excelente|gran|magn[ií]fica)\\s+(pregunta|punto|idea|observaci[oó]n)",
-    "^\\s*tienes\\s+(toda\\s+la\\s+)?raz[oó]n",
-    "^\\s*absolutamente,?\\s",
-    "^\\s*por\\s+supuesto,?\\s",
-    "^\\s*claro\\s+que\\s+s[ií],?\\s",
-    "^\\s*me\\s+parece\\s+(genial|fant[aá]stico|excelente|brillante)",
-    "^\\s*great\\s+(question|point|idea|observation)",
-    "^\\s*you'?re\\s+(absolutely\\s+)?right",
-    "^\\s*excellent\\s+(question|point|idea)",
-    "^\\s*absolutely,?\\s",
-    "^\\s*of\\s+course,?\\s",
-    "^\\s*good\\s+(question|point|idea)",
-    "^\\s*entiendo\\s+tu\\s+(preocupaci[oó]n|punto)",
-    "^\\s*comprendo\\s+(perfectamente|tu)",
-    "^\\s*estoy\\s+totalmente\\s+de\\s+acuerdo"
+    "^[\\s¡*_]*(buena|excelente|gran|magn[ií]fica)\\s+(pregunta|punto|idea|observaci[oó]n)",
+    "^[\\s¡*_]*tienes\\s+(toda\\s+la\\s+)?raz[oó]n",
+    "^[\\s¡*_]*absolutamente\\s*([,.!:;]|$)",
+    "^[\\s¡*_]*por\\s+supuesto([,.!:;]|\\s|$)",
+    "^[\\s¡*_]*claro\\s+que\\s+s[ií]([,.!:;]|\\s|$)",
+    "^[\\s¡*_]*me\\s+parece\\s+(genial|fant[aá]stico|excelente|brillante)",
+    "^[\\s¡*_]*great\\s+(question|point|idea|observation)",
+    "^[\\s¡*_]*you['’]?re\\s+(absolutely\\s+)?right",
+    "^[\\s¡*_]*excellent\\s+(question|point|idea)",
+    "^[\\s¡*_]*absolutely\\s*([,.!:;]|$)",
+    "^[\\s¡*_]*of\\s+course([,.!:;]|\\s|$)",
+    "^[\\s¡*_]*good\\s+(question|point|idea)",
+    "^[\\s¡*_]*entiendo\\s+tu\\s+(preocupaci[oó]n|punto)",
+    "^[\\s¡*_]*comprendo\\s+(perfectamente|tu)",
+    "^[\\s¡*_]*estoy\\s+totalmente\\s+de\\s+acuerdo"
   ],
   "subtle": [
     "(disculpa|perdona|lo\\s+siento)\\s+(la\\s+confusi[oó]n|por\\s+el\\s+malentendido|mucho)",
@@ -28,12 +28,13 @@
     "qu[eé]\\s+(buena|gran)\\s+idea"
   ],
   "_doc": {
-    "obvious": "Match en primeros 50 chars con position<50 dispara block en mode=block.",
+    "obvious": "Anclados al inicio; toleran apertura con espacios, '¡' o marcas markdown (* _). Match con position<50 dispara block en mode=block.",
     "subtle": "Match en cualquier posicion. Solo emite warn (nunca block).",
     "intentionally_excluded": [
-      "Cortesias legitimas con sustancia: 'gracias por la correccion', 'mi error', 'tienes razon, mira X'",
+      "Cortesias legitimas con sustancia: 'gracias por la correccion', 'mi error'. OJO: 'tienes razon' al inicio SI se detecta aunque le siga evidencia (Layer 1 no ve el diff)",
       "Saludos: 'hola', 'buenos dias'",
-      "Despedidas: 'un saludo', 'que vaya bien'"
+      "Despedidas: 'un saludo', 'que vaya bien'",
+      "Adverbio con contenido: 'Absolutamente todos los tests fallan' (absolutamente/absolutely solo cuentan seguidos de puntuacion o fin)"
     ]
   }
 }

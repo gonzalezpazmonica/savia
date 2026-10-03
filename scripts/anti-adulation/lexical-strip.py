@@ -14,6 +14,8 @@ Usage:
         [--patterns scripts/anti-adulation/regex-patterns.json] \
         --json
 
+    --draft - reads the draft from stdin (no ARG_MAX limit; the hook uses it).
+
 Output (--json):
     {
       "score": int (0-100),
@@ -32,7 +34,7 @@ Score table:
 Exit codes:
     0  ok (always; result in JSON)
     2  bad arguments
-    3  patterns file unreadable
+    3  patterns file unreadable, not valid JSON or with an invalid regex
 
 Ref: SPEC-192 docs/propuestas/SPEC-192-anti-adulation-illusory-truth.md
 """
@@ -84,7 +86,7 @@ def detect(draft: str, patterns_path: Path = DEFAULT_PATTERNS) -> dict:
             if category == "obvious" and position < 50:
                 score = 95
             stripped = draft[: m.start()] + draft[m.end():]
-            stripped = stripped.lstrip(" ,.;")
+            stripped = stripped.lstrip(" ,.;:!*_")
             return {
                 "score": score,
                 "category": category,
@@ -100,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="lexical-strip",
         description="SPEC-192 Layer 1: detect adulation patterns in a draft.",
     )
-    p.add_argument("--draft", required=True, help="Text to analyze (the LLM draft)")
+    p.add_argument("--draft", required=True, help="Text to analyze (the LLM draft); '-' reads stdin")
     p.add_argument(
         "--patterns",
         default=str(DEFAULT_PATTERNS),
@@ -112,9 +114,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    draft = sys.stdin.read() if args.draft == "-" else args.draft
     try:
-        result = detect(args.draft, Path(args.patterns))
-    except FileNotFoundError as exc:
+        result = detect(draft, Path(args.patterns))
+    except (FileNotFoundError, ValueError, re.error) as exc:
+        # ValueError covers json.JSONDecodeError. The hook treats exit 3 as fail-open.
         print(f"lexical-strip: {exc}", file=sys.stderr)
         return 3
     if args.json:
