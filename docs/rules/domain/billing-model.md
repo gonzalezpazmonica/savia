@@ -12,24 +12,29 @@ token_budget: 858
 > Era 38: v2.12.1 — Cost Management & Billing
 > Complementa: @.opencode/skills/savia-flow-practice/references/flow-tasks-config.md
 
-**Principio**: Los costes son datos de primera clase. Timesheets, presupuestos e invoices se versionan en Git, rates son git-ignorados.
+**Principio**: Los costes son datos de primera clase. Timesheets, presupuestos y ledger (`.flow-data/`) se versionan en Git; rates son git-ignorados; invoices e informes se generan en `output/` (git-ignorado, no se versionan).
 
 ## Rate Table Schema
 
-```yaml
-# .flow-data/rates.json (git-ignored, local per PM)
-rates_by_role:
-  developer: 85       # €/hour
-  senior_developer: 120
-  architect: 150
-  qa_engineer: 70
-  product_owner: 100
-  scrum_master: 95
-currency: "EUR"
-last_updated: "2026-03-01"
+`.flow-data/rates.json` (git-ignored, local per PM; importes en moneda/hora):
+
+```json
+{
+  "rates_by_role": {
+    "developer": 85,
+    "senior_developer": 120,
+    "architect": 150,
+    "qa_engineer": 70,
+    "product_owner": 100,
+    "scrum_master": 95
+  },
+  "currency": "EUR",
+  "last_updated": "2026-03-01"
+}
 ```
 
 Configurable por proyecto en `projects/{proj}/.rates.local.json` (overrides globales).
+Ambos ficheros están en `.gitignore` (`.flow-data/rates.json` y `**/.rates.local.json`), también dentro de los proyectos de ejemplo publicados.
 
 ## Timesheet Format (JSONL)
 
@@ -113,7 +118,7 @@ Where:
 - `AC` = Actual Cost = Σ timesheet hours × rates
 - `SPI` = Schedule Performance Index = EV / PV
 
-Formula for EAC: `EAC = BAC / CPI` (if CPI > 1.0, project over budget)
+Formula for EAC (EVM): `EAC = BAC / CPI` (if CPI < 1.0, project over budget; CPI > 1.0 means under budget). Requires `% complete`; `/cost-center forecast` uses the linear burn-rate EAC of cost-tracking.md instead.
 
 ## Integration
 

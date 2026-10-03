@@ -58,6 +58,11 @@ projects/*/evaluaciones/
 projects/*/privacy/
 projects/*/onboarding/
 
+# ── Tarifas de coste (información salarial, billing-model.md) ────────────────
+# Rate table global y overrides por proyecto, también en proyectos de ejemplo.
+.flow-data/rates.json
+**/.rates.local.json
+
 # ── Outputs generados ────────────────────────────────────────────────────────
 output/
 /tmp/

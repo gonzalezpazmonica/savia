@@ -22,14 +22,19 @@ metadata:
 
 Orquesta timesheet logging, budget tracking, forecasting y generación de invoices.
 
+**Ejecución**: no hay script dedicado. El agente aplica estos flujos leyendo y
+escribiendo los JSONL/JSON documentados con sus herramientas. Lo único ejecutable
+es el validador de contrato `scripts/test-cost-center.sh` y la protección de rates
+en `.gitignore`, ambos cubiertos por `tests/test-cost-management.bats`.
+
 ## Flujo 1 — Log de horas (`log`)
 
 1. Validar entrada:
    - `date`, `user`, `task_id`, `project`, `hours` (todos requeridos)
-   - `hours` es decimal ≥ 0.5
+   - `hours` es decimal ≥ 0.5 y múltiplo de 0.5 (precisión mínima de billing-model)
    - `user` tiene perfil
    - `project` existe en `projects/{proj}/CLAUDE.md`
-2. Leer rates de `.flow-data/rates.json` (o `.flow-data/{project}/.rates.local.json`)
+2. Leer rates de `projects/{proj}/.rates.local.json` si existe; si no, `.flow-data/rates.json` (ambos git-ignorados)
 3. Calcular cost = hours × rate_for_role
 4. Crear entrada JSONL en `.flow-data/timesheets/{user}/{YYYY-MM}.jsonl`
 5. Actualizar ledger: añadir entrada type "time" a `.flow-data/ledger/{project}.jsonl`
@@ -37,7 +42,7 @@ Orquesta timesheet logging, budget tracking, forecasting y generación de invoic
 
 Error handling:
 - Horas duplicadas (misma user/task/date): advertir, preguntar si actualizar
-- Rate no encontrado: sugerir `/cost-center budget --create-rates`
+- Rate no encontrado: crear `.flow-data/rates.json` con el schema de billing-model.md (no hay subcomando que lo cree)
 - User sin perfil: sugerir `/profile-setup {user}`
 
 ## Flujo 2 — Informe de costes (`report`)
@@ -80,7 +85,7 @@ api-v3          │ €60,000 │ €48,000 │ €12,000   │ 80% ⚠️
 ## Flujo 4 — Pronóstico (`forecast`)
 
 1. Leer ledger del proyecto
-2. Calcular:
+2. Calcular (EAC lineal por burn rate de cost-tracking.md; la variante EVM `BAC / CPI` de billing-model.md requiere `% complete`):
    - `elapsed_days` = hoy - fecha_inicio_presupuesto
    - `burn_rate` = actual_burn / elapsed_days
    - `remaining_days` = fecha_fin_presupuesto - hoy
@@ -109,20 +114,20 @@ Parámetros: `--client {slug}`, `--period {YYYY-MM}`, `--status draft|final`
 3. Generar invoice JSON con schema de @billing-model.md
 4. Guardar en `output/invoices/{client}-{YYYY-MM}.json`
 5. Status = "draft" (editable), cambiar a "final" cuando aprobado
-6. Output: resumen + ruta del PDF
+6. Output: resumen + ruta del JSON (no se genera PDF)
 
 ## Errores
 
 | Problema | Solución |
 |----------|----------|
 | Horas duplicadas | Advertir, preguntar si mezclar o descartar |
-| Rate no definido | Crear rate primero con `/cost-center budget --create-rates` |
+| Rate no definido | Crear `.flow-data/rates.json` (schema en billing-model.md) |
 | Proyecto sin presupuesto | Crear presupuesto con `/cost-center budget --create {project}` |
 | Período sin datos | Mostrar período más reciente disponible |
 
 ## Seguridad
 
-- **Rates are git-ignored**: `.flow-data/rates.json` nunca en commit
+- **Rates are git-ignored**: `.flow-data/rates.json` y `**/.rates.local.json` en `.gitignore` (verificado con `git check-ignore` en el test)
 - **No PII in invoices**: solo @handles, nunca nombres reales
 - **Ledger is immutable**: no editar historial, solo adjustments adelante
 - **Auditable**: cada entrada tiene timestamp y user para trazabilidad
