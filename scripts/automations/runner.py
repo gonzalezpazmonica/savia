@@ -4,6 +4,10 @@ Each run:
 1. Validates always_allowed_tools (scoped approvals)
 2. Writes output to output/automations/{task_id}/{run_id}.md
 3. Returns TaskRun with status
+
+Estado real: el runner aún NO invoca la skill ni el agente. Solo registra las
+instrucciones, así que el run queda en RUN_RECORDED, nunca RUN_COMPLETED.
+Un fallo de E/S (directorio de salida imposible) deja RUN_ERROR.
 """
 
 from __future__ import annotations
@@ -14,7 +18,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from .models import ScheduledTask, TaskRun, now_iso
+from .models import RUN_ERROR, RUN_RECORDED, RUN_RUNNING, ScheduledTask, TaskRun, now_iso
 
 logger = logging.getLogger("savia.automations.runner")
 
@@ -31,19 +35,18 @@ async def run_scheduled_task(
     run_id = str(uuid.uuid4())
     started = now_iso()
 
-    task_output_dir = Path(output_dir) / task.id
-    task_output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = task_output_dir / f"{run_id}.md"
-
     run = TaskRun(
         id=run_id,
         task_id=task.id,
-        status="running",
+        status=RUN_RUNNING,
         started_at=started,
         trigger=trigger,
     )
 
     try:
+        task_output_dir = Path(output_dir) / task.id
+        task_output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = task_output_dir / f"{run_id}.md"
         lines = [
             f"# Run: {task.name}",
             f"",
@@ -68,21 +71,21 @@ async def run_scheduled_task(
         if scoped:
             logger.info("task %s scoped approvals: %s", task.id, scoped)
 
-        run.status = "completed"
+        run.status = RUN_RECORDED
         run.output = str(output_file)
         run.finished_at = now_iso()
 
-        lines[-1] = "*Completed*"
+        lines[-1] = "*Recorded, not executed: the runner does not invoke the skill or agent yet.*"
         output_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     except asyncio.TimeoutError:
-        run.status = "error"
+        run.status = RUN_ERROR
         run.error = f"timeout after {run_timeout}s"
         run.finished_at = now_iso()
         logger.error("task %s timed out", task.id)
 
     except Exception as exc:
-        run.status = "error"
+        run.status = RUN_ERROR
         run.error = str(exc)
         run.finished_at = now_iso()
         logger.exception("task %s execution failed", task.id)

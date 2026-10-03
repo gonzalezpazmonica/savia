@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
+from . import cron
 from .models import ScheduledTask, TaskRun, Schedule, now_iso
 
 
@@ -54,12 +55,14 @@ class TaskStore:
         return [t for t in self.all() if t.enabled]
 
     def due(self, now: Optional[str] = None) -> List[ScheduledTask]:
-        ref = now or now_iso()
-        result = []
-        for task in self.enabled():
-            if task.next_run and task.next_run <= ref:
-                result.append(task)
-        return result
+        return [t for t in self.enabled() if self.is_due(t, now)]
+
+    @staticmethod
+    def is_due(task: ScheduledTask, now: Optional[str] = None) -> bool:
+        """Compare as datetimes: ISO strings with different offsets don't sort."""
+        next_run = parse_datetime(task.next_run or "", "UTC")
+        ref = parse_datetime(now, "UTC") if now else datetime.now(timezone.utc)
+        return bool(next_run and ref and next_run <= ref)
 
     def get(self, task_id: str) -> Optional[ScheduledTask]:
         for t in self.all():
@@ -72,7 +75,10 @@ class TaskStore:
         task.updated_at = now_iso()
         if not task.created_at:
             task.created_at = task.updated_at
-        task.next_run = self._compute_next_run(task.schedule)
+        if task.schedule.kind == "once" and task.last_run:
+            task.next_run = None  # a one-shot task fires once
+        else:
+            task.next_run = self._compute_next_run(task.schedule)
         d = task.to_dict()
         for i, existing in enumerate(tasks):
             if existing.get("id") == task.id:
@@ -145,7 +151,7 @@ class TaskStore:
           daily                 → 0 8 * * *   (default 08:00)
           weekly DOW HH:MM      → MM HH * * DOW
           weekly HH:MM          → 0 HH * * *
-        Any already-5-field cron passes through unchanged.
+        Any 5-field cron passes through; cron.parse validates it.
         Returns None if unparseable.
         """
         if not cron:
@@ -153,78 +159,83 @@ class TaskStore:
         raw = cron.strip().lower()
         parts = raw.split()
         # Already standard 5-field? Pass through.
-        if len(parts) == 5 and all(
-            _tok in "*0123456789,/-" for _tok in "".join(parts)
-        ):
+        if len(parts) == 5:
             return " ".join(parts)
+        def hhmm(tok: str) -> tuple[int, int]:
+            hh, mm = tok.split(":")
+            return int(hh), int(mm)
+
+        # Unrecognised words or extra tokens → None, never a silent default.
         try:
-            if parts and parts[0] == "daily":
-                if len(parts) >= 2 and ":" in parts[1]:
-                    hh, mm = parts[1].split(":")
-                    return f"{int(mm)} {int(hh)} * * *"
+            if parts[0] == "daily" and len(parts) <= 2:
+                if len(parts) == 2:
+                    hh, mm = hhmm(parts[1])
+                    return f"{mm} {hh} * * *"
                 return "0 8 * * *"  # daily default 08:00
-            if parts and parts[0] == "weekly":
+            if parts[0] == "weekly" and len(parts) <= 3:
                 if len(parts) >= 2 and parts[1] in self._HUMAN_DAYS:
                     dow = self._HUMAN_DAYS[parts[1]]
-                    if len(parts) >= 3 and ":" in parts[2]:
-                        hh, mm = parts[2].split(":")
-                        return f"{int(mm)} {int(hh)} * * {dow}"
+                    if len(parts) == 3:
+                        hh, mm = hhmm(parts[2])
+                        return f"{mm} {hh} * * {dow}"
                     return f"0 8 * * {dow}"
-                if len(parts) >= 2 and ":" in parts[1]:
-                    hh, mm = parts[1].split(":")
-                    return f"{int(mm)} {int(hh)} * * *"
-                return "0 8 * * *"
+                if len(parts) == 2:
+                    hh, mm = hhmm(parts[1])
+                    return f"{mm} {hh} * * *"
+                if len(parts) == 1:
+                    return "0 8 * * *"
         except (ValueError, IndexError):
             return None
         return None
 
-    def _compute_next_run(self, schedule: Schedule) -> Optional[str]:
+    def validate_schedule(self, schedule: Schedule) -> None:
+        """Raise ValueError when the schedule can never produce a run."""
         if schedule.kind == "once":
-            return schedule.fire_at
+            if parse_datetime(schedule.fire_at or "", schedule.timezone) is None:
+                raise ValueError(f"invalid fire_at: '{schedule.fire_at}'")
+            return
+        normalized = self._normalize_cron(schedule.cron or "")
+        if not normalized:
+            raise ValueError(f"invalid cron: '{schedule.cron}'")
+        spec = cron.parse(normalized)
+        now = datetime.now(timezone.utc)
+        if cron.next_fire(spec, now, schedule.timezone) is None:
+            raise ValueError(f"cron never fires: '{schedule.cron}'")
+
+    def _compute_next_run(
+        self, schedule: Schedule, now: Optional[datetime] = None
+    ) -> Optional[str]:
+        """Next fire time after ``now`` as a UTC ISO string, or None.
+
+        Cron fields are wall-clock times in ``schedule.timezone`` (``local``
+        by default, like system cron). ``now`` is injectable for tests.
+        """
+        if schedule.kind == "once":
+            fire = parse_datetime(schedule.fire_at or "", schedule.timezone)
+            return fire.isoformat() if fire else None
         normalized = self._normalize_cron(schedule.cron) if schedule.cron else None
         if not normalized:
             return None
-
-        parts = normalized.split()
-        if len(parts) != 5:
-            return None
-
+        ref = now or datetime.now(timezone.utc)
         try:
-            minute, hour, dom, month, dow = parts
-            now = datetime.now(timezone.utc)
-            candidates = []
-            for day_offset in range(8):
-                candidate = now.replace(
-                    hour=int(hour),
-                    minute=int(minute),
-                    second=0,
-                    microsecond=0,
-                )
-                from datetime import timedelta
-                candidate = candidate + timedelta(days=day_offset)
-                if candidate <= now:
-                    continue
-                if dom != "*":
-                    try:
-                        if candidate.day != int(dom):
-                            continue
-                    except ValueError:
-                        pass
-                if month != "*":
-                    try:
-                        if candidate.month != int(month):
-                            continue
-                    except ValueError:
-                        pass
-                if dow != "*":
-                    try:
-                        if candidate.weekday() != int(dow) % 7:
-                            continue
-                    except ValueError:
-                        pass
-                candidates.append(candidate)
-            if candidates:
-                return candidates[0].isoformat()
-        except (ValueError, IndexError):
+            when = cron.next_fire(cron.parse(normalized), ref, schedule.timezone)
+        except ValueError:
             return None
+        return when.isoformat() if when else None
+
+
+def parse_datetime(value: str, tz: str = "local") -> Optional[datetime]:
+    """Parse an ISO datetime to aware UTC; naive values are read in ``tz``."""
+    if not value:
         return None
+    try:
+        dt = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        if tz in ("", "local"):
+            dt = dt.astimezone()
+        else:
+            from zoneinfo import ZoneInfo
+            dt = dt.replace(tzinfo=ZoneInfo(tz))
+    return dt.astimezone(timezone.utc)

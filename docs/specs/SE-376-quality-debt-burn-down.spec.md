@@ -91,3 +91,11 @@ Las skills `.claude/skills/git-secret-scanner/SKILL.md`, `.claude/skills/workspa
 Hallazgo fuera de alcance: `.opencode/agents` (90, fuente de `AGENTS.md` y del catálogo) y `.claude/agents` (75, los que lee Claude Code) divergen. 15 agentes solo existen para OpenCode y los comunes tienen contenido distinto.
 
 `.gitignore`: excepción exacta `!tests/test-git-secret-scanner.bats`, en la lista enumerada del escáner (el patrón `**/*-secret*` sigue cerrado).
+
+### 2026-10-03 — automation-scheduler: cron real
+
+| Skill | Test | Auditor | Hallazgos corregidos |
+|---|---|---|---|
+| `automation-scheduler` | `tests/test-automation-scheduler.bats` (28) | 92 | `_compute_next_run` comparaba `weekday()` (lunes=0) con el día cron (domingo=0): `0 8 * * 1` caía en martes. Rangos, listas y pasos lanzaban `ValueError` ignorado (`1-5` casaba con cualquier día, `*/15` no se programaba nunca) y la búsqueda acababa a 8 días (mensuales sin `next_run`). `due()` comparaba texto ISO. `run`/`run-due` no actualizaban `run_count` ni `last_status`, una tarea `once` se repetía siempre y la CLI salía con 0 en «not found». Nuevo parser `scripts/automations/cron.py`; hora local, `next_run` en UTC. 24/24 fallan con el código anterior |
+
+`scripts/automations/store.py`, `scripts/automations/scheduler.py` (`last_status` quedaba en `running`), `scripts/savia-automations.sh`, `.claude/skills/automation-scheduler/SKILL.md` y `.claude/skills/automation-scheduler/DOMAIN.md`. La skill sigue `beta`: el runner aún no invoca skill ni agente; desde este cambio el run queda `recorded` (not executed), nunca `completed`, y un directorio de salida imposible queda en `error` en vez de una traza sin registrar (decisión de la operadora: estado honesto), y la promoción es decisión de la operadora. `tests/test-consolidacion-20260823.bats` comprobaba `T08:30:00` en el `next_run`; ahora comprueba la hora local.

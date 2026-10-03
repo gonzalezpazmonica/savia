@@ -1,6 +1,8 @@
 #!/usr/bin/env bats
 # SPEC-CONSOLIDACION 2026-08-23 — tests de los R1/R2/R3/R4 (sanitización)
 # Pruebas irrefutables para: cron humano, run-due, log de instalación, instalador central.
+# Ref: docs/specs/SE-376-quality-debt-burn-down.spec.md (cron del automation-scheduler)
+set -uo pipefail
 
 setup() {
   cd "$(dirname "$BATS_TEST_FILENAME")/.." || exit 1
@@ -24,7 +26,9 @@ from automations.models import Schedule
 s = TaskStore(sys.argv[1])
 assert s._normalize_cron("daily 08:30") == "30 8 * * *"
 n = s._compute_next_run(Schedule(kind="cron", cron="daily 08:30"))
-assert n is not None and "T08:30:00" in n, n
+# next_run se guarda en UTC; el cron se interpreta en hora local (SE-376).
+from datetime import datetime
+assert n is not None and datetime.fromisoformat(n).astimezone().strftime("%H:%M") == "08:30", n
 print(n)
 PY
 }
@@ -55,7 +59,32 @@ PY
     --schedule "daily 09:00" --instructions "test" >/dev/null 2>&1
   out=$(bash scripts/savia-automations.sh compute 2>&1)
   echo "$out" | grep -q "next_run="
-  echo "$out" | grep -q "T09:00:00"
+  # next_run en UTC; las 09:00 son hora local (SE-376).
+  next=$(echo "$out" | sed -n 's/.*test-diario: next_run=//p')
+  [[ "$(python3 -c 'import sys; from datetime import datetime; print(datetime.fromisoformat(sys.argv[1]).astimezone().strftime("%H:%M"))' "$next")" == "09:00" ]]
+}
+
+@test "R1e: invalid 'daily 25:00' → create sale con 2 y no guarda" {
+  run bash scripts/savia-automations.sh create --name hora-mala \
+    --schedule "daily 25:00" --instructions "test"
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"hour: 25 out of range"* ]]
+  run bash scripts/savia-automations.sh list
+  [[ "$output" == "(no tasks)" ]]
+}
+
+@test "R1f: invalid día 'weekly funday 09:00' → rechazado, no se convierte en diario" {
+  python3 - "$FIXDIR" <<'PY'
+import sys
+sys.path.insert(0, "scripts")
+from automations.store import TaskStore
+s = TaskStore(sys.argv[1])
+for bad in ("weekly funday 09:00", "daily 8", "daily 08:30 extra"):
+    assert s._normalize_cron(bad) is None, bad
+PY
+  run bash scripts/savia-automations.sh create --name dia-malo \
+    --schedule "weekly funday 09:00" --instructions "test"
+  [[ "$status" -eq 2 ]]
 }
 
 # ── R2: run-due ejecuta tareas atrasadas ────────────────────────────────────
@@ -66,6 +95,25 @@ PY
   bash scripts/savia-automations.sh compute >/dev/null 2>&1
   run bash scripts/savia-automations.sh run-due
   echo "$output" | grep -E "no due tasks|0/1"
+}
+
+@test "R2b: run-due --max no numérico → error con exit 2" {
+  run bash scripts/savia-automations.sh run-due --max muchas
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"--max needs an integer"* ]]
+}
+
+@test "R2c: boundary run-due --max 1 con dos tareas vencidas ejecuta solo una" {
+  for n in a b; do
+    bash scripts/savia-automations.sh create --name "vencida-$n" \
+      --schedule "2026-01-01T09:00:00" --instructions "test" >/dev/null
+  done
+  export SAVIA_AUTOMATIONS_OUTPUT="$FIXDIR/out"
+  run bash scripts/savia-automations.sh run-due --max 1
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"run-due: 1/2 tasks processed, 1 recorded without execution"* ]]
+  run bash scripts/savia-automations.sh run-due
+  [[ "$output" == *"run-due: 1/1 tasks processed, 1 recorded without execution"* ]]
 }
 
 # ── R3: log de instalación ─────────────────────────────────────────────────

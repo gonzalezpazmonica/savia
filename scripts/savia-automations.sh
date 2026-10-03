@@ -16,6 +16,8 @@ _cmd = os.environ.get("SAVIA_CMD", "help")
 _root = os.environ.get("ROOT_DIR", os.getcwd())
 _data = os.environ.get("SAVIA_AUTOMATIONS_DIR",
     os.path.join(_root, ".savia/automations"))
+_out = os.environ.get("SAVIA_AUTOMATIONS_OUTPUT",
+    os.path.join(_root, "output/automations"))
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +27,32 @@ from automations.models import ScheduledTask, TaskRun, Schedule, now_iso
 from automations.store import TaskStore
 
 store = TaskStore(str(_data))
+
+# 'recorded' = instrucciones registradas sin ejecutar skill ni agente; se dice siempre.
+NOT_EXECUTED = {"recorded": " (not executed)"}
+
+def fail(msg, code=1):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+def need_task(usage):
+    if len(sys.argv) < 2:
+        fail(f"Usage: {usage}", 2)
+    t = store.get(sys.argv[1])
+    if not t:
+        fail(f"not found: {sys.argv[1]}")
+    return t
+
+def record_run(task_id, result):
+    """Persist the run and the task's counters (next_run is recomputed by save)."""
+    store.add_run(result)
+    fresh = store.get(task_id)
+    if fresh is None:
+        return
+    fresh.run_count += 1
+    fresh.last_run = result.started_at
+    fresh.last_status = result.status
+    store.save(fresh)
 
 def cmd_list():
     import argparse
@@ -38,21 +66,16 @@ def cmd_list():
     if not tasks:
         print("(no tasks)")
         return
-    now = now_iso()
     for t in tasks:
         state = "\u2713" if t.enabled else "\u2717"
-        due = " DUE" if (t.next_run and t.next_run <= now) else ""
+        due = " DUE" if store.is_due(t) else ""
         print(f"[{state}] {t.id}  {t.name}{due}")
         sched = t.schedule.cron or t.schedule.fire_at or "none"
         print(f"     schedule: {t.schedule.kind}={sched}")
-        print(f"     last: {t.last_status or 'never'}  runs: {t.run_count}  next: {t.next_run or 'none'}")
+        print(f"     last: {t.last_status or 'never'}{NOT_EXECUTED.get(t.last_status, '')}  runs: {t.run_count}  next: {t.next_run or 'none'}")
 
 def cmd_show():
-    if len(sys.argv) < 2:
-        print("Usage: show <task-id>"); return
-    t = store.get(sys.argv[1])
-    if not t:
-        print(f"not found: {sys.argv[1]}"); return
+    t = need_task("show <task-id>")
     print(json.dumps(t.to_dict(), indent=2, ensure_ascii=False))
 
 def cmd_create():
@@ -64,12 +87,16 @@ def cmd_create():
     p.add_argument("--skill")
     p.add_argument("--agent")
     p.add_argument("--description", default="")
+    p.add_argument("--timezone", default="local")
     a, _ = p.parse_known_args(sys.argv[1:])
-    parts = a.schedule.split()
-    if len(parts) == 1:
-        schedule = Schedule(kind="once", fire_at=a.schedule)
+    if store._normalize_cron(a.schedule):
+        schedule = Schedule(kind="cron", cron=a.schedule, timezone=a.timezone)
     else:
-        schedule = Schedule(kind="cron", cron=a.schedule)
+        schedule = Schedule(kind="once", fire_at=a.schedule, timezone=a.timezone)
+    try:
+        store.validate_schedule(schedule)
+    except ValueError as exc:
+        fail(f"invalid schedule: {exc}", 2)
     t = ScheduledTask(
         id=str(uuid.uuid4())[:8],
         name=a.name,
@@ -87,23 +114,19 @@ def cmd_create():
     print(f"  next run: {t.next_run}")
 
 def cmd_run():
-    if len(sys.argv) < 2:
-        print("Usage: run <task-id>"); return
-    t = store.get(sys.argv[1])
-    if not t:
-        print(f"not found: {sys.argv[1]}"); return
+    t = need_task("run <task-id>")
     import asyncio
-    async def _run():
-        from automations.runner import run_scheduled_task
-        result = await run_scheduled_task(t, "manual", output_dir=os.path.join(_root, "output/automations"))
-        store.add_run(result)
-        return result
-    result = asyncio.run(_run())
-    print(f"run {result.id}: {result.status}")
+    from automations.runner import run_scheduled_task
+    result = asyncio.run(run_scheduled_task(
+        t, "manual", output_dir=_out))
+    record_run(t.id, result)
+    print(f"run {result.id}: {result.status}{NOT_EXECUTED.get(result.status, '')}")
     if result.output:
         print(f"  output: {result.output}")
     if result.error:
         print(f"  error: {result.error}")
+    if result.status not in ("completed", "recorded"):
+        sys.exit(1)
 
 def cmd_run_due():
     """Run all due enabled tasks (the 'loops saltan solos' driver).
@@ -118,28 +141,26 @@ def cmd_run_due():
         try:
             max_tasks = int(sys.argv[2])
         except ValueError:
-            max_tasks = sys.maxsize
+            fail(f"run-due: --max needs an integer, got '{sys.argv[2]}'", 2)
     due = store.due()
     if not due:
         print("run-due: no due tasks")
         return
     import asyncio
     executed = 0
+    recorded = 0
+    from automations.runner import run_scheduled_task
     for t in due[:max_tasks]:
-        async def _one(_t=t):
-            from automations.runner import run_scheduled_task
-            result = await run_scheduled_task(
-                _t, "schedule", output_dir=os.path.join(_root, "output/automations")
-            )
-            store.add_run(result)
-            return result
-        result = asyncio.run(_one())
+        result = asyncio.run(run_scheduled_task(
+            t, "schedule", output_dir=_out))
+        record_run(t.id, result)  # counters + recomputed next_run
         executed += 1
-        print(f"run-due {t.id} ({t.name}): {result.status}")
+        if result.status == "recorded":
+            recorded += 1
+        print(f"run-due {t.id} ({t.name}): {result.status}{NOT_EXECUTED.get(result.status, '')}")
         if result.error:
             print(f"  error: {result.error}")
-        store.save(t)  # recomputes next_run
-    print(f"run-due: {executed}/{len(due)} tasks executed")
+    print(f"run-due: {executed}/{len(due)} tasks processed, {recorded} recorded without execution")
 
 def cmd_compute():
     """Materialize next_run for every task (normalize + recompute)."""
@@ -154,30 +175,23 @@ def cmd_compute():
     print(f"compute: {updated} tasks updated")
 
 def cmd_disable():
-    if len(sys.argv) < 2:
-        print("Usage: disable <task-id>"); return
-    t = store.get(sys.argv[1])
-    if not t:
-        print(f"not found: {sys.argv[1]}"); return
+    t = need_task("disable <task-id>")
     t.enabled = False
     store.save(t)
     print(f"disabled {t.id}: {t.name}")
 
 def cmd_enable():
-    if len(sys.argv) < 2:
-        print("Usage: enable <task-id>"); return
-    t = store.get(sys.argv[1])
-    if not t:
-        print(f"not found: {sys.argv[1]}"); return
+    t = need_task("enable <task-id>")
     t.enabled = True
     store.save(t)
     print(f"enabled {t.id}: {t.name}")
 
 def cmd_delete():
     if len(sys.argv) < 2:
-        print("Usage: delete <task-id>"); return
-    ok = store.delete(sys.argv[1])
-    print("deleted" if ok else "not found")
+        fail("Usage: delete <task-id>", 2)
+    if not store.delete(sys.argv[1]):
+        fail(f"not found: {sys.argv[1]}")
+    print(f"deleted {sys.argv[1]}")
 
 def cmd_history():
     import argparse
@@ -185,28 +199,30 @@ def cmd_history():
     p.add_argument("task_id")
     p.add_argument("--last", type=int, default=10)
     a, _ = p.parse_known_args(sys.argv[1:])
+    if not store.get(a.task_id):
+        fail(f"not found: {a.task_id}")
     runs = store.list_runs(a.task_id, limit=a.last)
     if not runs:
         print("(no runs)")
         return
-    icons = {"completed": "\u2713", "running": "\u25CB", "error": "\u2717", "cancelled": "\u2298"}
+    icons = {"completed": "\u2713", "recorded": "\u25A1", "running": "\u25CB", "error": "\u2717", "cancelled": "\u2298"}
     for r in runs:
         icon = icons.get(r.status, "?")
-        print(f"[{icon}] {r.id}  {r.status}  {r.trigger}  {r.started_at}")
+        print(f"[{icon}] {r.id}  {r.status}  {r.trigger}  {r.started_at}{NOT_EXECUTED.get(r.status, '')}")
         if r.error:
             print(f"     error: {r.error}")
 
 def cmd_output():
     if len(sys.argv) < 3:
-        print("Usage: output <task-id> <run-id>"); return
+        fail("Usage: output <task-id> <run-id>", 2)
     run = store.get_run(sys.argv[1], sys.argv[2])
     if not run:
-        print(f"not found: {sys.argv[1]}/{sys.argv[2]}"); return
-    output_path = Path(_root) / "output/automations" / run.task_id / f"{run.id}.md"
+        fail(f"not found: {sys.argv[1]}/{sys.argv[2]}")
+    output_path = Path(_out) / run.task_id / f"{run.id}.md"
     if output_path.exists():
         print(output_path.read_text(encoding="utf-8"))
     else:
-        print("(output file not found)")
+        fail("(output file not found)")
 
 def cmd_init_defaults():
     tasks = [
@@ -258,6 +274,8 @@ cmds = {
 if _cmd in cmds:
     cmds[_cmd]()
 else:
+    if _cmd not in ("help", "-h", "--help"):
+        print(f"unknown command: {_cmd}", file=sys.stderr)
     print("savia-automations.sh -- Automation Scheduler CLI (SE-304)")
     print()
     print("Usage: savia-automations.sh <command> [args]")
@@ -265,7 +283,8 @@ else:
     print("Commands:")
     print("  list [--enabled] [--due]      List scheduled tasks")
     print("  show <task-id>                 Show full task details (JSON)")
-    print("  create --name <n> --schedule <cron> --instructions <text>")
+    print("  create --name <n> --schedule <cron|ISO datetime> --instructions <text>")
+    print("         [--timezone <IANA>] [--skill <s>] [--agent <a>]")
     print("  run <task-id>                  Execute a task immediately")
     print("  run-due [--max N]             Run all due enabled tasks")
     print("  compute                       Recompute next_run for all tasks")
@@ -279,6 +298,11 @@ else:
     print("Data: .savia/automations/tasks.json")
     print("Runs: .savia/automations/runs/")
     print("Output: output/automations/")
+    print()
+    print("Cron times are local wall-clock (like system cron) unless")
+    print("--timezone <IANA name> is given; next_run is stored in UTC.")
+    if _cmd not in ("help", "-h", "--help"):
+        sys.exit(2)
 PYEOF
 }
 

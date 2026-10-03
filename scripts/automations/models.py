@@ -97,6 +97,16 @@ class ScheduledTask:
         )
 
 
+# Estados de un TaskRun. 'completed' exige ejecución real de la skill o el agente;
+# 'recorded' = instrucciones registradas en el fichero de salida sin ejecutar nada.
+RUN_RUNNING = "running"
+RUN_RECORDED = "recorded"
+RUN_COMPLETED = "completed"
+RUN_ERROR = "error"
+RUN_CANCELLED = "cancelled"
+RUN_STATUSES = (RUN_RUNNING, RUN_RECORDED, RUN_COMPLETED, RUN_ERROR, RUN_CANCELLED)
+
+
 @dataclass
 class TaskRun:
     id: str

@@ -124,6 +124,7 @@ class AutomationScheduler:
                 result.id = run_id
                 result.finished_at = now_iso()
                 self.store.update_run(result)
+                run.status = result.status
             else:
                 run.status = "completed"
                 run.finished_at = now_iso()

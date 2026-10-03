@@ -29,9 +29,11 @@ def output_dir():
 
 class TestRunScheduledTask:
     @pytest.mark.asyncio
-    async def test_successful_run(self, task, output_dir):
+    async def test_run_without_execution_is_recorded(self, task, output_dir):
+        # El runner aún no invoca skill ni agente: nunca 'completed' sin ejecución real.
         run = await run_scheduled_task(task, "manual", output_dir=output_dir)
-        assert run.status == "completed"
+        assert run.status == "recorded"
+        assert run.status != "completed"
         assert run.trigger == "manual"
         assert run.output is not None
         assert Path(run.output).exists()
@@ -43,7 +45,8 @@ class TestRunScheduledTask:
         assert task.name in content
         assert task.instructions in content
         assert run.id in content
-        assert "*Completed*" in content
+        assert "Recorded, not executed" in content
+        assert "Completed" not in content
 
     @pytest.mark.asyncio
     async def test_run_with_skill(self, task, output_dir):
@@ -59,7 +62,15 @@ class TestRunScheduledTask:
         task.skill = None
         task.agent = None
         run = await run_scheduled_task(task, "manual", output_dir=output_dir)
-        assert run.status == "completed"
+        assert run.status == "recorded"
+
+    @pytest.mark.asyncio
+    async def test_unwritable_output_is_error(self, task, output_dir):
+        blocker = Path(output_dir) / "file"
+        blocker.write_text("x", encoding="utf-8")
+        run = await run_scheduled_task(task, "manual", output_dir=str(blocker))
+        assert run.status == "error"
+        assert run.error
 
 
 class TestScopedApprovals:
