@@ -7,6 +7,131 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.18.0] — 2026-10-03
+
+### Added
+
+- CI: job nocturno con la suite BATS completa (tests/ y tests/bats/), timeout por suite e issue de seguimiento.
+- `scripts/skill-listing-overrides.sh`: los comandos `tier: extended` se listan solo por nombre en Claude Code (`skillOverrides`), liberando presupuesto del listado de skills.
+- Spec propuesta de Savia Space: escritorio infinito con objetos, enlaces, cúpulas y flujos en tiempo real, apariencia gestionada por la persona (modo del sistema, paleta, acento, contraste, movimiento) y regla de atmósfera frente a señal (SE-432).
+- Specs propuestas de Savia Space: sustituto de OpenCode con OpenCode como motor (SE-428), interoperabilidad con API JWT/OpenAPI, MCP y A2A (SE-429), app móvil cliente (SE-430) y Savia Soul, el bucle proactivo con A2A y mensajería (SE-431).
+- SE-GRC-001 MVP: auditor GRC preliminar con agente, tres skills, matriz basada en evidencia y 17 pruebas locales.
+- **SE-391 Savia Codex Autonomy Profile**: ejecución autónoma L0-L2 con
+- **SE-392 Runtime común de Savia para Codex y OpenCode**: persiste la spec
+- SE-396 A01a: incorpora una frontera de adapters CLI gestionados con builders seguros para Codex/OpenCode, traducción fail-closed de eventos Codex e identidad de sesión nativa separada.
+- SE-396 A01b: conecta la selección explícita de adapters CLI al flujo no interactivo de Savia Bridge, con preflight aislado, sesiones nativas separadas y fallos cerrados.
+- SE-396 H04: canaries de sesión Codex juzgados sobre el sistema de ficheros y recibo OPERATIONAL_SESSION que el doctor valida (fresco, versión, escenario, nonce); gradúa como máximo L2.
+- Era 209 — SE-397 F3: informes report-only de drift arquitectónico, trazabilidad claim/evidence e impacto acotado, con provenance estable tras squash/rebase.
+- SE-397 F4 adds local report-only operational traces, explicit observation
+- SE-401 propone Intent-to-Effect Architecture (I2E): contratos separados de reasoning, decision, authority, execution, effect, verification, evidence y transición de estado, con frontera explícita entre AEK y Savia.
+- SE-407 S1: validate-ci-local.sh (G10 de pr-plan) bloquea si rule-manifest, pin settings-hooks, SAM, INDEX de propuestas o planning-state están desfasados, y nombra el comando que los regenera. Regenerado rule-manifest.json (desfasado desde #1188).
+- SE-407 S2: validate-ci-local.sh --clean-state (advisory) informa del checkout principal con cambios, worktrees agent/* ya integrados en main (retirables) y traspaso de sesión desfasado.
+- SE-407 S4: auditor externo audit-harness.sh fijado por commit y sha256 (report-only) con clasificación hueco real / equivalente Savia; AGENTS.md dice qué es Savia y enlaza clock-in/clock-out.
+- SE-410 Savia RAG en SaviaVaults: búsqueda híbrida (BM25 + embeddings locales vía Ollama, RRF) paralela sobre varias cúpulas y consultas, por MCP (`vault_rag`, `vault_rag_status`, `vault_rag_sync`) y CLI (`savia-vaults rag …`). Política dinámica de embeddings (`docs/rules/domain/rag-embedding-policy.md`) y disparador programado `savia-vaults rag sync --all --check`. En savia-docs: recall@10 0,347 → 0,806 y MRR 0,251 → 0,566 frente a `vault_search`.
+- Spec SE-411 (PROPOSED): eficiencia de Savia RAG — fusión entre cúpulas invariante al orden, caché de índices dimensionada, keep_alive del modelo de embedding, respuesta compacta y arranque en frío de la CLI. La skill savia-vaults documenta la configuración medida como óptima (MCP, híbrido, k=8, maxChars=4000, consultas agrupadas, evitar `domes:"*"` hasta SE-411).
+- SE-413: Savia Files (MVP) en SaviaVaults. Guarda ficheros originales (PDF, DOCX, PPTX, XLSX, TXT, MD, CSV, JSON) por cúpula fuera de git, inmutables y verificados por SHA-256, con revisiones y borrado real. Extrae su texto citando página, diapositiva, elemento o celda (Docling sin OCR y openpyxl en un worker Python aislado) y lo publica en `vault_rag` con procedencia. El escaneo ClamAV es opcional. Se usa con la tool MCP `vault_files` y la CLI `savia-vaults files`; está desactivado por defecto (`files.enabled`).
+- SE-416: Savia instala por sí misma, sin consola ni permisos de administrador, las dos dependencias de Savia Files: el lector de documentos y el antivirus ClamAV oficial, con versiones y huellas fijadas. Lo hace con `savia-vaults files setup` o desde el chat (`vault_files setup`, en segundo plano). Mantiene las firmas del antivirus al día sola y explica en lenguaje llano qué falta y qué supone. Por ahora solo Linux x86_64 (probado: instalación en 31 s; un PDF queda leído y el fichero de prueba EICAR, en cuarentena).
+- SE-417: las cúpulas N3/N4 de Savia Files se cifran en reposo (originales, texto extraído, metadatos e índice RAG) con libsodium. Las N1/N2 pueden activarlo con `files.encryption`. Borrar un fichero destruye su clave (borrado criptográfico). Las claves se pueden rotar sin volver a embeber y las cúpulas existentes se migran solas. El backup nocturno incluye los ficheros y guarda las claves por otro canal, selladas para una clave de recuperación (10 palabras + 4 dígitos). Las claves no se suben a la nube salvo que la configuración local lo pida (`SAVIA_BACKUP_UPLOAD_KEYS`). Medido: guardar 10 MB pasa de 54 a 177 ms y las búsquedas no cambian (6 ms).
+- SE-418: cada operación de Savia Files (guardar, borrar, reprocesar) queda registrada en un repo git privado de la cúpula, sin remoto y sin nombres ni texto, con un comprobante firmado (Ed25519). Reintentar con la misma `idempotencyKey` es seguro. Las operaciones cortadas por una caída o un fallo de git se completan o cancelan solas, y lo pendiente de extraer se extrae una vez. `files verify` comprueba ledger, documentos, originales y firmas. Sin dependencias nuevas (`node:sqlite`). Coste medido: unos 27 ms por operación; un lote de 300 ficheros hace un solo commit.
+- SE-419: permisos por documento en Savia Files. Cada fichero puede limitarse a unas personas concretas (`readers`/`writers`) dentro de su cúpula. Quien no tiene permiso no lo ve en la lista, en el texto, en la descarga ni en `vault_rag`, y el cambio vale al instante, sin reindexar. Lo cambia quien puede escribir el documento, con comprobante firmado. El nivel del documento se aplica también si la cúpula se reclasifica a la baja, y `vault_rag` deja de devolver los documentos borrados antes del siguiente sync. En un servidor local sin usuarios nada cambia. Coste medido: despreciable (`vault_rag` ~7 ms con 300 ficheros).
+- SE-421: Savia Files guarda y descarga ficheros de hasta 10 GiB (1 GiB por defecto, configurable por cúpula) sin cargarlos en memoria. Medido con 2 GiB: unos 160 MiB de memoria, también cifrando. `files get` admite `--range`. El antivirus analiza hasta 4.000 MB y lee los ficheros cifrados grandes por su entrada estándar, sin copia en claro. Los ficheros por encima del tope de extracción (256 MiB) se guardan y se descargan, pero sin texto. Es la base de la API HTTP con subida reanudable (SE-422).
+- SE-422: API HTTP de Savia Files (`savia-vaults serve --transport http`) para equipos que sirven Savia en red. Permite subir ficheros grandes con reanudación (protocolo tus 1.0: una subida cortada sigue donde se quedó aunque el servidor se reinicie), descargar por rangos y consultar documentos. Usa usuarios y tokens por persona, con los mismos permisos que MCP. Desde el chat, `vault_files upload` y `link` dan una URL y una autorización de un solo uso para que una persona suba o baje el fichero sin pasarlo por el contexto. Probado con el cliente oficial tus-js-client. Medido: 1 GiB a ~200 MB/s (N2) y ~57 MB/s (cifrado), con 185 MiB de memoria.
+- SE-423 PR 2: savia-vaults A2A por usuario detrás del AccessController, corte de descargas y PATCH al revocar (8 MiB / 30 s), enlaces svt1 ligados a la credencial, listas por documento por subjectId y `user rename`; caché de credenciales de 60 s.
+- SE-426 PROPOSED: firma de confidencialidad con secreto de CI y HMAC siempre verificado; incluye el RCA del handback hmac-signature-ci-20260927.
+- Specs SE-407 (predicado de estado consistente, P0 fase A), SE-408 (automatización móvil por accesibilidad) y SE-409 (bucle experiencia→skill), a partir de referencias externas de harness.
+
+### Changed
+
+- ADR-002: Savia se consolida como harness soberano y laboratorio de conformidad de The Executable Enterprise; ruta en seis fases (A-F) con gates de evidencia, sin fechas, WIP 3+1 y licencia MIT sin cambios. Se revoca la estrategia de producto de 2026-08-02.
+- `planning-state.json` reconciliado: 3 iniciativas en `IMPLEMENTING` (SE-376, SE-378, SE-396); 15 pasan a `DEFERRED` con fase asignada y lo mergeado permanece. Evidencia de SE-388 actualizada tras #1139.
+- `docs/ROADMAP.md` abre con la ruta canónica y conserva el historial; los demás roadmaps quedan marcados como históricos.
+- Planificación 2026-10-01: SE-421 y SE-422 IMPLEMENTED tras SE-424 H1 (decisión de la operadora); estado de SE-424 y SE-407; traspaso de sesión.
+- Planificación 2026-10-01: SE-407, SE-416 y SE-412 (AC3 aceptado) IMPLEMENTED; SE-423 entra en el WIP (IMPLEMENTING); SE-425 PROPOSED (lockfiles de npm).
+- Planning: SE-424, SE-402 y SE-405 graduadas a IMPLEMENTED tras verificar sus AC el 2026-10-01; Resultados añadidos a las specs de SE-402 y SE-405.
+- Planning: SE-423 (identidad mínima de savia-vaults) graduada a IMPLEMENTED tras #1216 y #1218; SE-425 (lockfiles y CI de savia-vaults) entra en el WIP.
+- Planning: SE-425 (lockfiles de npm y CI de savia-vaults) graduada a IMPLEMENTED tras #1220; WIP 2/3.
+- Planning: SE-426 pasos 1–3 integrados (#1224, #1225); graduación pendiente de observar el re-firmado del bot.
+- Ruta unificada 2026-09-30: inventario de 35 roadmaps, cola de sesiones S01–S09 en planning-state (route.session_plan), registros delivery de SE-402–405 y SE-410–422 sin completion, y S02 como revisión de seguridad/evidencia de Vaults/Files.
+- ADR-002: addendum que reconoce Savia Space como frontend de Savia sin ampliar autoridad, con guards críticos fail-closed en modo mediado y un cuarto hueco de WIP temporal para SE-428, que pasa a IMPLEMENTING.
+- SE-428: hallazgos de la implementación de Savia Space contra OpenCode (autenticación del motor, prevalencia de las reglas de sesión, salida a red sin preguntar, sandbox, cambios por git del workspace, parada del motor) y decisión D23-5 sobre hooks críticos en modo mediado.
+- SE-362: risk-tier.py no eleva el tier por artefactos regenerados de .scm/ (sam.json, views, reports, registry, INDEX.scm, categories); las declaraciones del SAM se siguen clasificando.
+- SE-376: agent-messaging, overnight-sprint y savia-vaults calibradas (tests de comportamiento certificados y maturity stable); deuda 127 → 124/137. La skill savia-vaults documentaba un binario y comandos inexistentes: reescrita y protegida por test.
+- SE-378: planning-state registra las PRs de SE-402..405 y su graduación pendiente de revisión humana; sin cambio de estado.
+- SE-396: revisión de cierre delta (2026-09-28) y traspaso de sesión; detecta regresión contract-pin settings-hooks desde #1168.
+- SE-397 F5A adds a semantics-preserving relevance fast exit to the global
+- SE-407 S3: CLAUDE.md dice en sus primeras líneas qué es Savia y enlaza clock-in (traspaso, validate-ci-local --quick, roadmap.sh current) y clock-out (--clean-state y traspaso).
+- SE-425 (lockfiles de npm y CI de savia-vaults) aprobada por la operadora; espera hueco WIP.
+- SE-425: lockfiles de npm versionados en scripts/ y projects/savia-vaults/, `npm ci` en la CI, auditoría sobre los locks versionados, job de CI de la suite de savia-vaults y aviso en validate-ci-local si un package.json no coincide con su lock.
+- SE-431 (Savia Soul): principio imperativo «orquestadora antes que ejecutora» — descompone, reparte en paralelo con envolventes heredadas y decide; AC11–AC13 y orchestration.maxParallelRuns.
+- Traspaso de sesión 2026-09-29 (SE-396).
+- Planificación: SE-407 entra en el WIP y SE-378 pasa a DEFERRED (repriorización por valor, 2026-09-29).
+
+### Fixed
+
+- savia-runs: los subcomandos que escriben el ledger toman un cerrojo exclusivo (20 actualizaciones simultáneas de runs distintos perdían 15); un PR mergeado va a DONE aunque el run no haya hecho finish (salía en READY TO MERGE); status --json sin ledger o vacío devuelve todas las columnas vacías; el hook capture-cost sigue sin tocar nada sin SAVIA_RUN_ID y espera el cerrojo como mucho 5 s; el cerrojo de macOS (mkdir) rompe cerrojos huérfanos; la regla de columnas tiene una sola definición.
+- ast-quality-gate: sin linter ni semgrep (o con la herramienta rota) daba PASS 100; ahora UNVERIFIED (exit 3) y cada capa declara su estado en `meta.tool_chain`. Los hallazgos de ruff/eslint ya no se descartan cuando la herramienta sale con 1, los gates bloqueantes (QG-01/03/05/09/12) bloquean de verdad, el target inexistente o un flag desconocido da exit 2, `LANG` deja de pisarse con el lenguaje detectado, dotnet/cargo/golangci-lint/tflint/eslint corren dentro del proyecto, los proyectos JavaScript sin tsconfig se detectan, y Java, COBOL y los lenguajes sin reglas Semgrep se marcan `unsupported` en lugar de pasar limpios.
+- CI: el auto-rebase empuja con AUTO_REBASE_TOKEN (fallback GITHUB_TOKEN) para que las PRs rebasadas disparen su CI.
+- dependency-scan: el fallback Docker funcionaba mal (pasaba la primera bandera como ruta), --security-checks pasa a --scanners, un fallo de Trivy ya no se informa como «vulnerabilidades» (exit 2), una sola pasada de Trivy con los hallazgos listados, y un SBOM fallido ya no se sustituye por uno vacío fabricado.
+- emergency-mode: el switchover documentado (ANTHROPIC_BASE_URL=http://localhost:8080/v1) hacía que Claude Code pidiera /v1/v1/messages; la base va sin /v1. localai-readiness-check: modelo por id exacto, JSON siempre válido, argumentos sin valor o seguidos de otra bandera → exit 2; imprime el switchover completo (ANTHROPIC_BASE_URL, ANTHROPIC_MODEL, ANTHROPIC_SMALL_FAST_MODEL) solo si el modelo pedido está cargado (si no, FAIL con los ids disponibles); barra final eliminada también en LOCALAI_URL; RAM y disco no medibles (macOS) son WARN y los umbrales se inyectan por entorno.
+- Tiers de modelo agnósticos a proveedor restaurados: agentes y comandos declaran `model_tier: heavy|mid|fast` (recuperado del historial git) en vez de IDs de proveedor que rompían Claude Code (75 agentes y 210 comandos con `unrecognized_model`).
+- Definición local por frontend en `~/.savia/preferences.yaml` → `tiers.{claude-code,opencode,codex}`; default Claude Code opus/sonnet/haiku. Adaptadores: hook `model-tier-inject.sh` (Claude Code), `plugins/lib/model-tiers.ts` para agentes y comandos (OpenCode) y `savia_resolve_model` (scripts).
+- `sync-model-tiers.sh` retirado (reescribía fuentes versionadas); nuevo guard `scripts/model-tier-lint.sh`.
+- Hooks Claude Code: modo ejecutable en `cache-hygiene-hook.sh` y `repeat-tool-guard.sh`; `judge-auto-router.sh` lee stdin/`tool_response` (antes usaba `CLAUDE_PLUGIN_ROOT` inexistente); rutas relativas → `$CLAUDE_PROJECT_DIR`; el hook de commit ya no fija un modelo de proveedor; `judge-trigger-detector.sh` sin error aritmético.
+- Savia Shield: el autostart era un no-op permanente (los hooks siempre reciben stdin por pipe). Ahora es opt-in con `SAVIA_SHIELD_AUTOSTART=on` hasta calibrar el NER; sin daemon, `data-sovereignty-gate.sh` mantiene el fallback regex. Retirado el hook HTTP duplicado que fallaba en cada Edit/Write con el daemon caído. Allow-list NER normaliza Markdown y añade términos de frontends.
+- `validate-bash-global.sh`: `cd "<worktree>"` ya se reconoce (en un worktree `.git` es un fichero); `agents-md-generate.sh` limita el marcador SE-371 a `PROJECT_ROOT`.
+- Codex: gates Bash de Savia en `.codex/hooks.json`; el probe de frontera de secretos fallaba en locales no ingleses (`LC_ALL=C`); canaries day-1 con expectativas actualizadas.
+- `generate-critical-facts.sh --check` ya no reescribe; el ancla describe la regla de tiers en vez de un modelo fijo. Frontmatter YAML válido en 3 comandos. SDK `@opencode-ai/plugin` 1.18.32.
+- Governance enterprise deja de emitir certificados internos desde puntuaciones y prepara un dossier revisable.
+- SE-051: spec-approval-gate cachea el estado por spec en cada escaneo (150 s -> 10 s, salida idéntica); su suite dejaba de terminar.
+- Re-sincroniza docs/propuestas/INDEX.md (desfasado desde 2026-08-31); los hooks dejaban el checkout sucio.
+- SE-337: el commit-guard filtra el comando cuando el frontend registra el hook para todo Bash; solo bloquea commits reales en main/master y respeta workdir y cd a worktrees aislados.
+- SE-362: risk-tier.py clasificaba por el último fichero del diff (un script seguido de un .md salía tier 1); ahora evalúa cada fichero y un diff vacío es tier 3 (fail-closed).
+- SE-369/SE-396: re-pin settings-hooks v4 tras revisar los hooks de #1168/#1169; la CI selecciona test-contract-pin.bats cuando cambian settings.json o el catálogo de digests.
+- SE-376: agent-messaging — tests certificados; corrige --unread que no filtraba, receptor con separadores de ruta y JSONL corrupto con tabuladores.
+- bus-factor-analysis calibrada (SE-376): el scan respeta .mailmap, ya no descarta humanos con email ci@ o noreply de GitHub, lee rutas no ASCII y subdirectorios, marca UNKNOWN (no CRITICAL) los modulos sin historial y deja de avisar con DeprecationWarning; report y distribute ya no usan el scan de otro proyecto y fallan con exit 2 ante JSON invalido; scan.sh propaga el fallo del motor. 25 tests nuevos con repos git sinteticos.
+- code-comprehension-report: contrato alineado con la realidad (skill solo prosa, sin disparo automático, PNG solo con mmdc, slug de task-id para nombres de fichero, ruta real de agent-notes); /comprehension-report declara Write y Bash y /comprehension-audit declara Write, para poder guardar su salida.
+- cache-metrics.sh (skill context-caching): --usage-json ya no se interpola como código Python (inyección), rechaza recuentos inválidos o en formato es_ES en vez de guardarlos mal, y report/--validate/ingest-opencode no rompen con filas corruptas o DB ajena
+- context-rot-strategy: advisor real como modo --rot de context-meter.sh; context-meter valida entradas (exit 2) y deja de ejecutar como Python el valor de CONTEXT_WINDOW_USED
+- dependency-scan: temporales únicos por ejecución (dos escaneos simultáneos se cruzaban el veredicto y perdían un HIGH); test ampliado de 22 a 35 casos con puntuación de mutación medida (antes 19/36 mutantes eliminados; ahora 37/39, los 2 supervivientes son equivalentes).
+- devops-validation: validate-devops.sh deja de dar PASS/WARN sin red o con PAT rechazado (fail-closed), sale con 1 si hay FAIL y 2 en error de uso, ya no pasa el PAT en los argumentos de curl, codifica proyecto y equipo con espacios en la URL (el equipo por defecto rompía backlog e iteraciones) y admite PATs de 84 caracteres; test certificado (25 casos, 85).
+- SE-376: git-secret-scanner, workspace-integrity y savia-memory calibradas (deuda 124 → 121). Arreglos: el escaneo de historial ya no da «limpio» si gitleaks falla (exit 4); el hook pre-push se instala donde git lo lee también en worktrees; los tests ya no escriben en ~/.savia-memory del usuario; documentación de las tres skills alineada con los comandos reales.
+- prospectiva-basica: micmac calcula la clasificación indirecta de Godet con potencias exactas (el tope de saturación aplanaba a «enlace» 189 de 200 matrices aleatorias), exige diagonal nula y enteros, informa converged; mactor rechaza poder total 0 (antes ZeroDivisionError), duplicados, ejes vacíos y umbral fuera de 0..1, y no declara alianza a pares sin stake común. Test certificado 98.
+- savia-hub-sync calibrada: init deja la config local fuera de git al clonar, siembra remotes vacíos, respeta SAVIA_HUB_REMOTE y crea la rama main; nuevo savia-hub-sync.sh (status/push/pull/flight) con exit codes, sin decir «sincronizado» sin remote o sin red y abortando el rebase ante conflictos.
+- social-linkedin: el import reconoce Shares.csv/Shares_<id>.csv y Comments.csv reales (Message, comillas \"), BOM y saltos de línea; respeta SOCIAL_STORE; rechaza almacenes dentro de un repo git y protege la copia raw (0700/0600); ZIP inválido sale con exit 1 sin traceback; los tests ya no escriben en el almacén real.
+- SE-396 H07: el bridge de hooks bloquea ante cualquier salida no cero, JSON de control inválido, denegación o permiso humano pendiente, y evita que eventos de autoridad se degraden a ejecución asíncrona.
+- SE-396 I03: el runtime limita cada ejecución por deadline, solicita cancelación best-effort y conserva como ambiguos los timeouts, excepciones y resultados tardíos para impedir reintentos con efectos duplicados.
+- SE-396 P01: el planning exige evidencia estructurada criterio→artefacto y revisión humana para cierres nuevos; detectar un PR mergeado sólo solicita revisión y nunca marca una iniciativa como implementada.
+- Regenera rule-manifest.json desincronizado desde #1165 (SPEC-181); readiness-check volvía a fallar en crítico.
+- SE-396 V02: la cache federada queda aislada por principal y revisiones de policy/contenido, filtra domes autorizados antes de ejecutar, conserva sources en hits y respeta el límite total de resultados.
+- SE-411 Savia RAG: la búsqueda en varias cúpulas ya no depende del orden (fusión por coseno; MRR en savia-docs + 3 cúpulas de 0,125 en el peor orden a 0,557) y no recarga índices en cada llamada (`domes:"*"` p95 2,0 s → 154 ms). Respuesta compacta de `vault_rag` (≤ 6 000 caracteres, 61 % de texto útil), modelo de embedding retenido 30 min y CLI `rag search` en savia-docs de 2,5 s a 0,93 s.
+- SE-412: `vault_search` deja de indexar ficheros que no son markdown y de tomar referencias `#648` como tags (MRR en savia-docs 0,251 → 0,275); la CLI `search` cachea su índice (1,37 s → ~0,5 s); una cúpula que vence el timeout del fan-out de Savia RAG ya no carga su índice después (causa de un test intermitente).
+- SE-415: Savia Files ya no da por comprendido un documento del que no extrae nada. Un PDF escaneado queda `ARCHIVE_ONLY` con `page-without-text`, y los JSON grandes declaran lo que omiten. Además, extrae las notas del presentador de PPTX, añade a cada celda XLSX el nombre de su columna y fila, lee CSV y TXT en Windows-1252 y procesa varios ficheros en un solo worker (6 PDF: 73,8 s → 37,1 s). La calidad de recuperación del corpus de evaluación no cambia.
+- SE-420: una nota cuyo nivel de confidencialidad supera el de su cúpula ya no se sirve por ninguna herramienta de SaviaVaults: lectura, lista, búsqueda, etiquetas, grafo, consultas, enlaces, A2A y RAG. Antes solo RAG la ocultaba y un lector de la cúpula podía leerla entera con `vault_read`. `vault_write` rechaza crear o pisar notas así, y `vault_stats` avisa de cuántas hay (`outOfLevel`). Coste medido con 1.000 notas: listar pasa de ~1 a ~4 ms.
+- SE-424 H1: Savia Files no da por limpio lo que ClamAV no analiza entero (> 2 GiB): rechazo previo con scan: required (alta y tus 422) y --alert-exceeds-max.
+- SE-424 H4: files setup instala los modelos de Docling del lector de PDF (~670 MB, manifiesto SHA-256); sin ellos los PDF quedaban FAILED en máquinas sin caché de HuggingFace.
+- sovereignty-auditor (D2): emergency-setup.sh fija credencial placeholder para Ollama, descarga todos los modelos de los alias, exige Ollama >= 0.20.0, redondea la RAM al GB y falla con exit 1/2 en vez de declarar setup completado; emergency-status.sh sale con 1 si hay problemas y ya no dice listo sin comprobar modelos, versión, base URL /v1 ni ANTHROPIC_AUTH_TOKEN
+- SaviaVaults: el test de firmas antiguas (SE-416 AC5) ya no compite con la actualización en segundo plano al borrar su directorio; Tools expone whenRefreshSettled().
+
+### Removed
+
+- El traspaso de sesión sale del repo público: `docs/propuestas/session-handoff.md` se elimina y clock-in/out usan el fichero privado `~/.savia/session-handoff.md`; `validate-ci-local --clean-state` avisa si vuelve a versionarse.
+
+### Security
+
+- agent-git-discipline: las órdenes destructivas (rm, git clean/stash/reset --hard/checkout ., dd, mkfs, truncado) ya no se esquivan encadenando con && o ;, con prefijos de entorno, en subshell o con git -C; las exenciones (-i, dry-run, rutas seguras) valen solo para su propia orden; las menciones en mensajes de commit dejan de bloquear.
+- agent-git-discipline: borrar ramas remotas que no son agent/* (git push --delete, -d o la refspec :rama) queda bloqueado, como exige autonomous-safety (NUNCA borrar ramas ajenas).
+- block-force-push: «git push --force», «push origin main», «commit --amend» y «reset --hard» ya no se esquivan con prefijos (VAR=valor, env, command, sudo), subshell o «git -C dir»; las menciones dentro de mensajes o echo siguen sin bloquear.
+- savia-gates: los guards PreToolUse evalúan el comando original y el desenvuelto cuando un plugin de sandbox (opencode-sandbox) lo envuelve antes; basta con que uno bloquee. Antes, con el sandbox delante, `rm -rf` y `sudo` pasaban sin bloqueo.
+- savia-foundation: los guards TS también se ejecutan sobre la orden desenvuelta (en una copia; las mutaciones solo desde la original). Antes, `sudo` envuelto pasaba.
+- SE-414: Savia Files resiste bombas de descompresión (un DOCX de 1 MB que se expandía a 414 MB se rechaza en 3 ms), limita los workers de extracción a uno por proceso (4,5 GB → 1,15 GB con 4 subidas simultáneas), rechaza nombres con caracteres invisibles o bidi, liga el texto extraído a su revisión por digest y resuelve symlinks antes de comprobar que el almacén (y el índice RAG) no está dentro de git. Un manifiesto por documento, con migración automática, baja guardar + extraer de 49,6 a 2,2 ms por documento con 3000 en la cúpula y evita que uno corrupto inutilice la cúpula.
+- SE-424 H2: A2A sin token solo en loopback y solo cúpulas N1/N2; peticiones de navegador de origen no permitido rechazadas; sin CORS *; token en tiempo constante.
+- SE-424 H3: el servidor MCP aplica revocaciones y tokens regenerados sin reiniciar; sin fichero de usuarios no vuelve al modo local.
+- SE-426 paso 1: confidentiality-sign.sh acepta la clave de CI (CONFIDENTIALITY_HMAC_KEY) y el modo exigente (CONFIDENTIALITY_REQUIRE_HMAC=1); la clave ya no aparece en argv. Sin cambios en la CI todavía.
+- SE-426 paso 3: la CI verifica la firma de confidencialidad con el secreto CONFIDENTIALITY_HMAC_KEY y la exige (CONFIDENTIALITY_REQUIRE_HMAC=1); el auto-rebase y la consolidación del CHANGELOG re-firman con la clave real, no con una efímera.
+- savia-foundation (OpenCode): el guard de soberanía de datos resuelve «..» en la ruta; «projects/../docs/x» ya no cuenta como destino privado y se escanea como público. docs/ relativo se reconoce como N1.
+- validate-bash-global (bash y TS): «sudo» se bloquea también encadenado (true && sudo …), con prefijo de entorno o en subshell; antes solo al principio de la orden.
+
+
 ## [6.17.13] — 2026-09-14
 
 ### Added
@@ -13224,6 +13349,7 @@ Initial public release of PM-Workspace.
 
 - **Documentation** with methodology
 
+[6.18.0]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.13...v6.18.0
 [6.17.13]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.12...v6.17.13
 [6.17.12]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.11...v6.17.12
 [6.17.11]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.10...v6.17.11
