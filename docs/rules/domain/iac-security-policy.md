@@ -21,10 +21,13 @@ el agente genera → Trivy escanea → humano recibe propuesta + security score.
 |---|---|---|
 | CRITICAL | Bloquea CI, requiere corrección antes del merge | 1 |
 | HIGH | Bloquea CI, requiere corrección o supresión justificada | 1 |
-| MEDIUM | Informativo — warning en stdout, no bloquea | 0 |
-| LOW | Informativo — warning en stdout, no bloquea | 0 |
+| MEDIUM | Informativo — línea `[INFO]` en stdout, no bloquea | 0 |
+| LOW | Informativo — línea `[INFO]` en stdout, no bloquea | 0 |
+| (error) | Trivy/Docker ausente o fallido, salida vacía o JSON inválido | 2 |
 
-Default: `--severity CRITICAL,HIGH` bloquea. MEDIUM/LOW son informativos.
+Default: `--severity CRITICAL,HIGH` bloquea. `--severity` define el conjunto
+bloqueante: `--severity CRITICAL` es más permisivo (HIGH pasa a informativo).
+Exit 2 nunca es PASS: el escaneo no se completó y el CI debe tratarlo como fallo.
 
 El humano puede override explícito de un hallazgo CRITICAL añadiéndolo a
 `.trivyignore` con justificación documentada. El CI no hace override automático.
@@ -32,7 +35,7 @@ El humano puede override explícito de un hallazgo CRITICAL añadiéndolo a
 ## Herramientas
 
 - **Trivy (local)**: escaneo offline sobre ficheros IaC — gate pre-aprobación
-- **Fallback Docker**: `docker run --rm -v "$(pwd):/workspace" aquasec/trivy:latest config /workspace`
+- **Fallback Docker**: `docker run --rm -v "<path>:/workspace:ro" aquasec/trivy:latest config --format json /workspace`
 - **Prowler / ScoutSuite**: auditoría periódica de cloud desplegado (requieren credenciales)
 
 ## Scripts de referencia
@@ -45,7 +48,7 @@ bash scripts/iac-security-scan.sh --path ./infra/ --severity CRITICAL,HIGH
 bash scripts/iac-security-scan.sh --image myapp:latest
 
 # Generar baseline para proyectos legacy
-bash scripts/iac-security-baseline.sh --path ./infra/ --output .trivyignore
+bash scripts/iac-security-baseline.sh --path ./infra/   # escribe ./infra/.trivyignore
 ```
 
 ## Gestión de falsos positivos con .trivyignore
@@ -59,6 +62,12 @@ Cuando una misconfiguración es un falso positivo conocido o aceptado:
 # Revisión: 2026-Q3
 AVD-AWS-0089
 ```
+
+El scan aplica `<path>/.trivyignore` o el `--ignorefile` explícito; nunca el
+`.trivyignore` del directorio actual de forma implícita. Lo suprimido se lista
+en la salida y en el report; `ID exp:YYYY-MM-DD` caduca la supresión (otro
+formato de fecha no se aplica y se avisa). La
+supresión es por ID en todo el path escaneado.
 
 Reglas del `.trivyignore`:
 1. **Toda supresión requiere comentario** con justificación y fecha de revisión
@@ -93,7 +102,7 @@ Los modelos tienden a generar configuraciones permisivas por defecto:
 # .github/workflows/iac-security.yml (fragmento)
 - name: IaC Security Scan
   run: bash scripts/iac-security-scan.sh --path ./infra/ --severity CRITICAL,HIGH
-  # exit 1 automáticamente si CRITICAL/HIGH detectados
+  # exit 1 si CRITICAL/HIGH detectados · exit 2 si el escaneo no se completó
 ```
 
 Ver: `docs/rules/domain/infrastructure-as-code.md` — SE-241

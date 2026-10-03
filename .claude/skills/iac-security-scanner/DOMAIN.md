@@ -4,7 +4,7 @@
 
 La infraestructura como código (Terraform, Bicep, CloudFormation, Helm) concentra configuración que en producción controla acceso a datos, redes y servicios críticos. Un error de configuración en un fichero `.tf` puede exponer un bucket S3 al público, abrir un grupo de seguridad a toda internet, o deshabilitar cifrado en reposo.
 
-Este skill usa checkov y/o tfsec para analizar IaC estáticamente antes de que llegue a `terraform apply`.
+Este skill usa **Trivy** (`trivy config`; fallback `aquasec/trivy` en Docker) para analizar IaC estáticamente antes de que llegue a `terraform apply`. No usa checkov ni tfsec. La auto-detección del script solo reconoce Terraform, Bicep, Dockerfile, docker-compose y manifests Kubernetes: un directorio con otro formato (p. ej. solo CloudFormation) y sin hallazgos sale como `NO_IAC`, no como PASS.
 
 ---
 
@@ -41,7 +41,7 @@ Este skill usa checkov y/o tfsec para analizar IaC estáticamente antes de que l
 | SOC 2 Type II | Organización | Disponibilidad, confidencialidad |
 | ISO 27001 Annex A | General | Control de acceso, cifrado |
 
-checkov mapea sus checks a estos frameworks automáticamente.
+Los IDs de Trivy (AVD-*, DS*, KSV*) documentan en su ficha el control equivalente; el script no hace ese mapeo.
 
 ---
 
@@ -50,9 +50,11 @@ checkov mapea sus checks a estos frameworks automáticamente.
 | Severidad | Acción requerida | Ejemplo |
 |---|---|---|
 | CRITICAL | Bloquea CI hasta resolución | Bucket público con datos, SSH abierto a internet |
-| HIGH | Bloquea CI (configurable con waiver) | Sin cifrado en RDS, IAM wildcard |
-| MEDIUM | Warning en CI, ticket obligatorio | Flow logs desactivados |
-| LOW | Informativo | Retención de logs subóptima |
+| HIGH | Bloquea CI (supresión justificada en `.trivyignore`) | Sin cifrado en RDS, IAM wildcard |
+| MEDIUM | Informativo `[INFO]` en la salida; abrir ticket es manual | Flow logs desactivados |
+| LOW | Informativo `[INFO]` | Retención de logs subóptima |
+
+El conjunto bloqueante es `--severity` (por defecto `CRITICAL,HIGH`). Exit 2 = el escaneo no se completó: nunca equivale a PASS.
 
 ---
 
