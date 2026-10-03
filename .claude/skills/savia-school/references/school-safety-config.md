@@ -7,7 +7,7 @@ SCHOOL_MODE_ENABLED=true SCHOOL_ENCRYPTION_ENABLED=true SCHOOL_STUDENT_ISOLATION
 SCHOOL_CONSENT_REQUIRED=true SCHOOL_AUDIT_ENABLED=true SCHOOL_STORE_PII=false
 
 # Encryption
-SCHOOL_ENCRYPTION_ALGORITHM="AES-256-CBC" SCHOOL_KEY_FILE="$HOME/.school-keys/encryption.key"
+SCHOOL_ENCRYPTION_ALGORITHM="AES-256-CBC+PBKDF2+HMAC-SHA256" SCHOOL_KEY_FILE="$HOME/.school-keys/encryption.key"
 SCHOOL_KEY_FILE_PERMISSIONS="0600" SCHOOL_ENCRYPT_EVALUATIONS=true
 
 # Content & GDPR
@@ -33,7 +33,7 @@ SCHOOL_NO_EXTERNAL_MESSAGING=true SCHOOL_DIARY_PARENT_ACCESS=false
 ## ✅ PRE-COMANDO CHECKS
 
 ```bash
-# Encryption: [ -f "$SCHOOL_KEY_FILE" ] && [ "$(stat -c '%a' "$SCHOOL_KEY_FILE")" = "600" ]
+# Encryption: [ -f "$SCHOOL_KEY_FILE" ] && [ "$(stat -c '%a' "$SCHOOL_KEY_FILE")" = "600" ] (encrypt-eval lo exige)
 # Isolation: bash scripts/savia-school-security.sh check-isolation "$ALIAS"
 # Consent: bash scripts/savia-school-security.sh gdpr-consent "$ALIAS" (si aplica)
 # Audit: bash scripts/savia-school-security.sh audit-access "$ALIAS" "$ACTION"

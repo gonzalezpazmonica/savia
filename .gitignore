@@ -209,3 +209,6 @@ intent/intent-control-band-*
 /.mcp.json
 test_se211.db
 test_warn2.db
+
+# Savia School: datos de menores (SCHOOL_BASE por defecto = cwd); nunca versionar
+school-savia/

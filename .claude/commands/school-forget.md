@@ -22,10 +22,10 @@ This command is **destructive and irreversible**. Must be authorized by:
 
 1. Prompt: "Confirm right to erasure request. Type: DELETE {alias}"
 2. Verify request source (parent email + signed consent required)
-3. Execute: `bash scripts/savia-school.sh forget {alias}`
+3. Execute: `bash scripts/savia-school.sh forget {alias}` (writes the `deletion` audit entry first; if the audit cannot be written, nothing is deleted)
    - Deletes: `classroom/{alias}/` (all projects, diary, progress)
    - Deletes: `teacher/evaluations/{alias}/` (all encrypted evals)
-4. Audit final action: `audit-access {alias} deletion-final`
+4. Audit final action: `bash scripts/savia-school-security.sh audit-access {alias} deletion-final`
 5. Confirm: "All data deleted. Audit trail retained for 30 days per GDPR."
 
 ## What's Permanently Deleted
@@ -38,8 +38,8 @@ This command is **destructive and irreversible**. Must be authorized by:
 
 ## What's Retained (30 days)
 
-- ✅ Audit log (for legal compliance)
-- ✅ Consent record (proof of authorization)
+- ✅ Audit log `school-savia/.audit.log` (alias + action + date, never content)
+- ❌ The `.consent` marker lives in `classroom/{alias}/` and is deleted with it: keep the signed authorization outside the workspace
 
 ## Output
 

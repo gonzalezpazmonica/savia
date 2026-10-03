@@ -20,12 +20,12 @@ Teacher assessment of student project. Evaluation stored ENCRYPTED.
 
 ## Execution
 
-1. Verify role: `verify_role teacher` (teacher-only gate)
+1. Verify role: `bash scripts/savia-school-security.sh verify-role "$USER"` must print `teacher` (the `teacher:` line written by setup)
 2. Load rubric: `teacher/rubrics/{rubric_name}.md`
 3. Prompt: Enter evaluation (strengths, improvements, grade)
 4. Filter content: `bash scripts/savia-school-security.sh filter-content "{evaluation}"`
-5. Encrypt: `bash scripts/savia-school-security.sh encrypt-eval {alias} "{content}"`
-6. Audit: `audit-access {alias} evaluation`
+5. Encrypt via stdin (the evaluation never goes in argv): `printf '%s\n' "{content}" | bash scripts/savia-school-security.sh encrypt-eval {alias} -`
+6. Audit: automatic (`encrypt` entry in `school-savia/.audit.log`)
 7. Confirm: "Evaluation encrypted and stored"
 
 ## Rubric Structure
@@ -43,7 +43,7 @@ status: OK
 student: {alias}
 project: {project_name}
 evaluated_at: ISO8601
-encryption: AES-256
+encryption: AES-256-CBC (PBKDF2) + HMAC-SHA256
 access: teacher_only
 ```
 
