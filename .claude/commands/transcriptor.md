@@ -13,7 +13,7 @@ Gestiona las reuniones capturadas por Savia Transcriptor.
 
 ## Subcomandos
 
-- /transcriptor scan — listar reuniones sin digerir
+- /transcriptor scan — listar reuniones transcritas sin digerir (las pendientes de transcribir salen como PENDIENTE en stderr)
 - /transcriptor digest — digerir todas las reuniones nuevas (transcripcion + capturas → notas de proyecto)
 - /transcriptor digest <carpeta> — digerir una reunion especifica
 - /transcriptor mark <carpeta> — marcar una reunion como digerida
@@ -27,7 +27,7 @@ Para cada reunion nueva:
 3. Delegar a meeting-digest (notas estructuradas) + visual-digest (contexto visual)
 4. Cruzar con reglas de negocio → alertas
 5. Guardar digest en SaviaVaults (N3)
-6. bash scripts/transcriptor-mark-digested.sh <carpeta>
+6. bash scripts/transcriptor-mark-digested.sh <carpeta> — solo tras guardar el digest; exit 3 si la reunion aun no esta transcrita
 
 ## Confidencialidad
 

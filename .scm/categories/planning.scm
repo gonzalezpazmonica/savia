@@ -585,7 +585,7 @@
 - **tracked-vs-nivel** (script): tracked-vs-nivel.sh — SE-258 Slice 1
 - **trajectory-detector** (script): trajectory-detector.sh — SE-273 S6: Detección de desviación en minutos
 - **transcriptor** (cmd): Gestionar Savia Transcriptor — escanear reuniones capturadas, digerir transcripciones y capturas, marcar como digeridas.
-- **transcriptor-scan** (script): transcriptor-scan.sh — listar reuniones sin digerir de Savia Transcriptor
+- **transcriptor-scan** (script): transcriptor-scan.sh — listar reuniones listas para digerir de Savia Transcriptor
 - **tribunal-critic** (script): tribunal-critic.sh — SE-201: quantitative scoring for tribunal verdicts
 - **tribunal-status** (cmd): Show Truth Tribunal queue depth, recent verdicts, and pending evaluations
 - **tribunal-tiered-runner** (script): tribunal-tiered-runner.sh — SE-106: Tiered tribunal execution

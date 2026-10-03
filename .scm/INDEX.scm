@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 1f0ca37df75b | resources: 1450
+> hash: 5165cb2335fc | resources: 1450
 > 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -1137,7 +1137,7 @@
 [planning] tracked-vs-nivel — nivel,slice,tracked — script:scripts/tracked-vs-nivel.sh
 [planning] trajectory-detector — desviación,detección,detector,minutos,trajectory — script:scripts/trajectory-detector.sh
 [planning] transcriptor — capturadas,capturas,digeridas,digerir,escanear — cmd:.claude/commands/transcriptor.md
-[planning] transcriptor-scan — digerir,listar,reuniones,savia,scan — script:scripts/transcriptor-scan.sh
+[planning] transcriptor-scan — digerir,listar,listas,reuniones,savia — script:scripts/transcriptor-scan.sh
 [planning] tribunal-critic — critic,quantitative,scoring,tribunal,verdicts — script:scripts/tribunal-critic.sh
 [planning] tribunal-status — depth,evaluations,pending,queue,recent — cmd:.claude/commands/tribunal-status.md
 [planning] tribunal-tiered-runner — execution,runner,tiered,tribunal — script:scripts/tribunal-tiered-runner.sh

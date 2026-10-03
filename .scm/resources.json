@@ -1,5 +1,5 @@
 {
-  "hash": "15c0024a7faa",
+  "hash": "d48ac891e7b7",
   "total": 1450,
   "resources": [
     {
@@ -15008,13 +15008,13 @@
       "intents": [
         "digerir",
         "listar",
+        "listas",
         "reuniones",
-        "savia",
-        "scan"
+        "savia"
       ],
       "kind": "script",
       "path": "scripts/transcriptor-scan.sh",
-      "description": "transcriptor-scan.sh — listar reuniones sin digerir de Savia Transcriptor"
+      "description": "transcriptor-scan.sh — listar reuniones listas para digerir de Savia Transcriptor"
     },
     {
       "category": "planning",
