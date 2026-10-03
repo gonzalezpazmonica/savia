@@ -97,4 +97,6 @@ las mismas guias que en bus-factor-analysis/DOMAIN.md:
 
 - No usar como metrica de rendimiento
 - El archivo vive en el repo del proyecto (no en pm-workspace)
-- Si el repo es publico, considerar usar solo nombres sin dominio
+- Si el repo es publico, generar con `--redact-owners` (owners sin dominio)
+- Nunca se mezcla el scan de otro proyecto (aislamiento N4) ni commits de
+  ramas sin integrar
