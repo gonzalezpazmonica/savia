@@ -1,0 +1,28 @@
+# Política de hooks `blocking: true` (D23-5, decisión D-T2 de 2026-10-03).
+# Ref: docs/rules/domain/hooks-blocking-guards.md
+# Auditor: scripts/hooks-integrity-check.sh --blocking · Test: tests/test-hooks-blocking-audit.bats
+#
+# En modo mediado (Savia Space), un hook `blocking: true` que sale con un código
+# distinto de 0/2, se cuelga hasta su timeout o no se puede lanzar BLOQUEA la
+# herramienta (fail-closed). Claude Code y OpenCode ignoran la clave.
+#
+# Formato: <verbo> <script-sin-extensión> [motivo]
+#   blocking  — guard de seguridad: TODAS sus apariciones en settings.json llevan blocking true
+#   excluded  — guard de seguridad deliberadamente sin blocking (motivo obligatorio, ≥10 caracteres)
+#   reviewed  — hook block-* revisado que no pasa a fail-closed (motivo obligatorio, ≥10 caracteres)
+# Todo hook (cualquier evento) cuyo script empiece por `block-` debe figurar aquí.
+
+blocking android-adb-validate
+blocking agent-git-discipline
+blocking block-credential-leak
+blocking block-force-push
+blocking block-infra-destructive
+blocking validate-bash-global
+
+excluded data-sovereignty-gate latencia sin acotar: curl al shield (2+10 s) y sovereignty-classify.sh sin timeout propio; en frío tardó 5,6 s con timeout de 15 s
+
+reviewed block-branch-switch-dirty protege trabajo local, no seguridad; fuera del alcance de D-T2
+reviewed block-commit-to-main fuera del alcance de D-T2; candidato a blocking, pendiente de decisión de la operadora
+reviewed block-gitignored-references fuera del alcance de D-T2; pendiente de medir latencia antes de fail-closed
+reviewed block-pat-file-write fuera del alcance de D-T2; candidato a blocking, pendiente de decisión de la operadora
+reviewed block-project-whitelist fuera del alcance de D-T2; pendiente de medir latencia antes de fail-closed

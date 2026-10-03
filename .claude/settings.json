@@ -75,12 +75,14 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/block-credential-leak.sh",
+            "blocking": true,
             "timeout": 5,
             "statusMessage": "Savia Shield: detectando credenciales..."
           },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/block-force-push.sh",
+            "blocking": true,
             "timeout": 5,
             "statusMessage": "Savia Shield: bloqueando force-push..."
           },
@@ -93,24 +95,28 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/agent-git-discipline.sh",
+            "blocking": true,
             "timeout": 5,
             "statusMessage": "SE-266: verificando disciplina git para agentes..."
           },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/block-infra-destructive.sh",
+            "blocking": true,
             "timeout": 5,
             "statusMessage": "Savia Shield: bloqueando infra destructiva..."
           },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/agent-git-discipline.sh",
+            "blocking": true,
             "timeout": 5,
             "statusMessage": "SE-266: verificando disciplina de agentes (git + rm)..."
           },
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/validate-bash-global.sh",
+            "blocking": true,
             "statusMessage": "Validando comando...",
             "timeout": 10
           },

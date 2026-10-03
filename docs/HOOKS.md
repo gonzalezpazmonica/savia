@@ -125,6 +125,15 @@ Hooks are defined in `.claude/settings.json` under `hooks` key, organized by eve
 }
 ```
 
+### `blocking: true` (fail-closed en Savia Space)
+
+Los guards de seguridad de PreToolUse llevan `"blocking": true`. En modo mediado de
+Savia Space, si un hook así falla, se cuelga o no se puede lanzar, la herramienta se
+bloquea (D23-5). Claude Code y OpenCode ignoran la clave. La lista, la exclusión de
+`data-sovereignty-gate` y la política de regresión están en
+`docs/rules/domain/hooks-blocking-guards.md`; el auditor es
+`bash scripts/hooks-integrity-check.sh --blocking`.
+
 ## Testing Coverage
 
 All hooks have BATS tests in `tests/hooks/`:
