@@ -91,3 +91,11 @@ Las skills `.claude/skills/git-secret-scanner/SKILL.md`, `.claude/skills/workspa
 Hallazgo fuera de alcance: `.opencode/agents` (90, fuente de `AGENTS.md` y del catálogo) y `.claude/agents` (75, los que lee Claude Code) divergen. 15 agentes solo existen para OpenCode y los comunes tienen contenido distinto.
 
 `.gitignore`: excepción exacta `!tests/test-git-secret-scanner.bats`, en la lista enumerada del escáner (el patrón `**/*-secret*` sigue cerrado).
+
+### 2026-10-03 — dag-scheduling (test certificado; promoción pendiente)
+
+| Skill | Test | Auditor | Hallazgos corregidos |
+|---|---|---|---|
+| `dag-scheduling` | `tests/test-dag-scheduling.bats` (23) | 93 | `scripts/wave-executor.sh`: `max_parallel` 0 o no numérico, un grafo sin array `tasks` y una tarea sin `depends_on` daban `success` con exit 0 sin ejecutar nada (errores de jq tragados). Sin `-k`, una tarea que ignora SIGTERM colgaba el motor indefinidamente. Ids con espacios se partían por word-splitting. Exit 124 propio de la tarea se contaba como timeout (exit 3). SIGTERM/SIGINT al motor dejaba las tareas huérfanas (timeout lidera su propio grupo, Ctrl-C no le llega). `--report` sin valor: «unbound variable» |
+
+Validación de esquema en `scripts/wave-executor-lib.sh` (contrato de `docs/specs/SPEC-WAVE-DAG.spec.md` §2.1, `depends_on` ausente = `[]`). `SDD_MAX_PARALLEL_AGENTS` y `SDD_DEFAULT_TIMEOUT_MIN` pasan a leerse (la skill los documentaba y el motor los ignoraba). `.claude/skills/dag-scheduling/SKILL.md` aclara lo que el motor no hace (camino crítico, worktrees, reintentos). `tests/test-wave-executor.bats` recupera 85 (bajaba a 77 al crecer el script). Sigue en `beta`: la promoción espera el OK de la operadora.

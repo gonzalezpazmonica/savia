@@ -133,3 +133,30 @@ teardown() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"cycle"* ]] || [[ "$output" == *"error"* ]] || [[ "$output" == *"Cycle"* ]]
 }
+
+# ── Interfaz y señales (SE-376) ──
+
+@test "usage: --report sin ruta sale por usage con exit 2" {
+  run bash "$SCRIPT" "$FIXTURES/wave-dag-happy.json" --report
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"usage"* ]]
+}
+
+@test "is_posint: SDD_MAX_PARALLEL_AGENTS no numérico es invalid (exit 2)" {
+  SDD_MAX_PARALLEL_AGENTS=abc run bash "$SCRIPT" "$FIXTURES/wave-dag-happy.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"SDD_MAX_PARALLEL_AGENTS"* ]]
+}
+
+@test "on_signal: SIGHUP al motor termina sus tareas y sale con 143" {
+  echo '{"tasks":[{"id":"long","command":"sleep 23.417","depends_on":[]}]}' > "$TMPDIR_WE/long.json"
+  bash "$SCRIPT" "$TMPDIR_WE/long.json" >/dev/null 2>&1 &
+  local ep=$! i rc=0
+  for i in $(seq 1 50); do pgrep -x -f "sleep 23.417" >/dev/null && break; sleep 0.1; done
+  kill -HUP "$ep"
+  wait "$ep" || rc=$?
+  [ "$rc" -eq 143 ]
+  sleep 0.3
+  run pgrep -x -f "sleep 23.417"
+  [ "$status" -ne 0 ]
+}
