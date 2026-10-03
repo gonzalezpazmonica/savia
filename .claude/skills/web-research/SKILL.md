@@ -80,7 +80,7 @@ bash scripts/scrapling-fetch.sh "${URL}" --json --timeout 25
 
 - Backend `scrapling` si está instalado: bypass Cloudflare/DataDome nativo
 - Fallback transparente a `curl` con user-agent `SaviaResearch/1.0`
-- Exit 0/1/2, JSON con `status|title|url_final|text|backend`
+- Exit 0 (2xx) / 1 (red, 4xx/5xx, timeout, > `--max-bytes`) / 2 (uso) / 3 (destino interno o metadatos bloqueado, anti-SSRF); JSON con `status|title|url_final|text|text_truncated|error|backend`, también en error
 
 Usar cuando WebFetch tool devuelve 403/429/503 o cuando el snippet no es suficiente. No usar para fetch masivo sin respetar robots.txt — ver `docs/rules/domain/research-stack.md`.
 

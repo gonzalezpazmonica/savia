@@ -22,7 +22,7 @@ Savia interactuar con paginas web como un humano.
 Savia agent → skill lightpanda-browser
   → ¿Lightpanda instalado?
     SI → lightpanda fetch --dump markdown $URL
-    NO → fallback: curl + html-to-md.py
+    NO → fallback: scripts/scrapling-fetch.sh --json (scrapling o curl)
   → output markdown → digest pipeline → KG extraction
 ```
 
@@ -31,7 +31,8 @@ Savia agent → skill lightpanda-browser
 - **Nunca bundled**: AGPL-3.0 es incompatible con MIT. Lightpanda es herramienta
   externa opcional como Docker o git.
 - **Patron availability check**: `command -v lightpanda` antes de usarlo. Si no
-  esta, fallback silencioso. No rompe el flujo.
+  esta, fallback a `scrapling-fetch.sh`, que informa del backend usado en el
+  campo `backend` y falla con exit != 0 ante 4xx/5xx o destinos bloqueados.
 - **MCP integration**: si Lightpanda MCP server esta corriendo, los agentes pueden
   usar herramientas de navegacion directamente via MCP.
 

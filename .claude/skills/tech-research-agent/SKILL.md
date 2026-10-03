@@ -135,8 +135,8 @@ bash scripts/scrapling-fetch.sh "https://ejemplo-cloudflare.com/docs" --json --t
 
 - Si Scrapling está instalado: bypass nativo de Cloudflare/DataDome/Akamai/Kasada/Incapsula
 - Si Scrapling NO está instalado: fallback transparente a curl con user-agent `SaviaResearch/1.0`
-- Salida JSON con `status`, `title`, `url_final`, `text`, `backend`
-- Exit code 0 = OK, 1 = fetch error, 2 = usage error
+- Salida JSON con `status`, `title`, `url_final`, `text`, `text_truncated`, `error`, `backend` (también en error)
+- Exit code 0 = OK (2xx), 1 = fetch error (incluye 4xx/5xx), 2 = usage error, 3 = destino bloqueado (loopback/privado sin `--allow-private`, metadatos 169.254.x siempre)
 
 Ver `docs/rules/domain/research-stack.md` para la cadena completa de backends y las consideraciones de legalidad/ToS.
 

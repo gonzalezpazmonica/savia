@@ -38,7 +38,8 @@ Cada nivel tiene exit codes claros, JSON output, y telemetría local. La skill c
 2. **Rate limiting**: Max 1 request/segundo al mismo dominio salvo que el site publique `Crawl-Delay: 0`. El wrapper no lo impone — responsabilidad del caller.
 3. **ToS awareness**: scraping ≠ API legítima. Cada dominio tiene política propia. Para research legítima/pública está aceptado; para extracción comercial masiva no.
 4. **GDPR**: No extraer datos personales identificables (nombres, emails, teléfonos) sin base legal. Si el site protege con login, no bypassearlo.
-5. **Attribution**: Los informes generados por research agents DEBEN citar la URL origen en `Fuentes`.
+5. **Destinos internos (SSRF)**: `scrapling-fetch.sh` sale con exit 3 ante loopback/redes privadas (salvo `--allow-private`) y SIEMPRE ante link-local/metadatos cloud (169.254.169.254), también tras una redirección. 4xx/5xx salen con exit 1, nunca como éxito. Límites: `--timeout` total ≥ 1 s y `--max-bytes` (5 MiB por defecto).
+6. **Attribution**: Los informes generados por research agents DEBEN citar la URL origen en `Fuentes`.
 
 ## No hacer
 
