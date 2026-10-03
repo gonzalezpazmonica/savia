@@ -7,8 +7,7 @@ source "$SCRIPTS_DIR/savia-compat.sh"
 
 # ── Encrypt: hybrid RSA+AES encryption ─────────────────────────────
 do_encrypt() {
-  local pubkey_file="${1:?Uso: savia-crypto.sh encrypt <pubkey.pem> < plaintext}"
-  local plaintext="${2:-}"
+  local pubkey_file="${1:?Uso: savia-crypto.sh encrypt <pubkey.pem> [texto] (sin texto: stdin)}"
 
   if [ ! -f "$pubkey_file" ]; then
     log_error "Public key not found: $pubkey_file"
@@ -19,9 +18,10 @@ do_encrypt() {
   tmp_dir=$(mktemp -d)
   trap "rm -rf '$tmp_dir'" EXIT
 
-  # Read plaintext from arg or stdin
-  if [ -n "$plaintext" ]; then
-    echo -n "$plaintext" > "$tmp_dir/plain.txt"
+  # Plaintext from arg (even if empty) or, with no arg, from stdin.
+  # printf, not echo -n: a body such as "-n" or "-e" is an echo option.
+  if [ $# -ge 2 ]; then
+    printf '%s' "$2" > "$tmp_dir/plain.txt"
   else
     cat > "$tmp_dir/plain.txt"
   fi
@@ -51,7 +51,14 @@ do_encrypt() {
 
 # ── Decrypt: hybrid RSA+AES decryption ─────────────────────────────
 do_decrypt() {
-  local encrypted="${1:?Uso: savia-crypto.sh decrypt <encrypted_package>}"
+  # Package from arg, or from stdin with "-" or no arg: a package bigger
+  # than MAX_ARG_STRLEN (128 KB) cannot travel as a single argument.
+  local encrypted
+  if [ $# -ge 1 ] && [ "$1" != "-" ]; then
+    encrypted="$1"
+  else
+    encrypted=$(cat)
+  fi
 
   if [ ! -f "$KEYS_DIR/private.pem" ]; then
     log_error "No private key found at $KEYS_DIR/private.pem"
@@ -64,8 +71,8 @@ do_decrypt() {
 
   # Split package
   local enc_key enc_body
-  enc_key=$(echo "$encrypted" | cut -d':' -f1)
-  enc_body=$(echo "$encrypted" | awk -F':::' '{print $2}')
+  enc_key=$(printf '%s\n' "$encrypted" | cut -d':' -f1)
+  enc_body=$(printf '%s\n' "$encrypted" | awk -F':::' '{print $2}')
 
   if [ -z "$enc_key" ] || [ -z "$enc_body" ]; then
     log_error "Invalid encrypted package format (expected key:::body)"

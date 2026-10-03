@@ -86,7 +86,7 @@ main() {
       echo "Commands:"
       echo "  keygen [--force]                — Generate RSA-4096 keypair"
       echo "  encrypt <pubkey.pem> [text]     — Encrypt (stdin or arg)"
-      echo "  decrypt <encrypted_package>     — Decrypt with private key"
+      echo "  decrypt [package|-]            — Decrypt with private key (stdin if - or absent)"
       echo "  export-pubkey <repo_dir> <handle> — Copy pubkey to repo"
       ;;
   esac

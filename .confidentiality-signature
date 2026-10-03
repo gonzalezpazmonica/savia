@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=25cc5cada1b137de9f783f52601088fc29ffafb87cc986c98e5ce15779433b1a
-timestamp=2026-10-03T20:34:01Z
-branch=agent/se376-hub-sync-20261003
-head_commit=9b17fb3b
-signature=1eabc81ebc6b6306756a61b218fbfe2db31cf0d7935b9ef7d6010c174d458cf8
+diff_hash=5065aa86ace2111d779d3ab6899c6883adba1fc4300e5440f68105857ae9755f
+timestamp=2026-10-03T21:05:09Z
+branch=agent/se376-calib-company-messaging-20261003
+head_commit=57a7df73
+signature=c9e0596f8a2c6a6196019edfd04d83e6a00842b45bc12953934203fce84a45a0

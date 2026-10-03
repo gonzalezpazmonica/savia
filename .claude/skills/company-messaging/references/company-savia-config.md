@@ -51,9 +51,9 @@ COMPANY_BROADCAST_CONFIRM   = true                                # Confirmar an
 main (orphan)
   ├── company/identity.md
   ├── company/org-chart.md
+  ├── directory.md        ← Directorio (tabla | @handle | ... |)
   ├── pubkeys/
-  │   ├── user/{handle}.pem
-  │   └── service/pubkey.pem
+  │   └── {handle}.pem
   ├── .savia-index/
   │   ├── users.idx
   │   ├── teams.idx
@@ -77,15 +77,14 @@ team/{name} (orphan)
   └── specs/              ← SDD specs del equipo
 
 exchange (orphan)
-  └── pub/sub/pending/
-      ├── {msg_id}.md     ← Mensajes pendientes de entrega
-      └── .index          ← Índice de mensajes por user/{handle}
+  └── pending/
+      └── {msg_id}.md     ← Mensajes pendientes de entrega (sin purga)
 ```
 
 ## Cross-Branch Reads & Writes
 
 **Lectura:** `git show {branch}:path/to/file.md` (sin checkout)
-**Escritura:** Usar worktree temporal → commit → merge-squash a main o user/{handle}
+**Escritura:** `savia-branch.sh write|move`: worktree temporal desacoplado sobre `origin/{rama}`, commit y push con reintento ante rechazo no fast-forward; un push fallido devuelve error
 
 Alternativa: Script `savia-branch.sh` (abstracción layer)
 
@@ -97,16 +96,16 @@ Alternativa: Script `savia-branch.sh` (abstracción layer)
 | `scripts/company-repo.sh` | Ciclo de vida: create, connect, sync |
 | `scripts/savia-messaging.sh` | CRUD de mensajes (usa exchange branch) |
 | `scripts/savia-crypto.sh` | Cifrado RSA+AES (openssl) |
-| `scripts/privacy-check-company.sh` | Validación pre-push |
+| `scripts/privacy-check-company.sh` | Validación de privacidad (`--stdin` en send/announce) |
 
 ## Comandos
 
 | Comando | Función |
 |---------|---------|
 | `/company-repo` | Crear, conectar, estado, sincronizar |
-| `/savia-send` | Enviar mensaje → exchange:pub/sub/pending/ |
+| `/savia-send` | Enviar mensaje → exchange:pending/ |
 | `/savia-inbox` | Ver user/{handle}/inbox/ |
 | `/savia-reply` | Responder con threading |
 | `/savia-announce` | Anuncio en main (solo admin) |
-| `/savia-directory` | Directorio de usuarios (main:company/directory.md) |
+| `/savia-directory` | Directorio de usuarios (main:directory.md) |
 | `/savia-broadcast` | Mensaje a todos (via exchange) |

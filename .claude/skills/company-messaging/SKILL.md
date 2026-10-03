@@ -14,134 +14,114 @@ metadata:
   savia.user-invocable: False
 ---
 
-# Company Messaging — Skill (Branch-Based v3)
+# Company Messaging — Skill (ramas git, v3)
 
-## Overview
+Mensajería asíncrona entre miembros de una organización sobre un repo git
+compartido (Company Savia). Cada mensaje es un fichero markdown con
+frontmatter YAML. Comportamiento verificado por `tests/test-company-messaging.bats`
+contra un remoto bare local.
 
-Company Savia enables async messaging between users across a company using
-orphan Git branches. Messages are plain markdown files with YAML frontmatter,
-stored in personal inboxes and a pub/sub exchange branch.
-
-## Branch Architecture
+## Ramas y rutas reales
 
 ```
-main (orphan)
-  ├── company/identity.md, org-chart.md
-  ├── pubkeys/user/{handle}.pem
-  └── .savia-index/users.idx
-
-user/{handle} (orphan)
-  ├── inbox/unread/        ← Personal messages (unread)
-  ├── inbox/read/          ← Personal messages (archive)
-  └── outbox/              ← Sent message archive
-
-exchange (orphan)
-  └── pub/sub/pending/
-      ├── {msg_id}.md      ← Pending delivery (temp)
-      └── .index           ← Routing table by recipient
-
-team/{name} (orphan)
-  └── (shared team resources)
+main
+  ├── directory.md              ← directorio: tabla "| @handle | Nombre | Rol | Estado |"
+  ├── pubkeys/{handle}.pem      ← claves públicas
+  └── company/inbox/{id}.md     ← anuncios
+exchange (huérfana)
+  └── pending/{id}.md           ← mensajes directos en tránsito
+user/{handle} (huérfana)
+  ├── inbox/unread/{id}.md
+  ├── inbox/read/{id}.md
+  └── outbox/{id}.md            ← copia de lo enviado
 ```
 
-## Message Lifecycle
+Un handle solo admite `[A-Za-z0-9_-]`: se convierte en nombre de rama y de
+ruta. La resolución es exacta (`@bo` no resuelve a `@bob`) y acepta tanto
+filas de tabla (`| @bob | ... |`, el formato que genera `company-repo`) como
+líneas `@bob` sueltas.
 
-1. **Compose**: Create message with YAML frontmatter
-2. **Encrypt** (optional): RSA-4096 + AES-256-CBC via `savia-crypto.sh`
-3. **Deliver**: Write to `exchange:pub/sub/pending/{msg_id}.md`
-4. **Sync**: `git add + commit + push` to exchange branch
-5. **Pull**: Recipient syncs and fetches from `exchange:pub/sub/pending/`
-6. **Move**: Transfer to `user/{handle}/inbox/unread/`
-7. **Read**: User moves to `user/{handle}/inbox/read/`
-8. **Archive**: Old messages can be purged per retention policy
+## Ciclo de vida de un mensaje
 
-## Fetch-Messages Workflow
+1. `send <handle> <asunto> <cuerpo> [--encrypt] [--priority p]`: resuelve el
+   handle, cifra el cuerpo si se pide, pasa el mensaje entero por
+   `privacy-check-company.sh --stdin` (bloquea si hay secretos) y lo escribe
+   en `exchange:pending/{id}.md` más una copia en `user/{remitente}:outbox/`.
+2. `inbox`: entrega los pendientes dirigidos al usuario
+   (`exchange:pending` → `user/{handle}:inbox/unread/`) y lista no leídos y
+   anuncios. Un mensaje ya presente en `unread/` o `read/` no se vuelve a
+   entregar.
+3. `read <id>`: muestra el mensaje y lo mueve de `unread/` a `read/` en un
+   solo commit (sale de `unread/`).
+4. `reply <id> <cuerpo>`: hereda `thread` del original (o usa su id) y fija
+   `reply_to`.
+5. `broadcast <asunto> <cuerpo>`: un `send` independiente por cada handle del
+   directorio salvo el propio; devuelve error si falla alguno.
+6. `announce <asunto> <cuerpo>`: escribe en `main:company/inbox/` (sin
+   cifrar). Lectura de anuncios en `$HOME/.pm-workspace/company-inbox-read.log`.
 
-```bash
-git show exchange:pub/sub/pending/{msg_id}.md | decrypt | move to user/{handle}/inbox/unread/
-```
+Los ids son `AAAAMMDD-HHMMSS-PID-aleatorio`: los mensajes de un mismo
+broadcast no colisionan.
 
-No need to checkout exchange branch — just `git show`.
+No hay purga: los ficheros de `exchange:pending/` permanecen tras la
+entrega (la deduplicación evita reentregas). No existe política de retención
+implementada.
 
-## @Handle Resolution
+## Escrituras entre ramas (`savia-branch.sh`)
 
-Handles are resolved from `main:company/directory.md` (admin-only):
+`write`, `move` y `ensure-orphan` operan con un worktree temporal desacoplado
+(`mktemp -d`), sin cambiar la rama del clon:
 
-```markdown
-| Handle | Name | Role | Status |
-|--------|------|------|--------|
-| @admin | Admin Name | Admin | active |
-```
+- Con remoto `origin`: base en `origin/<rama>` recién traída (una rama local
+  obsoleta perdería mensajes de otros), commit y `push HEAD:<rama>`. Si el
+  push se rechaza por no ser fast-forward (otro miembro escribió a la vez),
+  reintenta hasta 3 veces. Cualquier otro fallo de push devuelve código 1
+  con el motivo en stderr: nunca se traga en silencio.
+- La rama local se adelanta si no está extraída en ningún worktree; la rama
+  extraída (normalmente `main`) no se toca para no desincronizar su árbol.
+- Sin remoto `origin`: el commit va a la rama local.
+- Reescribir el mismo contenido es un no-op con éxito.
 
-Pubkeys stored at `main:pubkeys/user/{handle}.pem`.
+## Cifrado (`savia-crypto.sh`)
 
-## Encryption Protocol
+Híbrido RSA-4096 + AES-256-CBC con openssl:
 
-**Hybrid RSA-4096 + AES-256-CBC** (openssl only, zero deps):
+- `keygen [--force]`: par en `~/.pm-workspace/savia-keys/` (privada en 600).
+  Sin `--force` no sobrescribe un par existente.
+- `encrypt <pubkey.pem> [texto]`: sin texto lee stdin; un texto vacío cifra
+  vacío. Salida `base64(clave cifrada):::base64(cuerpo cifrado)`.
+- `decrypt [paquete|-]`: con `-` o sin argumento lee stdin. Los paquetes de
+  más de 128 KB solo caben por stdin (límite de un argumento en Linux).
+- Descifrar con otra clave privada o un paquete sin `:::` falla con código
+  distinto de 0.
 
-1. **Keygen**: `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096`
-2. **Encrypt**: Random AES-256 key → encrypt body → encrypt AES key with recipient RSA pubkey
-3. **Store**: Base64-encoded `encrypted_key:::encrypted_body` in frontmatter
-4. **Decrypt**: RSA-decrypt AES key (private.pem: chmod 600) → AES-decrypt body
+El flujo de mensajería NO descifra al leer: `read` muestra el paquete y el
+destinatario lo descifra con `savia-crypto.sh decrypt`. El asunto nunca se
+cifra.
 
-Public keys auto-published to `main:pubkeys/user/{handle}.pem` by admin script.
+Límites conocidos (no resueltos aquí): relleno RSA PKCS#1 v1.5, AES-CBC sin
+MAC (el cifrado no detecta manipulación) y sin firma del remitente, así que
+`from:` no está autenticado.
 
-## Privacy Rules
+## Privacidad (`privacy-check-company.sh`)
 
-Before any `git push`:
-
-1. **Layer 1**: `validate_privacy()` — PATs, tokens, IPs, connection strings
-2. **Layer 2**: Scan YAML frontmatter and body for secrets
-3. **Layer 3**: Verify subject line has no sensitive data (see messaging-subject-safety.md)
-
-Script: `scripts/privacy-check-company.sh`
-
-## Message Types
-
-| Type | Location | Persist | Encrypted |
-|---|---|---|---|
-| Direct message | exchange:pending → user/{handle}/inbox/unread/ | 7 days | Optional |
-| Reply | user/{handle}/inbox/ | Until archived | Optional |
-| Broadcast | exchange:pending (deliver to each user/{handle}) | 7 days | Optional |
-| Announcement | main:company/announcements/ | Permanent | Never |
-
-## Threading
-
-Messages form threads via YAML frontmatter:
-- `thread`: ID of first message
-- `reply_to`: ID of message being replied to
-
-Replies auto-inherit thread from parent.
-
-## Read Tracking
-
-- **Personal messages**: moved from `unread/` to `read/` on user branch
-- **Announcements**: tracked in `$HOME/.pm-workspace/company-inbox-read.log`
+- `--stdin`: analiza un mensaje (claves AWS, PAT de GitHub, claves `sk-`,
+  JWT, IP privadas, cadenas de conexión, claves privadas PEM). Lo invocan
+  `send` y `announce` antes de cualquier push.
+- `<repo> <handle>`: analiza `user/{handle}:inbox/unread/` y `documents/` por
+  rama, y los cambios staged solo si el clon está en `user/{handle}` o
+  `exchange`.
+- El asunto se revisa aparte con `check_subject_sensitivity`: solo avisa, no
+  bloquea (ver `docs/rules/domain/messaging-subject-safety.md`).
 
 ## Scripts
 
-| Script | Purpose |
+| Script | Función |
 |--------|---------|
-| `scripts/savia-branch.sh` | Abstraction layer for branch operations |
-| `scripts/savia-messaging.sh` | Message CRUD (create, fetch, deliver, archive) |
-| `scripts/savia-crypto.sh` | E2E encryption (RSA+AES) |
-| `scripts/privacy-check-company.sh` | Privacy validation pre-push |
+| `scripts/savia-branch.sh` | read, list, write, move, exists, ensure-orphan, check-permission, fetch-messages |
+| `scripts/savia-messaging.sh` (+ `-inbox`, `-actions`, `-privacy`) | send, inbox, read, reply, announce, broadcast, directory |
+| `scripts/savia-crypto.sh` (+ `savia-crypto-ops.sh`) | keygen, encrypt, decrypt, export-pubkey |
+| `scripts/privacy-check-company.sh` | Filtro de privacidad |
+| `scripts/savia-compat.sh` | Utilidades portables (base64, YAML, config) |
 
-## Worktree Pattern
-
-Writes use temporary worktrees to avoid checkout pollution:
-
-```bash
-git worktree add .claude/worktrees/{temp} user/{handle}
-# Write/edit files
-git add && git commit && git push
-git worktree remove .claude/worktrees/{temp}
-```
-
-## Session-Init Integration
-
-Unread count from `user/{handle}/inbox/unread/` (local, no network):
-
-```
-📬 3 unread messages · 1 pending broadcast
-```
+Configuración: `~/.pm-workspace/company-repo` con `LOCAL_PATH=` y `USER_HANDLE=`.

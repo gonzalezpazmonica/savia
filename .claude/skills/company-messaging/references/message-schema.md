@@ -96,7 +96,8 @@ Body format when `encrypted: true`:
 ## File Naming
 
 Messages are stored as `{id}.md`:
-- Personal: `users/{handle}/inbox/unread/{id}.md`
+- Pending: `exchange:pending/{id}.md`
+- Personal: `user/{handle}:inbox/unread/{id}.md` (rama `user/{handle}`)
 - Announcements: `company/inbox/{id}.md`
 
 ## Validation Rules

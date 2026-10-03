@@ -1,6 +1,7 @@
 #!/bin/bash
 # privacy-check-company.sh — Privacy filter for company repo content
-# Uso: bash scripts/privacy-check-company.sh <repo_dir> [handle]
+# Uso: bash scripts/privacy-check-company.sh <repo_dir> <handle>
+#      bash scripts/privacy-check-company.sh --stdin   (scan one message)
 #
 # Scans company repo content before push for secrets and private data.
 # Reuses validate_privacy() patterns from contribute.sh.
@@ -37,8 +38,9 @@ check_content() {
   echo "$content" | grep -qEi '(Server=.*Password=|jdbc:|mongodb\+srv://)' \
     && violations+=("Connection string")
 
-  # Private keys (actual key content, not pubkey references)
-  echo "$content" | grep -qE '-----BEGIN (RSA |EC )?PRIVATE KEY-----' \
+  # Private keys (actual key content, not pubkey references).
+  # -e: a pattern starting with "-" would otherwise be parsed as an option
+  echo "$content" | grep -qE -e '-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' \
     && violations+=("Private key content")
 
   printf '%s\n' "${violations[@]+"${violations[@]}"}"
@@ -53,6 +55,7 @@ scan_branch_dir() {
   items=$(bash "$savia_script" list "$repo_dir" "user/$handle" "$bdir" 2>/dev/null || echo "")
   while IFS= read -r file; do
     [ -z "$file" ] && continue
+    file=$(basename "$file")   # list returns paths relative to the branch root
     local content
     content=$(bash "$savia_script" read "$repo_dir" "user/$handle" "$bdir/$file" 2>/dev/null || echo "")
     [ -z "$content" ] && continue
@@ -72,14 +75,16 @@ do_scan() {
 
   log_info "Scanning user branch and staged changes..."
 
-  # Validate branch and check staged diff
+  # Staged changes only matter when the checkout is on a pushable branch.
+  # Messaging writes through temporary worktrees, so the clone normally
+  # stays on main: then only the branch contents below are scanned.
   local current_branch
   current_branch=$(git -C "$repo_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  [ "$current_branch" != "user/$handle" ] && [ "$current_branch" != "exchange" ] && \
-    { log_error "Push only to user/$handle or exchange"; return 1; }
-
   local all_violations=()
-  local staged_diff=$(git -C "$repo_dir" diff --cached 2>/dev/null || true)
+  local staged_diff=""
+  if [ "$current_branch" = "user/$handle" ] || [ "$current_branch" = "exchange" ]; then
+    staged_diff=$(git -C "$repo_dir" diff --cached 2>/dev/null || true)
+  fi
   if [ -n "$staged_diff" ]; then
     local added_lines=$(echo "$staged_diff" | grep '^+' | grep -v '^\+\+\+' || true)
     if [ -n "$added_lines" ]; then
@@ -116,10 +121,22 @@ main() {
   local cmd="${1:-help}"
 
   case "$cmd" in
+    --stdin)
+      local content vlist
+      content=$(cat)
+      vlist=$(check_content "$content")
+      if [ -n "$vlist" ]; then
+        log_error "Privacy check FAILED:"
+        while IFS= read -r v; do echo -e "  ${RED}•${NC} $v"; done <<< "$vlist"
+        return 1
+      fi
+      return 0
+      ;;
     help|--help|-h)
       echo "privacy-check-company.sh — Privacy filter for company repo"
       echo ""
-      echo "Uso: bash scripts/privacy-check-company.sh <repo_dir> [handle]"
+      echo "Uso: bash scripts/privacy-check-company.sh <repo_dir> <handle>"
+      echo "     bash scripts/privacy-check-company.sh --stdin < message.md"
       echo ""
       echo "Scans staged changes and personal folders for secrets/private data."
       echo "Returns exit code 0 (PASS) or 1 (FAIL)."

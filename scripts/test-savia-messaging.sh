@@ -25,7 +25,7 @@ trap cleanup EXIT
 echo "━━━ Test: Savia Branch Commands ━━━"
 
 # Create a working repo (not bare) where we can actually operate
-git init "$WORK" > /dev/null 2>&1 || test_fail "Git init"
+git init -b main "$WORK" > /dev/null 2>&1 || test_fail "Git init"
 cd "$WORK"
 git config user.email "test@test.local"
 git config user.name "Test"

@@ -9,7 +9,8 @@ do_inbox() {
   handle=$(get_handle)
 
   # Fetch pending messages from exchange
-  bash "$SCRIPTS_DIR/savia-branch.sh" fetch-messages "$repo_dir" "$handle" >/dev/null 2>&1 || true
+  bash "$SCRIPTS_DIR/savia-branch.sh" fetch-messages "$repo_dir" "$handle" >/dev/null \
+    || log_warn "Some pending messages could not be delivered (see error above)"
 
   echo -e "${CYAN}━━━ Inbox — @$handle ━━━${NC}"
 
@@ -20,7 +21,9 @@ do_inbox() {
   unread_files=$(bash "$SCRIPTS_DIR/savia-branch.sh" list "$repo_dir" "user/$handle" "inbox/unread") || unread_files=""
   if [ -n "$unread_files" ]; then
     while IFS= read -r msg_file; do
-      [ -z "$msg_file" ] && continue
+      # list returns full paths; .gitkeep and other non-messages are skipped
+      msg_file=$(basename "$msg_file")
+      [[ "$msg_file" == *.md ]] || continue
       local content
       content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/unread/$msg_file") || continue
       unread_count=$((unread_count + 1))
@@ -48,7 +51,8 @@ do_inbox() {
   ann_files=$(bash "$SCRIPTS_DIR/savia-branch.sh" list "$repo_dir" main "company/inbox") || ann_files=""
   if [ -n "$ann_files" ]; then
     while IFS= read -r ann_file; do
-      [ -z "$ann_file" ] && continue
+      ann_file=$(basename "$ann_file")
+      [[ "$ann_file" == *.md ]] || continue
       local ann_id
       ann_id="${ann_file%.md}"
       local is_read="false"
@@ -59,12 +63,12 @@ do_inbox() {
         ann_count=$((ann_count + 1))
         local from subject date
         from=$(echo "$content" | portable_yaml_field "from" /dev/stdin)
-        [ -z "$from" ] && from="admin"
+        [ -z "$from" ] && from="@admin"
         subject=$(echo "$content" | portable_yaml_field "subject" /dev/stdin)
         [ -z "$subject" ] && subject="(no subject)"
         date=$(echo "$content" | portable_yaml_field "date" /dev/stdin)
         [ -z "$date" ] && date="?"
-        echo "  🆕 [$date] @$from: $subject  ($ann_id)"
+        echo "  🆕 [$date] $from: $subject  ($ann_id)"
       fi
     done <<< "$ann_files"
   fi
@@ -80,13 +84,18 @@ do_read() {
   repo_dir=$(get_repo)
   handle=$(get_handle)
 
-  local content
-  content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/unread/${msg_id}.md") 2>/dev/null
-  if [ -z "$content" ]; then
-    # Try read/ folder
-    content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/read/${msg_id}.md") 2>/dev/null
-    [ -z "$content" ] && content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" main "company/inbox/${msg_id}.md") 2>/dev/null
+  if [[ ! "$msg_id" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    log_error "Invalid message id: $msg_id"
+    return 1
   fi
+
+  # A missing file makes "read" return 1; under set -e that would abort
+  # the lookup before trying the next folder, hence the "|| content=".
+  local content="" in_unread="false"
+  content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/unread/${msg_id}.md" 2>/dev/null) \
+    && in_unread="true" || content=""
+  [ -z "$content" ] && { content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/read/${msg_id}.md" 2>/dev/null) || content=""; }
+  [ -z "$content" ] && { content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" main "company/inbox/${msg_id}.md" 2>/dev/null) || content=""; }
 
   if [ -z "$content" ]; then
     log_error "Message $msg_id not found"
@@ -95,12 +104,12 @@ do_read() {
 
   echo "$content"
 
-  # Move from unread/ to read/ on user branch if in unread
-  local unread_check
-  unread_check=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/unread/${msg_id}.md") 2>/dev/null
-  if [ -n "$unread_check" ]; then
-    bash "$SCRIPTS_DIR/savia-branch.sh" write "$repo_dir" "user/$handle" "inbox/read/${msg_id}.md" "$content" \
-      "[user/$handle] read: moved $msg_id to read folder"
+  # Move from unread/ to read/ on user branch (one commit, file leaves unread/)
+  if [ "$in_unread" = "true" ]; then
+    bash "$SCRIPTS_DIR/savia-branch.sh" move "$repo_dir" "user/$handle" \
+      "inbox/unread/${msg_id}.md" "inbox/read/${msg_id}.md" \
+      "[user/$handle] read: moved $msg_id to read folder" \
+      || { log_error "Could not mark $msg_id as read"; return 1; }
   fi
 
   # Mark announcements as read in log
@@ -122,9 +131,9 @@ do_reply() {
   handle=$(get_handle)
 
   local orig_content=""
-  orig_content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/unread/${msg_id}.md") 2>/dev/null
-  [ -z "$orig_content" ] && orig_content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/read/${msg_id}.md") 2>/dev/null
-  [ -z "$orig_content" ] && orig_content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" main "company/inbox/${msg_id}.md") 2>/dev/null
+  orig_content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/unread/${msg_id}.md" 2>/dev/null) || orig_content=""
+  [ -z "$orig_content" ] && { orig_content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" "user/$handle" "inbox/read/${msg_id}.md" 2>/dev/null) || orig_content=""; }
+  [ -z "$orig_content" ] && { orig_content=$(bash "$SCRIPTS_DIR/savia-branch.sh" read "$repo_dir" main "company/inbox/${msg_id}.md" 2>/dev/null) || orig_content=""; }
 
   if [ -z "$orig_content" ]; then
     log_error "Original message $msg_id not found"

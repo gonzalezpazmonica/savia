@@ -16,7 +16,7 @@ trap "rm -rf '$TMPDIR'" EXIT
 # Setup: create bare repo + clone
 BARE_REPO="$TMPDIR/repo.git"
 CLONE_DIR="$TMPDIR/clone"
-git init --bare "$BARE_REPO" >/dev/null 2>&1
+git init --bare -b main "$BARE_REPO" >/dev/null 2>&1
 git clone "$BARE_REPO" "$CLONE_DIR" >/dev/null 2>&1
 
 # Initial commit on main
