@@ -25,11 +25,11 @@ tier: core
    ```bash
    bash scripts/legalize-es.sh status
    ```
-   Si no está instalado, mostrar:
+   Si sale con exit 3 (corpus no disponible), NO auditar: mostrar
    ```
-   ❌ legalize-es no instalado.
+   legalize-es no instalado: sin corpus no hay fuente para evaluar cumplimiento.
       Ejecuta: bash scripts/legalize-es.sh install
-      (Clona 12.235 normas españolas consolidadas del BOE)
+      (Clona las normas consolidadas del BOE; requiere red)
    ```
 
 2. Cargar skill: `@.opencode/skills/legal-compliance/SKILL.md`

@@ -25,7 +25,7 @@ proyecto contra la legislación española consolidada.
 - Trazabilidad regla→artículo: cada regla de negocio debe poder
   vincularse a al menos un artículo de legislación vigente.
 - Priorización por rango normativo: una LO prevalece sobre un RD.
-- Solo legislación vigente: filtrar `legal_status: vigente`.
+- Solo legislación vigente: filtrar `status: "in_force"` del frontmatter.
 - Disclaimer obligatorio en todo output: no es asesoramiento jurídico.
 - Máximo 10 normas por auditoría para respetar budget de contexto.
 

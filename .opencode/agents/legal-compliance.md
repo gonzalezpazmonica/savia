@@ -63,6 +63,10 @@ bash scripts/legalize-es.sh search "término" es
 bash scripts/legalize-es.sh search-article BOE-A-2018-16673 "Artículo 13"
 ```
 
+Exit codes: 0 encontrado, 1 sin resultados o artículo inexistente, 2 uso
+inválido, 3 corpus no disponible. Solo citar artículos extraídos con exit 0;
+si no, el hallazgo es NO VERIFICADO, nunca CUMPLE.
+
 ### 3. Analizar compliance
 - Cruzar cada regla/cláusula contra artículos encontrados
 - Evaluar: CUMPLE / NO CUMPLE / PARCIAL / NO APLICA
