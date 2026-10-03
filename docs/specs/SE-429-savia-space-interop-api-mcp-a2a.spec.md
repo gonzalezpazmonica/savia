@@ -47,12 +47,17 @@ seguridad. Las restricciones de partida:
      ni HMAC. Claves desde un JWKS fijado en la configuración, nunca desde cabeceras del token.
    - **Validez**: 300 s como máximo.
    - **Audiencia**: la de la instancia (RFC 8707).
-   - **Claims**: `iss sub aud exp iat jti client_id scope`; opcionales `act` (RFC 8693, agente que
-     actúa por una persona), `cnf` (DPoP) y nivel máximo de confidencialidad.
+   - **Claims**: `iss sub aud exp iat jti client_id scope`; opcionales `act` (agente que actúa
+     por una persona), `cnf` (DPoP) y nivel máximo de confidencialidad.
+   - **`act` solo para runs propios**: en 0.x, `act` solo aparece en tokens que Space emite para
+     sus propios runs (con el run padre y la profundidad). Un token con `act` que Space no emitió
+     así se rechaza.
    - **Tipos rechazados**: tokens de identidad (ID tokens, aserciones de identidad) y credenciales
      de otros servicios.
    - **Emisor local mínimo**: solo para clientes que la persona registra (`client_credentials` con
-     `private_key_jwt`). Sin contraseñas, flujos de navegador ni refresh tokens. Con un emisor
+     `private_key_jwt`). Sin contraseñas, flujos de navegador ni refresh tokens. **Sin token
+     exchange (RFC 8693) en 0.x**: ningún cliente obtiene un token que diga actuar por la persona.
+     Con un emisor
      externo de identidad, Space queda solo como servidor de recursos.
    - **Metadatos de recurso protegido** (RFC 9728) y JWKS públicos.
    - **Sin reenvío del token del llamante** a ningún servicio interno.
@@ -68,16 +73,31 @@ seguridad. Las restricciones de partida:
      los bytes frescos desde la web o el móvil.
    - **Delegación acotada**: la persona registra el cliente con una envolvente (tareas,
      proyectos, modelos locales, nivel, frecuencia y caducidad ≤ 30 días). Es una garantía más
-     débil y la interfaz lo dice. Prohibida si los datos salen a un proveedor en la nube.
+     débil y la interfaz lo dice. Prohibida si los datos salen a un proveedor en la nube. En un
+     cliente de tipo dispositivo (SE-430) solo vale para riesgo bajo; riesgo medio o alto exige la
+     clave de aprobación con biometría.
    - **Lease externo**: un Authority Lease de un emisor aprobado (AEK). Space lo verifica, con
      comprobación de revocación fresca antes de enviar, y lo consume una vez. Bloqueado hasta que
      exista el contrato aprobado. Space nunca emite leases.
+
+   **Riesgo determinista.** El riesgo que decide si hace falta biometría lo calcula Space con
+   una función pura del tipo de primitiva y de la envolvente; nunca un modelo, el agente
+   autónomo (SE-431) ni el llamante:
+
+   - **Bajo**: ejecución de evidencia con modelo local y nivel ≤ N2; tarea de agente de solo
+     lectura.
+   - **Medio**: tarea de agente con edición en su worktree o ejecución de comandos de su
+     allowlist; deshacer cambios.
+   - **Alto**: push de ramas `agent/*`, PR Draft, cualquier salida de datos a la red o a la nube,
+     permisos permanentes, nivel ≥ N3 y cambios de envolventes o de configuración.
+   - Gana el máximo de los componentes. Lo que la tabla no conoce es alto.
 6. **MCP.**
-   - Servidor stdio para agentes locales (0.2) y Streamable HTTP como servidor de recursos OAuth
-     (0.3).
+   - Servidor stdio para agentes locales y Streamable HTTP como servidor de recursos OAuth
+     (ambos en 0.4).
    - Tools tipadas con anotaciones de solo lectura donde corresponde; ninguna bloquea más de 30 s.
    - Recursos con suscripción y un prompt por tarea predefinida.
-   - El texto de las fuentes viaja marcado como no fiable.
+   - El texto de las fuentes, y las salidas y resúmenes de otras ejecuciones, viajan marcados
+     como no fiables.
 7. **A2A.**
    - Agent Card firmada.
    - Una tarea A2A es una ejecución de Space. Mientras falta una aprobación, un permiso o una
@@ -124,20 +144,32 @@ seguridad. Las restricciones de partida:
 - **AC10**: los recibos verifican con el JWKS de la instancia y un byte alterado rompe la firma.
 - **AC11**: un lease revocado entre la aprobación y el envío impide el envío.
 - **AC12**: un coordinador que repite el mismo paso obtiene la misma tarea y un solo envío.
+- **AC13**: un cliente de tipo dispositivo con delegación acotada que aprueba una tarea de agente
+  con edición (riesgo medio) enviando los hashes recibe `STEP_UP_REQUIRED` y la ejecución no
+  existe; con una ejecución de evidencia local N2 (riesgo bajo) se aprueba.
+- **AC14**: la función de riesgo pasa una tabla de casos dorados (al menos uno por nivel y uno
+  con un campo desconocido, que da alto), devuelve lo mismo en ejecuciones repetidas y no cambia
+  con ningún campo que aporte el llamante o el agente autónomo.
+- **AC15**: pedir token exchange al emisor local devuelve `unsupported_grant_type`; un token con
+  `act` que Space no emitió para un run propio se rechaza.
 
 ## Decisiones pendientes
 
-- **D1**: emisor local mínimo en 0.2 (propuesto) o esperar a un emisor externo.
-- **D2**: delegación acotada en 0.2 (propuesto) o solo aprobación de persona hasta tener leases.
+- **D1**: emisor local mínimo en 0.4 (propuesto) o esperar a un emisor externo.
+- **D2**: delegación acotada en 0.4 (propuesto; en dispositivos, solo riesgo bajo) o solo
+  aprobación de persona hasta tener leases.
 - **D3**: contrato OpenAPI contract-first (propuesto) o generado desde el código.
-- **D4**: recibos firmados en 0.2 (propuesto) o con A2A en 0.3.
+- **D4**: decidida — recibos firmados en 0.3, con el modo mediado (calendario de SE-428).
 
 ## Entregas
 
-- **0.2**: REST con JWT y OpenAPI, MCP stdio, aprobación de persona y delegación acotada,
-  recibos.
-- **0.3**: MCP HTTP, A2A en loopback, Agent Card firmada, prueba de AEOS en modo solo lectura.
-- **0.4**: red local y VPN con TLS fijado y DPoP; notificaciones push.
+Calendario único de SE-428: la interoperabilidad con terceros entra en **0.4**, junto con el
+móvil.
+
+- **0.3**: recibos firmados (modo mediado de SE-428).
+- **0.4**: REST con JWT y OpenAPI, MCP stdio y HTTP, A2A con Agent Card firmada, aprobación de
+  persona y delegación acotada, red local y VPN con TLS fijado y DPoP, prueba de AEOS en modo
+  solo lectura, notificaciones push.
 - **Leases externos**: bloqueados hasta el contrato de AEK.
 
 ## OpenCode Implementation Plan

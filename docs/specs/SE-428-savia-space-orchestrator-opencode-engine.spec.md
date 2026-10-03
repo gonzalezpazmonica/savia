@@ -79,6 +79,19 @@ Space nunca afloja `opencode.json`; solo puede endurecerlo. Las reglas de seguri
    - **automático**: dentro de la envolvente;
    - **persona**: en el resto, desde la web, el móvil o A2A.
    Una automatización nunca responde "siempre".
+   - El worktree por ejecución y esta política solo rigen en el perfil mediado y en ejecuciones
+     autónomas; en interactivo mandan los permisos de `opencode.json` sin cambios.
+   - **Riesgo determinista**: el riesgo de una tarea de agente (edición o ejecución: al menos
+     medio; push, PR Draft o salida a red: alto) lo calcula Space con la función de SE-429, nunca
+     el modelo. Decide el sandbox y si la aprobación exige biometría.
+   - **Salidas no fiables**: la salida, el resumen y el diff de una ejecución hija, los
+     comentarios y descripciones de PR y los logs de CI llegan a quien los consume marcados como
+     no fiables.
+   - **Exclusión declarada (pendiente de mitigar)**: los procesos que lanza el agente (shell,
+     terminal, MCP y LSP locales) heredan hoy el entorno del motor, incluida su contraseña, y
+     podrían llamar a la API del motor saltándose la mediación. Hasta que se mitigue, la
+     mediación no garantiza nada frente a un agente hostil en ejecuciones con shell, y el recibo
+     lo declara.
 6. **Evidencia** (perfil mediado). Recibo firmado con:
    - envolvente y aprobación;
    - versiones y hashes del motor, plugins y configuración;
@@ -144,6 +157,13 @@ mediación.
 - **AC8**: un hook declarado en un asset importado no se ejecuta.
 - **AC9**: en modo mediado, el recibo verifica con la clave pública de la instancia y su hash de
   diff coincide con el worktree.
+- **AC11**: la misma envolvente da siempre el mismo riesgo, y ningún texto del modelo o del
+  agente autónomo lo cambia; una envolvente con edición no se aprueba con delegación acotada
+  desde el móvil.
+- **AC12**: la salida de una ejecución hija llega a su consumidor marcada como no fiable.
+- **AC13**: un test del worktree, lanzado por un comando aprobado en modo mediado, que llama a la
+  API del motor con su contraseña recibe 401 y genera un aviso. Mientras no pase, la exclusión
+  sigue declarada en los recibos.
 - **AC10**: cinco jornadas de trabajo real de la operadora solo con Space, sin abrir la TUI de
   OpenCode para nada de P0. Cada apertura necesaria se registra con su causa.
 
@@ -227,7 +247,7 @@ Medidos en el prototipo local contra OpenCode 1.18.32, con un modelo local (Olla
 
 - [ ] Tests de contrato del adaptador contra la versión de OpenCode fijada.
 - [ ] Canarios por hook: cada evento se dispara una sola vez (motor o bus).
-- [ ] Escenarios AC1–AC9 en CI con un motor local de prueba; AC10 con la operadora.
+- [ ] Escenarios AC1–AC9 y AC11–AC13 en CI con un motor local de prueba; AC10 con la operadora.
 
 ### Portability classification
 
