@@ -233,6 +233,16 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
   [Orca](https://github.com/stablyai/orca), adaptados al sandbox y a la mediación de Space. La
   spec quedó APPROVED el 2026-10-06 con estos deltas incluidos.
 
+- **2026-10-07** (operadora, D3): el transporte de Relay es la app Space del móvil, no un servicio
+  de mensajería externo. Los avisos de Soul llegan por la bandeja M3 y las notificaciones por
+  WorkManager (sin push, SE-430 D3), sobre VPN con DPoP. Las órdenes cerradas (estado, despierta,
+  duerme, para, agenda, presupuesto, aprueba o rechaza de riesgo bajo) se envían desde la app por
+  la API móvil; el riesgo medio o alto exige biometría y JWS, como en la bandeja. El núcleo de
+  Relay se mantiene tras un trait `RelayTransport` con el transporte «móvil Space» como única
+  implementación real. **Divergencia con SE-406**: su D1 (WhatsApp Cloud API, con Telegram como
+  alternativa) no se aplica a Soul; SE-406 sigue siendo la referencia de la gramática cerrada, el
+  emparejamiento y los nonces de decisión, pero no del transporte.
+
 ## Entregas
 
 - **S1**: bajo demanda en la web; observar e informar; disparadores deterministas.
@@ -244,8 +254,8 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
 
 - **D1**: addendum a ADR-002 para Soul (L2 con envolventes, sin efectos externos).
 - **D2**: modo por defecto al instalar: apagado (propuesto) o bajo demanda.
-- **D3**: transporte de Relay: Telegram primero (propuesto aquí; SE-406 recomienda WhatsApp Cloud
-  API) o WhatsApp.
+- **D3** (resuelta 2026-10-07, operadora): Savia Relay va por la propia app Space en el móvil. Ni
+  Telegram ni WhatsApp. Ver el delta de esa fecha.
 - **D4**: A2A de salida en S4 (propuesto) o nunca.
 - **D5**: deliberación solo con modelo local (propuesto) o también con un perfil en la nube.
 
