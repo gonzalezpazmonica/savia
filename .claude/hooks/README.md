@@ -25,7 +25,7 @@ Ports TypeScript en `.opencode/plugins/guards/`. Cobertura dual .sh + .ts.
 | `validate-bash-global` | Bloquea comandos destructivos (rm -rf /, chmod 777, curl\|bash) |
 | `tdd-gate` | Refuerza TDD — tests antes que código |
 
-### Seguridad (6)
+### Seguridad (7)
 | Hook | Función |
 |------|---------|
 | `block-force-push` | Bloquea force-push a main/master |
@@ -34,6 +34,7 @@ Ports TypeScript en `.opencode/plugins/guards/`. Cobertura dual .sh + .ts.
 | `block-project-whitelist` | Whitelist de proyectos accesibles |
 | `compliance-gate` | CHANGELOG, tamaño ficheros, frontmatter |
 | `data-sovereignty-gate` | Gate de soberanía de datos |
+| `dome-guard` | Guard de cúpulas (SE-436 S5): escritura en una cúpula → ask (propuesta); lectura N2 no adjunta en nube → ask; N3+ → deny. Gemelo nativo en savia-gates (`lib/dome-guard.ts`), con prueba de paridad |
 
 ### Hooks PreToolUse (26)
 Validación previa a ejecución de herramientas. Bloquean con exit 2.

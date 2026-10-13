@@ -20,6 +20,7 @@ import { patchPaths, pinFor, protectsPath, verifyPin } from "./lib/guard-pin"
 import { REGISTRY, trustedFor, verifyTrusted, wrapCommand } from "./lib/trusted-guards"
 import type { TrustedGuards } from "./lib/trusted-guards"
 import { resolveProjectRoot } from "./lib/root"
+import { domeGuardVerdict, strictest } from "./lib/dome-guard"
 
 export const SaviaGates: Plugin = async (ctx: PluginInput) => {
   const { $, directory, worktree } = ctx
@@ -103,6 +104,14 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
       // A sandbox plugin may already have wrapped the command: hooks see the
       // original and the unwrapped form, and any block wins (lib/sandbox.ts).
       const variants = guardVariants(input.tool, output.args)
+      // SE-436 S5: guard de cúpulas nativo, gemelo del hook dome-guard.sh (misma decisión). OpenCode no
+      // pasa `permission.ask` a los plugins, así que `ask` se aplica como bloqueo con el aviso de propuesta.
+      const dome = strictest(variants.map((args) =>
+        domeGuardVerdict({ root, project: cwd, tool: input.tool, input: args, env: process.env })))
+      if (dome.decision !== "pass") {
+        await auditLog({ event: "dome-guard", tool: input.tool, decision: dome.decision, reason: dome.reason })
+        throw new Error(`savia-gates: DOME_${dome.decision.toUpperCase()}: ${dome.reason}`)
+      }
       let mutated: Record<string, unknown> | undefined
       for (const [n, toolInput] of variants.entries()) {
         const payload = JSON.stringify({
@@ -111,6 +120,7 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
           tool_input: toolInput,
           session_id: input.sessionID,
           call_id: input.callID,
+          cwd,
         })
         const result = await runHooksForEvent(root, hookMap, "PreToolUse", input.tool, payload, runOpts)
         if (result.blocked) {

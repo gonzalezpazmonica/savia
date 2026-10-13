@@ -61,6 +61,11 @@ if os.path.exists(plugin_path):
     if "sycophancy-guard.sh" in ts_guards:
         ts_guards["sycophancy-strip.sh"] = ts_guards["sycophancy-guard.sh"]
 
+# Reglas nativas del plugin savia-gates (scripts/opencode-plugin/savia-gates/lib/), gemelas de un hook bash
+# con prueba de paridad (SE-436 S5 DUAL_BINDING).
+for script, ts_name in {"dome-guard.sh": "savia-gates domeGuardVerdict"}.items():
+    ts_guards.setdefault(script, ts_name)
+
 # ── 3. Load hook script contents for exit-2 detection ──────────────────────
 script_content = {}
 if os.path.isdir(hooks_dir):

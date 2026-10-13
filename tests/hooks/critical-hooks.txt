@@ -14,3 +14,4 @@ data-sovereignty-gate
 prompt-injection-guard
 learning-recall-hook
 shield-autostart
+dome-guard

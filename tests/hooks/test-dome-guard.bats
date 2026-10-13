@@ -1,0 +1,161 @@
+#!/usr/bin/env bats
+# Tests del hook dome-guard.sh — guard de cúpulas en el motor (SE-436 S5, D30-4).
+# Ref: docs/specs/SE-436-savia-space-projects-and-domes.spec.md (§5, AC17, AC18, DUAL_BINDING)
+# La tabla de decisiones completa la ejecutan tests/python/test_dome_guard.py y la paridad con
+# savia-gates tests/hooks/test-dome-guard-parity.bats; aquí, el contrato del hook de Claude Code.
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  HOOK="$REPO_ROOT/.claude/hooks/dome-guard.sh"
+  WS="$(cd "$(mktemp -d)" && pwd -P)"
+  mkdir -p "$WS/projects/savia-vaults" "$WS/vaults/gallinero/00-Index" "$WS/vaults/secreta" "$WS/src/sub"
+  unset SAVIA_DOME_GUARD SAVIA_GATES_PIN SAVIA_SPACE_DOMES_FILE SAVIA_HOOK_PROFILE
+}
+
+teardown() {
+  [[ -n "${WS:-}" && -d "$WS" ]] && find "$WS" -mindepth 1 -delete 2>/dev/null; rmdir "$WS" 2>/dev/null || true
+}
+
+registry() {
+  printf '{"version":1,"domes":{"gallinero":{"path":"%s/vaults/gallinero","confidentiality":"N2"},"secreta":{"path":"%s/vaults/secreta","confidentiality":"N3"}}}' \
+    "$WS" "$WS" > "$WS/projects/savia-vaults/savia-vaults.domes.json"
+}
+
+# run_hook TOOL INPUT_JSON [EXTRA_PAYLOAD_FIELDS]
+run_hook() {
+  local payload="{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"$1\",\"tool_input\":$2,\"session_id\":\"s1\",\"cwd\":\"$WS\"${3:-}}"
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ "$payload" "$WS" "$HOOK"
+}
+
+decision() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision'; }
+reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason'; }
+
+@test "target has safety flags and is executable" {
+  grep -q "set -uo pipefail" "$HOOK"
+  [ -x "$HOOK" ]
+}
+
+@test "registered as PreToolUse for the write, read and shell tools of Claude Code" {
+  run jq -r '.hooks.PreToolUse[] | select(any(.hooks[]; (.command // "") | contains("dome-guard.sh"))) | .matcher' "$REPO_ROOT/.claude/settings.json"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | wc -l)" -eq 1 ]
+  for tool in Edit Write MultiEdit NotebookEdit Read Grep Glob LS Bash; do
+    [[ "|$output|" == *"|$tool|"* ]] || { echo "falta $tool en $output"; return 1; }
+  done
+}
+
+@test "without a dome registry the hook decides nothing (fast path, no output)" {
+  run_hook Edit "{\"file_path\":\"$WS/vaults/gallinero/a.md\"}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "AC17: Edit inside a dome asks with the proposal notice" {
+  registry
+  run_hook Edit "{\"file_path\":\"$WS/vaults/gallinero/00-Index/requisitos.md\",\"old_string\":\"a\",\"new_string\":\"b\"}"
+  [ "$status" -eq 0 ]
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"Usa una propuesta: Guardar como nota"* ]]
+}
+
+@test "AC17: the same Edit outside any dome follows the normal configuration" {
+  registry
+  run_hook Edit "{\"file_path\":\"$WS/src/main.rs\",\"old_string\":\"a\",\"new_string\":\"b\"}"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "AC17: a Bash that writes into a dome asks; relative paths resolve from the payload cwd" {
+  registry
+  run_hook Bash '{"command":"echo x > ../vaults/gallinero/a.md"}' ",\"cwd\":\"$WS/src\""
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"Guardar como nota"* ]]
+}
+
+@test "AC18: a cloud Read of a non-attached N2 dome asks and names the dome" {
+  registry
+  run_hook Read "{\"file_path\":\"$WS/vaults/gallinero/00-Index/requisitos.md\"}"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"«gallinero» es N2 y no está adjunta"* ]]
+}
+
+@test "AC18: dome_context from the caller (attached or granted) lets the read pass" {
+  registry
+  run_hook Read "{\"file_path\":\"$WS/vaults/gallinero/a.md\"}" ',"dome_context":{"attached":["gallinero"]}'
+  [ -z "$output" ]
+  run_hook Read "{\"file_path\":\"$WS/vaults/gallinero/a.md\"}" ',"dome_context":{"granted":["gallinero"]}'
+  [ -z "$output" ]
+  run_hook Read "{\"file_path\":\"$WS/vaults/gallinero/a.md\"}" ',"dome_context":{"cloud":false}'
+  [ -z "$output" ]
+}
+
+@test "AC15: an N3 dome is denied towards the cloud even if attached" {
+  registry
+  run_hook Read "{\"file_path\":\"$WS/vaults/secreta/a.md\"}" ',"dome_context":{"attached":["secreta"]}'
+  [ "$(decision)" = "deny" ]
+  [[ "$(reason)" == *"N3"* ]]
+}
+
+@test "an unreadable registry fails closed: every watched tool asks" {
+  printf '{roto' > "$WS/projects/savia-vaults/savia-vaults.domes.json"
+  run_hook Read "{\"file_path\":\"$WS/src/main.rs\"}"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"ilegible"* ]]
+  run_hook WebFetch '{"url":"https://example.com"}'
+  [ -z "$output" ]
+}
+
+@test "SAVIA_SPACE_DOMES_FILE pointing to a missing file is unreadable, not empty" {
+  run bash -c 'printf "%s" "$1" | SAVIA_SPACE_DOMES_FILE="$2/nada.json" CLAUDE_PROJECT_DIR="$2" bash "$3"' _ \
+    "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$WS/src/a.rs\"},\"cwd\":\"$WS\"}" "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"no existe"* ]]
+}
+
+@test "delegation: SAVIA_DOME_GUARD=space and SAVIA_GATES_PIN=1 leave the decision to Savia Space" {
+  registry
+  local payload="{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$WS/vaults/gallinero/a.md\"},\"cwd\":\"$WS\"}"
+  run bash -c 'printf "%s" "$1" | SAVIA_DOME_GUARD=space CLAUDE_PROJECT_DIR="$2" bash "$3"' _ "$payload" "$WS" "$HOOK"
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  run bash -c 'printf "%s" "$1" | SAVIA_GATES_PIN=1 CLAUDE_PROJECT_DIR="$2" bash "$3"' _ "$payload" "$WS" "$HOOK"
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  run bash -c 'printf "%s" "$1" | SAVIA_DOME_GUARD=otro CLAUDE_PROJECT_DIR="$2" bash "$3"' _ "$payload" "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+}
+
+@test "with a registry and no python3 the hook asks instead of passing" {
+  registry
+  mkdir -p "$WS/bin"
+  for c in bash cat timeout dirname; do ln -s "$(command -v "$c")" "$WS/bin/$c"; done
+  run env -i PATH="$WS/bin" CLAUDE_PROJECT_DIR="$WS" bash -c 'printf "%s" "$1" | bash "$2"' _ \
+    "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$WS/src/a.rs\"}}" "$HOOK"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"permissionDecision":"ask"'* ]]
+  [[ "$output" == *"python3 no disponible"* ]]
+}
+
+@test "a crash of the core asks instead of passing" {
+  registry
+  mkdir -p "$WS/bin"
+  printf '#!/bin/sh\nexit 3\n' > "$WS/bin/python3"
+  chmod +x "$WS/bin/python3"
+  run bash -c 'printf "%s" "$1" | PATH="$2/bin:$PATH" CLAUDE_PROJECT_DIR="$2" bash "$3"' _ \
+    "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":\"$WS/src/a.rs\"}}" "$WS" "$HOOK"
+  [[ "$output" == *'"permissionDecision":"ask"'* ]]
+  [[ "$output" == *"el guard falló"* ]]
+}
+
+@test "empty stdin passes" {
+  registry
+  run bash -c 'CLAUDE_PROJECT_DIR="$1" bash "$2" < /dev/null' _ "$WS" "$HOOK"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "savia-gates applies the native twin of this hook before the bash bridge" {
+  local idx="$REPO_ROOT/scripts/opencode-plugin/savia-gates/index.ts"
+  grep -q 'from "./lib/dome-guard"' "$idx"
+  grep -q 'domeGuardVerdict' "$idx"
+  grep -q 'DOME_' "$idx"
+  [ -f "$REPO_ROOT/scripts/opencode-plugin/savia-gates/lib/dome-guard.ts" ]
+}

@@ -16,11 +16,11 @@ lang: it
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 comandi · 90 agenti · 139 skills · 127 hook**
+**567 comandi · 90 agenti · 139 skills · 128 hook**
 
 ## Workspace di sviluppo multi-agente
 
-**567 comandi · 90 agenti · 139 skill · 127 hook · 16 linguaggi · 283+ suite di test**
+**567 comandi · 90 agenti · 139 skill · 128 hook · 16 linguaggi · 283+ suite di test**
 
 Sistema agentico sovrano per governare ed eseguire lavoro con IA, indipendente da modello, fornitore e frontend, con criterio umano by design. Integra agenti, memoria, sicurezza, policy eseguibili, tracciabilità e domini specializzati. Opera in locale con sovranità dei dati e dell'inferenza, in 9 lingue.
 
@@ -116,7 +116,7 @@ pm-workspace/
 │   ├── commands/       ← 567 comandi
 │   ├── agents/         ← 90 agenti specializzati (7 con decision trees: SPEC-147)
 │   ├── skills/         ← 139 skill di dominio
-│   ├── hooks/          ← 127 hook deterministici
+│   ├── hooks/          ← 128 hook deterministici
 │   └── rules/          ← regole di contesto e linguaggio
 ├── docs/               ← guide per ruolo, scenario, settore
 ├── projects/           ← progetti (git-ignorati per privacy)
