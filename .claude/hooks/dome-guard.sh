@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -uo pipefail
 # dome-guard.sh — Guard de cúpulas en el motor (SE-436 S5, D30-4). PreToolUse.
 # Matcher: Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|LS|Bash
 #
@@ -24,7 +25,6 @@
 # Límite conocido: es un guard léxico. Una ruta montada en tiempo de ejecución dentro de un guion
 # (`python3 -c "open('gall'+'inero/a','w')"`, variables calculadas) no se ve. La defensa en profundidad
 # es el sandbox del motor o el modo mediado de Savia Space (SE-434), no este hook.
-set -uo pipefail
 
 LIB_DIR="$(dirname "${BASH_SOURCE[0]}")/lib"
 if [[ -f "$LIB_DIR/profile-gate.sh" ]]; then

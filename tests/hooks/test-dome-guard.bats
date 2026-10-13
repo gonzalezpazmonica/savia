@@ -30,8 +30,8 @@ run_hook() {
 decision() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision'; }
 reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecisionReason'; }
 
-@test "target has safety flags and is executable" {
-  grep -q "set -uo pipefail" "$HOOK"
+@test "target has safety flags in its first 5 lines (as CI checks) and is executable" {
+  head -5 "$HOOK" | grep -q "set -uo pipefail"
   [ -x "$HOOK" ]
 }
 
