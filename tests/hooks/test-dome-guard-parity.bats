@@ -141,7 +141,7 @@ finally:
 print(f"pares={len(pairs)} payloads={len(seen)} subidas={sorted(ups)} problemas={len(problems)}")
 for p in problems[:40]:
     print(p)
-sys.exit(1 if problems or not {"pass->ask", "ask->deny"} <= ups else 0)
+sys.exit(1 if problems or "ask->deny" not in ups or not any(u.startswith("pass->") for u in ups) else 0)
 PY
 }
 
@@ -151,7 +151,7 @@ PY
   echo "$output"
   [ "$status" -eq 0 ]
   [[ "$output" == *"problemas=0"* ]]
-  [[ "$output" == *"pass->ask"* && "$output" == *"ask->deny"* ]]
+  [[ "$output" == *"'pass->"* && "$output" == *"ask->deny"* ]]
 }
 
 @test "parity: the monotonicity check fails on a binding that loosens a verdict (mutation: TS passes without a tool)" {

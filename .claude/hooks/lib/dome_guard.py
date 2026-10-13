@@ -19,11 +19,12 @@ cualquier otra orden, con cualquier programa (también envoltorios, `sh -c`, `ev
 llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
 Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
 desconocida con una ruta que los toque preguntan.
-El mismo principio aplica al directorio de trabajo (revisiones r4 y r5, rondas 7 y 8 de Space): bash se
-analiza con su directorio si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos
-motores y `workdir` ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, se analiza con
-la mejor base que se lee y con cada cúpula como directorio posible; gana el veredicto más estricto (deny > ask >
-pass) y como mínimo ask: lo desconocido nunca rebaja un deny ni da pass. Una llamada sin herramienta se evalúa
+El mismo principio aplica al directorio de trabajo (rondas 7-9 de Space): bash se analiza con su directorio
+si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos motores y `workdir`
+ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, veredicto cerrado y de coste
+constante: deny si la sesión es de nube y hay alguna cúpula N3 o superior, ask en el resto; nunca pass ni
+rebaja. Con el directorio conocido, una N3 en nube que la orden nombra o cuya ruta toca se deniega aunque el
+programa no sea un lector conocido (`base64`, `cp`, `curl -F file=@`). Una llamada sin herramienta se evalúa
 como cada herramienta y gana la más estricta.
 Falsos positivos aceptados (preguntan sin tocar una cúpula): un programa desconocido con `.` o una variable
 (`prettier --write .`), `rm -rf $X`, `mv a ..` y un literal entre comillas de un guion `-c`/`-e` que nombra
@@ -1090,31 +1091,18 @@ def strictest(verdicts: list[tuple[str, str]]) -> tuple[str, str]:
     return best
 
 
-def best_base(project: str, tool_input) -> str:
-    """La mejor base que se lee aunque el directorio no se conozca: el `workdir` si es texto, o el proyecto."""
-    v = tool_input.get("workdir") if isinstance(tool_input, dict) else None
-    return join(project, v) if isinstance(v, str) and v else project
-
-
 def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input,
                 cwd_known: bool = True) -> tuple[str, str]:
     # El directorio de trabajo decide contra qué se resuelven las rutas de la orden.
     cwd = effective_cwd(project, tool_input) if cwd_known else None
     if cwd is not None:
         return analyse_bash(domes, files, project, ctx, tool_input, *cwd)
-    # Sin saber dónde corre no se sabe qué lee ni qué escribe (ronda 8 de dome_guard.rs). Se hace el análisis
-    # normal con la mejor base que se lee (el `workdir` o el proyecto) y con cada cúpula como directorio de
-    # trabajo posible, siempre desplazado; gana el veredicto más estricto (deny > ask > pass) y como mínimo ask.
-    # Lo desconocido nunca rebaja ni da pass. En un empate a ask vale el motivo del primer análisis que pregunta.
-    tool_input = tool_input if isinstance(tool_input, dict) else {}
-    verdict = ("ask", UNKNOWN_CWD_NOTICE)
-    for base in [best_base(project, tool_input)] + [d["root"] for d in domes]:
-        v = analyse_bash(domes, files, project, ctx, tool_input, base, True)
-        if v[0] == "deny":
-            return v
-        if v[0] == "ask" and verdict[1] == UNKNOWN_CWD_NOTICE:
-            verdict = v
-    return verdict
+    # Sin saber dónde corre no se sabe qué lee ni qué escribe, y cualquier cúpula podría ser su directorio de
+    # trabajo (ronda 9 de dome_guard.rs). Veredicto cerrado y de coste constante: deny si la sesión es de nube y
+    # hay alguna cúpula N3 o superior (la política de N3 en nube no se rebaja por una clave que el modelo
+    # controla); ask en el resto. Nunca pass.
+    v = read_verdict(ctx, [d for d in domes if d["level"] >= 3])
+    return v if v[0] == "deny" else ("ask", UNKNOWN_CWD_NOTICE)
 
 
 def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict, base: str,
@@ -1143,18 +1131,28 @@ def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, t
     name_only_ok = (shifted or not pathlike or not reads_only
                     or any(any(ch in w for ch in "*?=@{}" + WS) for w in words))
 
-    def direct(d: dict) -> bool:
+    def reads_it(d: dict) -> bool:
+        """La orden nombra la cúpula o una ruta suya (el `direct` de dome_guard.rs)."""
         name = file_name(d["root"]).lower()
         named = (bool(name) and name in lower_tokens) or any(mentions_dome(d["root"], project, c)
                                                              for c in (command, plain))
         # Una ruta que cae en la cúpula la nombra aunque no se llame como ella, y un directorio de trabajo
         # dentro de ella (el efectivo o el de la sesión) hace que toda orden la toque.
         by_path = any(touches(d["root"], base, w, False) for w in pathlike) or touches(d["root"], base, ".", False)
+        return (named and name_only_ok) or by_path
+
+    def direct(d: dict) -> bool:
         # Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
-        return (named and name_only_ok) or by_path or (not reads_only and writes_reach(cmds, base, d["root"]))
+        return reads_it(d) or (not reads_only and writes_reach(cmds, base, d["root"]))
 
     direct_hit = [d for d in domes if direct(d)]
     if direct_hit and not reads_only:
+        # Un programa que no es lector conocido (`base64`, `awk`, `cp`, `curl -F file=@`) puede leer igual: una N3
+        # tocada en nube se rechaza como con un lector, no se rebaja a una pregunta (ronda 9 de dome_guard.rs).
+        # Solo lo que la nombra o cae en ella: alcanzarla por un ancestro o una variable pregunta, como en Space.
+        v = read_verdict(ctx, [d for d in direct_hit if reads_it(d)])
+        if v[0] == "deny":
+            return v
         # Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
         reached = [d for d in domes if traversal_reaches(cmds, base, d["root"])]
         if reached and read_verdict(ctx, reached)[0] == "deny":

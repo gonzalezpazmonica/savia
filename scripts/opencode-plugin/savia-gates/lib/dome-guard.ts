@@ -15,11 +15,12 @@
 // llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
 // Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
 // desconocida con una ruta que los toque preguntan.
-// El mismo principio aplica al directorio de trabajo (revisiones r4 y r5, rondas 7 y 8 de Space): bash se
-// analiza con su directorio si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos
-// motores y `workdir` ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, se analiza con
-// la mejor base que se lee y con cada cúpula como directorio posible; gana el veredicto más estricto (deny > ask >
-// pass) y como mínimo ask: lo desconocido nunca rebaja un deny ni da pass. Una llamada sin herramienta se evalúa
+// El mismo principio aplica al directorio de trabajo (rondas 7-9 de Space): bash se analiza con su directorio
+// si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos motores y `workdir`
+// ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, veredicto cerrado y de coste
+// constante: deny si la sesión es de nube y hay alguna cúpula N3 o superior, ask en el resto; nunca pass ni
+// rebaja. Con el directorio conocido, una N3 en nube que la orden nombra o cuya ruta toca se deniega aunque el
+// programa no sea un lector conocido (`base64`, `cp`, `curl -F file=@`). Una llamada sin herramienta se evalúa
 // como cada herramienta y gana la más estricta.
 // Falsos positivos aceptados (preguntan sin tocar una cúpula): un programa desconocido con `.` o una variable
 // (`prettier --write .`), `rm -rf $X`, `mv a ..` y un literal entre comillas de un guion `-c`/`-e` que nombra
@@ -1170,28 +1171,16 @@ function writesReach(cmds: Cmd[], base: string, target: string): boolean {
   return false
 }
 
-/** La mejor base que se lee aunque el directorio no se conozca: el `workdir` si es texto, o el proyecto. */
-function bestBase(project: string, input: Record<string, unknown>): string {
-  const v = input.workdir
-  return isStr(v) && v ? join(project, v) : project
-}
-
 function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, rawInput: unknown, cwdKnown = true): DomeVerdict {
   // El directorio de trabajo decide contra qué se resuelven las rutas de la orden.
   const cwd = cwdKnown ? effectiveCwd(project, rawInput) : null
   if (cwd !== null) return analyseBash(domes, files, project, ctx, rawInput as Record<string, unknown>, cwd[0], cwd[1])
-  // Sin saber dónde corre no se sabe qué lee ni qué escribe (ronda 8 de dome_guard.rs). Se hace el análisis
-  // normal con la mejor base que se lee (el `workdir` o el proyecto) y con cada cúpula como directorio de
-  // trabajo posible, siempre desplazado; gana el veredicto más estricto (deny > ask > pass) y como mínimo ask.
-  // Lo desconocido nunca rebaja ni da pass. En un empate a ask vale el motivo del primer análisis que pregunta.
-  const input = rawInput && typeof rawInput === "object" && !Array.isArray(rawInput) ? (rawInput as Record<string, unknown>) : {}
-  let verdict: DomeVerdict = { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
-  for (const base of [bestBase(project, input), ...domes.map((d) => d.root)]) {
-    const v = analyseBash(domes, files, project, ctx, input, base, true)
-    if (v.decision === "deny") return v
-    if (v.decision === "ask" && verdict.reason === UNKNOWN_CWD_NOTICE) verdict = v
-  }
-  return verdict
+  // Sin saber dónde corre no se sabe qué lee ni qué escribe, y cualquier cúpula podría ser su directorio de
+  // trabajo (ronda 9 de dome_guard.rs). Veredicto cerrado y de coste constante: deny si la sesión es de nube y
+  // hay alguna cúpula N3 o superior (la política de N3 en nube no se rebaja por una clave que el modelo
+  // controla); ask en el resto. Nunca pass.
+  const v = readVerdict(ctx, domes.filter((d) => d.level >= 3))
+  return v.decision === "deny" ? v : { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
 }
 
 /** Análisis de la orden con `base` como directorio de trabajo (`shifted`: distinto del proyecto). */
@@ -1221,17 +1210,24 @@ function analyseBash(domes: Dome[], files: string[], project: string, ctx: Ctx, 
   // Solo un lector conocido con rutas literales y limpias puede aflojar el nombre (ronda 4 de dome_guard.rs).
   const nameOnlyOk = shifted || pathlike.length === 0 || !readsOnly ||
     words.some((w) => [..."*?=@{}" + WS].some((ch) => w.includes(ch)))
-  const direct = (d: { root: string }) => {
+  /** La orden nombra la cúpula o una ruta suya (el `direct` de dome_guard.rs). */
+  const readsIt = (d: { root: string }) => {
     const name = fileName(d.root).toLowerCase()
     const named = (name !== "" && lowerTokens.includes(name)) || [command, plain].some((c) => mentionsDome(d.root, project, c))
     // Una ruta que cae en la cúpula la nombra, y un directorio de trabajo dentro de ella (el efectivo o el de
     // la sesión) hace que toda orden la toque.
     const byPath = pathlike.some((w) => touches(d.root, base, w, false)) || touches(d.root, base, ".", false)
-    // Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
-    return (named && nameOnlyOk) || byPath || (!readsOnly && writesReach(cmds, base, d.root))
+    return (named && nameOnlyOk) || byPath
   }
+  // Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
+  const direct = (d: { root: string }) => readsIt(d) || (!readsOnly && writesReach(cmds, base, d.root))
   const directHit = domes.filter(direct)
   if (directHit.length > 0 && !readsOnly) {
+    // Un programa que no es lector conocido (`base64`, `awk`, `cp`, `curl -F file=@`) puede leer igual: una N3
+    // tocada en nube se rechaza como con un lector, no se rebaja a una pregunta (ronda 9 de dome_guard.rs).
+    // Solo lo que la nombra o cae en ella: alcanzarla por un ancestro o una variable pregunta, como en Space.
+    const v = readVerdict(ctx, directHit.filter(readsIt))
+    if (v.decision === "deny") return v
     // Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
     const reached = domes.filter((d) => traversalReaches(cmds, base, d.root))
     if (reached.length > 0 && readVerdict(ctx, reached).decision === "deny") return readVerdict(ctx, reached)

@@ -185,7 +185,7 @@ class Monotonic(unittest.TestCase):
         self.assertEqual(failures, [])
 
     def test_the_property_is_not_vacuous(self):
-        """Algún par sube de verdad (pass -> ask, ask -> deny): si no, la propiedad no prueba nada."""
+        """Algún par sube de verdad (ask -> deny y alguno desde pass): si no, la propiedad no prueba nada."""
         table = json.loads(CASES.read_text(encoding="utf-8"))
         ws = build_workspace(table, {"registry": "std-pb"})
         try:
@@ -197,8 +197,9 @@ class Monotonic(unittest.TestCase):
                     ups.add((a, b))
         finally:
             cleanup(ws)
-        self.assertIn(("pass", "ask"), ups)
+        # Con una N3 en nube (std-pb) el cwd desconocido sube a deny desde pass o desde ask (ronda 9).
         self.assertIn(("ask", "deny"), ups)
+        self.assertTrue(any(a == "pass" for a, _b in ups), ups)
 
     def test_strictest_keeps_the_first_reason_on_ties(self):
         self.assertEqual(dg.strictest([("ask", "a"), ("ask", "b"), ("pass", "")]), ("ask", "a"))
