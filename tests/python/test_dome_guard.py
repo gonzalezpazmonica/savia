@@ -207,6 +207,27 @@ class Monotonic(unittest.TestCase):
         self.assertEqual(dg.strictest([]), ("pass", ""))
 
 
+class UnknownCwdCost(unittest.TestCase):
+    def test_the_unknown_working_directory_verdict_costs_the_same_with_many_domes(self):
+        """Ronda 9: con cwd desconocido no hay análisis por cúpula; 300 cúpulas cuestan lo mismo que una."""
+        import time
+        ws = os.path.realpath(tempfile.mkdtemp(prefix="dome-guard-many-"))
+        try:
+            os.makedirs(os.path.join(ws, "projects/savia-vaults"))
+            reg = os.path.join(ws, "projects/savia-vaults/savia-vaults.domes.json")
+            domes = {f"d{i}": {"path": f"{ws}/vaults/d{i}", "confidentiality": "N2"} for i in range(300)}
+            Path(reg).write_text(json.dumps({"version": 1, "domes": domes}), encoding="utf-8")
+            payload = json.dumps({"tool_name": "bash", "tool_input": {"command": "cat x.md", "x": 1}, "cwd": ws})
+            t0 = time.monotonic()
+            self.assertEqual(decide_text(payload, ws), ("ask", dg.UNKNOWN_CWD_NOTICE))
+            self.assertLess(time.monotonic() - t0, 0.5)
+            domes["n3"] = {"path": f"{ws}/vaults/secreta", "confidentiality": "N3"}
+            Path(reg).write_text(json.dumps({"version": 1, "domes": domes}), encoding="utf-8")
+            self.assertEqual(decide_text(payload, ws)[0], "deny")
+        finally:
+            cleanup(ws)
+
+
 class ShellParse(unittest.TestCase):
     def ro(self, cmd: str) -> bool:
         try:

@@ -306,6 +306,23 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
   [ "$(decision)" = "deny" ]
 }
 
+@test "ronda 9: an unknown working directory costs the same with 300 domes (ask), and one N3 in the cloud denies" {
+  local domes i
+  domes=$(for i in $(seq 0 299); do printf '"d%s":{"path":"%s/vaults/d%s","confidentiality":"N2"},' "$i" "$WS" "$i"; done)
+  printf '{"version":1,"domes":{%s"z":{"path":"%s/vaults/z","confidentiality":"N2"}}}' "$domes" "$WS" \
+    > "$WS/projects/savia-vaults/savia-vaults.domes.json"
+  local t0=$SECONDS
+  run_hook bash '{"command":"cat x.md","x":1}'
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"no se sabe en qué directorio"* ]]
+  # El proceso entero (bash + python3 + registro de 301 cúpulas) en pocos segundos: sin análisis por cúpula.
+  [ $((SECONDS - t0)) -le 5 ]
+  printf '{"version":1,"domes":{%s"n3":{"path":"%s/vaults/secreta","confidentiality":"N3"}}}' "$domes" "$WS" \
+    > "$WS/projects/savia-vaults/savia-vaults.domes.json"
+  run_hook bash '{"command":"cat x.md","x":1}'
+  [ "$(decision)" = "deny" ]
+}
+
 @test "fail-closed pass: raw NUL bytes or invalid UTF-8 on stdin reach the core intact and ask" {
   registry
   run bash -c 'printf "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"src/a\0b\"}}" | CLAUDE_PROJECT_DIR="$1" bash "$2"' _ "$WS" "$HOOK"
