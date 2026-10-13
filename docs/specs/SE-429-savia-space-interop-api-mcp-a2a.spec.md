@@ -18,6 +18,7 @@ timeline:
     value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
+
 # SE-429 — Savia Space interoperable: API con JWT y OpenAPI, MCP y A2A
 
 ## Problema
@@ -115,7 +116,7 @@ seguridad. Las restricciones de partida:
      respuesta, queda en `input-required`.
    - Artefactos de respuesta, evidencia, diff y recibo.
    - Streaming por SSE con la secuencia del journal.
-   - Sin notificaciones push en 0.4: la Agent Card publica `pushNotifications: false` y una petición
+   - Sin notificaciones push en 0.4: la Agent Card publica `capabilities.pushNotifications: false` y una petición
      con `pushNotificationConfig` se rechaza.
 8. **Compatibilidad con TEE v1.1, AEK y AEOS.**
    - Space produce **recibos firmados** de decisión, de envío al proveedor y de tareas de agente
@@ -152,7 +153,7 @@ seguridad. Las restricciones de partida:
   artefactos de evidencia.
 - **AC7b**: con la configuración por defecto, `GET /.well-known/agent-card.json` y las rutas A2A
   responden 404, mientras REST, MCP y el emparejamiento del móvil responden con normalidad. Con A2A
-  activado, la Agent Card publica `pushNotifications: false` y una tarea con
+  activado, la Agent Card publica `capabilities.pushNotifications: false` y una tarea con
   `pushNotificationConfig` se rechaza.
 - **AC8**: una tool MCP de ejecución responde en menos de 1 s con el identificador y notifica el
   progreso.

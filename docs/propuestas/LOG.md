@@ -8,7 +8,7 @@
 
 ## 2026-10-13 SE-406 DEFERRED
 
-Aparcada: los avisos urgentes y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3); se revisa si la app no basta para lo urgente.
+Aparcada: los avisos y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3); hoy la app consulta cada 15 minutos o más, y se revisa cuando se decida el push propio de SE-430 (D3).
 
 ## 2026-10-13 SE-436 APPROVED
 

@@ -18,6 +18,7 @@ timeline:
     value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
+
 # SE-431 — Savia Soul: la Savia proactiva dentro de Savia Space
 
 ## Problema
@@ -268,7 +269,8 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
 - **D2**: modo por defecto al instalar: apagado (propuesto) o bajo demanda.
 - **D3**: decidida — el Relay va por la app móvil de Savia Space (SE-430), ni Telegram ni WhatsApp.
   SE-406 queda aparcada.
-- **D4**: A2A de salida en S4 (propuesto) o nunca.
+- **D4**: A2A de salida en S4 (propuesto) o nunca. En cualquier caso, A2A está apagado por defecto
+  y solo funciona si la instalación lo activa (SE-429 §7).
 - **D5**: deliberación solo con modelo local (propuesto) o también con un perfil en la nube.
 
 ## OpenCode Implementation Plan

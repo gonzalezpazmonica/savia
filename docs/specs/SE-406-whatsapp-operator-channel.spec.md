@@ -14,10 +14,12 @@ timeline:
     value: "DEFERRED"
     source: "spec-lifecycle:manual"
 ---
+
 # SE-406 — Savia Relay: canal activo con la operadora por WhatsApp
 
 > Estado DEFERRED (aparcada). Los avisos urgentes y el Relay de Soul van por la app móvil de Savia
-> Space (SE-430, SE-431 D3). Se revisa si la app no basta para lo urgente. Nada de este spec se
+> Space (SE-430, SE-431 D3). Hoy la app consulta cada 15 minutos o más; se revisa cuando se decida
+> el push propio de SE-430 (D3), o si la app no basta para lo urgente. Nada de este spec se
 > implementa mientras siga aparcada.
 > Las decisiones abiertas están en §10.
 

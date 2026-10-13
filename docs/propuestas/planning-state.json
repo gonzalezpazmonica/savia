@@ -366,7 +366,7 @@
       "note": "Propuesta de canal en fase B, después del núcleo y sus contratos; decisiones D1-D8 abiertas. Sin implementación ni mensajes reales hasta aprobación específica. No desplaza SE-401/L31.",
       "evidence": "docs/specs/SE-406-whatsapp-operator-channel.spec.md",
       "phase": "B",
-      "deferral": "Aparcada: los avisos y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3). Se revisa si la app no basta para lo urgente."
+      "deferral": "Aparcada: los avisos y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3). Hoy la app consulta cada 15 minutos o más; se revisa cuando se decida el push propio de SE-430 (D3), o si la app no basta para lo urgente."
     },
     {
       "id": "SE-407",

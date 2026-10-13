@@ -17,6 +17,7 @@ timeline:
     value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
+
 # SE-435 — Savia Space: distribución agnóstica (paquetes nativos y `savia-space setup`)
 
 ## Problema
