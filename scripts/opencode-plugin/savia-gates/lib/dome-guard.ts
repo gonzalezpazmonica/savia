@@ -15,6 +15,12 @@
 // llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
 // Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
 // desconocida con una ruta que los toque preguntan.
+// El mismo principio aplica al directorio de trabajo (revisión r4, ronda 7 de Space): bash solo se analiza
+// si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos motores y `workdir`
+// ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, pregunta antes de analizar.
+// Falsos positivos aceptados (preguntan sin tocar una cúpula): un programa desconocido con `.` o una variable
+// (`prettier --write .`), `rm -rf $X`, `mv a ..` y un literal entre comillas de un guion `-c`/`-e` que nombra
+// un ancestro de una cúpula o del registro.
 //
 // Límite conocido: es un guard léxico. Una ruta montada en tiempo de ejecución dentro de un guion
 // (`python3 -c "open('gall'+'inero/a','w')"`, variables calculadas) no se ve. La defensa en profundidad es el
@@ -41,6 +47,8 @@ export interface DomeRequest {
   input: unknown
   /** `dome_context` de quien llama; sin él, nube y sin adjuntos. */
   context?: unknown
+  /** El directorio de la llamada se conoce; si no, bash pregunta siempre. Por defecto, sí (el plugin lo sabe). */
+  cwdKnown?: boolean
   env: Record<string, string | undefined>
 }
 
@@ -58,6 +66,8 @@ export const UNKNOWN_TOOL_NOTICE =
   "el guard no conoce esta herramienta y una de sus rutas toca una cúpula; si escribe, usa una propuesta: Guardar como nota"
 /** Hooks bash de settings.json con gemelo nativo aquí: el puente no los vuelve a ejecutar. */
 export const NATIVE_TWIN_HOOKS = ["dome-guard.sh"]
+export const UNKNOWN_CWD_NOTICE =
+  "no se sabe en qué directorio corre la orden, así que podría leer o escribir una cúpula: confirmar a mano"
 export const GUARD_FAILED = "el guard falló; no se puede comprobar si la orden toca una cúpula"
 
 const WRITERS = new Set(["cp", "mv", "rm", "touch", "tee", "sed", "dd", "install", "ln", "truncate", "chmod", "chown",
@@ -68,8 +78,9 @@ const FILE_TOOLS = new Set(["read", "grep", "glob", "list"])
 const READ_ONLY = new Set(["cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "diff", "nl"])
 const TRAVERSERS = new Set(["grep", "rg", "find", "tree", "du", "ls", "tar", "cp", "rsync", "zip", "cpio", "7z", "scp"])
 const WRITE_PATH_KEYS = ["filePath", "file_path", "path", "notebook_path"]
-// Parámetros de bash que fijan el directorio de trabajo (`workdir` en OpenCode y sus equivalentes).
-const WORKDIR_KEYS = ["workdir", "cwd", "directory", "dir", "working_directory", "workingDir"]
+// Esquema de la herramienta bash de los dos motores: OpenCode (command, workdir, timeout, description) y
+// Claude Code (además run_in_background, dangerouslyDisableSandbox). Otra clave podría fijar el directorio.
+const BASH_KEYS = new Set(["command", "workdir", "timeout", "description", "run_in_background", "dangerouslyDisableSandbox"])
 // Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
 const LINK_DEPTH = 3
 // Tope de entradas por directorio al buscar enlaces; un directorio mayor cuenta como que tiene uno.
@@ -86,14 +97,20 @@ const SANDBOXES = new Set(["bwrap"])
 // Intérpretes de shell cuyo `-c` es otra orden que se analiza como tal.
 const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "mksh"])
 // Claves de una herramienta desconocida que pueden llevar una ruta.
-const PATH_KEY = /path|file|dir|dest|target/i
+const PATH_KEY = /path|file|dir|dest|target|source|^(src|from|to|old|new)$/i
 // Profundidad máxima de órdenes anidadas (`sh -c`, `$(...)`, `eval`): más allá, no se analiza y pregunta.
 const MAX_NESTING = 4
 const DURATION = /^[0-9]+(\.[0-9]+)?[smhd]?$/
 const GIT_VALUE_FLAGS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"])
 const FIND_ACTIONS = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir"])
 // Programas que el guard conoce: tras un envoltorio, uno que no esté aquí cuenta como que recorre lo que nombra.
-const KNOWN_PROGRAMS = new Set([...WRITERS, ...DESTROYERS, ...READ_ONLY, ...TRAVERSERS, "echo", "printf", "true", "false", "test", "cd", "pwd", "cargo", "npm", "make", "go", "pytest"])
+// Linters y filtros habituales: no escriben salvo por redirección, así que `.` en ellos no es destructivo.
+const KNOWN_PROGRAMS = new Set([...WRITERS, ...DESTROYERS, ...READ_ONLY, ...TRAVERSERS, "echo", "printf", "true", "false",
+  "test", "cd", "pwd", "cargo", "npm", "make", "go", "pytest", "jq", "yq", "ruff", "eslint", "shellcheck", "sort", "uniq",
+  "cut", "tr", "awk", "mypy", "tsc"])
+// Intérpretes cuyo guion `-c`/`-e` se mira por las rutas literales entre comillas que nombra.
+const INTERPRETERS = new Set(["python", "python3", "node", "perl", "ruby"])
+const QUOTED = /'([^'\\]*)'|"([^"\\]*)"/g
 const LEVELS: Record<string, number> = { N1: 1, N2: 2, "": 2, N3: 3, N4: 4, N4B: 4 }
 // Espacio en blanco ASCII explícito, el mismo que el núcleo Python (los `\s` de JS y Python difieren).
 const WS = " \t\n\r\x0b\x0c"
@@ -982,17 +999,20 @@ function readVerdict(ctx: Ctx, touched: Dome[]): DomeVerdict {
   return { decision: "pass", reason: "" }
 }
 
-/** Directorio de trabajo efectivo de una orden de bash y si difiere del proyecto (ronda 5 de dome_guard.rs). */
-function effectiveCwd(project: string, input: Record<string, unknown>): [string, boolean] {
-  if (input.workdir_unknown === true) return [project, true]
-  for (const k of WORKDIR_KEYS) {
-    const v = input[k]
-    if (v === undefined || v === null) continue
-    if (!isStr(v) || !v) return [project, true]
-    const base = join(project, v)
-    return [base, realPath(base) !== realPath(project)]
-  }
-  return [project, false]
+/**
+ * Directorio de trabajo efectivo de una orden de bash y si difiere del proyecto (ronda 7 de dome_guard.rs).
+ * `null` = no se sabe dónde corre: la llamada no es un objeto, lleva una clave fuera del esquema de bash de los
+ * dos motores (podría fijar el directorio) o un `workdir` que no es texto.
+ */
+function effectiveCwd(project: string, input: unknown): [string, boolean] | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null
+  const obj = input as Record<string, unknown>
+  if (Object.keys(obj).some((k) => !BASH_KEYS.has(k))) return null
+  const v = obj.workdir
+  if (v === undefined || v === null) return [project, false]
+  if (!isStr(v) || !v) return null
+  const base = join(project, v)
+  return [base, realPath(base) !== realPath(project)]
 }
 
 /** Subcomando de git y sus argumentos, saltando las opciones globales (`git -C dir rm`). */
@@ -1096,6 +1116,19 @@ function changesDir(cmds: Cmd[]): boolean {
     w === "cd" || w === "pushd" || w === "popd" || w === "-C" || w.startsWith("--chdir") || w.startsWith("--directory")))
 }
 
+/** Literales entre comillas del guion `-c`/`-e` de un intérprete (tras un envoltorio, también). */
+function scriptLiterals(c: Cmd): string[] {
+  const words = unwrap(c.words.map(litOrDollar))
+  if (words.length === 0 || !INTERPRETERS.has(baseName(words[0]))) return []
+  for (let i = 1; i < words.length - 1; i++) {
+    const w = words[i]
+    if (w === "-c" || w === "-e" || w === "-E" || (w.startsWith("-") && !w.startsWith("--") && "ce".includes(w[w.length - 1]))) {
+      return [...words[i + 1].matchAll(QUOTED)].map((m) => m[1] || m[2]).filter((q) => q)
+    }
+  }
+  return []
+}
+
 /**
  * Un comando que no es de solo lectura alcanza la cúpula (o el registro) o un ancestro suyo con cualquiera de
  * sus palabras. Falla cerrado: no depende de qué programa sea, salvo para aflojar `.`/`..` en los que no
@@ -1110,8 +1143,10 @@ function writesReach(cmds: Cmd[], base: string, target: string): boolean {
     if (bashReadsOnly([c]) || first === "cd" || first === "pushd" || first === "popd") continue
     const destructive = destroys(c) || pipedAny
     if (wipesTree(c) && touches(target, base, ".", true)) return true
+    // El guion de un intérprete (`python3 -c "shutil.move('vaults', x)"`): sus literales entre comillas cuentan
+    // como palabras del comando (con la regla de los que no destruyen: `.` no cuenta).
     const words = [...c.words.slice(1), ...c.redirs.filter((r) => r.kind === "out" || r.kind === "append").map((r) => r.target),
-      ...c.assigns.map((a) => a[1])]
+      ...c.assigns.map((a) => a[1]), ...scriptLiterals(c).map((q): Word => [["lit", q, true]])]
     for (const w of words) {
       const lit = literal(w)
       if (lit === null) {
@@ -1132,7 +1167,13 @@ function writesReach(cmds: Cmd[], base: string, target: string): boolean {
   return false
 }
 
-function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, input: Record<string, unknown>): DomeVerdict {
+function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, rawInput: unknown, cwdKnown = true): DomeVerdict {
+  // Antes de analizar la orden: sin saber dónde corre no se sabe qué lee ni qué escribe. Pregunta siempre, sea
+  // cual sea el nivel, el proveedor o la orden (ronda 7 de dome_guard.rs).
+  const cwd = cwdKnown ? effectiveCwd(project, rawInput) : null
+  if (cwd === null) return { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
+  const [base, shifted] = cwd
+  const input = rawInput as Record<string, unknown>
   if (input.command !== undefined && input.command !== null && !isStr(input.command)) return { decision: "ask", reason: PAYLOAD_NOTICE }
   const command = isStr(input.command) ? input.command : ""
   let script: Cmd[]
@@ -1153,7 +1194,6 @@ function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, i
   const lowerTokens = plain.toLowerCase().split(LOWER_SPLIT)
   const words = script.flatMap((c) => [...c.words, ...c.redirs.map((r) => r.target)]).map(litOrDollar)
   const pathlike = words.filter((w) => w.includes("/") && ![..."*?$"].some((ch) => w.includes(ch)))
-  const [base, shifted] = effectiveCwd(project, input)
   const readsOnly = bashReadsOnly(script)
   // Solo un lector conocido con rutas literales y limpias puede aflojar el nombre (ronda 4 de dome_guard.rs).
   const nameOnlyOk = shifted || pathlike.length === 0 || !readsOnly ||
@@ -1241,7 +1281,9 @@ function decideUnknown(registry: Registry, project: string, input: Record<string
   return { decision: "pass", reason: "" }
 }
 
-function decide(registry: Registry, project: string, tool: string, input: Record<string, unknown>, ctx: Ctx): DomeVerdict {
+/** `cwdKnown`: el directorio de la llamada se conoce (en Claude Code, el `cwd` del payload es texto). */
+function decide(registry: Registry, project: string, tool: string, rawInput: unknown, ctx: Ctx, cwdKnown = true): DomeVerdict {
+  const input = rawInput && typeof rawInput === "object" && !Array.isArray(rawInput) ? (rawInput as Record<string, unknown>) : {}
   const permission = toolPermission(tool)
   if (!(permission === "bash" || FILE_TOOLS.has(permission) || WRITE_TOOLS.has(permission))) return decideUnknown(registry, project, input)
   if ("error" in registry) return { decision: "ask", reason: `registro de cúpulas ilegible (${registry.error}): ${WRITE_NOTICE}` }
@@ -1258,7 +1300,7 @@ function decide(registry: Registry, project: string, tool: string, input: Record
     if (paths.some((p) => files.some((f) => touches(f, project, p, false)))) return { decision: "ask", reason: REGISTRY_NOTICE }
     return { decision: "pass", reason: "" }
   }
-  if (permission === "bash") return decideBash(domes, files, project, ctx, input)
+  if (permission === "bash") return decideBash(domes, files, project, ctx, rawInput, cwdKnown)
   const root = searchRoot(project, permission, input)
   if (root === null) return readVerdict(ctx, domes)
   const recursive = permission !== "read"
@@ -1379,8 +1421,7 @@ function sessionContext(raw: unknown): Ctx {
 export function decideDome(req: DomeRequest): DomeVerdict {
   const env = req.env.SAVIA_SPACE_DOMES_FILE ?? ""
   const file = env || join(req.root, "projects/savia-vaults/savia-vaults.domes.json")
-  const input = req.input && typeof req.input === "object" && !Array.isArray(req.input) ? (req.input as Record<string, unknown>) : {}
-  return decide(loadRegistry(file, env !== ""), req.project, req.tool, input, sessionContext(req.context))
+  return decide(loadRegistry(file, env !== ""), req.project, req.tool, req.input, sessionContext(req.context), req.cwdKnown ?? true)
 }
 
 /**
@@ -1445,10 +1486,11 @@ export function decidePayload(raw: string, root: string, env: Record<string, str
     const registry = loadRegistry(file, !!env.SAVIA_SPACE_DOMES_FILE)
     return "error" in registry || registry.domes.length > 0 ? { decision: "ask", reason: PAYLOAD_NOTICE } : { decision: "pass", reason: "" }
   }
-  const cwd = isStr(payload.cwd) && payload.cwd ? payload.cwd : root
+  const cwdKnown = isStr(payload.cwd) && payload.cwd !== ""
   return domeGuardVerdict({
     root,
-    project: abspath(cwd),
+    project: abspath(cwdKnown ? payload.cwd : root),
+    cwdKnown,
     tool: String(payload.tool_name ?? ""),
     input: payload.tool_input,
     context: payload.dome_context,

@@ -139,11 +139,11 @@ PY
   [ "$output" = "bash=ask ts=ask" ]
 }
 
-@test "parity: an empty or null tool input passes in both bindings" {
+@test "parity: an empty or null tool input decides the same in both bindings (null bash input: unknown cwd, asks)" {
   require_ts
   printf '{"version":1,"domes":{"g":{"path":"%s/vaults/g"}}}' "$WS" > "$WS/projects/savia-vaults/savia-vaults.domes.json"
   run both "{\"tool_name\":\"bash\",\"tool_input\":null,\"cwd\":\"$WS\"}"
-  [ "$output" = "bash=pass ts=pass" ]
+  [ "$output" = "bash=ask ts=ask" ]
   run both "{\"tool_name\":\"grep\",\"tool_input\":{\"pattern\":\"x\",\"path\":\"src\"},\"cwd\":\"$WS\"}"
   [ "$output" = "bash=pass ts=pass" ]
   run both "{\"tool_name\":\"edit\",\"tool_input\":{},\"cwd\":\"$WS\"}"

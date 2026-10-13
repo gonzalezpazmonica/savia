@@ -173,7 +173,26 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
   run_hook bash '{"command":"cat x.md","workdir":"vaults/secreta"}'
   [ "$(decision)" = "deny" ]
   run_hook bash '{"command":"cat secreta/x.md","workdir":7}'
-  [ "$(decision)" = "deny" ]
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"no se sabe en qué directorio"* ]]
+}
+
+@test "review r4 P1-C2: a bash call whose directory is unknown always asks, before parsing the command" {
+  registry
+  for input in '{"command":"ls","x":1}' '{"command":"cat a.md","chdir":"vaults/secreta"}' '{"command":"cargo test","workdir":""}' \
+               '{"command":"ls","workdir":["a"]}' '"ls"' 'null'; do
+    run_hook bash "$input"
+    [ "$(decision)" = "ask" ] || { echo "pasa: $input"; return 1; }
+    [[ "$(reason)" == *"no se sabe en qué directorio"* ]] || { echo "otro motivo: $input"; return 1; }
+  done
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ '{"tool_name":"Bash","tool_input":{"command":"ls"}}' "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+  run_hook Bash '{"command":"ls"}' ',"cwd":42'
+  [ "$(decision)" = "ask" ]
+  run_hook Bash '{"command":"ls","description":"x","timeout":5,"run_in_background":true,"dangerouslyDisableSandbox":false}'
+  [ -z "$output" ]
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ '{"tool_name":"Read","tool_input":{"file_path":"src/a"}}' "$WS" "$HOOK"
+  [ -z "$output" ]
 }
 
 @test "review P1-S4: a session cwd inside a dome makes every command touch it" {

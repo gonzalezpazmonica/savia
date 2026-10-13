@@ -19,6 +19,12 @@ cualquier otra orden, con cualquier programa (también envoltorios, `sh -c`, `ev
 llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
 Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
 desconocida con una ruta que los toque preguntan.
+El mismo principio aplica al directorio de trabajo (revisión r4, ronda 7 de Space): bash solo se analiza
+si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos motores y `workdir`
+ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, pregunta antes de analizar.
+Falsos positivos aceptados (preguntan sin tocar una cúpula): un programa desconocido con `.` o una variable
+(`prettier --write .`), `rm -rf $X`, `mv a ..` y un literal entre comillas de un guion `-c`/`-e` que nombra
+un ancestro de una cúpula o del registro.
 
 Uso: `dome_guard.py --root DIR [--hook]` con el payload PreToolUse por stdin. Imprime
 `{"decision", "reason"}`; con `--hook`, la salida PreToolUse de Claude Code (nada si pasa).
@@ -40,6 +46,8 @@ REGISTRY_NOTICE = ("el registro de cúpulas no lo cambia el motor: lo cambia la 
 PAYLOAD_NOTICE = "la llamada no se puede leer; no se sabe si toca una cúpula"
 UNKNOWN_TOOL_NOTICE = ("el guard no conoce esta herramienta y una de sus rutas toca una cúpula; si escribe, usa una "
                        "propuesta: Guardar como nota")
+UNKNOWN_CWD_NOTICE = ("no se sabe en qué directorio corre la orden, así que podría leer o escribir una cúpula: "
+                      "confirmar a mano")
 CLOUD_DENIED = ("contenido N3 o superior no sale a la nube: esta cúpula no se lee con el motor. "
                 "Pide a la persona una tarea del carril local; el resultado lo ve ella y no vuelve a ti")
 
@@ -53,8 +61,9 @@ FILE_TOOLS = {"read", "grep", "glob", "list"}
 READ_ONLY = {"cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "diff", "nl"}
 TRAVERSERS = {"grep", "rg", "find", "tree", "du", "ls", "tar", "cp", "rsync", "zip", "cpio", "7z", "scp"}
 WRITE_PATH_KEYS = ("filePath", "file_path", "path", "notebook_path")
-# Parámetros de bash que fijan el directorio de trabajo (`workdir` en OpenCode y sus equivalentes).
-WORKDIR_KEYS = ("workdir", "cwd", "directory", "dir", "working_directory", "workingDir")
+# Esquema de la herramienta bash de los dos motores: OpenCode (command, workdir, timeout, description) y
+# Claude Code (además run_in_background, dangerouslyDisableSandbox). Otra clave podría fijar el directorio.
+BASH_KEYS = {"command", "workdir", "timeout", "description", "run_in_background", "dangerouslyDisableSandbox"}
 # Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
 LINK_DEPTH = 3
 # Tope de entradas por directorio al buscar enlaces; un directorio mayor cuenta como que tiene uno.
@@ -67,14 +76,19 @@ WRAPPERS = {"env", "command", "builtin", "exec", "nice", "nohup", "timeout", "st
             "sudo", "doas", "xargs", "chronic", "unbuffer", "flock", "watch", "parallel", "strace", "ltrace",
             "nsenter", "unshare", "chroot", "fakeroot", "systemd-run", "busybox"}
 # Programas que el guard conoce: tras un envoltorio, uno que no esté aquí cuenta como que recorre lo que nombra.
-KNOWN_PROGRAMS = (WRITERS | DESTROYERS | READ_ONLY | TRAVERSERS | {"echo", "printf", "true", "false", "test", "cd",
-                                                                    "pwd", "cargo", "npm", "make", "go", "pytest"})
+# Linters y filtros habituales: no escriben salvo por redirección, así que `.` en ellos no es destructivo.
+KNOWN_PROGRAMS = (WRITERS | DESTROYERS | READ_ONLY | TRAVERSERS | {
+    "echo", "printf", "true", "false", "test", "cd", "pwd", "cargo", "npm", "make", "go", "pytest",
+    "jq", "yq", "ruff", "eslint", "shellcheck", "sort", "uniq", "cut", "tr", "awk", "mypy", "tsc"})
+# Intérpretes cuyo guion `-c`/`-e` se mira por las rutas literales entre comillas que nombra.
+INTERPRETERS = {"python", "python3", "node", "perl", "ruby"}
+QUOTED = re.compile(r"'([^'\\]*)'|\"([^\"\\]*)\"")
 # Sandboxes cuyo comando va tras `--` (las opciones de antes son monturas).
 SANDBOXES = {"bwrap"}
 # Intérpretes de shell cuyo `-c` es otra orden que se analiza como tal.
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "mksh"}
 # Claves de una herramienta desconocida que pueden llevar una ruta.
-PATH_KEY = re.compile(r"path|file|dir|dest|target", re.I)
+PATH_KEY = re.compile(r"path|file|dir|dest|target|source|^(src|from|to|old|new)$", re.I)
 # Profundidad máxima de órdenes anidadas (`sh -c`, `$(...)`, `eval`): más allá, no se analiza y pregunta.
 MAX_NESTING = 4
 LEVELS = {"N1": 1, "N2": 2, "": 2, "N3": 3, "N4": 4, "N4B": 4}
@@ -893,20 +907,19 @@ def read_verdict(ctx: dict, touched: list[dict]) -> tuple[str, str]:
     return "pass", ""
 
 
-def effective_cwd(project: str, tool_input: dict) -> tuple[str, bool]:
-    """Directorio de trabajo efectivo de una orden de bash y si difiere del proyecto. Uno que no se puede
-    leer cuenta como distinto, con el proyecto como base (ronda 5 de dome_guard.rs)."""
-    if tool_input.get("workdir_unknown") is True:
-        return project, True
-    for k in WORKDIR_KEYS:
-        v = tool_input.get(k)
-        if v is None:
-            continue
-        if not isinstance(v, str) or not v:
-            return project, True
-        base = join(project, v)
-        return base, real_path(base) != real_path(project)
-    return project, False
+def effective_cwd(project: str, tool_input) -> tuple[str, bool] | None:
+    """Directorio de trabajo efectivo de una orden de bash y si difiere del proyecto (ronda 7 de dome_guard.rs).
+    `None` = no se sabe dónde corre: la llamada no es un objeto, lleva una clave fuera del esquema de bash de
+    los dos motores (podría fijar el directorio) o un `workdir` que no es texto."""
+    if not isinstance(tool_input, dict) or any(k not in BASH_KEYS for k in tool_input):
+        return None
+    v = tool_input.get("workdir")
+    if v is None:
+        return project, False
+    if not isinstance(v, str) or not v:
+        return None
+    base = join(project, v)
+    return base, real_path(base) != real_path(project)
 
 
 def git_subcommand(words: list[str]) -> tuple[str, list[str]]:
@@ -1013,6 +1026,17 @@ def changes_dir(cmds: list[dict]) -> bool:
                for c in cmds for w in (lit_or_dollar(x) for x in c["words"]))
 
 
+def script_literals(c: dict) -> list[str]:
+    """Literales entre comillas del guion `-c`/`-e` de un intérprete (tras un envoltorio, también)."""
+    words = unwrap([lit_or_dollar(w) for w in c["words"]])
+    if not words or base_name(words[0]) not in INTERPRETERS:
+        return []
+    for i, w in enumerate(words[1:-1], start=1):
+        if w in ("-c", "-e", "-E") or (w.startswith("-") and not w.startswith("--") and w[-1] in "ce"):
+            return [a or b for a, b in QUOTED.findall(words[i + 1]) if a or b]
+    return []
+
+
 def writes_reach(cmds: list[dict], base: str, target: str) -> bool:
     """Un comando que no es de solo lectura alcanza la cúpula (o el registro) o un ancestro suyo con cualquiera
     de sus palabras. Falla cerrado: no depende de qué programa sea, salvo para aflojar `.`/`..` en los que
@@ -1029,6 +1053,9 @@ def writes_reach(cmds: list[dict], base: str, target: str) -> bool:
             return True
         words = c["words"][1:] + [r["target"] for r in c["redirs"] if r["kind"] in ("out", "append")]
         words += [a[1] for a in c["assigns"]]
+        # El guion de un intérprete (`python3 -c "shutil.move('vaults', x)"`): sus literales entre comillas
+        # cuentan como palabras del comando (con la regla de los que no destruyen: `.` no cuenta).
+        words += [[("lit", q, True)] for q in script_literals(c)]
         for w in words:
             lit = literal(w)
             if lit is None:
@@ -1048,7 +1075,14 @@ def writes_reach(cmds: list[dict], base: str, target: str) -> bool:
     return False
 
 
-def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict) -> tuple[str, str]:
+def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input,
+                cwd_known: bool = True) -> tuple[str, str]:
+    # Antes de analizar la orden: sin saber dónde corre no se sabe qué lee ni qué escribe. Pregunta siempre,
+    # sea cual sea el nivel, el proveedor o la orden (ronda 7 de dome_guard.rs).
+    cwd = effective_cwd(project, tool_input) if cwd_known else None
+    if cwd is None:
+        return "ask", UNKNOWN_CWD_NOTICE
+    base, shifted = cwd
     command = tool_input.get("command")
     if command is not None and not isinstance(command, str):
         return "ask", PAYLOAD_NOTICE
@@ -1065,7 +1099,6 @@ def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, to
     lower_tokens = re.split("[" + re.escape(WS) + "/{},=@:]", plain.lower())
     words = [lit_or_dollar(w) for c in script for w in c["words"] + [r["target"] for r in c["redirs"]]]
     pathlike = [w for w in words if "/" in w and not any(ch in w for ch in "*?$")]
-    base, shifted = effective_cwd(project, tool_input)
     reads_only = bash_reads_only(script)
     # Solo un lector conocido con rutas literales y limpias puede aflojar el nombre: cualquier otro programa
     # (`env -C`, `sh -c`, `dd if=`, `curl -F file=@`) puede cambiar de directorio o esconder la ruta en una
@@ -1167,8 +1200,10 @@ def decide_unknown(registry: dict, project: str, tool_input: dict) -> tuple[str,
     return "pass", ""
 
 
-def decide(registry: dict, project: str, tool: str, tool_input: dict, ctx: dict) -> tuple[str, str]:
+def decide(registry: dict, project: str, tool: str, tool_input, ctx: dict, cwd_known: bool = True) -> tuple[str, str]:
+    """`cwd_known`: el directorio de la llamada se conoce (en Claude Code, el `cwd` del payload es texto)."""
     permission = tool_permission(tool)
+    raw_input = tool_input
     if not isinstance(tool_input, dict):
         tool_input = {}
     if not (permission == "bash" or permission in FILE_TOOLS or permission in WRITE_TOOLS):
@@ -1193,7 +1228,7 @@ def decide(registry: dict, project: str, tool: str, tool_input: dict, ctx: dict)
             return "ask", REGISTRY_NOTICE
         return "pass", ""
     if permission == "bash":
-        return decide_bash(domes, files, project, ctx, tool_input)
+        return decide_bash(domes, files, project, ctx, raw_input, cwd_known)
     root = search_root(project, permission, tool_input)
     if root is None:
         return read_verdict(ctx, domes)
@@ -1338,10 +1373,10 @@ def decide_payload(raw: str, root: str) -> tuple[str, str]:
     if not isinstance(payload, dict) or not clean_strings(payload):
         return ("ask", PAYLOAD_NOTICE) if ("error" in registry or registry["domes"]) else ("pass", "")
     cwd = payload.get("cwd")
-    project = os.path.abspath(cwd if isinstance(cwd, str) and cwd else root)
-    tool_input = payload.get("tool_input")
-    return decide(registry, project, str(payload.get("tool_name") or ""),
-                  tool_input if isinstance(tool_input, dict) else {}, session_context(payload))
+    cwd_known = isinstance(cwd, str) and bool(cwd)
+    project = os.path.abspath(cwd if cwd_known else root)
+    return decide(registry, project, str(payload.get("tool_name") or ""), payload.get("tool_input"),
+                  session_context(payload), cwd_known)
 
 
 def main(argv: list[str]) -> int:

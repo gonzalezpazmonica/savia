@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { UNKNOWN_TOOL_NOTICE, decidePayload, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
+import { UNKNOWN_CWD_NOTICE, UNKNOWN_TOOL_NOTICE, decidePayload, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
 import { SaviaGates } from "../index"
 
 // SE-436 S5 DUAL_BINDING: la regla de savia-gates decide igual que el hook dome-guard.sh. Esta suite
@@ -213,4 +213,22 @@ test("review r3: registry errors other than ENOENT fail closed, and any writer r
     expect([command, run("bash", { command }).decision]).toEqual([command, "pass"])
   }
   expect(run("mcp__fs__write_file", { file_path: join(ws, "vaults/secreta/a") }).reason).toBe(UNKNOWN_TOOL_NOTICE)
+})
+
+test("review r4 P1-C2: a bash call whose directory is unknown always asks, before parsing the command", async () => {
+  const table = JSON.parse(await readFile(CASES, "utf-8"))
+  const ws = await workspace(table, table.cases[0])
+  const run = (payload: unknown) => decidePayload(JSON.stringify(payload), ws, {})
+  for (const input of [{ command: "ls", x: 1 }, { command: "cat a.md", chdir: "vaults/secreta" }, { command: "cargo test", workdir: "" },
+    { command: "ls", workdir: ["a"] }, { command: "ls", workdir: 7 }, "ls", null]) {
+    expect([input, run({ tool_name: "bash", tool_input: input, cwd: ws })]).toEqual([input, { decision: "ask", reason: UNKNOWN_CWD_NOTICE }])
+  }
+  expect(run({ tool_name: "Bash", tool_input: { command: "ls" } }).reason).toBe(UNKNOWN_CWD_NOTICE)
+  expect(run({ tool_name: "Bash", tool_input: { command: "ls" }, cwd: 42 }).reason).toBe(UNKNOWN_CWD_NOTICE)
+  expect(run({ tool_name: "Bash", cwd: ws, tool_input: { command: "ls", description: "x", timeout: 5, run_in_background: true,
+    dangerouslyDisableSandbox: false } }).decision).toBe("pass")
+  expect(run({ tool_name: "Read", tool_input: { file_path: "src/a" } }).decision).toBe("pass")
+  // El plugin conoce el directorio de la sesión: sin cwdKnown explícito, una orden normal se analiza.
+  expect(domeGuardVerdict({ root: ws, project: ws, tool: "bash", input: { command: "ls" }, env: {} }).decision).toBe("pass")
+  expect(domeGuardVerdict({ root: ws, project: ws, tool: "bash", input: { command: "ls", cwd: "src" }, env: {} }).reason).toBe(UNKNOWN_CWD_NOTICE)
 })
