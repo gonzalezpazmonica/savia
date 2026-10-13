@@ -14,7 +14,8 @@
 # `dome_context: {cloud, attached[], granted[]}`; sin él, nube y sin adjuntos (falla cerrado).
 # Bash: las rutas se resuelven contra `workdir` si lo trae la llamada; un directorio de trabajo dentro de
 # una cúpula hace que toda orden la toque. Si no se sabe dónde corre (clave fuera del esquema de bash,
-# `workdir` que no es texto, payload sin `cwd`), pregunta antes de analizar la orden.
+# `workdir` que no es texto, payload sin `cwd`), la analiza desde la mejor base y desde cada cúpula, y
+# gana el veredicto más estricto, como mínimo ask (un deny nunca baja).
 # El registro (base y .local) también está protegido: el motor no lo escribe.
 # Delegación: SAVIA_DOME_GUARD=space (Savia Space decide con su guard nativo) o
 # SAVIA_GATES_PIN=1 (modo mediado, rige SE-434) → el hook no decide.

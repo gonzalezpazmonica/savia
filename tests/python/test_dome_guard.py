@@ -68,7 +68,7 @@ def cleanup(ws: str) -> None:
 def payload_text(case: dict, ws: str) -> str:
     """Payload PreToolUse del caso: `raw` tal cual, o el JSON con `cwd` (relativo al workspace) y contexto."""
     if "raw" in case:
-        return case["raw"]
+        return sub(case["raw"], ws)
     payload = {"hook_event_name": "PreToolUse", "tool_name": case["tool"], "tool_input": sub(case["input"], ws),
                "session_id": "s1", "cwd": os.path.join(ws, case["cwd"]) if "cwd" in case else ws}
     if "ctx" in case:
@@ -108,12 +108,102 @@ def check(table: dict, case: dict, got: dict) -> list[str]:
 class SharedCases(unittest.TestCase):
     def test_every_shared_case(self):
         table = json.loads(CASES.read_text(encoding="utf-8"))
-        self.assertGreaterEqual(len(table["cases"]), 310)
+        self.assertGreaterEqual(len(table["cases"]), 500)
         failures = []
         for case in table["cases"]:
             got, _ws = run_case(table, case)
             failures += [f"{case['name']}: {e}" for e in check(table, case, got)]
         self.assertEqual(failures, [])
+
+
+RANK = {"pass": 0, "ask": 1, "deny": 2}
+
+
+def monotonic_pairs(spec: dict, registries: list | None = None) -> list[tuple[str, dict | None, str, dict, dict]]:
+    """Pares (registro, contexto, etiqueta, payload, payload al menos igual de estricto) de la sección
+    `monotonic` de la tabla: añadir claves a bash, quitar el cwd del payload o quitar la herramienta.
+    `@WS@` queda sin sustituir. dome-guard.test.ts (monotonicPairs) los genera en el mismo orden."""
+    pairs = []
+    for reg, ctx in spec["registries"]:
+        if registries is not None and reg not in registries:
+            continue
+
+        def payload(tool, tool_input, cwd=True):
+            p = {} if tool is None else {"tool_name": tool}
+            p["tool_input"] = tool_input
+            if cwd:
+                p["cwd"] = "@WS@"
+            if ctx is not None:
+                p["dome_context"] = ctx
+            return p
+
+        for cmd in spec["commands"]:
+            for wd in spec["workdirs"]:
+                base = {"command": cmd} if wd is None else {"command": cmd, "workdir": wd}
+                weak = payload("bash", base)
+                for extra in spec["extras"]:
+                    if not set(extra) & set(base):
+                        pairs.append((reg, ctx, f"+{json.dumps(extra)}: {cmd} (workdir {wd})", weak,
+                                      payload("bash", {**base, **extra})))
+                pairs.append((reg, ctx, f"sin cwd: {cmd} (workdir {wd})", weak, payload("bash", base, cwd=False)))
+        for tool in spec["tools"]:
+            for tool_input in spec["inputs"]:
+                weak = payload(tool, tool_input)
+                pairs.append((reg, ctx, f"sin herramienta ({tool}): {json.dumps(tool_input)}", weak, payload(None, tool_input)))
+                pairs.append((reg, ctx, f"herramienta 42 ({tool}): {json.dumps(tool_input)}", weak, payload(42, tool_input)))
+    return pairs
+
+
+def decide_text(text: str, ws: str) -> tuple[str, str]:
+    with mock.patch.dict(os.environ, {}, clear=False):
+        for k in ("SAVIA_SPACE_DOMES_FILE", "SAVIA_DOME_GUARD", "SAVIA_GATES_PIN"):
+            os.environ.pop(k, None)
+        return dg.decide_payload(text, ws)
+
+
+class Monotonic(unittest.TestCase):
+    def test_extra_keys_missing_cwd_or_missing_tool_never_loosen_the_verdict(self):
+        table = json.loads(CASES.read_text(encoding="utf-8"))
+        pairs = monotonic_pairs(table["monotonic"])
+        self.assertGreaterEqual(len(pairs), 400)
+        failures, workspaces = [], {}
+        try:
+            for reg, _ctx, label, weak, strong in pairs:
+                if reg not in workspaces:
+                    workspaces[reg] = build_workspace(table, {"registry": reg})
+                ws = workspaces[reg]
+                a = decide_text(json.dumps(sub(weak, ws)), ws)
+                b = decide_text(json.dumps(sub(strong, ws)), ws)
+                if RANK[b[0]] < RANK[a[0]]:
+                    failures.append(f"{reg} {label}: {a[0]} -> {b[0]} ({b[1][:60]})")
+                # Ronda 8: el segundo de un par de bash tiene el cwd desconocido, y eso nunca es pass.
+                if not label.startswith(("sin herramienta", "herramienta 42")) and b[0] == "pass":
+                    failures.append(f"{reg} {label}: cwd desconocido y pass")
+        finally:
+            for ws in workspaces.values():
+                cleanup(ws)
+        self.assertEqual(failures, [])
+
+    def test_the_property_is_not_vacuous(self):
+        """Algún par sube de verdad (pass -> ask, ask -> deny): si no, la propiedad no prueba nada."""
+        table = json.loads(CASES.read_text(encoding="utf-8"))
+        ws = build_workspace(table, {"registry": "std-pb"})
+        try:
+            ups = set()
+            for _reg, _ctx, _label, weak, strong in monotonic_pairs(table["monotonic"], ["std-pb"]):
+                a = decide_text(json.dumps(sub(weak, ws)), ws)[0]
+                b = decide_text(json.dumps(sub(strong, ws)), ws)[0]
+                if a != b:
+                    ups.add((a, b))
+        finally:
+            cleanup(ws)
+        self.assertIn(("pass", "ask"), ups)
+        self.assertIn(("ask", "deny"), ups)
+
+    def test_strictest_keeps_the_first_reason_on_ties(self):
+        self.assertEqual(dg.strictest([("ask", "a"), ("ask", "b"), ("pass", "")]), ("ask", "a"))
+        self.assertEqual(dg.strictest([("ask", "a"), ("deny", "d")]), ("deny", "d"))
+        self.assertEqual(dg.strictest([]), ("pass", ""))
 
 
 class ShellParse(unittest.TestCase):

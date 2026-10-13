@@ -90,6 +90,87 @@ sys.exit(1 if problems else 0)
 PY
 }
 
+# monotonic [TS_COMMAND]: los pares de la sección `monotonic` de la tabla (registros de paridad) en el hook
+# bash y en la regla TS. Cada payload da lo mismo en los dos, y en cada par el segundo (más claves, sin cwd o
+# sin herramienta) nunca es menos estricto que el primero (deny > ask > pass).
+monotonic() {
+  python3 - "$REPO_ROOT" "$CASES" "$HOOK" "${1:-$TS_RUNTIME $CLI}" <<'PY'
+import json, os, shlex, subprocess, sys
+root, cases_file, hook, ts_cmd = sys.argv[1:5]
+sys.path.insert(0, os.path.join(root, "tests/python"))
+import test_dome_guard as t
+
+table = json.load(open(cases_file, encoding="utf-8"))
+spec = table["monotonic"]
+pairs = t.monotonic_pairs(spec, spec["parity_registries"])
+env = {k: v for k, v in os.environ.items() if k not in ("SAVIA_SPACE_DOMES_FILE", "SAVIA_DOME_GUARD", "SAVIA_GATES_PIN")}
+problems, seen, ups, spaces = [], {}, set(), {}
+
+
+def verdict(reg, payload):
+    ws = spaces.setdefault(reg, t.build_workspace(table, {"registry": reg}))
+    data = json.dumps(t.sub(payload, ws))
+    if (reg, data) not in seen:
+        env["CLAUDE_PROJECT_DIR"] = ws
+        out = subprocess.run(["bash", hook], input=data, capture_output=True, text=True, env=env, timeout=60).stdout.strip()
+        b = json.loads(out)["hookSpecificOutput"]["permissionDecision"] if out else "pass"
+        ts_out = subprocess.run(shlex.split(ts_cmd) + ["--root", ws], input=data, capture_output=True, text=True,
+                                env=env, timeout=60)
+        try:
+            ts = json.loads(ts_out.stdout)["decision"]
+        except (ValueError, KeyError):
+            ts = "error"
+        if b != ts:
+            problems.append(f"{reg} {data}: bash={b} ts={ts}")
+        seen[(reg, data)] = b if b == ts else ts
+    return seen[(reg, data)]
+
+
+try:
+    for reg, _ctx, label, weak, strong in pairs:
+        a, b = verdict(reg, weak), verdict(reg, strong)
+        if t.RANK.get(b, -1) < t.RANK.get(a, -1):
+            problems.append(f"{reg} {label}: {a} -> {b}")
+        if not label.startswith(("sin herramienta", "herramienta 42")) and b == "pass":
+            problems.append(f"{reg} {label}: cwd desconocido y pass")
+        if a != b:
+            ups.add(f"{a}->{b}")
+finally:
+    for ws in spaces.values():
+        t.cleanup(ws)
+print(f"pares={len(pairs)} payloads={len(seen)} subidas={sorted(ups)} problemas={len(problems)}")
+for p in problems[:40]:
+    print(p)
+sys.exit(1 if problems or not {"pass->ask", "ask->deny"} <= ups else 0)
+PY
+}
+
+@test "parity: monotonicity, extra keys, a missing cwd or a missing tool never give a looser verdict, and an unknown cwd is never a pass, in both bindings" {
+  require_ts
+  run monotonic
+  echo "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"problemas=0"* ]]
+  [[ "$output" == *"pass->ask"* && "$output" == *"ask->deny"* ]]
+}
+
+@test "parity: the monotonicity check fails on a binding that loosens a verdict (mutation: TS passes without a tool)" {
+  require_ts
+  local fake="$BATS_TEST_TMPDIR/fake-ts.sh"
+  {
+    echo '#!/bin/sh'
+    echo 'in=$(cat)'
+    echo 'case "$in" in'
+    echo "  *'\"tool_name\"'*) printf '%s' \"\$in\" | $TS_RUNTIME \"$CLI\" \"\$@\" ;;"
+    echo "  *) echo '{\"decision\": \"pass\", \"reason\": \"\"}' ;;"
+    echo 'esac'
+  } > "$fake"
+  chmod +x "$fake"
+  run monotonic "$fake"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin herramienta"* ]]
+}
+
 @test "parity: every shared case, evasion probes included, gives the expected decision and the same reason in the bash hook and in savia-gates" {
   require_ts
   run parity cases

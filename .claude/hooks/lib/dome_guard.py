@@ -19,9 +19,12 @@ cualquier otra orden, con cualquier programa (también envoltorios, `sh -c`, `ev
 llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
 Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
 desconocida con una ruta que los toque preguntan.
-El mismo principio aplica al directorio de trabajo (revisión r4, ronda 7 de Space): bash solo se analiza
-si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos motores y `workdir`
-ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, pregunta antes de analizar.
+El mismo principio aplica al directorio de trabajo (revisiones r4 y r5, rondas 7 y 8 de Space): bash se
+analiza con su directorio si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos
+motores y `workdir` ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, se analiza con
+la mejor base que se lee y con cada cúpula como directorio posible; gana el veredicto más estricto (deny > ask >
+pass) y como mínimo ask: lo desconocido nunca rebaja un deny ni da pass. Una llamada sin herramienta se evalúa
+como cada herramienta y gana la más estricta.
 Falsos positivos aceptados (preguntan sin tocar una cúpula): un programa desconocido con `.` o una variable
 (`prettier --write .`), `rm -rf $X`, `mv a ..` y un literal entre comillas de un guion `-c`/`-e` que nombra
 un ancestro de una cúpula o del registro.
@@ -1075,14 +1078,48 @@ def writes_reach(cmds: list[dict], base: str, target: str) -> bool:
     return False
 
 
+RANK = {"pass": 0, "ask": 1, "deny": 2}
+
+
+def strictest(verdicts: list[tuple[str, str]]) -> tuple[str, str]:
+    """El veredicto más estricto (deny > ask > pass); a igualdad, el primero (su motivo)."""
+    best = ("pass", "")
+    for v in verdicts:
+        if RANK[v[0]] > RANK[best[0]]:
+            best = v
+    return best
+
+
+def best_base(project: str, tool_input) -> str:
+    """La mejor base que se lee aunque el directorio no se conozca: el `workdir` si es texto, o el proyecto."""
+    v = tool_input.get("workdir") if isinstance(tool_input, dict) else None
+    return join(project, v) if isinstance(v, str) and v else project
+
+
 def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input,
                 cwd_known: bool = True) -> tuple[str, str]:
-    # Antes de analizar la orden: sin saber dónde corre no se sabe qué lee ni qué escribe. Pregunta siempre,
-    # sea cual sea el nivel, el proveedor o la orden (ronda 7 de dome_guard.rs).
+    # El directorio de trabajo decide contra qué se resuelven las rutas de la orden.
     cwd = effective_cwd(project, tool_input) if cwd_known else None
-    if cwd is None:
-        return "ask", UNKNOWN_CWD_NOTICE
-    base, shifted = cwd
+    if cwd is not None:
+        return analyse_bash(domes, files, project, ctx, tool_input, *cwd)
+    # Sin saber dónde corre no se sabe qué lee ni qué escribe (ronda 8 de dome_guard.rs). Se hace el análisis
+    # normal con la mejor base que se lee (el `workdir` o el proyecto) y con cada cúpula como directorio de
+    # trabajo posible, siempre desplazado; gana el veredicto más estricto (deny > ask > pass) y como mínimo ask.
+    # Lo desconocido nunca rebaja ni da pass. En un empate a ask vale el motivo del primer análisis que pregunta.
+    tool_input = tool_input if isinstance(tool_input, dict) else {}
+    verdict = ("ask", UNKNOWN_CWD_NOTICE)
+    for base in [best_base(project, tool_input)] + [d["root"] for d in domes]:
+        v = analyse_bash(domes, files, project, ctx, tool_input, base, True)
+        if v[0] == "deny":
+            return v
+        if v[0] == "ask" and verdict[1] == UNKNOWN_CWD_NOTICE:
+            verdict = v
+    return verdict
+
+
+def analyse_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict, base: str,
+                 shifted: bool) -> tuple[str, str]:
+    """Análisis de la orden con `base` como directorio de trabajo (`shifted`: distinto del proyecto)."""
     command = tool_input.get("command")
     if command is not None and not isinstance(command, str):
         return "ask", PAYLOAD_NOTICE
@@ -1200,8 +1237,20 @@ def decide_unknown(registry: dict, project: str, tool_input: dict) -> tuple[str,
     return "pass", ""
 
 
+# Una llamada sin herramienta se evalúa como cada una de ellas y gana la más estricta: quitar la herramienta
+# nunca da un veredicto menos estricto (monotonía). La desconocida va primero: su motivo es el que vale.
+ANY_TOOL = ("", "edit", "bash", "read", "grep", "glob", "list")
+
+
 def decide(registry: dict, project: str, tool: str, tool_input, ctx: dict, cwd_known: bool = True) -> tuple[str, str]:
-    """`cwd_known`: el directorio de la llamada se conoce (en Claude Code, el `cwd` del payload es texto)."""
+    """`cwd_known`: el directorio de la llamada se conoce (en Claude Code, el `cwd` del payload es texto).
+    `tool` vacío: no se sabe qué herramienta es."""
+    if not tool:
+        return strictest([decide_tool(registry, project, t, tool_input, ctx, cwd_known) for t in ANY_TOOL])
+    return decide_tool(registry, project, tool, tool_input, ctx, cwd_known)
+
+
+def decide_tool(registry: dict, project: str, tool: str, tool_input, ctx: dict, cwd_known: bool) -> tuple[str, str]:
     permission = tool_permission(tool)
     raw_input = tool_input
     if not isinstance(tool_input, dict):
@@ -1375,7 +1424,8 @@ def decide_payload(raw: str, root: str) -> tuple[str, str]:
     cwd = payload.get("cwd")
     cwd_known = isinstance(cwd, str) and bool(cwd)
     project = os.path.abspath(cwd if cwd_known else root)
-    return decide(registry, project, str(payload.get("tool_name") or ""), payload.get("tool_input"),
+    tool = payload.get("tool_name")
+    return decide(registry, project, tool if isinstance(tool, str) else "", payload.get("tool_input"),
                   session_context(payload), cwd_known)
 
 

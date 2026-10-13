@@ -173,22 +173,31 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
   run_hook bash '{"command":"cat x.md","workdir":"vaults/secreta"}'
   [ "$(decision)" = "deny" ]
   run_hook bash '{"command":"cat secreta/x.md","workdir":7}'
-  [ "$(decision)" = "ask" ]
-  [[ "$(reason)" == *"no se sabe en qué directorio"* ]]
+  [ "$(decision)" = "deny" ]
 }
 
-@test "review r4 P1-C2: a bash call whose directory is unknown always asks, before parsing the command" {
+@test "review r4 P1-C2 / ronda 8: a bash call whose directory is unknown is never a pass" {
   registry
-  for input in '{"command":"ls","x":1}' '{"command":"cat a.md","chdir":"vaults/secreta"}' '{"command":"cargo test","workdir":""}' \
-               '{"command":"ls","workdir":["a"]}' '"ls"' 'null'; do
+  local local_ctx=',"dome_context":{"cloud":false}'
+  for input in '{"command":"ls","x":1}' '{"command":"cat a.md","chdir":"src"}' '{"command":"ls","workdir":""}' \
+               '{"command":"ls","workdir":["a"]}' '{"command":"ls","workdir":7}'; do
+    # En la nube, cada cúpula es un directorio posible: desde la N3 «secreta», `ls` la lee y se deniega.
     run_hook bash "$input"
-    [ "$(decision)" = "ask" ] || { echo "pasa: $input"; return 1; }
+    [ "$(decision)" = "deny" ] || { echo "nube: $input -> $(decision)"; return 1; }
+    # En local ningún análisis pregunta: queda el «como mínimo ask» con el aviso de cwd.
+    run_hook bash "$input" "$local_ctx"
+    [ "$(decision)" = "ask" ] || { echo "local: $input -> $(decision)"; return 1; }
     [[ "$(reason)" == *"no se sabe en qué directorio"* ]] || { echo "otro motivo: $input"; return 1; }
   done
-  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ '{"tool_name":"Bash","tool_input":{"command":"ls"}}' "$WS" "$HOOK"
+  for input in '"ls"' 'null' '{"command":"cargo test","x":1}'; do
+    run_hook bash "$input" "$local_ctx"
+    [ "$(decision)" = "ask" ] || { echo "local: $input -> $(decision)"; return 1; }
+  done
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ '{"tool_name":"Bash","tool_input":{"command":"ls"},"dome_context":{"cloud":false}}' "$WS" "$HOOK"
   [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"no se sabe en qué directorio"* ]]
   run_hook Bash '{"command":"ls"}' ',"cwd":42'
-  [ "$(decision)" = "ask" ]
+  [ "$(decision)" = "deny" ]
   run_hook Bash '{"command":"ls","description":"x","timeout":5,"run_in_background":true,"dangerouslyDisableSandbox":false}'
   [ -z "$output" ]
   run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ '{"tool_name":"Read","tool_input":{"file_path":"src/a"}}' "$WS" "$HOOK"
@@ -256,6 +265,26 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
     run_hook Bash "$(jq -cn --arg c "$cmd" '{command: $c}')"
     [ -z "$output" ] || { echo "pregunta de más: $cmd"; return 1; }
   done
+}
+
+@test "strictest verdict: an unknown cwd adds at least ask and never lowers a deny; a missing tool counts as every tool" {
+  registry
+  for input in '{"command":"cat vaults/secreta/x.md","x":1}' '{"command":"cat vaults/secreta/x.md","workdir":7}' \
+               '{"command":"cat x.md","chdir":"vaults/secreta"}'; do
+    run_hook bash "$input"
+    [ "$(decision)" = "deny" ] || { echo "rebaja: $input -> $(decision)"; return 1; }
+  done
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ '{"tool_name":"Bash","tool_input":{"command":"cat vaults/secreta/x.md"}}' "$WS" "$HOOK"
+  [ "$(decision)" = "deny" ]
+  run_hook bash '{"command":"echo x > vaults/gallinero/a.md","x":1}' ',"dome_context":{"cloud":false}'
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"Guardar como nota"* ]]
+  run_hook bash '{"command":"ls","x":1}'
+  [ "$(decision)" = "deny" ]
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ "{\"tool_input\":{\"file_path\":\"vaults/secreta/x.md\"},\"cwd\":\"$WS\"}" "$WS" "$HOOK"
+  [ "$(decision)" = "deny" ]
+  run bash -c 'printf "%s" "$1" | CLAUDE_PROJECT_DIR="$2" bash "$3"' _ "{\"tool_name\":42,\"tool_input\":{\"file_path\":\"vaults/secreta/x.md\"},\"cwd\":\"$WS\"}" "$WS" "$HOOK"
+  [ "$(decision)" = "deny" ]
 }
 
 @test "fail-closed pass: raw NUL bytes or invalid UTF-8 on stdin reach the core intact and ask" {

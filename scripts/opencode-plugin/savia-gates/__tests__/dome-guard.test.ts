@@ -3,7 +3,7 @@ import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { UNKNOWN_CWD_NOTICE, UNKNOWN_TOOL_NOTICE, decidePayload, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
+import { UNKNOWN_CWD_NOTICE, UNKNOWN_TOOL_NOTICE, decidePayload, domeGuardVerdict, strictest, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
 import { SaviaGates } from "../index"
 
 // SE-436 S5 DUAL_BINDING: la regla de savia-gates decide igual que el hook dome-guard.sh. Esta suite
@@ -49,7 +49,7 @@ async function workspace(table: any, c: any): Promise<string> {
 }
 
 function payloadText(c: any, ws: string): string {
-  if ("raw" in c) return c.raw
+  if ("raw" in c) return sub(c.raw, ws)
   const payload: Record<string, unknown> = {
     hook_event_name: "PreToolUse", tool_name: c.tool, tool_input: sub(c.input, ws), session_id: "s1",
     cwd: "cwd" in c ? join(ws, c.cwd) : ws,
@@ -66,7 +66,7 @@ async function runCase(table: any, c: any): Promise<{ decision: string; reason: 
 
 test("every shared case gives the expected decision and reason", async () => {
   const table = JSON.parse(await readFile(CASES, "utf-8"))
-  expect(table.cases.length).toBeGreaterThanOrEqual(240)
+  expect(table.cases.length).toBeGreaterThanOrEqual(500)
   const notices: Record<string, string> = Object.fromEntries(Object.entries(table.notices).map(([k, v]) => [`@${k}@`, v as string]))
   const failures: string[] = []
   for (const c of table.cases) {
@@ -77,7 +77,8 @@ test("every shared case gives the expected decision and reason", async () => {
     if ("reason_lacks" in c && got.reason.includes(c.reason_lacks)) failures.push(`${c.name}: con ${c.reason_lacks}`)
   }
   expect(failures).toEqual([])
-})
+  // ~500 casos, cada uno con su workspace en disco: el tope de 5 s de bun no alcanza con la máquina cargada.
+}, 60_000)
 
 test("read-only bash detection is conservative", () => {
   const ro = (cmd: string) => {
@@ -215,20 +216,109 @@ test("review r3: registry errors other than ENOENT fail closed, and any writer r
   expect(run("mcp__fs__write_file", { file_path: join(ws, "vaults/secreta/a") }).reason).toBe(UNKNOWN_TOOL_NOTICE)
 })
 
-test("review r4 P1-C2: a bash call whose directory is unknown always asks, before parsing the command", async () => {
+test("review r4 P1-C2 / ronda 8: a bash call whose directory is unknown is never a pass", async () => {
   const table = JSON.parse(await readFile(CASES, "utf-8"))
-  const ws = await workspace(table, table.cases[0])
-  const run = (payload: unknown) => decidePayload(JSON.stringify(payload), ws, {})
-  for (const input of [{ command: "ls", x: 1 }, { command: "cat a.md", chdir: "vaults/secreta" }, { command: "cargo test", workdir: "" },
-    { command: "ls", workdir: ["a"] }, { command: "ls", workdir: 7 }, "ls", null]) {
-    expect([input, run({ tool_name: "bash", tool_input: input, cwd: ws })]).toEqual([input, { decision: "ask", reason: UNKNOWN_CWD_NOTICE }])
+  const ws = await workspace(table, { registry: "std" })
+  const local = { cloud: false }
+  const run = (payload: Record<string, unknown>) => decidePayload(JSON.stringify(payload), ws, {})
+  for (const input of [{ command: "ls", x: 1 }, { command: "cat a.md", chdir: "src" }, { command: "ls", workdir: "" },
+    { command: "ls", workdir: ["a"] }, { command: "ls", workdir: 7 }]) {
+    // En la nube, cada cúpula es un directorio posible: desde la N3 «secreta», `ls` la lee y se deniega.
+    expect([input, run({ tool_name: "bash", tool_input: input, cwd: ws }).decision]).toEqual([input, "deny"])
+    // En local ningún análisis pregunta: queda el «como mínimo ask» con el aviso de cwd.
+    expect([input, run({ tool_name: "bash", tool_input: input, cwd: ws, dome_context: local })])
+      .toEqual([input, { decision: "ask", reason: UNKNOWN_CWD_NOTICE }])
   }
-  expect(run({ tool_name: "Bash", tool_input: { command: "ls" } }).reason).toBe(UNKNOWN_CWD_NOTICE)
-  expect(run({ tool_name: "Bash", tool_input: { command: "ls" }, cwd: 42 }).reason).toBe(UNKNOWN_CWD_NOTICE)
+  for (const input of ["ls", null, { command: "cargo test", x: 1 }]) {
+    expect([input, run({ tool_name: "bash", tool_input: input, cwd: ws, dome_context: local }).decision]).toEqual([input, "ask"])
+  }
+  expect(run({ tool_name: "Bash", tool_input: { command: "ls" }, dome_context: local }).reason).toBe(UNKNOWN_CWD_NOTICE)
+  expect(run({ tool_name: "Bash", tool_input: { command: "ls" }, cwd: 42, dome_context: local }).reason).toBe(UNKNOWN_CWD_NOTICE)
+  expect(run({ tool_name: "Bash", tool_input: { command: "ls" } }).decision).toBe("deny")
   expect(run({ tool_name: "Bash", cwd: ws, tool_input: { command: "ls", description: "x", timeout: 5, run_in_background: true,
     dangerouslyDisableSandbox: false } }).decision).toBe("pass")
   expect(run({ tool_name: "Read", tool_input: { file_path: "src/a" } }).decision).toBe("pass")
   // El plugin conoce el directorio de la sesión: sin cwdKnown explícito, una orden normal se analiza.
   expect(domeGuardVerdict({ root: ws, project: ws, tool: "bash", input: { command: "ls" }, env: {} }).decision).toBe("pass")
-  expect(domeGuardVerdict({ root: ws, project: ws, tool: "bash", input: { command: "ls", cwd: "src" }, env: {} }).reason).toBe(UNKNOWN_CWD_NOTICE)
+  expect(domeGuardVerdict({ root: ws, project: ws, tool: "bash", input: { command: "ls", cwd: "src" }, context: local, env: {} }).reason)
+    .toBe(UNKNOWN_CWD_NOTICE)
+})
+
+const RANK: Record<string, number> = { pass: 0, ask: 1, deny: 2 }
+
+/** Los mismos pares que monotonic_pairs de tests/python/test_dome_guard.py, en el mismo orden. */
+function monotonicPairs(spec: any, registries?: string[]): [string, string, any, any][] {
+  const pairs: [string, string, any, any][] = []
+  for (const [reg, ctx] of spec.registries) {
+    if (registries && !registries.includes(reg)) continue
+    const payload = (tool: unknown, input: unknown, cwd = true) => {
+      const p: Record<string, unknown> = tool === null ? {} : { tool_name: tool }
+      p.tool_input = input
+      if (cwd) p.cwd = "@WS@"
+      if (ctx !== null) p.dome_context = ctx
+      return p
+    }
+    for (const cmd of spec.commands) {
+      for (const wd of spec.workdirs) {
+        const base: Record<string, unknown> = wd === null ? { command: cmd } : { command: cmd, workdir: wd }
+        const weak = payload("bash", base)
+        for (const extra of spec.extras) {
+          if (!Object.keys(extra).some((k) => k in base)) {
+            pairs.push([reg, `+${JSON.stringify(extra)}: ${cmd} (workdir ${wd})`, weak, payload("bash", { ...base, ...extra })])
+          }
+        }
+        pairs.push([reg, `sin cwd: ${cmd} (workdir ${wd})`, weak, payload("bash", base, false)])
+      }
+    }
+    for (const tool of spec.tools) {
+      for (const input of spec.inputs) {
+        const weak = payload(tool, input)
+        pairs.push([reg, `sin herramienta (${tool}): ${JSON.stringify(input)}`, weak, payload(null, input)])
+        pairs.push([reg, `herramienta 42 (${tool}): ${JSON.stringify(input)}`, weak, payload(42, input)])
+      }
+    }
+  }
+  return pairs
+}
+
+test("monotonicity: extra keys, a missing cwd or a missing tool never loosen the verdict", async () => {
+  const table = JSON.parse(await readFile(CASES, "utf-8"))
+  const pairs = monotonicPairs(table.monotonic)
+  expect(pairs.length).toBeGreaterThanOrEqual(400)
+  const spaces: Record<string, string> = {}
+  const failures: string[] = []
+  const ups = new Set<string>()
+  for (const [reg, label, weak, strong] of pairs) {
+    spaces[reg] ??= await workspace(table, { registry: reg })
+    const ws = spaces[reg]
+    const a = decidePayload(JSON.stringify(sub(weak, ws)), ws, {})
+    const b = decidePayload(JSON.stringify(sub(strong, ws)), ws, {})
+    if (RANK[b.decision] < RANK[a.decision]) failures.push(`${reg} ${label}: ${a.decision} -> ${b.decision}`)
+    // Ronda 8: el segundo de un par de bash tiene el cwd desconocido, y eso nunca es pass.
+    if (!label.startsWith("sin herramienta") && !label.startsWith("herramienta 42") && b.decision === "pass") {
+      failures.push(`${reg} ${label}: cwd desconocido y pass`)
+    }
+    if (a.decision !== b.decision) ups.add(`${a.decision}->${b.decision}`)
+  }
+  expect(failures).toEqual([])
+  // La propiedad no es vacía: algún par sube de verdad.
+  expect([...ups]).toEqual(expect.arrayContaining(["pass->ask", "ask->deny"]))
+  expect(strictest([{ decision: "ask", reason: "a" }, { decision: "ask", reason: "b" }])).toEqual({ decision: "ask", reason: "a" })
+}, 120_000)
+
+test("strictest verdict (ronda 8): an unknown cwd adds at least ask and never lowers a deny", async () => {
+  const table = JSON.parse(await readFile(CASES, "utf-8"))
+  const ws = await workspace(table, { registry: "std" })
+  const run = (input: unknown, extra: Record<string, unknown> = { cwd: ws }) =>
+    decidePayload(JSON.stringify({ tool_name: "bash", tool_input: input, ...extra }), ws, {})
+  expect(run({ command: "cat vaults/secreta/x.md", x: 1 }).decision).toBe("deny")
+  expect(run({ command: "cat vaults/secreta/x.md", workdir: 7 }).decision).toBe("deny")
+  expect(run({ command: "cat x.md", chdir: "vaults/secreta" }).decision).toBe("deny")
+  expect(run({ command: "cat vaults/secreta/x.md" }, {}).decision).toBe("deny")
+  expect(run({ command: "ls", x: 1 }).decision).toBe("deny")
+  expect(run({ command: "ls", x: 1 }, { cwd: ws, dome_context: { cloud: false } })).toEqual({ decision: "ask", reason: UNKNOWN_CWD_NOTICE })
+  expect(run({ command: "echo x > vaults/gallinero/a.md", x: 1 }, { cwd: ws, dome_context: { cloud: false } }).reason).toContain("Guardar como nota")
+  expect(decidePayload(JSON.stringify({ tool_input: { file_path: "vaults/secreta/x.md" }, cwd: ws }), ws, {}).decision).toBe("deny")
+  expect(domeGuardVerdict({ root: ws, project: ws, tool: "bash", input: { command: "cat x.md", dir: "vaults/secreta" }, env: {} }).decision)
+    .toBe("deny")
 })

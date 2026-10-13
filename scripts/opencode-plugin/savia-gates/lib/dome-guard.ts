@@ -15,9 +15,12 @@
 // llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
 // Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
 // desconocida con una ruta que los toque preguntan.
-// El mismo principio aplica al directorio de trabajo (revisión r4, ronda 7 de Space): bash solo se analiza
-// si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos motores y `workdir`
-// ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, pregunta antes de analizar.
+// El mismo principio aplica al directorio de trabajo (revisiones r4 y r5, rondas 7 y 8 de Space): bash se
+// analiza con su directorio si se sabe dónde corre (entrada objeto con las claves del esquema de bash de los dos
+// motores y `workdir` ausente o texto no vacío; en Claude Code, `cwd` del payload de texto). Si no, se analiza con
+// la mejor base que se lee y con cada cúpula como directorio posible; gana el veredicto más estricto (deny > ask >
+// pass) y como mínimo ask: lo desconocido nunca rebaja un deny ni da pass. Una llamada sin herramienta se evalúa
+// como cada herramienta y gana la más estricta.
 // Falsos positivos aceptados (preguntan sin tocar una cúpula): un programa desconocido con `.` o una variable
 // (`prettier --write .`), `rm -rf $X`, `mv a ..` y un literal entre comillas de un guion `-c`/`-e` que nombra
 // un ancestro de una cúpula o del registro.
@@ -1167,13 +1170,33 @@ function writesReach(cmds: Cmd[], base: string, target: string): boolean {
   return false
 }
 
+/** La mejor base que se lee aunque el directorio no se conozca: el `workdir` si es texto, o el proyecto. */
+function bestBase(project: string, input: Record<string, unknown>): string {
+  const v = input.workdir
+  return isStr(v) && v ? join(project, v) : project
+}
+
 function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, rawInput: unknown, cwdKnown = true): DomeVerdict {
-  // Antes de analizar la orden: sin saber dónde corre no se sabe qué lee ni qué escribe. Pregunta siempre, sea
-  // cual sea el nivel, el proveedor o la orden (ronda 7 de dome_guard.rs).
+  // El directorio de trabajo decide contra qué se resuelven las rutas de la orden.
   const cwd = cwdKnown ? effectiveCwd(project, rawInput) : null
-  if (cwd === null) return { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
-  const [base, shifted] = cwd
-  const input = rawInput as Record<string, unknown>
+  if (cwd !== null) return analyseBash(domes, files, project, ctx, rawInput as Record<string, unknown>, cwd[0], cwd[1])
+  // Sin saber dónde corre no se sabe qué lee ni qué escribe (ronda 8 de dome_guard.rs). Se hace el análisis
+  // normal con la mejor base que se lee (el `workdir` o el proyecto) y con cada cúpula como directorio de
+  // trabajo posible, siempre desplazado; gana el veredicto más estricto (deny > ask > pass) y como mínimo ask.
+  // Lo desconocido nunca rebaja ni da pass. En un empate a ask vale el motivo del primer análisis que pregunta.
+  const input = rawInput && typeof rawInput === "object" && !Array.isArray(rawInput) ? (rawInput as Record<string, unknown>) : {}
+  let verdict: DomeVerdict = { decision: "ask", reason: UNKNOWN_CWD_NOTICE }
+  for (const base of [bestBase(project, input), ...domes.map((d) => d.root)]) {
+    const v = analyseBash(domes, files, project, ctx, input, base, true)
+    if (v.decision === "deny") return v
+    if (v.decision === "ask" && verdict.reason === UNKNOWN_CWD_NOTICE) verdict = v
+  }
+  return verdict
+}
+
+/** Análisis de la orden con `base` como directorio de trabajo (`shifted`: distinto del proyecto). */
+function analyseBash(domes: Dome[], files: string[], project: string, ctx: Ctx, input: Record<string, unknown>, base: string,
+  shifted: boolean): DomeVerdict {
   if (input.command !== undefined && input.command !== null && !isStr(input.command)) return { decision: "ask", reason: PAYLOAD_NOTICE }
   const command = isStr(input.command) ? input.command : ""
   let script: Cmd[]
@@ -1282,7 +1305,16 @@ function decideUnknown(registry: Registry, project: string, input: Record<string
 }
 
 /** `cwdKnown`: el directorio de la llamada se conoce (en Claude Code, el `cwd` del payload es texto). */
+// Una llamada sin herramienta se evalúa como cada una de ellas y gana la más estricta: quitar la herramienta
+// nunca da un veredicto menos estricto (monotonía). La desconocida va primero: su motivo es el que vale.
+const ANY_TOOL = ["", "edit", "bash", "read", "grep", "glob", "list"]
+
 function decide(registry: Registry, project: string, tool: string, rawInput: unknown, ctx: Ctx, cwdKnown = true): DomeVerdict {
+  if (!tool) return strictest(ANY_TOOL.map((t) => decideTool(registry, project, t, rawInput, ctx, cwdKnown)))
+  return decideTool(registry, project, tool, rawInput, ctx, cwdKnown)
+}
+
+function decideTool(registry: Registry, project: string, tool: string, rawInput: unknown, ctx: Ctx, cwdKnown: boolean): DomeVerdict {
   const input = rawInput && typeof rawInput === "object" && !Array.isArray(rawInput) ? (rawInput as Record<string, unknown>) : {}
   const permission = toolPermission(tool)
   if (!(permission === "bash" || FILE_TOOLS.has(permission) || WRITE_TOOLS.has(permission))) return decideUnknown(registry, project, input)
@@ -1491,7 +1523,7 @@ export function decidePayload(raw: string, root: string, env: Record<string, str
     root,
     project: abspath(cwdKnown ? payload.cwd : root),
     cwdKnown,
-    tool: String(payload.tool_name ?? ""),
+    tool: isStr(payload.tool_name) ? payload.tool_name : "",
     input: payload.tool_input,
     context: payload.dome_context,
     env,
