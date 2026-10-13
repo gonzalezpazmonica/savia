@@ -1,7 +1,8 @@
 // dome-guard.ts — Guard de cúpulas en el motor (SE-436 S5, D30-4): regla nativa de savia-gates.
 //
 // Gemelo del hook de Claude Code `.claude/hooks/dome-guard.sh` (núcleo `.claude/hooks/lib/dome_guard.py`),
-// ambos portados de `crates/space-orchestrator/src/dome_guard.rs` de Savia Space. Misma entrada, misma
+// ambos portados de `crates/space-orchestrator/src/dome_guard.rs` de Savia Space @ 9137d4f (ronda 5), más
+// dos reglas propias: un cwd de sesión dentro de una cúpula la toca siempre y el registro no lo escribe el motor. Misma entrada, misma
 // decisión y mismo motivo: tests/hooks/test-dome-guard-parity.bats. Cualquier cambio aquí va también allí.
 //
 // - Escritura (edit, write, patch, multiedit o un bash que escriba) dentro de una cúpula → ask.
@@ -39,6 +40,11 @@ export const UNKNOWN_NOTICE =
 export const CLOUD_DENIED =
   "contenido N3 o superior no sale a la nube: esta cúpula no se lee con el motor. " +
   "Pide a la persona una tarea del carril local; el resultado lo ve ella y no vuelve a ti"
+export const REGISTRY_NOTICE =
+  "el registro de cúpulas no lo cambia el motor: lo cambia la persona desde Savia Space o con savia-vaults dome create"
+export const PAYLOAD_NOTICE = "la llamada no se puede leer; no se sabe si toca una cúpula"
+/** Hooks bash de settings.json con gemelo nativo aquí: el puente no los vuelve a ejecutar. */
+export const NATIVE_TWIN_HOOKS = ["dome-guard.sh"]
 export const GUARD_FAILED = "el guard falló; no se puede comprobar si la orden toca una cúpula"
 
 const WRITERS = new Set(["cp", "mv", "rm", "touch", "tee", "sed", "dd", "install", "ln", "truncate", "chmod", "chown",
@@ -49,6 +55,10 @@ const FILE_TOOLS = new Set(["read", "grep", "glob", "list"])
 const READ_ONLY = new Set(["cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "diff", "nl"])
 const TRAVERSERS = new Set(["grep", "rg", "find", "tree", "du", "ls", "tar", "cp", "rsync", "zip", "cpio", "7z", "scp"])
 const WRITE_PATH_KEYS = ["filePath", "file_path", "path", "notebook_path"]
+// Parámetros de bash que fijan el directorio de trabajo (`workdir` en OpenCode y sus equivalentes).
+const WORKDIR_KEYS = ["workdir", "cwd", "directory", "dir", "working_directory", "workingDir"]
+// Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
+const LINK_DEPTH = 3
 const LEVELS: Record<string, number> = { N1: 1, N2: 2, "": 2, N3: 3, N4: 4, N4B: 4 }
 // Espacio en blanco ASCII explícito, el mismo que el núcleo Python (los `\s` de JS y Python difieren).
 const WS = " \t\n\r\x0b\x0c"
@@ -275,7 +285,7 @@ function symlinksInto(root: string, target: string, depth: number): string[] {
 
 const TOKEN_SPLIT = new RegExp(WS_CLASS + "'\"`;&|()<>=]+")
 const COMPONENT_SPLIT = new RegExp(WS_CLASS + "/'\"`;&|()<>=:]+")
-const LOWER_SPLIT = new RegExp(WS_CLASS + "/]")
+const LOWER_SPLIT = new RegExp(WS_CLASS + "/{},=@:]")
 
 /** La orden menciona la cúpula: ruta, nombre como componente, enlace del workspace o comodín que la alcanza. */
 function mentionsDome(root: string, project: string, command: string): boolean {
@@ -822,7 +832,7 @@ interface Dome {
   root: string
   level: number
 }
-type Registry = { domes: Dome[] } | { error: string }
+type Registry = { domes: Dome[]; files: string[] } | { error: string }
 interface Ctx {
   cloud: boolean
   attached: string[]
@@ -903,7 +913,21 @@ function readVerdict(ctx: Ctx, touched: Dome[]): DomeVerdict {
   return { decision: "pass", reason: "" }
 }
 
-function decideBash(domes: Dome[], project: string, ctx: Ctx, command: string): DomeVerdict {
+/** Directorio de trabajo efectivo de una orden de bash y si difiere del proyecto (ronda 5 de dome_guard.rs). */
+function effectiveCwd(project: string, input: Record<string, unknown>): [string, boolean] {
+  if (input.workdir_unknown === true) return [project, true]
+  for (const k of WORKDIR_KEYS) {
+    const v = input[k]
+    if (v === undefined || v === null) continue
+    if (!isStr(v) || !v) return [project, true]
+    const base = join(project, v)
+    return [base, realPath(base) !== realPath(project)]
+  }
+  return [project, false]
+}
+
+function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, input: Record<string, unknown>): DomeVerdict {
+  const command = isStr(input.command) ? input.command : ""
   let script: Cmd[]
   try {
     script = parseShell(command)
@@ -915,20 +939,27 @@ function decideBash(domes: Dome[], project: string, ctx: Ctx, command: string): 
   const lowerTokens = plain.toLowerCase().split(LOWER_SPLIT)
   const words = script.flatMap((c) => [...c.words, ...c.redirs.map((r) => r.target)]).map(litOrDollar)
   const pathlike = words.filter((w) => w.includes("/") && ![..."*?$"].some((ch) => w.includes(ch)))
-  const nameOnlyOk = pathlike.length === 0 ||
-    words.some((w) => w === "cd" || w === "pushd" || w === "$" || w.includes("*") || w.includes("?"))
-  const direct = (d: Dome) => {
+  const [base, shifted] = effectiveCwd(project, input)
+  const readsOnly = bashReadsOnly(script)
+  // Solo un lector conocido con rutas literales y limpias puede aflojar el nombre (ronda 4 de dome_guard.rs).
+  const nameOnlyOk = shifted || pathlike.length === 0 || !readsOnly ||
+    words.some((w) => [..."*?=@{}" + WS].some((ch) => w.includes(ch)))
+  const direct = (d: { root: string }) => {
     const name = fileName(d.root).toLowerCase()
     const named = (name !== "" && lowerTokens.includes(name)) || [command, plain].some((c) => mentionsDome(d.root, project, c))
-    return named && (nameOnlyOk || pathlike.some((w) => touches(d.root, project, w, false)))
+    // Una ruta que cae en la cúpula la nombra, y un directorio de trabajo dentro de ella (el efectivo o el de
+    // la sesión) hace que toda orden la toque.
+    const byPath = pathlike.some((w) => touches(d.root, base, w, false)) || touches(d.root, base, ".", false)
+    return (named && nameOnlyOk) || byPath
   }
   const directHit = domes.filter(direct)
-  if (directHit.length > 0 && !bashReadsOnly(script)) {
+  if (directHit.length > 0 && !readsOnly) {
     return { decision: "ask", reason: writes(script) ? WRITE_NOTICE : UNKNOWN_NOTICE }
   }
+  if (!readsOnly && files.some((f) => direct({ root: f }))) return { decision: "ask", reason: REGISTRY_NOTICE }
   const touched = [...directHit]
   for (const d of domes) {
-    if (!touched.some((t) => t.id === d.id) && traversalReaches(script, project, d.root)) touched.push(d)
+    if (!touched.some((t) => t.id === d.id) && traversalReaches(script, base, d.root)) touched.push(d)
   }
   if (touched.length === 0) return { decision: "pass", reason: "" }
   return readVerdict(ctx, touched)
@@ -957,11 +988,16 @@ function searchRoot(project: string, permission: string, input: Record<string, u
   return project
 }
 
+/** Una búsqueda recursiva desde `root` entra en la cúpula por un enlace que hay debajo. */
+function reachesByLink(project: string, root: string, domeRoot: string): boolean {
+  return symlinksInto(resolvePath(join(project, root)), resolvePath(domeRoot), LINK_DEPTH).length > 0
+}
+
 function decide(registry: Registry, project: string, tool: string, input: Record<string, unknown>, ctx: Ctx): DomeVerdict {
   const permission = toolPermission(tool)
   if (!(permission === "bash" || FILE_TOOLS.has(permission) || WRITE_TOOLS.has(permission))) return { decision: "pass", reason: "" }
   if ("error" in registry) return { decision: "ask", reason: `registro de cúpulas ilegible (${registry.error}): ${WRITE_NOTICE}` }
-  const domes = registry.domes
+  const { domes, files } = registry
   if (domes.length === 0) return { decision: "pass", reason: "" }
   if (WRITE_TOOLS.has(permission)) {
     const paths = WRITE_PATH_KEYS.map((k) => input[k]).filter(isStr)
@@ -970,12 +1006,15 @@ function decide(registry: Registry, project: string, tool: string, input: Record
       if (isStr(v)) paths.push(...patchPathsOf(v))
     }
     if (paths.length === 0) return { decision: "ask", reason: `no se sabe qué ruta escribe el motor: ${WRITE_NOTICE}` }
-    const hit = paths.some((p) => domes.some((d) => touches(d.root, project, p, false)))
-    return hit ? { decision: "ask", reason: WRITE_NOTICE } : { decision: "pass", reason: "" }
+    if (paths.some((p) => domes.some((d) => touches(d.root, project, p, false)))) return { decision: "ask", reason: WRITE_NOTICE }
+    if (paths.some((p) => files.some((f) => touches(f, project, p, false)))) return { decision: "ask", reason: REGISTRY_NOTICE }
+    return { decision: "pass", reason: "" }
   }
-  if (permission === "bash") return decideBash(domes, project, ctx, isStr(input.command) ? input.command : "")
+  if (permission === "bash") return decideBash(domes, files, project, ctx, input)
   const root = searchRoot(project, permission, input)
-  const touched = root === null ? domes : domes.filter((d) => touches(d.root, project, root, permission !== "read"))
+  if (root === null) return readVerdict(ctx, domes)
+  const recursive = permission !== "read"
+  const touched = domes.filter((d) => touches(d.root, project, root, recursive) || (recursive && reachesByLink(project, root, d.root)))
   return readVerdict(ctx, touched)
 }
 
@@ -1052,7 +1091,8 @@ function loadRegistry(file: string, required: boolean): Registry {
   }
   if (!found && required) return { error: `${base}: no existe` }
   // Orden fijo por id: decide qué cúpula nombra el aviso cuando la orden toca varias.
-  return { domes: merged.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)) }
+  // `files`: el registro base y el local, que el motor no puede escribir (si los vaciara, el guard dejaría de proteger).
+  return { domes: merged.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), files: [base, localRegistryPath(base)] }
 }
 
 function sessionContext(raw: unknown): Ctx {
@@ -1081,6 +1121,47 @@ export function domeGuardVerdict(req: DomeRequest): DomeVerdict {
   } catch {
     return { decision: "ask", reason: GUARD_FAILED }
   }
+}
+
+/** posixpath.abspath, como el núcleo Python: el proyecto es el `cwd` del payload, normalizado. */
+function abspath(p: string): string {
+  const full = p.startsWith("/") ? p : `${process.cwd()}/${p}`
+  const initial = full.startsWith("//") && !full.startsWith("///") ? 2 : 1
+  const out: string[] = []
+  for (const c of full.split("/")) {
+    if (c === "" || c === ".") continue
+    if (c !== "..") out.push(c)
+    else if (out.length > 0) out.pop()
+  }
+  return "/".repeat(initial) + out.join("/")
+}
+
+/**
+ * Decisión para un payload PreToolUse en texto (el que recibe el hook bash), con la delegación de
+ * `domeGuardVerdict`. Un payload que no se puede leer, con cúpulas registradas, pregunta.
+ */
+export function decidePayload(raw: string, root: string, env: Record<string, string | undefined>): DomeVerdict {
+  if (env.SAVIA_DOME_GUARD === "space" || env.SAVIA_GATES_PIN === "1") return { decision: "pass", reason: "" }
+  let payload: any
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    payload = null
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    const file = env.SAVIA_SPACE_DOMES_FILE || join(root, "projects/savia-vaults/savia-vaults.domes.json")
+    const registry = loadRegistry(file, !!env.SAVIA_SPACE_DOMES_FILE)
+    return "error" in registry || registry.domes.length > 0 ? { decision: "ask", reason: PAYLOAD_NOTICE } : { decision: "pass", reason: "" }
+  }
+  const cwd = isStr(payload.cwd) && payload.cwd ? payload.cwd : root
+  return domeGuardVerdict({
+    root,
+    project: abspath(cwd),
+    tool: String(payload.tool_name ?? ""),
+    input: payload.tool_input,
+    context: payload.dome_context,
+    env,
+  })
 }
 
 const RANK: Record<DomeDecision, number> = { pass: 0, ask: 1, deny: 2 }

@@ -145,10 +145,55 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
   [[ "$output" == *"el guard falló"* ]]
 }
 
-@test "empty stdin passes" {
-  registry
+@test "empty or invalid stdin: passes without a registry, asks with one (fail closed)" {
   run bash -c 'CLAUDE_PROJECT_DIR="$1" bash "$2" < /dev/null' _ "$WS" "$HOOK"
   [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  registry
+  run bash -c 'CLAUDE_PROJECT_DIR="$1" bash "$2" < /dev/null' _ "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"no se puede leer"* ]]
+  run bash -c 'printf "no json" | CLAUDE_PROJECT_DIR="$1" bash "$2"' _ "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+}
+
+@test "review P1-S1/S2: an inline script or a key=value path does not hide a dome write or an N3 read" {
+  registry
+  for cmd in "bash -c 'echo x > vaults/gallinero/a.md'" "sh -c \"truncate -s0 vaults/gallinero/a.md\"" \
+             "python3 -c \"print(open('vaults/secreta/a').read())\"" "dd if=/dev/zero of=vaults/gallinero/a count=1"; do
+    run_hook Bash "$(jq -cn --arg c "$cmd" '{command: $c}')"
+    [ "$(decision)" = "ask" ] || { echo "pasa: $cmd"; return 1; }
+  done
+}
+
+@test "review P1-S3: an OpenCode workdir inside a dome is where the command runs" {
+  registry
+  run_hook bash "{\"command\":\"echo x > a.md\",\"workdir\":\"$WS/vaults/gallinero\"}"
+  [ "$(decision)" = "ask" ]
+  run_hook bash '{"command":"cat x.md","workdir":"vaults/secreta"}'
+  [ "$(decision)" = "deny" ]
+  run_hook bash '{"command":"cat secreta/x.md","workdir":7}'
+  [ "$(decision)" = "deny" ]
+}
+
+@test "review P1-S4: a session cwd inside a dome makes every command touch it" {
+  registry
+  run_hook Bash '{"command":"cat a.md"}' ",\"cwd\":\"$WS/vaults/secreta\""
+  [ "$(decision)" = "deny" ]
+  run_hook Bash '{"command":"echo x > a.md"}' ",\"cwd\":\"$WS/vaults/gallinero\""
+  [ "$(decision)" = "ask" ]
+  run_hook Bash '{"command":"ls"}' ",\"cwd\":\"$WS/src\""
+  [ -z "$output" ]
+}
+
+@test "review P1-S5: the engine cannot rewrite the dome registry (base or local) to disable the guard" {
+  registry
+  run_hook Write "{\"file_path\":\"$WS/projects/savia-vaults/savia-vaults.domes.local.json\",\"content\":\"{}\"}"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"registro de cúpulas no lo cambia el motor"* ]]
+  run_hook Bash '{"command":"echo x | tee -a projects/savia-vaults/savia-vaults.domes.local.json"}'
+  [ "$(decision)" = "ask" ]
+  run_hook Bash '{"command":"cat projects/savia-vaults/savia-vaults.domes.json"}'
   [ -z "$output" ]
 }
 

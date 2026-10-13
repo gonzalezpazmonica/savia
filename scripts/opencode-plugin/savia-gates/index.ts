@@ -20,7 +20,7 @@ import { patchPaths, pinFor, protectsPath, verifyPin } from "./lib/guard-pin"
 import { REGISTRY, trustedFor, verifyTrusted, wrapCommand } from "./lib/trusted-guards"
 import type { TrustedGuards } from "./lib/trusted-guards"
 import { resolveProjectRoot } from "./lib/root"
-import { domeGuardVerdict, strictest } from "./lib/dome-guard"
+import { domeGuardVerdict, NATIVE_TWIN_HOOKS, strictest } from "./lib/dome-guard"
 
 export const SaviaGates: Plugin = async (ctx: PluginInput) => {
   const { $, directory, worktree } = ctx
@@ -43,6 +43,10 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
     }
   }
   const hookMap = await loadHookMap(root, trusted ? `${trusted.copy}/${REGISTRY}` : undefined)
+  // El gemelo bash de una regla nativa (lib/dome-guard.ts) daría la misma decisión otra vez y costaría un
+  // proceso por llamada: el puente no lo ejecuta.
+  hookMap.PreToolUse = (hookMap.PreToolUse ?? []).filter((h) =>
+    !(h.type === "command" && NATIVE_TWIN_HOOKS.some((n) => h.command.endsWith(`/${n}`))))
   const runOpts = trusted ? { wrap: (command: string) => wrapCommand(trusted as TrustedGuards, command) } : {}
   let lastCwd: string | null = null
   // T1: además los guards se fijan por hash la primera vez que se carga este directorio y se

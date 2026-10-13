@@ -51,17 +51,24 @@ def build_workspace(table: dict, case: dict) -> str:
     return ws
 
 
+def payload_text(case: dict, ws: str) -> str:
+    """Payload PreToolUse del caso: `raw` tal cual, o el JSON con `cwd` (relativo al workspace) y contexto."""
+    if "raw" in case:
+        return case["raw"]
+    payload = {"hook_event_name": "PreToolUse", "tool_name": case["tool"], "tool_input": sub(case["input"], ws),
+               "session_id": "s1", "cwd": os.path.join(ws, case["cwd"]) if "cwd" in case else ws}
+    if "ctx" in case:
+        payload["dome_context"] = case["ctx"]
+    return json.dumps(payload)
+
+
 def run_case(table: dict, case: dict) -> tuple[dict, str]:
     ws = build_workspace(table, case)
     try:
-        payload = {"hook_event_name": "PreToolUse", "tool_name": case["tool"],
-                   "tool_input": sub(case["input"], ws), "session_id": "s1", "cwd": ws}
-        if "ctx" in case:
-            payload["dome_context"] = case["ctx"]
         env = {k: sub(v, ws) for k, v in case.get("env", {}).items()}
         out = io.StringIO()
         with mock.patch.dict(os.environ, env, clear=False), \
-                mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), redirect_stdout(out):
+                mock.patch.object(sys, "stdin", io.StringIO(payload_text(case, ws))), redirect_stdout(out):
             if "SAVIA_SPACE_DOMES_FILE" not in env:
                 os.environ.pop("SAVIA_SPACE_DOMES_FILE", None)
             dg.main(["--root", ws])
@@ -87,7 +94,7 @@ def check(table: dict, case: dict, got: dict) -> list[str]:
 class SharedCases(unittest.TestCase):
     def test_every_shared_case(self):
         table = json.loads(CASES.read_text(encoding="utf-8"))
-        self.assertGreaterEqual(len(table["cases"]), 100)
+        self.assertGreaterEqual(len(table["cases"]), 240)
         failures = []
         for case in table["cases"]:
             got, _ws = run_case(table, case)
@@ -145,7 +152,8 @@ class Registry(unittest.TestCase):
         self.assertIsNone(dg.parse_level("N5"))
 
     def test_missing_registry_is_empty_unless_required(self):
-        self.assertEqual(dg.load_registry("/nonexistent/x.json", False), {"domes": []})
+        self.assertEqual(dg.load_registry("/nonexistent/x.json", False),
+                         {"domes": [], "files": ["/nonexistent/x.json", "/nonexistent/x.local.json"]})
         self.assertIn("no existe", dg.load_registry("/nonexistent/x.json", True)["error"])
 
 

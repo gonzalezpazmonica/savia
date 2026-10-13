@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { decideDome, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
+import { decidePayload, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
 import { SaviaGates } from "../index"
 
 // SE-436 S5 DUAL_BINDING: la regla de savia-gates decide igual que el hook dome-guard.sh. Esta suite
@@ -40,22 +40,25 @@ async function workspace(table: any, c: any): Promise<string> {
   return ws
 }
 
+function payloadText(c: any, ws: string): string {
+  if ("raw" in c) return c.raw
+  const payload: Record<string, unknown> = {
+    hook_event_name: "PreToolUse", tool_name: c.tool, tool_input: sub(c.input, ws), session_id: "s1",
+    cwd: "cwd" in c ? join(ws, c.cwd) : ws,
+  }
+  if ("ctx" in c) payload.dome_context = c.ctx
+  return JSON.stringify(payload)
+}
+
 async function runCase(table: any, c: any): Promise<{ decision: string; reason: string }> {
   const ws = await workspace(table, c)
   const env = sub(c.env ?? {}, ws) as Record<string, string>
-  return decideDome({
-    root: ws,
-    project: ws,
-    tool: c.tool,
-    input: sub(c.input, ws),
-    context: "ctx" in c ? c.ctx : undefined,
-    env: { SAVIA_SPACE_DOMES_FILE: env.SAVIA_SPACE_DOMES_FILE },
-  })
+  return decidePayload(payloadText(c, ws), ws, { SAVIA_SPACE_DOMES_FILE: env.SAVIA_SPACE_DOMES_FILE })
 }
 
 test("every shared case gives the expected decision and reason", async () => {
   const table = JSON.parse(await readFile(CASES, "utf-8"))
-  expect(table.cases.length).toBeGreaterThanOrEqual(100)
+  expect(table.cases.length).toBeGreaterThanOrEqual(240)
   const notices: Record<string, string> = Object.fromEntries(Object.entries(table.notices).map(([k, v]) => [`@${k}@`, v as string]))
   const failures: string[] = []
   for (const c of table.cases) {
@@ -129,4 +132,40 @@ test("savia-gates enforces the rule in tool.execute.before, also on the sandbox-
   expect(await before(hooks, "bash", { command: "cargo test" })).toBe("PASS")
   const wrapped = `bwrap --ro-bind / / -- bash -c 'echo x > vaults/gallinero/a.md'`
   expect(await before(hooks, "bash", { command: wrapped })).toContain("DOME_ASK")
+})
+
+test("review P1s: inline scripts, key=value paths, workdir, session cwd in a dome and the registry itself", async () => {
+  const table = JSON.parse(await readFile(CASES, "utf-8"))
+  const ws = await workspace(table, table.cases[0])
+  const run = (tool: string, input: unknown, cwd = ws) =>
+    decidePayload(JSON.stringify({ tool_name: tool, tool_input: input, cwd }), ws, {}).decision
+  expect(run("bash", { command: "bash -c 'echo x > vaults/gallinero/a.md'" })).toBe("ask")
+  expect(run("bash", { command: `python3 -c "print(open('vaults/secreta/a').read())"` })).toBe("ask")
+  expect(run("bash", { command: "dd if=/dev/zero of=vaults/gallinero/a count=1" })).toBe("ask")
+  expect(run("bash", { command: "echo x > a.md", workdir: join(ws, "vaults/gallinero") })).toBe("ask")
+  expect(run("bash", { command: "cat x.md", workdir: "vaults/secreta" })).toBe("deny")
+  expect(run("bash", { command: "cat a.md" }, join(ws, "vaults/secreta"))).toBe("deny")
+  expect(run("bash", { command: "ls" }, join(ws, "src"))).toBe("pass")
+  expect(run("write", { filePath: join(ws, "projects/savia-vaults/savia-vaults.domes.local.json") })).toBe("ask")
+  expect(run("bash", { command: "echo x | tee -a projects/savia-vaults/savia-vaults.domes.local.json" })).toBe("ask")
+  expect(decidePayload("no json", ws, {}).decision).toBe("ask")
+})
+
+test("the bridge does not run the bash twin of a native rule again, but runs any other hook", async () => {
+  const ws = realpathSync(await mkdtemp(join(tmpdir(), "dome-guard-twin-")))
+  dirs.push(ws)
+  await mkdir(join(ws, ".claude/hooks"), { recursive: true })
+  const blocker = "#!/usr/bin/env bash\ncat >/dev/null\necho BLOQUEADO >&2\nexit 2\n"
+  for (const name of ["dome-guard.sh", "x-dome-guard.sh"]) await writeFile(join(ws, ".claude/hooks", name), blocker, { mode: 0o755 })
+  const settings = (name: string) => JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Edit", hooks: [
+    { type: "command", command: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/${name}` }] }] } })
+  process.env.SAVIA_AUDIT_DIR = join(ws, ".audit-test")
+  process.env.SAVIA_PLUGIN_DIR = join(ws, ".manifest-test")
+  delete process.env.SAVIA_GATES_PIN
+  await writeFile(join(ws, ".claude/settings.json"), settings("dome-guard.sh"))
+  let hooks: any = await SaviaGates({ $: Bun.$, directory: ws, worktree: ws } as any)
+  expect(await before(hooks, "edit", { filePath: join(ws, "a.md") })).toBe("PASS")
+  await writeFile(join(ws, ".claude/settings.json"), settings("x-dome-guard.sh"))
+  hooks = await SaviaGates({ $: Bun.$, directory: ws, worktree: ws } as any)
+  expect(await before(hooks, "edit", { filePath: join(ws, "a.md") })).toContain("BLOQUEADO")
 })

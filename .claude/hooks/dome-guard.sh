@@ -12,6 +12,9 @@
 #
 # Contexto de sesión: quien ejecuta el hook puede añadir al payload
 # `dome_context: {cloud, attached[], granted[]}`; sin él, nube y sin adjuntos (falla cerrado).
+# Bash: las rutas se resuelven contra `workdir` (o cwd/directory/dir/working_directory/workingDir) si
+# lo trae la llamada; un directorio de trabajo dentro de una cúpula hace que toda orden la toque.
+# El registro (base y .local) también está protegido: el motor no lo escribe.
 # Delegación: SAVIA_DOME_GUARD=space (Savia Space decide con su guard nativo) o
 # SAVIA_GATES_PIN=1 (modo mediado, rige SE-434) → el hook no decide.
 # Registro: SAVIA_SPACE_DOMES_FILE (si falta el fichero, ilegible) o
@@ -33,11 +36,11 @@ if [[ -z "${SAVIA_SPACE_DOMES_FILE:-}" && ! -e "$BASE" && ! -e "${BASE%.json}.lo
   exit 0
 fi
 
+# Con registro, un payload vacío o ilegible no pasa: el núcleo pregunta (no se sabe qué toca la llamada).
 INPUT=""
 if [[ ! -t 0 ]]; then
   INPUT=$(timeout 3 cat 2>/dev/null) || true
 fi
-[[ -z "$INPUT" ]] && exit 0
 
 ask() {
   local reason="$1"

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Guard de cúpulas (SE-436 S5, D30-4): núcleo del hook dome-guard.sh.
 
-Port de `crates/space-orchestrator/src/dome_guard.rs` de Savia Space (y del subconjunto de su
-`shell.rs` que necesita). Gemelo TypeScript: `scripts/opencode-plugin/savia-gates/lib/dome-guard.ts`.
+Port de `crates/space-orchestrator/src/dome_guard.rs` de Savia Space @ 9137d4f, ronda 5 (y del
+subconjunto de su `shell.rs` que necesita). Más estricto que el original en dos puntos que Space no
+necesita: un cwd de sesión dentro de una cúpula la toca siempre (en Space el proyecto es el workspace) y
+el registro de cúpulas (base y local) no lo escribe el motor. Gemelo TypeScript: `scripts/opencode-plugin/savia-gates/lib/dome-guard.ts`.
 Misma entrada, misma decisión: lo comprueba `tests/hooks/test-dome-guard-parity.bats`.
 
 - Escritura (edit, write, patch, multiedit, notebookedit o un bash que escriba) dentro de la raíz de
@@ -25,6 +27,9 @@ WRITE_NOTICE = ("Usa una propuesta: Guardar como nota. El motor no escribe en un
                 "la propuesta la revisa la persona")
 UNKNOWN_NOTICE = ("la orden toca una cúpula y no es una lectura conocida; si escribe, usa una propuesta: "
                   "Guardar como nota")
+REGISTRY_NOTICE = ("el registro de cúpulas no lo cambia el motor: lo cambia la persona desde Savia Space "
+                   "o con savia-vaults dome create")
+PAYLOAD_NOTICE = "la llamada no se puede leer; no se sabe si toca una cúpula"
 CLOUD_DENIED = ("contenido N3 o superior no sale a la nube: esta cúpula no se lee con el motor. "
                 "Pide a la persona una tarea del carril local; el resultado lo ve ella y no vuelve a ti")
 
@@ -37,6 +42,10 @@ FILE_TOOLS = {"read", "grep", "glob", "list"}
 READ_ONLY = {"cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "diff", "nl"}
 TRAVERSERS = {"grep", "rg", "find", "tree", "du", "ls", "tar", "cp", "rsync", "zip", "cpio", "7z", "scp"}
 WRITE_PATH_KEYS = ("filePath", "file_path", "path", "notebook_path")
+# Parámetros de bash que fijan el directorio de trabajo (`workdir` en OpenCode y sus equivalentes).
+WORKDIR_KEYS = ("workdir", "cwd", "directory", "dir", "working_directory", "workingDir")
+# Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
+LINK_DEPTH = 3
 LEVELS = {"N1": 1, "N2": 2, "": 2, "N3": 3, "N4": 4, "N4B": 4}
 # Espacio en blanco ASCII explícito: el gemelo TS usa el mismo conjunto (los `\s` de Python y JS difieren).
 WS = " \t\n\r\x0b\x0c"
@@ -812,29 +821,58 @@ def read_verdict(ctx: dict, touched: list[dict]) -> tuple[str, str]:
     return "pass", ""
 
 
-def decide_bash(domes: list[dict], project: str, ctx: dict, command: str) -> tuple[str, str]:
+def effective_cwd(project: str, tool_input: dict) -> tuple[str, bool]:
+    """Directorio de trabajo efectivo de una orden de bash y si difiere del proyecto. Uno que no se puede
+    leer cuenta como distinto, con el proyecto como base (ronda 5 de dome_guard.rs)."""
+    if tool_input.get("workdir_unknown") is True:
+        return project, True
+    for k in WORKDIR_KEYS:
+        v = tool_input.get(k)
+        if v is None:
+            continue
+        if not isinstance(v, str) or not v:
+            return project, True
+        base = join(project, v)
+        return base, real_path(base) != real_path(project)
+    return project, False
+
+
+def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict) -> tuple[str, str]:
+    command = tool_input.get("command")
+    command = command if isinstance(command, str) else ""
     try:
         script = parse(command)
     except ParseError:
         return "ask", f"la orden de shell no se puede analizar: {WRITE_NOTICE}"
     plain = unquoted(script)
-    lower_tokens = re.split("[" + re.escape(WS) + "/]", plain.lower())
+    lower_tokens = re.split("[" + re.escape(WS) + "/{},=@:]", plain.lower())
     words = [lit_or_dollar(w) for c in script for w in c["words"] + [r["target"] for r in c["redirs"]]]
     pathlike = [w for w in words if "/" in w and not any(ch in w for ch in "*?$")]
-    name_only_ok = not pathlike or any(w in ("cd", "pushd", "$") or "*" in w or "?" in w for w in words)
+    base, shifted = effective_cwd(project, tool_input)
+    reads_only = bash_reads_only(script)
+    # Solo un lector conocido con rutas literales y limpias puede aflojar el nombre: cualquier otro programa
+    # (`env -C`, `sh -c`, `dd if=`, `curl -F file=@`) puede cambiar de directorio o esconder la ruta en una
+    # palabra mayor, y entonces vale el nombre. Con otro directorio de trabajo, también.
+    name_only_ok = (shifted or not pathlike or not reads_only
+                    or any(any(ch in w for ch in "*?=@{}" + WS) for w in words))
 
     def direct(d: dict) -> bool:
         name = file_name(d["root"]).lower()
         named = (bool(name) and name in lower_tokens) or any(mentions_dome(d["root"], project, c)
                                                              for c in (command, plain))
-        return named and (name_only_ok or any(touches(d["root"], project, w, False) for w in pathlike))
+        # Una ruta que cae en la cúpula la nombra aunque no se llame como ella, y un directorio de trabajo
+        # dentro de ella (el efectivo o el de la sesión) hace que toda orden la toque.
+        by_path = any(touches(d["root"], base, w, False) for w in pathlike) or touches(d["root"], base, ".", False)
+        return (named and name_only_ok) or by_path
 
     direct_hit = [d for d in domes if direct(d)]
-    if direct_hit and not bash_reads_only(script):
+    if direct_hit and not reads_only:
         return "ask", WRITE_NOTICE if writes(script) else UNKNOWN_NOTICE
+    if not reads_only and any(direct({"root": f}) for f in files):
+        return "ask", REGISTRY_NOTICE
     touched = list(direct_hit)
     for d in domes:
-        if not any(t["id"] == d["id"] for t in touched) and traversal_reaches(script, project, d["root"]):
+        if not any(t["id"] == d["id"] for t in touched) and traversal_reaches(script, base, d["root"]):
             touched.append(d)
     if not touched:
         return "pass", ""
@@ -867,13 +905,18 @@ def search_root(project: str, permission: str, tool_input: dict) -> str | None:
     return project
 
 
+def reaches_by_link(project: str, root: str, dome_root: str) -> bool:
+    """Una búsqueda recursiva desde `root` entra en la cúpula por un enlace que hay debajo."""
+    return bool(symlinks_into(resolve(join(project, root)), resolve(dome_root), LINK_DEPTH))
+
+
 def decide(registry: dict, project: str, tool: str, tool_input: dict, ctx: dict) -> tuple[str, str]:
     permission = tool_permission(tool)
     if not (permission == "bash" or permission in FILE_TOOLS or permission in WRITE_TOOLS):
         return "pass", ""
     if "error" in registry:
         return "ask", f"registro de cúpulas ilegible ({registry['error']}): {WRITE_NOTICE}"
-    domes = registry["domes"]
+    domes, files = registry["domes"], registry.get("files", [])
     if not domes:
         return "pass", ""
     if not isinstance(tool_input, dict):
@@ -885,14 +928,19 @@ def decide(registry: dict, project: str, tool: str, tool_input: dict, ctx: dict)
                 paths.extend(patch_paths(tool_input[k]))
         if not paths:
             return "ask", f"no se sabe qué ruta escribe el motor: {WRITE_NOTICE}"
-        hit = any(touches(d["root"], project, p, False) for p in paths for d in domes)
-        return ("ask", WRITE_NOTICE) if hit else ("pass", "")
+        if any(touches(d["root"], project, p, False) for p in paths for d in domes):
+            return "ask", WRITE_NOTICE
+        if any(touches(f, project, p, False) for p in paths for f in files):
+            return "ask", REGISTRY_NOTICE
+        return "pass", ""
     if permission == "bash":
-        command = tool_input.get("command")
-        return decide_bash(domes, project, ctx, command if isinstance(command, str) else "")
+        return decide_bash(domes, files, project, ctx, tool_input)
     root = search_root(project, permission, tool_input)
-    touched = domes if root is None else [d for d in domes
-                                          if touches(d["root"], project, root, permission != "read")]
+    if root is None:
+        return read_verdict(ctx, domes)
+    recursive = permission != "read"
+    touched = [d for d in domes if touches(d["root"], project, root, recursive)
+               or (recursive and reaches_by_link(project, root, d["root"]))]
     return read_verdict(ctx, touched)
 
 
@@ -955,8 +1003,9 @@ def load_registry(file: str, required: bool) -> dict:
         return {"error": str(e)}
     if not found and required:
         return {"error": f"{base}: no existe"}
-    # Orden fijo por id: decide qué cúpula nombra el aviso cuando la orden toca varias.
-    return {"domes": sorted(merged, key=lambda d: d["id"])}
+    # Orden fijo por id: decide qué cúpula nombra el aviso cuando la orden toca varias. `files`: el registro
+    # base y el local, que el motor no puede escribir (si los vaciara, el guard dejaría de proteger).
+    return {"domes": sorted(merged, key=lambda d: d["id"]), "files": [base, local_registry_path(base)]}
 
 
 def registry_file(root: str) -> tuple[str, bool]:
@@ -978,20 +1027,26 @@ def session_context(payload: dict) -> dict:
             "granted": ids(raw.get("granted"))}
 
 
-def main(argv: list[str]) -> int:
-    root = argv[argv.index("--root") + 1] if "--root" in argv else os.getcwd()
+def decide_payload(raw: str, root: str) -> tuple[str, str]:
+    """Decisión para el payload PreToolUse en texto. Uno que no se puede leer, con cúpulas, pregunta."""
     try:
-        payload = json.loads(sys.stdin.read() or "{}")
+        payload = json.loads(raw)
     except ValueError:
-        payload = {}
+        payload = None
+    file, required = registry_file(root)
+    registry = load_registry(file, required)
     if not isinstance(payload, dict):
-        payload = {}
+        return ("ask", PAYLOAD_NOTICE) if ("error" in registry or registry["domes"]) else ("pass", "")
     cwd = payload.get("cwd")
     project = os.path.abspath(cwd if isinstance(cwd, str) and cwd else root)
-    file, required = registry_file(root)
     tool_input = payload.get("tool_input")
-    decision, reason = decide(load_registry(file, required), project, str(payload.get("tool_name") or ""),
-                              tool_input if isinstance(tool_input, dict) else {}, session_context(payload))
+    return decide(registry, project, str(payload.get("tool_name") or ""),
+                  tool_input if isinstance(tool_input, dict) else {}, session_context(payload))
+
+
+def main(argv: list[str]) -> int:
+    root = argv[argv.index("--root") + 1] if "--root" in argv else os.getcwd()
+    decision, reason = decide_payload(sys.stdin.read(), root)
     if "--hook" not in argv:
         print(json.dumps({"decision": decision, "reason": reason}, ensure_ascii=False))
     elif decision != "pass":

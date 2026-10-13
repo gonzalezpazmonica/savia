@@ -41,8 +41,8 @@ require_ts() {
   [[ -n "$TS_RUNTIME" ]] || skip "sin runtime TypeScript (bun o node >= 22.6): la paridad no se puede comprobar aquí"
 }
 
-# parity MODE [TS_COMMAND]: ejecuta cada entrada en el hook bash y en la regla TS y lista las diferencias.
-# MODE=cases usa la tabla compartida (y comprueba además lo esperado); MODE=probes, variantes de evasión.
+# parity MODE [TS_COMMAND]: ejecuta cada caso de la tabla compartida en el hook bash y en la regla TS, y
+# lista las diferencias entre ellos y con la decisión esperada del caso (cada caso, sondas incluidas, la trae).
 parity() {
   python3 - "$REPO_ROOT" "$CASES" "$HOOK" "$1" "${2:-$TS_RUNTIME $CLI}" <<'PY'
 import json, os, shlex, shutil, subprocess, sys
@@ -51,46 +51,15 @@ sys.path.insert(0, os.path.join(root, "tests/python"))
 import test_dome_guard as t
 
 table = json.load(open(cases_file, encoding="utf-8"))
-PROBES = [
-    ("edit", {"filePath": "./vaults/./gallinero/a.md"}), ("edit", {"filePath": "src//../vaults/gallinero/a.md"}),
-    ("Write", {"file_path": "@WS@/VAULTS/GALLINERO/x"}), ("edit", {"filePath": "/@WS@/vaults/gallinero/x"}),
-    ("read", {"filePath": "vaults/otra/../gallinero/a.md"}), ("read", {"filePath": "vaults/gallinero"}),
-    ("bash", {"command": "LANG=C git -C vaults/gallinero commit -m x"}),
-    ("bash", {"command": "bwrap --ro-bind / / -- bash -c 'echo x > vaults/gallinero/a.md'"}),
-    ("bash", {"command": "cat vaults/gallinero/a.md 2>/dev/null"}), ("bash", {"command": "cat < vaults/gallinero/a.md"}),
-    ("bash", {"command": "echo $(cat vaults/secreta/a.md)"}), ("bash", {"command": "x=vaults/gallinero; cat $x/a"}),
-    ("bash", {"command": "cat ~/vaults/gallinero/a"}), ("bash", {"command": "tar czf /tmp/x.tgz vaults"}),
-    ("bash", {"command": "rsync -a src/ /tmp/y"}), ("bash", {"command": "grep -R --include=*.md x"}),
-    ("bash", {"command": "ls vaults/*/"}), ("bash", {"command": "cat vaults/g?llinero/a.md"}),
-    ("bash", {"command": "echo \"$(echo vaults/gallinero)\" >&2"}), ("bash", {"command": "echo ok # vaults/gallinero"}),
-    ("bash", {"command": "cat <<EOF > vaults/gallinero/a\n$(id)\nEOF"}), ("bash", {"command": "echo ${X:-vaults/gallinero}"}),
-    ("bash", {"command": "echo $((1+2)) > src/n"}), ("bash", {"command": "printf %s\\\\n a | tee -a vaults/otra/x"}),
-    ("bash", {"command": "cd vaults; cat gallinero/a"}), ("bash", {"command": "f() { cat vaults/gallinero/a; }; f"}),
-    ("bash", {"command": "echo 'unterminated"}), ("bash", {"command": "cat vaults/abierta/a vaults/secreta/b"}),
-    ("grep", {"pattern": "x", "path": "@WS@"}), ("glob", {"pattern": "vaults/gall*/**"}),
-    ("glob", {"pattern": "/etc/*"}), ("list", {"path": "@WS@/vaults/abierta"}), ("LS", {"path": "/"}),
-    ("apply_patch", {"patchText": "*** Begin Patch\n*** Move to: vaults/gallinero/b\n*** End Patch"}),
-    ("NotebookEdit", {"notebook_path": "src/n.ipynb"}), ("Edit", {"file_path": 42}), ("bash", {"command": ["ls"]}),
-]
-if mode == "cases":
-    entries = table["cases"]
-else:
-    ctxs = [None, {"cloud": False}, {"attached": ["gallinero"]}, {"granted": ["otra"], "cloud": True}]
-    entries = [{"name": f"sonda {i}/{n}", "registry": "std", "links": [["src/atajo", "@WS@/vaults/gallinero"]],
-                "tool": tool, "input": inp, **({"ctx": ctx} if ctx is not None else {})}
-               for i, (tool, inp) in enumerate(PROBES) for n, ctx in enumerate(ctxs)]
+entries = table["cases"]
 problems = []
 for case in entries:
     ws = t.build_workspace(table, case)
     try:
-        payload = {"hook_event_name": "PreToolUse", "tool_name": case["tool"], "tool_input": t.sub(case["input"], ws),
-                   "session_id": "s1", "cwd": ws}
-        if "ctx" in case:
-            payload["dome_context"] = case["ctx"]
         env = {k: v for k, v in os.environ.items() if k not in ("SAVIA_SPACE_DOMES_FILE", "SAVIA_DOME_GUARD", "SAVIA_GATES_PIN")}
         env.update({k: t.sub(v, ws) for k, v in case.get("env", {}).items()})
         env["CLAUDE_PROJECT_DIR"] = ws
-        data = json.dumps(payload)
+        data = t.payload_text(case, ws)
         out = subprocess.run(["bash", hook], input=data, capture_output=True, text=True, env=env, timeout=60).stdout.strip()
         if out:
             spec = json.loads(out)["hookSpecificOutput"]
@@ -106,7 +75,7 @@ for case in entries:
             ts_v = {"decision": "error", "reason": ts_out.stderr.strip()[:200]}
         if bash_v != ts_v:
             problems.append(f"{case['name']}: bash={bash_v} ts={ts_v}")
-        elif "expect" in case:
+        else:
             problems += [f"{case['name']}: {e}" for e in t.check(table, case, bash_v)]
     finally:
         shutil.rmtree(ws, ignore_errors=True)
@@ -117,7 +86,7 @@ sys.exit(1 if problems else 0)
 PY
 }
 
-@test "parity: every shared case gives the same decision and reason in the bash hook and in savia-gates" {
+@test "parity: every shared case, evasion probes included, gives the expected decision and the same reason in the bash hook and in savia-gates" {
   require_ts
   run parity cases
   echo "$output"
@@ -125,16 +94,8 @@ PY
   [[ "$output" == *"diferencias=0"* ]]
   local n
   n=$(jq '.cases | length' "$CASES")
-  [ "$n" -ge 100 ]
+  [ "$n" -ge 240 ]
   [[ "$output" == *"entradas=$n "* ]]
-}
-
-@test "parity: boundary and evasion probes (.., case, sandbox wrapper, quoting, substitutions) agree in both bindings" {
-  require_ts
-  run parity probes
-  echo "$output"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"diferencias=0"* ]]
 }
 
 @test "parity: the comparison fails when a binding diverges (mutation of the TS side)" {
@@ -183,4 +144,28 @@ PY
   [ "$output" = "bash=pass ts=pass" ]
   run both "{\"tool_name\":\"edit\",\"tool_input\":{},\"cwd\":\"$WS\"}"
   [ "$output" = "bash=ask ts=ask" ]
+}
+
+@test "parity: a command over the 32 KiB boundary cannot be analysed and asks in both bindings" {
+  require_ts
+  printf '{"version":1,"domes":{"g":{"path":"%s/vaults/g"}}}' "$WS" > "$WS/projects/savia-vaults/savia-vaults.domes.json"
+  local long
+  long=$(head -c 33000 /dev/zero | tr '\0' 'a')
+  run both "$(jq -cn --arg c "echo $long" --arg w "$WS" '{tool_name:"bash",tool_input:{command:$c},cwd:$w}')"
+  [ "$output" = "bash=ask ts=ask" ]
+  long=$(head -c 30000 /dev/zero | tr '\0' 'a')
+  run both "$(jq -cn --arg c "echo $long" --arg w "$WS" '{tool_name:"bash",tool_input:{command:$c},cwd:$w}')"
+  [ "$output" = "bash=pass ts=pass" ]
+}
+
+@test "parity: dome_context with the dome attached or granted lifts the read question in both bindings" {
+  require_ts
+  printf '{"version":1,"domes":{"g":{"path":"%s/vaults/g"}}}' "$WS" > "$WS/projects/savia-vaults/savia-vaults.domes.json"
+  local read="{\"tool_name\":\"read\",\"tool_input\":{\"filePath\":\"$WS/vaults/g/a\"},\"cwd\":\"$WS\""
+  run both "$read}"
+  [ "$output" = "bash=ask ts=ask" ]
+  run both "$read,\"dome_context\":{\"attached\":[\"g\"]}}"
+  [ "$output" = "bash=pass ts=pass" ]
+  run both "$read,\"dome_context\":{\"granted\":[\"g\"]}}"
+  [ "$output" = "bash=pass ts=pass" ]
 }
