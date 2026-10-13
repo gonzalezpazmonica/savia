@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=5bdd6a8d4e053588d9c41b3b28458792fbebb46729083388fa8fbeb8cd6b8399
-timestamp=2026-10-07T08:45:31Z
-branch=agent/fix-dni-nif-checkletter
-head_commit=e9a5c2ae
-signature=d41dd374bc85a1bd498f48010a12600da4c30451919bb26555a3fa300ebbc8b1
+diff_hash=4be8cfaf4957cbe5b45abfe1ba934277e856a2c5a53f00afc270645c1e5252a7
+timestamp=2026-10-13T18:15:16Z
+branch=fix/tdd-gate-missing-dir
+head_commit=b058856f
+signature=de05dbba3497e4613936df2019e88aad66c0abe162d7e77143d005fa643f9c22
