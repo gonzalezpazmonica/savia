@@ -40,6 +40,8 @@ def build_workspace(table: dict, case: dict) -> str:
         os.makedirs(os.path.join(ws, d), exist_ok=True)
     for f in table["files"]:
         Path(ws, f).write_text("x", encoding="utf-8")
+    for d in case.get("mkdirs", []):
+        os.makedirs(os.path.join(ws, d), exist_ok=True)
     for link, target in case.get("links", []):
         os.symlink(sub(target, ws), os.path.join(ws, link))
     reg = table["registries"][case["registry"]]
@@ -48,7 +50,19 @@ def build_workspace(table: dict, case: dict) -> str:
         if key in reg:
             body = reg[key] if isinstance(reg[key], str) else json.dumps(sub(reg[key], ws))
             Path(path).write_text(body, encoding="utf-8")
+    for rel, mode in case.get("chmod", []):
+        os.chmod(os.path.join(ws, rel), int(mode, 8))
     return ws
+
+
+def cleanup(ws: str) -> None:
+    """Devuelve los permisos que quitó un caso (`chmod`) y borra el workspace."""
+    for dirpath, dirnames, _files in os.walk(ws):
+        for d in dirnames:
+            p = os.path.join(dirpath, d)
+            if not os.path.islink(p):
+                os.chmod(p, 0o755)
+    shutil.rmtree(ws, ignore_errors=True)
 
 
 def payload_text(case: dict, ws: str) -> str:
@@ -68,13 +82,13 @@ def run_case(table: dict, case: dict) -> tuple[dict, str]:
         env = {k: sub(v, ws) for k, v in case.get("env", {}).items()}
         out = io.StringIO()
         with mock.patch.dict(os.environ, env, clear=False), \
-                mock.patch.object(sys, "stdin", io.StringIO(payload_text(case, ws))), redirect_stdout(out):
+                mock.patch.object(sys, "stdin", io.TextIOWrapper(io.BytesIO(payload_text(case, ws).encode("utf-8", "surrogatepass")))), redirect_stdout(out):
             if "SAVIA_SPACE_DOMES_FILE" not in env:
                 os.environ.pop("SAVIA_SPACE_DOMES_FILE", None)
             dg.main(["--root", ws])
         return json.loads(out.getvalue()), ws
     finally:
-        shutil.rmtree(ws, ignore_errors=True)
+        cleanup(ws)
 
 
 def check(table: dict, case: dict, got: dict) -> list[str]:
@@ -94,7 +108,7 @@ def check(table: dict, case: dict, got: dict) -> list[str]:
 class SharedCases(unittest.TestCase):
     def test_every_shared_case(self):
         table = json.loads(CASES.read_text(encoding="utf-8"))
-        self.assertGreaterEqual(len(table["cases"]), 240)
+        self.assertGreaterEqual(len(table["cases"]), 310)
         failures = []
         for case in table["cases"]:
             got, _ws = run_case(table, case)

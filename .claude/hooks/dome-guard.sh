@@ -34,16 +34,26 @@ fi
 
 ROOT="${CLAUDE_PROJECT_DIR:-${SAVIA_WORKSPACE_DIR:-$(pwd)}}"
 BASE="$ROOT/projects/savia-vaults/savia-vaults.domes.json"
+
+# 0 solo si el fichero no existe de verdad (ENOENT): `-e` también es falso con un directorio sin permisos,
+# así que el ancestro existente más cercano tiene que ser un directorio que se pueda recorrer. Un enlace roto,
+# un componente que no es directorio o un directorio cerrado no son «no hay registro»: decide el núcleo.
+absent() {
+  local f="$1" d
+  [[ -e "$f" || -L "$f" ]] && return 1
+  d=$(dirname -- "$f")
+  while [[ ! -e "$d" && ! -L "$d" && "$d" != "/" && "$d" != "." ]]; do d=$(dirname -- "$d"); done
+  [[ -d "$d" && -x "$d" ]]
+}
+
 # Camino rápido: sin registro no hay cúpulas que proteger.
-if [[ -z "${SAVIA_SPACE_DOMES_FILE:-}" && ! -e "$BASE" && ! -e "${BASE%.json}.local.json" ]]; then
+if [[ -z "${SAVIA_SPACE_DOMES_FILE:-}" ]] && absent "$BASE" && absent "${BASE%.json}.local.json"; then
   exit 0
 fi
 
 # Con registro, un payload vacío o ilegible no pasa: el núcleo pregunta (no se sabe qué toca la llamada).
-INPUT=""
-if [[ ! -t 0 ]]; then
-  INPUT=$(timeout 3 cat 2>/dev/null) || true
-fi
+# El núcleo lee el payload directamente de stdin (sys.stdin.buffer.read): pasarlo por una variable de bash quitaría los NUL y los
+# saltos de línea finales, y una llamada ilegible podría volverse legible.
 
 ask() {
   local reason="$1"
@@ -54,7 +64,7 @@ ask() {
 
 # Falla cerrado: con un registro presente, sin núcleo no se sabe qué toca la orden.
 command -v python3 >/dev/null 2>&1 || ask "python3 no disponible; no se puede comprobar si la orden toca una cúpula"
-if ! OUT=$(printf '%s' "$INPUT" | timeout 10 python3 "$LIB_DIR/dome_guard.py" --root "$ROOT" --hook 2>/dev/null); then
+if ! OUT=$(timeout 10 python3 "$LIB_DIR/dome_guard.py" --root "$ROOT" --hook 2>/dev/null); then
   ask "el guard falló; no se puede comprobar si la orden toca una cúpula"
 fi
 [[ -n "$OUT" ]] && printf '%s\n' "$OUT"

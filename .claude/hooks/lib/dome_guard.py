@@ -13,6 +13,13 @@ Misma entrada, misma decisión: lo comprueba `tests/hooks/test-dome-guard-parity
 - Fuera de cualquier cúpula: `pass` (decide la configuración del motor).
 - Falla cerrado: registro ilegible → `ask` en todo lo que mira; sin contexto de sesión → nube sin adjuntos.
 
+Principio (causa común de las variantes de las revisiones r1-r3): el guard no enumera formas peligrosas,
+enumera las seguras. Solo un lector conocido (READ_ONLY) con rutas literales se analiza con precisión;
+cualquier otra orden, con cualquier programa (también envoltorios, `sh -c`, `eval`, `$(...)`, comodines,
+llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
+Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
+desconocida con una ruta que los toque preguntan.
+
 Uso: `dome_guard.py --root DIR [--hook]` con el payload PreToolUse por stdin. Imprime
 `{"decision", "reason"}`; con `--hook`, la salida PreToolUse de Claude Code (nada si pasa).
 """
@@ -21,6 +28,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import sys
 
 WRITE_NOTICE = ("Usa una propuesta: Guardar como nota. El motor no escribe en una cúpula; "
@@ -30,12 +38,15 @@ UNKNOWN_NOTICE = ("la orden toca una cúpula y no es una lectura conocida; si es
 REGISTRY_NOTICE = ("el registro de cúpulas no lo cambia el motor: lo cambia la persona desde Savia Space "
                    "o con savia-vaults dome create")
 PAYLOAD_NOTICE = "la llamada no se puede leer; no se sabe si toca una cúpula"
+UNKNOWN_TOOL_NOTICE = ("el guard no conoce esta herramienta y una de sus rutas toca una cúpula; si escribe, usa una "
+                       "propuesta: Guardar como nota")
 CLOUD_DENIED = ("contenido N3 o superior no sale a la nube: esta cúpula no se lee con el motor. "
                 "Pide a la persona una tarea del carril local; el resultado lo ve ella y no vuelve a ti")
 
 WRITERS = {"cp", "mv", "rm", "touch", "tee", "sed", "dd", "install", "ln", "truncate", "chmod", "chown",
            "mkdir", "rmdir", "tar", "unzip", "rsync", "git", "python3", "python", "node", "bash", "sh",
-           "perl", "ruby", "patch", "cpio", "zip", "7z", "scp", "curl", "wget", "eval"}
+           "perl", "ruby", "patch", "cpio", "zip", "7z", "scp", "curl", "wget", "eval",
+           "rename", "unlink", "shred", "chgrp", "chattr", "setfacl"}
 # Herramientas de escritura: las de OpenCode y las de Claude Code (notebookedit), en minúsculas.
 WRITE_TOOLS = {"edit", "write", "patch", "multiedit", "notebookedit", "apply_patch"}
 FILE_TOOLS = {"read", "grep", "glob", "list"}
@@ -46,8 +57,26 @@ WRITE_PATH_KEYS = ("filePath", "file_path", "path", "notebook_path")
 WORKDIR_KEYS = ("workdir", "cwd", "directory", "dir", "working_directory", "workingDir")
 # Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
 LINK_DEPTH = 3
-# Programas que mueven o borran lo que nombran (con `git mv/rm` y `find -delete/-exec`, ver `destroys`).
-DESTROYERS = {"mv", "rm", "rmdir", "unlink", "shred"}
+# Tope de entradas por directorio al buscar enlaces; un directorio mayor cuenta como que tiene uno.
+MAX_ENTRIES = 5000
+# Programas que mueven, borran o quitan permisos a lo que nombran (más `git mv/rm/clean/stash -u` y
+# `find -delete/-exec`, ver `destroys`): sobre un ancestro de una cúpula o del registro, se los llevan.
+DESTROYERS = {"mv", "rm", "rmdir", "unlink", "shred", "rename", "chmod", "chown", "chgrp", "chattr", "setfacl"}
+# Programas que ejecutan otro programa con sus argumentos: lo que hagan no se ve, cuentan como destructivos.
+WRAPPERS = {"env", "command", "builtin", "exec", "nice", "nohup", "timeout", "stdbuf", "time", "ionice", "setsid",
+            "sudo", "doas", "xargs", "chronic", "unbuffer", "flock", "watch", "parallel", "strace", "ltrace",
+            "nsenter", "unshare", "chroot", "fakeroot", "systemd-run", "busybox"}
+# Programas que el guard conoce: tras un envoltorio, uno que no esté aquí cuenta como que recorre lo que nombra.
+KNOWN_PROGRAMS = (WRITERS | DESTROYERS | READ_ONLY | TRAVERSERS | {"echo", "printf", "true", "false", "test", "cd",
+                                                                    "pwd", "cargo", "npm", "make", "go", "pytest"})
+# Sandboxes cuyo comando va tras `--` (las opciones de antes son monturas).
+SANDBOXES = {"bwrap"}
+# Intérpretes de shell cuyo `-c` es otra orden que se analiza como tal.
+SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "mksh"}
+# Claves de una herramienta desconocida que pueden llevar una ruta.
+PATH_KEY = re.compile(r"path|file|dir|dest|target", re.I)
+# Profundidad máxima de órdenes anidadas (`sh -c`, `$(...)`, `eval`): más allá, no se analiza y pregunta.
+MAX_NESTING = 4
 LEVELS = {"N1": 1, "N2": 2, "": 2, "N3": 3, "N4": 4, "N4B": 4}
 # Espacio en blanco ASCII explícito: el gemelo TS usa el mismo conjunto (los `\s` de Python y JS difieren).
 WS = " \t\n\r\x0b\x0c"
@@ -189,7 +218,9 @@ def list_dir(d: str) -> list[str]:
         return []
 
 
-def expand_glob(project: str, pattern: str) -> list[str]:
+def expand_glob(project: str, pattern: str) -> list[str] | None:
+    """Expansión de un comodín contra el disco, con tope. `None` si el tope corta la expansión: quien llama
+    lo trata como que alcanza la cúpula (falla cerrado)."""
     if pattern.startswith("/"):
         cur, rest = ["/"], pattern[1:]
     else:
@@ -206,21 +237,29 @@ def expand_glob(project: str, pattern: str) -> list[str]:
                 if (not name.startswith(".") or seg.startswith(".")) and wildcard(seg, name):
                     nxt.append(join(base, name))
                 if budget == 0:
-                    return nxt
+                    return None
         cur = nxt
     return cur
 
 
-def symlinks_into(root: str, target: str, depth: int) -> list[str]:
+def symlinks_into(root: str, target: str, depth: int) -> list[str] | None:
+    """Enlaces bajo `root` (hasta `depth` niveles) cuyo destino cae en `target`. `None` si algún directorio
+    supera el tope de entradas: quien llama lo trata como que hay enlace (falla cerrado)."""
     out: list[str] = []
-    for name in list_dir(root)[:500]:
+    names = list_dir(root)
+    if len(names) > MAX_ENTRIES:
+        return None
+    for name in names:
         p = join(root, name)
         if os.path.islink(p):
             c = canonical(p)
             if c is not None and under(c, target):
                 out.append(p)
         elif os.path.isdir(p) and depth > 1 and not name.startswith("."):
-            out.extend(symlinks_into(p, target, depth - 1))
+            inner = symlinks_into(p, target, depth - 1)
+            if inner is None:
+                return None
+            out.extend(inner)
     return out
 
 
@@ -240,13 +279,18 @@ def mentions_dome(root: str, project: str, command: str) -> bool:
         return True
     if rel is not None and rel in command:
         return True
-    for link in symlinks_into(ws, rd, 2):
+    links = symlinks_into(ws, rd, 2)
+    if links is None:
+        return True
+    for link in links:
         r = strip_prefix(link, ws)
         if r is not None and r in command:
             return True
     for t in tokens:
-        if ("*" in t or "?" in t) and any(under(resolve(m), rd) for m in expand_glob(project, t)):
-            return True
+        if "*" in t or "?" in t:
+            matches = expand_glob(project, t)
+            if matches is None or any(under(resolve(m), rd) for m in matches):
+                return True
     return False
 
 
@@ -757,7 +801,7 @@ def writes(script: list[dict]) -> bool:
     for c in script:
         prog = literal(c["words"][0]) if c["words"] else None
         dynamic = any(literal(w) is None for w in c["words"])
-        if outputs(c) or dynamic or prog is None or base_name(prog) in WRITERS:
+        if outputs(c) or dynamic or prog is None or base_name(prog) in WRITERS or base_name(prog) in WRAPPERS:
             return True
     return False
 
@@ -791,17 +835,43 @@ def is_recursive(prog: str, flags: list[str]) -> bool:
     return False
 
 
+DURATION = re.compile(r"[0-9]+(\.[0-9]+)?[smhd]?\Z")
+
+
+def unwrap(words: list[str]) -> list[str]:
+    """El programa que ejecuta un envoltorio (`timeout 5 grep`, `env LANG=C cat`, `nice -n 5 mv`): se quitan
+    el envoltorio, sus opciones, asignaciones y duraciones. Lo que quede puede no ser un programa (el valor
+    de una opción con argumento): entonces cuenta como desconocido."""
+    while words and base_name(words[0]) in WRAPPERS:
+        words = words[1:]
+        while words and (words[0].startswith("-") or "=" in words[0] or DURATION.match(words[0])):
+            words = words[1:]
+    return words
+
+
 def traversal_reaches(script: list[dict], project: str, root: str) -> bool:
     for c in script:
         words = [lit_or_dollar(w) for w in c["words"]]
-        if not words or base_name(words[0]) not in TRAVERSERS:
+        words = unwrap(words)
+        if not words:
             continue
         prog = base_name(words[0])
-        if not is_recursive(prog, [w for w in words[1:] if w.startswith("-") and len(w) > 1]):
+        # Un programa que no se conoce (o que queda tras un envoltorio que no se sabe leer) recorre lo que nombre
+        # cualquiera de sus palabras; uno conocido que no recorre, no.
+        wrapped = prog not in KNOWN_PROGRAMS
+        if not wrapped and prog not in TRAVERSERS:
+            continue
+        if not wrapped and not is_recursive(prog, [w for w in words[1:] if w.startswith("-") and len(w) > 1]):
             continue
         args = [w for w in words[1:] if not w.startswith("-")]
         if prog in ("grep", "rg") and args:
             args.pop(0)
+        if wrapped:
+            # `.`, `..` o `/` como argumento de un desconocido (las monturas de un sandbox) no cuentan: si no, toda
+            # orden envuelta por bwrap «recorrería» el disco entero.
+            if any(a != "$" and touches(root, project, a, True) and not contains_base(project, a) for a in args):
+                return True
+            continue
         if not args:
             if touches(root, project, ".", True):
                 return True
@@ -839,20 +909,95 @@ def effective_cwd(project: str, tool_input: dict) -> tuple[str, bool]:
     return project, False
 
 
+def git_subcommand(words: list[str]) -> tuple[str, list[str]]:
+    """Subcomando de git y sus argumentos, saltando las opciones globales (`git -C dir rm`)."""
+    rest = words[1:]
+    while rest and rest[0].startswith("-"):
+        rest = rest[2:] if rest[0] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") else rest[1:]
+    return (rest[0], rest[1:]) if rest else ("", [])
+
+
+def wipes_tree(c: dict) -> bool:
+    """`git clean` (sin -n) y `git stash -u/--all` borran lo no versionado del árbol, registro local incluido."""
+    words = [lit_or_dollar(w) for w in c["words"]]
+    if not words or base_name(words[0]) != "git":
+        return False
+    sub, args = git_subcommand(words)
+    if sub == "clean":
+        return not any(a in ("-n", "--dry-run") or (a.startswith("-") and not a.startswith("--") and "n" in a)
+                       for a in args)
+    return sub == "stash" and any(a in ("-u", "-a", "--all", "--include-untracked") for a in args)
+
+
 def destroys(c: dict) -> bool:
-    """El comando mueve o borra lo que nombra: mv/rm/rmdir/unlink/shred, git mv/rm y find con -delete o -exec."""
+    """El comando mueve, borra o cambia permisos de lo que nombra, o ejecuta otro programa que podría hacerlo."""
     words = [lit_or_dollar(w) for w in c["words"]]
     if not words:
         return False
     prog = base_name(words[0])
-    if prog in DESTROYERS:
+    if prog in DESTROYERS or prog in WRAPPERS or prog not in KNOWN_PROGRAMS:
         return True
     if prog == "git":
-        rest = words[1:]
-        while rest and rest[0].startswith("-"):
-            rest = rest[2:] if rest[0] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") else rest[1:]
-        return bool(rest) and rest[0] in ("rm", "mv")
+        return git_subcommand(words)[0] in ("rm", "mv") or wipes_tree(c)
     return prog == "find" and any(w in ("-delete", "-exec", "-execdir", "-ok", "-okdir") for w in words[1:])
+
+
+def flatten(script: list[dict], depth: int = 0) -> list[dict]:
+    """Los comandos de la orden más los de sus órdenes anidadas: `$(...)`, `<(...)`, here-documents sin
+    comillas, el `-c` de un shell y `eval`. Una anidada que no se puede analizar es un ParseError."""
+    if depth > MAX_NESTING:
+        raise ParseError("demasiado anidada")
+    out: list[dict] = []
+    for c in script:
+        all_words = [lit_or_dollar(w) for w in c["words"]]
+        if all_words and base_name(all_words[0]) in SANDBOXES and "--" in all_words:
+            # Las opciones de un sandbox son monturas, no rutas que toque: cuenta lo que ejecuta tras `--`.
+            i = all_words.index("--")
+            inner_cmd = {"assigns": [], "words": c["words"][i + 1:], "redirs": c["redirs"], "control": False}
+            out += flatten([inner_cmd], depth + 1)
+            continue
+        out.append(c)
+        inner: list[str] = []
+        for w in c["words"] + [r["target"] for r in c["redirs"]] + [a[1] for a in c["assigns"]]:
+            inner += [text for kind, text, _q in w if kind in ("sub", "proc")]
+        for r in c["redirs"]:
+            inner += r["subs"]
+        words = unwrap(all_words)
+        prog = base_name(words[0]) if words else ""
+        if prog in SHELLS:
+            for i, w in enumerate(words[1:-1], start=1):
+                if w.startswith("-") and not w.startswith("--") and "c" in w:
+                    inner.append(words[i + 1])
+                    break
+        if prog == "eval":
+            inner.append(" ".join(words[1:]))
+        for text in inner:
+            out += flatten(parse(text), depth + 1)
+    return out
+
+
+def expand_braces(word: str) -> list[str]:
+    """Un nivel de llaves con comas (`{vaults,src}`), como haría el shell."""
+    m = re.search(r"\{([^{}]*,[^{}]*)\}", word)
+    if not m:
+        return [word]
+    return [word[:m.start()] + alt + word[m.end():] for alt in m.group(1).split(",")]
+
+
+def candidates(word: str) -> list[str]:
+    """Rutas que puede nombrar una palabra: ella, lo que va tras `=` o `@`, y sus llaves expandidas."""
+    out = [word]
+    if "=" in word:
+        out.append(word.split("=", 1)[1])
+    if "@" in word:
+        out.append(word.split("@", 1)[1])
+    return [x for c in out for x in expand_braces(c) if x and not x.startswith("-")]
+
+
+def contains_base(base: str, cand: str) -> bool:
+    """La palabra es el directorio de trabajo o un ancestro suyo (`.`, `..`, `/`)."""
+    a, b = real_path(join(base, cand)), real_path(base)
+    return a is None or b is None or under(b.lower(), a.lower())
 
 
 def chain_of(target: str, base: str) -> list[str]:
@@ -862,28 +1007,58 @@ def chain_of(target: str, base: str) -> list[str]:
     return [c.lower() for c in (rel.split("/") if rel else split_path(rt)[1]) if c]
 
 
-def moves_ancestor(script: list[dict], base: str, target: str) -> bool:
-    """Un comando que mueve o borra la cúpula (o el registro) entera o un ancestro suyo: `mv vaults x`,
-    `rm -r projects/savia-vaults`. Tras un `cd`, el directorio no se conoce y vale el nombre de cualquier
-    componente de su ruta."""
-    moved = any(w in ("cd", "pushd") for c in script for w in (lit_or_dollar(x) for x in c["words"]))
+def changes_dir(cmds: list[dict]) -> bool:
+    """Alguna parte de la orden cambia de directorio, así que las rutas relativas no se resuelven bien."""
+    return any(w in ("cd", "pushd", "popd", "-C") or w.startswith(("--chdir", "--directory"))
+               for c in cmds for w in (lit_or_dollar(x) for x in c["words"]))
+
+
+def writes_reach(cmds: list[dict], base: str, target: str) -> bool:
+    """Un comando que no es de solo lectura alcanza la cúpula (o el registro) o un ancestro suyo con cualquiera
+    de sus palabras. Falla cerrado: no depende de qué programa sea, salvo para aflojar `.`/`..` en los que
+    no destruyen (`git add .`). Una palabra dinámica o un comodín en uno que destruye, pregunta."""
+    moved = changes_dir(cmds)
     chain = chain_of(target, base) if moved else []
-    for c in script:
-        if not destroys(c):
+    piped_any = any(base_name(lit_or_dollar(c["words"][0])) == "xargs" for c in cmds if c["words"])
+    for c in cmds:
+        first = lit_or_dollar(c["words"][0]) if c["words"] else ""
+        if bash_reads_only([c]) or first in ("cd", "pushd", "popd"):
             continue
-        for w in (lit_or_dollar(x) for x in c["words"][1:]):
-            if w == "$" or w.startswith("-"):
+        destructive = destroys(c) or piped_any
+        if wipes_tree(c) and touches(target, base, ".", True):
+            return True
+        words = c["words"][1:] + [r["target"] for r in c["redirs"] if r["kind"] in ("out", "append")]
+        words += [a[1] for a in c["assigns"]]
+        for w in words:
+            lit = literal(w)
+            if lit is None:
+                if destructive:
+                    return True
                 continue
-            if touches(target, base, w, True) or (moved and file_name(w).lower() in chain):
-                return True
+            for cand in candidates(lit):
+                if any(ch in cand for ch in "*?["):
+                    matches = expand_glob(base, cand)
+                    if matches is None or any(touches(target, base, m, True) for m in matches):
+                        return True
+                    continue
+                if touches(target, base, cand, True) and (destructive or not contains_base(base, cand)):
+                    return True
+                if moved and file_name(cand).lower() in chain:
+                    return True
     return False
 
 
 def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict) -> tuple[str, str]:
     command = tool_input.get("command")
-    command = command if isinstance(command, str) else ""
+    if command is not None and not isinstance(command, str):
+        return "ask", PAYLOAD_NOTICE
+    command = command or ""
     try:
         script = parse(command)
+    except ParseError:
+        return "ask", f"la orden de shell no se puede analizar: {WRITE_NOTICE}"
+    try:
+        cmds = flatten(script)
     except ParseError:
         return "ask", f"la orden de shell no se puede analizar: {WRITE_NOTICE}"
     plain = unquoted(script)
@@ -906,20 +1081,20 @@ def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, to
         # dentro de ella (el efectivo o el de la sesión) hace que toda orden la toque.
         by_path = any(touches(d["root"], base, w, False) for w in pathlike) or touches(d["root"], base, ".", False)
         # Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
-        return (named and name_only_ok) or by_path or (not reads_only and moves_ancestor(script, base, d["root"]))
+        return (named and name_only_ok) or by_path or (not reads_only and writes_reach(cmds, base, d["root"]))
 
     direct_hit = [d for d in domes if direct(d)]
     if direct_hit and not reads_only:
         # Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
-        reached = [d for d in domes if traversal_reaches(script, base, d["root"])]
+        reached = [d for d in domes if traversal_reaches(cmds, base, d["root"])]
         if reached and read_verdict(ctx, reached)[0] == "deny":
             return read_verdict(ctx, reached)
-        return "ask", WRITE_NOTICE if writes(script) else UNKNOWN_NOTICE
+        return "ask", WRITE_NOTICE if writes(cmds) else UNKNOWN_NOTICE
     if not reads_only and any(direct({"root": f}) for f in files):
         return "ask", REGISTRY_NOTICE
     touched = list(direct_hit)
     for d in domes:
-        if not any(t["id"] == d["id"] for t in touched) and traversal_reaches(script, base, d["root"]):
+        if not any(t["id"] == d["id"] for t in touched) and traversal_reaches(cmds, base, d["root"]):
             touched.append(d)
     if not touched:
         return "pass", ""
@@ -954,13 +1129,50 @@ def search_root(project: str, permission: str, tool_input: dict) -> str | None:
 
 def reaches_by_link(project: str, root: str, dome_root: str) -> bool:
     """Una búsqueda recursiva desde `root` entra en la cúpula por un enlace que hay debajo."""
-    return bool(symlinks_into(resolve(join(project, root)), resolve(dome_root), LINK_DEPTH))
+    links = symlinks_into(resolve(join(project, root)), resolve(dome_root), LINK_DEPTH)
+    return links is None or bool(links)
+
+
+def path_values(value, depth: int = 0) -> list[str]:
+    """Cadenas bajo claves de ruta, también anidadas en objetos y listas (hasta 8 niveles)."""
+    out: list[str] = []
+    if depth > 8:
+        return out
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if isinstance(v, str) and v and PATH_KEY.search(k):
+                out.append(v)
+            elif isinstance(v, (dict, list)):
+                out += path_values(v, depth + 1)
+    elif isinstance(value, list):
+        for v in value:
+            out += path_values(v, depth + 1)
+    return out
+
+
+def decide_unknown(registry: dict, project: str, tool_input: dict) -> tuple[str, str]:
+    """Herramienta que el guard no conoce (MCP, otras de edición): si alguna clave de ruta toca una cúpula,
+    el registro o un ancestro suyo, pregunta. Sin claves de ruta no decide nada."""
+    paths = path_values(tool_input)
+    if not paths:
+        return "pass", ""
+    if "error" in registry:
+        return "ask", f"registro de cúpulas ilegible ({registry['error']}): {WRITE_NOTICE}"
+    if not registry["domes"]:
+        return "pass", ""
+    if any(touches(d["root"], project, p, True) for p in paths for d in registry["domes"]):
+        return "ask", UNKNOWN_TOOL_NOTICE
+    if any(touches(f, project, p, True) for p in paths for f in registry["files"]):
+        return "ask", REGISTRY_NOTICE
+    return "pass", ""
 
 
 def decide(registry: dict, project: str, tool: str, tool_input: dict, ctx: dict) -> tuple[str, str]:
     permission = tool_permission(tool)
+    if not isinstance(tool_input, dict):
+        tool_input = {}
     if not (permission == "bash" or permission in FILE_TOOLS or permission in WRITE_TOOLS):
-        return "pass", ""
+        return decide_unknown(registry, project, tool_input)
     if "error" in registry:
         return "ask", f"registro de cúpulas ilegible ({registry['error']}): {WRITE_NOTICE}"
     domes, files = registry["domes"], registry.get("files", [])
@@ -1009,6 +1221,8 @@ def reject_constant(name: str):
 
 def read_registry_file(file: str) -> list[dict]:
     try:
+        if not stat.S_ISREG(os.stat(file).st_mode):
+            raise ValueError(f"{file}: no es un fichero")
         with open(file, encoding="utf-8") as fh:
             raw = fh.read()
     except (OSError, UnicodeDecodeError):
@@ -1034,6 +1248,25 @@ def read_registry_file(file: str) -> list[dict]:
     return out
 
 
+def registry_entry_exists(file: str) -> bool:
+    """Solo un ENOENT de verdad significa «no hay registro». Cualquier otro error (permisos, un componente que
+    no es directorio, un enlace roto) es un ValueError: el guard falla cerrado."""
+    try:
+        os.stat(file)
+        return True
+    except FileNotFoundError:
+        pass
+    except OSError:
+        raise ValueError(f"{file}: no se puede comprobar")
+    try:
+        os.lstat(file)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise ValueError(f"{file}: no se puede comprobar")
+    raise ValueError(f"{file}: enlace roto")
+
+
 def load_registry(file: str, required: bool) -> dict:
     """Registro fusionado: base más local, con el mismo id gana el local."""
     base = base_registry_path(file)
@@ -1041,7 +1274,7 @@ def load_registry(file: str, required: bool) -> dict:
     found = False
     try:
         for f in (base, local_registry_path(base)):
-            if not os.path.exists(f):
+            if not registry_entry_exists(f):
                 continue
             found = True
             for d in read_registry_file(f):
@@ -1074,15 +1307,35 @@ def session_context(payload: dict) -> dict:
             "granted": ids(raw.get("granted"))}
 
 
+def clean_strings(value, depth: int = 0) -> bool:
+    """Ninguna cadena (ni clave) lleva un NUL o un sustituto UTF-16 suelto: el sistema de ficheros no los
+    interpretaría como el guard, así que una llamada así no se decide (pregunta)."""
+    if depth > 64:
+        return False
+    if isinstance(value, str):
+        if "\x00" in value:
+            return False
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            return False
+        return True
+    if isinstance(value, dict):
+        return all(clean_strings(k, depth + 1) and clean_strings(v, depth + 1) for k, v in value.items())
+    if isinstance(value, list):
+        return all(clean_strings(v, depth + 1) for v in value)
+    return True
+
+
 def decide_payload(raw: str, root: str) -> tuple[str, str]:
     """Decisión para el payload PreToolUse en texto. Uno que no se puede leer, con cúpulas, pregunta."""
     try:
-        payload = json.loads(raw)
-    except ValueError:
+        payload = json.loads(raw, parse_constant=reject_constant)
+    except (ValueError, RecursionError):
         payload = None
     file, required = registry_file(root)
     registry = load_registry(file, required)
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or not clean_strings(payload):
         return ("ask", PAYLOAD_NOTICE) if ("error" in registry or registry["domes"]) else ("pass", "")
     cwd = payload.get("cwd")
     project = os.path.abspath(cwd if isinstance(cwd, str) and cwd else root)
@@ -1093,7 +1346,11 @@ def decide_payload(raw: str, root: str) -> tuple[str, str]:
 
 def main(argv: list[str]) -> int:
     root = argv[argv.index("--root") + 1] if "--root" in argv else os.getcwd()
-    decision, reason = decide_payload(sys.stdin.read(), root)
+    try:
+        raw = sys.stdin.buffer.read().decode("utf-8")
+    except UnicodeDecodeError:
+        raw = ""  # bytes que no son UTF-8: payload ilegible
+    decision, reason = decide_payload(raw, root)
     if "--hook" not in argv:
         print(json.dumps({"decision": decision, "reason": reason}, ensure_ascii=False))
     elif decision != "pass":

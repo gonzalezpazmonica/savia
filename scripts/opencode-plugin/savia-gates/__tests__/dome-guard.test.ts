@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { chmod, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { decidePayload, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
+import { UNKNOWN_TOOL_NOTICE, decidePayload, domeGuardVerdict, localRegistryPath, parseShell, bashReadsOnly } from "../lib/dome-guard"
 import { SaviaGates } from "../index"
 
 // SE-436 S5 DUAL_BINDING: la regla de savia-gates decide igual que el hook dome-guard.sh. Esta suite
@@ -14,8 +14,11 @@ const CASES = join(import.meta.dir, "../../../../tests/hooks/fixtures/dome-guard
 const dirs: string[] = []
 const savedEnv = { ...process.env }
 
+const locked: string[] = []
+
 afterEach(async () => {
   process.env = { ...savedEnv }
+  await Promise.all(locked.splice(0).map((p) => chmod(p, 0o755)))
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })))
 })
 
@@ -31,11 +34,16 @@ async function workspace(table: any, c: any): Promise<string> {
   dirs.push(ws)
   for (const d of table.dirs) await mkdir(join(ws, d), { recursive: true })
   for (const f of table.files) await writeFile(join(ws, f), "x")
+  for (const d of c.mkdirs ?? []) await mkdir(join(ws, d), { recursive: true })
   for (const [link, target] of c.links ?? []) await symlink(sub(target, ws), join(ws, link))
   const reg = table.registries[c.registry]
   const base = join(ws, "projects/savia-vaults/savia-vaults.domes.json")
   for (const [key, path] of [["base", base], ["local", localRegistryPath(base)]]) {
     if (key in reg) await writeFile(path, typeof reg[key] === "string" ? reg[key] : JSON.stringify(sub(reg[key], ws)))
+  }
+  for (const [rel, mode] of c.chmod ?? []) {
+    await chmod(join(ws, rel), parseInt(mode, 8))
+    locked.push(join(ws, rel))
   }
   return ws
 }
@@ -182,4 +190,27 @@ test("review P1-S6: moving or deleting an ancestor of a dome or of the registry 
   expect(run("mv projects/savia-vaults /tmp/sv").reason).toContain("registro de cúpulas no lo cambia el motor")
   expect(run("find vaults -delete").decision).toBe("deny")
   for (const cmd of ["mv src/a src/b", `${RM} -r vaults2`, `cd src && ${RM} -r tmp`]) expect(run(cmd).decision).toBe("pass")
+})
+
+test("review r3: registry errors other than ENOENT fail closed, and any writer reaching an ancestor asks", async () => {
+  const table = JSON.parse(await readFile(CASES, "utf-8"))
+  const ws = await workspace(table, table.cases[0])
+  const run = (tool: string, input: unknown) =>
+    decidePayload(JSON.stringify({ tool_name: tool, tool_input: input, cwd: ws }), ws, {})
+  await chmod(join(ws, "projects/savia-vaults"), 0o000)
+  locked.push(join(ws, "projects/savia-vaults"))
+  expect(run("read", { filePath: "vaults/secreta/a" })).toEqual(expect.objectContaining({ decision: "ask" }))
+  expect(run("read", { filePath: "src/a" }).reason).toContain("ilegible")
+  await chmod(join(ws, "projects/savia-vaults"), 0o755)
+  await symlink(join(ws, "nada.json"), join(ws, "projects/savia-vaults/savia-vaults.domes.local.json"))
+  expect(run("read", { filePath: "src/a" }).reason).toContain("enlace roto")
+  await rm(join(ws, "projects/savia-vaults/savia-vaults.domes.local.json"))
+  for (const command of ["env mv vaults /tmp/v", "timeout 5 mv projects/savia-vaults /tmp/sv", "bash -c 'mv vaults /tmp/v'",
+    "mv v* /tmp/v", "d=vaults; mv $d /tmp/v", "echo vaults | xargs mv -t /tmp", "git clean -fdX", "chmod 000 projects/savia-vaults"]) {
+    expect([command, run("bash", { command }).decision]).toEqual([command, "ask"])
+  }
+  for (const command of ["git add .", "timeout 30 cargo test", 'git commit -m "$msg"']) {
+    expect([command, run("bash", { command }).decision]).toEqual([command, "pass"])
+  }
+  expect(run("mcp__fs__write_file", { file_path: join(ws, "vaults/secreta/a") }).reason).toBe(UNKNOWN_TOOL_NOTICE)
 })

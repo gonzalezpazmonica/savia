@@ -82,7 +82,7 @@ for case in entries:
         else:
             problems += [f"{case['name']}: {e}" for e in t.check(table, case, bash_v)]
     finally:
-        shutil.rmtree(ws, ignore_errors=True)
+        t.cleanup(ws)
 print(f"entradas={len(entries)} diferencias={len(problems)}")
 for p in problems:
     print(p)
@@ -98,7 +98,7 @@ PY
   [[ "$output" == *"diferencias=0"* ]]
   local n
   n=$(jq '.cases | length' "$CASES")
-  [ "$n" -ge 240 ]
+  [ "$n" -ge 310 ]
   [[ "$output" == *"entradas=$n "* ]]
 }
 

@@ -212,6 +212,42 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
   done
 }
 
+@test "review P1-S7: a registry that cannot be checked (no permission, broken link) is unreadable, not absent" {
+  registry
+  chmod 000 "$WS/projects/savia-vaults"
+  run_hook Read "{\"file_path\":\"$WS/src/a.rs\"}"
+  chmod 755 "$WS/projects/savia-vaults"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"ilegible"* ]]
+  ln -s "$WS/nada.json" "$WS/projects/savia-vaults/savia-vaults.domes.local.json"
+  run_hook Read "{\"file_path\":\"$WS/src/a.rs\"}"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"enlace roto"* ]]
+}
+
+@test "review r3 P1-S6: wrappers, nested shells, globs and variables do not hide a move of a dome or the registry" {
+  registry
+  for cmd in "env mv vaults /tmp/v" "timeout 5 mv projects/savia-vaults /tmp/sv" "bash -c 'mv vaults /tmp/v'" \
+             "mv v* /tmp/v" "d=vaults; mv \$d /tmp/v" "echo vaults | xargs mv -t /tmp" "git clean -fdX" \
+             "chmod 000 projects/savia-vaults" "tar xf x.tar -C projects/savia-vaults"; do
+    run_hook Bash "$(jq -cn --arg c "$cmd" '{command: $c}')"
+    [ "$(decision)" = "ask" ] || { echo "pasa: $cmd"; return 1; }
+  done
+  for cmd in "git add ." "timeout 30 cargo test" "git commit -m \"\$msg\""; do
+    run_hook Bash "$(jq -cn --arg c "$cmd" '{command: $c}')"
+    [ -z "$output" ] || { echo "pregunta de más: $cmd"; return 1; }
+  done
+}
+
+@test "fail-closed pass: raw NUL bytes or invalid UTF-8 on stdin reach the core intact and ask" {
+  registry
+  run bash -c 'printf "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"src/a\0b\"}}" | CLAUDE_PROJECT_DIR="$1" bash "$2"' _ "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+  [[ "$(reason)" == *"no se puede leer"* ]]
+  run bash -c 'printf "{\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"src/\xff\"}}" | CLAUDE_PROJECT_DIR="$1" bash "$2"' _ "$WS" "$HOOK"
+  [ "$(decision)" = "ask" ]
+}
+
 @test "savia-gates applies the native twin of this hook before the bash bridge" {
   local idx="$REPO_ROOT/scripts/opencode-plugin/savia-gates/index.ts"
   grep -q 'from "./lib/dome-guard"' "$idx"

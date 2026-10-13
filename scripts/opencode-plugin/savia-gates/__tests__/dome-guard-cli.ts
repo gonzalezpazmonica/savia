@@ -6,9 +6,10 @@ import { decidePayload } from "../lib/dome-guard.ts"
 
 const argv = process.argv.slice(2)
 const root = argv.includes("--root") ? argv[argv.indexOf("--root") + 1] : process.cwd()
+// Bytes que no son UTF-8: payload ilegible, como en el núcleo Python.
 let raw = ""
 try {
-  raw = readFileSync(0, "utf-8")
+  raw = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(0))
 } catch {
   raw = ""
 }

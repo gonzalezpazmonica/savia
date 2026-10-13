@@ -2,19 +2,25 @@
 //
 // Gemelo del hook de Claude Code `.claude/hooks/dome-guard.sh` (núcleo `.claude/hooks/lib/dome_guard.py`),
 // ambos portados de `crates/space-orchestrator/src/dome_guard.rs` de Savia Space @ 9137d4f (ronda 5), más
-// dos reglas propias: un cwd de sesión dentro de una cúpula la toca siempre y el registro no lo escribe el motor. Misma entrada, misma
-// decisión y mismo motivo: tests/hooks/test-dome-guard-parity.bats. Cualquier cambio aquí va también allí.
+// dos reglas propias: un cwd de sesión dentro de una cúpula la toca siempre y el registro no lo escribe el
+// motor. Misma entrada, misma decisión y mismo motivo: tests/hooks/test-dome-guard-parity.bats. Cualquier cambio aquí va también allí.
 //
 // - Escritura (edit, write, patch, multiedit o un bash que escriba) dentro de una cúpula → ask.
 // - Lectura de una cúpula N2+ no adjunta con proveedor de nube → ask; N3+ → deny.
 // - Fuera de las cúpulas → pass. Registro ilegible → ask en todo lo que mira (falla cerrado).
-
+//
+// Principio (causa común de las variantes de las revisiones r1-r3): el guard no enumera formas peligrosas,
+// enumera las seguras. Solo un lector conocido (READ_ONLY) con rutas literales se analiza con precisión;
+// cualquier otra orden, con cualquier programa (también envoltorios, `sh -c`, `eval`, `$(...)`, comodines,
+// llaves, `clave=valor`), alcanza una cúpula o el registro si alguna palabra cae en ellos o en un ancestro.
+// Cualquier error que no sea un ENOENT real, cualquier tope que corte un análisis y cualquier herramienta
+// desconocida con una ruta que los toque preguntan.
 //
 // Límite conocido: es un guard léxico. Una ruta montada en tiempo de ejecución dentro de un guion
 // (`python3 -c "open('gall'+'inero/a','w')"`, variables calculadas) no se ve. La defensa en profundidad es el
 // sandbox del motor o el modo mediado de Savia Space (SE-434).
 
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
+import { lstatSync, statSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
 
 export type DomeDecision = "pass" | "ask" | "deny"
 export interface DomeVerdict {
@@ -48,13 +54,15 @@ export const CLOUD_DENIED =
 export const REGISTRY_NOTICE =
   "el registro de cúpulas no lo cambia el motor: lo cambia la persona desde Savia Space o con savia-vaults dome create"
 export const PAYLOAD_NOTICE = "la llamada no se puede leer; no se sabe si toca una cúpula"
+export const UNKNOWN_TOOL_NOTICE =
+  "el guard no conoce esta herramienta y una de sus rutas toca una cúpula; si escribe, usa una propuesta: Guardar como nota"
 /** Hooks bash de settings.json con gemelo nativo aquí: el puente no los vuelve a ejecutar. */
 export const NATIVE_TWIN_HOOKS = ["dome-guard.sh"]
 export const GUARD_FAILED = "el guard falló; no se puede comprobar si la orden toca una cúpula"
 
 const WRITERS = new Set(["cp", "mv", "rm", "touch", "tee", "sed", "dd", "install", "ln", "truncate", "chmod", "chown",
   "mkdir", "rmdir", "tar", "unzip", "rsync", "git", "python3", "python", "node", "bash", "sh", "perl", "ruby", "patch",
-  "cpio", "zip", "7z", "scp", "curl", "wget", "eval"])
+  "cpio", "zip", "7z", "scp", "curl", "wget", "eval", "rename", "unlink", "shred", "chgrp", "chattr", "setfacl"])
 const WRITE_TOOLS = new Set(["edit", "write", "patch", "multiedit", "notebookedit", "apply_patch"])
 const FILE_TOOLS = new Set(["read", "grep", "glob", "list"])
 const READ_ONLY = new Set(["cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "diff", "nl"])
@@ -64,10 +72,28 @@ const WRITE_PATH_KEYS = ["filePath", "file_path", "path", "notebook_path"]
 const WORKDIR_KEYS = ["workdir", "cwd", "directory", "dir", "working_directory", "workingDir"]
 // Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
 const LINK_DEPTH = 3
-// Programas que mueven o borran lo que nombran (con `git mv/rm` y `find -delete/-exec`, ver `destroys`).
-const DESTROYERS = new Set(["mv", "rm", "rmdir", "unlink", "shred"])
+// Tope de entradas por directorio al buscar enlaces; un directorio mayor cuenta como que tiene uno.
+const MAX_ENTRIES = 5000
+// Programas que mueven, borran o quitan permisos a lo que nombran (más `git mv/rm/clean/stash -u` y
+// `find -delete/-exec`, ver `destroys`): sobre un ancestro de una cúpula o del registro, se los llevan.
+const DESTROYERS = new Set(["mv", "rm", "rmdir", "unlink", "shred", "rename", "chmod", "chown", "chgrp", "chattr", "setfacl"])
+// Programas que ejecutan otro programa con sus argumentos: lo que hagan no se ve, cuentan como destructivos.
+const WRAPPERS = new Set(["env", "command", "builtin", "exec", "nice", "nohup", "timeout", "stdbuf", "time", "ionice",
+  "setsid", "sudo", "doas", "xargs", "chronic", "unbuffer", "flock", "watch", "parallel", "strace", "ltrace", "nsenter",
+  "unshare", "chroot", "fakeroot", "systemd-run", "busybox"])
+// Sandboxes cuyo comando va tras `--` (las opciones de antes son monturas).
+const SANDBOXES = new Set(["bwrap"])
+// Intérpretes de shell cuyo `-c` es otra orden que se analiza como tal.
+const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "mksh"])
+// Claves de una herramienta desconocida que pueden llevar una ruta.
+const PATH_KEY = /path|file|dir|dest|target/i
+// Profundidad máxima de órdenes anidadas (`sh -c`, `$(...)`, `eval`): más allá, no se analiza y pregunta.
+const MAX_NESTING = 4
+const DURATION = /^[0-9]+(\.[0-9]+)?[smhd]?$/
 const GIT_VALUE_FLAGS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"])
 const FIND_ACTIONS = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir"])
+// Programas que el guard conoce: tras un envoltorio, uno que no esté aquí cuenta como que recorre lo que nombra.
+const KNOWN_PROGRAMS = new Set([...WRITERS, ...DESTROYERS, ...READ_ONLY, ...TRAVERSERS, "echo", "printf", "true", "false", "test", "cd", "pwd", "cargo", "npm", "make", "go", "pytest"])
 const LEVELS: Record<string, number> = { N1: 1, N2: 2, "": 2, N3: 3, N4: 4, N4B: 4 }
 // Espacio en blanco ASCII explícito, el mismo que el núcleo Python (los `\s` de JS y Python difieren).
 const WS = " \t\n\r\x0b\x0c"
@@ -241,7 +267,8 @@ function listDir(d: string): string[] {
   }
 }
 
-function expandGlob(project: string, pattern: string): string[] {
+/** Expansión de un comodín con tope; `null` si el tope la corta (quien llama lo trata como que alcanza). */
+function expandGlob(project: string, pattern: string): string[] | null {
   let cur: string[]
   let rest: string
   if (pattern.startsWith("/")) {
@@ -262,7 +289,7 @@ function expandGlob(project: string, pattern: string): string[] {
       for (const name of listDir(base)) {
         budget = Math.max(0, budget - 1)
         if ((!name.startsWith(".") || seg.startsWith(".")) && wildcard(seg, name)) next.push(join(base, name))
-        if (budget === 0) return next
+        if (budget === 0) return null
       }
     }
     cur = next
@@ -278,15 +305,20 @@ function isDir(p: string): boolean {
   }
 }
 
-function symlinksInto(root: string, target: string, depth: number): string[] {
+/** Enlaces bajo `root` cuyo destino cae en `target`; `null` si un directorio supera el tope (cuenta como que hay). */
+function symlinksInto(root: string, target: string, depth: number): string[] | null {
   const out: string[] = []
-  for (const name of listDir(root).slice(0, 500)) {
+  const names = listDir(root)
+  if (names.length > MAX_ENTRIES) return null
+  for (const name of names) {
     const p = join(root, name)
     if (isLink(p)) {
       const c = canonical(p)
       if (c !== null && under(c, target)) out.push(p)
     } else if (isDir(p) && depth > 1 && !name.startsWith(".")) {
-      out.push(...symlinksInto(p, target, depth - 1))
+      const inner = symlinksInto(p, target, depth - 1)
+      if (inner === null) return null
+      out.push(...inner)
     }
   }
   return out
@@ -306,12 +338,17 @@ function mentionsDome(root: string, project: string, command: string): boolean {
   const name = fileName(rd)
   if (command.includes(root) || command.includes(rd) || (name && components.includes(name))) return true
   if (rel !== null && command.includes(rel)) return true
-  for (const link of symlinksInto(ws, rd, 2)) {
+  const links = symlinksInto(ws, rd, 2)
+  if (links === null) return true
+  for (const link of links) {
     const r = stripPrefix(link, ws)
     if (r !== null && command.includes(r)) return true
   }
   for (const t of tokens) {
-    if ((t.includes("*") || t.includes("?")) && expandGlob(project, t).some((m) => under(resolvePath(m), rd))) return true
+    if (t.includes("*") || t.includes("?")) {
+      const matches = expandGlob(project, t)
+      if (matches === null || matches.some((m) => under(resolvePath(m), rd))) return true
+    }
   }
   return false
 }
@@ -864,7 +901,7 @@ function writes(script: Cmd[]): boolean {
   return script.some((c) => {
     const prog = c.words.length > 0 ? literal(c.words[0]) : null
     const dynamic = c.words.some((w) => literal(w) === null)
-    return outputs(c) || dynamic || prog === null || WRITERS.has(baseName(prog))
+    return outputs(c) || dynamic || prog === null || WRITERS.has(baseName(prog)) || WRAPPERS.has(baseName(prog))
   })
 }
 
@@ -889,14 +926,37 @@ function isRecursive(prog: string, flags: string[]): boolean {
   return false
 }
 
+/**
+ * El programa que ejecuta un envoltorio (`timeout 5 grep`, `env LANG=C cat`, `nice -n 5 mv`): se quitan el
+ * envoltorio, sus opciones, asignaciones y duraciones. Lo que quede puede no ser un programa (el valor de una
+ * opción con argumento): entonces cuenta como desconocido.
+ */
+function unwrap(words: string[]): string[] {
+  while (words.length > 0 && WRAPPERS.has(baseName(words[0]))) {
+    words = words.slice(1)
+    while (words.length > 0 && (words[0].startsWith("-") || words[0].includes("=") || DURATION.test(words[0]))) words = words.slice(1)
+  }
+  return words
+}
+
 function traversalReaches(script: Cmd[], project: string, root: string): boolean {
   for (const c of script) {
-    const words = c.words.map(litOrDollar)
-    if (words.length === 0 || !TRAVERSERS.has(baseName(words[0]))) continue
+    const words = unwrap(c.words.map(litOrDollar))
+    if (words.length === 0) continue
     const prog = baseName(words[0])
-    if (!isRecursive(prog, words.slice(1).filter((w) => w.startsWith("-") && [...w].length > 1))) continue
+    // Un programa que no se conoce (o que queda tras un envoltorio que no se sabe leer) recorre lo que nombre
+    // cualquiera de sus palabras; uno conocido que no recorre, no.
+    const wrapped = !KNOWN_PROGRAMS.has(prog)
+    if (!wrapped && !TRAVERSERS.has(prog)) continue
+    if (!wrapped && !isRecursive(prog, words.slice(1).filter((w) => w.startsWith("-") && [...w].length > 1))) continue
     const args = words.slice(1).filter((w) => !w.startsWith("-"))
     if ((prog === "grep" || prog === "rg") && args.length > 0) args.shift()
+    if (wrapped) {
+      // `.`, `..` o `/` como argumento de un desconocido (las monturas de un sandbox) no cuentan: si no, toda
+      // orden envuelta por bwrap «recorrería» el disco entero.
+      if (args.some((a) => a !== "$" && touches(root, project, a, true) && !containsBase(project, a))) return true
+      continue
+    }
     if (args.length === 0) {
       if (touches(root, project, ".", true)) return true
     } else if (args.some((a) => a === "$" || touches(root, project, a, true))) {
@@ -935,18 +995,92 @@ function effectiveCwd(project: string, input: Record<string, unknown>): [string,
   return [project, false]
 }
 
-/** El comando mueve o borra lo que nombra: mv/rm/rmdir/unlink/shred, git mv/rm y find con -delete o -exec. */
+/** Subcomando de git y sus argumentos, saltando las opciones globales (`git -C dir rm`). */
+function gitSubcommand(words: string[]): [string, string[]] {
+  let rest = words.slice(1)
+  while (rest.length > 0 && rest[0].startsWith("-")) rest = rest.slice(GIT_VALUE_FLAGS.has(rest[0]) ? 2 : 1)
+  return rest.length > 0 ? [rest[0], rest.slice(1)] : ["", []]
+}
+
+/** `git clean` (sin -n) y `git stash -u/--all` borran lo no versionado del árbol, registro local incluido. */
+function wipesTree(c: Cmd): boolean {
+  const words = c.words.map(litOrDollar)
+  if (words.length === 0 || baseName(words[0]) !== "git") return false
+  const [sub, args] = gitSubcommand(words)
+  if (sub === "clean") {
+    return !args.some((a) => a === "-n" || a === "--dry-run" || (a.startsWith("-") && !a.startsWith("--") && a.includes("n")))
+  }
+  return sub === "stash" && args.some((a) => ["-u", "-a", "--all", "--include-untracked"].includes(a))
+}
+
+/** El comando mueve, borra o cambia permisos de lo que nombra, o ejecuta otro programa que podría hacerlo. */
 function destroys(c: Cmd): boolean {
   const words = c.words.map(litOrDollar)
   if (words.length === 0) return false
   const prog = baseName(words[0])
-  if (DESTROYERS.has(prog)) return true
-  if (prog === "git") {
-    let rest = words.slice(1)
-    while (rest.length > 0 && rest[0].startsWith("-")) rest = rest.slice(GIT_VALUE_FLAGS.has(rest[0]) ? 2 : 1)
-    return rest.length > 0 && (rest[0] === "rm" || rest[0] === "mv")
-  }
+  if (DESTROYERS.has(prog) || WRAPPERS.has(prog) || !KNOWN_PROGRAMS.has(prog)) return true
+  if (prog === "git") return ["rm", "mv"].includes(gitSubcommand(words)[0]) || wipesTree(c)
   return prog === "find" && words.slice(1).some((w) => FIND_ACTIONS.has(w))
+}
+
+/**
+ * Los comandos de la orden más los de sus órdenes anidadas: `$(...)`, `<(...)`, here-documents sin comillas,
+ * el `-c` de un shell y `eval`. Una anidada que no se puede analizar es un ShellParseError.
+ */
+function flatten(script: Cmd[], depth = 0): Cmd[] {
+  if (depth > MAX_NESTING) throw new ShellParseError("demasiado anidada")
+  const out: Cmd[] = []
+  for (const c of script) {
+    const allWords = c.words.map(litOrDollar)
+    if (allWords.length > 0 && SANDBOXES.has(baseName(allWords[0])) && allWords.includes("--")) {
+      // Las opciones de un sandbox son monturas, no rutas que toque: cuenta lo que ejecuta tras `--`.
+      const i = allWords.indexOf("--")
+      out.push(...flatten([{ assigns: [], words: c.words.slice(i + 1), redirs: c.redirs, control: false }], depth + 1))
+      continue
+    }
+    out.push(c)
+    const inner: string[] = []
+    for (const w of [...c.words, ...c.redirs.map((r) => r.target), ...c.assigns.map((a) => a[1])]) {
+      for (const [kind, text] of w) if (kind === "sub" || kind === "proc") inner.push(text)
+    }
+    for (const r of c.redirs) inner.push(...r.subs)
+    const words = unwrap(allWords)
+    const prog = words.length > 0 ? baseName(words[0]) : ""
+    if (SHELLS.has(prog)) {
+      for (let i = 1; i < words.length - 1; i++) {
+        const w = words[i]
+        if (w.startsWith("-") && !w.startsWith("--") && w.includes("c")) {
+          inner.push(words[i + 1])
+          break
+        }
+      }
+    }
+    if (prog === "eval") inner.push(words.slice(1).join(" "))
+    for (const text of inner) out.push(...flatten(parseShell(text), depth + 1))
+  }
+  return out
+}
+
+/** Un nivel de llaves con comas (`{vaults,src}`), como haría el shell. */
+function expandBraces(word: string): string[] {
+  const m = /\{([^{}]*,[^{}]*)\}/.exec(word)
+  if (!m) return [word]
+  return m[1].split(",").map((alt) => word.slice(0, m.index) + alt + word.slice(m.index + m[0].length))
+}
+
+/** Rutas que puede nombrar una palabra: ella, lo que va tras `=` o `@`, y sus llaves expandidas. */
+function candidates(word: string): string[] {
+  const out = [word]
+  if (word.includes("=")) out.push(word.slice(word.indexOf("=") + 1))
+  if (word.includes("@")) out.push(word.slice(word.indexOf("@") + 1))
+  return out.flatMap(expandBraces).filter((x) => x && !x.startsWith("-"))
+}
+
+/** La palabra es el directorio de trabajo o un ancestro suyo (`.`, `..`, `/`). */
+function containsBase(base: string, cand: string): boolean {
+  const a = realPath(join(base, cand))
+  const b = realPath(base)
+  return a === null || b === null || under(b.toLowerCase(), a.toLowerCase())
 }
 
 /** Componentes (en minúsculas) de la ruta de la cúpula desde el directorio de trabajo. */
@@ -956,29 +1090,61 @@ function chainOf(target: string, base: string): string[] {
   return (rel ? rel.split("/") : splitPath(rt)[1]).filter((c) => c).map((c) => c.toLowerCase())
 }
 
+/** Alguna parte de la orden cambia de directorio, así que las rutas relativas no se resuelven bien. */
+function changesDir(cmds: Cmd[]): boolean {
+  return cmds.some((c) => c.words.map(litOrDollar).some((w) =>
+    w === "cd" || w === "pushd" || w === "popd" || w === "-C" || w.startsWith("--chdir") || w.startsWith("--directory")))
+}
+
 /**
- * Un comando que mueve o borra la cúpula (o el registro) entera o un ancestro suyo: `mv vaults x`,
- * `rm -r projects/savia-vaults`. Tras un `cd`, el directorio no se conoce y vale el nombre de cualquier
- * componente de su ruta.
+ * Un comando que no es de solo lectura alcanza la cúpula (o el registro) o un ancestro suyo con cualquiera de
+ * sus palabras. Falla cerrado: no depende de qué programa sea, salvo para aflojar `.`/`..` en los que no
+ * destruyen (`git add .`). Una palabra dinámica o un comodín en uno que destruye, pregunta.
  */
-function movesAncestor(script: Cmd[], base: string, target: string): boolean {
-  const moved = script.some((c) => c.words.map(litOrDollar).some((w) => w === "cd" || w === "pushd"))
+function writesReach(cmds: Cmd[], base: string, target: string): boolean {
+  const moved = changesDir(cmds)
   const chain = moved ? chainOf(target, base) : []
-  for (const c of script) {
-    if (!destroys(c)) continue
-    for (const w of c.words.slice(1).map(litOrDollar)) {
-      if (w === "$" || w.startsWith("-")) continue
-      if (touches(target, base, w, true) || (moved && chain.includes(fileName(w).toLowerCase()))) return true
+  const pipedAny = cmds.some((c) => c.words.length > 0 && baseName(litOrDollar(c.words[0])) === "xargs")
+  for (const c of cmds) {
+    const first = c.words.length > 0 ? litOrDollar(c.words[0]) : ""
+    if (bashReadsOnly([c]) || first === "cd" || first === "pushd" || first === "popd") continue
+    const destructive = destroys(c) || pipedAny
+    if (wipesTree(c) && touches(target, base, ".", true)) return true
+    const words = [...c.words.slice(1), ...c.redirs.filter((r) => r.kind === "out" || r.kind === "append").map((r) => r.target),
+      ...c.assigns.map((a) => a[1])]
+    for (const w of words) {
+      const lit = literal(w)
+      if (lit === null) {
+        if (destructive) return true
+        continue
+      }
+      for (const cand of candidates(lit)) {
+        if ([..."*?["].some((ch) => cand.includes(ch))) {
+          const matches = expandGlob(base, cand)
+          if (matches === null || matches.some((m) => touches(target, base, m, true))) return true
+          continue
+        }
+        if (touches(target, base, cand, true) && (destructive || !containsBase(base, cand))) return true
+        if (moved && chain.includes(fileName(cand).toLowerCase())) return true
+      }
     }
   }
   return false
 }
 
 function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, input: Record<string, unknown>): DomeVerdict {
+  if (input.command !== undefined && input.command !== null && !isStr(input.command)) return { decision: "ask", reason: PAYLOAD_NOTICE }
   const command = isStr(input.command) ? input.command : ""
   let script: Cmd[]
   try {
     script = parseShell(command)
+  } catch (e) {
+    if (e instanceof ShellParseError) return { decision: "ask", reason: `la orden de shell no se puede analizar: ${WRITE_NOTICE}` }
+    throw e
+  }
+  let cmds: Cmd[]
+  try {
+    cmds = flatten(script)
   } catch (e) {
     if (e instanceof ShellParseError) return { decision: "ask", reason: `la orden de shell no se puede analizar: ${WRITE_NOTICE}` }
     throw e
@@ -999,19 +1165,19 @@ function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, i
     // la sesión) hace que toda orden la toque.
     const byPath = pathlike.some((w) => touches(d.root, base, w, false)) || touches(d.root, base, ".", false)
     // Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
-    return (named && nameOnlyOk) || byPath || (!readsOnly && movesAncestor(script, base, d.root))
+    return (named && nameOnlyOk) || byPath || (!readsOnly && writesReach(cmds, base, d.root))
   }
   const directHit = domes.filter(direct)
   if (directHit.length > 0 && !readsOnly) {
     // Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
-    const reached = domes.filter((d) => traversalReaches(script, base, d.root))
+    const reached = domes.filter((d) => traversalReaches(cmds, base, d.root))
     if (reached.length > 0 && readVerdict(ctx, reached).decision === "deny") return readVerdict(ctx, reached)
-    return { decision: "ask", reason: writes(script) ? WRITE_NOTICE : UNKNOWN_NOTICE }
+    return { decision: "ask", reason: writes(cmds) ? WRITE_NOTICE : UNKNOWN_NOTICE }
   }
   if (!readsOnly && files.some((f) => direct({ root: f }))) return { decision: "ask", reason: REGISTRY_NOTICE }
   const touched = [...directHit]
   for (const d of domes) {
-    if (!touched.some((t) => t.id === d.id) && traversalReaches(script, base, d.root)) touched.push(d)
+    if (!touched.some((t) => t.id === d.id) && traversalReaches(cmds, base, d.root)) touched.push(d)
   }
   if (touched.length === 0) return { decision: "pass", reason: "" }
   return readVerdict(ctx, touched)
@@ -1042,12 +1208,42 @@ function searchRoot(project: string, permission: string, input: Record<string, u
 
 /** Una búsqueda recursiva desde `root` entra en la cúpula por un enlace que hay debajo. */
 function reachesByLink(project: string, root: string, domeRoot: string): boolean {
-  return symlinksInto(resolvePath(join(project, root)), resolvePath(domeRoot), LINK_DEPTH).length > 0
+  const links = symlinksInto(resolvePath(join(project, root)), resolvePath(domeRoot), LINK_DEPTH)
+  return links === null || links.length > 0
+}
+
+/** Cadenas bajo claves de ruta, también anidadas en objetos y listas (hasta 8 niveles). */
+function pathValues(value: unknown, depth = 0): string[] {
+  const out: string[] = []
+  if (depth > 8) return out
+  if (Array.isArray(value)) {
+    for (const v of value) out.push(...pathValues(v, depth + 1))
+  } else if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value)) {
+      if (isStr(v) && v && PATH_KEY.test(k)) out.push(v)
+      else if (v && typeof v === "object") out.push(...pathValues(v, depth + 1))
+    }
+  }
+  return out
+}
+
+/**
+ * Herramienta que el guard no conoce (MCP, otras de edición): si alguna clave de ruta toca una cúpula, el
+ * registro o un ancestro suyo, pregunta. Sin claves de ruta no decide nada.
+ */
+function decideUnknown(registry: Registry, project: string, input: Record<string, unknown>): DomeVerdict {
+  const paths = pathValues(input)
+  if (paths.length === 0) return { decision: "pass", reason: "" }
+  if ("error" in registry) return { decision: "ask", reason: `registro de cúpulas ilegible (${registry.error}): ${WRITE_NOTICE}` }
+  if (registry.domes.length === 0) return { decision: "pass", reason: "" }
+  if (paths.some((p) => registry.domes.some((d) => touches(d.root, project, p, true)))) return { decision: "ask", reason: UNKNOWN_TOOL_NOTICE }
+  if (paths.some((p) => registry.files.some((f) => touches(f, project, p, true)))) return { decision: "ask", reason: REGISTRY_NOTICE }
+  return { decision: "pass", reason: "" }
 }
 
 function decide(registry: Registry, project: string, tool: string, input: Record<string, unknown>, ctx: Ctx): DomeVerdict {
   const permission = toolPermission(tool)
-  if (!(permission === "bash" || FILE_TOOLS.has(permission) || WRITE_TOOLS.has(permission))) return { decision: "pass", reason: "" }
+  if (!(permission === "bash" || FILE_TOOLS.has(permission) || WRITE_TOOLS.has(permission))) return decideUnknown(registry, project, input)
   if ("error" in registry) return { decision: "ask", reason: `registro de cúpulas ilegible (${registry.error}): ${WRITE_NOTICE}` }
   const { domes, files } = registry
   if (domes.length === 0) return { decision: "pass", reason: "" }
@@ -1101,6 +1297,11 @@ function dirName(p: string): string {
 function readRegistryFile(file: string): Dome[] {
   let raw: string
   try {
+    if (!statSync(file).isFile()) throw new Error(`${file}: no es un fichero`)
+  } catch (e) {
+    throw e instanceof Error && e.message.endsWith("no es un fichero") ? e : new Error(`${file}: no se puede leer`)
+  }
+  try {
     raw = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(readFileSync(file))
   } catch {
     throw new Error(`${file}: no se puede leer`)
@@ -1128,13 +1329,34 @@ function readRegistryFile(file: string): Dome[] {
   return out
 }
 
+/**
+ * Solo un ENOENT de verdad significa «no hay registro». Cualquier otro error (permisos, un componente que no es
+ * directorio, un enlace roto) lanza: el guard falla cerrado.
+ */
+function registryEntryExists(file: string): boolean {
+  const code = (e: unknown) => (e && typeof e === "object" && "code" in e ? (e as { code: unknown }).code : undefined)
+  try {
+    statSync(file)
+    return true
+  } catch (e) {
+    if (code(e) !== "ENOENT") throw new Error(`${file}: no se puede comprobar`)
+  }
+  try {
+    lstatSync(file)
+  } catch (e) {
+    if (code(e) === "ENOENT") return false
+    throw new Error(`${file}: no se puede comprobar`)
+  }
+  throw new Error(`${file}: enlace roto`)
+}
+
 function loadRegistry(file: string, required: boolean): Registry {
   const base = baseRegistryPath(file)
   let merged: Dome[] = []
   let found = false
   try {
     for (const f of [base, localRegistryPath(base)]) {
-      if (!existsSync(f)) continue
+      if (!registryEntryExists(f)) continue
       found = true
       for (const d of readRegistryFile(f)) merged = [...merged.filter((m) => m.id !== d.id), d]
     }
@@ -1169,6 +1391,8 @@ export function decideDome(req: DomeRequest): DomeVerdict {
 export function domeGuardVerdict(req: DomeRequest): DomeVerdict {
   if (req.env.SAVIA_DOME_GUARD === "space" || req.env.SAVIA_GATES_PIN === "1") return { decision: "pass", reason: "" }
   try {
+    // Lo mismo que decidePayload: un NUL o un sustituto suelto en la llamada no se decide.
+    if (!cleanStrings(req.input) || !cleanStrings(req.context)) return { decision: "ask", reason: PAYLOAD_NOTICE }
     return decideDome(req)
   } catch {
     return { decision: "ask", reason: GUARD_FAILED }
@@ -1188,6 +1412,22 @@ function abspath(p: string): string {
   return "/".repeat(initial) + out.join("/")
 }
 
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
+
+/**
+ * Ninguna cadena (ni clave) lleva un NUL o un sustituto UTF-16 suelto: el sistema de ficheros no los
+ * interpretaría como el guard, así que una llamada así no se decide (pregunta).
+ */
+function cleanStrings(value: unknown, depth = 0): boolean {
+  if (depth > 64) return false
+  if (isStr(value)) return !value.includes("\0") && !LONE_SURROGATE.test(value)
+  if (Array.isArray(value)) return value.every((v) => cleanStrings(v, depth + 1))
+  if (value && typeof value === "object") {
+    return Object.entries(value).every(([k, v]) => cleanStrings(k, depth + 1) && cleanStrings(v, depth + 1))
+  }
+  return true
+}
+
 /**
  * Decisión para un payload PreToolUse en texto (el que recibe el hook bash), con la delegación de
  * `domeGuardVerdict`. Un payload que no se puede leer, con cúpulas registradas, pregunta.
@@ -1200,7 +1440,7 @@ export function decidePayload(raw: string, root: string, env: Record<string, str
   } catch {
     payload = null
   }
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) || !cleanStrings(payload)) {
     const file = env.SAVIA_SPACE_DOMES_FILE || join(root, "projects/savia-vaults/savia-vaults.domes.json")
     const registry = loadRegistry(file, !!env.SAVIA_SPACE_DOMES_FILE)
     return "error" in registry || registry.domes.length > 0 ? { decision: "ask", reason: PAYLOAD_NOTICE } : { decision: "pass", reason: "" }
