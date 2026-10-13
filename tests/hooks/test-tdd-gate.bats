@@ -144,3 +144,27 @@ run_hook() {
   [ "$status" -eq 0 ]
   python3 -c "assert True"
 }
+
+# ── Target directory that does not exist yet: resolve ITS repo, not the cwd one ──
+# Regression 2026-10-13: writing the first file of tools/ in another repo was blocked
+# because `git -C <missing dir>` failed and the lookup fell back to the session repo.
+
+run_hook_from_other_repo() {
+  local other="$TMPDIR/other-repo"
+  mkdir -p "$other" && (cd "$other" && git init --quiet 2>/dev/null || true)
+  local tmpf="$TMPDIR/tddgate-input.json"
+  printf '%s' "$1" > "$tmpf"
+  run bash -c "cd '$other' && cat '$tmpf' | bash '$HOOK'"
+}
+
+@test "passes when the test exists in the target repo even if the target dir is missing" {
+  touch "$TEST_TMPDIR/tests/test_newtool.py"
+  run_hook_from_other_repo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEST_TMPDIR/newdir/tools/newtool.py\",\"content\":\"x\"}}"
+  [ "$status" -eq 0 ]
+}
+
+@test "BLOCKS when the target repo has no test, even with a missing target dir (negative control)" {
+  run_hook_from_other_repo "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$TEST_TMPDIR/newdir/tools/orphantool.py\",\"content\":\"x\"}}"
+  [ "$status" -eq 2 ]
+}
+

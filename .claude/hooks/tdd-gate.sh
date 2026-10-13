@@ -77,7 +77,14 @@ NAME_NO_EXT="${BASENAME%.*}"
 # Try git first (from the edited file's dir, so files outside the workspace
 # resolve to THEIR repo), but fall back to current dir or CLAUDE_PROJECT_DIR
 # In tests, this will be the TEST_TMPDIR which has .git initialized
-if PROJECT_ROOT=$(git -C "$DIR" rev-parse --show-toplevel 2>/dev/null); then
+# The target directory may not exist yet (first file of a new folder): probe the
+# nearest existing ancestor, otherwise `git -C` fails and the lookup silently
+# falls back to the session repo and misses the tests that DO exist.
+PROBE="$DIR"
+while [ -n "$PROBE" ] && [ "$PROBE" != "/" ] && [ ! -d "$PROBE" ]; do
+  PROBE=$(dirname "$PROBE")
+done
+if PROJECT_ROOT=$(git -C "$PROBE" rev-parse --show-toplevel 2>/dev/null); then
   :
 elif PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
   :
