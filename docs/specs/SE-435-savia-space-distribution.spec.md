@@ -2,6 +2,7 @@
 status: APPROVED
 approved_at: 2026-10-05
 approved_by: "operadora, AskUserQuestion 2026-10-05: «Apruebo, empieza por D1»"
+delta_approved: "gonzalezpazmonica 2026-10-13, delta «paquetes para terceros al final»"
 priority: P1
 developer_type: agent-team
 created: 2026-10-05
@@ -10,8 +11,12 @@ phase: A
 risk: L3
 related_specs: [SE-428, SE-434]
 origin: "Decisión de la operadora del 2026-10-05 (AskUserQuestion, D-MED-7): distribución agnóstica de Savia Space mediante paquetes nativos más `savia-space setup`. Pregunta de partida: «Savia Space tiene que ser agnóstico a la máquina en la que se ejecute. ¿Cómo lo solucionamos, con un instalador?»"
+timeline:
+  - from: "2026-10-13"
+    learned: "2026-10-13"
+    value: "APPROVED"
+    source: "spec-lifecycle:auto"
 ---
-
 # SE-435 — Savia Space: distribución agnóstica (paquetes nativos y `savia-space setup`)
 
 ## Problema
@@ -67,6 +72,11 @@ Cada paquete instala el binario `savia-space`, la web compilada, el servicio de 
 | D3 | `.rpm`, PKGBUILD y fórmula de Homebrew | AC6 |
 | D4 | CI de releases reproducibles y firmadas, con checksums | AC7 |
 
+**Orden.** D1 va primero: `setup` es requisito del sandbox de SE-434 en Ubuntu 23.10 o posterior.
+D2–D4 van al final, cuando el resto de Savia Space esté completo. Lo que ya esté integrado de D2–D4
+se conserva y se puede construir en local, pero no se publica en canales públicos (releases,
+repositorios de paquetes, fórmulas) hasta entonces.
+
 ## Criterios de aceptación
 
 - **AC1:** en una máquina Ubuntu 24.04 con userns restringido, `setup` diagnostica la causa, muestra las dos órdenes del perfil oficial y, tras la confirmación tecleada, deja el sandbox de SE-434 en LIVE (verificado por la sonda).
@@ -87,6 +97,11 @@ Cada paquete instala el binario `savia-space`, la web compilada, el servicio de 
 - `postinst` con AppArmor modifica la seguridad del sistema. Se limita al perfil oficial de la distribución, nunca relaja la restricción global y es reversible.
 - Mantener varios paquetes cuesta trabajo. Se mitiga con una CI que los construya todos desde la misma fuente.
 - Probar macOS y Fedora requiere máquinas o runners de CI de esas plataformas.
+
+## Deltas aprobados
+
+- **Paquetes para terceros al final.** D1 sigue primero; D2–D4 se publican cuando el resto de Savia
+  Space esté completo (ver «Orden» en «Slices»). La spec sigue APPROVED.
 
 ## OpenCode Implementation Plan
 

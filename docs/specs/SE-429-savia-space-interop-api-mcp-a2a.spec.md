@@ -2,6 +2,7 @@
 status: APPROVED
 approved_at: 2026-10-05
 approved_by: "operadora, AskUserQuestion 2026-10-05"
+delta_approved: "gonzalezpazmonica 2026-10-13, delta «A2A apagado por defecto y sin push en 0.4»"
 priority: P1
 developer_type: agent-single
 created: 2026-10-02
@@ -11,8 +12,12 @@ risk: L3
 related_specs: [SE-428, SE-430, SE-423, SE-401]
 origin: "Mandato de la operadora 2026-10-02: Savia Space con API JWT y contrato OpenAPI, MCP y A2A para ser consumido, ejecutado y usado por terceras aplicaciones, agentes o servicios; compatible con AEK, AEOS y TEE"
 resource: https://spec.openapis.org/oas/v3.1.0
+timeline:
+  - from: "2026-10-13"
+    learned: "2026-10-13"
+    value: "APPROVED"
+    source: "spec-lifecycle:auto"
 ---
-
 # SE-429 — Savia Space interoperable: API con JWT y OpenAPI, MCP y A2A
 
 ## Problema
@@ -101,12 +106,17 @@ seguridad. Las restricciones de partida:
    - El texto de las fuentes, y las salidas y resúmenes de otras ejecuciones, viajan marcados
      como no fiables.
 7. **A2A.**
+   - **Apagado por defecto.** El endpoint A2A y la Agent Card solo se sirven si la instalación lo
+     activa de forma expresa en su configuración. Sin esa activación, las rutas A2A responden 404 y
+     la Agent Card no se publica. REST, MCP y el emparejamiento del móvil no dependen de A2A y siguen
+     activos.
    - Agent Card firmada.
    - Una tarea A2A es una ejecución de Space. Mientras falta una aprobación, un permiso o una
      respuesta, queda en `input-required`.
    - Artefactos de respuesta, evidencia, diff y recibo.
    - Streaming por SSE con la secuencia del journal.
-   - Notificaciones push solo a URLs en allowlist, firmadas y sin contenido sensible (0.4).
+   - Sin notificaciones push en 0.4: la Agent Card publica `pushNotifications: false` y una petición
+     con `pushNotificationConfig` se rechaza.
 8. **Compatibilidad con TEE v1.1, AEK y AEOS.**
    - Space produce **recibos firmados** de decisión, de envío al proveedor y de tareas de agente
      (SE-428). Referencian hashes, nunca el texto de las fuentes.
@@ -138,8 +148,12 @@ seguridad. Las restricciones de partida:
 - **AC4**: la misma aprobación repetida no crea dos ejecuciones.
 - **AC5**: un cliente de nivel N1 no ve capturas N2.
 - **AC6**: un cliente revocado deja de funcionar en la siguiente petición.
-- **AC7**: una tarea A2A pasa por `input-required` → `working` → `completed` con artefactos de
-  evidencia.
+- **AC7**: con A2A activado, una tarea A2A pasa por `input-required` → `working` → `completed` con
+  artefactos de evidencia.
+- **AC7b**: con la configuración por defecto, `GET /.well-known/agent-card.json` y las rutas A2A
+  responden 404, mientras REST, MCP y el emparejamiento del móvil responden con normalidad. Con A2A
+  activado, la Agent Card publica `pushNotifications: false` y una tarea con
+  `pushNotificationConfig` se rechaza.
 - **AC8**: una tool MCP de ejecución responde en menos de 1 s con el identificador y notifica el
   progreso.
 - **AC9**: una petición con `Origin` ajeno se rechaza antes de leer el cuerpo.
@@ -163,6 +177,12 @@ seguridad. Las restricciones de partida:
 - **D3**: contrato OpenAPI contract-first (propuesto) o generado desde el código.
 - **D4**: decidida — recibos firmados en 0.3, con el modo mediado (calendario de SE-428).
 
+## Deltas aprobados
+
+- **A2A apagado por defecto y sin push en 0.4.** A2A se activa solo por configuración expresa de la
+  instalación (§7). Las notificaciones push A2A salen de 0.4. AC7 se ejecuta con A2A activado; AC7b
+  nuevo. La spec sigue APPROVED.
+
 ## Entregas
 
 Calendario único de SE-428: la interoperabilidad con terceros entra en **0.4**, junto con el
@@ -171,7 +191,7 @@ móvil.
 - **0.3**: recibos firmados (modo mediado de SE-428).
 - **0.4**: REST con JWT y OpenAPI, MCP stdio y HTTP, A2A con Agent Card firmada, aprobación de
   persona y delegación acotada, red local y VPN con TLS fijado y DPoP, prueba de AEOS en modo
-  solo lectura, notificaciones push.
+  solo lectura. Sin notificaciones push A2A.
 - **Leases externos**: bloqueados hasta el contrato de AEK.
 
 ## OpenCode Implementation Plan

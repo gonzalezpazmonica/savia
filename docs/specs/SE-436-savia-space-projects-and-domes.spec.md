@@ -2,6 +2,7 @@
 status: APPROVED
 approved_at: 2026-10-06
 approved_by: "operadora, AskUserQuestion 2026-10-06 (con las recomendaciones de Savia)"
+delta_approved: "gonzalezpazmonica 2026-10-13, delta «niveles con proveedor en la nube»: N3+ sin pregunta y N2 con recibo"
 priority: P1
 developer_type: agent-team
 created: 2026-10-06
@@ -14,6 +15,10 @@ timeline:
   - from: "2026-10-06"
     learned: "2026-10-06"
     value: "PROPOSED"
+    source: "spec-lifecycle:auto"
+  - from: "2026-10-13"
+    learned: "2026-10-13"
+    value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
 # SE-436 — Savia Space: proyectos y cúpulas desde Space
@@ -129,8 +134,10 @@ Con tres garantías:
 
 - Un hook registrado en el bus de Space y en el plugin savia-gates lee las raíces y los niveles del registro fusionado:
   - **escritura** del motor (`edit`, `write` o `bash` que escriba) dentro de la raíz de una cúpula → `ask`, con el mensaje «Usa una propuesta: Guardar como nota»;
-  - **lectura** de una cúpula N2 o superior que no está adjunta, con un proveedor de nube → `ask`. Se pregunta una vez por cúpula y sesión, y la respuesta queda registrada.
-- En modo mediado ya rige SE-434: las cúpulas son de solo lectura en el sandbox. El guard no cambia nada ahí.
+  - **lectura** de una cúpula N3, N4 o N4b con un proveedor de nube → `deny` con `LEVEL_NOT_ALLOWED`, sin pregunta. Lo privado nunca se resuelve con una pregunta. La denegación queda en la traza y en el registro de decisiones;
+  - **lectura** de una cúpula N2 que no está adjunta, con un proveedor de nube → `ask` con la cúpula, el nivel y el proveedor. Se pregunta una vez por cúpula y sesión. Si la persona acepta, Space deja un recibo `ATTACH_CONSENT` de esa cúpula para la sesión, y cada fichero leído bajo ese consentimiento queda en la traza con su `contentHash`. Si rechaza, las lecturas siguientes de esa cúpula en la sesión dan `deny`;
+  - la regla vale igual para las lecturas por las tools MCP `vault_*` que para `read`, `grep`, `glob` o `bash`.
+- En modo mediado ya rige SE-434: las cúpulas son de solo lectura en el sandbox. Además, Space aplica la misma regla de niveles de lectura al decidir cada permiso de las tools del motor. **Límite declarado:** las lecturas por `bash` dentro del sandbox no pasan por esa decisión; las cubre el sandbox solo cuando oculta al motor las cúpulas de esos niveles (máscaras de nivel de SE-434).
 
 ### 6. Traza en modo interactivo (G-06; D30-5)
 
@@ -177,7 +184,7 @@ El diseño de §1–§7 aplica estas decisiones, todas resueltas con la recomend
 | S2 | Registro local de cúpulas, `POST /api/v1/domes`, lectura y escritura de notas, editor, recibos `DOME_CREATE` y `NOTE_WRITE` | S1 | AC5–AC8 |
 | S3 | `Proposal`, «Guardar como nota» y «Guardar en el proyecto», tool `space_propose_write`, aceptar y rechazar, destinos denegados | S2 | AC9–AC12 |
 | S4 | Adjuntos, política por nivel y destino, vista previa y confirmación, anillo de contexto | S2 (D23-14 resuelta) | AC13–AC16 |
-| S5 | Guard de cúpulas en el bus de Space y en savia-gates | S2 (D30-4 resuelta) | AC17–AC18 |
+| S5 | Guard de cúpulas en el bus de Space y en savia-gates | S2 (D30-4 resuelta) | AC17–AC18b |
 | S6 | Traza observada en interactivo, pestaña Traza y receipts con 200 | — | AC19–AC21 |
 
 Orden: S1 → S2 → (S3 en paralelo con S4) → S5. S6 va en paralelo desde el principio. El e2e del gallinero se repite al final como AC22.
@@ -216,7 +223,8 @@ Datos de prueba comunes:
 
 **S5**
 - **AC17:** en interactivo, un `edit` del motor sobre `00-Index/requisitos.md` de la cúpula `gallinero` produce `ask` con el mensaje de propuesta. La misma orden fuera de cualquier cúpula sigue la configuración de `opencode.json` sin cambios.
-- **AC18:** con un perfil de nube, un `read` del motor sobre una cúpula N2 no adjunta produce `ask` la primera vez. Si se permite, la segunda lectura de la misma cúpula en la misma sesión no pregunta, y ambas quedan en el registro de decisiones.
+- **AC18:** con un perfil de nube, un `read` del motor sobre una cúpula N2 no adjunta produce `ask` la primera vez. Si se permite, queda un recibo `ATTACH_CONSENT` de la cúpula para la sesión; la segunda lectura de la misma cúpula en la misma sesión no pregunta, y ambas quedan en la traza con su `contentHash`. Si se rechaza, la segunda lectura da `deny`.
+- **AC18b:** con un perfil de nube, un `read` del motor sobre una cúpula N4 da `deny` con `LEVEL_NOT_ALLOWED` sin preguntar, y la petición al proveedor no contiene ningún byte de la cúpula. Lo mismo con N3 y N4b, y con `vault_read` sobre esa cúpula. Con un perfil local, la regla no aplica.
 
 **S6**
 - **AC19:** un run interactivo que lee 3 ficheros deja una traza con 3 spans `read`, cada uno con `argsHash` y `resultHash`. Tras recargar la página, la pestaña Traza muestra los mismos 3 spans.
@@ -243,6 +251,13 @@ Datos de prueba comunes:
 - **Registro de cúpulas versionado:** si se escribe el registro base, se publican nombres y rutas. Lo comprueba AC5.
 - **Migración de la config:** `config.json` usa `deny_unknown_fields`. Una config v2 abierta por un binario v1 falla con un error claro, nunca en silencio.
 - **Credencial de escritura de Vaults:** es nueva y va separada de la lectora. Si falta, se escribe por directorio y se declara en el recibo.
+
+## Deltas aprobados
+
+- **Niveles con proveedor en la nube.** Las lecturas del motor sobre cúpulas N3, N4 o N4b se deniegan
+  sin pregunta (§5). Las de N2 piden confirmación y dejan recibo `ATTACH_CONSENT`, como los adjuntos
+  de §4. La regla cubre también las tools MCP `vault_*`. AC18 revisado y AC18b nuevo. La spec sigue
+  APPROVED.
 
 ## OpenCode Implementation Plan
 

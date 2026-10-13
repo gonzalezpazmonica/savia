@@ -6,6 +6,26 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-13 SE-406 DEFERRED
+
+Aparcada: los avisos urgentes y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3); se revisa si la app no basta para lo urgente.
+
+## 2026-10-13 SE-436 APPROVED
+
+Delta: con proveedor en la nube, lecturas de cúpulas N3+ denegadas sin pregunta y N2 con confirmación y recibo, también por vault_*
+
+## 2026-10-13 SE-435 APPROVED
+
+Delta: D1 primero; paquetes y releases públicas (D2–D4) al final, con el resto de Savia Space completo
+
+## 2026-10-13 SE-431 APPROVED
+
+Delta: con perfil en la nube, Soul no envía N3+ y solo envía N2 con confirmación y recibo; Relay por la app móvil de Space (D3)
+
+## 2026-10-13 SE-429 APPROVED
+
+Delta: A2A apagado por defecto (solo por configuración expresa) y sin notificaciones push A2A en 0.4
+
 ## 2026-10-06 SE-436 APPROVED
 
 operadora, AskUserQuestion 2026-10-06: aprobada con las recomendaciones de Savia (D30-1..6, D23-14)

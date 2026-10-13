@@ -1,5 +1,6 @@
 ---
-status: PROPOSED
+status: DEFERRED
+deferred_by: "gonzalezpazmonica 2026-10-13, aparcada: los avisos van por la app móvil de Savia Space"
 priority: P1
 developer_type: agent-team
 created: 2026-09-27
@@ -7,11 +8,17 @@ phase: B
 risk: L4
 related_specs: [SE-343, SE-332, SE-349, SE-362, SE-392, SE-401, SPEC-186, SE-304]
 origin: "Operadora 2026-09-27: 'convierte a Savia en un harness de IA autónomo que se comunique de forma activa conmigo vía WhatsApp. Analiza, diseña, genera spec y haz una propuesta para revisar.'"
+timeline:
+  - from: "2026-10-13"
+    learned: "2026-10-13"
+    value: "DEFERRED"
+    source: "spec-lifecycle:manual"
 ---
-
 # SE-406 — Savia Relay: canal activo con la operadora por WhatsApp
 
-> Estado PROPOSED. Nada de este spec se implementa hasta su aprobación.
+> Estado DEFERRED (aparcada). Los avisos urgentes y el Relay de Soul van por la app móvil de Savia
+> Space (SE-430, SE-431 D3). Se revisa si la app no basta para lo urgente. Nada de este spec se
+> implementa mientras siga aparcada.
 > Las decisiones abiertas están en §10.
 
 ## 1. Objetivo
