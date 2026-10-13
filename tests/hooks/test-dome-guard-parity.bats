@@ -38,6 +38,10 @@ both() {
 }
 
 require_ts() {
+  if [[ -z "$TS_RUNTIME" && "${SAVIA_REQUIRE_TS:-}" == "1" ]]; then
+    echo "SAVIA_REQUIRE_TS=1 y no hay runtime TypeScript (bun o node >= 22.6)" >&2
+    return 1
+  fi
   [[ -n "$TS_RUNTIME" ]] || skip "sin runtime TypeScript (bun o node >= 22.6): la paridad no se puede comprobar aquí"
 }
 

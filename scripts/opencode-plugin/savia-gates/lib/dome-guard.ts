@@ -9,6 +9,11 @@
 // - Lectura de una cúpula N2+ no adjunta con proveedor de nube → ask; N3+ → deny.
 // - Fuera de las cúpulas → pass. Registro ilegible → ask en todo lo que mira (falla cerrado).
 
+//
+// Límite conocido: es un guard léxico. Una ruta montada en tiempo de ejecución dentro de un guion
+// (`python3 -c "open('gall'+'inero/a','w')"`, variables calculadas) no se ve. La defensa en profundidad es el
+// sandbox del motor o el modo mediado de Savia Space (SE-434).
+
 import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from "node:fs"
 
 export type DomeDecision = "pass" | "ask" | "deny"
@@ -59,6 +64,10 @@ const WRITE_PATH_KEYS = ["filePath", "file_path", "path", "notebook_path"]
 const WORKDIR_KEYS = ["workdir", "cwd", "directory", "dir", "working_directory", "workingDir"]
 // Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
 const LINK_DEPTH = 3
+// Programas que mueven o borran lo que nombran (con `git mv/rm` y `find -delete/-exec`, ver `destroys`).
+const DESTROYERS = new Set(["mv", "rm", "rmdir", "unlink", "shred"])
+const GIT_VALUE_FLAGS = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"])
+const FIND_ACTIONS = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir"])
 const LEVELS: Record<string, number> = { N1: 1, N2: 2, "": 2, N3: 3, N4: 4, N4B: 4 }
 // Espacio en blanco ASCII explícito, el mismo que el núcleo Python (los `\s` de JS y Python difieren).
 const WS = " \t\n\r\x0b\x0c"
@@ -926,6 +935,45 @@ function effectiveCwd(project: string, input: Record<string, unknown>): [string,
   return [project, false]
 }
 
+/** El comando mueve o borra lo que nombra: mv/rm/rmdir/unlink/shred, git mv/rm y find con -delete o -exec. */
+function destroys(c: Cmd): boolean {
+  const words = c.words.map(litOrDollar)
+  if (words.length === 0) return false
+  const prog = baseName(words[0])
+  if (DESTROYERS.has(prog)) return true
+  if (prog === "git") {
+    let rest = words.slice(1)
+    while (rest.length > 0 && rest[0].startsWith("-")) rest = rest.slice(GIT_VALUE_FLAGS.has(rest[0]) ? 2 : 1)
+    return rest.length > 0 && (rest[0] === "rm" || rest[0] === "mv")
+  }
+  return prog === "find" && words.slice(1).some((w) => FIND_ACTIONS.has(w))
+}
+
+/** Componentes (en minúsculas) de la ruta de la cúpula desde el directorio de trabajo. */
+function chainOf(target: string, base: string): string[] {
+  const rt = resolvePath(target)
+  const rel = stripPrefix(rt, resolvePath(base))
+  return (rel ? rel.split("/") : splitPath(rt)[1]).filter((c) => c).map((c) => c.toLowerCase())
+}
+
+/**
+ * Un comando que mueve o borra la cúpula (o el registro) entera o un ancestro suyo: `mv vaults x`,
+ * `rm -r projects/savia-vaults`. Tras un `cd`, el directorio no se conoce y vale el nombre de cualquier
+ * componente de su ruta.
+ */
+function movesAncestor(script: Cmd[], base: string, target: string): boolean {
+  const moved = script.some((c) => c.words.map(litOrDollar).some((w) => w === "cd" || w === "pushd"))
+  const chain = moved ? chainOf(target, base) : []
+  for (const c of script) {
+    if (!destroys(c)) continue
+    for (const w of c.words.slice(1).map(litOrDollar)) {
+      if (w === "$" || w.startsWith("-")) continue
+      if (touches(target, base, w, true) || (moved && chain.includes(fileName(w).toLowerCase()))) return true
+    }
+  }
+  return false
+}
+
 function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, input: Record<string, unknown>): DomeVerdict {
   const command = isStr(input.command) ? input.command : ""
   let script: Cmd[]
@@ -950,10 +998,14 @@ function decideBash(domes: Dome[], files: string[], project: string, ctx: Ctx, i
     // Una ruta que cae en la cúpula la nombra, y un directorio de trabajo dentro de ella (el efectivo o el de
     // la sesión) hace que toda orden la toque.
     const byPath = pathlike.some((w) => touches(d.root, base, w, false)) || touches(d.root, base, ".", false)
-    return (named && nameOnlyOk) || byPath
+    // Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
+    return (named && nameOnlyOk) || byPath || (!readsOnly && movesAncestor(script, base, d.root))
   }
   const directHit = domes.filter(direct)
   if (directHit.length > 0 && !readsOnly) {
+    // Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
+    const reached = domes.filter((d) => traversalReaches(script, base, d.root))
+    if (reached.length > 0 && readVerdict(ctx, reached).decision === "deny") return readVerdict(ctx, reached)
     return { decision: "ask", reason: writes(script) ? WRITE_NOTICE : UNKNOWN_NOTICE }
   }
   if (!readsOnly && files.some((f) => direct({ root: f }))) return { decision: "ask", reason: REGISTRY_NOTICE }

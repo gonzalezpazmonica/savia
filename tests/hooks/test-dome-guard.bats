@@ -197,6 +197,21 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
   [ -z "$output" ]
 }
 
+@test "review P1-S6: moving or deleting an ancestor of a dome or of the registry asks" {
+  registry
+  mkdir -p "$WS/vaults/otra"
+  for cmd in "mv vaults /tmp/v" "rm -r projects/savia-vaults" "cd projects && mv savia-vaults old" "mv projects /tmp/p" "git rm -r vaults"; do
+    run_hook Bash "$(jq -cn --arg c "$cmd" '{command: $c}')"
+    [ "$(decision)" = "ask" ] || { echo "pasa: $cmd"; return 1; }
+  done
+  run_hook Bash '{"command":"mv projects/savia-vaults /tmp/sv"}'
+  [[ "$(reason)" == *"registro de cúpulas no lo cambia el motor"* ]]
+  for cmd in "mv src/a src/b" "rm -r vaults2" "cd src && rm -r tmp"; do
+    run_hook Bash "$(jq -cn --arg c "$cmd" '{command: $c}')"
+    [ -z "$output" ] || { echo "pregunta de más: $cmd"; return 1; }
+  done
+}
+
 @test "savia-gates applies the native twin of this hook before the bash bridge" {
   local idx="$REPO_ROOT/scripts/opencode-plugin/savia-gates/index.ts"
   grep -q 'from "./lib/dome-guard"' "$idx"

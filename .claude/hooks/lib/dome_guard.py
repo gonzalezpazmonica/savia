@@ -46,6 +46,8 @@ WRITE_PATH_KEYS = ("filePath", "file_path", "path", "notebook_path")
 WORKDIR_KEYS = ("workdir", "cwd", "directory", "dir", "working_directory", "workingDir")
 # Profundidad con la que una búsqueda recursiva mira enlaces que entran en una cúpula.
 LINK_DEPTH = 3
+# Programas que mueven o borran lo que nombran (con `git mv/rm` y `find -delete/-exec`, ver `destroys`).
+DESTROYERS = {"mv", "rm", "rmdir", "unlink", "shred"}
 LEVELS = {"N1": 1, "N2": 2, "": 2, "N3": 3, "N4": 4, "N4B": 4}
 # Espacio en blanco ASCII explícito: el gemelo TS usa el mismo conjunto (los `\s` de Python y JS difieren).
 WS = " \t\n\r\x0b\x0c"
@@ -837,6 +839,46 @@ def effective_cwd(project: str, tool_input: dict) -> tuple[str, bool]:
     return project, False
 
 
+def destroys(c: dict) -> bool:
+    """El comando mueve o borra lo que nombra: mv/rm/rmdir/unlink/shred, git mv/rm y find con -delete o -exec."""
+    words = [lit_or_dollar(w) for w in c["words"]]
+    if not words:
+        return False
+    prog = base_name(words[0])
+    if prog in DESTROYERS:
+        return True
+    if prog == "git":
+        rest = words[1:]
+        while rest and rest[0].startswith("-"):
+            rest = rest[2:] if rest[0] in ("-C", "-c", "--git-dir", "--work-tree", "--namespace") else rest[1:]
+        return bool(rest) and rest[0] in ("rm", "mv")
+    return prog == "find" and any(w in ("-delete", "-exec", "-execdir", "-ok", "-okdir") for w in words[1:])
+
+
+def chain_of(target: str, base: str) -> list[str]:
+    """Componentes (en minúsculas) de la ruta de la cúpula desde el directorio de trabajo."""
+    rt, rb = resolve(target), resolve(base)
+    rel = strip_prefix(rt, rb)
+    return [c.lower() for c in (rel.split("/") if rel else split_path(rt)[1]) if c]
+
+
+def moves_ancestor(script: list[dict], base: str, target: str) -> bool:
+    """Un comando que mueve o borra la cúpula (o el registro) entera o un ancestro suyo: `mv vaults x`,
+    `rm -r projects/savia-vaults`. Tras un `cd`, el directorio no se conoce y vale el nombre de cualquier
+    componente de su ruta."""
+    moved = any(w in ("cd", "pushd") for c in script for w in (lit_or_dollar(x) for x in c["words"]))
+    chain = chain_of(target, base) if moved else []
+    for c in script:
+        if not destroys(c):
+            continue
+        for w in (lit_or_dollar(x) for x in c["words"][1:]):
+            if w == "$" or w.startswith("-"):
+                continue
+            if touches(target, base, w, True) or (moved and file_name(w).lower() in chain):
+                return True
+    return False
+
+
 def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, tool_input: dict) -> tuple[str, str]:
     command = tool_input.get("command")
     command = command if isinstance(command, str) else ""
@@ -863,10 +905,15 @@ def decide_bash(domes: list[dict], files: list[str], project: str, ctx: dict, to
         # Una ruta que cae en la cúpula la nombra aunque no se llame como ella, y un directorio de trabajo
         # dentro de ella (el efectivo o el de la sesión) hace que toda orden la toque.
         by_path = any(touches(d["root"], base, w, False) for w in pathlike) or touches(d["root"], base, ".", False)
-        return (named and name_only_ok) or by_path
+        # Mover o borrar un ancestro se lleva la cúpula o el registro (y con él, todo el guard).
+        return (named and name_only_ok) or by_path or (not reads_only and moves_ancestor(script, base, d["root"]))
 
     direct_hit = [d for d in domes if direct(d)]
     if direct_hit and not reads_only:
+        # Una orden que además recorre una N3 hacia la nube se deniega: la pregunta de escritura no la afloja.
+        reached = [d for d in domes if traversal_reaches(script, base, d["root"])]
+        if reached and read_verdict(ctx, reached)[0] == "deny":
+            return read_verdict(ctx, reached)
         return "ask", WRITE_NOTICE if writes(script) else UNKNOWN_NOTICE
     if not reads_only and any(direct({"root": f}) for f in files):
         return "ask", REGISTRY_NOTICE

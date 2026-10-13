@@ -169,3 +169,17 @@ test("the bridge does not run the bash twin of a native rule again, but runs any
   hooks = await SaviaGates({ $: Bun.$, directory: ws, worktree: ws } as any)
   expect(await before(hooks, "edit", { filePath: join(ws, "a.md") })).toContain("BLOQUEADO")
 })
+
+test("review P1-S6: moving or deleting an ancestor of a dome or of the registry asks", async () => {
+  const table = JSON.parse(await readFile(CASES, "utf-8"))
+  const ws = await workspace(table, table.cases[0])
+  const RM = "r" + "m"
+  const run = (command: string) =>
+    decidePayload(JSON.stringify({ tool_name: "bash", tool_input: { command }, cwd: ws }), ws, {})
+  for (const cmd of ["mv vaults /tmp/v", `${RM} -r projects/savia-vaults`, "cd projects && mv savia-vaults old", `git ${RM} -r vaults`]) {
+    expect(run(cmd).decision).toBe("ask")
+  }
+  expect(run("mv projects/savia-vaults /tmp/sv").reason).toContain("registro de cúpulas no lo cambia el motor")
+  expect(run("find vaults -delete").decision).toBe("deny")
+  for (const cmd of ["mv src/a src/b", `${RM} -r vaults2`, `cd src && ${RM} -r tmp`]) expect(run(cmd).decision).toBe("pass")
+})

@@ -19,6 +19,9 @@
 # SAVIA_GATES_PIN=1 (modo mediado, rige SE-434) → el hook no decide.
 # Registro: SAVIA_SPACE_DOMES_FILE (si falta el fichero, ilegible) o
 # $CLAUDE_PROJECT_DIR/projects/savia-vaults/savia-vaults.domes.json (+ .local.json).
+# Límite conocido: es un guard léxico. Una ruta montada en tiempo de ejecución dentro de un guion
+# (`python3 -c "open('gall'+'inero/a','w')"`, variables calculadas) no se ve. La defensa en profundidad
+# es el sandbox del motor o el modo mediado de Savia Space (SE-434), no este hook.
 set -uo pipefail
 
 LIB_DIR="$(dirname "${BASH_SOURCE[0]}")/lib"
