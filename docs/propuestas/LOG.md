@@ -6,6 +6,10 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-07 SE-434 APPROVED
+
+Delta FS-6b (D-MED-9): el motor corre con las máscaras N2 y el bash del agente va por intermediario sin anidar; aprobado con condición APTO de rev-fs6b REV5
+
 ## 2026-10-06 SE-436 APPROVED
 
 operadora, AskUserQuestion 2026-10-06: aprobada con las recomendaciones de Savia (D30-1..6, D23-14)
