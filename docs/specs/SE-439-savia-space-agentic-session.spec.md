@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-14
+approved_by: "aprobación humana, AskUserQuestion 2026-10-14"
 priority: P1
 developer_type: agent-team
 created: 2026-10-14
@@ -11,7 +13,7 @@ origin: "Ampliación de alcance de Savia Space: pasar de aplicación que corre d
 timeline:
   - from: "2026-10-14"
     learned: "2026-10-14"
-    value: "PROPOSED"
+    value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
 # SE-439 — Savia Space: sesión gráfica agéntica sobre Linux
