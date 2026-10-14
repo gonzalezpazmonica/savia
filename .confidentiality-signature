@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=5bdd6a8d4e053588d9c41b3b28458792fbebb46729083388fa8fbeb8cd6b8399
-timestamp=2026-10-07T08:45:31Z
-branch=agent/fix-dni-nif-checkletter
-head_commit=e9a5c2ae
-signature=d41dd374bc85a1bd498f48010a12600da4c30451919bb26555a3fa300ebbc8b1
+diff_hash=46c92268927aae903bdcdb162c4d587ccceb541112f08ed5158640273769aa54
+timestamp=2026-10-14T23:04:59Z
+branch=agent/savia-gates-cloud-context-20261014
+head_commit=085fa1dcc
+signature=ec6a09c6862c995c8add30bf823917f94459bfb6df0a65990536cd65cfa34f33
