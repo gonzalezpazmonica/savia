@@ -21,6 +21,26 @@ import { REGISTRY, trustedFor, verifyTrusted, wrapCommand } from "./lib/trusted-
 import type { TrustedGuards } from "./lib/trusted-guards"
 import { resolveProjectRoot } from "./lib/root"
 
+/** Providers the operator declared local (comma-separated). Anything else counts as cloud. */
+function localProviders(): Set<string> {
+  return new Set((process.env.SAVIA_GATES_LOCAL_PROVIDERS ?? "").split(",").map((p) => p.trim()).filter(Boolean))
+}
+
+/** Providers of the message's model, the default model, small_model and the agent's model. A model
+ *  that cannot be resolved counts as "" (unknown, so cloud). */
+async function turnProviders(ctx: PluginInput, agent: string | undefined, messageProvider: string | undefined): Promise<string[]> {
+  const of = (m: unknown) => (typeof m === "string" && m.includes("/") ? m.split("/")[0] : "")
+  try {
+    const cfg: any = (await ctx.client.config.get())?.data ?? {}
+    const agentModel = agent ? cfg.agent?.[agent]?.model : undefined
+    const out = [of(agentModel ?? cfg.model), of(cfg.small_model ?? cfg.model)]
+    if (messageProvider !== undefined) out.push(messageProvider)
+    return out
+  } catch {
+    return [""]
+  }
+}
+
 export const SaviaGates: Plugin = async (ctx: PluginInput) => {
   const { $, directory, worktree } = ctx
   const root = resolveProjectRoot(directory, worktree)
@@ -156,7 +176,33 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
       }
       const after = await pinViolationAfterHooks()
       if (after) throw new Error(`savia-gates: prompt blocked — ${after}`)
-      if (result.injectedContext) {
+      // Hook context has no confidentiality level unless the hook declares one. It only goes to a
+      // provider the operator declared local (SAVIA_GATES_LOCAL_PROVIDERS); to any other provider,
+      // or when the provider is unknown, only context declared N1 goes (fail-closed).
+      // Every provider the turn can reach: the message's model and the configured ones (the title
+      // and summary go to small_model with the same parts). One unknown or cloud provider is enough.
+      const providers = await turnProviders(ctx, input.agent, input.model?.providerID)
+      const provider = providers.join(",") || "unknown"
+      const allowedLocal = localProviders()
+      // Two independent signals; either one saying cloud makes it cloud. Space exports the lane of its
+      // engine (SAVIA_GATES_ENGINE_LANE=cloud|local); without Space (plain OpenCode CLI) it is unset and
+      // only the declared-local providers can open the local path.
+      const lane = process.env.SAVIA_GATES_ENGINE_LANE
+      const laneLocal = lane === undefined || lane === "local"
+      const local =
+        laneLocal && providers.length > 0 && providers.every((p) => p !== "" && allowedLocal.has(p))
+      const contexts = result.contexts ?? []
+      const allowed = contexts.filter((c) => local || c.level === "N1")
+      if (allowed.length < contexts.length) {
+        await auditLog({
+          event: "prompt-context-withheld",
+          provider,
+          lane: lane ?? "unset",
+          withheld: contexts.length - allowed.length,
+        })
+      }
+      const shipped = allowed.map((c) => c.text).join("\n")
+      if (shipped) {
         // OpenCode v1.18 Part schema: id must start with "prt_", and the
         // part's messageID MUST reference an existing message row (FK). Only
         // inject when the real message id is available; otherwise skip to
@@ -169,7 +215,7 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
             sessionID: input.sessionID,
             messageID,
             type: "text",
-            text: result.injectedContext,
+            text: shipped,
             synthetic: true,
           })
         }
