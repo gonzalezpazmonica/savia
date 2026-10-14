@@ -9,7 +9,7 @@ author: Savia
 phase: B
 risk: L4
 related_specs: [SE-428, SE-430, SE-431, SE-432, SE-434, SE-435, SE-436]
-origin: "Ampliación de alcance de Savia Space: pasar de aplicación que corre dentro de un entorno de escritorio a ser la sesión gráfica completa de Linux, de forma que no haga falta GNOME, KDE ni otro escritorio. Diseño interno en Savia Labs (privado)."
+origin: "Ampliación de alcance de Savia Space: pasar de aplicación que corre dentro de un entorno de escritorio a ser la sesión gráfica completa de Linux, de forma que no haga falta GNOME, KDE ni otro escritorio."
 timeline:
   - from: "2026-10-14"
     learned: "2026-10-14"
@@ -42,7 +42,7 @@ Que Savia Space sea **la sesión gráfica de Linux**: se elige en la pantalla de
 
 ### Capas
 
-```
+```text
 ┌────────────────────────────────────────────────────────────────────┐
 │ Aplicaciones: Wayland nativas · X11 vía XWayland · Flatpak         │
 ├────────────────────────────────────────────────────────────────────┤
@@ -88,7 +88,7 @@ El escritorio infinito necesita que las ventanas vivan **en el mismo plano** que
 - **Proyecto de una ventana**:
   - por contexto de lanzamiento: si se abrió desde un proyecto, con un token de activación xdg-activation que lleva el proyecto;
   - si no, por la carpeta de trabajo del proceso bajo `projects/<raíz>`, igual que las sesiones del motor;
-  - si no, «sin proyecto», con nivel N1. Una ventana sin proyecto no se expone al móvil ni a los agentes con nivel.
+  - si no, «sin proyecto», con **nivel desconocido**. Una ventana sin proyecto puede mostrar cualquier cosa (un terminal puede abrir una cúpula N4), así que no se expone al móvil y ningún agente con modelo de nube puede leerla, capturarla ni manejarla. Un agente con modelo local la puede usar con los permisos de cada peldaño. La persona puede asignarle un proyecto en cualquier momento, y entonces hereda su nivel.
 - **Nivel de una ventana**: el máximo de las cúpulas de su proyecto. Si no se puede determinar, el más alto (fallo cerrado, como en el guard de cúpulas).
 - Las ventanas de un proyecto aparecen en su tablero y se enlazan, como «observado», con la sesión o el run que las abrió.
 
@@ -145,7 +145,7 @@ Los paneles de ajustes son objetos del tablero «Sistema». No se inventa una co
 Los agentes (motor, Soul) **nunca hablan con el compositor directamente**. Lo hacen con tools de Space mediadas por el servidor, que aplica el guard de cúpulas, el broker y los recibos. La escalera, de menos a más invasiva:
 
 1. **Vía estructurada** (por defecto): la API, CLI, D-Bus o MCP propios de la aplicación, dentro del sandbox de SE-434. Ejemplos: `git`, LibreOffice headless, el MCP de un navegador o `gdbus` de un servicio.
-2. **Lectura de accesibilidad**: el árbol AT-SPI de una ventana concreta (textos, botones, estados), leído por el broker, filtrado por el nivel de la ventana y con recibo. Sin píxeles.
+2. **Lectura de accesibilidad**: el árbol AT-SPI de una ventana concreta (textos, botones, estados), leído por el broker, filtrado por el nivel de la ventana y con recibo. Sin píxeles. Para un modelo de nube, una ventana N2 pide confirmación y deja recibo, y una N3+ o de nivel desconocido se deniega sin pregunta.
 3. **Captura de una ventana**: imagen de una sola ventana, nunca de la pantalla entera. Se pide por ventana y por sesión de agente, con un indicador visible en el borde mientras dura y con recibo. Una ventana N3+ no se captura para un modelo de nube.
 4. **Entrada sintética** (teclado y ratón virtuales): solo con un permiso explícito por sesión y por ventana, que caduca. El borde de la ventana cambia mientras el agente la maneja, y cualquier tecla o movimiento de la persona devuelve el control al momento. PARA lo revoca todo. Nunca se permite en el bloqueo de pantalla, en el agente polkit, en el diálogo de contraseñas ni en ventanas de otro nivel superior al de la sesión.
 
@@ -206,14 +206,18 @@ Sin GPU utilizable hay un camino de render por software (pixman) que avisa. En m
 
 ## Criterios de aceptación
 
+### F0
+
+- [ ] AC0 — `savia-space --kiosk` abre el escritorio a pantalla completa en un webview propio, sin navegador instalado, sobre GNOME y KDE. Escape no lo cierra; salir pide confirmación y para servidor y motor sin dejar procesos.
+
 ### F1
 
 - [ ] AC1 — Tras instalar el paquete, «Savia Space» aparece en GDM, SDDM y greetd. Al elegirla se entra en la sesión y `XDG_CURRENT_DESKTOP=SaviaSpace`.
 - [ ] AC2 — `savia-space-session` desde un TTY arranca la sesión completa, y cerrar sesión vuelve al TTY sin procesos de Space vivos.
 - [ ] AC3 — La sesión funciona en un sistema sin paquetes de GNOME ni KDE (gnome-shell, plasma-workspace, mutter y kwin ausentes). Se prueba en una VM limpia de Debian o Ubuntu y en Fedora.
 - [ ] AC4 — Firefox, Chromium, un terminal, LibreOffice, VS Code (Electron) y una aplicación X11 (por ejemplo, xterm) se abren desde la paleta, aparecen como objetos Ventana en el plano y aceptan teclado y ratón.
-- [ ] AC5 — Con 20 ventanas abiertas y 2000 objetos en el plano, el desplazamiento y el zoom se mantienen a ≥ 55 fps en la máquina de referencia, y las ventanas fuera de cámara no reciben frame callbacks.
-- [ ] AC6 — Una ventana lanzada desde un proyecto queda en el tablero de ese proyecto, con el nivel máximo de sus cúpulas visible en el borde. Una ventana sin proyecto muestra «sin proyecto».
+- [ ] AC5 — Con 20 ventanas abiertas y 2000 objetos en el plano, el desplazamiento y el zoom se mantienen a ≥ 55 fps en la máquina de referencia (CPU x86-64 de 8 núcleos, 16 GiB, GPU integrada con Mesa, monitor 2560×1440 a escala 1), y las ventanas fuera de cámara no reciben frame callbacks.
+- [ ] AC6 — Una ventana lanzada desde un proyecto queda en el tablero de ese proyecto, con el nivel máximo de sus cúpulas visible en el borde. Una ventana sin proyecto muestra «sin proyecto · nivel desconocido».
 - [ ] AC7 — Matar `space-server` con SIGKILL no cierra ninguna ventana. systemd lo reinicia y la interfaz se reconecta en < 10 s.
 - [ ] AC8 — El bloqueo de pantalla bloquea antes de suspender (logind PrepareForSleep), no muestra contenido de notificaciones y no se puede saltar matando la interfaz ni el servidor.
 - [ ] AC9 — Copiar y pegar texto e imágenes entre aplicaciones Wayland y X11 funciona en ambos sentidos.
@@ -233,6 +237,7 @@ Sin GPU utilizable hay un camino de render por software (pixman) que avisa. En m
 - [ ] AC17 — Con entrada sintética concedida, el agente escribe en la ventana concedida y en ninguna otra. Una tecla de la persona le quita el control en < 100 ms, y PARA revoca el permiso en < 1 s.
 - [ ] AC18 — Ninguna aplicación que no sea Space puede usar screencopy, entrada virtual ni layer-shell (test con un cliente malicioso).
 - [ ] AC19 — Pegar en una sesión del motor contenido copiado de una ventana N3 pasa por el anillo de contexto y respeta la regla N3+ para la nube.
+- [ ] AC20 — Una ventana «sin proyecto» (por ejemplo, un terminal abierto desde la paleta fuera de cualquier proyecto) no se puede leer, capturar ni manejar desde una sesión con modelo de nube: la tool se niega sin pregunta. Al asignarle un proyecto N1, la misma petición pasa con los permisos de su peldaño.
 
 ## Fuera de alcance
 

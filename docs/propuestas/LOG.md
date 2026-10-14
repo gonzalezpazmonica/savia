@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-14 SE-439 APPROVED
+
+AskUserQuestion 2026-10-14: aprobada con las recomendaciones de Savia en las cuatro decisiones (base, agentes, arranque y prioridad)
+
+## 2026-10-14 SE-439 PROPOSED
+
+Savia Space como sesión gráfica agéntica sobre Linux, sustituto del entorno de escritorio
+
 ## 2026-10-06 SE-436 APPROVED
 
 operadora, AskUserQuestion 2026-10-06: aprobada con las recomendaciones de Savia (D30-1..6, D23-14)
