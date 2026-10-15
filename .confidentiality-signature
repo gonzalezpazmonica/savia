@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=1d2a7b10e146c6ff4b4ef524f12bd66f8b7731f31e070b8d4069f5ef62c80594
-timestamp=2026-10-15T06:22:48Z
-branch=agent/se439-space-agentic-session-20261014
-head_commit=13e73913c
-signature=7cf36ed639681c993df01c778bf417956f0030d1265b55603c12a0c611111db0
+diff_hash=c8c5a1a487662e5bca7f9c0c156f6097fd4a83abbcbb52d93b8c431c21ef6735
+timestamp=2026-10-15T19:28:54Z
+branch=agent/tdd-gate-missing-dir-20261015
+head_commit=26d873d47
+signature=050e5f9d13fa9a4d43c7ac4e04e0d29d4cb79e94adcf30a95d8c224458f4843e
