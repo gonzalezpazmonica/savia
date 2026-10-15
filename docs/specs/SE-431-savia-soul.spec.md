@@ -256,6 +256,16 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
   (§2, «Nivel del contexto con proveedor en la nube») y AC27. Relay por la app móvil de Space; D3
   queda decidida. La spec sigue APPROVED.
 
+- **2026-10-07** (operadora, D3): el transporte de Relay es la app Space del móvil, no un servicio
+  de mensajería externo. Los avisos de Soul llegan por la bandeja M3 y las notificaciones por
+  WorkManager (sin push, SE-430 D3), sobre VPN con DPoP. Las órdenes cerradas (estado, despierta,
+  duerme, para, agenda, presupuesto, aprueba o rechaza de riesgo bajo) se envían desde la app por
+  la API móvil; el riesgo medio o alto exige biometría y JWS, como en la bandeja. El núcleo de
+  Relay se mantiene tras un trait `RelayTransport` con el transporte «móvil Space» como única
+  implementación real. **Divergencia con SE-406**: su D1 (WhatsApp Cloud API, con Telegram como
+  alternativa) no se aplica a Soul; SE-406 sigue siendo la referencia de la gramática cerrada, el
+  emparejamiento y los nonces de decisión, pero no del transporte.
+
 ## Entregas
 
 - **S1**: bajo demanda en la web; observar e informar; disparadores deterministas.
@@ -267,8 +277,8 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
 
 - **D1**: addendum a ADR-002 para Soul (L2 con envolventes, sin efectos externos).
 - **D2**: modo por defecto al instalar: apagado (propuesto) o bajo demanda.
-- **D3**: decidida — el Relay va por la app móvil de Savia Space (SE-430), ni Telegram ni WhatsApp.
-  SE-406 queda aparcada.
+- **D3** (resuelta 2026-10-07, operadora): Savia Relay va por la propia app Space en el móvil (SE-430).
+  Ni Telegram ni WhatsApp. Ver el delta de esa fecha. SE-406 queda aparcada.
 - **D4**: A2A de salida en S4 (propuesto) o nunca. En cualquier caso, A2A está apagado por defecto
   y solo funciona si la instalación lo activa (SE-429 §7).
 - **D5**: deliberación solo con modelo local (propuesto) o también con un perfil en la nube.
