@@ -53,7 +53,7 @@ async function workspace(): Promise<string> {
 type Case = {
   lane?: string
   local?: string
-  config?: Record<string, unknown> | "throws"
+  config?: Record<string, unknown> | "throws" | "hangs"
   messageProvider?: string
 }
 
@@ -71,6 +71,7 @@ async function send(c: Case): Promise<string> {
     config: {
       get: async () => {
         if (c.config === "throws") throw new Error("sin servidor")
+        if (c.config === "hangs") return new Promise(() => {})
         return { data: c.config ?? LOCAL_CFG }
       },
     },
@@ -107,6 +108,11 @@ test("cloud by either signal: only context declared N1 is attached, the rest is 
     { lane: " local", local: "ollama" },
     { lane: "local", local: "ollama", config: { model: "ollama/qwen", small_model: "anthropic/haiku" } }, // title model
     { lane: "local", local: "ollama", config: { model: "ollama/qwen", agent: { build: { model: "openai/x" } } } },
+    { lane: "local", local: "ollama", config: { ...LOCAL_CFG, agent: { title: { model: "anthropic/haiku" } } } },
+    { lane: "local", local: "ollama", config: { ...LOCAL_CFG, agent: { summary: { model: "anthropic/haiku" } } } },
+    { lane: "local", local: "ollama", config: { ...LOCAL_CFG, agent: { compaction: { model: "anthropic/haiku" } } } },
+    { lane: "local", local: "ollama", config: { ...LOCAL_CFG, agent: { title: { model: "desconocido" } } } }, // internal agent, unknown model
+    { lane: "local", local: "ollama", config: "hangs" }, // config.get never answers
     { lane: "local", local: "ollama", messageProvider: "anthropic" },
     { lane: "local", local: "ollama", config: { model: "qwen" } }, // provider cannot be resolved
     { lane: "local", local: "ollama", config: {} },
@@ -121,4 +127,26 @@ test("cloud by either signal: only context declared N1 is attached, the rest is 
   }
   const log = await readFile(join(auditDir, "savia-gates.jsonl"), "utf8")
   expect(log).not.toContain(PRIVATE)
+})
+
+test("internal agents on a local provider keep the turn local", async () => {
+  const config = { ...LOCAL_CFG, agent: { title: { model: "ollama/a" }, summary: { model: "ollama/b" }, compaction: { model: "ollama/c" } } }
+  expect(await send({ lane: "local", local: "ollama", config })).toContain(PRIVATE)
+})
+
+test("a hook declaring N2, N3 or N4 is withheld from the cloud, N1 goes", async () => {
+  for (const level of ["N2", "N3", "N4"]) {
+    const root = await workspace()
+    await writeFile(join(root, ".claude/hooks/private.sh"), hook(PRIVATE, level), { mode: 0o755 })
+    delete process.env.SAVIA_GATES_PIN
+    process.env.SAVIA_GATES_ENGINE_LANE = "cloud"
+    process.env.SAVIA_PLUGIN_DIR = join(root, ".manifest-test")
+    const client = { config: { get: async () => ({ data: LOCAL_CFG }) } }
+    const hooks: any = await SaviaGates({ $: Bun.$, directory: root, client } as any)
+    const output: any = { message: { id: "msg_1" }, parts: [{ type: "text", text: "hola" }] }
+    await hooks["chat.message"]({ sessionID: "ses_1", agent: "build" }, output)
+    const shipped = output.parts.slice(1).map((p: any) => p.text).join("\n")
+    expect(shipped, level).not.toContain(PRIVATE)
+    expect(shipped, level).toBe(PUBLIC)
+  }
 })

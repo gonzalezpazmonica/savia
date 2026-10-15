@@ -26,14 +26,26 @@ function localProviders(): Set<string> {
   return new Set((process.env.SAVIA_GATES_LOCAL_PROVIDERS ?? "").split(",").map((p) => p.trim()).filter(Boolean))
 }
 
-/** Providers of the message's model, the default model, small_model and the agent's model. A model
- *  that cannot be resolved counts as "" (unknown, so cloud). */
+const CONFIG_TIMEOUT_MS = 3000
+const INTERNAL_AGENTS = ["title", "summary", "compaction"]
+
+/** Providers of the message's model, the default model, small_model, the agent's model and the models of
+ *  the internal agents (title, summary, compaction), which receive the session history. A model that
+ *  cannot be resolved, or a config that does not answer in time, counts as "" (unknown, so cloud). */
 async function turnProviders(ctx: PluginInput, agent: string | undefined, messageProvider: string | undefined): Promise<string[]> {
   const of = (m: unknown) => (typeof m === "string" && m.includes("/") ? m.split("/")[0] : "")
   try {
-    const cfg: any = (await ctx.client.config.get())?.data ?? {}
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("config.get timeout")), CONFIG_TIMEOUT_MS)
+    })
+    const cfg: any = (await Promise.race([ctx.client.config.get(), timeout]).finally(() => clearTimeout(timer)))?.data ?? {}
     const agentModel = agent ? cfg.agent?.[agent]?.model : undefined
     const out = [of(agentModel ?? cfg.model), of(cfg.small_model ?? cfg.model)]
+    for (const a of INTERNAL_AGENTS) {
+      const m = cfg.agent?.[a]?.model
+      if (m !== undefined) out.push(of(m))
+    }
     if (messageProvider !== undefined) out.push(messageProvider)
     return out
   } catch {
@@ -181,6 +193,8 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
       // or when the provider is unknown, only context declared N1 goes (fail-closed).
       // Every provider the turn can reach: the message's model and the configured ones (the title
       // and summary go to small_model with the same parts). One unknown or cloud provider is enough.
+      const contexts = result.contexts ?? []
+      if (contexts.length === 0) return
       const providers = await turnProviders(ctx, input.agent, input.model?.providerID)
       const provider = providers.join(",") || "unknown"
       const allowedLocal = localProviders()
@@ -191,7 +205,6 @@ export const SaviaGates: Plugin = async (ctx: PluginInput) => {
       const laneLocal = lane === undefined || lane === "local"
       const local =
         laneLocal && providers.length > 0 && providers.every((p) => p !== "" && allowedLocal.has(p))
-      const contexts = result.contexts ?? []
       const allowed = contexts.filter((c) => local || c.level === "N1")
       if (allowed.length < contexts.length) {
         await auditLog({
