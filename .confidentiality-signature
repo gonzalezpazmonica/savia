@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=984d4ed51d5aa7881ebb5e00095127c0fcc44086ebc07b5592f30c8c5055c328
-timestamp=2026-10-15T19:50:58Z
-branch=agent/tdd-gate-missing-dir-20261015
-head_commit=26f443ea
-signature=d1ab3307cf1d90a6ee472dcf681d11cb20cd0a4bc5c0bc7a972986cc6898eb3c
+diff_hash=8d111df69316b0a41f03d26419769c8a383d755d80819b6a17c5ef22ccefbbf6
+timestamp=2026-10-15T20:02:07Z
+branch=agent/se429-s14c-mcp-register
+head_commit=6032b56c
+signature=05b4e25edd69bf3420b9851ba540db119888bc8303897ecd06fbb275d29b677d
