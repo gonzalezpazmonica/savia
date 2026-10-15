@@ -280,6 +280,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # SE-436 S5: la paridad hook bash ↔ savia-gates ejecuta la regla TS con node --experimental-strip-types (>= 22.6).
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+
       - name: Install BATS and dependencies
         run: |
           git clone --depth 1 --branch v1.9.0 https://github.com/bats-core/bats-core.git /tmp/bats
@@ -297,6 +303,15 @@ jobs:
         env:
           SAVIA_CODEX_TEST_MODE: "1"
         run: python3 -m unittest discover -s tests/dual-cli -v
+
+      # SE-436 S5: el guard de cúpulas y su paridad hook bash ↔ savia-gates corren siempre, no solo en modo
+      # FULL (ci-select-bats solo elige tests/bats/).
+      - name: Dome guard parity (SE-436 S5)
+        env:
+          SAVIA_REQUIRE_TS: "1"
+        run: |
+          python3 -m unittest tests/python/test_dome_guard.py
+          bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
 
       - name: Generate BATS dependency map
         id: deps

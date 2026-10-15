@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=8d111df69316b0a41f03d26419769c8a383d755d80819b6a17c5ef22ccefbbf6
-timestamp=2026-10-15T20:02:07Z
-branch=agent/se429-s14c-mcp-register
-head_commit=6032b56c
-signature=05b4e25edd69bf3420b9851ba540db119888bc8303897ecd06fbb275d29b677d
+diff_hash=2ffad7be423c88bf92fa4eba3fc7476ab301a9fce0326d1106d5d5a2964dffa7
+timestamp=2026-10-15T20:28:52Z
+branch=agent/se436-s5-dual-binding
+head_commit=c24ee3ff
+signature=fc17657aab12aaf23e61e70632fd40bd7479e4ac6ea1fcc008cf0c5c697f2692

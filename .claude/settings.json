@@ -483,6 +483,18 @@
         ]
       },
       {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob|LS|Bash",
+        "_comment": "SE-436 S5 guard de cúpulas (DUAL_BINDING con savia-gates lib/dome-guard.ts)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/dome-guard.sh",
+            "timeout": 15,
+            "statusMessage": "Guard de cúpulas (SE-436)..."
+          }
+        ]
+      },
+      {
         "matcher": ".*",
         "hooks": [
           {

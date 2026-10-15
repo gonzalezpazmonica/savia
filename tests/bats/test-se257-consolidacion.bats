@@ -47,11 +47,19 @@ teardown() {
   [ -x "$REPO_ROOT/scripts/criterio-validate.sh" ]
 }
 
-@test "AC-1.4b: criterio-validate pasa con estado actual (CRIT-001 human_authored)" {
+@test "AC-1.4b: criterio-validate pasa y cuenta los human_authored reales de CRITERIO.md" {
+  # El recuento esperado se deriva del fichero: cada criterio que la operadora
+  # activa cambia la cifra y un literal fijo deriva (1 -> 6 con CRIT-034..038).
+  EXPECTED=$(grep -cE '^[[:space:]]*provenance:[[:space:]]*human_authored[[:space:]]*$' "$REPO_ROOT/CRITERIO.md")
+  [ "$EXPECTED" -ge 1 ]
   run bash "$REPO_ROOT/scripts/criterio-validate.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"1 human_authored"* ]]
-  [[ "$output" == *"GATE S5: DORMIDO (1 human_authored, need 20)"* ]]
+  [[ "$output" == *"Provenance: "*" INFERRED, $EXPECTED human_authored"* ]]
+  if [ "$EXPECTED" -ge 20 ]; then
+    [[ "$output" == *"GATE S5: ACTIVABLE ($EXPECTED >= 20 human_authored)"* ]]
+  else
+    [[ "$output" == *"GATE S5: DORMIDO ($EXPECTED human_authored, need 20)"* ]]
+  fi
 }
 
 @test "AC-1.5: criterio-validate fails on missing file with error" {

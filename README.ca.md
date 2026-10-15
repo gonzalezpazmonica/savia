@@ -18,7 +18,7 @@ lang: ca
 
 ## Workspace de desenvolupament multi-agent
 
-**567 comandos · 90 agents · 139 skills · 127 hooks**
+**567 comandos · 90 agents · 139 skills · 128 hooks**
 
 Sistema agèntic sobirà per governar i executar treball amb IA, independent de model, proveïdor i frontend, amb criteri humà per disseny. Integra agents, memòria, seguretat, polítiques executables, traçabilitat i dominis especialitzats. Funciona en local amb sobirania de dades i inferència, en 9 idiomes.
 
@@ -114,7 +114,7 @@ pm-workspace/
 │   ├── commands/       ← 567 comandos
 │   ├── agents/         ← 90 agents especialitzats (7 amb decision trees: SPEC-147)
 │   ├── skills/         ← 139 skills de domini
-│   ├── hooks/          ← 127 hooks deterministes
+│   ├── hooks/          ← 128 hooks deterministes
 │   └── rules/          ← regles de context i llenguatge
 ├── docs/               ← guies per rol, escenari, sector
 ├── projects/           ← projectes (git-ignorats per privacitat)
