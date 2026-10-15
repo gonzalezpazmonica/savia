@@ -42,6 +42,7 @@ Antes de activar cualquier server público (no nuestro):
 | `savia-memory` | `savia-memory` | recall, save, stats |
 | `savia-recall` | `savia-recall` (futuro) | semantic-search, bm25, entity-match |
 | `knowledge-graph` | `knowledge-graph` | query, traverse, neighbors |
+| `savia-space` | Savia Space (SE-429) | sessions_list, evidence_read, run_status, run_submit, run_cancel, approval_status |
 
 ## Streamable HTTP workaround
 

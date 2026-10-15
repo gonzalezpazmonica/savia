@@ -1,0 +1,39 @@
+// SE-429 S14c · savia-space MCP template (stdio, binario independiente del frontend)
+// Savia Space expone sesiones, evidencias y ejecuciones por MCP. Solo lectura y envío de
+// aprobaciones pendientes: ninguna tool aprueba. Una ejecución solo arranca cuando la persona
+// confirma los bytes frescos en Space. Mismo binario para OpenCode y Claude Code; el bloque de registro difiere.
+//
+// Este bloque es el esquema de OpenCode (`mcp`, `command` como lista, `environment`). Claude Code usa
+// otro esquema para el mismo servidor, en la configuracion MCP del proyecto:
+//   {"mcpServers": {"savia-space": {"command": "savia-space", "args": ["mcp"],
+//                                   "env": {"SAVIA_SPACE_MCP_TOKEN_FILE": "${SAVIA_SPACE_MCP_TOKEN_FILE}"}}}}
+//
+// El token de cliente NO va aqui: el servidor lo relee de un fichero 0600 del usuario en cada
+// peticion (SAVIA_SPACE_MCP_TOKEN_FILE), porque los access tokens duran como maximo 300 s. Space no
+// entrega ese fichero: el cliente se registra por API (POST /api/v1/interop/clients) y un lanzador
+// debe acuñar el token (client_credentials con aserción private_key_jwt) y renovarlo antes de que
+// caduque. Ese lanzador y el subcomando `savia-space mcp` estan pendientes.
+{
+  "mcp": {
+    "savia-space": {
+      "type": "local",
+      "command": ["savia-space", "mcp"],
+      "environment": {
+        "SAVIA_SPACE_MCP_TOKEN_FILE": "{env:SAVIA_SPACE_MCP_TOKEN_FILE}"
+      },
+      "enabled": false,
+      "timeout": 30000,
+      "_savia_meta": {
+        "scope": "sessions:read evidence:read runs:read",
+        "scope_extra": "runs:prepare runs:approve para pedir ejecuciones; runs:cancel solo si el agente debe cancelarlas (destructivo). Concederlos en el registro del cliente, no por defecto",
+        "auth": "bearer JWT de cliente registrado (fichero 0600)",
+        "rotation_days": 90,
+        "rotation_note": "rotacion de la clave privada del cliente registrado (private_key_jwt); el access token caduca solo en 300 s como maximo",
+        "trigger": "agente necesita leer sesiones o evidencias de Space, o pedir aprobación de una ejecución",
+        "token_budget": "medium",
+        "bluerock_audit": "local stdio - sin red propia; texto de fuentes marcado untrusted; sin SSRF",
+        "status": "bloqueado: el subcomando `savia-space mcp` (stdio) no existe todavía; space-mcp solo se monta por HTTP"
+      }
+    }
+  }
+}
