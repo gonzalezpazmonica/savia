@@ -48,6 +48,8 @@ export interface HookResult {
   stdout: string
   mutatedArgs?: any
   injectedContext?: string
+  /** Every hook's context, in order, with the level the hook declared (`hookSpecificOutput.saviaLevel`). */
+  contexts?: { text: string; level?: string }[]
 }
 
 function isAuthorityEvent(eventName: string): boolean {
@@ -526,6 +528,7 @@ function parseCommandHookOutput(stdout: string): {
   reason?: string
   mutatedArgs?: any
   injectedContext?: string
+  level?: string
 } {
   if (!stdout.trim()) return { blocked: false }
   let parsed: unknown
@@ -568,7 +571,8 @@ function parseCommandHookOutput(stdout: string): {
   if (mutation !== undefined && (typeof mutation !== "object" || mutation === null || Array.isArray(mutation))) {
     return { blocked: true, reason: "INVALID_HOOK_OUTPUT" }
   }
-  return { blocked: false, injectedContext: context, mutatedArgs: mutation }
+  const level = typeof specific.saviaLevel === "string" ? specific.saviaLevel : undefined
+  return { blocked: false, injectedContext: context, mutatedArgs: mutation, level }
 }
 
 export async function runHooksForEvent(
@@ -617,7 +621,10 @@ export async function runHooksForEvent(
         return result
       }
       if (decision.mutatedArgs !== undefined) result.mutatedArgs = decision.mutatedArgs
-      if (decision.injectedContext !== undefined) result.injectedContext = decision.injectedContext
+      if (decision.injectedContext !== undefined) {
+        result.injectedContext = decision.injectedContext
+        ;(result.contexts ??= []).push({ text: decision.injectedContext, level: decision.level })
+      }
     } catch (err) {
       // Synchronous hook failures are policy uncertainty, not permission.
       result.blocked = true
