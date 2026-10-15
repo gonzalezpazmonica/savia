@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [6.17.14] — 2026-10-13
-
-### Fixed
-
-- `tdd-gate.sh`: when the target directory does not exist yet (first file of a new folder), the hook probes the nearest existing ancestor before `git -C`, so the lookup resolves the target repo instead of silently falling back to the session repo and missing tests that do exist. Two bats cases, one negative control.
-
 ## [6.17.13] — 2026-09-14
 
 ### Added
@@ -13230,7 +13224,6 @@ Initial public release of PM-Workspace.
 
 - **Documentation** with methodology
 
-[6.17.14]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.13...v6.17.14
 [6.17.13]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.12...v6.17.13
 [6.17.12]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.11...v6.17.12
 [6.17.11]: https://github.com/gonzalezpazmonica/pm-workspace/compare/v6.17.10...v6.17.11
