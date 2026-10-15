@@ -72,14 +72,15 @@ CRIT-006 — Simplicidad exige menos justificacion que complejidad
   enforcement: solo-criterio
   provenance: INFERRED
 
-CRIT-007 — Soberania tecnologica: local primero, dependencias sustituibles
+CRIT-007 — Contexto soberano, inferencia alquilada y sustituible
   dureza: preferencia | constitucion: T4
-  principio: Para capacidad nueva: ejecucion en infraestructura propia si es viable; toda dependencia externa debe ser sustituible sin reescritura.
-  ejemplo: inferencia local para lo sensible; adapter sustituible para lo externo.
-  contraejemplo: capacidad critica que solo funciona con un servicio concreto sin plan de salida.
-  evidencia: homelab y stack self-hosted; iteracion 2.
-  enforcement: data-sovereignty-gate + solo-criterio
-  provenance: INFERRED
+  principio: Lo que sabe el sistema vive conmigo. La inferencia se alquila y el proveedor se cambia sin rehacer nada. Ante opciones equivalentes, gana la que no ata a un proveedor.
+  ejemplo: cada tier se configura en local y cambiar de proveedor es cambiar esa línea.
+  contraejemplo: una integración que solo funciona con un proveedor concreto.
+  evidencia: criterio firmado; aplicado en los tiers locales por proveedor.
+  enforcement: model-tier-lint.sh (sin nombres de modelo en fuente) + tiers locales (~/.savia/preferences.yaml).
+  provenance: human_authored
+  autorizacion: aprobación y merge en GitHub del PR que introduce este texto, por la titular de este criterio (Human-Authored: la aprobación del PR es la firma).
 
 CRIT-008 — Software libre por defecto ante tecnologia no especificada
   dureza: preferencia | constitucion: T1, T4
@@ -356,4 +357,4 @@ CRIT-038 — Decisiones siempre por pregunta interactiva
 
 38 entradas. 24 linea_roja, 11 preferencia, 3 estilo.
 Cobertura: tecnicas 10, comunicacion 6, priorizacion 5, riesgo 7, delegacion 5.
-CRIT-001 human_authored (2026-08-20); CRIT-034..038 human_authored (2026-10-04, AskUserQuestion). Resto provenance:INFERRED pendientes de reescritura de la operadora.
+CRIT-001 human_authored (2026-08-20); CRIT-007 human_authored (firmado por aprobación de su PR); CRIT-034..038 human_authored (2026-10-04, AskUserQuestion). Resto provenance:INFERRED pendientes de reescritura de la operadora.
