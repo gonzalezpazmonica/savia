@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=8d21e72d0722c2fe64ac3d1162151905eb12221eda0d0e40718ee2f6f236f8a9
-timestamp=2026-10-15T13:22:18Z
+diff_hash=eae3b7d993a015a5c825e1a4d69be8f28e8131dab2d1890b0914d49aa527613d
+timestamp=2026-10-15T19:51:14Z
 branch=agent/crit-007-preferencia-20261013
-head_commit=b961a98d
-signature=f85317a3b574408aea146d0558f19d937dc7136cd5489654eb528b492ef76a9a
+head_commit=f16d948b
+signature=e3238db5ae1f7f3a38f82f44a1613eb22221f7d90abbcaf8f5cb694cccc8df7c
