@@ -2,6 +2,7 @@
 status: APPROVED
 approved_at: 2026-10-06
 approved_by: "operadora, AskUserQuestion 2026-10-06"
+delta_approved: "gonzalezpazmonica 2026-10-13, delta «Soul no envía privados a la nube» y Relay por la app móvil"
 priority: P2
 developer_type: agent-single
 created: 2026-10-02
@@ -11,6 +12,11 @@ risk: L4
 related_specs: [SE-428, SE-429, SE-430, SE-406, SE-409, SPEC-186]
 origin: "Mandato de la operadora 2026-10-02: Savia Space debe contar con un flujo continuo configurable y activable bajo demanda, Savia Soul, que emule a bots autónomos (OpenClaw, Hermes, OpenAI Five, Meta Muse, Grok Bot), con el que otros bots se comuniquen por A2A y la operadora por chat o mensajería"
 resource: https://github.com/nousresearch/hermes-agent
+timeline:
+  - from: "2026-10-13"
+    learned: "2026-10-13"
+    value: "APPROVED"
+    source: "spec-lifecycle:auto"
 ---
 
 # SE-431 — Savia Soul: la Savia proactiva dentro de Savia Space
@@ -36,7 +42,7 @@ Savia no tiene ese modo, ni una forma de que otros bots hablen con ella.
 **percibe**, **delibera**, **actúa**, **reflexiona** y **duerme**.
 
 - Vigila, avisa, pregunta, propone y ejecuta trabajo acotado.
-- Habla con la operadora por chat (web y móvil) y por mensajería (Savia Relay, SE-406).
+- Habla con la persona que opera por chat (web y móvil) y por mensajería (Savia Relay, por la app móvil de Space).
 - Habla con otros bots por A2A.
 - Su voz es la de Savia.
 
@@ -111,6 +117,15 @@ no le da autoridad de merge; el merge sigue siendo de la persona.
      registrado como ejecución de evidencia, para que lo que Soul "pensó" se pueda auditar. La
      salida es una decisión estructurada: nada, avisar, preguntar, lanzar, responder a un bot o
      proponer.
+   - **Nivel del contexto con proveedor en la nube.** Si el juicio usa un perfil en la nube (D5),
+     Soul filtra por nivel todo lo que forma su contexto (eventos, notas propias y fragmentos de
+     cúpulas) antes de enviarlo:
+     - N3, N4 y N4b no salen nunca. Si la deliberación los necesita, Soul pregunta a la persona con
+       la cúpula o la nota nombrada, y no delibera sobre ese contenido.
+     - N2 solo sale con confirmación y recibo `ATTACH_CONSENT` (SE-436 §4). Como Soul trabaja sin
+       nadie delante, sin una confirmación vigente de esa cúpula en esa sesión lo trata igual que
+       N3: pregunta y no lo envía.
+     - Las tareas que Soul lanza al motor pasan por el mismo guard de cúpulas (SE-436 §5).
    - **Actuar**: solo si la orden permite actuar y la acción cabe en su envolvente. Si no,
      pregunta a la operadora con opciones y recomendación. Nunca hace merge, push forzado,
      aprobación de PRs ni efectos externos sin admisión externa (AEK).
@@ -136,7 +151,8 @@ no le da autoridad de merge; el merge sigue siendo de la persona.
      recibo.
 3. **Conversación.**
    - **Operadora**: chat libre en la web y en el móvil. Por mensajería, a través de Savia Relay,
-     con gramática cerrada y botones (estado, despierta, duerme, para, agenda, presupuesto,
+     sobre la app móvil de Savia Space (SE-430; D3), con gramática cerrada y botones (estado,
+     despierta, duerme, para, agenda, presupuesto,
      aprueba o rechaza). Aprobar riesgo medio o alto exige biometría en el móvil (SE-430); un
      mensaje no basta. El riesgo lo calcula Space de forma determinista a partir del tipo de
      primitiva y de la envolvente (SE-429); Soul no lo clasifica y su deliberación no lo cambia.
@@ -225,6 +241,10 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
 - **AC26** (D-ORCA-4): una orden permanente recién creada tiene `enabled: false` y no se dispara
   hasta que la persona la activa; un `precheck` que intenta salir a un destino no declarado en
   `egress` falla dentro del sandbox.
+- **AC27**: con un perfil en la nube y un evento de una cúpula N3 en la cola, el juicio se ejecuta
+  sin ese contenido (la petición al proveedor no contiene ningún hash ni texto de la cúpula) y Soul
+  deja una pregunta que nombra la cúpula. Con un evento de una cúpula N2 sin confirmación vigente en
+  la sesión, el resultado es el mismo.
 
 ## Deltas aprobados
 
@@ -232,6 +252,9 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
   orquestación con cierre obligatorio y de automatizaciones con precomprobación tomados de
   [Orca](https://github.com/stablyai/orca), adaptados al sandbox y a la mediación de Space. La
   spec quedó APPROVED el 2026-10-06 con estos deltas incluidos.
+- **Soul no envía privados a la nube.** Filtro de nivel en la deliberación con perfil en la nube
+  (§2, «Nivel del contexto con proveedor en la nube») y AC27. Relay por la app móvil de Space; D3
+  queda decidida. La spec sigue APPROVED.
 
 - **2026-10-07** (operadora, D3): el transporte de Relay es la app Space del móvil, no un servicio
   de mensajería externo. Los avisos de Soul llegan por la bandeja M3 y las notificaciones por
@@ -254,9 +277,10 @@ acciones aceptadas), se reduce a bajo demanda y se revisa. Los resultados negati
 
 - **D1**: addendum a ADR-002 para Soul (L2 con envolventes, sin efectos externos).
 - **D2**: modo por defecto al instalar: apagado (propuesto) o bajo demanda.
-- **D3** (resuelta 2026-10-07, operadora): Savia Relay va por la propia app Space en el móvil. Ni
-  Telegram ni WhatsApp. Ver el delta de esa fecha.
-- **D4**: A2A de salida en S4 (propuesto) o nunca.
+- **D3** (resuelta 2026-10-07, operadora): Savia Relay va por la propia app Space en el móvil (SE-430).
+  Ni Telegram ni WhatsApp. Ver el delta de esa fecha. SE-406 queda aparcada.
+- **D4**: A2A de salida en S4 (propuesto) o nunca. En cualquier caso, A2A está apagado por defecto
+  y solo funciona si la instalación lo activa (SE-429 §7).
 - **D5**: deliberación solo con modelo local (propuesto) o también con un perfil en la nube.
 
 ## OpenCode Implementation Plan
