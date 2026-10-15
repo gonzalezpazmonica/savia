@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=28f1846ae4afb6b384d5c4777e935ba30011df749acf19e9865d8317283ad2a5
-timestamp=2026-10-13T18:00:14Z
-branch=agent/space-spec-deltas-20261013
-head_commit=cdd7dc5fe
-signature=2db79f6caca008748722a24dc05b3bfb9c3e7a57fab9533a7ef09239be6747fc
+diff_hash=46bd35b42245b1aaffbdc7cb08cd4e08814a6d75dff09f6ba00d38c42c8cd4fe
+timestamp=2026-10-15T05:10:47Z
+branch=fix-1317-resync
+head_commit=b6b857469
+signature=9997c4350845334c944e0633af7caf68b3b39482332f45a31e05668cce5fb888
