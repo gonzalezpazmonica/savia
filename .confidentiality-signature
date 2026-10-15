@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=767db5d5abd004104df6e44e42e1d734ef0586400c4dea7485afd26ef03adac5
-timestamp=2026-10-14T23:05:33Z
+diff_hash=59cc87ecfab6ce6753f8af4f6a356e78d777e22eecd5b65fffe64a52298fdc7f
+timestamp=2026-10-15T06:07:40Z
 branch=agent/se436-s5-dual-binding
-head_commit=a4d4ae3a
-signature=3be24964ca5cd9fe380d8c3d3175a79474ee15d858cc8f32df6d04b255bc4ea4
+head_commit=fb272064
+signature=154cb878d8991596615994dbbc828d3d7c39c688509b85f3a3d94b692654d566
