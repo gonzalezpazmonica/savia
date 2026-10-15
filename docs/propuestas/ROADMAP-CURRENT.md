@@ -73,4 +73,11 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-404 [APPROVED] Proceso proporcional: G13 v2 y una corrección por revisión — evidencia: PR #1170 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-404-proportional-process-gates.spec.md · integrada #1170; revisar evidencia/graduación
 - SE-426 [IMPLEMENTING] Firma de confidencialidad con secreto de CI y HMAC siempre verificado — evidencia: docs/specs/SE-426-confidentiality-hmac-ci-key.spec.md
 - SE-428 [IMPLEMENTING] Savia Space como sustituto de OpenCode, con OpenCode como motor — evidencia: docs/specs/SE-428-savia-space-orchestrator-opencode-engine.spec.md
+- SE-429 [APPROVED] Savia Space interoperable: API con JWT y OpenAPI, MCP y A2A — evidencia: docs/specs/SE-429-savia-space-interop-api-mcp-a2a.spec.md
+- SE-430 [APPROVED] Savia Space Mobile: cliente Android de Savia Space — evidencia: docs/specs/SE-430-savia-space-mobile.spec.md
+- SE-431 [APPROVED] Savia Soul: la Savia proactiva dentro de Savia Space — evidencia: docs/specs/SE-431-savia-soul.spec.md
+- SE-432 [APPROVED] Savia Space: escritorio infinito y experiencia — evidencia: docs/specs/SE-432-savia-space-infinite-desktop-experience.spec.md
 - SE-433 [APPROVED] merge-sprint: merges autónomos bajo autorización humana previa — evidencia: docs/specs/SE-433-merge-sprint.spec.md
+- SE-434 [APPROVED] Savia Space: modo mediado con sandbox propio como frontera — evidencia: docs/specs/SE-434-savia-space-mediated-sandbox.spec.md
+- SE-435 [APPROVED] Savia Space: distribución agnóstica (paquetes nativos y savia-space setup) — evidencia: docs/specs/SE-435-savia-space-distribution.spec.md
+- SE-436 [APPROVED] Savia Space: proyectos y cúpulas desde Space — evidencia: docs/specs/SE-436-savia-space-projects-and-domes.spec.md
