@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-14 SE-439 APPROVED
+
+AskUserQuestion 2026-10-14: aprobada con las recomendaciones de Savia en las cuatro decisiones (base, agentes, arranque y prioridad)
+
+## 2026-10-14 SE-439 PROPOSED
+
+Savia Space como sesión gráfica agéntica sobre Linux, sustituto del entorno de escritorio
+
 ## 2026-10-13 SE-406 DEFERRED
 
 Aparcada: los avisos y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3); hoy la app consulta cada 15 minutos o más, y se revisa cuando se decida el push propio de SE-430 (D3).
