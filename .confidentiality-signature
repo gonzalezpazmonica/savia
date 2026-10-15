@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=8c59114a3539c582f20b08f06fd37840a3f714b4ff818768b68dcb9e7fa0785c
-timestamp=2026-10-14T22:53:37Z
-branch=agent/se431-d3-relay
-head_commit=576a025c
-signature=bbcf97d285a7b05b8d115ee308126fb3fe2938574a2d5f9c614fd1d90fdb4414
+diff_hash=46bd35b42245b1aaffbdc7cb08cd4e08814a6d75dff09f6ba00d38c42c8cd4fe
+timestamp=2026-10-15T05:10:47Z
+branch=fix-1317-resync
+head_commit=b6b857469
+signature=9997c4350845334c944e0633af7caf68b3b39482332f45a31e05668cce5fb888
