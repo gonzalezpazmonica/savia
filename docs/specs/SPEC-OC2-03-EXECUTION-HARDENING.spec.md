@@ -38,7 +38,9 @@ SDD pueda encadenar dos niveles, sin depender solo de guards cooperativos.
 ## 4. Diseño
 
 1. **Permissions** (V2):
-   - `external_directory: ask` — recupera el comportamiento V1.
+   - `external_directory: ask` — recupera el comportamiento V1, con allow
+     explícito para `~/.savia/*`, `~/.savia-memory/*`, `~/.config/opencode/*`
+     y `/tmp/opencode/*` (rutas de operación de Savia).
    - `subagent: allow` — la restricción real la fija `subagent_depth`.
 2. **Policies** (binarias, no preguntan, ganan a aprobaciones guardadas):
    - `shell:git push --force*`, `shell:git push -f*` → deny
