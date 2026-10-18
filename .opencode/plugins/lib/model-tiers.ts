@@ -76,8 +76,26 @@ function commandTierFromFile(directory: string, name: string): string | undefine
 // Config hook body: agents and commands get a concrete model from their tier.
 export function applyModelTiers(cfg: any, directory: string): void {
   const tierMap = getModelTierMap();
+  // SPEC-OC2-02: el tier vive en una clave de nivel superior, no dentro del
+  // agente. OpenCode V2 copia claves desconocidas del agente a request.body y
+  // las envía al proveedor; la forma antigua (`model_tier` por agente) se
+  // mantiene como fallback para configs ya existentes.
+  const hints = (cfg as any)?.x_savia_model_tiers;
+  if (hints && typeof hints === "object") {
+    for (const [name, tier] of Object.entries(hints)) {
+      const def = (cfg?.agent as any)?.[name];
+      if (def && typeof def === "object" && !def.model_tier) def.model_tier = tier;
+    }
+    delete (cfg as any).x_savia_model_tiers;
+  }
   if (cfg?.agent && typeof cfg.agent === "object") {
-    for (const def of Object.values(cfg.agent) as any[]) resolveTierInPlace(def, tierMap);
+    for (const def of Object.values(cfg.agent) as any[]) {
+      const before = def?.model;
+      resolveTierInPlace(def, tierMap);
+      // Solo se elimina el tier si la resolución fijó un modelo concreto;
+      // si no hay tier map local, se conserva para no perder la intención.
+      if (def?.model && def.model !== before) delete def.model_tier;
+    }
   }
   if (cfg?.command && typeof cfg.command === "object") {
     for (const [name, def] of Object.entries(cfg.command) as [string, any][]) {

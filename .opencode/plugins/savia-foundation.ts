@@ -29,7 +29,7 @@
 // Reference: SPEC-OC-01 (Savia Shield adaptation)
 // Reference: docs/rules/domain/provider-agnostic-env.md
 
-import type { Plugin } from "@opencode-ai/plugin";
+import { toV1After, toV1Before } from "./lib/v2-compat.ts";
 
 import { validateBashGlobal } from "./guards/validate-bash-global.ts";
 import { autoRedactSecrets } from "./guards/auto-redact-credentials.ts";
@@ -104,16 +104,88 @@ const AFTER_GUARDS = [
   sycophancyGuard,
 ] as const;
 
-export const SaviaFoundationPlugin: Plugin = async ({ project, $, directory }) => {
+// ── Shared runners ───────────────────────────────────────────────────────────
+
+async function runBeforeGuards(input: any, output: any): Promise<void> {
+  // Si un plugin de sandbox ya envolvió la orden, los guards ven también la de dentro.
+  await runGuardsOnVariants(BEFORE_GUARDS, input, output);
+}
+
+async function runAfterGuards(input: any, output: any): Promise<void> {
+  for (const guard of AFTER_GUARDS) {
+    try {
+      await guard(input, output);
+    } catch {
+      // After-guards are non-blocking — errors are logged internally
+      // but must not surface as tool failures
+    }
+  }
+}
+
+// ── V2 adapter (SPEC-OC2-01) ────────────────────────────────────────────────
+//
+// V2 exige un default export con `id` + `setup(ctx)`. Los hooks se registran
+// por dominio (`ctx.tool.hook`, `ctx.session.hook`) y reciben un único evento.
+// `lib/v2-compat.ts` traduce el evento al par (input, output) que usan los guards.
+
+async function setupV2(ctx: any): Promise<void> {
+  const register = async (domain: "tool" | "session", name: string, cb: (event: any) => Promise<void> | void) => {
+    try {
+      const target = domain === "session" ? ctx?.session : ctx?.tool;
+      if (target && typeof target.hook === "function") await target.hook(name, cb);
+    } catch {
+      // Un runtime sin ese hook no debe romper el arranque.
+    }
+  };
+
+  await register("tool", "execute.before", async (event: any) => {
+    const { input, output } = toV1Before(event);
+    await runBeforeGuards(input, output);
+    // Los guards pueden sustituir args (redacción); propaga la copia si la hubo.
+    if (event && output.args && event.input !== output.args && typeof event.input === "object") {
+      event.input = output.args;
+    }
+  });
+
+  await register("tool", "execute.after", async (event: any) => {
+    const { input, output } = toV1After(event);
+    await runAfterGuards(input, output);
+  });
+
+  await register("session", "prompt", async (event: any) => {
+    try {
+      await learningRecallGuard({ tool: "chat.message" } as any, event);
+    } catch {
+      // Non-blocking: a recall failure must never break message flow
+    }
+  });
+
+  // Saneamiento: V2 copia claves desconocidas de un agente a request.body
+  // (p. ej. `model_tier`). Se eliminan antes de enviar la petición.
+  await register("session", "model.request", (event: any) => {
+    const body = event?.body;
+    if (body && typeof body === "object") {
+      for (const key of Object.keys(body)) {
+        if (key === "model_tier" || key.startsWith("x_savia_")) delete body[key];
+      }
+    }
+  });
+}
+
+// ── V1 adapter (OpenCode 1.18.29+) ─────────────────────────────────────────
+//
+// Ojo: V1 < 1.18.29 solo acepta export de función. Savia soporta el formulario
+// objeto desde 1.18.29; para OpenCode 1 más antiguo existe
+// `savia-foundation.v1-legacy.ts` (documentado en el plan de adaptación).
+
+async function serverV1(runtime: any): Promise<Record<string, any>> {
+  const directory = runtime?.directory ?? process.cwd();
   return {
     config: (cfg: any) => {
-      // Provider-agnostic tiers: model_tier → local tier definition (lib/model-tiers.ts).
+      // Provider-agnostic tiers: model_tier → local tier definition.
       applyModelTiers(cfg, directory);
     },
-    "tool.execute.before": async (input: any, output: any) => {
-      // Si un plugin de sandbox ya envolvió la orden, los guards ven también la de dentro.
-      await runGuardsOnVariants(BEFORE_GUARDS, input, output);
-    },
+    "tool.execute.before": runBeforeGuards,
     "chat.message": async (input: any, output: any) => {
       try {
         await learningRecallGuard(input, output);
@@ -121,17 +193,14 @@ export const SaviaFoundationPlugin: Plugin = async ({ project, $, directory }) =
         // Non-blocking: a recall failure must never break message flow
       }
     },
-    "tool.execute.after": async (input: any, output: any) => {
-      for (const guard of AFTER_GUARDS) {
-        try {
-          await guard(input, output);
-        } catch {
-          // After-guards are non-blocking — errors are logged internally
-          // but must not surface as tool failures
-        }
-      }
-    },
+    "tool.execute.after": runAfterGuards,
   };
+}
+
+const SaviaFoundation = {
+  id: "savia-foundation",
+  setup: setupV2,
+  server: serverV1,
 };
 
-export default SaviaFoundationPlugin;
+export default SaviaFoundation;
