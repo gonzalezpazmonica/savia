@@ -64,7 +64,7 @@ recuperables conectan y los no recuperables quedan desactivados con motivo.
 
 ```bash
 opencode mcp list
-bash scripts/opencode-health-check.sh
+bash scripts/opencode-config-validate.sh --health
 ```
 
 ## 7. Riesgos
