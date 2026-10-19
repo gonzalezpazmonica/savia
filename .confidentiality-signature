@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=bea1c17c7422265bd86c6d9246773baaa76c71bb109fd9a49ffc63a08f26e621
-timestamp=2026-10-19T21:05:30Z
-branch=agent/fix-update-workspace-dir-20261019
-head_commit=badb954fc
-signature=47f3836d06a39fc76dfdee3700c2cf66e096a12e9d51e9bea772ea6e12c6e357
+diff_hash=f57208cb172342407c886a3a7434ce827b356401303d4e204010d49305995dae
+timestamp=2026-10-19T23:33:34Z
+branch=agent/savia-gates-opencode-v2-20261020
+head_commit=657c8bc2f
+signature=b2f04286bfb48ab8b7149a3a1abfe4297cdae449177b4250f30cbd26a9a3ad59
