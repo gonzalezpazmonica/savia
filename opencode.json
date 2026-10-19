@@ -12,17 +12,83 @@
     "docs/rules/domain/knowledge-discovery-priority.md",
     ".claude/CONSTITUCION.md"
   ],
-  "plugin": [
-    "opencode-sandbox"
-  ],
-  "experimental": {
-    "sandbox": {
-      "policy_dir": ".opencode/sandbox-policies",
-      "default_policy": "default-readonly",
-      "fail_if_unavailable": false,
-      "enabled": false
-    }
+  "x_savia_model_tiers": {
+    "build": "fast",
+    "plan": "fast",
+    "explore": "fast",
+    "general": "fast"
   },
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "ask"
+    },
+    {
+      "action": "external_directory",
+      "resource": "~/.savia/*",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "~/.savia-memory/*",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "~/.config/opencode/*",
+      "effect": "allow"
+    },
+    {
+      "action": "external_directory",
+      "resource": "/tmp/opencode/*",
+      "effect": "allow"
+    },
+    {
+      "action": "subagent",
+      "resource": "*",
+      "effect": "allow"
+    }
+  ],
+  "policies": [
+    {
+      "action": "tool.use",
+      "resource": "shell:git push --force*",
+      "effect": "deny"
+    },
+    {
+      "action": "tool.use",
+      "resource": "shell:git push -f*",
+      "effect": "deny"
+    },
+    {
+      "action": "tool.use",
+      "resource": "shell:git push origin main*",
+      "effect": "deny"
+    },
+    {
+      "action": "tool.use",
+      "resource": "shell:git push origin master*",
+      "effect": "deny"
+    },
+    {
+      "action": "tool.use",
+      "resource": "shell:rm -rf /*",
+      "effect": "deny"
+    },
+    {
+      "action": "tool.use",
+      "resource": "shell:sudo *",
+      "effect": "deny"
+    },
+    {
+      "action": "tool.use",
+      "resource": "edit:*.env",
+      "effect": "deny"
+    }
+  ],
+  "snapshots": true,
+  "update": "disable",
   "agent": {
     "build": {
       "mode": "primary",
@@ -53,8 +119,7 @@
           "bash *": "allow",
           "*": "allow"
         }
-      },
-      "model_tier": "fast"
+      }
     },
     "plan": {
       "mode": "primary",
@@ -62,8 +127,7 @@
         "edit": "deny",
         "bash": "deny",
         "task": "deny"
-      },
-      "model_tier": "fast"
+      }
     },
     "code-reviewer": {
       "description": "Revisión de código .NET como quality gate antes de merge. Focus: SOLID, OWASP, performance.",
@@ -248,8 +312,7 @@
         "edit": "deny",
         "write": "deny",
         "bash": "deny"
-      },
-      "model_tier": "fast"
+      }
     },
     "general": {
       "description": "General-purpose agent for complex multi-step tasks.",
@@ -260,8 +323,7 @@
         "bash": {
           "*": "allow"
         }
-      },
-      "model_tier": "fast"
+      }
     }
   },
   "command": {
@@ -318,28 +380,29 @@
     "codegraph": {
       "type": "local",
       "command": [
-        "env",
-        "PATH=/home/monica/.nvm/versions/node/v22.23.2/bin:/usr/bin:/bin",
-        "/home/monica/.nvm/versions/node/v22.23.2/bin/codegraph",
+        "/usr/bin/env",
+        "codegraph",
         "serve",
         "--mcp"
       ],
-      "enabled": true,
+      "enabled": false,
       "timeout": 30000
     },
     "codebase-memory-mcp": {
       "type": "local",
       "command": [
-        "/home/monica/.local/bin/codebase-memory-mcp",
+        "/usr/bin/env",
+        "codebase-memory-mcp",
         "serve"
       ],
-      "enabled": true,
+      "enabled": false,
       "timeout": 60000
     },
     "savia-vaults": {
       "type": "local",
       "command": [
-        "/home/monica/.nvm/versions/node/v22.23.2/bin/node",
+        "/usr/bin/env",
+        "node",
         "projects/savia-vaults/dist/cli/index.js",
         "serve",
         "--transport",
@@ -350,5 +413,8 @@
       "enabled": true,
       "timeout": 60000
     }
+  },
+  "experimental": {
+    "subagent_depth": 2
   }
 }
