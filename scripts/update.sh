@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # ── Constantes ──────────────────────────────────────────────────────
-WORKSPACE_DIR="${PM_WORKSPACE_ROOT:-$HOME/claude}"
+WORKSPACE_DIR="${PM_WORKSPACE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CONFIG_DIR="$HOME/.pm-workspace"
 CONFIG_FILE="$CONFIG_DIR/update-config"
 DEFAULT_INTERVAL=604800  # 7 dias en segundos
