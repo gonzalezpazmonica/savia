@@ -1,5 +1,6 @@
 ---
 status: IMPLEMENTING
+delta_approved: "operadora 2026-10-20, delta «OpenCode v2»: motor v2 con v1 congelado, un serve por espacio, pin por operaciones usadas, attach por --server (D1-D4, D7)"
 priority: P1
 developer_type: agent-single
 created: 2026-10-02
@@ -52,7 +53,16 @@ Space nunca afloja `opencode.json`; solo puede endurecerlo. Las reglas de seguri
    - Space arranca `opencode serve` en loopback, con puerto aleatorio y una contraseña aleatoria
      por arranque. El servidor de OpenCode no tiene autenticación sin ella (verificado en
      1.18.32).
-   - Fija el hash de la OpenAPI del motor y no lo usa si no coincide.
+   - Fija el motor y no lo usa si no coincide. Desde el delta «OpenCode v2» (ver «Deltas
+     aprobados»), el motor es OpenCode 2 y el pin es la huella de las operaciones que Space
+     invoca, no la de la OpenAPI completa. El pin de v1 (1.18.32) queda congelado.
+   - **Un `serve` por espacio.** Space lanza siempre `opencode serve --hostname 127.0.0.1 --port N`
+     en primer plano, sin `--service`, con `XDG_DATA_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME`,
+     `XDG_CONFIG_HOME` y `OPENCODE_DB` propios del espacio. Nunca usa el servicio único por
+     usuario de OpenCode 2 (registro de servicio, puerto fijo, base de datos y contraseña
+     compartidos), porque anularía las máscaras N2 de SE-434 y mezclaría datos entre proyectos.
+     Dentro del espacio, ninguna invocación de `opencode` se hace sin `--server` o `--standalone`,
+     y la configuración del espacio fija `service.disabled: true`.
    - Carga los plugins del workspace (sin `--pure`). Si falta el plugin de guards de Savia, el
      motor queda en modo degradado y no admite sesiones con escritura.
    - Si el motor cae, la ejecución queda interrumpida y nunca se reenvía un prompt
@@ -163,8 +173,11 @@ mediación.
 
 ## Criterios de aceptación
 
-- **AC1**: un motor con OpenAPI distinta de la fijada no se usa; uno sin el plugin de guards no
-  admite escritura.
+- **AC1** (revisado, delta OpenCode v2): un motor cuya huella de operaciones usadas difiere de la
+  fijada no se usa; uno sin el plugin de guards cargado no admite escritura. Un parche del motor
+  que no toca ninguna operación usada produce la misma huella y el motor se sigue usando; uno que
+  cambia el esquema de una operación usada (por ejemplo, un campo obligatorio nuevo en el prompt)
+  no. Antes: huella de la OpenAPI completa de 1.18.32.
 - **AC2**: el puerto del motor rechaza peticiones sin contraseña.
 - **AC3**: en una sesión interactiva, un `git push --force` del agente lo bloquea el guard de Savia,
   igual que en OpenCode.
@@ -172,8 +185,10 @@ mediación.
   bloquea, el prompt no llega al motor.
 - **AC5**: un comando de la paleta produce la misma salida que en OpenCode, con el mismo modelo y
   la misma sesión.
-- **AC6**: una sesión creada en Space se abre con `opencode attach` con el mismo historial, y un
-  permiso pendiente aparece en ambos.
+- **AC6** (revisado, delta OpenCode v2): una sesión creada en Space se abre con
+  `opencode --server <url> --session <id>`, con `OPENCODE_PASSWORD` en el entorno, y muestra el
+  mismo historial; un permiso pendiente aparece en ambos. Las sesiones de v2 no se abren con v1.
+  Antes: `opencode attach`, literal solo para v1 congelado.
 - **AC7**: en modo mediado, un permiso de edición que `opencode.json` permite se convierte en
   pregunta, sin modificar el fichero.
 - **AC8**: un hook declarado en un asset importado no se ejecuta.
@@ -188,6 +203,29 @@ mediación.
   sigue declarada en los recibos.
 - **AC10**: cinco jornadas de trabajo real de la operadora solo con Space, sin abrir la TUI de
   OpenCode para nada de P0. Cada apertura necesaria se registra con su causa.
+- **AC17** (D2): el motor v2 de un espacio escribe solo bajo los `XDG_*` y el `OPENCODE_DB` del
+  espacio. Tras una sesión, no existe ningún fichero nuevo en el directorio de datos o de estado
+  global del usuario ni registro de servicio, y ningún proceso escucha en el puerto por defecto
+  del servicio de OpenCode 2 (49374). Una orden `opencode run` sin `--server` lanzada desde el
+  espacio no se conecta a ningún servicio del usuario: termina sin tocar el puerto 49374.
+- **AC18** (R1): contra un motor v2 real, el driver V2 crea una sesión, envía un prompt, recibe el
+  streaming por `/api/event`, interrumpe el turno y responde un permiso por
+  `/api/session/{id}/permission/{requestID}/reply`. La salud se comprueba con `GET /api/info` y
+  exige cuerpo JSON: una respuesta 200 con `text/html` (ruta v1 inexistente) se trata como motor
+  no utilizable.
+- **AC19** (D3): `contracts/engine/` contiene el pin de v2 por operaciones usadas, y una prueba lo
+  reconstruye desde el `/openapi.json` servido por el motor real y obtiene la misma huella. La
+  prueba falla si una operación usada desaparece o cambia de esquema.
+- **AC20** (R2, X1): con el motor v2 de un espacio y el plugin de aislamiento cargado, un proceso
+  hijo lanzado por la herramienta `shell` no ve `OPENCODE_SERVER_PASSWORD` ni `OPENCODE_PASSWORD`
+  en su entorno ni en `/proc/<pid>/environ`. Si el plugin no carga, el motor no admite sesiones.
+- **AC21** (v2 vs hallazgos): la suite `real_engine` pasa contra v2 y mide de nuevo, con su
+  resultado escrito en los recibos de prueba: parada con SIGTERM, formato de la línea de escucha,
+  versión (`opencode --version` con prefijo `v`), 401 sin contraseña (AC2) y que el puerto del
+  motor no emite cookie ni empareja sin contraseña.
+- **AC22** (D7, `savia-gates` dual): el mismo plugin `savia-gates` bloquea un `git push --force`
+  (AC3) en v1 ≥ 1.18.29 y en v2, y la política de permisos de `AUTONOMOUS_REVIEWER` se evalúa en
+  ambos. En v1 anterior a 1.18.29 el motor queda en modo degradado, sin sesiones con escritura.
 - **AC14** (D-ORCA-3): con la hibernación activa, una ejecución hecha, inactiva 30 minutos y sin
   ninguna otra condición en contra se pausa. No se pausa, con un caso de prueba negativo por cada
   una de las diez condiciones: (1) turno en curso (no hecha), (2) en primer plano, (3) teclas
@@ -263,6 +301,23 @@ Medidos en el prototipo local contra OpenCode 1.18.32, con un modelo local (Olla
 
 ## Deltas aprobados
 
+- **2026-10-20** (operadora, decisiones D1-D4 y D7 del análisis de OpenCode 2): Space salta a
+  OpenCode 2 y congela v1.
+  - **D1**: el motor es OpenCode 2. v1 queda congelado, sin mantenimiento de versiones antiguas.
+    Space aún no está en uso, así que no hay migración de espacios ni de datos.
+  - **D2**: invariante de seguridad. Un `opencode serve` aislado por espacio, con `XDG_*` y
+    `OPENCODE_DB` propios; nunca el servicio único por usuario de OpenCode 2.
+  - **D3**: el pin es la huella de las operaciones y esquemas que Space usa, no la de la OpenAPI
+    completa (OpenCode 2 publica casi una versión al día y su contrato es experimental). La huella
+    completa se conserva solo como diagnóstico. AC1 revisado.
+  - **D4**: la compatibilidad de sesión con la TUI pasa a `opencode --server <url> [--session id]`
+    con la contraseña en `OPENCODE_PASSWORD`, porque OpenCode 2 no tiene `attach`. AC6 revisado.
+  - **D7**: el plugin de guards de Savia (`savia-gates`) es dual V1/V2; v1 mínima 1.18.29. Paquetes:
+    `opencode-ai` (v1) y `@opencode/cli` (v2). AC1 revisado y AC17-AC22 nuevos.
+  - Los «Hallazgos de la implementación» de arriba se midieron contra 1.18.32 y siguen siendo la
+    referencia de v1; cada uno se vuelve a medir contra v2 antes de darlo por válido (AC21).
+  La spec no cambia de estado.
+
 - **2026-10-05** (operadora, AskUserQuestion 2026-10-05, D-ORCA-3 y D-ORCA-5): hibernación de
   ejecuciones con condiciones conjuntivas y endpoint de hooks releído en cada llamada, patrones
   tomados de [Orca](https://github.com/stablyai/orca). La spec no cambia de estado.
@@ -280,15 +335,15 @@ Medidos en el prototipo local contra OpenCode 1.18.32, con un modelo local (Olla
 
 | Componente | Claude Code | OpenCode |
 |---|---|---|
-| Motor de agentes | no aplica en esta spec | `opencode serve` como proceso hijo; API fijada por hash de OpenAPI; `opencode attach` compatible |
-| Hooks de Savia | los scripts de `.claude/settings.json` se ejecutan desde el bus de Space con el contrato de Claude Code | el plugin de guards de Savia sigue cargado en el motor |
+| Motor de agentes | no aplica en esta spec | `opencode serve` (OpenCode 2, v1 congelado) como proceso hijo, uno por espacio; API fijada por huella de operaciones usadas; `opencode --server <url>` compatible (v1: `opencode attach`) |
+| Hooks de Savia | los scripts de `.claude/settings.json` se ejecutan desde el bus de Space con el contrato de Claude Code | el plugin `savia-gates` dual V1/V2 (`Plugin.define` con `server()` para v1 ≥ 1.18.29) sigue cargado en el motor |
 | Agentes, skills y comandos | sin cambios | se leen del catálogo del motor (`.opencode/agents`, skills, commands) |
 
 ### Verification protocol
 
-- [ ] Tests de contrato del adaptador contra la versión de OpenCode fijada.
+- [ ] Tests de contrato del adaptador contra la versión de OpenCode 2 fijada (driver V2) y, mientras se mantenga, contra 1.18.32 (driver V1 congelado).
 - [ ] Canarios por hook: cada evento se dispara una sola vez (motor o bus).
-- [ ] Escenarios AC1–AC9 y AC11–AC16 en CI con un motor local de prueba; AC10 con la operadora.
+- [ ] Escenarios AC1–AC9 y AC11–AC22 en CI con un motor local de prueba; AC10 con la operadora.
 
 ### Portability classification
 
