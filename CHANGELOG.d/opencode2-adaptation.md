@@ -19,3 +19,5 @@ section: Added
 - Config V2 aditiva: `permissions`, `policies`, `experimental.subagent_depth`.
 - MCP: intérprete del sistema y rutas relativas; `savia-vaults` compilado;
   servidores sin binario desactivados con `enabled: false`.
+- `opencode-config-validate.sh` acepta las claves nativas de V2 (`permissions`,
+  `policies`, `snapshots`, `update`, etc.) y el prefijo `x_savia_`.

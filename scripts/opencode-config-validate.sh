@@ -52,6 +52,24 @@ readonly VALID_KEYS=(
   'skill'
   'reference'
   'custom_tool'
+  # --- OpenCode V2 (nativas) ---
+  'default_agent'
+  'permissions'
+  'policies'
+  'snapshots'
+  'update'
+  'media'
+  'plugins'
+  'references'
+  'warming'
+  'skills'
+  'watcher'
+  'tool_output'
+  'worktree'
+  'username'
+  'enterprise'
+  'server'
+  'logLevel'
 )
 
 # Colors
@@ -64,7 +82,7 @@ usage() {
   cat <<EOF
 Usage: $0 [--check|--warn]
 
-Validates opencode.json top-level keys against known OpenCode >=1.16 schema.
+Validates opencode.json top-level keys against the OpenCode V1 (>=1.16) and V2 schemas.
 
   --check   Exit 1 if unknown keys found (CI mode)
   --warn    Warn only, exit 0 (pre-push mode)
@@ -133,6 +151,10 @@ WARNED=0
 ERRORS=0
 
 for key in "${TOP_KEYS[@]}"; do
+  # Extensión propia de Savia (ignorada por V1 y V2; nunca se envía al proveedor).
+  if [[ "$key" == x_savia_* ]]; then
+    continue
+  fi
   if [[ -z "${VALID_MAP[$key]:-}" ]]; then
     UNKNOWN+=("$key")
     ERRORS=$((ERRORS + 1))
