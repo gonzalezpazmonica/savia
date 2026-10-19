@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=94fb71479aef63ada4275c03f3b511ada00bba4a4fbad49a9d4ab997ee0354d4
-timestamp=2026-10-19T06:44:26Z
-branch=agent/overnight-20261018-opencode2-adaptation
-head_commit=f8f5b216
-signature=43ce8f3bc7ba60eb0171185ec176df835feeca49550463d5308af740c95c1b38
+diff_hash=bea1c17c7422265bd86c6d9246773baaa76c71bb109fd9a49ffc63a08f26e621
+timestamp=2026-10-19T21:05:30Z
+branch=agent/fix-update-workspace-dir-20261019
+head_commit=badb954fc
+signature=47f3836d06a39fc76dfdee3700c2cf66e096a12e9d51e9bea772ea6e12c6e357
