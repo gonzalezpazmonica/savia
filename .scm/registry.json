@@ -6264,6 +6264,26 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/opencode-health-check",
+      "intents": [
+        "check",
+        "health",
+        "opencode",
+        "spec"
+      ],
+      "kind": "script",
+      "owner_domain": "development",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/opencode-health-check.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/opencode-hooks/run-hook",
       "intents": [
         "adecuado",
@@ -29607,7 +29627,7 @@
       "tests": []
     }
   ],
-  "content_hash": "1314f1c752b5",
+  "content_hash": "f2a15386abc5",
   "deferred_kinds": [
     "rule",
     "hook"
