@@ -139,7 +139,7 @@ OpenCode se instala via npm (global) o binary download:
 
 ```bash
 # Opción A: npm global (recomendada — ya tenemos Node.js como prerequisito)
-npm install -g @opencode-ai/cli
+npm install -g @opencode/cli   # OpenCode 2 (opencode-ai para OpenCode 1)
 
 # Opción B: binary download (si no hay npm)
 curl -fsSL https://github.com/sst/opencode/releases/latest/download/opencode-linux-x64.tar.gz | tar xz -C /usr/local/bin

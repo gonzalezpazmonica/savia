@@ -333,8 +333,8 @@ reason() { printf '%s' "$output" | jq -r '.hookSpecificOutput.permissionDecision
 }
 
 @test "savia-gates applies the native twin of this hook before the bash bridge" {
-  local idx="$REPO_ROOT/scripts/opencode-plugin/savia-gates/index.ts"
-  grep -q 'from "./lib/dome-guard"' "$idx"
+  local idx="$REPO_ROOT/scripts/opencode-plugin/savia-gates/lib/gates.ts"
+  grep -q 'from "./dome-guard"' "$idx"
   grep -q 'domeGuardVerdict' "$idx"
   grep -q 'DOME_' "$idx"
   [ -f "$REPO_ROOT/scripts/opencode-plugin/savia-gates/lib/dome-guard.ts" ]

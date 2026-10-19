@@ -61,7 +61,7 @@ Salida esperada:
 
 Via npm (recomendado — ya tenemos Node.js como prerequisito):
 
-    npm install -g @opencode-ai/cli
+    npm install -g @opencode/cli   # OpenCode 2 (opencode-ai para OpenCode 1)
     opencode --version
 
 Via binario (si no hay npm disponible):

@@ -192,9 +192,12 @@ if (Get-Command opencode -ErrorAction SilentlyContinue) {
     $ocVer = try { opencode --version 2>&1 | Select-Object -First 1 } catch { "found" }
     Write-Ok "OpenCode already installed ($ocVer)"
 } else {
-    Write-Info "OpenCode not found - installing..."
+    # @opencode/cli = OpenCode 2 (recommended), opencode-ai = OpenCode 1 (>= 1.18.29 for the Savia plugins).
+    # @opencode-ai/cli is NOT OpenCode. Choose with SAVIA_OPENCODE_FLAVOR=v1|v2 (default v2).
+    $ocPkg = if ($env:SAVIA_OPENCODE_FLAVOR -eq "v1") { "opencode-ai" } else { "@opencode/cli" }
+    Write-Info "OpenCode not found - installing $ocPkg..."
     try {
-        npm install -g @opencode-ai/cli 2>$null
+        npm install -g $ocPkg 2>$null
         if ($LASTEXITCODE -eq 0) {
             Write-Ok "OpenCode installed via npm"
         } else {
@@ -202,7 +205,8 @@ if (Get-Command opencode -ErrorAction SilentlyContinue) {
         }
     } catch {
         Write-Warn "OpenCode installation failed. Install it later:"
-        Write-Host "    npm install -g @opencode-ai/cli"
+        Write-Host "    npm install -g @opencode/cli   # OpenCode 2 (recommended)"
+        Write-Host "    npm install -g opencode-ai     # OpenCode 1"
     }
 }
 

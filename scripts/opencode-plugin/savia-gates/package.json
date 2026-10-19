@@ -1,15 +1,24 @@
 {
   "name": "savia-gates",
-  "version": "0.1.0",
-  "description": "Savia gates for OpenCode v1.14 — bridges Claude Code hooks (.opencode/hooks/) into OpenCode plugin events. Source: SE-077.",
+  "version": "0.2.0",
+  "description": "Savia gates for OpenCode 1 (>= 1.18.29) and 2 — bridges Claude Code hooks (.opencode/hooks/) into OpenCode plugin events. Source: SE-077.",
   "type": "module",
   "main": "index.ts",
   "private": true,
   "engines": {
     "bun": ">=1.1.0"
   },
-  "dependencies": {
-    "@opencode-ai/plugin": "^1.14.25"
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.29",
+    "@opencode/plugin": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opencode/plugin": {
+      "optional": true
+    }
   },
   "savia": {
     "spec": "SE-077",
