@@ -56,7 +56,7 @@
 
 - Policies duras: force-push, push a main/master, `rm -rf /`, `sudo`, `*.env`.
 - Profundidad de subagentes 2 para orquestación SDD.
-- Gate `scripts/opencode-health-check.sh`: versión, plugins activos, MCP, permisos efectivos.
+- Gate `scripts/opencode-config-validate.sh --health`: versión, plugins activos, MCP, permisos efectivos.
 
 **Aceptación:** el gate devuelve PASS con el plugin cargado y los MCP en estado conocido.
 
@@ -92,7 +92,7 @@
 
 ```bash
 node --experimental-strip-types .opencode/plugins/__tests__/v2-compat.smoke.ts
-bash scripts/opencode-health-check.sh
+bash scripts/opencode-config-validate.sh --health
 opencode mcp list
 opencode debug config
 bash scripts/validate-ci-local.sh --quick

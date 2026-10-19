@@ -80,12 +80,14 @@ NC='\033[0m'
 
 usage() {
   cat <<EOF
-Usage: $0 [--check|--warn]
+Usage: $0 [--check|--warn|--health]
 
 Validates opencode.json top-level keys against the OpenCode V1 (>=1.16) and V2 schemas.
+--health comprueba además el runtime (plugin, config efectiva, MCP, smoke dual).
 
   --check   Exit 1 if unknown keys found (CI mode)
   --warn    Warn only, exit 0 (pre-push mode)
+  --health  Health check de solo lectura (exit 1 si algo falla)
 
 Environment:
   OPENCODE_CONFIG   Path to opencode.json (default: opencode.json)
@@ -95,12 +97,74 @@ EOF
 # ---------------------------------------------------------------------------
 # Parse args
 # ---------------------------------------------------------------------------
-if [[ "$MODE" != "--check" && "$MODE" != "--warn" ]]; then
+if [[ "$MODE" != "--check" && "$MODE" != "--warn" && "$MODE" != "--health" ]]; then
   echo "ERROR: unknown mode '$MODE'" >&2
   usage
   exit 2
 fi
 
+
+# ---------------------------------------------------------------------------
+# --health (SPEC-OC2-03): runtime de OpenCode, solo lectura
+# ---------------------------------------------------------------------------
+if [[ "$MODE" == "--health" ]]; then
+  ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  cd "$ROOT_DIR" || exit 2
+  FAILS=0; WARNS=0
+  hpass() { echo "PASS $1"; }
+  hwarn() { echo "WARN $1"; WARNS=$((WARNS+1)); }
+  hfail() { echo "FAIL $1"; FAILS=$((FAILS+1)); }
+
+  command -v opencode >/dev/null 2>&1 || { hfail "opencode no está en PATH"; exit 1; }
+  hpass "opencode $(opencode --version 2>/dev/null || echo '?')"
+
+  if opencode plugin list 2>/dev/null | grep -q "savia-foundation"; then
+    hpass "plugin savia-foundation descubierto"
+  else
+    hfail "plugin savia-foundation no descubierto"
+  fi
+
+  CFG=$(opencode debug config 2>/dev/null)
+  if [[ -z "$CFG" ]]; then
+    hfail "opencode debug config no devuelve configuración"
+  else
+    printf '%s' "$CFG" | grep -q '"model_tier"' \
+      && hfail "model_tier en la config efectiva (fuga a request.body)" \
+      || hpass "sin model_tier en la config efectiva"
+    printf '%s' "$CFG" | grep -q '"external_directory"' \
+      && hpass "permission external_directory definido" \
+      || hwarn "external_directory no definido (V2 permite acceso externo)"
+    printf '%s' "$CFG" | grep -q '"subagent_depth": 2' \
+      && hpass "subagent_depth=2" \
+      || hwarn "subagent_depth distinto de 2 (orquestación SDD limitada)"
+    printf '%s' "$CFG" | grep -q '"policies"' \
+      && hpass "policies presentes" \
+      || hwarn "policies ausentes (solo aplican en OpenCode 2)"
+  fi
+
+  MCP=$(opencode mcp list 2>&1 || true)
+  printf '%s' "$MCP" | grep -qE "✗ savia-vaults|savia-vaults.*failed" \
+    && hfail "savia-vaults no conecta" \
+    || hpass "savia-vaults sin fallo reportado"
+  printf '%s' "$MCP" | grep -qE "✗ (codegraph|codebase-memory-mcp)" \
+    && hfail "servidores desactivados siguen intentando arrancar" \
+    || hpass "servidores desactivados no arrancan"
+
+  SMOKE="$ROOT_DIR/.opencode/plugins/__tests__/v2-compat.smoke.ts"
+  if [[ -f "$SMOKE" ]] && timeout 120 node --experimental-strip-types "$SMOKE" >/dev/null 2>&1; then
+    hpass "smoke dual V1/V2"
+  elif [[ -f "$SMOKE" ]]; then
+    hfail "smoke dual V1/V2"
+  else
+    hwarn "smoke dual no encontrado"
+  fi
+
+  echo "---"
+  if [[ "$FAILS" -gt 0 ]]; then
+    echo "RESULT FAIL ($FAILS fallos, $WARNS warnings)"; exit 1
+  fi
+  echo "RESULT PASS ($WARNS warnings)"; exit 0
+fi
 # ---------------------------------------------------------------------------
 # Pre-flight
 # ---------------------------------------------------------------------------

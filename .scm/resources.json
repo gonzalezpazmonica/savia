@@ -1,6 +1,6 @@
 {
-  "hash": "f2a15386abc5",
-  "total": 1451,
+  "hash": "1314f1c752b5",
+  "total": 1450,
   "resources": [
     {
       "category": "analysis",
@@ -4043,19 +4043,6 @@
       "kind": "script",
       "path": "scripts/opencode-gates-heal.sh",
       "description": "opencode-gates-heal.sh — SE-077 process-leak self-heal (standalone)"
-    },
-    {
-      "category": "development",
-      "name": "opencode-health-check",
-      "intents": [
-        "check",
-        "health",
-        "opencode",
-        "spec"
-      ],
-      "kind": "script",
-      "path": "scripts/opencode-health-check.sh",
-      "description": "opencode-health-check.sh — SPEC-OC2-03"
     },
     {
       "category": "development",

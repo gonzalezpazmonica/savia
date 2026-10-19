@@ -32,7 +32,7 @@ SDD pueda encadenar dos niveles, sin depender solo de guards cooperativos.
 ## 3. Alcance
 
 - Dentro: `opencode.json` (`permissions`, `policies`, `subagent_depth`),
-  `scripts/opencode-health-check.sh`.
+  `scripts/opencode-config-validate.sh --health`.
 - Fuera: hooks de Claude Code/Codex, política de red.
 
 ## 4. Diseño
@@ -49,7 +49,7 @@ SDD pueda encadenar dos niveles, sin depender solo de guards cooperativos.
    - `edit:*.env` → deny
    No se bloquean pushes a ramas `agent/*` ni a ramas de trabajo.
 3. **subagent_depth: 2** para la cadena orquestador → developer.
-4. **Gate** `scripts/opencode-health-check.sh`:
+4. **Gate** `scripts/opencode-config-validate.sh --health`:
    - versión de OpenCode y canal
    - `opencode plugin list` (detecta plugins locales)
    - `opencode mcp list` (fallos inesperados)
@@ -69,7 +69,7 @@ SDD pueda encadenar dos niveles, sin depender solo de guards cooperativos.
 ## 6. Verificación
 
 ```bash
-bash scripts/opencode-health-check.sh
+bash scripts/opencode-config-validate.sh --health
 ```
 
 ## 7. Riesgos

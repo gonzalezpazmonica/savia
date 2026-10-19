@@ -7,7 +7,7 @@ section: Added
 
 - OpenCode 2: plugin dual V1/V2 (`id`+`setup` y `server()`), adaptador de hooks
   (`shell→bash`, `subagent→task`) y smoke sin bun.
-- Gate `scripts/opencode-health-check.sh` (solo lectura) para plugin, config
+- Gate `scripts/opencode-config-validate.sh --health` (solo lectura) para plugin, config
   efectiva, MCP y contrato dual.
 - Specs `SPEC-OC2-01..04` y plan de adaptación con matriz de compatibilidad
   OpenCode 2 / OpenCode 1 / Claude Code / Codex.
