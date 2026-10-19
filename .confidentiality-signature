@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f57208cb172342407c886a3a7434ce827b356401303d4e204010d49305995dae
-timestamp=2026-10-19T23:33:34Z
-branch=agent/savia-gates-opencode-v2-20261020
-head_commit=657c8bc2f
-signature=b2f04286bfb48ab8b7149a3a1abfe4297cdae449177b4250f30cbd26a9a3ad59
+diff_hash=b66d767aff11ea809808bd5dc98957797c1078591459078433814b822413a6f0
+timestamp=2026-10-19T23:46:50Z
+branch=agent/savia-gates-opencode-v2-20261020-r2
+head_commit=fac3377fd
+signature=168d9839edd1158d76ca18978d64c982880b6a5d2361d84727c50e0b002114c1
