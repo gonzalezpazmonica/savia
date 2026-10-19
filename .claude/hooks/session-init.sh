@@ -305,7 +305,7 @@ fi
 
 # ── Variables de entorno ─────────────────────────────────────────────────────
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "export PM_WORKSPACE_ROOT=$HOME/claude" >> "$CLAUDE_ENV_FILE"
+  echo "export PM_WORKSPACE_ROOT=${CLAUDE_PROJECT_DIR:-$SAVIA_WORKSPACE_DIR}" >> "$CLAUDE_ENV_FILE"
   echo "export PM_SESSION_DATE=$(date +%Y-%m-%d)" >> "$CLAUDE_ENV_FILE"
   if [ -x "$HOME/.savia/node/bin/node" ]; then
     echo "export PATH=$HOME/.savia/node/bin:$PATH" >> "$CLAUDE_ENV_FILE"
