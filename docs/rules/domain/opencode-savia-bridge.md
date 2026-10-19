@@ -85,22 +85,14 @@ Prueba contra el motor real (sin modelo ni red, aislado en un directorio tempora
 
 ## Ejecución de hooks bash
 
-- `shell-bridge` resuelve `$CLAUDE_PROJECT_DIR` **y** `$CLAUDE_PLUGIN_ROOT` del
-  comando del hook.
-- Cada hook corre con `bash -c` (interpolación `{raw}` para no romper comillas)
-  y `cwd(projectRoot)`, con el payload en stdin vía fichero temporal local.
-- Bloqueo por **dos contratos**: exit code 2 (Claude Code clásico) y stdout JSON
-  `{"decision":"block"}` con exit 0 (patrón SE-337 commit guard y los gates de
-  Stop).
-- Los matchers `Bash(git commit*)` / `Bash:gh pr create*` se resuelven
-  reconstruyendo el nombre compuesto `bash(<command>)` / `bash:<command>`.
+- `shell-bridge` resuelve `$CLAUDE_PROJECT_DIR` **y** `$CLAUDE_PLUGIN_ROOT` del comando del hook.
+- Cada hook corre con `bash -c` (interpolación `{raw}` para no romper comillas) y `cwd(projectRoot)`, con el payload en stdin vía fichero temporal local.
+- Bloqueo por **dos contratos**: exit code 2 (Claude Code clásico) y stdout JSON `{"decision":"block"}` con exit 0 (patrón SE-337 commit guard y los gates de Stop).
+- Los matchers `Bash(git commit*)` / `Bash:gh pr create*` se resuelven reconstruyendo el nombre compuesto `bash(<command>)` / `bash:<command>`.
 
 ### Anti-leak / timeout (SE-077 process-leak fix)
 
-> Los hooks se lanzan con `Bun.spawn({ detached: true })` — cada hook vive en su
-> propio proceso/process-group, NO como hijo pipe-able de `$` shell. Esto
-> permite matar el ÁRBOL completo del hook (incl. hijos como `ollama classify`
-> que cuelgan cuando el Shield daemon está caído).
+> Los hooks se lanzan con `Bun.spawn({ detached: true })` — cada hook vive en su propio proceso/process-group, NO como hijo pipe-able de `$` shell. Esto permite matar el ÁRBOL completo del hook (incl. hijos como `ollama classify` que cuelgan cuando el Shield daemon está caído).
 
 - **Timeout kill**: si un hook excede su timeout (`runHookOnce`), se ejecuta
   `process.kill(-pid, SIGKILL)` contra el grupo del hook. Antes, el proceso se
@@ -120,7 +112,6 @@ Prueba contra el motor real (sin modelo ni red, aislado en un directorio tempora
 - **Heal manual**: `bash scripts/opencode-gates-heal.sh` (dead owners) o
   `--force` (también hooks colgados de pids vivos), `--dry-run` para prever.
 
-
 ## Garantías de seguridad (autonomous-safety)
 
 - FAIL El plugin NUNCA hace `git push`, `gh pr merge`, `--force`
@@ -134,28 +125,13 @@ Prueba contra el motor real (sin modelo ni red, aislado en un directorio tempora
 
 ## Parity audit + canary
 
-```bash
-# Reporte de gap (texto)
-bash scripts/opencode-parity-audit.sh
-
-# Como JSON
-bash scripts/opencode-parity-audit.sh --json
-
-# Tras instalar, capturar el gap actual como baseline
-bash scripts/opencode-parity-audit.sh --baseline
-
-# Verificar regresión vs baseline
-bash scripts/opencode-parity-audit.sh --check
-
-# Canary mensual (compara equivalencia OpenCode vs Claude Code)
-bash scripts/opencode-monthly-canary.sh --spec SE-073 --report-only
-```
+`bash scripts/opencode-parity-audit.sh` da el gap en texto (`--json` en JSON), `--baseline` lo captura tras instalar y `--check` verifica regresión frente al baseline. Canary mensual de equivalencia OpenCode frente a Claude Code: `bash scripts/opencode-monthly-canary.sh --spec SE-073 --report-only`.
 
 **Re-baseline post-instalación**: el baseline inicial commiteado refleja el estado pre-plugin (gap=N). Tras `bash scripts/opencode-install.sh` y la primera carga del plugin, ejecutar `--baseline` de nuevo y commitear el nuevo número.
 
 ## Pre-requisitos cumplidos
 
-OpenCode v1.14.25 (latest abril 2026), Bun runtime (instalado por OpenCode), `.claude/settings.json` estable, AUTONOMOUS_REVIEWER configurado, AGENTS.md generado (SE-078).
+OpenCode 2 (recomendado, `@opencode/cli`) u OpenCode 1 >= 1.18.29 (`opencode-ai`), Bun runtime (instalado por OpenCode), `.claude/settings.json` estable, AUTONOMOUS_REVIEWER configurado, AGENTS.md generado (SE-078).
 
 ## Referencias
 
