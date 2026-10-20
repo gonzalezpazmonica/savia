@@ -136,3 +136,9 @@ call() { call_ev PreToolUse "$@"; }
   run call w1 Bash '{"command":"ls"}'
   [ "$status" -eq 0 ]
 }
+
+@test "OpenCode manda tool_name en minusculas: SAVIA_LOOP_EXCLUDE=Bash tambien exime" {
+  on_branch agent/x
+  export SAVIA_LOOP_EXCLUDE=Bash
+  for i in 1 2 3 4; do run call ox bash '{"command":"ls"}'; [ "$status" -eq 0 ]; done
+}

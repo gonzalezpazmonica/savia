@@ -60,7 +60,7 @@ def build_block_message(tool: str, count: int, preview: int, canonical: str) -> 
 
 def run_pre(args, exclude: set) -> int:
     """SE-445 S1: cuenta llamadas identicas consecutivas antes de ejecutarlas; bloquea en --block-at."""
-    if args.tool in exclude:
+    if args.tool.casefold() in exclude:
         return 0
     try:
         import fcntl
@@ -176,13 +176,13 @@ def main() -> int:
 
     exclude = set(DEFAULT_EXCLUDE)
     if args.exclude.strip():
-        exclude |= {t.strip() for t in args.exclude.split(",") if t.strip()}
+        exclude |= {t.strip().casefold() for t in args.exclude.split(",") if t.strip()}
 
     if args.mode == "pre":
         return run_pre(args, exclude)
 
     # bookkeeping tools are transparent to the chain
-    if args.tool in exclude:
+    if args.tool.casefold() in exclude:
         return 0
 
     key = f"{args.session}:::{args.turn or 'default'}"
