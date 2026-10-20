@@ -66,3 +66,13 @@ completion() { # $1 = acceptance_evidence JSON
   [[ "$output" == *"SE-X · AC9: autoridad simulada < requerida real"* ]]
   [ "$status" -eq "$base" ]
 }
+
+@test "la plantilla de spec trae la sección de autoridad como sección propia y la tabla de correspondencia sigue intacta" {
+  T="$ROOT/.claude/skills/spec-driven-development/references/spec-template.md"
+  grep -q '^## Criterios de aceptación con autoridad (SE-444)$' "$T"
+  grep -q 'autoridad_requerida' "$T"
+  # Cada fila de la tabla Spec-Kit Alignment empieza y termina en la misma línea.
+  run awk '/^Correspondencia entre secciones/{t=1} t && /^\| `## /{ if ($0 !~ /\|[[:space:]]*$/) bad=1 } t && /^$/ && seen{exit} t && /^\|/{seen=1} END{exit bad}' "$T"
+  [ "$status" -eq 0 ]
+  grep -q '^| `## Acceptance Criteria` | `## 5. Test Scenarios` + `## 10. Checklist Pre-Entrega` |$' "$T"
+}

@@ -16,25 +16,7 @@ Correspondencia entre secciones spec-kit estándar y secciones Savia extendidas:
 | `## What & Why` | `## 1. Contexto y Objetivo` |
 | `## Requirements` (Functional + Non-Functional) | `## 2. Contrato Técnico` + `## 3. Inputs/Outputs` + `## 3. Reglas de Negocio` + `## 4. Constraints and Limits` |
 | `## Technical Design` | `## 2.3 Dependencias` + `## 7. Código de Referencia` |
-| `## Acceptance Criteria` | `## Criterios de aceptación con autoridad (SE-444)
-
-> Regla: `docs/rules/domain/ac-verifier-authority.md`. Valores: `real` | `simulada` | `estatica`.
-
-| AC | Verificación | autoridad_requerida | autoridad_obtenida |
-|---|---|---|---|
-| AC1 | {comando o prueba} | {real / simulada / estatica} | {se rellena al cerrar} |
-
-Un AC cuyo texto exige comportamiento real no se cierra con `simulada` ni `estatica`; si la autoridad no está disponible, se registra como skip con nombre y motivo.
-
-### Autorizaciones literales (opcional; recomendable en riesgo L3+)
-
-| Cita textual de la persona | Alcance | Fecha | Sustituida por |
-|---|---|---|---|
-| «{cita literal}» | {qué autoriza y qué no} | {YYYY-MM-DD} | {- o referencia} |
-
----
-
-## 5. Test Scenarios` + `## 10. Checklist Pre-Entrega` |
+| `## Acceptance Criteria` | `## 5. Test Scenarios` + `## 10. Checklist Pre-Entrega` |
 
 **Secciones exclusivas Savia** (no mapeables a spec-kit):
 - `Developer Type` (human | agent-single | agent-team) — para SDD agent routing
@@ -308,6 +290,24 @@ public record CreatePatientResponse
 | Usuarios concurrentes | ≤ 10,000 | Horizontal: add más instancias de API (Azure App Service scale out) |
 | Registros de pacientes | ≤ 10 millones | Vertical: migrar a sharding por región, table partitioning en BD |
 | Datos por request | ≤ 1 MB | Si supera, usar pagination o batch API |
+
+---
+
+## Criterios de aceptación con autoridad (SE-444)
+
+> Regla: `docs/rules/domain/ac-verifier-authority.md`. Valores: `real` | `simulada` | `estatica`.
+
+| AC | Verificación | autoridad_requerida | autoridad_obtenida |
+|---|---|---|---|
+| AC1 | {comando o prueba} | {real / simulada / estatica} | {se rellena al cerrar} |
+
+Un AC cuyo texto exige comportamiento real no se cierra con `simulada` ni `estatica`; si la autoridad no está disponible, se registra como skip con nombre y motivo.
+
+### Autorizaciones literales (opcional; recomendable en riesgo L3+)
+
+| Cita textual de la persona | Alcance | Fecha | Sustituida por |
+|---|---|---|---|
+| «{cita literal}» | {qué autoriza y qué no} | {YYYY-MM-DD} | {- o referencia} |
 
 ---
 
