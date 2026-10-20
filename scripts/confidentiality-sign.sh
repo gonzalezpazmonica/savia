@@ -25,7 +25,9 @@ get_diff_hash() {
 # CONFIDENTIALITY_REQUIRE_HMAC=1: sin clave, sign y verify fallan cerrado.
 hmac_key() {
   # El secreto de CI puede llegar con salto de línea final; se trata igual que el fichero.
-  if [ -n "${CONFIDENTIALITY_HMAC_KEY//[$'\r\n']/}" ]; then printf '%s' "${CONFIDENTIALITY_HMAC_KEY//[$'\r\n']/}"
+  local env_key="${CONFIDENTIALITY_HMAC_KEY:-}"
+  env_key="${env_key//[$'\r\n']/}"
+  if [ -n "$env_key" ]; then printf '%s' "$env_key"
   elif [ -f "$SECRET_FILE" ]; then cat "$SECRET_FILE" 2>/dev/null | tr -d '\n'
   fi
 }

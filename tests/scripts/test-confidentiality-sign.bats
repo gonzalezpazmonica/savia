@@ -265,3 +265,13 @@ teardown() {
   ! grep -E 'confidentiality-sign.sh (re)?sign[^|]*(>/dev/null 2>&1)?[^|]*\|\| *true' "$root/.github/workflows/changelog-consolidate.yml"
   ! grep -E 'confidentiality-sign.sh sign >/dev/null 2>&1$' "$root/scripts/resolve-pr-conflicts.sh"
 }
+
+@test "key: local key file alone signs and verifies (no CI env var set)" {
+  printf '%s\n' "$KEY_A" > "$HOME/.savia/confidentiality-key"
+  run bash "$SCRIPT" sign
+  [ "$status" -eq 0 ]
+  grep -Eq '^signature=[0-9a-f]{64}$' "$CONFIDENTIALITY_SIG_FILE"
+  CONFIDENTIALITY_REQUIRE_HMAC=1 run bash "$SCRIPT" verify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HMAC: VERIFIED"* ]]
+}
