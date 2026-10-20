@@ -55,7 +55,7 @@ def load_policy() -> dict:
     raise ReviewerFailure("politica action-review-policy.md ilegible o incompleta")
 
 
-_REL_PATH = re.compile(r"^(?![/~-])[\w@+,=:%*?./-]+$")
+_REL_PATH = re.compile(r"^(?![/~-])[\w@+,=:%./-]+$")
 _REV = re.compile(r"^(?![/~-])[\w@~^{}:./-]+$")
 _NUM = re.compile(r"^\d+$")
 _SHORT_NUM = re.compile(r"^-\d+$")
@@ -97,6 +97,30 @@ _LONG = {
 }
 
 
+_EXPANSION = re.compile(r"[*?\[\]{}~$]")
+
+
+_GIT_EXPANSION = re.compile(r"[*?\[\]$]|^~|[{][^}]*,")
+
+
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root.rstrip("/") + "/")
+
+
+def _confined(cwd: str, tokens: list) -> bool:
+    """Directorio de trabajo y rutas existentes resuelven (symlinks incluidos) dentro del proyecto."""
+    root = os.path.realpath(project_dir())
+    base = os.path.realpath(cwd or root)
+    if not _inside(base, root):
+        return False
+    for tok in tokens:
+        if tok.startswith("-") or not os.path.lexists(os.path.join(base, tok)):
+            continue
+        if not _inside(os.path.realpath(os.path.join(base, tok)), root):
+            return False
+    return True
+
+
 def _safe_path(tok: str) -> bool:
     return bool(_REL_PATH.match(tok)) and ".." not in tok.split("/") and not tok.startswith(".*")
 
@@ -125,7 +149,7 @@ def _model_ok(key: str, args: list) -> bool:
     if positional == "none":
         return not pos
     if positional == "any":
-        return True
+        return all("/" not in t and ".." not in t for t in pos)
     if positional == "bare":
         return all("/" not in t and _REL_PATH.match(t) for t in pos)
     if positional == "date":
@@ -137,7 +161,7 @@ def _model_ok(key: str, args: list) -> bool:
     return all(_safe_path(t) for t in pos)
 
 
-def is_trivial(command: str, policy: dict) -> bool:
+def is_trivial(command: str, policy: dict, cwd: str = "") -> bool:
     """Lista cerrada: programa exacto (no prefijo de cadena) y argumentos modelados. Duda -> revisor."""
     cmd = command.strip()
     if not cmd or SHELL_META.search(cmd) or policy["sensitive"].search(cmd):
@@ -148,11 +172,24 @@ def is_trivial(command: str, policy: dict) -> bool:
         return False
     if not tokens or "/" in tokens[0] or tokens[0].startswith("~"):
         return False
+    expansion = _GIT_EXPANSION if tokens[0] == "git" else _EXPANSION  # HEAD~1 y HEAD^{tree} no se expanden
+    if any(expansion.search(t) for t in tokens[1:]) or not _confined(cwd, tokens[1:]):
+        return False
     key = " ".join(tokens[:2]) if tokens[0] == "git" and len(tokens) > 1 else tokens[0]
     if key not in _SPECS or key not in policy["allowlist"]:
         return False
     args = tokens[2:] if key.startswith("git ") else tokens[1:]
     return _model_ok(key, args)
+
+
+def call_cwd(payload: dict) -> str:
+    """Directorio de trabajo efectivo de la llamada: workdir (OpenCode), cwd o directory (otros frontends)."""
+    tool_input = payload.get("tool_input") or {}
+    for src in (tool_input, payload):
+        for key in ("workdir", "cwd", "directory"):
+            if isinstance(src.get(key), str) and src[key].strip():
+                return src[key]
+    return ""
 
 
 def task_text() -> str:
@@ -294,7 +331,7 @@ def review(payload: dict) -> int:
 
     try:
         policy = load_policy()
-        if is_trivial(command, policy):
+        if is_trivial(command, policy, call_cwd(payload)):
             return 0
         verdict, why = ask_reviewer(build_prompt(policy["rules"], task_text(), command))
     except ReviewerFailure as exc:
@@ -333,7 +370,7 @@ def main(argv: list) -> int:
             return 0
         command = str((payload.get("tool_input") or {}).get("command") or "")
         try:
-            trivial = is_trivial(command, load_policy())
+            trivial = is_trivial(command, load_policy(), call_cwd(payload))
         except ReviewerFailure:
             trivial = False
         print("trivial-skip" if trivial else "would-review")

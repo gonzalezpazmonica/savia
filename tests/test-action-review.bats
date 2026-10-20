@@ -237,3 +237,38 @@ os.environ['SAVIA_ACTION_REVIEW_TIMEOUT']='600'
 m.ask_reviewer('x'); print(seen['t'])"
   [ "$output" = "25.0" ]
 }
+
+# dry <json-payload>
+dry() { printf '%s' "$1" | bash "$HOOK" --dry-run; }
+
+@test "P1-2: workdir/cwd fuera del proyecto, o que escapa por symlink, no es trivial" {
+  mkdir -p "$FIX/src" "$BATS_TEST_TMPDIR/fuera"
+  ln -s "$BATS_TEST_TMPDIR/fuera" "$FIX/enlace"
+  run dry '{"tool_name":"Bash","tool_input":{"command":"cat .config/hosts.yml","workdir":"/home/monica"}}'
+  [ "$output" = "would-review" ]
+  run dry "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\",\"workdir\":\"$BATS_TEST_TMPDIR/fuera\"}}"
+  [ "$output" = "would-review" ]
+  run dry "{\"tool_name\":\"Bash\",\"cwd\":\"/etc\",\"tool_input\":{\"command\":\"ls\"}}"
+  [ "$output" = "would-review" ]
+  run dry "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\",\"workdir\":\"$FIX/enlace\"}}"
+  [ "$output" = "would-review" ]
+  run dry '{"tool_name":"Bash","tool_input":{"command":"cat enlace"}}'
+  [ "$output" = "would-review" ]
+  run dry "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"ls\",\"workdir\":\"$FIX/src\"}}"
+  [ "$output" = "trivial-skip" ]
+}
+
+@test "P1-2: comodines, expansiones, rutas absolutas y .. no son triviales (echo incluido)" {
+  for c in "cat .en?" "cat .config/g?/host?.yml" "grep -r -i passw .?*/.c?nfig" "cat .?*/.?*/.?*/etc/hostname" \
+           "echo /home/monica/*" "echo *" "echo ~" "echo ../x" "echo /etc" "ls [a-z]*" "ls {a,b}" "cat src/*.py"; do
+    run dry "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}}"
+    [ "$output" = "would-review" ] || { echo "trivial: $c"; return 1; }
+  done
+}
+
+@test "P1-2: lo ordinario sigue siendo trivial" {
+  for c in "echo hola" "git diff HEAD~1" "ls -la" "git log --oneline -5"; do
+    run dry "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}}"
+    [ "$output" = "trivial-skip" ] || { echo "no trivial: $c"; return 1; }
+  done
+}
