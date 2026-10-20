@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 0a228f62146c | resources: 1450
-> 295 commands · 139 skills · 90 agents · 926 scripts
+> hash: a97b8268155a | resources: 1451
+> 295 commands · 139 skills · 90 agents · 927 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -872,6 +872,7 @@
 [planning] lib/adb-wrapper —  — script:scripts/lib/adb-wrapper.sh
 [planning] lib/concurrent-executor — bounded,concurrent,execution,executor,parallel — script:scripts/lib/concurrent-executor.sh
 [planning] lib/enterprise-helpers — checks,enterprise,helpers,module,sourceable — script:scripts/lib/enterprise-helpers.sh
+[planning] lib/git-env-clean — aísla,clean,config,entorno,proceso — script:scripts/lib/git-env-clean.sh
 [planning] lib/llm-healer — healer,slice — script:scripts/lib/llm-healer.sh
 [planning] lib/mock-env — environment,library,mock,reusable,scripts — script:scripts/lib/mock-env.sh
 [planning] lib/os-detect — defaults,detect,detection,path,portable — script:scripts/lib/os-detect.sh

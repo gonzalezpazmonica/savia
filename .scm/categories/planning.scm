@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 633 resources
+> 634 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
@@ -320,6 +320,7 @@
 - **lib/adb-wrapper** (script): ============================================================================
 - **lib/concurrent-executor** (script): concurrent-executor.sh — Semaphore-bounded parallel task execution
 - **lib/enterprise-helpers** (script): enterprise-helpers.sh — Sourceable helpers for Enterprise module checks
+- **lib/git-env-clean** (script): git-env-clean.sh — aísla el proceso del repo/config git del entorno.
 - **lib/llm-healer** (script): llm-healer.sh — SE-076 Slice 3
 - **lib/mock-env** (script): mock-env.sh — Reusable mock environment library for pm-workspace scripts
 - **lib/os-detect** (script): scripts/lib/os-detect.sh — Portable OS detection and path defaults

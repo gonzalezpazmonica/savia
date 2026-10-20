@@ -1,6 +1,6 @@
 {
-  "hash": "1314f1c752b5",
-  "total": 1450,
+  "hash": "e3895c3504d0",
+  "total": 1451,
   "resources": [
     {
       "category": "analysis",
@@ -11527,6 +11527,20 @@
       "kind": "script",
       "path": "scripts/lib/enterprise-helpers.sh",
       "description": "enterprise-helpers.sh — Sourceable helpers for Enterprise module checks"
+    },
+    {
+      "category": "planning",
+      "name": "lib/git-env-clean",
+      "intents": [
+        "aísla",
+        "clean",
+        "config",
+        "entorno",
+        "proceso"
+      ],
+      "kind": "script",
+      "path": "scripts/lib/git-env-clean.sh",
+      "description": "git-env-clean.sh — aísla el proceso del repo/config git del entorno."
     },
     {
       "category": "planning",

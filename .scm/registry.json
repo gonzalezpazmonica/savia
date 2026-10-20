@@ -17805,6 +17805,27 @@
       "frontend_support": [
         "opencode"
       ],
+      "id": "script:scripts/lib/git-env-clean",
+      "intents": [
+        "aísla",
+        "clean",
+        "config",
+        "entorno",
+        "proceso"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/lib/git-env-clean.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "opencode"
+      ],
       "id": "script:scripts/lib/llm-healer",
       "intents": [
         "healer",
@@ -29607,7 +29628,7 @@
       "tests": []
     }
   ],
-  "content_hash": "1314f1c752b5",
+  "content_hash": "e3895c3504d0",
   "deferred_kinds": [
     "rule",
     "hook"
