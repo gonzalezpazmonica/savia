@@ -32,7 +32,7 @@ for rec in sys.stdin.read().split("\x1e"):
         continue
     sha, par, ae, msg = rec.split("\t", 3)
     out.append({"sha": sha, "parents": [{}] * len(par.split()),
-                "author": {"login": sys.argv[1], "type": sys.argv[2]},
+                "author": None if sys.argv[1] == "null" else {"login": sys.argv[1], "type": sys.argv[2]},
                 "commit": {"author": {"email": ae}, "message": msg}})
 print(json.dumps(out))' "$1" "$2" > "$T/c.json"
 }
@@ -108,4 +108,14 @@ Signed-off-by: Beto <beto@example.com>"; json ana User; run_dco
 @test "AC1: CONTRIBUTING documenta el DCO" {
   [ "$(grep -c 'Signed-off-by' "$REPO_ROOT/CONTRIBUTING.md")" -ge 1 ]
   grep -q 'Developer Certificate of Origin' "$REPO_ROOT/CONTRIBUTING.md"
+}
+
+@test "autor sin cuenta de GitHub vinculada y con -s pasa (author null no desplaza campos)" {
+  mk -s "feat: a"; json null ""; run_dco
+  [ "$status" -eq 0 ]
+}
+
+@test "autor sin cuenta de GitHub vinculada y sin -s falla" {
+  mk "" "feat: a"; json null ""; run_dco
+  [ "$status" -ne 0 ]
 }

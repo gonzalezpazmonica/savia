@@ -43,7 +43,7 @@ jobs:
             exit 0
           fi
           fail=0
-          while IFS=$'\t' read -r sha parents login type email msg_b64; do
+          while IFS=$'\x1f' read -r sha parents login type email msg_b64; do
             [ "$parents" -gt 1 ] && continue
             if [ "$type" = "Bot" ] || [[ "$login" == *"[bot]" ]]; then continue; fi
             skip=0
@@ -54,7 +54,7 @@ jobs:
               echo "Sin Signed-off-by coincidente con el autor: ${sha:0:12} (${email})" | tee -a "$summary"
               fail=1
             fi
-          done < <(jq -r '.[] | [.sha, (.parents|length), (.author.login // ""), (.author.type // ""), .commit.author.email, (.commit.message | @base64)] | @tsv' "$commits_json")
+          done < <(jq -r '.[] | [.sha, (.parents|length|tostring), (.author.login // ""), (.author.type // ""), (.commit.author.email // ""), (.commit.message | @base64)] | join("\u001f")' "$commits_json")
           if [ "$fail" = 1 ]; then
             {
               echo
