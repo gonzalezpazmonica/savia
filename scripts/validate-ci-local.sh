@@ -248,6 +248,11 @@ check_clean_state() {
   clean_state_report "$REPO_ROOT_CI" 2>&1 | grep -E '^(PASS|WARN) ' > "$TMPDIR_CI/9b-clean-state"
 }
 
+# ── SE-453: gates en «unknown» frente al baseline (primer ciclo: aviso) ──
+check_gate_unknown() {
+  bash "$REPO_ROOT_CI/scripts/gate-unknown-check.sh" > "$TMPDIR_CI/9c-gate-unknown" 2>&1
+}
+
 # ── Run checks in parallel ───────────────────────────────────────────────
 check_branch &
 check_coherence &
@@ -257,6 +262,7 @@ check_settings_json &
 check_changelog &
 check_generated_fresh &
 check_lockfiles &
+check_gate_unknown &
 $CLEAN_STATE && check_clean_state &
 if ! $QUICK_MODE; then
   check_required_files &

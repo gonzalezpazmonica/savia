@@ -135,11 +135,11 @@ else
   warn "Python3 not found (optional — needed for capacity calculator)"
 fi
 
-# jq (optional)
+# jq (required by blocking guards, SE-453)
 if command -v jq &>/dev/null; then
   ok "jq $(jq --version 2>&1 | grep -oE '[0-9]+\.[0-9.]+' || echo 'found')"
 else
-  warn "jq not found (optional — some scripts need it). Install: $(suggest jq)"
+  warn "jq not found — REQUIRED by the security guards (credential-leak, force-push, infra, git discipline): without it they fall back to grep parsing and refuse what they cannot parse. Install: $(suggest jq)"
 fi
 
 if [[ "$MISSING" -eq 1 ]]; then

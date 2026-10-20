@@ -61,7 +61,7 @@ log_telemetry() {
   fi
 }
 
-command -v jq >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || { source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit sycophancy-strip; }
 
 # Read input. If stdin has a JSON envelope (hook context), extract draft.
 # Otherwise, treat stdin as raw draft text.

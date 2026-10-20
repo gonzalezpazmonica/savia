@@ -20,7 +20,7 @@ if [[ -f "$LIB_DIR/profile-gate.sh" ]]; then
 fi
 
 if ! command -v jq &>/dev/null; then
-  exit 0
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit acm-turn-marker
 fi
 
 INPUT=""

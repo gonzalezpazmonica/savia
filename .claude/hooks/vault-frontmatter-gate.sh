@@ -57,7 +57,7 @@ if [[ ! -t 0 ]]; then
 fi
 [[ -z "$INPUT" ]] && exit 0
 
-command -v jq >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || { source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit vault-frontmatter-gate; }
 
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null) || exit 0
 [[ -z "$FILE_PATH" ]] && exit 0

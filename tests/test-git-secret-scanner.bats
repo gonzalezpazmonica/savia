@@ -11,6 +11,7 @@ setup() {
   mkdir -p "$WORK/proj/scripts" "$WORK/bin"
   cp "$REPO_ROOT/scripts/git-history-secret-scan.sh" "$REPO_ROOT/scripts/install-prepush-hook.sh" \
      "$REPO_ROOT/scripts/git-history-secret-remediate.sh" "$WORK/proj/scripts/"
+  mkdir -p "$WORK/proj/scripts/lib"; cp "$REPO_ROOT/scripts/lib/gate-result.sh" "$WORK/proj/scripts/lib/"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/proj/scripts/pre-push-security-gate.sh"
   SCAN="$WORK/proj/scripts/git-history-secret-scan.sh"
   REPO="$WORK/repo"
@@ -91,9 +92,9 @@ finding() { printf '{"RuleID":"%s","Description":"%s","File":"cfg.env","StartLin
   [ ! -e "$GL_ARGS" ]
 }
 
-@test "scan: sin gitleaks ⇒ exit 1 con instrucciones; parámetro invalid ⇒ exit 1" {
+@test "scan: sin gitleaks ⇒ exit 4 (unknown, SE-453) con instrucciones; parámetro inválido ⇒ exit 1" {
   run env PATH="/usr/bin:/bin" bash "$SCAN" --repo "$REPO"
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 4 ]
   [[ "$output" == *"gitleaks no está instalado"* ]]
   run bash "$SCAN" --nada
   [ "$status" -eq 1 ]

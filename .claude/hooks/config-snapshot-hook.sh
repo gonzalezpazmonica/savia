@@ -9,7 +9,7 @@ set -uo pipefail
 # Ref: docs/specs/SE-405-harness-observability-increments.spec.md
 
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-command -v jq >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || { source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit config-snapshot-hook; }
 path=$(jq -r '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null) || exit 0
 [[ -z "$path" ]] && exit 0
 case "$path" in
