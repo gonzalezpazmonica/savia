@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-20 SE-428 IMPLEMENTING
+
+Delta OpenCode v2: motor v2 con v1 congelado, un serve por espacio, pin por operaciones usadas, attach por --server (D1-D4, D7)
+
+## 2026-10-20 SE-434 APPROVED
+
+Delta OpenCode v2: un serve por espacio, policies y permissions, external_directory ask (D2, D6)
+
 ## 2026-10-14 SE-439 APPROVED
 
 AskUserQuestion 2026-10-14: aprobada con las recomendaciones de Savia en las cuatro decisiones (base, agentes, arranque y prioridad)

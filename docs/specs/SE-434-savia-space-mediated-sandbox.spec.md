@@ -2,7 +2,7 @@
 status: APPROVED
 approved_at: 2026-10-07
 approved_by: "gonzalezpazmonica — spec: AskUserQuestion 2026-10-05 «Apruebo, pero S1 y S2 a la vez»; delta FS-6b (D-MED-9): 2026-10-07, aprobado con condición APTO de rev-fs6b REV5"
-delta_approved: "gonzalezpazmonica 2026-10-07, FS-6b (D-MED-9), aprobado con condición APTO de rev-fs6b REV5"
+delta_approved: "gonzalezpazmonica 2026-10-07, FS-6b (D-MED-9), aprobado con condición APTO de rev-fs6b REV5; gonzalezpazmonica 2026-10-20, delta «OpenCode v2» (D2, D6): endurecimiento con policies y permissions, un serve por espacio"
 priority: P0
 developer_type: agent-team
 created: 2026-10-05
@@ -15,6 +15,10 @@ resource: https://code.claude.com/docs/en/sandboxing.md
 timeline:
   - from: "2026-10-07"
     learned: "2026-10-07"
+    value: "APPROVED"
+    source: "spec-lifecycle:auto"
+  - from: "2026-10-20"
+    learned: "2026-10-20"
     value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
@@ -398,9 +402,10 @@ Cada slice es un PR Draft independiente, con TDD y con verificación contra el m
 | S4 | Desbloqueo: registro, ampliar el entorno, intención explícita y móvil | AC10–AC13 |
 | S5 | Detección de backend, Seatbelt en macOS y guía del doctor y del instalador por plataforma (D-MED-6) | AC15–AC16 |
 | S6 | FS-6b, por partes: limpieza de enlaces N2 en `Sandbox::prepare`; alias de montaje; lanzador del motor con máscaras y `PinDir` (bwrap y `userns`); dos PID y medida desde fuera; reenganche; cúpula nueva o movida; fallo cerrado; intermediario del bash (`exec` de orden e interactivo, política de Space, autenticación, deny-list, ficha y registro, ciclo de vida); formatters y LSP desactivados en mediado con motor de nube y alguna N2; `engineN2` y `bashBroker` en el doctor | AC17–AC45, AC4, AC15 y AC16 modificados |
+| S7 | Delta «OpenCode v2»: superposición nativa de v2 (`permissions` y `policies`), `external_directory: ask`, verificador sobre `GET /api/config`, orden de reglas y guardarraíles del servicio único | S6 | AC46–AC50, AC44 modificado |
 | Cierre | Validación de experiencia con el modo mediado activo, sobre la integración de S1–S5 | AC14 |
 
-Orden: S1 y S2 en paralelo (decisión de la operadora al aprobar); S3 sobre S1 y S2; S4 sobre S3; S5 sobre S1; S6 sobre S1 y S5. S6 bloquea dar FS-6 por cumplido y anunciar el modo mediado con motor de nube.
+Orden: S1 y S2 en paralelo (decisión de la operadora al aprobar); S3 sobre S1 y S2; S4 sobre S3; S5 sobre S1; S6 sobre S1 y S5. S6 bloquea dar FS-6 por cumplido y anunciar el modo mediado con motor de nube. S7 bloquea usar OpenCode 2 como motor en mediado.
 
 ## Criterios de aceptación
 
@@ -572,6 +577,7 @@ Las pruebas con motor real usan `opencode` (se saltan, diciéndolo, si no está)
   - En mediado con motor de nube y una N2, tras `edit` de `ok/x.fmt`, ninguna marca existe; `/config` del motor muestra `formatter: false` y `lsp: false`; el doctor muestra `formatters: off` y `lsp: off`.
   - Una superposición que los reactivara hace fallar la comparación final de configuración y el motor no se usa.
   - Control: sin cúpulas N2 o en interactivo, las dos marcas aparecen (la prueba mide algo).
+  - **Delta OpenCode v2:** OpenCode 2 acepta `lsp` en la configuración pero no ejecuta servidores LSP. En v2 la marca del servidor LSP `probe` no aparece nunca, con o sin cúpulas N2, y la aserción de `lsp: false` se mantiene en la configuración anclada. El control de «la prueba mide algo» se cumple solo con el formatter. Con v1 (congelado) el AC se cumple tal cual.
 - **AC45 (terminal de la operadora por `exec` interactivo):**
   - En mediado, abrir una terminal desde la UI de Space crea la PTY del motor sin `command`, y la shell corre dentro del sandbox del agente:
     - `test -t 0` es verdadero y `stty size` devuelve el tamaño de la terminal de la UI;
@@ -583,6 +589,11 @@ Las pruebas con motor real usan `opencode` (se saltan, diciéndolo, si no está)
   - Sin ficha de terminal, un `exec` interactivo con un terminal válido (un MCP de prueba que abre su propia PTY y ejecuta el cliente sin argumentos) termina con 126 y `[Sin aprobación]` y no lanza shell. Lo mismo con una ficha caducada (más de 10 s) y con una ficha ya usada.
   - Dos `exec` interactivos sobre una sola ficha: se acepta uno y se rechaza el otro, y el registro dice cuál consumió la ficha.
   - El cliente sin argumentos y con el descriptor 0 en una tubería termina con 126 y `argumentos no admitidos` sin conectar al socket: el intermediario no registra ninguna conexión.
+- **AC46 (v2, un `serve` por espacio):** con el motor v2 real en su espacio, `ss -ltnp` en el host muestra solo el puerto asignado a ese espacio en `127.0.0.1` y ningún proceso del motor en el puerto 49374. El motor escribe únicamente bajo los `XDG_*` y el `OPENCODE_DB` del espacio. Desde una PTY del motor, `opencode run "x"` sin `--server` no abre ni se conecta al puerto 49374 y la `policies` de §Deltas lo deniega desde la herramienta `shell` (también `opencode2`).
+- **AC47 (v2, `policies` en las máscaras N2):** con la superposición N2 de v2 y la frontera de AC17 desactivada para la prueba, `read`, `edit` y `list` sobre `vaults/privada/n.md` por ruta directa devuelven denegación dura de `policies` (`tool.use`), también tras responder «permitir siempre» a una petición equivalente. Con `permissions` solo, sin `policies`, la prueba falla (mide algo).
+- **AC48 (v2, `external_directory`):** la superposición de mediado fija `external_directory: ask`. Un `read` de `/etc/hostname` fuera del workspace pregunta. Una superposición que lo dejara en `allow` hace fallar la comparación final contra `GET /api/config` y el motor no se usa.
+- **AC49 (v2, orden de reglas):** con las reglas `shell * ask` y, después, `shell git status allow`, `git status` se ejecuta; con el orden inverso, pregunta. La prueba usa el normalizador real de v2 sobre `GET /api/config`, y el verificador de Space da el mismo resultado. Una superposición con acciones v1 (`permission`, `bash`) se normaliza y se verifica igual que su equivalente v2.
+- **AC50 (v2, no aflojar):** ninguna superposición ni configuración de proyecto puede relajar un `deny` de `policies` ni pasar `ask` a `allow`; la comparación final lo detecta (T-NEVER-LOOSEN) y el motor no se usa. `share` y `doom_loop` no se exigen porque v2 no los tiene.
 
 ## Fuera de alcance
 
@@ -629,15 +640,43 @@ Las pruebas con motor real usan `opencode` (se saltan, diciéndolo, si no está)
 - **Dos PID.** Los caminos que hoy usan el PID del hijo (`is_engine_process`, el registro de ejecución, X1, la parada) pasan a usar el de OpenCode, y la parada termina en el init. Un fallo aquí deja motores huérfanos o apunta a bwrap; lo cubren AC28 y AC33.
 - **Respaldo `userns` como código nuevo de bajo nivel** (`unshare`, mapas de uid, init mínimo, cierre de descriptores). Se mantiene mínimo, monohilo y separado del servidor, y pasa las mismas pruebas que el backend bwrap (AC29).
 
+## Deltas aprobados
+
+- **2026-10-20** (operadora, decisiones D2 y D6 del análisis de OpenCode 2; el motor pasa a v2 y
+  v1 queda congelado, ver SE-428): endurecimiento nativo de OpenCode 2. La spec no cambia de estado.
+  - **Un `serve` por espacio (D2, invariante de seguridad).** Las máscaras N2 existen porque
+    `read`, `edit` y `list` corren en el proceso del motor, que Space lanza dentro de un espacio de
+    montaje con las cúpulas tapadas. El servicio único por usuario de OpenCode 2 correría fuera de
+    ese espacio, vería las cúpulas y compartiría base de datos y contraseña entre proyectos. Space
+    no lo usa nunca: lanza `opencode serve --hostname 127.0.0.1 --port N` por espacio, sin
+    `--service`, con `XDG_*` y `OPENCODE_DB` propios. La configuración del espacio fija
+    `service.disabled: true`, y una `policies` `tool.use` deniega `shell` con órdenes `opencode*` y
+    `opencode2*` para que un agente no arranque ni alcance el servicio del usuario.
+  - **Mecanismo de endurecimiento (D6).** En v2, `policies` (denegación dura `tool.use`, que ni
+    «permitir siempre» salta) es el mecanismo principal para las máscaras N2 por patrón
+    (`read:<cúpula>/*`, `edit:<cúpula>/*`, `list:<cúpula>/*`), junto a `permissions`, que conserva
+    el modelo de preguntar. `harden_for_n2` se mantiene como defensa en profundidad, como en v1.
+  - **`external_directory: ask` explícito (R3).** OpenCode 2 permite `external_directory` por
+    defecto (v1 preguntaba). La superposición de mediado lo fija en `ask` y la comparación final
+    de configuración lo exige, como `permission` (T-NEVER-LOOSEN).
+  - **Nombres y orden.** `permission` pasa a `permissions`, un array ordenado donde decide el orden;
+    `bash` pasa a `shell`, `task` a `subagent`, `write` y `patch` a `edit`. `share` y `doom_loop`
+    desaparecen. El verificador compara contra `GET /api/config` y se prueba el orden de reglas con
+    el normalizador real de v2, no con una copia.
+  - **Fichas (§5.7).** El permiso de bash se llama `shell` en v2. La ficha se sigue casando byte a
+    byte con la orden de `$SHELL -c`; si no coincide, rige la regla ya escrita (deny-list completa).
+  - **Sin cambios:** el aislamiento por bwrap o `userns`, el intermediario, el proxy y las
+    prohibiciones duras. v1 queda congelado: ninguna de estas reglas se adapta a v1.
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched
 
-| Componente | Claude Code | OpenCode v1.14 |
+| Componente | Claude Code | OpenCode (v2; v1 congelado) |
 |---|---|---|
-| Mediación de permisos de Space | No aplica (Space orquesta el motor por API) | Space configura `permission` del motor y responde a `permission.asked` |
+| Mediación de permisos de Space | No aplica (Space orquesta el motor por API) | Space configura `permissions` y `policies` (OpenCode 2; v1 congelado: `permission`) del motor y responde a la petición de permiso |
 | Sandbox de bash | No aplica (Claude Code tiene su propio `/sandbox`) | Space envuelve bash en su bwrap; en mediado no se carga el plugin de sandbox de terceros |
-| Guards de Savia (savia-gates) | Hooks `PreToolUse` | Plugin savia-gates fijado, como hoy |
+| Guards de Savia (savia-gates) | Hooks `PreToolUse` | Plugin savia-gates dual V1/V2 fijado (v1 mínima 1.18.29) |
 | Arranque del motor con máscaras N2 | No aplica (Space no lanza Claude Code como motor) | Space lanza `opencode serve` dentro de su espacio de usuario, montaje y PID (bwrap o lanzador `userns`), con un init mínimo, la contraseña por descriptor y los dos PID registrados |
 | Herramientas de ficheros del motor (`read`, `edit`, `list`) | No aplica: el `/sandbox` de Claude Code cubre bash, no sus herramientas de lectura | Sin cambios en OpenCode: no ven las N2 porque el proceso no las tiene montadas. La superposición de `harden_for_n2` se mantiene como defensa en profundidad |
 | Bash del agente | No aplica | `SHELL` del motor = cliente fijado de Space. Envía `-c <orden>` y sus descriptores al intermediario, que lanza el `bwrap` del agente en el host; no hay anidamiento |
@@ -653,6 +692,7 @@ Las pruebas con motor real usan `opencode` (se saltan, diciéndolo, si no está)
 - [ ] Tests cubren los dos backends de Linux (bwrap y `userns`) y los dos modos (mediado hermético, interactivo de mejor esfuerzo)
 - [ ] Bash del motor real por el intermediario en Ubuntu con `apparmor_restrict_unprivileged_userns=1`, con la sonda en `LIVE` (AC23, AC42)
 - [ ] Sin hooks nuevos: no hay nada que registrar en `savia-gates`
+- [ ] Delta OpenCode v2: AC46–AC50 con el motor v2 real, un `serve` por espacio
 
 ### Portability classification
 
