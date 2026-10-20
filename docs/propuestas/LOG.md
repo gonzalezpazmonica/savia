@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-20 SE-454 PROPOSED
+
+Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores de contenido no confiable
+
+## 2026-10-20 SE-453 PROPOSED
+
+Contrato de resultado de los gates: limpio, hallazgos y desconocido; guards blocking que no salen 0 sin evaluar
+
 ## 2026-10-20 SE-452 PROPOSED
 
 Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad; piloto sobre un contrato

@@ -7,7 +7,7 @@ author: Savia
 phase: A
 risk: L2
 related_specs: [SE-244, SE-425, SE-451]
-origin: output/research/20261020-learnings-inditex.md (L2, L3, L7)
+origin: output/research/20261020-learnings-inditex.md (L2, L3, L7); output/research/20261020-learnings-zero-breach.md (A4, delta S5)
 resource: https://github.com/InditexTech/gh-actions
 ---
 
@@ -48,6 +48,7 @@ La CI ejecuta código de terceros con el token del repositorio. Medido sobre `ma
 | S2 | `.github/dependabot.yml` con ecosistema `github-actions`, frecuencia semanal, agrupado en un único PR por ciclo. |
 | S3 | Workflows `codeql.yml` (JavaScript/TypeScript y Python) y `scorecard.yml`, con resultados a code scanning, `permissions` mínimos por job y acciones fijadas por SHA (S1). |
 | S4 | `SECURITY.md`: plazo de embargo coordinado, crédito al autor del reporte y marcado de la release de seguridad. |
+| S5 | **Requisitos de Python con hashes** (delta 2026-10-20). Lock con hashes de lo que instala `scripts/install-memory-deps.sh` (`scripts/requirements-memory.lock.txt`, generado con `pip-compile --generate-hashes`; `requirements-vector.txt` es un envoltorio de `scripts/requirements-memory.txt` y se actualiza solo si el envoltorio cambia), e instalación con `--require-hashes --only-binary=:all:`. Los `pip install` sin fijar de `ci.yml` (`pytest`) y `dependency-audit.yml` (`pip-audit`) pasan a un lock con hashes propio. `evals-ci.yaml` (`pip install deepeval … \|\| true`) queda como excepción registrada con motivo, porque su fallo se tolera a propósito. |
 
 ## Fuera de alcance
 
@@ -56,6 +57,7 @@ La CI ejecuta código de terceros con el token del repositorio. Medido sobre `ma
 - Análisis estático de bash (CodeQL no lo soporta): lo siguen cubriendo shellcheck y los BATS.
 - Dependabot para npm y pip (ya hay lockfiles, SE-425): decisión D2.
 - Scorecard como gate bloqueante: en esta spec solo mide y publica.
+- Firmar o atestar los artefactos de release: ver el delta propuesto de SE-435 (D4); hoy las releases del repo central solo publican notas.
 
 ## Criterios de aceptación
 
@@ -68,6 +70,23 @@ La CI ejecuta código de terceros con el token del repositorio. Medido sobre `ma
 | AC5 | `codeql.yml` y `scorecard.yml` existen, son YAML válido y cumplen AC1. En el PR, ambos jobs se ejecutan y suben resultados (evidencia: enlace al run; no verificable en local). |
 | AC6 | `SECURITY.md` contiene las secciones «Plazo de embargo», «Crédito» y «Releases de seguridad» (`grep -c` = 3). |
 | AC7 | `bash scripts/validate-ci-local.sh --quick` termina en verde. |
+| AC8 | (S5) `scripts/requirements-memory.lock.txt` existe, cada paquete que lista lleva al menos un `--hash=sha256:`, y `scripts/install-memory-deps.sh` instala con `--require-hashes --only-binary=:all:` (`grep -c -- '--require-hashes' scripts/install-memory-deps.sh` ≥ 1). |
+| AC9 | (S5) Test BATS `tests/test-requirements-hashed.bats`: con una línea sin hash en el lock de un fixture, falla y nombra la línea; con el lock real, pasa; ningún `pip install` de `.github/workflows/` sin `--require-hashes` ni `-r` a un lock salvo la excepción registrada de `evals-ci.yaml`. |
+
+## Evidencia del delta S5 (zero-breach)
+
+- zero-breach (Apache-2.0) instala su dependencia opcional con `--only-binary=:all:`, `--require-hashes`
+  y los hashes de las wheels de cada plataforma (lectura de `requirements-patterns.txt`, sin ejecutar).
+  Contra la sustitución de un paquete en el índice, `pip-audit` (SE-244) no protege: detecta CVE
+  conocidas, no un artefacto cambiado.
+- Medido sobre `main` (2c54b4f63): `scripts/requirements-memory.txt` fija tres paquetes directos
+  (`sentence-transformers`, `faiss-cpu`, `numpy`) con versión y **0 hashes**; las transitivas no tienen
+  versión ni hash; `torch==2.8.0` se instala por separado desde el índice CPU de PyTorch en
+  `install-memory-deps.sh`. `install-smoke.yml` no usa `pip`.
+- Riesgo propio de S5: no existe wheel de alguna dependencia para alguna plataforma. Entonces el lock
+  declara la plataforma no soportada, no relaja `--only-binary` (`feedback_root_cause_always`).
+- Decisión de la operadora **D4**: tratamiento de `torch` (su wheel CPU solo está en otro índice): el
+  lock lo cubre con `--index-url` y hashes, o se declara excepción.
 
 ## Riesgos
 
@@ -81,7 +100,7 @@ La CI ejecuta código de terceros con el token del repositorio. Medido sobre `ma
 
 ## Licencia de lo reutilizado
 
-Solo se copia el patrón (fijar a SHA, Dependabot, workflows estándar), no código. Las acciones
+Solo se copia el patrón (fijar a SHA, Dependabot, workflows estándar, requisitos con hashes de zero-breach, Apache-2.0), no código. Las acciones
 oficiales `ossf/scorecard-action` y `github/codeql-action` se usan como dependencia de CI, no se
 redistribuyen. Su licencia no se verificó en el repositorio de cada una: comprobarla en S3 antes de
 mergear (el informe de investigación las daba por Apache-2.0 sin contrastarlo). Compatible con la
@@ -89,13 +108,14 @@ licencia MIT de Savia en los dos casos habituales.
 
 ## Esfuerzo
 
-S: una sesión corta. S1+S2 son mecánicos; S3 depende de que los jobs corran en la CI real.
+S: una sesión corta. S1+S2 son mecánicos; S3 depende de que los jobs corran en la CI real. S5 es S, salvo que el lock de `torch` obligue a una excepción (D4).
 
 ## Decisiones pendientes de la operadora
 
 - **D1**: plazo de embargo de divulgación: 30 días (valor de referencia observado) u otro.
 - **D2**: ampliar Dependabot a npm y pip, agrupado, o dejarlo para una spec posterior.
 - **D3**: lenguajes de CodeQL en la primera versión (propuesta: JavaScript/TypeScript y Python).
+- **D4** (delta S5): `torch` en el lock con hashes: cubrirlo con el índice CPU y sus hashes o declarar excepción. Si se acepta D2 (Dependabot para pip), S5 es su prerrequisito: sin lock con hashes, Dependabot propone cambios que no se pueden verificar por hash.
 
 ## Referencias cruzadas
 

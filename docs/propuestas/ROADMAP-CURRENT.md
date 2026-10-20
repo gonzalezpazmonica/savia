@@ -11,9 +11,9 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: desbloquea todo el cierre; esfuerzo: slice pequeño; baseline variable.
 
 - **S10 · P0 · fase A** — Cadena de suministro de la CI
-  Acción: Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo.
-  Entrada: Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas.
-  Salida: Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz.
+  Acción: Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo. Delta S5: lock con hashes y --require-hashes para lo que instala install-memory-deps.sh y para los pip install sin fijar de la CI.
+  Entrada: Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.
+  Salida: Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: protege cada PR de la cola; esfuerzo: slice pequeño (S).
 
 - **S02 · P0 · fase A** — Seguridad, evidencia y cierre de Vaults/Files
@@ -46,6 +46,12 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Salida: Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: hace cumplir autonomous-safety donde hoy es texto; esfuerzo: S1, S2 y S4 pequeños; S3 medio.
 
+- **S17 · P1 · fase A** — Contrato de resultado de los gates
+  Acción: S0 auditar escáneres y guards blocking (vocabulario, dependencia ausente, topes); contrato que extiende checker-fail-closed; guards sin jq degradan a grep o salen 2; topes que producen unknown.
+  Entrada: Aprobación de SE-453 y decisión D1-D3; S2 probado en los dos frontends.
+  Salida: Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita falsos verdes en los gates de los que dependen merge-sprint y la CI; alimenta la cobertura no verificada de SE-444; esfuerzo: S0, S1 y S2 pequeños; S3 medio.
+
 - **S16 · P1 · fase A** — Decisión de gobernanza de contribuciones
   Acción: Decidir DCO, CLA o ninguno; si DCO, texto en CONTRIBUTING y workflow sin checkout de código del PR; REUSE solo si hay demanda.
   Entrada: Decisión D1-D4 de la operadora; un CLA de relicenciación contradiría LICENSE-ENTERPRISE.md y exige antes spec propia con revisión legal.
@@ -71,10 +77,10 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evidencia para portabilidad y pilotos; esfuerzo: slices por frontend/invariante.
 
 - **S14 · P2 · fase D** — Higiene de contexto y operación
-  Acción: SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad.
+  Acción: SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad. SE-448 S4 (defang) y categoría third-party-directive; SE-454 invariantes negativos como tests.
   Entrada: Aprobación de cada spec; se ejecutan por separado, uno por vez; sin hueco WIP nuevo.
-  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición.
-  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: tres slices pequeños independientes.
+  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
+  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: cinco slices pequeños independientes.
 
 - **S07 · P2 · fase D** — Kernel mínimo y portabilidad
   Acción: Ablación acotada F0 revisada; SAM F5/F6; runtime/canaries comunes y coste de complejidad. Curación de skills sólo si demuestra utilidad.

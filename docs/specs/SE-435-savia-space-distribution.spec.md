@@ -104,6 +104,31 @@ repositorios de paquetes, fórmulas) hasta entonces.
 - **Paquetes para terceros al final.** D1 sigue primero; D2–D4 se publican cuando el resto de Savia
   Space esté completo (ver «Orden» en «Slices»). La spec sigue APPROVED.
 
+## Deltas propuestos (pendientes de aprobación de la operadora)
+
+Los deltas de esta sección **no están aprobados**: no modifican `status` ni `delta_approved`, y no
+cambian el alcance de D4 hasta que la operadora los apruebe.
+
+- **Releases verificables (D4, AC7 concretado).** Origen: `output/research/20261020-learnings-zero-breach.md`
+  (A5, lectura de un proyecto Apache-2.0 que publica builds reproducibles y manifiesto firmado, sin
+  ejecutar). Hoy AC7 es una sola frase. El delta la concreta en cinco condiciones verificables:
+  1. **Doble build y comparación**: un job de CI construye cada artefacto dos veces y `cmp` exige
+     bytes idénticos; si difieren, la release no se publica.
+  2. **Manifiesto firmado**: `SHA256SUMS` con firma separada del artefacto y del manifiesto.
+  3. **Huella por canal independiente**: la huella completa de la clave se publica en un canal distinto
+     del de descarga, y el documento de verificación explica cómo comprobarla.
+  4. **Lo que la firma no demuestra**: el documento de verificación dice expresamente que un checksum
+     no autentica al publicador y que la firma no prueba que el código sea seguro, solo quién lo
+     publicó.
+  5. **Custodia de la clave**: la clave privada no vive en el repositorio ni en CI en claro; quién la
+     custodia lo decide la operadora (decisión D4-1), no el agente.
+  Nuevo criterio propuesto **AC7b**: en un runner limpio, `scripts/verify-release.sh <artefacto>`
+  (a crear en D4) descarga el manifiesto, verifica la firma con la huella publicada, compara el
+  checksum y sale 0; con un byte alterado del artefacto sale distinto de 0 y nombra la causa.
+  Contexto: las releases del repo central hoy solo publican notas y `scripts/update.sh` actualiza con
+  `git pull`, así que no hay artefacto que firmar fuera de Space; por eso el delta espera a D2–D4.
+  Esfuerzo M a L; riesgo medio por la custodia de clave.
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched

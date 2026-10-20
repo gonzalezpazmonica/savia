@@ -1009,7 +1009,7 @@
       "priority": "P1",
       "title": "Savia Space: distribución agnóstica (paquetes nativos y savia-space setup)",
       "evidence": "docs/specs/SE-435-savia-space-distribution.spec.md",
-      "note": "Decisión D-MED-7; aprobada 2026-10-05",
+      "note": "Decisión D-MED-7; aprobada 2026-10-05 Delta propuesto 2026-10-20 (D4 releases verificables, AC7b), pendiente de aprobación.",
       "phase": "A",
       "approval": "Operadora 2026-10-05 (AskUserQuestion): 'Apruebo, empieza por D1'"
     },
@@ -1038,7 +1038,7 @@
       "status": "PROPOSED",
       "priority": "P0",
       "title": "Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada",
-      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias.",
+      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes).",
       "evidence": "docs/specs/SE-442-ci-supply-chain-hardening.spec.md",
       "phase": "A"
     },
@@ -1092,7 +1092,7 @@
       "status": "PROPOSED",
       "priority": "P2",
       "title": "Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos",
-      "note": "El texto invisible ya está cubierto (SPEC-193, SE-028, SE-060); S0 mide superficie antes de construir.",
+      "note": "El texto invisible ya está cubierto (SPEC-193, SE-028, SE-060); S0 mide superficie antes de construir. Delta 2026-10-20: S4 defang de indicadores y categoría third-party-directive (evidencia de inyección en documentos de terceros).",
       "evidence": "docs/specs/SE-448-external-content-leak-canary-urls.spec.md",
       "phase": "D"
     },
@@ -1131,6 +1131,24 @@
       "note": "Piloto sobre un solo contrato; prematura sin implementadores externos, se encola dentro del laboratorio de conformidad.",
       "evidence": "docs/specs/SE-452-contract-conformance-suites.spec.md",
       "phase": "C"
+    },
+    {
+      "id": "SE-453",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Contrato de resultado de los gates: limpio, hallazgos y desconocido",
+      "note": "Tres vocabularios de salida incompatibles en tres escáneres; block-credential-leak y block-force-push (blocking) salen 0 sin jq (reproducido en el primero). Extiende checker-fail-closed.md; S0 audita antes de cambiar.",
+      "evidence": "docs/specs/SE-453-gate-result-contract.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-454",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores",
+      "note": "Los invariantes se cumplen hoy (medido); el test los fija. La guardia de red es aserción de pruebas, no control.",
+      "evidence": "docs/specs/SE-454-negative-invariant-tests.spec.md",
+      "phase": "D"
     }
   ],
   "route": {
@@ -1194,14 +1212,14 @@
           "SE-442"
         ],
         "title": "Cadena de suministro de la CI",
-        "action": "Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo.",
+        "action": "Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo. Delta S5: lock con hashes y --require-hashes para lo que instala install-memory-deps.sh y para los pip install sin fijar de la CI.",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
         "dependency_value": "protege cada PR de la cola",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas.",
-        "done": "Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz."
+        "prerequisites": "Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.",
+        "done": "Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada."
       },
       {
         "id": "S02",
@@ -1306,6 +1324,23 @@
         "done": "Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4."
       },
       {
+        "id": "S17",
+        "phase": "A",
+        "priority": "P1",
+        "initiatives": [
+          "SE-453"
+        ],
+        "title": "Contrato de resultado de los gates",
+        "action": "S0 auditar escáneres y guards blocking (vocabulario, dependencia ausente, topes); contrato que extiende checker-fail-closed; guards sin jq degradan a grep o salen 2; topes que producen unknown.",
+        "necessity": "alta",
+        "urgency": "media",
+        "value": "alto",
+        "dependency_value": "evita falsos verdes en los gates de los que dependen merge-sprint y la CI; alimenta la cobertura no verificada de SE-444",
+        "effort": "S0, S1 y S2 pequeños; S3 medio",
+        "prerequisites": "Aprobación de SE-453 y decisión D1-D3; S2 probado en los dos frontends.",
+        "done": "Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado."
+      },
+      {
         "id": "S16",
         "phase": "A",
         "priority": "P1",
@@ -1391,17 +1426,18 @@
         "initiatives": [
           "SE-448",
           "SE-449",
-          "SE-450"
+          "SE-450",
+          "SE-454"
         ],
         "title": "Higiene de contexto y operación",
-        "action": "SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad.",
+        "action": "SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad. SE-448 S4 (defang) y categoría third-party-directive; SE-454 invariantes negativos como tests.",
         "necessity": "media",
         "urgency": "baja",
         "value": "medio",
         "dependency_value": "reduce superficie sin bloquear otras fases",
-        "effort": "tres slices pequeños independientes",
+        "effort": "cinco slices pequeños independientes",
         "prerequisites": "Aprobación de cada spec; se ejecutan por separado, uno por vez; sin hueco WIP nuevo.",
-        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición."
+        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran."
       },
       {
         "id": "S07",
