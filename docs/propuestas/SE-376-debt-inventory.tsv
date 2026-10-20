@@ -43,7 +43,7 @@ diagram-import	Incomplete	131	REFACTOR	completar tests/DOMAIN para calibrar (pro
 doc-quality-feedback	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 dynamic-web-tester	Incomplete	92	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 ecosystem-watcher	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-emergency-mode	Incomplete	73	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+emergency-mode	Calibrated	73	CALIBRATED	2026-10-20: test de comportamiento certificado (>=80) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 enterprise-analytics	Incomplete	66	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 enterprise-onboarding	Incomplete	90	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 epistemic-humility	Incomplete	132	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
@@ -52,11 +52,11 @@ evidence-first-development	Incomplete	96	REFACTOR	completar tests/DOMAIN para ca
 executive-reporting	Incomplete	122	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 feasibility-probe	Incomplete	85	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 git-secret-scanner	Calibrated	101	CALIBRATED	2026-10-02: test de comportamiento certificado (>=80) y maturity stable con OK de la operadora
-governance-enterprise	Incomplete	89	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+governance-enterprise	Calibrated	89	CALIBRATED	2026-10-20: test de comportamiento certificado (>=80), lock del audit trail corregido (O_EXCL) y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 grill-me	Incomplete	65	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 human-code-map	Incomplete	150	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 iac-security-scanner	Incomplete	102	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
-legal-compliance	Incomplete	128	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
+legal-compliance	Calibrated	128	CALIBRATED	2026-10-20: test de comportamiento certificado (>=80), install/update cubiertos sin red y maturity stable; promocion pendiente del OK de la operadora al revisar el PR
 lightpanda-browser	Incomplete	103	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 managed-content	Incomplete	73	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)
 meeting-transcript-extract	Incomplete	91	REFACTOR	completar tests/DOMAIN para calibrar (propuesta)

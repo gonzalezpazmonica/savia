@@ -298,7 +298,7 @@ print(next(str(c["passed"]).lower() for f in d for c in f["checks"] if c["rule"]
 
 @test "append falla sin herramienta sha256 en vez de escribir hash vacío" {
   local bin="${TMP}/bin"; mkdir -p "$bin"
-  for c in bash date mkdir dirname cut grep tail head printf cat rmdir sleep basename wc; do
+  for c in bash date mkdir dirname cut grep tail head printf cat rmdir sleep basename wc unlink; do
     local p; p="$(command -v "$c" || true)"; [ -n "$p" ] && ln -s "$p" "${bin}/${c}"
   done
   run env PATH="$bin" bash "$AT" append --tenant t1 --actor a --action b
@@ -318,6 +318,41 @@ print(next(str(c["passed"]).lower() for f in d for c in f["checks"] if c["rule"]
   run "$AT" verify --file "$TRAIL"
   [ "$status" -eq 0 ]
   [[ "$output" == *"CHAIN OK"* ]]
+}
+
+@test "append con el lock tomado espera, agota los intentos y no escribe (lock busy)" {
+  append --actor a --action first >/dev/null
+  printf '4242\n' > "${TRAIL}.lock"
+  before="$(wc -l < "$TRAIL")"
+  AUDIT_LOCK_TRIES=2 run append --actor b --action second
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"lock busy"* ]]
+  [ "$(wc -l < "$TRAIL")" -eq "$before" ]
+  [ -e "${TRAIL}.lock" ]   # el lock ajeno no se toca
+}
+
+@test "el lock se libera tras un append correcto y tras uno que falla dentro de la sección crítica" {
+  append --actor a --action first >/dev/null
+  [ ! -e "${TRAIL}.lock" ]
+  # cola corrupta: el append muere con el lock tomado y debe soltarlo
+  printf 'basura sin salto de linea' >> "$TRAIL"
+  run append --actor b --action second
+  [ "$status" -eq 1 ]
+  [ ! -e "${TRAIL}.lock" ]
+}
+
+@test "la exclusión mutua no depende de mkdir (un mkdir no atómico no deja pasar a dos a la vez)" {
+  # Regresión: el mkdir de uutils-coreutils (Ubuntu 25.10+) devolvía éxito a varios
+  # procesos a la vez. Un mkdir que siempre tiene éxito no debe romper el lock.
+  mkdir -p "$TMP/bin"
+  printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/mkdir"
+  chmod +x "$TMP/bin/mkdir"
+  mkdir -p "$(dirname "$TRAIL")"
+  printf '4242\n' > "${TRAIL}.lock"
+  PATH="$TMP/bin:$PATH" AUDIT_LOCK_TRIES=2 run "$AT" append --tenant t1 --actor x --action y
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"lock busy"* ]]
+  [ ! -s "$TRAIL" ]
 }
 
 @test "export json produce JSON válido y md escapa barras verticales" {
@@ -423,6 +458,50 @@ print(next(str(c["passed"]).lower() for f in d for c in f["checks"] if c["rule"]
   [ "$status" -eq 1 ]
   [[ "$output" == *"malformed"* ]]
   [ "$(wc -l < "$TRAIL")" -eq 4 ]
+}
+
+@test "append se niega si la ultima entrada es valida pero no termina en salto de linea" {
+  seed3
+  head -c -1 "$TRAIL" > "${TMP}/cut" && cat "${TMP}/cut" > "$TRAIL"
+  [ "$(tail -c1 "$TRAIL" | wc -l)" -eq 0 ]
+  before="$(wc -c < "$TRAIL")"
+  run append --actor a --action next
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"malformed"* ]]
+  [ "$(wc -c < "$TRAIL")" -eq "$before" ]   # no se pega nada a la misma linea
+}
+
+@test "append se niega a encadenar si hay un byte NUL en una entrada anterior" {
+  seed3
+  python3 - "$TRAIL" <<'PY'
+import sys
+p = sys.argv[1]
+d = open(p, 'rb').read()
+open(p, 'wb').write(d.replace(b'"actor":"alice"', b'"actor":"ali\x00ce"', 1))
+PY
+  before="$(wc -c < "$TRAIL")"
+  run append --actor a --action next
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"malformed"* ]]
+  [ "$(wc -c < "$TRAIL")" -eq "$before" ]
+}
+
+@test "sin sha256sum usa shasum -a 256 y la cadena resultante verifica" {
+  local bin="${TMP}/shabin"; mkdir -p "$bin"
+  # sha256sum solo accesible desde el shim: el PATH de la prueba no lo ve
+  local real; real="$(command -v sha256sum)"
+  printf '#!/bin/sh\n[ "$1" = "-a" ] && [ "$2" = "256" ] || exit 9\nexec %s\n' "$real" > "${bin}/shasum"
+  chmod +x "${bin}/shasum"
+  for c in bash date mkdir dirname cut grep tail head printf cat rmdir sleep basename wc tr unlink sed; do
+    local p; p="$(command -v "$c" || true)"; [ -n "$p" ] && ln -sf "$p" "${bin}/${c}"
+  done
+  run env PATH="$bin" bash "$AT" append --tenant t1 --actor a --action b
+  [ "$status" -eq 0 ]
+  run env PATH="$bin" bash "$AT" append --tenant t1 --actor a --action c
+  [ "$status" -eq 0 ]
+  run "$AT" verify --file "$TRAIL"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"CHAIN OK"* ]]
 }
 
 @test "compliance-check dora: manifest.json corrupto no aprueba ict_risk_register" {
