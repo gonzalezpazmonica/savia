@@ -6,6 +6,50 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-20 SE-452 PROPOSED
+
+Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad; piloto sobre un contrato
+
+## 2026-10-20 SE-451 PROPOSED
+
+Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero; recomendación DCO, decisión pendiente
+
+## 2026-10-20 SE-450 PROPOSED
+
+Instaladores aditivos e idempotentes y propiedad de procesos con identidad de arranque
+
+## 2026-10-20 SE-449 PROPOSED
+
+Estado epistémico en hallazgos e informes: observado, derivado, inferido, desconocido
+
+## 2026-10-20 SE-448 PROPOSED
+
+Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos
+
+## 2026-10-20 SE-447 PROPOSED
+
+Contexto acotado en sesiones largas: una sola captura viva, tope absoluto de compactación y clasificación de acciones de riesgo
+
+## 2026-10-20 SE-446 PROPOSED
+
+Canal de aprobación inalcanzable para el agente: prueba de autoaprobación y mitigación
+
+## 2026-10-20 SE-445 PROPOSED
+
+Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito
+
+## 2026-10-20 SE-444 PROPOSED
+
+Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita
+
+## 2026-10-20 SE-443 PROPOSED
+
+Gobierno de conectores MCP: malware de paquetes, secretos tipados, importación, política por herramienta y doctrina de diseño
+
+## 2026-10-20 SE-442 PROPOSED
+
+Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada
+
 ## 2026-10-20 SE-428 IMPLEMENTING
 
 Delta OpenCode v2: motor v2 con v1 congelado, un serve por espacio, pin por operaciones usadas, attach por --server (D1-D4, D7)

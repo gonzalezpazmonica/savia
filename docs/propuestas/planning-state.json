@@ -1032,6 +1032,105 @@
       "note": "Compositor propio en Rust (Smithay), entrada desde el login existente, escalera de cuatro peldaños para agentes; F0 en paralelo y F1 tras cerrar móvil, Soul y guard delta",
       "phase": "B",
       "approval": "Operadora 2026-10-14 (AskUserQuestion): recomendación elegida en las cuatro preguntas, incluida «Spec ya, sesión después» (se aprueba la spec ahora)"
+    },
+    {
+      "id": "SE-442",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada",
+      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias.",
+      "evidence": "docs/specs/SE-442-ci-supply-chain-hardening.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-443",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Gobierno de conectores MCP: malware de paquetes, secretos tipados, importación, política por herramienta y doctrina de diseño",
+      "note": "S1-S2 no dependen de Space; S3-S5 se verifican contra el código real de space-server.",
+      "evidence": "docs/specs/SE-443-mcp-connector-governance.spec.md",
+      "phase": "B"
+    },
+    {
+      "id": "SE-444",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita",
+      "note": "Solo informe: no cambia el resultado del predicado de cierre. Refuerza S03/S04 (no certificar por presencia de ficheros).",
+      "evidence": "docs/specs/SE-444-verifier-authority-ac-closure.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-445",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito",
+      "note": "Convierte en enforcement dos reglas de autonomous-safety hoy solo de texto (3 repeticiones, time-box visible).",
+      "evidence": "docs/specs/SE-445-autonomous-execution-safeguards.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-446",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Canal de aprobación inalcanzable para el agente: prueba de autoaprobación y mitigación",
+      "note": "S0 es una sonda sin cambio de producto; el riesgo no está confirmado.",
+      "evidence": "docs/specs/SE-446-approval-channel-agent-unreachable.spec.md",
+      "phase": "B"
+    },
+    {
+      "id": "SE-447",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Contexto acotado en sesiones largas: una sola captura viva, tope absoluto de compactación y clasificación de acciones de riesgo",
+      "note": "S1 mide antes de fijar valores; S2 y S4 esperan a SE-439 tras F0.",
+      "evidence": "docs/specs/SE-447-bounded-context-long-sessions.spec.md",
+      "phase": "E"
+    },
+    {
+      "id": "SE-448",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos",
+      "note": "El texto invisible ya está cubierto (SPEC-193, SE-028, SE-060); S0 mide superficie antes de construir.",
+      "evidence": "docs/specs/SE-448-external-content-leak-canary-urls.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-449",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Estado epistémico en hallazgos e informes: observado, derivado, inferido, desconocido",
+      "note": "Etiqueta opcional; sin etiqueta el tribunal no cambia.",
+      "evidence": "docs/specs/SE-449-epistemic-status-in-reports.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-450",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Instaladores aditivos e idempotentes y propiedad de procesos con identidad de arranque",
+      "note": "S1 y S3 empiezan con auditoría o prueba, no con cambio.",
+      "evidence": "docs/specs/SE-450-installer-and-process-ownership-hygiene.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-451",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero",
+      "note": "La premisa de licencia dual del informe origen es falsa en el repo público (LICENSE-ENTERPRISE.md); recomendación DCO, decisión de la operadora.",
+      "evidence": "docs/specs/SE-451-contribution-governance-dco.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-452",
+      "status": "PROPOSED",
+      "priority": "P3",
+      "title": "Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad",
+      "note": "Piloto sobre un solo contrato; prematura sin implementadores externos, se encola dentro del laboratorio de conformidad.",
+      "evidence": "docs/specs/SE-452-contract-conformance-suites.spec.md",
+      "phase": "C"
     }
   ],
   "route": {
@@ -1059,7 +1158,14 @@
       "method": "Primero autoridad, seguridad, fase y WIP; después necesidad, urgencia, valor, dependencias y esfuerzo. Orden cualitativo; sin ROI ni scores numéricos no medidos.",
       "confidence": "Alta en commits/estados; limitada en graduación operacional, deuda actual y esfuerzo pendiente.",
       "delivery_rule": "delivery registra integración en main; no es completion ni autoriza IMPLEMENTED. Integrado se revisa antes de proponer reimplementación.",
-      "exception_rule": "Un riesgo confirmado de exposición o pérdida adelanta su mitigación acotada. Un delta nuevo requiere spec aprobada y hueco WIP; efectos externos conservan autoridad específica."
+      "exception_rule": "Un riesgo confirmado de exposición o pérdida adelanta su mitigación acotada. Un delta nuevo requiere spec aprobada y hueco WIP; efectos externos conservan autoridad específica.",
+      "amendments": [
+        {
+          "on": "2026-10-20",
+          "requested_by": "operadora, síntesis de tres investigaciones externas y repriorización por valor",
+          "change": "Alta de SE-442..SE-452 (PROPOSED) y sesiones S10..S16; reorden de la cola; SE-452 entra en S06. Gates, fases y límites WIP sin cambios."
+        }
+      ]
     },
     "session_plan": [
       {
@@ -1079,6 +1185,23 @@
         "effort": "slice pequeño; baseline variable",
         "prerequisites": "Disponible dentro del WIP actual; no ampliar superficie.",
         "done": "Predicado único reproducible, artefactos frescos, fallos desglosados con RCA y recibo de cierre; ninguna suite fallida ocultada."
+      },
+      {
+        "id": "S10",
+        "phase": "A",
+        "priority": "P0",
+        "initiatives": [
+          "SE-442"
+        ],
+        "title": "Cadena de suministro de la CI",
+        "action": "Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo.",
+        "necessity": "alta",
+        "urgency": "alta",
+        "value": "alto",
+        "dependency_value": "protege cada PR de la cola",
+        "effort": "slice pequeño (S)",
+        "prerequisites": "Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas.",
+        "done": "Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz."
       },
       {
         "id": "S02",
@@ -1132,6 +1255,23 @@
         "done": "Reducción de deuda demostrada por comportamiento discriminante, baseline publicado y excepciones explícitas; no certificar por presencia de ficheros."
       },
       {
+        "id": "S11",
+        "phase": "A",
+        "priority": "P0",
+        "initiatives": [
+          "SE-444"
+        ],
+        "title": "Autoridad del verificador en el cierre",
+        "action": "Regla y plantilla con autoridad requerida y obtenida por AC; informe de cobertura no verificada en validate-ci-local sin cambiar el predicado.",
+        "necessity": "alta",
+        "urgency": "alta",
+        "value": "alto",
+        "dependency_value": "hace honestos los cierres de S03 y S04",
+        "effort": "slice pequeño (S)",
+        "prerequisites": "Aprobación de SE-444; informe-only, compatible con lo ya integrado.",
+        "done": "Informe de cobertura no verificada visible, predicado de cierre sin cambios (regresión a cero) y decisión explícita sobre pasar a bloqueo con datos de dos cierres reales."
+      },
+      {
         "id": "S04",
         "phase": "B",
         "priority": "P0",
@@ -1147,6 +1287,58 @@
         "effort": "4-8 h de análisis compartido históricamente estimadas; costes de canaries a acordar",
         "prerequisites": "Baseline A demostrado; H04 real requiere autorización y coste; sin autograduación.",
         "done": "H04/H09 y regresión operacional documentadas; completion y revisión humana; límites L3/L4 intactos."
+      },
+      {
+        "id": "S12",
+        "phase": "A",
+        "priority": "P1",
+        "initiatives": [
+          "SE-445"
+        ],
+        "title": "Salvaguardas de ejecución autónoma",
+        "action": "Guard de repetición bloqueante en ramas agent/*, presupuesto de turnos visible, success_checks en automatizaciones; revisor de acciones opt-in como último slice.",
+        "necessity": "alta",
+        "urgency": "media",
+        "value": "alto",
+        "dependency_value": "hace cumplir autonomous-safety donde hoy es texto",
+        "effort": "S1, S2 y S4 pequeños; S3 medio",
+        "prerequisites": "Aprobación de SE-445; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.",
+        "done": "Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4."
+      },
+      {
+        "id": "S16",
+        "phase": "A",
+        "priority": "P1",
+        "initiatives": [
+          "SE-451"
+        ],
+        "title": "Decisión de gobernanza de contribuciones",
+        "action": "Decidir DCO, CLA o ninguno; si DCO, texto en CONTRIBUTING y workflow sin checkout de código del PR; REUSE solo si hay demanda.",
+        "necessity": "alta",
+        "urgency": "media",
+        "value": "alto",
+        "dependency_value": "cada contribución externa sin constancia no se puede recuperar después",
+        "effort": "decisión + slice pequeño (S)",
+        "prerequisites": "Decisión D1-D4 de la operadora; un CLA de relicenciación contradiría LICENSE-ENTERPRISE.md y exige antes spec propia con revisión legal.",
+        "done": "Decisión registrada; si DCO, check activo con exención documentada y mensaje claro para quien contribuye."
+      },
+      {
+        "id": "S13",
+        "phase": "B",
+        "priority": "P1",
+        "initiatives": [
+          "SE-446",
+          "SE-443"
+        ],
+        "title": "Seguridad del canal de aprobación y de los conectores de Space",
+        "action": "SE-446 S0: sonda de autoaprobación contra el space-server real. SE-443 S1-S2: doctrina de diseño MCP y comprobación de malware al habilitar; S3-S5 cuando space-server lo permita.",
+        "necessity": "alta",
+        "urgency": "media",
+        "value": "alto",
+        "dependency_value": "la política por herramienta presupone un canal de aprobación seguro",
+        "effort": "S0 pequeño; S1-S2 pequeños; S3-S5 medianos",
+        "prerequisites": "Aprobación de SE-446 y SE-443; usa el hueco temporal de SE-428 (no abre otra iniciativa en curso); si S0 encuentra una vía abierta, S1 de SE-446 pasa a P0 y adelanta a todo lo demás de Space.",
+        "done": "Informe de sonda por vía, test permanente de que el agente no contesta su propio ask, comprobación OSV con recibo, secretos tipados rechazados en command/args/url."
       },
       {
         "id": "S05",
@@ -1179,10 +1371,11 @@
           "SE-383",
           "SE-384",
           "SE-387",
-          "SE-403"
+          "SE-403",
+          "SE-452"
         ],
         "title": "Un laboratorio de conformidad y benchmark",
-        "action": "Unificar matriz negativa, bypass, caos, receipts y replay; graduar cierres parciales; baseline con trazas/selección fijadas.",
+        "action": "Unificar matriz negativa, bypass, caos, receipts y replay; graduar cierres parciales; baseline con trazas/selección fijadas. Último slice: piloto de suite de conformidad ejecutable sobre un solo contrato (SE-452).",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
@@ -1190,6 +1383,25 @@
         "effort": "slices por frontend/invariante",
         "prerequisites": "Gate B y corpus/contratos pinned; no ejecutar todos los experimentos Labs a la vez.",
         "done": "Cero violaciones de invariantes bajo fallos en los tres frontends y cuatro niveles de replay; evidencia auditable."
+      },
+      {
+        "id": "S14",
+        "phase": "D",
+        "priority": "P2",
+        "initiatives": [
+          "SE-448",
+          "SE-449",
+          "SE-450"
+        ],
+        "title": "Higiene de contexto y operación",
+        "action": "SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad.",
+        "necessity": "media",
+        "urgency": "baja",
+        "value": "medio",
+        "dependency_value": "reduce superficie sin bloquear otras fases",
+        "effort": "tres slices pequeños independientes",
+        "prerequisites": "Aprobación de cada spec; se ejecutan por separado, uno por vez; sin hueco WIP nuevo.",
+        "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición."
       },
       {
         "id": "S07",
@@ -1234,6 +1446,23 @@
         "effort": "un flujo de adopción y un perfil de formato cada vez",
         "prerequisites": "Gate D y autorización/revocación/scanner/restore de Files verificados. D08 S3 y paquetes Labs propuestos requieren aprobación; SE-289 S4 conforme ADR-002.",
         "done": "Una persona ajena instala y usa un flujo seguro con citas y doctor verde; ampliar perfiles sólo tras conformance."
+      },
+      {
+        "id": "S15",
+        "phase": "E",
+        "priority": "P2",
+        "initiatives": [
+          "SE-447"
+        ],
+        "title": "Contexto acotado de la sesión gráfica",
+        "action": "Medir tokens con y sin retirada de capturas, tope absoluto de compactación por tier, y después la herramienta de captura y la clasificación de acciones.",
+        "necessity": "media",
+        "urgency": "baja",
+        "value": "medio",
+        "dependency_value": "abarata sesiones largas de Space",
+        "effort": "S1 y S3 pequeños; S2 y S4 tras SE-439 F0",
+        "prerequisites": "Aprobación de SE-447; S2 y S4 esperan a que SE-439 salga de F0.",
+        "done": "Medición publicada, tope configurable sin nombres de modelo en la fuente y test de una sola imagen viva."
       },
       {
         "id": "S09",
