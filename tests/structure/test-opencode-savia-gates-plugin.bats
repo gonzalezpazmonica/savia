@@ -9,6 +9,10 @@ setup() {
   ROOT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
   PLUGIN_DIR="$ROOT_DIR/scripts/opencode-plugin/savia-gates"
   SCRIPT="$ROOT_DIR/scripts/opencode-install.sh"
+  # The plugin is dual V1/V2: the decisions live in lib/gates.ts, each frontend binding in its adapter.
+  CORE="$PLUGIN_DIR/lib/gates.ts"
+  V1="$PLUGIN_DIR/lib/v1-adapter.ts"
+  V2="$PLUGIN_DIR/lib/v2-adapter.ts"
 }
 
 # ── Plugin source structure ──────────────────────────────────────────────────
@@ -23,18 +27,30 @@ setup() {
   grep -q '"@opencode-ai/plugin"' "$PLUGIN_DIR/package.json"
 }
 
-@test "plugin: index.ts exports SaviaGates default" {
+@test "plugin: index.ts default-exports one object for V1 (server) and V2 (id + setup)" {
   [ -f "$PLUGIN_DIR/index.ts" ]
-  grep -q 'export const SaviaGates' "$PLUGIN_DIR/index.ts"
-  grep -q 'export default SaviaGates' "$PLUGIN_DIR/index.ts"
+  grep -q 'export const SaviaGates: Plugin' "$V1"
+  grep -q 'export default SaviaGatesPlugin' "$PLUGIN_DIR/index.ts"
+  grep -q 'id: "savia-gates"' "$PLUGIN_DIR/index.ts"
+  grep -q 'setup: setupV2' "$PLUGIN_DIR/index.ts"
+  grep -q 'server:' "$PLUGIN_DIR/index.ts"
+}
+
+@test "plugin: V2 adapter registers the authority hooks and fails closed (no Bun-only API)" {
+  grep -q 'ctx.tool.hook("execute.before"' "$V2"
+  grep -q 'ctx.tool.hook("execute.after"' "$V2"
+  grep -q 'ctx.session.hook("prompt"' "$V2"
+  grep -q 'ctx.permission.hook("evaluate"' "$V2"
+  grep -q 'GUARDS_UNAVAILABLE' "$V2"
+  ! grep -rE 'Bun\.\$|ctx\.\$[^{]|const \{ \$' "$PLUGIN_DIR/index.ts" "$PLUGIN_DIR/lib"
 }
 
 @test "plugin: index.ts registers ≥10 critical hook event handlers" {
   # AC-02: Plugin loads ≥10 critical hooks
-  count=$(grep -cE '"(tool\.execute\.before|tool\.execute\.after|chat\.message|permission\.ask|command\.execute\.before|event|experimental\.session\.compacting)"' "$PLUGIN_DIR/index.ts")
+  count=$(grep -cE '"(tool\.execute\.before|tool\.execute\.after|chat\.message|permission\.ask|command\.execute\.before|event|experimental\.session\.compacting)"' "$V1")
   [ "$count" -ge 7 ]
-  # And the index actively dispatches each over the hookMap
-  grep -q "loadHookMap" "$PLUGIN_DIR/index.ts"
+  # And the core actively dispatches each over the hookMap
+  grep -q "loadHookMap" "$CORE"
 }
 
 @test "plugin: lib/shell-bridge.ts loads .claude/settings.json (not directory walk)" {
@@ -98,8 +114,8 @@ setup() {
 }
 
 @test "plugin: learning recall uses the canonical UserPromptSubmit bridge" {
-  grep -q '"chat.message"' "$PLUGIN_DIR/index.ts"
-  grep -q '"UserPromptSubmit"' "$PLUGIN_DIR/index.ts"
+  grep -q '"chat.message"' "$V1"
+  grep -q '"UserPromptSubmit"' "$CORE"
   # #1129 split the parse: hookSpecificOutput is validated, then its
   # additionalContext becomes the injected context.
   grep -q 'const specific = value.hookSpecificOutput' "$PLUGIN_DIR/lib/shell-bridge.ts"
@@ -130,34 +146,40 @@ setup() {
 # ── Gap closure: SE-077 remaining 6 events (2026-08-25) ────────────────────
 
 @test "plugin: FileChanged mapped to file.edited / file.watcher.updated" {
-  grep -q '"file.edited"' "$PLUGIN_DIR/index.ts"
-  grep -qE 'cc: "FileChanged"|cc:"FileChanged"' "$PLUGIN_DIR/index.ts"
-  grep -q "file_path: e?.properties?.file" "$PLUGIN_DIR/index.ts"
+  grep -q '"file.edited"' "$V1"
+  grep -qE 'cc: "FileChanged"|cc:"FileChanged"' "$V1"
+  grep -q "file_path: e?.properties?.file" "$V1"
+  # V2 emits no file.edited for tool writes: FileChanged comes from edit/write/patch results
+  grep -q '"FileChanged"' "$V2"
 }
 
 @test "plugin: PostCompact mapped to session.compacted + compaction.autocontinue" {
-  grep -q 'session.compacted.*PostCompact\|"cc": "PostCompact"' "$PLUGIN_DIR/index.ts"
-  grep -q 'experimental.compaction.autocontinue' "$PLUGIN_DIR/index.ts"
-  grep -q '"PostCompact"' "$PLUGIN_DIR/index.ts"
+  grep -q 'session.compacted.*PostCompact\|"cc": "PostCompact"' "$V1"
+  grep -q 'experimental.compaction.autocontinue' "$V1"
+  grep -q '"PostCompact"' "$CORE"
+  grep -q 'session.compacted' "$V2"
 }
 
 @test "plugin: ConfigChange mapped to config hook" {
-  grep -q '"config": async' "$PLUGIN_DIR/index.ts"
-  grep -q '"ConfigChange"' "$PLUGIN_DIR/index.ts"
+  grep -q '"config": async' "$V1"
+  grep -q '"ConfigChange"' "$CORE"
+  grep -q 'config.updated' "$V2"
 }
 
 @test "plugin: CwdChanged mapped to shell.env (cwd dedup)" {
-  grep -q '"shell.env": async' "$PLUGIN_DIR/index.ts"
-  grep -q '"CwdChanged"' "$PLUGIN_DIR/index.ts"
-  grep -q 'lastCwd' "$PLUGIN_DIR/index.ts"
+  grep -q '"shell.env": async' "$V1"
+  grep -q '"CwdChanged"' "$CORE"
+  grep -q 'lastCwd' "$CORE"
+  grep -q 'create.before' "$V2"
 }
 
 @test "plugin: InstructionsLoaded mapped on session.created" {
-  grep -qE 'cc: "InstructionsLoaded"|cc:"InstructionsLoaded"' "$PLUGIN_DIR/index.ts"
+  grep -qE 'cc: "InstructionsLoaded"|cc:"InstructionsLoaded"' "$V1"
+  grep -qE 'cc: "InstructionsLoaded"|cc:"InstructionsLoaded"' "$V2"
 }
 
 @test "plugin: manifest is generated at install, never on plugin load (stable pluginSetHash)" {
-  ! grep -q 'writeManifest' "$PLUGIN_DIR/index.ts"
+  ! grep -rq 'writeManifest' "$PLUGIN_DIR/index.ts" "$PLUGIN_DIR/lib/gates.ts" "$V1" "$V2"
   ! grep -q 'generated_at' "$PLUGIN_DIR/lib/manifest.ts"
   grep -q 'lib/manifest.ts' "$SCRIPT"
 }
@@ -271,7 +293,7 @@ setup() {
 
 @test "plugin: sweepOrphanedHooks exported and wired at plugin load" {
   grep -q 'sweepOrphanedHooks' "$PLUGIN_DIR/lib/shell-bridge.ts"
-  grep -q 'sweepOrphanedHooks' "$PLUGIN_DIR/index.ts"
+  grep -q 'sweepOrphanedHooks' "$CORE"
   grep -q 'heal-sweep' "$PLUGIN_DIR/lib/shell-bridge.ts"
 }
 
@@ -307,7 +329,7 @@ setup() {
 }
 
 @test "plugin: PreToolUse sees through sandbox wrappers without trusting them (both forms, any block wins)" {
-  grep -qF 'guardVariants(input.tool, output.args)' "$PLUGIN_DIR/index.ts"
+  grep -qF 'guardVariants(tool, args)' "$CORE"
   grep -qF 'export function unwrapSandbox' "$PLUGIN_DIR/lib/sandbox.ts"
   # Only a clean wrapper is unwrapped: nothing but closing quotes may follow the last single quote.
   grep -qF '/^[\\"\s]*$/' "$PLUGIN_DIR/lib/sandbox.ts"

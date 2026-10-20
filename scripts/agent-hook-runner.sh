@@ -226,7 +226,12 @@ RAW_RESPONSE=""
 INVOKE_EXIT=0
 
 if [[ "$INVOKE_CMD" == "opencode" ]]; then
-  RAW_RESPONSE=$(timeout "$TIMEOUT" opencode run --no-interactive "$AGENT_PROMPT" 2>/dev/null) || INVOKE_EXIT=$?
+  # `run` is non-interactive by default in OpenCode 1 (`--interactive` is opt-in) and in 2; neither knows
+  # `--no-interactive`. In 2, `run` talks to the per-user background service unless `--standalone` is given,
+  # which would share session, database and credentials with every other project: use a private server.
+  OC_RUN_ARGS=(run)
+  if opencode run --help 2>&1 | grep -q -- '--standalone'; then OC_RUN_ARGS+=(--standalone); fi
+  RAW_RESPONSE=$(timeout "$TIMEOUT" opencode "${OC_RUN_ARGS[@]}" "$AGENT_PROMPT" 2>/dev/null) || INVOKE_EXIT=$?
 elif [[ "$INVOKE_CMD" == "claude" ]]; then
   RAW_RESPONSE=$(timeout "$TIMEOUT" claude -p "$AGENT_PROMPT" 2>/dev/null) || INVOKE_EXIT=$?
 fi
