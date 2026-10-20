@@ -20,6 +20,12 @@ MAX_OUTPUT = 1024 * 1024
 DEFAULT_TIMEOUT = 5.0
 MAX_TIMEOUT = 30.0
 AUTHORITY_EVENTS = ("PreToolUse", "PermissionRequest")
+ENV_ARG_LIMIT = 64 * 1024  # a single env string must stay far below the kernel limit
+# Switches that turn security hooks off must not be steerable from the gated session.
+STRIPPED_ENV = ("SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE")
+# The agent being gated must not rewrite the gate: deny by default (relative to root).
+PROTECTED_PATHS = (".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
+                   ".opencode/hooks", "scripts/dual-cli", ".codex")
 
 
 def _deny(reason, handler=None):
@@ -48,7 +54,10 @@ def _timeout(handler):
 
 
 def _run_command(command, payload, root, timeout):
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(root), CLAUDE_JSON_INPUT=payload)
+    env = {k: v for k, v in os.environ.items() if k not in STRIPPED_ENV}
+    env["CLAUDE_PROJECT_DIR"] = str(root)
+    if len(payload) <= ENV_ARG_LIMIT:  # larger events reach handlers by stdin only
+        env["CLAUDE_JSON_INPUT"] = payload
     proc = subprocess.Popen(["bash", "-c", command], cwd=str(root), env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, start_new_session=True)
@@ -123,31 +132,60 @@ def evaluate(event, payload, *, settings_path, root):
     return decision
 
 
+_HEADERS = (("*** Add File: ", "add"), ("*** Update File: ", "update"), ("*** Delete File: ", "delete"))
+_OTHER_HEADERS = ("*** Begin Patch", "*** End Patch", "*** End of File")
+
+
 def apply_patch_operations(patch, cwd):
-    """Split an apply_patch body into per-file (tool, path, op) operations."""
+    """Split an apply_patch body into per-file operations.
+
+    Returns (tool, path, op, content, old) tuples. Codex trims header lines, so
+    headers are matched on the stripped line; an unknown `*** ` line fails closed.
+    """
     if not isinstance(patch, str) or "*** Begin Patch" not in patch:
         raise ProtocolError("INVALID_EVENT")
     ops, current = [], None
     for line in patch.splitlines():
-        for prefix, op in (("*** Add File: ", "add"), ("*** Update File: ", "update"),
-                           ("*** Delete File: ", "delete")):
-            if line.startswith(prefix):
-                current = {"op": op, "path": line[len(prefix):].strip()}
+        head = line.strip()
+        if head[:1] in ("+", "-") or not head.startswith("***"):
+            if current is not None:
+                if line[:1] == "+":
+                    current["new"].append(line[1:])
+                elif line[:1] == "-":
+                    current["old"].append(line[1:])
+            continue
+        for prefix, op in _HEADERS:
+            if head.startswith(prefix):
+                current = {"op": op, "path": head[len(prefix):].strip(), "new": [], "old": []}
                 ops.append(current)
                 break
         else:
-            if line.startswith("*** Move to: ") and current and current["op"] == "update":
-                current["move_to"] = line[len("*** Move to: "):].strip()
+            if head.startswith("*** Move to: ") and current and current["op"] == "update":
+                current["move_to"] = head[len("*** Move to: "):].strip()
+            elif head not in _OTHER_HEADERS and not head.startswith("*** Move to: "):
+                raise ProtocolError("INVALID_EVENT")
     if not ops or any(not o["path"] for o in ops):
         raise ProtocolError("INVALID_EVENT")
     result = []
     for o in ops:
-        path = str(Path(cwd, o["path"]))
+        path = os.path.normpath(os.path.join(cwd, o["path"]))
         tool = "Edit" if o["op"] == "update" else "Write"
-        result.append((tool, path, o["op"]))
+        result.append((tool, path, o["op"], "\n".join(o["new"]), "\n".join(o["old"])))
         if "move_to" in o:
-            result.append(("Write", str(Path(cwd, o["move_to"])), "move"))
+            result.append(("Write", os.path.normpath(os.path.join(cwd, o["move_to"])), "move",
+                           "\n".join(o["new"]), ""))
     return result
+
+
+def is_protected(path, root):
+    """True when path (lexically and through symlinks) is gate configuration or code."""
+    for candidate in (os.path.normpath(path), os.path.realpath(path)):
+        for rel in PROTECTED_PATHS:
+            for base in (os.path.normpath(os.path.join(root, rel)),
+                         os.path.realpath(os.path.join(root, rel))):
+                if candidate == base or candidate.startswith(base + os.sep):
+                    return True
+    return False
 
 
 def normalize_codex_pretool(payload):
@@ -162,9 +200,13 @@ def normalize_codex_pretool(payload):
         return [payload]
     base = {k: v for k, v in payload.items() if k not in ("tool_name", "tool_input")}
     events = []
-    for name, path, op in apply_patch_operations(tool_input.get("command"), cwd):
-        events.append(dict(base, tool_name=name,
-                           tool_input={"file_path": path, "operation": op}))
+    for name, path, op, new, old in apply_patch_operations(tool_input.get("command"), cwd):
+        data = {"file_path": path, "operation": op}
+        if name == "Write":
+            data["content"] = new
+        else:
+            data["new_string"], data["old_string"] = new, old
+        events.append(dict(base, tool_name=name, tool_input=data))
     return events
 
 
@@ -175,8 +217,16 @@ def evaluate_codex_pretool(payload, *, settings_path, root):
         return _deny("INVALID_EVENT")
     final = None
     for event in events:
+        if event is not payload and is_protected(event["tool_input"]["file_path"], root):
+            return _deny("PROTECTED_GATE_PATH")
         decision = evaluate("PreToolUse", event, settings_path=settings_path, root=root)
         if decision["action"] != "allow":
             return decision
-        final = decision if final is None else final
+        if final is None:
+            final = decision
+            continue
+        if decision["context"]:
+            final["context"] = "\n".join(filter(None, (final["context"], decision["context"])))
+        if decision["updated_input"] is not None:
+            final["updated_input"] = decision["updated_input"]
     return final
