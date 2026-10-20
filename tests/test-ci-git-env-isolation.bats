@@ -30,7 +30,7 @@ assert_decoy_intact() {
 
 @test "git_env_clean elimina las variables de repositorio y config" {
   run env GIT_DIR=/x GIT_WORK_TREE=/y GIT_INDEX_FILE=/z GIT_COMMON_DIR=/w GIT_CONFIG_COUNT=1 \
-    bash -c 'source "$1/scripts/lib/git-env-clean.sh"; git_env_clean --isolate-config; env | grep -E "^GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT)="; echo "G=$GIT_CONFIG_GLOBAL"' _ "$ROOT"
+    bash -c 'source "$1/scripts/lib/mock-env.sh"; git_env_clean --isolate-config; env | grep -E "^GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT)="; echo "G=$GIT_CONFIG_GLOBAL"' _ "$ROOT"
   [ "$output" = "G=/dev/null" ]
 }
 
