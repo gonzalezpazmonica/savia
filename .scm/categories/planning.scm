@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 633 resources
+> 635 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
@@ -246,6 +246,7 @@
 - **gate-init** (script): scripts/gate-init.sh — SE-255
 - **gate-post-receive** (script): scripts/gate-post-receive.sh — SE-255
 - **gate-teardown** (script): scripts/gate-teardown.sh — SE-255
+- **gate-unknown-check** (script): gate-unknown-check.sh — contador de gates en «unknown» frente al baseline (SE-453 D3).
 - **generate-capability-map** (script): ── generate-capability-map.sh — Thin wrapper around the Python generator.
 - **generate-critical-facts** (script): scripts/generate-critical-facts.sh
 - **generate-github-hooks** (script): generate-github-hooks.sh — SE-180
@@ -320,6 +321,7 @@
 - **lib/adb-wrapper** (script): ============================================================================
 - **lib/concurrent-executor** (script): concurrent-executor.sh — Semaphore-bounded parallel task execution
 - **lib/enterprise-helpers** (script): enterprise-helpers.sh — Sourceable helpers for Enterprise module checks
+- **lib/gate-result** (script): gate-result.sh — contrato de resultado de los gates (SE-453).
 - **lib/llm-healer** (script): llm-healer.sh — SE-076 Slice 3
 - **lib/mock-env** (script): mock-env.sh — Reusable mock environment library for pm-workspace scripts
 - **lib/os-detect** (script): scripts/lib/os-detect.sh — Portable OS detection and path defaults
