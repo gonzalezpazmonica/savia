@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=b08fa4e3d0efa2c76692c3021aa35b513bf031e4ca3494a12096a67402f22eaa
-timestamp=2026-10-20T00:50:42Z
+diff_hash=7d76c3ee925fee6e3c864608f25be54dccc7e26f5c23a00b1a834df1744d9102
+timestamp=2026-10-20T05:06:09Z
 branch=agent/fix-ci-git-env-leak-20261020
-head_commit=78381fdf7
-signature=5c5da01e69db3cadf245980be11dc7567502bb5ae9ce5075f2a249063304cf3f
+head_commit=658b4ae2
+signature=2be65886fa3ebc7603d070a482ba9da634d0773449dc8c8d3105a24095994662
