@@ -130,3 +130,8 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-435 [APPROVED] Savia Space: distribución agnóstica (paquetes nativos y savia-space setup) — evidencia: docs/specs/SE-435-savia-space-distribution.spec.md
 - SE-436 [APPROVED] Savia Space: proyectos y cúpulas desde Space — evidencia: docs/specs/SE-436-savia-space-projects-and-domes.spec.md
 - SE-439 [APPROVED] Savia Space: sesión gráfica agéntica sobre Linux — evidencia: docs/specs/SE-439-savia-space-agentic-session.spec.md
+- SE-442 [APPROVED] Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada — evidencia: docs/specs/SE-442-ci-supply-chain-hardening.spec.md
+- SE-444 [APPROVED] Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita — evidencia: docs/specs/SE-444-verifier-authority-ac-closure.spec.md
+- SE-445 [APPROVED] Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito — evidencia: docs/specs/SE-445-autonomous-execution-safeguards.spec.md
+- SE-451 [APPROVED] Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero — evidencia: docs/specs/SE-451-contribution-governance-dco.spec.md
+- SE-453 [APPROVED] Contrato de resultado de los gates: limpio, hallazgos y desconocido — evidencia: docs/specs/SE-453-gate-result-contract.spec.md
