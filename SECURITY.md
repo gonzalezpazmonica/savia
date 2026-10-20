@@ -42,6 +42,18 @@ En su lugar:
 
 Recibiras acuse en **72 horas** y plan de resolución en **14 dias**. Te acredito en las release notes salvo que prefieras anonimato.
 
+## Plazo de embargo
+
+Divulgación coordinada: 30 días desde el acuse del reporte. Hasta entonces el problema no se hace público. Si hay corrección antes, se publica con ella; si el plazo vence sin corrección, se acuerda con quien reporta una prórroga razonada o la publicación con mitigaciones.
+
+## Crédito
+
+Se acredita a quien reporta en el aviso y en las release notes, con el nombre que indique. Quien prefiera anonimato, lo tiene.
+
+## Releases de seguridad
+
+Una release que corrige una vulnerabilidad lo indica en sus notas (etiqueta `security`, referencia al aviso y versiones afectadas) y se publica en la fecha de fin del embargo o antes si la corrección ya está disponible.
+
 ## Para contributors
 
 - Nunca incluyas PATs, URLs de organización, o nombres de proyecto reales
