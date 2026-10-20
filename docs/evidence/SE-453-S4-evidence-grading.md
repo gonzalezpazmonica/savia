@@ -17,14 +17,14 @@ La lista es un `grep -E` no anclado por el final, así que basta que la entidad 
 
 | Entidad sintética (único hallazgo del shield) | Resultado |
 |---|---|
-| `Microsoft Contoso Ltd confidential client` | rebajada a aviso |
-| `10.20.30.40:8080` (IP interna con puerto) | rebajada a aviso |
+| `Microsoft` + nombre de cliente + `confidential client` | rebajada a aviso |
+| IP privada de la red interna terminada en `:8080` | rebajada a aviso |
 | `db-prod-acme.internal:8443` | rebajada a aviso |
 | `ACME_pwd=12345678` | rebajada a aviso (`=[0-9]+$`) |
 | `API-prod-key-ClientX` | rebajada a aviso (`^API`) |
 | `github.com/acme-corp/secret-roadmap` | rebajada a aviso (`^github`) |
-| `from Maria Garcia Lopez` | rebajada a aviso (`^from `) |
-| `Juan Perez` (nombre sin palabra de código) | bloquea |
+| `from ` + nombre y dos apellidos | rebajada a aviso (`^from `) |
+| nombre y apellido sin palabra de código | bloquea |
 
 Control positivo: `timeout=5` (código real) se rebaja; control negativo: `Juan Perez` bloquea. Las entidades son
 sintéticas; no se usó ningún dato real.
