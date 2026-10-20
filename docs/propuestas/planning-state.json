@@ -1035,12 +1035,13 @@
     },
     {
       "id": "SE-442",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P0",
       "title": "Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada",
       "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes).",
       "evidence": "docs/specs/SE-442-ci-supply-chain-hardening.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
     },
     {
       "id": "SE-443",
@@ -1053,21 +1054,23 @@
     },
     {
       "id": "SE-444",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P0",
       "title": "Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita",
       "note": "Solo informe: no cambia el resultado del predicado de cierre. Refuerza S03/S04 (no certificar por presencia de ficheros).",
       "evidence": "docs/specs/SE-444-verifier-authority-ac-closure.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
     },
     {
       "id": "SE-445",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito",
       "note": "Convierte en enforcement dos reglas de autonomous-safety hoy solo de texto (3 repeticiones, time-box visible).",
       "evidence": "docs/specs/SE-445-autonomous-execution-safeguards.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
     },
     {
       "id": "SE-446",
@@ -1116,12 +1119,13 @@
     },
     {
       "id": "SE-451",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero",
       "note": "La premisa de licencia dual del informe origen es falsa en el repo público (LICENSE-ENTERPRISE.md); recomendación DCO, decisión de la operadora.",
       "evidence": "docs/specs/SE-451-contribution-governance-dco.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-20: AskUserQuestion, DCO (no CLA)"
     },
     {
       "id": "SE-452",
@@ -1134,12 +1138,13 @@
     },
     {
       "id": "SE-453",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Contrato de resultado de los gates: limpio, hallazgos y desconocido",
       "note": "Tres vocabularios de salida incompatibles en tres escáneres; block-credential-leak y block-force-push (blocking) salen 0 sin jq (reproducido en el primero). Extiende checker-fail-closed.md; S0 audita antes de cambiar.",
       "evidence": "docs/specs/SE-453-gate-result-contract.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
     },
     {
       "id": "SE-454",
