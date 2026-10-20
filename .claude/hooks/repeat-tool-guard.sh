@@ -35,13 +35,11 @@ if ! INPUT=$(timeout 3 cat 2>/dev/null); then
 fi
 [[ -z "$INPUT" ]] && exit 0
 
-EVENT=$(printf '%s' "$INPUT" | python3 -c "
-import json, sys
-try:
-    print(json.load(sys.stdin).get('hook_event_name', ''))
-except Exception:
-    print('')
-" 2>/dev/null || true)
+# Deteccion barata del evento (sin lanzar python en cada llamada de herramienta).
+EVENT=""
+if [[ "$INPUT" =~ \"hook_event_name\"[[:space:]]*:[[:space:]]*\"([A-Za-z]+)\" ]]; then
+  EVENT="${BASH_REMATCH[1]}"
+fi
 
 if [[ "$EVENT" == "PreToolUse" ]]; then
   [[ "${SAVIA_LOOP_BLOCK:-on}" == "off" ]] && exit 0

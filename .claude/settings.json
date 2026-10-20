@@ -526,6 +526,34 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/repeat-tool-guard.sh",
+            "timeout": 5,
+            "statusMessage": "Loop-guard bloqueante en modos autonomos (SE-445)..."
+          },
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/turn-budget-inject.sh",
+            "timeout": 3,
+            "statusMessage": "Presupuesto de turnos (SE-445, opt-in)..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/action-review.sh",
+            "timeout": 35,
+            "statusMessage": "Revisor de acciones (SE-445, opt-in)..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -1026,6 +1054,16 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/recommendation-tribunal-followup.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/turn-budget-inject.sh",
+            "timeout": 3,
+            "statusMessage": "Presupuesto de turnos (SE-445, opt-in)..."
           }
         ]
       }
