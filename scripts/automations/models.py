@@ -11,6 +11,17 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 
+# SE-445 S4: tope de reintentos alineado con AGENT_MAX_CONSECUTIVE_FAILURES (autonomous-safety).
+MAX_RETRIES_CAP = 3
+
+
+def clamp_retries(value) -> int:
+    try:
+        return max(0, min(MAX_RETRIES_CAP, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
 @dataclass
 class Schedule:
     kind: str
@@ -48,6 +59,8 @@ class ScheduledTask:
     workspace: str = ""
     enabled: bool = True
     always_allowed_tools: List[str] = field(default_factory=list)
+    success_checks: List[str] = field(default_factory=list)
+    max_retries: int = 0
     run_count: int = 0
     last_run: Optional[str] = None
     last_status: Optional[str] = None
@@ -67,6 +80,8 @@ class ScheduledTask:
             "workspace": self.workspace,
             "enabled": self.enabled,
             "always_allowed_tools": self.always_allowed_tools,
+            "success_checks": self.success_checks,
+            "max_retries": self.max_retries,
             "run_count": self.run_count,
             "last_run": self.last_run,
             "last_status": self.last_status,
@@ -88,6 +103,8 @@ class ScheduledTask:
             workspace=d.get("workspace", ""),
             enabled=d.get("enabled", True),
             always_allowed_tools=d.get("always_allowed_tools", []),
+            success_checks=list(d.get("success_checks", [])),
+            max_retries=clamp_retries(d.get("max_retries", 0)),
             run_count=d.get("run_count", 0),
             last_run=d.get("last_run"),
             last_status=d.get("last_status"),
@@ -104,7 +121,8 @@ RUN_RECORDED = "recorded"
 RUN_COMPLETED = "completed"
 RUN_ERROR = "error"
 RUN_CANCELLED = "cancelled"
-RUN_STATUSES = (RUN_RUNNING, RUN_RECORDED, RUN_COMPLETED, RUN_ERROR, RUN_CANCELLED)
+RUN_FAILED = "failed"
+RUN_STATUSES = (RUN_RUNNING, RUN_RECORDED, RUN_COMPLETED, RUN_ERROR, RUN_CANCELLED, RUN_FAILED)
 
 
 @dataclass
@@ -117,6 +135,7 @@ class TaskRun:
     trigger: str = "schedule"
     error: Optional[str] = None
     output: Optional[str] = None
+    attempts: int = 1
 
     def to_dict(self) -> dict:
         return {
@@ -128,6 +147,7 @@ class TaskRun:
             "trigger": self.trigger,
             "error": self.error,
             "output": self.output,
+            "attempts": self.attempts,
         }
 
     @classmethod
@@ -141,6 +161,7 @@ class TaskRun:
             trigger=d.get("trigger", "schedule"),
             error=d.get("error"),
             output=d.get("output"),
+            attempts=int(d.get("attempts", 1)),
         )
 
 
