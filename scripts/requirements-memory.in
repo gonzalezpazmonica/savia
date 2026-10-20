@@ -1,0 +1,9 @@
+# Fuente del lock con hashes (SE-442 S5). Regenerar:
+#   uv pip compile scripts/requirements-memory.in --universal --python-version 3.12 \
+#     --generate-hashes --only-binary :all: --index-strategy unsafe-best-match \
+#     --extra-index-url https://download.pytorch.org/whl/cpu \
+#     -o scripts/requirements-memory.lock.txt
+# torch: wheel CPU del indice oficial de PyTorch (Linux/Windows); macOS usa PyPI.
+-r requirements-memory.txt
+torch==2.8.0; sys_platform == "darwin"
+torch==2.8.0+cpu; sys_platform != "darwin"

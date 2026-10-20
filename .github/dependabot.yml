@@ -1,0 +1,11 @@
+# SE-442 S2 — actualiza las acciones fijadas por SHA (un unico PR agrupado por semana).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
