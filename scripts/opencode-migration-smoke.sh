@@ -3,9 +3,13 @@ set -uo pipefail
 export LC_ALL=C
 # opencode-migration-smoke.sh — SPEC-127 Slice 2b-ii (final migration prep)
 #
-# 6 fast checks confirming OpenCode v1.14+ can bootstrap Savia. Run after
-# `opencode upgrade` and `bash scripts/savia-preferences.sh init`. Fails
-# loudly with actionable error messages — no silent skips.
+# 6 fast checks confirming OpenCode can bootstrap Savia. Supports OpenCode 1
+# (>= 1.18.29, object plugins) and OpenCode 2. Run after installing/upgrading
+# and `bash scripts/savia-preferences.sh init`. Fails loudly with actionable
+# error messages — no silent skips.
+#
+# Never starts OpenCode 2's per-user background service: on v2 the agent and
+# command counts come from the files, not from `opencode debug agents`.
 #
 # Exit 0 = ready to migrate. Exit non-zero = list of fixes printed to stderr.
 #
@@ -25,18 +29,22 @@ echo "── OpenCode migration smoke test ──"
 
 # 1. opencode binary version
 echo "[1/6] OpenCode binary version"
+OC_MAJOR=""
 if ! command -v opencode >/dev/null 2>&1; then
-  fail "opencode binary not on PATH — install per docs/migration-claude-code-to-opencode.md"
+  fail "opencode binary not on PATH — install per docs/migration-claude-code-to-opencode.md (npm install -g @opencode/cli for v2, opencode-ai for v1)"
 else
-  V=$(opencode --version 2>/dev/null | head -1 | tr -d '[:space:]')
+  V=$(opencode --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
   if [[ -z "$V" ]]; then
     warn "opencode --version produced no output"
   else
-    # Compare against 1.14.0
-    if printf '%s\n%s\n' "1.14.0" "$V" | sort -V -C; then
-      ok "opencode v$V (≥ 1.14.0)"
+    OC_MAJOR="${V%%.*}"
+    if [[ "$OC_MAJOR" -ge 2 ]]; then
+      ok "opencode v$V (OpenCode 2)"
+    elif printf '%s\n%s\n' "1.18.29" "$V" | sort -V -C; then
+      ok "opencode v$V (OpenCode 1 >= 1.18.29)"
     else
-      fail "opencode v$V is below 1.14.0 — run: opencode upgrade"
+      # `opencode upgrade` stays inside the major, and from 1.x it needs --major to cross to 2.
+      fail "opencode v$V is below 1.18.29 (the Savia plugins use the object form) — run: opencode upgrade (stays on 1.x), or move to OpenCode 2 (recommended): npm install -g @opencode/cli"
     fi
   fi
 fi
@@ -69,9 +77,16 @@ PYEOF
 echo "[3/6] OpenCode discovers ≥ 70 agents"
 if ! command -v opencode >/dev/null 2>&1; then
   warn "skipped — opencode not on PATH"
+elif [[ "$OC_MAJOR" -ge 2 ]]; then
+  AGENTS=$(find "$ROOT/.opencode/agents/" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
+  if [[ "$AGENTS" -ge 70 ]]; then
+    ok "$AGENTS agent files (OpenCode 2: counted from files; its CLI would start the background service)"
+  else
+    fail "$AGENTS agent files (expected ≥ 70) — run: bash scripts/agents-opencode-convert.sh --apply"
+  fi
 else
   TMP=$(mktemp)
-  if opencode debug config > "$TMP" 2>/dev/null; then
+  if opencode debug config > "$TMP" 2>"$TMP.err"; then
     AGENTS=$(config_count "$TMP" agent)
     if [[ "$AGENTS" -ge 70 ]]; then
       ok "$AGENTS agents discovered"
@@ -80,16 +95,25 @@ else
     else
       warn "$AGENTS agents discovered (expected ≥ 70)"
     fi
+  elif grep -q "V2 permissions are not supported" "$TMP.err" 2>/dev/null; then
+    fail "opencode.json uses OpenCode 2 keys (permissions/policies) and this is OpenCode 1 — use OpenCode 2: npm install -g @opencode/cli"
   else
     fail "opencode debug config failed — check schema validity"
   fi
-  rm -f "$TMP"
+  rm -f "$TMP" "$TMP.err"
 fi
 
 # 4. commands discovered
 echo "[4/6] OpenCode discovers ≥ 500 commands"
 if ! command -v opencode >/dev/null 2>&1; then
   warn "skipped — opencode not on PATH"
+elif [[ "$OC_MAJOR" -ge 2 ]]; then
+  CMDS=$(find -L "$ROOT/.opencode/commands/" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l)
+  if [[ "$CMDS" -ge 500 ]]; then
+    ok "$CMDS command files (OpenCode 2: counted from files)"
+  else
+    fail "$CMDS command files (expected ≥ 500) — verify .opencode/commands symlink"
+  fi
 else
   TMP=$(mktemp)
   if opencode debug config > "$TMP" 2>/dev/null; then
@@ -117,7 +141,7 @@ else
 fi
 
 # 6. plugin foundation files
-echo "[6/6] OpenCode plugin foundation files present"
+echo "[6/6] OpenCode plugin foundation and savia-gates files present"
 MISSING=0
 for f in \
   ".opencode/package.json" \
@@ -127,7 +151,9 @@ for f in \
   ".opencode/plugins/lib/credential-patterns.ts" \
   ".opencode/plugins/guards/block-credential-leak.ts" \
   ".opencode/plugins/guards/validate-bash-global.ts" \
-  ".opencode/plugins/guards/tdd-gate.ts"
+  ".opencode/plugins/guards/tdd-gate.ts" \
+  "scripts/opencode-plugin/savia-gates/index.ts" \
+  "scripts/opencode-plugin/savia-gates/lib/v2-adapter.ts"
 do
   if [[ ! -f "$ROOT/$f" ]]; then
     fail "$f missing"
@@ -135,7 +161,7 @@ do
   fi
 done
 if [[ $MISSING -eq 0 ]]; then
-  ok "all 8 foundation files present"
+  ok "all 10 foundation files present"
 fi
 
 # ── Verdict ──
