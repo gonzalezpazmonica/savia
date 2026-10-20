@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=d6c5aa17c07a5cdf87ba93e52e993b2a76b58f4025a9af88a49ad00edecb4a53
-timestamp=2026-10-20T06:22:30Z
-branch=agent/zerobreach-specs-20261020
-head_commit=6458242e3
-signature=268aadbff7cdcfa29f00e6e11ed0d4deb90fe1511a9c20da5ec5da045a048607
+diff_hash=ca042ae6cd0fe858e68fe561dc111c38420606684cb84e8de6e46f2d28849b70
+timestamp=2026-10-20T07:07:25Z
+branch=agent/se445-autonomy-safeguards-20261020
+head_commit=6e2b53c23
+signature=394fe4604f951f6f9342b9ba9b4965978f99618e6e1a52b32614d61f790bfb30
