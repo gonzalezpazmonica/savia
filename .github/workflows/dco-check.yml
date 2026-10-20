@@ -1,0 +1,69 @@
+name: DCO check
+
+# SE-451. Evento pull_request, sin checkout del código del PR: solo lee los
+# commits por la API. La lógica entre los marcadores DCO-SCRIPT
+# la extrae y prueba tests/test-dco-check.bats.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Signed-off-by
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Comprobar Signed-off-by en los commits del PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MAINTAINERS: ${{ github.repository_owner }}
+          BOT_LOGINS: dependabot[bot] github-actions[bot] renovate[bot]
+        run: |
+          # DCO-SCRIPT-BEGIN
+          set -euo pipefail
+          commits_json="${1:-}"
+          if [ -z "$commits_json" ]; then
+            commits_json="$(mktemp)"
+            gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/commits" | jq -s 'add // []' > "$commits_json"
+          fi
+          summary="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+          is_maintainer=0
+          for m in ${MAINTAINERS:-}; do
+            [ "${m,,}" = "${PR_AUTHOR,,}" ] && is_maintainer=1
+          done
+          if [ "$is_maintainer" = 1 ] && [[ "${HEAD_REF:-}" == agent/* ]]; then
+            echo "DCO: exento, PR de rama agent/* abierto por ${PR_AUTHOR} (mantenedor)" | tee -a "$summary"
+            exit 0
+          fi
+          fail=0
+          while IFS=$'\x1f' read -r sha parents login type email msg_b64; do
+            [ "$parents" -gt 1 ] && continue
+            if [ "$type" = "Bot" ] || [[ "$login" == *"[bot]" ]]; then continue; fi
+            skip=0
+            for b in ${BOT_LOGINS:-}; do [ "$b" = "$login" ] && skip=1; done
+            [ "$skip" = 1 ] && continue
+            if ! printf '%s' "$msg_b64" | base64 -d | tr -d '\r' \
+                | awk -v e="<${email}>" 'tolower($0) ~ /^signed-off-by: / { l=$0; sub(/[ \t]+$/,"",l); n=length(e); if (tolower(substr(l,length(l)-n+1))==tolower(e)) f=1 } END{exit f?0:1}'; then
+              echo "Sin Signed-off-by coincidente con el autor: ${sha:0:12} (${email})" | tee -a "$summary"
+              fail=1
+            fi
+          done < <(jq -r '.[] | [.sha, (.parents|length|tostring), (.author.login // ""), (.author.type // ""), (.commit.author.email // ""), (.commit.message | @base64)] | join("\u001f")' "$commits_json")
+          if [ "$fail" = 1 ]; then
+            {
+              echo
+              echo "Cada commit necesita 'Signed-off-by: Nombre <correo>' igual que su autor (DCO 1.1, CONTRIBUTING.md)."
+              echo "Último commit:   git commit --amend -s --no-edit"
+              echo "Toda la rama:    git rebase --signoff origin/main"
+              echo "Después:         git push --force-with-lease"
+            } | tee -a "$summary"
+            exit 1
+          fi
+          echo "DCO: todos los commits llevan Signed-off-by" | tee -a "$summary"
+          # DCO-SCRIPT-END
