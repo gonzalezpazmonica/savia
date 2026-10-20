@@ -40,7 +40,7 @@ La llamada se rechaza con exit 2. Su huella queda guardada: repetirla se rechaza
 
 ## Comandos triviales (no se consultan)
 
-Un comando es trivial solo si el programa (y el subcomando de git) coincide exactamente con la lista, no contiene metacaracteres de shell (`; & | < > $ ` ( ) \ salto de linea`), no nombra una ruta sensible y sus argumentos encajan en el modelo cerrado de `scripts/action-review.py`: opciones permitidas explicitas, rutas solo relativas al proyecto (sin `/`, `~` ni `..`) y `git branch` solo en lectura (`--show-current`, `--list`, `-a`, `-r`, `-v`, sin nombres). Cualquier otra cosa, o la duda, se consulta. Limite conocido: un enlace simbolico dentro del proyecto que apunte fuera no se detecta. `SAVIA_ACTION_REVIEW_TIMEOUT` se limita a 25 s (el hook muere a los 35 s).
+Un comando es trivial solo si el programa (y el subcomando de git) coincide exactamente con la lista, no contiene metacaracteres de shell (`; & | < > $ ` ( ) \ salto de linea`), no nombra una ruta sensible y sus argumentos encajan en el modelo cerrado de `scripts/action-review.py`: opciones permitidas explicitas, rutas solo relativas al proyecto (sin `/`, `~`, `..` ni comodines o expansiones `* ? [ ] { } $`; `echo` tampoco admite argumentos con forma de ruta), directorio de trabajo efectivo de la llamada (`workdir`, `cwd`) dentro del proyecto y `git branch` solo en lectura (`--show-current`, `--list`, `-a`, `-r`, `-v`, sin nombres). Cualquier otra cosa, o la duda, se consulta. Los enlaces simbolicos que apuntan fuera del proyecto se resuelven y van al revisor. `SAVIA_ACTION_REVIEW_TIMEOUT` se limita a 25 s (el hook muere a los 35 s).
 
 ```allowlist
 ls
