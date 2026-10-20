@@ -24,7 +24,8 @@ get_diff_hash() {
 # Clave: CONFIDENTIALITY_HMAC_KEY (secreto de CI) o el fichero local; vacía = ausente.
 # CONFIDENTIALITY_REQUIRE_HMAC=1: sin clave, sign y verify fallan cerrado.
 hmac_key() {
-  if [ -n "${CONFIDENTIALITY_HMAC_KEY:-}" ]; then printf '%s' "$CONFIDENTIALITY_HMAC_KEY"
+  # El secreto de CI puede llegar con salto de línea final; se trata igual que el fichero.
+  if [ -n "${CONFIDENTIALITY_HMAC_KEY//[$'\r\n']/}" ]; then printf '%s' "${CONFIDENTIALITY_HMAC_KEY//[$'\r\n']/}"
   elif [ -f "$SECRET_FILE" ]; then cat "$SECRET_FILE" 2>/dev/null | tr -d '\n'
   fi
 }
@@ -101,9 +102,23 @@ do_verify() {
   echo "VERIFIED"
 }
 
+# Para los firmantes automáticos (bots): firma y comprueba la firma recién escrita.
+# Nunca deja una firma obsoleta en silencio: si falta la clave o la verificación falla, sale != 0.
+do_resign() {
+  export CONFIDENTIALITY_REQUIRE_HMAC=1   # un bot nunca firma con clave efímera
+  local rc=0
+  do_sign || rc=$?
+  if [ "$rc" -ne 0 ] || ! grep -q "^signature=" "$SIG_FILE" 2>/dev/null; then
+    echo "ERROR: re-firma fallida: no se ha generado una firma válida (¿CONFIDENTIALITY_HMAC_KEY?)" >&2
+    exit 1
+  fi
+  ( do_verify ) >/dev/null || { echo "ERROR: re-firma fallida: la firma recién escrita no verifica" >&2; exit 1; }
+  echo "RESIGNED"
+}
+
 do_status() {
   [ ! -f "$SIG_FILE" ] && echo "No signature." && exit 0
   grep -v '^#' "$SIG_FILE" | grep -v '^$'
 }
 
-case "$ACTION" in sign) do_sign ;; verify) do_verify ;; status) do_status ;; *) echo "Usage: $0 {sign|verify|status}"; exit 2 ;; esac
+case "$ACTION" in sign) do_sign ;; resign) do_resign ;; verify) do_verify ;; status) do_status ;; *) echo "Usage: $0 {sign|resign|verify|status}"; exit 2 ;; esac

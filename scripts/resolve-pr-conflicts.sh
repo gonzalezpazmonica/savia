@@ -237,7 +237,12 @@ fi
 # ── Re-sign confidentiality ────────────────────────────────────────────────
 
 if [[ -x "scripts/confidentiality-sign.sh" ]]; then
-  bash scripts/confidentiality-sign.sh sign >/dev/null 2>&1
+  # SE-426: una firma que falla no se empuja en silencio (el PR quedaría bloqueado sin aviso).
+  if ! sign_out=$(bash scripts/confidentiality-sign.sh resign 2>&1); then
+    echo "resolve-pr-conflicts: ERROR re-firma fallida, no se empuja $BRANCH" >&2
+    echo "$sign_out" | tail -3 >&2
+    exit 4
+  fi
   if ! git diff --quiet .confidentiality-signature; then
     git add .confidentiality-signature
     git commit -m "chore: re-sign after conflict resolution
