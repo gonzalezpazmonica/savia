@@ -532,7 +532,11 @@ g13_scope_trace() {
   while IFS= read -r sf; do
     [[ -z "$sf" ]] && continue
     local hints; hints=$(grep -oE '[a-zA-Z0-9_./*-]+\.(sh|py|md|bats|json|yaml|yml|ts|tsx|js)' "$sf" 2>/dev/null)
-    path_hints="${path_hints}${hints}"$'\n'
+    # SE-404: extensionless / dotfile paths (.gitignore, .github/CODEOWNERS,
+    # Makefile) only count when backticked and exact (never a directory prefix).
+    local bare; bare=$(grep -oE '`[A-Za-z0-9_./*-]+`' "$sf" 2>/dev/null | tr -d '`' \
+      | grep -E '^(\.[A-Za-z0-9_-]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_./*-]*[A-Za-z0-9_*-]|Makefile|Dockerfile|LICENSE|CODEOWNERS)$' || true)
+    path_hints="${path_hints}${hints}"$'\n'"${bare}"$'\n'
   done <<< "$spec_files"
   path_hints=$(echo "$path_hints" | grep -v '^$' | sort -u)
 
