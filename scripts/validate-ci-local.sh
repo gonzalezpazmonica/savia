@@ -6,6 +6,9 @@
 # SE-407 S2: --clean-state añade el estado limpio al cerrar (advisory: solo PASS/WARN).
 set -uo pipefail
 
+# Ningún test debe heredar GIT_DIR/GIT_WORK_TREE/... del agente: operarían sobre el repo real.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/mock-env.sh"; git_env_clean
+
 QUICK_MODE=false; CLEAN_STATE=false; CLEAN_ONLY=false
 CLEAN_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 while [[ $# -gt 0 ]]; do

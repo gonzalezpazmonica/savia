@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=c0c376e96ac9cc48ee1055632764eb175801ad3fc712ce69a899a8012a64f54e
-timestamp=2026-10-20T05:06:17Z
-branch=agent/savia-gates-opencode-v2-20261020-r2
-head_commit=29f03750
-signature=e2f89df5f48f924d2c6dbf08e6c52249fd7eb73aee139655b85040a313f1913d
+diff_hash=17289661b5545246331aa783715e126cea04cc1d765fcb77a3f05cdd196cc6e2
+timestamp=2026-10-20T05:31:07Z
+branch=agent/fix-ci-git-env-leak-20261020
+head_commit=3c948a94
+signature=1f41490cc02275d02c2c37c56ff0c88952a809e2a82e496cec5c3dc2c2a83640
