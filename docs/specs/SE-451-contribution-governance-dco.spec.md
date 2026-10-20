@@ -1,5 +1,6 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_by: "gonzalezpazmonica — AskUserQuestion 2026-10-20 (DCO), sprint nocturno"
 priority: P1
 developer_type: agent-single
 created: 2026-10-20
@@ -91,7 +92,15 @@ redistribuirla; su licencia no se verificó (marcar «a verificar»).
 
 S1 S, S2 S, S3 M con revisión legal, S4 M.
 
-## Decisiones pendientes de la operadora
+## Decisiones de la operadora
+
+Registro 2026-10-20 (AskUserQuestion, sprint nocturno; `output/agent-runs/overnight-20261007-audit.log`):
+
+- **D1 resuelta: DCO.** No CLA. S1 y S2 se implementan; S3 queda descartada (AC5 no aplica). Solo hacia adelante (D4): sin reescritura de historial.
+- **D2 (implementación):** los commits de agentes no llevan `Signed-off-by` y no se firman en nombre de nadie. Exención por rama y autor del PR: cabecera `agent/*` y autor del PR en la lista de mantenedores (`MAINTAINERS`, por defecto el propietario del repo). Un PR `agent/*` de una persona ajena no está exento. Bots: autor con `type: Bot` o login `*[bot]`.
+- **D3:** S4 (REUSE) no entra; sin demanda.
+
+## Decisiones pendientes de la operadora (histórico)
 
 - **D1**: DCO (recomendado), CLA o ninguno. Un CLA de relicenciación contradice `LICENSE-ENTERPRISE.md`.
 - **D2**: exención del check para ramas `agent/*` del mantenedor y lista de bots.
