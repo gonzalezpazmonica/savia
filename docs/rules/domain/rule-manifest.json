@@ -1,12 +1,16 @@
 {
-  "generated": "2026-10-05T05:00:38Z",
-  "total": 313,
+  "generated": "2026-10-20T07:08:14Z",
+  "total": 314,
   "tier1_count": 4,
   "tier2_count": 304,
-  "dormant_count": 5,
+  "dormant_count": 6,
   "rules": {
     "accessibility-output.md": {
       "tier": "tier2",
+      "consumers": ""
+    },
+    "action-review-policy.md": {
+      "tier": "dormant",
       "consumers": ""
     },
     "adaptive-output.md": {
