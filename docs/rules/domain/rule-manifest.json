@@ -1,8 +1,8 @@
 {
-  "generated": "2026-10-05T05:00:38Z",
-  "total": 313,
+  "generated": "2026-10-20T07:16:38Z",
+  "total": 314,
   "tier1_count": 4,
-  "tier2_count": 304,
+  "tier2_count": 305,
   "dormant_count": 5,
   "rules": {
     "accessibility-output.md": {
@@ -514,6 +514,10 @@
       "consumers": ""
     },
     "frontend-testing.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "gate-result-contract.md": {
       "tier": "tier2",
       "consumers": ""
     },
