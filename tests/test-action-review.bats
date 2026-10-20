@@ -203,3 +203,37 @@ PY
   run call "curl http://x.example" bash
   [ "$status" -eq 2 ]
 }
+
+@test "P1-1: comandos que la politica prohibe nunca son triviales y llegan al revisor" {
+  export FAKE_REPLY="BLOCK destruye historia o lee secretos"
+  for c in "git branch -D main" "git branch -f main HEAD~5" "git diff --output=/home/monica/.bashrc" \
+           "cat ~/.config/gh/hosts.yml" "cat ~/.kube/config" "head -c 100 ~/.docker/config.json" \
+           "grep -r password /home/monica" "git -C /tmp status" "rg --pre=sh foo" "cat ../fuera" "ls /etc"; do
+    run bash -c "printf '%s' '{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"$c\"}}' | bash '$HOOK' --dry-run"
+    [ "$output" = "would-review" ] || { echo "trivial: $c"; return 1; }
+    run call "$c"
+    [ "$status" -eq 2 ] || { echo "no bloqueado: $c"; return 1; }
+  done
+}
+
+@test "P1-1: formas de lectura modeladas siguen siendo triviales" {
+  export FAKE_REPLY="BLOCK"
+  for c in "git branch --show-current" "git log --oneline -5" "git diff HEAD~1" "head -n 20 src/a.py" "grep -rn foo src"; do
+    run call "$c"
+    [ "$status" -eq 0 ] || { echo "no trivial: $c"; return 1; }
+  done
+  [ "$(ncalls)" -eq 0 ]
+}
+
+@test "P2-3: SAVIA_ACTION_REVIEW_TIMEOUT se limita por debajo del timeout del hook" {
+  run python3 -c "
+import importlib.util as u
+sp=u.spec_from_file_location('ar','$REAL_ROOT/scripts/action-review.py'); m=u.module_from_spec(sp); sp.loader.exec_module(m)
+import os, subprocess
+seen={}
+def fake(argv, **kw): seen['t']=kw['timeout']; return subprocess.CompletedProcess(argv,0,'ALLOW','')
+m.subprocess.run=fake
+os.environ['SAVIA_ACTION_REVIEW_TIMEOUT']='600'
+m.ask_reviewer('x'); print(seen['t'])"
+  [ "$output" = "25.0" ]
+}

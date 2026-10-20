@@ -54,7 +54,8 @@ def build_block_message(tool: str, count: int, preview: int, canonical: str) -> 
         f"- arguments: {snippet}\n"
         "No repitas la llamada. Handback (SE-332): escala al padre inmediato con lo que "
         "intentaste y por que no avanza; si no hay padre, termina en manual. "
-        "Una llamada distinta reinicia la cadena.\n"
+        "Una llamada distinta reinicia la cadena. Si esperabas un cambio externo, "
+        "varia la espera o usa Monitor en vez de repetir el sondeo.\n"
     )
 
 
@@ -68,7 +69,7 @@ def run_pre(args, exclude: set) -> int:
         return 0
     os.makedirs(args.state_dir, exist_ok=True)
     base = os.path.join(args.state_dir, f"{safe_name(args.session)}.pre")
-    canonical = canonicalize_args(args.args)
+    canonical = canonicalize_args(normalize_bash_args(args.tool, args.args))
     key = args.agent or "-"
     now = time.time()
     with open(base + ".lock", "w") as lock:
@@ -94,6 +95,19 @@ def run_pre(args, exclude: set) -> int:
             file=sys.stderr,
         )
     return 0
+
+
+def normalize_bash_args(tool: str, raw: str) -> str:
+    """Bash: la clave ignora description/timeout/run_in_background y los espacios del comando."""
+    if tool.casefold() != "bash":
+        return raw
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return raw
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("command"), str):
+        return raw
+    return json.dumps({"command": " ".join(parsed["command"].split())})
 
 
 def canonicalize_args(raw: str) -> str:

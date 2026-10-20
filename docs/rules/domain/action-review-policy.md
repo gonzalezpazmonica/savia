@@ -40,7 +40,7 @@ La llamada se rechaza con exit 2. Su huella queda guardada: repetirla se rechaza
 
 ## Comandos triviales (no se consultan)
 
-Un comando es trivial si empieza por un programa de la lista, no contiene metacaracteres de shell (`; & | < > $ ` ( ) \ salto de linea`) y no nombra una ruta sensible. Cualquier otra cosa se consulta.
+Un comando es trivial solo si el programa (y el subcomando de git) coincide exactamente con la lista, no contiene metacaracteres de shell (`; & | < > $ ` ( ) \ salto de linea`), no nombra una ruta sensible y sus argumentos encajan en el modelo cerrado de `scripts/action-review.py`: opciones permitidas explicitas, rutas solo relativas al proyecto (sin `/`, `~` ni `..`) y `git branch` solo en lectura (`--show-current`, `--list`, `-a`, `-r`, `-v`, sin nombres). Cualquier otra cosa, o la duda, se consulta. Limite conocido: un enlace simbolico dentro del proyecto que apunte fuera no se detecta. `SAVIA_ACTION_REVIEW_TIMEOUT` se limita a 25 s (el hook muere a los 35 s).
 
 ```allowlist
 ls
@@ -68,7 +68,7 @@ git ls-files
 Rutas sensibles (expresion regular, sin distinguir mayusculas): un comando que las nombra nunca es trivial.
 
 ```sensitive
-\.ssh|\.env\b|\.pem\b|id_rsa|\.aws|\.gnupg|/etc/shadow|secret|credential|token|\.netrc|\.npmrc|\.pypirc
+\.ssh|\.env\b|hosts\.yml|\.kube|\.docker|\.git-credentials|\.config/gh|\.savia/|\.pem\b|id_rsa|\.aws|\.gnupg|/etc/shadow|secret|credential|token|\.netrc|\.npmrc|\.pypirc
 ```
 
 ## Reglas que recibe el revisor

@@ -24,6 +24,7 @@ import time
 from pathlib import Path
 
 DEFAULT_TIMEOUT = 20.0
+MAX_TIMEOUT = 25.0
 DEFAULT_TIER = 3
 NO_TASK = "(tarea no declarada)"
 SHELL_META = re.compile(r"[;&|<>$`()\\\n\r]")
@@ -54,11 +55,104 @@ def load_policy() -> dict:
     raise ReviewerFailure("politica action-review-policy.md ilegible o incompleta")
 
 
+_REL_PATH = re.compile(r"^(?![/~-])[\w@+,=:%*?./-]+$")
+_REV = re.compile(r"^(?![/~-])[\w@~^{}:./-]+$")
+_NUM = re.compile(r"^\d+$")
+_SHORT_NUM = re.compile(r"^-\d+$")
+
+# Programa -> (opciones cortas sin valor, opciones cortas con valor numerico, positionales).
+# Cerrada: lo no listado va al revisor. Positionales: "path" rutas relativas al proyecto,
+# "rev" revisiones git, "any" cualquier palabra, "none" ninguno, "bare" nombres de programa,
+# "date" un formato +FMT, "pattern+path" (grep/rg: patron y luego rutas).
+_SPECS = {
+    "ls": (set("alhRtrSdFA1"), set(), "path"),
+    "pwd": (set(), set(), "none"),
+    "whoami": (set(), set(), "none"),
+    "date": (set("u"), set(), "date"),
+    "echo": (set("n"), set(), "any"),
+    "which": (set("a"), set(), "bare"),
+    "wc": (set("lwcm"), set(), "path"),
+    "stat": (set("L"), set(), "path"),
+    "cat": (set("nbsA"), set(), "path"),
+    "head": (set(), set("nc"), "path"),
+    "tail": (set(), set("nc"), "path"),
+    "grep": (set("inwvlcHhFEIsr"), set("ABCm"), "pattern+path"),
+    "rg": (set("inwvlcFSsU"), set("ABCm"), "pattern+path"),
+    "git status": (set("sb"), set(), "path"),
+    "git log": (set(), set("n"), "rev"),
+    "git diff": (set(), set(), "rev"),
+    "git show": (set(), set(), "rev"),
+    "git branch": (set("avr"), set(), "none"),
+    "git rev-parse": (set(), set(), "rev"),
+    "git ls-files": (set("comds"), set(), "path"),
+}
+_LONG = {
+    "git status": {"--short", "--branch", "--porcelain"},
+    "git log": {"--oneline", "--stat", "--graph", "--decorate", "--no-color", "--name-only", "--name-status"},
+    "git diff": {"--stat", "--shortstat", "--cached", "--staged", "--name-only", "--name-status", "--no-color"},
+    "git show": {"--stat", "--name-only", "--name-status", "--no-color"},
+    "git branch": {"--show-current", "--list", "--all", "--remotes"},
+    "git rev-parse": {"--short", "--abbrev-ref", "--show-toplevel", "--git-dir", "--is-inside-work-tree", "--verify"},
+    "git ls-files": {"--others", "--cached", "--modified", "--deleted", "--exclude-standard"},
+}
+
+
+def _safe_path(tok: str) -> bool:
+    return bool(_REL_PATH.match(tok)) and ".." not in tok.split("/") and not tok.startswith(".*")
+
+
+def _model_ok(key: str, args: list) -> bool:
+    flags, valued, positional = _SPECS[key]
+    longs = _LONG.get(key, set())
+    pos, i = [], 0
+    while i < len(args):
+        tok = args[i]
+        if tok.startswith("--"):
+            if tok not in longs:
+                return False
+        elif tok.startswith("-") and len(tok) > 1:
+            if _SHORT_NUM.match(tok) and (valued or key == "git log"):
+                pass
+            elif len(tok) == 2 and tok[1] in valued:
+                i += 1
+                if i >= len(args) or not _NUM.match(args[i]):
+                    return False
+            elif not all(c in flags for c in tok[1:]):
+                return False
+        else:
+            pos.append(tok)
+        i += 1
+    if positional == "none":
+        return not pos
+    if positional == "any":
+        return True
+    if positional == "bare":
+        return all("/" not in t and _REL_PATH.match(t) for t in pos)
+    if positional == "date":
+        return len(pos) <= 1 and all(re.match(r"^\+[\w%:. /-]*$", t) for t in pos)
+    if positional == "rev":
+        return all(_REV.match(t) and (":" not in t or _safe_path(t.split(":", 1)[1] or ".")) for t in pos)
+    if positional == "pattern+path":
+        return bool(pos) and all(_safe_path(t) for t in pos[1:])
+    return all(_safe_path(t) for t in pos)
+
+
 def is_trivial(command: str, policy: dict) -> bool:
+    """Lista cerrada: programa exacto (no prefijo de cadena) y argumentos modelados. Duda -> revisor."""
     cmd = command.strip()
     if not cmd or SHELL_META.search(cmd) or policy["sensitive"].search(cmd):
         return False
-    return any(cmd == p or cmd.startswith(p + " ") for p in policy["allowlist"])
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError:
+        return False
+    if not tokens or "/" in tokens[0] or tokens[0].startswith("~"):
+        return False
+    key = " ".join(tokens[:2]) if tokens[0] == "git" and len(tokens) > 1 else tokens[0]
+    if key not in _SPECS or key not in policy["allowlist"]:
+        return False
+    args = tokens[2:] if key.startswith("git ") else tokens[1:]
+    return _model_ok(key, args)
 
 
 def task_text() -> str:
@@ -124,7 +218,12 @@ def reviewer_command() -> list:
 
 
 def ask_reviewer(prompt: str) -> tuple:
-    timeout = float(os.environ.get("SAVIA_ACTION_REVIEW_TIMEOUT") or DEFAULT_TIMEOUT)
+    try:
+        timeout = float(os.environ.get("SAVIA_ACTION_REVIEW_TIMEOUT") or DEFAULT_TIMEOUT)
+    except ValueError:
+        timeout = DEFAULT_TIMEOUT
+    # Por debajo del timeout del hook (35 s): si el hook muere, Claude Code deja pasar la llamada.
+    timeout = min(max(timeout, 1.0), MAX_TIMEOUT)
     argv = reviewer_command()
     try:
         proc = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=timeout)

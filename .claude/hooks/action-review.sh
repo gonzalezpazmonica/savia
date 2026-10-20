@@ -20,4 +20,8 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." &
 REVIEWER="$PROJECT_DIR/scripts/action-review.py"
 [[ -f "$REVIEWER" ]] || exit 0
 
+if ! command -v python3 >/dev/null 2>&1; then
+  # Sin python3 el revisor no puede decidir: fail-closed en tier 3/4, igual en Claude Code y OpenCode.
+  case "${SAVIA_RISK_TIER:-3}" in 1|2) exit 0 ;; *) echo "[action-review] python3 no disponible; fail-closed." >&2; exit 2 ;; esac
+fi
 exec python3 "$REVIEWER" "$@"

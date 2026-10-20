@@ -142,3 +142,13 @@ call() { call_ev PreToolUse "$@"; }
   export SAVIA_LOOP_EXCLUDE=Bash
   for i in 1 2 3 4; do run call ox bash '{"command":"ls"}'; [ "$status" -eq 0 ]; done
 }
+
+@test "P2-1: description, espacios y timeout no esquivan la cadena en Bash" {
+  export SAVIA_AUTONOMOUS_RUN=1
+  run call s Bash '{"command":"ls /tmp","description":"a"}'
+  [ "$status" -eq 0 ]
+  run call s Bash '{"command":"ls  /tmp","description":"b"}'
+  [ "$status" -eq 0 ]
+  run call s Bash '{"command":"ls /tmp ","timeout":5000}'
+  [ "$status" -eq 2 ]
+}
