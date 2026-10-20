@@ -7,8 +7,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# shellcheck source=lib/gate-result.sh
-source "$SCRIPT_DIR/lib/gate-result.sh"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
 OUTPUT_DIR="$REPO_ROOT/output/security"
 FINDINGS_FILE="$OUTPUT_DIR/pre-push-findings.jsonl"
 GITLEAKS_CONFIG="$REPO_ROOT/.gitleaks.toml"

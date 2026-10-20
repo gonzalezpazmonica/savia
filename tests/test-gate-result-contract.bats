@@ -25,10 +25,10 @@ setup_file() {
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   WORK="$(mktemp -d -p "$BATS_TEST_TMPDIR")"
-  mkdir -p "$WORK/proj/scripts/lib" "$WORK/bin"
+  mkdir -p "$WORK/proj/scripts" "$WORK/proj/.claude/hooks/lib" "$WORK/bin"
   cp "$REPO_ROOT/scripts/git-history-secret-scan.sh" "$REPO_ROOT/scripts/dependency-scan.sh" \
      "$REPO_ROOT/scripts/pre-push-security-gate.sh" "$WORK/proj/scripts/"
-  cp "$REPO_ROOT/scripts/lib/gate-result.sh" "$WORK/proj/scripts/lib/"
+  cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$WORK/proj/.claude/hooks/lib/"
   REPO="$WORK/repo"
   git init -q "$REPO"
   printf 'output/\n' > "$REPO/.gitignore"
@@ -50,14 +50,14 @@ last_result() { printf '%s\n' "$output" | grep '^gate-result: ' | tail -1 | sed 
 # ── contrato común ───────────────────────────────────────────────────────────
 
 @test "contrato: gate_result_emit imprime result y gaps con motivo válido" {
-  source "$REPO_ROOT/scripts/lib/gate-result.sh"
+  source "$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
   run gate_result_emit unknown "gitleaks:missing_tool" "history:limit"
   [ "$status" -eq 0 ]
   python3 -c 'import json,sys; d=json.loads(sys.argv[1].split(": ",1)[1]); assert d=={"result":"unknown","gaps":[{"check":"gitleaks","reason":"missing_tool"},{"check":"history","reason":"limit"}]}, d' "$output"
 }
 
 @test "contrato: rechaza estado inválido, motivo inválido y unknown sin hueco" {
-  source "$REPO_ROOT/scripts/lib/gate-result.sh"
+  source "$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
   run gate_result_emit mal; [ "$status" -ne 0 ]
   run gate_result_emit unknown "x:no_existe"; [ "$status" -ne 0 ]
   run gate_result_emit unknown; [ "$status" -ne 0 ]
@@ -205,23 +205,23 @@ ghtoken() { printf 'ghp_%s' "$(printf 'A%.0s' $(seq 1 36))"; }
 # ── consumidor: contador unknown frente al baseline (D3) ─────────────────────
 
 @test "gate-unknown-check: dentro del baseline PASS; por encima WARN y con ENFORCE=1 FAIL" {
-  S="$REPO_ROOT/scripts/gate-unknown-check.sh"
+  S="$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
   echo 0 > "$WORK/base"
   : > "$WORK/log"
-  run env GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S"
+  run env GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S" check
   [ "$status" -eq 0 ]; [[ "$output" == PASS* ]]
   printf '{"hook":"x","reason":"missing_tool","day":"%s"}\n' "$(date +%Y-%m-%d)" > "$WORK/log"
-  run env GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S"
+  run env GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S" check
   [ "$status" -eq 0 ]; [[ "$output" == WARN* ]]
-  run env GATE_UNKNOWN_ENFORCE=1 GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S"
+  run env GATE_UNKNOWN_ENFORCE=1 GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S" check
   [ "$status" -eq 1 ]; [[ "$output" == FAIL* ]]
 }
 
 @test "gate-unknown-check: baseline ausente o log corrupto fallan cerrado" {
-  S="$REPO_ROOT/scripts/gate-unknown-check.sh"
-  run env GATE_UNKNOWN_BASELINE="$WORK/no-existe" bash "$S"
+  S="$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
+  run env GATE_UNKNOWN_BASELINE="$WORK/no-existe" bash "$S" check
   [ "$status" -eq 1 ]
   echo 0 > "$WORK/base"; echo 'no json' > "$WORK/log"
-  run env GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S"
+  run env GATE_UNMEASURED_LOG="$WORK/log" GATE_UNKNOWN_BASELINE="$WORK/base" bash "$S" check
   [ "$status" -eq 1 ]
 }

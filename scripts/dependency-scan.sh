@@ -34,8 +34,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-# shellcheck source=lib/gate-result.sh
-source "$SCRIPT_DIR/lib/gate-result.sh"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
 
 # ── Valores por defecto ──────────────────────────────────────────────────────
 SCAN_PATH=""

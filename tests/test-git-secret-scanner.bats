@@ -11,7 +11,7 @@ setup() {
   mkdir -p "$WORK/proj/scripts" "$WORK/bin"
   cp "$REPO_ROOT/scripts/git-history-secret-scan.sh" "$REPO_ROOT/scripts/install-prepush-hook.sh" \
      "$REPO_ROOT/scripts/git-history-secret-remediate.sh" "$WORK/proj/scripts/"
-  mkdir -p "$WORK/proj/scripts/lib"; cp "$REPO_ROOT/scripts/lib/gate-result.sh" "$WORK/proj/scripts/lib/"
+  mkdir -p "$WORK/proj/.claude/hooks/lib"; cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$WORK/proj/.claude/hooks/lib/"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/proj/scripts/pre-push-security-gate.sh"
   SCAN="$WORK/proj/scripts/git-history-secret-scan.sh"
   REPO="$WORK/repo"

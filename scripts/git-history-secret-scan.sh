@@ -22,8 +22,8 @@ TARGET_REPO="$REPO_ROOT"
 MAX_COMMITS="${GIT_HISTORY_SCAN_MAX_COMMITS:-0}"
 SCAN_TIMEOUT="${GIT_HISTORY_SCAN_TIMEOUT:-0}"
 GAPS=()
-# shellcheck source=lib/gate-result.sh
-source "$SCRIPT_DIR/lib/gate-result.sh"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
 
 # ── Parámetros ────────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do

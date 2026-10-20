@@ -208,7 +208,7 @@ EOF
 
 @test "workspace-root .trivyignore is used when the scanned path has none" {
   mkdir -p "$TMPDIR/ws/scripts"
-  cp "$REPO_ROOT/$SCRIPT" "$TMPDIR/ws/scripts/"; mkdir -p "$TMPDIR/ws/scripts/lib"; cp "$REPO_ROOT/scripts/lib/gate-result.sh" "$TMPDIR/ws/scripts/lib/"
+  cp "$REPO_ROOT/$SCRIPT" "$TMPDIR/ws/scripts/"; mkdir -p "$TMPDIR/ws/.claude/hooks/lib"; cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$TMPDIR/ws/.claude/hooks/lib/"
   printf 'CVE-2020-0002\n' > "$TMPDIR/ws/.trivyignore"
   run bash "$TMPDIR/ws/$SCRIPT" --path "$TMPDIR/proj"
   [ "$status" -eq 0 ]
@@ -352,7 +352,7 @@ EOF
 @test "docker fallback does not pass the host-only workspace-root .trivyignore" {
   PATH="/usr/bin:/bin" command -v trivy >/dev/null && skip "trivy real en /usr/bin"
   mkdir -p "$TMPDIR/ws/scripts"
-  cp "$REPO_ROOT/$SCRIPT" "$TMPDIR/ws/scripts/"; mkdir -p "$TMPDIR/ws/scripts/lib"; cp "$REPO_ROOT/scripts/lib/gate-result.sh" "$TMPDIR/ws/scripts/lib/"
+  cp "$REPO_ROOT/$SCRIPT" "$TMPDIR/ws/scripts/"; mkdir -p "$TMPDIR/ws/.claude/hooks/lib"; cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$TMPDIR/ws/.claude/hooks/lib/"
   printf 'CVE-2020-0002\n' > "$TMPDIR/ws/.trivyignore"
   mv "$TMPDIR/bin/trivy" "$TMPDIR/trivy.real"
   printf '#!/usr/bin/env bash\necho "docker $*" >> "$FAKE_LOG"\nprintf "%%s\\n" "$FAKE_JSON"\n' > "$TMPDIR/bin/docker"

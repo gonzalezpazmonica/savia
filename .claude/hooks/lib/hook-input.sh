@@ -34,7 +34,7 @@ hook_extract_command() {
 hook_unmeasured_exit() {
   local hook="$1"
   # shellcheck source=/dev/null
-  source "$_HOOK_INPUT_DIR/../../../scripts/lib/gate-result.sh" 2>/dev/null \
+  source "$_HOOK_INPUT_DIR/gate-result.sh" 2>/dev/null \
     && GATE_UNMEASURED_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$_HOOK_INPUT_DIR/../../.." && pwd)}" gate_unmeasured_record "$hook" missing_tool
   exit 0
 }

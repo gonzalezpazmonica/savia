@@ -37,7 +37,7 @@ gate-result: {"result":"unknown","gaps":[{"check":"gitleaks","reason":"missing_t
   `unreadable` (salida o entrada ilegible, o herramienta que falló).
 - `unknown` exige al menos un hueco. `clean` no lleva huecos. `findings` puede llevarlos.
 
-Se emite con `scripts/lib/gate-result.sh` (`gate_result_emit <estado> [check:reason ...]`), que valida los tres
+Se emite con `.claude/hooks/lib/gate-result.sh` (`gate_result_emit <estado> [check:reason ...]`), que valida los tres
 campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasured_record`
 (vía `.claude/hooks/lib/hook-input.sh`) en `output/unmeasured-gates.jsonl`, una línea por hook y día.
 
@@ -70,6 +70,6 @@ sin haber evaluado. Los hooks no marcados que salen 0 sin `jq` añaden su línea
 ## Consumidores
 
 - **CI y `validate-ci-local.sh`**: `unknown` no bloquea el primer ciclo (D3). Se cuenta en
-  `config/gate-unknown-baseline.txt`; el contador solo puede bajar y `scripts/gate-unknown-check.sh` falla
+  `config/gate-unknown-baseline.txt`; el contador solo puede bajar y `bash .claude/hooks/lib/gate-result.sh check` falla
   si sube.
 - **Hooks**: leen `output/unmeasured-gates.jsonl` como señal de huecos de cobertura.

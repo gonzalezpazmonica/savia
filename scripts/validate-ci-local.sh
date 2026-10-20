@@ -250,7 +250,7 @@ check_clean_state() {
 
 # ── SE-453: gates en «unknown» frente al baseline (primer ciclo: aviso) ──
 check_gate_unknown() {
-  bash "$REPO_ROOT_CI/scripts/gate-unknown-check.sh" > "$TMPDIR_CI/9c-gate-unknown" 2>&1
+  bash "$REPO_ROOT_CI/.claude/hooks/lib/gate-result.sh" check > "$TMPDIR_CI/9c-gate-unknown" 2>&1
 }
 
 # ── Run checks in parallel ───────────────────────────────────────────────
