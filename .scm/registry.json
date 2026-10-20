@@ -16316,27 +16316,6 @@
       "frontend_support": [
         "opencode"
       ],
-      "id": "script:scripts/gate-unknown-check",
-      "intents": [
-        "baseline",
-        "check",
-        "contador",
-        "frente",
-        "gate"
-      ],
-      "kind": "script",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": "scripts/gate-unknown-check.sh",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "opencode"
-      ],
       "id": "script:scripts/generate-capability-map",
       "intents": [
         "around",
@@ -17818,27 +17797,6 @@
       "replaced_by": null,
       "risk_level": null,
       "source": "scripts/lib/enterprise-helpers.sh",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "opencode"
-      ],
-      "id": "script:scripts/lib/gate-result",
-      "intents": [
-        "contrato",
-        "gate",
-        "gates",
-        "result",
-        "resultado"
-      ],
-      "kind": "script",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": "scripts/lib/gate-result.sh",
       "status": "active",
       "tests": []
     },
@@ -29649,7 +29607,7 @@
       "tests": []
     }
   ],
-  "content_hash": "fb971d2bc835",
+  "content_hash": "1314f1c752b5",
   "deferred_kinds": [
     "rule",
     "hook"

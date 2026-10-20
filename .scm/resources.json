@@ -1,6 +1,6 @@
 {
-  "hash": "fb971d2bc835",
-  "total": 1452,
+  "hash": "1314f1c752b5",
+  "total": 1450,
   "resources": [
     {
       "category": "analysis",
@@ -10570,20 +10570,6 @@
     },
     {
       "category": "planning",
-      "name": "gate-unknown-check",
-      "intents": [
-        "baseline",
-        "check",
-        "contador",
-        "frente",
-        "gate"
-      ],
-      "kind": "script",
-      "path": "scripts/gate-unknown-check.sh",
-      "description": "gate-unknown-check.sh — contador de gates en «unknown» frente al baseline (SE-453 D3)."
-    },
-    {
-      "category": "planning",
       "name": "generate-capability-map",
       "intents": [
         "around",
@@ -11541,20 +11527,6 @@
       "kind": "script",
       "path": "scripts/lib/enterprise-helpers.sh",
       "description": "enterprise-helpers.sh — Sourceable helpers for Enterprise module checks"
-    },
-    {
-      "category": "planning",
-      "name": "lib/gate-result",
-      "intents": [
-        "contrato",
-        "gate",
-        "gates",
-        "result",
-        "resultado"
-      ],
-      "kind": "script",
-      "path": "scripts/lib/gate-result.sh",
-      "description": "gate-result.sh — contrato de resultado de los gates (SE-453)."
     },
     {
       "category": "planning",

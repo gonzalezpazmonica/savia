@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 5fd15ea1e81f | resources: 1452
-> 295 commands · 139 skills · 90 agents · 928 scripts
+> hash: 0a228f62146c | resources: 1450
+> 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -798,7 +798,6 @@
 [planning] gate-init — gate,init,scripts — script:scripts/gate-init.sh
 [planning] gate-post-receive — gate,post,receive,scripts — script:scripts/gate-post-receive.sh
 [planning] gate-teardown — gate,scripts,teardown — script:scripts/gate-teardown.sh
-[planning] gate-unknown-check — baseline,check,contador,frente,gate — script:scripts/gate-unknown-check.sh
 [planning] generate-capability-map — around,capability,generate,generator,python — script:scripts/generate-capability-map.sh
 [planning] generate-critical-facts — critical,facts,generate,scripts — script:scripts/generate-critical-facts.sh
 [planning] generate-github-hooks — generate,github,hooks — script:scripts/generate-github-hooks.sh
@@ -873,7 +872,6 @@
 [planning] lib/adb-wrapper —  — script:scripts/lib/adb-wrapper.sh
 [planning] lib/concurrent-executor — bounded,concurrent,execution,executor,parallel — script:scripts/lib/concurrent-executor.sh
 [planning] lib/enterprise-helpers — checks,enterprise,helpers,module,sourceable — script:scripts/lib/enterprise-helpers.sh
-[planning] lib/gate-result — contrato,gate,gates,result,resultado — script:scripts/lib/gate-result.sh
 [planning] lib/llm-healer — healer,slice — script:scripts/lib/llm-healer.sh
 [planning] lib/mock-env — environment,library,mock,reusable,scripts — script:scripts/lib/mock-env.sh
 [planning] lib/os-detect — defaults,detect,detection,path,portable — script:scripts/lib/os-detect.sh
