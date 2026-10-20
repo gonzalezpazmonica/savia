@@ -216,3 +216,62 @@ teardown() {
     [ "$status" -eq 0 ] || { echo "sin clave de CI o sin modo exigente: $f"; false; }
   done
 }
+
+# ── SE-426 paso 4: los firmantes automáticos no empujan firmas obsoletas en silencio ──
+
+@test "resign: without any key fails, names CONFIDENTIALITY_HMAC_KEY and creates no key" {
+  run bash "$SCRIPT" resign
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"CONFIDENTIALITY_HMAC_KEY"* ]]
+  [ ! -e "$HOME/.savia/confidentiality-key" ]
+}
+
+@test "resign: does not leave a forged-valid signature when the key is missing" {
+  printf 'diff_hash=x\nsignature=y\n' > "$CONFIDENTIALITY_SIG_FILE"
+  run bash "$SCRIPT" resign
+  [ "$status" -ne 0 ]
+  run bash "$SCRIPT" verify
+  [ "$status" -ne 0 ]
+}
+
+@test "resign: with the CI key signs and the result verifies in strict mode; other key is rejected" {
+  CONFIDENTIALITY_HMAC_KEY="$KEY_A" run bash "$SCRIPT" resign
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RESIGNED"* ]]
+  CONFIDENTIALITY_HMAC_KEY="$KEY_A" CONFIDENTIALITY_REQUIRE_HMAC=1 run bash "$SCRIPT" verify
+  [ "$status" -eq 0 ]
+  CONFIDENTIALITY_HMAC_KEY="$KEY_B" CONFIDENTIALITY_REQUIRE_HMAC=1 run bash "$SCRIPT" verify
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"HMAC mismatch"* ]]
+}
+
+@test "key: CI secret with trailing newline is equivalent to the same key without it" {
+  CONFIDENTIALITY_HMAC_KEY="$KEY_A" bash "$SCRIPT" sign >/dev/null
+  CONFIDENTIALITY_HMAC_KEY="$KEY_A"$'\n' CONFIDENTIALITY_REQUIRE_HMAC=1 run bash "$SCRIPT" verify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HMAC: VERIFIED"* ]]
+}
+
+@test "key: newline-only CI secret counts as missing under strict mode" {
+  CONFIDENTIALITY_HMAC_KEY=$'\n' CONFIDENTIALITY_REQUIRE_HMAC=1 run bash "$SCRIPT" sign
+  [ "$status" -ne 0 ]
+  [ ! -e "$HOME/.savia/confidentiality-key" ]
+}
+
+@test "bots (SE-426 paso 4): both re-signers call resign and never swallow its failure" {
+  root="$BATS_TEST_DIRNAME/../.."
+  grep -q 'confidentiality-sign.sh resign' "$root/scripts/resolve-pr-conflicts.sh"
+  grep -q 'confidentiality-sign.sh resign' "$root/.github/workflows/changelog-consolidate.yml"
+  ! grep -E 'confidentiality-sign.sh (re)?sign[^|]*(>/dev/null 2>&1)?[^|]*\|\| *true' "$root/.github/workflows/changelog-consolidate.yml"
+  ! grep -E 'confidentiality-sign.sh sign >/dev/null 2>&1$' "$root/scripts/resolve-pr-conflicts.sh"
+}
+
+@test "key: local key file alone signs and verifies (no CI env var set)" {
+  printf '%s\n' "$KEY_A" > "$HOME/.savia/confidentiality-key"
+  run bash "$SCRIPT" sign
+  [ "$status" -eq 0 ]
+  grep -Eq '^signature=[0-9a-f]{64}$' "$CONFIDENTIALITY_SIG_FILE"
+  CONFIDENTIALITY_REQUIRE_HMAC=1 run bash "$SCRIPT" verify
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HMAC: VERIFIED"* ]]
+}
