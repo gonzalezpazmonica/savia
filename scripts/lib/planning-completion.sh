@@ -50,3 +50,22 @@ planning_pr_merged() {
   git -C "$root" log --format='%s' "$main_ref" -200 2>/dev/null |
     grep -E "(^|[^0-9])#${pr}([^0-9]|$)" >/dev/null
 }
+
+# SE-444: autoridad del verificador. Solo informa; no altera planning_acceptance_evidence_valid.
+# Imprime "criterio<TAB>estado<TAB>obtenida<TAB>requerida" por cada AC con autoridad ausente
+# (estado "ausente") o inferior a la requerida (estado "insuficiente"). Orden: estatica < simulada < real.
+planning_unverified_authority_list() {
+  local completion="$1"
+  jq -r '
+    def rank: {"estatica":1,"simulada":2,"real":3}[.] // 0;
+    (.acceptance_evidence // [])[]
+    | select(type == "object")
+    | (.authority // "") as $got
+    | (.authority_required // "") as $req
+    | (if $got == "" then "ausente"
+       elif ($req != "" and ($got | rank) < ($req | rank)) then "insuficiente"
+       else empty end) as $state
+    | [(.criterion // "?"), $state, (if $got == "" then "-" else $got end), (if $req == "" then "-" else $req end)]
+    | @tsv
+  ' <<<"$completion" 2>/dev/null
+}
