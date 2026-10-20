@@ -151,26 +151,40 @@ fi
 # --- Step 3: OpenCode ----------------------------------------------------------
 step 3 "Checking OpenCode..."
 
+# Two OpenCode lines exist on npm, each with its own package (they install the same `opencode` command, so
+# only one at a time):
+#   @opencode/cli  OpenCode 2 (recommended; savia-gates and savia-foundation support it)
+#   opencode-ai    OpenCode 1 (>= 1.18.29 for the Savia plugins)
+# (@opencode-ai/cli is NOT OpenCode: it is an unrelated 0.0.0-beta package.)
+# Pick with SAVIA_OPENCODE_FLAVOR=v1|v2 (default v2).
+OC_FLAVOR="${SAVIA_OPENCODE_FLAVOR:-v2}"
+case "$OC_FLAVOR" in
+  v1) OC_NPM_PKG="opencode-ai" ;;
+  v2) OC_NPM_PKG="@opencode/cli" ;;
+  *)  fail "SAVIA_OPENCODE_FLAVOR must be v1 or v2 (got: $OC_FLAVOR)"; exit 1 ;;
+esac
+
 if command -v opencode &>/dev/null; then
   OC_VER=$(opencode --version 2>/dev/null | head -1 | tr -d '[:space:]')
   ok "OpenCode already installed (${OC_VER:-found})"
 else
-  info "OpenCode not found — installing..."
+  info "OpenCode not found — installing $OC_NPM_PKG ($OC_FLAVOR)..."
   if command -v npm &>/dev/null; then
-    if npm install -g @opencode-ai/cli 2>/dev/null; then
-      ok "OpenCode installed via npm"
+    if npm install -g "$OC_NPM_PKG" 2>/dev/null; then
+      ok "OpenCode installed via npm ($OC_NPM_PKG)"
     else
       warn "npm install failed — trying binary download..."
       if [[ -f "$SAVIA_HOME/scripts/opencode-install.sh" ]]; then
         bash "$SAVIA_HOME/scripts/opencode-install.sh" && ok "OpenCode installed via binary" || warn "OpenCode binary install failed"
       else
         warn "OpenCode installer not available yet — install manually:"
-        echo "    npm install -g @opencode-ai/cli"
+        echo "    npm install -g $OC_NPM_PKG"
       fi
     fi
   else
     warn "npm not found — install OpenCode manually:"
-    echo "    npm install -g @opencode-ai/cli"
+    echo "    npm install -g @opencode/cli   # OpenCode 2 (recommended)"
+    echo "    npm install -g opencode-ai     # OpenCode 1"
   fi
 fi
 

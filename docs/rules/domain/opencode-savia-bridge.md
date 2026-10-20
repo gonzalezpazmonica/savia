@@ -5,7 +5,7 @@ token_budget: 1031
 
 # Regla: OpenCode ↔ Savia bridge
 
-> Permite operar pm-workspace desde OpenCode v1.14 sin perder hooks, AUTONOMOUS_REVIEWER ni la base instalada de skills/agents. Vigente desde SE-077 Slice 1+2.
+> Permite operar pm-workspace desde OpenCode 1 (>= 1.18.29) o 2 sin perder hooks, AUTONOMOUS_REVIEWER ni la base instalada de skills/agents. Vigente desde SE-077 Slice 1+2.
 
 ## Cuándo usar
 
@@ -22,11 +22,12 @@ token_budget: 1031
 ## Instalación
 
 ```bash
-# Instala OpenCode v1.14.x en ~/.savia/opencode/ y enlaza el plugin savia-gates
+# Instala OpenCode 2 (@opencode/cli, recomendado) en ~/.savia/opencode/ y enlaza el plugin savia-gates
 bash scripts/opencode-install.sh
 
-# Versión específica
-bash scripts/opencode-install.sh --version 1.14.25
+# OpenCode 1 (paquete opencode-ai, >= 1.18.29) o versión específica
+bash scripts/opencode-install.sh --flavor v1
+bash scripts/opencode-install.sh --version 2.0.32
 
 # Sólo re-enlazar el plugin (binary ya instalado)
 bash scripts/opencode-install.sh --link-only
@@ -65,24 +66,33 @@ Eventos sin binding nativo (`Notification`, `PostToolUseFailure`, etc.) quedan
 documentados como `# opencode-binding: NOT_EXPOSED — <razón>` en el header del
 hook bash. La parity-audit los excluye del gap.
 
+## OpenCode 1 y 2: un plugin, dos enlaces
+
+`index.ts` exporta un objeto con `id` + `setup()` (OpenCode 2) y `server()` (OpenCode >= 1.18.29): un plugin solo-V1 **no carga** en OpenCode 2 y los guards se perdían sin error. Las decisiones viven en `lib/gates.ts`; `lib/v1-adapter.ts` (hooks por clave) y `lib/v2-adapter.ts` (hooks por dominio, un evento mutable) solo traducen. En V2 los nombres se normalizan antes de decidir (`shell`→`bash`, `subagent`→`task`, `path` visible también como `filePath`) y el bloqueo es fallo cerrado: una excepción en `tool.execute.before` rechaza esa llamada, en `prompt` no se admite el prompt, y si los guards no arrancan se rechaza todo (`GUARDS_UNAVAILABLE`). OpenCode 1.19 también llama a `setup()` con un contexto reducido: ahí no hace nada.
+
+| Guard | V1 | V2 |
+|---|---|---|
+| PreToolUse (hooks, cúpulas, pin) | `tool.execute.before` | `ctx.tool.hook("execute.before")` |
+| PostToolUse | `tool.execute.after` | `ctx.tool.hook("execute.after")` |
+| UserPromptSubmit y contexto por proveedor | `chat.message` (partes sintéticas) | `ctx.session.hook("prompt")` + `"context"` (por modelo de cada petición) |
+| AUTONOMOUS_REVIEWER | `permission.ask` | `ctx.permission.hook("evaluate")` |
+| `command.execute.before` | hook propio | sin equivalente: el prompt de un comando pasa por `prompt` y sus herramientas por `execute.before` |
+| FileChanged | `file.edited` | resultado de `edit`/`write`/`patch` |
+| Stop, SessionStart/End, PostCompact, PreCompact, ConfigChange | eventos | `ctx.event.subscribe()` |
+| CwdChanged | `shell.env` | `ctx.shell.hook("create.before")` |
+
+Prueba contra el motor real (sin modelo ni red, aislado en un directorio temporal): `python3 scripts/opencode-gates-real.py` (`--engine v1|v2`); en bats, `SAVIA_GATES_REAL=1`.
+
 ## Ejecución de hooks bash
 
-- `shell-bridge` resuelve `$CLAUDE_PROJECT_DIR` **y** `$CLAUDE_PLUGIN_ROOT` del
-  comando del hook.
-- Cada hook corre con `bash -c` (interpolación `{raw}` para no romper comillas)
-  y `cwd(projectRoot)`, con el payload en stdin vía fichero temporal local.
-- Bloqueo por **dos contratos**: exit code 2 (Claude Code clásico) y stdout JSON
-  `{"decision":"block"}` con exit 0 (patrón SE-337 commit guard y los gates de
-  Stop).
-- Los matchers `Bash(git commit*)` / `Bash:gh pr create*` se resuelven
-  reconstruyendo el nombre compuesto `bash(<command>)` / `bash:<command>`.
+- `shell-bridge` resuelve `$CLAUDE_PROJECT_DIR` **y** `$CLAUDE_PLUGIN_ROOT` del comando del hook.
+- Cada hook corre con `bash -c` (interpolación `{raw}` para no romper comillas) y `cwd(projectRoot)`, con el payload en stdin vía fichero temporal local.
+- Bloqueo por **dos contratos**: exit code 2 (Claude Code clásico) y stdout JSON `{"decision":"block"}` con exit 0 (patrón SE-337 commit guard y los gates de Stop).
+- Los matchers `Bash(git commit*)` / `Bash:gh pr create*` se resuelven reconstruyendo el nombre compuesto `bash(<command>)` / `bash:<command>`.
 
 ### Anti-leak / timeout (SE-077 process-leak fix)
 
-> Los hooks se lanzan con `Bun.spawn({ detached: true })` — cada hook vive en su
-> propio proceso/process-group, NO como hijo pipe-able de `$` shell. Esto
-> permite matar el ÁRBOL completo del hook (incl. hijos como `ollama classify`
-> que cuelgan cuando el Shield daemon está caído).
+> Los hooks se lanzan con `Bun.spawn({ detached: true })` — cada hook vive en su propio proceso/process-group, NO como hijo pipe-able de `$` shell. Esto permite matar el ÁRBOL completo del hook (incl. hijos como `ollama classify` que cuelgan cuando el Shield daemon está caído).
 
 - **Timeout kill**: si un hook excede su timeout (`runHookOnce`), se ejecuta
   `process.kill(-pid, SIGKILL)` contra el grupo del hook. Antes, el proceso se
@@ -102,7 +112,6 @@ hook bash. La parity-audit los excluye del gap.
 - **Heal manual**: `bash scripts/opencode-gates-heal.sh` (dead owners) o
   `--force` (también hooks colgados de pids vivos), `--dry-run` para prever.
 
-
 ## Garantías de seguridad (autonomous-safety)
 
 - FAIL El plugin NUNCA hace `git push`, `gh pr merge`, `--force`
@@ -116,28 +125,13 @@ hook bash. La parity-audit los excluye del gap.
 
 ## Parity audit + canary
 
-```bash
-# Reporte de gap (texto)
-bash scripts/opencode-parity-audit.sh
-
-# Como JSON
-bash scripts/opencode-parity-audit.sh --json
-
-# Tras instalar, capturar el gap actual como baseline
-bash scripts/opencode-parity-audit.sh --baseline
-
-# Verificar regresión vs baseline
-bash scripts/opencode-parity-audit.sh --check
-
-# Canary mensual (compara equivalencia OpenCode vs Claude Code)
-bash scripts/opencode-monthly-canary.sh --spec SE-073 --report-only
-```
+`bash scripts/opencode-parity-audit.sh` da el gap en texto (`--json` en JSON), `--baseline` lo captura tras instalar y `--check` verifica regresión frente al baseline. Canary mensual de equivalencia OpenCode frente a Claude Code: `bash scripts/opencode-monthly-canary.sh --spec SE-073 --report-only`.
 
 **Re-baseline post-instalación**: el baseline inicial commiteado refleja el estado pre-plugin (gap=N). Tras `bash scripts/opencode-install.sh` y la primera carga del plugin, ejecutar `--baseline` de nuevo y commitear el nuevo número.
 
 ## Pre-requisitos cumplidos
 
-OpenCode v1.14.25 (latest abril 2026), Bun runtime (instalado por OpenCode), `.claude/settings.json` estable, AUTONOMOUS_REVIEWER configurado, AGENTS.md generado (SE-078).
+OpenCode 2 (recomendado, `@opencode/cli`) u OpenCode 1 >= 1.18.29 (`opencode-ai`), Bun runtime (instalado por OpenCode), `.claude/settings.json` estable, AUTONOMOUS_REVIEWER configurado, AGENTS.md generado (SE-078).
 
 ## Referencias
 

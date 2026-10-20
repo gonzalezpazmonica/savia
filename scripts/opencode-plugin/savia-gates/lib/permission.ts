@@ -1,9 +1,13 @@
 // permission.ts — AUTONOMOUS_REVIEWER policy enforcement
 //
 // Default Claude Code policy: never auto-merge / push --force / approve PR
-// from agent/* branches. OpenCode exposes `permission.ask` so we can return
-// "deny" deterministically before the human is even prompted, instead of
-// trusting the runtime to ask every time.
+// from agent/* branches. OpenCode v1 exposes `permission.ask` and v2
+// `permission.hook("evaluate")`; both return "deny" deterministically before
+// the human is even prompted, instead of trusting the runtime to ask every
+// time. No runtime-specific shell helper: `git` runs through node:child_process
+// so the same code serves both frontends.
+
+import { execFile } from "node:child_process"
 
 const DESTRUCTIVE_PATTERNS: RegExp[] = [
   /\bgit\s+push\s+--force/i,
@@ -16,14 +20,14 @@ const DESTRUCTIVE_PATTERNS: RegExp[] = [
   /\brm\s+-rf\s+\//i,
 ]
 
-async function detectAgentBranch($: any, projectRoot: string): Promise<boolean> {
-  try {
-    const r = await $`git -C ${projectRoot} symbolic-ref --short HEAD`.quiet().nothrow().text()
-    const branch = String((r as any)?.stdout ?? r ?? "").trim()
-    return branch.startsWith("agent/") || branch.startsWith("spec-")
-  } catch {
-    return false
-  }
+function detectAgentBranch(projectRoot: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("git", ["-C", projectRoot, "symbolic-ref", "--short", "HEAD"], { timeout: 3000 }, (err, stdout) => {
+      if (err) return resolve(false)
+      const branch = String(stdout ?? "").trim()
+      resolve(branch.startsWith("agent/") || branch.startsWith("spec-"))
+    })
+  })
 }
 
 function isDestructive(input: any): boolean {
@@ -42,15 +46,12 @@ function reviewerConfigured(): boolean {
 }
 
 export async function decidePermission(
-  $: any,
   projectRoot: string,
   input: any,
 ): Promise<"allow" | "deny" | "ask"> {
-  const onAgentBranch = await detectAgentBranch($, projectRoot)
-  if (!onAgentBranch) return "ask"
-  if (isDestructive(input)) {
-    if (!reviewerConfigured()) return "deny"
-    return "deny"  // even with reviewer configured, agent/* never auto-allows destructive ops
-  }
-  return "ask"
+  // Cheap regex first: most permission checks are not destructive and never need the git call.
+  if (!isDestructive(input)) return "ask"
+  if (!(await detectAgentBranch(projectRoot))) return "ask"
+  if (!reviewerConfigured()) return "deny"
+  return "deny"  // even with reviewer configured, agent/* never auto-allows destructive ops
 }
