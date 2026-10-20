@@ -6,6 +6,9 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)"
 HOOKS="$ROOT/.claude/hooks"
+# Aislar de GIT_DIR/GIT_WORK_TREE/config del entorno: los repos del sandbox no pueden tocar el real.
+# shellcheck source=lib/git-env-clean.sh
+source "$ROOT/scripts/lib/git-env-clean.sh"; git_env_clean --isolate-config
 SANDBOX="$(mktemp -d)"
 JSON_OUT="false"
 if [[ "${1:-}" == "--json" ]]; then JSON_OUT="true"; fi
