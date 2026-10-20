@@ -6,6 +6,26 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-20 SE-451 APPROVED
+
+operadora, AskUserQuestion 2026-10-20: DCO (no CLA)
+
+## 2026-10-20 SE-453 APPROVED
+
+operadora, AskUserQuestion 2026-10-20 (sprint nocturno de Savia)
+
+## 2026-10-20 SE-445 APPROVED
+
+operadora, AskUserQuestion 2026-10-20 (sprint nocturno de Savia)
+
+## 2026-10-20 SE-444 APPROVED
+
+operadora, AskUserQuestion 2026-10-20 (sprint nocturno de Savia)
+
+## 2026-10-20 SE-442 APPROVED
+
+operadora, AskUserQuestion 2026-10-20 (sprint nocturno de Savia)
+
 ## 2026-10-20 SE-454 PROPOSED
 
 Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores de contenido no confiable
