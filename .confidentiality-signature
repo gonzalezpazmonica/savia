@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=483fc70526cd28330eb57411028f01e74e2980a88831c9fcffcfd054dc92dac5
-timestamp=2026-10-20T05:55:45Z
-branch=agent/learnings-specs-20261020
-head_commit=ed18a8840
-signature=742b715eb0eec5e0cbfe95c3083dd08e0d7d29c521a193565a4680c21d10addb
+diff_hash=d6c5aa17c07a5cdf87ba93e52e993b2a76b58f4025a9af88a49ad00edecb4a53
+timestamp=2026-10-20T06:22:30Z
+branch=agent/zerobreach-specs-20261020
+head_commit=6458242e3
+signature=268aadbff7cdcfa29f00e6e11ed0d4deb90fe1511a9c20da5ec5da045a048607
