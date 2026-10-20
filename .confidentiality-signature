@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f3b3eb85ea449d48b087fcfdb83771ba5765a97c2480ef82f26b1e58e5fa1ab0
-timestamp=2026-10-20T21:14:03Z
-branch=agent/se442-ci-supply-chain-20261020
-head_commit=029925ab
-signature=344886578f821bec806a5ff14eb954f1c6bbd5f2e7beccaabebd542eca9592fb
+diff_hash=c312765ff4cb09cc9487dd3696a724ff458a96ec0da324b4024d0e3a67d7ac03
+timestamp=2026-10-20T21:22:29Z
+branch=agent/se426-hmac-slice-20261020
+head_commit=0b043a4f
+signature=0dcb5e610c309a57152a555b23eb7f81c3b1004b410e79de49eeb9c186e58787
