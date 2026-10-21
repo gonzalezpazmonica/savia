@@ -92,6 +92,7 @@
 | L2 | [fronesis-destilacion.md](domain/fronesis-destilacion.md) | Regla: Destilación de fronemas (SE-344 · CRIT-001) | — |
 | L2 | [frontend-components.md](domain/frontend-components.md) | Frontend Component Rules | — |
 | L2 | [frontend-testing.md](domain/frontend-testing.md) | Frontend Testing — Convenciones y Configuración | — |
+| L2 | [gate-result-contract.md](domain/gate-result-contract.md) | Contrato de resultado de los gates: limpio, hallazgos y desconocido | — |
 | L2 | [github-flow.md](domain/github-flow.md) | GitHub Flow — Reglas de Branching | — |
 | L2 | [global-context.md](domain/global-context.md) | Global Context — Company DNA for All Agents | — |
 | L2 | [graphrag-quality-gates.md](domain/graphrag-quality-gates.md) | GraphRAG Quality Gates — SE-030-T | — |

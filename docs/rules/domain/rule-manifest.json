@@ -1,8 +1,8 @@
 {
-  "generated": "2026-10-20T07:00:06Z",
-  "total": 314,
+  "generated": "2026-10-21T00:33:31Z",
+  "total": 315,
   "tier1_count": 4,
-  "tier2_count": 304,
+  "tier2_count": 305,
   "dormant_count": 6,
   "rules": {
     "ac-verifier-authority.md": {
@@ -518,6 +518,10 @@
       "consumers": ""
     },
     "frontend-testing.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "gate-result-contract.md": {
       "tier": "tier2",
       "consumers": ""
     },

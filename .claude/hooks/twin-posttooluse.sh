@@ -24,7 +24,7 @@ if [[ ! -t 0 ]]; then
 fi
 [[ -z "$INPUT" ]] && exit 0
 
-command -v jq &>/dev/null || exit 0
+command -v jq &>/dev/null || { source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit twin-posttooluse; }
 
 # Detect affected project from tool output
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
