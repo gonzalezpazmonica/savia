@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=4a34e80b4c11df572508d5e36c3f8290681c0aed654d0cf610a4be8b44ad36c5
-timestamp=2026-10-21T05:05:49Z
-branch=agent/se404-proportional-slice-20261020
-head_commit=56eb70b7
-signature=9b769226d68ab6adf1d9c5a6448b077120a2b4f47ed4677a720a95f1131cb339
+diff_hash=2cf8d5e7b5771ec9bb7af08edd089b61be7501b37c000b977808ae14dec0226c
+timestamp=2026-10-21T06:02:08Z
+branch=agent/se376-debt-wave-20261020
+head_commit=760c2c9d
+signature=89770d0f52ded1150b12f6feba246a457d11dba086b73499ece9c442edb34ad6

@@ -167,19 +167,22 @@ read_tail() {
 }
 
 LOCK_DIR=""
-release_lock() { [[ -n "$LOCK_DIR" ]] && rmdir "$LOCK_DIR" 2>/dev/null; LOCK_DIR=""; }
+# Lock = fichero creado con O_EXCL (noclobber del propio bash). No usa `mkdir`:
+# el mkdir de uutils-coreutils (Ubuntu 25.10+) dejaba pasar a varios procesos
+# a la vez y rompía la cadena (20 appends paralelos -> prev_hash cruzados).
+release_lock() { [[ -n "$LOCK_DIR" ]] && unlink "$LOCK_DIR" 2>/dev/null; LOCK_DIR=""; }
 
 acquire_lock() {
-  local dir="$1.lock.d" i=0
-  # Un mkdir fallido es contención salvo que el directorio no sea escribible
-  # (comprobar -d aquí tendría carrera con la liberación del otro proceso).
-  [[ -w "$(dirname "$dir")" ]] || die "cannot create lock ${dir}: directory not writable"
-  until mkdir "$dir" 2>/dev/null; do
+  local lock="$1.lock" i=0
+  # Un create fallido es contención salvo que el directorio no sea escribible
+  # (comprobar -e aquí tendría carrera con la liberación del otro proceso).
+  [[ -w "$(dirname "$lock")" ]] || die "cannot create lock ${lock}: directory not writable"
+  until ( set -C; printf '%s\n' "$$" > "$lock" ) 2>/dev/null; do
     i=$(( i + 1 ))
-    [[ "$i" -ge "$LOCK_TRIES" ]] && die "lock busy: ${dir} (remove it only if no append is running)"
+    [[ "$i" -ge "$LOCK_TRIES" ]] && die "lock busy: ${lock} (remove it only if no append is running)"
     sleep 0.1
   done
-  LOCK_DIR="$dir"
+  LOCK_DIR="$lock"
   trap release_lock EXIT
 }
 

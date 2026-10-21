@@ -107,3 +107,19 @@ Hallazgo fuera de alcance: `.opencode/agents` (90, fuente de `AGENTS.md` y del c
 | `dag-scheduling` | `tests/test-dag-scheduling.bats` (27) | 92 | `scripts/wave-executor.sh`: `max_parallel` 0 o no numérico, un grafo sin array `tasks` y una tarea sin `depends_on` daban `success` con exit 0 sin ejecutar nada (errores de jq tragados). Sin `-k`, una tarea que ignora SIGTERM colgaba el motor indefinidamente. Ids con espacios se partían por word-splitting. Exit 124 propio de la tarea se contaba como timeout (exit 3). SIGTERM/SIGINT al motor dejaba las tareas huérfanas (timeout lidera su propio grupo, Ctrl-C no le llega). `--report` sin valor: «unbound variable» |
 
 Validación de esquema en `scripts/wave-executor-lib.sh` (contrato de `docs/specs/SPEC-WAVE-DAG.spec.md` §2.1, `depends_on` ausente = `[]`). `SDD_MAX_PARALLEL_AGENTS` y `SDD_DEFAULT_TIMEOUT_MIN` pasan a leerse (la skill los documentaba y el motor los ignoraba). `.claude/skills/dag-scheduling/SKILL.md` aclara lo que el motor no hace (camino crítico, worktrees, reintentos). `tests/test-wave-executor.bats` recupera 85 (bajaba a 77 al crecer el script). Sigue en `beta`: la promoción espera el OK de la operadora.
+
+### 2026-10-20 — grupo gobierno y continuidad (121 → 118/137)
+
+Remedido el 2026-10-20: 118/137 (19 Calibrated, 111 Incomplete, 7 Stub). Las tres skills ya tenían suite certificada; faltaba comprobar que sus tests matan mutantes (`scripts/mutation-audit.sh`) y la promoción. Grupo elegido por riesgo (registro de decisiones, base legal citada, continuidad sin API) y uso (auditorías y caída del proveedor).
+
+| Skill | Test | Auditor | Mutación del script | Hallazgos corregidos |
+|---|---|---|---|---|
+| `governance-enterprise` | `tests/test-governance-enterprise.bats` (63) | 88 | `governance-audit-trail.sh`: 4/4 mutantes manuales `\|\| return 0` de `read_tail` muertos; 3 tests de lock fallan con el código anterior | El lock de `append` usaba `mkdir`; en uutils-coreutils 0.10 (Ubuntu 25.10+) no es exclusivo y 20 appends paralelos cruzaban los `prev_hash` (el test 25 fallaba siempre en esta máquina). Lock con `O_EXCL`. Pruebas nuevas: lock ocupado, liberación, `mkdir` no atómico, cola sin salto de línea, NUL previo y `shasum` |
+| `legal-compliance` | `tests/test-legal-compliance.bats` (39) | 96 | `legalize-es.sh` 27 % → 81 % | `install` y `update` no tenían pruebas (clonado superficial, fallo de clonado, `pull --ff-only` divergente). Ahora se prueban contra un origen git local con reescritura de URL, sin hacer configurable el origen del corpus |
+| `emergency-mode` | `tests/test-emergency-mode.bats` (28) | 90 | `localai-readiness-check.sh`: los 5 supervivientes son `return` de funciones cuyo valor se ignora y una línea de comentario | Sin cambios de código |
+
+Las tres pasan a `maturity: stable`; la promoción queda pendiente del OK de la operadora al revisar el PR. `debt-budget-check`: 118 ≤ 133. `SE-376-debt-budget.yaml` no cambia: avanzar de wave sigue siendo decisión humana.
+
+Con suite certificada y pendientes de promoción (decisión previa de la operadora): `automation-scheduler`, `dag-scheduling`, `bus-factor-analysis`, `code-improvement-loop`.
+
+Hallazgos fuera de alcance. `sovereignty-auditor` tiene suite certificada solo para D2 (`emergency-setup.sh`, `emergency-status.sh`); D1, D3, D4, D5 y el score global son prosa sin script, y la rama offline de `emergency-setup.sh` (copia con privilegios a `/usr/local/bin`) no está probada (mutación 20 %): no se promociona. El mismo `mkdir` como lock aparece en `scripts/savia-branch.sh`.
