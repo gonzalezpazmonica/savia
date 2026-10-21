@@ -58,7 +58,11 @@ fi
 
 # Preserve the legacy jq behavior for malformed, missing and non-string input.
 if [[ "$STRING_COMMAND" -eq 0 && -n "$INPUT" ]]; then
-  COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || COMMAND=""
+  # SE-453 S2: sin jq degrada a grep; si no puede evaluar, sale 2.
+  # shellcheck source=/dev/null
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+  hook_extract_command "$INPUT" || exit 2
+  COMMAND="$HOOK_COMMAND"
 fi
 
 if [[ -z "$COMMAND" ]]; then

@@ -94,7 +94,7 @@ log_telemetry() {
 }
 
 # Need jq for parsing
-command -v jq >/dev/null 2>&1 || { exit 0; }
+command -v jq >/dev/null 2>&1 || { source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit context-greedy-inject; }
 
 # Need stdin
 if [[ -t 0 ]]; then

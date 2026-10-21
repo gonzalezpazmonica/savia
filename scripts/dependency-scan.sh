@@ -16,6 +16,8 @@
 #   1 = hallazgos en las severidades pedidas (por defecto CRITICAL o HIGH; bloquea CI)
 #   2 = error: argumentos, Trivy/Docker no disponibles, escaneo fallido o SBOM no generado.
 #       Un error nunca se presenta como «limpio» ni como «vulnerabilidades».
+#   Contrato SE-453: la última línea de stdout es `gate-result: {...}` (clean|findings|unknown).
+#   Código 2 = unknown (Trivy/jq ausente → missing_tool; escaneo o SBOM fallido → unreadable/timeout).
 #   Precedencia: 2 gana a 1 (hallazgos + SBOM fallido → 2; los hallazgos se listan igualmente).
 #
 # Artefactos ante fallo: el informe se escribe a un temporal único (.tmp.XXXXXX) y solo se publica si es JSON de Trivy
@@ -32,6 +34,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
 
 # ── Valores por defecto ──────────────────────────────────────────────────────
 SCAN_PATH=""
@@ -61,10 +65,10 @@ done
 [[ -n "$SCAN_PATH" ]] || usage_error "especifica --path <dir>"
 [[ -d "$SCAN_PATH" ]] || usage_error "el path no existe: $SCAN_PATH"
 [[ "$SEVERITY" =~ ^[A-Z]+(,[A-Z]+)*$ ]] || usage_error "severidades inválidas: $SEVERITY"
-command -v jq &>/dev/null || { echo "ERROR: jq no disponible; no se puede interpretar el informe." >&2; exit 2; }
+command -v jq &>/dev/null || { echo "ERROR: jq no disponible; no se puede interpretar el informe." >&2; gate_result_emit unknown "jq:missing_tool"; exit 2; }
 
 SCAN_PATH="$(cd "$SCAN_PATH" && pwd)"
-mkdir -p "$OUTPUT_DIR" || { echo "ERROR: no se puede crear el directorio de salida: $OUTPUT_DIR" >&2; exit 2; }
+mkdir -p "$OUTPUT_DIR" || { echo "ERROR: no se puede crear el directorio de salida: $OUTPUT_DIR" >&2; gate_result_emit unknown "output-dir:unreadable"; exit 2; }
 
 # ── Detección de Trivy ────────────────────────────────────────────────────────
 TRIVY_CMD=""
@@ -75,6 +79,7 @@ else
   echo "  Fallback: docker run --rm -v \"\$(pwd):/workspace\" aquasec/trivy:latest fs /workspace" >&2
   if ! command -v docker &>/dev/null; then
     echo "ERROR: Ni Trivy ni Docker disponibles. Instala Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/" >&2
+    gate_result_emit unknown "trivy:missing_tool"
     exit 2
   fi
   TRIVY_CMD="docker"
@@ -123,7 +128,7 @@ REPORT_JSON="$OUTPUT_DIR/dep-scan-${DATE}.json"
 SBOM_JSON="$OUTPUT_DIR/sbom-${DATE}.json"
 # Temporales únicos por ejecución: dos escaneos simultáneos en el mismo directorio de salida
 # (p. ej. dos proyectos en CI el mismo día) no pueden leer ni mover el informe del otro.
-REPORT_TMP="$(mktemp "$REPORT_JSON.tmp.XXXXXX")" || { echo "ERROR: no se puede escribir en $OUTPUT_DIR" >&2; exit 2; }
+REPORT_TMP="$(mktemp "$REPORT_JSON.tmp.XXXXXX")" || { echo "ERROR: no se puede escribir en $OUTPUT_DIR" >&2; gate_result_emit unknown "output-dir:unreadable"; exit 2; }
 
 echo "Escaneando dependencias en: $SCAN_PATH"
 echo "Tipos de proyecto detectados: $(detect_project_type "$SCAN_PATH")"
@@ -141,11 +146,14 @@ scan_failed() {
   else rm -f "$REPORT_TMP"; echo "  (Trivy no dejó salida que conservar)" >&2; fi
   echo "ERROR: el escaneo no se completó ($1). Diagnóstico: $REPORT_JSON.failed" >&2
   echo "  Ni limpio ni vulnerable: revisa Trivy (versión >= 0.37, base de datos, red) y repite." >&2
+  gate_result_emit unknown "trivy:${2:-unreadable}"
   exit 2
 }
 rc=0
 run_trivy_fs "$REPORT_TMP" "${FLAGS[@]}" --format json || rc=$?
-[[ $rc -eq 0 ]] || scan_failed "trivy rc=$rc"
+if [[ $rc -ne 0 ]]; then
+  if [[ $rc -eq 124 ]]; then scan_failed "trivy rc=$rc" timeout; else scan_failed "trivy rc=$rc"; fi
+fi
 jq -e "$SCHEMA_OK" "$REPORT_TMP" >/dev/null 2>&1 || scan_failed "informe ilegible o esquema desconocido"
 
 FINDINGS=$(jq -r --arg sev "$SEVERITY" '
@@ -167,7 +175,7 @@ if [[ "$GENERATE_SBOM" == "true" ]]; then
   echo ""
   echo "Generando SBOM (CycloneDX JSON)..."
   sbom_rc=0
-  SBOM_TMP="$(mktemp "$SBOM_JSON.tmp.XXXXXX")" || { echo "ERROR: no se puede escribir en $OUTPUT_DIR" >&2; exit 2; }
+  SBOM_TMP="$(mktemp "$SBOM_JSON.tmp.XXXXXX")" || { echo "ERROR: no se puede escribir en $OUTPUT_DIR" >&2; gate_result_emit unknown "sbom:unreadable"; exit 2; }
   run_trivy_fs "$SBOM_TMP" --format cyclonedx || sbom_rc=$?
   if [[ $sbom_rc -eq 0 ]] && jq -e '.bomFormat == "CycloneDX"' "$SBOM_TMP" >/dev/null 2>&1; then
     mv -f "$SBOM_TMP" "$SBOM_JSON"
@@ -205,9 +213,16 @@ fi
 # Precedencia: el error (2) gana a los hallazgos (1). Con hallazgos y SBOM fallido sale 2:
 # la ejecución no produjo lo pedido y un pipeline que solo mire el rc debe enterarse de que
 # falta el artefacto de release; los hallazgos ya se han listado arriba.
-[[ "$SBOM_FAILED" == "true" ]] && exit 2
-[[ -n "$FINDINGS" ]] && exit 1
+if [[ "$SBOM_FAILED" == "true" ]]; then
+  gate_result_emit unknown "sbom:unreadable"
+  exit 2
+fi
+if [[ -n "$FINDINGS" ]]; then
+  gate_result_emit findings
+  exit 1
+fi
 
 echo ""
 echo "PASS: Sin vulnerabilidades en severidades $SEVERITY."
+gate_result_emit clean
 exit 0

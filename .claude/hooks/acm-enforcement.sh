@@ -46,7 +46,7 @@ LOG_LEVEL="${SAVIA_ACM_LOG_LEVEL:-warn}"
 
 # Require jq for JSON parsing
 if ! command -v jq &>/dev/null; then
-  exit 0
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit acm-enforcement
 fi
 
 # Read stdin with timeout
