@@ -5,7 +5,7 @@ description: "Revisa governance enterprise. Usar cuando se audita compliance o s
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
-  savia.maturity: beta
+  savia.maturity: stable
   savia.category: governance
   savia.context: fork
   savia.context_cost: medium
@@ -33,7 +33,7 @@ Los flujos 1-3 son procedimientos que sigue el modelo; no hay script que los imp
 
 Garantías del audit trail:
 
-- Append bajo lock (`mkdir` atómico): escrituras concurrentes producen una cadena válida.
+- Append bajo lock (fichero `<trail>.lock` creado con `O_EXCL`; no `mkdir`, que en uutils-coreutils 0.10 no era exclusivo): escrituras concurrentes producen una cadena válida. Un lock ajeno agota `AUDIT_LOCK_TRIES` (100 × 0,1 s) y falla sin escribir.
 - Cada línea tiene forma canónica exacta; `verify` rechaza claves duplicadas, campos extra, líneas en blanco, CRLF, BOM, bytes NUL (el fichero entero) y la última línea aunque no acabe en salto de línea. Revalida cada campo (sin tabuladores ni vacíos) y exige `ts` con rangos de calendario válidos y sin retroceder.
 - `verify --tenant T` falla si alguna entrada es de otro tenant (trail copiado a un directorio ajeno). `append` se niega a escribir si el reloj es anterior a la última entrada.
 - El hash cubre `ts`, `tenant`, `actor`, `action`, `spec` y `prev_hash`, un campo por línea (sin fronteras ambiguas). `prev_hash` es el hash hexadecimal de la entrada previa.

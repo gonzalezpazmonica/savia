@@ -6,7 +6,7 @@ allowed-tools: [Bash, Read]
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.agent: architect
-  savia.maturity: beta
+  savia.maturity: stable
   savia.category: resilience
   savia.context: global
   savia.priority: high
