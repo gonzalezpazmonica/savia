@@ -1,10 +1,14 @@
 {
-  "generated": "2026-10-05T05:00:38Z",
-  "total": 313,
+  "generated": "2026-10-20T07:00:06Z",
+  "total": 314,
   "tier1_count": 4,
   "tier2_count": 304,
-  "dormant_count": 5,
+  "dormant_count": 6,
   "rules": {
+    "ac-verifier-authority.md": {
+      "tier": "dormant",
+      "consumers": ""
+    },
     "accessibility-output.md": {
       "tier": "tier2",
       "consumers": ""
