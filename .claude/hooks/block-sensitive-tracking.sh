@@ -25,7 +25,7 @@ if INPUT=$(timeout 3 cat 2>/dev/null); then
 fi
 
 if ! command -v jq &>/dev/null; then
-  exit 0
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit block-sensitive-tracking
 fi
 
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null) || TOOL=""

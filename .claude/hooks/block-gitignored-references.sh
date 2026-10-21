@@ -27,7 +27,7 @@ fi
 [[ -z "$INPUT" ]] && exit 0
 
 # Require jq
-command -v jq &>/dev/null || exit 0
+command -v jq &>/dev/null || { source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"; hook_unmeasured_exit block-gitignored-references; }
 
 # Extract file path
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null) || exit 0

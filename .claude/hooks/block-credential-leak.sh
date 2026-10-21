@@ -17,15 +17,11 @@ if INPUT=$(timeout 3 cat 2>/dev/null); then
   :
 fi
 
-# Require jq for safe JSON parsing
-if ! command -v jq &>/dev/null; then
-  echo "ADVERTENCIA: jq no está instalado. Instala jq para activar detección de secrets." >&2
-  exit 0
-fi
-COMMAND=""
-if [[ -n "$INPUT" ]]; then
-  COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null) || COMMAND=""
-fi
+# SE-453 S2: sin jq se degrada a un parseo con grep; si tampoco se puede evaluar, sale 2 (nunca 0 sin evaluar).
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+hook_extract_command "$INPUT" || exit 2
+COMMAND="$HOOK_COMMAND"
 
 if [ -z "$COMMAND" ]; then
   exit 0

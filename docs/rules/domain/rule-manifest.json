@@ -1,9 +1,9 @@
 {
-  "generated": "2026-10-20T22:30:47Z",
+  "generated": "2026-10-21T00:33:31Z",
   "total": 315,
   "tier1_count": 4,
-  "tier2_count": 304,
-  "dormant_count": 7,
+  "tier2_count": 305,
+  "dormant_count": 6,
   "rules": {
     "ac-verifier-authority.md": {
       "tier": "dormant",
@@ -11,10 +11,6 @@
     },
     "accessibility-output.md": {
       "tier": "tier2",
-      "consumers": ""
-    },
-    "action-review-policy.md": {
-      "tier": "dormant",
       "consumers": ""
     },
     "adaptive-output.md": {
@@ -522,6 +518,10 @@
       "consumers": ""
     },
     "frontend-testing.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "gate-result-contract.md": {
       "tier": "tier2",
       "consumers": ""
     },
