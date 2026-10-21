@@ -41,6 +41,13 @@ NUNCA crear tareas en backlog sin aprobación, cambiar configuración por hallaz
 
 Time-box por tarea (`AGENT_TASK_TIMEOUT_MINUTES`, 15). Abortar tras `AGENT_MAX_CONSECUTIVE_FAILURES` (3) fallos consecutivos o misma acción 3+ veces. Registrar cada intento. Contexto > 80% → compactar y reevaluar. Audit log en `output/agent-runs/`.
 
+## Enforcement por código (SE-445)
+
+- **Misma acción 3+ veces**: `repeat-tool-guard.sh` (PreToolUse) bloquea la 3.ª llamada idéntica con exit 2 en ramas `agent/*` o con `SAVIA_AUTONOMOUS_RUN=1`; recordatorio en la 2.ª. `SAVIA_LOOP_BLOCK=off` o `SAVIA_LOOP_EXCLUDE` para sondeos legítimos.
+- **Presupuesto visible**: `turn-budget-inject.sh`, opt-in con `SAVIA_TURN_BUDGET=on`.
+- **Revisor de acciones**: `action-review.sh`, opt-in con doble factor; política en `action-review-policy.md`. Fail-closed en tiers 3/4.
+- **Criterio de éxito**: `success_checks` y `max_retries` en `savia-automations.sh`.
+
 ## Obligaciones enlazadas
 
 - **Doble opt-in** (SPEC-186): variable persistente + `--confirm-autonomous`.

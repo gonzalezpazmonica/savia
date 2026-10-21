@@ -6,7 +6,7 @@
 
 | Total hooks | TS Guards | Git Hook mitigated | CI Job mitigated | NONE |
 |---|---|---|---|---|
-| 126 | 20 (15.9%) | 4 | 5 | 97 |
+| 130 | 20 (15.4%) | 4 | 5 | 101 |
 
 ## Bloqueantes sin cobertura ni mitigacion
 
@@ -14,10 +14,10 @@ Ninguno — AC-2.2 satisfecho.
 
 ## Cobertura real OpenCode
 
-- **TS Guards activos**: 20/126 (15.9%)
-- **Hooks sin cobertura TS**: 97 (77.0%)
+- **TS Guards activos**: 20/130 (15.4%)
+- **Hooks sin cobertura TS**: 101 (77.7%)
   - De los cuales son bloqueantes sin ninguna mitigacion: 0
-  - Eventos no disponibles en OpenCode (degradacion aceptada): 34
+  - Eventos no disponibles en OpenCode (degradacion aceptada): 35
 
 ## Full matrix
 
@@ -28,6 +28,7 @@ Ninguno — AC-2.2 satisfecho.
 | FileChanged | file-changed-staleness.sh | no | NONE | telemetria | evento FileChanged no disponible en OpenCode — degradacion_documentada |
 | InstructionsLoaded | instructions-tracker.sh | no | NONE | telemetria | evento InstructionsLoaded no disponible en OpenCode — degradacion_documentada |
 | PostCompact | post-compaction.sh | no | NONE | warning | evento PostCompact no disponible en OpenCode — degradacion_documentada |
+| PostToolUse | repeat-tool-guard.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code |
 | PostToolUse | sycophancy-strip.sh | si | TS_GUARD | bloqueante | sycophancyGuard |
 | PostToolUse | agent-trace-log.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PostToolUse | bash-output-compress.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
@@ -52,7 +53,6 @@ Ninguno — AC-2.2 satisfecho.
 | PostToolUse | pbi-history-capture.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PostToolUse | post-report-write.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PostToolUse | post-spec-edit-reindex.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
-| PostToolUse | repeat-tool-guard.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PostToolUse | router-mode-dispatch.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PostToolUse | speculative-skill-preload.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PostToolUse | token-tracker-middleware.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
@@ -70,6 +70,7 @@ Ninguno — AC-2.2 satisfecho.
 | PostToolUseFailure | post-tool-failure-log.sh | no | NONE | telemetria | evento PostToolUseFailure no disponible en OpenCode — degradacion_documentada |
 | PreCompact | pre-compact-backup.sh | no | NONE | warning | evento PreCompact no disponible en OpenCode — degradacion_documentada |
 | PreToolUse | acm-enforcement.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; ACM enforcement no portado — candidato SE-254 |
+| PreToolUse | action-review.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code |
 | PreToolUse | agent-dispatch-validate.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; agent dispatch sin gate en OpenCode — candidato SE-254 |
 | PreToolUse | agent-git-discipline.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code |
 | PreToolUse | agent-hook-premerge.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; pre-merge gate no portado en OpenCode |
@@ -98,6 +99,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | prompt-injection-guard.sh | si | TS_GUARD | bloqueante | promptInjectionGuard |
 | PreToolUse | protected-job-guard.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; protected job guard no portado en OpenCode |
 | PreToolUse | recursion-guard.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; Task nesting bloqueado via agent-dispatch-validate |
+| PreToolUse | repeat-tool-guard.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code |
 | PreToolUse | responsibility-judge.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; judge no portado en OpenCode |
 | PreToolUse | spec156-token-budget-projection.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; budget projection no disponible en OpenCode |
 | PreToolUse | tdd-gate.sh | si | TS_GUARD | bloqueante | tddGate |
@@ -120,6 +122,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | dome-guard.sh | si | TS_GUARD | warning | savia-gates domeGuardVerdict |
 | PreToolUse | model-tier-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PreToolUse | plan-gate.sh | no | CI_JOB | warning | CI validate-ci-local.sh |
+| PreToolUse | turn-budget-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | SessionEnd | cache-hygiene-hook.sh | no | NONE | telemetria | evento SessionEnd no disponible en OpenCode — degradacion_documentada |
 | SessionEnd | session-end-memory.sh | no | NONE | telemetria | evento SessionEnd no disponible en OpenCode — degradacion_documentada |
 | SessionStart | mind-virus-load-gate.sh | no | NONE | bloqueante | evento SessionStart no disponible en OpenCode — degradacion_documentada |
@@ -148,4 +151,5 @@ Ninguno — AC-2.2 satisfecho.
 | UserPromptSubmit | recommendation-tribunal-followup.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | stress-awareness-nudge.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | learning-recall-hook.sh | no | NONE | warning | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
+| UserPromptSubmit | turn-budget-inject.sh | no | NONE | warning | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | user-prompt-intercept.sh | no | NONE | warning | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |

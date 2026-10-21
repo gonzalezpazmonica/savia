@@ -18,7 +18,7 @@ lang: gl
 
 ## Workspace de desenvolvemento multi-axente
 
-**567 comandos · 90 axentes · 139 skills · 128 hooks**
+**567 comandos · 90 axentes · 139 skills · 132 hooks**
 
 Sistema axente soberano para gobernar e executar traballo con IA, independente de modelo, provedor e frontend, con criterio humano por deseño. Integra axentes, memoria, seguridade, políticas executables, trazabilidade e dominios especializados. Funciona en local con soberanía de datos e inferencia, en 9 idiomas.
 
@@ -114,7 +114,7 @@ pm-workspace/
 │   ├── commands/       ← 567 comandos
 │   ├── agents/         ← 90 axentes especializados (7 con decision trees: SPEC-147)
 │   ├── skills/         ← 139 skills de dominio
-│   ├── hooks/          ← 128 hooks deterministas
+│   ├── hooks/          ← 132 hooks deterministas
 │   └── rules/          ← regras de contexto e linguaxe
 ├── docs/               ← guias por rol, escenario, sector
 ├── projects/           ← proxectos (git-ignorados por privacidade)

@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(_root, "scripts"))
-from automations.models import ScheduledTask, TaskRun, Schedule, now_iso
+from automations.models import MAX_RETRIES_CAP, ScheduledTask, TaskRun, Schedule, now_iso
 from automations.store import TaskStore
 
 store = TaskStore(str(_data))
@@ -88,7 +88,15 @@ def cmd_create():
     p.add_argument("--agent")
     p.add_argument("--description", default="")
     p.add_argument("--timezone", default="local")
+    p.add_argument("--success-check", action="append", default=[], dest="success_checks")
+    p.add_argument("--max-retries", default="0")
     a, _ = p.parse_known_args(sys.argv[1:])
+    try:
+        max_retries = int(a.max_retries)
+    except ValueError:
+        fail(f"--max-retries needs an integer, got '{a.max_retries}'", 2)
+    if not 0 <= max_retries <= MAX_RETRIES_CAP:
+        fail(f"--max-retries must be 0..{MAX_RETRIES_CAP} (AGENT_MAX_CONSECUTIVE_FAILURES), got {max_retries}", 2)
     if store._normalize_cron(a.schedule):
         schedule = Schedule(kind="cron", cron=a.schedule, timezone=a.timezone)
     else:
@@ -105,6 +113,8 @@ def cmd_create():
         schedule=schedule,
         skill=a.skill,
         agent=a.agent,
+        success_checks=a.success_checks,
+        max_retries=max_retries,
         created_at=now_iso(),
         updated_at=now_iso(),
     )
@@ -116,8 +126,8 @@ def cmd_create():
 def cmd_run():
     t = need_task("run <task-id>")
     import asyncio
-    from automations.runner import run_scheduled_task
-    result = asyncio.run(run_scheduled_task(
+    from automations.runner import run_with_checks
+    result = asyncio.run(run_with_checks(
         t, "manual", output_dir=_out))
     record_run(t.id, result)
     print(f"run {result.id}: {result.status}{NOT_EXECUTED.get(result.status, '')}")
@@ -149,9 +159,9 @@ def cmd_run_due():
     import asyncio
     executed = 0
     recorded = 0
-    from automations.runner import run_scheduled_task
+    from automations.runner import run_with_checks
     for t in due[:max_tasks]:
-        result = asyncio.run(run_scheduled_task(
+        result = asyncio.run(run_with_checks(
             t, "schedule", output_dir=_out))
         record_run(t.id, result)  # counters + recomputed next_run
         executed += 1
@@ -205,7 +215,7 @@ def cmd_history():
     if not runs:
         print("(no runs)")
         return
-    icons = {"completed": "\u2713", "recorded": "\u25A1", "running": "\u25CB", "error": "\u2717", "cancelled": "\u2298"}
+    icons = {"completed": "\u2713", "recorded": "\u25A1", "running": "\u25CB", "error": "\u2717", "failed": "\u2717", "cancelled": "\u2298"}
     for r in runs:
         icon = icons.get(r.status, "?")
         print(f"[{icon}] {r.id}  {r.status}  {r.trigger}  {r.started_at}{NOT_EXECUTED.get(r.status, '')}")
@@ -285,6 +295,7 @@ else:
     print("  show <task-id>                 Show full task details (JSON)")
     print("  create --name <n> --schedule <cron|ISO datetime> --instructions <text>")
     print("         [--timezone <IANA>] [--skill <s>] [--agent <a>]")
+    print("         [--success-check <cmd>]... [--max-retries 0..3]   (SE-445)")
     print("  run <task-id>                  Execute a task immediately")
     print("  run-due [--max N]             Run all due enabled tasks")
     print("  compute                       Recompute next_run for all tasks")

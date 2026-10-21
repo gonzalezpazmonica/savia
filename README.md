@@ -11,7 +11,7 @@
 
 **Sistema agéntico soberano para gobernar y ejecutar trabajo con IA, independiente de modelo, proveedor y frontend, con criterio humano por diseño.**
 
-**567 comandos · 90 agentes · 139 skills · 128 hooks**
+**567 comandos · 90 agentes · 139 skills · 132 hooks**
 
 Savia es un sistema agéntico soberano para gobernar y ejecutar trabajo asistido por IA. Integra agentes, memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts, evaluación y dominios especializados — gestión de proyectos, ingeniería de software y más — sobre una arquitectura independiente de modelo, proveedor y frontend. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
 

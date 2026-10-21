@@ -91,7 +91,7 @@ Exit: 0 ok · 1 tarea/run no encontrado o run fallido · 2 uso incorrecto o sche
 
 savia-automations.sh list [--enabled] [--due]
 savia-automations.sh show <task-id>
-savia-automations.sh create --name <n> --schedule <cron|ISO> --instructions <text> [--timezone <IANA>]
+savia-automations.sh create --name <n> --schedule <cron|ISO> --instructions <text> [--timezone <IANA>] [--success-check <cmd>]... [--max-retries 0..3]
 savia-automations.sh run <task-id>
 savia-automations.sh run-due [--max N]
 savia-automations.sh compute
@@ -100,3 +100,9 @@ savia-automations.sh delete <task-id>
 savia-automations.sh history <task-id> [--last N]
 savia-automations.sh output <task-id> <run-id>
 savia-automations.sh init-defaults
+
+## Criterio de exito y reintento (SE-445 S4)
+
+`--success-check <cmd>` (repetible) declara cuando un run cuenta como correcto: cada comando se ejecuta tras el run (shell, `workspace` de la tarea o el cwd, 60 s) y todos deben salir con 0. Si alguno falla el run queda `failed` con el comando, el exit y la cola de su salida en `error`; un run que "termino" sin generar su fichero ya no cuenta como correcto. Los checks los define la operadora en local: son comandos de shell con sus permisos.
+
+`--max-retries N` (0 a 3, alineado con `AGENT_MAX_CONSECUTIVE_FAILURES`) reintenta tras un check fallido. El reintento recibe el fallo del check como entrada nueva; si su entrada seria identica a la del intento anterior se rechaza (patron prohibido n3 de `feedback_root_cause_always`). Mientras el runner solo registra instrucciones, un reintento sin cambio externo termina en ese rechazo: es la lectura honesta del estado actual.
