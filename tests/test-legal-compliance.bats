@@ -340,3 +340,83 @@ teardown() {
   [ "$status" -eq 3 ]
   [[ "$output" == *"no instalado"* ]]
 }
+
+# ── install / update contra un origen git local (sin red) ───────────────────
+# La URL del corpus está fijada en el script a propósito (un origen configurable
+# por entorno permitiría sustituir el corpus legal). El test la redirige con la
+# reescritura de URL de git, que solo afecta a este proceso.
+
+make_origin() {
+  ORIGIN="$TMPDIR_T/origin.git"; WORK="$TMPDIR_T/work"
+  git init -q --bare "$ORIGIN"
+  git init -q "$WORK"
+  git -C "$WORK" config user.email t@example.invalid
+  git -C "$WORK" config user.name t
+  git -C "$WORK" config commit.gpgsign false
+  mkdir -p "$WORK/es" "$WORK/es-ct"
+  printf -- '---\nidentifier: "BOE-A-1"\nstatus: "in_force"\n---\n' > "$WORK/es/BOE-A-1.md"
+  git -C "$WORK" add -A && git -C "$WORK" commit -q -m "norma uno"
+  git -C "$WORK" push -q "$ORIGIN" HEAD:refs/heads/main
+  git -C "$ORIGIN" symbolic-ref HEAD refs/heads/main
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://${ORIGIN}.insteadOf" \
+    GIT_CONFIG_VALUE_0="https://github.com/legalize-dev/legalize-es.git"
+}
+
+@test "install: clona el corpus (superficial) y cuenta las normas estatales" {
+  make_origin
+  export LEGALIZE_ES_PATH="$TMPDIR_T/fresh clone"
+  run bash "$SCRIPT" install
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Instalado: 1 normas estatales"* ]]
+  [ -d "$LEGALIZE_ES_PATH/.git" ]
+  [ -f "$LEGALIZE_ES_PATH/es/BOE-A-1.md" ]
+  [ "$(git -C "$LEGALIZE_ES_PATH" rev-parse --is-shallow-repository)" = "true" ]
+  # el corpus recién instalado ya es consultable
+  run bash "$SCRIPT" check-status BOE-A-1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"VIGENTE"* ]]
+}
+
+@test "install error: origen inaccesible sale 1 y no deja un corpus a medias que parezca instalado" {
+  export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://${TMPDIR_T}/no-existe.git.insteadOf" \
+    GIT_CONFIG_VALUE_0="https://github.com/legalize-dev/legalize-es.git"
+  export LEGALIZE_ES_PATH="$TMPDIR_T/never"
+  run bash "$SCRIPT" install
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Error al clonar"* ]]
+  [ ! -d "$LEGALIZE_ES_PATH/es" ]
+  # sin corpus no hay veredicto: la búsqueda sigue saliendo 3
+  run bash "$SCRIPT" search "datos"
+  [ "$status" -eq 3 ]
+}
+
+@test "update: trae la norma nueva y muestra el último commit" {
+  make_origin
+  export LEGALIZE_ES_PATH="$TMPDIR_T/clone"
+  bash "$SCRIPT" install >/dev/null
+  printf -- '---\nidentifier: "BOE-A-2"\nstatus: "in_force"\n---\n' > "$WORK/es/BOE-A-2.md"
+  git -C "$WORK" add -A && git -C "$WORK" commit -q -m "norma dos"
+  git -C "$WORK" push -q "$ORIGIN" HEAD:refs/heads/main
+  [ ! -f "$LEGALIZE_ES_PATH/es/BOE-A-2.md" ]
+  run bash "$SCRIPT" update
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Actualizado. Último commit:"* ]]
+  [[ "$output" == *"norma dos"* ]]
+  [ -f "$LEGALIZE_ES_PATH/es/BOE-A-2.md" ]
+}
+
+@test "update error: si git pull falla sale 1 y no dice que actualizó" {
+  make_origin
+  export LEGALIZE_ES_PATH="$TMPDIR_T/clone"
+  bash "$SCRIPT" install >/dev/null
+  # historia divergente: el pull --ff-only no puede avanzar
+  printf 'local\n' > "$LEGALIZE_ES_PATH/local.txt"
+  git -C "$LEGALIZE_ES_PATH" -c user.email=t@example.invalid -c user.name=t add -A
+  git -C "$LEGALIZE_ES_PATH" -c user.email=t@example.invalid -c user.name=t commit -q -m "local"
+  git -C "$WORK" commit -q --allow-empty -m "remoto"
+  git -C "$WORK" push -q "$ORIGIN" HEAD:refs/heads/main
+  run bash "$SCRIPT" update
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"git pull falló"* ]]
+  [[ "$output" != *"Actualizado."* ]]
+}
