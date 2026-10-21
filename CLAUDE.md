@@ -75,6 +75,7 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 | Skill Maturity Kanban (Calibrated/Incomplete/Stub/Deprecated) | `scripts/skill-maturity-audit.sh` + `docs/rules/domain/skill-maturity-kanban.md` | Necesitas saber qué skills están calibradas, cuáles requieren tests, o priorizar trabajo de calidad (SE-167) |
 | Knowledge Graph (entities + relations tipadas, SQLite) | `scripts/knowledge-graph.sh` + `docs/rules/domain/knowledge-graph.md` | Consultas de impacto, relaciones entre specs/rules/skills/proyectos, build del grafo (SE-162) |
 | Ubiquitous Language (glosario de dominio per-proyecto) | `scripts/extract-domain-entities.py` + `docs/rules/domain/ubiquitous-language.md` | Extraer términos de dominio, crear/actualizar CONTEXT.md per-proyecto, bridge a knowledge graph (SE-086) |
+| Escalera de remedios (prosa → script → skill → hook) | `docs/rules/domain/remedy-ladder.md` | Vas a añadir una regla, hook, skill o script para evitar que un fallo se repita |
 | Automation Scheduler (tareas programadas, SE-304) | `scripts/savia-automations.sh` + `.claude/skills/automation-scheduler/SKILL.md` | Creas, gestionas o ejecutas automatizaciones programadas — morning briefs, weekly reports, PR checks, CVE scans |
 
 **Protocolo de carga**: usar `Read` directamente con el path exacto. NO uses `@import` aquí — romperías el lazy.

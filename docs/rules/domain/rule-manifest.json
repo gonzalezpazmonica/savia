@@ -1,8 +1,8 @@
 {
-  "generated": "2026-10-21T05:18:13Z",
-  "total": 316,
+  "generated": "2026-10-21T20:30:16Z",
+  "total": 317,
   "tier1_count": 4,
-  "tier2_count": 305,
+  "tier2_count": 306,
   "dormant_count": 7,
   "rules": {
     "ac-verifier-authority.md": {
@@ -938,6 +938,10 @@
       "consumers": ""
     },
     "regulatory-compliance.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "remedy-ladder.md": {
       "tier": "tier2",
       "consumers": ""
     },

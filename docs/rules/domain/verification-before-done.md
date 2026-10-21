@@ -18,6 +18,7 @@ Ask: "Would a senior developer approve this in a code review?"
 4. **Proof of work**: Show output, screenshot, or test results.
 5. **Edge cases**: Consider at least 2 edge cases.
 6. **Docs updated**: If behavior changed, docs reflect it.
+7. **Deliverable reopened**: A successful write does not prove the deliverable is usable. Reopen it or check it with a command (parse, render, run) before saying done.
 
 ## Evidence Required
 
