@@ -293,6 +293,24 @@ public record CreatePatientResponse
 
 ---
 
+## Criterios de aceptación con autoridad (SE-444)
+
+> Regla: `docs/rules/domain/ac-verifier-authority.md`. Valores: `real` | `simulada` | `estatica`.
+
+| AC | Verificación | autoridad_requerida | autoridad_obtenida |
+|---|---|---|---|
+| AC1 | {comando o prueba} | {real / simulada / estatica} | {se rellena al cerrar} |
+
+Un AC cuyo texto exige comportamiento real no se cierra con `simulada` ni `estatica`; si la autoridad no está disponible, se registra como skip con nombre y motivo.
+
+### Autorizaciones literales (opcional; recomendable en riesgo L3+)
+
+| Cita textual de la persona | Alcance | Fecha | Sustituida por |
+|---|---|---|---|
+| «{cita literal}» | {qué autoriza y qué no} | {YYYY-MM-DD} | {- o referencia} |
+
+---
+
 ## 5. Test Scenarios
 
 > *Estos escenarios son los tests que DEBEN existir al finalizar la task.*

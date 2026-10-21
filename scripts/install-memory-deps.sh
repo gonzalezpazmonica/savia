@@ -20,17 +20,11 @@ PYTHON="$VENV_DIR/bin/python"
 }
 "$PYTHON" -m pip install --upgrade pip
 
-# Linux PyPI Torch wheels can pull CUDA libraries. Use the official CPU index.
-case "$(uname -s)" in
-Linux|MINGW*|MSYS*|CYGWIN*)
-  "$PYTHON" -m pip install --index-url https://download.pytorch.org/whl/cpu "torch==2.8.0"
-  ;;
-*)
-  "$PYTHON" -m pip install "torch==2.8.0"
-  ;;
-esac
-
-"$PYTHON" -m pip install -r "$ROOT/scripts/requirements-memory.txt"
+# SE-442 S5: lock con hashes (incluye la wheel CPU de torch del indice oficial
+# de PyTorch). Sin sdist ni paquetes sin hash: pip aborta si algo no coincide.
+"$PYTHON" -m pip install --require-hashes --only-binary=:all: \
+  --extra-index-url https://download.pytorch.org/whl/cpu \
+  -r "$ROOT/scripts/requirements-memory.lock.txt"
 "$PYTHON" -m pip check
 "$PYTHON" -c "import faiss, sentence_transformers, torch; assert not torch.cuda.is_available()"
 
