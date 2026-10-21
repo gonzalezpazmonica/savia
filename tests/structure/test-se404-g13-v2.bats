@@ -88,6 +88,53 @@ S
   [[ "$output" == *"unrelated-thing.sh"* ]]
 }
 
+@test "AC2+: a backticked dotfile named in the spec traces without override" {
+  printf '# SE-505\n- AC1: ignorar artefactos en `.gitignore`\n' > docs/specs/SE-505-x.spec.md
+  git add -A; git commit -qm spec; git update-ref refs/remotes/origin/main HEAD
+  summary "Scope-trace: SE-505"
+  echo "out/" > .gitignore
+  output=$(run_g13)
+  [[ "$output" == *"B8 attention-anchor present"* ]]
+}
+
+@test "AC2+: a backticked extensionless path is matched exactly" {
+  printf '# SE-506\n- AC1: revisores\n\nEntregables: `.github/CODEOWNERS`\n' > docs/specs/SE-506-x.spec.md
+  git add -A; git commit -qm spec; git update-ref refs/remotes/origin/main HEAD
+  summary "Scope-trace: SE-506"
+  mkdir -p .github; echo x > .github/CODEOWNERS
+  output=$(run_g13)
+  [[ "$output" == *"B8 attention-anchor present"* ]]
+}
+
+@test "reject: a sibling dotfile not named in the spec still FAILs" {
+  printf '# SE-507\n- AC1: ignorar artefactos en `.gitignore`\n' > docs/specs/SE-507-x.spec.md
+  git add -A; git commit -qm spec; git update-ref refs/remotes/origin/main HEAD
+  summary "Scope-trace: SE-507"
+  echo x > .gitattributes
+  output=$(run_g13)
+  [[ "$output" == FAIL* ]]
+  [[ "$output" == *".gitattributes"* ]]
+}
+
+@test "reject: a directory mention does not open its whole subtree" {
+  printf '# SE-508\n- AC1: trabajo en `scripts/helpers`\n' > docs/specs/SE-508-x.spec.md
+  git add -A; git commit -qm spec; git update-ref refs/remotes/origin/main HEAD
+  summary "Scope-trace: SE-508"
+  mkdir -p scripts/helpers; echo x > scripts/helpers/other
+  output=$(run_g13)
+  [[ "$output" == FAIL* ]]
+  [[ "$output" == *"scripts/helpers/other"* ]]
+}
+
+@test "reject: a dotfile mentioned without backticks does not count" {
+  printf '# SE-509\n- AC1: hablamos de .gitignore sin formato\n' > docs/specs/SE-509-x.spec.md
+  git add -A; git commit -qm spec; git update-ref refs/remotes/origin/main HEAD
+  summary "Scope-trace: SE-509"
+  echo "out/" > .gitignore
+  output=$(run_g13)
+  [[ "$output" == FAIL* ]]
+}
+
 @test "AC3: every Scope-trace skip is logged to output/g13-overrides.jsonl" {
   summary "Scope-trace: skip — motivo suficientemente largo"
   echo x > scripts/any.sh
