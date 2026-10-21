@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
 diff_hash=0b15a99bd7347bcb8a4bc5679c97ef00f8cc62ed1a56d121f5ba402c0dc35d5d
-timestamp=2026-10-20T21:53:23Z
+timestamp=2026-10-21T00:32:59Z
 branch=agent/fix-scorecard-ghcr-20261020
-head_commit=45a2b0435
-signature=0393ad7f07a810e8e6640eadd896fe6ed102eef21691aa6058c333de05f447df
+head_commit=e4ef9755b
+signature=3ae875878afc8cd74fbaa23d4c8f821e37e365cc17f6bcaf0261099e55c7674d
