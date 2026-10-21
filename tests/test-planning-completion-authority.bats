@@ -76,3 +76,13 @@ completion() { # $1 = acceptance_evidence JSON
   [ "$status" -eq 0 ]
   grep -q '^| `## Acceptance Criteria` | `## 5. Test Scenarios` + `## 10. Checklist Pre-Entrega` |$' "$T"
 }
+
+@test "planning_pr_merged encuentra un merge antiguo, más allá de los últimos 200 commits" {
+  R="$BATS_TEST_TMPDIR/hist"; git init -q -b main "$R"
+  git -C "$R" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "Merge pull request #1200 from x/y"
+  for i in $(seq 1 210); do git -C "$R" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "c$i"; done
+  run planning_pr_merged "$R" main 1200
+  [ "$status" -eq 0 ]
+  run planning_pr_merged "$R" main 1201
+  [ "$status" -ne 0 ]
+}
