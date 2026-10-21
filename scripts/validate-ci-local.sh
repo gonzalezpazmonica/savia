@@ -253,6 +253,33 @@ check_gate_unknown() {
   bash "$REPO_ROOT_CI/.claude/hooks/lib/gate-result.sh" check > "$TMPDIR_CI/9c-gate-unknown" 2>&1
 }
 
+# ── SE-444: cobertura no verificada (solo informa; nunca altera el código de salida) ──
+# Lista los AC de planning-state.json cuya autoridad de verificación falta o es inferior a la requerida.
+report_unverified_coverage() {
+  [[ "${SAVIA_AUTHORITY_REPORT:-on}" == "off" ]] && return 0
+  local state="${SAVIA_PLANNING_STATE_FOR_TESTS:-$REPO_ROOT_CI/docs/propuestas/planning-state.json}"
+  [[ -f "$state" ]] && command -v jq >/dev/null 2>&1 || return 0
+  . "$REPO_ROOT_CI/scripts/lib/planning-completion.sh" || return 0
+  local id completion line total=0 weak=0 missing=0 shown=0 out=""
+  while IFS=$'\t' read -r id completion; do
+    while IFS=$'\t' read -r crit st got req; do
+      [[ -z "$crit" ]] && continue
+      total=$((total+1))
+      if [[ "$st" == "insuficiente" ]]; then
+        weak=$((weak+1))
+        out+="    $id · $crit: autoridad $got < requerida $req"$'\n'
+      else
+        missing=$((missing+1))
+      fi
+    done < <(planning_unverified_authority_list "$completion")
+  done < <(jq -r '.initiatives[]? | select(.completion != null) | [.id, (.completion|tojson)] | @tsv' "$state" 2>/dev/null)
+  echo ""
+  echo "--- Cobertura no verificada (informativa) ---"
+  echo "  $total criterios sin autoridad suficiente: $weak inferior a la requerida, $missing con autoridad ausente (cierres previos a SE-444)"
+  [[ -n "$out" ]] && printf '%s' "$out"
+  return 0
+}
+
 # ── Run checks in parallel ───────────────────────────────────────────────
 check_branch &
 check_coherence &
@@ -283,6 +310,7 @@ for f in "$TMPDIR_CI"/*; do
   done < "$f"
 done
 
+report_unverified_coverage
 echo ""
 echo "--- Results: $PASS passed, $FAIL failed, $WARN warnings ---"
 
