@@ -7,6 +7,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
 OUTPUT_DIR="$REPO_ROOT/output/security"
 FINDINGS_FILE="$OUTPUT_DIR/pre-push-findings.jsonl"
 GITLEAKS_CONFIG="$REPO_ROOT/.gitleaks.toml"
@@ -61,7 +63,16 @@ if ! command -v gitleaks &>/dev/null; then
   echo "  # Linux/macOS (binario):" >&2
   echo "  brew install gitleaks  # macOS" >&2
   echo "  # O descarga desde: https://github.com/gitleaks/gitleaks/releases" >&2
-  echo "[pre-push-gate] Push continúa sin escaneo de secrets." >&2
+  # SE-453: gitleaks ausente es «desconocido», no «limpio». Ciclo de aviso (D3): el push sigue y se
+  # registra como no medido; SAVIA_GATE_UNKNOWN=block lo convierte en bloqueo (exit 1).
+  GATE_RESULT_LINE="$(gate_result_emit unknown "gitleaks:missing_tool")"
+  echo "[pre-push-gate] $GATE_RESULT_LINE" >&2
+  GATE_UNMEASURED_ROOT="$REPO_ROOT" gate_unmeasured_record "pre-push-security-gate" missing_tool
+  if [[ "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]]; then
+    echo "[pre-push-gate] SAVIA_GATE_UNKNOWN=block — push bloqueado: el escaneo no se ha podido ejecutar." >&2
+    exit 1
+  fi
+  echo "[pre-push-gate] Push continúa SIN escaneo de secrets (resultado desconocido, registrado en output/unmeasured-gates.jsonl)." >&2
   exit 0
 fi
 
