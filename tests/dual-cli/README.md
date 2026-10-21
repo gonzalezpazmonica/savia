@@ -80,3 +80,21 @@ evidencia, la configuración aborta sin tocar el fichero personal.
 El doctor y el evidence package actuales informan `DEGRADED_SAFE`. Los tests
 con probes sintéticos validan lógica e idempotencia; no cuentan como canaries
 reales de Codex. El runner real termina en 2 mientras falle el sandbox.
+
+## Gates compartidos y adaptador Codex (S3, parcial)
+
+`gates.py` lee `.claude/settings.json`, ejecuta los handlers `command` en su
+propio grupo de procesos y bloquea ante exit distinto de 0, timeout (mata el
+grupo), JSON inválido, `ask`, configuración ilegible o un handler `http`/`prompt`
+que aún no sabe ejecutar. `codex-hook.py` traduce un PreToolUse de Codex a esa
+política (bloqueo = exit 2) y descompone `apply_patch` en operaciones por
+archivo (alta, edición, renombrado, borrado). `.codex/hooks.json` no se ha
+modificado: la confianza del hook es decisión nativa de Codex.
+
+Evidencia: `test_gates.py` incluye un replay del mismo corpus
+(`fixtures/replay_corpus.json`) contra los hooks reales por el núcleo Codex y por
+`shell-bridge.ts` de OpenCode (vía bun): decisiones idénticas. Cubre la mitad
+de comando de AC2; la edición real, el binario Codex en vivo y el despacho por
+el socket del runtime siguen pendientes. Con el settings actual,
+`Bash(git commit*)` tiene un handler `prompt` y por tanto se bloquea en ambos
+núcleos hasta que exista transporte de prompt (hueco conocido, AC6).
