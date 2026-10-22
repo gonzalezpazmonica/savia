@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=0077ef442b2a3be6d224c62583c19949f03f34e1d22b61e13dd10cdc252e25d9
-timestamp=2026-10-21T21:37:23Z
+diff_hash=5dbca46b305e8b54e67e82b07cbb1c084ce3386816b1c9870ab9d49f5b1bdb6c
+timestamp=2026-10-22T16:20:17Z
 branch=agent/learnings-harness2-20261021
-head_commit=df330d94f
-signature=021a0e707dfcc3014a8c27d7c3fbf67c0ecff47a34168e876b2d1aaf37b569c6
+head_commit=7adddb6ee
+signature=99c430d4e9c7b4a6f4096e81a1034e6b2db8a0145d0d54026049c5862b38b33c
