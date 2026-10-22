@@ -77,12 +77,26 @@ completion() { # $1 = acceptance_evidence JSON
   grep -q '^| `## Acceptance Criteria` | `## 5. Test Scenarios` + `## 10. Checklist Pre-Entrega` |$' "$T"
 }
 
+gitc() { git -C "$R" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+
 @test "planning_pr_merged encuentra un merge antiguo, más allá de los últimos 200 commits" {
   R="$BATS_TEST_TMPDIR/hist"; git init -q -b main "$R"
-  git -C "$R" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "Merge pull request #1200 from x/y"
-  for i in $(seq 1 210); do git -C "$R" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "c$i"; done
+  gitc commit -q --allow-empty -m "Merge pull request #1200 from x/y"
+  for i in $(seq 1 210); do gitc commit -q --allow-empty -m "c$i"; done
   run planning_pr_merged "$R" main 1200
   [ "$status" -eq 0 ]
   run planning_pr_merged "$R" main 1201
   [ "$status" -ne 0 ]
+}
+
+@test "planning_pr_merged solo cuenta merges reales: squash sí; menciones y reverts no" {
+  R="$BATS_TEST_TMPDIR/formas"; git init -q -b main "$R"
+  gitc commit -q --allow-empty -m "feat(x): algo (#1300)"
+  gitc commit -q --allow-empty -m "fix: sigue lo de refs #1301"
+  gitc commit -q --allow-empty -m 'Revert "feat(y): otra cosa (#1302)"'
+  gitc commit -q --allow-empty -m "Merge pull request #13031 from x/y"
+  run planning_pr_merged "$R" main 1300; [ "$status" -eq 0 ]
+  run planning_pr_merged "$R" main 1301; [ "$status" -ne 0 ]
+  run planning_pr_merged "$R" main 1302; [ "$status" -ne 0 ]
+  run planning_pr_merged "$R" main 1303; [ "$status" -ne 0 ]
 }

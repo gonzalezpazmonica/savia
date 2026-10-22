@@ -26,7 +26,7 @@ crear() {
   run crear --when "tareas de cúpula en headless" --confidence media
   [ "$status" -eq 0 ]
   f=$(ls "$TMPD"/out/LP-*.md)
-  grep -q '^when: tareas de cúpula en headless$' "$f"
+  grep -q '^when: "tareas de cúpula en headless"$' "$f"
   grep -q '^confidence: media$' "$f"
   grep -q '^## Cuándo aplica$' "$f"
 }
@@ -34,6 +34,7 @@ crear() {
 @test "confianza fuera de alta/media/baja es error de uso" {
   run crear --when "x" --confidence total
   [ "$status" -eq 2 ]
+  [[ "$output" == *"--confidence"* ]]
   [ ! -d "$TMPD/out" ] || [ -z "$(ls "$TMPD/out")" ]
 }
 
@@ -49,4 +50,25 @@ crear() {
   run bash "$LP" --origin o --evidence "$TMPD/no-existe.md" --diagnosis d \
     --change c --target criterio --output-dir "$TMPD/out" --when x --confidence alta
   [ "$status" -eq 3 ]
+}
+
+@test "--when con salto de línea se rechaza (no inyecta claves en el frontmatter)" {
+  run crear --when $'x\ntarget: skill' --confidence alta
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--when"* ]]
+  [ ! -d "$TMPD/out" ] || [ -z "$(ls "$TMPD/out")" ]
+}
+
+@test "--when con dos puntos y comillas queda como un escalar entrecomillado" {
+  run crear --when 'cuando falla X: "reintentar"' --confidence baja
+  [ "$status" -eq 0 ]
+  f=$(ls "$TMPD"/out/LP-*.md)
+  grep -qF 'when: "cuando falla X: \"reintentar\""' "$f"
+  grep -q '^target: criterio$' "$f"
+}
+
+@test "--help muestra la cabecera entera" {
+  run bash "$LP" --help
+  [[ "$output" == *"Exit codes"* ]]
+  [[ "$output" == *"--when"* ]]
 }

@@ -48,7 +48,8 @@ WHEN=""
 CONFIDENCE=""
 
 usage() {
-  sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Toda la cabecera de comentarios, sin rango fijo que se rompa al editarla.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
   exit 2
 }
 
@@ -79,6 +80,13 @@ case "$TARGET" in
   criterio|memoria|skill|spec) ;;
   *) echo "ERROR: --target debe ser criterio|memoria|skill|spec" >&2; exit 2 ;;
 esac
+
+# --when es texto libre que va al frontmatter: sin saltos de línea (inyectaría claves) y entrecomillado.
+case "$WHEN" in
+  *$'\n'*|*$'\r'*) echo "ERROR: --when no admite saltos de línea" >&2; exit 2 ;;
+esac
+WHEN_YAML=""
+[[ -n "$WHEN" ]] && WHEN_YAML="\"$(printf '%s' "$WHEN" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
 
 case "$CONFIDENCE" in
   ""|alta|media|baja) ;;
@@ -156,7 +164,7 @@ criterion_id: $CRITERION_ID
 evidence_hash: $EVIDENCE_HASH
 created_utc: $CREATED_UTC
 expected_p_consistent: ${EXPECTED_PC:-}
-when: $WHEN
+when: $WHEN_YAML
 confidence: $CONFIDENCE
 ---
 

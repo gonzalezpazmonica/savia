@@ -1,6 +1,6 @@
 ---
 context_tier: L2
-token_budget: 420
+token_budget: 650
 ---
 
 # Escalera de remedios
