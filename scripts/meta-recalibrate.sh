@@ -31,6 +31,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -z "$TASK" || -z "$PRED" || -z "$OUTCOME" ]] && { echo "ERROR: --task/--predicted/--outcome requeridos" >&2; exit 2; }
+[[ "$PRED" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --predicted numerico 0-100" >&2; exit 2; }
 case "$OUTCOME" in success|fail|partial) ;; *) echo "ERROR: outcome ∈ success|fail|partial" >&2; exit 2 ;; esac
 
 L_DIR="$(dirname "$CAL_FILE")"

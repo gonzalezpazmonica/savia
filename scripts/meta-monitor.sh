@@ -41,6 +41,8 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -z "$TASK" || -z "$CONF" ]] && { echo "ERROR: --task y --confidence requeridos" >&2; exit 2; }
 [[ "$CONF" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --confidence numerico 0-100" >&2; exit 2; }
+[[ "$DIV" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --divergence numerico 0-1" >&2; exit 2; }
+[[ "$EVIDENCE" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --evidence numerico 0-1" >&2; exit 2; }
 
 # calibración histórica: si existe curva, cal por tarea (más preciso) con fallback global
 CAL_ACC="0.5"

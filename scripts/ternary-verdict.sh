@@ -106,22 +106,22 @@ if [[ "${VALIDATE_ONLY:-false}" == "true" ]]; then
   exit 0
 fi
 
-# Build output JSON
-python3 -c "
-import json, sys
+# Build output JSON — los valores viajan por entorno, nunca interpolados en el
+# código Python (comillas/backslashes/$ en motivo u owner lo corrompían).
+VT_BANDA="$BANDA" VT_MOTIVO="$MOTIVO" VT_OWNER="$OWNER" VT_ENGRAM="$ENGRAM_OP" \
+VT_ORIGEN="$ORIGEN" VT_TS="$TIMESTAMP" VT_DIMS="$DIMENSIONES_JSON" python3 -c "
+import json, os
 
+e = os.environ
 output = {
-    'veredicto': '$BANDA',
-    'motivo': '''${MOTIVO//\'/\'\\\'\'}''',
-    'owner': '${OWNER:-}' or None,
-    'engram_op': '${ENGRAM_OP:-}' or None,
-    'origen': '$ORIGEN',
-    'timestamp': '$TIMESTAMP'
+    'veredicto': e['VT_BANDA'],
+    'motivo': e['VT_MOTIVO'],
+    'owner': e['VT_OWNER'] or None,
+    'engram_op': e['VT_ENGRAM'] or None,
+    'origen': e['VT_ORIGEN'],
+    'timestamp': e['VT_TS'],
+    'dimensiones': json.loads(e['VT_DIMS']),
 }
-
-dims = json.loads('''${DIMENSIONES_JSON}''')
-output['dimensiones'] = dims
-
 print(json.dumps(output, indent=2, ensure_ascii=False))
 "
 exit $?
