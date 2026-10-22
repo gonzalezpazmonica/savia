@@ -20,7 +20,7 @@
 - **context-compaction-policy** (script): context-compaction-policy.sh — SE-270 S7: declared compaction survival policy
 - **context-condenser** (script): context-condenser.sh — SE-200: rolling window context compression
 - **context-distortion-measure** (script): context-distortion-measure.sh — SE-029-M
-- **context-dome** (skill): >
+- **context-dome** (skill): Genera CONTEXT_DOME.md con el conocimiento tácito de un módulo. Usar cuando un módulo tiene bus factor bajo o alguien va a dejar el equipo y hay que capturar decisiones, dependencias y runbook.
 - **context-dome-generate** (script): context-dome-generate.sh -- Genera CONTEXT_DOME.md por modulo con BF bajo.
 - **context-dome-manager** (agent): Arquitecto de conocimiento — disena, audita y evoluciona cupulas de contexto (SaviaVaults). Decide estructura, federacion, confidencialidad, publicacion. Orquesta digestion y clasificacion de conocimiento. Usar PROACTIVELY cuando: se crea u
 - **context-drop-after-use** (script): context-drop-after-use.sh — SE-221 Slice 2 — Drop-After-Use decision engine
