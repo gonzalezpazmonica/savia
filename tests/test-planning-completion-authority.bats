@@ -100,3 +100,21 @@ gitc() { git -C "$R" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c
   run planning_pr_merged "$R" main 1302; [ "$status" -ne 0 ]
   run planning_pr_merged "$R" main 1303; [ "$status" -ne 0 ]
 }
+
+@test "planning_pr_merged rechaza un número de PR que no es numérico (no entra en la regex)" {
+  R="$BATS_TEST_TMPDIR/validar"; git init -q -b main "$R"
+  gitc commit -q --allow-empty -m "Merge pull request #1400 from x/y"
+  run planning_pr_merged "$R" main '[0-9]+'; [ "$status" -ne 0 ]
+  run planning_pr_merged "$R" main '1|'; [ "$status" -ne 0 ]
+  run planning_pr_merged "$R" main ''; [ "$status" -ne 0 ]
+  run planning_pr_merged "$R" main 1400; [ "$status" -eq 0 ]
+}
+
+@test "planning_pr_merged avisa si el clon es superficial" {
+  R="$BATS_TEST_TMPDIR/origen"; git init -q -b main "$R"
+  for i in 1 2 3; do gitc commit -q --allow-empty -m "c$i (#15$i)"; done
+  C="$BATS_TEST_TMPDIR/superficial"; git clone -q --depth 1 "file://$R" "$C"
+  run planning_pr_merged "$C" main 151
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"superficial"* ]]
+}

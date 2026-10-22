@@ -85,6 +85,8 @@ esac
 case "$WHEN" in
   *$'\n'*|*$'\r'*) echo "ERROR: --when no admite saltos de línea" >&2; exit 2 ;;
 esac
+if [[ "$WHEN" =~ [[:cntrl:]] ]]; then echo "ERROR: --when no admite caracteres de control" >&2; exit 2; fi
+if (( ${#WHEN} > 200 )); then echo "ERROR: --when admite como mucho 200 caracteres" >&2; exit 2; fi
 WHEN_YAML=""
 [[ -n "$WHEN" ]] && WHEN_YAML="\"$(printf '%s' "$WHEN" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
 
