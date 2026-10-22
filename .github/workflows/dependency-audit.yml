@@ -49,7 +49,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install pip-audit
-        run: pip install --require-hashes --only-binary=:all: -r .github/requirements/pip-audit.lock.txt
+        run: |
+          pip install --require-hashes --only-binary=:all: -r .github/requirements/pip-audit.lock.txt
 
       - name: Find and audit requirements
         run: |
