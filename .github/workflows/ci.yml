@@ -317,7 +317,7 @@ jobs:
       - name: Gate guards parity (SE-453 S2)
         env:
           SAVIA_REQUIRE_TS: "1"
-        run: bats tests/test-gate-result-contract.bats tests/test-gate-result-dual-binding.bats
+        run: bats tests/test-gate-result-contract.bats tests/test-gate-result-dual-binding.bats tests/test-gate-result-scanners.bats
 
       - name: Generate BATS dependency map
         id: deps

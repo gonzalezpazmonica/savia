@@ -1,0 +1,106 @@
+#!/usr/bin/env bats
+# SE-453 S3 (lote 2): escáneres «por demanda» de la auditoría S0 con exposición real.
+# Spec: docs/specs/SE-453-gate-result-contract.spec.md · Contrato: docs/rules/domain/gate-result-contract.md
+# - security-audit-all.sh: `$(cmd || echo '{}')` pegaba `{}` tras el JSON de un escáner que salía 1 y el
+#   parseo fallaba a 0 hallazgos (un FAIL se leía PASS). Un escáner roto o ausente es hueco, no cero.
+# - mcp-security-audit.sh: sin python3 cada config salía como hallazgo MCP-00; ahora es unknown.
+
+setup_file() {
+  export NOPY="$BATS_FILE_TMPDIR/nopy"
+  mkdir -p "$NOPY"
+  local f
+  for f in /usr/bin/*; do
+    [[ "${f##*/}" == python* ]] && continue
+    [[ -x "$f" ]] && ln -sf "$f" "$NOPY/${f##*/}"
+  done
+}
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+  W="$(mktemp -d -p "$BATS_TEST_TMPDIR")"
+  mkdir -p "$W/scripts" "$W/.claude/hooks/lib"
+  cp "$REPO_ROOT/scripts/security-audit-all.sh" "$W/scripts/"
+  cp "$REPO_ROOT/scripts/mcp-security-audit.sh" "$W/scripts/mcp-real.sh"
+  cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$W/.claude/hooks/lib/"
+  # Escáneres falsos limpios; cada test rompe el que necesita.
+  for s in mcp-security-audit permissions-wildcard-audit hook-injection-audit; do stub "$s" 0 '{"verdict":"PASS","findings_count":0,"critical":0,"high":0,"medium":0,"low":0}'; done
+  printf '#!/usr/bin/env bash\necho "Scanned: 1 files | Findings: 0 | Warnings: 0"\n' > "$W/scripts/prompt-security-scan.sh"
+  printf '{"mcpServers":{"ok":{"command":"node","args":["s.js"],"description":"d"}}}' > "$W/clean.json"
+  printf '{"mcpServers":{"x":{"command":"npx","args":["-y","pkg"],"autoApprove":true,"description":"d"}}}' > "$W/bad.json"
+}
+
+stub() { # stub <scanner> <exit> <stdout>
+  printf '#!/usr/bin/env bash\nprintf %%s %q\nexit %s\n' "$3" "$2" > "$W/scripts/$1.sh"
+}
+
+json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d$1))"; }
+
+# ── mcp-security-audit.sh ───────────────────────────────────────────────────
+
+@test "mcp-audit: sin python3 ⇒ exit 2 y unknown/python3:missing_tool, no un hallazgo MCP-00" {
+  run env PATH="$NOPY" /usr/bin/bash "$W/scripts/mcp-real.sh" --config "$W/clean.json"
+  [ "$status" -eq 2 ]
+  [ "$status" -ne 1 ]
+  [[ "$output" != *"MCP-00"* ]]
+  [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"unknown","gaps":[{"check":"python3","reason":"missing_tool"}]}' ]
+}
+
+@test "mcp-audit --json sin python3: JSON válido con verdict UNKNOWN, result unknown y su hueco" {
+  run env PATH="$NOPY" /usr/bin/bash -c "bash '$W/scripts/mcp-real.sh' --config '$W/clean.json' --json 2>/dev/null"
+  [ "$status" -eq 2 ]
+  out="$output"; run python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["verdict"]=="UNKNOWN" and d["result"]=="unknown" and d["gaps"]==[{"check":"python3","reason":"missing_tool"}], d' "$out"
+  [ "$status" -eq 0 ]
+}
+
+@test "mcp-audit con python3: config limpio ⇒ clean, config con autoApprove ⇒ findings" {
+  run bash "$W/scripts/mcp-real.sh" --config "$W/clean.json" --json
+  [ "$status" -eq 0 ]
+  [ "$(json_field '["result"]')" = '"clean"' ]
+  run bash "$W/scripts/mcp-real.sh" --config "$W/bad.json" --json
+  [ "$status" -eq 1 ]
+  [ "$(json_field '["result"]')" = '"findings"' ]
+  [ "$(json_field '["critical"]')" = 1 ]
+}
+
+# ── security-audit-all.sh ───────────────────────────────────────────────────
+
+@test "agregador: un escáner que sale 1 con hallazgos cuenta sus hallazgos (antes 0 y PASS)" {
+  stub mcp-security-audit 1 '{"verdict":"FAIL","findings_count":1,"critical":1,"high":0,"medium":0,"low":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 1 ]
+  [ "$(json_field '["verdict"]')" = '"FAIL"' ]
+  [ "$(json_field '["total_critical"]')" = 1 ]
+  [ "$(json_field '["result"]')" = '"findings"' ]
+}
+
+@test "agregador: escáner que revienta o da salida no JSON ⇒ UNKNOWN exit 2 con hueco unreadable" {
+  stub mcp-security-audit 127 'bash: python3: orden no encontrada'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["verdict"]')" = '"UNKNOWN"' ]
+  [ "$(json_field '["gaps"]')" = '[{"check": "mcp-security-audit", "reason": "unreadable"}]' ]
+  [ "$(json_field '["scanners"][0]["critical"]')" = null ]
+}
+
+@test "agregador: rc 1 sin ninguna cuenta no se lee como limpio" {
+  stub hook-injection-audit 1 '{"verdict":"FAIL","findings_count":0,"critical":0,"high":0,"medium":0,"low":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["result"]')" = '"unknown"' ]
+}
+
+@test "agregador: escáner ausente ⇒ hueco missing_tool; prompt-scan roto ⇒ unreadable" {
+  mv "$W/scripts/permissions-wildcard-audit.sh" "$W/gone.sh"
+  printf '#!/usr/bin/env bash\necho boom >&2\nexit 2\n' > "$W/scripts/prompt-security-scan.sh"
+  run bash "$W/scripts/security-audit-all.sh"
+  [ "$status" -eq 2 ]
+  [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"unknown","gaps":[{"check":"permissions-wildcard-audit","reason":"missing_tool"},{"check":"prompt-security-scan","reason":"unreadable"}]}' ]
+}
+
+@test "agregador: todo limpio ⇒ PASS, exit 0 y result clean sin huecos" {
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  [ "$(json_field '["verdict"]')" = '"PASS"' ]
+  [ "$(json_field '["result"]')" = '"clean"' ]
+  [ "$(json_field '["gaps"]')" = '[]' ]
+}

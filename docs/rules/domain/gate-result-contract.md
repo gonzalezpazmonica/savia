@@ -57,6 +57,12 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | 2 (entorno), 3 (UNVERIFIED) | `unknown` |
 | `pre-push-security-gate.sh` | 0 con gitleaks / 1 | `clean` / `findings` |
 | | 0 sin gitleaks | `unknown` (registrado; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
+| `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
+| | 2 | `unknown` (python3 ausente) o error de uso |
+| `security-audit-all.sh` | 0 / 1 | bajo / sobre el umbral `--fail-on` (`result` dice `clean` o `findings`) |
+| | 2 | `unknown` (un escáner ausente, roto o con salida ilegible) o error de uso |
+
+Con `--json`, estos dos llevan `result` y `gaps` dentro del objeto JSON en vez de la línea final.
 
 El 4 de `git-history-secret-scan.sh` sustituye al 1 que antes se daba con gitleaks ausente: el 1 queda
 solo para hallazgos críticos. Es el único código que cambia.
@@ -66,6 +72,8 @@ solo para hallazgos críticos. Es el único código que cambia.
 Los hooks siguen saliendo solo con 0 o 2 (`hooks-blocking-guards.md`). Un guard `blocking` sin `jq`
 degrada a un parseo con `grep` (`hook_extract_command`); si tampoco puede evaluar, sale 2. Nunca sale 0
 sin haber evaluado. Los hooks no marcados que salen 0 sin `jq` añaden su línea de no medido.
+En OpenCode, `savia-gates` ejecuta los mismos `.sh`; los puertos nativos (`.opencode/plugins/guards/*.ts`)
+no usan `jq` y se comparan con el hook bash con las mismas entradas (`tests/test-gate-result-dual-binding.bats`).
 
 ## Consumidores
 
