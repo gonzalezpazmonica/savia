@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=5dbca46b305e8b54e67e82b07cbb1c084ce3386816b1c9870ab9d49f5b1bdb6c
-timestamp=2026-10-22T16:20:17Z
-branch=agent/learnings-harness2-20261021
-head_commit=7adddb6ee
-signature=99c430d4e9c7b4a6f4096e81a1034e6b2db8a0145d0d54026049c5862b38b33c
+diff_hash=83e382676075bd8baa2485a938364b2a775c64469b7825103650faed8754b7cb
+timestamp=2026-10-22T16:54:14Z
+branch=agent/fix-dependency-audit-yaml-20261022
+head_commit=c9ee90ed6
+signature=20ce0d8c24c505c6427ccae2d8a2021312b0e359b99e8c1357b55e92d64b7690
