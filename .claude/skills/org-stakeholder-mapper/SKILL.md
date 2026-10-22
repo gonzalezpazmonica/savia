@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: org-stakeholder-mapper
-description: "Mapeador de Stakeholders y Decisores: extrae roles formales y reales, motivaciones, alianzas y tensiones de una organización."
+description: "Mapea roles formales y reales, motivaciones, alianzas y tensiones de una organización. Usar cuando haya que saber quién decide de verdad antes de proponer o negociar algo."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: org-intelligence
