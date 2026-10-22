@@ -72,3 +72,11 @@ crear() {
   [[ "$output" == *"Exit codes"* ]]
   [[ "$output" == *"--when"* ]]
 }
+
+@test "--when con caracteres de control o demasiado largo se rechaza" {
+  run crear --when $'x\ty' --confidence alta
+  [ "$status" -eq 2 ]
+  run crear --when "$(printf 'a%.0s' $(seq 1 201))" --confidence alta
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"200"* ]]
+}

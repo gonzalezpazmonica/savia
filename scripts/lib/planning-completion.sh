@@ -46,11 +46,19 @@ planning_human_review_approved() {
 
 planning_pr_merged() {
   local root="$1" main_ref="$2" pr="$3"
+  # El número entra en una regex: solo dígitos, o cualquier metacarácter casaría con medio historial.
+  [[ "$pr" =~ ^[0-9]+$ ]] || return 1
+  # En un clon superficial el merge puede quedar fuera: avisar en vez de dar un falso negativo mudo.
+  if [[ "$(git -C "$root" rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]]; then
+    echo "AVISO planning_pr_merged: clon superficial; #$pr puede estar fusionado fuera del historial visible" >&2
+  fi
   # Sin grep -q: cortaría la tubería y, con pipefail, el SIGPIPE de git (141) daría falso negativo.
   # Historial completo: una ventana fija (antes -200) caduca sola cuando main crece y rompe specs viejas.
-  # Solo los formatos de merge reales (merge commit o squash), nunca menciones sueltas ni reverts.
+  # Solo cuentan los formatos de merge reales (merge commit o squash), no las menciones sueltas.
+  # Límites: un PR fusionado y después revertido sigue contando como fusionado, y «rebase and merge»
+  # no deja el número en el asunto (Savia fusiona con merge commit).
   git -C "$root" log --format='%s' "$main_ref" 2>/dev/null |
-    grep -v '^Revert' | grep -E "^Merge pull request #${pr}( |$)|\(#${pr}\)$" >/dev/null
+    grep -E "^Merge pull request #${pr}( |$)|\(#${pr}\)$" >/dev/null
 }
 
 # SE-444: autoridad del verificador. Solo informa; no altera planning_acceptance_evidence_valid.
