@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=d27c173cac9a1ab278aa9e8c99ab73cfd2d5e029fa396b9716632545cbc918af
-timestamp=2026-10-21T06:32:05Z
-branch=agent/se445-autonomy-safeguards-20261020
-head_commit=06e16775
-signature=2cf49822a18da313033cc0c79f10e3f2c9596a2c4d549bc3491c5869b70645f4
+diff_hash=5dbca46b305e8b54e67e82b07cbb1c084ce3386816b1c9870ab9d49f5b1bdb6c
+timestamp=2026-10-22T16:20:17Z
+branch=agent/learnings-harness2-20261021
+head_commit=7adddb6ee
+signature=99c430d4e9c7b4a6f4096e81a1034e6b2db8a0145d0d54026049c5862b38b33c

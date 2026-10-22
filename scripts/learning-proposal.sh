@@ -17,6 +17,7 @@
 #     --change <cambio propuesto> \
 #     --target <criterio|memoria|skill|spec> \
 #     [--criterion-id <CRIT-XXX>] \
+#     [--when <cuándo aplica>] [--confidence <alta|media|baja>] \
 #     [--expected-p-consistent <0-1>] \
 #     [--trigger <ledger|contradiction|divergence|recurrence>] \
 #     [--output-dir <path>] [--graph-index <path>] [--id <id>]
@@ -43,9 +44,12 @@ OUTPUT_DIR="${SCL_PROPOSALS_DIR:-$ROOT/docs/learning-proposals}"
 GRAPH_INDEX="${SCL_GRAPH_INDEX:-$ROOT/output/learning-loop/graph-index.jsonl}"
 PERSIST=false
 FORCE_ID=""
+WHEN=""
+CONFIDENCE=""
 
 usage() {
-  sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Toda la cabecera de comentarios, sin rango fijo que se rompa al editarla.
+  awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
   exit 2
 }
 
@@ -63,6 +67,8 @@ while [[ $# -gt 0 ]]; do
     --graph-index) GRAPH_INDEX="$2"; shift 2 ;;
     --persist) PERSIST=true; shift ;;
     --id) FORCE_ID="$2"; shift 2 ;;
+    --when) WHEN="$2"; shift 2 ;;
+    --confidence) CONFIDENCE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) shift ;;
   esac
@@ -73,6 +79,18 @@ done
 case "$TARGET" in
   criterio|memoria|skill|spec) ;;
   *) echo "ERROR: --target debe ser criterio|memoria|skill|spec" >&2; exit 2 ;;
+esac
+
+# --when es texto libre que va al frontmatter: sin saltos de línea (inyectaría claves) y entrecomillado.
+case "$WHEN" in
+  *$'\n'*|*$'\r'*) echo "ERROR: --when no admite saltos de línea" >&2; exit 2 ;;
+esac
+WHEN_YAML=""
+[[ -n "$WHEN" ]] && WHEN_YAML="\"$(printf '%s' "$WHEN" | sed 's/\\/\\\\/g; s/"/\\"/g')\""
+
+case "$CONFIDENCE" in
+  ""|alta|media|baja) ;;
+  *) echo "ERROR: --confidence debe ser alta|media|baja" >&2; exit 2 ;;
 esac
 
 if [[ -n "$CRITERION_ID" ]]; then
@@ -146,6 +164,8 @@ criterion_id: $CRITERION_ID
 evidence_hash: $EVIDENCE_HASH
 created_utc: $CREATED_UTC
 expected_p_consistent: ${EXPECTED_PC:-}
+when: $WHEN_YAML
+confidence: $CONFIDENCE
 ---
 
 # Learning Proposal $ID
@@ -153,6 +173,10 @@ expected_p_consistent: ${EXPECTED_PC:-}
 ## Origen
 
 $ORIGIN
+
+## Cuándo aplica
+
+${WHEN:-sin condición de uso declarada (añadir con --when)}${CONFIDENCE:+ · confianza: $CONFIDENCE}
 
 ## Evidencia
 

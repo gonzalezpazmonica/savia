@@ -47,8 +47,10 @@ planning_human_review_approved() {
 planning_pr_merged() {
   local root="$1" main_ref="$2" pr="$3"
   # Sin grep -q: cortaría la tubería y, con pipefail, el SIGPIPE de git (141) daría falso negativo.
-  git -C "$root" log --format='%s' "$main_ref" -200 2>/dev/null |
-    grep -E "(^|[^0-9])#${pr}([^0-9]|$)" >/dev/null
+  # Historial completo: una ventana fija (antes -200) caduca sola cuando main crece y rompe specs viejas.
+  # Solo los formatos de merge reales (merge commit o squash), nunca menciones sueltas ni reverts.
+  git -C "$root" log --format='%s' "$main_ref" 2>/dev/null |
+    grep -v '^Revert' | grep -E "^Merge pull request #${pr}( |$)|\(#${pr}\)$" >/dev/null
 }
 
 # SE-444: autoridad del verificador. Solo informa; no altera planning_acceptance_evidence_valid.
