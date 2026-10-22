@@ -30,6 +30,9 @@ env:
   SAVIA_EVAL_DELTA_THRESHOLD: "0.05"
   PYTHON_VERSION: "3.12"
 
+permissions:
+  contents: read
+
 jobs:
   # ── Job 1: DeepEval skills regression (every PR) ─────────────────────────────
   deepeval-skills:
