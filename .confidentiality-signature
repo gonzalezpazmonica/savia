@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f740a72e8bd3a6842bff9d3302d5864926f346c5b8257420249dbdeb4c5539a3
-timestamp=2026-10-22T21:35:47Z
-branch=agent/p2-planning-when-20261022
-head_commit=62675b959
-signature=4fcc75555b927da26ba43cca72e0f5836b89bb475503ed3e4698dbb244ce2531
+diff_hash=4b50a39f6a83e3afb83d4bc61c9188fa2663c24dd21e5f50f4667f2dc3b4d3e7
+timestamp=2026-10-22T23:05:28Z
+branch=agent/s03calidad-20261023
+head_commit=5a7ce4a59
+signature=28dd2fb5ab7c1e49c611cb0b5ee42f27d07712ea9fa9c10e1ebbe366e1ee6a8d
