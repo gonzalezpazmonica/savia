@@ -7,7 +7,11 @@ set -uo pipefail
 setup_file() {
   REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   export REPO_ROOT
-  # Requiere el venv con sentence-transformers (SCL-005 desbloqueado)
+}
+
+# Solo las pruebas que miden similitud semántica exigen el venv; el resto
+# (léxico, degradación, autoridad) deben ejecutarse siempre.
+need_venv() {
   if [[ ! -x "$HOME/.savia/venv/bin/python" ]] || ! "$HOME/.savia/venv/bin/python" -c 'import sentence_transformers' >/dev/null 2>&1; then
     skip "venv ~/.savia/venv no presente (SCL-005 requiere dependencias)"
   fi
@@ -59,6 +63,7 @@ teardown() {
 }
 
 @test "AC-1: hybrid.py computa scores lex+sem y marca hybrid=true" {
+  need_venv
   run bash -c "printf '%s' '{\"query\":\"token de acceso\",\"docs\":[{\"path\":\"a.md\",\"text\":\"PAT hardcodeado token acceso\"},{\"path\":\"b.md\",\"text\":\"receta de paella\"}]}' | SCL_VENV_PYTHON='$HOME/.savia/venv/bin/python' python3 '$HYBRID'"
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "
@@ -106,4 +111,85 @@ assert d['hits'][0]['hybrid']==False, d  # sin embeddings → lexico puro"
   run bash "$RECALL" --query "PAT hardcodeado" --top 3 --json
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['effective_hits'] == []; assert d['shadow_hits'] >= 1, d"
+}
+
+# --- S03c: puntuación léxica determinista de learning-hybrid.py (SCL-005) ---
+# SCL_VENV_PYTHON apunta a un intérprete inexistente → semántica desactivada,
+# el score es w_lex * fracción del query presente en el documento.
+
+hyb() { printf '%s' "$1" | SCL_VENV_PYTHON=/nonexistent python3 "$HYBRID"; }
+
+@test "léxico: score = w_lex(0.4) × fracción de términos del query presentes" {
+  run hyb '{"query":"token acceso azure","docs":[{"path":"a.md","text":"el token de acceso"}]}'
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+h = json.load(sys.stdin)['hits'][0]
+assert h['lex'] == 0.6667 and h['sem'] == 0.0 and h['hybrid'] is False, h
+assert h['score'] == round(0.4 * 2 / 3, 4), h"
+}
+
+@test "pesos personalizados: w_lex=1 hace score igual a la fracción léxica" {
+  run hyb '{"query":"token acceso","docs":[{"path":"a.md","text":"token acceso"}],"w_lex":1.0,"w_sem":0.0}'
+  echo "$output" | python3 -c "
+import json, sys
+h = json.load(sys.stdin)['hits'][0]
+assert h['score'] == 1.0, h"
+}
+
+@test "orden: los hits salen por score descendente" {
+  run hyb '{"query":"token acceso azure","docs":[{"path":"nada.md","text":"receta paella"},{"path":"todo.md","text":"token acceso azure"},{"path":"algo.md","text":"token"}]}'
+  echo "$output" | python3 -c "
+import json, sys
+paths = [h['path'] for h in json.load(sys.stdin)['hits']]
+assert paths == ['todo.md', 'algo.md', 'nada.md'], paths"
+}
+
+@test "borde: query vacío o solo palabras vacías/cortas → score 0 para todos" {
+  run hyb '{"query":"de la el","docs":[{"path":"a.md","text":"de la el token"}]}'
+  echo "$output" | python3 -c "
+import json, sys
+h = json.load(sys.stdin)['hits'][0]
+assert h['lex'] == 0.0 and h['score'] == 0.0, h"
+}
+
+@test "borde: lista de documentos vacía → hits vacío" {
+  run hyb '{"query":"token","docs":[]}'
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"hits": []}' ]
+}
+
+@test "limpieza: el frontmatter y los wikilinks no cuentan como contenido" {
+  run hyb '{"query":"entity provenance","docs":[{"path":"n.md","text":"---\nentity:\n  provenance: INFERRED\n---\n\nSolo cuerpo [[provenance]] aquí"}]}'
+  echo "$output" | python3 -c "
+import json, sys
+h = json.load(sys.stdin)['hits'][0]
+assert h['lex'] == 0.0, h"
+}
+
+@test "snippet: se trunca a 160 caracteres y sin saltos de línea" {
+  python3 - <<'PY' > "$TMPD/in.json"
+import json
+print(json.dumps({"query": "algo", "docs": [{"path": "l.md", "text": "algo\n" + "x" * 400}]}))
+PY
+  run bash -c "SCL_VENV_PYTHON=/nonexistent python3 '$HYBRID' < '$TMPD/in.json'"
+  echo "$output" | python3 -c "
+import json, sys
+s = json.load(sys.stdin)['hits'][0]['snippet']
+assert len(s) == 160 and '\n' not in s, len(s)"
+}
+
+@test "entrada que no es JSON → falla (exit ≠ 0), no inventa hits" {
+  run bash -c "printf 'no json' | SCL_VENV_PYTHON=/nonexistent python3 '$HYBRID'"
+  [ "$status" -ne 0 ]
+  ! echo "$output" | grep -q '"hits"'
+}
+
+@test "recall --hybrid: nota con score 0 (sin términos comunes) no cuenta ni como sombra" {
+  run bash "$RECALL" --query "zzzzqqqq wwwwxxxx" --top 3 --hybrid --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert (d['effective_hits'], d['shadow_hits'], d['rejected_hits']) == ([], 0, 0), d"
 }

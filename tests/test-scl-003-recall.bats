@@ -104,3 +104,136 @@ PY
   grep -q "$hash" "$TMPD/recall.jsonl"
   ! grep -q "$secret" "$TMPD/recall.jsonl"
 }
+
+# --- S03c: contrato de CLI, log y filtros del hook (SCL-003) ---
+
+hook_run() {
+  # $1 = JSON de entrada; env: SAVIA_LEARNING_RECALL opcional
+  printf '%s' "$1" | SAVIA_LEARNING_RECALL="${RECALL_SWITCH:-on}" SCL_VAULT_DIR="$TMPD/vault" \
+    SCL_RECALL_LOG="$TMPD/recall.jsonl" SCL_NODE_PATH=bash SCL_VAULT_CLI="$SCL_VAULT_CLI" \
+    SCL_CRITERIO_PATH="$SCL_CRITERIO_PATH" bash "$HOOK"
+}
+
+activate_proposal() {
+  # Edita la nota ya persistida en el vault temporal: humana, activa, ligada a CRIT-034.
+  local n
+  n=$(ls "$TMPD"/vault/learning/*.md | head -1)
+  sed -i -E 's/^( *)provenance: .*/\1provenance: human_authored/;s/^( *)lifecycle: .*/\1lifecycle: active/;s/^( *)criterion_id:.*/\1criterion_id: CRIT-034/' "$n"
+}
+
+@test "CLI: sin --query → exit 2 con uso" {
+  run bash "$RECALL" --top 3
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q "Usage: learning-recall.sh"
+}
+
+@test "CLI: --top fuera de 1..20 → exit 2 (fronteras 0 y 21), 1 y 20 válidos" {
+  run bash "$RECALL" --query x --top 0;  [ "$status" -eq 2 ]
+  run bash "$RECALL" --query x --top 21; [ "$status" -eq 2 ]
+  run bash "$RECALL" --query x --top abc; [ "$status" -eq 2 ]
+  run bash "$RECALL" --query x --top 1;  [ "$status" -eq 0 ]
+  run bash "$RECALL" --query x --top 20; [ "$status" -eq 0 ]
+}
+
+@test "CLI: --mode inválido y --min-score no numérico → exit 2" {
+  run bash "$RECALL" --query x --mode turbo
+  [ "$status" -eq 2 ]
+  run bash "$RECALL" --query x --min-score -1
+  [ "$status" -eq 2 ]
+  run bash "$RECALL" --query x --min-score 1.5
+  [ "$status" -eq 0 ]
+}
+
+@test "CLI: opción desconocida o sin valor → exit 2" {
+  run bash "$RECALL" --query x --bogus
+  [ "$status" -eq 2 ]
+  run bash "$RECALL" --query
+  [ "$status" -eq 2 ]
+}
+
+@test "CLI: vault inexistente o criterio ausente → exit 3 (entorno), no 2" {
+  run bash "$RECALL" --query x --vault "$TMPD/no-vault"
+  [ "$status" -eq 3 ]
+  run bash "$RECALL" --query x --criterio "$TMPD/no-criterio.md"
+  [ "$status" -eq 3 ]
+}
+
+@test "CLI: buscador ausente (CLI inexistente) → exit 3" {
+  SCL_VAULT_CLI="$TMPD/no-existe.sh" run bash "$RECALL" --query x
+  [ "$status" -eq 3 ]
+}
+
+@test "log: cada llamada añade exactamente una línea JSON con los contadores" {
+  bash "$RECALL" --query "hook captura diagnostico" --mode shadow >/dev/null
+  bash "$RECALL" --query "otra consulta" --mode effective >/dev/null
+  [ "$(wc -l < "$TMPD/recall.jsonl")" -eq 2 ]
+  python3 - "$TMPD/recall.jsonl" <<'PY'
+import json, re, sys
+a, b = (json.loads(l) for l in open(sys.argv[1]))
+assert (a['mode'], b['mode']) == ('shadow', 'effective'), (a, b)
+assert a['query_hash'] != b['query_hash'] and len(a['query_hash']) == 64
+assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', a['ts'])
+assert set(a) == {'ts','query_hash','mode','effective_hits','shadow_hits','rejected_hits','proposal_ids'}, a
+PY
+}
+
+@test "log: el hash de la misma consulta es estable y distinto del texto" {
+  bash "$RECALL" --query "consulta estable" >/dev/null
+  bash "$RECALL" --query "consulta estable" >/dev/null
+  python3 - "$TMPD/recall.jsonl" <<'PY'
+import hashlib, json, sys
+rows = [json.loads(l) for l in open(sys.argv[1])]
+h = hashlib.sha256(b"consulta estable").hexdigest()
+assert rows[0]['query_hash'] == rows[1]['query_hash'] == h, rows
+PY
+}
+
+@test "--json incluye la consulta y NO expone proposal_ids" {
+  run bash "$RECALL" --query "hook captura diagnostico" --json
+  echo "$output" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert d['query'] == 'hook captura diagnostico' and 'proposal_ids' not in d, d"
+}
+
+@test "log directory inexistente se crea (recall-log en ruta nueva)" {
+  run bash "$RECALL" --query "algo" --recall-log "$TMPD/nuevo/dir/r.jsonl"
+  [ "$status" -eq 0 ]
+  [ -s "$TMPD/nuevo/dir/r.jsonl" ]
+}
+
+@test "hook: SAVIA_LEARNING_RECALL=off no ejecuta nada ni registra" {
+  RECALL_SWITCH=off run hook_run '{"content":"voy a mejorar el hook de captura de memoria"}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -s "$TMPD/recall.jsonl" ]
+}
+
+@test "hook: prompt corto (<8 caracteres), confirmación o ruta no consultan" {
+  for txt in "ok" "gracias" "vale ya" "/status-check-ahora"; do
+    run hook_run "{\"content\":\"$txt\"}"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
+  [ ! -s "$TMPD/recall.jsonl" ]
+}
+
+@test "hook: entrada que no es JSON se ignora sin error" {
+  run hook_run 'esto no es json en absoluto'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -s "$TMPD/recall.jsonl" ]
+}
+
+@test "hook: lección humana activa y relevante SÍ se inyecta con su principio" {
+  activate_proposal
+  run hook_run '{"content":"voy a mejorar el hook de captura que pierde diagnostico"}'
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+c = json.load(sys.stdin)['hookSpecificOutput']
+assert c['hookEventName'] == 'UserPromptSubmit', c
+assert '## Criterios humanos aplicables' in c['additionalContext'], c
+assert '[CRIT-034] Exigir diagnostico no vacio antes de cambiar el hook.' in c['additionalContext'], c"
+  [ -s "$TMPD/recall.jsonl" ]
+}

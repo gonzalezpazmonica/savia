@@ -34,11 +34,13 @@ if [[ "$TOTAL_TABULAR" -lt 5 ]]; then
   exit 0
 fi
 
-# Extract tabular portion and profile it
+# Extract tabular portion and profile it. Only the tabular lines go to the
+# profiler: prose lines would be read as the CSV header and break profiling.
+TABULAR_PART=$(echo "$INPUT" | grep -E '^\s*\|.+\||^[^|]*,{1,}[^,]' 2>/dev/null || echo "")
 if [[ -x "$SUMMARIZER" ]]; then
-  PROFILE=$(echo "$INPUT" | "$SUMMARIZER" - 2>/dev/null || echo "")
+  PROFILE=$(echo "$TABULAR_PART" | "$SUMMARIZER" - 2>/dev/null || echo "")
 else
-  PROFILE=$(echo "$INPUT" | python3 "$PROFILER" 2>/dev/null || echo "")
+  PROFILE=$(echo "$TABULAR_PART" | python3 "$PROFILER" 2>/dev/null || echo "")
 fi
 
 if [[ -n "$PROFILE" && "$PROFILE" != *'"error"'* && "$PROFILE" != *'"detected":false'* ]]; then

@@ -85,3 +85,89 @@ for k in ['ts','goal','steps_used','max_steps','quality','delta_pass','veredicto
   run bash "$SCRIPT" --goal x --max-steps abc
   [[ "$status" -eq 2 ]]
 }
+# --- S03c: fronteras del límite duro y contrato JSON (SPEC-183) ---
+
+json_line() { echo "$output" | grep '^{' | tail -1; }
+
+@test "frontera: --max-steps 5 es el mínimo que pasa (steps=5, quality=100)" {
+  run bash "$SCRIPT" --goal "g" --max-steps 5
+  [[ "$status" -eq 0 ]]
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['veredicto'] == 'PASS' and d['delta_pass'] is True, d
+assert d['steps_used'] == 5 and d['quality'] == 100, d"
+}
+
+@test "frontera: --max-steps 4 ya falla y delta_pass es false" {
+  run bash "$SCRIPT" --goal "g" --max-steps 4
+  [[ "$status" -eq 0 ]]
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['veredicto'] == 'FAIL' and d['delta_pass'] is False, d
+assert d['max_steps'] == 4, d"
+}
+
+@test "frontera: --max-steps 0 (cero) falla sin abortar" {
+  run bash "$SCRIPT" --goal "g" --max-steps 0
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "steps=5/0"
+  json_line | grep -q '"veredicto":"FAIL"'
+}
+
+@test "max-steps negativo o decimal → exit 2" {
+  run bash "$SCRIPT" --goal g --max-steps -3
+  [[ "$status" -eq 2 ]]
+  run bash "$SCRIPT" --goal g --max-steps 2.5
+  [[ "$status" -eq 2 ]]
+}
+
+@test "flag desconocido → exit 2 con uso" {
+  run bash "$SCRIPT" --goal g --nope
+  [[ "$status" -eq 2 ]]
+  echo "$output" | grep -q "usage"
+}
+
+@test "--goal vacío cuenta como ausente → exit 2" {
+  run bash "$SCRIPT" --goal ""
+  [[ "$status" -eq 2 ]]
+}
+
+@test "el JSON conserva el goal y la marca temporal ISO-8601" {
+  run bash "$SCRIPT" --goal "objetivo con espacios y ñ"
+  json_line | python3 -c "
+import json, re, sys
+d = json.loads(sys.stdin.read())
+assert d['goal'] == 'objetivo con espacios y ñ', d
+assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', d['ts']), d"
+}
+
+@test "goal con comillas dobles sigue emitiendo JSON válido" {
+  run bash "$SCRIPT" --goal 'decir "hola" y \ barra'
+  [[ "$status" -eq 0 ]]
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['goal'] == 'decir \"hola\" y \\\\ barra', d"
+}
+
+@test "dry-run: no consume pasos, su JSON es válido y marca dry_run" {
+  run bash "$SCRIPT" --goal "plan" --dry-run --max-steps 3
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "max_steps: 3"
+  ! echo "$output" | grep -q "steps_used"
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d == {'goal': 'plan', 'dry_run': True, 'veredicto': 'dry-run'}, d"
+}
+
+@test "falta el orquestador → exit 3 (dependencia ausente)" {
+  local tree="$FIXDIR/tree"
+  mkdir -p "$tree/scripts"
+  cp "$SCRIPT" "$tree/scripts/sagi-e2e.sh"
+  run bash "$tree/scripts/sagi-e2e.sh" --goal g
+  [[ "$status" -eq 3 ]]
+  echo "$output" | grep -q "falta savia-orchestrator.sh"
+}

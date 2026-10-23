@@ -38,6 +38,13 @@ done
 # Dependencia: orquestador (run-2 real)
 [[ -x "$ROOT/scripts/savia-orchestrator.sh" ]] || { echo "ERROR: falta savia-orchestrator.sh (SCL-011)" >&2; exit 3; }
 
+# Escapa \ y " para incrustar el goal en JSON sin romper el contrato.
+json_escape() {
+  local v="${1//\\/\\\\}"
+  printf '%s' "${v//\"/\\\"}"
+}
+GOAL_JSON="$(json_escape "$GOAL")"
+
 # Auditor determinista de calidad 0-100: mide completitud del goal en el plan.
 # Run-1: calidad = cobertura de pasos del ciclo completados (LEER/DECIDIR/
 # VALIDAR/PERSISTIR/MEDIR) — 5 fases → máx 100 (20 c/u).
@@ -61,7 +68,7 @@ if $DRY_RUN; then
   plan:      LEER → DECIDIR → VALIDAR → PERSISTIR → MEDIR (5 pasos)
   delegación: CRIT-031 — el resultado será propuesta INFERRED, sin auto-activar
 EOF
-  echo "{\"goal\":\"$GOAL\",\"dry_run\":true,\"veredicto\":\"dry-run\"}"
+  echo "{\"goal\":\"$GOAL_JSON\",\"dry_run\":true,\"veredicto\":\"dry-run\"}"
   exit 0
 fi
 
@@ -83,6 +90,6 @@ echo "── sagi-e2e (SCL-013) ──"
 echo "  goal=$GOAL  steps=$STEPS_USED/$MAX_STEPS  quality=$QUALITY/100  -> $verdict"
 echo "  (resultado es propuesta INFERRED — requiere human_authored, CRIT-031)"
 printf '{"ts":"%s","goal":"%s","steps_used":%d,"max_steps":%d,"quality":%d,"delta_pass":%s,"veredicto":"%s"}\n' \
-  "$TS" "$GOAL" "$STEPS_USED" "$MAX_STEPS" "$QUALITY" "$delta_pass" "$verdict"
+  "$TS" "$GOAL_JSON" "$STEPS_USED" "$MAX_STEPS" "$QUALITY" "$delta_pass" "$verdict"
 
 exit 0
