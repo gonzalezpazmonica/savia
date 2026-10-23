@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=644da5eeff3f5fa1bf00cba01771f6181a83ae03eca7d7be1398d34b61c3a00a
-timestamp=2026-10-23T18:29:17Z
+diff_hash=ea55e2ea0341b5536cc3eecbfc62028575c09f72066b856933295f412a626ea3
+timestamp=2026-10-23T21:30:32Z
 branch=agent/codeql-triage-20261023
-head_commit=54aa9628
-signature=7aa8e0f0bfb0e4a3c1d183b677d5079195927243d6609fe481d1953048360445
+head_commit=373b274d
+signature=f26f07e00a6cb54ddff1d2d3ba42e7aa20901f8676c33054fa806bd0d7dc8a4f
