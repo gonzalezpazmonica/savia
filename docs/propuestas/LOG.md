@@ -6,6 +6,18 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-23 SE-466 PROPOSED
+
+Alta desde el triaje de code scanning (PR #1363)
+
+## 2026-10-23 SE-465 PROPOSED
+
+Alta desde el triaje de code scanning (PR #1363)
+
+## 2026-10-23 SE-464 PROPOSED
+
+Alta desde el triaje de code scanning (PR #1363)
+
 ## 2026-10-20 SE-451 APPROVED
 
 operadora, AskUserQuestion 2026-10-20: DCO (no CLA)
