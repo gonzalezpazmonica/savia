@@ -98,3 +98,23 @@ de comando de AC2; la edición real, el binario Codex en vivo y el despacho por
 el socket del runtime siguen pendientes. Con el settings actual,
 `Bash(git commit*)` tiene un handler `prompt` y por tanto se bloquea en ambos
 núcleos hasta que exista transporte de prompt (hueco conocido, AC6).
+
+### Mitad de edición de AC2 (replay)
+
+`test_edit_replay.py` envía las mismas ediciones como las manda cada CLI:
+Codex, `apply_patch` a `codex-hook.py`; OpenCode, `write`/`edit` con `filePath`
+y `apply_patch` con `patchText` al camino de producción de savia-gates
+(`lib/hook-vocabulary.ts` → `runPreToolUse`). Corpus en
+`fixtures/edit_replay_corpus.json`: 5 bloqueos reales (tdd-gate,
+block-pat-file-write, parche multiarchivo, parche ilegible) y 3 permitidos.
+Antes de este cambio OpenCode dejaba pasar 4 de los 5 bloqueos: los hooks
+comparan `tool_name == "Edit"` y leen `.tool_input.file_path`, y `apply_patch`
+no coincidía con ningún matcher Edit|Write. El puente traduce ahora nombres y
+claves al vocabulario de Claude Code (conserva las originales) y descompone el
+parche por archivo con el mismo algoritmo que `gates.py`; la paridad del parser
+se prueba contra Python (`PatchParserParityTests`).
+
+Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime,
+transporte de handlers `prompt`, y las rutas protegidas de `gates.py`
+(`PROTECTED_GATE_PATH`), que en OpenCode solo cubre guard-pin con
+`SAVIA_GATES_PIN=1`.
