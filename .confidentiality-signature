@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=782e588ad08cd5108f552340836d3dadad93e0975efe40055eafa7f4f6b128b1
-timestamp=2026-10-22T21:50:44Z
-branch=agent/skill-descriptions-cuando-20261022
-head_commit=19eb697e
-signature=b568a8269e848b0a3bd2c07e230f045fe31bba41a4472a588fae9e7aee5e61ac
+diff_hash=f05f2bf2c0367db82607235a3b566616d1d1cfb2b332aff9f5a5c94351872cfd
+timestamp=2026-10-23T06:20:58Z
+branch=agent/plantillas-20261023
+head_commit=b22c694ad
+signature=18387490a910c0ab1f53919353e764081b3fda7635370bc966a5b29e9bd773ab
