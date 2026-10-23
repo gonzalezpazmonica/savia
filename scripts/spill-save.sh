@@ -42,7 +42,10 @@ if [[ -n "$SRC_FILE" && ! -f "$SRC_FILE" ]]; then
   exit 1
 fi
 
-SESSION_DIR="$SPILL_ROOT/$SESSION"
+# La sesión también es un único segmento: ".." o "/" no pueden salir del root.
+SAFE_SESSION=$(printf '%s' "$SESSION" | tr '/\\' '__' | tr -cd '[:alnum:]._-')
+[[ -z "$SAFE_SESSION" || "$SAFE_SESSION" == "." || "$SAFE_SESSION" == ".." ]] && SAFE_SESSION="default"
+SESSION_DIR="$SPILL_ROOT/$SAFE_SESSION"
 if ! mkdir -p "$SESSION_DIR" 2>/dev/null; then
   echo "[spill] ERROR: no se pudo crear $SESSION_DIR" >&2
   exit 1

@@ -9,7 +9,7 @@ set -uo pipefail
 BRANCH=""
 PR_NUM=""
 SPEC_FILE=""
-OUTPUT_DIR="output/review-checkpoints"
+OUTPUT_DIR="${OUTPUT_DIR:-output/review-checkpoints}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
@@ -49,7 +49,7 @@ mkdir -p "$OUTPUT_DIR"
 detect_origin() {
   if [[ -n "$SPEC_FILE" && -f "$SPEC_FILE" ]]; then
     local spec_title=$(grep -m1 '^# ' "$SPEC_FILE" 2>/dev/null | sed 's/^# *//')
-    local spec_br=$(grep -m1 'BR[0-9]+\|AB#[0-9]+' "$SPEC_FILE" 2>/dev/null | head -1)
+    local spec_br=$(grep -m1 -E 'BR[0-9]+|AB#[0-9]+' "$SPEC_FILE" 2>/dev/null | head -1)
     echo "Cambio ligado a spec: $spec_title"
     [[ -n "$spec_br" ]] && echo "Requisito de negocio: $spec_br"
   else
