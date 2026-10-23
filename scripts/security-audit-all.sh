@@ -108,7 +108,11 @@ vals = [d.get(k, 0) for k in ("critical", "high", "medium", "low")]
 # type() y no isinstance(): True es un int para Python y en $((…)) valdría 0.
 if not all(type(v) is int and v >= 0 for v in vals):
     sys.exit(1)
-if type(d.get("findings_count", sum(vals))) is not int:
+fc = d.get("findings_count", sum(vals))
+if type(fc) is not int:
+    sys.exit(1)
+# Hallazgos declarados sin ninguna cuenta (p.ej. severidades anidadas en otra clave) no es un limpio.
+if fc > 0 and sum(vals) == 0:
     sys.exit(1)
 print(" ".join(map(str, vals)))
 ' 2>/dev/null) || counts=""

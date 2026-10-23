@@ -101,6 +101,17 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
   [ "$status" -eq 0 ]
 }
 
+@test "agregador: rc 0 con findings_count 5 y cuentas a 0 ⇒ unreadable, no limpio (revisión #1348 corrección P2-2)" {
+  stub hook-injection-audit 0 '{"verdict":"PASS","findings_count":5,"critical":0,"high":0,"medium":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["gaps"]')" = '[{"check": "hook-injection-audit", "reason": "unreadable"}]' ]
+  # findings_count coherente con las cuentas sigue siendo legible.
+  stub hook-injection-audit 0 '{"verdict":"PASS","findings_count":0,"critical":0,"high":0,"medium":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+}
+
 @test "agregador: sin python3 ⇒ UNKNOWN con la causa python3:missing_tool, no solo unreadable" {
   run env PATH="$NOPY" /usr/bin/bash "$W/scripts/security-audit-all.sh"
   [ "$status" -eq 2 ]
