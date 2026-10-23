@@ -1154,6 +1154,60 @@
       "note": "Los invariantes se cumplen hoy (medido); el test los fija. La guardia de red es aserción de pruebas, no control.",
       "evidence": "docs/specs/SE-454-negative-invariant-tests.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-458",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Presupuesto de atención humana: tope de PRs esperando revisión, lotes y prioridad",
+      "note": "Medido 2026-10-23: 20 PRs de agente en borrador, 15 del día, una revisora; WIP solo limita iniciativas.",
+      "evidence": "docs/specs/SE-458-human-review-attention-budget.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-459",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Aprobaciones contestables: tarjeta de aprobación en lenguaje llano",
+      "note": "El grant de merge-sprint se aprueba sobre un digest; diálogo de permiso con shell cruda paró un sprint 6 h.",
+      "evidence": "docs/specs/SE-459-contestable-approval-card.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-460",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Reactivación revalidada: automatizaciones y memoria con vigencia, procedencia y autoridad",
+      "note": "ScheduledTask sin origen, huella ni caducidad (runner aún no ejecuta: latente); memory-stack-load no filtra caducidad ni origen.",
+      "evidence": "docs/specs/SE-460-revalidated-reactivation-context.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-461",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Composición de efectos: combinaciones prohibidas en contratos de Yema y pruebas negativas",
+      "note": "El validador de Yema no tiene reglas de combinación; implementación por PR en el repo de Yema.",
+      "evidence": "docs/specs/SE-461-effect-composition-contracts.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-462",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Leer no implica poder retransmitir: marca de sesión tras leer una cúpula N2+",
+      "note": "dome_guard no guarda estado entre llamadas; la salida a PR, red o mensajería solo tiene escaneo léxico.",
+      "evidence": "docs/specs/SE-462-read-is-not-relay.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-463",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Cobertura de supervisión: reconciliar llamadas con lo que vieron los guards y fallar cerrado",
+      "note": "Ninguna reconciliación de llamadas contra guards; SE-402 cubre solo ficheros y en aviso.",
+      "evidence": "docs/specs/SE-463-supervision-coverage-reconciliation.spec.md",
+      "phase": "D"
     }
   ],
   "route": {
