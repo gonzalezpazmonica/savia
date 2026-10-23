@@ -34,7 +34,7 @@ FAIL  [Rule#11] verification-lattice/SKILL.md: 150 lines ≥ 150 (hard limit exc
 
 El WARN no bloquea el exit code del auditor (AC4).
 
-### 2. `.opencode/skills/_template/SKILL.md`
+### 2. `templates/skills/_template/SKILL.md`
 
 Actualizar el bloque HOW TO USE para incluir:
 
@@ -87,7 +87,7 @@ Regla: `SKILL.md` enlaza a los satélites en la sección `## Related`. Los saté
 classification: PURE_BASH
 files_touched:
   - scripts/skill-catalog-auditor.sh
-  - .claude/skills/_template/SKILL.md
+  - templates/skills/_template/SKILL.md
   - docs/rules/domain/skill-template-protocol.md
 requires_restart: false
 verification: bash scripts/skill-catalog-auditor.sh --check

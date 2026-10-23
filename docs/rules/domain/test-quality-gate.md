@@ -25,6 +25,7 @@ Current baseline (2026-04-24 sweep): **232/232 = 100% compliant, average 87**.
 | **G6b** in `scripts/pr-plan.sh` | Changed `.bats` files in PR | `--local` pre-push | PR blocked until score ≥80 |
 | `.github/workflows/bats-audit-sweep.yml` | All `.bats` files weekly | Monday 06:00 UTC cron | Workflow annotation + artifact |
 | `scripts/audit-all-bats.sh` | On-demand full sweep | Manual run | Report to `output/bats-audit-sweep-YYYYMMDD.md` |
+| Vacuity ratchet (SE-456) in `scripts/ci-test-quality-gate.sh` | All `.bats` files, CI | `.ci-baseline/test-vacuity.count` | CI fails if tests that cannot fail grow; a file with vacuity is not certified — see `test-evidence-criteria.md` |
 
 ## Scoring criteria (from SPEC-055)
 
@@ -81,4 +82,5 @@ A test can score 100 on auditor but kill 0 mutations (zombie test). Full quality
 - SE-039 — `docs/propuestas/SE-039-test-auditor-global-sweep.md`
 - SPEC-055 — `scripts/test-auditor.sh` engine (`scripts/test-auditor-engine.py`)
 - SE-035 — Mutation testing (ortogonal, future integration)
+- SE-456 — `docs/rules/domain/test-evidence-criteria.md` (tests que no pueden fallar)
 - Memory: `feedback_test_excellence_patterns.md`
