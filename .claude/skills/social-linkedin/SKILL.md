@@ -1,12 +1,7 @@
 ---
 layer: peripheral
 name: social-linkedin
-description: >-
-  Provider skill de LinkedIn para el agente social-networks (SE-385 MVP1).
-  Import manual del export oficial, modelo neutral SocialArtifact, digests
-  locales (themes/savia-history/writing-style) y status de capabilities.
-  Jamás publica sin external-publish-gate + approval hash. Datos en
-  ~/.savia/social/linkedin (local-first, CRIT-001).
+description: "Importa el export oficial de LinkedIn y genera digests locales (temas, historia, estilo). Usar cuando haya que analizar la actividad propia en LinkedIn; nunca publica."
 ---
 
 # LinkedIn Provider Skill (MVP1 — read/import)

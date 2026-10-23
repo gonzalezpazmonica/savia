@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: professional-domain
-description: "Family index for professional-domain skills (controlling, finance, labour, legal, sales). Load individual skills from subdirectories."
+description: "Índice de las skills de dominio profesional (controlling, finanzas, laboral, legal, ventas). Usar cuando una tarea pide criterio de uno de esos dominios, para cargar la skill concreta."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.context_tier: L3
