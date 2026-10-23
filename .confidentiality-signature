@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f740a72e8bd3a6842bff9d3302d5864926f346c5b8257420249dbdeb4c5539a3
-timestamp=2026-10-22T21:35:47Z
-branch=agent/p2-planning-when-20261022
-head_commit=62675b959
-signature=4fcc75555b927da26ba43cca72e0f5836b89bb475503ed3e4698dbb244ce2531
+diff_hash=6492e0a5d75c41b606b2bf9e85a55135f109444445bf037762998bee52feed28
+timestamp=2026-10-23T05:46:41Z
+branch=agent/rea-soberania-qa-20261023
+head_commit=07883c3b0
+signature=4688e23a7b81c296bce0074aa37b987c6c08e10f2eb3858dfca8807358bacde9
