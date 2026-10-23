@@ -47,8 +47,8 @@ Lo que se fusiona sin comprenderse es deuda aunque pase CI.
 
 | Slice | Entrega |
 |---|---|
-| S1 | `scripts/review-budget.sh status|check` lee las PRs abiertas que esperan a una persona (borrador o pendientes de revisión, autor agente o rama `agent/*`) y compara con `route.review_budget.max_waiting` en `planning-state.json` (propuesta: 6). `check` sale 0 si hay hueco, 1 si está lleno, 2 si no puede saberlo (sin `gh`, sin red): contrato de SE-453, nunca «limpio» por defecto. |
-| S2 | Gate en la creación de PR de agentes: el paso de PR de `pr-plan` y el cierre de los workers llaman a `check`. Lleno → no se abre la PR; el trabajo queda en su rama `agent/*` publicada y se registra en una cola (`~/.savia/review-queue.jsonl`, fuera del repo) con prioridad y tamaño. Desconocido → no se abre (fail-closed) y se dice por qué. |
+| S1 | `scripts/review-budget.sh status|check` lee las PRs abiertas que esperan a una persona (borrador o pendientes de revisión, autor agente o rama `agent/*`) y compara con `route.review_budget.max_waiting` en `planning-state.json` (propuesta: 6). `check` sale 0 si hay hueco, 1 si está lleno, 2 si no puede saberlo (sin `gh`, sin red). Frontera: **lleno cuando `esperando >= max_waiting`** (con tope 6, la sexta PR en espera ya llena; la séptima no se abre). Mapeo declarado aquí (script nuevo, según el contrato de SE-453, que fija los tres estados y deja a cada script su tabla de códigos): 0 = `clean`, 1 = `findings`, 2 = `unknown`; nunca «limpio» por defecto. |
+| S2 | Gate en la creación de PR de agentes, con **arranque suave**: al activarlo cuentan solo las PRs abiertas por agentes con fecha posterior a la de activación (`route.review_budget.since`), de modo que las PRs ya abiertas no bloquean de golpe a todos los agentes; la operadora puede mover `since` hacia atrás cuando quiera endurecerlo. Si D2 se acepta, `check --p0` permite **una** PR de seguridad P0 por encima del tope y la registra en la cola con `exception: p0`; sin `--p0` no hay excepción. el paso de PR de `pr-plan` y el cierre de los workers llaman a `check`. Lleno → no se abre la PR; el trabajo queda en su rama `agent/*` publicada y se registra en una cola (`~/.savia/review-queue.jsonl`, fuera del repo) con prioridad y tamaño. Desconocido → no se abre (fail-closed) y se dice por qué. |
 | S3 | Lotes y prioridad: `review-budget.sh next` propone el siguiente lote para la revisora ordenado por prioridad (P0 primero), riesgo (tier SE-362) y tamaño (diff pequeño primero dentro de la misma prioridad); `promote` abre la PR del siguiente elemento de la cola cuando hay hueco. |
 | S4 | Indicador visible: `roadmap.sh current` muestra `Revisión N/M` junto a `WIP`. |
 
@@ -64,6 +64,8 @@ Lo que se fusiona sin comprenderse es deuda aunque pase CI.
 |---|---|
 | AC1 | BATS con `gh` simulado (fixture JSON con 7 PRs de agente en espera y tope 6): `check` sale 1 y nombra el tope y el número. |
 | AC2 | Mismo fixture con 5 PRs: `check` sale 0. |
+| AC2b | Frontera: con exactamente 6 PRs en espera y tope 6, `check` sale 1 (lleno); con 5 sale 0. El test falla si la comparación pasa a `>`. |
+| AC2c | Arranque suave: fixture con 20 PRs anteriores a `since` y 2 posteriores → `check` sale 0. Con `--p0` y tope lleno sale 0 una vez y registra `exception: p0`; la segunda vez sale 1. Sin `--p0` el lleno sigue en 1. |
 | AC3 | Negativo: `gh` ausente o con error → `check` sale 2, no 0; el gate de S2 no abre la PR. |
 | AC4 | Negativo: PRs humanas (sin rama `agent/*` ni autor agente) no cuentan; fixture con 10 humanas y 0 de agente → sale 0. |
 | AC5 | Con el tope lleno, el cierre de worker deja la rama publicada, añade una línea a la cola con `branch`, `priority`, `tier`, `diff_lines` y no invoca `gh pr create` (espía en el test). |

@@ -50,7 +50,7 @@ sobre `main` (0dd2ea30b):
 |---|---|
 | S0 | Medir qué identifica una llamada en cada frontend: si la entrada de PreToolUse trae un identificador de llamada y si aparece en el registro de la sesión. Resultado en el informe del slice. Si no hay identificador común, S1 usa (orden, herramienta, huella de la entrada) y lo declara. |
 | S1 | Latido de guard: un registro de una línea por llamada vista (`~/.savia/supervision/<session>.jsonl`: id, herramienta, decisión), escrito por un hook ligero que corre el primero; en OpenCode, por `savia-gates`. |
-| S2 | `scripts/supervision-reconcile.sh <session>` compara las llamadas del registro de la sesión del frontend con el latido. Resultado con el contrato de SE-453: `clean` (todas vistas), `findings` (llamadas sin latido, listadas), `unknown` (no se puede leer alguno de los dos registros). |
+| S2 | `scripts/supervision-reconcile.sh <session>` compara las llamadas del registro de la sesión del frontend con el latido. Resultado con los tres estados de SE-453 y mapeo declarado aquí (script nuevo): `clean` = salida 0 (todas vistas), `findings` = salida 1 (llamadas sin latido, listadas), `unknown` = salida 2 (no se puede leer alguno de los dos registros). |
 | S3 | Fail-closed en ejecución autónoma: el cierre de los workers y `pr-plan` en ramas `agent/*` ejecutan la reconciliación; `findings` o `unknown` → no se abre la PR y la marca de fin dice «cobertura de supervisión perdida». En sesiones interactivas, solo aviso. |
 
 ## Fuera de alcance

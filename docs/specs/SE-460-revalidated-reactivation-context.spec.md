@@ -52,7 +52,7 @@ alguien la cambió después de aprobarla. Medido sobre `main` (0dd2ea30b):
 | Slice | Entrega |
 |---|---|
 | S1 | `ScheduledTask` añade `origin` (`owner|agent|untrusted`, por defecto `untrusted`), `approved_sha256` (huella de `instructions`+`skill`+`agent` sellada al aprobar), `approved_by`, `valid_until`. `savia-automations.sh approve <id>` sella; editar cualquiera de esos campos borra la aprobación. |
-| S2 | Revalidación en cada disparo, antes de ejecutar: huella distinta, caducada, origen `untrusted` o sin aprobación → el run queda `blocked_revalidation` con motivo, no se ejecuta y cuenta como fallo para SE-445. Se aplica a `run`, `execute` y `run-due`. |
+| S2 | Revalidación en cada disparo, antes de ejecutar: huella distinta, caducada, origen `untrusted` o sin aprobación → el run queda `blocked_revalidation` con motivo, no se ejecuta y cuenta como fallo para SE-445. Se aplica a `run`, `execute` y `run-due`. La regla del origen `untrusted` en S2 es **incondicional** (también en sesión interactiva): una automatización dispara sin nadie mirando, así que la persona que la aprobó es la única garantía. D1 afecta solo a la memoria (S3). |
 | S3 | `memory-stack-load.sh` excluye entradas caducadas y, en sesiones autónomas (`SAVIA_AUTONOMOUS_RUN=1` o rama `agent/*`), las de origen `untrusted`; lo excluido se cuenta en una línea («2 caducadas, 1 sin origen fiable omitidas»). |
 | S4 | Memoria por ficheros: campo opcional `valid_until` en el frontmatter; el cargador lo respeta y `memory-hygiene.sh` lista los ficheros cuya prosa contiene una fecha de fin sin campo (detección por fecha + «hasta»), sin reescribirlos. |
 
@@ -73,6 +73,7 @@ alguien la cambió después de aprobarla. Medido sobre `main` (0dd2ea30b):
 | AC5 | Negativo: una tarea guardada en el formato antiguo (sin campos nuevos) carga sin error y queda bloqueada, no ejecutable. |
 | AC6 | BATS: `memory-stack-load.sh` con un fixture de una entrada caducada y una vigente solo emite la vigente y la línea de omitidas. |
 | AC7 | Negativo: con `SAVIA_AUTONOMOUS_RUN=1`, una entrada `untrusted` no aparece; sin la variable, sí (comportamiento interactivo intacto). |
+| AC8 | Negativo: en una rama `agent/*` sin la variable, una entrada `untrusted` tampoco aparece (la otra definición de autónomo de S3); en `main` sin variable, sí. |
 
 ## Riesgos
 
@@ -82,7 +83,7 @@ alguien la cambió después de aprobarla. Medido sobre `main` (0dd2ea30b):
 
 ## Decisiones de la operadora
 
-- **D1**: ¿bloquear `untrusted` también en sesiones interactivas? (propuesta: no; solo autónomas).
+- **D1**: ¿excluir la memoria `untrusted` también en sesiones interactivas? (propuesta: no; solo autónomas). No afecta a las automatizaciones (S2 bloquea siempre).
 - **D2**: caducidad por defecto de una automatización aprobada (propuesta: 90 días).
 
 ## OpenCode Implementation Plan

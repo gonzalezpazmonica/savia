@@ -25,6 +25,7 @@ ve al aprobar no siempre le permite saber **qué** aprueba. Medido el 2026-10-23
   `merge-sprint.sh grant <manifest-digest>` (cabecera de `scripts/merge-sprint.sh`, línea 6). Lo
   visible es un hash de 64 caracteres. Qué PRs entran, cuántos merges como máximo y cuándo caduca
   solo se sabe ejecutando `plan` y leyendo el manifiesto.
+- El «ask» del grant es una regla de permisos de los settings de la operadora (SE-433): no admite texto de motivo propio, el diálogo muestra la orden. Por eso la tarjeta se emite en `plan`, que la operadora lee antes del grant.
 - De los hooks de Savia, solo `dome-guard.sh` responde «ask» con motivo
   (`permissionDecisionReason`); el resto de diálogos son los genéricos del arnés, que muestran la
   orden de shell en crudo.
@@ -51,7 +52,7 @@ Una aprobación que la persona no entiende es una garantía débil: deja rastro 
 | Slice | Entrega |
 |---|---|
 | S1 | Esquema de tarjeta (`docs/rules/domain/approval-card.md`, ≤ 60 líneas) y `scripts/approval-card.sh render <json>`: campos obligatorios `propuesta` (una frase), `por_que` (≤ 3 argumentos), `evidencia` (rutas o URLs), `efecto` (qué cambia y dónde), `reversible` (sí/no + cómo deshacer), `caduca`, `si_dices_no` (qué pasa). Salida ≤ 12 líneas de ≤ 70 caracteres: legible en un móvil. Falta un campo obligatorio → sale 2 y no imprime tarjeta. |
-| S2 | Grant de merge-sprint: `merge-sprint.sh grant` exige que exista la tarjeta del manifiesto (`plan` la genera con lista de PRs por número y título, máximo de merges, TTL, cómo revocar) y la imprime en el motivo del «ask». Sin tarjeta, no hay grant. |
+| S2 | Grant de merge-sprint: `plan` genera y imprime la tarjeta del manifiesto (lista de PRs por número y título, máximo de merges, TTL, cómo revocar), la guarda junto al manifiesto y la operadora la lee **antes** de conceder. `merge-sprint.sh grant` exige que esa tarjeta exista y que corresponda al digest recibido; sin tarjeta, no hay grant. El «ask» del grant es una regla de permisos en los settings de la operadora y no admite motivo propio: la tarjeta no se intenta meter ahí, y no se crea ningún hook para ello. |
 | S3 | Motivos de los hooks propios que responden «ask» (hoy `dome-guard.sh` y su par TypeScript) en formato tarjeta corta: efecto, dónde y reversible. Test de paridad bash/TS con la misma entrada. |
 | S4 | Lint: `tests/test-approval-card-lint.bats` recorre los hooks y scripts que emiten `"ask"` y falla si alguno no pasa por `approval-card.sh` o no da motivo. |
 
@@ -69,7 +70,7 @@ Una aprobación que la persona no entiende es una garantía débil: deja rastro 
 | AC1 | `approval-card.sh render` con un JSON completo imprime ≤ 12 líneas, ninguna > 70 caracteres, y contiene los siete rótulos. |
 | AC2 | Negativo: sin `efecto` o sin `reversible`, sale 2 y stdout vacío. |
 | AC3 | Negativo: `merge-sprint.sh grant <digest>` sin tarjeta del manifiesto sale ≠ 0 y no escribe `grant.json` (test con `HOME_MS` temporal). |
-| AC4 | Con tarjeta, el motivo del «ask» del grant lista los números de PR del manifiesto y el TTL; el test compara con el fixture. |
+| AC4 | La salida de `plan` incluye la tarjeta con los números de PR del manifiesto y el TTL (comparado con el fixture); `grant` con una tarjeta cuyo digest no coincide con el recibido sale ≠ 0 y no escribe `grant.json`. |
 | AC5 | `dome-guard.sh` y `dome-guard.ts`, con la misma entrada de escritura en una cúpula, dan un motivo con efecto y reversibilidad idénticos (paridad). |
 | AC6 | Negativo del lint: un hook de fixture que emite `"permissionDecision":"ask"` sin motivo hace fallar `test-approval-card-lint.bats`. |
 

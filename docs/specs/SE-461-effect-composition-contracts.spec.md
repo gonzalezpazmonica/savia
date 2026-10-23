@@ -32,8 +32,9 @@ lista. Leído en el repositorio de Yema (`docs/gobernanza.md`, `nucleo/contrato.
   (1) `contexto.cupulas` con una cúpula N2+ **y** `git-remoto` o `publicar` sobre un repositorio
   público: lo leído puede acabar publicado; (2) cúpula N2+ **y** `red`; (3) `escribir` sobre rutas
   que otro sistema ejecuta (`.github/workflows/*`, hooks de git) **y** `git-remoto`: código ejecutado
-  con secretos de CI; (4) `escribir` sobre ficheros que lee una orden permitida **y** `ejecutar`
-  (el propio documento reconoce que `python3 -m unittest` ejecuta código del repo).
+  con secretos de CI; (4) `escribir` sobre rutas que ejecuta una orden permitida (módulos o tests del repo que
+  `python3 -m unittest` importa) **y** `ejecutar` esa orden. Sin la condición de ruta, `escribir` +
+  `ejecutar` está en casi todos los contratos útiles y la regla rechazaría casi todo.
 - La hipótesis H3 de la línea de investigación del metaharness (L39) prueba 10 familias
   de ampliación de autoridad, todas de **un** efecto fuera de contrato; ninguna de composición.
 
@@ -54,7 +55,7 @@ que fusiona la operadora). Esta spec fija el contrato; no toca código de Savia 
 
 | Slice | Entrega |
 |---|---|
-| S1 | Tabla de combinaciones tóxicas versionada (`gobierno/composiciones.json` en Yema): cada entrada con `id`, `efectos` (y condiciones: nivel de cúpula, rutas ejecutables), `motivo` en lenguaje llano. Lote inicial: las cuatro del Problema. |
+| S1 | Tabla de combinaciones tóxicas versionada (`gobierno/composiciones.json` en Yema): cada entrada con `id`, `efectos` (y condiciones: nivel de cúpula, rutas ejecutables), `motivo` en lenguaje llano. Lote inicial: las cuatro del Problema; la (4) solo con condición de ruta explícita (como la (3)), y si esa condición no se puede fijar con precisión al implementar, la (4) sale del lote inicial. |
 | S2 | Validación al aprobar: un contrato que concede una combinación de la tabla se rechaza salvo que declare `composiciones_aceptadas: [{id, motivo}]`; esa declaración entra en la huella sellada y se muestra en `yema resumen`. |
 | S3 | Vigilancia en ejecución: la puerta guarda en el estado del contrato qué clases de efecto ya ocurrieron (p. ej. «leyó cúpula N2»); si la siguiente llamada completaría una combinación de la tabla no aceptada, responde «preguntar» con el motivo de la entrada, aunque el efecto individual esté concedido. |
 | S4 | Pruebas negativas: una por entrada de la tabla, en estático (S2) y en secuencia (S3). Nueva familia 11 «composición» para H3 de L39, propuesta a Labs, no ejecutada aquí. |
@@ -76,6 +77,7 @@ que fusiona la operadora). Esta spec fija el contrato; no toca código de Savia 
 | AC4 | Cada entrada de `composiciones.json` tiene al menos una prueba estática y una secuencial; un test recorre la tabla y falla si falta alguna (no pasa en vacío: exige ≥ 4 entradas). |
 | AC5 | Negativo del propio test: una entrada nueva sin pruebas en un fixture hace fallar AC4. |
 | AC6 | Los contratos sin ninguna combinación de la tabla se validan igual que hoy (suite actual de Yema en verde). |
+| AC7 | Negativo de acotación: un contrato con `escribir` y `ejecutar` sobre rutas **sin** relación (escribe en `salida/`, ejecuta tests que no importan `salida/`) se aprueba sin aceptación; con la ruta escrita dentro de lo que la orden ejecuta, se rechaza. |
 
 ## Riesgos
 
@@ -106,4 +108,4 @@ que fusiona la operadora). Esta spec fija el contrato; no toca código de Savia 
 
 ### Portability classification
 
-- [x] **PURE_BASH**: lógica en el núcleo Python de Yema, independiente del frontend.
+- [x] **Sin binding de frontend en Savia**: la lógica vive en el núcleo Python del repositorio de Yema y se entrega por PR allí; en este repositorio no cambia código. (No encaja en PURE_BASH ni DUAL_BINDING: se declara aparte.)
