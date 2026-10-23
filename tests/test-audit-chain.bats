@@ -247,6 +247,7 @@ _chain() { echo "$CLAUDE_PROJECT_DIR/output/audit/$1.jsonl"; }
   bash scripts/audit-chain-append.sh v-dflt a x >/dev/null
   mkdir -p "$BATS_TEST_TMPDIR/otro"
   run bash scripts/audit-chain-verify.sh "$BATS_TEST_TMPDIR/otro"
+  [ "$status" -eq 0 ]
   [[ "$output" == *"sin cadenas"* ]]
 }
 
@@ -411,5 +412,6 @@ PY
   bash scripts/audit-chain-append.sh p-m a x >/dev/null
   touch -d '200 days ago' "$(_chain p-m)"
   run bash scripts/audit-chain-prune.sh
+  [ "$status" -eq 0 ]
   [[ "$output" != *"nada que podar"* ]]
 }

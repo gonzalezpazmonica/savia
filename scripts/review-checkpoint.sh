@@ -9,7 +9,7 @@ set -uo pipefail
 BRANCH=""
 PR_NUM=""
 SPEC_FILE=""
-OUTPUT_DIR="${OUTPUT_DIR:-output/review-checkpoints}"
+OUTPUT_DIR="${REVIEW_CHECKPOINT_OUTPUT_DIR:-output/review-checkpoints}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {

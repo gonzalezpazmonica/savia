@@ -46,6 +46,10 @@ fi
 SAFE_SESSION=$(printf '%s' "$SESSION" | tr '/\\' '__' | tr -cd '[:alnum:]._-')
 [[ -z "$SAFE_SESSION" || "$SAFE_SESSION" == "." || "$SAFE_SESSION" == ".." ]] && SAFE_SESSION="default"
 SESSION_DIR="$SPILL_ROOT/$SAFE_SESSION"
+if [[ -L "$SESSION_DIR" ]]; then
+  echo "[spill] ERROR: el directorio de sesión es un symlink: $SESSION_DIR" >&2
+  exit 1
+fi
 if ! mkdir -p "$SESSION_DIR" 2>/dev/null; then
   echo "[spill] ERROR: no se pudo crear $SESSION_DIR" >&2
   exit 1

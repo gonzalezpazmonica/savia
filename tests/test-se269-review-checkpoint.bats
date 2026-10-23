@@ -68,7 +68,7 @@ setup() {
 @test "SE269-S3: generates markdown package file" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   [[ -f "$pkg_file" ]]
@@ -78,7 +78,7 @@ setup() {
 @test "SE269-S3 AC-3.2: package has 5 sections" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -c "^## " "$pkg_file"
@@ -90,7 +90,7 @@ setup() {
 @test "SE269-S3: package contains section 1 (Que cambio)" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -q "Que cambio" "$pkg_file"
@@ -101,7 +101,7 @@ setup() {
 @test "SE269-S3: package contains section 2 (Orden de lectura)" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -q "Orden de lectura" "$pkg_file"
@@ -112,7 +112,7 @@ setup() {
 @test "SE269-S3: package contains section 3 (Hallazgos)" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -q "Hallazgos" "$pkg_file"
@@ -123,7 +123,7 @@ setup() {
 @test "SE269-S3: package contains section 4 (Verificacion manual)" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -q "Verificacion manual" "$pkg_file"
@@ -134,7 +134,7 @@ setup() {
 @test "SE269-S3: package contains section 5 (Cierre)" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -q "Cierre" "$pkg_file"
@@ -154,7 +154,7 @@ setup() {
 @test "SE269-S3: cierre section contains decision options" {
   local output_dir; output_dir="$(mktemp -d)/review-checkpoints"
   mkdir -p "$output_dir"
-  run env OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
+  run env REVIEW_CHECKPOINT_OUTPUT_DIR="$output_dir" bash "$SCRIPT" --branch "agent/se269-test"
   [ "$status" -eq 0 ]
   local pkg_file; pkg_file=$(echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdin)['file'])" 2>/dev/null)
   run grep -q "APROBAR\|REHACER\|SEGUIR DISCUTIENDO" "$pkg_file"
@@ -163,7 +163,7 @@ setup() {
 }
 
 # ── Comportamiento: contenido del paquete sobre un repositorio aislado ────
-# El script lee `git diff HEAD~1` y escribe bajo OUTPUT_DIR relativo al cwd,
+# El script lee `git diff HEAD~1` y escribe bajo REVIEW_CHECKPOINT_OUTPUT_DIR relativo al cwd,
 # así que cada test trabaja en un repo temporal con los cambios que necesita.
 
 _repo() {  # _repo fichero... → repo con un commit base y esos ficheros modificados sin commitear
@@ -195,11 +195,18 @@ _gen() {  # _gen args... → ejecuta y deja PKG con el contenido del paquete
   [[ "$(echo "$output" | jq -r .timestamp)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$ ]]
 }
 
-@test "OUTPUT_DIR del entorno decide dónde se escribe el paquete" {
+@test "REVIEW_CHECKPOINT_OUTPUT_DIR del entorno decide dónde se escribe el paquete" {
   _repo
-  OUTPUT_DIR="$BATS_TEST_TMPDIR/otra/dir" _gen --branch agent/x
+  REVIEW_CHECKPOINT_OUTPUT_DIR="$BATS_TEST_TMPDIR/otra/dir" _gen --branch agent/x
   [[ "$PKG" == "$BATS_TEST_TMPDIR/otra/dir/ckpt-"*.md ]]
   [ ! -d output ]
+}
+
+@test "un OUTPUT_DIR genérico heredado del entorno no redirige el paquete" {
+  _repo
+  OUTPUT_DIR="$BATS_TEST_TMPDIR/ajeno" _gen --branch agent/x
+  [[ "$PKG" == "output/review-checkpoints/ckpt-"*.md || "$PKG" == *"/output/review-checkpoints/ckpt-"*.md ]]
+  [ ! -d "$BATS_TEST_TMPDIR/ajeno" ]
 }
 
 @test "cabecera: origen es la rama o 'PR #n'; spec 'No especificada' por defecto" {
@@ -408,7 +415,7 @@ _gen() {  # _gen args... → ejecuta y deja PKG con el contenido del paquete
   _absent ' c1$' "$PKG"
 }
 
-@test "sin commit anterior el diff no existe: el orden dice 'Sin diff disponible'" {
+@test "sin commit anterior (comportamiento actual conocido, no deseado): el orden dice 'Sin diff disponible'" {
   R="$BATS_TEST_TMPDIR/uno"; mkdir -p "$R"; cd "$R"
   git init -q; git config user.email t@e.invalid; git config user.name T
   echo a > a.txt; git add .; git commit -qm solo

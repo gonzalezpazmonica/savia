@@ -356,7 +356,9 @@ D_TRAZ="Trazabilidad a requisito/BR"; D_SLICE="Slices con hito utilizable"; D_ST
   _spec
   AUDIT="$BATS_TEST_TMPDIR/a/b/audit.jsonl"
   run env AUDIT_LOG="$AUDIT" bash "$SCRIPT" "$S"
+  [ "$status" -eq 0 ]
   run env AUDIT_LOG="$AUDIT" bash "$SCRIPT" "$S"
+  [ "$status" -eq 0 ]
   [ "$(wc -l < "$AUDIT")" -eq 2 ]
 }
 

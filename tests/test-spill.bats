@@ -152,6 +152,16 @@ _dest() { echo "$output" | grep -o "${SPILL_ROOT}/[^ ]*" | head -1; }
   [[ "$(_dest)" == "$SPILL_ROOT/default/"* ]]
 }
 
+@test "directorio de sesión plantado como symlink se rechaza y no escribe en el destino" {
+  echo x > "$TMPD/in.txt"
+  mkdir -p "$SPILL_ROOT" "$TMPD/destino"
+  ln -s "$TMPD/destino" "$SPILL_ROOT/trampa"
+  run bash "$SPILL" --session trampa --name n.txt --file "$TMPD/in.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"symlink"* ]]
+  [ -z "$(ls -A "$TMPD/destino")" ]
+}
+
 @test "sesión vacía usa SAVIA_SESSION_ID; --session lo anula" {
   echo x > "$TMPD/in.txt"
   SAVIA_SESSION_ID=envsess run bash "$SPILL" --name n.txt --file "$TMPD/in.txt"
@@ -214,17 +224,16 @@ _dest() { echo "$output" | grep -o "${SPILL_ROOT}/[^ ]*" | head -1; }
 }
 
 @test "fallo al escribir desde fichero: exit 1, mensaje y sin preview" {
-  mkdir -p "$SPILL_ROOT"; ln -s /proc/self "$SPILL_ROOT/sproc"
   echo x > "$TMPD/in.txt"
-  run bash "$SPILL" --session sproc --name n.txt --file "$TMPD/in.txt"
+  # límite de tamaño de fichero 0: el open 'wx' funciona y la escritura falla (EFBIG)
+  run bash -c "ulimit -f 0; bash '$SPILL' --session sproc --name n.txt --file '$TMPD/in.txt'"
   [ "$status" -eq 1 ]
   [[ "$output" == *"no se pudo escribir"* ]]
   [[ "$output" != *"preview"* ]]
 }
 
 @test "fallo al escribir desde stdin: exit 1, mensaje y sin preview" {
-  mkdir -p "$SPILL_ROOT"; ln -s /proc/self "$SPILL_ROOT/sproc"
-  run bash -c "echo x | bash '$SPILL' --session sproc --name n.txt"
+  run bash -c "ulimit -f 0; echo x | bash '$SPILL' --session sproc --name n.txt"
   [ "$status" -eq 1 ]
   [[ "$output" == *"no se pudo escribir"* ]]
   [[ "$output" != *"preview"* ]]
