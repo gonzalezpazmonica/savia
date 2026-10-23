@@ -8,27 +8,27 @@
 
 ## 2026-10-23 SE-463 PROPOSED
 
-Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
 
 ## 2026-10-23 SE-462 PROPOSED
 
-Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
 
 ## 2026-10-23 SE-461 PROPOSED
 
-Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
 
 ## 2026-10-23 SE-460 PROPOSED
 
-Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
 
 ## 2026-10-23 SE-459 PROPOSED
 
-Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
 
 ## 2026-10-23 SE-458 PROPOSED
 
-Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
 
 ## 2026-10-23 SE-456 APPROVED
 
