@@ -323,7 +323,9 @@ export class A2AServer {
         }
       } catch (e: unknown) {
         // El detalle (rutas absolutas, errores de E/S) queda en el log local, no en la respuesta.
-        console.error(`A2A ${req.method} ${req.url}: ${e instanceof Error ? e.message : String(e)}`);
+        // JSON.stringify escapa CR/LF: un cliente no puede fabricar líneas falsas en el log.
+        const detail = e instanceof Error ? e.message : String(e);
+        console.error(`A2A ${req.method} ${JSON.stringify(req.url)}: ${JSON.stringify(detail)}`);
         res.writeHead(500);
         res.end(JSON.stringify({ error: 'Internal error' }));
       }

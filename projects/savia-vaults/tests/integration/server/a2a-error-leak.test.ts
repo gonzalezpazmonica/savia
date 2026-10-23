@@ -39,6 +39,19 @@ describe('A2A: errores internos sin detalle al cliente', () => {
     expect(logged.mock.calls.flat().join(' ')).toContain(SECRET_PATH);
   });
 
+  it('el log escapa CR/LF del detalle (sin líneas falsas)', async () => {
+    (server as unknown as { storage: { stats: () => Promise<never> } }).storage.stats = async () => {
+      throw new Error('fallo\r\nA2A GET /ok: todo bien');
+    };
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { url } = await server.start(0, '127.0.0.1', TOKEN);
+    const r = await fetch(`${url}/stats`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+    expect(r.status).toBe(500);
+    const line = logged.mock.calls.flat().join(' ');
+    expect(line).toContain('todo bien');
+    expect(line).not.toMatch(/[\r\n]/);
+  });
+
   it('una petición correcta sigue respondiendo 200', async () => {
     const { url } = await server.start(0, '127.0.0.1', TOKEN);
     const r = await fetch(`${url}/stats`, { headers: { Authorization: `Bearer ${TOKEN}` } });
