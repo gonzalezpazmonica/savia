@@ -114,6 +114,12 @@ declared = []
 related = []
 unrelated = []
 
+
+def under(child, parent):
+    """child == parent o cuelga de parent, por componentes de ruta (no por prefijo de texto)."""
+    return child == parent or child.startswith(parent + "/")
+
+
 for f in changed:
     if f.startswith(WHITELIST_PREFIXES):
         declared.append(f)  # estructural — siempre in-scope
@@ -127,7 +133,8 @@ for f in changed:
     is_related = False
     if declared_paths:
         for d in (os.path.dirname(p) for p in declared_paths):
-            if d and (f_dir.startswith(d) or d.startswith(f_dir)):
+            # f_dir vacío (fichero en la raíz) no es "padre" de nada declarado.
+            if d and f_dir and (under(f_dir, d) or under(d, f_dir)):
                 is_related = True
                 break
         if not is_related:
