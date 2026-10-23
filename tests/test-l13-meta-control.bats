@@ -83,3 +83,110 @@ assert d.get('executed') is False
   [[ "$(sha256sum CRITERIO.md | cut -d' ' -f1)" == "$h1" ]]
   [[ "$(sha256sum .claude/CONSTITUCION.md | cut -d' ' -f1)" == "$h2" ]]
 }
+# ── Comportamiento discriminante (S03 calidad) ───────────────────────────────
+
+# action de una invocación (stdout JSON → campo)
+act() { bash "$CONTROL" "$@" | jq -r '.action'; }
+
+@test "usa modo estricto de bash (set -uo pipefail)" {
+  grep -q '^set -uo pipefail' "$CONTROL"
+}
+
+@test "umbral de POSTPONE es estricto: 60 emite, 59.9 pospone (boundary)" {
+  [ "$(act --adjusted 60 --divergence 0.2 --calibration 0.9)" = "EMIT" ]
+  [ "$(act --adjusted 59.9 --divergence 0.2 --calibration 0.9)" = "POSTPONE" ]
+}
+
+@test "umbral de divergencia es estricto: 0.7 no replanea, 0.71 sí (boundary)" {
+  [ "$(act --adjusted 90 --divergence 0.7 --calibration 0.9)" = "EMIT" ]
+  [ "$(act --adjusted 90 --divergence 0.71 --calibration 0.9)" = "REPLAN" ]
+}
+
+@test "umbral de calibración es estricto: 0.5 no reduce, 0.49 sí (boundary)" {
+  [ "$(act --adjusted 90 --divergence 0.2 --calibration 0.5)" = "EMIT" ]
+  [ "$(act --adjusted 90 --divergence 0.2 --calibration 0.49)" = "REDUCE" ]
+}
+
+@test "REDUCE manda sobre POSTPONE cuando ambos gatillos se cumplen" {
+  [ "$(act --adjusted 10 --divergence 0.2 --calibration 0.1)" = "REDUCE" ]
+}
+
+@test "POSTPONE solo aplica a emit, persist y decide; otras peticiones emiten" {
+  for r in emit persist decide; do
+    [ "$(act --adjusted 10 --divergence 0.2 --calibration 0.9 --requested $r)" = "POSTPONE" ]
+  done
+  [ "$(act --adjusted 10 --divergence 0.2 --calibration 0.9 --requested analyze)" = "EMIT" ]
+}
+
+@test "los umbrales se sobrescriben por entorno (SAGI_META_*)" {
+  SAGI_META_POSTPONE=20 run bash "$CONTROL" --adjusted 30 --divergence 0.2 --calibration 0.9
+  [ "$(jq -r .action <<< "$output")" = "EMIT" ]
+  SAGI_META_DIVERGENCE=0.1 run bash "$CONTROL" --adjusted 90 --divergence 0.2 --calibration 0.9
+  [ "$(jq -r .action <<< "$output")" = "REPLAN" ]
+  SAGI_META_CALIBRATION=0.95 run bash "$CONTROL" --adjusted 90 --divergence 0.2 --calibration 0.9
+  [ "$(jq -r .action <<< "$output")" = "REDUCE" ]
+}
+
+@test "la salida refleja las entradas y una razón y propuesta no vacías" {
+  run bash "$CONTROL" --adjusted 42.5 --divergence 0.33 --calibration 0.8 --requested persist
+  [ "$status" -eq 0 ]
+  run jq -e '.confidence_adjusted == 42.5 and .divergence == 0.33 and .calibration == 0.8 and .requested == "persist" and (.reason | length > 0) and (.proposal | length > 0)' <<< "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "la razón de REPLAN y REDUCE cita el valor y el umbral" {
+  run bash "$CONTROL" --adjusted 90 --divergence 0.85 --calibration 0.9
+  [[ "$(jq -r .reason <<< "$output")" == *"0.85"*"0.70"* ]]
+  run bash "$CONTROL" --adjusted 90 --divergence 0.2 --calibration 0.2
+  [[ "$(jq -r .reason <<< "$output")" == *"0.20"*"0.50"* ]]
+}
+
+@test "sin --dry-run no hay campos dry_run ni executed" {
+  run bash "$CONTROL" --adjusted 80 --divergence 0.2 --calibration 0.9
+  run jq -e 'has("dry_run") or has("executed") | not' <<< "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "defaults: sin --divergence ni --calibration usa 0.3 y 0.5" {
+  run bash "$CONTROL" --adjusted 80
+  [ "$status" -eq 0 ]
+  run jq -e '.divergence == 0.3 and .calibration == 0.5 and .requested == "decide" and .action == "EMIT"' <<< "$output"
+  [ "$status" -eq 0 ]
+}
+
+@test "invalid --divergence no numérica sale 2 sin traceback ni JSON" {
+  run bash "$CONTROL" --adjusted 50 --divergence abc
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"ERROR"* ]]
+  [[ "$output" != *"Traceback"* && "$output" != *'"action"'* ]]
+}
+
+@test "invalid --calibration no numérica sale 2 sin traceback ni JSON" {
+  run bash "$CONTROL" --adjusted 50 --calibration "0,5"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"Traceback"* && "$output" != *'"action"'* ]]
+}
+
+@test "invalid --adjusted negativo o vacío sale 2" {
+  run bash "$CONTROL" --adjusted -5
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted ""
+  [ "$status" -eq 2 ]
+}
+
+@test "opción desconocida sale 2 con usage" {
+  run bash "$CONTROL" --adjusted 50 --ejecutar
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"usage:"* ]]
+}
+
+@test "rango: divergencia > 1, calibración > 1 o ajustada > 100 → exit 2" {
+  run bash "$CONTROL" --adjusted 80 --divergence 5 --dry-run
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted 80 --calibration 1.5 --dry-run
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted 150 --dry-run
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted 100 --divergence 1 --calibration 0 --dry-run
+  [ "$status" -ne 2 ]
+}
