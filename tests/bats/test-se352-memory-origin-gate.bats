@@ -14,6 +14,10 @@ setup() {
   export SAVIA_VERIFIED_MEMORY_DISABLED=false
   export HOME="$(mktemp -d)"
   export SAVIA_EMBED_PORT=0
+  # El gate escribe en /tmp (ruta fija): sin esto un fichero residual de una
+  # ejecución anterior hace pasar o fallar los tests por estado compartido.
+  rm -f /tmp/savia-memory-taint/s1 /tmp/savia-memory-taint/s2 \
+        /tmp/savia-memory-taint/s3 /tmp/savia-memory-taint/s4
 }
 
 teardown() {
@@ -135,4 +139,269 @@ teardown() {
   [[ "$output" == *"QueryTrusted"* ]]
   run "$STORE" search "QueryDirty" --min-origin owner --mode grep
   [[ "$output" != *"QueryDirty"* ]]
+}
+
+# ── Comportamiento: clasificación de origen por source ────────────────────────
+
+_origin_of_last() { tail -n1 "$PROJECT_ROOT/output/.memory-store.jsonl" | grep -o '"origin":"[^"]*"' | cut -d'"' -f4; }
+
+@test "source con formato desconocido se rechaza y no se guarda nada" {
+  run "$STORE" save --type discovery --title "Src libre" --content "contenido de prueba s1" --source "web:example"
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"does not match required format"* ]]
+  [[ ! -s "$PROJECT_ROOT/output/.memory-store.jsonl" ]]
+}
+
+@test "source verified:* y file:a:b se clasifican como agent" {
+  "$STORE" save --type discovery --title "Ver" --content "contenido de prueba s2" --source "verified:abc" >/dev/null
+  [[ "$(_origin_of_last)" == "agent" ]]
+  "$STORE" save --type discovery --title "Fil" --content "contenido de prueba s3" --source "file:scripts/x.sh:7" >/dev/null
+  [[ "$(_origin_of_last)" == "agent" ]]
+}
+
+@test "source file: sin número de línea se rechaza (formato file:<path>:<line>)" {
+  run "$STORE" save --type discovery --title "FilSolo" --content "contenido de prueba s4" --source "file:scripts/x.sh"
+  [[ "$status" -ne 0 ]]
+  [[ ! -s "$PROJECT_ROOT/output/.memory-store.jsonl" ]]
+}
+
+@test "--origin explícito gana sobre la clasificación por source" {
+  "$STORE" save --type discovery --title "Forzado" --content "contenido de prueba s5" --source "user:explicit" --origin agent >/dev/null
+  [[ "$(_origin_of_last)" == "agent" ]]
+}
+
+@test "origin inválido: mensaje de error con los válidos y nada se guarda" {
+  run "$STORE" save --type discovery --title "Malo" --content "contenido de prueba s6" --source "user:explicit" --origin hacker
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"owner|agent|untrusted|system"* ]]
+  [[ ! -s "$PROJECT_ROOT/output/.memory-store.jsonl" ]]
+}
+
+# ── Comportamiento: taint de turno degrada el origen al guardar ───────────────
+
+_taint() { # <sid> <epoch>
+  mkdir -p /tmp/savia-memory-taint
+  printf '%s\n' "$2" > "/tmp/savia-memory-taint/$1"
+}
+
+@test "turno con taint fresco degrada owner a untrusted al guardar" {
+  sid="t-fresh-$$-$BATS_TEST_NUMBER"
+  _taint "$sid" "$(date -u +%s)"
+  SESSION_ID="$sid" "$STORE" save --type discovery --title "Tainted" --content "contenido de prueba t1" --source "user:explicit" >/dev/null
+  rm -f "/tmp/savia-memory-taint/$sid"
+  [[ "$(_origin_of_last)" == "untrusted" ]]
+}
+
+@test "taint caducado (más de 30 min) no degrada el origen" {
+  sid="t-old-$$-$BATS_TEST_NUMBER"
+  _taint "$sid" "$(( $(date -u +%s) - 1900 ))"
+  SESSION_ID="$sid" "$STORE" save --type discovery --title "Viejo" --content "contenido de prueba t2" --source "user:explicit" >/dev/null
+  rm -f "/tmp/savia-memory-taint/$sid"
+  [[ "$(_origin_of_last)" == "owner" ]]
+}
+
+@test "taint de otra sesión no afecta a esta sesión" {
+  other="t-other-$$-$BATS_TEST_NUMBER"
+  _taint "$other" "$(date -u +%s)"
+  SESSION_ID="t-mine-$$-$BATS_TEST_NUMBER" "$STORE" save --type discovery --title "Mia" --content "contenido de prueba t3" --source "user:explicit" >/dev/null
+  rm -f "/tmp/savia-memory-taint/$other"
+  [[ "$(_origin_of_last)" == "owner" ]]
+}
+
+@test "taint también degrada origin system pedido explícitamente" {
+  sid="t-sys-$$-$BATS_TEST_NUMBER"
+  _taint "$sid" "$(date -u +%s)"
+  SESSION_ID="$sid" "$STORE" save --type config --title "SysT" --content "contenido de prueba t4" --source "tool:Bash" --origin system >/dev/null
+  rm -f "/tmp/savia-memory-taint/$sid"
+  [[ "$(_origin_of_last)" == "untrusted" ]]
+}
+
+# ── Comportamiento: hook de taint ─────────────────────────────────────────────
+
+_hook() { # <json>
+  run env SAVIA_MEMORY_ORIGIN_GATE=on bash "$HOOK" <<< "$1"
+}
+
+@test "hook escribe el epoch actual en el fichero de taint" {
+  sid="h-epoch-$$-$BATS_TEST_NUMBER"
+  before=$(date -u +%s)
+  _hook '{"tool_name":"WebFetch","tool_input":{"url":"https://x.com"},"session_id":"'"$sid"'"}'
+  after=$(date -u +%s)
+  v="$(cat "/tmp/savia-memory-taint/$sid")"
+  rm -f "/tmp/savia-memory-taint/$sid"
+  [[ "$v" -ge "$before" && "$v" -le "$after" ]]
+}
+
+@test "hook: Bash con wget, git pull, gh api y pip install tainta el turno" {
+  i=0
+  for cmd in "wget http://x/y" "git pull origin main" "gh api repos/x/y" "pip install requests"; do
+    i=$((i+1)); sid="h-net$i-$$-$BATS_TEST_NUMBER"
+    _hook '{"tool_name":"Bash","tool_input":{"command":"'"$cmd"'"},"session_id":"'"$sid"'"}'
+    [[ -f "/tmp/savia-memory-taint/$sid" ]]
+    rm -f "/tmp/savia-memory-taint/$sid"
+  done
+}
+
+@test "hook: Bash local (ls, git status) no tainta" {
+  sid="h-local-$$-$BATS_TEST_NUMBER"
+  _hook '{"tool_name":"Bash","tool_input":{"command":"ls -la && git status"},"session_id":"'"$sid"'"}'
+  [[ "$status" -eq 0 ]]
+  [[ ! -f "/tmp/savia-memory-taint/$sid" ]]
+}
+
+@test "hook: palabra que solo contiene curl (curly) no tainta por límite de palabra" {
+  sid="h-curly-$$-$BATS_TEST_NUMBER"
+  _hook '{"tool_name":"Bash","tool_input":{"command":"echo curly braces"},"session_id":"'"$sid"'"}'
+  [[ ! -f "/tmp/savia-memory-taint/$sid" ]]
+}
+
+@test "hook: curl dentro de un Read (no Bash) no tainta, pero una URL como comando sí" {
+  sid="h-read-$$-$BATS_TEST_NUMBER"
+  _hook '{"tool_name":"Read","tool_input":{"command":"curl x"},"session_id":"'"$sid"'"}'
+  [[ ! -f "/tmp/savia-memory-taint/$sid" ]]
+  _hook '{"tool_name":"Fetch","tool_input":{"url":"https://example.org/a"},"session_id":"'"$sid"'"}'
+  [[ -f "/tmp/savia-memory-taint/$sid" ]]
+  rm -f "/tmp/savia-memory-taint/$sid"
+}
+
+@test "hook: sin session_id no crea ningún fichero de taint con nombre unknown" {
+  rm -f /tmp/savia-memory-taint/unknown
+  _hook '{"tool_name":"WebFetch","tool_input":{"url":"https://x.com"}}'
+  [[ "$status" -eq 0 ]]
+  [[ ! -f /tmp/savia-memory-taint/unknown ]]
+}
+
+@test "hook: stdin vacío termina en 0 sin tainter nada" {
+  run env SAVIA_MEMORY_ORIGIN_GATE=on bash "$HOOK" <<< ""
+  [[ "$status" -eq 0 ]]
+}
+
+@test "hook: valor distinto de on (p. ej. 0) desactiva el gate" {
+  sid="h-off0-$$-$BATS_TEST_NUMBER"
+  run env SAVIA_MEMORY_ORIGIN_GATE=0 bash "$HOOK" <<< '{"tool_name":"WebFetch","tool_input":{"url":"https://x.com"},"session_id":"'"$sid"'"}'
+  [[ "$status" -eq 0 ]]
+  [[ ! -f "/tmp/savia-memory-taint/$sid" ]]
+}
+
+@test "hook: por defecto (variable sin definir) el gate está activo" {
+  sid="h-def-$$-$BATS_TEST_NUMBER"
+  run env -u SAVIA_MEMORY_ORIGIN_GATE bash "$HOOK" <<< '{"tool_name":"WebFetch","tool_input":{"url":"https://x.com"},"session_id":"'"$sid"'"}'
+  [[ -f "/tmp/savia-memory-taint/$sid" ]]
+  rm -f "/tmp/savia-memory-taint/$sid"
+}
+
+@test "hook: purga ficheros de taint con más de 30 minutos" {
+  mkdir -p /tmp/savia-memory-taint
+  old="/tmp/savia-memory-taint/h-stale-$$-$BATS_TEST_NUMBER"
+  echo 1 > "$old"; touch -d '2 hours ago' "$old"
+  _hook '{"tool_name":"Read","tool_input":{},"session_id":"zz"}'
+  [[ ! -f "$old" ]]
+}
+
+# ── Comportamiento: audit-origins ─────────────────────────────────────────────
+
+@test "audit-origins sin store informa de que no hay memory store" {
+  run "$STORE" audit-origins
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"No hay memory store"* ]]
+}
+
+@test "audit-origins calcula porcentajes y cuenta entradas sin origin como untrusted" {
+  "$STORE" save --type discovery --title "A1" --content "contenido de prueba a1" --source "user:explicit" >/dev/null
+  "$STORE" save --type discovery --title "A2" --content "contenido de prueba a2" --source "tool:Bash" >/dev/null
+  echo '{"ts":"2026-01-01T00:00:00Z","type":"discovery","title":"legacy","content":"sin origin"}' >> "$PROJECT_ROOT/output/.memory-store.jsonl"
+  echo '{"ts":"2026-01-01T00:00:00Z","type":"discovery","title":"sys","content":"x","origin":"system"}' >> "$PROJECT_ROOT/output/.memory-store.jsonl"
+  run "$STORE" audit-origins
+  [[ "$output" == *"Total: 4 entradas"* ]]
+  [[ "$output" == *"owner:      1 (25.0%)"* ]]
+  [[ "$output" == *"agent:      1 (25.0%)"* ]]
+  [[ "$output" == *"system:     1 (25.0%)"* ]]
+  [[ "$output" == *"sin src:    1"* ]]
+}
+
+# ── Comportamiento: consolidate ───────────────────────────────────────────────
+
+@test "consolidate excluye system y agent se conserva, con contadores exactos" {
+  "$STORE" save --type discovery --title "Own" --content "contenido de prueba c1" --source "user:explicit" >/dev/null
+  "$STORE" save --type discovery --title "Agt" --content "contenido de prueba c2" --source "tool:Bash" >/dev/null
+  "$STORE" save --type config --title "Sis" --content "contenido de prueba c3" --source "tool:Bash" --origin system >/dev/null
+  "$STORE" save --type discovery --title "Unt" --content "contenido de prueba c4" --source "user:explicit" --origin untrusted >/dev/null
+  run "$STORE" consolidate
+  [[ "$output" == *"excluidas 2 entradas untrusted/system, mantenidas 2"* ]]
+  s="$PROJECT_ROOT/output/.memory-store.jsonl"
+  grep -q '"title":"Own"' "$s"
+  grep -q '"title":"Agt"' "$s"
+  ! grep -q '"title":"Sis"' "$s"
+  ! grep -q '"title":"Unt"' "$s"
+}
+
+@test "consolidate --dry-run no modifica el store" {
+  "$STORE" save --type discovery --title "DryU" --content "contenido de prueba c5" --source "user:explicit" --origin untrusted >/dev/null
+  before="$(cat "$PROJECT_ROOT/output/.memory-store.jsonl")"
+  run "$STORE" consolidate --dry-run
+  [[ "$output" == *"dry-run"* ]]
+  [[ "$(cat "$PROJECT_ROOT/output/.memory-store.jsonl")" == "$before" ]]
+}
+
+@test "consolidate trata la entrada sin campo origin como untrusted y la elimina" {
+  mkdir -p "$PROJECT_ROOT/output"
+  echo '{"ts":"2026-01-01T00:00:00Z","type":"discovery","title":"legacy","content":"sin origin"}' >> "$PROJECT_ROOT/output/.memory-store.jsonl"
+  run "$STORE" consolidate
+  [[ "$output" == *"excluidas 1"* ]]
+  ! grep -q '"title":"legacy"' "$PROJECT_ROOT/output/.memory-store.jsonl"
+}
+
+# ── Comportamiento: search --min-origin ───────────────────────────────────────
+
+_seed_search() {
+  "$STORE" save --type discovery --title "RankOwner" --content "palabraclave uno" --source "user:explicit" >/dev/null
+  "$STORE" save --type discovery --title "RankAgent" --content "palabraclave dos" --source "tool:Bash" >/dev/null
+  "$STORE" save --type discovery --title "RankUntr" --content "palabraclave tres" --source "user:explicit" --origin untrusted >/dev/null
+  "$STORE" save --type config --title "RankSys" --content "palabraclave cuatro" --source "tool:Bash" --origin system >/dev/null
+}
+
+@test "search --min-origin agent devuelve owner y agent, no untrusted ni system" {
+  _seed_search
+  run "$STORE" search "palabraclave" --min-origin agent --mode grep
+  [[ "$output" == *"RankOwner"* ]]
+  [[ "$output" == *"RankAgent"* ]]
+  [[ "$output" != *"RankUntr"* ]]
+  [[ "$output" != *"RankSys"* ]]
+}
+
+@test "search --min-origin untrusted excluye system pero incluye untrusted" {
+  _seed_search
+  run "$STORE" search "palabraclave" --min-origin untrusted --mode grep
+  [[ "$output" == *"RankUntr"* ]]
+  [[ "$output" != *"RankSys"* ]]
+}
+
+@test "search --min-origin con valor desconocido se comporta como untrusted" {
+  _seed_search
+  run "$STORE" search "palabraclave" --min-origin bogus --mode grep
+  [[ "$output" == *"RankAgent"* ]]
+  [[ "$output" == *"RankUntr"* ]]
+  [[ "$output" != *"RankSys"* ]]
+}
+
+@test "search sin --min-origin no filtra por origen (system incluido)" {
+  _seed_search
+  run "$STORE" search "palabraclave" --mode grep
+  [[ "$output" == *"RankSys"* ]]
+  [[ "$output" == *"RankOwner"* ]]
+}
+
+@test "taint dentro de la ventana (25 min) sigue degradando el origen" {
+  sid="t-mid-$$-$BATS_TEST_NUMBER"
+  _taint "$sid" "$(( $(date -u +%s) - 1500 ))"
+  SESSION_ID="$sid" "$STORE" save --type discovery --title "Medio" --content "contenido de prueba t5" --source "user:explicit" >/dev/null
+  rm -f "/tmp/savia-memory-taint/$sid"
+  [[ "$(_origin_of_last)" == "untrusted" ]]
+}
+
+@test "sin SESSION_ID no se aplica el taint de una sesión llamada x" {
+  _taint "x" "$(date -u +%s)"
+  env -u SESSION_ID "$STORE" save --type discovery --title "SinSid" --content "contenido de prueba t6" --source "user:explicit" >/dev/null
+  rm -f /tmp/savia-memory-taint/x
+  [[ "$(_origin_of_last)" == "owner" ]]
 }
