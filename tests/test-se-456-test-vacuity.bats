@@ -131,6 +131,59 @@ assert v['kind'] == 'V1', v
   echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['total']>=80 and d['certified'] is False and len(d['vacuity'])==1, d"
 }
 
+@test "V1: variantes que antes se escapaban se detectan" {
+  # \043 = «#»: sin un comentario literal en esta línea, el detector no se confunde con su propio fixture.
+  fixture v1c "$(printf 'grep -q x f || true  \043 nota\ngrep -q x f || true;\ngrep -E -q x f || true\nassert_output "x" || true\nrun echo a; [ "$status" -eq 0 ] || true\n[ -f f ] || exit 0\n[ -f f ] || return 0\n[ -f f ] || echo "no pasa"')"
+  [ "$(vac_count v1c)" -eq 8 ]
+}
+
+@test "@test con comillas simples o con comillas escapadas en el nombre se escanea" {
+  printf '#!/usr/bin/env bats\n@test '"'"'simple'"'"' {\n  grep -q x f || true\n}\n@test "con \\"comillas\\"" {\n  grep -q y f || true\n}\n' > "$FX/tests/q.bats"
+  [ "$(vac_count q)" -eq 2 ]
+}
+
+@test "no marca: || echo dentro de una sustitución de comando" {
+  fixture ok7 '  [ "$(grep -c x f || echo 0)" = "0" ]'
+  [ "$(vac_count ok7)" -eq 0 ]
+}
+
+@test "--vacuity-scan sin directorio tests/ sale con 2 y el gate falla cerrado" {
+  mkdir -p "$BATS_TEST_TMPDIR/vacio"
+  run python3 "$ENGINE" --vacuity-scan "$BATS_TEST_TMPDIR/vacio"
+  [ "$status" -eq 2 ]
+  echo 0 > "$BATS_TEST_TMPDIR/base.count"
+  run env SAVIA_VACUITY_ROOT="$BATS_TEST_TMPDIR/vacio" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
+  [ "$status" -ne 0 ]
+}
+
+@test "ratchet: arreglar un hallazgo y añadir otro con el mismo recuento falla" {
+  fixture nuevo '  grep -q x f || true'
+  printf 'tests/viejo.bats\tcaso\tV1\n' > "$BATS_TEST_TMPDIR/base.findings"
+  echo 1 > "$BATS_TEST_TMPDIR/base.count"
+  run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"tests/nuevo.bats"* ]]
+}
+
+@test "ratchet: los mismos hallazgos de la línea base pasan por identidad" {
+  fixture viejo '  grep -q x f || true'
+  printf 'tests/viejo.bats\tcaso\tV1\n' > "$BATS_TEST_TMPDIR/base.findings"
+  echo 1 > "$BATS_TEST_TMPDIR/base.count"
+  run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
+  [ "$status" -eq 0 ]
+}
+
+@test "--update-vacuity-baseline escribe recuento e identidades que el ratchet acepta" {
+  fixture viejo '  run false'
+  echo 0 > "$BATS_TEST_TMPDIR/base.count"
+  run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --update-vacuity-baseline
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/base.count")" -eq 1 ]
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/base.findings")" -eq 1 ]
+  run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
+  [ "$status" -eq 0 ]
+}
+
 @test "--vacuity-scan cuenta los hallazgos de todo el árbol de tests" {
   fixture a '  run false'
   fixture b '  grep -q x f || true'
@@ -175,6 +228,7 @@ assert v['kind'] == 'V1', v
   [ "$status" -eq 0 ]
   n=$(echo "$output" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")
   [ "$n" -eq "$(cat .ci-baseline/test-vacuity.count)" ]
+  [ "$n" -eq "$(wc -l < .ci-baseline/test-vacuity.findings)" ]
 }
 
 @test "la regla test-evidence-criteria existe y test-quality-gate la enlaza" {

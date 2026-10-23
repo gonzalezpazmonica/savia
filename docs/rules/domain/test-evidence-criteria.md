@@ -70,9 +70,17 @@ deja el test en rojo fuera del ratchet. Nunca se vuelve a anular. Ver `feedback_
   auxiliares, en `set +e` ni en `bash -c "… || true"`.
 - No mide si una aserción discrimina (que falle ante una mutación): eso es trabajo del revisor y de las pruebas de
   mutación.
+- No cubre `|| ` seguido de otras formas de anular (`|| ls`, `|| continue`), un `skip` incondicional, ni `@test` con
+  `{` en otra línea. Los heredocs que contienen `run …` dentro de un `@test` pueden dar falsos positivos.
 - Su cifra es una cota inferior de los tests vacíos, no un censo.
 
 ## Ratchet
 
-`.ci-baseline/test-vacuity.count` congela el número actual. Más hallazgos hacen fallar el gate y menos piden bajar la
-línea base en el mismo PR. Sin línea base, el gate falla cerrado.
+`.ci-baseline/test-vacuity.count` congela el número actual y `.ci-baseline/test-vacuity.findings` sus identidades
+(fichero, `@test`, tipo). El gate falla con un hallazgo que no esté en la línea base aunque el recuento no suba: arreglar
+uno y añadir otro no pasa. Menos hallazgos pasan y piden regenerar la línea base en el mismo PR con
+`bash scripts/ci-test-quality-gate.sh --update-vacuity-baseline` (el test de coincidencia lo exige). Subir la línea base
+exige justificación en el PR: nada la protege más que la revisión. Sin línea base, o sin `tests/` que escanear, el gate
+falla cerrado.
+
+La identidad es (fichero, nombre del `@test`, tipo): dos hallazgos del mismo tipo en un mismo test cuentan por recuento.

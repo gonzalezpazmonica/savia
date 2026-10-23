@@ -182,34 +182,61 @@ teardown() {
   ls "$REPO_ROOT/output/atestacion/"*.md >/dev/null 2>&1
 }
 
+# Las atestaciones se generan en una copia aislada del script: ROOT es el directorio temporal,
+# no el repo. Así no contaminan output/ y la cadena parte de un estado conocido.
+attest_sandbox() {
+  AT="$BATS_TEST_TMPDIR/at"
+  mkdir -p "$AT/scripts" "$AT/output/atestacion"
+  cp "$REPO_ROOT/scripts/savia-attest.sh" "$AT/scripts/"
+  WEEK_NOW="$(date +%Y-W%V)"
+  F_NOW="$AT/output/atestacion/${WEEK_NOW}.md"
+}
+
+body_hash() { sed '/^## Firma/,$d' "$1" | sha256sum | awk '{print $1}'; }
+
 @test "AC-6.3: atestacion menciona matriz nivel-N x destino" {
-  run bash "$REPO_ROOT/scripts/savia-attest.sh"
+  attest_sandbox
+  run bash "$AT/scripts/savia-attest.sh"
   [ "$status" -eq 0 ]
-  FILES=("$REPO_ROOT/output/atestacion/"*.md)
-  grep -qi "N3.*cloud" "${FILES[-1]}"
+  grep -qi "N3.*cloud" "$F_NOW"
 }
 
 @test "AC-6.4: atestacion incluye hash del fichero" {
-  run bash "$REPO_ROOT/scripts/savia-attest.sh"
+  attest_sandbox
+  run bash "$AT/scripts/savia-attest.sh"
   [ "$status" -eq 0 ]
-  f="$REPO_ROOT/output/atestacion/$(date +%Y-W%V).md"
-  [ -f "$f" ]
+  [ -f "$F_NOW" ]
   # La firma es el sha256 del cuerpo (todo lo anterior a «## Firma») y no el del fichero vacío.
-  sig=$(awk '/^```$/{getline; print; exit}' <(sed -n '/^## Firma/,$p' "$f"))
-  body=$(sed '/^## Firma/,$d' "$f" | sha256sum | awk '{print $1}')
-  [ "$sig" = "$body" ]
+  sig=$(awk '/^```$/{getline; print; exit}' <(sed -n '/^## Firma/,$p' "$F_NOW"))
+  [ "$sig" = "$(body_hash "$F_NOW")" ]
   [ "$sig" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]
 }
 
-@test "AC-6.4b: el hash anterior no apunta a la propia atestacion de la semana" {
-  run bash "$REPO_ROOT/scripts/savia-attest.sh"
+@test "AC-6.4b: el hash anterior es el de la semana previa, no el de la propia atestacion" {
+  attest_sandbox
+  printf 'semana previa\n' > "$AT/output/atestacion/2000-W01.md"
+  h_prev=$(sha256sum "$AT/output/atestacion/2000-W01.md" | awk '{print $1}')
+  run bash "$AT/scripts/savia-attest.sh"
   [ "$status" -eq 0 ]
-  f="$REPO_ROOT/output/atestacion/$(date +%Y-W%V).md"
-  run bash "$REPO_ROOT/scripts/savia-attest.sh"
+  h1=$(sha256sum "$F_NOW" | awk '{print $1}')
+  run bash "$AT/scripts/savia-attest.sh"
   [ "$status" -eq 0 ]
-  prev=$(sed -n 's/^- \*\*Hash anterior:\*\* //p' "$f")
-  [ -n "$prev" ]
-  [ "$prev" != "$(sed '/^## Firma/,$d' "$f" | sha256sum | awk '{print $1}')" ]
+  prev=$(sed -n 's/^- \*\*Hash anterior:\*\* //p' "$F_NOW")
+  # Con el script antiguo, la 2.ª ejecución encadenaba con h1 (la versión 1 de la misma semana).
+  [ "$prev" != "$h1" ]
+  [ "$prev" = "$h_prev" ]
+}
+
+@test "AC-6.4c: regenerar una semana antigua encadena con la anterior en la cadena, no con la mas reciente" {
+  attest_sandbox
+  printf 'w01\n' > "$AT/output/atestacion/2000-W01.md"
+  printf 'w09\n' > "$AT/output/atestacion/2000-W09.md"
+  touch -d '2 days ago' "$AT/output/atestacion/2000-W01.md"   # la más reciente por mtime es W09
+  h01=$(sha256sum "$AT/output/atestacion/2000-W01.md" | awk '{print $1}')
+  run bash "$AT/scripts/savia-attest.sh" 2000-W05
+  [ "$status" -eq 0 ]
+  prev=$(sed -n 's/^- \*\*Hash anterior:\*\* //p' "$AT/output/atestacion/2000-W05.md")
+  [ "$prev" = "$h01" ]
 }
 
 # ── Slice 2 extended: bootstrap ────────────────────────────────────────────

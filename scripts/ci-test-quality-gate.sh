@@ -33,7 +33,8 @@ PASS=true
 vacuity_ratchet() {
   local root="${SAVIA_VACUITY_ROOT:-$DIR/..}"
   local baseline="${SAVIA_VACUITY_BASELINE:-$DIR/../.ci-baseline/test-vacuity.count}"
-  local scan count base
+  local ids="${SAVIA_VACUITY_IDS:-${baseline%.count}.findings}"
+  local scan count base new
   if [[ ! -f "$baseline" ]]; then
     echo "  Vacuidad: sin línea base en $baseline (fallo cerrado)"
     return 1
@@ -48,22 +49,49 @@ vacuity_ratchet() {
     echo "  Vacuidad: línea base o recuento ilegibles (fallo cerrado)"
     return 1
   fi
-  if (( count > base )); then
-    echo "  Vacuidad: $count > línea base $base — tests nuevos que no pueden fallar:"
-    printf '%s' "$scan" | python3 -c "
-import json, sys
-for f in json.load(sys.stdin)['findings']:
-    print(f\"    {f['kind']} {f['file']}:{f['line']}  {f['text']}\")" | tail -n $(( count - base + 20 ))
+  # Identidad: hallazgos (fichero, test, tipo) que no estaban en la línea base. Arreglar uno y añadir otro
+  # deja el recuento igual pero no pasa. Sin fichero de identidades solo vale el recuento.
+  new=$(printf '%s' "$scan" | python3 -c "
+import collections, json, sys
+ids = sys.argv[1]
+cur = collections.Counter((f['file'], f['test'], f['kind']) for f in json.load(sys.stdin)['findings'])
+try:
+    base = collections.Counter(tuple(l.rstrip('\n').split('\t')) for l in open(ids) if l.strip())
+except OSError:
+    sys.exit(0)
+for (file, test, kind), n in sorted((cur - base).items()):
+    print(f'    {kind} {file}  @test \"{test}\"' + (f' (+{n})' if n > 1 else ''))
+" "$ids") || { echo "  Vacuidad: no se pudo comparar identidades (fallo cerrado)"; return 1; }
+  if [[ -n "$new" ]]; then
+    echo "  Vacuidad: hallazgos que no estaban en la línea base (tests que no pueden fallar):"
+    printf '%s\n' "$new"
     echo "  Regla: docs/rules/domain/test-evidence-criteria.md"
     return 1
   fi
+  if (( count > base )); then
+    echo "  Vacuidad: $count > línea base $base sin hallazgos nuevos identificables (fallo cerrado)"
+    return 1
+  fi
   if (( count < base )); then
-    echo "  Vacuidad: $count < línea base $base — bajar la línea base: echo $count > .ci-baseline/test-vacuity.count"
+    echo "  Vacuidad: $count < línea base $base — mejora; bajar la línea base: bash scripts/ci-test-quality-gate.sh --update-vacuity-baseline"
   else
     echo "  Vacuidad: $count = línea base $base"
   fi
   return 0
 }
+
+if [[ "${1:-}" == "--update-vacuity-baseline" ]]; then
+  root="${SAVIA_VACUITY_ROOT:-$DIR/..}"
+  baseline="${SAVIA_VACUITY_BASELINE:-$DIR/../.ci-baseline/test-vacuity.count}"
+  scan=$(python3 "$DIR/test-auditor-engine.py" --vacuity-scan "$root") || { echo "detector caído"; exit 2; }
+  printf '%s' "$scan" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])" > "$baseline"
+  printf '%s' "$scan" | python3 -c "
+import json, sys
+for f in json.load(sys.stdin)['findings']:
+    print('\t'.join((f['file'], f['test'], f['kind'])))" | sort > "${baseline%.count}.findings"
+  echo "Línea base actualizada: $(cat "$baseline") hallazgos"
+  exit 0
+fi
 
 if [[ "${1:-}" == "--vacuity-only" ]]; then
   vacuity_ratchet

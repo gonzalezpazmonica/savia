@@ -101,8 +101,8 @@ def c9_assertions(c):
 # SE-456: tests que no pueden fallar. V1 = aserción anulada con `|| true`/`|| :`;
 # V2 = `run` sin ninguna aserción detrás (ni $status, ni $output, ni nada que pueda fallar);
 # V3 = `run` cuyo estado se ignora pero con otras aserciones detrás: débil, no vacío.
-ASSERT_LINE = re.compile(r'^(\[\[?\s|test\s|grep\s+(-\w*q\w*|--quiet)\b)')
-NEUTRALIZED = re.compile(r'\|\|\s*(true|:)\s*$')
+ASSERT_LINE = re.compile(r'(?:^|;\s*)(?:\[\[?\s|test\s|(?:assert|refute)_\w+|grep\s+(?:-\S+\s+)*(?:-\w*q\w*|--quiet)\b)')
+NEUTRALIZED = re.compile(r'\|\|\s*(?:true|:|/bin/true|exit\s+0|return\s+0|echo\b[^|&;()\[\]]*)\s*;?\s*(?:#.*)?$')
 RUN_LINE = re.compile(r'^run(\s|$)')
 RUN_SELF_CHECKED = re.compile(r'^run\s+(-\d+|!)\s')
 # Líneas que no pueden hacer fallar el test por sí mismas.
@@ -114,7 +114,7 @@ def test_blocks(c):
     lines = c.splitlines()
     i = 0
     while i < len(lines):
-        m = re.match(r'^@test\s+"([^"]*)"\s*\{\s*$', lines[i])
+        m = re.match(r'^@test\s+(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\')\s*\{\s*$', lines[i])
         if not m:
             i += 1
             continue
@@ -124,14 +124,14 @@ def test_blocks(c):
             if s and not s.startswith("#"):
                 body.append((j + 1, s))
             j += 1
-        yield m.group(1), body
+        yield m.group(1) or m.group(2) or "", body
         i = j + 1
 
 def vacuity_all(c):
     found = []
     for name, body in test_blocks(c):
         for idx, (n, s) in enumerate(body):
-            if ASSERT_LINE.match(s) and NEUTRALIZED.search(s) and "&&" not in s:
+            if ASSERT_LINE.search(s) and NEUTRALIZED.search(s) and "&&" not in s:
                 found.append({"test": name, "line": n, "kind": "V1", "text": s[:120]})
             elif RUN_LINE.match(s) and not RUN_SELF_CHECKED.match(s):
                 same_line = re.split(r';\s*|\s&&\s', s, maxsplit=1)[1:]
@@ -156,6 +156,8 @@ def weak(c):
 
 def vacuity_scan(root):
     findings = []
+    if not os.path.isdir(os.path.join(root, "tests")):
+        raise FileNotFoundError(f"sin directorio tests/ en {root}")
     for dirpath, _, files in os.walk(os.path.join(root, "tests")):
         for f in sorted(files):
             if f.endswith(".bats"):
@@ -178,7 +180,7 @@ def audit(test_file, root):
     }
     total = sum(criteria.values())
     vac = vacuity(c)
-    h =hashlib.sha256(f"{os.path.basename(test_file)}{total}{today}".encode()).hexdigest()[:8]
+    h = hashlib.sha256(f"{os.path.basename(test_file)}{total}{today}".encode()).hexdigest()[:8]
     return {
         "file": os.path.relpath(test_file, root),
         "target": os.path.relpath(target, root) if target else None,
@@ -189,7 +191,11 @@ def audit(test_file, root):
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--vacuity-scan":
-        print(json.dumps(vacuity_scan(sys.argv[2]), indent=2, ensure_ascii=False))
+        try:
+            print(json.dumps(vacuity_scan(sys.argv[2]), indent=2, ensure_ascii=False))
+        except FileNotFoundError as e:
+            print(json.dumps({"error": str(e)}))
+            sys.exit(2)
         sys.exit(0)
     if len(sys.argv) < 3:
         print(json.dumps({"error": "Usage: test-auditor-engine.py <file> <root>"}))
