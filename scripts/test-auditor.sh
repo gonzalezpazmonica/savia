@@ -114,11 +114,16 @@ echo "$result"
 
 score=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total',0))" 2>/dev/null || echo "0")
 
-if [[ "$EMBED" == "true" && "$score" -ge 80 ]]; then
+# SE-456: certifica `certified` (>= 80 y sin tests que no pueden fallar), no la puntuación sola.
+certified=$(echo "$result" | python3 -c "import json,sys; print('yes' if json.load(sys.stdin).get('certified') else 'no')" 2>/dev/null || echo "no")
+
+if [[ "$EMBED" == "true" && "$certified" == "yes" ]]; then
   embed_hash "$TARGET" "$score"
   echo "Embedded certification hash in $TARGET (score=$score)"
+elif [[ "$EMBED" == "true" && "$score" -ge 80 ]]; then
+  echo "Score $score >= 80 but the file has tests that cannot fail (vacuity): not certified, hash NOT embedded"
 elif [[ "$EMBED" == "true" ]]; then
   echo "Score $score < 80: not certified, hash NOT embedded"
 fi
 
-exit "$( [[ "$score" -lt 80 ]] && echo 1 || echo 0 )"
+exit "$( [[ "$certified" != "yes" ]] && echo 1 || echo 0 )"

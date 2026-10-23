@@ -154,6 +154,7 @@ assert d['mode'] == 'shadow' and d['effective_hits'] == [] and d['shadow_hits'] 
   note dup-a human_authored active criterio CRIT-034
   note dup-b human_authored active criterio CRIT-034
   run recall_json
+  [ "$status" -eq 0 ]
   echo "$output" | jq_py "assert len(d['effective_hits']) == 1, d"
 }
 
@@ -164,6 +165,7 @@ assert d['mode'] == 'shadow' and d['effective_hits'] == [] and d['shadow_hits'] 
     note "l-$n" human_authored active criterio "CRIT-$n"
   done
   run recall_json
+  [ "$status" -eq 0 ]
   echo "$output" | jq_py "assert len(d['effective_hits']) == 3, d"
 }
 
@@ -172,6 +174,7 @@ assert d['mode'] == 'shadow' and d['effective_hits'] == [] and d['shadow_hits'] 
   printf 'CRIT-040 — sin procedencia\n  principio: algo\n' >> "$SCL_CRITERIO_PATH"
   note orphan human_authored active criterio CRIT-040
   run recall_json
+  [ "$status" -eq 0 ]
   echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 1, d"
 }
 
@@ -180,6 +183,7 @@ assert d['mode'] == 'shadow' and d['effective_hits'] == [] and d['shadow_hits'] 
   cp "$TMPD/CRITERIO.md" "$TMPD/fuera.md"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" %s\n' "'[{\"path\":\"../fuera.md\",\"score\":99.0}]'" > "$SCL_VAULT_CLI"
   run recall_json
+  [ "$status" -eq 0 ]
   echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 1, d"
 }
 
