@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: org-meeting-capture
-description: "Captura de Conocimiento Tácito de Reunión: extrae decisores, acuerdos informales y señales políticas de transcripciones."
+description: "Extrae decisores, acuerdos informales y señales políticas de transcripciones de reuniones. Usar cuando haya que capturar el conocimiento tácito de una reunión más allá del acta."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: org-intelligence
