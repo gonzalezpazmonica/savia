@@ -322,9 +322,10 @@ export class A2AServer {
           res.end(JSON.stringify({ error: 'Not found' }));
         }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
+        // El detalle (rutas absolutas, errores de E/S) queda en el log local, no en la respuesta.
+        console.error(`A2A ${req.method} ${req.url}: ${e instanceof Error ? e.message : String(e)}`);
         res.writeHead(500);
-        res.end(JSON.stringify({ error: msg }));
+        res.end(JSON.stringify({ error: 'Internal error' }));
       }
     });
 
