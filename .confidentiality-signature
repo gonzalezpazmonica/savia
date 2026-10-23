@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f05f2bf2c0367db82607235a3b566616d1d1cfb2b332aff9f5a5c94351872cfd
-timestamp=2026-10-23T06:20:58Z
+diff_hash=15039fd6c9b8b2c80802412b2a6b55c07f7b73a1c309847bc1f9dd5fef1b0cbe
+timestamp=2026-10-23T11:29:06Z
 branch=agent/plantillas-20261023
-head_commit=b22c694ad
-signature=18387490a910c0ab1f53919353e764081b3fda7635370bc966a5b29e9bd773ab
+head_commit=794ad5c84
+signature=e4594b2ac8e0b3f90b2f253c33eb5a5a897248e4ceed5a8848691c5a39a0e8c5
