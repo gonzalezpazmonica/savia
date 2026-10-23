@@ -219,5 +219,11 @@ print(json.dumps({'ok': True}))
 @test "no live doc points at the old .claude/skills/_template path" {
   run grep -rn --include='*.md' --include='*.txt' -E '(\.claude|\.opencode)/skills/_template' \
     CLAUDE.md docs/llms-full.txt docs/rules docs/propuestas .claude/skills
-  [ "$status" -ne 0 ]
+  # 1 = sin coincidencias; 2 = error de grep (ruta inexistente) no vale como verde
+  [ "$status" -eq 1 ]
+}
+
+@test "CLAUDE.md skill count matches reality after moving the templates" {
+  run bash scripts/claude-md-drift-check.sh
+  [ "$status" -eq 0 ]
 }
