@@ -18,6 +18,14 @@ Alta desde el triaje de code scanning (PR #1363)
 
 Alta desde el triaje de code scanning (PR #1363)
 
+## 2026-10-23 SE-456 APPROVED
+
+operadora, AskUserQuestion 2026-10-23
+
+## 2026-10-23 SE-455 APPROVED
+
+operadora, AskUserQuestion 2026-10-23
+
 ## 2026-10-20 SE-451 APPROVED
 
 operadora, AskUserQuestion 2026-10-20: DCO (no CLA)
