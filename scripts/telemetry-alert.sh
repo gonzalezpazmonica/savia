@@ -16,6 +16,7 @@ ISSUES="${TEL_FP_ISSUES:-$ROOT/output/telemetry-issues.jsonl}"
 POLICY="${TEL_FP_POLICY:-$ROOT/config/telemetry-policies.yaml}"
 ALERT_LOG="${TEL_FP_ALERT_LOG:-$ROOT/output/telemetry-alerts.jsonl}"
 CAPTURE=false
+DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,7 +37,7 @@ if [[ -f "$POLICY" ]]; then
   [[ -n "$P" ]] && THRESHOLD="$P"
 fi
 
-mkdir -p "$(dirname "$ALERT_LOG")"
+$DRY_RUN || mkdir -p "$(dirname "$ALERT_LOG")"
 ALERTS=0
 while IFS= read -r issue; do
   [[ -z "$issue" ]] && continue
@@ -46,9 +47,9 @@ while IFS= read -r issue; do
   if (( COUNT_JSON >= THRESHOLD )); then
     TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     ALERT="{\"ts\":\"$TS\",\"kind\":\"telemetry-alert\",\"hash\":\"$HASH\",\"count\":$COUNT_JSON,\"threshold\":$THRESHOLD,\"status\":\"open\"}"
-    echo "$ALERT" >> "$ALERT_LOG"
+    $DRY_RUN || echo "$ALERT" >> "$ALERT_LOG"
     ALERTS=$((ALERTS + 1))
-    if $CAPTURE; then
+    if $CAPTURE && ! $DRY_RUN; then
       bash "$ROOT/scripts/learning-proposal.sh" \
         --origin "telemetry alert: issue $HASH ($COUNT_JSON eventos)" \
         --evidence "$ISSUES" \
