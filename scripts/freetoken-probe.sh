@@ -20,17 +20,20 @@ MODEL="openai/gpt-oss-20b"
 DO_INSTALL=0
 DO_SERVE=0
 JSON=0
-MODE="${1:-probe}"
+usage() { echo "usage: $0 [probe|--install|--serve] [--model ID] [--json]" >&2; exit 2; }
 
-case "$MODE" in
-  probe) ;;
-  --install) DO_INSTALL=1 ;;
-  --serve) DO_SERVE=1 ;;
-  --json) JSON=1 ;;
-  *) echo "usage: $0 [--install|--serve] [--model ID] [--json]" >&2; exit 2 ;;
-esac
-
-while [[ $# -gt 1 ]]; do case "$1" in --model) MODEL="$2"; shift 2 ;; --json) JSON=1; shift ;; *) shift ;; esac; done
+# Todas las banderas se leen (antes la última se ignoraba y --model no podía ir primero).
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    probe) ;;
+    --install) DO_INSTALL=1 ;;
+    --serve) DO_SERVE=1 ;;
+    --json) JSON=1 ;;
+    --model) [[ -n "${2:-}" ]] || usage; MODEL="$2"; shift ;;
+    *) usage ;;
+  esac
+  shift
+done
 
 FT_BIN="${FT_BIN:-$HOME/.savia/freetoken/.venv/bin/ft}"
 
@@ -77,10 +80,13 @@ if [[ -z "$GPU_INFO" ]]; then
 fi
 # Soporte: cc declara RTX 30/40/50 (cc>=8.0). RTX 20 (cc 7.5) NO está soportada.
 CC=$(echo "$GPU_INFO" | awk -F', ' '{print $2}')
-CC_MAJOR=${CC%%.*}
-CC_MINOR=${CC##*.}
-CC_NUM=$(echo "$CC_MAJOR $CC_MINOR" | awk '{print $1 + $2/10}')
-if (( $(echo "${CC_NUM:-0} < 8.0" | bc -l 2>/dev/null || echo 1) )); then
+# Aritmética entera (cc*10): con awk+bc, un locale con coma decimal ("7,5") rompía
+# bc y la compuerta cc>=8.0 dejaba pasar GPUs no soportadas.
+CC_INT=0
+if [[ "$CC" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+  CC_INT=$(( 10#${BASH_REMATCH[1]} * 10 + 10#${BASH_REMATCH[2]} ))
+fi
+if (( CC_INT < 80 )); then
   if [[ "$DO_SERVE" -eq 1 ]]; then
     # vía explícita de prueba: el engine arranca pero requiere nvcc para JIT
     if [ -z "$NVCC" ] && [ -z "$CLIB" ]; then
