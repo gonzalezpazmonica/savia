@@ -31,13 +31,16 @@ CI y el auditor de calidad:
    `$output`, el test pasa igual. Ejemplo: `tests/bats/test-se255-push-gate.bats`, AC-2.1 («pr-plan --gate-mode sale con
    exit 1 si hay FAIL»), ejecuta el gate y termina con `true`.
 
-Medición heurística sobre `main` (`139268c0`, 16 649 tests): unas 77 líneas de aserción terminadas en `|| true` y
-unos 213 tests con un `run` cuyo resultado no se comprueba. Son cotas superiores: las cifras exactas las da el
-detector de S1.
+Medición sobre `main` (`139268c0`, 16 649 tests) con el detector de S1: 59 tests que no pueden fallar (54 V1 y
+5 V2), más los débiles V3 (`run` con el estado ignorado pero con otras aserciones detrás), que se informan aparte. Al
+reparar los dos ejemplos de arriba apareció un defecto real: la «firma» de todas las atestaciones de
+`savia-attest.sh` era el sha256 del fichero vacío (`e3b0c442…`), porque se calculaba sobre la salida recién truncada.
 
 Además, el auditor de calidad (`scripts/test-auditor-engine.py`, SPEC-055, umbral 80) cuenta los casos positivos,
 negativos y límite **por el nombre del test** (`error`, `invalid`, `empty`…) y la calidad de las aserciones por la
 presencia de patrones en cualquier parte del fichero. Un fichero con todas sus aserciones anuladas puede certificar.
+Y el paso de CI «Gate: Test Quality (SPEC-055 — all tests >= 80)» (`scripts/ci-test-quality-gate.sh`) sale siempre
+con 0 («advisory only»): el propio gate no puede fallar. El ratchet de S3 es su primera parte bloqueante.
 
 ## Valor y evidencia
 

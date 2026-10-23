@@ -147,9 +147,9 @@ for i in range(152):
   # Note: this is a best-effort test. The exact gate that catches it depends on
   # what checks run in the test environment.
   run bash "$TMPDIR/scripts/pr-plan.sh" --gate-mode
-  # Should fail because oversized command exists or other checks
-  # If all passes in test env, that's OK - the gate itself is verified by AC-3
-  true
+  # En modo gate un FAIL termina con 1 y lo nombra; un 0 aquí dejaría pasar el push.
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"GATE: FAILED"* || "$output" == *"FAIL"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

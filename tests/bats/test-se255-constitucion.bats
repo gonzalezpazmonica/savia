@@ -184,13 +184,32 @@ teardown() {
 
 @test "AC-6.3: atestacion menciona matriz nivel-N x destino" {
   run bash "$REPO_ROOT/scripts/savia-attest.sh"
-  grep -q "N3.*cloud\|N3.*Cloud" "$REPO_ROOT/output/atestacion/"*.md || true
+  [ "$status" -eq 0 ]
+  FILES=("$REPO_ROOT/output/atestacion/"*.md)
+  grep -qi "N3.*cloud" "${FILES[-1]}"
 }
 
 @test "AC-6.4: atestacion incluye hash del fichero" {
   run bash "$REPO_ROOT/scripts/savia-attest.sh"
-  FILES=("$REPO_ROOT/output/atestacion/"*.md)
-  grep -q "hash\|firma\|sha256" "${FILES[-1]}" || true
+  [ "$status" -eq 0 ]
+  f="$REPO_ROOT/output/atestacion/$(date +%Y-W%V).md"
+  [ -f "$f" ]
+  # La firma es el sha256 del cuerpo (todo lo anterior a «## Firma») y no el del fichero vacío.
+  sig=$(awk '/^```$/{getline; print; exit}' <(sed -n '/^## Firma/,$p' "$f"))
+  body=$(sed '/^## Firma/,$d' "$f" | sha256sum | awk '{print $1}')
+  [ "$sig" = "$body" ]
+  [ "$sig" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]
+}
+
+@test "AC-6.4b: el hash anterior no apunta a la propia atestacion de la semana" {
+  run bash "$REPO_ROOT/scripts/savia-attest.sh"
+  [ "$status" -eq 0 ]
+  f="$REPO_ROOT/output/atestacion/$(date +%Y-W%V).md"
+  run bash "$REPO_ROOT/scripts/savia-attest.sh"
+  [ "$status" -eq 0 ]
+  prev=$(sed -n 's/^- \*\*Hash anterior:\*\* //p' "$f")
+  [ -n "$prev" ]
+  [ "$prev" != "$(sed '/^## Firma/,$d' "$f" | sha256sum | awk '{print $1}')" ]
 }
 
 # ── Slice 2 extended: bootstrap ────────────────────────────────────────────
