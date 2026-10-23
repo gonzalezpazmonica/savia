@@ -1,16 +1,6 @@
 {
   "schema_version": "1",
   "skills": {
-    "_template": {
-      "layer": "peripheral",
-      "maturity": "",
-      "owner": "unassigned"
-    },
-    "_template_python": {
-      "layer": "peripheral",
-      "maturity": "",
-      "owner": "unassigned"
-    },
     "adversarial-security": {
       "layer": "peripheral",
       "maturity": "stable",
