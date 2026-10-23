@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 1dc206760423 | resources: 1451
+> hash: 5ebc267d337a | resources: 1451
 > 295 commands · 140 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -92,7 +92,7 @@
 [communication] meeting-risk-analyst —  — agent:.opencode/agents/meeting-risk-analyst.md
 [communication] meeting-transcript-extract — browser,extraer,reunión,teams,transcripción — skill:.claude/skills/meeting-transcript-extract/SKILL.md
 [communication] notify — cross,desktop,notifications,notify,platform — script:scripts/notify.sh
-[communication] org-meeting-capture — acuerdos,captura,conocimiento,decisores,extrae — skill:.claude/skills/org-meeting-capture/SKILL.md
+[communication] org-meeting-capture — acta,acuerdos,allá,capturar,conocimiento — skill:.claude/skills/org-meeting-capture/SKILL.md
 [communication] pdf-digest —  — agent:.opencode/agents/pdf-digest.md
 [communication] pptx-digest —  — agent:.opencode/agents/pptx-digest.md
 [communication] savia-announce —  — cmd:.claude/commands/savia-announce.md
@@ -179,6 +179,7 @@
 [communication] savia-watch — activity,feed,live,savia,watch — script:scripts/savia-watch.sh
 [communication] savia-watchdog — activate,detect,emergency,fallback,internet — script:scripts/savia-watchdog.sh
 [communication] savia-workspace — agentes,composicion,multi,repo,repos — script:scripts/savia-workspace.sh
+[communication] social-linkedin — actividad,analizar,digests,estilo,export — skill:.claude/skills/social-linkedin/SKILL.md
 [communication] transcriptor-digest — capturadas,capturas,carpetas,detectan,digerir — skill:.claude/skills/transcriptor-digest/SKILL.md
 [communication] transcriptor-mark-digested — digerida,digested,marcar,mark,reunion — script:scripts/transcriptor-mark-digested.sh
 [communication] voice-inbox — acciones,convertirlos,mensajes,procesan,transcribirlos — skill:.claude/skills/voice-inbox/SKILL.md
@@ -284,6 +285,7 @@
 [development] fiction-framing-judge — content,detects,domain,equivalent,framing — agent:.opencode/agents/fiction-framing-judge.md
 [development] freetoken-probe — freetoken,probe,spec,valida,viabilidad — script:scripts/freetoken-probe.sh
 [development] gaia-benchmark-harness — benchmark,gaia,harness,slice,spec — script:scripts/gaia-benchmark-harness.sh
+[development] git-secret-scanner — commits,comprobar,escanea,filtran,fuga — skill:.claude/skills/git-secret-scanner/SKILL.md
 [development] gitagent-export — adapter,export,gitagent,slice,spec — script:scripts/gitagent-export.sh
 [development] graph-build — conocimiento,construye,grafo,proyecto — cmd:.claude/commands/graph-build.md
 [development] graph-temporal-ops — graph,spec,temporal — script:scripts/graph-temporal-ops.sh
@@ -461,7 +463,7 @@
 [memory] context-compaction-policy — compaction,context,declared,policy,survival — script:scripts/context-compaction-policy.sh
 [memory] context-condenser — compression,condenser,context,rolling,window — script:scripts/context-condenser.sh
 [memory] context-distortion-measure — context,distortion,measure — script:scripts/context-distortion-measure.sh
-[memory] context-dome —  — skill:.claude/skills/context-dome/SKILL.md
+[memory] context-dome — alguien,bajo,capturar,conocimiento,context — skill:.claude/skills/context-dome/SKILL.md
 [memory] context-dome-generate — bajo,context,dome,generate,modulo — script:scripts/context-dome-generate.sh
 [memory] context-dome-manager — arquitecto,audita,clasificacion,confidencialidad,conocimiento — agent:.opencode/agents/context-dome-manager.md
 [memory] context-drop-after-use — context,decision,drop,engine,slice — script:scripts/context-drop-after-use.sh
@@ -579,7 +581,7 @@
 [planning] ast-comprehension — comprensión,código,desconocido,enteros,estructural — skill:.claude/skills/ast-comprehension/SKILL.md
 [planning] ast-quality-gate — calidad,código,generado,merge,verifica — skill:.claude/skills/ast-quality-gate/SKILL.md
 [planning] attack-surface-map — attack,mapping,surface — script:scripts/attack-surface-map.sh
-[planning] attack-surface-mapper — ataque,dominio,mapear,osint,subdominios — skill:.claude/skills/attack-surface-mapper/SKILL.md
+[planning] attack-surface-mapper — ataque,autorizadas,contratado,dominio,exposición — skill:.claude/skills/attack-surface-mapper/SKILL.md
 [planning] auto-loop-gate — auto,clarify,classifies,gate,loop — script:scripts/auto-loop-gate.sh
 [planning] azdevops-queries —  — script:scripts/azdevops-queries.sh
 [planning] azure-devops-operator —  — agent:.opencode/agents/azure-devops-operator.md
@@ -804,7 +806,6 @@
 [planning] generate-index — components,discoverable,generate,index,workspace — script:scripts/generate-index.sh
 [planning] git-history-secret-remediate — helper,history,remediation,secret — script:scripts/git-history-secret-remediate.sh
 [planning] git-history-secret-scan — history,scanning,secret — script:scripts/git-history-secret-scan.sh
-[planning] git-secret-scanner — buscando,commits,escanea,gitleaks,historial — skill:.claude/skills/git-secret-scanner/SKILL.md
 [planning] go-developer —  — agent:.opencode/agents/go-developer.md
 [planning] goal-service — durable,goal,service,sesión,wrapper — script:scripts/goal-service.sh
 [planning] graph-query — conocimiento,consulta,grafo,lenguaje,natural — cmd:.claude/commands/graph-query.md
@@ -903,7 +904,7 @@
 [planning] mobile-developer —  — agent:.opencode/agents/mobile-developer.md
 [planning] model-capability-resolver — capabilities,capability,model,registry,resolve — script:scripts/model-capability-resolver.sh
 [planning] my-sprint — asignados,cycle,items,pendientes,personal — cmd:.claude/commands/my-sprint.md
-[planning] network-recon — detection,http,httpx,nmap,port — skill:.claude/skills/network-recon/SKILL.md
+[planning] network-recon — alcance,autorizadas,expuestos,haya,http — skill:.claude/skills/network-recon/SKILL.md
 [planning] network-recon — network,recon,reconnaissance — script:scripts/network-recon.sh
 [planning] nidos — isolation,manage,named,nidos,parallel — cmd:.claude/commands/nidos.md
 [planning] nidos — isolation,named,nidos,parallel,savia — script:scripts/nidos.sh
@@ -922,9 +923,9 @@
 [planning] operator-grant — deterministic,grant,ledger,operator — script:scripts/operator-grant.sh
 [planning] opus47-calibration-scorecard — calibration,opus,scorecard,slice — script:scripts/opus47-calibration-scorecard.sh
 [planning] orchestration-protocol — agent,inter,messaging,orchestration,protocol — script:scripts/orchestration-protocol.sh
-[planning] org-political-landscape — alianzas,análisis,centros,detecta,interno — skill:.claude/skills/org-political-landscape/SKILL.md
+[planning] org-political-landscape — alianzas,atasca,centros,decisión,detecta — skill:.claude/skills/org-political-landscape/SKILL.md
 [planning] org-registrar — grafo,organizacional,registrar,wrapper — script:scripts/org-registrar.sh
-[planning] org-stakeholder-mapper — alianzas,decisores,extrae,formales,mapeador — skill:.claude/skills/org-stakeholder-mapper/SKILL.md
+[planning] org-stakeholder-mapper — algo,alianzas,decide,formales,haya — skill:.claude/skills/org-stakeholder-mapper/SKILL.md
 [planning] orgchart-import —  — cmd:.claude/commands/orgchart-import.md
 [planning] orgchart-import — equipo,estructura,extraer,importa,organigrama — skill:.claude/skills/orgchart-import/SKILL.md
 [planning] otel-emit — emisor,emit,estándar,eventos,otel — script:scripts/otel-emit.sh
@@ -953,7 +954,7 @@
 [planning] privacy-check-company — check,company,content,filter,privacy — script:scripts/privacy-check-company.sh
 [planning] probe-devops — acceso,azure,devops,diagnóstico,probe — script:scripts/probe-devops.sh
 [planning] product-discovery — análisis,descomponer,jtbd,pbis,producto — skill:.claude/skills/product-discovery/SKILL.md
-[planning] professional-domain — controlling,domain,family,finance,index — skill:.claude/skills/professional-domain/SKILL.md
+[planning] professional-domain — cargar,concreta,controlling,criterio,dominio — skill:.claude/skills/professional-domain/SKILL.md
 [planning] profile-discover — abtop,auto,discover,discovery,multi — script:scripts/profile-discover.sh
 [planning] profile-setup — configuración,conoce,conversación,natural,perfil — cmd:.claude/commands/profile-setup.md
 [planning] profile-show — actual,muestra,perfil,savia — cmd:.claude/commands/profile-show.md
@@ -1078,7 +1079,6 @@
 [planning] slm-train — export,fine,locally,ollama,slms — script:scripts/slm-train.sh
 [planning] slm-train-config — config,emit,phase,scaffolding,train — script:scripts/slm-train-config.sh
 [planning] smart-calendar — agenda,gestiona,inteligente,outlook,sincronización — skill:.claude/skills/smart-calendar/SKILL.md
-[planning] social-linkedin —  — skill:.claude/skills/social-linkedin/SKILL.md
 [planning] social-networks —  — agent:.opencode/agents/social-networks.md
 [planning] source-corroborator — corroboración,corroborator,externas,fuentes,source — script:scripts/source-corroborator.sh
 [planning] sovereignty-benchmark — benchmark,local,prompts,sovereignty,workspace — script:scripts/sovereignty-benchmark.sh
@@ -1228,7 +1228,7 @@
 [quality] docs-quality-audit — agentes,auditar,basada,calidad,documentacion — cmd:.claude/commands/docs-quality-audit.md
 [quality] drift-auditor — auditoría,cambios,config,convergencia,código — agent:.opencode/agents/drift-auditor.md
 [quality] dynamic-web-security-test — dynamic,security,test,testing — script:scripts/dynamic-web-security-test.sh
-[quality] dynamic-web-tester — dalfox,dinámico,endpoints,nuclei,sqli — skill:.claude/skills/dynamic-web-tester/SKILL.md
+[quality] dynamic-web-tester — alcance,aplicación,autorizadas,comprobar,dinámico — skill:.claude/skills/dynamic-web-tester/SKILL.md
 [quality] enterprise/activation-plan-review — activation,agent,plan,review — script:scripts/enterprise/activation-plan-review.sh
 [quality] enterprise/audit-purge — audit,purge,retention,spec — script:scripts/enterprise/audit-purge.sh
 [quality] enterprise/audit-search — audit,inspector,search,spec — script:scripts/enterprise/audit-search.sh

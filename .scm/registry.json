@@ -1828,11 +1828,11 @@
       ],
       "id": "skill:.claude/skills/org-meeting-capture/SKILL",
       "intents": [
+        "acta",
         "acuerdos",
-        "captura",
-        "conocimiento",
-        "decisores",
-        "extrae"
+        "allá",
+        "capturar",
+        "conocimiento"
       ],
       "kind": "skill",
       "owner_domain": "communication",
@@ -3551,6 +3551,27 @@
       "replaced_by": null,
       "risk_level": null,
       "source": "scripts/savia-workspace.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "claude"
+      ],
+      "id": "skill:.claude/skills/social-linkedin/SKILL",
+      "intents": [
+        "actividad",
+        "analizar",
+        "digests",
+        "estilo",
+        "export"
+      ],
+      "kind": "skill",
+      "owner_domain": "communication",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": ".claude/skills/social-linkedin/SKILL.md",
       "status": "active",
       "tests": []
     },
@@ -5740,6 +5761,27 @@
       "replaced_by": null,
       "risk_level": null,
       "source": "scripts/gaia-benchmark-harness.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "claude"
+      ],
+      "id": "skill:.claude/skills/git-secret-scanner/SKILL",
+      "intents": [
+        "commits",
+        "comprobar",
+        "escanea",
+        "filtran",
+        "fuga"
+      ],
+      "kind": "skill",
+      "owner_domain": "development",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": ".claude/skills/git-secret-scanner/SKILL.md",
       "status": "active",
       "tests": []
     },
@@ -9423,7 +9465,13 @@
         "claude"
       ],
       "id": "skill:.claude/skills/context-dome/SKILL",
-      "intents": [],
+      "intents": [
+        "alguien",
+        "bajo",
+        "capturar",
+        "conocimiento",
+        "context"
+      ],
       "kind": "skill",
       "owner_domain": "memory",
       "replaced_by": null,
@@ -11862,10 +11910,10 @@
       "id": "skill:.claude/skills/attack-surface-mapper/SKILL",
       "intents": [
         "ataque",
+        "autorizadas",
+        "contratado",
         "dominio",
-        "mapear",
-        "osint",
-        "subdominios"
+        "exposición"
       ],
       "kind": "skill",
       "owner_domain": "planning",
@@ -16434,27 +16482,6 @@
     {
       "depends_on": [],
       "frontend_support": [
-        "claude"
-      ],
-      "id": "skill:.claude/skills/git-secret-scanner/SKILL",
-      "intents": [
-        "buscando",
-        "commits",
-        "escanea",
-        "gitleaks",
-        "historial"
-      ],
-      "kind": "skill",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": ".claude/skills/git-secret-scanner/SKILL.md",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
         "opencode"
       ],
       "id": "agent:.opencode/agents/go-developer",
@@ -18443,11 +18470,11 @@
       ],
       "id": "skill:.claude/skills/network-recon/SKILL",
       "intents": [
-        "detection",
-        "http",
-        "httpx",
-        "nmap",
-        "port"
+        "alcance",
+        "autorizadas",
+        "expuestos",
+        "haya",
+        "http"
       ],
       "kind": "skill",
       "owner_domain": "planning",
@@ -18834,10 +18861,10 @@
       "id": "skill:.claude/skills/org-political-landscape/SKILL",
       "intents": [
         "alianzas",
-        "análisis",
+        "atasca",
         "centros",
-        "detecta",
-        "interno"
+        "decisión",
+        "detecta"
       ],
       "kind": "skill",
       "owner_domain": "planning",
@@ -18874,11 +18901,11 @@
       ],
       "id": "skill:.claude/skills/org-stakeholder-mapper/SKILL",
       "intents": [
+        "algo",
         "alianzas",
-        "decisores",
-        "extrae",
+        "decide",
         "formales",
-        "mapeador"
+        "haya"
       ],
       "kind": "skill",
       "owner_domain": "planning",
@@ -19460,11 +19487,11 @@
       ],
       "id": "skill:.claude/skills/professional-domain/SKILL",
       "intents": [
+        "cargar",
+        "concreta",
         "controlling",
-        "domain",
-        "family",
-        "finance",
-        "index"
+        "criterio",
+        "dominio"
       ],
       "kind": "skill",
       "owner_domain": "planning",
@@ -21994,21 +22021,6 @@
       "replaced_by": null,
       "risk_level": null,
       "source": ".claude/skills/smart-calendar/SKILL.md",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "claude"
-      ],
-      "id": "skill:.claude/skills/social-linkedin/SKILL",
-      "intents": [],
-      "kind": "skill",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": ".claude/skills/social-linkedin/SKILL.md",
       "status": "active",
       "tests": []
     },
@@ -25094,11 +25106,11 @@
       ],
       "id": "skill:.claude/skills/dynamic-web-tester/SKILL",
       "intents": [
-        "dalfox",
-        "dinámico",
-        "endpoints",
-        "nuclei",
-        "sqli"
+        "alcance",
+        "aplicación",
+        "autorizadas",
+        "comprobar",
+        "dinámico"
       ],
       "kind": "skill",
       "owner_domain": "quality",
@@ -29628,7 +29640,7 @@
       "tests": []
     }
   ],
-  "content_hash": "f694f445eb47",
+  "content_hash": "dbb2fb057463",
   "deferred_kinds": [
     "rule",
     "hook"
