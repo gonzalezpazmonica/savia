@@ -148,6 +148,55 @@ FP="--for""ce"
   (( SECONDS < 5 ))
 }
 
+# Revisión #1355 (P1, seguridad): cada nivel de $(…) se volvía a recorrer y 200 niveles en 1,6 KB tardaban
+# 8-20 s, más que el timeout del hook, que en PreToolUse no bloquea: la orden pasaba sin evaluar. Con el
+# presupuesto de pasos y el tope de anidamiento, bash acaba en tiempo y la coincidencia gruesa falla cerrado.
+@test "paridad amend: sustituciones anidadas en profundidad acaban antes del timeout y fallan cerrado ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  local deep="" dq="" i
+  for (( i = 0; i < 200; i++ )); do deep+='$(echo '; dq+='$(echo "'; done
+  deep+="x"; dq+="x"
+  for (( i = 0; i < 200; i++ )); do deep+=')'; dq+='")'; done
+  SECONDS=0
+  [ "$(bash_code block-force-push "$PATH" "git commit -m \"$deep\" --amend")" = 2 ]
+  [ "$(bash_code block-force-push "$PATH" "git commit --amend -m \"$dq\"")" = 2 ]
+  [ "$(bash_code block-force-push "$PATH" "git commit -m \"$deep --amend\"")" = 2 ]
+  (( SECONDS < 5 ))
+  parity block-force-push blockForcePush 2 "git commit -m \"$deep\" --amend" "git commit --amend -m \"$dq\""
+  # Por debajo de los topes el tokenizador sigue distinguiendo argumento y mensaje.
+  parity block-force-push blockForcePush 0 'git commit -m "$(echo "$(echo "$(echo --amend)")")"'
+  parity block-force-push blockForcePush 2 'git commit -m "$(echo "$(echo "$(echo x)")")" --amend'
+}
+
+# Revisión #1355 (P2): la vía rápida buscaba «commit» y «--am» literales y se saltaba el tokenizador con
+# escapes o comillas en mitad de la palabra; tras «|» con < o > entre comillas la tubería se tomaba por
+# redirección; y las opciones de sudo/env cortaban el reconocimiento de git.
+@test "paridad amend: escapes y comillas dentro de la palabra, tubería tras \">\" y sudo/env con opciones ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 'git co\mmit --amend' 'git commit --"amend"' "git commit --'am'end" \
+    'git commit --a\mend' 'echo ">"|git commit --amend' 'sudo -u x git commit --amend' \
+    'env -i git commit --amend' 'time -p git commit --amend' 'env -u HOME git commit --amend'
+}
+
+@test "paridad amend: \">\" entre comillas ante una tubería separa órdenes; opción de sudo con valor no es git ⇒ 0" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 0 'git commit -m ">"| echo --amend' 'sudo -u commit ls --amend'
+  parity block-force-push blockForcePush 2 'git commit -m x >| f --amend' 'git commit -m x 2>&1 --amend'
+}
+
+# Revisión #1355 (P2): el tope se medía en bytes en bash (LC_ALL=C) y en unidades UTF-16 en TS; con texto
+# no ASCII entre ~8 K y 16 K bytes bash fallaba cerrado y TS tokenizaba. Ahora ambos miden bytes UTF-8.
+@test "paridad amend: el tope de longitud cuenta bytes UTF-8 en bash y TS ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  local body
+  body=$(printf 'ñ%.0s' $(seq 1 8200))
+  parity block-force-push blockForcePush 2 "git commit -m \"$body --amend\""
+}
+
 # Revisión #1355 (P2): grep evalúa por línea y \s de JS cruzaba saltos de línea; ahora ambos evalúan por línea
 # tras unir las continuaciones «\⏎», que en bash ocultaban un push forzado partido en dos líneas.
 @test "paridad multilínea: una orden por línea y continuaciones unidas igual en bash y TS" {

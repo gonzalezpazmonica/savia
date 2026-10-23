@@ -151,6 +151,18 @@ ps_setup() {
   [ "$output" = 'gate-result: {"result":"clean","gaps":[]}' ]
 }
 
+# Revisión #1355 (P2): la rama «find falla» (subdirectorio no recorrible) no tenía test, y el de modo 000 se
+# salta como root. Un find que falla se simula con un find de mentira en PATH, así que corre también como root.
+@test "prompt-scan: find que no puede recorrer un subdirectorio ⇒ exit 2 y unknown/unreadable, nunca clean" {
+  ps_setup
+  mkdir -p "$W/fakebin"
+  printf '#!/usr/bin/env bash\n/usr/bin/find "$@"\necho "find: permiso denegado" >&2\nexit 1\n' > "$W/fakebin/find"
+  chmod +x "$W/fakebin/find"
+  run env PATH="$W/fakebin:$PATH" bash "$W/scripts/prompt-real.sh" "$W/p"
+  [ "$status" -eq 2 ]
+  [[ "$(printf '%s\n' "$output" | tail -1)" == 'gate-result: {"result":"unknown","gaps":[{"check":"'*'/p","reason":"unreadable"}]}' ]]
+}
+
 @test "prompt-scan: fichero ilegible ⇒ exit 2 y unknown/unreadable, nunca clean" {
   [[ "$(id -u)" -ne 0 ]] || skip "root lee ficheros con modo 000"
   ps_setup
