@@ -102,19 +102,35 @@ def c9_assertions(c):
 # V2 = `run` sin ninguna aserción detrás (ni $status, ni $output, ni nada que pueda fallar);
 # V3 = `run` cuyo estado se ignora pero con otras aserciones detrás: débil, no vacío.
 ASSERT_LINE = re.compile(r'(?:^|;\s*)(?:\[\[?\s|test\s|(?:assert|refute)_\w+|grep\s+(?:-\S+\s+)*(?:-\w*q\w*|--quiet)\b)')
-NEUTRALIZED = re.compile(r'\|\|\s*(?:true|:|/bin/true|exit\s+0|return\s+0|echo\b[^|&;()\[\]]*)\s*;?\s*(?:#.*)?$')
+NEUTRALIZED = re.compile(r'\|\|\s*(?:true|:|(?:/\S+/)?true|exit\s+0|return\s+0|echo\b[^|&;()\[\]]*)\s*;?\s*(?:#.*)?$')
 RUN_LINE = re.compile(r'^run(\s|$)')
 RUN_SELF_CHECKED = re.compile(r'^run\s+(-\d+|!)\s')
 # Líneas que no pueden hacer fallar el test por sí mismas.
 NON_ASSERT = re.compile(r'^(run\s|true|:|local\s|export\s|echo\s|printf\s|[A-Za-z_]\w*=(?!.*\$\()|cd\s|\}|\)|\'|")')
-RESULT_CHECK = re.compile(r'\$status|\$\{status|\$output|\$\{output|\$\{lines|\$lines|\blines\[|assert_|refute_')
+RESULT_CHECK = re.compile(r'\$status\b|\$\{status|\$output\b|\$\{output|\$\{lines|\$lines\b|\blines\[|assert_|refute_')
+# Mencionar el resultado no basta (`echo "$output"` no falla): tiene que estar dentro de algo que pueda fallar.
+CAN_FAIL = re.compile(r'\[\[?\s|\bgrep\b|\btest\s|assert_|refute_|\bdiff\b|\bcmp\b|\bpython3?\b|\bjq\b')
+# `if <aserción>; then :; fi`: la aserción no puede hacer fallar el test.
+IF_NOOP = re.compile(r'^if\s.*;\s*then\s+(?::|true)\s*;\s*(?:else\s+(?::|true)\s*;\s*)?fi\b')
+
+# `previo="$status"`: captura el resultado para compararlo después (límite conocido: no se verifica la comparación).
+CAPTURE = re.compile(r'^(?:local\s+)?\w+="?\$\{?(?:status|output)\}?"?$')
+
+def result_checked(x):
+    if CAPTURE.match(x):
+        return True
+    return bool(RESULT_CHECK.search(x) and CAN_FAIL.search(x) and not NEUTRALIZED.search(x))
+
+def only_assertions(s):
+    """`[ a ] && [ b ] || true` anula aserciones; `[ a ] && accion || true` es preparación condicional."""
+    return all(ASSERT_LINE.search(seg.strip()) for seg in s.split("&&"))
 
 def test_blocks(c):
     """(nombre, [(nº de línea, línea sin espacios)]) por cada @test."""
     lines = c.splitlines()
     i = 0
     while i < len(lines):
-        m = re.match(r'^@test\s+(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\')\s*\{\s*$', lines[i])
+        m = re.match(r'^@test\s+(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\')\s*\{\s*(?:#.*)?$', lines[i])
         if not m:
             i += 1
             continue
@@ -131,7 +147,7 @@ def vacuity_all(c):
     found = []
     for name, body in test_blocks(c):
         for idx, (n, s) in enumerate(body):
-            if ASSERT_LINE.search(s) and NEUTRALIZED.search(s) and "&&" not in s:
+            if (ASSERT_LINE.search(s) and NEUTRALIZED.search(s) and only_assertions(s)) or IF_NOOP.match(s):
                 found.append({"test": name, "line": n, "kind": "V1", "text": s[:120]})
             elif RUN_LINE.match(s) and not RUN_SELF_CHECKED.match(s):
                 same_line = re.split(r';\s*|\s&&\s', s, maxsplit=1)[1:]
@@ -140,8 +156,8 @@ def vacuity_all(c):
                 # el run siguiente (con su argumento multilínea) cuenta si consume $output del anterior
                 nxt = next((k for k, (_, x) in enumerate(rest[stop + 1:], stop + 1) if RUN_LINE.match(x)), len(rest))
                 consumed = any("$output" in x or "${output" in x for _, x in rest[stop:nxt])
-                checked = [x for _, x in rest[:stop + 1]] + same_line + (["$output"] if consumed else [])
-                if not any(RESULT_CHECK.search(x) for x in checked):
+                checked = [x for _, x in rest[:stop + 1]] + same_line
+                if not consumed and not any(result_checked(x) for x in checked):
                     can_fail = any(not NON_ASSERT.match(x) for x in checked)
                     kind = "V3" if can_fail else "V2"
                     found.append({"test": name, "line": n, "kind": kind, "text": s[:120]})

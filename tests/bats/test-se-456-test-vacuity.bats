@@ -9,7 +9,7 @@ ENGINE="scripts/test-auditor-engine.py"
 GATE="scripts/ci-test-quality-gate.sh"
 
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   cd "$REPO_ROOT"
   FX="$BATS_TEST_TMPDIR/fx"
   mkdir -p "$FX/tests"
@@ -147,6 +147,46 @@ assert v['kind'] == 'V1', v
   [ "$(vac_count ok7)" -eq 0 ]
 }
 
+@test "V1: aserciones encadenadas con && y anuladas con || true se detectan; preparación condicional no" {
+  fixture v1e '  [ "$status" -eq 0 ] && [ -f x ] || true'
+  [ "$(vac_count v1e)" -eq 1 ]
+  fixture v1f '  [ -f x ] && echo hola || true'
+  [ "$(vac_count v1f)" -eq 0 ]
+}
+
+@test "V1: || /usr/bin/true e if aserción; then :; fi se detectan" {
+  fixture v1g "$(printf 'grep -q x f || /usr/bin/true\nif grep -q x f; then :; fi')"
+  [ "$(vac_count v1g)" -eq 2 ]
+}
+
+@test "V2: nombrar \$output en un echo no comprueba el resultado; capturarlo sí" {
+  fixture v2e "$(printf 'run echo a\necho "$output"')"
+  [ "$(vac_kind v2e)" = "V2" ]
+  fixture v2g "$(printf 'run echo a\nprevio="$status"\nrun echo a\n[ "$status" -eq "$previo" ]')"
+  [ "$(vac_count v2g)" -eq 0 ]
+}
+
+@test "@test con comentario tras la llave se escanea" {
+  printf '#!/usr/bin/env bats\n@test "con nota" {  \043 nota\n  grep -q x f || true\n}\n' > "$FX/tests/n.bats"
+  [ "$(vac_count n)" -eq 1 ]
+}
+
+@test "test-auditor.sh --embed no certifica ni sale con 0 un fichero con vacuidad aunque sume 80" {
+  cp tests/fixtures/se376/certified-skill-test.bats.fixture "$FX/tests/limpio.bats"
+  cp "$FX/tests/limpio.bats" "$FX/tests/bueno.bats"
+  printf '@test "vacio" {\n  run false\n}\n' >> "$FX/tests/bueno.bats"
+  run bash scripts/test-auditor.sh "$FX/tests/bueno.bats" --embed
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"hash NOT embedded"* ]]
+  run grep -c '^# audit:' "$FX/tests/bueno.bats"
+  [ "$output" = "0" ]
+  run bash scripts/test-auditor.sh "$FX/tests/limpio.bats" --embed
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Embedded certification hash"* ]]
+  run grep -c '^# audit:' "$FX/tests/limpio.bats"
+  [ "$output" = "1" ]
+}
+
 @test "--vacuity-scan sin directorio tests/ sale con 2 y el gate falla cerrado" {
   mkdir -p "$BATS_TEST_TMPDIR/vacio"
   run python3 "$ENGINE" --vacuity-scan "$BATS_TEST_TMPDIR/vacio"
@@ -197,6 +237,7 @@ assert v['kind'] == 'V1', v
   fixture a '  run false'
   fixture b '  run false'
   echo 1 > "$BATS_TEST_TMPDIR/base.count"
+  printf 'tests/a.bats\tcaso\tV2\ntests/b.bats\tcaso\tV2\n' > "$BATS_TEST_TMPDIR/base.findings"
   run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
   [ "$status" -ne 0 ]
   [[ "$output" == *"2 > línea base 1"* ]]
@@ -205,13 +246,23 @@ assert v['kind'] == 'V1', v
 @test "ratchet: igual a la línea base pasa" {
   fixture a '  run false'
   echo 1 > "$BATS_TEST_TMPDIR/base.count"
+  printf 'tests/a.bats\tcaso\tV2\n' > "$BATS_TEST_TMPDIR/base.findings"
   run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
   [ "$status" -eq 0 ]
+}
+
+@test "ratchet: con recuento pero sin fichero de identidades falla cerrado" {
+  fixture a '  run false'
+  echo 1 > "$BATS_TEST_TMPDIR/base.count"
+  run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"sin fichero de identidades"* ]]
 }
 
 @test "ratchet: por debajo de la línea base pasa y avisa de bajarla" {
   fixture a '  [ 1 -eq 1 ]'
   echo 3 > "$BATS_TEST_TMPDIR/base.count"
+  printf 'tests/x.bats\tcaso\tV2\ntests/y.bats\tcaso\tV2\ntests/z.bats\tcaso\tV2\n' > "$BATS_TEST_TMPDIR/base.findings"
   run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
   [ "$status" -eq 0 ]
   [[ "$output" == *"bajar la línea base"* ]]
@@ -227,8 +278,10 @@ assert v['kind'] == 'V1', v
   run python3 "$ENGINE" --vacuity-scan "$REPO_ROOT"
   [ "$status" -eq 0 ]
   n=$(echo "$output" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])")
-  [ "$n" -eq "$(cat .ci-baseline/test-vacuity.count)" ]
-  [ "$n" -eq "$(wc -l < .ci-baseline/test-vacuity.findings)" ]
+  # Menos que la línea base es una mejora y el ratchet la deja pasar (AC3): solo se exige que no la supere
+  # y que recuento e identidades de la línea base sean coherentes entre sí.
+  [ "$n" -le "$(cat .ci-baseline/test-vacuity.count)" ]
+  [ "$(cat .ci-baseline/test-vacuity.count)" -eq "$(wc -l < .ci-baseline/test-vacuity.findings)" ]
 }
 
 @test "la regla test-evidence-criteria existe y test-quality-gate la enlaza" {

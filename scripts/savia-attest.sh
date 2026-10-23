@@ -5,7 +5,10 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
+[ "${1:-}" = "--week" ] && shift
 WEEK="${1:-$(date +%Y-W%V)}"
+# La semana forma parte de la ruta de salida: solo formato ISO, nada de `../`.
+[[ "$WEEK" =~ ^[0-9]{4}-W[0-9]{2}$ ]] || { echo "ERROR: semana inválida '$WEEK' (esperado YYYY-Www)" >&2; exit 2; }
 OUT="$ROOT/output/atestacion/${WEEK}.md"
 mkdir -p "$(dirname "$OUT")"
 

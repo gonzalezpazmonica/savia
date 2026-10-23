@@ -50,7 +50,11 @@ vacuity_ratchet() {
     return 1
   fi
   # Identidad: hallazgos (fichero, test, tipo) que no estaban en la línea base. Arreglar uno y añadir otro
-  # deja el recuento igual pero no pasa. Sin fichero de identidades solo vale el recuento.
+  # deja el recuento igual pero no pasa. Sin fichero de identidades no hay comparación posible: fallo cerrado.
+  if [[ ! -f "$ids" ]]; then
+    echo "  Vacuidad: sin fichero de identidades en $ids (fallo cerrado; regenerar con --update-vacuity-baseline)"
+    return 1
+  fi
   new=$(printf '%s' "$scan" | python3 -c "
 import collections, json, sys
 ids = sys.argv[1]
@@ -58,7 +62,7 @@ cur = collections.Counter((f['file'], f['test'], f['kind']) for f in json.load(s
 try:
     base = collections.Counter(tuple(l.rstrip('\n').split('\t')) for l in open(ids) if l.strip())
 except OSError:
-    sys.exit(0)
+    sys.exit(1)
 for (file, test, kind), n in sorted((cur - base).items()):
     print(f'    {kind} {file}  @test \"{test}\"' + (f' (+{n})' if n > 1 else ''))
 " "$ids") || { echo "  Vacuidad: no se pudo comparar identidades (fallo cerrado)"; return 1; }
@@ -108,7 +112,7 @@ echo "  Mode: $ADAPTIVE_MODE  Fixed-min: $FIXED_MIN  Floor: $FLOOR  Ceil: $CEIL"
 echo ""
 
 # Step 1: Audit test quality
-echo "Step 1/2: Auditing test quality..."
+echo "Step 1: Auditing test quality..."
 AUDIT=$(bash "$DIR/test-auditor.sh" --all --json 2>&1) || true
 TOTAL=$(echo "$AUDIT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total_files',0))" 2>/dev/null || echo "0")
 
@@ -186,7 +190,7 @@ for r in data.get('results', []):
 fi
 
 # Step 2: Coverage
-echo "Step 2/2: Checking coverage..."
+echo "Step 2: Checking coverage..."
 COV=$(bash "$DIR/test-coverage-checker.sh" --json 2>&1)
 COV_PCT=$(echo "$COV" | python3 -c "import json,sys; print(json.load(sys.stdin).get('coverage_percent', 0))" 2>/dev/null || echo "0")
 echo "  Coverage: $COV_PCT%"

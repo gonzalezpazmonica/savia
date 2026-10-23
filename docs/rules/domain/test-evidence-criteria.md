@@ -71,16 +71,20 @@ deja el test en rojo fuera del ratchet. Nunca se vuelve a anular. Ver `feedback_
 - No mide si una aserción discrimina (que falle ante una mutación): eso es trabajo del revisor y de las pruebas de
   mutación.
 - No cubre `|| ` seguido de otras formas de anular (`|| ls`, `|| continue`), un `skip` incondicional, ni `@test` con
-  `{` en otra línea. Los heredocs que contienen `run …` dentro de un `@test` pueden dar falsos positivos.
+  `{` en otra línea. Una línea `a && b || true` solo se marca si todos sus tramos son aserciones; si alguno es una
+  acción se trata como preparación condicional. Guardar el resultado (`previo="$status"`) cuenta como comprobarlo
+  aunque la comparación posterior no se verifique, y un `$output` dentro de un `[`, `grep`, `assert_*`, `python3` o
+  `jq` cuenta como aserción aunque esa aserción sea débil. Los heredocs que contienen `run …` dentro de un `@test` pueden dar falsos positivos.
 - Su cifra es una cota inferior de los tests vacíos, no un censo.
 
 ## Ratchet
 
 `.ci-baseline/test-vacuity.count` congela el número actual y `.ci-baseline/test-vacuity.findings` sus identidades
 (fichero, `@test`, tipo). El gate falla con un hallazgo que no esté en la línea base aunque el recuento no suba: arreglar
-uno y añadir otro no pasa. Menos hallazgos pasan y piden regenerar la línea base en el mismo PR con
-`bash scripts/ci-test-quality-gate.sh --update-vacuity-baseline` (el test de coincidencia lo exige). Subir la línea base
-exige justificación en el PR: nada la protege más que la revisión. Sin línea base, o sin `tests/` que escanear, el gate
-falla cerrado.
+uno y añadir otro no pasa. Menos hallazgos pasan y pasan con aviso y piden regenerar la línea base en el mismo PR con
+`bash scripts/ci-test-quality-gate.sh --update-vacuity-baseline` (el test de coincidencia solo exige que el repo no la
+supere y que recuento e identidades coincidan entre sí). Subir la línea base
+exige justificación en el PR: nada la protege más que la revisión. Sin línea base, sin fichero de identidades o sin `tests/` que
+escanear, el gate falla cerrado. `.ci-baseline/` tiene entrada propia en `.github/CODEOWNERS`.
 
 La identidad es (fichero, nombre del `@test`, tipo): dos hallazgos del mismo tipo en un mismo test cuentan por recuento.

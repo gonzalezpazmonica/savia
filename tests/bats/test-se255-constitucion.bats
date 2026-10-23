@@ -300,3 +300,15 @@ body_hash() { sed '/^## Firma/,$d' "$1" | sha256sum | awk '{print $1}'; }
 @test "AC-5.3b: test del guard existe" {
   [ -f "$REPO_ROOT/.opencode/plugins/__tests__/require-criterion-cite.test.ts" ]
 }
+
+@test "AC-6.5: semana con formato inválido se rechaza y no escribe fuera de output/atestacion" {
+  attest_sandbox
+  run bash "$AT/scripts/savia-attest.sh" "../../fuera"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"semana inválida"* ]]
+  [ ! -e "$AT/fuera.md" ]
+  [ -z "$(ls "$AT/output/atestacion/")" ]
+  run bash "$AT/scripts/savia-attest.sh" --week 2026-W43
+  [ "$status" -eq 0 ]
+  [ -f "$AT/output/atestacion/2026-W43.md" ]
+}
