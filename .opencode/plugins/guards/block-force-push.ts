@@ -25,8 +25,6 @@ const rx = (body: string) => new RegExp(GIT_AT + body, "i");
 // git accepts unique prefixes of long options, so --am, --ame and --amen are --amend too.
 const AMEND = /^--am(?:e(?:nd?)?)?$/i;
 const GIT_OPTS_WITH_VALUE = new Set(["-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source", "--super-prefix"]);
-// Fail closed: if the command cannot be tokenized (an open quote or substitution), a coarse match blocks.
-const AMEND_COARSE = /(?:^|[^A-Za-z0-9_-])git[^A-Za-z0-9_-](?:[\s\S]*[^A-Za-z0-9_-])?commit[\s\S]*[^A-Za-z0-9_-]--am(?:e(?:nd?)?)?(?:[^A-Za-z0-9_=-]|$)/i;
 
 // Review #1355 (3rd): the tokenizer does not expand, so an "opaque" word (unquoted or quoted substitution,
 // ${…}, $'…' with escapes, braces with , or ..) carries the \x01 mark and matches by substring: if it holds
@@ -35,6 +33,10 @@ const AMEND_COARSE = /(?:^|[^A-Za-z0-9_-])git[^A-Za-z0-9_-](?:[\s\S]*[^A-Za-z0-9
 // tokenized again as a command of its own, with the same budget and the same nesting cap.
 const OPAQUE = "\x01";
 const SHELLS = /^(?:bash|sh|zsh|dash|ksh|ash|mksh|fish|eval|ssh|su|watch)$/;
+// $var, $1, $@…: the value is not visible, so the word is opaque (--amend$x, 4th review).
+const PARAM_START = /[A-Za-z0-9_@*#?$!-]/;
+// An opaque word is compared without { } $: -{-amend,} and co${x}mmit match too.
+const bare = (x: string) => x.replace(/[{}$]/g, "");
 const COMMIT_OPTS_WITH_VALUE = /^(?:-m|-f|-c|-t|--message|--file|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--template|--cleanup|--trailer)$/;
 
 function gitCommitAmend(w: string[], k: number): boolean {
@@ -44,12 +46,12 @@ function gitCommitAmend(w: string[], k: number): boolean {
   }
   if (k >= w.length) return false;
   const sub = w[k].toLowerCase();
-  if (sub !== "commit" && !(sub.startsWith(OPAQUE) && sub.includes("commit"))) return false;
+  if (sub !== "commit" && !(sub.startsWith(OPAQUE) && bare(sub).includes("commit"))) return false;
   let prev = "";
   for (k++; k < w.length; k++) {
     const s = w[k].toLowerCase();
     if (AMEND.test(s)) return true;
-    if (s.startsWith(OPAQUE) && s.includes("--am") && !COMMIT_OPTS_WITH_VALUE.test(prev)) return true;
+    if (s.startsWith(OPAQUE) && bare(s).includes("--am") && !COMMIT_OPTS_WITH_VALUE.test(prev)) return true;
     prev = s;
   }
   return false;
@@ -235,6 +237,7 @@ function amendScanIn(s: string): number {
           const r = nested(k, s.slice(k + 1, j - 1), j, true); if (r !== 0) return r;
           k = j; continue;
         }
+        if (s[k] === "$" && PARAM_START.test(s[k + 1] ?? "")) opaque = true;
         word += s[k]; k++;
       }
       if (k >= s.length) return 2;
@@ -267,6 +270,7 @@ function amendScanIn(s: string): number {
       word += c; inWord = true; redir = false; i++; continue;
     }
     if (";&|()\n".includes(c)) { const r = endCmd(); if (r !== 0) return r; i++; continue; }
+    if (c === "$" && PARAM_START.test(s[i + 1] ?? "")) opaque = true;
     // Unquoted brace expansion ({a,b}, {1..3}): the shell expands it, the word is opaque.
     if (c === "{") ubrace = true;
     if (ubrace && (c === "," || (c === "." && s[i + 1] === "."))) opaque = true;
@@ -282,11 +286,17 @@ function amendScanIn(s: string): number {
 const utf8 = new TextEncoder();
 
 function amendBlocked(command: string): boolean {
-  // Without \, ' and " because git co\mmit --"am"end is --amend too (review #1355).
-  if (!/commit[\s\S]*--am/i.test(command.replace(/[\\'"]/g, ""))) return false;
+  // Without \ ' " $ { } because git co\mmit --"am"end, -$'-amend' and -{-amend,} are --amend too.
+  // indexOf instead of a regex: linear on commands of any length.
+  const fast = command.replace(/[\\'"${}]/g, "").toLowerCase();
+  const at = fast.indexOf("commit");
+  if (at < 0 || fast.indexOf("--am", at + 6) < 0) return false;
   st.steps = 0; st.nest = 0;
+  // Fail closed: if the fast path matched and the command cannot be tokenized (caps, open quote or
+  // substitution), block without a regex. The coarse match on the raw command was dodged by --"amend" and
+  // co\mmit, and its backtracking had no bound (4th review #1355).
   const r = utf8.encode(command).length > AMEND_MAX_CHARS ? 2 : amendScan(command);
-  return r === 1 || (r === 2 && AMEND_COARSE.test(command));
+  return r !== 0;
 }
 
 const FORCE_WITH_LEASE = rx(String.raw`push\s+.*--force-with-lease`);
@@ -323,8 +333,9 @@ export async function blockForcePush(input: ToolInput, output: ToolOutput): Prom
   if (!command) return;
 
   // Same as the bash hook: join «\⏎» continuations, then match line by line like grep does
-  // (\s and [^;&|] would otherwise cross a newline that separates two commands).
-  const joined = command.replace(/\\\n/g, " ");
+  // (\s and [^;&|] would otherwise cross a newline that separates two commands). Only an odd backslash
+  // continues: in «\\⏎» the backslash is literal and the newline separates commands (4th review #1355).
+  const joined = command.replace(/\\\\|\\\n/g, (m) => (m === "\\\n" ? " " : m));
   const lines = joined.split("\n");
   const anyLine = (r: RegExp) => lines.some((l) => r.test(l));
   const lease = anyLine(FORCE_WITH_LEASE);

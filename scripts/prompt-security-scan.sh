@@ -62,7 +62,7 @@ scan_file() {
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "CRIT" "$file" "$num" "PS-02" "Prompt exfiltration: system prompt leak"
   done < <(grep -anEi '(print|show|reveal|output|display|repeat|echo).*(system prompt|all instructions|CLAUDE\.md)' "$file" 2>/dev/null | \
-    grep -vi 'check.*rules\|verify.*rules\|business rules\|output.*for' || true)
+    grep -avi 'check.*rules\|verify.*rules\|business rules\|output.*for' || true)
 
   # PS-03: Role hijack
   while IFS=: read -r num _; do
@@ -73,13 +73,13 @@ scan_file() {
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-04" "Data exfiltration: suspicious external URL"
   done < <(grep -anEi '(curl|wget|fetch)\s+https?://[^ ]*(api|webhook|endpoint)' "$file" 2>/dev/null | \
-    grep -vi 'example\.com\|localhost\|127\.0\.0\.1\|ollama\|anthropic\|github\|azure\|google\|microsoft' || true)
+    grep -avi 'example\.com\|localhost\|127\.0\.0\.1\|ollama\|anthropic\|github\|azure\|google\|microsoft' || true)
 
   # PS-05: Credentials in prompt
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "CRIT" "$file" "$num" "PS-05" "Hardcoded credential in prompt"
   done < <(grep -anEi "(password|secret|token|api.key)\s*[=:]\s*[\"'][^\"']{8,}" "$file" 2>/dev/null | \
-    grep -vi 'PLACEHOLDER\|example\|TU_\|YOUR_\|<.*>\|vault\|keyvault\|secretsmanager' || true)
+    grep -avi 'PLACEHOLDER\|example\|TU_\|YOUR_\|<.*>\|vault\|keyvault\|secretsmanager' || true)
 
   # PS-06: Eval/exec patterns
   while IFS=: read -r num _; do
@@ -89,21 +89,21 @@ scan_file() {
   # PS-07: Base64 blobs (warning only)
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_warn "$file" "$num" "Base64-like content (verify manually)"
-  done < <(grep -anE '[A-Za-z0-9+/]{40,}={0,2}' "$file" 2>/dev/null | grep -v 'sha256\|hash\|commit' || true)
+  done < <(grep -anE '[A-Za-z0-9+/]{40,}={0,2}' "$file" 2>/dev/null | grep -av 'sha256\|hash\|commit' || true)
 
   # PS-08: PII in prompts (warning only)
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_warn "$file" "$num" "Email in prompt (verify not real PII)"
   done < <(grep -anE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$file" 2>/dev/null | \
-    grep -vi '@example\|@test\|@localhost\|noreply\|@anthropic' || true)
+    grep -avi '@example\|@test\|@localhost\|noreply\|@anthropic' || true)
 
   # PS-09: Missing model (agents)
-  if [[ "$file" == *agents* ]] && ! grep -qi 'model:' "$file" 2>/dev/null; then
+  if [[ "$file" == *agents* ]] && ! grep -aqi 'model:' "$file" 2>/dev/null; then
     log_warn "$file" "1" "Agent without model specification"
   fi
 
   # PS-10: Wildcard tools (agents)
-  if [[ "$file" == *agents* ]] && grep -qi 'tools:.*\*' "$file" 2>/dev/null; then
+  if [[ "$file" == *agents* ]] && grep -aqi 'tools:.*\*' "$file" 2>/dev/null; then
     log_warn "$file" "1" "Agent with wildcard tool access"
   fi
 
@@ -118,7 +118,7 @@ scan_file() {
   # PS-12: Long base64 strings (>80 chars, not in code blocks with hash/commit context)
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-12" "Long base64-like string (possible encoded directive)"
-  done < <(grep -anE '[A-Za-z0-9+/]{80,}={0,2}' "$file" 2>/dev/null | grep -vi 'sha\|hash\|commit\|signature\|certificate\|-----BEGIN' || true)
+  done < <(grep -anE '[A-Za-z0-9+/]{80,}={0,2}' "$file" 2>/dev/null | grep -avi 'sha\|hash\|commit\|signature\|certificate\|-----BEGIN' || true)
 
   # PS-13: URL-pipe-shell execution
   while IFS=: read -r num _; do

@@ -208,10 +208,14 @@ AMEND_HIDDEN=(
   "ssh -p 22 host 'cd x; git commit --amend'" "ssh host git commit --amend" "timeout 5 git commit --amend"
   "xargs git commit --amend" "find . -exec sh -lc 'git commit --amend' \\;" "git --namespace x commit --amend"
   "git --config-env a=B commit --amend" "git --attr-source t commit --amend"
+  # Revisión #1355 (4.ª, P1 correctness): expansión pegada a la palabra y comillas $'…'/$"…" que parten --amend.
+  "git commit --amend\"\$X\"" "git commit --amend\$x" "git commit --amend\${x}" "git commit -\$'-amend'"
+  "git commit --\$\"amend\"" "git commit -{-amend,}"
 )
 AMEND_VISIBLE_OK=(
   "bash -c 'git commit -m \"explica --amend\"'" "git commit -m \${MSG:---amend}" "eval 'git commit -m x'"
   "git commit -m \"\${M} sin --amend\"" "sh -c 'git status' && echo --amend" "git commit -m x && echo \${A:---amend}"
+  "git commit -m \"\$MSG\"" "git commit -F \"\$F\" \$ARGS" "git commit -m \"\$X --amend\""
 )
 
 @test "paridad amend: \$'…', \${…}, llaves, git tras prefijo y bash -c/eval/ssh siguen bloqueando ⇒ 2" {
@@ -266,6 +270,45 @@ AMEND_VISIBLE_OK=(
   command -v jq >/dev/null
   parity block-force-push blockForcePush 0 $'git push origin feat\necho '"$FP"
   parity block-force-push blockForcePush 2 $'git push \\\n'"$FP origin feat"
+}
+
+# Revisión #1355 (4.ª, P1 seguridad): «\\⏎» es una barra literal y un salto que separa órdenes; unir toda
+# barra seguida de salto pegaba la orden siguiente a la anterior y el git dejaba de verse. Con tres barras
+# la última sí continúa la línea (echo \git push … es un echo).
+BS_EVEN=(
+  $'echo \\\\\ngit push origin main' $'echo \\\\\ngit push '"$FP"' o feat' $'echo \\\\\ngit reset --hard'
+  $'echo \\\\\ngit commit --amend'
+)
+@test "paridad continuaciones: «\\\\⏎» separa órdenes y bloquea ⇒ 2; «\\\\\\⏎» une ⇒ 0" {
+  local c fails=""
+  for c in "${BS_EVEN[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
+  [ "$(bash_code block-force-push "$PATH" $'echo \\\\\\\ngit push origin main')" = 0 ]
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "${BS_EVEN[@]}"
+  parity block-force-push blockForcePush 0 $'echo \\\\\\\ngit push origin main'
+}
+
+# Revisión #1355 (4.ª, P1 seguridad): cuando no se puede tokenizar (tope de bytes, de anidamiento o comilla
+# abierta), la coincidencia gruesa se evaluaba sobre la orden cruda y --"amend" o co\mmit la esquivaban.
+# Ahora, si la vía rápida (sin \ ' " $) vio commit … --am, se bloquea sin regex.
+@test "paridad amend: sin tokenizar, --\"amend\" y co\\mmit fallan cerrado ⇒ 2" {
+  local big deep="" i c fails="" cases=()
+  big=$(printf 'x%.0s' $(seq 1 17000))
+  for (( i = 0; i < 33; i++ )); do deep+='$(echo '; done
+  deep+="x"; for (( i = 0; i < 33; i++ )); do deep+=')'; done
+  cases=("git commit --\"amend\" # $big" "git co\\mmit --'am'end # $big" "git commit --\"amend\" -m \"$deep\""
+    "git commit --\"amend\" -m 'abierta")
+  for c in "${cases[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 ]] || fails+="[${c:0:40}] no bloquea"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "${cases[@]}"
 }
 
 @test "paridad block-infra-destructive y validate-bash-global: destructivos ⇒ 2, inocuo ⇒ 0" {

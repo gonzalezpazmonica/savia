@@ -28,7 +28,10 @@ if [ -z "$COMMAND" ]; then
 fi
 # Revisión #1355: las continuaciones «\⏎» se unen antes de evaluar (grep evalúa por línea y un
 # git push partido en dos líneas pasaba); el puerto TS hace lo mismo y también evalúa por línea.
-COMMAND="${COMMAND//$'\\\n'/ }"
+# Solo continúa la barra impar: en «\\⏎» la barra es literal y el salto separa órdenes (4.ª revisión), así
+# que los pares «\\» se apartan antes de unir y se reponen después.
+_BS2='\\'
+COMMAND="${COMMAND//"$_BS2"/$'\x02'}"; COMMAND="${COMMAND//$'\\\n'/ }"; COMMAND="${COMMAND//$'\x02'/"$_BS2"}"
 
 # Inicio de una orden git real: al principio, tras un separador o al abrir un subshell, con lo
 # que puede ir delante (VAR=valor, env, command, sudo, nohup, time, exec) y opciones globales de
@@ -92,12 +95,13 @@ _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 s
     k=$((k+1))
   done
   (( k < n )) || return 1
+  # Una palabra opaca se compara sin { } $: -{-amend,} y co${x}mmit también casan.
   s="${w[k],,}"
-  [[ "$s" == commit || ( "$s" == $'\x01'* && "$s" == *commit* ) ]] || return 1
+  [[ "$s" == commit || ( "$s" == $'\x01'* && "${s//[\{\}\$]/}" == *commit* ) ]] || return 1
   for (( k = k + 1; k < n; k++ )); do
     s="${w[k],,}"
     [[ "$s" =~ ^--am(e(nd?)?)?$ ]] && return 0
-    [[ "$s" == $'\x01'*--am* && ! "$prev" =~ $_AMEND_COMMIT_VAL ]] && return 0
+    [[ "$s" == $'\x01'* && "${s//[\{\}\$]/}" == *--am* && ! "$prev" =~ $_AMEND_COMMIT_VAL ]] && return 0
     prev="$s"
   done
   return 1
@@ -268,6 +272,7 @@ _amend_scan_in() {
           j=$AMEND_J; _amend_scan $((k+1)) $((j-1)); (( AMEND_R != 0 )) && return
           _amend_word_add "$k" "$j"; opaque=1; k=$j; continue
         fi
+        [[ "${AMEND_CH[k]}" == '$' && "${AMEND_CH[k+1]:-}" == [A-Za-z0-9_@*#?\$!-] ]] && opaque=1
         word+="${AMEND_CH[k]}"; k=$((k+1))
       done
       (( k >= n )) && { AMEND_R=2; return; }
@@ -306,6 +311,8 @@ _amend_scan_in() {
       _amend_flush; _amend_end_cmd; (( AMEND_R != 0 )) && return
       i=$((i+1)); continue
     fi
+    # $var, $1, $@…: el valor no se ve, la palabra es opaca (--amend$x, 4.ª revisión).
+    [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == [A-Za-z0-9_@*#?\$!-] ]] && opaque=1
     # Expansión de llaves sin comillas ({a,b}, {1..3}) y ${…}: el shell las expande, la palabra es opaca.
     [[ "$c" == '{' ]] && ubrace=1
     (( ubrace )) && [[ "$c" == ',' || ( "$c" == '.' && "${AMEND_CH[i+1]:-}" == '.' ) ]] && opaque=1
@@ -332,16 +339,17 @@ amend_scan() { # orden → AMEND_R (ver _amend_scan). Más de AMEND_MAX_CHARS: 2
   while IFS= read -r -n1 -d '' c; do AMEND_CH+=("$c"); done < <(printf '%s' "$1")
   _amend_scan 0 "${#AMEND_CH[@]}"
 }
-# Falla cerrado: si la orden no se puede tokenizar (comilla o sustitución abierta), una coincidencia gruesa bloquea.
-AMEND_COARSE='(^|[^[:alnum:]_-])git[^[:alnum:]_-](.*[^[:alnum:]_-])?commit.*[^[:alnum:]_-]--am(e(nd?)?)?([^[:alnum:]_=-]|$)'
 AMEND_J=-1; AMEND_R=0; AMEND_MAX_CHARS=16384; AMEND_CH=()
 AMEND_STEPS=0; AMEND_MAX_STEPS=$((2 * AMEND_MAX_CHARS)); AMEND_NEST=0; AMEND_MAX_NEST=32
 shopt -s nocasematch
 # Vía rápida: sin «commit» y «--am» en la orden ninguna palabra puede casar; el tokenizador es O(n²) en bash.
-# Se mira sin \, ' ni " porque git co\mmit --"am"end también es --amend (revisión #1355).
-AMEND_FAST="${COMMAND//[\\\'\"]/}"
+# Se mira sin \ ' " $ { } porque git co\mmit --"am"end, -$'-amend' y -{-amend,} también son --amend.
+# Falla cerrado: si la vía rápida casó y la orden no se puede tokenizar (topes, comilla o sustitución
+# abierta), se bloquea sin regex. La coincidencia gruesa sobre la orden cruda la esquivaban --"amend" y
+# co\mmit, y su backtracking no tenía tope (4.ª revisión #1355).
+AMEND_FAST="${COMMAND//[\\\'\"\$\{\}]/}"
 [[ "$AMEND_FAST" == *commit*--am* ]] && amend_scan "$COMMAND"
-if (( AMEND_R == 1 )) || { (( AMEND_R == 2 )) && [[ "$COMMAND" =~ $AMEND_COARSE ]]; }; then
+if (( AMEND_R == 1 || AMEND_R == 2 )); then
   echo "BLOQUEADO: git commit --amend puede destruir commits anteriores. Crea un commit nuevo." >&2
   exit 2
 fi
