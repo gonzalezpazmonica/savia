@@ -33,7 +33,8 @@ PASS=true
 vacuity_ratchet() {
   local root="${SAVIA_VACUITY_ROOT:-$DIR/..}"
   local baseline="${SAVIA_VACUITY_BASELINE:-$DIR/../.ci-baseline/test-vacuity.count}"
-  local scan count base
+  local ids="${SAVIA_VACUITY_IDS:-${baseline%.count}.findings}"
+  local scan count base new
   if [[ ! -f "$baseline" ]]; then
     echo "  Vacuidad: sin línea base en $baseline (fallo cerrado)"
     return 1
@@ -48,22 +49,59 @@ vacuity_ratchet() {
     echo "  Vacuidad: línea base o recuento ilegibles (fallo cerrado)"
     return 1
   fi
-  if (( count > base )); then
-    echo "  Vacuidad: $count > línea base $base — tests nuevos que no pueden fallar:"
-    printf '%s' "$scan" | python3 -c "
-import json, sys
-for f in json.load(sys.stdin)['findings']:
-    print(f\"    {f['kind']} {f['file']}:{f['line']}  {f['text']}\")" | tail -n $(( count - base + 20 ))
+  # Identidad: hallazgos (fichero, test, tipo) que no estaban en la línea base. Arreglar uno y añadir otro
+  # deja el recuento igual pero no pasa. Sin fichero de identidades no hay comparación posible: fallo cerrado.
+  if [[ ! -f "$ids" ]]; then
+    echo "  Vacuidad: sin fichero de identidades en $ids (fallo cerrado; regenerar con --update-vacuity-baseline)"
+    return 1
+  fi
+  new=$(printf '%s' "$scan" | python3 -c "
+import collections, json, sys
+ids = sys.argv[1]
+cur = collections.Counter((f['file'], f['test'], f['kind']) for f in json.load(sys.stdin)['findings'])
+try:
+    base = collections.Counter(tuple(l.rstrip('\n').split('\t')) for l in open(ids) if l.strip())
+except OSError:
+    sys.exit(1)
+for (file, test, kind), n in sorted((cur - base).items()):
+    print(f'    {kind} {file}  @test \"{test}\"' + (f' (+{n})' if n > 1 else ''))
+" "$ids") || { echo "  Vacuidad: no se pudo comparar identidades (fallo cerrado)"; return 1; }
+  if [[ -n "$new" ]]; then
+    echo "  Vacuidad: hallazgos que no estaban en la línea base (tests que no pueden fallar):"
+    printf '%s\n' "$new"
     echo "  Regla: docs/rules/domain/test-evidence-criteria.md"
     return 1
   fi
+  if (( count > base )); then
+    echo "  Vacuidad: $count > línea base $base sin hallazgos nuevos identificables (fallo cerrado)"
+    return 1
+  fi
   if (( count < base )); then
-    echo "  Vacuidad: $count < línea base $base — bajar la línea base: echo $count > .ci-baseline/test-vacuity.count"
+    echo "  Vacuidad: $count < línea base $base — mejora; bajar la línea base: bash scripts/ci-test-quality-gate.sh --update-vacuity-baseline"
   else
     echo "  Vacuidad: $count = línea base $base"
   fi
   return 0
 }
+
+if [[ "${1:-}" == "--update-vacuity-baseline" ]]; then
+  root="${SAVIA_VACUITY_ROOT:-$DIR/..}"
+  baseline="${SAVIA_VACUITY_BASELINE:-$DIR/../.ci-baseline/test-vacuity.count}"
+  scan=$(python3 "$DIR/test-auditor-engine.py" --vacuity-scan "$root") || { echo "detector caído"; exit 2; }
+  # Se escribe en temporales y se mueve al final: un fallo a medias no deja ficheros truncados.
+  tmp_c=$(mktemp) && tmp_f=$(mktemp) || { echo "sin directorio temporal"; exit 2; }
+  trap 'rm -f "$tmp_c" "$tmp_f"' EXIT
+  printf '%s' "$scan" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])" > "$tmp_c" \
+    || { echo "no se pudo leer el recuento; línea base intacta"; exit 2; }
+  printf '%s' "$scan" | python3 -c "
+import json, sys
+for f in json.load(sys.stdin)['findings']:
+    print('\t'.join((f['file'], f['test'], f['kind'])))" | sort > "$tmp_f"
+  [[ ${PIPESTATUS[1]} -eq 0 ]] || { echo "no se pudieron leer los hallazgos; línea base intacta"; exit 2; }
+  mv "$tmp_f" "${baseline%.count}.findings" && mv "$tmp_c" "$baseline"
+  echo "Línea base actualizada: $(cat "$baseline") hallazgos"
+  exit 0
+fi
 
 if [[ "${1:-}" == "--vacuity-only" ]]; then
   vacuity_ratchet
@@ -80,7 +118,7 @@ echo "  Mode: $ADAPTIVE_MODE  Fixed-min: $FIXED_MIN  Floor: $FLOOR  Ceil: $CEIL"
 echo ""
 
 # Step 1: Audit test quality
-echo "Step 1/2: Auditing test quality..."
+echo "Step 1: Auditing test quality..."
 AUDIT=$(bash "$DIR/test-auditor.sh" --all --json 2>&1) || true
 TOTAL=$(echo "$AUDIT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total_files',0))" 2>/dev/null || echo "0")
 
@@ -158,7 +196,7 @@ for r in data.get('results', []):
 fi
 
 # Step 2: Coverage
-echo "Step 2/2: Checking coverage..."
+echo "Step 2: Checking coverage..."
 COV=$(bash "$DIR/test-coverage-checker.sh" --json 2>&1)
 COV_PCT=$(echo "$COV" | python3 -c "import json,sys; print(json.load(sys.stdin).get('coverage_percent', 0))" 2>/dev/null || echo "0")
 echo "  Coverage: $COV_PCT%"
