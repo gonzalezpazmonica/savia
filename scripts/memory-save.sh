@@ -175,7 +175,12 @@ EOF
 
     # SPEC-034: mark superseded entry with valid_to
     if [[ -n "$supersedes_key" && -f "$STORE_FILE" ]]; then
-        sed -i "s/\"topic_key\":\"$supersedes_key\"\(.*\)}/\"topic_key\":\"$supersedes_key\"\1,\"valid_to\":\"$now\",\"superseded_by\":\"$topic_key\"}/" "$STORE_FILE"
+        # Las claves de topic llevan "/" (tipo/slug): se escapan para sed.
+        local _k_re _k_rep _t_rep
+        _k_re=$(printf '%s' "$supersedes_key" | sed -e 's/[]\/$*.^[&]/\\&/g')
+        _t_rep=$(printf '%s' "$topic_key" | sed -e 's/[\\\/&]/\\&/g')
+        _k_rep=$(printf '%s' "$supersedes_key" | sed -e 's/[\\\/&]/\\&/g')
+        sed -i "s/\"topic_key\":\"$_k_re\"\(.*\)}/\"topic_key\":\"$_k_rep\"\1,\"valid_to\":\"$now\",\"superseded_by\":\"$_t_rep\"}/" "$STORE_FILE"
     fi
 
     # SPEC-038: auto-classify knowledge domain (skip in test mode for speed)

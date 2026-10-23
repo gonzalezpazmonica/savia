@@ -34,17 +34,54 @@ if [[ "$TOTAL_TABULAR" -lt 5 ]]; then
   exit 0
 fi
 
-# Extract tabular portion and profile it
+# Extract tabular portion and profile it. Only the tabular lines go to the
+# profiler: prose lines would be read as the CSV header and break profiling.
+# Field count ignores commas inside double quotes. CSV rows = lines with the
+# modal field count among data rows (those with a digit) that sit next to
+# another line of that same count, plus the header just above a data row; so
+# prose with a stray comma, or a lone sentence with the same count, is kept.
+split_tabular() { # $1 = keep (tabular lines) | drop (everything else)
+  printf '%s\n' "$INPUT" | awk -v mode="$1" '
+    function fields(s,   n, i, ch, q) {
+      n = 1; q = 0
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (ch == "\"") q = !q
+        else if (ch == "," && !q) n++
+      }
+      return n
+    }
+    { line[NR] = $0 }
+    /^[ \t]*\|.+\|/ { md[NR] = 1; next }
+    /^[^|]*,+[^,].*[0-9]/ { f[NR] = fields($0); cnt[f[NR]]++; if (cnt[f[NR]] > best) { best = cnt[f[NR]]; mode_f = f[NR] } }
+    END {
+      for (i = 1; i <= NR; i++) if (!md[i] && !(i in f) && line[i] !~ /\|/ && line[i] ~ /,/) g[i] = fields(line[i])
+      for (i = 1; i <= NR; i++) {
+        t = 0
+        if (md[i]) t = 1
+        else if (best && line[i] !~ /\|/) {
+          me = (i in f) ? f[i] : (i in g ? g[i] : -1)
+          if (me == mode_f) {
+            if ((i in f) && (((i-1) in f && f[i-1] == mode_f) || ((i+1) in f && f[i+1] == mode_f))) t = 1
+            else if (!(i in f) && (i+1) in f && f[i+1] == mode_f) t = 1
+            else if ((i in f) && ((i-1) in g && g[i-1] == mode_f)) t = 1
+          }
+        }
+        if ((mode == "keep") == (t == 1)) print line[i]
+      }
+    }'
+}
+TABULAR_PART=$(split_tabular keep)
 if [[ -x "$SUMMARIZER" ]]; then
-  PROFILE=$(echo "$INPUT" | "$SUMMARIZER" - 2>/dev/null || echo "")
+  PROFILE=$(echo "$TABULAR_PART" | "$SUMMARIZER" - 2>/dev/null || echo "")
 else
-  PROFILE=$(echo "$INPUT" | python3 "$PROFILER" 2>/dev/null || echo "")
+  PROFILE=$(echo "$TABULAR_PART" | python3 "$PROFILER" 2>/dev/null || echo "")
 fi
 
 if [[ -n "$PROFILE" && "$PROFILE" != *'"error"'* && "$PROFILE" != *'"detected":false'* ]]; then
   # Replace raw tabular data with profile in the prompt
   # Keep non-tabular parts of the original prompt
-  NON_TABULAR=$(echo "$INPUT" | grep -vE '^\s*\|.+\||^[^|]*,{1,}[^,]' 2>/dev/null || echo "")
+  NON_TABULAR=$(split_tabular drop)
   
   cat <<OUTPUT
 $NON_TABULAR
