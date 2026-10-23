@@ -64,7 +64,14 @@ ragCmd.command('sync').description('Sincroniza el índice (incremental por hash)
     try {
       const svc = ragService(opts.domesFile);
       const names = opts.all ? (await svc.status()).filter(s => s.enabled).map(s => s.name) : opts.dome ? [opts.dome] : [];
-      if (!names.length) throw new RagError('INVALID_INPUT', 'indica --dome <name> o --all');
+      if (!names.length) {
+        if (opts.all) {
+          // Registro sin cúpulas con rag.enabled: avería de configuración, no un "nada que hacer".
+          console.error('ALERTA: --all no encontró ninguna cúpula con rag.enabled=true en el registro; no se indexa nada');
+          process.exit(opts.check ? 2 : 1);
+        }
+        throw new RagError('INVALID_INPUT', 'indica --dome <name> o --all');
+      }
       const reports = [];
       let failed = false;
       for (const n of names) {
@@ -148,11 +155,13 @@ ragCmd.command('rollback <dome>').description('Restaura la generación anterior'
   });
 
 ragCmd.command('gc').description('Borra generaciones y ficheros no referenciados')
-  .option(...domesOpt).option('--dome <name>')
+  .option(...domesOpt).option('--dome <name>').option('--all', 'solo las cúpulas con rag.enabled', false)
   .action(async (opts) => {
     try {
       const svc = ragService(opts.domesFile);
-      const names = opts.dome ? [opts.dome] : (await svc.status()).map(s => s.name);
+      const names = opts.dome ? [opts.dome]
+        : opts.all ? (await svc.status()).filter(s => s.enabled).map(s => s.name)
+        : (await svc.status()).map(s => s.name); // compat: sin flags, todas
       for (const n of names) console.log(`[${n}] eliminados ${await svc.gc(n)}`);
     } catch (e) { ragFail(e); }
   });
