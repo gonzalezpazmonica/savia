@@ -903,6 +903,38 @@ def _parse_frontmatter(text: str) -> dict:
     return fm
 
 
+_PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _contain_path(root: Path, rel: str) -> Path | None:
+    """Resolve rel under root; None if it escapes (../, absolute, outside symlink).
+
+    Both sides go through os.path.realpath, so a symlink inside the workspace
+    that points outside it is rejected. The prefix check includes the
+    separator: /home/u/savia-other is NOT under /home/u/savia.
+    """
+    if not isinstance(rel, str) or "\x00" in rel or os.path.isabs(rel):
+        return None
+    root_real = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(root_real, rel))
+    if target == root_real or target.startswith(root_real + os.sep):
+        return Path(target)
+    return None
+
+
+def _project_dir(workspace: Path, project_id: str) -> Path | None:
+    """projects/{id} contained in the workspace; None for invalid ids."""
+    if not isinstance(project_id, str) or not _PROJECT_ID_RE.match(project_id):
+        return None
+    if project_id.strip(".") == "":
+        return None
+    projects_root = os.path.realpath(workspace / "projects")
+    candidate = os.path.realpath(os.path.join(projects_root, project_id))
+    if not candidate.startswith(projects_root + os.sep):
+        return None
+    return Path(candidate)
+
+
 def _parse_backlog_pbis(backlog_dir: Path) -> list:
     """Read PBI markdown files from backlog/pbi/ and return structured data."""
     pbi_dir = backlog_dir / "pbi"
@@ -2494,7 +2526,11 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 if project_id == "_workspace":
                     backlog_dir = workspace / "backlog"
                 else:
-                    backlog_dir = workspace / "projects" / project_id / "backlog"
+                    project_dir = _project_dir(workspace, project_id)
+                    if project_dir is None:
+                        self._send_json({"error": "Invalid project"}, 400)
+                        return
+                    backlog_dir = project_dir / "backlog"
                 pbis = _parse_backlog_pbis(backlog_dir)
                 tasks = _parse_backlog_tasks(backlog_dir)
                 self._send_json({"pbis": pbis, "tasks": tasks})
@@ -2528,7 +2564,10 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": "Missing project parameter"}, 400)
                 return
 
-            project_dir = Path.home() / "savia" / "projects" / project_id
+            project_dir = _project_dir(Path.home() / "savia", project_id)
+            if project_dir is None:
+                self._send_json({"error": "Invalid project"}, 400)
+                return
             if not project_dir.exists():
                 self._send_json({"error": f"Project {project_id} not found"}, 404)
                 return
@@ -2598,7 +2637,10 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": "Missing project parameter"}, 400)
                 return
 
-            project_dir = Path.home() / "savia" / "projects" / project_id
+            project_dir = _project_dir(Path.home() / "savia", project_id)
+            if project_dir is None:
+                self._send_json({"error": "Invalid project"}, 400)
+                return
             if not project_dir.exists():
                 self._send_json({"error": f"Project {project_id} not found"}, 404)
                 return
@@ -2641,7 +2683,10 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": "Missing project parameter"}, 400)
                 return
 
-            project_dir = Path.home() / "savia" / "projects" / project_id
+            project_dir = _project_dir(Path.home() / "savia", project_id)
+            if project_dir is None:
+                self._send_json({"error": "Invalid project"}, 400)
+                return
             if not project_dir.exists():
                 self._send_json({"error": f"Project {project_id} not found"}, 404)
                 return
@@ -2721,10 +2766,9 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 return
             params = parse_qs(parsed.query)
             rel_path = params.get("path", [""])[0]
-            workspace = Path.home() / "savia"
-            target = (workspace / rel_path).resolve()
-            # Security: prevent path traversal outside workspace
-            if not str(target).startswith(str(workspace)):
+            workspace = Path(os.path.realpath(Path.home() / "savia"))
+            target = _contain_path(workspace, rel_path)
+            if target is None:
                 self._send_json({"error": "Path traversal blocked"}, 403)
                 return
             if not target.exists():
@@ -2773,9 +2817,9 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 return
             params = parse_qs(parsed.query)
             rel_path = params.get("path", [""])[0]
-            workspace = Path.home() / "savia"
-            target = (workspace / rel_path).resolve()
-            if not str(target).startswith(str(workspace)):
+            workspace = Path(os.path.realpath(Path.home() / "savia"))
+            target = _contain_path(workspace, rel_path)
+            if target is None:
                 self._send_json({"error": "Path traversal blocked"}, 403)
                 return
             if not target.exists() or not target.is_file():
@@ -2887,7 +2931,10 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                     self._send_json({"error": "slug is required"}, 400)
                     return
                 workspace = Path(os.environ.get("SAVIA_WORKSPACE", Path.home() / "savia"))
-                project_dir = workspace / "projects" / slug
+                project_dir = _project_dir(workspace, slug)
+                if project_dir is None:
+                    self._send_json({"error": "Invalid slug"}, 400)
+                    return
                 if project_dir.exists():
                     self._send_json({"error": f"Project '{slug}' already exists"}, 409)
                     return
@@ -3298,8 +3345,8 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
                 rel_path = data.get("path", "")
                 content = data.get("content", "")
                 workspace = Path(os.environ.get("SAVIA_WORKSPACE", Path.home() / "savia"))
-                target = (workspace / rel_path).resolve()
-                if not str(target).startswith(str(workspace)):
+                target = _contain_path(workspace, rel_path)
+                if target is None or target == Path(os.path.realpath(workspace)):
                     self._send_json({"error": "Path traversal blocked"}, 403)
                     return
                 target.write_text(content, encoding="utf-8")
