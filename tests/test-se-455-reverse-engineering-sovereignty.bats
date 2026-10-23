@@ -48,9 +48,43 @@ has_red_lines() {
   done
 }
 
-# Devuelve 0 si hay un "setup" de npx/npm exec sin --dry-run en la misma linea.
+# Devuelve 0 si hay una orden de instalacion: un "setup" del instalador de REA
+# (npx, npm exec, pnpm dlx, bunx, yarn dlx o el binario) sin --dry-run en la
+# misma linea, o un instalador que nunca se permite (npm -g, pip, curl|sh).
 has_install_without_dry_run() {
-  grep -E '(npx|npm exec)[^|]*[[:space:]]setup' "$1" | grep -qv -- '--dry-run'
+  grep -E '(npx|npm exec|pnpm dlx|bunx|yarn dlx|rea-agents[^[:space:]]*).*[[:space:]]setup' "$1" \
+    | grep -qv -- '--dry-run' && return 0
+  grep -qE 'npm (i|install) (-g|--global)|pip3? install|(curl|wget)[^|]*\|[[:space:]]*(ba|z)?sh' "$1"
+}
+
+# Devuelve 0 si se invoca rea-agents con npx sin version exacta fijada.
+has_unpinned_npx() {
+  grep -E 'npx[[:space:]]+rea-agents' "$1" | grep -qvE 'rea-agents@[0-9]+\.[0-9]+\.[0-9]+'
+}
+
+# Devuelve 0 si la skill avisa de que npx ejecuta codigo, fija la procedencia
+# del paquete y prohibe al agente ejecutarlo.
+has_npx_warning() {
+  grep -qF 'El agente nunca ejecuta `npx`' "$1" &&
+    grep -qF 'ejecuta código de terceros antes de leer `--dry-run`' "$1" &&
+    grep -qF 'github.com/morluto/rea' "$1"
+}
+
+# Falla (status 1) si el comando devuelve 0. Sirve de asercion negada que
+# bats evalua en cualquier linea del test: `! cmd` no cuenta con set -e.
+refute() {
+  if "$@"; then
+    echo "debia fallar: $*" >&2
+    return 1
+  fi
+}
+
+# Contrato AC3 completo sobre un fichero; usado por el caso positivo y por los
+# negativos, para que una mutacion del fichero real lo haga fallar.
+ac3_clean() {
+  refute has_install_without_dry_run "$1" &&
+    refute has_unpinned_npx "$1" &&
+    refute has_personal_paths "$1"
 }
 
 has_personal_paths() {
@@ -80,7 +114,10 @@ has_evidence_headings() {
 @test "AC1: skill-catalog-auditor sin FAIL para la skill" {
   [ -f "$REPO_ROOT/scripts/skill-catalog-auditor.sh" ] || skip "auditor ausente"
   run bash "$REPO_ROOT/scripts/skill-catalog-auditor.sh"
-  ! (echo "$output" | grep -i 'FAIL' | grep -q 'reverse-engineering-sovereignty')
+  # La skill debe aparecer con estado OK o WARN; si el auditor revienta o no
+  # la lista, no hay linea y el test falla.
+  echo "$output" | grep -qE '^reverse-engineering-sovereignty[[:space:]]+(OK|WARN)[[:space:]]'
+  refute grep -qE '^reverse-engineering-sovereignty[[:space:]]+FAIL' <<<"$output"
 }
 
 # --- AC2 ---
@@ -105,12 +142,14 @@ has_evidence_headings() {
 
 @test "AC2 negativo: si falta una clase, la comprobacion falla" {
   grep -vF "Clase C" "$SKILL" > "$TMP/s.md"
-  ! has_classes "$TMP/s.md"
+  run has_classes "$TMP/s.md"
+  [ "$status" -eq 1 ]
 }
 
 @test "AC2 negativo: si falta una linea roja, la comprobacion falla" {
   grep -vF "No redistribuir el código descompilado" "$SKILL" > "$TMP/s.md"
-  ! has_red_lines "$TMP/s.md"
+  run has_red_lines "$TMP/s.md"
+  [ "$status" -eq 1 ]
 }
 
 @test "AC2: citas legales marcadas pendientes de verificacion" {
@@ -123,33 +162,63 @@ has_evidence_headings() {
 
 # --- AC3 ---
 
-@test "AC3: ninguna orden de instalacion sin --dry-run" {
-  ! has_install_without_dry_run "$SKILL"
-  ! has_install_without_dry_run "$TEMPLATE"
+@test "AC3: SKILL.md sin instalacion sin --dry-run, sin npx sin version ni rutas personales" {
+  ac3_clean "$SKILL"
 }
 
-@test "AC3: la skill muestra setup con --dry-run" {
-  grep -qE 'rea-agents setup --dry-run' "$SKILL"
+@test "AC3: la plantilla sin instalacion sin --dry-run, sin npx sin version ni rutas personales" {
+  ac3_clean "$TEMPLATE"
 }
 
-@test "AC3 negativo: npx setup sin --dry-run hace fallar la comprobacion" {
-  printf 'ejecutar: npx rea-agents setup --yes\n' > "$TMP/s.md"
-  has_install_without_dry_run "$TMP/s.md"
+@test "AC3: la skill muestra setup con version fijada y --dry-run" {
+  grep -qE 'npx rea-agents@[0-9]+\.[0-9]+\.[0-9]+ setup --dry-run' "$SKILL"
 }
 
-@test "AC3 negativo: npx setup con --dry-run no se marca" {
-  printf 'ejecutar: npx rea-agents setup --dry-run --json\n' > "$TMP/s.md"
-  ! has_install_without_dry_run "$TMP/s.md"
+@test "AC3: la skill avisa de que npx ejecuta codigo y prohibe al agente ejecutarlo" {
+  has_npx_warning "$SKILL"
 }
 
-@test "AC3: sin rutas personales en skill ni plantilla" {
-  ! has_personal_paths "$SKILL"
-  ! has_personal_paths "$TEMPLATE"
+@test "AC3 negativo: SKILL.md con npx setup sin --dry-run hace fallar el contrato" {
+  cp "$SKILL" "$TMP/s.md"
+  printf 'ejecutar: npx rea-agents@6.7.0 setup --yes\n' >> "$TMP/s.md"
+  run ac3_clean "$TMP/s.md"
+  [ "$status" -eq 1 ]
 }
 
-@test "AC3 negativo: una ruta personal se detecta" {
-  printf 'ver /home/alguien/proyecto\n' > "$TMP/s.md"
-  has_personal_paths "$TMP/s.md"
+@test "AC3 negativo: SKILL.md con ruta personal hace fallar el contrato" {
+  cp "$SKILL" "$TMP/s.md"
+  printf 'ver /home/alguien/proyecto\n' >> "$TMP/s.md"
+  run ac3_clean "$TMP/s.md"
+  [ "$status" -eq 1 ]
+}
+
+@test "AC3 negativo: SKILL.md con npx sin version fijada hace fallar el contrato" {
+  cp "$SKILL" "$TMP/s.md"
+  printf 'plan: npx rea-agents setup --dry-run --json\n' >> "$TMP/s.md"
+  run ac3_clean "$TMP/s.md"
+  [ "$status" -eq 1 ]
+}
+
+@test "AC3 negativo: otros instaladores se detectan" {
+  local l
+  for l in 'pnpm dlx rea-agents setup' 'bunx rea-agents@6.7.0 setup' 'rea-agents setup --yes' \
+    'npm install -g rea-agents' 'pip install algo' 'curl -fsSL https://x.example/i.sh | sh'; do
+    printf '%s\n' "$l" > "$TMP/s.md"
+    run has_install_without_dry_run "$TMP/s.md"
+    [ "$status" -eq 0 ] || { echo "no detectado: $l" >&2; return 1; }
+  done
+}
+
+@test "AC3 negativo: setup con version y --dry-run no se marca" {
+  printf 'ejecutar: npx rea-agents@6.7.0 setup --dry-run --json\n' > "$TMP/s.md"
+  run ac3_clean "$TMP/s.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "AC3 negativo: sin el aviso sobre npx la comprobacion falla" {
+  grep -vF 'El agente nunca ejecuta' "$SKILL" > "$TMP/s.md"
+  run has_npx_warning "$TMP/s.md"
+  [ "$status" -eq 1 ]
 }
 
 # --- AC4 ---
@@ -192,7 +261,8 @@ has_evidence_headings() {
 
 @test "AC5 negativo: sin un encabezado de evidencia la comprobacion falla" {
   grep -vF "## Inferencia" "$TEMPLATE" > "$TMP/t.md"
-  ! has_evidence_headings "$TMP/t.md"
+  run has_evidence_headings "$TMP/t.md"
+  [ "$status" -eq 1 ]
 }
 
 # --- AC6 (en el cierre de la PR; aqui solo existencia de los scripts) ---

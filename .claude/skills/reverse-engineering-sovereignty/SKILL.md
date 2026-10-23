@@ -33,7 +33,12 @@ seguridad, ver también `mobile-security-scanner`.
 [REA](https://github.com/morluto/rea) (MIT) es un MCP y CLI **locales** de ingeniería inversa. Es de terceros:
 **la persona lo instala y lo aprueba**; esta skill no instala nada, no lo embebe ni lo redistribuye.
 
-- Mostrar el plan antes de nada: `npx rea-agents setup --dry-run --json` (la persona revisa y aprueba después).
+- **El agente nunca ejecuta `npx`, `npm` ni el instalador de REA.** Solo propone la orden; la ejecuta la persona.
+- `npx` descarga y ejecuta código de terceros antes de leer `--dry-run`: ese flag no lo hace seguro, solo evita
+  que el instalador escriba la configuración. Antes de ejecutarlo, la persona comprueba que el paquete npm
+  `rea-agents` declara el repositorio `github.com/morluto/rea` (`npm view rea-agents@6.7.0 repository.url`)
+  y revisa esa versión. Alternativa más estricta: clonar el repo en un tag o commit concreto.
+- Orden con versión fijada (6.7.0, comprobada el 2026-10-23): `npx rea-agents@6.7.0 setup --dry-run --json`.
 - Comprobar el registro: `rea doctor --client <cliente> --json`. Ayuda general: `rea --help`.
 - REA no instala Java, Ghidra ni Node: también los instala la persona.
 - Fijar la versión usada en el registro de la sesión (la API cambia con frecuencia). No duplicar su documentación.
@@ -120,11 +125,13 @@ son propuestas: la persona decide.
 - `legal-compliance`: verificación de la base legal antes de usar las clases B o C.
 - `docs/rules/domain/autonomous-safety.md`: en modos autónomos esta skill no se ejecuta sin la persona.
 
+Riesgo residual: la puerta A-D y la regla de modos autónomos viven en prosa; ningún hook las hace cumplir.
+
 ## Errores
 
 | Situación | Acción |
 |---|---|
 | Objetivo no encaja en A, B ni C | Clase D: rechazar |
 | Falta autorización escrita (B) | Parar; no hay análisis |
-| REA no instalado | Indicar `npx rea-agents setup --dry-run --json` y esperar a la persona |
+| REA no instalado | Proponer a la persona `npx rea-agents@6.7.0 setup --dry-run --json` (no ejecutarlo) y esperar |
 | La tarea exige saltar una protección | Línea roja: parar y escalar |
