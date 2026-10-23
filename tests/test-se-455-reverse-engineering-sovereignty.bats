@@ -9,18 +9,26 @@
 # copia temporal para demostrar que cada comprobacion puede fallar.
 # REA_SKILL_DIR / SOV_SKILL_DIR / LEGACY_CMD permiten apuntar a otra ubicacion.
 
-setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  SKILL_DIR="${REA_SKILL_DIR:-$REPO_ROOT/.claude/skills/reverse-engineering-sovereignty}"
-  # Un override fuera del repo validaria otros ficheros y daria un falso verde.
-  case "$(cd "$SKILL_DIR" && pwd -P)/" in
+# Un override fuera del repo validaria otros ficheros y daria un falso verde.
+# Devuelve 1 si la ruta (fichero o directorio) no cae dentro de REPO_ROOT.
+check_inside_repo() {
+  local p="$1" d
+  [ -d "$p" ] && d="$p" || d="$(dirname "$p")"
+  d="$(cd "$d" 2>/dev/null && pwd -P)" || { echo "ruta inexistente: $1" >&2; return 1; }
+  case "$d/" in
     "$REPO_ROOT"/*) ;;
-    *) echo "REA_SKILL_DIR debe estar dentro del repo" >&2; return 1 ;;
+    *) echo "override debe estar dentro del repo: $1" >&2; return 1 ;;
   esac
-  SKILL="$SKILL_DIR/SKILL.md"
-  TEMPLATE="$SKILL_DIR/references/plantilla-informe.md"
+}
+
+setup() {
+  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd -P)"
+  SKILL_DIR="${REA_SKILL_DIR:-$REPO_ROOT/.claude/skills/reverse-engineering-sovereignty}"
   SOV="${SOV_SKILL_DIR:-$REPO_ROOT/.claude/skills/sovereignty-auditor}/SKILL.md"
   LEGACY="${LEGACY_CMD:-$REPO_ROOT/.claude/commands/legacy-assess.md}"
+  check_inside_repo "$SKILL_DIR" && check_inside_repo "$SOV" && check_inside_repo "$LEGACY" || return 1
+  SKILL="$SKILL_DIR/SKILL.md"
+  TEMPLATE="$SKILL_DIR/references/plantilla-informe.md"
   TMP="$(mktemp -d)"
 }
 
@@ -53,18 +61,27 @@ has_red_lines() {
   done
 }
 
+# Une las lineas continuadas con "\" para que una orden partida se evalue entera.
+joined() {
+  sed -e ':a' -e '/\\$/{N;s/\\\n[[:space:]]*/ /;ba}' "$1"
+}
+
 # Devuelve 0 si hay una orden de instalacion: un "setup" del instalador de REA
-# (npx, npm exec, pnpm dlx, bunx, yarn dlx o el binario) sin --dry-run en la
-# misma linea, o un instalador que nunca se permite (npm -g, pip, curl|sh).
+# (npx, npm exec, pnpm dlx, bunx, yarn dlx o el binario) que no lleve
+# "setup --dry-run" contiguo (un "--dry-run" en un comentario no cuenta) o que
+# lleve --yes/--force, o un instalador que nunca se permite (npm -g, pip, curl|sh).
 has_install_without_dry_run() {
-  grep -E '(npx|npm exec|pnpm dlx|bunx|yarn dlx|rea-agents[^[:space:]]*|(^|[[:space:]])rea).*[[:space:]]setup' "$1" \
-    | grep -qv -- '--dry-run' && return 0
+  local setup_re='(npx|npm exec|pnpm dlx|bunx|yarn dlx|rea-agents[^[:space:]]*|(^|[[:space:]])rea).*[[:space:]]setup'
+  joined "$1" | grep -E "$setup_re" | grep -qvE 'setup[[:space:]]+--dry-run' && return 0
+  joined "$1" | grep -E "$setup_re" | grep -qE 'setup.*--(yes|force)' && return 0
   grep -qE 'npm (i|install) (-g|--global)|pip3? install|(curl|wget)[^|]*\|[[:space:]]*(ba|z)?sh' "$1"
 }
 
-# Devuelve 0 si se invoca rea-agents con npx sin version exacta fijada.
+# Devuelve 0 si alguna invocacion de rea-agents con npx no lleva version exacta
+# (X.Y.Z sin sufijo). -o separa cada invocacion, tambien dentro de una misma linea.
 has_unpinned_npx() {
-  grep -E 'npx([[:space:]]+-[-a-z]+)*[[:space:]]+rea-agents' "$1" | grep -qvE 'rea-agents@[0-9]+\.[0-9]+\.[0-9]+'
+  joined "$1" | grep -oE 'npx([[:space:]]+-[-a-z]+)*[[:space:]]+rea-agents[^[:space:]`'"'"'"),;]*' \
+    | grep -qvE 'rea-agents@[0-9]+\.[0-9]+\.[0-9]+$'
 }
 
 # Devuelve 0 si la skill avisa de que npx ejecuta codigo, fija la procedencia
@@ -157,20 +174,45 @@ has_evidence_headings() {
   [ "$status" -eq 1 ]
 }
 
-# Une las lineas para que un salto de linea no parta una cita.
+# Un registro por bullet de lista (une las lineas de continuacion).
+bullets() {
+  awk '/^- /{if(r)print r; r=$0; next} /^[[:space:]]+[^[:space:]]/ && r{r=r" "$0; next} {if(r)print r; r=""} END{if(r)print r}' "$1" | tr -s ' '
+}
+
+# La cita debe aparecer en algun bullet y todos los bullets que la contienen
+# deben llevar su propia marca (la del encabezado o la de otro bullet no vale).
 cita_pendiente() {
-  tr '\n' ' ' < "$2" | tr -s ' ' | grep -qE "$1[^;(]*\(pendiente de verificación con legal-compliance"
+  local rec
+  rec="$(bullets "$2" | grep -F -- "$1")" || return 1
+  if grep -qvF "pendiente de verificación con legal-compliance" <<<"$rec"; then
+    return 1
+  fi
 }
 
 @test "AC2: cada cita legal lleva su marca de pendiente de verificacion" {
   local c
-  for c in "art. 100.3 LPI" "art. 160 LPI"; do
-    cita_pendiente "$c" "$SKILL"
+  for c in "art. 100.3 LPI" "art. 5.3 de la" "art. 100.5" "art. 6 de la" "art. 160 LPI"; do
+    cita_pendiente "$c" "$SKILL" || { echo "cita sin marca: $c" >&2; return 1; }
   done
 }
 
-@test "AC2 (negativo): una cita sin marca hace fallar el contrato" {
-  tr '\n' ' ' < "$SKILL" | tr -s ' ' | sed 's/pendiente de verificación con legal-compliance/revisada/g' > "$TMP/s.md"
+@test "AC2 (negativo): quitar la marca solo a una cita hace fallar esa cita y no las demas" {
+  local c
+  # Quita la primera marca que sigue a cada cita, dentro de su propio bullet.
+  for c in "art. 100.3 LPI" "art. 100.5" "art. 160 LPI"; do
+    C="$c" perl -CSD -Mutf8 -0pe 's/(\Q$ENV{C}\E[^\n]*(?:\n[ \t]+[^\n]*)*?)pendiente\s+de\s+verificación\s+con\s+legal-compliance/$1revisada/' "$SKILL" > "$TMP/s.md"
+    run cita_pendiente "$c" "$TMP/s.md"
+    [ "$status" -eq 1 ] || { echo "no falla sin marca: $c" >&2; return 1; }
+    # las demas citas siguen intactas
+    for o in "art. 100.3 LPI" "art. 100.5" "art. 160 LPI"; do
+      [ "$o" = "$c" ] && continue
+      cita_pendiente "$o" "$TMP/s.md" || { echo "falso rojo en $o al quitar $c" >&2; return 1; }
+    done
+  done
+}
+
+@test "AC2 (negativo): sin ninguna marca todas las citas fallan" {
+  perl -CSD -Mutf8 -0pe 's/pendiente\s+de\s+verificación\s+con\s+legal-compliance/revisada/g' "$SKILL" > "$TMP/s.md"
   run cita_pendiente "art. 160 LPI" "$TMP/s.md"
   [ "$status" -eq 1 ]
 }
@@ -230,9 +272,31 @@ cita_pendiente() {
   [ "$status" -eq 0 ]
 }
 
-@test "override REA_SKILL_DIR fuera del repo se rechaza" {
-  run env REA_SKILL_DIR="$TMP" bats "$BATS_TEST_FILENAME" --filter "AC2: cada cita"
-  [ "$status" -ne 0 ]
+@test "override fuera del repo se rechaza con mensaje y dentro se acepta" {
+  run check_inside_repo "$TMP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"debe estar dentro del repo"* ]]
+  run check_inside_repo "$TMP/no-existe.md"
+  [ "$status" -eq 1 ]
+  run check_inside_repo "$SKILL_DIR"
+  [ "$status" -eq 0 ]
+  run check_inside_repo "$SOV"
+  [ "$status" -eq 0 ]
+}
+
+@test "AC3 negativo: version con sufijo, comentario con --dry-run y orden partida se detectan" {
+  printf 'npx rea-agents@6.7.0-beta setup --dry-run\n' > "$TMP/a.md"
+  run has_unpinned_npx "$TMP/a.md"
+  [ "$status" -eq 0 ]
+  printf 'npx rea-agents@6.7.0 setup --dry-run; npx rea-agents setup --dry-run\n' > "$TMP/b.md"
+  run has_unpinned_npx "$TMP/b.md"
+  [ "$status" -eq 0 ]
+  printf 'npx rea-agents@6.7.0 setup --yes # no usar --dry-run\n' > "$TMP/c.md"
+  run has_install_without_dry_run "$TMP/c.md"
+  [ "$status" -eq 0 ]
+  printf 'npx rea-agents@6.7.0 \\\n  setup --yes\n' > "$TMP/d.md"
+  run has_install_without_dry_run "$TMP/d.md"
+  [ "$status" -eq 0 ]
 }
 
 @test "AC3 negativo: setup con version y --dry-run no se marca" {
