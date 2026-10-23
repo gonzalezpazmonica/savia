@@ -144,12 +144,10 @@ for i in range(152):
   git commit -m "add oversized command" --quiet
 
   # pr-plan --gate-mode should detect this via G10 (validate-ci-local checks sizes)
-  # Note: this is a best-effort test. The exact gate that catches it depends on
-  # what checks run in the test environment.
   run bash "$TMPDIR/scripts/pr-plan.sh" --gate-mode
   # En modo gate un FAIL termina con 1 y lo nombra; un 0 aquí dejaría pasar el push.
   [ "$status" -eq 1 ]
-  [[ "$output" == *"GATE: FAILED"* || "$output" == *"FAIL"* ]]
+  [[ "$output" == *"GATE: FAILED"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

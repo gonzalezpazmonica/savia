@@ -1,5 +1,5 @@
 {
-  "hash": "1314f1c752b5",
+  "hash": "a10ce9bccaae",
   "total": 1450,
   "resources": [
     {
@@ -1177,15 +1177,15 @@
       "category": "communication",
       "name": "org-meeting-capture",
       "intents": [
+        "acta",
         "acuerdos",
-        "captura",
-        "conocimiento",
-        "decisores",
-        "extrae"
+        "allá",
+        "capturar",
+        "conocimiento"
       ],
       "kind": "skill",
       "path": ".claude/skills/org-meeting-capture/SKILL.md",
-      "description": "Captura de Conocimiento Tácito de Reunión: extrae decisores, acuerdos informales y señales políticas de transcripciones."
+      "description": "Extrae decisores, acuerdos informales y señales políticas de transcripciones de reuniones. Usar cuando haya que capturar el conocimiento tácito de una reunión más allá del acta."
     },
     {
       "category": "communication",
@@ -2275,6 +2275,20 @@
       "kind": "script",
       "path": "scripts/savia-workspace.sh",
       "description": "savia-workspace.sh — SE-373: composicion de repos multi-repo para agentes."
+    },
+    {
+      "category": "communication",
+      "name": "social-linkedin",
+      "intents": [
+        "actividad",
+        "analizar",
+        "digests",
+        "estilo",
+        "export"
+      ],
+      "kind": "skill",
+      "path": ".claude/skills/social-linkedin/SKILL.md",
+      "description": "Importa el export oficial de LinkedIn y genera digests locales (temas, historia, estilo). Usar cuando haya que analizar la actividad propia en LinkedIn; nunca publica."
     },
     {
       "category": "communication",
@@ -3706,6 +3720,20 @@
       "kind": "script",
       "path": "scripts/gaia-benchmark-harness.sh",
       "description": "gaia-benchmark-harness.sh — SPEC-100 Slice 1 GAIA benchmark harness."
+    },
+    {
+      "category": "development",
+      "name": "git-secret-scanner",
+      "intents": [
+        "commits",
+        "comprobar",
+        "escanea",
+        "filtran",
+        "fuga"
+      ],
+      "kind": "skill",
+      "path": ".claude/skills/git-secret-scanner/SKILL.md",
+      "description": "Escanea el historial git o los commits pendientes con gitleaks. Usar cuando haya que comprobar que no se filtran secretos antes de publicar, o tras sospechar una fuga en un repo."
     },
     {
       "category": "development",
@@ -6109,10 +6137,16 @@
     {
       "category": "memory",
       "name": "context-dome",
-      "intents": [],
+      "intents": [
+        "alguien",
+        "bajo",
+        "capturar",
+        "conocimiento",
+        "context"
+      ],
       "kind": "skill",
       "path": ".claude/skills/context-dome/SKILL.md",
-      "description": ">"
+      "description": "Genera CONTEXT_DOME.md con el conocimiento tácito de un módulo. Usar cuando un módulo tiene bus factor bajo o alguien va a dejar el equipo y hay que capturar decisiones, dependencias y runbook."
     },
     {
       "category": "memory",
@@ -7703,14 +7737,14 @@
       "name": "attack-surface-mapper",
       "intents": [
         "ataque",
+        "autorizadas",
+        "contratado",
         "dominio",
-        "mapear",
-        "osint",
-        "subdominios"
+        "exposición"
       ],
       "kind": "skill",
       "path": ".claude/skills/attack-surface-mapper/SKILL.md",
-      "description": "Mapear la superficie de ataque de un dominio: subdominios, OSINT, typosquatting."
+      "description": "Mapear la superficie de ataque de un dominio (subdominios, OSINT, typosquatting). Usar solo en pruebas autorizadas, cuando haya que inventariar la exposición externa de un dominio propio o contratado."
     },
     {
       "category": "planning",
@@ -10648,20 +10682,6 @@
     },
     {
       "category": "planning",
-      "name": "git-secret-scanner",
-      "intents": [
-        "buscando",
-        "commits",
-        "escanea",
-        "gitleaks",
-        "historial"
-      ],
-      "kind": "skill",
-      "path": ".claude/skills/git-secret-scanner/SKILL.md",
-      "description": "Escanea el historial git o los commits pendientes de push buscando secrets con gitleaks. SE-239/SE-247."
-    },
-    {
-      "category": "planning",
       "name": "go-developer",
       "intents": [],
       "kind": "agent",
@@ -11932,15 +11952,15 @@
       "category": "planning",
       "name": "network-recon",
       "intents": [
-        "detection",
-        "http",
-        "httpx",
-        "nmap",
-        "port"
+        "alcance",
+        "autorizadas",
+        "expuestos",
+        "haya",
+        "http"
       ],
       "kind": "skill",
       "path": ".claude/skills/network-recon/SKILL.md",
-      "description": "Reconocimiento de red: port scan con nmap/RustScan + HTTP detection con httpx."
+      "description": "Reconocimiento de red (puertos con nmap/RustScan, servicios HTTP con httpx). Usar solo en pruebas autorizadas, cuando haya que inventariar los servicios expuestos de una red en alcance."
     },
     {
       "category": "planning",
@@ -12185,14 +12205,14 @@
       "name": "org-political-landscape",
       "intents": [
         "alianzas",
-        "análisis",
+        "atasca",
         "centros",
-        "detecta",
-        "interno"
+        "decisión",
+        "detecta"
       ],
       "kind": "skill",
       "path": ".claude/skills/org-political-landscape/SKILL.md",
-      "description": "Análisis de Paisaje Político Interno: detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders."
+      "description": "Detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders. Usar cuando una decisión o un proyecto se atasca por motivos organizativos y no técnicos."
     },
     {
       "category": "planning",
@@ -12211,15 +12231,15 @@
       "category": "planning",
       "name": "org-stakeholder-mapper",
       "intents": [
+        "algo",
         "alianzas",
-        "decisores",
-        "extrae",
+        "decide",
         "formales",
-        "mapeador"
+        "haya"
       ],
       "kind": "skill",
       "path": ".claude/skills/org-stakeholder-mapper/SKILL.md",
-      "description": "Mapeador de Stakeholders y Decisores: extrae roles formales y reales, motivaciones, alianzas y tensiones de una organización."
+      "description": "Mapea roles formales y reales, motivaciones, alianzas y tensiones de una organización. Usar cuando haya que saber quién decide de verdad antes de proponer o negociar algo."
     },
     {
       "category": "planning",
@@ -12588,15 +12608,15 @@
       "category": "planning",
       "name": "professional-domain",
       "intents": [
+        "cargar",
+        "concreta",
         "controlling",
-        "domain",
-        "family",
-        "finance",
-        "index"
+        "criterio",
+        "dominio"
       ],
       "kind": "skill",
       "path": ".claude/skills/professional-domain/SKILL.md",
-      "description": "Family index for professional-domain skills (controlling, finance, labour, legal, sales). Load individual skills from subdirectories."
+      "description": "Índice de las skills de dominio profesional (controlling, finanzas, laboral, legal, ventas). Usar cuando una tarea pide criterio de uno de esos dominios, para cargar la skill concreta."
     },
     {
       "category": "planning",
@@ -14215,14 +14235,6 @@
       "kind": "skill",
       "path": ".claude/skills/smart-calendar/SKILL.md",
       "description": "Usar cuando se gestiona la agenda inteligente con sincronización Outlook/Teams."
-    },
-    {
-      "category": "planning",
-      "name": "social-linkedin",
-      "intents": [],
-      "kind": "skill",
-      "path": ".claude/skills/social-linkedin/SKILL.md",
-      "description": ">-"
     },
     {
       "category": "planning",
@@ -16220,15 +16232,15 @@
       "category": "quality",
       "name": "dynamic-web-tester",
       "intents": [
-        "dalfox",
-        "dinámico",
-        "endpoints",
-        "nuclei",
-        "sqli"
+        "alcance",
+        "aplicación",
+        "autorizadas",
+        "comprobar",
+        "dinámico"
       ],
       "kind": "skill",
       "path": ".claude/skills/dynamic-web-tester/SKILL.md",
-      "description": "Testing dinámico de endpoints web: XSS (DalFox), SQLi (sqlmap), Nuclei."
+      "description": "Testing dinámico de endpoints web (XSS, SQLi, Nuclei). Usar solo en pruebas autorizadas, cuando haya que comprobar vulnerabilidades de una aplicación web propia o en alcance de un pentest."
     },
     {
       "category": "quality",

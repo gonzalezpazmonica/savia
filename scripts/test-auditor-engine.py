@@ -101,20 +101,36 @@ def c9_assertions(c):
 # SE-456: tests que no pueden fallar. V1 = aserción anulada con `|| true`/`|| :`;
 # V2 = `run` sin ninguna aserción detrás (ni $status, ni $output, ni nada que pueda fallar);
 # V3 = `run` cuyo estado se ignora pero con otras aserciones detrás: débil, no vacío.
-ASSERT_LINE = re.compile(r'^(\[\[?\s|test\s|grep\s+(-\w*q\w*|--quiet)\b)')
-NEUTRALIZED = re.compile(r'\|\|\s*(true|:)\s*$')
+ASSERT_LINE = re.compile(r'(?:^|;\s*)(?:\[\[?\s|test\s|(?:assert|refute)_\w+|grep\s+(?:-\S+\s+)*(?:-\w*q\w*|--quiet)\b)')
+NEUTRALIZED = re.compile(r'\|\|\s*(?:true|:|(?:/\S+/)?true|exit\s+0|return\s+0|echo\b[^|&;()\[\]]*)\s*;?\s*(?:#.*)?$')
 RUN_LINE = re.compile(r'^run(\s|$)')
 RUN_SELF_CHECKED = re.compile(r'^run\s+(-\d+|!)\s')
 # Líneas que no pueden hacer fallar el test por sí mismas.
 NON_ASSERT = re.compile(r'^(run\s|true|:|local\s|export\s|echo\s|printf\s|[A-Za-z_]\w*=(?!.*\$\()|cd\s|\}|\)|\'|")')
-RESULT_CHECK = re.compile(r'\$status|\$\{status|\$output|\$\{output|\$\{lines|\$lines|\blines\[|assert_|refute_')
+RESULT_CHECK = re.compile(r'\$status\b|\$\{status|\$output\b|\$\{output|\$\{lines|\$lines\b|\blines\[|assert_|refute_')
+# Mencionar el resultado no basta (`echo "$output"` no falla): tiene que estar dentro de algo que pueda fallar.
+CAN_FAIL = re.compile(r'\[\[?\s|\bgrep\b|\btest\s|assert_|refute_|\bdiff\b|\bcmp\b|\bpython3?\b|\bjq\b')
+# `if <aserción>; then :; fi`: la aserción no puede hacer fallar el test.
+IF_NOOP = re.compile(r'^if\s.*;\s*then\s+(?::|true)\s*;\s*(?:else\s+(?::|true)\s*;\s*)?fi\b')
+
+# `previo="$status"`: captura el resultado para compararlo después (límite conocido: no se verifica la comparación).
+CAPTURE = re.compile(r'^(?:local\s+)?\w+="?\$\{?(?:status|output)\}?"?$')
+
+def result_checked(x):
+    if CAPTURE.match(x):
+        return True
+    return bool(RESULT_CHECK.search(x) and CAN_FAIL.search(x) and not NEUTRALIZED.search(x))
+
+def only_assertions(s):
+    """`[ a ] && [ b ] || true` anula aserciones; `[ a ] && accion || true` es preparación condicional."""
+    return all(ASSERT_LINE.search(seg.strip()) for seg in s.split("&&"))
 
 def test_blocks(c):
     """(nombre, [(nº de línea, línea sin espacios)]) por cada @test."""
     lines = c.splitlines()
     i = 0
     while i < len(lines):
-        m = re.match(r'^@test\s+"([^"]*)"\s*\{\s*$', lines[i])
+        m = re.match(r'^@test\s+(?:"((?:[^"\\]|\\.)*)"|\'([^\']*)\')\s*\{\s*(?:#.*)?$', lines[i])
         if not m:
             i += 1
             continue
@@ -124,14 +140,14 @@ def test_blocks(c):
             if s and not s.startswith("#"):
                 body.append((j + 1, s))
             j += 1
-        yield m.group(1), body
+        yield m.group(1) or m.group(2) or "", body
         i = j + 1
 
 def vacuity_all(c):
     found = []
     for name, body in test_blocks(c):
         for idx, (n, s) in enumerate(body):
-            if ASSERT_LINE.match(s) and NEUTRALIZED.search(s) and "&&" not in s:
+            if (ASSERT_LINE.search(s) and NEUTRALIZED.search(s) and only_assertions(s)) or IF_NOOP.match(s):
                 found.append({"test": name, "line": n, "kind": "V1", "text": s[:120]})
             elif RUN_LINE.match(s) and not RUN_SELF_CHECKED.match(s):
                 same_line = re.split(r';\s*|\s&&\s', s, maxsplit=1)[1:]
@@ -140,8 +156,8 @@ def vacuity_all(c):
                 # el run siguiente (con su argumento multilínea) cuenta si consume $output del anterior
                 nxt = next((k for k, (_, x) in enumerate(rest[stop + 1:], stop + 1) if RUN_LINE.match(x)), len(rest))
                 consumed = any("$output" in x or "${output" in x for _, x in rest[stop:nxt])
-                checked = [x for _, x in rest[:stop + 1]] + same_line + (["$output"] if consumed else [])
-                if not any(RESULT_CHECK.search(x) for x in checked):
+                checked = [x for _, x in rest[:stop + 1]] + same_line
+                if not consumed and not any(result_checked(x) for x in checked):
                     can_fail = any(not NON_ASSERT.match(x) for x in checked)
                     kind = "V3" if can_fail else "V2"
                     found.append({"test": name, "line": n, "kind": kind, "text": s[:120]})
@@ -156,6 +172,8 @@ def weak(c):
 
 def vacuity_scan(root):
     findings = []
+    if not os.path.isdir(os.path.join(root, "tests")):
+        raise FileNotFoundError(f"sin directorio tests/ en {root}")
     for dirpath, _, files in os.walk(os.path.join(root, "tests")):
         for f in sorted(files):
             if f.endswith(".bats"):
@@ -178,7 +196,7 @@ def audit(test_file, root):
     }
     total = sum(criteria.values())
     vac = vacuity(c)
-    h =hashlib.sha256(f"{os.path.basename(test_file)}{total}{today}".encode()).hexdigest()[:8]
+    h = hashlib.sha256(f"{os.path.basename(test_file)}{total}{today}".encode()).hexdigest()[:8]
     return {
         "file": os.path.relpath(test_file, root),
         "target": os.path.relpath(target, root) if target else None,
@@ -189,7 +207,11 @@ def audit(test_file, root):
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "--vacuity-scan":
-        print(json.dumps(vacuity_scan(sys.argv[2]), indent=2, ensure_ascii=False))
+        try:
+            print(json.dumps(vacuity_scan(sys.argv[2]), indent=2, ensure_ascii=False))
+        except FileNotFoundError as e:
+            print(json.dumps({"error": str(e)}))
+            sys.exit(2)
         sys.exit(0)
     if len(sys.argv) < 3:
         print(json.dumps({"error": "Usage: test-auditor-engine.py <file> <root>"}))

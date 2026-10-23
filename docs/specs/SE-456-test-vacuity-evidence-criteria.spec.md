@@ -80,7 +80,7 @@ SE-444 ya trajo la autoridad del verificador. Esta spec trae el resto del criter
 
 | AC | Verificación |
 |---|---|
-| AC1 | `bats tests/test-se-456-test-vacuity.bats` pasa con fixtures que cubren V1 (`grep -q x f \|\| true`, `[[ … ]] \|\| true`), V2 (`run cmd` sin comprobar, `run cmd` seguido de `true`) y los **casos que no deben marcarse**: `run` + `[ "$status" -eq 0 ]`, `run` + `[[ "$output" == *x* ]]`, `cmd \|\| true` en una línea que no es aserción, `[[ -f x ]] && y \|\| true`. |
+| AC1 | `bats tests/bats/test-se-456-test-vacuity.bats` pasa con fixtures que cubren V1 (`grep -q x f \|\| true`, `[[ … ]] \|\| true`), V2 (`run cmd` sin comprobar, `run cmd` seguido de `true`) y los **casos que no deben marcarse**: `run` + `[ "$status" -eq 0 ]`, `run` + `[[ "$output" == *x* ]]`, `cmd \|\| true` en una línea que no es aserción, `[[ -f x ]] && y \|\| true`. |
 | AC2 | Un fichero fixture que suma 80 o más con un hallazgo de vacuidad sale con `certified: false`; el mismo fichero sin el hallazgo, con `certified: true`. |
 | AC3 | `ci-test-quality-gate.sh`: con la línea base en N, N+1 hallazgos falla (exit distinto de 0) y N pasa; N-1 pasa con aviso de bajar la línea base. Probado con una línea base de fixture, sin tocar la real. |
 | AC4 | `.ci-baseline/test-vacuity.count` existe y coincide con lo que mide el detector sobre `main` en el commit del PR. |

@@ -94,3 +94,135 @@ EOF
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['effective_hits']==[]; assert d['rejected_hits']==1"
 }
+
+# --- S03c: frontera de autoridad, caso por caso (SCL-008) ---
+# Notas escritas directamente en el vault temporal; el buscador falso devuelve
+# todas con score 42, así que el filtrado que se mide es el de learning-recall.sh.
+
+note() {
+  # $1=nombre $2=provenance $3=lifecycle $4=target $5=criterion_id
+  cat > "$TMPD/vault/learning/$1.md" <<NOTE
+---
+id: $1
+provenance: $2
+lifecycle: $3
+target: $4
+criterion_id: $5
+---
+cuerpo $1
+NOTE
+}
+
+reset_vault() { find "$TMPD/vault/learning" -name '*.md' -delete; }
+
+recall_json() { bash "$RECALL" --query 'credential local vault' --mode "${1:-effective}" --criterio "$SCL_CRITERIO_PATH" --json; }
+
+jq_py() { python3 -c "import json,sys; d=json.load(sys.stdin); $1"; }
+
+@test "autoridad: solo human_authored+active+criterio+criterio humano pasa; el resto se rechaza" {
+  reset_vault
+  note ok-1 human_authored active criterio CRIT-034
+  note bad-target human_authored active skill CRIT-034
+  note bad-life human_authored retired criterio CRIT-034
+  note bad-crit human_authored active criterio CRIT-999
+  note bad-prov agent_authored active criterio CRIT-034
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "
+assert [h['proposal_id'] for h in d['effective_hits']] == ['ok-1'], d
+assert d['rejected_hits'] == 4 and d['shadow_hits'] == 0, d"
+}
+
+@test "autoridad: lifecycle proposed va a sombra aunque sea human_authored" {
+  reset_vault
+  note prop human_authored proposed criterio CRIT-034
+  run recall_json
+  echo "$output" | jq_py "
+assert d['effective_hits'] == [] and d['shadow_hits'] == 1 and d['rejected_hits'] == 0, d"
+}
+
+@test "modo shadow: una lección autorizada se cuenta como sombra, no se emite" {
+  reset_vault
+  note ok-1 human_authored active criterio CRIT-034
+  run recall_json shadow
+  echo "$output" | jq_py "
+assert d['mode'] == 'shadow' and d['effective_hits'] == [] and d['shadow_hits'] == 1, d"
+}
+
+@test "dos lecciones del mismo criterio emiten una sola vez (dedup por CRIT)" {
+  reset_vault
+  note dup-a human_authored active criterio CRIT-034
+  note dup-b human_authored active criterio CRIT-034
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "assert len(d['effective_hits']) == 1, d"
+}
+
+@test "tope de 3 criterios efectivos aunque haya más lecciones autorizadas" {
+  reset_vault
+  for n in 035 036 037 038; do
+    printf 'CRIT-%s — extra\n  principio: principio %s\n  provenance: human_authored\n' "$n" "$n" >> "$SCL_CRITERIO_PATH"
+    note "l-$n" human_authored active criterio "CRIT-$n"
+  done
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "assert len(d['effective_hits']) == 3, d"
+}
+
+@test "criterio sin campo provenance no existe para el filtro (rechazo)" {
+  reset_vault
+  printf 'CRIT-040 — sin procedencia\n  principio: algo\n' >> "$SCL_CRITERIO_PATH"
+  note orphan human_authored active criterio CRIT-040
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 1, d"
+}
+
+@test "ruta con ../ que escapa del vault se rechaza (path traversal)" {
+  reset_vault
+  cp "$TMPD/CRITERIO.md" "$TMPD/fuera.md"
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" %s\n' "'[{\"path\":\"../fuera.md\",\"score\":99.0}]'" > "$SCL_VAULT_CLI"
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 1, d"
+}
+
+@test "nota inexistente referida por el buscador cuenta como rechazada, sin error" {
+  reset_vault
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" %s\n' "'[{\"path\":\"learning/fantasma.md\",\"score\":99.0}]'" > "$SCL_VAULT_CLI"
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "assert d['rejected_hits'] == 1, d"
+}
+
+@test "score por debajo del mínimo se ignora (ni sombra ni rechazo)" {
+  reset_vault
+  note ok-1 human_authored active criterio CRIT-034
+  run bash "$RECALL" --query 'credential local vault' --mode effective --criterio "$SCL_CRITERIO_PATH" --min-score 50 --json
+  echo "$output" | jq_py "
+assert (d['effective_hits'], d['shadow_hits'], d['rejected_hits']) == ([], 0, 0), d"
+}
+
+@test "salida de texto en modo effective lista '- [CRIT-id] principio'" {
+  reset_vault
+  note ok-1 human_authored active criterio CRIT-034
+  run bash "$RECALL" --query 'credential local vault' --mode effective --criterio "$SCL_CRITERIO_PATH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "- [CRIT-034] Las credenciales se resuelven desde un vault local." ]
+}
+
+@test "salida de texto en modo shadow está vacía (no filtra nada al contexto)" {
+  reset_vault
+  note ok-1 human_authored active criterio CRIT-034
+  run bash "$RECALL" --query 'credential local vault' --mode shadow --criterio "$SCL_CRITERIO_PATH"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "buscador que devuelve basura → resultado vacío con exit 0 (degradación)" {
+  reset_vault
+  printf '#!/usr/bin/env bash\necho "no es json"\n' > "$SCL_VAULT_CLI"
+  run recall_json
+  [ "$status" -eq 0 ]
+  echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 0, d"
+}

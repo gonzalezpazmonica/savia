@@ -145,3 +145,134 @@ teardown() {
   run bash "$SCRIPT" --modo "overnight-sprint" --contexto-dir "$TMP_DIR/nope"
   [ "$status" -eq 2 ]
 }
+
+# --- Behavior: refs, defaults, ordering, append semantics ---------------------------
+
+_artifact() { echo "$TMP_DIR/output/agent-runs/$1-$(date +%Y%m%d)-handback.md"; }
+
+@test "se-332: contexto_ref lists all five known record names in canonical order" {
+  mkdir -p "$TMP_DIR/ctx"
+  touch "$TMP_DIR/ctx/audit.log" "$TMP_DIR/ctx/results.tsv" "$TMP_DIR/ctx/terminal-state.jsonl" \
+        "$TMP_DIR/ctx/run-record.json" "$TMP_DIR/ctx/run-record.jsonl"
+  bash "$SCRIPT" --modo overnight-sprint --contexto-dir "$TMP_DIR/ctx" >/dev/null
+  refs="$(grep -E '^    - ' "$(_artifact overnight-sprint)" | sed 's/.*\///' | tr '\n' ' ')"
+  [ "$refs" = "run-record.jsonl run-record.json terminal-state.jsonl results.tsv audit.log " ]
+}
+
+@test "se-332: only existing record files are referenced, unknown files are not" {
+  mkdir -p "$TMP_DIR/ctx"
+  touch "$TMP_DIR/ctx/results.tsv" "$TMP_DIR/ctx/secret-notes.txt"
+  bash "$SCRIPT" --modo overnight-sprint --contexto-dir "$TMP_DIR/ctx" >/dev/null
+  a="$(_artifact overnight-sprint)"
+  [ "$(grep -c '^    - ' "$a")" -eq 1 ]
+  grep -q '^    - ctx/results.tsv$' "$a"
+  ! grep -q "secret-notes" "$a"
+}
+
+@test "se-332: dir without known records falls back to the directory name as the single ref" {
+  mkdir -p "$TMP_DIR/lonely-dir"
+  bash "$SCRIPT" --modo overnight-sprint --contexto-dir "$TMP_DIR/lonely-dir" >/dev/null
+  a="$(_artifact overnight-sprint)"
+  [ "$(grep -c '^    - ' "$a")" -eq 1 ]
+  grep -q '^    - lonely-dir/lonely-dir$' "$a"
+}
+
+@test "se-332: motivo defaults to otro and intentos_restantes line is omitted when not given" {
+  mkdir -p "$TMP_DIR/ctx"; touch "$TMP_DIR/ctx/audit.log"
+  bash "$SCRIPT" --modo court-orchestrator --contexto-dir "$TMP_DIR/ctx" >/dev/null
+  a="$(_artifact court-orchestrator)"
+  grep -q '^  motivo: otro$' "$a"
+  ! grep -q 'intentos_restantes' "$a"
+}
+
+@test "se-332: intentos-restantes 0 is still emitted (zero is a value, not absence)" {
+  mkdir -p "$TMP_DIR/ctx"; touch "$TMP_DIR/ctx/audit.log"
+  bash "$SCRIPT" --modo court-orchestrator --contexto-dir "$TMP_DIR/ctx" --intentos-restantes 0 >/dev/null
+  grep -q '^  intentos_restantes: 0$' "$(_artifact court-orchestrator)"
+}
+
+@test "se-332: artifact is a closed YAML front matter with escalado_desde, escalado_a and timestamp" {
+  mkdir -p "$TMP_DIR/ctx"; touch "$TMP_DIR/ctx/audit.log"
+  bash "$SCRIPT" --modo truth-tribunal-orchestrator --contexto-dir "$TMP_DIR/ctx" >/dev/null
+  a="$(_artifact truth-tribunal-orchestrator)"
+  [ "$(sed -n 1p "$a")" = "---" ]
+  [ "$(tail -n1 "$a")" = "---" ]
+  [ "$(sed -n 2p "$a")" = "handback:" ]
+  grep -q '^  escalado_desde: truth-tribunal-orchestrator$' "$a"
+  grep -q '^  escalado_a: dev-orchestrator$' "$a"
+  grep -Eq '^  timestamp: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}$' "$a"
+}
+
+@test "se-332: stdout reports the artifact path and the parent" {
+  mkdir -p "$TMP_DIR/ctx"; touch "$TMP_DIR/ctx/audit.log"
+  run bash "$SCRIPT" --modo court-orchestrator --contexto-dir "$TMP_DIR/ctx"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"handback artifact: $(_artifact court-orchestrator)"* ]]
+  [[ "$output" == *"handback_to: dev-orchestrator"* ]]
+}
+
+@test "se-332: audit log appends one line per handback and keeps earlier ones" {
+  mkdir -p "$TMP_DIR/ctx"; touch "$TMP_DIR/ctx/audit.log"
+  bash "$SCRIPT" --modo court-orchestrator --contexto-dir "$TMP_DIR/ctx" --motivo primero >/dev/null
+  bash "$SCRIPT" --modo court-orchestrator --contexto-dir "$TMP_DIR/ctx" --motivo segundo >/dev/null
+  audit="$TMP_DIR/output/agent-runs/court-orchestrator-$(date +%Y%m%d)-audit.log"
+  [ "$(wc -l < "$audit")" -eq 2 ]
+  sed -n 1p "$audit" | grep -q "motivo=primero"
+  sed -n 2p "$audit" | grep -q "motivo=segundo"
+  grep -q "artifact=$(_artifact court-orchestrator)" "$audit"
+}
+
+@test "se-332: invariant failure (exit 5) emits no artifact and no audit line" {
+  mkdir -p "$TMP_DIR/ctx"
+  run bash "$SCRIPT" --modo bogus-mode --contexto-dir "$TMP_DIR/ctx"
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"does not terminate in manual"* ]]
+  [ ! -e "$TMP_DIR/output/agent-runs" ]
+}
+
+@test "se-332: chain check runs before directory check (unknown mode + missing dir is exit 5)" {
+  run bash "$SCRIPT" --modo bogus-mode --contexto-dir "$TMP_DIR/nope"
+  [ "$status" -eq 5 ]
+}
+
+@test "se-332: missing contexto dir reports the offending path and creates nothing" {
+  run bash "$SCRIPT" --modo overnight-sprint --contexto-dir "$TMP_DIR/nope"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"$TMP_DIR/nope"* ]]
+  [ ! -e "$TMP_DIR/output" ]
+}
+
+@test "se-332: missing --modo, unknown flag and --help are all usage errors (exit 2)" {
+  run bash "$SCRIPT" --contexto-dir "$TMP_DIR"
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" --modo overnight-sprint --contexto-dir "$TMP_DIR" --bogus
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" --help
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "se-332: contexto dir outside the workspace gets a relative path, never an empty one" {
+  mkdir -p "$TMP_DIR/ws" "$TMP_DIR/outside"; touch "$TMP_DIR/outside/audit.log"
+  SAVIA_WORKSPACE_DIR="$TMP_DIR/ws" bash "$SCRIPT" --modo overnight-sprint --contexto-dir "$TMP_DIR/outside" >/dev/null
+  a="$TMP_DIR/ws/output/agent-runs/overnight-sprint-$(date +%Y%m%d)-handback.md"
+  grep -qE '^    - \.\./outside/audit\.log$' "$a"
+}
+
+@test "se-332: subagent parent defaults to orquestador and honours SAVIA_HANDBACK_PARENT" {
+  source "$ENVSH"
+  unset SAVIA_HANDBACK_PARENT
+  run savia_handback_chain subagent
+  [ "$output" = "orquestador" ]
+  for alias in subagente delegado delegate; do
+    SAVIA_HANDBACK_PARENT="padre-x" run savia_handback_chain "$alias"
+    [ "$status" -eq 0 ]
+    [ "$output" = "padre-x" ]
+  done
+}
+
+@test "se-332: empty mode is an invariant violation, not a silent default" {
+  source "$ENVSH"
+  run savia_handback_chain ""
+  [ "$status" -eq 5 ]
+}

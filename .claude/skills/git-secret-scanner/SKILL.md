@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: git-secret-scanner
-description: Escanea el historial git o los commits pendientes de push buscando secrets con gitleaks. SE-239/SE-247.
+description: "Escanea el historial git o los commits pendientes con gitleaks. Usar cuando haya que comprobar que no se filtran secretos antes de publicar, o tras sospechar una fuga en un repo."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: security

@@ -1,5 +1,5 @@
 # communication — Savia Capability Map (L1)
-> 108 resources
+> 109 resources
 
 - **archive-digest** (agent): >
 - **contract-pin** (script): contract-pin.sh — SE-369 Contract Digest Pins
@@ -17,7 +17,7 @@
 - **meeting-risk-analyst** (agent): >
 - **meeting-transcript-extract** (skill): Usar cuando se necesita extraer la transcripción de una reunión Teams desde el browser.
 - **notify** (script): notify.sh — Cross-platform desktop notifications for Savia
-- **org-meeting-capture** (skill): Captura de Conocimiento Tácito de Reunión: extrae decisores, acuerdos informales y señales políticas de transcripciones.
+- **org-meeting-capture** (skill): Extrae decisores, acuerdos informales y señales políticas de transcripciones de reuniones. Usar cuando haya que capturar el conocimiento tácito de una reunión más allá del acta.
 - **pdf-digest** (agent): >
 - **pptx-digest** (agent): >
 - **savia-announce** (cmd): >
@@ -104,6 +104,7 @@
 - **savia-watch** (script): savia-watch.sh — Live activity feed from Savia
 - **savia-watchdog** (script): savia-watchdog.sh — Emergency fallback: detect internet loss, activate local LLM
 - **savia-workspace** (script): savia-workspace.sh — SE-373: composicion de repos multi-repo para agentes.
+- **social-linkedin** (skill): Importa el export oficial de LinkedIn y genera digests locales (temas, historia, estilo). Usar cuando haya que analizar la actividad propia en LinkedIn; nunca publica.
 - **transcriptor-digest** (skill): Usar cuando se detectan carpetas nuevas en el directorio de reuniones del transcriptor o se quiere digerir transcripciones y capturas de reuniones capturadas por Savia Sonora (ex-Savia Transcriptor). Triggers: digerir reuniones, transcripto
 - **transcriptor-mark-digested** (script): transcriptor-mark-digested.sh — marcar una reunion como digerida
 - **voice-inbox** (skill): Usar cuando se procesan mensajes de voz para transcribirlos y convertirlos en acciones.
