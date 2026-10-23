@@ -6,13 +6,15 @@ on:
     types: [opened, synchronize, edited]
 
 permissions:
-  pull-requests: write
   contents: read
 
 jobs:
   pr-guardian:
     name: PR Guardian
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
 
     steps:
       - name: Checkout
