@@ -4,7 +4,7 @@
 // amend, hard reset. Port of `.opencode/hooks/block-force-push.sh`.
 // SE-453: the git-command anchor (GIT_AT) is the same as in the bash hook, so
 // `git -C dir push --force` and `git commit --amend` block in both bindings.
-// Checked against the bash hook with the same inputs in tests/test-gate-result-contract.bats.
+// Checked against the bash hook with the same inputs in tests/test-gate-result-dual-binding.bats.
 //
 // Reference: docs/rules/domain/autonomous-safety.md
 // Reference: docs/rules/domain/critical-rules-extended.md (Rule 13)
@@ -12,36 +12,56 @@
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
 // Start of a real git command: at the beginning of a line, after a separator, inside a subshell or
-// inside `bash -c "…"`/`sh -c '…'`/`eval`, with what may precede it (VAR=value, env, command, sudo, nohup,
-// time, exec, then, do, if, xargs, timeout N, nice, !, {) and git global options (-C dir, -c key=value,
-// --no-pager…). A mention inside a message or an echo does not match.
-// Flag m: `^` matches at every line start, like the bash hook's grep (one line at a time).
+// inside `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`, with what may precede it (VAR=value, wrappers such as
+// env/command/sudo/doas/nohup/time/exec/xargs/nice/ionice/stdbuf/setsid/timeout with their options —
+// `sudo -u x`, `env -i`, `timeout -s KILL 30` —, then, do, if, !, {), a path or a backslash before git
+// (`/usr/bin/git`, `\git`) and git global options (-C dir, -c key=value, --no-pager…).
+// A mention inside a message or an echo does not match. Same grammar as the bash hook's GIT_AT.
+// Flag m: `^` matches at every line start, like the bash hook's grep (one line at a time); S is the
+// whitespace that does not cross a newline, so no rule spans two lines (grep cannot either).
+// No word can be read two ways (a wrapper option argument is never a prefix word, the value of -c/-C
+// never starts with `-`): an ambiguous grammar backtracks exponentially in V8 (`nice -n 5 -n 5 …`,
+// `git -c -a -c -a …`), which would hang the guard; grep has no such problem.
+const S = String.raw`[^\S\n]`;
+const NUM = String.raw`[0-9][0-9.]*[smhd]?`;
+const WRAPPERS = String.raw`env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout`;
+const PREFIX_WORD = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=|(?:${WRAPPERS}|then|do|else|if|elif|while|until|${NUM}|!|\{)(?:${S}|$))`;
+const WRAPPER = String.raw`(?:${WRAPPERS})(?:${S}+-\S+(?:${S}+(?!${PREFIX_WORD})[^-\s]\S*)?)*`;
 const GIT_AT =
-  String.raw`(?:^|[;&|(\x60]|\$\(|\b(?:(?:ba|z|da|k)?sh\s+-c|eval)\s+["']?)\s*` +
-  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|env|command|sudo|nohup|time|exec|then|do|else|if|elif|while|until|xargs|nice|timeout\s+\S+|!|\{)\s+)*git` +
-  String.raw`(?:(?:\s+(?:-C|-c|--git-dir|--work-tree)\s+(?:"[^"]*"|'[^']*'|\S+))|(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?))*\s+`;
+  String.raw`(?:^|[;&|(\x60]|\$\(|\b(?:(?:ba|z|da|k)?sh(?:${S}+-[A-Za-z]+)*${S}+-[A-Za-z]*c|eval)${S}+["']?)${S}*` +
+  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|${WRAPPER}|timeout${S}+(?!${NUM}(?:${S}|$))[^-\s]\S*|${NUM}|then|do|else|if|elif|while|until|!|\{)${S}+)*` +
+  String.raw`(?:\\|\S*/)?git` +
+  String.raw`(?:(?:${S}+(?:-C|-c|--git-dir|--work-tree)${S}+(?:"[^"\n]*"|'[^'\n]*'|[^-\s]\S*))|(?:${S}+--?[A-Za-z][A-Za-z-]*(?:=\S+)?))*${S}+`;
 // End of an option or a branch name: whitespace, end of line, separator or closing quote.
-const END = String.raw`(?:\s|$|[;&|)"'\x60])`;
+const END = String.raw`(?:${S}|$|[;&|)"'\x60])`;
+// Whitespace inside a character class, without the newline.
+const WS = String.raw`\t\v\f\r `;
 const rx = (body: string) => new RegExp(GIT_AT + body, "im");
 
-const FORCE_WITH_LEASE = rx(String.raw`push\s+.*--force-with-lease`);
+const FORCE_WITH_LEASE = rx(String.raw`push${S}+.*--force-with-lease`);
 // Never matches --force-with-lease, so a hit is a real --force/-f even if another push in the command
-// uses the lease (SE-453: the lease no longer exempts the whole command).
-const BARE_FORCE = rx(String.raw`push\s+(?:[^;&|\n]*\s)?(?:--force|-f)` + END);
-// main/master as a destination: a bare word or after `:`, `+` or `/` of a refspec; `main-fix` does not match.
-const PUSH_MENTIONS_MAIN = /git\s+push\s+.*(?:^|[\s:+/])(?:main|master)(?:[\s:;&|)"'\x60]|$)/im;
+// uses the lease (SE-453: the lease no longer exempts the whole command). A `+branch` refspec forces too.
+const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|-f)${END}|["']?\+\S)`);
+// main/master as a destination: a bare word or after `:`, `+`, `/` or a quote; `main-fix` does not match.
+const PUSH_MENTIONS_MAIN = new RegExp(
+  String.raw`git${S}+push${S}+.*(?:^|[${WS}:+/"'])(?:main|master)(?:[${WS}:;&|)"'\x60]|$)`,
+  "im",
+);
+// main/master as the destination of a push in this same command (without crossing ;, & or |):
+// `origin main`, `HEAD:main`, `+main`, `refs/heads/main`, `main:main`, `'main'`.
+const PUSH_MAIN = String.raw`push${S}+(?:[^;&|\n]*[${WS}:+/"'])?(?:main|master)(?:[${WS}:]|$|[;&|)"'\x60])`;
 
 const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
   {
-    rx: rx(String.raw`push\s+(?:origin\s+)?(?:main|master)` + END),
+    rx: rx(PUSH_MAIN),
     msg: "Cannot push directly to main/master. Use a feature branch and PR.",
   },
   {
-    rx: rx(String.raw`commit\s+.*--amend`),
+    rx: rx(String.raw`commit${S}+.*--amend`),
     msg: "git commit --amend can destroy previous commits. Create a new commit.",
   },
   {
-    rx: rx(String.raw`reset\s+--hard`),
+    rx: rx(String.raw`reset${S}+--hard`),
     msg: "git reset --hard blocked. It destroys working directory changes.",
   },
   // OpenCode-only rules (stricter than the bash hook; kept from SPEC-OC-01).

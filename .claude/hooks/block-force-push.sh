@@ -28,13 +28,15 @@ if [ -z "$COMMAND" ]; then
 fi
 
 # Inicio de una orden git real: al principio de una línea, tras un separador, al abrir un subshell o
-# dentro de `bash -c "…"`/`sh -c '…'`/`eval`, con lo que puede ir delante (VAR=valor, env, command, sudo,
-# nohup, time, exec, then, do, if, xargs, timeout N, nice, !, {), con opciones tras los envoltorios
-# (`sudo -u x`, `env -i`, `timeout -s KILL 30`), una ruta delante de git (`/usr/bin/git`) y opciones
-# globales de git (-C dir, -c clave=valor, --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
+# dentro de `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`, con lo que puede ir delante (VAR=valor, los
+# envoltorios env, command, sudo, doas, nohup, time, exec, xargs, nice, ionice, stdbuf, setsid y timeout con
+# sus opciones —`sudo -u x`, `env -i`, `timeout -s KILL 30`—, then, do, if, !, {), una ruta o una barra
+# invertida delante de git (`/usr/bin/git`, `\git`) y opciones globales de git (-C dir, -c clave=valor,
+# --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
 # grep evalúa línea a línea: una orden en la línea 2 de un bloque multilínea también casa (SE-453).
-# El puerto TS (.opencode/plugins/guards/block-force-push.ts) lleva la misma regex con el flag m.
-GIT_AT='(^|[;&|(`]|\$\(|\b((ba|z|da|k)?sh[[:space:]]+-c|eval)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|nohup|time|exec|xargs|nice|timeout)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*|timeout[[:space:]]+[^[:space:]]+|[0-9]+[smhd]?|then|do|else|if|elif|while|until|!|\{)[[:space:]]+)*(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
+# El puerto TS (.opencode/plugins/guards/block-force-push.ts) lleva la misma gramática con el flag m, escrita
+# sin ambigüedades para que V8 no se cuelgue en vueltas atrás (grep no tiene ese problema).
+GIT_AT='(^|[;&|(`]|\$\(|\b((ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c|eval)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*|timeout[[:space:]]+[^[:space:]]+|[0-9][0-9.]*[smhd]?|then|do|else|if|elif|while|until|!|\{)[[:space:]]+)*(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^-[:space:]][^[:space:]]*))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
 # Fin de una opción o de un nombre de rama: espacio, fin de línea, separador o cierre de comillas.
 END='([[:space:]]|$|[;&|)"'"'"'`])'
 # main/master como destino de un push de esta misma orden (sin cruzar ;, & ni |): palabra suelta o tras
