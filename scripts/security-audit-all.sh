@@ -81,6 +81,8 @@ SCANNER_RESULTS=()
 # shellcheck source=../.claude/hooks/lib/gate-result.sh
 source "$PROJECT_ROOT/.claude/hooks/lib/gate-result.sh"
 GAPS=()
+# Sin python3 ningún JSON de escáner es legible: cada uno queda `unreadable` y este hueco dice por qué.
+command -v python3 >/dev/null 2>&1 || GAPS+=("python3:missing_tool")
 
 # SE-453: un escáner que no corre, sale con un código fuera de su contrato o da una salida que no es
 # JSON queda como hueco (unknown), nunca como cero hallazgos. Antes `$(cmd || echo '{}')` pegaba `{}`
@@ -97,6 +99,10 @@ run_scanner() {
     counts=$(printf '%s' "$output" | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
+# critical/high/medium son obligatorias: una clave ausente (esquema cambiado) es ilegible, no un 0.
+# low es opcional porque permissions-wildcard-audit y hook-injection-audit no la emiten.
+if not isinstance(d, dict) or any(k not in d for k in ("critical", "high", "medium")):
+    sys.exit(1)
 vals = [d.get(k, 0) for k in ("critical", "high", "medium", "low")]
 if not all(isinstance(v, int) and v >= 0 for v in vals):
     sys.exit(1)
@@ -161,7 +167,8 @@ done
 if [[ "$EXIT_CODE" -eq 1 ]]; then RESULT="findings"; VERDICT="FAIL"
 elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"; VERDICT="UNKNOWN"; EXIT_CODE=2
 else RESULT="clean"; VERDICT="PASS"; fi
-GATE_LINE="$(gate_result_emit "$RESULT" "${GAPS[@]}")"
+# ${GAPS[@]+…}: con set -u, un array vacío aborta en bash < 4.4 (macOS trae 3.2).
+GATE_LINE="$(gate_result_emit "$RESULT" ${GAPS[@]+"${GAPS[@]}"})"
 
 if [[ "$JSON" -eq 1 ]]; then
   scanners_json=""

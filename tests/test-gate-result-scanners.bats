@@ -89,6 +89,24 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
   [ "$(json_field '["result"]')" = '"unknown"' ]
 }
 
+@test "agregador: rc 0 sin la clave critical (esquema cambiado) ⇒ unreadable, no limpio" {
+  stub permissions-wildcard-audit 0 '{"verdict":"PASS","findings_count":0,"crit":3,"high":0,"medium":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["gaps"]')" = '[{"check": "permissions-wildcard-audit", "reason": "unreadable"}]' ]
+  # Sin low (lo que emiten los escáneres reales) sigue siendo legible.
+  stub permissions-wildcard-audit 0 '{"verdict":"PASS","findings_count":0,"critical":0,"high":0,"medium":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+}
+
+@test "agregador: sin python3 ⇒ UNKNOWN con la causa python3:missing_tool, no solo unreadable" {
+  run env PATH="$NOPY" /usr/bin/bash "$W/scripts/security-audit-all.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"check":"python3","reason":"missing_tool"'* ]]
+  [[ "$output" == *'"check":"mcp-security-audit","reason":"unreadable"'* ]]
+}
+
 @test "agregador: escáner ausente ⇒ hueco missing_tool; prompt-scan roto ⇒ unreadable" {
   mv "$W/scripts/permissions-wildcard-audit.sh" "$W/gone.sh"
   printf '#!/usr/bin/env bash\necho boom >&2\nexit 2\n' > "$W/scripts/prompt-security-scan.sh"
