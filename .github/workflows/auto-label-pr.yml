@@ -5,12 +5,14 @@ on:
     types: [opened, synchronize]
 
 permissions:
-  pull-requests: write
   contents: read
 
 jobs:
   label:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
     steps:
       - name: Label PR based on branch prefix
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
