@@ -30,6 +30,11 @@ env:
   SAVIA_EVAL_DELTA_THRESHOLD: "0.05"
   PYTHON_VERSION: "3.12"
 
+# Mínimo privilegio (Scorecard TokenPermissions): lectura arriba; solo escriben
+# deepeval-skills (comentario de delta en la PR) y promptfoo-redteam (issue de regresión).
+permissions:
+  contents: read
+
 jobs:
   # ── Job 1: DeepEval skills regression (every PR) ─────────────────────────────
   deepeval-skills:
@@ -37,6 +42,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -182,6 +190,9 @@ jobs:
       github.event_name == 'schedule' ||
       (github.event_name == 'workflow_dispatch' && inputs.run_redteam == true)
     timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - name: Checkout

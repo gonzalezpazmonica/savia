@@ -122,6 +122,30 @@ def write_manifest(attachment, source_chat, manifest_dir):
     return mf_path
 
 
+_AUTH_PAGE_HOSTS = ("teams.microsoft.com", "teams.cloud.microsoft", "teams.live.com")
+
+
+def is_authenticated_page_url(url):
+    """True when the URL's host is SharePoint or Teams (not a substring match).
+
+    The fetch runs inside the chosen page, so a tab such as
+    https://evil.example/?u=sharepoint.com must never be selected.
+    """
+    parsed = urllib.parse.urlsplit(url or "")
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https":
+        return False
+    return host.endswith(".sharepoint.com") or any(
+        host == h or host.endswith("." + h) for h in _AUTH_PAGE_HOSTS)
+
+
+def pick_authenticated_page(targets):
+    for t in targets:
+        if t.get("type") == "page" and is_authenticated_page_url(t.get("url")):
+            return t
+    return None
+
+
 def download_via_daemon(url, dest_path, cdp_port):
     """Download a URL using the daemon's authenticated context via CDP fetch."""
     import websocket
@@ -131,11 +155,7 @@ def download_via_daemon(url, dest_path, cdp_port):
             targets = json.loads(r.read())
     except Exception as err:
         return {"ok": False, "error": "cdp not available: " + str(err)[:100]}
-    page = None
-    for t in targets:
-        if t.get("type") == "page" and ("sharepoint.com" in t.get("url", "") or "teams." in t.get("url", "")):
-            page = t
-            break
+    page = pick_authenticated_page(targets)
     if not page:
         return {"ok": False, "error": "no authenticated page"}
     ws_url = page["webSocketDebuggerUrl"]
