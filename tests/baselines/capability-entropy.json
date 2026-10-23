@@ -1,17 +1,17 @@
 {
   "components": {
-    "active_capabilities": 1453,
+    "active_capabilities": 1448,
     "dependency_edges": 0,
     "exception_count": 0,
     "manual_sync_surfaces": 4,
     "mirror_pairs": 0,
-    "overlap_pairs": 166,
+    "overlap_pairs": 167,
     "routing_ambiguity": 0,
     "unowned_agents": 0,
     "untested_high_risk": 27
   },
-  "entropy": 1623,
-  "entropy_v1": 1650,
+  "entropy": 1619,
+  "entropy_v1": 1646,
   "entropy_version": 0,
   "weights": "all-1.0-provisional"
 }
