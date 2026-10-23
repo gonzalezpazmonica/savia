@@ -209,3 +209,7 @@ PY
   [ "$status" -eq 0 ]
   [[ "$(ctx)" == *"turnos 1/40"* ]]
 }
+
+@test "el hook declara set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$HOOK"
+}

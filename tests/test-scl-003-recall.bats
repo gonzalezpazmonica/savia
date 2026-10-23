@@ -237,3 +237,7 @@ assert '## Criterios humanos aplicables' in c['additionalContext'], c
 assert '[CRIT-034] Exigir diagnostico no vacio antes de cambiar el hook.' in c['additionalContext'], c"
   [ -s "$TMPD/recall.jsonl" ]
 }
+
+@test "el script declara set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$RECALL"
+}

@@ -153,3 +153,7 @@ scrub() { env SAVIA_SCRUB_ENV=1 "$@"; }
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "el script declara set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$SCRUB"
+}

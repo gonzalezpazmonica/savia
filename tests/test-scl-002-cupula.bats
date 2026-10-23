@@ -245,3 +245,7 @@ mk_prop() {
   [ "$status" -eq 0 ]
   git -C "$TMPD/vault" log --format=%s -1 | grep -q "persist $PID"
 }
+
+@test "persist declara set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$PERSIST"
+}

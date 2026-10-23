@@ -187,3 +187,7 @@ assert d['ram_gb'].isdigit() and d['disk_gb'].isdigit(), d"
   run probe bash scripts/freetoken-probe.sh --json
   [[ -z "$(ls -A "$BATS_TEST_TMPDIR/home")" ]]
 }
+
+@test "el script declara set -uo pipefail" {
+  grep -q '^set -uo pipefail' scripts/freetoken-probe.sh
+}
