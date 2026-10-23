@@ -624,3 +624,225 @@ print('OK')
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
+
+# ── Comportamiento: funciones del motor CST (importadas, con entorno controlado)
+
+# _bf '<expresión Python sobre m>' [NOMBRE valor ...]  (el entorno se pasa en pares)
+_bf() {
+  local expr="$1"; shift
+  local envargs=()
+  while [[ $# -ge 2 ]]; do envargs+=("$1=$2"); shift 2; done
+  env "${envargs[@]}" python3 - "$PY_SCRIPT" "$expr" <<'PY'
+import sys, importlib.util
+sp = importlib.util.spec_from_file_location('bf', sys.argv[1])
+m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(eval(sys.argv[2], {'m': m}))
+PY
+}
+
+@test "SE252-scan: should_exclude respeta vendor/, node_modules/ y *.lock por defecto" {
+  [ "$(_bf "[m.should_exclude(p) for p in ['vendor/x.py','node_modules/a.js','poetry.lock','src/app.py']]")" = "[True, True, True, False]" ]
+}
+
+@test "SE252-scan: un patrón de directorio no excluye ficheros que solo empiezan igual (vendor_client.py)" {
+  [ "$(_bf "[m.should_exclude(p) for p in ['vendor_client.py','vendored/a.py','node_modules_helper.js']]")" = "[False, False, False]" ]
+}
+
+@test "SE252-scan: patrones generados se evalúan sobre el nombre base y la ruta" {
+  [ "$(_bf "[m.should_exclude(p) for p in ['api/x.pb.go','a/b/foo_generated.py','web/app.min.js','web/app.js']]")" = "[True, True, True, False]" ]
+}
+
+@test "SE252-scan: BF_EXCLUDE_PATTERNS sustituye a los patrones por defecto" {
+  [ "$(_bf "[m.should_exclude(p) for p in ['vendor/x.py','docs/a.md']]" BF_EXCLUDE_PATTERNS "docs/")" = "[False, True]" ]
+}
+
+@test "SE252-scan: is_bot_author distingue bots reales de humanos con nombres parecidos" {
+  [ "$(_bf "[m.is_bot_author(a) for a in ['x[bot] <a@b.c>','gitlab-ci <gitlab-ci@x.com>','Dependabot <d@x.com>','CI <build-noreply@x.com>']]")" = "[True, True, True, True]" ]
+  [ "$(_bf "[m.is_bot_author(a) for a in ['Marci <marci@x.com>','Ana <ana@x.com>','U <1+u@users.noreply.github.com>','Marcinoreply <marcinoreply@x.com>']]")" = "[False, False, False, False]" ]
+}
+
+@test "SE252-scan: compute_file_bus_factor sin historial devuelve (0, [], [no_history])" {
+  [ "$(_bf "m.compute_file_bus_factor({})")" = "(0, [], ['no_history'])" ]
+  [ "$(_bf "m.compute_file_bus_factor({'a': 0})")" = "(0, [], ['no_history'])" ]
+}
+
+@test "SE252-scan: el umbral de propiedad es inclusivo (50/50 => dos owners)" {
+  [ "$(_bf "m.compute_file_bus_factor({'a':5,'b':5})[0]")" = "2" ]
+  [ "$(_bf "m.compute_file_bus_factor({'a':5,'b':5})[2]")" = "[]" ]
+}
+
+@test "SE252-scan: sin nadie sobre el umbral el mayor contribuidor es owner con aviso no_clear_owner" {
+  [ "$(_bf "m.compute_file_bus_factor({'a':4,'b':3,'c':3})")" = "(1, [{'dev': 'a', 'score': 0.4, 'files_owned': 0}], ['no_clear_owner'])" ]
+}
+
+@test "SE252-scan: owners ordenados por score descendente y score redondeado a 4 decimales" {
+  [ "$(_bf "[o['dev'] for o in m.compute_file_bus_factor({'a':2,'b':6,'c':2})[1]]" BF_OWNERSHIP_THRESHOLD 0.1)" = "['b', 'a', 'c']" ]
+  [ "$(_bf "m.compute_file_bus_factor({'a':2,'b':1})[1][0]['score']")" = "0.6667" ]
+}
+
+@test "SE252-scan: la variable de umbral no numérica cae al valor por defecto 0.5; una numérica se respeta" {
+  [ "$(_bf "m.BF_OWNERSHIP_THRESHOLD" BF_OWNERSHIP_THRESHOLD abc)" = "0.5" ]
+  [ "$(_bf "m.BF_OWNERSHIP_THRESHOLD" BF_OWNERSHIP_THRESHOLD 0.7)" = "0.7" ]
+}
+
+@test "SE252-scan: risk_level en cada frontera y UNKNOWN para bf <= 0" {
+  [ "$(_bf "[m.risk_level(b) for b in (-1,0,1,2,3,4,10)]")" = "['UNKNOWN', 'UNKNOWN', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'LOW']" ]
+}
+
+@test "SE252-scan: los niveles de riesgo se pueden mover por entorno" {
+  [ "$(_bf "[m.risk_level(b) for b in (1,2,3,4,5)]" BF_RISK_CRITICAL 2 BF_RISK_HIGH 3 BF_RISK_MEDIUM 4)" = "['CRITICAL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']" ]
+}
+
+@test "SE252-scan: module_path_for agrupa por los primeros N componentes y devuelve el directorio si el fichero es poco profundo" {
+  [ "$(_bf "[m.module_path_for(p, 2) for p in ('a/b/c/d.py','a/b/c.py','a/b.py','top.py')]")" = "['a/b', 'a/b', 'a', '.']" ]
+  [ "$(_bf "m.module_path_for('a/b/c/d.py', 1)")" = "a" ]
+  [ "$(_bf "m.module_path_for('a/b/c/d.py', 3)")" = "a/b/c" ]
+}
+
+@test "SE252-scan: compute_module_bus_factor de un módulo vacío o sin owners es 0" {
+  [ "$(_bf "m.compute_module_bus_factor([])")" = "(0, [])" ]
+  [ "$(_bf "m.compute_module_bus_factor([{'path':'a','owners':[]}])")" = "(0, [])" ]
+}
+
+@test "SE252-scan: un autor dueño de más de la mitad de los ficheros da bus factor 1 con files_owned correcto" {
+  [ "$(_bf "m.compute_module_bus_factor([{'path':p,'owners':[{'dev':d,'score':s}]} for p,d,s in (('1','a',1.0),('2','a',0.5),('3','a',0.5),('4','b',1.0))])")" = "(1, [{'dev': 'a', 'score': 0.6667, 'files_owned': 3}])" ]
+}
+
+@test "SE252-scan: cuatro ficheros de cuatro autores distintos necesitan dos autores para cubrir el 50%" {
+  [ "$(_bf "m.compute_module_bus_factor([{'path':p,'owners':[{'dev':d,'score':1.0}]} for p,d in (('1','a'),('2','b'),('3','c'),('4','d'))])[0]")" = "2" ]
+}
+
+@test "SE252-scan: con exactamente la mitad de ficheros cubiertos basta (>= 50%, no > 50%)" {
+  [ "$(_bf "m.compute_module_bus_factor([{'path':p,'owners':[{'dev':d,'score':1.0}]} for p,d in (('1','a'),('2','a'),('3','b'),('4','c'))])[0]")" = "1" ]
+}
+
+# ── Comportamiento: historial git real ────────────────────────────────────────
+
+_commit_as() { # <nombre> <email> <fichero> <contenido>
+  mkdir -p "$(dirname "$3")"
+  printf '%s\n' "$4" >> "$3"
+  git add "$3"
+  GIT_AUTHOR_NAME="$1" GIT_AUTHOR_EMAIL="$2" GIT_COMMITTER_NAME="$1" GIT_COMMITTER_EMAIL="$2" git commit -q -m "c"
+}
+
+_stats() { # <fichero> [NOMBRE valor ...]
+  local f="$1"; shift
+  local envargs=()
+  while [[ $# -ge 2 ]]; do envargs+=("$1=$2"); shift 2; done
+  env "${envargs[@]}" python3 - "$PY_SCRIPT" "$TEST_REPO" "$f" <<'PY'
+import sys, importlib.util
+sp = importlib.util.spec_from_file_location('bf', sys.argv[1])
+m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+print(sorted(m.get_file_stats(sys.argv[2], sys.argv[3]).items()))
+PY
+}
+
+@test "SE252-scan: get_file_stats suma líneas añadidas y borradas por autor" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com f.txt $'uno\ndos\ntres'
+  printf 'solo\n' > f.txt; git add f.txt
+  GIT_AUTHOR_NAME=Bob GIT_AUTHOR_EMAIL=bob@t.com GIT_COMMITTER_NAME=Bob GIT_COMMITTER_EMAIL=bob@t.com git commit -q -m r
+  [ "$(_stats f.txt)" = "[('ana@t.com', 3), ('bob@t.com', 4)]" ]
+}
+
+@test "SE252-scan: get_file_stats ignora a los bots y .mailmap unifica correos de una persona" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com f.txt "a"
+  _commit_as Ana ana@viejo.com f.txt "b"
+  _commit_as "dependabot[bot]" bot@t.com f.txt "c"
+  printf 'Ana <ana@t.com> <ana@viejo.com>\n' > .mailmap; git add .mailmap
+  GIT_AUTHOR_NAME=Ana GIT_AUTHOR_EMAIL=ana@t.com GIT_COMMITTER_NAME=Ana GIT_COMMITTER_EMAIL=ana@t.com git commit -q -m mm
+  [ "$(_stats f.txt)" = "[('ana@t.com', 2)]" ]
+}
+
+@test "SE252-scan: BF_MAX_HISTORY_DEPTH limita los commits considerados (los más recientes)" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com f.txt "a"
+  _commit_as Bob bob@t.com f.txt "b"
+  [ "$(_stats f.txt BF_MAX_HISTORY_DEPTH 1)" = "[('bob@t.com', 1)]" ]
+}
+
+@test "SE252-scan: fichero inexistente en el historial da estadísticas vacías" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com f.txt "a"
+  [ "$(_stats nada.txt)" = "[]" ]
+}
+
+# ── Comportamiento: scan_repo y CLI ───────────────────────────────────────────
+
+_scan_json() { python3 "$PY_SCRIPT" --project "$1" "$TEST_REPO" 2>/dev/null; }
+_jqs() { printf '%s' "$1" | jq -r "$2"; }
+
+@test "SE252-scan: repo sin ficheros versionados da no_tracked_files y un summary con todos los contadores a 0" {
+  cd "$TEST_REPO"; git init -q
+  out="$(_scan_json vacio)"
+  [ "$(_jqs "$out" '.warnings[0]')" = "no_tracked_files" ]
+  [ "$(_jqs "$out" '.summary | [.total_modules,.critical,.high,.medium,.low,.unknown] | join(",")')" = "0,0,0,0,0,0" ]
+  [ "$(_jqs "$out" '.project')" = "vacio" ]
+}
+
+@test "SE252-scan: dos autores al 50% de un fichero: bus factor del fichero 2, pero un solo autor cubre el módulo (CRITICAL)" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com a/b/f.txt $'1\n2'
+  _commit_as Bob bob@t.com a/b/f.txt $'3\n4'
+  out="$(_scan_json p)"
+  [ "$(_jqs "$out" '.modules[0].name')" = "a/b" ]
+  [ "$(_jqs "$out" '.modules[0].files[0].bus_factor')" = "2" ]
+  [ "$(_jqs "$out" '.modules[0].bus_factor')" = "1" ]
+  [ "$(_jqs "$out" '.modules[0].risk_level')" = "CRITICAL" ]
+  [ "$(_jqs "$out" '.summary.critical')" = "1" ]
+}
+
+@test "SE252-scan: ficheros excluidos no aparecen y vendor_client.py sí se analiza" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com vendor/lib.py "x"
+  _commit_as Ana ana@t.com vendor_client.py "y"
+  out="$(_scan_json p)"
+  [ "$(_jqs "$out" '[.modules[].files[].path] | sort | join(",")')" = "vendor_client.py" ]
+}
+
+@test "SE252-scan: los módulos salen ordenados por nombre" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com zeta/f.txt "x"
+  _commit_as Ana ana@t.com alfa/f.txt "x"
+  out="$(_scan_json p)"
+  [ "$(_jqs "$out" '[.modules[].name] | join(",")')" = "alfa,zeta" ]
+}
+
+@test "SE252-scan: el nombre del proyecto por defecto es el basename del repo" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com f.txt "x"
+  out="$(python3 "$PY_SCRIPT" "$TEST_REPO" 2>/dev/null)"
+  [ "$(_jqs "$out" '.project')" = "$(basename "$TEST_REPO")" ]
+}
+
+@test "SE252-scan: la CLI de Python falla con exit 1 si el directorio no existe o no es git" {
+  run python3 "$PY_SCRIPT" "$TEST_REPO/no-existe"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"directorio no existe"* ]]
+  run python3 "$PY_SCRIPT" "$TEST_REPO"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es un repositorio git"* ]]
+}
+
+@test "SE252-scan: scan.sh rechaza formatos que no sean json y argumentos desconocidos" {
+  run bash "$SCRIPT" --project "$TEST_REPO" --format xml
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"formato no soportado: xml"* ]]
+  run bash "$SCRIPT" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"argumento desconocido: --bogus"* ]]
+  run bash "$SCRIPT" --help
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BF_OWNERSHIP_THRESHOLD"* ]]
+}
+
+@test "SE252-scan: sin --output el JSON se escribe como <proyecto>-<fecha>T<hora>Z.json en BF_OUTPUT_DIR" {
+  cd "$TEST_REPO"; git init -q
+  _commit_as Ana ana@t.com f.txt "x"
+  run bash "$SCRIPT" --project "$TEST_REPO"
+  [ "$status" -eq 0 ]
+  f="$(ls "$BF_OUT"/*.json)"
+  [[ "$f" =~ /$(basename "$TEST_REPO")-[0-9]{8}T[0-9]{6}Z\.json$ ]]
+  jq -e '.modules | length >= 1' "$f" >/dev/null
+}
