@@ -158,6 +158,24 @@ class CorsOriginTests(unittest.TestCase):
                        "http://localhost:99999", "http://user@localhost"):
             self.assertIsNone(bridge._allowed_cors_origin(origin), origin)
 
+    def test_only_loopback_rfc1918_and_cgnat_networks(self):
+        # Edges of 172.16/12 are in; ranges ip.is_private also covers
+        # (link-local, benchmark, "this network", IETF) are out.
+        for origin in (f"http://{_ip(172, 31, 255, 254)}:8922",
+                       f"http://{_ip(172, 16, 0, 1)}"):
+            self.assertEqual(bridge._allowed_cors_origin(origin), origin, origin)
+        for origin in ("http://169.254.169.254", "http://198.18.0.1",
+                       "http://0.0.0.1", "http://192.0.0.8",
+                       f"http://{_ip(172, 15, 255, 255)}"):
+            self.assertIsNone(bridge._allowed_cors_origin(origin), origin)
+
+    def test_result_is_rebuilt_not_echoed(self):
+        # Canonical form: lower-case host, port without leading zeros.
+        self.assertEqual(bridge._allowed_cors_origin("http://LocalHost:08922"),
+                         "http://localhost:8922")
+        self.assertEqual(bridge._allowed_cors_origin("https://LIMA"),
+                         "https://lima")
+
     def test_folded_origin_with_crlf_is_not_reflected(self):
         sent = []
         fake = type("H", (), {})()

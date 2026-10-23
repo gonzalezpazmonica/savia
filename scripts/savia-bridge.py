@@ -1907,33 +1907,43 @@ def stream_cli_response(message: str, session_id: str = None,
 
 # --- HTTP Server ---
 
-_CORS_LOCAL_HOSTNAMES = frozenset({"localhost", "lima"})
-_CORS_CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale-style VPN
+# Hostname -> constant rendered in the header (never the client's string).
+_CORS_LOCAL_HOSTNAMES = {"localhost": "localhost", "lima": "lima"}
+# Loopback, RFC 1918 and the 100.64/10 range Tailscale-style VPNs use.
+_CORS_NETWORKS = tuple(ipaddress.IPv4Network(n) for n in (
+    "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+    "100.64.0.0/10"))
 _CORS_ORIGIN_RE = re.compile(r"https?://[A-Za-z0-9.\-]+(?::[0-9]{1,5})?")
 
 
 def _allowed_cors_origin(origin: str) -> str | None:
-    """Return the canonical Origin if it is a local-network origin, else None.
+    """Return a rebuilt local-network Origin, or None if it is not allowed.
 
     Matches the whole Origin, never a prefix: "http://localhost.evil.com"
-    and folded values carrying CR/LF (header splitting) are rejected.
+    and folded values carrying CR/LF (header splitting) are rejected. The
+    result is rebuilt from constants, an IPv4Address and an int port, so no
+    character of the client's header reaches the response (CodeQL
+    py/http-response-splitting).
     """
     if not origin or not _CORS_ORIGIN_RE.fullmatch(origin):
         return None
     parsed = urlparse(origin)
-    host = (parsed.hostname or "").lower()
+    scheme = "https" if parsed.scheme == "https" else "http"
     try:
         port = parsed.port
     except ValueError:
         return None
-    if host not in _CORS_LOCAL_HOSTNAMES:
+    name = (parsed.hostname or "").lower()
+    host = _CORS_LOCAL_HOSTNAMES.get(name)
+    if host is None:
         try:
-            ip = ipaddress.ip_address(host)
+            ip = ipaddress.IPv4Address(name)
         except ValueError:
             return None
-        if not (ip.is_loopback or ip.is_private or ip in _CORS_CGNAT):
+        if not any(ip in net for net in _CORS_NETWORKS):
             return None
-    return f"{parsed.scheme}://{host}" + (f":{port}" if port is not None else "")
+        host = str(ipaddress.IPv4Address(int(ip)))
+    return f"{scheme}://{host}" + (f":{int(port)}" if port is not None else "")
 
 
 class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
