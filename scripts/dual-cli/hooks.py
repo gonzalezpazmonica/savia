@@ -49,7 +49,8 @@ def matcher_expression(matcher: str) -> str:
 
 def _pattern(matcher: str) -> re.Pattern[str]:
     try:
-        return re.compile(matcher_expression(matcher), re.IGNORECASE)
+        # DOTALL: a heredoc or multi-line `-m` commit must still match `Bash(git commit*)`.
+        return re.compile(matcher_expression(matcher), re.IGNORECASE | re.DOTALL)
     except re.error as error:
         raise HookConfigurationError("INVALID_MATCHER") from error
 

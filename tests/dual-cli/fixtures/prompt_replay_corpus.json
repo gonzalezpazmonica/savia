@@ -8,5 +8,12 @@
   {"id": "evaluator-timeout", "command": "git commit -m 'feat: x'", "evaluator": "sleep 30", "timeout": 1, "action": "deny", "reason": "HOOK_TIMEOUT"},
   {"id": "arguments-rendered", "command": "git commit -m 'feat: x'", "evaluator": "if grep -q \"Valida: .*git commit -m 'feat: x'\"; then echo '{\"ok\": true}'; else echo '{\"ok\": false, \"reason\": \"sin argumentos\"}'; fi", "action": "allow", "reason": "HOOK_OK"},
   {"id": "model-forwarded", "command": "git commit -m 'feat: x'", "model": "fast", "evaluator": "cat >/dev/null; if [ \"$SAVIA_PROMPT_HOOK_MODEL\" = fast ]; then echo '{\"ok\": true}'; else echo '{\"ok\": false}'; fi", "action": "allow", "reason": "HOOK_OK"},
-  {"id": "unrelated-op-continues", "command": "git status --short", "evaluator": "", "action": "allow", "reason": "HOOK_OK"}
+  {"id": "unrelated-op-continues", "command": "git status --short", "evaluator": "", "action": "allow", "reason": "HOOK_OK"},
+  {"id": "heredoc-commit-gated", "command": "git commit -m \"$(cat <<'EOF'\nfeat: x\n\ncuerpo\nEOF\n)\"", "evaluator": "cat >/dev/null; echo '{\"ok\": false, \"reason\": \"revisado\"}'", "action": "deny", "reason": "PROMPT_HOOK_BLOCK: revisado"},
+  {"id": "multiline-m-commit-gated", "command": "git commit -m 'feat: x\n\ncuerpo'", "evaluator": "", "action": "deny", "reason": "PROMPT_HOOK_UNAVAILABLE"},
+  {"id": "inherited-model-not-leaked", "parent_env": {"SAVIA_PROMPT_HOOK_MODEL": "heredado", "CLAUDE_JSON_INPUT": "{}"}, "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; if [ -z \"${SAVIA_PROMPT_HOOK_MODEL+x}\" ] && [ -z \"${CLAUDE_JSON_INPUT+x}\" ]; then echo '{\"ok\": true}'; else echo '{\"ok\": false, \"reason\": \"entorno heredado\"}'; fi", "action": "allow", "reason": "HOOK_OK"},
+  {"id": "negative-timeout-invalid", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": true}'", "timeout": -1, "action": "deny", "reason": "INVALID_HOOK_CONFIGURATION"},
+  {"id": "duplicate-ok-key", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": false, \"ok\": true}'", "action": "deny", "reason": "INVALID_HOOK_OUTPUT"},
+  {"id": "nan-in-verdict", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": true, \"score\": NaN}'", "action": "deny", "reason": "INVALID_HOOK_OUTPUT"},
+  {"id": "infinite-number-in-verdict", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": true, \"score\": 1e999}'", "action": "deny", "reason": "INVALID_HOOK_OUTPUT"}
 ]

@@ -23,6 +23,8 @@ AUTHORITY_EVENTS = ("PreToolUse", "PermissionRequest")
 ENV_ARG_LIMIT = 64 * 1024  # a single env string must stay far below the kernel limit
 # Switches that turn security hooks off must not be steerable from the gated session.
 STRIPPED_ENV = ("SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE")
+# Never inherited by a prompt evaluator (mirrored by PROMPT_ONLY_ENV in savia-gates shell-bridge.ts).
+PROMPT_ONLY_ENV = ("CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL")
 # The agent being gated must not rewrite the gate: deny by default (relative to root).
 # Same list as PROTECTED_GATE_PATHS in savia-gates lib/hook-vocabulary.ts (parity test in test_edit_replay.py).
 PROTECTED_PATHS = (".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
@@ -58,7 +60,9 @@ def _timeout(handler):
 def _run_command(command, payload, root, timeout, extra_env=None):
     env = {k: v for k, v in os.environ.items() if k not in STRIPPED_ENV}
     env["CLAUDE_PROJECT_DIR"] = str(root)
-    if extra_env is not None:
+    if extra_env is not None:  # a prompt evaluator: no stale model or event from the parent
+        for key in PROMPT_ONLY_ENV:
+            env.pop(key, None)
         env.update(extra_env)
     elif len(payload) <= ENV_ARG_LIMIT:  # larger events reach handlers by stdin only
         env["CLAUDE_JSON_INPUT"] = payload

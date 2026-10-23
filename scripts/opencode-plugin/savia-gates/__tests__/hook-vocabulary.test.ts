@@ -117,6 +117,8 @@ test("applyPatchOperations resolves paths against the session directory", () => 
 test("a command-scoped matcher selects the command in OpenCode", async () => {
   const { before } = await gatesWith(`#!/usr/bin/env bash\necho COMMIT_GATE >&2; exit 2\n`, "Bash(git commit*)")
   expect((await before("bash", { command: "git commit -m 'feat: x'" })).verdict).toContain("COMMIT_GATE")
+  const heredoc = "git commit -m \"$(cat <<'EOF'\nfeat: x\n\ncuerpo\nEOF\n)\""
+  expect((await before("bash", { command: heredoc })).verdict).toContain("COMMIT_GATE")
   expect((await before("bash", { command: "git status" })).verdict).toBe("PASS")
 })
 

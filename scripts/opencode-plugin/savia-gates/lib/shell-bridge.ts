@@ -224,7 +224,8 @@ export function matcherExpression(matcher: string): string {
 }
 
 function toMatcherRegex(matcher: string): RegExp {
-  return new RegExp(matcherExpression(matcher), "i")
+  // "s" (dotAll): a heredoc or multi-line `-m` commit must still match `Bash(git commit*)`.
+  return new RegExp(matcherExpression(matcher), "is")
 }
 
 export function matcherApplies(
@@ -274,6 +275,13 @@ export function matcherApplies(
     }
   }
   return false
+}
+
+/** Never inherited by a prompt evaluator: a handler without `model` must not see a stale one. */
+const PROMPT_ONLY_ENV = ["CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL"]
+
+function inheritedEnv(drop: string[]): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !drop.includes(k)))
 }
 
 /** Path for a per-call stdin payload file (local, ephemeral, CRIT-001 safe). */
@@ -328,7 +336,9 @@ async function spawnHook(
       cmd: opts.wrap ? opts.wrap(h.command) : ["bash", "-c", h.command],
       cwd: projectRoot,
       // extraEnv replaces CLAUDE_JSON_INPUT: a prompt evaluator gets the rendered prompt on stdin only.
-      env: { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, ...(extraEnv ?? { CLAUDE_JSON_INPUT: payload }) },
+      env: extraEnv
+        ? { ...inheritedEnv(PROMPT_ONLY_ENV), CLAUDE_PROJECT_DIR: projectRoot, ...extraEnv }
+        : { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_JSON_INPUT: payload },
       stdin: Bun.file(stdinPath),
       stdout: ignoreOutput ? "ignore" : "pipe",
       stderr: ignoreOutput ? "ignore" : "pipe",
@@ -487,12 +497,47 @@ export function renderPrompt(prompt: string, payload: string): string {
   return prompt.includes("$ARGUMENTS") ? prompt.split("$ARGUMENTS").join(payload) : `${prompt}\n\n${payload}`
 }
 
+/** True when some object in a JSON text repeats a key; JSON.parse would silently keep the last one. */
+function hasDuplicateKeys(text: string): boolean {
+  const scopes: (Set<string> | null)[] = []
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === "{") scopes.push(new Set())
+    else if (c === "[") scopes.push(null)
+    else if (c === "}" || c === "]") scopes.pop()
+    else if (c === '"') {
+      let j = i + 1
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1
+      const literal = text.slice(i, j + 1)
+      i = j
+      let k = j + 1
+      while (/\s/.test(text[k] ?? "")) k++
+      const scope = scopes[scopes.length - 1]
+      if (text[k] !== ":" || !scope) continue
+      const key = JSON.parse(literal)
+      if (scope.has(key)) return true
+      scope.add(key)
+    }
+  }
+  return false
+}
+
+/** Like protocol.decode_json in the Codex core: duplicate keys and non-finite numbers are invalid. */
+function strictJson(text: string): unknown {
+  const value = JSON.parse(text, (_k, v) => {
+    if (typeof v === "number" && !Number.isFinite(v)) throw new Error("INVALID_NUMBER")
+    return v
+  })
+  if (hasDuplicateKeys(text)) throw new Error("DUPLICATE_KEY")
+  return value
+}
+
 /** Port of policy.prompt_decision: the evaluator must print exactly {"ok": bool, "reason"?: string}. */
 export function promptVerdict(exit: number, stdout: string): { exit: number; stdout: string; stderr: string } {
   if (exit !== 0) return { exit: BLOCK_EXIT, stdout: "", stderr: "PROMPT_HOOK_FAILURE" }
   let value: any
   try {
-    value = JSON.parse(stdout.trim())
+    value = strictJson(stdout.trim())
   } catch {
     value = undefined
   }
@@ -518,6 +563,9 @@ async function runPromptHookOnce(
 ): Promise<{ exit: number; stdout: string; stderr: string }> {
   const evaluator = (process.env.SAVIA_PROMPT_HOOK_CMD ?? "").trim()
   if (!evaluator) return { exit: BLOCK_EXIT, stdout: "", stderr: "PROMPT_HOOK_UNAVAILABLE" }
+  if (h.timeout !== undefined && (typeof h.timeout !== "number" || !Number.isFinite(h.timeout) || h.timeout <= 0)) {
+    return { exit: BLOCK_EXIT, stdout: "", stderr: "INVALID_HOOK_CONFIGURATION" }  // gates.py: _timeout
+  }
   const run = await runHookOnce(projectRoot, {
     type: "command", command: evaluator, timeout: h.timeout, declared_event: h.declared_event,
   }, renderPrompt(h.prompt, payload), false, {}, h.model !== undefined ? { SAVIA_PROMPT_HOOK_MODEL: h.model } : {})

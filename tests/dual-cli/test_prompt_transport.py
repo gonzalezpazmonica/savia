@@ -11,7 +11,6 @@ Before this change:
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,7 +20,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "scripts/dual-cli"
 FIXTURES = ROOT / "tests/dual-cli/fixtures"
 sys.path.insert(0, str(CORE))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gates
+from required_tools import needs
 from hooks import _matcher_applies
 
 
@@ -42,16 +43,18 @@ def python_prompt_decision(case):
         settings = Path(tmp) / "settings.json"
         settings.write_text(json.dumps({"hooks": {"PreToolUse": [
             {"matcher": "Bash(git commit*)", "hooks": [handler]}]}}))
-        saved = os.environ.get("SAVIA_PROMPT_HOOK_CMD")
-        os.environ["SAVIA_PROMPT_HOOK_CMD"] = case["evaluator"]
+        env = dict(case.get("parent_env", {}), SAVIA_PROMPT_HOOK_CMD=case["evaluator"])
+        saved = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
         try:
             decision = gates.evaluate("PreToolUse", {"tool_name": "Bash", "tool_input": {
                 "command": case["command"]}}, settings_path=settings, root=Path(tmp))
         finally:
-            if saved is None:
-                os.environ.pop("SAVIA_PROMPT_HOOK_CMD", None)
-            else:
-                os.environ["SAVIA_PROMPT_HOOK_CMD"] = saved
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
     return {"action": decision["action"], "reason": decision["reason"]}
 
 
@@ -76,7 +79,7 @@ class PromptTransportTests(unittest.TestCase):
                          {"action": "deny", "reason": "INVALID_HOOK_CONFIGURATION"})
 
 
-@unittest.skipUnless(shutil.which("bun"), "parity needs bun")
+@needs("bun")
 class PromptReplayParityTests(unittest.TestCase):
     def test_same_prompt_corpus_same_decisions_in_opencode(self):
         corpus = json.loads((FIXTURES / "prompt_replay_corpus.json").read_text())
@@ -92,7 +95,9 @@ def _settings_matchers():
                    if e.get("matcher")})
 
 
-CALLS = [("Bash", "git commit -m 'feat: x'"), ("Bash", "git status"), ("Bash", "gh pr create --draft"),
+HEREDOC_COMMIT = "git commit -m \"$(cat <<'EOF'\nfeat: x\n\ncuerpo\nEOF\n)\""
+COMMITS = ["git commit -m 'feat: x'", "git commit -m 'feat: x\n\ncuerpo'", HEREDOC_COMMIT]
+CALLS = [*(("Bash", c) for c in COMMITS), ("Bash", "git status"), ("Bash", "gh pr create --draft"),
          ("Bash", "gh pr merge 12"), ("Bash", "bash scripts/memory-store.sh save --type x"),
          ("Bash", "bash scripts/memory-store.sh recall x"), ("Edit", None), ("Write", None),
          ("Read", None), ("Task", None), ("Agent", None), ("mcp__vaults__search", None)]
@@ -114,13 +119,19 @@ class MatcherSemanticsTests(unittest.TestCase):
         self.assertTrue(self.matches(m, "Bash", "gh pr create --draft"))
         self.assertFalse(self.matches(m, "Bash", "gh pr view 12"))
 
+    def test_multiline_command_still_matches(self):
+        # The usual agent commit is a heredoc: `.` must cross newlines or every commit gate is skipped.
+        for command in COMMITS[1:]:
+            self.assertTrue(self.matches("Bash(git commit*)", "Bash", command), command)
+        self.assertFalse(self.matches("Bash(git commit*)", "Bash", "git status\ngit commit -m x"))
+
     def test_scoped_text_is_literal(self):
         self.assertFalse(self.matches("Bash(git commit*)", "Bash", "gitXcommit"))
         self.assertTrue(self.matches("Edit|Write", "Write"))
         self.assertFalse(self.matches("Edit|Write", "Read"))
 
 
-@unittest.skipUnless(shutil.which("bun"), "parity needs bun")
+@needs("bun")
 class CoreParityTests(unittest.TestCase):
     def test_every_settings_matcher_selects_the_same_calls_in_both_cores(self):
         cases = [{"matcher": m, "tool": t, **({} if c is None else {"command": c})}
@@ -132,7 +143,7 @@ class CoreParityTests(unittest.TestCase):
         diverging = [(c["matcher"], c["tool"], c.get("command")) for c, a, b in zip(cases, py, ts) if a != b]
         self.assertEqual(diverging, [])
         commit = [b for c, b in zip(cases, ts) if c["matcher"] == "Bash(git commit*)"]
-        self.assertEqual(commit.count(True), 1)  # only `git commit`, nothing else
+        self.assertEqual(commit, [c in COMMITS for _t, c in CALLS])  # every `git commit`, nothing else
 
     def test_protected_gate_paths_are_the_same_list_and_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -150,7 +161,7 @@ class CoreParityTests(unittest.TestCase):
             self.assertEqual(want, [True] * 7 + [False] * 3)
 
 
-@unittest.skipUnless(shutil.which("bun") and shutil.which("jq"), "replay needs bun and jq")
+@needs("bun", "jq")
 class ProtectedPathReplayTests(unittest.TestCase):
     """The real repo: OpenCode write/edit/apply_patch and Codex apply_patch on gate files are denied."""
 
@@ -169,6 +180,32 @@ class ProtectedPathReplayTests(unittest.TestCase):
             {"tool": "apply_patch", "input": {"patchText": patch}},
         ]
         self.assertEqual(bun("ts_replay.ts", native), [True, True, True])
+
+
+class RequiredToolsTests(unittest.TestCase):
+    """CI sets SAVIA_DUAL_CLI_STRICT=1: a missing bun fails the parity suite instead of skipping it."""
+
+    def run_probe(self, strict):
+        saved = os.environ.get("SAVIA_DUAL_CLI_STRICT")
+        os.environ["SAVIA_DUAL_CLI_STRICT"] = "1" if strict else "0"
+        try:
+            probe = needs("savia-no-such-tool")(type("Probe", (unittest.TestCase,), {"test_x": lambda self: None}))
+        finally:
+            if saved is None:
+                os.environ.pop("SAVIA_DUAL_CLI_STRICT", None)
+            else:
+                os.environ["SAVIA_DUAL_CLI_STRICT"] = saved
+        result = unittest.TestResult()
+        unittest.defaultTestLoader.loadTestsFromTestCase(probe).run(result)
+        return result
+
+    def test_missing_tool_fails_in_strict_mode(self):
+        result = self.run_probe(strict=True)
+        self.assertEqual((len(result.errors), len(result.skipped)), (1, 0))
+
+    def test_missing_tool_skips_outside_strict_mode(self):
+        result = self.run_probe(strict=False)
+        self.assertEqual((len(result.errors), len(result.skipped)), (0, 1))
 
 
 if __name__ == "__main__":
