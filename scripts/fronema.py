@@ -280,7 +280,7 @@ def cmd_calibrate(args):
         ratio = args.aciertos / args.total if args.total > 0 else 0
         print(f"ok {cid(c)} aciertos={args.aciertos}/{args.total} ratio={ratio:.2f}")
         if args.total > 0 and ratio >= 0.9 and len(c["calibracion"]) >= 3:
-            print(f"SUGERENCIA: caso {cid(c)} estable >=90% en >=3 sesiones — considerar: fronema.py graduate --id {c['id']}")
+            print(f"SUGERENCIA: caso {cid(c)} estable >=90% en >=3 sesiones — considerar: fronema.py graduate --id {cid(c)}")
     return _mutate(args, m)
 
 
