@@ -129,7 +129,7 @@ case "$MODE" in
   rotate) rotate ;;
   prune)  prune ;;
   redact) redact_file "$TELEMETRY_FILE" ;;
-  check)  check ;;
+  check)  check; exit $? ;;
   *) echo "usage: $0 [rotate|prune|redact|check]"; exit 2 ;;
 esac
 exit 0
