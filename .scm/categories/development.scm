@@ -1,5 +1,5 @@
 # development — Savia Capability Map (L1)
-> 228 resources
+> 229 resources
 
 - **/speckit.checklist** (cmd): Alias spec-kit compatible. Gate de calidad final con verification-lattice multi-capa. Invoca skill verification-lattice. Compatible con github/spec-kit.
 - **/speckit.clarify** (cmd): Alias spec-kit compatible. Preguntas dirigidas para cerrar ambigüedad en una spec. Invoca skill context-interview-conductor. Compatible con github/spec-kit.
@@ -101,6 +101,7 @@
 - **fiction-framing-judge** (agent): Recommendation Tribunal judge — detects persona-shift plus content-equivalent framing over sensitive domain (SPEC-193)
 - **freetoken-probe** (script): freetoken-probe.sh — SPEC-FREETOKEN-PROBE: valida la viabilidad de FreeToken
 - **gaia-benchmark-harness** (script): gaia-benchmark-harness.sh — SPEC-100 Slice 1 GAIA benchmark harness.
+- **git-secret-scanner** (skill): Escanea el historial git o los commits pendientes con gitleaks. Usar cuando haya que comprobar que no se filtran secretos antes de publicar, o tras sospechar una fuga en un repo.
 - **gitagent-export** (script): gitagent-export.sh — SPEC-099 Slice 1 gitagent adapter.
 - **graph-build** (cmd): Construye el grafo de conocimiento PM para un proyecto
 - **graph-temporal-ops** (script): graph-temporal-ops.sh — SPEC-123
