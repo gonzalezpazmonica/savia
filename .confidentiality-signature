@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f740a72e8bd3a6842bff9d3302d5864926f346c5b8257420249dbdeb4c5539a3
-timestamp=2026-10-22T21:35:47Z
-branch=agent/p2-planning-when-20261022
-head_commit=62675b959
-signature=4fcc75555b927da26ba43cca72e0f5836b89bb475503ed3e4698dbb244ce2531
+diff_hash=8ca32bd84f11008b1be455026dddb59f897216cbdecc3ed98e208dfda17a1283
+timestamp=2026-10-23T11:35:37Z
+branch=agent/l32-vaults-20261023
+head_commit=07b17eefe
+signature=d0d8101dc6b3135025f7d409eba8d5c879fe715b89a5e424b878f265fad2b4fc
