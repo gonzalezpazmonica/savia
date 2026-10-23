@@ -60,7 +60,7 @@ EOF
   make_lp LP-I2 INFERRED criterio "mismo principio" ev-shared
   run bash "$SCRIPT" --vault "$FIXDIR" --detect
   [[ "$status" -eq 0 ]]
-  ! echo "$output" | grep -q "PAIR"
+  if echo "$output" | grep -q "PAIR"; then false; fi
 }
 
 @test "AC-03: human_authored vs INFERRED → auto-resolve" {
@@ -147,4 +147,134 @@ for k in ['ts','id_a','id_b','bucket','proposal']:
 @test "vault ausente → exit 3" {
   run bash "$SCRIPT" --vault /nonexistent --detect
   [[ "$status" -eq 3 ]]
+}
+# --- S03c: ramas del árbol 3-bucket sin cubrir (SPEC-183) ---
+
+@test "classify: mismo evidence_hash → skip-idempotent aunque difieran provenance y texto" {
+  make_lp LP-S1 human_authored criterio "texto uno" ev-same
+  make_lp LP-S2 INFERRED skill "texto totalmente otro" ev-same
+  run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-S1 LP-S2
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q '"bucket":"skip-idempotent"'
+  echo "$output" | grep -q '"proposal":"same-evidence"'
+}
+
+@test "classify: targets distintos con texto idéntico → conflict-doc (no evolution)" {
+  make_lp LP-T1 INFERRED criterio "acceder primero a las cúpulas" ev-t1
+  make_lp LP-T2 INFERRED skill "acceder primero a las cúpulas" ev-t2
+  run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-T1 LP-T2
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q '"bucket":"conflict-doc"'
+  echo "$output" | grep -q 'escalate-human'
+}
+
+@test "classify: ambas human_authored y mismo target nunca es auto-resolve" {
+  make_lp LP-H1 human_authored criterio "principio uno distinto" ev-h1
+  make_lp LP-H2 human_authored criterio "otra cosa sin relación alguna aquí" ev-h2
+  run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-H1 LP-H2
+  [[ "$status" -eq 0 ]]
+  if echo "$output" | grep -q 'auto-resolve'; then false; fi
+  echo "$output" | grep -q '"bucket":"conflict-doc"'
+}
+
+@test "classify: el JSON registra provenance de ambas lecciones" {
+  make_lp LP-J1 human_authored criterio "principio J" ev-j1
+  make_lp LP-J2 INFERRED criterio "principio J" ev-j2
+  run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-J1 LP-J2
+  [[ "$status" -eq 0 ]]
+  echo "$output" | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['prov_a'] == 'human_authored', d
+assert d['prov_b'] == 'INFERRED', d
+assert d['id_a'] == 'LP-J1' and d['id_b'] == 'LP-J2', d"
+}
+
+@test "classify: lección inexistente → exit 3 y no escribe informe" {
+  make_lp LP-X1 INFERRED criterio "principio X" ev-x1
+  run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-X1 LP-NOPE
+  [[ "$status" -eq 3 ]]
+  echo "$output" | grep -q "lesson not found: LP-NOPE"
+  [[ ! -s "$REPORT" ]]
+}
+
+@test "classify: umbral SCL_RECONCILE_THRESHOLD=0.99 degrada evolution a conflict-doc" {
+  make_lp LP-U1 INFERRED skill "acceder primero a las cúpulas de conocimiento" ev-u1
+  make_lp LP-U2 INFERRED skill "acceder primero a las cúpulas de conocimiento persistido" ev-u2
+  SCL_RECONCILE_THRESHOLD=0.99 run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-U1 LP-U2
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q '"bucket":"conflict-doc"'
+  SCL_RECONCILE_THRESHOLD=0.10 run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-U1 LP-U2
+  echo "$output" | grep -q '"bucket":"evolution"'
+}
+
+@test "detect: targets distintos no forman par aunque el texto coincida" {
+  make_lp LP-P1 INFERRED criterio "consultar las cúpulas antes de grep" ev-p1
+  make_lp LP-P2 INFERRED skill "consultar las cúpulas antes de grep" ev-p2
+  run bash "$SCRIPT" --vault "$FIXDIR" --detect
+  [[ "$status" -eq 0 ]]
+  [[ -z "$output" ]]
+}
+
+@test "detect: lecciones sin evidence_hash se ignoran (vault vacío → sin salida)" {
+  run bash "$SCRIPT" --vault "$FIXDIR" --detect
+  [[ "$status" -eq 0 ]]
+  [[ -z "$output" ]]
+  cat > "$FIXDIR/learning/LP-NH.md" <<'EOT'
+---
+  id: LP-NH
+  provenance: INFERRED
+  target: criterio
+---
+## Cambio propuesto
+algo
+EOT
+  cp "$FIXDIR/learning/LP-NH.md" "$FIXDIR/learning/LP-NH2.md"
+  run bash "$SCRIPT" --vault "$FIXDIR" --detect
+  [[ -z "$output" ]]
+}
+
+@test "detect: la línea PAIR incluye similitud, provenance y target" {
+  make_lp LP-Q1 INFERRED criterio "siempre consultar las cúpulas primero antes de grep" ev-q1
+  make_lp LP-Q2 human_authored criterio "consultar las cúpulas primero antes de buscar con grep" ev-q2
+  run bash "$SCRIPT" --vault "$FIXDIR" --detect
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -qE '^PAIR LP-Q1 LP-Q2 sim=0\.[0-9]{3} prov=INFERRED/human_authored target=criterio$'
+}
+
+@test "report: cuenta pares por bucket tras varios classify" {
+  make_lp LP-Y1 human_authored criterio "p" ev-y1
+  make_lp LP-Y2 INFERRED criterio "p" ev-y2
+  make_lp LP-Y3 INFERRED criterio "q totalmente aparte" ev-y3
+  bash "$SCRIPT" --vault "$FIXDIR" --classify LP-Y1 LP-Y2 >/dev/null
+  bash "$SCRIPT" --vault "$FIXDIR" --classify LP-Y2 LP-Y3 >/dev/null
+  run bash "$SCRIPT" --vault "$FIXDIR" --report
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "pairs=2"
+  echo "$output" | grep -q "'auto-resolve': 1"
+  echo "$output" | grep -q "'conflict-doc': 1"
+}
+
+@test "report: sin informe previo avisa y sale 0 (caso vacío)" {
+  run bash "$SCRIPT" --vault "$FIXDIR" --report
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "no report yet"
+}
+
+@test "report: ignora líneas corruptas del JSONL sin fallar" {
+  mkdir -p "$(dirname "$REPORT")"
+  printf '%s\n' 'no es json' '{"bucket":"evolution"}' > "$REPORT"
+  run bash "$SCRIPT" --vault "$FIXDIR" --report
+  [[ "$status" -eq 0 ]]
+  echo "$output" | grep -q "pairs=1"
+}
+
+@test "sin modo → exit 2 con uso" {
+  run bash "$SCRIPT" --vault "$FIXDIR"
+  [[ "$status" -eq 2 ]]
+  echo "$output" | grep -q "usage"
+}
+
+@test "el script declara set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$SCRIPT"
 }

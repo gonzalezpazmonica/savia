@@ -22,10 +22,20 @@ if [[ "${SAVIA_SCRUB_ENV:-}" != "1" ]]; then
   exit 0
 fi
 
-SECRET_PATTERN='(KEY|SECRET|TOKEN|PASSWORD|PAT)'
+# PAT cuenta como subcadena (GH_PAT, GHPAT, AZDOPAT) salvo dentro de PATH:
+# PATH, PYTHONPATH o MYPATH no son credenciales.
+secret_names() {
+  awk '/KEY|SECRET|TOKEN|PASSWORD/ { print; next }
+       { m = $0; gsub(/PATH/, "", m); if (m ~ /PAT/) print }'
+}
+ALLOWLIST='PATH HOME SHELL LANG LC_ALL TERM USER CLAUDE_PROJECT_DIR SAVIA_WORKSPACE_DIR SAVIA_SCRUB_ENV'
 
 list_dropped() {
-  env | cut -d= -f1 | grep -E "$SECRET_PATTERN" || true
+  local name
+  while IFS= read -r name; do
+    [[ " $ALLOWLIST " == *" $name "* ]] && continue
+    printf '%s\n' "$name"
+  done < <(env | cut -d= -f1 | secret_names || true)
 }
 
 build_scrubbed_env() {
@@ -54,7 +64,9 @@ case "${1:-}" in
   check)
     shift
     cmdline="$*"
-    leak=$(printf '%s' "$cmdline" | grep -oE '[A-Za-z_]+(KEY|SECRET|TOKEN|PASSWORD|PAT)([A-Za-z0-9_]*)?=' 2>/dev/null || true)
+    # Todo NOMBRE= del comando cuyo nombre case con el patrón (incluye TOKEN= a secas).
+    leak=$(printf '%s' "$cmdline" | grep -oE '[A-Za-z_][A-Za-z0-9_]*=' 2>/dev/null \
+      | tr -d '=' | secret_names | sed 's/$/=/' || true)
     if [[ -n "$leak" ]]; then
       echo "WARN [env-scrub]: el comando introduce variable(s) secret(s) en el entorno: $leak" >&2
       echo "  Con SAVIA_SCRUB_ENV=1 las credenciales deben ir via \$(cat \$PAT_FILE), nunca por env." >&2
