@@ -199,7 +199,7 @@ field() { # field N CAMPO → valor del campo en la línea N del store
 @test "contenido: se trunca a 2000 caracteres (borde de tamaño)" {
   big=$(python3 -c "print('x' * 5000)")
   sv --type decision --title "Grande" --content "$big" >/dev/null
-  [ "$(field 1 content | tr -d '\n' | wc -c)" -le 2000 ]
+  [ "$(field 1 content | tr -d '\n' | wc -c)" -eq 2000 ]
 }
 
 @test "contenido: saltos de línea y tabuladores se escapan y la línea sigue siendo una" {
@@ -305,8 +305,9 @@ PY
 @test "suggest-topic: slug en minúsculas, sin símbolos y recortado a 40 caracteres" {
   run bash "$SCRIPT" suggest-topic decision "Usar Cache!! para API/v2 con un título larguísimo que excede cuarenta caracteres"
   [ "$status" -eq 0 ]
-  [[ "$output" == decision/usar-cache-para-apiv2-con-un-titulo-larg* ]] || [[ "$output" == decision/usar-cache-para-apiv2-con-un-t* ]]
   slug="${output#decision/}"
+  [ "${#slug}" -ge 30 ]
+  [[ "$output" == decision/usar-cache-para-apiv2-con-un-t* ]]
   [ "${#slug}" -le 40 ]
   [[ "$slug" =~ ^[a-z0-9-]+$ ]]
 }

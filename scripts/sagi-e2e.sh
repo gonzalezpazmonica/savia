@@ -44,7 +44,15 @@ json_escape() {
   v="${v//\"/\\\"}"
   v="${v//$'\n'/\\n}"
   v="${v//$'\r'/\\r}"
-  printf '%s' "${v//$'\t'/\\t}"
+  v="${v//$'\t'/\\t}"
+  # resto de controles U+0000-001F no tratados arriba → \u00XX
+  local i c esc
+  for i in 1 2 3 4 5 6 7 8 11 12 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31; do
+    printf -v c "\\$(printf '%03o' "$i")"
+    printf -v esc '\\u%04x' "$i"
+    v="${v//"$c"/$esc}"
+  done
+  printf '%s' "$v"
 }
 GOAL_JSON="$(json_escape "$GOAL")"
 

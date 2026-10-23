@@ -161,6 +161,15 @@ d = json.loads(sys.stdin.read())
 assert d['goal'] == 'linea1\nlinea2\tcol', d"
 }
 
+@test "goal con otros controles (\\b, ESC) sigue emitiendo JSON válido" {
+  run bash "$SCRIPT" --goal $'a\bb\x1bc'
+  [[ "$status" -eq 0 ]]
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['goal'] == 'a\x08b\x1bc', d"
+}
+
 @test "dry-run con comillas dobles emite JSON válido" {
   run bash "$SCRIPT" --goal 'di "hola"' --dry-run
   [[ "$status" -eq 0 ]]

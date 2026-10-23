@@ -66,7 +66,7 @@ scrub() { env SAVIA_SCRUB_ENV=1 "$@"; }
   done
 }
 
-@test "run: PYTHONPATH, GH_TOKEN, API_KEY, DB_PASSWORD, GH_PAT y CLIENT_SECRET no llegan al hijo" {
+@test "run (contrato env -i): PYTHONPATH, GH_TOKEN, API_KEY, DB_PASSWORD, GH_PAT y CLIENT_SECRET no llegan al hijo" {
   run env SAVIA_SCRUB_ENV=1 PYTHONPATH=/x GH_TOKEN=a API_KEY=b DB_PASSWORD=c GH_PAT=d CLIENT_SECRET=e bash "$SCRUB" run env
   [ "$status" -eq 0 ]
   if echo "$output" | grep -qE "^(PYTHONPATH|GH_TOKEN|API_KEY|DB_PASSWORD|GH_PAT|CLIENT_SECRET)="; then false; fi

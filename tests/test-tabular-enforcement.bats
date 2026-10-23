@@ -199,6 +199,21 @@ assert d['verdict'] == 'OK' and d['profiler_used'] is False, d"
   echo "$output" | grep -q '"name": "sprint"'
 }
 
+@test "hook: frase con las mismas comas que el CSV y un dígito, aislada, no se pierde" {
+  run bash -c "{ echo 'Resumen, ver 3 puntos'; echo 'y sigue prosa'; printf 'sprint,sp\n1,30\n2,34\n3,28\n4,40\n5,36\n'; } | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "^Resumen, ver 3 puntos$"
+  echo "$output" | grep -q "STATISTICAL PROFILE"
+  if echo "$output" | grep -q "^3,28$"; then false; fi
+}
+
+@test "hook: fila con campo entrecomillado con comas se perfila y no se cuela cruda" {
+  run bash -c "{ echo 'Mira esto'; printf 'id,ciudad,n\n1,Sevilla,5\n2,\"Madrid, ES\",7\n3,Leon,2\n4,Vigo,9\n5,Jaen,1\n'; } | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "STATISTICAL PROFILE"
+  if echo "$output" | grep -q '^2,"Madrid'; then false; fi
+}
+
 @test "hook: 4 líneas tabulares (bajo el umbral) no se transforman" {
   run bash -c "printf 'a,b 1\nc,d 2\ne,f 3\ng,h 4\n' | bash '$HOOK'"
   [ "$status" -eq 0 ]

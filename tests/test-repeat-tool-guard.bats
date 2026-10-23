@@ -163,9 +163,13 @@ PY
 }
 
 @test "--no-persist no deja fichero de estado ni acumula entre procesos" {
-  rep 4 u9 Read '{"f":1}' --no-persist
+  rep 4 u9 Read '{"f":1}' --no-persist --thresholds 2
   [[ ! -e "$TMPD/state/u9.json" ]]
+  # sin estado cada proceso ve una sola llamada: con umbral 2 nunca emite
   [[ ! -s "$TMPD/last" ]]
+  # control: con estado persistido la misma secuencia sí emite
+  rep 2 u9b Read '{"f":1}' --thresholds 2
+  [[ -s "$TMPD/last" ]]
 }
 
 @test "estado corrupto se ignora y la cadena empieza de cero (sin traza de error)" {
@@ -177,14 +181,18 @@ PY
 }
 
 @test "herramientas por defecto excluidas (todo_write/TodoWrite) no cuentan ni persisten" {
-  rep 6 u11 TodoWrite '{"t":1}'
+  rep 3 u11 TodoWrite '{"t":1}' --thresholds 2
   [[ ! -s "$TMPD/last" ]]
   [[ ! -e "$TMPD/state/u11.json" ]]
 }
 
 @test "--exclude es insensible a mayúsculas" {
-  rep 6 u12 BASH '{"c":1}' --exclude bash
+  # umbral 2: sin exclusión la 2ª llamada emite (control); con --exclude bash no
+  rep 2 u12c BASH '{"c":1}' --thresholds 2
+  [[ -s "$TMPD/last" ]]
+  rep 3 u12 BASH '{"c":1}' --exclude bash --thresholds 2
   [[ ! -s "$TMPD/last" ]]
+  [[ ! -e "$TMPD/state/u12.json" ]]
 }
 
 @test "telemetría: con --emit-telemetry se invoca el emisor con tool y run_length" {
