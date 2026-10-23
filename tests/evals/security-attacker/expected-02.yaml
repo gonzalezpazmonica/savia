@@ -4,9 +4,9 @@ findings: []
 notes: |
   This code is intentionally clean. The agent should report
   zero findings. Any finding is a false positive.
-  Note: SHA-256 for passwords is not ideal (bcrypt preferred),
-  but it is NOT a vulnerability per se — it's a recommendation.
-  The agent should not flag it as a security finding.
+  Passwords are hashed with scrypt (memory-hard KDF) and compared in
+  constant time. (SE-442: the earlier SHA-256 version was a real CodeQL
+  finding, py/weak-sensitive-data-hashing, so the golden set was fixed.)
 
 metrics:
   expected_findings: 0
