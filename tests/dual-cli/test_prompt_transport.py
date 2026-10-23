@@ -154,12 +154,15 @@ class CoreParityTests(unittest.TestCase):
                 ".claude/settings.json", ".claude/hooks/x.sh", "alias/x.sh", ".opencode/plugins/a.ts",
                 "scripts/opencode-plugin/savia-gates/index.ts", "scripts/dual-cli/gates.py",
                 ".codex/hooks.json", "opencode.json", ".opencode/package.json",
-                "src/app.py", ".claude/settingsXjson", "scripts/dual-cli-notes.md", "opencode.jsonc")]
+                # OpenCode also reads opencode.jsonc, .opencode/opencode.json(c) and the singular .opencode/plugin/
+                "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc", ".opencode/plugin/x.ts",
+                "src/app.py", ".claude/settingsXjson", "scripts/dual-cli-notes.md", "opencode.jsonc.bak",
+                ".opencode/plugin-notes.md")]
             got = bun("ts_matchers.ts", {"matchers": [], "paths": [{"path": p, "root": root} for p in paths]})
             self.assertEqual(got["list"], list(gates.PROTECTED_PATHS))
             want = [gates.is_protected(p, root) for p in paths]
             self.assertEqual(got["protected"], want)
-            self.assertEqual(want, [True] * 9 + [False] * 4)
+            self.assertEqual(want, [True] * 13 + [False] * 5)
 
 
 @needs("bun", "jq")

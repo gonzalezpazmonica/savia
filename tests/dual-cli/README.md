@@ -117,11 +117,11 @@ se prueba contra Python (`PatchParserParityTests`).
 ### Handlers `prompt` (AC6), matchers y rutas protegidas
 
 Ambos núcleos ejecutan ya los handlers `prompt` con el evaluador que declara quien
-arranca el CLI (`SAVIA_PROMPT_HOOK_CMD`, prompt renderizado por stdin, veredicto
-exacto `{"ok": bool, "reason"?: string}`). Sin evaluador, crash, timeout, prosa
+arranca el CLI (`SAVIA_PROMPT_HOOK_CMD`, prompt renderizado por stdin, veredicto:
+un objeto JSON con `ok` booleano y `reason` opcional string; otras claves se ignoran). Sin evaluador, crash, timeout, prosa
 alrededor del JSON u `ok` no booleano bloquean; una llamada que el matcher no
 selecciona continúa. `test_prompt_transport.py` replica el mismo corpus
-(`fixtures/prompt_replay_corpus.json`, 19 casos) en Codex y en OpenCode con las
+(`fixtures/prompt_replay_corpus.json`, 20 casos) en Codex y en OpenCode con las
 mismas decisiones y motivos.
 
 Al preparar ese replay apareció un hueco mayor: savia-gates leía `Bash(git commit*)`

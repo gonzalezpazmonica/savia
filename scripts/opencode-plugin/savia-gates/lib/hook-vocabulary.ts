@@ -30,12 +30,12 @@ const PATCH_TOOLS = new Set(["apply_patch", "patch"])
 
 /**
  * The agent being gated must not rewrite the gate. Same list as PROTECTED_PATHS in
- * scripts/dual-cli/gates.py (parity checked by tests/dual-cli/test_edit_replay.py), relative to the root.
+ * scripts/dual-cli/gates.py (parity checked by tests/dual-cli/test_prompt_transport.py), relative to the root.
  * Before this, OpenCode only protected them through guard-pin with SAVIA_GATES_PIN=1.
  */
 export const PROTECTED_GATE_PATHS = [".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
-  ".opencode/hooks", ".opencode/plugins", "scripts/dual-cli", "scripts/opencode-plugin", ".codex",
-  "opencode.json", ".opencode/package.json"]
+  ".opencode/hooks", ".opencode/plugins", ".opencode/plugin", "scripts/dual-cli", "scripts/opencode-plugin", ".codex",
+  "opencode.json", "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc", ".opencode/package.json"]
 
 /** Tools whose view carries a file the call writes. */
 const FILE_EFFECT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"])

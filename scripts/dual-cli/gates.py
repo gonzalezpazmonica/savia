@@ -26,10 +26,12 @@ STRIPPED_ENV = ("SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE")
 # Never inherited by a prompt evaluator (mirrored by PROMPT_ONLY_ENV in savia-gates shell-bridge.ts).
 PROMPT_ONLY_ENV = ("CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL")
 # The agent being gated must not rewrite the gate: deny by default (relative to root).
-# Same list as PROTECTED_GATE_PATHS in savia-gates lib/hook-vocabulary.ts (parity test in test_edit_replay.py).
+# Same list as PROTECTED_GATE_PATHS in savia-gates lib/hook-vocabulary.ts (parity test in test_prompt_transport.py).
+# OpenCode loads config from opencode.json(c) and .opencode/opencode.json(c), plugins from .opencode/plugin(s).
 PROTECTED_PATHS = (".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
-                   ".opencode/hooks", ".opencode/plugins", "scripts/dual-cli",
-                   "scripts/opencode-plugin", ".codex", "opencode.json", ".opencode/package.json")
+                   ".opencode/hooks", ".opencode/plugins", ".opencode/plugin", "scripts/dual-cli",
+                   "scripts/opencode-plugin", ".codex", "opencode.json", "opencode.jsonc",
+                   ".opencode/opencode.json", ".opencode/opencode.jsonc", ".opencode/package.json")
 
 
 def _deny(reason, handler=None):
