@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: network-recon
-description: "Reconocimiento de red: port scan con nmap/RustScan + HTTP detection con httpx."
+description: "Reconocimiento de red (puertos con nmap/RustScan, servicios HTTP con httpx). Usar solo en pruebas autorizadas, cuando haya que inventariar los servicios expuestos de una red en alcance."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.authorization_required: true
