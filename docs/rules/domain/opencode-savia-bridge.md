@@ -70,6 +70,8 @@ hook bash. La parity-audit los excluye del gap.
 
 `index.ts` exporta un objeto con `id` + `setup()` (OpenCode 2) y `server()` (OpenCode >= 1.18.29): un plugin solo-V1 **no carga** en OpenCode 2 y los guards se perdían sin error. Las decisiones viven en `lib/gates.ts`; `lib/v1-adapter.ts` (hooks por clave) y `lib/v2-adapter.ts` (hooks por dominio, un evento mutable) solo traducen. En V2 los nombres se normalizan antes de decidir (`shell`→`bash`, `subagent`→`task`, `path` visible también como `filePath`) y el bloqueo es fallo cerrado: una excepción en `tool.execute.before` rechaza esa llamada, en `prompt` no se admite el prompt, y si los guards no arrancan se rechaza todo (`GUARDS_UNAVAILABLE`). OpenCode 1.19 también llama a `setup()` con un contexto reducido: ahí no hace nada.
 
+Los hooks de `.claude/settings.json` reciben la llamada en el vocabulario de Claude Code (SE-392, `lib/hook-vocabulary.ts`): `bash`→`Bash`, `edit`→`Edit`, `write`→`Write`…, y `filePath`/`oldString`/`newString` también como `file_path`/`old_string`/`new_string` (las claves originales se conservan). `apply_patch` se evalúa archivo a archivo como `Write`/`Edit`, igual que el adaptador Codex; un parche ilegible bloquea (`INVALID_EVENT`) y una reescritura de un hook sobre un archivo del parche también (`UPDATED_INPUT_UNSUPPORTED`).
+
 | Guard | V1 | V2 |
 |---|---|---|
 | PreToolUse (hooks, cúpulas, pin) | `tool.execute.before` | `ctx.tool.hook("execute.before")` |
