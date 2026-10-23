@@ -36,7 +36,7 @@ Añadir WARN heurístico si `description`:
 
 El WARN es **no bloqueante** (AC4). Implementar como función `check_description_format`.
 
-### 2. `.opencode/skills/_template/SKILL.md`
+### 2. `templates/skills/_template/SKILL.md`
 
 Actualizar el campo `description` del frontmatter de ejemplo:
 
@@ -105,7 +105,7 @@ description: "Herramienta para gestionar la agenda con sincronización Outlook."
 classification: PURE_BASH
 files_touched:
   - scripts/skill-catalog-auditor.sh
-  - .claude/skills/_template/SKILL.md
+  - templates/skills/_template/SKILL.md
   - docs/rules/domain/skill-template-protocol.md
 requires_restart: false
 verification: bash scripts/skill-catalog-auditor.sh --description-audit
