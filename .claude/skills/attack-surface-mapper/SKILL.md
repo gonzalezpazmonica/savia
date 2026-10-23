@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: attack-surface-mapper
-description: "Mapear la superficie de ataque de un dominio: subdominios, OSINT, typosquatting."
+description: "Mapear la superficie de ataque de un dominio (subdominios, OSINT, typosquatting). Usar solo en pruebas autorizadas, cuando haya que inventariar la exposición externa de un dominio propio o contratado."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.authorization_required: true
