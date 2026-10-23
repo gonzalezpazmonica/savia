@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=2deda49bf5a25689911d7529bc96db00dea03d5f0709e2198087493db0ba6511
-timestamp=2026-10-23T05:47:04Z
-branch=agent/rea-soberania-qa-20261023
-head_commit=d0fe3eb8c
-signature=2cfef5e71db000617b21a42257945c76f2947dd335007a1b1a3d0d988cec9c59
+diff_hash=def2a5148a57f13d394fef73ad8374375f31f7d7495fe2d8b422f51f13c925dd
+timestamp=2026-10-23T06:03:26Z
+branch=agent/vac3-20261023
+head_commit=1340b384e
+signature=e6b9b0e8e5f960991ab29312daea927d154b5a2b8521afafeebbe017d958605d
