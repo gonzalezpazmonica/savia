@@ -41,7 +41,8 @@ class ShieldRedosTests(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 1.0)
 
     def test_keyword_argument_fragment_is_still_filtered(self):
-        result = daemon.scan('encoding = "utf-8 Maria', th=0.7)
+        # Balanced quotes: only filter 0e can drop it (0f needs exactly one).
+        result = daemon.scan('encoding = "utf-8" Maria', th=0.7)
         self.assertEqual(result["entities"], [])
 
     def test_plain_entity_still_reported(self):
