@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=ab55c3fdbc3f79ac0f6aeac265f2adbaf2144949735241e3185eb85c27fa3e4d
-timestamp=2026-10-23T17:08:42Z
-branch=agent/cierre-planning-20261023
-head_commit=215164e0
-signature=7e59b107d5f99d2d2e8043cc6d4366a23a7aa62e54f5c28cfa049c9fcd532294
+diff_hash=d0a016c7b2401fa291b7ad3546af749746252c289174a38f5fb0bdcddd3e0b12
+timestamp=2026-10-23T17:29:09Z
+branch=agent/pathinj2-20261023
+head_commit=5262a698
+signature=dee3e8174b0f452eb0f6569dca0cc877ff06a7a1cce50a9b28e0d89a5a0316b1
