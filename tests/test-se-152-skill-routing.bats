@@ -5,7 +5,7 @@
 
 SCRIPT="scripts/skill-routing-index.sh"
 INDEX_FILE="output/skill-routing-index.json"
-TEMPLATE_SKILL=".opencode/skills/_template/SKILL.md"
+TEMPLATE_SKILL="templates/skills/_template/SKILL.md"
 
 setup_file() {
   cd "$BATS_TEST_DIRNAME/.."
