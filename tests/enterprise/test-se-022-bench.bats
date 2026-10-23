@@ -104,7 +104,7 @@ _register() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"alice"* ]]
   # bob shouldn't appear (no python/azure)
-  [[ "$output" != *"\"user\":\"bob\""* ]] || true
+  [[ "$output" != *"\"user\":\"bob\""* ]]
 }
 
 @test "SE-022: bench-match.sh calculates skills_match_pct correctly" {

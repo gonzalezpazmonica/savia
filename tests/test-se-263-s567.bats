@@ -30,13 +30,9 @@ assert d['default'] == 'deny'
 }
 
 @test "S5-T05: bind-gate aborts on non-declared interface" {
-  run python3 scripts/a2a-server.py --host 0.0.0.0 --allowed-interface 127.0.0.1 --port 19876 2>&1 &
-  local pid=$!
-  sleep 1
-  kill $pid 2>/dev/null || true
-  wait $pid 2>/dev/null || true
-  # Should have exited non-zero
-  [[ "$output" =~ "BIND-GATE" ]] || true
+  run timeout 10 python3 scripts/a2a-server.py --host 0.0.0.0 --allowed-interface 127.0.0.1 --port 19876
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "BIND-GATE ABORT" ]]
 }
 
 @test "S5-T06: A2A server starts on declared interface" {
@@ -66,21 +62,23 @@ assert len(d['skills']) == 5
   local dir
   dir=$(mktemp -d)
   run bash scripts/exchange-ledger.sh append --instance test --type commitment --content "test" --project "$dir" 2>&1
-  # Ignore project flag, check ledger was created in default location
-  [[ -f "coordinacion/exchange/test.jsonl" ]] || true
+  [ "$status" -eq 0 ]
+  [[ -f "$dir/coordinacion/exchange/test.jsonl" ]]
+  grep -q '"prev_hash": "genesis"' "$dir/coordinacion/exchange/test.jsonl"
   rm -rf "$dir"
 }
 
 @test "S6-T03: verify detects broken chain" {
   local dir
   dir=$(mktemp -d)
-  mkdir -p "$dir"
+  mkdir -p "$dir/coordinacion/exchange"
   # Create a ledger with broken chain
-  echo '{"ts":"x","instance":"b","type":"t","content":"","prev_hash":"genesis","hash":"bad"}' > "$dir/b.jsonl"
-  echo '{"ts":"y","instance":"b","type":"t","content":"","prev_hash":"wrong","hash":"bad2"}' >> "$dir/b.jsonl"
-  run bash scripts/exchange-ledger.sh verify --instance b 2>&1
+  echo '{"ts":"x","instance":"b","type":"t","content":"","prev_hash":"genesis","hash":"bad"}' > "$dir/coordinacion/exchange/b.jsonl"
+  echo '{"ts":"y","instance":"b","type":"t","content":"","prev_hash":"wrong","hash":"bad2"}' >> "$dir/coordinacion/exchange/b.jsonl"
+  run bash scripts/exchange-ledger.sh verify --instance b --project "$dir" 2>&1
   rm -rf "$dir"
-  [[ "$output" =~ "BROKEN" ]] || true
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "BROKEN chain at line 2" ]]
 }
 
 @test "S6-T04: show displays ledger (using default path)" {
@@ -106,14 +104,17 @@ assert len(d['skills']) == 5
 @test "S7-T03: drill compromised runs on synthetic instance" {
   local dir
   dir=$(mktemp -d)
-  mkdir -p "$dir/cards"
-  cat > "$dir/cards/synthetic.card.json" << 'JSON'
+  mkdir -p "$dir/coordinacion/cards"
+  cat > "$dir/coordinacion/cards/synthetic.card.json" << 'JSON'
 {"instanceId":"synthetic","principal":"x","status":"active","publicKey":"","signature":"x"}
 JSON
-  # Should complete without crash
-  run bash scripts/federation-drill.sh compromised synthetic
+  FEDERATION_ROOT="$dir" run bash scripts/federation-drill.sh compromised synthetic
+  local card_status
+  card_status=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$dir/coordinacion/cards/synthetic.card.json")
   rm -rf "$dir"
-  [[ "$output" =~ "DRILL" ]] || true
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "DRILL COMPLETE" ]]
+  [ "$card_status" = "revoked" ]
 }
 
 @test "S7-T04: exchange ledger verify works on empty ledger" {

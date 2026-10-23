@@ -121,7 +121,7 @@ teardown() {
   rm -rf "$TEST_TMPDIR/.savia-kg"
   run bash "$SCRIPT" import
   [ "$status" -eq 0 ]
-  [[ "$output" == *"WARN"* ]] || [[ "$output" == *"no snapshot"* ]] || true
+  [[ "$output" == *"WARN: no snapshot found"* ]]
 }
 
 @test "assertion: status output contains required fields as JSON-parseable lines" {

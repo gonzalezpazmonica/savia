@@ -65,7 +65,7 @@ PRICE_OUTPUT[sonnet-4.5]=0
 
 INPUT_COST=${PRICE_INPUT_MISS[$MODEL]:-${PRICE_INPUT_MISS[opus-4.7]}}
 OUTPUT_COST=${PRICE_OUTPUT[$MODEL]:-${PRICE_OUTPUT[opus-4.7]}}
-CACHE_COST=${PRICE_INPUT_HIT[$MODEL]:-${PRICE_INPUT_MISS[$MODEL]}}
+CACHE_COST=${PRICE_INPUT_HIT[$MODEL]:-$INPUT_COST}
 
 # Auto-detect provider from model name if not specified
 if [[ "$PROVIDER" == "copilot" ]] && [[ "$MODEL" =~ ^(opus|sonnet|haiku)$ ]]; then

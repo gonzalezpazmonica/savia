@@ -143,15 +143,16 @@ print(f'total_samples={total}')
 
   run bash "$PROOF_SCRIPT" test --client "$test_client" --json
   # Should succeed and output mention adversarial
-  if [ "$status" -eq 0 ] || [ "$status" -eq 1 ]; then
-    run python3 -c "
-import json
-d = json.loads('''$output''')
-assert d['adversarial_test'] == True
+  [ "$status" -le 1 ]
+  run python3 -c "
+import json, sys
+t = sys.stdin.read()
+d = json.loads(t[t.index('{'):])
+assert d['adversarial_test'] is True
 print('OK')
-" 2>/dev/null || true
-    [[ "$output" == *"OK"* ]] || true
-  fi
+" <<< "$output"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK"* ]]
 
   rm -rf "$REPO_ROOT/engagements/$test_client" 2>/dev/null || true
 }

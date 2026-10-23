@@ -44,8 +44,8 @@ SETTINGS="${BATS_TEST_DIRNAME}/../.claude/settings.json"
 @test "auto-grill-me: triggers on .py file with Edit" {
   run env OPENCODE_TOOL_NAME="Edit" OPENCODE_TOOL_INPUT_PATH="src/main.py" bash "$GRILL_HOOK"
   [[ "$status" -eq 0 ]]
-  # message sent to stderr
-  [[ "$output" == "" || "$stderr" =~ "grill-me" ]] || true
+  # message sent to stderr (run lo mezcla en $output)
+  [[ "$output" == *"[auto-grill-me]"* ]]
 }
 
 @test "auto-grill-me: triggers on .sh file with Write" {

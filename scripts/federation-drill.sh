@@ -4,7 +4,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT="${FEDERATION_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 usage() {
   cat <<EOF
@@ -53,7 +53,7 @@ check_exchange() {
     local iid
     iid=$(basename "$ledger" .jsonl)
     local result
-    result=$(bash "$SCRIPT_DIR/exchange-ledger.sh" verify --instance "$iid" 2>&1 || echo "BROKEN")
+    result=$(bash "$SCRIPT_DIR/exchange-ledger.sh" verify --project "$ROOT" --instance "$iid" 2>&1 || echo "BROKEN")
     echo "  $iid: $result"
   done
 }
@@ -72,7 +72,7 @@ check_agent_index() {
 
 # ── Compromised drill ──
 drill_compromised() {
-  local target_id="${2:-}"
+  local target_id="${1:-}"
   [[ -z "$target_id" ]] && { echo "ERROR: specify instance ID to compromise"; exit 1; }
 
   echo "=== DRILL: Instance Compromise — $target_id ==="
@@ -97,7 +97,7 @@ with open('$card', 'w') as f:
   fi
 
   # Step 2: Regenerate agent index (should exclude revoked)
-  bash "$SCRIPT_DIR/agent-index-generate.sh" 2>&1 | tail -1
+  bash "$SCRIPT_DIR/agent-index-generate.sh" "$ROOT/coordinacion/cards" "$ROOT/coordinacion/domes/_federation/agent-index.json" 2>&1 | tail -1
   echo "  [2/4] Agent index regenerated"
 
   # Step 3: Verify exchange chains still intact

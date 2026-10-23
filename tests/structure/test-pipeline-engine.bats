@@ -60,8 +60,8 @@ teardown() {
 @test "pipeline engine handles invalid YAML without crash" {
   echo "{{invalid yaml" > "$TMPDIR_PE/bad.yaml"
   run bash -c "echo '' | $ROOT/scripts/pipeline-engine.sh $TMPDIR_PE/bad.yaml --dry-run 2>&1"
-  # May exit 0 (graceful) or non-zero (reject) — just must not hang
-  true
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no stages"* ]]
 }
 
 @test "stage runner fails without required args" {

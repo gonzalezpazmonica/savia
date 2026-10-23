@@ -51,7 +51,7 @@ teardown() {
 @test "allows empty CLAUDE_TOOL_INPUT" {
   run bash -c "CLAUDE_TOOL_INPUT='' bash '$HOOK'"
   [ "$status" -eq 0 ]
-  [[ "$output" == "" ]] || true
+  [[ "$output" == "" ]]
 }
 
 @test "special characters in input do not crash" {

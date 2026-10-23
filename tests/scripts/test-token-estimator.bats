@@ -83,19 +83,23 @@ teardown() {
 }
 
 @test "no arguments with empty stdin exits gracefully" {
+  mkdir -p "$TMPDIR/cwd-empty"
+  cd "$TMPDIR/cwd-empty"
   run timeout 3 bash "$SCRIPT" < /dev/null
-  # Script may exit 0 (empty output) or non-zero (no target) — both valid
-  [[ "$status" -eq 0 ]] || [[ "$status" -ne 0 ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ Files:[[:space:]]+0 ]]
 }
 
 @test "invalid model flag fails gracefully" {
   echo "test" > "$TMPDIR/test.md"
   run bash "$SCRIPT" "$TMPDIR/test.md" --model nonexistent-model-xyz
-  [ "$status" -eq 0 ] || [[ "$output" == *"unknown"* ]] || [[ "$output" == *"default"* ]] || true
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Est.tokens:"* ]]
 }
 
 @test "bad budget value is rejected" {
   echo "test" > "$TMPDIR/test.md"
   run bash "$SCRIPT" "$TMPDIR/test.md" --budget -1
-  [ "$status" -ne 0 ] || [[ "$output" == *"invalid"* ]] || true
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"exceeds budget"* ]]
 }
