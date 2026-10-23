@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto"
 import { loadHookMap, runHooksForEvent, sweepOrphanedHooks } from "./shell-bridge"
 import type { HookMap } from "./shell-bridge"
+import { runPreToolUse } from "./hook-vocabulary"
 import { decidePermission } from "./permission"
 import { auditLog } from "./audit"
 import { guardVariants } from "./sandbox"
@@ -138,21 +139,15 @@ export async function createGates(init: GatesInit, flavor: Flavor) {
       }
       let mutated: Record<string, unknown> | undefined
       for (const [n, toolInput] of variants.entries()) {
-        const payload = JSON.stringify({
-          hook_event_name: "PreToolUse",
-          tool_name: tool,
-          tool_input: toolInput,
-          session_id: a.sessionID,
-          call_id: a.callID,
-          cwd,
-        })
-        const result = await runHooksForEvent(root, hookMap, "PreToolUse", tool, payload, runOpts)
+        // SE-392: the hooks see the call in Claude Code vocabulary, one event per patched file (lib/hook-vocabulary.ts).
+        const result = await runPreToolUse(root, hookMap, tool, toolInput,
+          { session_id: a.sessionID, call_id: a.callID, cwd }, runOpts)
         if (result.blocked) {
-          await auditLog({ event: "tool-blocked", tool, reason: result.stderr, unwrapped: n > 0 })
-          throw new Error(`savia-gates: ${result.stderr || "PreToolUse blocked"}`)
+          await auditLog({ event: "tool-blocked", tool, reason: result.reason, unwrapped: n > 0 })
+          throw new Error(`savia-gates: ${result.reason}`)
         }
         // Mutations only apply to the args the frontend will actually run.
-        if (n === 0 && result.mutatedArgs) mutated = result.mutatedArgs
+        if (n === 0 && result.mutated) mutated = result.mutated
       }
       const after = await pinViolationAfterHooks()
       if (after) throw new Error(`savia-gates: ${after}`)
