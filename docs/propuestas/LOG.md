@@ -30,6 +30,14 @@ Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verifi
 
 Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes verificadas en el informe
 
+## 2026-10-23 SE-456 APPROVED
+
+operadora, AskUserQuestion 2026-10-23
+
+## 2026-10-23 SE-455 APPROVED
+
+operadora, AskUserQuestion 2026-10-23
+
 ## 2026-10-20 SE-451 APPROVED
 
 operadora, AskUserQuestion 2026-10-20: DCO (no CLA)

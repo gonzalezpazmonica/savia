@@ -1371,6 +1371,26 @@
       "note": "Ninguna reconciliación de llamadas contra guards; SE-402 cubre solo ficheros y en aviso.",
       "evidence": "docs/specs/SE-463-supervision-coverage-reconciliation.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-455",
+      "status": "APPROVED",
+      "priority": "P2",
+      "title": "Ingeniería inversa para la soberanía tecnológica: REA como herramienta externa opcional con puerta de autorización",
+      "note": "La skill no instala nada; puerta A/B/C/D con doble confirmación y base legal. Revisión legal antes del merge (D1).",
+      "evidence": "docs/specs/SE-455-reverse-engineering-sovereignty.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-23: AskUserQuestion"
+    },
+    {
+      "id": "SE-456",
+      "status": "APPROVED",
+      "priority": "P1",
+      "title": "Tests que no pueden fallar: detector de vacuidad y criterio de evidencia de REA en la QA",
+      "note": "Ratchet bloqueante sobre línea base; un fichero con vacuidad no certifica; reparación por tandas.",
+      "evidence": "docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-23: AskUserQuestion"
     }
   ],
   "route": {

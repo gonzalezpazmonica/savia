@@ -1,8 +1,8 @@
 {
-  "generated": "2026-10-22T16:19:59Z",
-  "total": 317,
+  "generated": "2026-10-23T05:47:04Z",
+  "total": 318,
   "tier1_count": 4,
-  "tier2_count": 306,
+  "tier2_count": 307,
   "dormant_count": 7,
   "rules": {
     "ac-verifier-authority.md": {
@@ -1162,6 +1162,10 @@
       "consumers": ""
     },
     "terminal-state-protocol.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "test-evidence-criteria.md": {
       "tier": "tier2",
       "consumers": ""
     },

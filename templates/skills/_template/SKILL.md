@@ -23,7 +23,7 @@ metadata:
 <!--
   HOW TO USE THIS TEMPLATE
   ------------------------
-  1. Copy `.claude/skills/_template/` to `.claude/skills/<your-skill-name>/`
+  1. Copy `templates/skills/_template/` to `.claude/skills/<your-skill-name>/`
   2. Replace ALL `<placeholder>` markers below.
   3. Update frontmatter `name`, `description`, `tags`.
   4. Delete this HOW TO block before commit.

@@ -20,17 +20,16 @@ Solución: **paths primero, prosa después**. Sección obligatoria `## Authorita
 ## Ubicación
 
 ```
-.claude/skills/_template/SKILL.md   ← canónica
-.opencode/skills/_template/SKILL.md ← visible vía symlink
+templates/skills/_template/SKILL.md   ← canónica
 ```
 
-`.opencode/skills` es un symlink a `../.claude/skills`, por lo que el template aparece en ambos paths automáticamente.
+Las plantillas viven fuera de `.claude/skills/` a propósito: así el cliente no las descubre como skills.
 
 ## Cómo usar
 
 1. Copiar el directorio:
    ```
-   cp -r .claude/skills/_template .claude/skills/<nombre-skill>
+   cp -r templates/skills/_template .claude/skills/<nombre-skill>
    ```
 2. Editar `SKILL.md`:
    - Reemplazar todos los `<placeholder>` por valores reales.
@@ -122,7 +121,7 @@ Lista priorizada para futuras migraciones (alta densidad de paths/handoffs):
 
 - ROADMAP: `docs/ROADMAP.md` — Era 197 / Tier 1, SE-153.
 - Patrón fuente: análisis flowsint 2026-05-30 (graph indexing + enricher pattern + authoritative paths first).
-- Template: `.claude/skills/_template/SKILL.md`.
+- Template: `templates/skills/_template/SKILL.md`.
 - Tests: `tests/test-skill-template.bats`.
 - Generadores: `scripts/skills-md-generate.sh`, `scripts/resolver-md-generate.sh`.
 - SE-208: `docs/propuestas/SE-208-skill-100-line-limit.md`.

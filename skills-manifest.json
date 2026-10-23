@@ -3,11 +3,6 @@
   "generated_at": "2026-10-03T19:18:05Z",
   "source": ".opencode/skills/*/SKILL.md",
   "skills": {
-    "_template_python": {
-      "path": ".opencode/skills/_template_python/SKILL.md",
-      "description": "TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una...",
-      "maturity": "beta"
-    },
     "adversarial-security": {
       "path": ".opencode/skills/adversarial-security/SKILL.md",
       "description": "Usar cuando se necesita auditar la seguridad de un proyecto con pipeline Red Team / Blue Team.",
