@@ -1,10 +1,7 @@
 ---
 layer: peripheral
 name: context-dome
-description: >
-  Genera CONTEXT_DOME.md para modulos con Bus Factor bajo. Captura
-  conocimiento tacito: proposito, decisiones no obvias, dependencias,
-  runbook minimo, knowledge owners y plan de distribucion.
+description: "Genera CONTEXT_DOME.md con el conocimiento tácito de un módulo. Usar cuando un módulo tiene bus factor bajo o alguien va a dejar el equipo y hay que capturar decisiones, dependencias y runbook."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: knowledge-management

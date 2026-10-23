@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: org-political-landscape
-description: "Análisis de Paisaje Político Interno: detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders."
+description: "Detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders. Usar cuando una decisión o un proyecto se atasca por motivos organizativos y no técnicos."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.category: org-intelligence
