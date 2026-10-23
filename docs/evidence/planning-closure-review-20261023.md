@@ -3,6 +3,10 @@
 > Revisión AC por AC de las specs APPROVED e IMPLEMENTING frente a `origin/main` (0dd2ea30b).
 > Autoridad según `docs/rules/domain/ac-verifier-authority.md` (SE-444). La autoridad requerida
 > se infiere del texto de cada AC (las specs son anteriores a la plantilla con `autoridad_requerida`).
+>
+> Limitación: este informe lo escribe la autora de la conciliación y el validador solo comprueba que el fichero
+> existe. `authority_required` es una propuesta, no un dato verificado. Antes de `human_review`, cotejar en GitHub
+> los run IDs citados (SE-426 AC5: 39504031706 y 39903878046; SE-442 AC5: 39498696379, 39903767248, 39903767015).
 
 ## Regla que limita el cierre
 
@@ -53,7 +57,7 @@ Era lo único que faltaba según la nota de planning-state («observar el re-fir
 | AC2 | ídem 2–3, 5 | simulada / simulada |
 | AC3 | grep del spec sobre `.github/workflows`: 0 líneas | estatica / estatica |
 | AC4 | `.github/dependabot.yml` válido; github-actions, weekly, grupo `*` | estatica / estatica |
-| AC5 | YAML válido (test 8–9). CodeQL corrió en la rama del PR (run 39498696379) y en main (39903767248). Scorecard corre en main con «Upload SARIF» (39903767015) | real / real |
+| AC5 | YAML válido (test 8–9). CodeQL corrió en la rama del PR (run 39498696379) y en main (39903767248). Scorecard corre en main con «Upload SARIF» (39903767015) | simulada / real (insuficiente: el AC pide Scorecard en el PR) |
 | AC6 | `SECURITY.md`: 3 secciones | estatica / estatica |
 | AC7 | `validate-ci-local.sh --quick` 13/13 | real / real |
 | AC8 | `tests/test-requirements-hashed.bats` 1, 3; lock con hashes | estatica / estatica |

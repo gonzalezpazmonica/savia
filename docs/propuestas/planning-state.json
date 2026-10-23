@@ -318,7 +318,7 @@
         "verified_on": "2026-09-30"
       },
       "completion": {
-        "merge_pr": 1170,
+        "merge_pr": 1336,
         "acceptance_evidence": [
           {
             "criterion": "AC1-AC6 (G13 v2, Fix-trace)",
@@ -346,7 +346,7 @@
           }
         ]
       },
-      "note": "2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora."
+      "note": "Código de G13 v2 en #1336; #1170 (spec original) se fusionó sin revisión L3. 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora."
     },
     {
       "id": "SE-405",
@@ -958,7 +958,7 @@
       "status": "IMPLEMENTING",
       "priority": "P1",
       "title": "Firma de confidencialidad con secreto de CI y HMAC siempre verificado",
-      "note": "Pasos 1 (#1224), 2 (secreto creado 2026-10-02) y 3 (#1225) integrados; la CI verificó en modo exigente una firma local (HMAC: VERIFIED). Falta observar el re-firmado del bot (auto-rebase o consolidación) antes de graduar 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
+      "note": "Pasos 1 (#1224), 2 (secreto creado 2026-10-02) y 3 (#1225) integrados; la CI verificó en modo exigente una firma local (HMAC: VERIFIED) y el re-firmado del bot (run 39903878046). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-426-confidentiality-hmac-ci-key.spec.md",
       "phase": "A",
       "approval": "Operadora 2026-10-02 en chat (AskUserQuestion, en remoto): 'Aprobar e implementar el paso 1'; secreto: 'Créalo tú, Savia'",
@@ -1085,7 +1085,7 @@
       "status": "APPROVED",
       "priority": "P0",
       "title": "Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada",
-      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
+      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes). 2026-10-23 conciliación: AC cubiertos en main salvo AC5 (Scorecard no corrió en el PR; la operadora decide) (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-442-ci-supply-chain-hardening.spec.md",
       "phase": "A",
       "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia",
@@ -1093,7 +1093,7 @@
         "merge_pr": 1332,
         "acceptance_evidence": [
           {
-            "criterion": "AC1-AC3, AC5 YAML, AC6 (acciones fijadas por SHA)",
+            "criterion": "AC1-AC3, AC5 YAML (acciones fijadas por SHA)",
             "file": "tests/test-ci-actions-pinned.bats",
             "authority": "simulada",
             "authority_required": "simulada"
@@ -1105,9 +1105,9 @@
             "authority_required": "estatica"
           },
           {
-            "criterion": "AC5 (CodeQL y Scorecard ejecutados y con SARIF; Scorecard solo en main)",
+            "criterion": "AC5 (CodeQL corrió en el PR; Scorecard solo en main: el AC pide ambos en el PR, decisión de la operadora)",
             "file": "docs/evidence/planning-closure-review-20261023.md",
-            "authority": "real",
+            "authority": "simulada",
             "authority_required": "real"
           },
           {
@@ -1121,6 +1121,12 @@
             "file": "tests/test-requirements-hashed.bats",
             "authority": "simulada",
             "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC6 (SECURITY.md con 3 secciones)",
+            "file": "SECURITY.md",
+            "authority": "estatica",
+            "authority_required": "estatica"
           }
         ]
       }
