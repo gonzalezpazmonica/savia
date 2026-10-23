@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 3367d97affac | resources: 1450
-> 295 commands · 139 skills · 90 agents · 926 scripts
+> hash: 5ebc267d337a | resources: 1451
+> 295 commands · 140 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -817,6 +817,7 @@
 [planning] hallucination-fast-judge — actually,calls,cited,commands,draft — agent:.opencode/agents/hallucination-fast-judge.md
 [planning] hallucination-judge — consistency,detects,facts,invented,judge — agent:.opencode/agents/hallucination-judge.md
 [planning] handback-resolve — handback,obligation,resolve — script:scripts/handback-resolve.sh
+[planning] harness-architecture — agentes,arquitectura,autónomo,bucle,bucles — skill:.claude/skills/harness-architecture/SKILL.md
 [planning] hashline-edit — edit,file,hashline,protection,safe — script:scripts/hashline-edit.sh
 [planning] hashline-guard — agent,edits,file,guard,hashline — script:scripts/hashline-guard.sh
 [planning] health-dashboard — adaptada,dashboard,muestra,proyecto,rápida — cmd:.claude/commands/health-dashboard.md

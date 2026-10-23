@@ -76,6 +76,7 @@ To use a skill: read `<path>` and follow its instructions.
 | grc-framework-router | `.opencode/skills/grc-framework-router/SKILL.md` | Selecciona marcos GRC y verifica vigencia. Usar cuando se prepara una auditoría, se compara norma... |
 | grc-gap-assessment | `.opencode/skills/grc-gap-assessment/SKILL.md` | Construye matriz GRC preliminar y acciones trazables. Usar cuando se solicita gap assessment, aud... |
 | grill-me | `.opencode/skills/grill-me/SKILL.md` | Adversarial review that hunts every weakness, assumption, edge case, and missing test. Opponent m... |
+| harness-architecture | `.opencode/skills/harness-architecture/SKILL.md` | Decide y diseña la arquitectura de un harness de agentes: agente único, orquestación o metaharnes... |
 | human-code-map | `.opencode/skills/human-code-map/SKILL.md` | Usar cuando se incorpora un dev nuevo, se toca un módulo sin mapa, o alguien re-lee el mismo códi... |
 | iac-security-scanner | `.opencode/skills/iac-security-scanner/SKILL.md` | Usar cuando se escanea IaC (Terraform, Bicep, Dockerfile, docker-compose) con Trivy config para d... |
 | knowledge-graph | `.opencode/skills/knowledge-graph/SKILL.md` | Usar cuando se construye o consulta el grafo de conocimiento de entidades del proyecto. |
