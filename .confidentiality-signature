@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=21815925d731aea04b897e05c0a7bc587940ba084e1b344549dd50b3bb0e2c39
-timestamp=2026-10-23T18:00:53Z
+diff_hash=0203a9993332b8e6646f5325fec9dfa3eccaafb2dbe202ead16198eb55ac172f
+timestamp=2026-10-23T18:16:50Z
 branch=agent/harness-skill-20261023
-head_commit=a96fc905
-signature=a43fe5ff2166a831ce5c9c2251d3ca84e3b39553fba8dded335a3c3ce649a554
+head_commit=30910b1e
+signature=1b07777015098aa12f48c93ed2f7c78a4435cfb54d1197a0f7df4c5b908758fd
