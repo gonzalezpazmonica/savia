@@ -78,15 +78,18 @@ daemon_available() {
 @test "masked-digest.sh fails gracefully with no stdin" {
   daemon_available || skip "Shield daemon not running"
   run bash "$SCRIPT" --dry-run < /dev/null
-  [[ "$status" -ne 0 ]] || [[ "$output" == *"error"* ]] || [[ "$output" == *"empty"* ]] || true
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"no input"* ]]
 }
 
-@test "daemon rejects invalid mask request" {
+@test "daemon treats a mask request without text as empty, never echoing data" {
   daemon_available || skip "Shield daemon not running"
   output=$(curl -s --max-time 5 -X POST "$SHIELD_URL/mask" \
     -H "Content-Type: application/json" $TOKEN_HEADER \
     -d '{"bad_field":"test"}' 2>/dev/null)
-  [[ "$output" == *"error"* ]] || [[ -z "$output" ]] || true
+  [[ "$output" == *'"masked": ""'* ]]
+  [[ "$output" == *'"changed": false'* ]]
+  [[ "$output" != *"test"* ]]
 }
 
 @test "unmask fails gracefully with missing map" {

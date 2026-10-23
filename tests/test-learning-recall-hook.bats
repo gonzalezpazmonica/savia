@@ -20,8 +20,21 @@ teardown() { cd /; }
   [[ "$output" -ge 1 ]]
 }
 @test "no persiste el prompt (SCL-008 TS-07)" {
-  run grep -ciE '>.*prompt|echo.*\$PROMPT|cat.*prompt' "$SCRIPT"
-  # El hook no debe volcar el prompt a ficheros. Si no hay escrituras de prompt,
-  # el count será 0.
-  :
+  # Sandboxed project with a stub recall that only answers when it receives the marker query.
+  local proj="$BATS_TEST_TMPDIR/proj" marker="PROMPT-MARKER-7f3a9c-unico"
+  mkdir -p "$proj/scripts"
+  cat > "$proj/scripts/learning-recall.sh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *PROMPT-MARKER-7f3a9c-unico*) echo '{"effective_hits":[{"criterion_id":"C-1","principle":"criterio de prueba"}]}' ;;
+esac
+STUB
+  run env CLAUDE_PROJECT_DIR="$proj" HOME="$BATS_TEST_TMPDIR/home" TMPDIR="$BATS_TEST_TMPDIR" \
+    bash -c "echo '{\"content\":\"consulta con $marker para recall\"}' | bash '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  # the hook did process the prompt (injected the stub hit) ...
+  [[ "$output" == *"Criterios humanos aplicables"* ]]
+  # ... and left no file containing it
+  run grep -rl --exclude=learning-recall.sh -- "$marker" "$BATS_TEST_TMPDIR"
+  [ -z "$output" ]
 }

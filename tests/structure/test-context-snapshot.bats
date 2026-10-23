@@ -72,9 +72,19 @@ print('OK')
 # ── Negative cases ──
 
 @test "snapshot load fails gracefully when no snapshot exists" {
-  run bash -c "echo '' | HOME='$TMPDIR' $ROOT/scripts/context-snapshot.sh load 2>&1"
-  # Should not crash even if no snapshot file
-  [[ "$status" -eq 0 ]] || [[ "$output" == *"No snapshot"* ]] || [[ "$output" == *"error"* ]] || true
+  # The snapshot lives under <script>/../.claude/context-cache: use a copy in an empty tree.
+  mkdir -p "$TMPDIR/scripts"
+  cp "$ROOT/scripts/context-snapshot.sh" "$TMPDIR/scripts/"
+  run bash -c "echo '' | $TMPDIR/scripts/context-snapshot.sh load 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"stale"'* ]]
+  [[ "$output" == *"No fresh snapshot"* ]]
+  # contrast: after a save, load returns the snapshot instead of the stale marker
+  run bash -c "echo '' | $TMPDIR/scripts/context-snapshot.sh save 2>&1"
+  [ "$status" -eq 0 ]
+  run bash -c "echo '' | $TMPDIR/scripts/context-snapshot.sh load 2>&1"
+  [[ "$output" == *'"timestamp"'* ]]
+  [[ "$output" != *'"status":"stale"'* ]]
 }
 
 @test "snapshot save handles non-git directory" {

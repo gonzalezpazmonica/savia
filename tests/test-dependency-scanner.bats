@@ -311,7 +311,7 @@ EOF
 @test "missing jq is an error (exit 2) instead of an unverifiable verdict" {
   mkdir -p "$TMPDIR/nojq"
   for f in /usr/bin/*; do
-    [[ "$(basename "$f")" == jq ]] || ln -s "$f" "$TMPDIR/nojq/" 2>/dev/null || true
+    if [[ "$(basename "$f")" != jq ]]; then ln -s "$f" "$TMPDIR/nojq/" 2>/dev/null; fi
   done
   run env PATH="$TMPDIR/bin:$TMPDIR/nojq" bash "$REPO_ROOT/$SCRIPT" --path "$TMPDIR/proj"
   [ "$status" -eq 2 ]

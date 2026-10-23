@@ -64,7 +64,9 @@ EOF
   bash "$ROOT_DIR/scripts/agents-md-generate.sh" --apply >/dev/null
   make_agent "bravo"
   run bash "$SCRIPT"
-  [[ "$output" == *"drift"* ]] || [[ "$stderr" == *"drift"* ]] || true
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"drift detected"* ]]
+  [[ "$output" == *"bravo"* ]]
 }
 
 @test "edge: empty agents dir + missing AGENTS.md still produces drift exit 1" {
