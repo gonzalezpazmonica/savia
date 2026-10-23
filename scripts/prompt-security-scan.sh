@@ -3,7 +3,13 @@ set -uo pipefail
 # prompt-security-scan.sh — Static analyzer for prompt injection/leakage
 # Scans agent and skill prompts for dangerous patterns without LLM.
 # Usage: bash scripts/prompt-security-scan.sh [--path DIR] [--fix] [--quiet]
-# Exit: 0 = clean, 1 = findings, 2 = error
+# Exit: 0 = clean, 1 = findings, 2 = error (ruta) o unknown (algún fichero no se pudo leer)
+# Contrato SE-453 (docs/rules/domain/gate-result-contract.md): la última línea de stdout es
+#   gate-result: {"result":"clean|findings|unknown","gaps":[...]} (también con --quiet).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh" || { echo "ERROR: falta .claude/hooks/lib/gate-result.sh" >&2; exit 2; }
 
 SCAN_PATH="${1:-.claude/agents}"
 FIX_MODE=false
@@ -35,8 +41,17 @@ log_warn() {
   $QUIET || printf "  WARN  %s:%s — %s\n" "$(basename "$1")" "$2" "$3"
 }
 
+GAPS=()
+
 scan_file() {
   local file="$1"
+
+  # Un fichero que no se puede leer no es un fichero limpio: grep callaría el error (2>/dev/null).
+  if [[ ! -r "$file" ]]; then
+    GAPS+=("${file//:/_}:unreadable")  # gate_result_emit separa check y motivo por el primer «:»
+    $QUIET || printf "  GAP   %s — no se puede leer\n" "$(basename "$file")"
+    return 0
+  fi
 
   # PS-01: Injection bait
   while IFS=: read -r num _; do
@@ -93,24 +108,11 @@ scan_file() {
   fi
 
   # PS-11: Zero-width chars (SE-060) — hidden directives via U+200B/C/D/FEFF
-  # Python-assisted detection: file encoding errors are expected on binary/non-utf8 — surface nothing
-  # rather than corrupt the grep pipeline. See SE-060 for rule definition.
-  if command -v python3 >/dev/null 2>&1; then
-    local zw_lines
-    zw_lines=$(python3 -c "
-import sys
-try:
-    with open('$file', 'r', encoding='utf-8', errors='replace') as f:
-        for i, line in enumerate(f, 1):
-            if any(c in line for c in ['\u200B', '\u200C', '\u200D', '\uFEFF']):
-                print(i)
-except (UnicodeDecodeError, FileNotFoundError, PermissionError):
-    sys.exit(0)
-" 2>/dev/null)
-    for num in $zw_lines; do
-      [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-11" "Zero-width character (possible hidden directive)"
-    done
-  fi
+  # SE-453: se buscan sus bytes UTF-8 con grep en locale C, sin python3. Antes, sin python3 la
+  # comprobación se omitía en silencio y el fichero salía limpio.
+  while IFS=: read -r num _; do
+    [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-11" "Zero-width character (possible hidden directive)"
+  done < <(LC_ALL=C grep -nE $'\xe2\x80[\x8b-\x8d]|\xef\xbb\xbf' "$file" 2>/dev/null || true)
 
   # PS-12: Long base64 strings (>80 chars, not in code blocks with hash/commit context)
   while IFS=: read -r num _; do
@@ -143,6 +145,8 @@ if [[ -d "$SCAN_PATH" ]]; then
     ((FILE_COUNT++)) || true
     scan_file "$file"
   done < <(find "$SCAN_PATH" -name '*.md' -type f -print0)
+  # Un subdirectorio que find no puede recorrer deja ficheros sin escanear.
+  find "$SCAN_PATH" -name '*.md' -type f >/dev/null 2>&1 || GAPS+=("${SCAN_PATH//:/_}:unreadable")
 else
   FILE_COUNT=1
   scan_file "$SCAN_PATH"
@@ -152,5 +156,13 @@ TOTAL_F=$(cat "$FINDINGS_FILE")
 TOTAL_W=$(cat "$WARNINGS_FILE")
 $QUIET || printf "\n  Scanned: %d files | Findings: %d | Warnings: %d\n\n" "$FILE_COUNT" "$TOTAL_F" "$TOTAL_W"
 
-[[ "$TOTAL_F" -gt 0 ]] && exit 1
+if [[ "$TOTAL_F" -gt 0 ]]; then
+  gate_result_emit findings "${GAPS[@]}"
+  exit 1
+fi
+if [[ ${#GAPS[@]} -gt 0 ]]; then
+  gate_result_emit unknown "${GAPS[@]}"
+  exit 2
+fi
+gate_result_emit clean
 exit 0

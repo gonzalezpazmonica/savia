@@ -104,3 +104,49 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
   [ "$(json_field '["result"]')" = '"clean"' ]
   [ "$(json_field '["gaps"]')" = '[]' ]
 }
+
+# ── prompt-security-scan.sh ─────────────────────────────────────────────────
+# PS-11 (caracteres de ancho cero) dependía de python3: sin él se omitía en silencio y el fichero salía limpio.
+
+ps_setup() {
+  cp "$REPO_ROOT/scripts/prompt-security-scan.sh" "$W/scripts/prompt-real.sh"
+  mkdir -p "$W/p"
+  printf 'Agente normal.\n' > "$W/p/ok.md"
+}
+
+@test "prompt-scan: ancho cero sin python3 ⇒ hallazgo PS-11 (exit 1, findings), no limpio" {
+  ps_setup
+  printf 'Texto\xe2\x80\x8b oculto\n' > "$W/p/zw.md"
+  run env PATH="$NOPY" bash "$W/scripts/prompt-real.sh" "$W/p"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"zw.md:1 — [PS-11]"* ]]
+  [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"findings","gaps":[]}' ]
+}
+
+@test "prompt-scan: BOM con python3 presente ⇒ PS-11 igual que sin python3" {
+  ps_setup
+  printf '\xef\xbb\xbfcabecera\n' > "$W/p/bom.md"
+  run bash "$W/scripts/prompt-real.sh" "$W/p"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bom.md:1 — [PS-11]"* ]]
+}
+
+@test "prompt-scan: limpio ⇒ exit 0 y gate-result clean (también con --quiet)" {
+  ps_setup
+  run bash "$W/scripts/prompt-real.sh" "$W/p"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"PS-11"* ]]
+  [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"clean","gaps":[]}' ]
+  run bash "$W/scripts/prompt-real.sh" --quiet --path "$W/p"
+  [ "$output" = 'gate-result: {"result":"clean","gaps":[]}' ]
+}
+
+@test "prompt-scan: fichero ilegible ⇒ exit 2 y unknown/unreadable, nunca clean" {
+  [[ "$(id -u)" -ne 0 ]] || skip "root lee ficheros con modo 000"
+  ps_setup
+  printf 'x\n' > "$W/p/locked.md"; chmod 000 "$W/p/locked.md"
+  run bash "$W/scripts/prompt-real.sh" "$W/p"
+  chmod 600 "$W/p/locked.md"
+  [ "$status" -eq 2 ]
+  [[ "$(printf '%s\n' "$output" | tail -1)" == 'gate-result: {"result":"unknown","gaps":[{"check":"'*'/locked.md","reason":"unreadable"}]}' ]]
+}

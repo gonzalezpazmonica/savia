@@ -18,6 +18,9 @@ const GIT_AT =
   String.raw`(?:^|[;&|(\x60]|\$\()\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|env|command|sudo|nohup|time|exec)\s+)*git` +
   String.raw`(?:(?:\s+(?:-C|-c|--git-dir|--work-tree)\s+(?:"[^"]*"|'[^']*'|\S+))|(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?))*\s+`;
 const rx = (body: string) => new RegExp(GIT_AT + body, "i");
+// One shell word, possibly with quoted runs: an --amend inside -m "…" or after a separator does not match.
+// git accepts unique prefixes of long options, so --am, --ame and --amen are --amend too.
+const ARG = String.raw`(?:"[^"]*"|'[^']*'|[^\s;&|()"'])+`;
 
 const FORCE_WITH_LEASE = rx(String.raw`push\s+.*--force-with-lease`);
 const BARE_FORCE = rx(String.raw`push\s+(?:[^;&|]*\s)?(?:--force|-f)(?:\s|$)`);
@@ -29,7 +32,7 @@ const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
     msg: "Cannot push directly to main/master. Use a feature branch and PR.",
   },
   {
-    rx: rx(String.raw`commit\s+.*--amend`),
+    rx: rx(String.raw`commit(?:\s+${ARG})*\s+(?:--am(?:e(?:nd?)?)?|"--amend"|'--amend')(?:\s|$|[;&|)])`),
     msg: "git commit --amend can destroy previous commits. Create a new commit.",
   },
   {

@@ -22,6 +22,10 @@
 #   1 = hallazgos en las severidades bloqueantes (bloquea CI)
 #   2 = error: argumentos inválidos, Trivy/Docker ausente o fallido, JSON inválido
 #
+# Contrato SE-453 (docs/rules/domain/gate-result-contract.md): en --format table la última línea de
+# stdout es `gate-result: {...}`; en --format json el objeto de stdout lleva `result` y `gaps`.
+# Un error de argumentos sale 2 sin resultado (no es un escaneo).
+#
 # También es la librería de iac-security-baseline.sh: al hacer `source` no se
 # ejecuta el escaneo (guarda BASH_SOURCE tras las funciones).
 #
@@ -216,6 +220,8 @@ PYEOF
 # ── Escaneo ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$ROOT/.claude/hooks/lib/gate-result.sh" || { echo "ERROR: falta .claude/hooks/lib/gate-result.sh" >&2; exit 2; }
 
 SCAN_PATH=""
 IMAGE_TARGET=""
@@ -256,16 +262,35 @@ if [[ -n "$IGNOREFILE" ]]; then
 elif [[ -n "$SCAN_PATH" && -f "$SCAN_PATH/.trivyignore" ]]; then
   IGNOREFILE="$SCAN_PATH/.trivyignore"
 fi
-command -v python3 >/dev/null 2>&1 || die "python3 es necesario para evaluar el JSON de Trivy"
+# emit_result <estado> [check:reason ...] — resultado SE-453 en el formato de salida pedido.
+# En json, stdout es un objeto: el report con `result` y `gaps` si se escribió, o solo esos dos campos.
+emit_result() {
+  local line
+  line="$(gate_result_emit "$@")" || return 2
+  if [[ "$FORMAT" != "json" ]]; then echo "$line"; return 0; fi
+  if [[ -n "${EMIT_REPORT:-}" ]]; then
+    python3 - "$EMIT_REPORT" "${line#gate-result: }" <<'PYEOF'
+import json, sys
+d = json.load(open(sys.argv[1])); d.update(json.loads(sys.argv[2]))
+print(json.dumps(d, indent=2, ensure_ascii=False))
+PYEOF
+  else
+    echo "${line#gate-result: }"
+  fi
+}
+# unknown_exit <check:reason> <mensaje> — no se pudo escanear: hueco y exit 2.
+unknown_exit() { echo "ERROR: $2" >&2; emit_result unknown "$1"; exit 2; }
+
+command -v python3 >/dev/null 2>&1 || unknown_exit "python3:missing_tool" "python3 es necesario para evaluar el JSON de Trivy"
 if ! iac_detect_runner; then
-  die "Ni Trivy ni Docker disponibles. Instala Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
+  unknown_exit "trivy:missing_tool" "Ni Trivy ni Docker disponibles. Instala Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
 fi
 
-mkdir -p "$OUTPUT_DIR" || die "No se pudo crear $OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR" || unknown_exit "output-dir:unreadable" "No se pudo crear $OUTPUT_DIR"
 REPORT_JSON="$OUTPUT_DIR/iac-scan-${DATE}.json"
 IMAGE_JSON="$OUTPUT_DIR/iac-image-scan-${DATE}.json"
 REPORT_MD="$OUTPUT_DIR/iac-scan-${DATE}.md"
-WORKDIR="$(mktemp -d)" || die "mktemp falló"
+WORKDIR="$(mktemp -d)" || unknown_exit "workdir:unreadable" "mktemp falló"
 trap 'rm -rf "$WORKDIR"' EXIT
 
 # En --format json, stdout queda reservado al report: los mensajes van a stderr.
@@ -315,6 +340,7 @@ scan_target() {
 }
 
 OVERALL_EXIT=0
+GAPS=()
 NO_IAC=false
 TYPES=""
 
@@ -324,6 +350,7 @@ if [[ -n "$SCAN_PATH" ]]; then
   say "Tipos detectados: ${TYPES:-ninguno}"
   say "Severidades bloqueantes: $SEVERITY · Ignorefile: ${IGNOREFILE:-ninguno}"
   rc=0; scan_target config "$SCAN_PATH" "$REPORT_JSON" || rc=$?
+  [[ $rc -ge 2 ]] && GAPS+=("trivy-config:unreadable")
   # Sin IaC reconocible y sin hallazgos: no se validó nada; no se presenta como PASS.
   if [[ $rc -eq 0 && -z "$TYPES" ]] && python3 - "$REPORT_JSON" <<'PYEOF'
 import json, sys
@@ -344,6 +371,7 @@ fi
 if [[ -n "$IMAGE_TARGET" ]]; then
   say "Escaneando imagen Docker: $IMAGE_TARGET"
   rc=0; scan_target image "$IMAGE_TARGET" "$IMAGE_JSON" || rc=$?
+  [[ $rc -ge 2 ]] && GAPS+=("trivy-image:unreadable")
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
   say "Resultado imagen: $(status_of "$rc")"
 fi
@@ -391,10 +419,15 @@ esac
   echo "*Ref: docs/rules/domain/iac-security-policy.md — SE-241*"
 } > "$REPORT_MD"
 
-if [[ "$FORMAT" == "json" && $OVERALL_EXIT -lt 2 ]]; then
-  if [[ -n "$SCAN_PATH" ]]; then cat "$REPORT_JSON"; else cat "$IMAGE_JSON"; fi
-fi
 say ""
 say "$VERDICT"
 say "Summary: $REPORT_MD"
+if [[ "$FORMAT" == "json" && $OVERALL_EXIT -lt 2 ]]; then
+  if [[ -n "$SCAN_PATH" ]]; then EMIT_REPORT="$REPORT_JSON"; else EMIT_REPORT="$IMAGE_JSON"; fi
+fi
+case $OVERALL_EXIT in
+  0) emit_result clean ;;
+  1) emit_result findings ;;
+  *) emit_result unknown "${GAPS[@]}" ;;
+esac
 exit "$OVERALL_EXIT"

@@ -69,8 +69,11 @@ if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+(origin[[:space:]]+)?(ma
 fi
 
 # Bloquear commit --amend sin confirmación explícita
-# FIX: Add anchoring for compound command separators
-if echo "$COMMAND" | grep -iE "${GIT_AT}commit[[:space:]]+.*--amend" > /dev/null; then
+# SE-453: --amend tiene que ser un argumento propio de ese git commit. Cada palabra (ARG) puede llevar
+# tramos entre comillas, así que un --amend dentro de -m "…" o tras un separador (&& echo --amend) no casa.
+# git acepta prefijos únicos de opciones largas: --am, --ame y --amen también son --amend.
+ARG='("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:];&|()"'"'"'])+'
+if echo "$COMMAND" | grep -iE "${GIT_AT}commit([[:space:]]+${ARG})*[[:space:]]+(--am(e(nd?)?)?|\"--amend\"|'--amend')([[:space:]]|\$|[;&|)])" > /dev/null; then
   echo "BLOQUEADO: git commit --amend puede destruir commits anteriores. Crea un commit nuevo." >&2
   exit 2
 fi

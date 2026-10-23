@@ -52,7 +52,9 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | `dependency-scan.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 | `unknown` (Trivy o jq ausente, escaneo o SBOM fallido) |
 | `iac-security-scan.sh` | 0 / 1 | `clean` (o `NO_IAC`) / `findings` |
-| | 2 | `unknown` |
+| | 2 | `unknown` (python3, Trivy o Docker ausentes, Trivy roto o JSON ilegible) o error de argumentos sin resultado |
+| `prompt-security-scan.sh` | 0 / 1 | `clean` / `findings` |
+| | 2 | `unknown` (fichero o directorio ilegible) o ruta inexistente sin resultado |
 | `ast-quality-gate.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 (entorno), 3 (UNVERIFIED) | `unknown` |
 | `pre-push-security-gate.sh` | 0 con gitleaks / 1 | `clean` / `findings` |
@@ -62,7 +64,7 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | `security-audit-all.sh` | 0 / 1 | bajo / sobre el umbral `--fail-on` (`result` dice `clean` o `findings`) |
 | | 2 | `unknown` (un escáner ausente, roto o con salida ilegible) o error de uso |
 
-Con `--json`, estos dos llevan `result` y `gaps` dentro del objeto JSON en vez de la línea final.
+Con `--json` (`--format json` en `iac-security-scan.sh`), estos llevan `result` y `gaps` dentro del objeto JSON en vez de la línea final.
 
 El 4 de `git-history-secret-scan.sh` sustituye al 1 que antes se daba con gitleaks ausente: el 1 queda
 solo para hallazgos críticos. Es el único código que cambia.
