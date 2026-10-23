@@ -1,6 +1,6 @@
 {
-  "hash": "1314f1c752b5",
-  "total": 1450,
+  "hash": "f694f445eb47",
+  "total": 1451,
   "resources": [
     {
       "category": "analysis",
@@ -10800,6 +10800,20 @@
       "kind": "script",
       "path": "scripts/handback-resolve.sh",
       "description": "handback-resolve.sh — SE-332 Handback Obligation"
+    },
+    {
+      "category": "planning",
+      "name": "harness-architecture",
+      "intents": [
+        "agentes",
+        "arquitectura",
+        "autónomo",
+        "bucle",
+        "bucles"
+      ],
+      "kind": "skill",
+      "path": ".claude/skills/harness-architecture/SKILL.md",
+      "description": "Diseña la arquitectura de un harness de agentes: único, orquestado o metaharness, flujos largos, bucles, sprints. Usar cuando se diseña o depura un harness, un bucle autónomo o un sprint nocturno."
     },
     {
       "category": "planning",
