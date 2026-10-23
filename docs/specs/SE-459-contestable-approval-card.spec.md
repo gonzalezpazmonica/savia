@@ -30,7 +30,7 @@ ve al aprobar no siempre le permite saber **qué** aprueba. Medido el 2026-10-23
   (`permissionDecisionReason`); el resto de diálogos son los genéricos del arnés, que muestran la
   orden de shell en crudo.
 - Ese mismo día, un sprint autónomo quedó detenido unas 6 horas esperando un diálogo de permiso cuya
-  única información era una orden de shell larga, ilegible en el móvil desde el que se supervisaba.
+  única información era una orden de shell larga, ilegible en una pantalla pequeña.
 - Búsqueda de una plantilla o esquema común para peticiones de aprobación (propuesta, argumentos,
   evidencia, efecto) en `docs/rules/domain/` y `scripts/`: sin resultados. La práctica de «decisiones
   con contexto llano» existe como costumbre de la orquestadora, no como contrato comprobable.

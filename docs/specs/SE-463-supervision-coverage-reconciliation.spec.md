@@ -49,9 +49,9 @@ sobre `main` (0dd2ea30b):
 | Slice | Entrega |
 |---|---|
 | S0 | Medir qué identifica una llamada en cada frontend: si la entrada de PreToolUse trae un identificador de llamada y si aparece en el registro de la sesión. Resultado en el informe del slice. Si no hay identificador común, S1 usa (orden, herramienta, huella de la entrada) y lo declara. |
-| S1 | Latido de guard: un registro de una línea por llamada vista (`~/.savia/supervision/<session>.jsonl`: id, herramienta, decisión), escrito por un hook ligero que corre el primero; en OpenCode, por `savia-gates`. |
-| S2 | `scripts/supervision-reconcile.sh <session>` compara las llamadas del registro de la sesión del frontend con el latido. Resultado con los tres estados de SE-453 y mapeo declarado aquí (script nuevo): `clean` = salida 0 (todas vistas), `findings` = salida 1 (llamadas sin latido, listadas), `unknown` = salida 2 (no se puede leer alguno de los dos registros). |
-| S3 | Fail-closed en ejecución autónoma: el cierre de los workers y `pr-plan` en ramas `agent/*` ejecutan la reconciliación; `findings` o `unknown` → no se abre la PR y la marca de fin dice «cobertura de supervisión perdida». En sesiones interactivas, solo aviso. |
+| S1 | Latido de guard: un registro de una línea por llamada vista (`~/.savia/supervision/<session>.jsonl`: id, herramienta, decisión, `prev`), escrito por un hook ligero que corre el primero; en OpenCode, por `savia-gates`. `prev` es el sha256 de la línea anterior (cadena): una línea borrada o reordenada rompe la cadena y la reconciliación lo trata como ilegible. `<session>` se valida con `^[A-Za-z0-9_-]{1,128}$` en el hook y en `supervision-reconcile.sh`; otro valor se rechaza sin tocar el disco (salida 2 en el script). |
+| S2 | `scripts/supervision-reconcile.sh <session>` compara las llamadas del registro de la sesión del frontend con el latido. Resultado con los tres estados de SE-453 y mapeo declarado aquí (script nuevo): `clean` = salida 0 (todas vistas), `findings` = salida 1 (llamadas sin latido, listadas), `unknown` = salida 2 (no se puede leer alguno de los dos registros, o el latido existe pero está ilegible o con la cadena rota). **Latido ausente** (el directorio de latidos existe y es legible, y no hay fichero de esa sesión) con llamadas en el registro de la sesión es `findings` con todas las llamadas sin latido: los hooks no corrieron, que es el caso `disableAllHooks`. Directorio de latidos inexistente o ilegible → `unknown`. |
+| S3 | Fail-closed en ejecución autónoma: el cierre de los workers y `pr-plan` en ramas `agent/*` ejecutan la reconciliación; `findings` o `unknown` → no se abre la PR y la marca de fin dice «cobertura de supervisión perdida». En sesiones interactivas, solo aviso. «Interactiva» exige prueba positiva de sesión humana: entrada estándar en un terminal, sin `SAVIA_AUTONOMOUS_RUN` y fuera de una rama `agent/*`. Sin esa prueba la sesión se trata como autónoma (fail-closed): quitar la variable o cambiar de rama no vuelve interactiva a una sesión sin terminal. |
 
 ## Fuera de alcance
 
@@ -64,22 +64,25 @@ sobre `main` (0dd2ea30b):
 | AC | Verificación |
 |---|---|
 | AC1 | pytest con fixtures de registro de sesión y latido idénticos: `supervision-reconcile.sh` sale 0 (`clean`). |
-| AC2 | Negativo: el fixture de latido omite 2 de 10 llamadas → sale 1 (`findings`) y lista las 2. |
-| AC3 | Negativo: latido ausente o ilegible → sale 2 (`unknown`), nunca 0. |
+| AC2 | Negativo: el fixture de latido omite 2 de 10 llamadas (no se escriben esas líneas; la cadena `prev` de las restantes es válida) → sale 1 (`findings`) y lista las 2. |
+| AC3 | Negativo: latido **ilegible** (fichero truncado, JSON roto o cadena `prev` rota por una línea borrada), o directorio de latidos inexistente o ilegible → sale 2 (`unknown`), nunca 0. Latido **ausente** con el directorio legible y llamadas en el registro → sale 1 (`findings`) y lista todas (es el estado de AC6). |
+| AC3b | Negativo de ruta: `supervision-reconcile.sh ../../x` y un id vacío o con `/` salen 2 sin leer nada fuera de `~/.savia/supervision/`. |
 | AC4 | Negativo: en una rama `agent/*` con resultado `findings`, el cierre del worker no invoca `gh pr create` (espía) y escribe el motivo en la marca de fin. |
-| AC5 | En una sesión interactiva con `findings`, solo imprime aviso y sale 0 del paso de PR. |
-| AC6 | Prueba de extremo a extremo (S0 permitiendo): una sesión `claude -p` corta con hooks y otra con `disableAllHooks` dan `clean` y `findings` respectivamente. |
+| AC5 | En una sesión interactiva (terminal simulado, sin variable, rama no `agent/*`) con `findings`, solo imprime aviso y sale 0 del paso de PR. |
+| AC5b | Negativo: sin terminal, con `SAVIA_AUTONOMOUS_RUN` sin definir y en una rama que no es `agent/*`, `findings` bloquea igual (la sesión sin prueba humana cuenta como autónoma). |
+| AC6 | Prueba de extremo a extremo (S0 permitiendo): una sesión `claude -p` corta con hooks y otra con `disableAllHooks` dan `clean` y `findings` respectivamente, con el directorio de latidos ya existente y legible (lo crea la primera sesión con hooks o la instalación); sin directorio, la segunda daría `unknown` (AC3). |
 
 ## Riesgos
 
 - Coste por llamada del latido: una escritura de una línea. Se mide en S1 contra `test-hook-latency-audit.bats`.
 - Formato del registro de sesión del frontend cambia entre versiones: el lector falla a `unknown`, que bloquea en autónomo. Preferible a un falso `clean`.
-- Un agente que escribe su propio latido: el directorio de latidos se añade a las rutas protegidas de los guards de escritura.
+- Un agente que escribe su propio latido: el directorio de latidos se añade a las rutas protegidas de los guards de escritura y la cadena `prev` detecta borrados y reordenaciones. Límite declarado: los guards de Bash son léxicos (`python -c`, `tee` indirectos pueden escaparse) y un latido completo falsificado dando de nuevo toda la cadena da `clean`. La cadena sin secreto es evidencia de manipulación torpe, no una barrera contra un agente que ya ejecuta; la frontera fuerte es un monitor fuera del arnés (SE-434), fuera de alcance aquí. Una variante con HMAC y clave fuera del alcance del agente queda como decisión D3.
 
 ## Decisiones de la operadora
 
 - **D1**: ¿bloquear en autónomo desde el primer día o empezar en aviso una semana? (propuesta: aviso una semana con medición, luego bloqueo).
 - **D2**: ¿reconciliar también subagentes? (propuesta: sí si S0 muestra que sus llamadas pasan por los mismos hooks).
+- **D3**: ¿firmar la cadena con HMAC y clave fuera del alcance del agente (más fuerte, más mantenimiento)? (propuesta: no en la primera versión; medir cuántos latidos falsos aparecen).
 
 ## OpenCode Implementation Plan
 

