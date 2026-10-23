@@ -17,7 +17,6 @@ To use a skill: read `<path>` and follow its instructions.
 
 | Name | Path | Description |
 |---|---|---|
-| _template_python | `.opencode/skills/_template_python/SKILL.md` | TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una... |
 | adversarial-security | `.opencode/skills/adversarial-security/SKILL.md` | Usar cuando se necesita auditar la seguridad de un proyecto con pipeline Red Team / Blue Team. |
 | agent-code-map | `.opencode/skills/agent-code-map/SKILL.md` | Usar cuando un agente necesita conocer la arquitectura del proyecto sin leer ficheros completos. |
 | agent-file-map | `.opencode/skills/agent-file-map/SKILL.md` | Usar cuando se trabaja con ficheros externos al workspace que los agentes deben localizar. |

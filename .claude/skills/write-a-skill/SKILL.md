@@ -23,8 +23,8 @@ Guia canonica para crear una skill nueva en pm-workspace que supere el auditor d
 
 | Para | Lee este path |
 |---|---|
-| Template SKILL.md | `.opencode/skills/_template/SKILL.md` |
-| Template DOMAIN.md | `.opencode/skills/_template/DOMAIN.md` |
+| Template SKILL.md | `templates/skills/_template/SKILL.md` |
+| Template DOMAIN.md | `templates/skills/_template/DOMAIN.md` |
 | Protocolo de template | `docs/rules/domain/skill-template-protocol.md` |
 | Auditor de calidad | `scripts/skill-catalog-auditor.sh` |
 | Registro de skills | `SKILLS.md` |
@@ -70,7 +70,7 @@ Registrar en SKILLS.md
 
 1. **Copiar template**:
    ```
-   cp -r .claude/skills/_template .claude/skills/<nombre-skill>
+   cp -r templates/skills/_template .claude/skills/<nombre-skill>
    ```
 
 2. **Rellenar SKILL.md**: sustituir todos los `<placeholder>`. Seguir patron "Authoritative Paths First" (SE-153). Borrar bloque HTML inicial. Si la skill no es orquestadora, borrar la seccion `Subagent Scope Guard`.
@@ -102,8 +102,8 @@ Decide el tipo ANTES de copiar el template:
 
 | Tipo | Cuándo | Template | Contrato |
 |---|---|---|---|
-| Markdown (instrucciones) | La capacidad es sobre todo procedimiento | `.claude/skills/_template/` | SKILL.md guía al agente |
-| **Python-backed** | El agente debe invocar funcionalidad reutilizable con contrato tipado | `.claude/skills/_template_python/` | SKILL.md + `pyproject.toml` + `src/<import>/__init__.py` con `run(...)` |
+| Markdown (instrucciones) | La capacidad es sobre todo procedimiento | `templates/skills/_template/` | SKILL.md guía al agente |
+| **Python-backed** | El agente debe invocar funcionalidad reutilizable con contrato tipado | `templates/skills/_template_python/` | SKILL.md + `pyproject.toml` + `src/<import>/__init__.py` con `run(...)` |
 
 Reglas del tipo Python-backed:
 
@@ -123,7 +123,7 @@ son candidatos a migrar a Python-backed progresivamente.
 
 ## Related
 
-- Template: `.opencode/skills/_template/SKILL.md`
+- Template: `templates/skills/_template/SKILL.md`
 - Rule: `docs/rules/domain/skill-template-protocol.md`
 - Auditor: `scripts/skill-catalog-auditor.sh`
 - Roadmap: `docs/ROADMAP.md`

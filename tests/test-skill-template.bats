@@ -1,10 +1,9 @@
 #!/usr/bin/env bats
-# BATS tests for .claude/skills/_template/SKILL.md
+# BATS tests for templates/skills/_template/SKILL.md
 # Ref: SE-153 — see docs/rules/domain/skill-template-protocol.md
 # Pattern: "Authoritative paths first" (SE-153, inspirado en flowsint)
 
-TEMPLATE=".claude/skills/_template/SKILL.md"
-TEMPLATE_LINK=".opencode/skills/_template/SKILL.md"
+TEMPLATE="templates/skills/_template/SKILL.md"
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
@@ -16,18 +15,16 @@ teardown() {
   [ -n "${TMPDIR_TEST:-}" ] && [ -d "$TMPDIR_TEST" ] && rm -rf "$TMPDIR_TEST"
 }
 
-# ── Existence + visibility via opencode symlink ───────────────────────
+# ── Existence + not discoverable as skill ───────────────────────
 
-@test "template SKILL.md exists in .claude/skills/_template/" {
+@test "template SKILL.md exists in templates/skills/_template/" {
   [[ -f "$TEMPLATE" ]]
 }
 
-@test "template visible through .opencode/skills symlink" {
-  [[ -f "$TEMPLATE_LINK" ]]
-}
-
-@test "template contents identical via both paths (symlink integrity)" {
-  diff "$TEMPLATE" "$TEMPLATE_LINK"
+@test "templates are not discoverable as skills (outside .claude/skills)" {
+  [[ ! -e .claude/skills/_template ]]
+  [[ ! -e .claude/skills/_template_python ]]
+  [[ -f templates/skills/_template_python/SKILL.md ]]
 }
 
 # ── Frontmatter ───────────────────────────────────────────────────────
@@ -148,7 +145,7 @@ teardown() {
 # ── Copyability ───────────────────────────────────────────────────────
 
 @test "edge: template is copyable to a new dir without modification" {
-  cp -r .claude/skills/_template "$TMPDIR_TEST/new-skill"
+  cp -r templates/skills/_template "$TMPDIR_TEST/new-skill"
   [[ -f "$TMPDIR_TEST/new-skill/SKILL.md" ]]
   diff "$TEMPLATE" "$TMPDIR_TEST/new-skill/SKILL.md"
 }
@@ -203,4 +200,30 @@ print(json.dumps({'ok': True}))
 
 @test "template Subagent Scope Guard names DONE/BLOCKED states" {
   awk '/^## Subagent Scope Guard/{f=1;next} /^## /{f=0} f' "$TEMPLATE" | grep -qE 'DONE.*BLOCKED|BLOCKED.*DONE'
+}
+
+# ── Documentación coherente tras mover las plantillas ──────────────────
+
+@test "protocol doc no longer claims the template is visible via symlink" {
+  run grep -n "visible vía symlink" docs/rules/domain/skill-template-protocol.md
+  [ "$status" -ne 0 ]
+  run grep -n "aparece en ambos paths" docs/rules/domain/skill-template-protocol.md
+  [ "$status" -ne 0 ]
+}
+
+@test "protocol doc lists a single canonical template path" {
+  n=$(grep -c '^templates/skills/_template/SKILL.md' docs/rules/domain/skill-template-protocol.md)
+  [ "$n" -eq 1 ]
+}
+
+@test "no live doc points at the old .claude/skills/_template path" {
+  run grep -rn --include='*.md' --include='*.txt' -E '(\.claude|\.opencode)/skills/_template' \
+    CLAUDE.md docs/llms-full.txt docs/rules docs/propuestas .claude/skills
+  # 1 = sin coincidencias; 2 = error de grep (ruta inexistente) no vale como verde
+  [ "$status" -eq 1 ]
+}
+
+@test "CLAUDE.md skill count matches reality after moving the templates" {
+  run bash scripts/claude-md-drift-check.sh
+  [ "$status" -eq 0 ]
 }
