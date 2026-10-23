@@ -2,10 +2,10 @@ id: task-019-se-153 skill-template
 baseline_commit: 0e851e90
 problem: >
   Implementar/verificar SE-153 skill-template: template con authoritative paths contra el estado actual del arbol.
-allowed_evidence: [.claude/skills/_template/]
+allowed_evidence: [templates/skills/_template/]
 forbidden_actions: [tocar guardrails sin spec, auto-merge, secrets en repo]
 expected_behavior: segun spec SE-153 skill-template vigente en docs/ y rules
-expected_files: [.claude/skills/_template/]
+expected_files: [templates/skills/_template/]
 invariants: [CRIT-001 local, sin-regresion-paired-delta]
 risk_level: L1
 evaluation: [pr-mergeada, gates-verdes, scope-respetado]
