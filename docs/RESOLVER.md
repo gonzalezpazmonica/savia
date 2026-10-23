@@ -46,7 +46,7 @@
 
 <!-- AUTO_BEGIN — do not edit; regenerate via scripts/resolver-md-generate.sh -->
 
-### Skills (137)
+### Skills (138)
 
 | Intent (skill) | Target | Cuándo usar |
 |---|---|---|
@@ -146,6 +146,7 @@
 | `regulatory-compliance` | skill:regulatory-compliance | Usar cuando se valida el cumplimiento de marcos regulatorios sectoriales. |
 | `reranker` | skill:reranker | Usar cuando se recibe un top-K ruidoso de búsqueda en memoria y se necesita reordenar ... |
 | `resource-references` | skill:resource-references | Usar cuando se necesitan referencias a recursos y plantillas del workspace. |
+| `reverse-engineering-sovereignty` | skill:reverse-engineering-sovereignty | Usar cuando se necesita comprobar qué hace un software opaco del que se depende, o pod... |
 | `risk-scoring` | skill:risk-scoring | Usar cuando se calcula el riesgo de una tarea para decidir el nivel de revisión requer... |
 | `robotica-diseno` | skill:robotica-diseno | Diseño profundo de robótica, automatización y hardware/software para el mundo físic... |
 | `rules-traceability` | skill:rules-traceability | Usar cuando se mapean reglas de negocio a PBIs para trazabilidad completa. |
@@ -156,7 +157,7 @@
 | `savia-labs` | skill:savia-labs | Usar cuando se investiga, experimenta o audita epistemicamente. Triggers: 'investiga', ... |
 | `savia-memory` | skill:savia-memory | Usar cuando se lee, escribe, busca o consolida la memoria persistente entre sesiones de... |
 | `savia-school` | skill:savia-school | Usar cuando el workspace se adapta para un entorno educativo con estudiantes menores de... |
-| `savia-vaults` | skill:savia-vaults | Usar cuando se interactua con SaviaVaults — cupulas de contexto, busqueda federada, s... |
+| `savia-vaults` | skill:savia-vaults | Usar cuando se interactua con SaviaVaults — cupulas de contexto, busqueda federada, R... |
 | `scaling-operations` | skill:scaling-operations | Usar cuando se analiza el tier de escala de un servicio o se necesitan optimizaciones d... |
 | `scheduled-messaging` | skill:scheduled-messaging | Usar cuando se configuran mensajes automáticos programados a plataformas de comunicaci... |
 | `skill-evaluation` | skill:skill-evaluation | Usar cuando se necesita seleccionar el skill más apropiado para una tarea dada. |

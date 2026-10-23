@@ -1,6 +1,6 @@
 {
-  "hash": "1314f1c752b5",
-  "total": 1450,
+  "hash": "0525d179a0ad",
+  "total": 1451,
   "resources": [
     {
       "category": "analysis",
@@ -13240,6 +13240,20 @@
       "kind": "script",
       "path": "scripts/restore-drill.sh",
       "description": "restore-drill.sh — SE-258 Slice 2"
+    },
+    {
+      "category": "planning",
+      "name": "reverse-engineering-sovereignty",
+      "intents": [
+        "autorizada",
+        "comprobar",
+        "depende",
+        "externo",
+        "hace"
+      ],
+      "kind": "skill",
+      "path": ".claude/skills/reverse-engineering-sovereignty/SKILL.md",
+      "description": "Usar cuando se necesita comprobar qué hace un software opaco del que se depende, o poder salir de él, mediante ingeniería inversa autorizada con REA externo."
     },
     {
       "category": "planning",
