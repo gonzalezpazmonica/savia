@@ -6,6 +6,30 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-23 SE-463 PROPOSED
+
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
+
+## 2026-10-23 SE-462 PROPOSED
+
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
+
+## 2026-10-23 SE-461 PROPOSED
+
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
+
+## 2026-10-23 SE-460 PROPOSED
+
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
+
+## 2026-10-23 SE-459 PROPOSED
+
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
+
+## 2026-10-23 SE-458 PROPOSED
+
+Alta desde investigación de arquitectura agéntica (2026-10-23); fuentes del informe (no todas verificadas; ver la PR)
+
 ## 2026-10-23 SE-456 APPROVED
 
 operadora, AskUserQuestion 2026-10-23
