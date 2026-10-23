@@ -201,3 +201,23 @@ print(json.dumps({'ok': True}))
 @test "template Subagent Scope Guard names DONE/BLOCKED states" {
   awk '/^## Subagent Scope Guard/{f=1;next} /^## /{f=0} f' "$TEMPLATE" | grep -qE 'DONE.*BLOCKED|BLOCKED.*DONE'
 }
+
+# ── Documentación coherente tras mover las plantillas ──────────────────
+
+@test "protocol doc no longer claims the template is visible via symlink" {
+  run grep -n "visible vía symlink" docs/rules/domain/skill-template-protocol.md
+  [ "$status" -ne 0 ]
+  run grep -n "aparece en ambos paths" docs/rules/domain/skill-template-protocol.md
+  [ "$status" -ne 0 ]
+}
+
+@test "protocol doc lists a single canonical template path" {
+  n=$(grep -c '^templates/skills/_template/SKILL.md' docs/rules/domain/skill-template-protocol.md)
+  [ "$n" -eq 1 ]
+}
+
+@test "no live doc points at the old .claude/skills/_template path" {
+  run grep -rn --include='*.md' --include='*.txt' -E '(\.claude|\.opencode)/skills/_template' \
+    CLAUDE.md docs/llms-full.txt docs/rules docs/propuestas .claude/skills
+  [ "$status" -ne 0 ]
+}

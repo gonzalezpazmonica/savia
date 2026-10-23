@@ -21,10 +21,9 @@ Solución: **paths primero, prosa después**. Sección obligatoria `## Authorita
 
 ```
 templates/skills/_template/SKILL.md   ← canónica
-templates/skills/_template/SKILL.md ← visible vía symlink
 ```
 
-`.opencode/skills` es un symlink a `../.claude/skills`, por lo que el template aparece en ambos paths automáticamente.
+Las plantillas viven fuera de `.claude/skills/` a propósito: así el cliente no las descubre como skills.
 
 ## Cómo usar
 
