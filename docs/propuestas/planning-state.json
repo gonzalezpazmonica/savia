@@ -316,7 +316,37 @@
         "merge_pr": 1170,
         "main_commit": "504e9d38",
         "verified_on": "2026-09-30"
-      }
+      },
+      "completion": {
+        "merge_pr": 1170,
+        "acceptance_evidence": [
+          {
+            "criterion": "AC1-AC6 (G13 v2, Fix-trace)",
+            "file": "tests/structure/test-se404-g13-v2.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC7 (COURT_MAX_FIX_ROUNDS=1)",
+            "file": "tests/test-se404-court-one-fix.bats",
+            "authority": "estatica",
+            "authority_required": "estatica"
+          },
+          {
+            "criterion": "AC8 (crc con más de una ronda)",
+            "file": "tests/test-se404-court-one-fix.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC9 (BATS 21/21 y 8/8, auditor 89/84)",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          }
+        ]
+      },
+      "note": "2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora."
     },
     {
       "id": "SE-405",
@@ -928,10 +958,27 @@
       "status": "IMPLEMENTING",
       "priority": "P1",
       "title": "Firma de confidencialidad con secreto de CI y HMAC siempre verificado",
-      "note": "Pasos 1 (#1224), 2 (secreto creado 2026-10-02) y 3 (#1225) integrados; la CI verificó en modo exigente una firma local (HMAC: VERIFIED). Falta observar el re-firmado del bot (auto-rebase o consolidación) antes de graduar",
+      "note": "Pasos 1 (#1224), 2 (secreto creado 2026-10-02) y 3 (#1225) integrados; la CI verificó en modo exigente una firma local (HMAC: VERIFIED). Falta observar el re-firmado del bot (auto-rebase o consolidación) antes de graduar 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-426-confidentiality-hmac-ci-key.spec.md",
       "phase": "A",
-      "approval": "Operadora 2026-10-02 en chat (AskUserQuestion, en remoto): 'Aprobar e implementar el paso 1'; secreto: 'Créalo tú, Savia'"
+      "approval": "Operadora 2026-10-02 en chat (AskUserQuestion, en remoto): 'Aprobar e implementar el paso 1'; secreto: 'Créalo tú, Savia'",
+      "completion": {
+        "merge_pr": 1337,
+        "acceptance_evidence": [
+          {
+            "criterion": "AC1-AC4, AC6 (36/36 BATS, auditor 85)",
+            "file": "tests/scripts/test-confidentiality-sign.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC5 (CI rechaza otra clave: run 39504031706; re-firmado del bot verificado: run 39903878046)",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "real",
+            "authority_required": "real"
+          }
+        ]
+      }
     },
     {
       "id": "SE-428",
@@ -1038,10 +1085,45 @@
       "status": "APPROVED",
       "priority": "P0",
       "title": "Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada",
-      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes).",
+      "note": "20 de 51 referencias uses: sin SHA (medido en main a15eae38f); sin dependabot.yml, CodeQL ni Scorecard. Esfuerzo S, sin dependencias. Delta 2026-10-20: S5 requisitos de Python con hashes (el único fichero real es scripts/requirements-memory.txt, 0 hashes). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-442-ci-supply-chain-hardening.spec.md",
       "phase": "A",
-      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia",
+      "completion": {
+        "merge_pr": 1332,
+        "acceptance_evidence": [
+          {
+            "criterion": "AC1-AC3, AC5 YAML, AC6 (acciones fijadas por SHA)",
+            "file": "tests/test-ci-actions-pinned.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC4 (dependabot.yml)",
+            "file": ".github/dependabot.yml",
+            "authority": "estatica",
+            "authority_required": "estatica"
+          },
+          {
+            "criterion": "AC5 (CodeQL y Scorecard ejecutados y con SARIF; Scorecard solo en main)",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "real",
+            "authority_required": "real"
+          },
+          {
+            "criterion": "AC7 (validate-ci-local --quick 13/13)",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "real",
+            "authority_required": "real"
+          },
+          {
+            "criterion": "AC8-AC9 (requisitos con hashes)",
+            "file": "tests/test-requirements-hashed.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          }
+        ]
+      }
     },
     {
       "id": "SE-443",
@@ -1057,20 +1139,78 @@
       "status": "APPROVED",
       "priority": "P0",
       "title": "Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita",
-      "note": "Solo informe: no cambia el resultado del predicado de cierre. Refuerza S03/S04 (no certificar por presencia de ficheros).",
+      "note": "Solo informe: no cambia el resultado del predicado de cierre. Refuerza S03/S04 (no certificar por presencia de ficheros). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-444-verifier-authority-ac-closure.spec.md",
       "phase": "A",
-      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia",
+      "completion": {
+        "merge_pr": 1334,
+        "acceptance_evidence": [
+          {
+            "criterion": "AC1 (regla de autoridad)",
+            "file": "docs/rules/domain/ac-verifier-authority.md",
+            "authority": "estatica",
+            "authority_required": "estatica"
+          },
+          {
+            "criterion": "AC2-AC5 (plantilla, listado, regresión del predicado, validate-ci-local)",
+            "file": "tests/test-planning-completion-authority.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC5-AC7 (ejecución real: sección impresa, roadmap validate y entropía PASS)",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "real",
+            "authority_required": "real"
+          }
+        ]
+      }
     },
     {
       "id": "SE-445",
       "status": "APPROVED",
       "priority": "P1",
       "title": "Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito",
-      "note": "Convierte en enforcement dos reglas de autonomous-safety hoy solo de texto (3 repeticiones, time-box visible).",
+      "note": "Convierte en enforcement dos reglas de autonomous-safety hoy solo de texto (3 repeticiones, time-box visible). 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-445-autonomous-execution-safeguards.spec.md",
       "phase": "A",
-      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia"
+      "approval": "Operadora 2026-10-20: AskUserQuestion, sprint nocturno de Savia",
+      "completion": {
+        "merge_pr": 1335,
+        "acceptance_evidence": [
+          {
+            "criterion": "AC1-AC2 (repetición bloqueante)",
+            "file": "tests/test-repeat-tool-guard-block.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC3 (presupuesto de turnos)",
+            "file": "tests/test-turn-budget-inject.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC4-AC6, AC8 (revisor de acciones, doble opt-in)",
+            "file": "tests/test-action-review.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC7 (success_checks y max_retries)",
+            "file": "tests/test-automation-success-checks.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC9 (validate-ci-local y entropía)",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "real",
+            "authority_required": "real"
+          }
+        ]
+      }
     },
     {
       "id": "SE-446",
@@ -1122,10 +1262,27 @@
       "status": "APPROVED",
       "priority": "P1",
       "title": "Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero",
-      "note": "La premisa de licencia dual del informe origen es falsa en el repo público (LICENSE-ENTERPRISE.md); recomendación DCO, decisión de la operadora.",
+      "note": "La premisa de licencia dual del informe origen es falsa en el repo público (LICENSE-ENTERPRISE.md); recomendación DCO, decisión de la operadora. 2026-10-23 conciliación: todos los AC cubiertos en main (docs/evidence/planning-closure-review-20261023.md); completion preparado sin human_review, la graduación espera la revisión de la operadora.",
       "evidence": "docs/specs/SE-451-contribution-governance-dco.spec.md",
       "phase": "A",
-      "approval": "Operadora 2026-10-20: AskUserQuestion, DCO (no CLA)"
+      "approval": "Operadora 2026-10-20: AskUserQuestion, DCO (no CLA)",
+      "completion": {
+        "merge_pr": 1331,
+        "acceptance_evidence": [
+          {
+            "criterion": "AC1-AC4 (DCO en CONTRIBUTING, lógica del workflow, permisos, SHA)",
+            "file": "tests/test-dco-check.bats",
+            "authority": "simulada",
+            "authority_required": "simulada"
+          },
+          {
+            "criterion": "AC5-AC6 no aplican (D1 = DCO; S4 no se hizo); AC7 validate-ci-local verde",
+            "file": "docs/evidence/planning-closure-review-20261023.md",
+            "authority": "real",
+            "authority_required": "real"
+          }
+        ]
+      }
     },
     {
       "id": "SE-452",
