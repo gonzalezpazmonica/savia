@@ -18,12 +18,14 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     name: Create GitHub Release (fallback for manual tag pushes)
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # Skip if the tag was pushed by github-actions[bot] — auto-tag.yml
     # already handles that case inline. This prevents duplicate work and
     # is also technically a no-op because GITHUB_TOKEN actions don't
