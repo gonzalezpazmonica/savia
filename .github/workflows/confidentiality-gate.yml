@@ -17,6 +17,9 @@ on:
           - full-repo
           - pr
 
+permissions:
+  contents: read
+
 jobs:
   signature-check:
     if: github.event_name == 'pull_request'
