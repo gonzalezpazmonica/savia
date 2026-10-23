@@ -24,11 +24,13 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  pull-requests: read
+  contents: read
 
 jobs:
   rebase:
+    permissions:
+      contents: write
+      pull-requests: read
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip auto-rebase]') }}
     env:

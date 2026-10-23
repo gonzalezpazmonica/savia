@@ -12,11 +12,13 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   auto-tag-and-release:
     name: Create tag and GitHub release from CHANGELOG
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
 
     steps:

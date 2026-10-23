@@ -5,11 +5,13 @@ on:
     types: [opened, synchronize]
 
 permissions:
-  pull-requests: write
   contents: read
 
 jobs:
   label:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - name: Label PR based on branch prefix

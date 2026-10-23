@@ -24,8 +24,7 @@ on:
       - 'CHANGELOG.d/**'
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: changelog-consolidate
@@ -34,6 +33,9 @@ concurrency:
 jobs:
   consolidate:
     name: Consolidate CHANGELOG.d if threshold exceeded
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip consolidate]') }}
     env:
