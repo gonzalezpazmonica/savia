@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 const folders: string[] = [];
 afterEach(() => { for (const f of folders.splice(0)) fs.rmSync(f, { recursive: true, force: true }); });
 
-function setup() {
+function setup(enabled: Record<string, boolean> = { a: true, b: true }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-cli-rag-'));
   folders.push(root);
   const domes: Record<string, unknown> = {};
@@ -17,7 +17,7 @@ function setup() {
     const folder = path.join(root, name);
     fs.mkdirSync(folder);
     fs.writeFileSync(path.join(folder, `${name}.md`), `# ${name}\n\n${'contenido de prueba para el índice. '.repeat(10)}`);
-    domes[name] = { name, path: folder, description: '', confidentiality: 'N2', rag: { enabled: true } };
+    domes[name] = { name, path: folder, description: '', confidentiality: 'N2', rag: { enabled: enabled[name] ?? true } };
   }
   const registry = path.join(root, 'domes.json');
   fs.writeFileSync(registry, JSON.stringify({ version: 1, defaultDome: 'a', domes }));
@@ -67,5 +67,39 @@ describe('SE-410 CLI rag sync --all --check', () => {
     const r = run('sync');
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('INVALID_INPUT');
+  }, 30000);
+});
+
+describe('L32 registro sin cúpulas habilitadas y gc --all', () => {
+  const off = { a: false, b: false };
+
+  it('sync --all --check sin cúpulas rag.enabled sale 2 con ALERTA', () => {
+    const { run } = setup(off);
+    const r = run('sync', '--all', '--check');
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('ALERTA');
+  }, 30000);
+
+  it('sync --all sin --check y sin cúpulas habilitadas sale 1 con ALERTA', () => {
+    const { run } = setup(off);
+    const r = run('sync', '--all');
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('ALERTA');
+  }, 30000);
+
+  it('gc --all solo toca las cúpulas habilitadas', () => {
+    const { run } = setup({ a: true, b: false });
+    const r = run('gc', '--all');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('[a]');
+    expect(r.stdout).not.toContain('[b]');
+  }, 30000);
+
+  it('negativo: gc sin flags sigue recorriendo todas las cúpulas', () => {
+    const { run } = setup({ a: true, b: false });
+    const r = run('gc');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('[a]');
+    expect(r.stdout).toContain('[b]');
   }, 30000);
 });
