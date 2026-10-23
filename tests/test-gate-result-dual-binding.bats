@@ -63,6 +63,7 @@ parity() {
   [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
 }
 
+SF="-""f"
 ghtoken() { printf 'ghp_%s' "$(printf 'A%.0s' $(seq 1 36))"; }
 FP="--for""ce"
 
@@ -72,6 +73,13 @@ FP="--for""ce"
   [ "$(ts_code block-force-push blockForcePush "ls -la")" = 0 ]
   run $TS_RUNTIME "$RUNNER" "$REPO_ROOT/.opencode/plugins/guards/block-force-push.ts" noExiste
   [ "$status" -eq 64 ]
+}
+
+@test "runner: un guard roto (lanza sin BLOCKED) da 70, no 2: no puede pasar por bloqueo" {
+  require_ts
+  printf '%s\n' 'export async function broken() { throw new TypeError("x is undefined"); }' > "$BATS_TEST_TMPDIR/broken.ts"
+  run env SAVIA_GUARD_CMD="ls" $TS_RUNTIME "$RUNNER" "$BATS_TEST_TMPDIR/broken.ts" broken
+  [ "$status" -eq 70 ]
 }
 
 @test "paridad block-credential-leak: token de GitHub ⇒ 2 en bash, bash sin jq y TS" {
@@ -89,11 +97,37 @@ FP="--for""ce"
     "git push $FP-with-lease origin main"
 }
 
+@test "paridad block-force-push: orden en la línea 2 de un bloque multilínea ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 \
+    $'cd repo\ngit push '"$FP"' origin feat' $'cd repo\ngit commit --amend -m x' \
+    $'cd repo\ngit reset --hard HEAD~1' $'cd repo\ngit push origin main'
+}
+
+@test "paridad block-force-push: envuelta en bash -c, sh -c, eval, then, {, xargs ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 \
+    "bash -c \"git push $FP origin feat\"" "sh -c 'git push origin main'" \
+    "if true; then git push $SF; fi" "{ git push $SF; }" "eval \"git reset --hard\"" \
+    "echo x | xargs git push $SF" "timeout 30 git push $FP origin feat" "! git commit --amend"
+}
+
+@test "paridad block-force-push: --force-with-lease en otra parte no exime un --force real ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 \
+    "git push $FP-with-lease origin a; git push $FP origin b" \
+    "git push $SF origin feat # $FP-with-lease" "git push $FP-with-lease origin HEAD:main"
+}
+
 @test "paridad sin bloqueo: inocuos, --force-with-lease a rama y mención en echo ⇒ 0" {
   require_ts
   command -v jq >/dev/null
   parity block-force-push blockForcePush 0 "ls -la" "git push $FP-with-lease origin feat" \
-    "git push origin main-fix" "echo 'git push $FP'"
+    "git push origin main-fix" "echo 'git push $FP'" "git push $FP-with-lease origin main-fix" \
+    "git commit -m 'no hagas git push $FP'" $'cd repo\ngit push origin feat' "bash -c 'git status'"
   parity block-credential-leak blockCredentialLeak 0 "ls -la" "git status"
 }
 

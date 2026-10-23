@@ -11,21 +11,29 @@
 
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
-// Start of a real git command: at the beginning, after a separator or inside a subshell, with what may
-// precede it (VAR=value, env, command, sudo, nohup, time, exec) and git global options
-// (-C dir, -c key=value, --no-pager…). A mention inside a message or an echo does not match.
+// Start of a real git command: at the beginning of a line, after a separator, inside a subshell or
+// inside `bash -c "…"`/`sh -c '…'`/`eval`, with what may precede it (VAR=value, env, command, sudo, nohup,
+// time, exec, then, do, if, xargs, timeout N, nice, !, {) and git global options (-C dir, -c key=value,
+// --no-pager…). A mention inside a message or an echo does not match.
+// Flag m: `^` matches at every line start, like the bash hook's grep (one line at a time).
 const GIT_AT =
-  String.raw`(?:^|[;&|(\x60]|\$\()\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|env|command|sudo|nohup|time|exec)\s+)*git` +
+  String.raw`(?:^|[;&|(\x60]|\$\(|\b(?:(?:ba|z|da|k)?sh\s+-c|eval)\s+["']?)\s*` +
+  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|env|command|sudo|nohup|time|exec|then|do|else|if|elif|while|until|xargs|nice|timeout\s+\S+|!|\{)\s+)*git` +
   String.raw`(?:(?:\s+(?:-C|-c|--git-dir|--work-tree)\s+(?:"[^"]*"|'[^']*'|\S+))|(?:\s+--?[A-Za-z][A-Za-z-]*(?:=\S+)?))*\s+`;
-const rx = (body: string) => new RegExp(GIT_AT + body, "i");
+// End of an option or a branch name: whitespace, end of line, separator or closing quote.
+const END = String.raw`(?:\s|$|[;&|)"'\x60])`;
+const rx = (body: string) => new RegExp(GIT_AT + body, "im");
 
 const FORCE_WITH_LEASE = rx(String.raw`push\s+.*--force-with-lease`);
-const BARE_FORCE = rx(String.raw`push\s+(?:[^;&|]*\s)?(?:--force|-f)(?:\s|$)`);
-const PUSH_MENTIONS_MAIN = /git\s+push\s+.*\b(?:main|master)\b/i;
+// Never matches --force-with-lease, so a hit is a real --force/-f even if another push in the command
+// uses the lease (SE-453: the lease no longer exempts the whole command).
+const BARE_FORCE = rx(String.raw`push\s+(?:[^;&|\n]*\s)?(?:--force|-f)` + END);
+// main/master as a destination: a bare word or after `:`, `+` or `/` of a refspec; `main-fix` does not match.
+const PUSH_MENTIONS_MAIN = /git\s+push\s+.*(?:^|[\s:+/])(?:main|master)(?:[\s:;&|)"'\x60]|$)/im;
 
 const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
   {
-    rx: rx(String.raw`push\s+(?:origin\s+)?(?:main|master)(?:\s|$|[;&|)])`),
+    rx: rx(String.raw`push\s+(?:origin\s+)?(?:main|master)` + END),
     msg: "Cannot push directly to main/master. Use a feature branch and PR.",
   },
   {
@@ -56,11 +64,10 @@ export async function blockForcePush(input: ToolInput, output: ToolOutput): Prom
   const command = extractCommand(input, output);
   if (!command) return;
 
-  const lease = FORCE_WITH_LEASE.test(command);
-  if (BARE_FORCE.test(command) && !lease) {
+  if (BARE_FORCE.test(command)) {
     throw new Error("BLOCKED [force-push]: git push --force blocked. Use --force-with-lease instead.");
   }
-  if (lease && PUSH_MENTIONS_MAIN.test(command)) {
+  if (FORCE_WITH_LEASE.test(command) && PUSH_MENTIONS_MAIN.test(command)) {
     throw new Error("BLOCKED [force-push]: Cannot force-push to main/master. Create a branch.");
   }
   for (const r of BLOCK_RULES) {
