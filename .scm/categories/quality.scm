@@ -42,7 +42,7 @@
 - **docs-quality-audit** (cmd): Auditar calidad de documentacion basada en feedback de agentes
 - **drift-auditor** (agent): Auditoría de convergencia repo: detecta drift entre docs, config y código. Usar PROACTIVELY tras cambios grandes o al inicio de sprint.
 - **dynamic-web-security-test** (script): dynamic-web-security-test.sh — SE-245 Dynamic Web Security Testing
-- **dynamic-web-tester** (skill): Testing dinámico de endpoints web: XSS (DalFox), SQLi (sqlmap), Nuclei.
+- **dynamic-web-tester** (skill): Testing dinámico de endpoints web (XSS, SQLi, Nuclei). Usar solo en pruebas autorizadas, cuando haya que comprobar vulnerabilidades de una aplicación web propia o en alcance de un pentest.
 - **enterprise/activation-plan-review** (script): activation-plan-review.sh — SE-034 Agent Activation Plan
 - **enterprise/audit-purge** (script): audit-purge.sh — SPEC-SE-037 Audit Log Retention Purge CLI
 - **enterprise/audit-search** (script): audit-search.sh — SPEC-SE-037 Audit Log CLI Inspector

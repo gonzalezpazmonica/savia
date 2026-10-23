@@ -1,7 +1,7 @@
 ---
 layer: peripheral
 name: dynamic-web-tester
-description: "Testing dinámico de endpoints web: XSS (DalFox), SQLi (sqlmap), Nuclei."
+description: "Testing dinámico de endpoints web (XSS, SQLi, Nuclei). Usar solo en pruebas autorizadas, cuando haya que comprobar vulnerabilidades de una aplicación web propia o en alcance de un pentest."
 metadata:
   # --- metadata.savia.* (SE-333) ---
   savia.authorization_required: true
