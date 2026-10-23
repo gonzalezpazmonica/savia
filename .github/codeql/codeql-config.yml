@@ -1,9 +1,9 @@
 # SE-442 S3 — configuración de CodeQL.
 # Se excluyen SOLO los laboratorios y fixtures que son vulnerables a propósito
-# (objetivos de pruebas del agente pentester y del benchmark de seguridad; cada
-# fichero lo declara en su cabecera y nunca se despliega). Cualquier otra alerta
-# se resuelve en el código o se registra con motivo: no se silencia.
+# (servidores mock del laboratorio pentester y fixtures del benchmark de
+# seguridad; nunca se despliegan). Los scripts de validación del laboratorio SÍ
+# se analizan. Cualquier otra alerta se resuelve en el código o se registra con motivo: no se silencia.
 name: savia-codeql-config
 paths-ignore:
-  - tests/pentest-lab
+  - tests/pentest-lab/mock-*
   - tests/fixtures/security-benchmark
