@@ -12,7 +12,8 @@ setup_file() {
   local f
   for f in /usr/bin/*; do
     [[ "${f##*/}" == jq ]] && continue
-    [[ -x "$f" ]] && ln -sf "$f" "$NOJQ/${f##*/}"
+    # Con `&&` como última orden del bucle, un último /usr/bin/* no ejecutable hacía fallar setup_file.
+    if [[ -x "$f" ]]; then ln -sf "$f" "$NOJQ/${f##*/}"; fi
   done
 }
 
@@ -148,8 +149,18 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
   require_ts
   parity block-force-push blockForcePush 2 \
     "git push origin main:main" "git push origin HEAD:refs/heads/main" "git push origin HEAD:main" \
-    "git push $FP-with-lease origin 'main'" "git push $FP-with-lease origin \"master\"" \
+    "git push $FP-with-lease origin 'main'" "git push $FP-with-lease origin \"main\"" \
+    "git push $FP-with-lease origin \"master\"" "git push origin \"main\"" "git push origin 'main'" \
     "git push origin +feat" "git push origin '+feat'" "git push origin +main"
+}
+
+# Límite conocido, igual en los dos lados: tras `eval` o `sh -c` no se distingue una orden real de prosa
+# dentro de un echo, así que bloquea (falso positivo aceptado, como `--amend` en un mensaje). Si un día se
+# afina, este test tiene que cambiar a 0 en bash y en TS a la vez.
+@test "paridad límite: eval o sh -c dentro de un echo bloquea en bash y en TS (falso positivo documentado)" {
+  require_ts
+  parity block-force-push blockForcePush 2 \
+    "echo \"ejemplo: eval git push $SF\"" "echo 'usa sh -c \"git reset --hard\"'"
 }
 
 @test "paridad sin bloqueo: inocuos, --force-with-lease a rama y mención en echo ⇒ 0" {
@@ -158,7 +169,8 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "git push origin main-fix" "echo 'git push $FP'" "git push $FP-with-lease origin main-fix" \
     "git commit -m 'no hagas git push $FP'" $'cd repo\ngit push origin feat' "bash -c 'git status'" \
     "git push origin feat-main" "git push origin main-fix:main-fix" "nice -n 5 git status" \
-    "/usr/bin/git push -u origin feat" "$SU -u bot git push origin feat"
+    "/usr/bin/git push -u origin feat" "$SU -u bot git push origin feat" "sleep 5 && git status" \
+    "echo \"no hagas git push $FP\"" "git push origin \"main-fix\""
   parity block-credential-leak blockCredentialLeak 0 "ls -la" "git status"
 }
 
@@ -168,14 +180,16 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     $'git push origin feat\nmain' $'git push origin feat\n'"$SF" $'git push\n'"$FP"
 }
 
-@test "TS sin vueltas atrás exponenciales: entradas ambiguas terminan en < 5 s (revisión #1348 P2-1)" {
+# Con 30 repeticiones una gramática ambigua son ~2^30 vueltas atrás (minutos); sin ambigüedad, milisegundos.
+@test "TS sin vueltas atrás exponenciales: entradas ambiguas terminan en < 1 s (revisión #1348 P2-1)" {
   require_ts
-  local c t0 t1
-  for c in "git$(rep ' -c -a' 40)" "nice$(rep ' -n 5' 40)" "$SU$(rep ' -u env' 40)" "timeout$(rep ' -k timeout' 40)"; do
-    t0=$SECONDS
+  local c t0 ms
+  for c in "git$(rep ' -c -a' 30)" "git$(rep ' -C -C' 30) !" "nice$(rep ' -n 5' 30)" "$SU$(rep ' -u env' 30)" \
+    "timeout$(rep ' -k timeout' 30)"; do
+    t0=$(date +%s%N)
     [ "$(timeout 20 env SAVIA_GUARD_CMD="$c" $TS_RUNTIME "$RUNNER" "$REPO_ROOT/.opencode/plugins/guards/block-force-push.ts" blockForcePush >/dev/null 2>&1; echo $?)" = 0 ]
-    t1=$SECONDS
-    (( t1 - t0 < 5 )) || { echo "tarda $((t1 - t0)) s: ${c:0:40}…" >&2; return 1; }
+    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+    (( ms < 1000 )) || { echo "tarda $ms ms: ${c:0:40}…" >&2; return 1; }
   done
 }
 

@@ -11,7 +11,8 @@ setup_file() {
   local f
   for f in /usr/bin/*; do
     [[ "${f##*/}" == python* ]] && continue
-    [[ -x "$f" ]] && ln -sf "$f" "$NOPY/${f##*/}"
+    # Con `&&` como última orden del bucle, un último /usr/bin/* no ejecutable hacía fallar setup_file.
+    if [[ -x "$f" ]]; then ln -sf "$f" "$NOPY/${f##*/}"; fi
   done
 }
 
@@ -105,6 +106,36 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
   [ "$status" -eq 2 ]
   [[ "$output" == *'"check":"python3","reason":"missing_tool"'* ]]
   [[ "$output" == *'"check":"mcp-security-audit","reason":"unreadable"'* ]]
+}
+
+# python3 en PATH pero que no arranca (shim de pyenv sin versión, venv roto): `command -v` lo da por bueno.
+broken_python() {
+  mkdir -p "$W/brokenpy"
+  printf '#!/bin/sh\necho "pyenv: python3: command not found" >&2\nexit 127\n' > "$W/brokenpy/python3"
+  chmod +x "$W/brokenpy/python3"
+}
+
+@test "mcp-audit: python3 presente pero roto ⇒ exit 2 y unknown, no un MCP-00 por config (revisión #1348 P2-4)" {
+  broken_python
+  run env PATH="$W/brokenpy:$NOPY" /usr/bin/bash "$W/scripts/mcp-real.sh" --config "$W/clean.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"MCP-00"* ]]
+  [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"unknown","gaps":[{"check":"python3","reason":"missing_tool"}]}' ]
+}
+
+@test "agregador: python3 presente pero roto ⇒ hueco python3:missing_tool, no solo unreadable (P2-4)" {
+  broken_python
+  run env PATH="$W/brokenpy:$NOPY" /usr/bin/bash "$W/scripts/security-audit-all.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"check":"python3","reason":"missing_tool"'* ]]
+}
+
+@test "agregador: una cuenta booleana (true) es ilegible, no un entero (revisión #1348 P2-5)" {
+  stub hook-injection-audit 1 '{"verdict":"FAIL","findings_count":1,"critical":true,"high":0,"medium":0}'
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["gaps"]')" = '[{"check": "hook-injection-audit", "reason": "unreadable"}]' ]
+  [ "$(json_field '["total_critical"]')" = 0 ]
 }
 
 @test "agregador: escáner ausente ⇒ hueco missing_tool; prompt-scan roto ⇒ unreadable" {

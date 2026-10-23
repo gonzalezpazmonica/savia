@@ -18,7 +18,7 @@
 # Exit codes:
 #   0 — no findings
 #   1 — findings present
-#   2 — usage error, or UNKNOWN: python3 missing, so no config can be read (SE-453).
+#   2 — usage error, or UNKNOWN: python3 missing or unable to start, so no config can be read (SE-453).
 #       A config that python3 cannot parse is a finding (MCP-00, exit 1), not UNKNOWN.
 #       With no config found (none given and no default present) the result is clean with 0 audited.
 #
@@ -90,8 +90,9 @@ FINDINGS=()
 total_servers=0
 
 # SE-453: sin python3 no se puede leer ningún config. Antes cada config salía como MCP-00 «Invalid JSON»
-# (un hallazgo falso por herramienta ausente); ahora es unknown/missing_tool.
-if [[ ${#CONFIGS[@]} -gt 0 ]] && ! command -v python3 >/dev/null 2>&1; then
+# (un hallazgo falso por herramienta ausente); ahora es unknown/missing_tool. También si python3 existe
+# pero no arranca (shim de pyenv sin versión, venv roto): `command -v` no basta.
+if [[ ${#CONFIGS[@]} -gt 0 ]] && ! python3 -c '' >/dev/null 2>&1; then
   echo "ERROR: python3 no disponible; no se pueden leer los configs MCP (no medido)." >&2
   if [[ "$JSON" -eq 1 ]]; then
     gate_line="$(gate_result_emit unknown "python3:missing_tool")"

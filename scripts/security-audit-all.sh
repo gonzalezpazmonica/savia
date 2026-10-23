@@ -82,7 +82,8 @@ SCANNER_RESULTS=()
 source "$PROJECT_ROOT/.claude/hooks/lib/gate-result.sh"
 GAPS=()
 # Sin python3 ningún JSON de escáner es legible: cada uno queda `unreadable` y este hueco dice por qué.
-command -v python3 >/dev/null 2>&1 || GAPS+=("python3:missing_tool")
+# Se prueba que arranque, no solo que exista: un shim de pyenv sin versión o un venv roto pasan `command -v`.
+python3 -c '' >/dev/null 2>&1 || GAPS+=("python3:missing_tool")
 
 # SE-453: un escáner que no corre, sale con un código fuera de su contrato o da una salida que no es
 # JSON queda como hueco (unknown), nunca como cero hallazgos. Antes `$(cmd || echo '{}')` pegaba `{}`
@@ -104,9 +105,10 @@ d = json.load(sys.stdin)
 if not isinstance(d, dict) or any(k not in d for k in ("critical", "high", "medium")):
     sys.exit(1)
 vals = [d.get(k, 0) for k in ("critical", "high", "medium", "low")]
-if not all(isinstance(v, int) and v >= 0 for v in vals):
+# type() y no isinstance(): True es un int para Python y en $((…)) valdría 0.
+if not all(type(v) is int and v >= 0 for v in vals):
     sys.exit(1)
-if not isinstance(d.get("findings_count", sum(vals)), int):
+if type(d.get("findings_count", sum(vals))) is not int:
     sys.exit(1)
 print(" ".join(map(str, vals)))
 ' 2>/dev/null) || counts=""
