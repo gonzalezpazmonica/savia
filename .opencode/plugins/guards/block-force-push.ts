@@ -42,14 +42,15 @@ const FORCE_WITH_LEASE = rx(String.raw`push${S}+.*--force-with-lease`);
 // Never matches --force-with-lease, so a hit is a real --force/-f even if another push in the command
 // uses the lease (SE-453: the lease no longer exempts the whole command). A `+branch` refspec forces too.
 const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|-f)${END}|["']?\+\S)`);
-// main/master as a destination: a bare word or after `:`, `+`, `/` or a quote; `main-fix` does not match.
+// main/master as a destination: a bare word, after `:`, `+` or a quote, or after refs/heads/ or
+// refs/remotes/<remote>/; `main-fix` and `feature/main` do not match.
 const PUSH_MENTIONS_MAIN = new RegExp(
-  String.raw`git${S}+push${S}+.*(?:^|[${WS}:+/"'])(?:main|master)(?:[${WS}:;&|)"'\x60]|$)`,
+  String.raw`git${S}+push${S}+.*(?:^|[${WS}:+"']|refs/heads/|refs/remotes/[^/\s]+/)(?:main|master)(?:[${WS}:;&|)"'\x60]|$)`,
   "im",
 );
 // main/master as the destination of a push in this same command (without crossing ;, & or |):
 // `origin main`, `HEAD:main`, `+main`, `refs/heads/main`, `main:main`, `'main'`.
-const PUSH_MAIN = String.raw`push${S}+(?:[^;&|\n]*[${WS}:+/"'])?(?:main|master)(?:[${WS}:]|$|[;&|)"'\x60])`;
+const PUSH_MAIN = String.raw`push${S}+(?:[^;&|\n]*(?:[${WS}:+"']|refs/heads/|refs/remotes/[^/\s]+/))?(?:main|master)(?:[${WS}:]|$|[;&|)"'\x60])`;
 
 const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
   {

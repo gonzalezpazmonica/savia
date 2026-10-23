@@ -170,7 +170,7 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "git commit -m 'no hagas git push $FP'" $'cd repo\ngit push origin feat' "bash -c 'git status'" \
     "git push origin feat-main" "git push origin main-fix:main-fix" "nice -n 5 git status" \
     "/usr/bin/git push -u origin feat" "$SU -u bot git push origin feat" "sleep 5 && git status" \
-    "echo \"no hagas git push $FP\"" "git push origin \"main-fix\""
+    "echo \"no hagas git push $FP\"" "git push origin \"main-fix\"" "git push origin feature/main" "git push -u origin release/master" "git push $FP-with-lease origin feature/main"
   parity block-credential-leak blockCredentialLeak 0 "ls -la" "git status"
 }
 

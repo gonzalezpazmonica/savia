@@ -40,10 +40,11 @@ GIT_AT='(^|[;&|(`]|\$\(|\b((ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[
 # Fin de una opción o de un nombre de rama: espacio, fin de línea, separador o cierre de comillas.
 END='([[:space:]]|$|[;&|)"'"'"'`])'
 # main/master como destino de un push de esta misma orden (sin cruzar ;, & ni |): palabra suelta o tras
-# `:`, `+` o `/` de un refspec (`HEAD:main`, `+main`, `refs/heads/main`, `main:main`); `main-fix` no casa.
-PUSH_MAIN='push[[:space:]]+([^;&|]*[[:space:]:+/"'"'"'])?(main|master)([[:space:]:]|$|[;&|)"'"'"'`])'
+# `:` o `+` de un refspec, o tras refs/heads/ o refs/remotes/<remoto>/ (`HEAD:main`, `+main`,
+# `refs/heads/main`, `main:main`); `main-fix` y `feature/main` no casan.
+PUSH_MAIN='push[[:space:]]+([^;&|]*([[:space:]:+"'"'"']|refs/heads/|refs/remotes/[^/[:space:]]+/))?(main|master)([[:space:]:]|$|[;&|)"'"'"'`])'
 # main/master como destino: palabra suelta o tras `:`, `+` o `/` de un refspec; `main-fix` no casa.
-MAIN_REF='(^|[[:space:]:+/"'"'"'])(main|master)([[:space:]:;&|)"'"'"'`]|$)'
+MAIN_REF='(^|[[:space:]:+"'"'"']|refs/heads/|refs/remotes/[^/[:space:]]+/)(main|master)([[:space:]:;&|)"'"'"'`]|$)'
 
 # Bloquear force push (permite --force-with-lease en ramas no-main)
 # --force-with-lease es más seguro: falla si el remoto avanzó sin nuestro conocimiento.
