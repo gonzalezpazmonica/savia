@@ -22,10 +22,17 @@ if (!guardPath || !exportName) {
     process.exit(64);
   }
   const args = { command };
+  // SAVIA_GUARD_TIME=1: imprime en stderr cuánto tarda solo el guard, sin el arranque del runtime.
+  const t0 = performance.now();
+  const timed = () => {
+    if (process.env.SAVIA_GUARD_TIME === "1") console.error(`guard-ms=${Math.round(performance.now() - t0)}`);
+  };
   try {
     await guard({ tool: "bash", args }, { args });
+    timed();
     process.exit(0);
   } catch (e) {
+    timed();
     const msg = String((e as Error)?.message ?? e);
     console.error(msg);
     // Solo un bloqueo deliberado cuenta como 2; un guard roto (TypeError…) no puede pasar por bloqueo.

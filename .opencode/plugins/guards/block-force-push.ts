@@ -12,8 +12,8 @@
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
 // Start of a real git command: at the beginning of a line, after a separator, inside a subshell or
-// inside `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`, with what may precede it (VAR=value, wrappers such as
-// env/command/sudo/doas/nohup/time/exec/xargs/nice/ionice/stdbuf/setsid/timeout with their options —
+// inside `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`/`su -c`/`ssh host`/`find -exec`, with what may precede it (VAR=value, wrappers such as
+// env/command/sudo/doas/nohup/time/exec/xargs/nice/ionice/stdbuf/setsid/timeout/strace/ltrace with their options —
 // `sudo -u x`, `env -i`, `timeout -s KILL 30` —, then, do, if, !, {), a path or a backslash before git
 // (`/usr/bin/git`, `\git`) and git global options (-C dir, -c key=value, --no-pager…).
 // A mention inside a message or an echo does not match. Same grammar as the bash hook's GIT_AT.
@@ -24,11 +24,15 @@ import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from
 // `git -c -a -c -a …`), which would hang the guard; grep has no such problem.
 const S = String.raw`[^\S\n]`;
 const NUM = String.raw`[0-9][0-9.]*[smhd]?`;
-const WRAPPERS = String.raw`env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout`;
+const WRAPPERS = String.raw`env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout|strace|ltrace`;
 const PREFIX_WORD = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=|(?:${WRAPPERS}|then|do|else|if|elif|while|until|${NUM}|!|\{)(?:${S}|$))`;
 const WRAPPER = String.raw`(?:${WRAPPERS})(?:${S}+-\S+(?:${S}+(?!${PREFIX_WORD})[^-\s]\S*)?)*`;
+// `su [-l|-|user]… -c '…'` and `ssh [-opt [arg]]… host '…'` run a command like `sh -c` does; `-exec`/`-execdir`
+// of find start one too. Each option word starts with `-` and each other word does not, so these stay unambiguous.
+const SU = String.raw`su(?:${S}+(?:-[A-Za-z-]*|[^-\s"']\S*))*${S}+(?:-[A-Za-z]*c|--command)`;
+const SSH = String.raw`ssh(?:${S}+-\S+(?:${S}+[^-\s]\S*)?)*${S}+[^-\s"']\S*`;
 const GIT_AT =
-  String.raw`(?:^|[;&|(\x60]|\$\(|\b(?:(?:ba|z|da|k)?sh(?:${S}+-[A-Za-z]+)*${S}+-[A-Za-z]*c|eval)${S}+["']?)${S}*` +
+  String.raw`(?:^|[;&|(\x60]|\$\(|${S}-exec(?:dir)?${S}|\b(?:(?:ba|z|da|k)?sh(?:${S}+-[A-Za-z]+)*${S}+-[A-Za-z]*c|eval|${SU}|${SSH})${S}+["']?)${S}*` +
   String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|${WRAPPER}|timeout${S}+(?!${NUM}(?:${S}|$))[^-\s]\S*|${NUM}|then|do|else|if|elif|while|until|!|\{)${S}+)*` +
   String.raw`(?:\\|\S*/)?git` +
   String.raw`(?:(?:${S}+(?:-C|-c|--git-dir|--work-tree)${S}+(?:"[^"\n]*"|'[^'\n]*'|[^-\s]\S*))|(?:${S}+--?[A-Za-z][A-Za-z-]*(?:=\S+)?))*${S}+`;
@@ -41,7 +45,8 @@ const rx = (body: string) => new RegExp(GIT_AT + body, "im");
 const FORCE_WITH_LEASE = rx(String.raw`push${S}+.*--force-with-lease`);
 // Never matches --force-with-lease, so a hit is a real --force/-f even if another push in the command
 // uses the lease (SE-453: the lease no longer exempts the whole command). A `+branch` refspec forces too.
-const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|-f)${END}|["']?\+\S)`);
+// Short flags may be combined (`-fu`, `-uf`): any single-dash cluster of letters with an `f` forces.
+const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|-[A-Za-z]*f[A-Za-z]*)${END}|["']?\+\S)`);
 // main/master as a destination: a bare word, after `:`, `+` or a quote, or after refs/heads/ or
 // refs/remotes/<remote>/; `main-fix` and `feature/main` do not match.
 const PUSH_MENTIONS_MAIN = new RegExp(

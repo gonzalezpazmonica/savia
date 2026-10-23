@@ -154,6 +154,27 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "git push origin +feat" "git push origin '+feat'" "git push origin +main"
 }
 
+# Revisión de seguridad de a71007ba9, P1-1: en `main` el TS sin ancla bloqueaba estas formas; con GIT_AT
+# dejaron de bloquear en OpenCode. `su -c`, `-exec` de find y `strace`/`ltrace`/`ssh <host>` son inicio de orden
+# o envoltorio en los dos bindings. P2-1: las banderas cortas combinadas (`-fu`, `-uf`) fuerzan igual.
+@test "paridad block-force-push: su -c, find -exec, strace, ltrace, ssh y -fu ⇒ 2 (revisión #1348 seguridad P1-1, P2-1)" {
+  require_ts
+  parity block-force-push blockForcePush 2 \
+    "su -c 'git push $FP origin feat'" "su - bot -c 'git push $FP origin feat'" "su -l bot -c 'git reset --hard'" \
+    "su -c 'git push origin main'" "su bot -c \"git commit --amend\"" \
+    "find . -exec git push $FP origin feat \\;" "find . -execdir git reset --hard \\;" \
+    "strace -f git push $SF" "ltrace git push $FP origin feat" "ssh host git push $FP origin feat" \
+    "ssh -p 22 user@host git reset --hard" "ssh host 'git push $SF'" \
+    "git push -fu origin feat" "git push -uf origin feat"
+}
+
+# Límite declarado (no se arregla aquí): una orden git dentro de una cadena de otro intérprete no casa.
+@test "paridad límite: git dentro de python3 -c no bloquea en ninguno de los dos (límite declarado)" {
+  require_ts
+  parity block-force-push blockForcePush 0 \
+    "python3 -c \"import os; os.system('git push $FP')\""
+}
+
 # Límite conocido, igual en los dos lados: tras `eval` o `sh -c` no se distingue una orden real de prosa
 # dentro de un echo, así que bloquea (falso positivo aceptado, como `--amend` en un mensaje). Si un día se
 # afina, este test tiene que cambiar a 0 en bash y en TS a la vez.
@@ -170,7 +191,9 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "git commit -m 'no hagas git push $FP'" $'cd repo\ngit push origin feat' "bash -c 'git status'" \
     "git push origin feat-main" "git push origin main-fix:main-fix" "nice -n 5 git status" \
     "/usr/bin/git push -u origin feat" "$SU -u bot git push origin feat" "sleep 5 && git status" \
-    "echo \"no hagas git push $FP\"" "git push origin \"main-fix\"" "git push origin feature/main" "git push -u origin release/master" "git push $FP-with-lease origin feature/main"
+    "echo \"no hagas git push $FP\"" "git push origin \"main-fix\"" "git push origin feature/main" "git push -u origin release/master" "git push $FP-with-lease origin feature/main" \
+    "git push -u origin feat" "git push --follow-tags origin feat" "su -c 'git status'" "ssh host git status" \
+    "find . -exec git status \\;" "strace -f git push origin feat" "git push -uq origin feat"
   parity block-credential-leak blockCredentialLeak 0 "ls -la" "git status"
 }
 
@@ -183,12 +206,16 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
 # Con 30 repeticiones una gramática ambigua son ~2^30 vueltas atrás (minutos); sin ambigüedad, milisegundos.
 @test "TS sin vueltas atrás exponenciales: entradas ambiguas terminan en < 1 s (revisión #1348 P2-1)" {
   require_ts
-  local c t0 ms
+  local c err ms
+  # Se mide solo la llamada al guard (SAVIA_GUARD_TIME=1 la imprime), no el arranque en frío del runtime:
+  # en un runner de CI cargado el arranque de bun/node podía pasar de 1 s sin que la regex tuviera culpa.
   for c in "git$(rep ' -c -a' 30)" "git$(rep ' -C -C' 30) !" "nice$(rep ' -n 5' 30)" "$SU$(rep ' -u env' 30)" \
-    "timeout$(rep ' -k timeout' 30)"; do
-    t0=$(date +%s%N)
-    [ "$(timeout 20 env SAVIA_GUARD_CMD="$c" $TS_RUNTIME "$RUNNER" "$REPO_ROOT/.opencode/plugins/guards/block-force-push.ts" blockForcePush >/dev/null 2>&1; echo $?)" = 0 ]
-    ms=$(( ($(date +%s%N) - t0) / 1000000 ))
+    "timeout$(rep ' -k timeout' 30)" "su$(rep ' -c' 30) x" "su$(rep ' - -c' 30) x" "ssh$(rep ' -o x' 30) !" \
+    "find$(rep ' -exec' 30) !" "git push -$(rep 'f' 3000)1"; do
+    err=$(timeout 20 env SAVIA_GUARD_CMD="$c" SAVIA_GUARD_TIME=1 $TS_RUNTIME "$RUNNER" "$REPO_ROOT/.opencode/plugins/guards/block-force-push.ts" blockForcePush 2>&1 >/dev/null; echo "rc=$?")
+    [[ "$err" == *"rc=0" ]] || { echo "rc inesperado: $err (${c:0:40}…)" >&2; return 1; }
+    ms=$(sed -n 's/^guard-ms=\([0-9]*\).*/\1/p' <<<"$err")
+    [[ -n "$ms" ]] || { echo "el runner no midió el guard: $err" >&2; return 1; }
     (( ms < 1000 )) || { echo "tarda $ms ms: ${c:0:40}…" >&2; return 1; }
   done
 }
