@@ -15,7 +15,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: nightly-full-bats
@@ -25,6 +24,9 @@ jobs:
   full-bats:
     name: Full BATS suite
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     timeout-minutes: 120
     steps:
       - name: Checkout
