@@ -33,7 +33,7 @@ COMMAND="${COMMAND//$'\\\n'/ }"
 # Inicio de una orden git real: al principio, tras un separador o al abrir un subshell, con lo
 # que puede ir delante (VAR=valor, env, command, sudo, nohup, time, exec) y opciones globales de
 # git (-C dir, -c clave=valor, --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
-GIT_AT='(^|[;&|(`]|\$\()[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nohup|time|exec)[[:space:]]+)*git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
+GIT_AT='(^|[;&|(`]|\$\()[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nohup|time|exec)[[:space:]]+)*git(([[:space:]]+(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--super-prefix)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
 
 # Bloquear force push (permite --force-with-lease en ramas no-main)
 # --force-with-lease es más seguro: falla si el remoto avanzó sin nuestro conocimiento.
@@ -52,8 +52,9 @@ if echo "$COMMAND" | grep -iE 'git[[:space:]]+push[[:space:]]+.*\b(main|master)\
   IS_PUSH_TO_MAIN=yes
 fi
 
-# Bare --force (sin --force-with-lease) siempre bloqueado
-if [[ "$IS_BARE_FORCE" == "yes" && "$IS_FORCE_WITH_LEASE" == "no" ]]; then
+# --force o -f siempre bloqueado. Un --force-with-lease en otra orden u otra línea no lo excusa, y en la misma
+# orden --force anula el lease (revisión #1355): la regex de --force no casa con --force-with-lease.
+if [[ "$IS_BARE_FORCE" == "yes" ]]; then
   echo "BLOQUEADO: git push --force no está permitido. Usa --force-with-lease." >&2
   exit 2
 fi
@@ -77,29 +78,51 @@ fi
 # órdenes simples; la regex de palabras se cortaba en $( o & y dejaba pasar --amend. Espejo de amendScan
 # en .opencode/plugins/guards/block-force-push.ts: mismas reglas, mismos resultados.
 # git acepta prefijos únicos de opciones largas: --am, --ame y --amen también son --amend.
-_amend_is_commit() { # palabras de una orden simple → 0 si es git … commit … --amend
-  local -a w=("$@"); local k=0 n=$# g p=""
-  while (( k < n )); do
-    [[ "${w[k]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && { k=$((k+1)); continue; }
-    # Opciones del prefijo anterior (sudo -u x, env -i, time -p); las de sudo y env que llevan valor se saltan con él.
-    if [[ -n "$p" && "${w[k]}" == -* ]]; then
-      [[ "$p:${w[k]}" =~ ^(sudo:-[ugpChDrtUT]|env:-[uCS])$ ]] && k=$((k+1))
-      k=$((k+1)); continue
-    fi
-    case "${w[k],,}" in env|command|sudo|nohup|time|exec) p="${w[k],,}"; k=$((k+1)) ;; if|then|do|else|elif|while|until|'!'|'{') p=""; k=$((k+1)) ;; *) break ;; esac
-  done
-  (( k < n )) || return 1
-  g="${w[k],,}"; [[ "$g" == git || "$g" == */git ]] || return 1
-  k=$((k+1))
+# Revisión #1355 (3.ª): el tokenizador no expande, así que una palabra «opaca» (sustitución sin comillas,
+# ${…}, $'…' con escapes o llaves con , o ..) lleva delante la marca \x01 y casa por subcadena: si contiene
+# --am tras commit (y no es el valor de -m, -F…), bloquea, como hacía la regex vieja. git puede ir tras
+# cualquier prefijo (sudo -u x, timeout 5, xargs, ssh host…), y el texto que reciben bash -c, sh -c, eval
+# o ssh se tokeniza otra vez como orden propia, con el mismo presupuesto y el mismo tope de anidamiento.
+_AMEND_SHELLS='^(bash|sh|zsh|dash|ksh|ash|mksh|fish|eval|ssh|su|watch)$'
+_AMEND_COMMIT_VAL='^(-m|-f|-c|-t|--message|--file|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--template|--cleanup|--trailer)$'
+_amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 si sigue commit … --amend
+  local k="$1" s prev=""
   while (( k < n )) && [[ "${w[k]}" == -* ]]; do
-    case "${w[k],,}" in -c|--git-dir|--work-tree) k=$((k+1)) ;; esac
+    case "${w[k],,}" in -c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--super-prefix) k=$((k+1)) ;; esac
     k=$((k+1))
   done
-  (( k < n )) && [[ "${w[k],,}" == commit ]] || return 1
+  (( k < n )) || return 1
+  s="${w[k],,}"
+  [[ "$s" == commit || ( "$s" == $'\x01'* && "$s" == *commit* ) ]] || return 1
   for (( k = k + 1; k < n; k++ )); do
-    [[ "${w[k],,}" =~ ^--am(e(nd?)?)?$ ]] && return 0
+    s="${w[k],,}"
+    [[ "$s" =~ ^--am(e(nd?)?)?$ ]] && return 0
+    [[ "$s" == $'\x01'*--am* && ! "$prev" =~ $_AMEND_COMMIT_VAL ]] && return 0
+    prev="$s"
   done
   return 1
+}
+_amend_is_commit() { # palabras de una orden simple → 0 es git … commit … --amend, 1 no, 2 no se puede tokenizar
+  local -a w=("$@"); local n=$# m b t
+  for (( m = 0; m < n; m++ )); do
+    b="${w[m]#$'\x01'}"; b="${b,,}"; b="${b##*/}"
+    if [[ "$b" == git || ( "${w[m]}" == $'\x01'* && "$b" == *git* ) ]]; then
+      _amend_git_commit $((m+1)) && return 0
+    elif [[ "$b" =~ $_AMEND_SHELLS ]] && (( m + 1 < n )); then
+      t="${w[*]:m+1}"; t="${t//$'\x01'/}"
+      _amend_scan_text "$t"
+      (( AMEND_R == 1 )) && return 0
+      (( AMEND_R == 2 )) && return 2
+    fi
+  done
+  return 1
+}
+_amend_scan_text() { # texto → AMEND_R, tokenizado con su propio AMEND_CH (el de fuera se restaura)
+  local -a saved=("${AMEND_CH[@]}"); local c
+  AMEND_CH=()
+  while IFS= read -r -n1 -d '' c; do AMEND_CH+=("$c"); done < <(printf '%s' "$1")
+  _amend_scan 0 "${#AMEND_CH[@]}"
+  AMEND_CH=("${saved[@]}")
 }
 # El tokenizador recorre AMEND_CH (un carácter por elemento) por índices: ${s:i:1} es O(i) en bash
 # y una orden de 30 KB tardaba más que el timeout del hook (5 s), que en PreToolUse no bloquea.
@@ -128,6 +151,18 @@ _amend_close_sq() { # i end → AMEND_J: índice tras la ' de cierre, o -1
   done
   AMEND_J=-1
 }
+_amend_close_ansi() { # i end → AMEND_J: índice tras la ' que cierra $'…' (\' no cierra), o -1; AMEND_ESC=1 si hay \
+  local i="$1" e="$2"; AMEND_ESC=0
+  while (( i < e )); do
+    (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_J=-1; return; }
+    case "${AMEND_CH[i]}" in
+      '\') AMEND_ESC=1; i=$((i+2)); continue ;;
+      "'") AMEND_J=$((i+1)); return ;;
+    esac
+    i=$((i+1))
+  done
+  AMEND_J=-1
+}
 _amend_close_dq() { # i end → AMEND_J: índice tras la " de cierre, o -1
   local i="$1" e="$2"
   while (( i < e )); do
@@ -137,6 +172,23 @@ _amend_close_dq() { # i end → AMEND_J: índice tras la " de cierre, o -1
       '"') AMEND_J=$((i+1)); return ;;
       '$') if [[ "${AMEND_CH[i+1]:-}" == '(' ]]; then _amend_close_subst $((i+2)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue; fi ;;
       '`') _amend_close_bq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+    esac
+    i=$((i+1))
+  done
+  AMEND_J=-1
+}
+_amend_close_brace() { # i end → AMEND_J: índice tras la } que cierra un ${ abierto antes de i, o -1
+  local i="$1" e="$2" depth=1
+  while (( i < e )); do
+    (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_J=-1; return; }
+    case "${AMEND_CH[i]}" in
+      '\') i=$((i+2)); continue ;;
+      "'") _amend_close_sq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+      '"') _amend_close_dq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+      '`') _amend_close_bq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+      '$') if [[ "${AMEND_CH[i+1]:-}" == '(' ]]; then _amend_close_subst $((i+2)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue; fi ;;
+      '{') depth=$((depth+1)) ;;
+      '}') depth=$((depth-1)); (( depth == 0 )) && { AMEND_J=$((i+1)); return; } ;;
     esac
     i=$((i+1))
   done
@@ -152,6 +204,7 @@ _amend_close_subst_in() {
     (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_J=-1; return; }
     case "${AMEND_CH[i]}" in
       '\') i=$((i+2)); continue ;;
+      '$') if [[ "${AMEND_CH[i+1]:-}" == "'" ]]; then _amend_close_ansi $((i+2)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue; fi ;;
       "'") _amend_close_sq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
       '"') _amend_close_dq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
       '`') _amend_close_bq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
@@ -176,7 +229,8 @@ _amend_scan() { # i end → AMEND_R: 1 alguna orden simple es git … commit …
 }
 _amend_scan_in() {
   # redir=1: la palabra acaba en < o > sin comillas (echo ">"|git … no es una redirección >|).
-  local i="$1" n="$2" c j k word="" inword=0 redir=0
+  # opaque=1: la palabra lleva algo que el shell expande y aquí no se ve (marca \x01); ubrace: { sin comillas.
+  local i="$1" n="$2" c j k word="" inword=0 redir=0 opaque=0 ubrace=0
   local -a words=()
   while (( i < n )); do
     (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_R=2; return; }
@@ -189,20 +243,30 @@ _amend_scan_in() {
       _amend_close_sq $((i+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
       j=$AMEND_J; _amend_word_add $((i+1)) $((j-1)); i=$j; continue
     fi
+    if [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == "'" ]]; then  # $'…': comillas ANSI-C; con \ la palabra es opaca
+      _amend_close_ansi $((i+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+      j=$AMEND_J; _amend_word_add $((i+2)) $((j-1)); (( AMEND_ESC )) && opaque=1; i=$j; continue
+    fi
+    if [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == '"' ]]; then i=$((i+1)); continue; fi  # $"…" es "…"
     if [[ "$c" == '"' ]]; then
       k=$((i+1)); inword=1; redir=0
       while (( k < n )) && [[ "${AMEND_CH[k]}" != '"' ]]; do
         (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_R=2; return; }
         if [[ "${AMEND_CH[k]}" == '\' ]] && (( k + 1 < n )) && [[ '"\$`' == *"${AMEND_CH[k+1]}"* ]]; then word+="${AMEND_CH[k+1]}"; k=$((k+2)); continue; fi
+        if [[ "${AMEND_CH[k]}" == '$' && "${AMEND_CH[k+1]:-}" == '{' ]]; then
+          _amend_close_brace $((k+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+          j=$AMEND_J; _amend_scan $((k+2)) $((j-1)); (( AMEND_R != 0 )) && return
+          _amend_word_add "$k" "$j"; opaque=1; k=$j; continue
+        fi
         if [[ "${AMEND_CH[k]}" == '$' && "${AMEND_CH[k+1]:-}" == '(' ]]; then
           _amend_close_subst $((k+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
           j=$AMEND_J; _amend_scan $((k+2)) $((j-1)); (( AMEND_R != 0 )) && return
-          _amend_word_add "$k" "$j"; k=$j; continue
+          _amend_word_add "$k" "$j"; opaque=1; k=$j; continue
         fi
         if [[ "${AMEND_CH[k]}" == '`' ]]; then
           _amend_close_bq $((k+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
           j=$AMEND_J; _amend_scan $((k+1)) $((j-1)); (( AMEND_R != 0 )) && return
-          _amend_word_add "$k" "$j"; k=$j; continue
+          _amend_word_add "$k" "$j"; opaque=1; k=$j; continue
         fi
         word+="${AMEND_CH[k]}"; k=$((k+1))
       done
@@ -212,19 +276,26 @@ _amend_scan_in() {
     if [[ "$c" == '$' || "$c" == '<' || "$c" == '>' ]] && [[ "${AMEND_CH[i+1]:-}" == '(' ]]; then
       _amend_close_subst $((i+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
       j=$AMEND_J; _amend_scan $((i+2)) $((j-1)); (( AMEND_R != 0 )) && return
-      _amend_word_add "$i" "$j"; i=$j; continue
+      _amend_word_add "$i" "$j"; [[ "$c" == '$' ]] && opaque=1; i=$j; continue
+    fi
+    if [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == '{' ]]; then  # ${…}: el texto de dentro se mira como orden
+      _amend_close_brace $((i+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+      j=$AMEND_J; _amend_scan $((i+2)) $((j-1)); (( AMEND_R != 0 )) && return
+      _amend_word_add "$i" "$j"; opaque=1; i=$j; continue
     fi
     if [[ "$c" == '`' ]]; then
       _amend_close_bq $((i+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
       j=$AMEND_J; _amend_scan $((i+1)) $((j-1)); (( AMEND_R != 0 )) && return
-      _amend_word_add "$i" "$j"; i=$j; continue
+      _amend_word_add "$i" "$j"; opaque=1; i=$j; continue
     fi
     if [[ "$c" == ' ' || "$c" == $'\t' ]]; then
-      (( inword )) && { words+=("$word"); word=""; inword=0; redir=0; }
-      i=$((i+1)); continue
+      _amend_flush; i=$((i+1)); continue
     fi
     if [[ "$c" == '#' ]] && (( ! inword )); then
-      while (( i < n )) && [[ "${AMEND_CH[i]}" != $'\n' ]]; do i=$((i+1)); done
+      while (( i < n )) && [[ "${AMEND_CH[i]}" != $'\n' ]]; do
+        (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_R=2; return; }
+        i=$((i+1))
+      done
       continue
     fi
     # Las redirecciones (2>&1, >&2, &>f, >|f) son parte de la palabra, no un separador.
@@ -232,17 +303,27 @@ _amend_scan_in() {
       word+="$c"; inword=1; redir=0; i=$((i+1)); continue
     fi
     if [[ "$c" == [\;\&\|\(\)] || "$c" == $'\n' ]]; then
-      (( inword )) && { words+=("$word"); word=""; inword=0; redir=0; }
-      (( ${#words[@]} )) && _amend_is_commit "${words[@]}" && { AMEND_R=1; return; }
-      words=(); i=$((i+1)); continue
+      _amend_flush; _amend_end_cmd; (( AMEND_R != 0 )) && return
+      i=$((i+1)); continue
     fi
+    # Expansión de llaves sin comillas ({a,b}, {1..3}) y ${…}: el shell las expande, la palabra es opaca.
+    [[ "$c" == '{' ]] && ubrace=1
+    (( ubrace )) && [[ "$c" == ',' || ( "$c" == '.' && "${AMEND_CH[i+1]:-}" == '.' ) ]] && opaque=1
     word+="$c"; inword=1; i=$((i+1))
     if [[ "$c" == [\<\>] ]]; then redir=1; else redir=0; fi
   done
   (( AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_R=2; return; }  # _amend_word_add cortó la palabra
-  (( inword )) && words+=("$word")
-  (( ${#words[@]} )) && _amend_is_commit "${words[@]}" && { AMEND_R=1; return; }
-  AMEND_R=0
+  _amend_flush; _amend_end_cmd
+}
+_amend_flush() { # cierra la palabra en curso de _amend_scan_in (opaca: con la marca \x01 delante)
+  if (( inword )); then (( opaque )) && word=$'\x01'"$word"; words+=("$word"); word=""; inword=0; redir=0; fi
+  opaque=0; ubrace=0
+}
+_amend_end_cmd() { # evalúa la orden simple de _amend_scan_in → AMEND_R (1 casa, 2 no se sabe, 0 no)
+  local rc=1
+  (( ${#words[@]} )) && { _amend_is_commit "${words[@]}"; rc=$?; }
+  words=()
+  case $rc in 0) AMEND_R=1 ;; 2) AMEND_R=2 ;; *) AMEND_R=0 ;; esac
 }
 amend_scan() { # orden → AMEND_R (ver _amend_scan). Más de AMEND_MAX_CHARS: 2, para fallar cerrado en tiempo acotado.
   local LC_ALL=C c

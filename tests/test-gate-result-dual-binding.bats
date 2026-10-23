@@ -197,6 +197,68 @@ FP="--for""ce"
   parity block-force-push blockForcePush 2 "git commit -m \"$body --amend\""
 }
 
+# Revisión #1355 (3.ª, P1): la regex vieja de main bloqueaba estas formas por texto y el tokenizador las dejaba
+# pasar: comillas $'…' y $"…", ${…}, llaves, sustitución sin comillas, git tras otro prefijo, opción global
+# con valor, y órdenes dentro de bash -c, sh -c, eval o ssh.
+AMEND_HIDDEN=(
+  "git commit \$'--amend'" "git commit \$\"--amend\"" "git commit \${X:---amend}" "git commit \${X:- --amend}"
+  "git commit {--amend,-q}" "git commit --am{end,}" "git commit \$'--am\\x65nd'" "git commit \$(echo --amend)"
+  "git commit \"\$(echo --amend)\"" "\$'git' commit --amend" "git \$'commit' --amend" "echo \${X:-\$(git commit --amend)}"
+  "bash -c 'cd /x && git commit --amend'" "sh -c \"git status; git commit --amend\"" "eval 'true; git commit --amend'"
+  "ssh -p 22 host 'cd x; git commit --amend'" "ssh host git commit --amend" "timeout 5 git commit --amend"
+  "xargs git commit --amend" "find . -exec sh -lc 'git commit --amend' \\;" "git --namespace x commit --amend"
+  "git --config-env a=B commit --amend" "git --attr-source t commit --amend"
+)
+AMEND_VISIBLE_OK=(
+  "bash -c 'git commit -m \"explica --amend\"'" "git commit -m \${MSG:---amend}" "eval 'git commit -m x'"
+  "git commit -m \"\${M} sin --amend\"" "sh -c 'git status' && echo --amend" "git commit -m x && echo \${A:---amend}"
+)
+
+@test "paridad amend: \$'…', \${…}, llaves, git tras prefijo y bash -c/eval/ssh siguen bloqueando ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "${AMEND_HIDDEN[@]}"
+}
+
+@test "paridad amend: --amend como valor de -m o dentro del mensaje de un bash -c no bloquea ⇒ 0" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 0 "${AMEND_VISIBLE_OK[@]}"
+}
+
+# Revisión #1355 (P2-4): sin bun la paridad se salta; el lado bash se comprueba igual, sin require_ts.
+@test "bash solo: formas ocultas de --amend ⇒ 2 y menciones ⇒ 0, con y sin jq" {
+  local c fails=""
+  for c in "${AMEND_HIDDEN[@]}" "git commit --amend" "git commit -m x --amend"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 && "$(bash_code block-force-push "$NOJQ" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
+  done
+  for c in "${AMEND_VISIBLE_OK[@]}" "git commit -m \"docs: explica --amend\"" "git commit -m x # --amend"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 0 ]] || fails+="[$c] bloquea"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
+}
+
+# Revisión #1355 (P2-2 correctness): el salto de comentario gasta pasos como el resto de bucles. Un comentario
+# dentro de dos $(…) cuenta 4 veces sin el arreglo (cierre y copia de cada nivel) y 5 con él: con 7500
+# caracteres, 30 K pasos caben en el presupuesto (32 768) y 37,5 K no, así que decide la coincidencia gruesa.
+@test "paridad amend: un comentario largo dentro de sustituciones gasta presupuesto ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  local cm
+  cm=$(printf 'c%.0s' $(seq 1 7500))
+  parity block-force-push blockForcePush 2 "echo \$(echo \$(: # $cm"$'\n'")); git commit -m \"a --amend\""
+  parity block-force-push blockForcePush 0 "echo \$(echo \$(: # c"$'\n'")); git commit -m \"a --amend\""
+}
+
+# Revisión #1355 (P2-2 security): un --force-with-lease en otra orden u otra línea no excusa un --force.
+@test "paridad force: lease en otra orden o línea no excusa un --force ⇒ 2; lease solo ⇒ 0" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "git push --force-with-lease o feat; git push $FP o feat" \
+    $'git push --force-with-lease o feat\ngit push '"$FP"' o feat' "git push --force-with-lease $FP o feat"
+  parity block-force-push blockForcePush 0 "git push --force-with-lease o feat" "git push --force-with-lease=feat o feat"
+}
+
 # Revisión #1355 (P2): grep evalúa por línea y \s de JS cruzaba saltos de línea; ahora ambos evalúan por línea
 # tras unir las continuaciones «\⏎», que en bash ocultaban un push forzado partido en dos líneas.
 @test "paridad multilínea: una orden por línea y continuaciones unidas igual en bash y TS" {
