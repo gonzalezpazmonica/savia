@@ -194,6 +194,7 @@ assert v['kind'] == 'V1', v
   echo 0 > "$BATS_TEST_TMPDIR/base.count"
   run env SAVIA_VACUITY_ROOT="$BATS_TEST_TMPDIR/vacio" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --vacuity-only
   [ "$status" -ne 0 ]
+  [[ "$output" == *"el detector no pudo medir"* ]]
 }
 
 @test "ratchet: arreglar un hallazgo y añadir otro con el mismo recuento falla" {
@@ -272,6 +273,24 @@ assert v['kind'] == 'V1', v
   fixture a '  [ 1 -eq 1 ]'
   run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/no-existe.count" bash "$GATE" --vacuity-only
   [ "$status" -ne 0 ]
+  [[ "$output" == *"sin línea base"* ]]
+}
+
+@test "update-baseline: detector caído no toca la línea base existente" {
+  mkdir -p "$BATS_TEST_TMPDIR/vacio"
+  echo 7 > "$BATS_TEST_TMPDIR/base.count"
+  run env SAVIA_VACUITY_ROOT="$BATS_TEST_TMPDIR/vacio" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --update-vacuity-baseline
+  [ "$status" -eq 2 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/base.count")" = "7" ]
+  [ ! -e "$BATS_TEST_TMPDIR/base.findings" ]
+}
+
+@test "update-baseline: escribe recuento e identidades coherentes" {
+  fixture a '  run false'
+  run env SAVIA_VACUITY_ROOT="$FX" SAVIA_VACUITY_BASELINE="$BATS_TEST_TMPDIR/base.count" bash "$GATE" --update-vacuity-baseline
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/base.count")" = "1" ]
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/base.findings")" -eq 1 ]
 }
 
 @test "la línea base real coincide con lo que mide el detector en el repo" {

@@ -88,11 +88,17 @@ if [[ "${1:-}" == "--update-vacuity-baseline" ]]; then
   root="${SAVIA_VACUITY_ROOT:-$DIR/..}"
   baseline="${SAVIA_VACUITY_BASELINE:-$DIR/../.ci-baseline/test-vacuity.count}"
   scan=$(python3 "$DIR/test-auditor-engine.py" --vacuity-scan "$root") || { echo "detector caído"; exit 2; }
-  printf '%s' "$scan" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])" > "$baseline"
+  # Se escribe en temporales y se mueve al final: un fallo a medias no deja ficheros truncados.
+  tmp_c=$(mktemp) && tmp_f=$(mktemp) || { echo "sin directorio temporal"; exit 2; }
+  trap 'rm -f "$tmp_c" "$tmp_f"' EXIT
+  printf '%s' "$scan" | python3 -c "import json,sys; print(json.load(sys.stdin)['count'])" > "$tmp_c" \
+    || { echo "no se pudo leer el recuento; línea base intacta"; exit 2; }
   printf '%s' "$scan" | python3 -c "
 import json, sys
 for f in json.load(sys.stdin)['findings']:
-    print('\t'.join((f['file'], f['test'], f['kind'])))" | sort > "${baseline%.count}.findings"
+    print('\t'.join((f['file'], f['test'], f['kind'])))" | sort > "$tmp_f"
+  [[ ${PIPESTATUS[1]} -eq 0 ]] || { echo "no se pudieron leer los hallazgos; línea base intacta"; exit 2; }
+  mv "$tmp_f" "${baseline%.count}.findings" && mv "$tmp_c" "$baseline"
   echo "Línea base actualizada: $(cat "$baseline") hallazgos"
   exit 0
 fi
