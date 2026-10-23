@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 634 resources
+> 631 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
@@ -27,7 +27,7 @@
 - **ast-comprehension** (skill): Usar cuando se explora código desconocido y se necesita comprensión estructural sin leer ficheros enteros.
 - **ast-quality-gate** (skill): Usar cuando se verifica la calidad de código generado por IA antes de merge.
 - **attack-surface-map** (script): attack-surface-map.sh — SE-243 Attack Surface Mapping
-- **attack-surface-mapper** (skill): Mapear la superficie de ataque de un dominio: subdominios, OSINT, typosquatting.
+- **attack-surface-mapper** (skill): Mapear la superficie de ataque de un dominio (subdominios, OSINT, typosquatting). Usar solo en pruebas autorizadas, cuando haya que inventariar la exposición externa de un dominio propio o contratado.
 - **auto-loop-gate** (script): SE-230 Auto-Loop Gate — classifies requests into loop/single-shot/clarify
 - **azdevops-queries** (script): =============================================================================
 - **azure-devops-operator** (agent): >
@@ -252,7 +252,6 @@
 - **generate-index** (script): generate-index.sh — Generate discoverable index of all workspace components
 - **git-history-secret-remediate** (script): SE-239 — Git history secret remediation helper
 - **git-history-secret-scan** (script): SE-239 — Git history secret scanning
-- **git-secret-scanner** (skill): Escanea el historial git o los commits pendientes de push buscando secrets con gitleaks. SE-239/SE-247.
 - **go-developer** (agent): >
 - **goal-service** (script): goal-service.sh — SE-326 S4: wrapper del goal service durable por sesión.
 - **graph-query** (cmd): Consulta el grafo de conocimiento en lenguaje natural
@@ -264,7 +263,6 @@
 - **hallucination-fast-judge** (agent): Recommendation Tribunal judge — verifies that entities cited in a draft (files, functions, flags, libs, paths, commands) actually exist via tool calls
 - **hallucination-judge** (agent): Truth Tribunal judge — detects invented facts via SelfCheck-style consistency
 - **handback-resolve** (script): handback-resolve.sh — SE-332 Handback Obligation
-- **harness-architecture** (skill): Diseña la arquitectura de un harness de agentes: único, orquestado o metaharness, flujos largos, bucles, sprints. Usar cuando se diseña o depura un harness, un bucle autónomo o un sprint nocturno.
 - **hashline-edit** (script): hashline-edit.sh — Safe edit wrapper with stale-file protection (SE-149)
 - **hashline-guard** (script): hashline-guard.sh — Stale-file protection for L3 agent edits (SE-149)
 - **health-dashboard** (cmd): Dashboard de salud del proyecto unificado — Savia muestra una vista rápida adaptada al rol
@@ -351,7 +349,7 @@
 - **mobile-developer** (agent): >
 - **model-capability-resolver** (script): model-capability-resolver.sh — Resolve model capabilities from YAML registry
 - **my-sprint** (cmd): Vista personal del sprint — items asignados, progreso, cycle time, PRs pendientes
-- **network-recon** (skill): Reconocimiento de red: port scan con nmap/RustScan + HTTP detection con httpx.
+- **network-recon** (skill): Reconocimiento de red (puertos con nmap/RustScan, servicios HTTP con httpx). Usar solo en pruebas autorizadas, cuando haya que inventariar los servicios expuestos de una red en alcance.
 - **network-recon** (script): network-recon.sh — SE-246 Network Reconnaissance
 - **nidos** (cmd): Manage parallel terminal isolation with named git worktrees (Savia Nidos)
 - **nidos** (script): nidos.sh — Savia Nidos: parallel terminal isolation via named git worktrees
@@ -370,9 +368,9 @@
 - **operator-grant** (script): operator-grant.sh — Deterministic operator-grant ledger (SE-343)
 - **opus47-calibration-scorecard** (script): opus47-calibration-scorecard.sh — SE-070 Slice 1
 - **orchestration-protocol** (script): scripts/orchestration-protocol.sh — SE-205: typed inter-agent messaging
-- **org-political-landscape** (skill): Análisis de Paisaje Político Interno: detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders.
+- **org-political-landscape** (skill): Detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders. Usar cuando una decisión o un proyecto se atasca por motivos organizativos y no técnicos.
 - **org-registrar** (script): org-registrar.sh — SE-365: CLI del grafo organizacional (wrapper).
-- **org-stakeholder-mapper** (skill): Mapeador de Stakeholders y Decisores: extrae roles formales y reales, motivaciones, alianzas y tensiones de una organización.
+- **org-stakeholder-mapper** (skill): Mapea roles formales y reales, motivaciones, alianzas y tensiones de una organización. Usar cuando haya que saber quién decide de verdad antes de proponer o negociar algo.
 - **orgchart-import** (cmd): >
 - **orgchart-import** (skill): Usar cuando se importa un organigrama para extraer la estructura del equipo.
 - **otel-emit** (script): otel-emit.sh — SE-313 S1: emisor de eventos de telemetría estándar.
@@ -401,7 +399,7 @@
 - **privacy-check-company** (script): privacy-check-company.sh — Privacy filter for company repo content
 - **probe-devops** (script): probe-devops.sh — diagnóstico de acceso a Azure DevOps usando la
 - **product-discovery** (skill): Usar antes de descomponer PBIs, cuando se necesita análisis JTBD y PRD del producto.
-- **professional-domain** (skill): Family index for professional-domain skills (controlling, finance, labour, legal, sales). Load individual skills from subdirectories.
+- **professional-domain** (skill): Índice de las skills de dominio profesional (controlling, finanzas, laboral, legal, ventas). Usar cuando una tarea pide criterio de uno de esos dominios, para cargar la skill concreta.
 - **profile-discover** (script): profile-discover.sh — SE-219 S4: auto multi-profile discovery (abtop pattern)
 - **profile-setup** (cmd): Savia te conoce — configuración del perfil en conversación natural.
 - **profile-show** (cmd): Savia muestra tu perfil actual.
@@ -526,7 +524,6 @@
 - **slm-train** (script): slm-train.sh — Fine-tune SLMs locally with Unsloth + export to Ollama
 - **slm-train-config** (script): slm-train-config.sh — Phase 3 scaffolding: emit Unsloth/TRL YAML config.
 - **smart-calendar** (skill): Usar cuando se gestiona la agenda inteligente con sincronización Outlook/Teams.
-- **social-linkedin** (skill): >-
 - **social-networks** (agent): >-
 - **source-corroborator** (script): source-corroborator.sh — SE-273 S5: Corroboración de fuentes externas
 - **sovereignty-benchmark** (script): sovereignty-benchmark.sh — Benchmark pm-workspace prompts with local LLM

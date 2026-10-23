@@ -60,7 +60,7 @@
 | `architecture-intelligence` | skill:architecture-intelligence | Usar cuando se diseña o revisa la arquitectura de un proyecto nuevo o existente. |
 | `ast-comprehension` | skill:ast-comprehension | Usar cuando se explora código desconocido y se necesita comprensión estructural sin l... |
 | `ast-quality-gate` | skill:ast-quality-gate | Usar cuando se verifica la calidad de código generado por IA antes de merge. |
-| `attack-surface-mapper` | skill:attack-surface-mapper | Mapear la superficie de ataque de un dominio: subdominios, OSINT, typosquatting. |
+| `attack-surface-mapper` | skill:attack-surface-mapper | Mapear la superficie de ataque de un dominio (subdominios, OSINT, typosquatting). Usar ... |
 | `automation-scheduler` | skill:automation-scheduler | Usar cuando se crean, gestionan o ejecutan automatizaciones programadas: morning briefs... |
 | `azure-devops-queries` | skill:azure-devops-queries | Usar cuando se necesitan consultas WIQL, actualización de work items o datos de sprint... |
 | `azure-pipelines` | skill:azure-pipelines | Usar cuando se gestiona o depura CI/CD con Azure Pipelines. |
@@ -78,7 +78,7 @@
 | `consensus-validation` | skill:consensus-validation | Usar cuando una decisión técnica o recomendación necesita validación por panel de j... |
 | `content-fingerprint` | skill:content-fingerprint | Usar cuando se necesita un identificador corto, deterministico y reproducible derivado ... |
 | `context-caching` | skill:context-caching | Usar cuando se optimiza el orden de carga de contexto para maximizar cache hits. |
-| `context-dome` | skill:context-dome | Genera CONTEXT_DOME.md para modulos con Bus Factor bajo. Captura conocimiento tacito: p... |
+| `context-dome` | skill:context-dome | Genera CONTEXT_DOME.md con el conocimiento tácito de un módulo. Usar cuando un módul... |
 | `context-interview-conductor` | skill:context-interview-conductor | Usar cuando se necesita recopilar contexto estructurado de un usuario mediante entrevis... |
 | `context-optimized-dev` | skill:context-optimized-dev | Usar cuando se desarrolla con presupuesto de contexto limitado. |
 | `context-rot-strategy` | skill:context-rot-strategy | Usar cuando una sesión larga se aproxima al límite de contexto y hay que decidir qué... |
@@ -92,7 +92,7 @@
 | `diagram-generation` | skill:diagram-generation | Usar cuando se necesita generar diagramas de arquitectura o flujo desde código o infra... |
 | `diagram-import` | skill:diagram-import | Usar cuando se importa un diagrama existente para extraer entidades y crear PBIs. |
 | `doc-quality-feedback` | skill:doc-quality-feedback | Usar cuando se recopila feedback de calidad de documentación tras usar skills y reglas. |
-| `dynamic-web-tester` | skill:dynamic-web-tester | Testing dinámico de endpoints web: XSS (DalFox), SQLi (sqlmap), Nuclei. |
+| `dynamic-web-tester` | skill:dynamic-web-tester | Testing dinámico de endpoints web (XSS, SQLi, Nuclei). Usar solo en pruebas autorizada... |
 | `ecosystem-watcher` | skill:ecosystem-watcher | Usar una vez al mes para detectar cambios relevantes en el ecosistema de herramientas e... |
 | `emergency-mode` | skill:emergency-mode | Usar cuando la API de Anthropic está caída y se necesita continuar operando con LocalAI. |
 | `enterprise-analytics` | skill:enterprise-analytics | Usar cuando se necesitan métricas SPACE, aggregación de portfolio o forecasting empre... |
@@ -102,7 +102,7 @@
 | `evidence-first-development` | skill:evidence-first-development | Desarrollo evidence-first: rodea la implementación con un SPEC aprobado y un gauntlet ... |
 | `executive-reporting` | skill:executive-reporting | Usar cuando se genera un informe ejecutivo multi-proyecto para dirección. |
 | `feasibility-probe` | skill:feasibility-probe | Usar cuando se necesita validar si una spec es técnicamente viable antes de implementa... |
-| `git-secret-scanner` | skill:git-secret-scanner | Escanea el historial git o los commits pendientes de push buscando secrets con gitleaks... |
+| `git-secret-scanner` | skill:git-secret-scanner | Escanea el historial git o los commits pendientes con gitleaks. Usar cuando haya que co... |
 | `governance-enterprise` | skill:governance-enterprise | Revisa governance enterprise. Usar cuando se audita compliance o se registran decisione... |
 | `grc-evidence-analysis` | skill:grc-evidence-analysis | Valida procedencia y suficiencia de pruebas GRC. Usar cuando se evalúan controles, se ... |
 | `grc-framework-router` | skill:grc-framework-router | Selecciona marcos GRC y verifica vigencia. Usar cuando se prepara una auditoría, se co... |
@@ -121,14 +121,14 @@
 | `mobile-security-scanner` | skill:mobile-security-scanner | Usar cuando se escanea un APK/AAB Android en busca de vulnerabilidades de seguridad. In... |
 | `model-upgrade-audit` | skill:model-upgrade-audit | Usar cuando hay un modelo nuevo disponible y se quiere detectar prompt debt en el works... |
 | `mutation-audit` | skill:mutation-audit | Usar cuando se quiere medir la calidad real de los tests mediante mutation testing. |
-| `network-recon` | skill:network-recon | Reconocimiento de red: port scan con nmap/RustScan + HTTP detection con httpx. |
+| `network-recon` | skill:network-recon | Reconocimiento de red (puertos con nmap/RustScan, servicios HTTP con httpx). Usar solo ... |
 | `nuclei-scanning` | skill:nuclei-scanning | Usar cuando se escanean vulnerabilidades conocidas (CVEs, misconfigs) con Nuclei. |
 | `obscura-browser` | skill:obscura-browser | Navegador headless nativo de Savia para fetch/scrape (Rust, sin Chromium, 41MB RAM, sin... |
 | `onboarding-dev` | skill:onboarding-dev | Usar cuando se incorpora un desarrollador nuevo al proyecto y necesita buddy IA. |
-| `org-meeting-capture` | skill:org-meeting-capture | Captura de Conocimiento Tácito de Reunión: extrae decisores, acuerdos informales y se... |
-| `org-political-landscape` | skill:org-political-landscape | Análisis de Paisaje Político Interno: detecta tensiones, alianzas y centros de poder ... |
+| `org-meeting-capture` | skill:org-meeting-capture | Extrae decisores, acuerdos informales y señales políticas de transcripciones de reuni... |
+| `org-political-landscape` | skill:org-political-landscape | Detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders. Usa... |
 | `org-registrar` | skill:org-registrar | Gestiona el grafo de entidades organizacionales (Company as Code, SE-365): valida entid... |
-| `org-stakeholder-mapper` | skill:org-stakeholder-mapper | Mapeador de Stakeholders y Decisores: extrae roles formales y reales, motivaciones, ali... |
+| `org-stakeholder-mapper` | skill:org-stakeholder-mapper | Mapea roles formales y reales, motivaciones, alianzas y tensiones de una organización.... |
 | `orgchart-import` | skill:orgchart-import | Usar cuando se importa un organigrama para extraer la estructura del equipo. |
 | `overnight-sprint` | skill:overnight-sprint | Usar cuando se quiere ejecutar tareas de bajo riesgo de forma autónoma durante la noche. |
 | `parallel-dispatch` | skill:parallel-dispatch | Usar cuando se necesitan subagentes en paralelo con admission-handle — lanza N tareas... |
@@ -138,7 +138,7 @@
 | `personal-vault` | skill:personal-vault | Usar cuando se lee o escribe el repositorio personal del usuario (perfil, preferencias,... |
 | `pr-agent-judge` | skill:pr-agent-judge | Usar cuando se añade pr-agent como juez externo en el Code Review Court. |
 | `product-discovery` | skill:product-discovery | Usar antes de descomponer PBIs, cuando se necesita análisis JTBD y PRD del producto. |
-| `professional-domain` | skill:professional-domain | Family index for professional-domain skills (controlling, finance, labour, legal, sales... |
+| `professional-domain` | skill:professional-domain | Índice de las skills de dominio profesional (controlling, finanzas, laboral, legal, ve... |
 | `project-update` | skill:project-update | Usar cuando se necesita una actualización integral del proyecto activo desde todas las... |
 | `prompt-optimizer` | skill:prompt-optimizer | Usar cuando se optimiza el prompt de un skill o agente para mejorar su efectividad. |
 | `prospectiva-basica` | skill:prospectiva-basica | Prospectiva sistemica local: micro-MICMAC (variables motrices vs dependientes) y micro-... |
@@ -163,7 +163,7 @@
 | `skill-evaluation` | skill:skill-evaluation | Usar cuando se necesita seleccionar el skill más apropiado para una tarea dada. |
 | `smart-calendar` | skill:smart-calendar | Usar cuando se gestiona la agenda inteligente con sincronización Outlook/Teams. |
 | `smart-routing` | skill:smart-routing | Usar cuando se necesita descubrir o enrutar a un comando específico entre los 400+ dis... |
-| `social-linkedin` | skill:social-linkedin | Provider skill de LinkedIn para el agente social-networks (SE-385 MVP1). Import manual ... |
+| `social-linkedin` | skill:social-linkedin | Importa el export oficial de LinkedIn y genera digests locales (temas, historia, estilo... |
 | `sovereignty-auditor` | skill:sovereignty-auditor | Usar cuando se audita el grado de dependencia cognitiva del equipo respecto a herramien... |
 | `spec-driven-development` | skill:spec-driven-development | Usar cuando se escribe, valida o implementa una spec ejecutable SDD. |
 | `sprint-management` | skill:sprint-management | Usar cuando se consulta el estado del sprint, se actualizan items o se genera el resumen. |
