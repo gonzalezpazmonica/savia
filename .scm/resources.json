@@ -1,6 +1,6 @@
 {
-  "hash": "a10ce9bccaae",
-  "total": 1450,
+  "hash": "2e97d0166bf6",
+  "total": 1448,
   "resources": [
     {
       "category": "analysis",
@@ -7394,34 +7394,6 @@
       "kind": "cmd",
       "path": ".claude/commands/decide-architecture.md",
       "description": "Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas."
-    },
-    {
-      "category": "planning",
-      "name": "_template",
-      "intents": [
-        "carga",
-        "copia",
-        "crear",
-        "directorio",
-        "nueva"
-      ],
-      "kind": "skill",
-      "path": ".claude/skills/_template/SKILL.md",
-      "description": "TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime."
-    },
-    {
-      "category": "planning",
-      "name": "_template_python",
-      "intents": [
-        "backed",
-        "carga",
-        "copia",
-        "crear",
-        "directorio"
-      ],
-      "kind": "skill",
-      "path": ".claude/skills/_template_python/SKILL.md",
-      "description": "TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una skill que expone funcionalidad invocable con run(). NO se carga en runtime."
     },
     {
       "category": "planning",

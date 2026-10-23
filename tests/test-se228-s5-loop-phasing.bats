@@ -14,7 +14,7 @@ setup() {
   REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   LOOP_PHASING_DOC="$REPO_ROOT/docs/rules/domain/loop-phasing.md"
   AUDIT_SCRIPT="$REPO_ROOT/scripts/loop-phasing-audit.sh"
-  TEMPLATE_SKILL="$REPO_ROOT/.opencode/skills/_template/SKILL.md"
+  TEMPLATE_SKILL="$REPO_ROOT/templates/skills/_template/SKILL.md"
   OVERNIGHT_SKILL="$REPO_ROOT/.opencode/skills/overnight-sprint/SKILL.md"
   CODE_LOOP_SKILL="$REPO_ROOT/.opencode/skills/code-improvement-loop/SKILL.md"
   RESEARCH_SKILL="$REPO_ROOT/.opencode/skills/tech-research-agent/SKILL.md"
