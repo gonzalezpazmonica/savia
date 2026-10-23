@@ -65,7 +65,10 @@ PY
   mkdir -p "$RUN_DIR"
   COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
   DIRTY=false
-  [[ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]] && DIRTY=true
+  # results/ está versionado y cada ejecución lo reescribe: no cuenta como árbol sucio.
+  EXCL=()
+  [[ "$RES" == "$ROOT"/* ]] && EXCL=(-- . ":(exclude)${RES#"$ROOT"/}")
+  [[ -n "$(git -C "$ROOT" status --porcelain "${EXCL[@]}" 2>/dev/null)" ]] && DIRTY=true
   STARTED=$(date -u +%FT%TZ)
   GREEN=0; MAPPED=0
   while IFS= read -r row; do
