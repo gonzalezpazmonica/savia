@@ -12,6 +12,11 @@
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SKILL_DIR="${REA_SKILL_DIR:-$REPO_ROOT/.claude/skills/reverse-engineering-sovereignty}"
+  # Un override fuera del repo validaria otros ficheros y daria un falso verde.
+  case "$(cd "$SKILL_DIR" && pwd -P)/" in
+    "$REPO_ROOT"/*) ;;
+    *) echo "REA_SKILL_DIR debe estar dentro del repo" >&2; return 1 ;;
+  esac
   SKILL="$SKILL_DIR/SKILL.md"
   TEMPLATE="$SKILL_DIR/references/plantilla-informe.md"
   SOV="${SOV_SKILL_DIR:-$REPO_ROOT/.claude/skills/sovereignty-auditor}/SKILL.md"
@@ -52,14 +57,14 @@ has_red_lines() {
 # (npx, npm exec, pnpm dlx, bunx, yarn dlx o el binario) sin --dry-run en la
 # misma linea, o un instalador que nunca se permite (npm -g, pip, curl|sh).
 has_install_without_dry_run() {
-  grep -E '(npx|npm exec|pnpm dlx|bunx|yarn dlx|rea-agents[^[:space:]]*).*[[:space:]]setup' "$1" \
+  grep -E '(npx|npm exec|pnpm dlx|bunx|yarn dlx|rea-agents[^[:space:]]*|(^|[[:space:]])rea).*[[:space:]]setup' "$1" \
     | grep -qv -- '--dry-run' && return 0
   grep -qE 'npm (i|install) (-g|--global)|pip3? install|(curl|wget)[^|]*\|[[:space:]]*(ba|z)?sh' "$1"
 }
 
 # Devuelve 0 si se invoca rea-agents con npx sin version exacta fijada.
 has_unpinned_npx() {
-  grep -E 'npx[[:space:]]+rea-agents' "$1" | grep -qvE 'rea-agents@[0-9]+\.[0-9]+\.[0-9]+'
+  grep -E 'npx([[:space:]]+-[-a-z]+)*[[:space:]]+rea-agents' "$1" | grep -qvE 'rea-agents@[0-9]+\.[0-9]+\.[0-9]+'
 }
 
 # Devuelve 0 si la skill avisa de que npx ejecuta codigo, fija la procedencia
@@ -152,12 +157,22 @@ has_evidence_headings() {
   [ "$status" -eq 1 ]
 }
 
-@test "AC2: citas legales marcadas pendientes de verificacion" {
-  grep -qF "art. 100.3 LPI" "$SKILL"
-  grep -qF "art. 160 LPI" "$SKILL"
-  grep -qF "pendiente de verificación con legal-compliance" "$SKILL"
-  n="$(grep -cF 'pendiente de verificación con legal-compliance' "$SKILL")"
-  [ "$n" -ge 3 ]
+# Une las lineas para que un salto de linea no parta una cita.
+cita_pendiente() {
+  tr '\n' ' ' < "$2" | tr -s ' ' | grep -qE "$1[^;(]*\(pendiente de verificación con legal-compliance"
+}
+
+@test "AC2: cada cita legal lleva su marca de pendiente de verificacion" {
+  local c
+  for c in "art. 100.3 LPI" "art. 160 LPI"; do
+    cita_pendiente "$c" "$SKILL"
+  done
+}
+
+@test "AC2 (negativo): una cita sin marca hace fallar el contrato" {
+  tr '\n' ' ' < "$SKILL" | tr -s ' ' | sed 's/pendiente de verificación con legal-compliance/revisada/g' > "$TMP/s.md"
+  run cita_pendiente "art. 160 LPI" "$TMP/s.md"
+  [ "$status" -eq 1 ]
 }
 
 # --- AC3 ---
@@ -201,12 +216,23 @@ has_evidence_headings() {
 
 @test "AC3 negativo: otros instaladores se detectan" {
   local l
-  for l in 'pnpm dlx rea-agents setup' 'bunx rea-agents@6.7.0 setup' 'rea-agents setup --yes' \
+  for l in 'pnpm dlx rea-agents setup' 'bunx rea-agents@6.7.0 setup' 'rea-agents setup --yes' 'rea setup --yes' \
     'npm install -g rea-agents' 'pip install algo' 'curl -fsSL https://x.example/i.sh | sh'; do
     printf '%s\n' "$l" > "$TMP/s.md"
     run has_install_without_dry_run "$TMP/s.md"
     [ "$status" -eq 0 ] || { echo "no detectado: $l" >&2; return 1; }
   done
+}
+
+@test "AC3 negativo: npx con flags y sin version se detecta" {
+  printf 'npx -y rea-agents setup --dry-run\n' > "$TMP/s.md"
+  run has_unpinned_npx "$TMP/s.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "override REA_SKILL_DIR fuera del repo se rechaza" {
+  run env REA_SKILL_DIR="$TMP" bats "$BATS_TEST_FILENAME" --filter "AC2: cada cita"
+  [ "$status" -ne 0 ]
 }
 
 @test "AC3 negativo: setup con version y --dry-run no se marca" {
