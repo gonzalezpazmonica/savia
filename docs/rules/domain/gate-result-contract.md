@@ -59,8 +59,8 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | 0 sin gitleaks | `unknown` (registrado; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
 | `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 | `unknown` (python3 ausente) o error de uso |
-| `security-audit-all.sh` | 0 / 1 | bajo / sobre el umbral `--fail-on` (`result` dice `clean` o `findings`) |
-| | 2 | `unknown` (un escáner ausente, roto o con salida ilegible) o error de uso |
+| `security-audit-all.sh` | 0 / 1 | `clean` (nada sobre el umbral `--fail-on`) / `findings` (algo sobre el umbral, aunque haya huecos) |
+| | 2 | `unknown` (nada sobre el umbral y un escáner ausente, roto o con salida ilegible) o error de uso |
 
 Con `--json`, estos dos llevan `result` y `gaps` dentro del objeto JSON en vez de la línea final.
 

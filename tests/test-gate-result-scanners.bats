@@ -104,3 +104,50 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
   [ "$(json_field '["result"]')" = '"clean"' ]
   [ "$(json_field '["gaps"]')" = '[]' ]
 }
+
+@test "mcp-audit: sin python3 y sin --config (autodescubrimiento) ⇒ exit 2, nunca un 0 sin auditar" {
+  printf '{"mcpServers":{}}' > "$W/.claude/mcp.json"
+  run env HOME="$W" PATH="$NOPY" /usr/bin/bash "$W/scripts/mcp-real.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"result":"unknown"'* ]]
+}
+
+@test "agregador: hallazgo bajo el umbral + hueco ⇒ result unknown, UNKNOWN y exit 2 (antes result findings)" {
+  stub hook-injection-audit 0 '{"verdict":"PASS","findings_count":1,"critical":0,"high":0,"medium":0,"low":1}'
+  mv "$W/scripts/permissions-wildcard-audit.sh" "$W/gone.sh"
+  run bash "$W/scripts/security-audit-all.sh" --json --fail-on HIGH
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["verdict"]')" = '"UNKNOWN"' ]
+  [ "$(json_field '["result"]')" = '"unknown"' ]
+  [ "$(json_field '["total_low"]')" = 1 ]
+}
+
+@test "agregador: hallazgo bajo el umbral sin huecos ⇒ result clean, PASS y exit 0" {
+  stub hook-injection-audit 0 '{"verdict":"PASS","findings_count":1,"critical":0,"high":0,"medium":0,"low":1}'
+  run bash "$W/scripts/security-audit-all.sh" --json --fail-on HIGH
+  [ "$status" -eq 0 ]
+  [ "$(json_field '["verdict"]')" = '"PASS"' ]
+  [ "$(json_field '["result"]')" = '"clean"' ]
+  [ "$(json_field '["total_low"]')" = 1 ]
+}
+
+@test "agregador: hallazgo sobre el umbral + hueco ⇒ findings, FAIL y exit 1 con el hueco en gaps" {
+  stub mcp-security-audit 1 '{"verdict":"FAIL","findings_count":1,"critical":1,"high":0,"medium":0,"low":0}'
+  mv "$W/scripts/permissions-wildcard-audit.sh" "$W/gone.sh"
+  run bash "$W/scripts/security-audit-all.sh" --json --fail-on HIGH
+  [ "$status" -eq 1 ]
+  [ "$(json_field '["verdict"]')" = '"FAIL"' ]
+  [ "$(json_field '["result"]')" = '"findings"' ]
+  [ "$(json_field '["gaps"]')" = '[{"check": "permissions-wildcard-audit", "reason": "missing_tool"}]' ]
+}
+
+@test "agregador: prompt-scan rc 0 con Findings: 3 cuenta 3 HIGH; rc 1 con Findings: 0 es unreadable" {
+  printf '#!/usr/bin/env bash\necho "Scanned: 1 files | Findings: 3 | Warnings: 0"\n' > "$W/scripts/prompt-security-scan.sh"
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 1 ]
+  [ "$(json_field '["total_high"]')" = 3 ]
+  printf '#!/usr/bin/env bash\necho "Scanned: 1 files | Findings: 0 | Warnings: 0"\nexit 1\n' > "$W/scripts/prompt-security-scan.sh"
+  run bash "$W/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 2 ]
+  [ "$(json_field '["gaps"]')" = '[{"check": "prompt-security-scan", "reason": "unreadable"}]' ]
+}

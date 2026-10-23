@@ -18,7 +18,9 @@
 # Exit codes:
 #   0 — no findings
 #   1 — findings present
-#   2 — usage error, or UNKNOWN: python3 missing, the configs cannot be parsed (SE-453)
+#   2 — usage error, or UNKNOWN: python3 missing, so no config can be read (SE-453).
+#       A config that python3 cannot parse is a finding (MCP-00, exit 1), not UNKNOWN.
+#       With no config found (none given and no default present) the result is clean with 0 audited.
 #
 # Contrato SE-453: --json lleva `result` y `gaps`; en texto la última línea es `gate-result: {...}`.
 #

@@ -155,13 +155,12 @@ for sev_thresh in CRITICAL HIGH MEDIUM LOW; do
   fi
 done
 
-# SE-453: resultado del contrato. Un hueco sin hallazgos sobre el umbral no es PASS: es UNKNOWN (exit 2).
-if [[ $((TOTAL_CRIT + TOTAL_HIGH + TOTAL_MED + TOTAL_LOW)) -gt 0 ]]; then RESULT="findings"
-elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"
-else RESULT="clean"; fi
-VERDICT="PASS"
-if [[ "$EXIT_CODE" -eq 1 ]]; then VERDICT="FAIL"
-elif [[ ${#GAPS[@]} -gt 0 ]]; then VERDICT="UNKNOWN"; EXIT_CODE=2; fi
+# SE-453: resultado del contrato, derivado del mismo criterio que el exit para que `result`, `verdict` y
+# el código digan lo mismo: sobre el umbral ⇒ findings/FAIL/1 (aunque haya huecos, que van en `gaps`);
+# si no, un hueco ⇒ unknown/UNKNOWN/2; si no, clean/PASS/0. Los hallazgos bajo el umbral siguen en los totales.
+if [[ "$EXIT_CODE" -eq 1 ]]; then RESULT="findings"; VERDICT="FAIL"
+elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"; VERDICT="UNKNOWN"; EXIT_CODE=2
+else RESULT="clean"; VERDICT="PASS"; fi
 GATE_LINE="$(gate_result_emit "$RESULT" "${GAPS[@]}")"
 
 if [[ "$JSON" -eq 1 ]]; then
