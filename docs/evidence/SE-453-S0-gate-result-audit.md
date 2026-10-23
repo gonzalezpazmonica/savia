@@ -51,7 +51,7 @@ compararon con el hook bash con las mismas entradas:
 
 | Guard | Entradas | Divergencias halladas | Estado |
 |---|---|---|---|
-| `block-force-push.ts` | 11 | `git -C dir push --force` y `git commit --amend` pasaban en TS (bash 2, TS 0); `git push origin main-fix` bloqueaba en TS | Corregido: mismo ancla `GIT_AT` que el hook |
+| `block-force-push.ts` | 11 | `git -C dir push --force` y `git commit --amend` pasaban en TS (bash 2, TS 0); `git push origin main-fix` bloqueaba en TS | Corregido: mismo ancla `GIT_AT` que el hook. Revisión de #1348: el primer ancla dejaba pasar en TS la orden en la línea 2 de un bloque (sin flag `m`) y, en ambos bindings, `bash -c "…"`, `sh -c`, `eval`, `then`, `{`, `xargs` y un `--force` junto a un `--force-with-lease`; corregido en bash y TS con casos de paridad. Sigue sin cubrirse una orden git construida en tiempo de ejecución (variables, alias) |
 | `block-credential-leak.ts` | 4 | ninguna | Sin cambios |
 | `block-infra-destructive.ts` | 4 | ninguna | Sin cambios |
 | `validate-bash-global.ts` | 2 | ninguna | Sin cambios |
