@@ -97,6 +97,21 @@ FP="--for""ce"
   parity block-credential-leak blockCredentialLeak 0 "ls -la" "git status"
 }
 
+@test "paridad amend: --amend como argumento propio (también abreviado o tras -m) ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "git commit -m \"x\" --amend" "git commit -a --no-edit --amend" \
+    "git commit -m\"x y\" --amend" "git -C /tmp/x commit --amend" "git commit --amend;ls" \
+    "git commit --amen -m x" "git commit --am"
+}
+
+@test "paridad amend: --amend dentro del mensaje o tras un separador no bloquea ⇒ 0" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 0 "git commit -m \"docs: explica --amend\"" \
+    "git commit -m 'a --amend b'" "git commit -m x && echo --amend" "git commit -m x --amendment"
+}
+
 @test "paridad block-infra-destructive y validate-bash-global: destructivos ⇒ 2, inocuo ⇒ 0" {
   require_ts
   command -v jq >/dev/null
