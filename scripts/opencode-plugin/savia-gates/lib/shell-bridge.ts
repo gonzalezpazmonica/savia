@@ -277,6 +277,8 @@ export function matcherApplies(
   return false
 }
 
+/** Switches that turn security hooks off are never inherited by a handler (gates.py: STRIPPED_ENV). */
+const STRIPPED_ENV = ["SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE"]
 /** Never inherited by a prompt evaluator: a handler without `model` must not see a stale one. */
 const PROMPT_ONLY_ENV = ["CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL"]
 
@@ -337,8 +339,8 @@ async function spawnHook(
       cwd: projectRoot,
       // extraEnv replaces CLAUDE_JSON_INPUT: a prompt evaluator gets the rendered prompt on stdin only.
       env: extraEnv
-        ? { ...inheritedEnv(PROMPT_ONLY_ENV), CLAUDE_PROJECT_DIR: projectRoot, ...extraEnv }
-        : { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_JSON_INPUT: payload },
+        ? { ...inheritedEnv([...STRIPPED_ENV, ...PROMPT_ONLY_ENV]), CLAUDE_PROJECT_DIR: projectRoot, ...extraEnv }
+        : { ...inheritedEnv(STRIPPED_ENV), CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_JSON_INPUT: payload },
       stdin: Bun.file(stdinPath),
       stdout: ignoreOutput ? "ignore" : "pipe",
       stderr: ignoreOutput ? "ignore" : "pipe",
@@ -532,6 +534,11 @@ function strictJson(text: string): unknown {
   return value
 }
 
+/** Python's s[:n]: cut by code points, never inside a surrogate pair. */
+export function codePoints(s: string, n: number): string {
+  return Array.from(s).slice(0, n).join("")
+}
+
 /** Port of policy.prompt_decision: the evaluator must print exactly {"ok": bool, "reason"?: string}. */
 export function promptVerdict(exit: number, stdout: string): { exit: number; stdout: string; stderr: string } {
   if (exit !== 0) return { exit: BLOCK_EXIT, stdout: "", stderr: "PROMPT_HOOK_FAILURE" }
@@ -546,7 +553,7 @@ export function promptVerdict(exit: number, stdout: string): { exit: number; std
     return { exit: BLOCK_EXIT, stdout: "", stderr: "INVALID_HOOK_OUTPUT" }
   }
   if (value.ok) return { exit: 0, stdout: "", stderr: "" }
-  return { exit: BLOCK_EXIT, stdout: "", stderr: `PROMPT_HOOK_BLOCK: ${(value.reason || "sin motivo").slice(0, 500)}` }
+  return { exit: BLOCK_EXIT, stdout: "", stderr: `PROMPT_HOOK_BLOCK: ${codePoints(value.reason || "sin motivo", 500)}` }
 }
 
 /**

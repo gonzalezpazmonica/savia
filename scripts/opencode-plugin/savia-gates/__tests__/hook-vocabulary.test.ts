@@ -144,4 +144,24 @@ test("the gate files cannot be rewritten from OpenCode, also without SAVIA_GATES
   const patch = "*** Begin Patch\n*** Add File: libre.txt\n+a\n*** Add File: scripts/opencode-plugin/x.ts\n+b\n*** End Patch\n"
   expect((await before("apply_patch", { patchText: patch })).verdict).toContain("PROTECTED_GATE_PATH")
   expect((await before("write", { filePath: join(root, "libre.txt"), content: "x" })).verdict).toBe("PASS")
+  // opencode.json and .opencode/package.json decide what OpenCode loads; a notebook edit names notebook_path.
+  expect((await before("write", { filePath: join(root, "opencode.json"), content: "{}" })).verdict).toContain("PROTECTED_GATE_PATH")
+  expect((await before("edit", { filePath: join(root, ".opencode/package.json"), oldString: "a", newString: "b" })).verdict).toContain("PROTECTED_GATE_PATH")
+  expect((await before("NotebookEdit", { notebook_path: join(root, ".claude/hooks/n.ipynb"), new_source: "x" })).verdict).toContain("PROTECTED_GATE_PATH")
+  expect((await before("NotebookEdit", { notebook_path: join(root, "libre.ipynb"), new_source: "x" })).verdict).toBe("PASS")
+})
+
+// Same contract as gates.STRIPPED_ENV in the Codex core: a switch that turns security hooks off never reaches a hook.
+test("hooks do not inherit the security bypass switches, and do inherit the rest", async () => {
+  const { before } = await gatesWith(`#!/usr/bin/env bash
+[ -n "\${SAVIA_TEST_CONTROL:-}" ] || { echo SIN_CONTROL >&2; exit 2; }
+for v in SAVIA_PAT_BLOCK SAVIA_SHIELD_ENABLED SAVIA_HOOK_PROFILE; do
+  [ -z "\${!v:-}" ] || { echo "HEREDADO $v" >&2; exit 2; }
+done
+exit 0
+`, "Bash")
+  Object.assign(process.env, { SAVIA_TEST_CONTROL: "1", SAVIA_PAT_BLOCK: "off", SAVIA_SHIELD_ENABLED: "false", SAVIA_HOOK_PROFILE: "minimal" })
+  expect((await before("bash", { command: "ls" })).verdict).toBe("PASS")
+  delete process.env.SAVIA_TEST_CONTROL
+  expect((await before("bash", { command: "ls" })).verdict).toContain("SIN_CONTROL")
 })

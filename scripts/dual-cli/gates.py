@@ -29,7 +29,7 @@ PROMPT_ONLY_ENV = ("CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL")
 # Same list as PROTECTED_GATE_PATHS in savia-gates lib/hook-vocabulary.ts (parity test in test_edit_replay.py).
 PROTECTED_PATHS = (".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
                    ".opencode/hooks", ".opencode/plugins", "scripts/dual-cli",
-                   "scripts/opencode-plugin", ".codex")
+                   "scripts/opencode-plugin", ".codex", "opencode.json", ".opencode/package.json")
 
 
 def _deny(reason, handler=None):

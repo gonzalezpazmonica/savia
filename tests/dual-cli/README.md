@@ -121,7 +121,7 @@ arranca el CLI (`SAVIA_PROMPT_HOOK_CMD`, prompt renderizado por stdin, veredicto
 exacto `{"ok": bool, "reason"?: string}`). Sin evaluador, crash, timeout, prosa
 alrededor del JSON u `ok` no booleano bloquean; una llamada que el matcher no
 selecciona continúa. `test_prompt_transport.py` replica el mismo corpus
-(`fixtures/prompt_replay_corpus.json`, 10 casos) en Codex y en OpenCode con las
+(`fixtures/prompt_replay_corpus.json`, 19 casos) en Codex y en OpenCode con las
 mismas decisiones y motivos.
 
 Al preparar ese replay apareció un hueco mayor: savia-gates leía `Bash(git commit*)`
@@ -131,11 +131,16 @@ como regex (un grupo) y no casaba nunca, así que `block-commit-to-main.sh`,
 `Bash(bash*memory-store*save*)` exigía estrellas literales y `memory-write-sanitize.sh`
 no corría en Codex. Ahora `Herramienta(orden)` es un glob literal en los dos, también
 dentro de alternativas con `|`; un test compara cada matcher de `settings.json`
-contra 12 llamadas en ambos núcleos (cero divergencias).
+contra 15 llamadas en ambos núcleos (cero divergencias).
 
 `PROTECTED_GATE_PATH` se aplica también en OpenCode (`write`, `edit`, `apply_patch`),
 sin depender de `SAVIA_GATES_PIN`; la lista es la misma en los dos núcleos (test de
-paridad) y añade `.opencode/plugins` y `scripts/opencode-plugin`.
+paridad) y añade `.opencode/plugins`, `scripts/opencode-plugin`, `opencode.json` y
+`.opencode/package.json`. En OpenCode también mira `notebook_path`. El motivo del
+bloqueo (`PROTECTED_GATE_PATH`) se comprueba en los dos núcleos, no solo que bloquee.
+Los handlers de OpenCode tampoco heredan los interruptores que apagan hooks de
+seguridad (`SAVIA_PAT_BLOCK`, `SAVIA_SHIELD_ENABLED`, `SAVIA_HOOK_PROFILE`), igual
+que en Codex.
 
 Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime
 (requiere decisión de la operadora sobre revisión de política y confianza del

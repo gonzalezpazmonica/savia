@@ -34,7 +34,8 @@ const PATCH_TOOLS = new Set(["apply_patch", "patch"])
  * Before this, OpenCode only protected them through guard-pin with SAVIA_GATES_PIN=1.
  */
 export const PROTECTED_GATE_PATHS = [".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
-  ".opencode/hooks", ".opencode/plugins", "scripts/dual-cli", "scripts/opencode-plugin", ".codex"]
+  ".opencode/hooks", ".opencode/plugins", "scripts/dual-cli", "scripts/opencode-plugin", ".codex",
+  "opencode.json", ".opencode/package.json"]
 
 /** Tools whose view carries a file the call writes. */
 const FILE_EFFECT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"])
@@ -176,7 +177,7 @@ export async function runPreToolUse(
     return { blocked: true, reason: "INVALID_EVENT" }
   }
   for (const view of views) {
-    const target = view.tool_input.file_path
+    const target = view.tool_input.file_path ?? view.tool_input.notebook_path
     if (FILE_EFFECT_TOOLS.has(view.tool_name) && typeof target === "string" &&
         isProtectedPath(joinPath(base.cwd, target), root)) {
       return { blocked: true, reason: "PROTECTED_GATE_PATH" }

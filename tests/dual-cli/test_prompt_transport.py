@@ -26,8 +26,8 @@ from required_tools import needs
 from hooks import _matcher_applies
 
 
-def bun(script, data):
-    run = subprocess.run(["bun", str(FIXTURES / script)], input=json.dumps(data).encode(),
+def bun(script, data, *args):
+    run = subprocess.run(["bun", str(FIXTURES / script), *args], input=json.dumps(data).encode(),
                          capture_output=True, timeout=300,
                          env=dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT)))
     if run.returncode != 0:
@@ -153,12 +153,13 @@ class CoreParityTests(unittest.TestCase):
             paths = [os.path.join(root, p) for p in (
                 ".claude/settings.json", ".claude/hooks/x.sh", "alias/x.sh", ".opencode/plugins/a.ts",
                 "scripts/opencode-plugin/savia-gates/index.ts", "scripts/dual-cli/gates.py",
-                ".codex/hooks.json", "src/app.py", ".claude/settingsXjson", "scripts/dual-cli-notes.md")]
+                ".codex/hooks.json", "opencode.json", ".opencode/package.json",
+                "src/app.py", ".claude/settingsXjson", "scripts/dual-cli-notes.md", "opencode.jsonc")]
             got = bun("ts_matchers.ts", {"matchers": [], "paths": [{"path": p, "root": root} for p in paths]})
             self.assertEqual(got["list"], list(gates.PROTECTED_PATHS))
             want = [gates.is_protected(p, root) for p in paths]
             self.assertEqual(got["protected"], want)
-            self.assertEqual(want, [True] * 7 + [False] * 3)
+            self.assertEqual(want, [True] * 9 + [False] * 4)
 
 
 @needs("bun", "jq")
@@ -179,7 +180,7 @@ class ProtectedPathReplayTests(unittest.TestCase):
                                        "oldString": "a", "newString": "b"}},
             {"tool": "apply_patch", "input": {"patchText": patch}},
         ]
-        self.assertEqual(bun("ts_replay.ts", native), [True, True, True])
+        self.assertEqual(bun("ts_replay.ts", native, "--reasons"), [[True, "PROTECTED_GATE_PATH"]] * 3)
 
 
 class RequiredToolsTests(unittest.TestCase):
