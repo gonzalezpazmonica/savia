@@ -183,3 +183,29 @@ ps_setup() {
   [ "$status" -eq 2 ]
   [[ "$(printf '%s\n' "$output" | tail -1)" == 'gate-result: {"result":"unknown","gaps":[{"check":"'*'/locked.md","reason":"unreadable"}]}' ]]
 }
+
+# Revisión #1355 (5.ª, P2): PS-11 cubre también word joiner, guion blando y controles bidi (Trojan Source).
+@test "prompt-scan: U+2060, U+00AD y controles bidi ⇒ PS-11; texto con acentos y guion normal no" {
+  ps_setup
+  printf 'a\xe2\x81\xa0b\n' > "$W/p/wj.md"
+  printf 'a\xc2\xadb\n' > "$W/p/shy.md"
+  printf 'a\xe2\x80\xaeb\n' > "$W/p/rlo.md"
+  printf 'a\xe2\x81\xa7b\n' > "$W/p/isol.md"
+  printf 'canción — ñandú – guion-normal\n' > "$W/p/fine.md"
+  run bash "$W/scripts/prompt-real.sh" "$W/p"
+  [ "$status" -eq 1 ]
+  for f in wj shy rlo isol; do [[ "$output" == *"$f.md:1 — [PS-11]"* ]]; done
+  [[ "$output" != *"fine.md"* ]]
+}
+
+# Revisión #1355 (5.ª, P2): un error de lectura que -r no ve (EIO) daba limpio porque los grep callan su error.
+@test "prompt-scan: grep que falla leyendo un fichero ⇒ exit 2 y unknown/unreadable, nunca clean" {
+  ps_setup
+  mkdir -p "$W/fakebin"
+  printf '#!/usr/bin/env bash\n[[ "$1" == -aq && "$2" == "" ]] && exit 2\nexec /usr/bin/grep "$@"\n' > "$W/fakebin/grep"
+  chmod +x "$W/fakebin/grep"
+  run env PATH="$W/fakebin:$PATH" bash "$W/scripts/prompt-real.sh" "$W/p"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"GAP   ok.md — error de lectura"* ]]
+  [[ "$(printf '%s\n' "$output" | tail -1)" == 'gate-result: {"result":"unknown","gaps":[{"check":"'*'/ok.md","reason":"unreadable"}]}' ]]
+}

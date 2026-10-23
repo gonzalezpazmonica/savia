@@ -53,6 +53,14 @@ scan_file() {
     return 0
   fi
 
+  # Un error de lectura que -r no ve (EIO…) lo daría limpio: grep sale con 2 y las reglas lo callan.
+  local rc=0; grep -aq '' "$file" 2>/dev/null || rc=$?
+  if (( rc > 1 )); then
+    GAPS+=("${file//:/_}:unreadable")
+    $QUIET || printf "  GAP   %s — error de lectura\n" "$(basename "$file")"
+    return 0
+  fi
+
   # PS-01: Injection bait
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "CRIT" "$file" "$num" "PS-01" "Injection bait: instruction override"
@@ -107,13 +115,14 @@ scan_file() {
     log_warn "$file" "1" "Agent with wildcard tool access"
   fi
 
-  # PS-11: Zero-width chars (SE-060) — hidden directives via U+200B/C/D/FEFF
+  # PS-11: Zero-width chars (SE-060) — hidden directives via U+200B-D, U+2060, U+FEFF, U+00AD y controles bidi
+  # U+202A-E / U+2066-9 (Trojan Source; revisión #1355)
   # SE-453: se buscan sus bytes UTF-8 con grep en locale C, sin python3. Antes, sin python3 la
   # comprobación se omitía en silencio y el fichero salía limpio. Todas las búsquedas usan grep -a: con un
   # byte NUL, grep imprimía «Binary file … matches» sin número de línea y no se registraba nada.
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-11" "Zero-width character (possible hidden directive)"
-  done < <(LC_ALL=C grep -anE $'\xe2\x80[\x8b-\x8d]|\xef\xbb\xbf' "$file" 2>/dev/null || true)
+  done < <(LC_ALL=C grep -anE $'\xe2\x80[\x8b-\x8d\xaa-\xae]|\xe2\x81[\xa0\xa6-\xa9]|\xef\xbb\xbf|\xc2\xad' "$file" 2>/dev/null || true)
 
   # PS-12: Long base64 strings (>80 chars, not in code blocks with hash/commit context)
   while IFS=: read -r num _; do
@@ -142,12 +151,14 @@ fi
 
 FILE_COUNT=0
 if [[ -d "$SCAN_PATH" ]]; then
+  # Una sola pasada de find, con su estado: un subdirectorio que no puede recorrer deja ficheros sin escanear.
+  FILE_LIST="$(mktemp)"
+  trap 'rm -f "$FINDINGS_FILE" "$WARNINGS_FILE" "$FILE_LIST"' EXIT
+  find "$SCAN_PATH" -name '*.md' -type f -print0 > "$FILE_LIST" 2>/dev/null || GAPS+=("${SCAN_PATH//:/_}:unreadable")
   while IFS= read -r -d '' file; do
     ((FILE_COUNT++)) || true
     scan_file "$file"
-  done < <(find "$SCAN_PATH" -name '*.md' -type f -print0)
-  # Un subdirectorio que find no puede recorrer deja ficheros sin escanear.
-  find "$SCAN_PATH" -name '*.md' -type f >/dev/null 2>&1 || GAPS+=("${SCAN_PATH//:/_}:unreadable")
+  done < "$FILE_LIST"
 else
   FILE_COUNT=1
   scan_file "$SCAN_PATH"

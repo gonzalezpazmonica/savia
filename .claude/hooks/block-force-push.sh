@@ -31,19 +31,21 @@ fi
 # Solo continúa la barra impar: en «\\⏎» la barra es literal y el salto separa órdenes (4.ª revisión), así
 # que los pares «\\» se apartan antes de unir y se reponen después.
 _BS2='\\'
-COMMAND="${COMMAND//"$_BS2"/$'\x02'}"; COMMAND="${COMMAND//$'\\\n'/ }"; COMMAND="${COMMAND//$'\x02'/"$_BS2"}"
+COMMAND="${COMMAND//"$_BS2"/$'\x02'}"
+# \⏎ desaparece sin dejar espacio (git comm\⏎it, git pu\⏎sh): se evalúan las dos uniones, con y sin espacio.
+COMMAND_NOSP="${COMMAND//$'\\\n'/}"; COMMAND_NOSP="${COMMAND_NOSP//$'\x02'/"$_BS2"}"
+COMMAND="${COMMAND//$'\\\n'/ }"; COMMAND="${COMMAND//$'\x02'/"$_BS2"}"
 
 # Inicio de una orden git real: al principio, tras un separador o al abrir un subshell, con lo
 # que puede ir delante (VAR=valor, env, command, sudo, nohup, time, exec) y opciones globales de
 # git (-C dir, -c clave=valor, --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
 GIT_AT='(^|[;&|(`]|\$\()[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nohup|time|exec)[[:space:]]+)*git(([[:space:]]+(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--super-prefix)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
 
+_push_checks() { # $1 = orden con las continuaciones ya unidas → sale 2 si bloquea
+  local COMMAND="$1" IS_FORCE_WITH_LEASE=no IS_BARE_FORCE=no IS_PUSH_TO_MAIN=no
 # Bloquear force push (permite --force-with-lease en ramas no-main)
 # --force-with-lease es más seguro: falla si el remoto avanzó sin nuestro conocimiento.
 # Requerido en flujo de rebase de PRs en cola (SPEC-105).
-IS_FORCE_WITH_LEASE=no
-IS_BARE_FORCE=no
-IS_PUSH_TO_MAIN=no
 
 if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+.*--force-with-lease" > /dev/null; then
   IS_FORCE_WITH_LEASE=yes
@@ -75,6 +77,8 @@ if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+(origin[[:space:]]+)?(ma
   exit 2
 fi
 
+}
+
 # Bloquear commit --amend sin confirmación explícita
 # SE-453 (revisión #1355): --amend tiene que ser un argumento propio de ese git commit. Un tokenizador
 # de shell (comillas, escapes, $(…), <(…), `…`, redirecciones como 2>&1, comentarios) parte la orden en
@@ -95,13 +99,13 @@ _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 s
     k=$((k+1))
   done
   (( k < n )) || return 1
-  # Una palabra opaca se compara sin { } $: -{-amend,} y co${x}mmit también casan.
+  # Una palabra opaca se compara sin { } $ ,: -{-,}amend y co${x}mmit también casan.
   s="${w[k],,}"
-  [[ "$s" == commit || ( "$s" == $'\x01'* && "${s//[\{\}\$]/}" == *commit* ) ]] || return 1
+  [[ "$s" == commit || ( "$s" == $'\x01'* && "${s//[\{\}\$,]/}" == *commit* ) ]] || return 1
   for (( k = k + 1; k < n; k++ )); do
     s="${w[k],,}"
     [[ "$s" =~ ^--am(e(nd?)?)?$ ]] && return 0
-    [[ "$s" == $'\x01'* && "${s//[\{\}\$]/}" == *--am* && ! "$prev" =~ $_AMEND_COMMIT_VAL ]] && return 0
+    [[ "$s" == $'\x01'* && "${s//[\{\}\$,]/}" == *--am* && ! "$prev" =~ $_AMEND_COMMIT_VAL ]] && return 0
     prev="$s"
   done
   return 1
@@ -341,25 +345,36 @@ amend_scan() { # orden → AMEND_R (ver _amend_scan). Más de AMEND_MAX_CHARS: 2
 }
 AMEND_J=-1; AMEND_R=0; AMEND_MAX_CHARS=16384; AMEND_CH=()
 AMEND_STEPS=0; AMEND_MAX_STEPS=$((2 * AMEND_MAX_CHARS)); AMEND_NEST=0; AMEND_MAX_NEST=32
-shopt -s nocasematch
-# Vía rápida: sin «commit» y «--am» en la orden ninguna palabra puede casar; el tokenizador es O(n²) en bash.
-# Se mira sin \ ' " $ { } porque git co\mmit --"am"end, -$'-amend' y -{-amend,} también son --amend.
-# Falla cerrado: si la vía rápida casó y la orden no se puede tokenizar (topes, comilla o sustitución
-# abierta), se bloquea sin regex. La coincidencia gruesa sobre la orden cruda la esquivaban --"amend" y
-# co\mmit, y su backtracking no tenía tope (4.ª revisión #1355).
-AMEND_FAST="${COMMAND//[\\\'\"\$\{\}]/}"
-[[ "$AMEND_FAST" == *commit*--am* ]] && amend_scan "$COMMAND"
-if (( AMEND_R == 1 || AMEND_R == 2 )); then
-  echo "BLOQUEADO: git commit --amend puede destruir commits anteriores. Crea un commit nuevo." >&2
-  exit 2
-fi
-shopt -u nocasematch
+_amend_reset_checks() { # $1 = orden con las continuaciones ya unidas → sale 2 si bloquea
+  local COMMAND="$1" AMEND_FAST
+  AMEND_R=0
+  shopt -s nocasematch
+  # Vía rápida: sin «commit» y «--am» en la orden ninguna palabra puede casar; el tokenizador es O(n²) en bash.
+  # Se mira sin \ ' " $ { } ni , porque git co\mmit --"am"end, -$'-amend' y -{-,}amend también son --amend.
+  # Falla cerrado: si la vía rápida casó y la orden no se puede tokenizar (topes, comilla o sustitución
+  # abierta), se bloquea sin regex. La coincidencia gruesa sobre la orden cruda la esquivaban --"amend" y
+  # co\mmit, y su backtracking no tenía tope (4.ª revisión #1355).
+  AMEND_FAST="${COMMAND//[\\\'\"\$\{\},]/}"
+  [[ "$AMEND_FAST" == *commit*--am* ]] && amend_scan "$COMMAND"
+  if (( AMEND_R == 1 || AMEND_R == 2 )); then
+    echo "BLOQUEADO: git commit --amend puede destruir commits anteriores. Crea un commit nuevo." >&2
+    exit 2
+  fi
+  shopt -u nocasematch
 
-# Bloquear reset --hard
-# FIX: Add anchoring for compound command separators
-if echo "$COMMAND" | grep -iE "${GIT_AT}reset[[:space:]]+--hard" > /dev/null; then
-  echo "BLOQUEADO: git reset --hard puede perder trabajo. Usa git stash o git revert." >&2
-  exit 2
+  # Bloquear reset --hard
+  # FIX: Add anchoring for compound command separators
+  if echo "$COMMAND" | grep -iE "${GIT_AT}reset[[:space:]]+--hard" > /dev/null; then
+    echo "BLOQUEADO: git reset --hard puede perder trabajo. Usa git stash o git revert." >&2
+    exit 2
+  fi
+}
+
+_push_checks "$COMMAND"
+_amend_reset_checks "$COMMAND"
+if [[ "$COMMAND_NOSP" != "$COMMAND" ]]; then
+  _push_checks "$COMMAND_NOSP"
+  _amend_reset_checks "$COMMAND_NOSP"
 fi
 
 exit 0

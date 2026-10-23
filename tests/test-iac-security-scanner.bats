@@ -454,3 +454,25 @@ gate_line() { printf '%s\n' "$output" | tail -1; }
   [ "$status" -eq 2 ]
   [[ "$output" != *"gate-result"* ]]
 }
+
+# Revisión #1355 (5.ª, P2): hallazgos en una parte y hueco en la otra colapsaban a unknown y los hallazgos
+# se perdían del resultado. Ahora gana findings (exit 1) con los huecos dentro, como prompt-security-scan.
+@test "gate-result: hallazgos en --path y trivy roto en --image ⇒ exit 1, findings con el hueco de la imagen" {
+  mv "$WORK/stub/trivy" "$WORK/stub/trivy.real"
+  printf '#!/bin/bash\n[[ "$1" == image ]] && { echo "FATAL: imagen" >&2; exit 1; }\nexec %s/stub/trivy.real "$@"\n' "$WORK" > "$WORK/stub/trivy"
+  chmod +x "$WORK/stub/trivy"
+  run bash "$SCAN" --path "$INFRA" --image myapp:latest
+  [ "$status" -eq 1 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"findings","gaps":[{"check":"trivy-image","reason":"unreadable"}]}' ]
+  [[ "$output" == *"Hay partes sin verificar: trivy-image"* ]]
+  run --separate-stderr bash "$SCAN" --path "$INFRA" --image myapp:latest --format json
+  [ "$status" -eq 1 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="findings" and d["gaps"]==[{"check":"trivy-image","reason":"unreadable"}] and len(d["findings"])==5, d'
+}
+
+@test "gate-result: sin python3 ⇒ unknown con hueco python3:missing_tool" {
+  mv "$WORK/sys/python3" "$WORK/python3.off"
+  run bash "$SCAN" --path "$INFRA"
+  [ "$status" -eq 2 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"unknown","gaps":[{"check":"python3","reason":"missing_tool"}]}' ]
+}

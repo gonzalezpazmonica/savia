@@ -35,8 +35,8 @@ const OPAQUE = "\x01";
 const SHELLS = /^(?:bash|sh|zsh|dash|ksh|ash|mksh|fish|eval|ssh|su|watch)$/;
 // $var, $1, $@…: the value is not visible, so the word is opaque (--amend$x, 4th review).
 const PARAM_START = /[A-Za-z0-9_@*#?$!-]/;
-// An opaque word is compared without { } $: -{-amend,} and co${x}mmit match too.
-const bare = (x: string) => x.replace(/[{}$]/g, "");
+// An opaque word is compared without { } $ ,: -{-,}amend and co${x}mmit match too.
+const bare = (x: string) => x.replace(/[{}$,]/g, "");
 const COMMIT_OPTS_WITH_VALUE = /^(?:-m|-f|-c|-t|--message|--file|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--template|--cleanup|--trailer)$/;
 
 function gitCommitAmend(w: string[], k: number): boolean {
@@ -286,9 +286,9 @@ function amendScanIn(s: string): number {
 const utf8 = new TextEncoder();
 
 function amendBlocked(command: string): boolean {
-  // Without \ ' " $ { } because git co\mmit --"am"end, -$'-amend' and -{-amend,} are --amend too.
+  // Without \ ' " $ { } , because git co\mmit --"am"end, -$'-amend' and -{-,}amend are --amend too.
   // indexOf instead of a regex: linear on commands of any length.
-  const fast = command.replace(/[\\'"${}]/g, "").toLowerCase();
+  const fast = command.replace(/[\\'"${},]/g, "").toLowerCase();
   const at = fast.indexOf("commit");
   if (at < 0 || fast.indexOf("--am", at + 6) < 0) return false;
   st.steps = 0; st.nest = 0;
@@ -335,7 +335,14 @@ export async function blockForcePush(input: ToolInput, output: ToolOutput): Prom
   // Same as the bash hook: join «\⏎» continuations, then match line by line like grep does
   // (\s and [^;&|] would otherwise cross a newline that separates two commands). Only an odd backslash
   // continues: in «\\⏎» the backslash is literal and the newline separates commands (4th review #1355).
-  const joined = command.replace(/\\\\|\\\n/g, (m) => (m === "\\\n" ? " " : m));
+  // «\⏎» vanishes without leaving a space (git comm\⏎it), so both joins are checked: with and without space.
+  const withSpace = command.replace(/\\\\|\\\n/g, (m) => (m === "\\\n" ? " " : m));
+  const noSpace = command.replace(/\\\\|\\\n/g, (m) => (m === "\\\n" ? "" : m));
+  checkJoined(withSpace);
+  if (noSpace !== withSpace) checkJoined(noSpace);
+}
+
+function checkJoined(joined: string): void {
   const lines = joined.split("\n");
   const anyLine = (r: RegExp) => lines.some((l) => r.test(l));
   const lease = anyLine(FORCE_WITH_LEASE);

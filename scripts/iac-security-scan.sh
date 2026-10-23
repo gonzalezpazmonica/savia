@@ -341,6 +341,7 @@ scan_target() {
 }
 
 OVERALL_EXIT=0
+HAS_FINDINGS=false
 GAPS=()
 NO_IAC=false
 TYPES=""
@@ -366,6 +367,7 @@ PYEOF
     NO_IAC=true
   fi
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
+  [[ $rc -eq 1 ]] && HAS_FINDINGS=true
   say "Resultado config: $([[ $NO_IAC == true ]] && echo NO_IAC || status_of "$rc")"
 fi
 
@@ -374,8 +376,13 @@ if [[ -n "$IMAGE_TARGET" ]]; then
   rc=0; scan_target image "$IMAGE_TARGET" "$IMAGE_JSON" || rc=$?
   [[ $rc -ge 2 ]] && GAPS+=("trivy-image:unreadable")
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
+  [[ $rc -eq 1 ]] && HAS_FINDINGS=true
   say "Resultado imagen: $(status_of "$rc")"
 fi
+
+# Revisión #1355 (5.ª): hallazgos y hueco a la vez. Como en prompt-security-scan, gana findings (exit 1) y los
+# huecos viajan en el resultado: antes un hueco de la otra parte borraba los hallazgos de la salida.
+if (( OVERALL_EXIT >= 2 )) && [[ $HAS_FINDINGS == true ]]; then OVERALL_EXIT=1; fi
 
 case $OVERALL_EXIT in
   0) if [[ $NO_IAC == true && -z "$IMAGE_TARGET" ]]; then
@@ -383,7 +390,8 @@ case $OVERALL_EXIT in
      else
        VERDICT="PASS — sin hallazgos en severidades bloqueantes ($SEVERITY)."
      fi ;;
-  1) VERDICT="FAIL — hallazgos en severidades bloqueantes ($SEVERITY). El pipeline CI debe bloquearse." ;;
+  1) VERDICT="FAIL — hallazgos en severidades bloqueantes ($SEVERITY). El pipeline CI debe bloquearse."
+     (( ${#GAPS[@]} )) && VERDICT+=" Hay partes sin verificar: ${GAPS[*]}." ;;
   *) VERDICT="ERROR — el escaneo no se completó; el resultado NO es válido y no se ha verificado nada." ;;
 esac
 
@@ -428,7 +436,7 @@ if [[ "$FORMAT" == "json" && $OVERALL_EXIT -lt 2 ]]; then
 fi
 case $OVERALL_EXIT in
   0) emit_result clean || exit 2 ;;
-  1) emit_result findings || exit 2 ;;
+  1) emit_result findings ${GAPS[@]+"${GAPS[@]}"} || exit 2 ;;
   # Red de seguridad: un exit ≥2 sin hueco registrado no puede salir sin resultado (unknown exige uno).
   *) (( ${#GAPS[@]} )) || GAPS+=("trivy:unreadable")
      emit_result unknown "${GAPS[@]}" ;;

@@ -319,3 +319,13 @@ BS_EVEN=(
   parity validate-bash-global validateBashGlobal 2 "chmod 777 /etc"
   parity validate-bash-global validateBashGlobal 0 "ls -la"
 }
+
+# Revisión #1355 (5.ª): «\⏎» desaparece sin dejar espacio, y una coma de llaves no esconde --amend.
+@test "paridad amend: continuación partida dentro de la palabra y llaves con coma ⇒ 2; coma entre comillas ⇒ 0" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 $'git comm\\\nit --amend' $'git pu\\\nsh --force origin x' \
+    $'git commit --am\\\nend' "git commit -{-,}amend" "git commit -{-,-}amend"
+  parity block-force-push blockForcePush 0 'git commit -m "a, b"' $'git commit -m x \\\n -a' \
+    $'git push --force-with-lease origin feat'
+}

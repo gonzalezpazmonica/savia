@@ -251,3 +251,21 @@ assert d['question'] == 'tendencia?', d
 assert d['profile']['rows'] == 6, d
 assert 'Do NOT recompute' in d['instruction'], d"
 }
+
+# Revisión #1355 (5.ª, P2): se fija lo que pasa con filas de otra anchura. El hook solo sustituye las líneas
+# del bloque tabular (recuento modal de campos); una fila irregular o suelta NO se sustituye y llega tal cual al
+# LLM, para no perder texto. Es el compromiso asumido: minimiza datos del bloque, no de las filas sueltas.
+@test "hook: filas de otra anchura no se pierden ni se perfilan; el bloque regular sí" {
+  run bash -c "printf 'Mira\nid,a,b\n1,2,3\n2,3,4\n3,4,5\n4,5,6\n5,6,7\n9,9\nsuelta,fila,rara,extra\n' | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "STATISTICAL PROFILE"
+  echo "$output" | grep -q "^9,9$"
+  echo "$output" | grep -q "^suelta,fila,rara,extra$"
+  if echo "$output" | grep -q "^3,4,5$"; then false; fi
+}
+
+@test "hook: una fila CSV suelta sin bloque no se transforma" {
+  run bash -c "printf 'Mira\nsolo,una,fila\nProsa\n' | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ "$output" == $'Mira\nsolo,una,fila\nProsa' ]
+}
