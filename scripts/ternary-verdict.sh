@@ -93,11 +93,9 @@ if [[ "$BANDA" != "PASA" && "$BANDA" != "ENDURECIDA" && "$BANDA" != "APROBAR" &&
 fi
 
 # Validate dimensiones JSON
-if [[ -n "$DIMENSIONES_JSON" ]]; then
-  if ! echo "$DIMENSIONES_JSON" | python3 -m json.tool >/dev/null 2>&1; then
-    echo "{\"error\":\"--dimensiones no es JSON válido\"}" >&2
-    exit 1
-  fi
+if ! echo "$DIMENSIONES_JSON" | python3 -m json.tool >/dev/null 2>&1; then
+  echo "{\"error\":\"--dimensiones no es JSON válido\"}" >&2
+  exit 1
 fi
 
 # Validate-only mode

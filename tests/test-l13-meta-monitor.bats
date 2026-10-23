@@ -249,3 +249,15 @@ adj() { bash "$MONITOR" --calibration-file "$CAL" --task t --confidence "$1" --d
   [ "$status" -eq 2 ]
   [[ ! -e "$CAL" ]]
 }
+
+@test "rango: evidence/divergence > 1, confidence > 100 y predicted > 100 → exit 2" {
+  run bash "$MONITOR" --task t --confidence 70 --divergence 0.2 --evidence 7
+  [ "$status" -eq 2 ]
+  run bash "$MONITOR" --task t --confidence 70 --divergence 5 --evidence 0.5
+  [ "$status" -eq 2 ]
+  run bash "$MONITOR" --task t --confidence 170 --divergence 0.2 --evidence 0.5
+  [ "$status" -eq 2 ]
+  run bash "$RECAL" --calibration-file "$CAL" --task t --predicted 150 --outcome success
+  [ "$status" -eq 2 ]
+  [[ ! -e "$CAL" ]]
+}

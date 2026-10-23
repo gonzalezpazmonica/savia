@@ -223,7 +223,6 @@ teardown() {
 @test "SE269-S2: owner con apóstrofo no rompe la emisión ni se ejecuta como código" {
   run bash "$SCRIPT" --banda RESERVAS --motivo m --owner "o'); print('PWNED'); ('"
   [ "$status" -eq 0 ]
-  [[ "$output" != *PWNED$'\n'* ]]
   run jq -e '.owner == "o'"'"'); print('"'"'PWNED'"'"'); ('"'"'"' <<< "$output"
   [ "$status" -eq 0 ]
 }
@@ -321,4 +320,11 @@ teardown() {
   [ "$status" -eq 0 ]
   run jq -e '.dimensiones[0].hallazgos[0] == "fuga de teléfono"' <<< "$output"
   [ "$status" -eq 0 ]
+}
+
+@test "SE269-S2: --dimensiones vacío falla con el error JSON del contrato (exit 1)" {
+  run bash "$SCRIPT" --banda PASA --dimensiones ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'--dimensiones no es JSON válido'* ]]
+  [[ "$output" != *Traceback* ]]
 }

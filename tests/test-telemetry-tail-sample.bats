@@ -160,7 +160,7 @@ ev_line() { printf '{"schema":"savia.event/1.0","ts":"2026-01-01T00:00:00Z","eve
   run bash "$SCRIPT" redact
   [ "$status" -eq 0 ]
   [ "$(wc -l < "$EV")" -eq 3 ]
-  run jq -e 'keys == ["event","schema","ts"]' "$EV"
+  run jq -e -s 'all(.[]; keys == ["event","schema","ts"])' "$EV"
   [ "$status" -eq 0 ]
   ! grep -q secreto "$EV"
 }

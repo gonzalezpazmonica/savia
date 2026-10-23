@@ -22,12 +22,12 @@ teardown() {
 mk_fixture() {
   FIX="$(mktemp -d)"
   mkdir -p "$FIX/tests/bats" "$FIX/scripts" "$FIX/docs"
-  cat > "$FIX/tests/bats/test-a.bats" <<'EOF'
-@test "a" { run bash "$REPO_ROOT/scripts/foo.sh"; run cat "$REPO_ROOT/scripts/foo.sh"; }
-EOF
-  cat > "$FIX/tests/bats/test-b.bats" <<'EOF'
-@test "b" { run bash "$REPO_ROOT/scripts/foo.sh"; run bash "$REPO_ROOT/scripts/bar.sh"; run cat "$SKILLS_DIR/docs/guide.md"; run cat "$REPO_ROOT/otro/ignorado.sh"; }
-EOF
+  # printf y no heredoc: bats 1.9 cuenta como test cualquier línea que empiece
+  # por @test, también dentro de un heredoc (plan 34, ejecutados 32).
+  printf '%s\n' '@test "a" { run bash "$REPO_ROOT/scripts/foo.sh"; run cat "$REPO_ROOT/scripts/foo.sh"; }' \
+    > "$FIX/tests/bats/test-a.bats"
+  printf '%s\n' '@test "b" { run bash "$REPO_ROOT/scripts/foo.sh"; run bash "$REPO_ROOT/scripts/bar.sh"; run cat "$SKILLS_DIR/docs/guide.md"; run cat "$REPO_ROOT/otro/ignorado.sh"; }' \
+    > "$FIX/tests/bats/test-b.bats"
   echo 'echo foo' > "$FIX/scripts/foo.sh"
   echo 'echo bar' > "$FIX/scripts/bar.sh"
   git -C "$FIX" init -q
@@ -330,4 +330,33 @@ EOF
   run in_fix bash "$SELECT_SCRIPT" --base HEAD~1
   [ "$status" -eq 1 ]
   [ "$output" = "FULL" ]
+}
+
+@test "SE-305: ningún heredoc de este fichero contiene líneas @test (plan de bats 1.9 = ejecutados)" {
+  run awk '/<<.?EOF.?$/ {in_h=1; next} /^EOF$/ {in_h=0} in_h && /^[[:space:]]*@test/ {print NR; bad=1} END {exit bad}' "$BATS_TEST_FILENAME"
+  [ "$status" -eq 0 ]
+}
+
+wild_fixture() {
+  mk_fixture
+  in_fix bash "$REPO_ROOT/scripts/ci-bats-deps.sh" --generate >/dev/null
+  jq '.mappings["scripts/fo*"]=["test-wild.bats"] | .mappings["docs/*"]=["test-docs.bats"]' \
+    "$FIX/tests/bats/.deps.json" > "$FIX/d.json" && mv "$FIX/d.json" "$FIX/tests/bats/.deps.json"
+}
+
+@test "SE-305: claves comodín de mappings (scripts/fo*, docs/*) seleccionan por prefijo" {
+  wild_fixture
+  echo x > "$FIX/scripts/foo-extra.sh"; echo y > "$FIX/docs/g.md"
+  git -C "$FIX" add -A; git -C "$FIX" commit -q -m wild
+  run in_fix env SAVIA_BATS_FULL_THRESHOLD_PCT=10000 bash "$REPO_ROOT/scripts/ci-select-bats.sh" --base HEAD~1
+  [[ "$output" == *test-wild.bats* ]]
+  [[ "$output" == *test-docs.bats* ]]
+}
+
+@test "SE-305: el comodín scripts/fo* no selecciona scripts/fa.sh" {
+  wild_fixture
+  echo x > "$FIX/scripts/fa.sh"
+  git -C "$FIX" add -A; git -C "$FIX" commit -q -m nowild
+  run in_fix env SAVIA_BATS_FULL_THRESHOLD_PCT=10000 bash "$REPO_ROOT/scripts/ci-select-bats.sh" --base HEAD~1
+  [[ "$output" != *test-wild.bats* ]]
 }

@@ -39,9 +39,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -z "$ADJUSTED" ]] && { echo "ERROR: --adjusted requerido" >&2; exit 2; }
-[[ "$ADJUSTED" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --adjusted numerico 0-100" >&2; exit 2; }
-[[ "$DIVERGENCE" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --divergence numerico 0-1" >&2; exit 2; }
-[[ "$CALIBRATION" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: --calibration numerico 0-1" >&2; exit 2; }
+[[ "$ADJUSTED" =~ ^([0-9]{1,2}([.][0-9]+)?|100([.]0+)?)$ ]] || { echo "ERROR: --adjusted numerico 0-100" >&2; exit 2; }
+[[ "$DIVERGENCE" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] || { echo "ERROR: --divergence numerico 0-1" >&2; exit 2; }
+[[ "$CALIBRATION" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] || { echo "ERROR: --calibration numerico 0-1" >&2; exit 2; }
 
 # Decisión de control (determinista, umbrales configurables)
 python3 - "$ADJUSTED" "$DIVERGENCE" "$CALIBRATION" "$REQUESTED" \

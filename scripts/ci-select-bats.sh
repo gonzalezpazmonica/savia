@@ -63,7 +63,7 @@ while IFS= read -r file; do
   [[ -z "$file" ]] && continue
 
   matched=$(python3 -c "
-import json, sys
+import fnmatch, json, sys
 deps = json.load(open('$DEPS_FILE'))
 f = sys.argv[1].strip()
 tests = set()
@@ -76,10 +76,8 @@ for d, dt in deps.get('dir_rules', {}).items():
         tests.update(dt)
 
 for pattern, pt in deps.get('mappings', {}).items():
-    if pattern.endswith('*'):
-        prefix = pattern[:-2]
-        if f.startswith(prefix):
-            tests.update(pt)
+    if '*' in pattern and fnmatch.fnmatchcase(f, pattern):
+        tests.update(pt)
 
 for t in sorted(tests):
     print(t)

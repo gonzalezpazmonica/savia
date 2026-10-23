@@ -179,3 +179,14 @@ act() { bash "$CONTROL" "$@" | jq -r '.action'; }
   [ "$status" -eq 2 ]
   [[ "$output" == *"usage:"* ]]
 }
+
+@test "rango: divergencia > 1, calibración > 1 o ajustada > 100 → exit 2" {
+  run bash "$CONTROL" --adjusted 80 --divergence 5 --dry-run
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted 80 --calibration 1.5 --dry-run
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted 150 --dry-run
+  [ "$status" -eq 2 ]
+  run bash "$CONTROL" --adjusted 100 --divergence 1 --calibration 0 --dry-run
+  [ "$status" -ne 2 ]
+}
