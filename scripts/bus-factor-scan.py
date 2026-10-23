@@ -113,7 +113,9 @@ def get_tracked_files(repo):
 def should_exclude(path):
     """Retorna True si el path debe excluirse segun los patrones configurados."""
     for pat in BF_EXCLUDE_PATTERNS:
-        if fnmatch.fnmatch(path, pat) or path.startswith(pat.rstrip("/")):
+        # Un patrón "dir/" excluye ese directorio, no cualquier ruta que
+        # empiece por las mismas letras (vendor_client.py, vendored/...).
+        if fnmatch.fnmatch(path, pat) or (pat.endswith("/") and path.startswith(pat)):
             return True
     for pat in BF_EXCLUDE_GENERATED_PATTERNS:
         basename = os.path.basename(path)
