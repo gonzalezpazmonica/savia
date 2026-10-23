@@ -95,9 +95,9 @@ Evidencia: `test_gates.py` incluye un replay del mismo corpus
 (`fixtures/replay_corpus.json`) contra los hooks reales por el núcleo Codex y por
 `shell-bridge.ts` de OpenCode (vía bun): decisiones idénticas. Cubre la mitad
 de comando de AC2; la edición real, el binario Codex en vivo y el despacho por
-el socket del runtime siguen pendientes. Con el settings actual,
-`Bash(git commit*)` tiene un handler `prompt` y por tanto se bloquea en ambos
-núcleos hasta que exista transporte de prompt (hueco conocido, AC6).
+el socket del runtime siguen pendientes. (Este párrafo decía que
+`Bash(git commit*)` se bloqueaba en ambos núcleos por su handler `prompt`: era
+falso en OpenCode, donde ese matcher nunca casaba; ver abajo.)
 
 ### Mitad de edición de AC2 (replay)
 
@@ -114,7 +114,31 @@ claves al vocabulario de Claude Code (conserva las originales) y descompone el
 parche por archivo con el mismo algoritmo que `gates.py`; la paridad del parser
 se prueba contra Python (`PatchParserParityTests`).
 
-Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime,
-transporte de handlers `prompt`, y las rutas protegidas de `gates.py`
-(`PROTECTED_GATE_PATH`), que en OpenCode solo cubre guard-pin con
-`SAVIA_GATES_PIN=1`.
+### Handlers `prompt` (AC6), matchers y rutas protegidas
+
+Ambos núcleos ejecutan ya los handlers `prompt` con el evaluador que declara quien
+arranca el CLI (`SAVIA_PROMPT_HOOK_CMD`, prompt renderizado por stdin, veredicto
+exacto `{"ok": bool, "reason"?: string}`). Sin evaluador, crash, timeout, prosa
+alrededor del JSON u `ok` no booleano bloquean; una llamada que el matcher no
+selecciona continúa. `test_prompt_transport.py` replica el mismo corpus
+(`fixtures/prompt_replay_corpus.json`, 10 casos) en Codex y en OpenCode con las
+mismas decisiones y motivos.
+
+Al preparar ese replay apareció un hueco mayor: savia-gates leía `Bash(git commit*)`
+como regex (un grupo) y no casaba nunca, así que `block-commit-to-main.sh`,
+`compliance-gate.sh`, `prompt-hook-commit.sh`, `pr-summary-gate.sh` y el handler
+`prompt` no corrían en OpenCode. Y el núcleo Python solo aceptaba una estrella final:
+`Bash(bash*memory-store*save*)` exigía estrellas literales y `memory-write-sanitize.sh`
+no corría en Codex. Ahora `Herramienta(orden)` es un glob literal en los dos, también
+dentro de alternativas con `|`; un test compara cada matcher de `settings.json`
+contra 12 llamadas en ambos núcleos (cero divergencias).
+
+`PROTECTED_GATE_PATH` se aplica también en OpenCode (`write`, `edit`, `apply_patch`),
+sin depender de `SAVIA_GATES_PIN`; la lista es la misma en los dos núcleos (test de
+paridad) y añade `.opencode/plugins` y `scripts/opencode-plugin`.
+
+Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime
+(requiere decisión de la operadora sobre revisión de política y confianza del
+daemon), escrituras a rutas protegidas desde `bash` en ambos núcleos, y la
+divergencia restante del matcher de OpenCode, que además prueba el payload
+serializado como candidato (Python solo lo hace sin nombre de herramienta).

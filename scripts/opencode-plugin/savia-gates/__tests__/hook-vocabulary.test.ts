@@ -33,12 +33,12 @@ in=$(cat)
 printf '%s' "$in" | jq -c '{hookSpecificOutput:{hookEventName:"PreToolUse",updatedInput:(.tool_input + {file_path:"/tmp/seguro.txt"})}}'
 `
 
-async function gatesWith(guard: string) {
+async function gatesWith(guard: string, matcher = "Edit|Write", extra: Record<string, unknown>[] = []) {
   const root = await mkdtemp(join(tmpdir(), "savia-vocab-test-"))
   roots.push(root)
   await mkdir(join(root, ".claude/hooks"), { recursive: true })
   await writeFile(join(root, ".claude/hooks/guard.sh"), guard, { mode: 0o755 })
-  const hooks = { PreToolUse: [{ matcher: "Edit|Write", hooks: [{ type: "command", command: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard.sh` }] }] }
+  const hooks = { PreToolUse: [{ matcher, hooks: [{ type: "command", command: `"$CLAUDE_PROJECT_DIR"/.claude/hooks/guard.sh` }, ...extra] }] }
   await writeFile(join(root, ".claude/settings.json"), JSON.stringify({ hooks }))
   process.env.SAVIA_AUDIT_DIR = join(root, ".audit-test")
   process.env.SAVIA_PLUGIN_DIR = join(root, ".manifest-test")
@@ -110,4 +110,36 @@ test("fromHookInput drops untouched aliases and maps changed ones back", () => {
 test("applyPatchOperations resolves paths against the session directory", () => {
   expect(applyPatchOperations("*** Begin Patch\n*** Delete File: ../b/c.txt\n*** End Patch", "/r/s"))
     .toEqual([["Write", "/r/b/c.txt", "delete", "", ""]])
+})
+
+// SE-392 AC6. Read as a regex, `Bash(git commit*)` was a group that never matched: block-commit-to-main and the
+// other commit gates did not run in OpenCode. Matcher parity with the Codex core: tests/dual-cli/test_prompt_transport.py.
+test("a command-scoped matcher selects the command in OpenCode", async () => {
+  const { before } = await gatesWith(`#!/usr/bin/env bash\necho COMMIT_GATE >&2; exit 2\n`, "Bash(git commit*)")
+  expect((await before("bash", { command: "git commit -m 'feat: x'" })).verdict).toContain("COMMIT_GATE")
+  expect((await before("bash", { command: "git status" })).verdict).toBe("PASS")
+})
+
+test("a prompt handler goes to the declared evaluator and every failure blocks", async () => {
+  const prompt = { type: "prompt", prompt: "Valida: $ARGUMENTS", timeout: 2 }
+  const { before } = await gatesWith(`#!/usr/bin/env bash\nexit 0\n`, "Bash(git commit*)", [prompt])
+  const commit = { command: "git commit -m 'feat: x'" }
+  delete process.env.SAVIA_PROMPT_HOOK_CMD
+  expect((await before("bash", commit)).verdict).toContain("PROMPT_HOOK_UNAVAILABLE")
+  expect((await before("bash", { command: "ls" })).verdict).toBe("PASS")
+  process.env.SAVIA_PROMPT_HOOK_CMD = `grep -q "git commit -m 'feat: x'" && echo '{"ok": true}'`
+  expect((await before("bash", commit)).verdict).toBe("PASS")
+  process.env.SAVIA_PROMPT_HOOK_CMD = `cat >/dev/null; echo '{"ok": false, "reason": "vago"}'`
+  expect((await before("bash", commit)).verdict).toContain("PROMPT_HOOK_BLOCK: vago")
+  process.env.SAVIA_PROMPT_HOOK_CMD = `cat >/dev/null; echo 'vale'`
+  expect((await before("bash", commit)).verdict).toContain("INVALID_HOOK_OUTPUT")
+})
+
+test("the gate files cannot be rewritten from OpenCode, also without SAVIA_GATES_PIN", async () => {
+  const { root, before } = await gatesWith(`#!/usr/bin/env bash\nexit 0\n`)
+  expect((await before("write", { filePath: join(root, ".claude/settings.json"), content: "{}" })).verdict).toContain("PROTECTED_GATE_PATH")
+  expect((await before("edit", { filePath: join(root, ".claude/hooks/guard.sh"), oldString: "exit 0", newString: "exit 0" })).verdict).toContain("PROTECTED_GATE_PATH")
+  const patch = "*** Begin Patch\n*** Add File: libre.txt\n+a\n*** Add File: scripts/opencode-plugin/x.ts\n+b\n*** End Patch\n"
+  expect((await before("apply_patch", { patchText: patch })).verdict).toContain("PROTECTED_GATE_PATH")
+  expect((await before("write", { filePath: join(root, "libre.txt"), content: "x" })).verdict).toBe("PASS")
 })

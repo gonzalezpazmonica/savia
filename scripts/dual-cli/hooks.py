@@ -13,19 +13,43 @@ class HookConfigurationError(ValueError):
     """A hook rule cannot be interpreted safely."""
 
 
-def _pattern(matcher: str) -> re.Pattern[str]:
+_SCOPED = re.compile(r"([^()|]+)\(([^()]*)\)")
+
+
+def _alternatives(matcher: str):
+    """Split on `|` outside parentheses: `Bash(a*)|Bash(b*)` -> two alternatives."""
+    parts, depth, start = [], 0, 0
+    for i, char in enumerate(matcher):
+        depth += (char == "(") - (char == ")")
+        if char == "|" and depth == 0:
+            parts.append(matcher[start:i])
+            start = i + 1
+    return parts + [matcher[start:]]
+
+
+def matcher_expression(matcher: str) -> str:
+    """The regex a matcher stands for. Mirrored by matcherExpression in savia-gates shell-bridge.ts.
+
+    `Tool(command)` is a command-scoped glob: literal text, every `*` a wildcard
+    (`Bash(bash*memory-store*save*)`). Any other alternative mixes regular
+    expressions (`.*`, `A|B`) and glob stars: regex stars are kept, globs expanded.
+    """
     if matcher == "*":
-        matcher = ".*"
-    elif re.fullmatch(r"[^()]+\([^()]*\*[^()]*\)", matcher):
-        tool, command = matcher.split("(", 1)
-        command = command[:-1]
-        matcher = re.escape(tool) + r"\(" + re.escape(command[:-1]) + r".*\)"
-    else:
-        # Existing policy mixes regular expressions (`.*`, `A|B`) and simple
-        # glob stars (`Bash(command*)`). Preserve regex stars and expand globs.
-        matcher = re.sub(r"(?<!\.)\*", ".*", matcher)
+        return ".*"
+    out = []
+    for part in _alternatives(matcher):
+        scoped = _SCOPED.fullmatch(part)
+        if scoped:
+            glob = ".*".join(re.escape(piece) for piece in scoped.group(2).split("*"))
+            out.append(re.escape(scoped.group(1)) + r"\(" + glob + r"\)")
+        else:
+            out.append(re.sub(r"(?<!\.)\*", ".*", part))
+    return out[0] if len(out) == 1 else "|".join(f"(?:{p})" for p in out)
+
+
+def _pattern(matcher: str) -> re.Pattern[str]:
     try:
-        return re.compile(matcher, re.IGNORECASE)
+        return re.compile(matcher_expression(matcher), re.IGNORECASE)
     except re.error as error:
         raise HookConfigurationError("INVALID_MATCHER") from error
 

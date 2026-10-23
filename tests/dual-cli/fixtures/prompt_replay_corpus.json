@@ -1,0 +1,12 @@
+[
+  {"id": "verdict-ok", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": true}'", "action": "allow", "reason": "HOOK_OK"},
+  {"id": "verdict-block", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": false, \"reason\": \"mensaje vago\"}'", "action": "deny", "reason": "PROMPT_HOOK_BLOCK: mensaje vago"},
+  {"id": "no-evaluator", "command": "git commit -m 'feat: x'", "evaluator": "", "action": "deny", "reason": "PROMPT_HOOK_UNAVAILABLE"},
+  {"id": "evaluator-crash", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; exit 3", "action": "deny", "reason": "PROMPT_HOOK_FAILURE"},
+  {"id": "prose-around-json", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo 'claro: {\"ok\": true}'", "action": "deny", "reason": "INVALID_HOOK_OUTPUT"},
+  {"id": "ok-not-boolean", "command": "git commit -m 'feat: x'", "evaluator": "cat >/dev/null; echo '{\"ok\": \"true\"}'", "action": "deny", "reason": "INVALID_HOOK_OUTPUT"},
+  {"id": "evaluator-timeout", "command": "git commit -m 'feat: x'", "evaluator": "sleep 30", "timeout": 1, "action": "deny", "reason": "HOOK_TIMEOUT"},
+  {"id": "arguments-rendered", "command": "git commit -m 'feat: x'", "evaluator": "if grep -q \"Valida: .*git commit -m 'feat: x'\"; then echo '{\"ok\": true}'; else echo '{\"ok\": false, \"reason\": \"sin argumentos\"}'; fi", "action": "allow", "reason": "HOOK_OK"},
+  {"id": "model-forwarded", "command": "git commit -m 'feat: x'", "model": "fast", "evaluator": "cat >/dev/null; if [ \"$SAVIA_PROMPT_HOOK_MODEL\" = fast ]; then echo '{\"ok\": true}'; else echo '{\"ok\": false}'; fi", "action": "allow", "reason": "HOOK_OK"},
+  {"id": "unrelated-op-continues", "command": "git status --short", "evaluator": "", "action": "allow", "reason": "HOOK_OK"}
+]

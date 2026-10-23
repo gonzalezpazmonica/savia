@@ -86,12 +86,16 @@ class GateCoreTests(unittest.TestCase):
         self.assertEqual(self.run_gate()["action"], "allow")
 
     def test_unexecutable_critical_handler_blocks(self):
-        for handler in ({"type": "http", "url": "http://127.0.0.1:1/gate"},
-                        {"type": "prompt", "prompt": "x"}):
-            self.configure(handler)
-            decision = self.run_gate()
-            self.assertEqual((decision["action"], decision["reason"]),
-                             ("deny", "UNSUPPORTED_CRITICAL_HOOK"))
+        self.configure({"type": "http", "url": "http://127.0.0.1:1/gate"})
+        decision = self.run_gate()
+        self.assertEqual((decision["action"], decision["reason"]), ("deny", "UNSUPPORTED_CRITICAL_HOOK"))
+
+    def test_prompt_handler_without_evaluator_blocks(self):
+        # AC6: the transport exists now, but with no evaluator declared the gate still fails closed.
+        os.environ.pop("SAVIA_PROMPT_HOOK_CMD", None)
+        self.configure({"type": "prompt", "prompt": "x"})
+        decision = self.run_gate()
+        self.assertEqual((decision["action"], decision["reason"]), ("deny", "PROMPT_HOOK_UNAVAILABLE"))
 
     def test_async_telemetry_is_skipped_only_outside_authority_events(self):
         self.configure({"type": "prompt", "prompt": "x", "async": True}, event="PostToolUse")
