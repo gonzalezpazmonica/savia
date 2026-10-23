@@ -298,8 +298,10 @@ class ReplayEquivalenceTests(unittest.TestCase):
     def test_same_corpus_same_blocks_in_codex_core_and_opencode_bridge(self):
         corpus = json.loads((ROOT / "tests/dual-cli/fixtures/replay_corpus.json").read_text())
         env = dict(os.environ, CLAUDE_PROJECT_DIR=str(ROOT))
+        # OpenCode names the shell tool `bash`; the bridge must still reach the `Bash` hooks.
+        native = [{"tool": c["tool"].lower(), "input": c["input"]} for c in corpus]
         ts = subprocess.run(["bun", str(ROOT / "tests/dual-cli/fixtures/ts_replay.ts")], env=env,
-                            input=json.dumps(corpus).encode(), capture_output=True, timeout=120)
+                            input=json.dumps(native).encode(), capture_output=True, timeout=120)
         self.assertEqual(ts.returncode, 0, ts.stderr.decode())
         opencode = json.loads(ts.stdout)
         codex = [codex_hook({"tool_name": c["tool"], "cwd": str(ROOT), "tool_input": c["input"]}).returncode == 2
