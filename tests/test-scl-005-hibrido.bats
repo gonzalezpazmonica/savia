@@ -182,7 +182,7 @@ assert len(s) == 160 and '\n' not in s, len(s)"
 @test "entrada que no es JSON → falla (exit ≠ 0), no inventa hits" {
   run bash -c "printf 'no json' | SCL_VENV_PYTHON=/nonexistent python3 '$HYBRID'"
   [ "$status" -ne 0 ]
-  ! echo "$output" | grep -q '"hits"'
+  if echo "$output" | grep -q '"hits"'; then false; fi
 }
 
 @test "recall --hybrid: nota con score 0 (sin términos comunes) no cuenta ni como sombra" {

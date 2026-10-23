@@ -38,10 +38,13 @@ done
 # Dependencia: orquestador (run-2 real)
 [[ -x "$ROOT/scripts/savia-orchestrator.sh" ]] || { echo "ERROR: falta savia-orchestrator.sh (SCL-011)" >&2; exit 3; }
 
-# Escapa \ y " para incrustar el goal en JSON sin romper el contrato.
+# Escapa \, " y los controles habituales para incrustar el goal en JSON.
 json_escape() {
   local v="${1//\\/\\\\}"
-  printf '%s' "${v//\"/\\\"}"
+  v="${v//\"/\\\"}"
+  v="${v//$'\n'/\\n}"
+  v="${v//$'\r'/\\r}"
+  printf '%s' "${v//$'\t'/\\t}"
 }
 GOAL_JSON="$(json_escape "$GOAL")"
 

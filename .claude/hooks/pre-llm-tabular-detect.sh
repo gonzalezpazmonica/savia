@@ -36,7 +36,23 @@ fi
 
 # Extract tabular portion and profile it. Only the tabular lines go to the
 # profiler: prose lines would be read as the CSV header and break profiling.
-TABULAR_PART=$(echo "$INPUT" | grep -E '^\s*\|.+\||^[^|]*,{1,}[^,]' 2>/dev/null || echo "")
+# CSV rows = lines with the modal comma count among the data rows (those with
+# a digit), so the header is kept and prose with a stray comma is not.
+split_tabular() { # $1 = keep (tabular lines) | drop (everything else)
+  echo "$INPUT" | awk -v mode="$1" '
+    { line[NR] = $0 }
+    /^[ \t]*\|.+\|/ { md[NR] = 1; next }
+    /^[^|]*,+[^,].*[0-9]/ { c = gsub(/,/, ","); cnt[c]++; if (cnt[c] > best) { best = cnt[c]; mode_c = c } }
+    END {
+      for (i = 1; i <= NR; i++) {
+        t = 0
+        if (md[i]) t = 1
+        else if (line[i] !~ /\|/ && line[i] ~ /,/) { c = gsub(/,/, ",", line[i]); if (best && c == mode_c) t = 1 }
+        if ((mode == "keep") == (t == 1)) print line[i]
+      }
+    }'
+}
+TABULAR_PART=$(split_tabular keep)
 if [[ -x "$SUMMARIZER" ]]; then
   PROFILE=$(echo "$TABULAR_PART" | "$SUMMARIZER" - 2>/dev/null || echo "")
 else
@@ -46,7 +62,7 @@ fi
 if [[ -n "$PROFILE" && "$PROFILE" != *'"error"'* && "$PROFILE" != *'"detected":false'* ]]; then
   # Replace raw tabular data with profile in the prompt
   # Keep non-tabular parts of the original prompt
-  NON_TABULAR=$(echo "$INPUT" | grep -vE '^\s*\|.+\||^[^|]*,{1,}[^,]' 2>/dev/null || echo "")
+  NON_TABULAR=$(split_tabular drop)
   
   cat <<OUTPUT
 $NON_TABULAR

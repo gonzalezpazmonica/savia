@@ -59,7 +59,7 @@ scrub() { env SAVIA_SCRUB_ENV=1 "$@"; }
 @test "run: solo sobrevive la allowlist; una variable ordinaria ajena también se elimina" {
   run env SAVIA_SCRUB_ENV=1 MY_ORDINARY_VAR=hola OTRA=1 bash "$SCRUB" run env
   [ "$status" -eq 0 ]
-  ! echo "$output" | grep -q "MY_ORDINARY_VAR\|^OTRA="
+  if echo "$output" | grep -q "MY_ORDINARY_VAR\|^OTRA="; then false; fi
   names=$(echo "$output" | cut -d= -f1 | sort | tr '\n' ' ')
   for k in HOME PATH SAVIA_SCRUB_ENV SHELL LANG TERM; do
     [[ " $names" == *" $k "* ]]
@@ -69,7 +69,7 @@ scrub() { env SAVIA_SCRUB_ENV=1 "$@"; }
 @test "run: PYTHONPATH, GH_TOKEN, API_KEY, DB_PASSWORD, GH_PAT y CLIENT_SECRET no llegan al hijo" {
   run env SAVIA_SCRUB_ENV=1 PYTHONPATH=/x GH_TOKEN=a API_KEY=b DB_PASSWORD=c GH_PAT=d CLIENT_SECRET=e bash "$SCRUB" run env
   [ "$status" -eq 0 ]
-  ! echo "$output" | grep -qE "^(PYTHONPATH|GH_TOKEN|API_KEY|DB_PASSWORD|GH_PAT|CLIENT_SECRET)="
+  if echo "$output" | grep -qE "^(PYTHONPATH|GH_TOKEN|API_KEY|DB_PASSWORD|GH_PAT|CLIENT_SECRET)="; then false; fi
 }
 
 @test "run: conserva CLAUDE_PROJECT_DIR y SAVIA_WORKSPACE_DIR y fuerza SAVIA_SCRUB_ENV=1" {
@@ -118,6 +118,13 @@ scrub() { env SAVIA_SCRUB_ENV=1 "$@"; }
   done
 }
 
+@test "check: PAT pegado (GHPAT, AZDOPAT) sigue marcándose" {
+  for v in GHPAT AZDOPAT; do
+    run env SAVIA_SCRUB_ENV=1 bash "$SCRUB" check "$v=x cmd"
+    [ "$status" -eq 2 ]
+  done
+}
+
 @test "check: PATH, PYTHONPATH y MYPATH no son credenciales (sin falsos positivos)" {
   run env SAVIA_SCRUB_ENV=1 bash "$SCRUB" check 'PATH=$PATH:/x PYTHONPATH=. MYPATH=1 ls'
   [ "$status" -eq 0 ]
@@ -140,12 +147,12 @@ scrub() { env SAVIA_SCRUB_ENV=1 "$@"; }
   run env SAVIA_SCRUB_ENV=1 GH_TOKEN=x PYTHONPATH=/y bash "$SCRUB" --list-dropped
   [ "$status" -eq 0 ]
   echo "$output" | grep -qx "GH_TOKEN"
-  ! echo "$output" | grep -qx "PATH"
+  if echo "$output" | grep -qx "PATH"; then false; fi
 }
 
 @test "--list-dropped: PYTHONPATH no cuenta como credencial" {
   run env SAVIA_SCRUB_ENV=1 PYTHONPATH=/y bash "$SCRUB" --list-dropped
-  ! echo "$output" | grep -qx "PYTHONPATH"
+  if echo "$output" | grep -qx "PYTHONPATH"; then false; fi
 }
 
 @test "--list-dropped: sin variables sensibles la salida está vacía (vacío)" {

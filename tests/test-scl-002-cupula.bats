@@ -225,7 +225,7 @@ mk_prop() {
   bash "$PERSIST" --file "$PF" >/dev/null
   [ "$id1" != "$id2" ]
   [ -f "$TMPD/vault/learning/$id1.md" ] && [ -f "$TMPD/vault/learning/$id2.md" ]
-  ! grep -q "$id2" "$TMPD/vault/learning/$id1.md"
+  if grep -q "$id2" "$TMPD/vault/learning/$id1.md"; then false; fi
 }
 
 @test "persist: --commit en vault que no es repo git avisa pero persiste (exit 0)" {

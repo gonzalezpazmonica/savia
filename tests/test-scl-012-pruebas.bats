@@ -48,7 +48,7 @@ teardown() {
   run bash "$SCRIPT" --pruebas P1
   [[ "$status" -eq 0 ]]
   echo "$output" | grep -q "\[P1\]"
-  ! echo "$output" | grep -q "\[P3\]"
+  if echo "$output" | grep -q "\[P3\]"; then false; fi
 }
 
 @test "P4/P5 declarados dry-run sin requerir infra federada" {
@@ -134,7 +134,7 @@ mk_tree() {
   run bash "$TREE/scripts/sagi-pruebas.sh" --dry-run
   [[ "$status" -eq 0 ]]
   echo "$output" | grep -q "INCONCLUSO (0/3"
-  ! echo "$output" | grep -q "→ PASS"
+  if echo "$output" | grep -q "→ PASS"; then false; fi
   echo "$output" | grep -q "\[P1\] dry-run"
 }
 
@@ -180,7 +180,7 @@ assert d['dry_run'] is True, d"
   run bash "$TREE/scripts/sagi-pruebas.sh"
   [[ "$status" -eq 0 ]]
   echo "$output" | grep -q "\[P3\] .* → FAIL"
-  ! echo "$output" | grep -qi "syntax error\|unbound"
+  if echo "$output" | grep -qi "syntax error\|unbound"; then false; fi
 }
 
 @test "el script declara set -uo pipefail" {

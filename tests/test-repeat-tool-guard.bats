@@ -111,7 +111,7 @@ rep() { # rep N session tool args [extra...] → N llamadas; deja stderr de la �
 @test "la 8ª llamada idéntica emite el recordatorio detallado con consecutive_calls: 8" {
   rep 8 u2 Read '{"f":1}'
   grep -q "consecutive_calls: 8" "$TMPD/last"
-  ! grep -q "repeating the exact same tool call" "$TMPD/last"
+  if grep -q "repeating the exact same tool call" "$TMPD/last"; then false; fi
 }
 
 @test "--thresholds inválidos (menor que 2, duplicados, no numéricos) caen a los por defecto" {

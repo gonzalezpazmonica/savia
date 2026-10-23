@@ -58,6 +58,7 @@ mk_path() { # mk_path "<salida nvidia-smi o vacío>" <con_nvcc 0|1>
   FAKE="$BATS_TEST_TMPDIR/bin"; mkdir -p "$FAKE"
   local t
   for t in bash env awk free df head tail python3 bc cut cat sed grep dirname mkdir uname; do
+    [[ "$t" == bc && "${NO_BC:-0}" == "1" ]] && continue
     local p; p=$(command -v "$t") && ln -sf "$p" "$FAKE/$t"
   done
   if [[ -n "$1" ]]; then
@@ -86,9 +87,19 @@ verdict() { echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin)
   echo "$output" | grep -q "cc 7.5"
 }
 
-@test "la compuerta cc no depende del locale (coma decimal)" {
-  mk_path "NVIDIA GeForce RTX 2070, 7.5, 8192 MiB, 550.1" 1
-  run probe LC_ALL=es_ES.UTF-8 LANG=es_ES.UTF-8 bash scripts/freetoken-probe.sh --json
+@test "la compuerta cc no depende de bc: sin bc una RTX 30 con nvcc sigue siendo viable" {
+  NO_BC=1 mk_path "NVIDIA GeForce RTX 3090, 8.6, 24576 MiB, 550.1" 1
+  [[ ! -e "$FAKE/bc" ]]
+  run probe bash scripts/freetoken-probe.sh --json
+  [[ "$(verdict)" == "viable" ]]
+}
+
+@test "la compuerta cc acepta coma decimal (8,6 → viable; 7,5 → inviable)" {
+  mk_path "NVIDIA GeForce RTX 3090, 8,6, 24576 MiB, 550.1" 1
+  run probe bash scripts/freetoken-probe.sh --json
+  [[ "$(verdict)" == "viable" ]]
+  mk_path "NVIDIA GeForce RTX 2070, 7,5, 8192 MiB, 550.1" 1
+  run probe bash scripts/freetoken-probe.sh --json
   [[ "$(verdict)" == "inviable" ]]
 }
 

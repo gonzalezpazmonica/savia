@@ -95,7 +95,7 @@ assert d['rows'] == 10 and d['min'] == 50, d"
 @test "predict: justo 50 filas supera la compuerta de tamaño (frontera)" {
   head -51 "$FIX/tiny.csv" > "$FIX/edge.csv"
   run python3 "$SCRIPT" predict --target t "$FIX/edge.csv"
-  ! echo "$output" | grep -q "too small"
+  if echo "$output" | grep -q "too small"; then false; fi
 }
 
 @test "predict: 49 filas siguen siendo demasiado pocas (frontera)" {
@@ -107,7 +107,7 @@ assert d['rows'] == 10 and d['min'] == 50, d"
 
 @test "predict: la validación de tamaño y objetivo ocurre antes de importar sklearn" {
   run python3 "$SCRIPT" predict --target nope "$FIX/tiny.csv"
-  ! echo "$output" | grep -q "sklearn"
+  if echo "$output" | grep -q "sklearn"; then false; fi
 }
 
 @test "predict: stdin vacío → no data found" {

@@ -152,11 +152,29 @@ d = json.loads(sys.stdin.read())
 assert d['goal'] == 'decir \"hola\" y \\\\ barra', d"
 }
 
+@test "goal con salto de línea y tabulador sigue emitiendo JSON válido" {
+  run bash "$SCRIPT" --goal $'linea1\nlinea2\tcol'
+  [[ "$status" -eq 0 ]]
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['goal'] == 'linea1\nlinea2\tcol', d"
+}
+
+@test "dry-run con comillas dobles emite JSON válido" {
+  run bash "$SCRIPT" --goal 'di "hola"' --dry-run
+  [[ "$status" -eq 0 ]]
+  json_line | python3 -c "
+import json, sys
+d = json.loads(sys.stdin.read())
+assert d['goal'] == 'di \"hola\"', d"
+}
+
 @test "dry-run: no consume pasos, su JSON es válido y marca dry_run" {
   run bash "$SCRIPT" --goal "plan" --dry-run --max-steps 3
   [[ "$status" -eq 0 ]]
   echo "$output" | grep -q "max_steps: 3"
-  ! echo "$output" | grep -q "steps_used"
+  if echo "$output" | grep -q "steps_used"; then false; fi
   json_line | python3 -c "
 import json, sys
 d = json.loads(sys.stdin.read())

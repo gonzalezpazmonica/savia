@@ -80,10 +80,10 @@ if [[ -z "$GPU_INFO" ]]; then
 fi
 # Soporte: cc declara RTX 30/40/50 (cc>=8.0). RTX 20 (cc 7.5) NO está soportada.
 CC=$(echo "$GPU_INFO" | awk -F', ' '{print $2}')
-# Aritmética entera (cc*10): con awk+bc, un locale con coma decimal ("7,5") rompía
-# bc y la compuerta cc>=8.0 dejaba pasar GPUs no soportadas.
+# Aritmética entera (cc*10), sin awk ni bc: antes, sin bc instalado (o con coma
+# decimal) la comparación fallaba y toda GPU salía inviable. Acepta "8.6" y "8,6".
 CC_INT=0
-if [[ "$CC" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+if [[ "$CC" =~ ^([0-9]+)[.,]([0-9]+)$ ]]; then
   CC_INT=$(( 10#${BASH_REMATCH[1]} * 10 + 10#${BASH_REMATCH[2]} ))
 fi
 if (( CC_INT < 80 )); then

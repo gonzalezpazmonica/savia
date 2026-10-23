@@ -60,7 +60,7 @@ EOF
   make_lp LP-I2 INFERRED criterio "mismo principio" ev-shared
   run bash "$SCRIPT" --vault "$FIXDIR" --detect
   [[ "$status" -eq 0 ]]
-  ! echo "$output" | grep -q "PAIR"
+  if echo "$output" | grep -q "PAIR"; then false; fi
 }
 
 @test "AC-03: human_authored vs INFERRED → auto-resolve" {
@@ -173,7 +173,7 @@ for k in ['ts','id_a','id_b','bucket','proposal']:
   make_lp LP-H2 human_authored criterio "otra cosa sin relación alguna aquí" ev-h2
   run bash "$SCRIPT" --vault "$FIXDIR" --classify LP-H1 LP-H2
   [[ "$status" -eq 0 ]]
-  ! echo "$output" | grep -q 'auto-resolve'
+  if echo "$output" | grep -q 'auto-resolve'; then false; fi
   echo "$output" | grep -q '"bucket":"conflict-doc"'
 }
 

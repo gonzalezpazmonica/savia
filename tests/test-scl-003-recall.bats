@@ -102,7 +102,7 @@ PY
   bash "$RECALL" --query "$secret" --mode shadow --json >/dev/null
   hash=$(printf '%s' "$secret" | sha256sum | cut -d' ' -f1)
   grep -q "$hash" "$TMPD/recall.jsonl"
-  ! grep -q "$secret" "$TMPD/recall.jsonl"
+  if grep -q "$secret" "$TMPD/recall.jsonl"; then false; fi
 }
 
 # --- S03c: contrato de CLI, log y filtros del hook (SCL-003) ---

@@ -109,7 +109,7 @@ assert d == {'detected': False, 'reason': 'no tabular data found'}, d"
   printf '| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |\n' > "$BATS_TEST_TMPDIR/d.md"
   run bash "$SUMMARIZER" "$BATS_TEST_TMPDIR/d.md"
   [ "$status" -eq 0 ]
-  ! echo "$output" | grep -q '"detected":false'
+  if echo "$output" | grep -q '"detected":false'; then false; fi
 }
 
 @test "summarize: fichero inexistente → no tabular (no falla)" {
@@ -163,7 +163,7 @@ assert d['verdict'] == 'OK' and d['profiler_used'] is False, d"
   { csv_block; echo "ran tabular-profile.py"; } > "$BATS_TEST_TMPDIR/t.log"
   run bash "$AUDITOR" "$BATS_TEST_TMPDIR/t.log"
   [ "$status" -eq 0 ]
-  ! grep -q BYPASS "$SAVIA_AUDIT_LOG"
+  if grep -q BYPASS "$SAVIA_AUDIT_LOG"; then false; fi
   grep -q '"profiler_used":true' "$SAVIA_AUDIT_LOG"
 }
 
@@ -187,20 +187,29 @@ assert d['verdict'] == 'OK' and d['profiler_used'] is False, d"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Analiza esto por favor"
   echo "$output" | grep -q "STATISTICAL PROFILE"
-  ! echo "$output" | grep -q "^3,28,5"
+  if echo "$output" | grep -q "^3,28,5"; then false; fi
+}
+
+@test "hook: prosa con comas antes del CSV no se toma por cabecera ni se pierde" {
+  run bash -c "{ echo 'Hola, analiza esto'; printf 'sprint,sp,bugs\n1,30,2\n2,34,1\n3,28,5\n4,40,0\n5,36,3\n'; } | bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Hola, analiza esto"
+  echo "$output" | grep -q "STATISTICAL PROFILE"
+  echo "$output" | grep -q '"columns": 3'
+  echo "$output" | grep -q '"name": "sprint"'
 }
 
 @test "hook: 4 líneas tabulares (bajo el umbral) no se transforman" {
   run bash -c "printf 'a,b 1\nc,d 2\ne,f 3\ng,h 4\n' | bash '$HOOK'"
   [ "$status" -eq 0 ]
-  ! echo "$output" | grep -q "STATISTICAL PROFILE"
+  if echo "$output" | grep -q "STATISTICAL PROFILE"; then false; fi
   echo "$output" | grep -q "^a,b 1"
 }
 
 @test "hook: referencia a .xlsx inexistente no dispara perfil" {
   run bash -c "echo 'mira ventas-que-no-existe.xlsx' | bash '$HOOK'"
   [ "$status" -eq 0 ]
-  ! echo "$output" | grep -q "STATISTICAL PROFILE"
+  if echo "$output" | grep -q "STATISTICAL PROFILE"; then false; fi
 }
 
 @test "mcp-tool: sin --question → error JSON y exit 2" {

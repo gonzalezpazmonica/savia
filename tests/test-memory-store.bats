@@ -193,7 +193,7 @@ field() { # field N CAMPO → valor del campo en la línea N del store
 @test "privacidad: <private>…</private> se sustituye por [REDACTED] antes de guardar" {
   sv --type decision --title "Priv" --content "público <private>secreto-123</private> fin" >/dev/null
   grep -q "REDACTED" "$(store)"
-  ! grep -q "secreto-123" "$(store)"
+  if grep -q "secreto-123" "$(store)"; then false; fi
 }
 
 @test "contenido: se trunca a 2000 caracteres (borde de tamaño)" {
@@ -232,7 +232,7 @@ field() { # field N CAMPO → valor del campo en la línea N del store
   sv --type decision --title "T" --topic decision/igual --content "mismo" >/dev/null
   sv --type decision --title "T" --topic decision/igual --content "mismo" >/dev/null
   [ "$(field 1 rev)" = "2" ]
-  ! grep -q '"supersedes"' "$(store)"
+  if grep -q '"supersedes"' "$(store)"; then false; fi
 }
 
 @test "dedup: mismo contenido en topics distintos dentro de 15 min se omite" {
@@ -293,6 +293,15 @@ PY
   [ "$(field 2 supersedes_key)" = "decision/vieja" ]
 }
 
+@test "supersedes-key: '|' y '&' en la clave se tratan como literales" {
+  sv --type decision --title "A" --topic 'decision/a|b' --content "x" >/dev/null
+  sv --type decision --title "B" --topic 'decision/a' --content "y" >/dev/null
+  sv --type decision --title "C" --topic 'decision/c&a' --content "z" --supersedes 'decision/a|b' >/dev/null
+  # solo la entrada 1 (clave con '|') queda reemplazada; la 2 ('decision/a') no
+  [ "$(field 1 superseded_by)" = 'decision/c&a' ]
+  [ "$(field 2 superseded_by)" = "None" ]
+}
+
 @test "suggest-topic: slug en minúsculas, sin símbolos y recortado a 40 caracteres" {
   run bash "$SCRIPT" suggest-topic decision "Usar Cache!! para API/v2 con un título larguísimo que excede cuarenta caracteres"
   [ "$status" -eq 0 ]
@@ -347,7 +356,7 @@ PY
   run bash "$SCRIPT" consolidate
   [ "$status" -eq 0 ]
   [ "$(wc -l < "$(store)")" -eq 2 ]
-  ! grep -q '"origin":"untrusted"\|"origin":"system"' "$(store)"
+  if grep -q '"origin":"untrusted"\|"origin":"system"' "$(store)"; then false; fi
 }
 
 @test "timeline: ventana alrededor del ancla marca la entrada con ▶" {
@@ -360,7 +369,7 @@ PY
   [ "${#lines[@]}" -eq 3 ]
   echo "${lines[1]}" | grep -q "^▶ 2026-01-03T10:00  \[decision\] E3"
   echo "$output" | grep -q "E2"
-  ! echo "$output" | grep -q "E1\|E5"
+  if echo "$output" | grep -q "E1\|E5"; then false; fi
 }
 
 @test "timeline: errores — ancla inexistente (1), sin ancla o ventana inválida (2), store vacío (1)" {
@@ -385,7 +394,7 @@ PY
   [ "$(grep -c '^- ' "$idx")" -eq 2 ]
   grep -q '^- decision: Otro \[decision/dos\] · src:agent$' "$idx"
   grep -q '^- decision: Cambiado \[decision/uno\]' "$idx"
-  ! grep -q "Primero" "$idx"
+  if grep -q "Primero" "$idx"; then false; fi
   # lo más nuevo arriba
   [ "$(grep -n '^- ' "$idx" | head -1 | cut -d: -f2-)" = "- decision: Otro [decision/dos] · src:agent" ]
 }
@@ -397,7 +406,7 @@ PY
   for i in 1 2 3 4 5; do sv --type decision --title "N$i" --topic "decision/n$i" --content "c$i" >/dev/null; done
   [ "$(grep -c '^- ' "$idx")" -eq 3 ]
   grep -q "N5" "$idx"; grep -q "N3" "$idx"
-  ! grep -q "N1" "$idx"
+  if grep -q "N1" "$idx"; then false; fi
 }
 
 @test "índice: sin fichero de índice la grabación sigue funcionando (exit 0)" {
@@ -412,7 +421,7 @@ PY
   sv --type entity --title "Bob" --content "qa" --concepts "persona" --project beta >/dev/null
   run bash "$SCRIPT" entity list --project alfa
   echo "$output" | grep -q "Alice (persona) — proyecto: alfa"
-  ! echo "$output" | grep -q "Bob"
+  if echo "$output" | grep -q "Bob"; then false; fi
   run bash "$SCRIPT" entity find bob
   echo "$output" | grep -q "^Bob — "
   run bash "$SCRIPT" entity find
