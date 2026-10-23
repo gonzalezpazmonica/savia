@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=9916b27a1ab77d81804f8432d17c08393a550d656a51971530f517b272343168
-timestamp=2026-10-23T21:30:22Z
+diff_hash=9830d7a5a0074d6c64a1a763b083875f2eb984524b9e698f92b51e03d8754390
+timestamp=2026-10-23T22:08:00Z
 branch=agent/arq-agentica-20261023
-head_commit=820198fe
-signature=2e7c2e9565c6e96421b0c0cfe261d30be0b7cf0da6beab1c5aff21afb5a0349b
+head_commit=461f7c8ec
+signature=5f67bac140160c7fb46afa52cb3ad1d70e9fc6b06e6320dda67f93d5199416c5
