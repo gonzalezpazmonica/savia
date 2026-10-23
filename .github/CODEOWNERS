@@ -38,3 +38,6 @@ projects/sala-reservas/                     @gonzalezpazmonica
 # Documentation
 docs/                                       @gonzalezpazmonica
 README.md                                   @gonzalezpazmonica
+
+# Linea base de calidad de tests (SE-456): subirla exige revision explicita
+.ci-baseline/                               @gonzalezpazmonica

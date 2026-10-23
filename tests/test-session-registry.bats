@@ -227,3 +227,178 @@ print(json.dumps(d))" "$ts")
   # nido field should be empty string, not missing
   [[ "$output" == *'"nido":""'* ]]
 }
+
+# ── Comportamiento discriminante (S03 calidad) ───────────────────────────────
+
+# Entrada JSONL con heartbeat hace $3 segundos y estado $4 (default active).
+mk_entry() {
+  local ts; ts=$(date -u -d "$3 seconds ago" +"%Y-%m-%dT%H:%M:%SZ")
+  jq -cn --arg sid "$1" --arg br "$2" --arg ts "$ts" --arg st "${4:-active}" \
+    '{session_id:$sid,pid:"1",nido:"n",branch:$br,task:"t",worktree:"",started_at:$ts,heartbeat_at:$ts,status:$st}' \
+    >> "$SAVIA_DIR/active-sessions.jsonl"
+}
+
+# Campo de la última entrada de una sesión.
+field() { grep "\"session_id\":\"$1\"" "$SAVIA_DIR/active-sessions.jsonl" | tail -1 | jq -r ".$2"; }
+
+@test "usa modo estricto de bash (set -uo pipefail)" {
+  grep -q '^set -uo pipefail' "$REGISTRY"
+}
+
+@test "register guarda todos los campos y estado active con heartbeat igual a started_at" {
+  run bash "$REGISTRY" register --session s1 --nido nd --branch br --task "mi tarea" --worktree /tmp/wt
+  [ "$status" -eq 0 ]
+  [ "$(field s1 nido)" = "nd" ]
+  [ "$(field s1 branch)" = "br" ]
+  [ "$(field s1 task)" = "mi tarea" ]
+  [ "$(field s1 worktree)" = "/tmp/wt" ]
+  [ "$(field s1 status)" = "active" ]
+  [ "$(field s1 heartbeat_at)" = "$(field s1 started_at)" ]
+  [[ "$(field s1 started_at)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$ ]]
+  [ "$(field s1 focal_state_path)" = "$TEST_HOME/.savia/focal-state/nd.json" ]
+}
+
+@test "register without --session fails with 1 and creates no record" {
+  run bash "$REGISTRY" register --nido n --branch b
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--session"* ]]
+  [[ ! -s "$SAVIA_DIR/active-sessions.jsonl" ]]
+}
+
+@test "register idempotente refresca el heartbeat de la entrada existente en vez de duplicarla" {
+  mk_entry sid-x br 300
+  before="$(field sid-x heartbeat_at)"
+  run bash "$REGISTRY" register --session sid-x --nido n --branch br --task t
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$SAVIA_DIR/active-sessions.jsonl")" -eq 1 ]
+  [ "$(field sid-x heartbeat_at)" != "$before" ]
+}
+
+@test "register tras release crea una entrada activa nueva (la idempotencia solo aplica a active)" {
+  bash "$REGISTRY" register --session s2 --nido n --branch b --task t
+  bash "$REGISTRY" release --session s2
+  bash "$REGISTRY" register --session s2 --nido n --branch b --task t
+  [ "$(grep -c '"session_id":"s2"' "$SAVIA_DIR/active-sessions.jsonl")" -eq 2 ]
+  [ "$(field s2 status)" = "active" ]
+}
+
+@test "list with nonexistent file or all stale (empty result) reports No active sessions" {
+  run bash "$REGISTRY" list
+  [ "$status" -eq 0 ]
+  [ "$output" = "No active sessions." ]
+  mk_entry old b 900
+  run bash "$REGISTRY" list
+  [[ "$output" == *"No active sessions."* ]]
+}
+
+@test "list boundary at 600 s: 590 s stays active and 610 s does not" {
+  mk_entry recent b1 590
+  mk_entry expired b2 610
+  run bash "$REGISTRY" list
+  [[ "$output" == *"recent"* ]]
+  [[ "$output" != *"expired"* ]]
+}
+
+@test "list imprime cabecera y trunca session_id a 36 y task a 50 caracteres" {
+  long_sid="$(printf 'a%.0s' $(seq 1 50))"
+  long_task="$(printf 'b%.0s' $(seq 1 80))"
+  bash "$REGISTRY" register --session "$long_sid" --nido n --branch b --task "$long_task"
+  run bash "$REGISTRY" list
+  [[ "${lines[0]}" == SESSION_ID* ]]
+  [[ "$output" == *"$(printf 'a%.0s' $(seq 1 36)) "* ]]
+  [[ "$output" != *"$(printf 'a%.0s' $(seq 1 37))"* ]]
+  [[ "$output" == *"$(printf 'b%.0s' $(seq 1 50))" ]] || [[ "$output" == *"$(printf 'b%.0s' $(seq 1 50))"$'\n'* ]]
+  [[ "$output" != *"$(printf 'b%.0s' $(seq 1 51))"* ]]
+}
+
+@test "claim: una sesión stale no bloquea la rama (610 s) pero una de 590 s sí" {
+  mk_entry dueña rama 610
+  run bash "$REGISTRY" claim --branch rama --session otra
+  [ "$status" -eq 0 ]
+  mk_entry viva rama 590
+  run bash "$REGISTRY" claim --branch rama --session otra
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"claimed by session 'viva'"* ]]
+}
+
+@test "claim: una sesión released no bloquea la rama" {
+  mk_entry vieja rama 10 released
+  run bash "$REGISTRY" claim --branch rama --session otra
+  [ "$status" -eq 0 ]
+}
+
+@test "claim solo bloquea la rama exacta, no otras" {
+  mk_entry viva rama-a 10
+  run bash "$REGISTRY" claim --branch rama-b --session otra
+  [ "$status" -eq 0 ]
+}
+
+@test "claim with missing --branch or --session fails with 1" {
+  run bash "$REGISTRY" claim --branch x
+  [ "$status" -eq 1 ]
+  run bash "$REGISTRY" claim --session x
+  [ "$status" -eq 1 ]
+}
+
+@test "release cambia solo la sesión indicada y refresca su heartbeat" {
+  mk_entry uno b1 300
+  mk_entry dos b2 300
+  before_dos="$(field dos heartbeat_at)"
+  run bash "$REGISTRY" release --session uno
+  [ "$status" -eq 0 ]
+  [ "$(field uno status)" = "released" ]
+  [ "$(field uno heartbeat_at)" != "$(field dos heartbeat_at)" ]
+  [ "$(field dos status)" = "active" ]
+  [ "$(field dos heartbeat_at)" = "$before_dos" ]
+}
+
+@test "release of a nonexistent session leaves the file intact" {
+  mk_entry uno b1 10
+  before="$(cksum < "$SAVIA_DIR/active-sessions.jsonl")"
+  run bash "$REGISTRY" release --session no-existe
+  [ "$status" -eq 0 ]
+  [ "$(cksum < "$SAVIA_DIR/active-sessions.jsonl")" = "$before" ]
+}
+
+@test "release or heartbeat with missing --session fail with 1" {
+  run bash "$REGISTRY" release
+  [ "$status" -eq 1 ]
+  run bash "$REGISTRY" heartbeat
+  [ "$status" -eq 1 ]
+}
+
+@test "heartbeat refresca solo la sesión indicada y no cambia su estado" {
+  mk_entry uno b1 400
+  mk_entry dos b2 400
+  before_dos="$(field dos heartbeat_at)"
+  run bash "$REGISTRY" heartbeat --session uno
+  [ "$status" -eq 0 ]
+  [ "$(field uno heartbeat_at)" != "$before_dos" ]
+  [ "$(field dos heartbeat_at)" = "$before_dos" ]
+  [ "$(field uno status)" = "active" ]
+}
+
+@test "gc elimina released y stale pero conserva las activas recientes intactas" {
+  mk_entry viva b1 10
+  mk_entry vieja b2 900
+  mk_entry liberada b3 10 released
+  before="$(grep '"session_id":"viva"' "$SAVIA_DIR/active-sessions.jsonl")"
+  run bash "$REGISTRY" gc
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$SAVIA_DIR/active-sessions.jsonl")" -eq 1 ]
+  [ "$(cat "$SAVIA_DIR/active-sessions.jsonl")" = "$before" ]
+}
+
+@test "gc with nonexistent sessions file is a no-op with exit 0" {
+  run bash "$REGISTRY" gc
+  [ "$status" -eq 0 ]
+  [[ ! -e "$SAVIA_DIR/active-sessions.jsonl" ]]
+}
+
+@test "invalid or missing subcommand prints usage and exits 1" {
+  run bash "$REGISTRY" borrar-todo
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage: session-registry.sh"* ]]
+  run bash "$REGISTRY"
+  [ "$status" -eq 1 ]
+}
