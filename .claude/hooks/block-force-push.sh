@@ -26,6 +26,9 @@ COMMAND="$HOOK_COMMAND"
 if [ -z "$COMMAND" ]; then
   exit 0
 fi
+# Revisión #1355: las continuaciones «\⏎» se unen antes de evaluar (grep evalúa por línea y un
+# git push partido en dos líneas pasaba); el puerto TS hace lo mismo y también evalúa por línea.
+COMMAND="${COMMAND//$'\\\n'/ }"
 
 # Inicio de una orden git real: al principio, tras un separador o al abrir un subshell, con lo
 # que puede ir delante (VAR=valor, env, command, sudo, nohup, time, exec) y opciones globales de
@@ -69,14 +72,167 @@ if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+(origin[[:space:]]+)?(ma
 fi
 
 # Bloquear commit --amend sin confirmación explícita
-# SE-453: --amend tiene que ser un argumento propio de ese git commit. Cada palabra (ARG) puede llevar
-# tramos entre comillas, así que un --amend dentro de -m "…" o tras un separador (&& echo --amend) no casa.
+# SE-453 (revisión #1355): --amend tiene que ser un argumento propio de ese git commit. Un tokenizador
+# de shell (comillas, escapes, $(…), <(…), `…`, redirecciones como 2>&1, comentarios) parte la orden en
+# órdenes simples; la regex de palabras se cortaba en $( o & y dejaba pasar --amend. Espejo de amendScan
+# en .opencode/plugins/guards/block-force-push.ts: mismas reglas, mismos resultados.
 # git acepta prefijos únicos de opciones largas: --am, --ame y --amen también son --amend.
-ARG='("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:];&|()"'"'"'])+'
-if echo "$COMMAND" | grep -iE "${GIT_AT}commit([[:space:]]+${ARG})*[[:space:]]+(--am(e(nd?)?)?|\"--amend\"|'--amend')([[:space:]]|\$|[;&|)])" > /dev/null; then
+_amend_is_commit() { # palabras de una orden simple → 0 si es git … commit … --amend
+  local -a w=("$@"); local k=0 n=$# g
+  while (( k < n )); do
+    [[ "${w[k]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && { k=$((k+1)); continue; }
+    case "${w[k],,}" in env|command|sudo|nohup|time|exec|if|then|do|else|elif|while|until|'!'|'{') k=$((k+1)) ;; *) break ;; esac
+  done
+  (( k < n )) || return 1
+  g="${w[k],,}"; [[ "$g" == git || "$g" == */git ]] || return 1
+  k=$((k+1))
+  while (( k < n )) && [[ "${w[k]}" == -* ]]; do
+    case "${w[k],,}" in -c|--git-dir|--work-tree) k=$((k+1)) ;; esac
+    k=$((k+1))
+  done
+  (( k < n )) && [[ "${w[k],,}" == commit ]] || return 1
+  for (( k = k + 1; k < n; k++ )); do
+    [[ "${w[k],,}" =~ ^--am(e(nd?)?)?$ ]] && return 0
+  done
+  return 1
+}
+# El tokenizador recorre AMEND_CH (un carácter por elemento) por índices: ${s:i:1} es O(i) en bash
+# y una orden de 30 KB tardaba más que el timeout del hook (5 s), que en PreToolUse no bloquea.
+_amend_close_bq() { # i end → AMEND_J: índice tras la ` de cierre, o -1
+  local i="$1" e="$2"
+  while (( i < e )); do
+    case "${AMEND_CH[i]}" in
+      '\') i=$((i+2)); continue ;;
+      '`') AMEND_J=$((i+1)); return ;;
+    esac
+    i=$((i+1))
+  done
+  AMEND_J=-1
+}
+_amend_close_sq() { # i end → AMEND_J: índice tras la ' de cierre, o -1
+  local i="$1" e="$2"
+  while (( i < e )); do
+    [[ "${AMEND_CH[i]}" == "'" ]] && { AMEND_J=$((i+1)); return; }
+    i=$((i+1))
+  done
+  AMEND_J=-1
+}
+_amend_close_dq() { # i end → AMEND_J: índice tras la " de cierre, o -1
+  local i="$1" e="$2"
+  while (( i < e )); do
+    case "${AMEND_CH[i]}" in
+      '\') i=$((i+2)); continue ;;
+      '"') AMEND_J=$((i+1)); return ;;
+      '$') if [[ "${AMEND_CH[i+1]:-}" == '(' ]]; then _amend_close_subst $((i+2)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue; fi ;;
+      '`') _amend_close_bq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+    esac
+    i=$((i+1))
+  done
+  AMEND_J=-1
+}
+_amend_close_subst() { # i end → AMEND_J: índice tras la ) que cierra un $( / <( / >( abierto antes de i, o -1
+  local i="$1" e="$2" depth=1
+  while (( i < e )); do
+    case "${AMEND_CH[i]}" in
+      '\') i=$((i+2)); continue ;;
+      "'") _amend_close_sq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+      '"') _amend_close_dq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+      '`') _amend_close_bq $((i+1)) "$e"; (( AMEND_J < 0 )) && return; i=$AMEND_J; continue ;;
+      '(') depth=$((depth+1)) ;;
+      ')') depth=$((depth-1)); (( depth == 0 )) && { AMEND_J=$((i+1)); return; } ;;
+    esac
+    i=$((i+1))
+  done
+  AMEND_J=-1
+}
+_amend_word_add() { # i j → añade AMEND_CH[i..j) a la palabra en curso
+  local k
+  for (( k = $1; k < $2; k++ )); do word+="${AMEND_CH[k]}"; done
+  inword=1
+}
+_amend_scan() { # i end → AMEND_R: 1 alguna orden simple es git … commit … --amend, 0 ninguna, 2 no se puede tokenizar
+  local i="$1" n="$2" c j k word="" inword=0
+  local -a words=()
+  while (( i < n )); do
+    c="${AMEND_CH[i]}"
+    if [[ "$c" == '\' ]]; then
+      if (( i + 1 < n )) && [[ "${AMEND_CH[i+1]}" != $'\n' ]]; then word+="${AMEND_CH[i+1]}"; inword=1; fi
+      i=$((i+2)); continue
+    fi
+    if [[ "$c" == "'" ]]; then
+      _amend_close_sq $((i+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+      j=$AMEND_J; _amend_word_add $((i+1)) $((j-1)); i=$j; continue
+    fi
+    if [[ "$c" == '"' ]]; then
+      k=$((i+1)); inword=1
+      while (( k < n )) && [[ "${AMEND_CH[k]}" != '"' ]]; do
+        if [[ "${AMEND_CH[k]}" == '\' ]] && (( k + 1 < n )) && [[ '"\$`' == *"${AMEND_CH[k+1]}"* ]]; then word+="${AMEND_CH[k+1]}"; k=$((k+2)); continue; fi
+        if [[ "${AMEND_CH[k]}" == '$' && "${AMEND_CH[k+1]:-}" == '(' ]]; then
+          _amend_close_subst $((k+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+          j=$AMEND_J; _amend_scan $((k+2)) $((j-1)); (( AMEND_R != 0 )) && return
+          _amend_word_add "$k" "$j"; k=$j; continue
+        fi
+        if [[ "${AMEND_CH[k]}" == '`' ]]; then
+          _amend_close_bq $((k+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+          j=$AMEND_J; _amend_scan $((k+1)) $((j-1)); (( AMEND_R != 0 )) && return
+          _amend_word_add "$k" "$j"; k=$j; continue
+        fi
+        word+="${AMEND_CH[k]}"; k=$((k+1))
+      done
+      (( k >= n )) && { AMEND_R=2; return; }
+      i=$((k+1)); continue
+    fi
+    if [[ "$c" == '$' || "$c" == '<' || "$c" == '>' ]] && [[ "${AMEND_CH[i+1]:-}" == '(' ]]; then
+      _amend_close_subst $((i+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+      j=$AMEND_J; _amend_scan $((i+2)) $((j-1)); (( AMEND_R != 0 )) && return
+      _amend_word_add "$i" "$j"; i=$j; continue
+    fi
+    if [[ "$c" == '`' ]]; then
+      _amend_close_bq $((i+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
+      j=$AMEND_J; _amend_scan $((i+1)) $((j-1)); (( AMEND_R != 0 )) && return
+      _amend_word_add "$i" "$j"; i=$j; continue
+    fi
+    if [[ "$c" == ' ' || "$c" == $'\t' ]]; then
+      (( inword )) && { words+=("$word"); word=""; inword=0; }
+      i=$((i+1)); continue
+    fi
+    if [[ "$c" == '#' ]] && (( ! inword )); then
+      while (( i < n )) && [[ "${AMEND_CH[i]}" != $'\n' ]]; do i=$((i+1)); done
+      continue
+    fi
+    # Las redirecciones (2>&1, >&2, &>f, >|f) son parte de la palabra, no un separador.
+    if { [[ "$c" == '&' ]] && [[ "${AMEND_CH[i+1]:-}" == '>' || "$word" == *[\<\>] ]]; } || { [[ "$c" == '|' && "$word" == *[\<\>] ]]; }; then
+      word+="$c"; inword=1; i=$((i+1)); continue
+    fi
+    if [[ "$c" == [\;\&\|\(\)] || "$c" == $'\n' ]]; then
+      (( inword )) && { words+=("$word"); word=""; inword=0; }
+      (( ${#words[@]} )) && _amend_is_commit "${words[@]}" && { AMEND_R=1; return; }
+      words=(); i=$((i+1)); continue
+    fi
+    word+="$c"; inword=1; i=$((i+1))
+  done
+  (( inword )) && words+=("$word")
+  (( ${#words[@]} )) && _amend_is_commit "${words[@]}" && { AMEND_R=1; return; }
+  AMEND_R=0
+}
+amend_scan() { # orden → AMEND_R (ver _amend_scan). Más de AMEND_MAX_CHARS: 2, para fallar cerrado en tiempo acotado.
+  local LC_ALL=C c
+  AMEND_CH=()
+  if (( ${#1} > AMEND_MAX_CHARS )); then AMEND_R=2; return; fi
+  while IFS= read -r -n1 -d '' c; do AMEND_CH+=("$c"); done < <(printf '%s' "$1")
+  _amend_scan 0 "${#AMEND_CH[@]}"
+}
+# Falla cerrado: si la orden no se puede tokenizar (comilla o sustitución abierta), una coincidencia gruesa bloquea.
+AMEND_COARSE='(^|[^[:alnum:]_-])git[^[:alnum:]_-](.*[^[:alnum:]_-])?commit.*[^[:alnum:]_-]--am(e(nd?)?)?([^[:alnum:]_=-]|$)'
+AMEND_J=-1; AMEND_R=0; AMEND_MAX_CHARS=16384; AMEND_CH=()
+shopt -s nocasematch
+# Vía rápida: sin «commit» y «--am» en la orden ninguna palabra puede casar; el tokenizador es O(n²) en bash.
+[[ "$COMMAND" == *commit*--am* ]] && amend_scan "$COMMAND"
+if (( AMEND_R == 1 )) || { (( AMEND_R == 2 )) && [[ "$COMMAND" =~ $AMEND_COARSE ]]; }; then
   echo "BLOQUEADO: git commit --amend puede destruir commits anteriores. Crea un commit nuevo." >&2
   exit 2
 fi
+shopt -u nocasematch
 
 # Bloquear reset --hard
 # FIX: Add anchoring for compound command separators

@@ -112,6 +112,51 @@ FP="--for""ce"
     "git commit -m 'a --amend b'" "git commit -m x && echo --amend" "git commit -m x --amendment"
 }
 
+# Revisión #1355 (P1): con la regex de palabras, un argumento previo con $(…), <(…), 2>&1, \" o \' cortaba
+# la cadena y --amend pasaba. El tokenizador de shell lo ve como argumento propio en bash, sin jq y TS.
+@test "paridad amend: sustituciones, redirecciones y escapes antes de --amend siguen bloqueando ⇒ 2" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "git commit -m \$(date +%F) --amend" \
+    "git commit -F <(echo x) --amend" "git commit -m x 2>&1 --amend" "git commit -m \"a \\\" b\" --amend" \
+    "git commit -m don\\'t --amend" "git commit -m \`date\` --amend" "echo \$(git commit --amend)" \
+    "if git commit --amend; then :; fi" "/usr/bin/git commit --amend" \
+    $'git commit -m "$(cat <<\'EOF\'\nno puedo\'\nEOF\n)" --amend' $'git commit -m x \\\n  --amend'
+}
+
+@test "paridad amend: heredoc en el mensaje, comentario y otra línea no bloquean ⇒ 0" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 0 \
+    $'git commit -m "$(cat <<\'EOF\'\nfeat: x\n\nmenciona --amend\nEOF\n)"' \
+    "git commit -m x # --amend" $'git commit -m x\necho --amend' "git commit -m \"\$(echo --amend)\""
+}
+
+# El tokenizador bash tiene que acabar dentro del timeout del hook (5 s), que en PreToolUse no bloquea:
+# por encima de 16 384 caracteres no se tokeniza y la coincidencia gruesa falla cerrado en ambos lados.
+@test "paridad amend: orden enorme con --amend solo en el mensaje falla cerrado; justo bajo el tope, no ⇒ 2 / 0" {
+  require_ts
+  command -v jq >/dev/null
+  local body
+  body=$(printf 'x%.0s' $(seq 1 16400))
+  parity block-force-push blockForcePush 2 "git commit -m \"$body --amend\""
+  body=$(printf 'x%.0s' $(seq 1 16300))
+  parity block-force-push blockForcePush 0 "git commit -m \"$body --amend\""
+  parity block-force-push blockForcePush 2 "git commit -m \"$body\" --amend"
+  SECONDS=0
+  [ "$(bash_code block-force-push "$PATH" "git commit -m \"$body\" --amend")" = 2 ]
+  (( SECONDS < 5 ))
+}
+
+# Revisión #1355 (P2): grep evalúa por línea y \s de JS cruzaba saltos de línea; ahora ambos evalúan por línea
+# tras unir las continuaciones «\⏎», que en bash ocultaban un push forzado partido en dos líneas.
+@test "paridad multilínea: una orden por línea y continuaciones unidas igual en bash y TS" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 0 $'git push origin feat\necho '"$FP"
+  parity block-force-push blockForcePush 2 $'git push \\\n'"$FP origin feat"
+}
+
 @test "paridad block-infra-destructive y validate-bash-global: destructivos ⇒ 2, inocuo ⇒ 0" {
   require_ts
   command -v jq >/dev/null
