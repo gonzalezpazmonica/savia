@@ -136,3 +136,291 @@ teardown() {
 @test "edge: hash_content function exists" {
   grep -q "hash_content()" "$SCRIPT"
 }
+
+# --- S03c: contenido del JSONL, upsert, procedencia y consolidación (SE-072, SE-352, SE-405) ---
+
+sv() { bash "$SCRIPT" save --source tool:Bats "$@"; }
+store() { echo "$TMPDIR_MS/output/.memory-store.jsonl"; }
+field() { # field N CAMPO → valor del campo en la línea N del store
+  sed -n "${1}p" "$(store)" | python3 -c "import json,sys; v=json.load(sys.stdin).get('$2'); print(v if not isinstance(v,(list,dict)) else json.dumps(v))"
+}
+
+@test "JSONL: cada línea es JSON válido con sector, tier y memory_type derivados del tipo" {
+  sv --type decision --title "Uno" --content "c1" >/dev/null
+  sv --type bug --title "Dos" --content "c2" >/dev/null
+  sv --type pattern --title "Tres" --content "c3" >/dev/null
+  [ "$(wc -l < "$(store)")" -eq 3 ]
+  [ "$(field 1 sector)" = "semantic" ];   [ "$(field 1 importance_tier)" = "A" ]; [ "$(field 1 memory_type)" = "decision" ]
+  [ "$(field 2 sector)" = "semantic" ];   [ "$(field 2 importance_tier)" = "B" ]; [ "$(field 2 memory_type)" = "error" ]
+  [ "$(field 3 sector)" = "procedural" ]; [ "$(field 3 importance_tier)" = "B" ]; [ "$(field 3 memory_type)" = "learning" ]
+}
+
+@test "origin: tool:* → agent, user:explicit → owner, explícito se respeta" {
+  sv --type decision --title "A" --content "a" >/dev/null
+  bash "$SCRIPT" save --source user:explicit --type decision --title "B" --content "b" >/dev/null
+  sv --type decision --title "C" --content "c" --origin system >/dev/null
+  [ "$(field 1 origin)" = "agent" ]
+  [ "$(field 2 origin)" = "owner" ]
+  [ "$(field 3 origin)" = "system" ]
+}
+
+@test "origin: valor inválido → rechazo y nada se escribe" {
+  run sv --type decision --title "X" --content "x" --origin root
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "inválido"
+  [ ! -s "$(store)" ]
+}
+
+@test "origin: turno marcado como tainted degrada a untrusted aunque se pida owner" {
+  export SESSION_ID="bats-s03c-$$"
+  mkdir -p /tmp/savia-memory-taint
+  date -u +%s > "/tmp/savia-memory-taint/$SESSION_ID"
+  run sv --type decision --title "Tainted" --content "t" --origin owner
+  unlink "/tmp/savia-memory-taint/$SESSION_ID"
+  [ "$status" -eq 0 ]
+  [ "$(field 1 origin)" = "untrusted" ]
+}
+
+@test "origin: marca de taint caducada (>30 min) no degrada" {
+  export SESSION_ID="bats-s03c-old-$$"
+  mkdir -p /tmp/savia-memory-taint
+  echo $(( $(date -u +%s) - 4000 )) > "/tmp/savia-memory-taint/$SESSION_ID"
+  run sv --type decision --title "Old taint" --content "t" --origin owner
+  unlink "/tmp/savia-memory-taint/$SESSION_ID"
+  [ "$(field 1 origin)" = "owner" ]
+}
+
+@test "privacidad: <private>…</private> se sustituye por [REDACTED] antes de guardar" {
+  sv --type decision --title "Priv" --content "público <private>secreto-123</private> fin" >/dev/null
+  grep -q "REDACTED" "$(store)"
+  ! grep -q "secreto-123" "$(store)"
+}
+
+@test "contenido: se trunca a 2000 caracteres (borde de tamaño)" {
+  big=$(python3 -c "print('x' * 5000)")
+  sv --type decision --title "Grande" --content "$big" >/dev/null
+  [ "$(field 1 content | tr -d '\n' | wc -c)" -le 2000 ]
+}
+
+@test "contenido: saltos de línea y tabuladores se escapan y la línea sigue siendo una" {
+  sv --type decision --title "Multi" --content $'linea1\nlinea2\tTab' >/dev/null
+  [ "$(wc -l < "$(store)")" -eq 1 ]
+  [ "$(field 1 content)" = $'linea1\nlinea2\tTab' ]
+}
+
+@test "W/W/W/L: --what/--why/--where/--learned componen el contenido estructurado" {
+  sv --type decision --title "WWWL" --what "A" --why "B" --where "C" --learned "D" >/dev/null
+  [ "$(field 1 content)" = "What: A | Why: B | Where: C | Learned: D" ]
+}
+
+@test "falta contenido (ni --content ni --what) → error y exit ≠ 0" {
+  run sv --type decision --title "Vacío"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "required"
+}
+
+@test "upsert: mismo topic reemplaza la línea, sube rev y guarda supersedes" {
+  sv --type decision --title "T" --topic decision/mi-tema --content "version uno" >/dev/null
+  sv --type decision --title "T" --topic decision/mi-tema --content "version dos" >/dev/null
+  [ "$(wc -l < "$(store)")" -eq 1 ]
+  [ "$(field 1 rev)" = "2" ]
+  [ "$(field 1 content)" = "version dos" ]
+  [ "$(field 1 supersedes)" = "version uno" ]
+}
+
+@test "upsert: contenido idéntico en el mismo topic sube rev pero no marca supersedes" {
+  sv --type decision --title "T" --topic decision/igual --content "mismo" >/dev/null
+  sv --type decision --title "T" --topic decision/igual --content "mismo" >/dev/null
+  [ "$(field 1 rev)" = "2" ]
+  ! grep -q '"supersedes"' "$(store)"
+}
+
+@test "dedup: mismo contenido en topics distintos dentro de 15 min se omite" {
+  sv --type decision --title "A" --topic decision/a --content "contenido repetido" >/dev/null
+  run sv --type decision --title "B" --topic decision/b --content "contenido repetido"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Duplicado omitido"
+  [ "$(wc -l < "$(store)")" -eq 1 ]
+}
+
+@test "dedup: tras 15 min el mismo contenido sí se guarda" {
+  sv --type decision --title "A" --topic decision/a --content "contenido viejo" >/dev/null
+  old=$(date -u -d '2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+  sed -i "s/\"ts\":\"[^\"]*\"/\"ts\":\"$old\"/" "$(store)"
+  run sv --type decision --title "B" --topic decision/b --content "contenido viejo"
+  echo "$output" | grep -q "Guardado"
+  [ "$(wc -l < "$(store)")" -eq 2 ]
+}
+
+@test "episodio: TTL de 90 días por defecto y --pin lo elimina" {
+  sv --type episode --title "Ep1" --content "e1" >/dev/null
+  sv --type episode --title "Ep2" --content "e2" --pin >/dev/null
+  exp=$(field 1 expires_at)
+  [ "$exp" != "None" ]
+  python3 - "$exp" <<'PY'
+import datetime, sys
+d = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ")
+delta = (d - datetime.datetime.utcnow()).days
+assert 88 <= delta <= 90, delta
+PY
+  [ "$(field 2 expires_at)" = "None" ]
+}
+
+@test "--expires N fija expires_at ≈ N días" {
+  sv --type decision --title "Exp" --content "x" --expires 7 >/dev/null
+  python3 - "$(field 1 expires_at)" <<'PY'
+import datetime, sys
+d = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%dT%H:%M:%SZ")
+assert 5 <= (d - datetime.datetime.utcnow()).days <= 7
+PY
+}
+
+@test "concepts: se normalizan a array JSON sin espacios" {
+  sv --type decision --title "Cpt" --content "x" --concepts "uno, dos ,tres" >/dev/null
+  [ "$(field 1 concepts)" = '["uno", "dos", "tres"]' ]
+}
+
+@test "entities: --entities se guarda como array (SE-076)" {
+  sv --type episode --title "Ent" --content "x" --entities "a, b" >/dev/null
+  [ "$(field 1 entities)" = '["a", "b"]' ]
+}
+
+@test "supersedes-key: la entrada antigua recibe valid_to y superseded_by" {
+  sv --type decision --title "Vieja" --topic decision/vieja --content "v" >/dev/null
+  sv --type decision --title "Nueva" --topic decision/nueva --content "n" --supersedes decision/vieja >/dev/null
+  [ "$(field 1 superseded_by)" = "decision/nueva" ]
+  [ "$(field 1 valid_to)" != "None" ]
+  [ "$(field 2 supersedes_key)" = "decision/vieja" ]
+}
+
+@test "suggest-topic: slug en minúsculas, sin símbolos y recortado a 40 caracteres" {
+  run bash "$SCRIPT" suggest-topic decision "Usar Cache!! para API/v2 con un título larguísimo que excede cuarenta caracteres"
+  [ "$status" -eq 0 ]
+  [[ "$output" == decision/usar-cache-para-apiv2-con-un-titulo-larg* ]] || [[ "$output" == decision/usar-cache-para-apiv2-con-un-t* ]]
+  slug="${output#decision/}"
+  [ "${#slug}" -le 40 ]
+  [[ "$slug" =~ ^[a-z0-9-]+$ ]]
+}
+
+@test "suggest-topic: tipo no mapeado usa el propio tipo como prefijo" {
+  run bash "$SCRIPT" suggest-topic rareza "Hola Mundo"
+  [ "$output" = "rareza/hola-mundo" ]
+}
+
+@test "session-summary: sin --accomplished falla; con él guarda topic session/<fecha>" {
+  run bash "$SCRIPT" session-summary --goal g
+  [ "$status" -ne 0 ]
+  run env SAVIA_VERIFIED_MEMORY_DISABLED=true bash "$SCRIPT" session-summary --goal g --accomplished hecho --files f.sh
+  [ "$status" -eq 0 ]
+  [ "$(field 1 topic_key)" = "session/$(date +%Y-%m-%d)" ]
+  [ "$(field 1 importance_tier)" = "C" ]
+  field 1 content | grep -q "Goal: g | Accomplished: hecho | Files: f.sh"
+}
+
+@test "audit-origins: cuenta por origen con porcentajes y trata la falta de origen como untrusted" {
+  sv --type decision --title "A" --content "a" >/dev/null
+  sv --type decision --title "B" --content "b" --origin owner >/dev/null
+  printf '%s\n' '{"ts":"2026-01-01T00:00:00Z","type":"x","title":"viejo","topic_key":"x/viejo","hash":"h"}' >> "$(store)"
+  run bash "$SCRIPT" audit-origins
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Total: 3 entradas"
+  echo "$output" | grep -q "owner:      1 (33.3%)"
+  echo "$output" | grep -q "agent:      1 (33.3%)"
+  echo "$output" | grep -q "untrusted:  1 (33.3%)"
+  echo "$output" | grep -q "sin src:    1"
+}
+
+@test "consolidate --dry-run informa exclusiones sin tocar el store" {
+  sv --type decision --title "A" --content "a" --origin owner >/dev/null
+  sv --type decision --title "B" --content "b" --origin untrusted >/dev/null
+  before=$(sha256sum "$(store)" | cut -d' ' -f1)
+  run bash "$SCRIPT" consolidate --dry-run
+  echo "$output" | grep -q "excluidas 1 entradas untrusted/system, mantenidas 1"
+  [ "$(sha256sum "$(store)" | cut -d' ' -f1)" = "$before" ]
+}
+
+@test "consolidate: elimina untrusted/system y conserva owner/agent" {
+  sv --type decision --title "A" --content "a" --origin owner >/dev/null
+  sv --type decision --title "B" --content "b" --origin untrusted >/dev/null
+  sv --type decision --title "C" --content "c" --origin system >/dev/null
+  sv --type decision --title "D" --content "d" >/dev/null
+  run bash "$SCRIPT" consolidate
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$(store)")" -eq 2 ]
+  ! grep -q '"origin":"untrusted"\|"origin":"system"' "$(store)"
+}
+
+@test "timeline: ventana alrededor del ancla marca la entrada con ▶" {
+  for i in 1 2 3 4 5; do
+    sv --type decision --title "E$i" --topic "decision/e$i" --content "c$i" >/dev/null
+    sed -i "${i}s/\"ts\":\"[^\"]*\"/\"ts\":\"2026-01-0${i}T10:00:00Z\"/" "$(store)"
+  done
+  run bash "$SCRIPT" timeline decision/e3 --window 1
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 3 ]
+  echo "${lines[1]}" | grep -q "^▶ 2026-01-03T10:00  \[decision\] E3"
+  echo "$output" | grep -q "E2"
+  ! echo "$output" | grep -q "E1\|E5"
+}
+
+@test "timeline: errores — ancla inexistente (1), sin ancla o ventana inválida (2), store vacío (1)" {
+  run bash "$SCRIPT" timeline x
+  [ "$status" -eq 1 ]
+  sv --type decision --title "E" --topic decision/e --content c >/dev/null
+  run bash "$SCRIPT" timeline decision/no-esta
+  [ "$status" -eq 1 ]
+  run bash "$SCRIPT" timeline
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" timeline decision/e --window abc
+  [ "$status" -eq 2 ]
+}
+
+@test "índice: SAVIA_MEMORY_INDEX_FILE se actualiza en sitio (reemplazo, no duplicado)" {
+  idx="$TMPDIR_MS/MEMORY.md"
+  printf '# Índice\n<!-- ENTRIES_START -->\n<!-- ENTRIES_END -->\n' > "$idx"
+  export SAVIA_MEMORY_INDEX_FILE="$idx"
+  sv --type decision --title "Primero" --topic decision/uno --content "a" >/dev/null
+  sv --type decision --title "Cambiado" --topic decision/uno --content "b" >/dev/null
+  sv --type decision --title "Otro" --topic decision/dos --content "c" >/dev/null
+  [ "$(grep -c '^- ' "$idx")" -eq 2 ]
+  grep -q '^- decision: Otro \[decision/dos\] · src:agent$' "$idx"
+  grep -q '^- decision: Cambiado \[decision/uno\]' "$idx"
+  ! grep -q "Primero" "$idx"
+  # lo más nuevo arriba
+  [ "$(grep -n '^- ' "$idx" | head -1 | cut -d: -f2-)" = "- decision: Otro [decision/dos] · src:agent" ]
+}
+
+@test "índice: el tope blando recorta las entradas más antiguas" {
+  idx="$TMPDIR_MS/MEMORY.md"
+  printf '<!-- ENTRIES_START -->\n<!-- ENTRIES_END -->\n' > "$idx"
+  export SAVIA_MEMORY_INDEX_FILE="$idx" MEMORY_INDEX_SOFT_CAP=3
+  for i in 1 2 3 4 5; do sv --type decision --title "N$i" --topic "decision/n$i" --content "c$i" >/dev/null; done
+  [ "$(grep -c '^- ' "$idx")" -eq 3 ]
+  grep -q "N5" "$idx"; grep -q "N3" "$idx"
+  ! grep -q "N1" "$idx"
+}
+
+@test "índice: sin fichero de índice la grabación sigue funcionando (exit 0)" {
+  export SAVIA_MEMORY_INDEX_FILE="$TMPDIR_MS/no-existe.md"
+  run sv --type decision --title "Sin idx" --topic decision/x --content "x"
+  [ "$status" -eq 0 ]
+  [ ! -e "$SAVIA_MEMORY_INDEX_FILE" ]
+}
+
+@test "entity list/find: lista por proyecto y busca por nombre" {
+  sv --type entity --title "Alice" --content "dev backend" --concepts "persona" --project alfa >/dev/null
+  sv --type entity --title "Bob" --content "qa" --concepts "persona" --project beta >/dev/null
+  run bash "$SCRIPT" entity list --project alfa
+  echo "$output" | grep -q "Alice (persona) — proyecto: alfa"
+  ! echo "$output" | grep -q "Bob"
+  run bash "$SCRIPT" entity find bob
+  echo "$output" | grep -q "^Bob — "
+  run bash "$SCRIPT" entity find
+  echo "$output" | grep -q "Uso: entity find"
+}
+
+@test "HOME vacío → exit 1 con mensaje (no escribe en /tmp)" {
+  run env -u HOME bash "$SCRIPT" stats
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "HOME no definido"
+}
