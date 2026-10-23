@@ -13,7 +13,7 @@ metadata:
 > Python-backed viene de Prime Agent (docs/skills.md): SKILL.md + paquete
 > Python instalable + callable `run()` con contrato tipado.
 >
-> Para skills solo-instructivos usa `.claude/skills/_template/`.
+> Para skills solo-instructivos usa `templates/skills/_template/`.
 
 ## Estructura
 
