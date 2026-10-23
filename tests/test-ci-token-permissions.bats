@@ -20,6 +20,34 @@ for f in sorted(glob.glob(sys.argv[1] + "/.github/workflows/*.y*ml")):
 PY
 }
 
+# Imprime "fichero:job: llamada" por cada job que escribe en issues/PRs (vía
+# github-script o gh) sin el permiso de escritura efectivo que necesita.
+job_write_gaps() {
+  python3 - "$1" <<'PY'
+import glob, json, sys, yaml
+NEEDS = {
+    "issues.createComment": ("issues", "pull-requests"),
+    "issues.addLabels": ("issues", "pull-requests"),
+    "issues.create(": ("issues",),
+    "gh pr comment": ("issues", "pull-requests"),
+    "gh pr edit": ("pull-requests",),
+    "gh issue create": ("issues",),
+}
+for f in sorted(glob.glob(sys.argv[1] + "/.github/workflows/*.y*ml")):
+    wf = yaml.safe_load(open(f)) or {}
+    for name, job in (wf.get("jobs") or {}).items():
+        perms = job.get("permissions", wf.get("permissions", {}))
+        text = json.dumps(job.get("steps", []))
+        for call, scopes in NEEDS.items():
+            if call not in text:
+                continue
+            ok = perms == "write-all" or (isinstance(perms, dict) and any(
+                perms.get(s) == "write" for s in scopes))
+            if not ok:
+                print(f"{f}:{name}: {call} sin escritura en {'/'.join(scopes)}")
+PY
+}
+
 setup() { TMP="$(mktemp -d "$ROOT/.tmp-tokperm.XXXXXX")"; mkdir -p "$TMP/.github/workflows"; }
 teardown() { [[ -n "${TMP:-}" && -d "$TMP" ]] && python3 -c 'import shutil,sys;shutil.rmtree(sys.argv[1])' "$TMP"; }
 
@@ -50,5 +78,23 @@ teardown() { [[ -n "${TMP:-}" && -d "$TMP" ]] && python3 -c 'import shutil,sys;s
 @test "positivo: lectura arriba y escritura en el job pasa" {
   printf 'permissions:\n  contents: read\njobs:\n  a:\n    permissions:\n      contents: write\n    runs-on: x\n' > "$TMP/.github/workflows/w.yml"
   run toplevel_violations "$TMP"
+  [ -z "$output" ]
+}
+
+@test "el arbol real: cada job que escribe en issues/PRs tiene el permiso" {
+  run job_write_gaps "$ROOT"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "negativo: comentario en PR con solo lectura se detecta" {
+  printf 'permissions:\n  contents: read\njobs:\n  a:\n    runs-on: x\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: github.rest.issues.createComment({})\n' > "$TMP/.github/workflows/w.yml"
+  run job_write_gaps "$TMP"
+  [[ "$output" == *"w.yml:a: issues.createComment sin escritura"* ]]
+}
+
+@test "positivo: comentario en PR con pull-requests: write en el job pasa" {
+  printf 'permissions:\n  contents: read\njobs:\n  a:\n    permissions:\n      pull-requests: write\n    runs-on: x\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: github.rest.issues.createComment({})\n' > "$TMP/.github/workflows/w.yml"
+  run job_write_gaps "$TMP"
   [ -z "$output" ]
 }
