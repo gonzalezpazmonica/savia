@@ -1,9 +1,7 @@
 # planning — Savia Capability Map (L1)
-> 632 resources
+> 630 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
-- **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
-- **_template_python** (skill): TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una skill que expone funcionalidad invocable con run(). NO se carga en runtime.
 - **acceptance-cost** (script): acceptance-cost.sh — SE-360: costo por cambio aceptado (CLI wrapper).
 - **accessibility-mode** (cmd): Toggle rápido de accesibilidad — activa, desactiva o muestra el estado
 - **accessibility-setup** (cmd): Configura las preferencias de accesibilidad de Savia para adaptarse a tus necesidades

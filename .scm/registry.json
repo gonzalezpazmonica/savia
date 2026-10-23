@@ -11390,48 +11390,6 @@
     {
       "depends_on": [],
       "frontend_support": [
-        "claude"
-      ],
-      "id": "skill:.claude/skills/_template/SKILL",
-      "intents": [
-        "carga",
-        "copia",
-        "crear",
-        "directorio",
-        "nueva"
-      ],
-      "kind": "skill",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": ".claude/skills/_template/SKILL.md",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "claude"
-      ],
-      "id": "skill:.claude/skills/_template_python/SKILL",
-      "intents": [
-        "backed",
-        "carga",
-        "copia",
-        "crear",
-        "directorio"
-      ],
-      "kind": "skill",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": ".claude/skills/_template_python/SKILL.md",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
         "opencode"
       ],
       "id": "script:scripts/acceptance-cost",
@@ -29640,7 +29598,7 @@
       "tests": []
     }
   ],
-  "content_hash": "3ae6f246e1a9",
+  "content_hash": "9c5881b0df13",
   "deferred_kinds": [
     "rule",
     "hook"
