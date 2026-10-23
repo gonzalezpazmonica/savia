@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=67c95919383ce55232af1afa90e12e74f24d9450cb6749526f454f09076bd26e
-timestamp=2026-10-23T20:56:08Z
-branch=agent/s03calidad-20261023
-head_commit=d5af5fb2a
-signature=0c202778fc8c50a0b66816f7886690bd1e7f07a33e98c3e5acbaa15347df3045
+diff_hash=64d240eb206e8edb233f29caf4a79b2620b63f4ba407436e128f59b55a9a8a4d
+timestamp=2026-10-23T21:46:38Z
+branch=agent/codeql-specs-20261023
+head_commit=a2e83a1c9
+signature=ba48b68981e4a6c369e40b74f211f9693c3e1ee51a0c9491fe9d53fe9c9b59bc
