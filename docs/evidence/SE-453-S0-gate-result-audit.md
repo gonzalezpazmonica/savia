@@ -11,10 +11,10 @@
 | `scripts/git-history-secret-scan.sh` | 0 limpio, 1 CRITICAL/HIGH, 2 MEDIUM/LOW, 3 `output/` sin ignorar, 4 fallo | gitleaks ausente salía **1** (igual que un hallazgo crítico) | sin tope ni timeout: historial enorme sin límite | Ausente → 4 + `unknown/missing_tool`; `GIT_HISTORY_SCAN_MAX_COMMITS` y `GIT_HISTORY_SCAN_TIMEOUT` → `unknown/limit` y `unknown/timeout` |
 | `scripts/pre-push-security-gate.sh` | 0 limpio u omitido, 1 hallazgos | gitleaks ausente: **exit 0** con aviso «push continúa sin escaneo» | sin tope | Ausente → `unknown/missing_tool`, línea en `output/unmeasured-gates.jsonl`; `SAVIA_GATE_UNKNOWN=block` lo bloquea (D3: un ciclo de aviso) |
 | `scripts/dependency-scan.sh` | 0 limpio, 1 hallazgos, 2 error | Trivy/Docker/jq ausentes → 2 (correcto en código, sin vocabulario de resultado) | sin timeout propio; Trivy rc 124 caía en «fallido» | Línea `gate-result` en todas las salidas; 2 = `unknown` con `missing_tool`, `unreadable` o `timeout` |
-| `scripts/iac-security-scan.sh` | 0 limpio o NO_IAC, 1 hallazgos, 2 error | Trivy y Docker ausentes → `die` 2 | `find -maxdepth 5` solo para etiquetar tipos; Trivy escanea el árbol entero | Sin cambio de código: el tope no oculta hallazgos (solo la etiqueta NO_IAC). Por demanda: emitir `gate-result` |
+| `scripts/iac-security-scan.sh` | 0 limpio o NO_IAC, 1 hallazgos, 2 error | Trivy y Docker ausentes → `die` 2 | `find -maxdepth 5` solo para etiquetar tipos; Trivy escanea el árbol entero | El tope no oculta hallazgos (solo la etiqueta NO_IAC). Emite `gate-result` (en `--format json`, `result` y `gaps` en el objeto); sin herramienta → `unknown/missing_tool`, Trivy roto → `unknown/unreadable` |
 | `scripts/ast-quality-gate.sh` | 0 limpio, 1 fallo, 2 entorno, 3 UNVERIFIED con `meta.coverage` | Capa que no corre = `missing/failed/unsupported`, baja cobertura | `find -maxdepth 3` para detectar lenguajes | Es el modelo interno del contrato; sin cambios |
 | `scripts/mobile-security-scan.sh` | 0 con informe, 1 argumentos | MobSF y Docker ausentes → análisis básico (apktool + grep) sin marcar cobertura reducida | `curl --max-time 3` al detectar MobSF | Por demanda: marcar el análisis básico como `unknown` cuando apktool falta |
-| `scripts/prompt-security-scan.sh` | 0 limpio, 1 hallazgos, 2 error (ruta) | python3 ausente solo omite una comprobación (línea 98) sin registrarlo | sin tope | Por demanda |
+| `scripts/prompt-security-scan.sh` | 0 limpio, 1 hallazgos, 2 error (ruta) | python3 ausente solo omite una comprobación (PS-11) sin registrarlo | sin tope | PS-11 sin python3 (bytes UTF-8 con `grep` en locale C): ya no hay dependencia. Fichero o directorio ilegible → 2 `unknown/unreadable`. Emite `gate-result` |
 | `scripts/confidentiality-scan.sh` | 0 limpio, 1 violaciones, 2 error | sin herramienta externa | sin tope | Sin cambios |
 | `scripts/security-scan.sh` | 0 siempre salvo `--ci` con hallazgos (1) | grep/find estándar | sin tope | Por demanda: sin `--ci` los hallazgos no cambian el código |
 | `scripts/vuln-scan.sh` | 0 siempre salvo `--ci` con vulnerabilidades (1) | grep estándar | sin tope | Por demanda: igual que `security-scan.sh` |
@@ -55,6 +55,12 @@ compararon con el hook bash con las mismas entradas:
 | `block-credential-leak.ts` | 4 | ninguna | Sin cambios |
 | `block-infra-destructive.ts` | 4 | ninguna | Sin cambios |
 | `validate-bash-global.ts` | 2 | ninguna | Sin cambios |
+
+Falso positivo compartido (bash y TS, mismo patrón): `commit\s+.*--amend` bloqueaba `git commit -m "explica --amend"`
+y `git commit -m x && echo --amend`, y no veía los prefijos que git acepta (`--am`, `--amen`). Ahora `--amend` tiene
+que ser una palabra propia de ese `git commit` (las palabras pueden llevar tramos entre comillas); lo comprueban
+dos casos de paridad en `tests/test-gate-result-dual-binding.bats`. Hueco conocido: un `-m "--amend"` (mensaje que es
+exactamente la opción) sigue bloqueando, y un `; git commit --amend` escrito dentro de un mensaje entre comillas también.
 
 Reglas solo-TS que siguen siendo más estrictas que el hook (no se tocan): `git checkout --force`,
 `git rebase origin/main` y `git push --delete origin main`.

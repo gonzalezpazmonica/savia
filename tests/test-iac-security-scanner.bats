@@ -15,6 +15,8 @@ setup() {
   # Proyecto aislado: los informes van a $WORK/proj/output/security, nunca al repo real.
   mkdir -p "$WORK/proj/scripts" "$WORK/stub" "$WORK/sys" "$WORK/cwd"
   cp "$REPO_ROOT/$SCRIPT" "$REPO_ROOT/$BASELINE" "$WORK/proj/scripts/"
+  mkdir -p "$WORK/proj/.claude/hooks/lib"
+  cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$WORK/proj/.claude/hooks/lib/"
   SCAN="$WORK/proj/scripts/iac-security-scan.sh"
   BASE="$WORK/proj/scripts/iac-security-baseline.sh"
   OUT="$WORK/proj/output/security"
@@ -398,4 +400,46 @@ STUB
   run bash "$SCAN" --path "$INFRA"
   [ "$status" -eq 1 ]
   [[ "$output" == *"exp: inválido"*"DS002"* ]]
+}
+
+# ── Contrato SE-453: resultado clean / findings / unknown ────────────────────
+
+gate_line() { printf '%s\n' "$output" | tail -1; }
+
+@test "gate-result: limpio ⇒ última línea clean; hallazgos ⇒ findings" {
+  printf '{"Results":[]}' > "$WORK/clean.json"
+  TRIVY_JSON="$WORK/clean.json" run bash "$SCAN" --path "$INFRA"
+  [ "$status" -eq 0 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"clean","gaps":[]}' ]
+  run bash "$SCAN" --path "$INFRA"
+  [ "$status" -eq 1 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"findings","gaps":[]}' ]
+}
+
+@test "gate-result: sin trivy ni docker ⇒ unknown con hueco missing_tool, nunca clean" {
+  mv "$WORK/stub/trivy" "$WORK/trivy.off"
+  run bash "$SCAN" --path "$INFRA"
+  [ "$status" -eq 2 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"unknown","gaps":[{"check":"trivy","reason":"missing_tool"}]}' ]
+}
+
+@test "gate-result: trivy roto ⇒ unknown con hueco unreadable del objetivo" {
+  TRIVY_FAIL=1 run bash "$SCAN" --path "$INFRA"
+  [ "$status" -eq 2 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"unknown","gaps":[{"check":"trivy-config","reason":"unreadable"}]}' ]
+}
+
+@test "gate-result: --format json lleva result y gaps dentro del objeto (éxito y error)" {
+  run --separate-stderr bash "$SCAN" --path "$INFRA" --format json
+  [ "$status" -eq 1 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="findings" and d["gaps"]==[] and len(d["findings"])==5, d'
+  TRIVY_FAIL=1 run --separate-stderr bash "$SCAN" --path "$INFRA" --format json
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d=={"result":"unknown","gaps":[{"check":"trivy-config","reason":"unreadable"}]}, d'
+}
+
+@test "gate-result: un error de argumentos sale 2 sin resultado (no es un escaneo)" {
+  run bash "$SCAN" --format xml --path "$INFRA"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"gate-result"* ]]
 }
