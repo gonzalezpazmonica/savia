@@ -134,3 +134,22 @@ latest_run() { ls -1t "$SAVIA_BENCH_DIR/runs" | head -1; }
   [ "$status" -eq 1 ]
   [[ "$output" == *"run not found"* ]]
 }
+
+@test "regression: rewriting the tracked results/ dir does not make the next run dirty" {
+  export SAVIA_BENCH_RESULTS="$SAVIA_BENCH_ROOT/results"
+  bash "$RUNNER" --execute >/dev/null
+  git -C "$SAVIA_BENCH_ROOT" add -A; git -C "$SAVIA_BENCH_ROOT" commit -qm results
+  sleep 1
+  bash "$RUNNER" --execute >/dev/null   # reescribe results/ (duraciones distintas)
+  [ -n "$(git -C "$SAVIA_BENCH_ROOT" status --porcelain)" ]
+  sleep 1
+  bash "$RUNNER" --execute >/dev/null
+  [ "$(jq -r .dirty "$SAVIA_BENCH_DIR/runs/$(latest_run)/manifest.json")" = "false" ]
+}
+
+@test "regression: a real change outside results/ still marks the run dirty" {
+  export SAVIA_BENCH_RESULTS="$SAVIA_BENCH_ROOT/results"
+  echo y >> "$SAVIA_BENCH_ROOT/f"
+  bash "$RUNNER" --execute >/dev/null
+  [ "$(jq -r .dirty "$SAVIA_BENCH_DIR/runs/$(latest_run)/manifest.json")" = "true" ]
+}
