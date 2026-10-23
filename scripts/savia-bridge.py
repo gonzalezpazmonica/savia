@@ -70,6 +70,7 @@ Design Principles:
 import argparse
 import hashlib
 import http.server
+import ipaddress
 import json
 import os
 import re
@@ -1338,7 +1339,8 @@ def _get_or_create_interactive_session(
         cmd.extend(["--resume", session_id])
 
     if system_prompt and is_new:
-        cmd.extend(["--system-prompt", system_prompt])
+        # "=" form: a client value starting with "-" can never become a flag
+        cmd.append(f"--system-prompt={system_prompt}")
 
     chat_log(f"[req:{request_id}] Starting interactive process (workdir={workdir}): {' '.join(cmd[:6])}...")
 
@@ -1596,8 +1598,9 @@ def stream_claude_response(message: str, session_id: str = None, system_prompt: 
             cmd.extend(["--resume", session_id])
 
     if system_prompt and is_new:
-        # Only send system prompt on first message of a session
-        cmd.extend(["--system-prompt", system_prompt])
+        # Only send system prompt on first message of a session.
+        # "=" form: a client value starting with "-" can never become a flag
+        cmd.append(f"--system-prompt={system_prompt}")
 
     # Inject user identity context into every message (--resume ignores --system-prompt)
     if user_slug:
@@ -1617,7 +1620,8 @@ def stream_claude_response(message: str, session_id: str = None, system_prompt: 
         except Exception:
             pass
 
-    cmd.append(message)
+    # "--" ends option parsing: a message like "--mcp-config=..." stays a prompt
+    cmd.extend(["--", message])
 
     session_mode = "new" if is_new else "resume"
     log(f"[req:{request_id}] Executing ({session_mode}): {claude_bin} -p ... '{message[:80]}'")
@@ -1903,6 +1907,35 @@ def stream_cli_response(message: str, session_id: str = None,
 
 # --- HTTP Server ---
 
+_CORS_LOCAL_HOSTNAMES = frozenset({"localhost", "lima"})
+_CORS_CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale-style VPN
+_CORS_ORIGIN_RE = re.compile(r"https?://[A-Za-z0-9.\-]+(?::[0-9]{1,5})?")
+
+
+def _allowed_cors_origin(origin: str) -> str | None:
+    """Return the canonical Origin if it is a local-network origin, else None.
+
+    Matches the whole Origin, never a prefix: "http://localhost.evil.com"
+    and folded values carrying CR/LF (header splitting) are rejected.
+    """
+    if not origin or not _CORS_ORIGIN_RE.fullmatch(origin):
+        return None
+    parsed = urlparse(origin)
+    host = (parsed.hostname or "").lower()
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if host not in _CORS_LOCAL_HOSTNAMES:
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return None
+        if not (ip.is_loopback or ip.is_private or ip in _CORS_CGNAT):
+            return None
+    return f"{parsed.scheme}://{host}" + (f":{port}" if port is not None else "")
+
+
 class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
     """
     HTTP/HTTPS request handler for Savia Bridge endpoints.
@@ -2005,18 +2038,8 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
     def _send_cors_headers(self):
         """A5 FIX: Restrict CORS to local network origins only."""
-        origin = self.headers.get("Origin", "")
-        allowed_patterns = ("http://localhost", "https://localhost",
-                            "http://127.0.0.1", "https://127.0.0.1",
-                            "http://192.168.", "https://192.168.",
-                            "http://10.", "https://10.",
-                            "http://100.", "https://100.",
-                            "http://172.", "https://172.",
-                            "http://lima", "https://lima")
-        if any(origin.startswith(p) for p in allowed_patterns):
-            self.send_header("Access-Control-Allow-Origin", origin)
-        else:
-            self.send_header("Access-Control-Allow-Origin", "https://localhost")
+        allowed = _allowed_cors_origin(self.headers.get("Origin", ""))
+        self.send_header("Access-Control-Allow-Origin", allowed or "https://localhost")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.send_header("Vary", "Origin")
