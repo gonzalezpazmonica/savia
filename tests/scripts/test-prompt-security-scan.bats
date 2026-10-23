@@ -95,7 +95,8 @@ MD
 Safe agent prompt.
 MD
   run bash "$SCRIPT" --path "$TMPDIR_TEST/agents" --quiet
-  [ -z "$output" ]
+  # SE-453: --quiet calla el informe, pero la línea final del contrato gate-result se emite siempre.
+  [ "$output" = 'gate-result: {"result":"clean","gaps":[]}' ]
 }
 
 @test "prompt-scan: single file scan works" {

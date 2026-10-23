@@ -56,6 +56,14 @@ last_result() { printf '%s\n' "$output" | grep '^gate-result: ' | tail -1 | sed 
   python3 -c 'import json,sys; d=json.loads(sys.argv[1].split(": ",1)[1]); assert d=={"result":"unknown","gaps":[{"check":"gitleaks","reason":"missing_tool"},{"check":"history","reason":"limit"}]}, d' "$output"
 }
 
+@test "contrato: un check con salto de línea o tabulador sale en una sola línea JSON válida (revisión #1355)" {
+  source "$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
+  run gate_result_emit unknown $'a\nb\tc.md:unreadable'
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1].split(": ",1)[1]); assert d["gaps"]==[{"check":"a_b_c.md","reason":"unreadable"}], d' "$output"
+}
+
 @test "contrato: rechaza estado inválido, motivo inválido y unknown sin hueco" {
   source "$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
   run gate_result_emit mal; [ "$status" -ne 0 ]

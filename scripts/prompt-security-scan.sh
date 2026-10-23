@@ -56,45 +56,45 @@ scan_file() {
   # PS-01: Injection bait
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "CRIT" "$file" "$num" "PS-01" "Injection bait: instruction override"
-  done < <(grep -nEi '(ignore|forget|disregard|override).*(previous|above|system|prior).*(instructions|prompt|rules|context)' "$file" 2>/dev/null || true)
+  done < <(grep -anEi '(ignore|forget|disregard|override).*(previous|above|system|prior).*(instructions|prompt|rules|context)' "$file" 2>/dev/null || true)
 
   # PS-02: Prompt exfiltration
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "CRIT" "$file" "$num" "PS-02" "Prompt exfiltration: system prompt leak"
-  done < <(grep -nEi '(print|show|reveal|output|display|repeat|echo).*(system prompt|all instructions|CLAUDE\.md)' "$file" 2>/dev/null | \
+  done < <(grep -anEi '(print|show|reveal|output|display|repeat|echo).*(system prompt|all instructions|CLAUDE\.md)' "$file" 2>/dev/null | \
     grep -vi 'check.*rules\|verify.*rules\|business rules\|output.*for' || true)
 
   # PS-03: Role hijack
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-03" "Role hijack: identity redefinition"
-  done < <(grep -nEi '(you are now|from now on you).*(different|new|another|not)' "$file" 2>/dev/null || true)
+  done < <(grep -anEi '(you are now|from now on you).*(different|new|another|not)' "$file" 2>/dev/null || true)
 
   # PS-04: Data exfiltration via URL
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-04" "Data exfiltration: suspicious external URL"
-  done < <(grep -nEi '(curl|wget|fetch)\s+https?://[^ ]*(api|webhook|endpoint)' "$file" 2>/dev/null | \
+  done < <(grep -anEi '(curl|wget|fetch)\s+https?://[^ ]*(api|webhook|endpoint)' "$file" 2>/dev/null | \
     grep -vi 'example\.com\|localhost\|127\.0\.0\.1\|ollama\|anthropic\|github\|azure\|google\|microsoft' || true)
 
   # PS-05: Credentials in prompt
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "CRIT" "$file" "$num" "PS-05" "Hardcoded credential in prompt"
-  done < <(grep -nEi "(password|secret|token|api.key)\s*[=:]\s*[\"'][^\"']{8,}" "$file" 2>/dev/null | \
+  done < <(grep -anEi "(password|secret|token|api.key)\s*[=:]\s*[\"'][^\"']{8,}" "$file" 2>/dev/null | \
     grep -vi 'PLACEHOLDER\|example\|TU_\|YOUR_\|<.*>\|vault\|keyvault\|secretsmanager' || true)
 
   # PS-06: Eval/exec patterns
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-06" "Code execution pattern in prompt"
-  done < <(grep -nEi '(eval|exec|os\.system|child_process)\s*\(' "$file" 2>/dev/null || true)
+  done < <(grep -anEi '(eval|exec|os\.system|child_process)\s*\(' "$file" 2>/dev/null || true)
 
   # PS-07: Base64 blobs (warning only)
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_warn "$file" "$num" "Base64-like content (verify manually)"
-  done < <(grep -nE '[A-Za-z0-9+/]{40,}={0,2}' "$file" 2>/dev/null | grep -v 'sha256\|hash\|commit' || true)
+  done < <(grep -anE '[A-Za-z0-9+/]{40,}={0,2}' "$file" 2>/dev/null | grep -v 'sha256\|hash\|commit' || true)
 
   # PS-08: PII in prompts (warning only)
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_warn "$file" "$num" "Email in prompt (verify not real PII)"
-  done < <(grep -nE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$file" 2>/dev/null | \
+  done < <(grep -anE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$file" 2>/dev/null | \
     grep -vi '@example\|@test\|@localhost\|noreply\|@anthropic' || true)
 
   # PS-09: Missing model (agents)
@@ -109,25 +109,26 @@ scan_file() {
 
   # PS-11: Zero-width chars (SE-060) — hidden directives via U+200B/C/D/FEFF
   # SE-453: se buscan sus bytes UTF-8 con grep en locale C, sin python3. Antes, sin python3 la
-  # comprobación se omitía en silencio y el fichero salía limpio.
+  # comprobación se omitía en silencio y el fichero salía limpio. Todas las búsquedas usan grep -a: con un
+  # byte NUL, grep imprimía «Binary file … matches» sin número de línea y no se registraba nada.
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-11" "Zero-width character (possible hidden directive)"
-  done < <(LC_ALL=C grep -nE $'\xe2\x80[\x8b-\x8d]|\xef\xbb\xbf' "$file" 2>/dev/null || true)
+  done < <(LC_ALL=C grep -anE $'\xe2\x80[\x8b-\x8d]|\xef\xbb\xbf' "$file" 2>/dev/null || true)
 
   # PS-12: Long base64 strings (>80 chars, not in code blocks with hash/commit context)
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-12" "Long base64-like string (possible encoded directive)"
-  done < <(grep -nE '[A-Za-z0-9+/]{80,}={0,2}' "$file" 2>/dev/null | grep -vi 'sha\|hash\|commit\|signature\|certificate\|-----BEGIN' || true)
+  done < <(grep -anE '[A-Za-z0-9+/]{80,}={0,2}' "$file" 2>/dev/null | grep -vi 'sha\|hash\|commit\|signature\|certificate\|-----BEGIN' || true)
 
   # PS-13: URL-pipe-shell execution
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-13" "URL-pipe-shell execution pattern"
-  done < <(grep -nE '(curl|wget)[^|]*https?[^|]*\|[[:space:]]*(bash|sh|zsh)' "$file" 2>/dev/null || true)
+  done < <(grep -anE '(curl|wget)[^|]*https?[^|]*\|[[:space:]]*(bash|sh|zsh)' "$file" 2>/dev/null || true)
 
   # PS-14: Time-based conditional (time bomb) — epoch comparison in agent/skill prompts
   while IFS=: read -r num _; do
     [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-14" "Time-based conditional (possible time bomb)"
-  done < <(grep -nE 'date[[:space:]]+\+%s.*[><]=?[[:space:]]*[0-9]{10,}' "$file" 2>/dev/null || true)
+  done < <(grep -anE 'date[[:space:]]+\+%s.*[><]=?[[:space:]]*[0-9]{10,}' "$file" 2>/dev/null || true)
 }
 
 # ── Main ──
@@ -157,7 +158,8 @@ TOTAL_W=$(cat "$WARNINGS_FILE")
 $QUIET || printf "\n  Scanned: %d files | Findings: %d | Warnings: %d\n\n" "$FILE_COUNT" "$TOTAL_F" "$TOTAL_W"
 
 if [[ "$TOTAL_F" -gt 0 ]]; then
-  gate_result_emit findings "${GAPS[@]}"
+  # ${GAPS[@]+…}: con set -u, bash < 4.4 trata un array vacío como variable sin definir.
+  gate_result_emit findings ${GAPS[@]+"${GAPS[@]}"}
   exit 1
 fi
 if [[ ${#GAPS[@]} -gt 0 ]]; then

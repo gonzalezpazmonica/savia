@@ -438,6 +438,17 @@ gate_line() { printf '%s\n' "$output" | tail -1; }
   printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d=={"result":"unknown","gaps":[{"check":"trivy-config","reason":"unreadable"}]}, d'
 }
 
+@test "gate-result: --format json con fallo al fusionar el report ⇒ exit 2 y unknown, no stdout vacío (revisión #1355)" {
+  # python3 que falla solo en la fusión final del report (argumentos: -, report, línea gate-result).
+  local real; real="$(command -p readlink -f "$WORK/sys/python3")"
+  rm "$WORK/sys/python3"
+  printf '#!/bin/bash\n[[ "$1" == - && "${3:-}" == "{\\"result\\""* ]] && exit 1\nexec %s "$@"\n' "$real" > "$WORK/sys/python3"
+  chmod +x "$WORK/sys/python3"
+  run --separate-stderr bash "$SCAN" --path "$INFRA" --format json
+  [ "$status" -eq 2 ]
+  printf '%s' "$output" | "$real" -c 'import json,sys; d=json.load(sys.stdin); assert d=={"result":"unknown","gaps":[{"check":"report","reason":"unreadable"}]}, d'
+}
+
 @test "gate-result: un error de argumentos sale 2 sin resultado (no es un escaneo)" {
   run bash "$SCAN" --format xml --path "$INFRA"
   [ "$status" -eq 2 ]

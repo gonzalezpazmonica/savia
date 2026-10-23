@@ -269,7 +269,8 @@ emit_result() {
   line="$(gate_result_emit "$@")" || return 2
   if [[ "$FORMAT" != "json" ]]; then echo "$line"; return 0; fi
   if [[ -n "${EMIT_REPORT:-}" ]]; then
-    python3 - "$EMIT_REPORT" "${line#gate-result: }" <<'PYEOF'
+    # Si no se puede fusionar, stdout quedaría vacío con exit 0/1: se emite unknown y el llamador sale 2.
+    python3 - "$EMIT_REPORT" "${line#gate-result: }" <<'PYEOF' || { echo "ERROR: no se pudo añadir el resultado al report JSON" >&2; line="$(gate_result_emit unknown "report:unreadable")"; echo "${line#gate-result: }"; return 2; }
 import json, sys
 d = json.load(open(sys.argv[1])); d.update(json.loads(sys.argv[2]))
 print(json.dumps(d, indent=2, ensure_ascii=False))
@@ -426,8 +427,10 @@ if [[ "$FORMAT" == "json" && $OVERALL_EXIT -lt 2 ]]; then
   if [[ -n "$SCAN_PATH" ]]; then EMIT_REPORT="$REPORT_JSON"; else EMIT_REPORT="$IMAGE_JSON"; fi
 fi
 case $OVERALL_EXIT in
-  0) emit_result clean ;;
-  1) emit_result findings ;;
-  *) emit_result unknown "${GAPS[@]}" ;;
+  0) emit_result clean || exit 2 ;;
+  1) emit_result findings || exit 2 ;;
+  # Red de seguridad: un exit ≥2 sin hueco registrado no puede salir sin resultado (unknown exige uno).
+  *) (( ${#GAPS[@]} )) || GAPS+=("trivy:unreadable")
+     emit_result unknown "${GAPS[@]}" ;;
 esac
 exit "$OVERALL_EXIT"
