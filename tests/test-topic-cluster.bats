@@ -122,6 +122,8 @@ teardown() {
   [ "$status" -eq 0 ]
   # With 6 docs, 2 themed clusters expected
   run python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['topics']))" <<<"$output"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
 }
 
 # --- Usage errors ---
