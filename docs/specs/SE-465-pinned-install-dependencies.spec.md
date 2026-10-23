@@ -51,10 +51,10 @@ descartar 8 con causa sube la puntuación de Scorecard y, sobre todo, hace repro
 | Slice | Entrega |
 |---|---|
 | S1 | G1: `FROM imagen:tag@sha256:<digest>` en los 5 Dockerfiles; el digest se resuelve con `docker buildx imagetools inspect` (o la API del registro) y Dependabot `docker` lo mantiene (se añade el ecosistema a `.github/dependabot.yml`). |
-| S2 | G2: cada instalador remoto se sustituye por descarga de un artefacto versionado con verificación de SHA-256 antes de ejecutar (`curl -o` + `sha256sum -c`), o por el gestor de paquetes con versión fija (Node: imagen `node:<ver>` en vez de nodesource). Si el proveedor no publica artefacto con hash, se documenta y se deja la ruta remota detrás de una confirmación explícita (`--allow-remote-installer`). |
+| S2 | G2: cada instalador remoto se sustituye por descarga de un artefacto versionado con verificación de SHA-256 antes de ejecutar (`curl -o` + `sha256sum -c`), o por el gestor de paquetes con versión fija (Node: imagen `node:<ver>` en vez de nodesource). Si el proveedor no publica artefacto con hash, se documenta y se deja la ruta remota detrás de una confirmación explícita (`--allow-remote-installer`, solo como argumento de línea de órdenes: sin equivalente en variable de entorno, y la CI lo rechaza). |
 | S3 | G4(a): `npm ci` donde hay lockfile versionado. G4(c): `npm install -g <paquete>@<versión exacta>`. G4(b): decisión D1 por proyecto (versionar el lock como SE-425 o `npm ci` contra un lock generado en CI). |
 | S4 | G5: `pip install --require-hashes -r <lock>` con locks generados por `pip-compile --generate-hashes` (mismo patrón que `.github/requirements/pip-audit.lock.txt` de SE-442). |
-| S5 | Checker `scripts/check-pinned-installs.sh` que recorre `*.sh`, `Dockerfile*` y `.github/workflows/*` y falla ante `FROM` sin `@sha256:`, `curl … \| (ba)?sh`, `npm install -g` sin `@versión` y `pip install` sin `--require-hashes`, con lista de excepciones razonadas en un fichero aparte. BATS con casos positivos y negativos. |
+| S5 | Checker `scripts/check-pinned-installs.sh` que recorre `*.sh`, `Dockerfile*` y `.github/workflows/*` y falla ante `FROM` sin `@sha256:`, `curl … \| (ba)?sh`, `npm install -g` sin `@versión`, `npm install` sin `-g` (debe ser `npm ci`; cubre G4 a y b, con excepciones razonadas según D1) y `pip install` sin `--require-hashes`, con lista de excepciones razonadas en un fichero aparte. Trata también como ejecución de lo descargado `curl … \| python3` sin `-c "<literal>"` ni `-m json.tool` (`\| python3`, `\| python3 -`, `\| python3 /dev/stdin`). BATS con casos positivos y negativos. |
 | S6 | G3: la PR deja en su body la orden `gh api -X PATCH …` de descarte (`false positive`) para las 8 alertas, con el motivo por alerta. No las descarta. |
 
 ## Fuera de alcance
@@ -69,9 +69,9 @@ descartar 8 con causa sube la puntuación de Scorecard y, sobre todo, hace repro
 | AC | Verificación |
 |---|---|
 | AC1 | `bats tests/test-check-pinned-installs.bats` pasa. |
-| AC2 | Caso negativo: fixtures con `FROM python:3.11-slim`, `curl -fsSL x \| sh`, `npm install -g foo` y `pip install bar` hacen fallar el checker, con fichero y línea. Contra `main`, el checker sin excepciones reporta ≥ 26 hallazgos (G1+G2+G4+G5). |
-| AC3 | El checker **no** reporta los 8 casos de G3 (`curl … \| python3 -c`, `\| python3 -m json.tool`): test explícito, para que el falso positivo de Scorecard no se replique. |
-| AC4 | Tras S1-S4 el checker sobre el repo da 0 hallazgos fuera de la lista de excepciones, y cada excepción lleva motivo. |
+| AC2 | Caso negativo: fixtures con `FROM python:3.11-slim`, `curl -fsSL x \| sh`, `npm install -g foo` y `pip install bar` hacen fallar el checker, con fichero y línea. Contra `main`, el checker sin excepciones reporta ≥ 26 hallazgos: G1 5 + G2 4 + G4 12 (a: `npm install` → `npm ci`; b: `npm install` sin lock; c: `-g` sin versión) + G5 5. Un fixture por patrón (`npm install` sin `-g` incluido) falla con fichero y línea. |
+| AC3 | El checker **no** reporta los 8 casos de G3 (`curl … \| python3 -c`, `\| python3 -m json.tool`): test explícito, para que el falso positivo de Scorecard no se replique. Casos positivos simétricos que **sí** deben fallar: `curl x \| python3`, `curl x \| python3 -` y `curl x \| python3 /dev/stdin`. La excepción se limita a `python3 -c "<literal>"` y `python3 -m json.tool`. |
+| AC4 | Tras S1-S4 (incluido `npm ci` donde hay lockfile) el checker sobre el repo da 0 hallazgos fuera de la lista de excepciones, y cada excepción lleva motivo. |
 | AC5 | `bash install.sh` (o el smoke de `install-smoke.yml`) sigue verde en CI. |
 | AC6 | En el siguiente análisis de Scorecard sobre `main` tras el merge, las alertas de G1, G2, G4 y G5 que se arreglaron pasan a `fixed` (comprobado con `gh api`); se anota en la spec el recuento antes/después. |
 

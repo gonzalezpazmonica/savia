@@ -48,10 +48,10 @@ siendo `0.0.0.0`); se cierra con un descarte razonado que cite esta spec una vez
 
 | Slice | Entrega |
 |---|---|
-| S1 | Servidor HTTP **apagado por defecto**: `main.py` solo lo arranca si `zeroclaw/firmware/config.json` (el mismo fichero que ya lee `boot.py` para `wifi_ssid`) trae `"http_enabled": true` y un `"http_token"` de al menos 32 caracteres. Sin token configurado no arranca y lo dice por serie. |
-| S2 | Autenticación: `/cmd` y `/status` exigen `Authorization: Bearer <token>` con comparación en tiempo constante (bucle XOR propio; MicroPython no trae `hmac.compare_digest`). `/ping` queda abierto pero sin IP. Sin cabecera o con token erróneo: `401` sin cuerpo útil. |
+| S1 | Servidor HTTP **apagado por defecto**: `main.py` solo lo arranca si `zeroclaw/firmware/config.json` (el mismo fichero que ya lee `boot.py` para `wifi_ssid`) trae `"http_enabled": true` y un `"http_token"` de al menos 32 caracteres. Sin token configurado no arranca y lo dice por serie. El aviso se emite **fuera** del `try/except: pass` que hoy envuelve el bloque WiFi de `main.py` (líneas 35-47), en la función `should_start_http(cfg)`; si la lectura de `config.json` falla (fichero ausente o corrupto), el resultado es «apagado», decisión deliberada. |
+| S2 | Autenticación: `/cmd` y `/status` exigen `Authorization: Bearer <token>` con comparación en tiempo constante (bucle XOR propio; MicroPython no trae `hmac.compare_digest`). `/ping` queda abierto pero sin IP. Sin cabecera o con token erróneo: `401` sin cuerpo útil. El nombre de la cabecera no distingue mayúsculas (`authorization` vale). La petición se lee en bucle hasta `\r\n\r\n` y `Content-Length` (tope 4096 bytes; más, `413`), porque un único `recv(2048)` puede truncar `Authorization` o el cuerpo. |
 | S3 | Sin `Access-Control-Allow-Origin: *`: no se emite cabecera CORS. Un navegador no puede leer la respuesta y la cabecera `Authorization` fuerza preflight, que el servidor no contesta. El 500 responde `{"error":"internal"}`. |
-| S4 | `gpio` con lista permitida de pines (constante en `commands.py`, por defecto vacía para la vía HTTP); la vía serie conserva el comportamiento actual. |
+| S4 | `gpio` con lista permitida de pines (constante en `commands.py`, por defecto vacía para la vía HTTP); la vía serie conserva el comportamiento actual. `CommandHandler.process(body, source="serial")` recibe el origen; `wifi_server.py` llama con `source="http"` y solo ese origen aplica la lista. |
 | S5 | Tests en CPython sin hardware: `_handle()` y `poll()` con socket falso y `network`/`machine` sustituidos por módulos stub en `sys.modules`. |
 
 ## Fuera de alcance
@@ -70,7 +70,9 @@ siendo `0.0.0.0`); se cierra con un descarte razonado que cite esta spec una vez
 | AC3 | Token erróneo de la misma longitud y token correcto con un carácter cambiado: 401 en ambos. Token correcto: 200 y una llamada al handler. |
 | AC4 | Ninguna respuesta contiene `Access-Control-Allow-Origin` (test sobre los bytes enviados al socket falso). |
 | AC5 | `main.py` con config sin `http_token` o con token de menos de 32 caracteres no instancia `MiniHTTPServer` (test con `main` importado contra stubs, o refactor mínimo a una función `should_start_http(cfg)` testeada). |
-| AC6 | `gpio` por la vía HTTP con un pin fuera de la lista permitida devuelve error y no llama a `machine.Pin`. |
+| AC6 | `gpio` con `source="http"` y un pin fuera de la lista permitida devuelve error y no llama a `machine.Pin`; con `source="serial"` (valor por defecto) el comportamiento es el actual. |
+| AC9 | Cabecera `authorization: Bearer <token>` en minúsculas: 200. Petición partida en dos `recv` (cabecera `Authorization` en el segundo): 200 con token correcto, 401 sin él. Cuerpo mayor de 4096 bytes: 413 y cero llamadas al handler. |
+| AC10 | `should_start_http` con `config.json` ausente o ilegible devuelve falso y el aviso sale por serie aunque el bloque WiFi falle. |
 | AC7 | Prueba en hardware anotada en la PR por la operadora: con token, `curl -H "Authorization: Bearer …" -d 'led on' http://<ip>/cmd` enciende el LED; sin token, 401. Si no hay hardware a mano, la PR lo dice y el AC queda pendiente. |
 | AC8 | `wifi_server.py` sigue ≤ 150 líneas (`test_network.py`). |
 
