@@ -448,3 +448,33 @@ teardown() {
   [[ -n "${T242:-}" ]] && find "$T242" -delete
   true
 }
+
+@test "SE242-B40: real testssl ids for NULL, EXPORT and 3DES grade C" {
+  mk_tree242; fake_testssl
+  for id in cipherlist_NULL cipherlist_aNULL cipherlist_EXPORT cipherlist_3DES_IDEA TLS_RSA_WITH_3DES_EDE_CBC_SHA; do
+    FAKE_TESTSSL_JSON='[{"id":"'"$id"'","severity":"HIGH","finding":"offered"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+    [[ "$output" == *"GRADE: C"* ]] || { echo "id=$id output=$output"; false; }
+  done
+}
+
+@test "SE242-B41: words that merely contain des or null do not grade C" {
+  mk_tree242; fake_testssl
+  FAKE_TESTSSL_JSON='[{"id":"cipherlist_OK","severity":"INFO","finding":"described, nullable, exported, destination"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [[ "$output" == *"GRADE: B"* ]]
+}
+
+@test "SE242-B42: a host starting with a dash is rejected" {
+  mk_tree242; fake_testssl
+  tls bash "$T242/scripts/tls-security-check.sh" --host "-x"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"host inválido"* ]]
+}
+
+@test "SE242-B43: control characters in a header value keep the JSON valid" {
+  mk_tree242; start_http
+  { echo "$ALL_HEADERS"; printf 'Server: ngx\ttab\n'; } > "$T242/hdr_"
+  tls bash "$T242/scripts/web-headers-check.sh" --url "$URL/"
+  stop_http
+  [ "$status" -eq 0 ]
+  [ "$(jget "$(hdr_report)" "d['server']")" = "ngx tab" ]
+}

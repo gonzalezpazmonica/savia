@@ -73,7 +73,7 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
       grep -HnE "\b${sym}\b" $sources 2>/dev/null \
         | grep -vE ":(#|//|/\*|\*|--|<!--)[[:space:]]*$" \
         | grep -vE "\b(import|from|require|use|include|package|module|export|#include)\b.*\b${sym}\b" \
-        | grep -vE ":(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
+        | grep -vE ":[[:space:]]*(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
         | cut -d: -f1 \
         | sort -u
     else

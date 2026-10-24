@@ -310,3 +310,13 @@ jf() { echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); pri
   [[ "$output" == "backend=grep"* || "$output" == "backend=codegraph" ]]
   rm_proj
 }
+
+@test "BR-B20: --symbol with --file ignores an indented definition" {
+  mk_proj
+  cd "$P"
+  printf '  function zed() {\n    :\n  }\n' > only-def.sh
+  run bash "$BR" --symbol zed --file only-def.sh
+  [ "$status" -eq 0 ]
+  [ "$(jf "d['total']")" = "0" ]
+  rm_proj
+}

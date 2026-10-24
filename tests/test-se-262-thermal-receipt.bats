@@ -225,3 +225,19 @@ assert d['health_after'] == {'score': 87, 'grade': 'B+'}, d
   [ "$status" -eq 0 ]
   [ "$(field files_changed)" = "4" ]
 }
+
+@test "T30: --project and --format also fail cleanly without a value" {
+  run bash "$SCRIPT" --project
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "--project requires a value" ]]
+  run bash "$SCRIPT" --format
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "--format requires a value" ]]
+}
+
+@test "T31: a refspec that looks like an option is rejected, no file is written" {
+  run bash "$SCRIPT" --branch "--output=$BATS_TEST_TMPDIR/pwned" --project "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "invalid refspec" ]]
+  [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+}

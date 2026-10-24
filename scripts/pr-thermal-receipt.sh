@@ -34,7 +34,9 @@ while [[ $# -gt 0 ]]; do
     --branch|--project|--format)
       [[ $# -ge 2 ]] || { echo "ERROR: $1 requires a value" >&2; exit 1; }
       case "$1" in
-        --branch) MODE="branch"; REFSPEC="$2" ;;
+        --branch)
+          [[ "$2" != -* ]] || { echo "ERROR: invalid refspec: $2" >&2; exit 1; }
+          MODE="branch"; REFSPEC="$2" ;;
         --project) ROOT="$2" ;;
         --format) FORMAT="$2" ;;
       esac

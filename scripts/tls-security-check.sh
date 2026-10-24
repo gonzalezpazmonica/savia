@@ -29,7 +29,7 @@ if [[ -z "$HOST" ]]; then
   exit 1
 fi
 
-if [[ ! "$HOST" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+if [[ ! "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]]; then
   echo "ERROR: host inválido: $HOST" >&2
   exit 1
 fi
@@ -154,7 +154,7 @@ elif echo "$FINDINGS" | grep -qi "sslv3\|cert.*invalid\|expired"; then
   GRADE="F"
 elif echo "$FINDINGS" | grep -qi "tlsv1\.0\|tlsv1\.1"; then
   GRADE="D"
-elif echo "$FINDINGS" | grep -qiE '\b(rc4|des|export|null)\b'; then
+elif echo "$FINDINGS" | grep -qiE '(^|[^a-z])(rc4|3?des|export|a?null)([^a-z]|$)'; then
   GRADE="C"
 fi
 
