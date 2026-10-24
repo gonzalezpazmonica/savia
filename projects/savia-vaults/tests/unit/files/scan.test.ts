@@ -75,6 +75,7 @@ exit 1
 describe('SE-416 antivirus gestionado', () => {
   let dir: string;
   let tools: Tools;
+  let pins: ConstructorParameters<typeof Tools>[0]['pins'];
   let close: () => Promise<void>;
   beforeEach(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-scan-m-'));
@@ -82,14 +83,12 @@ describe('SE-416 antivirus gestionado', () => {
     const uv = fakeUvTarGz(dir);
     const srv = await serve({ '/clamav.deb': deb, '/uv.tar.gz': uv });
     close = srv.close;
-    tools = new Tools({
-      home: path.join(dir, 'tools'), env: { PATH: process.env.PATH, HOME: dir },
-      pins: {
-        clamav: { version: '9.9.9', url: `${srv.url}/clamav.deb`, sha256: sha256(deb) },
-        uv: { version: '0.0.1', url: `${srv.url}/uv.tar.gz`, sha256: sha256(uv) },
-        python: '3.12', torchIndex: 'http://127.0.0.1:9/none',
-      },
-    });
+    pins = {
+      clamav: { version: '9.9.9', url: `${srv.url}/clamav.deb`, sha256: sha256(deb) },
+      uv: { version: '0.0.1', url: `${srv.url}/uv.tar.gz`, sha256: sha256(uv) },
+      python: '3.12', torchIndex: 'http://127.0.0.1:9/none',
+    };
+    tools = new Tools({ home: path.join(dir, 'tools'), env: { PATH: process.env.PATH, HOME: dir }, pins });
     const [r] = await tools.setup(['antivirus']);
     expect(r.ok).toBe(true);
   });
@@ -112,14 +111,29 @@ describe('SE-416 antivirus gestionado', () => {
     expect(r).toEqual([{ verdict: 'clean' }, { verdict: 'infected', signature: 'Eicar-Test-Signature' }]);
   });
 
+  // Toda llamada con firmas viejas lanza un refresco real en segundo plano que, si acaba bien, deja
+  // las firmas al día; sin controlarlo, la segunda llamada compite con él (en un runner rápido ya no
+  // hay aviso). Aquí freshclam falla siempre: las firmas siguen viejas de forma determinista.
   it('AC5: con firmas de más de 7 días, required rechaza explicando el motivo; auto analiza y pide actualizar', async () => {
+    const stale = new Tools({ home: path.join(dir, 'tools'), env: { PATH: process.env.PATH, HOME: dir, FAKE_FRESHCLAM_FAIL: '1' }, pins });
     const f = path.join(dir, 'a.txt');
     fs.writeFileSync(f, 'x');
     age(8 * 24);
-    await expect(scanFiles([f], { mode: 'required', tools })).rejects.toThrow(/SCAN_REQUIRED.*firmas.*8 días/);
-    const r = await scanFiles([f], { mode: 'auto', tools });
+    await expect(scanFiles([f], { mode: 'required', tools: stale })).rejects.toThrow(/SCAN_REQUIRED.*firmas.*8 días/);
+    await stale.whenRefreshSettled();
+    const r = await scanFiles([f], { mode: 'auto', tools: stale });
+    await stale.whenRefreshSettled();
     expect(r[0].verdict).toBe('clean');
     expect(r[0].detail).toMatch(/firmas de hace 8 días/);
+  });
+
+  it('AC5: si el refresco en segundo plano acaba bien, el siguiente análisis ya no rechaza por firmas viejas', async () => {
+    const f = path.join(dir, 'a.txt');
+    fs.writeFileSync(f, 'x');
+    age(8 * 24);
+    await expect(scanFiles([f], { mode: 'required', tools })).rejects.toThrow(/SCAN_REQUIRED/);
+    await tools.whenRefreshSettled();
+    expect(await scanFiles([f], { mode: 'required', tools })).toEqual([{ verdict: 'clean' }]);
   });
 
   it('AC5: firmas de más de 24 h lanzan la actualización en segundo plano sin esperar', async () => {
