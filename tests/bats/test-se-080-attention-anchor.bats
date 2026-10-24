@@ -56,3 +56,69 @@ CHECK_SCRIPT="$REPO_ROOT/scripts/attention-anchor-check.sh"
 @test "SE-080 AC-06: attention-anchor.md cites Genesis upstream (danielmeppiel/genesis)" {
   grep -qi "genesis" "$ANCHOR_DOC"
 }
+
+# ── Comportamiento con árbol sintético (SE-456) ───────────────────────────────
+# La raíz se deduce de la ruta del script: se copia a un árbol temporal para
+# controlar exactamente qué ficheros mencionan cada patrón.
+
+aa_root() {
+  T="$(mktemp -d)"
+  mkdir -p "$T/scripts" "$T/docs/rules" "$T/.opencode"
+  cp "$CHECK_SCRIPT" "$T/scripts/attention-anchor-check.sh"
+}
+
+teardown() { [[ -n "${T:-}" ]] && rm -rf "$T"; true; }
+
+@test "SE-080 comportamiento: sin ningún fichero que cite los patrones, los 4 faltan" {
+  aa_root
+  run bash "$T/scripts/attention-anchor-check.sh"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .checked <<<"$output")" -eq 4 ]
+  [ "$(jq -r .found <<<"$output")" -eq 0 ]
+  [ "$(jq -c '.missing|sort' <<<"$output")" = '["A7","A9","B8","B9"]' ]
+  [ "$(jq -c .details <<<"$output")" = "{}" ]
+}
+
+@test "SE-080 comportamiento: el script no se cuenta a sí mismo como referencia" {
+  aa_root
+  echo "nada relevante" > "$T/docs/a.md"
+  run bash "$T/scripts/attention-anchor-check.sh"
+  [ "$(jq -r .found <<<"$output")" -eq 0 ]
+  [[ "$(jq -r '.details|keys|length' <<<"$output")" -eq 0 ]]
+}
+
+@test "SE-080 comportamiento: cada patrón se localiza con fichero:línea del primer acierto" {
+  aa_root
+  printf 'intro\nlínea con B8 aquí\notra\n' > "$T/docs/uno.md"
+  printf 'x\ny\nz\nA9 supervised\n' > "$T/docs/rules/dos.md"
+  printf '# B9 goal steward\n' > "$T/scripts/tres.sh"
+  run bash "$T/scripts/attention-anchor-check.sh"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .found <<<"$output")" -eq 3 ]
+  [ "$(jq -c '.missing' <<<"$output")" = '["A7"]' ]
+  [ "$(jq -r .details.B8 <<<"$output")" = "docs/uno.md:2" ]
+  [ "$(jq -r .details.A9 <<<"$output")" = "docs/rules/dos.md:4" ]
+  [ "$(jq -r .details.B9 <<<"$output")" = "scripts/tres.sh:1" ]
+}
+
+@test "SE-080 comportamiento: solo cuentan ficheros .md y .sh de docs, scripts y .opencode" {
+  aa_root
+  echo "A7 en texto plano" > "$T/docs/notas.txt"
+  mkdir -p "$T/otro"
+  echo "A7 fuera de las carpetas" > "$T/otro/x.md"
+  run bash "$T/scripts/attention-anchor-check.sh"
+  [ "$(jq -r .found <<<"$output")" -eq 0 ]
+  echo "A7 en .opencode" > "$T/.opencode/regla.md"
+  run bash "$T/scripts/attention-anchor-check.sh"
+  [ "$(jq -r .found <<<"$output")" -eq 1 ]
+  [ "$(jq -r .details.A7 <<<"$output")" = ".opencode/regla.md:1" ]
+}
+
+@test "SE-080 comportamiento: los 4 patrones presentes → found 4 y missing vacío" {
+  aa_root
+  printf 'B8\nB9\nA7\nA9\n' > "$T/docs/todos.md"
+  run bash "$T/scripts/attention-anchor-check.sh"
+  [ "$(jq -r .found <<<"$output")" -eq 4 ]
+  [ "$(jq -c .missing <<<"$output")" = "[]" ]
+  [ "$(jq -r '.details|length' <<<"$output")" -eq 4 ]
+}
