@@ -46,6 +46,14 @@ if [[ -z "$HEADERS_RAW" ]]; then
   exit 1
 fi
 
+# Escapa un valor para incrustarlo en una cadena JSON.
+json_esc() {
+  local v="$1"
+  v=${v//\\/\\\\}
+  v=${v//\"/\\\"}
+  printf '%s' "$v"
+}
+
 # ── Función: extraer header value ─────────────────────────────────────────────
 get_header() {
   local name="$1"
@@ -76,8 +84,8 @@ REFERRER_PRESENT=$(header_present "referrer-policy")
 PERMS=$(get_header "permissions-policy")
 PERMS_PRESENT=$(header_present "permissions-policy")
 
-SERVER=$(get_header "server")
-X_POWERED=$(get_header "x-powered-by")
+SERVER=$(json_esc "$(get_header "server")")
+X_POWERED=$(json_esc "$(get_header "x-powered-by")")
 
 # ── Calcular score (0-100) ────────────────────────────────────────────────────
 SCORE=0
@@ -147,6 +155,8 @@ fi
 FINDINGS_JSON="[${FINDINGS_JSON%,}]"
 
 # ── Generar report JSON ───────────────────────────────────────────────────────
+CSP=$(json_esc "$CSP"); HSTS=$(json_esc "$HSTS"); XCTO=$(json_esc "$XCTO"); XFO=$(json_esc "$XFO")
+REFERRER=$(json_esc "$REFERRER"); PERMS=$(json_esc "$PERMS"); TARGET_URL=$(json_esc "$TARGET_URL")
 cat > "$REPORT_FILE" <<EOF
 {
   "url": "${TARGET_URL}",

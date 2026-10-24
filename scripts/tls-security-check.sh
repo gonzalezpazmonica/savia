@@ -29,6 +29,15 @@ if [[ -z "$HOST" ]]; then
   exit 1
 fi
 
+if [[ ! "$HOST" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+  echo "ERROR: host inválido: $HOST" >&2
+  exit 1
+fi
+if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+  echo "ERROR: puerto inválido: $PORT" >&2
+  exit 1
+fi
+
 # ── Preparar output dir ───────────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
 SAFE_HOST="${HOST//:/_}"
@@ -97,6 +106,7 @@ $TESTSSL_CMD --jsonfile "$TESTSSL_OUT" --severity "$MIN_SEVERITY" \
 # ── Parsear output y clasificar ───────────────────────────────────────────────
 FINDINGS="[]"
 GRADE="A"
+SCAN_OK=false
 
 if [[ -f "$TESTSSL_OUT" ]]; then
   # Extraer findings relevantes con python3 o jq
@@ -127,18 +137,24 @@ for item in data:
 
 print(json.dumps(findings))
 PYEOF
-    )
+    ) && SCAN_OK=true
   fi
+fi
+if ! $SCAN_OK; then
+  FINDINGS="[]"
+  echo "WARN: testssl no produjo un informe legible; no se puede calificar el host." >&2
 fi
 
 # ── Grading ───────────────────────────────────────────────────────────────────
 # Inspeccionar si SSLv3/cert invalid → F; TLS 1.0/1.1 → D; etc.
 GRADE="B"  # default: TLS 1.2 presente
-if echo "$FINDINGS" | grep -qi "sslv3\|cert.*invalid\|expired"; then
+if ! $SCAN_OK; then
+  GRADE="UNKNOWN"  # sin informe legible nunca se da nota (fail-closed)
+elif echo "$FINDINGS" | grep -qi "sslv3\|cert.*invalid\|expired"; then
   GRADE="F"
 elif echo "$FINDINGS" | grep -qi "tlsv1\.0\|tlsv1\.1"; then
   GRADE="D"
-elif echo "$FINDINGS" | grep -qi "rc4\|des\|export\|null"; then
+elif echo "$FINDINGS" | grep -qiE '\b(rc4|des|export|null)\b'; then
   GRADE="C"
 fi
 
