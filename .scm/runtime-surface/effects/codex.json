@@ -1,0 +1,57 @@
+{
+  "kind": "effect-map",
+  "notes": "Worst-case effects per native tool; a tool name is never an effect (TOOL != EFFECT).",
+  "patterns": [
+    {
+      "effects": [
+        "CALL_MCP"
+      ],
+      "prefix": "mcp__"
+    }
+  ],
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "codex",
+  "schema_version": 1,
+  "tools": {
+    "apply_patch": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ],
+    "exec_command": [
+      "EXECUTE_LOCAL",
+      "CREATE_PROCESS",
+      "WRITE_WORKSPACE",
+      "ACCESS_SECRET",
+      "ACCESS_NETWORK",
+      "MODIFY_CONFIG",
+      "EXTERNAL_EFFECT",
+      "CHANGE_SHARED_STATE"
+    ],
+    "read_file": [
+      "READ_WORKSPACE",
+      "ACCESS_SECRET"
+    ],
+    "request_user_input": [
+      "REQUEST_HUMAN_DECISION"
+    ],
+    "shell": [
+      "EXECUTE_LOCAL",
+      "CREATE_PROCESS",
+      "WRITE_WORKSPACE",
+      "ACCESS_SECRET",
+      "ACCESS_NETWORK",
+      "MODIFY_CONFIG",
+      "EXTERNAL_EFFECT",
+      "CHANGE_SHARED_STATE"
+    ],
+    "web_search": [
+      "ACCESS_NETWORK"
+    ]
+  },
+  "verification": "NOT_VERIFIED"
+}

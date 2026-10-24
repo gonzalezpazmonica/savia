@@ -147,6 +147,25 @@ def _surface(root: Path, surface_id: str | None) -> int:
     return 0
 
 
+def _effects(root: Path, surface_id: str | None, tool: str | None) -> int:
+    from sam_effects import load_effect_maps, surface_dispositions, tool_disposition
+    from sam_surface import load_manifests
+
+    manifests, maps = load_manifests(root), load_effect_maps(root)
+    if tool is not None:
+        if surface_id is None:
+            raise SamValidationError("INVALID_SURFACE_MANIFEST", "--tool requires --surface")
+        result = tool_disposition(manifests, maps, surface_id, tool)
+    elif surface_id is not None:
+        result = {"surface": surface_id, "dispositions": surface_dispositions(manifests, surface_id),
+                  "claims": "NONE_REPORT_ONLY"}
+    else:
+        print(f"SAM EFFECTS: VALID ({len(maps)} runtimes)")
+        return 0
+    sys.stdout.buffer.write(canonical_json(result) + b"\n")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SE-397 Savia Architecture Model")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -165,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
     baseline.add_argument("--receipts", type=Path)
     surface = _root_parser(commands, "surface", "validate runtime/surface manifests (SE-398 F1)")
     surface.add_argument("--resolve", metavar="SURFACE_ID")
+    effects = _root_parser(commands, "effects", "native tool to canonical effect mapping (SE-398 F2)")
+    effects.add_argument("--surface", metavar="SURFACE_ID")
+    effects.add_argument("--tool", metavar="NAME")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     try:
@@ -174,6 +196,8 @@ def main(argv: list[str] | None = None) -> int:
             return _check(root)
         if args.command == "impact":
             return _impact(root, args.node, args.depth)
+        if args.command == "effects":
+            return _effects(root, args.surface, args.tool)
         if args.command == "surface":
             return _surface(root, args.resolve)
         if args.command == "trace":
