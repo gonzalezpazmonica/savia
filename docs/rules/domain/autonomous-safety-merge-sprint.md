@@ -84,19 +84,24 @@ Equivalencia del head, comparando árboles (blob y modo):
 
 - **Prefiltro determinista.** Antes de consultar al juez, provoca STOP cualquier delta que toque
   ficheros fuera de los autorizados o paths de tier 3 o gobernanza, suba el tier, añada o borre
-  ficheros, elimine tests, cambie binarios o modos, o supere 200 líneas.
+  ficheros, elimine tests o aserciones, debilite un test (`skip`, `|| true`, `xfail`), cambie
+  binarios o modos, o supere 200 líneas.
+- **Solicitud.** Acotada al grant y al head: `judge/<grant>/<pr>-<head>.request.json`. Un commit
+  nuevo la deja obsoleta y el head nuevo se evalúa de cero.
 - **Veredicto.** Primera línea: `JUDGE: SAFE|STOP pr= from= to= judge= fix_author= scope= security=
-  reason=`. El juez es distinto del autor del fix, del autor original y del orquestador. Ante la
-  duda, STOP.
+  reason=`. `fix_author` es el email del autor del commit o su trailer `Fix-Author:`. El juez es
+  distinto del autor del fix, del autor original y del orquestador. Ante la duda, STOP.
+- **Pausa.** Mientras un PR espera al juez conserva la etiqueta `merge-sprint:<id>`. `plan` borra
+  las etiquetas de sprints muertos.
 - **Comprobación del ejecutor.** El ejecutor verifica el formato, los SHA, la independencia y la
   unicidad. Un veredicto `SAFE` solo deja seguir al PR, con CI nueva. `STOP` detiene el sprint para
   revisión humana.
 
 | Evento | Acción |
 |---|---|
-| CI roja del PR (con tarea de causa raíz), conflicto real, revisión cambiada o HOLD nuevo, tier elevado, merge rechazado | Aparcar (vuelve a Draft) y seguir |
+| CI roja del PR (con tarea de causa raíz), conflicto real, revisión cambiada o HOLD nuevo, tier elevado, merge rechazado | Aparcar (vuelve a Draft si el ejecutor lo sacó de Draft) y seguir |
 | CI de `main` no verde tras un merge (rojo, pending, ausente, cancelled, skipped) | Parar |
-| Grant inválido o revocado, manifiesto o blobs alterados, merge externo, base cambiada, checks reducidos | Parar (anomalía) |
+| Grant inválido o revocado, manifiesto o blobs alterados, merge externo (sin reserva propia, o de otro SHA u otra cuenta), base cambiada, checks reducidos | Parar (anomalía) |
 | Juez `STOP`, veredicto inválido o fuera de plazo | Parar |
 | Máximo de merges, TTL, fichero STOP, 3 aparcamientos seguidos | Parar |
 
