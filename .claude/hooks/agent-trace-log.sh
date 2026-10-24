@@ -7,6 +7,11 @@ export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$SAVIA_WORKSPACE_DIR}"
 # Includes per-agent token budget metering (SPEC-AGENT-METERING)
 # NOTE: no set -e — script manages errors manually
 
+# Un hook PostToolUse nunca debe fallar por variables ausentes (set -u).
+TOOL_NAME="${TOOL_NAME:-}"
+TOOL_INPUT="${TOOL_INPUT:-}"
+TOOL_RESULT_STATUS="${TOOL_RESULT_STATUS:-}"
+
 # Only trigger for Task tool (subagent invocation)
 if [[ "$TOOL_NAME" != "Task" ]]; then
     exit 0

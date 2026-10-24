@@ -60,9 +60,9 @@ teardown() {
 }
 
 @test "bad agent name with dots fails gracefully" {
-  result=$(bash "$SCRIPT" "bad.agent.name")
-  [ "$status" -eq 0 ] || true
-  [[ "$result" == "0" ]]
+  run bash "$SCRIPT" "bad.agent.name"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "0" ]]
 }
 
 # ── Edge cases ──
