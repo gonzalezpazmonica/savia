@@ -21,11 +21,14 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from ablation_consumers import static_consumers
+
 CONTRACT_PATH = "config/ablation-contract.json"
 DEFAULT_OUT = "output/ablation"
 REPORT_NAME = "f1-inventory"
 FRONTENDS = (".claude", ".opencode", ".agents")
 MODEL_KEYS = frozenset({"model", "model_id", "provider", "frontend", "baseline_model"})
+CONSUMED_KINDS = frozenset({"command", "skill", "agent", "hook", "script", "rule"})
 REMOVAL_ACTIONS = frozenset({"delete", "remove", "retire"})
 REQUIRED_FLOORS = ("authority_effect_correctness", "security_floors")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -36,6 +39,7 @@ LIMITATIONS = [
     "NO_SEMANTIC_EQUIVALENCE",
     "STATIC_TRACKED_TREE_ONLY",
     "HOOK_REGISTRATION_IS_NOT_INVOCATION",
+    "STATIC_CONSUMERS_ARE_LITERAL_REFERENCES_NOT_USAGE",
 ]
 
 
@@ -244,12 +248,17 @@ def build_report(root: Path) -> dict:
                         "essentiality": "DOMAIN_PACK", "sam_capability": None,
                         "basis": ["REGISTRY:config/domain-packs.json"],
                         "hypotheses": [], "unknowns": []})
+    consumers = static_consumers(root, files, records, set(ctx["views"]))
     for rec in records:
+        edges = consumers.get(rec["path"], {})
+        rec["static_consumers"] = {b: len(edges.get(b, [])) for b in ("active", "tests")}
+        if rec["kind"] in CONSUMED_KINDS and not any(rec["static_consumers"].values()):
+            rec["unknowns"].append("NO_STATIC_CONSUMER")
         validate_record(rec, contract)
     surface = sha256(canonical([[r["path"], files.get(r["path"], ("", ""))[1]]
                                 for r in records]))
     report = {
-        "schema": 1, "spec": "SE-400", "phase": "F1",
+        "schema": 1, "spec": "SE-400", "phases": ["F1", "F2-static-consumers"],
         "provenance": {
             "contract_version": contract["contract_version"],
             "contract_sha256": sha256(canonical(contract)),
@@ -272,6 +281,8 @@ def summarize(records: list[dict]) -> dict:
     for rec in records:
         by_kind[rec["kind"]]["physical"] += 1
         by_kind[rec["kind"]]["indexed_in_sam"] += bool(rec["sam_capability"])
+        sc = rec.get("static_consumers", {})
+        by_kind[rec["kind"]]["only_test_consumers"] += bool(sc.get("tests") and not sc.get("active"))
         by_origin[rec["origin"]][rec["kind"]] += 1
     unknowns = Counter(u for rec in records for u in rec["unknowns"])
     hypotheses = Counter(h for rec in records for h in rec["hypotheses"])
@@ -293,9 +304,10 @@ def render_md(report: dict) -> str:
              f"Revisión del informe: `{report['report_revision'][:12]}`", "",
              "| Procedencia | Valor |", "|---|---|"]
     lines += [f"| {k} | `{v}` |" for k, v in sorted(p.items())]
-    lines += ["", "| Kind | Física | Indexada en SAM |", "|---|---:|---:|"]
-    lines += [f"| {k} | {v.get('physical', 0)} | {v.get('indexed_in_sam', 0)} |"
-              for k, v in s["by_kind"].items()]
+    lines += ["", "| Kind | Física | Indexada en SAM | Solo consumidores test |",
+              "|---|---:|---:|---:|"]
+    lines += [f"| {k} | {v.get('physical', 0)} | {v.get('indexed_in_sam', 0)} "
+              f"| {v.get('only_test_consumers', 0)} |" for k, v in s["by_kind"].items()]
     for title, key in (("Clase", "by_class"), ("Essentiality", "by_essentiality"),
                        ("Motivo UNKNOWN", "unknown_reasons"),
                        ("Hipótesis (no autoritativas)", "hypotheses")):

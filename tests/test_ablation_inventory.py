@@ -13,6 +13,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from ablation_consumers import build_keys  # noqa: E402
 from ablation_inventory import (  # noqa: E402
     InventoryError,
     build_report,
@@ -59,9 +60,14 @@ def make_fixture(root: Path) -> None:
     _write(root, "scripts/gen-agents.sh", "#!/bin/sh\n")
     _write(root, "scripts/tool.py", "print(1)\n")
     _write(root, "docs/rules/domain/rule.md", "# rule\n")
-    _write(root, "AGENTS.md", "# generated\n")
     _write(root, "SKILLS.md", "# generated\n")
     _write(root, "README.md", "# out of surface\n")
+    _write(root, "docs/guide.md",
+           "Run `scripts/tool.py`, then /core, see .opencode/skills/demo/SKILL.md.\n")
+    _write(root, "tests/test-gen.bats", "run bash ./scripts/gen-agents.sh\n")
+    _write(root, "CHANGELOG.md", "- docs/rules/domain/rule.md added\n")
+    _write(root, "AGENTS.md", "# generated: .claude/commands/extended.md\n")
+    _write(root, "scripts/selfref.sh", "# usage: scripts/selfref.sh\n")
     edges = [{"relation": "IMPLEMENTS", "source": "component/.claude/commands/core.md",
               "target": "capability/cmd:.claude/commands/core"}]
     _write(root, ".scm/sam.json", json.dumps({"model_revision": "f" * 64, "edges": edges}))
@@ -173,6 +179,28 @@ class FixtureInventoryTest(unittest.TestCase):
         self.assertEqual(self.by_path[".claude/agents/orphan.md"]["basis"], [])
         self.assertEqual(self.by_path[".agents/skills"]["basis"], ["SYMLINK:../.claude/skills"])
         self.assertEqual(self.by_path[".claude/hooks/guard.sh"]["basis"], ["SETTINGS:PreToolUse"])
+
+    def consumers(self, path: str) -> dict:
+        return self.by_path[path]["static_consumers"]
+
+    def test_static_consumers_by_literal_reference(self) -> None:
+        self.assertEqual(self.consumers("scripts/tool.py"), {"active": 1, "tests": 0})
+        self.assertEqual(self.consumers(".claude/commands/core.md")["active"], 1)
+        self.assertEqual(self.consumers(".claude/skills/demo/SKILL.md")["active"], 1)
+        self.assertEqual(self.consumers("scripts/gen-agents.sh")["tests"], 1)
+        self.assertEqual(self.consumers(".claude/hooks/guard.sh")["active"], 1)
+
+    def test_passive_and_self_references_do_not_count(self) -> None:
+        for path in ("docs/rules/domain/rule.md", ".claude/commands/extended.md",
+                     ".claude/hooks/dormant.sh", "scripts/selfref.sh"):
+            self.assertEqual(self.consumers(path), {"active": 0, "tests": 0}, path)
+            self.assertIn("NO_STATIC_CONSUMER", self.by_path[path]["unknowns"], path)
+            self.assertEqual(self.by_path[path]["essentiality"], "UNKNOWN", path)
+
+    def test_ambiguous_keys_are_dropped(self) -> None:
+        keys = build_keys(self.report["records"])
+        self.assertNotIn("agents/architect.md", keys)
+        self.assertEqual(keys["agents/orphan.md"], ".claude/agents/orphan.md")
 
     def test_f1_never_emits_receipt_states(self) -> None:
         gated = set(CONTRACT["taxonomy"]["requires_ablation_receipt"])
