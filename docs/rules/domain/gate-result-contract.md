@@ -58,15 +58,15 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | `iac-security-scan.sh` | 0 / 1 | `clean` (o `NO_IAC`) / `findings` (línea final o campos del report JSON) |
 | | 2 | `unknown` (Trivy/Docker o python3 ausente, Trivy fallido o con timeout, JSON ilegible, argumentos) |
 | `prompt-security-scan.sh` | 0 / 1 | `clean` / `findings` |
-| | 0 con hueco | `unknown` (python3 ausente para PS-11, fichero ilegible, path sin `.md`; registrado) |
+| | 0 con hueco | `unknown` (python3 ausente para PS-11, fichero ilegible, path sin `.md`; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
 | | 2 | `unknown` (path inexistente) |
 | `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
-| | 0 con hueco | `unknown` (`--config` inexistente o ilegible; registrado) |
+| | 0 con hueco | `unknown` (`--config` inexistente o ilegible, o ninguna config por defecto; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
 | | 2 | `unknown` (python3 ausente; antes salía 1 con un falso MCP-00) o argumentos |
 | `security-audit-all.sh` | 0 / 1 | según `result` (hallazgos bajo o sobre `--fail-on`) |
-| | 0 con hueco | `unknown` (sub-escáner ≥ 2, ilegible o `unknown`; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
+| | 0 con hueco | `unknown` (sub-escáner ≥ 2, ilegible o `unknown`; motivo ajeno al vocabulario ⇒ `unreadable`; con `SAVIA_GATE_UNKNOWN=block` sale 1 siempre que haya hueco, también con hallazgos bajo `--fail-on`) |
 | `confidentiality-scan.sh` | 0 / 1 | `clean` / `findings` |
-| | 0 con aviso `UNKNOWN` | `unknown` (git no calcula el diff, p. ej. sin `origin/main`; blocklist pedida ilegible o generador ausente o fallido; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
+| | 0 con aviso `UNKNOWN` | `unknown` (git no calcula el diff, p. ej. sin `origin/main`; blocklist pedida ilegible o generador ausente o fallido; con `SAVIA_GATE_UNKNOWN=block` sale 2). El Check 4 (ficheros prohibidos) corre aunque no haya líneas añadidas y sin las exclusiones de contenido |
 | `ast-quality-gate.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 (entorno), 3 (UNVERIFIED) | `unknown` |
 | `pre-push-security-gate.sh` | 0 con gitleaks / 1 | `clean` / `findings` |
