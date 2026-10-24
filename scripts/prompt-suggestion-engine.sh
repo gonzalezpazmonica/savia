@@ -6,7 +6,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_DIR="$ROOT/output/trace-analysis"
+OUTPUT_DIR="${TRACE_ANALYSIS_DIR:-$ROOT/output/trace-analysis}"
 AGENT_FILTER=""
 TRACES_FILE=""
 DRY_RUN=false
@@ -79,8 +79,9 @@ try:
     candidates = data if isinstance(data, list) else data.get('candidates', [])
     for c in candidates[:10]:
         name = c.get('agent', 'unknown')
-        fr = c.get('failure_rate', 0)
-        br = c.get('budget_exceeded_rate', 0)
+        # El extractor emite tasas como fracción (0.5); el clasificador umbrales en %
+        fr = round(c.get('failure_rate', 0) * 100, 1)
+        br = round(c.get('budget_overage_rate', c.get('budget_exceeded_rate', 0)) * 100, 1)
         print(f'{name}|{fr}|{br}')
 except Exception as e:
     print(f'ERROR|0|0', file=sys.stderr)

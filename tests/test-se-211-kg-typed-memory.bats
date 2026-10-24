@@ -40,12 +40,6 @@ print('OK', mod.MEMORY_TYPES)
 
 # ── 3. DB open adds memory_type column ────────────────────────────────────────
 @test "SE-211: open_db() creates memory_type column in entities" {
-    run python3 scripts/knowledge-graph.py status --db /tmp/se211_opendb.db
-    # After status, db is created — check schema
-    run python3 -c "import sqlite3; conn=sqlite3.connect('/tmp/se211_opendb.db'); cols=[r[1] for r in conn.execute('PRAGMA table_info(entities)')]; print('memory_type' in cols and 'OK' or 'MISSING'); conn.close()"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"OK"* ]] || [[ "$output" == *"True"* ]] || true
-    # Main check: open_db function adds the column
     run python3 -c "
 import importlib.util, pathlib
 spec = importlib.util.spec_from_file_location('kg', 'scripts/knowledge-graph.py')

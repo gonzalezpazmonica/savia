@@ -50,9 +50,19 @@ teardown() { rm -rf "$TMPDIR_TO"; }
 }
 
 @test "positive: engine generates plans" {
-  bash "$ENGINE" --traces-file "$TMPDIR_TO/traces.jsonl" 2>/dev/null || true
-  # May or may not generate plans depending on thresholds
-  [ -d "$TMPDIR_TO/output/trace-analysis" ] || true
+  TRACE_ANALYSIS_DIR="$TMPDIR_TO/output/trace-analysis" MIN_TRACES=2 \
+    run bash "$ENGINE" --traces-file "$TMPDIR_TO/traces.jsonl"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Agent: dotnet-developer"* ]]
+  [ -f "$TMPDIR_TO/output/trace-analysis/dotnet-developer-plan.md" ]
+  grep -q "frequent_failures" "$TMPDIR_TO/output/trace-analysis/dotnet-developer-plan.md"
+}
+
+@test "negative: engine below min-traces generates no plans" {
+  TRACE_ANALYSIS_DIR="$TMPDIR_TO/output/trace-analysis" \
+    run bash "$ENGINE" --traces-file "$TMPDIR_TO/traces.jsonl"
+  [ "$status" -eq 0 ]
+  [ -z "$(ls "$TMPDIR_TO"/output/trace-analysis/*-plan.md 2>/dev/null)" ]
 }
 
 @test "negative: extractor handles empty traces" {

@@ -103,7 +103,8 @@ print('OK')
 @test "analyzer handles empty rules directory with zero rules" {
   mkdir -p "$TMPDIR_RLL/docs/rules/domain"
   run bash -c "echo '' | $ROOT/scripts/rule-usage-analyzer.sh --root $TMPDIR_RLL 2>&1"
-  true  # Should not crash
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"total": 0'* ]]
 }
 
 @test "manifest rules each have a consumers field" {
