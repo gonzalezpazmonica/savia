@@ -175,6 +175,7 @@ elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"; VERDICT="UNKNOWN"; EXIT_COD
 else RESULT="clean"; VERDICT="PASS"; fi
 # ${GAPS[@]+…}: con set -u, un array vacío aborta en bash < 4.4 (macOS trae 3.2).
 GATE_LINE="$(gate_result_emit "$RESULT" ${GAPS[@]+"${GAPS[@]}"})"
+[[ -n "$GATE_LINE" ]] || { echo "gate_result_emit falló" >&2; exit 2; }
 
 if [[ "$JSON" -eq 1 ]]; then
   scanners_json=""

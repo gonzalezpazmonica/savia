@@ -86,7 +86,7 @@ test("blockForcePush: allows push to a branch whose name starts with main", asyn
 for (const command of [
   "su -c 'git push --force origin feat'",
   "su - bot -c 'git reset --hard'",
-  "find . -exec git push --force origin feat \;",
+  "find . -exec git push --force origin feat \\;",
   "strace -f git push -f",
   "ssh host git push --force origin feat",
   "ssh -p 22 user@host 'git push -f'",
@@ -98,7 +98,7 @@ for (const command of [
   });
 }
 
-for (const command of ["su -c 'git status'", "ssh host git status", "git push -u origin feat", "find . -exec git status \;"]) {
+for (const command of ["su -c 'git status'", "ssh host git status", "git push -u origin feat", "find . -exec git status \\;"]) {
   test(`blockForcePush: allows ${command}`, async () => {
     const input = { tool: "bash", args: { command } };
     await expect(blockForcePush(input as any, {} as any)).resolves.toBeUndefined();

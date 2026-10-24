@@ -25,7 +25,7 @@ setup() {
     TS_RUNTIME="bun"
   elif [[ -x "$HOME/.bun/bin/bun" ]]; then
     TS_RUNTIME="$HOME/.bun/bin/bun"
-  elif node --experimental-strip-types --no-warnings -e '' >/dev/null 2>&1; then
+  elif node --experimental-strip-types --no-warnings -e 'await import(process.argv[1])' "$REPO_ROOT/.opencode/plugins/guards/block-force-push.ts" >/dev/null 2>&1; then
     TS_RUNTIME="node --experimental-strip-types --no-warnings"
   fi
   unset SAVIA_HOOK_PROFILE

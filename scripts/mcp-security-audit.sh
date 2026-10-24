@@ -238,6 +238,7 @@ if [[ "$JSON" -eq 1 ]]; then
   done
   findings_json="[${findings_json%,}]"
   gate_line="$(gate_result_emit "$([ $EXIT_CODE -eq 0 ] && echo clean || echo findings)")"
+  [[ -n "$gate_line" ]] || { echo "gate_result_emit falló" >&2; exit 2; }
   cat <<JSON
 {"verdict":"$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)","configs_audited":${#CONFIGS[@]},"servers_audited":$total_servers,"findings_count":${#FINDINGS[@]},"critical":$CRIT,"high":$HIGH,"medium":$MED,"low":$LOW,"findings":$findings_json,${gate_line#gate-result: \{}
 JSON
