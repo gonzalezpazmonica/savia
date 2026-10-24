@@ -60,7 +60,7 @@ daemon_available() {
   daemon_available || skip "Shield daemon not running"
   output=$(curl -s --max-time 5 -X POST "$SHIELD_URL/gate" \
     -H "Content-Type: application/json" $AUTH_HEADER -d 'not-json' 2>/dev/null)
-  [[ -n "$output" ]] || true
+  [[ "$output" == *'"error"'* ]]
 }
 
 @test "daemon blocks credential-like pattern in public path" {
@@ -111,7 +111,7 @@ print(json.dumps(d))
   output=$(curl -s --max-time 10 -X POST "$SHIELD_URL/gate" \
     -H "Content-Type: application/json" $AUTH_HEADER \
     -d "{\"tool_input\":{\"file_path\":\"docs/t.md\",\"content\":\"$big\"}}" 2>/dev/null)
-  [[ -n "$output" ]] || true
+  [[ "$output" == *'"verdict"'* ]]
 }
 
 # --- Safety ---

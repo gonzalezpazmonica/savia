@@ -260,7 +260,7 @@ setup() {
 @test "edge: --link-only mode skips download step" {
   run bash "$SCRIPT" --link-only --dry-run
   [ "$status" -eq 0 ]
-  [[ "$output" != *"download"* ]] || true
+  [[ "$output" != *"download"* ]]
 }
 
 @test "edge: empty agents-md doesn't crash plugin loader" {
