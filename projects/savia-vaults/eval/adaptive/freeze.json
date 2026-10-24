@@ -1,0 +1,44 @@
+{
+  "baselineSha256": "a1eba76a5b08ca9a43f8610236b0935d751c153ed5ecfb1b0def6491253a5223",
+  "corpusSha256": "18e725567976caa700285522f24bc9a6d095eec501e0f4f6fbd4bd0853b16d59",
+  "datasetSha256": "01f38ba06579241b06c9d8805e33d0c30ec39f78e51edd7884510a26e48f76fe",
+  "labels": {
+    "bySplit": {
+      "calibration": 45,
+      "test": 45,
+      "train": 90
+    },
+    "byStratum": {
+      "ambiguous": 20,
+      "conflicting": 20,
+      "cross_domain": 20,
+      "monodomain": 20,
+      "new": 20,
+      "repeated": 20,
+      "restricted": 20,
+      "stale": 20,
+      "unhealthy": 20
+    },
+    "queries": 180
+  },
+  "profile": {
+    "k": 10,
+    "maxBranches": 2,
+    "maxContextTokens": 4096,
+    "maxLatencyMs": 3000,
+    "maxRemoteCalls": 3,
+    "maxVaults": 3,
+    "tokenizer": "whitespace-proxy"
+  },
+  "schemaVersion": 1,
+  "seed": 395,
+  "thresholds": {
+    "exposureMax": 0,
+    "irrelevantContextReduction": 0.25,
+    "p95VsBaseline": 0,
+    "provenanceVsBaseline": 0,
+    "recallDeltaMin": -0.02,
+    "remoteCallReduction": 0.3,
+    "usefulDensityRatio": 1.2
+  }
+}

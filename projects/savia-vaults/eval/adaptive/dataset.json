@@ -1,0 +1,4947 @@
+{
+  "corpusSha256": "18e725567976caa700285522f24bc9a6d095eec501e0f4f6fbd4bd0853b16d59",
+  "queries": [
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "monodomain-00",
+      "query": "soxaba kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "monodomain-01",
+      "query": "xaxaso dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "monodomain-02",
+      "query": "mudiba lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "monodomain-03",
+      "query": "vediba mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "monodomain-04",
+      "query": "soxaba sprint",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "monodomain-05",
+      "query": "xaxaso factura",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "monodomain-06",
+      "query": "mudiba despliegue",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "monodomain-07",
+      "query": "vediba alumno",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "monodomain-08",
+      "query": "kezomu backlog",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "monodomain-09",
+      "query": "dimulo cobro",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "monodomain-10",
+      "query": "lodizo rama",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "monodomain-11",
+      "query": "mukelo rúbrica",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "monodomain-12",
+      "query": "soxaba kezomu velocidad",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "monodomain-13",
+      "query": "xaxaso dimulo asiento",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "monodomain-14",
+      "query": "mudiba lodizo pipeline",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "monodomain-15",
+      "query": "vediba mukelo tarea",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "monodomain-16",
+      "query": "capacidad kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "monodomain-17",
+      "query": "balance dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "monodomain-18",
+      "query": "artefacto lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "monodomain-19",
+      "query": "portafolio mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "monodomain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t1",
+      "forbidden": [],
+      "id": "cross_domain-00",
+      "query": "zonari mumumu",
+      "relevant": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "local/d0t1-2.md",
+        "beta/d0t1-3.md",
+        "beta/d0t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "beta/d0t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t1",
+      "forbidden": [],
+      "id": "cross_domain-01",
+      "query": "bamutu sobazo",
+      "relevant": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "beta/d1t1-2.md",
+        "gamma/d1t1-3.md",
+        "gamma/d1t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "gamma/d1t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t1",
+      "forbidden": [],
+      "id": "cross_domain-02",
+      "query": "zomuba tudive",
+      "relevant": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "gamma/d2t1-2.md",
+        "delta/d2t1-3.md",
+        "delta/d2t1-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "delta/d2t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d3t1",
+      "forbidden": [],
+      "id": "cross_domain-03",
+      "query": "tuveke xamuri",
+      "relevant": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "delta/d3t1-2.md",
+        "local/d3t1-3.md",
+        "local/d3t1-4.md"
+      ],
+      "split": "test",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "local/d3t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t1",
+      "forbidden": [],
+      "id": "cross_domain-04",
+      "query": "zonari sprint",
+      "relevant": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "local/d0t1-2.md",
+        "beta/d0t1-3.md",
+        "beta/d0t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "beta/d0t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t1",
+      "forbidden": [],
+      "id": "cross_domain-05",
+      "query": "bamutu factura",
+      "relevant": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "beta/d1t1-2.md",
+        "gamma/d1t1-3.md",
+        "gamma/d1t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "gamma/d1t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t1",
+      "forbidden": [],
+      "id": "cross_domain-06",
+      "query": "zomuba despliegue",
+      "relevant": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "gamma/d2t1-2.md",
+        "delta/d2t1-3.md",
+        "delta/d2t1-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "delta/d2t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d3t1",
+      "forbidden": [],
+      "id": "cross_domain-07",
+      "query": "tuveke alumno",
+      "relevant": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "delta/d3t1-2.md",
+        "local/d3t1-3.md",
+        "local/d3t1-4.md"
+      ],
+      "split": "test",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "local/d3t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t1",
+      "forbidden": [],
+      "id": "cross_domain-08",
+      "query": "mumumu backlog",
+      "relevant": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "local/d0t1-2.md",
+        "beta/d0t1-3.md",
+        "beta/d0t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "beta/d0t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t1",
+      "forbidden": [],
+      "id": "cross_domain-09",
+      "query": "sobazo cobro",
+      "relevant": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "beta/d1t1-2.md",
+        "gamma/d1t1-3.md",
+        "gamma/d1t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "gamma/d1t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t1",
+      "forbidden": [],
+      "id": "cross_domain-10",
+      "query": "tudive rama",
+      "relevant": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "gamma/d2t1-2.md",
+        "delta/d2t1-3.md",
+        "delta/d2t1-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "delta/d2t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d3t1",
+      "forbidden": [],
+      "id": "cross_domain-11",
+      "query": "xamuri rúbrica",
+      "relevant": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "delta/d3t1-2.md",
+        "local/d3t1-3.md",
+        "local/d3t1-4.md"
+      ],
+      "split": "test",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "local/d3t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t1",
+      "forbidden": [],
+      "id": "cross_domain-12",
+      "query": "zonari mumumu velocidad",
+      "relevant": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "local/d0t1-2.md",
+        "beta/d0t1-3.md",
+        "beta/d0t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "beta/d0t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t1",
+      "forbidden": [],
+      "id": "cross_domain-13",
+      "query": "bamutu sobazo asiento",
+      "relevant": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "beta/d1t1-2.md",
+        "gamma/d1t1-3.md",
+        "gamma/d1t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "gamma/d1t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t1",
+      "forbidden": [],
+      "id": "cross_domain-14",
+      "query": "zomuba tudive pipeline",
+      "relevant": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "gamma/d2t1-2.md",
+        "delta/d2t1-3.md",
+        "delta/d2t1-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "delta/d2t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d3t1",
+      "forbidden": [],
+      "id": "cross_domain-15",
+      "query": "tuveke xamuri tarea",
+      "relevant": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "delta/d3t1-2.md",
+        "local/d3t1-3.md",
+        "local/d3t1-4.md"
+      ],
+      "split": "test",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "local/d3t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t1",
+      "forbidden": [],
+      "id": "cross_domain-16",
+      "query": "capacidad mumumu",
+      "relevant": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "local/d0t1-2.md",
+        "beta/d0t1-3.md",
+        "beta/d0t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t1-0.md",
+        "local/d0t1-1.md",
+        "beta/d0t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t1",
+      "forbidden": [],
+      "id": "cross_domain-17",
+      "query": "balance sobazo",
+      "relevant": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "beta/d1t1-2.md",
+        "gamma/d1t1-3.md",
+        "gamma/d1t1-4.md"
+      ],
+      "split": "train",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t1-0.md",
+        "beta/d1t1-1.md",
+        "gamma/d1t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t1",
+      "forbidden": [],
+      "id": "cross_domain-18",
+      "query": "artefacto tudive",
+      "relevant": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "gamma/d2t1-2.md",
+        "delta/d2t1-3.md",
+        "delta/d2t1-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t1-0.md",
+        "gamma/d2t1-1.md",
+        "delta/d2t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": true,
+      "conflictPairs": [],
+      "family": "d3t1",
+      "forbidden": [],
+      "id": "cross_domain-19",
+      "query": "portafolio xamuri",
+      "relevant": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "delta/d3t1-2.md",
+        "local/d3t1-3.md",
+        "local/d3t1-4.md"
+      ],
+      "split": "test",
+      "stratum": "cross_domain",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t1-0.md",
+        "delta/d3t1-1.md",
+        "local/d3t1-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "ambiguous-00",
+      "query": "soxaba xaxaso sprint",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "ambiguous-01",
+      "query": "soxaba xaxaso backlog",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "ambiguous-02",
+      "query": "soxaba xaxaso velocidad",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "ambiguous-03",
+      "query": "soxaba xaxaso capacidad",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "ambiguous-04",
+      "query": "soxaba xaxaso riesgo",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "ambiguous-05",
+      "query": "xaxaso soxaba factura",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "ambiguous-06",
+      "query": "xaxaso soxaba cobro",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "ambiguous-07",
+      "query": "xaxaso soxaba asiento",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "ambiguous-08",
+      "query": "xaxaso soxaba balance",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "ambiguous-09",
+      "query": "xaxaso soxaba partida",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "ambiguous-10",
+      "query": "mudiba vediba despliegue",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "ambiguous-11",
+      "query": "mudiba vediba rama",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "ambiguous-12",
+      "query": "mudiba vediba pipeline",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "ambiguous-13",
+      "query": "mudiba vediba artefacto",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "ambiguous-14",
+      "query": "mudiba vediba versión",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "ambiguous-15",
+      "query": "vediba mudiba alumno",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "ambiguous-16",
+      "query": "vediba mudiba rúbrica",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "ambiguous-17",
+      "query": "vediba mudiba tarea",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "ambiguous-18",
+      "query": "vediba mudiba portafolio",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "ambiguous-19",
+      "query": "vediba mudiba curso",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "ambiguous",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "local/d0t2-0.md",
+          "beta/d0t2-1.md"
+        ]
+      ],
+      "family": "d0t2",
+      "forbidden": [],
+      "id": "conflicting-00",
+      "query": "nabatu dikeri",
+      "relevant": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md",
+        "local/d0t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "beta/d1t2-0.md",
+          "gamma/d1t2-1.md"
+        ]
+      ],
+      "family": "d1t2",
+      "forbidden": [],
+      "id": "conflicting-01",
+      "query": "rikexa vezodi",
+      "relevant": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md",
+        "beta/d1t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "gamma/d2t2-0.md",
+          "delta/d2t2-1.md"
+        ]
+      ],
+      "family": "d2t2",
+      "forbidden": [],
+      "id": "conflicting-02",
+      "query": "rivemu kenave",
+      "relevant": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md",
+        "gamma/d2t2-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "delta/d3t2-0.md",
+          "local/d3t2-1.md"
+        ]
+      ],
+      "family": "d3t2",
+      "forbidden": [],
+      "id": "conflicting-03",
+      "query": "rizotu disoxa",
+      "relevant": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md",
+        "delta/d3t2-2.md"
+      ],
+      "split": "test",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "local/d0t2-0.md",
+          "beta/d0t2-1.md"
+        ]
+      ],
+      "family": "d0t2",
+      "forbidden": [],
+      "id": "conflicting-04",
+      "query": "nabatu sprint",
+      "relevant": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md",
+        "local/d0t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "beta/d1t2-0.md",
+          "gamma/d1t2-1.md"
+        ]
+      ],
+      "family": "d1t2",
+      "forbidden": [],
+      "id": "conflicting-05",
+      "query": "rikexa factura",
+      "relevant": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md",
+        "beta/d1t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "gamma/d2t2-0.md",
+          "delta/d2t2-1.md"
+        ]
+      ],
+      "family": "d2t2",
+      "forbidden": [],
+      "id": "conflicting-06",
+      "query": "rivemu despliegue",
+      "relevant": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md",
+        "gamma/d2t2-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "delta/d3t2-0.md",
+          "local/d3t2-1.md"
+        ]
+      ],
+      "family": "d3t2",
+      "forbidden": [],
+      "id": "conflicting-07",
+      "query": "rizotu alumno",
+      "relevant": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md",
+        "delta/d3t2-2.md"
+      ],
+      "split": "test",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "local/d0t2-0.md",
+          "beta/d0t2-1.md"
+        ]
+      ],
+      "family": "d0t2",
+      "forbidden": [],
+      "id": "conflicting-08",
+      "query": "dikeri backlog",
+      "relevant": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md",
+        "local/d0t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "beta/d1t2-0.md",
+          "gamma/d1t2-1.md"
+        ]
+      ],
+      "family": "d1t2",
+      "forbidden": [],
+      "id": "conflicting-09",
+      "query": "vezodi cobro",
+      "relevant": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md",
+        "beta/d1t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "gamma/d2t2-0.md",
+          "delta/d2t2-1.md"
+        ]
+      ],
+      "family": "d2t2",
+      "forbidden": [],
+      "id": "conflicting-10",
+      "query": "kenave rama",
+      "relevant": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md",
+        "gamma/d2t2-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "delta/d3t2-0.md",
+          "local/d3t2-1.md"
+        ]
+      ],
+      "family": "d3t2",
+      "forbidden": [],
+      "id": "conflicting-11",
+      "query": "disoxa rúbrica",
+      "relevant": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md",
+        "delta/d3t2-2.md"
+      ],
+      "split": "test",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "local/d0t2-0.md",
+          "beta/d0t2-1.md"
+        ]
+      ],
+      "family": "d0t2",
+      "forbidden": [],
+      "id": "conflicting-12",
+      "query": "nabatu dikeri velocidad",
+      "relevant": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md",
+        "local/d0t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "beta/d1t2-0.md",
+          "gamma/d1t2-1.md"
+        ]
+      ],
+      "family": "d1t2",
+      "forbidden": [],
+      "id": "conflicting-13",
+      "query": "rikexa vezodi asiento",
+      "relevant": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md",
+        "beta/d1t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "gamma/d2t2-0.md",
+          "delta/d2t2-1.md"
+        ]
+      ],
+      "family": "d2t2",
+      "forbidden": [],
+      "id": "conflicting-14",
+      "query": "rivemu kenave pipeline",
+      "relevant": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md",
+        "gamma/d2t2-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "delta/d3t2-0.md",
+          "local/d3t2-1.md"
+        ]
+      ],
+      "family": "d3t2",
+      "forbidden": [],
+      "id": "conflicting-15",
+      "query": "rizotu disoxa tarea",
+      "relevant": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md",
+        "delta/d3t2-2.md"
+      ],
+      "split": "test",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "local/d0t2-0.md",
+          "beta/d0t2-1.md"
+        ]
+      ],
+      "family": "d0t2",
+      "forbidden": [],
+      "id": "conflicting-16",
+      "query": "capacidad dikeri",
+      "relevant": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md",
+        "local/d0t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t2-0.md",
+        "beta/d0t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "beta/d1t2-0.md",
+          "gamma/d1t2-1.md"
+        ]
+      ],
+      "family": "d1t2",
+      "forbidden": [],
+      "id": "conflicting-17",
+      "query": "balance vezodi",
+      "relevant": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md",
+        "beta/d1t2-2.md"
+      ],
+      "split": "train",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t2-0.md",
+        "gamma/d1t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "gamma/d2t2-0.md",
+          "delta/d2t2-1.md"
+        ]
+      ],
+      "family": "d2t2",
+      "forbidden": [],
+      "id": "conflicting-18",
+      "query": "artefacto kenave",
+      "relevant": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md",
+        "gamma/d2t2-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t2-0.md",
+        "delta/d2t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [
+        [
+          "delta/d3t2-0.md",
+          "local/d3t2-1.md"
+        ]
+      ],
+      "family": "d3t2",
+      "forbidden": [],
+      "id": "conflicting-19",
+      "query": "portafolio disoxa",
+      "relevant": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md",
+        "delta/d3t2-2.md"
+      ],
+      "split": "test",
+      "stratum": "conflicting",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t2-0.md",
+        "local/d3t2-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t3",
+      "forbidden": [],
+      "id": "stale-00",
+      "query": "xazolo risoba",
+      "relevant": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t3",
+      "forbidden": [],
+      "id": "stale-01",
+      "query": "zokeso tusove",
+      "relevant": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t3",
+      "forbidden": [],
+      "id": "stale-02",
+      "query": "naxari tumuzo",
+      "relevant": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t3",
+      "forbidden": [],
+      "id": "stale-03",
+      "query": "tutuke nadixa",
+      "relevant": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ],
+      "split": "test",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t3",
+      "forbidden": [],
+      "id": "stale-04",
+      "query": "xazolo sprint",
+      "relevant": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t3",
+      "forbidden": [],
+      "id": "stale-05",
+      "query": "zokeso factura",
+      "relevant": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t3",
+      "forbidden": [],
+      "id": "stale-06",
+      "query": "naxari despliegue",
+      "relevant": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t3",
+      "forbidden": [],
+      "id": "stale-07",
+      "query": "tutuke alumno",
+      "relevant": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ],
+      "split": "test",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t3",
+      "forbidden": [],
+      "id": "stale-08",
+      "query": "risoba backlog",
+      "relevant": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t3",
+      "forbidden": [],
+      "id": "stale-09",
+      "query": "tusove cobro",
+      "relevant": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t3",
+      "forbidden": [],
+      "id": "stale-10",
+      "query": "tumuzo rama",
+      "relevant": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t3",
+      "forbidden": [],
+      "id": "stale-11",
+      "query": "nadixa rúbrica",
+      "relevant": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ],
+      "split": "test",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t3",
+      "forbidden": [],
+      "id": "stale-12",
+      "query": "xazolo risoba velocidad",
+      "relevant": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t3",
+      "forbidden": [],
+      "id": "stale-13",
+      "query": "zokeso tusove asiento",
+      "relevant": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t3",
+      "forbidden": [],
+      "id": "stale-14",
+      "query": "naxari tumuzo pipeline",
+      "relevant": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t3",
+      "forbidden": [],
+      "id": "stale-15",
+      "query": "tutuke nadixa tarea",
+      "relevant": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ],
+      "split": "test",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t3",
+      "forbidden": [],
+      "id": "stale-16",
+      "query": "capacidad risoba",
+      "relevant": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t3-0.md",
+        "local/d0t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t3",
+      "forbidden": [],
+      "id": "stale-17",
+      "query": "balance tusove",
+      "relevant": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ],
+      "split": "train",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t3-0.md",
+        "beta/d1t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t3",
+      "forbidden": [],
+      "id": "stale-18",
+      "query": "artefacto tumuzo",
+      "relevant": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t3-0.md",
+        "gamma/d2t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t3",
+      "forbidden": [],
+      "id": "stale-19",
+      "query": "portafolio nadixa",
+      "relevant": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ],
+      "split": "test",
+      "stratum": "stale",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t3-0.md",
+        "delta/d3t3-2.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t4",
+      "forbidden": [
+        "local/d0t4-0.md",
+        "local/d0t4-1.md",
+        "local/d0t4-2.md"
+      ],
+      "id": "restricted-00",
+      "query": "batulo xavelo",
+      "relevant": [
+        "beta/d0t4-3.md",
+        "beta/d0t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d0t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t4",
+      "forbidden": [
+        "beta/d1t4-0.md",
+        "beta/d1t4-1.md",
+        "beta/d1t4-2.md"
+      ],
+      "id": "restricted-01",
+      "query": "vevedi zonake",
+      "relevant": [
+        "gamma/d1t4-3.md",
+        "gamma/d1t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d1t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t4",
+      "forbidden": [
+        "gamma/d2t4-0.md",
+        "gamma/d2t4-1.md",
+        "gamma/d2t4-2.md"
+      ],
+      "id": "restricted-02",
+      "query": "tuloba musoxa",
+      "relevant": [
+        "delta/d2t4-3.md",
+        "delta/d2t4-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d2t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t4",
+      "forbidden": [
+        "delta/d3t4-0.md",
+        "delta/d3t4-1.md",
+        "delta/d3t4-2.md"
+      ],
+      "id": "restricted-03",
+      "query": "xazoba lonadi",
+      "relevant": [
+        "local/d3t4-3.md",
+        "local/d3t4-4.md"
+      ],
+      "split": "test",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d3t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t4",
+      "forbidden": [
+        "local/d0t4-0.md",
+        "local/d0t4-1.md",
+        "local/d0t4-2.md"
+      ],
+      "id": "restricted-04",
+      "query": "batulo sprint",
+      "relevant": [
+        "beta/d0t4-3.md",
+        "beta/d0t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d0t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t4",
+      "forbidden": [
+        "beta/d1t4-0.md",
+        "beta/d1t4-1.md",
+        "beta/d1t4-2.md"
+      ],
+      "id": "restricted-05",
+      "query": "vevedi factura",
+      "relevant": [
+        "gamma/d1t4-3.md",
+        "gamma/d1t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d1t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t4",
+      "forbidden": [
+        "gamma/d2t4-0.md",
+        "gamma/d2t4-1.md",
+        "gamma/d2t4-2.md"
+      ],
+      "id": "restricted-06",
+      "query": "tuloba despliegue",
+      "relevant": [
+        "delta/d2t4-3.md",
+        "delta/d2t4-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d2t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t4",
+      "forbidden": [
+        "delta/d3t4-0.md",
+        "delta/d3t4-1.md",
+        "delta/d3t4-2.md"
+      ],
+      "id": "restricted-07",
+      "query": "xazoba alumno",
+      "relevant": [
+        "local/d3t4-3.md",
+        "local/d3t4-4.md"
+      ],
+      "split": "test",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d3t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t4",
+      "forbidden": [
+        "local/d0t4-0.md",
+        "local/d0t4-1.md",
+        "local/d0t4-2.md"
+      ],
+      "id": "restricted-08",
+      "query": "xavelo backlog",
+      "relevant": [
+        "beta/d0t4-3.md",
+        "beta/d0t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d0t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t4",
+      "forbidden": [
+        "beta/d1t4-0.md",
+        "beta/d1t4-1.md",
+        "beta/d1t4-2.md"
+      ],
+      "id": "restricted-09",
+      "query": "zonake cobro",
+      "relevant": [
+        "gamma/d1t4-3.md",
+        "gamma/d1t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d1t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t4",
+      "forbidden": [
+        "gamma/d2t4-0.md",
+        "gamma/d2t4-1.md",
+        "gamma/d2t4-2.md"
+      ],
+      "id": "restricted-10",
+      "query": "musoxa rama",
+      "relevant": [
+        "delta/d2t4-3.md",
+        "delta/d2t4-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d2t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t4",
+      "forbidden": [
+        "delta/d3t4-0.md",
+        "delta/d3t4-1.md",
+        "delta/d3t4-2.md"
+      ],
+      "id": "restricted-11",
+      "query": "lonadi rúbrica",
+      "relevant": [
+        "local/d3t4-3.md",
+        "local/d3t4-4.md"
+      ],
+      "split": "test",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d3t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t4",
+      "forbidden": [
+        "local/d0t4-0.md",
+        "local/d0t4-1.md",
+        "local/d0t4-2.md"
+      ],
+      "id": "restricted-12",
+      "query": "batulo xavelo velocidad",
+      "relevant": [
+        "beta/d0t4-3.md",
+        "beta/d0t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d0t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t4",
+      "forbidden": [
+        "beta/d1t4-0.md",
+        "beta/d1t4-1.md",
+        "beta/d1t4-2.md"
+      ],
+      "id": "restricted-13",
+      "query": "vevedi zonake asiento",
+      "relevant": [
+        "gamma/d1t4-3.md",
+        "gamma/d1t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d1t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t4",
+      "forbidden": [
+        "gamma/d2t4-0.md",
+        "gamma/d2t4-1.md",
+        "gamma/d2t4-2.md"
+      ],
+      "id": "restricted-14",
+      "query": "tuloba musoxa pipeline",
+      "relevant": [
+        "delta/d2t4-3.md",
+        "delta/d2t4-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d2t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t4",
+      "forbidden": [
+        "delta/d3t4-0.md",
+        "delta/d3t4-1.md",
+        "delta/d3t4-2.md"
+      ],
+      "id": "restricted-15",
+      "query": "xazoba lonadi tarea",
+      "relevant": [
+        "local/d3t4-3.md",
+        "local/d3t4-4.md"
+      ],
+      "split": "test",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d3t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t4",
+      "forbidden": [
+        "local/d0t4-0.md",
+        "local/d0t4-1.md",
+        "local/d0t4-2.md"
+      ],
+      "id": "restricted-16",
+      "query": "capacidad xavelo",
+      "relevant": [
+        "beta/d0t4-3.md",
+        "beta/d0t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d0t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t4",
+      "forbidden": [
+        "beta/d1t4-0.md",
+        "beta/d1t4-1.md",
+        "beta/d1t4-2.md"
+      ],
+      "id": "restricted-17",
+      "query": "balance zonake",
+      "relevant": [
+        "gamma/d1t4-3.md",
+        "gamma/d1t4-4.md"
+      ],
+      "split": "train",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d1t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t4",
+      "forbidden": [
+        "gamma/d2t4-0.md",
+        "gamma/d2t4-1.md",
+        "gamma/d2t4-2.md"
+      ],
+      "id": "restricted-18",
+      "query": "artefacto musoxa",
+      "relevant": [
+        "delta/d2t4-3.md",
+        "delta/d2t4-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d2t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t4",
+      "forbidden": [
+        "delta/d3t4-0.md",
+        "delta/d3t4-1.md",
+        "delta/d3t4-2.md"
+      ],
+      "id": "restricted-19",
+      "query": "portafolio lonadi",
+      "relevant": [
+        "local/d3t4-3.md",
+        "local/d3t4-4.md"
+      ],
+      "split": "test",
+      "stratum": "restricted",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d3t4-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t5",
+      "forbidden": [],
+      "id": "unhealthy-00",
+      "query": "dikezo mudike",
+      "relevant": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "local/d0t5-2.md",
+        "beta/d0t5-3.md",
+        "beta/d0t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "beta/d0t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t5",
+      "forbidden": [],
+      "id": "unhealthy-01",
+      "query": "lobaso lotuve",
+      "relevant": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "beta/d1t5-2.md",
+        "gamma/d1t5-3.md",
+        "gamma/d1t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "gamma/d1t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t5",
+      "forbidden": [],
+      "id": "unhealthy-02",
+      "query": "rizozo lobaba",
+      "relevant": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "gamma/d2t5-2.md",
+        "delta/d2t5-3.md",
+        "delta/d2t5-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "gamma"
+      ],
+      "useful": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "delta/d2t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t5",
+      "forbidden": [],
+      "id": "unhealthy-03",
+      "query": "loveba kenake",
+      "relevant": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "delta/d3t5-2.md",
+        "local/d3t5-3.md",
+        "local/d3t5-4.md"
+      ],
+      "split": "test",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "delta"
+      ],
+      "useful": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "local/d3t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t5",
+      "forbidden": [],
+      "id": "unhealthy-04",
+      "query": "dikezo sprint",
+      "relevant": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "local/d0t5-2.md",
+        "beta/d0t5-3.md",
+        "beta/d0t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "beta/d0t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t5",
+      "forbidden": [],
+      "id": "unhealthy-05",
+      "query": "lobaso factura",
+      "relevant": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "beta/d1t5-2.md",
+        "gamma/d1t5-3.md",
+        "gamma/d1t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "gamma/d1t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t5",
+      "forbidden": [],
+      "id": "unhealthy-06",
+      "query": "rizozo despliegue",
+      "relevant": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "gamma/d2t5-2.md",
+        "delta/d2t5-3.md",
+        "delta/d2t5-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "gamma"
+      ],
+      "useful": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "delta/d2t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t5",
+      "forbidden": [],
+      "id": "unhealthy-07",
+      "query": "loveba alumno",
+      "relevant": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "delta/d3t5-2.md",
+        "local/d3t5-3.md",
+        "local/d3t5-4.md"
+      ],
+      "split": "test",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "delta"
+      ],
+      "useful": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "local/d3t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t5",
+      "forbidden": [],
+      "id": "unhealthy-08",
+      "query": "mudike backlog",
+      "relevant": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "local/d0t5-2.md",
+        "beta/d0t5-3.md",
+        "beta/d0t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "beta/d0t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t5",
+      "forbidden": [],
+      "id": "unhealthy-09",
+      "query": "lotuve cobro",
+      "relevant": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "beta/d1t5-2.md",
+        "gamma/d1t5-3.md",
+        "gamma/d1t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "gamma/d1t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t5",
+      "forbidden": [],
+      "id": "unhealthy-10",
+      "query": "lobaba rama",
+      "relevant": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "gamma/d2t5-2.md",
+        "delta/d2t5-3.md",
+        "delta/d2t5-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "gamma"
+      ],
+      "useful": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "delta/d2t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t5",
+      "forbidden": [],
+      "id": "unhealthy-11",
+      "query": "kenake rúbrica",
+      "relevant": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "delta/d3t5-2.md",
+        "local/d3t5-3.md",
+        "local/d3t5-4.md"
+      ],
+      "split": "test",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "delta"
+      ],
+      "useful": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "local/d3t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t5",
+      "forbidden": [],
+      "id": "unhealthy-12",
+      "query": "dikezo mudike velocidad",
+      "relevant": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "local/d0t5-2.md",
+        "beta/d0t5-3.md",
+        "beta/d0t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "beta/d0t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t5",
+      "forbidden": [],
+      "id": "unhealthy-13",
+      "query": "lobaso lotuve asiento",
+      "relevant": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "beta/d1t5-2.md",
+        "gamma/d1t5-3.md",
+        "gamma/d1t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "gamma/d1t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t5",
+      "forbidden": [],
+      "id": "unhealthy-14",
+      "query": "rizozo lobaba pipeline",
+      "relevant": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "gamma/d2t5-2.md",
+        "delta/d2t5-3.md",
+        "delta/d2t5-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "gamma"
+      ],
+      "useful": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "delta/d2t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t5",
+      "forbidden": [],
+      "id": "unhealthy-15",
+      "query": "loveba kenake tarea",
+      "relevant": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "delta/d3t5-2.md",
+        "local/d3t5-3.md",
+        "local/d3t5-4.md"
+      ],
+      "split": "test",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "delta"
+      ],
+      "useful": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "local/d3t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t5",
+      "forbidden": [],
+      "id": "unhealthy-16",
+      "query": "capacidad mudike",
+      "relevant": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "local/d0t5-2.md",
+        "beta/d0t5-3.md",
+        "beta/d0t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "local/d0t5-0.md",
+        "local/d0t5-1.md",
+        "beta/d0t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t5",
+      "forbidden": [],
+      "id": "unhealthy-17",
+      "query": "balance lotuve",
+      "relevant": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "beta/d1t5-2.md",
+        "gamma/d1t5-3.md",
+        "gamma/d1t5-4.md"
+      ],
+      "split": "train",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "beta"
+      ],
+      "useful": [
+        "beta/d1t5-0.md",
+        "beta/d1t5-1.md",
+        "gamma/d1t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t5",
+      "forbidden": [],
+      "id": "unhealthy-18",
+      "query": "artefacto lobaba",
+      "relevant": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "gamma/d2t5-2.md",
+        "delta/d2t5-3.md",
+        "delta/d2t5-4.md"
+      ],
+      "split": "calibration",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "gamma"
+      ],
+      "useful": [
+        "gamma/d2t5-0.md",
+        "gamma/d2t5-1.md",
+        "delta/d2t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t5",
+      "forbidden": [],
+      "id": "unhealthy-19",
+      "query": "portafolio kenake",
+      "relevant": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "delta/d3t5-2.md",
+        "local/d3t5-3.md",
+        "local/d3t5-4.md"
+      ],
+      "split": "test",
+      "stratum": "unhealthy",
+      "unhealthyVaults": [
+        "delta"
+      ],
+      "useful": [
+        "delta/d3t5-0.md",
+        "delta/d3t5-1.md",
+        "local/d3t5-3.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "repeated-00",
+      "query": "soxaba kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "repeated-01",
+      "query": "soxaba kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "repeated-02",
+      "query": "soxaba kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "repeated-03",
+      "query": "soxaba kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t0",
+      "forbidden": [],
+      "id": "repeated-04",
+      "query": "soxaba kezomu",
+      "relevant": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md",
+        "local/d0t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t0-0.md",
+        "local/d0t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "repeated-05",
+      "query": "xaxaso dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "repeated-06",
+      "query": "xaxaso dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "repeated-07",
+      "query": "xaxaso dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "repeated-08",
+      "query": "xaxaso dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t0",
+      "forbidden": [],
+      "id": "repeated-09",
+      "query": "xaxaso dimulo",
+      "relevant": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md",
+        "beta/d1t0-2.md"
+      ],
+      "split": "train",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t0-0.md",
+        "beta/d1t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "repeated-10",
+      "query": "mudiba lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "repeated-11",
+      "query": "mudiba lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "repeated-12",
+      "query": "mudiba lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "repeated-13",
+      "query": "mudiba lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t0",
+      "forbidden": [],
+      "id": "repeated-14",
+      "query": "mudiba lodizo",
+      "relevant": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md",
+        "gamma/d2t0-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t0-0.md",
+        "gamma/d2t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "repeated-15",
+      "query": "vediba mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "repeated-16",
+      "query": "vediba mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "repeated-17",
+      "query": "vediba mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "repeated-18",
+      "query": "vediba mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t0",
+      "forbidden": [],
+      "id": "repeated-19",
+      "query": "vediba mukelo",
+      "relevant": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md",
+        "delta/d3t0-2.md"
+      ],
+      "split": "test",
+      "stratum": "repeated",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t0-0.md",
+        "delta/d3t0-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t6",
+      "forbidden": [],
+      "id": "new-00",
+      "query": "veriri xakemu",
+      "relevant": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md",
+        "local/d0t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t6",
+      "forbidden": [],
+      "id": "new-01",
+      "query": "kenamu losozo",
+      "relevant": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md",
+        "beta/d1t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t6",
+      "forbidden": [],
+      "id": "new-02",
+      "query": "tutuzo sozozo",
+      "relevant": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md",
+        "gamma/d2t6-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t6",
+      "forbidden": [],
+      "id": "new-03",
+      "query": "sotuna vetudi",
+      "relevant": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md",
+        "delta/d3t6-2.md"
+      ],
+      "split": "test",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t6",
+      "forbidden": [],
+      "id": "new-04",
+      "query": "veriri sprint",
+      "relevant": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md",
+        "local/d0t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t6",
+      "forbidden": [],
+      "id": "new-05",
+      "query": "kenamu factura",
+      "relevant": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md",
+        "beta/d1t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t6",
+      "forbidden": [],
+      "id": "new-06",
+      "query": "tutuzo despliegue",
+      "relevant": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md",
+        "gamma/d2t6-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t6",
+      "forbidden": [],
+      "id": "new-07",
+      "query": "sotuna alumno",
+      "relevant": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md",
+        "delta/d3t6-2.md"
+      ],
+      "split": "test",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t6",
+      "forbidden": [],
+      "id": "new-08",
+      "query": "xakemu backlog",
+      "relevant": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md",
+        "local/d0t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t6",
+      "forbidden": [],
+      "id": "new-09",
+      "query": "losozo cobro",
+      "relevant": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md",
+        "beta/d1t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t6",
+      "forbidden": [],
+      "id": "new-10",
+      "query": "sozozo rama",
+      "relevant": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md",
+        "gamma/d2t6-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t6",
+      "forbidden": [],
+      "id": "new-11",
+      "query": "vetudi rúbrica",
+      "relevant": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md",
+        "delta/d3t6-2.md"
+      ],
+      "split": "test",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t6",
+      "forbidden": [],
+      "id": "new-12",
+      "query": "veriri xakemu velocidad",
+      "relevant": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md",
+        "local/d0t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t6",
+      "forbidden": [],
+      "id": "new-13",
+      "query": "kenamu losozo asiento",
+      "relevant": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md",
+        "beta/d1t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t6",
+      "forbidden": [],
+      "id": "new-14",
+      "query": "tutuzo sozozo pipeline",
+      "relevant": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md",
+        "gamma/d2t6-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t6",
+      "forbidden": [],
+      "id": "new-15",
+      "query": "sotuna vetudi tarea",
+      "relevant": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md",
+        "delta/d3t6-2.md"
+      ],
+      "split": "test",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d0t6",
+      "forbidden": [],
+      "id": "new-16",
+      "query": "capacidad xakemu",
+      "relevant": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md",
+        "local/d0t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "local/d0t6-0.md",
+        "local/d0t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d1t6",
+      "forbidden": [],
+      "id": "new-17",
+      "query": "balance losozo",
+      "relevant": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md",
+        "beta/d1t6-2.md"
+      ],
+      "split": "train",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "beta/d1t6-0.md",
+        "beta/d1t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d2t6",
+      "forbidden": [],
+      "id": "new-18",
+      "query": "artefacto sozozo",
+      "relevant": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md",
+        "gamma/d2t6-2.md"
+      ],
+      "split": "calibration",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "gamma/d2t6-0.md",
+        "gamma/d2t6-1.md"
+      ]
+    },
+    {
+      "allowedVaults": [
+        "local",
+        "beta",
+        "gamma",
+        "delta"
+      ],
+      "baselineAdvantage": false,
+      "conflictPairs": [],
+      "family": "d3t6",
+      "forbidden": [],
+      "id": "new-19",
+      "query": "portafolio vetudi",
+      "relevant": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md",
+        "delta/d3t6-2.md"
+      ],
+      "split": "test",
+      "stratum": "new",
+      "unhealthyVaults": [],
+      "useful": [
+        "delta/d3t6-0.md",
+        "delta/d3t6-1.md"
+      ]
+    }
+  ],
+  "schemaVersion": 1,
+  "seed": 395
+}

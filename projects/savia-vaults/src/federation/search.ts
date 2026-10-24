@@ -5,11 +5,11 @@ import { FederationCache } from './cache.js';
 import type { FederatedDome, FederatedSearchContext, FederatedSearchResult, FederatedSearchResponse } from './types.js';
 
 export class FederatedSearchEngine {
-  private local: SearchEngine; private registry: FederationRegistry; private client: A2AClient; private cache: FederationCache; private localTimeout: number; private maxTotalResults: number;
+  private local: SearchEngine; private registry: FederationRegistry; private client: Pick<A2AClient, 'search' | 'healthCheck'>; private cache: FederationCache; private localTimeout: number; private maxTotalResults: number;
 
-  constructor(local: SearchEngine, registry: FederationRegistry, opts: { localTimeout?: number; maxTotalResults?: number; cacheTtlMs?: number } = {}) {
+  constructor(local: SearchEngine, registry: FederationRegistry, opts: { localTimeout?: number; maxTotalResults?: number; cacheTtlMs?: number; client?: Pick<A2AClient, 'search' | 'healthCheck'> } = {}) {
     if (opts.maxTotalResults !== undefined && (!Number.isInteger(opts.maxTotalResults) || opts.maxTotalResults <= 0)) throw new Error('maxTotalResults must be a positive integer');
-    this.local = local; this.registry = registry; this.client = new A2AClient();
+    this.local = local; this.registry = registry; this.client = opts.client ?? new A2AClient();
     this.cache = new FederationCache(1000, opts.cacheTtlMs ?? 300000);
     this.localTimeout = opts.localTimeout ?? 2000; this.maxTotalResults = opts.maxTotalResults ?? 50;
   }
