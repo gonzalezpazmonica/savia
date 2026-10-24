@@ -103,6 +103,8 @@ jv() { python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$
   run bash "$D"
   [ "$status" -eq 2 ]
   [[ "$output" == *"learning-divergence.sh --claim"* ]]
+  [[ "$output" == *"[--threshold <0-1>] [--propose] [--output-dir <dir>] [--json]"* ]]
+  [[ "$output" == *"2 usage"* ]]
 }
 
 @test "div: -h muestra el uso y sale 2 aunque haya claim" {
