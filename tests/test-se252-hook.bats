@@ -138,7 +138,7 @@ JSONEOF
   BF_OUTPUT_DIR="$BF_OUT" run bash "$HOOK" <<< "$input"
   [ "$status" -eq 0 ]
   # No debe emitir hookSpecificOutput
-  [[ "$output" != *"hookSpecificOutput"* ]] || true
+  [[ "$output" != *"hookSpecificOutput"* ]]
 }
 
 # ── 09: hook emite JSON válido cuando hay warning ─────────────────────────────

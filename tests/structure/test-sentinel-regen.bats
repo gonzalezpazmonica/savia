@@ -46,7 +46,7 @@ EOF
   sed -i 's/original/tampered/' "$FILE"
   run bash "$SCRIPT" verify-hash "$FILE"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"DRIFT"* ]] || [[ "$stderr" == *"DRIFT"* ]] || true
+  [[ "$output" == *"DRIFT"* ]]
 }
 
 @test "AC3: verify-hash exits 0 on clean file" {
