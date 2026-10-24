@@ -22,13 +22,15 @@ setup() {
 }
 
 @test "summarize detects tabular data" {
-  echo "col1,col2,col3
+  run bash "$SUMMARIZER" - <<< "col1,col2,col3
 1,2,3
 4,5,6
 7,8,9
 10,11,12
-13,14,15" | run bash "$SUMMARIZER" -
-  [ "$status" -eq 0 ] || true
+13,14,15"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"rows": 5'* ]]
+  [[ "$output" != *'"detected":false'* ]]
 }
 
 @test "summarize returns detected:false for non-tabular" {
