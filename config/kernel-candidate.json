@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "spec": "SE-400",
+  "candidate_id": "savia-kernel-candidate",
+  "version": "0.2.0",
+  "status": "PROVISIONAL_HYPOTHESIS",
+  "description": "Semillas del kernel candidato (SE-400 §5). Hipótesis a medir, no clasificación: el cierre de dependencias se calcula con el grafo F2 y nada aquí autoriza retirar lo que queda fuera. 0.2.0 añade data-sovereignty-gate tras el FALSE_ALLOW de 0.1.0 (secreto por Write).",
+  "allowed_packs": ["core-local"],
+  "areas": {
+    "identity_principles": [
+      ".claude/profiles/savia.md",
+      "docs/rules/domain/savia-ethical-principles.md",
+      "docs/rules/domain/radical-honesty.md",
+      "docs/critical-facts.md"
+    ],
+    "authority_human_gates": [
+      "docs/rules/domain/autonomous-safety.md",
+      ".claude/hooks/block-force-push.sh",
+      ".claude/hooks/block-commit-to-main.sh",
+      ".claude/hooks/agent-git-discipline.sh",
+      ".claude/hooks/block-infra-destructive.sh",
+      ".claude/hooks/validate-bash-global.sh"
+    ],
+    "security_floors": [
+      ".claude/hooks/block-credential-leak.sh",
+      ".claude/hooks/data-sovereignty-gate.sh"
+    ],
+    "architecture_truth": [
+      "scripts/sam.py",
+      ".scm/sam.json",
+      ".scm/resources.json",
+      ".scm/registry.json"
+    ],
+    "evidence_provenance": [
+      "scripts/ablation_inventory.py",
+      "config/ablation-contract.json",
+      "config/domain-packs.json"
+    ],
+    "bootstrap": [
+      "scripts/savia-env.sh"
+    ],
+    "runtime_projection": [
+      ".opencode/hooks"
+    ]
+  }
+}
