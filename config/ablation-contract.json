@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "spec": "SE-400",
+  "contract_id": "savia-baseline-contract",
+  "contract_version": "1.0.0",
+  "baseline": {
+    "description": "El baseline de toda ablación es el contrato Savia, nunca un modelo, provider o frontend.",
+    "dimensions": [
+      "identity_integrity",
+      "authority_effect_correctness",
+      "security_floors",
+      "human_gates",
+      "policy",
+      "evidence_provenance",
+      "capability_coverage",
+      "failure_safety_recovery",
+      "portability",
+      "context_discipline",
+      "reproducibility",
+      "observability",
+      "maintainability"
+    ],
+    "non_compensable_floors": [
+      "authority_effect_correctness",
+      "security_floors",
+      "human_gates"
+    ],
+    "abort_conditions": [
+      "FALSE_ALLOW",
+      "AUTHORITY_REGRESSION",
+      "CRITICAL_SECURITY_REGRESSION",
+      "UNRECONCILED_EXTERNAL_EFFECT"
+    ]
+  },
+  "taxonomy": {
+    "classes": [
+      "Capability",
+      "Component",
+      "Mechanism",
+      "Script",
+      "Control",
+      "Projection",
+      "Alias",
+      "GeneratedView",
+      "DomainPack",
+      "Extension",
+      "CompatibilityAsset",
+      "UNKNOWN"
+    ],
+    "essentiality": [
+      "CORE_ESSENTIAL",
+      "CORE_SUPPORTIVE",
+      "OPTIONAL_PACK",
+      "DOMAIN_PACK",
+      "EXTENSION",
+      "RUNTIME_PROJECTION",
+      "UI_PROJECTION",
+      "GENERATED_VIEW",
+      "IMPLEMENTATION_DETAIL",
+      "COMPATIBILITY_LEGACY",
+      "MERGE_CANDIDATE",
+      "REDUNDANT_CANDIDATE",
+      "DEAD",
+      "UNKNOWN"
+    ],
+    "requires_ablation_receipt": [
+      "CORE_ESSENTIAL",
+      "CORE_SUPPORTIVE",
+      "MERGE_CANDIDATE",
+      "REDUNDANT_CANDIDATE",
+      "DEAD"
+    ],
+    "physical_removal_states": [
+      "REDUNDANT_CANDIDATE",
+      "DEAD"
+    ]
+  },
+  "surface": [
+    {"kind": "command", "pattern": ".claude/commands/**/*.md"},
+    {"kind": "skill", "pattern": ".claude/skills/*/SKILL.md"},
+    {"kind": "agent", "pattern": ".opencode/agents/*.md"},
+    {"kind": "agent", "pattern": ".claude/agents/*.md"},
+    {"kind": "hook", "pattern": ".claude/hooks/*.sh"},
+    {"kind": "script", "pattern": "scripts/**"},
+    {"kind": "rule", "pattern": "docs/rules/**/*.md"},
+    {"kind": "frontend_link", "pattern": ".opencode/*"},
+    {"kind": "frontend_link", "pattern": ".opencode/agents/*"},
+    {"kind": "frontend_link", "pattern": ".agents/*"}
+  ],
+  "generated_views": [
+    {"path": "AGENTS.md", "generator": "scripts/agents-md-generate.sh"},
+    {"path": "SKILLS.md", "generator": "scripts/skills-md-generate.sh"},
+    {"path": "docs/RESOLVER.md", "generator": "scripts/resolver-md-generate.sh"},
+    {"path": "docs/rules/INDEX.md", "generator": "scripts/rules-index-generate.sh"},
+    {"path": "docs/rules/domain/rule-manifest.json", "generator": "scripts/rule-manifest-generate.sh"},
+    {"path": "docs/rules/domain/agents-catalog.md", "generator": "scripts/agents-catalog-sync.sh"},
+    {"path": ".scm/INDEX.scm", "generator": "scripts/generate-capability-map.py"},
+    {"path": ".scm/registry.json", "generator": "scripts/generate-capability-map.py"},
+    {"path": ".scm/resources.json", "generator": "scripts/generate-capability-map.py"},
+    {"path": ".scm/sam.json", "generator": "scripts/sam.py"}
+  ]
+}
