@@ -5,10 +5,10 @@ import * as path from 'node:path';
 import { generateDataset, DEFAULT_SEED } from '../../../src/federation/benchmark/generate.js';
 import { validateDataset } from '../../../src/federation/benchmark/validate.js';
 import { runBaseline } from '../../../src/federation/benchmark/baseline.js';
-import { buildAll } from '../../../src/federation/benchmark/freeze.js';
+import { buildAll, syncFrozen } from '../../../src/federation/benchmark/freeze.js';
 import { canonicalJson, sha256Json } from '../../../src/federation/benchmark/canon.js';
-import { mean, mrr, ndcgAtK, percentile, precisionAtK, ratio, recallAtK } from '../../../src/federation/benchmark/metrics.js';
-import { STRATA } from '../../../src/federation/benchmark/types.js';
+import { mean, mrr, ndcgAtK, percentile, precisionAtK, ratio, recallAtK, tokenCount } from '../../../src/federation/benchmark/metrics.js';
+import { BENCH_PROFILE, GATE_THRESHOLDS, STRATA } from '../../../src/federation/benchmark/types.js';
 import { FederatedSearchEngine } from '../../../src/federation/search.js';
 import { FederationRegistry } from '../../../src/federation/registry.js';
 import type { SearchEngine } from '../../../src/search/index.js';
@@ -76,6 +76,16 @@ describe('dataset', () => {
     expect(validateDataset(corpus, leak).join('\n')).toMatch(/relevante y prohibido/);
     const ghost = clone(dataset); ghost.queries[0].relevant.push('nope/none.md');
     expect(validateDataset(corpus, ghost).join('\n')).toMatch(/documento desconocido/);
+    const empty = clone(dataset); empty.queries[0].relevant = []; empty.queries[0].useful = [];
+    expect(validateDataset(corpus, empty).join('\n')).toMatch(/relevant vacío/);
+    const staleDoc = corpus.docs.find(d => d.stale)!;
+    const staleRel = clone(dataset); staleRel.queries[0].relevant.push(staleDoc.id);
+    expect(validateDataset(corpus, staleRel).join('\n')).toMatch(/obsoleto marcado como relevante/);
+    const badPair = clone(corpus); badPair.conflictPairs.push(['x/none.md', 'y/none.md']);
+    const badPairDs = clone(dataset); badPairDs.corpusSha256 = sha256Json(badPair);
+    expect(validateDataset(badPair, badPairDs).join('\n')).toMatch(/conflictPair con documento desconocido/);
+    const noTest = clone(dataset); noTest.queries = noTest.queries.filter(q => !(q.stratum === 'new' && q.split === 'test'));
+    expect(validateDataset(corpus, noTest).join('\n')).toMatch(/estrato new sin consultas en test/);
     const tampered = clone(corpus); tampered.docs[0].text += ' x';
     expect(validateDataset(tampered, dataset).join('\n')).toMatch(/corpusSha256/);
   });
@@ -101,6 +111,28 @@ describe('baseline offline', () => {
     expect(report.overall.warm.remoteCalls).toBe(0);
     expect(report.overall.warm.recallAtK).toBe(report.overall.cold.recallAtK);
     expect(report.overall.warm.latencyP95).toBe(0);
+    expect(report.overall.cold.latencyP95!).toBeGreaterThan(0);
+  }, 60000);
+
+  it('la latencia warm se mide: sin cache efectivo hay llamadas remotas y latencia > 0', async () => {
+    const { corpus, dataset } = generateDataset();
+    const { report } = await runBaseline(corpus, dataset, { cacheTtlMs: -1 });
+    expect(report.overall.warm.remoteCalls).toBeGreaterThan(0);
+    expect(report.overall.warm.latencyP95!).toBeGreaterThan(0);
+  }, 60000);
+
+  it('provenance se mide: una atribución falsa de source la baja y cuenta como exposición', async () => {
+    const { corpus, dataset } = generateDataset();
+    const { report } = await runBaseline(corpus, dataset, { tamperResult: r => ({ ...r, source: 'local' }) });
+    expect(report.overall.cold.provenance!).toBeLessThan(1);
+  }, 60000);
+
+  it('ranking y tokens se evalúan sobre el mismo top-k', async () => {
+    const { corpus, dataset } = generateDataset();
+    const k = 3;
+    const maxDocTokens = Math.max(...corpus.docs.map(d => tokenCount(d.text)));
+    const { metrics } = await runBaseline(corpus, dataset, { profile: { ...BENCH_PROFILE, k } });
+    for (const m of metrics) expect(m.retrievedTokens, m.queryId).toBeLessThanOrEqual(k * maxDocTokens);
   }, 60000);
 
   it('el baseline degrada donde debe: vault no sano baja el recall y restringido no filtra', async () => {
@@ -119,6 +151,18 @@ describe('baseline offline', () => {
 });
 
 describe('artefactos congelados', () => {
+  it('umbrales preregistrados: el hash fijado en el test no cambia sin tocar este test', () => {
+    expect(sha256Json(GATE_THRESHOLDS)).toBe('02d8eefe2c059bd03e7e1d4edfb6ee2aaebee792f87dc841d3a4f390e071a7b3');
+  });
+  it('syncFrozen detecta deriva, falta de fichero y no la da si coincide', () => {
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR ?? '/tmp'), 'se395-freeze-'));
+    try {
+      expect(syncFrozen(dir, { 'a.json': { x: 1 } }, false)).toEqual(['a.json']);
+      expect(syncFrozen(dir, { 'a.json': { x: 1 } }, true)).toEqual([]);
+      expect(syncFrozen(dir, { 'a.json': { x: 1 } }, false)).toEqual([]);
+      expect(syncFrozen(dir, { 'a.json': { x: 2 } }, false)).toEqual(['a.json']);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
   it('eval/adaptive coincide con lo regenerado (corpus, dataset, baseline, freeze)', async () => {
     const { corpus, dataset } = generateDataset();
     const { report, freeze } = await buildAll(corpus, dataset);

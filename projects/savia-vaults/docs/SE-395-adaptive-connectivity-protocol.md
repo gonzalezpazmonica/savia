@@ -67,6 +67,16 @@ baseline ya es óptimo) y documentos prohibidos en `restricted`.
 - El estrato `repeated` repite el texto de `monodomain` variante 0; la
   repetición se ejerce además con la medición cold/warm.
 - `duplicates` vale 0: el corpus no contiene contenido idéntico entre vaults.
+- Provenance: el cliente simulado asigna `source` por vault, así que vale 1 por
+  construcción. Solo detecta que el motor reescriba `source`; no mide atribución
+  de un router futuro. No usarla como evidencia de mejora.
+- Potencia estadística baja: calibration y test tienen una familia por estrato
+  (5 consultas). Los intervalos serán anchos; cualquier gate de F2/F3 debe
+  tratarlo y ampliar muestra antes de decidir.
+- `new` es idéntico a `monodomain` (sin documentos ni vaults recién añadidos) y
+  `ambiguous` reutiliza anclas de otro tópico (dominios 2↔3), con fuga menor de
+  familia entre calibration y test. `baselineAdvantage` se asigna por dominio,
+  no por resultado medido. Se corrigen al ampliar el dataset (cambio de protocolo).
 - Latencias remotas: valores fijos derivados de un hash, no medidas.
 - Etiquetas generadas por construcción, no revisadas por una persona
   independiente: la revisión humana de etiquetas queda pendiente.
@@ -84,9 +94,15 @@ cold (motor nuevo) y warm (segunda llamada, cache).
 | MRR / NDCG@10 | 0,883 / 0,839 |
 | Llamadas remotas | 505 (warm: 0) |
 | Latencia p50 / p95 (fixture) | 162 / 195 ms |
-| Tokens recuperados / irrelevantes / útiles | 16 641 / 11 331 / 3 510 |
-| Densidad de contexto útil | 0,211 |
-| Provenance / exposición | 1,0 / 0 |
+| Tokens recuperados / irrelevantes / útiles | 13 239 / 8 063 / 3 416 |
+| Densidad de contexto útil | 0,258 |
+| Provenance / exposición | 1,0 / 0 (provenance no informativa, ver límites) |
+
+Conjunto evaluado: el top-k (k=10) que recibe el consumidor; ranking y tokens
+se calculan sobre el mismo conjunto. Latencia cold: la mayor de las llamadas
+remotas (paralelas) de la consulta; warm: lo que informa el motor en un cache
+hit (`totalMs`), medido y no fijado. Los tests demuestran que ambas métricas
+pueden fallar (cache desactivado, `source` falsificado).
 
 Desglose por estrato y split en `eval/adaptive/baseline.json`.
 
@@ -101,11 +117,16 @@ npx vitest run tests/unit/federation/benchmark.test.ts
 
 `eval/adaptive/freeze.json` fija los SHA-256 de corpus, dataset y baseline más
 el perfil y los umbrales; el test de artefactos congelados falla si cualquiera
-cambia sin regenerar.
+cambia sin regenerar. El hash de `GATE_THRESHOLDS` está además fijado en el test
+(`umbrales preregistrados`): cambiar un umbral exige tocar ese test, visible en
+la revisión del diff; regenerar `freeze.json` no basta.
 
 ## 7. Decisión de fase
 
-F0 y F1: **GO** para continuar a F2 (guidance estático + shadow), condicionado a
-revisión humana de este protocolo. No hay evidencia todavía de que un router
+F0 y F1: **NEEDS_MORE_EVIDENCE** para F2. La infraestructura de medida está
+entregada, pero el dataset es 100 % sintético, faltan los casos realistas
+sanitizados autorizados que exige la spec («fixtures favorables exclusivamente
+no bastan») y las etiquetas no tienen revisión humana independiente. F2 puede
+prepararse en rama, pero no se declara GO hasta cerrar esas dos condiciones. No hay evidencia todavía de que un router
 adaptativo mejore nada: el baseline ya tiene recall 0,92 con 2,8 llamadas
 remotas por consulta, y esa es la única cifra que F2–F3 deben batir.

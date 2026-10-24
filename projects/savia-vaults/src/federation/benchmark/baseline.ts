@@ -30,13 +30,18 @@ class LexIndex {
       let score = 0;
       for (const t of q) { const f = d.terms.get(t) ?? 0; if (!f) continue; const idf = Math.log(1 + (n - (this.df.get(t) ?? 0) + 0.5) / ((this.df.get(t) ?? 0) + 0.5)); score += idf * (f * 2.2) / (f + 1.2 * (0.25 + 0.75 * d.len / this.avg)); }
       return { path: d.id, score, snippet: d.text, tags: [] as string[] };
-    }).filter(r => r.score > 0).sort((a, b) => b.score - a.score || a.path.localeCompare(b.path)).slice(0, max);
+    }).filter(r => r.score > 0).sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).slice(0, max);
   }
 }
 const tokenize = (s: string): string[] => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const contentHash = (s: string): string => sha256(s).slice(0, 8);
 
-export interface BaselineOptions { profile?: BenchProfile }
+export interface BaselineOptions {
+  profile?: BenchProfile;
+  // Solo pruebas del propio benchmark: fuerzan fallos para demostrar que las métricas pueden fallar.
+  cacheTtlMs?: number;
+  tamperResult?: (r: FederatedSearchResult) => FederatedSearchResult;
+}
 
 // Ejecuta cada consulta cold (motor nuevo) y warm (misma consulta, mismo motor -> cache).
 export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, opts: BaselineOptions = {}): Promise<{ report: BaselineReport; metrics: QueryMetrics[] }> {
@@ -48,13 +53,14 @@ export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, op
   const metrics: QueryMetrics[] = [];
   try {
     for (const q of dataset.queries) {
-      let calls = 0;
+      let calls = 0; let callLatencies: number[] = [];
       const client = {
         async search(dome: FederatedDome, query: string, max = 20) {
           calls++;
           const hits = indexes.get(dome.id)!.search(query, max);
           const latencyMs = 40 + parseInt(sha256(`${query}|${dome.id}`).slice(0, 4), 16) % 160;
-          const results: FederatedSearchResult[] = hits.map(h => ({ path: h.path, score: h.score * dome.weight, snippet: h.snippet, tags: [], source: dome.id, contentHash: contentHash(h.snippet) }));
+          callLatencies.push(latencyMs);
+          const results: FederatedSearchResult[] = hits.map(h => ({ path: h.path, score: h.score * dome.weight, snippet: h.snippet, tags: [], source: dome.id, contentHash: contentHash(h.snippet) })).map(r => opts.tamperResult?.(r) ?? r);
           return { results, status: 'ok' as const, latencyMs };
         },
         async healthCheck() { return { healthy: true, latencyMs: 1 }; },
@@ -62,12 +68,14 @@ export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, op
       const registry = new FederationRegistry(path.join(tmp, q.id));
       for (const v of corpus.vaults.filter(x => !x.local)) registry.add({ id: v.id, name: v.name, url: 'http://bench.invalid', timeout: 3000, enabled: true, weight: v.weight, tags: [], status: q.unhealthyVaults.includes(v.id) ? 'unhealthy' : 'healthy' });
       const local = { search: ({ query, maxResults }: { query: string; maxResults: number }) => indexes.get('local')!.search(query, maxResults) } as unknown as SearchEngine;
-      const engine = new FederatedSearchEngine(local, registry, { client, maxTotalResults: 50 });
+      const engine = new FederatedSearchEngine(local, registry, { client, maxTotalResults: 50, cacheTtlMs: opts.cacheTtlMs });
       const ctx: FederatedSearchContext = { principalId: 'bench-principal', policyRevision: 'p1', contentRevision: dataset.corpusSha256.slice(0, 12), allowedDomeIds: q.allowedVaults };
       for (const cache of ['cold', 'warm'] as const) {
-        calls = 0;
+        calls = 0; callLatencies = [];
         const res = await engine.search(q.query, ctx, profile.k);
-        metrics.push(measure(q, res, cache, calls, docById, corpus, profile));
+        // Latencia medida: con llamadas remotas, la mayor de este run (paralelas); sin ellas (cache hit), lo que informa el motor.
+        const latency = calls > 0 ? Math.max(...callLatencies) : res.totalMs;
+        metrics.push(measure(q, res, cache, calls, latency, docById, profile));
       }
     }
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
@@ -75,25 +83,26 @@ export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, op
   return { report: buildReport(metrics, profile, dataset, datasetSha256), metrics };
 }
 
-function measure(q: BenchQuery, res: FederatedSearchResponse, cache: 'cold' | 'warm', calls: number, docs: Map<string, { vault: string; useful: boolean }>, corpus: BenchCorpus, profile: BenchProfile): QueryMetrics {
-  const ranked = res.results.map(r => r.path); const rel = new Set(q.relevant); const useful = new Set(q.useful); const k = profile.k;
+function measure(q: BenchQuery, res: FederatedSearchResponse, cache: 'cold' | 'warm', calls: number, latency: number, docs: Map<string, { vault: string; useful: boolean }>, profile: BenchProfile): QueryMetrics {
+  // Conjunto evaluado: lo que recibe el consumidor a k. Ranking y tokens miden el mismo top-k.
+  const k = profile.k; const results = res.results.slice(0, k);
+  const ranked = results.map(r => r.path); const rel = new Set(q.relevant); const useful = new Set(q.useful);
   let retrieved = 0, irrelevant = 0, usefulTok = 0, provOk = 0, exposed = 0;
-  for (const r of res.results) {
+  for (const r of results) {
     const t = tokenCount(r.snippet); retrieved += t;
     if (!rel.has(r.path)) irrelevant += t;
     if (useful.has(r.path)) usefulTok += t;
     if (docs.get(r.path)?.vault === r.source) provOk++;
     if (q.forbidden.includes(r.path) || !q.allowedVaults.includes(r.source)) exposed++;
   }
-  const remoteSources = res.sources.filter(s => s.id !== 'local');
-  return {
+    return {
     queryId: q.id, stratum: q.stratum, split: q.split, cache,
     recallAtK: recallAtK(ranked, q.relevant, k), precisionAtK: precisionAtK(ranked, q.relevant, k), mrr: mrr(ranked, q.relevant), ndcgAtK: ndcgAtK(ranked, q.relevant, k),
     attempts: calls, remoteCalls: calls,
-    latencyMs: cache === 'warm' ? 0 : Math.max(0, ...remoteSources.map(s => s.latencyMs)),
+    latencyMs: latency,
     retrievedTokens: retrieved, irrelevantTokens: irrelevant, usefulTokens: usefulTok, usefulDensity: ratio(usefulTok, retrieved),
     duplicates: 0, conflictsSurfaced: q.conflictPairs.filter(([a, b]) => ranked.includes(a) && ranked.includes(b)).length,
-    provenanceOk: ratio(provOk, res.results.length), exposed,
+    provenanceOk: ratio(provOk, results.length), exposed,
   };
 }
 

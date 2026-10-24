@@ -1,4 +1,6 @@
-import { sha256Json } from './canon.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { canonicalJson, sha256Json } from './canon.js';
 import { runBaseline } from './baseline.js';
 import { BENCH_PROFILE, BENCH_SCHEMA_VERSION, GATE_THRESHOLDS, type BaselineReport, type BenchCorpus, type BenchDataset } from './types.js';
 
@@ -23,4 +25,16 @@ export function buildFreeze(corpus: BenchCorpus, dataset: BenchDataset, report: 
 export async function buildAll(corpus: BenchCorpus, dataset: BenchDataset): Promise<{ report: BaselineReport; freeze: FreezeManifest }> {
   const { report } = await runBaseline(corpus, dataset);
   return { report, freeze: buildFreeze(corpus, dataset, report) };
+}
+
+// Compara (o escribe) los artefactos congelados. Devuelve los nombres que difieren; con write=true escribe y devuelve [].
+export function syncFrozen(dir: string, files: Record<string, unknown>, write: boolean): string[] {
+  const drift: string[] = [];
+  for (const [name, value] of Object.entries(files)) {
+    const body = JSON.stringify(JSON.parse(canonicalJson(value)), null, 2) + '\n';
+    const file = path.join(dir, name);
+    if (write) { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, body); continue; }
+    if (!fs.existsSync(file) || fs.readFileSync(file, 'utf-8') !== body) drift.push(name);
+  }
+  return drift;
 }

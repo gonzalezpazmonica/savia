@@ -6,7 +6,7 @@
         "conflictsSurfaced": 5,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 2544,
+        "irrelevantTokens": 1941,
         "latencyP50": 162,
         "latencyP95": 195,
         "mrr": 0.985185185185185,
@@ -16,8 +16,8 @@
         "provenance": 1,
         "recallAtK": 0.9333333333333331,
         "remoteCalls": 125,
-        "retrievedTokens": 3859,
-        "usefulDensity": 0.22415133454262762,
+        "retrievedTokens": 3256,
+        "usefulDensity": 0.2656633906633907,
         "usefulTokens": 865
       },
       "warm": {
@@ -25,7 +25,7 @@
         "conflictsSurfaced": 5,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 2544,
+        "irrelevantTokens": 1941,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.985185185185185,
@@ -35,8 +35,8 @@
         "provenance": 1,
         "recallAtK": 0.9333333333333331,
         "remoteCalls": 0,
-        "retrievedTokens": 3859,
-        "usefulDensity": 0.22415133454262762,
+        "retrievedTokens": 3256,
+        "usefulDensity": 0.2656633906633907,
         "usefulTokens": 865
       }
     },
@@ -46,7 +46,7 @@
         "conflictsSurfaced": 5,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1993,
+        "irrelevantTokens": 1841,
         "latencyP50": 149,
         "latencyP95": 196,
         "mrr": 0.6467460317460316,
@@ -56,16 +56,16 @@
         "provenance": 1,
         "recallAtK": 0.9259259259259257,
         "remoteCalls": 125,
-        "retrievedTokens": 3308,
-        "usefulDensity": 0.26148730350665056,
-        "usefulTokens": 865
+        "retrievedTokens": 3146,
+        "usefulDensity": 0.27177368086459,
+        "usefulTokens": 855
       },
       "warm": {
         "attempts": 0,
         "conflictsSurfaced": 5,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1993,
+        "irrelevantTokens": 1841,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.6467460317460316,
@@ -75,18 +75,18 @@
         "provenance": 1,
         "recallAtK": 0.9259259259259257,
         "remoteCalls": 0,
-        "retrievedTokens": 3308,
-        "usefulDensity": 0.26148730350665056,
-        "usefulTokens": 865
+        "retrievedTokens": 3146,
+        "usefulDensity": 0.27177368086459,
+        "usefulTokens": 855
       }
     },
     "train": {
       "cold": {
         "attempts": 255,
-        "conflictsSurfaced": 10,
+        "conflictsSurfaced": 6,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 6794,
+        "irrelevantTokens": 4281,
         "latencyP50": 163,
         "latencyP95": 194,
         "mrr": 0.9509259259259261,
@@ -96,16 +96,16 @@
         "provenance": 1,
         "recallAtK": 0.9118518518518518,
         "remoteCalls": 255,
-        "retrievedTokens": 9474,
-        "usefulDensity": 0.1878826261346844,
-        "usefulTokens": 1780
+        "retrievedTokens": 6837,
+        "usefulDensity": 0.24806201550387597,
+        "usefulTokens": 1696
       },
       "warm": {
         "attempts": 0,
-        "conflictsSurfaced": 10,
+        "conflictsSurfaced": 6,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 6794,
+        "irrelevantTokens": 4281,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.9509259259259261,
@@ -115,9 +115,9 @@
         "provenance": 1,
         "recallAtK": 0.9118518518518518,
         "remoteCalls": 0,
-        "retrievedTokens": 9474,
-        "usefulDensity": 0.1878826261346844,
-        "usefulTokens": 1780
+        "retrievedTokens": 6837,
+        "usefulDensity": 0.24806201550387597,
+        "usefulTokens": 1696
       }
     }
   },
@@ -128,7 +128,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 2443,
+        "irrelevantTokens": 1420,
         "latencyP50": 145,
         "latencyP95": 183,
         "mrr": 0.6054166666666665,
@@ -138,16 +138,16 @@
         "provenance": 1,
         "recallAtK": 0.9833333333333334,
         "remoteCalls": 60,
-        "retrievedTokens": 3043,
-        "usefulDensity": 0.13144922773578704,
-        "usefulTokens": 400
+        "retrievedTokens": 2010,
+        "usefulDensity": 0.19402985074626866,
+        "usefulTokens": 390
       },
       "warm": {
         "attempts": 0,
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 2443,
+        "irrelevantTokens": 1420,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.6054166666666665,
@@ -157,18 +157,18 @@
         "provenance": 1,
         "recallAtK": 0.9833333333333334,
         "remoteCalls": 0,
-        "retrievedTokens": 3043,
-        "usefulDensity": 0.13144922773578704,
-        "usefulTokens": 400
+        "retrievedTokens": 2010,
+        "usefulDensity": 0.19402985074626866,
+        "usefulTokens": 390
       }
     },
     "conflicting": {
       "cold": {
         "attempts": 60,
-        "conflictsSurfaced": 20,
+        "conflictsSurfaced": 16,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1557,
+        "irrelevantTokens": 1134,
         "latencyP50": 153,
         "latencyP95": 196,
         "mrr": 1,
@@ -178,16 +178,16 @@
         "provenance": 1,
         "recallAtK": 0.9333333333333332,
         "remoteCalls": 60,
-        "retrievedTokens": 2197,
-        "usefulDensity": 0.2002730996813837,
-        "usefulTokens": 440
+        "retrievedTokens": 1730,
+        "usefulDensity": 0.22890173410404624,
+        "usefulTokens": 396
       },
       "warm": {
         "attempts": 0,
-        "conflictsSurfaced": 20,
+        "conflictsSurfaced": 16,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1557,
+        "irrelevantTokens": 1134,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 1,
@@ -197,9 +197,9 @@
         "provenance": 1,
         "recallAtK": 0.9333333333333332,
         "remoteCalls": 0,
-        "retrievedTokens": 2197,
-        "usefulDensity": 0.2002730996813837,
-        "usefulTokens": 440
+        "retrievedTokens": 1730,
+        "usefulDensity": 0.22890173410404624,
+        "usefulTokens": 396
       }
     },
     "cross_domain": {
@@ -208,7 +208,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1361,
+        "irrelevantTokens": 873,
         "latencyP50": 177,
         "latencyP95": 194,
         "mrr": 0.9666666666666666,
@@ -218,16 +218,16 @@
         "provenance": 1,
         "recallAtK": 0.9199999999999999,
         "remoteCalls": 60,
-        "retrievedTokens": 2361,
-        "usefulDensity": 0.25412960609911056,
-        "usefulTokens": 600
+        "retrievedTokens": 1793,
+        "usefulDensity": 0.3123257110987172,
+        "usefulTokens": 560
       },
       "warm": {
         "attempts": 0,
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1361,
+        "irrelevantTokens": 873,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.9666666666666666,
@@ -237,9 +237,9 @@
         "provenance": 1,
         "recallAtK": 0.9199999999999999,
         "remoteCalls": 0,
-        "retrievedTokens": 2361,
-        "usefulDensity": 0.25412960609911056,
-        "usefulTokens": 600
+        "retrievedTokens": 1793,
+        "usefulDensity": 0.3123257110987172,
+        "usefulTokens": 560
       }
     },
     "monodomain": {
@@ -248,7 +248,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1541,
+        "irrelevantTokens": 1093,
         "latencyP50": 162,
         "latencyP95": 188,
         "mrr": 0.839642857142857,
@@ -258,8 +258,8 @@
         "provenance": 1,
         "recallAtK": 1,
         "remoteCalls": 60,
-        "retrievedTokens": 2141,
-        "usefulDensity": 0.18682858477347034,
+        "retrievedTokens": 1693,
+        "usefulDensity": 0.23626698168930893,
         "usefulTokens": 400
       },
       "warm": {
@@ -267,7 +267,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1541,
+        "irrelevantTokens": 1093,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.839642857142857,
@@ -277,8 +277,8 @@
         "provenance": 1,
         "recallAtK": 1,
         "remoteCalls": 0,
-        "retrievedTokens": 2141,
-        "usefulDensity": 0.18682858477347034,
+        "retrievedTokens": 1693,
+        "usefulDensity": 0.23626698168930893,
         "usefulTokens": 400
       }
     },
@@ -288,7 +288,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1543,
+        "irrelevantTokens": 1093,
         "latencyP50": 173,
         "latencyP95": 195,
         "mrr": 0.839642857142857,
@@ -298,8 +298,8 @@
         "provenance": 1,
         "recallAtK": 1,
         "remoteCalls": 60,
-        "retrievedTokens": 2143,
-        "usefulDensity": 0.18665422305179655,
+        "retrievedTokens": 1693,
+        "usefulDensity": 0.23626698168930893,
         "usefulTokens": 400
       },
       "warm": {
@@ -307,7 +307,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1543,
+        "irrelevantTokens": 1093,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.839642857142857,
@@ -317,8 +317,8 @@
         "provenance": 1,
         "recallAtK": 1,
         "remoteCalls": 0,
-        "retrievedTokens": 2143,
-        "usefulDensity": 0.18665422305179655,
+        "retrievedTokens": 1693,
+        "usefulDensity": 0.23626698168930893,
         "usefulTokens": 400
       }
     },
@@ -408,7 +408,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1745,
+        "irrelevantTokens": 1309,
         "latencyP50": 157,
         "latencyP95": 195,
         "mrr": 0.8038095238095238,
@@ -418,8 +418,8 @@
         "provenance": 1,
         "recallAtK": 1,
         "remoteCalls": 60,
-        "retrievedTokens": 2165,
-        "usefulDensity": 0.19399538106235567,
+        "retrievedTokens": 1729,
+        "usefulDensity": 0.242914979757085,
         "usefulTokens": 420
       },
       "warm": {
@@ -427,7 +427,7 @@
         "conflictsSurfaced": 0,
         "duplicates": 0,
         "exposed": 0,
-        "irrelevantTokens": 1745,
+        "irrelevantTokens": 1309,
         "latencyP50": 0,
         "latencyP95": 0,
         "mrr": 0.8038095238095238,
@@ -437,8 +437,8 @@
         "provenance": 1,
         "recallAtK": 1,
         "remoteCalls": 0,
-        "retrievedTokens": 2165,
-        "usefulDensity": 0.19399538106235567,
+        "retrievedTokens": 1729,
+        "usefulDensity": 0.242914979757085,
         "usefulTokens": 420
       }
     },
@@ -488,10 +488,10 @@
   "overall": {
     "cold": {
       "attempts": 505,
-      "conflictsSurfaced": 20,
+      "conflictsSurfaced": 16,
       "duplicates": 0,
       "exposed": 0,
-      "irrelevantTokens": 11331,
+      "irrelevantTokens": 8063,
       "latencyP50": 162,
       "latencyP95": 195,
       "mrr": 0.883445767195767,
@@ -501,16 +501,16 @@
       "provenance": 1,
       "recallAtK": 0.9207407407407412,
       "remoteCalls": 505,
-      "retrievedTokens": 16641,
-      "usefulDensity": 0.21092482422931313,
-      "usefulTokens": 3510
+      "retrievedTokens": 13239,
+      "usefulDensity": 0.2580255306292016,
+      "usefulTokens": 3416
     },
     "warm": {
       "attempts": 0,
-      "conflictsSurfaced": 20,
+      "conflictsSurfaced": 16,
       "duplicates": 0,
       "exposed": 0,
-      "irrelevantTokens": 11331,
+      "irrelevantTokens": 8063,
       "latencyP50": 0,
       "latencyP95": 0,
       "mrr": 0.883445767195767,
@@ -520,9 +520,9 @@
       "provenance": 1,
       "recallAtK": 0.9207407407407412,
       "remoteCalls": 0,
-      "retrievedTokens": 16641,
-      "usefulDensity": 0.21092482422931313,
-      "usefulTokens": 3510
+      "retrievedTokens": 13239,
+      "usefulDensity": 0.2580255306292016,
+      "usefulTokens": 3416
     }
   },
   "profile": {
