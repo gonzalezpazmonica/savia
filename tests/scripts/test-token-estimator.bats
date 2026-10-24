@@ -83,9 +83,11 @@ teardown() {
 }
 
 @test "no arguments with empty stdin exits gracefully" {
+  mkdir -p "$TMPDIR/cwd-empty"
+  cd "$TMPDIR/cwd-empty"
   run timeout 3 bash "$SCRIPT" < /dev/null
-  # Script may exit 0 (empty output) or non-zero (no target) — both valid
-  [[ "$status" -eq 0 ]] || [[ "$status" -ne 0 ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ Files:[[:space:]]+0 ]]
 }
 
 @test "unknown model falls back to default pricing with a warning" {

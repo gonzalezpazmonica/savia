@@ -82,10 +82,11 @@ teardown() {
 
 @test "state mapping handles bad provider and empty state" {
   source "$ROOT/scripts/sync-adapters/adapter-interface.sh"
-  local m1; m1=$(map_state_to_provider "Active" "unknown-provider" 2>&1) || true
-  [[ -n "$m1" ]] || true
-  local m2; m2=$(map_state_to_provider "" "azure-devops" 2>&1) || true
-  [[ -z "$m2" ]] || true
+  run map_state_to_provider "Active" "unknown-provider"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unsupported provider"* ]]
+  local m2; m2=$(map_state_to_provider "" "azure-devops" 2>&1)
+  [[ -z "$m2" ]]
 }
 
 # ── Edge cases ──
@@ -137,8 +138,8 @@ teardown() {
 
 @test "state mapping rejects invalid state and handles null timestamps" {
   source "$ROOT/scripts/sync-adapters/adapter-interface.sh"
-  local m; m=$(map_state_to_provider "InvalidXYZ" "azure-devops" 2>&1) || true
-  [[ -n "$m" ]] || true
+  local m; m=$(map_state_to_provider "InvalidXYZ" "azure-devops" 2>&1)
+  [ "$m" = "InvalidXYZ" ]
   local s; s=$(compute_sync_status "" "" "" "")
   [[ -n "$s" ]]
 }
