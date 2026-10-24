@@ -233,7 +233,7 @@ plan_and_grant() {
 # ── v2: re-sync autónomo con main (repo git temporal con remoto bare; nunca GitHub) ──
 v2_repo() { export MERGE_SPRINT_RESYNC=1; }
 v2_pr() {  # v2_pr <n> <fichero> <contenido> : rama pr-<n> con un commit; registra la revisión sobre su head
-  G switch -q -c "pr-$1" main; echo "$3" > "$MERGE_SPRINT_GIT_ROOT/$2"; G add "$2"; G commit -qm "pr $1"; G push -q origin "pr-$1"; G switch -q main
+  G switch -q -c "pr-$1" main; mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"; echo "$3" > "$MERGE_SPRINT_GIT_ROOT/$2"; G add "$2"; G commit -qm "pr $1"; G push -q origin "pr-$1"; G switch -q main
   echo "pr-$1" > "$FAKE/$1.branch"; echo x > "$FAKE/$1.head"; echo "scripts/x$1.sh" > "$FAKE/$1.files"
   local s; s=$(git --git-dir="$BARE" rev-parse "refs/heads/pr-$1")
   echo "VERDICT: APPROVE pr=$1 sha=$s role=correctness tier=2 reviewer=rev-agent author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0" > "$TMPDIR_T/r$1.md"
@@ -265,14 +265,15 @@ main_moves() {  # main_moves <fichero> <contenido>
   [ "$(git --git-dir="$BARE" rev-parse refs/heads/pr-41)" = "$before" ]
 }
 
-@test "v2 block: commit de código posterior a la revisión aparca (requiere juez)" {
+@test "v2 block: commit de código posterior a la revisión en un path de tier 3 para el sprint (prefiltro del juez)" {
   v2_repo; v2_pr 42 d.txt pr42
   plan_and_grant
   G switch -q pr-42; echo cambio-colado >> "$MERGE_SPRINT_GIT_ROOT/d.txt"; G commit -qam sneaky; G push -q origin pr-42; G switch -q main
   main_moves e.txt main2
   run bash "$SCRIPT" run
   [ ! -e "$FAKE/merged" ]
-  grep -q '"reason":"head_cambiado_requiere_juez"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_tier"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }
 
 @test "boundary: 12 registros concurrentes dejan la cadena íntegra (cerrojo en chain_append)" {
@@ -459,6 +460,7 @@ PY
   echo "bash '$PWD/$SCRIPT' revoke" > "$FAKE/94.on_merge"
   plan_and_grant
   run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
   [ "$(paste -sd, "$FAKE/merged")" = "94" ]
   grep -q '"reason":"grant_revocado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }
@@ -491,6 +493,7 @@ PY
   mkpr 99 "scripts/ab.sh"; review 99 APPROVE correctness; echo fail > "$FAKE/99.checks"
   plan_and_grant
   run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
   grep -q '"reason":"merge_rechazado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
   grep -qx 'pr ready 98 -R .* --undo' "$FAKE/calls"
   ! grep -q 'pr ready 99' "$FAKE/calls"
@@ -502,6 +505,7 @@ PY
   plan_and_grant
   local id; id=$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -c1-12)
   run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
   grep -q "pr edit 100 -R .* --add-label merge-sprint:$id" "$FAKE/calls"
   grep -q "pr edit 101 -R .* --add-label merge-sprint:$id" "$FAKE/calls"
   [ "$(grep -n -- "--add-label" "$FAKE/calls" | tail -1 | cut -d: -f1)" -lt "$(grep -n '^pr merge' "$FAKE/calls" | head -1 | cut -d: -f1)" ]
@@ -553,7 +557,7 @@ JSON
   mv "$FAKE/103.on_merge" "$TMPDIR_T/103.on_merge.old"
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
-  grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"103"' | grep -q '"reconciled":"1"'
+  grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"103"' | grep -q '"equivalence":"reconciled"'
   ! grep -q '"reason":"merge_externo"' "$MERGE_SPRINT_HOME/ledger.jsonl"
   [ "$(paste -sd, "$FAKE/merged")" = "103,104" ]
   [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["merged"])' "$MERGE_SPRINT_HOME/grant.json")" -eq 2 ]
@@ -577,6 +581,187 @@ JSON
   echo "touch '$MERGE_SPRINT_HOME/STOP'" > "$FAKE/checks_hook"
   sed -i 's|"pr checks") printf|"pr checks") [[ -f "$F/checks_hook" ]] \&\& bash "$F/checks_hook"; printf|' "$GH"
   run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
   [ ! -e "$FAKE/merged" ]
   grep -q '"reason":"stop_antes_de_merge"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+# ── v5: juez de cambios posteriores al grant (§2.7) ──
+jpr() {  # jpr <n> <fichero> <contenido> : PR v2 cuyo diff declarado es el fichero real
+  v2_repo; v2_pr "$1" "$2" "$3"; echo "$2" > "$FAKE/$1.files"
+}
+fix_commit() {  # fix_commit <n> <orden> : commit del agente «fixer» en la rama del PR
+  G switch -q "pr-$1"; (cd "$MERGE_SPRINT_GIT_ROOT" && eval "$2")
+  G add -A; git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=f@f -c user.name=fixer -c commit.gpgsign=false commit -qm fix
+  G push -q origin "pr-$1"; G switch -q main
+}
+no_request() { ! compgen -G "$MERGE_SPRINT_HOME/judge/*.request.json" >/dev/null; }
+
+@test "AC-11 block: delta que toca un fichero fuera de files para sin solicitar al juez" {
+  v2_repo; main_moves scripts/otro.sh base
+  jpr 110 scripts/d.sh l1; plan_and_grant
+  fix_commit 110 'echo otro >> scripts/otro.sh'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_fuera_de_files"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request; [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-11 block: delta que toca un path de gobernanza para sin solicitar al juez" {
+  jpr 111 scripts/d.sh l1; plan_and_grant
+  fix_commit 111 'echo "# x" >> scripts/risk-tier.py'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_tier"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request
+}
+
+@test "AC-11 block: delta que añade un fichero para sin solicitar al juez" {
+  jpr 112 scripts/d.sh l1; plan_and_grant
+  fix_commit 112 'echo nuevo > scripts/nuevo.sh'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_alta_baja"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request
+}
+
+@test "AC-11 block: delta que elimina un @test para sin solicitar al juez" {
+  jpr 113 tests/t.bats $'@test "a" {\n  [ 1 -eq 1 ]\n}\n@test "b" {\n  true\n}'
+  plan_and_grant
+  fix_commit 113 "sed -i '4,6d' tests/t.bats"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_tests_eliminados"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request
+}
+
+@test "AC-11 boundary: delta de más de 200 líneas para; uno de 200 se solicita al juez" {
+  jpr 114 scripts/d.sh l1; plan_and_grant
+  fix_commit 114 'seq 1 201 >> scripts/d.sh'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_tamano"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request
+}
+
+@test "AC-11 boundary: delta de 200 líneas en un fichero del PR pasa el prefiltro y queda awaiting_judge" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  jpr 115 scripts/d.sh l1; plan_and_grant
+  fix_commit 115 'seq 1 200 >> scripts/d.sh'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"espera al juez"* ]]
+  ls "$MERGE_SPRINT_HOME"/judge/115-*.request.json
+  grep -q '"event":"JUDGE_REQUEST"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+judge_setup() {  # judge_setup <n> : PR con commit de arreglo tras el grant, solicitud emitida y sprint en pausa
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  jpr "$1" scripts/d.sh l1; plan_and_grant
+  H0=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prs"][0]["head"])' "$MERGE_SPRINT_HOME/manifest.json")
+  fix_commit "$1" 'echo l2 >> scripts/d.sh'
+  H1=$(git --git-dir="$BARE" rev-parse "refs/heads/pr-$1")
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"espera al juez"* ]]
+}
+verdict() {  # verdict <n> <línea> : registra un veredicto del juez
+  local f; f=$(mktemp "$TMPDIR_T/v.XXXX"); echo "$2" > "$f"
+  bash "$SCRIPT" review-register "$1" "$f"
+}
+safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fix_author=fixer scope=unchanged security=unchanged reason=${3:-implementa_p2}"; }
+
+@test "AC-12 positivo: SAFE válido → CI nueva sobre to y merge con --match-head-commit to; manifiesto y grant intactos" {
+  judge_setup 120
+  local mbefore; mbefore=$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json")
+  local gbefore; gbefore=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d.pop("merged"); print(json.dumps(d,sort_keys=True))' "$MERGE_SPRINT_HOME/grant.json")
+  verdict 120 "$(safe_line 120)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 120 "$FAKE/merged"
+  grep -q "pr merge 120 .*--match-head-commit $H1" "$FAKE/calls"
+  grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep -q '"equivalence":"judge_safe"'
+  [ "$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json")" = "$mbefore" ]
+  [ "$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d.pop("merged"); print(json.dumps(d,sort_keys=True))' "$MERGE_SPRINT_HOME/grant.json")" = "$gbefore" ]
+}
+
+@test "AC-12 block: veredicto STOP del juez para el sprint" {
+  judge_setup 121
+  verdict 121 "JUDGE: STOP pr=121 from=$H0 to=$H1 judge=judge-agent fix_author=fixer scope=changed security=unchanged reason=amplia"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_stop"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-12 block: SAFE con scope=changed cuenta como STOP" {
+  judge_setup 122
+  verdict 122 "JUDGE: SAFE pr=122 from=$H0 to=$H1 judge=judge-agent fix_author=fixer scope=changed security=unchanged reason=x"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_stop"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-12 invalid: veredicto con formato inválido para el sprint" {
+  judge_setup 123
+  verdict 123 "JUDGE: SAFE pr=123 from=$H0 to=$H1 judge=judge-agent"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_formato"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-12 invalid: from o to erróneos paran el sprint" {
+  judge_setup 124
+  local h0=$H0; H0=$(printf '%040d' 1)
+  verdict 124 "$(safe_line 124)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_from_to"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-12 block: judge igual al autor del arreglo para el sprint" {
+  judge_setup 125
+  verdict 125 "$(safe_line 125 fixer)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_no_independiente"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-12 block: judge igual al autor original o al orquestador para el sprint" {
+  judge_setup 126
+  verdict 126 "$(safe_line 126 impl-agent)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_no_independiente"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-12 block: dos veredictos para el mismo (pr, to) paran el sprint" {
+  judge_setup 127
+  verdict 127 "$(safe_line 127 judge-a r1)"; verdict 127 "$(safe_line 127 judge-b r2)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_duplicado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-12 block: plazo del juez vencido sin veredicto para el sprint" {
+  export MERGE_SPRINT_JUDGE_MIN=0 MERGE_SPRINT_JUDGE_POLLS=1
+  jpr 128 scripts/d.sh l1; plan_and_grant
+  fix_commit 128 'echo l2 >> scripts/d.sh'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_plazo"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-12 error: veredicto alterado tras registrarlo para el sprint" {
+  judge_setup 129
+  verdict 129 "$(safe_line 129)"
+  for f in "$MERGE_SPRINT_HOME"/judge/129-*.verdict.md; do echo x >> "$f"; done
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_alterado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # merge-sprint.sh — SE-433 v1: merges en serie bajo autorización humana previa y acotada.
 #
-#   review-register <pr> <informe>   registra una revisión (primera línea VERDICT: …) en el registro encadenado
+#   review-register <pr> <informe>   registra una revisión (VERDICT: …) o un veredicto del juez (JUDGE: …, §2.7)
 #   plan                             manifiesto: PRs abiertos con revisión APPROVE sobre su head actual
 #   grant <manifest-digest>          emite el grant (regla «ask»: la operadora lo aprueba desde el frontend)
 #   run                              ejecuta el sprint del grant vigente, en serie y ascendente
@@ -17,7 +17,7 @@ POLICY="${MERGE_SPRINT_POLICY:-$ROOT/config/merge-sprint-policy.conf}"
 REPO="${MERGE_SPRINT_REPO:-gonzalezpazmonica/savia}"
 GH="${GH:-gh}"
 ORCH="${MERGE_SPRINT_ORCHESTRATOR:-savia-orchestrator}"
-REG="$HOME_MS/reviews.jsonl"; LEDGER="$HOME_MS/ledger.jsonl"; GRANT="$HOME_MS/grant.json"
+REG="$HOME_MS/reviews.jsonl"; JREG="$HOME_MS/judge.jsonl"; LEDGER="$HOME_MS/ledger.jsonl"; GRANT="$HOME_MS/grant.json"
 STOPF="$HOME_MS/STOP"; MANIFEST="$HOME_MS/manifest.json"
 GITROOT="${MERGE_SPRINT_GIT_ROOT:-$ROOT}"     # repo git sobre el que se re-sincronizan las ramas
 RESYNC="${MERGE_SPRINT_RESYNC:-1}"           # v2: re-sync con main dentro de run (0 = solo v1)
@@ -71,6 +71,15 @@ PY
 cmd_review_register() {
   local pr="$1" file="$2"
   [[ -f "$file" ]] || die "informe inexistente: $file"
+  [[ "$pr" =~ ^[0-9]+$ ]] || die "pr inválido: $pr" 3
+  if [[ "$(head -c 6 "$file")" == "JUDGE:" ]]; then
+    # Veredicto del juez de cambios (§2.7): se registra tal cual; run lo valida y, si no es válido, para.
+    local copy="$HOME_MS/judge/$pr-$(sha < "$file" | cut -c1-12).verdict.md"
+    mkdir -p "$HOME_MS/judge"; cp "$file" "$copy"; chmod 600 "$copy"
+    chain_append "$JREG" "$(python3 -c 'import json,sys,time; print(json.dumps({"ts":sys.argv[1],"ts_epoch":int(time.time()),"pr":int(sys.argv[2]),"file":sys.argv[3],"hash":sys.argv[4]}))' \
+      "$(now)" "$pr" "$copy" "$(sha < "$copy")")"
+    echo "veredicto de juez registrado: #$pr"; return 0
+  fi
   local parsed; parsed=$(parse_verdict "$(head -1 "$file")") || die "primera línea sin gramática VERDICT válida" 3
   read -r v p s role tier rv au <<<"$parsed"
   [[ "$p" == "$pr" ]] || die "pr del veredicto ($p) ≠ $pr" 3
@@ -152,8 +161,9 @@ cmd_plan() {
       [[ -n "$found" ]] || continue
       head="$found"
     fi
-    local meta; meta=$(pr_meta "$n") || continue
-    out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o)}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta")
+    local meta files; meta=$(pr_meta "$n") || continue
+    files=$($GH pr diff "$n" -R "$REPO" --name-only 2>/dev/null) && [[ -n "$files" ]] || continue
+    out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o),"files":sorted(sys.argv[6].split())}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta" "$files")
   done
   # Blobs del ejecutor y del clasificador en origin/<base> y checks obligatorios de la protección (§2.2).
   local rb cb req
@@ -203,14 +213,19 @@ required_ok() {  # checks obligatorios del PR: pass | fail | pending
 DERIVED_RE='^(\.scm/|\.confidentiality-signature$|docs/rules/INDEX\.md$|docs/rules/domain/rule-manifest\.json$)'
 is_derived() { grep -qE "$DERIVED_RE" <<<"$1"; }
 
+equiv_tree() {  # equiv_tree <sha_revisado> <sha_actual> → árbol T = merge(revisado, main integrado en el actual)
+  git -C "$GITROOT" cat-file -e "$1^{commit}" 2>/dev/null && git -C "$GITROOT" cat-file -e "$2^{commit}" 2>/dev/null || return 1
+  local m tree
+  m=$(git -C "$GITROOT" merge-base "$2" origin/main 2>/dev/null) || return 1
+  # Conflictos solo admisibles en derivados: merge-tree escribe el árbol aunque haya conflictos.
+  tree=$(git -C "$GITROOT" merge-tree --write-tree --name-only "$1" "$m" 2>/dev/null | head -1)
+  [[ -n "$tree" ]] && echo "$tree"
+}
+
 head_equivalent() {  # head_equivalent <sha_revisado> <sha_actual> → 0 si el actual == merge(revisado, main) salvo derivados
   [[ "$1" == "$2" ]] && return 0
-  git -C "$GITROOT" cat-file -e "$1^{commit}" 2>/dev/null && git -C "$GITROOT" cat-file -e "$2^{commit}" 2>/dev/null || return 1
-  local m tree changed f
-  m=$(git -C "$GITROOT" merge-base "$2" origin/main 2>/dev/null) || return 1
-  # Árbol resultante de mergear la versión revisada con ese main (conflictos solo admisibles en derivados).
-  tree=$(git -C "$GITROOT" merge-tree --write-tree --name-only "$1" "$m" 2>/dev/null | head -1)
-  [[ -n "$tree" ]] || return 1
+  local tree changed f
+  tree=$(equiv_tree "$1" "$2") || return 1
   changed=$(git -C "$GITROOT" diff --name-only "$tree" "$2" 2>/dev/null) || return 1
   while IFS= read -r f; do
     { [[ -z "$f" ]] || is_derived "$f"; } && continue
@@ -273,13 +288,14 @@ park() {
 }
 
 anomaly() {  # anomaly <motivo> [pr] → STOP del sprint, sin merge ni revert
-  ledger event=STOP reason="$1" ${2:+pr="$2"}; echo "STOP (anomalía): $1${2:+ #$2}"; exit 5
+  ledger event=STOP reason="$1" ${2:+pr="$2"}; echo "STOP: $1${2:+ #$2}"; exit 5
 }
 
 # Reservas F5 (SE-387) pr.merge/<N> de este grant: distinguen un merge propio sin registrar de uno externo.
 f5() { (cd "$GITROOT" && SAVIA_RESERVATIONS="$HOME_MS/reservations/${DIGEST:0:12}" bash "$ROOT/scripts/f5-state.sh" "$@"); }
 
 mf() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[2]]; print("\n".join(v) if isinstance(v,list) else v)' "$MANIFEST" "$1"; }
+mf_entry() { python3 -c 'import json,sys; print(json.dumps(next(p for p in json.load(open(sys.argv[1]))["prs"] if p["pr"]==int(sys.argv[2]))))' "$MANIFEST" "$1"; }
 
 check_required() {  # checks obligatorios vivos ⊇ los del manifiesto y no vacíos (AC-16)
   local live; live=$(required_live)
@@ -287,10 +303,120 @@ check_required() {  # checks obligatorios vivos ⊇ los del manifiesto y no vac�
   [[ -z "$(comm -23 <(mf required_checks | sort -u) <(echo "$live"))" ]] || anomaly checks_obligatorios_reducidos
 }
 
+sprint_gate() {  # paso 1 de cada entrada: STOP, grant vigente, TTL, contador y checks obligatorios
+  [[ -e "$STOPF" ]] && { ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
+  [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || { ledger event=STOP reason=grant_revocado; echo "STOP: grant revocado"; exit 0; }
+  (( $(date +%s) < $(grant_field expires_epoch) )) || { ledger event=STOP reason=ttl; echo "STOP: grant caducado"; exit 0; }
+  (( MERGED < $(grant_field max_merges) )) || { ledger event=STOP reason=max; echo "STOP: máximo de merges"; exit 0; }
+  check_required
+}
+
 main_ci_gate() {  # main_ci_gate <pr> <merge_commit> → vuelve solo si main queda en verde; si no, STOP sin revert
   local st
   for _ in $(seq 1 "${MERGE_SPRINT_MAIN_POLLS:-40}"); do st=$(main_ci "$2"); [[ "$st" != pending ]] && break; sleep "${MERGE_SPRINT_POLL_S:-30}"; done
   [[ "$st" == pass ]] || { ledger event=STOP reason="main_$st" pr="$1"; echo "STOP: main '$st' tras #$1 (sin revert)"; exit 0; }
+}
+
+merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7–8 de §2.5 sobre el SHA S
+  local pr="$1" s="$2"
+  case "$(wait_ci "$pr")" in
+    pass) ;;
+    fail) FAIL=ci_roja; return 1 ;;
+    *) FAIL=ci_pendiente; return 1 ;;
+  esac
+  [[ "$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)" == "$s" ]] || { FAIL=head_movido; return 1; }
+  [[ -e "$STOPF" ]] && { park "$pr" stop_antes_de_merge; ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
+  $GH pr ready "$pr" -R "$REPO" >/dev/null 2>&1 && READIED="$READIED $pr"
+  f5 reserve pr.merge "$pr" >/dev/null && f5 mark_submitted pr.merge "$pr" >/dev/null || anomaly f5_reserva "$pr"
+  $GH pr merge "$pr" -R "$REPO" --squash --match-head-commit "$s" >/dev/null 2>&1 && return 0
+  FAIL="merge_rechazado:$($GH pr view "$pr" -R "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null)"; return 1
+}
+
+record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → ledger, reserva cerrada y CI de main
+  MERGED=$((MERGED+1)); grant_set_merged "$MERGED"
+  local mc; mc=$($GH pr view "$1" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
+  ledger event=MERGED pr="$1" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"}
+  f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
+  echo "  MERGED #$1 → ${mc:0:8}"
+  main_ci_gate "$1" "$mc"
+}
+
+# ── Juez de cambios posteriores al grant (§2.7): el ejecutor no usa LLM; solo pide, filtra y verifica ──
+judge_prefilter() {  # judge_prefilter <T> <H1> <tier> <entrada-json> → vacío si pasa; si no, el motivo
+  python3 - "$GITROOT" "$1" "$2" "$3" "$4" "$DERIVED_RE" "$ROOT/scripts/risk-tier.py" <<'PY'
+import json, re, subprocess, sys
+root, t, h1, tier, entry, derived, classifier = sys.argv[1:8]
+g = lambda *a: subprocess.run(["git", "-C", root, *a], capture_output=True, text=True, check=True).stdout
+keep = lambda p: not re.search(derived, p)
+raw = [l.split("\t") for l in g("diff", "--raw", "--no-renames", t, h1).splitlines() if l]
+raw = [(m.lstrip(":").split(), p) for m, p in raw if keep(p)]
+paths = [p for _, p in raw]
+if not paths: sys.exit(0)
+out = subprocess.run(["python3", classifier, "--diff", " ".join(paths), "--json"], capture_output=True, text=True).stdout
+dt = json.loads(out).get("tier", 4) if out else 4
+if dt >= 3 or dt > int(tier): print("prefiltro_tier"); sys.exit(0)
+if any(m[4] in ("A", "D") for m, _ in raw): print("prefiltro_alta_baja"); sys.exit(0)
+num = [l.split("\t") for l in g("diff", "--numstat", "--no-renames", t, h1, "--", *paths).splitlines() if l]
+if any(m[0] != m[1] for m, _ in raw) or any(a == "-" for a, _, _ in num): print("prefiltro_binario_modo"); sys.exit(0)
+if set(paths) - set(json.loads(entry)["files"]): print("prefiltro_fuera_de_files"); sys.exit(0)
+patch, cur = g("diff", "-U0", "--no-renames", t, h1, "--", *paths), ""
+for l in patch.splitlines():
+    if l.startswith("+++ "): cur = l[6:]
+    if l.startswith("-") and not l.startswith("---"):
+        body = l[1:].strip()
+        if "@test" in body or re.search(r"\bassert", body) or (cur.endswith(".bats") and body.startswith("[")):
+            print("prefiltro_tests_eliminados"); sys.exit(0)
+if sum(int(a) + int(d) for a, d, _ in num) > 200: print("prefiltro_tamano"); sys.exit(0)
+PY
+}
+
+judge_request() {  # judge_request <pr> <H0> <H1> <T> <tier> → escribe la solicitud y la registra
+  local f="$HOME_MS/judge/$1-$3.request.json" fixers
+  mkdir -p "$HOME_MS/judge"
+  fixers=$(git -C "$GITROOT" log --no-merges --format=%an "$3" "^$2" ^origin/main 2>/dev/null | sort -u | paste -sd' ' -)
+  python3 - "$REG" "$1" "$2" "$3" "$5" "$(mf_entry "$1")" "$fixers" \
+    "$(git -C "$GITROOT" diff --no-renames "$4" "$3" | grep -v '^index ' || true)" > "$f" <<'PY'
+import json, sys, time
+reg, pr, h0, h1, tier, entry, fixers, diff = sys.argv[1:9]
+revs = [json.loads(l) for l in open(reg)] if reg else []
+revs = [r for r in revs if r["pr"] == int(pr) and r["sha"] == h0]
+print(json.dumps({"pr": int(pr), "from": h0, "to": h1, "tier": int(tier), "entry": json.loads(entry),
+  "review_sha256": [r["hash"] for r in revs], "authors": sorted({r["author"] for r in revs}),
+  "fix_author": fixers.split(), "diff": diff, "requested_epoch": int(time.time())}, sort_keys=True, indent=1))
+PY
+  chmod 600 "$f"
+  ledger event=JUDGE_REQUEST pr="$1" from="$2" to="$3" request="$f"
+  echo "  #$1 awaiting_judge (${3:0:8})"
+}
+
+judge_verdict() {  # judge_verdict <request> → SAFE:<hash> | PENDING | STOP:<motivo>
+  python3 - "$JREG" "$1" "$ORCH" "${MERGE_SPRINT_JUDGE_MIN:-60}" <<'PY'
+import hashlib, json, re, sys, time
+jreg, reqf, orch, minutes = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+q = json.load(open(reqf)); deadline = q["requested_epoch"] + minutes * 60
+try: recs = [json.loads(l) for l in open(jreg)]
+except FileNotFoundError: recs = []
+recs = [r for r in recs if r["pr"] == q["pr"] and r["ts_epoch"] >= q["requested_epoch"]]
+G = re.compile(r"JUDGE: (SAFE|STOP) pr=(\d+) from=([0-9a-f]{40}) to=([0-9a-f]{40}) judge=(\S+) fix_author=(\S+) "
+               r"scope=(unchanged|changed) security=(unchanged|changed) reason=([a-z0-9_-]+)")
+def stop(m): print("STOP:" + m); sys.exit(0)
+parsed = []
+for r in recs:
+    data = open(r["file"], "rb").read()
+    if hashlib.sha256(data).hexdigest() != r["hash"]: stop("judge_alterado")
+    m = G.fullmatch(data.decode("utf-8", "replace").split("\n", 1)[0])
+    if not m: stop("judge_formato")
+    parsed.append((r, m.groups()))
+for r, (v, pr, fr, to, judge, fixer, scope, sec, _) in parsed:
+    if int(pr) != q["pr"] or fr != q["from"] or to != q["to"]: stop("judge_from_to")
+    if judge in {orch, fixer, *q["fix_author"], *q["authors"]}: stop("judge_no_independiente")
+    if q["fix_author"] and fixer not in q["fix_author"]: stop("judge_fix_author")
+    if r["ts_epoch"] > deadline: stop("judge_plazo")
+if len(parsed) > 1: stop("judge_duplicado")
+if not parsed: stop("judge_plazo") if time.time() > deadline else print("PENDING"); sys.exit(0)
+r, (v, *_, scope, sec, _) = parsed[0]
+stop("judge_stop") if v != "SAFE" or scope != "unchanged" or sec != "unchanged" else print("SAFE:" + r["hash"])
+PY
 }
 
 LABELED=""
@@ -307,10 +433,11 @@ cmd_run() {
   exec 9>"$HOME_MS/run.lock"; flock -n 9 || die "otro sprint en curso" 3
   verify_chain "$LEDGER" || die "ledger manipulado" 4
   verify_chain "$REG" || die "registro de revisiones manipulado" 4
+  verify_chain "$JREG" || die "registro de veredictos del juez manipulado" 4
   DIGEST=$(sha < "$MANIFEST")
   [[ "$DIGEST" == "$(grant_field digest)" ]] || die "manifiesto alterado tras el grant" 4
   local allowed; allowed=$(policy allowed_tiers) || exit 2
-  local merged; merged=$(grant_field merged)
+  MERGED=$(grant_field merged)
   ledger event=RUN digest="$DIGEST"
   # El ejecutor y el clasificador que corren deben ser los blobs congelados en el manifiesto (AC-17).
   [[ "$(git hash-object "$ROOT/scripts/merge-sprint.sh")" == "$(mf runner_blob)" ]] || anomaly blob_ejecutor
@@ -328,25 +455,17 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     $GH pr edit "$pr" -R "$REPO" --add-label "$label" >/dev/null 2>&1 || anomaly etiqueta_fallida "$pr"
     LABELED="$LABELED $pr"
   done <<<"$entries"
+  local awaiting=""   # PRs en awaiting_judge: vuelven al final de la cola (§2.7)
   while read -r pr head tier base hrepo reopens; do
     [[ -z "$pr" ]] && continue
-    [[ -e "$STOPF" ]] && { ledger event=STOP reason=manual; echo "STOP manual"; return 0; }
-    [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || { ledger event=STOP reason=grant_revocado; echo "STOP: grant revocado"; return 0; }
-    (( $(date +%s) < $(grant_field expires_epoch) )) || { ledger event=STOP reason=ttl; echo "STOP: grant caducado"; return 0; }
-    (( merged < $(grant_field max_merges) )) || { ledger event=STOP reason=max; echo "STOP: máximo de merges"; return 0; }
-    check_required
+    sprint_gate
     local state; state=$($GH pr view "$pr" -R "$REPO" --json state --jq .state)
     if [[ "$state" == MERGED ]]; then
       # Reconciliación tras una caída (AC-25/26): solo una reserva submitted de este grant lo hace propio.
       case "$(f5 status pr.merge "$pr")" in
         closed) continue ;;   # ya mergeado y registrado por este grant
-        submitted)
-          local mc; mc=$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
-          merged=$((merged+1)); grant_set_merged "$merged"
-          ledger event=MERGED pr="$pr" tier="$tier" head="$head" merge_commit="$mc" reconciled=1
-          f5 close pr.merge "$pr" >/dev/null || anomaly f5_close "$pr"
-          echo "  MERGED #$pr (reconciliado) → ${mc:0:8}"
-          main_ci_gate "$pr" "$mc"; continue ;;
+        submitted) echo "  #$pr mergeado sin registrar: reconciliado con la reserva F5"
+                   record_merge "$pr" "$tier" "$head" reconciled; continue ;;
         *) anomaly merge_externo "$pr" ;;
       esac
     fi
@@ -356,9 +475,11 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     local t; t=$(pr_tier "$pr")
     (( t <= tier )) && [[ ",$allowed," == *",$t,"* ]] || { park "$pr" "tier_$t"; continue; }
     reviews_ok "$pr" "$head" "$tier" || { park "$pr" revision; continue; }
+    # Solicitud al juez ya emitida en un run anterior: se espera su veredicto, sin re-sincronizar.
+    compgen -G "$HOME_MS/judge/$pr-*.request.json" >/dev/null && { awaiting="$awaiting $pr:$tier"; continue; }
     # Si main avanza durante la espera de CI (otro merge), GitHub rechaza el merge por desfase:
     # se re-sincroniza y se vuelve a esperar, hasta MERGE_SPRINT_TRIES intentos.
-    local try reason="" cur="" ok=0 ms rs
+    local try reason="" cur="" ok=0 rs eq
     for try in $(seq 1 "${MERGE_SPRINT_TRIES:-3}"); do
       if [[ "$RESYNC" == 1 ]]; then
         resync "$pr"; rs=$?
@@ -367,31 +488,41 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
       fi
       cur=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
       git -C "$GITROOT" fetch -q origin 2>/dev/null
-      head_equivalent "$head" "$cur" || { reason=head_cambiado_requiere_juez; break; }
-      case "$(wait_ci "$pr")" in
-        pass) ;;
-        fail) reason=ci_roja; break ;;
-        *) reason=ci_pendiente; break ;;
-      esac
-      [[ -e "$STOPF" ]] && { park "$pr" stop_antes_de_merge; ledger event=STOP reason=manual; echo "STOP manual"; return 0; }
-      $GH pr ready "$pr" -R "$REPO" >/dev/null 2>&1 && READIED="$READIED $pr"
-      f5 reserve pr.merge "$pr" >/dev/null && f5 mark_submitted pr.merge "$pr" >/dev/null || anomaly f5_reserva "$pr"
-      if $GH pr merge "$pr" -R "$REPO" --squash --match-head-commit "$cur" >/dev/null 2>&1; then ok=1; break; fi
-      ms=$($GH pr view "$pr" -R "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null)
-      if [[ "$RESYNC" == 1 && ( "$ms" == DIRTY || "$ms" == BEHIND ) ]]; then
+      if ! head_equivalent "$head" "$cur"; then
+        local tt pf; tt=$(equiv_tree "$head" "$cur") || { reason=equivalencia_ilegible; break; }
+        pf=$(judge_prefilter "$tt" "$cur" "$tier" "$(mf_entry "$pr")") || anomaly judge_prefiltro_fallo "$pr"
+        [[ -z "$pf" ]] || anomaly "judge_$pf" "$pr"    # el prefiltro para sin consultar al juez (AC-11)
+        judge_request "$pr" "$head" "$cur" "$tt" "$tier"; awaiting="$awaiting $pr:$tier"; reason=awaiting_judge; break
+      fi
+      [[ "$head" == "$cur" ]] && eq=identical || eq=main_merge
+      if merge_at "$pr" "$cur"; then ok=1; break; fi
+      reason=$FAIL
+      if [[ "$RESYNC" == 1 && ( "$FAIL" == *:DIRTY || "$FAIL" == *:BEHIND ) ]]; then
         ledger event=RETRY pr="$pr" try="$try" reason=main_movido; reason=main_movido_sin_converger; continue
       fi
-      reason=merge_rechazado; break
+      break
     done
-    (( ok )) || { park "$pr" "$reason"; continue; }
-    merged=$((merged+1)); grant_set_merged "$merged"
-    local mc; mc=$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
-    ledger event=MERGED pr="$pr" tier="$t" head="$cur" merge_commit="$mc"
-    f5 close pr.merge "$pr" >/dev/null || anomaly f5_close "$pr"
-    echo "  MERGED #$pr → ${mc:0:8}"
-    main_ci_gate "$pr" "$mc"
+    [[ "$reason" == awaiting_judge ]] && continue
+    (( ok )) || { park "$pr" "${reason%%:*}"; continue; }
+    record_merge "$pr" "$t" "$cur" "$eq"
   done <<<"$entries"
-  ledger event=END merged="$merged"; echo "sprint terminado: $merged merges"
+  # Cola del juez: SAFE → CI nueva sobre `to` y merge con S = to; cualquier otra cosa para el sprint.
+  local item req v
+  for item in $awaiting; do
+    pr=${item%%:*}; tier=${item##*:}
+    req=$(ls -t "$HOME_MS/judge/$pr-"*.request.json | head -1)
+    for _ in $(seq 1 "${MERGE_SPRINT_JUDGE_POLLS:-120}"); do
+      v=$(judge_verdict "$req") || anomaly judge_verificacion_fallo "$pr"
+      [[ "$v" != PENDING ]] && break; sleep "${MERGE_SPRINT_POLL_S:-30}"
+    done
+    ledger event=JUDGE_VERDICT pr="$pr" verdict="$v" request="$req"
+    [[ "$v" == PENDING ]] && { ledger event=PAUSE reason=awaiting_judge pr="$pr"; echo "sprint en pausa: #$pr espera al juez"; exit 0; }
+    [[ "$v" == SAFE:* ]] || anomaly "${v#STOP:}" "$pr"
+    sprint_gate
+    local to; to=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["to"])' "$req")
+    if merge_at "$pr" "$to"; then record_merge "$pr" "$tier" "$to" judge_safe "${v#SAFE:}"; else park "$pr" "${FAIL%%:*}"; fi
+  done
+  ledger event=END merged="$MERGED"; echo "sprint terminado: $MERGED merges"
 }
 
 cmd_report() {
@@ -417,6 +548,6 @@ case "${1:-}" in
   stop) touch "$STOPF"; ledger event=STOP_REQUEST; echo "STOP solicitado" ;;
   revoke) mv "$GRANT" "$HOME_MS/grant.revoked.$(date +%s)" 2>/dev/null; ledger event=REVOKE; echo "grant revocado" ;;
   report) cmd_report ;;
-  verify-ledger) verify_chain "$LEDGER" && verify_chain "$REG" && echo "íntegro" || die "cadena rota" 4 ;;
+  verify-ledger) verify_chain "$LEDGER" && verify_chain "$REG" && verify_chain "$JREG" && echo "íntegro" || die "cadena rota" 4 ;;
   *) die "uso: merge-sprint.sh review-register|plan|grant|run|status|stop|revoke|report|verify-ledger" ;;
 esac
