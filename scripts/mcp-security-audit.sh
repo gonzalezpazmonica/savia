@@ -18,7 +18,11 @@
 # Exit codes:
 #   0 — no findings
 #   1 — findings present
-#   2 — usage error
+#   2 — usage error, or UNKNOWN: python3 missing or unable to start, so no config can be read (SE-453).
+#       A config that python3 cannot parse is a finding (MCP-00, exit 1), not UNKNOWN.
+#       With no config found (none given and no default present) the result is clean with 0 audited.
+#
+# Contrato SE-453: --json lleva `result` y `gaps`; en texto la última línea es `gate-result: {...}`.
 #
 # Ref: SE-058, research/agentshield-20260420.md
 # Safety: read-only. set -uo pipefail.
@@ -27,6 +31,8 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$PROJECT_ROOT/.claude/hooks/lib/gate-result.sh"
 
 CONFIGS=()
 JSON=0
@@ -82,6 +88,20 @@ fi
 
 FINDINGS=()
 total_servers=0
+
+# SE-453: sin python3 no se puede leer ningún config. Antes cada config salía como MCP-00 «Invalid JSON»
+# (un hallazgo falso por herramienta ausente); ahora es unknown/missing_tool. También si python3 existe
+# pero no arranca (shim de pyenv sin versión, venv roto): `command -v` no basta.
+if [[ ${#CONFIGS[@]} -gt 0 ]] && ! python3 -c '' >/dev/null 2>&1; then
+  echo "ERROR: python3 no disponible; no se pueden leer los configs MCP (no medido)." >&2
+  if [[ "$JSON" -eq 1 ]]; then
+    gate_line="$(gate_result_emit unknown "python3:missing_tool")"
+    echo "{\"verdict\":\"UNKNOWN\",\"configs_audited\":0,\"servers_audited\":0,\"findings_count\":0,\"critical\":0,\"high\":0,\"medium\":0,\"low\":0,\"findings\":[],${gate_line#gate-result: \{}"
+  else
+    gate_result_emit unknown "python3:missing_tool"
+  fi
+  exit 2
+fi
 
 # Emit finding
 add_finding() {
@@ -217,8 +237,9 @@ if [[ "$JSON" -eq 1 ]]; then
     findings_json+="{\"rule\":\"$rule\",\"severity\":\"$sev\",\"server\":\"$server\",\"detail\":\"$detail_esc\",\"config\":\"$cfg_esc\"},"
   done
   findings_json="[${findings_json%,}]"
+  gate_line="$(gate_result_emit "$([ $EXIT_CODE -eq 0 ] && echo clean || echo findings)")"
   cat <<JSON
-{"verdict":"$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)","configs_audited":${#CONFIGS[@]},"servers_audited":$total_servers,"findings_count":${#FINDINGS[@]},"critical":$CRIT,"high":$HIGH,"medium":$MED,"low":$LOW,"findings":$findings_json}
+{"verdict":"$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)","configs_audited":${#CONFIGS[@]},"servers_audited":$total_servers,"findings_count":${#FINDINGS[@]},"critical":$CRIT,"high":$HIGH,"medium":$MED,"low":$LOW,"findings":$findings_json,${gate_line#gate-result: \{}
 JSON
 else
   echo "=== SE-058 MCP Security Audit ==="
@@ -236,6 +257,7 @@ else
     echo ""
   fi
   echo "VERDICT: $([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)"
+  gate_result_emit "$([ $EXIT_CODE -eq 0 ] && echo clean || echo findings)"
 fi
 
 exit $EXIT_CODE

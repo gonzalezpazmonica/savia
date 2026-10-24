@@ -313,6 +313,12 @@ jobs:
           python3 -m unittest tests/python/test_dome_guard.py
           bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
 
+      # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
+      - name: Gate guards parity (SE-453 S2)
+        env:
+          SAVIA_REQUIRE_TS: "1"
+        run: bats tests/test-gate-result-contract.bats tests/test-gate-result-dual-binding.bats tests/test-gate-result-scanners.bats
+
       - name: Generate BATS dependency map
         id: deps
         run: bash scripts/ci-bats-deps.sh --generate

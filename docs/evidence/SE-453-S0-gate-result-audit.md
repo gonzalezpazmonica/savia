@@ -18,7 +18,8 @@
 | `scripts/confidentiality-scan.sh` | 0 limpio, 1 violaciones, 2 error | sin herramienta externa | sin tope | Sin cambios |
 | `scripts/security-scan.sh` | 0 siempre salvo `--ci` con hallazgos (1) | grep/find estándar | sin tope | Por demanda: sin `--ci` los hallazgos no cambian el código |
 | `scripts/vuln-scan.sh` | 0 siempre salvo `--ci` con vulnerabilidades (1) | grep estándar | sin tope | Por demanda: igual que `security-scan.sh` |
-| `scripts/mcp-security-audit.sh` | 0 limpio, 1 hallazgos, 2 argumentos | python3 ausente: las extracciones devuelven vacío (no medido) | sin tope | Por demanda: python3 ausente debe ser `unknown/missing_tool` |
+| `scripts/mcp-security-audit.sh` | 0 limpio, 1 hallazgos, 2 argumentos | python3 ausente: cada config salía como hallazgo MCP-00 «Invalid JSON» (exit 1) | sin tope | Lote 2: python3 ausente → 2 + `unknown/missing_tool`; `--json` lleva `result` y `gaps` |
+| `scripts/security-audit-all.sh` (agregador) | 0 bajo umbral, 1 sobre umbral, 2 argumentos | `$(cmd \|\| echo '{}')`: un escáner que salía 1 (hallazgos) dejaba `{}` tras su JSON, el parseo fallaba y contaba **0** (FAIL leído PASS; reproducido el 2026-10-23); escáner roto o ausente = 0 | sin tope | Lote 2: escáner ausente, roto o ilegible = hueco; sin hallazgos sobre umbral y con hueco → 2 `UNKNOWN` |
 | `scripts/transcriptor-scan.sh` | 0 limpio u omitido, 1 error | python3 ausente → 1 | sin tope | Sin cambios |
 
 ## Guards y hooks `blocking: true`
@@ -41,6 +42,22 @@
 | `config-snapshot-hook`, `context-greedy-inject`, `propuestas-index-refresh`, `twin-posttooluse` | 0 | exit 0 sin `jq` | — | Igual |
 | `sycophancy-strip`, `vault-frontmatter-gate` | 0 o 2 | exit 0 sin `jq` | — | Igual |
 | Resto de los 31 que citan `command -v jq` (p. ej. `tdd-gate`, `contract-test-guard`) | 0 o 2 | degradan o no son de seguridad | — | Por demanda |
+
+## Paridad OpenCode de los guards `blocking` (DUAL_BINDING, 2026-10-23)
+
+`savia-gates` ejecuta los mismos `.sh` por su shell-bridge: paridad por construcción, también sin `jq`.
+Los puertos nativos de `.opencode/plugins/guards/` no usan `jq` (caso «sin jq» no aplicable en TS) y se
+compararon con el hook bash con las mismas entradas:
+
+| Guard | Entradas | Divergencias halladas | Estado |
+|---|---|---|---|
+| `block-force-push.ts` | 11 | `git -C dir push --force` y `git commit --amend` pasaban en TS (bash 2, TS 0); `git push origin main-fix` bloqueaba en TS | Corregido: mismo ancla `GIT_AT` que el hook. Revisión de #1348: el primer ancla dejaba pasar en TS la orden en la línea 2 de un bloque (sin flag `m`) y, en ambos bindings, `bash -c "…"`, `sh -c`, `eval`, `then`, `{`, `xargs` y un `--force` junto a un `--force-with-lease`; corregido en bash y TS con casos de paridad. Sigue sin cubrirse una orden git construida en tiempo de ejecución (variables, alias) |
+| `block-credential-leak.ts` | 4 | ninguna | Sin cambios |
+| `block-infra-destructive.ts` | 4 | ninguna | Sin cambios |
+| `validate-bash-global.ts` | 2 | ninguna | Sin cambios |
+
+Reglas solo-TS que siguen siendo más estrictas que el hook (no se tocan): `git checkout --force`,
+`git rebase origin/main` y `git push --delete origin main`.
 
 ## Conclusiones para S1 a S3
 

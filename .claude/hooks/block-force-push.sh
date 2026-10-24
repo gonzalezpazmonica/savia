@@ -27,10 +27,27 @@ if [ -z "$COMMAND" ]; then
   exit 0
 fi
 
-# Inicio de una orden git real: al principio, tras un separador o al abrir un subshell, con lo
-# que puede ir delante (VAR=valor, env, command, sudo, nohup, time, exec) y opciones globales de
-# git (-C dir, -c clave=valor, --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
-GIT_AT='(^|[;&|(`]|\$\()[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|env|command|sudo|nohup|time|exec)[[:space:]]+)*git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
+# Inicio de una orden git real: al principio de una línea, tras un separador, al abrir un subshell o
+# dentro de `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`/`su -c '…'`/`ssh host '…'`/`find -exec`, con lo que puede
+# ir delante (VAR=valor, los envoltorios env, command, sudo, doas, nohup, time, exec, xargs, nice, ionice, stdbuf,
+# setsid, timeout, strace y ltrace con
+# sus opciones —`sudo -u x`, `env -i`, `timeout -s KILL 30`—, then, do, if, !, {), una ruta o una barra
+# invertida delante de git (`/usr/bin/git`, `\git`) y opciones globales de git (-C dir, -c clave=valor,
+# --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
+# Sin `\b`: es extensión GNU y BSD grep (macOS) puede no reconocerla; `(^|[^[:alnum:]_])` vale en los dos.
+# Una bandera corta combinada con f (`-fu`, `-uf`) fuerza igual que `-f`.
+# grep evalúa línea a línea: una orden en la línea 2 de un bloque multilínea también casa (SE-453).
+# El puerto TS (.opencode/plugins/guards/block-force-push.ts) lleva la misma gramática con el flag m, escrita
+# sin ambigüedades para que V8 no se cuelgue en vueltas atrás (grep no tiene ese problema).
+GIT_AT='(^|[;&|(`]|\$\(|[[:space:]]-exec(dir)?[[:space:]]|(^|[^[:alnum:]_])((ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c|eval|su([[:space:]]+(-[A-Za-z-]*|[^-[:space:]"'"'"'][^[:space:]]*))*[[:space:]]+(-[A-Za-z]*c|--command)|ssh([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+[^-[:space:]"'"'"'][^[:space:]]*)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout|strace|ltrace)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*|timeout[[:space:]]+[^[:space:]]+|[0-9][0-9.]*[smhd]?|then|do|else|if|elif|while|until|!|\{)[[:space:]]+)*(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^-[:space:]][^[:space:]]*))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
+# Fin de una opción o de un nombre de rama: espacio, fin de línea, separador o cierre de comillas.
+END='([[:space:]]|$|[;&|)"'"'"'`])'
+# main/master como destino de un push de esta misma orden (sin cruzar ;, & ni |): palabra suelta o tras
+# `:` o `+` de un refspec, o tras refs/heads/ o refs/remotes/<remoto>/ (`HEAD:main`, `+main`,
+# `refs/heads/main`, `main:main`); `main-fix` y `feature/main` no casan.
+PUSH_MAIN='push[[:space:]]+([^;&|]*([[:space:]:+"'"'"']|refs/heads/|refs/remotes/[^/[:space:]]+/))?(main|master)([[:space:]:]|$|[;&|)"'"'"'`])'
+# main/master como destino: palabra suelta o tras `:`, `+` o `/` de un refspec; `main-fix` no casa.
+MAIN_REF='(^|[[:space:]:+"'"'"']|refs/heads/|refs/remotes/[^/[:space:]]+/)(main|master)([[:space:]:;&|)"'"'"'`]|$)'
 
 # Bloquear force push (permite --force-with-lease en ramas no-main)
 # --force-with-lease es más seguro: falla si el remoto avanzó sin nuestro conocimiento.
@@ -42,15 +59,16 @@ IS_PUSH_TO_MAIN=no
 if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+.*--force-with-lease" > /dev/null; then
   IS_FORCE_WITH_LEASE=yes
 fi
-if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+([^;&|]*[[:space:]])?--force([[:space:]]|\$)|${GIT_AT}push[[:space:]]+([^;&|]*[[:space:]])?-f([[:space:]]|\$)" > /dev/null; then
+if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+([^;&|]*[[:space:]])?((--force|-[A-Za-z]*f[A-Za-z]*)${END}|[\"']?\+[^[:space:]])" > /dev/null; then
   IS_BARE_FORCE=yes
 fi
-if echo "$COMMAND" | grep -iE 'git[[:space:]]+push[[:space:]]+.*\b(main|master)\b' > /dev/null; then
+if echo "$COMMAND" | grep -iE "git[[:space:]]+push[[:space:]]+.*${MAIN_REF}" > /dev/null; then
   IS_PUSH_TO_MAIN=yes
 fi
 
-# Bare --force (sin --force-with-lease) siempre bloqueado
-if [[ "$IS_BARE_FORCE" == "yes" && "$IS_FORCE_WITH_LEASE" == "no" ]]; then
+# Bare --force (o refspec `+rama`, que fuerza igual) siempre bloqueado, aunque otra parte de la orden lleve --force-with-lease (SE-453):
+# la regex de force no casa con --force-with-lease, así que un yes aquí es un --force/-f real.
+if [[ "$IS_BARE_FORCE" == "yes" ]]; then
   echo "BLOQUEADO: git push --force no está permitido. Usa --force-with-lease." >&2
   exit 2
 fi
@@ -63,7 +81,7 @@ fi
 
 # Bloquear push directo a main/master
 # FIX: Add anchoring for compound command separators
-if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+(origin[[:space:]]+)?(main|master)([[:space:]]|\$|[;&|)])" > /dev/null; then
+if echo "$COMMAND" | grep -iE "${GIT_AT}${PUSH_MAIN}" > /dev/null; then
   echo "BLOQUEADO: Push directo a main/master no permitido. Usa rama + PR." >&2
   exit 2
 fi
