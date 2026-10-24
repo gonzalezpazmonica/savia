@@ -92,6 +92,29 @@ class SchemaLite(unittest.TestCase):
             schema_lite.validate(1, {"type": "number"})
 
 
+class SchemaLiteGaps(unittest.TestCase):
+    def test_unique_items_ignores_key_order(self):
+        sch = {"type": "array", "uniqueItems": True}
+        self.assertTrue(schema_lite.validate([{"a": 1, "b": 2}, {"b": 2, "a": 1}], sch))
+
+    def test_additional_properties_subschema_enforced(self):
+        sch = {"type": "object", "additionalProperties": {"type": "string"}}
+        self.assertEqual(schema_lite.validate({"x": "ok"}, sch), [])
+        self.assertTrue(schema_lite.validate({"x": 1}, sch))
+
+    def test_unsupported_keyword_in_unvisited_defs_detected(self):
+        sch = {"type": "object", "$defs": {"unused": {"type": "string", "maxLength": 3}}}
+        self.assertTrue(any("maxLength" in e for e in schema_lite.validate({}, sch)))
+
+    def test_manifest_with_secret_rejected_at_load(self):
+        with tempfile.TemporaryDirectory() as d:
+            m = json.loads((FX / "manifests/git.json").read_text())
+            m["targets"][0]["source"]["locator"] = "https://user:hunter2@example.invalid/x"
+            (Path(d) / "g.json").write_text(json.dumps(m))
+            with self.assertRaises(ValueError):
+                load_manifests(d)
+
+
 class Planner(unittest.TestCase):
     def test_ubuntu_ready_and_ordered_by_dependencies(self):
         p = plan("ubuntu-x64", "opencode")
@@ -205,17 +228,24 @@ class Planner(unittest.TestCase):
         for cid, m in MANIFESTS.items():
             for t in m["targets"]:
                 a = t["actions"]
-                self.assertNotEqual(a["install"]["invocation"], a["uninstall"]["invocation"], cid)
+                if "uninstall" in a:
+                    self.assertNotEqual(a["install"]["invocation"], a["uninstall"]["invocation"], cid)
 
     def test_shell_interpreter_and_recovery_elevation_warn(self):
         p = plan("ubuntu-x64", "vendor-installer")
-        self.assertIn(("vendor-installer", "shell_interpreter"), codes(p, "warnings") | codes(p))
+        self.assertIn(("vendor-installer", "shell_interpreter"), codes(p, "warnings"))
+        self.assertNotIn(("vendor-installer", "shell_interpreter"), codes(p))
         h = host("ubuntu-noroot")
-        h = type(h)(**{**h.__dict__, "elevation_available": False})
+        self.assertFalse(h.elevation_available)
         m = copy.deepcopy(MANIFESTS)
         t = m["opencode"]["targets"][0]
         t["actions"]["uninstall"]["privilege"] = "ROOT-ADMIN"
         self.assertIn(("opencode", "recovery_needs_elevation"), codes(build_plan(m, h, ["opencode"]), "warnings"))
+
+    def test_selected_installed_without_manifest_warns(self):
+        m = {k: v for k, v in MANIFESTS.items() if k != "git"}
+        p = build_plan(m, host("ubuntu-x64"), ["git"])
+        self.assertIn(("git", "no_manifest_for_installed"), codes(p, "warnings"))
 
     def test_adapter_execution_is_out_of_scope(self):
         with self.assertRaises(NotImplementedError):
@@ -270,6 +300,8 @@ class StateMachine(unittest.TestCase):
     def test_crash_recovery_offers_resume_rollback_inspect(self):
         self.assertEqual(state.recovery_options("installing"), ["resume", "rollback", "inspect"])
         self.assertEqual(state.recovery_options("completed"), ["inspect"])
+        for st in ("failed", "partially-rolled-back", "repair-required"):
+            self.assertIn("rollback", state.recovery_options(st), st)
 
     def test_state_document_schema(self):
         doc = {"schema_version": 1, "plan_id": "b" * 64, "state": "installing", "last_successful_sync_at": None}
@@ -292,6 +324,12 @@ class Cli(unittest.TestCase):
         self.assertEqual(json.loads(ok.stdout)["status"], "ready_with_warnings")
         self.assertEqual(self.run_cli("windows-arm64", "opencode").returncode, 2)
         self.assertEqual(self.run_cli("nope", "git").returncode, 1)
+
+    def test_usage_error_is_exit_1_not_blocked(self):
+        script = str(Path(__file__).resolve().parents[2] / "scripts/installer-plan.py")
+        for argv in ([], ["--manifests", str(FX / "manifests")], ["--bogus"]):
+            r = subprocess.run([sys.executable, script, *argv], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1, argv)
 
 
 if __name__ == "__main__":

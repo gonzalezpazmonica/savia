@@ -17,8 +17,17 @@ from provisioning.adapter import FixtureAdapter  # noqa: E402
 from provisioning.planner import build_plan, find_secrets, load_manifests, validate  # noqa: E402
 
 
+class _Parser(argparse.ArgumentParser):
+    """Usage errors exit 1 (invalid input); exit 2 is reserved for a blocked plan."""
+
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"ERROR: {message}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = _Parser(description=__doc__)
     ap.add_argument("--manifests", required=True)
     ap.add_argument("--host", required=True, help="fixture JSON for the fake platform adapter")
     ap.add_argument("--select", action="append", required=True)

@@ -1,6 +1,7 @@
 """Stdlib validator for the JSON Schema subset used by schemas/installer/ (CI has no jsonschema)."""
 from __future__ import annotations
 
+import json
 import re
 
 _TYPES = {"object": dict, "array": list, "string": str, "boolean": bool, "null": type(None)}
@@ -10,6 +11,23 @@ _DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2
 SUPPORTED = {"$defs", "$id", "$ref", "$schema", "additionalProperties", "const", "default", "description", "enum",
              "format", "items", "minItems", "minLength", "minimum", "pattern", "properties", "required", "title",
              "type", "uniqueItems"}
+
+
+def _canon(x):
+    return json.dumps(x, sort_keys=True)
+
+
+def check_schema(node, path="#") -> list:
+    """Unsupported keywords anywhere in the schema, including unreferenced $defs and absent properties."""
+    if not isinstance(node, dict):
+        return []
+    errs = [f"{path}: unsupported schema keyword {k!r}" for k in sorted(set(node) - SUPPORTED)]
+    for key in ("properties", "$defs"):
+        for k, v in node.get(key, {}).items():
+            errs += check_schema(v, f"{path}/{key}/{k}")
+    for key in ("items", "additionalProperties"):
+        errs += check_schema(node.get(key), f"{path}/{key}")
+    return errs
 
 
 def _same(a, b):
@@ -26,8 +44,10 @@ def _is(v, t):
 
 
 def validate(doc, schema, root=None, path="") -> list:
-    root = root or schema
-    errs = [f"{path}: unsupported schema keyword {k!r}" for k in sorted(set(schema) - SUPPORTED)]
+    errs = []
+    if root is None:
+        root = schema
+        errs = check_schema(schema)
     if "$ref" in schema:
         node = root
         for part in schema["$ref"].lstrip("#/").split("/"):
@@ -53,7 +73,7 @@ def validate(doc, schema, root=None, path="") -> list:
     if isinstance(doc, list):
         if len(doc) < schema.get("minItems", 0):
             errs.append(f"{path}: too few items")
-        if schema.get("uniqueItems") and len({repr(x) for x in doc}) != len(doc):
+        if schema.get("uniqueItems") and len({_canon(x) for x in doc}) != len(doc):
             errs.append(f"{path}: duplicate items")
         for i, x in enumerate(doc):
             if "items" in schema:
@@ -66,4 +86,6 @@ def validate(doc, schema, root=None, path="") -> list:
                 errs += validate(v, props[k], root, f"{path}/{k}")
             elif schema.get("additionalProperties") is False:
                 errs.append(f"{path}/{k}: unexpected property")
+            elif isinstance(schema.get("additionalProperties"), dict):
+                errs += validate(v, schema["additionalProperties"], root, f"{path}/{k}")
     return sorted(errs)

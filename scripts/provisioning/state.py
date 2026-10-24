@@ -27,7 +27,9 @@ def transition(current: str, nxt: str) -> str:
 
 
 def recovery_options(state: str) -> list:
-    """After a crash: never assume completion. In-flight states offer resume/rollback/inspect."""
+    """After a crash: never assume completion. In-flight states offer resume/rollback/inspect; states that can roll back offer rollback."""
     if state in IN_FLIGHT:
         return ["resume", "rollback", "inspect"]
+    if "rolling-back" in TRANSITIONS.get(state, ()):
+        return ["rollback", "inspect"]
     return ["inspect"]

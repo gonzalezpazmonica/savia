@@ -52,6 +52,8 @@ def load_manifests(directory: str) -> dict:
         errs = validate(m, "component-manifest")
         if errs:
             raise ValueError(f"{name}: invalid manifest: {errs[0]}")
+        if find_secrets(m):
+            raise ValueError(f"{name}: manifest contains secret-like content at {find_secrets(m)[0]}")
         if m["id"] in out:
             raise ValueError(f"duplicate component id {m['id']}")
         out[m["id"]] = m
@@ -107,6 +109,9 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
     order = _closure(manifests, selection, blockers, host.installed)
     selected = set(selection)
     present = (set(host.installed) | set(order))
+    for cid in sorted(selected - set(manifests)):
+        if cid in host.installed:
+            warnings.append({"code": "no_manifest_for_installed", "component": cid, "message": f"{cid} is installed but has no manifest; nothing to plan"})
     for cid in order:
         m = manifests[cid]
         # conflicts in both directions: this manifest vs present, and present manifests vs this component
