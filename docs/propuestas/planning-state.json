@@ -1418,6 +1418,15 @@
       "evidence": "docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md",
       "phase": "D",
       "approval": "Operadora 2026-10-23: AskUserQuestion"
+    },
+    {
+      "id": "SE-457",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints",
+      "note": "Skill entregada en la PR #1361; la spec sigue PROPOSED hasta la aprobación de la operadora.",
+      "evidence": "docs/specs/SE-457-harness-architecture-skill.spec.md",
+      "phase": "D"
     }
   ],
   "route": {

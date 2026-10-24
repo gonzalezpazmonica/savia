@@ -6,6 +6,10 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-23 SE-457 PROPOSED
+
+Alta junto con la skill harness-architecture (PR #1361)
+
 ## 2026-10-23 SE-466 PROPOSED
 
 Alta desde el triaje de code scanning (PR #1363)
