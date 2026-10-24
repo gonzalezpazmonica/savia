@@ -130,6 +130,7 @@ To use a skill: read `<path>` and follow its instructions.
 | regulatory-compliance | `.opencode/skills/regulatory-compliance/SKILL.md` | Usar cuando se valida el cumplimiento de marcos regulatorios sectoriales. |
 | reranker | `.opencode/skills/reranker/SKILL.md` | Usar cuando se recibe un top-K ruidoso de búsqueda en memoria y se necesita reordenar por relevan... |
 | resource-references | `.opencode/skills/resource-references/SKILL.md` | Usar cuando se necesitan referencias a recursos y plantillas del workspace. |
+| reverse-engineering-sovereignty | `.opencode/skills/reverse-engineering-sovereignty/SKILL.md` | Usar cuando se necesita comprobar qué hace un software opaco del que se depende, o poder salir de... |
 | risk-scoring | `.opencode/skills/risk-scoring/SKILL.md` | Usar cuando se calcula el riesgo de una tarea para decidir el nivel de revisión requerido. |
 | robotica-diseno | `.opencode/skills/robotica-diseno/SKILL.md` | Diseño profundo de robótica, automatización y hardware/software para el mundo físico. Usar cuando... |
 | rules-traceability | `.opencode/skills/rules-traceability/SKILL.md` | Usar cuando se mapean reglas de negocio a PBIs para trazabilidad completa. |
