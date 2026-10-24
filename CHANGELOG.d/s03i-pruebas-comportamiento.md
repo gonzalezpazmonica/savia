@@ -12,3 +12,4 @@ section: Fixed
 - Fix: `pr-thermal-receipt.sh` aceptaba una ref inválida como diff vacío con salida 0, siempre contaba 0 scripts eliminados en modo rama, usaba el repo del script en vez del cwd y producía JSON inválido con `--health` sin script.
 - Fix: `tls-security-check.sh` daba nota B cuando testssl no producía informe y degradaba a C por cualquier palabra con «des»; `web-headers-check.sh` rompía el JSON con comillas en cabeceras.
 
+- Fix (revisión de la PR): `tls-security-check.sh` volvía a dar nota B a hosts con NULL, EXPORT o 3DES porque `\b` no separa en `_` ni dígitos (ids reales `cipherlist_NULL`…); ahora fronteras por no-letra. El host ya no puede empezar por `-`, `pr-thermal-receipt.sh` rechaza refspecs que parecen opciones, `web-headers-check.sh` neutraliza caracteres de control en el JSON, `blast-radius.sh --file` ignora definiciones indentadas como la rama git grep, y el SKILL documenta que UNKNOWN bloquea.
