@@ -54,7 +54,9 @@ assert d['verdict'] in ('viable','inviable','inviable-en-este-hardware'), d['ver
   # Static guard: the only download line sits after the --install branch opens.
   guard=$(grep -nE 'DO_INSTALL" -eq 1' scripts/freetoken-probe.sh | head -1 | cut -d: -f1)
   dl=$(grep -nE 'curl.*uv-install' scripts/freetoken-probe.sh | head -1 | cut -d: -f1)
-  [ -n "$guard" ] && [ -n "$dl" ] && [ "$dl" -gt "$guard" ]
+  [ -n "$guard" ]
+  [ -n "$dl" ]
+  [ "$dl" -gt "$guard" ]
   # sanidad: no borra y no escribe en CRITERIO/CONSTITUCION
   run grep -nE "CRITERIO|CONSTITUCION" scripts/freetoken-probe.sh
   [[ -z "$output" ]]

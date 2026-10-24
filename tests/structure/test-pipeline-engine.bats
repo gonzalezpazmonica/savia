@@ -57,10 +57,11 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-@test "pipeline engine handles invalid YAML without crash" {
+@test "pipeline engine currently accepts invalid YAML as zero stages (known fail-open defect, not a desired contract)" {
   echo "{{invalid yaml" > "$TMPDIR_PE/bad.yaml"
   run bash -c "echo '' | $ROOT/scripts/pipeline-engine.sh $TMPDIR_PE/bad.yaml --dry-run 2>&1"
-  # Current contract: no stage is parseable, so nothing runs and nothing crashes.
+  # FIXME fail-open: invalid YAML should exit non-zero. When the engine is fixed this test
+  # must be inverted, not weakened. Today: no stage is parseable, so nothing runs and nothing crashes.
   [ "$status" -eq 0 ]
   [[ "$output" == *"Pipeline: bad.yaml"* ]]
   [[ "$output" == *"All 0 stages passed"* ]]

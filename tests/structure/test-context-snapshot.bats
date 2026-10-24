@@ -83,6 +83,7 @@ print('OK')
   run bash -c "echo '' | $TMPDIR/scripts/context-snapshot.sh save 2>&1"
   [ "$status" -eq 0 ]
   run bash -c "echo '' | $TMPDIR/scripts/context-snapshot.sh load 2>&1"
+  [ "$status" -eq 0 ]
   [[ "$output" == *'"timestamp"'* ]]
   [[ "$output" != *'"status":"stale"'* ]]
 }
