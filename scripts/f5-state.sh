@@ -7,7 +7,8 @@ set -uo pipefail
 DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"; mkdir -p "$DIR"
 CMD="${1:-}"; OP="${2:-pr.merge}"; KEY="${3:-}"; F="$DIR/${OP}__${KEY}.json"
 
-pr_state() { gh pr view "$KEY" --json state -q .state 2>/dev/null || echo ""; }
+# SAVIA_GH_REPO: repo explícito (merge-sprint lo pasa); sin él, gh resuelve el repo por el directorio actual.
+pr_state() { gh pr view "$KEY" ${SAVIA_GH_REPO:+-R "$SAVIA_GH_REPO"} --json state -q .state 2>/dev/null || echo ""; }
 
 case "$CMD" in
   reserve)

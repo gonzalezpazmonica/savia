@@ -464,7 +464,7 @@ PY
   echo "bash '$PWD/$SCRIPT' revoke" > "$FAKE/94.on_merge"
   plan_and_grant
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 5 ]   # spec §2.5 y AC: grant revocado es anomalía, exit ≠ 0
   [ "$(paste -sd, "$FAKE/merged")" = "94" ]
   grep -q '"reason":"grant_revocado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }
@@ -914,4 +914,124 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   grep -q '^label delete merge-sprint:aaaaaaaaaaaa ' "$FAKE/calls"
   ! grep -q "^label delete merge-sprint:$id" "$FAKE/calls" || false
   ! grep -q '^label delete bug' "$FAKE/calls" || false
+}
+
+# ── v7: segunda revisión independiente de la PR #1375 ──
+
+@test "AC-18 block: base cambiada mientras se espera al juez para el sprint antes del merge de la cola" {
+  judge_setup 160
+  verdict 160 "$(safe_line 160)"
+  # el gh falso reapunta la base al responder la consulta de checks de la cola (después del bucle principal)
+  echo "echo develop > '$FAKE/160.base'" > "$FAKE/checks_hook"
+  sed -i 's|"pr checks") printf|"pr checks") [[ -f "$F/checks_hook" ]] \&\& bash "$F/checks_hook"; printf|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"pr_alterado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+  ! grep -q '^pr merge 160' "$FAKE/calls" || false
+}
+
+@test "AC-18 positivo: sin cambios de metadatos durante la espera de CI el merge sigue adelante" {
+  mkpr 161 "scripts/ca.sh"; review 161 APPROVE correctness
+  plan_and_grant
+  echo "true" > "$FAKE/checks_hook"
+  sed -i 's|"pr checks") printf|"pr checks") [[ -f "$F/checks_hook" ]] \&\& bash "$F/checks_hook"; printf|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 161 "$FAKE/merged"
+}
+
+@test "AC-18 block: repo de head cambiado durante la espera de CI del bucle principal para el sprint" {
+  mkpr 162 "scripts/cb.sh"; review 162 APPROVE correctness
+  plan_and_grant
+  echo "echo fork/otro > '$FAKE/162.repo'" > "$FAKE/checks_hook"
+  sed -i 's|"pr checks") printf|"pr checks") [[ -f "$F/checks_hook" ]] \&\& bash "$F/checks_hook"; printf|' "$GH"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"pr_alterado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "boundary: revoke espera al cerrojo del contador y no se pierde ni se recrea el grant" {
+  mkpr 163 "scripts/cc.sh"; review 163 APPROVE correctness
+  plan_and_grant
+  exec 7>"$MERGE_SPRINT_HOME/grant.json.lock"; flock -n 7
+  run timeout 2 bash "$SCRIPT" revoke
+  exec 7>&-
+  [ "$status" -eq 124 ]
+  [ -f "$MERGE_SPRINT_HOME/grant.json" ]
+  run bash "$SCRIPT" revoke
+  [ "$status" -eq 0 ]
+  [ ! -f "$MERGE_SPRINT_HOME/grant.json" ]
+}
+
+@test "boundary: plan omite un PR con fork borrado (repo de head «/») sin vaciar el manifiesto" {
+  mkpr 164 "scripts/cd.sh"; review 164 APPROVE correctness; echo / > "$FAKE/164.repo"
+  mkpr 165 "scripts/ce.sh"; review 165 APPROVE correctness
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"#164"* ]]
+  [[ "$output" == *"#165(t"* ]]
+}
+
+@test "positivo: PR cerrado con fork borrado durante el sprint se aparca y el siguiente se mergea" {
+  mkpr 166 "scripts/cf.sh"; review 166 APPROVE correctness
+  mkpr 167 "scripts/cg.sh"; review 167 APPROVE correctness
+  plan_and_grant
+  echo CLOSED > "$FAKE/166.state"; echo / > "$FAKE/166.repo"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -q '"reason":"no_abierto"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ "$(paste -sd, "$FAKE/merged")" = "167" ]
+}
+
+@test "AC-11 positivo: borrar un comentario con «should» fuera de los tests no cuenta como aserción eliminada" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  jpr 168 scripts/d.sh $'echo a\n# this should go\necho b'
+  plan_and_grant
+  fix_commit 168 "sed -i '2d' scripts/d.sh"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"espera al juez"* ]]
+  ! grep -q '"reason":"judge_prefiltro_tests_eliminados"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
+}
+
+@test "AC-11 block: borrar una línea con «should» en un fichero de test sigue contando como aserción eliminada" {
+  jpr 169 tests/t.sh $'echo a\nresult should be 1\necho b'
+  plan_and_grant
+  fix_commit 169 "sed -i '2d' tests/t.sh"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_prefiltro_tests_eliminados"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request
+}
+
+@test "D6 boundary: una etiqueta con espacios se borra entera y nunca la palabra suelta («bug»)" {
+  mkpr 170 "scripts/ch.sh"; review 170 APPROVE correctness
+  printf 'merge-sprint:x bug\nbug\nmerge-sprint:*\n' > "$FAKE/labels"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  grep -q '^label delete merge-sprint:x bug -R' "$FAKE/calls"
+  grep -q '^label delete merge-sprint:\* -R' "$FAKE/calls"
+  ! grep -q '^label delete bug' "$FAKE/calls" || false
+}
+
+@test "AC-23 boundary: el workflow solo pausa etiquetas merge-sprint:<12 hex>, no cualquier merge-sprint:*" {
+  cat > "$TMPDIR_T/prs.json" <<'JSON'
+[{"number":7,"headRefName":"a","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","labels":[{"name":"merge-sprint:abc123abc123"}]},
+ {"number":8,"headRefName":"b","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","labels":[{"name":"merge-sprint:cualquiera"}]}]
+JSON
+  run auto_rebase_list_step
+  [ "$status" -eq 0 ]
+  local prs; prs=$(sed -n '/^prs<<EOF$/,/^EOF$/p' "$TMPDIR_T/gh_output" | sed '1d;$d')
+  [ "$(jq -c '[.[].number]' <<<"$prs")" = "[8]" ]
+}
+
+@test "F5: las reservas consultan el estado del PR en el repo del ejecutor (-R), no en el del directorio" {
+  mkpr 171 "scripts/ci.sh"; review 171 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -q '^pr view 171 -R [^ ]* --json state -q .state$' "$FAKE/calls"
+  ! grep -q '^pr view 171 --json state' "$FAKE/calls" || false
 }

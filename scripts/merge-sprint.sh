@@ -127,7 +127,8 @@ required_live() {  # checks obligatorios vivos de la protección de base, uno po
 pr_meta() {  # pr_meta <pr> → "base_ref head_repo reopens" o falla (fail-closed)
   local b r o
   b=$($GH pr view "$1" -R "$REPO" --json baseRefName --jq .baseRefName) && [[ -n "$b" ]] || return 1
-  r=$($GH pr view "$1" -R "$REPO" --json headRepository,headRepositoryOwner --jq '.headRepositoryOwner.login+"/"+.headRepository.name') && [[ -n "$r" ]] || return 1
+  # Fork borrado: GitHub devuelve owner y nombre vacíos ("/"); sin repo de head no hay metadatos fiables.
+  r=$($GH pr view "$1" -R "$REPO" --json headRepository,headRepositoryOwner --jq '.headRepositoryOwner.login+"/"+.headRepository.name') && [[ "$r" =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]] || return 1
   o=$($GH api --paginate "repos/$REPO/issues/$1/events?per_page=100" --jq '[.[]|select(.event=="reopened")]|length') || return 1
   echo "$b $r $(awk '{s+=$1} END {print s+0}' <<<"$o")"
 }
@@ -146,10 +147,11 @@ clean_labels() {  # borra etiquetas merge-sprint:* de sprints muertos (kill -9 n
   ( flock -n 9 || exit 0
     local keep="" l
     [[ -f "$GRANT" ]] && keep="merge-sprint:$(grant_field digest | cut -c1-12)"
-    for l in $($GH label list -R "$REPO" --search merge-sprint: --limit 200 --json name --jq '.[].name' 2>/dev/null | grep '^merge-sprint:'); do
-      [[ "$l" == "$keep" ]] && continue
+    # Una etiqueta por línea, sin partir en palabras ni expandir comodines: «merge-sprint:x bug» no borra «bug».
+    while IFS= read -r l; do
+      [[ "$l" == merge-sprint:* && "$l" != "$keep" ]] || continue
       $GH label delete "$l" -R "$REPO" --yes >/dev/null 2>&1 && ledger event=LABEL_CLEAN label="$l"
-    done ) 9>"$HOME_MS/run.lock"
+    done < <($GH label list -R "$REPO" --search merge-sprint: --limit 200 --json name --jq '.[].name' 2>/dev/null) ) 9>"$HOME_MS/run.lock"
 }
 
 cmd_plan() {
@@ -205,8 +207,11 @@ cmd_grant() {
 
 grant_field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$GRANT" "$1"; }
 grant_set_merged() {  # el contador se actualiza solo si el grant sigue vigente; revocado, el siguiente paso para
-  [[ -f "$GRANT" ]] || return 0
-  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["merged"]=int(sys.argv[2]); json.dump(d,open(sys.argv[1],"w"))' "$GRANT" "$1"
+  # Bajo el mismo cerrojo que revoke: sin él, un revoke entre la lectura y la escritura recrearía grant.json.
+  ( flock -x 7 || exit 1
+    [[ -f "$GRANT" ]] || exit 0
+    python3 -c 'import json,os,sys; d=json.load(open(sys.argv[1])); d["merged"]=int(sys.argv[2]); json.dump(d,open(sys.argv[1]+".tmp","w")); os.replace(sys.argv[1]+".tmp",sys.argv[1])' "$GRANT" "$1"
+  ) 7>"$GRANT.lock"
 }
 
 main_ci() {  # pass | fail | pending sobre un SHA de main
@@ -303,8 +308,9 @@ anomaly() {  # anomaly <motivo> [pr] → STOP del sprint, sin merge ni revert
   ledger event=STOP reason="$1" ${2:+pr="$2"}; echo "STOP: $1${2:+ #$2}"; exit 5
 }
 
-# Reservas F5 (SE-387) pr.merge/<N> de este grant: distinguen un merge propio sin registrar de uno externo.
-f5() { (cd "$GITROOT" && SAVIA_RESERVATIONS="$HOME_MS/reservations/${DIGEST:0:12}" bash "$ROOT/scripts/f5-state.sh" "$@"); }
+# Reservas F5 (SE-387) pr.merge/<N> por manifiesto (digest), compartidas por los grants del mismo manifiesto:
+# un merge reservado bajo un grant anterior del mismo manifiesto también es propio. Distinguen un merge propio sin registrar de uno externo.
+f5() { (cd "$GITROOT" && SAVIA_GH_REPO="$REPO" SAVIA_RESERVATIONS="$HOME_MS/reservations/${DIGEST:0:12}" bash "$ROOT/scripts/f5-state.sh" "$@"); }
 resv_head() { mkdir -p "$HOME_MS/reservations/${DIGEST:0:12}"; echo "$HOME_MS/reservations/${DIGEST:0:12}/pr.merge__$1.head"; }
 reconcilable() {  # reconcilable <pr> → imprime el SHA reservado si el merge real es de ese SHA y lo hizo la cuenta del ejecutor
   local s real by me
@@ -326,7 +332,7 @@ check_required() {  # checks obligatorios vivos ⊇ los del manifiesto y no vac�
 
 sprint_gate() {  # paso 1 de cada entrada: STOP, grant vigente, TTL, contador y checks obligatorios
   [[ -e "$STOPF" ]] && { ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
-  [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || { ledger event=STOP reason=grant_revocado; echo "STOP: grant revocado"; exit 0; }
+  [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || anomaly grant_revocado   # §2.5: anomalía, exit ≠ 0
   (( $(date +%s) < $(grant_field expires_epoch) )) || { ledger event=STOP reason=ttl; echo "STOP: grant caducado"; exit 0; }
   (( MERGED < $(grant_field max_merges) )) || { ledger event=STOP reason=max; echo "STOP: máximo de merges"; exit 0; }
   check_required
@@ -347,6 +353,11 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
   esac
   [[ "$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)" == "$s" ]] || { FAIL=head_movido; return 1; }
   [[ -e "$STOPF" ]] && { park "$pr" stop_antes_de_merge; ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
+  # Entre la comprobación del bucle y aquí pasan la espera de CI y, en la cola, la del juez: base, repo de
+  # head y reaperturas se revalidan contra el manifiesto (AC-18); --match-head-commit solo fija el head.
+  [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state)" == OPEN ]] || { FAIL=no_abierto; return 1; }
+  local meta; meta=$(pr_meta "$pr") || anomaly pr_ilegible "$pr"
+  [[ "$meta" == "$(python3 -c 'import json,sys; p=json.loads(sys.argv[1]); print(p["base_ref"],p["head_repo"],p["reopens"])' "$(mf_entry "$pr")")" ]] || anomaly pr_alterado "$pr"
   # Solo vuelve a Draft al aparcarse lo que este run sacó de Draft (gh pr ready sale con 0 aunque no lo fuera).
   if [[ "$($GH pr view "$pr" -R "$REPO" --json isDraft --jq .isDraft 2>/dev/null)" != false ]]; then
     $GH pr ready "$pr" -R "$REPO" >/dev/null 2>&1 && READIED="$READIED $pr"
@@ -399,7 +410,7 @@ for l in patch.splitlines():
         hunk = l.startswith("@@"); continue
     body = l[1:].strip()
     if l.startswith("-"):
-        if ("@test" in body or re.search(r"\bassert|\bexpect\(|\bshould\b", body)
+        if ("@test" in body or re.search(r"\bassert|\bexpect\(", body) or (is_test(cur) and re.search(r"\bshould\b", body))
                 or (cur.endswith(".bats") and (body.startswith("[") or body.startswith("run ")))):
             print("prefiltro_tests_eliminados"); sys.exit(0)
     elif l.startswith("+") and is_test(cur) and weak.search(body):
@@ -516,9 +527,10 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
         *) anomaly merge_externo "$pr" ;;
       esac
     fi
+    # Cerrado: se aparca sin leer metadatos (un fork borrado no los tiene y no debe parar el sprint).
+    [[ "$state" == OPEN ]] || { park "$pr" no_abierto; continue; }
     local meta; meta=$(pr_meta "$pr") || anomaly pr_ilegible "$pr"
     [[ "$meta" == "$base $hrepo $reopens" ]] || anomaly "pr_alterado" "$pr"   # base, repo de head o reabierto (AC-18)
-    [[ "$state" == OPEN ]] || { park "$pr" no_abierto; continue; }
     local t; t=$(pr_tier "$pr")
     (( t <= tier )) && [[ ",$allowed," == *",$t,"* ]] || { park "$pr" "tier_$t"; continue; }
     reviews_ok "$pr" "$head" "$tier" || { park "$pr" revision; continue; }
@@ -602,7 +614,7 @@ case "${1:-}" in
   run) cmd_run ;;
   status) [[ -f "$GRANT" ]] && cat "$GRANT" || echo "sin grant"; [[ -e "$STOPF" ]] && echo "STOP activo" ;;
   stop) touch "$STOPF"; ledger event=STOP_REQUEST; echo "STOP solicitado" ;;
-  revoke) mv "$GRANT" "$HOME_MS/grant.revoked.$(date +%s)" 2>/dev/null; ledger event=REVOKE; echo "grant revocado" ;;
+  revoke) ( flock -x 7 && mv "$GRANT" "$HOME_MS/grant.revoked.$(date +%s)" 2>/dev/null ) 7>"$GRANT.lock"; ledger event=REVOKE; echo "grant revocado" ;;
   report) cmd_report ;;
   verify-ledger) verify_chain "$LEDGER" && verify_chain "$REG" && verify_chain "$JREG" && echo "íntegro" || die "cadena rota" 4 ;;
   *) die "uso: merge-sprint.sh review-register|plan|grant|run|status|stop|revoke|report|verify-ledger" ;;
