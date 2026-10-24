@@ -52,6 +52,7 @@ field() { echo "$output" | python3 -c "import sys,json; print(json.load(sys.stdi
   [[ "$status" -eq 0 ]]
   [[ "$output" =~ "WARN: no staged changes" ]]
   run bash -c "bash '$SCRIPT' --staged --project '$R' --format json 2>/dev/null"
+  [ "$status" -eq 0 ]
   [ "$(field files_changed)" = "0" ]
   [ "$(field loc_added)" = "0" ]
 }
@@ -88,6 +89,7 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
   printf 'def nueva():\n    pass\n' > "$R/new.py"
   git -C "$R" add -A
   run bash "$SCRIPT" --staged --project "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(field files_changed)" = "2" ]
   [ "$(field files_added)" = "1" ]
   [ "$(field files_deleted)" = "0" ]
@@ -102,6 +104,7 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
 @test "T08: staged counts removals: deleted files, removed LOC, removed functions and scripts" {
   git -C "$R" rm -q old.js scripts/a.sh
   run bash "$SCRIPT" --staged --project "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(field files_changed)" = "2" ]
   [ "$(field files_deleted)" = "2" ]
   [ "$(field files_added)" = "0" ]
@@ -134,6 +137,7 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
   git -C "$R" rm -q scripts/a.sh
   git -C "$R" commit -qm third
   run bash "$SCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(field scripts_removed)" = "1" ]
   [ "$(field scripts_added)" = "1" ]
 }
