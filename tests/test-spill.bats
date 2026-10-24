@@ -70,3 +70,171 @@ teardown() {
   [[ $status -eq 0 ]]
   [[ "$output" == *"[spill] output completo en"* ]]
 }
+
+# ── Comportamiento: contenido, preview, sanitizado y estado en disco ──────
+
+_dest() { echo "$output" | grep -o "${SPILL_ROOT}/[^ ]*" | head -1; }
+
+@test "contenido íntegro: el fichero spilleado es idéntico al origen" {
+  seq 1 500 > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/in.txt"
+  [ "$status" -eq 0 ]
+  cmp "$(_dest)" "$TMPD/in.txt"
+}
+
+@test "locator informa el tamaño exacto en bytes" {
+  printf 'abcde' > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/in.txt"
+  [[ "$output" == *"(5 bytes)"* ]]
+}
+
+@test "preview: primeras 20 líneas en la cabecera y últimas 20 en la cola" {
+  seq 1 100 > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/in.txt"
+  head_part=$(echo "$output" | sed -n '/primeras 20/,/últimas 20/p')
+  tail_part=$(echo "$output" | sed -n '/últimas 20/,/fin preview/p')
+  [[ "$head_part" == *$'\n20\n'* ]]
+  [[ "$head_part" != *$'\n21\n'* ]]
+  [[ "$tail_part" == *$'\n81\n'* ]]
+  [[ "$tail_part" == *$'\n100\n'* ]]
+  [[ "$tail_part" != *$'\n80\n'* ]]
+}
+
+@test "preview: un fichero corto aparece completo en ambas secciones" {
+  printf 'uno\ndos\n' > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/in.txt"
+  [ "$(echo "$output" | grep -c '^uno$')" -eq 2 ]
+  [ "$(echo "$output" | grep -c '^dos$')" -eq 2 ]
+}
+
+@test "el nombre final lleva sufijo aleatorio hex de 12 caracteres y el nombre seguro" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name "mi salida.txt" --file "$TMPD/in.txt"
+  base=$(basename "$(_dest)")
+  [[ "$base" =~ ^[0-9a-f]{12}-misalida\.txt$ ]]
+}
+
+@test "dos spills con el mismo nombre no colisionan" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/in.txt"; d1=$(_dest)
+  run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/in.txt"; d2=$(_dest)
+  [ "$d1" != "$d2" ]
+  [ -f "$d1" ]
+  [ -f "$d2" ]
+}
+
+@test "nombre vacío o solo caracteres inválidos cae a output.txt" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --file "$TMPD/in.txt"
+  [[ "$(_dest)" == *-output.txt ]]
+  run bash "$SPILL" --session s1 --name '!!!@@@' --file "$TMPD/in.txt"
+  [[ "$(_dest)" == *-output.txt ]]
+}
+
+@test "nombre con barras: queda en el directorio de sesión, sin subdirectorios" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session s1 --name '../../etc/passwd' --file "$TMPD/in.txt"
+  d=$(_dest)
+  [ "$(dirname "$d")" = "$SPILL_ROOT/s1" ]
+  [[ "$(basename "$d")" == *-.._.._etc_passwd ]]
+  [ "$(find "$SPILL_ROOT" -type f | wc -l)" -eq 1 ]
+}
+
+@test "sesión con .. o / no sale del root de spill (traversal)" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session '../../fuera' --name n.txt --file "$TMPD/in.txt"
+  [ "$status" -eq 0 ]
+  d=$(_dest)
+  [[ "$d" == "$SPILL_ROOT"/* ]]
+  [ ! -e "$TMPD/fuera" ]
+  [ ! -e "$TMPD/../fuera" ]
+  run bash "$SPILL" --session '..' --name n.txt --file "$TMPD/in.txt"
+  [[ "$(_dest)" == "$SPILL_ROOT/default/"* ]]
+}
+
+@test "directorio de sesión plantado como symlink se rechaza y no escribe en el destino" {
+  echo x > "$TMPD/in.txt"
+  mkdir -p "$SPILL_ROOT" "$TMPD/destino"
+  ln -s "$TMPD/destino" "$SPILL_ROOT/trampa"
+  run bash "$SPILL" --session trampa --name n.txt --file "$TMPD/in.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"symlink"* ]]
+  [ -z "$(ls -A "$TMPD/destino")" ]
+}
+
+@test "sesión vacía usa SAVIA_SESSION_ID; --session lo anula" {
+  echo x > "$TMPD/in.txt"
+  SAVIA_SESSION_ID=envsess run bash "$SPILL" --name n.txt --file "$TMPD/in.txt"
+  [[ "$(_dest)" == "$SPILL_ROOT/envsess/"* ]]
+  SAVIA_SESSION_ID=envsess run bash "$SPILL" --session flag --name n.txt --file "$TMPD/in.txt"
+  [[ "$(_dest)" == "$SPILL_ROOT/flag/"* ]]
+}
+
+@test "sin SAVIA_SESSION_ID ni --session el directorio es default" {
+  echo x > "$TMPD/in.txt"
+  env -u SAVIA_SESSION_ID bash "$SPILL" --name n.txt --file "$TMPD/in.txt" > "$TMPD/o.txt"
+  [ -d "$SPILL_ROOT/default" ]
+}
+
+@test "argumentos desconocidos se ignoran sin romper" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --raro --session s1 --name n.txt --file "$TMPD/in.txt"
+  [ "$status" -eq 0 ]
+  [ -d "$SPILL_ROOT/s1" ]
+}
+
+@test "origen inexistente: mensaje a stderr con la ruta y sin crear la sesión" {
+  run bash "$SPILL" --session sNo --name n.txt --file "$TMPD/falta.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"origen no existe: $TMPD/falta.txt"* ]]
+  [ ! -e "$SPILL_ROOT/sNo" ]
+}
+
+@test "raíz no escribible: falla con 1 y mensaje, sin salida de preview" {
+  : > "$TMPD/archivo"
+  SPILL_ROOT="$TMPD/archivo/sub" run bash "$SPILL" --session s1 --name n.txt --file "$TMPD/archivo"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pudo crear"* ]]
+  [[ "$output" != *"preview"* ]]
+}
+
+@test "stdin: el contenido guardado es el de la tubería, 0600" {
+  run bash -c "printf 'a\nb\nc\n' | bash '$SPILL' --session sp --name p.txt"
+  [ "$status" -eq 0 ]
+  d=$(_dest)
+  [ "$(cat "$d")" = $'a\nb\nc' ]
+  [ "$(stat -c %a "$d")" = "600" ]
+  [[ "$output" == *"(6 bytes)"* ]]
+}
+
+@test "directorio de sesión queda en 0700 aunque exista con otros permisos" {
+  mkdir -p "$SPILL_ROOT/sm"; chmod 755 "$SPILL_ROOT/sm"
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session sm --name n.txt --file "$TMPD/in.txt"
+  [ "$(stat -c %a "$SPILL_ROOT/sm")" = "700" ]
+}
+
+@test "sesión vacía o solo con caracteres inválidos usa default, no el root" {
+  echo x > "$TMPD/in.txt"
+  run bash "$SPILL" --session '' --name n.txt --file "$TMPD/in.txt"
+  [[ "$(_dest)" == "$SPILL_ROOT/default/"* ]]
+  run bash "$SPILL" --session '@@@' --name n.txt --file "$TMPD/in.txt"
+  [[ "$(_dest)" == "$SPILL_ROOT/default/"* ]]
+  [ -z "$(find "$SPILL_ROOT" -maxdepth 1 -type f)" ]
+}
+
+@test "fallo al escribir desde fichero: exit 1, mensaje y sin preview" {
+  echo x > "$TMPD/in.txt"
+  # límite de tamaño de fichero 0: el open 'wx' funciona y la escritura falla (EFBIG)
+  run bash -c "ulimit -f 0; bash '$SPILL' --session sproc --name n.txt --file '$TMPD/in.txt'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pudo escribir"* ]]
+  [[ "$output" != *"preview"* ]]
+}
+
+@test "fallo al escribir desde stdin: exit 1, mensaje y sin preview" {
+  run bash -c "ulimit -f 0; echo x | bash '$SPILL' --session sproc --name n.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pudo escribir"* ]]
+  [[ "$output" != *"preview"* ]]
+}

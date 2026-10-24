@@ -9,7 +9,7 @@ Ninguna fuente externa mide la mayoría; es lo más original de esta skill.
 | Pregunta bloqueante en mitad de un ciclo | 7 entregas sin procesar durante 4 h | Despachar y rearmar vigilantes antes de preguntar; preguntas en lote |
 | Vigilante por recuento | Entregas perdidas durante ~1 h | Lista de vistos |
 | Agente que termina sin marca de fin | ~40 min con 0 agentes | Marca obligatoria + comparar esperados con vivos |
-| Orquestadora con ~400k tokens de contexto | 64 % del consumo semanal en 4 días [medido] | Umbral de traspaso y sesión nueva |
+| Orquestadora con ~400k tokens de contexto | 64 % del consumo semanal en 4 días [M-int] | Umbral de traspaso y sesión nueva |
 | Agentes en paralelo sin presupuesto de disco | Disco al 100 %; «Disk quota exceeded» que parecía flaky | Presupuesto de disco/RAM; compilar en disco |
 | Cola de PR sin revisor asignado | 33 PR acumulados en un día | Revisor al abrir el PR |
 | Cambiar instrucciones de un agente en marcha por mensaje | Dos agentes bloqueados por el clasificador | Relanzar con encargo limpio |

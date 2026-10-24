@@ -18,7 +18,7 @@ Python-backed de Prime Agent, SE-347): SKILL.md + paquete Python + `run()`.
 
 ## Límites
 
-- Para skills solo-instructivos usa `.claude/skills/_template/`.
+- Para skills solo-instructivos usa `templates/skills/_template/`.
 - TDD: test del callable antes de la implementación (`__init__.test.py`).
 
 ## Confidencialidad

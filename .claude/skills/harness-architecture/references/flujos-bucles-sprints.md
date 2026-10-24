@@ -42,7 +42,7 @@ Reglas:
 2. Prohíbe soluciones de relleno en el encargo y comprueba con tests por unidad. [O: C2]
 3. Dos intentos para una propuesta inválida y vuelta a lo conocido, sin tercer intento. [O: G1]
 4. Si una instrucción se ignora repetidamente, súbela de nivel: prosa, script, hook. [O: G1; `remedy-ladder.md`]
-5. Cambia de estrategia tras el segundo fallo igual; no repitas el mismo intento. [O]
+5. Cambia de estrategia tras el segundo fallo igual; no repitas el mismo intento. [O] Los umbrales no se contradicen: dos intentos valen para una propuesta nueva (paso 3), el mismo fallo exige cambiar de estrategia al segundo (paso 5) y tres fallos seguidos de una unidad la aparcan y escalan (tabla de bucles).
 6. Escala a la persona por umbral de fallos y por acción de alto riesgo o irreversible. [O: OA1]
 
 ## 3. Sprints nocturnos

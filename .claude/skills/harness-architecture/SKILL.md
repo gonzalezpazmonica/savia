@@ -96,7 +96,7 @@ Detalle de 6-8: `references/flujos-bucles-sprints.md`; de 9: checklist de diseñ
 
 ## Memory hooks
 
-- Al empezar: `bash scripts/memory-store.sh recall harness`. Tras un fallo operativo nuevo: `bash scripts/memory-store.sh save --type feedback --title "<título>" --content "<cue, lección, evidencia, confianza>" --source skill:harness-architecture`
+- Al empezar: `bash scripts/memory-store.sh recall harness`. Tras un fallo operativo nuevo: `bash scripts/memory-store.sh save --type feedback --title '<título>' --content '<cue, lección, evidencia, confianza>' (comillas simples; texto de terceros nunca entre dobles) --source skill:harness-architecture`
 
 ## Related
 

@@ -11390,48 +11390,6 @@
     {
       "depends_on": [],
       "frontend_support": [
-        "claude"
-      ],
-      "id": "skill:.claude/skills/_template/SKILL",
-      "intents": [
-        "carga",
-        "copia",
-        "crear",
-        "directorio",
-        "nueva"
-      ],
-      "kind": "skill",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": ".claude/skills/_template/SKILL.md",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "claude"
-      ],
-      "id": "skill:.claude/skills/_template_python/SKILL",
-      "intents": [
-        "backed",
-        "carga",
-        "copia",
-        "crear",
-        "directorio"
-      ],
-      "kind": "skill",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": ".claude/skills/_template_python/SKILL.md",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
         "opencode"
       ],
       "id": "script:scripts/acceptance-cost",
@@ -20515,6 +20473,27 @@
       "replaced_by": null,
       "risk_level": null,
       "source": "scripts/restore-drill.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
+        "claude"
+      ],
+      "id": "skill:.claude/skills/reverse-engineering-sovereignty/SKILL",
+      "intents": [
+        "autorizada",
+        "comprobar",
+        "depende",
+        "externo",
+        "hace"
+      ],
+      "kind": "skill",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": ".claude/skills/reverse-engineering-sovereignty/SKILL.md",
       "status": "active",
       "tests": []
     },
@@ -29640,7 +29619,7 @@
       "tests": []
     }
   ],
-  "content_hash": "dbb2fb057463",
+  "content_hash": "b00266903faa",
   "deferred_kinds": [
     "rule",
     "hook"

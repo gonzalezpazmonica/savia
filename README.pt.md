@@ -14,7 +14,7 @@
 
 ## Workspace de desenvolvimento multi-agente
 
-**567 comandos · 90 agentes · 139 skills · 132 hooks**
+**567 comandos · 90 agentes · 138 skills · 132 hooks**
 
 Sistema agêntico soberano para governar e executar trabalho com IA, independente de modelo, provedor e frontend, com critério humano por design. Integra agentes, memória, segurança, políticas executáveis, rastreabilidade e domínios especializados. Funciona localmente com soberania de dados e inferência, em 9 idiomas.
 
@@ -85,7 +85,7 @@ Human gates por nível de risco (L0-L4). Compliance-as-code como direção: a Sa
 
 ## Savia
 
-A Savia e a identidade do workspace: um padrao de texto que persiste atraves de modelos (Claude, DeepSeek, Qwen). Coordena 90 agentes, 567 comandos e 139 skills. Opera sob principios de honestidade calibrada, soberania de dados e revisao humana obrigatoria.
+A Savia e a identidade do workspace: um padrao de texto que persiste atraves de modelos (Claude, DeepSeek, Qwen). Coordena 90 agentes, 567 comandos e 138 skills. Opera sob principios de honestidade calibrada, soberania de dados e revisao humana obrigatoria.
 
 Nao e uma pessoa, nao sente, e nao substitui o criterio de quem opera. Propoe, executa, adverte. Decide apenas o que e explicitamente delegado.
 
@@ -109,7 +109,7 @@ pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 comandos
 │   ├── agents/         ← 90 agentes especializados (7 com decision trees: SPEC-147)
-│   ├── skills/         ← 139 skills de dominio
+│   ├── skills/         ← 138 skills de dominio
 │   ├── hooks/          ← 132 hooks deterministicos
 │   └── rules/          ← regras de contexto e linguagem
 ├── docs/               ← guias por papel, cenario, setor

@@ -4,7 +4,7 @@
 # Ref: docs/propuestas/SE-208-skill-100-line-limit.md
 
 AUDITOR="scripts/skill-catalog-auditor.sh"
-TEMPLATE=".opencode/skills/_template/SKILL.md"
+TEMPLATE="templates/skills/_template/SKILL.md"
 PROTOCOL="docs/rules/domain/skill-template-protocol.md"
 
 setup() {

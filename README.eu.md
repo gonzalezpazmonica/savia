@@ -16,11 +16,11 @@ lang: eu
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 komandoak · 90 agenteak · 139 skills · 132 hooks**
+**567 komandoak · 90 agenteak · 138 skills · 132 hooks**
 
 ## Garapen workspace multi-agentea
 
-**567 komando · 90 agente · 139 skill · 132 hook · 16 hizkuntza · 283+ test suite**
+**567 komando · 90 agente · 138 skill · 132 hook · 16 hizkuntza · 283+ test suite**
 
 pm-workspace-k Claude Code eta OpenCode ingeniaritza multi-agente ingurune bihurtzen ditu. Agente espezializatuak orkestratzen ditu proiektuen kudeaketarako, spec exekutagarriekin garapenerako, segurtasun auditoriarako eta kode berrikusketarako. Lokalean funtzionatzen du datu eta inferentzia subiranotasunarekin, 9 hizkuntzatan.
 
@@ -91,7 +91,7 @@ Human gates L0-L4. Compliance-as-code: exekutatutako kontrolen ebidentzia, ez le
 
 ## Savia
 
-Savia workspace-aren identitatea da: modeloetan zehar irauten duen testu patrola (Claude, DeepSeek, Qwen). 90 agente, 567 komando eta 139 skill koordinatzen ditu. Zintzotasun kalibratu, datu subiranotasun eta giza berrikusketa derrigorrezko printzipioen pean jarduten du.
+Savia workspace-aren identitatea da: modeloetan zehar irauten duen testu patrola (Claude, DeepSeek, Qwen). 90 agente, 567 komando eta 138 skill koordinatzen ditu. Zintzotasun kalibratu, datu subiranotasun eta giza berrikusketa derrigorrezko printzipioen pean jarduten du.
 
 Ez da pertsona, ez du sentitzen, eta ez du operatzen duenaren irizpidea ordezkatzen. Proposatu, exekutatu, ohartarazi. Esplizituki delegatutakoa bakarrik erabakitzen du.
 
@@ -115,7 +115,7 @@ pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 komando
 │   ├── agents/         ← 90 agente espezializatu (7 decision tree-rekin: SPEC-147)
-│   ├── skills/         ← 139 domeinu skill
+│   ├── skills/         ← 138 domeinu skill
 │   ├── hooks/          ← 132 hook deterministiko
 │   └── rules/          ← testuinguru eta hizkuntza arauak
 ├── docs/               ← gidak rolaren, eszenarioaren, sektorearen arabera

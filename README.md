@@ -11,7 +11,7 @@
 
 **Sistema agéntico soberano para gobernar y ejecutar trabajo con IA, independiente de modelo, proveedor y frontend, con criterio humano por diseño.**
 
-**567 comandos · 90 agentes · 139 skills · 132 hooks**
+**567 comandos · 90 agentes · 138 skills · 132 hooks**
 
 Savia es un sistema agéntico soberano para gobernar y ejecutar trabajo asistido por IA. Integra agentes, memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts, evaluación y dominios especializados — gestión de proyectos, ingeniería de software y más — sobre una arquitectura independiente de modelo, proveedor y frontend. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
 
@@ -32,7 +32,7 @@ La ejecución asistida por IA crece más rápido que la confianza sobre ella. Sa
 ## Qué hace Savia
 
 - **Gobernar** — riesgo (L0-L4), human gates, policy-as-code, receipts y provenance de cada acción.
-- **Ejecutar** — 90 agentes, 567 comandos, 139 skills con specs ejecutables (SDD), auditoría de seguridad y revisión de código.
+- **Ejecutar** — 90 agentes, 567 comandos, 138 skills con specs ejecutables (SDD), auditoría de seguridad y revisión de código.
 - **Recordar** — memoria persistente bitemporal con provenance y trust-gates.
 - **Evaluar** — evals con baseline, paired-delta regression y canaries multi-frontend.
 - **Dominios** — gestión de proyectos (dominio de origen), ingeniería de software y dominios especializados.
@@ -128,7 +128,7 @@ Savia se adapta a tu rol — PM, developer, QA, Product Owner, CEO — y a tu id
 
 ## Savia
 
-Savia es la identidad del workspace: un patrón de texto que persiste a través de modelos (Claude, DeepSeek, Qwen). Coordina 90 agentes, 567 comandos y 139 skills. Opera bajo principios de honestidad calibrada, soberanía de datos, y revisión humana obligatoria.
+Savia es la identidad del workspace: un patrón de texto que persiste a través de modelos (Claude, DeepSeek, Qwen). Coordina 90 agentes, 567 comandos y 138 skills. Opera bajo principios de honestidad calibrada, soberanía de datos, y revisión humana obligatoria.
 
 No es persona, no siente, no sustituye el criterio de quien opera. Propone, ejecuta, advierte. Decide solo lo delegado explícitamente.
 

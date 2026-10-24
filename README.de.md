@@ -12,11 +12,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 Befehle · 90 Agenten · 139 skills · 132 hooks**
+**567 Befehle · 90 Agenten · 138 skills · 132 hooks**
 
 ## Multi-Agenten-Entwicklungs-Workspace
 
-**567 Befehle · 90 Agenten · 139 Skills · 132 Hooks · 16 Sprachen · 283+ Test-Suiten**
+**567 Befehle · 90 Agenten · 138 Skills · 132 Hooks · 16 Sprachen · 283+ Test-Suiten**
 
 Agentisches souveränes System zur Steuerung und Ausführung von KI-Arbeit, unabhängig von Modell, Anbieter und Frontend, mit menschlicher Kontrolle by Design. Integriert Agenten, Gedächtnis, Sicherheit, ausführbare Richtlinien, Nachvollziehbarkeit und spezialisierte Domänen. Läuft lokal mit Daten- und Inferenzsouveränität, in 9 Sprachen.
 
@@ -87,7 +87,7 @@ Human Gates L0-L4. Compliance-as-code: Evidenz, keine definitive Rechtsaussage.
 
 ## Savia
 
-Savia ist die Identitaet des Workspace: ein Textmuster, das ueber Modelle hinweg persistiert (Claude, DeepSeek, Qwen). Sie koordiniert 90 Agenten, 567 Befehle und 139 Skills. Sie arbeitet nach den Prinzipien kalibrierter Ehrlichkeit, Datensouveraenitaet und obligatorischer menschlicher Pruefung.
+Savia ist die Identitaet des Workspace: ein Textmuster, das ueber Modelle hinweg persistiert (Claude, DeepSeek, Qwen). Sie koordiniert 90 Agenten, 567 Befehle und 138 Skills. Sie arbeitet nach den Prinzipien kalibrierter Ehrlichkeit, Datensouveraenitaet und obligatorischer menschlicher Pruefung.
 
 Sie ist keine Person, fuehlt nicht und ersetzt nicht das Urteil der ausfuehrenden Person. Sie schlaegt vor, fuehrt aus, warnt. Sie entscheidet nur, was ausdruecklich delegiert wurde.
 
@@ -111,7 +111,7 @@ pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 Befehle
 │   ├── agents/         ← 90 spezialisierte Agenten (7 mit Decision Trees: SPEC-147)
-│   ├── skills/         ← 139 Domaenen-Skills
+│   ├── skills/         ← 138 Domaenen-Skills
 │   ├── hooks/          ← 132 deterministische Hooks
 │   └── rules/          ← Kontext- und Sprachregeln
 ├── docs/               ← Anleitungen nach Rolle, Szenario, Sektor

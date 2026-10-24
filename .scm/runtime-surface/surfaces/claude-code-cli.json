@@ -1,0 +1,22 @@
+{
+  "deltas": {
+    "plugins": "hooks configured in .claude/settings.json",
+    "shell": "user shell"
+  },
+  "equivalence": "E1",
+  "execution_modes": [
+    "LOCAL"
+  ],
+  "id": "claude-code-cli",
+  "kind": "surface",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "claude-code",
+  "schema_version": 1,
+  "state": "discovered",
+  "verification": "NOT_VERIFIED"
+}

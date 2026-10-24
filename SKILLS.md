@@ -17,7 +17,6 @@ To use a skill: read `<path>` and follow its instructions.
 
 | Name | Path | Description |
 |---|---|---|
-| _template_python | `.opencode/skills/_template_python/SKILL.md` | TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una... |
 | adversarial-security | `.opencode/skills/adversarial-security/SKILL.md` | Usar cuando se necesita auditar la seguridad de un proyecto con pipeline Red Team / Blue Team. |
 | agent-code-map | `.opencode/skills/agent-code-map/SKILL.md` | Usar cuando un agente necesita conocer la arquitectura del proyecto sin leer ficheros completos. |
 | agent-file-map | `.opencode/skills/agent-file-map/SKILL.md` | Usar cuando se trabaja con ficheros externos al workspace que los agentes deben localizar. |
@@ -28,7 +27,7 @@ To use a skill: read `<path>` and follow its instructions.
 | architecture-intelligence | `.opencode/skills/architecture-intelligence/SKILL.md` | Usar cuando se diseña o revisa la arquitectura de un proyecto nuevo o existente. |
 | ast-comprehension | `.opencode/skills/ast-comprehension/SKILL.md` | Usar cuando se explora código desconocido y se necesita comprensión estructural sin leer ficheros... |
 | ast-quality-gate | `.opencode/skills/ast-quality-gate/SKILL.md` | Usar cuando se verifica la calidad de código generado por IA antes de merge. |
-| attack-surface-mapper | `.opencode/skills/attack-surface-mapper/SKILL.md` | Mapear la superficie de ataque de un dominio: subdominios, OSINT, typosquatting. |
+| attack-surface-mapper | `.opencode/skills/attack-surface-mapper/SKILL.md` | Mapear la superficie de ataque de un dominio (subdominios, OSINT, typosquatting). Usar solo en pr... |
 | automation-scheduler | `.opencode/skills/automation-scheduler/SKILL.md` | Usar cuando se crean, gestionan o ejecutan automatizaciones programadas: morning briefs, weekly r... |
 | azure-devops-queries | `.opencode/skills/azure-devops-queries/SKILL.md` | Usar cuando se necesitan consultas WIQL, actualización de work items o datos de sprint en Azure D... |
 | azure-pipelines | `.opencode/skills/azure-pipelines/SKILL.md` | Usar cuando se gestiona o depura CI/CD con Azure Pipelines. |
@@ -46,7 +45,7 @@ To use a skill: read `<path>` and follow its instructions.
 | consensus-validation | `.opencode/skills/consensus-validation/SKILL.md` | Usar cuando una decisión técnica o recomendación necesita validación por panel de jueces. |
 | content-fingerprint | `.opencode/skills/content-fingerprint/SKILL.md` | Usar cuando se necesita un identificador corto, deterministico y reproducible derivado del conten... |
 | context-caching | `.opencode/skills/context-caching/SKILL.md` | Usar cuando se optimiza el orden de carga de contexto para maximizar cache hits. |
-| context-dome | `.opencode/skills/context-dome/SKILL.md` | Genera CONTEXT_DOME.md para modulos con Bus Factor bajo. Captura conocimiento tacito: proposito, ... |
+| context-dome | `.opencode/skills/context-dome/SKILL.md` | Genera CONTEXT_DOME.md con el conocimiento tácito de un módulo. Usar cuando un módulo tiene bus f... |
 | context-interview-conductor | `.opencode/skills/context-interview-conductor/SKILL.md` | Usar cuando se necesita recopilar contexto estructurado de un usuario mediante entrevista guiada. |
 | context-optimized-dev | `.opencode/skills/context-optimized-dev/SKILL.md` | Usar cuando se desarrolla con presupuesto de contexto limitado. |
 | context-rot-strategy | `.opencode/skills/context-rot-strategy/SKILL.md` | Usar cuando una sesión larga se aproxima al límite de contexto y hay que decidir qué compactar. |
@@ -60,7 +59,7 @@ To use a skill: read `<path>` and follow its instructions.
 | diagram-generation | `.opencode/skills/diagram-generation/SKILL.md` | Usar cuando se necesita generar diagramas de arquitectura o flujo desde código o infraestructura. |
 | diagram-import | `.opencode/skills/diagram-import/SKILL.md` | Usar cuando se importa un diagrama existente para extraer entidades y crear PBIs. |
 | doc-quality-feedback | `.opencode/skills/doc-quality-feedback/SKILL.md` | Usar cuando se recopila feedback de calidad de documentación tras usar skills y reglas. |
-| dynamic-web-tester | `.opencode/skills/dynamic-web-tester/SKILL.md` | Testing dinámico de endpoints web: XSS (DalFox), SQLi (sqlmap), Nuclei. |
+| dynamic-web-tester | `.opencode/skills/dynamic-web-tester/SKILL.md` | Testing dinámico de endpoints web (XSS, SQLi, Nuclei). Usar solo en pruebas autorizadas, cuando h... |
 | ecosystem-watcher | `.opencode/skills/ecosystem-watcher/SKILL.md` | Usar una vez al mes para detectar cambios relevantes en el ecosistema de herramientas externas. |
 | emergency-mode | `.opencode/skills/emergency-mode/SKILL.md` | Usar cuando la API de Anthropic está caída y se necesita continuar operando con LocalAI. |
 | enterprise-analytics | `.opencode/skills/enterprise-analytics/SKILL.md` | Usar cuando se necesitan métricas SPACE, aggregación de portfolio o forecasting empresarial. |
@@ -70,13 +69,13 @@ To use a skill: read `<path>` and follow its instructions.
 | evidence-first-development | `.opencode/skills/evidence-first-development/SKILL.md` | Desarrollo evidence-first: rodea la implementación con un SPEC aprobado y un gauntlet de restricc... |
 | executive-reporting | `.opencode/skills/executive-reporting/SKILL.md` | Usar cuando se genera un informe ejecutivo multi-proyecto para dirección. |
 | feasibility-probe | `.opencode/skills/feasibility-probe/SKILL.md` | Usar cuando se necesita validar si una spec es técnicamente viable antes de implementarla. |
-| git-secret-scanner | `.opencode/skills/git-secret-scanner/SKILL.md` | Escanea el historial git o los commits pendientes de push buscando secrets con gitleaks. SE-239/S... |
+| git-secret-scanner | `.opencode/skills/git-secret-scanner/SKILL.md` | Escanea el historial git o los commits pendientes con gitleaks. Usar cuando haya que comprobar qu... |
 | governance-enterprise | `.opencode/skills/governance-enterprise/SKILL.md` | Revisa governance enterprise. Usar cuando se audita compliance o se registran decisiones; nunca e... |
 | grc-evidence-analysis | `.opencode/skills/grc-evidence-analysis/SKILL.md` | Valida procedencia y suficiencia de pruebas GRC. Usar cuando se evalúan controles, se revisan evi... |
 | grc-framework-router | `.opencode/skills/grc-framework-router/SKILL.md` | Selecciona marcos GRC y verifica vigencia. Usar cuando se prepara una auditoría, se compara norma... |
 | grc-gap-assessment | `.opencode/skills/grc-gap-assessment/SKILL.md` | Construye matriz GRC preliminar y acciones trazables. Usar cuando se solicita gap assessment, aud... |
 | grill-me | `.opencode/skills/grill-me/SKILL.md` | Adversarial review that hunts every weakness, assumption, edge case, and missing test. Opponent m... |
-| harness-architecture | `.opencode/skills/harness-architecture/SKILL.md` | Decide y diseña la arquitectura de un harness de agentes: agente único, orquestación o metaharnes... |
+| harness-architecture | `.opencode/skills/harness-architecture/SKILL.md` | Diseña la arquitectura de un harness de agentes: único, orquestado o metaharness, flujos largos, ... |
 | human-code-map | `.opencode/skills/human-code-map/SKILL.md` | Usar cuando se incorpora un dev nuevo, se toca un módulo sin mapa, o alguien re-lee el mismo códi... |
 | iac-security-scanner | `.opencode/skills/iac-security-scanner/SKILL.md` | Usar cuando se escanea IaC (Terraform, Bicep, Dockerfile, docker-compose) con Trivy config para d... |
 | knowledge-graph | `.opencode/skills/knowledge-graph/SKILL.md` | Usar cuando se construye o consulta el grafo de conocimiento de entidades del proyecto. |
@@ -89,14 +88,14 @@ To use a skill: read `<path>` and follow its instructions.
 | mobile-security-scanner | `.opencode/skills/mobile-security-scanner/SKILL.md` | Usar cuando se escanea un APK/AAB Android en busca de vulnerabilidades de seguridad. Integra con ... |
 | model-upgrade-audit | `.opencode/skills/model-upgrade-audit/SKILL.md` | Usar cuando hay un modelo nuevo disponible y se quiere detectar prompt debt en el workspace. |
 | mutation-audit | `.opencode/skills/mutation-audit/SKILL.md` | Usar cuando se quiere medir la calidad real de los tests mediante mutation testing. |
-| network-recon | `.opencode/skills/network-recon/SKILL.md` | Reconocimiento de red: port scan con nmap/RustScan + HTTP detection con httpx. |
+| network-recon | `.opencode/skills/network-recon/SKILL.md` | Reconocimiento de red (puertos con nmap/RustScan, servicios HTTP con httpx). Usar solo en pruebas... |
 | nuclei-scanning | `.opencode/skills/nuclei-scanning/SKILL.md` | Usar cuando se escanean vulnerabilidades conocidas (CVEs, misconfigs) con Nuclei. |
 | obscura-browser | `.opencode/skills/obscura-browser/SKILL.md` | Navegador headless nativo de Savia para fetch/scrape (Rust, sin Chromium, 41MB RAM, sin telemetri... |
 | onboarding-dev | `.opencode/skills/onboarding-dev/SKILL.md` | Usar cuando se incorpora un desarrollador nuevo al proyecto y necesita buddy IA. |
-| org-meeting-capture | `.opencode/skills/org-meeting-capture/SKILL.md` | Captura de Conocimiento Tácito de Reunión: extrae decisores, acuerdos informales y señales políti... |
-| org-political-landscape | `.opencode/skills/org-political-landscape/SKILL.md` | Análisis de Paisaje Político Interno: detecta tensiones, alianzas y centros de poder a partir de ... |
+| org-meeting-capture | `.opencode/skills/org-meeting-capture/SKILL.md` | Extrae decisores, acuerdos informales y señales políticas de transcripciones de reuniones. Usar c... |
+| org-political-landscape | `.opencode/skills/org-political-landscape/SKILL.md` | Detecta tensiones, alianzas y centros de poder a partir de un mapa de stakeholders. Usar cuando u... |
 | org-registrar | `.opencode/skills/org-registrar/SKILL.md` | Gestiona el grafo de entidades organizacionales (Company as Code, SE-365): valida entidades, inde... |
-| org-stakeholder-mapper | `.opencode/skills/org-stakeholder-mapper/SKILL.md` | Mapeador de Stakeholders y Decisores: extrae roles formales y reales, motivaciones, alianzas y te... |
+| org-stakeholder-mapper | `.opencode/skills/org-stakeholder-mapper/SKILL.md` | Mapea roles formales y reales, motivaciones, alianzas y tensiones de una organización. Usar cuand... |
 | orgchart-import | `.opencode/skills/orgchart-import/SKILL.md` | Usar cuando se importa un organigrama para extraer la estructura del equipo. |
 | overnight-sprint | `.opencode/skills/overnight-sprint/SKILL.md` | Usar cuando se quiere ejecutar tareas de bajo riesgo de forma autónoma durante la noche. |
 | parallel-dispatch | `.opencode/skills/parallel-dispatch/SKILL.md` | Usar cuando se necesitan subagentes en paralelo con admission-handle — lanza N tareas en backgrou... |
@@ -106,7 +105,7 @@ To use a skill: read `<path>` and follow its instructions.
 | personal-vault | `.opencode/skills/personal-vault/SKILL.md` | Usar cuando se lee o escribe el repositorio personal del usuario (perfil, preferencias, memoria). |
 | pr-agent-judge | `.opencode/skills/pr-agent-judge/SKILL.md` | Usar cuando se añade pr-agent como juez externo en el Code Review Court. |
 | product-discovery | `.opencode/skills/product-discovery/SKILL.md` | Usar antes de descomponer PBIs, cuando se necesita análisis JTBD y PRD del producto. |
-| professional-domain | `.opencode/skills/professional-domain/SKILL.md` | Family index for professional-domain skills (controlling, finance, labour, legal, sales). Load in... |
+| professional-domain | `.opencode/skills/professional-domain/SKILL.md` | Índice de las skills de dominio profesional (controlling, finanzas, laboral, legal, ventas). Usar... |
 | controlling-kpi-analyst | `.opencode/skills/professional-domain/controlling/controlling-kpi-analyst/SKILL.md` | Evalúa KPIs de gestión, identifica tendencias y genera narrativa comentada con semáforo y alertas. |
 | controlling-management-report | `.opencode/skills/professional-domain/controlling/controlling-management-report/SKILL.md` | Genera informes de gestión mensual adaptados a la audiencia (CFO/CEO/board/operaciones) con narra... |
 | controlling-variance-analyzer | `.opencode/skills/professional-domain/controlling/controlling-variance-analyzer/SKILL.md` | Análisis de desviaciones real vs budget con causa raíz, narrativa para dirección y semáforo RAG. |
@@ -132,6 +131,7 @@ To use a skill: read `<path>` and follow its instructions.
 | regulatory-compliance | `.opencode/skills/regulatory-compliance/SKILL.md` | Usar cuando se valida el cumplimiento de marcos regulatorios sectoriales. |
 | reranker | `.opencode/skills/reranker/SKILL.md` | Usar cuando se recibe un top-K ruidoso de búsqueda en memoria y se necesita reordenar por relevan... |
 | resource-references | `.opencode/skills/resource-references/SKILL.md` | Usar cuando se necesitan referencias a recursos y plantillas del workspace. |
+| reverse-engineering-sovereignty | `.opencode/skills/reverse-engineering-sovereignty/SKILL.md` | Usar cuando se necesita comprobar qué hace un software opaco del que se depende, o poder salir de... |
 | risk-scoring | `.opencode/skills/risk-scoring/SKILL.md` | Usar cuando se calcula el riesgo de una tarea para decidir el nivel de revisión requerido. |
 | robotica-diseno | `.opencode/skills/robotica-diseno/SKILL.md` | Diseño profundo de robótica, automatización y hardware/software para el mundo físico. Usar cuando... |
 | rules-traceability | `.opencode/skills/rules-traceability/SKILL.md` | Usar cuando se mapean reglas de negocio a PBIs para trazabilidad completa. |
@@ -148,7 +148,7 @@ To use a skill: read `<path>` and follow its instructions.
 | skill-evaluation | `.opencode/skills/skill-evaluation/SKILL.md` | Usar cuando se necesita seleccionar el skill más apropiado para una tarea dada. |
 | smart-calendar | `.opencode/skills/smart-calendar/SKILL.md` | Usar cuando se gestiona la agenda inteligente con sincronización Outlook/Teams. |
 | smart-routing | `.opencode/skills/smart-routing/SKILL.md` | Usar cuando se necesita descubrir o enrutar a un comando específico entre los 400+ disponibles. |
-| social-linkedin | `.opencode/skills/social-linkedin/SKILL.md` | Provider skill de LinkedIn para el agente social-networks (SE-385 MVP1). Import manual del export... |
+| social-linkedin | `.opencode/skills/social-linkedin/SKILL.md` | Importa el export oficial de LinkedIn y genera digests locales (temas, historia, estilo). Usar cu... |
 | sovereignty-auditor | `.opencode/skills/sovereignty-auditor/SKILL.md` | Usar cuando se audita el grado de dependencia cognitiva del equipo respecto a herramientas de IA. |
 | spec-driven-development | `.opencode/skills/spec-driven-development/SKILL.md` | Usar cuando se escribe, valida o implementa una spec ejecutable SDD. |
 | sprint-management | `.opencode/skills/sprint-management/SKILL.md` | Usar cuando se consulta el estado del sprint, se actualizan items o se genera el resumen. |

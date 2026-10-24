@@ -1,9 +1,7 @@
 # planning — Savia Capability Map (L1)
-> 632 resources
+> 631 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
-- **_template** (skill): TEMPLATE — copia este directorio para crear una skill nueva. NO se carga en runtime.
-- **_template_python** (skill): TEMPLATE de skill Python-backed (SE-347/PMA). Usar cuando se copia este directorio para crear una skill que expone funcionalidad invocable con run(). NO se carga en runtime.
 - **acceptance-cost** (script): acceptance-cost.sh — SE-360: costo por cambio aceptado (CLI wrapper).
 - **accessibility-mode** (cmd): Toggle rápido de accesibilidad — activa, desactiva o muestra el estado
 - **accessibility-setup** (cmd): Configura las preferencias de accesibilidad de Savia para adaptarse a tus necesidades
@@ -452,6 +450,7 @@
 - **resource-references** (skill): Usar cuando se necesitan referencias a recursos y plantillas del workspace.
 - **restore-checkpoint** (script): restore-checkpoint.sh — Git stash checkpoint for high-radius operations
 - **restore-drill** (script): restore-drill.sh — SE-258 Slice 2
+- **reverse-engineering-sovereignty** (skill): Usar cuando se necesita comprobar qué hace un software opaco del que se depende, o poder salir de él, mediante ingeniería inversa autorizada con REA externo.
 - **roadmap** (script): roadmap.sh — SE-378: CLI del planning state machine.
 - **robotica-diseno** (skill): Diseño profundo de robótica, automatización y hardware/software para el mundo físico. Usar cuando se diseña un robot, una celda de automatización, integración de sensores, servos, PLCs, visión artificial, o cuando se conecta un agente a har
 - **rpi-start** (cmd): >

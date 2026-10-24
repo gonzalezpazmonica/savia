@@ -31,7 +31,7 @@ condiciones de parada. Medido sobre `main` (139268c03):
 
 ## Valor y evidencia
 
-La investigación abrió unas 40 fuentes públicas (lista con URL y fecha en
+La investigación abrió unas 35 fuentes públicas (lista con URL y fecha en
 `.claude/skills/harness-architecture/references/fuentes.md`). Hallazgos que la skill recoge:
 
 - Convergencia en empezar simple y añadir estructura solo tras un fallo observado (Anthropic, OpenAI,

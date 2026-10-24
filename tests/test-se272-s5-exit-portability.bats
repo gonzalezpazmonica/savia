@@ -325,7 +325,8 @@ EOF
 @test "SE-272-S5-90: all scripts have set -uo pipefail" {
   for s in exit-package-generate.sh exit-independence-verify.sh exit-drill-execute.sh exit-purge-verify.sh exit-dependencies-declare.sh; do
     run grep -c 'set -uo pipefail' "${ROOT}/scripts/$s"
-    [[ "$output" -ge 1 ]] || echo "FAIL: $s missing set -uo pipefail"
+    [[ "$status" -eq 0 ]]
+    [[ "$output" -ge 1 ]]
   done
 }
 
@@ -347,7 +348,8 @@ EOF
 
   # Run verification on generated package
   run bash "$SCRIPT" --package "$gen_pkg"
-  [[ "$output" =~ "INDEPENDENT" ]] || true
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "Result: INDEPENDENT" ]]
 }
 
 @test "SE-272-S5-101: generator --help works" {

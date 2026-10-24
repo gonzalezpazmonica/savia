@@ -1,0 +1,30 @@
+{
+  "capability_overrides": {
+    "ACCESS_SECRET": "UNKNOWN",
+    "EXECUTE_LOCAL": "UNKNOWN",
+    "WRITE_WORKSPACE": "UNKNOWN"
+  },
+  "deltas": {
+    "lifecycle": "local vs cloud vs remote-control sessions",
+    "plugins": "hook coverage in Desktop unverified",
+    "process": "GUI process with folder grants"
+  },
+  "equivalence": "E0",
+  "execution_modes": [
+    "LOCAL",
+    "CLOUD",
+    "REMOTE"
+  ],
+  "id": "claude-code-desktop",
+  "kind": "surface",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "claude-code",
+  "schema_version": 1,
+  "state": "unassessed",
+  "verification": "NOT_VERIFIED"
+}
