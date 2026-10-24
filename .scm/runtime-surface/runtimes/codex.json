@@ -1,0 +1,27 @@
+{
+  "capabilities": {
+    "ACCESS_NETWORK": "UNKNOWN",
+    "ACCESS_SECRET": "UNKNOWN",
+    "CALL_MCP": "UNKNOWN",
+    "CHANGE_SHARED_STATE": "UNKNOWN",
+    "CREATE_PROCESS": "UNKNOWN",
+    "EXECUTE_LOCAL": "EMULATED",
+    "EXTERNAL_EFFECT": "UNSUPPORTED",
+    "MODIFY_CONFIG": "UNKNOWN",
+    "READ_WORKSPACE": "NATIVE",
+    "REQUEST_HUMAN_DECISION": "EMULATED",
+    "SEARCH_WORKSPACE": "NATIVE",
+    "WRITE_WORKSPACE": "EMULATED"
+  },
+  "id": "codex",
+  "kind": "runtime",
+  "notes": "Hypothesis from SE-398 F0 coverage table; not an operational claim.",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "schema_version": 1,
+  "verification": "NOT_VERIFIED"
+}
