@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "savia://schemas/installer/installation-plan/1",
+  "title": "SE-399 Installation Plan (deterministic preview)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "plan_id", "platform", "status", "steps", "blockers", "warnings", "preview", "graph", "preflight"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch"],
+      "properties": {"os": {"enum": ["linux", "windows"]}, "arch": {"enum": ["x64", "arm64"]}, "distro": {"type": "string"}}
+    },
+    "status": {"enum": ["ready", "ready_with_warnings", "blocked"]},
+    "selection": {"type": "array", "items": {"type": "string"}},
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["order", "component", "version", "disposition", "source", "privilege", "reversibility"],
+        "properties": {
+          "order": {"type": "integer", "minimum": 1},
+          "component": {"type": "string"},
+          "version": {"type": "string"},
+          "disposition": {"enum": ["install", "already_installed"]},
+          "source": {"type": "object"},
+          "privilege": {"enum": ["USER", "ELEVATED", "ROOT-ADMIN"]},
+          "reversibility": {"enum": ["reversible", "partially_reversible", "irreversible"]},
+          "changes": {"type": "array", "items": {"type": "object"}}
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "disposition"], "properties": {"id": {"type": "string"}, "disposition": {"enum": ["install", "already_installed"]}}}},
+        "edges": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["from", "to", "kind"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "kind": {"const": "DEPENDS_ON"}}}}
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checks"],
+      "properties": {
+        "status": {"enum": ["ready", "warnings", "blockers"]},
+        "checks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "status", "component", "message"], "properties": {"id": {"type": "string"}, "status": {"enum": ["ok", "warning", "blocker", "not_probed"]}, "component": {"type": "string"}, "message": {"type": "string"}}}}
+      }
+    },
+    "blockers": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "warnings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["download_bytes", "disk_bytes", "privileges", "irreversible", "restarts", "changes"],
+      "properties": {
+        "download_bytes": {"type": "integer", "minimum": 0},
+        "disk_bytes": {"type": "integer", "minimum": 0},
+        "privileges": {"type": "array", "items": {"enum": ["USER", "ELEVATED", "ROOT-ADMIN"]}},
+        "irreversible": {"type": "array", "items": {"type": "string"}},
+        "restarts": {"type": "array", "items": {"type": "string"}},
+        "changes": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "component", "message"],
+      "properties": {"code": {"type": "string"}, "component": {"type": "string"}, "message": {"type": "string"}}
+    }
+  }
+}
