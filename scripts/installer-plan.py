@@ -43,14 +43,16 @@ def main() -> int:
     try:
         manifests = load_manifests(a.manifests)
         host = (LocalAdapter(manifests) if a.local else FixtureAdapter(a.host)).discover()
-        if a.retire:
+        if a.retire is not None:
             if a.retire not in manifests and a.retire not in host.installed:
                 print(f"ERROR: unknown component(s): {a.retire}", file=sys.stderr)
                 return 1
-            report = retirement(manifests, set(host.installed), a.retire)
+            # --local only sees components that declare detection; the rest have unknown presence
+            blind = [c for c, m in manifests.items() if not m.get("detection")] if a.local else []
+            report = retirement(manifests, set(host.installed), a.retire, blind)
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0 if report["safe"] else 2
-        unknown = sorted(set(a.select) - set(manifests) - set(host.installed))
+        unknown = sorted(set(a.select or []) - set(manifests) - set(host.installed))
         if unknown:  # a mistyped id is invalid input, not a blocked plan
             print(f"ERROR: unknown component(s): {', '.join(unknown)}", file=sys.stderr)
             return 1

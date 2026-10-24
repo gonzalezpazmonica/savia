@@ -89,6 +89,19 @@ class LocalDetection(unittest.TestCase):
         with self.assertRaises(ValueError):
             local(machine="riscv64").discover()
 
+    def test_derivative_distro_matches_via_id_like(self):
+        mint = 'ID=linuxmint\nID_LIKE="ubuntu debian"\n'
+        self.assertEqual(local(read=lambda p: mint).discover().distro, "ubuntu")
+        other = 'ID=weird\nID_LIKE=arch\n'
+        self.assertEqual(local(read=lambda p: other).discover().distro, "weird")
+
+    def test_executable_with_path_is_never_looked_up(self):
+        looked = []
+        man = {"x": {"detection": {"executable": "/opt/x/bin/x", "args": []}}}
+        LocalAdapter(man, env={}, which=lambda n: looked.append(n), system="Linux", machine="x86_64",
+                     disk_usage=lambda p: Usage(10, 1, 9), read=_no_file, geteuid=lambda: 1000, home="/h").discover()
+        self.assertNotIn("/opt/x/bin/x", looked)
+
     def test_disk_measure_failure_is_none(self):
         def boom(p):
             raise OSError("x")
@@ -116,7 +129,27 @@ class Graph(unittest.TestCase):
         self.assertTrue(graph.retirement(MANIFESTS, {"savia-core", "opencode"}, "opencode")["safe"])
 
 
+    def test_retirement_fails_closed_when_presence_is_undetectable(self):
+        # --local: opencode declares no detection, so it may be installed and depend on savia-core
+        r = graph.retirement(MANIFESTS, {"savia-core"}, "savia-core", undetectable=["opencode"])
+        self.assertFalse(r["safe"])
+        self.assertEqual(r["undetermined"], ["opencode"])
+        # the component itself cannot be detected: presence is unknown, never "safe"
+        u = graph.retirement(MANIFESTS, set(), "opencode", undetectable=["opencode"])
+        self.assertEqual((u["present"], u["safe"]), ("unknown", False))
+        # detectable and absent: known absent, nothing to break
+        self.assertEqual(graph.retirement(MANIFESTS, set(), "vendor-installer", undetectable=["opencode"])["safe"], True)
+
+
 class Preflight(unittest.TestCase):
+    def test_disk_boundary_is_exact(self):
+        need = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=10**12), ["opencode"])["preview"]
+        need = need["download_bytes"] + need["disk_bytes"]
+        eq = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=need), ["opencode"])
+        short = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=need - 1), ["opencode"])
+        self.assertNotIn(("host", "preflight_disk"), codes(eq))
+        self.assertIn(("host", "preflight_disk"), codes(short))
+
     def test_disk_insufficient_blocks(self):
         p = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=1000), ["opencode"])
         self.assertEqual(p["status"], "blocked")
@@ -176,6 +209,18 @@ class Cli(unittest.TestCase):
         self.assertEqual(json.loads(unsafe.stdout)["dependents"], ["opencode"])
         self.assertEqual(safe.returncode, 0, safe.stderr)
         self.assertEqual(unknown.returncode, 1)
+
+    def test_retire_local_fails_closed_for_undetectable_components(self):
+        r = self.run_cli("--local", "--retire", "savia-core")
+        if r.returncode == 1 and "unsupported host" in r.stderr:
+            self.skipTest("host outside the MVP matrix")
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("opencode", json.loads(r.stdout)["undetermined"])
+
+    def test_empty_retire_is_invalid_input_not_a_traceback(self):
+        r = self.run_cli("--host", str(FX / "hosts/ubuntu-x64.json"), "--retire", "")
+        self.assertEqual(r.returncode, 1)
+        self.assertNotIn("Traceback", r.stderr)
 
     def test_local_and_host_are_exclusive_and_one_is_required(self):
         self.assertEqual(self.run_cli("--select", "git").returncode, 1)

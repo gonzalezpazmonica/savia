@@ -18,14 +18,21 @@ PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_pro
 ARCH = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64", "arm64": "arm64"}
 
 
-def _distro(read) -> str:
+def _distro(read, known=()) -> str:
+    """Distro id from os-release. A derivative (Mint, Pop!_OS) takes the first ID_LIKE entry that a
+    manifest knows about, so it matches `distros: ["ubuntu"]` instead of blocking as unsupported."""
+    ids = {}
     try:
         for line in read("/etc/os-release").splitlines():
-            if line.startswith("ID="):
-                return line[3:].strip().strip('"').lower()
+            key, _, val = line.partition("=")
+            if key in ("ID", "ID_LIKE"):
+                ids[key] = val.strip().strip('"').lower()
     except OSError:
-        pass
-    return ""
+        return ""
+    own = ids.get("ID", "")
+    if own in known:
+        return own
+    return next((d for d in ids.get("ID_LIKE", "").split() if d in known), own)
 
 
 def _read(path: str) -> str:
@@ -56,6 +63,9 @@ class LocalAdapter(PlatformAdapter):
         except OSError:
             return False
 
+    def _known_distros(self) -> set:
+        return {d for m in self._manifests.values() for t in m.get("targets", []) for d in t.get("distros", [])}
+
     def discover(self) -> HostFacts:
         osname = {"linux": "linux", "windows": "windows"}.get(self._system)
         arch = ARCH.get(self._machine)
@@ -70,10 +80,12 @@ class LocalAdapter(PlatformAdapter):
         installed = {}
         for cid, m in sorted(self._manifests.items()):
             exe = (m.get("detection") or {}).get("executable")
-            if exe and self._which(exe):
-                installed[cid] = "unknown"
+            if exe and not {"/", "\\"} & set(exe):  # basename only: a path is never looked up
+                if self._which(exe):
+                    installed[cid] = "unknown"
         return HostFacts(
-            os=osname, arch=arch, distro=_distro(self._read) if osname == "linux" else "",
+            os=osname, arch=arch, distro=_distro(self._read, self._known_distros()) if osname == "linux" else "",
+            # sudo on PATH is presence only: whether this user may use it is not probed
             elevation_available=is_root or (osname == "linux" and bool(self._which("sudo"))),
             package_managers=pms, installed=installed, disk_free_bytes=free, is_root=is_root,
             is_wsl=self._is_wsl(), shell=os.path.basename(self._env.get("SHELL", "")),

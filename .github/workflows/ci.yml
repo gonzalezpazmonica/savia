@@ -313,8 +313,8 @@ jobs:
           python3 -m unittest tests/python/test_dome_guard.py
           bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
 
-      - name: Installer contracts and planner (SE-399 F1)
-        run: python3 -m unittest tests/python/test_installer_plan.py
+      - name: Installer contracts, planner and detection (SE-399 F1+F2)
+        run: python3 -m unittest tests/python/test_installer_plan.py tests/python/test_installer_f2.py
 
       - name: Generate BATS dependency map
         id: deps

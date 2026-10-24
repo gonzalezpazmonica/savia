@@ -25,7 +25,17 @@ def dependents(manifests: dict, present, cid: str) -> list:
     return sorted(found)
 
 
-def retirement(manifests: dict, present, cid: str) -> dict:
-    """Answer 'can cid be retired without breaking dependencies?' (SE-399 section 12)."""
+def retirement(manifests: dict, present, cid: str, undetectable=()) -> dict:
+    """Answer 'can cid be retired without breaking dependencies?' (SE-399 section 12).
+
+    undetectable: components whose presence cannot be determined on this host (no detection
+    declared). Presence of those is unknown, so the answer is only safe when none of them could be
+    affected; otherwise it fails closed with `undetermined` listing what could not be checked.
+    """
+    present = set(present)
     deps = dependents(manifests, present, cid)
-    return {"component": cid, "present": cid in set(present), "dependents": deps, "safe": not deps}
+    blind = set(undetectable) - present
+    undetermined = [o for o in dependents(manifests, set(manifests), cid) if o in blind]
+    cid_present = True if cid in present else ("unknown" if cid in blind else False)
+    return {"component": cid, "present": cid_present, "dependents": deps, "undetermined": undetermined,
+            "safe": not deps and not undetermined and cid_present != "unknown"}
