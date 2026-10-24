@@ -52,7 +52,8 @@ run_hook() {
 @test "empty input passes without crash" {
   run_hook '{"tool_name":"Bash","tool_input":{"command":""}}'
   [ "$status" -eq 0 ]
-  grep -qv "FATAL" <<< "${output:-empty}" || true
+  [[ "$output" != *"FATAL"* ]]
+  [[ "$output" != *"sin asignar"* && "$output" != *"unbound"* ]]
 }
 
 @test "handles no staged files gracefully" {

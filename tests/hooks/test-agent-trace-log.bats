@@ -35,16 +35,28 @@ teardown() {
 
 # ── Task tool branch (tested without causing errors) ──
 
-@test "Task tool with complete env exits with 0 or error" {
-  run bash -c "export TOOL_NAME='Task' && export TOOL_INPUT='{\"agent\":\"test\"}' && export TOOL_OUTPUT='result' && export CLAUDE_PROJECT_DIR='$TEST_TMPDIR' && export CLAUDE_PROJECT_NAME='test-project' && export TOOL_DURATION=1 && export TOOL_RESULT_STATUS='success' && bash '$HOOK' 2>&1 || true"
-  [ -n "$output" ] || [ -f "$TEST_TMPDIR/projects/test-project/traces/agent-traces.jsonl" ] || true
+@test "Task tool with complete env exits 0 and appends a trace line" {
+  run bash -c "export TOOL_NAME='Task' && export TOOL_INPUT='{\"agent\":\"test\"}' && export TOOL_OUTPUT='result' && export CLAUDE_PROJECT_DIR='$TEST_TMPDIR' && export CLAUDE_PROJECT_NAME='test-project' && export TOOL_DURATION=1 && export TOOL_RESULT_STATUS='success' && bash '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [ -f "$TEST_TMPDIR/output/agent-traces.jsonl" ]
+  [ "$(wc -l < "$TEST_TMPDIR/output/agent-traces.jsonl")" -eq 1 ]
+  grep -q '"agent":"test"' "$TEST_TMPDIR/output/agent-traces.jsonl"
+  grep -q '"outcome":"success"' "$TEST_TMPDIR/output/agent-traces.jsonl"
 }
 
 # ── Empty/missing tool name ──
 
 @test "missing TOOL_NAME defaults to early exit" {
-  run bash -c "bash '$HOOK' 2>&1 || true"
-  true
+  run bash -c "unset TOOL_NAME; CLAUDE_PROJECT_DIR='$TEST_TMPDIR' bash '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -f "$TEST_TMPDIR/output/agent-traces.jsonl" ]
+}
+
+@test "Task tool without TOOL_RESULT_STATUS still exits 0 and logs" {
+  run bash -c "unset TOOL_RESULT_STATUS; TOOL_NAME=Task TOOL_INPUT='{\"agent\":\"x\"}' CLAUDE_PROJECT_DIR='$TEST_TMPDIR' bash '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  grep -q '"agent":"x"' "$TEST_TMPDIR/output/agent-traces.jsonl"
 }
 
 # ── Budget metering scenarios (SPEC-AGENT-METERING) ──
@@ -138,8 +150,9 @@ AGENT
 # ── Edge case: nonexistent project dir ──
 
 @test "nonexistent project dir does not crash" {
-  run bash -c "TOOL_NAME='Task' TOOL_INPUT='{\"agent\":\"x\"}' TOOL_OUTPUT='ok' CLAUDE_PROJECT_DIR='/tmp/nonexistent-$$' CLAUDE_PROJECT_NAME='ghost' bash '$HOOK' 2>&1 || true"
-  [[ "$status" -eq 0 ]] || true
+  run bash -c "TOOL_NAME='Task' TOOL_INPUT='{\"agent\":\"x\"}' TOOL_OUTPUT='ok' CLAUDE_PROJECT_DIR='/tmp/nonexistent-$$' CLAUDE_PROJECT_NAME='ghost' bash '$HOOK' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"sin asignar"* && "$output" != *"unbound"* ]]
 }
 
 @test "edge: nonexistent traces directory" {
