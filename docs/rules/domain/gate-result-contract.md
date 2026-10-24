@@ -36,6 +36,10 @@ gate-result: {"result":"unknown","gaps":[{"check":"gitleaks","reason":"missing_t
 - `reason` ∈ `missing_tool` (herramienta ausente), `limit` (tope de recursos superado), `timeout`,
   `unreadable` (salida o entrada ilegible, o herramienta que falló).
 - `unknown` exige al menos un hueco. `clean` no lleva huecos. `findings` puede llevarlos.
+- Si stdout está reservado a un JSON (`--json`, `--format json`), `result` y `gaps` van como campos de ese
+  JSON y no hay línea final. `--quiet` suprime también la línea; el exit code y el registro se mantienen.
+- Un agregador lee el JSON de cada sub-escáner aunque salga 1; un exit ≥ 2, un JSON ilegible o un
+  `result: unknown` del sub-escáner es un hueco suyo (`<sub>:unreadable` o `<sub>/<check>:<reason>`).
 
 Se emite con `.claude/hooks/lib/gate-result.sh` (`gate_result_emit <estado> [check:reason ...]`), que valida los tres
 campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasured_record`
@@ -51,8 +55,18 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | 4 (gitleaks ausente, fallido, timeout, ilegible o tope de commits) | `unknown` |
 | `dependency-scan.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 | `unknown` (Trivy o jq ausente, escaneo o SBOM fallido) |
-| `iac-security-scan.sh` | 0 / 1 | `clean` (o `NO_IAC`) / `findings` |
-| | 2 | `unknown` |
+| `iac-security-scan.sh` | 0 / 1 | `clean` (o `NO_IAC`) / `findings` (línea final o campos del report JSON) |
+| | 2 | `unknown` (Trivy/Docker o python3 ausente, Trivy fallido o con timeout, JSON ilegible, argumentos) |
+| `prompt-security-scan.sh` | 0 / 1 | `clean` / `findings` |
+| | 0 con hueco | `unknown` (python3 ausente para PS-11, fichero ilegible, path sin `.md`; registrado) |
+| | 2 | `unknown` (path inexistente) |
+| `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
+| | 0 con hueco | `unknown` (`--config` inexistente o ilegible; registrado) |
+| | 2 | `unknown` (python3 ausente; antes salía 1 con un falso MCP-00) o argumentos |
+| `security-audit-all.sh` | 0 / 1 | según `result` (hallazgos bajo o sobre `--fail-on`) |
+| | 0 con hueco | `unknown` (sub-escáner ≥ 2, ilegible o `unknown`; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
+| `confidentiality-scan.sh` | 0 / 1 | `clean` / `findings` |
+| | 0 con aviso `UNKNOWN` | `unknown` (git no calcula el diff, p. ej. sin `origin/main`; blocklist pedida ilegible o generador ausente o fallido; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
 | `ast-quality-gate.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 (entorno), 3 (UNVERIFIED) | `unknown` |
 | `pre-push-security-gate.sh` | 0 con gitleaks / 1 | `clean` / `findings` |
@@ -64,7 +78,10 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | 1 | argumentos inválidos |
 
 El 4 de `git-history-secret-scan.sh` sustituye al 1 que antes se daba con gitleaks ausente: el 1 queda
-solo para hallazgos críticos. Es el único código que cambia.
+solo para hallazgos críticos. El 2 de `mcp-security-audit.sh` sin python3 sustituye a un 1 por un falso
+hallazgo. Son los únicos códigos que cambian.
+
+Fuera del contrato: `transcriptor-scan.sh` (lista reuniones por stdout, una por línea; no es un gate).
 
 ## Guards `blocking` (hooks)
 
