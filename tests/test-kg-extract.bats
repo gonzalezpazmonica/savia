@@ -105,7 +105,6 @@ PY
 
 @test "evidence span stores character offsets and up to 60 characters of context each side" {
   python3 -c "print('x'*100 + ' SE-291 ' + 'y'*100)" > "$TESTDIR/in.txt"
-  run ext
   [ "$(ext | jq_py "[e['evidence_span']['start'] for e in d['entities'] if e['pattern']=='spec_id'][0]")" = "101" ]
   [ "$(ext | jq_py "[e['evidence_span']['end'] for e in d['entities'] if e['pattern']=='spec_id'][0]")" = "107" ]
   [ "$(ext | jq_py "len([e['evidence_span']['text'] for e in d['entities'] if e['pattern']=='spec_id'][0])")" = "126" ]
