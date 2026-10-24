@@ -95,8 +95,13 @@ fi
 idx="$ROOT/.scm/INDEX.scm"
 if [[ -f "$idx" && -x "$ROOT/scripts/generate-capability-map.py" ]]; then
   SB_VIEW=$(mktemp -d)
+  # Enlaces duros si es posible (mismo dispositivo); por directorio, con
+  # copia real como respaldo si falla (tmpfs, bind mounts, otro mount).
   for d in .claude .opencode scripts docs; do
-    cp -al "$ROOT/$d" "$SB_VIEW/$d" 2>/dev/null
+    cp -al "$ROOT/$d" "$SB_VIEW/$d" 2>/dev/null || {
+      mkdir -p "$SB_VIEW/$d"
+      cp -a "$ROOT/$d/." "$SB_VIEW/$d/" 2>/dev/null
+    }
   done
   ( cd "$SB_VIEW" && timeout 120 python3 "$SB_VIEW/scripts/generate-capability-map.py" >/dev/null 2>&1 )
   REG="$ROOT/.scm/registry.json"
