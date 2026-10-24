@@ -188,7 +188,7 @@ def main(argv=None):
     if "--check" in argv:
         print("config ok: port=%d ratelimit=%d rpm redact_keys=%d ollama=%s" % (PORT, RPM, len(REDACT_KEYS), OLLAMA))
         return 0
-    print(f"model-gateway listening on :{PORT} (ollama={OLLAMA} embed={EMBED} log={LOG_PATH})")
+    print(f"model-gateway listening on :{PORT} (ollama={OLLAMA} embed={EMBED} log={LOG_PATH})", flush=True)
     try:
         HTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
     except KeyboardInterrupt:
