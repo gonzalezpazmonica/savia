@@ -1,6 +1,6 @@
-# SE-395 — Protocolo preregistrado de conectividad adaptativa (R00 + R01)
+# SE-395 — Protocolo preregistrado de conectividad adaptativa (R00–R04)
 
-> Estado: F0 y F1 entregadas. Ninguna fase adaptativa está implementada ni activada.
+> Estado: F0–F3 entregadas como código de medida. El router existe como módulo puro pero no está conectado a `FederatedSearchEngine` ni activado.
 > Spec: `docs/specs/SE-395-vaults-adaptive-connectivity.spec.md`. Los flags
 > `adaptive`, `pioneer`, `plasticity` y `exploration` siguen en `false`.
 
@@ -130,3 +130,52 @@ no bastan») y las etiquetas no tienen revisión humana independiente. F2 puede
 prepararse en rama, pero no se declara GO hasta cerrar esas dos condiciones. No hay evidencia todavía de que un router
 adaptativo mejore nada: el baseline ya tiene recall 0,92 con 2,8 llamadas
 remotas por consulta, y esa es la única cifra que F2–F3 deben batir.
+
+## 8. R02 — guidance y selección determinista
+
+`src/federation/adaptive/guidance.ts` (schema v1: `attracts`/`repels` con score finito en [0,1], `specialties`;
+rechaza campos desconocidos, listas largas, duplicados y versión distinta) y `select.ts`
+(`selectDestinations`, función pura). Orden fijo: policy → salud → score → presupuesto. Un destino denegado
+no se puntúa ni se nombra en el resultado (solo `deniedCount`). La repulsión baja prioridad pero no deniega.
+`local` autorizado se incluye siempre y cuenta en `maxVaults`. Desempate por id. Con `adaptive=false` devuelve
+exactamente el baseline. Guidance inválida → federación existente limitada al presupuesto restante
+(`mode: 'fallback'`), nunca broadcast; sin presupuesto → `BUDGET_EXHAUSTED` sin expansión.
+
+## 9. R03 — shadow
+
+`runShadow` invoca el baseline exactamente una vez y calcula la selección del challenger sin red.
+El receipt (`counterfactual-estimate`) lleva `queryId` opaco (se rechaza todo lo que no lo sea), hash de
+configuración, destinos visitados/omitidos autorizados y la estimación de llamadas ahorradas y de resultados
+del baseline que vendrían de destinos omitidos. Es una estimación, no ahorro demostrado. No incluye la consulta.
+
+## 10. R04 — A/B aislado y decisión
+
+`benchmark/ab.ts` ejecuta baseline y challenger sobre el mismo snapshot sin red (`ab-run.ts [split]`). La guidance
+estática sale solo del split `train`; el router solo recibe consulta, policy y salud (sin etiquetas). Reglas de
+decisión añadidas **antes** de ejecutar el holdout y separadas de `GATE_THRESHOLDS`: ≥100 pares para GO o NO_GO por
+gates; exposición > 0 es NO_GO con cualquier muestra; bootstrap pareado seed 395, 2000 remuestreos, IC 95 %.
+
+Resultado (una sola ejecución del holdout `test`, 45 pares, sin ajustes posteriores):
+
+| Gate | Calibration | Test | Umbral |
+|---|---|---|---|
+| Reducción de llamadas remotas | 0,28 | 0,28 | ≥ 0,30 |
+| Reducción de contexto irrelevante | 0,196 | 0,244 | ≥ 0,25 |
+| Recall delta (cota inferior IC) | −0,129 | −0,800 | ≥ −0,02 |
+| Provenance / exposición / p95 | pasa | pasa | — |
+| Densidad de contexto útil | 1,05× | 0,43× | ≥ 1,20× |
+
+Decisión formal: **NEEDS_MORE_EVIDENCE** (45 < 100 pares). Lectura honesta: en test el recall medio cae 0,69 y el
+IC 95 % (−0,80 a −0,57) queda muy por debajo de −0,02; con los datos actuales este challenger estático **no es
+defendible** y la recomendación es NO-GO para esa variante. Causa: la guidance de train no conoce los tópicos
+nuevos de test (anclas inéditas y vault de origen distinto), así que el presupuesto recorta el vault de menor peso
+por defecto. No se cambió ninguna regla ni umbral tras ver el holdout; ampliar a ≥100 pares o proponer otro
+challenger exige un holdout nuevo.
+
+## 11. Estado de AC
+
+AC01–AC06 (schema, policy antes de score, atracción/repulsión, subconjunto, fallback): cubiertos por
+`adaptive-select.test.ts`. AC13 (presupuestos) y AC14 (un salto: solo destinos registrados) en `select`.
+AC15 (receipts) parcial: receipt de shadow, sin integración con el store de evidencia existente. AC16 (explain
+"why this/why not") **no hecho**. AC17–AC20: A/B reproducible, coste+calidad y adversarial hechos; apagado =
+baseline probado en benchmark. AC07–AC12 (pioneer, pesos aprendidos, dormancy) **diferidos**: R04 no justifica GO.
