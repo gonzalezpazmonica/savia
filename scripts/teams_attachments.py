@@ -122,7 +122,10 @@ def write_manifest(attachment, source_chat, manifest_dir):
     return mf_path
 
 
-_AUTH_PAGE_HOSTS = ("teams.microsoft.com", "teams.cloud.microsoft", "teams.live.com")
+# Sovereign clouds included: gov./dod.teams.microsoft.us match by suffix.
+_AUTH_PAGE_HOSTS = ("teams.microsoft.com", "teams.cloud.microsoft", "teams.live.com",
+                    "teams.microsoft.us")
+_SHAREPOINT_SUFFIXES = (".sharepoint.com", ".sharepoint.us", ".sharepoint.cn")
 
 
 def is_authenticated_page_url(url):
@@ -135,7 +138,7 @@ def is_authenticated_page_url(url):
     host = (parsed.hostname or "").lower()
     if parsed.scheme != "https":
         return False
-    return host.endswith(".sharepoint.com") or any(
+    return host.endswith(_SHAREPOINT_SUFFIXES) or any(
         host == h or host.endswith("." + h) for h in _AUTH_PAGE_HOSTS)
 
 

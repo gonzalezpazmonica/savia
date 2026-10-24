@@ -33,6 +33,8 @@ EVIL = [
     "https://evil.example/?next=sharepoint.com",
     "https://sharepoint.com.evil.example/",
     "https://evilsharepoint.com/",
+    "https://sharepoint.us.evil.example/",
+    "https://evilteams.microsoft.us/",
     "https://evil.example/teams.microsoft.com",
     "http://contoso.sharepoint.com/",
     "javascript:alert('sharepoint.com')",
@@ -82,7 +84,10 @@ class TeamsSelectionTests(unittest.TestCase):
 
     def test_teams_and_sharepoint_hosts_are_accepted(self):
         for url in ("https://teams.microsoft.com/v2/", "https://teams.cloud.microsoft/",
-                    "https://contoso.sharepoint.com/sites/x"):
+                    "https://contoso.sharepoint.com/sites/x",
+                    "https://gov.teams.microsoft.us/", "https://dod.teams.microsoft.us/",
+                    "https://contoso.sharepoint.us/sites/x",
+                    "https://contoso.sharepoint.cn/sites/x"):
             page = teams.pick_authenticated_page([_page(EVIL[0]), _page(url)])
             self.assertEqual(page["url"], url)
 
