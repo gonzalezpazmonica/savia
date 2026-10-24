@@ -115,7 +115,7 @@ ac3_clean() {
 }
 
 has_personal_paths() {
-  grep -qE '/home/[a-z]|/Users/[A-Za-z]|C:\\Users|~/\.savia/' "$1"
+  grep -qE '/home/[A-Za-z0-9]|/Users/[A-Za-z]|/root/|C:\\Users|~/\.[a-z]|\$HOME/|[A-Za-z0-9._-]+@[A-Za-z0-9-]+\.(com|org|es|net)' "$1"
 }
 
 has_evidence_headings() {
@@ -360,9 +360,18 @@ marcas() {
 }
 
 @test "AC4: el test existente de sovereignty-auditor sigue en verde" {
-  command -v bats >/dev/null || skip "bats ausente"
+  command -v bats >/dev/null || { echo "bats ausente"; return 1; }
   run bats "$REPO_ROOT/tests/test-sovereignty-auditor.bats"
   [ "$status" -eq 0 ]
+}
+
+@test "AC3 negativo: rutas personales distintas de /home/[a-z] se detectan" {
+  local p
+  for p in '/home/1000/x' '$HOME/x' '~/.config/x' '/root/x' 'persona@ejemplo.com'; do
+    printf 'ver %s\n' "$p" > "$TMP/p.md"
+    run has_personal_paths "$TMP/p.md"
+    [ "$status" -eq 0 ]
+  done
 }
 
 # --- AC5 ---
@@ -384,7 +393,7 @@ marcas() {
 
 # --- AC6 (en el cierre de la PR; aqui solo existencia de los scripts) ---
 
-@test "AC6: existen los scripts de cierre" {
+@test "AC6: scripts de cierre presentes (la ejecucion va en el cierre de la PR)" {
   [ -f "$REPO_ROOT/scripts/capability-entropy.py" ]
   [ -f "$REPO_ROOT/scripts/sam.py" ]
   [ -f "$REPO_ROOT/scripts/confidentiality-scan.sh" ]
