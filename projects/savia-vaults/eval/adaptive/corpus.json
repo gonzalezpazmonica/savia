@@ -1,0 +1,914 @@
+{
+  "conflictPairs": [
+    [
+      "local/d0t2-0.md",
+      "beta/d0t2-1.md"
+    ],
+    [
+      "beta/d1t2-0.md",
+      "gamma/d1t2-1.md"
+    ],
+    [
+      "gamma/d2t2-0.md",
+      "delta/d2t2-1.md"
+    ],
+    [
+      "delta/d3t2-0.md",
+      "local/d3t2-1.md"
+    ]
+  ],
+  "docs": [
+    {
+      "id": "local/d0t0-0.md",
+      "stale": false,
+      "text": "soxaba kezomu velocidad entrega ritual riesgo entrega velocidad sprint riesgo",
+      "topic": "d0t0",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t0-1.md",
+      "stale": false,
+      "text": "soxaba kezomu backlog equipo capacidad equipo entrega velocidad ritual sprint",
+      "topic": "d0t0",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t0-2.md",
+      "stale": false,
+      "text": "soxaba kezomu riesgo velocidad velocidad riesgo riesgo backlog entrega sprint",
+      "topic": "d0t0",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t1-0.md",
+      "stale": false,
+      "text": "zonari mumumu capacidad capacidad entrega velocidad velocidad riesgo ritual entrega",
+      "topic": "d0t1",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t1-1.md",
+      "stale": false,
+      "text": "zonari mumumu ritual backlog backlog ritual backlog capacidad capacidad velocidad",
+      "topic": "d0t1",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t1-2.md",
+      "stale": false,
+      "text": "zonari mumumu equipo velocidad equipo sprint sprint ritual equipo backlog",
+      "topic": "d0t1",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "beta/d0t1-3.md",
+      "stale": false,
+      "text": "zonari mumumu equipo velocidad sprint equipo entrega velocidad velocidad entrega",
+      "topic": "d0t1",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d0t1-4.md",
+      "stale": false,
+      "text": "zonari mumumu capacidad entrega entrega capacidad equipo entrega backlog equipo",
+      "topic": "d0t1",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "local/d0t2-0.md",
+      "stale": false,
+      "text": "nabatu dikeri sprint backlog riesgo sprint sprint entrega entrega sprint permitido",
+      "topic": "d0t2",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "beta/d0t2-1.md",
+      "stale": false,
+      "text": "nabatu dikeri riesgo entrega velocidad sprint entrega entrega backlog entrega prohibido",
+      "topic": "d0t2",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "local/d0t2-2.md",
+      "stale": false,
+      "text": "nabatu dikeri capacidad sprint velocidad entrega ritual velocidad capacidad sprint",
+      "topic": "d0t2",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t3-0.md",
+      "stale": false,
+      "text": "xazolo risoba ritual ritual velocidad riesgo capacidad ritual capacidad equipo vigente",
+      "topic": "d0t3",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t3-1.md",
+      "stale": true,
+      "text": "xazolo risoba entrega entrega equipo velocidad velocidad velocidad ritual equipo obsoleto",
+      "topic": "d0t3",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t3-2.md",
+      "stale": false,
+      "text": "xazolo risoba ritual velocidad velocidad capacidad ritual backlog velocidad entrega",
+      "topic": "d0t3",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t4-0.md",
+      "stale": false,
+      "text": "batulo xavelo entrega capacidad ritual backlog sprint backlog riesgo velocidad",
+      "topic": "d0t4",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t4-1.md",
+      "stale": false,
+      "text": "batulo xavelo backlog equipo riesgo capacidad ritual capacidad entrega backlog",
+      "topic": "d0t4",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t4-2.md",
+      "stale": false,
+      "text": "batulo xavelo equipo sprint entrega capacidad equipo capacidad ritual sprint",
+      "topic": "d0t4",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "beta/d0t4-3.md",
+      "stale": false,
+      "text": "batulo xavelo backlog riesgo sprint ritual sprint sprint backlog ritual",
+      "topic": "d0t4",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d0t4-4.md",
+      "stale": false,
+      "text": "batulo xavelo equipo capacidad riesgo ritual sprint entrega riesgo ritual",
+      "topic": "d0t4",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "local/d0t5-0.md",
+      "stale": false,
+      "text": "dikezo mudike backlog ritual backlog velocidad sprint equipo sprint ritual",
+      "topic": "d0t5",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t5-1.md",
+      "stale": false,
+      "text": "dikezo mudike sprint equipo capacidad backlog backlog riesgo capacidad sprint",
+      "topic": "d0t5",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t5-2.md",
+      "stale": false,
+      "text": "dikezo mudike capacidad riesgo entrega entrega capacidad entrega riesgo capacidad",
+      "topic": "d0t5",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "beta/d0t5-3.md",
+      "stale": false,
+      "text": "dikezo mudike equipo backlog ritual riesgo backlog capacidad riesgo ritual",
+      "topic": "d0t5",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d0t5-4.md",
+      "stale": false,
+      "text": "dikezo mudike velocidad backlog velocidad equipo velocidad riesgo ritual velocidad",
+      "topic": "d0t5",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "local/d0t6-0.md",
+      "stale": false,
+      "text": "veriri xakemu riesgo capacidad sprint velocidad equipo equipo backlog capacidad",
+      "topic": "d0t6",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t6-1.md",
+      "stale": false,
+      "text": "veriri xakemu capacidad entrega sprint ritual capacidad sprint backlog equipo",
+      "topic": "d0t6",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d0t6-2.md",
+      "stale": false,
+      "text": "veriri xakemu entrega equipo equipo velocidad riesgo capacidad entrega ritual",
+      "topic": "d0t6",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "beta/d1t0-0.md",
+      "stale": false,
+      "text": "xaxaso dimulo asiento factura partida partida factura asiento mayor factura",
+      "topic": "d1t0",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t0-1.md",
+      "stale": false,
+      "text": "xaxaso dimulo partida balance tasa balance tasa asiento balance cierre",
+      "topic": "d1t0",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t0-2.md",
+      "stale": false,
+      "text": "xaxaso dimulo mayor partida tasa asiento cierre mayor tasa partida",
+      "topic": "d1t0",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t1-0.md",
+      "stale": false,
+      "text": "bamutu sobazo cobro asiento asiento cobro tasa cierre partida partida",
+      "topic": "d1t1",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t1-1.md",
+      "stale": false,
+      "text": "bamutu sobazo tasa partida mayor asiento cobro asiento partida cobro",
+      "topic": "d1t1",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t1-2.md",
+      "stale": false,
+      "text": "bamutu sobazo partida mayor partida cierre cobro cobro balance asiento",
+      "topic": "d1t1",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "gamma/d1t1-3.md",
+      "stale": false,
+      "text": "bamutu sobazo cobro cobro cobro factura cierre factura balance partida",
+      "topic": "d1t1",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d1t1-4.md",
+      "stale": false,
+      "text": "bamutu sobazo partida partida partida cierre balance tasa balance balance",
+      "topic": "d1t1",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "beta/d1t2-0.md",
+      "stale": false,
+      "text": "rikexa vezodi cobro mayor cierre cobro balance cobro factura tasa permitido",
+      "topic": "d1t2",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "gamma/d1t2-1.md",
+      "stale": false,
+      "text": "rikexa vezodi balance asiento partida cobro cierre factura mayor tasa prohibido",
+      "topic": "d1t2",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "beta/d1t2-2.md",
+      "stale": false,
+      "text": "rikexa vezodi asiento cierre balance mayor cobro tasa partida asiento",
+      "topic": "d1t2",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t3-0.md",
+      "stale": false,
+      "text": "zokeso tusove tasa cobro partida tasa factura asiento balance asiento vigente",
+      "topic": "d1t3",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t3-1.md",
+      "stale": true,
+      "text": "zokeso tusove asiento asiento cobro tasa balance asiento mayor tasa obsoleto",
+      "topic": "d1t3",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t3-2.md",
+      "stale": false,
+      "text": "zokeso tusove tasa partida partida balance mayor cierre factura asiento",
+      "topic": "d1t3",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t4-0.md",
+      "stale": false,
+      "text": "vevedi zonake partida cobro cobro balance balance balance asiento mayor",
+      "topic": "d1t4",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t4-1.md",
+      "stale": false,
+      "text": "vevedi zonake cobro tasa cierre mayor partida partida tasa cobro",
+      "topic": "d1t4",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t4-2.md",
+      "stale": false,
+      "text": "vevedi zonake factura tasa factura cobro tasa balance mayor cobro",
+      "topic": "d1t4",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "gamma/d1t4-3.md",
+      "stale": false,
+      "text": "vevedi zonake cobro asiento balance balance cierre mayor factura partida",
+      "topic": "d1t4",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d1t4-4.md",
+      "stale": false,
+      "text": "vevedi zonake balance asiento partida tasa balance factura balance tasa",
+      "topic": "d1t4",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "beta/d1t5-0.md",
+      "stale": false,
+      "text": "lobaso lotuve cobro balance cobro asiento cobro cierre tasa asiento",
+      "topic": "d1t5",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t5-1.md",
+      "stale": false,
+      "text": "lobaso lotuve asiento partida tasa balance tasa factura cierre cobro",
+      "topic": "d1t5",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t5-2.md",
+      "stale": false,
+      "text": "lobaso lotuve cobro tasa cobro partida partida partida factura asiento",
+      "topic": "d1t5",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "gamma/d1t5-3.md",
+      "stale": false,
+      "text": "lobaso lotuve balance cobro cobro cobro cierre factura cobro partida",
+      "topic": "d1t5",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d1t5-4.md",
+      "stale": false,
+      "text": "lobaso lotuve mayor balance factura balance partida factura cierre partida",
+      "topic": "d1t5",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "beta/d1t6-0.md",
+      "stale": false,
+      "text": "kenamu losozo cobro tasa balance partida mayor mayor mayor cierre",
+      "topic": "d1t6",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t6-1.md",
+      "stale": false,
+      "text": "kenamu losozo factura factura factura cobro cierre tasa asiento mayor",
+      "topic": "d1t6",
+      "useful": true,
+      "vault": "beta"
+    },
+    {
+      "id": "beta/d1t6-2.md",
+      "stale": false,
+      "text": "kenamu losozo partida mayor tasa tasa cobro partida mayor mayor",
+      "topic": "d1t6",
+      "useful": false,
+      "vault": "beta"
+    },
+    {
+      "id": "gamma/d2t0-0.md",
+      "stale": false,
+      "text": "mudiba lodizo artefacto canal despliegue canal pipeline artefacto rollback entorno",
+      "topic": "d2t0",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t0-1.md",
+      "stale": false,
+      "text": "mudiba lodizo despliegue despliegue despliegue versión pipeline versión rama artefacto",
+      "topic": "d2t0",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t0-2.md",
+      "stale": false,
+      "text": "mudiba lodizo artefacto canal pipeline rollback versión rollback pipeline versión",
+      "topic": "d2t0",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t1-0.md",
+      "stale": false,
+      "text": "zomuba tudive rollback despliegue rama despliegue entorno rollback rama entorno",
+      "topic": "d2t1",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t1-1.md",
+      "stale": false,
+      "text": "zomuba tudive versión despliegue despliegue canal pipeline artefacto versión rama",
+      "topic": "d2t1",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t1-2.md",
+      "stale": false,
+      "text": "zomuba tudive rama despliegue entorno rama entorno rollback canal entorno",
+      "topic": "d2t1",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "delta/d2t1-3.md",
+      "stale": false,
+      "text": "zomuba tudive pipeline despliegue pipeline entorno artefacto canal entorno despliegue",
+      "topic": "d2t1",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d2t1-4.md",
+      "stale": false,
+      "text": "zomuba tudive artefacto artefacto artefacto canal canal despliegue artefacto rollback",
+      "topic": "d2t1",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "gamma/d2t2-0.md",
+      "stale": false,
+      "text": "rivemu kenave artefacto artefacto artefacto artefacto rama entorno entorno rollback permitido",
+      "topic": "d2t2",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "delta/d2t2-1.md",
+      "stale": false,
+      "text": "rivemu kenave canal despliegue rollback versión pipeline entorno rollback entorno prohibido",
+      "topic": "d2t2",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "gamma/d2t2-2.md",
+      "stale": false,
+      "text": "rivemu kenave canal rollback rollback canal despliegue canal rollback artefacto",
+      "topic": "d2t2",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t3-0.md",
+      "stale": false,
+      "text": "naxari tumuzo pipeline despliegue pipeline rollback pipeline despliegue artefacto rollback vigente",
+      "topic": "d2t3",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t3-1.md",
+      "stale": true,
+      "text": "naxari tumuzo rama pipeline rollback entorno artefacto despliegue artefacto rollback obsoleto",
+      "topic": "d2t3",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t3-2.md",
+      "stale": false,
+      "text": "naxari tumuzo pipeline pipeline rollback despliegue canal artefacto artefacto rama",
+      "topic": "d2t3",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t4-0.md",
+      "stale": false,
+      "text": "tuloba musoxa pipeline canal despliegue rama canal rama pipeline rama",
+      "topic": "d2t4",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t4-1.md",
+      "stale": false,
+      "text": "tuloba musoxa despliegue canal despliegue artefacto rollback versión rollback rollback",
+      "topic": "d2t4",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t4-2.md",
+      "stale": false,
+      "text": "tuloba musoxa artefacto artefacto versión rollback entorno despliegue artefacto pipeline",
+      "topic": "d2t4",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "delta/d2t4-3.md",
+      "stale": false,
+      "text": "tuloba musoxa despliegue despliegue pipeline rollback entorno versión pipeline versión",
+      "topic": "d2t4",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d2t4-4.md",
+      "stale": false,
+      "text": "tuloba musoxa versión versión entorno rollback entorno rama rollback canal",
+      "topic": "d2t4",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "gamma/d2t5-0.md",
+      "stale": false,
+      "text": "rizozo lobaba despliegue pipeline canal entorno rama pipeline rollback despliegue",
+      "topic": "d2t5",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t5-1.md",
+      "stale": false,
+      "text": "rizozo lobaba despliegue canal artefacto versión rollback versión pipeline rama",
+      "topic": "d2t5",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t5-2.md",
+      "stale": false,
+      "text": "rizozo lobaba rama entorno despliegue canal pipeline despliegue rollback artefacto",
+      "topic": "d2t5",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "delta/d2t5-3.md",
+      "stale": false,
+      "text": "rizozo lobaba artefacto artefacto canal rama rama artefacto versión despliegue",
+      "topic": "d2t5",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d2t5-4.md",
+      "stale": false,
+      "text": "rizozo lobaba artefacto despliegue pipeline despliegue rama rama versión rama",
+      "topic": "d2t5",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "gamma/d2t6-0.md",
+      "stale": false,
+      "text": "tutuzo sozozo artefacto pipeline artefacto artefacto artefacto rama canal artefacto",
+      "topic": "d2t6",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t6-1.md",
+      "stale": false,
+      "text": "tutuzo sozozo pipeline rama artefacto pipeline rollback rollback despliegue rama",
+      "topic": "d2t6",
+      "useful": true,
+      "vault": "gamma"
+    },
+    {
+      "id": "gamma/d2t6-2.md",
+      "stale": false,
+      "text": "tutuzo sozozo canal despliegue artefacto artefacto rollback versión versión artefacto",
+      "topic": "d2t6",
+      "useful": false,
+      "vault": "gamma"
+    },
+    {
+      "id": "delta/d3t0-0.md",
+      "stale": false,
+      "text": "vediba mukelo diario nota diario alumno rúbrica diario rúbrica tarea",
+      "topic": "d3t0",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t0-1.md",
+      "stale": false,
+      "text": "vediba mukelo curso curso sesión alumno curso nota diario rúbrica",
+      "topic": "d3t0",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t0-2.md",
+      "stale": false,
+      "text": "vediba mukelo alumno portafolio rúbrica portafolio rúbrica sesión tarea alumno",
+      "topic": "d3t0",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t1-0.md",
+      "stale": false,
+      "text": "tuveke xamuri rúbrica rúbrica curso nota diario sesión tarea alumno",
+      "topic": "d3t1",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t1-1.md",
+      "stale": false,
+      "text": "tuveke xamuri alumno alumno rúbrica tarea portafolio diario rúbrica curso",
+      "topic": "d3t1",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t1-2.md",
+      "stale": false,
+      "text": "tuveke xamuri sesión sesión curso diario alumno nota tarea rúbrica",
+      "topic": "d3t1",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "local/d3t1-3.md",
+      "stale": false,
+      "text": "tuveke xamuri alumno nota nota diario rúbrica rúbrica diario alumno",
+      "topic": "d3t1",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d3t1-4.md",
+      "stale": false,
+      "text": "tuveke xamuri rúbrica tarea alumno sesión alumno sesión diario alumno",
+      "topic": "d3t1",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "delta/d3t2-0.md",
+      "stale": false,
+      "text": "rizotu disoxa tarea rúbrica curso portafolio curso curso tarea portafolio permitido",
+      "topic": "d3t2",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "local/d3t2-1.md",
+      "stale": false,
+      "text": "rizotu disoxa portafolio diario portafolio nota diario nota tarea alumno prohibido",
+      "topic": "d3t2",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "delta/d3t2-2.md",
+      "stale": false,
+      "text": "rizotu disoxa diario diario alumno tarea nota alumno tarea alumno",
+      "topic": "d3t2",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t3-0.md",
+      "stale": false,
+      "text": "tutuke nadixa portafolio alumno curso curso alumno alumno sesión nota vigente",
+      "topic": "d3t3",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t3-1.md",
+      "stale": true,
+      "text": "tutuke nadixa curso portafolio diario curso portafolio tarea alumno sesión obsoleto",
+      "topic": "d3t3",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t3-2.md",
+      "stale": false,
+      "text": "tutuke nadixa nota portafolio rúbrica tarea alumno rúbrica nota alumno",
+      "topic": "d3t3",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t4-0.md",
+      "stale": false,
+      "text": "xazoba lonadi diario nota sesión sesión diario sesión alumno diario",
+      "topic": "d3t4",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t4-1.md",
+      "stale": false,
+      "text": "xazoba lonadi sesión curso diario portafolio portafolio rúbrica curso nota",
+      "topic": "d3t4",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t4-2.md",
+      "stale": false,
+      "text": "xazoba lonadi nota rúbrica diario portafolio sesión sesión tarea rúbrica",
+      "topic": "d3t4",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "local/d3t4-3.md",
+      "stale": false,
+      "text": "xazoba lonadi sesión sesión nota sesión curso alumno tarea alumno",
+      "topic": "d3t4",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d3t4-4.md",
+      "stale": false,
+      "text": "xazoba lonadi tarea diario curso portafolio tarea diario tarea sesión",
+      "topic": "d3t4",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "delta/d3t5-0.md",
+      "stale": false,
+      "text": "loveba kenake alumno sesión portafolio tarea portafolio portafolio portafolio rúbrica",
+      "topic": "d3t5",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t5-1.md",
+      "stale": false,
+      "text": "loveba kenake diario portafolio alumno rúbrica nota rúbrica portafolio diario",
+      "topic": "d3t5",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t5-2.md",
+      "stale": false,
+      "text": "loveba kenake curso portafolio alumno tarea diario rúbrica diario sesión",
+      "topic": "d3t5",
+      "useful": false,
+      "vault": "delta"
+    },
+    {
+      "id": "local/d3t5-3.md",
+      "stale": false,
+      "text": "loveba kenake nota portafolio rúbrica diario rúbrica portafolio tarea nota",
+      "topic": "d3t5",
+      "useful": true,
+      "vault": "local"
+    },
+    {
+      "id": "local/d3t5-4.md",
+      "stale": false,
+      "text": "loveba kenake curso rúbrica nota curso sesión nota sesión tarea",
+      "topic": "d3t5",
+      "useful": false,
+      "vault": "local"
+    },
+    {
+      "id": "delta/d3t6-0.md",
+      "stale": false,
+      "text": "sotuna vetudi sesión nota curso tarea alumno alumno rúbrica curso",
+      "topic": "d3t6",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t6-1.md",
+      "stale": false,
+      "text": "sotuna vetudi sesión alumno sesión nota sesión portafolio portafolio rúbrica",
+      "topic": "d3t6",
+      "useful": true,
+      "vault": "delta"
+    },
+    {
+      "id": "delta/d3t6-2.md",
+      "stale": false,
+      "text": "sotuna vetudi tarea rúbrica diario nota alumno tarea portafolio rúbrica",
+      "topic": "d3t6",
+      "useful": false,
+      "vault": "delta"
+    }
+  ],
+  "schemaVersion": 1,
+  "seed": 395,
+  "vaults": [
+    {
+      "id": "local",
+      "local": true,
+      "name": "Local",
+      "weight": 1
+    },
+    {
+      "id": "beta",
+      "local": false,
+      "name": "Beta",
+      "weight": 1
+    },
+    {
+      "id": "gamma",
+      "local": false,
+      "name": "Gamma",
+      "weight": 0.8
+    },
+    {
+      "id": "delta",
+      "local": false,
+      "name": "Delta",
+      "weight": 0.5
+    }
+  ]
+}
