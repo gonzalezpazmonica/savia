@@ -472,9 +472,9 @@ teardown() {
 
 @test "SE242-B43: control characters in a header value keep the JSON valid" {
   mk_tree242; start_http
-  { echo "$ALL_HEADERS"; printf 'Server: ngx\ttab\n'; } > "$T242/hdr_"
+  { echo "$ALL_HEADERS"; printf 'Server: ngx\t1.2\n'; } > "$T242/hdr_"
   tls bash "$T242/scripts/web-headers-check.sh" --url "$URL/"
   stop_http
   [ "$status" -eq 0 ]
-  [ "$(jget "$(hdr_report)" "d['server']")" = "ngx tab" ]
+  [[ "$(jget "$(hdr_report)" "[f['message'] for f in d['findings']]")" == *"exposes version: ngx 1.2"* ]]
 }
