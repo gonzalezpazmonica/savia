@@ -27,7 +27,7 @@ TOTAL_TURNS=0
 OK_TURNS=0
 FALSE_TURNS=0
 NA_TURNS=0
-declare -A FS_TOP
+declare -A FS_TOP=()
 
 if [[ -f "$DISCOVERY_LOG" ]]; then
   while IFS= read -r line; do
@@ -63,7 +63,7 @@ fi
 # ── Consolidación dod-gate ───────────────────────────────────────────────────
 DOD_BLOCK=0
 DOD_WARN=0
-declare -A DOD_RULES
+declare -A DOD_RULES=()
 
 if [[ -f "$DOD_LOG" ]]; then
   while IFS= read -r line; do
