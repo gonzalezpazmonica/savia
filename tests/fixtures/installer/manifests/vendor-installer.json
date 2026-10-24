@@ -19,7 +19,8 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "i.sh"
+              "i.sh",
+              "--uninstall"
             ],
             "executable": "sh"
           },

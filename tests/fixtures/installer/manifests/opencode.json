@@ -43,7 +43,7 @@
           ],
           "invocation": {
             "args": [
-              "install",
+              "uninstall",
               "-g",
               "opencode-ai"
             ],
@@ -89,7 +89,7 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "install",
+              "uninstall",
               "-g",
               "opencode-ai"
             ],

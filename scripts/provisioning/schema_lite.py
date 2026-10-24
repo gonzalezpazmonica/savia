@@ -7,23 +7,35 @@ _TYPES = {"object": dict, "array": list, "string": str, "boolean": bool, "null":
 _DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
 
 
+SUPPORTED = {"$defs", "$id", "$ref", "$schema", "additionalProperties", "const", "default", "description", "enum",
+             "format", "items", "minItems", "minLength", "minimum", "pattern", "properties", "required", "title",
+             "type", "uniqueItems"}
+
+
+def _same(a, b):
+    """Equality that does not conflate True with 1 or False with 0."""
+    return type(a) is type(b) and a == b
+
+
 def _is(v, t):
     if t == "integer":
         return isinstance(v, int) and not isinstance(v, bool)
+    if t not in _TYPES:
+        raise ValueError(f"unsupported schema type {t!r}")
     return isinstance(v, _TYPES[t]) and not (t != "boolean" and isinstance(v, bool))
 
 
 def validate(doc, schema, root=None, path="") -> list:
     root = root or schema
-    errs = []
+    errs = [f"{path}: unsupported schema keyword {k!r}" for k in sorted(set(schema) - SUPPORTED)]
     if "$ref" in schema:
         node = root
         for part in schema["$ref"].lstrip("#/").split("/"):
             node = node[part]
-        return validate(doc, node, root, path)
-    if "const" in schema and doc != schema["const"]:
+        return errs + validate(doc, node, root, path)
+    if "const" in schema and not _same(doc, schema["const"]):
         errs.append(f"{path}: expected {schema['const']!r}")
-    if "enum" in schema and doc not in schema["enum"]:
+    if "enum" in schema and not any(_same(doc, e) for e in schema["enum"]):
         errs.append(f"{path}: {doc!r} not in {schema['enum']}")
     if "type" in schema:
         ts = schema["type"] if isinstance(schema["type"], list) else [schema["type"]]

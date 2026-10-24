@@ -11,7 +11,8 @@ from .adapter import HostFacts
 
 SCHEMA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "schemas", "installer")
 SECRET_KEY = re.compile(r"(token|passw(or)?d|secret|api[_-]?key|credential|private[_-]?key)", re.I)
-SECRET_VALUE = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY)")
+SECRET_VALUE = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|://[^/@\s]+:[^/@\s]+@)")
+SHELL_INTERPRETERS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"}
 PRIV_RANK = {"USER": 0, "ELEVATED": 1, "ROOT-ADMIN": 2}
 
 
@@ -66,19 +67,23 @@ def _pick_target(m: dict, host: HostFacts):
 
 def _integrity_problem(t: dict):
     s = t["source"]
-    if s["locator"].lower().startswith(("http://", "ftp://")):
+    if s["kind"] != "package_manager" and not s["locator"].strip().lower().startswith("https://") or s["locator"] != s["locator"].strip():
         return "insecure transport; HTTPS required"
     if s["kind"] in ("signed_installer", "official_release") and not s.get("integrity", {}).get("sha256"):
         return f"{s['kind']} source without sha256"
     return None
 
 
-def _closure(manifests: dict, selection: list, blockers: list) -> list:
+def _closure(manifests: dict, selection: list, blockers: list, installed=()) -> list:
     """Dependency closure in deterministic topological order; cycles/missing deps block."""
     order, state = [], {}
+    missing_ok = set(installed) - set(manifests)  # installed dependency without manifest: nothing to plan
 
     def visit(cid, chain):
+        if cid in missing_ok or state.get(cid) == "missing":
+            return
         if cid not in manifests:
+            state[cid] = "missing"
             blockers.append({"code": "missing_dependency", "component": cid, "message": f"no manifest for {cid} (needed by {chain[-1] if chain else 'selection'})"})
             return
         if state.get(cid) == "done":
@@ -99,17 +104,38 @@ def _closure(manifests: dict, selection: list, blockers: list) -> list:
 
 def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
     blockers, warnings, steps = [], [], []
-    order = _closure(manifests, selection, blockers)
-    present = set(host.installed) | set(order)
+    order = _closure(manifests, selection, blockers, host.installed)
+    selected = set(selection)
+    present = (set(host.installed) | set(order))
     for cid in order:
         m = manifests[cid]
-        for c in sorted(m.get("conflicts", [])):
-            if c in present and c != cid:
-                blockers.append({"code": "conflict", "component": cid, "message": f"conflicts with {c}"})
+        # conflicts in both directions: this manifest vs present, and present manifests vs this component
+        found = {c for c in m.get("conflicts", []) if c in present and c != cid}
+        found |= {o for o in present if o != cid and o in manifests and cid in manifests[o].get("conflicts", [])
+                  and (o in selected or o in order or o in host.installed)}
+        for c in sorted(found):
+            blockers.append({"code": "conflict", "component": cid, "message": f"conflicts with {c}"})
         t = _pick_target(m, host)
+        installed = cid in host.installed
+        if installed:
+            # Nothing will run for this component: skip platform/integrity/privilege blockers.
+            if host.installed[cid] != m["version"]:
+                warnings.append({"code": "version_mismatch", "component": cid, "message": f"installed {host.installed[cid]} differs from manifest {m['version']}; F1 never upgrades"})
+            act = t["actions"]["install"] if t else None
+            steps.append({
+                "order": len(steps) + 1, "component": cid, "version": m["version"], "disposition": "already_installed",
+                "source": {"kind": t["source"]["kind"], "locator": t["source"]["locator"]} if t else {"kind": "installed"},
+                "privilege": act["privilege"] if act else "USER", "reversibility": act["reversibility"] if act else "reversible",
+                "changes": [], "_t": t or {}, "_m": m,
+            })
+            continue
         if t is None:
             blockers.append({"code": "unsupported_platform", "component": cid, "message": f"no target for {host.os}/{host.arch}{'/' + host.distro if host.distro else ''}"})
             continue
+        for aname, a in sorted(t["actions"].items()):
+            exe = a.get("invocation", {}).get("executable", "")
+            if exe.replace("\\", "/").rsplit("/", 1)[-1].lower() in SHELL_INTERPRETERS:
+                warnings.append({"code": "shell_interpreter", "component": cid, "message": f"{aname} runs a shell interpreter ({exe}); needs human review"})
         problem = _integrity_problem(t)
         if problem:
             blockers.append({"code": "integrity", "component": cid, "message": problem})
@@ -120,11 +146,14 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
         if PRIV_RANK[act["privilege"]] > 0 and not host.elevation_available:
             blockers.append({"code": "no_elevation", "component": cid, "message": f"requires {act['privilege']} but the host offers no elevation"})
             continue
+        for aname in ("uninstall", "rollback"):
+            a = t["actions"].get(aname)
+            if a and PRIV_RANK[a["privilege"]] > 0 and not host.elevation_available:
+                warnings.append({"code": "recovery_needs_elevation", "component": cid, "message": f"{aname} requires {a['privilege']} but the host offers no elevation; recovery would not be possible"})
         if act["reversibility"] == "irreversible" and not act.get("compensation", "none") == "none":
             warnings.append({"code": "compensation_on_irreversible", "component": cid, "message": "irreversible action declares compensation; verify it is real"})
-        disp = "already_installed" if cid in host.installed else "install"
         steps.append({
-            "order": len(steps) + 1, "component": cid, "version": m["version"], "disposition": disp,
+            "order": len(steps) + 1, "component": cid, "version": m["version"], "disposition": "install",
             "source": {"kind": t["source"]["kind"], "locator": t["source"]["locator"], **({"sha256": t["source"]["integrity"]["sha256"]} if t["source"].get("integrity", {}).get("sha256") else {})},
             "privilege": act["privilege"], "reversibility": act["reversibility"],
             "changes": sorted(act.get("changes", []), key=lambda c: (c["kind"], c["target"])),

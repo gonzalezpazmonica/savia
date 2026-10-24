@@ -27,7 +27,7 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "install",
+              "remove",
               "-y",
               "git"
             ],
@@ -81,7 +81,7 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "install",
+              "uninstall",
               "--id",
               "Git.Git",
               "-e"

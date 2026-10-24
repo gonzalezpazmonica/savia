@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FX = ROOT / "tests/fixtures/installer"
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from provisioning import state  # noqa: E402
+from provisioning import schema_lite, state  # noqa: E402
 from provisioning.adapter import FixtureAdapter, PlatformAdapter  # noqa: E402
 from provisioning.planner import build_plan, find_secrets, load_manifests, load_schema, validate  # noqa: E402
 
@@ -80,10 +80,23 @@ class ManifestSchema(unittest.TestCase):
             v.validate(bad)
 
 
+class SchemaLite(unittest.TestCase):
+    def test_const_and_enum_do_not_conflate_bool_and_int(self):
+        self.assertTrue(schema_lite.validate(True, {"const": 1}))
+        self.assertTrue(schema_lite.validate(True, {"enum": [1, 2]}))
+        self.assertEqual(schema_lite.validate(1, {"const": 1}), [])
+
+    def test_unsupported_keyword_and_type_fail_loudly(self):
+        self.assertTrue(schema_lite.validate("abc", {"maxLength": 1}))
+        with self.assertRaises(ValueError):
+            schema_lite.validate(1, {"type": "number"})
+
+
 class Planner(unittest.TestCase):
     def test_ubuntu_ready_and_ordered_by_dependencies(self):
         p = plan("ubuntu-x64", "opencode")
-        self.assertEqual(p["status"], "ready")
+        self.assertEqual(p["status"], "ready_with_warnings")  # git 2.40 installed vs manifest 2.45
+        self.assertIn(("git", "version_mismatch"), codes(p, "warnings"))
         order = [s["component"] for s in p["steps"]]
         self.assertLess(order.index("node"), order.index("savia-core"))
         self.assertLess(order.index("savia-core"), order.index("opencode"))
@@ -146,6 +159,64 @@ class Planner(unittest.TestCase):
         self.assertIn(("restart-demo", "manual_source"), codes(p, "warnings"))
         self.assertEqual(p["status"], "ready_with_warnings")
 
+    def test_installed_component_skips_install_blockers(self):
+        # P1: git installed + no elevation must not block on a root install that never runs
+        h = host("ubuntu-noroot")
+        h = type(h)(**{**h.__dict__, "installed": {"git": "2.45"}})
+        p = build_plan(MANIFESTS, h, ["git"])
+        self.assertEqual(p["status"], "ready")
+        self.assertEqual([(s["component"], s["disposition"]) for s in p["steps"]], [("git", "already_installed")])
+        self.assertEqual(p["preview"]["download_bytes"], 0)
+
+    def test_installed_component_without_target_or_sha_does_not_block(self):
+        h = host("fedora-x64")
+        h = type(h)(**{**h.__dict__, "installed": {"git": "2.45"}})
+        p = build_plan(MANIFESTS, h, ["git"])
+        self.assertEqual(p["status"], "ready")
+        self.assertEqual(p["steps"][0]["disposition"], "already_installed")
+        self.assertEqual(validate(p, "installation-plan"), [])
+
+    def test_reverse_conflict_installed_declares_it(self):
+        h = host("ubuntu-x64")
+        h = type(h)(**{**h.__dict__, "installed": {"opencode": "1.2"}})
+        self.assertIn(("opencode-legacy", "conflict"), codes(build_plan(MANIFESTS, h, ["opencode-legacy"])))
+
+    def test_installed_dependency_without_manifest_is_not_missing(self):
+        m = copy.deepcopy(MANIFESTS)
+        m["git"]["depends_on"] = ["ghost"]
+        h = host("ubuntu-x64")
+        h = type(h)(**{**h.__dict__, "installed": {"git": "2.45", "ghost": "1"}})
+        self.assertNotIn(("ghost", "missing_dependency"), codes(build_plan(m, h, ["git"])))
+
+    def test_missing_dependency_reported_once_for_shared_parent(self):
+        m = copy.deepcopy(MANIFESTS)
+        m["git"]["depends_on"] = ["ghost"]
+        m["node"]["depends_on"] = ["ghost"]
+        p = plan("ubuntu-x64", "git", "node", manifests=m)
+        self.assertEqual([b["component"] for b in p["blockers"]].count("ghost"), 1)
+
+    def test_non_https_schemes_block(self):
+        for loc in ["file:///tmp/x.tgz", "git://example.invalid/x", "smb://h/x", " http://example.invalid/x", "http://example.invalid/x"]:
+            m = copy.deepcopy(MANIFESTS)
+            m["savia-core"]["targets"][0]["source"]["locator"] = loc
+            self.assertIn(("savia-core", "integrity"), codes(plan("ubuntu-x64", "savia-core", manifests=m)), loc)
+
+    def test_uninstall_is_never_a_copy_of_install(self):
+        for cid, m in MANIFESTS.items():
+            for t in m["targets"]:
+                a = t["actions"]
+                self.assertNotEqual(a["install"]["invocation"], a["uninstall"]["invocation"], cid)
+
+    def test_shell_interpreter_and_recovery_elevation_warn(self):
+        p = plan("ubuntu-x64", "vendor-installer")
+        self.assertIn(("vendor-installer", "shell_interpreter"), codes(p, "warnings") | codes(p))
+        h = host("ubuntu-noroot")
+        h = type(h)(**{**h.__dict__, "elevation_available": False})
+        m = copy.deepcopy(MANIFESTS)
+        t = m["opencode"]["targets"][0]
+        t["actions"]["uninstall"]["privilege"] = "ROOT-ADMIN"
+        self.assertIn(("opencode", "recovery_needs_elevation"), codes(build_plan(m, h, ["opencode"]), "warnings"))
+
     def test_adapter_execution_is_out_of_scope(self):
         with self.assertRaises(NotImplementedError):
             FixtureAdapter(str(FX / "hosts/ubuntu-x64.json")).invoke({"executable": "true", "args": []})
@@ -156,6 +227,8 @@ class SecretsAndReceipt(unittest.TestCase):
         self.assertEqual(find_secrets({"a": {"api_key": "x"}}), ["$.a.api_key"])
         self.assertTrue(find_secrets({"u": "ghp_" + "A" * 30}))
         self.assertEqual(find_secrets(plan("ubuntu-x64", "opencode")), [])
+        self.assertTrue(find_secrets({"locator": "https://user:pw@example.invalid/x"}))
+        self.assertEqual(find_secrets({"locator": "https://example.invalid/a@b"}), [])
 
     @staticmethod
     def receipt():
@@ -216,7 +289,7 @@ class Cli(unittest.TestCase):
     def test_exit_codes(self):
         ok = self.run_cli("ubuntu-x64", "opencode")
         self.assertEqual(ok.returncode, 0, ok.stderr)
-        self.assertEqual(json.loads(ok.stdout)["status"], "ready")
+        self.assertEqual(json.loads(ok.stdout)["status"], "ready_with_warnings")
         self.assertEqual(self.run_cli("windows-arm64", "opencode").returncode, 2)
         self.assertEqual(self.run_cli("nope", "git").returncode, 1)
 

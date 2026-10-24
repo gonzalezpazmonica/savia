@@ -59,10 +59,10 @@
           "compensation": "rollback",
           "invocation": {
             "args": [
-              "-xzf",
-              "savia-core-1.0.tar.gz"
+              "-rf",
+              "savia-core-1.0"
             ],
-            "executable": "tar"
+            "executable": "rm"
           },
           "privilege": "USER",
           "reversibility": "reversible"
@@ -123,10 +123,10 @@
           "compensation": "rollback",
           "invocation": {
             "args": [
-              "-xf",
-              "savia-core-1.0.zip"
+              "-rf",
+              "savia-core-1.0"
             ],
-            "executable": "tar"
+            "executable": "rm"
           },
           "privilege": "USER",
           "reversibility": "reversible"

@@ -21,7 +21,7 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "install",
+              "uninstall",
               "-g",
               "opencode-legacy"
             ],

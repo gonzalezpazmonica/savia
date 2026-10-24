@@ -21,7 +21,7 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "install",
+              "remove",
               "-y",
               "nodejs"
             ],
@@ -75,7 +75,7 @@
         "uninstall": {
           "invocation": {
             "args": [
-              "install",
+              "uninstall",
               "--id",
               "OpenJS.NodeJS",
               "-e"
