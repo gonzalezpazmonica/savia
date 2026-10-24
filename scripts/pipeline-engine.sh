@@ -20,7 +20,6 @@ shift 2>/dev/null || true
 PIPELINE_NAME=$(grep '^name:' "$PIPELINE_FILE" | head -1 | sed 's/name: *"//;s/"$/;s/^ *//')
 RUN_ID=$(date +%Y%m%d-%H%M%S)
 OUTPUT_DIR="output/pipeline-runs/${RUN_ID}"
-mkdir -p "$OUTPUT_DIR"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "Pipeline: ${PIPELINE_NAME:-$(basename "$PIPELINE_FILE")}"
@@ -58,6 +57,12 @@ while IFS= read -r line; do
     esac
   fi
 done < "$PIPELINE_FILE"
+
+if [ "${#STAGES[@]}" -eq 0 ]; then
+  echo "ERROR: no stages found in $PIPELINE_FILE" >&2
+  exit 1
+fi
+mkdir -p "$OUTPUT_DIR"
 
 # ── Execute stages ──
 declare -A STAGE_STATUS
