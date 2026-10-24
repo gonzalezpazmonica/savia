@@ -101,8 +101,8 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
       | grep -E "^[+-].*\b(def|func|function|class|fn|sub|public|private|protected|static)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*|^[+-][a-zA-Z_][a-zA-Z0-9_]*\(\)" \
       | grep -vE "^[+-]{2}" \
       | grep -oE "(def|func|function|class|fn|sub|public|private|protected|static)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*\(\)" \
+      | sed -E 's/\(\)$//' \
       | grep -oE "[a-zA-Z_][a-zA-Z0-9_]*$" \
-      | sed -E 's/\(\)//' \
       | grep -vE "^(def|func|function|class|fn|sub|main|__init__|setup|teardown|run|start|stop|init|__main__)$" \
       | grep -vE "^(and|or|not|if|else|elif|for|while|return|import|from|class|def|with|try|except|in|is|lambda)$" \
       | sort -u
@@ -296,8 +296,8 @@ scan_deps() {
       # Determine relation type
       local rel="imports"
       local content
-      content=$(cat "$ref_clean" 2>/dev/null || true)
-      if echo "$content" | grep -qE "(source|\.) \.*${basename}"; then
+      content=$(cat "$ROOT/$ref_clean" 2>/dev/null || true)
+      if echo "$content" | grep -qE "(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*${basename}"; then
         rel="imports"
       elif echo "$content" | grep -qE "(require|import).*${basename}"; then
         rel="imports"
@@ -316,7 +316,8 @@ scan_deps() {
     [[ ${#queue[@]} -gt 50 ]] && break
   done
 
-  printf '%s\n' "${results[@]}"
+  [[ ${#results[@]} -gt 0 ]] && printf '%s\n' "${results[@]}"
+  return 0
 }
 
 # ── Calculate risk score ──
@@ -426,7 +427,7 @@ JSON
     printf "║  Summary: %d files impacted, %d direct, %d transitive             ║\n" \
       "${#results[@]}" "$direct" "$transitive"
     printf "║  Risk score: %s/100 (%-8s)                              ║\n" \
-      "$rscore" "$(risk_grade "$rscore")" " "
+      "$rscore" "$(risk_grade "$rscore")"
     echo "╚══════════════════════════════════════════════════════════════════╝"
   fi
 
