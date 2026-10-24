@@ -72,7 +72,12 @@ joined() {
 # lleve --yes/--force, o un instalador que nunca se permite (npm -g, pip, curl|sh).
 has_install_without_dry_run() {
   local setup_re='(npx|npm exec|pnpm dlx|bunx|yarn dlx|rea-agents[^[:space:]]*|(^|[[:space:]])rea).*[[:space:]]setup'
-  joined "$1" | grep -E "$setup_re" | grep -qvE 'setup[[:space:]]+--dry-run' && return 0
+  local line
+  # Cada "setup" de la linea debe ir seguido de --dry-run: "setup --dry-run && ... setup" no vale.
+  while IFS= read -r line; do
+    [ "$(grep -oE '(^|[[:space:]])setup([[:space:]]|$)' <<<"$line" | wc -l)" -gt \
+      "$(grep -oE '(^|[[:space:]])setup[[:space:]]+--dry-run' <<<"$line" | wc -l)" ] && return 0
+  done < <(joined "$1" | grep -E "$setup_re")
   joined "$1" | grep -E "$setup_re" | grep -qE 'setup.*--(yes|force)' && return 0
   grep -qE 'npm (i|install) (-g|--global)|pip3? install|(curl|wget)[^|]*\|[[:space:]]*(ba|z)?sh' "$1"
 }
@@ -134,7 +139,8 @@ has_evidence_headings() {
 }
 
 @test "AC1: skill-catalog-auditor sin FAIL para la skill" {
-  [ -f "$REPO_ROOT/scripts/skill-catalog-auditor.sh" ] || skip "auditor ausente"
+  # Sin auditor no hay comprobacion: falla en vez de saltar (un skip seria un verde vacio).
+  [ -f "$REPO_ROOT/scripts/skill-catalog-auditor.sh" ]
   run bash "$REPO_ROOT/scripts/skill-catalog-auditor.sh"
   # La skill debe aparecer con estado OK o WARN; si el auditor revienta o no
   # la lista, no hay linea y el test falla.
@@ -208,6 +214,24 @@ cita_pendiente() {
       [ "$o" = "$c" ] && continue
       cita_pendiente "$o" "$TMP/s.md" || { echo "falso rojo en $o al quitar $c" >&2; return 1; }
     done
+  done
+}
+
+marcas() {
+  tr '\n' ' ' < "$1" | tr -s ' ' | grep -o '(pendiente de verificación con legal-compliance)' | wc -l
+}
+
+# Borrar la marca entera (sin dejar parentesis) es el caso que un helper sobre el
+# texto unido no veia: la regex cruzaba al bullet siguiente y tomaba su marca.
+@test "AC2 (negativo): borrar la marca entera de una cita no la valida con la del bullet siguiente" {
+  local c
+  for c in "art. 100.3 LPI" "art. 100.5"; do
+    C="$c" perl -CSD -Mutf8 -0pe 's/(\Q$ENV{C}\E[^\n]*(?:\n[ \t]+[^\n]*)*?)\s*\(pendiente\s+de\s+verificación\s+con\s+legal-compliance\)/$1/' "$SKILL" > "$TMP/s.md"
+    # La mutacion quita exactamente una marca.
+    [ "$(marcas "$TMP/s.md")" -eq "$(( $(marcas "$SKILL") - 1 ))" ] || {
+      echo "la mutacion no quito una sola marca para $c" >&2; return 1; }
+    run cita_pendiente "$c" "$TMP/s.md"
+    [ "$status" -eq 1 ] || { echo "no falla sin marca: $c" >&2; return 1; }
   done
 }
 
@@ -296,6 +320,9 @@ cita_pendiente() {
   [ "$status" -eq 0 ]
   printf 'npx rea-agents@6.7.0 \\\n  setup --yes\n' > "$TMP/d.md"
   run has_install_without_dry_run "$TMP/d.md"
+  [ "$status" -eq 0 ]
+  printf 'npx rea-agents@6.7.0 setup --dry-run && npx rea-agents@6.7.0 setup\n' > "$TMP/e.md"
+  run has_install_without_dry_run "$TMP/e.md"
   [ "$status" -eq 0 ]
 }
 
