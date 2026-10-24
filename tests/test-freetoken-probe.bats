@@ -40,12 +40,23 @@ assert d['verdict'] in ('viable','inviable','inviable-en-este-hardware'), d['ver
 }
 
 @test "probe CRIT-001: solo descarga al pedir --install, nunca en read-only" {
-  # El probe read-only no ejecuta curl de descarga
-  run grep -nE "curl.*uv-install|rm -rf|wget" scripts/freetoken-probe.sh
-  # la única descarga es condicional bajo --install y la guardamos con grep
-  if [[ "$output" != *"--install"* ]]; then
-    [[ -z "$output" ]] || true
-  fi
+  # Read-only run with fake downloaders on PATH: none may be invoked.
+  local fakebin="$BATS_TEST_TMPDIR/fakebin" calls="$BATS_TEST_TMPDIR/calls.log"
+  mkdir -p "$fakebin"
+  for t in curl wget uv; do
+    printf '#!/bin/sh\necho "%s $*" >> "%s"\nexit 1\n' "$t" "$calls" > "$fakebin/$t"
+    chmod +x "$fakebin/$t"
+  done
+  HOME="$BATS_TEST_TMPDIR/home" PATH="$fakebin:$PATH" run bash scripts/freetoken-probe.sh
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"VERDICTO:"* ]]
+  [ ! -s "$calls" ]
+  # Static guard: the only download line sits after the --install branch opens.
+  guard=$(grep -nE 'DO_INSTALL" -eq 1' scripts/freetoken-probe.sh | head -1 | cut -d: -f1)
+  dl=$(grep -nE 'curl.*uv-install' scripts/freetoken-probe.sh | head -1 | cut -d: -f1)
+  [ -n "$guard" ]
+  [ -n "$dl" ]
+  [ "$dl" -gt "$guard" ]
   # sanidad: no borra y no escribe en CRITERIO/CONSTITUCION
   run grep -nE "CRITERIO|CONSTITUCION" scripts/freetoken-probe.sh
   [[ -z "$output" ]]
