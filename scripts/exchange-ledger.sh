@@ -91,7 +91,12 @@ cmd_verify() {
     prev_hash="$e_hash"
   done < "$LEDGER"
 
-  [[ "$broken" -eq 0 ]] && echo "VERIFY: chain INTACT ($line entries)" || echo "VERIFY: chain BROKEN"
+  if [[ "$broken" -eq 0 ]]; then
+    echo "VERIFY: chain INTACT ($line entries)"
+  else
+    echo "VERIFY: chain BROKEN"
+    exit 1
+  fi
 }
 
 cmd_show() {
