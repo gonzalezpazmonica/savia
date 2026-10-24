@@ -32,7 +32,7 @@ setup() {
 
 @test "T05: markdown output has thermal receipt header" {
   run bash "$SCRIPT" --staged
-  [[ "$output" =~ "THERMAL RECEIPT" ]] || true
+  [[ "$output" =~ "THERMAL RECEIPT" ]]
 }
 
 @test "T06: json format outputs valid JSON" {
@@ -57,7 +57,8 @@ setup() {
 
 @test "T09: branch mode with HEAD ref works" {
   run bash "$SCRIPT" --branch "HEAD~1..HEAD" 2>&1
-  [[ "$output" =~ "THERMAL RECEIPT" ]] || [[ "$output" =~ "ERROR" ]] || true
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "THERMAL RECEIPT" ]]
 }
 
 @test "T10: help flag works" {

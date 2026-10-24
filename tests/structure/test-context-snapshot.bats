@@ -73,8 +73,9 @@ print('OK')
 
 @test "snapshot load fails gracefully when no snapshot exists" {
   run bash -c "echo '' | HOME='$TMPDIR' $ROOT/scripts/context-snapshot.sh load 2>&1"
-  # Should not crash even if no snapshot file
-  [[ "$status" -eq 0 ]] || [[ "$output" == *"No snapshot"* ]] || [[ "$output" == *"error"* ]] || true
+  [ "$status" -eq 0 ]
+  # El snapshot vive en el repo (no bajo HOME): stale o fresco, nunca error
+  [[ "$output" == *"No fresh snapshot"* || "$output" == *'"timestamp"'* ]]
 }
 
 @test "snapshot save handles non-git directory" {
