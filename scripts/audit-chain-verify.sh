@@ -51,7 +51,11 @@ for chain_file in "$AUDIT_DIR"/*.jsonl; do
     #    jq -c añade newline final; el append hashea sin newline (printf '%s').
     CALC="$(printf '%s' "$line" | jq -c 'del(.entry_hash) | del(.signature)' 2>/dev/null | tr -d '\n' | sha256sum | cut -d' ' -f1)"
     DECL="$(printf '%s' "$line" | jq -r '.entry_hash // empty' 2>/dev/null | sed 's/^sha256://')"
-    if [[ -n "$DECL" && "$CALC" != "$DECL" ]]; then
+    if [[ -z "$DECL" ]]; then
+      # Una entrada sin entry_hash permitiría editarla sin dejar rastro.
+      echo "CORRUPT [$CHAIN_ID]: entrada sin entry_hash en seq $SEQ_ACTUAL"
+      FAILURES=$((FAILURES+1))
+    elif [[ "$CALC" != "$DECL" ]]; then
       echo "CORRUPT [$CHAIN_ID]: entry_hash no coincide en seq $SEQ_ACTUAL"
       FAILURES=$((FAILURES+1))
     fi
