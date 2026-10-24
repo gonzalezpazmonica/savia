@@ -57,6 +57,11 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | 2 (entorno), 3 (UNVERIFIED) | `unknown` |
 | `pre-push-security-gate.sh` | 0 con gitleaks / 1 | `clean` / `findings` |
 | | 0 sin gitleaks | `unknown` (registrado; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
+| `security-scan.sh`, `vuln-scan.sh` | 0 sin `--ci` | según la línea `gate-result` |
+| | `--ci`: 0 / 1 | `clean` / `findings` |
+| | `--ci`: 0 con aviso `WARN` | `unknown` (grep ilegible o sin hooks; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
+| `mobile-security-scan.sh` | 0 con informe | según `gate-result` (también en el JSON: `result`, `gaps`); sin apktool, descompilación vacía, modo `dynamic` o informe MobSF sin triaje ⇒ `unknown` |
+| | 1 | argumentos inválidos |
 | `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 | `unknown` (python3 ausente) o error de uso |
 | `security-audit-all.sh` | 0 / 1 | `clean` (nada sobre el umbral `--fail-on`) / `findings` (algo sobre el umbral, aunque haya huecos) |

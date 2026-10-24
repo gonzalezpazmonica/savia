@@ -29,14 +29,15 @@ teardown() {
 }
 
 @test "pre-compact-backup.sh: extracts decisions from input" {
-    # Create memory-store.sh accessible
-    mkdir -p "$PROJECT_ROOT/scripts"
-    cp "$BATS_TEST_DIRNAME/../../scripts/memory-store.sh" "$PROJECT_ROOT/scripts/"
-    cp "$BATS_TEST_DIRNAME/../../scripts/memory-save.sh" "$PROJECT_ROOT/scripts/"
-    cp "$BATS_TEST_DIRNAME/../../scripts/memory-search.sh" "$PROJECT_ROOT/scripts/"
-    echo '{"text":"We decided to use PostgreSQL for the database"}' | bash "$HOOKS_DIR/pre-compact-backup.sh"
-    # Should have created a session summary if it found "decided"
-    [ -f "$STORE_FILE" ] || true  # May not create if pattern not strong enough
+    export HOME="$TMPDIR/home"
+    export CLAUDE_PROJECT_DIR="$TMPDIR/proj"
+    mkdir -p "$HOME" "$CLAUDE_PROJECT_DIR"
+    run bash -c "echo '{\"text\":\"We decided to use PostgreSQL for the database\"}' | bash '$HOOKS_DIR/pre-compact-backup.sh'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Pre-compact: "* ]]
+    hot=$(find "$HOME/.claude/projects" -name session-hot.md)
+    [ -n "$hot" ]
+    grep -q "Decisions: .*PostgreSQL" "$hot"
 }
 
 @test "post-tool-failure-log.sh: exists and valid bash" {

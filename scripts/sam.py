@@ -135,6 +135,18 @@ def _baseline(root: Path, events: Path, receipts: Path | None) -> int:
     return 0
 
 
+def _surface(root: Path, surface_id: str | None) -> int:
+    from sam_surface import load_manifests, resolve_surface
+
+    manifests = load_manifests(root)
+    if surface_id is None:
+        print(f"SAM SURFACE: VALID ({len(manifests['runtimes'])} runtimes, "
+              f"{len(manifests['surfaces'])} surfaces)")
+        return 0
+    sys.stdout.buffer.write(canonical_json(resolve_surface(manifests, surface_id)) + b"\n")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="SE-397 Savia Architecture Model")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -151,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
     baseline = _root_parser(commands, "baseline", "aggregate local operational traces")
     baseline.add_argument("--events", type=Path, required=True)
     baseline.add_argument("--receipts", type=Path)
+    surface = _root_parser(commands, "surface", "validate runtime/surface manifests (SE-398 F1)")
+    surface.add_argument("--resolve", metavar="SURFACE_ID")
     args = parser.parse_args(argv)
     root = args.root.resolve()
     try:
@@ -160,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
             return _check(root)
         if args.command == "impact":
             return _impact(root, args.node, args.depth)
+        if args.command == "surface":
+            return _surface(root, args.resolve)
         if args.command == "trace":
             return _trace(root, args.events, args.receipts)
         if args.command == "baseline":
