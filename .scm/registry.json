@@ -20458,6 +20458,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "claude"
+      ],
+      "id": "skill:.claude/skills/reverse-engineering-sovereignty/SKILL",
+      "intents": [
+        "autorizada",
+        "comprobar",
+        "depende",
+        "externo",
+        "hace"
+      ],
+      "kind": "skill",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": ".claude/skills/reverse-engineering-sovereignty/SKILL.md",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "opencode"
       ],
       "id": "script:scripts/roadmap",
@@ -29577,7 +29598,7 @@
       "tests": []
     }
   ],
-  "content_hash": "2e97d0166bf6",
+  "content_hash": "9c5881b0df13",
   "deferred_kinds": [
     "rule",
     "hook"
