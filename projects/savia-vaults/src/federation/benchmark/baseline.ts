@@ -36,11 +36,16 @@ class LexIndex {
 const tokenize = (s: string): string[] => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const contentHash = (s: string): string => sha256(s).slice(0, 8);
 
+// Vista del router: sin relevant/useful/forbidden, para que el challenger no pueda ver etiquetas.
+export type RouteView = Pick<BenchQuery, 'id' | 'query' | 'allowedVaults' | 'unhealthyVaults'>;
+
 export interface BaselineOptions {
   profile?: BenchProfile;
   // Solo pruebas del propio benchmark: fuerzan fallos para demostrar que las métricas pueden fallar.
   cacheTtlMs?: number;
   tamperResult?: (r: FederatedSearchResult) => FederatedSearchResult;
+  // Challenger A/B (R04): estrecha los destinos ANTES de ejecutar; solo recibe la consulta, no sus etiquetas.
+  route?: (q: RouteView) => string[];
 }
 
 // Ejecuta cada consulta cold (motor nuevo) y warm (misma consulta, mismo motor -> cache).
@@ -69,7 +74,7 @@ export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, op
       for (const v of corpus.vaults.filter(x => !x.local)) registry.add({ id: v.id, name: v.name, url: 'http://bench.invalid', timeout: 3000, enabled: true, weight: v.weight, tags: [], status: q.unhealthyVaults.includes(v.id) ? 'unhealthy' : 'healthy' });
       const local = { search: ({ query, maxResults }: { query: string; maxResults: number }) => indexes.get('local')!.search(query, maxResults) } as unknown as SearchEngine;
       const engine = new FederatedSearchEngine(local, registry, { client, maxTotalResults: 50, cacheTtlMs: opts.cacheTtlMs });
-      const ctx: FederatedSearchContext = { principalId: 'bench-principal', policyRevision: 'p1', contentRevision: dataset.corpusSha256.slice(0, 12), allowedDomeIds: q.allowedVaults };
+      const ctx: FederatedSearchContext = { principalId: 'bench-principal', policyRevision: 'p1', contentRevision: dataset.corpusSha256.slice(0, 12), allowedDomeIds: opts.route ? opts.route({ id: q.id, query: q.query, allowedVaults: [...q.allowedVaults], unhealthyVaults: [...q.unhealthyVaults] }) : q.allowedVaults };
       for (const cache of ['cold', 'warm'] as const) {
         calls = 0; callLatencies = [];
         const res = await engine.search(q.query, ctx, profile.k);
