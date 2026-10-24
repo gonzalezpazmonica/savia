@@ -1006,14 +1006,13 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   no_request
 }
 
-@test "D6 boundary: una etiqueta con espacios se borra entera y nunca la palabra suelta («bug»)" {
+@test "D6 boundary: solo se borran etiquetas merge-sprint:<12 hex>; ni «merge-sprint:x bug», ni comodines, ni «bug»" {
   mkpr 170 "scripts/ch.sh"; review 170 APPROVE correctness
-  printf 'merge-sprint:x bug\nbug\nmerge-sprint:*\n' > "$FAKE/labels"
+  printf 'merge-sprint:x bug\nbug\nmerge-sprint:*\nmerge-sprint:bbbbbbbbbbbb\n' > "$FAKE/labels"
   run bash "$SCRIPT" plan
   [ "$status" -eq 0 ]
-  grep -q '^label delete merge-sprint:x bug -R' "$FAKE/calls"
-  grep -q '^label delete merge-sprint:\* -R' "$FAKE/calls"
-  ! grep -q '^label delete bug' "$FAKE/calls" || false
+  grep -q '^label delete merge-sprint:bbbbbbbbbbbb -R' "$FAKE/calls"
+  [ "$(grep -c '^label delete' "$FAKE/calls")" -eq 1 ]
 }
 
 @test "AC-23 boundary: el workflow solo pausa etiquetas merge-sprint:<12 hex>, no cualquier merge-sprint:*" {
@@ -1034,4 +1033,68 @@ JSON
   [ "$status" -eq 0 ]
   grep -q '^pr view 171 -R [^ ]* --json state -q .state$' "$FAKE/calls"
   ! grep -q '^pr view 171 --json state' "$FAKE/calls" || false
+}
+
+# ── v8: P2 baratos de la segunda revisión independiente ──
+
+@test "P2 block: si f5 close falla tras el merge, no se escribe MERGED ni se cuenta (sin doble recuento al reconciliar)" {
+  mkpr 180 "scripts/da.sh"; review 180 APPROVE correctness
+  echo 'echo OPEN > "$FAKE/180.state"' > "$FAKE/180.on_merge"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"f5_close"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  ! grep -q '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
+  [ "$(jq -r .merged "$MERGE_SPRINT_HOME/grant.json")" -eq 0 ]
+}
+
+@test "P2 boundary: si la consulta de isDraft falla (vacío) no se llama a ready ni el PR vuelve a Draft" {
+  mkpr 181 "scripts/db.sh"; review 181 APPROVE correctness; echo 1 > "$FAKE/181.reject"; : > "$FAKE/181.draft"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  grep -q '"reason":"merge_rechazado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  ! grep -q 'pr ready 181' "$FAKE/calls" || false
+  ! grep -q 'pr ready 181 .*--undo' "$FAKE/calls" || false
+}
+
+@test "P2 positivo: PR en Draft sigue saliendo de Draft con ready antes del merge" {
+  mkpr 182 "scripts/dc.sh"; review 182 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  grep -q 'pr ready 182' "$FAKE/calls"
+  grep -qx 182 "$FAKE/merged"
+}
+
+@test "P2 block: plan no admite un PR cuya base no es la configurada" {
+  mkpr 183 "scripts/dd.sh"; review 183 APPROVE correctness; echo release > "$FAKE/183.base"
+  mkpr 184 "scripts/de.sh"; review 184 APPROVE correctness
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"#183"* ]]
+  [[ "$output" == *"#184(t"* ]]
+}
+
+@test "P2 boundary: grant.json conserva modo 0600 tras actualizar el contador" {
+  mkpr 185 "scripts/df.sh"; review 185 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "$MERGE_SPRINT_HOME/grant.json")" = 600 ]
+}
+
+@test "P2 boundary: la equivalencia del head se calcula contra origin/<BASE>, no contra origin/main fijo" {
+  export MERGE_SPRINT_BASE=trunk
+  G branch trunk main; G push -q origin trunk
+  G switch -q -c feat main; mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"; echo f > "$MERGE_SPRINT_GIT_ROOT/scripts/fa.sh"; G add scripts/fa.sh; G commit -qm feat
+  local r; r=$(G rev-parse HEAD)
+  G switch -q trunk; echo t > "$MERGE_SPRINT_GIT_ROOT/scripts/tb.sh"; G add scripts/tb.sh; G commit -qm trunk-avanza; G push -q origin trunk
+  G switch -q main; echo m > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G commit -qam main-diverge; G push -q origin main
+  G switch -q feat; G merge -q --no-edit trunk
+  local h; h=$(G rev-parse HEAD)
+  echo "$h" > "$FAKE/186.head"; echo "scripts/fa.sh scripts/tb.sh" > "$FAKE/186.files"; echo trunk > "$FAKE/186.base"
+  echo "VERDICT: APPROVE pr=186 sha=$r role=correctness tier=2 reviewer=rev-agent author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0" > "$TMPDIR_T/rev186.md"
+  bash "$SCRIPT" review-register 186 "$TMPDIR_T/rev186.md"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"#186(t"* ]]
 }

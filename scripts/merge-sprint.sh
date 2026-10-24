@@ -149,7 +149,7 @@ clean_labels() {  # borra etiquetas merge-sprint:* de sprints muertos (kill -9 n
     [[ -f "$GRANT" ]] && keep="merge-sprint:$(grant_field digest | cut -c1-12)"
     # Una etiqueta por línea, sin partir en palabras ni expandir comodines: «merge-sprint:x bug» no borra «bug».
     while IFS= read -r l; do
-      [[ "$l" == merge-sprint:* && "$l" != "$keep" ]] || continue
+      [[ "$l" =~ ^merge-sprint:[0-9a-f]{12}$ && "$l" != "$keep" ]] || continue
       $GH label delete "$l" -R "$REPO" --yes >/dev/null 2>&1 && ledger event=LABEL_CLEAN label="$l"
     done < <($GH label list -R "$REPO" --search merge-sprint: --limit 200 --json name --jq '.[].name' 2>/dev/null) ) 9>"$HOME_MS/run.lock"
 }
@@ -176,6 +176,8 @@ cmd_plan() {
       head="$found"
     fi
     local meta files; meta=$(pr_meta "$n") || continue
+    # Los checks congelados son los de $BASE: un PR hacia otra rama no los tiene, no entra al manifiesto.
+    [[ "${meta%% *}" == "$BASE" ]] || continue
     files=$($GH pr diff "$n" -R "$REPO" --name-only 2>/dev/null) && [[ -n "$files" ]] || continue
     out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o),"files":sorted(sys.argv[6].split())}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta" "$files")
   done
@@ -210,7 +212,7 @@ grant_set_merged() {  # el contador se actualiza solo si el grant sigue vigente;
   # Bajo el mismo cerrojo que revoke: sin él, un revoke entre la lectura y la escritura recrearía grant.json.
   ( flock -x 7 || exit 1
     [[ -f "$GRANT" ]] || exit 0
-    python3 -c 'import json,os,sys; d=json.load(open(sys.argv[1])); d["merged"]=int(sys.argv[2]); json.dump(d,open(sys.argv[1]+".tmp","w")); os.replace(sys.argv[1]+".tmp",sys.argv[1])' "$GRANT" "$1"
+    python3 -c 'import json,os,sys; d=json.load(open(sys.argv[1])); d["merged"]=int(sys.argv[2]); t=sys.argv[1]+".tmp"; json.dump(d,os.fdopen(os.open(t,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600),"w")); os.replace(t,sys.argv[1])' "$GRANT" "$1"
   ) 7>"$GRANT.lock"
 }
 
@@ -233,7 +235,7 @@ is_derived() { grep -qE "$DERIVED_RE" <<<"$1"; }
 equiv_tree() {  # equiv_tree <sha_revisado> <sha_actual> → árbol T = merge(revisado, main integrado en el actual)
   git -C "$GITROOT" cat-file -e "$1^{commit}" 2>/dev/null && git -C "$GITROOT" cat-file -e "$2^{commit}" 2>/dev/null || return 1
   local m tree
-  m=$(git -C "$GITROOT" merge-base "$2" origin/main 2>/dev/null) || return 1
+  m=$(git -C "$GITROOT" merge-base "$2" "origin/$BASE" 2>/dev/null) || return 1
   # Conflictos solo admisibles en derivados: merge-tree escribe el árbol aunque haya conflictos.
   tree=$(git -C "$GITROOT" merge-tree --write-tree --name-only "$1" "$m" 2>/dev/null | head -1)
   [[ -n "$tree" ]] && echo "$tree"
@@ -359,7 +361,7 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
   local meta; meta=$(pr_meta "$pr") || anomaly pr_ilegible "$pr"
   [[ "$meta" == "$(python3 -c 'import json,sys; p=json.loads(sys.argv[1]); print(p["base_ref"],p["head_repo"],p["reopens"])' "$(mf_entry "$pr")")" ]] || anomaly pr_alterado "$pr"
   # Solo vuelve a Draft al aparcarse lo que este run sacó de Draft (gh pr ready sale con 0 aunque no lo fuera).
-  if [[ "$($GH pr view "$pr" -R "$REPO" --json isDraft --jq .isDraft 2>/dev/null)" != false ]]; then
+  if [[ "$($GH pr view "$pr" -R "$REPO" --json isDraft --jq .isDraft 2>/dev/null)" == true ]]; then
     $GH pr ready "$pr" -R "$REPO" >/dev/null 2>&1 && READIED="$READIED $pr"
   fi
   # La reserva lleva el SHA solicitado: la reconciliación solo acepta un merge de ese SHA (AC-26).
@@ -372,10 +374,12 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
 }
 
 record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → ledger, reserva cerrada y CI de main
+  # Primero se cierra la reserva: si close falla (latencia de la API), el siguiente run reconcilia y registra
+  # el merge una sola vez; con el ledger y el contador antes, se contaría dos veces.
+  f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
   MERGED=$((MERGED+1)); grant_set_merged "$MERGED"
   local mc; mc=$($GH pr view "$1" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
   ledger event=MERGED pr="$1" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"}
-  f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
   echo "  MERGED #$1 → ${mc:0:8}"
   main_ci_gate "$1" "$mc"
 }
