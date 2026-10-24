@@ -95,7 +95,11 @@ print('ok')
 }
 
 @test "edge case: nonexistent store file created on first save" {
-  rm -f "$STORE_FILE"
-  bash "$STORE" save --type decision --title "create-new" --content "first entry" 2>/dev/null || true
-  [ -f "$STORE_FILE" ] || true
+  # memory-store.sh derives its own store path from PROJECT_ROOT (STORE_FILE env is ignored)
+  local store="$PROJECT_ROOT/output/.memory-store.jsonl"
+  [ ! -e "$store" ]
+  run bash "$STORE" save --type decision --title "create-new" --content "first entry"
+  [ "$status" -eq 0 ]
+  [ -f "$store" ]
+  grep -q "create-new" "$store"
 }
