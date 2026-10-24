@@ -19,6 +19,12 @@
 #   1 — findings at or above fail-on threshold
 #   2 — usage error
 #
+# SE-453: resultado clean|findings|unknown. En texto, la última línea de stdout es
+# `gate-result: {...}`; con --json, los campos `result` y `gaps`. Un sub-escáner que sale ≥ 2,
+# no deja JSON legible o informa `result: unknown` es un hueco, nunca cero hallazgos.
+# Con hueco y sin hallazgos el exit sigue en 0 (D3: ciclo de aviso, registrado en
+# output/unmeasured-gates.jsonl); SAVIA_GATE_UNKNOWN=block lo convierte en 1.
+#
 # Ref: docs/rules/domain/security-scanners.md
 # Safety: read-only, invokes read-only scanners. set -uo pipefail.
 
@@ -26,6 +32,10 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+GAPS=()
+add_gap() { [[ " ${GAPS[*]} " == *" $1 "* ]] || GAPS+=("$1"); }
 
 JSON=0
 FAIL_ON="HIGH"
@@ -76,17 +86,34 @@ TOTAL_MED=0
 TOTAL_LOW=0
 SCANNER_RESULTS=()
 
+# run_scanner <nombre> <orden...> — ejecuta un sub-escáner en modo JSON y suma sus severidades.
+# El exit code 1 (hallazgos) no invalida el JSON: se lee igual. Exit ≥ 2, JSON ilegible o
+# `result: unknown` ⇒ hueco (con los huecos propios del sub-escáner si los declara).
 run_scanner() {
-  local name="$1" cmd="$2"
-  local output
-  output=$(eval "$cmd" 2>/dev/null || echo '{}')
-  # Parse severity counts from JSON
-  local c h m l
-  c=$(echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('critical', 0))" 2>/dev/null || echo 0)
-  h=$(echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('high', 0))" 2>/dev/null || echo 0)
-  m=$(echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('medium', 0))" 2>/dev/null || echo 0)
-  l=$(echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('low', 0))" 2>/dev/null || echo 0)
-  c="${c:-0}"; h="${h:-0}"; m="${m:-0}"; l="${l:-0}"
+  local name="$1"; shift
+  local output rc=0 parsed c=0 h=0 m=0 l=0 g
+  output=$("$@" 2>/dev/null) || rc=$?
+  parsed=$(printf '%s' "$output" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    counts = [int(d.get(k, 0)) for k in ("critical", "high", "medium", "low")]
+except (ValueError, TypeError, AttributeError):
+    sys.exit(3)
+print(*counts)
+if d.get("result") == "unknown":
+    gaps = [g for g in d.get("gaps") or [] if isinstance(g, dict)]
+    for g in gaps or [{"check": "result", "reason": "unreadable"}]:
+        print("%s:%s" % (g.get("check", "result"), g.get("reason", "unreadable")))
+' 2>/dev/null) || parsed=""
+  if [[ $rc -ge 2 || -z "$parsed" ]]; then
+    add_gap "$name:unreadable"
+  else
+    read -r c h m l <<< "$(head -1 <<< "$parsed")"
+    while IFS= read -r g; do
+      [[ -n "$g" ]] && add_gap "$name/$g"
+    done < <(tail -n +2 <<< "$parsed")
+  fi
   TOTAL_CRIT=$((TOTAL_CRIT + c))
   TOTAL_HIGH=$((TOTAL_HIGH + h))
   TOTAL_MED=$((TOTAL_MED + m))
@@ -95,15 +122,22 @@ run_scanner() {
 }
 
 # Run each scanner in JSON mode
-run_scanner "mcp-security-audit" "bash $PROJECT_ROOT/scripts/mcp-security-audit.sh --json"
-run_scanner "permissions-wildcard-audit" "bash $PROJECT_ROOT/scripts/permissions-wildcard-audit.sh --json"
-run_scanner "hook-injection-audit" "bash $PROJECT_ROOT/scripts/hook-injection-audit.sh --json"
+run_scanner "mcp-security-audit" bash "$PROJECT_ROOT/scripts/mcp-security-audit.sh" --json
+run_scanner "permissions-wildcard-audit" bash "$PROJECT_ROOT/scripts/permissions-wildcard-audit.sh" --json
+run_scanner "hook-injection-audit" bash "$PROJECT_ROOT/scripts/hook-injection-audit.sh" --json
 
 # Prompt security scan: count findings manually (it has different output format)
 PS_FINDINGS=0
 if [[ -x "$PROJECT_ROOT/scripts/prompt-security-scan.sh" ]]; then
-  PS_OUT=$(bash "$PROJECT_ROOT/scripts/prompt-security-scan.sh" "$PROJECT_ROOT/.claude/agents" 2>&1 || true)
+  PS_RC=0
+  PS_OUT=$(bash "$PROJECT_ROOT/scripts/prompt-security-scan.sh" "$PROJECT_ROOT/.claude/agents" 2>&1) || PS_RC=$?
   PS_FINDINGS=$(echo "$PS_OUT" | grep -oE 'Findings: [0-9]+' | head -1 | awk '{print $2}')
+  PS_GATE=$(echo "$PS_OUT" | grep '^gate-result: ' | tail -1)
+  if [[ $PS_RC -ge 2 || -z "$PS_FINDINGS" ]]; then
+    add_gap "prompt-security-scan:unreadable"
+  elif [[ "$PS_GATE" == *'"result":"unknown"'* ]]; then
+    add_gap "prompt-security-scan:unreadable"
+  fi
   PS_FINDINGS="${PS_FINDINGS:-0}"
   # Assume HIGH severity for PS findings (simplification)
   TOTAL_HIGH=$((TOTAL_HIGH + PS_FINDINGS))
@@ -124,6 +158,16 @@ for sev_thresh in CRITICAL HIGH MEDIUM LOW; do
   fi
 done
 
+RESULT="clean"
+if [[ $((TOTAL_CRIT + TOTAL_HIGH + TOTAL_MED + TOTAL_LOW)) -gt 0 ]]; then
+  RESULT="findings"
+elif [[ ${#GAPS[@]} -gt 0 ]]; then
+  RESULT="unknown"
+  GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "security-audit-all" unreadable
+  [[ "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]] && EXIT_CODE=1
+fi
+VERDICT="$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)"
+
 if [[ "$JSON" -eq 1 ]]; then
   scanners_json=""
   for r in "${SCANNER_RESULTS[@]}"; do
@@ -132,7 +176,7 @@ if [[ "$JSON" -eq 1 ]]; then
   done
   scanners_json="[${scanners_json%,}]"
   cat <<JSON
-{"verdict":"$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)","fail_on":"$FAIL_ON","total_critical":$TOTAL_CRIT,"total_high":$TOTAL_HIGH,"total_medium":$TOTAL_MED,"total_low":$TOTAL_LOW,"scanners":$scanners_json}
+{"verdict":"$VERDICT","fail_on":"$FAIL_ON","total_critical":$TOTAL_CRIT,"total_high":$TOTAL_HIGH,"total_medium":$TOTAL_MED,"total_low":$TOTAL_LOW,"scanners":$scanners_json,$(gate_result_emit "$RESULT" "${GAPS[@]}" | sed 's/^gate-result: {//; s/}$//')}
 JSON
 else
   echo "=== Savia Security Audit (all scanners) ==="
@@ -147,7 +191,9 @@ else
   echo ""
   echo "Totals:          crit=$TOTAL_CRIT  high=$TOTAL_HIGH  med=$TOTAL_MED  low=$TOTAL_LOW"
   echo ""
-  echo "VERDICT: $([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)"
+  echo "VERDICT: $VERDICT"
+  [[ "$RESULT" == "unknown" ]] && echo "WARN: auditoría incompleta (resultado desconocido): ${GAPS[*]}"
+  gate_result_emit "$RESULT" "${GAPS[@]}"
 fi
 
 exit $EXIT_CODE

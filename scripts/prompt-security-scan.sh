@@ -4,6 +4,17 @@ set -uo pipefail
 # Scans agent and skill prompts for dangerous patterns without LLM.
 # Usage: bash scripts/prompt-security-scan.sh [--path DIR] [--fix] [--quiet]
 # Exit: 0 = clean, 1 = findings, 2 = error
+# SE-453: la última línea de stdout es `gate-result: {...}` (clean|findings|unknown). Códigos sin
+# renumerar: una comprobación que no corre (python3 ausente, fichero ilegible) o un path sin ficheros
+# .md deja el resultado en unknown con exit 0, y se registra en output/unmeasured-gates.jsonl.
+# --quiet suprime toda la salida, también esa línea (el exit code y el registro se mantienen).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+GAPS=()
+add_gap() { [[ " ${GAPS[*]} " == *" $1 "* ]] || GAPS+=("$1"); }
 
 SCAN_PATH="${1:-.claude/agents}"
 FIX_MODE=false
@@ -37,6 +48,10 @@ log_warn() {
 
 scan_file() {
   local file="$1"
+  if [[ ! -r "$file" ]]; then
+    add_gap "read:unreadable"
+    return 0
+  fi
 
   # PS-01: Injection bait
   while IFS=: read -r num _; do
@@ -96,20 +111,20 @@ scan_file() {
   # Python-assisted detection: file encoding errors are expected on binary/non-utf8 — surface nothing
   # rather than corrupt the grep pipeline. See SE-060 for rule definition.
   if command -v python3 >/dev/null 2>&1; then
-    local zw_lines
+    local zw_lines zw_rc=0
     zw_lines=$(python3 -c "
 import sys
-try:
-    with open('$file', 'r', encoding='utf-8', errors='replace') as f:
-        for i, line in enumerate(f, 1):
-            if any(c in line for c in ['\u200B', '\u200C', '\u200D', '\uFEFF']):
-                print(i)
-except (UnicodeDecodeError, FileNotFoundError, PermissionError):
-    sys.exit(0)
-" 2>/dev/null)
+with open(sys.argv[1], 'r', encoding='utf-8', errors='replace') as f:
+    for i, line in enumerate(f, 1):
+        if any(c in line for c in ['\u200B', '\u200C', '\u200D', '\uFEFF']):
+            print(i)
+" "$file" 2>/dev/null) || zw_rc=$?
+    [[ $zw_rc -ne 0 ]] && add_gap "PS-11:unreadable"
     for num in $zw_lines; do
       [[ -n "$num" ]] && log_finding "HIGH" "$file" "$num" "PS-11" "Zero-width character (possible hidden directive)"
     done
+  else
+    add_gap "PS-11:missing_tool"
   fi
 
   # PS-12: Long base64 strings (>80 chars, not in code blocks with hash/commit context)
@@ -134,6 +149,7 @@ $QUIET || printf "\n  Prompt Security Scan\n  %s\n\n" "$(printf '%.0s─' {1..40
 
 if [[ ! -d "$SCAN_PATH" ]] && [[ ! -f "$SCAN_PATH" ]]; then
   echo "Error: path not found: $SCAN_PATH" >&2
+  $QUIET || gate_result_emit unknown "path:unreadable"
   exit 2
 fi
 
@@ -152,5 +168,10 @@ TOTAL_F=$(cat "$FINDINGS_FILE")
 TOTAL_W=$(cat "$WARNINGS_FILE")
 $QUIET || printf "\n  Scanned: %d files | Findings: %d | Warnings: %d\n\n" "$FILE_COUNT" "$TOTAL_F" "$TOTAL_W"
 
+[[ "$FILE_COUNT" -eq 0 ]] && add_gap "files:unreadable"
+RESULT="clean"
+if [[ "$TOTAL_F" -gt 0 ]]; then RESULT="findings"; elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"; fi
+[[ "$RESULT" == "unknown" ]] && GATE_UNMEASURED_ROOT="$ROOT" gate_unmeasured_record "prompt-security-scan" "${GAPS[0]#*:}"
+$QUIET || gate_result_emit "$RESULT" "${GAPS[@]}"
 [[ "$TOTAL_F" -gt 0 ]] && exit 1
 exit 0
