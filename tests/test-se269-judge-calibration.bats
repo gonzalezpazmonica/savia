@@ -174,3 +174,282 @@ setup() {
   [ "$?" -eq 0 ]
   rm -f "$cal_file" "$fn_file"
 }
+
+# ── Comportamiento: contenido de los registros, filtros por juez, umbrales ──
+
+jc() { env CALIBRATION_FILE="$CAL" FN_FILE="$FN" DEGRADATION_FILE="$DEG" bash "$SCRIPT" "$@"; }
+
+setup_files() {
+  CAL="$BATS_TEST_TMPDIR/cal.jsonl"; FN="$BATS_TEST_TMPDIR/fn.jsonl"; DEG="$BATS_TEST_TMPDIR/deg.jsonl"
+}
+
+disponer() { # n disposicion juez
+  local i
+  for i in $(seq 1 "$1"); do jc --dispose "H-$3-$2-$i" "$2" "$3" > /dev/null; done
+}
+
+@test "dispose: la entrada guarda id, disposición, usuario, sello UTC y juez; y se imprime el JSON de estado" {
+  setup_files
+  run env USER=alguien CALIBRATION_FILE="$CAL" bash "$SCRIPT" --dispose H-9 descartado-nimiedad security-judge
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"status": "disposed", "id": "H-9", "value": "descartado-nimiedad"}' ]
+  [ "$(jq -r .hallazgo_id "$CAL")" = "H-9" ]
+  [ "$(jq -r .disposicion "$CAL")" = "descartado-nimiedad" ]
+  [ "$(jq -r .disposed_by "$CAL")" = "alguien" ]
+  [ "$(jq -r .juez "$CAL")" = "security-judge" ]
+  [[ "$(jq -r .timestamp "$CAL")" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]
+}
+
+@test "dispose sin juez no escribe la clave juez" {
+  setup_files
+  jc --dispose H-1 aceptado > /dev/null
+  [ "$(jq 'has("juez")' "$CAL")" = "false" ]
+}
+
+@test "dispose: una disposición que solo es prefijo válido ('descartado') se rechaza y no escribe" {
+  setup_files
+  run jc --dispose H-1 descartado
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"disposicion invalida: descartado"* ]]
+  [ ! -s "$CAL" ] || [ ! -e "$CAL" ]
+  run jc --dispose H-1 "aceptado descartado-nimiedad"
+  [ "$status" -eq 1 ]
+}
+
+@test "dispose: id vacío o disposición vacía salen con 1 y mensaje de requisito" {
+  setup_files
+  run jc --dispose "" aceptado
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--dispose requiere id y disposicion"* ]]
+}
+
+@test "dispose acumula: cada llamada añade una línea JSON válida" {
+  setup_files
+  jc --dispose A aceptado > /dev/null
+  jc --dispose B descartado-malentendido > /dev/null
+  [ "$(wc -l < "$CAL")" -eq 2 ]
+  [ "$(jq -s 'map(.hallazgo_id) | join(",")' "$CAL" | tr -d '"')" = "A,B" ]
+}
+
+@test "dispose con comillas y caracteres de shell en el id no inyecta código" {
+  setup_files
+  run jc --dispose "x'; import os; os.system('touch $BATS_TEST_TMPDIR/pwned') #" aceptado
+  [ "$status" -eq 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+  [[ "$(jq -r .hallazgo_id "$CAL")" == "x'; import os;"* ]]
+}
+
+@test "fn-record: guarda id, juez, descripción (con comillas y ñ) y quién; imprime el estado" {
+  setup_files
+  run env USER=otra FN_FILE="$FN" bash "$SCRIPT" --fn-record FN-7 correctness-judge "no vió el 'null' en ñandú"
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"status": "fn_recorded", "id": "FN-7", "juez": "correctness-judge"}' ]
+  [ "$(jq -r .fn_id "$FN")" = "FN-7" ]
+  [ "$(jq -r .descripcion "$FN")" = "no vió el 'null' en ñandú" ]
+  [ "$(jq -r .recorded_by "$FN")" = "otra" ]
+}
+
+@test "fn-record: descripción opcional queda vacía; sin juez falla con 1" {
+  setup_files
+  run jc --fn-record FN-1 j
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .descripcion "$FN")" = "" ]
+  run jc --fn-record FN-2 ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requiere id, juez, y descripcion"* ]]
+}
+
+@test "degrade: pasa a modo asesor con el motivo dado; sin motivo usa 'FP elevado'" {
+  setup_files
+  run jc --degrade j1 "demasiados FP"
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"status": "degraded", "juez": "j1", "modo": "asesor"}' ]
+  jc --degrade j2 > /dev/null
+  [ "$(jq -r 'select(.juez=="j1") | .motivo' "$DEG")" = "demasiados FP" ]
+  [ "$(jq -r 'select(.juez=="j2") | .motivo' "$DEG")" = "FP elevado" ]
+  [ "$(jq -r 'select(.juez=="j1") | .modo_destino' "$DEG")" = "asesor" ]
+}
+
+@test "degrade con motivo con comillas se guarda íntegro" {
+  setup_files
+  jc --degrade j "FP > 50% y 'ruido' \"alto\"" > /dev/null
+  [ "$(jq -r .motivo "$DEG")" = "FP > 50% y 'ruido' \"alto\"" ]
+}
+
+@test "restore: modo activo, motivo recalibrado; sin juez falla con 1" {
+  setup_files
+  run jc --restore j1
+  [ "$output" = '{"status": "restored", "juez": "j1", "modo": "activo"}' ]
+  [ "$(jq -r .modo_destino "$DEG")" = "activo" ]
+  [ "$(jq -r .motivo "$DEG")" = "recalibrado" ]
+  run jc --restore ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--restore requiere juez"* ]]
+}
+
+@test "report sin datos: sin_datos con N 0 y nº de FN del juez" {
+  setup_files
+  jc --fn-record F1 j1 d > /dev/null
+  jc --fn-record F2 otro d > /dev/null
+  run jc --report j1
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .status)" = "sin_datos" ]
+  [ "$(echo "$output" | jq -r .N)" = "0" ]
+  [ "$(echo "$output" | jq -r .fn_N)" = "1" ]
+}
+
+@test "report con 24 disposiciones: sin_datos y mensaje con el N actual; con 25 ya hay tasa" {
+  setup_files
+  disponer 24 aceptado j1
+  run jc --report j1
+  [ "$(echo "$output" | jq -r .status)" = "sin_datos" ]
+  [ "$(echo "$output" | jq -r .N)" = "24" ]
+  [[ "$(echo "$output" | jq -r .message)" == "N<25 (actual=24)"* ]]
+  disponer 1 descartado-nimiedad j1
+  run jc --report j1
+  [ "$(echo "$output" | jq -r .status)" = "datos_suficientes" ]
+  [ "$(echo "$output" | jq -r .N)" = "25" ]
+}
+
+@test "report: tasa de FP = descartados/total con un decimal; cuenta aceptados y FN" {
+  setup_files
+  disponer 17 aceptado j1
+  disponer 4 descartado-nimiedad j1
+  disponer 3 descartado-malentendido j1
+  disponer 2 descartado-inexistente j1
+  jc --fn-record F1 j1 d > /dev/null
+  jc --fn-record F2 j1 d > /dev/null
+  run jc --report j1
+  [ "$(echo "$output" | jq -r .N)" = "26" ]
+  [ "$(echo "$output" | jq -r .aceptados)" = "17" ]
+  [ "$(echo "$output" | jq -r .falsos_positivos)" = "9" ]
+  [ "$(echo "$output" | jq -r .fp_rate_pct)" = "34.6" ]
+  [ "$(echo "$output" | jq -r .falsos_negativos)" = "2" ]
+  [ "$(echo "$output" | jq -r .fn_status)" = "registrados" ]
+}
+
+@test "report sin FN registrados: fn_status sin_datos_fn" {
+  setup_files
+  disponer 25 aceptado j1
+  run jc --report j1
+  [ "$(echo "$output" | jq -r .fn_status)" = "sin_datos_fn" ]
+  [ "$(echo "$output" | jq -r .fp_rate_pct)" = "0.0" ]
+}
+
+@test "report filtra por juez: las disposiciones de otro juez no cuentan; 'all' las suma" {
+  setup_files
+  disponer 25 aceptado j1
+  disponer 10 descartado-nimiedad j2
+  run jc --report j2
+  [ "$(echo "$output" | jq -r .status)" = "sin_datos" ]
+  [ "$(echo "$output" | jq -r .N)" = "10" ]
+  run jc --report all
+  [ "$(echo "$output" | jq -r .N)" = "35" ]
+  run jc
+  [ "$(echo "$output" | jq -r .juez)" = "all" ]
+}
+
+@test "report ignora líneas corruptas y vacías del fichero de calibración" {
+  setup_files
+  disponer 25 aceptado j1
+  printf 'no es json\n\n' >> "$CAL"
+  run jc --report j1
+  [ "$(echo "$output" | jq -r .N)" = "25" ]
+}
+
+@test "publish con menos de 25: sin_datos_suficientes con fp_N, fn_N y mensaje" {
+  setup_files
+  disponer 3 aceptado j1
+  jc --fn-record F1 j1 d > /dev/null
+  run jc --publish j1
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .status)" = "sin_datos_suficientes" ]
+  [ "$(echo "$output" | jq -r .fp_N)" = "3" ]
+  [ "$(echo "$output" | jq -r .fn_N)" = "1" ]
+  [[ "$(echo "$output" | jq -r .message)" == *">=25"* ]]
+}
+
+@test "publish con 25 o más: tasas FP y FN juntas con nota anti-Goodhart" {
+  setup_files
+  disponer 20 aceptado j1
+  disponer 5 descartado-inexistente j1
+  run jc --publish j1
+  [ "$(echo "$output" | jq -r .status)" = "datos_publicados" ]
+  [ "$(echo "$output" | jq -r .fp_count)" = "5" ]
+  [ "$(echo "$output" | jq -r .fp_rate_pct)" = "20.0" ]
+  [ "$(echo "$output" | jq -r .aceptados)" = "20" ]
+  [ "$(echo "$output" | jq -r .fn_status)" = "sin_datos_fn" ]
+  [ "$(echo "$output" | jq -r .modo_actual)" = "activo" ]
+  [[ "$(echo "$output" | jq -r .nota_anti_goodhart)" == *"cold-start"* ]]
+  jc --fn-record F1 j1 d > /dev/null
+  run jc --publish j1
+  [ "$(echo "$output" | jq -r .fn_status)" = "fn_registrados" ]
+  [ "$(echo "$output" | jq -r .fn_N)" = "1" ]
+}
+
+@test "publish: el filtro por juez aísla los datos de cada juez" {
+  setup_files
+  disponer 25 aceptado j1
+  disponer 25 descartado-nimiedad j2
+  run jc --publish j2
+  [ "$(echo "$output" | jq -r .fp_rate_pct)" = "100.0" ]
+  run jc --publish j1
+  [ "$(echo "$output" | jq -r .fp_rate_pct)" = "0.0" ]
+}
+
+@test "publish sin juez falla con 1" {
+  setup_files
+  run jc --publish ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--publish requiere juez"* ]]
+}
+
+@test "--help imprime el uso y sale 0; sin operación equivale a report de todos" {
+  setup_files
+  run jc --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == "Uso: judge-calibration.sh --report"* ]]
+  run jc
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .status)" = "sin_datos" ]
+}
+
+@test "los ficheros de salida se crean con sus directorios" {
+  local d="$BATS_TEST_TMPDIR/a/b"
+  run env CALIBRATION_FILE="$d/cal.jsonl" bash "$SCRIPT" --dispose H aceptado j
+  [ "$status" -eq 0 ]
+  [ -f "$d/cal.jsonl" ]
+}
+
+@test "registros con acentos y eñes se guardan literales (no escapados)" {
+  setup_files
+  jc --dispose H-1 aceptado "juéz-ñ" > /dev/null
+  jc --fn-record FN-1 "juéz-ñ" "descripción ñandú" > /dev/null
+  jc --degrade "juéz-ñ" "motivo: señal" > /dev/null
+  jc --restore "juéz-ñ" > /dev/null
+  grep -q 'juéz-ñ' "$CAL"
+  grep -q 'descripción ñandú' "$FN"
+  grep -q 'motivo: señal' "$DEG"
+  [ "$(grep -c 'juéz-ñ' "$DEG")" -eq 2 ]
+}
+
+@test "ficheros de salida con nombre sin directorio (en el cwd) funcionan" {
+  cd "$BATS_TEST_TMPDIR"
+  run env CALIBRATION_FILE=cal.jsonl FN_FILE=fn.jsonl DEGRADATION_FILE=deg.jsonl bash "$BATS_TEST_DIRNAME/../$SCRIPT" --dispose H aceptado j
+  [ "$status" -eq 0 ]
+  run env CALIBRATION_FILE=cal.jsonl FN_FILE=fn.jsonl DEGRADATION_FILE=deg.jsonl bash "$BATS_TEST_DIRNAME/../$SCRIPT" --fn-record F j d
+  [ "$status" -eq 0 ]
+  run env CALIBRATION_FILE=cal.jsonl FN_FILE=fn.jsonl DEGRADATION_FILE=deg.jsonl bash "$BATS_TEST_DIRNAME/../$SCRIPT" --degrade j m
+  [ "$status" -eq 0 ]
+  run env CALIBRATION_FILE=cal.jsonl FN_FILE=fn.jsonl DEGRADATION_FILE=deg.jsonl bash "$BATS_TEST_DIRNAME/../$SCRIPT" --restore j
+  [ "$status" -eq 0 ]
+  [ -s cal.jsonl ] && [ -s fn.jsonl ] && [ "$(wc -l < deg.jsonl)" -eq 2 ]
+}
+
+@test "degrade sin juez falla con 1 y mensaje, sin escribir" {
+  setup_files
+  run jc --degrade ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--degrade requiere juez y motivo"* ]]
+  [ ! -e "$DEG" ]
+}

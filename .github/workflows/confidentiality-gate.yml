@@ -17,7 +17,6 @@ on:
           - full-repo
           - pr
 
-# Mínimo privilegio (Scorecard TokenPermissions): ningún job de este workflow escribe.
 permissions:
   contents: read
 

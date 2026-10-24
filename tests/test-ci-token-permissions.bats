@@ -1,100 +1,92 @@
 #!/usr/bin/env bats
-# Scorecard TokenPermissions (alertas #65-#70): el GITHUB_TOKEN arranca en solo
-# lectura en cada workflow; la escritura se concede solo al job que la usa.
+# SE-442 S3 — permisos del GITHUB_TOKEN: todo workflow declara `permissions:` a
+# nivel superior, sin escritura (la escritura va por job), y CodeQL usa su config.
+# Ref: docs/specs/SE-442-ci-supply-chain-hardening.spec.md
 
 ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
-# Imprime "fichero: motivo" por cada workflow con permisos de nivel superior
-# ausentes o con alguna escritura.
-toplevel_violations() {
+# Imprime los workflows sin bloque permissions: de nivel superior, o con escritura en él,
+# y los jobs que escriben en GitHub (API, gh, git push) sin declarar permiso de escritura
+# propio. Al final imprime "evaluados=N" para que un glob vacío no pase en falso.
+offenders() {
   python3 - "$1" <<'PY'
-import glob, sys, yaml
-for f in sorted(glob.glob(sys.argv[1] + "/.github/workflows/*.y*ml")):
-    perms = (yaml.safe_load(open(f)) or {}).get("permissions", "MISSING")
-    if perms == "MISSING":
+import sys, glob, re, yaml
+WRITE = re.compile(r"github\.rest\.\w+\.(create|update|delete|add|remove|merge)\w*"
+                   r"|gh (pr (create|edit|comment|merge|close)|issue (create|comment|edit|close)|release create)\b"
+                   r"|^\s*git push\b", re.M)
+def code(steps):
+    out = []
+    for st in steps or []:
+        out.append(str(st.get("run", "")))
+        out.append(str((st.get("with") or {}).get("script", "")))
+    return "\n".join(out)
+def writes(p):
+    return p == "write-all" or (isinstance(p, dict) and any(v == "write" for v in p.values()))
+files = sorted(glob.glob(sys.argv[1] + "/.github/workflows/*.y*ml"))
+for f in files:
+    d = yaml.safe_load(open(f)) or {}
+    p = d.get("permissions")
+    if p is None:
         print(f"{f}: sin permissions de nivel superior")
-    elif isinstance(perms, str) and perms != "read-all":
-        print(f"{f}: permissions={perms}")
-    elif isinstance(perms, dict) and "write" in perms.values():
-        print(f"{f}: escritura de nivel superior {perms}")
+    elif writes(p):
+        print(f"{f}: permissions de nivel superior con escritura")
+    for name, job in (d.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        if WRITE.search(code(job.get("steps"))) and not writes(job.get("permissions")):
+            print(f"{f}: job {name} escribe en GitHub sin permiso de escritura propio")
+print(f"evaluados={len(files)}")
 PY
 }
 
-# Imprime "fichero:job: llamada" por cada job que escribe en issues/PRs (vía
-# github-script o gh) sin el permiso de escritura efectivo que necesita.
-job_write_gaps() {
-  python3 - "$1" <<'PY'
-import glob, json, sys, yaml
-NEEDS = {
-    "issues.createComment": ("issues", "pull-requests"),
-    "issues.addLabels": ("issues", "pull-requests"),
-    "issues.create(": ("issues",),
-    "gh pr comment": ("issues", "pull-requests"),
-    "gh pr edit": ("pull-requests",),
-    "gh issue create": ("issues",),
-}
-for f in sorted(glob.glob(sys.argv[1] + "/.github/workflows/*.y*ml")):
-    wf = yaml.safe_load(open(f)) or {}
-    for name, job in (wf.get("jobs") or {}).items():
-        perms = job.get("permissions", wf.get("permissions", {}))
-        text = json.dumps(job.get("steps", []))
-        for call, scopes in NEEDS.items():
-            if call not in text:
-                continue
-            ok = perms == "write-all" or (isinstance(perms, dict) and any(
-                perms.get(s) == "write" for s in scopes))
-            if not ok:
-                print(f"{f}:{name}: {call} sin escritura en {'/'.join(scopes)}")
-PY
-}
-
-setup() { TMP="$(mktemp -d "$ROOT/.tmp-tokperm.XXXXXX")"; mkdir -p "$TMP/.github/workflows"; }
+setup() { TMP="$(mktemp -d "$ROOT/.tmp-perm.XXXXXX")"; mkdir -p "$TMP/.github/workflows"; }
 teardown() { [[ -n "${TMP:-}" && -d "$TMP" ]] && python3 -c 'import shutil,sys;shutil.rmtree(sys.argv[1])' "$TMP"; }
 
-@test "el arbol real: ningun workflow da escritura de nivel superior ni omite permissions" {
-  run toplevel_violations "$ROOT"
+@test "el arbol real: permissions de nivel superior presentes y sin escritura" {
+  run offenders "$ROOT"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [[ "$output" =~ evaluados=([0-9]+)$ ]]
+  [ "${BASH_REMATCH[1]}" -gt 0 ]
+  [ "$(printf '%s\n' "$output" | grep -vc '^evaluados=')" -eq 0 ]
 }
 
-@test "negativo: contents: write de nivel superior se detecta" {
-  printf 'permissions:\n  contents: write\njobs:\n  a:\n    runs-on: x\n' > "$TMP/.github/workflows/w.yml"
-  run toplevel_violations "$TMP"
-  [[ "$output" == *"w.yml: escritura de nivel superior"* ]]
+@test "negativo: un workflow sin permissions falla y lo nombra" {
+  printf 'on: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps: []\n' > "$TMP/.github/workflows/x.yml"
+  run offenders "$TMP"
+  [[ "$output" == *"x.yml: sin permissions"* ]]
 }
 
-@test "negativo: workflow sin permissions se detecta" {
-  printf 'jobs:\n  a:\n    runs-on: x\n' > "$TMP/.github/workflows/w.yml"
-  run toplevel_violations "$TMP"
-  [[ "$output" == *"w.yml: sin permissions"* ]]
+@test "negativo: escritura a nivel superior falla" {
+  printf 'on: push\npermissions:\n  contents: write\njobs: {}\n' > "$TMP/.github/workflows/y.yml"
+  run offenders "$TMP"
+  [[ "$output" == *"y.yml: permissions de nivel superior con escritura"* ]]
 }
 
-@test "negativo: write-all se detecta" {
-  printf 'permissions: write-all\njobs:\n  a:\n    runs-on: x\n' > "$TMP/.github/workflows/w.yml"
-  run toplevel_violations "$TMP"
-  [[ "$output" == *"permissions=write-all"* ]]
+@test "codeql.yml usa la config y esta solo excluye laboratorios vulnerables a proposito" {
+  run python3 -c 'import yaml,sys
+d=yaml.safe_load(open(sys.argv[1]))
+steps=[s for j in d["jobs"].values() for s in j["steps"] if str(s.get("uses","")).split("@")[0].endswith("codeql-action/init")]
+print(steps[0]["with"]["config-file"])' "$ROOT/.github/workflows/codeql.yml"
+  [ "$output" = "./.github/codeql/codeql-config.yml" ]
+  run python3 -c 'import yaml,sys;print("\n".join(yaml.safe_load(open(sys.argv[1]))["paths-ignore"]))' "$ROOT/.github/codeql/codeql-config.yml"
+  [ "$output" = "$(printf 'tests/pentest-lab/mock-*\ntests/fixtures/security-benchmark')" ]
 }
 
-@test "positivo: lectura arriba y escritura en el job pasa" {
-  printf 'permissions:\n  contents: read\njobs:\n  a:\n    permissions:\n      contents: write\n    runs-on: x\n' > "$TMP/.github/workflows/w.yml"
-  run toplevel_violations "$TMP"
-  [ -z "$output" ]
+@test "negativo: un job que comenta en PR sin permiso de escritura propio falla" {
+  printf 'on: push\npermissions:\n  contents: read\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/github-script@x\n        with:\n          script: await github.rest.issues.createComment({})\n' > "$TMP/.github/workflows/z.yml"
+  run offenders "$TMP"
+  [[ "$output" == *"z.yml: job c escribe en GitHub sin permiso"* ]]
 }
 
-@test "el arbol real: cada job que escribe en issues/PRs tiene el permiso" {
-  run job_write_gaps "$ROOT"
+@test "un job que escribe con su permiso propio no se marca" {
+  printf 'on: push\npermissions:\n  contents: read\njobs:\n  c:\n    runs-on: ubuntu-latest\n    permissions:\n      issues: write\n    steps:\n      - run: gh issue create --title x\n' > "$TMP/.github/workflows/w.yml"
+  run offenders "$TMP"
+  [[ "$output" != *"escribe en GitHub"* ]]
+}
+
+@test "negativo: workflow vacio no rompe el analisis y se marca" {
+  : > "$TMP/.github/workflows/e.yml"
+  run offenders "$TMP"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test "negativo: comentario en PR con solo lectura se detecta" {
-  printf 'permissions:\n  contents: read\njobs:\n  a:\n    runs-on: x\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: github.rest.issues.createComment({})\n' > "$TMP/.github/workflows/w.yml"
-  run job_write_gaps "$TMP"
-  [[ "$output" == *"w.yml:a: issues.createComment sin escritura"* ]]
-}
-
-@test "positivo: comentario en PR con pull-requests: write en el job pasa" {
-  printf 'permissions:\n  contents: read\njobs:\n  a:\n    permissions:\n      pull-requests: write\n    runs-on: x\n    steps:\n      - uses: actions/github-script@v7\n        with:\n          script: github.rest.issues.createComment({})\n' > "$TMP/.github/workflows/w.yml"
-  run job_write_gaps "$TMP"
-  [ -z "$output" ]
+  [[ "$output" == *"e.yml: sin permissions"* ]]
 }

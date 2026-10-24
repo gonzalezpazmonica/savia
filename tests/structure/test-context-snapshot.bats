@@ -72,9 +72,9 @@ print('OK')
 # ── Negative cases ──
 
 @test "snapshot load fails gracefully when no snapshot exists" {
-  run bash -c "echo '' | HOME='$TMPDIR' $ROOT/scripts/context-snapshot.sh load 2>&1"
-  # Should not crash even if no snapshot file
-  [[ "$status" -eq 0 ]] || [[ "$output" == *"No snapshot"* ]] || [[ "$output" == *"error"* ]] || true
+  run bash -c "echo '' | CONTEXT_CACHE_DIR='$TMPDIR/cache' $ROOT/scripts/context-snapshot.sh load 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status":"stale"'* ]]
 }
 
 @test "snapshot save handles non-git directory" {

@@ -100,7 +100,7 @@ if [[ ${#ATTRS[@]} -gt 0 ]]; then
   for kv in "${ATTRS[@]}"; do
     K="${kv%%=*}"; V="${kv#*=}"
     case "$K" in
-      tier|chain_id|seq|prev_hash|agent|action|timestamp|input_hash|output_hash|signature) continue ;;
+      tier|chain_id|seq|prev_hash|agent|action|timestamp|input_hash|output_hash|entry_hash|signature) continue ;;
     esac
     EXTRA="$(jq -c --arg k "$K" --arg v "$V" '.[$k]=$v' <<< "$EXTRA")"
   done

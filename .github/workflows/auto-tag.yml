@@ -17,9 +17,9 @@ permissions:
 jobs:
   auto-tag-and-release:
     name: Create tag and GitHub release from CHANGELOG
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout

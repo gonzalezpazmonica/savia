@@ -84,10 +84,11 @@ PY
 
 ask_yn(){ local a; printf '%s [y/N] ' "$1"; read -r a || return 1; [[ "$a" =~ ^[YySs]$ ]]; }
 ask_menu(){ # $1 prompt; resto opciones; imprime eleccion
+  # El menú va a stderr: quien llama captura stdout con $(...) y solo debe recibir la elección.
   local prompt="$1"; shift; local n=$# i=1 o
-  printf '%s\n' "$prompt"
-  for o in "$@"; do printf '  %d) %s\n' "$i" "$o"; i=$((i+1)); done
-  printf 'Elegir [1-%d]: ' "$n"; read -r a || a=""
+  printf '%s\n' "$prompt" >&2
+  for o in "$@"; do printf '  %d) %s\n' "$i" "$o" >&2; i=$((i+1)); done
+  printf 'Elegir [1-%d]: ' "$n" >&2; read -r a || a=""
   if [[ "$a" =~ ^[0-9]+$ && "$a" -ge 1 && "$a" -le "$n" ]]; then
     eval "printf '%s' \"\${$a}\""
   else printf '%s' "$1"
@@ -155,7 +156,7 @@ PY
 }
 apply_user(){
   python3 - "$ACTIVE_USER" "$STATE_FILE" <<'PY' || return 0
-import json,os,re,sys
+import datetime,json,os,re,sys
 p,st=sys.argv[1],sys.argv[2]
 s=json.load(open(st)) or {}
 name=(s.get("profile") or {}).get("name") or ""
@@ -163,7 +164,8 @@ if not name: raise SystemExit
 role=(s.get("profile") or {}).get("role") or "Operadora"
 slug=(s.get("profile") or {}).get("slug") or re.sub(r'[^a-z0-9]+','_',name.lower()).strip('_')
 os.makedirs(os.path.dirname(p),exist_ok=True)
-open(p,"w").write(f'---\nactive_slug: "{slug}"\nactive_name: "{name}"\nactive_role: "{role}"\nactivated_at: "2026-09-03T00:00:00Z"\n---\n')
+now=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+open(p,"w").write(f'---\nactive_slug: "{slug}"\nactive_name: "{name}"\nactive_role: "{role}"\nactivated_at: "{now}"\n---\n')
 print("perfil activo:", slug)
 PY
 }
@@ -248,12 +250,12 @@ PY
 }
 apply_fed(){
   python3 - "$VAULTS_ROOT" "$STATE_FILE" <<'PY' || return 1
-import json,os,sys
+import datetime,json,os,sys
 root,st=sys.argv[1],sys.argv[2]
 s=json.load(open(st)) or {}; fed=s.get("federation") or {}
 if not fed.get("enabled"): raise SystemExit(0)
 open(os.path.join(root,".federation.json"),"w").write(
-  json.dumps({"enabled":True,"remotes":fed.get("remotes",[]),"updated_at":"2026-09-03T00:00:00Z"},indent=2)+"\n")
+  json.dumps({"enabled":True,"remotes":fed.get("remotes",[]),"updated_at":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},indent=2)+"\n")
 print("federacion:", ", ".join(fed.get("remotes",[])) if fed.get("remotes") else "on (sin remotos)")
 PY
 }
@@ -301,7 +303,7 @@ wizard(){
   local ANSWERS_TMP
   ANSWERS_TMP="$(mktemp)"
   NAME="$name" ROLE="$role" PROVIDER="$prov" HEAVY="$heavy" MID="$mid" FAST="$fast" \
-  FE="$fe" MODE_V="$mode" REM="$rem" DOMES="${domes[*]:-}" ON_V="$on_v" ON_CG="$on_cg" ON_CBM="$on_cbm" FED="$fed" REMS="${rems[*]:-}" \
+  FE="$fe" MODE_V="${mode/remoto/remote}" REM="$rem" DOMES="${domes[*]:-}" ON_V="$on_v" ON_CG="$on_cg" ON_CBM="$on_cbm" FED="$fed" REMS="${rems[*]:-}" \
   python3 - "$ANSWERS_TMP" <<'PY'
 import json,os,sys
 p=sys.argv[1]
@@ -327,8 +329,11 @@ for r in os.environ.get("REMS","").split():
     if r: d["federation"]["remotes"].append(r)
 open(p,"w").write(json.dumps(d,ensure_ascii=False))
 PY
-  ANSWERS="$ANSWERS_TMP" MODULE=all cmd_from_answers
+  # cmd_from_answers termina con exit: en subshell para no cortar el cierre del asistente
+  ( ANSWERS="$ANSWERS_TMP" MODULE=all cmd_from_answers )
+  local rc=$?
   rm -f "$ANSWERS_TMP"
+  [[ "$rc" -eq 0 ]] || exit "$rc"
   echo; echo "=== Savia configurada ==="; cmd_check
   exit 0
 }

@@ -28,10 +28,10 @@ permissions:
 
 jobs:
   rebase:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: read
-    runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip auto-rebase]') }}
     env:
       # SE-426: firma y verificación con la clave real (secreto de CI); sin clave, falla cerrado.

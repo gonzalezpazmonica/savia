@@ -1,0 +1,22 @@
+{
+  "deltas": {
+    "lifecycle": "TUI is a client of the runtime server",
+    "plugins": "savia-gates plugin loaded by the TUI client"
+  },
+  "equivalence": "E1",
+  "execution_modes": [
+    "LOCAL"
+  ],
+  "id": "opencode-tui",
+  "kind": "surface",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "opencode",
+  "schema_version": 1,
+  "state": "discovered",
+  "verification": "NOT_VERIFIED"
+}

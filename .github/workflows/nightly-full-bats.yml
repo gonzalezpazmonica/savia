@@ -23,10 +23,10 @@ concurrency:
 jobs:
   full-bats:
     name: Full BATS suite
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
-    runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
       - name: Checkout

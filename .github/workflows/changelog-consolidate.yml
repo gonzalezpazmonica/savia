@@ -33,10 +33,10 @@ concurrency:
 jobs:
   consolidate:
     name: Consolidate CHANGELOG.d if threshold exceeded
+    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip consolidate]') }}
     env:
       # SE-426: firma con la clave real (secreto de CI); sin clave, no firma.

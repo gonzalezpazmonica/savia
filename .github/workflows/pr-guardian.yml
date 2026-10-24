@@ -11,10 +11,10 @@ permissions:
 jobs:
   pr-guardian:
     name: PR Guardian
-    permissions:
-      contents: read
-      pull-requests: write
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
 
     steps:
       - name: Checkout
