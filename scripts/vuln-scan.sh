@@ -10,6 +10,21 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODE="${1:---summary}"
 VULNS=0
 WARNINGS=0
+# SE-453: la última línea de stdout es el resultado (clean|findings|unknown). Códigos sin renumerar:
+# sin --ci sale 0; con --ci, 1 si hay vulnerabilidades. Sin ficheros que leer o con un grep que no
+# pudo leerlos, la comprobación es un hueco, no un «pass».
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+GAPS=()
+compgen -G "$ROOT/.opencode/hooks/*.sh" >/dev/null || GAPS+=("hooks:unreadable")
+compgen -G "$ROOT/scripts/*.sh" >/dev/null || GAPS+=("scripts:unreadable")
+# grep_files <check> <args de grep...> → deja las coincidencias en GREP_OUT; rc ≥ 2 = hueco unreadable.
+grep_files() {
+  local check="$1" rc; shift
+  GREP_OUT="$(grep "$@" 2>/dev/null)"; rc=$?
+  [[ $rc -ge 2 ]] && GAPS+=("$check:unreadable")
+  return 0
+}
 
 vuln()    { VULNS=$((VULNS + 1)); echo "  🔴 VULN: $1"; }
 warn()    { WARNINGS=$((WARNINGS + 1)); echo "  🟡 WARN: $1"; }
@@ -44,15 +59,16 @@ echo ""
 
 # ── 2. eval usage (only in hooks — scripts/test-* are legacy) ──
 echo "--- Checking for eval usage in hooks ---"
-if grep -rn "eval " "$ROOT/.opencode/hooks/"*.sh 2>/dev/null \
-   | grep -v "^[^:]*:#" | head -1 | grep -q .; then
+grep_files eval_hooks -rn "eval " "$ROOT/.opencode/hooks/"*.sh
+if printf '%s\n' "$GREP_OUT" | grep -v "^[^:]*:#" | head -1 | grep -q .; then
   vuln "eval found in hooks (command injection risk)"
   explain "eval can execute arbitrary code. Use safer alternatives."
 else
   pass "No eval usage in hooks"
 fi
 # Warn about eval in scripts (lower severity)
-eval_scripts=$(grep -rl "eval " "$ROOT/scripts/"*.sh 2>/dev/null | grep -v "vuln-scan" | grep -v "^[^:]*:#" | wc -l)
+grep_files eval_scripts -rl "eval " "$ROOT/scripts/"*.sh
+eval_scripts=$(printf '%s\n' "$GREP_OUT" | grep -v '^$' | grep -v "vuln-scan" | grep -v "^[^:]*:#" | wc -l)
 if [ "$eval_scripts" -gt 0 ]; then
   warn "$eval_scripts scripts use eval (review for safety)"
 else
@@ -84,9 +100,9 @@ echo ""
 
 # ── 4. Curl/wget without cert verification ──
 echo "--- Checking HTTP client security ---"
-if grep -rn "curl.*-k\|curl.*--insecure\|wget.*--no-check-certificate" \
-   "$ROOT/.opencode/hooks/"*.sh "$ROOT/scripts/"*.sh 2>/dev/null \
-   | grep -v "^[^:]*:#" | grep -v "vuln-scan.sh" | head -1 | grep -q .; then
+grep_files insecure_http -rn "curl.*-k\|curl.*--insecure\|wget.*--no-check-certificate" \
+   "$ROOT/.opencode/hooks/"*.sh "$ROOT/scripts/"*.sh
+if printf '%s\n' "$GREP_OUT" | grep -v "^[^:]*:#" | grep -v "vuln-scan.sh" | head -1 | grep -q .; then
   vuln "Insecure HTTP client usage (cert verification disabled)"
   explain "Never disable TLS cert verification — enables MITM attacks"
 else
@@ -97,8 +113,8 @@ echo ""
 
 # ── 5. Hardcoded paths ──
 echo "--- Checking for hardcoded user paths ---"
-if grep -rn "/home/[a-z]" "$ROOT/.opencode/hooks/"*.sh "$ROOT/scripts/"*.sh 2>/dev/null \
-   | grep -v "^[^:]*:#" | grep -v "test-data" | head -1 | grep -q .; then
+grep_files home_paths -rn "/home/[a-z]" "$ROOT/.opencode/hooks/"*.sh "$ROOT/scripts/"*.sh
+if printf '%s\n' "$GREP_OUT" | grep -v "^[^:]*:#" | grep -v "test-data" | head -1 | grep -q .; then
   warn "Hardcoded user home paths found"
   explain "Use \$HOME or relative paths for portability"
 else
@@ -165,10 +181,25 @@ echo "════════════════════════�
 echo "  Results: $VULNS vulnerabilities, $WARNINGS warnings"
 echo "═══════════════════════════════════════════════════"
 
+RESULT="clean"
+if [ "$VULNS" -gt 0 ]; then RESULT="findings"; elif [ "${#GAPS[@]}" -gt 0 ]; then RESULT="unknown"; fi
+[ "$RESULT" = "unknown" ] && GATE_UNMEASURED_ROOT="$ROOT" gate_unmeasured_record "vuln-scan" unreadable
+RC=0
 if [ "$MODE" = "--ci" ]; then
   if [ "$VULNS" -gt 0 ]; then
     echo "FAIL: $VULNS vulnerabilities found"
-    exit 1
+    RC=1
+  elif [ "$RESULT" = "unknown" ]; then
+    # D3: un ciclo de aviso; SAVIA_GATE_UNKNOWN=block lo convierte en fallo.
+    if [ "${SAVIA_GATE_UNKNOWN:-warn}" = "block" ]; then
+      echo "FAIL: scan incompleto (resultado desconocido, SAVIA_GATE_UNKNOWN=block)"
+      RC=1
+    else
+      echo "WARN: scan incompleto (resultado desconocido, registrado en output/unmeasured-gates.jsonl)"
+    fi
+  else
+    echo "PASS: No vulnerabilities found"
   fi
-  echo "PASS: No vulnerabilities found"
 fi
+gate_result_emit "$RESULT" "${GAPS[@]}"
+exit "$RC"
