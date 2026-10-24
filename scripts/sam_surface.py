@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 
 from sam_model import SamValidationError
 
@@ -40,7 +39,6 @@ FORBIDDEN_KEYS = frozenset({
 RUNTIME_IDS = ("opencode", "codex", "claude-code")
 SURFACE_IDS = ("opencode-tui", "opencode-desktop", "codex-cli", "codex-desktop",
                "claude-code-cli", "claude-code-desktop")
-_ID = re.compile(r"^[a-z][a-z0-9-]{1,40}$")
 _RUNTIME_KEYS = {"schema_version", "kind", "id", "capabilities", "provenance",
                  "verification", "notes"}
 _SURFACE_KEYS = {"schema_version", "kind", "id", "runtime", "execution_modes",
@@ -61,6 +59,15 @@ def _reject_forbidden(value: object, path: str) -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _reject_forbidden(child, f"{path}/{index}")
+
+
+def _state_ok(value: object) -> bool:
+    # isinstance first: an unhashable value (list/dict) must not reach the dict lookup.
+    return isinstance(value, str) and value in STATE_RANK
+
+
+def _notes_ok(doc: dict) -> bool:
+    return "notes" not in doc or isinstance(doc["notes"], str)
 
 
 def _pairs(pairs):
@@ -104,8 +111,10 @@ def _check_runtime(doc: dict, rel: str) -> None:
         raise _fail(rel)
     caps = doc.get("capabilities")
     if not isinstance(caps, dict) or set(caps) != set(EFFECTS) \
-            or any(state not in STATE_RANK for state in caps.values()):
+            or not all(_state_ok(state) for state in caps.values()):
         raise _fail(f"{rel}/capabilities")
+    if not _notes_ok(doc):
+        raise _fail(f"{rel}/notes")
     _check_provenance(doc.get("provenance"), rel)
     _check_verification(doc.get("verification"), rel)
 
@@ -113,11 +122,12 @@ def _check_runtime(doc: dict, rel: str) -> None:
 def _check_surface(doc: dict, rel: str) -> None:
     if set(doc) - _SURFACE_KEYS or doc.get("schema_version") != 1 \
             or doc.get("kind") != "surface" or doc.get("id") not in SURFACE_IDS \
-            or not _ID.fullmatch(str(doc.get("runtime", ""))):
+            or doc.get("runtime") not in RUNTIME_IDS:
         raise _fail(rel)
     modes = doc.get("execution_modes")
-    if not isinstance(modes, list) or not modes or len(set(modes)) != len(modes) \
-            or any(m not in EXECUTION_MODES for m in modes):
+    if not isinstance(modes, list) or not modes \
+            or not all(isinstance(m, str) and m in EXECUTION_MODES for m in modes) \
+            or len(set(modes)) != len(modes):
         raise _fail(f"{rel}/execution_modes")
     if doc.get("state") not in SURFACE_STATES:
         raise _fail(f"{rel}/state")
@@ -130,8 +140,10 @@ def _check_surface(doc: dict, rel: str) -> None:
         raise _fail(f"{rel}/deltas")
     overrides = doc.get("capability_overrides", {})
     if not isinstance(overrides, dict) or set(overrides) - set(EFFECTS) \
-            or any(state not in STATE_RANK for state in overrides.values()):
+            or not all(_state_ok(state) for state in overrides.values()):
         raise _fail(f"{rel}/capability_overrides")
+    if not _notes_ok(doc):
+        raise _fail(f"{rel}/notes")
     _check_provenance(doc.get("provenance"), rel)
 
 
@@ -148,6 +160,8 @@ def load_manifests(root: Path) -> dict:
             raise _fail(f"{MANIFEST_DIR}/{folder}")
         for path in sorted(directory.glob("*.json")):
             rel = f"{MANIFEST_DIR}/{folder}/{path.name}"
+            if path.is_symlink():
+                raise _fail(rel)
             doc = _load(path, rel)
             _reject_forbidden(doc, rel)
             check(doc, rel)
