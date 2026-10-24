@@ -1,0 +1,10 @@
+{
+  "arch": "arm64",
+  "elevation_available": true,
+  "installed": {},
+  "name": "windows-arm64",
+  "os": "windows",
+  "package_managers": [
+    "winget"
+  ]
+}
