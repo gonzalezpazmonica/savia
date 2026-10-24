@@ -57,14 +57,26 @@ fails() { grep -c '^FAIL:' <<<"$output"; }
   [ "$status" -eq 0 ]
   [ "$(grep -c '^PASS:' <<<"$output")" -eq 6 ]
   [ "$(fails)" -eq 0 ]
-  ! grep -q '^SKIP' <<<"$output"
   [[ "$output" == *"todo consistente"* ]]
+  [ "$(grep -c '^SKIP' <<<"$output")" -eq 0 ]
 }
 
 @test "regresion: GENERATED_VIEW_DRIFT compara contenido real, no falla por no poder copiar al sandbox" {
   run bash "$SCRIPT" --root "$FX/ok"
   [[ "$output" == *"PASS: GENERATED_VIEW_DRIFT"* ]]
   run bash "$SCRIPT" --root "$FX/view-drift"
+  [[ "$output" == *"difiere de la regeneración"* ]]
+  [[ "$output" != *"no se pudo regenerar"* ]]
+}
+
+@test "regresion: con cp -al fallando en algun directorio (otro mount) cae a cp -a y sigue comparando contenido real" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\nexit 0\n' > "$BATS_TEST_TMPDIR/bin/ln"
+  printf '#!/bin/sh\ncase "$1" in -al) exit 1;; esac\nexec /bin/cp "$@"\n' > "$BATS_TEST_TMPDIR/bin/cp"
+  chmod +x "$BATS_TEST_TMPDIR/bin/ln" "$BATS_TEST_TMPDIR/bin/cp"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH" run bash "$SCRIPT" --root "$FX/ok"
+  [[ "$output" == *"PASS: GENERATED_VIEW_DRIFT"* ]]
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH" run bash "$SCRIPT" --root "$FX/view-drift"
   [[ "$output" == *"difiere de la regeneración"* ]]
   [[ "$output" != *"no se pudo regenerar"* ]]
 }
@@ -84,12 +96,12 @@ fails() { grep -c '^FAIL:' <<<"$output"; }
 
 @test "VERSION_REGRESSION nombra la version duplicada" {
   run bash "$SCRIPT" --root "$FX/version-regression"
-  [[ "$output" =~ FAIL:\ VERSION_REGRESSION:.*[0-9]+\.[0-9]+\.[0-9]+ ]]
+  [[ "$output" == *"FAIL: VERSION_REGRESSION: versiones duplicadas en CHANGELOG: 1.0.1"* ]]
 }
 
 @test "CHANGELOG_VERSION_MISMATCH informa ambas versiones" {
   run bash "$SCRIPT" --root "$FX/changelog-mismatch"
-  [[ "$output" =~ CHANGELOG=[0-9.]+\ package.json=[0-9.]+ ]]
+  [[ "$output" == *"CHANGELOG=1.0.1 package.json=9.9.9"* ]]
 }
 
 @test "package.json sin campo version no falla la comparacion" {

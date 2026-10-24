@@ -112,7 +112,8 @@ cd_env() {
   [ "$status" -eq 6 ]
   [[ "$output" == *"not valid JSON"* ]]
   [ "$(cat "$SAVIA_SETTINGS_OVERRIDE")" = "{roto" ]
-  ! ls "$SAVIA_SETTINGS_OVERRIDE".bak.* >/dev/null 2>&1
+  run ls "$SAVIA_SETTINGS_OVERRIDE".bak.*
+  [ "$status" -ne 0 ]
 }
 
 @test "disable quita solo los dos hooks propios, deja cognitive-debt-check y los ajenos" {
@@ -121,8 +122,11 @@ cd_env() {
   run bash "$CD" disable
   [ "$status" -eq 0 ]
   [[ "$output" == *"Telemetry preserved"* ]]
-  ! grep -q 'cognitive-debt-telemetry' "$SAVIA_SETTINGS_OVERRIDE"
-  ! grep -q 'hypothesis-first' "$SAVIA_SETTINGS_OVERRIDE"
+  run grep -c 'cognitive-debt-telemetry' "$SAVIA_SETTINGS_OVERRIDE"
+  [ "$output" = "0" ]
+  run grep -c 'hypothesis-first' "$SAVIA_SETTINGS_OVERRIDE"
+  [ "$output" = "0" ]
+  [ "$(jq '[.hooks.PostToolUse[].hooks[]] | length' "$SAVIA_SETTINGS_OVERRIDE")" -eq 1 ]
   grep -q 'cognitive-debt-check.sh' "$SAVIA_SETTINGS_OVERRIDE"
   grep -q 'ajeno.sh' "$SAVIA_SETTINGS_OVERRIDE"
   [ "$(jq '.hooks.PreToolUse | length' "$SAVIA_SETTINGS_OVERRIDE")" -eq 1 ]
@@ -141,7 +145,8 @@ cd_env() {
   run bash "$CD" disable
   [ "$status" -eq 0 ]
   [[ "$output" == *"Already disabled"* ]]
-  ! ls "$SAVIA_SETTINGS_OVERRIDE".bak.* >/dev/null 2>&1
+  run ls "$SAVIA_SETTINGS_OVERRIDE".bak.*
+  [ "$status" -ne 0 ]
   mv "$SAVIA_SETTINGS_OVERRIDE" "$BATS_TEST_TMPDIR/otro.json"
   run bash "$CD" disable
   [ "$status" -eq 0 ]
