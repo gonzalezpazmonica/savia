@@ -216,3 +216,10 @@ _prop() { ls "$SCL_PROPOSALS_DIR"/*.md | head -1; }
   _cap '{"tool_name":"Task","tool_input":{"agent":"t"}}'
   [ "$(_props)" = "0" ]
 }
+
+@test "tildes en minuscula se normalizan: 'lección aprendida' y 'volvió a fallar' capturan" {
+  _cap '{"tool_name":"Task","tool_response":"lección aprendida: verificar antes","tool_input":{"agent":"a"}}'
+  _cap '{"tool_name":"Task","tool_response":"el test volvió a fallar tras el cambio","tool_input":{"agent":"b"}}'
+  _cap '{"tool_name":"Task","tool_response":"lo corregí en el hook","tool_input":{"agent":"c"}}'
+  [ "$(_props)" = "3" ]
+}
