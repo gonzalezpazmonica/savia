@@ -1,7 +1,0 @@
----
-version_bump: minor
-section: Added
----
-- **SE-453 contrato de resultado de los gates** (`docs/rules/domain/gate-result-contract.md`, `.claude/hooks/lib/gate-result.sh`): estados `clean`/`findings`/`unknown`, campo `result` y lista `gaps[]` (`missing_tool`, `limit`, `timeout`, `unreadable`), con tabla de correspondencia de los códigos existentes. `git-history-secret-scan.sh` con gitleaks ausente ya no sale 1 (hallazgo crítico) sino 4 con `unknown/missing_tool`, y admite tope de commits y timeout como hueco. `dependency-scan.sh` y `pre-push-security-gate.sh` emiten `gate-result`; el pre-push registra la herramienta ausente en `output/unmeasured-gates.jsonl` (`SAVIA_GATE_UNKNOWN=block` lo bloquea).
-- **Guards `blocking` sin `jq`** (`.claude/hooks/lib/hook-input.sh`): `block-credential-leak`, `block-force-push`, `block-infra-destructive`, `agent-git-discipline` y `validate-bash-global` degradan a un parseo con `grep` y salen 2 si no pueden evaluar (antes salían 0). Diez hooks no marcados registran el hueco en `output/unmeasured-gates.jsonl`. `install.sh` avisa de que `jq` es requisito de los guards.
-- **`gate-result.sh check`** y `config/gate-unknown-baseline.txt`: contador de gates en unknown frente a baseline, integrado en `validate-ci-local.sh` (primer ciclo en aviso, D3). Evidencia: `docs/evidence/SE-453-S0-gate-result-audit.md` y `SE-453-S4-evidence-grading.md` (la lista «parece código» de `data-sovereignty-gate.sh` sí puede ocultar un dato real: delta propuesto).
