@@ -70,7 +70,7 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
       local sources
       sources=$(list_sources "$file_filter")
       [[ -z "$sources" ]] && return 0
-      grep -nE "\b${sym}\b" $sources 2>/dev/null \
+      grep -HnE "\b${sym}\b" $sources 2>/dev/null \
         | grep -vE ":(#|//|/\*|\*|--|<!--)[[:space:]]*$" \
         | grep -vE "\b(import|from|require|use|include|package|module|export|#include)\b.*\b${sym}\b" \
         | grep -vE ":(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
@@ -144,7 +144,9 @@ PYEOF
   if [[ "$1" == "--symbol" ]]; then
     SYMBOL="${2:-}"
     [[ -z "$SYMBOL" ]] && { echo "ERROR: --symbol requiere nombre" >&2; exit 1; }
-    DIRECT=$(grep_callers "$SYMBOL")
+    FILE_FILTER=""
+    [[ "${3:-}" == "--file" ]] && FILE_FILTER="${4:-}"
+    DIRECT=$(grep_callers "$SYMBOL" "$FILE_FILTER")
     out=$(emit_result "$SYMBOL" "$DIRECT" "" "grep")
     printf '%s\n' "$out"
     # Telemetría SE-313: evento blast.radius (AC-S3.3) — nunca bloquea.
