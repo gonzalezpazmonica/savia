@@ -9,13 +9,14 @@ setup() {
   export MERGE_SPRINT_HOME="$TMPDIR_T/state"
   export MERGE_SPRINT_POLICY="$TMPDIR_T/policy.conf"
   export MERGE_SPRINT_POLL_S=0 MERGE_SPRINT_MAIN_POLLS=2 MERGE_SPRINT_CI_POLLS=1 MERGE_SPRINT_CI_SETTLE_S=0
-  export MERGE_SPRINT_RESYNC=0   # los tests v1 no re-sincronizan; los v2 lo activan con su repo temporal
+  export MERGE_SPRINT_RESYNC=0   # los tests v1 no re-sincronizan; los v2 lo activan con v2_repo
   printf 'allowed_tiers=1,2,3\nttl_hours=12\nmax_merges=40\nmax_prs=50\n' > "$MERGE_SPRINT_POLICY"
-  export FAKE="$TMPDIR_T/fake"; mkdir -p "$FAKE"
-  # gh falso: estado en $FAKE/<pr>.{head,files,checks,state}, $FAKE/main_ci, log de merges en $FAKE/merged
-  cat > "$TMPDIR_T/gh" <<'EOF'
+  export FAKE="$TMPDIR_T/fake"; mkdir -p "$FAKE" "$TMPDIR_T/bin"
+  # gh falso: estado en $FAKE/<pr>.{head,files,checks,state,base,repo,reopens,on_merge}, $FAKE/main_ci,
+  # $FAKE/required (checks obligatorios de main), log de merges en $FAKE/merged y de llamadas en $FAKE/calls
+  cat > "$TMPDIR_T/bin/gh" <<'EOF'
 #!/usr/bin/env bash
-F="$FAKE"; a="$*"
+F="$FAKE"; a="$*"; echo "$a" >> "$F/calls"
 case "$1 $2" in
   "pr list") ls "$F" | sed -n 's/^\([0-9]*\)\.head$/\1/p' | while read -r n; do [[ "$(cat "$F/$n.state" 2>/dev/null || echo OPEN)" == OPEN ]] && echo "$n"; done | sort -n ;;
   "pr view")
@@ -23,21 +24,41 @@ case "$1 $2" in
     case "$a" in
       *headRefOid*) if [[ -f "$F/$n.branch" ]]; then git --git-dir="$BARE" rev-parse "refs/heads/$(cat "$F/$n.branch")"; else cat "$F/$n.head"; fi ;;
       *headRefName*) cat "$F/$n.branch" ;;
+      *baseRefName*) cat "$F/$n.base" 2>/dev/null || echo main ;;
+      *headRepository*) cat "$F/$n.repo" 2>/dev/null || echo owner/repo ;;
       *mergeStateStatus*) cat "$F/$n.mss" 2>/dev/null || echo CLEAN ;;
       *mergeCommit*) echo "m${n}0000000000000000000000000000000000000" ;;
       *state*) cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
     esac ;;
   "pr diff") cat "$F/$3.files" ;;
   "pr checks") printf 'CI\t%s\n' "$(cat "$F/$3.checks" 2>/dev/null || echo pass)" ;;
-  "pr ready") exit 0 ;;
+  "pr ready"|"pr edit"|"label create") exit 0 ;;
   "pr merge") if [[ -f "$F/$3.reject" ]]; then n=$(cat "$F/$3.reject"); (( n > 0 )) && { echo $((n-1)) > "$F/$3.reject"; exit 1; }; fi
-              echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state" ;;
-  "api repos/"*) echo "$(cat "$F/main_ci" 2>/dev/null || echo pass)" ;;
-  *) exit 1 ;;
+              echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state"
+              [[ -f "$F/$3.on_merge" ]] && GHPPID=$PPID bash "$F/$3.on_merge"; exit 0 ;;
+  *)
+    case "$a" in
+      api*protection/required_status_checks*) cat "$F/required" 2>/dev/null ;;
+      api*/issues/*/events*) n=$(sed -E 's|.*/issues/([0-9]+)/events.*|\1|' <<<"$a"); cat "$F/$n.reopens" 2>/dev/null || echo 0 ;;
+      api*check-runs*) cat "$F/main_ci" 2>/dev/null || echo pass ;;
+      *) exit 1 ;;
+    esac ;;
 esac
 EOF
-  chmod +x "$TMPDIR_T/gh"; export GH="$TMPDIR_T/gh"
+  chmod +x "$TMPDIR_T/bin/gh"; export GH="$TMPDIR_T/bin/gh"; export PATH="$TMPDIR_T/bin:$PATH"
+  echo CI > "$FAKE/required"
+  # Repo git temporal con remoto bare: origin/main lleva el ejecutor y el clasificador de este árbol
+  export BARE="$TMPDIR_T/origin.git"; git init -q --bare "$BARE"
+  export MERGE_SPRINT_GIT_ROOT="$TMPDIR_T/clone"
+  git clone -q "$BARE" "$MERGE_SPRINT_GIT_ROOT" 2>/dev/null
+  git -C "$MERGE_SPRINT_GIT_ROOT" config user.email t@t; git -C "$MERGE_SPRINT_GIT_ROOT" config user.name t
+  git -C "$MERGE_SPRINT_GIT_ROOT" config commit.gpgsign false
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"
+  cp scripts/merge-sprint.sh scripts/risk-tier.py "$MERGE_SPRINT_GIT_ROOT/scripts/"
+  echo base > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G add a.txt scripts; G commit -qm base; G branch -M main; G push -q origin main
 }
+
+G() { git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
 
 teardown() { rm -rf "$TMPDIR_T"; }
 
@@ -210,15 +231,7 @@ plan_and_grant() {
 }
 
 # ── v2: re-sync autónomo con main (repo git temporal con remoto bare; nunca GitHub) ──
-v2_repo() {
-  export BARE="$TMPDIR_T/origin.git"; git init -q --bare "$BARE"
-  export MERGE_SPRINT_GIT_ROOT="$TMPDIR_T/clone"; export MERGE_SPRINT_RESYNC=1
-  git clone -q "$BARE" "$MERGE_SPRINT_GIT_ROOT" 2>/dev/null
-  git -C "$MERGE_SPRINT_GIT_ROOT" config user.email t@t; git -C "$MERGE_SPRINT_GIT_ROOT" config user.name t
-  git -C "$MERGE_SPRINT_GIT_ROOT" config commit.gpgsign false
-  G() { git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
-  echo base > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G add a.txt; G commit -qm base; G branch -M main; G push -q origin main
-}
+v2_repo() { export MERGE_SPRINT_RESYNC=1; }
 v2_pr() {  # v2_pr <n> <fichero> <contenido> : rama pr-<n> con un commit; registra la revisión sobre su head
   G switch -q -c "pr-$1" main; echo "$3" > "$MERGE_SPRINT_GIT_ROOT/$2"; G add "$2"; G commit -qm "pr $1"; G push -q origin "pr-$1"; G switch -q main
   echo "pr-$1" > "$FAKE/$1.branch"; echo x > "$FAKE/$1.head"; echo "scripts/x$1.sh" > "$FAKE/$1.files"
@@ -393,4 +406,177 @@ PY
   grep -qx 80 "$FAKE/merged"
   local t="$TMPDIR_T/chk"; git clone -q -b pr-80 "$BARE" "$t"
   [ "$(cd "$t" && python3 scripts/sam.py check)" = "SAM: FRESH" ]
+}
+
+# ── v4: anomalías del run, vuelta a Draft, etiqueta de auto-rebase y reservas F5 ──
+
+@test "AC-16 error: plan sin checks obligatorios en la protección de main falla cerrado" {
+  mkpr 90 "scripts/s.sh"; review 90 APPROVE correctness; : > "$FAKE/required"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 4 ]
+  [ ! -e "$MERGE_SPRINT_HOME/manifest.json" ]
+}
+
+@test "AC-16 block: checks obligatorios vivos reducidos o vacíos paran el sprint sin merge" {
+  printf 'CI\nsecurity\n' > "$FAKE/required"
+  mkpr 91 "scripts/t.sh"; review 91 APPROVE correctness
+  plan_and_grant
+  grep -q '"required_checks":\["CI","security"\]' "$MERGE_SPRINT_HOME/manifest.json"
+  echo CI > "$FAKE/required"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ ! -e "$FAKE/merged" ]
+  grep -q '"reason":"checks_obligatorios_reducidos"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  : > "$FAKE/required"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"checks_obligatorios_vacios"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-17 block: ejecutor distinto del blob del manifiesto para el sprint" {
+  echo "# otra versión" >> "$MERGE_SPRINT_GIT_ROOT/scripts/merge-sprint.sh"; G commit -qam "ejecutor cambiado"; G push -q origin main
+  mkpr 92 "scripts/u.sh"; review 92 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ ! -e "$FAKE/merged" ]
+  grep -q '"reason":"blob_ejecutor"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-17 block: clasificador distinto del blob del manifiesto para el sprint" {
+  echo "# otra versión" >> "$MERGE_SPRINT_GIT_ROOT/scripts/risk-tier.py"; G commit -qam "clasificador cambiado"; G push -q origin main
+  mkpr 93 "scripts/v.sh"; review 93 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ ! -e "$FAKE/merged" ]
+  grep -q '"reason":"blob_clasificador"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-17 block: revoke entre dos merges impide el siguiente" {
+  mkpr 94 "scripts/w.sh"; mkpr 95 "scripts/x.sh"
+  review 94 APPROVE correctness; review 95 APPROVE correctness
+  echo "bash '$PWD/$SCRIPT' revoke" > "$FAKE/94.on_merge"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$(paste -sd, "$FAKE/merged")" = "94" ]
+  grep -q '"reason":"grant_revocado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-18 block: PR reapuntado a otra base para el sprint por anomalía" {
+  mkpr 96 "scripts/y.sh"; review 96 APPROVE correctness
+  plan_and_grant
+  echo develop > "$FAKE/96.base"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ ! -e "$FAKE/merged" ]
+  grep -q '"reason":"pr_alterado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+}
+
+@test "AC-18 block: PR con otro repo de head o cerrado y reabierto para el sprint" {
+  mkpr 97 "scripts/z.sh"; review 97 APPROVE correctness
+  plan_and_grant
+  echo fork/repo > "$FAKE/97.repo"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  mv "$FAKE/97.repo" "$TMPDIR_T/97.repo.old"; echo 1 > "$FAKE/97.reopens"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ ! -e "$FAKE/merged" ]
+  [ "$(grep -c '"reason":"pr_alterado"' "$MERGE_SPRINT_HOME/ledger.jsonl")" -eq 2 ]
+}
+
+@test "AC-22 positivo: PR aparcado tras gh pr ready vuelve a Draft; sin ready no se toca" {
+  mkpr 98 "scripts/aa.sh"; review 98 APPROVE correctness; echo 1 > "$FAKE/98.reject"
+  mkpr 99 "scripts/ab.sh"; review 99 APPROVE correctness; echo fail > "$FAKE/99.checks"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  grep -q '"reason":"merge_rechazado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  grep -qx 'pr ready 98 -R .* --undo' "$FAKE/calls"
+  ! grep -q 'pr ready 99' "$FAKE/calls"
+}
+
+@test "AC-23 positivo: se etiquetan los PRs del manifiesto antes del primer merge y al terminar se retira la etiqueta de los no mergeados" {
+  mkpr 100 "scripts/ac.sh"; review 100 APPROVE correctness
+  mkpr 101 "scripts/ad.sh"; review 101 APPROVE correctness; echo fail > "$FAKE/101.checks"
+  plan_and_grant
+  local id; id=$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -c1-12)
+  run bash "$SCRIPT" run
+  grep -q "pr edit 100 -R .* --add-label merge-sprint:$id" "$FAKE/calls"
+  grep -q "pr edit 101 -R .* --add-label merge-sprint:$id" "$FAKE/calls"
+  [ "$(grep -n -- "--add-label" "$FAKE/calls" | tail -1 | cut -d: -f1)" -lt "$(grep -n '^pr merge' "$FAKE/calls" | head -1 | cut -d: -f1)" ]
+  grep -q "pr edit 101 -R .* --remove-label merge-sprint:$id" "$FAKE/calls"
+  ! grep -q "pr edit 100 -R .* --remove-label" "$FAKE/calls"
+}
+
+auto_rebase_list_step() {  # ejecuta el paso «List open PRs» del workflow real con un gh simulado
+  python3 -c 'import sys,yaml
+w=yaml.safe_load(open(".github/workflows/auto-rebase-open-prs.yml"))
+print(next(s["run"] for s in w["jobs"]["rebase"]["steps"] if s.get("name")=="List open PRs"))' > "$TMPDIR_T/step.sh"
+  mkdir -p "$TMPDIR_T/wf"
+  printf '#!/usr/bin/env bash\ncat "%s"\n' "$TMPDIR_T/prs.json" > "$TMPDIR_T/wf/gh"; chmod +x "$TMPDIR_T/wf/gh"
+  : > "$TMPDIR_T/gh_output"
+  PATH="$TMPDIR_T/wf:$PATH" GITHUB_OUTPUT="$TMPDIR_T/gh_output" bash "$TMPDIR_T/step.sh"
+}
+
+@test "AC-23 positivo: el workflow de auto-rebase omite los PRs con etiqueta merge-sprint:<id>" {
+  cat > "$TMPDIR_T/prs.json" <<'JSON'
+[{"number":7,"headRefName":"a","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","labels":[{"name":"merge-sprint:abc123abc123"}]},
+ {"number":8,"headRefName":"b","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","labels":[{"name":"bug"}]},
+ {"number":9,"headRefName":"c","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY","labels":[]}]
+JSON
+  run auto_rebase_list_step
+  [ "$status" -eq 0 ]
+  local prs; prs=$(sed -n '/^prs<<EOF$/,/^EOF$/p' "$TMPDIR_T/gh_output" | sed '1d;$d')
+  [ "$(jq -c '[.[].number]' <<<"$prs")" = "[8,9]" ]
+}
+
+@test "AC-25 boundary: dos run concurrentes, el segundo termina con error sin tocar nada" {
+  mkpr 102 "scripts/ae.sh"; review 102 APPROVE correctness
+  plan_and_grant
+  exec 7>"$MERGE_SPRINT_HOME/run.lock"; flock -n 7
+  run bash "$SCRIPT" run
+  exec 7>&-
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"otro sprint en curso"* ]]
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-25 positivo: proceso muerto entre el merge y el ledger; el siguiente run reconcilia con la reserva F5" {
+  mkpr 103 "scripts/af.sh"; mkpr 104 "scripts/ag.sh"
+  review 103 APPROVE correctness; review 104 APPROVE correctness
+  echo 'kill -9 $GHPPID' > "$FAKE/103.on_merge"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -ne 0 ]
+  ! grep -q '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  mv "$FAKE/103.on_merge" "$TMPDIR_T/103.on_merge.old"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"103"' | grep -q '"reconciled":"1"'
+  ! grep -q '"reason":"merge_externo"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ "$(paste -sd, "$FAKE/merged")" = "103,104" ]
+  [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["merged"])' "$MERGE_SPRINT_HOME/grant.json")" -eq 2 ]
+}
+
+@test "AC-26 block: PR del manifiesto mergeado sin reserva de este grant para el sprint por anomalía" {
+  mkpr 105 "scripts/ah.sh"; mkpr 106 "scripts/ai.sh"
+  review 105 APPROVE correctness; review 106 APPROVE correctness
+  plan_and_grant
+  echo MERGED > "$FAKE/105.state"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"merge_externo"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "AC-20 block: fichero STOP creado entre los checks y el merge impide el merge" {
+  mkpr 107 "scripts/aj.sh"; review 107 APPROVE correctness
+  plan_and_grant
+  # el gh falso crea el STOP justo al responder la consulta de checks
+  echo "touch '$MERGE_SPRINT_HOME/STOP'" > "$FAKE/checks_hook"
+  sed -i 's|"pr checks") printf|"pr checks") [[ -f "$F/checks_hook" ]] \&\& bash "$F/checks_hook"; printf|' "$GH"
+  run bash "$SCRIPT" run
+  [ ! -e "$FAKE/merged" ]
+  grep -q '"reason":"stop_antes_de_merge"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }

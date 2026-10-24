@@ -21,6 +21,7 @@ REG="$HOME_MS/reviews.jsonl"; LEDGER="$HOME_MS/ledger.jsonl"; GRANT="$HOME_MS/gr
 STOPF="$HOME_MS/STOP"; MANIFEST="$HOME_MS/manifest.json"
 GITROOT="${MERGE_SPRINT_GIT_ROOT:-$ROOT}"     # repo git sobre el que se re-sincronizan las ramas
 RESYNC="${MERGE_SPRINT_RESYNC:-1}"           # v2: re-sync con main dentro de run (0 = solo v1)
+BASE="${MERGE_SPRINT_BASE:-main}"
 
 die() { echo "merge-sprint: $*" >&2; exit "${2:-1}"; }
 now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -107,6 +108,20 @@ pr_tier() {  # tier calculado por risk-tier.py sobre los ficheros del PR
   python3 "$ROOT/scripts/risk-tier.py" --diff "$files" --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tier",4))' 2>/dev/null || echo 4
 }
 
+blob_on_main() { git -C "$GITROOT" rev-parse -q --verify "origin/$BASE:$1" 2>/dev/null; }
+
+required_live() {  # checks obligatorios vivos de la protección de base, uno por línea, ordenados
+  $GH api "repos/$REPO/branches/$BASE/protection/required_status_checks" --jq '.contexts[]' 2>/dev/null | sort -u
+}
+
+pr_meta() {  # pr_meta <pr> → "base_ref head_repo reopens" o falla (fail-closed)
+  local b r o
+  b=$($GH pr view "$1" -R "$REPO" --json baseRefName --jq .baseRefName) && [[ -n "$b" ]] || return 1
+  r=$($GH pr view "$1" -R "$REPO" --json headRepository,headRepositoryOwner --jq '.headRepositoryOwner.login+"/"+.headRepository.name') && [[ -n "$r" ]] || return 1
+  o=$($GH api --paginate "repos/$REPO/issues/$1/events?per_page=100" --jq '[.[]|select(.event=="reopened")]|length') || return 1
+  echo "$b $r $(awk '{s+=$1} END {print s+0}' <<<"$o")"
+}
+
 reviewed_shas() {  # reviewed_shas <pr> → shas con revisión registrada, del más reciente al más antiguo
   [[ -f "$REG" ]] || return 0
   python3 -c 'import json,sys
@@ -137,9 +152,19 @@ cmd_plan() {
       [[ -n "$found" ]] || continue
       head="$found"
     fi
-    out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4])}); print(json.dumps(a))' "$out" "$n" "$head" "$tier")
+    local meta; meta=$(pr_meta "$n") || continue
+    out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o)}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta")
   done
-  python3 -c 'import json,sys; a=json.loads(sys.argv[1])[:int(sys.argv[2])]; print(json.dumps({"repo":sys.argv[3],"prs":a},sort_keys=True,separators=(",",":")))' "$out" "$max_prs" "$REPO" > "$MANIFEST"
+  # Blobs del ejecutor y del clasificador en origin/<base> y checks obligatorios de la protección (§2.2).
+  local rb cb req
+  rb=$(blob_on_main scripts/merge-sprint.sh) || die "sin scripts/merge-sprint.sh en origin/$BASE" 4
+  cb=$(blob_on_main scripts/risk-tier.py) || die "sin scripts/risk-tier.py en origin/$BASE" 4
+  req=$(required_live)
+  [[ -n "$req" ]] || die "la protección de $BASE no declara checks obligatorios" 4
+  python3 -c 'import json,sys; a=json.loads(sys.argv[1])[:int(sys.argv[2])]
+print(json.dumps({"repo":sys.argv[3],"base":sys.argv[4],"runner_blob":sys.argv[5],"classifier_blob":sys.argv[6],
+ "required_checks":sys.argv[7].splitlines(),"prs":a},sort_keys=True,separators=(",",":")))' \
+    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" > "$MANIFEST"
   chmod 600 "$MANIFEST"
   echo "manifiesto: $(python3 -c 'import json,sys; print(" ".join("#%d(t%d)"%(p["pr"],p["tier"]) for p in json.load(open(sys.argv[1]))["prs"]))' "$MANIFEST")"
   echo "digest: $(sha < "$MANIFEST")"
@@ -157,6 +182,10 @@ cmd_grant() {
 }
 
 grant_field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$GRANT" "$1"; }
+grant_set_merged() {  # el contador se actualiza solo si el grant sigue vigente; revocado, el siguiente paso para
+  [[ -f "$GRANT" ]] || return 0
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["merged"]=int(sys.argv[2]); json.dump(d,open(sys.argv[1],"w"))' "$GRANT" "$1"
+}
 
 main_ci() {  # pass | fail | pending sobre un SHA de main
   $GH api "repos/$REPO/commits/$1/check-runs?per_page=100" --jq '[.check_runs[] | .conclusion // "pending"] | if length==0 then "pending" elif any(.=="pending") then "pending" elif any(.=="failure" or .=="timed_out" or .=="cancelled") then "fail" else "pass" end' 2>/dev/null || echo pending
@@ -235,24 +264,95 @@ wait_ci() {  # wait_ci <pr> → pass | fail | pending (agotado el plazo)
   echo "$st"
 }
 
-park() { ledger event=PARK pr="$1" reason="$2"; echo "  aparcado #$1: $2"; }
+READIED=""   # PRs sacados de Draft en este run: si se aparcan, vuelven a Draft (§2.5)
+park() {
+  if [[ " $READIED " == *" $1 "* ]]; then
+    $GH pr ready "$1" -R "$REPO" --undo >/dev/null 2>&1 || ledger event=DRAFT_FALLO pr="$1"
+  fi
+  ledger event=PARK pr="$1" reason="$2"; echo "  aparcado #$1: $2"
+}
+
+anomaly() {  # anomaly <motivo> [pr] → STOP del sprint, sin merge ni revert
+  ledger event=STOP reason="$1" ${2:+pr="$2"}; echo "STOP (anomalía): $1${2:+ #$2}"; exit 5
+}
+
+# Reservas F5 (SE-387) pr.merge/<N> de este grant: distinguen un merge propio sin registrar de uno externo.
+f5() { (cd "$GITROOT" && SAVIA_RESERVATIONS="$HOME_MS/reservations/${DIGEST:0:12}" bash "$ROOT/scripts/f5-state.sh" "$@"); }
+
+mf() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))[sys.argv[2]]; print("\n".join(v) if isinstance(v,list) else v)' "$MANIFEST" "$1"; }
+
+check_required() {  # checks obligatorios vivos ⊇ los del manifiesto y no vacíos (AC-16)
+  local live; live=$(required_live)
+  [[ -n "$live" ]] || anomaly checks_obligatorios_vacios
+  [[ -z "$(comm -23 <(mf required_checks | sort -u) <(echo "$live"))" ]] || anomaly checks_obligatorios_reducidos
+}
+
+main_ci_gate() {  # main_ci_gate <pr> <merge_commit> → vuelve solo si main queda en verde; si no, STOP sin revert
+  local st
+  for _ in $(seq 1 "${MERGE_SPRINT_MAIN_POLLS:-40}"); do st=$(main_ci "$2"); [[ "$st" != pending ]] && break; sleep "${MERGE_SPRINT_POLL_S:-30}"; done
+  [[ "$st" == pass ]] || { ledger event=STOP reason="main_$st" pr="$1"; echo "STOP: main '$st' tras #$1 (sin revert)"; exit 0; }
+}
+
+LABELED=""
+unlabel() {  # al terminar, el auto-rebase vuelve a ver los PRs no mergeados (D6 solo pausa el manifiesto vigente)
+  local n
+  for n in $LABELED; do
+    [[ "$($GH pr view "$n" -R "$REPO" --json state --jq .state 2>/dev/null)" == OPEN ]] || continue
+    $GH pr edit "$n" -R "$REPO" --remove-label "merge-sprint:${DIGEST:0:12}" >/dev/null 2>&1
+  done
+}
 
 cmd_run() {
   [[ -f "$GRANT" ]] || die "sin grant" 3
   exec 9>"$HOME_MS/run.lock"; flock -n 9 || die "otro sprint en curso" 3
   verify_chain "$LEDGER" || die "ledger manipulado" 4
   verify_chain "$REG" || die "registro de revisiones manipulado" 4
-  [[ "$(sha < "$MANIFEST")" == "$(grant_field digest)" ]] || die "manifiesto alterado tras el grant" 4
+  DIGEST=$(sha < "$MANIFEST")
+  [[ "$DIGEST" == "$(grant_field digest)" ]] || die "manifiesto alterado tras el grant" 4
   local allowed; allowed=$(policy allowed_tiers) || exit 2
   local merged; merged=$(grant_field merged)
-  ledger event=RUN digest="$(grant_field digest)"
-  local entries; entries=$(python3 -c 'import json,sys; [print(p["pr"],p["head"],p["tier"]) for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"])]' "$MANIFEST")
-  while read -r pr head tier; do
+  ledger event=RUN digest="$DIGEST"
+  # El ejecutor y el clasificador que corren deben ser los blobs congelados en el manifiesto (AC-17).
+  [[ "$(git hash-object "$ROOT/scripts/merge-sprint.sh")" == "$(mf runner_blob)" ]] || anomaly blob_ejecutor
+  [[ "$(git hash-object "$ROOT/scripts/risk-tier.py")" == "$(mf classifier_blob)" ]] || anomaly blob_clasificador
+  check_required
+  local entries; entries=$(python3 -c 'import json,sys
+for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_repo"],p["reopens"])' "$MANIFEST") \
+    || anomaly manifiesto_ilegible
+  # D6: la etiqueta merge-sprint:<id> pausa el auto-rebase de los PRs del manifiesto mientras dura el run.
+  local label="merge-sprint:${DIGEST:0:12}" pr head tier base hrepo reopens
+  $GH label create "$label" -R "$REPO" --force --description "SE-433: auto-rebase en pausa" >/dev/null 2>&1 || anomaly etiqueta_fallida
+  trap unlabel EXIT
+  while read -r pr _; do
+    [[ -n "$pr" && "$($GH pr view "$pr" -R "$REPO" --json state --jq .state)" == OPEN ]] || continue
+    $GH pr edit "$pr" -R "$REPO" --add-label "$label" >/dev/null 2>&1 || anomaly etiqueta_fallida "$pr"
+    LABELED="$LABELED $pr"
+  done <<<"$entries"
+  while read -r pr head tier base hrepo reopens; do
     [[ -z "$pr" ]] && continue
     [[ -e "$STOPF" ]] && { ledger event=STOP reason=manual; echo "STOP manual"; return 0; }
+    [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || { ledger event=STOP reason=grant_revocado; echo "STOP: grant revocado"; return 0; }
     (( $(date +%s) < $(grant_field expires_epoch) )) || { ledger event=STOP reason=ttl; echo "STOP: grant caducado"; return 0; }
     (( merged < $(grant_field max_merges) )) || { ledger event=STOP reason=max; echo "STOP: máximo de merges"; return 0; }
-    [[ "$($GH pr view "$pr" -R "$REPO" --json state --jq .state)" == OPEN ]] || { park "$pr" no_abierto; continue; }
+    check_required
+    local state; state=$($GH pr view "$pr" -R "$REPO" --json state --jq .state)
+    if [[ "$state" == MERGED ]]; then
+      # Reconciliación tras una caída (AC-25/26): solo una reserva submitted de este grant lo hace propio.
+      case "$(f5 status pr.merge "$pr")" in
+        closed) continue ;;   # ya mergeado y registrado por este grant
+        submitted)
+          local mc; mc=$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
+          merged=$((merged+1)); grant_set_merged "$merged"
+          ledger event=MERGED pr="$pr" tier="$tier" head="$head" merge_commit="$mc" reconciled=1
+          f5 close pr.merge "$pr" >/dev/null || anomaly f5_close "$pr"
+          echo "  MERGED #$pr (reconciliado) → ${mc:0:8}"
+          main_ci_gate "$pr" "$mc"; continue ;;
+        *) anomaly merge_externo "$pr" ;;
+      esac
+    fi
+    local meta; meta=$(pr_meta "$pr") || anomaly pr_ilegible "$pr"
+    [[ "$meta" == "$base $hrepo $reopens" ]] || anomaly "pr_alterado" "$pr"   # base, repo de head o reabierto (AC-18)
+    [[ "$state" == OPEN ]] || { park "$pr" no_abierto; continue; }
     local t; t=$(pr_tier "$pr")
     (( t <= tier )) && [[ ",$allowed," == *",$t,"* ]] || { park "$pr" "tier_$t"; continue; }
     reviews_ok "$pr" "$head" "$tier" || { park "$pr" revision; continue; }
@@ -273,7 +373,9 @@ cmd_run() {
         fail) reason=ci_roja; break ;;
         *) reason=ci_pendiente; break ;;
       esac
-      $GH pr ready "$pr" -R "$REPO" >/dev/null 2>&1
+      [[ -e "$STOPF" ]] && { park "$pr" stop_antes_de_merge; ledger event=STOP reason=manual; echo "STOP manual"; return 0; }
+      $GH pr ready "$pr" -R "$REPO" >/dev/null 2>&1 && READIED="$READIED $pr"
+      f5 reserve pr.merge "$pr" >/dev/null && f5 mark_submitted pr.merge "$pr" >/dev/null || anomaly f5_reserva "$pr"
       if $GH pr merge "$pr" -R "$REPO" --squash --match-head-commit "$cur" >/dev/null 2>&1; then ok=1; break; fi
       ms=$($GH pr view "$pr" -R "$REPO" --json mergeStateStatus --jq .mergeStateStatus 2>/dev/null)
       if [[ "$RESYNC" == 1 && ( "$ms" == DIRTY || "$ms" == BEHIND ) ]]; then
@@ -282,14 +384,12 @@ cmd_run() {
       reason=merge_rechazado; break
     done
     (( ok )) || { park "$pr" "$reason"; continue; }
-    merged=$((merged+1))
-    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["merged"]=int(sys.argv[2]); json.dump(d,open(sys.argv[1],"w"))' "$GRANT" "$merged"
+    merged=$((merged+1)); grant_set_merged "$merged"
     local mc; mc=$($GH pr view "$pr" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
     ledger event=MERGED pr="$pr" tier="$t" head="$cur" merge_commit="$mc"
+    f5 close pr.merge "$pr" >/dev/null || anomaly f5_close "$pr"
     echo "  MERGED #$pr → ${mc:0:8}"
-    local st i
-    for _ in $(seq 1 "${MERGE_SPRINT_MAIN_POLLS:-40}"); do st=$(main_ci "$mc"); [[ "$st" != pending ]] && break; sleep "${MERGE_SPRINT_POLL_S:-30}"; done
-    [[ "$st" == pass ]] || { ledger event=STOP reason="main_$st" pr="$pr"; echo "STOP: main '$st' tras #$pr (sin revert)"; return 0; }
+    main_ci_gate "$pr" "$mc"
   done <<<"$entries"
   ledger event=END merged="$merged"; echo "sprint terminado: $merged merges"
 }
