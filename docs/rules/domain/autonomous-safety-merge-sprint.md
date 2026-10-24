@@ -146,6 +146,13 @@ permisos del frontend, no esta regla. El revisor, el revisor de seguridad y el j
 mismo modelo y comparten sesgos. Las identidades de los agentes son autodeclaradas: el registro
 encadenado detecta que alguien compre veredictos antes de `plan`, pero no lo impide.
 
+- La independencia del juez compara su id declarado con emails git y trailers `Fix-Author:`, que son
+  espacios de nombres distintos: un agente que firma con email y juzga con su id no se detecta.
+- Las reservas F5 van por manifiesto (digest), no por grant: un merge reservado bajo un grant
+  anterior del mismo manifiesto cuenta como propio.
+- La re-sincronización ejecuta generadores de la rama del PR (`sam.py`, escáner y firma) antes de
+  que el prefiltro y el juez vean el delta.
+
 ## Referencias
 
 - Spec: `docs/specs/SE-433-merge-sprint.spec.md`
