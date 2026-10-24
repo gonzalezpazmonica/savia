@@ -412,6 +412,9 @@ def main(argv: list[str]) -> int:
 
     start_time = time.monotonic()
     repo_root = Path(output_arg).resolve() if output_arg else Path(__file__).resolve().parents[1]
+    if not repo_root.is_dir():
+        print(f"Error: directory not found: {repo_root}", file=sys.stderr)
+        return 2
     scm_dir = repo_root / ".scm"
     categories_dir = scm_dir / "categories"
 
