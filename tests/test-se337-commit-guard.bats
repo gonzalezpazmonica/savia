@@ -60,7 +60,6 @@ teardown() {
   h2=$(sha256sum .claude/CONSTITUCION.md | cut -d' ' -f1)
   cd "$FIXDIR" || return 1
   bash "$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/$HOOK" >/dev/null 2>&1
-  [[ "$(sha256sum ../CRITERIO.md 2>/dev/null | cut -d' ' -f1)" == "$h1" ]] || true
   # verificación real desde la raíz del repo
   cd "$(dirname "$BATS_TEST_FILENAME")/.."
   [[ "$(sha256sum CRITERIO.md | cut -d' ' -f1)" == "$h1" ]]

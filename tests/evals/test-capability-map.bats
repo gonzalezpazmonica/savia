@@ -106,7 +106,7 @@ mk_script() { printf '#!/usr/bin/env bash\n# %s\nset -uo pipefail\n' "$2" > "$TM
 
 @test "error: missing directory argument handled gracefully" {
   run bash "$SCRIPT" "/nonexistent-dir-$$"
-  [[ "$status" -ne 0 ]] || [[ "$output" == *"error"* ]] || [[ "$output" == *"not found"* ]] || true
+  [ "$status" -ne 0 ]
 }
 
 @test "error: empty workspace produces valid but minimal output" {
