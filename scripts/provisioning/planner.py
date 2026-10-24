@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 
 from . import schema_lite
 from .adapter import HostFacts
@@ -13,7 +14,7 @@ SCHEMA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.pat
 SECRET_KEY = re.compile(r"(token|passw(or)?d|secret|api[_-]?key|credential|private[_-]?key)", re.I)
 SECRET_VALUE = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|://[^/@\s]+:[^/@\s]+@)")
 SHELL_INTERPRETERS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "ash", "cmd", "powershell", "pwsh", "wsl"}
-EXEC_WRAPPERS = {"env", "busybox"}  # run their first non-option argument
+EXEC_WRAPPERS = {"env", "busybox", "sudo", "doas", "nohup", "timeout", "xargs", "nice", "stdbuf", "command"}
 INLINE_CODE = ({"python", "python3", "node", "perl", "ruby", "deno"}, {"-c", "-e", "--eval"})
 PM_LOCATOR = re.compile(r"^(apt|dnf|winget|npm):[A-Za-z0-9._@/+-]+\Z")
 PRIV_RANK = {"USER": 0, "ELEVATED": 1, "ROOT-ADMIN": 2}
@@ -75,12 +76,17 @@ def _base(exe: str) -> str:
     return b[:-4] if b.endswith(".exe") else b
 
 
-def _runs_shell(inv: dict) -> bool:
-    """Shell interpreters, wrappers around one (env bash, busybox sh) and inline code (python -c, node -e)."""
+def _runs_shell(inv: dict, depth: int = 0) -> bool:
+    """Shell interpreters, wrappers around one (env/sudo/nohup/timeout/xargs ... bash) and inline code (python -c).
+
+    Heuristic for human review, deliberately over-inclusive: behind a wrapper every later argument
+    is tried as the wrapped executable, so option values (env -u VAR) cannot hide the shell.
+    """
     exe, args = _base(inv.get("executable", "")), list(inv.get("args", []))
-    if exe in EXEC_WRAPPERS:
-        rest = [a for a in args if not a.startswith("-") and "=" not in a]
-        return bool(rest) and _runs_shell({"executable": rest[0], "args": args[args.index(rest[0]) + 1:]})
+    if exe in EXEC_WRAPPERS and depth < 4:
+        words = [w for a in args for w in (shlex.split(a) if " " in a else [a])]  # env -S "bash -c x"
+        return any(_runs_shell({"executable": w, "args": words[i + 1:]}, depth + 1)
+                   for i, w in enumerate(words) if not w.startswith("-") and "=" not in w)
     return exe in SHELL_INTERPRETERS or (exe in INLINE_CODE[0] and any(a in INLINE_CODE[1] for a in args))
 
 
@@ -88,7 +94,7 @@ def _integrity_problem(t: dict):
     s = t["source"]
     if s["kind"] == "package_manager" and not PM_LOCATOR.match(s["locator"]):
         return "package_manager locator must be <apt|dnf|winget|npm>:<package>"
-    if s["kind"] != "package_manager" and not s["locator"].strip().lower().startswith("https://") or s["locator"] != s["locator"].strip():
+    if (s["kind"] != "package_manager" and not s["locator"].strip().lower().startswith("https://")) or s["locator"] != s["locator"].strip():
         return "insecure transport; HTTPS required"
     if s["kind"] in ("signed_installer", "official_release") and not s.get("integrity", {}).get("sha256"):
         return f"{s['kind']} source without sha256"

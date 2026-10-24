@@ -268,7 +268,9 @@ class Planner(unittest.TestCase):
 
     def test_shell_interpreter_variants_detected(self):
         for exe, args in (("bash.exe", ["-c", "x"]), ("wsl", ["sh"]), ("/usr/bin/env", ["bash", "-c", "x"]),
-                          ("busybox", ["sh", "-c", "x"]), ("python3", ["-c", "print(1)"]), ("node", ["-e", "1"])):
+                          ("busybox", ["sh", "-c", "x"]), ("python3", ["-c", "print(1)"]), ("node", ["-e", "1"]),
+                          ("env", ["-u", "VAR", "bash", "-c", "x"]), ("sudo", ["-n", "sh"]), ("nohup", ["bash"]),
+                          ("timeout", ["5", "sh"]), ("env", ["-S", "bash -c x"]), ("xargs", ["sh", "-c", "x"])):
             m = copy.deepcopy(MANIFESTS)
             inv = m["opencode"]["targets"][0]["actions"]["install"]["invocation"]
             inv["executable"], inv["args"] = exe, args
@@ -277,6 +279,27 @@ class Planner(unittest.TestCase):
         inv = m["opencode"]["targets"][0]["actions"]["install"]["invocation"]
         inv["executable"], inv["args"] = "python3", ["setup.py"]
         self.assertNotIn(("opencode", "shell_interpreter"), codes(build_plan(m, host("ubuntu-x64"), ["opencode"]), "warnings"))
+
+    def test_wrapper_without_shell_not_flagged(self):
+        m = copy.deepcopy(MANIFESTS)
+        inv = m["opencode"]["targets"][0]["actions"]["install"]["invocation"]
+        inv["executable"], inv["args"] = "env", ["-u", "VAR", "tool", "--version"]
+        self.assertNotIn(("opencode", "shell_interpreter"), codes(build_plan(m, host("ubuntu-x64"), ["opencode"]), "warnings"))
+
+    def test_datetime_format_rejects_trailing_newline_and_unicode_digits(self):
+        sch = {"type": "string", "format": "date-time"}
+        self.assertEqual(schema_lite.validate("2026-01-01T00:00:00Z", sch), [])
+        for bad in ("2026-01-01T00:00:00Z\n", "\u0662026-01-01T00:00:00Z"):
+            self.assertNotEqual(schema_lite.validate(bad, sch), [], repr(bad))
+
+    def test_cwd_must_be_relative_and_contained(self):
+        for bad in ("/etc", "../x", "a/../../x", "C:\\Windows", "a\\..\\b"):
+            m = copy.deepcopy(MANIFESTS)
+            m["opencode"]["targets"][0]["actions"]["install"]["invocation"]["cwd"] = bad
+            self.assertTrue(validate(m["opencode"], "component-manifest"), bad)
+        m = copy.deepcopy(MANIFESTS)
+        m["opencode"]["targets"][0]["actions"]["install"]["invocation"]["cwd"] = "build/out"
+        self.assertEqual(validate(m["opencode"], "component-manifest"), [])
 
     def test_package_manager_locator_validated(self):
         for bad in ("npm:https://example.invalid/x", "apt:", "curl:x", "npm:a b"):
@@ -386,6 +409,26 @@ class Cli(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stderr)
         self.assertIn("self-check", r.stderr)
         self.assertNotIn(leak, r.stderr + r.stdout)
+
+    def test_secret_in_valid_plan_prints_only_count(self):
+        # The plan passes the schema; only the secret scanner can stop it (mutation: drop find_secrets -> exit 0).
+        leak = "ghp_" + "B" * 30
+        with tempfile.TemporaryDirectory() as d:
+            h = json.loads((FX / "hosts/ubuntu-x64.json").read_text())
+            h["installed"]["git"] = leak  # becomes a version_mismatch warning carrying the value
+            hp = Path(d) / "h.json"
+            hp.write_text(json.dumps(h))
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/installer-plan.py"), "--manifests", str(FX / "manifests"),
+                                "--host", str(hp), "--select", "git"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("secret-like content in 1 location(s)", r.stderr)
+        self.assertNotIn(leak, r.stderr + r.stdout)
+
+    def test_unknown_selection_is_invalid_input_exit_1(self):
+        r = self.run_cli("ubuntu-x64", "no-such-component")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("unknown component", r.stderr)
+        self.assertEqual(self.run_cli("ubuntu-x64", "git").returncode, 0)
 
     def test_usage_error_is_exit_1_not_blocked(self):
         script = str(Path(__file__).resolve().parents[2] / "scripts/installer-plan.py")

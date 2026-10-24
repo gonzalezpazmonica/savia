@@ -5,7 +5,7 @@ import json
 import re
 
 _TYPES = {"object": dict, "array": list, "string": str, "boolean": bool, "null": type(None)}
-_DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
+_DATETIME = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})\Z")
 
 
 SUPPORTED = {"$defs", "$id", "$ref", "$schema", "additionalProperties", "const", "default", "description", "enum",

@@ -54,7 +54,7 @@
         "executable": {"type": "string", "minLength": 1, "pattern": "^[^\\s;&|`$<>]+$"},
         "args": {"type": "array", "items": {"type": "string"}},
         "env_allow": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$"}, "uniqueItems": true},
-        "cwd": {"type": "string"},
+        "cwd": {"type": "string", "minLength": 1, "pattern": "^(?![/\\\\])(?![A-Za-z]:)(?!(.*[/\\\\])?\\.\\.([/\\\\]|$)).+$"},
         "version_regex": {"type": "string"}
       }
     },

@@ -33,7 +33,12 @@ def main() -> int:
     ap.add_argument("--select", action="append", required=True)
     a = ap.parse_args()
     try:
-        plan = build_plan(load_manifests(a.manifests), FixtureAdapter(a.host).discover(), a.select)
+        manifests, host = load_manifests(a.manifests), FixtureAdapter(a.host).discover()
+        unknown = sorted(set(a.select) - set(manifests) - set(host.installed))
+        if unknown:  # a mistyped id is invalid input, not a blocked plan
+            print(f"ERROR: unknown component(s): {', '.join(unknown)}", file=sys.stderr)
+            return 1
+        plan = build_plan(manifests, host, a.select)
     except (ValueError, OSError, KeyError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
