@@ -29,6 +29,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$IDEA" ]] && { echo '{"error":"--idea obligatorio"}' >&2; exit 1; }
+[[ "$MAX_TURNS" =~ ^[0-9]+$ ]] || { echo '{"error":"--max-turns debe ser un entero"}' >&2; exit 1; }
+# Los valores viajan por entorno: interpolarlos en el código Python rompía con una comilla en la idea
+# y ejecutaba como código lo que contuviera.
+export IDEA SESSION_ID START_TIME VIOLATIONS RESIDUE_FILE MAX_TURNS
 
 # ── Phase 0: linea_roja check against CRITERIO.md (AC-1.3) ──
 check_violations() {
@@ -47,16 +51,17 @@ check_violations() {
 VIOLATIONS=$(check_violations)
 if [[ -n "${VIOLATIONS:-}" ]]; then
   python3 -c "
-import json
+import json, os
+e = os.environ
 print(json.dumps({
     'veredicto': 'MUERTA',
-    'motivo': 'Contradice CRIT linea_roja: $VIOLATIONS',
+    'motivo': 'Contradice CRIT linea_roja: ' + e['VIOLATIONS'],
     'destilado': '',
     'turnos': 0,
-    'session_id': '$SESSION_ID',
-    'timestamp': '$START_TIME',
+    'session_id': e['SESSION_ID'],
+    'timestamp': e['START_TIME'],
     'preguntas_abiertas': [],
-    'decisiones': [{'decision': 'muerte por linea_roja', 'crits': '$VIOLATIONS'}]
+    'decisiones': [{'decision': 'muerte por linea_roja', 'crits': e['VIOLATIONS']}]
 }, indent=2, ensure_ascii=False))
 "
   exit 0
@@ -86,20 +91,22 @@ fi
 
 # ── Phase 3: destilado ──
 DESTILADO=$(echo "$IDEA" | python3 -c "import sys;t=sys.stdin.read().strip()[:800];print(t)" 2>/dev/null || echo "$IDEA")
+export DESTILADO KG_CONTRAST ADVERSARIAL
 
 # ── Phase 4: Store residue (engrams, AC-1.5) ──
 if command -v python3 &>/dev/null; then
   python3 -c "
 import json, os
+e = os.environ
 entry = {
-    'session_id': '$SESSION_ID',
+    'session_id': e['SESSION_ID'],
     'veredicto': 'ENDURECIDA',
-    'timestamp': '$START_TIME',
-    'idea_len': len('$DESTILADO'),
-    'adversarial': $([[ "$ADVERSARIAL" == "true" ]] && echo "True" || echo "False"),
-    'kg_contrast': '$KG_CONTRAST'
+    'timestamp': e['START_TIME'],
+    'idea_len': len(e['DESTILADO']),
+    'adversarial': e['ADVERSARIAL'] == 'true',
+    'kg_contrast': e['KG_CONTRAST']
 }
-path = '$RESIDUE_FILE'
+path = e['RESIDUE_FILE']
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, 'a') as f:
     f.write(json.dumps(entry, ensure_ascii=False) + '\n')
@@ -113,24 +120,26 @@ if [[ "$KG_CONTRAST" == "kg_contrast_disponible" ]]; then
   kg_contrast_note="$kg_count entidades en KG"
 fi
 
+export KG_CONTRAST_NOTE="$kg_contrast_note"
 python3 -c "
-import json
+import json, os
+e = os.environ
 
 output = {
     'veredicto': 'ENDURECIDA',
-    'motivo': 'Sesion de forja completada. $kg_contrast_note',
-    'destilado': '$DESTILADO'[:800],
+    'motivo': 'Sesion de forja completada. ' + e['KG_CONTRAST_NOTE'],
+    'destilado': e['DESTILADO'][:800],
     'turnos': 3,
-    'adversarial': True if '$ADVERSARIAL' == 'true' else False,
-    'session_id': '$SESSION_ID',
-    'timestamp': '$START_TIME',
-    'kg_contrast': '$KG_CONTRAST',
+    'adversarial': e['ADVERSARIAL'] == 'true',
+    'session_id': e['SESSION_ID'],
+    'timestamp': e['START_TIME'],
+    'kg_contrast': e['KG_CONTRAST'],
     'preguntas_abiertas': [],
     'decisiones': [
         {'decision': 'verificacion linea_roja', 'motivo': 'sin violaciones detectadas'},
-        {'decision': 'contraste KG', 'motivo': '$kg_contrast_note'}
+        {'decision': 'contraste KG', 'motivo': e['KG_CONTRAST_NOTE']}
     ],
-    'max_turns': $MAX_TURNS,
+    'max_turns': int(e['MAX_TURNS']),
     'engram_stored': True
 }
 print(json.dumps(output, indent=2, ensure_ascii=False))

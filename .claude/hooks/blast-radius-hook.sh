@@ -63,7 +63,7 @@ if [[ -f "$INPUT_PATH" ]] && command -v timeout >/dev/null 2>&1; then
   syms=$(timeout 4 bash -c "
     git -C '$REPO_ROOT' grep -hE '([[:space:]]|^)(def|func|function|class|fn|sub)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*|^[a-zA-Z_][a-zA-Z0-9_]*\(\)' -- '$RELPATH' 2>/dev/null \
     | grep -oE '(def|func|function|class|fn|sub)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*\(\)' \
-    | sed -E 's/[[:space:]]+//; s/\(\)//' \
+    | sed -E 's/^(def|func|function|class|fn|sub)[[:space:]]+//; s/\(\)//' \
     | grep -vE '^(def|func|function|class|fn|sub)$' | sort -u" 2>/dev/null) || syms=""
   if [[ -n "$syms" ]]; then
     while IFS= read -r s; do
