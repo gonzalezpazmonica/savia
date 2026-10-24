@@ -215,7 +215,8 @@ FINDING='[{"RuleID":"aws-key","File":"src/a.py","StartLine":7,"Commit":"abcdef12
 @test "gate: con .gitleaks.toml en el repo se pasa --config; sin él no" {
   mk_gate; with_gitleaks
   run_gate "r $S1 r $S2"
-  ! grep -qxF -- "--config" "$GL_ARGS"
+  run grep -qxF -- "--config" "$GL_ARGS"
+  [ "$status" -ne 0 ]
   : > "$SB/.gitleaks.toml"
   run_gate "r $S1 r $S2"
   grep -qxF -- "--config" "$GL_ARGS"

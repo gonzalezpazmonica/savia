@@ -261,8 +261,7 @@ logf() { python3 -c 'import json,sys; print(json.loads(sys.stdin.read().splitlin
 @test "validate: rechazo por tarjeta suspendida, desconocida o con otro id, con mensaje y registro REJECT" {
   mk_cards "$PLATFORM_CARDS_FILE"; export IDENTITY_LOG="$TEST_DIR/log.jsonl"
   local id
-  for id in ext-beta ext-nope EXT-ALPHA ""; do
-    [ -z "$id" ] && continue
+  for id in ext-beta ext-nope EXT-ALPHA; do
     run bash "$SCRIPT" validate --origin agent --agent-id "$id"
     [ "$status" -eq 1 ]
     [[ "$output" == *"REJECT_UNREGISTERED: agent_id '$id' not found or not active in platform cards"* ]]
@@ -271,6 +270,13 @@ logf() { python3 -c 'import json,sys; print(json.loads(sys.stdin.read().splitlin
     [ "$(logf reason)" = "no-verifiable-identity" ]
     [ "$(logf card_id)" = "" ]
   done
+}
+
+@test "validate: --agent-id vacío en origen agent -> exit 2 (error de uso)" {
+  mk_cards "$PLATFORM_CARDS_FILE"; export IDENTITY_LOG="$TEST_DIR/log.jsonl"
+  run bash "$SCRIPT" validate --origin agent --agent-id ""
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--agent-id is required"* ]]
 }
 
 @test "validate: el estado debe ser exactamente active" {
