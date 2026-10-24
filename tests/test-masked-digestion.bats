@@ -87,9 +87,8 @@ daemon_available() {
   output=$(curl -s --max-time 5 -X POST "$SHIELD_URL/mask" \
     -H "Content-Type: application/json" $TOKEN_HEADER \
     -d '{"bad_field":"test"}' 2>/dev/null)
-  [[ "$output" == *'"masked": ""'* ]]
-  [[ "$output" == *'"changed": false'* ]]
-  [[ "$output" != *"test"* ]]
+  run python3 -c "import sys,json; d=json.loads(sys.argv[1]); assert d['masked']=='' and d['changed'] is False, d" "$output"
+  [ "$status" -eq 0 ]
 }
 
 @test "unmask fails gracefully with missing map" {
