@@ -1,0 +1,23 @@
+{
+  "deltas": {
+    "approval": "CLI approval prompt",
+    "sandbox": "native workspace-write boundary"
+  },
+  "equivalence": "E1",
+  "execution_modes": [
+    "LOCAL",
+    "SANDBOXED_LOCAL"
+  ],
+  "id": "codex-cli",
+  "kind": "surface",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "codex",
+  "schema_version": 1,
+  "state": "degraded-safe",
+  "verification": "NOT_VERIFIED"
+}
