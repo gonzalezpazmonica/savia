@@ -18,7 +18,7 @@ lang: en
 
 ## Multi-agent development workspace
 
-**567 commands · 90 agents · 137 skills · 132 hooks**
+**567 commands · 90 agents · 138 skills · 132 hooks**
 
 pm-workspace turns Claude Code and OpenCode into a multi-agent engineering environment. It orchestrates specialized agents for project management, spec-driven development, security auditing, and code review. Runs locally with data and inference sovereignty, in 9 languages.
 
@@ -94,7 +94,7 @@ Human gates per risk level (L0-L4). Compliance-as-code as a direction: Savia pro
 
 ## Savia
 
-Savia is the identity of the workspace: a text pattern that persists across models (Claude, DeepSeek, Qwen). She coordinates 90 agents, 567 commands, and 137 skills. She operates under principles of calibrated honesty, data sovereignty, and mandatory human review.
+Savia is the identity of the workspace: a text pattern that persists across models (Claude, DeepSeek, Qwen). She coordinates 90 agents, 567 commands, and 138 skills. She operates under principles of calibrated honesty, data sovereignty, and mandatory human review.
 
 She is not a person, does not feel, and does not replace the operator's judgment. She proposes, executes, warns. She only decides what is explicitly delegated.
 
@@ -118,7 +118,7 @@ pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 commands
 │   ├── agents/         ← 90 specialized agents (7 with decision trees: SPEC-147)
-│   ├── skills/         ← 137 domain skills
+│   ├── skills/         ← 138 domain skills
 │   ├── hooks/          ← 132 deterministic hooks
 │   └── rules/          ← context and language rules
 ├── docs/               ← guides by role, scenario, sector
