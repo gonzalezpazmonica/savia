@@ -20,9 +20,23 @@ teardown() { cd /; }
   [[ "$output" -ge 1 ]]
 }
 @test "no persiste el prompt (SCL-008 TS-07)" {
-  run grep -ciE '>.*prompt|echo.*\$PROMPT|cat.*prompt' "$SCRIPT"
-  # El hook no debe volcar el prompt a ficheros: 0 coincidencias.
-  [ "$output" = "0" ]
+  # Proyecto aislado con un recall falso que solo responde si recibe el marcador en la consulta.
+  local proj="$BATS_TEST_TMPDIR/proj" marker="PROMPT-MARKER-7f3a9c-unico"
+  mkdir -p "$proj/scripts"
+  cat > "$proj/scripts/learning-recall.sh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  *PROMPT-MARKER-7f3a9c-unico*) echo '{"effective_hits":[{"criterion_id":"C-1","principle":"criterio de prueba"}]}' ;;
+esac
+STUB
+  run env CLAUDE_PROJECT_DIR="$proj" HOME="$BATS_TEST_TMPDIR/home" TMPDIR="$BATS_TEST_TMPDIR" \
+    bash -c "echo '{\"content\":\"consulta con $marker para recall\"}' | bash '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  # el hook procesó el prompt (inyectó el acierto del stub) ...
+  [[ "$output" == *"Criterios humanos aplicables"* ]]
+  # ... y no dejó ningún fichero que lo contenga
+  run grep -rl --exclude=learning-recall.sh -- "$marker" "$BATS_TEST_TMPDIR"
+  [ -z "$output" ]
 }
 # --- Comportamiento: proyecto temporal con un learning-recall.sh falso que registra sus argumentos ---
 

@@ -58,6 +58,7 @@ teardown() {
   run bash "$BATS_TEST_DIRNAME/../scripts/classify-execution-level.sh" --help 2>/dev/null
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage: classify-execution-level.sh"* ]]
+  [[ "$output" == *"N-anfitrion"* ]]
 }
 
 @test "safety: containment-run has set -uo pipefail" {

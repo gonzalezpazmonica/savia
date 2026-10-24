@@ -66,8 +66,7 @@ teardown() {
 @test "no-path: Read without file_path exits 0" {
   run bash "$HOOK" <<< '{"tool_name":"Read","tool_input":{}}'
   [ "$status" -eq 0 ]
-  run compgen -G "$MARKER_DIR/acm-read-*"
-  [ "$status" -ne 0 ]
+  [[ ! -d "$MARKER_DIR" ]]
 }
 
 @test "no-path: Read with empty file_path exits 0" {

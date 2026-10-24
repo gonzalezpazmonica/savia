@@ -228,3 +228,273 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"c1"* ]]
 }
+
+# ── comportamiento: idempotencia, versiones explícitas y estados de compat ────
+
+pin_two_versions() {
+  "$PIN" pin pilot-contract --path "$FIXTURES/contract-v1.json" > /dev/null
+  printf '{"schema_version": 2}\n' > "$FIXTURES/contract-v2.json"
+  "$PIN" pin pilot-contract --path "$FIXTURES/contract-v2.json" > /dev/null
+}
+
+@test "pin del mismo contenido es idempotente: exit 0, sin bump y sin previous nuevo" {
+  "$PIN" pin pilot-contract --path "$FIXTURES/contract-v1.json" > /dev/null
+  run "$PIN" pin pilot-contract --path "$FIXTURES/contract-v1.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"sin bump"* ]]
+  [ "$(jq -r '.["pilot-contract"].current.version' "$CONTRACT_DIGESTS_FILE")" = "1" ]
+  [ "$(jq -r '.["pilot-contract"].previous | length' "$CONTRACT_DIGESTS_FILE")" = "0" ]
+}
+
+@test "pin con contenido nuevo incrementa la versión en uno y archiva la anterior" {
+  pin_two_versions
+  [ "$(jq -r '.["pilot-contract"].current.version' "$CONTRACT_DIGESTS_FILE")" = "2" ]
+  [ "$(jq -r '.["pilot-contract"].previous | length' "$CONTRACT_DIGESTS_FILE")" = "1" ]
+  [ "$(jq -r '.["pilot-contract"].previous[0].path' "$CONTRACT_DIGESTS_FILE")" = "$FIXTURES/contract-v1.json" ]
+}
+
+@test "pin --version explícita mayor se respeta; igual al máximo se rechaza" {
+  pin_two_versions
+  printf '{"schema_version": 7}\n' > "$FIXTURES/c7.json"
+  run "$PIN" pin pilot-contract --path "$FIXTURES/c7.json" --version 2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"debe ser > 2"* ]]
+  run "$PIN" pin pilot-contract --path "$FIXTURES/c7.json" --version 1
+  [ "$status" -eq 1 ]
+  [ "$(jq -r '.["pilot-contract"].current.version' "$CONTRACT_DIGESTS_FILE")" = "2" ]
+  run "$PIN" pin pilot-contract --path "$FIXTURES/c7.json" --version 10
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"v10"* ]]
+  [ "$(jq -r '.["pilot-contract"].current.version' "$CONTRACT_DIGESTS_FILE")" = "10" ]
+}
+
+@test "pin de contrato nuevo con --version fija esa versión inicial" {
+  run "$PIN" pin nuevo --path "$FIXTURES/contract-v1.json" --version 5
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.nuevo.current.version' "$CONTRACT_DIGESTS_FILE")" = "5" ]
+}
+
+@test "pin con --version no entera se rechaza sin tocar el catálogo" {
+  run "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" --version abc
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"entero"* ]]
+  [ ! -f "$CONTRACT_DIGESTS_FILE" ]
+}
+
+@test "pin con argumento desconocido falla y lo nombra" {
+  run "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--bogus"* ]]
+}
+
+@test "un contrato pineado no afecta a otro: pin de c2 no toca c1" {
+  "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" > /dev/null
+  printf '{"otro": 1}\n' > "$FIXTURES/otro.json"
+  "$PIN" pin c2 --path "$FIXTURES/otro.json" > /dev/null
+  [ "$(jq -r '.c1.current.digest' "$CONTRACT_DIGESTS_FILE")" = "sha256:$(sha256sum "$FIXTURES/contract-v1.json" | cut -d' ' -f1)" ]
+  [ "$(jq -r 'keys | length' "$CONTRACT_DIGESTS_FILE")" = "2" ]
+}
+
+@test "check con fichero ausente devuelve FAIL y exit 1; --path alternativo se usa" {
+  "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" > /dev/null
+  run "$PIN" check c1 --path "$FIXTURES/no-existe.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fichero ausente"* ]]
+  cp "$FIXTURES/contract-v1.json" "$FIXTURES/copia.json"
+  run "$PIN" check c1 --path "$FIXTURES/copia.json"
+  [ "$status" -eq 0 ]
+  printf 'distinto\n' > "$FIXTURES/copia.json"
+  run "$PIN" check c1 --path "$FIXTURES/copia.json"
+  [ "$status" -eq 1 ]
+}
+
+@test "check sin catálogo falla explicando que hay que pinear" {
+  run "$PIN" check c1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"catálogo no encontrado"* ]]
+}
+
+@test "accept con la versión current devuelve OK y exit 0" {
+  pin_two_versions
+  run "$PIN" accept pilot-contract --schema 2
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK: consumidor pilot-contract v2 == current v2"* ]]
+}
+
+@test "accept sin --schema entero falla; con contrato no pineado falla" {
+  "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" > /dev/null
+  run "$PIN" accept c1
+  [ "$status" -eq 1 ]
+  run "$PIN" accept c1 --schema x
+  [ "$status" -eq 1 ]
+  run "$PIN" accept fantasma --schema 1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no pineado"* ]]
+}
+
+@test "accept con schema mayor aconseja actualizar el pin, no el consumidor" {
+  "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" > /dev/null
+  run "$PIN" accept c1 --schema 3
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"desconocido"* ]]
+  [[ "$output" != *"requiere upgrade"* ]]
+}
+
+@test "compat --version de la current dice CURRENT y exit 0" {
+  pin_two_versions
+  run "$PIN" compat pilot-contract --version 2
+  [ "$status" -eq 0 ]
+  [[ "$output" == CURRENT* ]]
+}
+
+@test "compat --version inexistente: NO-COMPAT y exit 1" {
+  pin_two_versions
+  run "$PIN" compat pilot-contract --version 9
+  [ "$status" -eq 1 ]
+  [[ "$output" == NO-COMPAT* ]]
+}
+
+@test "compat --version de previous sin compat=true: NO-COMPAT y exit 1" {
+  pin_two_versions
+  local tmp
+  tmp="$(mktemp)"
+  jq '.["pilot-contract"].previous[0].compat = false' "$CONTRACT_DIGESTS_FILE" > "$tmp"
+  mv "$tmp" "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" compat pilot-contract --version 1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"compat=false"* ]]
+}
+
+@test "compat sin versión lista el número de previas y su digest" {
+  pin_two_versions
+  run "$PIN" compat pilot-contract
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"previas de pilot-contract (compat, sin autoridad): 1"* ]]
+  [[ "$output" == *"authoritative=false"* ]]
+  [[ "$output" == *"sha256:$(sha256sum "$FIXTURES/contract-v1.json" | cut -d' ' -f1)"* ]]
+}
+
+@test "compat con --version no entera y con contrato no pineado falla" {
+  pin_two_versions
+  run "$PIN" compat pilot-contract --version x
+  [ "$status" -eq 1 ]
+  run "$PIN" compat fantasma
+  [ "$status" -eq 1 ]
+}
+
+@test "additive-check: base idéntico a new es ADITIVO con 'ninguno' añadido" {
+  printf '{"a": 1}\n' > "$FIXTURES/b.json"
+  run "$PIN" additive-check --base "$FIXTURES/b.json" --new "$FIXTURES/b.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"añadidos: ninguno"* ]]
+}
+
+@test "additive-check: el orden de claves no cuenta (encoding canónico) y lista los campos añadidos" {
+  printf '{"a": 1, "b": {"x": 1, "y": 2}}\n' > "$FIXTURES/b.json"
+  printf '{"c": 3, "b": {"y": 2, "x": 1}, "a": 1}\n' > "$FIXTURES/n.json"
+  run "$PIN" additive-check --base "$FIXTURES/b.json" --new "$FIXTURES/n.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"añadidos: c"* ]]
+}
+
+@test "additive-check: un campo anidado cambiado es BREAKING y nombra el campo de primer nivel" {
+  printf '{"a": 1, "b": {"x": 1}}\n' > "$FIXTURES/b.json"
+  printf '{"a": 1, "b": {"x": 2}}\n' > "$FIXTURES/n.json"
+  run "$PIN" additive-check --base "$FIXTURES/b.json" --new "$FIXTURES/n.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"modificados"*": b"* ]]
+  [[ "$output" == *"exige bump"* ]]
+}
+
+@test "additive-check: cambiado y ausente a la vez informa de ambos" {
+  printf '{"a": 1, "b": 2}\n' > "$FIXTURES/b.json"
+  printf '{"a": 9}\n' > "$FIXTURES/n.json"
+  run "$PIN" additive-check --base "$FIXTURES/b.json" --new "$FIXTURES/n.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"modificados"*": a"* ]]
+  [[ "$output" == *"ausentes: b"* ]]
+}
+
+@test "additive-check: JSON inválido y argumentos ausentes fallan con exit 1" {
+  printf '{"a": 1}\n' > "$FIXTURES/b.json"
+  printf 'no es json\n' > "$FIXTURES/malo.json"
+  run "$PIN" additive-check --base "$FIXTURES/malo.json" --new "$FIXTURES/b.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"base no es JSON válido"* ]]
+  run "$PIN" additive-check --base "$FIXTURES/b.json" --new "$FIXTURES/malo.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"new no es JSON válido"* ]]
+  run "$PIN" additive-check --base "$FIXTURES/b.json"
+  [ "$status" -eq 1 ]
+  run "$PIN" additive-check --base "$FIXTURES/no.json" --new "$FIXTURES/b.json"
+  [ "$status" -eq 1 ]
+}
+
+@test "list muestra versión, digest y ruta de cada contrato" {
+  pin_two_versions
+  run "$PIN" list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pilot-contract"*"v2"*"sha256:"*"contract-v2.json"* ]]
+}
+
+@test "--validate: versión previous >= current, duplicadas y previous no array se detectan" {
+  local d1 d2
+  d1="sha256:$(printf 'a%.0s' {1..64})"; d2="sha256:$(printf 'b%.0s' {1..64})"
+  printf '{"c1": {"current": {"version": 2, "digest": "%s", "path": "x"}, "previous": [{"version": 2, "digest": "%s", "compat": true, "authoritative": false}]}}\n' "$d1" "$d2" > "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"previous v2 >= current v2"* ]]
+  printf '{"c1": {"current": {"version": 3, "digest": "%s", "path": "x"}, "previous": [{"version": 1, "digest": "%s", "compat": true, "authoritative": false}, {"version": 1, "digest": "%s", "compat": true, "authoritative": false}]}}\n' "$d1" "$d2" "$d2" > "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"duplicadas"* ]]
+  printf '{"c1": {"current": {"version": 3, "digest": "%s", "path": "x"}, "previous": "no"}}\n' "$d1" > "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"previous debe ser array"* ]]
+}
+
+@test "--validate: version no numérica y path ausente se detectan; cuenta violaciones" {
+  local d1
+  d1="sha256:$(printf 'a%.0s' {1..64})"
+  printf '{"c1": {"current": {"version": "uno", "digest": "%s"}, "previous": []}}\n' "$d1" > "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 violaciones"* ]]
+  [[ "$output" == *"current.version debe ser número"* ]]
+  [[ "$output" == *"current.path ausente"* ]]
+}
+
+@test "--validate: catálogo que no es objeto o ausente falla; válido informa nº de contratos" {
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  printf '[1,2]\n' > "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es un objeto JSON"* ]]
+  "$PIN" help > /dev/null
+  printf '{}\n' > "$CONTRACT_DIGESTS_FILE"
+  "$PIN" pin c1 --path "$FIXTURES/contract-v1.json" > /dev/null
+  "$PIN" pin c2 --path "$FIXTURES/contract-v1.json" > /dev/null
+  run "$PIN" --validate
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"(2 contratos)"* ]]
+}
+
+@test "sin argumentos muestra el uso y sale 1; help sale 0" {
+  run "$PIN"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"contract-pin.sh pin"* ]]
+  run "$PIN" help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"additive-check"* ]]
+}
+
+@test "--validate: un contrato sin current cuenta una sola violación (no encadena comprobaciones sobre el vacío)" {
+  printf '{"c1": {"previous": []}, "c2": {"current": "texto", "previous": []}}\n' > "$CONTRACT_DIGESTS_FILE"
+  run "$PIN" --validate
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"(2 violaciones)"* ]]
+  [[ "$output" == *"c1: debe tener exactamente un current (objeto); encontrado: null"* ]]
+  [[ "$output" == *"c2: debe tener exactamente un current (objeto); encontrado: string"* ]]
+}
