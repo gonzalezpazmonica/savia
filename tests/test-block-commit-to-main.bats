@@ -50,3 +50,99 @@ teardown() { cd /; unset SAVIA_TURN_SDLC_LOG_DIR; }
   run grep -c 'commit-guard.jsonl' "$SCRIPT"
   [[ "$output" -ge 1 ]]
 }
+# --- Comportamiento real: repo temporal, entrada JSON de hook, veredicto observable ---
+
+mkrepo() {  # $1 = rama
+  REPO="$TMPDIR/repo-$1-$RANDOM"
+  git init -q -b "$1" "$REPO"
+  git -C "$REPO" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+}
+hook() {  # $1 = comando git simulado, $2 = cwd
+  jq -n --arg c "$1" --arg d "$2" '{tool_input:{command:$c},cwd:$d}' | bash "$SCRIPT"
+}
+
+@test "commit en rama main: emite decision block con motivo y registra block" {
+  mkrepo main
+  run hook 'git commit -m x' "$REPO"
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -r .decision)" = "block" ]
+  [[ "$(echo "$output" | jq -r .reason)" == *"(main)"* ]]
+  run jq -r .verdict "$SAVIA_TURN_SDLC_LOG_DIR/commit-guard.jsonl"
+  [ "$output" = "block" ]
+}
+
+@test "commit en master tambien se bloquea" {
+  mkrepo master
+  run hook 'git commit -m x' "$REPO"
+  [ "$(echo "$output" | jq -r .decision)" = "block" ]
+}
+
+@test "commit en rama agent/* no bloquea ni escribe log" {
+  mkrepo agent/tarea
+  run hook 'git commit -m x' "$REPO"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -e "$SAVIA_TURN_SDLC_LOG_DIR/commit-guard.jsonl" ]
+}
+
+@test "rama con nombre parecido (mainline, feature/main) no bloquea" {
+  mkrepo mainline
+  run hook 'git commit -m x' "$REPO"
+  [ -z "$output" ]
+  mkrepo feature/main
+  run hook 'git commit -m x' "$REPO"
+  [ -z "$output" ]
+}
+
+@test "comando que no es commit en main no bloquea (git status, --no-commit, commit-msg)" {
+  mkrepo main
+  for c in 'git status' 'git merge --no-commit x' 'cat .git/hooks/commit-msg' 'echo commit'; do
+    run hook "$c" "$REPO"
+    [ -z "$output" ]
+  done
+  [ ! -e "$SAVIA_TURN_SDLC_LOG_DIR/commit-guard.jsonl" ]
+}
+
+@test "commit encadenado tras punto y coma en main se bloquea" {
+  mkrepo main
+  run hook 'echo hi; git commit -m x' "$REPO"
+  [ "$(echo "$output" | jq -r .decision)" = "block" ]
+}
+
+@test "bypass SAVIA_ALLOW_MAIN_COMMIT=1: deja pasar y registra bypass" {
+  mkrepo main
+  SAVIA_ALLOW_MAIN_COMMIT=1 run hook 'git commit -m x' "$REPO"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run jq -r .verdict "$SAVIA_TURN_SDLC_LOG_DIR/commit-guard.jsonl"
+  [ "$output" = "bypass" ]
+}
+
+@test "bypass con valor distinto de 1 sigue bloqueando" {
+  mkrepo main
+  SAVIA_ALLOW_MAIN_COMMIT=true run hook 'git commit -m x' "$REPO"
+  [ "$(echo "$output" | jq -r .decision)" = "block" ]
+}
+
+@test "cd entre comillas a worktree agent/* evalua esa rama, no la del cwd" {
+  mkrepo main; MAIN="$REPO"
+  mkrepo agent/wt; WT="$REPO"
+  run hook "cd \"$WT\" && git commit -m x" "$MAIN"
+  [ -z "$output" ]
+  run hook "cd \"$MAIN\" && git commit -m x" "$WT"
+  [ "$(echo "$output" | jq -r .decision)" = "block" ]
+}
+
+@test "directorio fuera de repo git sale sin bloquear" {
+  mkdir -p "$TMPDIR/nogit"
+  run hook 'git commit -m x' "$TMPDIR/nogit"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "HEAD desacoplado (sin rama) no bloquea" {
+  mkrepo main
+  git -C "$REPO" checkout -q --detach
+  run hook 'git commit -m x' "$REPO"
+  [ -z "$output" ]
+}
