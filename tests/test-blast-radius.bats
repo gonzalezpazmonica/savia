@@ -146,3 +146,187 @@ assert d['total'] == 0, d
   run grep -rnE "AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{32,}|192\.168\.|10\.([0-9]{1,3}\.){2}" scripts/blast-radius.sh .claude/hooks/blast-radius-hook.sh
   [[ -z "$output" ]]
 }
+
+# ── Hook pre-write: interruptor, filtros de ruta, extraccion de simbolos y mensajes ────────
+
+# hookenv: arbol temporal con el hook, un blast-radius simulado y un repo git con un fichero de ejemplo
+hookenv() {
+  H="$BATS_TEST_TMPDIR/h"; mkdir -p "$H/.claude/hooks" "$H/scripts" "$H/repo"
+  cp "$BATS_TEST_DIRNAME/../.claude/hooks/blast-radius-hook.sh" "$H/.claude/hooks/"
+  BLASTLOG="$H/blast.log"; : > "$BLASTLOG"
+  cat > "$H/scripts/blast-radius.sh" <<EOS
+#!/usr/bin/env bash
+echo "\$2" >> "$BLASTLOG"
+case "\$2" in
+  alfa) echo '{"total": 3}' ;;
+  gamma) echo '{"total": 5}' ;;
+  uno) echo '{"total": 1}' ;;
+  roto) echo 'esto no es json' ;;
+  *) echo '{"total": 0}' ;;
+esac
+EOS
+  chmod +x "$H/scripts/blast-radius.sh"
+  ( cd "$H/repo" && git init -q && git config user.email t@example.com && git config user.name T )
+  printf 'def alfa():\n    return 1\n\ndef beta():\n    return 2\n' > "$H/repo/lib.py"
+  ( cd "$H/repo" && git add . && git commit -qm init )
+}
+# runhook <args...>: ejecuta el hook dentro del repo de ejemplo con el interruptor encendido; stdin vacio
+runhook() { ( cd "$H/repo" && SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" "$@" 2>&1 </dev/null ); }
+
+@test "hook: solo el valor exacto on activa el interruptor" {
+  hookenv
+  for v in "" off ON 1 true yes; do
+    out=$( cd "$H/repo" && SAVIA_BLAST_RADIUS="$v" bash "$H/.claude/hooks/blast-radius-hook.sh" --file lib.py 2>&1 </dev/null )
+    [ -z "$out" ] || { echo "activo con '$v'"; return 1; }
+  done
+  out=$( cd "$H/repo" && bash "$H/.claude/hooks/blast-radius-hook.sh" --file lib.py 2>&1 </dev/null )
+  [ -z "$out" ]
+}
+
+@test "hook: avisa solo de los simbolos con dependientes y con su recuento" {
+  hookenv
+  run runhook --file lib.py
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"AFFECTED: 'alfa' → 3 fichero(s) dependientes"* ]]
+  [[ "$output" != *"'beta'"* ]]
+  [[ "$output" != *"usa 'scripts/blast-radius.sh --diff"* ]]
+}
+
+@test "hook: consulta blast-radius una vez por cada simbolo definido en el fichero" {
+  hookenv
+  runhook --file lib.py >/dev/null
+  [ "$(sort "$BLASTLOG" | tr '\n' ' ')" = "alfa beta " ]
+}
+
+@test "hook: sin simbolos con dependientes muestra la sugerencia de --diff" {
+  hookenv
+  printf 'def beta():\n    return 2\n' > "$H/repo/solo.py"; ( cd "$H/repo" && git add solo.py && git commit -qm s )
+  run runhook --file solo.py
+  [ "$status" -eq 0 ]
+  [ "$output" = "AFFECTED: usa 'scripts/blast-radius.sh --diff origin/main..HEAD' para ver el impacto del cambio (SE-318)" ]
+}
+
+@test "hook: reconoce definiciones de varios lenguajes" {
+  hookenv
+  cat > "$H/repo/multi.js" <<'EOS'
+function gamma() {}
+class Delta {}
+EOS
+  printf 'func epsilon() {}\nfn zeta() {}\nsub eta { }\nfoo_sh() {\n  :\n}\n' > "$H/repo/multi.go"
+  ( cd "$H/repo" && git add . && git commit -qm m )
+  runhook --file multi.js >/dev/null
+  runhook --file multi.go >/dev/null
+  for s in gamma Delta epsilon zeta eta foo_sh; do
+    grep -qx "$s" "$BLASTLOG" || { echo "no consulto $s"; return 1; }
+  done
+}
+
+@test "hook: varios simbolos con dependientes producen un aviso por simbolo" {
+  hookenv
+  printf 'def alfa():\n    pass\n\ndef gamma():\n    pass\n' > "$H/repo/dos.py"; ( cd "$H/repo" && git add . && git commit -qm d )
+  run runhook --file dos.py
+  [[ "$output" == *"'alfa' → 3 fichero(s)"* ]]
+  [[ "$output" == *"'gamma' → 5 fichero(s)"* ]]
+  [ "$(grep -c '^AFFECTED' <<< "$output")" -eq 2 ]
+}
+
+@test "hook: un fichero que no existe sigue dando la sugerencia y no consulta simbolos" {
+  hookenv
+  run runhook --file no_existe.py
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"usa 'scripts/blast-radius.sh --diff"* ]]
+  [ ! -s "$BLASTLOG" ]
+}
+
+@test "hook: extensiones que no son de codigo se ignoran en silencio" {
+  hookenv
+  for f in notas.md datos.json texto.txt Makefile imagen.png; do
+    : > "$H/repo/$f"
+    run runhook --file "$f"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ] || { echo "avisa con $f"; return 1; }
+  done
+}
+
+@test "hook: todas las extensiones de codigo declaradas se procesan" {
+  hookenv
+  for e in sh py ts js tsx jsx java cs go rb php rs vue svelte c cpp h hpp; do
+    run runhook --file "x.$e"
+    [[ "$output" == *"AFFECTED"* ]] || { echo "ignora .$e"; return 1; }
+  done
+}
+
+@test "hook: rutas bajo /tmp, /var y /etc se ignoran aunque sean de codigo" {
+  hookenv
+  for p in /tmp/x.py /var/x.py /etc/x.py; do
+    run runhook --file "$p"
+    [ -z "$output" ] || { echo "avisa con $p"; return 1; }
+  done
+}
+
+@test "hook: lee file_path, filePath y path del JSON de stdin" {
+  hookenv
+  for k in file_path filePath path; do
+    out=$( cd "$H/repo" && printf '{"tool_input":{"%s":"lib.py"}}' "$k" | SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" 2>&1 )
+    [[ "$out" == *"'alfa' → 3"* ]] || { echo "no lee $k"; return 1; }
+  done
+}
+
+@test "hook: JSON sin ruta, JSON roto o stdin vacio no avisan" {
+  hookenv
+  for in in '{"tool_input":{}}' 'no es json' ''; do
+    out=$( cd "$H/repo" && printf '%s' "$in" | SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" 2>&1 )
+    [ -z "$out" ] || { echo "avisa con '$in'"; return 1; }
+  done
+}
+
+@test "hook: --file tiene prioridad sobre stdin" {
+  hookenv
+  out=$( cd "$H/repo" && printf '{"tool_input":{"file_path":"otro.py"}}' | SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" --file lib.py 2>&1 )
+  [[ "$out" == *"'alfa'"* ]]
+}
+
+@test "hook: fuera de un repo git no hace nada" {
+  hookenv
+  mkdir -p "$H/sin-git"; printf 'def alfa():\n  pass\n' > "$H/sin-git/lib.py"
+  out=$( cd "$H/sin-git" && GIT_CEILING_DIRECTORIES="$H" SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" --file lib.py 2>&1 </dev/null )
+  [ -z "$out" ]
+}
+
+@test "hook: nunca bloquea, ni con una respuesta no JSON de blast-radius ni con blast-radius roto" {
+  hookenv
+  printf 'def roto():\n  pass\n' > "$H/repo/r.py"; ( cd "$H/repo" && git add . && git commit -qm r )
+  run runhook --file r.py
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"usa 'scripts/blast-radius.sh --diff"* ]]
+  printf '#!/usr/bin/env bash\nexit 7\n' > "$H/scripts/blast-radius.sh"
+  run runhook --file lib.py
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"usa 'scripts/blast-radius.sh --diff"* ]]
+}
+
+@test "hook: el aviso va a stderr, no a stdout" {
+  hookenv
+  out=$( cd "$H/repo" && SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" --file lib.py 2>/dev/null </dev/null )
+  [ -z "$out" ]
+}
+
+@test "hook: un solo fichero dependiente tambien se avisa" {
+  hookenv
+  printf 'def uno():\n    pass\n' > "$H/repo/uno.py"; ( cd "$H/repo" && git add . && git commit -qm u )
+  run runhook --file uno.py
+  [[ "$output" == *"AFFECTED: 'uno' → 1 fichero(s) dependientes"* ]]
+  [[ "$output" != *"usa 'scripts/blast-radius.sh --diff"* ]]
+}
+
+@test "hook: una ruta absoluta dentro del repo se relativiza antes de consultar git" {
+  hookenv
+  # las rutas bajo /tmp, /var y /etc se ignoran por diseño: el repo vive en /dev/shm
+  [ -d /dev/shm ] && [ -w /dev/shm ] || skip "sin /dev/shm escribible"
+  ABS=$(mktemp -d -p /dev/shm)
+  ( cd "$ABS" && git init -q && git config user.email t@example.com && git config user.name T \
+    && printf 'def alfa():\n    pass\n' > lib.py && git add . && git commit -qm i )
+  out=$( cd "$ABS" && SAVIA_BLAST_RADIUS=on bash "$H/.claude/hooks/blast-radius-hook.sh" --file "$ABS/lib.py" 2>&1 </dev/null )
+  rm -r -f "$ABS"
+  [[ "$out" == *"AFFECTED: 'alfa' → 3 fichero(s) dependientes"* ]]
+}
