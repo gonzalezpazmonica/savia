@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "savia://schemas/installer/component-manifest/1",
+  "title": "SE-399 Component Installation Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "category", "version", "license", "targets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+    "category": {"enum": ["core", "adapter", "runtime", "surface", "ide", "toolchain", "provider", "mcp", "prerequisite"]},
+    "version": {"type": "string", "minLength": 1},
+    "license": {"type": "string", "minLength": 1},
+    "optional": {"type": "boolean", "default": false},
+    "requires_restart": {"type": "boolean", "default": false},
+    "depends_on": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "conflicts": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "compat": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min_runtime_version": {"type": "string"},
+        "savia_min": {"type": "string"}
+      }
+    },
+    "ownership": {
+      "description": "Reconciliation: only owned fields may be replaced; absent managed fields preserve the user's value.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "owned_fields": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "link_mode": {"enum": ["isolated", "link"], "default": "isolated"}
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_age_days": {"type": "integer", "minimum": 1},
+        "previous_successful_sync_at": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "detection": {"$ref": "#/$defs/invocation"},
+    "targets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/target"}}
+  },
+  "$defs": {
+    "invocation": {
+      "description": "Structured process invocation. Never a shell string.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "args"],
+      "properties": {
+        "executable": {"type": "string", "minLength": 1, "pattern": "^[^\\s;&|`$<>]+$"},
+        "args": {"type": "array", "items": {"type": "string"}},
+        "env_allow": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$"}, "uniqueItems": true},
+        "cwd": {"type": "string"},
+        "version_regex": {"type": "string"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocation", "privilege", "reversibility"],
+      "properties": {
+        "invocation": {"$ref": "#/$defs/invocation"},
+        "privilege": {"enum": ["USER", "ELEVATED", "ROOT-ADMIN"]},
+        "reversibility": {"enum": ["reversible", "partially_reversible", "irreversible"]},
+        "atomic_replace": {"description": "Stage, verify provenance, then atomic rename; never truncate in place.", "type": "boolean"},
+        "compensation": {"description": "Action id run when a later phase fails (prepare -> verify -> commit or compensate).", "enum": ["rollback", "uninstall", "none"]},
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "target"],
+            "properties": {
+              "kind": {"enum": ["file", "path", "service", "config", "project"]},
+              "target": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator"],
+      "properties": {
+        "kind": {"enum": ["package_manager", "signed_installer", "official_release", "manual"]},
+        "locator": {"type": "string", "minLength": 1},
+        "integrity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "signature": {"type": "string"}
+          }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "arch", "source", "actions"],
+      "properties": {
+        "os": {"enum": ["linux", "windows"]},
+        "arch": {"type": "array", "minItems": 1, "items": {"enum": ["x64", "arm64"]}, "uniqueItems": true},
+        "distros": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "source": {"$ref": "#/$defs/source"},
+        "download_bytes": {"type": "integer", "minimum": 0},
+        "disk_bytes": {"type": "integer", "minimum": 0},
+        "actions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["install", "verify"],
+          "properties": {
+            "install": {"$ref": "#/$defs/action"},
+            "verify": {"$ref": "#/$defs/action"},
+            "uninstall": {"$ref": "#/$defs/action"},
+            "rollback": {"$ref": "#/$defs/action"}
+          }
+        }
+      }
+    }
+  }
+}

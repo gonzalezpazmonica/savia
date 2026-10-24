@@ -1,0 +1,55 @@
+{
+  "category": "runtime",
+  "id": "opencode-legacy",
+  "license": "MIT",
+  "schema_version": 1,
+  "targets": [
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "install",
+              "-g",
+              "opencode-legacy"
+            ],
+            "executable": "npm"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "install",
+              "-g",
+              "opencode-legacy"
+            ],
+            "executable": "npm"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "--version"
+            ],
+            "executable": "opencode"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64"
+      ],
+      "os": "linux",
+      "source": {
+        "kind": "package_manager",
+        "locator": "npm:opencode-legacy"
+      }
+    }
+  ],
+  "version": "0.9"
+}

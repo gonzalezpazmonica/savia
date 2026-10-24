@@ -1,0 +1,119 @@
+{
+  "category": "prerequisite",
+  "detection": {
+    "args": [
+      "--version"
+    ],
+    "executable": "git"
+  },
+  "id": "git",
+  "license": "MIT",
+  "schema_version": 1,
+  "targets": [
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "install",
+              "-y",
+              "git"
+            ],
+            "executable": "apt-get"
+          },
+          "privilege": "ROOT-ADMIN",
+          "reversibility": "reversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "install",
+              "-y",
+              "git"
+            ],
+            "executable": "apt-get"
+          },
+          "privilege": "ROOT-ADMIN",
+          "reversibility": "reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "--version"
+            ],
+            "executable": "git"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64",
+        "arm64"
+      ],
+      "disk_bytes": 30000000,
+      "distros": [
+        "ubuntu",
+        "debian"
+      ],
+      "download_bytes": 5000000,
+      "os": "linux",
+      "source": {
+        "kind": "package_manager",
+        "locator": "apt:git"
+      }
+    },
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "install",
+              "--id",
+              "Git.Git",
+              "-e"
+            ],
+            "executable": "winget"
+          },
+          "privilege": "ELEVATED",
+          "reversibility": "partially_reversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "install",
+              "--id",
+              "Git.Git",
+              "-e"
+            ],
+            "executable": "winget"
+          },
+          "privilege": "ELEVATED",
+          "reversibility": "partially_reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "--version"
+            ],
+            "executable": "git"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64",
+        "arm64"
+      ],
+      "disk_bytes": 300000000,
+      "download_bytes": 60000000,
+      "os": "windows",
+      "source": {
+        "kind": "package_manager",
+        "locator": "winget:Git.Git"
+      }
+    }
+  ],
+  "version": "2.45"
+}

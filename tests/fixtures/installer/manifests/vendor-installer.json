@@ -1,0 +1,49 @@
+{
+  "category": "ide",
+  "id": "vendor-installer",
+  "license": "MIT",
+  "schema_version": 1,
+  "targets": [
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "i.sh"
+            ],
+            "executable": "sh"
+          },
+          "privilege": "ROOT-ADMIN",
+          "reversibility": "irreversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "i.sh"
+            ],
+            "executable": "sh"
+          },
+          "privilege": "ROOT-ADMIN",
+          "reversibility": "irreversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [],
+            "executable": "true"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64"
+      ],
+      "os": "linux",
+      "source": {
+        "kind": "signed_installer",
+        "locator": "https://example.invalid/i.sh"
+      }
+    }
+  ],
+  "version": "1.0"
+}

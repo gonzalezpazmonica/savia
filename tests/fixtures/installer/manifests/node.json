@@ -1,0 +1,110 @@
+{
+  "category": "prerequisite",
+  "id": "node",
+  "license": "MIT",
+  "schema_version": 1,
+  "targets": [
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "install",
+              "-y",
+              "nodejs"
+            ],
+            "executable": "apt-get"
+          },
+          "privilege": "ROOT-ADMIN",
+          "reversibility": "reversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "install",
+              "-y",
+              "nodejs"
+            ],
+            "executable": "apt-get"
+          },
+          "privilege": "ROOT-ADMIN",
+          "reversibility": "reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "--version"
+            ],
+            "executable": "node"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64",
+        "arm64"
+      ],
+      "disk_bytes": 150000000,
+      "distros": [
+        "ubuntu",
+        "debian"
+      ],
+      "download_bytes": 30000000,
+      "os": "linux",
+      "source": {
+        "kind": "package_manager",
+        "locator": "apt:nodejs"
+      }
+    },
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "install",
+              "--id",
+              "OpenJS.NodeJS",
+              "-e"
+            ],
+            "executable": "winget"
+          },
+          "privilege": "ELEVATED",
+          "reversibility": "partially_reversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "install",
+              "--id",
+              "OpenJS.NodeJS",
+              "-e"
+            ],
+            "executable": "winget"
+          },
+          "privilege": "ELEVATED",
+          "reversibility": "partially_reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "--version"
+            ],
+            "executable": "node"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64"
+      ],
+      "os": "windows",
+      "source": {
+        "kind": "package_manager",
+        "locator": "winget:OpenJS.NodeJS"
+      }
+    }
+  ],
+  "version": "22"
+}

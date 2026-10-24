@@ -1,0 +1,50 @@
+{
+  "category": "toolchain",
+  "id": "restart-demo",
+  "license": "MIT",
+  "requires_restart": true,
+  "schema_version": 1,
+  "targets": [
+    {
+      "actions": {
+        "install": {
+          "invocation": {
+            "args": [
+              "/quiet"
+            ],
+            "executable": "setup"
+          },
+          "privilege": "ELEVATED",
+          "reversibility": "irreversible"
+        },
+        "uninstall": {
+          "invocation": {
+            "args": [
+              "/quiet"
+            ],
+            "executable": "setup"
+          },
+          "privilege": "ELEVATED",
+          "reversibility": "irreversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [],
+            "executable": "true"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64"
+      ],
+      "os": "windows",
+      "source": {
+        "kind": "manual",
+        "locator": "https://example.invalid/manual"
+      }
+    }
+  ],
+  "version": "1.0"
+}
