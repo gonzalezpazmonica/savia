@@ -97,7 +97,7 @@ cmd_select() {
   local grant=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --grant) grant="${2:-}"; shift 2 ;;
+      --grant) grant="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
       *) _die "select: opción desconocida '$1'" ;;
     esac
   done
@@ -154,10 +154,10 @@ cmd_log() {
   local claim="" source="" fetched="" level="N1"
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --claim) claim="${2:-}"; shift 2 ;;
-      --source) source="${2:-}"; shift 2 ;;
-      --fetched) fetched="${2:-}"; shift 2 ;;
-      --level) level="${2:-}"; shift 2 ;;
+      --claim) claim="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
+      --source) source="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
+      --fetched) fetched="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
+      --level) level="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
       *) _die "log: opción desconocida '$1'" ;;
     esac
   done
@@ -193,8 +193,8 @@ cmd_contradict() {
   local a="" b=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --a) a="${2:-}"; shift 2 ;;
-      --b) b="${2:-}"; shift 2 ;;
+      --a) a="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
+      --b) b="${2:-}"; shift $(( $# < 2 ? $# : 2 )) ;;
       *) _die "contradict: opción desconocida '$1'" ;;
     esac
   done

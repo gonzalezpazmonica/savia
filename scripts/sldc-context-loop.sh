@@ -30,7 +30,7 @@ WRITE_DOME="${SLDC_WRITE_DOME:-example-context}"
 MAX_CONF="${SLDC_MAX_CONFIDENTIALITY:-N2}"
 PENDING_DIR="${SLDC_PENDING_DIR:-$HOME/.savia/sldc-pending}"
 LLM_CMD="${SLDC_LLM_CMD:-}"
-BASE_REF=""; HEAD_REF=""; DRY_RUN=0; FEED=0
+BASE_REF=""; HEAD_REF=""; DRY_RUN=0; FEED=0; ACTION=""
 
 usage() {
   sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -116,7 +116,9 @@ feed_note() {
     return 0
   fi
   local resp
-  resp=$(curl -s --max-time 10 -X POST "$VAULTS_URL/share" -H "Content-Type: application/json" -d "$1")
+  # curl caido (conexion rechazada, timeout) o respuesta vacia = no entregada: nunca "OK"
+  resp=$(curl -s --max-time 10 -X POST "$VAULTS_URL/share" -H "Content-Type: application/json" -d "$1") || return 1
+  [[ -n "$resp" ]] || return 1
   if echo "$resp" | grep -q '"error"'; then
     return 1
   fi
@@ -141,7 +143,9 @@ flush_pending() {
   for f in "$PENDING_DIR"/*.json; do
     [[ -f "$f" ]] || continue
     if feed_note "$(cat "$f")"; then
-      ok=$((ok+1)); rm -f "$f"
+      ok=$((ok+1))
+      # --dry-run no consume la cola: solo informa de lo que se enviaria
+      [[ "$DRY_RUN" == "1" ]] || rm -f "$f"
     else
       fail=$((fail+1))
     fi
@@ -165,12 +169,18 @@ while [[ $# -gt 0 ]]; do
     --head) HEAD_REF="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --feed) FEED=1; shift ;;
-    --list-pending) list_pending; exit 0 ;;
-    --flush-pending) flush_pending; exit 0 ;;
+    --list-pending) ACTION=list; shift ;;
+    --flush-pending) ACTION=flush; shift ;;
     -h|--help) usage ;;
     *) echo "error: argumento desconocido: $1" >&2; usage ;;
   esac
 done
+
+# Las acciones se despachan tras leer todos los argumentos (--dry-run puede ir despues)
+case "$ACTION" in
+  list) list_pending; exit 0 ;;
+  flush) flush_pending; exit 0 ;;
+esac
 
 if [[ -z "$BASE_REF" ]]; then
   echo "error: --base requerido" >&2; usage
@@ -209,7 +219,7 @@ if [[ "$FEED" == "1" ]]; then
   done <<< "$NOTES"
 else
   echo "== Notas generadas (usa --feed para escribir en las cupulas) =="
-  echo "$NOTES" | python3 -m json.tool 2>/dev/null || echo "$NOTES"
+  echo "$NOTES" | python3 -m json.tool --no-ensure-ascii 2>/dev/null || echo "$NOTES"
 fi
 
 exit 0

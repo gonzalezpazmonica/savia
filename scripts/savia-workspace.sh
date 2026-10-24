@@ -156,7 +156,7 @@ echo "$BODY" > "$OUT"
 echo "✓ composicion: $OUT"
 
 python3 - "$STATE_FILE" "$WROOT" "$PERSIST" <<'PY'
-import json, os, sys
+import datetime, json, os, sys
 st, wdir, persist_s = sys.argv[1:4]
 persist = json.loads(persist_s)
 state = {}
@@ -165,7 +165,7 @@ if os.path.exists(st):
     except Exception: state = {}
 ws = state.setdefault("workspaces", {})
 ws[wdir] = {"repos": persist["repos"], "relations": persist["relations"],
-            "relations_manual": persist["manual"], "updated_at": "2026-09-03T00:00:00Z"}
+            "relations_manual": persist["manual"], "updated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 state["version"] = 1
 open(st, "w").write(json.dumps(state, indent=2, ensure_ascii=False) + "\n")
 print("✓ estado registrado: workspaces[" + os.path.basename(wdir) + "]")
