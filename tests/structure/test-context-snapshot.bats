@@ -72,10 +72,9 @@ print('OK')
 # ── Negative cases ──
 
 @test "snapshot load fails gracefully when no snapshot exists" {
-  run bash -c "echo '' | HOME='$TMPDIR' $ROOT/scripts/context-snapshot.sh load 2>&1"
+  run bash -c "echo '' | CONTEXT_CACHE_DIR='$TMPDIR/cache' $ROOT/scripts/context-snapshot.sh load 2>&1"
   [ "$status" -eq 0 ]
-  # El snapshot vive en el repo (no bajo HOME): stale o fresco, nunca error
-  [[ "$output" == *"No fresh snapshot"* || "$output" == *'"timestamp"'* ]]
+  [[ "$output" == *'"status":"stale"'* ]]
 }
 
 @test "snapshot save handles non-git directory" {
