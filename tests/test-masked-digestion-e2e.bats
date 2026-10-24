@@ -89,7 +89,9 @@ unmask_text() {
 @test "e2e: unmask with bad input fails gracefully" {
   daemon_available || skip "Shield daemon not running"
   output=$(unmask_text "")
-  [[ -z "$output" ]] || [[ "$output" == *"error"* ]] || true
+  [[ -z "$output" ]]
+  # contrast: non-empty input comes back unchanged when there is nothing to unmask
+  [[ "$(unmask_text "nothing to restore")" == "nothing to restore" ]]
 }
 
 @test "e2e: mask rejects null text — no silent fail" {
@@ -105,7 +107,7 @@ unmask_text() {
   output=$(curl -s --max-time 5 -X POST "$SHIELD_URL/unmask" \
     -H "Content-Type: application/json" $TOKEN_HEADER \
     -d 'bad-json' 2>/dev/null)
-  [[ -n "$output" ]] || true
+  [[ "$output" == *'"error"'* ]]
 }
 
 # --- Edge cases ---
@@ -113,7 +115,7 @@ unmask_text() {
 @test "e2e: empty text mask returns empty gracefully" {
   daemon_available || skip "Shield daemon not running"
   output=$(mask_text "")
-  [[ -z "$output" ]] || [[ "$output" == "" ]] || true
+  [[ -z "$output" ]]
 }
 
 @test "e2e: nonexistent mask-map skips leakage check" {
@@ -122,8 +124,10 @@ unmask_text() {
 
 @test "e2e: boundary — text with only special chars" {
   daemon_available || skip "Shield daemon not running"
-  output=$(mask_text "!@#\$%^&*()_+-=[]{}|;':\",./<>?")
-  [[ -n "$output" ]] || true
+  local special="!@#\$%^&*()_+-=[]{}|;':\",./<>?"
+  output=$(mask_text "$special")
+  # nothing to mask: the text must come back intact, not empty or mangled
+  [[ "$output" == "$special" ]]
 }
 
 # --- Safety ---

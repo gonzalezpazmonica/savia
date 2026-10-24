@@ -126,8 +126,10 @@ teardown() {
   # claude CLI likely missing in CI; hook falls back gracefully
   SDD_COMPRESS_AGENT_OUTPUT=true run bash "$HOOK" <<< "$big"
   [ "$status" -eq 0 ]
-  # Raw dir should be created
-  [[ -d output/dev-sessions/compressed-raw ]] || true
+  # Raw dir is created and holds the untouched original output
+  [[ -d output/dev-sessions/compressed-raw ]]
+  [[ "$output" == *"raw: output/dev-sessions/compressed-raw/"* ]]
+  grep -qF "$big" output/dev-sessions/compressed-raw/*.txt
   rm -rf output/dev-sessions/raw-test-slice output/dev-sessions/compressed-raw
 }
 
