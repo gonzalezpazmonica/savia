@@ -1,15 +1,6 @@
 tests/enterprise/test-se-022-bench.bats	SE-022: bench-match.sh returns candidates for matching skills	V1
 tests/evals/test-capability-map.bats	error: missing directory argument handled gracefully	V1
-tests/hooks/test-agent-budget-lookup.bats	bad agent name with dots fails gracefully	V1
-tests/hooks/test-agent-trace-log.bats	missing TOOL_NAME defaults to early exit	V2
-tests/hooks/test-agent-trace-log.bats	nonexistent project dir does not crash	V1
-tests/hooks/test-agent-trace-log.bats	Task tool with complete env exits with 0 or error	V1
-tests/hooks/test-block-project-whitelist.bats	allows empty CLAUDE_TOOL_INPUT	V1
 tests/hooks/test-new-hooks.bats	pre-compact-backup.sh: extracts decisions from input	V1
-tests/hooks/test-pre-commit-review.bats	empty input passes without crash	V1
-tests/scripts/test-skill-manifest.bats	error: nonexistent skills directory fails gracefully	V1
-tests/scripts/test-token-estimator.bats	bad budget value is rejected	V1
-tests/scripts/test-token-estimator.bats	invalid model flag fails gracefully	V1
 tests/structure/test-agents-md-drift-check.bats	drift-check: prints diff hint to stderr on drift	V1
 tests/structure/test-context-snapshot.bats	snapshot load fails gracefully when no snapshot exists	V1
 tests/structure/test-opencode-savia-gates-plugin.bats	edge: --link-only mode skips download step	V1
