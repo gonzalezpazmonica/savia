@@ -101,12 +101,10 @@ print('OK')
 # ── Edge cases ──
 
 @test "analyzer handles empty rules directory with zero rules" {
-  # The analyzer resolves its root from its own location: run a copy inside an empty tree.
-  mkdir -p "$TMPDIR_RLL/docs/rules/domain" "$TMPDIR_RLL/scripts"
-  cp "$ROOT/scripts/rule-usage-analyzer.sh" "$TMPDIR_RLL/scripts/"
-  run bash -c "echo '' | $TMPDIR_RLL/scripts/rule-usage-analyzer.sh --summary 2>&1"
+  mkdir -p "$TMPDIR_RLL/docs/rules/domain"
+  run bash -c "echo '' | $ROOT/scripts/rule-usage-analyzer.sh --root $TMPDIR_RLL 2>&1"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Rules: 0 total | 0 tier1 | 0 tier2 | 0 dormant"* ]]
+  [[ "$output" == *'"total": 0'* ]]
 }
 
 @test "manifest rules each have a consumers field" {

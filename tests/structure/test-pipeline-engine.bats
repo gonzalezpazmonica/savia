@@ -57,15 +57,11 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-@test "pipeline engine currently accepts invalid YAML as zero stages (known fail-open defect, not a desired contract)" {
+@test "pipeline engine handles invalid YAML without crash" {
   echo "{{invalid yaml" > "$TMPDIR_PE/bad.yaml"
   run bash -c "echo '' | $ROOT/scripts/pipeline-engine.sh $TMPDIR_PE/bad.yaml --dry-run 2>&1"
-  # FIXME fail-open: invalid YAML should exit non-zero. When the engine is fixed this test
-  # must be inverted, not weakened. Today: no stage is parseable, so nothing runs and nothing crashes.
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Pipeline: bad.yaml"* ]]
-  [[ "$output" == *"All 0 stages passed"* ]]
-  [[ "$output" != *"command not found"* ]]
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"no stages"* ]]
 }
 
 @test "stage runner fails without required args" {
@@ -100,4 +96,12 @@ teardown() {
 @test "stage runner handles empty command gracefully" {
   run bash -c "echo '' | $ROOT/scripts/pipeline-stage-runner.sh --name empty-cmd --command '' --output-dir $TMPDIR_PE 2>&1"
   [ "$status" -eq 0 ] || [ "$status" -eq 1 ]
+}
+
+@test "pipeline engine with no stages leaves no orphan output dir" {
+  echo "{{invalid yaml" > "$TMPDIR_PE/bad2.yaml"
+  mkdir -p "$TMPDIR_PE/cwd"
+  run bash -c "cd '$TMPDIR_PE/cwd' && echo '' | $ROOT/scripts/pipeline-engine.sh '$TMPDIR_PE/bad2.yaml' 2>&1"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMPDIR_PE/cwd/output/pipeline-runs" ]
 }

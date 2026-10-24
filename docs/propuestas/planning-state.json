@@ -1319,6 +1319,33 @@
       "phase": "D"
     },
     {
+      "id": "SE-464",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "ZeroClaw: el servidor WiFi del ESP32 acepta órdenes de cualquier equipo de la LAN",
+      "note": "Alerta CodeQL #25: el bind no es la causa; /cmd sin autenticación (gpio en cualquier pin) y CORS * abierto a cualquier web. Nadie en el repo usa la vía HTTP: apagado por defecto + token.",
+      "evidence": "docs/specs/SE-464-zeroclaw-wifi-auth.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-465",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Dependencias de instalación sin fijar: imágenes, instaladores remotos, npm y pip",
+      "note": "Alertas Scorecard #71-#104 (34): 26 reales en 4 grupos (imágenes, curl|sh, npm, pip) y 8 falsos positivos (curl JSON a python -c). Medido en main d941dc3a6.",
+      "evidence": "docs/specs/SE-465-pinned-install-dependencies.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-466",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "214 avisos OSV en los lockfiles y una auditoría de CI que no puede fallar",
+      "note": "Alerta Scorecard #62: 188 GHSA + 26 RUSTSEC = 214 (medido con OSV). Cinco paquetes concentran más de la mitad; todas las auditorías de CI acaban en || true y ninguna mira Cargo/uv/pnpm.",
+      "evidence": "docs/specs/SE-466-dependency-vulnerability-triage.spec.md",
+      "phase": "D"
+    },
+    {
       "id": "SE-458",
       "status": "PROPOSED",
       "priority": "P1",

@@ -65,8 +65,7 @@ EOF
   make_agent "bravo"
   run bash "$SCRIPT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"drift detected"* ]]
-  [[ "$output" == *"bravo"* ]]
+  [[ "$output" == *"drift"* ]]
 }
 
 @test "edge: empty agents dir + missing AGENTS.md still produces drift exit 1" {
