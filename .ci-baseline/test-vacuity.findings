@@ -1,33 +1,8 @@
-tests/enterprise/test-se-022-bench.bats	SE-022: bench-match.sh returns candidates for matching skills	V1
-tests/evals/test-capability-map.bats	error: missing directory argument handled gracefully	V1
-tests/hooks/test-new-hooks.bats	pre-compact-backup.sh: extracts decisions from input	V1
-tests/structure/test-agents-md-drift-check.bats	drift-check: prints diff hint to stderr on drift	V1
-tests/structure/test-context-snapshot.bats	snapshot load fails gracefully when no snapshot exists	V1
-tests/structure/test-opencode-savia-gates-plugin.bats	edge: --link-only mode skips download step	V1
-tests/structure/test-pipeline-engine.bats	pipeline engine handles invalid YAML without crash	V2
-tests/structure/test-rule-lazy-loading.bats	analyzer handles empty rules directory with zero rules	V2
-tests/structure/test-sentinel-regen.bats	AC2: verify-hash detects drift when generated block edited manually	V1
-tests/structure/test-sync-adapters.bats	state mapping handles bad provider and empty state	V1
-tests/structure/test-sync-adapters.bats	state mapping handles bad provider and empty state	V1
-tests/structure/test-sync-adapters.bats	state mapping rejects invalid state and handles null timestamps	V1
-tests/test-acm-turn-marker.bats	no-path: Read without file_path exits 0	V1
-tests/test-compress-agent-output.bats	raw: long output saved to compressed-raw dir when compression attempted	V1
-tests/test-context-greedy-inject.bats	warn mode: GOOD subgraph emits advisory but exits 0	V1
-tests/test-context-origin-stamp-hook.bats	binary content (NUL bytes) no rompe el hook	V1
-tests/test-credential-isolation.bats	classify-execution-level works	V1
-tests/test-data-sovereignty-audit.bats	edge: empty stdin logs TIMEOUT_SKIP marker	V1
-tests/test-dependency-scanner.bats	missing jq is an error (exit 2) instead of an unverifiable verdict	V1
-tests/test-fail-closed.bats	adversarial suite --ci produces TAP output	V1
-tests/test-fail-closed.bats	adversarial suite reports test count	V1
-tests/test-fail-closed.bats	session container start without Docker fails gracefully	V1
-tests/test-freetoken-probe.bats	probe CRIT-001: solo descarga al pedir --install, nunca en read-only	V1
-tests/test-learning-recall-hook.bats	no persiste el prompt (SCL-008 TS-07)	V2
 tests/test-masked-digestion.bats	daemon rejects invalid mask request	V1
 tests/test-masked-digestion.bats	masked-digest.sh fails gracefully with no stdin	V1
 tests/test-masked-digestion-e2e.bats	e2e: boundary — text with only special chars	V1
 tests/test-masked-digestion-e2e.bats	e2e: empty text mask returns empty gracefully	V1
 tests/test-masked-digestion-e2e.bats	e2e: invalid JSON to unmask returns error	V1
-tests/test-masked-digestion-e2e.bats	e2e: unmask with bad input fails gracefully	V1
 tests/test-memory-contradiction.bats	edge case: nonexistent store file created on first save	V1
 tests/test-savia-shield-daemon.bats	boundary: large content handled within timeout	V1
 tests/test-savia-shield-daemon.bats	daemon rejects invalid JSON gracefully — no crash	V1

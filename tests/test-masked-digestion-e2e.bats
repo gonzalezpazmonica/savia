@@ -89,7 +89,7 @@ unmask_text() {
 @test "e2e: unmask with bad input fails gracefully" {
   daemon_available || skip "Shield daemon not running"
   output=$(unmask_text "")
-  [[ -z "$output" ]] || [[ "$output" == *"error"* ]] || true
+  [[ -z "$output" ]] || [[ "$output" == *"error"* ]]
 }
 
 @test "e2e: mask rejects null text — no silent fail" {

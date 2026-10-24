@@ -59,6 +59,11 @@ while IFS= read -r line; do
   fi
 done < "$PIPELINE_FILE"
 
+if [ "${#STAGES[@]}" -eq 0 ]; then
+  echo "Error: no stages found in $PIPELINE_FILE (invalid or empty pipeline)" >&2
+  exit 1
+fi
+
 # ── Execute stages ──
 declare -A STAGE_STATUS
 FAILED=0

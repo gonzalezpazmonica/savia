@@ -56,7 +56,8 @@ teardown() {
 
 @test "classify-execution-level works" {
   run bash "$BATS_TEST_DIRNAME/../scripts/classify-execution-level.sh" --help 2>/dev/null
-  [ "$status" -eq 0 ] || true
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage: classify-execution-level.sh"* ]]
 }
 
 @test "safety: containment-run has set -uo pipefail" {

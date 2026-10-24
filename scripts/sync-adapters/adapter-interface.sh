@@ -71,6 +71,7 @@ map_state_to_provider() {
         Resolved|Closed) echo "closed" ;;
         *) echo "$state" ;;
       esac ;;
+    *) echo "map_state_to_provider: unknown provider '$provider'" >&2; return 1 ;;
   esac
 }
 

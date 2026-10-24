@@ -135,7 +135,7 @@ assert d['mode'] == 'shadow'
   payload=$(printf '{"tool_name":"Read","tool_input":{"file_path":"%s"}}' "$acm")
   run bash -c "echo '$payload' | bash '$HOOK' 2>&1 1>/dev/null"
   [[ "$status" -eq 0 ]]
-  [[ "$output" == *"[CGI]"* ]] || [[ "$output" == *"subgraph"* ]] || true
+  [[ "$output" == *"[CGI]"* ]] || [[ "$output" == *"subgraph"* ]]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

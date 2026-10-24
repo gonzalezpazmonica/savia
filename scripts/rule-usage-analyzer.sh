@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # rule-usage-analyzer.sh — Analyze domain rule usage across the workspace
 # Outputs JSON manifest mapping rules to their consumers.
-# Usage: ./scripts/rule-usage-analyzer.sh [--output FILE] [--summary]
+# Usage: ./scripts/rule-usage-analyzer.sh [--root DIR] [--output FILE] [--summary]
 # ─────────────────────────────────────────────────────────────────────
 set -uo pipefail
 cat /dev/stdin > /dev/null 2>&1 || true
@@ -14,6 +14,7 @@ SUMMARY_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --root) ROOT="$2"; RULES_DIR="${ROOT}/docs/rules/domain"; shift 2 ;;
     --output) OUTPUT_FILE="$2"; shift 2 ;;
     --summary) SUMMARY_ONLY=true; shift ;;
     *) shift ;;

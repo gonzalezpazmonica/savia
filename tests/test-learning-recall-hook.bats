@@ -21,9 +21,8 @@ teardown() { cd /; }
 }
 @test "no persiste el prompt (SCL-008 TS-07)" {
   run grep -ciE '>.*prompt|echo.*\$PROMPT|cat.*prompt' "$SCRIPT"
-  # El hook no debe volcar el prompt a ficheros. Si no hay escrituras de prompt,
-  # el count será 0.
-  :
+  # El hook no debe volcar el prompt a ficheros: 0 coincidencias.
+  [ "$output" = "0" ]
 }
 # --- Comportamiento: proyecto temporal con un learning-recall.sh falso que registra sus argumentos ---
 

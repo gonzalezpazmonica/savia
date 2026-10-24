@@ -8,7 +8,7 @@ cat /dev/stdin > /dev/null 2>&1 || true
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${SCRIPT_DIR}/.."
-CACHE_DIR="${ROOT}/.claude/context-cache"
+CACHE_DIR="${CONTEXT_CACHE_DIR:-${ROOT}/.claude/context-cache}"
 SNAPSHOT="${CACHE_DIR}/last-session.json"
 TTL_HOURS=24
 

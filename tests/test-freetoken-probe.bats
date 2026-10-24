@@ -40,12 +40,18 @@ assert d['verdict'] in ('viable','inviable','inviable-en-este-hardware'), d['ver
 }
 
 @test "probe CRIT-001: solo descarga al pedir --install, nunca en read-only" {
-  # El probe read-only no ejecuta curl de descarga
-  run grep -nE "curl.*uv-install|rm -rf|wget" scripts/freetoken-probe.sh
-  # la única descarga es condicional bajo --install y la guardamos con grep
-  if [[ "$output" != *"--install"* ]]; then
-    [[ -z "$output" ]] || true
-  fi
+  # Estático: toda descarga está después de la guarda DO_INSTALL
+  local guard first
+  guard=$(grep -n 'if \[\[ "\$DO_INSTALL" -eq 1 \]\]' scripts/freetoken-probe.sh | head -1 | cut -d: -f1)
+  first=$(grep -nE "curl|wget" scripts/freetoken-probe.sh | head -1 | cut -d: -f1)
+  [ -n "$guard" ] && [ -n "$first" ] && [ "$first" -gt "$guard" ]
+  # Dinámico: el probe read-only no invoca curl ni wget
+  local b="$BATS_TEST_TMPDIR/stub" t; mkdir -p "$b"
+  for t in curl wget; do
+    printf '#!/bin/sh\necho "$0 $*" >> "%s/net.log"\n' "$BATS_TEST_TMPDIR" > "$b/$t"; chmod +x "$b/$t"
+  done
+  PATH="$b:$PATH" run bash scripts/freetoken-probe.sh
+  [ ! -e "$BATS_TEST_TMPDIR/net.log" ]
   # sanidad: no borra y no escribe en CRITERIO/CONSTITUCION
   run grep -nE "CRITERIO|CONSTITUCION" scripts/freetoken-probe.sh
   [[ -z "$output" ]]

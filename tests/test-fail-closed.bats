@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   SCRIPT="$BATS_TEST_DIRNAME/../scripts/containment-run.sh"
   CHECK="$BATS_TEST_DIRNAME/../scripts/containment-check.sh"
@@ -27,21 +29,23 @@ setup() {
 
 @test "containment-check --json produces valid JSON" {
   PATH=/nonexistent:$PATH run bash "$CHECK" --json
-  echo "$output" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null || true
+  echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['docker_available'] is False"
 }
 
 @test "session container start without Docker fails gracefully" {
   SESSION="$BATS_TEST_DIRNAME/../containment/session-container.sh"
-  PATH=/nonexistent:$PATH run bash "$SESSION" start
-  [ "$status" -ne 0 ] || true
+  command -v docker >/dev/null 2>&1 && skip "docker presente: el caso sin Docker no es reproducible"
+  PATH=/nonexistent:$PATH run -127 bash "$SESSION" start
+  [[ "$output" == *"docker"* ]]
 }
 
 @test "adversarial suite reports test count" {
   run bash "$BATS_TEST_DIRNAME/../scripts/adversarial-containment.sh"
-  [[ "$output" =~ "Results:" ]] || true
+  [[ "$output" =~ "Results:" ]]
 }
 
 @test "adversarial suite --ci produces TAP output" {
   run bash "$BATS_TEST_DIRNAME/../scripts/adversarial-containment.sh" --ci
-  [[ "$output" =~ "TAP version" || "$output" =~ "1..6" ]] || true
+  [[ "$output" =~ "TAP version" ]]
+  [[ "$output" =~ "1..6" ]]
 }

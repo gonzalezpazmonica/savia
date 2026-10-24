@@ -127,7 +127,8 @@ teardown() {
   SDD_COMPRESS_AGENT_OUTPUT=true run bash "$HOOK" <<< "$big"
   [ "$status" -eq 0 ]
   # Raw dir should be created
-  [[ -d output/dev-sessions/compressed-raw ]] || true
+  [ -d output/dev-sessions/compressed-raw ]
+  [ -n "$(ls output/dev-sessions/compressed-raw)" ]
   rm -rf output/dev-sessions/raw-test-slice output/dev-sessions/compressed-raw
 }
 
