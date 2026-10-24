@@ -104,8 +104,7 @@ print('OK')
   mkdir -p "$TMPDIR_RLL/docs/rules/domain"
   run bash -c "echo '' | $ROOT/scripts/rule-usage-analyzer.sh --root $TMPDIR_RLL --summary 2>&1"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"0"* ]]
-  [[ "$output" != *"319"* ]]
+  [[ "$output" == "Rules: 0 total | 0 tier1 | 0 tier2 | 0 dormant"* ]]
 }
 
 @test "manifest rules each have a consumers field" {
