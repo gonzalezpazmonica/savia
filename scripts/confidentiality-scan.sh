@@ -98,13 +98,32 @@ get_lines() {
   esac
 }
 
-# changed_files — ficheros añadidos o modificados del modo actual (Check 4), con las mismas exclusiones.
+# changed_files — ficheros añadidos o modificados del modo actual (Check 4). Sin EXCLUDE_FILES: esa
+# lista es para el contenido autorreferente (tests/, pentesting/…) y no debe dejar pasar un .pem o un
+# id_rsa por estar en esas carpetas. Ningún fichero versionado coincide hoy con el patrón prohibido.
 changed_files() {
   cd "$ROOT_DIR" || exit 2
   case "$MODE" in
     --staged) git diff --cached --diff-filter=ACMR --name-only ;;
     --pr)     git diff origin/main...HEAD --diff-filter=ACMR --name-only ;;
-  esac | grep -vE "$EXCLUDE_FILES"
+  esac
+}
+
+# check_forbidden_files — Check 4. Va aparte porque también corre cuando no hay líneas añadidas:
+# un .p12/.pfx binario o un .env vacío no aportan ninguna línea `+` y antes salían como CLEAN.
+check_forbidden_files() {
+  if [ "$MODE" = "--full-repo" ]; then
+    echo "-- Check 4: Forbidden files (skipped in full-repo mode)"; return 0
+  fi
+  echo "-- Check 4: Forbidden files"
+  local changed forbid
+  changed=$(changed_files 2>/dev/null || true)
+  forbid=$(echo "$changed" | grep -iE "\.(env|pat|secret|pem|p12|pfx|key)$|id_rsa|id_ed25519" || true)
+  if [ -n "$forbid" ]; then
+    echo "::error::BLOCKED: Forbidden file types"
+    echo "$forbid" | while read -r f; do echo "  FAIL $f"; done
+    FAILS=$((FAILS + 1))
+  else echo "  OK"; fi
 }
 
 # git_source_ok — 0 si git puede calcular la fuente del modo actual (diff o lista de ficheros).
@@ -124,7 +143,12 @@ if ! git_source_ok; then
   finish
 fi
 ADDED_LINES=$(get_lines 2>/dev/null || true)
-if [ -z "$ADDED_LINES" ]; then echo "No content to scan."; finish; fi
+if [ -z "$ADDED_LINES" ]; then
+  echo "No content lines to scan."
+  check_forbidden_files
+  [ "$FAILS" -gt 0 ] && echo "BLOCKED — $FAILS violation(s)"
+  finish
+fi
 LINE_COUNT=$(echo "$ADDED_LINES" | wc -l)
 echo "Scanning $LINE_COUNT lines (mode: $MODE)"
 
@@ -193,18 +217,7 @@ if [ -n "$EMAILS" ]; then
 else echo "  OK"; fi
 
 # ── Check 4: Forbidden files (skip for full-repo — files already committed) ─
-if [ "$MODE" != "--full-repo" ]; then
-  echo "-- Check 4: Forbidden files"
-  CHANGED=$(changed_files 2>/dev/null || true)
-  FORBID=$(echo "$CHANGED" | grep -iE "\.(env|pat|secret|pem|p12|pfx|key)$|id_rsa|id_ed25519" || true)
-  if [ -n "$FORBID" ]; then
-    echo "::error::BLOCKED: Forbidden file types"
-    echo "$FORBID" | while read -r f; do echo "  FAIL $f"; done
-    FAILS=$((FAILS + 1))
-  else echo "  OK"; fi
-else
-  echo "-- Check 4: Forbidden files (skipped in full-repo mode)"
-fi
+check_forbidden_files
 
 # ── Check 5: Merge conflict markers ───────────────────────────────────────
 echo "-- Check 5: Conflict markers"

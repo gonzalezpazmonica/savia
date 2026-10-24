@@ -23,7 +23,8 @@
 # SE-453: resultado clean|findings|unknown. En texto, la última línea de stdout es
 # `gate-result: {...}`; con --json, los campos `result` y `gaps` del propio JSON.
 # python3 ausente ⇒ unknown/python3:missing_tool y exit 2 (antes salía 1 con un falso MCP-00).
-# --config a un fichero que no existe o no se puede leer ⇒ unknown/config:unreadable (exit 0, registrado).
+# --config a un fichero que no existe o no se puede leer, o ninguna config por defecto ⇒
+# unknown/config:unreadable (exit 0, registrado; SAVIA_GATE_UNKNOWN=block ⇒ exit 2).
 #
 # Ref: SE-058, research/agentshield-20260420.md
 # Safety: read-only. set -uo pipefail.
@@ -87,6 +88,8 @@ MIN_RANK=$(sev_rank "$MIN_SEVERITY")
 if [[ ${#CONFIGS[@]} -eq 0 ]]; then
   [[ -f "$PROJECT_ROOT/.claude/mcp.json" ]] && CONFIGS+=("$PROJECT_ROOT/.claude/mcp.json")
   [[ -f "$HOME/.claude.json" ]] && CONFIGS+=("$HOME/.claude.json")
+  # Sin ninguna config que leer no hay evidencia de «limpio» (mismo criterio que --config inexistente).
+  [[ ${#CONFIGS[@]} -eq 0 ]] && add_gap "config:unreadable"
 fi
 
 FINDINGS=()
@@ -240,7 +243,10 @@ LOW=$(count_sev "LOW")
 
 RESULT="clean"
 if [[ ${#FINDINGS[@]} -gt 0 ]]; then RESULT="findings"; elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"; fi
-[[ "$RESULT" == "unknown" ]] && GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "mcp-security-audit" unreadable
+if [[ "$RESULT" == "unknown" ]]; then
+  GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "mcp-security-audit" "${GAPS[0]#*:}"
+  [[ "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]] && EXIT_CODE=2
+fi
 GATE_JSON="$(gate_result_emit "$RESULT" "${GAPS[@]}" | sed 's/^gate-result: {//; s/}$//')"
 
 if [[ "$JSON" -eq 1 ]]; then

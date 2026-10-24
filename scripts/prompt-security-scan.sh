@@ -7,6 +7,7 @@ set -uo pipefail
 # SE-453: la última línea de stdout es `gate-result: {...}` (clean|findings|unknown). Códigos sin
 # renumerar: una comprobación que no corre (python3 ausente, fichero ilegible) o un path sin ficheros
 # .md deja el resultado en unknown con exit 0, y se registra en output/unmeasured-gates.jsonl.
+# SAVIA_GATE_UNKNOWN=block ⇒ unknown sale 2. Un path inexistente sale 2 siempre (error de uso).
 # --quiet suprime toda la salida, también esa línea (el exit code y el registro se mantienen).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -149,6 +150,7 @@ $QUIET || printf "\n  Prompt Security Scan\n  %s\n\n" "$(printf '%.0s─' {1..40
 
 if [[ ! -d "$SCAN_PATH" ]] && [[ ! -f "$SCAN_PATH" ]]; then
   echo "Error: path not found: $SCAN_PATH" >&2
+  GATE_UNMEASURED_ROOT="$ROOT" gate_unmeasured_record "prompt-security-scan" unreadable
   $QUIET || gate_result_emit unknown "path:unreadable"
   exit 2
 fi
@@ -174,4 +176,5 @@ if [[ "$TOTAL_F" -gt 0 ]]; then RESULT="findings"; elif [[ ${#GAPS[@]} -gt 0 ]];
 [[ "$RESULT" == "unknown" ]] && GATE_UNMEASURED_ROOT="$ROOT" gate_unmeasured_record "prompt-security-scan" "${GAPS[0]#*:}"
 $QUIET || gate_result_emit "$RESULT" "${GAPS[@]}"
 [[ "$TOTAL_F" -gt 0 ]] && exit 1
+[[ "$RESULT" == "unknown" && "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]] && exit 2
 exit 0

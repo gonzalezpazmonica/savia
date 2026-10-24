@@ -93,8 +93,9 @@ run_scanner() {
   local name="$1"; shift
   local output rc=0 parsed c=0 h=0 m=0 l=0 g
   output=$("$@" 2>/dev/null) || rc=$?
-  parsed=$(printf '%s' "$output" | python3 -c '
-import json, sys
+  parsed=$(printf '%s' "$output" | GATE_REASONS="$_GATE_REASONS" python3 -c '
+import json, os, re, sys
+REASONS = os.environ["GATE_REASONS"].split()
 try:
     d = json.load(sys.stdin)
     counts = [int(d.get(k, 0)) for k in ("critical", "high", "medium", "low")]
@@ -104,7 +105,11 @@ print(*counts)
 if d.get("result") == "unknown":
     gaps = [g for g in d.get("gaps") or [] if isinstance(g, dict)]
     for g in gaps or [{"check": "result", "reason": "unreadable"}]:
-        print("%s:%s" % (g.get("check", "result"), g.get("reason", "unreadable")))
+        # Vocabulario cerrado (gate-result.sh): un motivo ajeno o un check con «:», espacios o saltos
+        # de línea haría que gate_result_emit fallara sin salida y el JSON agregado quedara roto.
+        check = re.sub(r"[^A-Za-z0-9_./-]", "_", str(g.get("check") or "result")) or "result"
+        reason = g.get("reason")
+        print("%s:%s" % (check, reason if reason in REASONS else "unreadable"))
 ' 2>/dev/null) || parsed=""
   if [[ $rc -ge 2 || -z "$parsed" ]]; then
     add_gap "$name:unreadable"
@@ -164,8 +169,10 @@ if [[ $((TOTAL_CRIT + TOTAL_HIGH + TOTAL_MED + TOTAL_LOW)) -gt 0 ]]; then
 elif [[ ${#GAPS[@]} -gt 0 ]]; then
   RESULT="unknown"
   GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "security-audit-all" unreadable
-  [[ "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]] && EXIT_CODE=1
 fi
+# block mira los huecos, no RESULT: un hallazgo LOW bajo --fail-on no puede tapar un sub-escáner
+# ilegible que quizá escondía un CRITICAL.
+[[ ${#GAPS[@]} -gt 0 && "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]] && EXIT_CODE=1
 VERDICT="$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)"
 
 if [[ "$JSON" -eq 1 ]]; then

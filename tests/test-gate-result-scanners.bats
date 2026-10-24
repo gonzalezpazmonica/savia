@@ -88,6 +88,22 @@ unmeasured() { grep -q "\"hook\":\"$1\"" "$PROJ/output/unmeasured-gates.jsonl"; 
   has_gap unknown path unreadable
 }
 
+@test "prompt: path inexistente queda registrado en unmeasured-gates.jsonl" {
+  run bash "$PROJ/scripts/prompt-security-scan.sh" "$WORK/no-existe"
+  [ "$status" -eq 2 ]
+  unmeasured prompt-security-scan
+}
+
+@test "prompt: SAVIA_GATE_UNKNOWN=block ⇒ unknown sale 2; sin la variable, 0" {
+  mkdir -p "$WORK/empty"
+  run env SAVIA_GATE_UNKNOWN=block bash "$PROJ/scripts/prompt-security-scan.sh" "$WORK/empty"
+  [ "$status" -eq 2 ]
+  has_gap unknown files unreadable
+  run env SAVIA_GATE_UNKNOWN=block bash "$PROJ/scripts/prompt-security-scan.sh" "$WORK/md"
+  [ "$status" -eq 0 ]
+  is_result clean
+}
+
 # ── mcp-security-audit ───────────────────────────────────────────────────────
 
 mcp_cfg() { printf '{"mcpServers":{"s":{"command":"/opt/s","description":"d"%s}}}\n' "${2:-}" > "$1"; }
@@ -121,6 +137,23 @@ mcp_cfg() { printf '{"mcpServers":{"s":{"command":"/opt/s","description":"d"%s}}
   run --separate-stderr bash "$PROJ/scripts/mcp-security-audit.sh" --config "$WORK/a'b.json" --json
   [ "$status" -eq 1 ]
   printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); r=[f["rule"] for f in d["findings"]]; assert "MCP-02" in r and "MCP-00" not in r and d["result"]=="findings", d'
+}
+
+@test "mcp: sin ninguna config por defecto ⇒ unknown/config:unreadable, nunca clean" {
+  mkdir -p "$WORK/home"
+  run env HOME="$WORK/home" bash "$PROJ/scripts/mcp-security-audit.sh"
+  [ "$status" -eq 0 ]
+  has_gap unknown config unreadable
+  unmeasured mcp-security-audit
+}
+
+@test "mcp: SAVIA_GATE_UNKNOWN=block ⇒ unknown sale 2; config limpia sigue en 0" {
+  run env SAVIA_GATE_UNKNOWN=block bash "$PROJ/scripts/mcp-security-audit.sh" --config "$WORK/no-existe.json"
+  [ "$status" -eq 2 ]
+  has_gap unknown config unreadable
+  mcp_cfg "$WORK/m.json"
+  run env SAVIA_GATE_UNKNOWN=block bash "$PROJ/scripts/mcp-security-audit.sh" --config "$WORK/m.json"
+  [ "$status" -eq 0 ]
 }
 
 # ── iac-security-scan ────────────────────────────────────────────────────────
@@ -210,6 +243,9 @@ clean_subs() {
   [ "$status" -eq 0 ]
   is_result clean
   is_last_line "$(last_result)"
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="clean" and d["gaps"]==[] and d["verdict"]=="PASS", d'
 }
 
 @test "audit-all: sub-escáner con exit 2 o salida ilegible ⇒ unknown, no cero hallazgos" {
@@ -229,6 +265,46 @@ clean_subs() {
   run bash "$PROJ/scripts/security-audit-all.sh"
   [ "$status" -eq 0 ]
   has_gap unknown mcp-security-audit/config unreadable
+}
+
+@test "audit-all: motivo fuera de vocabulario o check con «:» y salto de línea ⇒ hueco normalizado, JSON válido" {
+  clean_subs
+  fake_sub mcp-security-audit '{"critical":0,"high":0,"medium":0,"low":0,"result":"unknown","gaps":[{"check":"a:b\nc","reason":"rarísimo"}]}' 0
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="unknown" and d["gaps"]==[{"check":"mcp-security-audit/a_b_c","reason":"unreadable"}], d'
+  run bash "$PROJ/scripts/security-audit-all.sh"
+  has_gap unknown mcp-security-audit/a_b_c unreadable
+  is_last_line "$(last_result)"
+}
+
+@test "audit-all: --json con un sub-escáner ilegible ⇒ JSON válido con result unknown" {
+  clean_subs
+  fake_sub permissions-wildcard-audit 'basura' 0
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="unknown" and {"check":"permissions-wildcard-audit","reason":"unreadable"} in d["gaps"], d'
+}
+
+@test "audit-all: SAVIA_GATE_UNKNOWN=block bloquea un hueco aunque haya hallazgos bajo --fail-on" {
+  clean_subs
+  fake_sub mcp-security-audit '{"critical":0,"high":0,"medium":0,"low":1}' 1
+  fake_sub hook-injection-audit 'no es json' 2
+  run bash "$PROJ/scripts/security-audit-all.sh" --fail-on HIGH
+  [ "$status" -eq 0 ]
+  is_result findings
+  run env SAVIA_GATE_UNKNOWN=block bash "$PROJ/scripts/security-audit-all.sh" --fail-on HIGH
+  [ "$status" -eq 1 ]
+}
+
+@test "audit-all: prompt-security-scan con result unknown ⇒ hueco prompt-security-scan:unreadable" {
+  clean_subs
+  printf '#!/usr/bin/env bash\necho "Scanned: 0 files | Findings: 0 | Warnings: 0"\necho %q\n' \
+    'gate-result: {"result":"unknown","gaps":[{"check":"files","reason":"unreadable"}]}' > "$PROJ/scripts/prompt-security-scan.sh"
+  chmod +x "$PROJ/scripts/prompt-security-scan.sh"
+  run bash "$PROJ/scripts/security-audit-all.sh"
+  [ "$status" -eq 0 ]
+  has_gap unknown prompt-security-scan unreadable
 }
 
 # ── confidentiality-scan ─────────────────────────────────────────────────────
@@ -280,6 +356,42 @@ conf_repo() {
   conf_repo
   printf 'texto inocuo\n' > "$PROJ/notas.txt"; git -C "$PROJ" add notas.txt
   run bash "$PROJ/scripts/confidentiality-scan.sh" --staged --blocklist "$WORK/no-existe.txt"
+  [ "$status" -eq 0 ]
+  has_gap unknown blocklist unreadable
+}
+
+@test "conf: --staged con solo un .p12 binario (sin líneas +) ⇒ BLOCKED, no «No content to scan»/clean" {
+  conf_repo
+  printf '\x00\x01\x02binario\x00' > "$PROJ/cert.p12"; git -C "$PROJ" add cert.p12
+  run bash "$PROJ/scripts/confidentiality-scan.sh" --staged
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL cert.p12"* ]]
+  is_result findings
+}
+
+@test "conf: --staged con solo un .env vacío ⇒ BLOCKED por Check 4" {
+  conf_repo
+  : > "$PROJ/.env"; git -C "$PROJ" add -f .env
+  run bash "$PROJ/scripts/confidentiality-scan.sh" --staged
+  [ "$status" -eq 1 ]
+  is_result findings
+}
+
+@test "conf: un .pem bajo tests/ o pentesting/ también es prohibido (EXCLUDE_FILES no aplica al Check 4)" {
+  conf_repo
+  mkdir -p "$PROJ/tests/fixtures" "$PROJ/pentesting"
+  printf 'x\n' > "$PROJ/tests/fixtures/prod.pem"; printf 'x\n' > "$PROJ/pentesting/id_rsa"
+  git -C "$PROJ" add tests/fixtures/prod.pem pentesting/id_rsa
+  run bash "$PROJ/scripts/confidentiality-scan.sh" --staged
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL tests/fixtures/prod.pem"* && "$output" == *"FAIL pentesting/id_rsa"* ]]
+}
+
+@test "conf: generador de blocklist que falla ⇒ unknown/blocklist:unreadable, no clean" {
+  conf_repo
+  printf '#!/usr/bin/env bash\nexit 3\n' > "$PROJ/scripts/generate-blocklist.sh"
+  printf 'texto inocuo\n' > "$PROJ/notas.txt"; git -C "$PROJ" add notas.txt
+  run bash "$PROJ/scripts/confidentiality-scan.sh" --staged
   [ "$status" -eq 0 ]
   has_gap unknown blocklist unreadable
 }
