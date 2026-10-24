@@ -1,0 +1,41 @@
+{
+  "source": "/tmp/tmp.4O8mYp0WMp/in.txt",
+  "method": "deterministic",
+  "entities": [
+    {
+      "name": "Spec: SE-291",
+      "type": "document",
+      "value": "SE-291",
+      "confidence": 1.0,
+      "extraction_method": "regex",
+      "pattern": "spec_id",
+      "source_document": "/tmp/tmp.4O8mYp0WMp/in.txt",
+      "source_hash": "291d7314cf207dd1",
+      "evidence_span": {
+        "start": 0,
+        "end": 6,
+        "text": "SE-291"
+      },
+      "verified_in_source": true
+    },
+    {
+      "name": "Amount: 291",
+      "type": "event",
+      "value": "291",
+      "confidence": 1.0,
+      "extraction_method": "regex",
+      "pattern": "money",
+      "source_document": "/tmp/tmp.4O8mYp0WMp/in.txt",
+      "source_hash": "291d7314cf207dd1",
+      "evidence_span": {
+        "start": 3,
+        "end": 6,
+        "text": "SE-291"
+      },
+      "verified_in_source": true
+    }
+  ],
+  "entity_count": 2,
+  "coverage_pct": 200.0,
+  "needs_llm": false
+}
