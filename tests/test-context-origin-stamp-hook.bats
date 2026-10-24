@@ -143,8 +143,9 @@ teardown() {
 
 @test "binary content (NUL bytes) no rompe el hook" {
   # NUL bytes pueden causar problemas con bash strings
-  printf '\x00\x00\x00' | bash "$HOOK" >/dev/null 2>&1
-  [ "$?" -ne 1 ] || true
+  run bash -c "printf '\x00\x00\x00' | bash '$HOOK' 2>/dev/null"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"---origin"* ]]
 }
 
 # === Edge cases umbral ===
