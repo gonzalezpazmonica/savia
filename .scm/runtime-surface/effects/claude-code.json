@@ -4,7 +4,8 @@
   "patterns": [
     {
       "effects": [
-        "CALL_MCP"
+        "CALL_MCP",
+        "EXTERNAL_EFFECT"
       ],
       "prefix": "mcp__"
     }
@@ -19,7 +20,14 @@
   "schema_version": 1,
   "tools": {
     "Agent": [
-      "CREATE_PROCESS"
+      "ACCESS_NETWORK",
+      "ACCESS_SECRET",
+      "CHANGE_SHARED_STATE",
+      "CREATE_PROCESS",
+      "EXECUTE_LOCAL",
+      "EXTERNAL_EFFECT",
+      "MODIFY_CONFIG",
+      "WRITE_WORKSPACE"
     ],
     "AskUserQuestion": [
       "REQUEST_HUMAN_DECISION"
@@ -53,13 +61,22 @@
       "ACCESS_SECRET"
     ],
     "Task": [
-      "CREATE_PROCESS"
+      "ACCESS_NETWORK",
+      "ACCESS_SECRET",
+      "CHANGE_SHARED_STATE",
+      "CREATE_PROCESS",
+      "EXECUTE_LOCAL",
+      "EXTERNAL_EFFECT",
+      "MODIFY_CONFIG",
+      "WRITE_WORKSPACE"
     ],
     "WebFetch": [
-      "ACCESS_NETWORK"
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
     ],
     "WebSearch": [
-      "ACCESS_NETWORK"
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
     ],
     "Write": [
       "WRITE_WORKSPACE",

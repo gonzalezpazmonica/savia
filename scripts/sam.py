@@ -151,10 +151,10 @@ def _effects(root: Path, surface_id: str | None, tool: str | None) -> int:
     from sam_effects import load_effect_maps, surface_dispositions, tool_disposition
     from sam_surface import load_manifests
 
+    if tool is not None and surface_id is None:
+        raise SamValidationError("INVALID_SURFACE_MANIFEST", "--tool requires --surface")
     manifests, maps = load_manifests(root), load_effect_maps(root)
     if tool is not None:
-        if surface_id is None:
-            raise SamValidationError("INVALID_SURFACE_MANIFEST", "--tool requires --surface")
         result = tool_disposition(manifests, maps, surface_id, tool)
     elif surface_id is not None:
         result = {"surface": surface_id, "dispositions": surface_dispositions(manifests, surface_id),

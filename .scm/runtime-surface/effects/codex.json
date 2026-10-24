@@ -4,7 +4,8 @@
   "patterns": [
     {
       "effects": [
-        "CALL_MCP"
+        "CALL_MCP",
+        "EXTERNAL_EFFECT"
       ],
       "prefix": "mcp__"
     }
@@ -50,7 +51,8 @@
       "CHANGE_SHARED_STATE"
     ],
     "web_search": [
-      "ACCESS_NETWORK"
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
     ]
   },
   "verification": "NOT_VERIFIED"

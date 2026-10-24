@@ -47,10 +47,18 @@
       "ACCESS_SECRET"
     ],
     "task": [
-      "CREATE_PROCESS"
+      "ACCESS_NETWORK",
+      "ACCESS_SECRET",
+      "CHANGE_SHARED_STATE",
+      "CREATE_PROCESS",
+      "EXECUTE_LOCAL",
+      "EXTERNAL_EFFECT",
+      "MODIFY_CONFIG",
+      "WRITE_WORKSPACE"
     ],
     "webfetch": [
-      "ACCESS_NETWORK"
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
     ],
     "write": [
       "WRITE_WORKSPACE",

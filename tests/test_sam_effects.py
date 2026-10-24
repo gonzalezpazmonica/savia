@@ -12,7 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from sam_effects import (DISPOSITIONS, UNKNOWN_EFFECT, classify_tool, effect_disposition,  # noqa: E402
+from sam_effects import (DELEGATING_TOOLS, DISPOSITIONS, SHELL_TOOLS, UNKNOWN_EFFECT, classify_tool, effect_disposition,  # noqa: E402
                          load_effect_maps, surface_dispositions, tool_disposition)
 from sam_model import SamValidationError  # noqa: E402
 from sam_surface import EFFECTS, SURFACE_IDS, load_manifests  # noqa: E402
@@ -28,14 +28,15 @@ class SamEffectsTest(unittest.TestCase):
     def test_unmapped_tool_fails_closed(self):
         self.assertEqual([UNKNOWN_EFFECT], classify_tool(self.maps, "claude-code", "Teleport"))
         result = tool_disposition(self.manifests, self.maps, "claude-code-cli", "Teleport")
-        self.assertEqual("DEGRADED_SAFE", result["disposition"])
+        self.assertEqual("UNSUPPORTED_FOR_EFFECT", result["disposition"])
 
     def test_same_name_is_not_same_effect_across_runtimes(self):
         self.assertEqual([UNKNOWN_EFFECT], classify_tool(self.maps, "opencode", "Bash"))
         self.assertIn("EXECUTE_LOCAL", classify_tool(self.maps, "opencode", "bash"))
 
     def test_mcp_prefix_maps_to_call_mcp(self):
-        self.assertEqual(["CALL_MCP"], classify_tool(self.maps, "claude-code", "mcp__x__y"))
+        self.assertEqual(["CALL_MCP", "EXTERNAL_EFFECT"],
+                         classify_tool(self.maps, "claude-code", "mcp__x__y"))
 
     def test_shell_is_worst_case_multi_effect(self):
         effects = classify_tool(self.maps, "codex", "shell")
@@ -47,12 +48,28 @@ class SamEffectsTest(unittest.TestCase):
         result = tool_disposition(self.manifests, self.maps, "codex-desktop", "shell")
         self.assertEqual("UNSUPPORTED_FOR_EFFECT", result["disposition"])
 
-    def test_no_disposition_is_ever_an_allow(self):
-        for state in ("NATIVE", "ADAPTED", "EMULATED", "UNKNOWN", "UNSUPPORTED"):
-            self.assertIn(effect_disposition(state), DISPOSITIONS)
+    def test_effect_disposition_exact_table(self):
+        table = {"UNSUPPORTED": "UNSUPPORTED_FOR_EFFECT", "EMULATED": "REROUTE_HUMAN",
+                 "NATIVE": "CANDIDATE_GATED", "ADAPTED": "CANDIDATE_GATED",
+                 "UNKNOWN": "DEGRADED_SAFE", "FOO": "DEGRADED_SAFE", "": "DEGRADED_SAFE"}
+        for state, expected in table.items():
+            self.assertEqual(expected, effect_disposition(state), state)
+
+    def test_no_surface_disposition_is_an_allow(self):
         for sid in SURFACE_IDS:
-            values = set(surface_dispositions(self.manifests, sid).values())
-            self.assertFalse({v for v in values if "ALLOW" in v})
+            for value in surface_dispositions(self.manifests, sid).values():
+                self.assertIn(value, DISPOSITIONS + ("NOT_CRITICAL",))
+
+    def test_delegating_tools_carry_shell_worst_case(self):
+        for runtime, names in DELEGATING_TOOLS.items():
+            shell = set(classify_tool(self.maps, runtime, SHELL_TOOLS[runtime][0]))
+            for name in names:
+                self.assertTrue(shell <= set(classify_tool(self.maps, runtime, name)), name)
+
+    def test_network_and_mcp_tools_carry_external_effect(self):
+        for runtime, tool in (("claude-code", "WebFetch"), ("opencode", "webfetch"),
+                              ("codex", "web_search"), ("claude-code", "mcp__x__y")):
+            self.assertIn("EXTERNAL_EFFECT", classify_tool(self.maps, runtime, tool))
 
     def test_every_surface_covers_every_effect(self):
         for sid in SURFACE_IDS:
@@ -106,6 +123,20 @@ class SamEffectsValidationTest(unittest.TestCase):
         (self.root / BASE / "effects" / "codex.json").unlink()
         self._invalid()
 
+    def test_rejects_shell_tool_without_execute_local(self):
+        self._edit(lambda d: d["tools"].update(bash=["READ_WORKSPACE"]))
+        self._invalid()
+
+    def test_rejects_delegating_tool_weaker_than_shell(self):
+        self._edit(lambda d: d["tools"].update(task=["CREATE_PROCESS"]))
+        self._invalid()
+
+    def test_rejects_symlinked_effects_directory(self):
+        real = self.root / "real-effects"
+        (self.root / BASE / "effects").rename(real)
+        (self.root / BASE / "effects").symlink_to(real)
+        self._invalid()
+
     def test_rejects_bad_pattern(self):
         self._edit(lambda d: d.update(patterns=[{"prefix": "", "effects": ["CALL_MCP"]}]),
                    "claude-code")
@@ -123,7 +154,10 @@ class SamEffectsCliTest(unittest.TestCase):
         self.assertEqual("UNSUPPORTED_FOR_EFFECT", json.loads(out.stdout)["disposition"])
 
     def test_cli_tool_without_surface_exits_2(self):
-        self.assertEqual(2, self._run("--tool", "shell").returncode)
+        out = self._run("--tool", "shell")
+        self.assertEqual(2, out.returncode)
+        self.assertIn("INVALID_SURFACE_MANIFEST", out.stderr)
+        self.assertIn("--tool requires --surface", out.stderr)
 
 
 if __name__ == "__main__":
