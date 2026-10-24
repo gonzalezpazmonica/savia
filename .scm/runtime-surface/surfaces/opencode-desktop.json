@@ -1,0 +1,30 @@
+{
+  "capability_overrides": {
+    "ACCESS_SECRET": "UNKNOWN",
+    "EXECUTE_LOCAL": "UNKNOWN",
+    "WRITE_WORKSPACE": "UNKNOWN"
+  },
+  "deltas": {
+    "environment": "PATH/env/cwd of the GUI process, not the shell",
+    "lifecycle": "sidecar restart and app update",
+    "process": "local sidecar server or external server URL",
+    "sandbox": "OS app sandbox/permissions"
+  },
+  "equivalence": "E0",
+  "execution_modes": [
+    "LOCAL",
+    "REMOTE"
+  ],
+  "id": "opencode-desktop",
+  "kind": "surface",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "opencode",
+  "schema_version": 1,
+  "state": "unassessed",
+  "verification": "NOT_VERIFIED"
+}
