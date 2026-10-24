@@ -75,6 +75,17 @@ Calcula el Sovereignty Score analizando 5 dimensiones:
 3. Generar gráfico ASCII de barras por dimensión
 4. Guardar en `output/sovereignty-scan-YYYYMMDD.md`
 
+### Dimensión opcional — Software opaco (SE-455)
+
+Opcional y **sin peso por defecto**: no entra en la fórmula del Paso 6 ni cambia el score salvo que la persona la active
+y asigne peso explícito. Se informa aparte.
+
+1. Inventariar componentes críticos sin fuentes (binarios, aplicaciones cerradas, firmware, formatos propietarios).
+2. Para cada uno: ¿se puede comprobar lo que hace? ¿se puede sustituir? ¿hay formato de salida abierto?
+3. Listar los que no se pueden comprobar ni sustituir como riesgo de soberanía.
+4. Para comprobarlos o planificar la salida: skill `reverse-engineering-sovereignty` (puerta de autorización A-D;
+   nunca sin ella).
+
 ## Flujo: Report
 
 1. Cargar último scan de `output/sovereignty-scan-*.md`

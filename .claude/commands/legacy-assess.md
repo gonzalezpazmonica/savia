@@ -43,6 +43,9 @@ El subagente ejecuta los pasos 1-5 abajo y guarda el informe en `output/assessme
 - **CI/CD**: pipelines existentes (`/pipeline-status`), frecuencia de deploy
 - **Deuda técnica**: si existe `debt-register.md`, incorporar datos
 - **Errores**: si Sentry configurado (`/sentry-health`), crash rate
+- **Sin fuentes** (solo binarios o aplicación cerrada): no hay LOC ni ciclomática. Remitir a la skill
+  `reverse-engineering-sovereignty` (puerta de autorización A-D) y registrar las dimensiones afectadas como
+  «desconocido», sin inventar scores.
 
 ### 2. Calcular scores (1-10)
 
@@ -108,6 +111,7 @@ Conocimiento:   ████░░░░░░ 4/10
 - `/project-release-plan` → incorpora roadmap de modernización como input
 - `/debt-track` → importa hallazgos como items de deuda técnica
 - `/evaluate-repo` → complementario (evaluate-repo = seguridad, legacy-assess = salud global)
+- skill `reverse-engineering-sovereignty` → cuando no hay fuentes (SE-455)
 
 ## Restricciones
 
