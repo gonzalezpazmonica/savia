@@ -164,3 +164,85 @@ setup() {
   run bash "$HOOK"
   [ "$status" -eq 0 ]
 }
+
+# --- Comportamiento: los cuatro patrones, la frontera de loop_skill y el formato del bloqueo ---
+
+blocks() {  # $1 = entrada de herramienta; exporta contexto de bucle
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  export OPENCODE_TOOL_INPUT="$1"
+  run bash "$HOOK"
+}
+
+@test "cada patron de bucle bloquea y se nombra en el mensaje" {
+  for p in overnight-sprint code-improvement-loop tech-research-agent; do
+    blocks "lanzar $p ahora"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Cannot launch '$p'"* ]]
+  done
+}
+
+@test "loop_skill como campo JSON bloquea" {
+  blocks '{"loop_skill": "x"}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Cannot launch 'loop_skill'"* ]]
+}
+
+@test "loop_skill como palabra suelta, al final de la entrada o seguida de espacio bloquea" {
+  blocks 'run loop_skill'
+  [ "$status" -eq 2 ]
+  blocks 'loop_skill --now'
+  [ "$status" -eq 2 ]
+}
+
+@test "loop_skill dentro de otro identificador no bloquea (my_loop_skill_ext, loop_skill_ext)" {
+  blocks 'my_loop_skill_ext run'
+  [ "$status" -eq 0 ]
+  blocks 'loop_skill_ext'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "entrada vacia dentro de un bucle no bloquea" {
+  blocks ''
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "permitido: no escribe nada en stdout" {
+  blocks '{"command":"ls"}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "el mensaje trunca la entrada a 100 caracteres" {
+  long="overnight-sprint $(printf 'x%.0s' $(seq 1 200))"
+  blocks "$long"
+  [ "$status" -eq 2 ]
+  line=$(echo "$output" | grep 'Tool input (truncated):')
+  [ "$line" = "  Tool input (truncated): ${long:0:100}" ]
+}
+
+@test "el mensaje explica como limpiar el contexto" {
+  blocks 'overnight-sprint'
+  [[ "$output" == *"SAVIA_LOOP_CONTEXT="* ]]
+  [[ "$output" == *"Current context: overnight-sprint:1"* ]]
+}
+
+@test "export con nombre de bucle vacio falla sin tocar el contexto" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:2"
+  run bash -c 'source "$1" ""; echo "rc=$? ctx=$SAVIA_LOOP_CONTEXT"' _ "$EXPORT"
+  [[ "$output" == *"rc=1 ctx=overnight-sprint:2"* ]]
+}
+
+@test "export con profundidad no numerica parte de 0" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:abc"
+  # shellcheck disable=SC1090
+  source "$EXPORT" "tech-research-agent"
+  [ "$SAVIA_LOOP_CONTEXT" = "tech-research-agent:1" ]
+}
+
+@test "export ejecutado en vez de sourced se niega con exit 1" {
+  run bash "$EXPORT" overnight-sprint
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must be sourced"* ]]
+}

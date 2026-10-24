@@ -72,3 +72,135 @@ teardown() {
   [[ "$output" == 00-4bf92f3577b34da6a3ce929d0e0e4736-* ]]
   unset SAVIA_TRACEPARENT
 }
+
+# ── Comportamiento: traceparent, span, eventos emitidos y códigos ─────────
+
+_tp() { echo "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"; }
+
+@test "usage: acción desconocida con evento sale 1 y no emite telemetría" {
+  run bash "$SCRIPT" bogus agent.x
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"usage"* ]]
+  [ ! -s "$SAVIA_TELEMETRY_FILE" ]
+}
+
+@test "start raíz: sin padre, el span nuevo del traceparent difiere en cada llamada" {
+  a=$(bash "$SCRIPT" start e.x)
+  b=$(bash "$SCRIPT" start e.x)
+  [ "${a:3:32}" != "${b:3:32}" ]
+  [ "${a:36:16}" != "${b:36:16}" ]
+}
+
+@test "start raíz: el evento comparte trace_id y su parent_span_id es el span nuevo devuelto" {
+  tp=$(bash "$SCRIPT" start agent.started agent_name=raiz)
+  run jq -r 'select(.event=="agent.started") | .trace_id + " " + .parent_span_id' "$SAVIA_TELEMETRY_FILE"
+  [ "$output" = "${tp:3:32} ${tp:36:16}" ]
+}
+
+@test "start con padre: devuelve span nuevo distinto del padre y misma traza" {
+  export SAVIA_TRACEPARENT="$(_tp)"
+  run bash "$SCRIPT" start agent.started agent_name=hijo
+  [ "${output:3:32}" = "4bf92f3577b34da6a3ce929d0e0e4736" ]
+  [ "${output:36:16}" != "00f067aa0ba902b7" ]
+  [[ "$output" =~ -01$ ]]
+}
+
+@test "start con padre: el evento apunta al span heredado como parent_span_id" {
+  export SAVIA_TRACEPARENT="$(_tp)"
+  bash "$SCRIPT" start agent.started agent_name=hijo >/dev/null
+  run jq -r 'select(.event=="agent.started") | .parent_span_id' "$SAVIA_TELEMETRY_FILE"
+  [ "$output" = "00f067aa0ba902b7" ]
+}
+
+@test "start propaga los pares clave=valor al evento" {
+  bash "$SCRIPT" start agent.started agent_name=zeta tier=heavy >/dev/null
+  run jq -r 'select(.event=="agent.started") | .agent_name + "/" + .tier' "$SAVIA_TELEMETRY_FILE"
+  [ "$output" = "zeta/heavy" ]
+}
+
+@test "end con padre: restaura el traceparent con el span entrante y flags 01" {
+  export SAVIA_TRACEPARENT="$(_tp)"
+  run bash "$SCRIPT" end agent.completed agent_name=x
+  [ "$status" -eq 0 ]
+  [ "$output" = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" ]
+}
+
+@test "end con padre en flags 00: el traceparent restaurado usa 01" {
+  export SAVIA_TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00"
+  run bash "$SCRIPT" end agent.completed
+  [ "$output" = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" ]
+}
+
+@test "end sin traza heredada: imprime línea vacía y emite el evento" {
+  run bash "$SCRIPT" end agent.completed agent_name=x
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run jq -r 'select(.event=="agent.completed") | .agent_name' "$SAVIA_TELEMETRY_FILE"
+  [ "$output" = "x" ]
+}
+
+@test "end emite con el trace_id heredado y el padre del traceparent" {
+  export SAVIA_TRACEPARENT="$(_tp)"
+  bash "$SCRIPT" end agent.completed duration_ms=42 >/dev/null
+  run jq -r 'select(.event=="agent.completed") | .trace_id + " " + .parent_span_id + " " + (.duration_ms|tostring)' "$SAVIA_TELEMETRY_FILE"
+  [ "$output" = "4bf92f3577b34da6a3ce929d0e0e4736 00f067aa0ba902b7 42" ]
+}
+
+@test "traceparent malformado se ignora: traza nueva en lugar de heredar" {
+  for bad in "00-XYZ" "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" \
+             "00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01" \
+             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7"; do
+    SAVIA_TRACEPARENT="$bad" run bash "$SCRIPT" start e.x
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ ^00-[0-9a-f]{32}-[0-9a-f]{16}-01$ ]]
+    [[ "$output" != 00-4bf92f3577b34da6a3ce929d0e0e4736-* ]]
+  done
+}
+
+@test "end con traceparent malformado se comporta como raíz (línea vacía)" {
+  SAVIA_TRACEPARENT="basura" run bash "$SCRIPT" end e.x
+  [ -z "$output" ]
+}
+
+@test "sin otel-emit ejecutable start no falla y sigue devolviendo traceparent" {
+  W="$BATS_TEST_TMPDIR/ws"
+  mkdir -p "$W/scripts"
+  CLAUDE_PROJECT_DIR="$W" run bash "$BATS_TEST_DIRNAME/../$SCRIPT" start e.x
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ ^00-[0-9a-f]{32}-[0-9a-f]{16}-01$ ]]
+  [ ! -s "$SAVIA_TELEMETRY_FILE" ]
+}
+
+@test "sin otel-emit ejecutable end no falla" {
+  W="$BATS_TEST_TMPDIR/ws2"
+  mkdir -p "$W/scripts"
+  SAVIA_TRACEPARENT="$(_tp)" CLAUDE_PROJECT_DIR="$W" run bash "$BATS_TEST_DIRNAME/../$SCRIPT" end e.x
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(_tp)" ]
+}
+
+@test "start anidado: hijo en la misma traza con span distinto; end devuelve el traceparent entrante" {
+  A=$(bash "$SCRIPT" start nivel.a)
+  B=$(SAVIA_TRACEPARENT="$A" bash "$SCRIPT" start nivel.b)
+  [ "${A:3:32}" = "${B:3:32}" ]
+  [ "${A:36:16}" != "${B:36:16}" ]
+  back=$(SAVIA_TRACEPARENT="$B" bash "$SCRIPT" end nivel.b)
+  [ "$back" = "$B" ]
+}
+
+@test "traceparent con trace_id de 31 hex, span de 15 hex o sufijo extra no se hereda" {
+  for bad in "00-4bf92f3577b34da6a3ce929d0e0e473-00f067aa0ba902b7-01" \
+             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b-01" \
+             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra" \
+             "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-0"; do
+    SAVIA_TRACEPARENT="$bad" run bash "$SCRIPT" start e.x
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ ^00-[0-9a-f]{32}-[0-9a-f]{16}-01$ ]]
+    [[ "${output:3:12}" != "4bf92f3577b3" ]]
+  done
+}
+
+@test "traceparent de 33 hex tampoco se hereda" {
+  SAVIA_TRACEPARENT="00-4bf92f3577b34da6a3ce929d0e0e47360-00f067aa0ba902b7-01" run bash "$SCRIPT" start e.x
+  [[ "${output:3:12}" != "4bf92f3577b3" ]]
+}
