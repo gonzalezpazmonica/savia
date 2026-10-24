@@ -28,7 +28,9 @@ describe('runShadow', () => {
     const { dir, engine, calls } = mk();
     const plain = mk();
     await plain.engine.search('q', ctx, 10);
-    const { response, receipt } = await runShadow({ queryId: 'q-00000001', selection, baseline: () => engine.search('q', ctx, 10) });
+    let invocations = 0;
+    const { response, receipt } = await runShadow({ queryId: 'q-00000001', selection, baseline: () => { invocations++; return engine.search('q', ctx, 10); } });
+    expect(invocations).toBe(1);
     expect(calls()).toBe(plain.calls());
     expect(calls()).toBe(3);
     expect(response.results.length).toBe(3);
@@ -59,6 +61,12 @@ describe('runShadow', () => {
     for (const bad of ['consulta secreta xyz', 'short', '']) {
       await expect(runShadow({ queryId: bad, selection, baseline: async () => { ran++; throw new Error('no'); } })).rejects.toThrow(/opaco/);
     }
+    expect(ran).toBe(0);
+  });
+  it('rechaza un queryId que contiene la consulta aunque tenga formato válido', async () => {
+    let ran = 0;
+    const sel = { ...selection, query: 'password123' };
+    await expect(runShadow({ queryId: 'PASSWORD123', selection: sel, baseline: async () => { ran++; throw new Error('no'); } })).rejects.toThrow(/consulta/);
     expect(ran).toBe(0);
   });
   it('un fallo del baseline se propaga (shadow no lo enmascara)', async () => {

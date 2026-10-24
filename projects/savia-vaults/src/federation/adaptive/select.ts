@@ -48,7 +48,8 @@ function baselineIds(i: SelectionInput): { ids: string[]; denied: number; skippe
   let denied = 0;
   for (const d of [...i.domes].sort((a, b) => byIdAsc(a.id, b.id))) {
     if (!allowed.has(d.id)) { denied++; continue; }
-    if (!d.enabled || (d.status !== 'healthy')) { skipped.push({ id: d.id, reason: 'UNHEALTHY' }); continue; }
+    // Igual que registry.getHealthy(): 'degraded' sigue siendo consultable por el baseline real.
+    if (!d.enabled || d.status === 'unhealthy') { skipped.push({ id: d.id, reason: 'UNHEALTHY' }); continue; }
     ids.push(d.id);
   }
   return { ids, denied, skipped };
@@ -67,7 +68,8 @@ export function selectDestinations(input: SelectionInput): SelectionResult {
     return { mode: 'baseline', selected: [...head, ...base.ids], skipped: base.skipped, deniedCount: base.denied, scores: {}, termination: null, reasons: ['adaptive=false'] };
   }
 
-  const remoteBudget = Math.max(0, Math.min(input.budget.maxRemoteCalls, input.budget.maxVaults - head.length));
+  const rawBudget = Math.min(input.budget.maxRemoteCalls, input.budget.maxVaults - head.length);
+  const remoteBudget = Number.isFinite(rawBudget) ? Math.max(0, rawBudget) : 0;
   const parsed = parseGuidance(input.guidance);
   if (!parsed.ok) {
     // Fallo adaptativo -> federación existente con policy y presupuesto restante, nunca broadcast ilimitado.
@@ -93,7 +95,11 @@ export function selectDestinations(input: SelectionInput): SelectionResult {
   const chosen = ranked.slice(0, remoteBudget);
   const skipped = [...base.skipped, ...ranked.slice(remoteBudget).map(r => ({ id: r.id, reason: 'BUDGET' as const }))];
   const selected = [...head, ...chosen.map(c => c.id)];
-  const termination: Termination | null = selected.length === 0 ? (base.denied > 0 && base.ids.length === 0 ? 'POLICY_BLOCK' : 'NO_ROUTE') : null;
+  // POLICY_BLOCK: la policy deja fuera todo y no hay nada autorizado; BUDGET_EXHAUSTED: hay sanos pero el presupuesto remoto es 0.
+  const authorized = base.ids.length + base.skipped.length + head.length;
+  const termination: Termination | null = selected.length === 0
+    ? (base.denied > 0 && authorized === 0 ? 'POLICY_BLOCK' : remoteBudget === 0 && base.ids.length > 0 ? 'BUDGET_EXHAUSTED' : 'NO_ROUTE')
+    : remoteBudget === 0 && base.ids.length > 0 ? 'BUDGET_EXHAUSTED' : null;
   if (selected.length === 0) return { ...empty('adaptive', termination!, ['sin destinos elegibles']), scores };
   return { mode: 'adaptive', selected, skipped, deniedCount: base.denied, scores, termination, reasons: [] };
 }

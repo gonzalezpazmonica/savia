@@ -8,7 +8,7 @@ export const SHADOW_RECEIPT_VERSION = 1;
 
 export interface ShadowReceipt {
   receiptVersion: number;
-  /** Id opaco aportado por el llamante; un hash de la consulta NO anonimiza y no se usa. */
+  /** Id aportado por el llamante; solo se valida el formato y que no contenga la consulta. Que sea opaco (UUID/aleatorio) es responsabilidad del llamante: un hash o una consulta corta NO anonimizan. */
   queryId: string;
   configHash: string;
   evidenceType: 'counterfactual-estimate';
@@ -24,6 +24,8 @@ const configHash = (s: SelectionInput): string => createHash('sha256').update(JS
 // `baseline` se invoca exactamente una vez; el challenger es una función pura sobre la misma entrada.
 export async function runShadow(opts: ShadowOptions): Promise<{ response: FederatedSearchResponse; receipt: ShadowReceipt }> {
   if (!/^[A-Za-z0-9_-]{8,64}$/.test(opts.queryId)) throw new Error('queryId debe ser un identificador opaco de 8-64 caracteres [A-Za-z0-9_-]');
+  const norm = (x: string): string => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  if (norm(opts.queryId).includes(norm(opts.selection.query)) && norm(opts.selection.query) !== '') throw new Error('queryId no puede contener la consulta');
   const response = await opts.baseline();
   // Shadow evalúa el challenger como si estuviera activo; el flag real del sistema no cambia.
   const chal = selectDestinations({ ...opts.selection, flags: { ...opts.selection.flags, adaptive: true } });

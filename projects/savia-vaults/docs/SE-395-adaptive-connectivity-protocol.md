@@ -144,7 +144,7 @@ exactamente el baseline. Guidance inválida → federación existente limitada a
 ## 9. R03 — shadow
 
 `runShadow` invoca el baseline exactamente una vez y calcula la selección del challenger sin red.
-El receipt (`counterfactual-estimate`) lleva `queryId` opaco (se rechaza todo lo que no lo sea), hash de
+El receipt (`counterfactual-estimate`) lleva `queryId` aportado por el llamante (solo se valida formato y que no contenga la consulta; que sea opaco —UUID/aleatorio— es responsabilidad del llamante), hash de
 configuración, destinos visitados/omitidos autorizados y la estimación de llamadas ahorradas y de resultados
 del baseline que vendrían de destinos omitidos. Es una estimación, no ahorro demostrado. No incluye la consulta.
 
@@ -179,3 +179,5 @@ AC01–AC06 (schema, policy antes de score, atracción/repulsión, subconjunto, 
 AC15 (receipts) parcial: receipt de shadow, sin integración con el store de evidencia existente. AC16 (explain
 "why this/why not") **no hecho**. AC17–AC20: A/B reproducible, coste+calidad y adversarial hechos; apagado =
 baseline probado en benchmark. AC07–AC12 (pioneer, pesos aprendidos, dormancy) **diferidos**: R04 no justifica GO.
+
+> Integración futura: en el benchmark `route` sustituye a la policy a propósito (para medir exposición). En producción la salida del router DEBE intersectarse con `allowedDomeIds`.

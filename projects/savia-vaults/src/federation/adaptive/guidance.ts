@@ -18,18 +18,24 @@ const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof
 const unknownKeys = (o: Record<string, unknown>, allowed: string[], where: string, errs: string[]): void => {
   for (const k of Object.keys(o)) if (!allowed.includes(k)) errs.push(`${where}: campo desconocido '${k}'`);
 };
-const validTerm = (t: unknown): t is string => typeof t === 'string' && t.trim() !== '' && t.length <= GUIDANCE_LIMITS.maxTermLength;
+// Un término válido es un único token como los que produce el tokenizador de la consulta; otro no podría coincidir nunca.
+const TOKEN = /^[\p{L}\p{N}]+$/u;
+const validTerm = (t: unknown): t is string => typeof t === 'string' && t.length <= GUIDANCE_LIMITS.maxTermLength && TOKEN.test(t.trim());
 
 function parseWeighted(v: unknown, where: string, errs: string[]): WeightedTerm[] {
   if (!Array.isArray(v)) { errs.push(`${where}: debe ser array`); return []; }
   if (v.length > GUIDANCE_LIMITS.maxTermsPerList) { errs.push(`${where}: máximo ${GUIDANCE_LIMITS.maxTermsPerList} términos`); return []; }
   const out: WeightedTerm[] = [];
+  const seenTerms = new Set<string>();
   v.forEach((e, i) => {
     if (!isObj(e)) { errs.push(`${where}[${i}]: debe ser objeto`); return; }
     unknownKeys(e, ['term', 'score'], `${where}[${i}]`, errs);
     if (!validTerm(e.term)) { errs.push(`${where}[${i}].term inválido`); return; }
     if (typeof e.score !== 'number' || !Number.isFinite(e.score) || e.score < 0 || e.score > 1) { errs.push(`${where}[${i}].score debe ser finito en [0,1]`); return; }
-    out.push({ term: e.term.trim().toLowerCase(), score: e.score });
+    const term = e.term.trim().toLowerCase();
+    if (seenTerms.has(term)) { errs.push(`${where}[${i}].term duplicado`); return; }
+    seenTerms.add(term);
+    out.push({ term, score: e.score });
   });
   return out;
 }
@@ -56,7 +62,7 @@ export function parseGuidance(raw: unknown): GuidanceResult {
       let specialties: string[] = [];
       const sp = c.specialties ?? [];
       if (!Array.isArray(sp) || sp.length > GUIDANCE_LIMITS.maxTermsPerList || !sp.every(validTerm)) errs.push(`${w}.specialties inválido`);
-      else specialties = (sp as string[]).map(s => s.trim().toLowerCase());
+      else specialties = [...new Set((sp as string[]).map(s => s.trim().toLowerCase()))];
       cues.push({ vaultId: c.vaultId, attracts, repels, specialties });
     });
   }

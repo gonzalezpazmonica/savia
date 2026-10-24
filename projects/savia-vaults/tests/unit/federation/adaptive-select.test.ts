@@ -110,3 +110,33 @@ describe('selectDestinations', () => {
     expect(JSON.stringify(input)).toBe(snap);
   });
 });
+
+describe('revisión #1382', () => {
+  it('degraded es elegible como en registry.getHealthy; unhealthy no (apagado y encendido)', () => {
+    const domes = [{ id: 'a', weight: 1, status: 'degraded' as const, enabled: true }, dome('b', 1, 'unhealthy')];
+    const off = selectDestinations(base({ domes, flags: {} }));
+    expect(off.selected).toEqual(['local', 'a']);
+    expect(off.skipped).toEqual([{ id: 'b', reason: 'UNHEALTHY' }]);
+    expect(selectDestinations(base({ domes })).selected).toEqual(['local', 'a']);
+  });
+  it('terminación coherente: presupuesto remoto 0 con sanos = BUDGET_EXHAUSTED', () => {
+    expect(selectDestinations(base({ budget: { maxVaults: 1, maxRemoteCalls: 3 } })).termination).toBe('BUDGET_EXHAUSTED');
+    expect(selectDestinations(base({ budget: { maxVaults: 1, maxRemoteCalls: 3 }, guidance: 'x' })).termination).toBe('BUDGET_EXHAUSTED');
+    expect(selectDestinations(base({ allowedDomeIds: ['a'], budget: { maxVaults: 0, maxRemoteCalls: 3 } })).termination).toBe('BUDGET_EXHAUSTED');
+  });
+  it('POLICY_BLOCK solo si nada está autorizado; autorizados no sanos = NO_ROUTE', () => {
+    expect(selectDestinations(base({ allowedDomeIds: [] })).termination).toBe('POLICY_BLOCK');
+    expect(selectDestinations(base({ allowedDomeIds: ['a'], domes: [dome('a', 1, 'unhealthy'), dome('b')] })).termination).toBe('NO_ROUTE');
+  });
+  it('presupuesto NaN no expande nada', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: NaN, maxRemoteCalls: NaN } }));
+    expect(r.selected).toEqual(['local']);
+  });
+  it('términos duplicados, con espacios o puntuación se rechazan', () => {
+    const dup = Array.from({ length: 16 }, () => ({ term: 'x', score: 1 }));
+    expect(parseGuidance(g([{ vaultId: 'a', attracts: dup }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', attracts: [{ term: 'a b', score: 1 }] }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['c++'] }])).ok).toBe(false);
+  });
+});
+

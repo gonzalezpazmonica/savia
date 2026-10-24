@@ -52,8 +52,13 @@ describe('A/B sobre el benchmark congelado', () => {
     const g = trainGuidance(corpus, dataset);
     const testTopicTerms = new Set(corpus.docs.filter(d => dataset.queries.some(q => q.split === 'test' && q.family === d.topic)).flatMap(d => d.text.split(' ').slice(0, 2)));
     for (const cue of g.cues) for (const a of cue.attracts) expect(testTopicTerms.has(a.term)).toBe(false);
-    const view = { id: 'x', query: 'q', allowedVaults: ['local', 'beta'], unhealthyVaults: [] as string[], relevant: ['SECRETO'] };
-    expect(makeRouter(corpus, g)(view)).not.toContain('SECRETO');
+    const trainTerms = new Set(g.cues.flatMap(c => c.attracts.map(a => a.term)));
+    const testQueryTerms = new Set(dataset.queries.filter(q => q.split === 'test').flatMap(q => q.query.toLowerCase().split(/[^\p{L}\p{N}]+/u)));
+    // La guidance es función solo de train: reentrenada sin las consultas de test, es idéntica.
+    const trainOnly = { ...dataset, queries: dataset.queries.filter(q => q.split === 'train') };
+    expect(trainGuidance(corpus, trainOnly)).toEqual(g);
+    expect(trainTerms.size).toBeGreaterThan(0);
+    expect(testQueryTerms.size).toBeGreaterThan(0);
   });
   it('nunca consulta fuera de la policy ni excede el presupuesto (exposición 0)', async () => {
     const base = await runBaseline(corpus, dataset);
@@ -74,8 +79,17 @@ describe('A/B sobre el benchmark congelado', () => {
   });
   it('desactivar el router restaura exactamente el baseline', async () => {
     const base = await runBaseline(corpus, dataset);
-    const off = await runBaseline(corpus, dataset, { route: q => selectDestinations({ query: q.query, allowedDomeIds: q.allowedVaults, domes: [], guidance: null, budget: { maxVaults: 3, maxRemoteCalls: 3 } }).selected.length ? q.allowedVaults : q.allowedVaults });
+    const remoteIds = [...new Set(dataset.queries.flatMap(q => q.allowedVaults))].filter(id => id !== 'local').sort();
+    const off = await runBaseline(corpus, dataset, {
+      route: q => selectDestinations({
+        query: q.query, allowedDomeIds: q.allowedVaults, guidance: null, budget: { maxVaults: 99, maxRemoteCalls: 99 }, flags: {},
+        domes: remoteIds.map(id => ({ id, weight: 1, status: q.unhealthyVaults.includes(id) ? 'unhealthy' as const : 'healthy' as const, enabled: true })),
+      }).selected,
+    });
     expect(off.report).toEqual(base.report);
+    // Control negativo: un router que descarta destinos sí cambia el informe (el test puede fallar).
+    const broken = await runBaseline(corpus, dataset, { route: q => q.allowedVaults.slice(0, 1) });
+    expect(broken.report).not.toEqual(base.report);
   });
   it('resultado del holdout preregistrado: el challenger estático NO supera el gate', async () => {
     const r = await runAb(corpus, dataset, 'test');
