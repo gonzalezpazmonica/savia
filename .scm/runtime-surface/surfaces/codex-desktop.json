@@ -1,0 +1,29 @@
+{
+  "capability_overrides": {
+    "EXECUTE_LOCAL": "UNKNOWN",
+    "WRITE_WORKSPACE": "UNKNOWN"
+  },
+  "deltas": {
+    "approval": "UI approval without Savia decision receipt",
+    "lifecycle": "app lifecycle, integrated worktrees, local/cloud handoff",
+    "sandbox": "OS-specific sandbox; ceiling not above runtime"
+  },
+  "equivalence": "E0",
+  "execution_modes": [
+    "LOCAL",
+    "SANDBOXED_LOCAL",
+    "CLOUD"
+  ],
+  "id": "codex-desktop",
+  "kind": "surface",
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "codex",
+  "schema_version": 1,
+  "state": "unassessed",
+  "verification": "NOT_VERIFIED"
+}
