@@ -14,10 +14,10 @@ fi
 
 TEXT=$(cat "$INPUT" 2>/dev/null || echo "")
 
-if [[ -z "${TEXT// }" ]]; then
+if [[ -z "${TEXT//[[:space:]]/}" ]]; then
   echo '{"extracted":false,"reason":"empty input"}' 
   exit 0
 fi
 
-python3 "$EXTRACTOR" --mode deterministic --source "$SOURCE" --quality-gate 2>/dev/null || \
+printf '%s\n' "$TEXT" | python3 "$EXTRACTOR" --mode deterministic --source "$SOURCE" --quality-gate 2>/dev/null || \
   echo '{"extracted":false,"error":"extraction failed"}'
