@@ -347,7 +347,8 @@ EOF
 
   # Run verification on generated package
   run bash "$SCRIPT" --package "$gen_pkg"
-  [[ "$output" =~ "INDEPENDENT" ]] || true
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ "Result: INDEPENDENT" ]]
 }
 
 @test "SE-272-S5-101: generator --help works" {
