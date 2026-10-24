@@ -11,7 +11,7 @@ import { FileStore, TypeSniffer, detectType, textEncoding } from '../../../src/f
 import { FilesService, type FilesDomeRef } from '../../../src/files/service.js';
 import { Journal } from '../../../src/files/journal.js';
 import { scanStream, scannerAvailable } from '../../../src/files/scan.js';
-import { Tools } from '../../../src/files/setup.js';
+import { STALE_AFTER_H, Tools } from '../../../src/files/setup.js';
 import {
   FRAME_PLAIN_BYTES, UPLOAD_MAGIC, encryptStream, decryptStream, openUploadChunks, randomKey, sealUploadChunk, sodiumReady,
 } from '../../../src/files/crypto.js';
@@ -150,6 +150,8 @@ describe('SE-421 almacén en streaming', () => {
   it('AC6: con el ClamAV gestionado real, EICAR cifrado grande se analiza por stdin y queda QUARANTINED', async () => {
     const tools = new Tools();
     if (!scannerAvailable(undefined, tools)) return; // sin ClamAV instalado en esta máquina
+    // Con firmas gestionadas de más de 7 días `required` rechaza por diseño: no es lo que se prueba aquí.
+    if ((tools.clamav()?.signaturesAgeHours ?? 0) > STALE_AFTER_H) return;
     const store = mk('S', true, { maxExtractBytes: 10 }); // fuerza la vía stdin (por encima del tope de extracción)
     const svc = new FilesService({
       domes: () => [{ name: 'S', confidentiality: 'N3', files: { enabled: true } }] as FilesDomeRef[],
