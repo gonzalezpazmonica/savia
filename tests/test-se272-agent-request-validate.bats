@@ -332,6 +332,7 @@ logf() { python3 -c 'import json,sys; print(json.loads(sys.stdin.read().splitlin
 @test "validate: un origen inválido no escribe registro" {
   export IDENTITY_LOG="$TEST_DIR/log.jsonl"
   run bash "$SCRIPT" validate --origin robot
+  [ "$status" -eq 2 ]
   [ ! -e "$IDENTITY_LOG" ]
 }
 

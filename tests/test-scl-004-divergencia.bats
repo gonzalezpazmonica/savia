@@ -258,6 +258,7 @@ jv() { python3 -c 'import json,sys; print(json.load(sys.stdin)[sys.argv[1]])' "$
 @test "div: el fichero de evidencia temporal se borra tras proponer" {
   mk_div; mkdir -p "$TMPD/out"
   run bash "$D" --claim "xxxx" --graph-text "captura" --propose --output-dir "$TMPD/out"
+  [ "$status" -eq 1 ]
   [ -e "$STUB_DIR/proposal-args" ]
   [ -z "$(ls -A "$TMPD/out")" ]
 }

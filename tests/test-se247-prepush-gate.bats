@@ -155,6 +155,7 @@ FINDING='[{"RuleID":"aws-key","File":"src/a.py","StartLine":7,"Commit":"abcdef12
 @test "gate: valor distinto de off (on) sí escanea" {
   mk_gate; with_gitleaks
   run env PATH="$TMPDIR_247/safebin" SAVIA_PREPUSH_SECURITY=on bash "$SB/scripts/pre-push-security-gate.sh" <<< "r $S1 r $S2"
+  [ "$status" -eq 0 ]
   [ -e "$GL_ARGS" ]
 }
 
@@ -196,6 +197,7 @@ FINDING='[{"RuleID":"aws-key","File":"src/a.py","StartLine":7,"Commit":"abcdef12
 @test "gate: solo se lee el primer par de refs de stdin" {
   mk_gate; with_gitleaks
   run env PATH="$TMPDIR_247/safebin" bash "$SB/scripts/pre-push-security-gate.sh" < <(printf 'r %s r %s\nr %s r %s\n' "$S1" "$S2" "$S2" "$S1")
+  [ "$status" -eq 0 ]
   grep -qxF -- "--log-opts=$S2..$S1" "$GL_ARGS"
 }
 
