@@ -36,6 +36,30 @@ def codes(p, kind="blockers"):
 class ManifestSchema(unittest.TestCase):
     def test_fixture_manifests_valid(self):
         self.assertEqual(len(MANIFESTS), 7)
+        for f in sorted((FX / "manifests").glob("*.json")):
+            self.assertEqual(validate(json.loads(f.read_text()), "component-manifest"), [], f.name)
+
+    def test_pattern_anchor_rejects_trailing_newline(self):
+        m = copy.deepcopy(MANIFESTS["savia-core"])
+        m["targets"][0]["source"]["integrity"]["sha256"] = "a" * 64 + "\n"
+        self.assertTrue(validate(m, "component-manifest"))
+        m = copy.deepcopy(MANIFESTS["git"])
+        m["id"] = "git\n"
+        self.assertTrue(validate(m, "component-manifest"))
+
+    def test_schema_errors_never_echo_document_values(self):
+        leak = "https://user:hunter2@example.invalid/x"
+        errs = schema_lite.validate(leak, {"enum": ["a"]}) + schema_lite.validate(leak, {"type": "string", "pattern": "^a$"})
+        self.assertEqual(len(errs), 2)
+        self.assertFalse(any("hunter2" in e for e in errs), errs)
+
+    def test_compensation_must_name_a_declared_action(self):
+        m = copy.deepcopy(MANIFESTS)
+        a = m["opencode"]["targets"][0]["actions"]
+        a["install"]["compensation"] = "rollback"
+        a.pop("rollback", None)
+        self.assertIn(("opencode", "compensation_missing"), codes(build_plan(m, host("ubuntu-x64"), ["opencode"])))
+        self.assertNotIn(("savia-core", "compensation_missing"), codes(plan("ubuntu-x64", "savia-core")))
 
     def test_rejects_shell_string_executable(self):
         m = copy.deepcopy(MANIFESTS["git"])
@@ -242,6 +266,30 @@ class Planner(unittest.TestCase):
         t["actions"]["uninstall"]["privilege"] = "ROOT-ADMIN"
         self.assertIn(("opencode", "recovery_needs_elevation"), codes(build_plan(m, h, ["opencode"]), "warnings"))
 
+    def test_shell_interpreter_variants_detected(self):
+        for exe, args in (("bash.exe", ["-c", "x"]), ("wsl", ["sh"]), ("/usr/bin/env", ["bash", "-c", "x"]),
+                          ("busybox", ["sh", "-c", "x"]), ("python3", ["-c", "print(1)"]), ("node", ["-e", "1"])):
+            m = copy.deepcopy(MANIFESTS)
+            inv = m["opencode"]["targets"][0]["actions"]["install"]["invocation"]
+            inv["executable"], inv["args"] = exe, args
+            self.assertIn(("opencode", "shell_interpreter"), codes(build_plan(m, host("ubuntu-x64"), ["opencode"]), "warnings"), exe)
+        m = copy.deepcopy(MANIFESTS)
+        inv = m["opencode"]["targets"][0]["actions"]["install"]["invocation"]
+        inv["executable"], inv["args"] = "python3", ["setup.py"]
+        self.assertNotIn(("opencode", "shell_interpreter"), codes(build_plan(m, host("ubuntu-x64"), ["opencode"]), "warnings"))
+
+    def test_package_manager_locator_validated(self):
+        for bad in ("npm:https://example.invalid/x", "apt:", "curl:x", "npm:a b"):
+            m = copy.deepcopy(MANIFESTS)
+            m["opencode"]["targets"][0]["source"]["locator"] = bad
+            self.assertIn(("opencode", "integrity"), codes(build_plan(m, host("ubuntu-x64"), ["opencode"])), bad)
+        self.assertNotIn(("opencode", "integrity"), codes(plan("ubuntu-x64", "opencode")))
+
+    def test_plan_id_covers_invocation(self):
+        m = copy.deepcopy(MANIFESTS)
+        m["opencode"]["targets"][0]["actions"]["install"]["invocation"]["args"].append("--extra")
+        self.assertNotEqual(build_plan(m, host("ubuntu-x64"), ["opencode"])["plan_id"], plan("ubuntu-x64", "opencode")["plan_id"])
+
     def test_selected_installed_without_manifest_warns(self):
         m = {k: v for k, v in MANIFESTS.items() if k != "git"}
         p = build_plan(m, host("ubuntu-x64"), ["git"])
@@ -324,6 +372,20 @@ class Cli(unittest.TestCase):
         self.assertEqual(json.loads(ok.stdout)["status"], "ready_with_warnings")
         self.assertEqual(self.run_cli("windows-arm64", "opencode").returncode, 2)
         self.assertEqual(self.run_cli("nope", "git").returncode, 1)
+
+    def test_self_check_failure_does_not_print_values(self):
+        leak = "ghp_" + "A" * 30
+        with tempfile.TemporaryDirectory() as d:
+            h = json.loads((FX / "hosts/ubuntu-x64.json").read_text())
+            h["installed"]["git"] = leak  # flows into a version_mismatch warning
+            h["os"] = leak + "-os"        # fails the plan schema enum
+            hp = Path(d) / "h.json"
+            hp.write_text(json.dumps(h))
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/installer-plan.py"), "--manifests", str(FX / "manifests"),
+                                "--host", str(hp), "--select", "git"], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("self-check", r.stderr)
+        self.assertNotIn(leak, r.stderr + r.stdout)
 
     def test_usage_error_is_exit_1_not_blocked(self):
         script = str(Path(__file__).resolve().parents[2] / "scripts/installer-plan.py")

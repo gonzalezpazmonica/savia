@@ -44,6 +44,27 @@
           "privilege": "USER",
           "reversibility": "reversible"
         },
+        "rollback": {
+          "changes": [
+            {
+              "kind": "file",
+              "target": "~/.savia/core"
+            },
+            {
+              "kind": "path",
+              "target": "~/.savia/bin"
+            }
+          ],
+          "invocation": {
+            "args": [
+              "-xzf",
+              "savia-core-previous.tar.gz"
+            ],
+            "executable": "tar"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
         "uninstall": {
           "atomic_replace": true,
           "changes": [
@@ -106,6 +127,23 @@
             "args": [
               "-xf",
               "savia-core-1.0.zip"
+            ],
+            "executable": "tar"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "rollback": {
+          "changes": [
+            {
+              "kind": "file",
+              "target": "%LOCALAPPDATA%/Savia/core"
+            }
+          ],
+          "invocation": {
+            "args": [
+              "-xf",
+              "savia-core-previous.zip"
             ],
             "executable": "tar"
           },

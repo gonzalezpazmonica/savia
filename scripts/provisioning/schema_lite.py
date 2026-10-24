@@ -43,6 +43,11 @@ def _is(v, t):
     return isinstance(v, _TYPES[t]) and not (t != "boolean" and isinstance(v, bool))
 
 
+def _ecma(pattern: str) -> str:
+    """ECMA-262 `$` is end of input; Python's also matches before a final newline."""
+    return pattern[:-1] + r"\Z" if pattern.endswith("$") and not pattern.endswith("\\$") else pattern
+
+
 def validate(doc, schema, root=None, path="") -> list:
     errs = []
     if root is None:
@@ -56,7 +61,7 @@ def validate(doc, schema, root=None, path="") -> list:
     if "const" in schema and not _same(doc, schema["const"]):
         errs.append(f"{path}: expected {schema['const']!r}")
     if "enum" in schema and not any(_same(doc, e) for e in schema["enum"]):
-        errs.append(f"{path}: {doc!r} not in {schema['enum']}")
+        errs.append(f"{path}: value not in {schema['enum']}")  # never echo document values (may be secrets)
     if "type" in schema:
         ts = schema["type"] if isinstance(schema["type"], list) else [schema["type"]]
         if not any(_is(doc, t) for t in ts):
@@ -64,8 +69,8 @@ def validate(doc, schema, root=None, path="") -> list:
     if isinstance(doc, str):
         if len(doc) < schema.get("minLength", 0):
             errs.append(f"{path}: too short")
-        if "pattern" in schema and not re.search(schema["pattern"], doc):
-            errs.append(f"{path}: {doc!r} does not match {schema['pattern']}")
+        if "pattern" in schema and not re.search(_ecma(schema["pattern"]), doc):
+            errs.append(f"{path}: value does not match {schema['pattern']}")
         if schema.get("format") == "date-time" and not _DATETIME.match(doc):
             errs.append(f"{path}: not a date-time")
     if isinstance(doc, int) and not isinstance(doc, bool) and doc < schema.get("minimum", doc):

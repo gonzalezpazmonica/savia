@@ -12,7 +12,10 @@ from .adapter import HostFacts
 SCHEMA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "schemas", "installer")
 SECRET_KEY = re.compile(r"(token|passw(or)?d|secret|api[_-]?key|credential|private[_-]?key)", re.I)
 SECRET_VALUE = re.compile(r"(gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY|://[^/@\s]+:[^/@\s]+@)")
-SHELL_INTERPRETERS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh", "pwsh.exe"}
+SHELL_INTERPRETERS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "ash", "cmd", "powershell", "pwsh", "wsl"}
+EXEC_WRAPPERS = {"env", "busybox"}  # run their first non-option argument
+INLINE_CODE = ({"python", "python3", "node", "perl", "ruby", "deno"}, {"-c", "-e", "--eval"})
+PM_LOCATOR = re.compile(r"^(apt|dnf|winget|npm):[A-Za-z0-9._@/+-]+\Z")
 PRIV_RANK = {"USER": 0, "ELEVATED": 1, "ROOT-ADMIN": 2}
 
 
@@ -67,8 +70,24 @@ def _pick_target(m: dict, host: HostFacts):
     return None
 
 
+def _base(exe: str) -> str:
+    b = exe.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return b[:-4] if b.endswith(".exe") else b
+
+
+def _runs_shell(inv: dict) -> bool:
+    """Shell interpreters, wrappers around one (env bash, busybox sh) and inline code (python -c, node -e)."""
+    exe, args = _base(inv.get("executable", "")), list(inv.get("args", []))
+    if exe in EXEC_WRAPPERS:
+        rest = [a for a in args if not a.startswith("-") and "=" not in a]
+        return bool(rest) and _runs_shell({"executable": rest[0], "args": args[args.index(rest[0]) + 1:]})
+    return exe in SHELL_INTERPRETERS or (exe in INLINE_CODE[0] and any(a in INLINE_CODE[1] for a in args))
+
+
 def _integrity_problem(t: dict):
     s = t["source"]
+    if s["kind"] == "package_manager" and not PM_LOCATOR.match(s["locator"]):
+        return "package_manager locator must be <apt|dnf|winget|npm>:<package>"
     if s["kind"] != "package_manager" and not s["locator"].strip().lower().startswith("https://") or s["locator"] != s["locator"].strip():
         return "insecure transport; HTTPS required"
     if s["kind"] in ("signed_installer", "official_release") and not s.get("integrity", {}).get("sha256"):
@@ -138,9 +157,11 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
             blockers.append({"code": "unsupported_platform", "component": cid, "message": f"no target for {host.os}/{host.arch}{'/' + host.distro if host.distro else ''}"})
             continue
         for aname, a in sorted(t["actions"].items()):
-            exe = a.get("invocation", {}).get("executable", "")
-            if exe.replace("\\", "/").rsplit("/", 1)[-1].lower() in SHELL_INTERPRETERS:
-                warnings.append({"code": "shell_interpreter", "component": cid, "message": f"{aname} runs a shell interpreter ({exe}); needs human review"})
+            if _runs_shell(a.get("invocation", {})):
+                warnings.append({"code": "shell_interpreter", "component": cid, "message": f"{aname} runs a shell interpreter or inline code ({a['invocation']['executable']}); needs human review"})
+            comp = a.get("compensation", "none")
+            if comp != "none" and comp not in t["actions"]:
+                blockers.append({"code": "compensation_missing", "component": cid, "message": f"{aname} compensates with {comp}, which is not declared"})
         problem = _integrity_problem(t)
         if problem:
             blockers.append({"code": "integrity", "component": cid, "message": problem})
@@ -173,6 +194,8 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
         "restarts": sorted(s["component"] for s in todo if s["_m"].get("requires_restart")),
         "changes": sorted((dict(c, component=s["component"]) for s in todo for c in s["changes"]), key=lambda c: (c["component"], c["kind"], c["target"])),
     }
+    # plan_id must also bind what would run (invocations, compensation), not only the visible summary
+    actions = {s["component"]: s["_t"].get("actions", {}) for s in todo}
     for s in steps:
         s.pop("_t"), s.pop("_m")
     plat = {"os": host.os, "arch": host.arch, **({"distro": host.distro} if host.distro else {})}
@@ -183,5 +206,5 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
         "status": "blocked" if blockers else ("ready_with_warnings" if warnings else "ready"),
         "steps": steps, "blockers": blockers, "warnings": warnings, "preview": preview,
     }
-    plan["plan_id"] = hashlib.sha256(json.dumps(plan, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    plan["plan_id"] = hashlib.sha256(json.dumps([plan, actions], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return plan

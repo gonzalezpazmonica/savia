@@ -37,9 +37,13 @@ def main() -> int:
     except (ValueError, OSError, KeyError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
-    errs = validate(plan, "installation-plan") or [f"secret-like content at {p}" for p in find_secrets(plan)]
-    if errs:
+    errs = validate(plan, "installation-plan")
+    if errs:  # schema messages carry paths, never document values
         print(f"ERROR: plan failed self-check: {errs[0]}", file=sys.stderr)
+        return 1
+    hits = len(find_secrets(plan))
+    if hits:  # report only the count: the matched content must not reach logs
+        print(f"ERROR: plan failed self-check: secret-like content in {hits} location(s)", file=sys.stderr)
         return 1
     print(json.dumps(plan, indent=2, sort_keys=True))
     return 2 if plan["status"] == "blocked" else 0
