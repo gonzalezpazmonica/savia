@@ -156,10 +156,8 @@ teardown() {
 @test "edge: empty stdin logs TIMEOUT_SKIP marker" {
   run bash "$HOOK" <<< ""
   [ "$status" -eq 0 ]
-  # Audit log should record timeout skip (best effort)
-  if [[ -f "$CLAUDE_PROJECT_DIR/output/data-sovereignty-audit.jsonl" ]]; then
-    grep -q 'TIMEOUT_SKIP\|^$' "$CLAUDE_PROJECT_DIR/output/data-sovereignty-audit.jsonl" || true
-  fi
+  [ -f "$CLAUDE_PROJECT_DIR/output/data-sovereignty-audit.jsonl" ]
+  grep -q '"verdict":"TIMEOUT_SKIP"' "$CLAUDE_PROJECT_DIR/output/data-sovereignty-audit.jsonl"
 }
 
 @test "edge: github PAT pattern detected (constructed to avoid pre-commit block)" {
