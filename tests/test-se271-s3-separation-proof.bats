@@ -18,6 +18,13 @@ setup() {
 
 # ── Structure tests ──────────────────────────────────────────────────────────
 
+teardown() {
+  local c
+  for c in adversarialtest adversarialtest2 adversarialcleanup proofverify verifycmd; do
+    rm -rf "$REPO_ROOT/engagements/$c" 2>/dev/null || true
+  done
+}
+
 @test "SE271-SEP-01: separation-proof script exists" {
   [ -f "$PROOF_SCRIPT" ]
 }

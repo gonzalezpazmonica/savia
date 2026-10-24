@@ -97,3 +97,11 @@ teardown() {
   run bash -c "echo '' | $ROOT/scripts/pipeline-stage-runner.sh --name empty-cmd --command '' --output-dir $TMPDIR_PE 2>&1"
   [ "$status" -eq 0 ] || [ "$status" -eq 1 ]
 }
+
+@test "pipeline engine with no stages leaves no orphan output dir" {
+  echo "{{invalid yaml" > "$TMPDIR_PE/bad2.yaml"
+  mkdir -p "$TMPDIR_PE/cwd"
+  run bash -c "cd '$TMPDIR_PE/cwd' && echo '' | $ROOT/scripts/pipeline-engine.sh '$TMPDIR_PE/bad2.yaml' 2>&1"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMPDIR_PE/cwd/output/pipeline-runs" ]
+}

@@ -90,16 +90,24 @@ teardown() {
   [[ "$output" =~ Files:[[:space:]]+0 ]]
 }
 
-@test "invalid model flag fails gracefully" {
+@test "unknown model falls back to default pricing with a warning" {
   echo "test" > "$TMPDIR/test.md"
   run bash "$SCRIPT" "$TMPDIR/test.md" --model nonexistent-model-xyz
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Est.tokens:"* ]]
+  [[ "$output" == *"unknown model"* ]]
+  [[ "$output" == *"Cost (cache miss)"* ]]
 }
 
 @test "bad budget value is rejected" {
   echo "test" > "$TMPDIR/test.md"
   run bash "$SCRIPT" "$TMPDIR/test.md" --budget -1
-  [ "$status" -ne 0 ]
-  [[ "$output" == *"exceeds budget"* ]]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid budget"* ]]
+}
+
+@test "non-numeric budget value is rejected" {
+  echo "test" > "$TMPDIR/test.md"
+  run bash "$SCRIPT" "$TMPDIR/test.md" --budget abc
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid budget"* ]]
 }

@@ -30,7 +30,7 @@ assert d['default'] == 'deny'
 }
 
 @test "S5-T05: bind-gate aborts on non-declared interface" {
-  run timeout 10 python3 scripts/a2a-server.py --host 0.0.0.0 --allowed-interface 127.0.0.1 --port 19876
+  run timeout 3 python3 scripts/a2a-server.py --host 0.0.0.0 --allowed-interface 127.0.0.1 --port 19876
   [ "$status" -eq 1 ]
   [[ "$output" =~ "BIND-GATE ABORT" ]]
 }
@@ -115,6 +115,25 @@ JSON
   [ "$status" -eq 0 ]
   [[ "$output" =~ "DRILL COMPLETE" ]]
   [ "$card_status" = "revoked" ]
+}
+
+@test "S7-T03b: drill compromised rejects path-traversal and quote in instance id" {
+  local dir
+  dir=$(mktemp -d)
+  mkdir -p "$dir/coordinacion/cards"
+  echo '{"instanceId":"x","status":"active"}' > "$dir/coordinacion/cards/x.card.json"
+  FEDERATION_ROOT="$dir" run bash scripts/federation-drill.sh compromised "../cards/x"
+  local s1=$status
+  FEDERATION_ROOT="$dir" run bash scripts/federation-drill.sh compromised "x'; import os; os.system('touch $dir/pwned') #"
+  local s2=$status
+  local card_status pwned=no
+  card_status=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$dir/coordinacion/cards/x.card.json")
+  [ -e "$dir/pwned" ] && pwned=yes
+  rm -r "$dir"
+  [ "$s1" -eq 1 ]
+  [ "$s2" -eq 1 ]
+  [ "$card_status" = "active" ]
+  [ "$pwned" = "no" ]
 }
 
 @test "S7-T04: exchange ledger verify works on empty ledger" {

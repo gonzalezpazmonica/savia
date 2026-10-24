@@ -14,7 +14,13 @@ PROVIDER="copilot"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --budget) BUDGET="$2"; shift 2 ;;
+    --budget)
+      BUDGET="${2:-}"
+      if ! [[ "$BUDGET" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: invalid budget '$BUDGET' (entero >= 0 requerido)" >&2
+        exit 2
+      fi
+      shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --provider) PROVIDER="$2"; shift 2 ;;
     *) TARGET="$1"; shift ;;
@@ -63,9 +69,12 @@ PRICE_INPUT_MISS[sonnet-4.5]=0
 PRICE_INPUT_HIT[sonnet-4.5]=0
 PRICE_OUTPUT[sonnet-4.5]=0
 
+if [[ -z "${PRICE_INPUT_MISS[$MODEL]+x}" ]]; then
+  echo "WARNING: unknown model '$MODEL', using default pricing (opus-4.7)" >&2
+fi
 INPUT_COST=${PRICE_INPUT_MISS[$MODEL]:-${PRICE_INPUT_MISS[opus-4.7]}}
 OUTPUT_COST=${PRICE_OUTPUT[$MODEL]:-${PRICE_OUTPUT[opus-4.7]}}
-CACHE_COST=${PRICE_INPUT_HIT[$MODEL]:-$INPUT_COST}
+CACHE_COST=${PRICE_INPUT_HIT[$MODEL]:-${PRICE_INPUT_MISS[$MODEL]:-${PRICE_INPUT_MISS[opus-4.7]}}}
 
 # Auto-detect provider from model name if not specified
 if [[ "$PROVIDER" == "copilot" ]] && [[ "$MODEL" =~ ^(opus|sonnet|haiku)$ ]]; then

@@ -14,8 +14,12 @@ SUMMARY_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --root) ROOT="$2"; RULES_DIR="${ROOT}/docs/rules/domain"; shift 2 ;;
-    --output) OUTPUT_FILE="$2"; shift 2 ;;
+    --root)
+      [[ -n "${2:-}" && -d "$2" ]] || { echo "ERROR: --root requiere un directorio existente" >&2; exit 2; }
+      ROOT="$2"; RULES_DIR="${ROOT}/docs/rules/domain"; shift 2 ;;
+    --output)
+      [[ -n "${2:-}" ]] || { echo "ERROR: --output requiere una ruta" >&2; exit 2; }
+      OUTPUT_FILE="$2"; shift 2 ;;
     --summary) SUMMARY_ONLY=true; shift ;;
     *) shift ;;
   esac

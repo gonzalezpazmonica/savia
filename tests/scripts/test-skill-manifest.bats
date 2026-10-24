@@ -81,6 +81,7 @@ print('OK')
   run bash "$SCRIPT" "$TMPDIR_SM/nonexistent" "$TMPDIR_OUTPUT"
   [ "$status" -ne 0 ]
   [[ "$output" == *"SKILLS_DIR no encontrado"* ]]
+  [ ! -e "$TMPDIR_OUTPUT" ]
 }
 
 @test "edge: empty skills directory produces empty manifest" {

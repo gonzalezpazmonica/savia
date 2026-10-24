@@ -53,6 +53,7 @@ run_hook() {
   run_hook '{"tool_name":"Bash","tool_input":{"command":""}}'
   [ "$status" -eq 0 ]
   [[ "$output" != *"FATAL"* ]]
+  [[ "$output" != *"sin asignar"* && "$output" != *"unbound"* ]]
 }
 
 @test "handles no staged files gracefully" {
