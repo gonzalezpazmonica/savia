@@ -11,14 +11,14 @@ TEST_PATTERNS = [
     # SE/SPEC entries are always real
     r'(OK[0-9]|Entry (one|two)|inject.test|ep-(x|\d+\b)|tiny content|dec-1|pinx)',
     r'(Test (decision|rebuild)|Dedup test|My Test Bug|dummy|fake)',
-    r'(Some entry|Use (Redis|GraphQL|PostgreSQL)|Decision [AB]|Login broken)',
+    r'(Some entry|Use (Redis|GraphQL|PostgreSQL)|Decision [AB]\b|Login broken)',
     r'(Timeout error|Redis Timeout|Null ref|Circuit Breaker|Grep assert)',
     r'(GraphQL for Frontend|Microservices|split)',
     r'(Edge|First|Second|Daily|Temp|Perm|Only entry|Bypass|WithSource|Auth|DB choice)\b.*\[',
 ]
 
 def is_test(line):
-    if re.search(r"(SE-d+|SPEC-d+)", line):
+    if re.search(r'(SE-\d+|SPEC-\d+)', line):
         return False
     after = re.sub(r'^- [a-z-]+: ', '', line)
     if len(after) < 25:
