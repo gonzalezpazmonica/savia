@@ -96,6 +96,7 @@ if [[ ${#CONFIGS[@]} -gt 0 ]] && ! python3 -c '' >/dev/null 2>&1; then
   echo "ERROR: python3 no disponible; no se pueden leer los configs MCP (no medido)." >&2
   if [[ "$JSON" -eq 1 ]]; then
     gate_line="$(gate_result_emit unknown "python3:missing_tool")"
+    [[ -n "$gate_line" ]] || { echo "gate_result_emit falló" >&2; exit 2; }
     echo "{\"verdict\":\"UNKNOWN\",\"configs_audited\":0,\"servers_audited\":0,\"findings_count\":0,\"critical\":0,\"high\":0,\"medium\":0,\"low\":0,\"findings\":[],${gate_line#gate-result: \{}"
   else
     gate_result_emit unknown "python3:missing_tool"

@@ -104,3 +104,30 @@ for (const command of ["su -c 'git status'", "ssh host git status", "git push -u
     await expect(blockForcePush(input as any, {} as any)).resolves.toBeUndefined();
   });
 }
+
+// ── Revisión de seguridad #1348, 2.ª ronda (P1-1): elevación, intérpretes con -c y envoltorios posicionales ──
+
+for (const command of [
+  "pkexec git push --force origin feat",
+  "runuser -u bot -- git push --force origin feat",
+  "script -qc 'git push --force origin feat' /dev/null",
+  "fish -c 'git push -f'",
+  "tcsh -c 'git reset --hard'",
+  "chroot / git push -f",
+  "flock /tmp/l git push -f",
+  "unbuffer git push --force origin feat",
+  "watch -n 5 git reset --hard",
+  "pkexec git push origin main",
+]) {
+  test(`blockForcePush: blocks ${command}`, async () => {
+    const input = { tool: "bash", args: { command } };
+    await expect(blockForcePush(input as any, {} as any)).rejects.toThrow(/BLOCKED \[force-push\]/);
+  });
+}
+
+for (const command of ["pkexec git status", "chroot / git push origin feat", "script -qc 'git status' /dev/null"]) {
+  test(`blockForcePush: allows ${command}`, async () => {
+    const input = { tool: "bash", args: { command } };
+    await expect(blockForcePush(input as any, {} as any)).resolves.toBeUndefined();
+  });
+}

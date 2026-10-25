@@ -12,8 +12,9 @@
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
 // Start of a real git command: at the beginning of a line, after a separator, inside a subshell or
-// inside `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`/`su -c`/`ssh host`/`find -exec`, with what may precede it (VAR=value, wrappers such as
-// env/command/sudo/doas/nohup/time/exec/xargs/nice/ionice/stdbuf/setsid/timeout/strace/ltrace with their options —
+// inside `bash -c "…"`/`bash -lc`/`sh -c '…'`/`fish`/`tcsh`/`csh -c`/`script -qc`/`eval`/`su -c`/`ssh host`/`find -exec`, with what may precede it (VAR=value, wrappers such as
+// env/command/sudo/doas/pkexec/runuser/nohup/time/exec/xargs/nice/ionice/stdbuf/setsid/timeout/strace/ltrace/unbuffer/watch with their options,
+// chroot/flock with their positional argument —
 // `sudo -u x`, `env -i`, `timeout -s KILL 30` —, then, do, if, !, {), a path or a backslash before git
 // (`/usr/bin/git`, `\git`) and git global options (-C dir, -c key=value, --no-pager…).
 // A mention inside a message or an echo does not match. Same grammar as the bash hook's GIT_AT.
@@ -24,16 +25,19 @@ import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from
 // `git -c -a -c -a …`), which would hang the guard; grep has no such problem.
 const S = String.raw`[^\S\n]`;
 const NUM = String.raw`[0-9][0-9.]*[smhd]?`;
-const WRAPPERS = String.raw`env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout|strace|ltrace`;
-const PREFIX_WORD = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=|(?:${WRAPPERS}|then|do|else|if|elif|while|until|${NUM}|!|\{)(?:${S}|$))`;
+const WRAPPERS = String.raw`env|command|sudo|doas|pkexec|runuser|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout|strace|ltrace|unbuffer|watch`;
+// Wrappers whose first non-option word is not the command (`chroot /`, `flock file`); their options take no argument,
+// so each word has one reading (`flock -w 5 f git` is a known limit).
+const POSITIONAL = String.raw`flock|chroot`;
+const PREFIX_WORD = String.raw`(?:[A-Za-z_][A-Za-z0-9_]*=|(?:${WRAPPERS}|${POSITIONAL}|then|do|else|if|elif|while|until|${NUM}|!|\{)(?:${S}|$))`;
 const WRAPPER = String.raw`(?:${WRAPPERS})(?:${S}+-\S+(?:${S}+(?!${PREFIX_WORD})[^-\s]\S*)?)*`;
 // `su [-l|-|user]… -c '…'` and `ssh [-opt [arg]]… host '…'` run a command like `sh -c` does; `-exec`/`-execdir`
 // of find start one too. Each option word starts with `-` and each other word does not, so these stay unambiguous.
 const SU = String.raw`su(?:${S}+(?:-[A-Za-z-]*|[^-\s"']\S*))*${S}+(?:-[A-Za-z]*c|--command)`;
 const SSH = String.raw`ssh(?:${S}+-\S+(?:${S}+[^-\s]\S*)?)*${S}+[^-\s"']\S*`;
 const GIT_AT =
-  String.raw`(?:^|[;&|(\x60]|\$\(|${S}-exec(?:dir)?${S}|\b(?:(?:ba|z|da|k)?sh(?:${S}+-[A-Za-z]+)*${S}+-[A-Za-z]*c|eval|${SU}|${SSH})${S}+["']?)${S}*` +
-  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|${WRAPPER}|timeout${S}+(?!${NUM}(?:${S}|$))[^-\s]\S*|${NUM}|then|do|else|if|elif|while|until|!|\{)${S}+)*` +
+  String.raw`(?:^|[;&|(\x60]|\$\(|${S}-exec(?:dir)?${S}|\b(?:(?:(?:ba|z|da|k|t?c|fi)?sh|script)(?:${S}+-[A-Za-z]+)*${S}+-[A-Za-z]*c|eval|${SU}|${SSH})${S}+["']?)${S}*` +
+  String.raw`(?:(?:[A-Za-z_][A-Za-z0-9_]*=\S*|${WRAPPER}|timeout${S}+(?!${NUM}(?:${S}|$))[^-\s]\S*|(?:${POSITIONAL})(?:${S}+-\S+)*${S}+(?!${PREFIX_WORD})[^-\s]\S*|${NUM}|then|do|else|if|elif|while|until|!|\{)${S}+)*` +
   String.raw`(?:\\|\S*/)?git` +
   String.raw`(?:(?:${S}+(?:-C|-c|--git-dir|--work-tree)${S}+(?:"[^"\n]*"|'[^'\n]*'|[^-\s]\S*))|(?:${S}+--?[A-Za-z][A-Za-z-]*(?:=\S+)?))*${S}+`;
 // End of an option or a branch name: whitespace, end of line, separator or closing quote.

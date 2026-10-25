@@ -168,6 +168,37 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "git push -fu origin feat" "git push -uf origin feat"
 }
 
+# Revisión de seguridad de 1b6eeaadf, P1-1: en `main` el TS sin ancla bloqueaba también estas formas. Elevación
+# (`pkexec`, `runuser`), intérpretes con -c (`script -qc`, `fish`/`tcsh`/`csh -c`) y envoltorios con argumento
+# posicional (`chroot /`, `flock fichero`) o sin él (`unbuffer`, `watch`) son inicio de orden en los dos bindings.
+@test "paridad block-force-push: pkexec, runuser, script -c, fish/tcsh/csh -c, chroot, unbuffer, flock, watch ⇒ 2 (revisión #1348 seguridad P1-1, 2.ª ronda)" {
+  require_ts
+  parity block-force-push blockForcePush 2 \
+    "pkexec git push $FP origin feat" "runuser -u bot -- git push $FP origin feat" \
+    "script -qc 'git push $FP origin feat' /dev/null" "script -c \"git reset --hard\" /dev/null" \
+    "fish -c 'git push $SF'" "tcsh -c 'git push $FP origin feat'" "csh -c 'git commit --amend'" \
+    "chroot / git push $SF" "unbuffer git push $FP origin feat" "flock /tmp/l git push $SF" \
+    "watch git push $SF" "watch -n 5 git reset --hard" \
+    "pkexec git push origin main" "pkexec git push $FP-with-lease origin main" "pkexec --user bot git push $SF"
+}
+
+@test "paridad sin bloqueo: los envoltorios nuevos con órdenes inocuas ⇒ 0" {
+  require_ts
+  parity block-force-push blockForcePush 0 \
+    "pkexec git status" "runuser -u bot -- git push origin feat" "script -qc 'git status' /dev/null" \
+    "fish -c 'git status'" "chroot / git push origin feat" "flock /tmp/l git push -u origin feat" \
+    "watch git status" "unbuffer git push origin feat" "echo 'pkexec git push $FP'"
+}
+
+# Falso positivo del lado seguro (revisión de corrección #1348 P2-2): PUSH_MAIN acepta `main` como palabra
+# suelta en cualquier punto de la misma orden push, también dentro del texto de un argumento. Se fija aquí
+# para que, si un día se afina, cambie a 0 en bash y en TS a la vez.
+@test "paridad límite: main como palabra dentro de un argumento del push bloquea en los dos (falso positivo documentado)" {
+  require_ts
+  parity block-force-push blockForcePush 2 \
+    "git push origin feat --push-option \"fix main\"" "git push -u origin feat -o 'ci main'"
+}
+
 # Límite declarado (no se arregla aquí): una orden git dentro de una cadena de otro intérprete no casa.
 @test "paridad límite: git dentro de python3 -c no bloquea en ninguno de los dos (límite declarado)" {
   require_ts
@@ -204,19 +235,22 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
 }
 
 # Con 30 repeticiones una gramática ambigua son ~2^30 vueltas atrás (minutos); sin ambigüedad, milisegundos.
-@test "TS sin vueltas atrás exponenciales: entradas ambiguas terminan en < 1 s (revisión #1348 P2-1)" {
+# Umbral de 3 s (revisión de corrección #1348 P2-3): con 1 s un runner de CI cargado podía dar un falso rojo;
+# una regresión exponencial tarda minutos, así que 3 s no le quita poder de detección.
+@test "TS sin vueltas atrás exponenciales: entradas ambiguas terminan en < 3 s (revisión #1348 P2-1)" {
   require_ts
   local c err ms
   # Se mide solo la llamada al guard (SAVIA_GUARD_TIME=1 la imprime), no el arranque en frío del runtime:
   # en un runner de CI cargado el arranque de bun/node podía pasar de 1 s sin que la regex tuviera culpa.
   for c in "git$(rep ' -c -a' 30)" "git$(rep ' -C -C' 30) !" "nice$(rep ' -n 5' 30)" "$SU$(rep ' -u env' 30)" \
     "timeout$(rep ' -k timeout' 30)" "su$(rep ' -c' 30) x" "su$(rep ' - -c' 30) x" "ssh$(rep ' -o x' 30) !" \
-    "find$(rep ' -exec' 30) !" "git push -$(rep 'f' 3000)1"; do
+    "find$(rep ' -exec' 30) !" "flock$(rep ' -x' 30) !" "$(rep 'chroot / ' 30)!" "script$(rep ' -q' 30) x" \
+    "pkexec$(rep ' -u pkexec' 30)" "git push -$(rep 'f' 3000)1"; do
     err=$(timeout 20 env SAVIA_GUARD_CMD="$c" SAVIA_GUARD_TIME=1 $TS_RUNTIME "$RUNNER" "$REPO_ROOT/.opencode/plugins/guards/block-force-push.ts" blockForcePush 2>&1 >/dev/null; echo "rc=$?")
     [[ "$err" == *"rc=0" ]] || { echo "rc inesperado: $err (${c:0:40}…)" >&2; return 1; }
     ms=$(sed -n 's/^guard-ms=\([0-9]*\).*/\1/p' <<<"$err")
     [[ -n "$ms" ]] || { echo "el runner no midió el guard: $err" >&2; return 1; }
-    (( ms < 1000 )) || { echo "tarda $ms ms: ${c:0:40}…" >&2; return 1; }
+    (( ms < 3000 )) || { echo "tarda $ms ms: ${c:0:40}…" >&2; return 1; }
   done
 }
 

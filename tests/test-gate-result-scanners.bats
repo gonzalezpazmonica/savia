@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 # SE-453 S3 (lote 2): escáneres «por demanda» de la auditoría S0 con exposición real.
 # Spec: docs/specs/SE-453-gate-result-contract.spec.md · Contrato: docs/rules/domain/gate-result-contract.md
 # - security-audit-all.sh: `$(cmd || echo '{}')` pegaba `{}` tras el JSON de un escáner que salía 1 y el
@@ -51,6 +52,16 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
   [ "$status" -eq 2 ]
   out="$output"; run python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["verdict"]=="UNKNOWN" and d["result"]=="unknown" and d["gaps"]==[{"check":"python3","reason":"missing_tool"}], d' "$out"
   [ "$status" -eq 0 ]
+}
+
+# Revisión #1348 (correctness P2-1, security P2-1): la rama `unknown` de --json no comprobaba la línea de
+# gate_result_emit; si salía vacía, stdout llevaba un JSON cortado (`…"findings":[],`).
+@test "mcp-audit --json sin python3 y gate_result_emit vacío ⇒ exit 2 sin JSON malformado en stdout" {
+  printf 'gate_result_emit() { return 1; }\n' > "$W/.claude/hooks/lib/gate-result.sh"
+  run --separate-stderr env PATH="$NOPY" /usr/bin/bash "$W/scripts/mcp-real.sh" --json --config "$W/clean.json"
+  [ "$status" -eq 2 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"gate_result_emit falló"* ]]
 }
 
 @test "mcp-audit con python3: config limpio ⇒ clean, config con autoApprove ⇒ findings" {
