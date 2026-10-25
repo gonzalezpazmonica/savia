@@ -74,6 +74,7 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
         | grep -vE ":(#|//|/\*|\*|--|<!--)[[:space:]]*$" \
         | grep -vE "\b(import|from|require|use|include|package|module|export|#include)\b.*\b${sym}\b" \
         | grep -vE ":[[:space:]]*(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
+        | grep -vE ":[[:space:]]*${sym}[[:space:]]*\(\)[[:space:]]*\{" \
         | cut -d: -f1 \
         | sort -u
     else
@@ -85,6 +86,7 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
                 | grep -vE ":(#|//|/\*|\*|--|<!--)[[:space:]]*$" \
                 | grep -vE "\b(import|from|require|use|include|package|module|export|#include)\b.*\b${sym}\b" \
                 | grep -vE ":[[:space:]]*(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
+                | grep -vE ":[[:space:]]*${sym}[[:space:]]*\(\)[[:space:]]*\{" \
                 | grep -qE ":.*\b${sym}\b"; then
               printf '%s\n' "$f"
             fi
@@ -146,6 +148,9 @@ PYEOF
     [[ -z "$SYMBOL" ]] && { echo "ERROR: --symbol requiere nombre" >&2; exit 1; }
     FILE_FILTER=""
     [[ "${3:-}" == "--file" ]] && FILE_FILTER="${4:-}"
+    if [[ -n "$FILE_FILTER" && ! -f "$FILE_FILTER" ]]; then
+      echo "ERROR: file not found: $FILE_FILTER" >&2; exit 1
+    fi
     DIRECT=$(grep_callers "$SYMBOL" "$FILE_FILTER")
     out=$(emit_result "$SYMBOL" "$DIRECT" "" "grep")
     printf '%s\n' "$out"

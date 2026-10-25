@@ -205,8 +205,8 @@ jf() { echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); pri
   cd "$P"
   run bash "$BR" --symbol helper
   [ "$status" -eq 0 ]
-  [ "$(jf "d['symbol'], d['backend'], d['total']")" = "('helper', 'grep', 2)" ]
-  [[ "$output" == *'"app.sh"'* ]]
+  # lib/util.sh solo define helper (sintaxis bash name() {): no es usuario
+  [ "$(jf "d['symbol'], d['backend'], d['direct']")" = "('helper', 'grep', ['app.sh'])" ]
   rm_proj
 }
 
@@ -249,7 +249,7 @@ jf() { echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); pri
   cd "$P"
   run bash "$BR" --diff HEAD~1..HEAD
   [ "$status" -eq 0 ]
-  [ "$(jf "d['mode'], d['symbols'], d['total']")" = "('diff', ['newfn'], 2)" ]
+  [ "$(jf "d['mode'], d['symbols'], d['direct']")" = "('diff', ['newfn'], ['uses.sh'])" ]
   [[ "$output" == *'"uses.sh"'* ]]
   rm_proj
 }
@@ -311,12 +311,35 @@ jf() { echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); pri
   rm_proj
 }
 
-@test "BR-B20: --symbol with --file ignores an indented definition" {
+@test "BR-B22: --symbol with --file ignores an indented definition" {
   mk_proj
   cd "$P"
   printf '  function zed() {\n    :\n  }\n' > only-def.sh
   run bash "$BR" --symbol zed --file only-def.sh
   [ "$status" -eq 0 ]
+  [ "$(jf "d['total']")" = "0" ]
+  rm_proj
+}
+
+@test "BR-B23: --symbol with --file on a missing file fails instead of reporting zero users" {
+  mk_proj
+  cd "$P"
+  run bash "$BR" --symbol helper --file nope.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"file not found: nope.sh"* ]]
+  rm_proj
+}
+
+@test "BR-B24: a bash name() { definition is not a user, a call with () still is" {
+  mk_proj
+  cd "$P"
+  printf 'zork() {\n  :\n}\n' > def.sh
+  printf 'zork()\n' > call.py
+  git add -A
+  run bash "$BR" --symbol zork
+  [ "$status" -eq 0 ]
+  [ "$(jf "d['direct']")" = "['call.py']" ]
+  run bash "$BR" --symbol zork --file def.sh
   [ "$(jf "d['total']")" = "0" ]
   rm_proj
 }
