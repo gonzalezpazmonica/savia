@@ -262,3 +262,163 @@ assert d['decision']=='SINGLE_SHOT', 'expected SINGLE_SHOT, got: ' + d['decision
   # output should NOT be parseable JSON (it is an error message)
   echo "${output}${stderr}" | grep -q "request" || true
 }
+
+# ── Comportamiento: tabla de decisión completa, precedencia, nulos y errores ──
+
+gate() { run bash "$SCRIPT" --request "$1"; }
+field() { echo "$output" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)[sys.argv[1]], ensure_ascii=False))' "$1"; }
+
+@test "cada rama devuelve su skill, criterio de convergencia y presupuesto exactos" {
+  local row req skill conv n
+  while IFS='|' read -r req skill conv n; do
+    gate "$req"
+    [ "$status" -eq 0 ]
+    [ "$(field decision)" = '"PROPOSE_LOOP"' ] || { echo "decision para: $req -> $output"; return 1; }
+    [ "$(field loop_skill)" = "\"$skill\"" ] || { echo "skill para: $req -> $output"; return 1; }
+    [ "$(field convergence_criterion)" = "\"$conv\"" ]
+    [ "$(field max_iterations)" = "$n" ]
+  done <<'EOF'
+spec nueva con criterio claro|tdd-vertical-slices|tests_green_and_dod|8
+spec con test unitario|tdd-vertical-slices|tests_green_and_dod|8
+bug que falla en producción|tdd-vertical-slices|bug_reproduced_and_fixed|5
+bug que quiero reproduce|tdd-vertical-slices|bug_reproduced_and_fixed|5
+refactor con cobertura mínima|code-improvement-loop|coverage_threshold_met|6
+refactor y test de humo|code-improvement-loop|coverage_threshold_met|6
+revisar PR 123|court-orchestrator|court_no_blocking_findings|3
+review de código del módulo|court-orchestrator|court_no_blocking_findings|3
+investiga a fondo el mercado|tech-research-agent|research_saturation|4
+analiza en profundidad la API|tech-research-agent|research_saturation|4
+research exhaustivo de opciones|tech-research-agent|research_saturation|4
+EOF
+}
+
+@test "SINGLE_SHOT y CLARIFY_NEEDED llevan null en skill, criterio e iteraciones" {
+  gate "hola, cuéntame un chiste"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  [ "$(field loop_skill)" = "null" ]
+  [ "$(field convergence_criterion)" = "null" ]
+  [ "$(field max_iterations)" = "null" ]
+  [ "$(field proposal_text)" = "null" ]
+  [ "$(field rationale)" = '"No loop pattern matched — single-shot response appropriate"' ]
+  gate "refactor del módulo de pagos"
+  [ "$(field decision)" = '"CLARIFY_NEEDED"' ]
+  [ "$(field loop_skill)" = "null" ]
+  [ "$(field convergence_criterion)" = "null" ]
+  [ "$(field max_iterations)" = "null" ]
+}
+
+@test "una sola mitad de la condición no basta: bug sin señal, spec sin criterio, investigación sin profundidad" {
+  gate "hay un bug raro en el menú"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  gate "lee la spec del proyecto"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  gate "investiga el mercado"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  gate "hay que ser exhaustivo con el informe"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  gate "haz un test del login"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+}
+
+@test "las palabras deben ser enteras: debug, refactoring y prefactor no disparan" {
+  gate "debug del test"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  gate "prefactor con test"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  gate "specification con tests"
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+}
+
+@test "precedencia: spec+test gana a bug y a refactor; bug gana a refactor; refactor+test gana a review" {
+  gate "spec con test, hay un bug y quiero refactor"
+  [ "$(field loop_skill)" = '"tdd-vertical-slices"' ]
+  [ "$(field max_iterations)" = "8" ]
+  gate "bug que falla y quiero refactor con test"
+  [ "$(field max_iterations)" = "5" ]
+  gate "refactor con test y code review"
+  [ "$(field loop_skill)" = '"code-improvement-loop"' ]
+  gate "code review e investiga a fondo"
+  [ "$(field loop_skill)" = '"court-orchestrator"' ]
+}
+
+@test "refactor con review pero sin test sigue siendo review (no CLARIFY)" {
+  gate "refactor y revisar código"
+  [ "$(field decision)" = '"PROPOSE_LOOP"' ]
+  [ "$(field loop_skill)" = '"court-orchestrator"' ]
+}
+
+@test "mayúsculas no importan" {
+  gate "IMPLEMENTA LA SPEC CON TEST"
+  [ "$(field loop_skill)" = '"tdd-vertical-slices"' ]
+}
+
+@test "variantes de review: code-review, code review, pr_review, review de código, revisar pr" {
+  local r
+  for r in "haz un code-review" "necesito code review" "hazme un pr review rápido" "review de código del equipo" "revisar pr urgente" "revisar código"; do
+    gate "$r"
+    [ "$(field loop_skill)" = '"court-orchestrator"' ] || { echo "no casó: $r"; return 1; }
+  done
+}
+
+@test "texto de propuesta exacto para PROPOSE_LOOP y para CLARIFY_NEEDED" {
+  gate "implementa la spec con test"
+  python3 - "$output" <<'EOP'
+import json, sys
+d = json.loads(sys.argv[1])
+assert d["proposal_text"] == ("Detecto que esta tarea tiene DoD verificable.\\n  Loop sugerido: tdd-vertical-slices\\n"
+    "  Criterio de parada: todos los tests en verde y DoD cumplido\\n  Budget máximo: 8 iteraciones\\n\\n"
+    "¿Activo el loop? [sí / no / ajustar budget]"), d["proposal_text"]
+EOP
+  gate "refactor general"
+  [[ "$(field proposal_text)" == *"no incluye criterio de convergencia"* ]]
+  [[ "$(field proposal_text)" == *"coverage >80%"* ]]
+}
+
+@test "etiqueta del criterio por skill en el texto de propuesta" {
+  gate "bug que falla"; [[ "$(field proposal_text)" == *"bug reproducido y test en verde"* ]]
+  gate "refactor con coverage"; [[ "$(field proposal_text)" == *"cobertura alcanza el umbral configurado"* ]]
+  gate "code review"; [[ "$(field proposal_text)" == *"Code Review Court sin hallazgos bloqueantes"* ]]
+  gate "investiga a fondo"; [[ "$(field proposal_text)" == *"saturación de fuentes"* ]]
+}
+
+@test "la guarda de recursión devuelve SINGLE_SHOT con el contexto en la razón y exit 0 aunque falte --request" {
+  SAVIA_LOOP_CONTEXT="loop-padre" run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  [[ "$(field rationale)" == *"recursion blocked (context: loop-padre)"* ]]
+  [ "$(field convergence_criterion)" = "null" ]
+}
+
+@test "SAVIA_LOOP_CONTEXT vacío no activa la guarda" {
+  SAVIA_LOOP_CONTEXT="" run bash "$SCRIPT" --request "spec con test"
+  [ "$(field decision)" = '"PROPOSE_LOOP"' ]
+}
+
+@test "petición vacía: SINGLE_SHOT con razón de vacío y exit 0" {
+  run bash "$SCRIPT" --request ""
+  [ "$status" -eq 0 ]
+  [ "$(field decision)" = '"SINGLE_SHOT"' ]
+  [ "$(field rationale)" = '"empty request — no pattern to classify"' ]
+}
+
+@test "sin --request: exit 1 con error por stderr y nada en stdout" {
+  run bash -c "bash '$SCRIPT' 2>/dev/null"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+  run bash "$SCRIPT"
+  [[ "$output" == *"ERROR: --request is required"* ]]
+  run bash "$SCRIPT" --context /tmp/x
+  [ "$status" -eq 1 ]
+}
+
+@test "--context y argumentos desconocidos se aceptan sin cambiar la decisión" {
+  run bash "$SCRIPT" --context /tmp/nada --nada --request "bug que falla"
+  [ "$status" -eq 0 ]
+  [ "$(field max_iterations)" = "5" ]
+}
+
+@test "comillas y barras en la petición no rompen el JSON" {
+  run bash "$SCRIPT" --request 'spec "con" tests \ y dod'
+  [ "$status" -eq 0 ]
+  [ "$(field decision)" = '"PROPOSE_LOOP"' ]
+}
