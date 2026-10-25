@@ -279,15 +279,16 @@ PY
 
 @test "dense path: alpha 1 ranks by cosine alone, alpha 0 by BM25 alone" {
   start_embed
-  # nota "decoy" sin la palabra riego en BM25 pero con embedding de riego
-  echo "riego riego riego riego" > "$IDXDIR/notes/zz-riego-extra.md"
-  echo "tomate tomate tomate agua" > "$IDXDIR/notes/aa-tomate.md"
+  # La única nota con "tomate" también dice "riego": BM25 la pone primera, pero su
+  # vector es [1,0] y el de la consulta [0,1] (cos 0). Si los pesos se invirtieran,
+  # alpha 1 la pondría primera y alpha 0 no: el test distingue ambos sentidos.
+  echo "tomate tomate tomate riego" > "$IDXDIR/notes/zz-tomate-riego.md"
   build
-  top_dense="$(python3 "$SCRIPT" query "tomate" --index "$IDX" --top 1 --alpha 1.0 | cut -f1)"
-  top_bm25="$(python3 "$SCRIPT" query "tomate" --index "$IDX" --top 1 --alpha 0.0 | cut -f1)"
-  # con alpha=1 y consulta sin "riego", la consulta tiene vector [0,1]: gana una nota sin "riego" (cos 1)
-  [[ "$top_dense" != "zz-riego-extra.md" ]]
-  [[ "$top_bm25" == "aa-tomate.md" ]]
+  top_dense="$(python3 "$SCRIPT" query "tomate" --index "$IDX" --top 1 --alpha 1.0)"
+  top_bm25="$(python3 "$SCRIPT" query "tomate" --index "$IDX" --top 1 --alpha 0.0)"
+  [[ "$(echo "$top_dense" | cut -f1)" != "zz-tomate-riego.md" ]]
+  [[ "$top_dense" == *"cos=1.0" ]]
+  [[ "$(echo "$top_bm25" | cut -f1)" == "zz-tomate-riego.md" ]]
 }
 
 @test "dense path: fused score is the alpha-weighted blend of cosine and bm25" {
