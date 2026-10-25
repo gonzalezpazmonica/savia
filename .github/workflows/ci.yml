@@ -299,9 +299,16 @@ jobs:
           git config --global user.email "ci@example.com"
           git config --global user.name "CI Runner"
 
+      # SE-392: the OpenCode half of the dual-cli parity runs on Bun; strict mode turns a missing bun into a failure.
+      - name: Set up Bun (dual-cli parity)
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
       - name: Run dual-cli contract tests
         env:
           SAVIA_CODEX_TEST_MODE: "1"
+          SAVIA_DUAL_CLI_STRICT: "1"
         run: python3 -m unittest discover -s tests/dual-cli -v
 
       # SE-436 S5: el guard de cúpulas y su paridad hook bash ↔ savia-gates corren siempre, no solo en modo
