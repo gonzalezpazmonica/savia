@@ -10,6 +10,10 @@
 
 Alta desde la medición de la decisión D2 de SE-456 (sesgo de idioma del auditor de tests)
 
+## 2026-10-23 SE-457 PROPOSED
+
+Alta junto con la skill harness-architecture (PR #1361)
+
 ## 2026-10-23 SE-466 PROPOSED
 
 Alta desde el triaje de code scanning (PR #1363)
