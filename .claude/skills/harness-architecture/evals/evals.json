@@ -1,0 +1,66 @@
+{
+  "skill_name": "harness-architecture",
+  "trigger_evals": [
+    {"query": "Quiero montar una orquestadora con varios subagentes que implementen specs en paralelo. ¿Cómo lo diseño para que no se pisen los ficheros ni se cuelguen?", "should_trigger": true},
+    {"query": "Mi agente repite la misma acción en bucle y gasta tokens sin parar. ¿Qué condiciones de parada y detector de repetición le pongo?", "should_trigger": true},
+    {"query": "Necesito que un agente trabaje 6 horas seguidas y sobreviva a la compactación del contexto. ¿Cómo organizo el progreso en ficheros y la reanudación?", "should_trigger": true},
+    {"query": "Diseña el plan de un sprint nocturno autónomo: cola de tareas, vigilantes, un PR por tarea y cómo hacer los merges sin bloquearme con preguntas.", "should_trigger": true},
+    {"query": "¿Merece la pena lanzar harnesses especializados con una ficha cada uno desde un harness madre, o basta con un solo agente? Dame criterios de decisión.", "should_trigger": true},
+    {"query": "Revisa la arquitectura de este harness: contrato de autoridad, herramientas, presupuesto y verificación de postcondiciones. ¿Qué le falta?", "should_trigger": true},
+    {"query": "tengo 4 agentes en background y uno lleva horas parado sin avanzar, creo que espera un permiso. como evito que se cuelguen en el próximo sprint?", "should_trigger": true},
+    {"query": "¿Cuántos agentes en paralelo debería permitir en mi harness? Ahora lo tengo fijo en 4 y no sé si es un límite técnico o solo una decisión mía.", "should_trigger": true},
+    {"query": "Quiero un revisor independiente que valide lo que produce otro agente antes de abrir el PR. ¿Cómo separo productor y verificador y qué formato de veredicto uso?", "should_trigger": true},
+    {"query": "Voy a hacer un bucle estilo Ralph para migrar 200 ficheros con tests. ¿Qué tope de iteraciones, reintentos y presupuesto le pongo?", "should_trigger": true},
+    {"query": "Programa una tarea que ejecute el informe semanal todos los viernes a las 8:00.", "should_trigger": false, "note": "casi-fallo: automation-scheduler"},
+    {"query": "Ejecuta el overnight-sprint de esta noche con las tareas etiquetadas como seguras.", "should_trigger": false, "note": "casi-fallo: ejecutar un sprint ya diseñado, overnight-sprint"},
+    {"query": "Planifica el sprint 14 del proyecto: capacity del equipo, historias y velocidad.", "should_trigger": false, "note": "casi-fallo: sprint de gestión de proyecto, sprint-management"},
+    {"query": "Escribe una función en Python que reintente una petición HTTP tres veces con espera exponencial.", "should_trigger": false, "note": "casi-fallo: bucle de código normal, no un harness"},
+    {"query": "Lanza las fases 2 y 3 de la spec en paralelo según su grafo de dependencias SDD.", "should_trigger": false, "note": "casi-fallo: dag-scheduling"},
+    {"query": "Pon en marcha code-improvement-loop sobre el módulo de informes y déjalo con PRs en borrador.", "should_trigger": false, "note": "casi-fallo: ejecutar code-improvement-loop"},
+    {"query": "Escribe un hook de PreToolUse en bash que bloquee los comandos rm -rf.", "should_trigger": false, "note": "casi-fallo: implementar un hook concreto, no decidir arquitectura"},
+    {"query": "Explícame qué es un agente de IA y en qué se diferencia de un chatbot.", "should_trigger": false, "note": "casi-fallo: pregunta conceptual general"},
+    {"query": "Resume en tres líneas el informe de investigación que me pasaron ayer.", "should_trigger": false, "note": "casi-fallo: tarea corta de un paso"},
+    {"query": "Configura el modelo por defecto y el tema de colores del CLI.", "should_trigger": false, "note": "casi-fallo: ajustes de producto, no diseño de harness"}
+  ],
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Tengo 12 PR pequeños que debo preparar esta noche en un repo sin nadie vigilando. Dime cómo orquestarlo con agentes y qué plan seguir.",
+      "expected_output": "Justifica el esquema con el Decision Checklist (agente único frente a orquestadora con trabajadoras) y pide comprobar ámbitos de ficheros disjuntos. Entrega un plan de sprint con cola, tope de agentes simultáneos declarado como política de cuenta y de máquina, presupuesto de disco y dinero, permisos preconcedidos, vigilante con lista de vistos, marca de fin obligatoria, un PR en borrador por unidad con revisor independiente, merges solo con grant y preguntas acumuladas en lote. Etiqueta qué es evidencia y qué opinión.",
+      "files": [],
+      "assertions": [
+        "Incluye condiciones de parada explícitas (fallos consecutivos, presupuesto, fichero de parada)",
+        "No propone que los agentes hagan merge sin grant ni que aprueben su propio trabajo",
+        "Menciona permisos preconcedidos o evitar diálogos interactivos",
+        "Propone vigilante con lista de vistos o equivalente, y marca de fin",
+        "Presenta el tope de agentes simultáneos como parámetro de política, no como límite técnico",
+        "Distingue evidencia de opinión con etiquetas o frases"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Un agente en bucle intenta arreglar un test que falla. Lleva 40 intentos. Diseña el bucle para que sea seguro y termine.",
+      "expected_output": "Exige un criterio de éxito ejecutable, máximo de iteraciones, tope de reintentos por unidad (p. ej. 3), detector de repetición, presupuesto, parada externa y registro por intento. Indica cambiar de estrategia o escalar a la persona tras fallos repetidos. Señala que sin criterio comprobable no hay bucle sino un informe.",
+      "files": [],
+      "assertions": [
+        "Define al menos cuatro de: criterio de éxito, máximo de iteraciones, reintentos, detector de repetición, presupuesto, parada externa",
+        "Escala a la persona o aparca la unidad tras los fallos, en vez de reintentar sin fin",
+        "No pide que el mismo agente valide su propio arreglo sin verificación separada",
+        "No propone rebajar el test ni desactivarlo para que pase"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "¿Debería construir un metaharness que enrute tareas entre tres harnesses distintos? Respóndeme con evidencia.",
+      "expected_output": "Dice que el metaharness es experimental y que la evidencia es limitada: un caso real, ventajas medidas pequeñas y específicas del dominio, ninguna prueba de que el enrutado supere al mejor harness único, hipótesis abiertas sobre el sobrecoste. Recomienda empezar con un solo harness o reglas simples, fichas con coste medido, invocación determinista, verificación de postcondición y medir el sobrecoste con un umbral antes de ampliar. No presenta el metaharness como demostrado.",
+      "files": [],
+      "assertions": [
+        "Indica explícitamente que el metaharness es experimental o que su evidencia no está confirmada",
+        "Recomienda medir coste y calidad frente a hacerlo en línea antes de ampliar",
+        "Menciona que la autoridad no se amplía al delegar",
+        "No cita cifras sin respaldo como si fueran concluyentes",
+        "No cita la cifra de que un segundo revisor baja el éxito un 8 %"
+      ]
+    }
+  ]
+}
