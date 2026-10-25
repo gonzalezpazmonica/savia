@@ -28,10 +28,11 @@ if [ -z "$COMMAND" ]; then
 fi
 
 # Inicio de una orden git real: al principio de una línea, tras un separador, al abrir un subshell o
-# dentro de `bash -c "…"`/`bash -lc`/`sh -c '…'`/`eval`/`su -c '…'`/`ssh host '…'`/`find -exec`, con lo que puede
-# ir delante (VAR=valor, los envoltorios env, command, sudo, doas, nohup, time, exec, xargs, nice, ionice, stdbuf,
-# setsid, timeout, strace y ltrace con
-# sus opciones —`sudo -u x`, `env -i`, `timeout -s KILL 30`—, then, do, if, !, {), una ruta o una barra
+# dentro de `bash -c "…"`/`bash -lc`/`sh -c '…'`/`fish`/`tcsh`/`csh -c`/`script -qc`/`eval`/`su -c '…'`/`ssh host '…'`/
+# `find -exec`, con lo que puede ir delante (VAR=valor, los envoltorios env, command, sudo, doas, pkexec, runuser,
+# nohup, time, exec, xargs, nice, ionice, stdbuf, setsid, timeout, strace, ltrace, unbuffer y watch con sus opciones
+# —`sudo -u x`, `env -i`, `timeout -s KILL 30`—, chroot y flock con su argumento posicional —`chroot /`,
+# `flock fichero`—, then, do, if, !, {), una ruta o una barra
 # invertida delante de git (`/usr/bin/git`, `\git`) y opciones globales de git (-C dir, -c clave=valor,
 # --no-pager…). Una mención dentro de un mensaje o de un echo no casa.
 # Sin `\b`: es extensión GNU y BSD grep (macOS) puede no reconocerla; `(^|[^[:alnum:]_])` vale en los dos.
@@ -39,7 +40,7 @@ fi
 # grep evalúa línea a línea: una orden en la línea 2 de un bloque multilínea también casa (SE-453).
 # El puerto TS (.opencode/plugins/guards/block-force-push.ts) lleva la misma gramática con el flag m, escrita
 # sin ambigüedades para que V8 no se cuelgue en vueltas atrás (grep no tiene ese problema).
-GIT_AT='(^|[;&|(`]|\$\(|[[:space:]]-exec(dir)?[[:space:]]|(^|[^[:alnum:]_])((ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c|eval|su([[:space:]]+(-[A-Za-z-]*|[^-[:space:]"'"'"'][^[:space:]]*))*[[:space:]]+(-[A-Za-z]*c|--command)|ssh([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+[^-[:space:]"'"'"'][^[:space:]]*)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout|strace|ltrace)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*|timeout[[:space:]]+[^[:space:]]+|[0-9][0-9.]*[smhd]?|then|do|else|if|elif|while|until|!|\{)[[:space:]]+)*(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^-[:space:]][^[:space:]]*))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
+GIT_AT='(^|[;&|(`]|\$\(|[[:space:]]-exec(dir)?[[:space:]]|(^|[^[:alnum:]_])(((ba|z|da|k|t?c|fi)?sh|script)([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c|eval|su([[:space:]]+(-[A-Za-z-]*|[^-[:space:]"'"'"'][^[:space:]]*))*[[:space:]]+(-[A-Za-z]*c|--command)|ssh([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+[^-[:space:]"'"'"'][^[:space:]]*)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|doas|pkexec|runuser|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout|strace|ltrace|unbuffer|watch)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*|timeout[[:space:]]+[^[:space:]]+|(flock|chroot)([[:space:]]+-[^[:space:]]+)*[[:space:]]+[^-[:space:]][^[:space:]]*|[0-9][0-9.]*[smhd]?|then|do|else|if|elif|while|until|!|\{)[[:space:]]+)*(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]+(\"[^\"]*\"|'"'"'[^'"'"']*'"'"'|[^-[:space:]][^[:space:]]*))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'
 # Fin de una opción o de un nombre de rama: espacio, fin de línea, separador o cierre de comillas.
 END='([[:space:]]|$|[;&|)"'"'"'`])'
 # main/master como destino de un push de esta misma orden (sin cruzar ;, & ni |): palabra suelta o tras
