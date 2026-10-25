@@ -1,0 +1,11 @@
+{
+  "arch": "x64",
+  "distro": "fedora",
+  "elevation_available": true,
+  "installed": {},
+  "name": "fedora-x64",
+  "os": "linux",
+  "package_managers": [
+    "dnf"
+  ]
+}

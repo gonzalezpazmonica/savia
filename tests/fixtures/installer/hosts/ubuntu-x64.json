@@ -1,0 +1,14 @@
+{
+  "arch": "x64",
+  "distro": "ubuntu",
+  "elevation_available": true,
+  "installed": {
+    "git": "2.40"
+  },
+  "name": "ubuntu-x64",
+  "os": "linux",
+  "package_managers": [
+    "apt",
+    "npm"
+  ]
+}
