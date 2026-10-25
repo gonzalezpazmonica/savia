@@ -48,7 +48,8 @@ VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --log)     LOG_PATH="${2:-}"; shift 2 ;;
+    --log)     [[ $# -ge 2 ]] || { echo "ERROR: --log requires a value" >&2; exit 1; }
+               LOG_PATH="$2"; shift 2 ;;
     --verbose) VERBOSE=true; shift ;;
     --help|-h) show_usage; exit 0 ;;
     *) echo "Unknown arg: $1" >&2; show_usage >&2; exit 1 ;;

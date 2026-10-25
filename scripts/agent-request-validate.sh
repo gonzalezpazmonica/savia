@@ -56,14 +56,16 @@ _validate_agent_card() {
   fi
 
   local found
-  found=$(_py "
-import yaml, json, sys
+  # Los valores viajan por entorno: interpolarlos en el código Python permitía que un
+  # agent_id con comillas alterase la condición y se aceptase sin tarjeta.
+  found=$(CARD_FILE="$card_file" AGENT_ID="$agent_id" _py "
+import os, yaml, sys
 try:
-    with open('${card_file}') as fh:
+    with open(os.environ['CARD_FILE']) as fh:
         cfg = yaml.safe_load(fh)
     cards = cfg.get('cards', {})
     for key, card in cards.items():
-        if card.get('id') == '${agent_id}':
+        if card.get('id') == os.environ['AGENT_ID']:
             if card.get('status') == 'active':
                 print(key)
                 sys.exit(0)
@@ -92,17 +94,19 @@ _log_identity() {
   local ts
   ts="$(_now)"
 
-  _py "
-import json
+  REC_TS="$ts" REC_ORIGIN="$origin" REC_AGENT="$agent_id" REC_CARD="$card_id" \
+  REC_DECISION="$decision" REC_REASON="$reason" REC_LOG="$IDENTITY_LOG" _py "
+import json, os
+e = os.environ
 record = {
-    'timestamp': '${ts}',
-    'origin': '${origin}',
-    'agent_id': '${agent_id}',
-    'card_id': '${card_id}',
-    'decision': '${decision}',
-    'reason': '${reason}',
+    'timestamp': e['REC_TS'],
+    'origin': e['REC_ORIGIN'],
+    'agent_id': e['REC_AGENT'],
+    'card_id': e['REC_CARD'],
+    'decision': e['REC_DECISION'],
+    'reason': e['REC_REASON'],
 }
-with open('${IDENTITY_LOG}', 'a') as fh:
+with open(e['REC_LOG'], 'a') as fh:
     fh.write(json.dumps(record) + '\n')
 " 2>/dev/null || true
 }
