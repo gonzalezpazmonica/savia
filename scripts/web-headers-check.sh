@@ -28,7 +28,8 @@ if [[ -z "$TARGET_URL" ]]; then
 fi
 
 # ── Extraer hostname del URL ──────────────────────────────────────────────────
-HOSTNAME=$(echo "$TARGET_URL" | sed 's|https\?://||' | sed 's|/.*||' | sed 's|:.*||')
+# Sin userinfo (user:pass@): no debe acabar en el informe ni en el nombre del fichero
+HOSTNAME=$(echo "$TARGET_URL" | sed 's|https\?://||' | sed 's|/.*||' | sed 's|^.*@||' | sed 's|:.*||')
 SAFE_HOST="${HOSTNAME//./_}"
 mkdir -p "$OUTPUT_DIR"
 REPORT_FILE="$OUTPUT_DIR/headers-check-${SAFE_HOST}-${DATE}.json"
@@ -158,6 +159,7 @@ FINDINGS_JSON="[${FINDINGS_JSON%,}]"
 # ── Generar report JSON ───────────────────────────────────────────────────────
 CSP=$(json_esc "$CSP"); HSTS=$(json_esc "$HSTS"); XCTO=$(json_esc "$XCTO"); XFO=$(json_esc "$XFO")
 REFERRER=$(json_esc "$REFERRER"); PERMS=$(json_esc "$PERMS"); TARGET_URL=$(json_esc "$TARGET_URL")
+HOSTNAME=$(json_esc "$HOSTNAME")
 cat > "$REPORT_FILE" <<EOF
 {
   "url": "${TARGET_URL}",

@@ -107,13 +107,14 @@ mk_tree242() {
   cp "$TLS_SCRIPT" "$HEADERS_SCRIPT" "$T242/scripts/"
   OUT="$T242/output/security"
   # PATH mínimo sin testssl ni wafw00f
-  for b in bash python3 date mkdir cat grep sed head tr echo curl dirname env; do
+  for b in bash python3 date mkdir cat grep sed head tr echo curl dirname env rm; do
     p="$(command -v $b)" && ln -sf "$p" "$T242/bin/$b"
   done
   BASEPATH="$T242/bin"
 }
 
-# testssl.sh falso: vuelca $FAKE_TESTSSL_JSON en el fichero de --jsonfile y registra argumentos
+# testssl.sh falso: vuelca $FAKE_TESTSSL_JSON en el fichero de --jsonfile y registra argumentos.
+# Como el real, se niega a sobrescribir un --jsonfile existente (sin --overwrite).
 fake_testssl() {
   cat > "$T242/bin/testssl.sh" <<'EOS'
 #!/usr/bin/env bash
@@ -122,6 +123,7 @@ while [[ $# -gt 0 ]]; do
   [[ "$1" == "--jsonfile" ]] && out="$2"
   shift
 done
+[[ -e "$out" ]] && { echo "Fatal error: $out exists" >&2; exit 251; }
 [[ -n "${FAKE_TESTSSL_JSON:-}" ]] && printf '%s' "$FAKE_TESTSSL_JSON" > "$out"
 exit "${FAKE_TESTSSL_EXIT:-0}"
 EOS
@@ -157,7 +159,7 @@ jget() { python3 -c "import sys,json; d=json.load(open(sys.argv[1])); print(($2)
 
 @test "SE242-B04: tls check rejects non-numeric and out-of-range ports" {
   mk_tree242
-  for p in abc 0 65536 "80;ls"; do
+  for p in abc 0 65536 "80;ls" 0443 09; do
     tls bash "$T242/scripts/tls-security-check.sh" --host example.org --port "$p"
     [ "$status" -eq 1 ]
     [[ "$output" == *"puerto inválido"* ]]
@@ -243,7 +245,7 @@ jget() { python3 -c "import sys,json; d=json.load(open(sys.argv[1])); print(($2)
 @test "SE242-B14: testssl that writes no report is never graded (UNKNOWN, warning)" {
   mk_tree242; fake_testssl
   FAKE_TESTSSL_JSON='' FAKE_TESTSSL_EXIT=1 tls bash "$T242/scripts/tls-security-check.sh" --host example.org
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
   [[ "$output" == *"GRADE: UNKNOWN"* ]]
   [[ "$output" == *"no produjo un informe legible"* ]]
 }
@@ -251,6 +253,7 @@ jget() { python3 -c "import sys,json; d=json.load(open(sys.argv[1])); print(($2)
 @test "SE242-B15: an unreadable testssl report is never graded either" {
   mk_tree242; fake_testssl
   FAKE_TESTSSL_JSON='not json {' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [ "$status" -eq 2 ]
   [[ "$output" == *"GRADE: UNKNOWN"* ]]
   f="$(ls "$OUT"/tls-check-example.org-*.json)"
   [ "$(jget "$f" "d['grade'], d['findings']")" = "('UNKNOWN', [])" ]
@@ -477,4 +480,62 @@ teardown() {
   stop_http
   [ "$status" -eq 0 ]
   [[ "$(jget "$(hdr_report)" "[f['message'] for f in d['findings']]")" == *"exposes version: ngx 1.2"* ]]
+}
+
+@test "SE242-B44: a retry on the same day never grades with the previous raw report" {
+  mk_tree242; fake_testssl
+  FAKE_TESTSSL_JSON='[{"id":"x","severity":"INFO","finding":"all good"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [[ "$output" == *"GRADE: B"* ]]
+  # Segunda ejecución: testssl falla sin escribir; el informe crudo de antes no cuenta
+  FAKE_TESTSSL_JSON='' FAKE_TESTSSL_EXIT=1 tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"GRADE: UNKNOWN"* ]]
+  # Y un reintento con informe nuevo se califica con el nuevo, no con el viejo
+  FAKE_TESTSSL_JSON='[{"id":"SSLv3","severity":"CRITICAL","finding":"offered"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GRADE: F"* ]]
+}
+
+@test "SE242-B45: a clean scan exits 0; only an ungraded scan exits 2" {
+  mk_tree242; fake_testssl
+  FAKE_TESTSSL_JSON='[{"id":"SSLv3","severity":"CRITICAL","finding":"offered"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GRADE: F"* ]]
+}
+
+@test "SE242-B46: real testssl ids TLS1 and TLS1_1 grade D, TLS1_2 and TLS1_3 do not" {
+  mk_tree242; fake_testssl
+  for id in TLS1 TLS1_1; do
+    FAKE_TESTSSL_JSON='[{"id":"'"$id"'","severity":"LOW","finding":"offered (deprecated)"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org --severity LOW
+    [[ "$output" == *"GRADE: D"* ]] || { echo "id=$id output=$output"; false; }
+  done
+  for id in TLS1_2 TLS1_3; do
+    FAKE_TESTSSL_JSON='[{"id":"'"$id"'","severity":"LOW","finding":"offered"}]' tls bash "$T242/scripts/tls-security-check.sh" --host example.org --severity LOW
+    [[ "$output" == *"GRADE: B"* ]] || { echo "id=$id output=$output"; false; }
+  done
+}
+
+@test "SE242-B47: protocols reported as not offered never lower the grade" {
+  mk_tree242; fake_testssl
+  FAKE_TESTSSL_JSON='[{"id":"SSLv3","severity":"LOW","finding":"not offered"},{"id":"TLS1","severity":"LOW","finding":"not offered"}]' \
+    tls bash "$T242/scripts/tls-security-check.sh" --host example.org --severity LOW
+  [[ "$output" == *"GRADE: B"* ]]
+}
+
+@test "SE242-B48: a JSON null cve does not grade C" {
+  mk_tree242; fake_testssl
+  FAKE_TESTSSL_JSON='[{"id":"BREACH","severity":"MEDIUM","finding":"potentially vulnerable","cve":null}]' \
+    tls bash "$T242/scripts/tls-security-check.sh" --host example.org
+  [[ "$output" == *"GRADE: B"* ]]
+  f="$(ls "$OUT"/tls-check-example.org-*.json)"
+  [ "$(jget "$f" "d['findings'][0]['cve']")" = "" ]
+}
+
+@test "SE242-B49: userinfo in the URL never reaches the report and keeps the JSON valid" {
+  mk_tree242; start_http
+  printf '%s\n' "$ALL_HEADERS" > "$T242/hdr_"
+  tls bash "$T242/scripts/web-headers-check.sh" --url "http://u\"x:pw@${URL#http://}/"
+  stop_http
+  [ "$status" -eq 0 ]
+  [ "$(jget "$(hdr_report)" "d['hostname']")" = "127.0.0.1" ]
 }

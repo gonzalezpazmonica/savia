@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # test-se244-dependency-scan.bats — Tests para SE-244 Dependency Vulnerability Scanning
 # Ref: docs/propuestas/SE-244-dependency-vulnerability-scanning.md
+bats_require_minimum_version 1.5.0
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
@@ -201,7 +202,7 @@ VULN_REPORT='{"SchemaVersion":2,"Results":[{"Target":"package-lock.json","Vulner
   grep -qx -- 'vuln' "$FAKE_ARGS"
   grep -qx -- 'json' "$FAKE_ARGS"
   grep -qx -- "$D/proj" "$FAKE_ARGS"
-  ! grep -qx -- '--skip-db-update' "$FAKE_ARGS"
+  run ! grep -qx -- '--skip-db-update' "$FAKE_ARGS"
   rm_dep
 }
 

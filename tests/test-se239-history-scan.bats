@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # SE-239 — Tests para git history secret scanning
 # Ref: docs/propuestas/SE-239-git-history-secret-scanning.md
+bats_require_minimum_version 1.5.0
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
@@ -252,7 +253,7 @@ jsonl() { ls "$TREE"/output/security/history-scan-*[0-9].jsonl | head -1; }
   FAKE_EXIT=1 scan bash "$(SCAN_SH)"
   [ "$status" -eq 1 ]
   [ "$(last_line)" = 'gate-result: {"result":"findings","gaps":[]}' ]
-  ! grep -q SUPERSECRETVALUE "$(jsonl)"
+  run ! grep -q SUPERSECRETVALUE "$(jsonl)"
   grep -q '"severity": "CRITICAL"' "$(jsonl)"
   grep -q '^| CRITICAL | 1 |$' "$(summary)"
   grep -q '^| HIGH | 0 |$' "$(summary)"
@@ -369,7 +370,7 @@ jsonl() { ls "$TREE"/output/security/history-scan-*[0-9].jsonl | head -1; }
   scan bash "$(SCAN_SH)" --repo "$other"
   [ "$status" -eq 0 ]
   grep -qx -- "$other" "$FAKE_ARGS"
-  ! grep -qx -- '--config' "$FAKE_ARGS"
+  run ! grep -qx -- '--config' "$FAKE_ARGS"
   : > "$TREE/.gitleaks.toml"
   scan bash "$(SCAN_SH)"
   grep -qx -- '--config' "$FAKE_ARGS"
