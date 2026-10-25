@@ -119,6 +119,8 @@ EOS
 dep() { run env PATH="$D/bin:$PATH" bash "$D/tree/scripts/dependency-scan.sh" "$@"; }
 dlast() { printf '%s\n' "$output" | tail -1; }
 rm_dep() { find "${D:-/nonexistent}" -delete 2>/dev/null; true; }
+# También en teardown: si un test falla a mitad, su árbol temporal no queda en /tmp
+teardown() { rm_dep; }
 
 CLEAN_REPORT='{"SchemaVersion":2,"Results":[{"Target":"package-lock.json","Vulnerabilities":[{"Severity":"LOW","VulnerabilityID":"CVE-1","PkgName":"a","InstalledVersion":"1.0"}]}]}'
 VULN_REPORT='{"SchemaVersion":2,"Results":[{"Target":"package-lock.json","Vulnerabilities":[{"Severity":"HIGH","VulnerabilityID":"CVE-2024-1","PkgName":"lodash","InstalledVersion":"4.0.0","FixedVersion":"4.17.21"},{"Severity":"LOW","VulnerabilityID":"CVE-2","PkgName":"b","InstalledVersion":"1"}]}]}'

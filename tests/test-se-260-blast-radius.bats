@@ -93,6 +93,8 @@ mk_proj() {
 }
 
 rm_proj() { find "${P:-/nonexistent}" "${TOOL:-/nonexistent}" -delete 2>/dev/null; true; }
+# También en teardown: si un test falla a mitad, sus temporales no quedan en /tmp
+teardown() { rm_proj; }
 
 br() { run bash "$BR" --project "$P" "$@"; }
 jf() { echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); print(($1))"; }
