@@ -159,9 +159,18 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
   [[ "$output" =~ "scripts        +2 / -0" ]]
 }
 
+# copia del script en un "workspace" propio, opcionalmente con un workspace-health falso
+mk_ws() {
+  WS="$R/.ws"
+  mkdir -p "$WS/scripts"
+  cp "$SCRIPT" "$WS/scripts/"
+  WSCRIPT="$WS/scripts/pr-thermal-receipt.sh"
+}
+
 @test "T14: --health without workspace-health script yields valid JSON with null score" {
   second_commit
-  run bash "$SCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json --health
+  mk_ws
+  run bash "$WSCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json --health
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "
 import sys, json
@@ -172,20 +181,48 @@ assert d['health_after'] == {'score': None, 'grade': '?'}, d
 
 @test "T15: --health parses score and grade from workspace-health output" {
   second_commit
-  mkdir -p "$R/scripts"
-  cat > "$R/scripts/workspace-health.sh" <<'EOS'
+  mk_ws
+  cat > "$WS/scripts/workspace-health.sh" <<'EOS'
 #!/usr/bin/env bash
 echo '{"score": 87, "grade": "B+"}'
 EOS
-  chmod +x "$R/scripts/workspace-health.sh"
-  run bash "$SCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json --health
+  chmod +x "$WS/scripts/workspace-health.sh"
+  run bash "$WSCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json --health
   echo "$output" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)['delta']
 assert d['health_after'] == {'score': 87, 'grade': 'B+'}, d
 "
-  run bash "$SCRIPT" --branch "HEAD~1..HEAD" --project "$R" --health
+  run bash "$WSCRIPT" --branch "HEAD~1..HEAD" --project "$R" --health
   [[ "$output" =~ "health        B+" ]]
+}
+
+@test "T15b: --health never runs a workspace-health.sh from the measured repo" {
+  second_commit
+  mk_ws
+  cat > "$R/scripts/workspace-health.sh" <<EOS
+#!/usr/bin/env bash
+touch "$R/PWNED"
+echo '{"score": 1, "grade": "F"}'
+EOS
+  chmod +x "$R/scripts/workspace-health.sh"
+  run bash "$WSCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json --health
+  [ "$status" -eq 0 ]
+  [ ! -e "$R/PWNED" ]
+  [[ "$output" != *'"grade": "F"'* ]]
+}
+
+@test "T15c: run from a subdirectory measures the enclosing repo" {
+  second_commit
+  mkdir -p "$R/deep/er"
+  cd "$R/deep/er"
+  run bash "$SCRIPT" --branch "HEAD~1..HEAD" --format json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)['delta']
+assert d['files_changed'] == 4, d
+"
 }
 
 @test "T16: without --health the receipt has no health line" {

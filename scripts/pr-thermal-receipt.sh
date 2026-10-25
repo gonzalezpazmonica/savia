@@ -5,7 +5,9 @@
 # Usage: bash scripts/pr-thermal-receipt.sh [--staged | --branch REFSPEC]
 set -uo pipefail
 
-ROOT="$PWD"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Repo a medir: el del cwd (también desde un subdirectorio) salvo --project
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 
 MODE=""
 REFSPEC=""
@@ -140,7 +142,8 @@ HEALTH_DELTA=""
 HEALTH_SCORE="null"
 HEALTH_GRADE="?"
 if $INCLUDE_HEALTH; then
-  HEALTH_SCRIPT="$ROOT/scripts/workspace-health.sh"
+  # Siempre el del propio workspace: nunca se ejecuta código del repo medido
+  HEALTH_SCRIPT="$SCRIPT_DIR/workspace-health.sh"
   if [[ -x "$HEALTH_SCRIPT" ]]; then
     HEALTH_JSON=$(bash "$HEALTH_SCRIPT" --json --v2 2>/dev/null || echo "{}")
     HEALTH_SCORE=$(echo "$HEALTH_JSON" | grep -oE '"score": [0-9]+' | head -1 | grep -oE '[0-9]+' || true)
