@@ -16660,6 +16660,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "claude"
+      ],
+      "id": "skill:.claude/skills/harness-architecture/SKILL",
+      "intents": [
+        "agentes",
+        "arquitectura",
+        "autónomo",
+        "bucle",
+        "bucles"
+      ],
+      "kind": "skill",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": ".claude/skills/harness-architecture/SKILL.md",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "opencode"
       ],
       "id": "script:scripts/hashline-edit",
@@ -29598,7 +29619,7 @@
       "tests": []
     }
   ],
-  "content_hash": "9c5881b0df13",
+  "content_hash": "b00266903faa",
   "deferred_kinds": [
     "rule",
     "hook"
