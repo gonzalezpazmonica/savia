@@ -21,7 +21,7 @@ REPO_ROOT="${SCRIPT_DIR}/.."
 
 ACTION="${1:-}"
 case "$ACTION" in
-  -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 [[ -z "$ACTION" ]] && { echo "usage: memory-consolidate.sh {scan|link|distill|prune} [--store <file>] [--apply]" >&2; exit 2; }
 shift

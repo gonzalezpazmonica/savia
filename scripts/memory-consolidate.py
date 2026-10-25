@@ -33,17 +33,18 @@ with open(MEMORY_FILE) as f:
 
 entries = []
 header = []
+footer = []  # ENTRIES_END y lo que le sigue: las entradas quedan entre marcadores
 in_entries = False
 entry_lines = []
 
 for line in lines:
+    if footer or (in_entries and 'ENTRIES_END' in line):
+        footer.append(line)
+        continue
     if not in_entries:
         header.append(line)
         if 'ENTRIES_START' in line:
             in_entries = True
-        continue
-    if 'ENTRIES_END' in line:
-        header.append(line)
         continue
     if line.startswith('- '):
         entry_lines.append(line)
@@ -102,6 +103,8 @@ if MODE == '--apply':
             f.write(line)
         for e in keep:
             f.write(e)
+        for line in footer:
+            f.write(line)
 
     print(f"Removed: {removed} entries")
     print(f"Remaining: {len(keep)} entries")

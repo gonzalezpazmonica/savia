@@ -31,6 +31,7 @@ mkmem() {
 - episode: test [ep-x]
 - decision: OK1 [decision/ok1]
 <!-- ENTRIES_END -->
+## Notas al pie
 MD
 }
 
@@ -117,6 +118,11 @@ MD
   [[ "$output" != *"ep-x"* ]]
   [[ "$output" != *"OK1"* ]]
   [ "$(grep -c 'decision/ledger' "$MEM")" -eq 1 ]
+  # Las entradas siguen entre los marcadores y lo que va tras END se conserva
+  [ "${lines[1]}" = "<!-- ENTRIES_START -->" ]
+  [ "${lines[5]}" = "<!-- ENTRIES_END -->" ]
+  [ "${lines[6]}" = "## Notas al pie" ]
+  [ "${#lines[@]}" -eq 7 ]
   ls "$AUTO"/archive/MEMORY-*.md
   grep -q 'ep-x' "$AUTO"/archive/MEMORY-*.md
 }
@@ -158,6 +164,7 @@ MD
   run bash "$SH" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"memory-consolidate.sh scan|link|distill|prune"* ]]
+  [[ "$output" == *"Exit: 0 ok, 2 uso"* ]]
 }
 
 @test "MC-T10: sh without action exits 2 with usage on stderr" {
