@@ -10,16 +10,16 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import tempfile
 import time
 
 from hooks import HookConfigurationError, _matcher_applies
-from policy import hook_decision, prompt_decision
+from policy import AUTHORITY_EVENTS, hook_decision, plain_output_mode, prompt_decision
 from protocol import ProtocolError, decode_json
 
 MAX_OUTPUT = 1024 * 1024
 DEFAULT_TIMEOUT = 5.0
 MAX_TIMEOUT = 30.0
-AUTHORITY_EVENTS = ("PreToolUse", "PermissionRequest")
 ENV_ARG_LIMIT = 64 * 1024  # a single env string must stay far below the kernel limit
 # Switches that turn security hooks off must not be steerable from the gated session.
 STRIPPED_ENV = ("SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE")
@@ -35,7 +35,7 @@ PROTECTED_PATHS = (".claude/settings.json", ".claude/settings.local.json", ".cla
 
 
 def _deny(reason, handler=None):
-    return {"action": "deny", "reason": reason, "context": None,
+    return {"action": "deny", "reason": reason, "context": None, "contexts": [],
             "updated_input": None, "handler": handler}
 
 
@@ -59,7 +59,7 @@ def _timeout(handler):
     return min(float(seconds), MAX_TIMEOUT)
 
 
-def _run_command(command, payload, root, timeout, extra_env=None):
+def _handler_env(payload, root, extra_env=None):
     env = {k: v for k, v in os.environ.items() if k not in STRIPPED_ENV}
     env["CLAUDE_PROJECT_DIR"] = str(root)
     if extra_env is not None:  # a prompt evaluator: no stale model or event from the parent
@@ -68,6 +68,27 @@ def _run_command(command, payload, root, timeout, extra_env=None):
         env.update(extra_env)
     elif len(payload) <= ENV_ARG_LIMIT:  # larger events reach handlers by stdin only
         env["CLAUDE_JSON_INPUT"] = payload
+    return env
+
+
+_DETACHED = []  # never awaited; held so the interpreter does not warn about them
+
+
+def _spawn_detached(command, payload, root):
+    """Fire-and-forget an `async` handler, as Claude Code and savia-gates do: never awaited.
+
+    stdin is an unlinked temp file, so a handler that never reads cannot block the caller.
+    """
+    with tempfile.TemporaryFile() as stdin:
+        stdin.write(payload.encode())
+        stdin.seek(0)
+        _DETACHED.append(subprocess.Popen(
+            ["bash", "-c", command], cwd=str(root), env=_handler_env(payload, root), stdin=stdin,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True))
+
+
+def _run_command(command, payload, root, timeout, extra_env=None):
+    env = _handler_env(payload, root, extra_env)
     proc = subprocess.Popen(["bash", "-c", command], cwd=str(root), env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, start_new_session=True)
@@ -117,8 +138,13 @@ def _run_prompt(handler, raw, root):
     return prompt_decision(code, out)
 
 
-def evaluate(event, payload, *, settings_path, root):
-    """Evaluate every matching handler in order; the first block wins."""
+def evaluate(event, payload, *, settings_path, root, spawn_async=False):
+    """Evaluate every matching handler in order; the first block wins.
+
+    `async` handlers of non-authority events are telemetry: skipped, or launched
+    detached when `spawn_async` (the adapters of a live CLI), never awaited.
+    `contexts` keeps each context with the level its hook declared.
+    """
     rules, error = load_rules(settings_path, event)
     if error:
         return _deny(error)
@@ -128,7 +154,7 @@ def evaluate(event, payload, *, settings_path, root):
         return _deny("INVALID_EVENT")
     if len(raw.encode()) > MAX_OUTPUT:
         return _deny("HOOK_INPUT_TOO_LARGE")
-    decision = {"action": "allow", "reason": "HOOK_OK", "context": None,
+    decision = {"action": "allow", "reason": "HOOK_OK", "context": None, "contexts": [],
                 "updated_input": None, "handler": None}
     contexts = []
     for rule in rules:
@@ -151,20 +177,24 @@ def evaluate(event, payload, *, settings_path, root):
                         continue  # telemetry by contract
                     return _deny("UNSUPPORTED_CRITICAL_HOOK", kind)
                 if handler.get("async") is True and event not in AUTHORITY_EVENTS:
+                    if spawn_async:
+                        _spawn_detached(handler["command"], raw, root)
                     continue
                 code, out, err, timed_out = _run_command(
                     handler["command"], raw, root, _timeout(handler))
                 name = handler["command"][-80:]
                 if timed_out:
                     return _deny("HOOK_TIMEOUT", name)
-                result = hook_decision(code, out)
+                result = hook_decision(code, out, plain=plain_output_mode(event))
                 if result["action"] != "allow":
                     if code is not None and code != 0 and err.strip():
                         result["reason"] = err.strip().splitlines()[0][:500]
                     result["handler"] = name
+                    result["contexts"] = []
                     return result
                 if result["context"]:
                     contexts.append(result["context"])
+                    decision["contexts"].append({"text": result["context"], "level": result.get("level")})
                 if result["updated_input"] is not None:
                     decision["updated_input"] = result["updated_input"]
         except (HookConfigurationError, AttributeError, OSError):
@@ -253,21 +283,30 @@ def normalize_codex_pretool(payload):
 
 
 def evaluate_codex_pretool(payload, *, settings_path, root):
+    return evaluate_codex_tool("PreToolUse", payload, settings_path=settings_path, root=root)
+
+
+def evaluate_codex_tool(event, payload, *, settings_path, root, spawn_async=False):
+    """A Codex tool event (Pre/PostToolUse, PermissionRequest), one evaluation per effect.
+
+    Protected gate paths are refused only before the effect: PostToolUse cannot undo it.
+    """
     try:
         events = normalize_codex_pretool(payload)
     except ProtocolError:
         return _deny("INVALID_EVENT")
-    if any(event is not payload and is_protected(event["tool_input"]["file_path"], root)
-           for event in events):
+    if event in AUTHORITY_EVENTS and any(
+            item is not payload and is_protected(item["tool_input"]["file_path"], root) for item in events):
         return _deny("PROTECTED_GATE_PATH")
     final = None
-    for event in events:
-        decision = evaluate("PreToolUse", event, settings_path=settings_path, root=root)
+    for item in events:
+        decision = evaluate(event, item, settings_path=settings_path, root=root, spawn_async=spawn_async)
         if decision["action"] != "allow":
             return decision
         if final is None:
             final = decision
             continue
+        final["contexts"] += decision["contexts"]
         if decision["context"]:
             final["context"] = "\n".join(filter(None, (final["context"], decision["context"])))
         if decision["updated_input"] is not None:

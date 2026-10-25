@@ -85,6 +85,7 @@ class PromptReplayParityTests(unittest.TestCase):
         corpus = json.loads((FIXTURES / "prompt_replay_corpus.json").read_text())
         opencode = bun("ts_prompt_replay.ts", corpus)
         expected = [{"action": c["action"], "reason": c["reason"]} for c in corpus]
+        self.assertEqual(len(opencode), len(corpus))  # zip would hide cases the replay dropped
         for case, got, want in zip(corpus, opencode, expected):
             self.assertEqual(got, want, case["id"])
 
@@ -140,6 +141,7 @@ class CoreParityTests(unittest.TestCase):
         py = [_matcher_applies(c["matcher"], {"tool_name": c["tool"], "tool_input":
                                               {"command": c["command"]} if "command" in c else {}})
               for c in cases]
+        self.assertEqual((len(ts), len(py)), (len(cases), len(cases)))  # zip would hide dropped cases
         diverging = [(c["matcher"], c["tool"], c.get("command")) for c, a, b in zip(cases, py, ts) if a != b]
         self.assertEqual(diverging, [])
         commit = [b for c, b in zip(cases, ts) if c["matcher"] == "Bash(git commit*)"]

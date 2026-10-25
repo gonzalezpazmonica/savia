@@ -147,3 +147,27 @@ Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime
 daemon), escrituras a rutas protegidas desde `bash` en ambos núcleos, y la
 divergencia restante del matcher de OpenCode, que además prueba el payload
 serializado como candidato (Python solo lo hace sin nombre de herramienta).
+
+### Resto de eventos de Codex (S3)
+
+`codex-hook.py` despacha por `hook_event_name` (`codex_events.py`) los 12 eventos
+de Codex 0.163 a los handlers del mismo nombre en `.claude/settings.json`. Lo que
+puede hacer cada decisión sigue lo que savia-gates hace con ese evento en OpenCode:
+PreToolUse y UserPromptSubmit bloquean (exit 2); PermissionRequest solo deniega,
+nunca emite `allow`; SessionStart, SubagentStart, PostToolUse, Pre/PostCompact,
+Stop y SubagentStop son consultivos (un fallo es `systemMessage`, nunca fuerza
+continuación ni corta la compactación); `Interrupt` no tiene equivalente. Los
+handlers `async` se lanzan desacoplados, sin esperar, como en OpenCode.
+El contexto solo sale si el hook lo declara N1 (`saviaLevel`), la regla de
+savia-gates para proveedores no declarados locales; Codex no informa del proveedor.
+
+Paridad corregida en ambos núcleos: el stdout en texto plano de un evento no
+autoritativo ya no es salida inválida. En SessionStart, UserPromptSubmit y
+SubagentStart es contexto (sin nivel); en el resto se ignora. PreToolUse y
+PermissionRequest siguen exigiendo JSON o nada. Antes `session-init.sh` imprimía
+texto, el bucle de SessionStart se cortaba ahí y los 5 hooks siguientes nunca
+corrían en OpenCode. `test_codex_events.py` repite el mismo corpus de ciclo de vida
+por `gates.py` y por `shell-bridge.ts`: decisiones y contextos idénticos.
+
+Pendiente: activar estos eventos en `.codex/hooks.json` (revisión nativa de
+confianza en Codex), binario Codex en vivo y despacho por el socket del runtime.

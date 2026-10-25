@@ -268,7 +268,7 @@ class CodexAdapterFailClosedTests(unittest.TestCase):
     def run_copy(self, mutate, payload=None):
         with tempfile.TemporaryDirectory() as tmp:
             dst = Path(tmp)
-            for f in ("codex-hook.py", "gates.py", "hooks.py", "policy.py", "protocol.py"):
+            for f in ("codex-hook.py", "codex_events.py", "gates.py", "hooks.py", "policy.py", "protocol.py"):
                 shutil.copy(CORE / f, dst / f)
             mutate(dst)
             return subprocess.run([sys.executable, str(dst / "codex-hook.py")], capture_output=True,

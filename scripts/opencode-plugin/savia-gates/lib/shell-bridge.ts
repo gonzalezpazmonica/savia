@@ -62,6 +62,19 @@ function isAuthorityEvent(eventName: string): boolean {
   return eventName === "PreToolUse" || eventName === "PermissionRequest"
 }
 
+/** Claude Code and Codex read plain (non-JSON) stdout of these events as context. */
+const PLAIN_CONTEXT_EVENTS = new Set(["SessionStart", "UserPromptSubmit", "SubagentStart"])
+
+/**
+ * How exit-0 stdout that is not JSON is read (same rule as scripts/dual-cli/policy.py): authority
+ * events must answer with JSON or nothing; elsewhere plain text is context or ignored, never a block.
+ * Reading it as invalid stopped the loop at session-init.sh and the later SessionStart hooks never ran.
+ */
+export function plainOutputMode(eventName: string): "invalid" | "context" | "ignore" {
+  if (isAuthorityEvent(eventName)) return "invalid"
+  return PLAIN_CONTEXT_EVENTS.has(eventName) ? "context" : "ignore"
+}
+
 function unsupportedHook(eventName: string, matcher: string | undefined): UnsupportedHookEntry {
   return { type: "unsupported", matcher, async: false, declared_event: eventName }
 }
@@ -677,14 +690,19 @@ export async function sweepOrphanedHooks(): Promise<{ killed: number; removed: n
 // still policy uncertainty and therefore fails closed in this adapter.
 const BLOCK_EXIT = 2
 
-function parseCommandHookOutput(stdout: string): {
+export function parseCommandHookOutput(stdout: string, plain: "invalid" | "context" | "ignore" = "invalid"): {
   blocked: boolean
   reason?: string
   mutatedArgs?: any
   injectedContext?: string
   level?: string
 } {
-  if (!stdout.trim()) return { blocked: false }
+  const text = stdout.trim()
+  if (!text) return { blocked: false }
+  // Plain text (also "[TAG] ..."), not broken JSON: what starts like an object still has to parse.
+  if (plain !== "invalid" && !text.startsWith("{")) {
+    return plain === "context" ? { blocked: false, injectedContext: text } : { blocked: false }
+  }
   let parsed: unknown
   try {
     parsed = JSON.parse(stdout)
@@ -770,7 +788,7 @@ export async function runHooksForEvent(
         result.stderr = stderr.trim() || (h.type === "command" ? `HOOK_EXIT_${exit}` : "HTTP_GATE_BLOCK")
         return result
       }
-      const decision = parseCommandHookOutput(stdout)
+      const decision = parseCommandHookOutput(stdout, plainOutputMode(event))
       if (decision.blocked) {
         result.blocked = true
         result.stderr = decision.reason ?? "HOOK_BLOCK"
