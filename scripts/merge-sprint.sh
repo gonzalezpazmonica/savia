@@ -9,6 +9,8 @@
 #
 # Estado: ${MERGE_SPRINT_HOME:-$HOME/.savia/merge-sprint} (fuera del repo). Política: config/merge-sprint-policy.conf.
 # Nunca: rebase, force-push, revert automático, tier 4, reintento de CI.
+# Salida de run: 0 terminado o parado (STOP manual, TTL, máximo, main no verde) · 5 anomalía o sprint ya parado
+# (hace falta un grant nuevo) · 6 en pausa, un PR espera al juez (§2.7) · 3/4 sin grant, cerrojo o datos manipulados.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -182,15 +184,16 @@ cmd_plan() {
     out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o),"files":sorted(sys.argv[6].split())}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta" "$files")
   done
   # Blobs del ejecutor y del clasificador en origin/<base> y checks obligatorios de la protección (§2.2).
-  local rb cb req
+  local rb cb fb req
   rb=$(blob_on_main scripts/merge-sprint.sh) || die "sin scripts/merge-sprint.sh en origin/$BASE" 4
   cb=$(blob_on_main scripts/risk-tier.py) || die "sin scripts/risk-tier.py en origin/$BASE" 4
+  fb=$(blob_on_main scripts/f5-state.sh) || die "sin scripts/f5-state.sh en origin/$BASE" 4   # decide reconciliar o merge_externo
   req=$(required_live)
   [[ -n "$req" ]] || die "la protección de $BASE no declara checks obligatorios" 4
   python3 -c 'import json,sys; a=json.loads(sys.argv[1])[:int(sys.argv[2])]
 print(json.dumps({"repo":sys.argv[3],"base":sys.argv[4],"runner_blob":sys.argv[5],"classifier_blob":sys.argv[6],
- "required_checks":sys.argv[7].splitlines(),"prs":a},sort_keys=True,separators=(",",":")))' \
-    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" > "$MANIFEST"
+ "f5_blob":sys.argv[8],"required_checks":sys.argv[7].splitlines(),"prs":a},sort_keys=True,separators=(",",":")))' \
+    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" "$fb" > "$MANIFEST"
   chmod 600 "$MANIFEST"
   echo "manifiesto: $(python3 -c 'import json,sys; print(" ".join("#%d(t%d)"%(p["pr"],p["tier"]) for p in json.load(open(sys.argv[1]))["prs"]))' "$MANIFEST")"
   echo "digest: $(sha < "$MANIFEST")"
@@ -306,8 +309,19 @@ park() {
   ledger event=PARK pr="$1" reason="$2"; echo "  aparcado #$1: $2"
 }
 
+halt() {  # halt <motivo> → el sprint queda parado: el fichero STOP con el motivo solo lo borra un grant nuevo
+  printf '%s\n' "$1" > "$STOPF"
+}
+
 anomaly() {  # anomaly <motivo> [pr] → STOP del sprint, sin merge ni revert
-  ledger event=STOP reason="$1" ${2:+pr="$2"}; echo "STOP: $1${2:+ #$2}"; exit 5
+  halt "$1"; ledger event=STOP reason="$1" ${2:+pr="$2"}; echo "STOP: $1${2:+ #$2}"; exit 5
+}
+
+stop_gate() {  # fichero STOP: vacío = STOP manual (exit 0); con motivo = sprint ya parado, no se reanuda (exit 5)
+  [[ -e "$STOPF" ]] || return 0
+  local r; r=$(head -1 "$STOPF")
+  [[ -z "$r" ]] && { ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
+  ledger event=STOP reason=parado cause="$r"; echo "STOP: sprint parado ($r); hace falta un grant nuevo"; exit 5
 }
 
 # Reservas F5 (SE-387) pr.merge/<N> por manifiesto (digest), compartidas por los grants del mismo manifiesto:
@@ -333,7 +347,7 @@ check_required() {  # checks obligatorios vivos ⊇ los del manifiesto y no vac�
 }
 
 sprint_gate() {  # paso 1 de cada entrada: STOP, grant vigente, TTL, contador y checks obligatorios
-  [[ -e "$STOPF" ]] && { ledger event=STOP reason=manual; echo "STOP manual"; exit 0; }
+  stop_gate
   [[ -f "$GRANT" && "$(grant_field digest)" == "$DIGEST" ]] || anomaly grant_revocado   # §2.5: anomalía, exit ≠ 0
   (( $(date +%s) < $(grant_field expires_epoch) )) || { ledger event=STOP reason=ttl; echo "STOP: grant caducado"; exit 0; }
   (( MERGED < $(grant_field max_merges) )) || { ledger event=STOP reason=max; echo "STOP: máximo de merges"; exit 0; }
@@ -343,7 +357,7 @@ sprint_gate() {  # paso 1 de cada entrada: STOP, grant vigente, TTL, contador y 
 main_ci_gate() {  # main_ci_gate <pr> <merge_commit> → vuelve solo si main queda en verde; si no, STOP sin revert
   local st
   for _ in $(seq 1 "${MERGE_SPRINT_MAIN_POLLS:-40}"); do st=$(main_ci "$2"); [[ "$st" != pending ]] && break; sleep "${MERGE_SPRINT_POLL_S:-30}"; done
-  [[ "$st" == pass ]] || { ledger event=STOP reason="main_$st" pr="$1"; echo "STOP: main '$st' tras #$1 (sin revert)"; exit 0; }
+  [[ "$st" == pass ]] || { halt "main_$st"; ledger event=STOP reason="main_$st" pr="$1"; echo "STOP: main '$st' tras #$1 (sin revert)"; exit 0; }
 }
 
 merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7–8 de §2.5 sobre el SHA S
@@ -373,13 +387,25 @@ merge_at() {  # merge_at <pr> <S> → 0 mergeado; 1 con FAIL=<motivo>. Pasos 7�
   return 1
 }
 
-record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → ledger, reserva cerrada y CI de main
-  # Primero se cierra la reserva: si close falla (latencia de la API), el siguiente run reconcilia y registra
-  # el merge una sola vez; con el ledger y el contador antes, se contaría dos veces.
+ledger_merged() {  # ledger_merged <pr> → 0 si el ledger ya tiene el MERGED de ese PR para este manifiesto
+  [[ -s "$LEDGER" ]] || return 1
+  python3 -c 'import json,sys
+sys.exit(0 if any(d.get("event")=="MERGED" and d.get("pr")==sys.argv[2] and d.get("digest")==sys.argv[3]
+                  for d in map(json.loads, open(sys.argv[1]))) else 1)' "$LEDGER" "$1" "$DIGEST"
+}
+merged_count() {  # merges registrados en el ledger bajo el grant vigente: el contador sale del ledger, no de la memoria
+  [[ -s "$LEDGER" ]] || { echo 0; return; }
+  python3 -c 'import json,sys; print(sum(1 for d in map(json.loads, open(sys.argv[1])) if d.get("event")=="MERGED" and d.get("grant")==sys.argv[2]))' "$LEDGER" "$GRANT_ID"
+}
+
+record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → ledger, contador, reserva cerrada y CI de main
+  # La reserva sigue submitted hasta que el MERGED está en el ledger: una caída en cualquier punto anterior
+  # la deja reconciliable, y al reconciliar no se repite un MERGED ya escrito (idempotente por PR y manifiesto).
+  local mc; mc=$($GH pr view "$1" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid) && [[ "$mc" =~ ^[0-9a-f]{40}$ ]] \
+    || anomaly merge_commit_ilegible "$1"
+  ledger_merged "$1" || ledger event=MERGED pr="$1" digest="$DIGEST" grant="$GRANT_ID" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"}
+  MERGED=$(merged_count); grant_set_merged "$MERGED"
   f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
-  MERGED=$((MERGED+1)); grant_set_merged "$MERGED"
-  local mc; mc=$($GH pr view "$1" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid)
-  ledger event=MERGED pr="$1" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"}
   echo "  MERGED #$1 → ${mc:0:8}"
   main_ci_gate "$1" "$mc"
 }
@@ -423,15 +449,17 @@ if sum(int(a) + int(d) for a, d, _ in num) > 200: print("prefiltro_tamano"); sys
 PY
 }
 
-judge_request() {  # judge_request <pr> <H0> <H1> <T> <tier> → escribe la solicitud y la registra; ≠0 si no pudo
-  local f="$JDIR/$1-$3.request.json" fixers
-  mkdir -p "$JDIR"
-  # fix_author: identidades sin espacios (email del autor y trailer Fix-Author), una por línea.
-  fixers=$(git -C "$GITROOT" log --no-merges --format='%ae%n%(trailers:key=Fix-Author,valueonly)' "$3" "^$2" ^origin/main 2>/dev/null | sed 's/^ *//;s/ *$//;/^$/d' | sort -u)
+judge_request_body() {  # judge_request_body <pr> <H0> <H1> <T> <tier> <epoch> → JSON de la solicitud · 1 fallo · 3 sin autor del arreglo
+  local fixers
+  # fix_author: identidades sin espacios (email del autor y trailer Fix-Author), una por línea. Si git falla o no
+  # hay ningún autor (delta solo en commits de merge), la independencia del juez no es comprobable: fail-closed.
+  fixers=$(git -C "$GITROOT" log --no-merges --format='%ae%n%(trailers:key=Fix-Author,valueonly)' "$3" "^$2" "^origin/$BASE") || return 1
+  fixers=$(sed 's/^ *//;s/ *$//;/^$/d' <<<"$fixers" | sort -u)
+  [[ -n "$fixers" ]] || return 3
   # El diff lo calcula python sin los derivados (§2.7): nunca viaja por argv (E2BIG por encima de 128 KB).
-  python3 - "$GITROOT" "$REG" "$1" "$2" "$3" "$4" "$5" "$(mf_entry "$1")" "$fixers" "$DERIVED_RE" > "$f.tmp" <<'PY' || { rm -f "$f.tmp"; return 1; }
-import json, re, subprocess, sys, time
-root, reg, pr, h0, h1, t, tier, entry, fixers, derived = sys.argv[1:11]
+  python3 - "$GITROOT" "$REG" "$1" "$2" "$3" "$4" "$5" "$(mf_entry "$1")" "$fixers" "$DERIVED_RE" "$6" <<'PY'
+import json, re, subprocess, sys
+root, reg, pr, h0, h1, t, tier, entry, fixers, derived, epoch = sys.argv[1:12]
 g = lambda *a: subprocess.run(["git", "-C", root, *a], capture_output=True, text=True, check=True).stdout
 paths = [p for p in g("diff", "--name-only", "--no-renames", t, h1).splitlines() if p and not re.search(derived, p)]
 diff = "".join(l + "\n" for l in g("diff", "--no-renames", t, h1, "--", *paths).splitlines() if not l.startswith("index ")) if paths else ""
@@ -439,16 +467,24 @@ revs = [json.loads(l) for l in open(reg)] if reg else []
 revs = [r for r in revs if r["pr"] == int(pr) and r["sha"] == h0]
 print(json.dumps({"pr": int(pr), "from": h0, "to": h1, "tier": int(tier), "entry": json.loads(entry),
   "review_sha256": [r["hash"] for r in revs], "authors": sorted({r["author"] for r in revs}),
-  "fix_author": [x for x in fixers.splitlines() if x], "diff": diff, "requested_epoch": int(time.time())}, sort_keys=True, indent=1))
+  "fix_author": [x for x in fixers.splitlines() if x], "diff": diff, "requested_epoch": int(epoch)}, sort_keys=True, indent=1))
 PY
-  chmod 600 "$f.tmp" && mv "$f.tmp" "$f" || return 1
+}
+
+judge_request() {  # judge_request <pr> <H0> <H1> <T> <tier> → escribe la solicitud y la registra; ≠0 si no pudo
+  local f="$JDIR/$1-$3.request.json" body rc
+  mkdir -p "$JDIR"
+  body=$(judge_request_body "$1" "$2" "$3" "$4" "$5" "$(date +%s)"); rc=$?
+  (( rc == 3 )) && anomaly judge_fix_author_vacio "$1"
+  (( rc == 0 )) || return 1
+  printf '%s\n' "$body" > "$f.tmp" && chmod 600 "$f.tmp" && mv "$f.tmp" "$f" || { rm -f "$f.tmp"; return 1; }
   ledger event=JUDGE_REQUEST pr="$1" from="$2" to="$3" request="$f"
   echo "  #$1 awaiting_judge (${3:0:8})"
 }
 
 judge_verdict() {  # judge_verdict <request> → SAFE:<hash> | PENDING | STOP:<motivo>
   python3 - "$JREG" "$1" "$ORCH" "${MERGE_SPRINT_JUDGE_MIN:-60}" <<'PY'
-import hashlib, json, re, sys, time
+import hashlib, json, os, re, sys, time
 jreg, reqf, orch, minutes = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 q = json.load(open(reqf)); deadline = q["requested_epoch"] + minutes * 60
 try: recs = [json.loads(l) for l in open(jreg)]
@@ -463,6 +499,11 @@ for r in recs:
     if hashlib.sha256(data).hexdigest() != r["hash"]: stop("judge_alterado")
     m = G.fullmatch(data.decode("utf-8", "replace").split("\n", 1)[0])
     if not m: stop("judge_formato")
+    # Veredicto tardío de una solicitud obsoleta de este grant (mismo from, otro to con solicitud propia):
+    # nunca autoriza el head actual, así que se ignora en vez de parar el sprint por un juez lento.
+    _, vpr, vfr, vto = m.groups()[:4]
+    if (int(vpr) == q["pr"] and vfr == q["from"] and vto != q["to"]
+            and os.path.exists(os.path.join(os.path.dirname(reqf), "%s-%s.request.json" % (vpr, vto)))): continue
     parsed.append((r, m.groups()))
 for r, (v, pr, fr, to, judge, fixer, scope, sec, _) in parsed:
     if int(pr) != q["pr"] or fr != q["from"] or to != q["to"]: stop("judge_from_to")
@@ -484,6 +525,41 @@ unlabel() {  # al terminar, el auto-rebase vuelve a ver los PRs no mergeados (D6
     $GH pr edit "$n" -R "$REPO" --remove-label "merge-sprint:${DIGEST:0:12}" >/dev/null 2>&1
   done
 }
+keep_label() { LABELED=$(tr ' ' '\n' <<<"$LABELED" | grep -vx "$1" | paste -sd' ' -); }   # PR que espera al juez (D6)
+
+try_merge() {  # try_merge <pr> <head> <tier> [to] → RESULT=merged|awaiting_judge|<motivo>; CUR, EQ, AWAIT_TO
+  # <head>: sha revisado del manifiesto. <to>: head con veredicto SAFE (§2.7); tras él solo cabe un merge de main (§2.6).
+  # Si main avanza durante la espera de CI (otro merge), GitHub rechaza el merge por desfase:
+  # se re-sincroniza y se vuelve a esperar, hasta MERGE_SPRINT_TRIES intentos.
+  local pr="$1" head="$2" tier="$3" to="${4:-}" try rs cur tt pf
+  RESULT=""
+  for try in $(seq 1 "${MERGE_SPRINT_TRIES:-3}"); do
+    if [[ "$RESYNC" == 1 ]]; then
+      resync "$pr"; rs=$?
+      case $rs in 0) ;; 2) RESULT=conflicto_real; return ;; 3) RESULT=confidencialidad; return ;; *) RESULT=resync_fallo; return ;; esac
+      sleep "${MERGE_SPRINT_CI_SETTLE_S:-60}"
+    fi
+    cur=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
+    git -C "$GITROOT" fetch -q origin 2>/dev/null
+    if head_equivalent "$head" "$cur"; then
+      [[ "$head" == "$cur" ]] && EQ=identical || EQ=main_merge
+    elif [[ -n "$to" ]] && head_equivalent "$to" "$cur"; then
+      EQ=judge_safe
+    else
+      tt=$(equiv_tree "$head" "$cur") || { RESULT=equivalencia_ilegible; return; }
+      pf=$(judge_prefilter "$tt" "$cur" "$tier" "$(mf_entry "$pr")") || anomaly judge_prefiltro_fallo "$pr"
+      [[ -z "$pf" ]] || anomaly "judge_$pf" "$pr"    # el prefiltro para sin consultar al juez (AC-11)
+      judge_request "$pr" "$head" "$cur" "$tt" "$tier" || anomaly judge_solicitud_fallo "$pr"
+      AWAIT_TO="$cur"; RESULT=awaiting_judge; return
+    fi
+    if merge_at "$pr" "$cur"; then CUR="$cur"; RESULT=merged; return; fi
+    RESULT=$FAIL
+    if [[ "$RESYNC" == 1 && ( "$FAIL" == *:DIRTY || "$FAIL" == *:BEHIND ) ]]; then
+      ledger event=RETRY pr="$pr" try="$try" reason=main_movido; RESULT=main_movido_sin_converger; continue
+    fi
+    return
+  done
+}
 
 cmd_run() {
   [[ -f "$GRANT" ]] || die "sin grant" 3
@@ -494,23 +570,31 @@ cmd_run() {
   DIGEST=$(sha < "$MANIFEST")
   [[ "$DIGEST" == "$(grant_field digest)" ]] || die "manifiesto alterado tras el grant" 4
   # Solicitudes al juez acotadas a este grant (§2.7): las de grants anteriores nunca se reutilizan.
-  JDIR="$HOME_MS/judge/$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("id") or d["digest"][:12])' "$GRANT")"
+  GRANT_ID=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("id") or d["digest"][:12])' "$GRANT")
+  JDIR="$HOME_MS/judge/$GRANT_ID"
   local allowed; allowed=$(policy allowed_tiers) || exit 2
-  MERGED=$(grant_field merged)
+  stop_gate   # un sprint parado (anomalía o main no verde) no se reanuda con el mismo grant
+  MERGED=$(merged_count)
   ledger event=RUN digest="$DIGEST"
-  # El ejecutor y el clasificador que corren deben ser los blobs congelados en el manifiesto (AC-17).
+  # La base de la equivalencia y del juez es la congelada en el manifiesto, no la del entorno.
+  [[ "$(mf base)" == "$BASE" ]] || anomaly base_distinta
+  # El ejecutor, el clasificador y las reservas F5 que corren deben ser los blobs congelados en el manifiesto (AC-17).
   [[ "$(git hash-object "$ROOT/scripts/merge-sprint.sh")" == "$(mf runner_blob)" ]] || anomaly blob_ejecutor
   [[ "$(git hash-object "$ROOT/scripts/risk-tier.py")" == "$(mf classifier_blob)" ]] || anomaly blob_clasificador
+  [[ "$(git hash-object "$ROOT/scripts/f5-state.sh")" == "$(mf f5_blob 2>/dev/null)" ]] || anomaly blob_f5
   check_required
   local entries; entries=$(python3 -c 'import json,sys
 for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_repo"],p["reopens"])' "$MANIFEST") \
     || anomaly manifiesto_ilegible
   # D6: la etiqueta merge-sprint:<id> pausa el auto-rebase de los PRs del manifiesto mientras dura el run.
-  local label="merge-sprint:${DIGEST:0:12}" pr head tier base hrepo reopens
+  local label="merge-sprint:${DIGEST:0:12}" pr head tier base hrepo reopens st
   $GH label create "$label" -R "$REPO" --force --description "SE-433: auto-rebase en pausa" >/dev/null 2>&1 || anomaly etiqueta_fallida
   trap unlabel EXIT
   while read -r pr _; do
-    [[ -n "$pr" && "$($GH pr view "$pr" -R "$REPO" --json state --jq .state)" == OPEN ]] || continue
+    [[ -n "$pr" ]] || continue
+    # Sin estado legible no se sabe si hay que pausar su auto-rebase: para, no lo deja sin etiqueta.
+    st=$($GH pr view "$pr" -R "$REPO" --json state --jq .state) && [[ -n "$st" ]] || anomaly etiqueta_fallida "$pr"
+    [[ "$st" == OPEN ]] || continue
     $GH pr edit "$pr" -R "$REPO" --add-label "$label" >/dev/null 2>&1 || anomaly etiqueta_fallida "$pr"
     LABELED="$LABELED $pr"
   done <<<"$entries"
@@ -524,7 +608,7 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
       # Además, el merge real debe ser del SHA reservado y de la cuenta del ejecutor; si no, es ajeno.
       local rs_sha
       case "$(f5 status pr.merge "$pr")" in
-        closed) continue ;;   # ya mergeado y registrado por este grant
+        closed) continue ;;   # ya mergeado y registrado (close va después del ledger)
         submitted) rs_sha=$(reconcilable "$pr") || anomaly merge_externo "$pr"
                    echo "  #$pr mergeado sin registrar: reconciliado con la reserva F5"
                    record_merge "$pr" "$tier" "$rs_sha" reconciled; continue ;;
@@ -542,43 +626,29 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     # Si el head se movió después, la solicitud es obsoleta y el head nuevo se evalúa de cero (§2.7).
     local h_now; h_now=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
     [[ -f "$JDIR/$pr-$h_now.request.json" ]] && { awaiting="$awaiting $pr:$tier:$h_now"; continue; }
-    # Si main avanza durante la espera de CI (otro merge), GitHub rechaza el merge por desfase:
-    # se re-sincroniza y se vuelve a esperar, hasta MERGE_SPRINT_TRIES intentos.
-    local try reason="" cur="" ok=0 rs eq
-    for try in $(seq 1 "${MERGE_SPRINT_TRIES:-3}"); do
-      if [[ "$RESYNC" == 1 ]]; then
-        resync "$pr"; rs=$?
-        case $rs in 0) ;; 2) reason=conflicto_real; break ;; 3) reason=confidencialidad; break ;; *) reason=resync_fallo; break ;; esac
-        sleep "${MERGE_SPRINT_CI_SETTLE_S:-60}"
-      fi
-      cur=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
-      git -C "$GITROOT" fetch -q origin 2>/dev/null
-      if ! head_equivalent "$head" "$cur"; then
-        local tt pf; tt=$(equiv_tree "$head" "$cur") || { reason=equivalencia_ilegible; break; }
-        pf=$(judge_prefilter "$tt" "$cur" "$tier" "$(mf_entry "$pr")") || anomaly judge_prefiltro_fallo "$pr"
-        [[ -z "$pf" ]] || anomaly "judge_$pf" "$pr"    # el prefiltro para sin consultar al juez (AC-11)
-        judge_request "$pr" "$head" "$cur" "$tt" "$tier" || anomaly judge_solicitud_fallo "$pr"
-        awaiting="$awaiting $pr:$tier:$cur"; reason=awaiting_judge; break
-      fi
-      [[ "$head" == "$cur" ]] && eq=identical || eq=main_merge
-      if merge_at "$pr" "$cur"; then ok=1; break; fi
-      reason=$FAIL
-      if [[ "$RESYNC" == 1 && ( "$FAIL" == *:DIRTY || "$FAIL" == *:BEHIND ) ]]; then
-        ledger event=RETRY pr="$pr" try="$try" reason=main_movido; reason=main_movido_sin_converger; continue
-      fi
-      break
-    done
-    [[ "$reason" == awaiting_judge ]] && continue
-    (( ok )) || { park "$pr" "${reason%%:*}"; continue; }
-    record_merge "$pr" "$t" "$cur" "$eq"
+    try_merge "$pr" "$head" "$tier"
+    case "$RESULT" in
+      awaiting_judge) awaiting="$awaiting $pr:$tier:$AWAIT_TO" ;;
+      merged) record_merge "$pr" "$t" "$CUR" "$EQ" ;;
+      *) park "$pr" "${RESULT%%:*}" ;;
+    esac
   done <<<"$entries"
-  # Cola del juez: SAFE → CI nueva sobre `to` y merge con S = to; cualquier otra cosa para el sprint.
-  local item req v to qft done_q=""
+  # Cola del juez: SAFE → re-sync con main si hace falta (sin código nuevo sobre `to`), CI nueva y merge;
+  # cualquier otra cosa para el sprint.
+  local item req v to h0 tt pf qft done_q="" again=""
   for item in $awaiting; do
     IFS=: read -r pr tier to <<<"$item"
     req="$JDIR/$pr-$to.request.json"
-    qft=$(python3 -c 'import json,sys; q=json.load(open(sys.argv[1])); print(q["pr"], q["from"], q["to"])' "$req") || anomaly judge_solicitud_ilegible "$pr"
-    [[ "$qft" == "$pr $(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["head"])' "$(mf_entry "$pr")") $to" ]] || anomaly judge_from_to "$pr"
+    h0=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["head"])' "$(mf_entry "$pr")") || anomaly manifiesto_ilegible "$pr"
+    qft=$(python3 -c 'import json,sys; q=json.load(open(sys.argv[1])); print(q["pr"], q["from"], q["to"], q["tier"], q["requested_epoch"])' "$req") || anomaly judge_solicitud_ilegible "$pr"
+    [[ "${qft% *}" == "$pr $h0 $to $tier" ]] || anomaly judge_from_to "$pr"
+    # La solicitud vive en el directorio de estado: se recalcula entera (prefiltro, diff, autores, revisiones)
+    # y debe coincidir con la guardada; si no, alguien la cambió después de emitirla.
+    git -C "$GITROOT" fetch -q origin 2>/dev/null
+    tt=$(equiv_tree "$h0" "$to") || anomaly judge_solicitud_alterada "$pr"
+    pf=$(judge_prefilter "$tt" "$to" "$tier" "$(mf_entry "$pr")") || anomaly judge_prefiltro_fallo "$pr"
+    [[ -z "$pf" ]] || anomaly "judge_$pf" "$pr"
+    [[ "$(judge_request_body "$pr" "$h0" "$to" "$tt" "$tier" "${qft##* }")" == "$(cat "$req")" ]] || anomaly judge_solicitud_alterada "$pr"
     for _ in $(seq 1 "${MERGE_SPRINT_JUDGE_POLLS:-120}"); do
       v=$(judge_verdict "$req") || anomaly judge_verificacion_fallo "$pr"
       [[ "$v" != PENDING ]] && break; sleep "${MERGE_SPRINT_POLL_S:-30}"
@@ -586,14 +656,24 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     ledger event=JUDGE_VERDICT pr="$pr" verdict="$v" request="$req"
     if [[ "$v" == PENDING ]]; then
       # Los PRs que siguen esperando al juez conservan la etiqueta: el auto-rebase no debe mover su head (D6).
-      local w; for w in $awaiting; do [[ " $done_q " == *" ${w%%:*} "* ]] || LABELED=$(tr ' ' '\n' <<<"$LABELED" | grep -vx "${w%%:*}" | paste -sd' ' -); done
-      ledger event=PAUSE reason=awaiting_judge pr="$pr"; echo "sprint en pausa: #$pr espera al juez"; exit 0
+      local w; for w in $awaiting; do [[ " $done_q " == *" ${w%%:*} "* ]] || keep_label "${w%%:*}"; done
+      for w in $again; do keep_label "$w"; done
+      ledger event=PAUSE reason=awaiting_judge pr="$pr"; echo "sprint en pausa: #$pr espera al juez"; exit 6
     fi
     done_q="$done_q $pr"
     [[ "$v" == SAFE:* ]] || anomaly "${v#STOP:}" "$pr"
     sprint_gate
-    if merge_at "$pr" "$to"; then record_merge "$pr" "$tier" "$to" judge_safe "${v#SAFE:}"; else park "$pr" "${FAIL%%:*}"; fi
+    try_merge "$pr" "$h0" "$tier" "$to"
+    case "$RESULT" in
+      merged) record_merge "$pr" "$tier" "$CUR" "$EQ" "${v#SAFE:}" ;;
+      awaiting_judge) again="$again $pr" ;;   # código nuevo tras el SAFE: solicitud nueva, se evalúa de cero
+      *) park "$pr" "${RESULT%%:*}" ;;
+    esac
   done
+  if [[ -n "$again" ]]; then
+    local w; for w in $again; do keep_label "$w"; done
+    ledger event=PAUSE reason=awaiting_judge pr="${again# }"; echo "sprint en pausa:$again espera al juez"; exit 6
+  fi
   ledger event=END merged="$MERGED"; echo "sprint terminado: $MERGED merges"
 }
 

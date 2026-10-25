@@ -29,14 +29,19 @@ case "$1 $2" in
       *mergeStateStatus*) cat "$F/$n.mss" 2>/dev/null || echo CLEAN ;;
       *isDraft*) cat "$F/$n.draft" 2>/dev/null || echo true ;;
       *mergedBy*) cat "$F/$n.merged_by" 2>/dev/null || echo executor ;;
-      *mergeCommit*) echo "m${n}0000000000000000000000000000000000000" ;;
-      *state*) cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
+      *mergeCommit*) [[ -f "$F/$n.on_mc" ]] && bash "$F/$n.on_mc"; [[ -f "$F/$n.mc_fail" ]] && exit 1; printf 'c%039d\n' "$n" ;;
+      *state*) [[ -f "$F/$n.state_fail" ]] && exit 1
+               [[ "$a" == *"-q .state"* && -f "$F/$n.on_f5state" ]] && bash "$F/$n.on_f5state"   # consulta de f5-state.sh
+               cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
     esac ;;
   "pr diff") cat "$F/$3.files" ;;
   "pr checks") printf 'CI\t%s\n' "$(cat "$F/$3.checks" 2>/dev/null || echo pass)" ;;
   "pr ready"|"pr edit"|"label create"|"label delete") exit 0 ;;
   "label list") cat "$F/labels" 2>/dev/null ;;
-  "pr merge") if [[ -f "$F/$3.reject" ]]; then n=$(cat "$F/$3.reject"); (( n > 0 )) && { echo $((n-1)) > "$F/$3.reject"; exit 1; }; fi
+  "pr merge") # rama protegida «al día»: rechaza el merge si main no está integrada en la rama del PR
+              if [[ -f "$F/$3.require_uptodate" ]] && ! git --git-dir="$BARE" merge-base --is-ancestor refs/heads/main "refs/heads/$(cat "$F/$3.branch")"; then
+                echo BEHIND > "$F/$3.mss"; exit 1; fi
+              if [[ -f "$F/$3.reject" ]]; then n=$(cat "$F/$3.reject"); (( n > 0 )) && { echo $((n-1)) > "$F/$3.reject"; exit 1; }; fi
               echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state"
               [[ -f "$F/$3.on_merge" ]] && GHPPID=$PPID bash "$F/$3.on_merge"; exit 0 ;;
   *)
@@ -58,7 +63,7 @@ EOF
   git -C "$MERGE_SPRINT_GIT_ROOT" config user.email t@t; git -C "$MERGE_SPRINT_GIT_ROOT" config user.name t
   git -C "$MERGE_SPRINT_GIT_ROOT" config commit.gpgsign false
   mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"
-  cp scripts/merge-sprint.sh scripts/risk-tier.py "$MERGE_SPRINT_GIT_ROOT/scripts/"
+  cp scripts/merge-sprint.sh scripts/risk-tier.py scripts/f5-state.sh "$MERGE_SPRINT_GIT_ROOT/scripts/"
   echo base > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G add a.txt scripts; G commit -qm base; G branch -M main; G push -q origin main
 }
 
@@ -76,6 +81,10 @@ review() {  # review <n> <verdict> <role> [reviewer] [p1]
   local f="$TMPDIR_T/rev-$1-$3.md"
   echo "VERDICT: $2 pr=$1 sha=$(sha_of "$1") role=$3 tier=2 reviewer=${4:-rev-agent} author=impl-agent p0=0 p1=${5:-0} p2=0 p2_blocking=0" > "$f"
   bash "$SCRIPT" review-register "$1" "$f"
+}
+
+regrant() {  # grant nuevo sobre el mismo manifiesto: un sprint parado solo se reanuda así
+  bash "$SCRIPT" grant "$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -d' ' -f1)" >/dev/null
 }
 
 plan_and_grant() {
@@ -432,7 +441,7 @@ PY
   [ "$status" -eq 5 ]
   [ ! -e "$FAKE/merged" ]
   grep -q '"reason":"checks_obligatorios_reducidos"' "$MERGE_SPRINT_HOME/ledger.jsonl"
-  : > "$FAKE/required"
+  : > "$FAKE/required"; regrant
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
   grep -q '"reason":"checks_obligatorios_vacios"' "$MERGE_SPRINT_HOME/ledger.jsonl"
@@ -485,7 +494,7 @@ PY
   echo fork/repo > "$FAKE/97.repo"
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
-  mv "$FAKE/97.repo" "$TMPDIR_T/97.repo.old"; echo 1 > "$FAKE/97.reopens"
+  mv "$FAKE/97.repo" "$TMPDIR_T/97.repo.old"; echo 1 > "$FAKE/97.reopens"; regrant
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
   [ ! -e "$FAKE/merged" ]
@@ -653,7 +662,7 @@ no_request() { ! compgen -G "$MERGE_SPRINT_HOME/judge/*/*.request.json" >/dev/nu
   jpr 115 scripts/d.sh l1; plan_and_grant
   fix_commit 115 'seq 1 200 >> scripts/d.sh'
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
   ls "$MERGE_SPRINT_HOME"/judge/*/115-*.request.json
   grep -q '"event":"JUDGE_REQUEST"' "$MERGE_SPRINT_HOME/ledger.jsonl"
@@ -667,8 +676,9 @@ judge_setup() {  # judge_setup <n> : PR con commit de arreglo tras el grant, sol
   fix_commit "$1" 'echo l2 >> scripts/d.sh'
   H1=$(git --git-dir="$BARE" rev-parse "refs/heads/pr-$1")
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
+  grep -q '"event":"PAUSE"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }
 verdict() {  # verdict <n> <línea> : registra un veredicto del juez
   local f; f=$(mktemp "$TMPDIR_T/v.XXXX"); echo "$2" > "$f"
@@ -726,7 +736,7 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   [ ! -e "$FAKE/merged" ]
 }
 
-@test "AC-12 block: judge igual al autor del arreglo para el sprint" {
+@test "AC-12 block: judge igual al email git del autor del arreglo para el sprint (id ≠ email: límite declarado)" {
   judge_setup 125
   verdict 125 "$(safe_line 125 f@f)"
   run bash "$SCRIPT" run
@@ -794,7 +804,7 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   printf '%040d' 7 > "$FAKE/141.head"
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
-  sha_of 141 > "$FAKE/141.head"; echo otra-cuenta > "$FAKE/141.merged_by"
+  sha_of 141 > "$FAKE/141.head"; echo otra-cuenta > "$FAKE/141.merged_by"; regrant
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
   [ "$(grep -c '"reason":"merge_externo"' "$MERGE_SPRINT_HOME/ledger.jsonl")" -eq 2 ]
@@ -806,7 +816,7 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   fix_commit 142 'echo l3 >> scripts/d.sh'
   local h2; h2=$(git --git-dir="$BARE" rev-parse refs/heads/pr-142)
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
   [ -n "$(find "$MERGE_SPRINT_HOME/judge" -name "142-$h2.request.json")" ]
 }
@@ -818,7 +828,7 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   run bash "$SCRIPT" grant "$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -d' ' -f1)"
   [ "$status" -eq 0 ]
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
   ! grep -q '"reason":"judge_plazo"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
   [ "$(find "$MERGE_SPRINT_HOME/judge" -name '143-*.request.json' | wc -l)" -eq 2 ]
@@ -847,7 +857,7 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   jpr 146 scripts/d.sh l1; plan_and_grant
   fix_commit 146 'mkdir -p .scm && python3 -c "print(\"x\"*300000)" > .scm/big.json && echo l2 >> scripts/d.sh'
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
   local f; f=$(find "$MERGE_SPRINT_HOME/judge" -name '146-*.request.json')
   python3 -c 'import json,sys; d=json.load(open(sys.argv[1]))["diff"]; assert "scripts/d.sh" in d and ".scm/" not in d' "$f"
@@ -991,7 +1001,7 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
   plan_and_grant
   fix_commit 168 "sed -i '2d' scripts/d.sh"
   run bash "$SCRIPT" run
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
   ! grep -q '"reason":"judge_prefiltro_tests_eliminados"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
 }
@@ -1037,15 +1047,21 @@ JSON
 
 # ── v8: P2 baratos de la segunda revisión independiente ──
 
-@test "P2 block: si f5 close falla tras el merge, no se escribe MERGED ni se cuenta (sin doble recuento al reconciliar)" {
+@test "P1 boundary: si f5 close falla tras el merge, el MERGED ya está en el ledger una vez y al reconciliar no se duplica" {
   mkpr 180 "scripts/da.sh"; review 180 APPROVE correctness
-  echo 'echo OPEN > "$FAKE/180.state"' > "$FAKE/180.on_merge"
+  echo 'echo OPEN > "$FAKE/180.state"' > "$FAKE/180.on_merge"   # latencia de la API: aún no se ve MERGED
   plan_and_grant
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
   grep -q '"reason":"f5_close"' "$MERGE_SPRINT_HOME/ledger.jsonl"
-  ! grep -q '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
-  [ "$(jq -r .merged "$MERGE_SPRINT_HOME/grant.json")" -eq 0 ]
+  [ "$(grep -c '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl")" -eq 1 ]
+  [ "$(jq -r .merged "$MERGE_SPRINT_HOME/grant.json")" -eq 1 ]
+  echo MERGED > "$FAKE/180.state"; regrant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl")" -eq 1 ]
+  ! grep -q '"reason":"merge_externo"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
+  [ "$(jq -r .state "$MERGE_SPRINT_HOME"/reservations/*/pr.merge__180.json)" = closed ]
 }
 
 @test "P2 boundary: si la consulta de isDraft falla (vacío) no se llama a ready ni el PR vuelve a Draft" {
@@ -1097,4 +1113,197 @@ JSON
   run bash "$SCRIPT" plan
   [ "$status" -eq 0 ]
   [[ "$output" == *"#186(t"* ]]
+}
+
+# ── v9: tercera revisión independiente de la PR #1375 (P1 y P2) ──
+killrun_hook() {  # killrun_hook <fichero> : gancho del gh falso que mata con kill -9 el run y sus subprocesos
+  cat > "$1" <<'EOF'
+p=$PPID; pids=()
+while [ "$p" -gt 1 ]; do
+  c=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null)
+  case "$c" in *merge-sprint.sh*|*f5-state.sh*|*/bin/gh*) pids=("$p" "${pids[@]}") ;; *) break ;; esac
+  p=$(awk '{print $4}' "/proc/$p/stat")
+done
+kill -9 "${pids[@]}"
+EOF
+}
+merged_events() { grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep -c "\"pr\":\"$1\""; }
+resv_state() { jq -r .state "$MERGE_SPRINT_HOME"/reservations/*/pr.merge__"$1".json; }
+
+@test "P1 positivo: proceso muerto tras el merge, al leer el commit de merge; el siguiente run lo registra una vez" {
+  mkpr 200 "scripts/ea.sh"; mkpr 201 "scripts/eb.sh"
+  review 200 APPROVE correctness; review 201 APPROVE correctness
+  killrun_hook "$FAKE/200.on_mc"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -ne 0 ]
+  [ "$(merged_events 200)" -eq 0 ]
+  [ "$(resv_state 200)" = submitted ]   # la reserva no se cierra antes del ledger
+  mv "$FAKE/200.on_mc" "$TMPDIR_T/200.on_mc.old"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(merged_events 200)" -eq 1 ]
+  grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"200"' | grep -q '"equivalence":"reconciled"'
+  [ "$(paste -sd, "$FAKE/merged")" = "200,201" ]
+  [ "$(jq -r .merged "$MERGE_SPRINT_HOME/grant.json")" -eq 2 ]
+}
+
+@test "P1 boundary: proceso muerto en f5 close, con el MERGED ya escrito; al reconciliar no se duplica ni se cuenta dos veces" {
+  mkpr 202 "scripts/ec.sh"; mkpr 203 "scripts/ed.sh"
+  review 202 APPROVE correctness; review 203 APPROVE correctness
+  killrun_hook "$FAKE/202.on_f5state"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -ne 0 ]
+  [ "$(merged_events 202)" -eq 1 ]
+  [ "$(resv_state 202)" = submitted ]
+  mv "$FAKE/202.on_f5state" "$TMPDIR_T/202.on_f5state.old"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(merged_events 202)" -eq 1 ]
+  [ "$(resv_state 202)" = closed ]
+  [ "$(paste -sd, "$FAKE/merged")" = "202,203" ]
+  [ "$(jq -r .merged "$MERGE_SPRINT_HOME/grant.json")" -eq 2 ]
+}
+
+@test "P1 error: commit de merge ilegible tras el merge para sin escribir un MERGED con commit vacío" {
+  mkpr 204 "scripts/ee.sh"; review 204 APPROVE correctness; touch "$FAKE/204.mc_fail"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"merge_commit_ilegible"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ "$(merged_events 204)" -eq 0 ]
+  [ "$(resv_state 204)" = submitted ]
+}
+
+@test "P1 positivo: SAFE sobre un head que otro merge del sprint dejó detrás de main se re-sincroniza y se mergea sin otro juicio" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  jpr 205 scripts/d.sh l1; jpr 206 scripts/e.sh l1
+  plan_and_grant
+  H0=$(python3 -c 'import json,sys; print(next(p["head"] for p in json.load(open(sys.argv[1]))["prs"] if p["pr"]==205))' "$MERGE_SPRINT_HOME/manifest.json")
+  fix_commit 205 'echo l2 >> scripts/d.sh'
+  H1=$(git --git-dir="$BARE" rev-parse refs/heads/pr-205)
+  # el merge de #206 avanza main como un squash en GitHub; #205 exige rama al día
+  cat > "$FAKE/206.on_merge" <<'EOF'
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+c=$(git --git-dir="$BARE" commit-tree "$(git --git-dir="$BARE" rev-parse 'refs/heads/pr-206^{tree}')" -p refs/heads/main -m "squash 206")
+git --git-dir="$BARE" update-ref refs/heads/main "$c"
+EOF
+  touch "$FAKE/205.require_uptodate"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 6 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "206" ]
+  verdict 205 "$(safe_line 205)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "206,205" ]
+  local h2; h2=$(git --git-dir="$BARE" rev-parse refs/heads/pr-205)
+  [ "$h2" != "$H1" ]
+  grep -q "pr merge 205 .*--match-head-commit $h2" "$FAKE/calls"
+  grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"205"' | grep '"equivalence":"judge_safe"' | grep -q '"judge_ref"'
+}
+
+@test "P2 block: tras main roja, un run con el mismo grant no mergea nada; con un grant nuevo sí" {
+  mkpr 207 "scripts/ef.sh"; mkpr 208 "scripts/eg.sh"
+  review 207 APPROVE correctness; review 208 APPROVE correctness; echo fail > "$FAKE/main_ci"
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "207" ]
+  echo pass > "$FAKE/main_ci"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "207" ]
+  grep -q '"cause":"main_fail"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  regrant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "207,208" ]
+}
+
+@test "P2 boundary: un veredicto tardío de una solicitud obsoleta se ignora y el sprint sigue en pausa" {
+  judge_setup 209
+  fix_commit 209 'echo l3 >> scripts/d.sh'
+  run bash "$SCRIPT" run
+  [ "$status" -eq 6 ]
+  verdict 209 "$(safe_line 209)"   # SAFE para el to anterior (H1)
+  run bash "$SCRIPT" run
+  [ "$status" -eq 6 ]
+  [[ "$output" == *"espera al juez"* ]]
+  ! grep -q '"reason":"judge_from_to"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "P2 block: estado ilegible al etiquetar para el sprint en vez de dejar el PR sin etiqueta" {
+  mkpr 210 "scripts/eh.sh"; review 210 APPROVE correctness
+  plan_and_grant
+  touch "$FAKE/210.state_fail"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"etiqueta_fallida"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "P2 boundary: el run siguiente a una pausa no re-sincroniza el PR que espera al juez aunque main avance" {
+  judge_setup 211
+  main_moves z.txt m1
+  run bash "$SCRIPT" run
+  [ "$status" -eq 6 ]
+  [ "$(git --git-dir="$BARE" rev-parse refs/heads/pr-211)" = "$H1" ]
+  ! grep '"event":"RESYNC"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep -q '"pr":"211"' || false
+}
+
+@test "P2 error: judge.jsonl manipulado hace fallar run y verify-ledger con exit 4" {
+  judge_setup 212
+  verdict 212 "$(safe_line 212)"; verdict 999 "JUDGE: STOP otro"
+  sed -i '1s/"pr":212/"pr":213/' "$MERGE_SPRINT_HOME/judge.jsonl"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 4 ]
+  run bash "$SCRIPT" verify-ledger
+  [ "$status" -eq 4 ]
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "P2 block: run con una base distinta de la del manifiesto para por anomalía" {
+  mkpr 213 "scripts/ei.sh"; review 213 APPROVE correctness
+  plan_and_grant
+  MERGE_SPRINT_BASE=trunk run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"base_distinta"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "P2 block: solicitud al juez alterada en el directorio de estado (autores vaciados) para antes de aceptar el SAFE" {
+  judge_setup 214
+  local f; f=$(find "$MERGE_SPRINT_HOME/judge" -name '214-*.request.json')
+  python3 -c 'import json,sys; q=json.load(open(sys.argv[1])); q["authors"]=[]; json.dump(q,open(sys.argv[1],"w"),sort_keys=True,indent=1)' "$f"
+  verdict 214 "$(safe_line 214 impl-agent)"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_solicitud_alterada"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
+}
+
+@test "P2 block: delta solo en un commit de merge (sin autor de arreglo) para sin solicitar al juez" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  jpr 215 scripts/d.sh l1; plan_and_grant
+  main_moves z.txt m1
+  G switch -q pr-215; G merge -q --no-ff --no-commit main
+  echo l2 >> "$MERGE_SPRINT_GIT_ROOT/scripts/d.sh"; G add -A
+  git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=f@f -c user.name=fixer -c commit.gpgsign=false commit -qm "merge con arreglo"
+  G push -q origin pr-215; G switch -q main
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"judge_fix_author_vacio"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  no_request
+}
+
+@test "P2 block: f5-state.sh distinto del blob del manifiesto para el sprint" {
+  echo "# otra versión" >> "$MERGE_SPRINT_GIT_ROOT/scripts/f5-state.sh"; G commit -qam "f5 cambiado"; G push -q origin main
+  mkpr 216 "scripts/ej.sh"; review 216 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  grep -q '"reason":"blob_f5"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [ ! -e "$FAKE/merged" ]
 }

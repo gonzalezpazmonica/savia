@@ -37,7 +37,7 @@ NUNCA   un grant sin respuesta literal de la operadora a la pregunta generada po
 NUNCA   un subagente emite un grant; nadie lo amplía, prorroga ni reutiliza para otro manifiesto
 NUNCA   tier 4 · consulta sin resolver · grant sin TTL, máximo ni tiers enumerados
 SIEMPRE manifiesto congelado: PR, head SHA, ficheros, tier, todas las revisiones, blobs del
-        ejecutor y del clasificador, checks obligatorios y workflows de main
+        ejecutor, del clasificador y de F5, checks obligatorios, base y workflows de main
 SIEMPRE el ejecutor exige grant con manifest_digest idéntico y respuesta = opción de aprobación
 SIEMPRE por defecto TTL 12 h, 40 merges, ≤ 50 PRs; topes absolutos TTL ≤ 24 h, parks ≤ 3
 SIEMPRE acuse e informe enviados a la operadora; revoke/stop invalidan el grant al instante
@@ -86,10 +86,10 @@ Equivalencia del head, comparando árboles (blob y modo):
 - **Veredicto.** Primera línea: `JUDGE: SAFE|STOP pr= from= to= judge= fix_author= scope= security=
   reason=`. `fix_author`: email del autor del commit o trailer `Fix-Author:`. El juez es distinto del
   autor del fix, del original y del orquestador. Ante la duda, STOP.
-- **Pausa.** Mientras un PR espera al juez conserva la etiqueta `merge-sprint:<id>`. `plan` borra
-  las etiquetas de sprints muertos.
-- **Comprobación del ejecutor.** Verifica formato, SHA, independencia y unicidad. `SAFE` solo deja
-  seguir al PR, con CI nueva. `STOP` detiene el sprint para revisión humana.
+- **Pausa.** Mientras un PR espera al juez conserva la etiqueta `merge-sprint:<id>` y `run` sale
+  con 6 (pausa, no fin). `plan` borra las etiquetas de sprints muertos.
+- **Comprobación del ejecutor.** Verifica formato, SHA, independencia y unicidad, y recalcula la
+  solicitud. `SAFE` deja seguir al PR con CI nueva; después solo cabe un merge de `main`. `STOP` para.
 
 | Evento | Acción |
 |---|---|
@@ -99,7 +99,7 @@ Equivalencia del head, comparando árboles (blob y modo):
 | Juez `STOP`, veredicto inválido o fuera de plazo | Parar |
 | Máximo de merges, TTL, fichero STOP, 3 aparcamientos seguidos | Parar |
 
-Parar siempre es seguro. Un sprint parado por una condición de parada no se reanuda sin grant nuevo.
+Parar siempre es seguro. Un sprint parado no se reanuda sin grant nuevo (STOP guarda el motivo).
 
 ## Tier 3/4
 
@@ -123,7 +123,7 @@ Lo concede la operadora en sus settings, nunca un agente:
 
 - **Allow**: `run|status|stop|revoke|report|plan|render-question|review-register|verify-ledger`.
 - **Ask**: `grant`. **Deny**: `gh pr merge`, la edición del ejecutor y de `risk-tier.py`, y la
-  escritura en `~/.savia/merge-sprints/`.
+  escritura en `~/.savia/merge-sprint/` (estado real del ejecutor).
 
 Sin grant vigente para el manifiesto exacto, `run` termina con error. No elude el clasificador: es un
 único camino, acotado y auditable, que concede la operadora.
