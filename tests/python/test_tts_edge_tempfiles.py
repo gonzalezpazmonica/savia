@@ -32,10 +32,14 @@ tts = _load_tts()
 
 
 class EdgeTempfileTests(unittest.TestCase):
-    def _run_synth(self, returncode):
+    def setUp(self):
+        self.cmds = []
+
+    def _run_synth(self, returncode, text="hola"):
         seen = []
 
         def fake_run(cmd, **_kwargs):
+            self.cmds.append(cmd)
             out = cmd[cmd.index("--write-media") + 1]
             parent = Path(out).parent
             seen.append((out, stat.S_IMODE(parent.stat().st_mode), parent))
@@ -46,7 +50,7 @@ class EdgeTempfileTests(unittest.TestCase):
         with patch.object(tts.tempfile, "mktemp",
                           side_effect=AssertionError("mktemp is racy")), \
                 patch.object(tts.subprocess, "run", side_effect=fake_run):
-            result = synth._synth_edge("hola")
+            result = synth._synth_edge(text)
         return result, seen
 
     def test_media_is_written_inside_a_private_directory(self):
@@ -59,6 +63,14 @@ class EdgeTempfileTests(unittest.TestCase):
     def test_private_directory_is_removed_afterwards(self):
         _result, seen = self._run_synth(returncode=1)
         self.assertFalse(os.path.exists(seen[0][2]))
+
+    def test_dash_leading_text_is_bound_to_text_option(self):
+        # "--text", "--write-media=/x" would let edge-tts parse the text as an option
+        self._run_synth(returncode=1, text="--write-media=/x")
+        cmd = self.cmds[0]
+        self.assertIn("--text=--write-media=/x", cmd)
+        self.assertNotIn("--text", cmd)
+        self.assertNotIn("--write-media=/x", cmd)
 
 
 if __name__ == "__main__":

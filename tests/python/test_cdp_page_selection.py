@@ -78,6 +78,32 @@ class SharePointSelectionTests(unittest.TestCase):
             self.assertIsNone(sp.find_sp_page("http://127.0.0.1:9222"))
 
 
+class BareHostTests(unittest.TestCase):
+    # Behaviour change: the bare apex is not a tenant host and is no longer
+    # selected (only *.sharepoint.com and friends, by suffix with a leading dot).
+    def test_bare_sharepoint_apex_is_rejected(self):
+        for url in ("https://sharepoint.com/", "https://sharepoint.us/",
+                    "https://sharepoint.cn/"):
+            self.assertFalse(sp.is_sharepoint_url(url), url)
+            self.assertFalse(teams.is_authenticated_page_url(url), url)
+
+
+class AttachmentExtractorCloudTests(unittest.TestCase):
+    # Tab selection and URL extraction must accept the same clouds.
+    def _urls(self, content):
+        chat = {"active": {"messages": [{"content": content}]}}
+        return [a["url"] for a in teams.extract_attachments_from_chat(chat)
+                if a["kind"] == "sharepoint_url"]
+
+    def test_sovereign_sharepoint_urls_are_extracted(self):
+        for tld in ("com", "us", "cn"):
+            url = f"https://contoso.sharepoint.{tld}/sites/x/Doc.pdf"
+            self.assertEqual(self._urls(f"see {url} ok"), [url])
+
+    def test_lookalike_sharepoint_urls_are_not_extracted(self):
+        self.assertEqual(self._urls("https://contoso.sharepoint.evil/x/Doc.pdf"), [])
+
+
 class TeamsSelectionTests(unittest.TestCase):
     def test_lookalike_tabs_are_never_selected(self):
         self.assertIsNone(teams.pick_authenticated_page([_page(u) for u in EVIL]))

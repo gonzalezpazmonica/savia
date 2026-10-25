@@ -42,8 +42,8 @@ def extract_attachments_from_chat(chat_json):
     """Scan messages for attachment-like patterns (filenames, sharepoint URLs)."""
     found = []
     msgs = (chat_json.get("active") or {}).get("messages") or []
-    # SharePoint file URL patterns
-    sp_url_re = re.compile(r"https?://[a-z0-9\-]+\.sharepoint\.com/[^\s'\"]+\.(?:xlsx|xls|csv|pdf|docx|doc|pptx|ppt|txt|zip|png|jpg|jpeg)",
+    # SharePoint file URL patterns (same clouds as _SHAREPOINT_SUFFIXES)
+    sp_url_re = re.compile(r"https?://[a-z0-9\-]+\.sharepoint\.(?:com|us|cn)/[^\s'\"]+\.(?:xlsx|xls|csv|pdf|docx|doc|pptx|ppt|txt|zip|png|jpg|jpeg)",
                            re.IGNORECASE)
     # filename with extension
     filename_re = re.compile(r"\b([A-Za-z0-9_\-][A-Za-z0-9_\-\.\(\) ]{0,120}\.(?:xlsx|xls|csv|pdf|docx|doc|pptx|ppt|txt|zip|png|jpg|jpeg))\b",

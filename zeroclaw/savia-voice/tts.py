@@ -152,8 +152,9 @@ class TTSSynthesizer:
         tmp_wav = os.path.join(tmp_dir, "edge.wav")
         try:
             r = subprocess.run(
+                # "--text=" binds the value: text starting with "-" is not an option
                 [f"{VENV_BIN}/edge-tts", "--voice", edge_voice,
-                 "--text", text, "--write-media", tmp_mp3],
+                 f"--text={text}", "--write-media", tmp_mp3],
                 capture_output=True, timeout=15
             )
             if r.returncode != 0:
