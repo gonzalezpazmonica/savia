@@ -102,6 +102,14 @@ class LocalDetection(unittest.TestCase):
                      disk_usage=lambda p: Usage(10, 1, 9), read=_no_file, geteuid=lambda: 1000, home="/h").discover()
         self.assertNotIn("/opt/x/bin/x", looked)
 
+    def test_path_or_missing_detection_is_undetectable_not_absent(self):
+        man = {"p": {"detection": {"executable": "/opt/p/bin/p"}}, "w": {"detection": {"executable": "C:\\p\\w.exe"}},
+               "n": {}, "b": {"detection": {"executable": "b"}}}
+        a = LocalAdapter(man, env={}, which=lambda n: None, system="Linux", machine="x86_64",
+                         disk_usage=lambda p: Usage(10, 1, 9), read=_no_file, geteuid=lambda: 1000, home="/h")
+        self.assertEqual(a.undetectable(), ["n", "p", "w"])
+        self.assertEqual(a.discover().installed, {})
+
     def test_disk_measure_failure_is_none(self):
         def boom(p):
             raise OSError("x")
@@ -141,6 +149,15 @@ class Graph(unittest.TestCase):
         self.assertEqual(graph.retirement(MANIFESTS, set(), "vendor-installer", undetectable=["opencode"])["safe"], True)
 
 
+    def test_dependents_and_retirement_terminate_on_cycles(self):
+        # --retire bypasses the planner's cycle blocker, so the walk itself must stay finite and exclude cid
+        cyc = {"a": {"depends_on": ["b"]}, "b": {"depends_on": ["a"]}, "c": {"depends_on": ["a"]}}
+        self.assertEqual(graph.dependents(cyc, {"a", "b", "c"}, "a"), ["b", "c"])
+        self.assertEqual(graph.dependents(cyc, {"a", "b"}, "b"), ["a"])
+        r = graph.retirement(cyc, {"a", "b"}, "a", undetectable=["c"])
+        self.assertEqual((r["dependents"], r["undetermined"], r["safe"]), (["b"], ["c"], False))
+
+
 class Preflight(unittest.TestCase):
     def test_disk_boundary_is_exact(self):
         need = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=10**12), ["opencode"])["preview"]
@@ -168,8 +185,20 @@ class Preflight(unittest.TestCase):
         self.assertIn(("opencode", "preflight_package_manager"), codes(p))
 
     def test_nothing_to_install_never_blocks_on_disk(self):
-        p = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=0), ["git"])
-        self.assertNotIn(("host", "preflight_disk"), codes(p))
+        # unmeasured disk would warn if anything were installed; git is already there, so no disk check fires
+        p = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=None), ["git"])
+        self.assertNotIn(("host", "preflight_disk"), codes(p) | codes(p, "warnings"))
+        self.assertEqual({c["id"]: c["status"] for c in p["preflight"]["checks"]}["disk"], "ok")
+
+    def test_package_manager_only_plan_still_flags_network_not_probed(self):
+        # node on Windows: winget source, no declared download bytes, yet it still downloads
+        p = build_plan(MANIFESTS, fx_host("windows-x64", disk_free_bytes=10**12), ["node"])
+        self.assertEqual(p["preview"]["download_bytes"], 0)
+        st = {c["id"]: c["status"] for c in p["preflight"]["checks"]}
+        self.assertEqual((st.get("network"), st.get("certificates")), ("not_probed", "not_probed"))
+        # nothing to install: no network to probe
+        idle = build_plan(MANIFESTS, fx_host("ubuntu-x64", disk_free_bytes=10**12), ["git"])
+        self.assertNotIn("network", {c["id"] for c in idle["preflight"]["checks"]})
 
     def test_proxy_and_wsl_warn_and_network_not_probed(self):
         h = fx_host("ubuntu-x64", disk_free_bytes=10**12, proxy_configured=True, is_wsl=True)
@@ -216,6 +245,21 @@ class Cli(unittest.TestCase):
             self.skipTest("host outside the MVP matrix")
         self.assertEqual(r.returncode, 2, r.stderr)
         self.assertIn("opencode", json.loads(r.stdout)["undetermined"])
+
+    def test_retire_local_fails_closed_for_path_detected_dependents(self):
+        # a dependent detected by absolute path is never looked up: its presence is unknown, not absent
+        with tempfile.TemporaryDirectory() as d:
+            git = json.loads((FX / "manifests/git.json").read_text())
+            dep = dict(git, id="pathdep", depends_on=["git"], detection={"executable": "/opt/pathdep/bin/pathdep", "args": []})
+            (Path(d) / "git.json").write_text(json.dumps(git))
+            (Path(d) / "pathdep.json").write_text(json.dumps(dep))
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/installer-plan.py"), "--manifests", d,
+                                "--local", "--retire", "git"], capture_output=True, text=True)
+        if r.returncode == 1 and "unsupported host" in r.stderr:
+            self.skipTest("host outside the MVP matrix")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual((out["undetermined"], out["safe"], out["presence_basis"]), (["pathdep"], False, "path_lookup_best_effort"))
 
     def test_empty_retire_is_invalid_input_not_a_traceback(self):
         r = self.run_cli("--host", str(FX / "hosts/ubuntu-x64.json"), "--retire", "")

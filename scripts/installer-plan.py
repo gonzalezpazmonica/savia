@@ -42,14 +42,16 @@ def main() -> int:
     a = ap.parse_args()
     try:
         manifests = load_manifests(a.manifests)
-        host = (LocalAdapter(manifests) if a.local else FixtureAdapter(a.host)).discover()
+        adapter = LocalAdapter(manifests) if a.local else FixtureAdapter(a.host)
+        host = adapter.discover()
         if a.retire is not None:
             if a.retire not in manifests and a.retire not in host.installed:
                 print(f"ERROR: unknown component(s): {a.retire}", file=sys.stderr)
                 return 1
-            # --local only sees components that declare detection; the rest have unknown presence
-            blind = [c for c, m in manifests.items() if not m.get("detection")] if a.local else []
+            # --local only sees bare-name detection on PATH; everything else has unknown presence
+            blind = adapter.undetectable() if a.local else []
             report = retirement(manifests, set(host.installed), a.retire, blind)
+            report["presence_basis"] = "path_lookup_best_effort" if a.local else "fixture"
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0 if report["safe"] else 2
         unknown = sorted(set(a.select or []) - set(manifests) - set(host.installed))

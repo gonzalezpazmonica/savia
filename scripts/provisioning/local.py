@@ -4,6 +4,11 @@ Never executes anything, never reads secrets: only presence of executables (PATH
 basename of the shell, the *presence* of proxy variables (their values may carry credentials) and
 free disk space. Component versions are therefore reported as "unknown": running a
 manifest-declared command during discovery would be code execution, which stays behind F3.
+
+Limits that F3 must close before acting on these facts:
+- Presence is a PATH lookup: any binary with that name counts as installed (not authenticated), and
+  one installed outside this process's PATH is reported as absent. Reports built on it are best effort.
+- Free disk space is measured at the user's home; a system package may land on another filesystem.
 """
 from __future__ import annotations
 
@@ -33,6 +38,12 @@ def _distro(read, known=()) -> str:
     if own in known:
         return own
     return next((d for d in ids.get("ID_LIKE", "").split() if d in known), own)
+
+
+def _detectable(manifest: dict) -> bool:
+    """Only a bare executable name is looked up; no detection or a path means presence is unknown."""
+    exe = (manifest.get("detection") or {}).get("executable")
+    return bool(exe) and not {"/", "\\"} & set(exe)
 
 
 def _read(path: str) -> str:
@@ -66,6 +77,10 @@ class LocalAdapter(PlatformAdapter):
     def _known_distros(self) -> set:
         return {d for m in self._manifests.values() for t in m.get("targets", []) for d in t.get("distros", [])}
 
+    def undetectable(self) -> list:
+        """Components whose presence this adapter cannot determine (fail closed, never 'absent')."""
+        return sorted(cid for cid, m in self._manifests.items() if not _detectable(m))
+
     def discover(self) -> HostFacts:
         osname = {"linux": "linux", "windows": "windows"}.get(self._system)
         arch = ARCH.get(self._machine)
@@ -79,10 +94,8 @@ class LocalAdapter(PlatformAdapter):
             free = None
         installed = {}
         for cid, m in sorted(self._manifests.items()):
-            exe = (m.get("detection") or {}).get("executable")
-            if exe and not {"/", "\\"} & set(exe):  # basename only: a path is never looked up
-                if self._which(exe):
-                    installed[cid] = "unknown"
+            if _detectable(m) and self._which(m["detection"]["executable"]):  # a path is never looked up
+                installed[cid] = "unknown"
         return HostFacts(
             os=osname, arch=arch, distro=_distro(self._read, self._known_distros()) if osname == "linux" else "",
             # sudo on PATH is presence only: whether this user may use it is not probed

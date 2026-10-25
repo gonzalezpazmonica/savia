@@ -33,7 +33,8 @@ def run(host: HostFacts, steps: list, preview: dict) -> dict:
     if not any(c["id"] == "package_manager" for c in checks):
         add("package_manager", "ok", "every package-manager source has its manager")
 
-    if any(s["source"]["kind"] != "installed" and s["source"]["kind"] != "package_manager" for s in todo) or preview["download_bytes"]:
+    # every install fetches something (package managers included, even without declared bytes)
+    if todo or preview["download_bytes"]:
         add("network", "not_probed", "connectivity is not probed in read-only mode; downloads may still fail")
         add("certificates", "not_probed", "TLS trust is not probed; TLS validation stays enabled during install")
     if host.proxy_configured and todo:
