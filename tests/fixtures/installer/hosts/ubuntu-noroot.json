@@ -1,0 +1,11 @@
+{
+  "arch": "x64",
+  "distro": "ubuntu",
+  "elevation_available": false,
+  "installed": {},
+  "name": "ubuntu-noroot",
+  "os": "linux",
+  "package_managers": [
+    "apt"
+  ]
+}
