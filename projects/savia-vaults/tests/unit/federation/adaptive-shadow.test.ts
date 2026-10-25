@@ -29,7 +29,7 @@ describe('runShadow', () => {
     const plain = mk();
     await plain.engine.search('q', ctx, 10);
     let invocations = 0;
-    const { response, receipt } = await runShadow({ queryId: 'q-00000001', selection, baseline: () => { invocations++; return engine.search('q', ctx, 10); } });
+    const { response, receipt } = await runShadow({ selection, baseline: () => { invocations++; return engine.search('q', ctx, 10); } });
     expect(invocations).toBe(1);
     expect(calls()).toBe(plain.calls());
     expect(calls()).toBe(3);
@@ -39,7 +39,7 @@ describe('runShadow', () => {
   });
   it('el receipt es contrafactual: estima ahorro y resultados que se habrían perdido', async () => {
     const { dir, engine } = mk();
-    const { receipt } = await runShadow({ queryId: 'q-00000002', selection, baseline: () => engine.search('q', ctx, 10) });
+    const { receipt } = await runShadow({ selection, baseline: () => engine.search('q', ctx, 10) });
     expect(receipt.evidenceType).toBe('counterfactual-estimate');
     expect(receipt.challenger.selected).toEqual(['local', 'a']);
     expect(receipt.estimate.remoteCallsSaved).toBe(2);
@@ -49,27 +49,34 @@ describe('runShadow', () => {
   });
   it('el receipt no contiene la consulta, destinos denegados ni credenciales', async () => {
     const { dir, engine } = mk();
-    const { receipt } = await runShadow({ queryId: 'q-00000003', selection, baseline: () => engine.search('q', ctx, 10) });
+    const { receipt } = await runShadow({ selection, baseline: () => engine.search('q', ctx, 10) });
     const text = JSON.stringify(receipt);
     expect(text).not.toContain('secreta-xyz');
     expect(text).not.toMatch(/"d"/);
     expect(receipt.challenger.deniedCount).toBe(1);
     fs.rmSync(dir, { recursive: true, force: true });
   });
-  it('rechaza queryId no opaco (p. ej. la propia consulta) y no ejecuta el baseline', async () => {
-    let ran = 0;
-    for (const bad of ['consulta secreta xyz', 'short', '']) {
-      await expect(runShadow({ queryId: bad, selection, baseline: async () => { ran++; throw new Error('no'); } })).rejects.toThrow(/opaco/);
-    }
-    expect(ran).toBe(0);
+  it('queryId es un UUID generado dentro de runShadow, distinto por ejecución y ajeno a la consulta', async () => {
+    const { dir, engine } = mk();
+    // Consulta de un carácter: con el control antiguo («queryId contiene la consulta») casi cualquier id la contenía.
+    const sel = { ...selection, query: 'a' };
+    const r1 = await runShadow({ selection: sel, baseline: () => engine.search('a', ctx, 10) });
+    const r2 = await runShadow({ selection: sel, baseline: () => engine.search('a', ctx, 10) });
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    expect(r1.receipt.queryId).toMatch(uuid);
+    expect(r2.receipt.queryId).toMatch(uuid);
+    expect(r1.receipt.queryId).not.toBe(r2.receipt.queryId);
+    // Mismo selection -> mismo configHash: el id no se deriva de la entrada.
+    expect(r1.receipt.configHash).toBe(r2.receipt.configHash);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
-  it('rechaza un queryId que contiene la consulta aunque tenga formato válido', async () => {
+  it('guidance no serializable falla ANTES de ejecutar el baseline (no se pierde la búsqueda)', async () => {
     let ran = 0;
-    const sel = { ...selection, query: 'password123' };
-    await expect(runShadow({ queryId: 'PASSWORD123', selection: sel, baseline: async () => { ran++; throw new Error('no'); } })).rejects.toThrow(/consulta/);
+    const sel = { ...selection, guidance: { version: 1, cues: [], n: 1n } };
+    await expect(runShadow({ selection: sel, baseline: async () => { ran++; throw new Error('no'); } })).rejects.toThrow(/BigInt/);
     expect(ran).toBe(0);
   });
   it('un fallo del baseline se propaga (shadow no lo enmascara)', async () => {
-    await expect(runShadow({ queryId: 'q-00000004', selection, baseline: async () => { throw new Error('boom'); } })).rejects.toThrow('boom');
+    await expect(runShadow({ selection, baseline: async () => { throw new Error('boom'); } })).rejects.toThrow('boom');
   });
 });

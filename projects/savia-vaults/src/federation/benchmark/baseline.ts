@@ -45,6 +45,8 @@ export interface BaselineOptions {
   cacheTtlMs?: number;
   tamperResult?: (r: FederatedSearchResult) => FederatedSearchResult;
   // Challenger A/B (R04): estrecha los destinos ANTES de ejecutar; solo recibe la consulta, no sus etiquetas.
+  // SUSTITUYE a allowedVaults (sin intersección) para poder medir exposición: solo benchmark. En producción el motor
+  // debe imponer route(q) ∩ allowedDomeIds; no reutilizar este gancho fuera del benchmark.
   route?: (q: RouteView) => string[];
 }
 

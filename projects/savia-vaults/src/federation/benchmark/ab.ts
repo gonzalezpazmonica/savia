@@ -31,7 +31,10 @@ export function trainGuidance(corpus: BenchCorpus, dataset: BenchDataset): Guida
 export function makeRouter(corpus: BenchCorpus, guidance: Guidance): (q: RouteView) => string[] {
   return q => {
     const domes = corpus.vaults.filter(v => !v.local).map(v => ({ id: v.id, weight: v.weight, enabled: true, status: (q.unhealthyVaults.includes(v.id) ? 'unhealthy' : 'healthy') as 'healthy' | 'unhealthy' }));
-    return selectDestinations({ query: q.query, allowedDomeIds: q.allowedVaults, domes, guidance, budget: { maxVaults: BENCH_PROFILE.maxVaults, maxRemoteCalls: BENCH_PROFILE.maxRemoteCalls }, flags: { adaptive: true } }).selected;
+    const r = selectDestinations({ query: q.query, allowedDomeIds: q.allowedVaults, domes, guidance, budget: { maxVaults: BENCH_PROFILE.maxVaults, maxRemoteCalls: BENCH_PROFILE.maxRemoteCalls }, flags: { adaptive: true } });
+    // Si la guidance cae a fallback el A/B mediría la federación recortada, no el challenger: se aborta en vez de informar algo falso.
+    if (r.mode !== 'adaptive') throw new Error(`A/B: el challenger no está en modo adaptive (${r.mode}): ${r.reasons.join('; ')}`);
+    return r.selected;
   };
 }
 

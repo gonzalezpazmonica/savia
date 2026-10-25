@@ -132,6 +132,32 @@ describe('revisión #1382', () => {
     const r = selectDestinations(base({ budget: { maxVaults: NaN, maxRemoteCalls: NaN } }));
     expect(r.selected).toEqual(['local']);
   });
+  it('presupuesto Infinity es fail-closed: no significa «sin tope»', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: Infinity, maxRemoteCalls: Infinity } }));
+    expect(r.selected).toEqual(['local']);
+    expect(r.termination).toBe('BUDGET_EXHAUSTED');
+  });
+  it('BUDGET_EXHAUSTED sin seleccionados lista los sanos recortados como BUDGET, igual que fallback', () => {
+    const budget = { maxVaults: 0, maxRemoteCalls: 3 };
+    const allowedDomeIds = ['a', 'b', 'c', 'd'];
+    const ad = selectDestinations(base({ budget, allowedDomeIds }));
+    const fb = selectDestinations(base({ budget, allowedDomeIds, guidance: 'x' }));
+    expect(ad.selected).toEqual([]);
+    expect(ad.termination).toBe('BUDGET_EXHAUSTED');
+    expect(ad.skipped).toEqual(['a', 'b', 'c', 'd'].map(id => ({ id, reason: 'BUDGET' })));
+    expect(ad.skipped).toEqual(fb.skipped);
+  });
+  it('id de dome repetido cuenta una vez: no se selecciona dos veces ni gasta presupuesto doble', () => {
+    const r = selectDestinations(base({ domes: [dome('a', 5), dome('a', 5), dome('b'), dome('c')], allowedDomeIds: ['local', 'a', 'b', 'c'] }));
+    expect(r.selected).toEqual(['local', 'a', 'b']);
+    expect(new Set(r.selected).size).toBe(r.selected.length);
+  });
+  it("un id '__proto__' es una clave propia de scores, no reasigna el prototipo", () => {
+    const r = selectDestinations(base({ domes: [dome('__proto__', 2), dome('a')], allowedDomeIds: ['local', '__proto__', 'a'] }));
+    expect(Object.prototype.hasOwnProperty.call(r.scores, '__proto__')).toBe(true);
+    expect(r.scores['__proto__']).toBe(2);
+    expect(r.selected).toEqual(['local', '__proto__', 'a']);
+  });
   it('términos duplicados, con espacios o puntuación se rechazan', () => {
     const dup = Array.from({ length: 16 }, () => ({ term: 'x', score: 1 }));
     expect(parseGuidance(g([{ vaultId: 'a', attracts: dup }])).ok).toBe(false);
