@@ -1,0 +1,198 @@
+{
+  "category": "core",
+  "depends_on": [
+    "git",
+    "node"
+  ],
+  "freshness": {
+    "max_age_days": 30,
+    "previous_successful_sync_at": null
+  },
+  "id": "savia-core",
+  "license": "MIT",
+  "ownership": {
+    "link_mode": "isolated",
+    "owned_fields": [
+      "hooks",
+      "agents"
+    ]
+  },
+  "schema_version": 1,
+  "targets": [
+    {
+      "actions": {
+        "install": {
+          "atomic_replace": true,
+          "changes": [
+            {
+              "kind": "file",
+              "target": "~/.savia/core"
+            },
+            {
+              "kind": "path",
+              "target": "~/.savia/bin"
+            }
+          ],
+          "compensation": "rollback",
+          "invocation": {
+            "args": [
+              "-xzf",
+              "savia-core-1.0.tar.gz"
+            ],
+            "executable": "tar"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "rollback": {
+          "changes": [
+            {
+              "kind": "file",
+              "target": "~/.savia/core"
+            },
+            {
+              "kind": "path",
+              "target": "~/.savia/bin"
+            }
+          ],
+          "invocation": {
+            "args": [
+              "-xzf",
+              "savia-core-previous.tar.gz"
+            ],
+            "executable": "tar"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "uninstall": {
+          "atomic_replace": true,
+          "changes": [
+            {
+              "kind": "file",
+              "target": "~/.savia/core"
+            },
+            {
+              "kind": "path",
+              "target": "~/.savia/bin"
+            }
+          ],
+          "compensation": "rollback",
+          "invocation": {
+            "args": [
+              "-rf",
+              "savia-core-1.0"
+            ],
+            "executable": "rm"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "doctor"
+            ],
+            "executable": "savia"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64",
+        "arm64"
+      ],
+      "os": "linux",
+      "source": {
+        "integrity": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "kind": "official_release",
+        "locator": "https://example.invalid/releases/savia-core-1.0.tar.gz"
+      }
+    },
+    {
+      "actions": {
+        "install": {
+          "atomic_replace": true,
+          "changes": [
+            {
+              "kind": "file",
+              "target": "%LOCALAPPDATA%/Savia/core"
+            }
+          ],
+          "compensation": "rollback",
+          "invocation": {
+            "args": [
+              "-xf",
+              "savia-core-1.0.zip"
+            ],
+            "executable": "tar"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "rollback": {
+          "changes": [
+            {
+              "kind": "file",
+              "target": "%LOCALAPPDATA%/Savia/core"
+            }
+          ],
+          "invocation": {
+            "args": [
+              "-xf",
+              "savia-core-previous.zip"
+            ],
+            "executable": "tar"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "uninstall": {
+          "atomic_replace": true,
+          "changes": [
+            {
+              "kind": "file",
+              "target": "%LOCALAPPDATA%/Savia/core"
+            }
+          ],
+          "compensation": "rollback",
+          "invocation": {
+            "args": [
+              "-rf",
+              "savia-core-1.0"
+            ],
+            "executable": "rm"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        },
+        "verify": {
+          "invocation": {
+            "args": [
+              "doctor"
+            ],
+            "executable": "savia"
+          },
+          "privilege": "USER",
+          "reversibility": "reversible"
+        }
+      },
+      "arch": [
+        "x64",
+        "arm64"
+      ],
+      "os": "windows",
+      "source": {
+        "integrity": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "kind": "official_release",
+        "locator": "https://example.invalid/releases/savia-core-1.0.zip"
+      }
+    }
+  ],
+  "version": "1.0"
+}
