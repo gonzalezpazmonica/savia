@@ -108,6 +108,7 @@
 | `grc-framework-router` | skill:grc-framework-router | Selecciona marcos GRC y verifica vigencia. Usar cuando se prepara una auditoría, se co... |
 | `grc-gap-assessment` | skill:grc-gap-assessment | Construye matriz GRC preliminar y acciones trazables. Usar cuando se solicita gap asses... |
 | `grill-me` | skill:grill-me | Adversarial review that hunts every weakness, assumption, edge case, and missing test. ... |
+| `harness-architecture` | skill:harness-architecture | Diseña la arquitectura de un harness de agentes: único, orquestado o metaharness, flu... |
 | `human-code-map` | skill:human-code-map | Usar cuando se incorpora un dev nuevo, se toca un módulo sin mapa, o alguien re-lee el... |
 | `iac-security-scanner` | skill:iac-security-scanner | Usar cuando se escanea IaC (Terraform, Bicep, Dockerfile, docker-compose) con Trivy con... |
 | `knowledge-graph` | skill:knowledge-graph | Usar cuando se construye o consulta el grafo de conocimiento de entidades del proyecto. |
