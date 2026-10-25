@@ -12,10 +12,11 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from sam_effects import (DELEGATING_TOOLS, DISPOSITIONS, SHELL_TOOLS, UNKNOWN_EFFECT, classify_tool, effect_disposition,  # noqa: E402
+from sam_effects import (CRITICAL_EFFECTS, DELEGATING_TOOLS, DISPOSITIONS, SHELL_FLOOR,  # noqa: E402
+                         SHELL_TOOLS, UNKNOWN_EFFECT, classify_tool, effect_disposition,
                          load_effect_maps, surface_dispositions, tool_disposition)
 from sam_model import SamValidationError  # noqa: E402
-from sam_surface import EFFECTS, SURFACE_IDS, load_manifests  # noqa: E402
+from sam_surface import EFFECTS, SURFACE_IDS, load_manifests, resolve_surface  # noqa: E402
 
 BASE = ".scm/runtime-surface"
 
@@ -51,7 +52,8 @@ class SamEffectsTest(unittest.TestCase):
     def test_effect_disposition_exact_table(self):
         table = {"UNSUPPORTED": "UNSUPPORTED_FOR_EFFECT", "EMULATED": "REROUTE_HUMAN",
                  "NATIVE": "CANDIDATE_GATED", "ADAPTED": "CANDIDATE_GATED",
-                 "UNKNOWN": "DEGRADED_SAFE", "FOO": "DEGRADED_SAFE", "": "DEGRADED_SAFE"}
+                 "UNKNOWN": "DEGRADED_SAFE", "FOO": "UNSUPPORTED_FOR_EFFECT",
+                 "": "UNSUPPORTED_FOR_EFFECT", None: "UNSUPPORTED_FOR_EFFECT"}
         for state, expected in table.items():
             self.assertEqual(expected, effect_disposition(state), state)
 
@@ -71,9 +73,42 @@ class SamEffectsTest(unittest.TestCase):
                               ("codex", "web_search"), ("claude-code", "mcp__x__y")):
             self.assertIn("EXTERNAL_EFFECT", classify_tool(self.maps, runtime, tool))
 
-    def test_every_surface_covers_every_effect(self):
+    def test_surface_dispositions_follow_resolved_capabilities(self):
+        non_critical = {"READ_WORKSPACE", "SEARCH_WORKSPACE", "REQUEST_HUMAN_DECISION"}
+        self.assertEqual(set(EFFECTS) - non_critical, set(CRITICAL_EFFECTS))
         for sid in SURFACE_IDS:
-            self.assertEqual(set(EFFECTS), set(surface_dispositions(self.manifests, sid)))
+            caps = resolve_surface(self.manifests, sid)["capabilities"]
+            got = surface_dispositions(self.manifests, sid)
+            self.assertEqual(non_critical, {e for e, v in got.items() if v == "NOT_CRITICAL"}, sid)
+            for effect in CRITICAL_EFFECTS:
+                self.assertEqual(effect_disposition(caps[effect]), got[effect], f"{sid}/{effect}")
+        self.assertEqual("UNSUPPORTED_FOR_EFFECT",
+                         surface_dispositions(self.manifests, "codex-desktop")["EXTERNAL_EFFECT"])
+
+    def test_missing_capability_fails_closed(self):
+        runtime = self.manifests["runtimes"]["codex"]
+        caps = dict(runtime["capabilities"])
+        del caps["EXECUTE_LOCAL"]
+        broken = {"runtimes": {**self.manifests["runtimes"], "codex": {**runtime, "capabilities": caps}},
+                  "surfaces": self.manifests["surfaces"]}
+        surface = next(s for s in SURFACE_IDS if s.startswith("codex-")
+                       and "EXECUTE_LOCAL" not in self.manifests["surfaces"][s].get("capability_overrides", {}))
+        self.assertEqual("UNSUPPORTED_FOR_EFFECT", surface_dispositions(broken, surface)["EXECUTE_LOCAL"])
+
+    def test_tool_matching_several_patterns_takes_union(self):
+        maps = {"codex": {"tools": {}, "patterns": [
+            {"prefix": "mcp__", "effects": ["CALL_MCP"]},
+            {"prefix": "mcp__fs", "effects": ["WRITE_WORKSPACE"]}]}}
+        self.assertEqual(["CALL_MCP", "WRITE_WORKSPACE"], classify_tool(maps, "codex", "mcp__fs__w"))
+        self.assertEqual(["CALL_MCP"], classify_tool(maps, "codex", "mcp__x"))
+
+    def test_opencode_mcp_tool_is_unknown(self):
+        self.assertEqual([UNKNOWN_EFFECT], classify_tool(self.maps, "opencode", "mcp__x__y"))
+
+    def test_every_shell_tool_carries_full_floor(self):
+        for runtime, names in SHELL_TOOLS.items():
+            for name in names:
+                self.assertTrue(SHELL_FLOOR <= set(classify_tool(self.maps, runtime, name)), name)
 
     def test_unknown_surface_rejected(self):
         with self.assertRaises(SamValidationError):
@@ -127,6 +162,18 @@ class SamEffectsValidationTest(unittest.TestCase):
         self._edit(lambda d: d["tools"].update(bash=["READ_WORKSPACE"]))
         self._invalid()
 
+    def test_rejects_shell_tool_below_floor_even_with_execute_local(self):
+        self._edit(lambda d: d["tools"].update(bash=["EXECUTE_LOCAL"], task=["EXECUTE_LOCAL"]))
+        self._invalid()
+
+    def test_rejects_second_codex_shell_below_floor(self):
+        self._edit(lambda d: d["tools"].update(exec_command=["EXECUTE_LOCAL"]), "codex")
+        self._invalid()
+
+    def test_rejects_workspace_write_without_modify_config(self):
+        self._edit(lambda d: d["tools"].update(NotebookEdit=["WRITE_WORKSPACE"]), "claude-code")
+        self._invalid()
+
     def test_rejects_delegating_tool_weaker_than_shell(self):
         self._edit(lambda d: d["tools"].update(task=["CREATE_PROCESS"]))
         self._invalid()
@@ -158,6 +205,24 @@ class SamEffectsCliTest(unittest.TestCase):
         self.assertEqual(2, out.returncode)
         self.assertIn("INVALID_SURFACE_MANIFEST", out.stderr)
         self.assertIn("--tool requires --surface", out.stderr)
+
+    def test_cli_unknown_surface_exits_2(self):
+        out = self._run("--surface", "nope")
+        self.assertEqual(2, out.returncode)
+        self.assertIn("INVALID_SURFACE_MANIFEST", out.stderr)
+        self.assertEqual("", out.stdout)
+
+    def test_cli_empty_tool_fails_closed(self):
+        out = self._run("--surface", "claude-code-cli", "--tool", "")
+        self.assertEqual(0, out.returncode)
+        result = json.loads(out.stdout)
+        self.assertEqual([UNKNOWN_EFFECT], result["effects"])
+        self.assertEqual("UNSUPPORTED_FOR_EFFECT", result["disposition"])
+
+    def test_cli_without_arguments_reports_valid(self):
+        out = self._run()
+        self.assertEqual(0, out.returncode)
+        self.assertEqual("SAM EFFECTS: VALID (3 runtimes)", out.stdout.strip())
 
 
 if __name__ == "__main__":

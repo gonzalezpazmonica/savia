@@ -54,7 +54,8 @@
       "ACCESS_SECRET"
     ],
     "NotebookEdit": [
-      "WRITE_WORKSPACE"
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
     ],
     "Read": [
       "READ_WORKSPACE",

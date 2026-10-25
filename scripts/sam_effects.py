@@ -18,9 +18,14 @@ CRITICAL_EFFECTS = frozenset(EFFECTS) - {"READ_WORKSPACE", "SEARCH_WORKSPACE",
                                          "REQUEST_HUMAN_DECISION"}
 UNKNOWN_EFFECT = "UNKNOWN_EFFECT"
 DISPOSITIONS = ("CANDIDATE_GATED", "DEGRADED_SAFE", "REROUTE_HUMAN", "UNSUPPORTED_FOR_EFFECT")
-# Semantic floor per runtime: shell tools must carry EXECUTE_LOCAL and delegating
-# tools (subagents inherit the shell) must carry every effect a shell has.
+# Semantic floor fixed in code, not taken from the map under validation: every
+# shell tool and every delegating tool (subagents inherit the shell) must carry
+# the full worst case of an arbitrary command.
+SHELL_FLOOR = frozenset({"EXECUTE_LOCAL", "CREATE_PROCESS", "WRITE_WORKSPACE", "ACCESS_SECRET",
+                         "ACCESS_NETWORK", "MODIFY_CONFIG", "EXTERNAL_EFFECT", "CHANGE_SHARED_STATE"})
 SHELL_TOOLS = {"claude-code": ("Bash",), "opencode": ("bash",), "codex": ("shell", "exec_command")}
+# Codex has no documented subagent tool (SE-398 F0); any spawn tool it exposes is
+# unmapped, so it classifies as UNKNOWN_EFFECT and fails closed.
 DELEGATING_TOOLS = {"claude-code": ("Agent", "Task"), "opencode": ("task",), "codex": ()}
 _KEYS = {"schema_version", "kind", "runtime", "tools", "patterns", "provenance",
          "verification", "notes"}
@@ -33,12 +38,12 @@ def _effects_ok(value: object) -> bool:
 
 def _check_semantics(doc: dict, rel: str) -> None:
     runtime, tools = doc["runtime"], doc["tools"]
-    for name in SHELL_TOOLS[runtime]:
-        if "EXECUTE_LOCAL" not in tools.get(name, ()):
+    for name in SHELL_TOOLS[runtime] + DELEGATING_TOOLS[runtime]:
+        if not SHELL_FLOOR <= set(tools.get(name, ())):
             raise _fail(f"{rel}/tools/{name}")
-    floor = set(tools[SHELL_TOOLS[runtime][0]])
-    for name in DELEGATING_TOOLS[runtime]:
-        if not floor <= set(tools.get(name, ())):
+    # A workspace write can land on a config file: it never omits MODIFY_CONFIG.
+    for name, effects in tools.items():
+        if "WRITE_WORKSPACE" in effects and "MODIFY_CONFIG" not in effects:
             raise _fail(f"{rel}/tools/{name}")
 
 
@@ -76,28 +81,32 @@ def load_effect_maps(root: Path) -> dict:
 
 
 def classify_tool(maps: dict, runtime: str, tool: str) -> list[str]:
-    """Worst-case canonical effects of a native tool; unmapped fails closed."""
+    """Worst-case canonical effects of a native tool; unmapped fails closed.
+
+    The result is the union of the exact entry and every matching prefix, so
+    adding a pattern can only widen a tool, never pick a weaker first match.
+    """
     doc = maps.get(runtime)
     if doc is None:
         raise _fail(f"runtime/{runtime}")
-    if tool in doc["tools"]:
-        return sorted(doc["tools"][tool])
+    effects = set(doc["tools"].get(tool, ()))
     for pattern in doc["patterns"]:
         if tool.startswith(pattern["prefix"]):
-            return sorted(pattern["effects"])
-    return [UNKNOWN_EFFECT]
+            effects.update(pattern["effects"])
+    return sorted(effects) if effects else [UNKNOWN_EFFECT]
 
 
-def effect_disposition(state: str) -> str:
+def effect_disposition(state: str | None) -> str:
     """Disposition of one effect from the surface capability state.
 
     No branch allows: even NATIVE/ADAPTED is only a gated candidate until
     operational evidence exists (AVAILABLE != VERIFIED != SUPPORTED).
     CANDIDATE_GATED is an extension of the three outcomes in spec SE-398 s5
     (UNSUPPORTED_FOR_EFFECT, DEGRADED_SAFE, human reroute): it claims no support
-    and is the weakest value, never an allow.
+    and is the weakest value, never an allow. A state outside the F1 vocabulary
+    (typo, missing) is the strictest outcome, not a degradation.
     """
-    if state == "UNSUPPORTED":
+    if state not in STATE_RANK or state == "UNSUPPORTED":
         return "UNSUPPORTED_FOR_EFFECT"
     if state == "EMULATED":
         return "REROUTE_HUMAN"
@@ -108,7 +117,7 @@ def effect_disposition(state: str) -> str:
 
 def surface_dispositions(manifests: dict, surface_id: str) -> dict:
     caps = resolve_surface(manifests, surface_id)["capabilities"]
-    return {e: (effect_disposition(caps[e]) if e in CRITICAL_EFFECTS else "NOT_CRITICAL")
+    return {e: (effect_disposition(caps.get(e)) if e in CRITICAL_EFFECTS else "NOT_CRITICAL")
             for e in EFFECTS}
 
 
