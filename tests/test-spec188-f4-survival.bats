@@ -114,3 +114,143 @@ print('fixes_total:', d['fixes_total'])
   grep -q "month: ${TEST_MONTH}" "$REPORT"
   grep -q "report_type:" "$REPORT"
 }
+
+# ── Comportamiento con repositorio git sintético (SE-456) ─────────────────────
+
+fs_repo() {
+  FSR="$(mktemp -d)"
+  git -C "$FSR" init -q -b main
+  git -C "$FSR" config user.email t@example.org
+  git -C "$FSR" config user.name t
+  git -C "$FSR" config commit.gpgsign false
+  echo base > "$FSR/f.txt"
+  git -C "$FSR" add f.txt
+  git -C "$FSR" commit -q -m "chore: base"
+}
+
+fs_commit() {  # fs_commit "<asunto>"
+  echo "$RANDOM$RANDOM" >> "$FSR/f.txt"
+  git -C "$FSR" commit -q -am "$1"
+}
+
+fs_run() { CLAUDE_PROJECT_DIR="$FSR" run bash "$SURVIVAL_SCRIPT" "$@"; }
+
+@test "SPEC-188 F4: solo cuentan commits fix(, fix:, hotfix y bugfix; el resto no" {
+  fs_repo
+  fs_commit "fix: uno"
+  fs_commit "fix(core): dos"
+  fs_commit "hotfix: tres"
+  fs_commit "bugfix(x): cuatro"
+  fs_commit "feat: nueva cosa"
+  fs_commit "chore: fix de estilo en medio"
+  fs_commit "docs: prefix fixed"
+  fs_run --json --days 7
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .fixes_total <<<"$output")" -eq 4 ]
+  [ "$(jq -r .fixes_survived <<<"$output")" -eq 4 ]
+  [ "$(jq -r .survival_rate <<<"$output")" = "1.0" ]
+  [ "$(jq -c .reverted <<<"$output")" = "[]" ]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: un fix revertido con git revert no sobrevive y se lista con su SHA corto" {
+  fs_repo
+  fs_commit "fix: bueno"
+  fs_commit "fix: malo"
+  bad="$(git -C "$FSR" rev-parse HEAD)"
+  git -C "$FSR" revert --no-edit HEAD >/dev/null
+  fs_run --json --days 7
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .fixes_total <<<"$output")" -eq 2 ]
+  [ "$(jq -r .fixes_survived <<<"$output")" -eq 1 ]
+  [ "$(jq -r .survival_rate <<<"$output")" = "0.5" ]
+  [ "$(jq -r '.reverted|length' <<<"$output")" -eq 1 ]
+  [ "$(jq -r '.reverted[0].commit' <<<"$output")" = "${bad:0:7}" ]
+  [ "$(jq -r '.reverted[0].subject' <<<"$output")" = "fix: malo" ]
+  [ "$(jq -r '.reverted[0].reason' <<<"$output")" = "revert detected" ]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: la tasa de supervivencia se redondea a 4 decimales (2 de 3)" {
+  fs_repo
+  fs_commit "fix: a"
+  fs_commit "fix: b"
+  fs_commit "fix: c"
+  git -C "$FSR" revert --no-edit HEAD >/dev/null
+  fs_run --json --days 7
+  [ "$(jq -r .survival_rate <<<"$output")" = "0.6667" ]
+  [ "$(jq -r .fixes_survived <<<"$output")" -eq 2 ]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: asunto del fix con comillas no rompe el JSON del revertido" {
+  fs_repo
+  fs_commit 'fix: arregla "el" caso'
+  git -C "$FSR" revert --no-edit HEAD >/dev/null
+  fs_run --json --days 7
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.reverted[0].subject' <<<"$output")" = 'fix: arregla "el" caso' ]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: sin commits fix la tasa es 1.0 y el total 0" {
+  fs_repo
+  fs_commit "feat: algo"
+  fs_run --json --days 7
+  [ "$(jq -r .fixes_total <<<"$output")" -eq 0 ]
+  [ "$(jq -r .survival_rate <<<"$output")" = "1.0" ]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: --branch limita la búsqueda a esa rama" {
+  fs_repo
+  git -C "$FSR" checkout -q -b otra
+  fs_commit "fix: solo en otra"
+  git -C "$FSR" checkout -q main
+  fs_run --json --days 7 --branch main
+  [ "$(jq -r .fixes_total <<<"$output")" -eq 0 ]
+  fs_run --json --days 7 --branch otra
+  [ "$(jq -r .fixes_total <<<"$output")" -eq 1 ]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: salida de texto con resumen, periodo y lista de revertidos" {
+  fs_repo
+  fs_commit "fix: bueno"
+  fs_commit "fix: malo"
+  git -C "$FSR" revert --no-edit HEAD >/dev/null
+  fs_run --days 3
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Fix Survival Report"* ]]
+  [[ "$output" == *"last 3 days"* ]]
+  [[ "$output" == *"Fixes:    1/2 survived"* ]]
+  [[ "$output" == *"Rate:     0.5"* ]]
+  [[ "$output" == *"Reverted:"* ]]
+  [[ "$output" == *"fix: malo"* ]]
+}
+
+@test "SPEC-188 F4: salida de texto sin revertidos no imprime la sección Reverted" {
+  fs_repo
+  fs_commit "fix: bueno"
+  fs_run
+  [[ "$output" == *"Fixes:    1/1 survived"* ]]
+  [[ "$output" != *"Reverted:"* ]]
+  rm -rf "$FSR"
+}
+
+@test "SPEC-188 F4: fuera de un repositorio git sale con 1 y error JSON" {
+  d="$(mktemp -d)"
+  CLAUDE_PROJECT_DIR="$d" run bash "$SURVIVAL_SCRIPT" --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not a git repository"* ]]
+  rm -rf "$d"
+}
+
+@test "SPEC-188 F4: days_back y la semana ISO salen en el JSON" {
+  fs_repo
+  fs_run --json --days 14
+  [ "$(jq -r .days_back <<<"$output")" -eq 14 ]
+  [[ "$(jq -r .week <<<"$output")" =~ ^[0-9]{4}-W[0-9]{2}$ ]]
+  [[ "$(jq -r .checked_at <<<"$output")" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$ ]]
+  rm -rf "$FSR"
+}

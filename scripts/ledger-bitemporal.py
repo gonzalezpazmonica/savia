@@ -127,12 +127,20 @@ def emit_receipt(action, actor, gate="savia-ledger"):
         print(f"WARN: receipt fallo: {exc}", file=sys.stderr)
 
 
+def _check_interval(valid_from, valid_to):
+    """El ledger no se reescribe: un intervalo invertido quedaría para siempre
+    (y --validate lo rechazaría), así que se corta antes de escribir."""
+    if valid_to not in (None, "null") and valid_to < valid_from:
+        raise ValueError(f"valid_to ({valid_to}) anterior a valid_from ({valid_from})")
+
+
 def build_fact(rows, args):
     if not _is_date(args.valid_from):
         raise ValueError(f"--valid-from debe ser YYYY-MM-DD: {args.valid_from}")
     if args.valid_to is not None and args.valid_to != "null":
         if not _is_date(args.valid_to):
             raise ValueError(f"--valid-to debe ser YYYY-MM-DD o null: {args.valid_to}")
+    _check_interval(args.valid_from, args.valid_to)
     if args.source not in ("agent", "human"):
         raise ValueError(f"--source debe ser agent|human: {args.source}")
     evidence = json.loads(args.evidence_json) if args.evidence_json else []
@@ -187,6 +195,11 @@ def cmd_correct(args):
     new["valid_from"] = args.valid_from or target["valid_from"]
     if args.valid_to is not None:
         new["valid_to"] = None if args.valid_to == "null" else args.valid_to
+    if not _is_date(new["valid_from"]):
+        raise ValueError(f"--valid-from debe ser YYYY-MM-DD: {new['valid_from']}")
+    if new["valid_to"] is not None and not _is_date(new["valid_to"]):
+        raise ValueError(f"--valid-to debe ser YYYY-MM-DD o null: {new['valid_to']}")
+    _check_interval(new["valid_from"], new["valid_to"])
     new["asserted_at"] = superseded
     new["superseded_at"] = None
     new["supersedes"] = target["fact_id"]
