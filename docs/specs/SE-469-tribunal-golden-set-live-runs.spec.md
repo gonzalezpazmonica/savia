@@ -59,6 +59,7 @@ Nadie sabe cuánto acierta un juez que influye en los merges.
 | AC4 | BATS: al superar `--budget-usd` (coste simulado) sale con código ≠0 y conserva los resultados parciales. |
 | AC5 | El informe da el IC95 de Wilson por tribunal; con n < 30 en un tribunal advierte que el dato no es decisorio para el kill criterion. |
 | AC6 | Misma semilla → misma muestra (test determinista). |
+| AC7 | Criterio de salida heredado de SE-468 AC7 (decisión de la operadora 2026-10-26): conectado el ejecutor, la fixture saboteada de SE-468 S3 (artefacto vacío o saboteado de `pbi-decomposition`) da `findings` en el gate de evals; si da `unknown` o `clean`, SE-469 no se cierra. Negativo: el mismo test con el artefacto íntegro no da `findings` por sabotaje. |
 
 ## Kill criterion y decisión posterior
 

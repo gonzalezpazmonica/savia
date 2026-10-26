@@ -17,9 +17,9 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: protege cada PR de la cola; esfuerzo: slice pequeño (S).
 
 - **S18 · P0 · fase A** — Evals que pueden fallar
-  Acción: SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que debe dar findings.
+  Acción: SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que impide declarar evaluado un dataset (AC7 condicional; el findings con sabotaje es criterio de salida de SE-469).
   Entrada: SE-468 ya APPROVED (operadora, 2026-10-26); falta la decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.
-  Salida: Con la skill saboteada el gate no da PASS; modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo.
+  Salida: Con la skill saboteada el gate nunca da PASS ni declara el dataset evaluado: sin ejecutor real el resultado es unknown (AC7 condicional, decisión de la operadora 2026-10-26); modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469; esfuerzo: slice pequeño (S).
 
 - **S02 · P0 · fase A** — Seguridad, evidencia y cierre de Vaults/Files

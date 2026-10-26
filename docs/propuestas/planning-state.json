@@ -1576,14 +1576,14 @@
           "SE-468"
         ],
         "title": "Evals que pueden fallar",
-        "action": "SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que debe dar findings.",
+        "action": "SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que impide declarar evaluado un dataset (AC7 condicional; el findings con sabotaje es criterio de salida de SE-469).",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
         "dependency_value": "quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469",
         "effort": "slice pequeño (S)",
         "prerequisites": "SE-468 ya APPROVED (operadora, 2026-10-26); falta la decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.",
-        "done": "Con la skill saboteada el gate no da PASS; modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo."
+        "done": "Con la skill saboteada el gate nunca da PASS ni declara el dataset evaluado: sin ejecutor real el resultado es unknown (AC7 condicional, decisión de la operadora 2026-10-26); modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo."
       },
       {
         "id": "S02",
