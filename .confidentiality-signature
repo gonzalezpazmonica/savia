@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=4f4cbdd547902126034c1726cc3600506e5c83f3d444627dcd37d832445f71f3
-timestamp=2026-10-25T13:23:28Z
-branch=agent/codeql-triage-20261023
-head_commit=de654a06
-signature=56f54be6a9566fd06e674842c43a7d25ddcff8f3c99a0cab4adcc2e3c4cf3f37
+diff_hash=2952fa2c2874335d286d22401ac95912830f5482a933f9e5ddc2cb4520ef0395
+timestamp=2026-10-26T21:48:00Z
+branch=agent/tesis-specs-20261023
+head_commit=60653dac2
+signature=0b73f6a432485e0d909b65387ca6cb76368e4b057da84513471199baadd931f9
