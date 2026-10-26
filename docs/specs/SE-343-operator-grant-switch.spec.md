@@ -37,12 +37,30 @@ created_at: 2026-08-24
 > autorización de merge-sprint, que registra la pregunta y la respuesta literales de la operadora, la
 > sesión y el hash. Un grant sin ese registro dejará de bastar para `push-pr.sh --merge`. Ver `docs/specs/SE-433-merge-sprint.spec.md` §2.11. Pendiente de spec propia.
 >
-> **Arreglo P1 (2026-10-26, decisión de la operadora):** `grant --scope merge` ya no se emite sin
-> prueba de persona. Exige la terminal de la operadora (`source: tty`) o el ticket de un solo uso que
-> deja `operator-grant.sh guard` al pedir el diálogo de permisos del arnés
-> (`source: harness-ask`), y el grant se firma con HMAC-SHA256 (patrón Yema F4). `check` rechaza un
-> grant de merge sin firma válida. El `source` deja de ser un literal. Detalle:
+> **Arreglo P1 (2026-10-26/27, decisiones de la operadora):** `grant --scope merge` ya no se emite sin
+> ella. Savia solo deja una petición canónica; la operadora la firma con su clave ed25519 privada (móvil
+> o Savia Space, nunca en el equipo de los agentes) y `check` verifica la firma con `ssh-keygen -Y verify`
+> contra la clave pública versionada en `config/operator-grant-signers`. Sustituye al HMAC con clave
+> local de la primera versión de la PR #1401. Detalle y alta de la clave:
 > `docs/rules/domain/autonomous-safety-merge-grant.md`.
+>
+> **Registro del hook (pendiente de la orquestadora, fichero protegido):** añadir a
+> `hooks.PreToolUse` de `.claude/settings.json` este bloque exacto:
+>
+> ```json
+> {
+>   "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
+>   "hooks": [
+>     {
+>       "type": "command",
+>       "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/operator-grant.sh guard",
+>       "timeout": 5,
+>       "statusMessage": "SE-343: protegiendo la raíz de confianza del grant de merge..."
+>     }
+>   ],
+>   "_comment": "SE-343 LAW-HUMAN-002: veta modificar config/operator-grant-signers"
+> }
+> ```
 
 ## 1. Origen y problema
 
