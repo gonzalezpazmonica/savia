@@ -144,8 +144,16 @@ que en Codex.
 
 Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime
 (requiere decisión de la operadora sobre revisión de política y confianza del
-daemon) y la divergencia restante del matcher de OpenCode, que además prueba el
-payload serializado como candidato (Python solo lo hace sin nombre de herramienta).
+daemon).
+
+El matcher de OpenCode usa ya los mismos candidatos que el núcleo Python: nombre de
+herramienta y, con comando, `Tool(cmd)`, `Tool:cmd` y `Tool cmd`; el payload serializado
+solo cuando no hay herramienta. Antes probaba siempre el payload: en 40 de 168 pares
+matcher × llamada (entradas que nombran otras herramientas) corrían hooks solo en OpenCode,
+p.ej. los de `Bash` con un `Read` de `docs/Bash-notes.md` o `Bash(git commit*)` con una
+búsqueda MCP. Ahora 0 (`test_tool_inputs_that_name_other_tools_select_the_same_hooks`).
+Sigue igual en los dos, y no se ha decidido cambiarlo: la búsqueda es sin anclar y sin
+mayúsculas, así que `Edit|Write` también corre en un `Bash` cuyo comando contiene «write».
 
 ### Rutas protegidas desde `bash`
 
