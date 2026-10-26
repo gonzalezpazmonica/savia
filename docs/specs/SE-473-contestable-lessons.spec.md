@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-27
+approved_by: "operadora, AskUserQuestion 2026-10-27 (alcance aprobado: solo S0 (medición; puede cerrar la spec))"
 priority: P2
 developer_type: agent-single
 created: 2026-10-26

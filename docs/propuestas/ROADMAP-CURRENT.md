@@ -156,3 +156,8 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-455 [APPROVED] Ingeniería inversa para la soberanía tecnológica: REA como herramienta externa opcional con puerta de autorización — evidencia: docs/specs/SE-455-reverse-engineering-sovereignty.spec.md
 - SE-456 [APPROVED] Tests que no pueden fallar: detector de vacuidad y criterio de evidencia de REA en la QA — evidencia: docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md
 - SE-468 [APPROVED] El gate de evals debe poder fallar — evidencia: docs/specs/SE-468-honest-evals-gate.spec.md
+- SE-469 [APPROVED] Tribunales medidos con sus propios golden sets — evidencia: docs/specs/SE-469-tribunal-golden-set-live-runs.spec.md
+- SE-470 [APPROVED] Integridad de los artefactos de evaluación — evidencia: docs/specs/SE-470-eval-artifact-integrity.spec.md
+- SE-471 [APPROVED] Relevo nocturno con evidencia: declarado, validado y aceptado — evidencia: docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md
+- SE-472 [APPROVED] Vigencia de la autoridad comprobada antes de cada tarea nocturna — evidencia: docs/specs/SE-472-overnight-per-task-authority-check.spec.md
+- SE-473 [APPROVED] Lecciones contrastables: ámbito, evidencia, revalidación y refutación — evidencia: docs/specs/SE-473-contestable-lessons.spec.md

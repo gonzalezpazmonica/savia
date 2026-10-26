@@ -1449,48 +1449,53 @@
     },
     {
       "id": "SE-469",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Tribunales medidos con sus propios golden sets",
       "note": "150 casos esperados (50 por tribunal) solo validados por esquema; ningún script los ejecuta y el registro FP/FN no tiene datos reales. Primer uso: 30 casos con tope de gasto.",
       "evidence": "docs/specs/SE-469-tribunal-golden-set-live-runs.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-470",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Integridad de los artefactos de evaluación",
       "note": "Sello SPEC-188-P3 solo en cliente (Edit|Write, 5 ficheros); golden sets y baselines sin sellar; 5 commits desde 2026-07-01 tocaron ficheros sellados sin marca. Sube a P1 si la auditoría de trazas encuentra eventos.",
       "evidence": "docs/specs/SE-470-eval-artifact-integrity.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-471",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Relevo nocturno con evidencia: declarado, validado y aceptado",
       "note": "159 marcas de fin de referencia, 21 % no OK; el OK es autodeclarado y el ledger SE-349 tiene 3 entradas. Script de solo lectura con tope de decisiones y kill criterion.",
       "evidence": "docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-472",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Vigencia de la autoridad comprobada antes de cada tarea nocturna",
       "note": "overnight-sprint-loop.sh no vuelve a comprobar grants entre tareas; operator-grant.sh check ya existe y solo lo usa push-pr.sh.",
       "evidence": "docs/specs/SE-472-overnight-per-task-authority-check.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-473",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Lecciones contrastables: ámbito, evidencia, revalidación y refutación",
       "note": "Ninguna lección declara ámbito ni refutación; MAX_LESSON_AGE_DAYS=90 declarado en lesson-pipeline.sh y sin uso. S0 mide y puede cerrar la spec.",
       "evidence": "docs/specs/SE-473-contestable-lessons.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion (alcance aprobado: solo S0 (medición; puede cerrar la spec))"
     }
   ],
   "route": {
