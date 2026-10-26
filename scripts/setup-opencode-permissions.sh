@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
-# setup-claude-permissions.sh — Genera settings.local.json con permisos recomendados
+# setup-opencode-permissions.sh — Genera settings.local.json con permisos recomendados
 #
 # Uso:
-#   bash scripts/setup-claude-permissions.sh          # genera si no existe
-#   bash scripts/setup-claude-permissions.sh --force   # regenera (backup previo)
-#   bash scripts/setup-claude-permissions.sh --check   # solo valida
+#   bash scripts/setup-opencode-permissions.sh          # genera si no existe
+#   bash scripts/setup-opencode-permissions.sh --force   # regenera (backup previo)
+#   bash scripts/setup-opencode-permissions.sh --check   # solo valida
 #
 # Salida: .claude/settings.local.json
 #
@@ -89,7 +89,7 @@ if [[ "${1:-}" == "--check" ]]; then
     fi
   else
     warn "settings.local.json does not exist"
-    echo "     Run: bash scripts/setup-claude-permissions.sh"
+    echo "     Run: bash scripts/setup-opencode-permissions.sh"
     exit 1
   fi
 fi

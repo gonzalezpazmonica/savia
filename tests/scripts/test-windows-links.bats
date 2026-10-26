@@ -4,6 +4,7 @@
 # extraen como ficheros de texto y el script los materializa como junction o
 # hard link. Los casos que crean enlaces solo corren en Windows (Git Bash);
 # fuera de Windows se comprueba que el script es un no-op.
+# Ref: CHANGELOG.d/windows-textlinks.md
 
 SCRIPT="$BATS_TEST_DIRNAME/../../scripts/windows-links.sh"
 
@@ -43,6 +44,10 @@ teardown() {
   rm -rf "$TMP"
 }
 
+@test "script usa set -uo pipefail" {
+  head -25 "$SCRIPT" | grep -q "set -uo pipefail"
+}
+
 @test "fuera de Windows es un no-op con exit 0" {
   on_windows && skip "solo fuera de Windows"
   run bash "$REPO/scripts/windows-links.sh" repair
@@ -51,12 +56,13 @@ teardown() {
   [ -f "$REPO/.opencode/hooks" ] || [ -L "$REPO/.opencode/hooks" ]
 }
 
-@test "argumento desconocido devuelve exit 2" {
+@test "invalid: argumento desconocido devuelve exit 2" {
   run bash "$REPO/scripts/windows-links.sh" borrar
   [ "$status" -eq 2 ]
 }
 
 @test "check detecta textlinks pendientes sin modificar nada" {
+  # ejercita: read_text, say
   on_windows || skip "requiere Windows"
   run bash "$REPO/scripts/windows-links.sh" check
   [ "$status" -eq 1 ]
@@ -66,6 +72,7 @@ teardown() {
 }
 
 @test "repair materializa directorio y fichero y deja git status limpio" {
+  # ejercita: normalize, physical_dir, inside_root, win_cmd (mklink /J y /H)
   on_windows || skip "requiere Windows"
   run bash "$REPO/scripts/windows-links.sh" repair
   [ "$status" -eq 0 ]
@@ -86,6 +93,7 @@ teardown() {
 }
 
 @test "junction que apunta a otro clon se reapunta al destino del repo" {
+  # ejercita: physical_dir sobre la junction, win_cmd rmdir
   on_windows || skip "requiere Windows"
   mkdir -p "$TMP/otro-clon/hooks"
   rm -f "$REPO/.opencode/hooks"
@@ -98,7 +106,8 @@ teardown() {
   [ -d "$TMP/otro-clon/hooks" ]
 }
 
-@test "destino que escapa del repositorio se rechaza sin crear enlace" {
+@test "reject: destino que escapa del repositorio no crea enlace" {
+  # ejercita: normalize + inside_root, conflict
   on_windows || skip "requiere Windows"
   mkdir -p "$TMP/fuera"
   add_link .opencode/escape ../../fuera
@@ -110,7 +119,8 @@ teardown() {
   [ ! -L "$REPO/.opencode/escape" ]
 }
 
-@test "fichero con contenido ajeno en la ruta del enlace no se sobrescribe" {
+@test "block: fichero con contenido ajeno en la ruta del enlace no se sobrescribe" {
+  # ejercita: read_text, conflict
   on_windows || skip "requiere Windows"
   git -C "$REPO" update-index --skip-worktree -- .opencode/C.md
   printf 'notas locales\n' > "$REPO/.opencode/C.md"
@@ -118,4 +128,63 @@ teardown() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"CONFLICT .opencode/C.md"* ]]
   [ "$(cat "$REPO/.opencode/C.md")" = "notas locales" ]
+}
+
+@test "reject: destino absoluto registrado en git no crea enlace" {
+  on_windows || skip "requiere Windows"
+  # ejercita: valid_target, conflict
+  add_link .opencode/abs /etc
+  git -C "$REPO" commit -qm abs
+  git -C "$REPO" checkout -q -- .opencode/abs
+  run bash "$REPO/scripts/windows-links.sh" repair
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"CONFLICT .opencode/abs: destino no permitido"* ]]
+  [ ! -L "$REPO/.opencode/abs" ]
+}
+
+@test "reject: destino con backslash o unidad de Windows no crea enlace" {
+  on_windows || skip "requiere Windows"
+  # ejercita: valid_target
+  add_link .opencode/bs '..\.claude\hooks'
+  add_link .opencode/drv 'C:/Windows'
+  git -C "$REPO" commit -qm bs
+  git -C "$REPO" checkout -q -- .opencode/bs .opencode/drv
+  run bash "$REPO/scripts/windows-links.sh" repair
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"CONFLICT .opencode/bs: destino no permitido"* ]]
+  [[ "$output" == *"CONFLICT .opencode/drv: destino no permitido"* ]]
+}
+
+@test "empty: repositorio sin enlaces registrados termina en exit 0" {
+  on_windows || skip "requiere Windows"
+  local plain="$TMP/plain"
+  mkdir -p "$plain/scripts"
+  cp "$SCRIPT" "$plain/scripts/windows-links.sh"
+  git -C "$plain" init -q
+  run bash "$plain/scripts/windows-links.sh" check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"sin enlaces en el índice"* ]]
+}
+
+@test "nonexistent: destino inexistente se omite con SKIP y sin error" {
+  on_windows || skip "requiere Windows"
+  add_link .opencode/fantasma ../no-existe
+  git -C "$REPO" commit -qm fantasma
+  git -C "$REPO" checkout -q -- .opencode/fantasma
+  bash "$REPO/scripts/windows-links.sh" repair --quiet
+  run bash "$REPO/scripts/windows-links.sh" check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SKIP     .opencode/fantasma: destino inexistente"* ]]
+  [ -f "$REPO/.opencode/fantasma" ]
+}
+
+@test "boundary: repositorio en una ruta con espacios se repara igual" {
+  on_windows || skip "requiere Windows"
+  local spaced="$TMP/con espacio"
+  mkdir -p "$spaced"
+  mv "$REPO" "$spaced/repo"
+  REPO="$spaced/repo"
+  run bash "$REPO/scripts/windows-links.sh" repair
+  [ "$status" -eq 0 ]
+  [ "$(cat "$REPO/.opencode/hooks/h.sh")" = "echo hook" ]
 }

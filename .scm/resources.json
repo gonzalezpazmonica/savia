@@ -1,6 +1,6 @@
 {
-  "hash": "a83cd383a47e",
-  "total": 1451,
+  "hash": "f4b6f391343f",
+  "total": 1450,
   "resources": [
     {
       "category": "analysis",
@@ -4730,31 +4730,17 @@
     },
     {
       "category": "development",
-      "name": "setup-claude-permissions",
-      "intents": [
-        "backward",
-        "compatibility",
-        "deprecated",
-        "file",
-        "instead"
-      ],
-      "kind": "script",
-      "path": "scripts/setup-claude-permissions.sh",
-      "description": "DEPRECATED: use setup-opencode-permissions.sh instead. This file kept for backward compatibility."
-    },
-    {
-      "category": "development",
       "name": "setup-opencode-permissions",
       "intents": [
-        "claude",
         "json",
         "local",
+        "opencode",
         "permisos",
         "permissions"
       ],
       "kind": "script",
       "path": "scripts/setup-opencode-permissions.sh",
-      "description": "setup-claude-permissions.sh — Genera settings.local.json con permisos recomendados"
+      "description": "setup-opencode-permissions.sh — Genera settings.local.json con permisos recomendados"
     },
     {
       "category": "development",

@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: e8c93f32c17b | resources: 1451
-> 295 commands · 139 skills · 90 agents · 927 scripts
+> hash: 54c655cdebf4 | resources: 1450
+> 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -361,8 +361,7 @@
 [development] semantic-compact — compact,generator,semantic,smart,spec — script:scripts/semantic-compact.sh
 [development] semantic-map — code,compressed,files,generate,maps — script:scripts/semantic-map.sh
 [development] sentinel-regen — docs,domain,regen,rules,safe — script:scripts/sentinel-regen.sh
-[development] setup-claude-permissions — backward,compatibility,deprecated,file,instead — script:scripts/setup-claude-permissions.sh
-[development] setup-opencode-permissions — claude,json,local,permisos,permissions — script:scripts/setup-opencode-permissions.sh
+[development] setup-opencode-permissions — json,local,opencode,permisos,permissions — script:scripts/setup-opencode-permissions.sh
 [development] setup-savia-web — build,http,localhost,savia,serve — script:scripts/setup-savia-web.sh
 [development] skill-listing-overrides — claude,code,listing,load,overrides — script:scripts/skill-listing-overrides.sh
 [development] skill-loader — aware,context,loader,loading,skill — script:scripts/skill-loader.sh

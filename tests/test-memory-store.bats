@@ -447,7 +447,7 @@ jsonl_valid() {
   [[ "$status" -eq 0 ]]
   run jsonl_valid "$TMPDIR_MS/output/.memory-store.jsonl"
   [[ "$status" -eq 0 ]]
-  grep -qF '"title":"ruta C:\Users\x \"citada\""' "$TMPDIR_MS/output/.memory-store.jsonl"
+  grep -qF '"title":"ruta C:\\Users\\x \"citada\""' "$TMPDIR_MS/output/.memory-store.jsonl"
 }
 
 @test "upsert sobre contenido con comillas escapadas mantiene supersedes válido" {
@@ -455,5 +455,5 @@ jsonl_valid() {
   bash "$SCRIPT" save --type discovery --title 'mismo tema' --content 'v2 distinta' --source user:explicit
   run jsonl_valid "$TMPDIR_MS/output/.memory-store.jsonl"
   [[ "$status" -eq 0 ]]
-  grep -qF '"supersedes":"v1 \"citada\" C:\a"' "$TMPDIR_MS/output/.memory-store.jsonl"
+  grep -qF '"supersedes":"v1 \"citada\" C:\\a"' "$TMPDIR_MS/output/.memory-store.jsonl"
 }
