@@ -110,7 +110,11 @@ tools: [Read, Write, Edit, Bash, Glob, Grep]
 
 ## Validacion
 
-Script `scripts/validate-agent-permissions.sh` verifica que tools del agente coincide con su nivel declarado. Mismatch = WARNING.
+Script `scripts/validate-agent-permissions.sh` verifica las tools del agente contra su nivel declarado (el nivel es un máximo):
+
+- Tool **por encima** del nivel (exceso) = ERROR, exit 1, con agente y tool.
+- Tool del nivel no declarada = WARNING (tener menos es válido).
+- Excesos pendientes de decisión: línea base `docs/agent-permissions-excess-baseline.txt` (pares `agente tool`). Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el máximo. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
 
 ## Integracion con agent-policies.yaml
 

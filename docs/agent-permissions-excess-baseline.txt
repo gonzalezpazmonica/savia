@@ -1,0 +1,32 @@
+# Agent permission excess baseline (ratchet) — scripts/validate-agent-permissions.sh
+# One "agent tool" pair per line: a tool above the agent's permission_level
+# (docs/rules/domain/agent-permission-levels.md) pending an operator decision
+# (raise the level or drop the tool).
+# This list may only SHRINK: a pair that is no longer an excess fails the
+# validator (stale entry), and tests/test-validate-agent-permissions-excess.bats
+# caps the number of entries. Never add a pair to make CI green.
+context-dome-manager Bash
+context-dome-manager Skill
+context-dome-manager Task
+diagram-architect Edit
+diagram-architect Write
+excel-digest Bash
+excel-digest Task
+legal-compliance Bash
+meeting-digest Task
+memory-agent Bash
+model-upgrade-auditor Task
+model-upgrade-auditor Write
+pdf-digest Bash
+pdf-digest Task
+pptx-digest Bash
+pptx-digest Task
+recommendation-tribunal-orchestrator Bash
+recommendation-tribunal-orchestrator Task
+sdd-spec-writer Bash
+tech-writer Bash
+truth-tribunal-orchestrator Bash
+truth-tribunal-orchestrator Task
+visual-digest Bash
+word-digest Bash
+word-digest Task
