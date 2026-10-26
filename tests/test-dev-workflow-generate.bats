@@ -350,3 +350,147 @@ EOF
     echo "$last_access" | grep -qE "(^|[^0-9])${i}([^0-9]|$)"
   done
 }
+
+# ── Comportamiento: estructura exacta del workflow (SE-456) ───────────────────
+# Extrae un campo del paso N del YAML generado.
+step_field() {
+  local n="$1" field="$2"
+  echo "$output" | awk -v n="$n" -v f="$field" '
+    $1=="-" && $2=="id:" { cur=$3 }
+    cur==n && $1==f":" { sub(/^[^:]*:[ ]*/,""); print; exit }'
+}
+
+gen() {  # gen <nombre> <contenido> → deja el fichero en $spec y ejecuta
+  spec="$TMP_DIR/$1.md"
+  printf '%s\n' "$2" > "$spec"
+  run bash "$SCRIPT" --spec "$spec"
+}
+
+@test "flujo mínimo: architect → implementador dotnet → court, access_list encadenado" {
+  gen min $'---\nspec_id: SE-1\n---\nAdd a basic data listing endpoint.'
+  [ "$status" -eq 0 ]
+  [ "$(step_field 1 agent)" = "architect" ]
+  [ "$(step_field 1 access_list)" = "[]" ]
+  [ "$(step_field 2 agent)" = "dotnet-developer" ]
+  [ "$(step_field 2 access_list)" = "[1]" ]
+  [ "$(step_field 3 agent)" = "court-orchestrator" ]
+  [ "$(step_field 3 access_list)" = "[1, 2]" ]
+  [ -z "$(step_field 4 agent)" ]
+}
+
+@test "con security: security-guardian es el paso 1 bloqueante y architect depende de él" {
+  gen sec $'---\nspec_id: SE-2\n---\nJWT login with encrypt at rest.'
+  [ "$status" -eq 0 ]
+  [ "$(step_field 1 agent)" = "security-guardian" ]
+  [ "$(step_field 1 blocking)" = "true" ]
+  [ "$(step_field 2 agent)" = "architect" ]
+  [ "$(step_field 2 access_list)" = "[1]" ]
+  [ "$(step_field 3 access_list)" = "[1, 2]" ]
+  # solo el paso de seguridad es bloqueante
+  [ "$(echo "$output" | grep -c 'blocking: true')" -eq 1 ]
+}
+
+@test "negación: 'no security' no activa el paso de seguridad" {
+  gen nosec $'---\nspec_id: SE-3\n---\nThis feature has no security impact, just a listing.'
+  [ "$status" -eq 0 ]
+  [ "$(step_field 1 agent)" = "architect" ]
+  [[ "$output" != *"security-guardian"* ]]
+}
+
+@test "negación: 'without security' tampoco lo activa, pero 'security' a secas sí" {
+  gen without $'without security review this is plain.'
+  [[ "$output" != *"security-guardian"* ]]
+  gen plain $'Define the security model for the service.'
+  [[ "$output" == *"security-guardian"* ]]
+}
+
+@test "con tests y sin paralelo: test-engineer antes que el implementador, luego integración" {
+  gen tst $'---\nspec_id: SE-4\n---\n- [ ] AC-01 listing works'
+  [ "$status" -eq 0 ]
+  [ "$(step_field 1 agent)" = "architect" ]
+  [ "$(step_field 2 agent)" = "test-engineer" ]
+  [ "$(step_field 2 access_list)" = "[1]" ]
+  [ "$(step_field 3 agent)" = "dotnet-developer" ]
+  [ "$(step_field 3 access_list)" = "[1, 2]" ]
+  [ "$(step_field 4 agent)" = "dotnet-developer" ]
+  [ "$(step_field 4 access_list)" = "[2, 3]" ]
+  [ "$(step_field 5 agent)" = "court-orchestrator" ]
+  [ "$(step_field 5 access_list)" = "[1, 2, 3, 4]" ]
+  [ -z "$(step_field 3 parallel_with)" ]
+}
+
+@test "con tests y 'parallel': implementador y test-engineer se declaran paralelos entre sí" {
+  gen par $'- [ ] AC-01 listing\nThe two parts are independent and run in parallel.'
+  [ "$status" -eq 0 ]
+  [ "$(step_field 2 agent)" = "dotnet-developer" ]
+  [ "$(step_field 2 parallel_with)" = "[3]" ]
+  [ "$(step_field 3 agent)" = "test-engineer" ]
+  [ "$(step_field 3 parallel_with)" = "[2]" ]
+  [ "$(step_field 4 access_list)" = "[2, 3]" ]
+}
+
+@test "'parallel' sin tests no genera parallel_with" {
+  gen parnotest $'Independent modules, nothing else.'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"parallel_with"* ]]
+  [[ "$output" != *"test-engineer"* ]]
+}
+
+@test "detección de lenguaje: cada pista elige su agente implementador" {
+  gen py $'Implement a python script.';          [ "$(step_field 2 agent)" = "python-developer" ]
+  gen ts $'Build the angular component.';         [ "$(step_field 2 agent)" = "typescript-developer" ]
+  gen go $'Write it in golang.';                  [ "$(step_field 2 agent)" = "go-developer" ]
+  gen jv $'Use spring for the service.';          [ "$(step_field 2 agent)" = "java-developer" ]
+  gen rb $'A rails controller.';                  [ "$(step_field 2 agent)" = "ruby-developer" ]
+  gen rs $'Handler with axum.';                   [ "$(step_field 2 agent)" = "rust-developer" ]
+  gen ph $'A laravel migration.';                 [ "$(step_field 2 agent)" = "php-developer" ]
+}
+
+@test "el campo language del frontmatter manda sobre las pistas del cuerpo" {
+  gen fm $'---\nlanguage: Rust\n---\nThis mentions python everywhere.'
+  [ "$(step_field 2 agent)" = "rust-developer" ]
+}
+
+@test "metadatos: spec_id y title del frontmatter se vuelcan sin comillas dobles anidadas" {
+  gen meta $'---\nspec_id: "SE-77"\ntitle: "Mi título"\n---\nlisting'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'spec_id: "SE-77"'* ]]
+  [[ "$output" == *'title: "Mi título"'* ]]
+  [[ "$output" == *"spec_ref: \"$spec\""* ]]
+  [[ "$output" =~ generated_at:\ \"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z\" ]]
+}
+
+@test "sin frontmatter no se emiten spec_id ni title" {
+  gen nofm $'plain listing'
+  [[ "$output" != *"spec_id:"* ]]
+  [[ "$output" != *"title:"* ]]
+}
+
+@test "--output escribe el fichero, avisa por stderr y deja stdout vacío" {
+  spec="$TMP_DIR/o.md"; echo "listing" > "$spec"
+  run bash -c "bash '$SCRIPT' --spec '$spec' --output '$TMP_DIR/out.yaml' 2>'$TMP_DIR/err' >'$TMP_DIR/stdout'"
+  [ "$status" -eq 0 ]
+  [ ! -s "$TMP_DIR/stdout" ]
+  grep -q "Workflow written to: $TMP_DIR/out.yaml" "$TMP_DIR/err"
+  grep -q "^workflow:" "$TMP_DIR/out.yaml"
+  grep -q "agent: court-orchestrator" "$TMP_DIR/out.yaml"
+}
+
+@test "spec inexistente: sale con 1 y nombra la ruta" {
+  run bash "$SCRIPT" --spec "$TMP_DIR/no-existe.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"spec file not found: $TMP_DIR/no-existe.md"* ]]
+}
+
+@test "argumento desconocido: sale con 1 y muestra uso" {
+  run bash "$SCRIPT" --zzz
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unknown argument '--zzz'"* ]]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "sin --spec: sale con 1 y dice que es obligatorio" {
+  run bash "$SCRIPT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--spec is required"* ]]
+}
