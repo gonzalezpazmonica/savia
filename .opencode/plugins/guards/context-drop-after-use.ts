@@ -23,6 +23,7 @@
 // Empirical: probe SE-221 confirmed output.output mutation is observed by the LLM.
 
 import { extractToolName, extractFilePath, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
+import { bashExecutable } from "../lib/bash-runtime.ts";
 
 const MIN_LINES = Number(process.env.CONTEXT_DROP_MIN_LINES ?? "500");
 
@@ -62,7 +63,7 @@ async function runDropScript(filePath: string, nextTask: string): Promise<Verdic
     const script = dropScriptPath();
     const { spawn } = await import("node:child_process");
     return await new Promise<VerdictResult | null>((resolve) => {
-      const args = ["bash", script, "--json", "--path", filePath, "--next-task", nextTask];
+      const args = [bashExecutable(), script, "--json", "--path", filePath, "--next-task", nextTask];
       const child = spawn(args[0], args.slice(1), { stdio: ["ignore", "pipe", "ignore"] });
       let buf = "";
       child.stdout.on("data", (chunk) => { buf += String(chunk); });

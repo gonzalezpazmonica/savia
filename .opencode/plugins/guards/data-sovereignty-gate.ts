@@ -33,6 +33,7 @@ import {
   isN1Destination,
 } from "../lib/sovereignty-patterns.ts";
 import { posix } from "node:path";
+import { bashExecutable } from "../lib/bash-runtime.ts";
 
 // ── Daemon path REMOVED 2026-05-06 (OpenCode-native migration) ──────────
 // Shield daemons no longer run. Guard relies on inline regex + base64
@@ -148,7 +149,7 @@ export async function dataSovereigntyGate(
 
       const classOut = await new Promise<string>((resolve, reject) => {
         execFile(
-          "bash",
+          bashExecutable(),
           [classifyScript, "--context-path", normPath],
           { timeout: 15000, maxBuffer: 1024 * 20 },
           (err, stdout) => {
@@ -173,7 +174,7 @@ export async function dataSovereigntyGate(
         const dest = isN1Destination(normPath) ? "n1" : "n4";
         const dec = await new Promise<string>((resolve, reject) => {
           execFile(
-            "bash",
+            bashExecutable(),
             [decideScript, "--dest", dest],
             { timeout: 5000, maxBuffer: 1024 * 5, input: classOut },
             (err, stdout) => {

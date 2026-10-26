@@ -44,7 +44,13 @@ function basename(path: string): string {
 
 export type TddVerdict = { needsTest: boolean; nameNoExt: string; ext: string };
 
-export function tddGateForPath(filePath: string): TddVerdict {
+// Windows paths arrive with "\\"; the classifier and the walk-up use "/" only.
+function toSlash(path: string): string {
+  return path.replaceAll("\\", "/");
+}
+
+export function tddGateForPath(rawPath: string): TddVerdict {
+  const filePath = toSlash(rawPath);
   const e = ext(filePath);
   const bn = basename(filePath);
   const nameNoExt = bn.replace(new RegExp(`\\.${e}$`), "");
@@ -70,8 +76,9 @@ export function tddGateForPath(filePath: string): TddVerdict {
 export async function tddGate(input: ToolInput, output: ToolOutput): Promise<void> {
   const tool = extractToolName(input);
   if (tool !== "edit" && tool !== "write") return;
-  const filePath = extractFilePath(input, output);
-  if (!filePath) return;
+  const rawPath = extractFilePath(input, output);
+  if (!rawPath) return;
+  const filePath = toSlash(rawPath);
 
   const verdict = tddGateForPath(filePath);
   if (!verdict.needsTest) return;
