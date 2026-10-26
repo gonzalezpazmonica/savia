@@ -163,9 +163,17 @@ export function shellWritesGate(view: HookView, cwd: string, root: string): bool
   if (view.tool_name !== "Bash" || typeof command !== "string") return false
   try {
     return protectedTarget(command, cwd, root, PROTECTED_GATE_PATHS) !== null
-  } catch {
-    return PROTECTED_GATE_PATHS.some((rel) => command.includes(rel.split("/")[0]))
+  } catch (e) {
+    // Any other error denies, as an exception out of gates.py does in Codex (INVALID_EVENT).
+    if (!(e instanceof Error && e.message === "INVALID_EVENT")) return true
+    return PROTECTED_GATE_PATHS.some((rel) => command.includes(gateMark(rel)))
   }
+}
+
+/** Port of gates._gate_mark: a dot directory or the file itself names a gate; `scripts` alone does not. */
+function gateMark(rel: string): string {
+  const first = rel.split("/")[0]
+  return first.startsWith(".") || first === rel ? first : rel
 }
 
 export interface PreToolUseOutcome {

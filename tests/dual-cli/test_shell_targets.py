@@ -86,6 +86,64 @@ class ShellTargetCorpusTests(unittest.TestCase):
             self.assertEqual(got["hit"], "alias/tdd-gate.sh")
             self.assertIsNone(python_answer("echo x > aliasX/tdd-gate.sh", root, root)["hit"])
 
+    def test_unparseable_text_naming_only_a_plain_parent_is_not_a_gate(self):
+        """`scripts` alone names no gate; `scripts/dual-cli` and `.claude` do (PR #1391 review)."""
+        deny = lambda c: gates.shell_writes_gate({"tool_name": "Bash", "tool_input": {"command": c}}, "/w")
+        self.assertFalse(deny("ls scripts 'sin cerrar"))
+        self.assertTrue(deny("ls scripts/dual-cli 'sin cerrar"))
+        self.assertTrue(deny("ls .claude 'sin cerrar"))
+
+    def test_invalid_glob_range_is_invalid_not_allowed(self):
+        with self.assertRaises(ProtocolError):
+            shell_targets.protected_target("rm -rf [z-a]", "/w", "/w", gates.PROTECTED_PATHS)
+
+    def test_home_is_expanded_both_ways(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = os.path.realpath(tmp)
+            root = os.path.join(home, "repo")
+            saved = os.environ.get("HOME")
+            os.environ["HOME"] = home
+            try:
+                for command in ("rm -rf ~/repo/.claude", 'rm -rf "$HOME/repo/.claude"'):
+                    self.assertIsNotNone(python_answer(command, root, root)["hit"], command)
+                for command in ("rm -rf ~/.claude/hooks/x", 'rm -rf "$HOME/.claude/hooks/x"'):
+                    self.assertIsNone(python_answer(command, root, root)["hit"], command)
+            finally:
+                if saved is None:
+                    os.environ.pop("HOME")
+                else:
+                    os.environ["HOME"] = saved
+
+
+def gate_tree(tmp):
+    root = os.path.realpath(tmp)
+    os.makedirs(os.path.join(root, ".claude/hooks"))
+    os.makedirs(os.path.join(root, "docs"))
+    Path(root, ".claude/hooks/tdd-gate.sh").write_text("exit 2\n")
+    return root
+
+
+# Cases whose answer depends on the files on disk (gate_tree): find -name and cd to an unknown place.
+FS_CASES = [("find . -name '*.sh' -delete", True), ("find . -iname '*.SH' -exec rm -f {} +", True),
+            ("find . -name '*.pyc' -delete", False), ('cd "$D" && sed -i s/2/0/ tdd-gate.sh', True),
+            ('cd "$D" && rm -f other.sh', False), ("cd docs && rm -f tdd-gate.sh", False)]
+
+
+class ShellTargetFilesystemTests(unittest.TestCase):
+    def test_answers_that_read_the_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = gate_tree(tmp)
+            got = [python_answer(c, root, root)["hit"] is not None for c, _ in FS_CASES]
+            self.assertEqual(got, [want for _, want in FS_CASES])
+
+    def test_cwd_in_a_subdirectory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = gate_tree(tmp)
+            cwd = os.path.join(root, "docs")
+            self.assertIsNotNone(python_answer("rm -f ../.claude/hooks/tdd-gate.sh", cwd, root)["hit"])
+            self.assertIsNotNone(python_answer("cd .. && rm -f .claude/hooks/tdd-gate.sh", cwd, root)["hit"])
+            self.assertIsNone(python_answer("rm -f .claude/hooks/tdd-gate.sh", cwd, root)["hit"])
+
 
 @needs("bun")
 class ShellTargetParityTests(unittest.TestCase):
@@ -106,6 +164,24 @@ class ShellTargetParityTests(unittest.TestCase):
             self.assertEqual(ts_answers(cases, root, root), want)
             self.assertEqual([w["hit"] is not None for w in want], [True, True, True, False, False])
 
+    def test_same_tree_answers_in_opencode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = gate_tree(tmp)
+            cases = [{"command": c} for c, _ in FS_CASES]
+            want = [python_answer(c["command"], root, root) for c in cases]
+            self.assertEqual(ts_answers(cases, root, root), want)
+            self.assertEqual([w["hit"] is not None for w in want], [w for _, w in FS_CASES])
+            sub = os.path.join(root, "docs")
+            cases = [{"command": "cd .. && rm -f .claude/hooks/tdd-gate.sh"}, {"command": "rm -f .claude/hooks/x"}]
+            self.assertEqual(ts_answers(cases, sub, root), [python_answer(c["command"], sub, root) for c in cases])
+
+    def test_invalid_glob_and_plain_parent_in_opencode(self):
+        cases = [{"command": "rm -rf [z-a]"}, {"command": "ls scripts 'sin cerrar"},
+                 {"command": "ls scripts/dual-cli 'sin cerrar"}]
+        got = ts_answers(cases, "/w", "/w")
+        self.assertEqual(got, [python_answer(c["command"], "/w", "/w") for c in cases])
+        self.assertEqual([g["gate"] for g in got], [False, False, True])
+
 
 # Real-repo replay: the adapters of both CLIs with the hooks of .claude/settings.json.
 GATE_WRITES = ["echo '{}' > .claude/settings.json", "sed -i 's/exit 2/exit 0/' .claude/hooks/tdd-gate.sh",
@@ -113,10 +189,10 @@ GATE_WRITES = ["echo '{}' > .claude/settings.json", "sed -i 's/exit 2/exit 0/' .
 UNRELATED = ["ls -la", "cat .claude/settings.json"]
 
 
-def codex_hook(command, core=CORE):
+def codex_hook(command, core=CORE, sub=""):
     return subprocess.run([sys.executable, str(core / "codex-hook.py")], capture_output=True, timeout=120,
                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(core.parents[1])),
-                          input=json.dumps({"tool_name": "Bash", "cwd": str(core.parents[1]),
+                          input=json.dumps({"tool_name": "Bash", "cwd": str(core.parents[1] / sub),
                                             "tool_input": {"command": command}}).encode())
 
 
@@ -139,10 +215,22 @@ class ShellGateReplayTests(unittest.TestCase):
         self.assertEqual(got[:len(GATE_WRITES)], [[True, "PROTECTED_GATE_PATH"]] * len(GATE_WRITES))
         self.assertEqual([blocked for blocked, _ in got[len(GATE_WRITES):]], [False] * len(UNRELATED))
 
+    def test_relative_paths_from_a_subdirectory_cwd(self):
+        run = codex_hook("sed -i 's/exit 2/exit 0/' ../.claude/hooks/tdd-gate.sh", sub="docs")
+        self.assertEqual(run.returncode, 2, run.stderr)
+        self.assertIn(b"PROTECTED_GATE_PATH", run.stderr)
+        run = codex_hook("cd .. && git checkout -- .codex/hooks.json", sub="docs")
+        self.assertEqual(run.returncode, 2, run.stderr)
+        run = codex_hook("ls -la ..", sub="docs")
+        self.assertEqual(run.returncode, 0, run.stderr)
+
     def test_the_committed_core_before_this_change_let_them_through(self):
         """Red baseline: the core of e7224df97 (parent of this change) allowed the same commands."""
         base = "e7224df97"
         if subprocess.run(["git", "-C", str(ROOT), "cat-file", "-e", base], capture_output=True).returncode:
+            # A shallow clone has no baseline: in CI (strict) that is a failure, the red half cannot be skipped.
+            if os.environ.get("SAVIA_DUAL_CLI_STRICT") == "1":
+                self.fail(f"SAVIA_DUAL_CLI_STRICT=1 and baseline {base} not in this clone")
             self.skipTest("baseline commit not in this clone")
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "base.tar"

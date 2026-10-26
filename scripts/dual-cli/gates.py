@@ -271,7 +271,14 @@ def shell_writes_gate(payload, root):
     try:
         return protected_target(command, cwd, str(root), PROTECTED_PATHS) is not None
     except ProtocolError:
-        return any(rel.split("/")[0] in command for rel in PROTECTED_PATHS)
+        return any(_gate_mark(rel) in command for rel in PROTECTED_PATHS)
+
+
+def _gate_mark(rel):
+    """What names a gate location in text: its first component when that is a dot directory or the
+    file itself (`.claude`, `opencode.json`), the whole path otherwise (`scripts` alone is no gate)."""
+    first = rel.split("/")[0]
+    return first if first.startswith(".") or first == rel else rel
 
 
 def normalize_codex_pretool(payload):
