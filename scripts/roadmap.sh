@@ -190,6 +190,13 @@ case "$CMD" in
         ' "$STATE" >/dev/null 2>&1; then
           echo "FAIL: cola de sesiones inválida (IDs, fases, referencias o criterios)"; ERR=1
         fi
+        # 10. Una entrada no puede seguir pidiendo la aprobación de una spec ya aprobada.
+        STALE=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
+          | .route.session_plan[]? | .id as $s
+          | (.prerequisites // "" | [scan("[Aa]probación de (SE-[0-9]+)")[]] | .[])
+          | select($st[.] != null and ($st[.] | IN("IDEA","PROPOSED") | not))
+          | "\($s):\(.)=\($st[.])"' "$STATE" 2>/dev/null)
+        [[ -n "$STALE" ]] && { echo "FAIL: entrada de sesión pide aprobar una spec ya resuelta: $(echo $STALE)"; ERR=1; }
       fi
     fi
     [[ $ERR -eq 0 ]] && echo "PASS: planning state consistente"

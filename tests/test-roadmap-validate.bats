@@ -38,6 +38,28 @@ set_session_plan() {
   [[ "$output" == *"PASS: planning state consistente"* ]]
 }
 
+@test "validate rejects a session that still asks to approve an APPROVED spec" {
+  set_session_plan
+  jq '.route.session_plan[0].prerequisites="Aprobación de SE-375 y decisión D1"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"pide aprobar una spec ya resuelta: S01:SE-375=APPROVED"* ]]
+}
+
+@test "validate accepts a session asking to approve a PROPOSED spec" {
+  set_session_plan
+  jq '.initiatives[0].status="PROPOSED" | .route.session_plan[0].prerequisites="Aprobación de SE-375"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '%s\n' 'status: PROPOSED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '## 2026-09-05 SE-375 PROPOSED\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [[ "$output" != *"pide aprobar"* ]]
+  [ "$status" -eq 0 ]
+}
+
 @test "next identifies merged delivery as review work while keeping APPROVED" {
   set_session_plan
   jq '.initiatives[0].delivery={"merge_pr":42}' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"

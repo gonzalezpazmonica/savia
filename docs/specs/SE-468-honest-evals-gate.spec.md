@@ -45,8 +45,8 @@ el sitio donde la PR busca la señal «la skill no ha empeorado».
 
 | Slice | Entrega |
 |---|---|
-| S1 | **Resultado honesto.** Mientras el runner no ejecute el artefacto evaluado, cada dataset emite `result: unknown` con un hueco `gaps[].reason: not_executed` (contrato de SE-453; el motivo nuevo es la decisión D1). El paso de umbral distingue `clean`, `findings` y `unknown`, y `unknown` no se presenta como verde en el comentario de la PR. Un dataset sin baseline también da `unknown` (`reason: no_baseline`). |
-| S2 | **Sin placeholder.** Se elimina `score = 0.80`: el modo vivo sin juez ni ejecutor configurado sale con código ≠0 y un mensaje que nombra la variable que falta (fallo cerrado, `checker-fail-closed.md`). |
+| S1 | **Resultado honesto.** Mientras el runner no ejecute el artefacto evaluado, cada dataset emite `result: unknown` con un hueco `gaps[].reason: not_executed` (contrato de SE-453; el motivo nuevo es la decisión D1). El paso de umbral distingue `clean`, `findings` y `unknown`, y `unknown` no se presenta como verde en el comentario de la PR. Un dataset sin baseline también da `unknown` (`reason: no_baseline`). Si concurren varios motivos, `gaps[]` los lleva **todos** (orden fijo: `not_executed`, `no_baseline`); ninguno oculta a otro. |
+| S2 | **Sin placeholder.** Se elimina `score = 0.80`: el modo vivo sin juez ni ejecutor configurado sale con código ≠0 y un mensaje que nombra la variable que falta. Hoy el runner no lee ninguna; se introduce `EVALS_JUDGE_CMD` (orden que puntúa un caso; nombre provisional, se fija en la implementación y el test afirma ese nombre literal) (fallo cerrado, `checker-fail-closed.md`). |
 | S3 | **Prueba de sabotaje** (criterio de SE-456 para que un gate cuente como evidencia): fixture con el artefacto evaluado vacío o saboteado. El gate solo puede declarar un dataset como evaluado si esa fixture produce `findings`. |
 
 ## Fuera de alcance
@@ -59,11 +59,12 @@ el sitio donde la PR busca la señal «la skill no ha empeorado».
 
 | AC | Verificación |
 |---|---|
-| AC1 | BATS que falla antes del cambio: con el artefacto del dataset `pbi-decomposition` sustituido por uno vacío, el gate **no** devuelve PASS; devuelve `unknown` o `findings`. |
+| AC1 | BATS que falla antes del cambio (S1): con el artefacto del dataset `pbi-decomposition` sustituido por uno vacío, el gate **no** devuelve PASS; mientras no haya ejecución devuelve `unknown` con `not_executed`. Este AC solo prueba que el PASS vacuo desaparece; la capacidad de detectar la vacía la exige AC7. |
 | AC2 | BATS negativo: `evals-runner.sh` sin `--mock` y sin juez configurado sale con código ≠0 y el mensaje nombra la variable que falta. Hoy sale con 0 y nota 0,80. |
-| AC3 | BATS: un dataset sin baseline produce `result: unknown` con `reason: no_baseline`, nunca `threshold_pass: true`. |
+| AC3 | BATS: un dataset sin baseline produce `result: unknown` y `gaps[]` contiene `no_baseline` (en S1 junto a `not_executed`), nunca `threshold_pass: true`. |
 | AC4 | El JSON que consume el paso `github-script` contiene el resultado por dataset y el comentario de la PR muestra «no evaluado» para los `unknown` (test sobre el JSON, no sobre la UI). |
 | AC5 | Si el detector de vacuidad de SE-456 cubre workflows, clasifica el gate antiguo como vacuo y el nuevo como no vacuo; si no los cubre, se registra como cobertura no verificada (SE-444), sin afirmarlo. |
+| AC7 | S3, negativo: con la fixture saboteada, un dataset que el gate declara evaluado da `findings`; si la fixture saboteada no da `findings`, el gate no puede declarar ese dataset evaluado y sigue en `unknown`. `unknown` no satisface este AC. |
 | AC6 | Los tests existentes del runner (`tests/` que referencian `evals-runner.sh`) en verde, y `capability-entropy.py --check` PASS. |
 
 ## Riesgos

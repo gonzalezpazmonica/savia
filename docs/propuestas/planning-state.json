@@ -1528,7 +1528,7 @@
         {
           "on": "2026-10-26",
           "requested_by": "operadora, síntesis de tres tesis investigadas (evals, calendario y sprint nocturno, neuro-simbólica)",
-          "change": "Alta de SE-468..SE-473 (PROPOSED) y sesiones S18..S20; S18 (P0) tras S10 porque el gate de evals actual no puede fallar. Deltas en SE-449, SE-461 y SE-406 sin cambio de status. Gates, fases y límites WIP sin cambios."
+          "change": "Alta de SE-469..SE-473 (PROPOSED) y de SE-468 (APPROVED por la operadora en chat el 2026-10-26, «Aprobado SE-468»), y sesiones S18..S20; S18 (P0) tras S10 porque el gate de evals actual no puede fallar. Deltas en SE-449, SE-461 y SE-406 sin cambio de status. Gates, fases y límites WIP sin cambios."
         }
       ]
     },
@@ -1565,7 +1565,7 @@
         "value": "alto",
         "dependency_value": "protege cada PR de la cola",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.",
+        "prerequisites": "SE-442 ya APPROVED; falta la decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.",
         "done": "Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada."
       },
       {
@@ -1582,7 +1582,7 @@
         "value": "alto",
         "dependency_value": "quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-468 y decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.",
+        "prerequisites": "SE-468 ya APPROVED (operadora, 2026-10-26); falta la decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.",
         "done": "Con la skill saboteada el gate no da PASS; modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo."
       },
       {
@@ -1650,7 +1650,7 @@
         "value": "alto",
         "dependency_value": "hace honestos los cierres de S03 y S04",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-444; informe-only, compatible con lo ya integrado.",
+        "prerequisites": "SE-444 ya APPROVED; informe-only, compatible con lo ya integrado.",
         "done": "Informe de cobertura no verificada visible, predicado de cierre sin cambios (regresión a cero) y decisión explícita sobre pasar a bloqueo con datos de dos cierres reales."
       },
       {
@@ -1684,7 +1684,7 @@
         "value": "alto",
         "dependency_value": "hace cumplir autonomous-safety donde hoy es texto",
         "effort": "S1, S2 y S4 pequeños; S3 medio",
-        "prerequisites": "Aprobación de SE-445; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.",
+        "prerequisites": "SE-445 ya APPROVED; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.",
         "done": "Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4."
       },
       {
@@ -1701,7 +1701,7 @@
         "value": "alto",
         "dependency_value": "evita falsos verdes en los gates de los que dependen merge-sprint y la CI; alimenta la cobertura no verificada de SE-444",
         "effort": "S0, S1 y S2 pequeños; S3 medio",
-        "prerequisites": "Aprobación de SE-453 y decisión D1-D3; S2 probado en los dos frontends.",
+        "prerequisites": "SE-453 ya APPROVED; falta la decisión D1-D3; S2 probado en los dos frontends.",
         "done": "Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado."
       },
       {

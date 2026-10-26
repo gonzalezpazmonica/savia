@@ -12,13 +12,13 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S10 · P0 · fase A** — Cadena de suministro de la CI
   Acción: Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo. Delta S5: lock con hashes y --require-hashes para lo que instala install-memory-deps.sh y para los pip install sin fijar de la CI.
-  Entrada: Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.
+  Entrada: SE-442 ya APPROVED; falta la decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.
   Salida: Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: protege cada PR de la cola; esfuerzo: slice pequeño (S).
 
 - **S18 · P0 · fase A** — Evals que pueden fallar
   Acción: SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que debe dar findings.
-  Entrada: Aprobación de SE-468 y decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.
+  Entrada: SE-468 ya APPROVED (operadora, 2026-10-26); falta la decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.
   Salida: Con la skill saboteada el gate no da PASS; modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469; esfuerzo: slice pequeño (S).
 
@@ -36,7 +36,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S11 · P0 · fase A** — Autoridad del verificador en el cierre
   Acción: Regla y plantilla con autoridad requerida y obtenida por AC; informe de cobertura no verificada en validate-ci-local sin cambiar el predicado.
-  Entrada: Aprobación de SE-444; informe-only, compatible con lo ya integrado.
+  Entrada: SE-444 ya APPROVED; informe-only, compatible con lo ya integrado.
   Salida: Informe de cobertura no verificada visible, predicado de cierre sin cambios (regresión a cero) y decisión explícita sobre pasar a bloqueo con datos de dos cierres reales.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: hace honestos los cierres de S03 y S04; esfuerzo: slice pequeño (S).
 
@@ -48,13 +48,13 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S12 · P1 · fase A** — Salvaguardas de ejecución autónoma
   Acción: Guard de repetición bloqueante en ramas agent/*, presupuesto de turnos visible, success_checks en automatizaciones; revisor de acciones opt-in como último slice.
-  Entrada: Aprobación de SE-445; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.
+  Entrada: SE-445 ya APPROVED; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.
   Salida: Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: hace cumplir autonomous-safety donde hoy es texto; esfuerzo: S1, S2 y S4 pequeños; S3 medio.
 
 - **S17 · P1 · fase A** — Contrato de resultado de los gates
   Acción: S0 auditar escáneres y guards blocking (vocabulario, dependencia ausente, topes); contrato que extiende checker-fail-closed; guards sin jq degradan a grep o salen 2; topes que producen unknown.
-  Entrada: Aprobación de SE-453 y decisión D1-D3; S2 probado en los dos frontends.
+  Entrada: SE-453 ya APPROVED; falta la decisión D1-D3; S2 probado en los dos frontends.
   Salida: Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita falsos verdes en los gates de los que dependen merge-sprint y la CI; alimenta la cobertura no verificada de SE-444; esfuerzo: S0, S1 y S2 pequeños; S3 medio.
 

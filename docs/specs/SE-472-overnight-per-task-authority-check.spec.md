@@ -32,7 +32,7 @@ autorización caduque o se revoque.
 | Slice | Entrega |
 |---|---|
 | S1 | Antes de cada tarea, el bucle llama a `check_authority` (función en `scripts/lib/`), que por defecto ejecuta `bash scripts/operator-grant.sh check --scope autonomy:overnight` (scope configurable con `OVERNIGHT_GRANT_SCOPE`). Salida 0: sigue. Salida 1, 2 o 3: **no arranca tareas nuevas**; las pendientes pasan a `suspended` con motivo `authority_expired`, `authority_invalid` o `authority_missing` en `state.json` y en el audit log (`output/agent-runs/`). La tarea en curso no se mata: termina o agota su time-box (cierre seguro). |
-| S2 | El resumen de la noche incluye «N tareas suspendidas por vigencia»; SE-471 las presenta como decisión. Flag `OVERNIGHT_REQUIRE_GRANT`: `false` hasta que SE-343 se apruebe (con aviso `grant-check disabled` en el audit log) y `true` desde entonces. No se rebaja ningún gate existente. |
+| S2 | El resumen de la noche incluye «N tareas suspendidas por vigencia»; SE-471 las presenta como decisión. Flag `OVERNIGHT_REQUIRE_GRANT`, **fail-closed**: sin la variable vale `true`. Desactivarlo exige `OVERNIGHT_REQUIRE_GRANT=false` explícito en la configuración local de la operadora (gitignored), nunca un valor por defecto en el repo; cada lote desactivado deja `grant-check disabled` en el audit log y la línea «control de autoridad desactivado» en la cabecera del resumen (SE-471). Mientras SE-343 no esté aprobada, desactivarlo es decisión de la operadora (D3). No se rebaja ningún gate existente. |
 
 ## Fuera de alcance
 
@@ -47,7 +47,7 @@ función).
 | AC2 | Negativo: con grant vigente todo el lote, `results.tsv` y los estados finales coinciden con los de la versión anterior (sin regresión). |
 | AC3 | Negativo: grant revocado (fichero borrado) a mitad del lote → mismo efecto con `authority_missing`. |
 | AC4 | Ningún camino del bucle invoca `operator-grant.sh grant`: stub que falla el test si se llama. |
-| AC5 | Con `OVERNIGHT_REQUIRE_GRANT=false` el lote corre y el audit log contiene `grant-check disabled`. |
+| AC5 | Con `OVERNIGHT_REQUIRE_GRANT=false` el lote corre, el audit log contiene `grant-check disabled` y el resumen de la noche lo muestra en cabecera. Negativo: sin la variable y sin grant, ninguna tarea arranca (`authority_missing`), y ningún fichero versionado asigna `OVERNIGHT_REQUIRE_GRANT=false` (grep en el test). |
 | AC6 | Cada test falla si se quita el gancho (SE-456); los tests existentes de SE-226 en verde. |
 
 ## Métrica y kill criterion
@@ -70,6 +70,9 @@ S: una función, un gancho en el bucle y 6 tests.
 - **D1**: scope por defecto `autonomy:overnight` o reutilizar uno existente de SE-343 (propuesta: el nuevo, más
   estrecho).
 - **D2**: si la orquestación por cola adopta el gancho en el mismo slice (propuesta: no; primero S1 con sus tests).
+- **D3**: mientras SE-343 siga PROPOSED, ¿se desactiva el control en local (`OVERNIGHT_REQUIRE_GRANT=false`) o se emite
+  antes un grant `autonomy:overnight` con `operator-grant.sh grant`? (propuesta: emitir el grant; desactivar solo con
+  registro explícito).
 
 ## Referencias cruzadas
 
