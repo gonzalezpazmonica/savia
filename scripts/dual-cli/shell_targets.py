@@ -712,6 +712,7 @@ def _braces(text):
 
 
 MAX_WALK = 5000
+_GENERATED = {"__pycache__", "node_modules"}  # regenerable, not gate code: `find . -name '*.pyc' -delete`
 
 
 def _gate_names(bases, protected_rel):
@@ -719,6 +720,7 @@ def _gate_names(bases, protected_rel):
     names, seen = {c for rel in protected_rel for c in rel.split("/")}, 0
     for base in bases:
         for _dir, dirs, files in os.walk(base):
+            dirs[:] = [d for d in dirs if d not in _GENERATED]
             seen += len(dirs) + len(files)
             if seen > MAX_WALK:
                 return None

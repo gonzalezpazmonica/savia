@@ -162,22 +162,47 @@ o un borrado recursivo de `.claude` llegaban al CLI en Codex y en OpenCode, aunq
 misma escritura con `write`/`edit`/`apply_patch` se denegaba. `shell_targets.py` (y su
 port `lib/shell-targets.ts`) lee el texto del comando, sin ejecutarlo, y extrae los
 destinos de escritura: redirecciones (`>`, `>>`, `&>`, `<>`), `rm/mv/cp/ln/install/tee/
-touch/truncate/chmod -R/...`, `sed/perl -i`, `dd of=`, subcomandos de `git` que reescriben
-el árbol, `xargs`, `find -delete/-exec` (solo rutas de inicio), y el texto de `bash -c`,
-`eval`, `$(...)` y backticks de forma recursiva. Los heredocs se saltan (un mensaje de
-commit que menciona un hook no bloquea). Los borradores también se deniegan sobre un
-directorio que contiene una ruta protegida; los globs se comparan componente a componente.
-Un texto que el tokenizador no cierra solo se deniega si nombra una ubicación protegida.
+touch/truncate/chmod -R/...`, `sed/perl -i` (también en clusters: `-Ei`, `-pi`), `dd of=`,
+subcomandos de `git` que reescriben el árbol, `xargs`, `find -delete/-exec`, y el texto de
+`bash -c` (y `-lc`, `-ec`…), `eval`, `env -S`, `$(...)`, backticks y del heredoc o
+here-string que se pasa a un shell, de forma recursiva. Los heredocs de otros comandos se
+saltan (un mensaje de commit que menciona un hook no bloquea). Los borradores también se
+deniegan sobre un directorio que contiene una ruta protegida; los globs se comparan
+componente a componente y las llaves se expanden (`{.claude,tmp}`). `$'\x2e…'` se decodifica
+y `((x<<2))` es aritmética, no heredoc. Un texto que el tokenizador no cierra solo se deniega
+si nombra una ubicación protegida (`.claude`, `opencode.json`, `scripts/dual-cli`; `scripts`
+suelto no).
 
-`test_shell_targets.py`: corpus de 61 casos (`fixtures/shell_targets_corpus.json`) con las
-mismas respuestas en los dos núcleos, symlink a `.claude/hooks`, y réplica por
-`codex-hook.py` y por savia-gates con los hooks reales: 4/4 escrituras denegadas
-(`PROTECTED_GATE_PATH`) frente a 4/4 permitidas en el núcleo de `e7224df97`.
+Base de las rutas relativas: el `cwd` del payload, movido por `cd`/`pushd`/`popd` (un
+subshell `( … )` lo restaura), `git -C`/`--work-tree`, `env -C` y la opción de directorio de
+la elevación de privilegios. Tras un `cd` a un sitio desconocido (`cd "$D"`, `cd -`, `cd ~`), una
+ruta literal se deniega si es un gate visto desde cualquier directorio camino de uno, o si
+existe dentro de uno (así `cd "$D" && rm -f settings.json` se deniega aunque `$D` fuera otro
+sitio). `~` y `$HOME` se expanden con `HOME`. Los pathspecs de `git checkout/restore/rm/clean/
+reset/stash` alcanzan su árbol (`git checkout -- .`, `git restore scripts`). `find` con
+`-delete` o `-exec` de un escritor alcanza el árbol de sus rutas de inicio salvo que solo lo
+estrechen `-name`/`-iname` cuyos patrones no casan con ningún nombre de gate (sin contar
+`__pycache__` ni `node_modules`); con `-o`, `!`, `-path`, `-mtime`… se deniega. `cp`/`mv` a un
+directorio escriben `dest/basename(src)`; una copia recursiva alcanza ese árbol
+(`cp -r /tmp/x/. .`). Las opciones con valor de los envoltorios (`-u root`, `env -u X`,
+`timeout -s KILL`) se saltan.
+
+`test_shell_targets.py`: corpus de 112 casos (`fixtures/shell_targets_corpus.json`) con las
+mismas respuestas en los dos núcleos (36 de los 51 añadidos tras la revisión de #1391 fallan
+con el núcleo anterior; los otros 15 son negativos), casos que dependen del árbol en disco,
+`cwd` en un subdirectorio, symlink a `.claude/hooks`, y réplica por `codex-hook.py` y por
+savia-gates con los hooks reales: 4/4 escrituras denegadas (`PROTECTED_GATE_PATH`) frente a
+4/4 permitidas en el núcleo de `e7224df97`. Sin ese commit en el clon, la línea base falla en
+modo estricto (`SAVIA_DUAL_CLI_STRICT=1`) en vez de saltarse.
 
 No cubierto, y así consta: código de otros intérpretes (`python -c "open(...,'w')"`,
 `node -e`), variables cuyo valor no está en el texto (`rm -r $X` con `X=.claude`), rutas
-que llegan por stdin a `xargs`, y lo que un script ejecutado escriba. Es un gate
-cooperativo contra reescrituras del agente, no aislamiento frente a procesos hostiles.
+que llegan por stdin a `xargs`, texto que llega a un shell por tubería (`… | bash`), lo que
+un script ejecutado escriba, globs tras un `cd` desconocido, y escritores sin destino
+literal: `patch -p1 < x.diff`, `git apply/am`, `git reset --hard`, `git stash pop`,
+`git pull/merge/rebase/switch`, `tar -x`. Estos traen contenido versionado o de un fichero
+que el texto no muestra; denegarlos bloquearía el flujo normal de git. Es un gate cooperativo
+contra reescrituras del agente, no aislamiento frente a procesos hostiles.
 
 ### Resto de eventos de Codex (S3)
 

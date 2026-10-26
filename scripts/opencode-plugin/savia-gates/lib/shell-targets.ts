@@ -14,6 +14,7 @@ import { basename, dirname, normalize, sep } from "node:path"
 const MAX_DEPTH = 8
 const MAX_BRACE = 64
 const MAX_WALK = 5000
+const GENERATED = new Set(["__pycache__", "node_modules"])
 const OPERATORS = [";;", "&&", "||", "|&", ";", "|", "&", "(", ")", "\n"]
 const WRAPPERS = new Set(["sudo", "command", "builtin", "nohup", "time", "nice", "exec", "doas", "stdbuf", "ionice",
   "timeout", "env"])
@@ -762,6 +763,7 @@ function gateNames(bases: string[], protectedRel: readonly string[]): Set<string
     } catch {
       return true
     }
+    entries = entries.filter((e) => !(e.isDirectory() && GENERATED.has(e.name)))
     seen += entries.length
     if (seen > MAX_WALK) return false
     for (const e of entries) names.add(e.name)

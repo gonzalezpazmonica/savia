@@ -120,6 +120,8 @@ def gate_tree(tmp):
     os.makedirs(os.path.join(root, ".claude/hooks"))
     os.makedirs(os.path.join(root, "docs"))
     Path(root, ".claude/hooks/tdd-gate.sh").write_text("exit 2\n")
+    os.makedirs(os.path.join(root, ".claude/hooks/__pycache__"))  # regenerable: not gate code
+    Path(root, ".claude/hooks/__pycache__/x.pyc").write_text("")
     return root
 
 
