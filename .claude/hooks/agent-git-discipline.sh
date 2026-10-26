@@ -51,7 +51,18 @@ while IFS= read -r seg; do
     echo "  La eliminación recursiva requiere confirmación humana directa." >&2
     exit 2
   fi
-  if ! echo "$seg" | grep -qE "$SAFE_PATHS"; then
+  # La exención vale solo si TODOS los operandos están bajo una ruta segura (prefijo, sin ..):
+  # `rm /etc/passwd /tmp/opencode/x` o `rm /tmp/opencode/../../etc/x` no se eximen.
+  args=""; [[ "$seg" =~ (^|[[:space:]\;\&\|\(])rm[[:space:]]+(.*)$ ]] && args="${BASH_REMATCH[2]}"
+  unsafe=0; operands=0
+  read -r -a words <<<"$args"
+  for w in "${words[@]}"; do
+    [[ "$w" == -* ]] && continue
+    w="${w#[\"\']}"; w="${w%[\"\']}"
+    operands=$((operands + 1))
+    if [[ ! "$w" =~ ^($SAFE_PATHS)(/|$) || "$w" == *..* ]]; then unsafe=1; fi
+  done
+  if (( unsafe || operands == 0 )); then
     echo "BLOCKED [agent-git-discipline]: rm sin confirmación humana (-i / --interactive)." >&2
     echo "  Usa rm -i o elimina archivos desde tu terminal." >&2
     exit 2
@@ -65,7 +76,10 @@ if echo "$NORMALIZED" | grep -qE "${AT}"'(cat[[:space:]]+/dev/null|true|:)[[:spa
 fi
 
 # ─── Escritura directa a dispositivos de bloque ────────────────────────
-if echo "$NORMALIZED" | grep -qE "${AT}dd[[:space:]]+${SEG}"'of=/dev/[sh]n?d'; then
+# Cualquier destino en /dev salvo los pseudodispositivos inocuos: sd, hd, nvme, mmcblk, vd, xvd, md,
+# dm-*, mapper/, disk/by-* y los que vengan. Una lista de discos siempre se queda corta.
+if echo "$NORMALIZED" | grep -oE "${AT}dd[[:space:]]+${SEG}" | grep -oE 'of=/dev/[^[:space:]]*' \
+   | grep -qvE '^of=/dev/(null|zero|stdout|stderr|tty|fd/[0-9]+)$'; then
   echo "BLOCKED [agent-git-discipline]: dd escribiendo a dispositivo de bloque." >&2
   exit 2
 fi
