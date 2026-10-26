@@ -13,6 +13,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODE="${1:---warn}"
 
+case "$MODE" in
+  --check|--warn|--fix) ;;
+  *) echo "ERROR: unknown mode '$MODE' (use --check, --warn or --fix)" >&2; exit 2 ;;
+esac
+
 HOOKS_STRATEGY="$REPO_ROOT/.opencode/HOOKS-STRATEGY.md"
 SETTINGS="$REPO_ROOT/.claude/settings.json"
 AGENTS_DIR="$REPO_ROOT/.opencode/agents"
@@ -22,7 +27,7 @@ errors=0
 # ── Count hooks in settings.json ──────────────────────────────────────────
 # ── Count hooks — two metrics ─────────────────────────────────────────────
 # HOOKS-STRATEGY.md refers to .sh files in .claude/hooks/, not settings.json registrations
-real_hooks=$(ls "$REPO_ROOT/.claude/hooks/"*.sh 2>/dev/null | wc -l)
+real_hooks=$(ls "$REPO_ROOT/.claude/hooks/"*.sh 2>/dev/null | wc -l || true)
 real_registrations=$(python3 -c "
 import json, sys
 d = json.load(open('$SETTINGS'))
@@ -44,7 +49,12 @@ if [[ "$declared_hooks" != "unknown" ]]; then
   diff_abs=${diff_hooks#-}
   if [[ "$diff_abs" -gt 2 ]]; then
     echo "DIFF: HOOKS-STRATEGY.md declares $declared_hooks hooks, disk has $real_hooks (diff: $diff_hooks)"
-    errors=1
+    if [[ "$MODE" == "--fix" ]]; then
+      sed -i -E "0,/[0-9]+ (registered )?hooks/s//${real_hooks} \1hooks/" "$HOOKS_STRATEGY"
+      echo "FIXED: HOOKS-STRATEGY.md now declares $real_hooks hooks"
+    else
+      errors=1
+    fi
   else
     echo "OK: hooks count — declared=$declared_hooks real=$real_hooks (within tolerance ±2)"
   fi
@@ -63,7 +73,12 @@ if [[ -f "$agents_md" ]]; then
     diff_abs_a=${diff_agents#-}
     if [[ "$diff_abs_a" -gt 2 ]]; then
       echo "DIFF: AGENTS.md declares $declared_agents agents, disk has $real_agents (diff: $diff_agents)"
-      errors=1
+      if [[ "$MODE" == "--fix" ]]; then
+        sed -i -E "0,/[0-9]+ agents/s//${real_agents} agents/" "$agents_md"
+        echo "FIXED: AGENTS.md now declares $real_agents agents"
+      else
+        errors=1
+      fi
     else
       echo "OK: agents count — declared=$declared_agents real=$real_agents (within tolerance ±2)"
     fi
