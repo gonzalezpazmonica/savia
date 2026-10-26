@@ -83,7 +83,7 @@ bash scripts/web-headers-check.sh --url "$DEPLOY_URL" --follow-redirects
 bash scripts/tls-security-check.sh --host "$DEPLOY_HOST" --severity HIGH
 ```
 
-Grade D, F o UNKNOWN → bloquear deploy. UNKNOWN tras un escaneo fallido sale con exit 2 (convención gate-result); el modo Docker fallback solo imprime el comando y sale 0 con UNKNOWN. Grade C → warning, continuar con ticket.
+Grade D, F o UNKNOWN → bloquear deploy. UNKNOWN sale siempre con exit 2 (convención gate-result): escaneo fallido, informe con `scanProblem`/`FATAL` o modo Docker fallback (solo imprime el comando). La nota se calcula con todos los hallazgos LOW+ del informe; `--severity` solo filtra la lista mostrada. Grade C → warning, continuar con ticket.
 
 ## Instalación testssl.sh (opcional)
 

@@ -25,7 +25,9 @@ Options:
   --branch REFSPEC  Analyze diff between branches (e.g. main..feature/x)
   --project DIR     Project root. Default: current dir
   --format md|json  Output format. Default: md
-  --health          Include health score delta (requires workspace-health.sh --v2)
+  --health          Include health score delta (requires workspace-health.sh --v2).
+                    The score is always the Savia workspace's own health, not the
+                    --project repo's: a measured repo's scripts are never executed.
 
 EOF
 }
@@ -132,7 +134,7 @@ FUNCTIONS_ADDED=$(echo "$FUNC_DELTA" | awk '{print $1}')
 FUNCTIONS_REMOVED=$(echo "$FUNC_DELTA" | awk '{print $2}')
 
 # ── Scripts delta ──
-SCRIPTS_ADDED=$(gd --name-only 2>/dev/null | grep -cE '^scripts/' || true)
+SCRIPTS_ADDED=$(gd --diff-filter=A --name-only 2>/dev/null | grep -cE '^scripts/' || true)
 SCRIPTS_DELETED=$(gd --diff-filter=D --name-only 2>/dev/null | grep -cE '^scripts/' || true)
 
 # ── Health delta (optional) ──
@@ -159,12 +161,21 @@ if $INCLUDE_HEALTH; then
 fi
 
 # ── Output ──
+# Escapa un valor para incrustarlo en una cadena JSON (actor/rama vienen del repo medido).
+json_esc() {
+  local v="$1"
+  v=${v//\\/\\\\}
+  v=${v//\"/\\\"}
+  v=${v//[$'\001'-$'\037']/ }
+  printf '%s' "$v"
+}
+
 if [[ "$FORMAT" == "json" ]]; then
   cat <<JSON
 {
   "timestamp": "$TIMESTAMP",
-  "actor": "$ACTOR",
-  "branch": "$BRANCH",
+  "actor": "$(json_esc "$ACTOR")",
+  "branch": "$(json_esc "$BRANCH")",
   "delta": {
     "files_changed": $FILES_CHANGED,
     "files_added": $FILES_ADDED,

@@ -30,6 +30,8 @@ fi
 # ── Extraer hostname del URL ──────────────────────────────────────────────────
 # Sin userinfo (user:pass@): no debe acabar en el informe ni en el nombre del fichero
 HOSTNAME=$(echo "$TARGET_URL" | sed 's|https\?://||' | sed 's|/.*||' | sed 's|^.*@||' | sed 's|:.*||')
+# URL para mostrar y persistir: la misma sin userinfo (curl sí recibe la original)
+SAFE_URL=$(printf '%s' "$TARGET_URL" | sed -E 's#^([a-zA-Z][a-zA-Z0-9+.-]*://)?[^/?#]*@#\1#')
 SAFE_HOST="${HOSTNAME//./_}"
 mkdir -p "$OUTPUT_DIR"
 REPORT_FILE="$OUTPUT_DIR/headers-check-${SAFE_HOST}-${DATE}.json"
@@ -43,7 +45,7 @@ fi
 HEADERS_RAW=$(curl $CURL_OPTS "$TARGET_URL" 2>/dev/null || echo "")
 
 if [[ -z "$HEADERS_RAW" ]]; then
-  echo "ERROR: No se pudo conectar a $TARGET_URL" >&2
+  echo "ERROR: No se pudo conectar a $SAFE_URL" >&2
   exit 1
 fi
 
@@ -158,11 +160,11 @@ FINDINGS_JSON="[${FINDINGS_JSON%,}]"
 
 # ── Generar report JSON ───────────────────────────────────────────────────────
 CSP=$(json_esc "$CSP"); HSTS=$(json_esc "$HSTS"); XCTO=$(json_esc "$XCTO"); XFO=$(json_esc "$XFO")
-REFERRER=$(json_esc "$REFERRER"); PERMS=$(json_esc "$PERMS"); TARGET_URL=$(json_esc "$TARGET_URL")
+REFERRER=$(json_esc "$REFERRER"); PERMS=$(json_esc "$PERMS"); SAFE_URL=$(json_esc "$SAFE_URL")
 HOSTNAME=$(json_esc "$HOSTNAME")
 cat > "$REPORT_FILE" <<EOF
 {
-  "url": "${TARGET_URL}",
+  "url": "${SAFE_URL}",
   "hostname": "${HOSTNAME}",
   "date": "${DATE}",
   "tool": "web-headers-check",
