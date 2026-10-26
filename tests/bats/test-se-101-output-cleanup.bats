@@ -151,3 +151,12 @@ mk_tree() {
   [[ "$output" == *"a/b/ok.md"* ]]
   [[ "$output" != *"deep.md"* ]]
 }
+
+@test "SE-101 aislado: retencion de 1 dia es valida y marca antiguo lo de hace 2 dias" {
+  mk_tree
+  touch -d '2 days ago' "$T/output/dos-dias.md"
+  run env SAVIA_OUTPUT_RETENTION_DAYS=1 bash "$CLEAN" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"dos-dias.md"* ]]
+  [[ "$output" == *"recent.md"* ]]
+}
