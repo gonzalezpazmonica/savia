@@ -223,3 +223,18 @@ _prop() { ls "$SCL_PROPOSALS_DIR"/*.md | head -1; }
   _cap '{"tool_name":"Task","tool_response":"lo corregí en el hook","tool_input":{"agent":"c"}}'
   [ "$(_props)" = "3" ]
 }
+
+@test "con LC_ALL=C las vocales acentuadas se normalizan igual (el hook fija su locale)" {
+  LC_ALL=C _cap '{"tool_name":"Task","tool_response":"LECCIÓN APRENDIDA: revisar siempre","tool_input":{"agent":"a"}}'
+  LC_ALL=C _cap '{"tool_name":"Task","tool_response":"volvió a fallar el paso","tool_input":{"agent":"b"}}'
+  [ "$(_props)" = "2" ]
+}
+
+@test "evidencia con formato ruta:hash se conserva y no cae al hash de la respuesta" {
+  printf 'a' > "$TMPD/h.txt"
+  _cap "{\"tool_name\":\"Task\",\"tool_response\":\"se reconoce el error: ruta con hash\",\"tool_input\":{\"agent\":\"t\",\"files\":[\"$TMPD/h.txt:abc123\"]}}"
+  f=$(_prop)
+  grep -q "h.txt:abc123" "$f"
+  run grep -q "session:response:" "$f"
+  [ "$status" -ne 0 ]
+}
