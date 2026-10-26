@@ -1,0 +1,88 @@
+{
+  "kind": "effect-map",
+  "notes": "Worst-case effects per native tool; a tool name is never an effect (TOOL != EFFECT).",
+  "patterns": [
+    {
+      "effects": [
+        "CALL_MCP",
+        "EXTERNAL_EFFECT"
+      ],
+      "prefix": "mcp__"
+    }
+  ],
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "claude-code",
+  "schema_version": 1,
+  "tools": {
+    "Agent": [
+      "ACCESS_NETWORK",
+      "ACCESS_SECRET",
+      "CHANGE_SHARED_STATE",
+      "CREATE_PROCESS",
+      "EXECUTE_LOCAL",
+      "EXTERNAL_EFFECT",
+      "MODIFY_CONFIG",
+      "WRITE_WORKSPACE"
+    ],
+    "AskUserQuestion": [
+      "REQUEST_HUMAN_DECISION"
+    ],
+    "Bash": [
+      "EXECUTE_LOCAL",
+      "CREATE_PROCESS",
+      "WRITE_WORKSPACE",
+      "ACCESS_SECRET",
+      "ACCESS_NETWORK",
+      "MODIFY_CONFIG",
+      "EXTERNAL_EFFECT",
+      "CHANGE_SHARED_STATE"
+    ],
+    "Edit": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ],
+    "Glob": [
+      "SEARCH_WORKSPACE"
+    ],
+    "Grep": [
+      "SEARCH_WORKSPACE",
+      "ACCESS_SECRET"
+    ],
+    "NotebookEdit": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ],
+    "Read": [
+      "READ_WORKSPACE",
+      "ACCESS_SECRET"
+    ],
+    "Task": [
+      "ACCESS_NETWORK",
+      "ACCESS_SECRET",
+      "CHANGE_SHARED_STATE",
+      "CREATE_PROCESS",
+      "EXECUTE_LOCAL",
+      "EXTERNAL_EFFECT",
+      "MODIFY_CONFIG",
+      "WRITE_WORKSPACE"
+    ],
+    "WebFetch": [
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
+    ],
+    "WebSearch": [
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
+    ],
+    "Write": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ]
+  },
+  "verification": "NOT_VERIFIED"
+}
