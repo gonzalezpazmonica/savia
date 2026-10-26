@@ -9,12 +9,20 @@
 setup_file() {
   export NOJQ="$BATS_FILE_TMPDIR/nojq"
   mkdir -p "$NOJQ"
-  local f
-  for f in /usr/bin/*; do
-    [[ "${f##*/}" == jq ]] && continue
-    # Con `&&` como última orden del bucle, un último /usr/bin/* no ejecutable hacía fallar setup_file.
-    if [[ -x "$f" ]]; then ln -sf "$f" "$NOJQ/${f##*/}"; fi
+  # Todos los directorios del PATH, no solo /usr/bin (revisión de corrección #1348 P2-4): en runners o macOS
+  # con bash o coreutils en otra ruta, «sin jq» seguía teniendo todo lo demás. El primero del PATH gana, como en él.
+  local d f
+  local IFS=:
+  for d in $PATH; do
+    [[ -d "$d" ]] || continue
+    for f in "$d"/*; do
+      [[ "${f##*/}" == jq || -e "$NOJQ/${f##*/}" ]] && continue
+      # Con `&&` como última orden del bucle, un último fichero no ejecutable hacía fallar setup_file.
+      if [[ -x "$f" && ! -d "$f" ]]; then ln -s "$f" "$NOJQ/${f##*/}"; fi
+    done
   done
+  export BASH_BIN
+  BASH_BIN="$(command -v bash)"
 }
 
 setup() {
@@ -41,13 +49,13 @@ require_ts() {
 }
 
 # La paridad compara bash con jq y sin jq: hace falta jq en PATH y que $NOJQ lo oculte de verdad
-# (si jq viviera en /usr/bin/jq y el filtro fallara, «sin jq» sería otra vez «con jq» sin que se notara).
+# (si jq viviera en un directorio del PATH y el filtro fallara, «sin jq» sería otra vez «con jq» sin que se notara).
 require_jq() {
   if ! command -v jq >/dev/null 2>&1; then
     [[ "${SAVIA_REQUIRE_TS:-}" == "1" ]] && { echo "SAVIA_REQUIRE_TS=1 y no hay jq" >&2; return 1; }
     skip "sin jq: el lado «con jq» de la paridad no se puede comprobar aquí"
   fi
-  if env PATH="$NOJQ" /usr/bin/bash -c 'command -v jq' >/dev/null 2>&1; then
+  if env PATH="$NOJQ" "$BASH_BIN" -c 'command -v jq' >/dev/null 2>&1; then
     echo "el PATH sin jq ($NOJQ) todavía resuelve jq" >&2
     return 1
   fi
@@ -58,7 +66,7 @@ require_jq() {
 bash_code() { # hook path command
   local json err rc
   json=$(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$3")
-  err=$(printf '%s' "$json" | env PATH="$2" CLAUDE_PROJECT_DIR="$BATS_TEST_TMPDIR" /usr/bin/bash "$REPO_ROOT/.claude/hooks/$1.sh" 2>&1 >/dev/null)
+  err=$(printf '%s' "$json" | env PATH="$2" CLAUDE_PROJECT_DIR="$BATS_TEST_TMPDIR" "$BASH_BIN" "$REPO_ROOT/.claude/hooks/$1.sh" 2>&1 >/dev/null)
   rc=$?
   if [[ "$rc" -eq 2 && "$err" != *BLOQUEADO* ]]; then echo "2-sin-bloqueo"; else echo "$rc"; fi
 }
@@ -188,6 +196,36 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "pkexec git status" "runuser -u bot -- git push origin feat" "script -qc 'git status' /dev/null" \
     "fish -c 'git status'" "chroot / git push origin feat" "flock /tmp/l git push -u origin feat" \
     "watch git status" "unbuffer git push origin feat" "echo 'pkexec git push $FP'"
+}
+
+# Solo TS (revisión de seguridad #1348, 3.ª ronda, P1-1 y P2-2): el puerto anclado no puede bloquear menos que
+# el TS de main, que no tenía ancla. Estas órdenes bloqueaban en main con prefijos fuera de la lista de
+# envoltorios; el hook bash no las bloquea (tampoco en main), así que la paridad no detecta la regresión.
+@test "TS no bloquea menos que en main: envoltorios no listados con force, push a main y reset --hard ⇒ 2" {
+  require_ts
+  local c t fails=""
+  for c in "watch 'git push $FP origin feat'" "env -S 'git push $FP origin feat'" \
+    "flock -w 5 /tmp/l git push $FP origin feat" "sg grp -c 'git push $FP origin feat'" \
+    "unshare -r git push $FP origin feat" "nsenter -t 1 git push $SF origin feat" \
+    "systemd-run --user git push $FP origin feat" "firejail git push $FP origin feat" \
+    "parallel git push $FP ::: origin" "proxychains git push origin main" "caffeinate git push origin master" \
+    "watch \"git push $FP-with-lease origin main\"" "firejail git reset --hard"; do
+    t=$(ts_code block-force-push blockForcePush "$c")
+    [[ "$t" == 2 ]] || fails+="[$c] ts=$t (esperado 2)"$'\n'
+  done
+  for c in "proxychains git push origin main-fix" "firejail git push origin feat" "watch 'git status'" \
+    "caffeinate git push $FP-with-lease origin feat" "unshare -r git push origin release/main"; do
+    t=$(ts_code block-force-push blockForcePush "$c")
+    [[ "$t" == 0 ]] || fails+="[$c] ts=$t (esperado 0)"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
+}
+
+# Falso positivo del lado seguro (revisión de corrección #1348 P2-1, 3.ª ronda): cualquier palabra que empiece
+# por `+` en un push se lee como refspec forzado, también dentro del texto de una opción. Fijado en los dos.
+@test "paridad límite: una palabra +x dentro de un argumento del push bloquea en los dos (falso positivo documentado)" {
+  require_ts
+  parity block-force-push blockForcePush 2 "git push origin feat -o \"ci +skip\""
 }
 
 # Falso positivo del lado seguro (revisión de corrección #1348 P2-2): PUSH_MAIN acepta `main` como palabra

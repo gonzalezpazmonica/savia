@@ -42,7 +42,6 @@ json_field() { printf '%s' "$output" | python3 -c "import json,sys; d=json.load(
 @test "mcp-audit: sin python3 ⇒ exit 2 y unknown/python3:missing_tool, no un hallazgo MCP-00" {
   run env PATH="$NOPY" /usr/bin/bash "$W/scripts/mcp-real.sh" --config "$W/clean.json"
   [ "$status" -eq 2 ]
-  [ "$status" -ne 1 ]
   [[ "$output" != *"MCP-00"* ]]
   [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"unknown","gaps":[{"check":"python3","reason":"missing_tool"}]}' ]
 }

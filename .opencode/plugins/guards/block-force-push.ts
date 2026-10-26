@@ -53,6 +53,8 @@ const FORCE_WITH_LEASE = rx(String.raw`push${S}+.*--force-with-lease`);
 const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|-[A-Za-z]*f[A-Za-z]*)${END}|["']?\+\S)`);
 // main/master as a destination: a bare word, after `:`, `+` or a quote, or after refs/heads/ or
 // refs/remotes/<remote>/; `main-fix` and `feature/main` do not match.
+// Unanchored on purpose (same as IS_PUSH_TO_MAIN in the bash hook): it only counts together with the anchored
+// FORCE_WITH_LEASE, so the lease and the mention of main may sit in different commands of one line (safe side).
 const PUSH_MENTIONS_MAIN = new RegExp(
   String.raw`git${S}+push${S}+.*(?:^|[${WS}:+"']|refs/heads/|refs/remotes/[^/\s]+/)(?:main|master)(?:[${WS}:;&|)"'\x60]|$)`,
   "im",
@@ -75,6 +77,22 @@ const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
     msg: "git reset --hard blocked. It destroys working directory changes.",
   },
   // OpenCode-only rules (stricter than the bash hook; kept from SPEC-OC-01).
+  // Floor: the unanchored rules of the TS port in main, so a prefix missing from WRAPPERS (`watch '…'`,
+  // `firejail`, `proxychains`…) never blocks less than before SE-453 (security review #1348, round 3, P1-1).
+  // Like main, a flag followed by a quote (`echo 'git push --force'`) does not match; unlike main, no rule
+  // crosses a newline and `main-fix` does not count as main.
+  {
+    rx: new RegExp(String.raw`git${S}+push${S}+(?:.*${S})?(?:--force(?!-with-lease)|-f)(?:${S}|$)`, "im"),
+    msg: "git push --force blocked. Use --force-with-lease instead.",
+  },
+  {
+    rx: new RegExp(String.raw`git${S}+push${S}+(?:.*${S})?origin${S}+(?:main|master)(?![\w./-])`, "im"),
+    msg: "Cannot push directly to origin/main or origin/master. Use a feature branch and PR.",
+  },
+  {
+    rx: new RegExp(String.raw`git${S}+reset${S}+--hard`, "im"),
+    msg: "git reset --hard blocked. It destroys working directory changes.",
+  },
   {
     rx: /git\s+push\s+.*--delete\s+origin\s+main/i,
     msg: "Cannot delete origin/main branch.",
