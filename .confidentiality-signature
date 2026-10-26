@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=17a00c2fc24de788c90dc1d15816a1c010371e532d330f081a729f2c9507545a
-timestamp=2026-10-26T22:18:53Z
+diff_hash=c93cf5c1c56dbb8807dfd7b9203252173d1822476a5e1e89c109439517d49f27
+timestamp=2026-10-26T22:25:18Z
 branch=agent/tesis-specs-20261023
-head_commit=d455bd868
-signature=ca0cb198751678fe87d89ca062401c86a7fed4559ad9ef832debb75a6a50ad6c
+head_commit=aabd5d90
+signature=5adee257906957b42827be63f4a68612b47fd8c28b761aff51b26fb42e5b9f63
