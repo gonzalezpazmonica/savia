@@ -2,7 +2,7 @@
 # BATS tests for scripts/operator-grant.sh (SE-343)
 # Ref: SE-343, SPEC-186, autonomous-safety.md
 
-SCRIPT="scripts/operator-grant.sh"
+REAL_SCRIPT="scripts/operator-grant.sh"
 
 setup() {
   set -o pipefail
@@ -15,20 +15,16 @@ setup() {
   # Fixture profile: never depends on the real (gitignored) active-user.md.
   export SAVIA_ACTIVE_USER_FILE="$TMP_GRANTS/active-user.md"
   printf 'active_slug: "%s"\n' "$ACTIVE_SLUG" > "$SAVIA_ACTIVE_USER_FILE"
-  # Clave HMAC y tickets del diálogo, aislados por test (mismos nombres que en real).
-  export SAVIA_GRANT_KEY_FILE="$TMP_GRANTS/grant-keys/operator-grant.key"
-  export SAVIA_GRANT_TICKETS_DIR="$TMP_GRANTS/grant-tickets"
-}
-
-
-# Simula la orden que ve el hook PreToolUse; $2 = permission_mode.
-guard_input() {
-  python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]},"permission_mode":sys.argv[2]}))' "$1" "${2:-default}"
-}
-
-# La operadora contesta el diálogo del arnés: el guard deja el ticket.
-ask_ticket() {
-  guard_input "bash scripts/operator-grant.sh grant --scope merge --context \"$1\" --ttl-hours 1" | bash "$SCRIPT" guard >/dev/null
+  # La raíz de confianza no admite override por entorno: copia del script en un
+  # repo temporal con un par de claves de prueba generado aquí (nunca una real).
+  FAKE_REPO="$TMP_GRANTS/repo"
+  mkdir -p "$FAKE_REPO/scripts" "$FAKE_REPO/config"
+  cp "$REAL_SCRIPT" "$FAKE_REPO/scripts/"
+  SCRIPT="$FAKE_REPO/scripts/operator-grant.sh"
+  SIGNERS="$FAKE_REPO/config/operator-grant-signers"
+  KEY="$TMP_GRANTS/op-key"
+  ssh-keygen -q -t ed25519 -N "" -C test -f "$KEY"
+  printf '%s namespaces="savia-operator-grant" %s\n' "$ACTIVE_SLUG" "$(cut -d' ' -f1-2 "$KEY.pub")" > "$SIGNERS"
 }
 
 teardown() {
@@ -36,12 +32,35 @@ teardown() {
   cd /
 }
 
+# La operadora firma la petición pendiente: $1 = clave, $2 = namespace.
+# Deja la firma en $TMP_GRANTS/req.sig.
+sign_request() {
+  local key="${1:-$KEY}" ns="${2:-savia-operator-grant}" d
+  d="$(mktemp -d "$TMP_GRANTS/sig.XXXXXX")"
+  cp "$TMP_GRANTS/merge.request" "$d/req"
+  ssh-keygen -q -Y sign -f "$key" -n "$ns" "$d/req" 2>/dev/null
+  cp "$d/req.sig" "$TMP_GRANTS/req.sig"
+}
+
+# Ciclo completo: petición (exit 4) → firma de la operadora → grant.
+issue_merge() {
+  run bash "$SCRIPT" grant --scope merge --context "$1" --ttl-hours 1
+  [ "$status" -eq 4 ]
+  sign_request
+  bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+}
+
+# Simula el evento PreToolUse: $1 = herramienta, $2 = campo, $3 = valor.
+guard_event() {
+  python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[1],"tool_input":{sys.argv[2]:sys.argv[3]}}))' "$1" "$2" "$3"
+}
+
 @test "script exists and is executable" {
-  [[ -x "$SCRIPT" ]]
+  [[ -x "$REAL_SCRIPT" ]]
 }
 
 @test "passes bash -n syntax" {
-  run bash -n "$SCRIPT"
+  run bash -n "$REAL_SCRIPT"
   [ "$status" -eq 0 ]
 }
 
@@ -69,14 +88,12 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
-@test "grantor is active user slug, never self; merge source is the measured channel" {
-  ask_ticket "test"
-  run bash "$SCRIPT" grant --scope merge --context "test" --ttl-hours 1
-  [ "$status" -eq 0 ]
+@test "grantor is active user slug, never self; merge source is the operator signature" {
+  issue_merge "test"
   file="$(ls "$SAVIA_GRANTS_DIR"/merge.json)"
   grep -q "\"grantor\":\"$ACTIVE_SLUG\"" "$file"
   ! grep -q '"grantor":"self"' "$file"
-  grep -q '"source":"harness-ask"' "$file"
+  grep -q '"source":"operator-signature"' "$file"
   ! grep -q '"source":"express-request"' "$file"
 }
 
@@ -91,10 +108,12 @@ teardown() {
   [ "$status" -eq 2 ]
 }
 
-@test "revoke removes grant (check 3)" {
-  ask_ticket "revoke test"
-  bash "$SCRIPT" grant --scope merge --context "revoke test" --ttl-hours 1
+@test "revoke removes grant and pending request (check 3)" {
+  issue_merge "revoke test"
+  run bash "$SCRIPT" grant --scope merge --context "otra" --ttl-hours 1
+  [ -e "$TMP_GRANTS/merge.request" ]
   bash "$SCRIPT" revoke --scope merge
+  [ ! -e "$TMP_GRANTS/merge.request" ]
   run bash "$SCRIPT" check --scope merge
   [ "$status" -eq 3 ]
 }
@@ -111,19 +130,21 @@ teardown() {
 @test "double-optin passes with grant and WITHOUT env var" {
   # SE-343: emit the autonomy grant inside the test body (each test gets a
   # fresh SAVIA_GRANTS_DIR from setup). No env var needed for factor 1.
-  run bash "$SCRIPT" grant --scope autonomy:overnight-sprint \
+  run bash "$REAL_SCRIPT" grant --scope autonomy:overnight-sprint \
     --context "autonomous session" --ttl-hours 1
   [ "$status" -eq 0 ]
   run bash scripts/savia-double-optin-check.sh --skill overnight-sprint \
     --confirm-autonomous
   [ "$status" -eq 0 ]
 }
+
 @test "fail-closed: no resolvable operator means no grant is issued" {
   printf '# no slug\n' > "$SAVIA_ACTIVE_USER_FILE"
   run bash "$SCRIPT" grant --scope merge --context "no operator"
   [ "$status" -eq 2 ]
   [[ "$output" == *"no active operator"* ]]
   [ ! -e "$TMP_GRANTS/merge.json" ]
+  [ ! -e "$TMP_GRANTS/merge.request" ]
 }
 
 @test "missing: nonexistent profile file also refuses to grant" {
@@ -134,12 +155,13 @@ teardown() {
 }
 
 @test "cwd-independent: grant and check work when run from another directory" {
-  ask_ticket "cwd test"
-  cd "$TMP_GRANTS"
-  run bash "$BATS_TEST_DIRNAME/../scripts/operator-grant.sh" grant --scope merge --context "cwd test" --ttl-hours 1
-  [ "$status" -eq 0 ]
+  # Una raíz de confianza plantada en el cwd no se usa: cuenta la del repo del script.
+  mkdir -p "$TMP_GRANTS/elsewhere/config"
+  printf 'intruso namespaces="savia-operator-grant" ssh-ed25519 AAAA\n' > "$TMP_GRANTS/elsewhere/config/operator-grant-signers"
+  cd "$TMP_GRANTS/elsewhere"
+  issue_merge "cwd test"
   grep -q "\"grantor\":\"$ACTIVE_SLUG\"" "$TMP_GRANTS/merge.json"
-  run bash "$BATS_TEST_DIRNAME/../scripts/operator-grant.sh" check --scope merge
+  run bash "$SCRIPT" check --scope merge
   [ "$status" -eq 0 ]
 }
 
@@ -155,103 +177,135 @@ teardown() {
   [ "$status" -eq 1 ]
 }
 
-# ── P1: grant de merge sin interacción humana (LAW-HUMAN-002) ───────────
+# ── P1: grant de merge firmado por la operadora (LAW-HUMAN-002) ─────────
 
-@test "P1: grant --scope merge sin prueba de interacción humana NO pasa check" {
+@test "P1: grant --scope merge sin firma solo deja una petición y NO pasa check" {
   run bash "$SCRIPT" grant --scope merge --context "la operadora lo pidió" --ttl-hours 1
   [ "$status" -eq 4 ]
-  [[ "$output" == *"exige a la operadora"* ]]
+  [[ "$output" == *"-n savia-operator-grant"* ]]
   [ ! -e "$TMP_GRANTS/merge.json" ]
+  [ -e "$TMP_GRANTS/merge.request" ]
+  [ "$(stat -c %a "$TMP_GRANTS/merge.request")" = "600" ]
   run bash "$SCRIPT" check --scope merge
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 3 ]
 }
 
-@test "P1: con el ticket del diálogo el grant se emite firmado y el ticket se consume" {
-  ask_ticket "merge #1 pedido"
-  [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 1 ]
-  run bash "$SCRIPT" grant --scope merge --context "merge #1 pedido" --ttl-hours 1
-  [ "$status" -eq 0 ]
-  grep -qE '"sig":"[0-9a-f]{64}"' "$TMP_GRANTS/merge.json"
-  [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 0 ]
-  [ "$(stat -c %a "$SAVIA_GRANT_KEY_FILE")" = "600" ]
+@test "P1: con la firma de la operadora el grant se emite y la petición se consume" {
+  issue_merge "merge #1 pedido"
+  [ ! -e "$TMP_GRANTS/merge.request" ]
+  grep -q 'BEGIN SSH SIGNATURE' "$TMP_GRANTS/merge.json"
   run bash "$SCRIPT" check --scope merge
   [ "$status" -eq 0 ]
 }
 
-@test "P1: el ticket es de un solo uso" {
-  ask_ticket "una vez"
-  bash "$SCRIPT" grant --scope merge --context "una vez" --ttl-hours 1
-  bash "$SCRIPT" revoke --scope merge
-  run bash "$SCRIPT" grant --scope merge --context "una vez" --ttl-hours 1
-  [ "$status" -eq 4 ]
+@test "P1: la firma también se acepta pegada por stdin (--signature -)" {
+  run bash "$SCRIPT" grant --scope merge --context "desde el móvil" --ttl-hours 1
+  sign_request
+  run bash "$SCRIPT" grant --scope merge --signature - < "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 0 ]
+  run bash "$SCRIPT" check --scope merge
+  [ "$status" -eq 0 ]
 }
 
-@test "P1: un ticket de otro contexto no vale" {
-  ask_ticket "merge del PR 1"
+@test "P1: una clave que no está en la raíz de confianza (la de un agente) no vale" {
+  ssh-keygen -q -t ed25519 -N "" -C agent -f "$TMP_GRANTS/agent-key"
+  run bash "$SCRIPT" grant --scope merge --context "me lo firmo yo" --ttl-hours 1
+  sign_request "$TMP_GRANTS/agent-key"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP_GRANTS/merge.json" ]
+}
+
+@test "P1: firma con otro namespace no vale" {
+  run bash "$SCRIPT" grant --scope merge --context "ns" --ttl-hours 1
+  sign_request "$KEY" "git"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP_GRANTS/merge.json" ]
+}
+
+@test "P1: la firma de otra petición no vale para la nueva" {
+  run bash "$SCRIPT" grant --scope merge --context "merge del PR 1" --ttl-hours 1
+  sign_request
   run bash "$SCRIPT" grant --scope merge --context "merge de todo" --ttl-hours 1
-  [ "$status" -eq 4 ]
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
   [ ! -e "$TMP_GRANTS/merge.json" ]
 }
 
-@test "P1: un ticket caducado (> 5 min) no vale y se borra" {
-  ask_ticket "viejo"
-  t="$(ls "$SAVIA_GRANT_TICKETS_DIR"/*.json)"
-  printf '{"ts": %s}' "$(( $(date +%s) - 301 ))" > "$t"
-  run bash "$SCRIPT" grant --scope merge --context "viejo" --ttl-hours 1
-  [ "$status" -eq 4 ]
-  [ ! -e "$t" ]
+@test "P1: una petición alterada antes de adjuntar la firma se rechaza" {
+  run bash "$SCRIPT" grant --scope merge --context "corta" --ttl-hours 1
+  sign_request
+  sed -i 's/"corta"/"larga"/' "$TMP_GRANTS/merge.request"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP_GRANTS/merge.json" ]
 }
 
-@test "P1: un merge.json escrito a mano (sin firma) no pasa check" {
-  printf '{"scope":"merge","grantor":"%s","source":"tty","request_context":"x","issued_at":"t","expires_epoch":%s}\n' \
+@test "P1: la clave registrada con otra identidad no firma por la operadora activa" {
+  sed -i "s/^$ACTIVE_SLUG /otra-operadora /" "$SIGNERS"
+  run bash "$SCRIPT" grant --scope merge --context "identidad" --ttl-hours 1
+  sign_request
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+}
+
+@test "P1: una petición caducada no se puede firmar a posteriori" {
+  run bash "$SCRIPT" grant --scope merge --context "vieja" --ttl-hours 0
+  sign_request
+  sleep 1
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP_GRANTS/merge.json" ]
+}
+
+@test "P1: --signature sin petición pendiente o fuera de merge es invocación inválida" {
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/nada.sig"
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" grant --scope autonomy:overnight-sprint --signature "$TMP_GRANTS/nada.sig"
+  [ "$status" -eq 2 ]
+}
+
+@test "P1: un merge.json escrito a mano (sin firma o con firma basura) no pasa check" {
+  printf '{"scope":"merge","grantor":"%s","source":"operator-signature","request_context":"x","issued_at":"t","expires_epoch":%s}\n' \
     "$ACTIVE_SLUG" "$(( $(date +%s) + 3600 ))" > "$TMP_GRANTS/merge.json"
   run bash "$SCRIPT" check --scope merge
   [ "$status" -eq 1 ]
-}
-
-@test "P1: firma con otra clave o grant alterado tras firmar no pasan check" {
-  ask_ticket "firmado"
-  bash "$SCRIPT" grant --scope merge --context "firmado" --ttl-hours 1
-  cp "$TMP_GRANTS/merge.json" "$TMP_GRANTS/orig"
-  # Alterar la caducidad invalida la firma.
-  sed -i -E 's/"expires_epoch":[0-9]+/"expires_epoch":9999999999/' "$TMP_GRANTS/merge.json"
-  run bash "$SCRIPT" check --scope merge
-  [ "$status" -eq 1 ]
-  # Mismo grant, otra clave en disco: tampoco.
-  cp "$TMP_GRANTS/orig" "$TMP_GRANTS/merge.json"
-  python3 -c 'import secrets;print(secrets.token_hex(32))' > "$SAVIA_GRANT_KEY_FILE"
-  run bash "$SCRIPT" check --scope merge
-  [ "$status" -eq 1 ]
-}
-
-@test "P1: source express-request ya no basta para merge aunque la firma cuadre" {
-  ask_ticket "fuente"
-  bash "$SCRIPT" grant --scope merge --context "fuente" --ttl-hours 1
-  python3 - "$TMP_GRANTS/merge.json" "$SAVIA_GRANT_KEY_FILE" <<'PY'
-import hashlib, hmac, json, sys
-p, kf = sys.argv[1:3]
-r = json.load(open(p)); r["source"] = "express-request"
-F = ("scope", "grantor", "source", "request_context", "issued_at", "expires_epoch")
-m = json.dumps({f: r.get(f) for f in F}, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-r["sig"] = hmac.new(bytes.fromhex(open(kf).read().strip()), m.encode(), hashlib.sha256).hexdigest()
-json.dump(r, open(p, "w"))
+  python3 - "$TMP_GRANTS/merge.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+r["sig"] = "-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----\n"
+json.dump(r, open(sys.argv[1], "w"))
 PY
   run bash "$SCRIPT" check --scope merge
   [ "$status" -eq 1 ]
 }
 
-@test "P1: en la terminal de la operadora, escribir MERGE concede (source tty)" {
-  command -v script >/dev/null || skip "util-linux script no disponible para simular una terminal"
-  run script -qec "bash $SCRIPT grant --scope merge --context terminal --ttl-hours 1" /dev/null <<< "MERGE"
-  grep -q '"source":"tty"' "$TMP_GRANTS/merge.json"
+@test "P1: grant alterado tras firmar, source cambiado o clave retirada no pasan check" {
+  issue_merge "firmado"
+  cp "$TMP_GRANTS/merge.json" "$TMP_GRANTS/orig"
+  sed -i 's/"request_context":"firmado"/"request_context":"todo"/' "$TMP_GRANTS/merge.json"
+  run bash "$SCRIPT" check --scope merge
+  [ "$status" -eq 1 ]
+  cp "$TMP_GRANTS/orig" "$TMP_GRANTS/merge.json"
+  sed -i 's/"source":"operator-signature"/"source":"express-request"/' "$TMP_GRANTS/merge.json"
+  run bash "$SCRIPT" check --scope merge
+  [ "$status" -eq 1 ]
+  # Control: el original sigue valiendo, así que los rechazos de arriba son por la alteración.
+  cp "$TMP_GRANTS/orig" "$TMP_GRANTS/merge.json"
   run bash "$SCRIPT" check --scope merge
   [ "$status" -eq 0 ]
+  printf '# clave retirada\n' > "$SIGNERS"
+  run bash "$SCRIPT" check --scope merge
+  [ "$status" -eq 1 ]
 }
 
-@test "P1: en la terminal, otra respuesta no concede" {
-  command -v script >/dev/null || skip "util-linux script no disponible para simular una terminal"
-  run script -qec "bash $SCRIPT grant --scope merge --context terminal --ttl-hours 1" /dev/null <<< "si"
-  [ ! -e "$TMP_GRANTS/merge.json" ]
+@test "P1: la raíz de confianza versionada no contiene ninguna clave (fail-closed)" {
+  # Un grant firmado con la clave de prueba no vale contra el fichero del repo.
+  issue_merge "contra el repo"
+  run bash "$REAL_SCRIPT" check --scope merge
+  [ "$status" -eq 1 ]
+  ! grep -vqE '^[[:space:]]*(#|$)' "$BATS_TEST_DIRNAME/../config/operator-grant-signers"
 }
 
 @test "contexto con comillas produce JSON válido (sin inyección de campos)" {
@@ -266,59 +320,35 @@ PY
 
 # ── operator-grant.sh guard (PreToolUse) ────────────────────────────────
 
-@test "guard: grant de merge en modo normal pide el diálogo y deja ticket" {
-  run bash "$SCRIPT" guard < <(guard_input 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"')
+@test "guard: veta a Write/Edit/Bash modificar la raíz de confianza" {
+  run bash "$SCRIPT" guard < <(guard_event Write file_path "$SIGNERS")
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" guard < <(guard_event Edit file_path "config/operator-grant-signers")
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" guard < <(guard_event NotebookEdit notebook_path "$SIGNERS")
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" guard < <(guard_event Bash command "echo 'x ssh-ed25519 AAAA' >> config/operator-grant-signers")
+  [ "$status" -eq 2 ]
+}
+
+@test "guard: deja pasar la lectura de la clave pública y el resto de órdenes" {
+  run bash "$SCRIPT" guard < <(guard_event Read file_path "$SIGNERS")
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"permissionDecision": "ask"'* ]]
-  [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 1 ]
-}
-
-@test "guard: en bypassPermissions o dontAsk deniega y no deja ticket" {
-  for mode in bypassPermissions dontAsk; do
-    run bash "$SCRIPT" guard < <(guard_input 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"' "$mode")
-    [ "$status" -eq 2 ]
-  done
-  [ ! -d "$SAVIA_GRANT_TICKETS_DIR" ] || [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 0 ]
-}
-
-@test "guard: invocación ilegible pregunta sin dejar ticket" {
-  run bash "$SCRIPT" guard < <(guard_input 'X=operator-grant.sh; eval "bash scripts/$X grant --scope merge --context y"')
+  run bash "$SCRIPT" guard < <(guard_event Write file_path "$TMP_GRANTS/otro.txt")
   [ "$status" -eq 0 ]
-  [[ "$output" == *'"ask"'* ]]
-  [ ! -d "$SAVIA_GRANT_TICKETS_DIR" ] || [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 0 ]
-}
-
-@test "guard: check, revoke y grants de autonomía pasan sin preguntar" {
-  for c in 'bash scripts/operator-grant.sh check --scope merge' \
-           'bash scripts/operator-grant.sh revoke --scope merge' \
-           'bash scripts/operator-grant.sh grant --scope autonomy:overnight-sprint --context z' \
-           'git status'; do
-    run bash "$SCRIPT" guard < <(guard_input "$c")
+  for c in 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"' \
+           'bash scripts/operator-grant.sh check --scope merge' 'git status'; do
+    run bash "$SCRIPT" guard < <(guard_event Bash command "$c")
     [ "$status" -eq 0 ]
     [ -z "$output" ]
   done
-}
-
-@test "guard: veta clave y tickets a Read, Grep sobre su carpeta madre y Bash" {
-  kdir="$(dirname "$SAVIA_GRANT_KEY_FILE")"
-  run bash "$SCRIPT" guard < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":sys.argv[1]}}))' "$SAVIA_GRANT_KEY_FILE")
-  [ "$status" -eq 2 ]
-  run bash "$SCRIPT" guard < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Grep","tool_input":{"pattern":"a","path":sys.argv[1]}}))' "$TMP_GRANTS")
-  [ "$status" -eq 2 ]
-  run bash "$SCRIPT" guard < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Write","tool_input":{"file_path":sys.argv[1]+"/merge-x.json","content":"{}"}}))' "$SAVIA_GRANT_TICKETS_DIR")
-  [ "$status" -eq 2 ]
-  run bash "$SCRIPT" guard < <(guard_input "cat $kdir/*")
-  [ "$status" -eq 2 ]
-  run bash "$SCRIPT" guard < <(guard_input 'SAVIA_GRANT_KEY_FILE=/tmp/k bash scripts/operator-grant.sh check --scope merge')
-  [ "$status" -eq 2 ]
-  # Negativo: una ruta ajena pasa.
-  run bash "$SCRIPT" guard < <(python3 -c 'import json;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":"/etc/hostname"}}))')
-  [ "$status" -eq 0 ]
 }
 
 @test "guard: sin entrada o con entrada no JSON, bloquea (nunca 0 sin evaluar)" {
   run bash "$SCRIPT" guard < /dev/null
   [ "$status" -eq 2 ]
   run bash "$SCRIPT" guard <<< "no-json"
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" guard <<< "[]"
   [ "$status" -eq 2 ]
 }
