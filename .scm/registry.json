@@ -24158,6 +24158,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "opencode"
+      ],
+      "id": "script:scripts/windows-links",
+      "intents": [
+        "enlaces",
+        "links",
+        "materializa",
+        "modo",
+        "windows"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/windows-links.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "claude",
         "opencode"
       ],
@@ -29619,7 +29640,7 @@
       "tests": []
     }
   ],
-  "content_hash": "b00266903faa",
+  "content_hash": "a83cd383a47e",
   "deferred_kinds": [
     "rule",
     "hook"

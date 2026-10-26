@@ -1,6 +1,6 @@
 {
-  "hash": "b00266903faa",
-  "total": 1450,
+  "hash": "a83cd383a47e",
+  "total": 1451,
   "resources": [
     {
       "category": "analysis",
@@ -15624,6 +15624,20 @@
       "kind": "skill",
       "path": ".claude/skills/wellbeing-guardian/SKILL.md",
       "description": "Usar cuando se monitorizan señales de bienestar individual en el equipo."
+    },
+    {
+      "category": "planning",
+      "name": "windows-links",
+      "intents": [
+        "enlaces",
+        "links",
+        "materializa",
+        "modo",
+        "windows"
+      ],
+      "kind": "script",
+      "path": "scripts/windows-links.sh",
+      "description": "windows-links.sh — Materializa en Windows los enlaces Git (modo 120000)."
     },
     {
       "category": "planning",

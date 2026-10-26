@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 5cca77fefb50 | resources: 1450
-> 295 commands · 139 skills · 90 agents · 926 scripts
+> hash: e8c93f32c17b | resources: 1451
+> 295 commands · 139 skills · 90 agents · 927 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -1183,6 +1183,7 @@
 [planning] wave-executor-lib — executor,functions,helper,wave — script:scripts/wave-executor-lib.sh
 [planning] wellbeing-guardian — alerts,balance,break,hours,individual — cmd:.claude/commands/wellbeing-guardian.md
 [planning] wellbeing-guardian — bienestar,equipo,individual,monitorizan,señales — skill:.claude/skills/wellbeing-guardian/SKILL.md
+[planning] windows-links — enlaces,links,materializa,modo,windows — script:scripts/windows-links.sh
 [planning] workspace-doctor —  — cmd:.claude/commands/workspace-doctor.md
 [planning] workspace-health — comprehensive,dashboard,health,workspace — script:scripts/workspace-health.sh
 [planning] write-a-skill — correctamente,crear,guia,nueva,repite — skill:.claude/skills/write-a-skill/SKILL.md
