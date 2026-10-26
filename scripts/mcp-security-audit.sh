@@ -18,11 +18,13 @@
 # Exit codes:
 #   0 — no findings
 #   1 — findings present
-#   2 — usage error, or UNKNOWN: python3 missing or unable to start, so no config can be read (SE-453).
-#       A config that python3 cannot parse is a finding (MCP-00, exit 1), not UNKNOWN.
-#       With no config found (none given and no default present) the result is clean with 0 audited.
+#   2 — usage error, o auditoría imposible (python3 ausente)
 #
-# Contrato SE-453: --json lleva `result` y `gaps`; en texto la última línea es `gate-result: {...}`.
+# SE-453: resultado clean|findings|unknown. En texto, la última línea de stdout es
+# `gate-result: {...}`; con --json, los campos `result` y `gaps` del propio JSON.
+# python3 ausente ⇒ unknown/python3:missing_tool y exit 2 (antes salía 1 con un falso MCP-00).
+# --config a un fichero que no existe o no se puede leer, o ninguna config por defecto ⇒
+# unknown/config:unreadable (exit 0, registrado; SAVIA_GATE_UNKNOWN=block ⇒ exit 2).
 #
 # Ref: SE-058, research/agentshield-20260420.md
 # Safety: read-only. set -uo pipefail.
@@ -32,7 +34,9 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=../.claude/hooks/lib/gate-result.sh
-source "$PROJECT_ROOT/.claude/hooks/lib/gate-result.sh"
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+GAPS=()
+add_gap() { [[ " ${GAPS[*]} " == *" $1 "* ]] || GAPS+=("$1"); }
 
 CONFIGS=()
 JSON=0
@@ -84,23 +88,30 @@ MIN_RANK=$(sev_rank "$MIN_SEVERITY")
 if [[ ${#CONFIGS[@]} -eq 0 ]]; then
   [[ -f "$PROJECT_ROOT/.claude/mcp.json" ]] && CONFIGS+=("$PROJECT_ROOT/.claude/mcp.json")
   [[ -f "$HOME/.claude.json" ]] && CONFIGS+=("$HOME/.claude.json")
+  # Sin ninguna config que leer no hay evidencia de «limpio» (mismo criterio que --config inexistente).
+  [[ ${#CONFIGS[@]} -eq 0 ]] && add_gap "config:unreadable"
 fi
 
 FINDINGS=()
 total_servers=0
 
-# SE-453: sin python3 no se puede leer ningún config. Antes cada config salía como MCP-00 «Invalid JSON»
-# (un hallazgo falso por herramienta ausente); ahora es unknown/missing_tool. También si python3 existe
-# pero no arranca (shim de pyenv sin versión, venv roto): `command -v` no basta.
-if [[ ${#CONFIGS[@]} -gt 0 ]] && ! python3 -c '' >/dev/null 2>&1; then
-  echo "ERROR: python3 no disponible; no se pueden leer los configs MCP (no medido)." >&2
+# emit_result <result> — salida del contrato SE-453 en el formato pedido (texto o --json).
+emit_result() {
+  local result="$1"
   if [[ "$JSON" -eq 1 ]]; then
-    gate_line="$(gate_result_emit unknown "python3:missing_tool")"
-    [[ -n "$gate_line" ]] || { echo "gate_result_emit falló" >&2; exit 2; }
-    echo "{\"verdict\":\"UNKNOWN\",\"configs_audited\":0,\"servers_audited\":0,\"findings_count\":0,\"critical\":0,\"high\":0,\"medium\":0,\"low\":0,\"findings\":[],${gate_line#gate-result: \{}"
+    gate_result_emit "$result" "${GAPS[@]}" | sed 's/^gate-result: //'
   else
-    gate_result_emit unknown "python3:missing_tool"
+    gate_result_emit "$result" "${GAPS[@]}"
   fi
+}
+
+# Se prueba que python3 arranque, no solo que exista: un shim de pyenv sin versión o un venv roto
+# pasan `command -v` y luego cada config saldría como un falso MCP-00.
+if ! python3 -c '' >/dev/null 2>&1; then
+  echo "ERROR: python3 no disponible; no se puede auditar ninguna configuración MCP." >&2
+  add_gap "python3:missing_tool"
+  GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "mcp-security-audit" missing_tool
+  emit_result unknown
   exit 2
 fi
 
@@ -116,10 +127,13 @@ add_finding() {
 # Process a single config file
 audit_config() {
   local cfg="$1"
-  [[ ! -f "$cfg" ]] && return 0
+  if [[ ! -f "$cfg" || ! -r "$cfg" ]]; then
+    add_gap "config:unreadable"
+    return 0
+  fi
 
   # Check if valid JSON
-  if ! python3 -c "import json; json.load(open('$cfg'))" 2>/dev/null; then
+  if ! python3 -c "import json, sys; json.load(open(sys.argv[1]))" "$cfg" 2>/dev/null; then
     add_finding "MCP-00" "HIGH" "_global" "Invalid JSON in $cfg" "$cfg"
     return 0
   fi
@@ -128,13 +142,13 @@ audit_config() {
   local servers_json
   servers_json=$(python3 -c "
 import json, sys
-with open('$cfg') as f:
+with open(sys.argv[1]) as f:
     d = json.load(f)
 servers = d.get('mcpServers', {})
 for name, cfg in servers.items():
     if isinstance(cfg, dict):
         print(json.dumps({'name': name, 'cfg': cfg}))
-" 2>/dev/null)
+" "$cfg" 2>/dev/null)
 
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -229,6 +243,14 @@ HIGH=$(count_sev "HIGH")
 MED=$(count_sev "MEDIUM")
 LOW=$(count_sev "LOW")
 
+RESULT="clean"
+if [[ ${#FINDINGS[@]} -gt 0 ]]; then RESULT="findings"; elif [[ ${#GAPS[@]} -gt 0 ]]; then RESULT="unknown"; fi
+if [[ "$RESULT" == "unknown" ]]; then
+  GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "mcp-security-audit" "${GAPS[0]#*:}"
+  [[ "${SAVIA_GATE_UNKNOWN:-warn}" == "block" ]] && EXIT_CODE=2
+fi
+GATE_JSON="$(gate_result_emit "$RESULT" "${GAPS[@]}" | sed 's/^gate-result: {//; s/}$//')"
+
 if [[ "$JSON" -eq 1 ]]; then
   findings_json=""
   for f in "${FINDINGS[@]}"; do
@@ -238,10 +260,8 @@ if [[ "$JSON" -eq 1 ]]; then
     findings_json+="{\"rule\":\"$rule\",\"severity\":\"$sev\",\"server\":\"$server\",\"detail\":\"$detail_esc\",\"config\":\"$cfg_esc\"},"
   done
   findings_json="[${findings_json%,}]"
-  gate_line="$(gate_result_emit "$([ $EXIT_CODE -eq 0 ] && echo clean || echo findings)")"
-  [[ -n "$gate_line" ]] || { echo "gate_result_emit falló" >&2; exit 2; }
   cat <<JSON
-{"verdict":"$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)","configs_audited":${#CONFIGS[@]},"servers_audited":$total_servers,"findings_count":${#FINDINGS[@]},"critical":$CRIT,"high":$HIGH,"medium":$MED,"low":$LOW,"findings":$findings_json,${gate_line#gate-result: \{}
+{"verdict":"$([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)","configs_audited":${#CONFIGS[@]},"servers_audited":$total_servers,"findings_count":${#FINDINGS[@]},"critical":$CRIT,"high":$HIGH,"medium":$MED,"low":$LOW,"findings":$findings_json,$GATE_JSON}
 JSON
 else
   echo "=== SE-058 MCP Security Audit ==="
@@ -259,7 +279,7 @@ else
     echo ""
   fi
   echo "VERDICT: $([ $EXIT_CODE -eq 0 ] && echo PASS || echo FAIL)"
-  gate_result_emit "$([ $EXIT_CODE -eq 0 ] && echo clean || echo findings)"
+  emit_result "$RESULT"
 fi
 
 exit $EXIT_CODE

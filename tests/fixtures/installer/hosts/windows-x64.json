@@ -1,0 +1,11 @@
+{
+  "arch": "x64",
+  "elevation_available": true,
+  "installed": {},
+  "name": "windows-x64",
+  "os": "windows",
+  "package_managers": [
+    "winget",
+    "npm"
+  ]
+}

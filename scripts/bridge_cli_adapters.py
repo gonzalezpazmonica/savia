@@ -66,6 +66,8 @@ class _CliAdapter:
 
     @staticmethod
     def _prompt(request: BridgeRequest):
+        # Client-controlled: every command places it after "--" so a prompt
+        # such as "--version" or "--mcp-config=..." is never parsed as a flag.
         if request.system_prompt:
             return f"{request.system_prompt}\n\n{request.message}"
         return request.message
@@ -81,14 +83,14 @@ class CodexCliAdapter(_CliAdapter):
                "-C", request.workdir]
         if not request.persistent:
             cmd.append("--ephemeral")
-        return [*cmd, self._prompt(request)]
+        return [*cmd, "--", self._prompt(request)]
 
     def resume_command(self, request: BridgeRequest, native_session_ref: str):
         if not request.persistent:
             raise AdapterContractError("UNSUPPORTED_RESUME")
         if not native_session_ref:
             raise AdapterContractError("MISSING_NATIVE_SESSION")
-        return [self._require_binary(), "exec", "resume", "--json",
+        return [self._require_binary(), "exec", "resume", "--json", "--",
                 native_session_ref, self._prompt(request)]
 
     def translate(self, line: str):
@@ -122,14 +124,14 @@ class OpenCodeCliAdapter(_CliAdapter):
 
     def start_command(self, request: BridgeRequest):
         return [self._require_binary(), "run", "--pure", "--format", "json",
-                "--dir", request.workdir, self._prompt(request)]
+                "--dir", request.workdir, "--", self._prompt(request)]
 
     def resume_command(self, request: BridgeRequest, native_session_ref: str):
         if not native_session_ref:
             raise AdapterContractError("MISSING_NATIVE_SESSION")
         return [self._require_binary(), "run", "--pure", "--format", "json",
                 "--dir", request.workdir, "--session", native_session_ref,
-                self._prompt(request)]
+                "--", self._prompt(request)]
 
     def translate(self, line: str):
         try:
