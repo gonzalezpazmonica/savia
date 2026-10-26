@@ -34,10 +34,21 @@ def cdp_send(ws, mid, method, params=None, timeout=60):
     raise TimeoutError("CDP timeout " + method)
 
 
+def is_sharepoint_url(url):
+    """True only when the URL's host is *.sharepoint.com (not a substring match).
+
+    The page's window.location.origin receives user and drive ids, so a tab
+    like https://evil.example/?next=sharepoint.com must never be selected.
+    """
+    parsed = urllib.parse.urlsplit(url or "")
+    host = (parsed.hostname or "").lower()
+    return parsed.scheme == "https" and host.endswith(".sharepoint.com")
+
+
 def find_sp_page(cdp_url):
     targets = json.loads(urllib.request.urlopen(cdp_url + "/json", timeout=5).read())
     for t in targets:
-        if t.get("type") == "page" and "sharepoint.com" in (t.get("url") or ""):
+        if t.get("type") == "page" and is_sharepoint_url(t.get("url")):
             return t
     return None
 

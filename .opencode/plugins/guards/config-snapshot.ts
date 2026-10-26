@@ -12,6 +12,7 @@ import {
   type ToolInput,
   type ToolOutput,
 } from "../lib/hook-input.ts";
+import { bashExecutable } from "../lib/bash-runtime.ts";
 
 export function isWatchedConfig(filePath: string, home: string): boolean {
   if (!filePath) return false;
@@ -32,7 +33,7 @@ export async function configSnapshot(input: ToolInput, output: ToolOutput): Prom
     if (!existsSync(filePath)) return;
     const { spawnSync } = await import("node:child_process");
     const root = process.env.SAVIA_WORKSPACE_DIR ?? process.cwd();
-    spawnSync("bash", [root + "/scripts/config-snapshot.sh", "snapshot", filePath], {
+    spawnSync(bashExecutable(), [root + "/scripts/config-snapshot.sh", "snapshot", filePath], {
       encoding: "utf8",
       timeout: 3000,
     });

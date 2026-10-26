@@ -49,7 +49,7 @@ def cmd_setup(args):
     config = generate_esp32_config(ssid, password, host_ip, args.port or 8765)
     # Mask password in display
     display = dict(config)
-    display["wifi_pass"] = "***" + password[-2:] if len(password) > 2 else "***"
+    display["wifi_pass"] = "***"  # no suffix: terminal scrollback is not a vault
     print(f"  Config: {json.dumps(display, indent=2)}")
 
     print()
