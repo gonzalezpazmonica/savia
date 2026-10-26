@@ -385,7 +385,8 @@ ACT_PY='import json,sys; sys.stdin.read(); print(json.dumps({"activate":True,"sc
   export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_DOUBT 'd')"
   run_hook "$HIGH_IMPACT_JSON"
   [ "$(ev banner_emitted)" = "true" ]
-  [ "$(ev score)" = "55" ]
+  # el score depende de la franja horaria (operator_state): se compara con el evaluador real
+  [ "$(ev score)" = "$(echo "$HIGH_IMPACT_JSON" | python3 "$REPO_ROOT/scripts/criterion-simulation/trigger-evaluator.py" | jq -r .score)" ]
   [[ "$(ev reasons)" == *production* ]]
 }
 
@@ -403,7 +404,8 @@ ACT_PY='import json,sys; sys.stdin.read(); print(json.dumps({"activate":True,"sc
   run_hook "$HIGH_IMPACT_JSON"
   [ ! -s "$ERR" ]
   [ "$(ev verdict)" = "FRAME_REJECT" ]
-  [ "$(ev score)" = "55" ]
+  # el score depende de la franja horaria (operator_state): se compara con el evaluador real
+  [ "$(ev score)" = "$(echo "$HIGH_IMPACT_JSON" | python3 "$REPO_ROOT/scripts/criterion-simulation/trigger-evaluator.py" | jq -r .score)" ]
   [ "$(ev banner_emitted)" = "false" ]
 }
 
@@ -433,7 +435,8 @@ ACT_PY='import json,sys; sys.stdin.read(); print(json.dumps({"activate":True,"sc
   run_hook "$HIGH_IMPACT_JSON"
   [ ! -s "$ERR" ]
   [ "$(ev verdict)" = "ACTIVATED_NO_JUDGE" ]
-  [ "$(ev score)" = "55" ]
+  # el score depende de la franja horaria (operator_state): se compara con el evaluador real
+  [ "$(ev score)" = "$(echo "$HIGH_IMPACT_JSON" | python3 "$REPO_ROOT/scripts/criterion-simulation/trigger-evaluator.py" | jq -r .score)" ]
 }
 
 @test "tarea de bajo impacto: BYPASS_LOW_SCORE aunque haya veredicto de rechazo" {
@@ -441,7 +444,8 @@ ACT_PY='import json,sys; sys.stdin.read(); print(json.dumps({"activate":True,"sc
   run_hook '{"problem_statement":"renombrar variable"}'
   [ ! -s "$ERR" ]
   [ "$(ev verdict)" = "BYPASS_LOW_SCORE" ]
-  [ "$(ev score)" = "0" ]
+  # la franja horaria suma hasta 13 puntos: lo que importa es quedar bajo el umbral 50
+  [ "$(ev score)" -lt 50 ]
 }
 
 @test "sin evaluador de disparo: BYPASS_NO_SCRIPT (fail-open)" {
