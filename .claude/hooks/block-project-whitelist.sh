@@ -11,7 +11,10 @@ if [[ -f "$LIB_DIR/profile-gate.sh" ]]; then
 fi
 
 # Lee el input del hook
+# Claude Code y OpenCode pasan la entrada del hook por stdin; CLAUDE_TOOL_INPUT no lo define ningún
+# runtime y leerla sola dejaba el hook en fallo abierto (exit 0 siempre). Se conserva como respaldo.
 INPUT="${CLAUDE_TOOL_INPUT:-}"
+if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
 
 # Solo nos interesa si se está editando .gitignore
 if ! echo "$INPUT" | grep -q "\.gitignore"; then

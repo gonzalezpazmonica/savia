@@ -20,7 +20,10 @@ PROMPT_HOOKS_MODE="${PROMPT_HOOKS_MODE:-warning}"
 [[ "$PROMPT_HOOKS_ENABLED" != "true" ]] && exit 0
 
 # Only run on git commit commands
+# Claude Code y OpenCode pasan la entrada del hook por stdin; CLAUDE_TOOL_INPUT no lo define ningún
+# runtime y leerla sola dejaba el hook en fallo abierto (exit 0 siempre). Se conserva como respaldo.
 INPUT="${CLAUDE_TOOL_INPUT:-}"
+if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
 if ! echo "$INPUT" | grep -q "git commit"; then
   exit 0
 fi
