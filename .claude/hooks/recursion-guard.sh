@@ -43,7 +43,9 @@ main() {
     exit 0
   fi
 
+  # Claude Code pasa la entrada por stdin; OPENCODE_TOOL_INPUT queda como respaldo.
   local tool_input="${OPENCODE_TOOL_INPUT:-}"
+  if [[ -z "$tool_input" && ! -t 0 ]]; then tool_input=$(timeout 3 cat 2>/dev/null || true); fi
 
   local detected_loop
   if ! detected_loop="$(_detect_loop "$tool_input")"; then

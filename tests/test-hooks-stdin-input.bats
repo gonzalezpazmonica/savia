@@ -42,11 +42,17 @@ payload() { python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[
   [[ "$output" == *"Plan Gate"* ]]
 }
 
-@test "ningún hook PreToolUse lee solo CLAUDE_TOOL_INPUT sin stdin" {
+@test "ningún hook PreToolUse lee su entrada solo de una variable de entorno" {
+  pre=$(python3 -c 'import json,re
+d=json.load(open(".claude/settings.json"))
+for m in d["hooks"].get("PreToolUse",[]):
+    for h in m.get("hooks",[]):
+        for f in re.findall(r"hooks/([A-Za-z0-9_.-]+\.sh)", h.get("command","")): print(f)' | sort -u)
   bad=""
-  for f in .claude/hooks/*.sh; do
-    grep -q 'CLAUDE_TOOL_INPUT' "$f" || continue
-    grep -qE 'cat( |\)|$)|read -r|hook_extract' "$f" || bad="$bad $(basename "$f")"
+  for f in $pre; do
+    [ -f ".claude/hooks/$f" ] || continue
+    grep -qE '(OPENCODE_|CLAUDE_)?TOOL_INPUT(_FILE)?:-' ".claude/hooks/$f" || continue
+    grep -qE 'cat( |\)|$)|read -r|hook_extract' ".claude/hooks/$f" || bad="$bad $f"
   done
   [ -z "$bad" ] || { echo "solo env:$bad"; return 1; }
 }
@@ -66,5 +72,26 @@ payload() { python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[
 @test "block-project-whitelist bloquea Write de .gitignore con !projects/ en content" {
   payload Write '{"file_path":"/repo/.gitignore","content":"*.log\n!projects/nuevo/\n"}' > "$TMP/in.json"
   run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "android-adb-validate bloquea por stdin un borrado recursivo por adb shell" {
+  export HOME="$TMP"
+  payload Bash '{"command":"adb shell rm -rf /sdcard/x"}' > "$TMP/in.json"
+  run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "android-adb-validate deja pasar por stdin adb devices" {
+  export HOME="$TMP"
+  payload Bash '{"command":"adb devices"}' > "$TMP/in.json"
+  run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "recursion-guard bloquea por stdin un bucle dentro de otro" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  payload Task '{"prompt":"lanza overnight-sprint otra vez"}' > "$TMP/in.json"
+  run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
 }
