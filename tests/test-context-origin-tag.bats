@@ -258,3 +258,23 @@ teardown() {
   # Cualquier salida controlada acepta — lo critico es no segfault.
   [ "$status" -ne 139 ]  # 139 = SIGSEGV
 }
+
+# === Rutas Windows (Git Bash) ===
+
+@test "windows: ruta C:\ fuera del workspace no hereda un tier interno" {
+  run bash "$SCRIPT" 'C:\Users\otra\AppData\Local\Temp\fake-spec.md'
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "untrusted" || "$output" == "N5-external" ]]
+}
+
+@test "windows: workspace y ruta en formato C:\ resuelven el anchor" {
+  SAVIA_WORKSPACE_DIR='C:\ws-savia' run bash "$SCRIPT" 'C:\ws-savia\docs\critical-facts.md'
+  [[ "$output" == "N1-anchor" ]]
+  SAVIA_WORKSPACE_DIR='C:\ws-savia' run bash "$SCRIPT" 'c:/ws-savia/docs/critical-facts.md'
+  [[ "$output" == "N1-anchor" ]]
+}
+
+@test "directorio hermano con el mismo prefijo no cuenta como workspace" {
+  run bash "$SCRIPT" "${WS}-otro/docs/critical-facts.md"
+  [[ "$output" != "N1-anchor" ]]
+}

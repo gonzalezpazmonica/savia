@@ -14,6 +14,7 @@ import {
   type ToolInput,
   type ToolOutput,
 } from "../lib/hook-input.ts";
+import { bashExecutable } from "../lib/bash-runtime.ts";
 
 function workspaceRoot(): string {
   return process.env.SAVIA_WORKSPACE_DIR ?? process.cwd();
@@ -41,7 +42,7 @@ export async function editLedgerRecord(input: ToolInput, output: ToolOutput): Pr
   if (!payload) return;
   try {
     const { spawnSync } = await import("node:child_process");
-    spawnSync("bash", [workspaceRoot() + "/scripts/edit-ledger.sh", "record"], {
+    spawnSync(bashExecutable(), [workspaceRoot() + "/scripts/edit-ledger.sh", "record"], {
       input: payload,
       encoding: "utf8",
       timeout: 3000,

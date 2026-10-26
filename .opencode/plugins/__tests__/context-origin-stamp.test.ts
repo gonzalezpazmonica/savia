@@ -8,7 +8,7 @@
 import { test, expect, beforeEach } from "bun:test";
 import { contextOriginStamp } from "../guards/context-origin-stamp.ts";
 import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const ORIGIN_HEADER = "---origin";
@@ -122,11 +122,12 @@ test("tier resolution: file outside workspace is N5-external or untrusted", asyn
 
 test("tier resolution: docs/critical-facts.md is N1-anchor (real workspace path)", async () => {
   // Use the real workspace file as the test target
-  const wsCriticalFacts = "/home/monica/savia/docs/critical-facts.md";
+  const workspace = resolve(import.meta.dir, "..", "..", "..");
+  const wsCriticalFacts = join(workspace, "docs", "critical-facts.md");
   // Force SAVIA_WORKSPACE_DIR so tier resolution works regardless of cwd
   // (bun test cwd = .opencode/plugins/, not workspace root)
   const prev = process.env.SAVIA_WORKSPACE_DIR;
-  process.env.SAVIA_WORKSPACE_DIR = "/home/monica/savia";
+  process.env.SAVIA_WORKSPACE_DIR = workspace;
   try {
     const input = makeInput("read", wsCriticalFacts);
     const output = makeOutput(makeLongOutput(250));
