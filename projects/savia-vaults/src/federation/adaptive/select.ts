@@ -3,7 +3,7 @@
 import type { FederatedDome } from '../types.js';
 import { DEFAULT_FLAGS, parseGuidance, type AdaptiveFlags, type VaultCue } from './guidance.js';
 
-// Presupuesto finito obligatorio: NaN o Infinity se tratan como 0 (fail-closed), nunca como «sin tope».
+// Presupuesto finito obligatorio: cada tope NaN, Infinity o negativo se trata como 0 (fail-closed), nunca como «sin tope».
 export interface SelectionBudget { maxVaults: number; maxRemoteCalls: number; }
 export type Termination = 'ANSWER_SUFFICIENT' | 'BUDGET_EXHAUSTED' | 'POLICY_BLOCK' | 'NO_ROUTE' | 'CONFLICT' | 'TIMEOUT' | 'UNKNOWN';
 export type SkipReason = 'UNHEALTHY' | 'BUDGET';
@@ -41,7 +41,14 @@ function score(weight: number, cue: VaultCue | undefined, q: Set<string>): numbe
   return Math.max(0, weight * (1 + sum(cue.attracts) + spec - sum(cue.repels)));
 }
 
-// Baseline de la federación actual: todo destino autorizado y sano, sin tope propio.
+// Elegible = habilitado y 'healthy' | 'degraded', exactamente registry.getHealthy(): 'unknown' tampoco lo consulta el motor real.
+const eligible = (d: Pick<FederatedDome, 'status' | 'enabled'>): boolean => d.enabled && (d.status === 'healthy' || d.status === 'degraded');
+// Peso de configuración local: no finito o negativo cuenta como 0 para que el orden sea total y determinista.
+const safeWeight = (w: number): number => (Number.isFinite(w) && w > 0 ? w : 0);
+// Cada tope por separado: no finito (NaN, Infinity) o negativo es 0. Fail-closed, nunca «sin tope».
+const cap = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+
+// Baseline de la federación actual: todo destino autorizado y elegible, sin tope propio.
 function baselineIds(i: SelectionInput): { ids: string[]; denied: number; skipped: SelectionResult['skipped'] } {
   const allowed = new Set(i.allowedDomeIds);
   const skipped: SelectionResult['skipped'] = [];
@@ -53,11 +60,20 @@ function baselineIds(i: SelectionInput): { ids: string[]; denied: number; skippe
     if (seen.has(d.id)) continue;
     seen.add(d.id);
     if (!allowed.has(d.id)) { denied++; continue; }
-    // Igual que registry.getHealthy(): 'degraded' sigue siendo consultable por el baseline real.
-    if (!d.enabled || d.status === 'unhealthy') { skipped.push({ id: d.id, reason: 'UNHEALTHY' }); continue; }
+    if (!eligible(d)) { skipped.push({ id: d.id, reason: 'UNHEALTHY' }); continue; }
     ids.push(d.id);
   }
   return { ids, denied, skipped };
+}
+
+// Misma terminación para adaptive y fallback. POLICY_BLOCK: la policy deja fuera todo y no hay nada autorizado;
+// BUDGET_EXHAUSTED: había destinos elegibles (o local) y el presupuesto los recortó todos; NO_ROUTE: nada elegible.
+function terminate(selected: string[], base: ReturnType<typeof baselineIds>, remoteBudget: number, localAllowed: boolean, localKept: boolean): Termination | null {
+  const remoteCut = remoteBudget === 0 && base.ids.length > 0;
+  if (selected.length > 0) return remoteCut ? 'BUDGET_EXHAUSTED' : null;
+  const authorized = base.ids.length + base.skipped.length + (localAllowed ? 1 : 0);
+  if (base.denied > 0 && authorized === 0) return 'POLICY_BLOCK';
+  return remoteCut || (localAllowed && !localKept) ? 'BUDGET_EXHAUSTED' : 'NO_ROUTE';
 }
 
 export function selectDestinations(input: SelectionInput): SelectionResult {
@@ -65,23 +81,24 @@ export function selectDestinations(input: SelectionInput): SelectionResult {
   const allowed = new Set(input.allowedDomeIds);
   const localAllowed = allowed.has('local');
   const base = baselineIds(input);
-  const head = localAllowed ? ['local'] : [];
   if (!flags.adaptive) {
-    return { mode: 'baseline', selected: [...head, ...base.ids], skipped: base.skipped, deniedCount: base.denied, scores: {}, termination: null, reasons: ['adaptive=false'] };
+    return { mode: 'baseline', selected: [...(localAllowed ? ['local'] : []), ...base.ids], skipped: base.skipped, deniedCount: base.denied, scores: {}, termination: null, reasons: ['adaptive=false'] };
   }
 
-  const rawBudget = Math.min(input.budget.maxRemoteCalls, input.budget.maxVaults - head.length);
-  const remoteBudget = Number.isFinite(rawBudget) ? Math.max(0, rawBudget) : 0;
+  const maxVaults = cap(input.budget.maxVaults);
+  // 'local' cuenta en maxVaults: con maxVaults 0 tampoco entra (se informa como BUDGET).
+  const localKept = localAllowed && maxVaults >= 1;
+  const head = localKept ? ['local'] : [];
+  const localSkip = localAllowed && !localKept ? [{ id: 'local', reason: 'BUDGET' as const }] : [];
+  const remoteBudget = Math.min(cap(input.budget.maxRemoteCalls), maxVaults - head.length);
+  const weightOf = (id: string): number => safeWeight(input.domes.find(d => d.id === id)!.weight);
   const parsed = parseGuidance(input.guidance);
   if (!parsed.ok) {
     // Fallo adaptativo -> federación existente con policy y presupuesto restante, nunca broadcast ilimitado.
-    const capped = [...base.ids].sort((a, b) => {
-      const w = (id: string): number => input.domes.find(d => d.id === id)!.weight;
-      return w(b) - w(a) || byIdAsc(a, b);
-    }).slice(0, remoteBudget);
-    const skipped = [...base.skipped, ...base.ids.filter(id => !capped.includes(id)).map(id => ({ id, reason: 'BUDGET' as const }))];
-    const r = { mode: 'fallback' as const, selected: [...head, ...capped], skipped, deniedCount: base.denied, scores: {}, termination: null, reasons: ['guidance inválida', ...parsed.errors.slice(0, 5)] };
-    return remoteBudget === 0 && base.ids.length > 0 ? { ...r, termination: 'BUDGET_EXHAUSTED' } : r;
+    const capped = [...base.ids].sort((a, b) => weightOf(b) - weightOf(a) || byIdAsc(a, b)).slice(0, remoteBudget);
+    const skipped = [...localSkip, ...base.skipped, ...base.ids.filter(id => !capped.includes(id)).map(id => ({ id, reason: 'BUDGET' as const }))];
+    const selected = [...head, ...capped];
+    return { mode: 'fallback', selected, skipped, deniedCount: base.denied, scores: {}, termination: terminate(selected, base, remoteBudget, localAllowed, localKept), reasons: ['guidance inválida', ...parsed.errors.slice(0, 5)] };
   }
 
   const q = tokens(input.query);
@@ -90,19 +107,14 @@ export function selectDestinations(input: SelectionInput): SelectionResult {
   // Sin prototipo: un id como '__proto__' es una clave más, no reasigna el prototipo.
   const scores: Record<string, number> = Object.create(null) as Record<string, number>;
   const ranked = base.ids.map(id => {
-    const d = input.domes.find(x => x.id === id)!;
-    const s = score(d.weight, cues.get(id), q);
+    const s = score(weightOf(id), cues.get(id), q);
     scores[id] = s;
     return { id, s };
   }).sort((a, b) => b.s - a.s || byIdAsc(a.id, b.id));
   const chosen = ranked.slice(0, remoteBudget);
-  const skipped = [...base.skipped, ...ranked.slice(remoteBudget).map(r => ({ id: r.id, reason: 'BUDGET' as const }))];
+  const skipped = [...localSkip, ...base.skipped, ...ranked.slice(remoteBudget).map(r => ({ id: r.id, reason: 'BUDGET' as const }))];
   const selected = [...head, ...chosen.map(c => c.id)];
-  // POLICY_BLOCK: la policy deja fuera todo y no hay nada autorizado; BUDGET_EXHAUSTED: hay sanos pero el presupuesto remoto es 0.
-  const authorized = base.ids.length + base.skipped.length + head.length;
-  const termination: Termination | null = selected.length === 0
-    ? (base.denied > 0 && authorized === 0 ? 'POLICY_BLOCK' : remoteBudget === 0 && base.ids.length > 0 ? 'BUDGET_EXHAUSTED' : 'NO_ROUTE')
-    : remoteBudget === 0 && base.ids.length > 0 ? 'BUDGET_EXHAUSTED' : null;
+  const termination = terminate(selected, base, remoteBudget, localAllowed, localKept);
   // Mismo `skipped` en ambas ramas: con presupuesto 0 los sanos recortados figuran como BUDGET, igual que en fallback.
   return { mode: 'adaptive', selected, skipped, deniedCount: base.denied, scores, termination, reasons: selected.length === 0 ? ['sin destinos elegibles'] : [] };
 }

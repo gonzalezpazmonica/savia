@@ -1,5 +1,6 @@
 // SE-395 R04: A/B aislado, regla de decisión y suite adversarial (AC17, AC18, AC19, AC20).
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { generateDataset } from '../../../src/federation/benchmark/generate.js';
 import { runBaseline } from '../../../src/federation/benchmark/baseline.js';
 import { compare, makeRouter, pairedBootstrap, runAb, trainGuidance, DECISION_RULES } from '../../../src/federation/benchmark/ab.js';
@@ -91,6 +92,16 @@ describe('A/B sobre el benchmark congelado', () => {
     const leaky = await runBaseline(corpus, dataset, { route: () => ['local', 'beta', 'gamma', 'delta'] });
     expect(leaky.metrics.reduce((s, m) => s + m.exposed, 0)).toBeGreaterThan(0);
   });
+  it('route se intersecta con la policy: nada fuera se consulta y la exposición mide la salida cruda del router', async () => {
+    const all = ['local', 'beta', 'gamma', 'delta'];
+    const leaky = await runBaseline(corpus, dataset, { route: () => all });
+    const base = await runBaseline(corpus, dataset);
+    // Exposición exacta = ids propuestos fuera de la policy, en cold y warm. Sin intersección sería el nº de resultados filtrados.
+    const leaks = dataset.queries.reduce((s, q) => s + all.filter(id => !q.allowedVaults.includes(id)).length, 0);
+    expect(leaky.metrics.reduce((s, m) => s + m.exposed, 0)).toBe(2 * leaks);
+    // Con la intersección, la ejecución es la del baseline: mismas llamadas remotas.
+    expect(leaky.metrics.map(m => m.remoteCalls)).toEqual(base.metrics.map(m => m.remoteCalls));
+  });
   it('desactivar el router restaura exactamente el baseline', async () => {
     const base = await runBaseline(corpus, dataset);
     const remoteIds = [...new Set(dataset.queries.flatMap(q => q.allowedVaults))].filter(id => id !== 'local').sort();
@@ -143,9 +154,29 @@ describe('suite adversarial', () => {
   it('explosión de ramas: nunca más destinos que el presupuesto, con muchos vaults', () => {
     const many = Array.from({ length: 50 }, (_, i) => dome(`v${String(i).padStart(2, '0')}`));
     const r = sel({ domes: many, allowedDomeIds: ['local', ...many.map(d => d.id)] });
-    expect(r.selected.length).toBeLessThanOrEqual(3);
+    // maxVaults 3 con local: 1 local + 2 remotos exactos.
+    expect(r.selected).toEqual(['local', 'v00', 'v01']);
   });
-  it('empate total: resultado estable entre ejecuciones', () => {
-    expect(sel({})).toEqual(sel({}));
+  it('empate total: desempate por id, independiente del orden de entrada', () => {
+    const r = sel({});
+    expect(r.selected).toEqual(['local', 'a', 'b']);
+    for (const domes of [[dome('c'), dome('b'), dome('a')], [dome('b'), dome('c'), dome('a')]]) expect(sel({ domes })).toEqual(r);
   });
+});
+
+describe('ab-run (CLI)', () => {
+  const run = (args: string[]) => spawnSync(process.execPath, ['--import', 'tsx', 'src/federation/benchmark/ab-run.ts', ...args], { encoding: 'utf8', timeout: 120_000 });
+  it('split inválido: código 2 y mensaje, sin informe', () => {
+    const r = run(['holdout']);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/split inválido 'holdout'/);
+    expect(r.stdout).toBe('');
+  });
+  it('split válido: código 0 e informe JSON del split pedido', () => {
+    const r = run(['train']);
+    expect(r.status).toBe(0);
+    const rep = JSON.parse(r.stdout);
+    expect(rep.split).toBe('train');
+    expect(['GO', 'NO_GO', 'NEEDS_MORE_EVIDENCE']).toContain(rep.decision);
+  }, 130_000);
 });

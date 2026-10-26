@@ -69,6 +69,8 @@ export function compare(base: QueryMetrics[], chal: QueryMetrics[], split: Split
   const dens = densC === null || densB === null ? null : fin(ratio(densC, densB));
   const p95b = percentile(b.map(m => m.latencyMs), 0.95); const p95c = percentile(c.map(m => m.latencyMs), 0.95);
   const provB = mean(b.map(m => m.provenanceOk)); const provC = mean(c.map(m => m.provenanceOk));
+  // Para makeRouter la exposición es 0 por construcción (selected ⊆ allowedVaults): es un invariante que se vigila,
+  // no evidencia de mejora. El gate solo discrimina con un `route` arbitrario (ver control negativo en los tests).
   const exposed = sum(c, m => m.exposed);
   const gates: GateResult[] = [
     { name: 'remoteCallReduction', value: callRed, threshold: T.remoteCallReduction, pass: callRed === null ? null : callRed >= T.remoteCallReduction },

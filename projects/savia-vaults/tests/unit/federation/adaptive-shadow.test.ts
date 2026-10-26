@@ -14,7 +14,8 @@ const mk = () => {
   const reg = new FederationRegistry(dir);
   for (const id of ['a', 'b', 'c', 'd']) reg.add({ id, name: id, url: 'http://x.invalid', timeout: 100, enabled: true, weight: 1, tags: [], status: 'healthy' });
   let calls = 0;
-  const client = { async search(d: FederatedDome, _q: string) { calls++; return { results: [{ path: `${d.id}/doc`, score: 1, snippet: `s ${d.id}`, tags: [], source: d.id, contentHash: `h-${d.id}` }], status: 'ok' as const, latencyMs: 5 }; }, async healthCheck() { return { healthy: true, latencyMs: 1 }; } };
+  // El snippet devuelve la consulta: si el receipt llegara a incluir resultados, la fuga se vería.
+  const client = { async search(d: FederatedDome, q: string) { calls++; return { results: [{ path: `${d.id}/doc`, score: 1, snippet: `s ${d.id} ${q}`, tags: [], source: d.id, contentHash: `h-${d.id}` }], status: 'ok' as const, latencyMs: 5 }; }, async healthCheck() { return { healthy: true, latencyMs: 1 }; } };
   const local = { search: () => [] } as unknown as SearchEngine;
   const engine = new FederatedSearchEngine(local, reg, { client });
   return { dir, engine, calls: () => calls, reg };
@@ -49,7 +50,9 @@ describe('runShadow', () => {
   });
   it('el receipt no contiene la consulta, destinos denegados ni credenciales', async () => {
     const { dir, engine } = mk();
-    const { receipt } = await runShadow({ selection, baseline: () => engine.search('q', ctx, 10) });
+    const { response, receipt } = await runShadow({ selection, baseline: () => engine.search(selection.query, ctx, 10) });
+    // Control: la respuesta sí contiene la consulta (vía snippet); el receipt no.
+    expect(JSON.stringify(response)).toContain('secreta-xyz');
     const text = JSON.stringify(receipt);
     expect(text).not.toContain('secreta-xyz');
     expect(text).not.toMatch(/"d"/);

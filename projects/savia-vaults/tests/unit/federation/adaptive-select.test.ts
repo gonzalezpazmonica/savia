@@ -73,8 +73,9 @@ describe('selectDestinations', () => {
     const r = selectDestinations(base({ domes: [dome('a'), dome('b', 1, 'unhealthy'), dome('c'), dome('d')] }));
     expect(r.selected).not.toContain('b');
     expect(r.skipped).toContainEqual({ id: 'b', reason: 'UNHEALTHY' });
-    expect(r.selected.length).toBeLessThanOrEqual(3);
-    expect(r.selected.filter(i => i !== 'local').length).toBeLessThanOrEqual(3);
+    // maxVaults 3 con local autorizado deja 2 remotos: el tope efectivo es 2, no 3.
+    expect(r.selected).toEqual(['local', 'a', 'c']);
+    expect(r.skipped).toContainEqual({ id: 'd', reason: 'BUDGET' });
   });
   it('local autorizado cuenta en maxVaults y no es desplazado', () => {
     const r = selectDestinations(base({ budget: { maxVaults: 2, maxRemoteCalls: 3 }, guidance: g([{ vaultId: 'c', attracts: [{ term: 'cifrado', score: 1 }] }]) }));
@@ -128,13 +129,14 @@ describe('revisión #1382', () => {
     expect(selectDestinations(base({ allowedDomeIds: [] })).termination).toBe('POLICY_BLOCK');
     expect(selectDestinations(base({ allowedDomeIds: ['a'], domes: [dome('a', 1, 'unhealthy'), dome('b')] })).termination).toBe('NO_ROUTE');
   });
-  it('presupuesto NaN no expande nada', () => {
+  it('presupuesto NaN no expande nada (ni siquiera local, que cuenta en maxVaults)', () => {
     const r = selectDestinations(base({ budget: { maxVaults: NaN, maxRemoteCalls: NaN } }));
-    expect(r.selected).toEqual(['local']);
+    expect(r.selected).toEqual([]);
+    expect(r.termination).toBe('BUDGET_EXHAUSTED');
   });
   it('presupuesto Infinity es fail-closed: no significa «sin tope»', () => {
     const r = selectDestinations(base({ budget: { maxVaults: Infinity, maxRemoteCalls: Infinity } }));
-    expect(r.selected).toEqual(['local']);
+    expect(r.selected).toEqual([]);
     expect(r.termination).toBe('BUDGET_EXHAUSTED');
   });
   it('BUDGET_EXHAUSTED sin seleccionados lista los sanos recortados como BUDGET, igual que fallback', () => {
@@ -166,3 +168,56 @@ describe('revisión #1382', () => {
   });
 });
 
+
+describe('revisión #1382 (fix1382c)', () => {
+  const unknown = { id: 'a', weight: 5, status: 'unknown' as const, enabled: true };
+  it("'unknown' no es elegible, como en registry.getHealthy (apagado y encendido)", () => {
+    const domes = [unknown, dome('b'), dome('c')];
+    const off = selectDestinations(base({ domes, flags: {} }));
+    expect(off.selected).toEqual(['local', 'b', 'c']);
+    expect(off.skipped).toEqual([{ id: 'a', reason: 'UNHEALTHY' }]);
+    const on = selectDestinations(base({ domes, guidance: g([{ vaultId: 'a', attracts: [{ term: 'cifrado', score: 1 }] }]) }));
+    expect(on.selected).not.toContain('a');
+    expect(Object.keys(on.scores)).not.toContain('a');
+    expect(selectDestinations(base({ domes, guidance: 'x' })).selected).not.toContain('a');
+  });
+  it('fallback y adaptive dan la misma terminación con la selección vacía', () => {
+    for (const over of [{ allowedDomeIds: [] }, { allowedDomeIds: ['a'], domes: [dome('a', 1, 'unhealthy')] }, { allowedDomeIds: ['a'], budget: { maxVaults: 0, maxRemoteCalls: 3 } }]) {
+      const ad = selectDestinations(base(over));
+      const fb = selectDestinations(base({ ...over, guidance: 'x' }));
+      expect(fb.mode).toBe('fallback');
+      expect(fb.selected).toEqual([]);
+      expect(fb.termination).not.toBeNull();
+      expect(fb.termination).toBe(ad.termination);
+    }
+    expect(selectDestinations(base({ allowedDomeIds: [], guidance: 'x' })).termination).toBe('POLICY_BLOCK');
+  });
+  it('maxVaults 0 o negativo: local tampoco entra y figura como BUDGET', () => {
+    for (const maxVaults of [0, -1]) {
+      for (const guidance of [g([]), 'x']) {
+        const r = selectDestinations(base({ budget: { maxVaults, maxRemoteCalls: 3 }, guidance }));
+        expect(r.selected).toEqual([]);
+        expect(r.skipped).toContainEqual({ id: 'local', reason: 'BUDGET' });
+        expect(r.termination).toBe('BUDGET_EXHAUSTED');
+      }
+    }
+  });
+  it('cada tope infinito vale 0 por separado: Infinity en maxVaults no deja pasar maxRemoteCalls', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: Infinity, maxRemoteCalls: 3 } }));
+    expect(r.selected).toEqual([]);
+  });
+  it('weight NaN o negativo cuenta como 0: orden total y determinista', () => {
+    const domes = [dome('a', NaN), dome('b', -3), dome('c', 1), dome('d', 1)];
+    const r = selectDestinations(base({ domes }));
+    expect(r.scores.a).toBe(0);
+    expect(r.scores.b).toBe(0);
+    expect(r.selected).toEqual(['local', 'c', 'd']);
+    const perm = selectDestinations(base({ domes: [domes[2], domes[0], domes[3], domes[1]] }));
+    expect(perm).toEqual(r);
+    expect(selectDestinations(base({ domes, guidance: 'x' })).selected).toEqual(['local', 'c', 'd']);
+  });
+  it('specialties duplicadas se rechazan como en attracts/repels', () => {
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['claves', 'Claves'] }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['claves', 'cifrado'] }])).ok).toBe(true);
+  });
+});

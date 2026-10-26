@@ -62,7 +62,11 @@ export function parseGuidance(raw: unknown): GuidanceResult {
       let specialties: string[] = [];
       const sp = c.specialties ?? [];
       if (!Array.isArray(sp) || sp.length > GUIDANCE_LIMITS.maxTermsPerList || !sp.every(validTerm)) errs.push(`${w}.specialties inválido`);
-      else specialties = [...new Set((sp as string[]).map(s => s.trim().toLowerCase()))];
+      else {
+        specialties = (sp as string[]).map(s => s.trim().toLowerCase());
+        // Igual que attracts/repels: un duplicado rechaza el documento, no se deduplica en silencio.
+        if (new Set(specialties).size !== specialties.length) errs.push(`${w}.specialties: término duplicado`);
+      }
       cues.push({ vaultId: c.vaultId, attracts, repels, specialties });
     });
   }
