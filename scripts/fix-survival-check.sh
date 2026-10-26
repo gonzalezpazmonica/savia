@@ -60,10 +60,12 @@ WEEK=$(week_label)
 
 # ── Find fix commits in the last DAYS days ────────────────────────────────
 # Match commits with subject starting with fix(, fix:, hotfix(, hotfix:, revert "fix
+# BRANCH va como revisión: `--branches=main` sin comodín significa `refs/heads/main/*`
+# y no devuelve nada, así que el recuento salía siempre en cero.
 FIX_COMMITS=$(git -C "$REPO_ROOT" log \
   --since="$SINCE" \
   --format="%H %s" \
-  --branches="$BRANCH" \
+  "$BRANCH" -- \
   2>/dev/null \
   | grep -E '^[0-9a-f]{40} (fix[:(]|hotfix[:(]|bugfix[:(])' \
   | awk '{print $1}' \
@@ -73,6 +75,10 @@ FIX_COMMITS=$(git -C "$REPO_ROOT" log \
 TOTAL=0
 SURVIVED=0
 REVERTED_LIST=""
+WINDOW_BODIES=""
+if [[ -n "$FIX_COMMITS" ]]; then
+  WINDOW_BODIES=$(git -C "$REPO_ROOT" log --since="$SINCE" --format="%B" "$BRANCH" -- 2>/dev/null || true)
+fi
 
 if [[ -n "$FIX_COMMITS" ]]; then
   while IFS= read -r commit; do
@@ -83,19 +89,16 @@ if [[ -n "$FIX_COMMITS" ]]; then
 
     # Check if a revert of this commit exists in the same window
     # A revert commit references the original SHA in its message: "Revert "...", "This reverts commit SHA"
-    REVERT_FOUND=$(git -C "$REPO_ROOT" log \
-      --since="$SINCE" \
-      --format="%H %s" \
-      --branches="$BRANCH" \
-      2>/dev/null \
-      | grep -E "(revert|Revert)" \
-      | grep -i "$commit" \
-      || true)
+    # `git revert` deja el SHA original en el cuerpo ("This reverts commit <sha>"),
+    # no en el asunto: se busca ahí.
+    REVERT_FOUND=$(printf '%s\n' "$WINDOW_BODIES" | grep -F "reverts commit ${commit}" || true)
 
     if [[ -n "$REVERT_FOUND" ]]; then
       # Reverted — did not survive
       SHORT="${commit:0:7}"
-      REVERTED_LIST="${REVERTED_LIST}{\"commit\":\"${SHORT}\",\"subject\":\"${SUBJECT}\",\"reason\":\"revert detected\"},"
+      SUBJECT_ESC=${SUBJECT//\\/\\\\}
+      SUBJECT_ESC=${SUBJECT_ESC//\"/\\\"}
+      REVERTED_LIST="${REVERTED_LIST}{\"commit\":\"${SHORT}\",\"subject\":\"${SUBJECT_ESC}\",\"reason\":\"revert detected\"},"
     else
       SURVIVED=$((SURVIVED + 1))
     fi
