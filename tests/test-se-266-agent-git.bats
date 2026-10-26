@@ -418,3 +418,40 @@ allowed() { run hk "$1"; [ "$status" -eq 0 ]; [[ "$output" != *"BLOCKED"* ]]; }
   [[ "$output" != *"SCRUB-CHECK"* ]]
   rm -rf "$proj"
 }
+
+# ═══════════════════════════════════════════════════════════════════════
+# Huecos cerrados (revisión de seguridad de #1387)
+# ═══════════════════════════════════════════════════════════════════════
+
+@test "SE266-T31: blocks rm mixing a safe path with an unsafe one" {
+  run run_hook "rm /etc/passwd /tmp/opencode/x"
+  [[ "$status" -eq 2 ]]
+  [[ "$output" =~ "BLOCKED" ]]
+}
+
+@test "SE266-T32: blocks rm escaping a safe path with .." {
+  run run_hook "rm /tmp/opencode/../../etc/passwd"
+  [[ "$status" -eq 2 ]]
+}
+
+@test "SE266-T33: blocks rm whose unsafe path only contains a safe path as substring" {
+  run run_hook "rm /home/u/tmp/opencode/x"
+  [[ "$status" -eq 2 ]]
+}
+
+@test "SE266-T34: allows rm of several files all under safe paths" {
+  run run_hook "rm /tmp/opencode/a /tmp/recovery/b"
+  [[ "$status" -eq 0 ]]
+}
+
+@test "SE266-T35: blocks dd to nvme, mmcblk, vd and mapper devices" {
+  for dev in nvme0n1 mmcblk0 vda xvda mapper/root md0; do
+    run run_hook "dd if=/dev/zero of=/dev/$dev bs=1M"
+    [[ "$status" -eq 2 ]] || { echo "no bloquea of=/dev/$dev"; return 1; }
+  done
+}
+
+@test "SE266-T36: allows dd to /dev/null" {
+  run run_hook "dd if=/tmp/opencode/x of=/dev/null bs=1M"
+  [[ "$status" -eq 0 ]]
+}
