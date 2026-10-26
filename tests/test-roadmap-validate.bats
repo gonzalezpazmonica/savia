@@ -60,6 +60,50 @@ set_session_plan() {
   [ "$status" -eq 0 ]
 }
 
+@test "validate checks every spec in an approval enumeration, not only the first" {
+  set_session_plan
+  jq '.route.session_plan[0].prerequisites="Aprobación de SE-999 y SE-375"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"pide aprobar una spec ya resuelta: S01:SE-375=APPROVED"* ]]
+}
+
+@test "validate accepts a session asking to reactivate a DEFERRED spec" {
+  set_session_plan
+  jq '.initiatives[0].status="DEFERRED" | .route.session_plan[0].prerequisites="Aprobación de SE-375 (reactivación)"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  printf '%s\n' 'status: DEFERRED' > "$FIXTURE/docs/specs/SE-375-example.spec.md"
+  printf '## 2026-09-05 SE-375 DEFERRED\n' >> "$FIXTURE/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [[ "$output" != *"pide aprobar"* ]]
+  [ "$status" -eq 0 ]
+}
+
+@test "validate fails closed when the approval check cannot be evaluated" {
+  set_session_plan
+  jq '.route.session_plan[0].prerequisites=5' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  run env REPO_ROOT="$FIXTURE" bash "$SCRIPT" validate
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"check de aprobaciones obsoletas no evaluable"* ]]
+}
+
+@test "validate reports stale approvals literally without shell globbing" {
+  set_session_plan
+  jq '.route.session_plan[0].id="S*" | .route.session_plan[0].prerequisites="Aprobación de SE-375"' \
+    "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"
+  mv "$FIXTURE/state.tmp" "$FIXTURE/docs/propuestas/planning-state.json"
+  touch "$FIXTURE/Sglob-hit:SE-375=APPROVED"
+  run env REPO_ROOT="$FIXTURE" bash -c "cd '$FIXTURE' && bash '$PWD/$SCRIPT' validate"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"resuelta: S*:SE-375=APPROVED"* ]]
+  [[ "$output" != *"glob-hit"* ]]
+}
+
 @test "next identifies merged delivery as review work while keeping APPROVED" {
   set_session_plan
   jq '.initiatives[0].delivery={"merge_pr":42}' "$FIXTURE/docs/propuestas/planning-state.json" > "$FIXTURE/state.tmp"

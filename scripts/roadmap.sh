@@ -191,12 +191,19 @@ case "$CMD" in
           echo "FAIL: cola de sesiones inválida (IDs, fases, referencias o criterios)"; ERR=1
         fi
         # 10. Una entrada no puede seguir pidiendo la aprobación de una spec ya aprobada.
-        STALE=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
+        # Cubre enumeraciones («Aprobación de SE-A, SE-B y SE-C»). DEFERRED no cuenta como
+        # resuelta: pedir su reactivación es legítimo. Si jq falla, el check falla cerrado.
+        if STALE=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
           | .route.session_plan[]? | .id as $s
-          | (.prerequisites // "" | [scan("[Aa]probación de (SE-[0-9]+)")[]] | .[])
-          | select($st[.] != null and ($st[.] | IN("IDEA","PROPOSED") | not))
-          | "\($s):\(.)=\($st[.])"' "$STATE" 2>/dev/null)
-        [[ -n "$STALE" ]] && { echo "FAIL: entrada de sesión pide aprobar una spec ya resuelta: $(echo $STALE)"; ERR=1; }
+          | (.prerequisites // ""
+             | [scan("[Aa]probación de SE-[0-9]+(?:\\s*(?:,|\\by\\b|\\be\\b)\\s*SE-[0-9]+)*")]
+             | map(scan("SE-[0-9]+")) | .[])
+          | select($st[.] != null and ($st[.] | IN("IDEA","PROPOSED","DEFERRED") | not))
+          | "\($s):\(.)=\($st[.])"' "$STATE" 2>/dev/null); then
+          [[ -n "$STALE" ]] && { echo "FAIL: entrada de sesión pide aprobar una spec ya resuelta: ${STALE//$'\n'/ }"; ERR=1; }
+        else
+          echo "FAIL: check de aprobaciones obsoletas no evaluable (jq falló sobre $STATE)"; ERR=1
+        fi
       fi
     fi
     [[ $ERR -eq 0 ]] && echo "PASS: planning state consistente"
