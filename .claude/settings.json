@@ -5,6 +5,12 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/windows-links.sh repair --quiet >/dev/null 2>&1 || echo \"[windows-links] enlaces del repositorio sin materializar — run: bash scripts/windows-links.sh check\"",
+            "timeout": 30,
+            "statusMessage": "Comprobando enlaces del repositorio..."
+          },
+          {
+            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/session-init.sh",
             "timeout": 15,
             "statusMessage": "Inicializando sesión PM-Workspace..."

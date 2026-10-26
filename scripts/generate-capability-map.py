@@ -280,7 +280,7 @@ def write_index_file(index_path: Path, resources: list[ResourceEntry]) -> None:
         ),
         "",
     ]
-    index_path.write_text("\n".join(header_lines + body_lines) + "\n", encoding="utf-8")
+    index_path.write_text("\n".join(header_lines + body_lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def write_category_files(category_dir: Path, resources: list[ResourceEntry]) -> None:
@@ -299,7 +299,7 @@ def write_category_files(category_dir: Path, resources: list[ResourceEntry]) -> 
             "",
         ]
         lines.extend(entry.category_line() for entry in entries)
-        (category_dir / f"{category}.scm").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (category_dir / f"{category}.scm").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def write_resources_json(json_path: Path, resources: list[ResourceEntry]) -> None:
@@ -321,6 +321,7 @@ def write_resources_json(json_path: Path, resources: list[ResourceEntry]) -> Non
     json_path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -358,17 +359,19 @@ def write_registry_json(scm_dir: Path, resources: list[ResourceEntry]) -> None:
                     status = "deprecated"
             except OSError:
                 pass
+        # as_posix: str(Path) usa "\" en Windows y cambiaba ids y source del registro.
+        posix = src.as_posix()
         if r.kind == "cmd":
             frontend = ["claude", "opencode"]
-        elif str(src).startswith(".claude"):
+        elif posix.startswith(".claude"):
             frontend = ["claude"]
         else:
             frontend = ["opencode"]
-        stem = str(src)[:-len(src.suffix)] if src.suffix else str(src)
+        stem = posix[:-len(src.suffix)] if src.suffix else posix
         capabilities.append({
             "id": f"{r.kind}:{stem}",
             "kind": r.kind,
-            "source": str(src),
+            "source": posix,
             "status": status,
             "owner_domain": r.category,
             "intents": sorted(set(r.intents)),
@@ -389,6 +392,7 @@ def write_registry_json(scm_dir: Path, resources: list[ResourceEntry]) -> None:
     (scm_dir / "registry.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
 
 

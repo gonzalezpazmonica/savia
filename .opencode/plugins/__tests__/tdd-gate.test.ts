@@ -63,3 +63,28 @@ test("tddGate: skips when file_path empty", async () => {
   const input = { tool: "edit", args: {} };
   await expect(tddGate(input as any, {} as any)).resolves.toBeUndefined();
 });
+
+// Rutas Windows: llegan con "\" y deben clasificarse igual que las POSIX.
+
+test("tddGateForPath: ruta Windows bajo tests está exenta", () => {
+  const r = tddGateForPath(String.raw`C:\repo\tests\orderService.ts`);
+  expect(r.needsTest).toBe(false);
+});
+
+test("tddGateForPath: ruta Windows de producción extrae el basename correcto", () => {
+  const r = tddGateForPath(String.raw`C:\repo\src\orderService.ts`);
+  expect(r.needsTest).toBe(true);
+  expect(r.nameNoExt).toBe("orderService");
+});
+
+test("tddGate: ruta Windows encuentra el test hermano en __tests__", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const root = mkdtempSync(join(tmpdir(), "tdd-win-"));
+  mkdirSync(join(root, "src", "__tests__"), { recursive: true });
+  writeFileSync(join(root, "src", "__tests__", "orderService.test.ts"), "");
+  const winPath = join(root, "src", "orderService.ts").replaceAll("/", "\\");
+  const input = { tool: "edit", args: { filePath: winPath } };
+  await expect(tddGate(input as any, {} as any)).resolves.toBeUndefined();
+});
