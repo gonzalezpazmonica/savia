@@ -93,6 +93,23 @@ que fusiona la operadora). Esta spec fija el contrato; no toca código de Savia 
 - **D2**: en ejecución, ¿«preguntar» o «denegar» al completar una combinación no aceptada? (propuesta: preguntar).
 - **D3**: ¿se acepta la familia 11 para H3 de L39 como trabajo de Labs?
 
+## Delta 2026-10-26
+
+Origen: síntesis de una tesis sobre arquitectura neuro-simbólica (diseño en el repo de investigación privado). No cambia el
+status de esta spec.
+
+- **Problema**: la verificación de combinaciones de efectos es la parte de más valor del patrón «LLM + verificador
+  externo» (Kambhampati et al., ICML 2024), y aquí se resuelve con un validador determinista sin solver. Falta escrito
+  **cuándo** dejaría de bastar, para no meter un motor lógico sin necesidad ni dejar de meterlo cuando haga falta.
+- **Criterio para escalar a solver** (z3, clingo o Soufflé), que se mide en la implementación y se publica en su PR:
+  reabrir solo si (a) las reglas de composición superan ~20 con interacción entre ellas, (b) aparecen excepciones
+  derrotables («prohibido salvo que…» anidado), o (c) el corpus preregistrado de combinaciones dañinas da algún
+  false-allow que un solver detectaría y el validador no.
+- **AC adicional**: la PR de implementación informa el número de reglas, el número de excepciones y el false-allow /
+  false-deny sobre el corpus; si se cumple (a), (b) o (c), abre una decisión para la operadora en vez de añadir el motor.
+- **Fuera de alcance del delta**: elegir motor. Cada motor es una dependencia nativa que fijar (SE-465), auditar
+  (SE-466) y probar en los dos frontends.
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched

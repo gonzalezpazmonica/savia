@@ -1436,6 +1436,60 @@
       "note": "Skill entregada en la PR #1361; la spec sigue PROPOSED hasta la aprobación de la operadora.",
       "evidence": "docs/specs/SE-457-harness-architecture-skill.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-468",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "El gate de evals debe poder fallar",
+      "note": "Medido 2026-10-26 en e7224df97: sin ninguna skill, agente ni hook el Evals CI Gate da el mismo PASS (mock puntúa la longitud del caso; vivo es 0,80 constante; sin baseline = PASS).",
+      "evidence": "docs/specs/SE-468-honest-evals-gate.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-469",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Tribunales medidos con sus propios golden sets",
+      "note": "150 casos esperados (50 por tribunal) solo validados por esquema; ningún script los ejecuta y el registro FP/FN no tiene datos reales. Primer uso: 30 casos con tope de gasto.",
+      "evidence": "docs/specs/SE-469-tribunal-golden-set-live-runs.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-470",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Integridad de los artefactos de evaluación",
+      "note": "Sello SPEC-188-P3 solo en cliente (Edit|Write, 5 ficheros); golden sets y baselines sin sellar; 5 commits desde 2026-07-01 tocaron ficheros sellados sin marca. Sube a P1 si la auditoría de trazas encuentra eventos.",
+      "evidence": "docs/specs/SE-470-eval-artifact-integrity.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-471",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Relevo nocturno con evidencia: declarado, validado y aceptado",
+      "note": "159 marcas de fin de referencia, 21 % no OK; el OK es autodeclarado y el ledger SE-349 tiene 3 entradas. Script de solo lectura con tope de decisiones y kill criterion.",
+      "evidence": "docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-472",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Vigencia de la autoridad comprobada antes de cada tarea nocturna",
+      "note": "overnight-sprint-loop.sh no vuelve a comprobar grants entre tareas; operator-grant.sh check ya existe y solo lo usa push-pr.sh.",
+      "evidence": "docs/specs/SE-472-overnight-per-task-authority-check.spec.md",
+      "phase": "A"
+    },
+    {
+      "id": "SE-473",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Lecciones contrastables: ámbito, evidencia, revalidación y refutación",
+      "note": "Ninguna lección declara ámbito ni refutación; MAX_LESSON_AGE_DAYS=90 declarado en lesson-pipeline.sh y sin uso. S0 mide y puede cerrar la spec.",
+      "evidence": "docs/specs/SE-473-contestable-lessons.spec.md",
+      "phase": "D"
     }
   ],
   "route": {
@@ -1469,6 +1523,11 @@
           "on": "2026-10-20",
           "requested_by": "operadora, síntesis de tres investigaciones externas y repriorización por valor",
           "change": "Alta de SE-442..SE-452 (PROPOSED) y sesiones S10..S16; reorden de la cola; SE-452 entra en S06. Gates, fases y límites WIP sin cambios."
+        },
+        {
+          "on": "2026-10-26",
+          "requested_by": "operadora, síntesis de tres tesis investigadas (evals, calendario y sprint nocturno, neuro-simbólica)",
+          "change": "Alta de SE-468..SE-473 (PROPOSED) y sesiones S18..S20; S18 (P0) tras S10 porque el gate de evals actual no puede fallar. Deltas en SE-449, SE-461 y SE-406 sin cambio de status. Gates, fases y límites WIP sin cambios."
         }
       ]
     },
@@ -1507,6 +1566,23 @@
         "effort": "slice pequeño (S)",
         "prerequisites": "Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.",
         "done": "Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada."
+      },
+      {
+        "id": "S18",
+        "phase": "A",
+        "priority": "P0",
+        "initiatives": [
+          "SE-468"
+        ],
+        "title": "Evals que pueden fallar",
+        "action": "SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que debe dar findings.",
+        "necessity": "alta",
+        "urgency": "alta",
+        "value": "alto",
+        "dependency_value": "quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469",
+        "effort": "slice pequeño (S)",
+        "prerequisites": "Aprobación de SE-468 y decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.",
+        "done": "Con la skill saboteada el gate no da PASS; modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo."
       },
       {
         "id": "S02",
@@ -1628,6 +1704,24 @@
         "done": "Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado."
       },
       {
+        "id": "S19",
+        "phase": "A",
+        "priority": "P1",
+        "initiatives": [
+          "SE-469",
+          "SE-471"
+        ],
+        "title": "Medir jueces y relevos antes de confiar en ellos",
+        "action": "SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-471: digest de solo lectura del relevo nocturno en declarado/validado/aceptado con tope de decisiones.",
+        "necessity": "alta",
+        "urgency": "media",
+        "value": "alto",
+        "dependency_value": "da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado",
+        "effort": "SE-469 medio (M); SE-471 pequeño (S); independientes",
+        "prerequisites": "Aprobación de cada spec; SE-469 después de SE-468; sin hueco WIP nuevo (SE-471 es solo lectura).",
+        "done": "Informe de concordancia con IC95 y decisión según kill criterion; digest con tests negativos y medición de OK no validados; retirada si no reduce el tiempo de relevo."
+      },
+      {
         "id": "S16",
         "phase": "A",
         "priority": "P1",
@@ -1725,6 +1819,25 @@
         "effort": "cinco slices pequeños independientes",
         "prerequisites": "Aprobación de cada spec; se ejecutan por separado, uno por vez; sin hueco WIP nuevo.",
         "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran."
+      },
+      {
+        "id": "S20",
+        "phase": "D",
+        "priority": "P2",
+        "initiatives": [
+          "SE-470",
+          "SE-472",
+          "SE-473"
+        ],
+        "title": "Integridad de evaluación, vigencia nocturna y lecciones revocables",
+        "action": "SE-470: etiqueta eval-integrity en CI y detector determinista de trazas. SE-472: check de grant antes de cada tarea del bucle nocturno. SE-473 S0: medir lecciones sin ámbito, evidencia ni fecha.",
+        "necessity": "media",
+        "urgency": "baja",
+        "value": "medio",
+        "dependency_value": "cierra vectores documentados fuera pero no observados aún; cada slice decide si sube o se mata",
+        "effort": "tres slices pequeños independientes; SE-473 S2 medio",
+        "prerequisites": "Aprobación de cada spec; SE-470 condicionada a H3/H4; SE-472 a SE-343; SE-473 S1-S2 al resultado de S0.",
+        "done": "Cada slice publica su medición y sus tests con caso negativo; nada pasa a bloqueo sin datos."
       },
       {
         "id": "S07",
