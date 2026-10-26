@@ -41,7 +41,7 @@ PATTERNS = {
         "label_template": "Spec: {value}",
     },
     "pr_ref": {
-        "regex": re.compile(r"\bPR\s*#?\d{2,5}\b|\b#\d{3,5}\b"),
+        "regex": re.compile(r"\bPR\s*#?\d{2,5}\b|(?<!\w)#\d{3,5}\b"),
         "entity_type": "event",
         "label_template": "PR: {value}",
     },
@@ -63,7 +63,7 @@ PATTERNS = {
         "label_template": "Person: {value}",
     },
     "percentage": {
-        "regex": re.compile(r"\b\d{1,3}(?:\.\d+)?\s*%\b"),
+        "regex": re.compile(r"\b\d{1,3}(?:\.\d+)?\s*%"),
         "entity_type": "event",
         "label_template": "Metric: {value}",
     },
@@ -112,6 +112,8 @@ class DeterministicExtractor:
         seen_spans = set()
 
         for pattern_name, pattern_def in PATTERNS.items():
+            if pattern_name in SKIP_PATTERNS:
+                continue
             for match in pattern_def["regex"].finditer(text):
                 value = match.group().strip()
                 span = (match.start(), match.end())
@@ -209,7 +211,7 @@ Text:
                 "relations": [],
             }
 
-        prompt = self.PROMPT_TEMPLATE.format(text=text[:4000])
+        prompt = self.PROMPT_TEMPLATE.replace("{text}", text[:4000])
 
         try:
             response = await self.router.complete({
