@@ -2,6 +2,7 @@
 
 import os
 import queue
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -145,12 +146,15 @@ class TTSSynthesizer:
 
     def _synth_edge(self, text, add_lead_in=False):
         edge_voice = "es-ES-ElviraNeural"
-        tmp_mp3 = tempfile.mktemp(suffix=".mp3")
-        tmp_wav = tempfile.mktemp(suffix=".wav")
+        # Private 0700 dir: no predictable shared-/tmp name to pre-plant
+        tmp_dir = tempfile.mkdtemp(prefix="savia-tts-")
+        tmp_mp3 = os.path.join(tmp_dir, "edge.mp3")
+        tmp_wav = os.path.join(tmp_dir, "edge.wav")
         try:
             r = subprocess.run(
+                # "--text=" binds the value: text starting with "-" is not an option
                 [f"{VENV_BIN}/edge-tts", "--voice", edge_voice,
-                 "--text", text, "--write-media", tmp_mp3],
+                 f"--text={text}", "--write-media", tmp_mp3],
                 capture_output=True, timeout=15
             )
             if r.returncode != 0:
@@ -178,6 +182,4 @@ class TTSSynthesizer:
             print(f"[tts] edge-tts error: {e}")
             return None
         finally:
-            for f in [tmp_mp3, tmp_wav]:
-                if os.path.exists(f):
-                    os.unlink(f)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
