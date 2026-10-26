@@ -36,11 +36,18 @@ class LexIndex {
 const tokenize = (s: string): string[] => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 const contentHash = (s: string): string => sha256(s).slice(0, 8);
 
+// Vista del router: sin relevant/useful/forbidden, para que el challenger no pueda ver etiquetas.
+export type RouteView = Pick<BenchQuery, 'id' | 'query' | 'allowedVaults' | 'unhealthyVaults'>;
+
 export interface BaselineOptions {
   profile?: BenchProfile;
   // Solo pruebas del propio benchmark: fuerzan fallos para demostrar que las métricas pueden fallar.
   cacheTtlMs?: number;
   tamperResult?: (r: FederatedSearchResult) => FederatedSearchResult;
+  // Challenger A/B (R04): estrecha los destinos ANTES de ejecutar; solo recibe la consulta, no sus etiquetas.
+  // Se ejecuta SIEMPRE route(q) ∩ allowedVaults: el gancho nunca amplía la policy. Cada id propuesto fuera de la
+  // policy cuenta como exposición (salida cruda del router), aunque no llegue a consultarse.
+  route?: (q: RouteView) => string[];
 }
 
 // Ejecuta cada consulta cold (motor nuevo) y warm (misma consulta, mismo motor -> cache).
@@ -69,13 +76,15 @@ export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, op
       for (const v of corpus.vaults.filter(x => !x.local)) registry.add({ id: v.id, name: v.name, url: 'http://bench.invalid', timeout: 3000, enabled: true, weight: v.weight, tags: [], status: q.unhealthyVaults.includes(v.id) ? 'unhealthy' : 'healthy' });
       const local = { search: ({ query, maxResults }: { query: string; maxResults: number }) => indexes.get('local')!.search(query, maxResults) } as unknown as SearchEngine;
       const engine = new FederatedSearchEngine(local, registry, { client, maxTotalResults: 50, cacheTtlMs: opts.cacheTtlMs });
-      const ctx: FederatedSearchContext = { principalId: 'bench-principal', policyRevision: 'p1', contentRevision: dataset.corpusSha256.slice(0, 12), allowedDomeIds: q.allowedVaults };
+      const proposed = opts.route ? [...new Set(opts.route({ id: q.id, query: q.query, allowedVaults: [...q.allowedVaults], unhealthyVaults: [...q.unhealthyVaults] }))] : q.allowedVaults;
+      const routeLeak = proposed.filter(id => !q.allowedVaults.includes(id)).length;
+      const ctx: FederatedSearchContext = { principalId: 'bench-principal', policyRevision: 'p1', contentRevision: dataset.corpusSha256.slice(0, 12), allowedDomeIds: proposed.filter(id => q.allowedVaults.includes(id)) };
       for (const cache of ['cold', 'warm'] as const) {
         calls = 0; callLatencies = [];
         const res = await engine.search(q.query, ctx, profile.k);
         // Latencia medida: con llamadas remotas, la mayor de este run (paralelas); sin ellas (cache hit), lo que informa el motor.
         const latency = calls > 0 ? Math.max(...callLatencies) : res.totalMs;
-        metrics.push(measure(q, res, cache, calls, latency, docById, profile));
+        metrics.push(measure(q, res, cache, calls, latency, docById, profile, routeLeak));
       }
     }
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
@@ -83,11 +92,12 @@ export async function runBaseline(corpus: BenchCorpus, dataset: BenchDataset, op
   return { report: buildReport(metrics, profile, dataset, datasetSha256), metrics };
 }
 
-function measure(q: BenchQuery, res: FederatedSearchResponse, cache: 'cold' | 'warm', calls: number, latency: number, docs: Map<string, { vault: string; useful: boolean }>, profile: BenchProfile): QueryMetrics {
+function measure(q: BenchQuery, res: FederatedSearchResponse, cache: 'cold' | 'warm', calls: number, latency: number, docs: Map<string, { vault: string; useful: boolean }>, profile: BenchProfile, routeLeak = 0): QueryMetrics {
   // Conjunto evaluado: lo que recibe el consumidor a k. Ranking y tokens miden el mismo top-k.
   const k = profile.k; const results = res.results.slice(0, k);
   const ranked = results.map(r => r.path); const rel = new Set(q.relevant); const useful = new Set(q.useful);
-  let retrieved = 0, irrelevant = 0, usefulTok = 0, provOk = 0, exposed = 0;
+  // Exposición = destinos que el router propuso fuera de la policy + resultados prohibidos o de fuentes no autorizadas.
+  let retrieved = 0, irrelevant = 0, usefulTok = 0, provOk = 0, exposed = routeLeak;
   for (const r of results) {
     const t = tokenCount(r.snippet); retrieved += t;
     if (!rel.has(r.path)) irrelevant += t;
