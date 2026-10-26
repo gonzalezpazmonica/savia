@@ -173,3 +173,121 @@ print(d['total_matchers'])
     [ "$status" -eq 2 ]
   fi
 }
+
+# ── Comportamiento con settings.json controlado (SE-456) ──────────────────────
+# El script resuelve settings.json relativo a su propia ruta: se copia a un árbol
+# temporal con un settings.json construido a mano, de modo que los recuentos son exactos.
+
+make_root() {
+  T="$(mktemp -d)"
+  mkdir -p "$T/scripts" "$T/.claude"
+  cp "$SCRIPT" "$T/scripts/hook-matcher-audit.sh"
+  cat > "$T/.claude/settings.json" <<'JSON'
+{"hooks":{
+ "PreToolUse":[
+   {"matcher":".*","hooks":[{"type":"command","command":"a"},{"type":"command","command":"b"}]},
+   {"matcher":"Bash","hooks":[{"type":"command","command":"c"}]},
+   {"matcher":"Edit|Write","hooks":[{"type":"command","command":"d"}]},
+   {"hooks":[{"type":"command","command":"e"}]}
+ ],
+ "PostToolUse":[
+   {"matcher":"Task","hooks":[{"type":"command","command":"f"}]},
+   {"matcher":"*","hooks":[{"type":"command","command":"g"}]}
+ ]
+}}
+JSON
+}
+
+teardown() { [[ -n "${T:-}" ]] && rm -rf "$T"; true; }
+
+@test "SE270-matcher-16: recuentos exactos por clase con settings controlado" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh" --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq .total_matchers)" -eq 6 ]
+  [ "$(echo "$output" | jq .broad)" -eq 3 ]
+  [ "$(echo "$output" | jq .tool_only)" -eq 2 ]
+  [ "$(echo "$output" | jq .specific)" -eq 1 ]
+  [ "$(echo "$output" | jq .broad_pct)" -eq 50 ]
+}
+
+@test "SE270-matcher-17: broad_details lista .* con sus 2 hooks y el matcher vacío con 1" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh" --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq '[.broad_details[]|select(.matcher==".*")]|length')" -eq 1 ]
+  [ "$(echo "$output" | jq -r '.broad_details[]|select(.matcher==".*")|.hooks')" -eq 2 ]
+  [ "$(echo "$output" | jq -r '.broad_details[]|select(.matcher=="<empty>")|.hooks')" -eq 1 ]
+  [[ "$(echo "$output" | jq -r '.broad_details[]|select(.matcher==".*")|.suggestion')" == *"Restrict to known tool names"* ]]
+  [[ "$(echo "$output" | jq -r '.broad_details[]|select(.matcher=="<empty>")|.suggestion')" == *"empty matcher"* ]]
+}
+
+@test "SE270-matcher-18: '*' pelado es broad con su sugerencia y Bash/Task salen como tool-only" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh" --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq '[.broad_details[]|select(.matcher=="*")]|length')" -eq 1 ]
+  [[ "$(echo "$output" | jq -r '.broad_details[]|select(.matcher=="*")|.suggestion')" == *"Use .* for all tools"* ]]
+  run bash "$T/scripts/hook-matcher-audit.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Tool-only matchers (acceptable, reviewable):"* ]]
+  [[ "$output" == *"'Bash'"* ]]
+  [[ "$output" == *"'Task'"* ]]
+  [[ "$output" != *"'Edit|Write'"* ]]
+}
+
+@test "SE270-matcher-19: --event restringe el recuento al evento pedido" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh" --event PostToolUse --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq .total_matchers)" -eq 2 ]
+  [ "$(echo "$output" | jq .broad)" -eq 1 ]
+  [ "$(echo "$output" | jq .tool_only)" -eq 1 ]
+  [ "$(echo "$output" | jq .specific)" -eq 0 ]
+}
+
+@test "SE270-matcher-20: evento inexistente da total 0 y porcentaje 0 sin dividir por cero" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh" --event NoExiste --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq .total_matchers)" -eq 0 ]
+  [ "$(echo "$output" | jq .broad_pct)" -eq 0 ]
+  [ "$(echo "$output" | jq '.broad_details|length')" -eq 0 ]
+}
+
+@test "SE270-matcher-21: texto lista los broad con su sugerencia y el recuento final" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Total matchers:  6"* ]]
+  [[ "$output" == *"Broad:         3 (50%)"* ]]
+  [[ "$output" == *"Broad matchers (.*, *, empty):"* ]]
+  [[ "$output" == *"'.*'"* ]]
+  [[ "$output" == *"'<empty>'"* ]]
+  [[ "$output" == *"Current broad count: 3"* ]]
+}
+
+@test "SE270-matcher-22: sin matchers broad el informe omite la sección de broad" {
+  make_root
+  echo '{"hooks":{"PreToolUse":[{"matcher":"Edit|Write","hooks":[{"type":"command","command":"x"}]}]}}' > "$T/.claude/settings.json"
+  run bash "$T/scripts/hook-matcher-audit.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Broad matchers (.*, *, empty):"* ]]
+  [[ "$output" == *"Current broad count: 0"* ]]
+  [[ "$output" == *"Specific:      1"* ]]
+}
+
+@test "SE270-matcher-23: sin settings.json sale con 2 y mensaje" {
+  make_root
+  rm "$T/.claude/settings.json"
+  run bash "$T/scripts/hook-matcher-audit.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"settings.json not found"* ]]
+}
+
+@test "SE270-matcher-24: argumento desconocido sale con 2 y lo nombra" {
+  make_root
+  run bash "$T/scripts/hook-matcher-audit.sh" --nope
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown arg '--nope'"* ]]
+}
