@@ -97,7 +97,7 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
   [ "$(field loc_removed)" = "0" ]
   [ "$(field functions_added)" = "1" ]
   [ "$(field functions_removed)" = "0" ]
-  [ "$(field scripts_added)" = "1" ]
+  [ "$(field scripts_added)" = "0" ]  # a.sh solo modificado
   [ "$(field scripts_removed)" = "0" ]
 }
 
@@ -132,14 +132,14 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
   [ "$(field functions_removed)" = "1" ]
 }
 
-@test "T11: branch mode counts scripts touched and scripts removed" {
+@test "T11: branch mode counts only new scripts as added; a removed one is not" {
   second_commit
   git -C "$R" rm -q scripts/a.sh
   git -C "$R" commit -qm third
   run bash "$SCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json
   [ "$status" -eq 0 ]
   [ "$(field scripts_removed)" = "1" ]
-  [ "$(field scripts_added)" = "1" ]
+  [ "$(field scripts_added)" = "0" ]
 }
 
 @test "T12: branch mode with an empty range reports zeros and exits 0" {
@@ -156,7 +156,8 @@ assert set(d['delta']) >= {'files_changed','files_added','files_deleted','loc_ad
   [[ "$output" =~ "files          4 (+2 new, -1 removed)" ]]
   [[ "$output" =~ "LOC           +5 / -2" ]]
   [[ "$output" =~ "functions      +2 / -1" ]]
-  [[ "$output" =~ "scripts        +2 / -0" ]]
+  # a.sh modificado no cuenta como añadido; b.sh nuevo sí
+  [[ "$output" =~ "scripts        +1 / -0" ]]
 }
 
 # copia del script en un "workspace" propio, opcionalmente con un workspace-health falso
@@ -277,4 +278,13 @@ assert d['files_changed'] == 4, d
   [ "$status" -eq 1 ]
   [[ "$output" =~ "invalid refspec" ]]
   [ ! -e "$BATS_TEST_TMPDIR/pwned" ]
+}
+
+@test "T16: actor and branch with quotes keep the JSON valid" {
+  git -C "$R" config user.name 'Ana "la" Tester'
+  git -C "$R" switch -q -c 'feat/a"b'
+  second_commit
+  run bash "$SCRIPT" --branch "HEAD~1..HEAD" --project "$R" --format json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['actor'], d['branch'])")" = 'Ana "la" Tester feat/a"b' ]
 }
