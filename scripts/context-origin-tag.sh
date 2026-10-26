@@ -50,9 +50,22 @@ fi
 # Resolver workspace (acepta override por env)
 WORKSPACE="${SAVIA_WORKSPACE_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
+# Windows (Git Bash): C:\x o C:/x → /c/x. Sin esto una ruta Windows se tomaba
+# como relativa, quedaba "dentro" del workspace y heredaba un tier de confianza.
+win_to_posix() {
+  local p="$1"
+  if [[ "$p" =~ ^([A-Za-z]):[\\/] ]]; then
+    p="${p//\\//}"
+    p="/${BASH_REMATCH[1],,}${p:2}"
+  fi
+  printf '%s' "$p"
+}
+WORKSPACE=$(win_to_posix "${WORKSPACE%/}")
+
 # Normalizar a absoluto sin requerir que exista (para tests)
 abs_path() {
-  local p="$1"
+  local p
+  p=$(win_to_posix "$1")
   if [[ "$p" = /* ]]; then
     printf '%s' "$p"
   else
@@ -71,7 +84,8 @@ resolve_tier() {
   esac
 
   # Fuera del workspace → N5-external o untrusted
-  if [[ "$p" != "$WORKSPACE"* ]]; then
+  # Prefijo por componente: /repo no debe contener /repo-otro.
+  if [[ "$p" != "$WORKSPACE"/* ]]; then
     case "$p" in
       "$HOME"/.savia-memory/*|"$HOME"/.savia/*|"$HOME"/.claude/*) echo "N5-external"; return ;;
       "$HOME"/*) echo "N5-external"; return ;;

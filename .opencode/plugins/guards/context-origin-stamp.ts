@@ -24,6 +24,7 @@
 // Empirical: probe SE-221 confirmed output.output mutation is observed by the LLM.
 
 import { extractToolName, extractFilePath, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
+import { bashExecutable } from "../lib/bash-runtime.ts";
 
 const MIN_LINES = Number(process.env.CONTEXT_ORIGIN_MIN_LINES ?? "200");
 
@@ -40,7 +41,7 @@ async function resolveTier(filePath: string): Promise<string> {
     const script = tagScriptPath();
     const { spawn } = await import("node:child_process");
     return await new Promise<string>((resolve) => {
-      const child = spawn("bash", [script, filePath], { stdio: ["ignore", "pipe", "ignore"] });
+      const child = spawn(bashExecutable(), [script, filePath], { stdio: ["ignore", "pipe", "ignore"] });
       let buf = "";
       child.stdout.on("data", (chunk) => {
         buf += String(chunk);
