@@ -130,3 +130,23 @@ no bastan») y las etiquetas no tienen revisión humana independiente. F2 puede
 prepararse en rama, pero no se declara GO hasta cerrar esas dos condiciones. No hay evidencia todavía de que un router
 adaptativo mejore nada: el baseline ya tiene recall 0,92 con 2,8 llamadas
 remotas por consulta, y esa es la única cifra que F2–F3 deben batir.
+
+## 8. R02 — schema de guidance y selección pura (F2, parte estática)
+
+Entregado en `src/federation/adaptive/{guidance,select}.ts`, sin cablear en
+`FederatedSearchEngine` (el shadow es R03). Los cuatro flags siguen en `false`;
+con `adaptive=false` la selección devuelve el baseline por peso.
+
+| AC | Cobertura (tests en `tests/unit/federation/adaptive-select.test.ts`) |
+|---|---|
+| AC01 | flags por defecto `false`; sin flag, selección = baseline |
+| AC02 | `parseGuidance`: schema cerrado, versión, límites de tamaño, pesos finitos, duplicados |
+| AC03 | policy y salud filtran antes del score; un destino denegado no entra en `scored` ni en `selected` |
+| AC04 | atracción/especialidad suben, repulsión baja sin excluir; desempate por id; orden de entrada irrelevante |
+| AC05 | resultado ⊆ autorizados ∩ sanos; respeta `maxVaults` y `maxRemoteCalls` |
+| AC06 | guidance ausente/inválida/sin señal -> baseline con policy y presupuesto restante; presupuesto agotado -> sin expansión |
+
+Constantes del score (`SCORE`: attract 1, specialty 2, repel 1,5) fijadas antes de
+cualquier holdout. Límites: es una función pura sin evidencia de mejora; no hay
+medición contra el baseline hasta R03/R04. La decisión de fase sigue siendo
+`NEEDS_MORE_EVIDENCE` (§7).
