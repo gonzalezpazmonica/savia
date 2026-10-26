@@ -191,7 +191,8 @@ def scan(text, th=None, file_path=""):
                     continue
                 # Filter 0e: keyword argument fragments (encoding="utf-8", name="foo")
                 # Presidio sometimes marks the truncated left side as PERSON/ORG.
-                if re.search(r'\w+\s*=\s*["\']', entity_text):
+                # One \w suffices for search() and avoids O(n^2) backtracking.
+                if re.search(r'\w\s*=\s*["\']', entity_text):
                     continue
                 # Filter 0f: entity with unbalanced quotes = truncated literal, skip
                 if entity_text.count('"') == 1 or entity_text.count("'") == 1:

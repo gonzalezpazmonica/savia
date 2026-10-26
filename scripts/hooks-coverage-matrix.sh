@@ -22,6 +22,8 @@ if ! command -v python3 &>/dev/null; then
   echo "ERROR: python3 not found" >&2
   exit 1
 fi
+# UTF-8 en stdout y open(): en Windows python usa cp1252 y "—" salía como "\x97".
+export PYTHONUTF8=1
 
 # --------------------------------------------------------------------------
 # Generate matrix via Python (all logic in one heredoc for atomicity)

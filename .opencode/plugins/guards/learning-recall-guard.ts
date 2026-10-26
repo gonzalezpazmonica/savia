@@ -14,6 +14,8 @@
 //
 // Spec: docs/specs/SCL-001-aprendizaje-continuo.spec.md (AC-2.1..2.6)
 
+import { bashExecutable } from "../lib/bash-runtime.ts";
+
 interface ChatMessageOutput {
   message: { id: string; sessionID: string };
   parts: Array<Record<string, unknown>>;
@@ -32,7 +34,7 @@ async function runRecall(query: string): Promise<Array<{ criterion_id: string; p
   const { spawn } = await import("node:child_process");
   return new Promise((resolve) => {
     const child = spawn(
-      "bash",
+      bashExecutable(),
       [script, "--query", query, "--top", "3", "--min-score", "10", "--mode", "effective", "--json"],
       { stdio: ["ignore", "pipe", "ignore"], timeout: 4000 },
     );
