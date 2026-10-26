@@ -3,8 +3,12 @@
   "spec": "SE-400",
   "phase": "F4",
   "registry_id": "f4-pretooluse-bash",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "status": "PREREGISTERED_BEFORE_RUN",
+  "history": "0.1.0 corrió con las mismas unidades y expectativas: 18/18 INCONCLUSIVE porque el control FULL deja pasar f4-adb-root. 0.2.0 solo añade esa exclusión con su causa; no cambia unidades, expectativas, corpus ni regla.",
+  "excluded_cases": [
+    {"id": "f4-adb-root", "reason": "CONTROL_DEFECT: android-adb-validate.sh lee la orden de la variable TOOL_INPUT y el runtime la entrega por stdin, así que el guard nunca actúa en FULL. Caduca en cuanto el hook lea stdin."}
+  ],
   "description": "Preregistro F4 (SE-400 §6): ablación determinista A0 (quitar el hook de settings, conservar el fichero) y A2 (sustituir el hook por un no-op en el snapshot) de cada hook bloqueante del grupo PreToolUse/Bash. Las expectativas se fijan antes de correr y el receipt las compara con lo observado; un fallo de predicción es un dato, no un error. Ningún resultado autoriza retirar nada.",
   "scope": {"event": "PreToolUse", "matcher": "Bash"},
   "corpora": ["config/kernel-corpus.json", "config/ablation-f4-corpus.json"],
