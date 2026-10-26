@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-26
+approved_by: "operadora, chat 2026-10-26 («Aprobado SE-468»)"
 priority: P0
 developer_type: agent-single
 created: 2026-10-26

@@ -1439,12 +1439,13 @@
     },
     {
       "id": "SE-468",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P0",
       "title": "El gate de evals debe poder fallar",
       "note": "Medido 2026-10-26 en e7224df97: sin ninguna skill, agente ni hook el Evals CI Gate da el mismo PASS (mock puntúa la longitud del caso; vivo es 0,80 constante; sin baseline = PASS).",
       "evidence": "docs/specs/SE-468-honest-evals-gate.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-26: chat («Aprobado SE-468»)"
     },
     {
       "id": "SE-469",
