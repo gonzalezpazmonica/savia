@@ -190,6 +190,15 @@ EOF
   echo "$output" | jq -e '.verdict and .reason and .tier and .path' >/dev/null
 }
 
+@test "--json escapa backslash y comillas de una ruta Windows y conserva UTF-8" {
+  printf -- '— Título “citado” con C:\\ruta\n' > "$WS/docs/rules/domain/acentos.md"
+  run "$SCRIPT" --json --path 'C:\no\existe "x".md' --next-task "unrelated"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.path == "C:\\no\\existe \"x\".md"' >/dev/null
+  run "$SCRIPT" --json --path "$WS/docs/rules/domain/acentos.md" --next-task "unrelated"
+  echo "$output" | jq -e '.abstract | startswith("— Título “citado” con C:\\ruta")' >/dev/null
+}
+
 # === Hook PostToolUse ===
 
 @test "hook: passthrough cuando bajo umbral" {

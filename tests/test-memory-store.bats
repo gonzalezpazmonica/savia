@@ -434,3 +434,26 @@ PY
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "HOME no definido"
 }
+
+# Rutas Windows y comillas: cada línea del JSONL debe seguir siendo JSON válido.
+# La ruta va por argv (MSYS la traduce para el python nativo de Windows).
+jsonl_valid() {
+  python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1], encoding="utf-8")]' "$1"
+}
+
+@test "save con ruta Windows y comillas escribe JSON válido" {
+  run bash "$SCRIPT" save --type discovery --title 'ruta C:\Users\x "citada"' \
+    --content 'ver C:\Users\x\proyecto y "comillas"' --source 'file:C:\a.sh:1' --entities 'a"b,C:\x'
+  [[ "$status" -eq 0 ]]
+  run jsonl_valid "$TMPDIR_MS/output/.memory-store.jsonl"
+  [[ "$status" -eq 0 ]]
+  grep -qF '"title":"ruta C:\\Users\\x \"citada\""' "$TMPDIR_MS/output/.memory-store.jsonl"
+}
+
+@test "upsert sobre contenido con comillas escapadas mantiene supersedes válido" {
+  bash "$SCRIPT" save --type discovery --title 'mismo tema' --content 'v1 "citada" C:\a' --source user:explicit
+  bash "$SCRIPT" save --type discovery --title 'mismo tema' --content 'v2 distinta' --source user:explicit
+  run jsonl_valid "$TMPDIR_MS/output/.memory-store.jsonl"
+  [[ "$status" -eq 0 ]]
+  grep -qF '"supersedes":"v1 \"citada\" C:\\a"' "$TMPDIR_MS/output/.memory-store.jsonl"
+}
