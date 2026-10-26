@@ -150,10 +150,18 @@ fi
 # === Emitir resultado ===
 
 if [[ "$JSON" -eq 1 ]]; then
-  # JSON robust: escapar abstract
-  abs_escaped=$(printf '%s' "$ABSTRACT" | python3 -c 'import sys,json;print(json.dumps(sys.stdin.read()))' 2>/dev/null || printf '"%s"' "$ABSTRACT")
-  printf '{"verdict":"%s","reason":"%s","abstract":%s,"tier":"%s","path":"%s"}\n' \
-    "$VERDICT" "$REASON" "$abs_escaped" "$TIER" "$PATH_ARG"
+  # JSON sin python: en Windows python decodifica stdin como cp1252 (mojibake) y
+  # las rutas C:\... llevan "\" que hay que escapar en todos los campos.
+  json_str() {
+    local s="$1"
+    s="${s//\\/\\\\}"; s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+    s="${s//[[:cntrl:]]/}"
+    printf '"%s"' "$s"
+  }
+  printf '{"verdict":%s,"reason":%s,"abstract":%s,"tier":%s,"path":%s}\n' \
+    "$(json_str "$VERDICT")" "$(json_str "$REASON")" "$(json_str "$ABSTRACT")" \
+    "$(json_str "$TIER")" "$(json_str "$PATH_ARG")"
 else
   echo "$VERDICT: $REASON"
   if [[ "$VERDICT" == "STUB" ]] && [[ -n "$ABSTRACT" ]]; then
