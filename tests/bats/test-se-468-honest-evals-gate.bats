@@ -176,3 +176,15 @@ for r in rows:
   [ "$(field "$REPORT" pbi-decomposition result)" = '"unknown"' ]
   [[ "$(field "$REPORT" pbi-decomposition gaps)" == *'"reason": "unreadable"'* ]]
 }
+
+@test "D1: todos los motivos del informe están en el vocabulario del contrato SE-453" {
+  run bash "$RUNNER" --mock --output "$REPORT"
+  [ "$status" -eq 0 ]
+  source "$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
+  run python3 -c "
+import json, sys
+allowed = set(sys.argv[2].split())
+bad = [g for r in json.load(open(sys.argv[1])) for g in r['gaps'] if g['reason'] not in allowed]
+assert not bad, bad" "$REPORT" "$_GATE_REASONS"
+  [ "$status" -eq 0 ]
+}

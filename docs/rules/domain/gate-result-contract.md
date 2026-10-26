@@ -34,7 +34,9 @@ gate-result: {"result":"unknown","gaps":[{"check":"gitleaks","reason":"missing_t
 - `result`: `clean`, `findings` o `unknown`.
 - `gaps[]`: lista de huecos; cada uno con `check` (qué comprobación) y `reason`.
 - `reason` ∈ `missing_tool` (herramienta ausente), `limit` (tope de recursos superado), `timeout`,
-  `unreadable` (salida o entrada ilegible, o herramienta que falló).
+  `unreadable` (salida o entrada ilegible, o herramienta que falló), `not_executed` (el artefacto evaluado no se
+  ejecutó, o se ejecutó sin poder distinguirlo de uno saboteado) y `no_baseline` (sin referencia con la que comparar),
+  estos dos de SE-468.
 - `unknown` exige al menos un hueco. `clean` no lleva huecos. `findings` puede llevarlos.
 - Si stdout está reservado a un JSON (`--json`, `--format json`), `result` y `gaps` van como campos de ese
   JSON y no hay línea final. `--quiet` suprime también la línea; el exit code y el registro se mantienen.
@@ -74,6 +76,9 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | `security-scan.sh`, `vuln-scan.sh` | 0 sin `--ci` | según la línea `gate-result` |
 | | `--ci`: 0 / 1 | `clean` / `findings` |
 | | `--ci`: 0 con aviso `WARN` | `unknown` (grep ilegible o sin hooks; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
+| `evals-runner.sh` (SE-468) | 0 | `result` por dataset en el JSON (`--mock`: siempre `unknown`/`not_executed`; sin baseline: `no_baseline`) |
+| | 2 | modo vivo sin `SAVIA_EVAL_EXECUTOR` (fallo cerrado) |
+| `evals-paired-delta.py --check-report` | 0 / 1 / 2 | sin `findings` (lista los `unknown` como no evaluados) / `findings` / informe ilegible |
 | `mobile-security-scan.sh` | 0 con informe | según `gate-result` (también en el JSON: `result`, `gaps`); sin apktool, descompilación vacía, modo `dynamic` o informe MobSF sin triaje ⇒ `unknown` |
 | | 1 | argumentos inválidos |
 
