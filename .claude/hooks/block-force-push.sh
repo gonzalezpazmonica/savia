@@ -45,10 +45,11 @@ GIT_AT='(^|[;&|(`]|\$\(|[[:space:]]-exec(dir)?[[:space:]]|(^|[^[:alnum:]_])(((ba
 END='([[:space:]]|$|[;&|)"'"'"'`])'
 # main/master como destino de un push de esta misma orden (sin cruzar ;, & ni |): palabra suelta o tras
 # `:` o `+` de un refspec, o tras refs/heads/ o refs/remotes/<remoto>/ (`HEAD:main`, `+main`,
-# `refs/heads/main`, `main:main`); `main-fix` y `feature/main` no casan.
-PUSH_MAIN='push[[:space:]]+([^;&|]*([[:space:]:+"'"'"']|refs/heads/|refs/remotes/[^/[:space:]]+/))?(main|master)([[:space:]:]|$|[;&|)"'"'"'`])'
+# `refs/heads/main`, `heads/main` —git lo resuelve a refs/heads/main—, `main:main`); `main-fix` y
+# `feature/main` no casan.
+PUSH_MAIN='push[[:space:]]+([^;&|]*([[:space:]:+"'"'"']|(refs/|[[:space:]:+"'"'"'])heads/|refs/remotes/[^/[:space:]]+/))?(main|master)([[:space:]:]|$|[;&|)"'"'"'`])'
 # main/master como destino: palabra suelta o tras `:`, `+` o `/` de un refspec; `main-fix` no casa.
-MAIN_REF='(^|[[:space:]:+"'"'"']|refs/heads/|refs/remotes/[^/[:space:]]+/)(main|master)([[:space:]:;&|)"'"'"'`]|$)'
+MAIN_REF='(^|[[:space:]:+"'"'"']|(refs/|[[:space:]:+"'"'"'])heads/|refs/remotes/[^/[:space:]]+/)(main|master)([[:space:]:;&|)"'"'"'`]|$)'
 
 # Bloquear force push (permite --force-with-lease en ramas no-main)
 # --force-with-lease es más seguro: falla si el remoto avanzó sin nuestro conocimiento.
@@ -60,14 +61,17 @@ IS_PUSH_TO_MAIN=no
 if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+.*--force-with-lease" > /dev/null; then
   IS_FORCE_WITH_LEASE=yes
 fi
-if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+([^;&|]*[[:space:]])?((--force|-[A-Za-z]*f[A-Za-z]*)${END}|[\"']?\+[^[:space:]])" > /dev/null; then
+if echo "$COMMAND" | grep -iE "${GIT_AT}push[[:space:]]+([^;&|]*[[:space:]])?((--force|--mirror|-[A-Za-z]*f[A-Za-z]*)${END}|[\"']?\+[^[:space:]])" > /dev/null; then
   IS_BARE_FORCE=yes
 fi
-if echo "$COMMAND" | grep -iE "git[[:space:]]+push[[:space:]]+.*${MAIN_REF}" > /dev/null; then
+# Sin GIT_AT a propósito: solo cuenta junto a IS_FORCE_WITH_LEASE (anclado), así que el lease y la mención de
+# main pueden estar en órdenes distintas de la misma línea (lado seguro). No «arreglarlo» sin probar la paridad TS.
+# --all actualiza también main sin nombrarla; con lease cuenta como push a main.
+if echo "$COMMAND" | grep -iE "git[[:space:]]+push[[:space:]]+(.*${MAIN_REF}|([^;&|]*[[:space:]])?--all${END})" > /dev/null; then
   IS_PUSH_TO_MAIN=yes
 fi
 
-# Bare --force (o refspec `+rama`, que fuerza igual) siempre bloqueado, aunque otra parte de la orden lleve --force-with-lease (SE-453):
+# Bare --force (o refspec `+rama` o --mirror, que fuerzan igual: --mirror fuerza y borra refs remotas) siempre bloqueado, aunque otra parte de la orden lleve --force-with-lease (SE-453):
 # la regex de force no casa con --force-with-lease, así que un yes aquí es un --force/-f real.
 if [[ "$IS_BARE_FORCE" == "yes" ]]; then
   echo "BLOQUEADO: git push --force no está permitido. Usa --force-with-lease." >&2

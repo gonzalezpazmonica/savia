@@ -324,6 +324,7 @@ jobs:
         run: python3 -m unittest tests/python/test_installer_plan.py
 
       # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
+      # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
       - name: Gate guards parity (SE-453 S2)
         env:
           SAVIA_REQUIRE_TS: "1"

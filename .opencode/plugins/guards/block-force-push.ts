@@ -50,18 +50,21 @@ const FORCE_WITH_LEASE = rx(String.raw`push${S}+.*--force-with-lease`);
 // Never matches --force-with-lease, so a hit is a real --force/-f even if another push in the command
 // uses the lease (SE-453: the lease no longer exempts the whole command). A `+branch` refspec forces too.
 // Short flags may be combined (`-fu`, `-uf`): any single-dash cluster of letters with an `f` forces.
-const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|-[A-Za-z]*f[A-Za-z]*)${END}|["']?\+\S)`);
-// main/master as a destination: a bare word, after `:`, `+` or a quote, or after refs/heads/ or
-// refs/remotes/<remote>/; `main-fix` and `feature/main` do not match.
+// `--mirror` forces too (it force-updates and deletes remote refs).
+const BARE_FORCE = rx(String.raw`push${S}+(?:[^;&|\n]*[${WS}])?(?:(?:--force|--mirror|-[A-Za-z]*f[A-Za-z]*)${END}|["']?\+\S)`);
+// main/master as a destination: a bare word, after `:`, `+` or a quote, or after refs/heads/, heads/
+// (git resolves it to refs/heads/) or refs/remotes/<remote>/; `main-fix` and `feature/main` do not match.
+// `--all` updates main without naming it, so with the lease it counts as a push to main.
 // Unanchored on purpose (same as IS_PUSH_TO_MAIN in the bash hook): it only counts together with the anchored
 // FORCE_WITH_LEASE, so the lease and the mention of main may sit in different commands of one line (safe side).
 const PUSH_MENTIONS_MAIN = new RegExp(
-  String.raw`git${S}+push${S}+.*(?:^|[${WS}:+"']|refs/heads/|refs/remotes/[^/\s]+/)(?:main|master)(?:[${WS}:;&|)"'\x60]|$)`,
+  String.raw`git${S}+push${S}+.*(?:^|[${WS}:+"']|(?:refs/|[${WS}:+"'])heads/|refs/remotes/[^/\s]+/)(?:main|master)(?:[${WS}:;&|)"'\x60]|$)` +
+    String.raw`|git${S}+push${S}+(?:[^;&|\n]*[${WS}])?--all${END}`,
   "im",
 );
 // main/master as the destination of a push in this same command (without crossing ;, & or |):
-// `origin main`, `HEAD:main`, `+main`, `refs/heads/main`, `main:main`, `'main'`.
-const PUSH_MAIN = String.raw`push${S}+(?:[^;&|\n]*(?:[${WS}:+"']|refs/heads/|refs/remotes/[^/\s]+/))?(?:main|master)(?:[${WS}:]|$|[;&|)"'\x60])`;
+// `origin main`, `HEAD:main`, `+main`, `refs/heads/main`, `heads/main`, `main:main`, `'main'`.
+const PUSH_MAIN = String.raw`push${S}+(?:[^;&|\n]*(?:[${WS}:+"']|(?:refs/|[${WS}:+"'])heads/|refs/remotes/[^/\s]+/))?(?:main|master)(?:[${WS}:]|$|[;&|)"'\x60])`;
 
 const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
   {

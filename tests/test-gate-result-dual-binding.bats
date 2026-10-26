@@ -162,6 +162,23 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
     "git push origin +feat" "git push origin '+feat'" "git push origin +main"
 }
 
+# Revisión de seguridad de 8be7ba6, P2-1 y P2-2: git resuelve `heads/main` a refs/heads/main; `--mirror` fuerza
+# (y borra refs remotas) sin decir --force; `--all` con lease actualiza main sin nombrarla.
+@test "paridad block-force-push: heads/main, --mirror y --all con lease ⇒ 2 (revisión #1348 seguridad P2-1, P2-2)" {
+  require_ts
+  parity block-force-push blockForcePush 2 \
+    "git push $FP-with-lease origin HEAD:heads/main" "git push origin HEAD:heads/main" "git push origin heads/master" \
+    "git push --mirror origin" "git push $FP-with-lease --mirror" "git push origin --mirror" \
+    "git push $FP-with-lease --all" "git push $FP-with-lease origin --all"
+}
+
+@test "paridad sin bloqueo: --all sin forzar, heads/ dentro de otra rama y opción --allx ⇒ 0" {
+  require_ts
+  parity block-force-push blockForcePush 0 \
+    "git push --all origin" "git push $FP-with-lease origin feat/heads/main" \
+    "git push $FP-with-lease origin heads/main-fix" "git push $FP-with-lease origin feat --allx"
+}
+
 # Revisión de seguridad de a71007ba9, P1-1: en `main` el TS sin ancla bloqueaba estas formas; con GIT_AT
 # dejaron de bloquear en OpenCode. `su -c`, `-exec` de find y `strace`/`ltrace`/`ssh <host>` son inicio de orden
 # o envoltorio en los dos bindings. P2-1: las banderas cortas combinadas (`-fu`, `-uf`) fuerzan igual.
