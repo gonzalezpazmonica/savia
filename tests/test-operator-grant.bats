@@ -20,7 +20,6 @@ setup() {
   export SAVIA_GRANT_TICKETS_DIR="$TMP_GRANTS/grant-tickets"
 }
 
-GUARD="scripts/operator-grant-guard.sh"
 
 # Simula la orden que ve el hook PreToolUse; $2 = permission_mode.
 guard_input() {
@@ -29,7 +28,7 @@ guard_input() {
 
 # La operadora contesta el diálogo del arnés: el guard deja el ticket.
 ask_ticket() {
-  guard_input "bash scripts/operator-grant.sh grant --scope merge --context \"$1\" --ttl-hours 1" | bash "$GUARD" >/dev/null
+  guard_input "bash scripts/operator-grant.sh grant --scope merge --context \"$1\" --ttl-hours 1" | bash "$SCRIPT" guard >/dev/null
 }
 
 teardown() {
@@ -265,10 +264,10 @@ PY
   python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$SAVIA_GRANTS_DIR/autonomy:overnight-sprint.json"
 }
 
-# ── operator-grant-guard.sh (PreToolUse) ────────────────────────────────
+# ── operator-grant.sh guard (PreToolUse) ────────────────────────────────
 
 @test "guard: grant de merge en modo normal pide el diálogo y deja ticket" {
-  run bash "$GUARD" < <(guard_input 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"')
+  run bash "$SCRIPT" guard < <(guard_input 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"')
   [ "$status" -eq 0 ]
   [[ "$output" == *'"permissionDecision": "ask"'* ]]
   [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 1 ]
@@ -276,14 +275,14 @@ PY
 
 @test "guard: en bypassPermissions o dontAsk deniega y no deja ticket" {
   for mode in bypassPermissions dontAsk; do
-    run bash "$GUARD" < <(guard_input 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"' "$mode")
+    run bash "$SCRIPT" guard < <(guard_input 'bash scripts/operator-grant.sh grant --scope merge --context "PR 7"' "$mode")
     [ "$status" -eq 2 ]
   done
   [ ! -d "$SAVIA_GRANT_TICKETS_DIR" ] || [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 0 ]
 }
 
 @test "guard: invocación ilegible pregunta sin dejar ticket" {
-  run bash "$GUARD" < <(guard_input 'X=operator-grant.sh; eval "bash scripts/$X grant --scope merge --context y"')
+  run bash "$SCRIPT" guard < <(guard_input 'X=operator-grant.sh; eval "bash scripts/$X grant --scope merge --context y"')
   [ "$status" -eq 0 ]
   [[ "$output" == *'"ask"'* ]]
   [ ! -d "$SAVIA_GRANT_TICKETS_DIR" ] || [ "$(ls "$SAVIA_GRANT_TICKETS_DIR" | wc -l)" -eq 0 ]
@@ -294,7 +293,7 @@ PY
            'bash scripts/operator-grant.sh revoke --scope merge' \
            'bash scripts/operator-grant.sh grant --scope autonomy:overnight-sprint --context z' \
            'git status'; do
-    run bash "$GUARD" < <(guard_input "$c")
+    run bash "$SCRIPT" guard < <(guard_input "$c")
     [ "$status" -eq 0 ]
     [ -z "$output" ]
   done
@@ -302,24 +301,24 @@ PY
 
 @test "guard: veta clave y tickets a Read, Grep sobre su carpeta madre y Bash" {
   kdir="$(dirname "$SAVIA_GRANT_KEY_FILE")"
-  run bash "$GUARD" < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":sys.argv[1]}}))' "$SAVIA_GRANT_KEY_FILE")
+  run bash "$SCRIPT" guard < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":sys.argv[1]}}))' "$SAVIA_GRANT_KEY_FILE")
   [ "$status" -eq 2 ]
-  run bash "$GUARD" < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Grep","tool_input":{"pattern":"a","path":sys.argv[1]}}))' "$TMP_GRANTS")
+  run bash "$SCRIPT" guard < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Grep","tool_input":{"pattern":"a","path":sys.argv[1]}}))' "$TMP_GRANTS")
   [ "$status" -eq 2 ]
-  run bash "$GUARD" < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Write","tool_input":{"file_path":sys.argv[1]+"/merge-x.json","content":"{}"}}))' "$SAVIA_GRANT_TICKETS_DIR")
+  run bash "$SCRIPT" guard < <(python3 -c 'import json,sys;print(json.dumps({"tool_name":"Write","tool_input":{"file_path":sys.argv[1]+"/merge-x.json","content":"{}"}}))' "$SAVIA_GRANT_TICKETS_DIR")
   [ "$status" -eq 2 ]
-  run bash "$GUARD" < <(guard_input "cat $kdir/*")
+  run bash "$SCRIPT" guard < <(guard_input "cat $kdir/*")
   [ "$status" -eq 2 ]
-  run bash "$GUARD" < <(guard_input 'SAVIA_GRANT_KEY_FILE=/tmp/k bash scripts/operator-grant.sh check --scope merge')
+  run bash "$SCRIPT" guard < <(guard_input 'SAVIA_GRANT_KEY_FILE=/tmp/k bash scripts/operator-grant.sh check --scope merge')
   [ "$status" -eq 2 ]
   # Negativo: una ruta ajena pasa.
-  run bash "$GUARD" < <(python3 -c 'import json;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":"/etc/hostname"}}))')
+  run bash "$SCRIPT" guard < <(python3 -c 'import json;print(json.dumps({"tool_name":"Read","tool_input":{"file_path":"/etc/hostname"}}))')
   [ "$status" -eq 0 ]
 }
 
 @test "guard: sin entrada o con entrada no JSON, bloquea (nunca 0 sin evaluar)" {
-  run bash "$GUARD" < /dev/null
+  run bash "$SCRIPT" guard < /dev/null
   [ "$status" -eq 2 ]
-  run bash "$GUARD" <<< "no-json"
+  run bash "$SCRIPT" guard <<< "no-json"
   [ "$status" -eq 2 ]
 }

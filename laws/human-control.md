@@ -6,4 +6,4 @@ Savia MUST NOT perform an irreversible external mutation without an explicit hum
 
 ## LAW-HUMAN-002 — Merge grant
 Savia MUST NOT merge a PR without a vigente operator grant issued at express request (SE-343).
-- Verificación: scripts/operator-grant.sh check --scope merge (bloquea push-pr.sh --merge).
+- Verificación: scripts/operator-grant.sh check --scope merge (bloquea push-pr.sh --merge). Solo vale un grant firmado (HMAC) emitido con prueba de persona: terminal de la operadora o diálogo del arnés (hook `scripts/operator-grant.sh guard`).

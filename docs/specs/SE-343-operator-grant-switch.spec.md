@@ -36,6 +36,13 @@ created_at: 2026-08-24
 > **Enmienda propuesta (SE-433, D7, 2026-10-04):** el grant `merge` se unificará con el modelo de
 > autorización de merge-sprint, que registra la pregunta y la respuesta literales de la operadora, la
 > sesión y el hash. Un grant sin ese registro dejará de bastar para `push-pr.sh --merge`. Ver `docs/specs/SE-433-merge-sprint.spec.md` §2.11. Pendiente de spec propia.
+>
+> **Arreglo P1 (2026-10-26, decisión de la operadora):** `grant --scope merge` ya no se emite sin
+> prueba de persona. Exige la terminal de la operadora (`source: tty`) o el ticket de un solo uso que
+> deja `operator-grant.sh guard` al pedir el diálogo de permisos del arnés
+> (`source: harness-ask`), y el grant se firma con HMAC-SHA256 (patrón Yema F4). `check` rechaza un
+> grant de merge sin firma válida. El `source` deja de ser un literal. Detalle:
+> `docs/rules/domain/autonomous-safety-merge-grant.md`.
 
 ## 1. Origen y problema
 
