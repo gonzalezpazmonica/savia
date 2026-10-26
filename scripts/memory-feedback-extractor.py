@@ -29,7 +29,7 @@ def extract(payload: dict) -> dict:
 
     # ── 2. Determine outcome ──────────────────────────────────────────────
     failure_patterns = [
-        r"\bERROR\b", r"\berror\b", r"\bFAIL(ED|URE)?\b", r"\bfailed?\b",
+        r"\bERROR\b", r"\berror\b", r"\bFAIL(ED|URE)?\b", r"\bfail(ed)?\b",
         r"\bexception\b", r"\bException\b", r"\bTraceback\b", r"\btraceback\b",
         r"\bCritical\b", r"\bcritical\b", r"\bFATAL\b", r"\bfatal\b",
         r"\bAbort\b", r"\babort\b", r"\bCrash\b", r"\bcrash\b",
@@ -148,7 +148,7 @@ def main():
         payload = json.loads(raw)
         result = extract(payload)
         print(json.dumps(result))
-    except (json.JSONDecodeError, KeyError, TypeError):
+    except (json.JSONDecodeError, KeyError, TypeError, AttributeError):
         # Fail gracefully — output a safe default
         print(json.dumps({
             "outcome": "unknown",

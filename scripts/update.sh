@@ -241,6 +241,10 @@ do_install() {
     }
   fi
 
+  # Paso 5a: Windows — rematerializar enlaces que el pull haya devuelto a texto
+  bash "$WORKSPACE_DIR/scripts/windows-links.sh" repair --quiet 2>/dev/null \
+    || log_warn "Enlaces del repositorio pendientes: bash scripts/windows-links.sh check"
+
   # Paso 5b: Restore Savia Shield state
   bash "$WORKSPACE_DIR/scripts/hook-profile.sh" set "$prev_profile" 2>/dev/null || true
   log_ok "Savia Shield profile restored: $prev_profile"

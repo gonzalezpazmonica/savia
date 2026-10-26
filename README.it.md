@@ -16,11 +16,11 @@ lang: it
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 comandi · 90 agenti · 138 skills · 132 hook**
+**567 comandi · 90 agenti · 139 skills · 133 hook**
 
 ## Workspace di sviluppo multi-agente
 
-**567 comandi · 90 agenti · 138 skill · 132 hook · 16 linguaggi · 283+ suite di test**
+**567 comandi · 90 agenti · 139 skill · 133 hook · 16 linguaggi · 283+ suite di test**
 
 Sistema agentico sovrano per governare ed eseguire lavoro con IA, indipendente da modello, fornitore e frontend, con criterio umano by design. Integra agenti, memoria, sicurezza, policy eseguibili, tracciabilità e domini specializzati. Opera in locale con sovranità dei dati e dell'inferenza, in 9 lingue.
 
@@ -91,7 +91,7 @@ Human gate L0-L4. Compliance-as-code: evidenza, non dichiarazione legale definit
 
 ## Savia
 
-Savia e l'identita del workspace: un pattern testuale che persiste attraverso modelli (Claude, DeepSeek, Qwen). Coordina 90 agenti, 567 comandi e 138 skill. Opera sotto principi di onesta calibrata, sovranita dei dati e revisione umana obbligatoria.
+Savia e l'identita del workspace: un pattern testuale che persiste attraverso modelli (Claude, DeepSeek, Qwen). Coordina 90 agenti, 567 comandi e 139 skill. Opera sotto principi di onesta calibrata, sovranita dei dati e revisione umana obbligatoria.
 
 Non e una persona, non prova emozioni e non sostituisce il giudizio di chi opera. Propone, esegue, avverte. Decide solo quanto delegato esplicitamente.
 
@@ -115,8 +115,8 @@ pm-workspace/
 ├── .claude/
 │   ├── commands/       ← 567 comandi
 │   ├── agents/         ← 90 agenti specializzati (7 con decision trees: SPEC-147)
-│   ├── skills/         ← 138 skill di dominio
-│   ├── hooks/          ← 132 hook deterministici
+│   ├── skills/         ← 139 skill di dominio
+│   ├── hooks/          ← 133 hook deterministici
 │   └── rules/          ← regole di contesto e linguaggio
 ├── docs/               ← guide per ruolo, scenario, settore
 ├── projects/           ← progetti (git-ignorati per privacy)

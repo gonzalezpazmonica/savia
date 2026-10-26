@@ -7,11 +7,12 @@
 import { test, expect, beforeAll, afterAll } from "bun:test";
 import { contextDropAfterUse } from "../guards/context-drop-after-use.ts";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const STUB_RX = /^<stub origin=/;
-const WORKSPACE = "/home/monica/savia";
+// Raíz real del repo, sea cual sea la máquina (Linux, macOS o Windows).
+const WORKSPACE = resolve(import.meta.dir, "..", "..", "..");
 
 function makeLongOutput(lines: number, prefix = "content"): string {
   return Array.from({ length: lines }, (_, i) => `${prefix} ${i + 1}`).join("\n");

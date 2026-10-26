@@ -29,6 +29,16 @@ if [[ -z "$HOST" ]]; then
   exit 1
 fi
 
+if [[ ! "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]]; then
+  echo "ERROR: host inválido: $HOST" >&2
+  exit 1
+fi
+# Sin ceros a la izquierda: bash leería 0443 como octal y el JSON quedaría inválido
+if [[ ! "$PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( PORT > 65535 )); then
+  echo "ERROR: puerto inválido: $PORT" >&2
+  exit 1
+fi
+
 # ── Preparar output dir ───────────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR"
 SAFE_HOST="${HOST//:/_}"
@@ -86,17 +96,24 @@ if [[ "$TESTSSL_CMD" == "docker run --rm drwetter/testssl.sh" ]]; then
 }
 EOF
   echo "INFO: Report generado en $REPORT_FILE"
-  exit 0
+  echo "GRADE: UNKNOWN"
+  # Exit 2 = desconocido (convención gate-result): sin escaneo no hay nota
+  exit 2
 fi
 
-# testssl.sh disponible localmente
-$TESTSSL_CMD --jsonfile "$TESTSSL_OUT" --severity "$MIN_SEVERITY" \
+# testssl.sh disponible localmente. testssl no sobrescribe un --jsonfile existente:
+# sin este borrado, un reintento el mismo día calificaría con el informe viejo.
+rm -f "$TESTSSL_OUT"
+# testssl siempre con LOW: la nota se calcula con todo el informe (TLS1 o 3DES
+# suelen ser LOW/MEDIUM); --severity solo filtra la lista de hallazgos mostrada.
+$TESTSSL_CMD --jsonfile "$TESTSSL_OUT" --severity LOW \
   --protocols --ciphers --headers --vulnerable \
   "${HOST}:${PORT}" 2>/dev/null || true
 
 # ── Parsear output y clasificar ───────────────────────────────────────────────
 FINDINGS="[]"
 GRADE="A"
+SCAN_OK=false
 
 if [[ -f "$TESTSSL_OUT" ]]; then
   # Extraer findings relevantes con python3 o jq
@@ -113,32 +130,55 @@ with open(raw_file) as f:
     data = json.load(f)
 
 findings = []
+grade_lines = []
+fatal = False
 worst = 0
 for item in data:
     sev = item.get("severity", "INFO").upper()
+    if sev == "FATAL" or item.get("id") == "scanProblem":
+        fatal = True  # testssl no pudo evaluar el host
+    # Nota: solo hallazgos con severidad (LOW+); OK/INFO dicen "no SSLv3 support"
+    if sev_order.get(sev, 0) >= 1 and not str(item.get("finding", "")).lower().startswith("not offered"):
+        grade_lines.append(("%s %s" % (item.get("id", ""), item.get("finding", ""))).replace("\n", " "))
     if sev_order.get(sev, 0) >= min_order:
         findings.append({
             "id": item.get("id", ""),
             "severity": sev,
             "finding": item.get("finding", ""),
-            "cve": item.get("cve", "")
+            "cve": item.get("cve") or ""
         })
         worst = max(worst, sev_order.get(sev, 0))
 
-print(json.dumps(findings))
+print(json.dumps({"findings": findings, "grade_text": "\n".join(grade_lines), "fatal": fatal}))
 PYEOF
-    )
+    ) && SCAN_OK=true
   fi
+fi
+GRADE_TEXT=""
+if $SCAN_OK; then
+  # Hallazgos (filtrados por --severity) y texto de calificación (informe completo)
+  GRADE_TEXT=$(printf '%s' "$FINDINGS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["grade_text"])')
+  SCAN_FATAL=$(printf '%s' "$FINDINGS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["fatal"])')
+  FINDINGS=$(printf '%s' "$FINDINGS" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["findings"]))')
+  [[ "$SCAN_FATAL" == "True" ]] && SCAN_OK=false
+fi
+if ! $SCAN_OK; then
+  FINDINGS="[]"
+  echo "WARN: testssl no produjo un informe legible; no se puede calificar el host." >&2
 fi
 
 # ── Grading ───────────────────────────────────────────────────────────────────
 # Inspeccionar si SSLv3/cert invalid → F; TLS 1.0/1.1 → D; etc.
+# Solo se miran id y finding (no cve ni claves JSON) y se ignoran los "not offered".
+# Se califica sobre el informe completo, no sobre los hallazgos filtrados.
 GRADE="B"  # default: TLS 1.2 presente
-if echo "$FINDINGS" | grep -qi "sslv3\|cert.*invalid\|expired"; then
+if ! $SCAN_OK; then
+  GRADE="UNKNOWN"  # sin informe legible nunca se da nota (fail-closed)
+elif echo "$GRADE_TEXT" | grep -qi "sslv3\|cert.*invalid\|expired"; then
   GRADE="F"
-elif echo "$FINDINGS" | grep -qi "tlsv1\.0\|tlsv1\.1"; then
-  GRADE="D"
-elif echo "$FINDINGS" | grep -qi "rc4\|des\|export\|null"; then
+elif echo "$GRADE_TEXT" | grep -qiE '(^|[^a-z0-9_])tls ?v?1([._ ]?[01])?([^a-z0-9_.]|$)'; then
+  GRADE="D"  # TLS 1.0/1.1 en cualquier grafía (TLSv1.0, TLS 1.1, TLSv1) o ids TLS1, TLS1_1
+elif echo "$GRADE_TEXT" | grep -qiE '(^|[^a-z])(rc4|3?des|export|a?null)([^a-z]|$)'; then
   GRADE="C"
 fi
 
@@ -171,3 +211,5 @@ EOF
 
 echo "GRADE: ${GRADE}"
 echo "Report: $REPORT_FILE"
+# Exit 2 = desconocido (convención gate-result): el escaneo falló y no hay nota
+$SCAN_OK || exit 2

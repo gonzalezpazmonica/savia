@@ -2,9 +2,27 @@
 from protocol import ProtocolError, decode_json
 
 
-def hook_decision(exit_code, stdout, *, timed_out=False):
-    result = dict(action="deny", reason="HOOK_FAILURE", context=None, updated_input=None)
+# Claude Code and Codex read plain (non-JSON) stdout of these events as context.
+PLAIN_CONTEXT_EVENTS = ("SessionStart", "UserPromptSubmit", "SubagentStart")
+# Authority events must answer with JSON or nothing: anything else is invalid output.
+AUTHORITY_EVENTS = ("PreToolUse", "PermissionRequest")
+
+
+def plain_output_mode(event):
+    """How exit-0 stdout that is not JSON is read for `event`: invalid, context or ignore."""
+    if event in AUTHORITY_EVENTS:
+        return "invalid"
+    return "context" if event in PLAIN_CONTEXT_EVENTS else "ignore"
+
+
+def hook_decision(exit_code, stdout, *, timed_out=False, plain="invalid"):
+    result = dict(action="deny", reason="HOOK_FAILURE", context=None, updated_input=None, level=None)
     if timed_out or type(exit_code) is not int or exit_code != 0:
+        return result
+    text = stdout.strip()
+    if plain != "invalid" and text and not text.startswith("{"):
+        # Plain text (also "[TAG] ..."), not broken JSON: what starts like an object still has to parse.
+        result.update(action="allow", reason="HOOK_OK", context=text if plain == "context" else None)
         return result
     try:
         value = decode_json(stdout.encode("utf-8")) if stdout.strip() else {}
@@ -29,7 +47,32 @@ def hook_decision(exit_code, stdout, *, timed_out=False):
             raise ProtocolError("INVALID_EVENT")
         if mutation is not None and not isinstance(mutation, dict):
             raise ProtocolError("INVALID_EVENT")
-        result.update(action="allow", reason="HOOK_OK", context=context, updated_input=mutation)
+        # A context level is only what the hook declares (savia-gates reads the same key).
+        level = specific.get("saviaLevel")
+        result.update(action="allow", reason="HOOK_OK", context=context, updated_input=mutation,
+                      level=level if isinstance(level, str) else None)
     except (ProtocolError, UnicodeError, AttributeError):
         result["reason"] = "INVALID_HOOK_OUTPUT"
+    return result
+
+
+def prompt_decision(exit_code, stdout):
+    """Verdict of a `prompt` handler evaluator: exactly {"ok": bool, "reason"?: str}.
+
+    Anything else (crash, extra prose around the JSON, non-boolean ok) is uncertainty and denies.
+    """
+    result = dict(action="deny", reason="PROMPT_HOOK_FAILURE", context=None, updated_input=None)
+    if type(exit_code) is not int or exit_code != 0:
+        return result
+    try:
+        value = decode_json(stdout.strip().encode("utf-8"))
+    except (ProtocolError, UnicodeError):
+        value = None
+    if not isinstance(value, dict) or type(value.get("ok")) is not bool \
+            or not isinstance(value.get("reason", ""), str):
+        result["reason"] = "INVALID_HOOK_OUTPUT"
+    elif value["ok"]:
+        result.update(action="allow", reason="HOOK_OK")
+    else:
+        result["reason"] = "PROMPT_HOOK_BLOCK: " + (value.get("reason") or "sin motivo")[:500]
     return result

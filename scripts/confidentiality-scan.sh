@@ -7,11 +7,33 @@ set -uo pipefail
 #   --pr:        scan PR diff vs origin/main
 #   --full-repo: scan ALL tracked file contents (periodic audit)
 #   --blocklist: path to dynamically generated blocklist
+# SE-453: la última línea de stdout es `gate-result: {...}` (clean|findings|unknown). Un diff que git
+# no pudo calcular (p. ej. sin origin/main) o una blocklist pedida que no se pudo leer es un hueco,
+# nunca «No content to scan»/CLEAN. Códigos sin renumerar: con hueco y sin violaciones sale 0
+# (D3: ciclo de aviso, registrado en output/unmeasured-gates.jsonl); SAVIA_GATE_UNKNOWN=block ⇒ 2.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ALLOWLIST="$ROOT_DIR/scripts/confidentiality-allowlist.txt"
 FAILS=0; WARNS=0; MODE="--staged"; DYN_BLOCKLIST=""
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+GAPS=()
+add_gap() { [[ " ${GAPS[*]} " == *" $1 "* ]] || GAPS+=("$1"); }
+
+# finish — resultado del contrato SE-453 y exit code (sin renumerar).
+finish() {
+  local result="clean" rc=0
+  if [ "$FAILS" -gt 0 ]; then result="findings"; rc=1
+  elif [ "${#GAPS[@]}" -gt 0 ]; then
+    result="unknown"
+    GATE_UNMEASURED_ROOT="$ROOT_DIR" gate_unmeasured_record "confidentiality-scan" "${GAPS[0]#*:}"
+    echo "WARN: escaneo incompleto (resultado desconocido): ${GAPS[*]}"
+    [ "${SAVIA_GATE_UNKNOWN:-warn}" = "block" ] && rc=2
+  fi
+  gate_result_emit "$result" "${GAPS[@]}"
+  exit "$rc"
+}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -76,8 +98,57 @@ get_lines() {
   esac
 }
 
+# changed_files — ficheros añadidos o modificados del modo actual (Check 4). Sin EXCLUDE_FILES: esa
+# lista es para el contenido autorreferente (tests/, pentesting/…) y no debe dejar pasar un .pem o un
+# id_rsa por estar en esas carpetas. Ningún fichero versionado coincide hoy con el patrón prohibido.
+changed_files() {
+  cd "$ROOT_DIR" || exit 2
+  case "$MODE" in
+    --staged) git diff --cached --diff-filter=ACMR --name-only ;;
+    --pr)     git diff origin/main...HEAD --diff-filter=ACMR --name-only ;;
+  esac
+}
+
+# check_forbidden_files — Check 4. Va aparte porque también corre cuando no hay líneas añadidas:
+# un .p12/.pfx binario o un .env vacío no aportan ninguna línea `+` y antes salían como CLEAN.
+check_forbidden_files() {
+  if [ "$MODE" = "--full-repo" ]; then
+    echo "-- Check 4: Forbidden files (skipped in full-repo mode)"; return 0
+  fi
+  echo "-- Check 4: Forbidden files"
+  local changed forbid
+  changed=$(changed_files 2>/dev/null || true)
+  forbid=$(echo "$changed" | grep -iE "\.(env|pat|secret|pem|p12|pfx|key)$|id_rsa|id_ed25519" || true)
+  if [ -n "$forbid" ]; then
+    echo "::error::BLOCKED: Forbidden file types"
+    echo "$forbid" | while read -r f; do echo "  FAIL $f"; done
+    FAILS=$((FAILS + 1))
+  else echo "  OK"; fi
+}
+
+# git_source_ok — 0 si git puede calcular la fuente del modo actual (diff o lista de ficheros).
+git_source_ok() {
+  local rc=0
+  case "$MODE" in
+    --staged) git -C "$ROOT_DIR" diff --cached --quiet >/dev/null 2>&1 || rc=$? ;;
+    --pr)     git -C "$ROOT_DIR" diff --quiet origin/main...HEAD >/dev/null 2>&1 || rc=$? ;;
+    --full-repo) git -C "$ROOT_DIR" ls-files >/dev/null 2>&1 || rc=2 ;;
+  esac
+  [ "$rc" -le 1 ]
+}
+
+if ! git_source_ok; then
+  echo "ERROR: git no pudo calcular el contenido a escanear (mode: $MODE). No se ha escaneado nada." >&2
+  add_gap "git-diff:unreadable"
+  finish
+fi
 ADDED_LINES=$(get_lines 2>/dev/null || true)
-if [ -z "$ADDED_LINES" ]; then echo "No content to scan."; exit 0; fi
+if [ -z "$ADDED_LINES" ]; then
+  echo "No content lines to scan."
+  check_forbidden_files
+  [ "$FAILS" -gt 0 ] && echo "BLOCKED — $FAILS violation(s)"
+  finish
+fi
 LINE_COUNT=$(echo "$ADDED_LINES" | wc -l)
 echo "Scanning $LINE_COUNT lines (mode: $MODE)"
 
@@ -87,10 +158,15 @@ if [ -z "$DYN_BLOCKLIST" ]; then
   GEN="$SCRIPT_DIR/generate-blocklist.sh"
   if [ -f "$GEN" ]; then
     DYN_BLOCKLIST=$(mktemp)
-    bash "$GEN" > "$DYN_BLOCKLIST" 2>/dev/null
+    bash "$GEN" > "$DYN_BLOCKLIST" 2>/dev/null || add_gap "blocklist:unreadable"
     trap "rm -f '$DYN_BLOCKLIST'" EXIT
     echo "  (auto-generated $(wc -l < "$DYN_BLOCKLIST") patterns from workspace)"
+  else
+    add_gap "blocklist:missing_tool"
   fi
+elif [ ! -f "$DYN_BLOCKLIST" ] || [ ! -r "$DYN_BLOCKLIST" ]; then
+  echo "  ERROR: --blocklist no existe o no se puede leer: $DYN_BLOCKLIST" >&2
+  add_gap "blocklist:unreadable"
 fi
 ALL_PATTERNS=""
 if [ -n "$DYN_BLOCKLIST" ] && [ -f "$DYN_BLOCKLIST" ]; then
@@ -141,18 +217,7 @@ if [ -n "$EMAILS" ]; then
 else echo "  OK"; fi
 
 # ── Check 4: Forbidden files (skip for full-repo — files already committed) ─
-if [ "$MODE" != "--full-repo" ]; then
-  echo "-- Check 4: Forbidden files"
-  CHANGED=$(get_lines 2>/dev/null | grep "^diff --git" | sed 's|.*b/||' || true)
-  FORBID=$(echo "$CHANGED" | grep -iE "\.(env|pat|secret|pem|p12|pfx|key)$|id_rsa|id_ed25519" || true)
-  if [ -n "$FORBID" ]; then
-    echo "::error::BLOCKED: Forbidden file types"
-    echo "$FORBID" | while read -r f; do echo "  FAIL $f"; done
-    FAILS=$((FAILS + 1))
-  else echo "  OK"; fi
-else
-  echo "-- Check 4: Forbidden files (skipped in full-repo mode)"
-fi
+check_forbidden_files
 
 # ── Check 5: Merge conflict markers ───────────────────────────────────────
 echo "-- Check 5: Conflict markers"
@@ -196,6 +261,8 @@ else echo "  OK"; fi
 
 # ── Results ────────────────────────────────────────────────────────────────
 echo ""; echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if [ $FAILS -gt 0 ]; then echo "BLOCKED — $FAILS violation(s), $WARNS warning(s)"; exit 1
-elif [ $WARNS -gt 0 ]; then echo "PASSED with $WARNS warning(s)"; exit 0
-else echo "CLEAN — no violations"; exit 0; fi
+if [ $FAILS -gt 0 ]; then echo "BLOCKED — $FAILS violation(s), $WARNS warning(s)"
+elif [ ${#GAPS[@]} -gt 0 ]; then echo "UNKNOWN — escaneo incompleto, $WARNS warning(s)"
+elif [ $WARNS -gt 0 ]; then echo "PASSED with $WARNS warning(s)"
+else echo "CLEAN — no violations"; fi
+finish

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "savia://schemas/installer/installation-state/1",
+  "title": "SE-399 persistent installation state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "state", "plan_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "state": {"enum": ["discovery", "planning", "ready", "installing", "verifying", "completed", "completed-with-warnings", "failed", "rolling-back", "rolled-back", "partially-rolled-back", "repair-required"]},
+    "phase": {"enum": ["PLAN", "CHECKPOINT", "EXECUTE", "VERIFY", "COMMIT"]},
+    "completed_steps": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "last_successful_sync_at": {"description": "Advances only after the whole transaction and verification succeed.", "type": ["string", "null"], "format": "date-time"}
+  }
+}
