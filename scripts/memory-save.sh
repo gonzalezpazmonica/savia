@@ -22,6 +22,13 @@ map_type_to_importance_tier() {
     esac
 }
 
+# Escapa "\" y comillas para un literal JSON. Sin esto una ruta Windows (C:\Users)
+# o una cita dejaban una línea inválida en el JSONL y rompían recall y rebuild.
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"; printf '%s' "${s//\"/\\\"}"
+}
+
 cmd_save() {
     local type= title= content= concepts= topic_key= project= rev=1 expires_days=
     local what= why= where= learned= supersedes_key= valid_from= quality="unverified"
@@ -125,6 +132,7 @@ EOF
     [[ -z "$content" ]] && { echo "Error: --content or --what required"; exit 1; }
 
     content=$(echo "$content" | redact_private | head -c 2000)
+    content=$(json_escape "$content")
     content="${content//$'\n'/\\n}"; content="${content//$'\r'/\\r}"; content="${content//$'\t'/\\t}"
     local tokens_est=$((${#content} / 4))
     local hash=$(hash_content "$content") now=$(iso8601_now)
@@ -153,7 +161,10 @@ EOF
         local old_line=$(grep -F "\"topic_key\":\"$topic_key\"" "$STORE_FILE" 2>/dev/null | tail -1 || true)
         if [[ -n "$old_line" ]]; then
             rev=$(($(echo "$old_line" | grep -o '"rev":[0-9]*' | cut -d: -f2) + 1))
-            local old_content=$(echo "$old_line" | grep -o '"content":"[^"]*"' | sed 's/"content":"//;s/"$//' | head -c 200)
+            # Literal JSON con escapes (\" \\): [^"]* se cortaba en la primera comilla escapada.
+            local old_content=$(echo "$old_line" | grep -oE '"content":"([^"\\]|\\.)*"' | head -1 | sed 's/^"content":"//;s/"$//' | head -c 200)
+            # El recorte puede partir un escape: sin "\" final impar, el literal sigue siendo válido.
+            [[ "$old_content" =~ (\\+)$ ]] && (( ${#BASH_REMATCH[1]} % 2 )) && old_content="${old_content%\\}"
             [[ -n "$old_content" && "$old_content" != "$content" ]] && supersedes="$old_content"
             local temp_file=$(mktemp)
             grep -vF "\"topic_key\":\"$topic_key\"" "$STORE_FILE" > "$temp_file" || true
@@ -216,17 +227,17 @@ EOF
         for i in "${!ENTS[@]}"; do
             local e="${ENTS[$i]// /}"
             [[ -z "$e" ]] && continue
-            entities_json="$entities_json\"${e//\"/\\\"}\""
+            entities_json="$entities_json\"$(json_escape "$e")\""
             [[ $i -lt $((${#ENTS[@]} - 1)) ]] && entities_json="$entities_json,"
         done
         entities_json="$entities_json]"
     fi
 
-    local json="{\"ts\":\"$now\",\"type\":\"$type\",\"sector\":\"$sector\",\"domain\":\"$domain\",\"title\":\"$title\",\"content\":\"$content\",\"concepts\":$concepts_json,\"tokens_est\":$tokens_est,\"topic_key\":\"${topic_key}\",\"project\":\"${project:-null}\",\"hash\":\"$hash\",\"rev\":$rev,\"valid_from\":\"$vf\",\"importance_tier\":\"$importance_tier\",\"quality\":\"$quality\",\"memory_type\":\"$memory_type_kg\",\"origin\":\"$origin\",\"questions\":[]"
+    local json="{\"ts\":\"$now\",\"type\":\"$type\",\"sector\":\"$sector\",\"domain\":\"$domain\",\"title\":\"$(json_escape "$title")\",\"content\":\"$content\",\"concepts\":$concepts_json,\"tokens_est\":$tokens_est,\"topic_key\":\"${topic_key}\",\"project\":\"${project:-null}\",\"hash\":\"$hash\",\"rev\":$rev,\"valid_from\":\"$vf\",\"importance_tier\":\"$importance_tier\",\"quality\":\"$quality\",\"memory_type\":\"$memory_type_kg\",\"origin\":\"$origin\",\"questions\":[]"
     [[ "$supersedes" != "null" ]] && json="$json,\"supersedes\":\"$supersedes\""
     [[ "$expires_at" != "null" ]] && json="$json,\"expires_at\":\"$expires_at\""
     [[ -n "$supersedes_key" ]] && json="$json,\"supersedes_key\":\"$supersedes_key\""
-    [[ -n "$source" ]] && json="$json,\"source\":\"${source//\"/\\\"}\""
+    [[ -n "$source" ]] && json="$json,\"source\":\"$(json_escape "$source")\""
     [[ "$entities_json" != "[]" ]] && json="$json,\"entities\":$entities_json"
     [[ -n "$valid_to" ]] && json="$json,\"valid_to\":\"$valid_to\""
     echo "$json}" >> "$STORE_FILE"
