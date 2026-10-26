@@ -12,11 +12,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 Befehle · 90 Agenten · 139 skills · 132 hooks**
+**567 Befehle · 90 Agenten · 139 skills · 133 hooks**
 
 ## Multi-Agenten-Entwicklungs-Workspace
 
-**567 Befehle · 90 Agenten · 139 Skills · 132 Hooks · 16 Sprachen · 283+ Test-Suiten**
+**567 Befehle · 90 Agenten · 139 Skills · 133 Hooks · 16 Sprachen · 283+ Test-Suiten**
 
 Agentisches souveränes System zur Steuerung und Ausführung von KI-Arbeit, unabhängig von Modell, Anbieter und Frontend, mit menschlicher Kontrolle by Design. Integriert Agenten, Gedächtnis, Sicherheit, ausführbare Richtlinien, Nachvollziehbarkeit und spezialisierte Domänen. Läuft lokal mit Daten- und Inferenzsouveränität, in 9 Sprachen.
 
@@ -112,7 +112,7 @@ pm-workspace/
 │   ├── commands/       ← 567 Befehle
 │   ├── agents/         ← 90 spezialisierte Agenten (7 mit Decision Trees: SPEC-147)
 │   ├── skills/         ← 139 Domaenen-Skills
-│   ├── hooks/          ← 132 deterministische Hooks
+│   ├── hooks/          ← 133 deterministische Hooks
 │   └── rules/          ← Kontext- und Sprachregeln
 ├── docs/               ← Anleitungen nach Rolle, Szenario, Sektor
 ├── projects/           ← Projekte (git-ignoriert fuer Datenschutz)

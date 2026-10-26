@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 631 resources
+> 632 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **acceptance-cost** (script): acceptance-cost.sh — SE-360: costo por cambio aceptado (CLI wrapper).
@@ -629,6 +629,7 @@
 - **wave-executor-lib** (script): wave-executor-lib.sh — Helper functions for wave-executor.sh
 - **wellbeing-guardian** (cmd): Proactive individual wellbeing system — break reminders, after-hours alerts, work-life balance nudges
 - **wellbeing-guardian** (skill): Usar cuando se monitorizan señales de bienestar individual en el equipo.
+- **windows-links** (script): windows-links.sh — Materializa en Windows los enlaces Git (modo 120000).
 - **workspace-doctor** (cmd): >
 - **workspace-health** (script): workspace-health.sh — Comprehensive health dashboard for pm-workspace
 - **write-a-skill** (skill): Guia para crear una nueva skill correctamente en pm-workspace. Usar cuando una tarea se repite 2+ veces o tarda mas de 15 min.
