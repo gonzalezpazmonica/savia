@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=a8f2e926182c4c64c24b1c2de55e8f7a398cc9306641a4085937eaa0059c417f
-timestamp=2026-10-25T12:37:24Z
-branch=agent/se392c-20261023
-head_commit=5c21d10b
-signature=079ef71f4050e993ae73287d82d6baaec4fd05c54033e1b127c99f1a76868f6e
+diff_hash=f2b08f18a5b16d1ee32507fb05ab2080dcf2d6326faa8835c00abbae92ff21c5
+timestamp=2026-10-26T19:08:15Z
+branch=agent/windows-textlinks-20261026
+head_commit=6ed1dd95
+signature=5932c337dca3ddb4b9345d67a5feb30a2a67415a59862f7a23cc82f6a90efdf1
