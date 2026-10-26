@@ -71,6 +71,8 @@ if $SUMMARY_ONLY; then
 fi
 
 # ── Generate JSON manifest ──
+# --output FILE: el manifiesto va al fichero (antes se aceptaba y se ignoraba).
+[[ -n "$OUTPUT_FILE" ]] && exec > "$OUTPUT_FILE"
 echo "{"
 echo "  \"generated\": \"$(date -Iseconds)\","
 echo "  \"total\": $TOTAL,"
