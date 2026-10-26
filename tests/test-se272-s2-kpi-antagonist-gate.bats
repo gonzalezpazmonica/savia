@@ -373,3 +373,193 @@ YAMLEOF
   [[ -x "$CHAIN_SH" ]]
   [[ -x "$REVIEW_SH" ]]
 }
+
+# ── Comportamiento: mensajes, clasificación y anomalías (SE-456) ──────────────
+# Usa el catálogo del setup: kpi-001 "Sprint Velocity" ↔ kpi-002 "Defect Escape Rate".
+
+write_kpis() {  # write_kpis <bloques "id|nombre|antagonista" ...>
+  {
+    echo 'version: 1'
+    echo 'kpis:'
+    local spec id name ant
+    for spec in "$@"; do
+      IFS='|' read -r id name ant <<<"$spec"
+      echo "  - id: \"$id\""
+      echo "    name: \"$name\""
+      echo "    definition: \"d\""
+      echo "    antagonist_kpi_id: \"$ant\""
+      echo "    signature_1:"
+      echo "      name: \"Alice\""
+    done
+  } > "$ENG_DIR/kpis.yaml"
+}
+
+@test "kpi-antagonist-gate check: lista cada KPI con su antagonista y resultado PASSED" {
+  run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"# Antagonist Gate Check — $ENGAGEMENT"* ]]
+  [[ "$output" == *"OK:   KPI 'kpi-001' (Sprint Velocity) → antagonist 'kpi-002'"* ]]
+  [[ "$output" == *"OK:   KPI 'kpi-002' (Defect Escape Rate) → antagonist 'kpi-001'"* ]]
+  [[ "$output" == *"RESULT: PASSED"* ]]
+}
+
+@test "kpi-antagonist-gate check: KPI de eficiencia sin antagonista → FAIL, BLOCKED y exit 1, también el último del fichero" {
+  write_kpis "a|Defect Escape Rate|b" "b|Code Quality|a" "c|Cycle Time|"
+  run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: KPI 'c' (Cycle Time) is efficiency-type and has NO antagonist"* ]]
+  [[ "$output" == *"RESULT: BLOCKED — 1 KPI(s) without antagonist"* ]]
+}
+
+@test "kpi-antagonist-gate check: KPI que no es de eficiencia sin antagonista solo avisa (WARN, exit 0)" {
+  write_kpis "a|Customer Satisfaction|" "b|Defect Rate|"
+  run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: KPI 'a' (Customer Satisfaction) has no antagonist (non-efficiency, advisory)"* ]]
+  [[ "$output" == *"WARN: KPI 'b'"* ]]
+  [[ "$output" == *"RESULT: PASSED"* ]]
+}
+
+@test "kpi-antagonist-gate check: cada patrón de eficiencia, sin distinguir mayúsculas, exige antagonista" {
+  for n in "Velocity" "THROUGHPUT" "Speed of release" "Cycle time" "Lead Time" "Delivery rate" "Productivity index"; do
+    write_kpis "x|$n|"
+    run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT"
+    [ "$status" -eq 1 ] || { echo "no bloqueó: $n"; false; }
+  done
+  write_kpis "x|Escape Quality|"
+  run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+}
+
+@test "kpi-antagonist-gate check: cuenta todos los bloqueados" {
+  write_kpis "a|Velocity|" "b|Throughput|" "c|Quality|"
+  run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BLOCKED — 2 KPI(s) without antagonist"* ]]
+}
+
+@test "kpi-antagonist-gate check: errores de uso" {
+  run bash "$ANTAGONIST_SH" check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"check: --engagement is required"* ]]
+  run bash "$ANTAGONIST_SH" check --engagement "$ENGAGEMENT" --nope
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"check: unknown argument: --nope"* ]]
+  run bash "$ANTAGONIST_SH" check --engagement otro/inexistente
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: KPI catalog not found"* ]]
+}
+
+@test "kpi-antagonist-gate validate-pair: el nombre del antagonista sale de su propio bloque" {
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id kpi-001 --antagonist-id kpi-002 --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"OK: KPI 'kpi-001' (Sprint Velocity) ↔ antagonist 'kpi-002' (Defect Escape Rate)"* ]]
+  [[ "$output" == *"Pairing is valid"* ]]
+  [[ "$output" != *"WARN"* ]]
+}
+
+@test "kpi-antagonist-gate validate-pair: el antagonista declarado debe coincidir (mensaje con ambos ids)" {
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id kpi-001 --antagonist-id kpi-009 --engagement "$ENGAGEMENT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: KPI 'kpi-001' declares antagonist 'kpi-002', not 'kpi-009'"* ]]
+  [[ "$output" != *"Pairing is valid"* ]]
+}
+
+@test "kpi-antagonist-gate validate-pair: antagonista que no parece de calidad avisa pero valida" {
+  write_kpis "a|Velocity|b" "b|Team Size|a"
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id a --antagonist-id b --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: Antagonist 'b' (Team Size) does not appear to be a quality KPI"* ]]
+  [[ "$output" == *"Pairing is valid"* ]]
+}
+
+@test "kpi-antagonist-gate validate-pair: palabras de calidad evitan el aviso" {
+  for q in "Defect Density" "Error Budget" "Incident Count" "Rework" "Stability" "Reliability" "User Satisfaction" "NPS"; do
+    write_kpis "a|Velocity|b" "b|$q|a"
+    run bash "$ANTAGONIST_SH" validate-pair --kpi-id a --antagonist-id b --engagement "$ENGAGEMENT"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"WARN"* ]] || { echo "aviso inesperado con: $q"; false; }
+  done
+}
+
+@test "kpi-antagonist-gate validate-pair: KPI no eficiente no evalúa la calidad del antagonista" {
+  write_kpis "a|Defect Rate|b" "b|Team Size|a"
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id a --antagonist-id b --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"WARN"* ]]
+}
+
+@test "kpi-antagonist-gate validate-pair: faltan argumentos o catálogo → exit 1 con mensaje" {
+  run bash "$ANTAGONIST_SH" validate-pair --antagonist-id x --engagement "$ENGAGEMENT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--kpi-id is required"* ]]
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id x --engagement "$ENGAGEMENT"
+  [[ "$output" == *"--antagonist-id is required"* ]]
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id x --antagonist-id y
+  [[ "$output" == *"--engagement is required"* ]]
+  run bash "$ANTAGONIST_SH" validate-pair --kpi-id x --antagonist-id y --engagement otro/no
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: KPI catalog not found"* ]]
+}
+
+chain() {  # chain h1 h2 ... → una línea por periodo
+  local i=0 h
+  : > "$ENG_DIR/kpi-chain.jsonl"
+  for h in "$@"; do
+    i=$((i + 1))
+    printf '{"period":"2026-%02d","data_hash":"%s"}\n' "$i" "$h" >> "$ENG_DIR/kpi-chain.jsonl"
+  done
+}
+
+@test "kpi-antagonist-gate anomaly: sin cadena de datos → mensaje y exit 0" {
+  run bash "$ANTAGONIST_SH" anomaly --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No KPI chain data available"* ]]
+  [[ "$output" == *"Threshold: 30% abrupt change"* ]]
+}
+
+@test "kpi-antagonist-gate anomaly: menos de 2 periodos no se evalúa, y el umbral se refleja" {
+  chain h1
+  run bash "$ANTAGONIST_SH" anomaly --engagement "$ENGAGEMENT" --threshold-pct 45
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Threshold: 45% abrupt change"* ]]
+  [[ "$output" == *"Need at least 2 periods for anomaly detection (have 1)"* ]]
+}
+
+@test "kpi-antagonist-gate anomaly: cambio y luego congelación se marca (h1,h2,h2)" {
+  chain h1 h2 h2
+  run bash "$ANTAGONIST_SH" anomaly --engagement "$ENGAGEMENT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ANOMALY: Period 2026-03 shows no data change vs 2026-02"* ]]
+  [[ "$output" == *"Total anomalies: 1"* ]]
+  [[ "$output" == *"Goodhart"* ]]
+}
+
+@test "kpi-antagonist-gate anomaly: datos siempre distintos o siempre iguales no son anomalía" {
+  chain h1 h2 h3 h4
+  run bash "$ANTAGONIST_SH" anomaly --engagement "$ENGAGEMENT"
+  [[ "$output" == *"No anomalies detected across 4 periods"* ]]
+  chain h1 h1 h1
+  run bash "$ANTAGONIST_SH" anomaly --engagement "$ENGAGEMENT"
+  [[ "$output" == *"No anomalies detected across 3 periods"* ]]
+  [[ "$output" != *"ANOMALY"* ]]
+}
+
+@test "kpi-antagonist-gate anomaly: dos periodos congelados tras un cambio cuentan una sola vez cada vez que se rompe la racha" {
+  chain h1 h2 h2 h3 h3
+  run bash "$ANTAGONIST_SH" anomaly --engagement "$ENGAGEMENT"
+  [[ "$output" == *"Total anomalies: 2"* ]]
+  [[ "$output" == *"Period 2026-03 shows no data change vs 2026-02"* ]]
+  [[ "$output" == *"Period 2026-05 shows no data change vs 2026-04"* ]]
+}
+
+@test "kpi-antagonist-gate: sin argumentos o con --help imprime uso (exit 0); subcomando desconocido → 2" {
+  run bash "$ANTAGONIST_SH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Anti-Goodhart gate"* ]]
+  run bash "$ANTAGONIST_SH" --help
+  [ "$status" -eq 0 ]
+  run bash "$ANTAGONIST_SH" frobnicar
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown subcommand: frobnicar"* ]]
+}
