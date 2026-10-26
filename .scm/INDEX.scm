@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 8b67728741a4 | resources: 1449
-> 295 commands · 138 skills · 90 agents · 926 scripts
+> hash: 54c655cdebf4 | resources: 1450
+> 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -361,8 +361,7 @@
 [development] semantic-compact — compact,generator,semantic,smart,spec — script:scripts/semantic-compact.sh
 [development] semantic-map — code,compressed,files,generate,maps — script:scripts/semantic-map.sh
 [development] sentinel-regen — docs,domain,regen,rules,safe — script:scripts/sentinel-regen.sh
-[development] setup-claude-permissions — backward,compatibility,deprecated,file,instead — script:scripts/setup-claude-permissions.sh
-[development] setup-opencode-permissions — claude,json,local,permisos,permissions — script:scripts/setup-opencode-permissions.sh
+[development] setup-opencode-permissions — json,local,opencode,permisos,permissions — script:scripts/setup-opencode-permissions.sh
 [development] setup-savia-web — build,http,localhost,savia,serve — script:scripts/setup-savia-web.sh
 [development] skill-listing-overrides — claude,code,listing,load,overrides — script:scripts/skill-listing-overrides.sh
 [development] skill-loader — aware,context,loader,loading,skill — script:scripts/skill-loader.sh
@@ -815,6 +814,7 @@
 [planning] hallucination-fast-judge — actually,calls,cited,commands,draft — agent:.opencode/agents/hallucination-fast-judge.md
 [planning] hallucination-judge — consistency,detects,facts,invented,judge — agent:.opencode/agents/hallucination-judge.md
 [planning] handback-resolve — handback,obligation,resolve — script:scripts/handback-resolve.sh
+[planning] harness-architecture — agentes,arquitectura,autónomo,bucle,bucles — skill:.claude/skills/harness-architecture/SKILL.md
 [planning] hashline-edit — edit,file,hashline,protection,safe — script:scripts/hashline-edit.sh
 [planning] hashline-guard — agent,edits,file,guard,hashline — script:scripts/hashline-guard.sh
 [planning] health-dashboard — adaptada,dashboard,muestra,proyecto,rápida — cmd:.claude/commands/health-dashboard.md
@@ -1182,6 +1182,7 @@
 [planning] wave-executor-lib — executor,functions,helper,wave — script:scripts/wave-executor-lib.sh
 [planning] wellbeing-guardian — alerts,balance,break,hours,individual — cmd:.claude/commands/wellbeing-guardian.md
 [planning] wellbeing-guardian — bienestar,equipo,individual,monitorizan,señales — skill:.claude/skills/wellbeing-guardian/SKILL.md
+[planning] windows-links — enlaces,links,materializa,modo,windows — script:scripts/windows-links.sh
 [planning] workspace-doctor —  — cmd:.claude/commands/workspace-doctor.md
 [planning] workspace-health — comprehensive,dashboard,health,workspace — script:scripts/workspace-health.sh
 [planning] write-a-skill — correctamente,crear,guia,nueva,repite — skill:.claude/skills/write-a-skill/SKILL.md

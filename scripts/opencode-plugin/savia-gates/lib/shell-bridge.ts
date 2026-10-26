@@ -29,11 +29,17 @@ export interface HttpHookEntry extends HookEntryBase {
   tokenEnv?: string
 }
 
+export interface PromptHookEntry extends HookEntryBase {
+  type: "prompt"
+  prompt: string
+  model?: string
+}
+
 export interface UnsupportedHookEntry extends HookEntryBase {
   type: "unsupported"
 }
 
-export type HookEntry = CommandHookEntry | HttpHookEntry | UnsupportedHookEntry
+export type HookEntry = CommandHookEntry | HttpHookEntry | PromptHookEntry | UnsupportedHookEntry
 
 export type HookMap = Record<string, HookEntry[]>
 
@@ -54,6 +60,19 @@ export interface HookResult {
 
 function isAuthorityEvent(eventName: string): boolean {
   return eventName === "PreToolUse" || eventName === "PermissionRequest"
+}
+
+/** Claude Code and Codex read plain (non-JSON) stdout of these events as context. */
+const PLAIN_CONTEXT_EVENTS = new Set(["SessionStart", "UserPromptSubmit", "SubagentStart"])
+
+/**
+ * How exit-0 stdout that is not JSON is read (same rule as scripts/dual-cli/policy.py): authority
+ * events must answer with JSON or nothing; elsewhere plain text is context or ignored, never a block.
+ * Reading it as invalid stopped the loop at session-init.sh and the later SessionStart hooks never ran.
+ */
+export function plainOutputMode(eventName: string): "invalid" | "context" | "ignore" {
+  if (isAuthorityEvent(eventName)) return "invalid"
+  return PLAIN_CONTEXT_EVENTS.has(eventName) ? "context" : "ignore"
 }
 
 function unsupportedHook(eventName: string, matcher: string | undefined): UnsupportedHookEntry {
@@ -134,6 +153,18 @@ export async function loadHookMap(
           else if (!h.async || isAuthorityEvent(eventName)) out[eventName].push(unsupportedHook(eventName, matcher))
           continue
         }
+        if (h.type === "prompt" && typeof h.prompt === "string") {
+          out[eventName].push({
+            type: "prompt",
+            prompt: h.prompt,
+            model: typeof h.model === "string" ? h.model : undefined,
+            matcher,
+            timeout: h.timeout,
+            async: isAuthorityEvent(eventName) ? false : h.async,
+            declared_event: eventName,
+          })
+          continue
+        }
         // A configured synchronous gate must never disappear merely because
         // this adapter cannot execute its hook type.  Async hooks are
         // telemetry by contract and remain non-blocking.
@@ -168,13 +199,49 @@ export async function loadHookMap(
   return out
 }
 
-function toMatcherRegex(matcher: string): RegExp {
-  // Claude Code matchers are simple regex / `*` globs / pipe-separated
-  // alternatives. Convert `*` to `.*` and match case-insensitively.
-  return new RegExp(matcher.replace(/\*/g, ".*"), "i")
+const SCOPED_MATCHER = /^([^()|]+)\(([^()]*)\)$/
+const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\\/-]/g, "\\$&")
+
+/** Split on `|` outside parentheses: `Bash(a*)|Bash(b*)` -> two alternatives. */
+function matcherAlternatives(matcher: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < matcher.length; i++) {
+    const c = matcher[i]
+    if (c === "(") depth++
+    else if (c === ")") depth--
+    else if (c === "|" && depth === 0) {
+      parts.push(matcher.slice(start, i))
+      start = i + 1
+    }
+  }
+  parts.push(matcher.slice(start))
+  return parts
 }
 
-function matcherApplies(
+/**
+ * The regex a matcher stands for; port of matcher_expression in scripts/dual-cli/hooks.py.
+ * `Tool(command)` is a command-scoped glob (literal text, every `*` a wildcard): read as a plain regex,
+ * `Bash(git commit*)` was a group that never matched, so the commit gates never ran in OpenCode (SE-392).
+ * Any other alternative mixes regular expressions (`.*`, `A|B`) and glob stars.
+ */
+export function matcherExpression(matcher: string): string {
+  if (matcher === "*") return ".*"
+  const out = matcherAlternatives(matcher).map((part) => {
+    const scoped = SCOPED_MATCHER.exec(part)
+    if (scoped) return `${escapeRegex(scoped[1])}\\(${scoped[2].split("*").map(escapeRegex).join(".*")}\\)`
+    return part.replace(/(?<!\.)\*/g, ".*")
+  })
+  return out.length === 1 ? out[0] : out.map((p) => `(?:${p})`).join("|")
+}
+
+function toMatcherRegex(matcher: string): RegExp {
+  // "s" (dotAll): a heredoc or multi-line `-m` commit must still match `Bash(git commit*)`.
+  return new RegExp(matcherExpression(matcher), "is")
+}
+
+export function matcherApplies(
   matcher: string | undefined,
   tool: string | null,
   payload?: string,
@@ -223,6 +290,15 @@ function matcherApplies(
   return false
 }
 
+/** Switches that turn security hooks off are never inherited by a handler (gates.py: STRIPPED_ENV). */
+const STRIPPED_ENV = ["SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE"]
+/** Never inherited by a prompt evaluator: a handler without `model` must not see a stale one. */
+const PROMPT_ONLY_ENV = ["CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL"]
+
+function inheritedEnv(drop: string[]): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !drop.includes(k)))
+}
+
 /** Path for a per-call stdin payload file (local, ephemeral, CRIT-001 safe). */
 function stdinPayloadPath(): { path: string; cleanup: () => Promise<void> } {
   const path = `${tmpdir()}/savia-gates-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
@@ -260,6 +336,7 @@ async function spawnHook(
   payload: string,
   ignoreOutput: boolean,
   opts: RunOptions = {},
+  extraEnv?: Record<string, string>,
 ): Promise<{ proc: any; pid: number; cleanup: () => Promise<void> }> {
   const { path: stdinPath, cleanup } = stdinPayloadPath()
   await writeFile(stdinPath, payload, "utf8")
@@ -273,7 +350,10 @@ async function spawnHook(
     const proc = Bun.spawn({
       cmd: opts.wrap ? opts.wrap(h.command) : ["bash", "-c", h.command],
       cwd: projectRoot,
-      env: { ...process.env, CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_JSON_INPUT: payload },
+      // extraEnv replaces CLAUDE_JSON_INPUT: a prompt evaluator gets the rendered prompt on stdin only.
+      env: extraEnv
+        ? { ...inheritedEnv([...STRIPPED_ENV, ...PROMPT_ONLY_ENV]), CLAUDE_PROJECT_DIR: projectRoot, ...extraEnv }
+        : { ...inheritedEnv(STRIPPED_ENV), CLAUDE_PROJECT_DIR: projectRoot, CLAUDE_JSON_INPUT: payload },
       stdin: Bun.file(stdinPath),
       stdout: ignoreOutput ? "ignore" : "pipe",
       stderr: ignoreOutput ? "ignore" : "pipe",
@@ -330,8 +410,9 @@ async function runHookOnce(
   payload: string,
   fireAndForget = false,
   opts: RunOptions = {},
-): Promise<{ exit: number; stdout: string; stderr: string }> {
-  const { proc, pid, cleanup } = await spawnHook(projectRoot, h, payload, fireAndForget, opts)
+  extraEnv?: Record<string, string>,
+): Promise<{ exit: number; stdout: string; stderr: string; timedOut?: boolean }> {
+  const { proc, pid, cleanup } = await spawnHook(projectRoot, h, payload, fireAndForget, opts, extraEnv)
   const cap = fireAndForget ? 60000 : timeoutFor(h) + 1000
   let timedOut = false
   const killTimer = setTimeout(() => {
@@ -345,7 +426,7 @@ async function runHookOnce(
       proc.exited,
     ])
     if (timedOut) {
-      return { exit: BLOCK_EXIT, stdout: "", stderr: `${h.command} timed out after ${cap}ms` }
+      return { exit: BLOCK_EXIT, stdout: "", stderr: `${h.command} timed out after ${cap}ms`, timedOut: true }
     }
     return { exit: typeof exitCode === "number" ? exitCode : 0, stdout, stderr }
   } finally {
@@ -424,6 +505,92 @@ async function runHttpHookOnce(
   } finally {
     clearTimeout(timer)
   }
+}
+
+/** Claude Code semantics: `$ARGUMENTS` becomes the hook input JSON; without it, the JSON is appended. */
+export function renderPrompt(prompt: string, payload: string): string {
+  return prompt.includes("$ARGUMENTS") ? prompt.split("$ARGUMENTS").join(payload) : `${prompt}\n\n${payload}`
+}
+
+/** True when some object in a JSON text repeats a key; JSON.parse would silently keep the last one. */
+function hasDuplicateKeys(text: string): boolean {
+  const scopes: (Set<string> | null)[] = []
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (c === "{") scopes.push(new Set())
+    else if (c === "[") scopes.push(null)
+    else if (c === "}" || c === "]") scopes.pop()
+    else if (c === '"') {
+      let j = i + 1
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1
+      const literal = text.slice(i, j + 1)
+      i = j
+      let k = j + 1
+      while (/\s/.test(text[k] ?? "")) k++
+      const scope = scopes[scopes.length - 1]
+      if (text[k] !== ":" || !scope) continue
+      const key = JSON.parse(literal)
+      if (scope.has(key)) return true
+      scope.add(key)
+    }
+  }
+  return false
+}
+
+/** Like protocol.decode_json in the Codex core: duplicate keys and non-finite numbers are invalid. */
+function strictJson(text: string): unknown {
+  const value = JSON.parse(text, (_k, v) => {
+    if (typeof v === "number" && !Number.isFinite(v)) throw new Error("INVALID_NUMBER")
+    return v
+  })
+  if (hasDuplicateKeys(text)) throw new Error("DUPLICATE_KEY")
+  return value
+}
+
+/** Python's s[:n]: cut by code points, never inside a surrogate pair. */
+export function codePoints(s: string, n: number): string {
+  return Array.from(s).slice(0, n).join("")
+}
+
+/** Port of policy.prompt_decision: the evaluator must print exactly {"ok": bool, "reason"?: string}. */
+export function promptVerdict(exit: number, stdout: string): { exit: number; stdout: string; stderr: string } {
+  if (exit !== 0) return { exit: BLOCK_EXIT, stdout: "", stderr: "PROMPT_HOOK_FAILURE" }
+  let value: any
+  try {
+    value = strictJson(stdout.trim())
+  } catch {
+    value = undefined
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.ok !== "boolean" ||
+      (value.reason !== undefined && typeof value.reason !== "string")) {
+    return { exit: BLOCK_EXIT, stdout: "", stderr: "INVALID_HOOK_OUTPUT" }
+  }
+  if (value.ok) return { exit: 0, stdout: "", stderr: "" }
+  return { exit: BLOCK_EXIT, stdout: "", stderr: `PROMPT_HOOK_BLOCK: ${codePoints(value.reason || "sin motivo", 500)}` }
+}
+
+/**
+ * A `prompt` handler goes to the evaluator the operator declared when launching OpenCode
+ * (SAVIA_PROMPT_HOOK_CMD: reads the rendered prompt on stdin, prints the model verdict). Same contract
+ * as the Codex core (scripts/dual-cli/gates.py: _run_prompt). The evaluator is operator configuration,
+ * not repo code, so it is not wrapped in the trusted-guards sandbox (it may need the network).
+ * No evaluator, crash, timeout or a malformed verdict blocks (SE-392 AC6).
+ */
+async function runPromptHookOnce(
+  projectRoot: string,
+  h: PromptHookEntry,
+  payload: string,
+): Promise<{ exit: number; stdout: string; stderr: string }> {
+  const evaluator = (process.env.SAVIA_PROMPT_HOOK_CMD ?? "").trim()
+  if (!evaluator) return { exit: BLOCK_EXIT, stdout: "", stderr: "PROMPT_HOOK_UNAVAILABLE" }
+  if (h.timeout !== undefined && (typeof h.timeout !== "number" || !Number.isFinite(h.timeout) || h.timeout <= 0)) {
+    return { exit: BLOCK_EXIT, stdout: "", stderr: "INVALID_HOOK_CONFIGURATION" }  // gates.py: _timeout
+  }
+  const run = await runHookOnce(projectRoot, {
+    type: "command", command: evaluator, timeout: h.timeout, declared_event: h.declared_event,
+  }, renderPrompt(h.prompt, payload), false, {}, h.model !== undefined ? { SAVIA_PROMPT_HOOK_MODEL: h.model } : {})
+  if (run.timedOut) return { exit: BLOCK_EXIT, stdout: "", stderr: "HOOK_TIMEOUT" }
+  return promptVerdict(run.exit, run.stdout)
 }
 
 /**
@@ -523,14 +690,19 @@ export async function sweepOrphanedHooks(): Promise<{ killed: number; removed: n
 // still policy uncertainty and therefore fails closed in this adapter.
 const BLOCK_EXIT = 2
 
-function parseCommandHookOutput(stdout: string): {
+export function parseCommandHookOutput(stdout: string, plain: "invalid" | "context" | "ignore" = "invalid"): {
   blocked: boolean
   reason?: string
   mutatedArgs?: any
   injectedContext?: string
   level?: string
 } {
-  if (!stdout.trim()) return { blocked: false }
+  const text = stdout.trim()
+  if (!text) return { blocked: false }
+  // Plain text (also "[TAG] ..."), not broken JSON: what starts like an object still has to parse.
+  if (plain !== "invalid" && !text.startsWith("{")) {
+    return plain === "context" ? { blocked: false, injectedContext: text } : { blocked: false }
+  }
   let parsed: unknown
   try {
     parsed = JSON.parse(stdout)
@@ -602,22 +774,25 @@ export async function runHooksForEvent(
       // their exit code and output are ignored, and the caller never waits.
       if (h.async) {
         if (h.type === "command") void runHookOnce(projectRoot, h, payload, true, opts).catch(() => {})
-        else void runHttpHookOnce(h, payload).catch(() => {})
+        else if (h.type === "http") void runHttpHookOnce(h, payload).catch(() => {})
+        // An async prompt has no reader for its verdict: nothing to run.
         continue
       }
       const { exit, stdout, stderr } = h.type === "command"
         ? await runHookOnce(projectRoot, h, payload, false, opts)
-        : await runHttpHookOnce(h, payload)
+        : h.type === "prompt"
+          ? await runPromptHookOnce(projectRoot, h, payload)
+          : await runHttpHookOnce(h, payload)
       if (exit !== 0) {
         result.blocked = true
         result.stderr = stderr.trim() || (h.type === "command" ? `HOOK_EXIT_${exit}` : "HTTP_GATE_BLOCK")
         return result
       }
-      const decision = parseCommandHookOutput(stdout)
+      const decision = parseCommandHookOutput(stdout, plainOutputMode(event))
       if (decision.blocked) {
         result.blocked = true
         result.stderr = decision.reason ?? "HOOK_BLOCK"
-        await auditLog({ event: "hook-json-block", command: h.type === "command" ? h.command : h.url, reason: result.stderr })
+        await auditLog({ event: "hook-json-block", command: h.type === "command" ? h.command : h.type === "http" ? h.url : "prompt", reason: result.stderr })
         return result
       }
       if (decision.mutatedArgs !== undefined) result.mutatedArgs = decision.mutatedArgs

@@ -1346,6 +1346,15 @@
       "phase": "D"
     },
     {
+      "id": "SE-467",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "El auditor de tests puntúa el idioma del nombre, no el caso probado",
+      "note": "D2 de SE-456 medida: certifican el 83 % de ficheros en inglés y el 43 % en español; en S03 con mutación >=90 %, 8 de 57 con el motor y 35 con léxico en español. Opciones: (a) motor, (b) renombrar 1483 tests.",
+      "evidence": "docs/specs/SE-467-auditor-language-bias.spec.md",
+      "phase": "D"
+    },
+    {
       "id": "SE-458",
       "status": "PROPOSED",
       "priority": "P1",
@@ -1418,6 +1427,15 @@
       "evidence": "docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md",
       "phase": "D",
       "approval": "Operadora 2026-10-23: AskUserQuestion"
+    },
+    {
+      "id": "SE-457",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints",
+      "note": "Skill entregada en la PR #1361; la spec sigue PROPOSED hasta la aprobación de la operadora.",
+      "evidence": "docs/specs/SE-457-harness-architecture-skill.spec.md",
+      "phase": "D"
     }
   ],
   "route": {

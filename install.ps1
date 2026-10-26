@@ -264,6 +264,21 @@ if ($RunningFromRepo) {
     Write-Ok "Cloned to $SaviaHome"
 }
 
+# Git for Windows checks symlinks out as text files (core.symlinks=false):
+# materialize them as junctions/hard links. Git Bash, never WSL bash.
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+$gitBash = if ($gitCmd) { Join-Path (Split-Path (Split-Path $gitCmd.Source)) 'bin\bash.exe' }
+if ($gitBash -and (Test-Path $gitBash)) {
+    Push-Location $SaviaHome
+    try {
+        & $gitBash scripts/windows-links.sh repair --quiet
+        if ($LASTEXITCODE -eq 0) { Write-Ok "Repository links materialized" }
+        else { Write-Warn 'Some repository links need review: bash scripts/windows-links.sh check' }
+    } finally { Pop-Location }
+} else {
+    Write-Warn 'Git Bash not found - run later: bash scripts/windows-links.sh repair'
+}
+
 # --- Step 5: Install dependencies -----------------------------------------------
 Write-Step 5 "Installing script dependencies..."
 
@@ -387,16 +402,15 @@ if ($SkipTests) {
 } else {
     $testScript = Join-Path $SaviaHome "scripts\test-workspace.sh"
     if (Test-Path $testScript) {
-        $bashCmd = Get-Command bash -ErrorAction SilentlyContinue
-        if ($bashCmd) {
+        if ($gitBash -and (Test-Path $gitBash)) {
             try {
-                bash $testScript --mock 2>&1 | Out-Null
+                & $gitBash $testScript --mock 2>&1 | Out-Null
                 Write-Ok "Smoke tests passed"
             } catch {
                 Write-Warn 'Some tests failed (normal without Azure DevOps configured)'
             }
         } else {
-            Write-Warn 'bash not found - skipping tests (install Git Bash or WSL)'
+            Write-Warn 'Git Bash not found - skipping tests (install Git for Windows)'
         }
     } else {
         Write-Warn "Test script not found - skipping"

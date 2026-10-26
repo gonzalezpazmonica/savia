@@ -7320,32 +7320,11 @@
       "frontend_support": [
         "opencode"
       ],
-      "id": "script:scripts/setup-claude-permissions",
-      "intents": [
-        "backward",
-        "compatibility",
-        "deprecated",
-        "file",
-        "instead"
-      ],
-      "kind": "script",
-      "owner_domain": "development",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": "scripts/setup-claude-permissions.sh",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "opencode"
-      ],
       "id": "script:scripts/setup-opencode-permissions",
       "intents": [
-        "claude",
         "json",
         "local",
+        "opencode",
         "permisos",
         "permissions"
       ],
@@ -16660,6 +16639,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "claude"
+      ],
+      "id": "skill:.claude/skills/harness-architecture/SKILL",
+      "intents": [
+        "agentes",
+        "arquitectura",
+        "autónomo",
+        "bucle",
+        "bucles"
+      ],
+      "kind": "skill",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": ".claude/skills/harness-architecture/SKILL.md",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "opencode"
       ],
       "id": "script:scripts/hashline-edit",
@@ -24137,6 +24137,27 @@
     {
       "depends_on": [],
       "frontend_support": [
+        "opencode"
+      ],
+      "id": "script:scripts/windows-links",
+      "intents": [
+        "enlaces",
+        "links",
+        "materializa",
+        "modo",
+        "windows"
+      ],
+      "kind": "script",
+      "owner_domain": "planning",
+      "replaced_by": null,
+      "risk_level": null,
+      "source": "scripts/windows-links.sh",
+      "status": "active",
+      "tests": []
+    },
+    {
+      "depends_on": [],
+      "frontend_support": [
         "claude",
         "opencode"
       ],
@@ -29598,7 +29619,7 @@
       "tests": []
     }
   ],
-  "content_hash": "9c5881b0df13",
+  "content_hash": "f4b6f391343f",
   "deferred_kinds": [
     "rule",
     "hook"

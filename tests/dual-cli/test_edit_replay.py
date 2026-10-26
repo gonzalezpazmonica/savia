@@ -9,7 +9,6 @@ five blocking cases below passed in OpenCode: tdd-gate compares `tool_name == "E
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import unittest
@@ -18,7 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "scripts/dual-cli"
 FIXTURES = ROOT / "tests/dual-cli/fixtures"
 sys.path.insert(0, str(CORE))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gates
+from required_tools import needs
 from protocol import ProtocolError
 
 
@@ -37,7 +38,7 @@ def codex_blocks(event):
     return run.returncode == 2
 
 
-@unittest.skipUnless(shutil.which("jq") and shutil.which("bun"), "replay needs bun and jq")
+@needs("jq", "bun")
 class EditReplayEquivalenceTests(unittest.TestCase):
     def test_same_edits_same_decisions_in_codex_and_opencode(self):
         corpus = json.loads((FIXTURES / "edit_replay_corpus.json").read_text())
@@ -65,7 +66,7 @@ PATCHES = [
 ]
 
 
-@unittest.skipUnless(shutil.which("bun"), "parity needs bun")
+@needs("bun")
 class PatchParserParityTests(unittest.TestCase):
     def test_opencode_port_splits_patches_exactly_like_the_codex_core(self):
         cases = [{"patch": p, "cwd": "/w/repo"} for p in PATCHES]

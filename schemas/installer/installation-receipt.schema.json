@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "savia://schemas/installer/installation-receipt/1",
+  "title": "SE-399 Installation Receipt (no secrets)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "receipt_id", "timestamp", "savia_version", "installer_version", "platform", "plan_id", "components", "actions", "verification", "warnings", "failures"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "receipt_id": {"type": "string", "minLength": 8},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "savia_version": {"type": "string"},
+    "installer_version": {"type": "string"},
+    "platform": {"type": "object", "required": ["os", "arch"], "properties": {"os": {"enum": ["linux", "windows"]}, "arch": {"enum": ["x64", "arm64"]}}},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version", "source"],
+        "properties": {"id": {"type": "string"}, "version": {"type": "string"}, "source": {"type": "object"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+      }
+    },
+    "actions": {"type": "array", "items": {"type": "object", "required": ["component", "action", "privilege", "result"], "properties": {"component": {"type": "string"}, "action": {"enum": ["install", "verify", "uninstall", "rollback"]}, "privilege": {"enum": ["USER", "ELEVATED", "ROOT-ADMIN"]}, "result": {"enum": ["ok", "failed", "skipped", "compensated"]}}}},
+    "config_changes": {"type": "array", "items": {"type": "object"}},
+    "verification": {"type": "object", "required": ["doctor"], "properties": {"doctor": {"enum": ["INSTALLED_NOT_VERIFIED", "DEGRADED_SAFE", "BLOCKED", "UNKNOWN"]}}},
+    "rollback": {"type": "object"},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "failures": {"type": "array", "items": {"type": "string"}}
+  }
+}

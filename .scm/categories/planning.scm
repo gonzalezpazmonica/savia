@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 630 resources
+> 632 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **acceptance-cost** (script): acceptance-cost.sh — SE-360: costo por cambio aceptado (CLI wrapper).
@@ -261,6 +261,7 @@
 - **hallucination-fast-judge** (agent): Recommendation Tribunal judge — verifies that entities cited in a draft (files, functions, flags, libs, paths, commands) actually exist via tool calls
 - **hallucination-judge** (agent): Truth Tribunal judge — detects invented facts via SelfCheck-style consistency
 - **handback-resolve** (script): handback-resolve.sh — SE-332 Handback Obligation
+- **harness-architecture** (skill): Diseña la arquitectura de un harness de agentes: único, orquestado o metaharness, flujos largos, bucles, sprints. Usar cuando se diseña o depura un harness, un bucle autónomo o un sprint nocturno.
 - **hashline-edit** (script): hashline-edit.sh — Safe edit wrapper with stale-file protection (SE-149)
 - **hashline-guard** (script): hashline-guard.sh — Stale-file protection for L3 agent edits (SE-149)
 - **health-dashboard** (cmd): Dashboard de salud del proyecto unificado — Savia muestra una vista rápida adaptada al rol
@@ -628,6 +629,7 @@
 - **wave-executor-lib** (script): wave-executor-lib.sh — Helper functions for wave-executor.sh
 - **wellbeing-guardian** (cmd): Proactive individual wellbeing system — break reminders, after-hours alerts, work-life balance nudges
 - **wellbeing-guardian** (skill): Usar cuando se monitorizan señales de bienestar individual en el equipo.
+- **windows-links** (script): windows-links.sh — Materializa en Windows los enlaces Git (modo 120000).
 - **workspace-doctor** (cmd): >
 - **workspace-health** (script): workspace-health.sh — Comprehensive health dashboard for pm-workspace
 - **write-a-skill** (skill): Guia para crear una nueva skill correctamente en pm-workspace. Usar cuando una tarea se repite 2+ veces o tarda mas de 15 min.

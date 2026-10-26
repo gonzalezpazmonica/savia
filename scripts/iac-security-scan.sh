@@ -22,6 +22,11 @@
 #   1 = hallazgos en las severidades bloqueantes (bloquea CI)
 #   2 = error: argumentos inválidos, Trivy/Docker ausente o fallido, JSON inválido
 #
+# SE-453: resultado clean|findings|unknown (docs/rules/domain/gate-result-contract.md). Con
+# --format table la última línea de stdout es `gate-result: {...}`; con --format json stdout sigue
+# reservado al report, que lleva los campos `result` y `gaps`. Exit 2 ⇒ unknown con su hueco
+# (trivy:missing_tool, trivy:timeout, trivy:unreadable…). NO_IAC ⇒ clean. Códigos sin renumerar.
+#
 # También es la librería de iac-security-baseline.sh: al hacer `source` no se
 # ejecuta el escaneo (guarda BASH_SOURCE tras las funciones).
 #
@@ -216,6 +221,26 @@ PYEOF
 # ── Escaneo ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=../.claude/hooks/lib/gate-result.sh
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+
+# Contrato SE-453: cualquier salida (también los `die` de argumentos o herramienta ausente) acaba
+# con su resultado. GATE_GAPS acumula los huecos; el trap traduce el exit code sin renumerarlo.
+GATE_GAPS=()
+FORMAT="table"
+gate_gap() { [[ " ${GATE_GAPS[*]} " == *" $1 "* ]] || GATE_GAPS+=("$1"); }
+gate_on_exit() {
+  local rc=${GATE_RC:-$?} result=clean
+  case $rc in
+    0) result=clean ;;
+    1) result=findings ;;
+    *) result=unknown; [[ ${#GATE_GAPS[@]} -gt 0 ]] || gate_gap "iac-scan:unreadable" ;;
+  esac
+  [[ "$result" == "unknown" ]] && GATE_UNMEASURED_ROOT="$ROOT" gate_unmeasured_record "iac-security-scan" "${GATE_GAPS[0]#*:}"
+  [[ "$FORMAT" == "json" ]] || gate_result_emit "$result" "${GATE_GAPS[@]}"
+  exit "$rc"
+}
+trap gate_on_exit EXIT
 
 SCAN_PATH=""
 IMAGE_TARGET=""
@@ -234,9 +259,11 @@ while [[ $# -gt 0 ]]; do
     --format)      need_value "$@"; FORMAT="$2";       shift 2 ;;
     --ignorefile)  need_value "$@"; IGNOREFILE="$2";   shift 2 ;;
     --skip-update) SKIP_UPDATE=true; shift ;;
-    *) die "Argumento desconocido: $1" ;;
+    *) gate_gap "args:unreadable"; die "Argumento desconocido: $1" ;;
   esac
 done
+# Las validaciones de argumentos de aquí abajo salen 2: entrada que no se pudo evaluar.
+gate_gap "args:unreadable"
 
 if [[ -z "$SCAN_PATH" && -z "$IMAGE_TARGET" ]]; then
   echo "Ejemplo: $0 --path ./infra/ --severity CRITICAL,HIGH" >&2
@@ -256,17 +283,19 @@ if [[ -n "$IGNOREFILE" ]]; then
 elif [[ -n "$SCAN_PATH" && -f "$SCAN_PATH/.trivyignore" ]]; then
   IGNOREFILE="$SCAN_PATH/.trivyignore"
 fi
-command -v python3 >/dev/null 2>&1 || die "python3 es necesario para evaluar el JSON de Trivy"
+GATE_GAPS=()
+command -v python3 >/dev/null 2>&1 || { gate_gap "python3:missing_tool"; die "python3 es necesario para evaluar el JSON de Trivy"; }
 if ! iac_detect_runner; then
+  gate_gap "trivy:missing_tool"
   die "Ni Trivy ni Docker disponibles. Instala Trivy: https://aquasecurity.github.io/trivy/latest/getting-started/installation/"
 fi
 
-mkdir -p "$OUTPUT_DIR" || die "No se pudo crear $OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR" || { gate_gap "output-dir:unreadable"; die "No se pudo crear $OUTPUT_DIR"; }
 REPORT_JSON="$OUTPUT_DIR/iac-scan-${DATE}.json"
 IMAGE_JSON="$OUTPUT_DIR/iac-image-scan-${DATE}.json"
 REPORT_MD="$OUTPUT_DIR/iac-scan-${DATE}.md"
-WORKDIR="$(mktemp -d)" || die "mktemp falló"
-trap 'rm -rf "$WORKDIR"' EXIT
+WORKDIR="$(mktemp -d)" || { gate_gap "workdir:unreadable"; die "mktemp falló"; }
+trap 'GATE_RC=$?; rm -rf "$WORKDIR"; gate_on_exit' EXIT
 
 # En --format json, stdout queda reservado al report: los mensajes van a stderr.
 say() { if [[ "$FORMAT" == "json" ]]; then echo "$*" >&2; else echo "$*"; fi; }
@@ -278,8 +307,23 @@ error_report() {
   python3 - "$@" <<'PYEOF'
 import json, sys
 report, kind, target, reason = sys.argv[1:5]
+check, _, why = sys.argv[5].partition(":")
 json.dump({"tool": "trivy", "kind": kind, "target": target, "status": "ERROR",
-           "error": reason, "findings": []}, open(report, "w"), indent=2, ensure_ascii=False)
+           "error": reason, "findings": [], "result": "unknown",
+           "gaps": [{"check": check, "reason": why}]},
+          open(report, "w"), indent=2, ensure_ascii=False)
+PYEOF
+}
+
+# report_result <report> — añade `result` y `gaps` (contrato SE-453) a un report PASS/FAIL/NO_IAC.
+report_result() {
+  python3 - "$1" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["result"] = "findings" if d.get("status") == "FAIL" else "clean"
+d["gaps"] = []
+json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
 PYEOF
 }
 
@@ -292,12 +336,16 @@ scan_target() {
   if [[ $rc -ne 0 ]]; then
     echo "ERROR: Trivy ($IAC_RUNNER) falló con exit $rc al escanear $target. El escaneo NO es válido." >&2
     tail -5 "$err" >&2
-    error_report "$report" "$mode" "$target" "trivy exit $rc"
+    local gap="trivy-$mode:unreadable"
+    [[ $rc -eq 124 ]] && gap="trivy-$mode:timeout"
+    gate_gap "$gap"
+    error_report "$report" "$mode" "$target" "trivy exit $rc" "$gap"
     return 2
   fi
   if [[ ! -s "$raw" ]]; then
     echo "ERROR: Trivy no produjo salida JSON para $target. El escaneo NO es válido." >&2
-    error_report "$report" "$mode" "$target" "salida vacía"
+    gate_gap "trivy-$mode:unreadable"
+    error_report "$report" "$mode" "$target" "salida vacía" "trivy-$mode:unreadable"
     return 2
   fi
   rc=0
@@ -305,7 +353,8 @@ scan_target() {
   if [[ $rc -ne 0 && $rc -ne 1 ]]; then
     rm -f "$report.tmp"
     echo "ERROR: no se pudo evaluar la salida de Trivy para $target (JSON inválido o ilegible)." >&2
-    error_report "$report" "$mode" "$target" "JSON inválido"
+    gate_gap "trivy-$mode:unreadable"
+    error_report "$report" "$mode" "$target" "JSON inválido" "trivy-$mode:unreadable"
     return 2
   fi
   mv "$report.tmp" "$report"
@@ -337,6 +386,7 @@ PYEOF
   then
     NO_IAC=true
   fi
+  [[ $rc -lt 2 ]] && report_result "$REPORT_JSON"
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
   say "Resultado config: $([[ $NO_IAC == true ]] && echo NO_IAC || status_of "$rc")"
 fi
@@ -344,6 +394,7 @@ fi
 if [[ -n "$IMAGE_TARGET" ]]; then
   say "Escaneando imagen Docker: $IMAGE_TARGET"
   rc=0; scan_target image "$IMAGE_TARGET" "$IMAGE_JSON" || rc=$?
+  [[ $rc -lt 2 ]] && report_result "$IMAGE_JSON"
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
   say "Resultado imagen: $(status_of "$rc")"
 fi

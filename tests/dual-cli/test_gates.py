@@ -16,7 +16,9 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 CORE = ROOT / "scripts/dual-cli"
 sys.path.insert(0, str(CORE))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gates
+from required_tools import needs
 
 BASH = {"tool_name": "Bash", "tool_input": {"command": "echo hi"}}
 
@@ -86,12 +88,18 @@ class GateCoreTests(unittest.TestCase):
         self.assertEqual(self.run_gate()["action"], "allow")
 
     def test_unexecutable_critical_handler_blocks(self):
-        for handler in ({"type": "http", "url": "http://127.0.0.1:1/gate"},
-                        {"type": "prompt", "prompt": "x"}):
-            self.configure(handler)
-            decision = self.run_gate()
-            self.assertEqual((decision["action"], decision["reason"]),
-                             ("deny", "UNSUPPORTED_CRITICAL_HOOK"))
+        self.configure({"type": "http", "url": "http://127.0.0.1:1/gate"})
+        decision = self.run_gate()
+        self.assertEqual((decision["action"], decision["reason"]), ("deny", "UNSUPPORTED_CRITICAL_HOOK"))
+
+    def test_prompt_handler_without_evaluator_blocks(self):
+        # AC6: the transport exists now, but with no evaluator declared the gate still fails closed.
+        saved = os.environ.pop("SAVIA_PROMPT_HOOK_CMD", None)
+        if saved is not None:
+            self.addCleanup(os.environ.__setitem__, "SAVIA_PROMPT_HOOK_CMD", saved)
+        self.configure({"type": "prompt", "prompt": "x"})
+        decision = self.run_gate()
+        self.assertEqual((decision["action"], decision["reason"]), ("deny", "PROMPT_HOOK_UNAVAILABLE"))
 
     def test_async_telemetry_is_skipped_only_outside_authority_events(self):
         self.configure({"type": "prompt", "prompt": "x", "async": True}, event="PostToolUse")
@@ -237,7 +245,7 @@ def codex_hook(payload, root=ROOT, raw=None):
                           input=raw if raw is not None else json.dumps(payload).encode(), timeout=60)
 
 
-@unittest.skipUnless(shutil.which("jq"), "real hooks need jq")
+@needs("jq")
 class CodexAdapterTests(unittest.TestCase):
     def test_real_command_is_blocked_with_exit_2_and_stderr_reason(self):
         run = codex_hook({"tool_name": "Bash", "cwd": str(ROOT),
@@ -255,12 +263,12 @@ class CodexAdapterTests(unittest.TestCase):
             self.assertEqual(codex_hook(None, raw=raw).returncode, 2, raw)
 
 
-@unittest.skipUnless(shutil.which("jq"), "real hooks need jq")
+@needs("jq")
 class CodexAdapterFailClosedTests(unittest.TestCase):
     def run_copy(self, mutate, payload=None):
         with tempfile.TemporaryDirectory() as tmp:
             dst = Path(tmp)
-            for f in ("codex-hook.py", "gates.py", "hooks.py", "policy.py", "protocol.py"):
+            for f in ("codex-hook.py", "codex_events.py", "gates.py", "hooks.py", "policy.py", "protocol.py"):
                 shutil.copy(CORE / f, dst / f)
             mutate(dst)
             return subprocess.run([sys.executable, str(dst / "codex-hook.py")], capture_output=True,
@@ -291,7 +299,7 @@ class CodexAdapterFailClosedTests(unittest.TestCase):
             self.assertEqual(run.returncode, 2)
 
 
-@unittest.skipUnless(shutil.which("jq") and shutil.which("bun"), "replay needs bun and jq")
+@needs("jq", "bun")
 class ReplayEquivalenceTests(unittest.TestCase):
     """AC2 (command half): the same corpus gives the same decision in both cores."""
 
