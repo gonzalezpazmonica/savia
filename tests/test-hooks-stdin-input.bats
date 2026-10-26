@@ -50,3 +50,21 @@ payload() { python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[
   done
   [ -z "$bad" ] || { echo "solo env:$bad"; return 1; }
 }
+
+@test "block-project-whitelist no bloquea editar otro fichero que menciona .gitignore y !projects/" {
+  payload Edit '{"file_path":"docs/privacidad.md","old_string":"a","new_string":"en .gitignore nunca !projects/x"}' > "$TMP/in.json"
+  run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "block-project-whitelist no bloquea quitar un !projects/ de .gitignore" {
+  payload Edit '{"file_path":".gitignore","old_string":"!projects/viejo/","new_string":""}' > "$TMP/in.json"
+  run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "block-project-whitelist bloquea Write de .gitignore con !projects/ en content" {
+  payload Write '{"file_path":"/repo/.gitignore","content":"*.log\n!projects/nuevo/\n"}' > "$TMP/in.json"
+  run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}

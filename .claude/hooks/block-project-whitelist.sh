@@ -16,8 +16,13 @@ fi
 INPUT="${CLAUDE_TOOL_INPUT:-}"
 if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
 
-# Solo nos interesa si se está editando .gitignore
-if ! echo "$INPUT" | grep -q "\.gitignore"; then
+# Con JSON de stdin se mira solo el fichero destino y el texto que se AÑADE (new_string/content):
+# editar otro fichero que mencione ambas cadenas, o quitar un !projects/ de .gitignore, no bloquea.
+# Si jq no está o la entrada no es JSON (respaldo por variable), se mantiene el filtro textual de antes.
+if command -v jq &>/dev/null && FILE=$(printf '%s' "$INPUT" | jq -er '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null); then
+    [[ "$(basename "$FILE")" == ".gitignore" ]] || exit 0
+    INPUT=$(printf '%s' "$INPUT" | jq -r '[.tool_input.new_string, .tool_input.content, .tool_input.newString] | map(select(. != null)) | join("\n")' 2>/dev/null)
+elif ! echo "$INPUT" | grep -q "\.gitignore"; then
     exit 0
 fi
 
