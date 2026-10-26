@@ -70,10 +70,11 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
       local sources
       sources=$(list_sources "$file_filter")
       [[ -z "$sources" ]] && return 0
-      grep -nE "\b${sym}\b" $sources 2>/dev/null \
+      grep -HnE "\b${sym}\b" $sources 2>/dev/null \
         | grep -vE ":(#|//|/\*|\*|--|<!--)[[:space:]]*$" \
         | grep -vE "\b(import|from|require|use|include|package|module|export|#include)\b.*\b${sym}\b" \
-        | grep -vE ":(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
+        | grep -vE ":[[:space:]]*(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
+        | grep -vE ":[[:space:]]*${sym}[[:space:]]*\(\)[[:space:]]*\{" \
         | cut -d: -f1 \
         | sort -u
     else
@@ -85,6 +86,7 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
                 | grep -vE ":(#|//|/\*|\*|--|<!--)[[:space:]]*$" \
                 | grep -vE "\b(import|from|require|use|include|package|module|export|#include)\b.*\b${sym}\b" \
                 | grep -vE ":[[:space:]]*(def|func|function|class|public|private|protected|static|fn|sub|void|int|string|bool|var|let|const)[[:space:]]+${sym}[[:space:]]*(\()?" \
+                | grep -vE ":[[:space:]]*${sym}[[:space:]]*\(\)[[:space:]]*\{" \
                 | grep -qE ":.*\b${sym}\b"; then
               printf '%s\n' "$f"
             fi
@@ -101,8 +103,8 @@ if [[ "$FIRST_ARG" == "--symbol" || "$FIRST_ARG" == "--diff" || "$FIRST_ARG" == 
       | grep -E "^[+-].*\b(def|func|function|class|fn|sub|public|private|protected|static)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*|^[+-][a-zA-Z_][a-zA-Z0-9_]*\(\)" \
       | grep -vE "^[+-]{2}" \
       | grep -oE "(def|func|function|class|fn|sub|public|private|protected|static)[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*\(\)" \
+      | sed -E 's/\(\)$//' \
       | grep -oE "[a-zA-Z_][a-zA-Z0-9_]*$" \
-      | sed -E 's/\(\)//' \
       | grep -vE "^(def|func|function|class|fn|sub|main|__init__|setup|teardown|run|start|stop|init|__main__)$" \
       | grep -vE "^(and|or|not|if|else|elif|for|while|return|import|from|class|def|with|try|except|in|is|lambda)$" \
       | sort -u
@@ -144,7 +146,12 @@ PYEOF
   if [[ "$1" == "--symbol" ]]; then
     SYMBOL="${2:-}"
     [[ -z "$SYMBOL" ]] && { echo "ERROR: --symbol requiere nombre" >&2; exit 1; }
-    DIRECT=$(grep_callers "$SYMBOL")
+    FILE_FILTER=""
+    [[ "${3:-}" == "--file" ]] && FILE_FILTER="${4:-}"
+    if [[ -n "$FILE_FILTER" && ! -f "$FILE_FILTER" ]]; then
+      echo "ERROR: file not found: $FILE_FILTER" >&2; exit 1
+    fi
+    DIRECT=$(grep_callers "$SYMBOL" "$FILE_FILTER")
     out=$(emit_result "$SYMBOL" "$DIRECT" "" "grep")
     printf '%s\n' "$out"
     # Telemetría SE-313: evento blast.radius (AC-S3.3) — nunca bloquea.
@@ -296,8 +303,8 @@ scan_deps() {
       # Determine relation type
       local rel="imports"
       local content
-      content=$(cat "$ref_clean" 2>/dev/null || true)
-      if echo "$content" | grep -qE "(source|\.) \.*${basename}"; then
+      content=$(cat "$ROOT/$ref_clean" 2>/dev/null || true)
+      if echo "$content" | grep -qE "(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*${basename}"; then
         rel="imports"
       elif echo "$content" | grep -qE "(require|import).*${basename}"; then
         rel="imports"
@@ -316,7 +323,8 @@ scan_deps() {
     [[ ${#queue[@]} -gt 50 ]] && break
   done
 
-  printf '%s\n' "${results[@]}"
+  [[ ${#results[@]} -gt 0 ]] && printf '%s\n' "${results[@]}"
+  return 0
 }
 
 # ── Calculate risk score ──
@@ -426,7 +434,7 @@ JSON
     printf "║  Summary: %d files impacted, %d direct, %d transitive             ║\n" \
       "${#results[@]}" "$direct" "$transitive"
     printf "║  Risk score: %s/100 (%-8s)                              ║\n" \
-      "$rscore" "$(risk_grade "$rscore")" " "
+      "$rscore" "$(risk_grade "$rscore")"
     echo "╚══════════════════════════════════════════════════════════════════╝"
   fi
 
