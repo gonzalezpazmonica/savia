@@ -13,6 +13,7 @@
 import { realpathSync } from "node:fs"
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path"
 import { runHooksForEvent } from "./shell-bridge"
+import { protectedTarget } from "./shell-targets"
 import type { HookMap, RunOptions } from "./shell-bridge"
 
 const TOOL_NAMES: Record<string, string> = {
@@ -155,6 +156,18 @@ export function fromHookInput(mutated: Record<string, unknown>, view: HookView):
   return next
 }
 
+/** Port of gates.shell_writes_gate: a Bash call whose text writes gate code (lib/shell-targets.ts). Text the
+ * tokenizer cannot close counts as a write only when it names a gate location: there is nothing else to guard. */
+export function shellWritesGate(view: HookView, cwd: string, root: string): boolean {
+  const command = view.tool_input.command
+  if (view.tool_name !== "Bash" || typeof command !== "string") return false
+  try {
+    return protectedTarget(command, cwd, root, PROTECTED_GATE_PATHS) !== null
+  } catch {
+    return PROTECTED_GATE_PATHS.some((rel) => command.includes(rel.split("/")[0]))
+  }
+}
+
 export interface PreToolUseOutcome {
   blocked: boolean
   reason: string
@@ -182,6 +195,7 @@ export async function runPreToolUse(
         isProtectedPath(joinPath(base.cwd, target), root)) {
       return { blocked: true, reason: "PROTECTED_GATE_PATH" }
     }
+    if (shellWritesGate(view, base.cwd, root)) return { blocked: true, reason: "PROTECTED_GATE_PATH" }
   }
   let mutated: Record<string, unknown> | undefined
   for (const view of views) {

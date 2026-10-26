@@ -16,6 +16,7 @@ import time
 from hooks import HookConfigurationError, _matcher_applies
 from policy import AUTHORITY_EVENTS, hook_decision, plain_output_mode, prompt_decision
 from protocol import ProtocolError, decode_json
+from shell_targets import protected_target
 
 MAX_OUTPUT = 1024 * 1024
 DEFAULT_TIMEOUT = 5.0
@@ -260,6 +261,19 @@ def is_protected(path, root):
     return False
 
 
+def shell_writes_gate(payload, root):
+    """A Bash call whose text writes gate code (shell_targets.py). Text the tokenizer cannot
+    close counts as a write only when it names a gate location: there is nothing else to guard."""
+    command = payload.get("tool_input", {}).get("command")
+    if payload.get("tool_name") != "Bash" or not isinstance(command, str):
+        return False
+    cwd = payload.get("cwd") or str(root)
+    try:
+        return protected_target(command, cwd, str(root), PROTECTED_PATHS) is not None
+    except ProtocolError:
+        return any(rel.split("/")[0] in command for rel in PROTECTED_PATHS)
+
+
 def normalize_codex_pretool(payload):
     """Codex PreToolUse payload -> list of Claude-shaped payloads, one per effect."""
     if not isinstance(payload, dict):
@@ -297,6 +311,8 @@ def evaluate_codex_tool(event, payload, *, settings_path, root, spawn_async=Fals
         return _deny("INVALID_EVENT")
     if event in AUTHORITY_EVENTS and any(
             item is not payload and is_protected(item["tool_input"]["file_path"], root) for item in events):
+        return _deny("PROTECTED_GATE_PATH")
+    if event in AUTHORITY_EVENTS and shell_writes_gate(payload, root):
         return _deny("PROTECTED_GATE_PATH")
     final = None
     for item in events:

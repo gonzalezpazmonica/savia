@@ -144,9 +144,32 @@ que en Codex.
 
 Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime
 (requiere decisión de la operadora sobre revisión de política y confianza del
-daemon), escrituras a rutas protegidas desde `bash` en ambos núcleos, y la
-divergencia restante del matcher de OpenCode, que además prueba el payload
-serializado como candidato (Python solo lo hace sin nombre de herramienta).
+daemon) y la divergencia restante del matcher de OpenCode, que además prueba el
+payload serializado como candidato (Python solo lo hace sin nombre de herramienta).
+
+### Rutas protegidas desde `bash`
+
+`echo {} > .claude/settings.json`, `sed -i` sobre un hook, `git checkout -- .codex/hooks.json`
+o un borrado recursivo de `.claude` llegaban al CLI en Codex y en OpenCode, aunque la
+misma escritura con `write`/`edit`/`apply_patch` se denegaba. `shell_targets.py` (y su
+port `lib/shell-targets.ts`) lee el texto del comando, sin ejecutarlo, y extrae los
+destinos de escritura: redirecciones (`>`, `>>`, `&>`, `<>`), `rm/mv/cp/ln/install/tee/
+touch/truncate/chmod -R/...`, `sed/perl -i`, `dd of=`, subcomandos de `git` que reescriben
+el árbol, `xargs`, `find -delete/-exec` (solo rutas de inicio), y el texto de `bash -c`,
+`eval`, `$(...)` y backticks de forma recursiva. Los heredocs se saltan (un mensaje de
+commit que menciona un hook no bloquea). Los borradores también se deniegan sobre un
+directorio que contiene una ruta protegida; los globs se comparan componente a componente.
+Un texto que el tokenizador no cierra solo se deniega si nombra una ubicación protegida.
+
+`test_shell_targets.py`: corpus de 61 casos (`fixtures/shell_targets_corpus.json`) con las
+mismas respuestas en los dos núcleos, symlink a `.claude/hooks`, y réplica por
+`codex-hook.py` y por savia-gates con los hooks reales: 4/4 escrituras denegadas
+(`PROTECTED_GATE_PATH`) frente a 4/4 permitidas en el núcleo de `e7224df97`.
+
+No cubierto, y así consta: código de otros intérpretes (`python -c "open(...,'w')"`,
+`node -e`), variables cuyo valor no está en el texto (`rm -r $X` con `X=.claude`), rutas
+que llegan por stdin a `xargs`, y lo que un script ejecutado escriba. Es un gate
+cooperativo contra reescrituras del agente, no aislamiento frente a procesos hostiles.
 
 ### Resto de eventos de Codex (S3)
 
