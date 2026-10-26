@@ -55,7 +55,7 @@ fi
 # Normalize: lowercase + strip accents for robust matching (prod bugfix:
 # "leccion aprendida" sin tilde no matcheaba "lección aprendida").
 # tr no baja a minuscula las mayusculas acentuadas (multibyte): se mapean aparte.
-normalize() { echo "$1" | sed 's/[ÁÀÄÂ]/a/g;s/[ÉÈËÊ]/e/g;s/[ÍÌÏÎ]/i/g;s/[ÓÒÖÔ]/o/g;s/[ÚÙÜÛ]/u/g;s/Ñ/n/g' | tr '[:upper:]' '[:lower:]' | sed 's/[áàäâ]/a/g;s/[éèëê]/e/g;s/[íìïî]/i/g;s/[óòöô]/o/g;s/[úùüû]/u/g;s/ñ/n/g'; }
+normalize() { echo "$1" | LC_ALL=C.UTF-8 sed 's/[ÁÀÄÂ]/a/g;s/[ÉÈËÊ]/e/g;s/[ÍÌÏÎ]/i/g;s/[ÓÒÖÔ]/o/g;s/[ÚÙÜÛ]/u/g;s/Ñ/n/g' | tr '[:upper:]' '[:lower:]' | LC_ALL=C.UTF-8 sed 's/[áàäâ]/a/g;s/[éèëê]/e/g;s/[íìïî]/i/g;s/[óòöô]/o/g;s/[úùüû]/u/g;s/ñ/n/g'; }
 
 ERROR_KEYWORDS=(
   "error reconocido" "se reconoce el error" "mismo error"
@@ -113,7 +113,7 @@ if [[ -n "$EVIDENCE" ]]; then
   KEPT=""
   IFS=',' read -ra EV_PATHS <<< "$EVIDENCE"
   for ev in "${EV_PATHS[@]}"; do
-    [[ -f "$ev" ]] && KEPT="${KEPT:+$KEPT,}$ev"
+    [[ -f "${ev%%:*}" || -f "$ev" ]] && KEPT="${KEPT:+$KEPT,}$ev"
   done
   EVIDENCE="$KEPT"
 fi

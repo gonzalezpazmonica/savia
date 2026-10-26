@@ -75,11 +75,17 @@ assert r["delta.md"]=={"tier":"dormant","consumers":""}, r["delta.md"]
   echo "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["total"]==0 and d["rules"]=={}'
 }
 
-@test "una referencia con nombre distinto no cuenta: alpha2 no promueve a alpha" {
+@test "una referencia con nombre distinto no cuenta: delta2 no promueve a delta" {
   mk_root
-  echo "x @docs/rules/domain/alpha2.md" > "$R/.opencode/agents/a.md"
+  echo "x @docs/rules/domain/delta2.md" > "$R/.opencode/agents/a.md"
   run bash "$SCRIPT" --root "$R" --summary
   [ "$output" = "Rules: 4 total | 2 tier1 | 1 tier2 | 1 dormant" ]
+  run bash "$SCRIPT" --root "$R"
+  echo "$output" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+assert d["rules"]["delta.md"]=={"tier":"dormant","consumers":""}, d["rules"]["delta.md"]
+'
 }
 
 @test "una regla citada solo desde un comando pasa de dormida a tier2" {
@@ -102,4 +108,11 @@ assert r["delta.md"]=={"tier":"dormant","consumers":""}, r["delta.md"]
   [ "$status" -eq 0 ]
   [ -z "$output" ]
   python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["total"]==4' "$BATS_TEST_TMPDIR/m.json"
+}
+
+@test "--output a una ruta no escribible falla con exit 2 y sin JSON en stdout" {
+  mk_root
+  run bash "$SCRIPT" --root "$R" --output "$BATS_TEST_TMPDIR/no/existe/m.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *'"total"'* ]]
 }

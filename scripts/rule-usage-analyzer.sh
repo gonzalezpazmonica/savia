@@ -72,7 +72,9 @@ fi
 
 # ── Generate JSON manifest ──
 # --output FILE: el manifiesto va al fichero (antes se aceptaba y se ignoraba).
-[[ -n "$OUTPUT_FILE" ]] && exec > "$OUTPUT_FILE"
+if [[ -n "$OUTPUT_FILE" ]]; then
+  exec > "$OUTPUT_FILE" || { echo "ERROR: no se puede escribir $OUTPUT_FILE" >&2; exit 2; }
+fi
 echo "{"
 echo "  \"generated\": \"$(date -Iseconds)\","
 echo "  \"total\": $TOTAL,"

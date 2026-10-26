@@ -179,7 +179,8 @@ mk_agents_tree() {
   [ "$(sed -n 2p "$CAT")" = "context_tier: T2" ]
   [ "$(sed -n 3p "$CAT")" = "token_budget: 900" ]
   [ "$(sed -n 4p "$CAT")" = "---" ]
-  ! grep -q viejo "$CAT"
+  run grep -q viejo "$CAT"
+  [ "$status" -ne 0 ]
   grep -q "^# Agents Catalog" "$CAT"
 }
 
