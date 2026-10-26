@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f59bd32cf45ab32d638189a56431b59c908cb14e9efbff1a8430deeead3f2f85
-timestamp=2026-10-26T21:56:41Z
-branch=agent/s03i-20261023
-head_commit=5d596963
-signature=75a668647a467dfa066d3f7de5ac7a9f95038cd8437295fac1d8730e69213356
+diff_hash=b9ae0930b428afc745d72c3f00c0af4c773f9028eabfc09a90a405e6f3af27c9
+timestamp=2026-10-26T22:14:34Z
+branch=agent/hook-discipline-gaps-20261026
+head_commit=c1f7d74e9
+signature=9d2a0c7fecb702e3d1552d8e4334ee0cfe87e116cd5678c58b52f9c33cc12fa2
