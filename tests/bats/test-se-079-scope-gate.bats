@@ -182,3 +182,9 @@ jq_field() { python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dum
   [ "$(echo "$output" | jq_field files_in_scope)" = '["mapper.py"]' ]
   [ "$(echo "$output" | jq_field files_outside_scope)" = '[]' ]
 }
+
+@test "scope aislado: un token de exactamente 4 letras (json) basta para casar" {
+  mk_scope_tree
+  run bash "$G" --spec SE-900 --files src/mi-json.py
+  [ "$(echo "$output" | jq_field files_in_scope)" = '["src/mi-json.py"]' ]
+}
