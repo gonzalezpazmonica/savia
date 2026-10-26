@@ -10,9 +10,11 @@ if [[ -z "${HOME:-}" ]]; then
   exit 1
 fi
 
-STORE_FILE="${PROJECT_ROOT:-.}/output/.memory-store.jsonl"
-mkdir -p "$(dirname "$STORE_FILE")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Raíz = padre de scripts/, no el CWD: invocado desde .opencode/ u otro directorio
+# escribía un store paralelo en <cwd>/output/.
+STORE_FILE="${PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}/output/.memory-store.jsonl"
+mkdir -p "$(dirname "$STORE_FILE")"
 MEMORY_PYTHON="${SAVIA_MEMORY_PYTHON:-$HOME/.savia/venv/bin/python}"
 [[ -x "$MEMORY_PYTHON" ]] || MEMORY_PYTHON="$HOME/.savia/venv/Scripts/python.exe"
 [[ -x "$MEMORY_PYTHON" ]] || MEMORY_PYTHON="$(command -v python3 || true)"

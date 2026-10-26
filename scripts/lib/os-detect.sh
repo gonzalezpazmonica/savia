@@ -2,6 +2,7 @@
 # scripts/lib/os-detect.sh — Portable OS detection and path defaults
 # Source this from other scripts: source "$(dirname "$0")/lib/os-detect.sh"
 # Provides: detect_os() → "linux" | "macos" | "windows" | "unknown"
+#           jq() y PYTHONUTF8 en Windows — salida sin CRLF ni cp1252
 #           setup_paths() → exports OLLAMA_BIN, ANDROID_HOME, JAVA_HOME
 
 detect_os() {
@@ -41,3 +42,15 @@ setup_paths() {
   esac
   export OLLAMA_BIN ANDROID_HOME JAVA_HOME
 }
+
+# jq para Windows termina cada línea en \r\n; $(...) solo quita el \n y las
+# comparaciones con la salida de `jq -r` fallaban en silencio ("x\r" != "x").
+# --binary emite \n. Exportada: la heredan los bash hijos.
+# python para Windows usa cp1252 en stdout y en open() sin encoding: los
+# ficheros generados salían con mojibake. PYTHONUTF8=1 fija UTF-8 (PEP 540)
+# salvo que ya venga definida. Fuera de Windows no define nada.
+case "${OSTYPE:-}" in
+  msys*|cygwin*)
+    jq() { command jq --binary "$@"; }; export -f jq
+    export PYTHONUTF8="${PYTHONUTF8:-1}" ;;
+esac
