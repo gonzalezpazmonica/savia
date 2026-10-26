@@ -253,10 +253,19 @@ cmd_validate_pair() {
   local content
   content="$(cat "$kpis_file")"
 
+  # Campo de un KPI leído solo dentro de su propio bloque ("  - id: ..." hasta el
+  # siguiente). Un grep -A sobre `id: "X"` también casaba `antagonist_kpi_id: "X"`
+  # y devolvía el name: de otra firma u otro KPI.
+  kpi_field() {
+    echo "$content" | awk -v want="$1" -v field="$2" '
+      /^  - id:/ { cur = $0; sub(/^  - id: *"/, "", cur); sub(/".*$/, "", cur); next }
+      cur == want && $1 == field ":" { v = $0; sub(/^[^:]*: *"/, "", v); sub(/"$/, "", v); print v; exit }'
+  }
+
   local kpi_name ant_name kpi_ant
-  kpi_name="$(echo "$content" | grep -A20 "id: \"${kpi_id}\"" | grep "name:" | head -1 | sed 's/.*name: *"//;s/"$//')"
-  ant_name="$(echo "$content" | grep -A20 "id: \"${antagonist_id}\"" | grep "name:" | head -1 | sed 's/.*name: *"//;s/"$//')"
-  kpi_ant="$(echo "$content" | grep -A20 "id: \"${kpi_id}\"" | grep "antagonist_kpi_id:" | head -1 | sed 's/.*antagonist_kpi_id: *"//;s/"$//')"
+  kpi_name="$(kpi_field "$kpi_id" name)"
+  ant_name="$(kpi_field "$antagonist_id" name)"
+  kpi_ant="$(kpi_field "$kpi_id" antagonist_kpi_id)"
 
   local pass=1
 
