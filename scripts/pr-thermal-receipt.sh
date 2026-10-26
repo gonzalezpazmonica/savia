@@ -5,8 +5,9 @@
 # Usage: bash scripts/pr-thermal-receipt.sh [--staged | --branch REFSPEC]
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Repo a medir: el del cwd (también desde un subdirectorio) salvo --project
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 
 MODE=""
 REFSPEC=""
@@ -24,7 +25,9 @@ Options:
   --branch REFSPEC  Analyze diff between branches (e.g. main..feature/x)
   --project DIR     Project root. Default: current dir
   --format md|json  Output format. Default: md
-  --health          Include health score delta (requires workspace-health.sh --v2)
+  --health          Include health score delta (requires workspace-health.sh --v2).
+                    The score is always the Savia workspace's own health, not the
+                    --project repo's: a measured repo's scripts are never executed.
 
 EOF
 }
@@ -32,9 +35,16 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --staged) MODE="staged"; shift ;;
-    --branch) MODE="branch"; REFSPEC="$2"; shift 2 ;;
-    --project) ROOT="$2"; shift 2 ;;
-    --format) FORMAT="$2"; shift 2 ;;
+    --branch|--project|--format)
+      [[ $# -ge 2 ]] || { echo "ERROR: $1 requires a value" >&2; exit 1; }
+      case "$1" in
+        --branch)
+          [[ "$2" != -* ]] || { echo "ERROR: invalid refspec: $2" >&2; exit 1; }
+          MODE="branch"; REFSPEC="$2" ;;
+        --project) ROOT="$2" ;;
+        --format) FORMAT="$2" ;;
+      esac
+      shift 2 ;;
     --health) INCLUDE_HEALTH=true; shift ;;
     --help|-h) usage; exit 0 ;;
     *) echo "ERROR: unknown option: $1" >&2; usage >&2; exit 1 ;;
@@ -42,6 +52,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Validate ──
+if [[ "$FORMAT" != "md" && "$FORMAT" != "json" ]]; then
+  echo "ERROR: unknown format: $FORMAT (use md or json)" >&2
+  exit 1
+fi
+
 if ! git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   echo "ERROR: not a git repository" >&2
   exit 1
@@ -51,6 +66,22 @@ if [[ -z "$MODE" ]]; then
   echo "ERROR: must specify --staged or --branch" >&2
   usage >&2
   exit 1
+fi
+
+# Diff de la modalidad elegida; $@ = opciones extra de git diff.
+gd() {
+  case "$MODE" in
+    staged) git -C "$ROOT" diff --staged "$@" ;;
+    branch) git -C "$ROOT" diff "$@" "$REFSPEC" ;;
+  esac
+}
+
+if [[ "$MODE" == "branch" ]]; then
+  gd --quiet >/dev/null 2>&1
+  if [[ $? -gt 1 ]]; then
+    echo "ERROR: invalid refspec: $REFSPEC" >&2
+    exit 1
+  fi
 fi
 
 # ── Gather metrics ──
@@ -92,14 +123,9 @@ esac
 
 # ── Functions delta (heuristic) ──
 count_functions() {
-  local diff_cmd
-  case "$MODE" in
-    staged) diff_cmd="git -C $ROOT diff --staged" ;;
-    branch) diff_cmd="git -C $ROOT diff $REFSPEC" ;;
-  esac
   local added=0 removed=0
-  added=$($diff_cmd 2>/dev/null | grep -cE '^\+\s*(function |def |func |public .*\(|export .*\(|async .*\()' || true)
-  removed=$($diff_cmd 2>/dev/null | grep -cE '^\-\s*(function |def |func |public .*\(|export .*\(|async .*\()' || true)
+  added=$(gd 2>/dev/null | grep -cE '^\+\s*(function |def |func |public .*\(|export .*\(|async .*\()' || true)
+  removed=$(gd 2>/dev/null | grep -cE '^\-\s*(function |def |func |public .*\(|export .*\(|async .*\()' || true)
   echo "$added $removed"
 }
 
@@ -108,23 +134,24 @@ FUNCTIONS_ADDED=$(echo "$FUNC_DELTA" | awk '{print $1}')
 FUNCTIONS_REMOVED=$(echo "$FUNC_DELTA" | awk '{print $2}')
 
 # ── Scripts delta ──
-case "$MODE" in
-  staged) diff_cmd="git -C $ROOT diff --staged --name-only" ;;
-  branch) diff_cmd="git -C $ROOT diff --name-only $REFSPEC" ;;
-esac
-SCRIPTS_ADDED=$($diff_cmd 2>/dev/null | grep -cE '^scripts/' || true)
-SCRIPTS_DELETED=$(git -C "$ROOT" diff --diff-filter=D --name-only ${MODE:+--staged} ${REFSPEC:+"$REFSPEC"} 2>/dev/null | grep -cE '^scripts/' || true)
+SCRIPTS_ADDED=$(gd --diff-filter=A --name-only 2>/dev/null | grep -cE '^scripts/' || true)
+SCRIPTS_DELETED=$(gd --diff-filter=D --name-only 2>/dev/null | grep -cE '^scripts/' || true)
 
 # ── Health delta (optional) ──
 HEALTH_BEFORE=""
 HEALTH_AFTER=""
 HEALTH_DELTA=""
+HEALTH_SCORE="null"
+HEALTH_GRADE="?"
 if $INCLUDE_HEALTH; then
-  HEALTH_SCRIPT="$ROOT/scripts/workspace-health.sh"
+  # Siempre el del propio workspace: nunca se ejecuta código del repo medido
+  HEALTH_SCRIPT="$SCRIPT_DIR/workspace-health.sh"
   if [[ -x "$HEALTH_SCRIPT" ]]; then
     HEALTH_JSON=$(bash "$HEALTH_SCRIPT" --json --v2 2>/dev/null || echo "{}")
-    HEALTH_SCORE=$(echo "$HEALTH_JSON" | grep -oE '"score": [0-9]+' | head -1 | grep -oE '[0-9]+' || echo "?")
-    HEALTH_GRADE=$(echo "$HEALTH_JSON" | grep -oE '"grade": "[A-F][+-]?"' | head -1 | grep -oE '[A-F][+-]?' || echo "?")
+    HEALTH_SCORE=$(echo "$HEALTH_JSON" | grep -oE '"score": [0-9]+' | head -1 | grep -oE '[0-9]+' || true)
+    HEALTH_SCORE="${HEALTH_SCORE:-null}"
+    HEALTH_GRADE=$(echo "$HEALTH_JSON" | grep -oE '"grade": "[A-F][+-]?"' | head -1 | grep -oE '[A-F][+-]?' || true)
+    HEALTH_GRADE="${HEALTH_GRADE:-?}"
     HEALTH_AFTER="$HEALTH_GRADE"
     HEALTH_DELTA="?"
   else
@@ -134,12 +161,21 @@ if $INCLUDE_HEALTH; then
 fi
 
 # ── Output ──
+# Escapa un valor para incrustarlo en una cadena JSON (actor/rama vienen del repo medido).
+json_esc() {
+  local v="$1"
+  v=${v//\\/\\\\}
+  v=${v//\"/\\\"}
+  v=${v//[$'\001'-$'\037']/ }
+  printf '%s' "$v"
+}
+
 if [[ "$FORMAT" == "json" ]]; then
   cat <<JSON
 {
   "timestamp": "$TIMESTAMP",
-  "actor": "$ACTOR",
-  "branch": "$BRANCH",
+  "actor": "$(json_esc "$ACTOR")",
+  "branch": "$(json_esc "$BRANCH")",
   "delta": {
     "files_changed": $FILES_CHANGED,
     "files_added": $FILES_ADDED,
