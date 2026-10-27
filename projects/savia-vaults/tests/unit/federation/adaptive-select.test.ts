@@ -1,118 +1,223 @@
+// SE-395 R02: guidance schema y selección determinista (AC02, AC03, AC04, AC05, AC06, AC13).
 import { describe, it, expect } from 'vitest';
-import { parseGuidance, GUIDANCE_LIMITS } from '../../../src/federation/adaptive/guidance.js';
-import { selectRoute, ADAPTIVE_FLAGS_DEFAULT, type Candidate } from '../../../src/federation/adaptive/select.js';
+import { parseGuidance, GUIDANCE_LIMITS, DEFAULT_FLAGS } from '../../../src/federation/adaptive/guidance.js';
+import { selectDestinations, type SelectionInput } from '../../../src/federation/adaptive/select.js';
 
-const cands: Candidate[] = [
-  { id: 'local', weight: 1, local: true, healthy: true },
-  { id: 'hr', weight: 0.5, local: false, healthy: true },
-  { id: 'fin', weight: 0.6, local: false, healthy: true },
-  { id: 'ops', weight: 0.4, local: false, healthy: true },
-  { id: 'legal', weight: 0.9, local: false, healthy: false },
-];
-const all = ['local', 'hr', 'fin', 'ops', 'legal'];
-const budget = { maxVaults: 3, maxRemoteCalls: 3 };
-const guidance = { version: 1, cues: [
-  { dome: 'hr', attracts: ['vacaciones'], repels: [], specialties: ['nomina'] },
-  { dome: 'fin', attracts: ['factura'], repels: ['vacaciones'], specialties: [] },
-] };
-const on = { adaptive: true };
-
-describe('SE-395 R02 guidance schema (AC02)', () => {
-  it('acepta un cue válido y normaliza términos', () => {
-    const r = parseGuidance({ version: 1, cues: [{ dome: 'a', attracts: [' Foo '], repels: [], specialties: [] }] });
-    expect(r.ok && r.guidance.cues[0].attracts).toEqual(['foo']);
-  });
-  it.each([
-    ['no objeto', 'x'], ['versión', { version: 2, cues: [] }], ['campo desconocido top', { version: 1, cues: [], extra: 1 }],
-    ['campo desconocido cue', { version: 1, cues: [{ dome: 'a', trust: 1 }] }], ['peso NaN', { version: 1, cues: [{ dome: 'a', weight: NaN }] }],
-    ['peso Infinity', { version: 1, cues: [{ dome: 'a', weight: Infinity }] }], ['peso fuera de rango', { version: 1, cues: [{ dome: 'a', weight: 2 }] }],
-    ['dome duplicado', { version: 1, cues: [{ dome: 'a' }, { dome: 'a' }] }], ['término vacío', { version: 1, cues: [{ dome: 'a', attracts: [''] }] }],
-    ['término largo', { version: 1, cues: [{ dome: 'a', attracts: ['x'.repeat(GUIDANCE_LIMITS.maxTermLength + 1)] }] }],
-    ['demasiados términos', { version: 1, cues: [{ dome: 'a', repels: Array(GUIDANCE_LIMITS.maxTermsPerList + 1).fill('x') }] }],
-    ['demasiados cues', { version: 1, cues: Array.from({ length: GUIDANCE_LIMITS.maxCues + 1 }, (_, i) => ({ dome: `d${i}` })) }],
-  ])('rechaza: %s', (_n, input) => { expect(parseGuidance(input).ok).toBe(false); });
+const dome = (id: string, weight = 1, status: 'healthy' | 'unhealthy' = 'healthy') => ({ id, weight, status, enabled: true });
+const g = (cues: unknown[]) => ({ version: 1, cues });
+const base = (over: Partial<SelectionInput> = {}): SelectionInput => ({
+  query: 'rotación claves cifrado', allowedDomeIds: ['local', 'a', 'b', 'c', 'd'],
+  domes: [dome('a'), dome('b'), dome('c'), dome('d')], guidance: g([]),
+  budget: { maxVaults: 3, maxRemoteCalls: 3 }, flags: { adaptive: true }, ...over,
 });
 
-describe('SE-395 R02 selección', () => {
-  it('AC01: flags por defecto en false y sin flag devuelve el baseline por peso', () => {
-    expect(Object.values(ADAPTIVE_FLAGS_DEFAULT).every(v => v === false)).toBe(true);
-    const s = selectRoute({ query: 'vacaciones', candidates: cands, allowedIds: all, guidance, budget });
-    expect(s).toMatchObject({ mode: 'baseline', fallbackReason: 'flag_off', selected: ['local', 'fin', 'hr'] });
+describe('guidance schema', () => {
+  it('acepta un documento válido y normaliza términos', () => {
+    const r = parseGuidance(g([{ vaultId: 'a', attracts: [{ term: 'Cifrado', score: 0.5 }], repels: [], specialties: ['Claves'] }]));
+    expect(r.ok).toBe(true);
+    if (r.ok) { expect(r.guidance.cues[0].attracts[0].term).toBe('cifrado'); expect(r.guidance.cues[0].specialties).toEqual(['claves']); }
   });
-
-  it('AC03: un destino denegado no se puntúa ni se selecciona, aunque su cue lo atraiga al máximo', () => {
-    const g = { version: 1, cues: [{ dome: 'hr', attracts: ['vacaciones', 'x'], specialties: ['vacaciones'], weight: 1 }] };
-    const s = selectRoute({ query: 'vacaciones x', candidates: cands, allowedIds: ['local', 'fin', 'ops'], guidance: g, budget, flags: on });
-    expect(s.selected).not.toContain('hr');
-    expect(s.scored.map(x => x.id)).not.toContain('hr');
-    expect(JSON.stringify(s)).not.toContain('hr"');
+  it('rechaza campos desconocidos en cualquier nivel', () => {
+    expect(parseGuidance({ ...g([]), extra: 1 }).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', trust: 1 }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', attracts: [{ term: 'x', score: 0.1, deny: true }] }])).ok).toBe(false);
   });
-
-  it('AC03: DENY no es un peso: autorizar el destino lo cambia de ausente a primero', () => {
-    const g = { version: 1, cues: [{ dome: 'hr', attracts: [], specialties: ['nomina'] }] };
-    const d = selectRoute({ query: 'nomina', candidates: cands, allowedIds: ['local', 'fin'], guidance: g, budget, flags: on });
-    const a = selectRoute({ query: 'nomina', candidates: cands, allowedIds: ['local', 'fin', 'hr'], guidance: g, budget, flags: on });
-    expect(d.selected).not.toContain('hr');
-    expect(a.scored[0].id).toBe('hr');
+  it('rechaza scores no finitos, fuera de rango y versión errónea', () => {
+    for (const s of [NaN, Infinity, -0.1, 1.1, '0.5']) expect(parseGuidance(g([{ vaultId: 'a', attracts: [{ term: 'x', score: s }] }])).ok).toBe(false);
+    expect(parseGuidance({ version: 2, cues: [] }).ok).toBe(false);
   });
-
-  it('AC03: un destino no sano no se selecciona aunque esté autorizado y atraído', () => {
-    const g = { version: 1, cues: [{ dome: 'legal', specialties: ['contrato'] }] };
-    const s = selectRoute({ query: 'contrato', candidates: cands, allowedIds: all, guidance: g, budget, flags: on });
-    expect(s.selected).not.toContain('legal');
+  it('aplica límites de tamaño y duplicados', () => {
+    const many = Array.from({ length: GUIDANCE_LIMITS.maxCues + 1 }, (_, i) => ({ vaultId: `v${i}` }));
+    expect(parseGuidance(g(many)).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: Array(GUIDANCE_LIMITS.maxTermsPerList + 1).fill('x') }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['x'.repeat(GUIDANCE_LIMITS.maxTermLength + 1)] }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a' }, { vaultId: 'a' }])).ok).toBe(false);
   });
-
-  it('AC04: atracción sube y repulsión baja el destino sin excluirlo', () => {
-    const s = selectRoute({ query: 'vacaciones nomina', candidates: cands, allowedIds: all, guidance, budget: { maxVaults: 5, maxRemoteCalls: 5 }, flags: on });
-    expect(s.mode).toBe('adaptive');
-    expect(s.scored[0].id).toBe('hr');
-    expect(s.selected).toContain('fin'); // repelido pero autorizado y con hueco
-    const fin = s.scored.find(x => x.id === 'fin')!;
-    expect(fin.matched.repels).toBe(1);
-    expect(fin.score).toBeLessThan(0.6);
+  it('no confía en entradas no objeto', () => {
+    for (const bad of [null, 'x', 3, [], undefined]) expect(parseGuidance(bad).ok).toBe(false);
   });
-
-  it('AC04: desempate estable por id y orden de entrada irrelevante', () => {
-    const tie: Candidate[] = [{ id: 'b', weight: 0.5, local: false, healthy: true }, { id: 'a', weight: 0.5, local: false, healthy: true }];
-    const g = { version: 1, cues: [{ dome: 'a', attracts: ['q'] }, { dome: 'b', attracts: ['q'] }] };
-    const r1 = selectRoute({ query: 'q', candidates: tie, allowedIds: ['a', 'b'], guidance: g, budget, flags: on });
-    const r2 = selectRoute({ query: 'q', candidates: [...tie].reverse(), allowedIds: ['b', 'a'], guidance: g, budget, flags: on });
-    expect(r1.selected).toEqual(['a', 'b']);
-    expect(r2).toEqual(r1);
+  it('flags por defecto: todos false y congelados', () => {
+    expect(Object.values(DEFAULT_FLAGS).every(v => v === false)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_FLAGS)).toBe(true);
   });
+});
 
-  it('AC05: el resultado es subconjunto de autorizados y sanos y respeta maxVaults y maxRemoteCalls', () => {
-    const s = selectRoute({ query: 'vacaciones factura', candidates: cands, allowedIds: ['local', 'hr', 'fin', 'legal'], guidance, budget: { maxVaults: 3, maxRemoteCalls: 1 }, flags: on });
-    expect(s.selected.length).toBeLessThanOrEqual(2); // local + 1 remoto
-    expect(s.selected.filter(i => i !== 'local').length).toBe(1);
-    for (const id of s.selected) expect(['local', 'hr', 'fin']).toContain(id);
+describe('selectDestinations', () => {
+  it('flag apagado = baseline: todos los autorizados y sanos, sin tope', () => {
+    const r = selectDestinations(base({ flags: {} }));
+    expect(r.mode).toBe('baseline');
+    expect(r.selected).toEqual(['local', 'a', 'b', 'c', 'd']);
   });
-
-  it('AC06: guidance inválida cae al baseline con policy y presupuesto', () => {
-    const s = selectRoute({ query: 'vacaciones', candidates: cands, allowedIds: ['local', 'hr', 'ops'], guidance: { version: 1, cues: [{ dome: 'hr', weight: NaN }] }, budget, flags: on });
-    expect(s).toMatchObject({ mode: 'baseline', fallbackReason: 'invalid_guidance', selected: ['local', 'hr', 'ops'] });
+  it('policy antes de score: un destino denegado jamás se puntúa ni se nombra, por alto que sea su cue', () => {
+    const guidance = g([{ vaultId: 'd', attracts: [{ term: 'cifrado', score: 1 }], specialties: ['claves'] }]);
+    const r = selectDestinations(base({ allowedDomeIds: ['local', 'a', 'b'], guidance }));
+    expect(r.selected).not.toContain('d');
+    expect(Object.keys(r.scores)).not.toContain('d');
+    expect(JSON.stringify(r)).not.toMatch(/"d"/);
+    expect(r.deniedCount).toBe(2);
   });
-
-  it('AC06: sin señal o sin guidance cae al baseline', () => {
-    expect(selectRoute({ query: 'zzz', candidates: cands, allowedIds: all, guidance, budget, flags: on }).fallbackReason).toBe('no_signal');
-    expect(selectRoute({ query: 'zzz', candidates: cands, allowedIds: all, budget, flags: on }).fallbackReason).toBe('no_guidance');
+  it('control positivo: el mismo cue sobre un destino autorizado sí lo prioriza', () => {
+    const guidance = g([{ vaultId: 'd', attracts: [{ term: 'cifrado', score: 1 }] }]);
+    const r = selectDestinations(base({ guidance }));
+    expect(r.selected[1]).toBe('d');
   });
-
-  it('AC06: fallback con presupuesto remoto agotado termina sin expansión (no broadcast)', () => {
-    const s = selectRoute({ query: 'x', candidates: cands.filter(c => !c.local), allowedIds: all, guidance: 'basura', budget: { maxVaults: 3, maxRemoteCalls: 3, remoteCallsUsed: 3 }, flags: on });
-    expect(s.selected).toEqual([]);
-    expect(s.termination).toBe('BUDGET_EXHAUSTED');
+  it('repulsión baja prioridad pero no deniega: con presupuesto holgado sigue elegible', () => {
+    const guidance = g([{ vaultId: 'a', repels: [{ term: 'cifrado', score: 1 }] }]);
+    const tight = selectDestinations(base({ guidance }));
+    expect(tight.selected).not.toContain('a');
+    expect(tight.scores.a).toBe(0);
+    const loose = selectDestinations(base({ guidance, budget: { maxVaults: 5, maxRemoteCalls: 4 } }));
+    expect(loose.selected).toContain('a');
   });
-
-  it('AC06: sin ningún destino autorizado termina en POLICY_BLOCK', () => {
-    const s = selectRoute({ query: 'x', candidates: cands, allowedIds: [], budget, flags: on });
-    expect(s).toMatchObject({ selected: [], termination: 'POLICY_BLOCK' });
+  it('selección ⊆ autorizados ∩ sanos y respeta el presupuesto', () => {
+    const r = selectDestinations(base({ domes: [dome('a'), dome('b', 1, 'unhealthy'), dome('c'), dome('d')] }));
+    expect(r.selected).not.toContain('b');
+    expect(r.skipped).toContainEqual({ id: 'b', reason: 'UNHEALTHY' });
+    // maxVaults 3 con local autorizado deja 2 remotos: el tope efectivo es 2, no 3.
+    expect(r.selected).toEqual(['local', 'a', 'c']);
+    expect(r.skipped).toContainEqual({ id: 'd', reason: 'BUDGET' });
   });
-
-  it('es pura: misma entrada, misma salida y no muta la entrada', () => {
-    const input = { query: 'vacaciones', candidates: cands, allowedIds: all, guidance, budget, flags: on };
+  it('local autorizado cuenta en maxVaults y no es desplazado', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: 2, maxRemoteCalls: 3 }, guidance: g([{ vaultId: 'c', attracts: [{ term: 'cifrado', score: 1 }] }]) }));
+    expect(r.selected).toEqual(['local', 'c']);
+  });
+  it('desempate estable por id y orden de entrada irrelevante', () => {
+    const a = selectDestinations(base());
+    const b = selectDestinations(base({ domes: [dome('d'), dome('c'), dome('b'), dome('a')] }));
+    expect(a.selected).toEqual(['local', 'a', 'b']);
+    expect(b).toEqual(a);
+  });
+  it('guidance inválida cae a federación existente con presupuesto, no a broadcast', () => {
+    const r = selectDestinations(base({ guidance: { version: 9 } }));
+    expect(r.mode).toBe('fallback');
+    expect(r.selected).toEqual(['local', 'a', 'b']);
+    expect(r.skipped).toContainEqual({ id: 'c', reason: 'BUDGET' });
+  });
+  it('fallback sin presupuesto restante termina sin expansión', () => {
+    const r = selectDestinations(base({ guidance: null, budget: { maxVaults: 1, maxRemoteCalls: 3 } }));
+    expect(r.selected).toEqual(['local']);
+    expect(r.termination).toBe('BUDGET_EXHAUSTED');
+  });
+  it('sin destinos autorizados: POLICY_BLOCK; sin sanos: NO_ROUTE', () => {
+    expect(selectDestinations(base({ allowedDomeIds: [] })).termination).toBe('POLICY_BLOCK');
+    const none = selectDestinations(base({ allowedDomeIds: ['a'], domes: [dome('a', 1, 'unhealthy')] }));
+    expect(none.termination).toBe('NO_ROUTE');
+    expect(none.selected).toEqual([]);
+  });
+  it('no muta la entrada', () => {
+    const input = base({ guidance: g([{ vaultId: 'a', attracts: [{ term: 'cifrado', score: 0.4 }] }]) });
     const snap = JSON.stringify(input);
-    expect(selectRoute(input)).toEqual(selectRoute(input));
+    selectDestinations(input);
     expect(JSON.stringify(input)).toBe(snap);
+  });
+});
+
+describe('revisión #1382', () => {
+  it('degraded es elegible como en registry.getHealthy; unhealthy no (apagado y encendido)', () => {
+    const domes = [{ id: 'a', weight: 1, status: 'degraded' as const, enabled: true }, dome('b', 1, 'unhealthy')];
+    const off = selectDestinations(base({ domes, flags: {} }));
+    expect(off.selected).toEqual(['local', 'a']);
+    expect(off.skipped).toEqual([{ id: 'b', reason: 'UNHEALTHY' }]);
+    expect(selectDestinations(base({ domes })).selected).toEqual(['local', 'a']);
+  });
+  it('terminación coherente: presupuesto remoto 0 con sanos = BUDGET_EXHAUSTED', () => {
+    expect(selectDestinations(base({ budget: { maxVaults: 1, maxRemoteCalls: 3 } })).termination).toBe('BUDGET_EXHAUSTED');
+    expect(selectDestinations(base({ budget: { maxVaults: 1, maxRemoteCalls: 3 }, guidance: 'x' })).termination).toBe('BUDGET_EXHAUSTED');
+    expect(selectDestinations(base({ allowedDomeIds: ['a'], budget: { maxVaults: 0, maxRemoteCalls: 3 } })).termination).toBe('BUDGET_EXHAUSTED');
+  });
+  it('POLICY_BLOCK solo si nada está autorizado; autorizados no sanos = NO_ROUTE', () => {
+    expect(selectDestinations(base({ allowedDomeIds: [] })).termination).toBe('POLICY_BLOCK');
+    expect(selectDestinations(base({ allowedDomeIds: ['a'], domes: [dome('a', 1, 'unhealthy'), dome('b')] })).termination).toBe('NO_ROUTE');
+  });
+  it('presupuesto NaN no expande nada (ni siquiera local, que cuenta en maxVaults)', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: NaN, maxRemoteCalls: NaN } }));
+    expect(r.selected).toEqual([]);
+    expect(r.termination).toBe('BUDGET_EXHAUSTED');
+  });
+  it('presupuesto Infinity es fail-closed: no significa «sin tope»', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: Infinity, maxRemoteCalls: Infinity } }));
+    expect(r.selected).toEqual([]);
+    expect(r.termination).toBe('BUDGET_EXHAUSTED');
+  });
+  it('BUDGET_EXHAUSTED sin seleccionados lista los sanos recortados como BUDGET, igual que fallback', () => {
+    const budget = { maxVaults: 0, maxRemoteCalls: 3 };
+    const allowedDomeIds = ['a', 'b', 'c', 'd'];
+    const ad = selectDestinations(base({ budget, allowedDomeIds }));
+    const fb = selectDestinations(base({ budget, allowedDomeIds, guidance: 'x' }));
+    expect(ad.selected).toEqual([]);
+    expect(ad.termination).toBe('BUDGET_EXHAUSTED');
+    expect(ad.skipped).toEqual(['a', 'b', 'c', 'd'].map(id => ({ id, reason: 'BUDGET' })));
+    expect(ad.skipped).toEqual(fb.skipped);
+  });
+  it('id de dome repetido cuenta una vez: no se selecciona dos veces ni gasta presupuesto doble', () => {
+    const r = selectDestinations(base({ domes: [dome('a', 5), dome('a', 5), dome('b'), dome('c')], allowedDomeIds: ['local', 'a', 'b', 'c'] }));
+    expect(r.selected).toEqual(['local', 'a', 'b']);
+    expect(new Set(r.selected).size).toBe(r.selected.length);
+  });
+  it("un id '__proto__' es una clave propia de scores, no reasigna el prototipo", () => {
+    const r = selectDestinations(base({ domes: [dome('__proto__', 2), dome('a')], allowedDomeIds: ['local', '__proto__', 'a'] }));
+    expect(Object.prototype.hasOwnProperty.call(r.scores, '__proto__')).toBe(true);
+    expect(r.scores['__proto__']).toBe(2);
+    expect(r.selected).toEqual(['local', '__proto__', 'a']);
+  });
+  it('términos duplicados, con espacios o puntuación se rechazan', () => {
+    const dup = Array.from({ length: 16 }, () => ({ term: 'x', score: 1 }));
+    expect(parseGuidance(g([{ vaultId: 'a', attracts: dup }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', attracts: [{ term: 'a b', score: 1 }] }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['c++'] }])).ok).toBe(false);
+  });
+});
+
+
+describe('revisión #1382 (fix1382c)', () => {
+  const unknown = { id: 'a', weight: 5, status: 'unknown' as const, enabled: true };
+  it("'unknown' no es elegible, como en registry.getHealthy (apagado y encendido)", () => {
+    const domes = [unknown, dome('b'), dome('c')];
+    const off = selectDestinations(base({ domes, flags: {} }));
+    expect(off.selected).toEqual(['local', 'b', 'c']);
+    expect(off.skipped).toEqual([{ id: 'a', reason: 'UNHEALTHY' }]);
+    const on = selectDestinations(base({ domes, guidance: g([{ vaultId: 'a', attracts: [{ term: 'cifrado', score: 1 }] }]) }));
+    expect(on.selected).not.toContain('a');
+    expect(Object.keys(on.scores)).not.toContain('a');
+    expect(selectDestinations(base({ domes, guidance: 'x' })).selected).not.toContain('a');
+  });
+  it('fallback y adaptive dan la misma terminación con la selección vacía', () => {
+    for (const over of [{ allowedDomeIds: [] }, { allowedDomeIds: ['a'], domes: [dome('a', 1, 'unhealthy')] }, { allowedDomeIds: ['a'], budget: { maxVaults: 0, maxRemoteCalls: 3 } }]) {
+      const ad = selectDestinations(base(over));
+      const fb = selectDestinations(base({ ...over, guidance: 'x' }));
+      expect(fb.mode).toBe('fallback');
+      expect(fb.selected).toEqual([]);
+      expect(fb.termination).not.toBeNull();
+      expect(fb.termination).toBe(ad.termination);
+    }
+    expect(selectDestinations(base({ allowedDomeIds: [], guidance: 'x' })).termination).toBe('POLICY_BLOCK');
+  });
+  it('maxVaults 0 o negativo: local tampoco entra y figura como BUDGET', () => {
+    for (const maxVaults of [0, -1]) {
+      for (const guidance of [g([]), 'x']) {
+        const r = selectDestinations(base({ budget: { maxVaults, maxRemoteCalls: 3 }, guidance }));
+        expect(r.selected).toEqual([]);
+        expect(r.skipped).toContainEqual({ id: 'local', reason: 'BUDGET' });
+        expect(r.termination).toBe('BUDGET_EXHAUSTED');
+      }
+    }
+  });
+  it('cada tope infinito vale 0 por separado: Infinity en maxVaults no deja pasar maxRemoteCalls', () => {
+    const r = selectDestinations(base({ budget: { maxVaults: Infinity, maxRemoteCalls: 3 } }));
+    expect(r.selected).toEqual([]);
+  });
+  it('weight NaN o negativo cuenta como 0: orden total y determinista', () => {
+    const domes = [dome('a', NaN), dome('b', -3), dome('c', 1), dome('d', 1)];
+    const r = selectDestinations(base({ domes }));
+    expect(r.scores.a).toBe(0);
+    expect(r.scores.b).toBe(0);
+    expect(r.selected).toEqual(['local', 'c', 'd']);
+    const perm = selectDestinations(base({ domes: [domes[2], domes[0], domes[3], domes[1]] }));
+    expect(perm).toEqual(r);
+    expect(selectDestinations(base({ domes, guidance: 'x' })).selected).toEqual(['local', 'c', 'd']);
+  });
+  it('specialties duplicadas se rechazan como en attracts/repels', () => {
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['claves', 'Claves'] }])).ok).toBe(false);
+    expect(parseGuidance(g([{ vaultId: 'a', specialties: ['claves', 'cifrado'] }])).ok).toBe(true);
   });
 });

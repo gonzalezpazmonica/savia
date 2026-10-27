@@ -1,6 +1,6 @@
-# SE-395 — Protocolo preregistrado de conectividad adaptativa (R00 + R01)
+# SE-395 — Protocolo preregistrado de conectividad adaptativa (R00–R04)
 
-> Estado: F0 y F1 entregadas. Ninguna fase adaptativa está implementada ni activada.
+> Estado: F0–F3 entregadas como código de medida. El router existe como módulo puro pero no está conectado a `FederatedSearchEngine` ni activado.
 > Spec: `docs/specs/SE-395-vaults-adaptive-connectivity.spec.md`. Los flags
 > `adaptive`, `pioneer`, `plasticity` y `exploration` siguen en `false`.
 
@@ -131,22 +131,62 @@ prepararse en rama, pero no se declara GO hasta cerrar esas dos condiciones. No 
 adaptativo mejore nada: el baseline ya tiene recall 0,92 con 2,8 llamadas
 remotas por consulta, y esa es la única cifra que F2–F3 deben batir.
 
-## 8. R02 — schema de guidance y selección pura (F2, parte estática)
+## 8. R02 — guidance y selección determinista
 
-Entregado en `src/federation/adaptive/{guidance,select}.ts`, sin cablear en
-`FederatedSearchEngine` (el shadow es R03). Los cuatro flags siguen en `false`;
-con `adaptive=false` la selección devuelve el baseline por peso.
+`src/federation/adaptive/guidance.ts` (schema v1: `attracts`/`repels` con score finito en [0,1], `specialties`;
+rechaza campos desconocidos, listas largas, duplicados —también en `specialties`— y versión distinta) y `select.ts`
+(`selectDestinations`, función pura). Orden fijo: policy → salud → score → presupuesto. Un destino denegado
+no se puntúa ni se nombra en el resultado (solo `deniedCount`). La repulsión baja prioridad pero no deniega.
+Salud: elegible solo `healthy` o `degraded` y habilitado, igual que `registry.getHealthy()` (`unknown` no entra).
+`local` autorizado va primero y cuenta en `maxVaults`: con `maxVaults` 0 tampoco entra (`skipped` como `BUDGET`).
+Cada tope NaN, Infinity o negativo vale 0 (fail-closed); un `weight` no finito o negativo vale 0. Desempate por id.
+Con `adaptive=false` devuelve exactamente el baseline. Guidance inválida → federación existente limitada al
+presupuesto restante (`mode: 'fallback'`), nunca broadcast. Fallback y adaptive comparten la terminación
+(`POLICY_BLOCK`, `BUDGET_EXHAUSTED`, `NO_ROUTE`): nunca `null` con la selección vacía.
 
-| AC | Cobertura (tests en `tests/unit/federation/adaptive-select.test.ts`) |
-|---|---|
-| AC01 | flags por defecto `false`; sin flag, selección = baseline |
-| AC02 | `parseGuidance`: schema cerrado, versión, límites de tamaño, pesos finitos, duplicados |
-| AC03 | policy y salud filtran antes del score; un destino denegado no entra en `scored` ni en `selected` |
-| AC04 | atracción/especialidad suben, repulsión baja sin excluir; desempate por id; orden de entrada irrelevante |
-| AC05 | resultado ⊆ autorizados ∩ sanos; respeta `maxVaults` y `maxRemoteCalls` |
-| AC06 | guidance ausente/inválida/sin señal -> baseline con policy y presupuesto restante; presupuesto agotado -> sin expansión |
+## 9. R03 — shadow
 
-Constantes del score (`SCORE`: attract 1, specialty 2, repel 1,5) fijadas antes de
-cualquier holdout. Límites: es una función pura sin evidencia de mejora; no hay
-medición contra el baseline hasta R03/R04. La decisión de fase sigue siendo
-`NEEDS_MORE_EVIDENCE` (§7).
+`runShadow` invoca el baseline exactamente una vez y calcula la selección del challenger sin red.
+El receipt (`counterfactual-estimate`) lleva un `queryId` UUID v4 generado dentro de `runShadow` con `randomUUID()`
+(el llamante no lo aporta y no deriva de la consulta), hash de
+configuración, destinos visitados/omitidos autorizados y la estimación de llamadas ahorradas y de resultados
+del baseline que vendrían de destinos omitidos. Es una estimación, no ahorro demostrado. No incluye la consulta.
+
+## 10. R04 — A/B aislado y decisión
+
+`benchmark/ab.ts` ejecuta baseline y challenger sobre el mismo snapshot sin red (`ab-run.ts [split]`). La guidance
+estática sale solo del split `train`; el router solo recibe consulta, policy y salud (sin etiquetas). Reglas de
+decisión añadidas **antes** de ejecutar el holdout y separadas de `GATE_THRESHOLDS`: ≥100 pares para GO o NO_GO por
+gates; exposición > 0 es NO_GO con cualquier muestra; bootstrap pareado seed 395, 2000 remuestreos, IC 95 %.
+
+Resultado (una sola ejecución del holdout `test`, 45 pares, sin ajustes posteriores):
+
+| Gate | Calibration | Test | Umbral |
+|---|---|---|---|
+| Reducción de llamadas remotas | 0,28 | 0,28 | ≥ 0,30 |
+| Reducción de contexto irrelevante | 0,196 | 0,244 | ≥ 0,25 |
+| Recall delta (cota inferior IC) | −0,129 | −0,800 | ≥ −0,02 |
+| Provenance / p95 | pasa | pasa | — |
+| Exposición | 0 (invariante) | 0 (invariante) | 0 |
+| Densidad de contexto útil | 1,05× | 0,43× | ≥ 1,20× |
+
+La exposición 0 del challenger no es evidencia: `makeRouter` solo elige dentro de `allowedVaults` por construcción.
+El gate discrimina con un `route` arbitrario (control negativo en `adaptive-ab.test.ts`).
+
+Decisión formal: **NEEDS_MORE_EVIDENCE** (45 < 100 pares). Lectura honesta: en test el recall medio cae 0,69 y el
+IC 95 % (−0,80 a −0,57) queda muy por debajo de −0,02; con los datos actuales este challenger estático **no es
+defendible** y la recomendación es NO-GO para esa variante. Causa: la guidance de train no conoce los tópicos
+nuevos de test (anclas inéditas y vault de origen distinto), así que el presupuesto recorta el vault de menor peso
+por defecto. No se cambió ninguna regla ni umbral tras ver el holdout; ampliar a ≥100 pares o proponer otro
+challenger exige un holdout nuevo.
+
+## 11. Estado de AC
+
+AC01–AC06 (schema, policy antes de score, atracción/repulsión, subconjunto, fallback): cubiertos por
+`adaptive-select.test.ts`. AC13 (presupuestos) y AC14 (un salto: solo destinos registrados) en `select`.
+AC15 (receipts) parcial: receipt de shadow, sin integración con el store de evidencia existente. AC16 (explain
+"why this/why not") **no hecho**. AC17–AC20: A/B reproducible, coste+calidad y adversarial hechos; apagado =
+baseline probado en benchmark. AC07–AC12 (pioneer, pesos aprendidos, dormancy) **diferidos**: R04 no justifica GO.
+
+> En el benchmark se ejecuta siempre `route(q) ∩ allowedVaults`; cada id que el router proponga fuera de la policy
+> cuenta como exposición aunque no se consulte. La integración en producción debe imponer la misma intersección.

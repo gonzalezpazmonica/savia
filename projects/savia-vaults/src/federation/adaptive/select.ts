@@ -1,90 +1,120 @@
-// SE-395 R02 — selección pura y determinista de destinos. No abre red, no usa reloj ni azar.
-// Orden obligatorio: policy -> salud -> score -> subconjunto. DENY nunca es un peso negativo:
-// un destino no autorizado no entra en el scoring ni deja rastro en la decisión.
-import { parseGuidance, type DomeCue } from './guidance.js';
+// SE-395 R02 — selección determinista y pura de destinos. Orden obligatorio:
+// 1) policy (allowedDomeIds) 2) salud 3) score 4) presupuesto. DENY nunca entra al score.
+import type { FederatedDome } from '../types.js';
+import { DEFAULT_FLAGS, parseGuidance, type AdaptiveFlags, type VaultCue } from './guidance.js';
 
-export interface AdaptiveFlags { adaptive: boolean; pioneer: boolean; plasticity: boolean; exploration: boolean; }
-export const ADAPTIVE_FLAGS_DEFAULT: Readonly<AdaptiveFlags> = Object.freeze({ adaptive: false, pioneer: false, plasticity: false, exploration: false });
-
+// Presupuesto finito obligatorio: cada tope NaN, Infinity o negativo se trata como 0 (fail-closed), nunca como «sin tope».
+export interface SelectionBudget { maxVaults: number; maxRemoteCalls: number; }
 export type Termination = 'ANSWER_SUFFICIENT' | 'BUDGET_EXHAUSTED' | 'POLICY_BLOCK' | 'NO_ROUTE' | 'CONFLICT' | 'TIMEOUT' | 'UNKNOWN';
-export interface Candidate { id: string; weight: number; local: boolean; healthy: boolean; tags?: string[]; }
-export interface SelectionBudget { maxVaults: number; maxRemoteCalls: number; remoteCallsUsed?: number; }
+export type SkipReason = 'UNHEALTHY' | 'BUDGET';
+
 export interface SelectionInput {
   query: string;
-  candidates: Candidate[];
-  allowedIds: string[];
-  guidance?: unknown;
+  allowedDomeIds: string[];
+  /** Destinos remotos registrados (cualquier estado); 'local' no figura aquí. */
+  domes: Array<Pick<FederatedDome, 'id' | 'weight' | 'status' | 'enabled'>>;
+  guidance: unknown;
   budget: SelectionBudget;
   flags?: Partial<AdaptiveFlags>;
 }
-export interface ScoredCandidate { id: string; score: number; matched: { attracts: number; repels: number; specialties: number }; }
-export interface Selection {
-  mode: 'adaptive' | 'baseline';
-  fallbackReason: 'flag_off' | 'no_guidance' | 'invalid_guidance' | 'no_signal' | null;
+export interface SelectionResult {
+  mode: 'baseline' | 'adaptive' | 'fallback';
+  /** Orden de consulta: 'local' primero si está autorizado, después remotos por score. */
   selected: string[];
-  scored: ScoredCandidate[];
+  /** Solo destinos autorizados: nunca se nombra un destino denegado por policy. */
+  skipped: Array<{ id: string; reason: SkipReason }>;
+  deniedCount: number;
+  scores: Record<string, number>;
   termination: Termination | null;
+  reasons: string[];
 }
 
-// Constantes del score, fijadas antes de cualquier holdout.
-export const SCORE = { attract: 1, specialty: 2, repel: 1.5 } as const;
+const tokens = (s: string): Set<string> => new Set(s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean));
+const byIdAsc = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-export const tokenize = (s: string): string[] => s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-const byScoreThenId = (a: { id: string; score: number }, b: { id: string; score: number }): number => b.score - a.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-
-function matches(termsList: string[], tokens: Set<string>): number {
-  let n = 0;
-  for (const t of termsList) if (tokenize(t).some(x => tokens.has(x))) n++;
-  return n;
+// Score = peso configurado * (1 + atracción + especialidad - repulsión), acotado a >= 0.
+// La repulsión baja prioridad pero no deniega: si el presupuesto sobra el destino sigue elegible.
+function score(weight: number, cue: VaultCue | undefined, q: Set<string>): number {
+  if (!cue) return weight;
+  const sum = (l: Array<{ term: string; score: number }>): number => l.reduce((s, t) => s + (q.has(t.term) ? t.score : 0), 0);
+  const spec = cue.specialties.filter(t => q.has(t)).length * 0.5;
+  return Math.max(0, weight * (1 + sum(cue.attracts) + spec - sum(cue.repels)));
 }
 
-// Capacidad restante: local no consume llamadas remotas; los remotos se cortan a lo que queda.
-function applyBudget(ordered: Candidate[], b: SelectionBudget): { ids: string[]; exhausted: boolean } {
-  const remoteLeft = Math.max(0, b.maxRemoteCalls - (b.remoteCallsUsed ?? 0));
-  const ids: string[] = []; let remote = 0; let exhausted = false;
-  for (const c of ordered) {
-    if (ids.length >= b.maxVaults) break;
-    if (!c.local) { if (remote >= remoteLeft) { exhausted = true; continue; } remote++; }
-    ids.push(c.id);
+// Elegible = habilitado y 'healthy' | 'degraded', exactamente registry.getHealthy(): 'unknown' tampoco lo consulta el motor real.
+const eligible = (d: Pick<FederatedDome, 'status' | 'enabled'>): boolean => d.enabled && (d.status === 'healthy' || d.status === 'degraded');
+// Peso de configuración local: no finito o negativo cuenta como 0 para que el orden sea total y determinista.
+const safeWeight = (w: number): number => (Number.isFinite(w) && w > 0 ? w : 0);
+// Cada tope por separado: no finito (NaN, Infinity) o negativo es 0. Fail-closed, nunca «sin tope».
+const cap = (n: number): number => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+
+// Baseline de la federación actual: todo destino autorizado y elegible, sin tope propio.
+function baselineIds(i: SelectionInput): { ids: string[]; denied: number; skipped: SelectionResult['skipped'] } {
+  const allowed = new Set(i.allowedDomeIds);
+  const skipped: SelectionResult['skipped'] = [];
+  const ids: string[] = [];
+  let denied = 0;
+  const seen = new Set<string>();
+  for (const d of [...i.domes].sort((a, b) => byIdAsc(a.id, b.id))) {
+    // Un id repetido se cuenta una sola vez: no puede gastar presupuesto doble ni seleccionarse dos veces.
+    if (seen.has(d.id)) continue;
+    seen.add(d.id);
+    if (!allowed.has(d.id)) { denied++; continue; }
+    if (!eligible(d)) { skipped.push({ id: d.id, reason: 'UNHEALTHY' }); continue; }
+    ids.push(d.id);
   }
-  return { ids, exhausted };
+  return { ids, denied, skipped };
 }
 
-export function selectRoute(input: SelectionInput): Selection {
-  const flags: AdaptiveFlags = { ...ADAPTIVE_FLAGS_DEFAULT, ...input.flags };
-  // 1) Policy antes de cualquier observación del contenido de los candidatos.
-  const allowed = new Set(input.allowedIds);
-  const authorised = input.candidates.filter(c => allowed.has(c.id));
-  // 2) Salud.
-  const usable = authorised.filter(c => c.healthy);
-  const base = [...usable].sort((a, b) => b.weight - a.weight || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+// Misma terminación para adaptive y fallback. POLICY_BLOCK: la policy deja fuera todo y no hay nada autorizado;
+// BUDGET_EXHAUSTED: había destinos elegibles (o local) y el presupuesto los recortó todos; NO_ROUTE: nada elegible.
+function terminate(selected: string[], base: ReturnType<typeof baselineIds>, remoteBudget: number, localAllowed: boolean, localKept: boolean): Termination | null {
+  const remoteCut = remoteBudget === 0 && base.ids.length > 0;
+  if (selected.length > 0) return remoteCut ? 'BUDGET_EXHAUSTED' : null;
+  const authorized = base.ids.length + base.skipped.length + (localAllowed ? 1 : 0);
+  if (base.denied > 0 && authorized === 0) return 'POLICY_BLOCK';
+  return remoteCut || (localAllowed && !localKept) ? 'BUDGET_EXHAUSTED' : 'NO_ROUTE';
+}
 
-  const baseline = (reason: Selection['fallbackReason']): Selection => {
-    const { ids, exhausted } = applyBudget(base, input.budget);
-    // Fallback: federación existente con la policy y el presupuesto restantes; sin garantía -> sin expansión.
-    const termination: Termination | null = usable.length === 0 ? (authorised.length === 0 && input.candidates.length > 0 ? 'POLICY_BLOCK' : 'NO_ROUTE') : ids.length === 0 && exhausted ? 'BUDGET_EXHAUSTED' : null;
-    return { mode: 'baseline', fallbackReason: reason, selected: ids, scored: [], termination };
-  };
+export function selectDestinations(input: SelectionInput): SelectionResult {
+  const flags = { ...DEFAULT_FLAGS, ...input.flags };
+  const allowed = new Set(input.allowedDomeIds);
+  const localAllowed = allowed.has('local');
+  const base = baselineIds(input);
+  if (!flags.adaptive) {
+    return { mode: 'baseline', selected: [...(localAllowed ? ['local'] : []), ...base.ids], skipped: base.skipped, deniedCount: base.denied, scores: {}, termination: null, reasons: ['adaptive=false'] };
+  }
 
-  if (!flags.adaptive) return baseline('flag_off');
-  if (input.guidance === undefined) return baseline('no_guidance');
+  const maxVaults = cap(input.budget.maxVaults);
+  // 'local' cuenta en maxVaults: con maxVaults 0 tampoco entra (se informa como BUDGET).
+  const localKept = localAllowed && maxVaults >= 1;
+  const head = localKept ? ['local'] : [];
+  const localSkip = localAllowed && !localKept ? [{ id: 'local', reason: 'BUDGET' as const }] : [];
+  const remoteBudget = Math.min(cap(input.budget.maxRemoteCalls), maxVaults - head.length);
+  const weightOf = (id: string): number => safeWeight(input.domes.find(d => d.id === id)!.weight);
   const parsed = parseGuidance(input.guidance);
-  if (!parsed.ok) return baseline('invalid_guidance');
+  if (!parsed.ok) {
+    // Fallo adaptativo -> federación existente con policy y presupuesto restante, nunca broadcast ilimitado.
+    const capped = [...base.ids].sort((a, b) => weightOf(b) - weightOf(a) || byIdAsc(a, b)).slice(0, remoteBudget);
+    const skipped = [...localSkip, ...base.skipped, ...base.ids.filter(id => !capped.includes(id)).map(id => ({ id, reason: 'BUDGET' as const }))];
+    const selected = [...head, ...capped];
+    return { mode: 'fallback', selected, skipped, deniedCount: base.denied, scores: {}, termination: terminate(selected, base, remoteBudget, localAllowed, localKept), reasons: ['guidance inválida', ...parsed.errors.slice(0, 5)] };
+  }
 
-  // 3) Score solo sobre autorizados y sanos.
-  const cues = new Map<string, DomeCue>(parsed.guidance.cues.map(c => [c.dome, c]));
-  const tokens = new Set(tokenize(input.query));
-  const scored: ScoredCandidate[] = usable.map(c => {
-    const cue = cues.get(c.id);
-    const matched = cue ? { attracts: matches(cue.attracts, tokens), repels: matches(cue.repels, tokens), specialties: matches(cue.specialties, tokens) } : { attracts: 0, repels: 0, specialties: 0 };
-    const signal = matched.attracts * SCORE.attract + matched.specialties * SCORE.specialty - matched.repels * SCORE.repel;
-    const score = c.weight + (cue?.weight ?? 1) * signal;
-    return { id: c.id, score: Number.isFinite(score) ? score : c.weight, matched };
-  }).sort(byScoreThenId);
-  if (scored.every(s => s.matched.attracts + s.matched.repels + s.matched.specialties === 0)) return baseline('no_signal');
-
-  // 4) Subconjunto bajo presupuesto. Repeler baja el score, nunca excluye por sí solo.
-  const order = scored.map(s => usable.find(c => c.id === s.id)!);
-  const { ids, exhausted } = applyBudget(order, input.budget);
-  return { mode: 'adaptive', fallbackReason: null, selected: ids, scored, termination: ids.length === 0 ? (exhausted ? 'BUDGET_EXHAUSTED' : 'NO_ROUTE') : null };
+  const q = tokens(input.query);
+  const cues = new Map(parsed.guidance.cues.map(c => [c.vaultId, c]));
+  // La policy ya filtró: solo destinos autorizados y sanos llegan al score.
+  // Sin prototipo: un id como '__proto__' es una clave más, no reasigna el prototipo.
+  const scores: Record<string, number> = Object.create(null) as Record<string, number>;
+  const ranked = base.ids.map(id => {
+    const s = score(weightOf(id), cues.get(id), q);
+    scores[id] = s;
+    return { id, s };
+  }).sort((a, b) => b.s - a.s || byIdAsc(a.id, b.id));
+  const chosen = ranked.slice(0, remoteBudget);
+  const skipped = [...localSkip, ...base.skipped, ...ranked.slice(remoteBudget).map(r => ({ id: r.id, reason: 'BUDGET' as const }))];
+  const selected = [...head, ...chosen.map(c => c.id)];
+  const termination = terminate(selected, base, remoteBudget, localAllowed, localKept);
+  // Mismo `skipped` en ambas ramas: con presupuesto 0 los sanos recortados figuran como BUDGET, igual que en fallback.
+  return { mode: 'adaptive', selected, skipped, deniedCount: base.denied, scores, termination, reasons: selected.length === 0 ? ['sin destinos elegibles'] : [] };
 }

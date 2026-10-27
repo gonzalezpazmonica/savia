@@ -6,6 +6,90 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-27 SE-463 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-446 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-462 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-467 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-465 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-466 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-454 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-458 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-459 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-461 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-457 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-401 APPROVED
+
+operadora, AskUserQuestion 2026-10-27 (alcance aprobado: solo F0, de solo lectura)
+
+## 2026-10-27 SE-443 APPROVED
+
+operadora, AskUserQuestion 2026-10-27 (alcance aprobado: S1-S2)
+
+## 2026-10-27 SE-449 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-460 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-448 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-447 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-450 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-408 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-409 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-452 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
 ## 2026-10-24 SE-467 PROPOSED
 
 Alta desde la medición de la decisión D2 de SE-456 (sesgo de idioma del auditor de tests)
