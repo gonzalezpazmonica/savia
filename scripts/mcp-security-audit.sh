@@ -105,7 +105,9 @@ emit_result() {
   fi
 }
 
-if ! command -v python3 >/dev/null 2>&1; then
+# Se prueba que python3 arranque, no solo que exista: un shim de pyenv sin versión o un venv roto
+# pasan `command -v` y luego cada config saldría como un falso MCP-00.
+if ! python3 -c '' >/dev/null 2>&1; then
   echo "ERROR: python3 no disponible; no se puede auditar ninguna configuración MCP." >&2
   add_gap "python3:missing_tool"
   GATE_UNMEASURED_ROOT="$PROJECT_ROOT" gate_unmeasured_record "mcp-security-audit" missing_tool
