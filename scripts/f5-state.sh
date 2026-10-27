@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # f5-state.sh — SE-387 C/F5: máquina de estados exactly-once para pr.merge.
-# Estados: reserved -> submitted (merge solicitado) -> closed (MERGED real).
+# Estados: reserved -> submitted (merge solicitado) -> closed (MERGED real); release borra una reserva no consumada.
 # Reglas: closed => ALREADY_EXECUTED (exit 3). submitted/reserved => reanudable.
 # PR-state real via `gh pr view` (stub-able en tests con PATH).
 set -uo pipefail
 DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"; mkdir -p "$DIR"
 CMD="${1:-}"; OP="${2:-pr.merge}"; KEY="${3:-}"; F="$DIR/${OP}__${KEY}.json"
 
-pr_state() { gh pr view "$KEY" --json state -q .state 2>/dev/null || echo ""; }
+# SAVIA_GH_REPO: repo explícito (merge-sprint lo pasa); sin él, gh resuelve el repo por el directorio actual.
+pr_state() { gh pr view "$KEY" ${SAVIA_GH_REPO:+-R "$SAVIA_GH_REPO"} --json state -q .state 2>/dev/null || echo ""; }
 
 case "$CMD" in
   reserve)
@@ -40,7 +41,14 @@ case "$CMD" in
     fi
     jq -c '.state="closed" | .closed_at=(now|todate)' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
     echo "closed (receipt): $OP/$KEY"; exit 0 ;;
+  release)
+    # Efecto rechazado (p. ej. GitHub no aceptó el merge): la reserva se borra para que un merge
+    # posterior ajeno no se tome por propio. Nunca sobre closed ni si el PR real ya está MERGED.
+    [[ -f "$F" ]] || { echo "none: $OP/$KEY"; exit 0; }
+    [[ "$(jq -r .state "$F")" == "closed" ]] && { echo "BLOCK: $OP/$KEY closed — no se libera"; exit 2; }
+    [[ "$(pr_state)" == "MERGED" ]] && { echo "BLOCK: $OP/$KEY con PR MERGED — no se libera"; exit 2; }
+    rm -f "$F"; echo "released: $OP/$KEY"; exit 0 ;;
   status)
     [[ -f "$F" ]] && jq -r .state "$F" || echo "none"; exit 0 ;;
-  *) echo "uso: f5-state.sh reserve|mark_submitted|close|status [op] [key]"; exit 1 ;;
+  *) echo "uso: f5-state.sh reserve|mark_submitted|close|release|status [op] [key]"; exit 1 ;;
 esac
