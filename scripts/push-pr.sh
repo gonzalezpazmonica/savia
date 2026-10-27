@@ -5,6 +5,8 @@
 # (--draft kept for backward compat; it's a no-op since draft is now default.)
 set -euo pipefail
 cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+# Raíz del repo (los pasos F5 la usan; sin definir, `set -u` abortaba el --merge).
+ROOT="$PWD"
 
 TITLE="" BODY="" DRAFT=true MERGE=false SKIP_CL=false SKIP_CI=false FROM_PR_PLAN=false
 while [[ $# -gt 0 ]]; do
@@ -168,8 +170,9 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
   GRANT_RES="pr:${PR_URL##*/}"
   if ! bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; then
     echo "ERROR: merge requires a vigente operator grant for $GRANT_RES." >&2
-    echo "  El permiso expreso debe registrarse antes (operator-grant.sh grant --scope merge --resource $GRANT_RES)." >&2
-    echo "  Sin autorizacion registrada, el PR queda en Draft y no se mergea." >&2
+    echo "  El grant se firma para un PR que ya existe: pide la firma para $GRANT_RES" >&2
+    echo "  (operator-grant.sh grant --scope merge --resource $GRANT_RES --context \"...\"), la operadora" >&2
+    echo "  la firma y se vuelve a ejecutar push-pr.sh --merge. Sin grant, el PR queda en Draft." >&2
     exit 1
   fi
   echo "  operator grant 'merge' vigente. Merge autorizado."
@@ -208,10 +211,12 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
       [[ "$R" == "GREEN" ]] && break; [[ "$R" == "FAIL" ]] && { echo "  CI failed."; exit 1; }
       echo "  ... ($((i*10))s)"
     done
-    [[ "$R" == "GREEN" ]] && curl -s -X PUT "https://api.github.com/repos/$REPO/pulls/$PR_NUM/merge" \
-      -H "Authorization: token $TOKEN" -d "{\"merge_method\":\"squash\",\"commit_title\":\"$TITLE\"}" \
-      | python3 -c "import sys,json;d=json.load(sys.stdin);print('  Merged.' if 'sha' in d else f'  Merge: {d}')" \
-      || echo "  CI timeout. Merge manually."
+    if [[ "$R" == "GREEN" ]]; then
+      MR=$(curl -s -X PUT "https://api.github.com/repos/$REPO/pulls/$PR_NUM/merge" \
+        -H "Authorization: token $TOKEN" -d "{\"merge_method\":\"squash\",\"commit_title\":\"$TITLE\"}" \
+        | python3 -c "import sys,json;d=json.load(sys.stdin);print('MERGED' if d.get('merged') or 'sha' in d else f'Merge: {d}')" 2>&1) || true
+      if [[ "$MR" == "MERGED" ]]; then echo "  Merged."; MERGED=true; else echo "  $MR"; fi
+    else echo "  CI timeout. Merge manually."; fi
   fi
   # F5: cerrar reservation solo tras merge real; en fallo queda "reserved"
   # (crash-safe: retry tras crash permite completar; retry tras close => ALREADY_EXECUTED)
@@ -227,9 +232,22 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
     [[ "$PR_STATE" == "MERGED" ]] && MERGED=true
   fi
   # SE-343: consume the merge grant after a successful merge (one-shot; id spent).
+  # Si consume falla (grant caducado entre medias, ledger no escribible), se
+  # revoca: revoke apunta el id aunque ya no valide. Nunca se informa de un
+  # consumo que no ocurrió.
   if $MERGED; then
-    bash scripts/operator-grant.sh consume --scope merge --resource "$GRANT_RES" >/dev/null 2>&1 || true
-    echo "  Merge grant consumed (one-shot)."
+    if bash scripts/operator-grant.sh consume --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; then
+      echo "  Merge grant consumed (one-shot)."
+    elif bash scripts/operator-grant.sh revoke --scope merge >/dev/null 2>&1; then
+      echo "WARNING: merge hecho, pero el grant de $GRANT_RES no se pudo consumir; revocado en su lugar." >&2
+    else
+      echo "WARNING: merge hecho, pero el grant de $GRANT_RES NO se pudo gastar ni revocar." >&2
+      echo "  Revócalo a mano: bash scripts/operator-grant.sh revoke --scope merge" >&2
+    fi
+  else
+    # Auto-merge diferido (gh --auto) o merge no confirmado: el grant no se
+    # gasta aquí; sigue ligado a este repo y PR hasta caducar (TTL 6 h).
+    echo "  Merge no confirmado todavía: el grant de $GRANT_RES no se ha gastado (caduca solo)."
   fi
 fi
 

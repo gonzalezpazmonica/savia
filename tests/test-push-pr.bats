@@ -126,8 +126,9 @@ res_dir_expr() { grep -oP '^\s*RES_DIR="\K[^"]+' "$PUSH_PR"; }
   grep -q 'GRANT_RES="pr:${PR_URL##\*/}"' "$PUSH_PR"
   grep -q 'operator-grant.sh check --scope merge --resource "$GRANT_RES"' "$PUSH_PR"
   grep -q 'operator-grant.sh consume --scope merge --resource "$GRANT_RES"' "$PUSH_PR"
-  # Ninguna llamada a check/revoke de merge sin recurso (revoke sin gastar el id permitía replay).
-  run grep -nE 'operator-grant.sh (check|revoke) --scope merge( |$)[^-]*$' "$PUSH_PR"
+  # Ninguna llamada a check de merge sin recurso. (revoke sin recurso sí: gasta
+  # el id del grant y de la petición; lo prueba test-operator-grant.bats.)
+  run grep -nE 'operator-grant.sh check --scope merge( |$)[^-]*$' "$PUSH_PR"
   [ "$status" -eq 1 ]
 }
 
@@ -180,6 +181,85 @@ GH
   run env PATH="$TESTDIR/bin:$PATH" bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog
   [ "$status" -eq 0 ]
   grep -q "pr create --title agent/x" "$GH_LOG"
+}
+
+# ── SE-343: --merge de extremo a extremo con gh y operator-grant simulados ──
+# operator-grant.sh falso: registra cada llamada y sale con OG_<ACCIÓN>_RC.
+make_merge_repo() {
+  local r
+  r=$(make_repo)
+  cat > "$r/scripts/operator-grant.sh" <<'OG'
+#!/usr/bin/env bash
+echo "$*" >> "$OG_LOG"
+case "$1" in
+  check) exit "${OG_CHECK_RC:-0}" ;;
+  consume) exit "${OG_CONSUME_RC:-0}" ;;
+  revoke) exit "${OG_REVOKE_RC:-0}" ;;
+esac
+exit 2
+OG
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$r/scripts/f5-state.sh"
+  # Riesgo bajo: el camino real (grant → tier → reserva F5 → merge).
+  printf 'import json\nprint(json.dumps({"tier": 1}))\n' > "$r/scripts/risk-tier.py"
+  printf '# Changelog\n\n## [1.2.3]\n- x\n' > "$r/CHANGELOG.md"
+  cat >> "$TESTDIR/bin/gh" <<'GH'
+case "$1 $2" in
+  "pr view") echo "${GH_STATE:-OPEN}" ;;
+esac
+exit 0
+GH
+  git -C "$r" add -A; git -C "$r" commit -qm "chore: stubs"
+  echo "$r"
+}
+
+run_merge() {
+  export GH_LOG="$TESTDIR/gh.log" OG_LOG="$TESTDIR/og.log"
+  : > "$GH_LOG"; : > "$OG_LOG"
+  cd "$1"
+  run env PATH="$TESTDIR/bin:$PATH" bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog --merge
+}
+
+@test "SE-343 --merge: sin grant para este PR no hay merge ni consumo (exit 1)" {
+  r=$(make_merge_repo)
+  OG_CHECK_RC=1 run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"vuelve a ejecutar push-pr.sh --merge"* ]]
+  grep -qx "check --scope merge --resource pr:42" "$OG_LOG"
+  run grep -c "pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  run grep -c "^consume" "$OG_LOG"
+  [ "$output" = "0" ]
+}
+
+@test "SE-343 --merge: con grant y merge confirmado se consume el grant de ESTE PR" {
+  r=$(make_merge_repo)
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q "pr merge 42 --squash --auto" "$GH_LOG"
+  grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
+  [[ "$output" == *"Merge grant consumed (one-shot)."* ]]
+}
+
+@test "SE-343 --merge: si consume falla no se informa de consumo y el grant se revoca" {
+  r=$(make_merge_repo)
+  GH_STATE=MERGED OG_CONSUME_RC=1 run_merge "$r"
+  grep -qx "revoke --scope merge" "$OG_LOG"
+  [[ "$output" != *"Merge grant consumed"* ]]
+  [[ "$output" == *"revocado en su lugar"* ]]
+  # Y si tampoco se puede revocar, se dice.
+  GH_STATE=MERGED OG_CONSUME_RC=1 OG_REVOKE_RC=2 run_merge "$r"
+  [[ "$output" != *"Merge grant consumed"* ]]
+  [[ "$output" == *"NO se pudo gastar ni revocar"* ]]
+}
+
+@test "SE-343 --merge: auto-merge pendiente no gasta el grant ni dice que lo hizo" {
+  r=$(make_merge_repo)
+  GH_STATE=OPEN run_merge "$r"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"Merge grant consumed"* ]]
+  [[ "$output" == *"no se ha gastado"* ]]
+  run grep -c "^consume" "$OG_LOG"
+  [ "$output" = "0" ]
 }
 
 @test "pr-plan: success is detected by a /pull/N URL, not by any github.com line" {
