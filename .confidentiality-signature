@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=0df9d660ebb35d26a371f97cec535ec95552e46e58719de0adaef1d4441debc7
-timestamp=2026-10-27T07:47:47Z
+diff_hash=e5dda1e2bbe7d231f41ae36e6e1a4d53f565735940697a1ba270f20c85970e6c
+timestamp=2026-10-27T07:53:36Z
 branch=agent/hooks-stdin-failopen-20261026
-head_commit=59e2caa83
-signature=3b39cb0eed603b076c89898eca960cf1eb023361ad64f7fcf5a2ebd47947725d
+head_commit=276825d9
+signature=6bd0187c0c0aee89352fbcd46dede1e0959026a7709890f05fc4b3791dd7dc76
