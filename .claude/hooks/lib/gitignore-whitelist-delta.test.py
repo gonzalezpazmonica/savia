@@ -77,5 +77,24 @@ class Delta(unittest.TestCase):
         self.assertEqual(run({"file_path": ".gitignore", "content": "*.tmp\npro" + "jects/*\n"},
                              "pro" + "jects/*\n*.tmp\n", subdirs=["alfa"]), 0)
 
+    def test_gitignore_anidado_con_excepcion_nueva_bloquea(self):
+        # Un .gitignore dentro de la carpeta de proyectos puede reincluir lo que la raíz excluye.
+        with tempfile.TemporaryDirectory() as d:
+            sub = os.path.join(d, "pro" + "jects")
+            os.makedirs(sub)
+            env = dict(os.environ, CLAUDE_PROJECT_DIR=d)
+            inp = json.dumps({"tool_input": {"file_path": os.path.join(sub, ".gitignore"), "content": "!*/\n"}})
+            p = subprocess.run([sys.executable, SCRIPT], input=inp, text=True, capture_output=True, env=env)
+            self.assertEqual(p.returncode, 1)
+
+    def test_gitignore_anidado_sin_excepciones_no_bloquea(self):
+        with tempfile.TemporaryDirectory() as d:
+            sub = os.path.join(d, "docs")
+            os.makedirs(sub)
+            env = dict(os.environ, CLAUDE_PROJECT_DIR=d)
+            inp = json.dumps({"tool_input": {"file_path": os.path.join(sub, ".gitignore"), "content": "*.tmp\n"}})
+            p = subprocess.run([sys.executable, SCRIPT], input=inp, text=True, capture_output=True, env=env)
+            self.assertEqual(p.returncode, 0)
+
 if __name__ == "__main__":
     unittest.main()

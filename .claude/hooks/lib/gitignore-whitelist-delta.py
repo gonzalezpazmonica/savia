@@ -56,6 +56,14 @@ def main():
             result = result.replace(old, new) if e.get("replace_all") else result.replace(old, new, 1)
     if whitelist(result) - whitelist(current):
         return 1
+    # Un .gitignore anidado (por ejemplo dentro de la carpeta de proyectos) se aplica sobre su propio
+    # directorio y puede reincluir lo que la raíz excluye. La simulación aislada solo modela la raíz,
+    # así que en uno anidado cualquier excepción (!) nueva bloquea.
+    root = os.path.realpath(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    if os.path.realpath(os.path.dirname(path)) != root:
+        nuevas = {l.strip() for l in result.splitlines() if l.strip().startswith("!")} \
+            - {l.strip() for l in current.splitlines() if l.strip().startswith("!")}
+        return 1 if nuevas else 0
     # Lo que importa es qué rutas de proyecto dejan de estar ignoradas, no qué líneas cambian: borrar la
     # exclusión general o escribir la excepción con una clase de caracteres también publica.
     # Se pregunta al propio motor de git, con el .gitignore anterior y el resultante, en un repo aislado.

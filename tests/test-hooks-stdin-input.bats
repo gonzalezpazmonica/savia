@@ -314,3 +314,12 @@ print(bad); raise SystemExit(1 if bad else 0)'
   run env PATH="$TMP/bin" bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
 }
+
+@test "android-adb-validate: comillas, barra o tabulador en el binario no eluden el prefiltro" {
+  export HOME="$TMP"
+  for c in '"adb" shell rm -rf /sdcard/x' "'adb' shell rm -rf /sdcard/x" 'a\db shell rm -rf /sdcard/x' "$(printf 'adb\tshell rm -rf /sdcard/x')"; do
+    python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$c" > "$TMP/in.json"
+    run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+    [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
+  done
+}

@@ -26,14 +26,15 @@ LOG_FILE="$LOG_DIR/android-adb.log"
 
 mkdir -p "$LOG_DIR"
 
+# Se compara la orden normalizada: sin comillas ni barras de escape y con espacios (tabuladores
+# incluidos) colapsados, para que `"adb" shell 'rm -rf x'`, `a\db shell …` o `adb<TAB>shell …` no
+# eludan ni el prefiltro ni los patrones. El prefiltro va DESPUÉS de normalizar.
+ADB_CMD=$(tr -d "\"'\\\\" <<<"$TOOL_INPUT" | tr -s '[:space:]' ' ')
+
 # Only process ADB commands
-if [[ "$TOOL_INPUT" != *"adb "* && "$TOOL_INPUT" != *"adb_"* ]]; then
+if ! grep -qE '(^|[^[:alnum:]_])adb( |_)' <<<"$ADB_CMD"; then
     exit 0
 fi
-
-# Se compara la orden normalizada: sin comillas ni barras de escape y con espacios colapsados, para
-# que `adb shell 'rm -rf x'` o `adb shell "rm" -rf x` no eludan los patrones.
-ADB_CMD=$(tr -d "\"'\\\\" <<<"$TOOL_INPUT" | tr -s '[:space:]' ' ')
 
 # ─── Blocked operations (never allow) ──────────────────────────────────────
 # rm recursivo con cualquier combinación y orden de opciones (-rf, -fr, -R -f, --recursive).
