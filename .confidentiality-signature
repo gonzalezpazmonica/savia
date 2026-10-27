@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=ba20517a362766204d3d99367205409df5dfc1b36d1904e5beb0d9fc5749bf9f
-timestamp=2026-10-27T07:56:24Z
-branch=agent/tesis-specs-20261023
-head_commit=a8d46faa8
-signature=bcf39850cdd4584c0c192baf469c88e4bbe3d0a7546d34c6b94192cd19d12406
+diff_hash=3c80fd01afcc71259d553350387a302c4cd06c4091143130a18ef5bf09085728
+timestamp=2026-10-27T18:48:53Z
+branch=agent/hooks-agent-matcher-20261027
+head_commit=fb6885e5c
+signature=5ffad395a00e8374aa4cce72ddc603e7b1164aef4843a2b0a5550450f91fbbb1
