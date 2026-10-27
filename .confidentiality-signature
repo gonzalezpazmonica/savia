@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=61a4d3bbec2cfe61dad368e9fc7fe511bfaefd1e59a4a931192069299987c6a4
-timestamp=2026-10-27T08:59:48Z
+diff_hash=ad92427127873005dac81fe9faa26f819893f65b7c227c92858e8b091fab06f7
+timestamp=2026-10-27T21:30:57Z
 branch=agent/agent-perms-20261023
-head_commit=4896c368
-signature=bc9ff699e2672b83a832ee0c452af5703d88d56a6b0729439b76cf9c8f9f0284
+head_commit=fe7af5f1
+signature=b3c2807b506fd9a785df15ff1a2e5e0bce72aeb57655eeff687a7ace6ab8d8f0
