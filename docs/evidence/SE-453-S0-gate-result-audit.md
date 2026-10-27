@@ -19,7 +19,7 @@
 | `scripts/security-scan.sh` | 0 siempre salvo `--ci` con hallazgos (1) | grep/find estándar | sin tope | S3 por demanda (2026-10-24): `gate-result`; grep con rc ≥ 2 o sin hooks ⇒ `unknown`; códigos sin cambio |
 | `scripts/vuln-scan.sh` | 0 siempre salvo `--ci` con vulnerabilidades (1) | grep estándar | sin tope | S3 por demanda (2026-10-24): igual que `security-scan.sh` |
 | `scripts/mcp-security-audit.sh` | 0 limpio, 1 hallazgos, 2 argumentos | python3 ausente: salía 1 con un falso MCP-00 «Invalid JSON» | sin tope | S3 por demanda (2026-10-24): python3 ausente ⇒ exit 2 `unknown/missing_tool`; `--config` inexistente o ninguna config ⇒ `unknown`; path por argv |
-| `scripts/security-audit-all.sh` | 0 / 1 según `--fail-on`, 2 argumentos | un sub-escáner que salía 1 añadía `{}` a su JSON: el parseo fallaba y sus hallazgos contaban 0 | sin tope | S3 por demanda (2026-10-24): lee el JSON aunque salga 1; exit ≥ 2, ilegible o `unknown` ⇒ hueco propagado |
+| `scripts/security-audit-all.sh` | 0 / 1 según `--fail-on`, 2 argumentos | un sub-escáner que salía 1 añadía `{}` a su JSON: el parseo fallaba y sus hallazgos contaban 0 | sin tope | S3 por demanda (2026-10-24): lee el JSON aunque salga 1; exit ≥ 2, ilegible o `unknown` ⇒ hueco propagado. SE-453 parte 2 (#1348): cuentas obligatorias y enteras (un booleano o una clave ausente es ilegible), `findings_count` > 0 sin cuentas o exit 1 sin cuentas ⇒ hueco, y `prompt-security-scan` ausente ⇒ `missing_tool` en vez de omitido |
 | `scripts/transcriptor-scan.sh` | 0 limpio u omitido, 1 error | python3 ausente → 1 | sin tope | Fuera del contrato: lista reuniones por stdout, no es un gate |
 
 ## Guards y hooks `blocking: true`
@@ -42,6 +42,22 @@
 | `config-snapshot-hook`, `context-greedy-inject`, `propuestas-index-refresh`, `twin-posttooluse` | 0 | exit 0 sin `jq` | — | Igual |
 | `sycophancy-strip`, `vault-frontmatter-gate` | 0 o 2 | exit 0 sin `jq` | — | Igual |
 | Resto de los 31 que citan `command -v jq` (p. ej. `tdd-gate`, `contract-test-guard`) | 0 o 2 | degradan o no son de seguridad | — | Por demanda |
+
+## Paridad OpenCode de los guards `blocking` (DUAL_BINDING, 2026-10-23)
+
+`savia-gates` ejecuta los mismos `.sh` por su shell-bridge: paridad por construcción, también sin `jq`.
+Los puertos nativos de `.opencode/plugins/guards/` no usan `jq` (caso «sin jq» no aplicable en TS) y se
+compararon con el hook bash con las mismas entradas:
+
+| Guard | Entradas | Divergencias halladas | Estado |
+|---|---|---|---|
+| `block-force-push.ts` | 11 | `git -C dir push --force` y `git commit --amend` pasaban en TS (bash 2, TS 0); `git push origin main-fix` bloqueaba en TS | Corregido: mismo ancla `GIT_AT` que el hook. Revisión de #1348: el primer ancla dejaba pasar en TS la orden en la línea 2 de un bloque (sin flag `m`) y, en ambos bindings, `bash -c "…"`, `sh -c`, `eval`, `then`, `{`, `xargs` y un `--force` junto a un `--force-with-lease`; corregido en bash y TS con casos de paridad. Sigue sin cubrirse una orden git construida en tiempo de ejecución (variables, alias) |
+| `block-credential-leak.ts` | 4 | ninguna | Sin cambios |
+| `block-infra-destructive.ts` | 4 | ninguna | Sin cambios |
+| `validate-bash-global.ts` | 2 | ninguna | Sin cambios |
+
+Reglas solo-TS que siguen siendo más estrictas que el hook (no se tocan): `git checkout --force`,
+`git rebase origin/main` y `git push --delete origin main`.
 
 ## Conclusiones para S1 a S3
 
