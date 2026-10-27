@@ -161,16 +161,25 @@ if $V2; then
   fi
 
   # 9. Dead Code — functions defined but never referenced (bash scripts only)
+  # Una sola pasada: nº de scripts distintos que contienen cada palabra.
+  declare -A WORD_FILES=()
+  while read -r w c; do
+    WORD_FILES["$w"]=$c
+  done < <(awk 'FNR==1 { delete seen }
+    { n = split($0, a, /[^_a-zA-Z0-9]+/)
+      for (i = 1; i <= n; i++) { w = a[i]
+        if (w != "" && !((w) in seen)) { seen[w] = 1; cnt[w]++ } } }
+    END { for (w in cnt) print w, cnt[w] }' "$ROOT"/scripts/*.sh 2>/dev/null)
   for script in "$ROOT"/scripts/*.sh; do
     [[ ! -f "$script" ]] && continue
     while IFS= read -r line; do
       func_name=$(echo "$line" | sed -nE 's/^[[:space:]]*(function[[:space:]]+)?([_a-zA-Z][_a-zA-Z0-9]*)[[:space:]]*\(.*/\2/p')
       [[ -z "$func_name" ]] && continue
       total_funcs=$((total_funcs + 1))
-      script_name=$(basename "$script")
-      refs=$(grep -rl "$func_name" "$ROOT/scripts" --include="*.sh" 2>/dev/null | grep -v "$script_name" | wc -l)
+      # el propio script que la define cuenta 1: refs externas = total - 1
+      refs=$(( ${WORD_FILES[$func_name]:-1} - 1 ))
       [[ "$refs" -eq 0 ]] && dead_funcs=$((dead_funcs + 1))
-    done < <(grep -nE '^[[:space:]]*(function[[:space:]]+[_a-zA-Z][_a-zA-Z0-9]*|[_a-zA-Z][_a-zA-Z0-9]*[[:space:]]*\(\))' "$script" 2>/dev/null)
+    done < <(grep -E '^[[:space:]]*(function[[:space:]]+[_a-zA-Z][_a-zA-Z0-9]*|[_a-zA-Z][_a-zA-Z0-9]*[[:space:]]*\(\))' "$script" 2>/dev/null)
   done
   if [[ "$total_funcs" -gt 0 ]]; then
     dead_pct=$(pct "$dead_funcs" "$total_funcs")

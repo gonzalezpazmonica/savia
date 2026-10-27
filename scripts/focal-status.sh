@@ -77,7 +77,8 @@ _calc_load() {
         ts_str = substr($0, 1, 20)
         # Remove trailing Z
         gsub("Z","", ts_str); gsub("T"," ", ts_str)
-        cmd = "date -d \"" ts_str "\" +%s 2>/dev/null"
+        # El log guarda UTC: sin "UTC" date lo leería en hora local y desplazaría la ventana
+        cmd = "date -d \"" ts_str " UTC\" +%s 2>/dev/null"
         cmd | getline ep
         close(cmd)
         if (ep+0 >= cutoff) count++

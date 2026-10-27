@@ -311,3 +311,422 @@ EOF
   stale_line=$(echo "$output" | grep "stale15")
   [[ "$stale_line" == *"[STALE]"* ]]
 }
+
+# ── Comportamiento discriminante (S03k) ──────────────────────────────────────
+# Helper: nido con campos explícitos. $1 nombre, $2 status, $3 updated_at,
+# $4 intervalo, $5 bloque next_human_decision (JSON o "null"), $6 rama
+_mk() {
+  local name="$1" st="$2" upd="$3" iv="${4:-10}" nhd="${5:-null}" br="${6:-agent/x}"
+  cat > "$HOME/.savia/focal-state/${name}.json" <<JSON
+{
+  "nido": "${name}",
+  "branch": "${br}",
+  "status": "${st}",
+  "next_human_decision": ${nhd},
+  "check_in_interval_min": ${iv},
+  "updated_at": "${upd}"
+}
+JSON
+}
+
+_ago() { date -u -d "-${1} seconds" +"%Y-%m-%dT%H:%M:%SZ"; }
+
+_nhd() {
+  # $1 blocking, $2 urgency, $3 cost, $4 descripción
+  printf '{"type":"approve","description":"%s","blocking":%s,"urgency":%s,"cognitive_cost":%s,"created_at":"%s"}' \
+    "$4" "$1" "$2" "$3" "$(_ago 0)"
+}
+
+@test "S03k focal-status: fila de tabla lleva rama, estado, carga OK y minutos al check-in" {
+  _mk alfa active "$(_ago 270)" 10 null agent/rama-alfa
+  run bash "$FOCAL_STATUS"
+  [ "$status" -eq 0 ]
+  row=$(echo "$output" | grep '^alfa ')
+  [[ "$row" == *"agent/rama-alfa"* ]]
+  [[ "$row" == *"active"* ]]
+  [[ "$row" == *" OK "* ]]
+  # intervalo 10 min, 4.5 min transcurridos -> quedan 5 min
+  [[ "$row" == *"5 min"* ]]
+  [[ "$output" == *"PROXIMO CHECK-IN: alfa en 5 min"* ]]
+}
+
+@test "S03k focal-status: nido reciente no se marca STALE (caso negativo)" {
+  _mk fresco active "$(_ago 60)" 10
+  run bash "$FOCAL_STATUS"
+  [[ "$output" != *"[STALE]"* ]]
+}
+
+@test "S03k focal-status: STALE solo pasado 2x el intervalo (límite)" {
+  # intervalo 5 -> umbral 10 min: 9 min no es stale, 11 min sí
+  _mk justo active "$(_ago 540)" 5
+  _mk pasado active "$(_ago 660)" 5
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^justo ')" != *"[STALE]"* ]]
+  [[ "$(echo "$output" | grep '^pasado ')" == *"[STALE]"* ]]
+}
+
+@test "S03k focal-status: done y abandoned antiguos nunca son STALE" {
+  _mk hecho done "$(_ago 7200)" 10
+  _mk dejado abandoned "$(_ago 7200)" 10
+  run bash "$FOCAL_STATUS"
+  [[ "$output" != *"[STALE]"* ]]
+}
+
+@test "S03k focal-status: intervalo 0 cae al valor por defecto de 10" {
+  # 15 min con intervalo 10 -> umbral 20, no stale; si 0 se respetara, sería stale
+  _mk cero active "$(_ago 900)" 0
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^cero ')" != *"[STALE]"* ]]
+}
+
+@test "S03k focal-status: sin intervalo en el JSON usa 10 min" {
+  cat > "$HOME/.savia/focal-state/sinint.json" <<JSON
+{"nido":"sinint","branch":"b","status":"active","updated_at":"$(_ago 1500)"}
+JSON
+  run bash "$FOCAL_STATUS"
+  # 25 min > 2x10 -> STALE
+  [[ "$(echo "$output" | grep '^sinint ')" == *"[STALE]"* ]]
+}
+
+@test "S03k focal-status: nido STALE muestra minutos de antigüedad con [!]" {
+  _mk viejo active "$(_ago 1800)" 10
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^viejo ')" == *"[!] 30 min"* ]]
+  # un STALE no aporta PROXIMO CHECK-IN
+  [[ "$output" != *"PROXIMO CHECK-IN"* ]]
+}
+
+@test "S03k focal-status: done sin updated_at muestra confirmado" {
+  cat > "$HOME/.savia/focal-state/fin.json" <<JSON
+{"nido":"fin","branch":"b","status":"done"}
+JSON
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^fin ')" == *"confirmado"* ]]
+}
+
+@test "S03k focal-status: rama de más de 30 caracteres se trunca con elipsis" {
+  local largo="agent/una-rama-extremadamente-larga-de-prueba"
+  _mk trunc active "$(_ago 10)" 10 null "$largo"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" != *"$largo"* ]]
+  [[ "$output" == *"agent/una-rama-extremadamente…"* ]]
+}
+
+@test "S03k focal-status: sin campo nido usa el nombre del fichero" {
+  cat > "$HOME/.savia/focal-state/por-fichero.json" <<JSON
+{"branch":"b","status":"active","updated_at":"$(_ago 10)"}
+JSON
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"por-fichero"* ]]
+}
+
+@test "S03k focal-status: cabecera de tabla presente" {
+  _mk uno active "$(_ago 10)"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"FOCAL STATUS"* ]]
+  [[ "$output" =~ NIDO[[:space:]]+RAMA[[:space:]]+ESTADO[[:space:]]+LOAD[[:space:]]+CHECK-IN ]]
+}
+
+@test "S03k focal-status: --summary cuenta nidos, BLOCKING, STALE y el próximo check-in" {
+  _mk a active "$(_ago 270)" 10 "$(_nhd true 1 1 'bloqueo')"
+  _mk b active "$(_ago 3000)" 10
+  _mk c active "$(_ago 30)" 10
+  run bash "$FOCAL_STATUS" --summary
+  [ "$status" -eq 0 ]
+  [[ "$output" == "Focal: 3 nidos · 1 BLOCKING · 1 STALE · próximo: a 5min" ]]
+}
+
+@test "S03k focal-status: --summary sin BLOCKING ni STALE solo da el total" {
+  _mk a active "$(_ago 10)" 10
+  run bash "$FOCAL_STATUS" --summary
+  [[ "$output" != *"BLOCKING"* ]]
+  [[ "$output" != *"STALE"* ]]
+  [[ "$output" == "Focal: 1 nidos"* ]]
+}
+
+@test "S03k focal-status: --summary sin nidos da su propia frase" {
+  run bash "$FOCAL_STATUS" --summary
+  [ "$output" = "Focal: sin nidos activos" ]
+}
+
+@test "S03k focal-status: DECISIONES distingue BLOCKING de URGENT y cuenta ambos" {
+  _mk b1 active "$(_ago 10)" 10 "$(_nhd true 1 1 'decide-esto')"
+  _mk u1 active "$(_ago 10)" 10 "$(_nhd false 1 1 'mira-esto')"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"DECISIONES PENDIENTES (1 BLOCKING, 1 URGENT)"* ]]
+  [[ "$output" == *"b1: decide-esto [BLOCKING]"* ]]
+  [[ "$output" == *"u1: mira-esto [URGENT]"* ]]
+  [[ "$output" != *"TRIAGE"* ]]
+}
+
+@test "S03k focal-status: TRIAGE aparece con 2 BLOCKING y no con 1" {
+  _mk b1 active "$(_ago 10)" 10 "$(_nhd true 1 1 'uno')"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" != *"TRIAGE"* ]]
+  _mk b2 active "$(_ago 10)" 10 "$(_nhd true 1 1 'dos')"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"TRIAGE: 2 BLOCKING activos"* ]]
+}
+
+@test "S03k focal-status: la prioridad pesa urgencia, bloqueo y coste (orden exacto)" {
+  # p = 3u + 5b - 2c : alta(u3,b,c1)=12, media(u2,b,c1)=9, baja(u1,nb,c3)=0 (suelo)
+  _mk baja active "$(_ago 10)" 10 "$(_nhd false 1 3 'tres')"
+  _mk alta active "$(_ago 10)" 10 "$(_nhd true 3 1 'uno')"
+  _mk media active "$(_ago 10)" 10 "$(_nhd true 2 1 'dos')"
+  run bash "$FOCAL_STATUS"
+  i_alta=$(echo "$output" | grep -n 'alta: uno' | cut -d: -f1)
+  i_media=$(echo "$output" | grep -n 'media: dos' | cut -d: -f1)
+  i_baja=$(echo "$output" | grep -n 'baja: tres' | cut -d: -f1)
+  [ "$i_alta" -lt "$i_media" ]
+  [ "$i_media" -lt "$i_baja" ]
+}
+
+@test "S03k focal-status: coste por defecto 2 si falta cognitive_cost" {
+  cat > "$HOME/.savia/focal-state/sincoste.json" <<JSON
+{"nido":"sincoste","branch":"b","status":"active","updated_at":"$(_ago 10)",
+ "next_human_decision":{"description":"sin coste","blocking":false}}
+JSON
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"cost:2"* ]]
+}
+
+@test "S03k focal-status: la antigüedad de la decisión sale en minutos" {
+  local viejo; viejo=$(_ago 1200)
+  _mk edad active "$(_ago 10)" 10 \
+    "{\"description\":\"antigua\",\"blocking\":false,\"urgency\":1,\"cognitive_cost\":1,\"created_at\":\"$viejo\"}"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"age:20min"* ]]
+}
+
+@test "S03k focal-status: decisión de un nido STALE no se lista" {
+  _mk rancio active "$(_ago 3000)" 10 "$(_nhd true 3 1 'fantasma')"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" != *"fantasma"* ]]
+  [[ "$output" != *"DECISIONES PENDIENTES"* ]]
+}
+
+@test "S03k focal-status: carga HIGH y OVERLOAD según cambios en la última hora" {
+  # TZ lejos de UTC: el log está en UTC y la ventana de 1 h no debe desplazarse
+  export TZ=Asia/Tokyo
+  _mk cargado active "$(_ago 10)" 10
+  for i in 1 2 3 4; do echo "$(_ago 60) a→b" >> "$HOME/.savia/.switch-log"; done
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^cargado ')" == *" HIGH "* ]]
+  for i in 1 2 3; do echo "$(_ago 60) a→b" >> "$HOME/.savia/.switch-log"; done
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^cargado ')" == *" OVERLOAD "* ]]
+}
+
+@test "S03k focal-status: cambios de hace más de una hora no cuentan para la carga" {
+  export TZ=America/Los_Angeles
+  _mk tranquilo active "$(_ago 10)" 10
+  for i in 1 2 3 4 5 6 7 8; do echo "$(_ago 7200) a→b" >> "$HOME/.savia/.switch-log"; done
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^tranquilo ')" == *" OK "* ]]
+}
+
+@test "S03k focal-status: sesiones activas de active-sessions.jsonl aparecen, inactivas no" {
+  cat > "$HOME/.savia/active-sessions.jsonl" <<JSON
+{"nido":"sesion-viva","status":"active","branch":"agent/viva","heartbeat_at":"$(_ago 30)"}
+{"nido":"sesion-muerta","status":"ended","branch":"agent/muerta","heartbeat_at":"$(_ago 30)"}
+JSON
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"sesion-viva"* ]]
+  [[ "$output" == *"agent/viva"* ]]
+  [[ "$output" != *"sesion-muerta"* ]]
+}
+
+@test "S03k focal-status: nido en focal-state y en sesiones sale una sola vez" {
+  _mk doble active "$(_ago 10)" 10 null agent/del-estado
+  cat > "$HOME/.savia/active-sessions.jsonl" <<JSON
+{"nido":"doble","status":"active","branch":"agent/de-la-sesion","heartbeat_at":"$(_ago 30)"}
+JSON
+  run bash "$FOCAL_STATUS"
+  [ "$(echo "$output" | grep -c '^doble ')" -eq 1 ]
+  [[ "$output" == *"agent/del-estado"* ]]
+  [[ "$output" != *"agent/de-la-sesion"* ]]
+}
+
+# ── focal-switch ─────────────────────────────────────────────────────────────
+
+@test "S03k focal-switch: sin nido origen falla con exit 1 y mensaje" {
+  run env -u SAVIA_NIDO bash "$FOCAL_SWITCH" --save-only
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pudo determinar el nido origen"* ]]
+  [ -z "$(ls "$HOME/.savia/focal-state")" ]
+}
+
+@test "S03k focal-switch: SAVIA_NIDO sirve de origen" {
+  run env SAVIA_NIDO=desde-env bash "$FOCAL_SWITCH" --save-only --task "t"
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.savia/focal-state/desde-env.json" ]
+}
+
+@test "S03k focal-switch: el origen se infiere del cwd dentro de ~/.savia/nidos" {
+  mkdir -p "$HOME/.savia/nidos/inferido/sub"
+  cd "$HOME/.savia/nidos/inferido/sub"
+  run env -u SAVIA_NIDO bash "$FOCAL_SWITCH" --save-only
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.savia/focal-state/inferido.json" ]
+}
+
+@test "S03k focal-switch: guarda status paused y la descripción en context_summary" {
+  run bash "$FOCAL_SWITCH" --save-only --nido n1 --task "mitad de la migración"
+  [[ "$output" == *"Estado de n1 guardado (status=paused)"* ]]
+  grep -q '"status": "paused"' "$HOME/.savia/focal-state/n1.json"
+  grep -q '"context_summary": "mitad de la migración"' "$HOME/.savia/focal-state/n1.json"
+}
+
+@test "S03k focal-switch: sin descripción usa el texto por defecto" {
+  run bash "$FOCAL_SWITCH" --save-only --nido n2
+  grep -q '"context_summary": "Estado guardado por focal-switch"' "$HOME/.savia/focal-state/n2.json"
+}
+
+@test "S03k focal-switch: conserva rama, tarea e intervalo previos" {
+  cat > "$HOME/.savia/focal-state/n3.json" <<JSON
+{"nido":"n3","branch":"agent/previa","task":"tarea previa","status":"active","check_in_interval_min":25,"created_at":"2020-01-01T00:00:00Z","context_summary":"resumen previo"}
+JSON
+  run bash "$FOCAL_SWITCH" --save-only --nido n3
+  f="$HOME/.savia/focal-state/n3.json"
+  grep -q '"branch": "agent/previa"' "$f"
+  grep -q '"task": "tarea previa"' "$f"
+  grep -q '"check_in_interval_min": 25' "$f"
+  grep -q '"created_at": "2020-01-01T00:00:00Z"' "$f"
+  grep -q '"context_summary": "resumen previo"' "$f"
+  ! grep -q '"updated_at": "2020' "$f"
+}
+
+@test "S03k focal-switch: preserva next_human_decision existente" {
+  cat > "$HOME/.savia/focal-state/n4.json" <<JSON
+{"nido":"n4","status":"active","next_human_decision": {"description":"aprobar PR","blocking":true},"check_in_interval_min":10}
+JSON
+  run bash "$FOCAL_SWITCH" --save-only --nido n4
+  grep -q '"description":"aprobar PR"' "$HOME/.savia/focal-state/n4.json"
+}
+
+@test "S03k focal-switch: escapa comillas en la descripción y el JSON sigue siendo válido" {
+  run bash "$FOCAL_SWITCH" --save-only --nido n5 --task 'dijo "hola" y \adios'
+  python3 - "$HOME/.savia/focal-state/n5.json" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+assert d['context_summary']=='dijo "hola" y \\adios', d['context_summary']
+PY
+}
+
+@test "S03k focal-switch: recorta context_summary a 200 caracteres" {
+  local largo; largo=$(printf 'x%.0s' $(seq 1 300))
+  run bash "$FOCAL_SWITCH" --save-only --nido n6 --task "$largo"
+  python3 - "$HOME/.savia/focal-state/n6.json" <<'PY'
+import json,sys
+assert len(json.load(open(sys.argv[1]))['context_summary'])==200
+PY
+}
+
+@test "S03k focal-switch: --from/--to registra el cambio y muestra el contexto destino" {
+  cat > "$HOME/.savia/focal-state/destino.json" <<JSON
+{"nido":"destino","branch":"agent/dest","task":"tarea destino","context_summary":"donde lo dejé","status":"paused"}
+JSON
+  run bash "$FOCAL_SWITCH" --from origen --to destino --task "salgo"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--- Contexto de destino ---"* ]]
+  [[ "$output" == *"Rama: agent/dest"* ]]
+  [[ "$output" == *"Tarea: tarea destino"* ]]
+  [[ "$output" == *"Resumen: donde lo dejé"* ]]
+  [[ "$output" == *"Cambio registrado: origen → destino"* ]]
+  grep -q 'origen→destino' "$HOME/.savia/.switch-log"
+}
+
+@test "S03k focal-switch: destino sin estado lo dice y --save-only no escribe .switch-log" {
+  run bash "$FOCAL_SWITCH" --from o --to fantasma --task "x"
+  [[ "$output" == *"Nido destino fantasma: sin estado guardado"* ]]
+  : > "$HOME/.savia/.switch-log"
+  run bash "$FOCAL_SWITCH" --save-only --nido o --to otro
+  [ ! -s "$HOME/.savia/.switch-log" ]
+}
+
+# Pares de decisiones donde cada peso de la fórmula decide el orden
+_primero() {
+  # $1 y $2 patrones: devuelve 0 si $1 aparece antes que $2 en la salida
+  local a b
+  a=$(echo "$output" | grep -n -- "$1" | head -1 | cut -d: -f1)
+  b=$(echo "$output" | grep -n -- "$2" | head -1 | cut -d: -f1)
+  [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]
+}
+
+_nhd_edad() {
+  # $1 blocking, $2 urgency, $3 cost, $4 descripción, $5 minutos de antigüedad
+  printf '{"description":"%s","blocking":%s,"urgency":%s,"cognitive_cost":%s,"created_at":"%s"}' \
+    "$4" "$1" "$2" "$3" "$(_ago $(( $5 * 60 + 5 )))"
+}
+
+@test "S03k focal-status: el bloqueo pesa 5 (5 > urgencia 1 + 15 min de edad = 4.5)" {
+  _mk bloq active "$(_ago 10)" 10 "$(_nhd_edad true 0 0 'bloqueada' 0)"
+  _mk urg active "$(_ago 10)" 10 "$(_nhd_edad false 1 0 'urgente' 15)"
+  run bash "$FOCAL_STATUS"
+  _primero 'bloq: bloqueada' 'urg: urgente'
+}
+
+@test "S03k focal-status: la urgencia pesa 3 (3 > 25 min de edad = 2.5)" {
+  _mk urg active "$(_ago 10)" 10 "$(_nhd_edad false 1 0 'urgente' 0)"
+  _mk vieja active "$(_ago 10)" 10 "$(_nhd_edad false 0 0 'antigua' 25)"
+  run bash "$FOCAL_STATUS"
+  _primero 'urg: urgente' 'vieja: antigua'
+}
+
+@test "S03k focal-status: el coste resta y la antigüedad suma" {
+  _mk caro active "$(_ago 10)" 10 "$(_nhd_edad false 1 1 'caro' 0)"
+  _mk barato active "$(_ago 10)" 10 "$(_nhd_edad false 1 0 'barato' 0)"
+  run bash "$FOCAL_STATUS"
+  _primero 'barato: barato' 'caro: caro'
+}
+
+@test "S03k focal-status: prioridad negativa se recorta a 0 y queda bajo una positiva pequeña" {
+  _mk neg active "$(_ago 10)" 10 "$(_nhd_edad false 0 3 'negativa' 0)"
+  _mk pos active "$(_ago 10)" 10 "$(_nhd_edad false 0 0 'pequena' 5)"
+  run bash "$FOCAL_STATUS"
+  _primero 'pos: pequena' 'neg: negativa'
+}
+
+@test "S03k focal-status: rama de 25 y de 30 caracteres no se truncan" {
+  local b25="agent/aaaaaaaaaaaaaaaaaaaa"      # 26
+  local b30="agent/aaaaaaaaaaaaaaaaaaaaaaaa"  # 30
+  [ "${#b30}" -eq 30 ]
+  _mk r25 active "$(_ago 10)" 10 null "$b25"
+  _mk r30 active "$(_ago 10)" 10 null "$b30"
+  run bash "$FOCAL_STATUS"
+  [[ "$output" == *"$b25"* ]]
+  [[ "$output" == *"$b30"* ]]
+  [[ "$output" != *"…"* ]]
+}
+
+@test "S03k focal-status: carga OK con 3 cambios, HIGH con 6" {
+  export TZ=Asia/Kolkata
+  _mk limite active "$(_ago 10)" 10
+  for i in 1 2 3; do echo "$(_ago 60) a→b" >> "$HOME/.savia/.switch-log"; done
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^limite ')" == *" OK "* ]]
+  for i in 1 2 3; do echo "$(_ago 60) a→b" >> "$HOME/.savia/.switch-log"; done
+  run bash "$FOCAL_STATUS"
+  [[ "$(echo "$output" | grep '^limite ')" == *" HIGH "* ]]
+}
+
+@test "S03k focal-switch: un nido nuevo nace con intervalo 10, decisión null y created_at válido" {
+  run bash "$FOCAL_SWITCH" --save-only --nido nuevo --task "t"
+  python3 - "$HOME/.savia/focal-state/nuevo.json" <<'PY'
+import json,re,sys
+d=json.load(open(sys.argv[1]))
+assert d["check_in_interval_min"]==10
+assert d["next_human_decision"] is None
+assert d["waiting_for"] is None
+assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", d["created_at"]), d["created_at"]
+assert d["created_at"]==d["updated_at"] or d["created_at"]<=d["updated_at"]
+PY
+}
+
+@test "S03k focal-switch: un cambio --from/--to también deja el origen en paused" {
+  cat > "$HOME/.savia/focal-state/org.json" <<JSON
+{"nido":"org","status":"active","check_in_interval_min":10}
+JSON
+  run bash "$FOCAL_SWITCH" --from org --to dst --task "x"
+  grep -q '"status": "paused"' "$HOME/.savia/focal-state/org.json"
+}
