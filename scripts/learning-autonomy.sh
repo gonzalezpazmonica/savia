@@ -38,8 +38,8 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --p-consistent) P="$2"; shift 2 ;;
-    --requested) REQUESTED="$2"; shift 2 ;;
+    --p-consistent) [[ $# -ge 2 ]] || usage; P="$2"; shift 2 ;;
+    --requested) [[ $# -ge 2 ]] || usage; REQUESTED="$2"; shift 2 ;;
     --history-ok) HISTORY_OK=true; shift ;;
     --human-ok) HUMAN_OK=true; shift ;;
     --json) JSON=true; shift ;;
@@ -49,6 +49,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$P" ]] && usage
+
+# Solo decimales planos: awk toma "0.5abc" como 0.5 y compara "abc" como texto.
+[[ "$P" =~ ^([0-9]+(\.[0-9]*)?|\.[0-9]+)$ ]] || { echo "ERROR: p_consistent out of range [0,1]: $P" >&2; exit 3; }
 
 # Range validation (locale-safe)
 verdict=$(awk -v x="$P" 'BEGIN{ if (x<0 || x>1) print "INVALID"; else print "OK" }')
