@@ -159,3 +159,231 @@ print(t.success_checks, t.max_retries)
   [ "$status" -eq 0 ]
   [[ "$output" == "[] 0" ]]
 }
+
+# ── S03k: ciclo de vida de la CLI (list, enable/disable, delete, history, output, compute, init-defaults, run-due) ──
+
+@test "S03k auto: list sin tareas imprime '(no tasks)'" {
+  run bash "$CLI" list
+  [ "$status" -eq 0 ]
+  [ "$output" = "(no tasks)" ]
+}
+
+@test "S03k auto: list muestra id, nombre, cron, estado habilitada y 'never'" {
+  create_task
+  run bash "$CLI" list
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[✓] $TASK_ID  fx"* ]]
+  [[ "$output" == *"schedule: cron=0 9 * * 1-5"* ]]
+  [[ "$output" == *"last: never"* ]]
+  [[ "$output" == *"runs: 0"* ]]
+}
+
+@test "S03k auto: disable marca la tarea, la saca de --enabled y enable la devuelve" {
+  create_task
+  run bash "$CLI" disable "$TASK_ID"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "disabled $TASK_ID: fx" ]]
+  run bash "$CLI" list
+  [[ "$output" == *"[✗] $TASK_ID"* ]]
+  run bash "$CLI" list --enabled
+  [ "$output" = "(no tasks)" ]
+  run bash "$CLI" enable "$TASK_ID"
+  [[ "$output" == "enabled $TASK_ID: fx" ]]
+  run bash "$CLI" list --enabled
+  [[ "$output" == *"[✓] $TASK_ID"* ]]
+}
+
+@test "S03k auto: una tarea deshabilitada no se ejecuta en run-due" {
+  create_task
+  py 'import json,pathlib
+p=pathlib.Path(sys.argv[1])/"automations"/"tasks.json"
+d=json.loads(p.read_text())
+ts=d["tasks"] if isinstance(d,dict) and "tasks" in d else d
+for t in (ts.values() if isinstance(ts,dict) else ts): t["next_run"]="2020-01-01T00:00:00+00:00"
+p.write_text(json.dumps(d))'
+  bash "$CLI" disable "$TASK_ID"
+  run bash "$CLI" run-due
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no due tasks"* ]]
+}
+
+@test "S03k auto: delete borra la tarea y un segundo delete falla con exit 1" {
+  create_task
+  run bash "$CLI" delete "$TASK_ID"
+  [ "$status" -eq 0 ]
+  [ "$output" = "deleted $TASK_ID" ]
+  run bash "$CLI" list
+  [ "$output" = "(no tasks)" ]
+  run bash "$CLI" delete "$TASK_ID"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found: $TASK_ID"* ]]
+}
+
+@test "S03k auto: show devuelve JSON con las instrucciones y los success_checks guardados" {
+  create_task --success-check "test -f a" --success-check "test -f b" --max-retries 2
+  run bash "$CLI" show "$TASK_ID"
+  [ "$status" -eq 0 ]
+  python3 - "$output" <<'PY'
+import json, sys
+d = json.loads(sys.argv[1])
+assert d["instructions"] == "genera out.md", d
+assert d["success_checks"] == ["test -f a", "test -f b"], d
+assert d["max_retries"] == 2, d
+PY
+}
+
+@test "S03k auto: --max-retries no entero sale con 2 y no guarda" {
+  run bash "$CLI" create --name fx --schedule "0 9 * * 1-5" --instructions x --max-retries dos
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"needs an integer"* ]]
+  run bash "$CLI" list
+  [ "$output" = "(no tasks)" ]
+}
+
+@test "S03k auto: --max-retries negativo se rechaza y 3 (el tope) se acepta" {
+  run bash "$CLI" create --name fx --schedule "0 9 * * 1-5" --instructions x --max-retries -1
+  [ "$status" -eq 2 ]
+  run bash "$CLI" create --name fx --schedule "0 9 * * 1-5" --instructions x --max-retries 3
+  [ "$status" -eq 0 ]
+}
+
+@test "S03k auto: history sin ejecuciones dice '(no runs)'; con ejecuciones respeta --last" {
+  create_task
+  run bash "$CLI" history "$TASK_ID"
+  [ "$output" = "(no runs)" ]
+  for i in 1 2 3; do bash "$CLI" run "$TASK_ID" >/dev/null; done
+  run bash "$CLI" history "$TASK_ID"
+  [ "$(grep -c 'recorded  manual' <<< "$output")" -eq 3 ]
+  run bash "$CLI" history "$TASK_ID" --last 2
+  [ "$(grep -c 'recorded  manual' <<< "$output")" -eq 2 ]
+}
+
+@test "S03k auto: history marca las ejecuciones fallidas y muestra su error" {
+  create_task --success-check "false"
+  run bash "$CLI" run "$TASK_ID"
+  [ "$status" -eq 1 ]
+  run bash "$CLI" history "$TASK_ID"
+  [[ "$output" == *"[✗]"*"failed  manual"* ]]
+  [[ "$output" == *"error:"* ]]
+}
+
+@test "S03k auto: output de un run inexistente falla con exit 1; sin argumentos con 2" {
+  create_task
+  run bash "$CLI" output "$TASK_ID" nope
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found: $TASK_ID/nope"* ]]
+  run bash "$CLI" output "$TASK_ID"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: output"* ]]
+}
+
+@test "S03k auto: run cuenta en run_count y list lo refleja con '(not executed)'" {
+  create_task
+  bash "$CLI" run "$TASK_ID" >/dev/null
+  run bash "$CLI" list
+  [[ "$output" == *"last: recorded (not executed)"* ]]
+  [[ "$output" == *"runs: 1"* ]]
+}
+
+@test "S03k auto: init-defaults crea 6 tareas y una segunda llamada no duplica" {
+  run bash "$CLI" init-defaults
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"6 default tasks created"* ]]
+  run bash "$CLI" init-defaults
+  [[ "$output" == *"skip morning-brief (already exists)"* ]]
+  [[ "$output" == *"0 default tasks created"* ]]
+  [ "$(bash "$CLI" list | grep -c '^\[')" -eq 6 ]
+}
+
+@test "S03k auto: drift-daily solo recibe herramienta de lectura; el resto lectura y escritura" {
+  bash "$CLI" init-defaults >/dev/null
+  id=$(bash "$CLI" list | awk '/drift-daily/{print $2}')
+  run bash "$CLI" show "$id"
+  python3 - "$output" <<'PY'
+import json, sys
+d = json.loads(sys.argv[1])
+assert d["always_allowed_tools"] == ["read"], d
+PY
+  id=$(bash "$CLI" list | awk '/weekly-report/{print $2}')
+  run bash "$CLI" show "$id"
+  python3 - "$output" <<'PY'
+import json, sys
+d = json.loads(sys.argv[1])
+assert d["always_allowed_tools"] == ["read", "write"], d
+PY
+}
+
+@test "S03k auto: run-due --max no entero sale con 2" {
+  run bash "$CLI" run-due --max muchas
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--max needs an integer"* ]]
+}
+
+@test "S03k auto: run-due --max 1 procesa solo una de dos vencidas" {
+  create_task
+  first="$TASK_ID"
+  create_task
+  py 'import json,pathlib
+p=pathlib.Path(sys.argv[1])/"automations"/"tasks.json"
+d=json.loads(p.read_text())
+ts=d["tasks"] if isinstance(d,dict) and "tasks" in d else d
+for t in (ts.values() if isinstance(ts,dict) else ts): t["next_run"]="2020-01-01T00:00:00+00:00"
+p.write_text(json.dumps(d))'
+  run bash "$CLI" run-due --max 1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"run-due: 1/2 tasks processed, 1 recorded without execution"* ]]
+}
+
+@test "S03k auto: compute materializa next_run y cuenta solo las tareas que cambian" {
+  create_task
+  run bash "$CLI" compute
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"compute: 0 tasks updated"* ]]
+  py 'import json,pathlib
+p=pathlib.Path(sys.argv[1])/"automations"/"tasks.json"
+d=json.loads(p.read_text())
+ts=d["tasks"] if isinstance(d,dict) and "tasks" in d else d
+for t in (ts.values() if isinstance(ts,dict) else ts): t["next_run"]=None
+p.write_text(json.dumps(d))'
+  run bash "$CLI" compute
+  [[ "$output" == *"compute: 1 tasks updated"* ]]
+}
+
+@test "S03k auto: list --due solo muestra las vencidas y las marca DUE" {
+  create_task
+  run bash "$CLI" list --due
+  [ "$output" = "(no tasks)" ]
+  py 'import json,pathlib
+p=pathlib.Path(sys.argv[1])/"automations"/"tasks.json"
+d=json.loads(p.read_text())
+ts=d["tasks"] if isinstance(d,dict) and "tasks" in d else d
+for t in (ts.values() if isinstance(ts,dict) else ts): t["next_run"]="2020-01-01T00:00:00+00:00"
+p.write_text(json.dumps(d))'
+  run bash "$CLI" list --due
+  [[ "$output" == *"$TASK_ID  fx DUE"* ]]
+}
+
+@test "S03k auto: tarea 'once' con fecha ISO se guarda como once, con su fecha" {
+  run bash "$CLI" create --name unica --schedule "2099-01-01T10:00:00" --instructions x --timezone UTC
+  [ "$status" -eq 0 ]
+  run bash "$CLI" list
+  [[ "$output" == *"schedule: once=2099-01-01T10:00:00"* ]]
+}
+
+@test "S03k auto: create sin --instructions es un error de uso" {
+  run bash "$CLI" create --name fx --schedule "0 9 * * 1-5"
+  [ "$status" -ne 0 ]
+  run bash "$CLI" list
+  [ "$output" = "(no tasks)" ]
+}
+
+@test "S03k auto: cada comando con id exige el argumento y nombra su uso" {
+  for c in show disable enable run; do
+    run bash "$CLI" $c
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Usage: $c <task-id>"* ]]
+  done
+  run bash "$CLI" delete
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: delete <task-id>"* ]]
+}
