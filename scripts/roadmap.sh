@@ -191,15 +191,25 @@ case "$CMD" in
           echo "FAIL: cola de sesiones inválida (IDs, fases, referencias o criterios)"; ERR=1
         fi
         # 10. Una entrada no puede seguir pidiendo la aprobación de una spec ya aprobada.
-        # Cubre enumeraciones («Aprobación de SE-A, SE-B y SE-C»). DEFERRED no cuenta como
-        # resuelta: pedir su reactivación es legítimo. Si jq falla, el check falla cerrado.
+        # Formas con ID (sin distinguir mayúsculas ni tilde): «Aprobación [de] SE-N»,
+        # «aprobar SE-N», «approval of SE-N», con enumeraciones por «,», «/», «y», «e», «and».
+        # Formas genéricas («Aprobación de cada spec», «aprobar las specs») se resuelven
+        # contra las iniciativas de la sesión: falla si todas están ya resueltas.
+        # Cobertura léxica limitada: otras redacciones («visto bueno a SE-N») no se detectan.
+        # DEFERRED no cuenta como resuelta: pedir su reactivación es legítimo.
+        # Si jq falla, el check falla cerrado.
         if STALE=$(jq -r '(.initiatives | map({(.id): .status}) | add) as $st
-          | .route.session_plan[]? | .id as $s
-          | (.prerequisites // ""
-             | [scan("[Aa]probación de SE-[0-9]+(?:\\s*(?:,|\\by\\b|\\be\\b)\\s*SE-[0-9]+)*")]
-             | map(scan("SE-[0-9]+")) | .[])
-          | select($st[.] != null and ($st[.] | IN("IDEA","PROPOSED","DEFERRED") | not))
-          | "\($s):\(.)=\($st[.])"' "$STATE" 2>/dev/null); then
+          | .route.session_plan[]? | .id as $s | (.initiatives // []) as $ini
+          | (.prerequisites // "") as $p
+          | ( ($p
+               | [scan("(?:aprobaci[oó]n|aprobar|approval)(?:\\s+(?:de|of))?\\s+SE-[0-9]+(?:\\s*(?:,|/|\\by\\b|\\be\\b|\\band\\b)\\s*SE-[0-9]+)*"; "i")]
+               | map(scan("SE-[0-9]+"; "i") | ascii_upcase) | .[]
+               | select($st[.] != null and ($st[.] | IN("IDEA","PROPOSED","DEFERRED") | not))
+               | "\($s):\(.)=\($st[.])"),
+              (if ($p | test("(?:aprobaci[oó]n\\s+de|aprobar|approval\\s+of)\\s+(?:cada|las|la|todas\\s+las|each|the|all)\\s+(?:specs?|iniciativas?)"; "i"))
+                  and ($ini | length) > 0
+                  and all($ini[]; $st[.] != null and ($st[.] | IN("IDEA","PROPOSED","DEFERRED") | not))
+               then "\($s):cada-spec=\($ini | join(","))" else empty end) )' "$STATE" 2>/dev/null); then
           [[ -n "$STALE" ]] && { echo "FAIL: entrada de sesión pide aprobar una spec ya resuelta: ${STALE//$'\n'/ }"; ERR=1; }
         else
           echo "FAIL: check de aprobaciones obsoletas no evaluable (jq falló sobre $STATE)"; ERR=1

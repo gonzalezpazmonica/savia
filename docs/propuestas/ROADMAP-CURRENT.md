@@ -60,7 +60,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S19 · P1 · fase A** — Medir jueces y relevos antes de confiar en ellos
   Acción: SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-471: digest de solo lectura del relevo nocturno en declarado/validado/aceptado con tope de decisiones.
-  Entrada: Aprobación de cada spec; SE-469 después de SE-468; sin hueco WIP nuevo (SE-471 es solo lectura).
+  Entrada: SE-469 y SE-471 ya APPROVED (operadora, 2026-10-27); SE-469 después de SE-468; sin hueco WIP nuevo (SE-471 es solo lectura).
   Salida: Informe de concordancia con IC95 y decisión según kill criterion; digest con tests negativos y medición de OK no validados; retirada si no reduce el tiempo de relevo.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 medio (M); SE-471 pequeño (S); independientes.
 
@@ -96,7 +96,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S20 · P2 · fase D** — Integridad de evaluación, vigencia nocturna y lecciones revocables
   Acción: SE-470: etiqueta eval-integrity en CI y detector determinista de trazas. SE-472: check de grant antes de cada tarea del bucle nocturno. SE-473 S0: medir lecciones sin ámbito, evidencia ni fecha.
-  Entrada: Aprobación de cada spec; SE-470 condicionada a H3/H4; SE-472 a SE-343; SE-473 S1-S2 al resultado de S0.
+  Entrada: SE-470, SE-472 y SE-473 ya APPROVED (operadora, 2026-10-27); de SE-473 solo S0, S1-S2 necesitan nueva aprobación tras el resultado de S0; SE-470 condicionada a H3/H4; SE-472 a SE-343.
   Salida: Cada slice publica su medición y sus tests con caso negativo; nada pasa a bloqueo sin datos.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: cierra vectores documentados fuera pero no observados aún; cada slice decide si sube o se mata; esfuerzo: tres slices pequeños independientes; SE-473 S2 medio.
 

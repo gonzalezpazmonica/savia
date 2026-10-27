@@ -14,6 +14,9 @@ origin: síntesis de una tesis sobre arquitectura neuro-simbólica; diseño en e
 
 # SE-473 — Lecciones contrastables: ámbito, evidencia, revalidación y refutación
 
+> **Alcance de la aprobación (2026-10-27)**: solo S0 (medición). S1 y S2 no están aprobados aunque el status sea
+> `APPROVED`; requieren una aprobación nueva de la operadora tras el informe de S0, y no se ejecutan si S0 cierra la spec (AC2).
+
 ## Problema
 
 Savia captura lecciones y las promueve con revisión humana (SCL-001: capturar → `INFERRED` → canary →
