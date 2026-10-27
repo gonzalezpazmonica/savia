@@ -13,8 +13,11 @@ SCRIPT = os.path.join(HERE, "gitignore-whitelist-delta.py")
 WL = "!" + "pro" + "jects/"
 
 
-def run(tool_input, gitignore=None):
+def run(tool_input, gitignore=None, subdirs=()):
     with tempfile.TemporaryDirectory() as d:
+        for sd in subdirs:
+            os.makedirs(os.path.join(d, "pro" + "jects", sd), exist_ok=True)
+            open(os.path.join(d, "pro" + "jects", sd, "dato.txt"), "w").close()
         if gitignore is not None:
             with open(os.path.join(d, ".gitignore"), "w") as fh:
                 fh.write(gitignore)
@@ -59,6 +62,20 @@ class Delta(unittest.TestCase):
     def test_contenido_enorme_sin_sigpipe(self):
         self.assertEqual(run({"file_path": ".gitignore", "content": WL + "g/\n#" + "x" * 3000000}, ""), 1)
 
+
+    def test_borrar_la_exclusion_general_bloquea(self):
+        # Quitar la exclusión descubre proyectos privados sin añadir ninguna whitelist.
+        self.assertEqual(run({"file_path": ".gitignore", "old_string": "pro" + "jects/*\n", "new_string": ""},
+                             "pro" + "jects/*\n", subdirs=["alfa"]), 1)
+
+    def test_whitelist_con_clase_de_caracteres_bloquea(self):
+        self.assertEqual(run({"file_path": ".gitignore",
+                              "content": "pro" + "jects/*\n![p]ro" + "jects/beta/\n"},
+                             "pro" + "jects/*\n"), 1)
+
+    def test_reordenar_sin_cambiar_lo_ignorado_no_bloquea(self):
+        self.assertEqual(run({"file_path": ".gitignore", "content": "*.tmp\npro" + "jects/*\n"},
+                             "pro" + "jects/*\n*.tmp\n", subdirs=["alfa"]), 0)
 
 if __name__ == "__main__":
     unittest.main()

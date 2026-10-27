@@ -12,11 +12,25 @@ hook_extract_command() {
   local input="$1" raw
   HOOK_COMMAND=""
   [[ -z "$input" ]] && return 0
+  local trimmed="${input#"${input%%[![:space:]]*}"}"
   if command -v jq &>/dev/null; then
-    HOOK_COMMAND=$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null) || HOOK_COMMAND=""
+    if HOOK_COMMAND=$(jq -r '.tool_input.command // empty' <<<"$input" 2>/dev/null); then
+      return 0
+    fi
+    HOOK_COMMAND=""
+    # Parece JSON pero no se puede leer (truncado, malformado): fallo cerrado. Texto plano: nada que evaluar.
+    if [[ "$trimmed" == \{* || "$trimmed" == \[* ]]; then
+      echo "BLOQUEADO: entrada del hook malformada; no se puede evaluar." >&2
+      return 2
+    fi
     return 0
   fi
-  raw=$(printf '%s' "$input" | grep -oE '"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*"' | head -1)
+  # Sin jq no se decodifican los escapes \uXXXX con fidelidad: si aparecen, no se puede evaluar.
+  if [[ "$input" == *'\u'* && "$input" == *'"command"'* ]]; then
+    echo "BLOQUEADO: sin jq no se puede decodificar la orden (instala jq)." >&2
+    return 2
+  fi
+  raw=$(grep -oE '"command"[[:space:]]*:[[:space:]]*"([^"\\]|\\.)*"' <<<"$input" | head -1)
   if [[ -z "$raw" ]]; then
     if [[ "$input" == *'"command"'* ]]; then
       echo "BLOQUEADO: sin jq no se puede evaluar el comando (instala jq)." >&2

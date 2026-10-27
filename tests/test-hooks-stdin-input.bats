@@ -272,3 +272,45 @@ print(bad); raise SystemExit(1 if bad else 0)'
   run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
 }
+
+# ── Ronda 6: tercera refutación (guards de seguridad) ──
+
+@test "android-adb-validate: comillas y orden de opciones no eluden el bloqueo" {
+  export HOME="$TMP"
+  for c in "adb shell 'rm -rf /sdcard/x'" 'adb shell rm -fr /sdcard/x' 'adb shell rm -R -f /sdcard/x' 'adb shell \"rm --recursive /sdcard/x\"'; do
+    python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$c" > "$TMP/in.json"
+    run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+    [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
+  done
+}
+
+@test "android-adb-validate: JSON truncado con una orden bloqueada falla cerrado" {
+  export HOME="$TMP"
+  printf '%s' '{"tool_input":{"command":"adb shell rm -rf /sdcard/x"}' > "$TMP/in.json"
+  run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "recursion-guard: dentro de un bucle, entrada vacía o no evaluable falla cerrado" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  run bash .opencode/hooks/recursion-guard.sh < /dev/null
+  [ "$status" -eq 2 ]
+  printf '[' > "$TMP/in.json"
+  run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "recursion-guard: una clave loop_skill con contenedor vacío sigue detectándose" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  printf '%s' '{"tool_input":{"loop_skill":{}}}' > "$TMP/in.json"
+  run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "recursion-guard: sin jq, un escape que no puede decodificar falla cerrado" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  mkdir -p "$TMP/bin"; for b in bash cat timeout grep head printf; do ln -sf "$(command -v $b)" "$TMP/bin/$b"; done
+  python3 -c 'print(chr(123)+chr(34)+"tool_input"+chr(34)+":"+chr(123)+chr(34)+"prompt"+chr(34)+":"+chr(34)+"lanza overnight"+chr(92)+"u002dsprint"+chr(34)+chr(125)+chr(125))' > "$TMP/in.json"
+  run env PATH="$TMP/bin" bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}

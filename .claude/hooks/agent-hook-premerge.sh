@@ -29,7 +29,7 @@ hook_read_command agent-hook-premerge; _rc=$?
 INPUT="$HOOK_COMMAND"
 CMD_AT="$HOOK_CMD_AT"
 GIT_AT="$HOOK_GIT_AT"
-if ! grep -qE "${GIT_AT}merge([[:space:]]|$)|${CMD_AT}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)" <<<"$INPUT"; then
+if ! grep -qE "${GIT_AT}merge([[:space:]]|$)|${CMD_AT}([^[:space:]]*/)?gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)" <<<"$INPUT"; then
   exit 0
 fi
 

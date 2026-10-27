@@ -18,7 +18,7 @@ if [[ -z "$TOOL_INPUT" && ! -t 0 ]]; then
   _raw=$(timeout 3 cat 2>/dev/null || true)
   # shellcheck source=/dev/null
   source "$LIB_DIR/hook-input.sh"
-  hook_extract_command "$_raw" || exit 2
+  hook_extract_command "$_raw" || exit 2   # JSON malformado → bloqueo (fallo cerrado)
   TOOL_INPUT="$HOOK_COMMAND"
 fi
 LOG_DIR="$HOME/.claude/logs"
@@ -31,13 +31,14 @@ if [[ "$TOOL_INPUT" != *"adb "* && "$TOOL_INPUT" != *"adb_"* ]]; then
     exit 0
 fi
 
-# Extract the ADB subcommand
-ADB_CMD="$TOOL_INPUT"
+# Se compara la orden normalizada: sin comillas ni barras de escape y con espacios colapsados, para
+# que `adb shell 'rm -rf x'` o `adb shell "rm" -rf x` no eludan los patrones.
+ADB_CMD=$(tr -d "\"'\\\\" <<<"$TOOL_INPUT" | tr -s '[:space:]' ' ')
 
 # ─── Blocked operations (never allow) ──────────────────────────────────────
+# rm recursivo con cualquier combinación y orden de opciones (-rf, -fr, -R -f, --recursive).
 BLOCKED_PATTERNS=(
-    "adb.*shell rm -rf"
-    "adb.*shell rm -r /"
+    "adb.*shell.*\\brm\\s+(-[a-zA-Z]+\\s+)*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\\b"
     "adb.*shell format"
     "adb.*shell dd if="
     "adb.*shell su "

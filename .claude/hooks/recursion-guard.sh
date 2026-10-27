@@ -46,15 +46,27 @@ main() {
   # Claude Code pasa la entrada por stdin; OPENCODE_TOOL_INPUT queda como respaldo.
   local tool_input="${OPENCODE_TOOL_INPUT:-}"
   if [[ -z "$tool_input" && ! -t 0 ]]; then tool_input=$(timeout 3 cat 2>/dev/null || true); fi
-  # JSON: se compara el texto DECODIFICADO (un «\u002d» equivale a «-») y las claves; here-strings sin SIGPIPE.
+  # Dentro de un bucle activo el guard falla cerrado: sin entrada, o con una que no puede decodificar,
+  # bloquea. JSON: se compara el texto DECODIFICADO (un escape \uXXXX equivale a su carácter) y todas
+  # las rutas de claves, también las de contenedores vacíos; here-strings sin SIGPIPE.
   local trimmed="${tool_input#"${tool_input%%[![:space:]]*}"}"
-  if [[ "$trimmed" == \{* ]] && command -v jq &>/dev/null; then
+  if [[ -z "$trimmed" ]]; then
+    printf 'BLOCKED [recursion-guard]: sin entrada que evaluar dentro de un bucle activo.\n'
+    exit 2
+  fi
+  if [[ "$trimmed" == \{* || "$trimmed" == \[* ]]; then
     local decoded
-    if ! decoded=$(jq -r '[paths(scalars) as $p | ($p | map(tostring) | join(".")), (getpath($p) | tostring)] | join("\n")' <<<"$trimmed" 2>/dev/null); then
+    if ! command -v jq &>/dev/null; then
+      if [[ "$trimmed" == *'\u'* ]]; then
+        printf 'BLOCKED [recursion-guard]: sin jq no se pueden decodificar los escapes de la entrada.\n'
+        exit 2
+      fi
+    elif ! decoded=$(jq -r '[paths as $p | ($p | map(tostring) | join(".")), (getpath($p) | select(type != "object" and type != "array") | tostring)] | join("\n")' <<<"$trimmed" 2>/dev/null); then
       printf 'BLOCKED [recursion-guard]: entrada malformada dentro de un bucle activo.\n'
       exit 2
+    else
+      tool_input="$decoded"
     fi
-    tool_input="$decoded"
   fi
 
   local detected_loop

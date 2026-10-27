@@ -157,12 +157,13 @@ setup() {
   [ "$SAVIA_LOOP_CONTEXT" = "code-improvement-loop:2" ]
 }
 
-# Test 12: OPENCODE_TOOL_INPUT unset + SAVIA_LOOP_CONTEXT set → exit 0 (no input = no loop)
-@test "OPENCODE_TOOL_INPUT unset + SAVIA_LOOP_CONTEXT set → exit 0 (no tool input to block)" {
+# Test 12: dentro de un bucle, sin entrada que evaluar el guard falla cerrado (#1398, revisión de
+# refutación): antes salía con 0 y una entrada perdida dejaba lanzar un bucle anidado.
+@test "OPENCODE_TOOL_INPUT unset + SAVIA_LOOP_CONTEXT set → exit 2 (fail-closed without input)" {
   export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
   unset OPENCODE_TOOL_INPUT
-  run bash "$HOOK"
-  [ "$status" -eq 0 ]
+  run bash "$HOOK" < /dev/null
+  [ "$status" -eq 2 ]
 }
 
 # --- Comportamiento: los cuatro patrones, la frontera de loop_skill y el formato del bloqueo ---
@@ -202,10 +203,9 @@ blocks() {  # $1 = entrada de herramienta; exporta contexto de bucle
   [ -z "$output" ]
 }
 
-@test "entrada vacia dentro de un bucle no bloquea" {
+@test "entrada vacia dentro de un bucle bloquea (fallo cerrado, #1398)" {
   blocks ''
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [ "$status" -eq 2 ]
 }
 
 @test "permitido: no escribe nada en stdout" {
