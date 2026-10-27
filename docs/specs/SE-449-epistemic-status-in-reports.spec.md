@@ -86,6 +86,23 @@ S1 S, S2 S–M, S3 S. Total M.
 SPEC-106 (Truth Tribunal), SE-444 (autoridad del verificador: misma preocupación sobre cobertura no
 verificada, aplicada a AC), SE-332 (Handback: bloqueo escala al padre, aplicable a informes con muchos `unknown`).
 
+## Delta 2026-10-26
+
+Origen: síntesis de una tesis sobre arquitectura neuro-simbólica (diseño en el repo de investigación privado). No cambia el
+status de esta spec.
+
+- **Problema**: los cuatro valores no distinguen una afirmación **refutada** de una desconocida, ni una conclusión
+  **derivada bajo un modelo** (válida si las premisas lo son) de una **estimación estadística** con incertidumbre.
+  Un árbol de derivación prueba bajo premisas, no la verdad de las premisas.
+- **Propuesta**: dos valores más en S1. `rejected` (contrastada y refutada, con referencia al contraejemplo; la lectura
+  humana: «descartado») y `estimated` (estimación con incertidumbre declarada, p. ej. un IC; «estimado»). `derived`
+  queda para cálculo determinista desde observados.
+- **AC adicional**: el BATS de AC2/AC3 cubre `{e:rejected}` sin referencia al contraejemplo (hallazgo
+  `EPISTEMIC_UNREFUTED`) y `{e:estimated}` sin incertidumbre (hallazgo `EPISTEMIC_NO_UNCERTAINTY`), con caso negativo
+  para cada uno.
+- **Consumidor**: SE-473 (`refuted_by` de las lecciones) y SE-469 (cifras de concordancia con IC95).
+- **Decisión de la operadora**: incorporarlo a S1 o dejarlo para un S3 (propuesta: S1, son dos filas de la misma tabla).
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched
