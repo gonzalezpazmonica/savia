@@ -323,6 +323,13 @@ jobs:
       - name: Installer contracts and planner (SE-399 F1)
         run: python3 -m unittest tests/python/test_installer_plan.py
 
+      # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
+      # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
+      - name: Gate guards parity (SE-453 S2)
+        env:
+          SAVIA_REQUIRE_TS: "1"
+        run: bats tests/test-gate-result-contract.bats tests/test-gate-result-dual-binding.bats tests/test-gate-result-scanners.bats
+
       - name: Generate BATS dependency map
         id: deps
         run: bash scripts/ci-bats-deps.sh --generate
