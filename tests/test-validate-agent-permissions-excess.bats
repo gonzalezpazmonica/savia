@@ -63,7 +63,7 @@ teardown() {
 
 @test "ratchet: baselined excess passes and is reported verbosely" {
   printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/x.md"
-  printf 'x Bash\n' > "$TMPDIR_AP/base.txt"
+  printf 'x Bash operadora 2099-01-01\n' > "$TMPDIR_AP/base.txt"
   run bash "$SCRIPT" "$TMPDIR_AP/agents" --verbose --baseline "$TMPDIR_AP/base.txt"
   [ "$status" -eq 0 ]
   [[ "$output" == *"BASELINE: x (L0) — excess tool: Bash"* ]]
@@ -72,7 +72,7 @@ teardown() {
 
 @test "ratchet: excess not in baseline still fails" {
   printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Bash, Write]\n---\n' > "$TMPDIR_AP/agents/x.md"
-  printf 'x Bash\n' > "$TMPDIR_AP/base.txt"
+  printf 'x Bash operadora 2099-01-01\n' > "$TMPDIR_AP/base.txt"
   run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/base.txt"
   [ "$status" -eq 1 ]
   [[ "$output" == *"x (L0) — excess tool: Write"* ]]
@@ -80,7 +80,7 @@ teardown() {
 
 @test "ratchet: stale baseline entry fails so the list only shrinks" {
   printf -- '---\nname: x\npermission_level: L0\ntools: [Read]\n---\n' > "$TMPDIR_AP/agents/x.md"
-  printf 'x Bash\n' > "$TMPDIR_AP/base.txt"
+  printf 'x Bash operadora 2099-01-01\n' > "$TMPDIR_AP/base.txt"
   run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/base.txt"
   [ "$status" -eq 1 ]
   [[ "$output" == *"stale baseline entry 'x Bash'"* ]]
@@ -91,6 +91,93 @@ teardown() {
   run bash "$SCRIPT" "$TMPDIR_AP/agents"
   [ "$status" -eq 1 ]
   [[ "$output" == *"tech-writer (L2) — excess tool: Bash"* ]]
+}
+
+@test "transient: expired baseline entry stops absorbing the excess" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  printf 'x Bash operadora 2026-11-10\n' > "$TMPDIR_AP/base.txt"
+  AGENT_PERMS_TODAY=2026-11-11 run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/base.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x (L0) — excess tool: Bash (baseline entry expired 2026-11-10"* ]]
+}
+
+@test "transient: entry still valid on its expiry day" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  printf 'x Bash operadora 2026-11-10\n' > "$TMPDIR_AP/base.txt"
+  AGENT_PERMS_TODAY=2026-11-10 run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/base.txt"
+  [ "$status" -eq 0 ]
+}
+
+@test "transient: entry without owner or date is an error" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  for entry in 'x Bash' 'x Bash operadora' 'x Bash operadora soon' 'x Bash operadora 2026-13-45'; do
+    printf '%s\n' "$entry" > "$TMPDIR_AP/base.txt"
+    run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/base.txt"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"malformed baseline entry"* ]]
+    [[ "$output" == *"x (L0) — excess tool: Bash"* ]]
+  done
+}
+
+@test "transient: missing baseline file is an error, not a pass" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/nope.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"baseline file not found"* ]]
+}
+
+@test "new excess: an agent absent from a non-empty baseline cannot add a tool" {
+  printf -- '---\nname: old\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/old.md"
+  printf -- '---\nname: fresh\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/fresh.md"
+  printf 'old Bash operadora 2099-01-01\n' > "$TMPDIR_AP/base.txt"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline "$TMPDIR_AP/base.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fresh (L0) — excess tool: Bash"* ]]
+  [[ "$output" != *"old (L0) — excess tool"* ]]
+}
+
+@test "real repo: new excess on a real agent fails despite the real baseline" {
+  cp -r "$REPO_ROOT/.claude/agents" "$TMPDIR_AP/real"
+  # tools: line of a conforming agent gains Bash; its name is not in the baseline
+  sed -i 's/^tools: .*/tools: [Read, Glob, Grep, Bash]/' "$TMPDIR_AP/real/code-reviewer.md"
+  sed -i 's/^permission_level: .*/permission_level: L0/' "$TMPDIR_AP/real/code-reviewer.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/real" --baseline "$BASELINE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"code-reviewer (L0) — excess tool: Bash"* ]]
+}
+
+@test "parser: inline list continued on following lines is fully read" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Glob,\n  Grep, Bash]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x (L0) — excess tool: Bash"* ]]
+}
+
+@test "parser: blank line inside a block list does not hide later tools" {
+  printf -- '---\nname: x\npermission_level: L0\ntools:\n  - Read\n\n  - Bash\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x (L0) — excess tool: Bash"* ]]
+}
+
+@test "parser: trailing comment on a map value does not hide a true tool" {
+  printf -- '---\nname: x\npermission_level: L0\ntools:\n  read: true\n  bash: true # needed\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x (L0) — excess tool: Bash"* ]]
+}
+
+@test "parser: comments in a conforming list are not read as tools" {
+  printf -- '---\nname: x\npermission_level: L0\ntools:\n  # read-only set\n  - Read # files\n  - Grep\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Errors:  0"* ]]
+}
+
+@test "parser: commented-out tool in an inline list is ignored" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Grep] # Bash removed\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 0 ]
 }
 
 @test "real repo: passes with baseline, every entry consumed" {

@@ -8,11 +8,14 @@ set -uo pipefail
 # The level is a MAXIMUM (agent-permission-levels.md):
 #   - a tool ABOVE the level (excess)  -> ERROR, exit 1
 #   - a tool of the level not declared -> WARNING (fewer tools is allowed)
-# Known excesses pending an operator decision live in a ratchet baseline
-# (one "agent tool" pair per line). Listed pairs are reported as BASELINE,
-# not errors; a listed pair that is no longer an excess is a STALE error,
-# so the baseline can only shrink. The default baseline applies only to the
-# repo's own .claude/agents; other dirs need --baseline explicitly.
+# Known excesses pending an operator decision live in a TRANSIENT baseline
+# (one "agent tool owner YYYY-MM-DD" entry per line). Listed pairs are
+# reported as BASELINE, not errors, only until their expiry date; after it the
+# entry stops absorbing and the excess fails. An entry without owner or a valid
+# date is an error, and a listed pair that is no longer an excess is a STALE
+# error, so the baseline can only shrink. The default baseline applies only to
+# the repo's own .claude/agents; other dirs need --baseline explicitly.
+# AGENT_PERMS_TODAY (YYYY-MM-DD) overrides today's date (tests).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -50,35 +53,67 @@ LEVEL_TOOLS[L2]="Read Write Edit Glob Grep"
 LEVEL_TOOLS[L3]="Read Write Edit Bash Glob Grep"
 LEVEL_TOOLS[L4]="Read Write Edit Bash Glob Grep Task"
 
+TODAY="${AGENT_PERMS_TODAY:-$(date +%F)}"
 declare -A BASE_PAIRS
+declare -A BASE_EXPIRES
 declare -A SEEN_PAIRS
-if [[ -n "$BASELINE" && -f "$BASELINE" ]]; then
-  while read -r b_agent b_tool _; do
-    [[ -z "$b_agent" || "$b_agent" == \#* ]] && continue
-    BASE_PAIRS["$b_agent $b_tool"]=1
-  done < "$BASELINE"
+if [[ -n "$BASELINE" ]]; then
+  if [[ ! -f "$BASELINE" ]]; then
+    echo "ERROR: baseline file not found: $BASELINE"
+    ERRORS=$((ERRORS + 1))
+  else
+    while read -r b_agent b_tool b_owner b_expires _; do
+      [[ -z "$b_agent" || "$b_agent" == \#* ]] && continue
+      if [[ -z "$b_tool" || -z "$b_owner" || ! "$b_expires" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] \
+         || ! date -d "$b_expires" +%F >/dev/null 2>&1; then
+        echo "ERROR: malformed baseline entry '$b_agent ${b_tool:-?}' — needs 'agent tool owner YYYY-MM-DD' (owner and expiry are mandatory)"
+        ERRORS=$((ERRORS + 1))
+        continue
+      fi
+      BASE_PAIRS["$b_agent $b_tool"]=1
+      BASE_EXPIRES["$b_agent $b_tool"]="$b_expires"
+    done < "$BASELINE"
+  fi
 fi
 
 # extract_tools FILE — print the agent's enabled tools, one per line.
 # Reads only the `tools:` key of the first frontmatter block and supports
-# inline lists ([A, B]), block lists (- A) and maps (a: true / a: false).
+# inline lists ([A, B], also spanning several lines), block lists (- A) and
+# maps (a: true / a: false). Comments and blank lines are ignored.
 extract_tools() {
   awk '
+    function emit_tokens(v,   n, a, i) {
+      gsub(/[][",'"'"']/, " ", v); n = split(v, a, /[ \t]+/)
+      for (i = 1; i <= n; i++) if (a[i] != "") print a[i]
+    }
     NR == 1 && $0 == "---" { fm = 1; next }
-    fm && $0 == "---" { exit }
     !fm { exit }
+    $0 == "---" { exit }
+    {
+      line = $0; sub(/[ \t]+#.*$/, "", line); sub(/^[ \t]*#.*$/, "", line); sub(/[ \t]+$/, "", line)
+    }
+    in_list {
+      emit_tokens(line)
+      if (line ~ /\]/) in_list = 0
+      next
+    }
     /^tools:/ {
-      v = $0; sub(/^tools:[ \t]*/, "", v)
-      if (v != "") { gsub(/[][",'"'"']/, " ", v); n = split(v, a, /[ \t]+/); for (i = 1; i <= n; i++) if (a[i] != "") print a[i]; exit }
+      v = line; sub(/^tools:[ \t]*/, "", v)
+      if (v != "") {
+        emit_tokens(v)
+        if (v ~ /^\[/ && v !~ /\]/) in_list = 1; else exit
+        next
+      }
       in_tools = 1; next
     }
     in_tools {
-      if ($0 !~ /^[ \t]/) exit
-      line = $0; gsub(/["'"'"']/, "", line)
-      if (line ~ /^[ \t]*-[ \t]*/) { sub(/^[ \t]*-[ \t]*/, "", line); sub(/[ \t]+$/, "", line); if (line != "") print line; next }
+      if (line == "") next
+      if (line !~ /^[ \t]/) exit
+      gsub(/["'"'"']/, "", line)
+      if (line ~ /^[ \t]*-[ \t]*/) { sub(/^[ \t]*-[ \t]*/, "", line); if (line != "") print line; next }
       if (line ~ /:/) {
         k = line; sub(/:.*/, "", k); gsub(/[ \t]/, "", k)
-        val = line; sub(/^[^:]*:[ \t]*/, "", val); sub(/[ \t]+$/, "", val)
+        val = line; sub(/^[^:]*:[ \t]*/, "", val)
         if (tolower(val) == "true") print k
       }
     }
@@ -104,7 +139,7 @@ for agent_file in "$AGENTS_DIR"/*.md; do
   agent_name=$(basename "$agent_file" .md)
 
   # Extract permission_level from frontmatter
-  level=$(sed -n '/^---$/,/^---$/{ /^permission_level:/{ s/.*: *//; p; } }' "$agent_file")
+  level=$(awk 'NR==1 && $0=="---"{fm=1;next} !fm{exit} $0=="---"{exit} /^permission_level:/{v=$0; sub(/^permission_level:[ \t]*/,"",v); sub(/[ \t]+#.*$/,"",v); gsub(/["'"'"' \t]/,"",v); print v; exit}' "$agent_file")
 
   if [[ -z "$level" ]]; then
     WARNINGS=$((WARNINGS + 1))
@@ -143,6 +178,11 @@ for agent_file in "$AGENTS_DIR"/*.md; do
     pair="$agent_name $tool"
     if [[ -n "${BASE_PAIRS[$pair]:-}" ]]; then
       SEEN_PAIRS["$pair"]=1
+      if [[ "${BASE_EXPIRES[$pair]}" < "$TODAY" ]]; then
+        echo "ERROR: $agent_name ($level) — excess tool: $tool (baseline entry expired ${BASE_EXPIRES[$pair]}; decide: raise the level or drop the tool)"
+        ERRORS=$((ERRORS + 1))
+        continue
+      fi
       BASELINED=$((BASELINED + 1))
       if [[ $VERBOSE -eq 1 ]]; then
         echo "BASELINE: $agent_name ($level) — excess tool: $tool (pending decision)"

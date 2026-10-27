@@ -114,7 +114,7 @@ Script `scripts/validate-agent-permissions.sh` verifica las tools del agente con
 
 - Tool **por encima** del nivel (exceso) = ERROR, exit 1, con agente y tool.
 - Tool del nivel no declarada = WARNING (tener menos es válido).
-- Excesos pendientes de decisión: línea base `docs/agent-permissions-excess-baseline.txt` (pares `agente tool`). Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el máximo. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
+- Excesos pendientes de decisión: línea base **transitoria** `docs/agent-permissions-excess-baseline.txt`, una entrada `agente tool responsable AAAA-MM-DD` por línea. Sin responsable o fecha válida = ERROR. Pasada la fecha la entrada deja de absorber el exceso y el validador falla. Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el máximo. Un exceso nuevo nunca se absorbe. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
 
 ## Integracion con agent-policies.yaml
 
