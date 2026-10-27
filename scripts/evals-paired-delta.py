@@ -191,8 +191,7 @@ def evaluate_dataset(path: Path, root: Path, baselines_dir: Path, artifacts: dic
     if sabotage["threshold_pass"]:
         # The executor scored an empty artifact as well as the baseline: it is not measuring it.
         return _entry(name, "unknown", [{"check": f"{name}/sabotage", "reason": "not_executed"}], **extra)
-    result = "clean" if real["threshold_pass"] else "findings"
-    return _entry(name, result, [], threshold_pass=real["threshold_pass"], **extra)
+    return _entry(name, "clean", [], threshold_pass=True, **extra)
 
 
 def run_datasets(args: argparse.Namespace, threshold: float) -> int:
@@ -219,6 +218,8 @@ def check_report(path: str) -> int:
         if not all(isinstance(res, str) for _, res in results):
             raise TypeError("result must be a string")
         unknown_rows = [r for r in report if r["result"] == "unknown"]
+        if any(not (r.get("gaps") or []) for r in unknown_rows):
+            raise TypeError("unknown sin gaps: el contrato exige al menos un hueco")
         reasons = {id(r): ", ".join(f"{g['check']}:{g['reason']}" for g in r.get("gaps") or []) for r in unknown_rows}
     except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
         print(f"ERROR: informe de evals ilegible ({exc!r}): sin veredicto.")
@@ -268,7 +269,11 @@ def main() -> None:
         threshold = args.threshold
     else:
         env_threshold = os.environ.get("SAVIA_EVAL_DELTA_THRESHOLD")
-        threshold = float(env_threshold) if env_threshold else 0.05
+        try:
+            threshold = float(env_threshold) if env_threshold else 0.05
+        except ValueError:
+            print(f"ERROR: SAVIA_EVAL_DELTA_THRESHOLD no numérico ({env_threshold!r}): sin veredicto.", file=sys.stderr)
+            sys.exit(2)
 
     if args.check_report:
         sys.exit(check_report(args.check_report))

@@ -312,9 +312,34 @@ PY
   run python3 "$DELTA" --check-report "$f"
   [ "$status" -eq 2 ]
   [[ "$output" != *Traceback* ]]
+  # el contrato exige al menos un hueco en un unknown: gaps null o vacío no es un informe válido
   echo '[{"dataset":"a","result":"unknown","gaps":null}]' > "$f"
   run python3 "$DELTA" --check-report "$f"
+  [ "$status" -eq 2 ]
+  echo '[{"dataset":"a","result":"unknown","gaps":[]}]' > "$f"
+  run python3 "$DELTA" --check-report "$f"
+  [ "$status" -eq 2 ]
+  echo '[{"dataset":"a","result":"clean","gaps":[]}]' > "$f"
+  run python3 "$DELTA" --check-report "$f"
   [ "$status" -eq 0 ]
+}
+
+@test "umbral: SAVIA_EVAL_DELTA_THRESHOLD no numérico sale 2 sin traceback; numérico no falla" {
+  local f="$BATS_TEST_TMPDIR/r.json"
+  echo '[{"dataset":"a","result":"clean","gaps":[]}]' > "$f"
+  SAVIA_EVAL_DELTA_THRESHOLD=abc run python3 "$DELTA" --check-report "$f"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *Traceback* ]]
+  [[ "$output" == *SAVIA_EVAL_DELTA_THRESHOLD* ]]
+  SAVIA_EVAL_DELTA_THRESHOLD=0.1 run python3 "$DELTA" --check-report "$f"
+  [ "$status" -eq 0 ]
+}
+
+@test "workflow: la etiqueta y el delta del comentario se escapan o se fuerzan a número" {
+  run grep -c 'esc(r.label' "$REPO_ROOT/.github/workflows/evals-ci.yaml"
+  [ "$output" -ge 1 ]
+  run grep -c 'Number.isFinite(d)' "$REPO_ROOT/.github/workflows/evals-ci.yaml"
+  [ "$output" -ge 1 ]
 }
 
 @test "check-report: datasets con el mismo nombre no se colapsan y unknown emite ::warning::" {

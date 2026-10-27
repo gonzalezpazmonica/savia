@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-27
+approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2
 developer_type: agent-single
 created: 2026-10-26
@@ -58,7 +60,7 @@ La literatura de 2025–2026 documenta agentes que modifican tests, parchean eva
 
 | AC | Verificación |
 |---|---|
-| AC1 | Test que falla antes: un diff sintético que modifica `tests/evals/truth-tribunal/cases.jsonl` sin marca produce la etiqueta o el fallo `eval-integrity`. |
+| AC1 | Test que falla antes: un diff sintético que modifica `tests/evals/truth-tribunal/cases.jsonl` sin marca produce la etiqueta `eval-integrity` y el comentario (modo aviso de S1; el bloqueo solo existe si H4 lo justifica y tendrá su propio AC). |
 | AC2 | Negativo: el mismo diff con `[eval-change]` en el título no la produce; un diff que no toca rutas protegidas tampoco. |
 | AC3 | pytest: un recibo sintético con `Read` sobre una ruta de holdout da 1 hallazgo; un recibo limpio, 0; un `Bash` con `sed -i` sobre un test protegido, 1. |
 | AC4 | El detector aplicado a un lote real de recibos produce un informe con su recuento (sea 0 o no); el recuento se cita en la PR sin rutas privadas. |

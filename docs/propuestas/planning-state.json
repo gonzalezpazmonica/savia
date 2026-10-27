@@ -251,12 +251,13 @@
     },
     {
       "id": "SE-401",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P0",
       "title": "Intent-to-Effect Execution Architecture (I2E)",
       "note": "Tras cierre verificable SE-396, F0 de solo lectura: validar la frontera con el programa privado AEK. No implementar ni graduar antes de aprobación explícita. ADR-002: reescribir alineada a TEE v1.1 (Sufficiency, Commitment, Outcome, Disposition, Authority Lease). Colisión de IDs resuelta 2026-09-26: AEK usa prefijo AEK-; SE-401 conserva su ID. Fase B.",
       "evidence": "docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md",
-      "phase": "B"
+      "phase": "B",
+      "approval": "Operadora 2026-10-27: AskUserQuestion (alcance aprobado: solo F0, de solo lectura)"
     },
     {
       "id": "SE-402",
@@ -428,21 +429,23 @@
     },
     {
       "id": "SE-408",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Automatización móvil por árbol de accesibilidad (mobile-mcp) bajo soberanía",
       "note": "Primer paso: feasibility probe S0 (telemetría desactivada verificada, versión fijada)",
       "evidence": "docs/specs/SE-408-mobile-accessibility-automation.spec.md",
-      "phase": "E"
+      "phase": "E",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-409",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P3",
       "title": "Bucle experiencia → skill con curación y retirada",
       "note": "README de hermes-agent verificado el 2026-09-29: aprendizaje de skills confirmado; curación y retirada, aportación de Savia",
       "evidence": "docs/specs/SE-409-experience-to-skill-loop.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-410",
@@ -1133,12 +1136,13 @@
     },
     {
       "id": "SE-443",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Gobierno de conectores MCP: malware de paquetes, secretos tipados, importación, política por herramienta y doctrina de diseño",
       "note": "S1-S2 no dependen de Space; S3-S5 se verifican contra el código real de space-server.",
       "evidence": "docs/specs/SE-443-mcp-connector-governance.spec.md",
-      "phase": "B"
+      "phase": "B",
+      "approval": "Operadora 2026-10-27: AskUserQuestion (alcance aprobado: S1-S2)"
     },
     {
       "id": "SE-444",
@@ -1220,48 +1224,53 @@
     },
     {
       "id": "SE-446",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Canal de aprobación inalcanzable para el agente: prueba de autoaprobación y mitigación",
       "note": "S0 es una sonda sin cambio de producto; el riesgo no está confirmado.",
       "evidence": "docs/specs/SE-446-approval-channel-agent-unreachable.spec.md",
-      "phase": "B"
+      "phase": "B",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-447",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Contexto acotado en sesiones largas: una sola captura viva, tope absoluto de compactación y clasificación de acciones de riesgo",
       "note": "S1 mide antes de fijar valores; S2 y S4 esperan a SE-439 tras F0.",
       "evidence": "docs/specs/SE-447-bounded-context-long-sessions.spec.md",
-      "phase": "E"
+      "phase": "E",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-448",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos",
       "note": "El texto invisible ya está cubierto (SPEC-193, SE-028, SE-060); S0 mide superficie antes de construir. Delta 2026-10-20: S4 defang de indicadores y categoría third-party-directive (evidencia de inyección en documentos de terceros).",
       "evidence": "docs/specs/SE-448-external-content-leak-canary-urls.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-449",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Estado epistémico en hallazgos e informes: observado, derivado, inferido, desconocido",
       "note": "Etiqueta opcional; sin etiqueta el tribunal no cambia.",
       "evidence": "docs/specs/SE-449-epistemic-status-in-reports.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-450",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Instaladores aditivos e idempotentes y propiedad de procesos con identidad de arranque",
       "note": "S1 y S3 empiezan con auditoría o prueba, no con cambio.",
       "evidence": "docs/specs/SE-450-installer-and-process-ownership-hygiene.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-451",
@@ -1292,12 +1301,13 @@
     },
     {
       "id": "SE-452",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P3",
       "title": "Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad",
       "note": "Piloto sobre un solo contrato; prematura sin implementadores externos, se encola dentro del laboratorio de conformidad.",
       "evidence": "docs/specs/SE-452-contract-conformance-suites.spec.md",
-      "phase": "C"
+      "phase": "C",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-453",
@@ -1311,12 +1321,13 @@
     },
     {
       "id": "SE-454",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores",
       "note": "Los invariantes se cumplen hoy (medido); el test los fija. La guardia de red es aserción de pruebas, no control.",
       "evidence": "docs/specs/SE-454-negative-invariant-tests.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-464",
@@ -1329,84 +1340,93 @@
     },
     {
       "id": "SE-465",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Dependencias de instalación sin fijar: imágenes, instaladores remotos, npm y pip",
       "note": "Alertas Scorecard #71-#104 (34): 26 reales en 4 grupos (imágenes, curl|sh, npm, pip) y 8 falsos positivos (curl JSON a python -c). Medido en main d941dc3a6.",
       "evidence": "docs/specs/SE-465-pinned-install-dependencies.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-466",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "214 avisos OSV en los lockfiles y una auditoría de CI que no puede fallar",
       "note": "Alerta Scorecard #62: 188 GHSA + 26 RUSTSEC = 214 (medido con OSV). Cinco paquetes concentran más de la mitad; todas las auditorías de CI acaban en || true y ninguna mira Cargo/uv/pnpm.",
       "evidence": "docs/specs/SE-466-dependency-vulnerability-triage.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-467",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "El auditor de tests puntúa el idioma del nombre, no el caso probado",
       "note": "D2 de SE-456 medida: certifican el 83 % de ficheros en inglés y el 43 % en español; en S03 con mutación >=90 %, 8 de 57 con el motor y 35 con léxico en español. Opciones: (a) motor, (b) renombrar 1483 tests.",
       "evidence": "docs/specs/SE-467-auditor-language-bias.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-458",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Presupuesto de atención humana: tope de PRs esperando revisión, lotes y prioridad",
       "note": "Medido 2026-10-23: 20 PRs de agente en borrador, 15 del día, una revisora; WIP solo limita iniciativas.",
       "evidence": "docs/specs/SE-458-human-review-attention-budget.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-459",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Aprobaciones contestables: tarjeta de aprobación en lenguaje llano",
       "note": "El grant de merge-sprint se aprueba sobre un digest; diálogo de permiso con shell cruda paró un sprint 6 h.",
       "evidence": "docs/specs/SE-459-contestable-approval-card.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-460",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Reactivación revalidada: automatizaciones y memoria con vigencia, procedencia y autoridad",
       "note": "ScheduledTask sin origen, huella ni caducidad (runner aún no ejecuta: latente); memory-stack-load no filtra caducidad ni origen.",
       "evidence": "docs/specs/SE-460-revalidated-reactivation-context.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-461",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Composición de efectos: combinaciones prohibidas en contratos de Yema y pruebas negativas",
       "note": "El validador de Yema no tiene reglas de combinación; implementación por PR en el repo de Yema.",
       "evidence": "docs/specs/SE-461-effect-composition-contracts.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-462",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Leer no implica poder retransmitir: marca de sesión tras leer una cúpula N2+",
       "note": "dome_guard no guarda estado entre llamadas; la salida a PR, red o mensajería solo tiene escaneo léxico.",
       "evidence": "docs/specs/SE-462-read-is-not-relay.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-463",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Cobertura de supervisión: reconciliar llamadas con lo que vieron los guards y fallar cerrado",
       "note": "Ninguna reconciliación de llamadas contra guards; SE-402 cubre solo ficheros y en aviso.",
       "evidence": "docs/specs/SE-463-supervision-coverage-reconciliation.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-455",
@@ -1430,12 +1450,13 @@
     },
     {
       "id": "SE-457",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints",
       "note": "Skill entregada en la PR #1361; la spec sigue PROPOSED hasta la aprobación de la operadora.",
       "evidence": "docs/specs/SE-457-harness-architecture-skill.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-468",
@@ -1449,48 +1470,53 @@
     },
     {
       "id": "SE-469",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Tribunales medidos con sus propios golden sets",
       "note": "150 casos esperados (50 por tribunal) solo validados por esquema; ningún script los ejecuta y el registro FP/FN no tiene datos reales. Primer uso: 30 casos con tope de gasto.",
       "evidence": "docs/specs/SE-469-tribunal-golden-set-live-runs.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-470",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Integridad de los artefactos de evaluación",
       "note": "Sello SPEC-188-P3 solo en cliente (Edit|Write, 5 ficheros); golden sets y baselines sin sellar; 5 commits desde 2026-07-01 tocaron ficheros sellados sin marca. Sube a P1 si la auditoría de trazas encuentra eventos.",
       "evidence": "docs/specs/SE-470-eval-artifact-integrity.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-471",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P1",
       "title": "Relevo nocturno con evidencia: declarado, validado y aceptado",
       "note": "159 marcas de fin de referencia, 21 % no OK; el OK es autodeclarado y el ledger SE-349 tiene 3 entradas. Script de solo lectura con tope de decisiones y kill criterion.",
       "evidence": "docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-472",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Vigencia de la autoridad comprobada antes de cada tarea nocturna",
       "note": "overnight-sprint-loop.sh no vuelve a comprobar grants entre tareas; operator-grant.sh check ya existe y solo lo usa push-pr.sh.",
       "evidence": "docs/specs/SE-472-overnight-per-task-authority-check.spec.md",
-      "phase": "A"
+      "phase": "A",
+      "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
       "id": "SE-473",
-      "status": "PROPOSED",
+      "status": "APPROVED",
       "priority": "P2",
       "title": "Lecciones contrastables: ámbito, evidencia, revalidación y refutación",
       "note": "Ninguna lección declara ámbito ni refutación; MAX_LESSON_AGE_DAYS=90 declarado en lesson-pipeline.sh y sin uso. S0 mide y puede cerrar la spec.",
       "evidence": "docs/specs/SE-473-contestable-lessons.spec.md",
-      "phase": "D"
+      "phase": "D",
+      "approval": "Operadora 2026-10-27: AskUserQuestion (alcance aprobado: solo S0 (medición; puede cerrar la spec))"
     }
   ],
   "route": {
@@ -1528,7 +1554,12 @@
         {
           "on": "2026-10-26",
           "requested_by": "operadora, síntesis de tres tesis investigadas (evals, calendario y sprint nocturno, neuro-simbólica)",
-          "change": "Alta de SE-468..SE-473 (PROPOSED) y sesiones S18..S20; S18 (P0) tras S10 porque el gate de evals actual no puede fallar. Deltas en SE-449, SE-461 y SE-406 sin cambio de status. Gates, fases y límites WIP sin cambios."
+          "change": "Alta de SE-469..SE-473 (PROPOSED) y de SE-468 (APPROVED por la operadora en chat el 2026-10-26, «Aprobado SE-468»), y sesiones S18..S20; S18 (P0) tras S10 porque el gate de evals actual no puede fallar. Deltas en SE-449, SE-461 y SE-406 sin cambio de status. Gates, fases y límites WIP sin cambios."
+        },
+        {
+          "on": "2026-10-27",
+          "requested_by": "operadora, AskUserQuestion en la sesión de la orquestadora",
+          "change": "SE-469..SE-473 pasan de PROPOSED a APPROVED; de SE-473 se aprueba solo S0 (medición, puede cerrar la spec) y S1-S2 requieren nueva aprobación. Entradas de S19 y S20 actualizadas. Gates, fases y límites WIP sin cambios."
         }
       ]
     },
@@ -1565,7 +1596,7 @@
         "value": "alto",
         "dependency_value": "protege cada PR de la cola",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-442 y decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.",
+        "prerequisites": "SE-442 ya APPROVED; falta la decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.",
         "done": "Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada."
       },
       {
@@ -1576,14 +1607,14 @@
           "SE-468"
         ],
         "title": "Evals que pueden fallar",
-        "action": "SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que debe dar findings.",
+        "action": "SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que impide declarar evaluado un dataset (AC7 condicional; el findings con sabotaje es criterio de salida de SE-469).",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
         "dependency_value": "quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-468 y decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.",
-        "done": "Con la skill saboteada el gate no da PASS; modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo."
+        "prerequisites": "SE-468 ya APPROVED (operadora, 2026-10-26); falta la decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.",
+        "done": "Con la skill saboteada el gate nunca da PASS ni declara el dataset evaluado: sin ejecutor real el resultado es unknown (AC7 condicional, decisión de la operadora 2026-10-26); modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo."
       },
       {
         "id": "S02",
@@ -1650,7 +1681,7 @@
         "value": "alto",
         "dependency_value": "hace honestos los cierres de S03 y S04",
         "effort": "slice pequeño (S)",
-        "prerequisites": "Aprobación de SE-444; informe-only, compatible con lo ya integrado.",
+        "prerequisites": "SE-444 ya APPROVED; informe-only, compatible con lo ya integrado.",
         "done": "Informe de cobertura no verificada visible, predicado de cierre sin cambios (regresión a cero) y decisión explícita sobre pasar a bloqueo con datos de dos cierres reales."
       },
       {
@@ -1684,7 +1715,7 @@
         "value": "alto",
         "dependency_value": "hace cumplir autonomous-safety donde hoy es texto",
         "effort": "S1, S2 y S4 pequeños; S3 medio",
-        "prerequisites": "Aprobación de SE-445; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.",
+        "prerequisites": "SE-445 ya APPROVED; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.",
         "done": "Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4."
       },
       {
@@ -1701,7 +1732,7 @@
         "value": "alto",
         "dependency_value": "evita falsos verdes en los gates de los que dependen merge-sprint y la CI; alimenta la cobertura no verificada de SE-444",
         "effort": "S0, S1 y S2 pequeños; S3 medio",
-        "prerequisites": "Aprobación de SE-453 y decisión D1-D3; S2 probado en los dos frontends.",
+        "prerequisites": "SE-453 ya APPROVED; falta la decisión D1-D3; S2 probado en los dos frontends.",
         "done": "Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado."
       },
       {
@@ -1719,7 +1750,7 @@
         "value": "alto",
         "dependency_value": "da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado",
         "effort": "SE-469 medio (M); SE-471 pequeño (S); independientes",
-        "prerequisites": "Aprobación de cada spec; SE-469 después de SE-468; sin hueco WIP nuevo (SE-471 es solo lectura).",
+        "prerequisites": "SE-469 y SE-471 ya APPROVED (operadora, 2026-10-27); SE-469 después de SE-468; sin hueco WIP nuevo (SE-471 es solo lectura).",
         "done": "Informe de concordancia con IC95 y decisión según kill criterion; digest con tests negativos y medición de OK no validados; retirada si no reduce el tiempo de relevo."
       },
       {
@@ -1754,7 +1785,7 @@
         "value": "alto",
         "dependency_value": "la política por herramienta presupone un canal de aprobación seguro",
         "effort": "S0 pequeño; S1-S2 pequeños; S3-S5 medianos",
-        "prerequisites": "Aprobación de SE-446 y SE-443; usa el hueco temporal de SE-428 (no abre otra iniciativa en curso); si S0 encuentra una vía abierta, S1 de SE-446 pasa a P0 y adelanta a todo lo demás de Space.",
+        "prerequisites": "Specs SE-446 y SE-443 aprobadas (2026-10-27); usa el hueco temporal de SE-428 (no abre otra iniciativa en curso); si S0 encuentra una vía abierta, S1 de SE-446 pasa a P0 y adelanta a todo lo demás de Space.",
         "done": "Informe de sonda por vía, test permanente de que el agente no contesta su propio ask, comprobación OSV con recibo, secretos tipados rechazados en command/args/url."
       },
       {
@@ -1818,7 +1849,7 @@
         "value": "medio",
         "dependency_value": "reduce superficie sin bloquear otras fases",
         "effort": "cinco slices pequeños independientes",
-        "prerequisites": "Aprobación de cada spec; se ejecutan por separado, uno por vez; sin hueco WIP nuevo.",
+        "prerequisites": "Specs ya aprobadas (2026-10-27); se ejecutan por separado, uno por vez; sin hueco WIP nuevo.",
         "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran."
       },
       {
@@ -1837,7 +1868,7 @@
         "value": "medio",
         "dependency_value": "cierra vectores documentados fuera pero no observados aún; cada slice decide si sube o se mata",
         "effort": "tres slices pequeños independientes; SE-473 S2 medio",
-        "prerequisites": "Aprobación de cada spec; SE-470 condicionada a H3/H4; SE-472 a SE-343; SE-473 S1-S2 al resultado de S0.",
+        "prerequisites": "SE-470, SE-472 y SE-473 ya APPROVED (operadora, 2026-10-27); de SE-473 solo S0, S1-S2 necesitan nueva aprobación tras el resultado de S0; SE-470 condicionada a H3/H4; SE-472 a SE-343.",
         "done": "Cada slice publica su medición y sus tests con caso negativo; nada pasa a bloqueo sin datos."
       },
       {
@@ -1898,7 +1929,7 @@
         "value": "medio",
         "dependency_value": "abarata sesiones largas de Space",
         "effort": "S1 y S3 pequeños; S2 y S4 tras SE-439 F0",
-        "prerequisites": "Aprobación de SE-447; S2 y S4 esperan a que SE-439 salga de F0.",
+        "prerequisites": "Spec SE-447 aprobada (2026-10-27); S2 y S4 esperan a que SE-439 salga de F0.",
         "done": "Medición publicada, tope configurable sin nombres de modelo en la fuente y test de una sola imagen viva."
       },
       {

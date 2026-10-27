@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-27
+approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P1
 developer_type: agent-single
 created: 2026-10-26
@@ -57,14 +59,18 @@ Nadie sabe cuánto acierta un juez que influye en los merges.
 | AC2 | BATS: un veredicto no parseable o un `expected` desconocido cuenta como `indeterminado`, no suma aciertos. |
 | AC3 | Tras una ejecución real de 30 casos hay exactamente 30 líneas nuevas en el registro, todas con `tribunal_version` y `model`. |
 | AC4 | BATS: al superar `--budget-usd` (coste simulado) sale con código ≠0 y conserva los resultados parciales. |
-| AC5 | El informe da el IC95 de Wilson por tribunal; con n < 10 en un tribunal advierte que el dato no es concluyente. |
+| AC5 | El informe da el IC95 de Wilson por tribunal; con n < 30 en un tribunal advierte que el dato no es decisorio para el kill criterion. |
 | AC6 | Misma semilla → misma muestra (test determinista). |
+| AC7 | Criterio de salida heredado de SE-468 AC7 (decisión de la operadora 2026-10-26): conectado el ejecutor, la fixture saboteada de SE-468 S3 (artefacto vacío o saboteado de `pbi-decomposition`) da `findings` en el gate de evals; si da `unknown` o `clean`, SE-469 no se cierra. Negativo: el mismo test con el artefacto íntegro no da `findings` por sabotaje. |
 
 ## Kill criterion y decisión posterior
 
-- Si los tres tribunales superan el 85 % de concordancia con FP ≤ 10 % (IC inferior ≥ 70 %), se archiva el resultado y se
-  pasa a ejecución trimestral. No hacen falta más piezas.
-- Si alguno queda por debajo del 60 %, se propone en otra spec que ese tribunal no pueda ser el único verificador de un AC
+- Con el primer uso (10 casos por tribunal) el criterio **no es decisorio**: el límite inferior del IC95 de Wilson es
+  ≈0,72 con 10/10 y ≈0,60 con 9/10, así que un solo fallo o el ruido mueven la decisión. Ese primer uso solo calibra
+  coste y formato. La decisión se toma con n ≥ 30 por tribunal (90 casos, otra ejecución con su tope de gasto).
+- Con n ≥ 30: si los tres tribunales superan el 85 % de concordancia con FP ≤ 10 % (IC inferior ≥ 70 %), se archiva el
+  resultado y se pasa a ejecución trimestral. No hacen falta más piezas.
+- Con n ≥ 30, si el límite superior del IC95 de alguno queda por debajo del 60 %, se propone en otra spec que ese tribunal no pueda ser el único verificador de un AC
   en el cierre (SE-444) hasta recalibrarlo.
 
 ## Riesgos

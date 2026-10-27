@@ -116,8 +116,9 @@ jobs:
             const esc = v => String(v).replace(/[|\\`@\r\n]/g, c => (c === '|' || c === '`' || c === '@' || c === '\\') ? '\\' + c : ' ');
             const fmt = v => (v === null || v === undefined) ? 'N/A' : Number(v).toFixed(4);
             const rows = report.map(r => {
-              const status = `${icon[r.result] || '⚪'} ${r.label || 'no evaluado'}`;
-              const delta = r.delta !== null && r.delta !== undefined ? (r.delta >= 0 ? `+${r.delta}` : `${r.delta}`) : 'N/A';
+              const status = `${icon[r.result] || '⚪'} ${esc(r.label || 'no evaluado')}`;
+              const d = Number(r.delta);
+              const delta = (r.delta === null || r.delta === undefined || !Number.isFinite(d)) ? 'N/A' : (d >= 0 ? `+${d}` : `${d}`);
               const gaps = (r.gaps || []).map(g => `${esc(g.check)}: ${esc(g.reason)}`).join('; ') || '—';
               return `| ${esc(r.dataset)} | ${fmt(r.baseline_score)} | ${fmt(r.current_score)} | ${delta} | ${status} | ${gaps} |`;
             }).join('\n');

@@ -147,6 +147,22 @@ class CoreParityTests(unittest.TestCase):
         commit = [b for c, b in zip(cases, ts) if c["matcher"] == "Bash(git commit*)"]
         self.assertEqual(commit, [c in COMMITS for _t, c in CALLS])  # every `git commit`, nothing else
 
+    def test_tool_inputs_that_name_other_tools_select_the_same_hooks(self):
+        # OpenCode also matched the serialized payload of a tool call: a Read of docs/Bash.md ran the
+        # Bash hooks, a Grep for "Agent" the Agent hooks. Codex only matches the tool and its command.
+        inputs = [("Read", {"file_path": "docs/Bash-notes.md"}), ("Grep", {"pattern": "Agent|Task"}),
+                  ("Write", {"file_path": "x.md", "content": "Edit Read WebFetch mcp__vault"}),
+                  ("Glob", {"pattern": "**/Write*.ts"}), ("Bash", {"command": "ls", "description": "Edit"}),
+                  ("mcp__vaults__search", {"query": "Bash(git commit -m x)"})]
+        cases = [{"matcher": m, "tool": t, "input": i} for m in _settings_matchers() for t, i in inputs]
+        ts = bun("ts_matchers.ts", {"matchers": cases, "paths": []})["matches"]
+        py = [_matcher_applies(c["matcher"], {"tool_name": c["tool"], "tool_input": c["input"]}) for c in cases]
+        self.assertEqual(len(ts), len(cases))
+        diverging = [(c["matcher"], c["tool"]) for c, a, b in zip(cases, py, ts) if a != b]
+        self.assertEqual(diverging, [])
+        read_bash = [b for c, b in zip(cases, ts) if c["matcher"] == "Bash" and c["tool"] == "Read"]
+        self.assertEqual(read_bash, [False])
+
     def test_protected_gate_paths_are_the_same_list_and_decision(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = os.path.realpath(tmp)

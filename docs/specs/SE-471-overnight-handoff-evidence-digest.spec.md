@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-27
+approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P1
 developer_type: agent-single
 created: 2026-10-26
@@ -47,8 +49,8 @@ overnight-handoff-digest.sh --runs-dir <dir> [--since <ISO>] [--log <fichero>]
 
 | Slice | Entrega |
 |---|---|
-| S1 | **Offline**: lee las marcas `done` y, opcionalmente, un log `<ISO> start|end <nombre> [rc=N]`. Por run: `declarado` (OK/PARCIAL/FALLO/sin marca/malformada), `validado` y `aceptado` = `desconocido`. Lista de decisiones con tope, en este orden: (1) sin marca con `end` rc≠0, (2) FALLO, (3) OK con `validado: no`, (4) PARCIAL, (5) malformada. Cada entrada lleva su «Siguiente» literal y la ruta de la marca; lo que pasa del tope se cuenta («+N sin listar»). Cabecera con totales y ventana temporal. |
-| S2 | **Online** (`--online`): por cada URL de PR, `gh pr view --json state,isDraft,reviewDecision,statusCheckRollup,mergedAt`. `validado: sí` si CI verde **y** sin CHANGES_REQUESTED; `no` si CI rojo o cambios pedidos. `aceptado: sí` si merged. Sin red o sin `gh`, se degrada a offline y lo dice. |
+| S1 | **Offline**: lee las marcas `done` y, opcionalmente, un log `<ISO> start|end <nombre> [rc=N]`. Por run: `declarado` (OK/PARCIAL/FALLO/sin marca/malformada), `validado` y `aceptado` = `desconocido`. Lista de decisiones con tope, en este orden: (1) sin marca con `end` rc≠0, (2) FALLO, (3) OK con `validado: no` (solo existe con `--online`; offline la categoría queda vacía porque `validado` es siempre `desconocido`), (4) PARCIAL, (5) malformada. Cada entrada lleva su «Siguiente» literal y la ruta de la marca; lo que pasa del tope se cuenta («+N sin listar»). Cabecera con totales y ventana temporal. |
+| S2 | **Online** (`--online`): por cada URL de PR que pase la allowlist `^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+$` (la URL la escribe el propio worker: lo que no casa no se consulta y el run sale con `validado: desconocido` y aviso `url_rechazada`), `gh pr view --json state,isDraft,reviewDecision,statusCheckRollup,mergedAt -- <url>` (argumento tras `--`, sin shell). `validado: sí` si CI verde **y** sin CHANGES_REQUESTED; `no` si CI rojo o cambios pedidos. `aceptado: sí` si merged. Sin red o sin `gh`, se degrada a offline y lo dice. |
 
 La raíz de runs es siempre un parámetro: ninguna ruta en el código.
 
@@ -61,19 +63,23 @@ notificar, programarse con cron, leer diffs o contenido de PRs.
 
 | AC | Verificación |
 |---|---|
-| AC1 | Fixture de 6 runs (OK, OK con CI rojo simulado, PARCIAL, FALLO, sin marca con rc=1, marca malformada): la salida JSON clasifica cada run como se espera y las decisiones respetan el orden de S1. |
+| AC1 | Offline, fixture de 5 runs (OK, PARCIAL, FALLO, sin marca con rc=1, marca malformada): la salida JSON clasifica cada run como se espera y las decisiones respetan el orden de S1 (sin categoría 3, que es online). |
 | AC2 | Negativo: una marca sin línea `ESTADO:` sale como `malformada` y aparece en decisiones; nunca cuenta como OK. |
 | AC3 | Negativo: offline, ningún run sale con `validado: sí` ni `aceptado: sí`; se muestra `desconocido`, nunca un valor inferido. |
 | AC4 | Con `--max-decisions 2` y 5 candidatas se listan 2 y la salida dice «+3 sin listar». |
 | AC5 | El script no escribe fuera de stdout: test que compara mtimes del árbol de fixtures antes y después. |
-| AC6 | `--online` con `gh` simulado en un `PATH` falso produce los tres estados; si `gh` falla, aviso «degradado a offline» y exit 0. |
+| AC6 | `--online` con `gh` simulado en un `PATH` falso produce los tres estados de `validado`; un OK cuya PR tiene CI rojo sale `validado: no` y aparece en decisiones en la posición (3), antes que PARCIAL. Si `gh` falla, aviso «degradado a offline» y exit 0. |
 | AC7 | < 2 s offline sobre 200 marcas generadas. |
+| AC8 | Negativo, `--online`: marcas con URL maliciosa (`--repo otro/repo`, `$(touch x)`, `https://github.com/a/b/pull/1;id`) no llegan a `gh` (el `gh` falso registra sus argumentos y el registro queda vacío), no crean ficheros y el run sale `validado: desconocido` con `url_rechazada`. |
 
 Cada AC tiene su test BATS y la aserción falla si se elimina la lógica correspondiente (SE-456).
 
 ## Métrica y kill criterion
 
-- Primer uso: medir el porcentaje de OK no validados sobre las marcas existentes. Si es < 5 %, se eliminan las columnas
+- Primer uso, **con `--online`** (offline `validado` es siempre `desconocido` y la métrica no existe): porcentaje de OK
+  con `validado: no` sobre los OK cuya URL se pudo consultar (`gh pr view` también responde para PRs cerradas o
+  mergeadas). Los OK sin URL o con `url_rechazada` se cuentan aparte como «no medibles» y no entran en el denominador; si
+  son más de la mitad de los OK, la métrica no decide. Si el porcentaje es < 5 %, se eliminan las columnas
   `validado`/`aceptado` y queda una lista simple.
 - Durante 10 mañanas, minutos declarados por la persona revisora hasta cerrar la lista de decisiones, frente a la lectura
   manual (sin telemetría de actividad). **Kill**: si la mediana no baja ≥ 30 %, o el digest omite una decisión que estaba
@@ -87,7 +93,7 @@ Cada AC tiene su test BATS y la aserción falla si se elimina la lógica corresp
 
 ## Esfuerzo
 
-S: un script, fixtures y 7 tests.
+S: un script, fixtures y 8 tests.
 
 ## Decisiones pendientes de la operadora
 
