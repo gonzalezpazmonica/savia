@@ -44,23 +44,15 @@ created_at: 2026-08-24
 > local de la primera versión de la PR #1401. Detalle y alta de la clave:
 > `docs/rules/domain/autonomous-safety-merge-grant.md`.
 >
-> **Registro del hook (pendiente de la orquestadora, fichero protegido):** añadir a
-> `hooks.PreToolUse` de `.claude/settings.json` este bloque exacto:
+> **Registro del hook:** hecho en `.claude/settings.json` (`hooks.PreToolUse`, matcher
+> `Bash|Edit|Write|MultiEdit|NotebookEdit`, orden `"$CLAUDE_PROJECT_DIR"/scripts/operator-grant.sh guard`).
 >
-> ```json
-> {
->   "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit",
->   "hooks": [
->     {
->       "type": "command",
->       "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/operator-grant.sh guard",
->       "timeout": 5,
->       "statusMessage": "SE-343: protegiendo la raíz de confianza del grant de merge..."
->     }
->   ],
->   "_comment": "SE-343 LAW-HUMAN-002: veta modificar config/operator-grant-signers"
-> }
-> ```
+> **Fase 0 (2026-10-27, revisión de #1401):** el grant de merge lleva id aleatorio, `grantor`
+> (principal), `scope`, `resource` (`pr:<n>` o `task:<id>`) y vigencia, todo firmado. `check --scope
+> merge --resource R` verifica cada campo en el punto de uso; `consume` (tras el merge) y `revoke`
+> apuntan el id en `merge.spent` y `check` rechaza las copias (replay). Sin `--resource`, sin clave
+> pública o sin `ssh-keygen`: no hay PASS. Una firma prueba el uso de una clave, no la presencia
+> humana: esa garantía la da la ceremonia (la clave privada vive solo en el móvil de la operadora).
 
 ## 1. Origen y problema
 
