@@ -323,3 +323,19 @@ print(bad); raise SystemExit(1 if bad else 0)'
     [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
   done
 }
+
+@test "android-adb-validate: opciones de borrado recursivo después de la ruta no eluden el bloqueo" {
+  export HOME="$TMP"
+  for c in 'adb shell rm /sdcard/x -rf' 'adb shell rm /sdcard/x --recursive' 'adb shell rm /sdcard/x -f -R'; do
+    python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$c" > "$TMP/in.json"
+    run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+    [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
+  done
+}
+
+@test "android-adb-validate: un borrado no recursivo por adb no se bloquea" {
+  export HOME="$TMP"
+  python3 -c 'import json; print(json.dumps({"tool_name":"Bash","tool_input":{"command":"adb shell rm /sdcard/fichero-temporal.txt"}}))' > "$TMP/in.json"
+  run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}

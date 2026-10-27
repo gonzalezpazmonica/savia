@@ -37,9 +37,9 @@ if ! grep -qE '(^|[^[:alnum:]_])adb( |_)' <<<"$ADB_CMD"; then
 fi
 
 # ─── Blocked operations (never allow) ──────────────────────────────────────
-# rm recursivo con cualquier combinación y orden de opciones (-rf, -fr, -R -f, --recursive).
+# rm recursivo con cualquier combinación y posición de opciones (-rf, -fr, -R -f, --recursive, o tras la ruta).
 BLOCKED_PATTERNS=(
-    "adb.*shell.*\\brm\\s+(-[a-zA-Z]+\\s+)*(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\\b"
+    "adb.*shell.*\\brm\\b.*\\s(-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\\b"
     "adb.*shell format"
     "adb.*shell dd if="
     "adb.*shell su "
