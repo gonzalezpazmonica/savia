@@ -20,9 +20,14 @@ set -uo pipefail
 #
 # Frontmatter is parsed as real YAML (python3 + PyYAML, fail-closed if absent).
 # Fail-closed cases (ERROR): unparseable frontmatter, duplicate keys, missing
-# `tools:` (the agent inherits every tool), tool values that are not
-# true/false, and a missing AGENTS_DIR. An agent without permission_level
-# warns and is held to L0, so dropping the level cannot hide an excess.
+# `tools:` (the agent inherits every tool), an empty tools list (ambiguous),
+# tool values that are not true/false, and a missing AGENTS_DIR. An agent
+# without permission_level warns and is held to L0, so dropping the level
+# cannot hide an excess. `memory:` implies Read, Write and Edit (Claude Code
+# enables them for the memory files), so they count against the level too.
+# `Agent` is Claude Code's current name for `Task`; `Tool(args)` counts as Tool.
+# Agents in subdirectories (a .md starting with a frontmatter block) are
+# validated as well.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -147,15 +152,26 @@ def unique_mapping(loader, node, deep=False):
 
 UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, unique_mapping)
 
+ALIAS = {"agent": "Task"}  # Claude Code renamed Task to Agent; same level
+
 def canon(t):
-    t = re.sub(r"\s+", "_", t.strip())
-    return CANON.get(t.lower(), t)
+    t = re.sub(r"\(.*$", "", t.strip(), flags=re.S).strip()  # Bash(git *) -> Bash
+    t = re.sub(r"\s+", "_", t)
+    return ALIAS.get(t.lower()) or CANON.get(t.lower(), t)
+
+def dedup(ts):
+    return list(dict.fromkeys(ts))
+
+def field(v):
+    # one token, no whitespace or \x1f/newline: keeps the \x1f line protocol intact
+    return "_".join(str(v).split())
 
 def tools_of(v):
     if v is None:
         return ["*"]
     if isinstance(v, str):
-        return [canon(x) for x in v.split(",") if x.strip()] or ["*"]
+        # split on commas outside parentheses: "Agent(a, b), Read"
+        return [canon(x) for x in re.split(r",(?![^(]*\))", v) if x.strip()] or ["*"]
     if isinstance(v, list):
         if not all(isinstance(x, str) for x in v):
             raise ValueError("tools list holds a non-string item")
@@ -181,20 +197,30 @@ for path in sys.argv[1:]:
         if not isinstance(doc, dict):
             raise ValueError("frontmatter is not a mapping")
         level = doc.get("permission_level")
-        level = "" if level is None else str(level).strip()
-        tools = tools_of(doc["tools"]) if "tools" in doc else ["*"]
-        print("OK\x1f%s\x1f%s\x1f%s" % (name, level, " ".join(tools)))
+        level = "" if not level else field(level)
+        tools = dedup(tools_of(doc["tools"])) if "tools" in doc else ["*"]
+        if not tools:
+            raise ValueError("empty tools list (ambiguous: none or all); list the tools")
+        mem = doc.get("memory")
+        implied = [] if mem in (None, False, "", "none") else \
+            [t for t in ("Read", "Write", "Edit") if t not in tools]
+        print("OK\x1f%s\x1f%s\x1f%s\x1f%s" % (field(name), level, " ".join(tools), " ".join(implied)))
     except Exception as e:
         reason = " ".join(str(e).split())
-        print("ERR\x1f%s\x1f%s" % (name, reason or type(e).__name__))
+        print("ERR\x1f%s\x1f%s" % (field(name), reason or type(e).__name__))
 PY
 }
 
 shopt -s nullglob
 AGENT_FILES=("$AGENTS_DIR"/*.md)
 shopt -u nullglob
+# Subdirectories: only files that open with a frontmatter block are agents
+# (e.g. decision-trees/*.md are plain docs and are skipped)
+while IFS= read -r -d '' sub; do
+  [[ "$(head -c 4 "$sub" | tr -d '\r')" == "---"* ]] && AGENT_FILES+=("$sub")
+done < <(find "$AGENTS_DIR" -mindepth 2 -name '*.md' -type f -print0 | sort -z)
 
-while IFS=$'\x1f' read -r p_status agent_name p_level p_tools; do
+while IFS=$'\x1f' read -r p_status agent_name p_level p_tools p_implied; do
   CHECKED=$((CHECKED + 1))
 
   if [[ "$p_status" != "OK" ]]; then
@@ -227,6 +253,7 @@ while IFS=$'\x1f' read -r p_status agent_name p_level p_tools; do
   fi
   read -ra tool_list <<< "$p_tools"
   tools_clean=" ${tool_list[*]} "
+  read -ra implied_list <<< "${p_implied:-}"
 
   # Missing: a tool of the level not declared (allowed, warning only)
   for tool in $expected; do
@@ -239,9 +266,11 @@ while IFS=$'\x1f' read -r p_status agent_name p_level p_tools; do
   done
 
   # Excess: a declared tool above the level (error unless baselined)
-  for tool in "${tool_list[@]}"; do
+  for tool in "${tool_list[@]}" "${implied_list[@]}"; do
     [[ " $expected " == *" $tool "* ]] && continue
     pair="$agent_name $tool"
+    why="above level"
+    [[ "$tools_clean" != *" $tool "* ]] && why="above level, implied by memory:"
     if [[ -n "${BASE_PAIRS[$pair]:-}" ]]; then
       SEEN_PAIRS["$pair"]=1
       if [[ "${BASE_EXPIRES[$pair]}" < "$TODAY" ]]; then
@@ -254,7 +283,7 @@ while IFS=$'\x1f' read -r p_status agent_name p_level p_tools; do
         echo "BASELINE: $agent_name ($level) — excess tool: $tool (pending decision)"
       fi
     else
-      echo "ERROR: $agent_name ($level) — excess tool: $tool (above level)"
+      echo "ERROR: $agent_name ($level) — excess tool: $tool ($why)"
       ERRORS=$((ERRORS + 1))
     fi
   done

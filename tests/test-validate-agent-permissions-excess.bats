@@ -142,7 +142,8 @@ teardown() {
 
 @test "real repo: new excess on a real agent fails despite the real baseline" {
   cp -r "$REPO_ROOT/.claude/agents" "$TMPDIR_AP/real"
-  # tools: line of a conforming agent gains Bash; its name is not in the baseline
+  # code-reviewer (block list with Bash, not in the baseline) dropped to L0:
+  # its declared Bash becomes a new excess the real baseline must not absorb
   sed -i 's/^tools: .*/tools: [Read, Glob, Grep, Bash]/' "$TMPDIR_AP/real/code-reviewer.md"
   sed -i 's/^permission_level: .*/permission_level: L0/' "$TMPDIR_AP/real/code-reviewer.md"
   run bash "$SCRIPT" "$TMPDIR_AP/real" --baseline "$BASELINE"
@@ -202,7 +203,8 @@ teardown() {
     truth-tribunal-orchestrator:Task word-digest:Task context-dome-manager:Skill "
   allowed=$(echo $allowed)
   n=0
-  while read -r agent tool owner expires _; do
+  # "|| -n agent": the validator also reads a last line without a newline
+  while read -r agent tool owner expires _ || [[ -n "${agent:-}" ]]; do
     [[ -z "$agent" || "$agent" == \#* ]] && continue
     n=$((n + 1))
     [[ " $allowed " == *" $agent:$tool "* ]] || { echo "not authorised: $agent $tool"; return 1; }
@@ -325,4 +327,84 @@ teardown() {
   ci="$REPO_ROOT/.github/workflows/ci.yml"
   grep -q 'bash scripts/validate-agent-permissions.sh .claude/agents' "$ci"
   grep -q 'tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats' "$ci"
+}
+
+@test "ratchet: unauthorised pair on a last line without newline is caught by the subset check" {
+  cp "$BASELINE" "$TMPDIR_AP/nonl.txt"
+  printf 'code-reviewer Write operadora 2099-01-01' >> "$TMPDIR_AP/nonl.txt"
+  AGENT_PERMS_TEST_BASELINE="$TMPDIR_AP/nonl.txt" run bats -f "baseline is a subset" "$BATS_TEST_FILENAME"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not authorised: code-reviewer Write"* ]]
+}
+
+@test "memory: memory field implies Write and Edit above L0/L1" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Glob, Grep]\nmemory: project\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x (L0) — excess tool: Write (above level, implied by memory:)"* ]]
+  [[ "$output" == *"x (L0) — excess tool: Edit (above level, implied by memory:)"* ]]
+  [[ "$output" == *"Errors:  2"* ]]
+}
+
+@test "negative: memory field within an L2+ level passes" {
+  printf -- '---\nname: x\npermission_level: L2\ntools: [Read, Glob, Grep]\nmemory: user\n---\n' > "$TMPDIR_AP/agents/x.md"
+  printf -- '---\nname: y\npermission_level: L0\ntools: [Read]\nmemory: false\n---\n' > "$TMPDIR_AP/agents/y.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Errors:  0"* ]]
+}
+
+@test "alias: Agent counts as Task, allowed at L4 and an excess below it" {
+  printf -- '---\nname: a\npermission_level: L4\ntools: [Read, Bash, Agent]\n---\n' > "$TMPDIR_AP/agents/a.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 0 ]
+  printf -- '---\nname: b\npermission_level: L1\ntools:\n  - Read\n  - Agent(worker, researcher)\n---\n' > "$TMPDIR_AP/agents/b.md"
+  printf -- '---\nname: c\npermission_level: L1\ntools: Agent(worker, researcher), Read\n---\n' > "$TMPDIR_AP/agents/c.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"b (L1) — excess tool: Task"* ]]
+  [[ "$output" == *"c (L1) — excess tool: Task"* ]]
+  [[ "$output" == *"Errors:  2"* ]]
+}
+
+@test "parser: scoped tool Bash(git *) counts as Bash" {
+  printf -- '---\nname: x\npermission_level: L0\ntools:\n  - Read\n  - Bash(git status:*)\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x (L0) — excess tool: Bash ("* ]]
+}
+
+@test "parser: a repeated tool is counted once" {
+  printf -- '---\nname: x\npermission_level: L0\ntools: [Read, Bash, Bash]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Errors:  1"* ]]
+}
+
+@test "fail-closed: empty tools list or all-false map is an error" {
+  printf -- '---\nname: a\npermission_level: L0\ntools: []\n---\n' > "$TMPDIR_AP/agents/a.md"
+  printf -- '---\nname: b\npermission_level: L0\ntools: {bash: false}\n---\n' > "$TMPDIR_AP/agents/b.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a — unparseable frontmatter: empty tools list"* ]]
+  [[ "$output" == *"b — unparseable frontmatter: empty tools list"* ]]
+}
+
+@test "fail-closed: permission_level cannot inject records into the line protocol" {
+  printf -- '---\nname: x\npermission_level: "L4\\nOK\\x1fy\\x1fL4"\ntools: [Read, Bash, Task]\n---\n' > "$TMPDIR_AP/agents/x.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"x — unknown level: L4_OK_y_L4"* ]]
+  [[ "$output" == *"Checked: 1 agents"* ]]
+  [[ "$output" != *"parsed "* ]]
+}
+
+@test "subdirs: agent in a subdirectory is validated, plain docs are skipped" {
+  mkdir -p "$TMPDIR_AP/agents/team" "$TMPDIR_AP/agents/decision-trees"
+  printf -- '---\nname: deep\npermission_level: L0\ntools: [Read, Bash]\n---\n' > "$TMPDIR_AP/agents/team/deep.md"
+  printf -- '# Decision Trees\n\n- tools: Bash\n' > "$TMPDIR_AP/agents/decision-trees/doc.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"deep (L0) — excess tool: Bash"* ]]
+  [[ "$output" == *"Checked: 1 agents"* ]]
 }

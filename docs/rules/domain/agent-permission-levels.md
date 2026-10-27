@@ -115,7 +115,9 @@ Script `scripts/validate-agent-permissions.sh` verifica las tools del agente con
 - Tool **por encima** del nivel (exceso) = ERROR, exit 1, con agente y tool.
 - Tool del nivel no declarada = WARNING (tener menos es válido).
 - Excesos pendientes de decisión: línea base **transitoria** `docs/agent-permissions-excess-baseline.txt`, una entrada `agente tool responsable AAAA-MM-DD` por línea. Sin responsable o fecha válida = ERROR. Pasada la fecha la entrada deja de absorber el exceso y el validador falla. Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el conjunto autorizado (solo subconjuntos) y la fecha máxima; una entrada duplicada es ERROR. Un exceso nuevo nunca se absorbe. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
-- El frontmatter se lee como YAML real (fail-closed): YAML inválido, claves duplicadas, `tools:` ausente (hereda todas) o valores de mapa que no son booleanos = ERROR. Sin `permission_level` = WARNING y se evalúa como L0. Directorio inexistente = ERROR.
+- El frontmatter se lee como YAML real (fail-closed): YAML inválido, claves duplicadas, `tools:` ausente (hereda todas) o valores de mapa que no son booleanos = ERROR; lista de tools vacía = ERROR (ambigua). Sin `permission_level` = WARNING y se evalúa como L0. Directorio inexistente = ERROR.
+- Permisos implícitos: `memory:` activa `Read`, `Write` y `Edit` en Claude Code, así que cuentan contra el nivel (un L0/L1 con memoria es exceso). `Agent` es el nombre actual de `Task` (mismo nivel, L4) y `Tool(args)` cuenta como `Tool`. También se validan los agentes de subdirectorios (`.md` que abren con frontmatter).
+- L2 y Bash: el validador no distingue un Bash de solo lectura; en L2 todo `Bash` es exceso. Si un agente L2 lo necesita, la decisión es subir a L3 o quitarlo.
 - La CI de cada PR ejecuta el validador y sus dos suites (paso «Agent permission levels gate» de `ci.yml`).
 
 ## Integracion con agent-policies.yaml
