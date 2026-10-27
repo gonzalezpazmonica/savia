@@ -113,12 +113,13 @@ jobs:
 
             // SE-468: el estado sale de r.result; unknown se muestra como «no evaluado», nunca PASS.
             const icon = { clean: '✅', findings: '❌', unknown: '⚪' };
+            const esc = v => String(v).replace(/[|\\`@\r\n]/g, c => (c === '|' || c === '`' || c === '@' || c === '\\') ? '\\' + c : ' ');
             const fmt = v => (v === null || v === undefined) ? 'N/A' : Number(v).toFixed(4);
             const rows = report.map(r => {
               const status = `${icon[r.result] || '⚪'} ${r.label || 'no evaluado'}`;
               const delta = r.delta !== null && r.delta !== undefined ? (r.delta >= 0 ? `+${r.delta}` : `${r.delta}`) : 'N/A';
-              const gaps = (r.gaps || []).map(g => `${g.check}: ${g.reason}`).join('; ') || '—';
-              return `| ${r.dataset} | ${fmt(r.baseline_score)} | ${fmt(r.current_score)} | ${delta} | ${status} | ${gaps} |`;
+              const gaps = (r.gaps || []).map(g => `${esc(g.check)}: ${esc(g.reason)}`).join('; ') || '—';
+              return `| ${esc(r.dataset)} | ${fmt(r.baseline_score)} | ${fmt(r.current_score)} | ${delta} | ${status} | ${gaps} |`;
             }).join('\n');
             const unknown = report.filter(r => r.result === 'unknown').length;
 

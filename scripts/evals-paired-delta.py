@@ -117,7 +117,7 @@ def _mean(values: list[float]) -> float:
 
 
 def _execute(executor: str, name: str, artifact: Path, rows: list[dict]) -> dict[str, float] | None:
-    """Run the executor once per row. None if any call fails or prints no score."""
+    """Run the executor once per row. None if any call fails, prints no score or a row id repeats."""
     env = dict(os.environ, SAVIA_EVAL_ARTIFACT=str(artifact), SAVIA_EVAL_DATASET=name)
     scores: dict[str, float] = {}
     for i, row in enumerate(rows):
@@ -130,7 +130,10 @@ def _execute(executor: str, name: str, artifact: Path, rows: list[dict]) -> dict
             score = None
         if score is None or not 0.0 <= score <= 1.0:
             return None
-        scores[str(row.get("id", f"row-{i}"))] = score
+        key = str(row.get("id", f"row-{i}"))
+        if key in scores:
+            return None
+        scores[key] = score
     return scores
 
 
@@ -139,34 +142,52 @@ def evaluate_dataset(path: Path, root: Path, baselines_dir: Path, artifacts: dic
     name = path.stem
     gaps: list[dict] = []
     baseline_file = baselines_dir / f"{name}-baseline.json"
-    baseline = load_scores(str(baseline_file)) if baseline_file.is_file() else {}
+    try:
+        baseline = load_scores(str(baseline_file)) if baseline_file.is_file() else {}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return _entry(name, "unknown", [{"check": f"{name}/baseline", "reason": "unreadable"}])
     if not baseline:
         gaps.append({"check": name, "reason": "no_baseline"})
     artifact_rel = artifacts.get(name)
+    artifact_path = None
     if mode == "mock":
         gaps.append({"check": name, "reason": "not_executed"})
     elif not artifact_rel:
         gaps.append({"check": f"{name}/artifact", "reason": "not_executed"})
-    elif not (root / artifact_rel).is_file():
-        gaps.append({"check": f"{name}/artifact", "reason": "unreadable"})
+    else:
+        artifact_path = (root / str(artifact_rel)).resolve()
+        if not artifact_path.is_relative_to(root.resolve()) or not artifact_path.is_file():
+            gaps.append({"check": f"{name}/artifact", "reason": "unreadable"})
     base_extra = {"baseline_score": _mean(list(baseline.values())) if baseline else None}
     if gaps:
         return _entry(name, "unknown", gaps, **base_extra)
 
-    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    unreadable = lambda check: _entry(name, "unknown", [{"check": f"{name}/{check}", "reason": "unreadable"}], **base_extra)
+    try:
+        rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    except (OSError, ValueError):
+        return unreadable("dataset")
+    if not rows or not all(isinstance(r, dict) for r in rows):
+        return unreadable("dataset")
     executor = os.environ["SAVIA_EVAL_EXECUTOR"]
-    current = _execute(executor, name, root / artifact_rel, rows)
+    current = _execute(executor, name, artifact_path, rows)
     with tempfile.NamedTemporaryFile(suffix=".md") as empty:
         sabotaged = _execute(executor, name, Path(empty.name), rows) if current is not None else None
     if current is None or sabotaged is None:
-        return _entry(name, "unknown", [{"check": f"{name}/executor", "reason": "unreadable"}], **base_extra)
+        return unreadable("executor")
 
     real = compute_paired_delta(baseline, current, threshold)
-    sabotage = compute_paired_delta(baseline, sabotaged, threshold)
-    if real["pairs_evaluated"] == 0:
+    # The sabotage run is compared with the real run: a baseline-relative test would hide a
+    # discriminating executor whenever the baseline is low.
+    sabotage = compute_paired_delta(current, sabotaged, threshold)
+    if real["pairs_evaluated"] != len(baseline):
+        # Every baseline row must be paired; a partial overlap proves nothing about the rest.
         return _entry(name, "unknown", [{"check": name, "reason": "no_baseline"}], **base_extra)
     extra = dict(base_extra, current_score=_mean(list(current.values())),
                  delta=real["mean_delta"], sabotage_detected=not sabotage["threshold_pass"])
+    if not real["threshold_pass"]:
+        # A degradation seen in the real run needs no sabotage proof: it cannot be a false green.
+        return _entry(name, "findings", [], threshold_pass=False, **extra)
     if sabotage["threshold_pass"]:
         # The executor scored an empty artifact as well as the baseline: it is not measuring it.
         return _entry(name, "unknown", [{"check": f"{name}/sabotage", "reason": "not_executed"}], **extra)
@@ -195,27 +216,31 @@ def check_report(path: str) -> int:
     try:
         report = json.loads(Path(path).read_text())
         results = [(r["dataset"], r["result"]) for r in report]
-    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
-        print(f"ERROR: informe de evals ilegible ({exc}): sin veredicto.")
+        if not all(isinstance(res, str) for _, res in results):
+            raise TypeError("result must be a string")
+        unknown_rows = [r for r in report if r["result"] == "unknown"]
+        reasons = {id(r): ", ".join(f"{g['check']}:{g['reason']}" for g in r.get("gaps") or []) for r in unknown_rows}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError) as exc:
+        print(f"ERROR: informe de evals ilegible ({exc!r}): sin veredicto.")
         return 2
     if not results or any(res not in LABELS for _, res in results):
         print("ERROR: informe sin resultado válido por dataset (clean|findings|unknown): sin veredicto.")
         return 2
-    by_name = {r["dataset"]: r for r in report}
-    findings = [n for n, res in results if res == "findings"]
-    unknown = [n for n, res in results if res == "unknown"]
-    clean = [n for n, res in results if res == "clean"]
+    findings = [r for r in report if r["result"] == "findings"]
+    clean = [r["dataset"] for r in report if r["result"] == "clean"]
     if findings:
         print("DEGRADATION DETECTED:")
-        for n in findings:
-            print(f"  {n}: delta={by_name[n].get('delta')}")
-    if unknown:
-        print(f"UNKNOWN (no evaluado, sin veredicto): {len(unknown)} dataset(s)")
-        for n in unknown:
-            reasons = ", ".join(f"{g['check']}:{g['reason']}" for g in by_name[n].get("gaps", []))
-            print(f"  {n}: {reasons}")
+        for r in findings:
+            print(f"  {r['dataset']}: delta={r.get('delta')}")
+    if unknown_rows:
+        print(f"UNKNOWN (no evaluado, sin veredicto): {len(unknown_rows)} dataset(s)")
+        print(f"::warning::evals: {len(unknown_rows)} dataset(s) sin evaluar (unknown); no es un verde")
+        for r in unknown_rows:
+            print(f"  {r['dataset']}: {reasons[id(r)]}")
     if clean:
         print(f"PASS (evaluado y sin degradación): {', '.join(clean)}")
+    if unknown_rows and os.environ.get("SAVIA_GATE_UNKNOWN") == "block":
+        return 1
     return 1 if findings else 0
 
 
