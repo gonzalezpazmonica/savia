@@ -2,5 +2,5 @@
 diff_hash=a933245c6aa2c96e0b2a2bc8b7e87a493a6e153ea8e59b30b1a58196e5a82b2a
 timestamp=2026-10-27T06:55:41Z
 branch=agent/hooks-stdin-failopen-20261026
-head_commit=7f2618970
+head_commit=81963fdfc
 signature=80eb324fa1b5a37869ce73588f0c101a2c4e289038f29b7287d3dd780d681b7b
