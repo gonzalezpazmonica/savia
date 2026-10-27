@@ -69,7 +69,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          prs=$(gh pr list --state open --json number,headRefName,mergeable,mergeStateStatus 2>/dev/null || echo "[]")
+          prs=$(gh pr list --state open --json number,headRefName,mergeable,mergeStateStatus,labels 2>/dev/null || echo "[]")
+          # SE-433 D6: los PRs de un merge-sprint en curso (etiqueta merge-sprint:<id>) no se tocan.
+          # Solo el formato que crea el ejecutor (merge-sprint:<12 hex>): otra etiqueta parecida no pausa nada.
+          paused='any(.labels[]?; .name | test("^merge-sprint:[0-9a-f]{12}$"))'
+          echo "$prs" | jq -r ".[] | select($paused) | \"  PR #\(.number) paused by merge-sprint\""
+          prs=$(echo "$prs" | jq -c "[.[] | select($paused | not)]")
           echo "Open PRs detected:"
           echo "$prs" | jq -r '.[] | "  PR #\(.number) \(.headRefName) (\(.mergeable)/\(.mergeStateStatus))"'
           echo "prs<<EOF" >> "$GITHUB_OUTPUT"
