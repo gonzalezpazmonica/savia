@@ -152,3 +152,16 @@ call() { call_ev PreToolUse "$@"; }
   run call s Bash '{"command":"ls /tmp ","timeout":5000}'
   [ "$status" -eq 2 ]
 }
+
+@test "solo Bash normaliza espacios: en otra herramienta 'x  y' y 'x y' son llamadas distintas" {
+  on_branch agent/x
+  call n1 Edit '{"command":"x  y"}' >/dev/null 2>&1
+  call n1 Edit '{"command":"x y"}' >/dev/null 2>&1
+  run call n1 Edit '{"command":"x  y"}'
+  [ "$status" -eq 0 ]
+  # control: con argumentos literalmente iguales la 3a si bloquea
+  call n2 Edit '{"command":"x  y"}' >/dev/null 2>&1
+  call n2 Edit '{"command":"x  y"}' >/dev/null 2>&1
+  run call n2 Edit '{"command":"x  y"}'
+  [ "$status" -eq 2 ]
+}
