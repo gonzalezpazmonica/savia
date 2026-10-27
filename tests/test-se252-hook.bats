@@ -282,3 +282,116 @@ print('OK')
   BF_OUTPUT_DIR="/tmp/directorio-que-no-existe-$$" run bash "$HOOK" <<< "$input"
   [ "$status" -eq 0 ]
 }
+
+# ── Comportamiento discriminante (S03m): contenido exacto del aviso y reglas de seleccion ──
+
+# Helper: escribe un scan con un fichero. args: <scan> <modulo> <riesgo> <path> <bf> <owner>
+_scan_one() {
+  python3 - "$BF_OUT/$1.json" "$2" "$3" "$4" "$5" "$6" <<'PY'
+import json, sys
+out, mod, risk, path, bf, owner = sys.argv[1:7]
+owners = [{"dev": owner, "score": 1.0, "files_owned": 0}] if owner else []
+json.dump({"modules": [{"name": mod, "risk_level": risk, "files": [
+    {"path": path, "bus_factor": int(bf), "owners": owners}]}]}, open(out, "w"))
+PY
+}
+
+_hook() { printf '%s' "$1" | BF_OUTPUT_DIR="$BF_OUT" bash "$HOOK"; }
+_ctx() { python3 -c 'import json,sys; print(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"])'; }
+
+@test "aviso BF=1: JSON valido con evento PostToolUse y owner, modulo y riesgo del scan" {
+  _scan_one s1 core HIGH src/a.py 1 alice@test.com
+  out=$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')
+  [ "$(printf '%s' "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin)["hookSpecificOutput"]["hookEventName"])')" = "PostToolUse" ]
+  msg=$(printf '%s' "$out" | _ctx)
+  [[ "$msg" == "[BF-WARN] Archivo src/a.py tiene BF=1 (unico conocedor: alice@test.com, modulo: core, riesgo: HIGH)."* ]]
+}
+
+@test "Edit tambien avisa y la clave alternativa 'path' se acepta" {
+  _scan_one s1 core HIGH src/a.py 1 alice@test.com
+  out=$(_hook '{"tool_name":"Edit","tool_input":{"path":"src/a.py"}}')
+  [[ "$out" == *"[BF-WARN] Archivo src/a.py"* ]]
+}
+
+@test "BF=2 y BF=0 no avisan: solo el unico conocedor (BF=1) cuenta" {
+  _scan_one s1 core HIGH src/a.py 2 alice@test.com
+  [ -z "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')" ]
+  _scan_one s1 core HIGH src/a.py 0 alice@test.com
+  [ -z "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')" ]
+}
+
+@test "un fichero distinto del scan no avisa aunque otro tenga BF=1" {
+  _scan_one s1 core HIGH src/a.py 1 alice@test.com
+  [ -z "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/otro.py"}}')" ]
+}
+
+@test "coincide por basename aunque el scan guarde otra ruta" {
+  _scan_one s1 core HIGH lib/deep/a.py 1 alice@test.com
+  out=$(_hook '{"tool_name":"Write","tool_input":{"file_path":"/work/x/a.py"}}')
+  [[ "$out" == *"Archivo lib/deep/a.py tiene BF=1"* ]]
+}
+
+@test "sin owners en el scan el unico conocedor es 'desconocido'" {
+  _scan_one s1 core LOW src/a.py 1 ""
+  out=$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')
+  [[ "$out" == *"unico conocedor: desconocido"* ]]
+}
+
+@test "solo se miran los 3 scans mas recientes: un 4o antiguo con BF=1 se ignora" {
+  _scan_one old core HIGH src/a.py 1 alice@test.com
+  touch -d '2026-01-01' "$BF_OUT/old.json"
+  for n in n1 n2 n3; do _scan_one $n core LOW src/z.py 3 bob@test.com; done
+  [ -z "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')" ]
+  # control: con un solo scan antiguo si avisa
+  find "$BF_OUT" -name 'n?.json' -delete
+  [[ "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')" == *"BF-WARN"* ]]
+}
+
+@test "un scan corrupto no impide leer el siguiente" {
+  printf '{no json' > "$BF_OUT/bad.json"
+  _scan_one good core HIGH src/a.py 1 alice@test.com
+  out=$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')
+  [[ "$out" == *"BF-WARN"* ]]
+}
+
+@test "las comillas del scan se escapan: la salida sigue siendo JSON valido" {
+  _scan_one s1 'mod"x' HIGH src/a.py 1 'a"b@test.com'
+  out=$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')
+  printf '%s' "$out" | python3 -c 'import json,sys; json.load(sys.stdin)'
+}
+
+@test "herramientas que no son Write/Edit no avisan aunque haya BF=1 (Read, Grep, MultiEdit)" {
+  _scan_one s1 core HIGH src/a.py 1 alice@test.com
+  for t in Read Grep MultiEdit; do
+    [ -z "$(_hook "{\"tool_name\":\"$t\",\"tool_input\":{\"file_path\":\"src/a.py\"}}")" ]
+  done
+}
+
+@test "sin file_path ni path no avisa y sale 0" {
+  _scan_one s1 core HIGH src/a.py 1 alice@test.com
+  run bash -c "printf '%s' '{\"tool_name\":\"Write\",\"tool_input\":{}}' | BF_OUTPUT_DIR='$BF_OUT' bash '$HOOK'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "el scan mas reciente no tiene el fichero pero uno anterior (dentro de los 3 ultimos) si: avisa" {
+  _scan_one older core HIGH src/a.py 1 alice@test.com
+  touch -d '2026-01-01' "$BF_OUT/older.json"
+  _scan_one newer core LOW src/z.py 3 bob@test.com
+  [[ "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')" == *"Archivo src/a.py tiene BF=1"* ]]
+}
+
+@test "un scan corrupto MAS RECIENTE no corta la busqueda en los anteriores" {
+  _scan_one good core HIGH src/a.py 1 alice@test.com
+  touch -d '2026-01-01' "$BF_OUT/good.json"
+  printf '{no json' > "$BF_OUT/bad.json"
+  [[ "$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')" == *"BF-WARN"* ]]
+}
+
+@test "con el mismo fichero en varios scans emite un unico aviso (una linea)" {
+  _scan_one s1 core HIGH src/a.py 1 alice@test.com
+  _scan_one s2 core HIGH src/a.py 1 bob@test.com
+  out=$(_hook '{"tool_name":"Write","tool_input":{"file_path":"src/a.py"}}')
+  [ "$(printf '%s\n' "$out" | wc -l)" -eq 1 ]
+  [ "$(printf '%s' "$out" | grep -o 'BF-WARN' | wc -l)" -eq 1 ]
+}
