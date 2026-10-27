@@ -45,7 +45,7 @@ if [[ -z "$CURRENT_TOOL" ]] && command -v jq &>/dev/null && [[ -n "$INPUT" ]]; t
 fi
 
 case "$CURRENT_TOOL" in
-    Edit|Write|Task)
+    Edit|Write|Task|Agent)
         # Allowlist: always NEW_ASK — skip effort reduction
         exit 0
         ;;

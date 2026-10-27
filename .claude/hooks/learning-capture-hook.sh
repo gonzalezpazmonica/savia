@@ -46,7 +46,7 @@ if command -v jq >/dev/null 2>&1; then
 fi
 
 # Only act on Task tool outputs (agent completions)
-if [[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "task" ]]; then
+if [[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "task" && "$TOOL_NAME" != "Agent" ]]; then
   exit 0
 fi
 [[ -z "$TOOL_RESPONSE" ]] && exit 0

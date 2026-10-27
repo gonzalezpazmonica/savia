@@ -62,7 +62,7 @@ if ! printf '%s' "$INPUT" | jq -e 'type == "object" and has("tool_name")' >/dev/
 fi
 
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
-if [[ "$TOOL_NAME" != "Task" ]]; then
+if [[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "Agent" ]]; then
   passthrough
 fi
 

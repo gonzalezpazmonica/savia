@@ -14,7 +14,7 @@ ENFORCE="${SAVIA_BUDGET_ENFORCEMENT:-warn}"
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
-[ "$TOOL_NAME" = "Task" ] || exit 0
+[ "$TOOL_NAME" = "Task" ] || [ "$TOOL_NAME" = "Agent" ] || exit 0
 
 AGENT=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty')
 PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')

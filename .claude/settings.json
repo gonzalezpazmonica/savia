@@ -54,7 +54,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -159,7 +159,7 @@
         ]
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -398,7 +398,7 @@
         ]
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -667,7 +667,7 @@
         ]
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -712,7 +712,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|Task",
+        "matcher": "Edit|Write|Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -782,7 +782,7 @@
         "_comment": "SE-352 taint de turno por origen de red (memory provenance)"
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -792,7 +792,7 @@
         "_comment": "Evalúa framing de sub-tareas delegadas (SPEC-194)"
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -802,7 +802,7 @@
         "_comment": "Clasifica Task calls mode1/mode2 (SPEC-163)"
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -812,7 +812,7 @@
         "_comment": "Hint de skill al input de sub-agente (SE-220 S3)"
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -842,7 +842,7 @@
         "_comment": "Progreso por cada tool call (SPEC-042)"
       },
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
           {
             "type": "command",
@@ -878,7 +878,7 @@
         ]
       },
       {
-        "matcher": "Task|Write|Edit|Bash|WebFetch",
+        "matcher": "Agent|Task|Write|Edit|Bash|WebFetch",
         "_comment": "judge-auto-router: SE-273 S1 — auto-triggers judges based on output content patterns. Master switch: SAVIA_JUDGE_AUTO_ROUTER=off",
         "hooks": [
           {
@@ -888,7 +888,7 @@
         ]
       },
       {
-        "matcher": "Task|Bash",
+        "matcher": "Agent|Task|Bash",
         "hooks": [
           {
             "type": "command",
