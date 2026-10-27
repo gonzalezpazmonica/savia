@@ -37,10 +37,19 @@ const RECURSIVE_ONLY = new Set(["chmod", "chown", "chgrp", "setfacl"])
 const GIT_WRITERS = new Set(["checkout", "restore", "rm", "mv", "apply", "clean", "reset", "stash", "am",
   "switch", "merge", "pull", "rebase", "cherry-pick", "revert"])
 const GIT_PATHSPEC_TREE = new Set(["checkout", "restore", "rm", "clean", "reset", "stash"])
+// Subcommand -> [options that make it touch only the index, options that bring the worktree back];
+// an empty first set means "index only unless a second-set option is given" (`git reset .`).
+const GIT_INDEX_ONLY: Record<string, [Set<string>, Set<string>]> = {
+  restore: [new Set(["--staged", "-S"]), new Set(["--worktree", "-W"])],
+  rm: [new Set(["--cached"]), new Set()],
+  reset: [new Set(), new Set(["--hard", "--merge", "--keep"])],
+}
+const GIT_BRANCH_VALUED = new Set(["-b", "-B", "--orphan", "-c", "-C"])
 const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh"])
 const SHELL_VALUED = new Set(["-o", "+o", "-O", "+O", "--rcfile", "--init-file"])
 const RECURSIVE_COPY = /^(?:-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive)$/
-const XARGS_VALUED = new Set(["-I", "-n", "-L", "-P", "-d", "-s", "-E", "-a"])
+const XARGS_VALUED = new Set(["-I", "-n", "-L", "-P", "-d", "-s", "-E", "-a", "--max-args", "--max-lines",
+  "--max-procs", "--delimiter", "--max-chars", "--arg-file", "--eof", "--process-slot-var"])
 const FIND_NAME = new Set(["-name", "-iname"])
 const FIND_VALUED = new Set(["-type", "-maxdepth", "-mindepth"])
 const FIND_PLAIN = new Set(["(", ")", "-a", "-and", "-print", "-print0", "-delete", "-depth"])
@@ -222,7 +231,8 @@ function skipDouble(text: string, i: number): number {
   invalid()
 }
 
-export function tokenize(text: string, nested: string[]): Token[] {
+/** Command and process substitutions go to `nested` as [index of the token they belong to, raw text]. */
+export function tokenize(text: string, nested: [number, string][]): Token[] {
   const tokens: Token[] = []
   const n = text.length
   let i = 0
@@ -302,7 +312,7 @@ export function tokenize(text: string, nested: string[]): Token[] {
         }
         if (text.startsWith("$(", i)) {
           const end = closing(text, i + 2, "(", ")")
-          nested.push(text.slice(i + 2, end - 1))
+          nested.push([tokens.length, text.slice(i + 2, end - 1)])
           w.text += "$(...)"
           w.dynamic = true
           i = end
@@ -311,7 +321,7 @@ export function tokenize(text: string, nested: string[]): Token[] {
         if (d === "`") {
           const j = text.indexOf("`", i + 1)
           if (j < 0) invalid()
-          nested.push(text.slice(i + 1, j))
+          nested.push([tokens.length, text.slice(i + 1, j)])
           w.text += "$(...)"
           w.dynamic = true
           i = j + 1
@@ -325,7 +335,7 @@ export function tokenize(text: string, nested: string[]): Token[] {
     }
     if (text.startsWith("$(", i)) {
       const end = closing(text, i + 2, "(", ")")
-      nested.push(text.slice(i + 2, end - 1))
+      nested.push([tokens.length, text.slice(i + 2, end - 1)])
       word ??= newWord()
       word.text += "$(...)"
       word.dynamic = true
@@ -335,11 +345,21 @@ export function tokenize(text: string, nested: string[]): Token[] {
     if (c === "`") {
       const j = text.indexOf("`", i + 1)
       if (j < 0) invalid()
-      nested.push(text.slice(i + 1, j))
+      nested.push([tokens.length, text.slice(i + 1, j)])
       word ??= newWord()
       word.text += "$(...)"
       word.dynamic = true
       i = j + 1
+      continue
+    }
+    if (text.startsWith("<(", i) || text.startsWith(">(", i)) {
+      // Process substitution: a /dev/fd name; its commands run.
+      const end = closing(text, i + 2, "(", ")")
+      nested.push([tokens.length, text.slice(i + 2, end - 1)])
+      word ??= newWord()
+      word.text += "$(...)"
+      word.dynamic = true
+      i = end
       continue
     }
     if (c === "<" || c === ">" || (c === "&" && text.startsWith("&>", i))) {
@@ -493,6 +513,9 @@ function targetsOf(name: string, args: Word[], depth: number, bodies: string[]):
     }
     return rest.map((w) => [w, DESTRUCTIVE.has(name)])
   }
+  if (name === "install" && args.some((w) => w.text === "-d" || w.text === "--directory")) {
+    return nonOptions(args).map((w) => [w, false])  // every argument is a directory to create
+  }
   if (LAST_ARG.has(name)) {
     const recursive = args.some((w) => RECURSIVE_COPY.test(w.text))
     for (let k = 0; k < args.length; k++) {
@@ -531,8 +554,17 @@ function targetsOf(name: string, args: Word[], depth: number, bodies: string[]):
       k += ["-c", "--git-dir", "--namespace"].includes(t) ? 2 : 1
     }
     if (k < args.length && GIT_WRITERS.has(args[k].text)) {
-      const reach = GIT_PATHSPEC_TREE.has(args[k].text)
-      return nonOptions(args.slice(k + 1)).map((w) => [rebase(w, base, loose), reach])
+      const sub = args[k].text
+      let rest = args.slice(k + 1)
+      const opts = new Set(rest.map((w) => w.text))
+      const only = GIT_INDEX_ONLY[sub]
+      if (only && ![...only[1]].some((o) => opts.has(o)) && (only[0].size === 0 || [...only[0]].some((o) => opts.has(o)))) {
+        return []  // only the index changes: `git restore --staged .`, `git reset .`, `git rm --cached`
+      }
+      // The value of `checkout -b NAME` is a branch, not a pathspec.
+      rest = rest.filter((_, j) => !(j > 0 && GIT_BRANCH_VALUED.has(rest[j - 1].text)))
+      const reach = GIT_PATHSPEC_TREE.has(sub)
+      return nonOptions(rest).map((w) => [rebase(w, base, loose), reach])
     }
   }
   return []
@@ -548,6 +580,7 @@ function findTargets(args: Word[], depth: number): Target[] {
   let writes = false
   let narrow = true
   const names: [string, boolean][] = []
+  const literal: Target[] = []
   while (k < args.length) {
     const t = args[k].text
     if (FIND_EXEC.has(t)) {
@@ -559,9 +592,13 @@ function findTargets(args: Word[], depth: number): Target[] {
         }
       }
       const inner = args.slice(k + 1, end)
-      if (inner.length > 0 && (SHELLS.has(pyBasename(inner[0].text)) || commandTargets(inner, depth).length > 0)) {
-        writes = true
+      // A target that starts with `{}` is the found file; any other one is a literal path written once per
+      // match (`-exec cp {} /tmp/ \;` reads the tree, `-exec cp {} .claude/x \;` writes x).
+      for (const [w, d] of inner.length > 0 ? commandTargets(inner, depth) : []) {
+        if (w.text.startsWith("{}")) writes = true
+        else literal.push([t === "-execdir" || t === "-okdir" ? copy(w, { loose: true }) : w, d])
       }
+      if (inner.length > 0 && SHELLS.has(pyBasename(inner[0].text))) writes = true
       k = end + 1
       continue
     }
@@ -578,10 +615,10 @@ function findTargets(args: Word[], depth: number): Target[] {
     else if (!FIND_PLAIN.has(t)) narrow = false
     k += 1
   }
-  if (!writes) return []
+  if (!writes) return literal
   if (starts.length === 0) starts = [plain(".", newWord())]
   const keep = names.length > 0 && narrow ? names : null
-  return starts.map((w) => [copy(w, { names: keep }), true])
+  return starts.map((w) => [copy(w, { names: keep }), true] as Target).concat(literal)
 }
 
 function cd(words: Word[], base: string, loose: boolean, dirs: [string, boolean][]): [string, boolean] {
@@ -601,7 +638,7 @@ function cd(words: Word[], base: string, loose: boolean, dirs: [string, boolean]
 /** [word, destructive] for every write target the command text shows. Throws INVALID_EVENT. */
 export function analyse(text: unknown, depth = 0): Target[] {
   if (depth > MAX_DEPTH || typeof text !== "string") invalid()
-  const nested: string[] = []
+  const nested: [number, string][] = []
   const tokens = tokenize(text, nested)
   let targets: Target[] = []
   let words: Word[] = []
@@ -611,7 +648,10 @@ export function analyse(text: unknown, depth = 0): Target[] {
   let loose = false
   const scopes: [string, boolean][] = []
   const dirs: [string, boolean][] = []
-  for (const [kind, value] of [...tokens, ["op", ";"] as Token]) {
+  let done = 0
+  const all = [...tokens, ["op", ";"] as Token]
+  for (let at = 0; at < all.length; at++) {
+    const [kind, value] = all[at]
     if (pending !== null) {
       if (kind !== "word") invalid()
       if (pending === "<<<") bodies.push((value as Word).text)
@@ -623,6 +663,10 @@ export function analyse(text: unknown, depth = 0): Target[] {
     else if (kind === "body") bodies = bodies.concat(value as string[])
     else if (kind === "word") words.push(value as Word)
     else {
+      // The substitutions inside this command run from where it runs (`cd .claude && echo $(rm x)`).
+      for (; done < nested.length && nested[done][0] < at; done++) {
+        targets = targets.concat(analyse(nested[done][1], depth + 1).map(([w, d]) => [rebase(w, base, loose), d]))
+      }
       targets = targets.concat(commandTargets(words, depth, bodies).map(([w, d]) => [rebase(w, base, loose), d]))
       ;[base, loose] = cd(words, base, loose, dirs)
       if (value === "(") scopes.push([base, loose])
@@ -631,7 +675,6 @@ export function analyse(text: unknown, depth = 0): Target[] {
       bodies = []
     }
   }
-  for (const inner of nested) targets = targets.concat(analyse(inner, depth + 1))
   return targets
 }
 
@@ -803,6 +846,11 @@ export function protectedTarget(command: unknown, cwd: string, root: string, pro
   }
 
   const hits = (word: Word, text: string, destructive: boolean): boolean => {
+    if (text === "~+" || text === "~-" || text.startsWith("~+/") || text.startsWith("~-/")) {
+      // `~+` is $PWD, `~-` is $OLDPWD: the rest is relative to the current or an unknown directory.
+      if (text[1] === "-") word = copy(word, { loose: true })
+      text = "." + text.slice(2)
+    }
     const here = normPath(pjoin(cwd, word.base))
     for (const v of ["${CLAUDE_PROJECT_DIR}", "$CLAUDE_PROJECT_DIR"]) text = text.split(v).join(root)
     if (home) {
@@ -813,7 +861,16 @@ export function protectedTarget(command: unknown, cwd: string, root: string, pro
     if (text.startsWith("~")) return false
     if (word.dynamic && text.includes("$")) {
       const tail = "/" + text.replace(/^\/+/, "")
-      return protectedRel.some((rel) => tail.endsWith("/" + rel) || tail.includes("/" + rel + "/"))
+      if (protectedRel.some((rel) => tail.endsWith("/" + rel) || tail.includes("/" + rel + "/"))) return true
+      // Removing `"$R"/scripts` removes scripts/dual-cli when $R is the root: the literal part after the last
+      // variable is a parent of a gate.
+      const comps = text.split("/")
+      let last = 0
+      comps.forEach((c, k) => {
+        if (c.includes("$")) last = k
+      })
+      const lit = comps.slice(last + 1).filter((c) => c !== "" && c !== ".").join("/")
+      return destructive && lit !== "" && protectedRel.some((rel) => rel.startsWith(lit + "/"))
     }
     const rel = pjoin(word.base, text)
     if (word.loose && !rel.startsWith("/")) {
@@ -823,7 +880,12 @@ export function protectedTarget(command: unknown, cwd: string, root: string, pro
       })
     }
     const path = normPath(pjoin(here, text))
-    destructive = destructive && reaches(word)
+    if (!reaches(word)) {
+      // No name in the gates matches the patterns: the walk touches none of them, even when it starts inside
+      // one. The names come from the files on disk, so a start path that is not there is judged as a plain write.
+      if (lexists(path)) return false
+      destructive = false
+    }
     if (word.glob) return globHits(path, bases, destructive)
     return inside(path, destructive)
   }

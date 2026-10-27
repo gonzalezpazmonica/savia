@@ -51,7 +51,7 @@ class ShellTargetCorpusTests(unittest.TestCase):
         for case in CORPUS:
             got = python_answer(case["command"], "/w", "/w")
             if case.get("invalid"):
-                self.assertTrue(got["invalid"], case["id"])
+                self.assertEqual((got["invalid"], got["gate"]), (True, True), case["id"])
             else:
                 self.assertEqual((got["invalid"], got["hit"]), (False, case["hit"]), case["id"])
                 self.assertEqual(got["gate"], case["hit"] is not None, case["id"])
@@ -59,11 +59,17 @@ class ShellTargetCorpusTests(unittest.TestCase):
         self.assertGreaterEqual(sum(1 for c in CORPUS if c.get("hit")), 30)
         self.assertGreaterEqual(sum(1 for c in CORPUS if "hit" in c and c["hit"] is None), 20)
 
-    def test_unparseable_text_denies_only_when_it_names_a_gate_location(self):
-        self.assertTrue(gates.shell_writes_gate({"tool_name": "Bash", "tool_input": {
-            "command": "echo 'x > .codex/hooks.json"}}, "/w"))
-        self.assertFalse(gates.shell_writes_gate({"tool_name": "Bash", "tool_input": {
-            "command": "echo 'sin cerrar"}}, "/w"))
+    def test_unparseable_text_is_denied_whatever_it_names(self):
+        """PR #1391 security review P1: the raw text of a command the tokenizer rejects hides what the
+        tokenizer decodes (`.cl''aude`, `$'\\x2e'codex`, a `cd` before a relative path). A substring
+        search on it let them through, so a text that cannot be read is denied, gate name or not."""
+        deny = lambda c: gates.shell_writes_gate({"tool_name": "Bash", "tool_input": {"command": c}}, "/w")
+        for command in ("echo x > .cl''aude/settings.json; echo 'sin cerrar",
+                        "echo {} > $'\\x2e'codex/hooks.json; echo $(ls",
+                        "cd scripts && echo x > dual-cli/gates.py; echo x >",
+                        "echo 'sin cerrar"):
+            self.assertTrue(deny(command), command)
+        self.assertFalse(deny("echo 'cerrada'"))  # a text that can be read is judged on what it writes
 
     def test_other_tools_and_non_string_commands_are_not_shell(self):
         self.assertFalse(gates.shell_writes_gate({"tool_name": "Read", "tool_input": {
@@ -86,12 +92,12 @@ class ShellTargetCorpusTests(unittest.TestCase):
             self.assertEqual(got["hit"], "alias/tdd-gate.sh")
             self.assertIsNone(python_answer("echo x > aliasX/tdd-gate.sh", root, root)["hit"])
 
-    def test_unparseable_text_naming_only_a_plain_parent_is_not_a_gate(self):
-        """`scripts` alone names no gate; `scripts/dual-cli` and `.claude` do (PR #1391 review)."""
-        deny = lambda c: gates.shell_writes_gate({"tool_name": "Bash", "tool_input": {"command": c}}, "/w")
-        self.assertFalse(deny("ls scripts 'sin cerrar"))
-        self.assertTrue(deny("ls scripts/dual-cli 'sin cerrar"))
-        self.assertTrue(deny("ls .claude 'sin cerrar"))
+    def test_process_substitution_is_read_not_rejected(self):
+        """`<(…)`/`>(…)` were INVALID, and the fallback made them a way around the analyser."""
+        nested = []
+        tokens = shell_targets.tokenize("diff <(ls a) >(cat)", nested)
+        self.assertEqual([k for k, _ in tokens], ["word", "word", "word"])
+        self.assertEqual([t for _, t in nested], ["ls a", "cat"])
 
     def test_invalid_glob_range_is_invalid_not_allowed(self):
         with self.assertRaises(ProtocolError):
@@ -128,7 +134,13 @@ def gate_tree(tmp):
 # Cases whose answer depends on the files on disk (gate_tree): find -name and cd to an unknown place.
 FS_CASES = [("find . -name '*.sh' -delete", True), ("find . -iname '*.SH' -exec rm -f {} +", True),
             ("find . -name '*.pyc' -delete", False), ('cd "$D" && sed -i s/2/0/ tdd-gate.sh', True),
-            ('cd "$D" && rm -f other.sh', False), ("cd docs && rm -f tdd-gate.sh", False)]
+            ('cd "$D" && rm -f other.sh', False), ("cd docs && rm -f tdd-gate.sh", False),
+            # PR #1391 correctness review P2-2/P2-3: a copy out of a gate reads it; a walk inside a gate that
+            # only matches generated names touches no gate file.
+            ("find .claude -name '*.sh' -exec cp {} /tmp/ \\;", False),
+            ("find .claude -name '*.sh' -exec sed -i s/2/0/ {} +", True),
+            ("find .claude/hooks -name __pycache__ -exec rm -rf {} +", False),
+            ("find .claude/hooks -name '*.sh' -delete", True)]
 
 
 class ShellTargetFilesystemTests(unittest.TestCase):
@@ -177,12 +189,12 @@ class ShellTargetParityTests(unittest.TestCase):
             cases = [{"command": "cd .. && rm -f .claude/hooks/tdd-gate.sh"}, {"command": "rm -f .claude/hooks/x"}]
             self.assertEqual(ts_answers(cases, sub, root), [python_answer(c["command"], sub, root) for c in cases])
 
-    def test_invalid_glob_and_plain_parent_in_opencode(self):
+    def test_invalid_text_denies_in_opencode(self):
         cases = [{"command": "rm -rf [z-a]"}, {"command": "ls scripts 'sin cerrar"},
-                 {"command": "ls scripts/dual-cli 'sin cerrar"}]
+                 {"command": "echo x > .cl''aude/settings.json; echo 'sin cerrar"}, {"command": "ls scripts"}]
         got = ts_answers(cases, "/w", "/w")
         self.assertEqual(got, [python_answer(c["command"], "/w", "/w") for c in cases])
-        self.assertEqual([g["gate"] for g in got], [False, False, True])
+        self.assertEqual([g["gate"] for g in got], [True, True, True, False])
 
 
 # Real-repo replay: the adapters of both CLIs with the hooks of .claude/settings.json.

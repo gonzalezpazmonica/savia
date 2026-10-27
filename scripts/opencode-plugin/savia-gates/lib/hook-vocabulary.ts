@@ -157,23 +157,16 @@ export function fromHookInput(mutated: Record<string, unknown>, view: HookView):
 }
 
 /** Port of gates.shell_writes_gate: a Bash call whose text writes gate code (lib/shell-targets.ts). Text the
- * tokenizer cannot close counts as a write only when it names a gate location: there is nothing else to guard. */
+ * tokenizer cannot close is denied too: its raw text hides what the tokenizer would have decoded, so no
+ * substring of it can clear it. Any other error denies as well, as an exception out of gates.py does in Codex. */
 export function shellWritesGate(view: HookView, cwd: string, root: string): boolean {
   const command = view.tool_input.command
   if (view.tool_name !== "Bash" || typeof command !== "string") return false
   try {
     return protectedTarget(command, cwd, root, PROTECTED_GATE_PATHS) !== null
-  } catch (e) {
-    // Any other error denies, as an exception out of gates.py does in Codex (INVALID_EVENT).
-    if (!(e instanceof Error && e.message === "INVALID_EVENT")) return true
-    return PROTECTED_GATE_PATHS.some((rel) => command.includes(gateMark(rel)))
+  } catch {
+    return true
   }
-}
-
-/** Port of gates._gate_mark: a dot directory or the file itself names a gate; `scripts` alone does not. */
-function gateMark(rel: string): string {
-  const first = rel.split("/")[0]
-  return first.startsWith(".") || first === rel ? first : rel
 }
 
 export interface PreToolUseOutcome {

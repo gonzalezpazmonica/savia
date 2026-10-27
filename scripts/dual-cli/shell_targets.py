@@ -51,6 +51,14 @@ _GIT_WRITERS = {"checkout", "restore", "rm", "mv", "apply", "clean", "reset", "s
                 "switch", "merge", "pull", "rebase", "cherry-pick", "revert"}
 # Their pathspecs reach every file below them: `git checkout ref -- scripts` rewrites scripts/dual-cli.
 _GIT_PATHSPEC_TREE = {"checkout", "restore", "rm", "clean", "reset", "stash"}
+# Subcommand -> (options that make it touch only the index, options that bring the worktree back);
+# an empty first set means "index only unless a second-set option is given" (`git reset .`).
+_GIT_INDEX_ONLY = {"restore": ({"--staged", "-S"}, {"--worktree", "-W"}),
+                   "rm": ({"--cached"}, set()),
+                   "reset": (set(), {"--hard", "--merge", "--keep"})}
+_GIT_BRANCH_VALUED = {"-b", "-B", "--orphan", "-c", "-C"}
+_XARGS_VALUED = {"-I", "-n", "-L", "-P", "-d", "-s", "-E", "-a", "--max-args", "--max-lines", "--max-procs",
+                 "--delimiter", "--max-chars", "--arg-file", "--eof", "--process-slot-var"}
 _SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
 _SHELL_VALUED = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
 _RECURSIVE_COPY = re.compile(r"-[a-zA-Z]*[rRa][a-zA-Z]*|--recursive|--archive")
@@ -231,7 +239,8 @@ def tokenize(text, nested):
     """Shell text -> list of tokens: ("word", _Word), ("op", str), ("redir", str), and
     ("body", [text]) where a heredoc opens: the list receives its body once it is read.
 
-    Command substitutions are appended to `nested` as raw text: their commands run too.
+    Command and process substitutions are appended to `nested` as (index of the token they belong
+    to, raw text): their commands run too, from the directory of the command that holds them.
     """
     tokens, i, n = [], 0, len(text)
     word, heredocs = None, []
@@ -301,7 +310,7 @@ def tokenize(text, nested):
                     continue
                 if text.startswith("$(", i):
                     end = _closing(text, i + 2, "(", ")")
-                    nested.append(text[i + 2:end - 1])
+                    nested.append((len(tokens), text[i + 2:end - 1]))
                     word.text += "$(...)"
                     word.dynamic = True
                     i = end
@@ -310,7 +319,7 @@ def tokenize(text, nested):
                     j = text.find("`", i + 1)
                     if j < 0:
                         raise ProtocolError("INVALID_EVENT")
-                    nested.append(text[i + 1:j])
+                    nested.append((len(tokens), text[i + 1:j]))
                     word.text += "$(...)"
                     word.dynamic = True
                     i = j + 1
@@ -322,7 +331,7 @@ def tokenize(text, nested):
             continue
         if text.startswith("$(", i):
             end = _closing(text, i + 2, "(", ")")
-            nested.append(text[i + 2:end - 1])
+            nested.append((len(tokens), text[i + 2:end - 1]))
             word = word or _Word()
             word.text += "$(...)"
             word.dynamic = True
@@ -332,11 +341,19 @@ def tokenize(text, nested):
             j = text.find("`", i + 1)
             if j < 0:
                 raise ProtocolError("INVALID_EVENT")
-            nested.append(text[i + 1:j])
+            nested.append((len(tokens), text[i + 1:j]))
             word = word or _Word()
             word.text += "$(...)"
             word.dynamic = True
             i = j + 1
+            continue
+        if text.startswith(("<(", ">("), i):  # process substitution: a /dev/fd name; its commands run
+            end = _closing(text, i + 2, "(", ")")
+            nested.append((len(tokens), text[i + 2:end - 1]))
+            word = word or _Word()
+            word.text += "$(...)"
+            word.dynamic = True
+            i = end
             continue
         if c in "<>" or (c == "&" and text.startswith("&>", i)):
             fd = word is not None and re.fullmatch(r"[0-9]+", word.text) is not None and not word.dynamic
@@ -480,7 +497,7 @@ def _targets_of(name, args, depth, bodies):
         # The arguments xargs appends come from stdin: only the literal ones are seen.
         k = 0
         while k < len(args) and args[k].text.startswith("-"):
-            k += 2 if args[k].text in ("-I", "-n", "-L", "-P", "-d", "-s", "-E", "-a") else 1
+            k += 2 if args[k].text in _XARGS_VALUED else 1
         return _command_targets(args[k:], depth)
     if name == "find":
         return _find_targets(args, depth)
@@ -495,6 +512,8 @@ def _targets_of(name, args, depth, bodies):
                             for w in args)
             return [(w, recursive) for w in rest]
         return [(w, name in DESTRUCTIVE) for w in rest]
+    if name == "install" and any(w.text in ("-d", "--directory") for w in args):
+        return [(w, False) for w in _non_options(args)]  # every argument is a directory to create
     if name in _LAST_ARG:
         recursive = any(_RECURSIVE_COPY.fullmatch(w.text) for w in args)
         for k, w in enumerate(args):
@@ -524,8 +543,15 @@ def _targets_of(name, args, depth, bodies):
                 continue
             k += 2 if args[k].text in ("-c", "--git-dir", "--namespace") else 1
         if k < len(args) and args[k].text in _GIT_WRITERS:
-            reach = args[k].text in _GIT_PATHSPEC_TREE
-            return [(_rebase(w, base, loose), reach) for w in _non_options(args[k + 1:])]
+            sub, rest = args[k].text, args[k + 1:]
+            opts = {w.text for w in rest}
+            if sub in _GIT_INDEX_ONLY and not opts & _GIT_INDEX_ONLY[sub][1] and (
+                    opts & _GIT_INDEX_ONLY[sub][0] or not _GIT_INDEX_ONLY[sub][0]):
+                return []  # only the index changes: `git restore --staged .`, `git reset .`, `git rm --cached`
+            # The value of `checkout -b NAME` is a branch, not a pathspec.
+            rest = [w for j, w in enumerate(rest) if not (j and rest[j - 1].text in _GIT_BRANCH_VALUED)]
+            reach = sub in _GIT_PATHSPEC_TREE
+            return [(_rebase(w, base, loose), reach) for w in _non_options(rest)]
     return []
 
 
@@ -537,13 +563,20 @@ def _find_targets(args, depth):
     while k < len(args) and not (args[k].text.startswith("-") or args[k].text in ("(", "!")):
         starts.append(args[k])
         k += 1
-    writes, names, narrow = False, [], True
+    writes, names, narrow, literal = False, [], True, []
     while k < len(args):
         t = args[k].text
         if t in _FIND_EXEC:
             end = next((j for j in range(k + 1, len(args)) if args[j].text in (";", "+")), len(args))
             inner = args[k + 1:end]
-            if inner and (os.path.basename(inner[0].text) in _SHELLS or _command_targets(inner, depth)):
+            # A target that starts with `{}` is the found file; any other one is a literal path written
+            # once per match (`-exec cp {} /tmp/ \;` reads the tree, `-exec cp {} .claude/x \;` writes x).
+            for w, d in _command_targets(inner, depth) if inner else []:
+                if w.text.startswith("{}"):
+                    writes = True
+                else:
+                    literal.append((_copy(w, loose=True) if t in ("-execdir", "-okdir") else w, d))
+            if inner and os.path.basename(inner[0].text) in _SHELLS:
                 writes = True
             k = end + 1
             continue
@@ -560,11 +593,11 @@ def _find_targets(args, depth):
             narrow = False  # -o, !, -not, -path, -mtime…: a gate cannot be ruled out
         k += 1
     if not writes:
-        return []
+        return literal
     if not starts:
         starts = [_plain(".", _Word())]
     keep = names if names and narrow else None
-    return [(_copy(w, names=keep), True) for w in starts]
+    return [(_copy(w, names=keep), True) for w in starts] + literal
 
 
 def _cd(words, base, loose, dirs):
@@ -595,8 +628,8 @@ def analyse(text, depth=0):
     nested = []
     tokens = tokenize(text, nested)
     targets, words, bodies, pending = [], [], [], None
-    base, loose, scopes, dirs = "", False, [], []
-    for kind, value in tokens + [("op", ";")]:
+    base, loose, scopes, dirs, done = "", False, [], [], 0
+    for at, (kind, value) in enumerate(tokens + [("op", ";")]):
         if pending is not None:
             if kind != "word":
                 raise ProtocolError("INVALID_EVENT")
@@ -613,6 +646,10 @@ def analyse(text, depth=0):
         elif kind == "word":
             words.append(value)
         else:
+            # The substitutions inside this command run from where it runs (`cd .claude && echo $(rm x)`).
+            while done < len(nested) and nested[done][0] < at:
+                targets += [(_rebase(w, base, loose), d) for w, d in analyse(nested[done][1], depth + 1)]
+                done += 1
             targets += [(_rebase(w, base, loose), d) for w, d in _command_targets(words, depth, bodies)]
             base, loose = _cd(words, base, loose, dirs)
             if value == "(":
@@ -620,8 +657,6 @@ def analyse(text, depth=0):
             elif value == ")" and scopes:
                 base, loose = scopes.pop()  # a subshell's `cd` ends with it
             words, bodies = [], []
-    for inner in nested:
-        targets += analyse(inner, depth + 1)
     return targets
 
 
@@ -759,6 +794,10 @@ def protected_target(command, cwd, root, protected_rel):
         return False
 
     def hits(word, text, destructive):
+        if text in ("~+", "~-") or text.startswith(("~+/", "~-/")):
+            # `~+` is $PWD, `~-` is $OLDPWD: the rest is relative to the current or an unknown directory.
+            word = word if text[1] == "+" else _copy(word, loose=True)
+            text = "." + text[2:]
         here = os.path.normpath(os.path.join(cwd, word.base))
         for var in ("${CLAUDE_PROJECT_DIR}", "$CLAUDE_PROJECT_DIR"):
             text = text.replace(var, root)
@@ -775,7 +814,15 @@ def protected_target(command, cwd, root, protected_rel):
         if word.dynamic and "$" in text:
             # An unexpanded variable may stand for the root: judge the literal tail.
             tail = "/" + text.lstrip("/")
-            return any(tail.endswith("/" + rel) or ("/" + rel + "/") in tail for rel in protected_rel)
+            if any(tail.endswith("/" + rel) or ("/" + rel + "/") in tail for rel in protected_rel):
+                return True
+            # Removing `"$R"/scripts` removes scripts/dual-cli when $R is the root: the literal part after
+            # the last variable is a parent of a gate.
+            comps = text.split("/")
+            last = max(k for k, c in enumerate(comps) if "$" in c)
+            lit = "/".join(c for c in comps[last + 1:] if c not in ("", "."))
+            return destructive and bool(lit) and any(rel.startswith(lit + "/") for rel in protected_rel)
+        rel = posixpath.join(word.base, text)
         rel = posixpath.join(word.base, text)
         if word.loose and not rel.startswith("/"):
             # Unknown directory: a literal path is a gate if it is one from any directory on the way
@@ -784,7 +831,13 @@ def protected_target(command, cwd, root, protected_rel):
                 inside(cand, False) and (a not in bases or os.path.lexists(cand))
                 for a in anchors for cand in [os.path.normpath(os.path.join(a, rel))])
         path = os.path.normpath(os.path.join(here, text))
-        destructive = destructive and reaches(word)
+        if not reaches(word):
+            # No name in the gates matches the patterns: the walk touches none of them, even when it starts
+            # inside one (`find .claude/hooks -name __pycache__ -delete`). The names come from the files on
+            # disk, so a start path that is not there was not walked: it is judged as a plain write.
+            if os.path.lexists(path):
+                return False
+            destructive = False
         if word.glob:
             return _glob_hits(path, bases, destructive)
         return inside(path, destructive)

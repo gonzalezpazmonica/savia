@@ -262,8 +262,9 @@ def is_protected(path, root):
 
 
 def shell_writes_gate(payload, root):
-    """A Bash call whose text writes gate code (shell_targets.py). Text the tokenizer cannot
-    close counts as a write only when it names a gate location: there is nothing else to guard."""
+    """A Bash call whose text writes gate code (shell_targets.py). Text the tokenizer cannot close is
+    denied too: bash may still run it, and its raw text hides what the tokenizer would have decoded
+    (`.cl''aude`, `$'\\x2e'codex`, a `cd` before a relative path), so no substring of it can clear it."""
     command = payload.get("tool_input", {}).get("command")
     if payload.get("tool_name") != "Bash" or not isinstance(command, str):
         return False
@@ -271,14 +272,7 @@ def shell_writes_gate(payload, root):
     try:
         return protected_target(command, cwd, str(root), PROTECTED_PATHS) is not None
     except ProtocolError:
-        return any(_gate_mark(rel) in command for rel in PROTECTED_PATHS)
-
-
-def _gate_mark(rel):
-    """What names a gate location in text: its first component when that is a dot directory or the
-    file itself (`.claude`, `opencode.json`), the whole path otherwise (`scripts` alone is no gate)."""
-    first = rel.split("/")[0]
-    return first if first.startswith(".") or first == rel else rel
+        return True
 
 
 def normalize_codex_pretool(payload):
