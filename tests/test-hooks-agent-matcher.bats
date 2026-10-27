@@ -66,3 +66,11 @@ print(bad); raise SystemExit(1 if bad else 0)'
   run bash .claude/hooks/protected-job-guard.sh < "$TMP/in.json"
   [ "$status" -eq 0 ]
 }
+
+@test "protected-job-guard trata el contexto de bucle (SAVIA_LOOP_CONTEXT) como autónomo" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  unset SAVIA_PROTECTED_JOB_OVERRIDE
+  printf '%s' '{"tool_name":"Agent","tool_input":{"subagent_type":"architect","prompt":"diseña"}}' > "$TMP/in.json"
+  run bash .claude/hooks/protected-job-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
