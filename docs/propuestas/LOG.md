@@ -10,6 +10,54 @@
 
 Alta: proveedor independiente opcional (decisión de la operadora 2026-10-27, sesgo correlacionado)
 
+## 2026-10-27 SE-469 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-470 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-471 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-472 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-473 APPROVED
+
+operadora, AskUserQuestion 2026-10-27 (alcance aprobado: solo S0 (medición; puede cerrar la spec))
+
+## 2026-10-26 SE-468 APPROVED
+
+operadora, chat 2026-10-26 («Aprobado SE-468»)
+
+## 2026-10-26 SE-473 PROPOSED
+
+Alta desde la síntesis de una tesis sobre arquitectura neuro-simbólica (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-472 PROPOSED
+
+Alta desde la síntesis de una tesis sobre calendario agéntico y sprint nocturno (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-471 PROPOSED
+
+Alta desde la síntesis de una tesis sobre calendario agéntico y sprint nocturno (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-470 PROPOSED
+
+Alta desde la síntesis de una tesis sobre evaluación y aseguramiento de agentes (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-469 PROPOSED
+
+Alta desde la síntesis de una tesis sobre evaluación y aseguramiento de agentes (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-468 PROPOSED
+
+Alta desde la síntesis de una tesis sobre evaluación y aseguramiento de agentes (diseño en el repo de investigación privado)
+
 ## 2026-10-27 SE-463 APPROVED
 
 operadora, AskUserQuestion 2026-10-27
