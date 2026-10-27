@@ -16,18 +16,24 @@ fi
 INPUT="${CLAUDE_TOOL_INPUT:-}"
 if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
 
-# Con JSON de stdin se mira solo el fichero destino y el texto que se AÑADE (new_string/content):
-# editar otro fichero que mencione ambas cadenas, o quitar un !projects/ de .gitignore, no bloquea.
-# Si jq no está o la entrada no es JSON (respaldo por variable), se mantiene el filtro textual de antes.
-if command -v jq &>/dev/null && FILE=$(printf '%s' "$INPUT" | jq -er '.tool_input.file_path // .tool_input.filePath // empty' 2>/dev/null); then
-    [[ "$(basename "$FILE")" == ".gitignore" ]] || exit 0
-    INPUT=$(printf '%s' "$INPUT" | jq -r '[.tool_input.new_string, .tool_input.content, .tool_input.newString] | map(select(. != null)) | join("\n")' 2>/dev/null)
-elif ! echo "$INPUT" | grep -q "\.gitignore"; then
+# Con JSON de stdin se evalúa el contenido RESULTANTE de .gitignore (lib/gitignore-whitelist-delta.py):
+# bloquea si aparece alguna whitelist de proyecto que no estaba, incluida una edición parcial que solo
+# cambia el nombre. Quitar una whitelist, o editar otro fichero, no bloquea. No evaluable → bloqueo.
+# Sin JSON (respaldo por variable) se mantiene el filtro textual de antes. Here-strings: sin SIGPIPE.
+_trim="${INPUT#"${INPUT%%[![:space:]]*}"}"
+if [[ "$_trim" == \{* ]]; then
+    printf '%s' "$_trim" | python3 "$(dirname "${BASH_SOURCE[0]}")/lib/gitignore-whitelist-delta.py"
+    case $? in
+        0) exit 0 ;;
+        1) WHITELIST_NUEVA=1 ;;
+        *) echo "BLOQUEADO [block-project-whitelist]: no se pudo evaluar la edición de .gitignore." >&2; exit 2 ;;
+    esac
+elif ! grep -q "\.gitignore" <<<"$INPUT"; then
     exit 0
 fi
 
 # Detectar si el contenido incluye un whitelist de proyecto (!projects/)
-if echo "$INPUT" | grep -qE '!projects/'; then
+if [[ "${WHITELIST_NUEVA:-0}" == 1 ]] || grep -qE '!projects/' <<<"$INPUT"; then
     echo "🛑 BLOQUEADO: Intento de añadir whitelist de proyecto en .gitignore" >&2
     echo "" >&2
     echo "La regla de privacidad de proyectos requiere confirmación humana explícita" >&2

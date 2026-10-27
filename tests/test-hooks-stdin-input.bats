@@ -14,8 +14,10 @@ teardown() { rm -rf "$TMP"; }
 
 payload() { python3 -c 'import json,sys; print(json.dumps({"tool_name":sys.argv[1],"tool_input":json.loads(sys.argv[2])}))' "$@"; }
 
-@test "block-project-whitelist bloquea por stdin un !projects/ en .gitignore" {
-  payload Edit '{"file_path":".gitignore","old_string":"x","new_string":"!projects/secreto/"}' > "$TMP/in.json"
+@test "block-project-whitelist bloquea por stdin una whitelist nueva en .gitignore" {
+  mkdir -p "$TMP/proj"; export CLAUDE_PROJECT_DIR="$TMP/proj"
+  printf '*.log\n' > "$TMP/proj/.gitignore"
+  python3 -c 'import json; print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":".gitignore","old_string":"*.log","new_string":"*.log\n!pro"+"jects/a/"}}))' > "$TMP/in.json"
   run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
   [[ "$output" == *BLOQUEADO* ]]
@@ -214,10 +216,59 @@ runner_falla() {
   grep -q '"hook":"pr-summary-gate","reason":"empty_input"' "$CLAUDE_PROJECT_DIR/output/unmeasured-gates.jsonl"
 }
 
-@test "ningún matcher PreToolUse usa patrones de argumentos que Claude Code no aplica" {
+@test "ningún hook command PreToolUse usa patrones de argumentos que Claude Code no aplica" {
   run python3 -c 'import json
 d=json.load(open(".claude/settings.json"))
-bad=[m["matcher"] for m in d["hooks"].get("PreToolUse",[]) if "(" in m.get("matcher","")]
+bad=[m["matcher"] for m in d["hooks"].get("PreToolUse",[]) if "(" in m.get("matcher","") and any(h.get("type")=="command" for h in m.get("hooks",[]))]
 print(bad); raise SystemExit(1 if bad else 0)'
   [ "$status" -eq 0 ]
+}
+
+@test "ningún hook de tipo prompt queda con matcher Bash sin filtro (evaluaría con un LLM cada orden)" {
+  run python3 -c 'import json
+d=json.load(open(".claude/settings.json"))
+bad=[m["matcher"] for m in d["hooks"].get("PreToolUse",[]) if m.get("matcher")=="Bash" and any(h.get("type")=="prompt" for h in m.get("hooks",[]))]
+print(bad); raise SystemExit(1 if bad else 0)'
+  [ "$status" -eq 0 ]
+}
+
+# ── Ronda 5: reproducciones de la segunda refutación ──
+
+@test "pr-summary-gate: if, !, env -u y sudo -u no eluden el gate" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  for c in 'if gh pr create --draft; then :; fi' '! gh pr create --draft' 'env -u X gh pr create --draft' 'sudo -u root gh pr create --draft'; do
+    payload Bash "{\"command\":\"$c\"}" > "$TMP/in.json"
+    run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+    [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
+  done
+}
+
+@test "block-project-whitelist: una edición parcial que cambia el nombre de una whitelist bloquea" {
+  mkdir -p "$TMP/proj"; export CLAUDE_PROJECT_DIR="$TMP/proj"
+  printf '%s\n' "!pro""jects/alfa/" > "$TMP/proj/.gitignore"
+  payload Edit '{"file_path":".gitignore","old_string":"alfa","new_string":"beta"}' > "$TMP/in.json"
+  run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "block-project-whitelist: contenido enorme no elude por SIGPIPE" {
+  mkdir -p "$TMP/proj"; export CLAUDE_PROJECT_DIR="$TMP/proj"
+  python3 -c 'import json; print(json.dumps({"tool_input":{"file_path":".gitignore","content":"!pro"+"jects/g/\n#"+"x"*3000000}}))' > "$TMP/in.json"
+  run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "recursion-guard: un escape JSON equivalente no elude el guard" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  python3 -c 'print(chr(123)+chr(34)+"tool_name"+chr(34)+":"+chr(34)+"Task"+chr(34)+","+chr(34)+"tool_input"+chr(34)+":"+chr(123)+chr(34)+"prompt"+chr(34)+":"+chr(34)+"lanza overnight"+chr(92)+"u002dsprint"+chr(34)+chr(125)+chr(125))' > "$TMP/in.json"
+  grep -q 'u002d' "$TMP/in.json"
+  run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "recursion-guard: un campo enorme no elude por SIGPIPE" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  python3 -c 'import json; print(json.dumps({"tool_name":"Task","tool_input":{"prompt":"lanza overnight-sprint","extra":"x"*3000000}},indent=2))' > "$TMP/in.json"
+  run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
 }

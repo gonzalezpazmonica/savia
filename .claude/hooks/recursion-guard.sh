@@ -23,12 +23,12 @@ _detect_loop() {
   for pattern in "${LOOP_PATTERNS[@]}"; do
     if [[ "$pattern" == "loop_skill" ]]; then
       # Match as JSON field OR as standalone word (avoid partial matches like my_loop_skill_ext)
-      if printf '%s' "$input" | grep -qE '"loop_skill"\s*:|loop_skill[^_[:alnum:]]|loop_skill$'; then
+      if grep -qE '"loop_skill"\s*:|loop_skill[^_[:alnum:]]|loop_skill$' <<<"$input"; then
         printf '%s' "$pattern"
         return 0
       fi
     else
-      if printf '%s' "$input" | grep -qF "$pattern"; then
+      if grep -qF "$pattern" <<<"$input"; then
         printf '%s' "$pattern"
         return 0
       fi
@@ -46,6 +46,16 @@ main() {
   # Claude Code pasa la entrada por stdin; OPENCODE_TOOL_INPUT queda como respaldo.
   local tool_input="${OPENCODE_TOOL_INPUT:-}"
   if [[ -z "$tool_input" && ! -t 0 ]]; then tool_input=$(timeout 3 cat 2>/dev/null || true); fi
+  # JSON: se compara el texto DECODIFICADO (un «\u002d» equivale a «-») y las claves; here-strings sin SIGPIPE.
+  local trimmed="${tool_input#"${tool_input%%[![:space:]]*}"}"
+  if [[ "$trimmed" == \{* ]] && command -v jq &>/dev/null; then
+    local decoded
+    if ! decoded=$(jq -r '[paths(scalars) as $p | ($p | map(tostring) | join(".")), (getpath($p) | tostring)] | join("\n")' <<<"$trimmed" 2>/dev/null); then
+      printf 'BLOCKED [recursion-guard]: entrada malformada dentro de un bucle activo.\n'
+      exit 2
+    fi
+    tool_input="$decoded"
+  fi
 
   local detected_loop
   if ! detected_loop="$(_detect_loop "$tool_input")"; then

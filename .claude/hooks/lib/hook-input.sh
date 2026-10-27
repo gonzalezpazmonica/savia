@@ -41,9 +41,10 @@ hook_unmeasured_exit() {
 
 # Inicio de una orden real dentro de una línea de shell: principio, separador (; & | `), subshell ( o $(,
 # o el argumento de `sh -c`/`bash -c`/`eval`; seguido de prefijos que no cambian la orden (VAR=x, env,
-# command, sudo, doas, nohup, time, exec, xargs, nice, ionice, stdbuf, setsid, timeout N…).
+# command, sudo, doas, nohup, time, exec, xargs, nice, ionice, stdbuf, setsid, timeout N…, con sus
+# opciones —`sudo -u root`, `env -u X`—, y las palabras then, do, else, if, elif, while, until, !, {).
 # Una mención dentro de un mensaje, un echo o un grep no queda anclada.
-HOOK_CMD_AT='(^|[;&|(`]|\$\(|(^|[^[:alnum:]_])((ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c|eval)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout)([[:space:]]+-[^[:space:]]+)*|[0-9][0-9.]*[smhd]?)[[:space:]]+)*'
+HOOK_CMD_AT='(^|[;&|(`]|\$\(|(^|[^[:alnum:]_])((ba|z|da|k)?sh([[:space:]]+-[A-Za-z]+)*[[:space:]]+-[A-Za-z]*c|eval)[[:space:]]+["'"'"']?)[[:space:]]*(([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*|(env|command|sudo|doas|nohup|time|exec|xargs|nice|ionice|stdbuf|setsid|timeout)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*|[0-9][0-9.]*[smhd]?|then|do|else|if|elif|while|until|!|\{)[[:space:]]+)*'
 
 # Inicio de una orden git con sus opciones globales, valores entre comillas incluidos (-c user.name="A B").
 HOOK_GIT_AT="${HOOK_CMD_AT}"'(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-dir|--work-tree)[[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"'|[^-[:space:]][^[:space:]]*("[^"]*"|'"'"'[^'"'"']*'"'"')?[^[:space:]]*))|([[:space:]]+--?[A-Za-z][A-Za-z-]*(=[^[:space:]]+)?))*[[:space:]]+'

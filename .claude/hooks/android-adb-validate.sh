@@ -45,7 +45,7 @@ BLOCKED_PATTERNS=(
 )
 
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
-    if echo "$ADB_CMD" | grep -qP "$pattern"; then
+    if grep -qP "$pattern" <<<"$ADB_CMD"; then
         echo "BLOCKED: Destructive ADB operation: $ADB_CMD" >> "$LOG_FILE"
         echo "ADB operation blocked for safety: $pattern" >&2
         exit 2
@@ -67,7 +67,7 @@ RISKY_PATTERNS=(
 )
 
 for pattern in "${RISKY_PATTERNS[@]}"; do
-    if echo "$ADB_CMD" | grep -qP "$pattern"; then
+    if grep -qP "$pattern" <<<"$ADB_CMD"; then
         echo "$(date -Iseconds) | RISKY | $ADB_CMD" >> "$LOG_FILE"
         exit 0
     fi
