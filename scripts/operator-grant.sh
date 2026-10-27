@@ -5,10 +5,12 @@
 # "never merge" rule with a LOCAL, auditable grant ledger written by Savia
 # ONLY on the operator's express request.
 #
-#   grant  --scope <autonomy:<skill>|merge> --context "<why>" [--ttl-hours N]
-#   grant  --scope merge --signature <fichero|->   # incorpora la firma de la operadora
-#   check  --scope <scope>          # exit 0 vigente | 1 no/expirado | 2 invalido | 3 sin grant
-#   revoke --scope <scope>
+#   grant   --scope autonomy:<skill> --context "<why>" [--ttl-hours N]
+#   grant   --scope merge --resource pr:<n>|task:<id> --context "<why>" [--ttl-hours N]
+#   grant   --scope merge --signature <fichero|->   # incorpora la firma de la operadora
+#   check   --scope <scope> [--resource R]  # exit 0 vigente | 1 no/expirado | 2 invalido | 3 sin grant
+#   consume --scope merge --resource R      # uso único: gasta el grant tras el merge
+#   revoke  --scope <scope>
 #   list
 #   guard                           # hook PreToolUse (lee el evento por stdin)
 #
@@ -42,13 +44,16 @@ ACTIVE_USER_FILE="${SAVIA_ACTIVE_USER_FILE:-$REPO_ROOT/.claude/profiles/active-u
 
 usage() {
   cat <<'USAGE'
-Usage: operator-grant.sh <grant|check|revoke|list> --scope SCOPE [opts]
+Usage: operator-grant.sh <grant|check|consume|revoke|list> --scope SCOPE [opts]
 
 Commands:
   grant   SCOPE  --context "reason" [--ttl-hours N]   emit grant (express request)
+          merge also needs --resource pr:<n>|task:<id> (the PR or task it covers)
   grant   merge  --signature FILE|-                   attach the operator's signature
-  check   SCOPE                                       exit: 0 vigente | 1 no | 2 inval | 3 sin grant
-  revoke  SCOPE                                       revoke (remove grant and pending request)
+  check   SCOPE  [--resource R]                       exit: 0 vigente | 1 no | 2 inval | 3 sin grant
+                                                      (merge: --resource required)
+  consume merge  --resource R                         one-shot: spend the grant after merging
+  revoke  SCOPE                                       revoke (grant id marked spent, request removed)
   list                                                show all grants
   guard                                               PreToolUse hook (event on stdin)
 
@@ -66,6 +71,8 @@ Rules:
     machine): ssh-keygen -Y sign -f KEY -n savia-operator-grant REQUEST
     and `grant --scope merge --signature REQUEST.sig` attaches it. check
     verifies it against config/operator-grant-signers.
+  - merge grant: unique id, grantor, scope, resource and validity are signed;
+    check verifies each one and rejects ids already consumed or revoked.
   - default TTL: autonomy:* = 24h, merge = 6h (counted from the request).
   - grant (idempotent): renews expires_at of an existing autonomy grant.
 USAGE
@@ -101,28 +108,51 @@ valid_scope() {
 
 scope_file() { printf '%s/%s.json' "$GRANTS_DIR" "$1"; }
 request_file() { printf '%s/%s.request' "$GRANTS_DIR" "$1"; }
+spent_file() { printf '%s/%s.spent' "$GRANTS_DIR" "$1"; }
 
 # JSON escapado (un --context con comillas no inyecta campos) y, para merge,
 # petición canónica + verificación de la firma de la operadora con ssh-keygen.
+# Un grant de merge lleva id único, grantor (principal), scope, resource (PR o
+# tarea) y vigencia, todo dentro de lo firmado; check verifica cada campo y
+# rechaza los ids consumidos o revocados (merge.spent), así que una copia
+# guardada del grant no se puede volver a usar.
 GRANT_PY='
-import json, os, subprocess, sys, tempfile, time
-FIELDS = ("scope", "grantor", "request_context", "issued_at", "expires_at", "expires_epoch")
+import json, os, re, subprocess, sys, tempfile, time
+FIELDS = ("id", "scope", "resource", "grantor", "request_context",
+          "issued_at", "issued_epoch", "expires_at", "expires_epoch")
+ID_RE = re.compile(r"^[0-9a-f]{32}$")
+RES_RE = re.compile(r"^(pr|task):[A-Za-z0-9._-]{1,64}$")
 def payload(rec):
     """Bytes exactos que firma la operadora."""
     return json.dumps({f: rec.get(f) for f in FIELDS}, sort_keys=True,
                       ensure_ascii=True, separators=(",", ":")).encode()
+def spent_ids(path):
+    try:
+        return {l.split("\t", 1)[0] for l in open(path) if l.strip()}
+    except FileNotFoundError:
+        return set()
+def fields_ok(rec, slug, resource, spent):
+    """Campos del grant de merge, sin la firma. resource None = el suyo."""
+    now = time.time()
+    g, i, r = rec.get("grantor"), rec.get("id"), rec.get("resource")
+    ie, ee = rec.get("issued_epoch"), rec.get("expires_epoch")
+    return (rec.get("scope") == "merge"
+            and isinstance(i, str) and ID_RE.match(i) is not None and i not in spent
+            and isinstance(r, str) and RES_RE.match(r) is not None
+            and (resource is None or r == resource)
+            and isinstance(g, str) and g != "" and g != "self" and not g.startswith("-")
+            and (not slug or g == slug)
+            and isinstance(ie, int) and isinstance(ee, int)
+            and ie <= now + 60 and ie <= ee and ee >= now)
 def verify(rec, sig, signers, ns):
-    g = rec.get("grantor")
-    if not (isinstance(sig, str) and "BEGIN SSH SIGNATURE" in sig and os.path.isfile(signers)
-            and isinstance(g, str) and g and not g.startswith("-")
-            and isinstance(rec.get("expires_epoch"), int) and rec["expires_epoch"] >= time.time()):
+    if not (isinstance(sig, str) and "BEGIN SSH SIGNATURE" in sig and os.path.isfile(signers)):
         return False
     with tempfile.TemporaryDirectory() as d:
         sp = os.path.join(d, "grant.sig")
         with open(sp, "w") as f:
             f.write(sig)
         try:
-            r = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", signers, "-I", g, "-n", ns, "-s", sp],
+            r = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", signers, "-I", rec["grantor"], "-n", ns, "-s", sp],
                                input=payload(rec), capture_output=True, timeout=15)
         except (OSError, subprocess.SubprocessError):
             return False
@@ -130,58 +160,83 @@ def verify(rec, sig, signers, ns):
 def dump(path, rec):
     with open(path, "w") as f:
         f.write(json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n")
+def load(path):
+    try:
+        rec = json.load(open(path))
+    except (OSError, ValueError):
+        return None
+    return rec if isinstance(rec, dict) else None
 op = sys.argv[1]
 if op in ("write", "request"):
-    out, scope, grantor, source, ctx, issued, expires_at, exp = sys.argv[2:10]
+    out, scope, grantor, source, ctx, issued, expires_at, exp, now, resource = sys.argv[2:12]
     rec = {"scope": scope, "grantor": grantor, "source": source, "request_context": ctx,
            "issued_at": issued, "expires_at": expires_at, "expires_epoch": int(exp)}
     if op == "write":
         dump(out, rec)
     else:
+        rec.update(id=os.urandom(16).hex(), resource=resource, issued_epoch=int(now))
         with open(out, "wb") as f:
             f.write(payload(rec))
         print(payload(rec).decode())
 elif op == "accept":
-    req, sigsrc, out, signers, ns, slug = sys.argv[2:8]
+    req, sigsrc, out, signers, ns, slug, spent = sys.argv[2:9]
     try:
         raw = open(req, "rb").read()
         rec = json.loads(raw)
         sig = sys.stdin.read() if sigsrc == "-" else open(sigsrc).read()
     except (OSError, ValueError) as e:
         print("ERROR: petición o firma ilegible: %s" % e, file=sys.stderr); sys.exit(2)
-    if not isinstance(rec, dict) or rec.get("scope") != "merge" or payload(rec) != raw:
+    if not isinstance(rec, dict) or payload(rec) != raw:
         print("ERROR: la petición no es canónica (alterada)", file=sys.stderr); sys.exit(1)
     if slug and rec.get("grantor") != slug:
         print("ERROR: la petición es de otra operadora", file=sys.stderr); sys.exit(1)
-    if not verify(rec, sig, signers, ns):
+    if not (fields_ok(rec, slug, None, spent_ids(spent)) and verify(rec, sig, signers, ns)):
         print("ERROR: firma no válida para esta petición (clave, namespace, caducidad o contenido)", file=sys.stderr); sys.exit(1)
     rec.update(source="operator-signature", sig=sig)
     dump(out, rec)
-elif op == "verify":
-    path, signers, ns = sys.argv[2:5]
-    try:
-        rec = json.load(open(path))
-    except (OSError, ValueError):
+elif op == "check":
+    # Exit 0 vigente | 1 no válido. resource "*" = el del propio grant (solo list).
+    path, scope, slug, resource, signers, ns, spent = sys.argv[2:9]
+    rec = load(path)
+    if rec is None or rec.get("scope") != scope:
         sys.exit(1)
-    ok = (isinstance(rec, dict) and rec.get("scope") == "merge"
-          and rec.get("source") == "operator-signature" and verify(rec, rec.get("sig"), signers, ns))
+    if scope != "merge":
+        g, ee = rec.get("grantor"), rec.get("expires_epoch")
+        ok = (isinstance(g, str) and g != "" and g != "self" and (not slug or g == slug)
+              and isinstance(ee, int) and ee >= time.time())
+        sys.exit(0 if ok else 1)
+    ok = (rec.get("source") == "operator-signature"
+          and fields_ok(rec, slug, None if resource == "*" else resource, spent_ids(spent))
+          and verify(rec, rec.get("sig"), signers, ns))
     sys.exit(0 if ok else 1)
+elif op == "spend":
+    # Apunta el id del grant en el libro de gastados (consumido o revocado).
+    path, spent, why = sys.argv[2:5]
+    rec = load(path)
+    i = rec.get("id") if rec else None
+    if isinstance(i, str) and ID_RE.match(i):
+        with open(spent, "a") as f:
+            f.write("%s\t%s\t%d\n" % (i, why, int(time.time())))
+elif op == "field":
+    rec = load(sys.argv[2]) or {}
+    v = rec.get(sys.argv[3])
+    print(v if isinstance(v, (str, int)) else "")
 '
 
-# Campos de un grant nuevo, uno por línea: grantor, issued_at, expires_at, epoch.
+# Campos de un grant nuevo, uno por línea: grantor, issued_at, expires_at, epoch, now.
 grant_fields() {
   local scope="$1" ttl="$2" slug="$3" grantor="$4" now exp
   now="$(now_epoch)"
   exp=$(( now + ttl * 3600 ))
   # Reuse existing grantor if already present (stability); else active slug.
   if [[ -z "$grantor" && -f "$(scope_file "$scope")" ]]; then
-    grantor="$(grep -oP '"grantor":\s*"\K[^"]+' "$(scope_file "$scope")" 2>/dev/null | head -1 || true)"
+    grantor="$(python3 -c "$GRANT_PY" field "$(scope_file "$scope")" grantor 2>/dev/null || true)"
   fi
   [[ -z "$grantor" ]] && grantor="$slug"
-  printf '%s\n%s\n%s\n%s\n' "$grantor" \
+  printf '%s\n%s\n%s\n%s\n%s\n' "$grantor" \
     "$(date -u -d @"$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "epoch-$now")" \
     "$(date -u -d @"$exp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$exp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "epoch-$exp")" \
-    "$exp"
+    "$exp" "$now"
 }
 
 ensure_grants_dir() {
@@ -191,35 +246,36 @@ ensure_grants_dir() {
 
 # op = write (autonomy:*, grant en vigor) | request (merge, pendiente de firma).
 emit() {
-  local op="$1" scope="$2" context="$3" ttl="$4" slug="$5" grantor="$6" out f
+  local op="$1" scope="$2" context="$3" ttl="$4" slug="$5" grantor="$6" resource="$7" out f
   ensure_grants_dir
   mapfile -t f < <(grant_fields "$scope" "$ttl" "$slug" "$grantor")
   if [[ "$op" == "write" ]]; then out="$(scope_file "$scope")"; else out="$(request_file "$scope")"; fi
   ( umask 077
-    python3 -c "$GRANT_PY" "$op" "$out" "$scope" "${f[0]}" express-request "$context" "${f[1]}" "${f[2]}" "${f[3]}" ) \
+    python3 -c "$GRANT_PY" "$op" "$out" "$scope" "${f[0]}" express-request "$context" "${f[1]}" "${f[2]}" "${f[3]}" "${f[4]}" "$resource" ) \
     || { echo "ERROR: cannot write $out" >&2; exit 2; }
   chmod 600 "$out" 2>/dev/null || true
 }
 
+# $3 = recurso para merge (pr:N | task:ID); "*" = el del propio grant (solo list).
 check_scope() {
-  local scope="$1" slug="$2"
-  local file exp expires_at grantor
+  local scope="$1" slug="$2" resource="${3:-}" file
   file="$(scope_file "$scope")"
   [[ ! -f "$file" ]] && return 3
-  exp="$(grep -oP '"expires_epoch":\s*\K[0-9]+' "$file" 2>/dev/null | head -1)"
-  if [[ -z "$exp" ]]; then
-    expires_at="$(grep -oP '"expires_at":\s*"\K[^"]+' "$file" 2>/dev/null | head -1)"
-    exp="$(date -u -d "$expires_at" +%s 2>/dev/null || echo 0)"
+  python3 -c "$GRANT_PY" check "$file" "$scope" "$slug" "$resource" \
+    "$SIGNERS_FILE" "$SIG_NAMESPACE" "$(spent_file "$scope")" || return 1
+  return 0
+}
+
+# Gasta el grant (id al libro merge.spent) y lo retira; why = consumed | revoked.
+spend_scope() {
+  local scope="$1" why="$2" file
+  file="$(scope_file "$scope")"
+  if [[ "$scope" == "merge" && -f "$file" ]]; then
+    ensure_grants_dir
+    ( umask 077; python3 -c "$GRANT_PY" spend "$file" "$(spent_file "$scope")" "$why" ) \
+      || { echo "ERROR: cannot record spent grant" >&2; return 2; }
   fi
-  [[ "$(( $(now_epoch) ))" -gt "$exp" ]] && return 1
-  grantor="$(grep -oP '"grantor":\s*"\K[^"]+' "$file" 2>/dev/null | head -1)"
-  # A valid grant must be tied to the ACTIVE operator, never self/empty.
-  if [[ -z "$grantor" || "$grantor" == "self" ]]; then return 1; fi
-  if [[ -n "$slug" && "$grantor" != "$slug" ]]; then return 1; fi
-  # merge: la firma de la operadora es la única prueba aceptada de que hubo persona.
-  if [[ "$scope" == "merge" ]]; then
-    python3 -c "$GRANT_PY" verify "$file" "$SIGNERS_FILE" "$SIG_NAMESPACE" || return 1
-  fi
+  rm -f "$file" "$(request_file "$scope")" 2>/dev/null
   return 0
 }
 
@@ -229,32 +285,72 @@ check_scope() {
 # Veta a las herramientas modificar la raíz de confianza
 # (config/operator-grant-signers): con ella, un agente añadiría su propia clave
 # pública y firmaría él. Leerla con Read sigue permitido (es pública).
-# Límite: ve el texto de la orden, no lo que ejecuta un script escrito antes ni
-# un cambio de rama; el cambio versionado del fichero lo revisa la operadora en
-# su PR. Sin entrada evaluable: exit 2 (SE-453), nunca 0 sin evaluar.
+# Bash: busca el nombre tras quitar comillas y barras (operator-grant-''signers)
+# y resuelve globs y llaves (signer[s], {signers,x}) contra el cwd del evento.
+# Límite: ve el texto de la orden, no lo que ejecuta un script escrito antes,
+# una variable que compone el nombre ni un cambio de rama; el cambio versionado
+# del fichero lo revisa la operadora en su PR. Borrarlo o vaciarlo no da poder
+# (sin claves ningún grant vale). Evento malformado o incompleto: exit 2
+# (SE-453), nunca 0 sin evaluar.
 GUARD_PY='
-import json, os, sys
+import fnmatch, glob, json, os, re, shlex, sys
+def block(why):
+    print("BLOQUEADO [operator-grant-guard]: " + why, file=sys.stderr); sys.exit(2)
 try:
     ev = json.load(sys.stdin)
 except ValueError:
-    print("BLOQUEADO [operator-grant-guard]: entrada no es JSON", file=sys.stderr); sys.exit(2)
+    block("entrada no es JSON")
 if not isinstance(ev, dict):
-    print("BLOQUEADO [operator-grant-guard]: entrada no es un evento", file=sys.stderr); sys.exit(2)
-tool = ev.get("tool_name", "")
-ti = ev.get("tool_input") or {}
+    block("entrada no es un evento")
+tool, ti = ev.get("tool_name"), ev.get("tool_input")
+if not isinstance(tool, str) or not tool:
+    block("evento sin tool_name")
+if not isinstance(ti, dict):
+    block("evento sin tool_input evaluable")
 signers = os.path.realpath(os.environ["GUARD_SIGNERS_FILE"])
 marker = os.path.basename(signers)
+tail = os.path.join(os.path.basename(os.path.dirname(signers)), marker)
+cwd = ev.get("cwd") if isinstance(ev.get("cwd"), str) and os.path.isdir(ev.get("cwd")) else os.getcwd()
 def deny():
-    print("BLOQUEADO [operator-grant-guard]: " + marker + " es la raíz de confianza del grant de merge;"
-          " solo la operadora la cambia, por PR. Para leerla usa Read.", file=sys.stderr)
-    sys.exit(2)
+    block(marker + " es la raíz de confianza del grant de merge; solo la operadora la cambia, por PR. Para leerla usa Read.")
+def is_signers(p):
+    rp = os.path.realpath(os.path.join(cwd, os.path.expanduser(p)))
+    # También la copia de otro worktree o checkout: <raíz>/config/operator-grant-signers.
+    return rp == signers or rp.endswith(os.sep + tail)
+def braces(t):
+    m = re.search(r"\{([^{}]*)\}", t)
+    if not m:
+        return [t]
+    return [x for alt in m.group(1).split(",") for x in braces(t[:m.start()] + alt + t[m.end():])]
 if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
-    for f in ("file_path", "notebook_path"):
-        p = ti.get(f)
-        if isinstance(p, str) and p and (marker in p or os.path.realpath(os.path.expanduser(p)) == signers):
-            deny()
-elif tool == "Bash" and marker in str(ti.get("command") or ""):
-    deny()
+    paths = [ti.get(f) for f in ("file_path", "notebook_path") if ti.get(f) is not None]
+    if not paths or not all(isinstance(p, str) and p for p in paths):
+        block("evento " + tool + " sin ruta evaluable")
+    if any(is_signers(p) for p in paths):
+        deny()
+elif tool == "Bash":
+    cmd = ti.get("command")
+    if not isinstance(cmd, str):
+        block("evento Bash sin command")
+    if marker in re.sub(r"[\"\x27\\\\]", "", cmd):
+        deny()
+    try:
+        toks = shlex.split(cmd, comments=False, posix=True)
+    except ValueError:
+        toks = cmd.split()
+    for tok in toks:
+        for piece in re.split(r"[<>|;&=()`]", tok):
+            for cand in braces(piece):
+                if not cand:
+                    continue
+                if "{" in piece and is_signers(cand):
+                    deny()
+                if any(c in cand for c in "*?["):
+                    if any(is_signers(g) for g in glob.glob(os.path.join(cwd, os.path.expanduser(cand)))):
+                        deny()
+                    if ("signer" in cand or "operator-grant" in cand) and any(
+                            fnmatch.fnmatchcase(x, cand) for x in (marker, tail, signers)):
+                        deny()
 sys.exit(0)
 '
 
@@ -267,11 +363,11 @@ guard_main() {
 [[ "${1:-}" == "guard" ]] && { guard_main; exit $?; }
 
 # ── Parse ──────────────────────────────────────────────────────────────
-ACTION="" SCOPE="" CONTEXT="" TTL="" GRANTOR="" SIGNATURE=""
+ACTION="" SCOPE="" CONTEXT="" TTL="" GRANTOR="" SIGNATURE="" RESOURCE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    grant|check|revoke|list) ACTION="$1"; shift ;;
+    grant|check|consume|revoke|list) ACTION="$1"; shift ;;
     --scope) SCOPE="$2"; shift 2 ;;
     --scope=*) SCOPE="${1#--scope=}"; shift ;;
     --context) CONTEXT="$2"; shift 2 ;;
@@ -281,18 +377,21 @@ while [[ $# -gt 0 ]]; do
     --grantor) GRANTOR="$2"; shift 2 ;;
     --signature) SIGNATURE="$2"; shift 2 ;;
     --signature=*) SIGNATURE="${1#--signature=}"; shift ;;
+    --resource) RESOURCE="$2"; shift 2 ;;
+    --resource=*) RESOURCE="${1#--resource=}"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) shift ;;
   esac
 done
 
-[[ -z "$ACTION" ]] && { echo "ERROR: action required (grant|check|revoke|list)" >&2; usage >&2; exit 2; }
+[[ -z "$ACTION" ]] && { echo "ERROR: action required (grant|check|consume|revoke|list)" >&2; usage >&2; exit 2; }
 [[ "$ACTION" == "list" ]] && {
   if [[ -d "$GRANTS_DIR" ]]; then
     ls -1 "$GRANTS_DIR"/*.json 2>/dev/null | while read -r f; do
       b="$(basename "$f" .json)"
-      if check_scope "$b" ""; then v=yes; else v=no; fi
-      printf '%s\tvalid=%s\t%s\n' "$b" "$v" "$(grep -oP '"request_context":\s*"\K[^"]+' "$f" 2>/dev/null | head -1)"
+      if check_scope "$b" "" "*"; then v=yes; else v=no; fi
+      printf '%s\tvalid=%s\t%s\t%s\n' "$b" "$v" "$(python3 -c "$GRANT_PY" field "$f" resource)" \
+        "$(python3 -c "$GRANT_PY" field "$f" request_context)"
     done
   fi
   exit 0
@@ -305,12 +404,24 @@ fi
 
 SLUG="$(active_slug)"
 
+# merge: el grant vale para un recurso concreto (pr:N | task:ID), firmado.
+if [[ "$SCOPE" == "merge" && ( "$ACTION" == "check" || "$ACTION" == "consume" || ( "$ACTION" == "grant" && -z "$SIGNATURE" ) ) ]]; then
+  [[ "$RESOURCE" =~ ^(pr|task):[A-Za-z0-9._-]{1,64}$ ]] || {
+    echo "ERROR: --resource pr:<n>|task:<id> required for scope merge" >&2; exit 2; }
+fi
+
 case "$ACTION" in
   check)
-    check_scope "$SCOPE" "$SLUG"
+    check_scope "$SCOPE" "$SLUG" "$RESOURCE"
     exit $? ;;
+  consume)
+    # Uso único: solo un grant válido para ese recurso se gasta; su id queda
+    # en merge.spent y check rechaza cualquier copia posterior.
+    [[ "$SCOPE" == "merge" ]] || { echo "ERROR: consume solo aplica a --scope merge" >&2; exit 2; }
+    check_scope merge "$SLUG" "$RESOURCE" || exit $?
+    spend_scope merge consumed; exit $? ;;
   revoke)
-    rm -f "$(scope_file "$SCOPE")" "$(request_file "$SCOPE")" 2>/dev/null; exit 0 ;;
+    spend_scope "$SCOPE" revoked; exit $? ;;
   grant)
     if [[ -n "$SIGNATURE" ]]; then
       [[ "$SCOPE" == "merge" ]] || { echo "ERROR: --signature solo aplica a --scope merge" >&2; exit 2; }
@@ -318,10 +429,11 @@ case "$ACTION" in
       ensure_grants_dir
       ( umask 077
         python3 -c "$GRANT_PY" accept "$(request_file merge)" "$SIGNATURE" "$(scope_file merge)" \
-          "$SIGNERS_FILE" "$SIG_NAMESPACE" "$SLUG" ) || exit $?
+          "$SIGNERS_FILE" "$SIG_NAMESPACE" "$SLUG" "$(spent_file merge)" ) || exit $?
       rm -f "$(request_file merge)"
-      echo "granted: merge -> $SLUG (source operator-signature)"
-      check_scope merge "$SLUG"; exit $?
+      RESOURCE="$(python3 -c "$GRANT_PY" field "$(scope_file merge)" resource)"
+      echo "granted: merge $RESOURCE -> $SLUG (source operator-signature)"
+      check_scope merge "$SLUG" "$RESOURCE"; exit $?
     fi
     [[ -z "$CONTEXT" ]] && { echo "ERROR: --context required (why is this grant being issued)" >&2; exit 2; }
     [[ -z "$TTL" ]] && TTL="$(default_ttl "$SCOPE")"
@@ -334,12 +446,12 @@ case "$ACTION" in
     if [[ "$SCOPE" == "merge" ]]; then
       echo "Petición de grant de merge pendiente de tu firma (todavía NO hay grant)."
       echo "Texto exacto a firmar, sin salto de línea final ($(request_file merge)):"
-      emit request "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR"
+      emit request "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR" "$RESOURCE"
       echo "Firma: ssh-keygen -Y sign -f <tu clave> -n $SIG_NAMESPACE <petición>"
       echo "Después: operator-grant.sh grant --scope merge --signature <petición>.sig (o --signature - y pega la firma)"
       exit 4
     fi
-    emit write "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR"
+    emit write "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR" ""
     echo "granted: $SCOPE -> $SLUG (ttl ${TTL}h, source express-request)"
     check_scope "$SCOPE" "$SLUG"; exit $? ;;
 esac

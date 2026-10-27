@@ -122,6 +122,15 @@ res_dir_expr() { grep -oP '^\s*RES_DIR="\K[^"]+' "$PUSH_PR"; }
   [ "$tier_line" -lt "$res_line" ]
 }
 
+@test "SE-343: el grant de merge se comprueba y se consume para ESTE PR (pr:<n>), no uno cualquiera" {
+  grep -q 'GRANT_RES="pr:${PR_URL##\*/}"' "$PUSH_PR"
+  grep -q 'operator-grant.sh check --scope merge --resource "$GRANT_RES"' "$PUSH_PR"
+  grep -q 'operator-grant.sh consume --scope merge --resource "$GRANT_RES"' "$PUSH_PR"
+  # Ninguna llamada a check/revoke de merge sin recurso (revoke sin gastar el id permitía replay).
+  run grep -nE 'operator-grant.sh (check|revoke) --scope merge( |$)[^-]*$' "$PUSH_PR"
+  [ "$status" -eq 1 ]
+}
+
 # ── Regression: silent exit when no feat/fix commit (2026-09-27) ─────────────
 # With `set -euo pipefail`, the title grep that finds no feat:/fix: commit made
 # the assignment fail and the script exited in Step 6 without creating the PR.

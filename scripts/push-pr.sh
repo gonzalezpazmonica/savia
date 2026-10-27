@@ -164,10 +164,11 @@ rm -f "$BODY_FILE" "$PWD/.pr-summary.md"; echo "  $PR_URL"
 # ── Auto-merge (--merge flag) ────────────────────────────────────────────
 MERGED=false
 if $MERGE && [[ "$PR_URL" == http* ]]; then
-  # SE-343: merge requires a valid operator grant (express request recorded).
-  if ! bash scripts/operator-grant.sh check --scope merge >/dev/null 2>&1; then
-    echo "ERROR: merge requires a vigente operator grant." >&2
-    echo "  El permiso expreso debe registrarse antes (operator-grant.sh grant --scope merge)." >&2
+  # SE-343: merge requires a valid operator grant signed for THIS PR.
+  GRANT_RES="pr:${PR_URL##*/}"
+  if ! bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; then
+    echo "ERROR: merge requires a vigente operator grant for $GRANT_RES." >&2
+    echo "  El permiso expreso debe registrarse antes (operator-grant.sh grant --scope merge --resource $GRANT_RES)." >&2
     echo "  Sin autorizacion registrada, el PR queda en Draft y no se mergea." >&2
     exit 1
   fi
@@ -225,9 +226,9 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
     PR_STATE=$(gh pr view "$PR_NUM" --json state -q .state 2>/dev/null || echo "")
     [[ "$PR_STATE" == "MERGED" ]] && MERGED=true
   fi
-  # SE-343: consume the merge grant after a successful merge (one-shot).
+  # SE-343: consume the merge grant after a successful merge (one-shot; id spent).
   if $MERGED; then
-    bash scripts/operator-grant.sh revoke --scope merge >/dev/null 2>&1 || true
+    bash scripts/operator-grant.sh consume --scope merge --resource "$GRANT_RES" >/dev/null 2>&1 || true
     echo "  Merge grant consumed (one-shot)."
   fi
 fi
