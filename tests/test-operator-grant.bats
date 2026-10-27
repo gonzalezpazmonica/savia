@@ -25,6 +25,9 @@ setup() {
   FAKE_REPO="$TMP_GRANTS/repo"
   mkdir -p "$FAKE_REPO/scripts" "$FAKE_REPO/config"
   cp "$REAL_SCRIPT" "$FAKE_REPO/scripts/"
+  # El grant de merge se firma para un repositorio (remoto origin): A#1 ≠ B#1.
+  git -C "$FAKE_REPO" init -q
+  git -C "$FAKE_REPO" remote add origin "https://github.com/test-org/repo-a.git"
   SCRIPT="$FAKE_REPO/scripts/operator-grant.sh"
   SIGNERS="$FAKE_REPO/config/operator-grant-signers"
   KEY="$TMP_GRANTS/op-key"
@@ -374,6 +377,7 @@ import json, re, sys
 a, b = (json.load(open(p)) for p in sys.argv[1:3])
 assert re.fullmatch(r"[0-9a-f]{32}", a["id"]) and a["id"] != b["id"], (a["id"], b["id"])
 assert a["scope"] == "merge" and a["resource"] == "pr:41" and a["grantor"] == sys.argv[3]
+assert a["repo"] == "github.com/test-org/repo-a", a["repo"]
 assert isinstance(a["issued_epoch"], int) and a["expires_epoch"] > a["issued_epoch"]
 PY
 }
@@ -460,14 +464,29 @@ PY
   [ "$status" -eq 0 ]
 }
 
+# Reescribe la petición pendiente con vigencia de $1 segundos, en forma canónica
+# (la que firma la operadora): permite probar la caducidad sin tocar el reloj.
+short_request() {
+  python3 - "$TMP_GRANTS/merge.request" "$1" <<'PY'
+import json, sys, time
+p, secs = sys.argv[1], int(sys.argv[2])
+r = json.load(open(p))
+r["expires_epoch"] = int(time.time()) + secs
+open(p, "wb").write(json.dumps(r, sort_keys=True, ensure_ascii=True, separators=(",", ":")).encode())
+PY
+}
+
 @test "F0: grant firmado y luego caducado no pasa check" {
-  issue_merge "una hora"
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "dos segundos" --ttl-hours 1
+  [ "$status" -eq 4 ]
+  short_request 2
+  sign_request
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 0 ]
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 0 ]
-  # Reloj de python adelantado 2 h solo para esta orden: el grant (TTL 1 h) ya caducó.
-  mkdir -p "$TMP_GRANTS/clock"
-  printf 'import time\n_t = time.time\ntime.time = lambda: _t() + 7200\n' > "$TMP_GRANTS/clock/sitecustomize.py"
-  run env PYTHONPATH="$TMP_GRANTS/clock" bash "$SCRIPT" check --scope merge --resource pr:1
+  sleep 3
+  run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
 }
 
@@ -475,12 +494,18 @@ PY
   issue_merge "sin clave"
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 0 ]
-  # Sin ssh-keygen en el PATH (resto de herramientas presentes).
+  # El script fija su PATH (SAFE_PATH); la copia de prueba lo apunta a un bin
+  # con las mismas herramientas. Control positivo: con ssh-keygen enlazado da 0;
+  # sin él, 1. Así lo que cambia el resultado es solo la ausencia de ssh-keygen.
   mkdir -p "$TMP_GRANTS/bin"
-  for t in python3 grep date head cat mkdir chmod rm basename dirname; do
+  for t in python3 git grep date head cat mkdir chmod rm basename dirname timeout ssh-keygen; do
     ln -s "$(command -v "$t")" "$TMP_GRANTS/bin/$t"
   done
-  run env PATH="$TMP_GRANTS/bin" "$(command -v bash)" "$SCRIPT" check --scope merge --resource pr:1
+  sed -i "s|^SAFE_PATH=.*|SAFE_PATH=\"$TMP_GRANTS/bin\"|" "$SCRIPT"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  unlink "$TMP_GRANTS/bin/ssh-keygen"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
   mv "$SIGNERS" "$SIGNERS.off"
   run bash "$SCRIPT" check --scope merge --resource pr:1
@@ -492,20 +517,15 @@ PY
   [[ "$SAVIA_GRANTS_DIR" == "$TMP_GRANTS"* ]]
   # Con los defaults del script (sin SAVIA_GRANTS_DIR), todo cae bajo el HOME del test.
   tag="isolation-$$-$RANDOM$RANDOM"
-  # El guard de la versión HMAC dejaba un ticket por orden vista en
-  # $HOME/.savia/grant-tickets/merge-<sha256("merge\n"+contexto)[:16]>.json:
-  # así nació el del 2026-10-27 00:14 en el HOME real.
-  bash "$SCRIPT" guard < <(guard_event Bash command "bash scripts/operator-grant.sh grant --scope merge --context \"$tag\"") >/dev/null 2>&1
-  ticket="merge-$(printf 'merge\n%s' "$tag" | sha256sum | cut -c1-16).json"
-  [ ! -e "$REAL_HOME/.savia/grant-tickets/$ticket" ]
   run env -u SAVIA_GRANTS_DIR bash "$SCRIPT" grant --scope merge --resource pr:1 --context "$tag" --ttl-hours 1
   [ "$status" -eq 4 ]
   grep -q "$tag" "$HOME/.savia/grants/merge.request"
   # Y nada con esa marca llegó al HOME real.
-  if [[ -d "$REAL_HOME/.savia" ]]; then
-    run grep -rlF "$tag" "$REAL_HOME/.savia/grants" "$REAL_HOME/.savia/grant-tickets"
-    [ -z "$output" ]
-  fi
+  for d in "$REAL_HOME/.savia/grants" "$REAL_HOME/.savia/grant-tickets"; do
+    [[ -d "$d" ]] || continue
+    run grep -rlF "$tag" "$d"
+    [ "$status" -eq 1 ]
+  done
 }
 
 # ── guard: entradas malformadas y rodeos de shell (revisión Codex) ──────
@@ -543,4 +563,116 @@ PY
     run bash "$SCRIPT" guard < <(guard_event Bash command "$c" "$FAKE_REPO")
     [ "$status" -eq 0 ]
   done
+}
+
+# ── Segunda revisión de #1401 (Codex + security + correctness, 2026-10-27) ──
+
+@test "guard: comillas ANSI-C, \$\"…\", continuaciones y escapes de printf que componen el nombre se vetan" {
+  cd "$FAKE_REPO"
+  for c in "cat /tmp/a >> config/operator-grant-s\$'\\x69'gners" \
+           "cat /tmp/a >> config/operator-grant-s\$'\\151'gners" \
+           "cat /tmp/a >> config/operator-grant-s\$'\\u0069'gners" \
+           "tee -a config/operator-grant-s\$\"igners\"" \
+           $'tee -a config/operator-grant-signer\\\ns' \
+           "tee -a \"\$(printf 'config/operator-grant-s\\x69gners')\""; do
+    run bash "$SCRIPT" guard < <(guard_event Bash command "$c" "$FAKE_REPO")
+    [ "$status" -eq 2 ]
+  done
+  # Control: ANSI-C que no compone el nombre pasa.
+  run bash "$SCRIPT" guard < <(guard_event Bash command "printf \$'hola\\x21\\n'" "$FAKE_REPO")
+  [ "$status" -eq 0 ]
+}
+
+@test "guard: una orden que tumbaba el analizador (recursión), una explosión de llaves o una ruta con NUL salen con 2" {
+  cd "$FAKE_REPO"
+  run bash "$SCRIPT" guard < <(python3 -c 'import json,os; print(json.dumps({"tool_name":"Bash","cwd":os.getcwd(),"tool_input":{"command":"# "+"{x}"*1000+"\ncat /tmp/a | tee -a config/o*"}}))')
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" guard < <(python3 -c 'import json,os; print(json.dumps({"tool_name":"Bash","cwd":os.getcwd(),"tool_input":{"command":"echo "+"{a,b}"*12}}))')
+  [ "$status" -eq 2 ]
+  run bash "$SCRIPT" guard < <(python3 -c 'import json; print(json.dumps({"tool_name":"Write","tool_input":{"file_path":"a\u0000b"}}))')
+  [ "$status" -eq 2 ]
+  # Control: llaves normales y muchas llaves de una sola alternativa sin escritura pasan.
+  run bash "$SCRIPT" guard < <(guard_event Bash command "echo {a,b}{c,d}" "$FAKE_REPO")
+  [ "$status" -eq 0 ]
+  run bash "$SCRIPT" guard < <(python3 -c 'import json,os; print(json.dumps({"tool_name":"Bash","cwd":os.getcwd(),"tool_input":{"command":"echo "+"{x}"*1000}}))')
+  [ "$status" -eq 0 ]
+}
+
+@test "guard: sin python3 (exit 127) el hook sale con 2, nunca con un fallo que Claude Code deja pasar" {
+  mkdir -p "$TMP_GRANTS/nopy"
+  for t in timeout cat; do ln -s "$(command -v "$t")" "$TMP_GRANTS/nopy/$t"; done
+  sed -i "s|^SAFE_PATH=.*|SAFE_PATH=\"$TMP_GRANTS/nopy\"|" "$SCRIPT"
+  run bash "$SCRIPT" guard < <(guard_event Bash command "ls")
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"exit 127"* ]]
+}
+
+@test "guard: un nombre más largo es otro fichero; el nombre exacto en Bash se veta aunque sea una lectura" {
+  run bash "$SCRIPT" guard < <(guard_event Bash command "echo docs/operator-grant-signers-notes.md")
+  [ "$status" -eq 0 ]
+  run bash "$SCRIPT" guard < <(guard_event Bash command "git status -- config/operator-grant-signers")
+  [ "$status" -eq 2 ]
+}
+
+@test "P1: un grant firmado para el repo A no vale en otro checkout B con el mismo número de PR" {
+  issue_merge "solo A" pr:41
+  run bash "$SCRIPT" check --scope merge --resource pr:41
+  [ "$status" -eq 0 ]
+  B="$TMP_GRANTS/repo-b"
+  mkdir -p "$B/scripts" "$B/config"
+  cp "$REAL_SCRIPT" "$B/scripts/"
+  cp "$SIGNERS" "$B/config/"
+  git -C "$B" init -q
+  git -C "$B" remote add origin "https://github.com/test-org/repo-b.git"
+  run bash "$B/scripts/operator-grant.sh" check --scope merge --resource pr:41
+  [ "$status" -eq 1 ]
+  run bash "$B/scripts/operator-grant.sh" consume --scope merge --resource pr:41
+  [ "$status" -eq 1 ]
+  # Sin remoto identificable no hay PASS, ni se puede pedir un grant.
+  git -C "$B" remote remove origin
+  run bash "$B/scripts/operator-grant.sh" check --scope merge --resource pr:41
+  [ "$status" -eq 1 ]
+  run bash "$B/scripts/operator-grant.sh" grant --scope merge --resource pr:2 --context "sin remoto"
+  [ "$status" -eq 2 ]
+  # El mismo repositorio con otra forma de URL (ssh, mayúsculas) sigue valiendo.
+  git -C "$FAKE_REPO" remote set-url origin "git@github.com:Test-Org/repo-a.git"
+  run bash "$SCRIPT" check --scope merge --resource pr:41
+  [ "$status" -eq 0 ]
+}
+
+@test "P1: revocar una petición pendiente impide firmarla e incorporarla después" {
+  run bash "$SCRIPT" grant --scope merge --resource pr:41 --context "pendiente" --ttl-hours 1
+  [ "$status" -eq 4 ]
+  sign_request
+  cp "$TMP_GRANTS/merge.request" "$TMP_GRANTS/req.copia"
+  run bash "$SCRIPT" revoke --scope merge
+  [ "$status" -eq 0 ]
+  grep -q "revoked" "$TMP_GRANTS/merge.spent"
+  cp "$TMP_GRANTS/req.copia" "$TMP_GRANTS/merge.request"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP_GRANTS/merge.json" ]
+  run bash "$SCRIPT" check --scope merge --resource pr:41
+  [ "$status" -eq 3 ]
+}
+
+@test "P2: ni PYTHONPATH con sitecustomize ni un ssh-keygen falso en el PATH dan PASS sin firma" {
+  issue_merge "entorno" pr:1
+  python3 - "$TMP_GRANTS/merge.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+r["sig"] = "-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----\n"
+json.dump(r, open(sys.argv[1], "w"))
+PY
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  mkdir -p "$TMP_GRANTS/hook" "$TMP_GRANTS/fakebin"
+  printf 'import subprocess\nsubprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, 0, b"", b"")\n' \
+    > "$TMP_GRANTS/hook/sitecustomize.py"
+  run env PYTHONPATH="$TMP_GRANTS/hook" bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  printf '#!/bin/sh\nexit 0\n' > "$TMP_GRANTS/fakebin/ssh-keygen"
+  chmod +x "$TMP_GRANTS/fakebin/ssh-keygen"
+  run env PATH="$TMP_GRANTS/fakebin:$PATH" bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
 }
