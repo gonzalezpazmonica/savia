@@ -23,7 +23,17 @@ TIMEOUT_SECS=30
 # runtime y leerla sola dejaba el hook en fallo abierto (exit 0 siempre). Se conserva como respaldo.
 INPUT="${CLAUDE_TOOL_INPUT:-}"
 if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
-if ! echo "$INPUT" | grep -qE "git merge|gh pr merge"; then
+# Con JSON de stdin se evalúa solo tool_input.command: una mención en la descripción, en un grep o en un
+# heredoc no es una orden. Las órdenes se anclan a su inicio (principio, ;, &, |, ( o prefijos VAR=x).
+if [[ "$INPUT" == \{* ]]; then
+  # shellcheck source=/dev/null
+  source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+  hook_extract_command "$INPUT" || exit 2
+  INPUT="$HOOK_COMMAND"
+fi
+CMD_AT='(^|[;&|(])[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
+GIT_AT="${CMD_AT}"'git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+)*[[:space:]]+'
+if ! echo "$INPUT" | grep -qE "${GIT_AT}merge([[:space:]]|$)|${CMD_AT}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)"; then
   exit 0
 fi
 

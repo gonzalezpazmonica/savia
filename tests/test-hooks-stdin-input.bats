@@ -95,3 +95,63 @@ for m in d["hooks"].get("PreToolUse",[]):
   run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
 }
+
+# ── Gates que empiezan a actuar: acción real por stdin y sin falsos positivos por menciones ──
+
+repo() {
+  git init -q "$TMP/repo" && cd "$TMP/repo"
+  git config user.email t@example.invalid && git config user.name t
+  printf 'x\n' > a.txt && git add a.txt
+}
+
+@test "compliance-gate ejecuta el runner por stdin y bloquea si falla" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR/.claude/compliance"
+  printf '#!/bin/bash\necho runner-ejecutado >&2\nexit 1\n' > "$CLAUDE_PROJECT_DIR/.claude/compliance/runner.sh"
+  payload Bash '{"command":"git commit -m \"mensaje suficientemente largo\""}' > "$TMP/in.json"
+  run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *runner-ejecutado* ]]
+}
+
+@test "compliance-gate no actúa cuando el texto solo se menciona" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR/.claude/compliance"
+  printf '#!/bin/bash\nexit 1\n' > "$CLAUDE_PROJECT_DIR/.claude/compliance/runner.sh"
+  payload Bash '{"command":"git log --grep=\"git commit\"","description":"buscar git commit"}' > "$TMP/in.json"
+  run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "agent-hook-premerge revisa lo preparado por stdin y bloquea marcas de conflicto" {
+  H="$PWD/.opencode/hooks/agent-hook-premerge.sh"; repo
+  printf '<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> otra\n' > a.txt && git add a.txt
+  export AGENT_HOOKS_MODE=hard-block
+  payload Bash '{"command":"git merge feature"}' > "$TMP/in.json"
+  run bash "$H" < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"conflict markers"* ]]
+}
+
+@test "agent-hook-premerge no actúa con una mención en un echo" {
+  H="$PWD/.opencode/hooks/agent-hook-premerge.sh"; repo
+  printf '<<<<<<< HEAD\n' > a.txt && git add a.txt
+  export AGENT_HOOKS_MODE=hard-block
+  payload Bash '{"command":"echo \"luego git merge\""}' > "$TMP/in.json"
+  run bash "$H" < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "prompt-hook-commit revisa por stdin el mensaje y bloquea uno demasiado corto" {
+  H="$PWD/.opencode/hooks/prompt-hook-commit.sh"; repo
+  export PROMPT_HOOKS_MODE=hard-block
+  payload Bash '{"command":"git commit -m \"wip\""}' > "$TMP/in.json"
+  run bash "$H" < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"too short"* ]]
+}
+
+@test "pr-summary-gate no bloquea un heredoc que solo menciona la orden" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  payload Bash '{"command":"cat > .pr-summary.md <<EOF\nantes de gh pr create\nEOF"}' > "$TMP/in.json"
+  run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
