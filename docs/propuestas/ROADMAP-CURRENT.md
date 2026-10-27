@@ -72,7 +72,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S13 · P1 · fase B** — Seguridad del canal de aprobación y de los conectores de Space
   Acción: SE-446 S0: sonda de autoaprobación contra el space-server real. SE-443 S1-S2: doctrina de diseño MCP y comprobación de malware al habilitar; S3-S5 cuando space-server lo permita.
-  Entrada: Aprobación de SE-446 y SE-443; usa el hueco temporal de SE-428 (no abre otra iniciativa en curso); si S0 encuentra una vía abierta, S1 de SE-446 pasa a P0 y adelanta a todo lo demás de Space.
+  Entrada: Specs SE-446 y SE-443 aprobadas (2026-10-27); usa el hueco temporal de SE-428 (no abre otra iniciativa en curso); si S0 encuentra una vía abierta, S1 de SE-446 pasa a P0 y adelanta a todo lo demás de Space.
   Salida: Informe de sonda por vía, test permanente de que el agente no contesta su propio ask, comprobación OSV con recibo, secretos tipados rechazados en command/args/url.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: la política por herramienta presupone un canal de aprobación seguro; esfuerzo: S0 pequeño; S1-S2 pequeños; S3-S5 medianos.
 
@@ -90,7 +90,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S14 · P2 · fase D** — Higiene de contexto y operación
   Acción: SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad. SE-448 S4 (defang) y categoría third-party-directive; SE-454 invariantes negativos como tests.
-  Entrada: Aprobación de cada spec; se ejecutan por separado, uno por vez; sin hueco WIP nuevo.
+  Entrada: Specs ya aprobadas (2026-10-27); se ejecutan por separado, uno por vez; sin hueco WIP nuevo.
   Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: cinco slices pequeños independientes.
 
@@ -114,7 +114,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S15 · P2 · fase E** — Contexto acotado de la sesión gráfica
   Acción: Medir tokens con y sin retirada de capturas, tope absoluto de compactación por tier, y después la herramienta de captura y la clasificación de acciones.
-  Entrada: Aprobación de SE-447; S2 y S4 esperan a que SE-439 salga de F0.
+  Entrada: Spec SE-447 aprobada (2026-10-27); S2 y S4 esperan a que SE-439 salga de F0.
   Salida: Medición publicada, tope configurable sin nombres de modelo en la fuente y test de una sola imagen viva.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: abarata sesiones largas de Space; esfuerzo: S1 y S3 pequeños; S2 y S4 tras SE-439 F0.
 
@@ -135,8 +135,11 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-398 [APPROVED] Savia Desktop Runtime & Surface Support — evidencia: docs/specs/SE-398-f0-desktop-runtime-discovery.md
 - SE-399 [APPROVED] Savia Visual Installer & Environment Bootstrap — evidencia: docs/specs/SE-399-f0-installer-discovery.md
 - SE-400 [APPROVED] Model-Agnostic Savia Ablation & Minimal Sufficient Kernel — evidencia: docs/specs/SE-400-f0-model-agnostic-ablation-inventory.md
+- SE-401 [APPROVED] Intent-to-Effect Execution Architecture (I2E) — evidencia: docs/specs/SE-401-intent-to-effect-execution-architecture.spec.md
 - SE-403 [APPROVED] Benchmark evidence: trazas, frontera, hash de selección — evidencia: PR #1171 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-403-benchmark-evidence-frontier.spec.md · integrada #1171; revisar evidencia/graduación
 - SE-404 [APPROVED] Proceso proporcional: G13 v2 y una corrección por revisión — evidencia: PR #1170 mergeada 2026-09-28 sin review registrada; graduación pendiente de revisión humana (completion.human_review). Spec: docs/specs/SE-404-proportional-process-gates.spec.md · integrada #1170; revisar evidencia/graduación
+- SE-408 [APPROVED] Automatización móvil por árbol de accesibilidad (mobile-mcp) bajo soberanía — evidencia: docs/specs/SE-408-mobile-accessibility-automation.spec.md
+- SE-409 [APPROVED] Bucle experiencia → skill con curación y retirada — evidencia: docs/specs/SE-409-experience-to-skill-loop.spec.md
 - SE-426 [IMPLEMENTING] Firma de confidencialidad con secreto de CI y HMAC siempre verificado — evidencia: docs/specs/SE-426-confidentiality-hmac-ci-key.spec.md
 - SE-428 [IMPLEMENTING] Savia Space como sustituto de OpenCode, con OpenCode como motor — evidencia: docs/specs/SE-428-savia-space-orchestrator-opencode-engine.spec.md
 - SE-429 [APPROVED] Savia Space interoperable: API con JWT y OpenAPI, MCP y A2A — evidencia: docs/specs/SE-429-savia-space-interop-api-mcp-a2a.spec.md
@@ -149,12 +152,30 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-436 [APPROVED] Savia Space: proyectos y cúpulas desde Space — evidencia: docs/specs/SE-436-savia-space-projects-and-domes.spec.md
 - SE-439 [APPROVED] Savia Space: sesión gráfica agéntica sobre Linux — evidencia: docs/specs/SE-439-savia-space-agentic-session.spec.md
 - SE-442 [APPROVED] Cadena de suministro de la CI: acciones fijadas por SHA, Dependabot, CodeQL, Scorecard y divulgación coordinada — evidencia: docs/specs/SE-442-ci-supply-chain-hardening.spec.md
+- SE-443 [APPROVED] Gobierno de conectores MCP: malware de paquetes, secretos tipados, importación, política por herramienta y doctrina de diseño — evidencia: docs/specs/SE-443-mcp-connector-governance.spec.md
 - SE-444 [APPROVED] Autoridad del verificador en los criterios de aceptación y cobertura no verificada explícita — evidencia: docs/specs/SE-444-verifier-authority-ac-closure.spec.md
 - SE-445 [APPROVED] Salvaguardas de ejecución autónoma: repetición bloqueante, presupuesto de turnos, revisor de acciones y criterio de éxito — evidencia: docs/specs/SE-445-autonomous-execution-safeguards.spec.md
+- SE-446 [APPROVED] Canal de aprobación inalcanzable para el agente: prueba de autoaprobación y mitigación — evidencia: docs/specs/SE-446-approval-channel-agent-unreachable.spec.md
+- SE-447 [APPROVED] Contexto acotado en sesiones largas: una sola captura viva, tope absoluto de compactación y clasificación de acciones de riesgo — evidencia: docs/specs/SE-447-bounded-context-long-sessions.spec.md
+- SE-448 [APPROVED] Fuga por salida de contenido externo: token canario, lista de destinos de URL e ID estable de hallazgos — evidencia: docs/specs/SE-448-external-content-leak-canary-urls.spec.md
+- SE-449 [APPROVED] Estado epistémico en hallazgos e informes: observado, derivado, inferido, desconocido — evidencia: docs/specs/SE-449-epistemic-status-in-reports.spec.md
+- SE-450 [APPROVED] Instaladores aditivos e idempotentes y propiedad de procesos con identidad de arranque — evidencia: docs/specs/SE-450-installer-and-process-ownership-hygiene.spec.md
 - SE-451 [APPROVED] Gobernanza de contribuciones: DCO frente a CLA y metadatos de licencia por fichero — evidencia: docs/specs/SE-451-contribution-governance-dco.spec.md
+- SE-452 [APPROVED] Suite de conformidad ejecutable publicada junto a cada contrato de interoperabilidad — evidencia: docs/specs/SE-452-contract-conformance-suites.spec.md
 - SE-453 [APPROVED] Contrato de resultado de los gates: limpio, hallazgos y desconocido — evidencia: docs/specs/SE-453-gate-result-contract.spec.md
+- SE-454 [APPROVED] Invariantes negativos como tests sobre fuentes sensibles y aserción de red en analizadores — evidencia: docs/specs/SE-454-negative-invariant-tests.spec.md
+- SE-465 [APPROVED] Dependencias de instalación sin fijar: imágenes, instaladores remotos, npm y pip — evidencia: docs/specs/SE-465-pinned-install-dependencies.spec.md
+- SE-466 [APPROVED] 214 avisos OSV en los lockfiles y una auditoría de CI que no puede fallar — evidencia: docs/specs/SE-466-dependency-vulnerability-triage.spec.md
+- SE-467 [APPROVED] El auditor de tests puntúa el idioma del nombre, no el caso probado — evidencia: docs/specs/SE-467-auditor-language-bias.spec.md
+- SE-458 [APPROVED] Presupuesto de atención humana: tope de PRs esperando revisión, lotes y prioridad — evidencia: docs/specs/SE-458-human-review-attention-budget.spec.md
+- SE-459 [APPROVED] Aprobaciones contestables: tarjeta de aprobación en lenguaje llano — evidencia: docs/specs/SE-459-contestable-approval-card.spec.md
+- SE-460 [APPROVED] Reactivación revalidada: automatizaciones y memoria con vigencia, procedencia y autoridad — evidencia: docs/specs/SE-460-revalidated-reactivation-context.spec.md
+- SE-461 [APPROVED] Composición de efectos: combinaciones prohibidas en contratos de Yema y pruebas negativas — evidencia: docs/specs/SE-461-effect-composition-contracts.spec.md
+- SE-462 [APPROVED] Leer no implica poder retransmitir: marca de sesión tras leer una cúpula N2+ — evidencia: docs/specs/SE-462-read-is-not-relay.spec.md
+- SE-463 [APPROVED] Cobertura de supervisión: reconciliar llamadas con lo que vieron los guards y fallar cerrado — evidencia: docs/specs/SE-463-supervision-coverage-reconciliation.spec.md
 - SE-455 [APPROVED] Ingeniería inversa para la soberanía tecnológica: REA como herramienta externa opcional con puerta de autorización — evidencia: docs/specs/SE-455-reverse-engineering-sovereignty.spec.md
 - SE-456 [APPROVED] Tests que no pueden fallar: detector de vacuidad y criterio de evidencia de REA en la QA — evidencia: docs/specs/SE-456-test-vacuity-evidence-criteria.spec.md
+- SE-457 [APPROVED] Skill harness-architecture: arquitectura de harness, metaharness, flujos largos, bucles y sprints — evidencia: docs/specs/SE-457-harness-architecture-skill.spec.md
 - SE-468 [APPROVED] El gate de evals debe poder fallar — evidencia: docs/specs/SE-468-honest-evals-gate.spec.md
 - SE-469 [APPROVED] Tribunales medidos con sus propios golden sets — evidencia: docs/specs/SE-469-tribunal-golden-set-live-runs.spec.md
 - SE-470 [APPROVED] Integridad de los artefactos de evaluación — evidencia: docs/specs/SE-470-eval-artifact-integrity.spec.md

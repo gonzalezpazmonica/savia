@@ -248,10 +248,11 @@ export function matcherApplies(
 ): boolean {
   if (!matcher) return true
   if (!tool && !payload) return true  // event hooks (UserPromptSubmit, etc.) — no tool axis
-  // Prefer a relaxed regex match against the tool name (Claude Code semantics).
-  // When the tool name does not match, also try the serialized payload so
-  // content-sensitive matchers (`Bash:gh pr create*`, `Bash(gh pr create*)`)
-  // can fire — OpenCode passes the tool name lowercased (`bash` vs `Bash`).
+  // Same candidates as hooks._matcher_applies in the Codex core (SE-392): the tool name and, for a
+  // command, the composite forms `Tool(command)`, `Tool:command`, `Tool command` that command-scoped
+  // matchers (`Bash(git commit*)`) are written for. The serialized payload is a candidate only for an
+  // event without a tool (UserPromptSubmit, CommandExecuteBefore). It used to be one for every tool
+  // call, so a Read of `docs/Bash.md` or a Grep for `Agent` ran the Bash or Agent hooks in OpenCode only.
   let re: RegExp
   try {
     re = toMatcherRegex(matcher)
@@ -262,20 +263,16 @@ export function matcherApplies(
   }
   if (tool && re.test(tool)) return true
   const candidates: string[] = []
-  if (payload) candidates.push(payload)
-  // Claude Code matchers of the form `Tool(command*)` are matched against a
-  // composite "tool name" like `Bash(git commit -m x)` or `Bash:gh pr create`.
-  // OpenCode passes the lowercased tool name and the args. Rebuild the
-  // composite forms so command-scoped matchers fire.
+  if (!tool && payload) candidates.push(payload)
   let cmd: string | undefined
   try {
     const parsed = JSON.parse(payload ?? "")
-    cmd = parsed?.tool_input?.command ?? parsed?.command ?? parsed?.tool_input?.input
+    cmd = parsed?.tool_input?.command
     if (typeof cmd !== "string") cmd = undefined
   } catch {
     cmd = undefined
   }
-  if (tool && cmd) {
+  if (tool && cmd !== undefined) {
     candidates.push(`${tool}(${cmd})`)
     candidates.push(`${tool}:${cmd}`)
     candidates.push(`${tool} ${cmd}`)

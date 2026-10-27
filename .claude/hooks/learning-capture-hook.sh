@@ -54,7 +54,8 @@ fi
 # ── Error-recognition keyword detection ──────────────────────────────────
 # Normalize: lowercase + strip accents for robust matching (prod bugfix:
 # "leccion aprendida" sin tilde no matcheaba "lección aprendida").
-normalize() { echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[áàäâ]/a/g;s/[éèëê]/e/g;s/[íìïî]/i/g;s/[óòöô]/o/g;s/[úùüû]/u/g;s/ñ/n/g'; }
+# tr no baja a minuscula las mayusculas acentuadas (multibyte): se mapean aparte.
+normalize() { echo "$1" | LC_ALL=C.UTF-8 sed 's/[ÁÀÄÂ]/a/g;s/[ÉÈËÊ]/e/g;s/[ÍÌÏÎ]/i/g;s/[ÓÒÖÔ]/o/g;s/[ÚÙÜÛ]/u/g;s/Ñ/n/g' | tr '[:upper:]' '[:lower:]' | LC_ALL=C.UTF-8 sed 's/[áàäâ]/a/g;s/[éèëê]/e/g;s/[íìïî]/i/g;s/[óòöô]/o/g;s/[úùüû]/u/g;s/ñ/n/g'; }
 
 ERROR_KEYWORDS=(
   "error reconocido" "se reconoce el error" "mismo error"
@@ -103,6 +104,18 @@ EVIDENCE=""
 if command -v jq >/dev/null 2>&1; then
   EVIDENCE=$(jq -r '.tool_input.files[]? // .tool_input.file // ""' <<< "$INPUT" 2>/dev/null \
     | tr '\n' ',' | sed 's/,$//' | sed 's/,/,/g')
+fi
+
+# learning-proposal.sh rechaza rutas inexistentes y la captura se perdia en
+# silencio (el agente suele dar rutas relativas a otro cwd): conservar solo
+# las que existen y, si no queda ninguna, caer al hash de la respuesta.
+if [[ -n "$EVIDENCE" ]]; then
+  KEPT=""
+  IFS=',' read -ra EV_PATHS <<< "$EVIDENCE"
+  for ev in "${EV_PATHS[@]}"; do
+    [[ -f "${ev%%:*}" || -f "$ev" ]] && KEPT="${KEPT:+$KEPT,}$ev"
+  done
+  EVIDENCE="$KEPT"
 fi
 
 # ── If no file evidence, hash the agent's response content ───────────────
