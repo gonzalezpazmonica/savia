@@ -203,13 +203,17 @@ EOF
 
 # ── Graph index entry (SaviaVaults navigation index, not source of truth) ──
 mkdir -p "$(dirname "$GRAPH_INDEX")"
-{
-  printf '%s' '{"type":"learning_proposal","id":"'"$ID"'","provenance":"INFERRED","lifecycle":"proposed",'
-  printf '%s' '"origin":"'"$ORIGIN"'","trigger":"'"$TRIGGER"'","target":"'"$TARGET"'","criterion_id":"'"$CRITERION_ID"'",'
-  printf '%s' '"evidence_hash":"'"$EVIDENCE_HASH"'","created_utc":"'"$CREATED_UTC"'",'
-  printf '%s' '"relations":{"proposes_change":"'"$TARGET"'","evidence_from":'"$(printf '%s' "${EVIDENCE_ENTRIES[@]}" | tr '\n' ' ' | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read().strip().split()))' 2>/dev/null || echo '[]')"'}}'
-  echo ""
-} >> "$GRAPH_INDEX"
+# json.dumps escapa comillas y barras de origen/trigger/target; las entradas de evidencia van una por argumento.
+python3 - "$ID" "$ORIGIN" "$TRIGGER" "$TARGET" "$CRITERION_ID" "$EVIDENCE_HASH" "$CREATED_UTC" "${EVIDENCE_ENTRIES[@]}" >> "$GRAPH_INDEX" <<'PY'
+import json, sys
+id_, origin, trigger, target, crit, ehash, created, *evidence = sys.argv[1:]
+print(json.dumps({
+    "type": "learning_proposal", "id": id_, "provenance": "INFERRED", "lifecycle": "proposed",
+    "origin": origin, "trigger": trigger, "target": target, "criterion_id": crit,
+    "evidence_hash": ehash, "created_utc": created,
+    "relations": {"proposes_change": target, "evidence_from": evidence},
+}, ensure_ascii=False, separators=(",", ":")))
+PY
 
 echo "CREATED: $FILE"
 echo "id: $ID"

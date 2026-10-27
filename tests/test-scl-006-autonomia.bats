@@ -181,3 +181,33 @@ lvl_of() { bash "$AUT" --p-consistent "$@" --json | python3 -c 'import json,sys;
   run bash "$AUT" --p-consistent 0.6 --nada --requested L1
   [ "$status" -eq 0 ]
 }
+
+# ── S03k: entrada no decimal y opción sin valor ──
+
+@test "S03k aut: valores no decimales (texto, mezcla, notación científica) son exit 3" {
+  for v in abc 0.5abc 1e-1 "0.5 0.6" "" ; do
+    [ -n "$v" ] || continue
+    run bash "$AUT" --p-consistent "$v"
+    [ "$status" -eq 3 ]
+    [[ "$output" == *"out of range"* ]]
+  done
+}
+
+@test "S03k aut: .5 sin cero inicial se interpreta como 0.5" {
+  run bash "$AUT" --p-consistent .5 --json
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"allowed":"L1"'* ]]
+}
+
+@test "S03k aut: --p-consistent sin valor sale 2 (uso), no con error de variable" {
+  run bash "$AUT" --p-consistent
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"sin asignar"* ]]
+}
+
+@test "S03k aut: los gates solos no suben el nivel si p es bajo" {
+  run bash "$AUT" --p-consistent 0.6 --requested L3 --history-ok --human-ok
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"nivel permitido: L1"* ]]
+}
+
