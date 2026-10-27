@@ -77,8 +77,9 @@ Rules:
     machine): ssh-keygen -Y sign -f KEY -n savia-operator-grant REQUEST
     and `grant --scope merge --signature REQUEST.sig` attaches it. check
     verifies it against config/operator-grant-signers.
-  - merge grant: unique id, grantor, scope, resource and validity are signed;
-    check verifies each one and rejects ids already consumed or revoked.
+  - merge grant: unique id, grantor, scope, repo (origin remote), resource and
+    validity are signed; check verifies each one against this checkout and
+    rejects ids already consumed or revoked (revoke also spends the pending request).
   - default TTL: autonomy:* = 24h, merge = 6h (counted from the request).
   - grant (idempotent): renews expires_at of an existing autonomy grant.
 USAGE

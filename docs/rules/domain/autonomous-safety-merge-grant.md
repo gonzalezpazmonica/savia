@@ -24,6 +24,12 @@ contexto → la operadora la firma → Savia incorpora la firma →
 se consume (`consume`). Sin grant
 (nadie autorizó), `push-pr.sh --merge` aborta y el PR permanece en Draft.
 
+Son dos pasos: el grant se firma para un PR que ya existe. Si `push-pr.sh
+--merge` acaba de crear el PR, sale con 1 y lo deja en Draft; se pide la firma
+de `pr:<n>` y se vuelve a ejecutar. Si `consume` falla tras el merge, se revoca
+el grant y se avisa; un auto-merge diferido (`gh pr merge --auto`) no gasta el
+grant, que sigue ligado a ese repositorio y PR hasta caducar.
+
 ## Firma de la operadora (LAW-HUMAN-002, firma asimétrica)
 
 Pedir el grant no basta y Savia no puede emitirlo sola:
@@ -31,7 +37,8 @@ Pedir el grant no basta y Savia no puede emitirlo sola:
 1. `operator-grant.sh grant --scope merge --resource pr:<n> --context "..."`
    solo deja una petición canónica en `~/.savia/grants/merge.request` y la
    imprime (exit 4). Lleva id aleatorio, `grantor` (principal), `scope`,
-   `resource` y vigencia (`issued_epoch`, `expires_epoch`).
+   `repo` (remoto `origin` normalizado, `host/owner/name`), `resource` y
+   vigencia (`issued_epoch`, `expires_epoch`). Sin remoto identificable, exit 2.
 2. La operadora la firma con su clave ed25519 **privada**, que vive en su móvil
    o en Savia Space y nunca en el equipo de los agentes:
    `ssh-keygen -Y sign -f <clave> -n savia-operator-grant <petición>`.
@@ -43,11 +50,15 @@ cada campo firmado y la firma con `ssh-keygen -Y verify` contra
 `config/operator-grant-signers` (formato `allowed_signers`, identidad =
 `grantor`, namespace `savia-operator-grant`). Un `merge.json` escrito a mano,
 alterado, firmado por otra clave, con otro namespace, de otra petición, de otro
-PR o scope, caducado, consumido o revocado no vale. Sin `--resource`, sin
+repositorio, PR o scope, caducado, consumido o revocado no vale. Sin `--resource`, sin
 ninguna clave en ese fichero o sin `ssh-keygen`, ningún grant de merge es válido.
 
-`consume` y `revoke` apuntan el id en `~/.savia/grants/merge.spent`; `check`
-rechaza esos ids, así que restaurar una copia guardada del grant no lo revive.
+`consume` y `revoke` apuntan el id en `~/.savia/grants/merge.spent` (`revoke`,
+también el de la petición pendiente); `check` y la incorporación de la firma
+rechazan esos ids, así que restaurar una copia guardada del grant o de la
+petición no la revive. El verificador corre con `python3 -I` y un PATH fijo de
+sistema: ni `PYTHONPATH`/`sitecustomize` ni un `ssh-keygen` falso en el PATH lo
+sustituyen.
 
 ### Qué prueba la firma y qué no
 
@@ -69,14 +80,26 @@ saliera de ahí, la firma dejaría de probar nada sobre ella.
 4. Rotación o pérdida del móvil: quitar la línea antigua y añadir la nueva por
    el mismo camino. Quitarla invalida al instante los grants ya firmados.
 
-Límite: el guard ve el texto de la orden, no lo que ejecuta un script escrito
-antes ni un cambio de rama; la defensa de fondo es que el fichero es versionado
-y su cambio pasa por una PR que solo mergea la operadora. Lo mismo vale para el
-verificador (`scripts/operator-grant.sh`, `scripts/push-pr.sh`): en su rama, un
-agente puede cambiarlos; la frontera real es que el merge a `main` lo revisa y
-lo hace la operadora. El libro `merge.spent` es local: quien pueda borrarlo y
-conserve una copia podría reusar el grant, pero solo para el mismo PR (el
-recurso va firmado) y dentro de su vigencia.
+Límite: el guard ve el texto de la orden (resuelve comillas, barras, ANSI-C
+`$'…'`, `$"…"`, continuaciones, escapes de printf, globs y llaves), no lo que
+ejecuta un script escrito antes, una variable que compone el nombre ni un cambio
+de rama. En Bash veta cualquier mención del nombre exacto, también las lecturas
+(`git status -- …`): para leerlo, la herramienta Read.
+
+Qué protege y qué no: `check` lee la raíz de confianza de la **copia de
+trabajo**, no de `main`. Un cambio local sin commitear (por un rodeo que el
+guard no ve) bastaría para un merge desde este equipo sin pasar por ninguna PR;
+lo mismo vale para el verificador (`scripts/operator-grant.sh`,
+`scripts/push-pr.sh`), que un agente puede editar en su rama. Estos controles
+locales son defensa en profundidad. La frontera real es del lado de GitHub: la
+protección de rama o ruleset de `main` que exige la revisión y el merge de la
+operadora, y que el token de los agentes no pueda saltársela. Es un requisito,
+no algo que este script garantice.
+
+El libro `merge.spent` es local y su ruta admite `SAVIA_GRANTS_DIR` (lo usan
+los tests): quien pueda borrarlo o redirigirlo y conserve una copia podría
+reusar el grant, pero solo para el mismo repositorio y PR (van firmados) y
+dentro de su vigencia.
 
 ## Referencias
 

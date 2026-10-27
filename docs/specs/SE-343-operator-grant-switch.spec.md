@@ -53,6 +53,14 @@ created_at: 2026-08-24
 > apuntan el id en `merge.spent` y `check` rechaza las copias (replay). Sin `--resource`, sin clave
 > pública o sin `ssh-keygen`: no hay PASS. Una firma prueba el uso de una clave, no la presencia
 > humana: esa garantía la da la ceremonia (la clave privada vive solo en el móvil de la operadora).
+>
+> **Segunda revisión (2026-10-27, #1401):** lo firmado incluye también `repo` (remoto `origin`
+> normalizado, `host/owner/name`): un grant de A#41 no vale en otro checkout B#41, y sin remoto
+> identificable no se pide ni pasa. `revoke` apunta también el id de la petición pendiente (una copia
+> firmada antes de revocar ya no se incorpora). El verificador corre con `python3 -I` y un PATH fijo de
+> sistema. El guard resuelve comillas ANSI-C, `$"…"`, continuaciones y escapes de printf, y cualquier
+> error suyo sale con 2. Los ejemplos de §2.2 y §2.4 sin `--resource` son el diseño original: hoy
+> `check --scope merge` exige `--resource pr:<n>|task:<id>` (sin él, exit 2).
 
 ## 1. Origen y problema
 
@@ -129,7 +137,7 @@ bash scripts/operator-grant.sh grant --scope merge \
 
 # Verificar (determinista, sin LLM)
 bash scripts/operator-grant.sh check --scope autonomy:overnight-sprint   # exit 0|1
-bash scripts/operator-grant.sh check --scope merge                        # exit 0|1
+bash scripts/operator-grant.sh check --scope merge --resource pr:1007     # exit 0|1 (sin --resource: 2)
 
 # Listar / revocar
 bash scripts/operator-grant.sh list
