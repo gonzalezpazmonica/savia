@@ -114,7 +114,9 @@ Script `scripts/validate-agent-permissions.sh` verifica las tools del agente con
 
 - Tool **por encima** del nivel (exceso) = ERROR, exit 1, con agente y tool.
 - Tool del nivel no declarada = WARNING (tener menos es válido).
-- Excesos pendientes de decisión: línea base **transitoria** `docs/agent-permissions-excess-baseline.txt`, una entrada `agente tool responsable AAAA-MM-DD` por línea. Sin responsable o fecha válida = ERROR. Pasada la fecha la entrada deja de absorber el exceso y el validador falla. Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el máximo. Un exceso nuevo nunca se absorbe. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
+- Excesos pendientes de decisión: línea base **transitoria** `docs/agent-permissions-excess-baseline.txt`, una entrada `agente tool responsable AAAA-MM-DD` por línea. Sin responsable o fecha válida = ERROR. Pasada la fecha la entrada deja de absorber el exceso y el validador falla. Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el conjunto autorizado (solo subconjuntos) y la fecha máxima; una entrada duplicada es ERROR. Un exceso nuevo nunca se absorbe. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
+- El frontmatter se lee como YAML real (fail-closed): YAML inválido, claves duplicadas, `tools:` ausente (hereda todas) o valores de mapa que no son booleanos = ERROR. Sin `permission_level` = WARNING y se evalúa como L0. Directorio inexistente = ERROR.
+- La CI de cada PR ejecuta el validador y sus dos suites (paso «Agent permission levels gate» de `ci.yml`).
 
 ## Integracion con agent-policies.yaml
 
