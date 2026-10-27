@@ -19,21 +19,17 @@ TIMEOUT_SECS=30
 [[ "$AGENT_HOOKS_ENABLED" != "true" ]] && exit 0
 
 # Only run on merge-related commands
-# Claude Code y OpenCode pasan la entrada del hook por stdin; CLAUDE_TOOL_INPUT no lo define ningún
-# runtime y leerla sola dejaba el hook en fallo abierto (exit 0 siempre). Se conserva como respaldo.
-INPUT="${CLAUDE_TOOL_INPUT:-}"
-if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
-# Con JSON de stdin se evalúa solo tool_input.command: una mención en la descripción, en un grep o en un
-# heredoc no es una orden. Las órdenes se anclan a su inicio (principio, ;, &, |, ( o prefijos VAR=x).
-if [[ "$INPUT" == \{* ]]; then
-  # shellcheck source=/dev/null
-  source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
-  hook_extract_command "$INPUT" || exit 2
-  INPUT="$HOOK_COMMAND"
-fi
-CMD_AT='(^|[;&|(])[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
-GIT_AT="${CMD_AT}"'git([[:space:]]+(-C|-c)[[:space:]]+[^[:space:]]+)*[[:space:]]+'
-if ! echo "$INPUT" | grep -qE "${GIT_AT}merge([[:space:]]|$)|${CMD_AT}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)"; then
+# Entrada por stdin (Claude Code y OpenCode) o variable de respaldo; solo cuenta tool_input.command.
+# JSON malformado → bloqueo (fallo cerrado). Sin entrada → «no medido» registrado y salida 0.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+hook_read_command agent-hook-premerge; _rc=$?
+[[ $_rc -eq 2 ]] && exit 2
+[[ $_rc -eq 3 ]] && exit 0
+INPUT="$HOOK_COMMAND"
+CMD_AT="$HOOK_CMD_AT"
+GIT_AT="$HOOK_GIT_AT"
+if ! grep -qE "${GIT_AT}merge([[:space:]]|$)|${CMD_AT}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)" <<<"$INPUT"; then
   exit 0
 fi
 

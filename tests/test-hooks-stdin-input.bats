@@ -52,7 +52,7 @@ for m in d["hooks"].get("PreToolUse",[]):
   for f in $pre; do
     [ -f ".claude/hooks/$f" ] || continue
     grep -qE '(OPENCODE_|CLAUDE_)?TOOL_INPUT(_FILE)?:-' ".claude/hooks/$f" || continue
-    grep -qE 'cat( |\)|$)|read -r|hook_extract' ".claude/hooks/$f" || bad="$bad $f"
+    grep -v '^[[:space:]]*#' ".claude/hooks/$f" | grep -qE 'timeout 3 cat|hook_read_command|hook_extract_command' || bad="$bad $f"
   done
   [ -z "$bad" ] || { echo "solo env:$bad"; return 1; }
 }
@@ -153,5 +153,71 @@ repo() {
   export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
   payload Bash '{"command":"cat > .pr-summary.md <<EOF\nantes de gh pr create\nEOF"}' > "$TMP/in.json"
   run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+}
+
+# ── Reproducciones de la revisión de refutación (otro proveedor) ──
+
+runner_falla() {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR/.claude/compliance"
+  printf '#!/bin/bash\nexit 1\n' > "$CLAUDE_PROJECT_DIR/.claude/compliance/runner.sh"
+}
+
+@test "compliance-gate: el prefijo command no elude el gate" {
+  runner_falla
+  payload Bash '{"command":"command git commit -m \"mensaje suficientemente largo\""}' > "$TMP/in.json"
+  run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "compliance-gate: -c con valor entre comillas y espacios no elude el gate" {
+  runner_falla
+  payload Bash '{"command":"git -c user.name=\"Jane Doe\" commit -m \"mensaje suficientemente largo\""}' > "$TMP/in.json"
+  run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "compliance-gate: sudo y bash -c tampoco lo eluden" {
+  runner_falla
+  for c in 'sudo git commit -m \"mensaje suficientemente largo\"' 'bash -c \"git commit -m mensaje-suficientemente-largo\"'; do
+    payload Bash "{\"command\":\"$c\"}" > "$TMP/in.json"
+    run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
+    [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
+  done
+}
+
+@test "pr-summary-gate: JSON con espacio inicial no elude el gate" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  printf ' {"tool_input":{"command":"gh pr create --draft"}}' > "$TMP/in.json"
+  run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "pr-summary-gate: JSON truncado falla cerrado" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  printf '{"tool_input":{"command":"gh pr create --draft"}' > "$TMP/in.json"
+  run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "pr-summary-gate: un cuerpo enorme multilínea no elude el gate (sin SIGPIPE)" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  python3 -c 'import json; print(json.dumps({"tool_input":{"command":"gh pr create --draft --body \"a\n"+"x"*3000000+"\""}}))' > "$TMP/in.json"
+  run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "sin entrada, el gate queda registrado como no medido" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  run bash .opencode/hooks/pr-summary-gate.sh < /dev/null
+  [ "$status" -eq 0 ]
+  grep -q '"hook":"pr-summary-gate","reason":"empty_input"' "$CLAUDE_PROJECT_DIR/output/unmeasured-gates.jsonl"
+}
+
+@test "ningún matcher PreToolUse usa patrones de argumentos que Claude Code no aplica" {
+  run python3 -c 'import json
+d=json.load(open(".claude/settings.json"))
+bad=[m["matcher"] for m in d["hooks"].get("PreToolUse",[]) if "(" in m.get("matcher","")]
+print(bad); raise SystemExit(1 if bad else 0)'
   [ "$status" -eq 0 ]
 }

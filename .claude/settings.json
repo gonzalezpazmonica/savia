@@ -65,7 +65,7 @@
         ]
       },
       {
-        "matcher": "Bash(gh pr create*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -136,7 +136,7 @@
         ]
       },
       {
-        "matcher": "Bash(git commit*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -366,7 +366,7 @@
         ]
       },
       {
-        "matcher": "Bash(bash*memory-store*save*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -408,7 +408,7 @@
         ]
       },
       {
-        "matcher": "Bash(git commit*)",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "prompt",
