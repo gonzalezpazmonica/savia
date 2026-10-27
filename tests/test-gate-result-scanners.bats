@@ -226,8 +226,10 @@ clean_subs() {
   for s in mcp-security-audit permissions-wildcard-audit hook-injection-audit; do
     fake_sub "$s" '{"critical":0,"high":0,"medium":0,"low":0}' 0
   done
-  rm -f "$PROJ/scripts/prompt-security-scan.sh"
+  fake_ps 0 0
 }
+# prompt-security-scan falso: «Findings: $2», sale con $1.
+fake_ps() { printf '#!/usr/bin/env bash\necho "Scanned: 1 files | Findings: %s | Warnings: 0"\nexit %s\n' "$2" "$1" > "$PROJ/scripts/prompt-security-scan.sh"; }
 
 @test "audit-all: sub-escáner que sale 1 con hallazgos se suma (antes se perdía y daba PASS)" {
   clean_subs
@@ -305,6 +307,101 @@ clean_subs() {
   run bash "$PROJ/scripts/security-audit-all.sh"
   [ "$status" -eq 0 ]
   has_gap unknown prompt-security-scan unreadable
+}
+
+# ── security-audit-all: lectura estricta de las cuentas (SE-453 parte 2, #1348) ─
+# Con hueco el exit sigue en 0 (D3, aviso) y SAVIA_GATE_UNKNOWN=block lo sube a 1.
+
+gaps_are() { printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="unknown" and d["gaps"]==json.loads(sys.argv[1]), d' "$1"; }
+
+@test "audit-all: exit 1 sin ninguna cuenta ⇒ hueco unreadable, no limpio; block ⇒ 1" {
+  clean_subs
+  fake_sub hook-injection-audit '{"verdict":"FAIL","findings_count":0,"critical":0,"high":0,"medium":0,"low":0}' 1
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  gaps_are '[{"check":"hook-injection-audit","reason":"unreadable"}]'
+  unmeasured security-audit-all
+  run env SAVIA_GATE_UNKNOWN=block bash "$PROJ/scripts/security-audit-all.sh"
+  [ "$status" -eq 1 ]
+}
+
+@test "audit-all: sin la clave critical (esquema cambiado) ⇒ unreadable; sin low sigue legible" {
+  clean_subs
+  fake_sub permissions-wildcard-audit '{"findings_count":0,"crit":3,"high":0,"medium":0}' 0
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  gaps_are '[{"check":"permissions-wildcard-audit","reason":"unreadable"}]'
+  fake_sub permissions-wildcard-audit '{"findings_count":0,"critical":0,"high":0,"medium":0}' 0
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="clean", d'
+}
+
+@test "audit-all: findings_count 5 con cuentas a 0 ⇒ unreadable; coherente ⇒ legible" {
+  clean_subs
+  fake_sub hook-injection-audit '{"findings_count":5,"critical":0,"high":0,"medium":0}' 0
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  gaps_are '[{"check":"hook-injection-audit","reason":"unreadable"}]'
+  fake_sub hook-injection-audit '{"findings_count":2,"critical":0,"high":2,"medium":0}' 1
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 1 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="findings" and d["gaps"]==[] and d["total_high"]==2, d'
+}
+
+@test "audit-all: una cuenta booleana o en texto es ilegible, no un entero" {
+  clean_subs
+  fake_sub hook-injection-audit '{"findings_count":1,"critical":true,"high":0,"medium":0}' 1
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  gaps_are '[{"check":"hook-injection-audit","reason":"unreadable"}]'
+  fake_sub hook-injection-audit '{"critical":"2","high":0,"medium":0}' 1
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  gaps_are '[{"check":"hook-injection-audit","reason":"unreadable"}]'
+}
+
+@test "audit-all: prompt-security-scan ausente ⇒ missing_tool (antes se omitía y daba clean)" {
+  clean_subs
+  mv "$PROJ/scripts/prompt-security-scan.sh" "$WORK/ps-gone.sh"
+  run bash "$PROJ/scripts/security-audit-all.sh"
+  [ "$status" -eq 0 ]
+  has_gap unknown prompt-security-scan missing_tool
+}
+
+@test "audit-all: prompt-scan Findings: 3 cuenta 3 HIGH; exit 1 con Findings: 0 es unreadable" {
+  clean_subs
+  fake_ps 1 3
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 1 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["total_high"]==3 and d["result"]=="findings", d'
+  fake_ps 1 0
+  run --separate-stderr bash "$PROJ/scripts/security-audit-all.sh" --json
+  [ "$status" -eq 0 ]
+  gaps_are '[{"check":"prompt-security-scan","reason":"unreadable"}]'
+}
+
+# python3 en PATH pero que no arranca (shim de pyenv sin versión, venv roto): `command -v` lo da por bueno.
+broken_python() {
+  printf '#!/bin/sh\necho "pyenv: python3: command not found" >&2\nexit 127\n' > "$WORK/bin/python3"
+  chmod +x "$WORK/bin/python3"
+}
+
+@test "audit-all: sin python3, o con un python3 que no arranca ⇒ hueco python3:missing_tool" {
+  clean_subs
+  run env PATH="$NOPY" /usr/bin/bash "$PROJ/scripts/security-audit-all.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'{"check":"python3","reason":"missing_tool"}'* ]]
+  broken_python
+  run env PATH="$WORK/bin:$NOPY" /usr/bin/bash "$PROJ/scripts/security-audit-all.sh"
+  [[ "$output" == *'{"check":"python3","reason":"missing_tool"}'* ]]
+  run env PATH="$WORK/bin:$NOPY" SAVIA_GATE_UNKNOWN=block /usr/bin/bash "$PROJ/scripts/security-audit-all.sh"
+  [ "$status" -eq 1 ]
+}
+
+@test "mcp: python3 presente pero que no arranca ⇒ exit 2 unknown, no un MCP-00 por config" {
+  mcp_cfg "$WORK/m.json"
+  broken_python
+  run env PATH="$WORK/bin:$NOPY" /usr/bin/bash "$PROJ/scripts/mcp-security-audit.sh" --config "$WORK/m.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"MCP-00"* ]]
+  [ "$(printf '%s\n' "$output" | tail -1)" = 'gate-result: {"result":"unknown","gaps":[{"check":"python3","reason":"missing_tool"}]}' ]
 }
 
 # ── confidentiality-scan ─────────────────────────────────────────────────────

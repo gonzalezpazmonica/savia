@@ -62,9 +62,9 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | 2 | `unknown` (path inexistente) |
 | `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
 | | 0 con hueco | `unknown` (`--config` inexistente o ilegible, o ninguna config por defecto; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
-| | 2 | `unknown` (python3 ausente; antes salía 1 con un falso MCP-00) o argumentos |
+| | 2 | `unknown` (python3 ausente o que no arranca; antes salía 1 con un falso MCP-00) o argumentos |
 | `security-audit-all.sh` | 0 / 1 | según `result` (hallazgos bajo o sobre `--fail-on`) |
-| | 0 con hueco | `unknown` (sub-escáner ≥ 2, ilegible o `unknown`; motivo ajeno al vocabulario ⇒ `unreadable`; con `SAVIA_GATE_UNKNOWN=block` sale 1 siempre que haya hueco, también con hallazgos bajo `--fail-on`) |
+| | 0 con hueco | `unknown` (sub-escáner ≥ 2, ilegible o `unknown`; sin `critical`/`high`/`medium` enteros, exit 1 o `findings_count` > 0 sin ninguna cuenta; `prompt-security-scan.sh` ausente ⇒ `missing_tool`; python3 que no arranca ⇒ `python3:missing_tool`; motivo ajeno al vocabulario ⇒ `unreadable`; con `SAVIA_GATE_UNKNOWN=block` sale 1 siempre que haya hueco, también con hallazgos bajo `--fail-on`) |
 | `confidentiality-scan.sh` | 0 / 1 | `clean` / `findings` |
 | | 0 con aviso `UNKNOWN` | `unknown` (git no calcula el diff, p. ej. sin `origin/main`; blocklist pedida ilegible o generador ausente o fallido; con `SAVIA_GATE_UNKNOWN=block` sale 2). El Check 4 (ficheros prohibidos) corre aunque no haya líneas añadidas y sin las exclusiones de contenido |
 | `ast-quality-gate.sh` | 0 / 1 | `clean` / `findings` |
@@ -77,6 +77,9 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | `mobile-security-scan.sh` | 0 con informe | según `gate-result` (también en el JSON: `result`, `gaps`); sin apktool, descompilación vacía, modo `dynamic` o informe MobSF sin triaje ⇒ `unknown` |
 | | 1 | argumentos inválidos |
 
+Con `--json`, `mcp-security-audit.sh` y `security-audit-all.sh` llevan `result` y `gaps` dentro del
+objeto JSON en vez de la línea final.
+
 El 4 de `git-history-secret-scan.sh` sustituye al 1 que antes se daba con gitleaks ausente: el 1 queda
 solo para hallazgos críticos. El 2 de `mcp-security-audit.sh` sin python3 sustituye a un 1 por un falso
 hallazgo. Son los únicos códigos que cambian.
@@ -88,6 +91,8 @@ Fuera del contrato: `transcriptor-scan.sh` (lista reuniones por stdout, una por 
 Los hooks siguen saliendo solo con 0 o 2 (`hooks-blocking-guards.md`). Un guard `blocking` sin `jq`
 degrada a un parseo con `grep` (`hook_extract_command`); si tampoco puede evaluar, sale 2. Nunca sale 0
 sin haber evaluado. Los hooks no marcados que salen 0 sin `jq` añaden su línea de no medido.
+En OpenCode, `savia-gates` ejecuta los mismos `.sh`; los puertos nativos (`.opencode/plugins/guards/*.ts`)
+no usan `jq` y se comparan con el hook bash con las mismas entradas (`tests/test-gate-result-dual-binding.bats`).
 
 ## Consumidores
 
