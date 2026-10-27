@@ -262,3 +262,251 @@ EOF
   [[ "$last_line" == *'"rationale"'* ]]
   [[ "$last_line" == *'"content_hash"'* ]]
 }
+
+# ── Comportamiento discriminante (S03k) ──────────────────────────────────────
+_ago() { date -u -d "-${1} seconds" +"%Y-%m-%dT%H:%M:%SZ"; }
+
+# $1 nido, $2 blocking, $3 urgency, $4 cost|"-" (omitido), $5 desc, $6 minutos, $7 status, $8 type
+_dec() {
+  local n="$1" b="$2" u="$3" c="$4" d="$5" age="${6:-0}" st="${7:-active}" ty="${8:-review}"
+  local cost=""
+  [ "$c" != "-" ] && cost="\"cognitive_cost\": ${c},"
+  cat > "$HOME/.savia/focal-state/${n}.json" <<JSON
+{
+  "nido": "${n}",
+  "status": "${st}",
+  "next_human_decision": {
+    "type": "${ty}",
+    "description": "${d}",
+    "blocking": ${b},
+    "urgency": ${u},
+    ${cost}
+    "created_at": "$(_ago $(( age * 60 + 5 )))"
+  }
+}
+JSON
+}
+
+# Copia aislada del logger: escribe en un output/ temporal, no en el repo
+_aislar_log() {
+  LOGROOT="$(mktemp -d /tmp/focal-log-iso-XXXXXX)"
+  mkdir -p "$LOGROOT/scripts"
+  cp "$FOCAL_LOG" "$LOGROOT/scripts/focal-decisions-log.sh"
+  ISO_LOG="$LOGROOT/scripts/focal-decisions-log.sh"
+  ISO_OUT="$LOGROOT/output/focal-decisions.jsonl"
+}
+
+@test "S03k dispatch: sin decisiones imprime la frase exacta" {
+  run bash "$FOCAL_DISPATCH"
+  [ "$output" = "Sin decisiones pendientes" ]
+}
+
+@test "S03k dispatch: muestra solo la más crítica y cuenta las restantes" {
+  _dec alta true 3 1 "la-importante"
+  _dec media false 1 1 "la-media"
+  _dec baja false 0 3 "la-baja"
+  run bash "$FOCAL_DISPATCH"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SIGUIENTE DECISIÓN CRÍTICA:"* ]]
+  [[ "$output" == *"[1] alta: la-importante [BLOCKING]"* ]]
+  [[ "$output" != *"la-media"* ]]
+  [[ "$output" != *"la-baja"* ]]
+  [[ "$output" == *"(2 decisiones adicionales — usa --all para ver todas)"* ]]
+}
+
+@test "S03k dispatch: con una sola decisión no hay línea de adicionales" {
+  _dec solo true 1 1 "unica"
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" != *"adicionales"* ]]
+}
+
+@test "S03k dispatch: prioridad numérica exacta u*3 + b*5 + edad*0.1 - coste*2" {
+  # u=3 (9) + b (5) + 30min (3.0) - c=1 (2) = 15.00
+  _dec exacta true 3 1 "formula" 30
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"prioridad:15.00"* ]]
+  [[ "$output" == *"tipo:review urgency:3 cost:1 age:30min"* ]]
+}
+
+@test "S03k dispatch: no bloqueante no suma el 5 del bloqueo" {
+  # u=2 (6) + 0 + 0 - c=1 (2) = 4.00
+  _dec nob false 2 1 "sin-bloqueo" 0
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"prioridad:4.00"* ]]
+  [[ "$output" == *"[URGENT]"* ]]
+  [[ "$output" != *"[BLOCKING]"* ]]
+}
+
+@test "S03k dispatch: cognitive_cost ausente vale 2 y urgency ausente vale 0" {
+  cat > "$HOME/.savia/focal-state/def.json" <<JSON
+{"nido":"def","status":"active","next_human_decision":{"type":"x","description":"defaults","blocking":true}}
+JSON
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"urgency:0 cost:2"* ]]
+  # 0 + 5 - 4 = 1.00
+  [[ "$output" == *"prioridad:1.00"* ]]
+}
+
+@test "S03k dispatch: prioridad negativa se recorta a 0.00" {
+  _dec neg false 0 5 "carisima" 0
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"prioridad:0.00"* ]]
+}
+
+@test "S03k dispatch: el orden sigue la prioridad numérica descendente con --all" {
+  _dec c1 false 1 1 "tercera" 0      # 1.00
+  _dec c2 true 1 1 "primera" 0       # 6.00
+  _dec c3 false 3 1 "segunda" 0      # 7.00 -> en realidad va primero
+  run bash "$FOCAL_DISPATCH" --all
+  l1=$(echo "$output" | grep -n 'c3: segunda' | cut -d: -f1)
+  l2=$(echo "$output" | grep -n 'c2: primera' | cut -d: -f1)
+  l3=$(echo "$output" | grep -n 'c1: tercera' | cut -d: -f1)
+  [ "$l1" -lt "$l2" ]
+  [ "$l2" -lt "$l3" ]
+  [[ "$output" == *"[1] c3:"* ]]
+  [[ "$output" == *"[3] c1:"* ]]
+}
+
+@test "S03k dispatch: --all-blocking excluye no bloqueantes y lista las bloqueantes" {
+  _dec b1 true 1 1 "bloquea-uno"
+  _dec b2 true 2 1 "bloquea-dos"
+  _dec n1 false 3 1 "no-bloquea"
+  run bash "$FOCAL_DISPATCH" --all-blocking
+  [[ "$output" == *"bloquea-uno"* ]]
+  [[ "$output" == *"bloquea-dos"* ]]
+  [[ "$output" != *"no-bloquea"* ]]
+  [[ "$output" != *"SIGUIENTE DECISIÓN CRÍTICA"* ]]
+}
+
+@test "S03k dispatch: --all-blocking sin bloqueantes dice que no hay decisiones" {
+  _dec n1 false 3 1 "no-bloquea"
+  run bash "$FOCAL_DISPATCH" --all-blocking
+  [ "$output" = "Sin decisiones pendientes" ]
+}
+
+@test "S03k dispatch: nidos done y abandoned se ignoran aunque tengan decisión" {
+  _dec hecho true 3 1 "decision-de-hecho" 0 done
+  _dec dejado true 3 1 "decision-de-dejado" 0 abandoned
+  run bash "$FOCAL_DISPATCH"
+  [ "$output" = "Sin decisiones pendientes" ]
+}
+
+@test "S03k dispatch: next_human_decision null y JSON sin campo nido se ignoran" {
+  cat > "$HOME/.savia/focal-state/nulo.json" <<JSON
+{"nido":"nulo","status":"active","next_human_decision": null}
+JSON
+  cat > "$HOME/.savia/focal-state/ajeno.json" <<JSON
+{"otra":"cosa","next_human_decision":{"description":"ajena","blocking":true}}
+JSON
+  run bash "$FOCAL_DISPATCH"
+  [ "$output" = "Sin decisiones pendientes" ]
+}
+
+@test "S03k dispatch: una fecha futura no genera antigüedad negativa" {
+  cat > "$HOME/.savia/focal-state/fut.json" <<JSON
+{"nido":"fut","status":"active","next_human_decision":{"type":"t","description":"futura","blocking":false,"urgency":1,"cognitive_cost":0,"created_at":"$(date -u -d '+2 hours' +%Y-%m-%dT%H:%M:%SZ)"}}
+JSON
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"age:0min"* ]]
+  [[ "$output" == *"prioridad:3.00"* ]]
+}
+
+@test "S03k dispatch: sin created_at la antigüedad es 0" {
+  cat > "$HOME/.savia/focal-state/sf.json" <<JSON
+{"nido":"sf","status":"active","next_human_decision":{"type":"t","description":"sin fecha","blocking":false,"urgency":1,"cognitive_cost":1}}
+JSON
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"age:0min"* ]]
+}
+
+@test "S03k dispatch: la antigüedad no depende de la zona horaria local" {
+  export TZ=Asia/Tokyo
+  _dec tz false 1 1 "huso" 60
+  run bash "$FOCAL_DISPATCH"
+  [[ "$output" == *"age:60min"* ]]
+}
+
+# ── focal-decisions-log ──────────────────────────────────────────────────────
+
+@test "S03k decisions-log: sin --nido o sin --decision falla con exit 1 y no escribe" {
+  _aislar_log
+  run bash "$ISO_LOG" --decision d
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--nido y --decision son obligatorios"* ]]
+  run bash "$ISO_LOG" --nido n
+  [ "$status" -eq 1 ]
+  [ ! -s "$ISO_OUT" ]
+}
+
+@test "S03k decisions-log: la entrada es JSON válido con los valores pasados" {
+  _aislar_log
+  run bash "$ISO_LOG" --nido nx --decision aprobar --context "CI verde" --rationale "checks ok"
+  [ "$status" -eq 0 ]
+  [ "$output" = "Decisión registrada: aprobar para nido nx" ]
+  python3 - "$ISO_OUT" <<'PY'
+import json,re,sys
+lines=open(sys.argv[1]).read().splitlines()
+assert len(lines)==1
+d=json.loads(lines[0])
+assert d["nido"]=="nx" and d["decision"]=="aprobar"
+assert d["context"]=="CI verde" and d["rationale"]=="checks ok"
+assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", d["ts"])
+PY
+}
+
+@test "S03k decisions-log: escapa comillas y barras en los textos" {
+  _aislar_log
+  run bash "$ISO_LOG" --nido nx --decision d --context 'dijo "no"' --rationale 'ruta C:\tmp'
+  python3 - "$ISO_OUT" <<'PY'
+import json,sys
+d=json.loads(open(sys.argv[1]).read())
+assert d["context"]=='dijo "no"', d["context"]
+assert d["rationale"]=='ruta C:\\tmp', d["rationale"]
+PY
+}
+
+@test "S03k decisions-log: content_hash toma last_commit_hash del estado focal" {
+  _aislar_log
+  cat > "$HOME/.savia/focal-state/conhash.json" <<JSON
+{"nido":"conhash","last_commit_hash":"abc1234"}
+JSON
+  run bash "$ISO_LOG" --nido conhash --decision d
+  grep -q '"content_hash":"abc1234"' "$ISO_OUT"
+}
+
+@test "S03k decisions-log: sin last_commit_hash usa sha256 truncado a 8 del estado" {
+  _aislar_log
+  printf '{"nido":"sinhash"}' > "$HOME/.savia/focal-state/sinhash.json"
+  esperado=$(printf '{"nido":"sinhash"}' | sha256sum | cut -c1-8)
+  run bash "$ISO_LOG" --nido sinhash --decision d
+  grep -q "\"content_hash\":\"$esperado\"" "$ISO_OUT"
+}
+
+@test "S03k decisions-log: nido sin estado registra content_hash unknown" {
+  _aislar_log
+  run bash "$ISO_LOG" --nido nadie --decision d
+  grep -q '"content_hash":"unknown"' "$ISO_OUT"
+}
+
+@test "S03k decisions-log: es append-only, la segunda llamada conserva la primera" {
+  _aislar_log
+  bash "$ISO_LOG" --nido a --decision primera
+  bash "$ISO_LOG" --nido a --decision segunda
+  [ "$(wc -l < "$ISO_OUT")" -eq 2 ]
+  [[ "$(sed -n 1p "$ISO_OUT")" == *'"decision":"primera"'* ]]
+  [[ "$(sed -n 2p "$ISO_OUT")" == *'"decision":"segunda"'* ]]
+}
+
+@test "S03k decisions-log: 8 escrituras paralelas dejan 8 líneas JSON válidas" {
+  _aislar_log
+  for i in 1 2 3 4 5 6 7 8; do
+    bash "$ISO_LOG" --nido p --decision "d$i" --context "c$i" &
+  done
+  wait
+  [ "$(wc -l < "$ISO_OUT")" -eq 8 ]
+  python3 - "$ISO_OUT" <<'PY'
+import json,sys
+ds={json.loads(l)["decision"] for l in open(sys.argv[1])}
+assert ds=={f"d{i}" for i in range(1,9)}, ds
+PY
+}
