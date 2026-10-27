@@ -268,6 +268,22 @@ Cada fase es un PR Draft independiente y revisable.
 | D9 | Emparejamiento del canal | Emparejamiento por DM con código de un solo uso (patrón verificado en hermes-agent, 2026-09-29) antes de aceptar órdenes |
 | D8 | Posición en ADR-002 | Fase B (depende de la autoridad de SE-401); F1 puede entrar antes por bajo riesgo |
 
+## Delta 2026-10-26
+
+Origen: síntesis de una tesis sobre calendario agéntico y sprint nocturno (diseño en el repo de investigación privado). No
+cambia el status (DEFERRED) de esta spec; aplica cuando se reactive.
+
+- **Problema**: un canal de avisos puede crear disponibilidad implícita. Declarar que «un aviso no obliga» no basta: en
+  España el derecho a la desconexión exige política interna (art. 88 LOPDGDD, art. 20 bis ET) y, para el TJUE, la
+  disponibilidad cuenta como tiempo de trabajo cuando las restricciones reales son significativas (C-518/15 Matzak;
+  C-344/19). El diseño tiene que **no enviar** fuera de la ventana, no solo permitir silenciar.
+- **AC adicional (AC10)**: con reloj simulado, ningún escalado se envía durante las horas de silencio (D6) salvo una
+  guardia formal declarada por la persona con inicio y fin; las «alertas críticas» de D6 se acotan a esa guardia o a una
+  lista cerrada de categorías. Caso negativo: un handback abierto a las 23:00 sin guardia se encola para la ventana
+  siguiente y no se envía.
+- **AC adicional (AC11)**: el silencio nunca resuelve un handback (SE-332). Test: tras la ventana sin respuesta, el
+  handback sigue abierto y la acción afectada sigue detenida.
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched
