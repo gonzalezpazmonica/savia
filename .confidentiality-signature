@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=ebb71d6896e32d51ac35ae3b51530c228f4e0503aec89d6f781e715166cc1c86
-timestamp=2026-10-28T18:32:32Z
+diff_hash=d464f3645bf37a1fe05a98a6ccc46d7a29051f7162cbfab82141b6a4cb188ed4
+timestamp=2026-10-28T18:41:49Z
 branch=agent/grant-hmac-20261023
-head_commit=fc951b36
-signature=ed46c422af532f6d6e8c9f9ce1da10d3a94c311095438f1d5c59c11ac324a3fb
+head_commit=a39fd11e
+signature=62a9844be96ffb26141444b7486b694ee2ddaae2824d4b87359fc1d6d4e223e3
