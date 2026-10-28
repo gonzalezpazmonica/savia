@@ -17,7 +17,11 @@ fi
 TIMEOUT=30
 
 # Solo verificar en ficheros de código fuente
+# La ruta llega en tool_input.file_path por stdin; CLAUDE_TOOL_INPUT_FILE no lo define ningún runtime.
 FILE="${CLAUDE_TOOL_INPUT_FILE:-}"
+if [[ -z "$FILE" && ! -t 0 ]]; then
+  FILE=$(timeout 3 cat 2>/dev/null | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+fi
 [[ -z "$FILE" ]] && exit 0
 
 case "$FILE" in
