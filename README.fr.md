@@ -1,4 +1,3 @@
-<!-- Header image removed per SE-259 S2 -->
 
 **Francais** | [Espagnol](README.md) | [English](README.en.md) | [Galego](README.gl.md) | [Euskara](README.eu.md) | [Catala](README.ca.md) | [Deutsch](README.de.md) | [Portugues](README.pt.md) | [Italiano](README.it.md)
 
@@ -14,7 +13,7 @@
 
 ## Workspace de developpement multi-agent
 
-**567 commandes · 90 agents · 139 skills · 133 hooks**
+**567 commandes · 90 agents · 139 skills · 134 hooks**
 
 Système agentique souverain pour gouverner et exécuter le travail assisté par IA, indépendant du modèle, du fournisseur et du frontend, avec le critère humain by design.
 
@@ -68,18 +67,7 @@ Human gates par niveau de risque (L0-L4). Compliance-as-code comme direction : S
 
 ## Capacites
 
-| Domaine | Ce que ca fait |
-|---|---|
-| Gestion de projets | Sprints, burndown, capacite, dailies, retros, KPIs. Rapports Excel et PowerPoint. Prevision Monte Carlo. Facturation. |
-| Spec-Driven Development | Les taches deviennent des specs executables. 90 agents implementent en 16 langages (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) dans des worktrees isoles. Code review automatique + revue humaine obligatoire. Compatible avec `github/spec-kit`. |
-| Securite | SAST contre OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dynamique, SBOM, conformite sectorielle (12 secteurs). Savia Shield : classification locale des donnees avec LLM on-premise, masquage reversible, signature cryptographique des PRs. |
-| Code Review Court | 5 juges specialises (correctness, architecture, security, cognitive, spec) examinent en parallele avec scoring 0-100 et un seuil de 400 LOC. |
-| Souverainete d'inference | API Anthropic par defaut. Fallback automatique vers Ollama local (Gemma 4) en cas d'erreur reseau, HTTP 5xx, HTTP 429 ou timeout. Circuit breaker integre. |
-| Memoire persistante | Texte brut (JSONL). Entity recall, recherche semantique, continuite entre sessions. Extraction automatique des decisions. Personal Vault chiffre AES-256. |
-| Accessibilite | Travail guide pour les personnes en situation de handicap (visuel, moteur, TDAH, autisme, dyslexie). Micro-taches, detection de blocages, reformulation adaptative. |
-| Intelligence du code | Detection d'architecture (Clean, Hexagonal, DDD, CQRS, Microservices). Fitness functions. Human Code Maps (.hcm). Agent Code Maps (.acm) et `ast-comprehension` avec moteur optionnel [CodeGraph](https://github.com/colbymchenry/codegraph) (MCP, opt-in par projet). |
-| Modes autonomes | Sprint nocturne, amelioration du code, recherche technique. Les agents proposent sur des branches `agent/*` avec des PRs Draft — l'humain decide. |
-| Extensions | [Savia Mobile](projects/savia-mobile-android/README.md) (Android natif) · Savia Web (Vue.js) · [SaviaClaw](zeroclaw/ROADMAP.md) (ESP32 + voix full-duplex) |
+Tableau complet des capacités : [capabilities.fr.md](docs/readme/capabilities.fr.md).
 
 ---
 
@@ -91,33 +79,13 @@ Elle n'est pas une personne, ne ressent pas, et ne remplace pas le jugement de l
 
 **Quick-starts par role :**
 
-| Role | Quick-start |
-|---|---|
-| PM / Scrum Master | [→ quick-start-pm](docs/quick-starts/quick-start-pm.md) |
-| Tech Lead | [→ quick-start-tech-lead](docs/quick-starts/quick-start-tech-lead.md) |
-| Developer | [→ quick-start-developer](docs/quick-starts/quick-start-developer.md) |
-| QA | [→ quick-start-qa](docs/quick-starts/quick-start-qa.md) |
-| Product Owner | [→ quick-start-po](docs/quick-starts/quick-start-po.md) |
-| CEO / CTO | [→ quick-start-ceo](docs/quick-starts/quick-start-ceo.md) |
+Quick-starts par rôle : [quick-starts.fr.md](docs/readme/quick-starts.fr.md).
 
 ---
 
 ## Structure
 
-```
-pm-workspace/
-├── .claude/
-│   ├── commands/       ← 567 commandes
-│   ├── agents/         ← 90 agents specialises (7 avec decision trees : SPEC-147)
-│   ├── skills/         ← 139 skills de domaine
-│   ├── hooks/          ← 133 hooks deterministes
-│   └── rules/          ← regles de contexte et de langage
-├── docs/               ← guides par role, scenario, secteur
-├── projects/           ← projets (git-ignores pour la confidentialite)
-├── scripts/            ← validation, CI, utilitaires
-├── zeroclaw/           ← materiel ESP32 + voix
-└── CLAUDE.md           ← identite et regles fondamentales
-```
+Arborescence du dépôt : [repo-structure.fr.md](docs/readme/repo-structure.fr.md).
 
 ---
 
