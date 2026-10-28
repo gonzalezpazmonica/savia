@@ -143,7 +143,18 @@ make_repo() {
   git -C "$r" config user.email t@t; git -C "$r" config user.name t
   mkdir -p "$r/scripts"
   cp "$BATS_TEST_DIRNAME/../scripts/push-pr.sh" "$r/scripts/"
-  printf '#!/usr/bin/env bash\necho sig > .confidentiality-signature; echo SIGNED\n' > "$r/scripts/confidentiality-sign.sh"
+  # Firmador simulado NO idempotente, como el real: cada firma cambia el
+  # fichero (el real escribe timestamp y head_commit). verify compara el hash
+  # del árbol de HEAD (sin la firma) con el firmado.
+  cat > "$r/scripts/confidentiality-sign.sh" <<'SIGN'
+#!/usr/bin/env bash
+tree_hash() { git ls-tree -r HEAD | awk -F'\t' '$2 != ".confidentiality-signature"' | sha256sum | cut -d' ' -f1; }
+case "${1:-}" in
+  sign) printf 'diff_hash=%s\nnonce=%s-%s\n' "$(tree_hash)" "$(date +%s%N)" "$RANDOM" > .confidentiality-signature; echo SIGNED ;;
+  verify) [[ -n "$(tree_hash)" && "$(sed -n 's/^diff_hash=//p' .confidentiality-signature 2>/dev/null)" == "$(tree_hash)" ]] ;;
+  *) exit 2 ;;
+esac
+SIGN
   echo base > "$r/f.txt"; git -C "$r" add -A; git -C "$r" commit -qm "init"
   git -C "$r" remote add origin "$o"; git -C "$r" push -q origin main
   git -C "$r" checkout -q -b agent/x
@@ -153,8 +164,8 @@ make_repo() {
 #!/usr/bin/env bash
 echo "$*" >> "$GH_LOG"
 case "$1 $2" in
-  "auth status") exit 0 ;;
-  "pr list") echo "" ;;
+  "auth status") exit "${GH_AUTH_RC:-0}" ;;
+  "pr list") echo "${GH_LIST_OUT:-}" ;;
   "pr create") printf '%b\n' "${GH_CREATE_OUT:-https://github.com/o/r/pull/42}" ;;
 esac
 GH
@@ -226,17 +237,43 @@ esac
 exit 0
 GH
   git -C "$r" add -A; git -C "$r" commit -qm "chore: stubs"
-  # La rama ya está publicada (cabeza firmada): --merge no empuja nada.
-  ( cd "$r" && bash scripts/confidentiality-sign.sh sign >/dev/null && git add .confidentiality-signature \
-      && git commit -qm "chore: sign confidentiality audit" && git push -q origin agent/x )
+  # Paso 1 del flujo documentado: push-pr.sh SIN --merge firma, empuja y crea
+  # el PR #42. La cabeza que queda publicada es la que firmará el grant.
+  ( cd "$r" && env -u GH_LIST_OUT GH_LOG="$TESTDIR/gh.log" PATH="$TESTDIR/bin:$PATH" \
+      bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog >/dev/null 2>&1 )
   echo "$r"
 }
 
+# Paso 3: push-pr.sh --merge con el PR #42 ya abierto (gh pr list lo devuelve).
 run_merge() {
   export GH_LOG="$TESTDIR/gh.log" OG_LOG="$TESTDIR/og.log"
   : > "$GH_LOG"; : > "$OG_LOG"
   cd "$1"
-  run env PATH="$TESTDIR/bin:$PATH" bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog --merge
+  run env GH_LIST_OUT="${GH_LIST_OUT-42}" PATH="$TESTDIR/bin:$PATH" bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog --merge
+}
+
+remote_head() { git -C "$1" ls-remote origin refs/heads/agent/x | cut -f1; }
+
+@test "SE-343 flujo documentado con firmador NO idempotente: push → grant de esa cabeza → --merge mergea" {
+  r=$(make_merge_repo)
+  # Control: el firmador simulado cambia la firma en cada ejecución (como el real).
+  ( cd "$r" && bash scripts/confidentiality-sign.sh sign >/dev/null && cp .confidentiality-signature "$TESTDIR/s1" \
+      && bash scripts/confidentiality-sign.sh sign >/dev/null && ! cmp -s .confidentiality-signature "$TESTDIR/s1" ) \
+    || { echo "el firmador simulado es idempotente: este test no puede fallar"; return 1; }
+  git -C "$r" restore .confidentiality-signature
+  published=$(remote_head "$r")
+  [ "$published" = "$(git -C "$r" rev-parse HEAD)" ]
+  [ "$(git -C "$r" log -1 --format=%s)" = "chore: sign confidentiality audit" ]
+  # La operadora firma el grant para la cabeza publicada.
+  OG_SIGNED_HEAD="$published" GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q -- "^pr merge 42 -R .* --squash --match-head-commit $published$" "$GH_LOG"
+  grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
+  # --merge no firma ni empuja: ni commit nuevo ni cabeza remota movida.
+  [ "$(git -C "$r" rev-parse HEAD)" = "$published" ]
+  [ "$(remote_head "$r")" = "$published" ]
+  run grep -c "^pr create\|^api " "$GH_LOG"
+  [ "$output" = "0" ]
 }
 
 @test "SE-343 --merge: sin grant para este PR no hay merge ni consumo (exit 1)" {
@@ -282,17 +319,53 @@ run_merge() {
   grep -q "^pr merge 42" "$GH_LOG"
 }
 
-@test "SE-343 --merge: si este push mueve la cabeza no se mergea en la misma ejecución" {
+@test "SE-343 --merge: una cabeza local sin publicar no se empuja ni se mergea" {
   r=$(make_merge_repo)
+  published=$(remote_head "$r")
   git -C "$r" commit -q --allow-empty -m "agent(x): commit posterior al grant"
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"grant nuevo"* ]]
+  [[ "$output" == *"no es la publicada"* ]]
+  [[ "$output" == *"push-pr.sh (sin --merge)"* ]]
+  [ "$(remote_head "$r")" = "$published" ]
   run grep -c "^pr merge" "$GH_LOG"
   [ "$output" = "0" ]
   run grep -c "^check" "$OG_LOG"
   [ "$output" = "0" ]
-  # Control: sin cambios nuevos (cabeza ya publicada) el merge sigue.
+  # Control: tras volver a la cabeza publicada, el merge sigue.
+  git -C "$r" reset -q --hard "$published"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+}
+
+@test "SE-343 --merge: una cabeza publicada sin firma de confidencialidad válida no se mergea" {
+  r=$(make_merge_repo)
+  echo otro >> "$r/f.txt"; git -C "$r" commit -qam "agent(x): cambio sin re-firmar"
+  git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"firma de confidencialidad"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Control: firmada y publicada (paso 1 otra vez), mergea.
+  ( cd "$r" && env GH_LIST_OUT=42 GH_LOG="$GH_LOG" PATH="$TESTDIR/bin:$PATH" \
+      bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog >/dev/null 2>&1 )
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+}
+
+@test "SE-343 --merge: con cambios sin commitear o sin gh autenticado no se mergea" {
+  r=$(make_merge_repo)
+  echo sucio >> "$r/f.txt"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin commitear"* ]]
+  git -C "$r" restore f.txt
+  GH_AUTH_RC=1 GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"necesita gh"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
 }
@@ -307,17 +380,22 @@ run_merge() {
   [ "$output" = "0" ]
 }
 
-@test "SE-343 --merge: el recurso del grant es el número del PR aunque la salida traiga texto extra" {
+@test "SE-343 --merge: el recurso del grant es el número del PR abierto de la rama; sin él no hay merge" {
   r=$(make_merge_repo)
-  GH_CREATE_OUT='Warning: algo\nhttps://github.com/o/r/pull/42 (updated)' GH_STATE=MERGED run_merge "$r"
+  GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
   grep -qx "check --scope merge --resource pr:42 --print-head" "$OG_LOG"
   grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
-  # Sin número de PR reconocible no se comprueba ni se mergea nada.
-  GH_CREATE_OUT='https://github.com/o/r/pull/' run_merge "$r"
-  [ "$status" -eq 1 ]
-  run grep -c "^pr merge" "$GH_LOG"
-  [ "$output" = "0" ]
+  # Sin PR abierto, o con una salida que no es un número, no se comprueba ni se mergea.
+  for out in "" "x42" "42 43"; do
+    GH_LIST_OUT="$out" GH_STATE=MERGED run_merge "$r"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no hay un PR abierto"* ]]
+    run grep -c "^pr merge\|^pr create" "$GH_LOG"
+    [ "$output" = "0" ]
+    run grep -c "^check" "$OG_LOG"
+    [ "$output" = "0" ]
+  done
 }
 
 @test "SE-343 --merge: si consume falla no se informa de consumo y el grant se revoca" {

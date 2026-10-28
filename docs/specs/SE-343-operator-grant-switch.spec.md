@@ -64,6 +64,12 @@ created_at: 2026-08-24
 > `head_sha` **firmado** (`check --print-head`), no la cabeza local; `push-pr.sh` exige además que
 > coincida con la local. `SAVIA_GH_BIN` solo vale con `SAVIA_GRANT_TEST_MODE=1`, que `push-pr.sh
 > --merge` rechaza; fuera de ese modo `check` falla cerrado.
+>
+> **Quinta revisión (2026-10-28, #1401):** `push-pr.sh --merge` ya no firma, no empuja ni crea o
+> edita el PR: con el firmador real cada firma creaba un commit y el merge no llegaba nunca. Exige
+> árbol limpio, cabeza local = publicada, `confidentiality-sign.sh verify` y un PR abierto de la rama;
+> el grant firma esa cabeza. Flujo: `push-pr.sh` → grant de `pr:<n>` → `push-pr.sh --merge`. La rama
+> REST del merge (sin `gh`) se retira: `check` ya necesitaba `gh`.
 
 > **Segunda revisión (2026-10-27, #1401):** lo firmado incluye también `repo` (remoto `origin`
 > normalizado, `host/owner/name`): un grant de A#41 no vale en otro checkout B#41, y sin remoto
