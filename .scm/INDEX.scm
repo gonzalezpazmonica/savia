@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 54c655cdebf4 | resources: 1450
+> hash: 6df4782e1885 | resources: 1450
 > 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -276,7 +276,7 @@
 [development] epistemic-humility — adulación,asumido,auto,cesión,claim — skill:.claude/skills/epistemic-humility/SKILL.md
 [development] eval-agent — against,agent,bias,evaluate,golden — cmd:.claude/commands/eval-agent.md
 [development] eval-agent — agent,eval,evaluation,runner,spec — script:scripts/eval-agent.sh
-[development] evals-runner — evals,evaluation,local,runner,spec — script:scripts/evals-runner.sh
+[development] evals-runner — evals,evaluation,honest,local,result — script:scripts/evals-runner.sh
 [development] execution-supervisor — advisory,execution,reflection,spec,supervisor — script:scripts/execution-supervisor.sh
 [development] failure-pattern-memory — failure,fase,memory,pattern,spec — script:scripts/failure-pattern-memory.sh
 [development] feasibility-probe — attempt,boxed,feasibility,prototype,spec — cmd:.claude/commands/feasibility-probe.md
