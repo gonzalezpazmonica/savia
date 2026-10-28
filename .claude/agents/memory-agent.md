@@ -1,7 +1,8 @@
 ---
 name: memory-agent
 permission_level: L2
-description: Gestiona la memoria persistente de pm-workspace via lenguaje natural.
+description: >-
+             Gestiona la memoria persistente de pm-workspace via lenguaje natural.
              Busca decisiones pasadas, lecciones aprendidas, patrones y preferencias.
              Invocar PROACTIVELY cuando el usuario pregunta por algo que se pudo
              haber recordado antes, o cuando quiere guardar información para el futuro.

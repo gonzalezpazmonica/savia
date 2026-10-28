@@ -320,6 +320,13 @@ jobs:
           python3 -m unittest tests/python/test_dome_guard.py
           bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
 
+      # PR #1399: the agent permission gate and its suites live in tests/*.bats, which
+      # ci-select-bats never picks, so they run on every PR here.
+      - name: Agent permission levels gate
+        run: |
+          bash scripts/validate-agent-permissions.sh .claude/agents
+          bats tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats
+
       - name: Installer contracts and planner (SE-399 F1)
         run: python3 -m unittest tests/python/test_installer_plan.py
 

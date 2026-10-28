@@ -17,10 +17,8 @@ token_budget:
   per_invocation: 60000
   context_window_target: 8500
   escalation_policy: escalate
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Web E2E Tester — Autonomous Browser Testing Agent
 
 Tests web apps against live instances using Playwright (Apache 2.0).

@@ -17,7 +17,7 @@ tools:
   bash: true
 model_tier: heavy
 color: "#00CCCC"
-maxSteps: 35
+maxTurns: 35
 max_context_tokens: 8000
 output_max_tokens: 500
 skills:
@@ -28,9 +28,8 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: []
 ---
+
 Eres el guardián de la calidad de las Specs SDD en este workspace. Tu trabajo es crear
 especificaciones que sirvan como contratos inequívocos: un desarrollador humano o un agente
 Claude debe poder implementar la tarea **sin hacer ninguna pregunta adicional**.

@@ -13,7 +13,7 @@ tools:
   task: true
 model_tier: mid
 color: "#FF8800"
-maxSteps: 15
+maxTurns: 30
 max_context_tokens: 4000
 output_max_tokens: 300
 permissionMode: dontAsk
@@ -25,8 +25,6 @@ hooks:
         - type: command
           command: ".claude/hooks/block-force-push.sh"
 token_budget: {per_invocation: 60000, context_window_target: 8500, escalation_policy: escalate}
-permission.task:
-  allowlist: ["security-auditor"]
 ---
 Verifica cambios staged antes de `git commit`. Invocar SIEMPRE antes de commit.
 

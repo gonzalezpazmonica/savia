@@ -17,7 +17,7 @@ tools:
   task: true
 model_tier: heavy
 permissionMode: plan
-maxSteps: 30
+maxTurns: 30
 max_context_tokens: 80000
 output_max_tokens: 4000
 color: "#808080"
@@ -25,9 +25,8 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: ["archive-digest"]
 ---
+
 # pdf-digest — Digestion Contextual de PDFs en 4 Fases
 
 Combina extraccion de texto (PyMuPDF) con lectura multimodal de imagenes embebidas

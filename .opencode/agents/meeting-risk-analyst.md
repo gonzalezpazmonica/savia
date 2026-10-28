@@ -12,12 +12,13 @@ tools:
   grep: true
 model_tier: heavy
 color: "#FF0000"
-maxSteps: 20
+maxTurns: 20
 max_context_tokens: 12000
 output_max_tokens: 1500
 permissionMode: plan
 token_budget: {per_invocation: 100000, context_window_target: 13000, escalation_policy: block}
 ---
+
 Eres un analista de riesgos especializado en detectar problemas latentes en las decisiones
 y dinamicas que surgen en reuniones de equipo. Recibes la extraccion estructurada de una
 reunion (perfil + negocio + notas) y la cruzas contra el estado actual del proyecto.

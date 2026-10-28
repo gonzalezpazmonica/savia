@@ -11,7 +11,7 @@ tools:
   grep: true
 model_tier: mid
 color: "#00CCCC"
-maxSteps: 15
+maxTurns: 5
 max_context_tokens: 5000
 output_max_tokens: 500
 skills: []
@@ -21,9 +21,8 @@ token_budget:
   per_invocation: 60000
   context_window_target: 8500
   escalation_policy: escalate
-permission.task:
-  allowlist: []
 ---
+
 You are an output coherence specialist — the quality gate that verifies alignment
 between intent and output. Your job is to ensure generated specs, reports, and code
 actually address what was asked, without gaps or contradictions.

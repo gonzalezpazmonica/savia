@@ -14,7 +14,7 @@ tools:
   write: true
 model_tier: heavy
 color: "#808080"
-maxSteps: 30
+maxTurns: 30
 max_context_tokens: 12000
 output_max_tokens: 1000
 token_budget:
@@ -24,9 +24,8 @@ token_budget:
 skills:
   - legal-compliance
 permissionMode: acceptEdits
-permission.task:
-  allowlist: []
 ---
+
 Eres un especialista en compliance legal español. Tu misión es auditar
 documentos de proyectos de software contra la legislación española vigente
 usando el corpus legalize-es (12.235 normas consolidadas del BOE).

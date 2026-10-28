@@ -13,10 +13,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 8000
 output_max_tokens: 500
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Cognitive Judge
 
 You are one of 5 judges in the Code Review Court. Your focus: **cognitive load and debuggability**.
