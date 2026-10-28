@@ -427,9 +427,17 @@ AMEND_HIDDEN=(
   "script -qc 'git commit --amend' /dev/null" "tcsh -c 'git commit --amend'" "csh -c 'cd x; git commit --amend'"
 )
 AMEND_VISIBLE_OK=(
-  "bash -c 'git commit -m \"explica --amend\"'" "git commit -m \${MSG:---amend}" "eval 'git commit -m x'"
+  "bash -c 'git commit -m \"explica --amend\"'" "git commit -m \"\${MSG:---amend}\"" "eval 'git commit -m x'"
   "git commit -m \"\${M} sin --amend\"" "sh -c 'git status' && echo --amend" "git commit -m x && echo \${A:---amend}"
   "git commit -m \"\$MSG\"" "git commit -F \"\$F\" \$ARGS" "git commit -m \"\$X --amend\""
+  # Revisión #1355 (6.ª): entre comillas dobles no hay separación en palabras; el valor de -m sigue siendo uno.
+  "git commit -m \"\$(echo x --amend)\"" "git commit -F \"\`printf 'x --amend'\`\"" "git commit -m \$'x --amend'"
+)
+# Revisión #1355 (6.ª, P1 seguridad): una expansión sin comillas tras -m/-F se parte en palabras y su texto
+# puede dar un --amend real (git commit -m $(echo x --amend) ⇒ -m x --amend). La regex de main los bloqueaba.
+AMEND_SPLIT_HIDDEN=(
+  "git commit -m \$(echo x --amend)" "git commit -m \`printf 'x --amend'\`" "git commit -m \${M:-x --amend}"
+  "git commit -m \${MSG:---amend}" "git commit -F {x,--amend}" "git commit --message \$x--amend"
 )
 
 @test "paridad amend: \$'…', \${…}, llaves, git tras prefijo y bash -c/eval/ssh siguen bloqueando ⇒ 2" {
@@ -444,10 +452,16 @@ AMEND_VISIBLE_OK=(
   parity block-force-push blockForcePush 0 "${AMEND_VISIBLE_OK[@]}"
 }
 
+@test "paridad amend: expansión sin comillas tras -m/-F con --am dentro falla cerrado ⇒ 2 (revisión #1355, 6.ª)" {
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "${AMEND_SPLIT_HIDDEN[@]}"
+}
+
 # Revisión #1355 (P2-4): sin bun la paridad se salta; el lado bash se comprueba igual, sin require_ts.
 @test "bash solo: formas ocultas de --amend ⇒ 2 y menciones ⇒ 0, con y sin jq" {
   local c fails=""
-  for c in "${AMEND_HIDDEN[@]}" "git commit --amend" "git commit -m x --amend"; do
+  for c in "${AMEND_HIDDEN[@]}" "${AMEND_SPLIT_HIDDEN[@]}" "git commit --amend" "git commit -m x --amend"; do
     [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 && "$(bash_code block-force-push "$NOJQ" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
   done
   for c in "${AMEND_VISIBLE_OK[@]}" "git commit -m \"docs: explica --amend\"" "git commit -m x # --amend"; do
@@ -493,22 +507,42 @@ BS_EVEN=(
   $'echo \\\\\ngit push origin main' $'echo \\\\\ngit push '"$FP"' o feat' $'echo \\\\\ngit reset --hard'
   $'echo \\\\\ngit commit --amend'
 )
-@test "paridad continuaciones: «\\\\⏎» separa órdenes y bloquea ⇒ 2; «\\\\\\⏎» une ⇒ 0" {
+@test "paridad continuaciones: «\\\\⏎» separa órdenes y bloquea ⇒ 2; «\\\\\\⏎» une y su línea suelta también cuenta" {
   local c fails=""
   for c in "${BS_EVEN[@]}"; do
     [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
   done
   [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
-  [ "$(bash_code block-force-push "$PATH" $'echo \\\\\\\ngit push origin main')" = 0 ]
+  # Con tres barras la unión da un echo, pero las líneas tal cual también se evalúan (6.ª revisión): 2.
+  [ "$(bash_code block-force-push "$PATH" $'echo \\\\\\\ngit push origin main')" = 2 ]
+  # Caso negativo: ni la unión ni ninguna línea suelta es una orden git ⇒ 0.
+  [ "$(bash_code block-force-push "$PATH" $'echo \\\\\\\nfoo git push o HEAD:main')" = 0 ]
   require_ts
   command -v jq >/dev/null
   parity block-force-push blockForcePush 2 "${BS_EVEN[@]}"
-  # Con «origin main» decide en TS el suelo sin anclar de main (revisión #1348, ronda 3, P1-1: el puerto TS
-  # nunca bloquea menos que antes de SE-453), así que la unión se compara con un refspec que el suelo no ve.
-  parity block-force-push blockForcePush 0 $'echo \\\\\\\ngit push o HEAD:main'
-  [ "$(bash_code block-force-push "$PATH" $'echo \\\\\\\ngit push o HEAD:main')" = 0 ]
-  # Integración con main: el suelo TS es más estricto que bash a propósito (lado seguro).
-  [ "$(ts_code block-force-push blockForcePush $'echo \\\\\\\ngit push origin main')" = 2 ]
+  parity block-force-push blockForcePush 0 $'echo \\\\\\\nfoo git push o HEAD:main'
+}
+
+# Revisión #1355 (6.ª): «echo \\\⏎git push origin main» daba 2 en TS (suelo sin anclar) y 0 en bash. Gana
+# fallar cerrado: además de las uniones, se evalúan las líneas tal cual. La unión no siempre es lo que hace el
+# shell: un comentario que acaba en «\» no continúa, y la línea siguiente se ejecuta (pasaba en bash y en TS).
+BS_RAW=(
+  $'echo \\\\\\\ngit push origin main' $'echo \\\\\\\ngit push o HEAD:main'
+  $'# nota \\\ngit push origin HEAD:main' $'# nota \\\ngit push '"$FP"' o feat' $'# nota \\\ngit reset --hard'
+  $'# nota \\\ngit commit --amend'
+)
+@test "paridad continuaciones: las líneas sin unir también se evalúan (comentario con «\\» final) ⇒ 2" {
+  local c fails=""
+  for c in "${BS_RAW[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
+  # Caso negativo: la continuación normal de una orden permitida sigue pasando.
+  [ "$(bash_code block-force-push "$PATH" $'git push origin \\\nfeat')" = 0 ]
+  require_ts
+  command -v jq >/dev/null
+  parity block-force-push blockForcePush 2 "${BS_RAW[@]}"
+  parity block-force-push blockForcePush 0 $'git push origin \\\nfeat' $'# nota \\\necho git push o HEAD:main'
 }
 
 # Revisión #1355 (4.ª, P1 seguridad): cuando no se puede tokenizar (tope de bytes, de anidamiento o comilla

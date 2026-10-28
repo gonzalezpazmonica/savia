@@ -59,6 +59,9 @@ const GIT_OPTS_WITH_VALUE = new Set(["-c", "--git-dir", "--work-tree", "--namesp
 // prefix (sudo -u x, timeout 5, xargs, ssh host…), and the text given to bash -c, sh -c, eval or ssh is
 // tokenized again as a command of its own, with the same budget and the same nesting cap.
 const OPAQUE = "\x01";
+// Review #1355 (6th): the -m/-F exemption only holds when the expansion was inside double quotes. Unquoted, the
+// shell splits it into words (-m $(echo x --amend) ⇒ -m x --amend): those words carry \x01\x03 and fail closed.
+const SPLIT = "\x03";
 const SHELLS = /^(?:bash|sh|zsh|dash|ksh|ash|mksh|csh|tcsh|fish|script|eval|ssh|su|watch)$/;
 // $var, $1, $@…: the value is not visible, so the word is opaque (--amend$x, 4th review).
 const PARAM_START = /[A-Za-z0-9_@*#?$!-]/;
@@ -78,7 +81,7 @@ function gitCommitAmend(w: string[], k: number): boolean {
   for (k++; k < w.length; k++) {
     const s = w[k].toLowerCase();
     if (AMEND.test(s)) return true;
-    if (s.startsWith(OPAQUE) && bare(s).includes("--am") && !COMMIT_OPTS_WITH_VALUE.test(prev)) return true;
+    if (s.startsWith(OPAQUE) && bare(s).includes("--am") && (s.startsWith(OPAQUE + SPLIT) || !COMMIT_OPTS_WITH_VALUE.test(prev))) return true;
     prev = s;
   }
   return false;
@@ -87,11 +90,11 @@ function gitCommitAmend(w: string[], k: number): boolean {
 // Words of a simple command → 1 is git … commit … --amend, 0 no, 2 cannot be tokenized.
 function isAmendCommit(w: string[]): number {
   for (let m = 0; m < w.length; m++) {
-    const b = w[m].replace(/^\x01/, "").toLowerCase().replace(/^[\s\S]*\//, "");
+    const b = w[m].replace(/^\x01\x03?/, "").toLowerCase().replace(/^[\s\S]*\//, "");
     if (b === "git" || (w[m].startsWith(OPAQUE) && b.includes("git"))) {
       if (gitCommitAmend(w, m + 1)) return 1;
     } else if (SHELLS.test(b) && m + 1 < w.length) {
-      const r = amendScan(w.slice(m + 1).join(" ").replaceAll(OPAQUE, ""));
+      const r = amendScan(w.slice(m + 1).join(" ").replaceAll(OPAQUE, "").replaceAll(SPLIT, ""));
       if (r !== 0) return r;
     }
   }
@@ -208,18 +211,21 @@ function amendScanIn(s: string): number {
   // opaque: the word holds something the shell expands and the scan cannot see (\x01 mark); ubrace: unquoted {.
   let opaque = false;
   let ubrace = false;
+  // split: that expansion is unquoted and the shell may split it into several words (\x03 mark).
+  let split = false;
   const flush = () => {
-    if (inWord) { words.push(opaque ? OPAQUE + word : word); word = ""; inWord = false; redir = false; }
-    opaque = false; ubrace = false;
+    if (inWord) { words.push(opaque ? OPAQUE + (split ? SPLIT : "") + word : word); word = ""; inWord = false; redir = false; }
+    opaque = false; ubrace = false; split = false;
   };
   const endCmd = () => { flush(); const r = words.length ? isAmendCommit(words) : 0; words = []; return r; };
   // Substitutions are scanned as commands of their own and kept as part of the current word.
-  const nested = (start: number, inner: string, end: number, opq: boolean): number => {
+  const nested = (start: number, inner: string, end: number, opq: boolean, spl = false): number => {
     const r = amendScan(inner);
     if (r !== 0) return r;
     tick(end - start);
     word += s.slice(start, end); inWord = true; redir = false;
     if (opq) opaque = true;
+    if (opq && spl) split = true;
     return 0;
   };
   let i = 0;
@@ -272,17 +278,17 @@ function amendScanIn(s: string): number {
     }
     if ((c === "$" || c === "<" || c === ">") && s[i + 1] === "(") {
       const j = closeSubst(s, i + 2); if (j < 0) return 2;
-      const r = nested(i, s.slice(i + 2, j - 1), j, c === "$"); if (r !== 0) return r;
+      const r = nested(i, s.slice(i + 2, j - 1), j, c === "$", true); if (r !== 0) return r;
       i = j; continue;
     }
     if (c === "$" && s[i + 1] === "{") { // ${…}: the text inside is scanned as a command
       const j = closeBrace(s, i + 2); if (j < 0) return 2;
-      const r = nested(i, s.slice(i + 2, j - 1), j, true); if (r !== 0) return r;
+      const r = nested(i, s.slice(i + 2, j - 1), j, true, true); if (r !== 0) return r;
       i = j; continue;
     }
     if (c === "`") {
       const j = closeBq(s, i + 1); if (j < 0) return 2;
-      const r = nested(i, s.slice(i + 1, j - 1), j, true); if (r !== 0) return r;
+      const r = nested(i, s.slice(i + 1, j - 1), j, true, true); if (r !== 0) return r;
       i = j; continue;
     }
     if (c === " " || c === "\t") { flush(); i++; continue; }
@@ -297,10 +303,10 @@ function amendScanIn(s: string): number {
       word += c; inWord = true; redir = false; i++; continue;
     }
     if (";&|()\n".includes(c)) { const r = endCmd(); if (r !== 0) return r; i++; continue; }
-    if (c === "$" && PARAM_START.test(s[i + 1] ?? "")) opaque = true;
+    if (c === "$" && PARAM_START.test(s[i + 1] ?? "")) { opaque = true; split = true; }
     // Unquoted brace expansion ({a,b}, {1..3}): the shell expands it, the word is opaque.
     if (c === "{") ubrace = true;
-    if (ubrace && (c === "," || (c === "." && s[i + 1] === "."))) opaque = true;
+    if (ubrace && (c === "," || (c === "." && s[i + 1] === "."))) { opaque = true; split = true; }
     word += c; inWord = true; i++;
     redir = c === "<" || c === ">";
   }
@@ -399,6 +405,9 @@ export async function blockForcePush(input: ToolInput, output: ToolOutput): Prom
   const noSpace = command.replace(/\\\\|\\\n/g, (m) => (m === "\\\n" ? "" : m));
   checkJoined(withSpace);
   if (noSpace !== withSpace) checkJoined(noSpace);
+  // Review #1355 (6th): fail closed, the raw lines are checked too. The join is not always what the shell does:
+  // a comment ending in «\» does not continue, so the next line runs (# note \⏎git push … passed in both).
+  if (command !== withSpace && command !== noSpace) checkJoined(command);
 }
 
 function checkJoined(joined: string): void {

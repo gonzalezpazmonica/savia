@@ -30,6 +30,9 @@ fi
 # git push partido en dos líneas pasaba); el puerto TS hace lo mismo y también evalúa por línea.
 # Solo continúa la barra impar: en «\\⏎» la barra es literal y el salto separa órdenes (4.ª revisión), así
 # que los pares «\\» se apartan antes de unir y se reponen después.
+# Revisión #1355 (6.ª): la orden tal cual también se evalúa (ver el final): la unión no siempre es lo que
+# hace el shell (un comentario acabado en «\» no continúa y la línea siguiente se ejecuta).
+COMMAND_RAW="$COMMAND"
 _BS2='\\'
 COMMAND="${COMMAND//"$_BS2"/$'\x02'}"
 # \⏎ desaparece sin dejar espacio (git comm\⏎it, git pu\⏎sh): se evalúan las dos uniones, con y sin espacio.
@@ -113,6 +116,8 @@ fi
 # --am tras commit (y no es el valor de -m, -F…), bloquea, como hacía la regex vieja. git puede ir tras
 # cualquier prefijo (sudo -u x, timeout 5, xargs, ssh host…), y el texto que reciben bash -c, sh -c, eval
 # o ssh se tokeniza otra vez como orden propia, con el mismo presupuesto y el mismo tope de anidamiento.
+# Revisión #1355 (6.ª): la exención de -m/-F solo vale si la expansión iba entre comillas dobles. Sin comillas
+# el shell la parte en palabras (-m $(echo x --amend) ⇒ -m x --amend): esas palabras llevan \x01\x03 y fallan cerrado.
 _AMEND_SHELLS='^(bash|sh|zsh|dash|ksh|ash|mksh|csh|tcsh|fish|script|eval|ssh|su|watch)$'
 _AMEND_COMMIT_VAL='^(-m|-f|-c|-t|--message|--file|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--template|--cleanup|--trailer)$'
 _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 si sigue commit … --amend
@@ -128,7 +133,7 @@ _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 s
   for (( k = k + 1; k < n; k++ )); do
     s="${w[k],,}"
     [[ "$s" =~ ^--am(e(nd?)?)?$ ]] && return 0
-    [[ "$s" == $'\x01'* && "${s//[\{\}\$,]/}" == *--am* && ! "$prev" =~ $_AMEND_COMMIT_VAL ]] && return 0
+    [[ "$s" == $'\x01'* && "${s//[\{\}\$,]/}" == *--am* ]] && { [[ "$s" == $'\x01\x03'* ]] || ! [[ "$prev" =~ $_AMEND_COMMIT_VAL ]]; } && return 0
     prev="$s"
   done
   return 1
@@ -136,11 +141,11 @@ _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 s
 _amend_is_commit() { # palabras de una orden simple → 0 es git … commit … --amend, 1 no, 2 no se puede tokenizar
   local -a w=("$@"); local n=$# m b t
   for (( m = 0; m < n; m++ )); do
-    b="${w[m]#$'\x01'}"; b="${b,,}"; b="${b##*/}"
+    b="${w[m]#$'\x01'}"; b="${b#$'\x03'}"; b="${b,,}"; b="${b##*/}"
     if [[ "$b" == git || ( "${w[m]}" == $'\x01'* && "$b" == *git* ) ]]; then
       _amend_git_commit $((m+1)) && return 0
     elif [[ "$b" =~ $_AMEND_SHELLS ]] && (( m + 1 < n )); then
-      t="${w[*]:m+1}"; t="${t//$'\x01'/}"
+      t="${w[*]:m+1}"; t="${t//$'\x01'/}"; t="${t//$'\x03'/}"
       _amend_scan_text "$t"
       (( AMEND_R == 1 )) && return 0
       (( AMEND_R == 2 )) && return 2
@@ -261,7 +266,8 @@ _amend_scan() { # i end → AMEND_R: 1 alguna orden simple es git … commit …
 _amend_scan_in() {
   # redir=1: la palabra acaba en < o > sin comillas (echo ">"|git … no es una redirección >|).
   # opaque=1: la palabra lleva algo que el shell expande y aquí no se ve (marca \x01); ubrace: { sin comillas.
-  local i="$1" n="$2" c j k word="" inword=0 redir=0 opaque=0 ubrace=0
+  # usplit=1: esa expansión va sin comillas y el shell puede partirla en varias palabras (marca \x03).
+  local i="$1" n="$2" c j k word="" inword=0 redir=0 opaque=0 ubrace=0 usplit=0
   local -a words=()
   while (( i < n )); do
     (( ++AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_R=2; return; }
@@ -308,17 +314,17 @@ _amend_scan_in() {
     if [[ "$c" == '$' || "$c" == '<' || "$c" == '>' ]] && [[ "${AMEND_CH[i+1]:-}" == '(' ]]; then
       _amend_close_subst $((i+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
       j=$AMEND_J; _amend_scan $((i+2)) $((j-1)); (( AMEND_R != 0 )) && return
-      _amend_word_add "$i" "$j"; [[ "$c" == '$' ]] && opaque=1; i=$j; continue
+      _amend_word_add "$i" "$j"; [[ "$c" == '$' ]] && { opaque=1; usplit=1; }; i=$j; continue
     fi
     if [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == '{' ]]; then  # ${…}: el texto de dentro se mira como orden
       _amend_close_brace $((i+2)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
       j=$AMEND_J; _amend_scan $((i+2)) $((j-1)); (( AMEND_R != 0 )) && return
-      _amend_word_add "$i" "$j"; opaque=1; i=$j; continue
+      _amend_word_add "$i" "$j"; opaque=1; usplit=1; i=$j; continue
     fi
     if [[ "$c" == '`' ]]; then
       _amend_close_bq $((i+1)) "$n"; (( AMEND_J < 0 )) && { AMEND_R=2; return; }
       j=$AMEND_J; _amend_scan $((i+1)) $((j-1)); (( AMEND_R != 0 )) && return
-      _amend_word_add "$i" "$j"; opaque=1; i=$j; continue
+      _amend_word_add "$i" "$j"; opaque=1; usplit=1; i=$j; continue
     fi
     if [[ "$c" == ' ' || "$c" == $'\t' ]]; then
       _amend_flush; i=$((i+1)); continue
@@ -339,19 +345,23 @@ _amend_scan_in() {
       i=$((i+1)); continue
     fi
     # $var, $1, $@…: el valor no se ve, la palabra es opaca (--amend$x, 4.ª revisión).
-    [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == [A-Za-z0-9_@*#?\$!-] ]] && opaque=1
+    [[ "$c" == '$' && "${AMEND_CH[i+1]:-}" == [A-Za-z0-9_@*#?\$!-] ]] && { opaque=1; usplit=1; }
     # Expansión de llaves sin comillas ({a,b}, {1..3}) y ${…}: el shell las expande, la palabra es opaca.
     [[ "$c" == '{' ]] && ubrace=1
-    (( ubrace )) && [[ "$c" == ',' || ( "$c" == '.' && "${AMEND_CH[i+1]:-}" == '.' ) ]] && opaque=1
+    (( ubrace )) && [[ "$c" == ',' || ( "$c" == '.' && "${AMEND_CH[i+1]:-}" == '.' ) ]] && { opaque=1; usplit=1; }
     word+="$c"; inword=1; i=$((i+1))
     if [[ "$c" == [\<\>] ]]; then redir=1; else redir=0; fi
   done
   (( AMEND_STEPS > AMEND_MAX_STEPS )) && { AMEND_R=2; return; }  # _amend_word_add cortó la palabra
   _amend_flush; _amend_end_cmd
 }
-_amend_flush() { # cierra la palabra en curso de _amend_scan_in (opaca: con la marca \x01 delante)
-  if (( inword )); then (( opaque )) && word=$'\x01'"$word"; words+=("$word"); word=""; inword=0; redir=0; fi
-  opaque=0; ubrace=0
+_amend_flush() { # cierra la palabra en curso de _amend_scan_in (opaca: con la marca \x01, y \x03 si se parte)
+  if (( inword )); then
+    (( opaque && usplit )) && word=$'\x03'"$word"
+    (( opaque )) && word=$'\x01'"$word"
+    words+=("$word"); word=""; inword=0; redir=0
+  fi
+  opaque=0; ubrace=0; usplit=0
 }
 _amend_end_cmd() { # evalúa la orden simple de _amend_scan_in → AMEND_R (1 casa, 2 no se sabe, 0 no)
   local rc=1
@@ -398,6 +408,11 @@ _amend_reset_checks "$COMMAND"
 if [[ "$COMMAND_NOSP" != "$COMMAND" ]]; then
   _push_checks "$COMMAND_NOSP"
   _amend_reset_checks "$COMMAND_NOSP"
+fi
+# Fallar cerrado: también las líneas sin unir (echo \\\⏎git push origin main y # nota \⏎git push …).
+if [[ "$COMMAND_RAW" != "$COMMAND" && "$COMMAND_RAW" != "$COMMAND_NOSP" ]]; then
+  _push_checks "$COMMAND_RAW"
+  _amend_reset_checks "$COMMAND_RAW"
 fi
 
 exit 0
