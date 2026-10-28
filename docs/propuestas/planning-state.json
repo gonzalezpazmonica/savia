@@ -1369,6 +1369,15 @@
       "approval": "Operadora 2026-10-27: AskUserQuestion"
     },
     {
+      "id": "SE-474",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Proveedor independiente opcional: refutación, tribunal y programación, y protocolo reforzado de aprobación",
+      "note": "Sesgo correlacionado señalado por evaluación independiente: orquestadora y revisoras del mismo proveedor. Opcional y agnóstico; si está disponible, rol independent obligatorio en PRs de control. Primero M0: medir hallazgos que las revisoras no ven.",
+      "evidence": "docs/specs/SE-474-independent-provider-review.spec.md",
+      "phase": "D"
+    },
+    {
       "id": "SE-458",
       "status": "APPROVED",
       "priority": "P1",
