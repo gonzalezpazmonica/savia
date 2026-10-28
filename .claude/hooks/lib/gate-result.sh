@@ -5,10 +5,10 @@
 # Uso (source):
 #   gate_result_emit <clean|findings|unknown> [check:reason ...]
 # Imprime una línea final en stdout: gate-result: {"result":"...","gaps":[{"check":"...","reason":"..."}]}
-# reason ∈ missing_tool | limit | timeout | unreadable.
+# reason ∈ missing_tool | limit | timeout | unreadable | not_executed | no_baseline.
 # gate_unmeasured_record <gate> <reason> añade una línea a output/unmeasured-gates.jsonl (una por gate y día).
 
-_GATE_REASONS="missing_tool limit timeout unreadable"
+_GATE_REASONS="missing_tool limit timeout unreadable not_executed no_baseline"
 
 gate_result_emit() {
   local result="$1"; shift
