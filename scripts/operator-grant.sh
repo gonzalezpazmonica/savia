@@ -24,7 +24,8 @@
 # (`ssh-keygen -Y sign -n savia-operator-grant`), y `grant --scope merge
 # --signature FICHERO|-` la incorpora. `check` verifica la firma con
 # `ssh-keygen -Y verify` contra la clave pública versionada en
-# config/operator-grant-signers (sin override por variable de entorno).
+# config/operator-grant-signers DE origin/main (no la de la rama; sin override
+# por variable de entorno).
 #
 # Exit: 0 ok | 1 not valid/expired/bad signature | 2 invalid invocation
 #       3 no grant | 4 merge grant pending: falta la firma de la operadora
@@ -37,7 +38,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # el llamante controle (un ssh-keygen falso que sale con 0 daría PASS sin firma).
 # Junto con `python3 -I` (sin PYTHONPATH, sitecustomize del usuario ni cwd en
 # sys.path), ni el PATH ni Python del usuario sustituyen el verificador.
-SAFE_PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"
+# Los directorios del sistema primero: /usr/local/bin y /opt/homebrew/bin los
+# puede escribir el usuario (macOS) y solo se usan para lo que no esté en /usr/bin.
+SAFE_PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
 export PATH="$SAFE_PATH"
 # Una función Bash exportada (`python3() { return 0; }; export -f python3`) se
 # resuelve antes que el PATH. python3 y git se buscan aquí por ruta absoluta
@@ -76,8 +79,31 @@ GRANTS_DIR="${SAVIA_GRANTS_DIR:-$HOME/.savia/grants}"
 # Raíz de confianza del grant de merge: clave(s) pública(s) de la operadora en
 # formato allowed_signers de OpenSSH. Versionada y sin override: si una variable
 # pudiera redirigirla, un agente apuntaría a su propia clave y firmaría él.
-SIGNERS_FILE="$REPO_ROOT/config/operator-grant-signers"
+# La firma se verifica contra la versión de la RAMA BASE (BASE_REF), nunca contra
+# la copia de trabajo: un PR que añade su clave al fichero no se autoriza a sí
+# mismo (revisión de seguridad de #1401, P1-1). SIGNERS_FILE es la ruta que veta
+# el guard; la que cuenta para verificar es la de base_signers.
+SIGNERS_REL="config/operator-grant-signers"
+SIGNERS_FILE="$REPO_ROOT/$SIGNERS_REL"
+BASE_REF="refs/remotes/origin/main"
 SIG_NAMESPACE="savia-operator-grant"
+MERGE_MAX_TTL_HOURS=24
+BASE_SIGNERS="" _TMP_DIRS=()
+trap '(( ${#_TMP_DIRS[@]} )) && rm -rf "${_TMP_DIRS[@]}"' EXIT
+# Vuelca a un temporal los firmantes de BASE_REF (git cat-file: sin textconv ni
+# filtros de la rama). Sin BASE_REF o sin el fichero en ella: falla (no hay
+# raíz de confianza y ningún grant de merge vale).
+base_signers() {
+  [[ -n "$BASE_SIGNERS" ]] && return 0
+  local d
+  d="$(mktemp -d)" || return 1
+  _TMP_DIRS+=("$d")
+  if ! git -C "$REPO_ROOT" cat-file blob "$BASE_REF:$SIGNERS_REL" > "$d/signers" 2>/dev/null; then
+    echo "ERROR: sin $SIGNERS_REL en ${BASE_REF#refs/remotes/} (git fetch origin main); la firma se verifica contra la rama base, no contra esta rama" >&2
+    return 1
+  fi
+  BASE_SIGNERS="$d/signers"
+}
 # Resuelto desde la raíz del repo (no desde el cwd); override para tests.
 ACTIVE_USER_FILE="${SAVIA_ACTIVE_USER_FILE:-$REPO_ROOT/.claude/profiles/active-user.md}"
 
@@ -180,6 +206,7 @@ FIELDS = ("id", "scope", "repo", "resource", "grantor", "request_context",
 ID_RE = re.compile(r"^[0-9a-f]{32}$")
 HEAD_RE = re.compile(r"^[0-9a-f]{40}$")
 RES_RE = re.compile(r"^(pr|task):[A-Za-z0-9._-]{1,64}$")
+MAX_TTL = 24 * 3600  # vigencia máxima de un grant de merge (MERGE_MAX_TTL_HOURS)
 def payload(rec):
     """Bytes exactos que firma la operadora."""
     return json.dumps({f: rec.get(f) for f in FIELDS}, sort_keys=True,
@@ -217,7 +244,8 @@ def fields_ok(rec, slug, resource, spent, repo, head):
             and isinstance(g, str) and g != "" and g != "self" and not g.startswith("-")
             and (not slug or g == slug)
             and isinstance(ie, int) and isinstance(ee, int)
-            and ie <= now + 60 and ie <= ee and ee >= now)
+            and ie <= now + 60 and ie <= ee and ee >= now
+            and ee - ie <= MAX_TTL)
 def verify(rec, sig, signers, ns):
     if not (isinstance(sig, str) and "BEGIN SSH SIGNATURE" in sig and os.path.isfile(signers)):
         return False
@@ -357,9 +385,10 @@ check_scope() {
   if [[ "$scope" == "merge" ]]; then
     [[ "$res" == "*" ]] && res="$(python3 -I -c "$GRANT_PY" field "$file" resource 2>/dev/null || true)"
     head="$(pr_head "$res")"
+    base_signers || return 1
   fi
   python3 -I -c "$GRANT_PY" check "$file" "$scope" "$slug" "$resource" \
-    "$SIGNERS_FILE" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" "$head" "$print_head" || return 1
+    "$BASE_SIGNERS" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" "$head" "$print_head" || return 1
   return 0
 }
 
@@ -582,6 +611,8 @@ done
 [[ -z "$ACTION" ]] && { echo "ERROR: action required (grant|check|consume|revoke|list)" >&2; usage >&2; exit 2; }
 [[ "$ACTION" == "list" ]] && {
   if [[ -d "$GRANTS_DIR" ]]; then
+    # Aquí y no en el bucle (subshell): el temporal lo limpia el trap de este proceso.
+    base_signers 2>/dev/null || true
     ls -1 "$GRANTS_DIR"/*.json 2>/dev/null | while read -r f; do
       b="$(basename "$f" .json)"
       if check_scope "$b" "" "*"; then v=yes; else v=no; fi
@@ -622,9 +653,10 @@ case "$ACTION" in
       [[ "$SCOPE" == "merge" ]] || { echo "ERROR: --signature solo aplica a --scope merge" >&2; exit 2; }
       [[ -f "$(request_file merge)" ]] || { echo "ERROR: no hay petición pendiente; antes: grant --scope merge --context \"...\"" >&2; exit 2; }
       ensure_grants_dir
+      base_signers || exit 1
       ( umask 077
         python3 -I -c "$GRANT_PY" accept "$(request_file merge)" "$SIGNATURE" "$(scope_file merge)" \
-          "$SIGNERS_FILE" "$SIG_NAMESPACE" "$SLUG" "$(spent_file merge)" "$(repo_id)" \
+          "$BASE_SIGNERS" "$SIG_NAMESPACE" "$SLUG" "$(spent_file merge)" "$(repo_id)" \
           "$(python3 -I -c "$GRANT_PY" field "$(request_file merge)" head_sha)" ) || exit $?
       rm -f "$(request_file merge)"
       RESOURCE="$(python3 -I -c "$GRANT_PY" field "$(scope_file merge)" resource)"
@@ -633,6 +665,14 @@ case "$ACTION" in
     fi
     [[ -z "$CONTEXT" ]] && { echo "ERROR: --context required (why is this grant being issued)" >&2; exit 2; }
     [[ -z "$TTL" ]] && TTL="$(default_ttl "$SCOPE")"
+    # Solo dígitos: el valor entra en aritmética de bash ($(( ))), que evaluaría
+    # una expresión como 'a[$(cmd)]'. Tope para merge: la operadora no firma sin
+    # darse cuenta un grant de años (check también rechaza vigencias > 24 h).
+    [[ "$TTL" =~ ^[0-9]{1,3}$ ]] || { echo "ERROR: --ttl-hours debe ser un entero de 0 a 999" >&2; exit 2; }
+    TTL=$(( 10#$TTL ))
+    if [[ "$SCOPE" == "merge" ]] && (( TTL > MERGE_MAX_TTL_HOURS )); then
+      echo "ERROR: --ttl-hours de merge no puede pasar de $MERGE_MAX_TTL_HOURS" >&2; exit 2
+    fi
     # Fail-closed: sin operadora identificable no se emite un grant (antes se
     # escribía uno con grantor vacío que check rechazaba después).
     if [[ -z "$GRANTOR" && -z "$SLUG" ]]; then

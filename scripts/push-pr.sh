@@ -204,6 +204,27 @@ if $MERGE; then
   PR_NUM=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
   [[ "$PR_NUM" =~ ^[0-9]+$ ]] || merge_prep_fail "no hay un PR abierto para $BRANCH."
   echo "  PR #$PR_NUM, cabeza $LOCAL_HEAD."
+  # SE-343 (revisión de seguridad de #1401, P1-1): un PR que cambia la raíz de
+  # confianza del grant no se mergea nunca con --merge, traiga el grant que
+  # traiga: lo mergea la operadora a mano. Dos fuentes, y basta una: el diff local
+  # contra origin/main y los ficheros que GitHub lista para el PR. Si alguna no
+  # se puede leer, no hay merge (fail-closed).
+  SIGNERS_REL="config/operator-grant-signers"
+  signers_rc=0
+  git diff --quiet origin/main...HEAD -- "$SIGNERS_REL" 2>/dev/null || signers_rc=$?
+  if ! PR_FILES=$(gh pr view "$PR_NUM" -R "$REPO" --json files -q '.files[].path' 2>/dev/null); then
+    echo "ERROR: no se pudo leer de GitHub la lista de ficheros del PR #$PR_NUM; no se mergea." >&2
+    exit 1
+  fi
+  if (( signers_rc != 0 )) || grep -qxF "$SIGNERS_REL" <<<"$PR_FILES"; then
+    if (( signers_rc > 1 )); then
+      echo "ERROR: no se pudo comparar $SIGNERS_REL con origin/main (git diff exit $signers_rc); no se mergea." >&2
+    else
+      echo "ERROR: el PR #$PR_NUM modifica $SIGNERS_REL, la raíz de confianza del grant de merge." >&2
+    fi
+    echo "  Un PR que cambia los firmantes no se mergea con --merge: lo mergea la operadora a mano." >&2
+    exit 1
+  fi
   # SE-343: merge requires a valid operator grant signed for THIS PR.
   GRANT_RES="pr:$PR_NUM"
   # check --print-head devuelve el head_sha que firmó la operadora. Ese valor

@@ -231,7 +231,9 @@ OG
   cat >> "$TESTDIR/bin/gh" <<'GH'
 echo "GH_REPO=${GH_REPO:-}" >> "$GH_LOG"
 case "$1 $2" in
-  "pr view") echo "${GH_STATE:-OPEN}" ;;
+  # --json files: ficheros del PR según GitHub (GH_FILES, GH_FILES_RC); si no, el estado.
+  "pr view") if [[ " $* " == *" files "* ]]; then printf '%b\n' "${GH_FILES:-f.txt}"; exit "${GH_FILES_RC:-0}"; fi
+             echo "${GH_STATE:-OPEN}" ;;
   "pr merge") exit "${GH_MERGE_RC:-0}" ;;
 esac
 exit 0
@@ -473,6 +475,57 @@ remote_head() { git -C "$1" ls-remote origin refs/heads/agent/x | cut -f1; }
   [[ "$output" == *"no se ha gastado"* ]]
   run grep -c "^consume" "$OG_LOG"
   [ "$output" = "0" ]
+}
+
+# ── Revisión de seguridad de #1401, P1-1: un PR que toca los firmantes no se autoriza ──
+# El grant (simulado) es válido y el clasificador (simulado) da tier 1: lo único que
+# impide el merge es que el PR cambie config/operator-grant-signers.
+
+no_merge_done() {
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  run grep -c "^consume" "$OG_LOG"
+  [ "$output" = "0" ]
+}
+
+@test "P1-1 --merge: un PR que añade una clave a los firmantes no se mergea aunque traiga grant" {
+  r=$(make_merge_repo)
+  mkdir -p "$r/config"
+  printf 'agente namespaces="savia-operator-grant" ssh-ed25519 AAAAagente\n' > "$r/config/operator-grant-signers"
+  git -C "$r" add -A; git -C "$r" commit -qm "agent: añade mi clave"
+  ( cd "$r" && env -u GH_LIST_OUT GH_LOG="$TESTDIR/gh.log" PATH="$TESTDIR/bin:$PATH" \
+      bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog >/dev/null 2>&1 )
+  [ "$(remote_head "$r")" = "$(git -C "$r" rev-parse HEAD)" ]
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"modifica config/operator-grant-signers"* ]]
+  [[ "$output" == *"la operadora a mano"* ]]
+  no_merge_done
+}
+
+@test "P1-1 --merge: si GitHub lista los firmantes en el PR, no se mergea aunque el diff local no los vea" {
+  r=$(make_merge_repo)
+  GH_FILES='f.txt\nconfig/operator-grant-signers' GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"la operadora a mano"* ]]
+  no_merge_done
+  # Caso negativo: un fichero de nombre parecido no bloquea.
+  GH_FILES='docs/operator-grant-signers-notes.md' GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q "^pr merge 42" "$GH_LOG"
+}
+
+@test "P1-1 --merge: sin la lista de ficheros del PR, o sin origin/main para comparar, no hay merge" {
+  r=$(make_merge_repo)
+  GH_FILES_RC=1 GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"lista de ficheros"* ]]
+  no_merge_done
+  git -C "$r" update-ref -d refs/remotes/origin/main
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pudo comparar"* ]]
+  no_merge_done
 }
 
 @test "pr-plan: success is detected by a /pull/N URL, not by any github.com line" {

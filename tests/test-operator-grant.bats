@@ -41,6 +41,15 @@ setup() {
   KEY="$TMP_GRANTS/op-key"
   ssh-keygen -q -t ed25519 -N "" -C test -f "$KEY"
   printf '%s namespaces="savia-operator-grant" %s\n' "$ACTIVE_SLUG" "$(cut -d' ' -f1-2 "$KEY.pub")" > "$SIGNERS"
+  publish_signers
+}
+
+# La firma se verifica contra los firmantes de origin/main, no los de la copia de
+# trabajo: publica el $SIGNERS actual (o su ausencia) como origin/main del repo falso.
+publish_signers() {
+  git -C "$FAKE_REPO" add -A config
+  git -C "$FAKE_REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "signers"
+  git -C "$FAKE_REPO" update-ref refs/remotes/origin/main HEAD
 }
 
 # gh simulado que devuelve la cabeza de $TMP_GRANTS/pr-head.
@@ -269,6 +278,7 @@ guard_event() {
 
 @test "P1: la clave registrada con otra identidad no firma por la operadora activa" {
   sed -i "s/^$ACTIVE_SLUG /otra-operadora /" "$SIGNERS"
+  publish_signers
   run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "identidad" --ttl-hours 1
   sign_request
   run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
@@ -321,6 +331,7 @@ PY
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 0 ]
   printf '# clave retirada\n' > "$SIGNERS"
+  publish_signers
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
 }
@@ -555,7 +566,7 @@ PY
   # con las mismas herramientas. Control positivo: con ssh-keygen enlazado da 0;
   # sin él, 1. Así lo que cambia el resultado es solo la ausencia de ssh-keygen.
   mkdir -p "$TMP_GRANTS/bin"
-  for t in python3 git grep date head cat mkdir chmod rm basename dirname timeout ssh-keygen; do
+  for t in python3 git grep date head cat mkdir mktemp chmod rm basename dirname timeout ssh-keygen; do
     ln -s "$(command -v "$t")" "$TMP_GRANTS/bin/$t"
   done
   sed -i "s|^SAFE_PATH=.*|SAFE_PATH=\"$TMP_GRANTS/bin\"|" "$SCRIPT"
@@ -570,9 +581,11 @@ PY
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 0 ]
   mv "$SIGNERS" "$SIGNERS.off"
+  publish_signers
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
   mv "$SIGNERS.off" "$SIGNERS"
+  publish_signers
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 0 ]
 }
@@ -815,4 +828,113 @@ PY
   git -C "$FAKE_REPO" remote set-url origin https://github.com/test-org/repo-b.git
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
+}
+
+# ── Revisión de seguridad de #1401, P1-1: la raíz de confianza es la de origin/main ──
+# Antes la firma se verificaba contra config/operator-grant-signers de la copia de
+# trabajo: una rama que añadía su propia clave pública se autorizaba a sí misma.
+
+# Clave del agente atacante, registrada con la identidad de la operadora activa.
+attacker_key() {
+  ATT="$TMP_GRANTS/att-key"
+  ssh-keygen -q -t ed25519 -N "" -C att -f "$ATT"
+  ATT_LINE="$ACTIVE_SLUG namespaces=\"savia-operator-grant\" $(cut -d' ' -f1-2 "$ATT.pub")"
+}
+
+@test "P1-1: una rama que añade su clave a los firmantes y firma con ella no obtiene grant" {
+  attacker_key
+  # La rama (copia de trabajo y commit) confía en la clave del agente; origin/main no.
+  printf '%s\n' "$ATT_LINE" >> "$SIGNERS"
+  git -C "$FAKE_REPO" add -A config
+  git -C "$FAKE_REPO" -c user.name=t -c user.email=t@t commit -qm "agent: añade mi clave"
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "autofirmado" --ttl-hours 1
+  [ "$status" -eq 4 ]
+  sign_request "$ATT"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMP_GRANTS/merge.json" ]
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 3 ]
+  # Control: la misma petición firmada con la clave de origin/main sí vale, así que
+  # el rechazo de arriba es por la clave, no por la petición.
+  sign_request "$KEY"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 0 ]
+}
+
+@test "P1-1: un grant válido según los firmantes de la rama pero no según origin/main no pasa check" {
+  attacker_key
+  # Se obtiene un grant firmado por el atacante mientras origin/main confía en él...
+  printf '%s\n' "$ATT_LINE" >> "$SIGNERS"
+  publish_signers
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "rama" --ttl-hours 1
+  [ "$status" -eq 4 ]
+  sign_request "$ATT"
+  run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+  [ "$status" -eq 0 ]
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  # ...y origin/main vuelve a no confiar en él. La copia de trabajo lo sigue listando.
+  git -C "$FAKE_REPO" update-ref refs/remotes/origin/main HEAD~1
+  grep -qF "$(cut -d' ' -f2 "$ATT.pub")" "$SIGNERS"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  run bash "$SCRIPT" consume --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+}
+
+@test "P1-1: la copia de trabajo de los firmantes no cuenta; sin origin/main no hay PASS" {
+  issue_merge "base"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  # Vaciar la copia de trabajo no cambia nada: cuenta la de origin/main.
+  printf '# vacío en la rama\n' > "$SIGNERS"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  # Sin origin/main no hay raíz de confianza: fail-closed y explica por qué.
+  git -C "$FAKE_REPO" update-ref -d refs/remotes/origin/main
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"rama base"* ]]
+  # Una rama local llamada origin/main no sustituye a la remota.
+  git -C "$FAKE_REPO" branch -q origin/main HEAD
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+}
+
+# ── P2-1: --ttl-hours solo dígitos y con tope para merge ──
+
+@test "P2-1: --ttl-hours con aritmética no ejecuta nada y se rechaza" {
+  run bash "$SCRIPT" grant --scope autonomy:overnight-sprint --context x --ttl-hours "a[\$(touch $TMP_GRANTS/pwned)]"
+  [ "$status" -eq 2 ]
+  [ ! -e "$TMP_GRANTS/pwned" ]
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context x "--ttl-hours=1+1"
+  [ "$status" -eq 2 ]
+  [ ! -e "$TMP_GRANTS/merge.request" ]
+  # Ceros a la izquierda: decimal, no octal (08 sería un error de bash).
+  run bash "$SCRIPT" grant --scope autonomy:overnight-sprint --context x --ttl-hours 08
+  [ "$status" -eq 0 ]
+}
+
+@test "P2-1: un grant de merge no pasa de 24 h (límite en la petición y en check)" {
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context x --ttl-hours 25
+  [ "$status" -eq 2 ]
+  [ ! -e "$TMP_GRANTS/merge.request" ]
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context x --ttl-hours 24
+  [ "$status" -eq 4 ]
+  # Una petición retocada a 31 h y firmada por la operadora no se acepta; a 2 h, sí.
+  for extra in 30 1; do
+    run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "larga" --ttl-hours 1
+    [ "$status" -eq 4 ]
+    python3 - "$TMP_GRANTS/merge.request" "$extra" <<'PY'
+import json, sys
+p, extra = sys.argv[1], int(sys.argv[2])
+r = json.load(open(p))
+r["expires_epoch"] += extra * 3600
+open(p, "w").write(json.dumps(r, sort_keys=True, ensure_ascii=True, separators=(",", ":")))
+PY
+    sign_request
+    run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
+    if [[ "$extra" == 30 ]]; then [ "$status" -eq 1 ]; else [ "$status" -eq 0 ]; fi
+  done
 }

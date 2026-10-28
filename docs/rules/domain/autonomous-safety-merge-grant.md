@@ -77,7 +77,7 @@ Pedir el grant no basta y Savia no puede emitirlo sola:
 
 `check --scope merge --resource pr:<n>` verifica cada vez, en el punto de uso,
 cada campo firmado y la firma con `ssh-keygen -Y verify` contra
-`config/operator-grant-signers` (formato `allowed_signers`, identidad =
+`config/operator-grant-signers` **de `origin/main`** (formato `allowed_signers`, identidad =
 `grantor`, namespace `savia-operator-grant`). Un `merge.json` escrito a mano,
 alterado, firmado por otra clave, con otro namespace, de otra petición, de otro
 repositorio, PR o scope, caducado, consumido o revocado no vale. Sin `--resource`, sin
@@ -121,12 +121,30 @@ ejecuta un script escrito antes, una variable que compone el nombre ni un cambio
 de rama. En Bash veta cualquier mención del nombre exacto, también las lecturas
 (`git status -- …`): para leerlo, la herramienta Read.
 
-Qué protege y qué no: `check` lee la raíz de confianza de la **copia de
-trabajo**, no de `main`. Un cambio local sin commitear (por un rodeo que el
-guard no ve) bastaría para un merge desde este equipo sin pasar por ninguna PR;
-lo mismo vale para el verificador (`scripts/operator-grant.sh`,
-`scripts/push-pr.sh`), que un agente puede editar en su rama. Estos controles
-locales son defensa en profundidad. La frontera real es del lado de GitHub: la
+Qué protege y qué no:
+
+- `check` y la incorporación de la firma verifican contra la raíz de confianza
+  de **`origin/main`** (`git cat-file blob refs/remotes/origin/main:config/operator-grant-signers`
+  a un temporal), nunca contra la copia de trabajo ni la rama: una rama que
+  añade su propia clave no se autoriza a sí misma. Sin `origin/main` o sin el
+  fichero en ella, ningún grant de merge vale.
+- `push-pr.sh --merge` rechaza siempre un PR que modifica
+  `config/operator-grant-signers`, según el diff local contra `origin/main` o
+  según la lista de ficheros del PR en GitHub (basta una; si alguna no se puede
+  leer, no hay merge). Ese PR lo mergea la operadora a mano.
+- `risk-tier.py` clasifica `config/operator-grant-signers`,
+  `scripts/operator-grant.sh` y `scripts/push-pr.sh` como gobernanza (tier 4):
+  `push-pr.sh --merge` rechaza tier ≥ 3 y `merge-sprint.sh` no admite tier 4.
+- Un grant de merge no puede durar más de 24 h (`--ttl-hours` solo dígitos, y
+  `check` rechaza vigencias mayores aunque estén firmadas).
+
+Límites que siguen: el verificador (`operator-grant.sh`, `push-pr.sh`,
+`risk-tier.py`) es código de la rama que se ejecuta, así que una rama que lo
+reescriba se salta todo lo anterior si alguien lo ejecuta desde ella; y quien
+controla el repositorio local puede mover `refs/remotes/origin/main`. La lista
+de ficheros de GitHub (`gh pr view --json files`) puede quedarse en los
+primeros 100; el diff local cubre el resto. Estos controles locales son
+defensa en profundidad. La frontera real es del lado de GitHub: la
 protección de rama o ruleset de `main` que exige la revisión y el merge de la
 operadora, y que el token de los agentes no pueda saltársela. Es un requisito,
 no algo que este script garantice.
