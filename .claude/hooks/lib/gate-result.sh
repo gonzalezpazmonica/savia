@@ -17,6 +17,8 @@ gate_result_emit() {
   for g in "$@"; do
     check="${g%%:*}"; reason="${g#*:}"
     [[ " $_GATE_REASONS " == *" $reason "* ]] || { echo "gate_result_emit: motivo inválido '$reason'" >&2; return 2; }
+    # Un carácter de control (\n en una ruta) partiría la línea final o falsearía otra: se sustituye por _.
+    check="${check//[[:cntrl:]]/_}"
     check="${check//\\/\\\\}"; check="${check//\"/\\\"}"
     gaps+="${gaps:+,}{\"check\":\"$check\",\"reason\":\"$reason\"}"
   done

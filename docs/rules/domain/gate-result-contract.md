@@ -58,9 +58,10 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | `dependency-scan.sh` | 0 / 1 | `clean` / `findings` |
 | | 2 | `unknown` (Trivy o jq ausente, escaneo o SBOM fallido) |
 | `iac-security-scan.sh` | 0 / 1 | `clean` (o `NO_IAC`) / `findings` (línea final o campos del report JSON) |
-| | 2 | `unknown` (Trivy/Docker o python3 ausente, Trivy fallido o con timeout, JSON ilegible, argumentos) |
+| | 2 | `unknown` (Trivy/Docker o python3 ausente, Trivy fallido o con timeout, JSON ilegible, argumentos); en `--format json` stdout lleva `{"result":"unknown","gaps":[…]}` |
+| | 1 con hueco | `findings` con los huecos de la otra parte (`--path` con hallazgos y `--image` sin medir, o al revés) |
 | `prompt-security-scan.sh` | 0 / 1 | `clean` / `findings` |
-| | 0 con hueco | `unknown` (python3 ausente para PS-11, fichero ilegible, path sin `.md`; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
+| | 0 con hueco | `unknown` (fichero ilegible o con error de lectura, `find` que no recorre un subdirectorio, path sin `.md`; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 2). PS-11 no usa python3. La línea final sale también con `--quiet` |
 | | 2 | `unknown` (path inexistente) |
 | `mcp-security-audit.sh` | 0 / 1 | `clean` / `findings` |
 | | 0 con hueco | `unknown` (`--config` inexistente o ilegible, o ninguna config por defecto; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 2) |
