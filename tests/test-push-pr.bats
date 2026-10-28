@@ -185,18 +185,29 @@ GH
 
 # ── SE-343: --merge de extremo a extremo con gh y operator-grant simulados ──
 # operator-grant.sh falso: registra cada llamada y sale con OG_<ACCIÓN>_RC.
+# check --print-head imprime la cabeza firmada: OG_SIGNED_HEAD o, por defecto,
+# la cabeza actual del repo (grant firmado para lo publicado).
 make_merge_repo() {
   local r
   r=$(make_repo)
   cat > "$r/scripts/operator-grant.sh" <<'OG'
 #!/usr/bin/env bash
 echo "$*" >> "$OG_LOG"
+print_head() {
+  [[ " $* " == *" --print-head "* ]] || return 0
+  # OG_HEAD_SEQ="h1 h2": la n-ésima comprobación imprime la n-ésima cabeza.
+  if [[ -n "${OG_HEAD_SEQ:-}" ]]; then
+    local n; n=$(grep -c '^check' "$OG_LOG"); set -- $OG_HEAD_SEQ; shift $(( n - 1 )); printf '%s\n' "${1:-}"; return 0
+  fi
+  printf '%s\n' "${OG_SIGNED_HEAD:-$(git rev-parse HEAD)}"
+}
 case "$1" in
   # OG_CHECK_SEQ="0 1": la 1.ª comprobación pasa y la 2.ª no (revocado entre medias).
   check) if [[ -n "${OG_CHECK_SEQ:-}" ]]; then
-           n=$(grep -c '^check' "$OG_LOG"); set -- $OG_CHECK_SEQ; shift $(( n - 1 )); exit "${1:-1}"
+           n=$(grep -c '^check' "$OG_LOG"); args="$*"; set -- $OG_CHECK_SEQ; shift $(( n - 1 ))
+           rc="${1:-1}"; [[ "$rc" == 0 ]] && print_head $args; exit "$rc"
          fi
-         exit "${OG_CHECK_RC:-0}" ;;
+         rc="${OG_CHECK_RC:-0}"; [[ "$rc" == 0 ]] && print_head "$@"; exit "$rc" ;;
   consume) exit "${OG_CONSUME_RC:-0}" ;;
   revoke) exit "${OG_REVOKE_RC:-0}" ;;
 esac
@@ -233,7 +244,7 @@ run_merge() {
   OG_CHECK_RC=1 run_merge "$r"
   [ "$status" -eq 1 ]
   [[ "$output" == *"vuelve a ejecutar push-pr.sh --merge"* ]]
-  grep -qx "check --scope merge --resource pr:42" "$OG_LOG"
+  grep -qx "check --scope merge --resource pr:42 --print-head" "$OG_LOG"
   run grep -c "pr merge" "$GH_LOG"
   [ "$output" = "0" ]
   run grep -c "^consume" "$OG_LOG"
@@ -300,7 +311,7 @@ run_merge() {
   r=$(make_merge_repo)
   GH_CREATE_OUT='Warning: algo\nhttps://github.com/o/r/pull/42 (updated)' GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
-  grep -qx "check --scope merge --resource pr:42" "$OG_LOG"
+  grep -qx "check --scope merge --resource pr:42 --print-head" "$OG_LOG"
   grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
   # Sin número de PR reconocible no se comprueba ni se mergea nada.
   GH_CREATE_OUT='https://github.com/o/r/pull/' run_merge "$r"
@@ -319,6 +330,61 @@ run_merge() {
   GH_STATE=MERGED OG_CONSUME_RC=1 OG_REVOKE_RC=2 run_merge "$r"
   [[ "$output" != *"Merge grant consumed"* ]]
   [[ "$output" == *"NO se pudo gastar ni revocar"* ]]
+}
+
+@test "SE-343 --merge: a GitHub se pasa la cabeza FIRMADA; si no es la actual, no hay merge" {
+  r=$(make_merge_repo)
+  head=$(git -C "$r" rev-parse HEAD)
+  # Grant firmado para otra cabeza (A) mientras la publicada es B: aunque check
+  # dé 0 (p. ej. con un gh falseado), no se mergea.
+  OG_SIGNED_HEAD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"firma la cabeza aaaaaaaa"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  run grep -c "^consume" "$OG_LOG"
+  [ "$output" = "0" ]
+  # Sin cabeza firmada legible (check da 0 pero no imprime 40 hex) tampoco.
+  OG_SIGNED_HEAD=nohex GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Control: firmada = actual → merge con --match-head-commit de la firmada.
+  OG_SIGNED_HEAD="$head" GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q -- "^pr merge 42 -R .* --squash --match-head-commit $head$" "$GH_LOG"
+}
+
+@test "SE-343 --merge: la 2.ª comprobación debe ver la misma cabeza firmada que la 1.ª" {
+  r=$(make_merge_repo)
+  head=$(git -C "$r" rev-parse HEAD)
+  # La 1.ª comprobación ve la cabeza actual; la 2.ª, otra (grant sustituido entre medias).
+  OG_HEAD_SEQ="$head cccccccccccccccccccccccccccccccccccccccc" GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ya no es vigente"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Control: misma cabeza en ambas → merge.
+  OG_HEAD_SEQ="$head $head" GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q -- "--match-head-commit $head$" "$GH_LOG"
+}
+
+@test "SE-343 --merge: en modo de test de operator-grant (SAVIA_GRANT_TEST_MODE / SAVIA_GH_BIN) no se mergea" {
+  r=$(make_merge_repo)
+  SAVIA_GRANT_TEST_MODE=1 GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"solo para pruebas"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  SAVIA_GH_BIN=/bin/true GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Control: sin esas variables, el mismo repo mergea.
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q "^pr merge 42" "$GH_LOG"
 }
 
 @test "SE-343 --merge: si el PR no se puede mergear ahora, sale con 1 y no gasta el grant" {

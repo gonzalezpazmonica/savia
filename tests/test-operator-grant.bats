@@ -34,6 +34,8 @@ setup() {
   HEAD_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   printf '%s' "$HEAD_A" > "$TMP_GRANTS/pr-head"
   write_gh_ok
+  # gh simulado: solo se acepta en modo de test explícito (push-pr lo rechaza).
+  export SAVIA_GRANT_TEST_MODE=1
   export SAVIA_GH_BIN="$TMP_GRANTS/gh"
   SIGNERS="$FAKE_REPO/config/operator-grant-signers"
   KEY="$TMP_GRANTS/op-key"
@@ -562,9 +564,48 @@ PY
   unlink "$TMP_GRANTS/bin/ssh-keygen"
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
+  # Fichero de claves ausente, con ssh-keygen presente: lo único que cambia es
+  # el fichero. Ausente → 1; restaurado → 0.
+  ln -s "$(command -v ssh-keygen)" "$TMP_GRANTS/bin/ssh-keygen"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
   mv "$SIGNERS" "$SIGNERS.off"
   run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
+  mv "$SIGNERS.off" "$SIGNERS"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+}
+
+@test "SE-343: SAVIA_GH_BIN fuera del modo de test no elige la cabeza que ve check (fail-closed)" {
+  issue_merge "gh override"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  # Mismo gh simulado (devuelve la cabeza firmada A) sin SAVIA_GRANT_TEST_MODE:
+  # se rechaza el override y, sin gh de confianza, check no da PASS.
+  run env -u SAVIA_GRANT_TEST_MODE bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SAVIA_GH_BIN solo se acepta con SAVIA_GRANT_TEST_MODE=1"* ]]
+  run env SAVIA_GRANT_TEST_MODE=0 bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  # Ruta relativa: tampoco, ni en modo de test.
+  ( cd "$TMP_GRANTS" && SAVIA_GH_BIN=gh run bash "$SCRIPT" check --scope merge --resource pr:1; [ "$status" -eq 1 ] )
+}
+
+@test "SE-343: check --print-head imprime el head_sha firmado solo si el grant es vigente" {
+  issue_merge "print head"
+  run bash "$SCRIPT" check --scope merge --resource pr:1 --print-head
+  [ "$status" -eq 0 ]
+  [ "$output" = "$HEAD_A" ]
+  # Sin --print-head, check no imprime nada (los llamadores existentes no cambian).
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  # La cabeza del PR pasa a B: grant no vigente y no se imprime ninguna cabeza.
+  printf '%s' "$HEAD_B" > "$TMP_GRANTS/pr-head"
+  run bash "$SCRIPT" check --scope merge --resource pr:1 --print-head
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"$HEAD_A"* && "$output" != *"$HEAD_B"* ]]
 }
 
 @test "F0: la suite no escribe fuera de su directorio temporal (HOME aislado)" {

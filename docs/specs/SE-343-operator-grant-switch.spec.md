@@ -59,6 +59,11 @@ created_at: 2026-08-24
 > difiere o no se puede leer; el merge usa `gh pr merge --match-head-commit <sha>` (REST `sha`) y
 > `push-pr.sh --merge` no mergea en la misma ejecución en que un push movió la cabeza: tras un push
 > hace falta un grant nuevo.
+>
+> **Cuarta revisión (2026-10-28, #1401):** el `<sha>` de `--match-head-commit` (REST `sha`) es el
+> `head_sha` **firmado** (`check --print-head`), no la cabeza local; `push-pr.sh` exige además que
+> coincida con la local. `SAVIA_GH_BIN` solo vale con `SAVIA_GRANT_TEST_MODE=1`, que `push-pr.sh
+> --merge` rechaza; fuera de ese modo `check` falla cerrado.
 
 > **Segunda revisión (2026-10-27, #1401):** lo firmado incluye también `repo` (remoto `origin`
 > normalizado, `host/owner/name`): un grant de A#41 no vale en otro checkout B#41, y sin remoto

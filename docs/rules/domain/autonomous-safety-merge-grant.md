@@ -25,9 +25,15 @@ se consume (`consume`). Sin grant
 (nadie autorizó), `push-pr.sh --merge` aborta y el PR permanece en Draft.
 
 El grant firma un contenido, no un número de PR: `check` compara `head_sha` con
-la cabeza actual del PR y falla cerrado si difiere o no se puede leer, y el
-merge lleva `gh pr merge --match-head-commit <sha>` (REST: `sha`), de modo que
-GitHub rechaza el merge si la cabeza cambió entre el check y la fusión.
+la cabeza actual del PR y falla cerrado si difiere o no se puede leer.
+`check --print-head` devuelve el `head_sha` firmado del grant verificado y
+`push-pr.sh` pasa ese valor (no la cabeza local) a
+`gh pr merge --match-head-commit <sha>` (REST: `sha`): GitHub rechaza el merge
+si la cabeza del PR no es la que firmó la operadora, aunque la comprobación
+local se hubiera falseado. Si la cabeza firmada no es la local, ni se intenta.
+`gh` se toma solo de un PATH fijo de sistema; el gh simulado de las pruebas
+(`SAVIA_GH_BIN`) solo se acepta con `SAVIA_GRANT_TEST_MODE=1`, y en ese modo
+`push-pr.sh --merge` se niega a mergear.
 `push-pr.sh --merge` no mergea en una ejecución cuyo push haya movido la
 cabeza: tras un push hace falta un grant nuevo para la cabeza nueva.
 

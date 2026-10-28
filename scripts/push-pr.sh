@@ -180,6 +180,11 @@ if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
   [[ -n "$PR_NUM" ]] || { echo "ERROR: sin número de PR en '$PR_URL'; no se mergea." >&2; exit 1; }
   # SE-343: tras un push la cabeza cambia y ningún grant anterior la cubre;
   # nunca se empuja y se mergea en la misma ejecución.
+  # Modo de test de operator-grant (gh simulado): nunca un merge real.
+  if [[ "${SAVIA_GRANT_TEST_MODE:-}" == "1" || -n "${SAVIA_GH_BIN:-}" ]]; then
+    echo "ERROR: SAVIA_GRANT_TEST_MODE/SAVIA_GH_BIN son solo para pruebas; push-pr.sh --merge no mergea con ellos." >&2
+    exit 1
+  fi
   if [[ "$REMOTE_BEFORE" != "$LOCAL_HEAD" ]]; then
     echo "ERROR: este push ha movido la cabeza del PR a $LOCAL_HEAD; no se mergea en la misma ejecución." >&2
     echo "  Pide un grant nuevo para pr:$PR_NUM (firma la cabeza actual) y ejecuta push-pr.sh --merge otra vez." >&2
@@ -187,12 +192,29 @@ if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
   fi
   # SE-343: merge requires a valid operator grant signed for THIS PR.
   GRANT_RES="pr:$PR_NUM"
-  grant_ok() { bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; }
+  # check --print-head devuelve el head_sha que firmó la operadora. Ese valor
+  # (no la cabeza local) es el que se pasa a GitHub (--match-head-commit / sha):
+  # GitHub rechaza el merge si la cabeza del PR no es la firmada, aunque la
+  # comprobación local se hubiera falseado.
+  SIGNED_HEAD=""
+  grant_ok() {
+    local h
+    h="$(bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" --print-head 2>/dev/null)" || return 1
+    [[ "$h" =~ ^[0-9a-f]{40}$ ]] || return 1
+    # La segunda comprobación debe ver el mismo grant que la primera.
+    [[ -z "$SIGNED_HEAD" || "$h" == "$SIGNED_HEAD" ]] || return 1
+    SIGNED_HEAD="$h"
+  }
   if ! grant_ok; then
     echo "ERROR: merge requires a vigente operator grant for $GRANT_RES." >&2
     echo "  El grant se firma para un PR que ya existe: pide la firma para $GRANT_RES" >&2
     echo "  (operator-grant.sh grant --scope merge --resource $GRANT_RES --context \"...\"), la operadora" >&2
     echo "  la firma y se vuelve a ejecutar push-pr.sh --merge. Sin grant, el PR queda en Draft." >&2
+    exit 1
+  fi
+  if [[ "$SIGNED_HEAD" != "$LOCAL_HEAD" ]]; then
+    echo "ERROR: el grant de $GRANT_RES firma la cabeza $SIGNED_HEAD, no la actual $LOCAL_HEAD; no se mergea." >&2
+    echo "  Pide un grant nuevo para la cabeza actual." >&2
     exit 1
   fi
   echo "  operator grant 'merge' vigente. Merge autorizado."
@@ -223,7 +245,7 @@ if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
   if $USE_GH_CLI; then
     grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
     echo "  Merging..."
-    if ! gh pr merge "$PR_NUM" -R "$REPO" --squash --match-head-commit "$LOCAL_HEAD" 2>&1 | tail -1; then
+    if ! gh pr merge "$PR_NUM" -R "$REPO" --squash --match-head-commit "$SIGNED_HEAD" 2>&1 | tail -1; then
       echo "ERROR: el PR #$PR_NUM no se puede mergear ahora (CI pendiente o rojo, conflictos o reglas)." >&2
       echo "  El grant de $GRANT_RES no se ha gastado: vuelve a ejecutar push-pr.sh --merge con el CI en verde." >&2
       exit 1
@@ -242,7 +264,7 @@ if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
     if [[ "$R" == "GREEN" ]]; then
       grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
       MR=$(curl -s -X PUT "https://api.github.com/repos/$REPO/pulls/$PR_NUM/merge" \
-        -H "Authorization: token $TOKEN" -d "$(python3 -c 'import json,sys;print(json.dumps({"merge_method":"squash","commit_title":sys.argv[1],"sha":sys.argv[2]}))' "$TITLE" "$LOCAL_HEAD")" \
+        -H "Authorization: token $TOKEN" -d "$(python3 -c 'import json,sys;print(json.dumps({"merge_method":"squash","commit_title":sys.argv[1],"sha":sys.argv[2]}))' "$TITLE" "$SIGNED_HEAD")" \
         | python3 -c "import sys,json;d=json.load(sys.stdin);print('MERGED' if d.get('merged') or 'sha' in d else f'Merge: {d}')" 2>&1) || true
       if [[ "$MR" == "MERGED" ]]; then echo "  Merged."; MERGED=true; else echo "  $MR"; fi
     else echo "  CI timeout. Merge manually."; fi

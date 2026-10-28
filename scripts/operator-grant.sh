@@ -52,13 +52,24 @@ for _d in ${SAFE_PATH//:/ }; do
   [[ -z "$GIT_BIN" && -x "$_d/git" ]] && GIT_BIN="$_d/git"
 done
 python3() { "$PY3" "$@"; }
-# gh para leer la cabeza actual del PR (head_sha). SAVIA_GH_BIN solo sirve para
-# las pruebas; quien controla el entorno controla el script (ver arriba).
+# gh para leer la cabeza actual del PR (head_sha), solo desde SAFE_PATH.
+# SAVIA_GH_BIN (gh simulado) solo vale en modo de test explícito
+# (SAVIA_GRANT_TEST_MODE=1), que push-pr.sh --merge rechaza. Fuera de ese modo,
+# un SAVIA_GH_BIN presente deja sin gh (fail-closed): nadie elige qué cabeza
+# "ve" check. Aun así la frontera es GitHub: push-pr pasa el head_sha firmado
+# a --match-head-commit, así que un gh falso no hace mergear otra cabeza.
 GH_BIN=""
 for _d in ${SAFE_PATH//:/ }; do
   [[ -z "$GH_BIN" && -x "$_d/gh" ]] && GH_BIN="$_d/gh"
 done
-[[ -n "${SAVIA_GH_BIN:-}" && -x "${SAVIA_GH_BIN}" ]] && GH_BIN="$SAVIA_GH_BIN"
+if [[ -n "${SAVIA_GH_BIN:-}" ]]; then
+  if [[ "${SAVIA_GRANT_TEST_MODE:-}" == "1" && "$SAVIA_GH_BIN" == /* && -x "$SAVIA_GH_BIN" ]]; then
+    GH_BIN="$SAVIA_GH_BIN"
+  else
+    echo "ERROR: SAVIA_GH_BIN solo se acepta con SAVIA_GRANT_TEST_MODE=1 (pruebas); sin gh de confianza no se lee la cabeza del PR" >&2
+    GH_BIN=""
+  fi
+fi
 unset GH_REPO GH_HOST
 git() { "$GIT_BIN" "$@"; }
 GRANTS_DIR="${SAVIA_GRANTS_DIR:-$HOME/.savia/grants}"
@@ -79,7 +90,8 @@ Commands:
           merge also needs --resource pr:<n>|task:<id> (the PR or task it covers)
   grant   merge  --signature FILE|-                   attach the operator's signature
   check   SCOPE  [--resource R]                       exit: 0 vigente | 1 no | 2 inval | 3 sin grant
-                                                      (merge: --resource required)
+                                                      (merge: --resource required;
+                                                       --print-head prints the signed head_sha)
   consume merge  --resource R                         one-shot: spend the grant after merging
   revoke  SCOPE                                       revoke (grant id marked spent, request removed)
   list                                                show all grants
@@ -258,7 +270,9 @@ elif op == "accept":
     dump(out, rec)
 elif op == "check":
     # Exit 0 vigente | 1 no válido. resource "*" = el del propio grant (solo list).
-    path, scope, slug, resource, signers, ns, spent, repo, head = sys.argv[2:11]
+    # print_head = "1": imprime el head_sha firmado del grant verificado (el
+    # mismo registro que se acaba de comprobar), para que push-pr lo pase a GitHub.
+    path, scope, slug, resource, signers, ns, spent, repo, head, print_head = sys.argv[2:12]
     rec = load(path)
     if rec is None or rec.get("scope") != scope:
         sys.exit(1)
@@ -270,6 +284,8 @@ elif op == "check":
     ok = (rec.get("source") == "operator-signature"
           and fields_ok(rec, slug, None if resource == "*" else resource, spent_ids(spent), repo, head)
           and verify(rec, rec.get("sig"), signers, ns))
+    if ok and print_head == "1":
+        print(rec.get("head_sha"))
     sys.exit(0 if ok else 1)
 elif op == "spend":
     # Apunta en el libro de gastados (consumido o revocado) el id del grant y el
@@ -332,8 +348,9 @@ emit() {
 }
 
 # $3 = recurso para merge (pr:N | task:ID); "*" = el del propio grant (solo list).
+# $4 = 1: imprime el head_sha firmado si el grant es vigente (check --print-head).
 check_scope() {
-  local scope="$1" slug="$2" resource="${3:-}" file
+  local scope="$1" slug="$2" resource="${3:-}" print_head="${4:-0}" file
   file="$(scope_file "$scope")"
   [[ ! -f "$file" ]] && return 3
   local head="" res="$resource"
@@ -342,7 +359,7 @@ check_scope() {
     head="$(pr_head "$res")"
   fi
   python3 -I -c "$GRANT_PY" check "$file" "$scope" "$slug" "$resource" \
-    "$SIGNERS_FILE" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" "$head" || return 1
+    "$SIGNERS_FILE" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" "$head" "$print_head" || return 1
   return 0
 }
 
@@ -540,7 +557,7 @@ guard_main() {
 [[ "${1:-}" == "guard" ]] && { guard_main; exit $?; }
 
 # ── Parse ──────────────────────────────────────────────────────────────
-ACTION="" SCOPE="" CONTEXT="" TTL="" GRANTOR="" SIGNATURE="" RESOURCE=""
+ACTION="" SCOPE="" CONTEXT="" TTL="" GRANTOR="" SIGNATURE="" RESOURCE="" PRINT_HEAD=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -556,6 +573,7 @@ while [[ $# -gt 0 ]]; do
     --signature=*) SIGNATURE="${1#--signature=}"; shift ;;
     --resource) RESOURCE="$2"; shift 2 ;;
     --resource=*) RESOURCE="${1#--resource=}"; shift ;;
+    --print-head) PRINT_HEAD=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) shift ;;
   esac
@@ -589,7 +607,7 @@ fi
 
 case "$ACTION" in
   check)
-    check_scope "$SCOPE" "$SLUG" "$RESOURCE"
+    check_scope "$SCOPE" "$SLUG" "$RESOURCE" "$PRINT_HEAD"
     exit $? ;;
   consume)
     # Uso único: solo un grant válido para ese recurso se gasta; su id queda
