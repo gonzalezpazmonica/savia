@@ -13,7 +13,7 @@ TOOL_INPUT="${TOOL_INPUT:-}"
 TOOL_RESULT_STATUS="${TOOL_RESULT_STATUS:-}"
 
 # Only trigger for Task tool (subagent invocation)
-if [[ "$TOOL_NAME" != "Task" ]]; then
+if [[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "Agent" ]]; then
     exit 0
 fi
 

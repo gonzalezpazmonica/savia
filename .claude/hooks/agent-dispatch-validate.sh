@@ -17,7 +17,7 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 # y emite dispatch.resolved | dispatch.failed a telemetry-events.jsonl.
 # Nunca bloquea: los errores de resolución se advierten y se registran.
 # Se ejecuta ANTES del profile gate: la telemetría no depende del perfil.
-if [ "$TOOL_NAME" = "Task" ]; then
+if [ "$TOOL_NAME" = "Task" ] || [ "$TOOL_NAME" = "Agent" ]; then
   AGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.agent // .tool_input.subagent_type // empty')
   if [ -n "$AGENT_TYPE" ]; then
     GATE="$CLAUDE_PROJECT_DIR/scripts/subagent-dispatch-gate.sh"
@@ -36,7 +36,7 @@ if [[ -f "$LIB_DIR/profile-gate.sh" ]]; then
 fi
 
 # Solo aplica al tool Task (subagentes)
-if [ "$TOOL_NAME" != "Task" ]; then
+if [ "$TOOL_NAME" != "Task" ] && [ "$TOOL_NAME" != "Agent" ]; then
   exit 0
 fi
 
