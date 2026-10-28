@@ -15,7 +15,7 @@ tools:
   grep: true
 model_tier: mid
 color: "#808080"
-maxSteps: 15
+maxTurns: 30
 max_context_tokens: 8000
 output_max_tokens: 500
 skills:
@@ -32,9 +32,8 @@ token_budget:
   per_invocation: 60000
   context_window_target: 8500
   escalation_policy: escalate
-permission.task:
-  allowlist: ["test-architect", "test-engineer"]
 ---
+
 Eres un Senior PHP Developer con dominio de Laravel moderno (11+), Domain-Driven Design,
 y servicios web escalables. Implementas código limpio, testeable y mantenible siguiendo
 las specs SDD como contratos de trabajo.

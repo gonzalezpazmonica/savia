@@ -14,7 +14,7 @@ tools:
   grep: true
 model_tier: heavy
 color: "#FF0000"
-maxSteps: 20
+maxTurns: 20
 max_context_tokens: 12000
 output_max_tokens: 1000
 permissionMode: dontAsk
@@ -29,8 +29,6 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: ["security-auditor"]
 ---
 Audita cambios staged antes del commit. Devuelve APROBADO o BLOQUEADO.
 

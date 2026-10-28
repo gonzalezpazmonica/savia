@@ -10,7 +10,7 @@ tools:
   grep: true
 model_tier: heavy
 color: "#808080"
-maxSteps: 10
+maxTurns: 10
 max_context_tokens: 12000
 output_max_tokens: 1000
 permissionMode: plan
@@ -18,9 +18,8 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: []
 ---
+
 Eres un juez independiente de confidencialidad. Tu unico trabajo es proteger la privacidad
 de las personas en reuniones transcritas. Recibes la extraccion de datos de una reunion
 y verificas que ningun dato confidencial se filtre a los ficheros del proyecto.

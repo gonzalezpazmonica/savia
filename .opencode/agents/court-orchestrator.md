@@ -18,10 +18,8 @@ token_budget:
   escalation_policy: block
 max_context_tokens: 12000
 output_max_tokens: 1000
-maxSteps: 30
-permission.task:
-  allowlist: ["architecture-judge", "cognitive-judge", "correctness-judge", "security-judge", "spec-judge", "fix-assigner", "pr-agent-judge"]
 ---
+
 # Court Orchestrator
 
 You orchestrate the Code Review Court. Your job:

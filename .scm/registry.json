@@ -10220,13 +10220,7 @@
         "opencode"
       ],
       "id": "agent:.opencode/agents/memory-agent",
-      "intents": [
-        "gestiona",
-        "lenguaje",
-        "memoria",
-        "natural",
-        "persistente"
-      ],
+      "intents": [],
       "kind": "agent",
       "owner_domain": "memory",
       "replaced_by": null,
@@ -29619,7 +29613,7 @@
       "tests": []
     }
   ],
-  "content_hash": "d09eb12b833a",
+  "content_hash": "f1eac6c8d0fd",
   "deferred_kinds": [
     "rule",
     "hook"
