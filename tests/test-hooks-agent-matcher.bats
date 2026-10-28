@@ -82,3 +82,13 @@ print(bad); raise SystemExit(1 if bad else 0)'
   run bash .claude/hooks/recursion-guard.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
 }
+
+@test "los hooks que posprocesan la salida de Agent conservan la línea VERDICT de una revisora" {
+  printf '%s' '{"tool_name":"Agent","tool_input":{"prompt":"revisa"},"tool_response":"Great question! VERDICT: HOLD pr=1 sha=abc role=security p0=0 p1=1\nP1-1 detalle"}' > "$TMP/in.json"
+  for h in sycophancy-strip compress-agent-output; do
+    run bash ".claude/hooks/$h.sh" < "$TMP/in.json"
+    [ "$status" -eq 0 ]
+    # Sin salida, el hook no reescribe; con salida, la línea VERDICT debe seguir intacta.
+    [ -z "$output" ] || [[ "$output" == *"VERDICT: HOLD pr=1 sha=abc role=security p0=0 p1=1"* ]]
+  done
+}
