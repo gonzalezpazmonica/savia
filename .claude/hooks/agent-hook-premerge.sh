@@ -19,8 +19,17 @@ TIMEOUT_SECS=30
 [[ "$AGENT_HOOKS_ENABLED" != "true" ]] && exit 0
 
 # Only run on merge-related commands
-INPUT="${CLAUDE_TOOL_INPUT:-}"
-if ! echo "$INPUT" | grep -qE "git merge|gh pr merge"; then
+# Entrada por stdin (Claude Code y OpenCode) o variable de respaldo; solo cuenta tool_input.command.
+# JSON malformado → bloqueo (fallo cerrado). Sin entrada → «no medido» registrado y salida 0.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+hook_read_command agent-hook-premerge; _rc=$?
+[[ $_rc -eq 2 ]] && exit 2
+[[ $_rc -eq 3 ]] && exit 0
+INPUT="$HOOK_COMMAND"
+CMD_AT="$HOOK_CMD_AT"
+GIT_AT="$HOOK_GIT_AT"
+if ! grep -qE "${GIT_AT}merge([[:space:]]|$)|${CMD_AT}([^[:space:]]*/)?gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)" <<<"$INPUT"; then
   exit 0
 fi
 

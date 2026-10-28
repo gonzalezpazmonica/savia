@@ -26,8 +26,17 @@ if ! [[ "$LLM_TIMEOUT" =~ ^[0-9]+$ ]] || (( LLM_TIMEOUT < 1 || LLM_TIMEOUT > 90 
 fi
 
 # ── 0. Solo actuar en gh pr create ────────────────────────────────────────
-INPUT="${CLAUDE_TOOL_INPUT:-}"
-if ! echo "$INPUT" | grep -qE 'gh pr create'; then
+# Entrada por stdin (Claude Code y OpenCode) o variable de respaldo; solo cuenta tool_input.command.
+# JSON malformado → bloqueo (fallo cerrado). Sin entrada → «no medido» registrado y salida 0.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+hook_read_command pr-summary-gate; _rc=$?
+[[ $_rc -eq 2 ]] && exit 2
+[[ $_rc -eq 3 ]] && exit 0
+INPUT="$HOOK_COMMAND"
+CMD_AT="$HOOK_CMD_AT"
+GIT_AT="$HOOK_GIT_AT"
+if ! grep -qE "${CMD_AT}([^[:space:]]*/)?gh[[:space:]]+pr[[:space:]]+create([[:space:]]|$)" <<<"$INPUT"; then
   exit 0
 fi
 
