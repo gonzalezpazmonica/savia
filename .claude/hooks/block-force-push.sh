@@ -27,6 +27,14 @@ if [ -z "$COMMAND" ]; then
   exit 0
 fi
 
+# Continuaciones: una barra invertida impar al final de línea une la siguiente (`git push origin \⏎main`
+# ejecuta un push a main). grep evalúa línea a línea, así que se evalúan las líneas tal cual y, además, la
+# orden con las continuaciones unidas (sin barra ni salto, como el shell). Mismo criterio en el puerto TS.
+JOINED=$(printf '%s\n' "$COMMAND" | LC_ALL=C awk '{ if (match($0, /\\+$/) && RLENGTH % 2) printf "%s", substr($0, 1, length($0) - 1); else print }')
+if [[ "$JOINED" != "$COMMAND" ]]; then
+  COMMAND="$COMMAND"$'\n'"$JOINED"
+fi
+
 # Inicio de una orden git real: al principio de una línea, tras un separador, al abrir un subshell o
 # dentro de `bash -c "…"`/`bash -lc`/`sh -c '…'`/`fish`/`tcsh`/`csh -c`/`script -qc`/`eval`/`su -c '…'`/`ssh host '…'`/
 # `find -exec`, con lo que puede ir delante (VAR=valor, los envoltorios env, command, sudo, doas, pkexec, runuser,
