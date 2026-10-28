@@ -112,8 +112,13 @@ const BLOCK_RULES: Array<{ rx: RegExp; msg: string }> = [
 
 export async function blockForcePush(input: ToolInput, output: ToolOutput): Promise<void> {
   if (extractToolName(input) !== "bash") return;
-  const command = extractCommand(input, output);
-  if (!command) return;
+  const raw = extractCommand(input, output);
+  if (!raw) return;
+  // Line continuations: an odd backslash at the end of a line joins the next one (`git push origin \⏎main`
+  // pushes to main). Rules run line by line (flag m), so check the raw lines and also the command with the
+  // continuations joined (backslash and newline removed, as the shell does). Same as the bash hook.
+  const joined = raw.replace(/(?<!\\)((?:\\\\)*)\\\n/g, "$1");
+  const command = joined === raw ? raw : `${raw}\n${joined}`;
 
   if (BARE_FORCE.test(command)) {
     throw new Error("BLOCKED [force-push]: git push --force blocked. Use --force-with-lease instead.");

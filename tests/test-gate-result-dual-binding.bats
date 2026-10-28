@@ -309,6 +309,37 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
   done
 }
 
+# Continuaciones «\⏎»: el shell quita la barra y el salto, y la orden sigue en la línea siguiente. Main evaluaba
+# solo las líneas sueltas y un push a main o forzado partido así pasaba en bash y en TS.
+BS_JOIN_BLOCK=(
+  $'git push origin \\\nmain' $'git push \\\n'"$FP"' o feat' $'git \\\npush origin main' $'git push origin \\\n  HEAD:main'
+  $'git pu\\\nsh origin main' $'git push o \\\n'"$SF"' feat' $'git commit -m x \\\n  --amend' $'git reset \\\n--hard'
+  $'git push \\\n  origin \\\n  main'
+)
+# Negativos: continuación de una orden permitida, barra par (literal + salto que separa órdenes) y lease a rama.
+BS_JOIN_OK=(
+  $'git push origin \\\nfeat' $'git push \\\n--force-with-lease o feat' $'echo \\\\\nmain' $'git push origin \\\\\nmain'
+  $'git status \\\n&& echo main'
+)
+
+@test "bash solo: continuación «\\⏎» que parte un push a main, forzado, reset o amend ⇒ 2; permitidas ⇒ 0, con y sin jq" {
+  local c fails=""
+  for c in "${BS_JOIN_BLOCK[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 && "$(bash_code block-force-push "$NOJQ" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
+  done
+  for c in "${BS_JOIN_OK[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 0 && "$(bash_code block-force-push "$NOJQ" "$c")" == 0 ]] || fails+="[$c] bloquea"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
+}
+
+@test "paridad continuaciones «\\⏎»: unidas ⇒ 2 en bash y TS; las líneas sueltas se siguen evaluando" {
+  require_ts
+  parity block-force-push blockForcePush 2 "${BS_JOIN_BLOCK[@]}" \
+    $'# nota \\\ngit push origin main' $'echo x \\\ngit push origin main'
+  parity block-force-push blockForcePush 0 "${BS_JOIN_OK[@]}"
+}
+
 @test "paridad block-infra-destructive y validate-bash-global: destructivos ⇒ 2, inocuo ⇒ 0" {
   require_ts
   parity block-infra-destructive blockInfraDestructive 2 "terraform destroy" "kubectl delete namespace prod"
