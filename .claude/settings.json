@@ -567,7 +567,7 @@
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/operator-grant.sh guard",
-            "timeout": 5,
+            "timeout": 15,
             "statusMessage": "SE-343: protegiendo la raíz de confianza del grant de merge..."
           }
         ],
