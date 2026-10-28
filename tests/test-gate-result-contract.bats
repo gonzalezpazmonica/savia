@@ -64,6 +64,13 @@ last_result() { printf '%s\n' "$output" | grep '^gate-result: ' | tail -1 | sed 
   run gate_result_emit clean; [ "$status" -eq 0 ]
 }
 
+@test "contrato SE-468: acepta not_executed y no_baseline" {
+  source "$REPO_ROOT/.claude/hooks/lib/gate-result.sh"
+  run gate_result_emit unknown "evals:not_executed" "evals:no_baseline"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"reason":"not_executed"'* && "$output" == *'"reason":"no_baseline"'* ]]
+}
+
 # ── AC3: herramienta ausente ⇒ unknown, no hallazgo ──────────────────────────
 
 @test "AC3: sin gitleaks, el escaneo de historial es unknown/missing_tool y no sale 1" {

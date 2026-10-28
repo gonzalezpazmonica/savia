@@ -92,7 +92,7 @@
 - **epistemic-humility** (skill): Usar cuando se detecta riesgo de adulación, cesión sin evidencia, o claim repetido por el usuario asumido sin verificar. Trigger: tribunal SPEC-192 emite WARN/VETO o auto-detección léxica.
 - **eval-agent** (cmd): Evaluate an agent against its golden set — precision, recall, hallucinations, bias (SPEC-036)
 - **eval-agent** (script): eval-agent.sh — Agent Evaluation Runner (SPEC-036)
-- **evals-runner** (script): evals-runner.sh — SPEC-151 local evaluation runner.
+- **evals-runner** (script): evals-runner.sh — SPEC-151 local evaluation runner, honest result (SE-468).
 - **execution-supervisor** (script): execution-supervisor.sh — Advisory reflection trigger (SPEC-065)
 - **failure-pattern-memory** (script): failure-pattern-memory.sh — SPEC-188 Fase 1: Failure Pattern Memory store
 - **feasibility-probe** (cmd): Validate spec feasibility with a time-boxed prototype attempt
