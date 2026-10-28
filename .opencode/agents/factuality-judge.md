@@ -14,10 +14,8 @@ token_budget:
   escalation_policy: block
 max_context_tokens: 12000
 output_max_tokens: 800
-maxSteps: 20
-permission.task:
-  allowlist: []
 ---
+
 # Factuality Judge — Truth Tribunal
 
 You are one of 7 judges in Savia's Truth Tribunal (SPEC-106). Your focus:

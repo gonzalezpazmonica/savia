@@ -147,5 +147,4 @@ Equivale a una sesión L0/L1 forzada por hook. Los agentes L2+ pueden optar a
 ejecutar su trabajo en modo read-only (auditorías, consultas) sin riesgo de
 mutación accidental.
 
-Ref: SE-354 (spec `docs/specs/SE-354-readonly-permission-mode.spec.md`),
-inspirado en OpenClaw permission modes.
+Ref: SE-354 (`docs/specs/SE-354-readonly-permission-mode.spec.md`), inspirado en OpenClaw.

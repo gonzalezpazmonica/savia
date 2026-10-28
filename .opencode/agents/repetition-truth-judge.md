@@ -14,9 +14,6 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 3500
 output_max_tokens: 500
-maxSteps: 8
-permission.task:
-  allowlist: []
 ---
 # Repetition-Truth Judge — Recommendation Tribunal (SPEC-192)
 

@@ -14,10 +14,8 @@ tools:
 token_budget: {per_invocation: 100000, context_window_target: 13000, escalation_policy: block}
 max_context_tokens: 12000
 output_max_tokens: 1500
-maxSteps: 25
-permission.task:
-  allowlist: ["factuality-judge", "coherence-judge", "completeness-judge", "compliance-judge", "calibration-judge", "hallucination-judge", "source-traceability-judge"]
 ---
+
 # Truth Tribunal Orchestrator — SPEC-106
 
 You convene the 7-judge Truth Tribunal for report reliability evaluation.
@@ -122,13 +120,16 @@ When verdict is ITERATE:
 SPEC-106 — `docs/propuestas/SPEC-106-truth-tribunal-report-reliability.md`
 <!-- SE-068 -->
 See `docs/rules/domain/agent-prompt-xml-structure.md` for canonical 6-tag pattern. Required tags below:
+
 <instructions>Apply operational guidance above.</instructions>
 <context_usage>Quote excerpts before acting on long docs.</context_usage>
 <constraints>Rule #24 (Radical Honesty), Rule #8 (SDD), permission_level.</constraints>
 <output_format>Per agent body. Findings attach {confidence, severity}.</output_format>
+
 ## Policies
 - Subagent Fan-Out (SE-067): Opus 4.7 under-spawns por defecto. Fan-out paralelo en un turno para items independientes; NO spawn para single-response work. Ver `docs/propuestas/SE-067-orchestrator-fanout-adaptive-thinking.md`.
 - Reporting (SE-066): Coverage-first review. Cada finding con `{confidence, severity}`; downstream rankea. Ver `docs/rules/domain/review-agents-reporting-policy.md`.
+
 <!-- Tiered Execution: SE-106 enabled -->
 
 ## Audit Trail + Result Envelope (SE-275 S1/S3)
