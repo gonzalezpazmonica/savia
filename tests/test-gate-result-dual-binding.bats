@@ -314,12 +314,12 @@ rep() { local i out=""; for ((i = 0; i < $2; i++)); do out+="$1"; done; printf '
 BS_JOIN_BLOCK=(
   $'git push origin \\\nmain' $'git push \\\n'"$FP"' o feat' $'git \\\npush origin main' $'git push origin \\\n  HEAD:main'
   $'git pu\\\nsh origin main' $'git push o \\\n'"$SF"' feat' $'git commit -m x \\\n  --amend' $'git reset \\\n--hard'
-  $'git push \\\n  origin \\\n  main'
+  $'git push \\\n  origin \\\n  main' $'git push origin \\\\\\\n main'
 )
 # Negativos: continuación de una orden permitida, barra par (literal + salto que separa órdenes) y lease a rama.
 BS_JOIN_OK=(
   $'git push origin \\\nfeat' $'git push \\\n--force-with-lease o feat' $'echo \\\\\nmain' $'git push origin \\\\\nmain'
-  $'git status \\\n&& echo main'
+  $'git status \\\n&& echo main' $'git push origin \\\\\n main' $'git push origin \\\\\\\\\n main'
 )
 
 @test "bash solo: continuación «\\⏎» que parte un push a main, forzado, reset o amend ⇒ 2; permitidas ⇒ 0, con y sin jq" {
