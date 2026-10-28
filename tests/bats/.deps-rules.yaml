@@ -26,6 +26,7 @@ rules:
   - dir: ".github/workflows/"
     tests:
       - test-evals-ci-gate.bats
+      - test-se-468-honest-evals-gate.bats
 
   - dir: "scripts/"
     tests:
