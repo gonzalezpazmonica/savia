@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=f504a904601cfdad903168228d6de6789068147e4342347be88b7c5d770ddb92
-timestamp=2026-10-28T07:14:08Z
+diff_hash=a1021b3764855c5e64679f4d317e6e6dafe69f9265e4fa61c519f56249455b3d
+timestamp=2026-10-28T07:21:47Z
 branch=agent/hooks-agent-matcher-20261027
-head_commit=de9317bef
-signature=b61e9df853bbf4f3e22932b8b77c1088a5cfd8ee5221711dcadbaa9eeb2c22f2
+head_commit=0bb987b3
+signature=c46f1e14ad70b7544582a04eed21f6a0a3fda3352abdb3e4ec34b003dba39006
