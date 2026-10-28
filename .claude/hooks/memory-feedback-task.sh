@@ -34,7 +34,7 @@ if command -v jq &>/dev/null; then
 else
     TOOL_NAME=$(printf '%s' "$INPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('tool_name',''))" 2>/dev/null || true)
 fi
-[[ "$TOOL_NAME" != "Task" ]] && exit 0
+[[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "Agent" ]] && exit 0
 
 # ── Run extractor ─────────────────────────────────────────────────────────────
 TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

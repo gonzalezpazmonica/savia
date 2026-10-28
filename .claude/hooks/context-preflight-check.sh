@@ -27,7 +27,7 @@ PREFLIGHT="${SAVIA_PREFLIGHT:-on}"
 
 INPUT=$(cat)
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null || true)
-[ "$TOOL_NAME" = "Task" ] || exit 0
+[ "$TOOL_NAME" = "Task" ] || [ "$TOOL_NAME" = "Agent" ] || exit 0
 
 AGENT=$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null || true)
 PROMPT=$(printf '%s' "$INPUT" | jq -r '.tool_input.prompt // empty' 2>/dev/null || true)
