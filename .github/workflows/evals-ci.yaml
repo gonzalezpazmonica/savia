@@ -85,18 +85,8 @@ jobs:
           cat tests/evals/results/delta-report.json
 
       - name: Check delta threshold
-        run: |
-          python3 -c "
-          import json, sys
-          results = json.loads(open('tests/evals/results/delta-report.json').read())
-          failures = [r for r in results if r.get('threshold_pass') is False]
-          if failures:
-              print('DEGRADATION DETECTED:')
-              for f in failures:
-                  print(f'  {f[\"dataset\"]}: delta={f[\"delta\"]} (threshold={f.get(\"threshold_used\", 0.05)})')
-              sys.exit(1)
-          print(f'All {len(results)} datasets within threshold.')
-          "
+        # SE-468: findings falla; unknown (no evaluado) no pasa por verde ni bloquea (SE-453 D3).
+        run: python3 scripts/evals-paired-delta.py --check-report tests/evals/results/delta-report.json
 
       - name: Upload results artifact
         if: always()
@@ -121,23 +111,29 @@ jobs:
               return;
             }
 
+            // SE-468: el estado sale de r.result; unknown se muestra como «no evaluado», nunca PASS.
+            const icon = { clean: '✅', findings: '❌', unknown: '⚪' };
+            const esc = v => String(v).replace(/[|\\`@\r\n]/g, c => (c === '|' || c === '`' || c === '@' || c === '\\') ? '\\' + c : ' ');
+            const fmt = v => (v === null || v === undefined) ? 'N/A' : Number(v).toFixed(4);
             const rows = report.map(r => {
-              const status = r.threshold_pass === false ? '❌ FAIL' : '✅ PASS';
-              const delta = r.delta !== null ? (r.delta >= 0 ? `+${r.delta}` : `${r.delta}`) : 'N/A';
-              const baseline = r.baseline_score !== null ? r.baseline_score.toFixed(4) : 'N/A';
-              const current = r.current_score !== null ? r.current_score.toFixed(4) : 'N/A';
-              return `| ${r.dataset} | ${baseline} | ${current} | ${delta} | ${status} |`;
+              const status = `${icon[r.result] || '⚪'} ${esc(r.label || 'no evaluado')}`;
+              const d = Number(r.delta);
+              const delta = (r.delta === null || r.delta === undefined || !Number.isFinite(d)) ? 'N/A' : (d >= 0 ? `+${d}` : `${d}`);
+              const gaps = (r.gaps || []).map(g => `${esc(g.check)}: ${esc(g.reason)}`).join('; ') || '—';
+              return `| ${esc(r.dataset)} | ${fmt(r.baseline_score)} | ${fmt(r.current_score)} | ${delta} | ${status} | ${gaps} |`;
             }).join('\n');
+            const unknown = report.filter(r => r.result === 'unknown').length;
 
             const body = [
               '## Evals CI Gate — Paired-Delta Report',
               '',
               `Commit: \`${context.sha.substring(0, 8)}\``,
               '',
-              '| Dataset | Baseline | Current | Delta | Status |',
-              '|---|---|---|---|---|',
+              '| Dataset | Baseline | Current | Delta | Status | Huecos |',
+              '|---|---|---|---|---|---|',
               rows,
               '',
+              unknown ? `> ${unknown} dataset(s) **no evaluado(s)**: el runner no ejecutó el artefacto (skill, agente o hook) o falta baseline. No es un verde (SE-468).` : '',
               `> Threshold: ${process.env.SAVIA_EVAL_DELTA_THRESHOLD} degradation max. [Artifacts](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
             ].join('\n');
 
