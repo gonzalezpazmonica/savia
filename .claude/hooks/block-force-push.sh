@@ -118,10 +118,43 @@ fi
 # o ssh se tokeniza otra vez como orden propia, con el mismo presupuesto y el mismo tope de anidamiento.
 # Revisión #1355 (6.ª): la exención de -m/-F solo vale si la expansión iba entre comillas dobles. Sin comillas
 # el shell la parte en palabras (-m $(echo x --amend) ⇒ -m x --amend): esas palabras llevan \x01\x03 y fallan cerrado.
+# Revisión #1355 (7.ª): la exención miraba solo la palabra anterior y no sabía si esa palabra ya era el valor de
+# otra opción (-m -m "$(echo --amend)" ⇒ git: mensaje «-m» y luego --amend). Ahora los argumentos de commit se
+# recorren como los lee git (parse-options, git commit -h): una opción con valor consume la palabra siguiente
+# (separada) o el resto de su palabra (-mX, --author=X, -amX); una agrupación corta (-am) se lee letra a letra.
+# Criterio de fallo cerrado: una palabra opaca con --am solo queda exenta si es, con certeza, el valor consumido
+# por una opción literal conocida y es una sola palabra (entre comillas, sin \x03 ni @: "$@" da 0 o N palabras).
+# Si aparece algo que no se sabe leer —palabra opaca fuera de un valor, valor opaco que puede partirse, opción
+# desconocida o abreviada (--mess), letra corta desconocida o «--»—, la paridad opción/valor queda desconocida y
+# ya no hay exenciones en el resto de la orden. Espejo de commitOpt/gitCommitAmend en el puerto TS.
 _AMEND_SHELLS='^(bash|sh|zsh|dash|ksh|ash|mksh|csh|tcsh|fish|script|eval|ssh|su|watch)$'
-_AMEND_COMMIT_VAL='^(-m|-f|-c|-t|--message|--file|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--template|--cleanup|--trailer)$'
+# Opciones largas con valor obligatorio, y opciones largas sin valor (o con valor opcional, que solo va con =).
+_AMEND_LONG_VAL='^--(message|file|reuse-message|reedit-message|fixup|squash|author|date|template|cleanup|trailer|pathspec-from-file|unified|inter-hunk-context)$'
+_AMEND_LONG_FLAG='^--(no-)?(quiet|verbose|reset-author|signoff|edit|status|all|include|interactive|patch|only|verify|dry-run|short|branch|ahead-behind|porcelain|long|null|amend|post-rewrite|untracked-files|pathspec-file-nul|gpg-sign|message|file|reuse-message|reedit-message|fixup|squash|author|date|template|cleanup|trailer|pathspec-from-file)$'
+# Letras cortas: con valor (m F c C t U), con valor opcional solo pegado (S u) y sin valor.
+_AMEND_SHORT_VAL='mFcCtU'; _AMEND_SHORT_OPT='Su'; _AMEND_SHORT_FLAG='qvseaiponz'
+_amend_commit_opt() { # palabra literal, con su caja → need=1 si consume la siguiente, unk=1 si no se sabe leer
+  local o="$1" nc=0 x ch
+  shopt -q nocasematch && nc=1
+  shopt -u nocasematch  # git distingue -c de -C y no acepta --MESSAGE
+  case "$o" in
+    --) unk=1 ;;
+    --*=*) [[ "${o%%=*}" =~ $_AMEND_LONG_VAL || "${o%%=*}" =~ $_AMEND_LONG_FLAG ]] || unk=1 ;;
+    --*) if [[ "$o" =~ $_AMEND_LONG_VAL ]]; then need=1; elif ! [[ "$o" =~ $_AMEND_LONG_FLAG ]]; then unk=1; fi ;;
+    -?*)
+      for (( x = 1; x < ${#o}; x++ )); do
+        ch="${o:x:1}"
+        if [[ "$_AMEND_SHORT_VAL" == *"$ch"* ]]; then (( x + 1 == ${#o} )) && need=1; break
+        elif [[ "$_AMEND_SHORT_OPT" == *"$ch"* ]]; then break
+        elif [[ "$_AMEND_SHORT_FLAG" != *"$ch"* ]]; then unk=1; break
+        fi
+      done ;;
+  esac
+  (( nc )) && shopt -s nocasematch
+  return 0
+}
 _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 si sigue commit … --amend
-  local k="$1" s prev=""
+  local k="$1" s need=0 unk=0
   while (( k < n )) && [[ "${w[k]}" == -* ]]; do
     case "${w[k],,}" in -c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--super-prefix) k=$((k+1)) ;; esac
     k=$((k+1))
@@ -133,8 +166,14 @@ _amend_git_commit() { # índice tras git (usa w y n de _amend_is_commit) → 0 s
   for (( k = k + 1; k < n; k++ )); do
     s="${w[k],,}"
     [[ "$s" =~ ^--am(e(nd?)?)?$ ]] && return 0
-    [[ "$s" == $'\x01'* && "${s//[\{\}\$,]/}" == *--am* ]] && { [[ "$s" == $'\x01\x03'* ]] || ! [[ "$prev" =~ $_AMEND_COMMIT_VAL ]]; } && return 0
-    prev="$s"
+    if [[ "$s" == $'\x01'* ]]; then
+      # Valor consumido con certeza: una sola palabra (sin \x03 ni @) tras una opción leída sin dudas.
+      if (( need && ! unk )) && [[ "$s" != $'\x01\x03'* && "$s" != *@* ]]; then need=0; continue; fi
+      [[ "${s//[\{\}\$,]/}" == *--am* ]] && return 0
+      need=0; unk=1; continue
+    fi
+    if (( need )); then need=0; continue; fi
+    _amend_commit_opt "${w[k]}"
   done
   return 1
 }

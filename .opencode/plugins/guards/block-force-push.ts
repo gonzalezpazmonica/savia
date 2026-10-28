@@ -67,7 +67,40 @@ const SHELLS = /^(?:bash|sh|zsh|dash|ksh|ash|mksh|csh|tcsh|fish|script|eval|ssh|
 const PARAM_START = /[A-Za-z0-9_@*#?$!-]/;
 // An opaque word is compared without { } $ ,: -{-,}amend and co${x}mmit match too.
 const bare = (x: string) => x.replace(/[{}$,]/g, "");
-const COMMIT_OPTS_WITH_VALUE = /^(?:-m|-f|-c|-t|--message|--file|--reuse-message|--reedit-message|--fixup|--squash|--author|--date|--template|--cleanup|--trailer)$/;
+// Review #1355 (7th): the exemption looked only at the previous word and did not know whether that word was
+// already the value of another option (-m -m "$(echo --amend)" ⇒ git: message "-m", then --amend). The commit
+// arguments are now walked the way git reads them (parse-options, git commit -h): an option with a value takes
+// the next word (separate) or the rest of its own word (-mX, --author=X, -amX); a short cluster (-am) is read
+// letter by letter. Fail-closed criterion: an opaque word holding --am is exempt only if it is, for sure, the
+// value taken by a known literal option and a single word (quoted, without \x03 or @: "$@" gives 0 or N words).
+// Anything that cannot be read —an opaque word outside a value, an opaque value that may split, an unknown or
+// abbreviated option (--mess), an unknown short letter or "--"— makes the option/value parity unknown, and no
+// word is exempt for the rest of the command. Mirror of _amend_commit_opt/_amend_git_commit in the bash hook.
+// Long options with a required value, and long options without one (or with an optional value, only after =).
+const LONG_VAL = /^--(?:message|file|reuse-message|reedit-message|fixup|squash|author|date|template|cleanup|trailer|pathspec-from-file|unified|inter-hunk-context)$/;
+const LONG_FLAG = /^--(?:no-)?(?:quiet|verbose|reset-author|signoff|edit|status|all|include|interactive|patch|only|verify|dry-run|short|branch|ahead-behind|porcelain|long|null|amend|post-rewrite|untracked-files|pathspec-file-nul|gpg-sign|message|file|reuse-message|reedit-message|fixup|squash|author|date|template|cleanup|trailer|pathspec-from-file)$/;
+// Short letters: with a value (m F c C t U), with an optional value only when stuck (S u), and without one.
+const SHORT_VAL = "mFcCtU";
+const SHORT_OPT = "Su";
+const SHORT_FLAG = "qvseaiponz";
+
+// A literal word, case kept (git tells -c from -C) → need: it takes the next word; unk: it cannot be read.
+function commitOpt(o: string, st2: { need: boolean; unk: boolean }): void {
+  if (o === "--") { st2.unk = true; return; }
+  if (o.startsWith("--")) {
+    const name = o.includes("=") ? o.slice(0, o.indexOf("=")) : o;
+    if (!o.includes("=") && LONG_VAL.test(name)) st2.need = true;
+    else if (!LONG_VAL.test(name) && !LONG_FLAG.test(name)) st2.unk = true;
+    return;
+  }
+  if (o.length < 2 || !o.startsWith("-")) return;
+  for (let x = 1; x < o.length; x++) {
+    const ch = o[x];
+    if (SHORT_VAL.includes(ch)) { if (x + 1 === o.length) st2.need = true; return; }
+    if (SHORT_OPT.includes(ch)) return;
+    if (!SHORT_FLAG.includes(ch)) { st2.unk = true; return; }
+  }
+}
 
 function gitCommitAmend(w: string[], k: number): boolean {
   while (k < w.length && w[k].startsWith("-")) {
@@ -77,12 +110,18 @@ function gitCommitAmend(w: string[], k: number): boolean {
   if (k >= w.length) return false;
   const sub = w[k].toLowerCase();
   if (sub !== "commit" && !(sub.startsWith(OPAQUE) && bare(sub).includes("commit"))) return false;
-  let prev = "";
+  const st2 = { need: false, unk: false };
   for (k++; k < w.length; k++) {
     const s = w[k].toLowerCase();
     if (AMEND.test(s)) return true;
-    if (s.startsWith(OPAQUE) && bare(s).includes("--am") && (s.startsWith(OPAQUE + SPLIT) || !COMMIT_OPTS_WITH_VALUE.test(prev))) return true;
-    prev = s;
+    if (s.startsWith(OPAQUE)) {
+      // Value taken for sure: a single word (no \x03 or @) after an option read without doubt.
+      if (st2.need && !st2.unk && !s.startsWith(OPAQUE + SPLIT) && !s.includes("@")) { st2.need = false; continue; }
+      if (bare(s).includes("--am")) return true;
+      st2.need = false; st2.unk = true; continue;
+    }
+    if (st2.need) { st2.need = false; continue; }
+    commitOpt(w[k], st2);
   }
   return false;
 }

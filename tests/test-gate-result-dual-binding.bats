@@ -438,6 +438,10 @@ AMEND_VISIBLE_OK=(
 AMEND_SPLIT_HIDDEN=(
   "git commit -m \$(echo x --amend)" "git commit -m \`printf 'x --amend'\`" "git commit -m \${M:-x --amend}"
   "git commit -m \${MSG:---amend}" "git commit -F {x,--amend}" "git commit --message \$x--amend"
+  # Revisión #1355 (7.ª, P1 seguridad): la palabra anterior ya era el valor de otra opción (git: mensaje «-m»
+  # y luego --amend como opción). La regex de main los bloqueaba.
+  "git commit -m -m \"\$(echo --amend)\"" "git commit -m -m \"\${A:---amend}\""
+  "git commit --fixup -m \"\$(echo --amend)\"" "git commit --author -F \"\$(echo --amend)\""
 )
 
 @test "paridad amend: \$'…', \${…}, llaves, git tras prefijo y bash -c/eval/ssh siguen bloqueando ⇒ 2" {
@@ -456,6 +460,69 @@ AMEND_SPLIT_HIDDEN=(
   require_ts
   command -v jq >/dev/null
   parity block-force-push blockForcePush 2 "${AMEND_SPLIT_HIDDEN[@]}"
+}
+
+# Revisión #1355 (7.ª): todas las opciones de git commit que toman valor (git commit -h), separadas, repetidas y
+# pegadas. Una opción que consume la palabra siguiente deja la opaca de después fuera de la exención.
+AMEND_VAL_OPTS=(-m -F -c -C -t -U --message --file --reuse-message --reedit-message --fixup --squash --author
+  --date --template --cleanup --trailer --pathspec-from-file --unified --inter-hunk-context)
+AMEND_OPAQUE=("\"\$(echo --amend)\"" "\"\${A:---amend}\"")
+amend_val_table() { # bloquea|pasa → órdenes de la tabla en AMEND_TABLE
+  local o q
+  AMEND_TABLE=()
+  for o in "${AMEND_VAL_OPTS[@]}"; do
+    for q in "${AMEND_OPAQUE[@]}"; do
+      if [[ "$1" == bloquea ]]; then
+        # La opción consume -m (o se consume a sí misma repetida) y la opaca queda como opción de git.
+        AMEND_TABLE+=("git commit $o -m $q" "git commit $o $o $q")
+        # Forma pegada: el valor va dentro de la palabra y la opaca siguiente no es valor de nadie.
+        if [[ "$o" == --* ]]; then AMEND_TABLE+=("git commit $o=x $q"); else AMEND_TABLE+=("git commit ${o}x $q"); fi
+      else
+        AMEND_TABLE+=("git commit $o v -m $q" "git commit $o $q")
+        if [[ "$o" == --* ]]; then AMEND_TABLE+=("git commit $o=x -m $q"); else AMEND_TABLE+=("git commit ${o}x -m $q"); fi
+      fi
+    done
+  done
+}
+# Estado desconocido ⇒ sin exención: agrupación corta con valor al final (-am), abreviatura (--mess), letra
+# desconocida, palabra opaca fuera de un valor ("$X", $X sin comillas, "$@") y «--».
+AMEND_UNKNOWN_HIDDEN=(
+  "git commit -am -m \"\$(echo --amend)\"" "git commit --mess -m \"\$(echo --amend)\"" "git commit -k -m \"\$(echo --amend)\""
+  "git commit \"\$X\" -m \"\$(echo --amend)\"" "git commit -m \$X -m \"\$(echo --amend)\""
+  "git commit -m \"\$@\" -m \"\$(echo --amend)\"" "git commit -- -m \"\$(echo --amend)\"" "git commit --x=y -m \"\$(echo --amend)\""
+)
+# Lectura cierta ⇒ la exención sigue: agrupación con valor al final, valores opacos de una palabra, banderas
+# conocidas y opciones con valor opcional pegado (-uno, -Skey, --untracked-files=no).
+AMEND_KNOWN_OK=(
+  "git commit -am \"\$(echo --amend)\"" "git commit -m x -m \"\$(echo --amend)\"" "git commit -qs -m \"\$(echo --amend)\""
+  "git commit -m \"\$(date)\" -m \"\$(echo --amend)\"" "git commit --no-status -m \"\$(echo --amend)\""
+  "git commit -uno -m \"\$(echo --amend)\"" "git commit -Skey -m \"\$(echo --amend)\"" "git commit -S -m \"\$(echo --amend)\""
+  "git commit --untracked-files=no -m \"\$(echo --amend)\"" "git commit README -m \"\$(echo --amend)\""
+)
+
+@test "paridad amend: cada opción de commit con valor (separada, repetida, pegada) deja fuera de la exención la opaca siguiente ⇒ 2 (revisión #1355, 7.ª)" {
+  require_ts
+  amend_val_table bloquea
+  parity block-force-push blockForcePush 2 "${AMEND_TABLE[@]}" "${AMEND_UNKNOWN_HIDDEN[@]}"
+}
+
+@test "paridad amend: opaca que es con certeza el valor de una opción conocida no bloquea ⇒ 0 (revisión #1355, 7.ª)" {
+  require_ts
+  amend_val_table pasa
+  parity block-force-push blockForcePush 0 "${AMEND_TABLE[@]}" "${AMEND_KNOWN_OK[@]}"
+}
+
+@test "bash solo: tabla de opciones de commit con valor ⇒ 2 / 0, con y sin jq (revisión #1355, 7.ª)" {
+  local c fails=""
+  amend_val_table bloquea
+  for c in "${AMEND_TABLE[@]}" "${AMEND_UNKNOWN_HIDDEN[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 2 && "$(bash_code block-force-push "$NOJQ" "$c")" == 2 ]] || fails+="[$c] no bloquea"$'\n'
+  done
+  amend_val_table pasa
+  for c in "${AMEND_TABLE[@]}" "${AMEND_KNOWN_OK[@]}"; do
+    [[ "$(bash_code block-force-push "$PATH" "$c")" == 0 && "$(bash_code block-force-push "$NOJQ" "$c")" == 0 ]] || fails+="[$c] bloquea"$'\n'
+  done
+  [[ -z "$fails" ]] || { printf '%s' "$fails" >&2; return 1; }
 }
 
 # Revisión #1355 (P2-4): sin bun la paridad se salta; el lado bash se comprueba igual, sin require_ts.
