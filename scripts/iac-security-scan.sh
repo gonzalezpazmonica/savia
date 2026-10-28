@@ -26,6 +26,8 @@
 # --format table la última línea de stdout es `gate-result: {...}`; con --format json stdout sigue
 # reservado al report, que lleva los campos `result` y `gaps`. Exit 2 ⇒ unknown con su hueco
 # (trivy:missing_tool, trivy:timeout, trivy:unreadable…). NO_IAC ⇒ clean. Códigos sin renumerar.
+# En --format json, un exit 2 deja en stdout el objeto {"result":"unknown","gaps":[...]} (nunca vacío), y
+# hallazgos en una parte con hueco en la otra salen 1/findings con el hueco dentro (revisión #1355).
 #
 # También es la librería de iac-security-baseline.sh: al hacer `source` no se
 # ejecuta el escaneo (guarda BASH_SOURCE tras las funciones).
@@ -222,7 +224,7 @@ PYEOF
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=../.claude/hooks/lib/gate-result.sh
-source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh"
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh" || { echo "ERROR: falta .claude/hooks/lib/gate-result.sh" >&2; exit 2; }
 
 # Contrato SE-453: cualquier salida (también los `die` de argumentos o herramienta ausente) acaba
 # con su resultado. GATE_GAPS acumula los huecos; el trap traduce el exit code sin renumerarlo.
@@ -237,7 +239,14 @@ gate_on_exit() {
     *) result=unknown; [[ ${#GATE_GAPS[@]} -gt 0 ]] || gate_gap "iac-scan:unreadable" ;;
   esac
   [[ "$result" == "unknown" ]] && GATE_UNMEASURED_ROOT="$ROOT" gate_unmeasured_record "iac-security-scan" "${GATE_GAPS[0]#*:}"
-  [[ "$FORMAT" == "json" ]] || gate_result_emit "$result" "${GATE_GAPS[@]}"
+  local line
+  line="$(gate_result_emit "$result" ${GATE_GAPS[@]+"${GATE_GAPS[@]}"})" || { rc=2; line='gate-result: {"result":"unknown","gaps":[{"check":"gate-result","reason":"unreadable"}]}'; }
+  if [[ "$FORMAT" != "json" ]]; then
+    echo "$line"
+  elif [[ $rc -ge 2 ]]; then
+    # stdout reservado al report, pero sin report no puede quedar vacío: el objeto lleva el resultado.
+    echo "${line#gate-result: }"
+  fi
   exit "$rc"
 }
 trap gate_on_exit EXIT
@@ -364,6 +373,8 @@ scan_target() {
 }
 
 OVERALL_EXIT=0
+HAS_FINDINGS=false
+FINDINGS_JSON=""   # report de la primera parte con hallazgos: es el que sale por stdout en --format json
 NO_IAC=false
 TYPES=""
 
@@ -386,18 +397,25 @@ PYEOF
   then
     NO_IAC=true
   fi
-  [[ $rc -lt 2 ]] && report_result "$REPORT_JSON"
+  if [[ $rc -lt 2 ]] && ! report_result "$REPORT_JSON"; then gate_gap "report:unreadable"; rc=2; fi
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
+  [[ $rc -eq 1 ]] && { HAS_FINDINGS=true; FINDINGS_JSON="$REPORT_JSON"; }
   say "Resultado config: $([[ $NO_IAC == true ]] && echo NO_IAC || status_of "$rc")"
 fi
 
 if [[ -n "$IMAGE_TARGET" ]]; then
   say "Escaneando imagen Docker: $IMAGE_TARGET"
   rc=0; scan_target image "$IMAGE_TARGET" "$IMAGE_JSON" || rc=$?
-  [[ $rc -lt 2 ]] && report_result "$IMAGE_JSON"
+  if [[ $rc -lt 2 ]] && ! report_result "$IMAGE_JSON"; then gate_gap "report:unreadable"; rc=2; fi
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
+  [[ $rc -eq 1 && -z $FINDINGS_JSON ]] && FINDINGS_JSON="$IMAGE_JSON"
+  [[ $rc -eq 1 ]] && HAS_FINDINGS=true
   say "Resultado imagen: $(status_of "$rc")"
 fi
+
+# Revisión #1355 (5.ª): hallazgos y hueco a la vez. Como en prompt-security-scan, gana findings (exit 1) y los
+# huecos viajan en el resultado: antes un hueco de la otra parte borraba los hallazgos de la salida.
+if (( OVERALL_EXIT >= 2 )) && [[ $HAS_FINDINGS == true ]]; then OVERALL_EXIT=1; fi
 
 case $OVERALL_EXIT in
   0) if [[ $NO_IAC == true && -z "$IMAGE_TARGET" ]]; then
@@ -405,7 +423,8 @@ case $OVERALL_EXIT in
      else
        VERDICT="PASS — sin hallazgos en severidades bloqueantes ($SEVERITY)."
      fi ;;
-  1) VERDICT="FAIL — hallazgos en severidades bloqueantes ($SEVERITY). El pipeline CI debe bloquearse." ;;
+  1) VERDICT="FAIL — hallazgos en severidades bloqueantes ($SEVERITY). El pipeline CI debe bloquearse."
+     (( ${#GATE_GAPS[@]} )) && VERDICT+=" Hay partes sin verificar: ${GATE_GAPS[*]}." ;;
   *) VERDICT="ERROR — el escaneo no se completó; el resultado NO es válido y no se ha verificado nada." ;;
 esac
 
@@ -443,7 +462,24 @@ esac
 } > "$REPORT_MD"
 
 if [[ "$FORMAT" == "json" && $OVERALL_EXIT -lt 2 ]]; then
-  if [[ -n "$SCAN_PATH" ]]; then cat "$REPORT_JSON"; else cat "$IMAGE_JSON"; fi
+  # Revisión #1355 (6.ª): con exit 1 sale el report de la parte con hallazgos, no siempre el de --path
+  # (con --path roto o limpio, stdout decía unknown o clean sin los hallazgos de la imagen).
+  if [[ $OVERALL_EXIT -eq 1 ]]; then OUT_JSON="$FINDINGS_JSON"
+  elif [[ -n "$SCAN_PATH" ]]; then OUT_JSON="$REPORT_JSON"; else OUT_JSON="$IMAGE_JSON"; fi
+  # Los huecos de la otra parte (findings + hueco) viajan también en el objeto de stdout.
+  if (( ${#GATE_GAPS[@]} )) && ! python3 - "$OUT_JSON" "$(gate_result_emit findings "${GATE_GAPS[@]}")" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["gaps"] = json.loads(sys.argv[2].split(": ", 1)[1])["gaps"]
+d["result"] = "findings"
+json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
+PYEOF
+  then
+    echo "ERROR: no se pudo añadir los huecos al report JSON" >&2
+    gate_gap "report:unreadable"; exit 2
+  fi
+  cat "$OUT_JSON" || { gate_gap "report:unreadable"; exit 2; }
 fi
 say ""
 say "$VERDICT"
