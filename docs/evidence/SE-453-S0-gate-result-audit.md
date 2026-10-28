@@ -11,10 +11,10 @@
 | `scripts/git-history-secret-scan.sh` | 0 limpio, 1 CRITICAL/HIGH, 2 MEDIUM/LOW, 3 `output/` sin ignorar, 4 fallo | gitleaks ausente salía **1** (igual que un hallazgo crítico) | sin tope ni timeout: historial enorme sin límite | Ausente → 4 + `unknown/missing_tool`; `GIT_HISTORY_SCAN_MAX_COMMITS` y `GIT_HISTORY_SCAN_TIMEOUT` → `unknown/limit` y `unknown/timeout` |
 | `scripts/pre-push-security-gate.sh` | 0 limpio u omitido, 1 hallazgos | gitleaks ausente: **exit 0** con aviso «push continúa sin escaneo» | sin tope | Ausente → `unknown/missing_tool`, línea en `output/unmeasured-gates.jsonl`; `SAVIA_GATE_UNKNOWN=block` lo bloquea (D3: un ciclo de aviso) |
 | `scripts/dependency-scan.sh` | 0 limpio, 1 hallazgos, 2 error | Trivy/Docker/jq ausentes → 2 (correcto en código, sin vocabulario de resultado) | sin timeout propio; Trivy rc 124 caía en «fallido» | Línea `gate-result` en todas las salidas; 2 = `unknown` con `missing_tool`, `unreadable` o `timeout` |
-| `scripts/iac-security-scan.sh` | 0 limpio o NO_IAC, 1 hallazgos, 2 error | Trivy y Docker ausentes → `die` 2 | `find -maxdepth 5` solo para etiquetar tipos; Trivy escanea el árbol entero | S3 por demanda (2026-10-24): `gate-result` en tabla, `result`/`gaps` en el report JSON; Trivy fallido ⇒ `trivy-<modo>:unreadable`, rc 124 ⇒ `timeout`, sin Trivy ⇒ `missing_tool` |
+| `scripts/iac-security-scan.sh` | 0 limpio o NO_IAC, 1 hallazgos, 2 error | Trivy y Docker ausentes → `die` 2 | `find -maxdepth 5` solo para etiquetar tipos; Trivy escanea el árbol entero | S3 por demanda (2026-10-24): `gate-result` en tabla, `result`/`gaps` en el report JSON; Trivy fallido ⇒ `trivy-<modo>:unreadable`, rc 124 ⇒ `timeout`, sin Trivy ⇒ `missing_tool`. #1355: hallazgos en una parte y hueco en la otra ⇒ 1/`findings` con el hueco dentro; en `--format json` un exit 2 deja en stdout `{"result":"unknown",…}` en vez de nada |
 | `scripts/ast-quality-gate.sh` | 0 limpio, 1 fallo, 2 entorno, 3 UNVERIFIED con `meta.coverage` | Capa que no corre = `missing/failed/unsupported`, baja cobertura | `find -maxdepth 3` para detectar lenguajes | Es el modelo interno del contrato; sin cambios |
 | `scripts/mobile-security-scan.sh` | 0 con informe, 1 argumentos | MobSF y Docker ausentes → análisis básico (apktool + grep) sin marcar cobertura reducida | `curl --max-time 3` al detectar MobSF | S3 por demanda (2026-10-24): `gate-result` + `result`/`gaps` en el JSON; sin apktool, descompilación vacía, `dynamic` o MobSF sin triaje ⇒ `unknown` |
-| `scripts/prompt-security-scan.sh` | 0 limpio, 1 hallazgos, 2 error (ruta) | python3 ausente solo omite una comprobación (línea 98) sin registrarlo | sin tope | S3 por demanda (2026-10-24): `PS-11:missing_tool`, fichero ilegible y path sin `.md` ⇒ `unknown` registrado; path del fichero por argv |
+| `scripts/prompt-security-scan.sh` | 0 limpio, 1 hallazgos, 2 error (ruta) | python3 ausente solo omite una comprobación (línea 98) sin registrarlo | sin tope | S3 por demanda (2026-10-24): `PS-11:missing_tool`, fichero ilegible y path sin `.md` ⇒ `unknown` registrado; path del fichero por argv. #1355: PS-11 sin python3 (bytes UTF-8 con `grep` en locale C; también U+2060, U+00AD y bidi), `grep -a` con NUL, error de lectura que `-r` no ve y `find` fallido ⇒ `unknown`; la línea final sale también con `--quiet` |
 | `scripts/confidentiality-scan.sh` | 0 limpio, 1 violaciones, 2 error | sin herramienta externa; un diff que git no calcula (sin `origin/main`) salía «No content to scan» y 0; Check 4 nunca veía ficheros | sin tope | S3 por demanda (2026-10-24): `git-diff:unreadable` y blocklist ilegible ⇒ `unknown` registrado; Check 4 lista ficheros con `--name-only`, también sin líneas añadidas y sin exclusiones de contenido |
 | `scripts/security-scan.sh` | 0 siempre salvo `--ci` con hallazgos (1) | grep/find estándar | sin tope | S3 por demanda (2026-10-24): `gate-result`; grep con rc ≥ 2 o sin hooks ⇒ `unknown`; códigos sin cambio |
 | `scripts/vuln-scan.sh` | 0 siempre salvo `--ci` con vulnerabilidades (1) | grep estándar | sin tope | S3 por demanda (2026-10-24): igual que `security-scan.sh` |
@@ -55,6 +55,11 @@ compararon con el hook bash con las mismas entradas:
 | `block-credential-leak.ts` | 4 | ninguna | Sin cambios |
 | `block-infra-destructive.ts` | 4 | ninguna | Sin cambios |
 | `validate-bash-global.ts` | 2 | ninguna | Sin cambios |
+
+Falso positivo compartido y aceptado (bash y TS, mismo patrón): `commit\s+.*--amend` bloquea cualquier `git commit`
+que mencione `--amend`, también en el mensaje (`git commit -m "explica --amend"`). #1355 intentó afinarlo con un
+tokenizador y se retiró (decisión 2026-10-28): en 8 rondas de revisión cada versión dejaba pasar algún amend real
+que esta regex sí bloquea.
 
 Reglas solo-TS que siguen siendo más estrictas que el hook (no se tocan): `git checkout --force`,
 `git rebase origin/main` y `git push --delete origin main`.
