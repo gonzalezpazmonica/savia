@@ -74,3 +74,11 @@ print(bad); raise SystemExit(1 if bad else 0)'
   run bash .claude/hooks/protected-job-guard.sh < "$TMP/in.json"
   [ "$status" -eq 2 ]
 }
+
+@test "recursion-guard bloquea por stdin una invocación Agent que lanza otro bucle dentro de uno activo" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  unset OPENCODE_TOOL_INPUT
+  printf '%s' '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","prompt":"Ejecuta /overnight-sprint"}}' > "$TMP/in.json"
+  run bash .claude/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
