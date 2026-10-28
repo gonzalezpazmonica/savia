@@ -232,10 +232,12 @@ teardown() {
   [[ "$output" -ge 1 ]]
 }
 
-@test "coverage: 6 blocked patterns defined" {
+# Los dos patrones de rm (-rf y -r /) se unieron en uno que acepta cualquier orden de opciones (#1398):
+# el recuento baja a 5 sin perder cobertura; el comportamiento lo prueban los tests de bloqueo.
+@test "coverage: 5 blocked patterns defined" {
   local count
-  count=$(sed -n '/BLOCKED_PATTERNS=/,/)/p' "$HOOK" | grep -c '".*"' || echo 0)
-  [[ "$count" -ge 6 ]]
+  count=$(sed -n '/BLOCKED_PATTERNS=/,/^)/p' "$HOOK" | grep -c '^ *".*"$' || echo 0)
+  [[ "$count" -ge 5 ]]
 }
 
 @test "coverage: 9+ risky patterns defined" {
