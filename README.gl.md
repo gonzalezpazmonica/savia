@@ -2,8 +2,6 @@
 lang: gl
 ---
 
-<!-- Header image removed per SE-259 S2 -->
-
 **Galego** | [Castelan](README.md) | [English](README.en.md) | [Euskara](README.eu.md) | [Catala](README.ca.md) | [Francais](README.fr.md) | [Deutsch](README.de.md) | [Portugues](README.pt.md) | [Italiano](README.it.md)
 
 # PM-Workspace
@@ -72,18 +70,7 @@ Human gates por nivel de risco (L0-L4). Compliance-as-code como dirección: Savi
 
 ## Capacidades
 
-| Area | Que fai |
-|---|---|
-| Xestion de proxectos | Sprints, burndown, capacidade, dailies, retros, KPIs. Informes en Excel e PowerPoint. Prediccion con Monte Carlo. Facturacion. |
-| Spec-Driven Development | Tarefas convirtense en specs executabeis. 90 axentes implementan en 16 linguaxes (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) en worktrees illados. Code review automatico + revision humana obrigatoria. Compatible con `github/spec-kit`. |
-| Seguridade | SAST contra OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dinamico, SBOM, compliance sectorial (12 sectores). Savia Shield: clasificacion local de datos con LLM on-premise, enmascaramento reversibel, sinatura criptografica de PRs. |
-| Code Review Court | 5 xuices especializados (correctness, architecture, security, cognitive, spec) revisan en paralelo con scoring 0-100 e gate de 400 LOC. |
-| Soberania de inferencia | API Anthropic por defecto. Fallback automatico a Ollama local (Gemma 4) en caso de erro de rede, HTTP 5xx, HTTP 429 ou timeout. Circuit breaker integrado. |
-| Memoria persistente | Texto plano (JSONL). Entity recall, busca semantica, continuidade entre sesions. Extraccion automatica de decisions. Personal Vault cifrado AES-256. |
-| Accesibilidade | Traballo guiado para persoas con discapacidade (visual, motora, TDAH, autismo, dislexia). Micro-tarefas, deteccion de bloqueos, reformulacion adaptativa. |
-| Intelixencia de codigo | Deteccion de arquitectura (Clean, Hexagonal, DDD, CQRS, Microservices). Fitness functions. Human Code Maps (.hcm). Agent Code Maps (.acm) e `ast-comprehension` con motor opcional [CodeGraph](https://github.com/colbymchenry/codegraph) (MCP, opt-in por proxecto). |
-| Modos autonomos | Sprint nocturno, mellora de codigo, investigacion tecnica. Axentes proponen en ramas `agent/*` con PRs Draft — o humano decide. |
-| Extensions | [Savia Mobile](projects/savia-mobile-android/README.md) (Android nativo) · Savia Web (Vue.js) · [SaviaClaw](zeroclaw/ROADMAP.md) (ESP32 + voz full-duplex) |
+Táboa completa de capacidades: [capabilities.gl.md](docs/readme/capabilities.gl.md).
 
 ---
 
@@ -95,33 +82,13 @@ Non e unha persoa, non sente, e non substitue o criterio de quen opera. Propon, 
 
 **Quick-starts por rol:**
 
-| Rol | Quick-start |
-|---|---|
-| PM / Scrum Master | [→ quick-start-pm](docs/quick-starts/quick-start-pm.md) |
-| Tech Lead | [→ quick-start-tech-lead](docs/quick-starts/quick-start-tech-lead.md) |
-| Developer | [→ quick-start-developer](docs/quick-starts/quick-start-developer.md) |
-| QA | [→ quick-start-qa](docs/quick-starts/quick-start-qa.md) |
-| Product Owner | [→ quick-start-po](docs/quick-starts/quick-start-po.md) |
-| CEO / CTO | [→ quick-start-ceo](docs/quick-starts/quick-start-ceo.md) |
+Quick-starts por rol: [quick-starts.gl.md](docs/readme/quick-starts.gl.md).
 
 ---
 
 ## Estrutura
 
-```
-pm-workspace/
-├── .claude/
-│   ├── commands/       ← 567 comandos
-│   ├── agents/         ← 90 axentes especializados (7 con decision trees: SPEC-147)
-│   ├── skills/         ← 139 skills de dominio
-│   ├── hooks/          ← 133 hooks deterministas
-│   └── rules/          ← regras de contexto e linguaxe
-├── docs/               ← guias por rol, escenario, sector
-├── projects/           ← proxectos (git-ignorados por privacidade)
-├── scripts/            ← validacion, CI, utilidades
-├── zeroclaw/           ← hardware ESP32 + voz
-└── CLAUDE.md           ← identidade e regras fundamentais
-```
+Árbore do repositorio: [repo-structure.gl.md](docs/readme/repo-structure.gl.md).
 
 ---
 

@@ -2,8 +2,6 @@
 lang: ca
 ---
 
-<!-- Header image removed per SE-259 S2 -->
-
 **Catala** | [Espanyol](README.md) | [English](README.en.md) | [Galego](README.gl.md) | [Euskara](README.eu.md) | [Francais](README.fr.md) | [Deutsch](README.de.md) | [Portugues](README.pt.md) | [Italiano](README.it.md)
 
 # PM-Workspace
@@ -72,18 +70,7 @@ Human gates L0-L4. Compliance-as-code: evidència, no declaració legal definiti
 
 ## Capacitats
 
-| Area | Que fa |
-|---|---|
-| Gestio de projectes | Sprints, burndown, capacitat, dailies, retros, KPIs. Informes en Excel i PowerPoint. Prediccio amb Monte Carlo. Facturacio. |
-| Spec-Driven Development | Tasques es converteixen en specs executables. 90 agents implementen en 16 llenguatges (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) en worktrees aillats. Code review automatic + revisio humana obligatoria. Compatible amb `github/spec-kit`. |
-| Seguretat | SAST contra OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dinamic, SBOM, compliance sectorial (12 sectors). Savia Shield: classificacio local de dades amb LLM on-premise, emmascarament reversible, signatura criptografica de PRs. |
-| Code Review Court | 5 jutges especialitzats (correctness, architecture, security, cognitive, spec) revisen en paral·lel amb scoring 0-100 i gate de 400 LOC. |
-| Sobirania d'inferencia | API Anthropic per defecte. Fallback automatic a Ollama local (Gemma 4) en cas d'error de xarxa, HTTP 5xx, HTTP 429 o timeout. Circuit breaker integrat. |
-| Memoria persistent | Text pla (JSONL). Entity recall, cerca semantica, continuitat entre sessions. Extraccio automatica de decisions. Personal Vault xifrat AES-256. |
-| Accessibilitat | Treball guiat per a persones amb discapacitat (visual, motora, TDAH, autisme, dislexia). Micro-tasques, deteccio de bloquejos, reformulacio adaptativa. |
-| Intel·ligencia de codi | Deteccio d'arquitectura (Clean, Hexagonal, DDD, CQRS, Microservices). Fitness functions. Human Code Maps (.hcm). Agent Code Maps (.acm) i `ast-comprehension` amb motor opcional [CodeGraph](https://github.com/colbymchenry/codegraph) (MCP, opt-in per projecte). |
-| Modes autonoms | Sprint nocturn, millora de codi, investigacio tecnica. Agents proposen en branques `agent/*` amb PRs Draft — l'huma decideix. |
-| Extensions | [Savia Mobile](projects/savia-mobile-android/README.md) (Android natiu) · Savia Web (Vue.js) · [SaviaClaw](zeroclaw/ROADMAP.md) (ESP32 + veu full-duplex) |
+Taula completa de capacitats: [capabilities.ca.md](docs/readme/capabilities.ca.md).
 
 ---
 
@@ -95,33 +82,13 @@ No es una persona, no sent, i no substitueix el criteri de qui opera. Proposa, e
 
 **Quick-starts per rol:**
 
-| Rol | Quick-start |
-|---|---|
-| PM / Scrum Master | [→ quick-start-pm](docs/quick-starts/quick-start-pm.md) |
-| Tech Lead | [→ quick-start-tech-lead](docs/quick-starts/quick-start-tech-lead.md) |
-| Developer | [→ quick-start-developer](docs/quick-starts/quick-start-developer.md) |
-| QA | [→ quick-start-qa](docs/quick-starts/quick-start-qa.md) |
-| Product Owner | [→ quick-start-po](docs/quick-starts/quick-start-po.md) |
-| CEO / CTO | [→ quick-start-ceo](docs/quick-starts/quick-start-ceo.md) |
+Quick-starts per rol: [quick-starts.ca.md](docs/readme/quick-starts.ca.md).
 
 ---
 
 ## Estructura
 
-```
-pm-workspace/
-├── .claude/
-│   ├── commands/       ← 567 comandos
-│   ├── agents/         ← 90 agents especialitzats (7 amb decision trees: SPEC-147)
-│   ├── skills/         ← 139 skills de domini
-│   ├── hooks/          ← 133 hooks deterministes
-│   └── rules/          ← regles de context i llenguatge
-├── docs/               ← guies per rol, escenari, sector
-├── projects/           ← projectes (git-ignorats per privacitat)
-├── scripts/            ← validacio, CI, utilitats
-├── zeroclaw/           ← hardware ESP32 + veu
-└── CLAUDE.md           ← identitat i regles fonamentals
-```
+Arbre del repositori: [repo-structure.ca.md](docs/readme/repo-structure.ca.md).
 
 ---
 
