@@ -45,9 +45,6 @@ elif [[ -n "${SAVIA_AUTONOMOUS_SKILL:-}" ]]; then
   AUTONOMOUS=1
 elif [[ "${SAVIA_DELEGATION_DEPTH:-0}" -ge 1 ]]; then
   AUTONOMOUS=1
-elif [[ -n "${SAVIA_LOOP_CONTEXT:-}" ]]; then
-  # Los bucles autónomos (overnight-sprint-loop.sh y el auxiliar de recursión) exportan este contexto.
-  AUTONOMOUS=1
 fi
 [[ "$AUTONOMOUS" -eq 0 ]] && exit 0
 

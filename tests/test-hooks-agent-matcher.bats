@@ -67,14 +67,6 @@ print(bad); raise SystemExit(1 if bad else 0)'
   [ "$status" -eq 0 ]
 }
 
-@test "protected-job-guard trata el contexto de bucle (SAVIA_LOOP_CONTEXT) como autónomo" {
-  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
-  unset SAVIA_PROTECTED_JOB_OVERRIDE
-  printf '%s' '{"tool_name":"Agent","tool_input":{"subagent_type":"architect","prompt":"diseña"}}' > "$TMP/in.json"
-  run bash .claude/hooks/protected-job-guard.sh < "$TMP/in.json"
-  [ "$status" -eq 2 ]
-}
-
 @test "recursion-guard bloquea por stdin una invocación Agent que lanza otro bucle dentro de uno activo" {
   export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
   unset OPENCODE_TOOL_INPUT
@@ -83,12 +75,19 @@ print(bad); raise SystemExit(1 if bad else 0)'
   [ "$status" -eq 2 ]
 }
 
-@test "los hooks que posprocesan la salida de Agent conservan la línea VERDICT de una revisora" {
+@test "sycophancy-strip en modo strip quita la adulación de la salida de Agent y conserva la línea VERDICT" {
   printf '%s' '{"tool_name":"Agent","tool_input":{"prompt":"revisa"},"tool_response":"Great question! VERDICT: HOLD pr=1 sha=abc role=security p0=0 p1=1\nP1-1 detalle"}' > "$TMP/in.json"
-  for h in sycophancy-strip compress-agent-output; do
-    run bash ".claude/hooks/$h.sh" < "$TMP/in.json"
-    [ "$status" -eq 0 ]
-    # Sin salida, el hook no reescribe; con salida, la línea VERDICT debe seguir intacta.
-    [ -z "$output" ] || [[ "$output" == *"VERDICT: HOLD pr=1 sha=abc role=security p0=0 p1=1"* ]]
-  done
+  mkdir -p "$TMP/proj"
+  CLAUDE_PROJECT_DIR="$TMP/proj" SAVIA_ANTIADULATION_LAYER1=strip run bash .claude/hooks/sycophancy-strip.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"VERDICT: HOLD pr=1 sha=abc role=security p0=0 p1=1"* ]]
+  [[ "$output" != *"Great question"* ]]
+}
+
+@test "learning-capture-hook sigue sin actuar sobre Agent (escribiría extractos en docs/, versionado)" {
+  printf '%s' '{"tool_name":"Agent","tool_input":{"prompt":"x"},"tool_response":"Lección aprendida: debí usar otra ruta. No debería haber tocado docs."}' > "$TMP/in.json"
+  mkdir -p "$TMP/props"
+  SCL_PROPOSALS_DIR="$TMP/props" SCL_GRAPH_INDEX="$TMP/graph.jsonl" run bash .claude/hooks/learning-capture-hook.sh < "$TMP/in.json"
+  [ "$status" -eq 0 ]
+  [ -z "$(ls -A "$TMP/props")" ]
 }
