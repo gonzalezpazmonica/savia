@@ -36,7 +36,8 @@ case "$1 $2" in
     esac ;;
   "pr diff") cat "$F/$3.files" ;;
   "pr checks") printf 'CI\t%s\n' "$(cat "$F/$3.checks" 2>/dev/null || echo pass)" ;;
-  "pr ready"|"pr edit"|"label create"|"label delete") exit 0 ;;
+  "pr ready"|"label create"|"label delete") exit 0 ;;
+  "pr edit") exit 1 ;;   # como en GitHub desde la deprecación de Projects (classic)
   "label list") cat "$F/labels" 2>/dev/null ;;
   "pr merge") # rama protegida «al día»: rechaza el merge si main no está integrada en la rama del PR
               if [[ -f "$F/$3.require_uptodate" ]] && ! git --git-dir="$BARE" merge-base --is-ancestor refs/heads/main "refs/heads/$(cat "$F/$3.branch")"; then
@@ -50,6 +51,7 @@ case "$1 $2" in
       api*/issues/*/events*) n=$(sed -E 's|.*/issues/([0-9]+)/events.*|\1|' <<<"$a"); cat "$F/$n.reopens" 2>/dev/null || echo 0 ;;
       api*check-runs*) cat "$F/main_ci" 2>/dev/null || echo pass ;;
       "api user"*) echo executor ;;
+      "api -X POST repos/"*"/issues/"*"/labels"*|"api -X DELETE repos/"*"/issues/"*"/labels/"*) exit 0 ;;
       *) exit 1 ;;
     esac ;;
 esac
@@ -519,11 +521,11 @@ PY
   local id; id=$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -c1-12)
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
-  grep -q "pr edit 100 -R .* --add-label merge-sprint:$id" "$FAKE/calls"
-  grep -q "pr edit 101 -R .* --add-label merge-sprint:$id" "$FAKE/calls"
-  [ "$(grep -n -- "--add-label" "$FAKE/calls" | tail -1 | cut -d: -f1)" -lt "$(grep -n '^pr merge' "$FAKE/calls" | head -1 | cut -d: -f1)" ]
-  grep -q "pr edit 101 -R .* --remove-label merge-sprint:$id" "$FAKE/calls"
-  ! grep -q "pr edit 100 -R .* --remove-label" "$FAKE/calls" || false
+  grep -q "api -X POST repos/.*/issues/100/labels -f labels\[\]=merge-sprint:$id" "$FAKE/calls"
+  grep -q "api -X POST repos/.*/issues/101/labels -f labels\[\]=merge-sprint:$id" "$FAKE/calls"
+  [ "$(grep -n -- "/labels -f labels" "$FAKE/calls" | tail -1 | cut -d: -f1)" -lt "$(grep -n '^pr merge' "$FAKE/calls" | head -1 | cut -d: -f1)" ]
+  grep -q "api -X DELETE repos/.*/issues/101/labels/merge-sprint:$id" "$FAKE/calls"
+  ! grep -q "api -X DELETE repos/.*/issues/100/labels" "$FAKE/calls" || false
 }
 
 auto_rebase_list_step() {  # ejecuta el paso «List open PRs» del workflow real con un gh simulado
@@ -836,12 +838,12 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
 
 @test "D6 positivo: en pausa awaiting_judge el PR conserva la etiqueta; un STOP del juez la retira" {
   judge_setup 144
-  grep -q "pr edit 144 -R .* --add-label merge-sprint:" "$FAKE/calls"
-  ! grep -q "pr edit 144 -R .* --remove-label" "$FAKE/calls" || false
+  grep -q "api -X POST repos/.*/issues/144/labels -f labels\[\]=merge-sprint:" "$FAKE/calls"
+  ! grep -q "api -X DELETE repos/.*/issues/144/labels" "$FAKE/calls" || false
   verdict 144 "JUDGE: STOP pr=144 from=$H0 to=$H1 judge=judge-agent fix_author=f@f scope=changed security=unchanged reason=amplia"
   run bash "$SCRIPT" run
   [ "$status" -eq 5 ]
-  grep -q "pr edit 144 -R .* --remove-label merge-sprint:" "$FAKE/calls"
+  grep -q "api -X DELETE repos/.*/issues/144/labels/merge-sprint:" "$FAKE/calls"
 }
 
 @test "AC-22 boundary: PR que ya no era Draft no se toca con ready ni vuelve a Draft al aparcarse" {

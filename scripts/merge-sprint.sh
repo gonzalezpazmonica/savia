@@ -522,7 +522,7 @@ unlabel() {  # al terminar, el auto-rebase vuelve a ver los PRs no mergeados (D6
   local n
   for n in $LABELED; do
     [[ "$($GH pr view "$n" -R "$REPO" --json state --jq .state 2>/dev/null)" == OPEN ]] || continue
-    $GH pr edit "$n" -R "$REPO" --remove-label "merge-sprint:${DIGEST:0:12}" >/dev/null 2>&1
+    $GH api -X DELETE "repos/$REPO/issues/$n/labels/merge-sprint:${DIGEST:0:12}" >/dev/null 2>&1
   done
 }
 keep_label() { LABELED=$(tr ' ' '\n' <<<"$LABELED" | grep -vx "$1" | paste -sd' ' -); }   # PR que espera al juez (D6)
@@ -595,7 +595,8 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     # Sin estado legible no se sabe si hay que pausar su auto-rebase: para, no lo deja sin etiqueta.
     st=$($GH pr view "$pr" -R "$REPO" --json state --jq .state) && [[ -n "$st" ]] || anomaly etiqueta_fallida "$pr"
     [[ "$st" == OPEN ]] || continue
-    $GH pr edit "$pr" -R "$REPO" --add-label "$label" >/dev/null 2>&1 || anomaly etiqueta_fallida "$pr"
+    # API REST de etiquetas: `gh pr edit` falla desde la deprecación de Projects (classic) en GraphQL.
+    $GH api -X POST "repos/$REPO/issues/$pr/labels" -f "labels[]=$label" >/dev/null 2>&1 || anomaly etiqueta_fallida "$pr"
     LABELED="$LABELED $pr"
   done <<<"$entries"
   local awaiting=""   # PRs en awaiting_judge: vuelven al final de la cola (§2.7)
