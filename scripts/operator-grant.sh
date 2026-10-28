@@ -36,9 +36,23 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # PATH fijo de sistema: python3, ssh-keygen y git no se resuelven por un PATH que
 # el llamante controle (un ssh-keygen falso que sale con 0 daría PASS sin firma).
 # Junto con `python3 -I` (sin PYTHONPATH, sitecustomize del usuario ni cwd en
-# sys.path), el entorno no sustituye el verificador sin dejar rastro.
+# sys.path), ni el PATH ni Python del usuario sustituyen el verificador.
 SAFE_PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin"
 export PATH="$SAFE_PATH"
+# Una función Bash exportada (`python3() { return 0; }; export -f python3`) se
+# resuelve antes que el PATH. python3 y git se buscan aquí por ruta absoluta
+# (solo palabras reservadas y asignaciones) y estas definiciones tapan las
+# importadas del entorno. Límite: quien controla el entorno del proceso
+# (BASH_ENV, funciones exportadas llamadas exit, builtin…) controla el código
+# de salida de cualquier script Bash; el exit de check no es frontera frente a
+# un llamante hostil. La frontera es GitHub (autonomous-safety-merge-grant.md).
+PY3="" GIT_BIN=""
+for _d in ${SAFE_PATH//:/ }; do
+  [[ -z "$PY3" && -x "$_d/python3" ]] && PY3="$_d/python3"
+  [[ -z "$GIT_BIN" && -x "$_d/git" ]] && GIT_BIN="$_d/git"
+done
+python3() { "$PY3" "$@"; }
+git() { "$GIT_BIN" "$@"; }
 GRANTS_DIR="${SAVIA_GRANTS_DIR:-$HOME/.savia/grants}"
 # Raíz de confianza del grant de merge: clave(s) pública(s) de la operadora en
 # formato allowed_signers de OpenSSH. Versionada y sin override: si una variable
@@ -358,8 +372,25 @@ def ansi_c(s):
                lambda m: "\x27" + unescape(m.group(1)).replace("\x27", "\x27\\\x27\x27") + "\x27", s, flags=re.S)
     return re.sub(r"\$\"", "\"", s)
 MAX_ALTS = 512
+MAX_DIRS = 64
+SEQ_RE = re.compile(r"^(-?[0-9]+|.)\.\.(-?[0-9]+|.)(?:\.\.(-?[0-9]+))?$", re.S)
+def seq(body):
+    """Secuencia de bash {x..y[..paso]} (enteros o un carácter), o None si no lo es."""
+    m = SEQ_RE.match(body)
+    if not m:
+        return None
+    a, b, step = m.group(1), m.group(2), abs(int(m.group(3) or 1)) or 1
+    num = re.fullmatch(r"-?[0-9]+", a) and re.fullmatch(r"-?[0-9]+", b)
+    if not num and (len(a) != 1 or len(b) != 1):
+        return None
+    x, y = (int(a), int(b)) if num else (ord(a), ord(b))
+    if abs(y - x) // step + 1 > MAX_ALTS:
+        block("orden con demasiadas expansiones de llaves para evaluarla")
+    r = range(x, y + 1, step) if x <= y else range(x, y - 1, -step)
+    return [str(v) if num else chr(v) for v in r]
 def braces(t):
-    """Expansión de llaves iterativa y acotada (una orden hostil no tumba el guard)."""
+    """Expansión de llaves iterativa y acotada (una orden hostil no tumba el guard):
+    alternativas {a,b} y secuencias {a..z}, {1..9..2}."""
     out, todo, steps = [], [t], 0
     while todo:
         s = todo.pop()
@@ -368,7 +399,8 @@ def braces(t):
         if not m:
             out.append(s)
         else:
-            todo.extend(s[:m.start()] + alt + s[m.end():] for alt in m.group(1).split(","))
+            alts = seq(m.group(1))
+            todo.extend(s[:m.start()] + alt + s[m.end():] for alt in (alts if alts is not None else m.group(1).split(",")))
         if len(out) + len(todo) > MAX_ALTS or steps > 20 * MAX_ALTS:
             block("orden con demasiadas expansiones de llaves para evaluarla")
     return out
@@ -392,8 +424,8 @@ def main():
     cwd = ev.get("cwd") if isinstance(ev.get("cwd"), str) and os.path.isdir(ev.get("cwd")) else os.getcwd()
     def deny():
         block(marker + " es la raíz de confianza del grant de merge; solo la operadora la cambia, por PR. Para leerla usa Read.")
-    def is_signers(p):
-        rp = os.path.realpath(os.path.join(cwd, os.path.expanduser(p)))
+    def is_signers(p, base=cwd):
+        rp = os.path.realpath(os.path.join(base, os.path.expanduser(p)))
         # También la copia de otro worktree o checkout: <raíz>/config/operator-grant-signers.
         return rp == signers or rp.endswith(os.sep + tail)
     if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
@@ -414,19 +446,42 @@ def main():
             toks = shlex.split(cmd, comments=False, posix=True)
         except ValueError:
             toks = cmd.split()
-        for tok in toks:
-            for piece in re.split(r"[<>|;&=()`]", tok):
-                for cand in braces(piece):
-                    if not cand:
-                        continue
-                    if "{" in piece and is_signers(cand):
+        pieces = [p for tok in toks for p in re.split(r"[<>|;&=()`]", tok) if p]
+        expanded = [(p, [c for c in braces(p) if c]) for p in pieces]
+        def resolve(cand, base):
+            if any(c in cand for c in "*?["):
+                return glob.glob(os.path.join(base, os.path.expanduser(cand)))
+            return [os.path.join(base, os.path.expanduser(cand))]
+        # Directorios desde los que la orden puede resolver rutas: el cwd del
+        # evento y los destinos de cd/pushd y de -C/--directory/--work-tree
+        # (`cd config && tee -a o*`). Primero todos, después las rutas: el orden
+        # real no importa para vetar.
+        dirs, want = [cwd], False
+        for piece, cands in expanded:
+            if want and piece.startswith("-") and len(piece) > 1:
+                continue  # cd -P DIR: la opción no consume el destino
+            if want:
+                for d in list(dirs):
+                    for cand in cands:
+                        for x in resolve(cand, d):
+                            x = os.path.realpath(x)
+                            if os.path.isdir(x) and x not in dirs:
+                                dirs.append(x)
+                                if len(dirs) > MAX_DIRS:
+                                    block("orden con demasiados directorios para evaluarla")
+                want = False
+            if piece in ("cd", "pushd", "-C", "--directory", "--work-tree"):
+                want = True
+        for piece, cands in expanded:
+            for cand in cands:
+                if "{" in piece and (named.search(cand) or any(is_signers(cand, d) for d in dirs)):
+                    deny()
+                if any(c in cand for c in "*?["):
+                    if any(is_signers(g) for d in dirs for g in resolve(cand, d)):
                         deny()
-                    if any(c in cand for c in "*?["):
-                        if any(is_signers(g) for g in glob.glob(os.path.join(cwd, os.path.expanduser(cand)))):
-                            deny()
-                        if ("signer" in cand or "operator-grant" in cand) and any(
-                                fnmatch.fnmatchcase(x, cand) for x in (marker, tail, signers)):
-                            deny()
+                    if ("signer" in cand or "operator-grant" in cand) and any(
+                            fnmatch.fnmatchcase(x, cand) for x in (marker, tail, signers)):
+                        deny()
     sys.exit(0)
 try:
     main()

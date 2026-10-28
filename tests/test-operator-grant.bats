@@ -676,3 +676,47 @@ PY
   run env PATH="$TMP_GRANTS/fakebin:$PATH" bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
 }
+
+# ── Tercera revisión de #1401 (Codex refutación, 2026-10-28) ──
+
+@test "guard: secuencias de llaves {a..z} y rutas tras cd/-C que resuelven a la raíz de confianza se vetan" {
+  cd "$FAKE_REPO"
+  for c in 'tee -a config/oper{a..a}tor-grant-signers < /tmp/a' \
+           'tee -a config/operator-grant-signer{r..t}' \
+           'tee -a config/operator-grant-signer{s..s..1}' \
+           'cd config && tee -a o* < /tmp/a' \
+           'cd config && tee -a oper{a..a}tor-grant-signers' \
+           'cd -P con* && tee -a o*' \
+           'git -C config checkout -- op*' \
+           'pushd config; cp /tmp/a ./*'; do
+    run bash "$SCRIPT" guard < <(guard_event Bash command "$c" "$FAKE_REPO")
+    [ "$status" -eq 2 ]
+  done
+  # Una secuencia gigantesca no tumba el guard: sale con 2.
+  run bash "$SCRIPT" guard < <(guard_event Bash command 'echo {1..100000}' "$FAKE_REPO")
+  [ "$status" -eq 2 ]
+  # Control: secuencias y cd que no llegan al fichero pasan.
+  for c in 'echo {1..3} {a..c}' 'cd scripts && ls *' 'cd config && ls *.md' 'grep -C 3 x *.md'; do
+    run bash "$SCRIPT" guard < <(guard_event Bash command "$c" "$FAKE_REPO")
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "P1: una función python3 o git exportada no sustituye al verificador" {
+  echo '{}' > "$TMP_GRANTS/merge.json"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  run bash -c 'python3() { return 0; }; export -f python3; bash "$1" check --scope merge --resource pr:1' _ "$SCRIPT"
+  [ "$status" -eq 1 ]
+  run bash -c 'python3() { return 0; }; export -f python3; echo "{}" | bash "$1" guard' _ "$SCRIPT"
+  [ "$status" -eq 2 ]
+  # Un git falso no cambia la identidad del repositorio para la que vale el grant.
+  issue_merge "repo" pr:1
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  run bash -c 'git() { echo https://github.com/test-org/repo-b.git; }; export -f git; bash "$1" check --scope merge --resource pr:1' _ "$SCRIPT"
+  [ "$status" -eq 0 ]
+  git -C "$FAKE_REPO" remote set-url origin https://github.com/test-org/repo-b.git
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+}
