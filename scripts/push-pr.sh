@@ -72,6 +72,10 @@ if ! git diff --cached --quiet; then
   git commit -m "chore: sign confidentiality audit"
 else echo "  Unchanged."; fi
 echo -e "\n=== Step 5: Push ==="; export SAVIA_PUSH_PR=1
+# SE-343: el grant de merge firma una cabeza concreta del PR. Si este push la
+# mueve, el merge de esta ejecución no es posible: hace falta un grant nuevo.
+LOCAL_HEAD=$(git rev-parse HEAD)
+REMOTE_BEFORE=$(git ls-remote origin "refs/heads/$BRANCH" 2>/dev/null | cut -f1 | head -1 || true)
 git push origin "$BRANCH" 2>&1 | tail -3 || { echo "  Retrying..."; git push --force-with-lease origin "$BRANCH" 2>&1 | tail -3; }
 
 # ── Step 6: PR ───────────────────────────────────────────────────────────
@@ -174,6 +178,13 @@ PR_NUM=""
 [[ "$PR_URL" =~ (^|[[:space:]])https://[^[:space:]]+/pull/([0-9]+)([[:space:]]|$) ]] && PR_NUM="${BASH_REMATCH[2]}"
 if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
   [[ -n "$PR_NUM" ]] || { echo "ERROR: sin número de PR en '$PR_URL'; no se mergea." >&2; exit 1; }
+  # SE-343: tras un push la cabeza cambia y ningún grant anterior la cubre;
+  # nunca se empuja y se mergea en la misma ejecución.
+  if [[ "$REMOTE_BEFORE" != "$LOCAL_HEAD" ]]; then
+    echo "ERROR: este push ha movido la cabeza del PR a $LOCAL_HEAD; no se mergea en la misma ejecución." >&2
+    echo "  Pide un grant nuevo para pr:$PR_NUM (firma la cabeza actual) y ejecuta push-pr.sh --merge otra vez." >&2
+    exit 1
+  fi
   # SE-343: merge requires a valid operator grant signed for THIS PR.
   GRANT_RES="pr:$PR_NUM"
   grant_ok() { bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; }
@@ -212,7 +223,7 @@ if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
   if $USE_GH_CLI; then
     grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
     echo "  Merging..."
-    if ! gh pr merge "$PR_NUM" -R "$REPO" --squash 2>&1 | tail -1; then
+    if ! gh pr merge "$PR_NUM" -R "$REPO" --squash --match-head-commit "$LOCAL_HEAD" 2>&1 | tail -1; then
       echo "ERROR: el PR #$PR_NUM no se puede mergear ahora (CI pendiente o rojo, conflictos o reglas)." >&2
       echo "  El grant de $GRANT_RES no se ha gastado: vuelve a ejecutar push-pr.sh --merge con el CI en verde." >&2
       exit 1
@@ -231,7 +242,7 @@ if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
     if [[ "$R" == "GREEN" ]]; then
       grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
       MR=$(curl -s -X PUT "https://api.github.com/repos/$REPO/pulls/$PR_NUM/merge" \
-        -H "Authorization: token $TOKEN" -d "{\"merge_method\":\"squash\",\"commit_title\":\"$TITLE\"}" \
+        -H "Authorization: token $TOKEN" -d "$(python3 -c 'import json,sys;print(json.dumps({"merge_method":"squash","commit_title":sys.argv[1],"sha":sys.argv[2]}))' "$TITLE" "$LOCAL_HEAD")" \
         | python3 -c "import sys,json;d=json.load(sys.stdin);print('MERGED' if d.get('merged') or 'sha' in d else f'Merge: {d}')" 2>&1) || true
       if [[ "$MR" == "MERGED" ]]; then echo "  Merged."; MERGED=true; else echo "  $MR"; fi
     else echo "  CI timeout. Merge manually."; fi

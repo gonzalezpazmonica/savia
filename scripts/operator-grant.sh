@@ -52,6 +52,14 @@ for _d in ${SAFE_PATH//:/ }; do
   [[ -z "$GIT_BIN" && -x "$_d/git" ]] && GIT_BIN="$_d/git"
 done
 python3() { "$PY3" "$@"; }
+# gh para leer la cabeza actual del PR (head_sha). SAVIA_GH_BIN solo sirve para
+# las pruebas; quien controla el entorno controla el script (ver arriba).
+GH_BIN=""
+for _d in ${SAFE_PATH//:/ }; do
+  [[ -z "$GH_BIN" && -x "$_d/gh" ]] && GH_BIN="$_d/gh"
+done
+[[ -n "${SAVIA_GH_BIN:-}" && -x "${SAVIA_GH_BIN}" ]] && GH_BIN="$SAVIA_GH_BIN"
+unset GH_REPO GH_HOST
 git() { "$GIT_BIN" "$@"; }
 GRANTS_DIR="${SAVIA_GRANTS_DIR:-$HOME/.savia/grants}"
 # Raíz de confianza del grant de merge: clave(s) pública(s) de la operadora en
@@ -134,6 +142,16 @@ repo_id() {
   u="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null)" || return 0
   python3 -I -c "$GRANT_PY" repo "$u" 2>/dev/null || true
 }
+# Cabeza actual (headRefOid) del PR de un recurso pr:N; vacía si no es un PR o
+# no se puede leer (quien lo use falla cerrado). Solo 40 hex.
+pr_head() {
+  local res="$1" repo out
+  [[ "$res" == pr:* && -n "$GH_BIN" ]] || return 0
+  repo="$(repo_id)"; [[ -n "$repo" ]] || return 0
+  out="$("$GH_BIN" pr view "${res#pr:}" -R "$repo" --json headRefOid -q .headRefOid 2>/dev/null)" || return 0
+  [[ "$out" =~ ^[0-9a-f]{40}$ ]] && printf '%s' "$out"
+  return 0
+}
 request_file() { printf '%s/%s.request' "$GRANTS_DIR" "$1"; }
 spent_file() { printf '%s/%s.spent' "$GRANTS_DIR" "$1"; }
 
@@ -146,8 +164,9 @@ spent_file() { printf '%s/%s.spent' "$GRANTS_DIR" "$1"; }
 GRANT_PY='
 import json, os, re, subprocess, sys, tempfile, time
 FIELDS = ("id", "scope", "repo", "resource", "grantor", "request_context",
-          "issued_at", "issued_epoch", "expires_at", "expires_epoch")
+          "issued_at", "issued_epoch", "expires_at", "expires_epoch", "head_sha")
 ID_RE = re.compile(r"^[0-9a-f]{32}$")
+HEAD_RE = re.compile(r"^[0-9a-f]{40}$")
 RES_RE = re.compile(r"^(pr|task):[A-Za-z0-9._-]{1,64}$")
 def payload(rec):
     """Bytes exactos que firma la operadora."""
@@ -167,13 +186,18 @@ def repo_of(url):
     if not m or not re.fullmatch(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+", m.group(2)):
         return ""
     return (m.group(1) + "/" + m.group(2)).lower()
-def fields_ok(rec, slug, resource, spent, repo):
+def fields_ok(rec, slug, resource, spent, repo, head):
     """Campos del grant de merge, sin la firma. resource None = el suyo.
-    repo = identidad del checkout que lo usa: un grant de A#41 no vale en B#41."""
+    repo = identidad del checkout que lo usa: un grant de A#41 no vale en B#41.
+    head = cabeza actual del PR del grant: lo firmado es un contenido, no un número;
+    si el PR ya no está en la cabeza firmada (o no se pudo leer) no vale."""
     now = time.time()
     g, i, r = rec.get("grantor"), rec.get("id"), rec.get("resource")
     ie, ee, rp = rec.get("issued_epoch"), rec.get("expires_epoch"), rec.get("repo")
-    return (rec.get("scope") == "merge"
+    hs = rec.get("head_sha")
+    head_ok = (isinstance(hs, str) and HEAD_RE.match(hs) is not None and head == hs
+               if isinstance(r, str) and r.startswith("pr:") else hs == "")
+    return (rec.get("scope") == "merge" and head_ok
             and isinstance(rp, str) and rp != "" and rp == repo
             and isinstance(i, str) and ID_RE.match(i) is not None and i not in spent
             and isinstance(r, str) and RES_RE.match(r) is not None
@@ -206,18 +230,18 @@ def load(path):
     return rec if isinstance(rec, dict) else None
 op = sys.argv[1]
 if op in ("write", "request"):
-    out, scope, grantor, source, ctx, issued, expires_at, exp, now, resource, repo = sys.argv[2:13]
+    out, scope, grantor, source, ctx, issued, expires_at, exp, now, resource, repo, head = sys.argv[2:14]
     rec = {"scope": scope, "grantor": grantor, "source": source, "request_context": ctx,
            "issued_at": issued, "expires_at": expires_at, "expires_epoch": int(exp)}
     if op == "write":
         dump(out, rec)
     else:
-        rec.update(id=os.urandom(16).hex(), repo=repo, resource=resource, issued_epoch=int(now))
+        rec.update(id=os.urandom(16).hex(), repo=repo, resource=resource, issued_epoch=int(now), head_sha=head)
         with open(out, "wb") as f:
             f.write(payload(rec))
         print(payload(rec).decode())
 elif op == "accept":
-    req, sigsrc, out, signers, ns, slug, spent, repo = sys.argv[2:10]
+    req, sigsrc, out, signers, ns, slug, spent, repo, head = sys.argv[2:11]
     try:
         raw = open(req, "rb").read()
         rec = json.loads(raw)
@@ -228,13 +252,13 @@ elif op == "accept":
         print("ERROR: la petición no es canónica (alterada)", file=sys.stderr); sys.exit(1)
     if slug and rec.get("grantor") != slug:
         print("ERROR: la petición es de otra operadora", file=sys.stderr); sys.exit(1)
-    if not (fields_ok(rec, slug, None, spent_ids(spent), repo) and verify(rec, sig, signers, ns)):
+    if not (fields_ok(rec, slug, None, spent_ids(spent), repo, head) and verify(rec, sig, signers, ns)):
         print("ERROR: firma no válida para esta petición (clave, namespace, caducidad, repositorio, revocada o contenido)", file=sys.stderr); sys.exit(1)
     rec.update(source="operator-signature", sig=sig)
     dump(out, rec)
 elif op == "check":
     # Exit 0 vigente | 1 no válido. resource "*" = el del propio grant (solo list).
-    path, scope, slug, resource, signers, ns, spent, repo = sys.argv[2:10]
+    path, scope, slug, resource, signers, ns, spent, repo, head = sys.argv[2:11]
     rec = load(path)
     if rec is None or rec.get("scope") != scope:
         sys.exit(1)
@@ -244,7 +268,7 @@ elif op == "check":
               and isinstance(ee, int) and ee >= time.time())
         sys.exit(0 if ok else 1)
     ok = (rec.get("source") == "operator-signature"
-          and fields_ok(rec, slug, None if resource == "*" else resource, spent_ids(spent), repo)
+          and fields_ok(rec, slug, None if resource == "*" else resource, spent_ids(spent), repo, head)
           and verify(rec, rec.get("sig"), signers, ns))
     sys.exit(0 if ok else 1)
 elif op == "spend":
@@ -293,12 +317,16 @@ ensure_grants_dir() {
 
 # op = write (autonomy:*, grant en vigor) | request (merge, pendiente de firma).
 emit() {
-  local op="$1" scope="$2" context="$3" ttl="$4" slug="$5" grantor="$6" resource="$7" out f
+  local op="$1" scope="$2" context="$3" ttl="$4" slug="$5" grantor="$6" resource="$7" out f head=""
   ensure_grants_dir
+  if [[ "$op" == "request" && "$resource" == pr:* ]]; then
+    head="$(pr_head "$resource")"
+    [[ -n "$head" ]] || { echo "ERROR: no se pudo leer la cabeza actual de $resource (gh); el grant firma una cabeza concreta" >&2; exit 2; }
+  fi
   mapfile -t f < <(grant_fields "$scope" "$ttl" "$slug" "$grantor")
   if [[ "$op" == "write" ]]; then out="$(scope_file "$scope")"; else out="$(request_file "$scope")"; fi
   ( umask 077
-    python3 -I -c "$GRANT_PY" "$op" "$out" "$scope" "${f[0]}" express-request "$context" "${f[1]}" "${f[2]}" "${f[3]}" "${f[4]}" "$resource" "$(repo_id)" ) \
+    python3 -I -c "$GRANT_PY" "$op" "$out" "$scope" "${f[0]}" express-request "$context" "${f[1]}" "${f[2]}" "${f[3]}" "${f[4]}" "$resource" "$(repo_id)" "$head" ) \
     || { echo "ERROR: cannot write $out" >&2; exit 2; }
   chmod 600 "$out" 2>/dev/null || true
 }
@@ -308,8 +336,13 @@ check_scope() {
   local scope="$1" slug="$2" resource="${3:-}" file
   file="$(scope_file "$scope")"
   [[ ! -f "$file" ]] && return 3
+  local head="" res="$resource"
+  if [[ "$scope" == "merge" ]]; then
+    [[ "$res" == "*" ]] && res="$(python3 -I -c "$GRANT_PY" field "$file" resource 2>/dev/null || true)"
+    head="$(pr_head "$res")"
+  fi
   python3 -I -c "$GRANT_PY" check "$file" "$scope" "$slug" "$resource" \
-    "$SIGNERS_FILE" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" || return 1
+    "$SIGNERS_FILE" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" "$head" || return 1
   return 0
 }
 
@@ -573,7 +606,8 @@ case "$ACTION" in
       ensure_grants_dir
       ( umask 077
         python3 -I -c "$GRANT_PY" accept "$(request_file merge)" "$SIGNATURE" "$(scope_file merge)" \
-          "$SIGNERS_FILE" "$SIG_NAMESPACE" "$SLUG" "$(spent_file merge)" "$(repo_id)" ) || exit $?
+          "$SIGNERS_FILE" "$SIG_NAMESPACE" "$SLUG" "$(spent_file merge)" "$(repo_id)" \
+          "$(python3 -I -c "$GRANT_PY" field "$(request_file merge)" head_sha)" ) || exit $?
       rm -f "$(request_file merge)"
       RESOURCE="$(python3 -I -c "$GRANT_PY" field "$(scope_file merge)" resource)"
       echo "granted: merge $RESOURCE -> $SLUG (source operator-signature)"

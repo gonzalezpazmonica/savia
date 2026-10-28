@@ -24,6 +24,13 @@ contexto → la operadora la firma → Savia incorpora la firma →
 se consume (`consume`). Sin grant
 (nadie autorizó), `push-pr.sh --merge` aborta y el PR permanece en Draft.
 
+El grant firma un contenido, no un número de PR: `check` compara `head_sha` con
+la cabeza actual del PR y falla cerrado si difiere o no se puede leer, y el
+merge lleva `gh pr merge --match-head-commit <sha>` (REST: `sha`), de modo que
+GitHub rechaza el merge si la cabeza cambió entre el check y la fusión.
+`push-pr.sh --merge` no mergea en una ejecución cuyo push haya movido la
+cabeza: tras un push hace falta un grant nuevo para la cabeza nueva.
+
 Son dos pasos: el grant se firma para un PR que ya existe. Si `push-pr.sh
 --merge` acaba de crear el PR, sale con 1 y lo deja en Draft; se pide la firma
 de `pr:<n>` y se vuelve a ejecutar. Si `consume` falla tras el merge, se revoca
@@ -41,8 +48,10 @@ Pedir el grant no basta y Savia no puede emitirlo sola:
 1. `operator-grant.sh grant --scope merge --resource pr:<n> --context "..."`
    solo deja una petición canónica en `~/.savia/grants/merge.request` y la
    imprime (exit 4). Lleva id aleatorio, `grantor` (principal), `scope`,
-   `repo` (remoto `origin` normalizado, `host/owner/name`), `resource` y
-   vigencia (`issued_epoch`, `expires_epoch`). Sin remoto identificable, exit 2.
+   `repo` (remoto `origin` normalizado, `host/owner/name`), `resource`,
+   `head_sha` (la cabeza del PR, `headRefOid`, leída con `gh` al pedirlo) y
+   vigencia (`issued_epoch`, `expires_epoch`). Sin remoto identificable o sin
+   poder leer la cabeza, exit 2.
 2. La operadora la firma con su clave ed25519 **privada**, que vive en su móvil
    o en Savia Space y nunca en el equipo de los agentes:
    `ssh-keygen -Y sign -f <clave> -n savia-operator-grant <petición>`.

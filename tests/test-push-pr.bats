@@ -215,6 +215,9 @@ esac
 exit 0
 GH
   git -C "$r" add -A; git -C "$r" commit -qm "chore: stubs"
+  # La rama ya está publicada (cabeza firmada): --merge no empuja nada.
+  ( cd "$r" && bash scripts/confidentiality-sign.sh sign >/dev/null && git add .confidentiality-signature \
+      && git commit -qm "chore: sign confidentiality audit" && git push -q origin agent/x )
   echo "$r"
 }
 
@@ -241,7 +244,8 @@ run_merge() {
   r=$(make_merge_repo)
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
-  grep -q "^pr merge 42 -R .* --squash$" "$GH_LOG"
+  head=$(git -C "$r" rev-parse HEAD)
+  grep -q -- "^pr merge 42 -R .* --squash --match-head-commit $head$" "$GH_LOG"
   grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
   [[ "$output" == *"Merge grant consumed (one-shot)."* ]]
 }
@@ -267,12 +271,27 @@ run_merge() {
   grep -q "^pr merge 42" "$GH_LOG"
 }
 
+@test "SE-343 --merge: si este push mueve la cabeza no se mergea en la misma ejecución" {
+  r=$(make_merge_repo)
+  git -C "$r" commit -q --allow-empty -m "agent(x): commit posterior al grant"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"grant nuevo"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  run grep -c "^check" "$OG_LOG"
+  [ "$output" = "0" ]
+  # Control: sin cambios nuevos (cabeza ya publicada) el merge sigue.
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+}
+
 @test "SE-343 --merge: GH_REPO no desvía el merge a otro repositorio" {
   r=$(make_merge_repo)
   origin_repo=$(git -C "$r" remote get-url origin | sed -E 's|.*github\.com[:/]||;s|\.git$||')
   GH_REPO=org/B GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
-  grep -qx "pr merge 42 -R $origin_repo --squash" "$GH_LOG"
+  grep -q -- "^pr merge 42 -R $origin_repo --squash --match-head-commit [0-9a-f]\{40\}$" "$GH_LOG"
   run grep -c "^GH_REPO=org/B" "$GH_LOG"
   [ "$output" = "0" ]
 }

@@ -29,10 +29,22 @@ setup() {
   git -C "$FAKE_REPO" init -q
   git -C "$FAKE_REPO" remote add origin "https://github.com/test-org/repo-a.git"
   SCRIPT="$FAKE_REPO/scripts/operator-grant.sh"
+  # gh simulado: cabeza actual del PR = contenido de $TMP_GRANTS/pr-head (SE-343 head_sha).
+  HEAD_A="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  HEAD_B="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  printf '%s' "$HEAD_A" > "$TMP_GRANTS/pr-head"
+  write_gh_ok
+  export SAVIA_GH_BIN="$TMP_GRANTS/gh"
   SIGNERS="$FAKE_REPO/config/operator-grant-signers"
   KEY="$TMP_GRANTS/op-key"
   ssh-keygen -q -t ed25519 -N "" -C test -f "$KEY"
   printf '%s namespaces="savia-operator-grant" %s\n' "$ACTIVE_SLUG" "$(cut -d' ' -f1-2 "$KEY.pub")" > "$SIGNERS"
+}
+
+# gh simulado que devuelve la cabeza de $TMP_GRANTS/pr-head.
+write_gh_ok() {
+  printf '#!/bin/bash\nprintf "%%s" "$(cat "%s/pr-head")"\n' "$TMP_GRANTS" > "$TMP_GRANTS/gh"
+  chmod +x "$TMP_GRANTS/gh"
 }
 
 teardown() {
@@ -312,10 +324,54 @@ PY
 }
 
 @test "P1: la raíz de confianza versionada no acepta la clave de prueba (fail-closed)" {
-  # Un grant firmado con la clave de prueba no vale contra el fichero del repo, tenga o no
-  # la clave real de la operadora (el alta añade una línea y no debe romper este test).
+  # La única diferencia entre las dos comprobaciones es el fichero de firmantes: mismo
+  # remoto (el del checkout real), mismo grant, misma cabeza. No depende de la clave real
+  # de la operadora: el alta añade una línea y no debe romper este test.
+  git -C "$FAKE_REPO" remote set-url origin "$(git remote get-url origin)"
   issue_merge "contra el repo"
+  # Control: con la clave de prueba en el config/ temporal, el grant vale.
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  # El mismo grant contra el fichero de firmantes versionado no vale.
   run bash "$REAL_SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+}
+
+@test "SE-343: un grant emitido para la cabeza A no autoriza la cabeza B" {
+  issue_merge "cabeza A"
+  [ "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["head_sha"])' "$TMP_GRANTS/merge.json")" = "$HEAD_A" ]
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+  # Se añaden commits al PR tras firmar: la cabeza ya no es la firmada.
+  printf '%s' "$HEAD_B" > "$TMP_GRANTS/pr-head"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+  run bash "$SCRIPT" consume --scope merge --resource pr:1
+  [ "$status" -ne 0 ]
+  # Control: volver a la cabeza firmada lo hace valer otra vez.
+  printf '%s' "$HEAD_A" > "$TMP_GRANTS/pr-head"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 0 ]
+}
+
+@test "SE-343: head_sha está dentro de lo firmado (alterarlo invalida la firma)" {
+  issue_merge "firmado"
+  sed -i "s/$HEAD_A/$HEAD_B/" "$TMP_GRANTS/merge.json"
+  printf '%s' "$HEAD_B" > "$TMP_GRANTS/pr-head"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
+  [ "$status" -eq 1 ]
+}
+
+@test "SE-343: sin poder leer la cabeza del PR no se emite ni vale el grant (fail-closed)" {
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP_GRANTS/gh"
+  run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "sin gh" --ttl-hours 1
+  [ "$status" -eq 2 ]
+  [ ! -f "$TMP_GRANTS/merge.request" ]
+  # Un grant ya firmado tampoco vale si la cabeza no se puede leer.
+  write_gh_ok
+  issue_merge "con gh"
+  printf '#!/usr/bin/env bash\nprintf "no-es-sha"\n' > "$TMP_GRANTS/gh"
+  run bash "$SCRIPT" check --scope merge --resource pr:1
   [ "$status" -eq 1 ]
 }
 
