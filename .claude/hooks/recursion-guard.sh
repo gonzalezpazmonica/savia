@@ -44,8 +44,11 @@ main() {
   fi
 
   # Claude Code pasa la entrada por stdin; OPENCODE_TOOL_INPUT queda como respaldo.
-  local tool_input="${OPENCODE_TOOL_INPUT:-}"
-  if [[ -z "$tool_input" && ! -t 0 ]]; then tool_input=$(timeout 3 cat 2>/dev/null || true); fi
+  # stdin es la fuente autorizada; la variable solo vale de respaldo si stdin llega vacío (una variable
+  # heredada en el entorno no puede sustituir a la entrada real y anular la evaluación).
+  local tool_input=""
+  if [[ ! -t 0 ]]; then tool_input=$(timeout 3 cat 2>/dev/null || true); fi
+  [[ -z "$tool_input" ]] && tool_input="${OPENCODE_TOOL_INPUT:-}"
   # Dentro de un bucle activo el guard falla cerrado: sin entrada, o con una que no puede decodificar,
   # bloquea. JSON: se compara el texto DECODIFICADO (un escape \uXXXX equivale a su carácter) y todas
   # las rutas de claves, también las de contenedores vacíos; here-strings sin SIGPIPE.

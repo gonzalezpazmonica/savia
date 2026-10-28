@@ -13,8 +13,11 @@ fi
 # Lee el input del hook
 # Claude Code y OpenCode pasan la entrada del hook por stdin; CLAUDE_TOOL_INPUT no lo define ningún
 # runtime y leerla sola dejaba el hook en fallo abierto (exit 0 siempre). Se conserva como respaldo.
-INPUT="${CLAUDE_TOOL_INPUT:-}"
-if [[ -z "$INPUT" && ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
+# stdin es la fuente autorizada; la variable solo vale de respaldo si stdin llega vacío (una variable
+# heredada en el entorno no puede sustituir a la entrada real y anular la evaluación).
+INPUT=""
+if [[ ! -t 0 ]]; then INPUT=$(timeout 3 cat 2>/dev/null || true); fi
+[[ -z "$INPUT" ]] && INPUT="${CLAUDE_TOOL_INPUT:-}"
 
 # Con JSON de stdin se evalúa el contenido RESULTANTE de .gitignore (lib/gitignore-whitelist-delta.py):
 # bloquea si aparece alguna whitelist de proyecto que no estaba, incluida una edición parcial que solo

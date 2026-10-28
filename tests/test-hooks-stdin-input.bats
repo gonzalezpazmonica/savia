@@ -339,3 +339,34 @@ print(bad); raise SystemExit(1 if bad else 0)'
   run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
   [ "$status" -eq 0 ]
 }
+
+# ── Ronda 9: una variable heredada no puede anular la entrada real por stdin ──
+
+@test "block-project-whitelist: CLAUDE_TOOL_INPUT heredada no anula stdin" {
+  mkdir -p "$TMP/proj"; export CLAUDE_PROJECT_DIR="$TMP/proj"
+  printf '*.log\n' > "$TMP/proj/.gitignore"
+  python3 -c 'import json; print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":".gitignore","old_string":"*.log","new_string":"*.log\n!pro"+"jects/a/"}}))' > "$TMP/in.json"
+  CLAUDE_TOOL_INPUT=' ' run bash .opencode/hooks/block-project-whitelist.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "android-adb-validate: TOOL_INPUT heredada no anula stdin" {
+  export HOME="$TMP"
+  python3 -c 'import json; print(json.dumps({"tool_name":"Bash","tool_input":{"command":"adb shell rm -rf /sdcard/x"}}))' > "$TMP/in.json"
+  TOOL_INPUT=' ' run bash .opencode/hooks/android-adb-validate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "pr-summary-gate (lector común): CLAUDE_TOOL_INPUT heredada no anula stdin" {
+  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
+  printf '%s' '{"tool_input":{"command":"gh pr create --draft"}}' > "$TMP/in.json"
+  CLAUDE_TOOL_INPUT='echo hola' run bash .opencode/hooks/pr-summary-gate.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}
+
+@test "recursion-guard: OPENCODE_TOOL_INPUT heredada no anula stdin" {
+  export SAVIA_LOOP_CONTEXT="overnight-sprint:1"
+  printf '%s' '{"tool_input":{"prompt":"lanza overnight-sprint"}}' > "$TMP/in.json"
+  OPENCODE_TOOL_INPUT='{"prompt":"ls"}' run bash .opencode/hooks/recursion-guard.sh < "$TMP/in.json"
+  [ "$status" -eq 2 ]
+}

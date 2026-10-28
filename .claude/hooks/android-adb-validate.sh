@@ -13,13 +13,17 @@ fi
 
 # La orden llega por stdin (tool_input.command); TOOL_INPUT no lo define ningún runtime y leerla
 # sola dejaba el guard inerte. Se conserva como respaldo.
-TOOL_INPUT="${TOOL_INPUT:-}"
-if [[ -z "$TOOL_INPUT" && ! -t 0 ]]; then
-  _raw=$(timeout 3 cat 2>/dev/null || true)
+# stdin es la fuente autorizada; la variable solo vale de respaldo si stdin llega vacío (una variable
+# heredada en el entorno no puede sustituir a la entrada real y anular la evaluación).
+_raw=""
+if [[ ! -t 0 ]]; then _raw=$(timeout 3 cat 2>/dev/null || true); fi
+if [[ -n "$_raw" ]]; then
   # shellcheck source=/dev/null
   source "$LIB_DIR/hook-input.sh"
   hook_extract_command "$_raw" || exit 2   # JSON malformado → bloqueo (fallo cerrado)
   TOOL_INPUT="$HOOK_COMMAND"
+else
+  TOOL_INPUT="${TOOL_INPUT:-}"
 fi
 LOG_DIR="$HOME/.claude/logs"
 LOG_FILE="$LOG_DIR/android-adb.log"

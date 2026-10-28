@@ -68,9 +68,12 @@ HOOK_GIT_AT="${HOOK_CMD_AT}"'(\\|[^[:space:]]*/)?git(([[:space:]]+(-C|-c|--git-d
 #   2 → entrada JSON malformada: el llamador debe bloquear (fallo cerrado)
 #   3 → sin entrada: se registra como «no medido» y el llamador decide (los gates de órdenes salen con 0)
 hook_read_command() {
-  local hook="$1" raw="${CLAUDE_TOOL_INPUT:-}"
+  local hook="$1" raw=""
   HOOK_COMMAND=""
-  if [[ -z "$raw" && ! -t 0 ]]; then raw=$(timeout 3 cat 2>/dev/null || true); fi
+  # stdin es la fuente autorizada; la variable solo vale de respaldo si stdin llega vacío (una variable
+  # heredada en el entorno no puede sustituir a la entrada real y anular la evaluación).
+  if [[ ! -t 0 ]]; then raw=$(timeout 3 cat 2>/dev/null || true); fi
+  [[ -z "$raw" ]] && raw="${CLAUDE_TOOL_INPUT:-}"
   if [[ -z "$raw" ]]; then
     # shellcheck source=/dev/null
     source "$_HOOK_INPUT_DIR/gate-result.sh" 2>/dev/null \
