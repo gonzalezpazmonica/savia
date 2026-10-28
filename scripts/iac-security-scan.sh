@@ -374,6 +374,7 @@ scan_target() {
 
 OVERALL_EXIT=0
 HAS_FINDINGS=false
+FINDINGS_JSON=""   # report de la primera parte con hallazgos: es el que sale por stdout en --format json
 NO_IAC=false
 TYPES=""
 
@@ -398,7 +399,7 @@ PYEOF
   fi
   if [[ $rc -lt 2 ]] && ! report_result "$REPORT_JSON"; then gate_gap "report:unreadable"; rc=2; fi
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
-  [[ $rc -eq 1 ]] && HAS_FINDINGS=true
+  [[ $rc -eq 1 ]] && { HAS_FINDINGS=true; FINDINGS_JSON="$REPORT_JSON"; }
   say "Resultado config: $([[ $NO_IAC == true ]] && echo NO_IAC || status_of "$rc")"
 fi
 
@@ -407,6 +408,7 @@ if [[ -n "$IMAGE_TARGET" ]]; then
   rc=0; scan_target image "$IMAGE_TARGET" "$IMAGE_JSON" || rc=$?
   if [[ $rc -lt 2 ]] && ! report_result "$IMAGE_JSON"; then gate_gap "report:unreadable"; rc=2; fi
   (( rc > OVERALL_EXIT )) && OVERALL_EXIT=$rc
+  [[ $rc -eq 1 && -z $FINDINGS_JSON ]] && FINDINGS_JSON="$IMAGE_JSON"
   [[ $rc -eq 1 ]] && HAS_FINDINGS=true
   say "Resultado imagen: $(status_of "$rc")"
 fi
@@ -460,13 +462,17 @@ esac
 } > "$REPORT_MD"
 
 if [[ "$FORMAT" == "json" && $OVERALL_EXIT -lt 2 ]]; then
-  if [[ -n "$SCAN_PATH" ]]; then OUT_JSON="$REPORT_JSON"; else OUT_JSON="$IMAGE_JSON"; fi
+  # Revisión #1355 (6.ª): con exit 1 sale el report de la parte con hallazgos, no siempre el de --path
+  # (con --path roto o limpio, stdout decía unknown o clean sin los hallazgos de la imagen).
+  if [[ $OVERALL_EXIT -eq 1 ]]; then OUT_JSON="$FINDINGS_JSON"
+  elif [[ -n "$SCAN_PATH" ]]; then OUT_JSON="$REPORT_JSON"; else OUT_JSON="$IMAGE_JSON"; fi
   # Los huecos de la otra parte (findings + hueco) viajan también en el objeto de stdout.
   if (( ${#GATE_GAPS[@]} )) && ! python3 - "$OUT_JSON" "$(gate_result_emit findings "${GATE_GAPS[@]}")" <<'PYEOF'
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
 d["gaps"] = json.loads(sys.argv[2].split(": ", 1)[1])["gaps"]
+d["result"] = "findings"
 json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
 PYEOF
   then

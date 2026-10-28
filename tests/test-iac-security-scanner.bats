@@ -477,3 +477,34 @@ gate_line() { printf '%s\n' "$output" | tail -1; }
   [ "$status" -eq 2 ]
   [ "$(gate_line)" = 'gate-result: {"result":"unknown","gaps":[{"check":"python3","reason":"missing_tool"}]}' ]
 }
+
+# Revisión #1355 (6.ª, P1): en --format json el objeto de stdout salía del report de --path aunque los
+# hallazgos fueran de --image; con --path roto daba exit 1 y result "unknown" sin los hallazgos.
+@test "gate-result: trivy roto en --path y hallazgos en --image ⇒ exit 1 y JSON findings con los hallazgos de la imagen" {
+  printf '{"Results":[{"Target":"img","Vulnerabilities":[{"VulnerabilityID":"CVE-2024-1","PkgName":"openssl","InstalledVersion":"1.0","Severity":"CRITICAL"}]}]}' > "$WORK/img.json"
+  mv "$WORK/stub/trivy" "$WORK/stub/trivy.real"
+  printf '#!/bin/bash\n[[ "$1" == config ]] && { echo "FATAL: config" >&2; exit 1; }\nTRIVY_JSON=%s/img.json exec %s/stub/trivy.real "$@"\n' "$WORK" "$WORK" > "$WORK/stub/trivy"
+  chmod +x "$WORK/stub/trivy"
+  run bash "$SCAN" --path "$INFRA" --image myapp:latest
+  [ "$status" -eq 1 ]
+  [ "$(gate_line)" = 'gate-result: {"result":"findings","gaps":[{"check":"trivy-config","reason":"unreadable"}]}' ]
+  run --separate-stderr bash "$SCAN" --path "$INFRA" --image myapp:latest --format json
+  [ "$status" -eq 1 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="findings" and d["gaps"]==[{"check":"trivy-config","reason":"unreadable"}] and [f["id"] for f in d["findings"]]==["CVE-2024-1"], d'
+}
+
+@test "gate-result: --path limpio y hallazgos en --image ⇒ JSON findings con los de la imagen, nunca clean" {
+  printf '{"Results":[{"Target":"img","Vulnerabilities":[{"VulnerabilityID":"CVE-2024-1","PkgName":"openssl","InstalledVersion":"1.0","Severity":"CRITICAL"}]}]}' > "$WORK/img.json"
+  printf '{"Results":[]}' > "$WORK/clean.json"
+  mv "$WORK/stub/trivy" "$WORK/stub/trivy.real"
+  printf '#!/bin/bash\nj=%s/clean.json; [[ "$1" == image ]] && j=%s/img.json\nTRIVY_JSON=$j exec %s/stub/trivy.real "$@"\n' "$WORK" "$WORK" "$WORK" > "$WORK/stub/trivy"
+  chmod +x "$WORK/stub/trivy"
+  run --separate-stderr bash "$SCAN" --path "$INFRA" --image myapp:latest --format json
+  [ "$status" -eq 1 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="findings" and d["gaps"]==[] and [f["id"] for f in d["findings"]]==["CVE-2024-1"], d'
+  # Caso negativo: ambas partes limpias ⇒ exit 0 y clean.
+  printf '{"Results":[]}' > "$WORK/img.json"
+  run --separate-stderr bash "$SCAN" --path "$INFRA" --image myapp:latest --format json
+  [ "$status" -eq 0 ]
+  printf '%s' "$output" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["result"]=="clean" and d["gaps"]==[], d'
+}
