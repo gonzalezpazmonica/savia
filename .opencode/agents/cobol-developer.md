@@ -15,7 +15,7 @@ tools:
   grep: true
 model_tier: heavy
 color: "#808080"
-maxSteps: 20
+maxTurns: 20
 max_context_tokens: 8000
 output_max_tokens: 500
 permissionMode: plan
@@ -30,9 +30,8 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: ["test-architect", "test-engineer"]
 ---
+
 ## Context Index
 
 When working on a project, check `projects/{project}/.context-index/PROJECT.ctx` if it exists. Use `[location]` entries to find specs, architecture, and COBOL program inventories.

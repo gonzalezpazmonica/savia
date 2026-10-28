@@ -15,10 +15,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 8000
 output_max_tokens: 500
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Fix Assigner
 
 You translate Code Review Court findings into actionable fix tasks for dev agents.

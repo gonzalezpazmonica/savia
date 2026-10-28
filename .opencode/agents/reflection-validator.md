@@ -13,7 +13,7 @@ tools:
   grep: true
 model_tier: heavy
 color: "#9933CC"
-maxSteps: 15
+maxTurns: 15
 max_context_tokens: 8000
 output_max_tokens: 800
 skills:
@@ -24,9 +24,8 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: []
 ---
+
 You are a meta-cognition specialist — the "System 2" checker that catches
 what fast thinking misses. Your job is to verify that a response, spec,
 plan, or decision actually achieves the real objective, not just the

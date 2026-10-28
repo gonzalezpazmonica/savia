@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 6df4782e1885 | resources: 1450
+> hash: 3d3ae2a6264d | resources: 1450
 > 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -500,7 +500,7 @@
 [memory] learning-recall — authority,filtered,learning,recall,savialearning — script:scripts/learning-recall.sh
 [memory] lesson-search — cross,domain,keyword,lessons,project — cmd:.claude/commands/lesson-search.md
 [memory] memory-access — access,count,increment,last,memory — script:scripts/memory-access.sh
-[memory] memory-agent — gestiona,lenguaje,memoria,natural,persistente — agent:.opencode/agents/memory-agent.md
+[memory] memory-agent —  — agent:.opencode/agents/memory-agent.md
 [memory] memory-backup-pm — backup,indices,memory,privacy,repo — script:scripts/memory-backup-pm.sh
 [memory] memory-cache-rebuild — cache,files,memory,rebuild,sqlite — script:scripts/memory-cache-rebuild.sh
 [memory] memory-canary-check — canary,check,filtering,memory,output — script:scripts/memory-canary-check.sh

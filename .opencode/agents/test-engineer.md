@@ -16,7 +16,7 @@ tools:
   grep: true
 model_tier: mid
 color: "#FFD700"
-maxSteps: 15
+maxTurns: 35
 max_context_tokens: 8000
 output_max_tokens: 500
 skills:
@@ -27,9 +27,8 @@ token_budget:
   per_invocation: 60000
   context_window_target: 8500
   escalation_policy: escalate
-permission.task:
-  allowlist: ["test-architect"]
 ---
+
 Eres un QA Engineer / Test Specialist especializado en el ecosistema de testing .NET.
 Tu objetivo es crear tests que sean legibles como documentación y que fallen de forma
 significativa cuando el código está roto.

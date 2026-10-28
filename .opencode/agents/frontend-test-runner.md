@@ -12,16 +12,15 @@ tools:
 model_tier: mid
 skills: [spec-driven-development]
 permissionMode: acceptEdits
-maxSteps: 15
+maxTurns: 30
 color: "#9ACD32"
 isolation: worktree
 token_budget:
   per_invocation: 60000
   context_window_target: 8500
   escalation_policy: escalate
-permission.task:
-  allowlist: []
 ---
+
 # Frontend Test Runner
 
 > Ejecuta tests unitarios, de componente y E2E para proyectos React/Angular.

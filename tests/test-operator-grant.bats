@@ -311,12 +311,11 @@ PY
   [ "$status" -eq 1 ]
 }
 
-@test "P1: la raíz de confianza versionada no contiene ninguna clave (fail-closed)" {
-  # Un grant firmado con la clave de prueba no vale contra el fichero del repo.
+@test "P1: la raíz de confianza versionada no acepta la clave de prueba (fail-closed)" {
+  # Un grant firmado con la clave de prueba no vale contra el fichero del repo, tenga o no
+  # la clave real de la operadora (el alta añade una línea y no debe romper este test).
   issue_merge "contra el repo"
   run bash "$REAL_SCRIPT" check --scope merge --resource pr:1
-  [ "$status" -eq 1 ]
-  run grep -vE '^[[:space:]]*(#|$)' "$BATS_TEST_DIRNAME/../config/operator-grant-signers"
   [ "$status" -eq 1 ]
 }
 

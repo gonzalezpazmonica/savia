@@ -1,5 +1,5 @@
 {
-  "hash": "d09eb12b833a",
+  "hash": "f1eac6c8d0fd",
   "total": 1450,
   "resources": [
     {
@@ -6629,16 +6629,10 @@
     {
       "category": "memory",
       "name": "memory-agent",
-      "intents": [
-        "gestiona",
-        "lenguaje",
-        "memoria",
-        "natural",
-        "persistente"
-      ],
+      "intents": [],
       "kind": "agent",
       "path": ".opencode/agents/memory-agent.md",
-      "description": "Gestiona la memoria persistente de pm-workspace via lenguaje natural."
+      "description": ">-"
     },
     {
       "category": "memory",
