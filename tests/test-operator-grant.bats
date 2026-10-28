@@ -260,8 +260,10 @@ guard_event() {
 
 @test "P1: la firma de otra petición no vale para la nueva" {
   run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "merge del PR 1" --ttl-hours 1
+  [ "$status" -eq 4 ]
   sign_request
   run bash "$SCRIPT" grant --scope merge --resource pr:1 --context "merge de todo" --ttl-hours 1
+  [ "$status" -eq 4 ]
   run bash "$SCRIPT" grant --scope merge --signature "$TMP_GRANTS/req.sig"
   [ "$status" -eq 1 ]
   [ ! -e "$TMP_GRANTS/merge.json" ]
