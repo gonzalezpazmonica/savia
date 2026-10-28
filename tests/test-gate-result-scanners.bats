@@ -534,7 +534,7 @@ ps_setup() {
   [[ "$output" != *"nul3.md:Binary"* && "$output" != *"nul3.md:binary"* ]]
 }
 
-@test "prompt-scan: BOM con python3 presente ⇒ PS-11 igual que sin python3" {
+@test "prompt-scan: un BOM (U+FEFF) al inicio del fichero es hallazgo PS-11 con el PATH normal (falso positivo fijado)" {
   ps_setup
   printf '\xef\xbb\xbfcabecera\n' > "$W/p/bom.md"
   run bash "$W/scripts/prompt-real.sh" "$W/p"

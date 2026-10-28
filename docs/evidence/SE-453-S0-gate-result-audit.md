@@ -56,11 +56,10 @@ compararon con el hook bash con las mismas entradas:
 | `block-infra-destructive.ts` | 4 | ninguna | Sin cambios |
 | `validate-bash-global.ts` | 2 | ninguna | Sin cambios |
 
-Falso positivo compartido (bash y TS, mismo patrón): `commit\s+.*--amend` bloqueaba `git commit -m "explica --amend"`
-y `git commit -m x && echo --amend`, y no veía los prefijos que git acepta (`--am`, `--amen`). Ahora `--amend` tiene
-que ser una palabra propia de ese `git commit` (las palabras pueden llevar tramos entre comillas); lo comprueban
-dos casos de paridad en `tests/test-gate-result-dual-binding.bats`. Hueco conocido: un `-m "--amend"` (mensaje que es
-exactamente la opción) sigue bloqueando, y un `; git commit --amend` escrito dentro de un mensaje entre comillas también.
+Falso positivo compartido y aceptado (bash y TS, mismo patrón): `commit\s+.*--amend` bloquea cualquier `git commit`
+que mencione `--amend`, también en el mensaje (`git commit -m "explica --amend"`). #1355 intentó afinarlo con un
+tokenizador y se retiró (decisión 2026-10-28): en 8 rondas de revisión cada versión dejaba pasar algún amend real
+que esta regex sí bloquea.
 
 Reglas solo-TS que siguen siendo más estrictas que el hook (no se tocan): `git checkout --force`,
 `git rebase origin/main` y `git push --delete origin main`.
