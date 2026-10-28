@@ -3,13 +3,13 @@
 # Usage: push-pr.sh [--title "title"] [--body "body"] [--no-draft] [--merge]
 # Default: PR is created as DRAFT (safer). Use --no-draft for ready-for-review.
 # (--draft kept for backward compat; it's a no-op since draft is now default.)
-# --merge (SE-343) no firma, no empuja ni toca el PR: mergea la cabeza ya
-# publicada y firmada con el grant que la operadora firmó para esa cabeza.
-# Flujo: push-pr.sh (firma + push + PR) → grant de pr:<n> → push-pr.sh --merge.
 set -euo pipefail
 cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
 # Raíz del repo (los pasos F5 la usan; sin definir, `set -u` abortaba el --merge).
 ROOT="$PWD"
+# --merge (SE-343) no firma, no empuja ni toca el PR: mergea la cabeza ya
+# publicada y firmada con el grant que la operadora firmó para esa cabeza.
+# Flujo: push-pr.sh (firma + push + PR) → grant de pr:<n> → push-pr.sh --merge.
 
 TITLE="" BODY="" DRAFT=true MERGE=false SKIP_CL=false SKIP_CI=false FROM_PR_PLAN=false
 while [[ $# -gt 0 ]]; do
