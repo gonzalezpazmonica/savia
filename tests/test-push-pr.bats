@@ -31,7 +31,7 @@ teardown() {
 }
 
 @test "push-pr.sh has SE-300 existing-PR detection in gh CLI branch" {
-  grep -q "gh pr list --head" "$PUSH_PR"
+  grep -q 'gh pr list -R "$REPO" --head' "$PUSH_PR"
   grep -q "gh pr edit" "$PUSH_PR"
   grep -q "EXISTING_PR" "$PUSH_PR"
 }
@@ -70,7 +70,7 @@ teardown() {
 }
 
 @test "SE-300: push-pr updates existing PR via gh pr edit" {
-  grep -q "gh pr list --head" "$PUSH_PR"
+  grep -q 'gh pr list -R "$REPO" --head' "$PUSH_PR"
   grep -q "gh pr edit" "$PUSH_PR"
 }
 
@@ -123,7 +123,7 @@ res_dir_expr() { grep -oP '^\s*RES_DIR="\K[^"]+' "$PUSH_PR"; }
 }
 
 @test "SE-343: el grant de merge se comprueba y se consume para ESTE PR (pr:<n>), no uno cualquiera" {
-  grep -q 'GRANT_RES="pr:${PR_URL##\*/}"' "$PUSH_PR"
+  grep -q 'GRANT_RES="pr:$PR_NUM"' "$PUSH_PR"
   grep -q 'operator-grant.sh check --scope merge --resource "$GRANT_RES"' "$PUSH_PR"
   grep -q 'operator-grant.sh consume --scope merge --resource "$GRANT_RES"' "$PUSH_PR"
   # Ninguna llamada a check de merge sin recurso. (revoke sin recurso sí: gasta
@@ -155,7 +155,7 @@ echo "$*" >> "$GH_LOG"
 case "$1 $2" in
   "auth status") exit 0 ;;
   "pr list") echo "" ;;
-  "pr create") echo "https://github.com/o/r/pull/42" ;;
+  "pr create") printf '%b\n' "${GH_CREATE_OUT:-https://github.com/o/r/pull/42}" ;;
 esac
 GH
   chmod +x "$TESTDIR/bin/gh"
@@ -192,7 +192,11 @@ make_merge_repo() {
 #!/usr/bin/env bash
 echo "$*" >> "$OG_LOG"
 case "$1" in
-  check) exit "${OG_CHECK_RC:-0}" ;;
+  # OG_CHECK_SEQ="0 1": la 1.ª comprobación pasa y la 2.ª no (revocado entre medias).
+  check) if [[ -n "${OG_CHECK_SEQ:-}" ]]; then
+           n=$(grep -c '^check' "$OG_LOG"); set -- $OG_CHECK_SEQ; shift $(( n - 1 )); exit "${1:-1}"
+         fi
+         exit "${OG_CHECK_RC:-0}" ;;
   consume) exit "${OG_CONSUME_RC:-0}" ;;
   revoke) exit "${OG_REVOKE_RC:-0}" ;;
 esac
@@ -203,8 +207,10 @@ OG
   printf 'import json\nprint(json.dumps({"tier": 1}))\n' > "$r/scripts/risk-tier.py"
   printf '# Changelog\n\n## [1.2.3]\n- x\n' > "$r/CHANGELOG.md"
   cat >> "$TESTDIR/bin/gh" <<'GH'
+echo "GH_REPO=${GH_REPO:-}" >> "$GH_LOG"
 case "$1 $2" in
   "pr view") echo "${GH_STATE:-OPEN}" ;;
+  "pr merge") exit "${GH_MERGE_RC:-0}" ;;
 esac
 exit 0
 GH
@@ -235,9 +241,53 @@ run_merge() {
   r=$(make_merge_repo)
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
-  grep -q "pr merge 42 --squash --auto" "$GH_LOG"
+  grep -q "^pr merge 42 -R .* --squash$" "$GH_LOG"
   grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
   [[ "$output" == *"Merge grant consumed (one-shot)."* ]]
+}
+
+@test "SE-343 --merge: nunca programa un auto-merge (--auto) que sobreviviría a revocar el grant" {
+  r=$(make_merge_repo)
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  run grep -c -- "--auto" "$GH_LOG"
+  [ "$output" = "0" ]
+}
+
+@test "SE-343 --merge: grant revocado entre la primera comprobación y el merge → no hay merge" {
+  r=$(make_merge_repo)
+  GH_STATE=MERGED OG_CHECK_SEQ="0 1" run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ya no es vigente"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Control: si sigue vigente en la segunda comprobación, sí hay merge.
+  GH_STATE=MERGED OG_CHECK_SEQ="0 0" run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -q "^pr merge 42" "$GH_LOG"
+}
+
+@test "SE-343 --merge: GH_REPO no desvía el merge a otro repositorio" {
+  r=$(make_merge_repo)
+  origin_repo=$(git -C "$r" remote get-url origin | sed -E 's|.*github\.com[:/]||;s|\.git$||')
+  GH_REPO=org/B GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -qx "pr merge 42 -R $origin_repo --squash" "$GH_LOG"
+  run grep -c "^GH_REPO=org/B" "$GH_LOG"
+  [ "$output" = "0" ]
+}
+
+@test "SE-343 --merge: el recurso del grant es el número del PR aunque la salida traiga texto extra" {
+  r=$(make_merge_repo)
+  GH_CREATE_OUT='Warning: algo\nhttps://github.com/o/r/pull/42 (updated)' GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -qx "check --scope merge --resource pr:42" "$OG_LOG"
+  grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
+  # Sin número de PR reconocible no se comprueba ni se mergea nada.
+  GH_CREATE_OUT='https://github.com/o/r/pull/' run_merge "$r"
+  [ "$status" -eq 1 ]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
 }
 
 @test "SE-343 --merge: si consume falla no se informa de consumo y el grant se revoca" {
@@ -252,10 +302,10 @@ run_merge() {
   [[ "$output" == *"NO se pudo gastar ni revocar"* ]]
 }
 
-@test "SE-343 --merge: auto-merge pendiente no gasta el grant ni dice que lo hizo" {
+@test "SE-343 --merge: si el PR no se puede mergear ahora, sale con 1 y no gasta el grant" {
   r=$(make_merge_repo)
-  GH_STATE=OPEN run_merge "$r"
-  [ "$status" -eq 0 ]
+  GH_MERGE_RC=1 GH_STATE=OPEN run_merge "$r"
+  [ "$status" -eq 1 ]
   [[ "$output" != *"Merge grant consumed"* ]]
   [[ "$output" == *"no se ha gastado"* ]]
   run grep -c "^consume" "$OG_LOG"

@@ -37,6 +37,10 @@ if ! $FROM_PR_PLAN && [[ -f ".pr-plan-ok" ]]; then
 fi
 
 REPO=$(git remote get-url origin | sed -E 's|.*github\.com[:/]||;s|\.git$||')
+# SE-343: gh actúa siempre sobre el repo de origin (para el que se firma el
+# grant), nunca sobre otro elegido por GH_REPO/GH_HOST: con GH_REPO=org/B un
+# grant de A#42 mergeaba B#42.
+unset GH_REPO GH_HOST
 TOKEN=$(git remote get-url origin | grep -oP 'ghp_[A-Za-z0-9]+' 2>/dev/null || true)
 if [[ -z "$TOKEN" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   USE_GH_CLI=true
@@ -112,7 +116,7 @@ fi
 BODY_FILE=$(mktemp); echo "$BODY" > "$BODY_FILE"
 if $USE_GH_CLI; then
   # SE-300: detect existing PR; update instead of create
-  EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+  EXISTING_PR=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
   if [[ -n "$EXISTING_PR" ]]; then
     PR_URL="https://github.com/$REPO/pull/$EXISTING_PR"
     echo "  PR #$EXISTING_PR exists - updating body..."
@@ -165,10 +169,15 @@ rm -f "$BODY_FILE" "$PWD/.pr-summary.md"; echo "  $PR_URL"
 
 # ── Auto-merge (--merge flag) ────────────────────────────────────────────
 MERGED=false
-if $MERGE && [[ "$PR_URL" == http* ]]; then
+# Número del PR, del URL estructurado (la ruta REST añade " (updated)").
+PR_NUM=""
+[[ "$PR_URL" =~ (^|[[:space:]])https://[^[:space:]]+/pull/([0-9]+)([[:space:]]|$) ]] && PR_NUM="${BASH_REMATCH[2]}"
+if $MERGE && [[ -n "$PR_NUM" || "$PR_URL" == http* ]]; then
+  [[ -n "$PR_NUM" ]] || { echo "ERROR: sin número de PR en '$PR_URL'; no se mergea." >&2; exit 1; }
   # SE-343: merge requires a valid operator grant signed for THIS PR.
-  GRANT_RES="pr:${PR_URL##*/}"
-  if ! bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; then
+  GRANT_RES="pr:$PR_NUM"
+  grant_ok() { bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; }
+  if ! grant_ok; then
     echo "ERROR: merge requires a vigente operator grant for $GRANT_RES." >&2
     echo "  El grant se firma para un PR que ya existe: pide la firma para $GRANT_RES" >&2
     echo "  (operator-grant.sh grant --scope merge --resource $GRANT_RES --context \"...\"), la operadora" >&2
@@ -190,16 +199,24 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
     echo "  risk-tier: $RISK_TIER (auto-merge permitido)."
   # SE-387 C/F5 — reservation SOLO tras pasar grant y risk-tier:
   # una operación correctamente rechazada nunca deja reservation "reserved".
-  PR_NUM_RES="${PR_URL##*/}"
+  PR_NUM_RES="$PR_NUM"
   if [[ -z "$PR_NUM_RES" ]]; then echo "ERROR F5: sin número de PR — fail-explicit" >&2; exit 1; fi
   # Mismo directorio que f5-state.sh (SAVIA_RESERVATIONS); f5-state lo crea.
   RES_DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"
   bash "$ROOT/scripts/f5-state.sh" reserve pr.merge "$PR_NUM_RES" || exit 3
   echo "F5 reservation: pr.merge/$PR_NUM_RES"
   fi
-  PR_NUM=$(echo "$PR_URL" | grep -oP '[0-9]+$')
+  # SE-343: merge inmediato, nunca `gh pr merge --auto`. Un auto-merge
+  # programado se ejecutaría al ponerse verde el CI aunque el grant se hubiera
+  # revocado o caducado entretanto. El grant se vuelve a comprobar justo antes.
   if $USE_GH_CLI; then
-    echo "  Enabling auto-merge..."; gh pr merge "$PR_NUM" --squash --auto 2>&1 | tail -1
+    grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
+    echo "  Merging..."
+    if ! gh pr merge "$PR_NUM" -R "$REPO" --squash 2>&1 | tail -1; then
+      echo "ERROR: el PR #$PR_NUM no se puede mergear ahora (CI pendiente o rojo, conflictos o reglas)." >&2
+      echo "  El grant de $GRANT_RES no se ha gastado: vuelve a ejecutar push-pr.sh --merge con el CI en verde." >&2
+      exit 1
+    fi
     # SE-387 C/F5: merge SOLICITADO != efecto consumado; el close ocurrirá
     # cuando el estado real sea MERGED (retry permite completar desde submitted)
     bash "$ROOT/scripts/f5-state.sh" mark_submitted pr.merge "$PR_NUM"
@@ -212,6 +229,7 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
       echo "  ... ($((i*10))s)"
     done
     if [[ "$R" == "GREEN" ]]; then
+      grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
       MR=$(curl -s -X PUT "https://api.github.com/repos/$REPO/pulls/$PR_NUM/merge" \
         -H "Authorization: token $TOKEN" -d "{\"merge_method\":\"squash\",\"commit_title\":\"$TITLE\"}" \
         | python3 -c "import sys,json;d=json.load(sys.stdin);print('MERGED' if d.get('merged') or 'sha' in d else f'Merge: {d}')" 2>&1) || true
@@ -228,7 +246,7 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
 
   # Check if merge completed (for release step)
   if $USE_GH_CLI; then
-    PR_STATE=$(gh pr view "$PR_NUM" --json state -q .state 2>/dev/null || echo "")
+    PR_STATE=$(gh pr view "$PR_NUM" -R "$REPO" --json state -q .state 2>/dev/null || echo "")
     [[ "$PR_STATE" == "MERGED" ]] && MERGED=true
   fi
   # SE-343: consume the merge grant after a successful merge (one-shot; id spent).
@@ -245,8 +263,8 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
       echo "  Revócalo a mano: bash scripts/operator-grant.sh revoke --scope merge" >&2
     fi
   else
-    # Auto-merge diferido (gh --auto) o merge no confirmado: el grant no se
-    # gasta aquí; sigue ligado a este repo y PR hasta caducar (TTL 6 h).
+    # Merge no confirmado (p. ej. el REST esperó al CI sin verde): el grant no
+    # se gasta aquí; sigue ligado a este repo y PR hasta caducar (TTL 6 h).
     echo "  Merge no confirmado todavía: el grant de $GRANT_RES no se ha gastado (caduca solo)."
   fi
 fi

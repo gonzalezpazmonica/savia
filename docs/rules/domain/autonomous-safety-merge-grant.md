@@ -27,8 +27,12 @@ se consume (`consume`). Sin grant
 Son dos pasos: el grant se firma para un PR que ya existe. Si `push-pr.sh
 --merge` acaba de crear el PR, sale con 1 y lo deja en Draft; se pide la firma
 de `pr:<n>` y se vuelve a ejecutar. Si `consume` falla tras el merge, se revoca
-el grant y se avisa; un auto-merge diferido (`gh pr merge --auto`) no gasta el
-grant, que sigue ligado a ese repositorio y PR hasta caducar.
+el grant y se avisa. El merge es inmediato y el grant se vuelve a comprobar
+justo antes: nunca se programa un auto-merge (`gh pr merge --auto`), que GitHub
+ejecutaría al ponerse verde el CI aunque el grant se hubiera revocado o
+caducado. Si el PR no se puede mergear todavía, sale con 1 sin gastar el grant
+y se vuelve a ejecutar con el CI en verde. `gh` actúa siempre sobre el repo de
+`origin` (`-R`, sin `GH_REPO`/`GH_HOST`), el mismo para el que va firmado.
 
 ## Firma de la operadora (LAW-HUMAN-002, firma asimétrica)
 
@@ -57,8 +61,12 @@ ninguna clave en ese fichero o sin `ssh-keygen`, ningún grant de merge es váli
 también el de la petición pendiente); `check` y la incorporación de la firma
 rechazan esos ids, así que restaurar una copia guardada del grant o de la
 petición no la revive. El verificador corre con `python3 -I` y un PATH fijo de
-sistema: ni `PYTHONPATH`/`sitecustomize` ni un `ssh-keygen` falso en el PATH lo
-sustituyen.
+sistema, y `python3` y `git` se invocan por ruta absoluta: ni
+`PYTHONPATH`/`sitecustomize`, ni un `ssh-keygen` falso en el PATH, ni una
+función exportada (`export -f python3`) lo sustituyen. Límite: quien controla
+el entorno del proceso (`BASH_ENV`, funciones exportadas con el nombre de
+`exit` o `builtin`) controla el código de salida de cualquier script Bash; el
+exit de `check` no es frontera frente a un llamante hostil (ver abajo).
 
 ### Qué prueba la firma y qué no
 
@@ -81,7 +89,8 @@ saliera de ahí, la firma dejaría de probar nada sobre ella.
    el mismo camino. Quitarla invalida al instante los grants ya firmados.
 
 Límite: el guard ve el texto de la orden (resuelve comillas, barras, ANSI-C
-`$'…'`, `$"…"`, continuaciones, escapes de printf, globs y llaves), no lo que
+`$'…'`, `$"…"`, continuaciones, escapes de printf, globs, llaves y secuencias
+`{a..z}`, también desde los destinos de `cd`/`pushd`/`-C`), no lo que
 ejecuta un script escrito antes, una variable que compone el nombre ni un cambio
 de rama. En Bash veta cualquier mención del nombre exacto, también las lecturas
 (`git status -- …`): para leerlo, la herramienta Read.

@@ -61,6 +61,13 @@ created_at: 2026-08-24
 > sistema. El guard resuelve comillas ANSI-C, `$"…"`, continuaciones y escapes de printf, y cualquier
 > error suyo sale con 2. Los ejemplos de §2.2 y §2.4 sin `--resource` son el diseño original: hoy
 > `check --scope merge` exige `--resource pr:<n>|task:<id>` (sin él, exit 2).
+>
+> **Tercera revisión (2026-10-28, #1401):** el guard expande secuencias de llaves (`{a..z}`) y
+> resuelve rutas también desde los destinos de `cd`/`pushd`/`-C`. `python3` y `git` se invocan por
+> ruta absoluta (una función exportada no los sustituye). `push-pr.sh --merge` ya no usa
+> `gh pr merge --auto`: merge inmediato con el grant comprobado justo antes, `gh -R` del repo de
+> `origin` sin `GH_REPO`, y el número del PR se extrae del URL estructurado. El §2.4 de abajo
+> («antes de habilitar auto-merge») es el diseño original.
 
 ## 1. Origen y problema
 
