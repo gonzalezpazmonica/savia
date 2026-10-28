@@ -1,5 +1,5 @@
 {
-  "hash": "f4b6f391343f",
+  "hash": "d09eb12b833a",
   "total": 1450,
   "resources": [
     {
@@ -3601,13 +3601,13 @@
       "intents": [
         "evals",
         "evaluation",
+        "honest",
         "local",
-        "runner",
-        "spec"
+        "result"
       ],
       "kind": "script",
       "path": "scripts/evals-runner.sh",
-      "description": "evals-runner.sh — SPEC-151 local evaluation runner."
+      "description": "evals-runner.sh — SPEC-151 local evaluation runner, honest result (SE-468)."
     },
     {
       "category": "development",
