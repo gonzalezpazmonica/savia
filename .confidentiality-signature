@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=fc4a185ca3e3a39c5a50b72083fc8071151b543997fc160823399a7ee12dc863
-timestamp=2026-10-28T06:29:55Z
-branch=agent/compliance-readme-scope-20261028
-head_commit=964415cd1
-signature=dd3d38cd08a4ee83e30e01f9556e3b2cfa49158aa2981a63738394d84af01e76
+diff_hash=5862c4215bff6bd0719de17a10ab3d89ac6dd405f9bdcb3579d2cb3fd78898c0
+timestamp=2026-10-28T07:11:37Z
+branch=agent/merge-sprint-labels-rest-20261028
+head_commit=7d8b07fb2
+signature=3ef0a5f6242fd636e9e3bcb748a19683aae492486f62f22b474aac8c0d89a64c
