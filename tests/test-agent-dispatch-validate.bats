@@ -172,3 +172,55 @@ teardown() { cd /; }
   files_after=$(find "$TMPDIR" -maxdepth 1 -type f 2>/dev/null | wc -l)
   [[ "$files_before" == "$files_after" ]]
 }
+
+# ── Tool Agent + prompts de solo lectura (P2 de #1405) ───────────────────
+# Entrada real: JSON por stdin con tool_name=Agent, perfil strict, HOME aislado.
+
+agent_run() {
+  local json
+  json=$(jq -n --arg p "$1" '{tool_name:"Agent",tool_input:{prompt:$p}}')
+  HOME="$BATS_TEST_TMPDIR/home" run bash "$HOOK" <<< "$json"
+}
+
+@test "agent read-only: leer CHANGELOG no se bloquea" {
+  agent_run "Lee CHANGELOG.md y resume los cambios."
+  [ "$status" -eq 0 ]
+}
+
+@test "agent read-only: leer un command no exige frontmatter" {
+  agent_run "Lee .claude/commands/foo.md y describe su contenido"
+  [ "$status" -eq 0 ]
+}
+
+@test "agent read-only: revisar una skill y una rule no avisa" {
+  agent_run "Revisa .claude/skills/x/SKILL.md y docs/rules/domain/y.md y explica las diferencias"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"DISPATCH"* ]]
+}
+
+@test "agent write: modificar CHANGELOG sigue bloqueando" {
+  agent_run "Modifica CHANGELOG.md con nueva entrada"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHANGELOG"* ]]
+}
+
+@test "agent mixed: leer y luego editar CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y añade una entrada"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write: crear command sin name sigue bloqueando" {
+  agent_run "Lee un ejemplo y crea .claude/commands/foo.md"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"name"* ]]
+}
+
+@test "agent sin verbo reconocible: se mantiene la validación" {
+  agent_run "CHANGELOG.md nueva entrada"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent: perfil standard sigue saltando el hook" {
+  SAVIA_HOOK_PROFILE=standard agent_run "Modifica CHANGELOG.md"
+  [ "$status" -eq 0 ]
+}
