@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=1da775ae55574c6f39fa8c582fc40b7c32a5762067d5bc562c6224aeeb69cf92
-timestamp=2026-10-29T22:41:21Z
+diff_hash=236a902b66b011dca45041b2d4bcf52b1c2e35b661aaaf7a832249e3cf8e8e80
+timestamp=2026-10-29T22:57:28Z
 branch=agent/compliance-cwd-20261023
-head_commit=8d89eb4df
-signature=64a008d136baac2753eebae07b5321135d875fe44d77bf06287625ec76fba531
+head_commit=685d1228b
+signature=29570ad268300d5d89c5f936aee0e1a9924b3511faddc4577b7b176990199684
