@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=8a13cdab270a06cd5d159ffa5ffcba649b1f8429a1c724dcd5e3dbfd32ba11e9
-timestamp=2026-10-29T12:24:48Z
-branch=agent/scope-guard-lat-20261023
-head_commit=820ca1779
-signature=35b4c385000926ff0bf352f1109bc569ea767acbaef4a96afddc01f72f7ff2ff
+diff_hash=5669ce1a7e9c6c58bb4140058eaea956ce39817a94ef9c6ae5b243f2438a0d9f
+timestamp=2026-10-29T12:39:22Z
+branch=agent/posttool-inertes-20261023
+head_commit=cf7c115c
+signature=fe1fba1d5e25905d25ba53c0346a9060d9297e870ce7b5a57003ba2bdc0f3c5d
