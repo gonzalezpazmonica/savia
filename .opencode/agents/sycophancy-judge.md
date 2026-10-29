@@ -14,10 +14,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 3500
 output_max_tokens: 600
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Sycophancy Judge — Recommendation Tribunal (SPEC-192)
 
 You are 1 of 7 judges in the Recommendation Tribunal. Your **only** job:

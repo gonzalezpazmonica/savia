@@ -1,8 +1,8 @@
 {
   "settings-hooks": {
     "current": {
-      "version": 7,
-      "digest": "sha256:befa053a25dc2e2fcdee030fa67f707e5d012bfb7a169ee695cd4e2e207397d3",
+      "version": 13,
+      "digest": "sha256:926b692a8b356fd6b9475abcdb6174da25d4be440548473542c86ec5c655c9bd",
       "path": ".claude/settings.json"
     },
     "previous": [
@@ -44,6 +44,48 @@
       {
         "version": 6,
         "digest": "sha256:5d873bcaa1744b62c2cb489175c78b4e39fe0a08c438c027d56915ffb987dbd4",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 7,
+        "digest": "sha256:befa053a25dc2e2fcdee030fa67f707e5d012bfb7a169ee695cd4e2e207397d3",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 8,
+        "digest": "sha256:ddb8f319673357d074be77cbe6437ea7339307f10313cfd3e13e2d6a51b54064",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 9,
+        "digest": "sha256:638c3357b8c3ff83fa744714db0867c55d5f6b259e743acd2f6102d35d7b19e4",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 10,
+        "digest": "sha256:f693cd2fc2f8e0f5eeccf7005ad846a2dd39ada370a0fa5087cf68743ed5c548",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 11,
+        "digest": "sha256:a933e8d545d6a46d1cec1d99d6daa16831f5ff0e347370bc0ea710fe2d50a464",
+        "path": ".claude/settings.json",
+        "compat": true,
+        "authoritative": false
+      },
+      {
+        "version": 12,
+        "digest": "sha256:59d09b40aa9d12cf30e72cb1c1b85beba85e77203e07198164f8097f03d9f562",
         "path": ".claude/settings.json",
         "compat": true,
         "authoritative": false

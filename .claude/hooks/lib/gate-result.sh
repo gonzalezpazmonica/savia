@@ -5,10 +5,10 @@
 # Uso (source):
 #   gate_result_emit <clean|findings|unknown> [check:reason ...]
 # Imprime una línea final en stdout: gate-result: {"result":"...","gaps":[{"check":"...","reason":"..."}]}
-# reason ∈ missing_tool | limit | timeout | unreadable.
+# reason ∈ missing_tool | limit | timeout | unreadable | not_executed | no_baseline.
 # gate_unmeasured_record <gate> <reason> añade una línea a output/unmeasured-gates.jsonl (una por gate y día).
 
-_GATE_REASONS="missing_tool limit timeout unreadable"
+_GATE_REASONS="missing_tool limit timeout unreadable not_executed no_baseline"
 
 gate_result_emit() {
   local result="$1"; shift
@@ -17,6 +17,8 @@ gate_result_emit() {
   for g in "$@"; do
     check="${g%%:*}"; reason="${g#*:}"
     [[ " $_GATE_REASONS " == *" $reason "* ]] || { echo "gate_result_emit: motivo inválido '$reason'" >&2; return 2; }
+    # Un carácter de control (\n en una ruta) partiría la línea final o falsearía otra: se sustituye por _.
+    check="${check//[[:cntrl:]]/_}"
     check="${check//\\/\\\\}"; check="${check//\"/\\\"}"
     gaps+="${gaps:+,}{\"check\":\"$check\",\"reason\":\"$reason\"}"
   done

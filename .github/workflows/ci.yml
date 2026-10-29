@@ -299,9 +299,16 @@ jobs:
           git config --global user.email "ci@example.com"
           git config --global user.name "CI Runner"
 
+      # SE-392: the OpenCode half of the dual-cli parity runs on Bun; strict mode turns a missing bun into a failure.
+      - name: Set up Bun (dual-cli parity)
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.2
+
       - name: Run dual-cli contract tests
         env:
           SAVIA_CODEX_TEST_MODE: "1"
+          SAVIA_DUAL_CLI_STRICT: "1"
         run: python3 -m unittest discover -s tests/dual-cli -v
 
       # SE-436 S5: el guard de cúpulas y su paridad hook bash ↔ savia-gates corren siempre, no solo en modo
@@ -313,8 +320,22 @@ jobs:
           python3 -m unittest tests/python/test_dome_guard.py
           bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
 
+      # PR #1399: the agent permission gate and its suites live in tests/*.bats, which
+      # ci-select-bats never picks, so they run on every PR here.
+      - name: Agent permission levels gate
+        run: |
+          bash scripts/validate-agent-permissions.sh .claude/agents
+          bats tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats
+
       - name: Installer contracts, planner and detection (SE-399 F1+F2)
         run: python3 -m unittest tests/python/test_installer_plan.py tests/python/test_installer_f2.py
+
+      # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
+      # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
+      - name: Gate guards parity (SE-453 S2)
+        env:
+          SAVIA_REQUIRE_TS: "1"
+        run: bats tests/test-gate-result-contract.bats tests/test-gate-result-dual-binding.bats tests/test-gate-result-scanners.bats
 
       - name: Generate BATS dependency map
         id: deps

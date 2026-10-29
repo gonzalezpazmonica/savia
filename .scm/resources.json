@@ -1,6 +1,6 @@
 {
-  "hash": "9c5881b0df13",
-  "total": 1449,
+  "hash": "f1eac6c8d0fd",
+  "total": 1450,
   "resources": [
     {
       "category": "analysis",
@@ -3601,13 +3601,13 @@
       "intents": [
         "evals",
         "evaluation",
+        "honest",
         "local",
-        "runner",
-        "spec"
+        "result"
       ],
       "kind": "script",
       "path": "scripts/evals-runner.sh",
-      "description": "evals-runner.sh — SPEC-151 local evaluation runner."
+      "description": "evals-runner.sh — SPEC-151 local evaluation runner, honest result (SE-468)."
     },
     {
       "category": "development",
@@ -4730,31 +4730,17 @@
     },
     {
       "category": "development",
-      "name": "setup-claude-permissions",
-      "intents": [
-        "backward",
-        "compatibility",
-        "deprecated",
-        "file",
-        "instead"
-      ],
-      "kind": "script",
-      "path": "scripts/setup-claude-permissions.sh",
-      "description": "DEPRECATED: use setup-opencode-permissions.sh instead. This file kept for backward compatibility."
-    },
-    {
-      "category": "development",
       "name": "setup-opencode-permissions",
       "intents": [
-        "claude",
         "json",
         "local",
+        "opencode",
         "permisos",
         "permissions"
       ],
       "kind": "script",
       "path": "scripts/setup-opencode-permissions.sh",
-      "description": "setup-claude-permissions.sh — Genera settings.local.json con permisos recomendados"
+      "description": "setup-opencode-permissions.sh — Genera settings.local.json con permisos recomendados"
     },
     {
       "category": "development",
@@ -6643,16 +6629,10 @@
     {
       "category": "memory",
       "name": "memory-agent",
-      "intents": [
-        "gestiona",
-        "lenguaje",
-        "memoria",
-        "natural",
-        "persistente"
-      ],
+      "intents": [],
       "kind": "agent",
       "path": ".opencode/agents/memory-agent.md",
-      "description": "Gestiona la memoria persistente de pm-workspace via lenguaje natural."
+      "description": ">-"
     },
     {
       "category": "memory",
@@ -10792,6 +10772,20 @@
       "kind": "script",
       "path": "scripts/handback-resolve.sh",
       "description": "handback-resolve.sh — SE-332 Handback Obligation"
+    },
+    {
+      "category": "planning",
+      "name": "harness-architecture",
+      "intents": [
+        "agentes",
+        "arquitectura",
+        "autónomo",
+        "bucle",
+        "bucles"
+      ],
+      "kind": "skill",
+      "path": ".claude/skills/harness-architecture/SKILL.md",
+      "description": "Diseña la arquitectura de un harness de agentes: único, orquestado o metaharness, flujos largos, bucles, sprints. Usar cuando se diseña o depura un harness, un bucle autónomo o un sprint nocturno."
     },
     {
       "category": "planning",
@@ -15610,6 +15604,20 @@
       "kind": "skill",
       "path": ".claude/skills/wellbeing-guardian/SKILL.md",
       "description": "Usar cuando se monitorizan señales de bienestar individual en el equipo."
+    },
+    {
+      "category": "planning",
+      "name": "windows-links",
+      "intents": [
+        "enlaces",
+        "links",
+        "materializa",
+        "modo",
+        "windows"
+      ],
+      "kind": "script",
+      "path": "scripts/windows-links.sh",
+      "description": "windows-links.sh — Materializa en Windows los enlaces Git (modo 120000)."
     },
     {
       "category": "planning",

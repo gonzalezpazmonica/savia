@@ -1,5 +1,5 @@
 # development — Savia Capability Map (L1)
-> 229 resources
+> 228 resources
 
 - **/speckit.checklist** (cmd): Alias spec-kit compatible. Gate de calidad final con verification-lattice multi-capa. Invoca skill verification-lattice. Compatible con github/spec-kit.
 - **/speckit.clarify** (cmd): Alias spec-kit compatible. Preguntas dirigidas para cerrar ambigüedad en una spec. Invoca skill context-interview-conductor. Compatible con github/spec-kit.
@@ -92,7 +92,7 @@
 - **epistemic-humility** (skill): Usar cuando se detecta riesgo de adulación, cesión sin evidencia, o claim repetido por el usuario asumido sin verificar. Trigger: tribunal SPEC-192 emite WARN/VETO o auto-detección léxica.
 - **eval-agent** (cmd): Evaluate an agent against its golden set — precision, recall, hallucinations, bias (SPEC-036)
 - **eval-agent** (script): eval-agent.sh — Agent Evaluation Runner (SPEC-036)
-- **evals-runner** (script): evals-runner.sh — SPEC-151 local evaluation runner.
+- **evals-runner** (script): evals-runner.sh — SPEC-151 local evaluation runner, honest result (SE-468).
 - **execution-supervisor** (script): execution-supervisor.sh — Advisory reflection trigger (SPEC-065)
 - **failure-pattern-memory** (script): failure-pattern-memory.sh — SPEC-188 Fase 1: Failure Pattern Memory store
 - **feasibility-probe** (cmd): Validate spec feasibility with a time-boxed prototype attempt
@@ -177,8 +177,7 @@
 - **semantic-compact** (script): semantic-compact.sh — SPEC-022 F2: Smart compact summary generator
 - **semantic-map** (script): semantic-map.sh — Generate compressed semantic maps of source code files
 - **sentinel-regen** (script): Ref: SPEC-180 / docs/rules/domain/sentinel-safe-regen.md
-- **setup-claude-permissions** (script): DEPRECATED: use setup-opencode-permissions.sh instead. This file kept for backward compatibility.
-- **setup-opencode-permissions** (script): setup-claude-permissions.sh — Genera settings.local.json con permisos recomendados
+- **setup-opencode-permissions** (script): setup-opencode-permissions.sh — Genera settings.local.json con permisos recomendados
 - **setup-savia-web** (script): Setup, build, and serve savia-web on http://localhost:8081
 - **skill-listing-overrides** (script): skill-listing-overrides.sh — Project the SE-253 load tier into Claude Code's
 - **skill-loader** (script): skill-loader.sh — SPEC-144: Context-Aware Skill Loading

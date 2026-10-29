@@ -34,8 +34,10 @@ declare -a MISSING=()
 
 # ── Search each pattern in workspace ─────────────────────────────────────────
 for pattern in B8 B9 A7 A9; do
+  # El propio script cita los cuatro patrones en su cabecera: sin --exclude se
+  # encontraba a sí mismo y el informe nunca podía listar un patrón como ausente.
   hit=$(grep -rl "$pattern" "$REPO_ROOT/docs" "$REPO_ROOT/scripts" "$REPO_ROOT/.opencode" \
-        --include="*.md" --include="*.sh" 2>/dev/null \
+        --include="*.md" --include="*.sh" --exclude="$(basename "${BASH_SOURCE[0]}")" 2>/dev/null \
         | grep -v '\.git' | head -1 || true)
   if [[ -n "$hit" ]]; then
     # Get first matching line number

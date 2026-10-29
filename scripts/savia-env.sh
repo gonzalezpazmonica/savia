@@ -252,6 +252,10 @@ savia_resolve_model() {
 }
 export -f savia_resolve_model
 
+# ── Windows: jq sin CRLF (heredado por los bash hijos) ────────────────────────
+# shellcheck source=lib/os-detect.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/os-detect.sh"
+
 # ── Main (source mode) ───────────────────────────────────────────────────────
 # --------------------------------------------------------------------------
 # AUTONOMOUS_REVIEWER resolver (autonomous-safety.md)

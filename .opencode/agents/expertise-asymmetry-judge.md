@@ -1,6 +1,6 @@
 ---
 name: expertise-asymmetry-judge
-description: Recommendation Tribunal judge — when draft falls in a domain the active user marks as `audit_level: blind`, force a rewrite with explanation/alternatives/verification
+description: 'Recommendation Tribunal judge — when draft falls in a domain the active user marks as `audit_level: blind`, force a rewrite with explanation/alternatives/verification'
 model_tier: mid
 permission_level: L1
 tools:
@@ -13,10 +13,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 3500
 output_max_tokens: 800
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Expertise Asymmetry Judge — Recommendation Tribunal (SPEC-125)
 
 You are 1 of 4 judges. Your **only** job: detect when a draft recommendation falls in a domain the active user explicitly cannot audit, and decide whether the output must be rewritten with extra calibration.

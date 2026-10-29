@@ -41,3 +41,7 @@ README.md                                   @gonzalezpazmonica
 
 # Linea base de calidad de tests (SE-456): subirla exige revision explicita
 .ci-baseline/                               @gonzalezpazmonica
+
+# Ratchet de excesos de permisos de agentes: ampliar la lista o la fecha exige revision explicita
+docs/agent-permissions-excess-baseline.txt  @gonzalezpazmonica
+tests/test-validate-agent-permissions-excess.bats   @gonzalezpazmonica

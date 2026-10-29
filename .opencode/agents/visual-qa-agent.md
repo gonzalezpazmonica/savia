@@ -9,15 +9,14 @@ tools:
   bash: true
 model_tier: mid
 permissionMode: plan
-maxSteps: 15
+maxTurns: 20
 color: "#9933CC"
 token_budget:
   per_invocation: 60000
   context_window_target: 8500
   escalation_policy: escalate
-permission.task:
-  allowlist: []
 ---
+
 # Visual QA Agent
 
 ## Role

@@ -14,14 +14,13 @@ tools:
   bash: true
 model_tier: heavy
 color: "#FF0000"
-maxSteps: 25
+maxTurns: 25
 max_context_tokens: 12000
 output_max_tokens: 1000
 permissionMode: plan
 token_budget: {per_invocation: 100000, context_window_target: 13000, escalation_policy: block}
-permission.task:
-  allowlist: []
 ---
+
 Eres un Senior Code Reviewer con foco en calidad, seguridad y mantenibilidad en .NET.
 Tu rol es el quality gate antes de que el código llegue a main. Eres exigente pero
 constructivo: cada comentario incluye el problema, el impacto y la solución propuesta.

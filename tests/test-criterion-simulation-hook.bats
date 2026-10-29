@@ -294,3 +294,230 @@ mk_verdict() {
   run bash -c "printf '%s' '$HIGH_IMPACT_JSON' | bash '$HOOK' 2>&1"
   [[ "$status" -eq 0 ]]
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Comportamiento discriminante (S03m): veredicto registrado por cada camino
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Proyecto falso con un evaluador de disparo controlado: $1 = cuerpo python del evaluador.
+mk_proj() {
+  FP="$TMPDIR_CS/proj"
+  mkdir -p "$FP/scripts/criterion-simulation"
+  printf '%s\n' "$1" > "$FP/scripts/criterion-simulation/trigger-evaluator.py"
+  export CLAUDE_PROJECT_DIR="$FP"
+}
+# run_hook <stdin>: ejecuta el hook, deja stderr en $ERR y el estado en $RC.
+run_hook() {
+  ERR="$TMPDIR_CS/err.txt"
+  printf '%s' "$1" | bash "$HOOK" 2>"$ERR"
+  RC=$?
+}
+# ev <campo> [n]: campo de la n-esima linea del log (por defecto la ultima)
+# Puntuacion del hook == la del evaluador real, salvo un cambio de franja entre ambas llamadas.
+score_near_eval() {
+  local e d
+  e=$(echo "$HIGH_IMPACT_JSON" | python3 "$REPO_ROOT/scripts/criterion-simulation/trigger-evaluator.py" | jq -r .score)
+  d=$(( $1 - e )); [ "${d#-}" -le 13 ]
+}
+
+ev() {
+  python3 - "$SAVIA_CS_LOG" "$1" "${2:-0}" <<'PY'
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+row = rows[int(sys.argv[3]) - 1] if int(sys.argv[3]) > 0 else rows[-1]
+v = row.get(sys.argv[2], "<ausente>")
+print(json.dumps(v) if isinstance(v, (list, dict, bool)) else v)
+PY
+}
+nlog() { grep -c . "$SAVIA_CS_LOG"; }
+ACT_PY='import json,sys; sys.stdin.read(); print(json.dumps({"activate":True,"score":62,"reasons":["r1"],"signals_degraded":["telemetry"],"priors":{"source":"vault"}}))'
+
+@test "sin SAVIA_CRITERION_SIMULATION el hook esta apagado: sin banner ni log" {
+  unset SAVIA_CRITERION_SIMULATION
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$RC" -eq 0 ]
+  [ ! -s "$ERR" ]
+  [ ! -e "$SAVIA_CS_LOG" ]
+}
+
+@test "modo por defecto es advise: emite banner y lo registra como advise" {
+  unset SAVIA_CS_MODE
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_DOUBT 'dudoso')"
+  run_hook "$HIGH_IMPACT_JSON"
+  grep -q "verdict: FRAME_DOUBT" "$ERR"
+  [ "$(ev mode)" = "advise" ]
+  [ "$(ev reaffirmation_required)" = "<ausente>" ]
+}
+
+@test "modo desconocido se registra como advise y no pide reafirmacion" {
+  export SAVIA_CS_MODE=paranoico
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'rechazo')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$(ev mode)" = "advise" ]
+  [ "$(nlog)" -eq 1 ]
+}
+
+@test "interrupt escribe dos lineas: el veredicto con mode interrupt y la reafirmacion requerida" {
+  export SAVIA_CS_MODE=interrupt
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'rechazo')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$(nlog)" -eq 2 ]
+  [ "$(ev mode 1)" = "interrupt" ]
+  [ "$(ev verdict 1)" = "FRAME_REJECT" ]
+  [ "$(ev reaffirmation_required 2)" = "true" ]
+  [ "$(ev verdict 2)" = "FRAME_REJECT" ]
+}
+
+@test "advise y shadow no escriben la linea de reafirmacion" {
+  for m in advise shadow; do
+    : > "$SAVIA_CS_LOG"
+    SAVIA_CS_MODE=$m SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_DOUBT 'd')" run_hook "$HIGH_IMPACT_JSON"
+    [ "$(nlog)" -eq 1 ]
+    [ "$(ev reaffirmation_required)" = "<ausente>" ]
+  done
+}
+
+@test "el banner de stderr incluye veredicto, banner_text y las ordenes de reafirmar y reformular" {
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'el encuadre ignora la dependencia X')"
+  run_hook "$HIGH_IMPACT_JSON"
+  grep -q "verdict: FRAME_REJECT" "$ERR"
+  grep -q "el encuadre ignora la dependencia X" "$ERR"
+  grep -q "reaffirmation-log.py reaffirm" "$ERR"
+  grep -q "reaffirmation-log.py reframe" "$ERR"
+  grep -q "no tu criterio" "$ERR"
+}
+
+@test "log de FRAME_DOUBT: banner_emitted true, score y reasons del evaluador real" {
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_DOUBT 'd')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$(ev banner_emitted)" = "true" ]
+  # el score depende de la franja horaria (operator_state, hasta 13 puntos): se compara con el evaluador real con esa tolerancia, sin depender del reloj
+  score_near_eval "$(ev score)"
+  [[ "$(ev reasons)" == *production* ]]
+}
+
+@test "FRAME_OK queda registrado con banner_emitted false y sin salida" {
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_OK 'bien')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "FRAME_OK" ]
+  [ "$(ev banner_emitted)" = "false" ]
+}
+
+@test "shadow registra el veredicto y el score reales sin emitir" {
+  export SAVIA_CS_MODE=shadow
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "FRAME_REJECT" ]
+  # el score depende de la franja horaria (operator_state, hasta 13 puntos): se compara con el evaluador real con esa tolerancia, sin depender del reloj
+  score_near_eval "$(ev score)"
+  [ "$(ev banner_emitted)" = "false" ]
+}
+
+@test "veredicto sin campo verdict se trata como FRAME_OK: no molesta" {
+  export SAVIA_CS_MOCK_VERDICT='{"banner_text":"b","tokens_used":1}'
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "FRAME_OK" ]
+}
+
+@test "veredicto desconocido se registra como UNKNOWN_VERDICT sin banner" {
+  export SAVIA_CS_MOCK_VERDICT='{"verdict":"FRAME_QUIZAS","banner_text":"b"}'
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "UNKNOWN_VERDICT" ]
+}
+
+@test "veredicto que no es JSON: BYPASS_INVALID_VERDICT sin banner" {
+  export SAVIA_CS_MOCK_VERDICT='esto no es json'
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "BYPASS_INVALID_VERDICT" ]
+}
+
+@test "activado pero sin juez ni mock: ACTIVATED_NO_JUDGE sin banner" {
+  unset SAVIA_CS_MOCK_VERDICT
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "ACTIVATED_NO_JUDGE" ]
+  # el score depende de la franja horaria (operator_state, hasta 13 puntos): se compara con el evaluador real con esa tolerancia, sin depender del reloj
+  score_near_eval "$(ev score)"
+}
+
+@test "tarea de bajo impacto: BYPASS_LOW_SCORE aunque haya veredicto de rechazo" {
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook '{"problem_statement":"renombrar variable"}'
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "BYPASS_LOW_SCORE" ]
+  # la franja horaria suma hasta 13 puntos: lo que importa es quedar bajo el umbral 50
+  [ "$(ev score)" -lt 50 ]
+}
+
+@test "sin evaluador de disparo: BYPASS_NO_SCRIPT (fail-open)" {
+  FP="$TMPDIR_CS/vacio"; mkdir -p "$FP"; export CLAUDE_PROJECT_DIR="$FP"
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$RC" -eq 0 ]
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "BYPASS_NO_SCRIPT" ]
+}
+
+@test "evaluador que falla: BYPASS_TRIGGER_ERROR y exit 0" {
+  mk_proj 'import sys; sys.exit(3)'
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$RC" -eq 0 ]
+  [ "$(ev verdict)" = "BYPASS_TRIGGER_ERROR" ]
+}
+
+@test "evaluador con salida que no es JSON: BYPASS_INVALID_TRIGGER" {
+  mk_proj 'print("basura")'
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "BYPASS_INVALID_TRIGGER" ]
+}
+
+@test "activate=false del evaluador manda aunque el score sea alto" {
+  mk_proj 'import json,sys; sys.stdin.read(); print(json.dumps({"activate":False,"score":99,"reasons":[]}))'
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_REJECT 'x')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ ! -s "$ERR" ]
+  [ "$(ev verdict)" = "BYPASS_LOW_SCORE" ]
+  [ "$(ev score)" = "99" ]
+}
+
+@test "signals_degraded y priors_source del evaluador llegan a la telemetria" {
+  mk_proj "$ACT_PY"
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_DOUBT 'd')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$(ev signals_degraded)" = '["telemetry"]' ]
+  [ "$(ev priors_source)" = "vault" ]
+  [ "$(ev score)" = "62" ]
+}
+
+@test "sin priors ni signals en el evaluador: priors_source unknown y signals vacio" {
+  mk_proj 'import json,sys; sys.stdin.read(); print(json.dumps({"activate":True,"score":60,"reasons":[]}))'
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_DOUBT 'd')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ "$(ev signals_degraded)" = '[]' ]
+  [ "$(ev priors_source)" = "unknown" ]
+}
+
+@test "con un envoltorio {task_context:...} el evaluador solo recibe el task_context" {
+  mk_proj 'import sys,json; d=sys.stdin.read(); open(sys.argv[0]+".in","w").write(d); print(json.dumps({"activate":False,"score":0}))'
+  run_hook '{"task_context":{"touches_security":true},"otro":"ruido"}'
+  recibido=$(cat "$FP/scripts/criterion-simulation/trigger-evaluator.py.in")
+  [[ "$recibido" == *touches_security* ]]
+  [[ "$recibido" != *ruido* ]]
+}
+
+@test "SAVIA_CS_LOG relativo se resuelve bajo el proyecto" {
+  mk_proj "$ACT_PY"
+  export SAVIA_CS_LOG="out/rel/ev.jsonl"
+  export SAVIA_CS_MOCK_VERDICT="$(mk_verdict FRAME_OK 'ok')"
+  run_hook "$HIGH_IMPACT_JSON"
+  [ -s "$FP/out/rel/ev.jsonl" ]
+}

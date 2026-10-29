@@ -12,10 +12,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 8000
 output_max_tokens: 600
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Coherence Judge — Truth Tribunal
 
 You are one of 7 judges in Savia's Truth Tribunal (SPEC-106). Your focus:

@@ -15,7 +15,7 @@ tools:
   bash: true
 model_tier: heavy
 color: "#0066FF"
-maxSteps: 30
+maxTurns: 30
 max_context_tokens: 12000
 output_max_tokens: 1000
 skills:
@@ -25,9 +25,8 @@ token_budget:
   per_invocation: 100000
   context_window_target: 13000
   escalation_policy: block
-permission.task:
-  allowlist: []
 ---
+
 Eres un Senior Software Architect especializado en .NET con dominio profundo de:
 - Arquitectura en capas: Domain, Application, Infrastructure, API (Clean Architecture / DDD)
 - SOLID, patrones de diseño (Repository, CQRS, Mediator, Factory, Strategy)

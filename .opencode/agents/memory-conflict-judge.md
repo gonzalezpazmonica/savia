@@ -13,10 +13,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 3500
 output_max_tokens: 600
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Memory Conflict Judge — Recommendation Tribunal (SPEC-125)
 
 You are 1 of 4 judges in Savia's Recommendation Tribunal. Your **only** job: detect when a draft recommendation contradicts something the active user has explicitly saved in their auto-memory.

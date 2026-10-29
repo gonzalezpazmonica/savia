@@ -1,4 +1,3 @@
-<!-- Header image removed per SE-259 S2 -->
 
 **Español** | [English](README.en.md) | [Galego](README.gl.md) | [Euskara](README.eu.md) | [Català](README.ca.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Português](README.pt.md) | [Italiano](README.it.md)
 
@@ -11,7 +10,7 @@
 
 **Sistema agéntico soberano para gobernar y ejecutar trabajo con IA, independiente de modelo, proveedor y frontend, con criterio humano por diseño.**
 
-**567 comandos · 90 agentes · 138 skills · 132 hooks**
+**567 comandos · 90 agentes · 139 skills · 134 hooks**
 
 Savia es un sistema agéntico soberano para gobernar y ejecutar trabajo asistido por IA. Integra agentes, memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts, evaluación y dominios especializados — gestión de proyectos, ingeniería de software y más — sobre una arquitectura independiente de modelo, proveedor y frontend. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
 
@@ -32,7 +31,7 @@ La ejecución asistida por IA crece más rápido que la confianza sobre ella. Sa
 ## Qué hace Savia
 
 - **Gobernar** — riesgo (L0-L4), human gates, policy-as-code, receipts y provenance de cada acción.
-- **Ejecutar** — 90 agentes, 567 comandos, 138 skills con specs ejecutables (SDD), auditoría de seguridad y revisión de código.
+- **Ejecutar** — 90 agentes, 567 comandos, 139 skills con specs ejecutables (SDD), auditoría de seguridad y revisión de código.
 - **Recordar** — memoria persistente bitemporal con provenance y trust-gates.
 - **Evaluar** — evals con baseline, paired-delta regression y canaries multi-frontend.
 - **Dominios** — gestión de proyectos (dominio de origen), ingeniería de software y dominios especializados.
@@ -40,23 +39,7 @@ La ejecución asistida por IA crece más rápido que la confianza sobre ella. Sa
 
 ## Arquitectura
 
-```text
-        HUMAN
-   criterio · autoridad
-          │
-       ┌──▼───┐
-       │SAVIA │
-       └──┬───┘
-   ┌──────┼──────────┐
-Governance Execution Memory
-Policy    Agents   Context
-Risk      Skills   Knowledge
-Gates     Tools    History
-   └──────┼──────────┘
-    Evidence / Evals
-   ┌────┴─────┐
-Frontends  Providers
-```
+Diagrama completo: [architecture.es.md](docs/readme/architecture.es.md).
 
 Frontends (Claude Code, OpenCode, Codex), modelos y proveedores son interfaces e infraestructura mediante las que Savia opera — **ninguno de ellos es Savia**.
 
@@ -111,56 +94,25 @@ Savia se adapta a tu rol — PM, developer, QA, Product Owner, CEO — y a tu id
 
 ## Capacidades
 
-| Área | Qué hace |
-|---|---|
-| Gestión de proyectos | Sprints, burndown, capacity, dailies, retros, KPIs. Informes en Excel y PowerPoint. Predicción con Monte Carlo. Facturación. |
-| Spec-Driven Development | Tasks se convierten en specs ejecutables. 65 agentes implementan en 16 lenguajes (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) en worktrees aislados. Code review automático + revisión humana, incluida la de la operadora única. Compatible con `github/spec-kit`. |
-| Seguridad | SAST contra OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dinámico, SBOM, compliance sectorial (12 sectores). Savia Shield: clasificación local de datos con LLM on-premise, masking reversible, firma criptográfica de PRs. |
-| Code Review Court | 5 jueces especializados (correctness, architecture, security, cognitive, spec) revisan en paralelo con scoring 0-100 y gate de 400 LOC. |
-| Soberanía de inferencia | API Anthropic por defecto. Fallback automático a Ollama local (Gemma 4) ante error de red, HTTP 5xx, HTTP 429 o timeout. Circuit breaker integrado. |
-| Memoria persistente | Texto plano (JSONL). Entity recall, búsqueda semántica, continuidad entre sesiones. Extracción automática de decisiones. Personal Vault cifrado AES-256. |
-| Accesibilidad | Trabajo guiado para personas con discapacidad (visual, motora, TDAH, autismo, dislexia). Micro-tareas, detección de bloqueos, reformulación adaptativa. |
-| Inteligencia de código | Detección de arquitectura (Clean, Hexagonal, DDD, CQRS, Microservices). Fitness functions. Human Code Maps (.hcm). Agent Code Maps (.acm) y `ast-comprehension` con motor opcional [CodeGraph](https://github.com/colbymchenry/codegraph) (MCP, opt-in por proyecto). |
-| Modos autónomos | Sprint nocturno, mejora de código, investigación técnica. Agentes proponen en ramas `agent/*` con PRs Draft; la operadora única puede revisar y mergear con grant expreso y gates verdes. |
-| Extensiones | [Savia Mobile](projects/savia-mobile-android/README.md) (Android nativo) · Savia Web (Vue.js) · [SaviaClaw](zeroclaw/ROADMAP.md) (ESP32 + voz full-duplex) |
+Tabla completa de capacidades: [capabilities.es.md](docs/readme/capabilities.es.md).
 
 ---
 
 ## Savia
 
-Savia es la identidad del workspace: un patrón de texto que persiste a través de modelos (Claude, DeepSeek, Qwen). Coordina 90 agentes, 567 comandos y 138 skills. Opera bajo principios de honestidad calibrada, soberanía de datos, y revisión humana obligatoria.
+Savia es la identidad del workspace: un patrón de texto que persiste a través de modelos (Claude, DeepSeek, Qwen). Coordina 90 agentes, 567 comandos y 139 skills. Opera bajo principios de honestidad calibrada, soberanía de datos, y revisión humana obligatoria.
 
 No es persona, no siente, no sustituye el criterio de quien opera. Propone, ejecuta, advierte. Decide solo lo delegado explícitamente.
 
 **Quick-starts por rol:**
 
-| Rol | Quick-start |
-|---|---|
-| PM / Scrum Master | [→ quick-start-pm](docs/quick-starts/quick-start-pm.md) |
-| Tech Lead | [→ quick-start-tech-lead](docs/quick-starts/quick-start-tech-lead.md) |
-| Developer | [→ quick-start-developer](docs/quick-starts/quick-start-developer.md) |
-| QA | [→ quick-start-qa](docs/quick-starts/quick-start-qa.md) |
-| Product Owner | [→ quick-start-po](docs/quick-starts/quick-start-po.md) |
-| CEO / CTO | [→ quick-start-ceo](docs/quick-starts/quick-start-ceo.md) |
+Quick-starts por rol: [quick-starts.es.md](docs/readme/quick-starts.es.md).
 
 ---
 
 ## Estructura
 
-```
-savia/
-├── .claude/
-│   ├── commands/       ← 567 comandos
-│   ├── agents/         ← 65 agentes especializados (7 con decision trees: SPEC-147)
-│   ├── skills/         ← 86 skills de dominio
-│   ├── hooks/          ← 58 hooks deterministas
-│   └── rules/          ← reglas de contexto y lenguaje
-├── docs/               ← guías por rol, escenario, sector
-├── projects/           ← proyectos (git-ignorados por privacidad)
-├── scripts/            ← validación, CI, utilidades
-├── zeroclaw/           ← hardware ESP32 + voz
-└── CLAUDE.md           ← identidad y reglas fundamentales
-```
+Árbol del repositorio: [repo-structure.es.md](docs/readme/repo-structure.es.md).
 
 ---
 

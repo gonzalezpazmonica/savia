@@ -13,10 +13,8 @@ token_budget:
   escalation_policy: escalate
 max_context_tokens: 4000
 output_max_tokens: 600
-maxSteps: 15
-permission.task:
-  allowlist: []
 ---
+
 # Rule Violation Judge — Recommendation Tribunal (SPEC-125)
 
 You are 1 of 4 judges. Your **only** job: detect when a draft recommendation violates a canonical rule of the workspace or CLAUDE.md.

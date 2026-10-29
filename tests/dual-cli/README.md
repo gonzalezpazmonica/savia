@@ -95,9 +95,9 @@ Evidencia: `test_gates.py` incluye un replay del mismo corpus
 (`fixtures/replay_corpus.json`) contra los hooks reales por el núcleo Codex y por
 `shell-bridge.ts` de OpenCode (vía bun): decisiones idénticas. Cubre la mitad
 de comando de AC2; la edición real, el binario Codex en vivo y el despacho por
-el socket del runtime siguen pendientes. Con el settings actual,
-`Bash(git commit*)` tiene un handler `prompt` y por tanto se bloquea en ambos
-núcleos hasta que exista transporte de prompt (hueco conocido, AC6).
+el socket del runtime siguen pendientes. (Este párrafo decía que
+`Bash(git commit*)` se bloqueaba en ambos núcleos por su handler `prompt`: era
+falso en OpenCode, donde ese matcher nunca casaba; ver abajo.)
 
 ### Mitad de edición de AC2 (replay)
 
@@ -114,10 +114,114 @@ claves al vocabulario de Claude Code (conserva las originales) y descompone el
 parche por archivo con el mismo algoritmo que `gates.py`; la paridad del parser
 se prueba contra Python (`PatchParserParityTests`).
 
-Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime,
-transporte de handlers `prompt`, y las rutas protegidas de `gates.py`
-(`PROTECTED_GATE_PATH`), que en OpenCode solo cubre guard-pin con
-`SAVIA_GATES_PIN=1`.
+### Handlers `prompt` (AC6), matchers y rutas protegidas
+
+Ambos núcleos ejecutan ya los handlers `prompt` con el evaluador que declara quien
+arranca el CLI (`SAVIA_PROMPT_HOOK_CMD`, prompt renderizado por stdin, veredicto:
+un objeto JSON con `ok` booleano y `reason` opcional string; otras claves se ignoran). Sin evaluador, crash, timeout, prosa
+alrededor del JSON u `ok` no booleano bloquean; una llamada que el matcher no
+selecciona continúa. `test_prompt_transport.py` replica el mismo corpus
+(`fixtures/prompt_replay_corpus.json`, 20 casos) en Codex y en OpenCode con las
+mismas decisiones y motivos.
+
+Al preparar ese replay apareció un hueco mayor: savia-gates leía `Bash(git commit*)`
+como regex (un grupo) y no casaba nunca, así que `block-commit-to-main.sh`,
+`compliance-gate.sh`, `prompt-hook-commit.sh`, `pr-summary-gate.sh` y el handler
+`prompt` no corrían en OpenCode. Y el núcleo Python solo aceptaba una estrella final:
+`Bash(bash*memory-store*save*)` exigía estrellas literales y `memory-write-sanitize.sh`
+no corría en Codex. Ahora `Herramienta(orden)` es un glob literal en los dos, también
+dentro de alternativas con `|`; un test compara cada matcher de `settings.json`
+contra 15 llamadas en ambos núcleos (cero divergencias).
+
+`PROTECTED_GATE_PATH` se aplica también en OpenCode (`write`, `edit`, `apply_patch`),
+sin depender de `SAVIA_GATES_PIN`; la lista es la misma en los dos núcleos (test de
+paridad) y añade `.opencode/plugins`, `scripts/opencode-plugin`, `opencode.json` y
+`.opencode/package.json`. En OpenCode también mira `notebook_path`. El motivo del
+bloqueo (`PROTECTED_GATE_PATH`) se comprueba en los dos núcleos, no solo que bloquee.
+Los handlers de OpenCode tampoco heredan los interruptores que apagan hooks de
+seguridad (`SAVIA_PAT_BLOCK`, `SAVIA_SHIELD_ENABLED`, `SAVIA_HOOK_PROFILE`), igual
+que en Codex.
+
+Pendiente en S3: binario Codex en vivo, despacho por el socket del runtime
+(requiere decisión de la operadora sobre revisión de política y confianza del
+daemon).
+
+El matcher de OpenCode usa ya los mismos candidatos que el núcleo Python: nombre de
+herramienta y, con comando, `Tool(cmd)`, `Tool:cmd` y `Tool cmd`; el payload serializado
+solo cuando no hay herramienta. Antes probaba siempre el payload: en 40 de 168 pares
+matcher × llamada (entradas que nombran otras herramientas) corrían hooks solo en OpenCode,
+p.ej. los de `Bash` con un `Read` de `docs/Bash-notes.md` o `Bash(git commit*)` con una
+búsqueda MCP. Ahora 0 (`test_tool_inputs_that_name_other_tools_select_the_same_hooks`).
+Sigue igual en los dos, y no se ha decidido cambiarlo: la búsqueda es sin anclar y sin
+mayúsculas, así que `Edit|Write` también corre en un `Bash` cuyo comando contiene «write».
+
+### Rutas protegidas desde `bash`
+
+`echo {} > .claude/settings.json`, `sed -i` sobre un hook, `git checkout -- .codex/hooks.json`
+o un borrado recursivo de `.claude` llegaban al CLI en Codex y en OpenCode, aunque la
+misma escritura con `write`/`edit`/`apply_patch` se denegaba. `shell_targets.py` (y su
+port `lib/shell-targets.ts`) lee el texto del comando, sin ejecutarlo, y extrae los
+destinos de escritura: redirecciones (`>`, `>>`, `&>`, `<>`), `rm/mv/cp/ln/install/tee/
+touch/truncate/chmod -R/...`, `sed/perl -i` (también en clusters: `-Ei`, `-pi`), `dd of=`,
+subcomandos de `git` que reescriben el árbol, `xargs`, `find -delete/-exec`, y el texto de
+`bash -c` (y `-lc`, `-ec`…), `eval`, `env -S`, `$(...)`, backticks, `<(...)`/`>(...)` y del
+heredoc o here-string que se pasa a un shell, de forma recursiva; una sustitución se juzga desde
+el directorio del comando que la contiene (`cd .claude/hooks && echo $(rm x)`). Los heredocs de otros comandos se
+saltan (un mensaje de commit que menciona un hook no bloquea). Los borradores también se
+deniegan sobre un directorio que contiene una ruta protegida; los globs se comparan
+componente a componente y las llaves se expanden (`{.claude,tmp}`). `$'\x2e…'` se decodifica
+y `((x<<2))` es aritmética, no heredoc. Un texto que el tokenizador no cierra se deniega
+siempre: su texto crudo esconde lo que el tokenizador habría decodificado (`.cl''aude`,
+`$'\x2e'codex`, un `cd` previo), así que ninguna búsqueda de subcadenas sobre él es fiable
+(revisión de seguridad de #1391). Medido sobre 23 029 órdenes Bash reales de sesiones locales:
+solo 2 quedan sin analizar, y bash también las rechaza (una línea `EOF` cierra el heredoc antes
+de tiempo).
+
+Base de las rutas relativas: el `cwd` del payload, movido por `cd`/`pushd`/`popd` (un
+subshell `( … )` lo restaura), `git -C`/`--work-tree`, `env -C` y la opción de directorio de
+la elevación de privilegios. Tras un `cd` a un sitio desconocido (`cd "$D"`, `cd -`, `cd ~`), una
+ruta literal se deniega si es un gate visto desde cualquier directorio camino de uno, o si
+existe dentro de uno (así `cd "$D" && rm -f settings.json` se deniega aunque `$D` fuera otro
+sitio). `~` y `$HOME` se expanden con `HOME`; `~+` es el directorio actual y `~-` uno
+desconocido (`$OLDPWD`); `~usuario` queda fuera del repositorio. Los pathspecs de `git checkout/restore/rm/clean/
+reset/stash` alcanzan su árbol (`git checkout -- .`, `git restore scripts`); los que solo tocan
+el índice no escriben (`git restore --staged`, `git reset` sin `--hard/--merge/--keep`,
+`git rm --cached`) y el valor de `checkout -b/-B/--orphan` es una rama, no un pathspec. `find` con
+`-delete` o `-exec` de un escritor alcanza el árbol de sus rutas de inicio salvo que solo lo
+estrechen `-name`/`-iname` cuyos patrones no casan con ningún nombre de gate (sin contar
+`__pycache__` ni `node_modules`), también si empieza dentro de un gate
+(`find .claude/hooks -name __pycache__ -exec rm -rf {} +`) siempre que la ruta exista y se haya
+recorrido; con `-o`, `!`, `-path`, `-mtime`… se deniega. En `-exec`, solo un destino que empieza
+por `{}` es el fichero encontrado: `-exec cp {} /tmp/ \;` lee el árbol y `-exec cp {} .claude/x \;`
+escribe `.claude/x`. `cp`/`mv` a un
+directorio escriben `dest/basename(src)`; una copia recursiva alcanza ese árbol
+(`cp -r /tmp/x/. .`); `install -d` crea todos sus argumentos. Las opciones con valor de los
+envoltorios (`-u root`, `env -u X`, `timeout -s KILL`) y de `xargs` (también largas:
+`--max-args 1`) se saltan. Una variable seguida de un padre de gate en un borrado
+(`rm -rf "$R"/scripts`) se deniega por si `$R` es la raíz; coste medido: 3 de las 23 029
+órdenes (`rm -rf "$d"/.claude` sobre un temporal) pasan a denegarse.
+
+`test_shell_targets.py`: corpus de 143 casos (`fixtures/shell_targets_corpus.json`) con las
+mismas respuestas en los dos núcleos (36 de los 51 añadidos tras la primera revisión de #1391
+fallan con el núcleo anterior; los otros 15 son negativos; de los 31 `r1391b-*` de la segunda,
+20 fallan con el núcleo anterior), casos que dependen del árbol en disco,
+`cwd` en un subdirectorio, symlink a `.claude/hooks`, y réplica por `codex-hook.py` y por
+savia-gates con los hooks reales: 4/4 escrituras denegadas (`PROTECTED_GATE_PATH`) frente a
+4/4 permitidas en el núcleo de `e7224df97`. Sin ese commit en el clon, la línea base falla en
+modo estricto (`SAVIA_DUAL_CLI_STRICT=1`) en vez de saltarse.
+
+No cubierto, y así consta: código de otros intérpretes (`python -c "open(...,'w')"`,
+`node -e`), variables cuyo valor no está en el texto (`rm -r $X` con `X=.claude`,
+`rm -rf $(printf .claude)`, `rm -rf "$R"/hooks` con `R=.claude`: de una palabra con variable solo
+se mira la cola literal), rutas
+que llegan por stdin a `xargs`, texto que llega a un shell por tubería (`… | bash`), lo que
+un script ejecutado escriba, globs tras un `cd` desconocido, y escritores sin destino
+literal: `patch -p1 < x.diff`, `git apply/am` (se miran sus argumentos, no las rutas que trae
+el parche), `git reset --hard` sin rutas, `git stash pop`, `git pull/merge/rebase/switch`,
+`tar -x -C`, `unzip -d`, `curl -o`, `wget -O`. Cualquier escritor que no está en la lista de
+arriba se permite. Estos traen contenido versionado o de un fichero
+que el texto no muestra; denegarlos bloquearía el flujo normal de git. Es un gate cooperativo
+contra reescrituras del agente, no aislamiento frente a procesos hostiles.
 
 ### Resto de eventos de Codex (S3)
 

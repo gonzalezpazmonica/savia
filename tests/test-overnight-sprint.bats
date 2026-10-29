@@ -60,12 +60,23 @@ optin() { run bash "$OPTIN" --skill overnight-sprint "$@"; }
 }
 
 @test "opt-in: un grant autonomy:overnight-sprint vigente sustituye a la variable (SE-343), no al flag" {
-  mkdir -p scripts
-  printf '#!/usr/bin/env bash\n[ "$3" = "autonomy:overnight-sprint" ]\n' > scripts/operator-grant.sh
-  optin --confirm-autonomous
+  # El gate ancla el grant a la raíz de SU repo (#1281): se ejecuta una copia
+  # dentro de un repo falso cuyo scripts/operator-grant.sh concede el scope.
+  mkdir -p fake/scripts
+  cp "$OPTIN" fake/scripts/
+  printf '#!/usr/bin/env bash\n[ "$3" = "autonomy:overnight-sprint" ]\n' > fake/scripts/operator-grant.sh
+  run bash fake/scripts/savia-double-optin-check.sh --skill overnight-sprint --confirm-autonomous
   [ "$status" -eq 0 ]
-  optin
+  run bash fake/scripts/savia-double-optin-check.sh --skill overnight-sprint
   [ "$status" -eq 1 ]
+}
+
+@test "opt-in: un operator-grant.sh plantado en el cwd NO concede el factor (#1281)" {
+  mkdir -p scripts
+  printf '#!/usr/bin/env bash\nexit 0\n' > scripts/operator-grant.sh
+  optin --confirm-autonomous
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[FALTA] Variable de entorno: OVERNIGHT_SPRINT_ENABLED=true"* ]]
 }
 
 @test "opt-in: el bypass de tests exige SAVIA_TESTING=1 dentro de BATS; fuera de BATS no abre" {

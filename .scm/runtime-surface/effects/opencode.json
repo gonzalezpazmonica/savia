@@ -1,0 +1,69 @@
+{
+  "kind": "effect-map",
+  "notes": "Worst-case effects per native tool; a tool name is never an effect (TOOL != EFFECT).",
+  "patterns": [],
+  "provenance": {
+    "evidence_class": "DOCUMENTAL",
+    "sources": [
+      "docs/specs/SE-398-f0-desktop-runtime-discovery.md"
+    ]
+  },
+  "runtime": "opencode",
+  "schema_version": 1,
+  "tools": {
+    "bash": [
+      "EXECUTE_LOCAL",
+      "CREATE_PROCESS",
+      "WRITE_WORKSPACE",
+      "ACCESS_SECRET",
+      "ACCESS_NETWORK",
+      "MODIFY_CONFIG",
+      "EXTERNAL_EFFECT",
+      "CHANGE_SHARED_STATE"
+    ],
+    "edit": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ],
+    "glob": [
+      "SEARCH_WORKSPACE"
+    ],
+    "grep": [
+      "SEARCH_WORKSPACE",
+      "ACCESS_SECRET"
+    ],
+    "list": [
+      "READ_WORKSPACE"
+    ],
+    "patch": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ],
+    "question": [
+      "REQUEST_HUMAN_DECISION"
+    ],
+    "read": [
+      "READ_WORKSPACE",
+      "ACCESS_SECRET"
+    ],
+    "task": [
+      "ACCESS_NETWORK",
+      "ACCESS_SECRET",
+      "CHANGE_SHARED_STATE",
+      "CREATE_PROCESS",
+      "EXECUTE_LOCAL",
+      "EXTERNAL_EFFECT",
+      "MODIFY_CONFIG",
+      "WRITE_WORKSPACE"
+    ],
+    "webfetch": [
+      "ACCESS_NETWORK",
+      "EXTERNAL_EFFECT"
+    ],
+    "write": [
+      "WRITE_WORKSPACE",
+      "MODIFY_CONFIG"
+    ]
+  },
+  "verification": "NOT_VERIFIED"
+}

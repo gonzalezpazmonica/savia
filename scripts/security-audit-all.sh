@@ -88,7 +88,9 @@ SCANNER_RESULTS=()
 
 # run_scanner <nombre> <orden...> — ejecuta un sub-escáner en modo JSON y suma sus severidades.
 # El exit code 1 (hallazgos) no invalida el JSON: se lee igual. Exit ≥ 2, JSON ilegible o
-# `result: unknown` ⇒ hueco (con los huecos propios del sub-escáner si los declara).
+# `result: unknown` ⇒ hueco (con los huecos propios del sub-escáner si los declara). Las cuentas
+# critical/high/medium son obligatorias y enteras, y exit 1 o findings_count > 0 sin ninguna cuenta
+# es ilegible (SE-453 parte 2, #1348).
 run_scanner() {
   local name="$1"; shift
   local output rc=0 parsed c=0 h=0 m=0 l=0 g
@@ -98,8 +100,19 @@ import json, os, re, sys
 REASONS = os.environ["GATE_REASONS"].split()
 try:
     d = json.load(sys.stdin)
-    counts = [int(d.get(k, 0)) for k in ("critical", "high", "medium", "low")]
-except (ValueError, TypeError, AttributeError):
+except ValueError:
+    sys.exit(3)
+# critical/high/medium son obligatorias: una clave ausente (esquema cambiado) es ilegible, no un 0.
+# low es opcional porque permissions-wildcard-audit y hook-injection-audit no la emiten.
+if not isinstance(d, dict) or any(k not in d for k in ("critical", "high", "medium")):
+    sys.exit(3)
+counts = [d.get(k, 0) for k in ("critical", "high", "medium", "low")]
+# type() y no isinstance(): True es un int para Python; "2" o 2.7 tampoco son una cuenta.
+fc = d.get("findings_count", sum(c for c in counts if type(c) is int))
+if not all(type(v) is int and v >= 0 for v in counts + [fc]):
+    sys.exit(3)
+# Hallazgos declarados sin ninguna cuenta (p.ej. severidades anidadas en otra clave) no es un limpio.
+if fc > 0 and sum(counts) == 0:
     sys.exit(3)
 print(*counts)
 if d.get("result") == "unknown":
@@ -115,6 +128,10 @@ if d.get("result") == "unknown":
     add_gap "$name:unreadable"
   else
     read -r c h m l <<< "$(head -1 <<< "$parsed")"
+    # Un sub-escáner que dice FAIL (exit 1) sin ninguna cuenta no puede leerse como limpio.
+    if [[ $rc -eq 1 && $((c + h + m + l)) -eq 0 ]]; then
+      add_gap "$name:unreadable"
+    fi
     while IFS= read -r g; do
       [[ -n "$g" ]] && add_gap "$name/$g"
     done < <(tail -n +2 <<< "$parsed")
@@ -126,6 +143,10 @@ if d.get("result") == "unknown":
   SCANNER_RESULTS+=("$name|$c|$h|$m|$l")
 }
 
+# Sin python3 ningún JSON de escáner es legible: cada uno queda `unreadable` y este hueco dice por qué.
+# Se prueba que arranque, no solo que exista: un shim de pyenv sin versión o un venv roto pasan `command -v`.
+python3 -c '' >/dev/null 2>&1 || add_gap "python3:missing_tool"
+
 # Run each scanner in JSON mode
 run_scanner "mcp-security-audit" bash "$PROJECT_ROOT/scripts/mcp-security-audit.sh" --json
 run_scanner "permissions-wildcard-audit" bash "$PROJECT_ROOT/scripts/permissions-wildcard-audit.sh" --json
@@ -133,12 +154,13 @@ run_scanner "hook-injection-audit" bash "$PROJECT_ROOT/scripts/hook-injection-au
 
 # Prompt security scan: count findings manually (it has different output format)
 PS_FINDINGS=0
-if [[ -x "$PROJECT_ROOT/scripts/prompt-security-scan.sh" ]]; then
+if [[ -f "$PROJECT_ROOT/scripts/prompt-security-scan.sh" ]]; then
   PS_RC=0
   PS_OUT=$(bash "$PROJECT_ROOT/scripts/prompt-security-scan.sh" "$PROJECT_ROOT/.claude/agents" 2>&1) || PS_RC=$?
   PS_FINDINGS=$(echo "$PS_OUT" | grep -oE 'Findings: [0-9]+' | head -1 | awk '{print $2}')
   PS_GATE=$(echo "$PS_OUT" | grep '^gate-result: ' | tail -1)
-  if [[ $PS_RC -ge 2 || -z "$PS_FINDINGS" ]]; then
+  # Exit 1 con «Findings: 0» es un FAIL sin cuenta: hueco, no limpio.
+  if [[ $PS_RC -ge 2 || -z "$PS_FINDINGS" || ( $PS_RC -eq 1 && "$PS_FINDINGS" -eq 0 ) ]]; then
     add_gap "prompt-security-scan:unreadable"
   elif [[ "$PS_GATE" == *'"result":"unknown"'* ]]; then
     add_gap "prompt-security-scan:unreadable"
@@ -147,6 +169,9 @@ if [[ -x "$PROJECT_ROOT/scripts/prompt-security-scan.sh" ]]; then
   # Assume HIGH severity for PS findings (simplification)
   TOTAL_HIGH=$((TOTAL_HIGH + PS_FINDINGS))
   SCANNER_RESULTS+=("prompt-security-scan|0|$PS_FINDINGS|0|0")
+else
+  # Antes un prompt-security-scan ausente (o sin bit de ejecución) se omitía sin decirlo: clean sin medir.
+  add_gap "prompt-security-scan:missing_tool"
 fi
 
 # Determine exit

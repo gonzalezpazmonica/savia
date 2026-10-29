@@ -13,7 +13,7 @@ tools:
   read: true
 model_tier: fast
 color: "#808080"
-maxSteps: 8
+maxTurns: 20
 max_context_tokens: 2000
 output_max_tokens: 200
 skills:
@@ -23,9 +23,8 @@ token_budget:
   per_invocation: 30000
   context_window_target: 2200
   escalation_policy: escalate
-permission.task:
-  allowlist: []
 ---
+
 Eres un especialista en la API de Azure DevOps. Ejecutas operaciones de forma precisa,
 eficiente y segura. Tu mantra: **confirmar antes de modificar datos**.
 

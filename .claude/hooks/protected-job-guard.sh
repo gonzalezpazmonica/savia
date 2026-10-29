@@ -32,7 +32,7 @@ fi
 
 # Only apply to Task tool invocations
 TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null) || exit 0
-[[ "$TOOL_NAME" != "Task" ]] && exit 0
+[[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "Agent" ]] && exit 0
 
 SUBAGENT=$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null)
 [[ -z "$SUBAGENT" ]] && exit 0

@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-10-27
+approved_by: "operadora, AskUserQuestion 2026-10-27"
 priority: P2
 developer_type: agent-single
 created: 2026-10-20
@@ -50,7 +52,7 @@ empiezan con auditoría o prueba, no con cambio.
 
 | Slice | Entrega |
 |---|---|
-| S1 | **Auditoría** de `savia-setup.sh`, `setup-opencode-permissions.sh` y `setup-claude-permissions.sh` contra la lista: plan previo y aprobación, copia con marca de tiempo antes de escribir, reejecución sin efecto, no instala software ajeno, respeta las variables de OpenCode y el orden JSON/JSONC. Informe `docs/evidence/SE-450-S1-installer-audit.md` con cada punto en cumple / no cumple / no aplica y evidencia. |
+| S1 | **Auditoría** de `savia-setup.sh`, `setup-opencode-permissions.sh` (`setup-claude-permissions.sh` se retiró el 2026-10-26: era copia idéntica) contra la lista: plan previo y aprobación, copia con marca de tiempo antes de escribir, reejecución sin efecto, no instala software ajeno, respeta las variables de OpenCode y el orden JSON/JSONC. Informe `docs/evidence/SE-450-S1-installer-audit.md` con cada punto en cumple / no cumple / no aplica y evidencia. |
 | S2 | Corregir lo que S1 marque como «no cumple» y sea de bajo riesgo: modo `--dry-run` que imprime el diff sin escribir, y prueba de idempotencia (dos ejecuciones = un solo cambio). |
 | S3 | Locks de sesión con identidad: guardar `pid`, `starttime` (campo 22 de `/proc/<pid>/stat`) y ruta del ejecutable, y considerar vivo el lock solo si coinciden los tres. Si la limpieza falla, el lock se conserva marcado como pendiente. En macOS, `ps -o lstart=` sustituye a `/proc`. |
 

@@ -77,7 +77,7 @@ d = json.load(sys.stdin)
 print(d.get('tool_name', ''))
 " 2>/dev/null) || exit 0
 
-if [[ "$TOOL_NAME" != "Task" ]]; then
+if [[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "Agent" ]]; then
   exit 0
 fi
 

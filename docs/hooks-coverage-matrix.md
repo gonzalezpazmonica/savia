@@ -6,7 +6,7 @@
 
 | Total hooks | TS Guards | Git Hook mitigated | CI Job mitigated | NONE |
 |---|---|---|---|---|
-| 130 | 20 (15.4%) | 4 | 5 | 101 |
+| 132 | 20 (15.2%) | 4 | 5 | 103 |
 
 ## Bloqueantes sin cobertura ni mitigacion
 
@@ -14,10 +14,10 @@ Ninguno — AC-2.2 satisfecho.
 
 ## Cobertura real OpenCode
 
-- **TS Guards activos**: 20/130 (15.4%)
-- **Hooks sin cobertura TS**: 101 (77.7%)
+- **TS Guards activos**: 20/132 (15.2%)
+- **Hooks sin cobertura TS**: 103 (78.0%)
   - De los cuales son bloqueantes sin ninguna mitigacion: 0
-  - Eventos no disponibles en OpenCode (degradacion aceptada): 35
+  - Eventos no disponibles en OpenCode (degradacion aceptada): 36
 
 ## Full matrix
 
@@ -121,6 +121,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | config-snapshot-hook.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PreToolUse | dome-guard.sh | si | TS_GUARD | warning | savia-gates domeGuardVerdict |
 | PreToolUse | model-tier-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
+| PreToolUse | operator-grant.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PreToolUse | plan-gate.sh | no | CI_JOB | warning | CI validate-ci-local.sh |
 | PreToolUse | turn-budget-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | SessionEnd | cache-hygiene-hook.sh | no | NONE | telemetria | evento SessionEnd no disponible en OpenCode — degradacion_documentada |
@@ -131,6 +132,7 @@ Ninguno — AC-2.2 satisfecho.
 | SessionStart | session-init.sh | no | NONE | telemetria | evento SessionStart no disponible en OpenCode — degradacion_documentada |
 | SessionStart | shield-autostart.sh | no | NONE | telemetria | evento SessionStart no disponible en OpenCode — degradacion_documentada |
 | SessionStart | check-daemon-auth.sh | no | NONE | warning | evento SessionStart no disponible en OpenCode — degradacion_documentada |
+| SessionStart | windows-links.sh | no | NONE | warning | evento SessionStart no disponible en OpenCode — degradacion_documentada |
 | Stop | agents-md-auto-regenerate.sh | no | NONE | telemetria | evento Stop no disponible en OpenCode — degradacion_documentada |
 | Stop | emotional-regulation-monitor.sh | no | NONE | telemetria | evento Stop no disponible en OpenCode — degradacion_documentada |
 | Stop | pre-commit-review.sh | no | GIT_HOOK | telemetria | git pre-commit/pre-push |

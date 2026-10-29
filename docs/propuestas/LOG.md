@@ -6,9 +6,149 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-27 SE-474 PROPOSED
+
+Alta: proveedor independiente opcional (decisión de la operadora 2026-10-27, sesgo correlacionado)
+
+## 2026-10-27 SE-469 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-470 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-471 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-472 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-473 APPROVED
+
+operadora, AskUserQuestion 2026-10-27 (alcance aprobado: solo S0 (medición; puede cerrar la spec))
+
+## 2026-10-26 SE-468 APPROVED
+
+operadora, chat 2026-10-26 («Aprobado SE-468»)
+
+## 2026-10-26 SE-473 PROPOSED
+
+Alta desde la síntesis de una tesis sobre arquitectura neuro-simbólica (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-472 PROPOSED
+
+Alta desde la síntesis de una tesis sobre calendario agéntico y sprint nocturno (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-471 PROPOSED
+
+Alta desde la síntesis de una tesis sobre calendario agéntico y sprint nocturno (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-470 PROPOSED
+
+Alta desde la síntesis de una tesis sobre evaluación y aseguramiento de agentes (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-469 PROPOSED
+
+Alta desde la síntesis de una tesis sobre evaluación y aseguramiento de agentes (diseño en el repo de investigación privado)
+
+## 2026-10-26 SE-468 PROPOSED
+
+Alta desde la síntesis de una tesis sobre evaluación y aseguramiento de agentes (diseño en el repo de investigación privado)
+
+## 2026-10-27 SE-463 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-446 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-462 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-467 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-465 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-466 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-454 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-458 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-459 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-461 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-457 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-401 APPROVED
+
+operadora, AskUserQuestion 2026-10-27 (alcance aprobado: solo F0, de solo lectura)
+
+## 2026-10-27 SE-443 APPROVED
+
+operadora, AskUserQuestion 2026-10-27 (alcance aprobado: S1-S2)
+
+## 2026-10-27 SE-449 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-460 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-448 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-447 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-450 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-408 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-409 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
+## 2026-10-27 SE-452 APPROVED
+
+operadora, AskUserQuestion 2026-10-27
+
 ## 2026-10-24 SE-467 PROPOSED
 
 Alta desde la medición de la decisión D2 de SE-456 (sesgo de idioma del auditor de tests)
+
+## 2026-10-23 SE-457 PROPOSED
+
+Alta junto con la skill harness-architecture (PR #1361)
 
 ## 2026-10-23 SE-466 PROPOSED
 

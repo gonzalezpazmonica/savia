@@ -14,8 +14,9 @@ import tempfile
 import time
 
 from hooks import HookConfigurationError, _matcher_applies
-from policy import AUTHORITY_EVENTS, hook_decision, plain_output_mode
+from policy import AUTHORITY_EVENTS, hook_decision, plain_output_mode, prompt_decision
 from protocol import ProtocolError, decode_json
+from shell_targets import protected_target
 
 MAX_OUTPUT = 1024 * 1024
 DEFAULT_TIMEOUT = 5.0
@@ -23,9 +24,15 @@ MAX_TIMEOUT = 30.0
 ENV_ARG_LIMIT = 64 * 1024  # a single env string must stay far below the kernel limit
 # Switches that turn security hooks off must not be steerable from the gated session.
 STRIPPED_ENV = ("SAVIA_PAT_BLOCK", "SAVIA_SHIELD_ENABLED", "SAVIA_HOOK_PROFILE")
+# Never inherited by a prompt evaluator (mirrored by PROMPT_ONLY_ENV in savia-gates shell-bridge.ts).
+PROMPT_ONLY_ENV = ("CLAUDE_JSON_INPUT", "SAVIA_PROMPT_HOOK_MODEL")
 # The agent being gated must not rewrite the gate: deny by default (relative to root).
+# Same list as PROTECTED_GATE_PATHS in savia-gates lib/hook-vocabulary.ts (parity test in test_prompt_transport.py).
+# OpenCode loads config from opencode.json(c) and .opencode/opencode.json(c), plugins from .opencode/plugin(s).
 PROTECTED_PATHS = (".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
-                   ".opencode/hooks", "scripts/dual-cli", ".codex")
+                   ".opencode/hooks", ".opencode/plugins", ".opencode/plugin", "scripts/dual-cli",
+                   "scripts/opencode-plugin", ".codex", "opencode.json", "opencode.jsonc",
+                   ".opencode/opencode.json", ".opencode/opencode.jsonc", ".opencode/package.json")
 
 
 def _deny(reason, handler=None):
@@ -53,10 +60,14 @@ def _timeout(handler):
     return min(float(seconds), MAX_TIMEOUT)
 
 
-def _handler_env(payload, root):
+def _handler_env(payload, root, extra_env=None):
     env = {k: v for k, v in os.environ.items() if k not in STRIPPED_ENV}
     env["CLAUDE_PROJECT_DIR"] = str(root)
-    if len(payload) <= ENV_ARG_LIMIT:  # larger events reach handlers by stdin only
+    if extra_env is not None:  # a prompt evaluator: no stale model or event from the parent
+        for key in PROMPT_ONLY_ENV:
+            env.pop(key, None)
+        env.update(extra_env)
+    elif len(payload) <= ENV_ARG_LIMIT:  # larger events reach handlers by stdin only
         env["CLAUDE_JSON_INPUT"] = payload
     return env
 
@@ -77,8 +88,8 @@ def _spawn_detached(command, payload, root):
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True))
 
 
-def _run_command(command, payload, root, timeout):
-    env = _handler_env(payload, root)
+def _run_command(command, payload, root, timeout, extra_env=None):
+    env = _handler_env(payload, root, extra_env)
     proc = subprocess.Popen(["bash", "-c", command], cwd=str(root), env=env,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, start_new_session=True)
@@ -102,6 +113,30 @@ def _run_command(command, payload, root, timeout):
             pass
     return proc.returncode, out[:MAX_OUTPUT].decode("utf-8", "replace"), \
         err[:MAX_OUTPUT].decode("utf-8", "replace"), False
+
+
+def render_prompt(prompt, raw):
+    """Claude Code semantics: `$ARGUMENTS` becomes the hook input JSON; without it, the JSON is appended."""
+    return prompt.replace("$ARGUMENTS", raw) if "$ARGUMENTS" in prompt else f"{prompt}\n\n{raw}"
+
+
+def _run_prompt(handler, raw, root):
+    """Run a `prompt` handler through the evaluator the operator declared at launch.
+
+    SAVIA_PROMPT_HOOK_CMD is a shell command that reads the rendered prompt on stdin and prints the
+    model verdict. Which model answers is local configuration, never this repo. No evaluator, crash,
+    timeout or a verdict that is not exactly {"ok": bool} denies: the gate is critical (SE-392 AC6).
+    """
+    evaluator = os.environ.get("SAVIA_PROMPT_HOOK_CMD", "").strip()
+    if not evaluator:
+        return _deny("PROMPT_HOOK_UNAVAILABLE")
+    model = handler.get("model")
+    extra = {"SAVIA_PROMPT_HOOK_MODEL": model} if isinstance(model, str) else {}
+    code, out, _err, timed_out = _run_command(
+        evaluator, render_prompt(handler["prompt"], raw), root, _timeout(handler), extra)
+    if timed_out:
+        return _deny("HOOK_TIMEOUT")
+    return prompt_decision(code, out)
 
 
 def evaluate(event, payload, *, settings_path, root, spawn_async=False):
@@ -130,6 +165,14 @@ def evaluate(event, payload, *, settings_path, root, spawn_async=False):
             handlers = rule.get("hooks", [])
             for handler in handlers:
                 kind = handler.get("type")
+                if kind == "prompt" and isinstance(handler.get("prompt"), str):
+                    if handler.get("async") is True and event not in AUTHORITY_EVENTS:
+                        continue
+                    result = _run_prompt(handler, raw, root)
+                    if result["action"] != "allow":
+                        result["handler"] = "prompt"
+                        return result
+                    continue
                 if kind != "command" or not isinstance(handler.get("command"), str):
                     if handler.get("async") is True and event not in AUTHORITY_EVENTS:
                         continue  # telemetry by contract
@@ -218,6 +261,20 @@ def is_protected(path, root):
     return False
 
 
+def shell_writes_gate(payload, root):
+    """A Bash call whose text writes gate code (shell_targets.py). Text the tokenizer cannot close is
+    denied too: bash may still run it, and its raw text hides what the tokenizer would have decoded
+    (`.cl''aude`, `$'\\x2e'codex`, a `cd` before a relative path), so no substring of it can clear it."""
+    command = payload.get("tool_input", {}).get("command")
+    if payload.get("tool_name") != "Bash" or not isinstance(command, str):
+        return False
+    cwd = payload.get("cwd") or str(root)
+    try:
+        return protected_target(command, cwd, str(root), PROTECTED_PATHS) is not None
+    except ProtocolError:
+        return True
+
+
 def normalize_codex_pretool(payload):
     """Codex PreToolUse payload -> list of Claude-shaped payloads, one per effect."""
     if not isinstance(payload, dict):
@@ -253,11 +310,13 @@ def evaluate_codex_tool(event, payload, *, settings_path, root, spawn_async=Fals
         events = normalize_codex_pretool(payload)
     except ProtocolError:
         return _deny("INVALID_EVENT")
+    if event in AUTHORITY_EVENTS and any(
+            item is not payload and is_protected(item["tool_input"]["file_path"], root) for item in events):
+        return _deny("PROTECTED_GATE_PATH")
+    if event in AUTHORITY_EVENTS and shell_writes_gate(payload, root):
+        return _deny("PROTECTED_GATE_PATH")
     final = None
     for item in events:
-        if (event in AUTHORITY_EVENTS and item is not payload
-                and is_protected(item["tool_input"]["file_path"], root)):
-            return _deny("PROTECTED_GATE_PATH")
         decision = evaluate(event, item, settings_path=settings_path, root=root, spawn_async=spawn_async)
         if decision["action"] != "allow":
             return decision

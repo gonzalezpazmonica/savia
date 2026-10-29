@@ -10,8 +10,10 @@
 // replay to the same decisions. Original keys stay in the input: hooks that already read
 // `filePath` keep working. A patch that cannot be parsed is an error, never "no files".
 
-import { isAbsolute, join, normalize } from "node:path"
+import { realpathSync } from "node:fs"
+import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path"
 import { runHooksForEvent } from "./shell-bridge"
+import { protectedTarget } from "./shell-targets"
 import type { HookMap, RunOptions } from "./shell-bridge"
 
 const TOOL_NAMES: Record<string, string> = {
@@ -26,6 +28,40 @@ const KEY_ALIASES: [string, string][] = [
 ]
 
 const PATCH_TOOLS = new Set(["apply_patch", "patch"])
+
+/**
+ * The agent being gated must not rewrite the gate. Same list as PROTECTED_PATHS in
+ * scripts/dual-cli/gates.py (parity checked by tests/dual-cli/test_prompt_transport.py), relative to the root.
+ * Before this, OpenCode only protected them through guard-pin with SAVIA_GATES_PIN=1.
+ */
+export const PROTECTED_GATE_PATHS = [".claude/settings.json", ".claude/settings.local.json", ".claude/hooks",
+  ".opencode/hooks", ".opencode/plugins", ".opencode/plugin", "scripts/dual-cli", "scripts/opencode-plugin", ".codex",
+  "opencode.json", "opencode.jsonc", ".opencode/opencode.json", ".opencode/opencode.jsonc", ".opencode/package.json"]
+
+/** Tools whose view carries a file the call writes. */
+const FILE_EFFECT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"])
+
+/** os.path.realpath: resolves the symlinks of the part that exists, keeps the rest as written. */
+function realPath(p: string): string {
+  try {
+    return realpathSync(p)
+  } catch {
+    const parent = dirname(p)
+    return parent === p ? p : join(realPath(parent), basename(p))
+  }
+}
+
+/** Port of gates.is_protected: the path (lexically and through symlinks) is gate configuration or code. */
+export function isProtectedPath(path: string, root: string): boolean {
+  for (const candidate of [normalize(path), realPath(path)]) {
+    for (const rel of PROTECTED_GATE_PATHS) {
+      for (const base of [normalize(join(root, rel)), realPath(join(root, rel))]) {
+        if (candidate === base || candidate.startsWith(base + sep)) return true
+      }
+    }
+  }
+  return false
+}
 
 export interface HookView {
   tool_name: string
@@ -120,6 +156,19 @@ export function fromHookInput(mutated: Record<string, unknown>, view: HookView):
   return next
 }
 
+/** Port of gates.shell_writes_gate: a Bash call whose text writes gate code (lib/shell-targets.ts). Text the
+ * tokenizer cannot close is denied too: its raw text hides what the tokenizer would have decoded, so no
+ * substring of it can clear it. Any other error denies as well, as an exception out of gates.py does in Codex. */
+export function shellWritesGate(view: HookView, cwd: string, root: string): boolean {
+  const command = view.tool_input.command
+  if (view.tool_name !== "Bash" || typeof command !== "string") return false
+  try {
+    return protectedTarget(command, cwd, root, PROTECTED_GATE_PATHS) !== null
+  } catch {
+    return true
+  }
+}
+
 export interface PreToolUseOutcome {
   blocked: boolean
   reason: string
@@ -140,6 +189,14 @@ export async function runPreToolUse(
     views = hookViews(tool, input, base.cwd)
   } catch {
     return { blocked: true, reason: "INVALID_EVENT" }
+  }
+  for (const view of views) {
+    const target = view.tool_input.file_path ?? view.tool_input.notebook_path
+    if (FILE_EFFECT_TOOLS.has(view.tool_name) && typeof target === "string" &&
+        isProtectedPath(joinPath(base.cwd, target), root)) {
+      return { blocked: true, reason: "PROTECTED_GATE_PATH" }
+    }
+    if (shellWritesGate(view, base.cwd, root)) return { blocked: true, reason: "PROTECTED_GATE_PATH" }
   }
   let mutated: Record<string, unknown> | undefined
   for (const view of views) {

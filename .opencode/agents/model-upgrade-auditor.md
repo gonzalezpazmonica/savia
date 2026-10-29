@@ -15,11 +15,10 @@ token_budget:
   context_window_target: 20000
   escalation_policy: block
 permissionMode: acceptEdits
-maxSteps: 40
+maxTurns: 40
 color: "#CC00CC"
-permission.task:
-  allowlist: ["dotnet-developer", "java-developer", "python-developer", "typescript-developer"]
 ---
+
 # Model Upgrade Auditor
 
 You audit pm-workspace components for prompt debt — workarounds, emphatic repetitions, defensive parsing, and unnecessary complexity that newer models handle natively.
