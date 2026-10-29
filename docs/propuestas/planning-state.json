@@ -1555,6 +1555,15 @@
       "phase": "D"
     },
     {
+      "id": "SE-478",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Protocolo de decisiones: triaje, simetría de argumentos y criterio previo",
+      "note": "Condicionada: no se implementa antes del resultado de una evaluación previa en Savia Labs (privado). Triaje técnica/autorización/juicio; en las de juicio, mismo esquema por opción y sin recomendada en la primera ronda. Revisión de Anthropic Research, 2026-10-29.",
+      "evidence": "docs/specs/SE-478-decision-triage-symmetry-protocol.spec.md",
+      "phase": "D"
+    },
+    {
       "id": "SE-479",
       "status": "PROPOSED",
       "priority": "P2",
