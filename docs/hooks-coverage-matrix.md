@@ -83,7 +83,6 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | block-infra-destructive.sh | si | TS_GUARD | bloqueante | blockInfraDestructive |
 | PreToolUse | block-pat-file-write.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; credenciales write bloqueado via blockCredentialLeak TS (parcial) |
 | PreToolUse | block-project-whitelist.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; whitelist check no portado en OpenCode |
-| PreToolUse | compliance-gate.sh | no | GIT_HOOK | bloqueante | git pre-commit/pre-push |
 | PreToolUse | context-greedy-inject.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; greedy inject no portado en OpenCode |
 | PreToolUse | context-preflight-check.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; context preflight no ejecuta en OpenCode |
 | PreToolUse | context-sanitize-input.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; input sanitize no portado en OpenCode |
@@ -118,6 +117,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | auto-grill-me.sh | si | TS_GUARD | warning | autoGrillMe |
 | PreToolUse | auto-zoom-out.sh | si | TS_GUARD | warning | autoZoomOut |
 | PreToolUse | blast-radius-hook.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
+| PreToolUse | compliance-gate.sh | no | GIT_HOOK | warning | git pre-commit/pre-push |
 | PreToolUse | config-snapshot-hook.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PreToolUse | dome-guard.sh | si | TS_GUARD | warning | savia-gates domeGuardVerdict |
 | PreToolUse | model-tier-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
