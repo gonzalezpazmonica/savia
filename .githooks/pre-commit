@@ -6,7 +6,7 @@
 #
 # Lo ejecuta git en el repo real del commit, con lo que de verdad va en stage. Funciona igual con
 # git -C, cd, subshell, heredoc, script o commit -a. La autoridad que no se puede saltar es la CI (job
-# «Compliance runner»), que ejecuta el mismo runner sobre el diff de la PR.
+# «Compliance runner» del job obligatorio «Validate workspace»), con el mismo runner sobre el diff de la PR.
 
 set -uo pipefail
 

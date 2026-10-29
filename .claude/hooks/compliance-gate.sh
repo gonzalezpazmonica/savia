@@ -7,7 +7,7 @@ set -uo pipefail
 #   1. `.githooks/pre-commit` (core.hooksPath): git la ejecuta en el repo real del commit, sobre lo que de
 #      verdad va en stage y solo cuando la orden se ejecuta, es decir, tras la aprobación. Vale para
 #      cualquier forma de orden: git -C, cd, subshell, heredoc, script o commit -a.
-#   2. CI, job «Compliance runner»: el mismo runner sobre el diff de la PR. Es la autoridad que no se
+#   2. CI, paso «Compliance runner» del job obligatorio «Validate workspace»: el mismo runner sobre el diff de la PR. Es la autoridad que no se
 #      puede saltar: un commit local que esquive el pre-commit no llega a main sin pasarla.
 #
 # Antes este hook deducía del texto de la orden en qué repo se hacía el commit. No tiene solución completa:

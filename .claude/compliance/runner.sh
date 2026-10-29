@@ -37,11 +37,17 @@ if [[ "$MODE" == "--all" ]]; then
 elif [[ "$MODE" == "--range" ]]; then
   # CI: ficheros añadidos o modificados en el rango (los borrados no se verifican). Un rango que no se
   # resuelve falla cerrado: sin lista no hay verde.
-  if ! git rev-parse --verify --quiet "${RANGE%%...*}" >/dev/null; then
-    echo "❌ rango no resoluble: $RANGE" >&2
-    exit 2
-  fi
-  mapfile -t FILES < <(git diff --name-only --diff-filter=AMR "$RANGE")
+  # Admite A..B y A...B; los dos extremos tienen que existir.
+  _ends="${RANGE/.../ }"; _ends="${_ends/../ }"
+  for _e in $_ends; do
+    if ! git rev-parse --verify --quiet "$_e^{commit}" >/dev/null; then
+      echo "❌ rango no resoluble: $RANGE" >&2
+      exit 2
+    fi
+  done
+  if ! mapfile -t FILES < <(git diff --name-only --diff-filter=AMR "$RANGE"; echo "rc=$?"); then exit 2; fi
+  [[ "${FILES[-1]:-}" == "rc=0" ]] || { echo "❌ git diff falló sobre $RANGE" >&2; exit 2; }
+  unset 'FILES[-1]'
 else
   mapfile -t FILES < <(git diff --cached --name-only 2>/dev/null)
   if [[ ${#FILES[@]} -eq 0 ]]; then
