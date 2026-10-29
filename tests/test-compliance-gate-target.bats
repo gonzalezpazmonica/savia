@@ -65,6 +65,7 @@ setup() {
   mkrepo "$A" clean; mkrepo "$B" violation
   gate "$A" "cd $B && git commit -m x"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
 }
 
 @test "cd x && git commit con objetivo limpio: pasa aunque el cwd tenga violación" {
@@ -77,18 +78,28 @@ setup() {
   mkrepo "$A" clean; mkrepo "$BATS_TEST_TMPDIR/w/b" violation
   gate "$A" "cd ../w && git -C b commit -m x"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$(cd "$BATS_TEST_TMPDIR/w/b" && pwd -P)"* ]]
+}
+
+@test "cd relativo + git -C relativo a un repo limpio: pasa aunque el cwd tenga violación" {
+  mkrepo "$A" violation; mkrepo "$BATS_TEST_TMPDIR/w/b" clean
+  gate "$A" "cd ../w && git -C b commit -m x"
+  [ "$status" -eq 0 ]
 }
 
 @test "dos commits en repos distintos: se evalúan ambos" {
   mkrepo "$A" clean; mkrepo "$B" violation
   gate "$A" "git commit -m x; git -C $B commit -m y"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
 }
 
 @test "la palabra cd en prosa antes del commit no cambia el objetivo" {
   mkrepo "$A" violation
   gate "$A" "echo 'usa cd nope y luego' ; git commit -m x"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"* ]]
+  [[ "$output" != *"no se puede determinar"* ]]
 }
 
 @test "sin objetivo resoluble: ruta con variable bloquea" {
@@ -128,14 +139,165 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
-@test "cat > fichero <<EOF con líneas git commit dentro no es un commit" {
+@test "cat > fichero <<EOF con git commit dentro: se evalúa y, sin objetivo resoluble, bloquea (falso positivo aceptado, revisión 2)" {
   mkrepo "$A" clean
   gate "$A" "$(printf "cat > t.sh <<'EOF'\ngit -C \"\$1\" commit -q -m base\nEOF")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+@test "bash <<EOF con git commit dentro sí se evalúa (objetivo con violación)" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "bash <<'EOF'\ngit -C %s commit -q -m base\nEOF" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "bash <<EOF con git commit dentro sí se evalúa (objetivo limpio pasa)" {
+  mkrepo "$A" violation; mkrepo "$B" clean
+  gate "$A" "$(printf "bash <<'EOF'\ngit -C %s commit -q -m base\nEOF" "$B")"
   [ "$status" -eq 0 ]
 }
 
-@test "bash <<EOF con git commit dentro sí se evalúa" {
+# --- Revisión 2: órdenes multilínea ---
+
+@test "multilínea: commit en la 2.ª línea se localiza y se evalúa (limpio pasa)" {
   mkrepo "$A" clean
-  gate "$A" "$(printf "bash <<'EOF'\ngit -C \"\$1\" commit -q -m base\nEOF")"
+  gate "$A" "$(printf 'git add README.md\ngit commit -m y')"
+  [ "$status" -eq 0 ]
+}
+
+@test "multilínea: commit en la 2.ª línea con violación bloquea por la violación" {
+  mkrepo "$A" violation
+  gate "$A" "$(printf 'git add README.md\ngit commit -m y')"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"* ]]
+}
+
+@test "multilínea: el 2.º commit de otra línea también se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf 'git commit -m a\ngit -C %s commit -m b' "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "multilínea: cd en una línea y commit en la siguiente sigue al cd" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf 'cd %s\ngit commit -m b' "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+# --- Revisión 2: los heredocs que se ejecutan no se descartan ---
+
+@test "cat <<EOF | bash con commit dentro se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "cat <<'EOF' | bash\ngit -C %s commit -m x\nEOF" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "cat > s.sh <<EOF && bash s.sh con commit dentro se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "cat > s.sh <<'EOF' && bash s.sh\ngit -C %s commit -m x\nEOF" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "cat > s.sh <<EOF y bash s.sh en otra línea: el cuerpo se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "cat > s.sh <<'EOF'\ngit -C %s commit -m x\nEOF\nbash s.sh" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "tee >(bash) <<EOF con commit dentro se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "tee >(bash) <<'EOF'\ngit -C %s commit -m x\nEOF" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "grupo con cat > /dev/stdout canalizado a bash: el cuerpo se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "{\ncat > /dev/stdout <<'EOF'\ngit -C %s commit -m x\nEOF\n} | bash" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "here-string <<<palabra no abre un heredoc que oculte commits posteriores" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf 'cat <<<foo\ngit -C %s commit -m x' "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "heredoc sin terminador: el cuerpo se conserva y se evalúa" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "$(printf "cat > f.txt <<'EOF'\ngit -C %s commit -m x" "$B")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"*"$B"* ]]
+}
+
+@test "tee fichero <<EOF con git commit dentro: se evalúa y, sin objetivo resoluble, bloquea (falso positivo aceptado, revisión 2)" {
+  mkrepo "$A" clean
+  gate "$A" "$(printf "tee t.sh <<'EOF'\ngit -C \"\$1\" commit -q -m base\nEOF")"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+# --- Revisión 2: cd que no cambia el cwd del commit y entorno de git ---
+
+@test "(cd X; true); git commit: el cd del subshell no se sigue y bloquea" {
+  mkrepo "$A" violation; mkrepo "$B" clean
+  gate "$A" "(cd $B; true); git commit -m x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+@test "cd entre comillas (texto de un echo) no se sigue y bloquea" {
+  mkrepo "$A" violation; mkrepo "$B" clean
+  gate "$A" "echo \"x; cd $B\"; git commit -m x"
+  [ "$status" -eq 2 ]
+}
+
+@test "pushd X && git commit bloquea (pushd no se sigue)" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "pushd $B && git commit -m x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+@test "GIT_DIR= en el entorno de la orden bloquea" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "GIT_DIR=$B/.git GIT_WORK_TREE=$B git commit -m x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+@test "export GIT_WORK_TREE previo bloquea" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  gate "$A" "export GIT_WORK_TREE=$B; git commit -m x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+# --- Revisión 2: estado heredado y herramientas que fallan ---
+
+@test "texto plano: HOOK_SESSION_CWD heredado del entorno no desvía el objetivo" {
+  mkrepo "$A" violation; mkrepo "$B" clean
+  cd "$A"
+  run env HOOK_SESSION_CWD="$B" CLAUDE_TOOL_INPUT="git commit -m x" bash "$ROOT/.claude/hooks/compliance-gate.sh" </dev/null
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"* ]]
+}
+
+@test "awk que falla no deja el gate abierto" {
+  mkrepo "$A" violation
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\nexit 1\n' > "$BATS_TEST_TMPDIR/bin/awk"; chmod +x "$BATS_TEST_TMPDIR/bin/awk"
+  json=$(jq -n --arg c "git commit -m x" --arg d "$A" '{tool_input:{command:$c},cwd:$d}')
+  cd "$A"
+  run bash -c 'printf "%s" "$1" | PATH="$2:$PATH" bash "$3"' _ "$json" "$BATS_TEST_TMPDIR/bin" "$ROOT/.claude/hooks/compliance-gate.sh"
   [ "$status" -eq 2 ]
 }

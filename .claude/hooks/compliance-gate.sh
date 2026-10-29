@@ -29,7 +29,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
 hook_read_command compliance-gate; _rc=$?
 [[ $_rc -eq 2 ]] && exit 2
 [[ $_rc -eq 3 ]] && exit 0
-INPUT=$(hook_strip_file_heredocs "$HOOK_COMMAND")
+# Sin filtrar heredocs (revisión 2 de #1413): el filtro abría un falso verde. Un texto «git commit»
+# dentro de un heredoc puede dar un bloqueo falso, que es el lado seguro de un gate de flujo.
+INPUT="$HOOK_COMMAND"
 CMD_AT="$HOOK_CMD_AT"
 GIT_AT="$HOOK_GIT_AT"
 if ! grep -qE "${GIT_AT}commit([[:space:]]|$)" <<<"$INPUT"; then

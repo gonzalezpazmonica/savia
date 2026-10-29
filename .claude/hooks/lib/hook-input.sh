@@ -81,6 +81,7 @@ hook_read_command() {
     return 3
   fi
   local trimmed="${raw#"${raw%%[![:space:]]*}"}"
+  HOOK_SESSION_CWD=""  # nunca heredado del entorno: solo el cwd que entrega el runtime en el JSON
   if [[ "$trimmed" == \{* ]]; then
     raw="$trimmed"
     if command -v jq &>/dev/null && ! printf '%s' "$raw" | jq -e . >/dev/null 2>&1; then
@@ -110,21 +111,6 @@ _hook_resolve_dir() {
   _HOOK_RESOLVED=$(cd "$d" 2>/dev/null && pwd -P) || return 1
 }
 
-# hook_strip_file_heredocs <orden>: quita los cuerpos de heredoc que solo escriben un fichero
-# (`cat > f <<'EOF'`, `tee f <<EOF`); su texto no se ejecuta y no es un commit. Los demás heredocs
-# (`bash <<EOF`, `python - <<EOF`) se conservan. Resultado por stdout.
-hook_strip_file_heredocs() {
-  printf '%s\n' "$1" | awk '
-    skip != "" { if ($0 ~ "^[[:space:]]*" skip "[[:space:]]*$") skip = ""; next }
-    {
-      print
-      if ($0 ~ /^[[:space:]]*(cat|tee)([[:space:]]|$)/ && match($0, /<<-?[[:space:]]*["\x27]?[A-Za-z_][A-Za-z0-9_]*["\x27]?/)) {
-        tag = substr($0, RSTART, RLENGTH); sub(/^<<-?[[:space:]]*["\x27]?/, "", tag); sub(/["\x27]$/, "", tag)
-        skip = tag
-      }
-    }'
-}
-
 # hook_git_targets <orden> <cwd de la sesión>: repos (raíz del árbol de trabajo) sobre los que actúa cada
 # `git commit` de la orden, siguiendo `cd X &&` previos (acumulativos) y `git -C X` (acumulativos, relativos
 # al cd vigente). Rellena HOOK_GIT_TARGETS (únicos, en orden) y devuelve 0. Devuelve 1 y HOOK_TARGET_REASON
@@ -138,15 +124,32 @@ hook_git_targets() {
   local re_c='(^|[[:space:]])-C[[:space:]]+("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)'
   HOOK_GIT_TARGETS=(); HOOK_TARGET_REASON=""
   [[ -d "$base" ]] || { HOOK_TARGET_REASON="directorio de la sesión inexistente: $base"; return 1; }
-  rest="$cmd"
+  # Cada línea es una orden: el ancla de HOOK_GIT_AT no incluye «\n» y `^` solo casa al inicio de la
+  # cadena en `=~`, así que sin esto un commit en la 2.ª línea (o el 2.º de varias) no se localizaba.
+  rest="${cmd//$nl/;}"
   local consumed=""
   while [[ "$rest" =~ $re_commit ]]; do
     m="${BASH_REMATCH[0]}"
     prefix="${rest%%"$m"*}"
     consumed+="$prefix"
     cwd="$base"
-    local p="$consumed"
+    # Lo que cambia el directorio o el repo sin que el análisis pueda seguirlo falla cerrado.
+    if [[ "$consumed$m" =~ (^|[^[:alnum:]_])(pushd|popd)([[:space:]]|$) ]]; then
+      HOOK_TARGET_REASON="pushd/popd: el directorio no se sigue"; return 1
+    fi
+    if [[ "$consumed$m" == *GIT_DIR=* || "$consumed$m" == *GIT_WORK_TREE=* ]]; then
+      HOOK_TARGET_REASON="GIT_DIR/GIT_WORK_TREE en la orden: el árbol de trabajo no se determina"; return 1
+    fi
+    local p="$consumed" before q1 q2
     while [[ "$p" =~ $re_cd ]]; do
+      if [[ "${BASH_REMATCH[1]}" == *'('* || "${BASH_REMATCH[1]}" == *'`'* ]]; then
+        HOOK_TARGET_REASON="cd dentro de un subshell: no cambia el directorio del commit"; return 1
+      fi
+      # Un cd dentro de comillas (texto de un echo) no se ejecuta: comillas desparejadas antes de él.
+      before="${p%%"${BASH_REMATCH[0]}"*}"; q1="${before//[^\"]/}"; q2="${before//[^\']/}"
+      if (( ${#q1} % 2 || ${#q2} % 2 )); then
+        HOOK_TARGET_REASON="cd entre comillas: no se puede saber si se ejecuta"; return 1
+      fi
       if ! _hook_resolve_dir "${BASH_REMATCH[2]}" "$cwd"; then
         HOOK_TARGET_REASON="«cd ${BASH_REMATCH[2]}» no se resuelve a un directorio existente"; return 1
       fi
