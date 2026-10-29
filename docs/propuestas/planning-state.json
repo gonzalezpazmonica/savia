@@ -1526,6 +1526,42 @@
       "evidence": "docs/specs/SE-473-contestable-lessons.spec.md",
       "phase": "D",
       "approval": "Operadora 2026-10-27: AskUserQuestion (alcance aprobado: solo S0 (medición; puede cerrar la spec))"
+    },
+    {
+      "id": "SE-475",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Clase del bloqueo en los mensajes de hook: FORMA o POLÍTICA",
+      "note": "0 de 41 hooks con exit 2 y 27 guards TS declaran la clase del bloqueo; el agente adivina si puede reformular. Prefijo FORMA:/POLÍTICA:, biblioteca bash+TS y ratchet. Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
+      "evidence": "docs/specs/SE-475-hook-block-class-contract.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-476",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Independencia de la verificación: acuerdo correlacionado, autorrevisión e informe del propio modelo",
+      "note": "Jueces del mismo proveedor se agregan como votos independientes; la autorrevisión y el rationale del modelo no son verificación. Campo independence, AC autoverificados listados, rationale como autoinforme. Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
+      "evidence": "docs/specs/SE-476-verification-independence-labels.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-477",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Estadística mínima en las comparativas: intervalo, diferencia pareada y censura",
+      "note": "labs-preregister.sh no pide IC, diseño pareado ni política de cortes; los timeouts no son aleatorios. Librería stdlib, contrato de informe y campos de preregistro. Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
+      "evidence": "docs/specs/SE-477-comparison-statistics-minimum.spec.md",
+      "phase": "D"
+    },
+    {
+      "id": "SE-479",
+      "status": "PROPOSED",
+      "priority": "P2",
+      "title": "Baterías con tarea sin solución dentro del alcance",
+      "note": "Ninguna batería mide si el ejecutor para o rodea cuando la tarea es imposible dentro del alcance. Seis casos con control posible y evaluador determinista (PASS, FAIL_ESCAPE, FAIL_FALSE_DONE, FAIL_ATTEMPT). Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
+      "evidence": "docs/specs/SE-479-no-in-scope-solution-battery.spec.md",
+      "phase": "D"
     }
   ],
   "route": {
@@ -1879,6 +1915,26 @@
         "effort": "tres slices pequeños independientes; SE-473 S2 medio",
         "prerequisites": "SE-470, SE-472 y SE-473 ya APPROVED (operadora, 2026-10-27); de SE-473 solo S0, S1-S2 necesitan nueva aprobación tras el resultado de S0; SE-470 condicionada a H3/H4; SE-472 a SE-343.",
         "done": "Cada slice publica su medición y sus tests con caso negativo; nada pasa a bloqueo sin datos."
+      },
+      {
+        "id": "S21",
+        "phase": "D",
+        "priority": "P2",
+        "initiatives": [
+          "SE-475",
+          "SE-476",
+          "SE-477",
+          "SE-479"
+        ],
+        "title": "Verificación honesta tras la revisión de Anthropic Research",
+        "action": "SE-475: prefijo FORMA/POLÍTICA en los bloqueos de hook con biblioteca bash+TS. SE-476: acuerdo de jueces del mismo proveedor como correlacionado y autorrevisión fuera de la verificación. SE-477: IC, diferencia pareada y censura en comparativas. SE-479: casos imposibles dentro del alcance con control posible.",
+        "necessity": "media",
+        "urgency": "baja",
+        "value": "medio",
+        "dependency_value": "frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479",
+        "effort": "cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas",
+        "prerequisites": "Aprobación de SE-475, SE-476, SE-477 y SE-479 por la operadora (las cuatro PROPOSED); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.",
+        "done": "Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica."
       },
       {
         "id": "S07",
