@@ -88,8 +88,91 @@ hook_read_command() {
       return 2
     fi
     hook_extract_command "$raw" || return 2
+    HOOK_SESSION_CWD=""
+    if command -v jq &>/dev/null; then
+      HOOK_SESSION_CWD=$(jq -r '(.cwd // empty) | select(type == "string")' <<<"$raw" 2>/dev/null) || HOOK_SESSION_CWD=""
+    fi
     return 0
   fi
   HOOK_COMMAND="$raw"
+  return 0
+}
+
+# Resuelve un directorio escrito en la orden (comillas, ~, $HOME; relativo a $2). Sin expansión estática
+# ($VAR, $(...), `...`, comodines) o sin directorio existente → 1. Deja la ruta física en _HOOK_RESOLVED.
+_hook_resolve_dir() {
+  local d="$1" base="$2"
+  d="${d%\"}"; d="${d#\"}"; d="${d%\'}"; d="${d#\'}"
+  d="${d/#\~/$HOME}"; d="${d/#\$HOME/$HOME}"
+  [[ -z "$d" || "$d" == *'$'* || "$d" == *'`'* || "$d" == *[\*\?\[]* ]] && return 1
+  [[ "$d" != /* ]] && d="$base/$d"
+  [[ -d "$d" ]] || return 1
+  _HOOK_RESOLVED=$(cd "$d" 2>/dev/null && pwd -P) || return 1
+}
+
+# hook_strip_file_heredocs <orden>: quita los cuerpos de heredoc que solo escriben un fichero
+# (`cat > f <<'EOF'`, `tee f <<EOF`); su texto no se ejecuta y no es un commit. Los demás heredocs
+# (`bash <<EOF`, `python - <<EOF`) se conservan. Resultado por stdout.
+hook_strip_file_heredocs() {
+  printf '%s\n' "$1" | awk '
+    skip != "" { if ($0 ~ "^[[:space:]]*" skip "[[:space:]]*$") skip = ""; next }
+    {
+      print
+      if ($0 ~ /^[[:space:]]*(cat|tee)([[:space:]]|$)/ && match($0, /<<-?[[:space:]]*["\x27]?[A-Za-z_][A-Za-z0-9_]*["\x27]?/)) {
+        tag = substr($0, RSTART, RLENGTH); sub(/^<<-?[[:space:]]*["\x27]?/, "", tag); sub(/["\x27]$/, "", tag)
+        skip = tag
+      }
+    }'
+}
+
+# hook_git_targets <orden> <cwd de la sesión>: repos (raíz del árbol de trabajo) sobre los que actúa cada
+# `git commit` de la orden, siguiendo `cd X &&` previos (acumulativos) y `git -C X` (acumulativos, relativos
+# al cd vigente). Rellena HOOK_GIT_TARGETS (únicos, en orden) y devuelve 0. Devuelve 1 y HOOK_TARGET_REASON
+# si algún objetivo no se puede determinar estáticamente: --git-dir/--work-tree, rutas con variables o
+# sustituciones, directorios inexistentes, fuera de un repo, o un commit que el análisis no localiza.
+hook_git_targets() {
+  local cmd="$1" base="${2:-$PWD}" rest m prefix cwd dir top t
+  local re_commit="${HOOK_GIT_AT}commit([[:space:]]|\$)"
+  local nl=$'\n'
+  local re_cd='(^|[;&|('"$nl"'`]|\$\()[[:space:]]*cd[[:space:]]+("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:];&|)]*)[[:space:]]*(&&|;|\|\||\))?'
+  local re_c='(^|[[:space:]])-C[[:space:]]+("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)'
+  HOOK_GIT_TARGETS=(); HOOK_TARGET_REASON=""
+  [[ -d "$base" ]] || { HOOK_TARGET_REASON="directorio de la sesión inexistente: $base"; return 1; }
+  rest="$cmd"
+  local consumed=""
+  while [[ "$rest" =~ $re_commit ]]; do
+    m="${BASH_REMATCH[0]}"
+    prefix="${rest%%"$m"*}"
+    consumed+="$prefix"
+    cwd="$base"
+    local p="$consumed"
+    while [[ "$p" =~ $re_cd ]]; do
+      if ! _hook_resolve_dir "${BASH_REMATCH[2]}" "$cwd"; then
+        HOOK_TARGET_REASON="«cd ${BASH_REMATCH[2]}» no se resuelve a un directorio existente"; return 1
+      fi
+      cwd="$_HOOK_RESOLVED"
+      p="${p#*"${BASH_REMATCH[0]}"}"
+    done
+    if [[ "$m" == *--git-dir* || "$m" == *--work-tree* ]]; then
+      HOOK_TARGET_REASON="--git-dir/--work-tree: el árbol de trabajo no se determina"; return 1
+    fi
+    p="$m"
+    while [[ "$p" =~ $re_c ]]; do
+      if ! _hook_resolve_dir "${BASH_REMATCH[2]}" "$cwd"; then
+        HOOK_TARGET_REASON="«git -C ${BASH_REMATCH[2]}» no se resuelve a un directorio existente"; return 1
+      fi
+      cwd="$_HOOK_RESOLVED"
+      p="${p#*"${BASH_REMATCH[0]}"}"
+    done
+    top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || { HOOK_TARGET_REASON="$cwd no está dentro de un repo git"; return 1; }
+    top=$(cd "$top" && pwd -P)
+    for t in "${HOOK_GIT_TARGETS[@]:-}"; do [[ "$t" == "$top" ]] && top=""; done
+    [[ -n "$top" ]] && HOOK_GIT_TARGETS+=("$top")
+    consumed+="$m"
+    rest="${rest#*"$m"}"
+  done
+  if [[ ${#HOOK_GIT_TARGETS[@]} -eq 0 ]]; then
+    HOOK_TARGET_REASON="no se localiza el «git commit» en la orden"; return 1
+  fi
   return 0
 }

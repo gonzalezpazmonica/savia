@@ -29,7 +29,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
 hook_read_command compliance-gate; _rc=$?
 [[ $_rc -eq 2 ]] && exit 2
 [[ $_rc -eq 3 ]] && exit 0
-INPUT="$HOOK_COMMAND"
+INPUT=$(hook_strip_file_heredocs "$HOOK_COMMAND")
 CMD_AT="$HOOK_CMD_AT"
 GIT_AT="$HOOK_GIT_AT"
 if ! grep -qE "${GIT_AT}commit([[:space:]]|$)" <<<"$INPUT"; then
@@ -39,19 +39,30 @@ fi
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 RUNNER="$PROJECT_DIR/.claude/compliance/runner.sh"
 
+# Repo objetivo del commit (-C / cd previo / cwd de la sesión), no el del hook. Sin objetivo
+# determinable se bloquea: los gates de flujo protegen contra errores, y evaluar el árbol equivocado
+# da verdes falsos. Se corrige usando una ruta literal (git -C /ruta commit, cd /ruta && git commit).
+if ! hook_git_targets "$INPUT" "${HOOK_SESSION_CWD:-$PWD}"; then
+  echo "🛑 COMPLIANCE GATE: no se puede determinar en qué repo se hace el commit ($HOOK_TARGET_REASON)." >&2
+  echo "   Usa una ruta literal: git -C /ruta/al/repo commit ... o cd /ruta/al/repo && git commit ..." >&2
+  exit 2
+fi
+
 if [[ ! -x "$RUNNER" ]]; then
   chmod +x "$RUNNER" 2>/dev/null || true
 fi
 
 if [[ -f "$RUNNER" ]]; then
-  bash "$RUNNER" --staged
-  EXIT_CODE=$?
-  if [[ $EXIT_CODE -ne 0 ]]; then
-    echo "" >&2
-    echo "🛑 COMPLIANCE GATE: Commit bloqueado por violación de reglas." >&2
-    echo "   Ejecuta: bash .claude/compliance/runner.sh --all para diagnóstico completo." >&2
-    exit 2
-  fi
+  for TARGET in "${HOOK_GIT_TARGETS[@]}"; do
+    COMPLIANCE_TARGET_DIR="$TARGET" bash "$RUNNER" --staged
+    EXIT_CODE=$?
+    if [[ $EXIT_CODE -ne 0 ]]; then
+      echo "" >&2
+      echo "🛑 COMPLIANCE GATE: Commit bloqueado por violación de reglas ($TARGET)." >&2
+      echo "   Ejecuta: COMPLIANCE_TARGET_DIR=$TARGET bash .claude/compliance/runner.sh --all para diagnóstico completo." >&2
+      exit 2
+    fi
+  done
 fi
 
 exit 0

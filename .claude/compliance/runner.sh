@@ -13,11 +13,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# Repo evaluado: COMPLIANCE_TARGET_DIR (el que fija el gate a partir de la orden de commit); sin él, el
+# de PROJECT_DIR. Los checks se ejecutan siempre desde este runner, sobre los ficheros del objetivo.
+TARGET_DIR="${COMPLIANCE_TARGET_DIR:-$PROJECT_DIR}"
+if [[ ! -d "$TARGET_DIR" ]]; then
+  echo "❌ COMPLIANCE_TARGET_DIR no es un directorio: $TARGET_DIR" >&2
+  exit 2
+fi
 MODE="${1:---staged}"
 VIOLATIONS=0
 WARNINGS=0
 
-cd "$PROJECT_DIR"
+cd "$TARGET_DIR"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  COMPLIANCE RUNNER — Verificación de reglas"
@@ -48,7 +55,7 @@ run_check() {
 if echo "${FILES[*]}" | grep -q "CHANGELOG.md" || [[ "$MODE" == "--all" ]]; then
   run_check "1. Links de comparación en CHANGELOG" \
     "$PROJECT_DIR/scripts/validate-changelog-links.sh" \
-    "$PROJECT_DIR/CHANGELOG.md"
+    "$TARGET_DIR/CHANGELOG.md"
 else
   echo "📋 1. Links de comparación en CHANGELOG"
   echo "  ⏭️  CHANGELOG.md no modificado, skip"
