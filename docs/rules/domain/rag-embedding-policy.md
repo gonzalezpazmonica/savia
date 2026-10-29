@@ -78,6 +78,12 @@ contrato, chunks, pendientes, `staleRatio`, `lagHours`, memoria.
   stderr si no hay cúpulas habilitadas o hay cúpulas indexadas deshabilitadas, y
   deja un evento `alert` en `rag.jsonl`. Cron: redirigir stderr al log y usar
   `savia-vaults rag status --check` como `success_check` de la automatización.
+- Salida de la alerta por cúpula deshabilitada a propósito: `savia-vaults rag drop
+  <cúpula>` borra su índice (`rag gc` no sirve: conserva la generación activa).
+  `drop` rechaza cúpulas con `rag.enabled=true`. La misma alerta no se repite en
+  `rag.jsonl` el mismo día.
+- Límite: `lagHours` se mide desde el documento pendiente más antiguo; un cron
+  parado sin documentos nuevos no lo dispara. Eso lo cubre el `success_check`.
 - Eventos en `$SAVIA_RAG_HOME/logs/rag.jsonl` (sync, gate, promote, rollback, corrupt).
 
 ## P8 Checkpoint de pipeline
