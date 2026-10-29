@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=2a828bf5b0f702801c79f003dd9c28c35d4e130ad281eb007feb5b254a2ad3c4
-timestamp=2026-10-29T21:51:24Z
-branch=agent/dispatch-validate-p2-20261029
-head_commit=982680155
-signature=551c8f5afca985a394c2b09e8e9459441d958dffeb7a90578ef11f12087964fd
+diff_hash=cb3d1974b0573173348c58cdece61f6020445b15f14819f6184b778c5986e287
+timestamp=2026-10-29T23:59:16Z
+branch=agent/fix1412-lat-20261023
+head_commit=22f2fcac0
+signature=7dbf8034d0435b8991a8bd79a61c8f5ae7b803cc860290272502ab9f1e6b875e
