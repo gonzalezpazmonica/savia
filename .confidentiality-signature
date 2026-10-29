@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=5669ce1a7e9c6c58bb4140058eaea956ce39817a94ef9c6ae5b243f2438a0d9f
-timestamp=2026-10-29T12:39:22Z
-branch=agent/posttool-inertes-20261023
-head_commit=cf7c115c
-signature=fe1fba1d5e25905d25ba53c0346a9060d9297e870ce7b5a57003ba2bdc0f3c5d
+diff_hash=bb80bb6e6f1e0855911793bf0ed864bf9eb18df855f4de51788a2e8dde6a3c6d
+timestamp=2026-10-29T14:32:47Z
+branch=agent/anthropic-specs-20261023
+head_commit=96554d776
+signature=1914863f6fff1ec9d7cea8016a8041721335eef5d1a24c532de6e07e4ae48aa7
