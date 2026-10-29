@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=0f92301de24b8476da7b644e958a1cbb3d024f6e903585cb13adf7a1ab5cef88
-timestamp=2026-10-29T23:22:01Z
+diff_hash=9ad8bad1f9402396ae379696c1cf1c3d8922346e10340560a440e5fcac59f6f1
+timestamp=2026-10-29T23:58:11Z
 branch=agent/vaults-rag-slo-20261023
-head_commit=0f579579e
-signature=13a94fba449bc052cc8393e03b3f7246856d15c845ec2f90d65f6f1d24abc26e
+head_commit=d53810aa0
+signature=290ba50cf2d530e5d238485ceca1958d3419193418c5212a58ccaafa6d748fda
