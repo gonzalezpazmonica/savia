@@ -188,7 +188,10 @@ hook_git_targets() {
       cwd="$_HOOK_RESOLVED"
       p="${p#*"${BASH_REMATCH[0]}"}"
     done
-    top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || { HOOK_TARGET_REASON="$cwd no está dentro de un repo git"; return 1; }
+    # Repo elegido por el texto de la orden y aún no aprobado: nada configurado por él se ejecuta.
+    top=$(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false \
+          GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null GIT_OPTIONAL_LOCKS=0 \
+          git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || { HOOK_TARGET_REASON="$cwd no está dentro de un repo git"; return 1; }
     top=$(cd "$top" && pwd -P)
     for t in "${HOOK_GIT_TARGETS[@]:-}"; do [[ "$t" == "$top" ]] && top=""; done
     [[ -n "$top" ]] && HOOK_GIT_TARGETS+=("$top")

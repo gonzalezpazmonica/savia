@@ -331,3 +331,20 @@ setup() {
     [[ "$output" == *"no se puede determinar"* ]]
   done
 }
+
+@test "repo objetivo hostil: fsmonitor, hooks y filtro clean de su config no se ejecutan en el gate (revisión 5)" {
+  mkrepo "$A" clean; mkrepo "$B" clean
+  git -C "$B" commit -q -m readme          # nada en staged: el runner usa la rama de respaldo
+  M="$BATS_TEST_TMPDIR/marcas"; mkdir -p "$M" "$B/.hk"
+  printf '#!/bin/sh\ntouch "%s/fsmonitor"\n' "$M" > "$B/fsm.sh"; chmod +x "$B/fsm.sh"
+  printf '#!/bin/sh\ntouch "%s/hook"\n' "$M" > "$B/.hk/pre-commit"; chmod +x "$B/.hk/pre-commit"
+  git -C "$B" config core.fsmonitor "$B/fsm.sh"
+  git -C "$B" config core.hooksPath "$B/.hk"
+  git -C "$B" config filter.x.clean "touch $M/clean; cat"
+  echo 'base.txt filter=x' > "$B/.gitattributes"
+  echo cambiado > "$B/base.txt"            # cambio sin stage que un diff contra el árbol refrescaría
+  gate "$A" "git -C $B commit -m y"
+  [ ! -e "$M/fsmonitor" ]
+  [ ! -e "$M/hook" ]
+  [ ! -e "$M/clean" ]
+}

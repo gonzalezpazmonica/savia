@@ -25,6 +25,11 @@ VIOLATIONS=0
 WARNINGS=0
 
 cd "$TARGET_DIR"
+# El objetivo lo elige el texto de la orden y el gate corre antes de que la persona la apruebe: git no
+# debe ejecutar nada configurado por ese repo (fsmonitor, hooks). Las consultas son de índice o de árbol
+# contra árbol, nunca contra el árbol de trabajo, así que tampoco corren filtros clean/smudge.
+export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false \
+  GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null GIT_OPTIONAL_LOCKS=0
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  COMPLIANCE RUNNER — Verificación de reglas"
@@ -37,7 +42,7 @@ if [[ "$MODE" == "--all" ]]; then
 else
   mapfile -t FILES < <(git diff --cached --name-only 2>/dev/null)
   if [[ ${#FILES[@]} -eq 0 ]]; then
-    mapfile -t FILES < <(git diff --name-only HEAD~1 2>/dev/null || echo "")
+    mapfile -t FILES < <(git diff --no-ext-diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
   fi
 fi
 
