@@ -6,7 +6,7 @@ pm-workspace/
 │   ├── commands/       ← 567 Befehle
 │   ├── agents/         ← 90 spezialisierte Agenten (7 mit Decision Trees: SPEC-147)
 │   ├── skills/         ← 139 Domaenen-Skills
-│   ├── hooks/          ← 133 deterministische Hooks
+│   ├── hooks/          ← 134 deterministische Hooks
 │   └── rules/          ← Kontext- und Sprachregeln
 ├── docs/               ← Anleitungen nach Rolle, Szenario, Sektor
 ├── projects/           ← Projekte (git-ignoriert fuer Datenschutz)

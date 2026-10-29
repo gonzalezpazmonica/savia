@@ -13,7 +13,7 @@
 
 ## Workspace de desenvolvimento multi-agente
 
-**567 comandos · 90 agentes · 139 skills · 133 hooks**
+**567 comandos · 90 agentes · 139 skills · 134 hooks**
 
 Sistema agêntico soberano para governar e executar trabalho com IA, independente de modelo, provedor e frontend, com critério humano por design. Integra agentes, memória, segurança, políticas executáveis, rastreabilidade e domínios especializados. Funciona localmente com soberania de dados e inferência, em 9 idiomas.
 

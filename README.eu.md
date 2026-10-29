@@ -14,11 +14,11 @@ lang: eu
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 komandoak · 90 agenteak · 139 skills · 133 hooks**
+**567 komandoak · 90 agenteak · 139 skills · 134 hooks**
 
 ## Garapen workspace multi-agentea
 
-**567 komando · 90 agente · 139 skill · 133 hook · 16 hizkuntza · 283+ test suite**
+**567 komando · 90 agente · 139 skill · 134 hook · 16 hizkuntza · 283+ test suite**
 
 pm-workspace-k Claude Code eta OpenCode ingeniaritza multi-agente ingurune bihurtzen ditu. Agente espezializatuak orkestratzen ditu proiektuen kudeaketarako, spec exekutagarriekin garapenerako, segurtasun auditoriarako eta kode berrikusketarako. Lokalean funtzionatzen du datu eta inferentzia subiranotasunarekin, 9 hizkuntzatan.
 

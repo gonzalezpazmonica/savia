@@ -13,7 +13,7 @@
 
 ## Workspace de developpement multi-agent
 
-**567 commandes · 90 agents · 139 skills · 133 hooks**
+**567 commandes · 90 agents · 139 skills · 134 hooks**
 
 Système agentique souverain pour gouverner et exécuter le travail assisté par IA, indépendant du modèle, du fournisseur et du frontend, avec le critère humain by design.
 
