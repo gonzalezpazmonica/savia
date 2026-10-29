@@ -55,36 +55,17 @@ prompt_contains() {
   echo "$PROMPT" | grep -qiE "$1"
 }
 
-# ── Intención de solo lectura ────────────────────────────────────────────
-# Las reglas 1-3 y 5 detectan menciones de rutas, no escrituras. Un prompt que
-# pide leer/resumir y no contiene ningún verbo de escritura no necesita sus
-# requisitos. Ante duda (sin verbo de lectura, o con cualquier verbo de
-# escritura) se mantienen todas las comprobaciones.
-# Los verbos se buscan sobre el prompt sin tildes (reescríbelo, añádele).
-# Escritura: raíz al inicio de palabra, admitiendo prefijos re/sobre/over/auto/
-# pre/up (rewrite, sobrescribe, recreate, regenerate). Verbos cortos y
-# ambiguos (pon, set, put…) solo como palabra completa, con clíticos.
-# Lectura: los verbos cortos ambiguos (lea→lead, list→listo) como palabra.
-READ_STEMS='resum|describ|analiz|revis|explic|busca|search|summar|explain|review|muestra|inspect|compar|extra[ei]|extract'
-READ_WORDS='lee|leer|lea|leed|leelo|read|list|listar?|enumera|count|show|cuenta'
-WRITE_PREFIX='(re|sobre?|over|auto|pre|up)?-?'
-WRITE_STEMS='modific|edit|cre[ao]|crea|añad|agreg|escrib|actualiz|reemplaz|sustitu|elimin|borr|gener|implement|corrig|arregl|insert|renombr|refactor|mueve|mover|apend|prepend|append|writ|updat|add|replac|delet|remov|fix|patch|bump|rename|move|commit|push|merge|cambia|cambie|vaci|trunca|redact|introduc|guard|ejecut|execut|instal|rellen|traduc|translat|upgrad'
-WRITE_WORDS='pon|put|set|haz|run|save|fill|drop|wipe|empty|clear|reset|aplica|apply|documenta'
-CLITIC='(lo|la|los|las|le|les|me|te|nos)?'
-WORD_START='(^|[^[:alpha:]])'
-WORD_END='($|[^[:alpha:]])'
-VERB_TEXT=$(printf '%s' "$PROMPT" | sed -e 's/á/a/g; s/é/e/g; s/í/i/g; s/ó/o/g; s/ú/u/g; s/ü/u/g' \
-  -e 's/Á/A/g; s/É/E/g; s/Í/I/g; s/Ó/O/g; s/Ú/U/g; s/Ü/U/g')
-verb_contains() {
-  printf '%s\n' "$VERB_TEXT" | grep -qiE "$1"
-}
+# ── Intención de solo lectura: marca explícita ───────────────────────────
+# Las reglas 1-3 y 5 detectan menciones de rutas, no escrituras. Quien encarga
+# un trabajo de solo lectura lo declara empezando el prompt con «[solo-lectura]»
+# o «[read-only]». Sin la marca se aplican todas las comprobaciones. No se
+# deduce de los verbos del texto: una lista de verbos de escritura siempre deja
+# alguno fuera y falla en abierto (decisión de la operadora, 2026-10-29, #1412).
 READ_ONLY=0
-if { verb_contains "${WORD_START}(${READ_STEMS})" \
-     || verb_contains "${WORD_START}(${READ_WORDS})${CLITIC}${WORD_END}"; } \
-   && ! verb_contains "${WORD_START}${WRITE_PREFIX}(${WRITE_STEMS})" \
-   && ! verb_contains "${WORD_START}${WRITE_PREFIX}(${WRITE_WORDS})${CLITIC}${WORD_END}"; then
-  READ_ONLY=1
-fi
+_prompt_head="${PROMPT#"${PROMPT%%[![:space:]]*}"}"
+case "$_prompt_head" in
+  "[solo-lectura]"*|"[read-only]"*) READ_ONLY=1 ;;
+esac
 
 # ── 1. Si el agente va a crear commands (.opencode/commands/) ────────────
 if [ "$READ_ONLY" -eq 0 ] && prompt_contains 'commands/.*\.md|crear.*command|create.*command'; then

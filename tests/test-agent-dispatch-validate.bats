@@ -183,17 +183,17 @@ agent_run() {
 }
 
 @test "agent read-only: leer CHANGELOG no se bloquea" {
-  agent_run "Lee CHANGELOG.md y resume los cambios."
+  agent_run "[solo-lectura] Lee CHANGELOG.md y resume los cambios."
   [ "$status" -eq 0 ]
 }
 
 @test "agent read-only: leer un command no exige frontmatter" {
-  agent_run "Lee .claude/commands/foo.md y describe su contenido"
+  agent_run "[solo-lectura] Lee .claude/commands/foo.md y describe su contenido"
   [ "$status" -eq 0 ]
 }
 
 @test "agent read-only: revisar una skill y una rule no avisa" {
-  agent_run "Revisa .claude/skills/x/SKILL.md y docs/rules/domain/y.md y explica las diferencias"
+  agent_run "[solo-lectura] Revisa .claude/skills/x/SKILL.md y docs/rules/domain/y.md y explica las diferencias"
   [ "$status" -eq 0 ]
   [[ "$output" != *"DISPATCH"* ]]
 }
@@ -293,17 +293,32 @@ agent_run() {
 }
 
 @test "agent read-only con tilde: léelo y descríbelo no se bloquea" {
-  agent_run "Abre CHANGELOG.md, léelo y descríbelo"
+  agent_run "[solo-lectura] Abre CHANGELOG.md, léelo y descríbelo"
   [ "$status" -eq 0 ]
   [[ "$output" != *"DISPATCH"* ]]
 }
 
 @test "agent read-only: settings y output no cuentan como set/put" {
-  agent_run "Lee CHANGELOG.md y el output de settings.json y resume"
+  agent_run "[solo-lectura] Lee CHANGELOG.md y el output de settings.json y resume"
   [ "$status" -eq 0 ]
 }
 
 @test "agent write prefijo: sobrescríbelo (sobr+escrib) sigue bloqueando" {
   agent_run "Lee CHANGELOG.md y sobrescríbelo"
   [ "$status" -eq 2 ]
+}
+
+@test "marca de solo lectura: sin la marca, un prompt que solo lee sigue pasando todas las reglas (#1412)" {
+  agent_run "Lee CHANGELOG.md y resume los cambios."
+  [ "$status" -eq 2 ]
+}
+
+@test "marca de solo lectura: a mitad del texto no exime (#1412)" {
+  agent_run "Lee CHANGELOG.md [solo-lectura] y resume"
+  [ "$status" -eq 2 ]
+}
+
+@test "marca de solo lectura: [read-only] con espacios delante también vale (#1412)" {
+  agent_run "   [read-only] Read CHANGELOG.md and summarize"
+  [ "$status" -eq 0 ]
 }
