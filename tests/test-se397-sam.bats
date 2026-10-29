@@ -117,8 +117,13 @@ _fixture_state() { # <initiative-status> <spec-status>
   grep -q '^set -uo pipefail' scripts/roadmap.sh
 }
 
-@test "boundary: ADR-002 WIP boundary holds (at most 3 IMPLEMENTING)" {
-  n=$(python3 -c "import json;print(sum(1 for i in json.load(open('docs/propuestas/planning-state.json'))['initiatives'] if i['status']=='IMPLEMENTING'))")
+@test "boundary: ADR-002 WIP boundary holds (3 IMPLEMENTING, +1 solo para SE-428)" {
+  # Addendum ADR-002 (#1235): el cuarto hueco es exclusivo de Savia Space (SE-428)
+  # hasta cerrar su 0.2. Sin SE-428 IMPLEMENTING el límite vuelve a 3.
+  n=$(python3 -c "
+import json
+ids=[i['id'] for i in json.load(open('docs/propuestas/planning-state.json'))['initiatives'] if i['status']=='IMPLEMENTING']
+print(len(ids) - (1 if 'SE-428' in ids else 0))")
   [ "$n" -le 3 ]
 }
 
