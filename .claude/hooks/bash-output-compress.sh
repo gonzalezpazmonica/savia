@@ -9,12 +9,17 @@ export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$SAVIA_WORKSPACE_DIR}"
 # Async hook — NEVER blocks. Always exits 0.
 # ────────────────────────────────────────────────────────────────────────────
 
+# La entrada llega por stdin (JSON de Claude Code / OpenCode); las variables TOOL_* solo son respaldo.
+# shellcheck source=lib/hook-input.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+hook_read_posttool bash-output-compress
+
 # Only trigger for Bash tool
-if [[ "${TOOL_NAME:-}" != "Bash" ]]; then
+if [[ "$HOOK_TOOL_NAME" != "Bash" ]]; then
     exit 0
 fi
 
-OUTPUT="${TOOL_OUTPUT:-}"
+OUTPUT="$HOOK_TOOL_OUTPUT"
 [[ -z "$OUTPUT" ]] && exit 0
 
 # Count lines
@@ -41,7 +46,8 @@ if [[ $LINE_COUNT -le 30 ]]; then
 fi
 
 # Extract command from TOOL_INPUT JSON
-COMMAND=$(printf '%s' "${TOOL_INPUT:-}" | grep -o '"command":\s*"[^"]*"' | head -1 | cut -d'"' -f4 2>/dev/null || echo "unknown")
+COMMAND=$(printf '%s' "$HOOK_TOOL_INPUT" | jq -r '.command // empty' 2>/dev/null || true)
+[[ -z "$COMMAND" ]] && COMMAND="unknown"
 COMMAND_BASE=$(printf '%s' "$COMMAND" | awk '{print $1}' 2>/dev/null || echo "unknown")
 
 # ── Compress via standalone script (all filters moved to output-compress.sh) ─────────────────────────────────────────
