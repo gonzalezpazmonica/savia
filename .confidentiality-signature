@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=67bd3751fb71db1509a7fb457f4bd6f8f3b0b217d0b689c1e571557aed98d303
-timestamp=2026-10-29T12:04:46Z
+diff_hash=5669ce1a7e9c6c58bb4140058eaea956ce39817a94ef9c6ae5b243f2438a0d9f
+timestamp=2026-10-29T12:39:22Z
 branch=agent/posttool-inertes-20261023
-head_commit=bd14deb9
-signature=c79275af4f0d235dc3c717987294f85e7cc06ee8d74b07d6671ff25a87435719
+head_commit=cf7c115c
+signature=fe1fba1d5e25905d25ba53c0346a9060d9297e870ce7b5a57003ba2bdc0f3c5d
