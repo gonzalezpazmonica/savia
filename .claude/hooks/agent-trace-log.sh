@@ -7,10 +7,13 @@ export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$SAVIA_WORKSPACE_DIR}"
 # Includes per-agent token budget metering (SPEC-AGENT-METERING)
 # NOTE: no set -e — script manages errors manually
 
-# Un hook PostToolUse nunca debe fallar por variables ausentes (set -u).
-TOOL_NAME="${TOOL_NAME:-}"
-TOOL_INPUT="${TOOL_INPUT:-}"
-TOOL_RESULT_STATUS="${TOOL_RESULT_STATUS:-}"
+# La entrada llega por stdin (JSON de Claude Code / OpenCode); las variables TOOL_* solo son respaldo.
+# shellcheck source=lib/hook-input.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/hook-input.sh"
+hook_read_posttool agent-trace-log
+TOOL_NAME="$HOOK_TOOL_NAME"
+TOOL_INPUT="$HOOK_TOOL_INPUT"
+TOOL_RESULT_STATUS="$HOOK_TOOL_STATUS"
 
 # Only trigger for Task tool (subagent invocation)
 if [[ "$TOOL_NAME" != "Task" && "$TOOL_NAME" != "Agent" ]]; then
@@ -38,14 +41,15 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Estimar tokens (aproximado basado en longitud)
 INPUT_LENGTH=${#TOOL_INPUT}
-_TOOL_OUTPUT="${TOOL_OUTPUT:-}"
+_TOOL_OUTPUT="$HOOK_TOOL_OUTPUT"
 OUTPUT_LENGTH=${#_TOOL_OUTPUT}
 TOKENS_IN=$((INPUT_LENGTH / 4))
 TOKENS_OUT=$((OUTPUT_LENGTH / 4))
 
 # Calcular duracion (en segundos, convertir a ms)
-DURATION_S=${TOOL_DURATION:-0}
-DURATION_MS=$((DURATION_S * 1000))
+DURATION_MS="${HOOK_TOOL_DURATION_MS%%.*}"
+[[ "$DURATION_MS" =~ ^[0-9]+$ ]] || DURATION_MS=0
+DURATION_S=$((DURATION_MS / 1000))
 
 # Determinar outcome
 OUTCOME="success"

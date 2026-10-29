@@ -93,3 +93,37 @@ hook_read_command() {
   HOOK_COMMAND="$raw"
   return 0
 }
+
+# hook_read_posttool <hook>: entrada de un hook PostToolUse. Claude Code y OpenCode la entregan como JSON
+# por stdin (tool_name, tool_input, tool_response); las variables TOOL_NAME / TOOL_INPUT / TOOL_OUTPUT /
+# TOOL_DURATION solo valen de respaldo cuando stdin llega vacío o sin esos campos.
+# Rellena HOOK_TOOL_NAME, HOOK_TOOL_INPUT (JSON de tool_input), HOOK_TOOL_OUTPUT (texto de la respuesta),
+# HOOK_TOOL_DURATION_MS y HOOK_TOOL_STATUS (success|error). Devuelve siempre 0: un PostToolUse no bloquea.
+hook_read_posttool() {
+  local raw=""
+  HOOK_TOOL_NAME=""; HOOK_TOOL_INPUT=""; HOOK_TOOL_OUTPUT=""; HOOK_TOOL_DURATION_MS=""; HOOK_TOOL_STATUS=""
+  if [[ ! -t 0 ]]; then raw=$(timeout 3 cat 2>/dev/null || true); fi
+  local trimmed="${raw#"${raw%%[![:space:]]*}"}"
+  if [[ "$trimmed" == \{* ]] && command -v jq &>/dev/null && jq -e 'type == "object"' >/dev/null 2>&1 <<<"$trimmed"; then
+    HOOK_TOOL_NAME=$(jq -r '.tool_name // empty' <<<"$trimmed" 2>/dev/null) || HOOK_TOOL_NAME=""
+    HOOK_TOOL_INPUT=$(jq -c '.tool_input // empty' <<<"$trimmed" 2>/dev/null) || HOOK_TOOL_INPUT=""
+    HOOK_TOOL_OUTPUT=$(jq -r '
+      (.tool_response // .tool_output // empty)
+      | if type == "string" then .
+        elif type == "object" then
+          ( [ .stdout?, .stderr?, .output?, (.content? | if type == "array" then map(.text? // empty) | join("\n")
+                                                         elif type == "string" then . else empty end) ]
+            | map(select(type == "string" and . != "")) | join("\n") )
+        else empty end' <<<"$trimmed" 2>/dev/null) || HOOK_TOOL_OUTPUT=""
+    HOOK_TOOL_DURATION_MS=$(jq -r '(.tool_response? | objects | .totalDurationMs // .duration_ms // empty) // empty' <<<"$trimmed" 2>/dev/null) || HOOK_TOOL_DURATION_MS=""
+    HOOK_TOOL_STATUS=$(jq -r 'if (.tool_response? | objects | .is_error // .isError // false) == true then "error" else "success" end' <<<"$trimmed" 2>/dev/null) || HOOK_TOOL_STATUS=""
+  fi
+  [[ -z "$HOOK_TOOL_NAME" ]] && HOOK_TOOL_NAME="${TOOL_NAME:-}"
+  [[ -z "$HOOK_TOOL_INPUT" ]] && HOOK_TOOL_INPUT="${TOOL_INPUT:-}"
+  [[ -z "$HOOK_TOOL_OUTPUT" ]] && HOOK_TOOL_OUTPUT="${TOOL_OUTPUT:-}"
+  if [[ -z "$HOOK_TOOL_DURATION_MS" && -n "${TOOL_DURATION:-}" ]]; then
+    HOOK_TOOL_DURATION_MS=$(( ${TOOL_DURATION//[^0-9]/} * 1000 )) 2>/dev/null || HOOK_TOOL_DURATION_MS=""
+  fi
+  [[ -z "$HOOK_TOOL_STATUS" ]] && HOOK_TOOL_STATUS="${TOOL_RESULT_STATUS:-success}"
+  return 0
+}
