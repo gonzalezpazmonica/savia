@@ -1,0 +1,9 @@
+# Raíz de confianza del grant de merge (SE-343, LAW-HUMAN-002).
+# Formato allowed_signers de OpenSSH, una clave pública por línea:
+#   <active_slug> namespaces="savia-operator-grant" ssh-ed25519 AAAA... <comentario>
+# Solo claves PÚBLICAS. La privada vive en el móvil de la operadora o en Savia
+# Space; nunca en este equipo ni en el repo. Sin ninguna línea de clave, ningún
+# grant de merge es válido (fail-closed).
+# Alta y rotación: docs/rules/domain/autonomous-safety-merge-grant.md
+# Este fichero solo lo cambia la operadora, por PR (el hook
+# `operator-grant.sh guard` lo veta a las herramientas de los agentes).

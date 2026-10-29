@@ -16,7 +16,7 @@ lang: gl
 
 ## Workspace de desenvolvemento multi-axente
 
-**567 comandos · 90 axentes · 139 skills · 133 hooks**
+**567 comandos · 90 axentes · 139 skills · 134 hooks**
 
 Sistema axente soberano para gobernar e executar traballo con IA, independente de modelo, provedor e frontend, con criterio humano por deseño. Integra axentes, memoria, seguridade, políticas executables, trazabilidade e dominios especializados. Funciona en local con soberanía de datos e inferencia, en 9 idiomas.
 

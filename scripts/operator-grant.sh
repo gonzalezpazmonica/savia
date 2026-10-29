@@ -5,32 +5,123 @@
 # "never merge" rule with a LOCAL, auditable grant ledger written by Savia
 # ONLY on the operator's express request.
 #
-#   grant  --scope <autonomy:<skill>|merge> --context "<why>" [--ttl-hours N]
-#   check  --scope <scope>          # exit 0 vigente | 1 no/expirado | 2 invalido | 3 sin grant
-#   revoke --scope <scope>
+#   grant   --scope autonomy:<skill> --context "<why>" [--ttl-hours N]
+#   grant   --scope merge --resource pr:<n>|task:<id> --context "<why>" [--ttl-hours N]
+#   grant   --scope merge --signature <fichero|->   # incorpora la firma de la operadora
+#   check   --scope <scope> [--resource R]  # exit 0 vigente | 1 no/expirado | 2 invalido | 3 sin grant
+#   consume --scope merge --resource R      # uso único: gasta el grant tras el merge
+#   revoke  --scope <scope>
 #   list
+#   guard                           # hook PreToolUse (lee el evento por stdin)
 #
 # Ledger: ~/.savia/grants/<scope>.json  (local infra, CRIT-001 — never in repo)
 # Grantor: resolved from .claude/profiles/active-user.md (slug). NEVER "self".
 #
-# Exit: 0 ok | 1 not valid/expired | 2 invalid invocation | 3 no grant
-# Ref: SE-343, SPEC-186, autonomous-safety.md
+# Scope merge (LAW-HUMAN-002, firma asimétrica): Savia no puede emitirlo sola.
+# `grant --scope merge` deja una petición sin firmar (~/.savia/grants/
+# merge.request); la operadora la firma con su clave ed25519 privada, que vive
+# en su móvil o en Savia Space y nunca en este equipo
+# (`ssh-keygen -Y sign -n savia-operator-grant`), y `grant --scope merge
+# --signature FICHERO|-` la incorpora. `check` verifica la firma con
+# `ssh-keygen -Y verify` contra la clave pública versionada en
+# config/operator-grant-signers DE origin/main (no la de la rama; sin override
+# por variable de entorno).
+#
+# Exit: 0 ok | 1 not valid/expired/bad signature | 2 invalid invocation
+#       3 no grant | 4 merge grant pending: falta la firma de la operadora
+# Ref: SE-343, SE-433 D7, SPEC-186, autonomous-safety.md
 
 set -uo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# PATH fijo de sistema: python3, ssh-keygen y git no se resuelven por un PATH que
+# el llamante controle (un ssh-keygen falso que sale con 0 daría PASS sin firma).
+# Junto con `python3 -I` (sin PYTHONPATH, sitecustomize del usuario ni cwd en
+# sys.path), ni el PATH ni Python del usuario sustituyen el verificador.
+# Los directorios del sistema primero: /usr/local/bin y /opt/homebrew/bin los
+# puede escribir el usuario (macOS) y solo se usan para lo que no esté en /usr/bin.
+SAFE_PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"
+export PATH="$SAFE_PATH"
+# Una función Bash exportada (`python3() { return 0; }; export -f python3`) se
+# resuelve antes que el PATH. python3 y git se buscan aquí por ruta absoluta
+# (solo palabras reservadas y asignaciones) y estas definiciones tapan las
+# importadas del entorno. Límite: quien controla el entorno del proceso
+# (BASH_ENV, funciones exportadas llamadas exit, builtin…) controla el código
+# de salida de cualquier script Bash; el exit de check no es frontera frente a
+# un llamante hostil. La frontera es GitHub (autonomous-safety-merge-grant.md).
+PY3="" GIT_BIN=""
+for _d in ${SAFE_PATH//:/ }; do
+  [[ -z "$PY3" && -x "$_d/python3" ]] && PY3="$_d/python3"
+  [[ -z "$GIT_BIN" && -x "$_d/git" ]] && GIT_BIN="$_d/git"
+done
+python3() { "$PY3" "$@"; }
+# gh para leer la cabeza actual del PR (head_sha), solo desde SAFE_PATH.
+# SAVIA_GH_BIN (gh simulado) solo vale en modo de test explícito
+# (SAVIA_GRANT_TEST_MODE=1), que push-pr.sh --merge rechaza. Fuera de ese modo,
+# un SAVIA_GH_BIN presente deja sin gh (fail-closed): nadie elige qué cabeza
+# "ve" check. Aun así la frontera es GitHub: push-pr pasa el head_sha firmado
+# a --match-head-commit, así que un gh falso no hace mergear otra cabeza.
+GH_BIN=""
+for _d in ${SAFE_PATH//:/ }; do
+  [[ -z "$GH_BIN" && -x "$_d/gh" ]] && GH_BIN="$_d/gh"
+done
+if [[ -n "${SAVIA_GH_BIN:-}" ]]; then
+  if [[ "${SAVIA_GRANT_TEST_MODE:-}" == "1" && "$SAVIA_GH_BIN" == /* && -x "$SAVIA_GH_BIN" ]]; then
+    GH_BIN="$SAVIA_GH_BIN"
+  else
+    echo "ERROR: SAVIA_GH_BIN solo se acepta con SAVIA_GRANT_TEST_MODE=1 (pruebas); sin gh de confianza no se lee la cabeza del PR" >&2
+    GH_BIN=""
+  fi
+fi
+unset GH_REPO GH_HOST
+git() { "$GIT_BIN" "$@"; }
 GRANTS_DIR="${SAVIA_GRANTS_DIR:-$HOME/.savia/grants}"
+# Raíz de confianza del grant de merge: clave(s) pública(s) de la operadora en
+# formato allowed_signers de OpenSSH. Versionada y sin override: si una variable
+# pudiera redirigirla, un agente apuntaría a su propia clave y firmaría él.
+# La firma se verifica contra la versión de la RAMA BASE (BASE_REF), nunca contra
+# la copia de trabajo: un PR que añade su clave al fichero no se autoriza a sí
+# mismo (revisión de seguridad de #1401, P1-1). SIGNERS_FILE es la ruta que veta
+# el guard; la que cuenta para verificar es la de base_signers.
+SIGNERS_REL="config/operator-grant-signers"
+SIGNERS_FILE="$REPO_ROOT/$SIGNERS_REL"
+BASE_REF="refs/remotes/origin/main"
+SIG_NAMESPACE="savia-operator-grant"
+MERGE_MAX_TTL_HOURS=24
+BASE_SIGNERS="" _TMP_DIRS=()
+trap '(( ${#_TMP_DIRS[@]} )) && rm -rf "${_TMP_DIRS[@]}"' EXIT
+# Vuelca a un temporal los firmantes de BASE_REF (git cat-file: sin textconv ni
+# filtros de la rama). Sin BASE_REF o sin el fichero en ella: falla (no hay
+# raíz de confianza y ningún grant de merge vale).
+base_signers() {
+  [[ -n "$BASE_SIGNERS" ]] && return 0
+  local d
+  d="$(mktemp -d)" || return 1
+  _TMP_DIRS+=("$d")
+  if ! git -C "$REPO_ROOT" cat-file blob "$BASE_REF:$SIGNERS_REL" > "$d/signers" 2>/dev/null; then
+    echo "ERROR: sin $SIGNERS_REL en ${BASE_REF#refs/remotes/} (git fetch origin main); la firma se verifica contra la rama base, no contra esta rama" >&2
+    return 1
+  fi
+  BASE_SIGNERS="$d/signers"
+}
 # Resuelto desde la raíz del repo (no desde el cwd); override para tests.
-ACTIVE_USER_FILE="${SAVIA_ACTIVE_USER_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.claude/profiles/active-user.md}"
+ACTIVE_USER_FILE="${SAVIA_ACTIVE_USER_FILE:-$REPO_ROOT/.claude/profiles/active-user.md}"
 
 usage() {
   cat <<'USAGE'
-Usage: operator-grant.sh <grant|check|revoke|list> --scope SCOPE [opts]
+Usage: operator-grant.sh <grant|check|consume|revoke|list> --scope SCOPE [opts]
 
 Commands:
   grant   SCOPE  --context "reason" [--ttl-hours N]   emit grant (express request)
-  check   SCOPE                                       exit: 0 vigente | 1 no | 2 inval | 3 sin grant
-  revoke  SCOPE                                       revoke (remove file)
+          merge also needs --resource pr:<n>|task:<id> (the PR or task it covers)
+  grant   merge  --signature FILE|-                   attach the operator's signature
+  check   SCOPE  [--resource R]                       exit: 0 vigente | 1 no | 2 inval | 3 sin grant
+                                                      (merge: --resource required;
+                                                       --print-head prints the signed head_sha)
+  consume merge  --resource R                         one-shot: spend the grant after merging
+  revoke  SCOPE                                       revoke (grant id marked spent, request removed)
   list                                                show all grants
+  guard                                               PreToolUse hook (event on stdin)
 
 Scopes:
   autonomy:<skill>   enables double-optin "intent" factor for the skill
@@ -40,9 +131,17 @@ Scopes:
 
 Rules:
   - grantor = active user slug (active-user.md). NEVER "self".
-  - source  = express-request (set by Savia on operator request). NEVER "self".
-  - default TTL: autonomy:* = 24h, merge = 6h.
-  - grant (idempotent): renews expires_at of an existing valid grant.
+  - autonomy:* source express-request; merge source operator-signature.
+  - merge: `grant --context` only writes a pending request (exit 4). The
+    operator signs it with her ed25519 key (phone or Savia Space, never this
+    machine): ssh-keygen -Y sign -f KEY -n savia-operator-grant REQUEST
+    and `grant --scope merge --signature REQUEST.sig` attaches it. check
+    verifies it against config/operator-grant-signers.
+  - merge grant: unique id, grantor, scope, repo (origin remote), resource and
+    validity are signed; check verifies each one against this checkout and
+    rejects ids already consumed or revoked (revoke also spends the pending request).
+  - default TTL: autonomy:* = 24h, merge = 6h (counted from the request).
+  - grant (idempotent): renews expires_at of an existing autonomy grant.
 USAGE
 }
 
@@ -75,51 +174,423 @@ valid_scope() {
 }
 
 scope_file() { printf '%s/%s.json' "$GRANTS_DIR" "$1"; }
+# Identidad del repositorio en el que corre el script (remoto origin de REPO_ROOT).
+repo_id() {
+  local u
+  u="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null)" || return 0
+  python3 -I -c "$GRANT_PY" repo "$u" 2>/dev/null || true
+}
+# Cabeza actual (headRefOid) del PR de un recurso pr:N; vacía si no es un PR o
+# no se puede leer (quien lo use falla cerrado). Solo 40 hex.
+pr_head() {
+  local res="$1" repo out
+  [[ "$res" == pr:* && -n "$GH_BIN" ]] || return 0
+  repo="$(repo_id)"; [[ -n "$repo" ]] || return 0
+  out="$("$GH_BIN" pr view "${res#pr:}" -R "$repo" --json headRefOid -q .headRefOid 2>/dev/null)" || return 0
+  [[ "$out" =~ ^[0-9a-f]{40}$ ]] && printf '%s' "$out"
+  return 0
+}
+request_file() { printf '%s/%s.request' "$GRANTS_DIR" "$1"; }
+spent_file() { printf '%s/%s.spent' "$GRANTS_DIR" "$1"; }
 
-# Safe JSON write (best-effort; never readable by others)
-write_grant() {
-  local scope="$1" context="$2" ttl="$3" slug="$4" grantor="$5"
-  local file now exp
-  file="$(scope_file "$scope")"
-  mkdir -p "$GRANTS_DIR" 2>/dev/null || { echo "ERROR: cannot create $GRANTS_DIR" >&2; exit 2; }
-  chmod 700 "$GRANTS_DIR" 2>/dev/null || true
+# JSON escapado (un --context con comillas no inyecta campos) y, para merge,
+# petición canónica + verificación de la firma de la operadora con ssh-keygen.
+# Un grant de merge lleva id único, grantor (principal), scope, resource (PR o
+# tarea) y vigencia, todo dentro de lo firmado; check verifica cada campo y
+# rechaza los ids consumidos o revocados (merge.spent), así que una copia
+# guardada del grant no se puede volver a usar.
+GRANT_PY='
+import json, os, re, subprocess, sys, tempfile, time
+FIELDS = ("id", "scope", "repo", "resource", "grantor", "request_context",
+          "issued_at", "issued_epoch", "expires_at", "expires_epoch", "head_sha")
+ID_RE = re.compile(r"^[0-9a-f]{32}$")
+HEAD_RE = re.compile(r"^[0-9a-f]{40}$")
+RES_RE = re.compile(r"^(pr|task):[A-Za-z0-9._-]{1,64}$")
+MAX_TTL = 24 * 3600  # vigencia máxima de un grant de merge (MERGE_MAX_TTL_HOURS)
+def payload(rec):
+    """Bytes exactos que firma la operadora."""
+    return json.dumps({f: rec.get(f) for f in FIELDS}, sort_keys=True,
+                      ensure_ascii=True, separators=(",", ":")).encode()
+def spent_ids(path):
+    try:
+        return {l.split("\t", 1)[0] for l in open(path) if l.strip()}
+    except FileNotFoundError:
+        return set()
+def repo_of(url):
+    """Identidad del repositorio (host/owner/name) desde la URL del remoto origin.
+    Sin credenciales ni .git; vacía si no es una URL de forja reconocible."""
+    u = url.strip()
+    m = (re.fullmatch(r"[A-Za-z][A-Za-z0-9+.-]*://(?:[^@/]*@)?([^/:@]+)(?::[0-9]+)?/(.+?)(?:\.git)?/*", u)
+         or re.fullmatch(r"(?:[^@/:]+@)?([^/:@]+):(?!/)(.+?)(?:\.git)?/*", u))
+    if not m or not re.fullmatch(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+", m.group(2)):
+        return ""
+    return (m.group(1) + "/" + m.group(2)).lower()
+def fields_ok(rec, slug, resource, spent, repo, head):
+    """Campos del grant de merge, sin la firma. resource None = el suyo.
+    repo = identidad del checkout que lo usa: un grant de A#41 no vale en B#41.
+    head = cabeza actual del PR del grant: lo firmado es un contenido, no un número;
+    si el PR ya no está en la cabeza firmada (o no se pudo leer) no vale."""
+    now = time.time()
+    g, i, r = rec.get("grantor"), rec.get("id"), rec.get("resource")
+    ie, ee, rp = rec.get("issued_epoch"), rec.get("expires_epoch"), rec.get("repo")
+    hs = rec.get("head_sha")
+    head_ok = (isinstance(hs, str) and HEAD_RE.match(hs) is not None and head == hs
+               if isinstance(r, str) and r.startswith("pr:") else hs == "")
+    return (rec.get("scope") == "merge" and head_ok
+            and isinstance(rp, str) and rp != "" and rp == repo
+            and isinstance(i, str) and ID_RE.match(i) is not None and i not in spent
+            and isinstance(r, str) and RES_RE.match(r) is not None
+            and (resource is None or r == resource)
+            and isinstance(g, str) and g != "" and g != "self" and not g.startswith("-")
+            and (not slug or g == slug)
+            and isinstance(ie, int) and isinstance(ee, int)
+            and ie <= now + 60 and ie <= ee and ee >= now
+            and ee - ie <= MAX_TTL)
+def verify(rec, sig, signers, ns):
+    if not (isinstance(sig, str) and "BEGIN SSH SIGNATURE" in sig and os.path.isfile(signers)):
+        return False
+    with tempfile.TemporaryDirectory() as d:
+        sp = os.path.join(d, "grant.sig")
+        with open(sp, "w") as f:
+            f.write(sig)
+        try:
+            r = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", signers, "-I", rec["grantor"], "-n", ns, "-s", sp],
+                               input=payload(rec), capture_output=True, timeout=15)
+        except (OSError, subprocess.SubprocessError):
+            return False
+    return r.returncode == 0
+def dump(path, rec):
+    with open(path, "w") as f:
+        f.write(json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n")
+def load(path):
+    try:
+        rec = json.load(open(path))
+    except (OSError, ValueError):
+        return None
+    return rec if isinstance(rec, dict) else None
+op = sys.argv[1]
+if op in ("write", "request"):
+    out, scope, grantor, source, ctx, issued, expires_at, exp, now, resource, repo, head = sys.argv[2:14]
+    rec = {"scope": scope, "grantor": grantor, "source": source, "request_context": ctx,
+           "issued_at": issued, "expires_at": expires_at, "expires_epoch": int(exp)}
+    if op == "write":
+        dump(out, rec)
+    else:
+        rec.update(id=os.urandom(16).hex(), repo=repo, resource=resource, issued_epoch=int(now), head_sha=head)
+        with open(out, "wb") as f:
+            f.write(payload(rec))
+        print(payload(rec).decode())
+elif op == "accept":
+    req, sigsrc, out, signers, ns, slug, spent, repo, head = sys.argv[2:11]
+    try:
+        raw = open(req, "rb").read()
+        rec = json.loads(raw)
+        sig = sys.stdin.read() if sigsrc == "-" else open(sigsrc).read()
+    except (OSError, ValueError) as e:
+        print("ERROR: petición o firma ilegible: %s" % e, file=sys.stderr); sys.exit(2)
+    if not isinstance(rec, dict) or payload(rec) != raw:
+        print("ERROR: la petición no es canónica (alterada)", file=sys.stderr); sys.exit(1)
+    if slug and rec.get("grantor") != slug:
+        print("ERROR: la petición es de otra operadora", file=sys.stderr); sys.exit(1)
+    if not (fields_ok(rec, slug, None, spent_ids(spent), repo, head) and verify(rec, sig, signers, ns)):
+        print("ERROR: firma no válida para esta petición (clave, namespace, caducidad, repositorio, revocada o contenido)", file=sys.stderr); sys.exit(1)
+    rec.update(source="operator-signature", sig=sig)
+    dump(out, rec)
+elif op == "check":
+    # Exit 0 vigente | 1 no válido. resource "*" = el del propio grant (solo list).
+    # print_head = "1": imprime el head_sha firmado del grant verificado (el
+    # mismo registro que se acaba de comprobar), para que push-pr lo pase a GitHub.
+    path, scope, slug, resource, signers, ns, spent, repo, head, print_head = sys.argv[2:12]
+    rec = load(path)
+    if rec is None or rec.get("scope") != scope:
+        sys.exit(1)
+    if scope != "merge":
+        g, ee = rec.get("grantor"), rec.get("expires_epoch")
+        ok = (isinstance(g, str) and g != "" and g != "self" and (not slug or g == slug)
+              and isinstance(ee, int) and ee >= time.time())
+        sys.exit(0 if ok else 1)
+    ok = (rec.get("source") == "operator-signature"
+          and fields_ok(rec, slug, None if resource == "*" else resource, spent_ids(spent), repo, head)
+          and verify(rec, rec.get("sig"), signers, ns))
+    if ok and print_head == "1":
+        print(rec.get("head_sha"))
+    sys.exit(0 if ok else 1)
+elif op == "spend":
+    # Apunta en el libro de gastados (consumido o revocado) el id del grant y el
+    # de la petición pendiente: revocar antes de firmar también la invalida, y
+    # una copia guardada de la petición ya no se puede firmar e incorporar.
+    spent, why = sys.argv[2:4]
+    ids = []
+    for path in sys.argv[4:]:
+        rec = load(path)
+        i = rec.get("id") if rec else None
+        if isinstance(i, str) and ID_RE.match(i) and i not in ids:
+            ids.append(i)
+    if ids:
+        with open(spent, "a") as f:
+            for i in ids:
+                f.write("%s\t%s\t%d\n" % (i, why, int(time.time())))
+elif op == "repo":
+    print(repo_of(sys.argv[2]))
+elif op == "field":
+    rec = load(sys.argv[2]) or {}
+    v = rec.get(sys.argv[3])
+    print(v if isinstance(v, (str, int)) else "")
+'
+
+# Campos de un grant nuevo, uno por línea: grantor, issued_at, expires_at, epoch, now.
+grant_fields() {
+  local scope="$1" ttl="$2" slug="$3" grantor="$4" now exp
   now="$(now_epoch)"
   exp=$(( now + ttl * 3600 ))
   # Reuse existing grantor if already present (stability); else active slug.
   if [[ -z "$grantor" && -f "$(scope_file "$scope")" ]]; then
-    grantor="$(grep -oP '"grantor":\s*"\K[^"]+' "$(scope_file "$scope")" 2>/dev/null | head -1 || true)"
+    grantor="$(python3 -I -c "$GRANT_PY" field "$(scope_file "$scope")" grantor 2>/dev/null || true)"
   fi
   [[ -z "$grantor" ]] && grantor="$slug"
-  cat > "$file" <<EOF
-{"scope":"$scope","grantor":"$grantor","source":"express-request","request_context":"$context","issued_at":"$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)","expires_at":"$(date -u -d @"$exp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$exp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "epoch-$exp")","expires_epoch":$exp}
-EOF
-  chmod 600 "$file" 2>/dev/null || true
+  printf '%s\n%s\n%s\n%s\n%s\n' "$grantor" \
+    "$(date -u -d @"$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$now" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "epoch-$now")" \
+    "$(date -u -d @"$exp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$exp" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "epoch-$exp")" \
+    "$exp" "$now"
 }
 
+ensure_grants_dir() {
+  mkdir -p "$GRANTS_DIR" 2>/dev/null || { echo "ERROR: cannot create $GRANTS_DIR" >&2; exit 2; }
+  chmod 700 "$GRANTS_DIR" 2>/dev/null || true
+}
+
+# op = write (autonomy:*, grant en vigor) | request (merge, pendiente de firma).
+emit() {
+  local op="$1" scope="$2" context="$3" ttl="$4" slug="$5" grantor="$6" resource="$7" out f head=""
+  ensure_grants_dir
+  if [[ "$op" == "request" && "$resource" == pr:* ]]; then
+    head="$(pr_head "$resource")"
+    [[ -n "$head" ]] || { echo "ERROR: no se pudo leer la cabeza actual de $resource (gh); el grant firma una cabeza concreta" >&2; exit 2; }
+  fi
+  mapfile -t f < <(grant_fields "$scope" "$ttl" "$slug" "$grantor")
+  if [[ "$op" == "write" ]]; then out="$(scope_file "$scope")"; else out="$(request_file "$scope")"; fi
+  ( umask 077
+    python3 -I -c "$GRANT_PY" "$op" "$out" "$scope" "${f[0]}" express-request "$context" "${f[1]}" "${f[2]}" "${f[3]}" "${f[4]}" "$resource" "$(repo_id)" "$head" ) \
+    || { echo "ERROR: cannot write $out" >&2; exit 2; }
+  chmod 600 "$out" 2>/dev/null || true
+}
+
+# $3 = recurso para merge (pr:N | task:ID); "*" = el del propio grant (solo list).
+# $4 = 1: imprime el head_sha firmado si el grant es vigente (check --print-head).
 check_scope() {
-  local scope="$1" slug="$2"
-  local file exp expires_at grantor
+  local scope="$1" slug="$2" resource="${3:-}" print_head="${4:-0}" file
   file="$(scope_file "$scope")"
   [[ ! -f "$file" ]] && return 3
-  exp="$(grep -oP '"expires_epoch":\s*\K[0-9]+' "$file" 2>/dev/null | head -1)"
-  if [[ -z "$exp" ]]; then
-    expires_at="$(grep -oP '"expires_at":\s*"\K[^"]+' "$file" 2>/dev/null | head -1)"
-    exp="$(date -u -d "$expires_at" +%s 2>/dev/null || echo 0)"
+  local head="" res="$resource"
+  if [[ "$scope" == "merge" ]]; then
+    [[ "$res" == "*" ]] && res="$(python3 -I -c "$GRANT_PY" field "$file" resource 2>/dev/null || true)"
+    head="$(pr_head "$res")"
+    base_signers || return 1
   fi
-  [[ "$(( $(now_epoch) ))" -gt "$exp" ]] && return 1
-  grantor="$(grep -oP '"grantor":\s*"\K[^"]+' "$file" 2>/dev/null | head -1)"
-  # A valid grant must be tied to the ACTIVE operator, never self/empty.
-  if [[ -z "$grantor" || "$grantor" == "self" ]]; then return 1; fi
-  if [[ -n "$slug" && "$grantor" != "$slug" ]]; then return 1; fi
+  python3 -I -c "$GRANT_PY" check "$file" "$scope" "$slug" "$resource" \
+    "$BASE_SIGNERS" "$SIG_NAMESPACE" "$(spent_file "$scope")" "$(repo_id)" "$head" "$print_head" || return 1
   return 0
 }
 
+# Gasta el grant y la petición pendiente (sus ids al libro merge.spent) y los
+# retira; why = consumed | revoked.
+spend_scope() {
+  local scope="$1" why="$2" file req
+  file="$(scope_file "$scope")" req="$(request_file "$scope")"
+  if [[ "$scope" == "merge" && ( -f "$file" || -f "$req" ) ]]; then
+    ensure_grants_dir
+    ( umask 077; python3 -I -c "$GRANT_PY" spend "$(spent_file "$scope")" "$why" "$file" "$req" ) \
+      || { echo "ERROR: cannot record spent grant" >&2; return 2; }
+  fi
+  rm -f "$file" "$(request_file "$scope")" 2>/dev/null
+  return 0
+}
+
+# ── guard: hook PreToolUse (registro en .claude/settings.json, matcher
+# "Bash|Edit|Write|MultiEdit|NotebookEdit", orden
+# `"$CLAUDE_PROJECT_DIR"/scripts/operator-grant.sh guard`) ──────────────────
+# Veta a las herramientas modificar la raíz de confianza
+# (config/operator-grant-signers): con ella, un agente añadiría su propia clave
+# pública y firmaría él. Leerla con Read sigue permitido (es pública); en Bash
+# se veta cualquier mención del nombre exacto, también las lecturas
+# (`git status -- …`): distinguir lectura de escritura en el texto de una orden
+# no es fiable (git checkout --, sed -i, tee, cp…).
+# Bash: antes de buscar el nombre, resuelve lo que el shell resolvería en el
+# propio texto: comillas ANSI-C ($'\x69', $'\151', $'i'), $"…",
+# continuaciones de línea, comillas y barras (operator-grant-''signers), y
+# también los escapes \xHH/\NNN que expandirían printf o echo -e. Resuelve globs
+# y llaves (signer[s], {signers,x}) contra el cwd del evento.
+# Límite: ve el texto de la orden, no lo que ejecuta un script escrito antes,
+# una variable que compone el nombre ni un cambio de rama; el cambio versionado
+# del fichero lo revisa la operadora en su PR. Borrarlo o vaciarlo no da poder
+# (sin claves ningún grant vale). Evento malformado o incompleto, o cualquier
+# error al evaluarlo (excepción, python ausente): exit 2 (SE-453), nunca 0 ni 1.
+GUARD_PY='
+import fnmatch, glob, json, os, re, shlex, sys
+def block(why):
+    print("BLOQUEADO [operator-grant-guard]: " + why, file=sys.stderr); sys.exit(2)
+ESC = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
+       "t": "\t", "v": "\v", "\\": "\\", "\x27": "\x27", "\"": "\"", "?": "?"}
+ESC_RE = re.compile(r"\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{1,4}|U[0-9A-Fa-f]{1,8}|0?[0-7]{1,3}|c.|.)", re.S)
+def unescape(s):
+    """Escapes de las comillas ANSI-C de bash (y de printf/echo -e): xHH, NNN, uHHHH, cX, n…"""
+    def one(m):
+        e = m.group(1)
+        if e[0] in "xuU":
+            return chr(int(e[1:], 16))
+        if e[0] in "01234567":
+            return chr(int(e, 8) & 0xFF)
+        if e[0] == "c":
+            return chr(ord(e[1].upper()) ^ 0x40) if e[1].isascii() else e[1]
+        return ESC.get(e, "\\" + e)
+    return ESC_RE.sub(one, s)
+def ansi_c(s):
+    # Comillas ANSI-C (dólar + comilla simple) → su contenido decodificado entre comillas
+    # simples, con la comilla escapada; dólar + comilla doble (locale) → comilla doble.
+    s = re.sub(r"\$\x27((?:[^\x27\\]|\\.)*)\x27",
+               lambda m: "\x27" + unescape(m.group(1)).replace("\x27", "\x27\\\x27\x27") + "\x27", s, flags=re.S)
+    return re.sub(r"\$\"", "\"", s)
+MAX_ALTS = 512
+MAX_DIRS = 64
+SEQ_RE = re.compile(r"^(-?[0-9]+|.)\.\.(-?[0-9]+|.)(?:\.\.(-?[0-9]+))?$", re.S)
+def seq(body):
+    """Secuencia de bash {x..y[..paso]} (enteros o un carácter), o None si no lo es."""
+    m = SEQ_RE.match(body)
+    if not m:
+        return None
+    a, b, step = m.group(1), m.group(2), abs(int(m.group(3) or 1)) or 1
+    num = re.fullmatch(r"-?[0-9]+", a) and re.fullmatch(r"-?[0-9]+", b)
+    if not num and (len(a) != 1 or len(b) != 1):
+        return None
+    x, y = (int(a), int(b)) if num else (ord(a), ord(b))
+    if abs(y - x) // step + 1 > MAX_ALTS:
+        block("orden con demasiadas expansiones de llaves para evaluarla")
+    r = range(x, y + 1, step) if x <= y else range(x, y - 1, -step)
+    return [str(v) if num else chr(v) for v in r]
+def braces(t):
+    """Expansión de llaves iterativa y acotada (una orden hostil no tumba el guard):
+    alternativas {a,b} y secuencias {a..z}, {1..9..2}."""
+    out, todo, steps = [], [t], 0
+    while todo:
+        s = todo.pop()
+        steps += 1
+        m = re.search(r"\{([^{}]*)\}", s)
+        if not m:
+            out.append(s)
+        else:
+            alts = seq(m.group(1))
+            todo.extend(s[:m.start()] + alt + s[m.end():] for alt in (alts if alts is not None else m.group(1).split(",")))
+        if len(out) + len(todo) > MAX_ALTS or steps > 20 * MAX_ALTS:
+            block("orden con demasiadas expansiones de llaves para evaluarla")
+    return out
+def main():
+    try:
+        ev = json.load(sys.stdin)
+    except ValueError:
+        block("entrada no es JSON")
+    if not isinstance(ev, dict):
+        block("entrada no es un evento")
+    tool, ti = ev.get("tool_name"), ev.get("tool_input")
+    if not isinstance(tool, str) or not tool:
+        block("evento sin tool_name")
+    if not isinstance(ti, dict):
+        block("evento sin tool_input evaluable")
+    signers = os.path.realpath(os.environ["GUARD_SIGNERS_FILE"])
+    marker = os.path.basename(signers)
+    tail = os.path.join(os.path.basename(os.path.dirname(signers)), marker)
+    # El nombre exacto, no uno más largo (operator-grant-signers-notes.md es otro fichero).
+    named = re.compile(re.escape(marker) + r"(?![A-Za-z0-9_.-])")
+    cwd = ev.get("cwd") if isinstance(ev.get("cwd"), str) and os.path.isdir(ev.get("cwd")) else os.getcwd()
+    def deny():
+        block(marker + " es la raíz de confianza del grant de merge; solo la operadora la cambia, por PR. Para leerla usa Read.")
+    def is_signers(p, base=cwd):
+        rp = os.path.realpath(os.path.join(base, os.path.expanduser(p)))
+        # También la copia de otro worktree o checkout: <raíz>/config/operator-grant-signers.
+        return rp == signers or rp.endswith(os.sep + tail)
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        paths = [ti.get(f) for f in ("file_path", "notebook_path") if ti.get(f) is not None]
+        if not paths or not all(isinstance(p, str) and p for p in paths):
+            block("evento " + tool + " sin ruta evaluable")
+        if any(is_signers(p) for p in paths):
+            deny()
+    elif tool == "Bash":
+        cmd = ti.get("command")
+        if not isinstance(cmd, str):
+            block("evento Bash sin command")
+        cmd = ansi_c(re.sub(r"\\\n", "", cmd))
+        for form in (cmd, unescape(cmd)):
+            if named.search(re.sub(r"[\"\x27\\\\]", "", form)):
+                deny()
+        try:
+            toks = shlex.split(cmd, comments=False, posix=True)
+        except ValueError:
+            toks = cmd.split()
+        pieces = [p for tok in toks for p in re.split(r"[<>|;&=()`]", tok) if p]
+        expanded = [(p, [c for c in braces(p) if c]) for p in pieces]
+        def resolve(cand, base):
+            if any(c in cand for c in "*?["):
+                return glob.glob(os.path.join(base, os.path.expanduser(cand)))
+            return [os.path.join(base, os.path.expanduser(cand))]
+        # Directorios desde los que la orden puede resolver rutas: el cwd del
+        # evento y los destinos de cd/pushd y de -C/--directory/--work-tree
+        # (`cd config && tee -a o*`). Primero todos, después las rutas: el orden
+        # real no importa para vetar.
+        dirs, want = [cwd], False
+        for piece, cands in expanded:
+            if want and piece.startswith("-") and len(piece) > 1:
+                continue  # cd -P DIR: la opción no consume el destino
+            if want:
+                for d in list(dirs):
+                    for cand in cands:
+                        for x in resolve(cand, d):
+                            x = os.path.realpath(x)
+                            if os.path.isdir(x) and x not in dirs:
+                                dirs.append(x)
+                                if len(dirs) > MAX_DIRS:
+                                    block("orden con demasiados directorios para evaluarla")
+                want = False
+            if piece in ("cd", "pushd", "-C", "--directory", "--work-tree"):
+                want = True
+        for piece, cands in expanded:
+            for cand in cands:
+                if "{" in piece and (named.search(cand) or any(is_signers(cand, d) for d in dirs)):
+                    deny()
+                if any(c in cand for c in "*?["):
+                    if any(is_signers(g) for d in dirs for g in resolve(cand, d)):
+                        deny()
+                    if ("signer" in cand or "operator-grant" in cand) and any(
+                            fnmatch.fnmatchcase(x, cand) for x in (marker, tail, signers)):
+                        deny()
+    sys.exit(0)
+try:
+    main()
+except SystemExit:
+    raise
+except BaseException as e:
+    block("error al evaluar el evento (%s); sin evaluar no se deja pasar" % type(e).__name__)
+'
+
+guard_main() {
+  local input="" rc=0
+  if [[ ! -t 0 ]]; then input=$(timeout 3 cat 2>/dev/null) || true; fi
+  [[ -z "$input" ]] && { echo "BLOQUEADO [operator-grant-guard]: sin entrada del hook" >&2; return 2; }
+  printf '%s' "$input" | GUARD_SIGNERS_FILE="$SIGNERS_FILE" python3 -I -c "$GUARD_PY" || rc=$?
+  # Claude Code solo bloquea con 2: cualquier otro fallo (python ausente = 127,
+  # señal, excepción no prevista) sería fallo abierto.
+  if (( rc != 0 )); then
+    (( rc == 2 )) || echo "BLOQUEADO [operator-grant-guard]: el guard falló (exit $rc); sin evaluar no se deja pasar" >&2
+    return 2
+  fi
+  return 0
+}
+[[ "${1:-}" == "guard" ]] && { guard_main; exit $?; }
+
 # ── Parse ──────────────────────────────────────────────────────────────
-ACTION="" SCOPE="" CONTEXT="" TTL="" GRANTOR=""
+ACTION="" SCOPE="" CONTEXT="" TTL="" GRANTOR="" SIGNATURE="" RESOURCE="" PRINT_HEAD=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    grant|check|revoke|list) ACTION="$1"; shift ;;
+    grant|check|consume|revoke|list) ACTION="$1"; shift ;;
     --scope) SCOPE="$2"; shift 2 ;;
     --scope=*) SCOPE="${1#--scope=}"; shift ;;
     --context) CONTEXT="$2"; shift 2 ;;
@@ -127,18 +598,26 @@ while [[ $# -gt 0 ]]; do
     --ttl-hours) TTL="$2"; shift 2 ;;
     --ttl-hours=*) TTL="${1#--ttl-hours=}"; shift ;;
     --grantor) GRANTOR="$2"; shift 2 ;;
+    --signature) SIGNATURE="$2"; shift 2 ;;
+    --signature=*) SIGNATURE="${1#--signature=}"; shift ;;
+    --resource) RESOURCE="$2"; shift 2 ;;
+    --resource=*) RESOURCE="${1#--resource=}"; shift ;;
+    --print-head) PRINT_HEAD=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) shift ;;
   esac
 done
 
-[[ -z "$ACTION" ]] && { echo "ERROR: action required (grant|check|revoke|list)" >&2; usage >&2; exit 2; }
+[[ -z "$ACTION" ]] && { echo "ERROR: action required (grant|check|consume|revoke|list)" >&2; usage >&2; exit 2; }
 [[ "$ACTION" == "list" ]] && {
   if [[ -d "$GRANTS_DIR" ]]; then
+    # Aquí y no en el bucle (subshell): el temporal lo limpia el trap de este proceso.
+    base_signers 2>/dev/null || true
     ls -1 "$GRANTS_DIR"/*.json 2>/dev/null | while read -r f; do
       b="$(basename "$f" .json)"
-      if check_scope "$b" ""; then v=yes; else v=no; fi
-      printf '%s\tvalid=%s\t%s\n' "$b" "$v" "$(grep -oP '"request_context":\s*"\K[^"]+' "$f" 2>/dev/null | head -1)"
+      if check_scope "$b" "" "*"; then v=yes; else v=no; fi
+      printf '%s\tvalid=%s\t%s\t%s\n' "$b" "$v" "$(python3 -I -c "$GRANT_PY" field "$f" resource)" \
+        "$(python3 -I -c "$GRANT_PY" field "$f" request_context)"
     done
   fi
   exit 0
@@ -151,23 +630,68 @@ fi
 
 SLUG="$(active_slug)"
 
+# merge: el grant vale para un recurso concreto (pr:N | task:ID), firmado.
+if [[ "$SCOPE" == "merge" && ( "$ACTION" == "check" || "$ACTION" == "consume" || ( "$ACTION" == "grant" && -z "$SIGNATURE" ) ) ]]; then
+  [[ "$RESOURCE" =~ ^(pr|task):[A-Za-z0-9._-]{1,64}$ ]] || {
+    echo "ERROR: --resource pr:<n>|task:<id> required for scope merge" >&2; exit 2; }
+fi
+
 case "$ACTION" in
   check)
-    check_scope "$SCOPE" "$SLUG"
+    check_scope "$SCOPE" "$SLUG" "$RESOURCE" "$PRINT_HEAD"
     exit $? ;;
+  consume)
+    # Uso único: solo un grant válido para ese recurso se gasta; su id queda
+    # en merge.spent y check rechaza cualquier copia posterior.
+    [[ "$SCOPE" == "merge" ]] || { echo "ERROR: consume solo aplica a --scope merge" >&2; exit 2; }
+    check_scope merge "$SLUG" "$RESOURCE" || exit $?
+    spend_scope merge consumed; exit $? ;;
   revoke)
-    rm -f "$(scope_file "$SCOPE")" 2>/dev/null; exit 0 ;;
+    spend_scope "$SCOPE" revoked; exit $? ;;
   grant)
+    if [[ -n "$SIGNATURE" ]]; then
+      [[ "$SCOPE" == "merge" ]] || { echo "ERROR: --signature solo aplica a --scope merge" >&2; exit 2; }
+      [[ -f "$(request_file merge)" ]] || { echo "ERROR: no hay petición pendiente; antes: grant --scope merge --context \"...\"" >&2; exit 2; }
+      ensure_grants_dir
+      base_signers || exit 1
+      ( umask 077
+        python3 -I -c "$GRANT_PY" accept "$(request_file merge)" "$SIGNATURE" "$(scope_file merge)" \
+          "$BASE_SIGNERS" "$SIG_NAMESPACE" "$SLUG" "$(spent_file merge)" "$(repo_id)" \
+          "$(python3 -I -c "$GRANT_PY" field "$(request_file merge)" head_sha)" ) || exit $?
+      rm -f "$(request_file merge)"
+      RESOURCE="$(python3 -I -c "$GRANT_PY" field "$(scope_file merge)" resource)"
+      echo "granted: merge $RESOURCE -> $SLUG (source operator-signature)"
+      check_scope merge "$SLUG" "$RESOURCE"; exit $?
+    fi
     [[ -z "$CONTEXT" ]] && { echo "ERROR: --context required (why is this grant being issued)" >&2; exit 2; }
     [[ -z "$TTL" ]] && TTL="$(default_ttl "$SCOPE")"
+    # Solo dígitos: el valor entra en aritmética de bash ($(( ))), que evaluaría
+    # una expresión como 'a[$(cmd)]'. Tope para merge: la operadora no firma sin
+    # darse cuenta un grant de años (check también rechaza vigencias > 24 h).
+    [[ "$TTL" =~ ^[0-9]{1,3}$ ]] || { echo "ERROR: --ttl-hours debe ser un entero de 0 a 999" >&2; exit 2; }
+    TTL=$(( 10#$TTL ))
+    if [[ "$SCOPE" == "merge" ]] && (( TTL > MERGE_MAX_TTL_HOURS )); then
+      echo "ERROR: --ttl-hours de merge no puede pasar de $MERGE_MAX_TTL_HOURS" >&2; exit 2
+    fi
     # Fail-closed: sin operadora identificable no se emite un grant (antes se
     # escribía uno con grantor vacío que check rechazaba después).
     if [[ -z "$GRANTOR" && -z "$SLUG" ]]; then
       echo "ERROR: no active operator (active_slug in $ACTIVE_USER_FILE) — grant not issued" >&2
       exit 2
     fi
-    write_grant "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR"
-    echo "granted: $SCOPE -> $SLUG (ttl ${TTL}h)"
+    if [[ "$SCOPE" == "merge" ]]; then
+      [[ -n "$(repo_id)" ]] || {
+        echo "ERROR: sin remoto origin identificable en $REPO_ROOT; el grant de merge se firma para un repositorio concreto" >&2
+        exit 2; }
+      echo "Petición de grant de merge pendiente de tu firma (todavía NO hay grant)."
+      echo "Texto exacto a firmar, sin salto de línea final ($(request_file merge)):"
+      emit request "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR" "$RESOURCE"
+      echo "Firma: ssh-keygen -Y sign -f <tu clave> -n $SIG_NAMESPACE <petición>"
+      echo "Después: operator-grant.sh grant --scope merge --signature <petición>.sig (o --signature - y pega la firma)"
+      exit 4
+    fi
+    emit write "$SCOPE" "$CONTEXT" "$TTL" "$SLUG" "$GRANTOR" ""
+    echo "granted: $SCOPE -> $SLUG (ttl ${TTL}h, source express-request)"
     check_scope "$SCOPE" "$SLUG"; exit $? ;;
 esac
 exit 2

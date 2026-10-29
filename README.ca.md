@@ -16,7 +16,7 @@ lang: ca
 
 ## Workspace de desenvolupament multi-agent
 
-**567 comandos · 90 agents · 139 skills · 133 hooks**
+**567 comandos · 90 agents · 139 skills · 134 hooks**
 
 Sistema agèntic sobirà per governar i executar treball amb IA, independent de model, proveïdor i frontend, amb criteri humà per disseny. Integra agents, memòria, seguretat, polítiques executables, traçabilitat i dominis especialitzats. Funciona en local amb sobirania de dades i inferència, en 9 idiomes.
 
