@@ -6,7 +6,19 @@ set -uo pipefail
 # Exit codes: 0 = pass (con warning si aplica), 1 = bloqueo (solo en modo court activo)
 
 LIB_DIR="$(dirname "${BASH_SOURCE[0]}")/lib"
-ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "$(cd "$(dirname "$0")/../.." && pwd)")
+GIT_TOP=$(git rev-parse --show-toplevel 2>/dev/null || true)
+ROOT="${GIT_TOP:-$(cd "$(dirname "$0")/../.." && pwd)}"
+
+# Ficheros tracked modificados (staged + unstaged) respecto a HEAD.
+# Tras un checkout recién hecho (actions/checkout, clone, pull) las entradas
+# del índice quedan «racy»: git no puede fiarse del stat y `git diff` vuelve a
+# leer y hashear cada fichero en CADA llamada, porque diff nunca reescribe el
+# índice (~6000 ficheros, 100-500 ms en la CI). `update-index --refresh`
+# persiste el stat verificado: el coste se paga una vez por checkout.
+modified_files() {
+  git -C "$1" update-index -q --refresh >/dev/null 2>&1 || true
+  git -C "$1" diff HEAD --name-only 2>/dev/null || true
+}
 
 # ── SE-260 S1: Court mode — enforce frozen path-set during fix phase ──
 CRC_FILE="$ROOT/.review.crc"
@@ -27,7 +39,7 @@ except: pass
 
     if [[ -n "$PATH_SET" ]]; then
       # Get current modified files (staged + unstaged)
-      MODIFIED=$(git diff --name-only HEAD 2>/dev/null || echo "")
+      MODIFIED=$(modified_files "$ROOT")
       OUT_OF_COURT=""
       while IFS= read -r f; do
         [[ -z "$f" ]] && continue
@@ -54,15 +66,11 @@ fi
 
 INPUT=$(cat)
 
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+PROJECT_ROOT="${GIT_TOP:-.}"
 
-# Single git diff covers both staged + unstaged tracked changes
-MODIFIED=$(git -C "$PROJECT_ROOT" diff HEAD --name-only 2>/dev/null | sort -u | grep -v '^$' || true)
-
-if [ -z "$MODIFIED" ]; then
-  exit 0
-fi
-
+# Orden por coste: spec activa y ficheros declarados (baratos) antes que git
+# (O(ficheros tracked)). Sin spec con ficheros declarados no hay nada que
+# comparar y git no se ejecuta.
 # Restrict search to known SDD locations + maxdepth 4 (specs live at projects/{slug}/specs/ or docs/specs/)
 SEARCH_PATHS=()
 for p in "$PROJECT_ROOT/projects" "$PROJECT_ROOT/docs/specs" "$PROJECT_ROOT/docs/propuestas"; do
@@ -78,13 +86,13 @@ SPEC_FILE=""
 if [[ -n "${SAVIA_TMP:-}" && -f "$SAVIA_TMP/.scope-guard-marker" ]]; then
   SPEC_FILE=$(find "${SEARCH_PATHS[@]}" -maxdepth 4 \
     \( -name node_modules -o -name .git -o -name build -o -name dist -o -name target \) -prune -o \
-    -name "*.spec.md" -newer "$SAVIA_TMP/.scope-guard-marker" -print 2>/dev/null | head -1)
+    -name "*.spec.md" -newer "$SAVIA_TMP/.scope-guard-marker" -print -quit 2>/dev/null)
 fi
 
 if [ -z "$SPEC_FILE" ]; then
   SPEC_FILE=$(find "${SEARCH_PATHS[@]}" -maxdepth 4 \
     \( -name node_modules -o -name .git -o -name build -o -name dist -o -name target \) -prune -o \
-    -name "*.spec.md" -mmin -60 -print 2>/dev/null | head -1)
+    -name "*.spec.md" -mmin -60 -print -quit 2>/dev/null)
 fi
 
 if [ -z "$SPEC_FILE" ] || [ ! -f "$SPEC_FILE" ]; then
@@ -98,6 +106,12 @@ DECLARED=$(sed -n '/[Ff]icheros\|[Ff]iles to [Cc]reate/,/^## /p' "$SPEC_FILE" \
   | sort -u)
 
 if [ -z "$DECLARED" ]; then
+  exit 0
+fi
+
+MODIFIED=$(modified_files "$PROJECT_ROOT" | sort -u | grep -v '^$' || true)
+
+if [ -z "$MODIFIED" ]; then
   exit 0
 fi
 
