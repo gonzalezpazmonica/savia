@@ -26,7 +26,12 @@ function setup(enabled: Record<string, boolean> = { a: true, b: true }) {
     '--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href,
     path.resolve('src/cli/index.ts'), 'rag', ...args, '--domes-file', registry,
   ], { env: { PATH: process.env.PATH || '', SAVIA_RAG_HOME: home, SAVIA_RAG_TEST_PROVIDER: 'hash' }, encoding: 'utf-8', timeout: 30000 });
-  return { root, home, run };
+  const disable = (...names: string[]) => {
+    const reg = JSON.parse(fs.readFileSync(registry, 'utf-8'));
+    for (const n of names) reg.domes[n].rag.enabled = false;
+    fs.writeFileSync(registry, JSON.stringify(reg));
+  };
+  return { root, home, run, disable };
 }
 
 describe('SE-410 CLI rag sync --all --check', () => {
@@ -101,5 +106,65 @@ describe('L32 registro sin cúpulas habilitadas y gc --all', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('[a]');
     expect(r.stdout).toContain('[b]');
+  }, 30000);
+});
+
+describe('L32 SLO y sync ruidosos con cúpulas deshabilitadas pero indexadas', () => {
+  it('status --check sale 2 con alerta en stderr si una cúpula con índice se deshabilita', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    expect(run('status', '--check').status).toBe(0);
+    disable('a');
+    const r = run('status', '--check');
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('[a] ALERTA');
+    expect(r.stderr).toContain('rag.enabled=false');
+  }, 30000);
+
+  it('status --json: slo.ok=false con staleRatio alto en cúpula deshabilitada indexada', () => {
+    const { run, disable, root } = setup();
+    run('sync', '--all');
+    disable('a');
+    fs.writeFileSync(path.join(root, 'a', 'nuevo.md'), `# nuevo\n\n${'texto nuevo sin indexar. '.repeat(10)}`);
+    const st = JSON.parse(run('status', '--json').stdout) as Array<{ name: string; staleRatio: number; slo: { ok: boolean; alerts: string[] } }>;
+    const a = st.find(x => x.name === 'a')!;
+    expect(a.staleRatio).toBeGreaterThan(0.1);
+    expect(a.slo.ok).toBe(false);
+    expect(a.slo.alerts.length).toBeGreaterThanOrEqual(2);
+  }, 30000);
+
+  it('sync --all con cúpulas indexadas pero todas deshabilitadas sale distinto de 0 con stderr', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    disable('a', 'b');
+    const r = run('sync', '--all');
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('ALERTA');
+    expect(r.stderr).toContain('a, b');
+  }, 30000);
+
+  it('sync --all con una cúpula habilitada y otra indexada deshabilitada: sincroniza la primera y falla', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    disable('b');
+    const r = run('sync', '--all');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('[a] gen=');
+    expect(r.stderr).toContain('b');
+    expect(run('sync', '--all', '--check').status).toBe(2);
+  }, 30000);
+
+  it('la alerta queda en rag.jsonl para el morning brief', () => {
+    const { run, disable, home } = setup();
+    run('sync', '--all');
+    disable('a', 'b');
+    run('sync', '--all', '--check');
+    const lines = fs.readFileSync(path.join(home, 'logs', 'rag.jsonl'), 'utf-8').trim().split('\n').map(l => JSON.parse(l));
+    expect(lines.some(l => l.event === 'alert')).toBe(true);
+  }, 30000);
+
+  it('negativo: sin cúpulas indexadas deshabilitadas, sync --all sale 0', () => {
+    const { run } = setup({ a: true, b: true });
+    expect(run('sync', '--all').status).toBe(0);
   }, 30000);
 });

@@ -661,7 +661,7 @@ export class RagService {
           // proveedor caído: no es deriva de modelo; se refleja en búsqueda como degraded
         }
       }
-      const slo = sloStatus({ enabled: cfg.enabled, hasGeneration: Boolean(manifest), totalDocs: pending.totalDocs, pendingDocs: pending.pendingDocs, digestMatch });
+      const slo = sloStatus({ enabled: cfg.enabled, hasGeneration: Boolean(manifest), indexed: Boolean(pointer.active || pointer.shadow || pointer.previous), totalDocs: pending.totalDocs, pendingDocs: pending.pendingDocs, lagHours: pending.lagHours, digestMatch });
       out.push({
         name: d.name, enabled: cfg.enabled, confidentiality: d.confidentiality,
         active: pointer.active, shadow: pointer.shadow, previous: pointer.previous,
@@ -675,6 +675,11 @@ export class RagService {
       });
     }
     return out;
+  }
+
+  /** Deja una alerta operativa en rag.jsonl (la lee el morning brief / success_checks). */
+  recordAlert(kind: string, detail: unknown): void {
+    logEvent(this.home, { event: 'alert', kind, detail });
   }
 
   /** Comprueba que el home es seguro antes de operar (AC11). */
