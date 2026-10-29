@@ -12,24 +12,19 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CHECKS_DIR="$SCRIPT_DIR/checks"
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-# Repo evaluado: COMPLIANCE_TARGET_DIR (el que fija el gate a partir de la orden de commit); sin él, el
-# de PROJECT_DIR. Los checks se ejecutan siempre desde este runner, sobre los ficheros del objetivo.
-TARGET_DIR="${COMPLIANCE_TARGET_DIR:-$PROJECT_DIR}"
-if [[ ! -d "$TARGET_DIR" ]]; then
-  echo "❌ COMPLIANCE_TARGET_DIR no es un directorio: $TARGET_DIR" >&2
+# Primero el repo del directorio actual: desde el pre-commit de git es el repo real del commit (también
+# en un worktree), y CLAUDE_PROJECT_DIR apuntaría al de la sesión. Solo fuera de un repo se usa la variable.
+PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$PWD}")"
+MODE="${1:---staged}"
+RANGE="${2:-}"
+if [[ "$MODE" == "--range" && -z "$RANGE" ]]; then
+  echo "❌ uso: runner.sh --range <rev-range>   (p. ej. origin/main...HEAD)" >&2
   exit 2
 fi
-MODE="${1:---staged}"
 VIOLATIONS=0
 WARNINGS=0
 
-cd "$TARGET_DIR"
-# El objetivo lo elige el texto de la orden y el gate corre antes de que la persona la apruebe: git no
-# debe ejecutar nada configurado por ese repo (fsmonitor, hooks). Las consultas son de índice o de árbol
-# contra árbol, nunca contra el árbol de trabajo, así que tampoco corren filtros clean/smudge.
-export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false \
-  GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null GIT_OPTIONAL_LOCKS=0
+cd "$PROJECT_DIR"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  COMPLIANCE RUNNER — Verificación de reglas"
@@ -39,10 +34,18 @@ echo ""
 # Obtener ficheros a verificar
 if [[ "$MODE" == "--all" ]]; then
   mapfile -t FILES < <(git ls-files -- '*.md' '*.sh' 2>/dev/null)
+elif [[ "$MODE" == "--range" ]]; then
+  # CI: ficheros añadidos o modificados en el rango (los borrados no se verifican). Un rango que no se
+  # resuelve falla cerrado: sin lista no hay verde.
+  if ! git rev-parse --verify --quiet "${RANGE%%...*}" >/dev/null; then
+    echo "❌ rango no resoluble: $RANGE" >&2
+    exit 2
+  fi
+  mapfile -t FILES < <(git diff --name-only --diff-filter=AMR "$RANGE")
 else
   mapfile -t FILES < <(git diff --cached --name-only 2>/dev/null)
   if [[ ${#FILES[@]} -eq 0 ]]; then
-    mapfile -t FILES < <(git diff --no-ext-diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+    mapfile -t FILES < <(git diff --name-only HEAD~1 2>/dev/null || echo "")
   fi
 fi
 
@@ -60,7 +63,7 @@ run_check() {
 if echo "${FILES[*]}" | grep -q "CHANGELOG.md" || [[ "$MODE" == "--all" ]]; then
   run_check "1. Links de comparación en CHANGELOG" \
     "$PROJECT_DIR/scripts/validate-changelog-links.sh" \
-    "$TARGET_DIR/CHANGELOG.md"
+    "$PROJECT_DIR/CHANGELOG.md"
 else
   echo "📋 1. Links de comparación en CHANGELOG"
   echo "  ⏭️  CHANGELOG.md no modificado, skip"

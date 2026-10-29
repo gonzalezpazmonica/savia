@@ -81,7 +81,6 @@ hook_read_command() {
     return 3
   fi
   local trimmed="${raw#"${raw%%[![:space:]]*}"}"
-  HOOK_SESSION_CWD=""  # nunca heredado del entorno: solo el cwd que entrega el runtime en el JSON
   if [[ "$trimmed" == \{* ]]; then
     raw="$trimmed"
     if command -v jq &>/dev/null && ! printf '%s' "$raw" | jq -e . >/dev/null 2>&1; then
@@ -89,118 +88,9 @@ hook_read_command() {
       return 2
     fi
     hook_extract_command "$raw" || return 2
-    HOOK_SESSION_CWD=""
-    if command -v jq &>/dev/null; then
-      HOOK_SESSION_CWD=$(jq -r '(.cwd // empty) | select(type == "string")' <<<"$raw" 2>/dev/null) || HOOK_SESSION_CWD=""
-    fi
     return 0
   fi
   HOOK_COMMAND="$raw"
-  return 0
-}
-
-# Resuelve un directorio escrito en la orden (comillas, ~, $HOME; relativo a $2). Sin expansión estática
-# ($VAR, $(...), `...`, comodines) o sin directorio existente → 1. Deja la ruta física en _HOOK_RESOLVED.
-_hook_resolve_dir() {
-  local d="$1" base="$2"
-  d="${d%\"}"; d="${d#\"}"; d="${d%\'}"; d="${d#\'}"
-  d="${d/#\~/$HOME}"; d="${d/#\$HOME/$HOME}"
-  [[ -z "$d" || "$d" == *'$'* || "$d" == *'`'* || "$d" == *[\*\?\[]* ]] && return 1
-  [[ "$d" != /* ]] && d="$base/$d"
-  [[ -d "$d" ]] || return 1
-  _HOOK_RESOLVED=$(cd "$d" 2>/dev/null && pwd -P) || return 1
-}
-
-# hook_git_targets <orden> <cwd de la sesión>: repos (raíz del árbol de trabajo) sobre los que actúa cada
-# `git commit` de la orden, siguiendo `cd X &&` previos (acumulativos) y `git -C X` (acumulativos, relativos
-# al cd vigente). Rellena HOOK_GIT_TARGETS (únicos, en orden) y devuelve 0. Devuelve 1 y HOOK_TARGET_REASON
-# si algún objetivo no se puede determinar estáticamente: --git-dir/--work-tree, rutas con variables o
-# sustituciones, directorios inexistentes, fuera de un repo, o un commit que el análisis no localiza.
-hook_git_targets() {
-  local cmd="$1" base="${2:-$PWD}" rest m prefix cwd dir top t
-  local re_commit="${HOOK_GIT_AT}commit([[:space:]]|\$)"
-  local nl=$'\n'
-  local re_cd='(^|[;&|('"$nl"'`]|\$\()[[:space:]]*cd[[:space:]]+("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:];&|)]*)[[:space:]]*(&&|;|\|\||\))?'
-  local re_c='(^|[[:space:]])-C[[:space:]]+("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)'
-  HOOK_GIT_TARGETS=(); HOOK_TARGET_REASON=""
-  [[ -d "$base" ]] || { HOOK_TARGET_REASON="directorio de la sesión inexistente: $base"; return 1; }
-  # Cada línea es una orden: el ancla de HOOK_GIT_AT no incluye «\n» y `^` solo casa al inicio de la
-  # cadena en `=~`, así que sin esto un commit en la 2.ª línea (o el 2.º de varias) no se localizaba.
-  rest="${cmd//$nl/;}"
-  local consumed=""
-  while [[ "$rest" =~ $re_commit ]]; do
-    m="${BASH_REMATCH[0]}"
-    prefix="${rest%%"$m"*}"
-    consumed+="$prefix"
-    cwd="$base"
-    # Lo que cambia el directorio o el repo sin que el análisis pueda seguirlo falla cerrado.
-    if [[ "$consumed$m" =~ (^|[^[:alnum:]_])(pushd|popd)([[:space:]]|$) ]]; then
-      HOOK_TARGET_REASON="pushd/popd: el directorio no se sigue"; return 1
-    fi
-    if [[ "$consumed$m" == *GIT_DIR=* || "$consumed$m" == *GIT_WORK_TREE=* ]]; then
-      HOOK_TARGET_REASON="GIT_DIR/GIT_WORK_TREE en la orden: el árbol de trabajo no se determina"; return 1
-    fi
-    # Órdenes anidadas (bash -c, sh -c, eval): su contenido no se analiza, así que no se puede saber
-    # en qué directorio corre el commit.
-    # Solo lo anterior al commit: «eval» o «sh -c» dentro del mensaje (-m "…") no es una orden anidada.
-    if [[ "$consumed$m" =~ (^|[^[:alnum:]_])((ba|z|da)?sh[[:space:]]+(-[[:alpha:]]*[[:space:]]+)*-[[:alpha:]]*c|eval)([[:space:]]|$) ]]; then
-      HOOK_TARGET_REASON="orden anidada (sh -c / eval): el directorio del commit no se determina"; return 1
-    fi
-    # cd en segundo plano (`cd X & …`) o en tubería (`cd X | …`) corre en un subshell y no persiste.
-    # Sobre prefijo + match: el match del commit se come el separador previo («& git commit»), así que
-    # mirando solo el prefijo un «&&» quedaría como «&» suelto.
-    local re_cd_sub='(^|[^[:alnum:]_./-])cd[[:space:]]+[^;&|]*[[:space:]]*(&[^&]|\|[^|])'
-    if [[ "$consumed$m" =~ $re_cd_sub ]]; then
-      HOOK_TARGET_REASON="cd en segundo plano o en tubería: no cambia el directorio del commit"; return 1
-    fi
-    # Lista blanca de cd: cada palabra «cd» previa tiene que ser un cd simple que el análisis sigue
-    # (inicio de orden tras ; & | o salto de línea). Un cd tras {, then, do, !… no se enumera: bloquea.
-    local cd_words cd_seen=0
-    cd_words=$(grep -oE '(^|[^[:alnum:]_./-])cd([[:space:]]|$)' <<<"$consumed" | wc -l)
-    local p="$consumed" before q1 q2
-    while [[ "$p" =~ $re_cd ]]; do
-      cd_seen=$((cd_seen + 1))
-      if [[ "${BASH_REMATCH[1]}" == *'('* || "${BASH_REMATCH[1]}" == *'`'* ]]; then
-        HOOK_TARGET_REASON="cd dentro de un subshell: no cambia el directorio del commit"; return 1
-      fi
-      # Un cd dentro de comillas (texto de un echo) no se ejecuta: comillas desparejadas antes de él.
-      before="${p%%"${BASH_REMATCH[0]}"*}"; q1="${before//[^\"]/}"; q2="${before//[^\']/}"
-      if (( ${#q1} % 2 || ${#q2} % 2 )); then
-        HOOK_TARGET_REASON="cd entre comillas: no se puede saber si se ejecuta"; return 1
-      fi
-      if ! _hook_resolve_dir "${BASH_REMATCH[2]}" "$cwd"; then
-        HOOK_TARGET_REASON="«cd ${BASH_REMATCH[2]}» no se resuelve a un directorio existente"; return 1
-      fi
-      cwd="$_HOOK_RESOLVED"
-      p="${p#*"${BASH_REMATCH[0]}"}"
-    done
-    if (( cd_words > cd_seen )); then
-      HOOK_TARGET_REASON="hay un cd que el análisis no sigue (tras {, then, do, !…): usa cd \"/ruta\" && git commit"; return 1
-    fi
-    if [[ "$m" == *--git-dir* || "$m" == *--work-tree* ]]; then
-      HOOK_TARGET_REASON="--git-dir/--work-tree: el árbol de trabajo no se determina"; return 1
-    fi
-    p="$m"
-    while [[ "$p" =~ $re_c ]]; do
-      if ! _hook_resolve_dir "${BASH_REMATCH[2]}" "$cwd"; then
-        HOOK_TARGET_REASON="«git -C ${BASH_REMATCH[2]}» no se resuelve a un directorio existente"; return 1
-      fi
-      cwd="$_HOOK_RESOLVED"
-      p="${p#*"${BASH_REMATCH[0]}"}"
-    done
-    # Repo elegido por el texto de la orden y aún no aprobado: nada configurado por él se ejecuta.
-    top=$(GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=core.fsmonitor GIT_CONFIG_VALUE_0=false \
-          GIT_CONFIG_KEY_1=core.hooksPath GIT_CONFIG_VALUE_1=/dev/null GIT_OPTIONAL_LOCKS=0 \
-          git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || { HOOK_TARGET_REASON="$cwd no está dentro de un repo git"; return 1; }
-    top=$(cd "$top" && pwd -P)
-    for t in "${HOOK_GIT_TARGETS[@]:-}"; do [[ "$t" == "$top" ]] && top=""; done
-    [[ -n "$top" ]] && HOOK_GIT_TARGETS+=("$top")
-    consumed+="$m"
-    rest="${rest#*"$m"}"
-  done
-  if [[ ${#HOOK_GIT_TARGETS[@]} -eq 0 ]]; then
-    HOOK_TARGET_REASON="no se localiza el «git commit» en la orden"; return 1
-  fi
   return 0
 }
 

@@ -5,5 +5,7 @@ section: Fixed
 
 ### Fixed
 
-- compliance-gate evalúa el repo objetivo del commit (git -C, cd previo o cwd de la sesión) y sus ficheros staged, no el de la sesión; sin objetivo determinable bloquea (fail-closed). Detecta commits en cualquier línea de la orden y los evalúa todos. Falla cerrado si hay un cd dentro de un subshell o entre comillas, pushd/popd o variables que cambian el repo de git. Un commit dentro de un heredoc se evalúa como commit: se acepta ese falso positivo para no repetir el falso verde del filtro anterior. El cd que no se puede seguir bloquea: va tras `{`, `then`, `do` o `!`, aparece en prosa, corre en segundo plano o en tubería, o está dentro de `sh -c` o `eval`. Funciona como lista blanca. La palabra «eval» en el mensaje del commit no bloquea. Git se ejecuta sobre el repo objetivo con `core.fsmonitor` y `core.hooksPath` neutralizados, y con consultas de índice o de árbol contra árbol. Así, un `.git/config` hostil no ejecuta nada antes de que la persona apruebe la orden.
-
+- El compliance de reglas se verifica en el `pre-commit` de git (`.githooks/`). Git lo ejecuta en el repo real del commit, también en worktrees, sobre lo que de verdad va en stage y con cualquier forma de orden: `git -C`, `cd`, subshell, heredoc, script o `commit -a`. Antes, un PreToolUse deducía del texto de la orden en qué repo se hacía el commit, evaluaba el árbol equivocado y ejecutaba git en un repo que elegía la orden antes de que nadie la aprobara.
+- Un job de CI bloqueante, «Compliance runner», ejecuta el mismo runner sobre el diff de la PR (`runner.sh --range`), así que un commit que esquive el pre-commit local no llega a main.
+- El runner prioriza el repo del directorio actual sobre `CLAUDE_PROJECT_DIR`.
+- El PreToolUse `compliance-gate` queda sin efecto; retirar su registro de `settings.json` es decisión de la operadora.

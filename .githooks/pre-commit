@@ -1,18 +1,31 @@
 #!/usr/bin/env bash
-# Git pre-commit hook — Protección de privacidad de proyectos
+# Git pre-commit hook — privacidad de proyectos y compliance de reglas.
 # Se ejecuta ANTES de cada commit, independientemente de Savia o Claude Code.
 #
-# Instalación: git config core.hooksPath .githooks
+# Instalación: git config core.hooksPath .githooks (compartido por todos los worktrees del repo).
+#
+# Lo ejecuta git en el repo real del commit, con lo que de verdad va en stage. Funciona igual con
+# git -C, cd, subshell, heredoc, script o commit -a. La autoridad que no se puede saltar es la CI (job
+# «Compliance runner»), que ejecuta el mismo runner sobre el diff de la PR.
 
 set -uo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+rc=0
 
-# Ejecutar el script de protección en modo hook
+# 1. Privacidad de proyectos
 if [ -f "$ROOT/scripts/protect-project-privacy.sh" ]; then
-    bash "$ROOT/scripts/protect-project-privacy.sh" --hook
-    exit $?
+    bash "$ROOT/scripts/protect-project-privacy.sh" --hook || rc=1
 fi
 
-# Si el script no existe, permitir el commit (no bloquear por ausencia)
-exit 0
+# 2. Compliance de reglas sobre lo que va en stage, en este repo (no el de la sesión)
+if [ -f "$ROOT/.claude/compliance/runner.sh" ]; then
+    if ! (cd "$ROOT" && env -u CLAUDE_PROJECT_DIR bash .claude/compliance/runner.sh --staged); then
+        echo "" >&2
+        echo "🛑 COMPLIANCE: commit bloqueado por violación de reglas en $ROOT." >&2
+        echo "   Diagnóstico completo: bash .claude/compliance/runner.sh --all" >&2
+        rc=1
+    fi
+fi
+
+exit $rc

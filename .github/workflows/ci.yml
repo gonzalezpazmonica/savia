@@ -563,6 +563,22 @@ jobs:
       - name: SE-253 Agent sync guard — verify .claude/agents ↔ .opencode/agents
         run: bash scripts/agents-catalog-sync.sh --check
 
+  compliance-runner:
+    # #1413: el mismo runner que el pre-commit local (.githooks/pre-commit), sobre el diff de la PR.
+    # Es la autoridad que no se puede saltar: un commit que esquive el pre-commit local no entra sin esto.
+    runs-on: ubuntu-latest
+    name: Compliance runner (diff de la PR)
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Compliance runner sobre el rango de la PR
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="${BASE_SHA:-HEAD~1}"
+          bash .claude/compliance/runner.sh --range "$base...HEAD"
+
   standards-compliance:
     runs-on: ubuntu-latest
     name: Standards Compliance Gate
