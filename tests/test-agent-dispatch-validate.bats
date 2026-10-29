@@ -224,3 +224,86 @@ agent_run() {
   SAVIA_HOOK_PROFILE=standard agent_run "Modifica CHANGELOG.md"
   [ "$status" -eq 0 ]
 }
+
+# ── Revisión 2 de #1412: verbos de escritura con prefijo, tilde o cortos ──
+# Cada prompt contiene un verbo de lectura; si el de escritura no se detecta,
+# el hook marca solo lectura y se salta las reglas 1, 2, 3 y 5 (falso verde).
+
+@test "agent write prefijo: overwrite CHANGELOG sigue bloqueando" {
+  agent_run "Read CHANGELOG.md and overwrite it with the new release notes"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHANGELOG"* ]]
+}
+
+@test "agent write prefijo: rewrite CHANGELOG sigue bloqueando" {
+  agent_run "Review CHANGELOG.md and rewrite the top section"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write prefijo: sobrescribe CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y sobrescribe la sección de cambios"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write prefijo: reescribe CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y reescribe la sección"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write tilde: reescríbelo sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y reescríbelo"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write tilde: añádele una entrada sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y añádele una entrada"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write prefijo: recreate command exige frontmatter" {
+  agent_run "Read .claude/commands/foo.md and recreate it"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"name"* ]]
+}
+
+@test "agent write prefijo: regenerate rule avisa" {
+  agent_run "Review docs/rules/domain/x.md and regenerate it"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DISPATCH"* ]]
+}
+
+@test "agent write corto: pon una entrada en CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y pon una entrada nueva al principio"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write corto: pon la lista en CHANGELOG sigue bloqueando" {
+  agent_run "Pon en CHANGELOG.md la lista de cambios"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write: vacía CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y vacía el fichero"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent read ambiguo: 'lead' no cuenta como verbo de lectura" {
+  agent_run "CHANGELOG.md lead entry"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent read-only con tilde: léelo y descríbelo no se bloquea" {
+  agent_run "Abre CHANGELOG.md, léelo y descríbelo"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"DISPATCH"* ]]
+}
+
+@test "agent read-only: settings y output no cuentan como set/put" {
+  agent_run "Lee CHANGELOG.md y el output de settings.json y resume"
+  [ "$status" -eq 0 ]
+}
+
+@test "agent write prefijo: sobrescríbelo (sobr+escrib) sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y sobrescríbelo"
+  [ "$status" -eq 2 ]
+}
