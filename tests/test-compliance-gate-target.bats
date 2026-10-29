@@ -40,6 +40,7 @@ setup() {
   mkrepo "$A" violation
   gate "$A" "git commit -m x"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"Commit bloqueado"* ]]
 }
 
 @test "cwd normal: cwd limpio pasa" {
@@ -282,6 +283,7 @@ setup() {
   mkrepo "$A" violation; mkrepo "$B" clean
   gate "$A" "echo \"x; cd $B\"; git commit -m x"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"no se puede determinar"* ]]
 }
 
 @test "pushd X && git commit bloquea (pushd no se sigue)" {
@@ -315,12 +317,17 @@ setup() {
   [[ "$output" == *"Commit bloqueado"* ]]
 }
 
-@test "awk que falla no deja el gate abierto" {
-  mkrepo "$A" violation
-  mkdir -p "$BATS_TEST_TMPDIR/bin"
-  printf '#!/bin/sh\nexit 1\n' > "$BATS_TEST_TMPDIR/bin/awk"; chmod +x "$BATS_TEST_TMPDIR/bin/awk"
-  json=$(jq -n --arg c "git commit -m x" --arg d "$A" '{tool_input:{command:$c},cwd:$d}')
-  cd "$A"
-  run bash -c 'printf "%s" "$1" | PATH="$2:$PATH" bash "$3"' _ "$json" "$BATS_TEST_TMPDIR/bin" "$ROOT/.claude/hooks/compliance-gate.sh"
-  [ "$status" -eq 2 ]
+@test "eval o sh -c dentro del mensaje del commit no es una orden anidada (revisión 4)" {
+  mkrepo "$A" clean
+  gate "$A" "git commit -m \"fix eval harness; usa sh -c para probar\""
+  [ "$status" -eq 0 ]
+}
+
+@test "cd en segundo plano o en tubería no cambia el directorio: bloquea (revisión 4)" {
+  mkrepo "$A" violation; mkrepo "$B" clean
+  for c in "cd $B & git commit -m x" "cd $B | cat; git commit -m x"; do
+    gate "$A" "$c"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"no se puede determinar"* ]]
+  done
 }

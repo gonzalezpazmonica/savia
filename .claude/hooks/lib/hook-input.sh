@@ -142,8 +142,16 @@ hook_git_targets() {
     fi
     # Órdenes anidadas (bash -c, sh -c, eval): su contenido no se analiza, así que no se puede saber
     # en qué directorio corre el commit.
-    if [[ "$cmd" =~ (^|[^[:alnum:]_])((ba|z|da)?sh[[:space:]]+(-[[:alpha:]]*[[:space:]]+)*-[[:alpha:]]*c|eval)([[:space:]]|$) ]]; then
+    # Solo lo anterior al commit: «eval» o «sh -c» dentro del mensaje (-m "…") no es una orden anidada.
+    if [[ "$consumed$m" =~ (^|[^[:alnum:]_])((ba|z|da)?sh[[:space:]]+(-[[:alpha:]]*[[:space:]]+)*-[[:alpha:]]*c|eval)([[:space:]]|$) ]]; then
       HOOK_TARGET_REASON="orden anidada (sh -c / eval): el directorio del commit no se determina"; return 1
+    fi
+    # cd en segundo plano (`cd X & …`) o en tubería (`cd X | …`) corre en un subshell y no persiste.
+    # Sobre prefijo + match: el match del commit se come el separador previo («& git commit»), así que
+    # mirando solo el prefijo un «&&» quedaría como «&» suelto.
+    local re_cd_sub='(^|[^[:alnum:]_./-])cd[[:space:]]+[^;&|]*[[:space:]]*(&[^&]|\|[^|])'
+    if [[ "$consumed$m" =~ $re_cd_sub ]]; then
+      HOOK_TARGET_REASON="cd en segundo plano o en tubería: no cambia el directorio del commit"; return 1
     fi
     # Lista blanca de cd: cada palabra «cd» previa tiene que ser un cd simple que el análisis sigue
     # (inicio de orden tras ; & | o salto de línea). Un cd tras {, then, do, !… no se enumera: bloquea.
