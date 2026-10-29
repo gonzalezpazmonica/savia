@@ -159,6 +159,17 @@ plan_and_grant() {
   [[ "$output" != *"#18"* ]]
 }
 
+@test "boundary: la raíz de confianza del grant de merge (SE-343) es tier 4 y nunca entra en el manifiesto" {
+  # Antes: firmantes tier 3 y operator-grant.sh tier 2, mergeables con dos APPROVE de agentes.
+  mkpr 31 "config/operator-grant-signers"; mkpr 32 "scripts/operator-grant.sh"; mkpr 33 "scripts/push-pr.sh"
+  mkpr 34 "scripts/operator-grant-helper.sh"
+  for n in 31 32 33 34; do review $n APPROVE correctness; review $n APPROVE security rev-sec; done
+  run bash "$SCRIPT" plan
+  [[ "$output" != *"#31"* && "$output" != *"#32"* && "$output" != *"#33"* ]]
+  # Control: un script vecino (tier 2) sí entra, así que el plan se ejecutó.
+  [[ "$output" == *"#34(t2)"* ]]
+}
+
 @test "fail: CI roja aparca el PR y no mergea" {
   mkpr 19 "scripts/g.sh"; review 19 APPROVE correctness; echo fail > "$FAKE/19.checks"
   plan_and_grant

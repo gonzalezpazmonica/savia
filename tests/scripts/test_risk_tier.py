@@ -94,3 +94,24 @@ def test_scm_generado_no_eleva(rt):
 
 def test_scm_declaraciones_siguen_contando(rt):
     assert rt.classify([".scm/sam-authority-declarations.json"])["tier"] >= 3
+
+
+# SE-343 (revisión de seguridad de #1401, P1-1): la raíz de confianza del grant de
+# merge, su verificador y quien mergea con él son gobernanza → tier 4, solos o
+# mezclados con cambios de bajo riesgo. Antes: 3 (fail-closed), 2 y 3.
+GRANT_TRUST_FILES = ["config/operator-grant-" + "signers", "scripts/operator-grant.sh", "scripts/push-pr.sh"]
+
+
+@pytest.mark.parametrize("path", GRANT_TRUST_FILES)
+def test_raiz_de_confianza_del_grant_es_tier_4(rt, path):
+    assert rt.classify([path])["tier"] == 4
+    res = rt.classify(["docs/guide.md", path, "tests/test-x.bats"])
+    assert res["tier"] == 4
+    assert "gobernanza" in res["rationale"]
+
+
+def test_vecinos_del_grant_no_son_gobernanza(rt):
+    # Caso negativo: el nombre exacto, no uno parecido.
+    assert not rt.is_governance("docs/operator-grant-" + "signers-notes.md")
+    assert not rt.is_governance("scripts/operator-grant-helper.sh")
+    assert rt.classify(["scripts/operator-grant-helper.sh"])["tier"] == 2

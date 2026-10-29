@@ -5,6 +5,11 @@
 # (--draft kept for backward compat; it's a no-op since draft is now default.)
 set -euo pipefail
 cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+# Raíz del repo (los pasos F5 la usan; sin definir, `set -u` abortaba el --merge).
+ROOT="$PWD"
+# --merge (SE-343) no firma, no empuja ni toca el PR: mergea la cabeza ya
+# publicada y firmada con el grant que la operadora firmó para esa cabeza.
+# Flujo: push-pr.sh (firma + push + PR) → grant de pr:<n> → push-pr.sh --merge.
 
 TITLE="" BODY="" DRAFT=true MERGE=false SKIP_CL=false SKIP_CI=false FROM_PR_PLAN=false
 while [[ $# -gt 0 ]]; do
@@ -22,6 +27,19 @@ done
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]] && { echo "ERROR: On $BRANCH." >&2; exit 1; }
 
+REPO=$(git remote get-url origin | sed -E 's|.*github\.com[:/]||;s|\.git$||')
+# SE-343: gh actúa siempre sobre el repo de origin (para el que se firma el
+# grant), nunca sobre otro elegido por GH_REPO/GH_HOST: con GH_REPO=org/B un
+# grant de A#42 mergeaba B#42.
+unset GH_REPO GH_HOST
+TOKEN=$(git remote get-url origin | grep -oP 'ghp_[A-Za-z0-9]+' 2>/dev/null || true)
+if [[ -z "$TOKEN" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  USE_GH_CLI=true
+else USE_GH_CLI=false; fi
+
+# Pasos 0-6 (gate, CI, CHANGELOG, firma, push y PR): solo sin --merge. Con
+# --merge, firmar o empujar movería la cabeza que firmó la operadora (SE-343).
+if ! $MERGE; then
 # ── Step 0: pr-plan gate ──────────────────────────────────────────────────
 if ! $FROM_PR_PLAN && [[ ! -f ".pr-plan-ok" ]]; then
   echo "ERROR: /pr-plan not run. Run /pr-plan first or touch .pr-plan-ok to bypass." >&2; exit 1
@@ -34,11 +52,6 @@ if ! $FROM_PR_PLAN && [[ -f ".pr-plan-ok" ]]; then
   fi
 fi
 
-REPO=$(git remote get-url origin | sed -E 's|.*github\.com[:/]||;s|\.git$||')
-TOKEN=$(git remote get-url origin | grep -oP 'ghp_[A-Za-z0-9]+' 2>/dev/null || true)
-if [[ -z "$TOKEN" ]] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  USE_GH_CLI=true
-else USE_GH_CLI=false; fi
 
 # ── Steps 1-5: Validate → CI → CHANGELOG → Sign → Push ──────────────────
 _supervisor() { local d="$1"; bash scripts/session-action-log.sh log "push-pr" "$BRANCH" "fail" "$d" >/dev/null 2>&1 || true; bash scripts/execution-supervisor.sh "push-pr" "$BRANCH" "$d" 2>&1 || true; }
@@ -110,7 +123,7 @@ fi
 BODY_FILE=$(mktemp); echo "$BODY" > "$BODY_FILE"
 if $USE_GH_CLI; then
   # SE-300: detect existing PR; update instead of create
-  EXISTING_PR=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
+  EXISTING_PR=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || echo "")
   if [[ -n "$EXISTING_PR" ]]; then
     PR_URL="https://github.com/$REPO/pull/$EXISTING_PR"
     echo "  PR #$EXISTING_PR exists - updating body..."
@@ -160,15 +173,83 @@ except Exception as first_err:
 " 2>&1)
 fi
 rm -f "$BODY_FILE" "$PWD/.pr-summary.md"; echo "  $PR_URL"
+fi  # fin de los pasos 0-6 (sin --merge)
 
-# ── Auto-merge (--merge flag) ────────────────────────────────────────────
+# ── Merge (--merge): solo verifica y mergea; nunca firma ni empuja ───────
 MERGED=false
-if $MERGE && [[ "$PR_URL" == http* ]]; then
-  # SE-343: merge requires a valid operator grant (express request recorded).
-  if ! bash scripts/operator-grant.sh check --scope merge >/dev/null 2>&1; then
-    echo "ERROR: merge requires a vigente operator grant." >&2
-    echo "  El permiso expreso debe registrarse antes (operator-grant.sh grant --scope merge)." >&2
-    echo "  Sin autorizacion registrada, el PR queda en Draft y no se mergea." >&2
+if $MERGE; then
+  echo "=== Merge (SE-343): rama publicada, firmada y con grant ==="
+  merge_prep_fail() {
+    echo "ERROR: $1" >&2
+    echo "  --merge no firma ni empuja: prepara antes la rama con push-pr.sh (sin --merge)," >&2
+    echo "  pide el grant de pr:<n> para la cabeza publicada (operator-grant.sh grant --scope merge" >&2
+    echo "  --resource pr:<n> --context \"...\"), que la operadora lo firme, y ejecuta push-pr.sh --merge." >&2
+    exit 1
+  }
+  # Modo de test de operator-grant (gh simulado): nunca un merge real.
+  if [[ "${SAVIA_GRANT_TEST_MODE:-}" == "1" || -n "${SAVIA_GH_BIN:-}" ]]; then
+    echo "ERROR: SAVIA_GRANT_TEST_MODE/SAVIA_GH_BIN son solo para pruebas; push-pr.sh --merge no mergea con ellos." >&2
+    exit 1
+  fi
+  # check del grant lee la cabeza del PR con gh: sin gh no hay merge posible.
+  $USE_GH_CLI || merge_prep_fail "--merge necesita gh autenticado."
+  [[ -z "$(git status --porcelain --untracked-files=no 2>/dev/null)" ]] \
+    || merge_prep_fail "hay cambios sin commitear; no se mergea."
+  LOCAL_HEAD=$(git rev-parse HEAD)
+  REMOTE_HEAD=$(git ls-remote origin "refs/heads/$BRANCH" 2>/dev/null | cut -f1 | head -1 || true)
+  [[ "$REMOTE_HEAD" == "$LOCAL_HEAD" ]] \
+    || merge_prep_fail "la cabeza local $LOCAL_HEAD no es la publicada en origin/$BRANCH (${REMOTE_HEAD:-ninguna})."
+  bash scripts/confidentiality-sign.sh verify >/dev/null 2>&1 \
+    || merge_prep_fail "la firma de confidencialidad no cubre la cabeza $LOCAL_HEAD."
+  PR_NUM=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
+  [[ "$PR_NUM" =~ ^[0-9]+$ ]] || merge_prep_fail "no hay un PR abierto para $BRANCH."
+  echo "  PR #$PR_NUM, cabeza $LOCAL_HEAD."
+  # SE-343 (revisión de seguridad de #1401, P1-1): un PR que cambia la raíz de
+  # confianza del grant no se mergea nunca con --merge, traiga el grant que
+  # traiga: lo mergea la operadora a mano. Dos fuentes, y basta una: el diff local
+  # contra origin/main y los ficheros que GitHub lista para el PR. Si alguna no
+  # se puede leer, no hay merge (fail-closed).
+  SIGNERS_REL="config/operator-grant-signers"
+  signers_rc=0
+  git diff --quiet origin/main...HEAD -- "$SIGNERS_REL" 2>/dev/null || signers_rc=$?
+  if ! PR_FILES=$(gh pr view "$PR_NUM" -R "$REPO" --json files -q '.files[].path' 2>/dev/null); then
+    echo "ERROR: no se pudo leer de GitHub la lista de ficheros del PR #$PR_NUM; no se mergea." >&2
+    exit 1
+  fi
+  if (( signers_rc != 0 )) || grep -qxF "$SIGNERS_REL" <<<"$PR_FILES"; then
+    if (( signers_rc > 1 )); then
+      echo "ERROR: no se pudo comparar $SIGNERS_REL con origin/main (git diff exit $signers_rc); no se mergea." >&2
+    else
+      echo "ERROR: el PR #$PR_NUM modifica $SIGNERS_REL, la raíz de confianza del grant de merge." >&2
+    fi
+    echo "  Un PR que cambia los firmantes no se mergea con --merge: lo mergea la operadora a mano." >&2
+    exit 1
+  fi
+  # SE-343: merge requires a valid operator grant signed for THIS PR.
+  GRANT_RES="pr:$PR_NUM"
+  # check --print-head devuelve el head_sha que firmó la operadora. Ese valor
+  # (no la cabeza local) es el que se pasa a GitHub (--match-head-commit / sha):
+  # GitHub rechaza el merge si la cabeza del PR no es la firmada, aunque la
+  # comprobación local se hubiera falseado.
+  SIGNED_HEAD=""
+  grant_ok() {
+    local h
+    h="$(bash scripts/operator-grant.sh check --scope merge --resource "$GRANT_RES" --print-head 2>/dev/null)" || return 1
+    [[ "$h" =~ ^[0-9a-f]{40}$ ]] || return 1
+    # La segunda comprobación debe ver el mismo grant que la primera.
+    [[ -z "$SIGNED_HEAD" || "$h" == "$SIGNED_HEAD" ]] || return 1
+    SIGNED_HEAD="$h"
+  }
+  if ! grant_ok; then
+    echo "ERROR: merge requires a vigente operator grant for $GRANT_RES." >&2
+    echo "  El grant se firma para un PR que ya existe: pide la firma para $GRANT_RES" >&2
+    echo "  (operator-grant.sh grant --scope merge --resource $GRANT_RES --context \"...\"), la operadora" >&2
+    echo "  la firma y se vuelve a ejecutar push-pr.sh --merge. Sin grant, el PR queda en Draft." >&2
+    exit 1
+  fi
+  if [[ "$SIGNED_HEAD" != "$LOCAL_HEAD" ]]; then
+    echo "ERROR: el grant de $GRANT_RES firma la cabeza $SIGNED_HEAD, no la actual $LOCAL_HEAD; no se mergea." >&2
+    echo "  Pide un grant nuevo para la cabeza actual." >&2
     exit 1
   fi
   echo "  operator grant 'merge' vigente. Merge autorizado."
@@ -184,34 +265,30 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
       exit 1
     fi
     echo "  risk-tier: $RISK_TIER (auto-merge permitido)."
+  fi
   # SE-387 C/F5 — reservation SOLO tras pasar grant y risk-tier:
   # una operación correctamente rechazada nunca deja reservation "reserved".
-  PR_NUM_RES="${PR_URL##*/}"
-  if [[ -z "$PR_NUM_RES" ]]; then echo "ERROR F5: sin número de PR — fail-explicit" >&2; exit 1; fi
+  PR_NUM_RES="$PR_NUM"
   # Mismo directorio que f5-state.sh (SAVIA_RESERVATIONS); f5-state lo crea.
   RES_DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"
   bash "$ROOT/scripts/f5-state.sh" reserve pr.merge "$PR_NUM_RES" || exit 3
   echo "F5 reservation: pr.merge/$PR_NUM_RES"
+  # SE-343: merge inmediato, nunca `gh pr merge --auto`. Un auto-merge
+  # programado se ejecutaría al ponerse verde el CI aunque el grant se hubiera
+  # revocado o caducado entretanto. El grant se vuelve a comprobar justo antes.
+  grant_ok || { echo "ERROR: el grant de $GRANT_RES ya no es vigente (revocado o caducado); no se mergea." >&2; exit 1; }
+  echo "  Merging..."
+  if ! gh pr merge "$PR_NUM" -R "$REPO" --squash --match-head-commit "$SIGNED_HEAD" 2>&1 | tail -1; then
+    echo "ERROR: el PR #$PR_NUM no se puede mergear ahora (CI pendiente o rojo, conflictos o reglas)." >&2
+    echo "  El grant de $GRANT_RES no se ha gastado: vuelve a ejecutar push-pr.sh --merge con el CI en verde." >&2
+    exit 1
   fi
-  PR_NUM=$(echo "$PR_URL" | grep -oP '[0-9]+$')
-  if $USE_GH_CLI; then
-    echo "  Enabling auto-merge..."; gh pr merge "$PR_NUM" --squash --auto 2>&1 | tail -1
-    # SE-387 C/F5: merge SOLICITADO != efecto consumado; el close ocurrirá
-    # cuando el estado real sea MERGED (retry permite completar desde submitted)
-    bash "$ROOT/scripts/f5-state.sh" mark_submitted pr.merge "$PR_NUM"
-  elif [[ -n "$TOKEN" ]]; then
-    echo "  Waiting for CI..."; SHA=$(git rev-parse HEAD)
-    for i in $(seq 1 12); do sleep 10
-      R=$(curl -s "https://api.github.com/repos/$REPO/commits/$SHA/check-runs" -H "Authorization: token $TOKEN" \
-        | python3 -c "import sys,json;d=json.load(sys.stdin);p=[r for r in d.get('check_runs',[]) if r['status']!='completed'];f=[r for r in d.get('check_runs',[]) if r.get('conclusion') not in ('success','skipped',None) and r['status']=='completed'];print('GREEN' if not p and not f and d.get('total_count',0)>0 else 'FAIL' if f else 'WAIT')")
-      [[ "$R" == "GREEN" ]] && break; [[ "$R" == "FAIL" ]] && { echo "  CI failed."; exit 1; }
-      echo "  ... ($((i*10))s)"
-    done
-    [[ "$R" == "GREEN" ]] && curl -s -X PUT "https://api.github.com/repos/$REPO/pulls/$PR_NUM/merge" \
-      -H "Authorization: token $TOKEN" -d "{\"merge_method\":\"squash\",\"commit_title\":\"$TITLE\"}" \
-      | python3 -c "import sys,json;d=json.load(sys.stdin);print('  Merged.' if 'sha' in d else f'  Merge: {d}')" \
-      || echo "  CI timeout. Merge manually."
-  fi
+  # SE-387 C/F5: merge SOLICITADO != efecto consumado; el close ocurrirá
+  # cuando el estado real sea MERGED (retry permite completar desde submitted)
+  bash "$ROOT/scripts/f5-state.sh" mark_submitted pr.merge "$PR_NUM"
+  # Check if merge completed (for release step)
+  PR_STATE=$(gh pr view "$PR_NUM" -R "$REPO" --json state -q .state 2>/dev/null || echo "")
+  [[ "$PR_STATE" == "MERGED" ]] && MERGED=true
   # F5: cerrar reservation solo tras merge real; en fallo queda "reserved"
   # (crash-safe: retry tras crash permite completar; retry tras close => ALREADY_EXECUTED)
   if [[ "$MERGED" == "true" ]]; then
@@ -219,20 +296,27 @@ if $MERGE && [[ "$PR_URL" == http* ]]; then
   elif [[ -f "$RES_DIR/pr.merge__${PR_NUM_RES}.json" ]]; then
     echo "F5 PENDING/SUBMITTED: merge solicitado sin efecto consumado — reservation NO se cierra"
   fi
-
-  # Check if merge completed (for release step)
-  if $USE_GH_CLI; then
-    PR_STATE=$(gh pr view "$PR_NUM" --json state -q .state 2>/dev/null || echo "")
-    [[ "$PR_STATE" == "MERGED" ]] && MERGED=true
-  fi
-  # SE-343: consume the merge grant after a successful merge (one-shot).
+  # SE-343: consume the merge grant after a successful merge (one-shot; id spent).
+  # Si consume falla (grant caducado entre medias, ledger no escribible), se
+  # revoca: revoke apunta el id aunque ya no valide. Nunca se informa de un
+  # consumo que no ocurrió.
   if $MERGED; then
-    bash scripts/operator-grant.sh revoke --scope merge >/dev/null 2>&1 || true
-    echo "  Merge grant consumed (one-shot)."
+    if bash scripts/operator-grant.sh consume --scope merge --resource "$GRANT_RES" >/dev/null 2>&1; then
+      echo "  Merge grant consumed (one-shot)."
+    elif bash scripts/operator-grant.sh revoke --scope merge >/dev/null 2>&1; then
+      echo "WARNING: merge hecho, pero el grant de $GRANT_RES no se pudo consumir; revocado en su lugar." >&2
+    else
+      echo "WARNING: merge hecho, pero el grant de $GRANT_RES NO se pudo gastar ni revocar." >&2
+      echo "  Revócalo a mano: bash scripts/operator-grant.sh revoke --scope merge" >&2
+    fi
+  else
+    # Merge pedido pero aún no consumado (p. ej. reglas de la rama): el grant no
+    # se gasta aquí; sigue ligado a este repo y PR hasta caducar (TTL 6 h).
+    echo "  Merge no confirmado todavía: el grant de $GRANT_RES no se ha gastado (caduca solo)."
   fi
 fi
 
-# ── Step 7: Release update (only after successful merge with gh CLI) ────
+# ── Step 7: Release update (only after a confirmed merge) ───────────────
 if $MERGED && command -v gh >/dev/null 2>&1; then
   echo -e "\n=== Step 7: Release ==="
   VERSION=$(grep -oP '## \[\K[0-9.]+' CHANGELOG.md | head -1)

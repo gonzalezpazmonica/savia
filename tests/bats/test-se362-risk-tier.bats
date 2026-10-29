@@ -23,7 +23,8 @@ assert d['requires_human'] is False
 }
 
 @test "scripts con push/merge → tier 3, requiere humano" {
-  run python3 "$TIER" --diff "scripts/push-pr.sh" --json
+  # push-pr.sh ya no sirve de ejemplo: es gobernanza (tier 4, SE-343).
+  run python3 "$TIER" --diff "scripts/git-push-helper.sh" --json
   [[ "$status" -eq 0 ]]
   echo "$output" | python3 -c "
 import sys, json
@@ -31,6 +32,18 @@ d = json.load(sys.stdin)
 assert d['tier'] == 3, f'tier={d[\"tier\"]}'
 assert d['requires_human'] is True
 "
+}
+
+@test "SE-343: push-pr.sh y operator-grant.sh (mergean y verifican el grant) → tier 4" {
+  for f in scripts/push-pr.sh scripts/operator-grant.sh; do
+    run python3 "$TIER" --diff "$f" --json
+    [[ "$status" -eq 0 ]]
+    echo "$output" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+assert d['tier'] == 4, f'tier={d[\"tier\"]}'
+"
+  done
 }
 
 @test "infra → tier 4" {

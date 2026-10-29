@@ -36,6 +36,9 @@ TIER_4_PATHS = (
 GOVERNANCE_EXACT = (
     "scripts/merge-sprint.sh", "scripts/risk-tier.py",
     "docs/rules/domain/savia-ethical-principles.md", "docs/rules/domain/radical-honesty.md",
+    # SE-343: raíz de confianza del grant de merge y quien lo verifica y lo usa.
+    # Un PR que los cambie no se mergea sin la operadora (merge-sprint excluye tier 4).
+    "config/operator-grant-signers", "scripts/operator-grant.sh", "scripts/push-pr.sh",
 )
 GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/")
 

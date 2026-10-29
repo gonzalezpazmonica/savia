@@ -14,11 +14,11 @@ lang: it
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**567 comandi · 90 agenti · 139 skills · 133 hook**
+**567 comandi · 90 agenti · 139 skills · 134 hook**
 
 ## Workspace di sviluppo multi-agente
 
-**567 comandi · 90 agenti · 139 skill · 133 hook · 16 linguaggi · 283+ suite di test**
+**567 comandi · 90 agenti · 139 skill · 134 hook · 16 linguaggi · 283+ suite di test**
 
 Sistema agentico sovrano per governare ed eseguire lavoro con IA, indipendente da modello, fornitore e frontend, con criterio umano by design. Integra agenti, memoria, sicurezza, policy eseguibili, tracciabilità e domini specializzati. Opera in locale con sovranità dei dati e dell'inferenza, in 9 lingue.
 

@@ -36,6 +36,55 @@ created_at: 2026-08-24
 > **Enmienda propuesta (SE-433, D7, 2026-10-04):** el grant `merge` se unificará con el modelo de
 > autorización de merge-sprint, que registra la pregunta y la respuesta literales de la operadora, la
 > sesión y el hash. Un grant sin ese registro dejará de bastar para `push-pr.sh --merge`. Ver `docs/specs/SE-433-merge-sprint.spec.md` §2.11. Pendiente de spec propia.
+>
+> **Arreglo P1 (2026-10-26/27, decisiones de la operadora):** `grant --scope merge` ya no se emite sin
+> ella. Savia solo deja una petición canónica; la operadora la firma con su clave ed25519 privada (móvil
+> o Savia Space, nunca en el equipo de los agentes) y `check` verifica la firma con `ssh-keygen -Y verify`
+> contra la clave pública versionada en `config/operator-grant-signers`. Sustituye al HMAC con clave
+> local de la primera versión de la PR #1401. Detalle y alta de la clave:
+> `docs/rules/domain/autonomous-safety-merge-grant.md`.
+>
+> **Registro del hook:** hecho en `.claude/settings.json` (`hooks.PreToolUse`, matcher
+> `Bash|Edit|Write|MultiEdit|NotebookEdit`, orden `"$CLAUDE_PROJECT_DIR"/scripts/operator-grant.sh guard`).
+>
+> **Fase 0 (2026-10-27, revisión de #1401):** el grant de merge lleva id aleatorio, `grantor`
+> (principal), `scope`, `resource` (`pr:<n>` o `task:<id>`) y vigencia, todo firmado. `check --scope
+> merge --resource R` verifica cada campo en el punto de uso; `consume` (tras el merge) y `revoke`
+> apuntan el id en `merge.spent` y `check` rechaza las copias (replay). Sin `--resource`, sin clave
+> pública o sin `ssh-keygen`: no hay PASS. Una firma prueba el uso de una clave, no la presencia
+> humana: esa garantía la da la ceremonia (la clave privada vive solo en el móvil de la operadora).
+>
+> **Tercera revisión (2026-10-28, #1401):** lo firmado incluye también `head_sha` (la cabeza del PR,
+> `headRefOid`, al pedir el grant). `check` la compara con la cabeza actual del PR y falla cerrado si
+> difiere o no se puede leer; el merge usa `gh pr merge --match-head-commit <sha>` (REST `sha`) y
+> `push-pr.sh --merge` no mergea en la misma ejecución en que un push movió la cabeza: tras un push
+> hace falta un grant nuevo.
+>
+> **Cuarta revisión (2026-10-28, #1401):** el `<sha>` de `--match-head-commit` (REST `sha`) es el
+> `head_sha` **firmado** (`check --print-head`), no la cabeza local; `push-pr.sh` exige además que
+> coincida con la local. `SAVIA_GH_BIN` solo vale con `SAVIA_GRANT_TEST_MODE=1`, que `push-pr.sh
+> --merge` rechaza; fuera de ese modo `check` falla cerrado.
+>
+> **Quinta revisión (2026-10-28, #1401):** `push-pr.sh --merge` ya no firma, no empuja ni crea o
+> edita el PR: con el firmador real cada firma creaba un commit y el merge no llegaba nunca. Exige
+> árbol limpio, cabeza local = publicada, `confidentiality-sign.sh verify` y un PR abierto de la rama;
+> el grant firma esa cabeza. Flujo: `push-pr.sh` → grant de `pr:<n>` → `push-pr.sh --merge`. La rama
+> REST del merge (sin `gh`) se retira: `check` ya necesitaba `gh`.
+
+> **Segunda revisión (2026-10-27, #1401):** lo firmado incluye también `repo` (remoto `origin`
+> normalizado, `host/owner/name`): un grant de A#41 no vale en otro checkout B#41, y sin remoto
+> identificable no se pide ni pasa. `revoke` apunta también el id de la petición pendiente (una copia
+> firmada antes de revocar ya no se incorpora). El verificador corre con `python3 -I` y un PATH fijo de
+> sistema. El guard resuelve comillas ANSI-C, `$"…"`, continuaciones y escapes de printf, y cualquier
+> error suyo sale con 2. Los ejemplos de §2.2 y §2.4 sin `--resource` son el diseño original: hoy
+> `check --scope merge` exige `--resource pr:<n>|task:<id>` (sin él, exit 2).
+>
+> **Tercera revisión (2026-10-28, #1401):** el guard expande secuencias de llaves (`{a..z}`) y
+> resuelve rutas también desde los destinos de `cd`/`pushd`/`-C`. `python3` y `git` se invocan por
+> ruta absoluta (una función exportada no los sustituye). `push-pr.sh --merge` ya no usa
+> `gh pr merge --auto`: merge inmediato con el grant comprobado justo antes, `gh -R` del repo de
+> `origin` sin `GH_REPO`, y el número del PR se extrae del URL estructurado. El §2.4 de abajo
+> («antes de habilitar auto-merge») es el diseño original.
 
 ## 1. Origen y problema
 
@@ -112,7 +161,7 @@ bash scripts/operator-grant.sh grant --scope merge \
 
 # Verificar (determinista, sin LLM)
 bash scripts/operator-grant.sh check --scope autonomy:overnight-sprint   # exit 0|1
-bash scripts/operator-grant.sh check --scope merge                        # exit 0|1
+bash scripts/operator-grant.sh check --scope merge --resource pr:1007     # exit 0|1 (sin --resource: 2)
 
 # Listar / revocar
 bash scripts/operator-grant.sh list
