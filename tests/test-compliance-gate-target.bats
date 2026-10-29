@@ -94,12 +94,35 @@ setup() {
   [[ "$output" == *"Commit bloqueado"*"$B"* ]]
 }
 
-@test "la palabra cd en prosa antes del commit no cambia el objetivo" {
+@test "la palabra cd en prosa antes del commit: cd que no se sigue, bloquea por lista blanca (revisión 3)" {
   mkrepo "$A" violation
   gate "$A" "echo 'usa cd nope y luego' ; git commit -m x"
   [ "$status" -eq 2 ]
-  [[ "$output" == *"Commit bloqueado"* ]]
-  [[ "$output" != *"no se puede determinar"* ]]
+  [[ "$output" == *"no se puede determinar"* ]]
+}
+
+@test "lista blanca de cd: cd tras {, then, do o ! bloquea en vez de evaluar otro repo" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  for c in "{ cd $B; git commit -m x; }" "if true; then cd $B; git commit -m x; fi" "for i in 1; do cd $B; git commit -m x; done" "! cd $B; git commit -m x"; do
+    gate "$A" "$c"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"no se puede determinar"* ]]
+  done
+}
+
+@test "orden anidada: bash -c, sh -c y eval con cd y commit dentro bloquean" {
+  mkrepo "$A" clean; mkrepo "$B" violation
+  for c in "bash -c 'cd $B && git commit -m x'" "sh -c \"cd $B; git commit -m x\"" "eval \"cd $B && git commit -m x\""; do
+    gate "$A" "$c"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"no se puede determinar"* ]]
+  done
+}
+
+@test "la forma estándar cd \"/ruta\" && git commit sigue evaluando el repo objetivo" {
+  mkrepo "$A" violation; mkrepo "$B" clean
+  gate "$A" "cd \"$B\" && git commit -m \"mensaje con cd dentro\""
+  [ "$status" -eq 0 ]
 }
 
 @test "sin objetivo resoluble: ruta con variable bloquea" {

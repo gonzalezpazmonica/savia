@@ -140,8 +140,18 @@ hook_git_targets() {
     if [[ "$consumed$m" == *GIT_DIR=* || "$consumed$m" == *GIT_WORK_TREE=* ]]; then
       HOOK_TARGET_REASON="GIT_DIR/GIT_WORK_TREE en la orden: el árbol de trabajo no se determina"; return 1
     fi
+    # Órdenes anidadas (bash -c, sh -c, eval): su contenido no se analiza, así que no se puede saber
+    # en qué directorio corre el commit.
+    if [[ "$cmd" =~ (^|[^[:alnum:]_])((ba|z|da)?sh[[:space:]]+(-[[:alpha:]]*[[:space:]]+)*-[[:alpha:]]*c|eval)([[:space:]]|$) ]]; then
+      HOOK_TARGET_REASON="orden anidada (sh -c / eval): el directorio del commit no se determina"; return 1
+    fi
+    # Lista blanca de cd: cada palabra «cd» previa tiene que ser un cd simple que el análisis sigue
+    # (inicio de orden tras ; & | o salto de línea). Un cd tras {, then, do, !… no se enumera: bloquea.
+    local cd_words cd_seen=0
+    cd_words=$(grep -oE '(^|[^[:alnum:]_./-])cd([[:space:]]|$)' <<<"$consumed" | wc -l)
     local p="$consumed" before q1 q2
     while [[ "$p" =~ $re_cd ]]; do
+      cd_seen=$((cd_seen + 1))
       if [[ "${BASH_REMATCH[1]}" == *'('* || "${BASH_REMATCH[1]}" == *'`'* ]]; then
         HOOK_TARGET_REASON="cd dentro de un subshell: no cambia el directorio del commit"; return 1
       fi
@@ -156,6 +166,9 @@ hook_git_targets() {
       cwd="$_HOOK_RESOLVED"
       p="${p#*"${BASH_REMATCH[0]}"}"
     done
+    if (( cd_words > cd_seen )); then
+      HOOK_TARGET_REASON="hay un cd que el análisis no sigue (tras {, then, do, !…): usa cd \"/ruta\" && git commit"; return 1
+    fi
     if [[ "$m" == *--git-dir* || "$m" == *--work-tree* ]]; then
       HOOK_TARGET_REASON="--git-dir/--work-tree: el árbol de trabajo no se determina"; return 1
     fi
