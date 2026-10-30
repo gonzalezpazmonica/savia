@@ -137,7 +137,7 @@ sandbox_apply() {
   plan_check "$FX/alumna.json" "'my-learning' in p['commands'] and 'school-setup' not in p['commands'] and p['vertical']['status']=='none'"
 }
 
-@test "AC-2 médica: vertical de salud marcada como categoría especial y confidencialidad máxima" {
+@test "AC-2 médica: vertical de salud marcada como categoría especial; la confidencialidad la elige ella" {
   [ "$(caps_of "$FX/medica.json")" = "knowledge,research,tone,vertical" ]
   plan_check "$FX/medica.json" "p['vertical']['id']=='healthcare' and [s['capability'] for s in p['sensitivity']['special_categories']]==['vertical']"
   plan_check "$FX/medica.json" "{'file':'preferences.md','key':'knowledge_confidentiality','value':'confidential','action':'create'} in p['writes']"
@@ -222,6 +222,50 @@ json.dump(d, open('$TMP/in.json','w'))"
   echo "$output" | python3 -c "import json,sys; p=json.load(sys.stdin); sys.exit(0 if p['applied'] and p['diagnostics']==[{'id':'azure-pat','ok':False,'description':'Token de Azure DevOps en ~/.azure/devops-pat'}] else 1)"
 }
 
+@test "AC-4 negativo [block]: una pregunta sin responder ni saltar impide aplicar" {
+  python3 -c "
+import json; d=json.load(open('$FX/pm.json')); del d['answers']['project-management']['cadence']
+json.dump(d, open('$TMP/in.json','w'))"
+  plan_check "$TMP/in.json" "p['status']=='pending_questions' and p['pending']==[{'capability':'project-management','ask':'cadence'}]"
+  run sandbox_apply --input "$TMP/in.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
+  [ "$status" -eq 5 ]
+  [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm" ]
+}
+
+@test "AC-4: una pregunta saltada se aplica sin configurar esa parte" {
+  python3 -c "
+import json; d=json.load(open('$FX/pm.json')); del d['answers']['project-management']['cadence']; d['skipped']=['project-management.cadence']
+json.dump(d, open('$TMP/in.json','w'))"
+  run sandbox_apply --input "$TMP/in.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
+  [ "$status" -eq 0 ]
+  [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm/workflow.md" ]
+  grep -qx 'tracking_extra: "savia-flow"' "$SANDBOX/.claude/profiles/users/fx-pm/tools.md"
+}
+
+@test "AC-4 negativo [empty]: una multiselección vacía es inválida, no un salto silencioso" {
+  python3 -c "
+import json; d=json.load(open('$FX/programador.json')); d['answers']['sdd-development']['languages']=[]
+json.dump(d, open('$TMP/in.json','w'))"
+  plan_check "$TMP/in.json" "p['status']=='invalid_answers' and 'sdd-development.languages: elige al menos una opción o sáltala' in p['invalid_answers']"
+}
+
+@test "AC-4 negativo [invalid]: un input mal formado sale con código 2 y mensaje, sin traza" {
+  printf '{"name":"X","slug":"fx-x","answers":{"tone":"direct"},"proposed":[{"id":3}]}' > "$TMP/in.json"
+  run python3 "$ENGINE" plan --input "$TMP/in.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"answers.tone debe ser un objeto"* ]]
+  [[ "$output" == *"proposed[0] debe ser un objeto con 'id' de texto"* ]]
+  [[ "$output" != *"Traceback"* ]]
+}
+
+@test "AC-2: el nivel de sensibilidad del plan sale del catálogo, no de un valor fijo" {
+  sed 's/level: N3, special_category: false, why: "Si hay alumnado/level: N4, special_category: false, why: "Si hay alumnado/' "$CATALOG" > "$TMP/cat.yaml"
+  run python3 "$ENGINE" plan --catalog "$TMP/cat.yaml" --input "$FX/profesor.json"
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin)['sensitivity']['level']=='N4' else 1)"
+  plan_check "$FX/pm.json" "p['sensitivity']['level']=='N3'"
+}
+
 # ── AC-5: reentrada, solo cambios propuestos ────────────────────────────────
 
 @test "AC-5: un perfil existente solo recibe cambios y no se sobrescribe sin confirmar la clave" {
@@ -245,6 +289,16 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ "$status" -eq 0 ]
   grep -qx 'alert_style: "direct"' "$dir/tone.md"
   grep -qx 'Nota propia de la persona.' "$dir/tone.md"
+}
+
+@test "AC-5: un valor puesto a mano igual al de la plantilla también exige confirmar su clave" {
+  dir="$SANDBOX/.claude/profiles/users/fx-programador"
+  sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm >/dev/null
+  sed -i 's/^reviews_agent_code: .*/reviews_agent_code: false/' "$dir/workflow.md"
+  run sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "import json,sys; p=json.load(sys.stdin); sys.exit(0 if p['skipped_overwrites']==['workflow.md:reviews_agent_code'] else 1)"
+  grep -qx 'reviews_agent_code: false' "$dir/workflow.md"
 }
 
 @test "AC-5 límite [zero]: repetir el mismo onboarding no propone ningún cambio" {
@@ -286,6 +340,30 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm" ]
 }
 
+@test "AC-6 negativo [reject]: un fichero del perfil que es enlace a algo versionado no se sigue" {
+  printf 'versionado\n' > "$SANDBOX/README.md"
+  git -C "$SANDBOX" add README.md
+  git -C "$SANDBOX" -c user.email=t@example.com -c user.name=t commit -qm readme
+  mkdir -p "$SANDBOX/.claude/profiles/users/fx-pm"
+  ln -s ../../../../README.md "$SANDBOX/.claude/profiles/users/fx-pm/tone.md"
+  run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"tone.md es un enlace"* ]]
+  [ "$(cat "$SANDBOX/README.md")" = "versionado" ]
+  [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm/identity.md" ]
+}
+
+@test "AC-5 negativo [invalid]: un fichero existente sin frontmatter aborta sin escrituras parciales" {
+  dir="$SANDBOX/.claude/profiles/users/fx-pm"
+  mkdir -p "$dir"
+  printf 'texto libre sin cabecera\n' > "$dir/tone.md"
+  run sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"tone.md existe sin frontmatter"* ]]
+  [ ! -e "$dir/identity.md" ]
+  [ "$(cat "$dir/tone.md")" = "texto libre sin cabecera" ]
+}
+
 @test "AC-6 negativo [reject]: el slug del plan debe coincidir con el directorio" {
   run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-otra" --confirm
   [ "$status" -eq 4 ]
@@ -313,9 +391,26 @@ json.dump(d, open('$TMP/in.json','w'))"
   [[ "$output" == *"contiene emojis"* ]]
 }
 
+@test "AC-7: con --fallback y sin marcador, presentación mínima sin inventar identidad" {
+  printf '# Savia\n\nSin marcador.\n' > "$TMP/savia.md"
+  run python3 "$ENGINE" present --source "$TMP/savia.md" --fallback
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == "AVISO ERROR "*"sin marcador <!-- identity:short -->"*"; presentación mínima" ]]
+  [ "${lines[1]}" = "Soy Savia." ]
+  [ "${lines[2]}" = "¿A qué te dedicas y qué quieres conseguir con Savia?" ]
+}
+
+@test "AC-7 negativo [missing]: --fallback nunca muestra una frase con emojis" {
+  printf '<!-- identity:short -->\nFrase con buho \xf0\x9f\xa6\x89\n' > "$TMP/savia.md"
+  run python3 "$ENGINE" present --source "$TMP/savia.md" --fallback
+  [ "$status" -eq 0 ]
+  [ "${lines[1]}" = "Soy Savia." ]
+  [[ "$output" != *"buho"* ]]
+}
+
 @test "AC-7: las superficies del onboarding no tienen emojis ni copia propia de la identidad" {
   for f in .claude/commands/profile-setup.md .claude/commands/onboard.md docs/rules/domain/profile-onboarding.md; do
-    run grep -nP '[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}]' "$f"
+    LC_ALL=C.UTF-8 run grep -nP '[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}]' "$f"
     [ "$status" -eq 1 ]
     run grep -n "metaorquestadora" "$f"
     [ "$status" -eq 1 ]

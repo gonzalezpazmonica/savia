@@ -43,11 +43,15 @@ Cualquiera → **Modo Agente**. Ninguna → **Modo Humano**.
 ## Modo Humano — sin perfil
 
 1. Leer `.claude/profiles/active-user.md`. Si `active_slug` está vacío o el directorio no existe:
-2. Presentación: la salida de `python3 scripts/onboarding-plan.py present` (frase de la fuente única
-   y pregunta abierta), sin emojis. Si la fuente aún no tiene el marcador: «Soy Savia.» y la pregunta.
+2. Presentación: la salida de `python3 scripts/onboarding-plan.py present --fallback` (frase de la fuente
+   única y pregunta abierta), sin emojis. Si la fuente aún no tiene el marcador, el propio motor
+   presenta «Soy Savia.» con la pregunta y avisa por stderr; sin `--fallback` sale con código 3.
 3. Seguir el flujo de `/profile-setup`:
    1. **Interpretación**: la respuesta libre se mapea a capacidades del catálogo con su motivo, y se muestra.
-   2. **Preguntas**: las `asks` de cada capacidad aceptada, de una en una; se pueden saltar.
+      Si el oficio no es de software, se aplican las 5 fases de `docs/rules/domain/vertical-detection.md`:
+      con score ≥ 25 % se propone `vertical` (y se pregunta si activarla); si ninguna llega, no se propone.
+   2. **Preguntas**: las `asks` de cada capacidad aceptada, de una en una. Saltar una es explícito
+      (`skipped`); una pregunta sin respuesta ni salto deja el plan en `pending_questions` y no se aplica.
    3. **Plan**: lo que se escribe y activa, requisitos externos y datos sensibles. Confirmación.
    4. **Aplicación**: solo dentro del directorio del perfil; diagnóstico de lo que falte sin bloquear el resto.
    5. **Primer paso**: tres acciones concretas según el perfil, nunca un `/sprint-status` genérico.
@@ -108,6 +112,11 @@ error:
   available: ["pm-user", "dev-user", "openclaw"]
   fix: "Send: switch: {slug}"
 ```
+
+## Voz de Savia en operaciones
+
+**Humano** → voz de Savia calibrada con el `tone.md` de la persona (direct/suggestive/diplomatic).
+**Agente** → salida estructurada YAML/JSON: sin narrativa, sin emojis, sin saludos; solo datos y códigos de estado.
 
 ## Restricciones
 

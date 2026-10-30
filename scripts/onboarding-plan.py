@@ -14,9 +14,12 @@ Subcomandos:
   apply      aplica el plan: sin --confirm no escribe nada (simulación)
 
 Input (JSON): {"name", "slug"?, "role_text", "proposed": [{"id", "reason", "hints"?}],
-               "answers": {"<capacidad>": {"<pregunta>": "<opción>" | ["<opción>", ...]}}}
-Códigos de salida: 0 ok · 1 validación · 2 uso · 3 fuente de identidad · 4 destino no
-permitido · 5 plan no aplicable (faltan aclaraciones o hay respuestas inválidas).
+               "answers": {"<capacidad>": {"<pregunta>": "<opción>" | ["<opción>", ...]}},
+               "skipped": ["<capacidad>.<pregunta>", ...]}
+Una pregunta sin respuesta y sin saltar queda pendiente y el plan no se puede aplicar.
+Códigos de salida: 0 ok · 1 validación · 2 uso o input mal formado · 3 fuente de identidad ·
+4 destino no permitido · 5 plan no aplicable (aclaración, preguntas pendientes, respuestas
+inválidas o perfil existente sin frontmatter).
 """
 from __future__ import annotations
 
@@ -40,6 +43,7 @@ REQUIRED_CAPS = ("harness-orchestration", "research", "knowledge", "sdd-developm
                  "teaching-learning", "vertical", "professional-domain", "accessibility", "tone")
 FORBIDDEN_FIRST_STEPS = ("sprint-status",)
 MAX_BUTTONS = 4
+LEVELS = ("N1", "N2", "N3", "N4", "N4b")
 EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿⬀-⯿️]")
 
 
@@ -154,8 +158,11 @@ def frontmatter(text: str):
         return None, lines, -1
     for i in range(1, len(lines)):
         if lines[i].strip() == "---":
-            data = yaml.safe_load("\n".join(lines[1:i])) or {}
-            return data, lines, i
+            try:
+                data = yaml.safe_load("\n".join(lines[1:i])) or {}
+            except yaml.YAMLError:
+                return None, lines, -1
+            return (data, lines, i) if isinstance(data, dict) else (None, lines, -1)
     return None, lines, -1
 
 
@@ -195,21 +202,57 @@ def reference_errors(root: Path, cat) -> list[str]:
 
 
 # ── Presentación (frase de la fuente única SE-483) ───────────────────────────
+class IdentityError(Exception):
+    """La fuente única de identidad no da una frase utilizable (código 3)."""
+
+
 def identity_short(source: Path) -> str:
     try:
         text = source.read_text(encoding="utf-8")
     except OSError as exc:
-        fail(3, f"ERROR fuente de identidad ilegible: {exc}")
+        raise IdentityError(f"ERROR fuente de identidad ilegible: {exc}") from exc
     m = re.search(r"<!--\s*identity:short\s*-->(.*?)(?:<!--|\n\s*\n|\Z)", text, re.S)
     phrase = " ".join(l.strip().lstrip(">").strip() for l in (m.group(1) if m else "").strip().splitlines()).strip()
     if not phrase:
-        fail(3, f"ERROR {source}: sin marcador <!-- identity:short --> con texto (fuente única de SE-483)")
+        raise IdentityError(f"ERROR {source}: sin marcador <!-- identity:short --> con texto (fuente única de SE-483)")
     if EMOJI.search(phrase):
-        fail(3, "ERROR la frase de identidad contiene emojis")
+        raise IdentityError("ERROR la frase de identidad contiene emojis")
     return phrase
 
 
 # ── Plan ─────────────────────────────────────────────────────────────────────
+def input_errors(data) -> list[str]:
+    """Forma del input que produce el modelo; cualquier desviación es un error de uso (código 2)."""
+    if not isinstance(data, dict):
+        return ["el input debe ser un objeto JSON"]
+    errs = [f"'{k}' debe ser texto" for k in ("name", "slug", "role_text") if k in data and not isinstance(data[k], str)]
+    props = data.get("proposed", [])
+    if not isinstance(props, list):
+        errs.append("'proposed' debe ser una lista")
+    else:
+        for i, p in enumerate(props):
+            if not isinstance(p, dict) or not isinstance(p.get("id"), str):
+                errs.append(f"proposed[{i}] debe ser un objeto con 'id' de texto")
+            elif not isinstance(p.get("hints", {}), dict) or not all(
+                    isinstance(v, list) and all(isinstance(x, str) for x in v) for v in p.get("hints", {}).values()):
+                errs.append(f"proposed[{i}].hints debe ser un mapa pregunta → lista de opciones")
+    answers = data.get("answers", {})
+    if not isinstance(answers, dict):
+        errs.append("'answers' debe ser un objeto")
+    else:
+        for cid, per in answers.items():
+            if not isinstance(per, dict):
+                errs.append(f"answers.{cid} debe ser un objeto pregunta → respuesta")
+                continue
+            for aid, v in per.items():
+                if not (isinstance(v, str) or (isinstance(v, list) and all(isinstance(x, str) for x in v))):
+                    errs.append(f"answers.{cid}.{aid} debe ser texto o lista de textos")
+    skipped = data.get("skipped", [])
+    if not isinstance(skipped, list) or not all(isinstance(x, str) for x in skipped):
+        errs.append("'skipped' debe ser una lista de 'capacidad.pregunta'")
+    return errs
+
+
 def slugify(text: str) -> str:
     s = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
     return re.sub(r"[^a-z0-9]+", "-", s).strip("-")
@@ -251,9 +294,9 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
     name = str(data.get("name", "")).strip()
     slug = data.get("slug") or slugify(name)
     plan = {"status": "ready", "profile": {"name": name, "slug": slug, "role": str(data.get("role_text", "")).strip()},
-            "capabilities": accepted, "rejected": rejected, "pending": [], "invalid_answers": [],
+            "capabilities": accepted, "rejected": rejected, "pending": [], "skipped": [], "invalid_answers": [],
             "commands": [], "skills": [], "packs": [], "requires": [], "first_steps": [], "notes": [],
-            "sensitivity": {"level": "N3", "special_categories": []}, "vertical": {"status": "none", "message": cat["no_vertical_message"]}}
+            "sensitivity": {"level": "N1", "special_categories": []}, "vertical": {"status": "none", "message": cat["no_vertical_message"]}}
     if not real:
         plan["status"] = "needs_clarification"
         plan["clarify"] = {"question": cat["clarify_question"], "interview_skill": cat["interview_skill"],
@@ -266,16 +309,20 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
     if plan["profile"]["role"]:
         _merge_set(sets, "identity.md", "role", plan["profile"]["role"], "identidad", errors)
     _merge_set(sets, "preferences.md", "onboarding_capabilities", [a["id"] for a in accepted], "onboarding", errors)
-    answers, per_cap_steps = data.get("answers", {}), []
+    answers, skipped, per_cap_steps = data.get("answers", {}), set(data.get("skipped", [])), []
     for acc in accepted:
         cap = caps[acc["id"]]
         blocks, steps = [("capacidad", cap.get("configures", {}))], []
         for ask in cap["asks"]:
             raw = answers.get(cap["id"], {}).get(ask["id"])
             if raw is None:
-                plan["pending"].append({"capability": cap["id"], "ask": ask["id"]})
+                key = "skipped" if f"{cap['id']}.{ask['id']}" in skipped else "pending"
+                plan[key].append({"capability": cap["id"], "ask": ask["id"]})
                 continue
             raws = raw if isinstance(raw, list) else [raw]
+            if not raws:
+                plan["invalid_answers"].append(f"{cap['id']}.{ask['id']}: elige al menos una opción o sáltala")
+                continue
             if not ask["multi"] and len(raws) != 1:
                 plan["invalid_answers"].append(f"{cap['id']}.{ask['id']}: admite una sola opción")
                 continue
@@ -290,6 +337,7 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
                     plan["sensitivity"]["special_categories"].append({"capability": cap["id"], "why": opt["sensitive"]})
                 if cap["id"] == "vertical" and opt["id"] != "none":
                     plan["vertical"] = {"status": "selected", "id": opt["id"]}
+        plan["sensitivity"]["level"] = max(plan["sensitivity"]["level"], cap["sensitivity"]["level"], key=LEVELS.index)
         if cap["sensitivity"]["special_category"]:
             plan["sensitivity"]["special_categories"].append({"capability": cap["id"], "why": cap["sensitivity"].get("why", "")})
         for origin, conf in blocks:
@@ -308,6 +356,8 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
     plan["writes"], plan["unchanged"] = diff_writes(sets, root, cat, profile_dir)
     if plan["invalid_answers"] and plan["status"] == "ready":
         plan["status"] = "invalid_answers"
+    elif plan["pending"] and plan["status"] == "ready":
+        plan["status"] = "pending_questions"
     return plan
 
 
@@ -340,11 +390,13 @@ def diff_writes(sets, root: Path, cat, profile_dir: Path | None):
             if current is None:
                 action = "create"
             else:
+                # Un valor escrito en el fichero es de la persona aunque coincida con el de la plantilla:
+                # solo una clave ausente o vacía se considera hueco que se rellena sin pedir permiso.
                 have = current.get(key, default)
                 if have == value:
                     unchanged += 1
                     continue
-                action = "add" if have in (None, "", [], default) else "overwrite"
+                action = "add" if key not in current or current[key] in (None, "", []) else "overwrite"
             entry = {"file": fname, "key": key, "value": value, "action": action}
             if action == "overwrite":
                 entry["before"] = current.get(key)
@@ -388,6 +440,22 @@ def check_destination(root: Path, profile_dir: Path):
         fail(4, f"ERROR destino no ignorado por git: {target} (los perfiles nunca se versionan)")
 
 
+def check_files(root: Path, profile_dir: Path, files: list[str]):
+    """Antes de escribir nada: cada fichero queda dentro del perfil, no es un enlace, git lo ignora y,
+    si ya existe, tiene frontmatter. Un fallo aborta sin escrituras parciales."""
+    target = profile_dir.resolve()
+    for fname in files:
+        path = profile_dir / fname
+        if path.is_symlink() or path.resolve().parent != target:
+            fail(4, f"ERROR destino no permitido: {fname} es un enlace o sale del directorio del perfil")
+        probe = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", str(target / fname)],
+                               capture_output=True, check=False)
+        if probe.returncode != 0:
+            fail(4, f"ERROR destino no ignorado por git: {target / fname}")
+        if path.is_file() and frontmatter(path.read_text(encoding="utf-8"))[0] is None:
+            fail(5, f"ERROR {fname} existe sin frontmatter; no se toca")
+
+
 def run_checks(requires):
     out = []
     for r in requires:
@@ -408,10 +476,12 @@ def apply(cat, data, root: Path, profile_dir: Path, confirm: bool, overwrite: se
     plan["applied"], plan["diagnostics"] = False, run_checks(plan["requires"])
     todo = [w for w in plan["writes"] if w["action"] != "overwrite" or f"{w['file']}:{w['key']}" in overwrite]
     plan["skipped_overwrites"] = [f"{w['file']}:{w['key']}" for w in plan["writes"] if w not in todo]
+    files = sorted({w["file"] for w in todo})
+    check_files(root, profile_dir, files)
     if confirm:
         profile_dir.mkdir(parents=False, exist_ok=True)
         tpl_dir = root / cat["profile_template"]
-        for fname in sorted({w["file"] for w in todo}):
+        for fname in files:
             write_keys(profile_dir / fname, tpl_dir / fname, [w for w in todo if w["file"] == fname])
         plan["applied"], plan["written"] = True, [f"{w['file']}:{w['key']}" for w in todo]
     return plan
@@ -459,6 +529,8 @@ def main(argv=None) -> int:
     ap.add_argument("--catalog")
     ap.add_argument("--schema")
     ap.add_argument("--source", help="fuente de identidad (por defecto .claude/profiles/savia.md)")
+    ap.add_argument("--fallback", action="store_true",
+                    help="present: sin marcador en la fuente, «Soy Savia.» y aviso por stderr en vez de fallar")
     ap.add_argument("--input", help="fichero JSON con la interpretación y las respuestas")
     ap.add_argument("--profile-dir")
     ap.add_argument("--render", choices=["askuser", "text"], default="text")
@@ -476,7 +548,15 @@ def main(argv=None) -> int:
         print("\n".join(errs) if errs else "OK todas las referencias existen")
         return 1 if errs else 0
     if args.cmd == "present":
-        print(identity_short(Path(args.source) if args.source else root / IDENTITY_SOURCE) + "\n\n" + cat["open_question"])
+        source = Path(args.source) if args.source else root / IDENTITY_SOURCE
+        try:
+            phrase = identity_short(source)
+        except IdentityError as exc:
+            if not args.fallback:
+                fail(3, str(exc))
+            print(f"AVISO {exc}; presentación mínima", file=sys.stderr)
+            phrase = "Soy Savia."
+        print(phrase + "\n\n" + cat["open_question"])
         return 0
     if not args.input:
         fail(2, "ERROR falta --input")
@@ -484,6 +564,9 @@ def main(argv=None) -> int:
         data = json.loads(Path(args.input).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         fail(2, f"ERROR input ilegible: {exc}")
+    errs = input_errors(data)
+    if errs:
+        fail(2, "ERROR input mal formado:\n" + "\n".join(errs))
     profile_dir = Path(args.profile_dir) if args.profile_dir else None
     if args.cmd == "apply":
         if profile_dir is None:

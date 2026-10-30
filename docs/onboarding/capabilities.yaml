@@ -269,7 +269,7 @@ capabilities:
           - id: healthcare
             label: Salud
             featured: true
-            description: "Datos clínicos con confidencialidad máxima; nunca salen de tu máquina."
+            description: "Reglas del sector sanitario. Para datos clínicos, elige «Confidencial» en Conocimiento."
             sensitive: "Los datos de salud son categoría especial: solo se pregunta el sector, nunca datos de pacientes."
             configures:
               sets: {preferences.md: {vertical: healthcare}}
