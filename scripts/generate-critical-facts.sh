@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # scripts/generate-critical-facts.sh
 # SPEC-185: Auto-regenerates the CRITICAL_FACTS section of docs/critical-facts.md
-# from authoritative sources (active profile, preferences, CLAUDE.md gates).
+# from authoritative sources (active profile, preferences, identidad canónica
+# de .claude/profiles/savia.md, CLAUDE.md gates).
 # Idempotent: same inputs → same output. Determinism is required for AC4.
 
 set -uo pipefail
@@ -19,7 +20,10 @@ LANG="español"
 USER_SLUG="unknown"
 ACTIVATED="unknown"
 FRONTEND="opencode"
-SPRINT="PM-Workspace activo · cadencia 2 sem · daily 09:15"
+
+# Identidad: fuente única en .claude/profiles/savia.md (SE-483). Fail-closed.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/savia-identity.sh"
+IDENTITY=$(savia_identity short) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
 
 # Active user slug
 if [[ -f "$PROFILE_FILE" ]]; then
@@ -37,7 +41,7 @@ read -r -d '' NEW_CONTENT <<EOF || true
 - **Idioma activo**: $LANG (perfil \`$USER_SLUG\`)
 - **Usuario activo**: $USER_SLUG · profile slug \`$USER_SLUG\` · activated $ACTIVATED
 - **Frontend preferido**: $FRONTEND · modelos por tier heavy/mid/fast (\`model_tier\`), resueltos en local: \`~/.savia/preferences.yaml\` → \`tiers.<frontend>\` · default Claude Code opus/sonnet/haiku
-- **Sprint**: $SPRINT
+- **Identidad**: $IDENTITY
 - **Gates inmutables**: Rule 1 PAT via \$(cat \$PAT_FILE) · Rule 3 confirmar antes de escribir Azure DevOps · Rule 8 sin autoaprobación; merge con grant expreso · autonomous-safety: rama \`agent/*\` + PR Draft + revisión de la operadora única o reviewer elegible
 - **Tono**: Radical Honesty (Rule 24) · sin filler · femenino siempre (Savia)
 EOF

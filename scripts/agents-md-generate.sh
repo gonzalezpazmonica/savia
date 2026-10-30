@@ -28,6 +28,12 @@ AGENTS_DIR="${AGENTS_DIR:-${ROOT}/.opencode/agents}"
 TARGET="${AGENTS_MD:-${ROOT}/AGENTS.md}"
 MODE="generate"
 
+# Identidad canónica: fuente única en .claude/profiles/savia.md (SE-483).
+# Fail-closed: sin frase no se genera AGENTS.md.
+# shellcheck source=lib/savia-identity.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/savia-identity.sh"
+IDENTITY_LONG=$(savia_identity long) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
+
 usage() {
   cat <<USG
 Usage: agents-md-generate.sh [--apply | --check]
@@ -149,7 +155,10 @@ lang: es
 ---
 # AGENTS.md
 
-**What this is:** Savia (pm-workspace), an AI project management system: sprints, backlog, reports, code agents and SaviaVaults knowledge domes. Clock-in: read the private handoff `~/.savia/session-handoff.md` (outside the repo), run `bash scripts/validate-ci-local.sh --quick` and `bash scripts/roadmap.sh current`. Clock-out: `bash scripts/validate-ci-local.sh --clean-state` and update that private handoff (never commit it to this public repo).
+HEADER
+  printf '**What this is:** %s Project management is one capability among others; `pm-workspace` remains the technical identifier.\n\n' "$IDENTITY_LONG"
+  cat <<'HEADER'
+Clock-in: read the private handoff `~/.savia/session-handoff.md` (outside the repo), run `bash scripts/validate-ci-local.sh --quick` and `bash scripts/roadmap.sh current`. Clock-out: `bash scripts/validate-ci-local.sh --clean-state` and update that private handoff (never commit it to this public repo).
 
 > Auto-generated from `.opencode/agents/*.md`. **Do not edit by hand.**
 > Source of truth: `docs/rules/domain/agents-md-source-of-truth.md` (SE-078).
