@@ -221,13 +221,13 @@ export class A2AServer {
         }
       }
 
-      this.refreshRegistry();
       const clientIp = req.socket.remoteAddress || 'unknown';
       if (!this.limiter.allow(clientIp)) {
         res.writeHead(429);
         res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
         return;
       }
+      this.refreshRegistry();
 
       // Modo de la petición: secreto compartido (solo loopback), usuario (token personal) o público.
       const bearer = (req.headers.authorization ?? '').startsWith('Bearer ') ? (req.headers.authorization as string).slice(7).trim() : '';

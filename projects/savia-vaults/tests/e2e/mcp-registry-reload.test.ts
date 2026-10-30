@@ -65,7 +65,7 @@ describe('SE-480 MCP: registro en caliente', () => {
     const after = await status(c);
     expect(after.find(d => d.name === 'docs').enabled).toBe(true);
     expect(after.find(d => d.name === 'learn').enabled).toBe(false);
-    expect(after[0].registry).toMatchObject({ file: s.registry });
+    expect(after[0].registry).toMatchObject({ loadedAt: expect.any(String) });
     expect(after[0].registry.error).toBeUndefined();
   });
 
@@ -139,9 +139,10 @@ describe('SE-480 A2A: --rag-autosync', () => {
     s.write({ docs: s.entry('docs', { enabled: true }) });
     const port = await serve(s, [], { SAVIA_RAG_AUTOSYNC_DELAY_MS: '50' });
     const h = await until(() => health(port), v => v.status === 'ok');
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => setTimeout(r, 1500)); // 30× el retardo de arranque: un ciclo lento ya habría dejado rastro
     expect((await health(port)).autosync).toBeUndefined();
     expect(fs.existsSync(path.join(s.root, 'rag-home', 'docs'))).toBe(false);
+    expect(fs.existsSync(path.join(s.root, 'rag-home', 'autosync-state.json'))).toBe(false);
     expect(h.status).toBe('ok');
   });
 
@@ -149,7 +150,7 @@ describe('SE-480 A2A: --rag-autosync', () => {
     const s = setup();
     s.write({ docs: s.entry('docs', { enabled: true }) });
     const run = (...a: string[]) => spawnSync(process.execPath, ['--import', loader, cli, 'serve', '--domes', s.registry, ...a], { cwd: s.root, env: s.env, encoding: 'utf-8', timeout: 20_000 });
-    for (const args of [['--transport', 'a2a', '--rag-autosync', '0'], ['--transport', 'a2a', '--rag-autosync', 'abc'], ['--transport', 'mcp', '--rag-autosync', '15']]) {
+    for (const args of [['--transport', 'a2a', '--rag-autosync', '0'], ['--transport', 'a2a', '--rag-autosync', 'abc'], ['--transport', 'a2a', '--rag-autosync', '100000'], ['--transport', 'mcp', '--rag-autosync', '15']]) {
       const r = run(...args);
       expect(r.status).toBe(1);
       expect(r.stderr).toContain('--rag-autosync');

@@ -136,6 +136,23 @@ export class MCPVaultServer {
   }
 
   /** SE-419: devuelve el principal (usuario y rol) o undefined sin usuarios (modo local). */
+  /**
+   * Estado del registro apto para cualquier llamante autorizado en una cúpula: sin ruta absoluta; el texto del error
+   * (puede nombrar cúpulas N3/N4 o citar el JSON) solo si el llamante puede leer todas las cúpulas activas, y si no,
+   * un aviso genérico.
+   */
+  private async publicRegistryState(tool: string): Promise<{ loadedAt: string | null; mtime: string | null; error?: string }> {
+    const { file: _file, error, ...rest } = this.domeRegistry!.getState();
+    if (!error) return rest;
+    try {
+      for (const d of this.domeRegistry!.listActive()) await this.authorize(d.name, 'read', tool);
+      return { ...rest, error };
+    } catch (e) {
+      if (e instanceof AuthError) return { ...rest, error: 'registro de cúpulas inválido; detalle en el log del servidor' };
+      throw e;
+    }
+  }
+
   private async authorize(dome: string, action: AuthAction, tool?: string): Promise<Authorization | undefined> {
     if (!this.accessController) return undefined;
     // SE-424 H3: revocaciones, altas y tokens regenerados valen en la siguiente llamada, sin reiniciar.
@@ -429,7 +446,8 @@ export class MCPVaultServer {
             for (const n of names) {
               try { await this.authorize(n, 'read', 'vault_rag_status'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
             }
-            const registry = this.domeRegistry?.getState();
+            // Sin ruta del registro; el error (puede nombrar otras cúpulas) solo a quien lee todas las activas.
+            const registry = this.domeRegistry ? await this.publicRegistryState('vault_rag_status') : undefined;
             const reports = (await this.rag.status(names)).map(r => registry ? { ...r, registry } : r);
             return { content: [{ type: 'text', text: JSON.stringify(reports) }] };
           }
@@ -564,7 +582,7 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_health'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            const registryError = this.domeRegistry?.getState().error;
+            const registryError = this.domeRegistry ? (await this.publicRegistryState('vault_health')).error : undefined;
             const registryNote = registryError ? `\n\nRegistro de cúpulas: recarga rechazada, se sirve el último válido. ${registryError}` : '';
             // SE-481 R2: contador de cuarentena por código, sin rutas ni títulos (las rutas, solo por CLI local).
             const q = inst.storage.quarantine();

@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { RagService, type RagDomeRef } from '../../../src/rag/service.js';
 import { envMs } from '../../../src/env-ms.js';
-import { RagAutosync, AUTOSYNC_START_DELAY_MS, type AutosyncClock } from '../../../src/rag/autosync.js';
+import { RagAutosync, AUTOSYNC_START_DELAY_MS, AUTOSYNC_MAX_INTERVAL_MIN, readAutosyncState, type AutosyncClock } from '../../../src/rag/autosync.js';
 import { HashEmbedder, type Embedder } from '../../../src/rag/embedder.js';
 import { acquireLock, releaseLock } from '../../../src/rag/indexer.js';
 import { domeDir } from '../../../src/rag/store.js';
@@ -71,6 +71,7 @@ describe('RagAutosync (SE-480)', () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-autosync-home-'));
     embedder = new FlakyEmbedder(64);
     clock = new FakeClock();
+    clock.t = Date.now(); // lastRunAt persistido debe ser reciente para status (caducidad)
     dome = { name: 'Docs', confidentiality: 'N2', path: path.join(root, 'Docs'), rag: { enabled: true, model: 'm1' } };
     note('a.md', 'documento inicial sobre pagos');
     rag = new RagService({ domes: () => [dome], home, embedderFactory: (_c: ResolvedRagConfig): Embedder => embedder });
@@ -172,6 +173,44 @@ describe('RagAutosync (SE-480)', () => {
     const st = (await rag.status(['Docs']))[0];
     expect(st.autosync).toBeUndefined();
     expect(st.slo.alerts).not.toContain('autosync-failing');
+  });
+
+  const persisted = (over: object) => fs.writeFileSync(path.join(home, 'autosync-state.json'), JSON.stringify({ intervalMin: 15, running: false, consecutiveFailures: 5, lastOk: false, lastResults: {}, ...over }));
+
+  it('P1 #1418: un estado persistido caducado (servicio parado) no genera alerta ni autosync; uno vivo sí', async () => {
+    await rag.sync('Docs');
+    persisted({ lastRunAt: new Date(Date.now() - 4 * 15 * 60_000).toISOString() });
+    const old = (await rag.status(['Docs']))[0];
+    expect(old.autosync).toBeUndefined();
+    expect(old.slo.alerts).not.toContain('autosync-failing');
+    persisted({ lastRunAt: new Date(Date.now() - 2 * 15 * 60_000).toISOString() });
+    const live = (await rag.status(['Docs']))[0];
+    expect(live.slo.alerts).toContain('autosync-failing');
+    persisted({});
+    expect(readAutosyncState(home)).toBeUndefined(); // sin lastRunAt: fail-closed
+  });
+
+  it('P1 #1418 (seguridad): el informe de una cúpula no lleva resultados ni errores de otras', async () => {
+    const secret: RagDomeRef = { name: 'Secret', confidentiality: 'N4', path: path.join(root, 'Secret'), rag: { enabled: true, model: 'm1' } };
+    fs.mkdirSync(secret.path, { recursive: true });
+    const two = new RagService({ domes: () => [dome, secret], home, embedderFactory: (_c: ResolvedRagConfig): Embedder => embedder });
+    persisted({ lastRunAt: new Date().toISOString(), lastError: 'Secret: ENOENT /n4/privado.md', lastResults: { Docs: 'ok', Secret: 'error:ENOENT /n4/privado.md' } });
+    const [docs] = await two.status(['Docs']);
+    expect(docs.autosync?.lastResults).toEqual({ Docs: 'ok' });
+    expect(JSON.stringify(docs)).not.toMatch(/Secret|privado/);
+    const [sec] = await two.status(['Secret']);
+    expect(sec.autosync?.lastError).toBe('Secret: ENOENT /n4/privado.md');
+    expect(Object.keys(sec.autosync?.lastResults ?? {})).toEqual(['Secret']);
+  });
+
+  it('P2 #1418: el fichero de estado es privado (0600) y los minutos tienen tope', () => {
+    const a = autosync({ onState: (st) => rag.persistAutosyncState(st) });
+    return a.runCycle().then(() => {
+      expect(fs.statSync(path.join(home, 'autosync-state.json')).mode & 0o777).toBe(0o600);
+      expect(() => new RagAutosync(rag, { intervalMin: AUTOSYNC_MAX_INTERVAL_MIN, clock, log: () => {} })).not.toThrow();
+      expect(() => new RagAutosync(rag, { intervalMin: AUTOSYNC_MAX_INTERVAL_MIN + 1, clock, log: () => {} })).toThrow(/minutos/);
+      expect(AUTOSYNC_MAX_INTERVAL_MIN * 60_000).toBeLessThan(2 ** 31);
+    });
   });
 
   it('onRegistryReload no propaga si enabledDomes() lanza (P2 #1418)', () => {

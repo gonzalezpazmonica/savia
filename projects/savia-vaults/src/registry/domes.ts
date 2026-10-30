@@ -309,6 +309,7 @@ export class DomeRegistry {
       write(this.getLocalFilePath(), this.localDefault, byOrigin.local);
     }
     this.loadedKey = this.statKey();
+    this.loadError = undefined;
   }
 
   setDefault(name: string): void {

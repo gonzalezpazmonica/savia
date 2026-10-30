@@ -111,6 +111,13 @@ function percentile(values: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 }
 
+/** El informe de una cúpula no lleva resultados ni errores de otras (SE-424: ACL por cúpula). */
+function scopeAutosync(a: AutosyncState, dome: string): AutosyncState {
+  const mine = Object.prototype.hasOwnProperty.call(a.lastResults, dome) ? { [dome]: a.lastResults[dome] } : {};
+  const { lastError, ...rest } = a;
+  return { ...rest, lastResults: mine, ...(lastError?.startsWith(`${dome}: `) ? { lastError } : {}) };
+}
+
 export class RagService {
   private readonly home: string;
   private readonly env: NodeJS.ProcessEnv;
@@ -739,7 +746,7 @@ export class RagService {
         generationAgeHours: manifest ? Number(((Date.now() - Date.parse(manifest.createdAt)) / 3.6e6).toFixed(2)) : undefined,
         memoryBytes: manifest ? manifest.chunkCount * manifest.contract.dims * 4 : 0,
         slo: { ok: alerts.length === 0, alerts },
-        ...(autosync ? { autosync } : {}),
+        ...(autosync ? { autosync: scopeAutosync(autosync, d.name) } : {}),
       });
     }
     return out;

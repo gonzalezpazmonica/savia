@@ -12,21 +12,33 @@ export const AUTOSYNC_FAIL_THRESHOLD = 3;
 export const AUTOSYNC_FAILING_ALERT = 'autosync-failing';
 export const AUTOSYNC_START_DELAY_MS = 30_000;
 const STATE_FILE = 'autosync-state.json';
+/** Un estado persistido más viejo que esto × intervalMin ya no describe un sincronizador vivo. */
+export const AUTOSYNC_STALE_FACTOR = 3;
+/** Tope de minutos: setTimeout usa un entero de 32 bits en ms (2^31-1); por encima dispara al instante. */
+export const AUTOSYNC_MAX_INTERVAL_MIN = Math.floor((2 ** 31 - 1) / 60_000);
 
 /** Escribe el estado del ciclo en el rag-home (atómico) para que `status` de cualquier proceso lo vea. */
 export function writeAutosyncState(home: string, state: AutosyncState): void {
-  fs.mkdirSync(home, { recursive: true });
+  fs.mkdirSync(home, { recursive: true, mode: 0o700 });
   const f = path.join(home, STATE_FILE);
   const tmp = `${f}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(state));
+  fs.writeFileSync(tmp, JSON.stringify(state), { mode: 0o600 });
   fs.renameSync(tmp, f);
 }
 
-/** Lee el estado persistido; ausente, ilegible o con forma inesperada → undefined. */
-export function readAutosyncState(home: string): AutosyncState | undefined {
+/**
+ * Lee el estado persistido; ausente, ilegible, con forma inesperada o caducado → undefined.
+ * Caducado: `lastRunAt` más viejo que AUTOSYNC_STALE_FACTOR × intervalMin (servicio parado o desinstalado):
+ * ni alerta de fallo ni falso verde de un sincronizador que ya no corre.
+ */
+export function readAutosyncState(home: string, nowMs: number = Date.now()): AutosyncState | undefined {
   try {
     const s = JSON.parse(fs.readFileSync(path.join(home, STATE_FILE), 'utf8')) as AutosyncState;
-    return typeof s?.consecutiveFailures === 'number' && Number.isFinite(s.consecutiveFailures) ? s : undefined;
+    if (typeof s?.consecutiveFailures !== 'number' || !Number.isFinite(s.consecutiveFailures)) return undefined;
+    const last = Date.parse(s.lastRunAt ?? '');
+    if (!Number.isFinite(last) || !(s.intervalMin > 0)) return undefined;
+    if (nowMs - last > AUTOSYNC_STALE_FACTOR * s.intervalMin * 60_000) return undefined;
+    return s;
   } catch {
     return undefined;
   }
@@ -88,7 +100,9 @@ export class RagAutosync {
   private refreshing = false;
 
   constructor(private readonly target: AutosyncTarget, private readonly o: AutosyncOptions) {
-    if (!Number.isFinite(o.intervalMin) || o.intervalMin <= 0) throw new Error(`--rag-autosync exige minutos > 0 (recibido ${o.intervalMin})`);
+    if (!Number.isFinite(o.intervalMin) || o.intervalMin <= 0 || o.intervalMin > AUTOSYNC_MAX_INTERVAL_MIN) {
+      throw new Error(`--rag-autosync exige minutos > 0 y ≤ ${AUTOSYNC_MAX_INTERVAL_MIN} (recibido ${o.intervalMin})`);
+    }
     this.clock = o.clock ?? realClock;
     this.log = o.log ?? ((m) => console.error(m));
     this.state = { intervalMin: o.intervalMin, running: false, consecutiveFailures: 0, lastResults: {} };

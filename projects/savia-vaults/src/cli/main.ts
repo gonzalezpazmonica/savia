@@ -17,6 +17,7 @@ import { UserStore, ConfidentialityGuard, AuditLogger, UserQuotaStore, AccessCon
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { envMs } from '../env-ms.js';
+import { AUTOSYNC_MAX_INTERVAL_MIN } from '../rag/autosync.js';
 
 function makeConfig(name: string, vaultPath: string): VaultConfig {
   return { name, path: vaultPath, allowedExtensions: [], deniedPaths: [], maxDepth: 10, maxFileSize: 10 * 1024 * 1024 };
@@ -51,8 +52,8 @@ program.command('serve').description('Start MCP, A2A or HTTP (Savia Files) serve
     let autosyncMin: number | undefined;
     if (opts.ragAutosync !== undefined) {
       autosyncMin = Number(opts.ragAutosync);
-      if (!Number.isFinite(autosyncMin) || autosyncMin <= 0 || opts.transport !== 'a2a') {
-        console.error('--rag-autosync <minutos> exige minutos > 0 y --transport a2a');
+      if (!Number.isFinite(autosyncMin) || autosyncMin <= 0 || autosyncMin > AUTOSYNC_MAX_INTERVAL_MIN || opts.transport !== 'a2a') {
+        console.error(`--rag-autosync <minutos> exige minutos > 0 (máximo ${AUTOSYNC_MAX_INTERVAL_MIN}) y --transport a2a`);
         process.exit(1);
       }
     }

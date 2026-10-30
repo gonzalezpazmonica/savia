@@ -73,6 +73,19 @@ describe('DomeRegistry.reloadIfChanged (SE-480)', () => {
     expect(r.list().map(d => d.name)).toEqual(['A']);
   });
 
+  it('P1 #1418: tras una recarga rechazada, un save() (dome create) deja el registro válido y limpia el error', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = registry();
+    fs.writeFileSync(file, '{ roto');
+    const t = new Date(Date.now() + 99_000);
+    fs.utimesSync(file, t, t);
+    r.reloadIfChanged();
+    expect(r.getState().error).toBeDefined();
+    r.save();
+    expect(r.getState().error).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(file, 'utf8')).domes.A).toBeDefined();
+  });
+
   it('un fichero que parsea pero no valida no deja el registro a medias', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const r = registry();
