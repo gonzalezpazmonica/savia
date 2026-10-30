@@ -46,6 +46,7 @@ function effectiveAdmission(input: {
   technicalQuarantine: boolean;               // SE-481 o Files QUARANTINED
   decision?: { admission: StoredDecision; digest: string; scope?: string };  // la entrada de mayor seq del objetivo
   currentDigest: string;
+  negativeDigests: ReadonlyMap<string, 'REJECTED'|'QUARANTINED'>;  // digests con rechazo o cuarentena vigentes en la cúpula
   superseded: boolean;                        // derivado: excludedReason(...) !== undefined o superseded_by
 }): { state: AdmissionState; scope?: string }
 ```
@@ -53,7 +54,7 @@ function effectiveAdmission(input: {
 Las reglas se aplican en orden y gana la primera que se cumple:
 
 1. cuarentena técnica → `QUARANTINED`;
-2. decisión `REJECTED` del objetivo, **con cualquier digest**, o digest actual presente en el conjunto de digests rechazados de la cúpula → `REJECTED`;
+2. decisión `REJECTED` del objetivo, **con cualquier digest**, o `negativeDigests.get(currentDigest) === 'REJECTED'` → `REJECTED`;
 3. lo mismo con `QUARANTINED` → `QUARANTINED`;
 4. `superseded` → `SUPERSEDED`;
 5. decisión `ACCEPTED` o `RESTRICTED` con digest igual al actual → esa decisión;
@@ -92,13 +93,15 @@ Reglas del ledger:
 - **Orden de escritura**, bajo un lock de cúpula (el patrón `acquireLock` del indexador), que comparten la CLI y el servidor:
   1. añadir la entrada con fsync;
   2. reescribir el checkpoint de forma atómica (`writeAtomic`).
-- Al cargar:
+- Al cargar se lee **primero el checkpoint y después el ledger**. Así una escritura concurrente solo puede dejar el ledger por delante, que se tolera, y nunca por detrás, que sería un falso truncado. La recarga se dispara si cambia el mtime de cualquiera de los dos.
+- Comprobaciones:
   - si el `seq` del checkpoint es mayor que el último `seq` del ledger, o su `head` no coincide con el hash de la entrada con ese `seq`, el ledger es inválido;
   - si falta el checkpoint y el ledger tiene entradas, el ledger es inválido;
-  - si los dos faltan, el ledger está vacío y es válido;
+  - si los dos faltan y la cúpula **no** está marcada como inicializada, el ledger está vacío y es válido. La primera escritura marca `domes.<n>.admission.initialized: true` en el registro. Si la marca existe y faltan los dos ficheros, el ledger es inválido. Si alguien borra también la marca, el ledger se da por vacío: es el residuo de quien escribe en el directorio de estado;
   - se toleran entradas firmadas y encadenadas **posteriores** al checkpoint: es el caso de un fallo entre los pasos 1 y 2. La siguiente escritura adelanta el checkpoint.
 - **Ledger inválido.** Ocurre si una firma, la cadena `prev` o el ancla no cuadran, o si el ledger no se puede leer. Entonces la cúpula entra en **admisión degradada**:
   - ningún documento puede salir `ACCEPTED` ni `RESTRICTED`;
+  - la cuarentena técnica (regla 1) **sigue aplicándose**: esos documentos no se sirven;
   - en `standard`, todos los hits se sirven como `UNREVIEWED` y `DomeOutcome.detail` incluye `admission_ledger_invalid`, de modo que el aviso llega **en la respuesta** y no solo en `vault_health`;
   - en `governed`, la cúpula **no sirve ningún hit** (`status` degradado) hasta que se repare;
   - consecuencia declarada: en `standard`, un `REJECTED` vuelve a servirse con aviso mientras dure la degradación. Para provocarla hace falta escribir en el directorio de estado del servidor, que ninguna superficie de agente alcanza (R4, AC-6).
@@ -130,7 +133,11 @@ Reglas del ledger:
   - `admission show <cúpula> <target>`;
   - `admission report <cúpula>`, que da recuentos por estado efectivo, por estado técnico y por `admission_claim_ignored`, y solo en local las rutas.
 - Cómo se usa:
-  - La credencial de admitir se pide por prompt en la TTY, nunca por argv ni por variable de entorno.
+  - La credencial de admitir se pide por prompt en la TTY, nunca por argv ni por variable de entorno. Si `stdin` no es una TTY, la CLI termina con `ADMIT_REQUIRES_TTY`.
+  - **Punto de prueba**, sin atajos:
+    - el núcleo `recordDecision(ctx, auth: AdmitAuthorization, input)` solo acepta un `AdmitAuthorization`, y ese objeto solo lo construye `authorizeAdmit()`;
+    - los tests llaman a `authorizeAdmit(token)` con la credencial como argumento de función, en un directorio de estado temporal;
+    - la capa de prompt recibe el lector de TTY por inyección de dependencias en el código, **no** por variable de entorno ni por flag.
   - Un objetivo se confirma tecleando su id corto.
   - El lote son ids explícitos, **≤ 50** por llamada, y se confirma tecleando el nombre de la cúpula y el número de objetivos. No existe `--all`.
 - **No** se añade ninguna herramienta MCP ni ruta A2A ni HTTP para escribir admisión. El ledger está fuera de la raíz de cualquier cúpula, así que el confinamiento de rutas de `vault_write` y de Files ya lo deja fuera de alcance; AC-6 lo prueba. La lectura de la admisión efectiva sí aparece en los hits (R5).
@@ -169,7 +176,7 @@ Reglas del ledger:
 
 ## Criterios de aceptación
 
-- **AC-1 (función pura):** test de tabla que recorre las 6 reglas de R1 y el orden entre ellas (p. ej. `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). `RESTRICTED` sin `scope` lanza un error.
+- **AC-1 (función pura):** test de tabla que recorre las 6 reglas de R1 y el orden entre ellas. Por ejemplo: objetivo sin decisión, con `negativeDigests` que contiene su digest como `REJECTED` ⇒ `REJECTED` (copia o renombrado); el mismo sin el digest en el mapa ⇒ `UNREVIEWED`; `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). `RESTRICTED` sin `scope` lanza un error.
 - **AC-2 (autoadmisión por frontmatter):** una nota con `admission: accepted` y `status: approved` se sirve como `UNREVIEWED`, y `vault_health` cuenta 1 en `admission_claim_ignored`.
 - **AC-3 (edición y copia):**
   - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until`;
@@ -183,7 +190,11 @@ Reglas del ledger:
   - credencial `admit` sobre una cúpula sin `admit`;
   - credencial `admit` caducada o revocada;
   - rol `reader` con `admit`.
-- **AC-5 (CLI):** `grant-admit` sobre un usuario `service` termina con código ≠ 0 y no modifica `users.json`. `token-create --admit --expires-days 8` se rechaza.
+- **AC-5 (CLI):**
+  - controles positivos: `grant-admit` sobre un humano sale con 0 y escribe `admit: true` en su permiso de esa cúpula; `token-create --admit --expires-days 7` crea una credencial con `admit: true` y caducidad ≤ 7 días;
+  - negativos con error concreto: `grant-admit` sobre `service` falla con `ADMIT_SERVICE_FORBIDDEN` y `users.json` queda idéntico byte a byte; `--expires-days 8` falla con `ADMIT_TTL_EXCEEDED`;
+  - `admission set` con `stdin` no TTY falla con `ADMIT_REQUIRES_TTY` y el ledger no cambia;
+  - no existe ningún modo de pasar la credencial por variable de entorno ni por argv: un test lo recorre con las dos vías.
 - **AC-6 (sin superficie de agente):**
   - un test enumera las herramientas MCP y las rutas A2A y HTTP registradas, y falla si alguna importa el módulo de escritura del ledger. Comprueba también que no acepta `admission` como entrada;
   - `vault_write` con una ruta que intenta salir hacia el directorio de estado (`../`, ruta absoluta o enlace simbólico) se rechaza y el ledger no cambia.
@@ -192,7 +203,10 @@ Reglas del ledger:
   - (a) una entrada con la firma alterada;
   - (b) una entrada intermedia borrada;
   - (c) **las últimas entradas borradas (truncado de cola)**, comprobado con el checkpoint;
-  - (d) un checkpoint ausente con el ledger no vacío.
+  - (d) un checkpoint ausente con el ledger no vacío;
+  - (e) la cúpula marcada como inicializada sin ledger ni checkpoint.
+
+  En los cinco casos, una nota en cuarentena técnica **sigue** sin servirse.
 
   Caso que debe ser válido: una entrada firmada posterior al checkpoint (fallo entre la escritura y el checkpoint) se acepta.
 - **AC-8 (sin reembeber):** tras `admission set` sobre un documento indexado:
