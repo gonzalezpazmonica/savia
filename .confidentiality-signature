@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=d8ad2fb94cac575faa991897d15846a80f9dfce1d1a0d3c8a7d1336c49f91f0a
-timestamp=2026-10-30T00:11:00Z
+diff_hash=8d096dcda692295366d671d70916e1bd36155a888e0f73f95dbc8068c15bf86e
+timestamp=2026-10-30T06:19:25Z
 branch=agent/vaults-specs-pr-20261023
-head_commit=6c53e0e1
-signature=2c33f5f9ebdfc891cbd5dd6c5445a82b2a339720a48deca5356c4829f6a32ced
+head_commit=32d310e1e
+signature=78bc51d245b99ccf36c3daf4aaefc712e3e0668d198ed1db33e615733348595c
