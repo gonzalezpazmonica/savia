@@ -4,7 +4,7 @@
   "title": "SE-399 Installation Plan (deterministic preview)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "plan_id", "platform", "status", "steps", "blockers", "warnings", "preview"],
+  "required": ["schema_version", "plan_id", "platform", "status", "steps", "blockers", "warnings", "preview", "graph", "preflight"],
   "properties": {
     "schema_version": {"const": 1},
     "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -32,6 +32,24 @@
           "reversibility": {"enum": ["reversible", "partially_reversible", "irreversible"]},
           "changes": {"type": "array", "items": {"type": "object"}}
         }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "edges"],
+      "properties": {
+        "nodes": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "disposition"], "properties": {"id": {"type": "string"}, "disposition": {"enum": ["install", "already_installed"]}}}},
+        "edges": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["from", "to", "kind"], "properties": {"from": {"type": "string"}, "to": {"type": "string"}, "kind": {"const": "DEPENDS_ON"}}}}
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checks"],
+      "properties": {
+        "status": {"enum": ["ready", "warnings", "blockers"]},
+        "checks": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["id", "status", "component", "message"], "properties": {"id": {"type": "string"}, "status": {"enum": ["ok", "warning", "blocker", "not_probed"]}, "component": {"type": "string"}, "message": {"type": "string"}}}}
       }
     },
     "blockers": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
