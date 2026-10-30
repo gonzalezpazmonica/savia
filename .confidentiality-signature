@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=2189c7e84c3354c645f63257c303746b2f05fd27102b898e9de9a0d09c2cfe44
-timestamp=2026-10-29T17:03:59Z
+diff_hash=2983e67ad73089e0de740c19e7e1d1e1d136d2fbed77a16fac7911081b75dff5
+timestamp=2026-10-30T00:00:58Z
 branch=agent/anthropic-specs-20261023
-head_commit=d605624ac
-signature=c753ef60dc1c3d6557cd13e375e726033a2c6bb859b7c4e355dddd9d00987a9e
+head_commit=94e46b744
+signature=ef35ffc29a25ecae092431ed6edf9d2f75ad3db75a808c0609c05b45b11fb902
