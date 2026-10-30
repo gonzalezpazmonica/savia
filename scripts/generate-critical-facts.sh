@@ -22,7 +22,7 @@ ACTIVATED="unknown"
 FRONTEND="opencode"
 
 # Identidad: fuente única en .claude/profiles/savia.md (SE-483). Fail-closed.
-source "$(dirname "${BASH_SOURCE[0]}")/lib/savia-identity.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/docs-identity-check.sh"
 IDENTITY=$(savia_identity short) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
 
 # Active user slug

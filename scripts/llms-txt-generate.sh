@@ -8,8 +8,8 @@ LLMS_TXT="${LLMS_TXT:-$ROOT/docs/llms.txt}"
 LLMS_FULL="${LLMS_FULL:-$ROOT/docs/llms-full.txt}"
 LLMS_ROOT="${LLMS_ROOT:-$ROOT/llms.txt}"
 
-# shellcheck source=lib/savia-identity.sh
-source "$ROOT/scripts/lib/savia-identity.sh"
+# shellcheck source=docs-identity-check.sh
+source "$ROOT/scripts/docs-identity-check.sh"
 IDENTITY_LONG=$(savia_identity long) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
 IDENTITY_SHORT=$(savia_identity short) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
 

@@ -30,8 +30,8 @@ MODE="generate"
 
 # Identidad canónica: fuente única en .claude/profiles/savia.md (SE-483).
 # Fail-closed: sin frase no se genera AGENTS.md.
-# shellcheck source=lib/savia-identity.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/savia-identity.sh"
+# shellcheck source=docs-identity-check.sh
+source "$(dirname "${BASH_SOURCE[0]}")/docs-identity-check.sh"
 IDENTITY_LONG=$(savia_identity long) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
 
 usage() {

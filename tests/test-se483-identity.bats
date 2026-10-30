@@ -4,7 +4,7 @@
 
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  LIB="$ROOT/scripts/lib/savia-identity.sh"
+  LIB="$ROOT/scripts/docs-identity-check.sh"
   SRC="$ROOT/.claude/profiles/savia.md"
   TMP="$(mktemp -d)"
 }
@@ -73,7 +73,7 @@ make_fixture_root() {
 }
 
 @test "AC-3: check pasa en el repo actual" {
-  run bash "$LIB" check
+  run bash "$LIB" canonical
   [ "$status" -eq 0 ]
   [[ "$output" == PASS:* ]]
 }
@@ -81,7 +81,7 @@ make_fixture_root() {
 @test "AC-3 negativo: cambiar la fuente sin regenerar hace fallar el check" {
   make_fixture_root
   sed -i 's/Open source y soberana\./Open source, soberana y distinta./' "$TMP/root/.claude/profiles/savia.md"
-  run env SAVIA_IDENTITY_ROOT="$TMP/root" bash "$LIB" check
+  run env SAVIA_IDENTITY_ROOT="$TMP/root" bash "$LIB" canonical
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL: CLAUDE.md sin la frase larga canónica"* ]]
   [[ "$output" == *"FAIL: AGENTS.md sin la frase larga canónica"* ]]
@@ -90,7 +90,7 @@ make_fixture_root() {
 @test "AC-3 negativo: superficie corta desalineada hace fallar el check" {
   make_fixture_root
   jq '.description = "Complete PM automation"' "$ROOT/plugin.json" > "$TMP/root/plugin.json"
-  run env SAVIA_IDENTITY_ROOT="$TMP/root" bash "$LIB" check
+  run env SAVIA_IDENTITY_ROOT="$TMP/root" bash "$LIB" canonical
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL: plugin.json sin la frase corta canónica"* ]]
 }

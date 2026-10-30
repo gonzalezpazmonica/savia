@@ -33,8 +33,8 @@ TOP_P="0.9"
 SYSTEM_MESSAGE=""
 
 # Identidad de Savia: fuente única en .claude/profiles/savia.md (SE-483).
-# shellcheck source=lib/savia-identity.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/savia-identity.sh"
+# shellcheck source=docs-identity-check.sh
+source "$(dirname "${BASH_SOURCE[0]}")/docs-identity-check.sh"
 SAVIA_IDENTITY_LONG=$(savia_identity long 2>/dev/null) || SAVIA_IDENTITY_LONG=""
 
 # Persona allow-list (pre-built system prompts).
