@@ -16,6 +16,7 @@ El banco de regresión de 36 consultas (`eval/rag-savia-docs.json`) no se toca.
 | `validate.py` | Validador: esquema + evidencia contra ficheros. Solo stdlib |
 | `evidence-difficulty.ts` | Validación de dificultad con el baseline híbrido (M0). No es el runner de R2 |
 | `tests/` | Tests unittest del corpus, del validador y del banco |
+| `.gitattributes` | `corpus/** -text`: sin conversión de fin de línea, para que el blob en disco coincida con el de git |
 
 ## Caso
 
@@ -43,7 +44,10 @@ es el blob del fichero en disco.
 | E | 50 | 25 pares de reglas reales y 25 sintéticos (agregación sobre contratos, contrato → norma vigente, comparación) |
 | F | 50 | Cúpula N3 no autorizada, notas en cuarentena, anexo inexistente, circulares contradictorias, inyección, identificadores inexistentes |
 
-Split 70/30 por categoría, fijo por `sha256(id)`. Hay un subconjunto oculto de 30 casos fuera del repo.
+Split 70/30 por categoría y fijo por consulta: al regenerar, cada caso conserva el split que tiene en
+`cases.jsonl`; los nuevos se ordenan por `sha256(query)` y van a test hasta el 30 %. Quitar casos no
+reasigna nada: si test queda descompensado, el validador lo marca y decide una persona. Hay un
+subconjunto oculto de 30 casos (ids `H-`, todo test) fuera del repo; `validate.py --hidden` lo valida.
 
 Los casos no se derivan del grafo de vínculos: cada evidencia es una cita literal elegida leyendo el
 documento (A y B) o una plantilla sobre el corpus sintético (C, D, E, F).

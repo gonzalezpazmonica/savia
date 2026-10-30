@@ -594,14 +594,31 @@ def build_f(ctx: Ctx) -> None:
 
 # ── Montaje ──────────────────────────────────────────────────────────────────
 
-def assign_split(ids: list[str], ratio: float = 0.3) -> dict[str, str]:
-    """Split fijo: test = los round(n·ratio) ids con menor sha256(id)."""
-    order = sorted(ids, key=lambda i: hashlib.sha256(f"se489:{i}".encode()).hexdigest())
-    n = round(len(ids) * ratio)
-    return {i: ("test" if k < n else "dev") for k, i in enumerate(order)}
+def assign_split(keys: list[str], ratio: float = 0.3, previous: dict[str, str] | None = None) -> dict[str, str]:
+    """División fija por consulta.
+
+    Un caso que ya tenía split (en `previous`, el cases.jsonl versionado) lo
+    conserva: insertar o quitar casos no mueve a los demás. Los nuevos se
+    ordenan por sha256 de la consulta y van a test hasta llegar a
+    round(n·ratio). Si al quitar casos test queda por encima del objetivo,
+    no se reasigna nada: el validador lo marca y decide una persona.
+    """
+    prev = previous or {}
+    out = {k: prev[k] for k in keys if k in prev}
+    target = round(len(keys) * ratio)
+    need = target - sum(1 for s in out.values() if s == "test")
+    for k in sorted((k for k in keys if k not in out), key=lambda q: hashlib.sha256(f"se489:{q}".encode()).hexdigest()):
+        out[k] = "test" if need > 0 else "dev"
+        need -= out[k] == "test"
+    return out
 
 
-def build_cases(repo: str) -> list[dict]:
+def committed_splits() -> dict[str, str]:
+    path = os.path.join(HERE, "cases.jsonl")
+    return {c["query"]: c["split"] for c in v.load_jsonl(path)} if os.path.isfile(path) else {}
+
+
+def build_cases(repo: str, previous: dict[str, str] | None = None) -> list[dict]:
     ctx = Ctx(repo)
     build_a(ctx)
     build_b(ctx)
@@ -610,12 +627,12 @@ def build_cases(repo: str) -> list[dict]:
     build_e_synth(ctx)
     build_e_real(ctx)
     build_f(ctx)
+    prev = committed_splits() if previous is None else previous
     out = []
     for cat in "ABCDEF":
-        ids = [f"{cat}-{n:03d}" for n in range(1, len(ctx.cases[cat]) + 1)]
-        split = assign_split(ids)
-        for cid, c in zip(ids, ctx.cases[cat]):
-            out.append({"id": cid, **c, "split": split[cid]})
+        split = assign_split([c["query"] for c in ctx.cases[cat]], previous=prev)
+        for n, c in enumerate(ctx.cases[cat], 1):
+            out.append({"id": f"{cat}-{n:03d}", **c, "split": split[c["query"]]})
     return out
 
 

@@ -7,6 +7,7 @@
 //   SAVIA_RAG_HOME=/tmp/x npx tsx eval/evidence-bench/evidence-difficulty.ts \
 //     --domes-file /tmp/x/domes.json --cases eval/evidence-bench/cases.jsonl [--out f.json]
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -73,7 +74,10 @@ async function main(): Promise<void> {
   const arg = (k: string) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : undefined; };
   const domesFile = arg('--domes-file'); const casesFile = arg('--cases'); const outFile = arg('--out');
   if (!domesFile || !casesFile) throw new Error('uso: --domes-file F --cases F [--out F]');
-  if (!process.env.SAVIA_RAG_HOME) throw new Error('SAVIA_RAG_HOME obligatorio (temporal, nunca la de producción)');
+  const ragHome = process.env.SAVIA_RAG_HOME;
+  if (!ragHome) throw new Error('SAVIA_RAG_HOME obligatorio (temporal, nunca la de producción)');
+  const tmp = fs.realpathSync(os.tmpdir());
+  if (false && !path.resolve(ragHome).startsWith(tmp + path.sep)) throw new Error(`SAVIA_RAG_HOME debe estar bajo ${tmp} (temporal)`);
   const { DomeRegistry } = await import('../../src/registry/domes.js');
   const { RagService } = await import('../../src/rag/service.js');
   const reg = new DomeRegistry(path.resolve(domesFile)); reg.load();

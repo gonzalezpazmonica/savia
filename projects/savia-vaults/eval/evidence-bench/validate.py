@@ -53,7 +53,7 @@ def check_schema(x, s: dict, path: str = "$") -> list[str]:
         ts = s["type"] if isinstance(s["type"], list) else [s["type"]]
         if not any(_type_ok(x, t) for t in ts):
             return [f"{path}: tipo {type(x).__name__}, se esperaba {ts}"]
-    if "const" in s and x != s["const"]:
+    if "const" in s and (x != s["const"] or isinstance(x, bool) != isinstance(s["const"], bool)):
         errs.append(f"{path}: debe valer {s['const']!r}")
     if "enum" in s and x not in s["enum"]:
         errs.append(f"{path}: {x!r} fuera de {s['enum']}")
@@ -108,6 +108,13 @@ def section_text(text: str, section: str | None) -> str | None:
     return None
 
 
+def _decoded(rev: str, data: bytes, tag: str):
+    try:
+        return rev, data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None, f"{tag} no es UTF-8 válido"
+
+
 class Corpus:
     """Acceso a documentos por cúpula y revisión."""
 
@@ -143,15 +150,18 @@ class Corpus:
                 else:
                     rev = p.stdout.strip()
                     data = subprocess.run(["git", "-C", self.repo, "cat-file", "blob", rev], capture_output=True, check=True).stdout
-                    res = (rev, data.decode("utf-8"))
+                    res = _decoded(rev, data, f"{dome}:{doc}")
         elif d["source"] == "worktree":
-            path = os.path.join(self.repo, d["root"], doc)
-            if not os.path.isfile(path):
+            root = os.path.realpath(os.path.join(self.repo, d["root"]))
+            path = os.path.realpath(os.path.join(root, doc))
+            if os.path.commonpath([root, path]) != root:
+                res = (None, f"{dome}:{doc} sale de {d['root']} (enlace simbólico)")
+            elif not os.path.isfile(path):
                 res = (None, f"{dome}:{doc} no existe en {d['root']}")
             else:
                 with open(path, "rb") as fh:
                     data = fh.read()
-                res = (blob_sha(data), data.decode("utf-8"))
+                res = _decoded(blob_sha(data), data, f"{dome}:{doc}")
         else:
             res = (None, f"source desconocido {d['source']}")
         self.cache[key] = res
@@ -175,8 +185,14 @@ def validate(cases: list, manifest: dict, repo: str, hidden: bool = False, schem
             continue
         seen[cid] += 1
         by_cat[c["category"]][c["split"]] += 1
-        if not cid.lstrip("H-").startswith(c["category"]):
+        if not cid.removeprefix("H-").startswith(c["category"]):
             errs.append(f"{cid}: id no corresponde a la categoría {c['category']}")
+        if hidden and not cid.startswith("H-"):
+            errs.append(f"{cid}: un caso oculto lleva prefijo H-")
+        if hidden and c["split"] != "test":
+            errs.append(f"{cid}: un caso oculto va en split test")
+        if not hidden and cid.startswith("H-"):
+            errs.append(f"{cid}: un caso oculto (H-) no va en el banco versionado")
         allowed = c["scope"]["allowed_domes"]
         for dname in allowed:
             if dname not in domes:
@@ -239,7 +255,7 @@ def main(argv=None) -> int:
     ap.add_argument("--cases", default=os.path.join(HERE, "cases.jsonl"))
     ap.add_argument("--manifest", default=os.path.join(HERE, "manifest.json"))
     ap.add_argument("--repo", default=None, help="raíz del repo (def. git rev-parse --show-toplevel)")
-    ap.add_argument("--hidden", action="store_true", help="subconjunto oculto: sin mínimos ni split")
+    ap.add_argument("--hidden", action="store_true", help="subconjunto oculto: ids H-, todo test, sin mínimos")
     a = ap.parse_args(argv)
     try:
         repo = a.repo or subprocess.run(["git", "-C", HERE, "rev-parse", "--show-toplevel"],

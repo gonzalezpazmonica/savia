@@ -74,6 +74,12 @@ class Fixture:
         return v.validate(cases, self.manifest, self.root, hidden=hidden)
 
 
+def as_hidden(cs):
+    for c in cs:
+        c["id"] = "H-" + c["id"]
+        c["split"] = "test"
+
+
 class ValidateTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -184,7 +190,7 @@ class ValidateTest(unittest.TestCase):
         self.fx.manifest["min_per_category"] = 3
         try:
             self.assertTrue(any("mínimo" in e for e in self.errors()))
-            self.assertEqual(self.errors(hidden=True), [])
+            self.assertEqual(self.errors(as_hidden, hidden=True), [])
         finally:
             self.fx.manifest["min_per_category"] = 1
 
@@ -192,7 +198,8 @@ class ValidateTest(unittest.TestCase):
         def m(cs):
             cs[1]["split"] = "dev"
         self.assertTrue(any("split" in e for e in self.errors(m)))
-        self.assertEqual(self.errors(m, hidden=True), [])
+        # En el modo oculto no hay proporción: todo es test.
+        self.assertEqual(self.errors(as_hidden, hidden=True), [])
 
     def test_missing_snapshot_is_fail_closed(self):
         man = copy.deepcopy(self.fx.manifest)
@@ -202,6 +209,41 @@ class ValidateTest(unittest.TestCase):
         real = [e for e in errs if "savia-docs" in e]
         self.assertTrue(real)
         self.assertTrue(all("snapshot_commit" in e for e in real), real[:2])
+
+    def test_non_utf8_document_is_reported_not_raised(self):
+        path = os.path.join(self.fx.root, "corpus/legal/latin1.md")
+        with open(path, "wb") as fh:
+            fh.write("garantía".encode("latin-1"))
+        try:
+            def m(cs):
+                cs[0]["expected"]["forbidden_evidence"] = [{"dome": "legal", "document": "latin1.md", "reason": "no utf-8"}]
+            self.assertTrue(any("UTF-8" in e for e in self.errors(m)))
+        finally:
+            os.unlink(path)
+
+    def test_const_rejects_bool_for_zero(self):
+        def m(cs):
+            cs[0]["expected"]["max_unauthorized_reads"] = False
+        self.assertTrue(self.errors(m))
+
+    def test_symlink_escaping_worktree_dome_is_rejected(self):
+        outside = tempfile.mkdtemp()
+        with open(os.path.join(outside, "x.md"), "w") as fh:
+            fh.write("fuera")
+        link = os.path.join(self.fx.root, "corpus/legal/escape.md")
+        os.symlink(os.path.join(outside, "x.md"), link)
+        try:
+            def m(cs):
+                cs[0]["expected"]["forbidden_evidence"] = [{"dome": "legal", "document": "escape.md", "reason": "enlace"}]
+            self.assertTrue(any("enlace" in e for e in self.errors(m)))
+        finally:
+            os.unlink(link)
+
+    def test_hidden_mode_requires_h_prefix_and_test_split(self):
+        self.assertEqual(self.errors(as_hidden, hidden=True), [])
+        errs = self.errors(hidden=True)  # ids sin H- y con dev
+        self.assertTrue(any("H-" in e for e in errs))
+        self.assertTrue(any("split" in e for e in errs))
 
     def test_no_git_repo_is_fail_closed(self):
         with tempfile.TemporaryDirectory() as d:
