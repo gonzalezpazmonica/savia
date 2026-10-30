@@ -24,7 +24,7 @@ for version in "${HEADINGS[@]}"; do
   done
   if ! $found; then
     echo "❌ Versión [$version] sin link de comparación al final del CHANGELOG"
-    ((VIOLATIONS++))
+    VIOLATIONS=$((VIOLATIONS + 1))
   fi
 done
 

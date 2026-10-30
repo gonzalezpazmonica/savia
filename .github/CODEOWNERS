@@ -39,6 +39,10 @@ projects/sala-reservas/                     @gonzalezpazmonica
 docs/                                       @gonzalezpazmonica
 README.md                                   @gonzalezpazmonica
 
+# Compliance (#1413): la CI ejecuta el runner del propio árbol de la PR; cambiarlo exige revision explicita
+.claude/compliance/                         @gonzalezpazmonica
+.githooks/                                  @gonzalezpazmonica
+
 # Linea base de calidad de tests (SE-456): subirla exige revision explicita
 .ci-baseline/                               @gonzalezpazmonica
 
