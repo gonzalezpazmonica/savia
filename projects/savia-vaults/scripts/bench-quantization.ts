@@ -109,7 +109,7 @@ function synthCtx(dir: string): Ctx {
     if (!f32) { f32 = new Float32Array(n * dims); readInto(path.join(dir, 'vectors-0.f32'), new Uint8Array(f32.buffer)); }
     return f32;
   };
-  const fake = { manifest: { sealed: false, seq: 0 }, dims, dir } as unknown as ProjectionSource;
+  const fake = { manifest: { sealed: false, seq: 0 }, dims, dir, size: n } as unknown as ProjectionSource;
   return {
     n, dims,
     rows: () => ({ dims, vector: (i: number) => flat().subarray(i * dims, (i + 1) * dims) }),
@@ -379,7 +379,12 @@ function synth(): void {
 }
 
 const mode = process.argv[2];
+const needs: Record<string, string[]> = { variant: ['kind', 'dir', 'variant', 'queries'], real: ['src', 'bench', 'out'], synth: ['out'] };
+const missing = (needs[mode] ?? []).filter((a) => arg(a) === undefined);
+if (!needs[mode] || missing.length) {
+  console.error(`uso: real|synth|variant (ver cabecera)${missing.length ? `; faltan: ${missing.map((m) => `--${m}`).join(', ')}` : ''}`);
+  process.exit(2);
+}
 if (mode === 'variant') runVariant(arg('kind')!, arg('dir')!, arg('variant')!, arg('queries')!);
 else if (mode === 'real') await real();
-else if (mode === 'synth') synth();
-else { console.error('uso: real|synth (ver cabecera)'); process.exit(2); }
+else synth();

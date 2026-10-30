@@ -5,15 +5,15 @@ Reproducción: `projects/savia-vaults/scripts/bench-quantization.ts` (`real` y `
 
 ## Conclusión
 
-1. **En savia-docs no compensa.** Con 10 796 chunks el float32 pesa 44 MB y una búsqueda exacta tarda 23 ms (p50). Embeber la consulta tarda 910 ms (p50): la búsqueda es el 2,5 % de la latencia. Binario + rescoring (M=100) baja la búsqueda a 2,2 ms; el usuario no lo nota.
+1. **En savia-docs compensa poco.** Con 10 796 chunks el float32 pesa 44 MB y una búsqueda exacta tarda 41 ms (p50). Embeber la consulta tarda 156 ms (p50): la búsqueda es ~20 % de la latencia. Binario + rescoring (M=100) baja la búsqueda a 3,5–4,2 ms; el ahorro (~37 ms) es perceptible solo en el límite.
 2. **Recall perdido en savia-docs, dense-only, 36 consultas:**
    - Binario + rescoring float32: **0 pp** en Recall@10 y MRR frente al float32 exacto, para M = 50, 100, 200 y 400 (0,736 / 0,561 en todos).
    - A nivel de chunk, el solape del top-10 con el exacto es 0,964 (M=50), 0,986 (M=100), 0,997 (M=200), 1,000 (M=400). M=100 pierde 1,4 pp de chunks, y ninguno cambia la lista de documentos.
    - Binario puro sin rescoring: solape 0,628, MRR 0,503 (−0,058). No usar.
    - int8: solape 0,997, mismo Recall@10 y MRR. Pierde 0,3 pp, pero en JS es más lento que el float32.
 3. **Umbral de tamaño.**
-   - Latencia: la búsqueda exacta cuesta ~2,1 µs por vector (1024 dims, JS). Pasa de 100 ms hacia **~50 000 vectores**; con 100 000 son 415 ms frente a 18 ms binario (23×); con 1 M, 4,2 s frente a 0,16 s (26×). El presupuesto de 100 ms es supuesto mío, no una cifra de la spec.
-   - Memoria: la proyección binaria con rescoring desde disco evita tener el float32 residente (4 GB a 1 M vectores; 250 MB de pico en la medición sintética). **Solo si además los chunks dejan de cargarse en RAM** (ver «Hallazgos»). Con el índice actual, el ahorro de RAM a 1 M sería falso.
+   - Latencia: la búsqueda exacta cuesta ~2–4 µs por vector (1024 dims, JS; 23 ms y 41 ms por 10,8 k en dos ejecuciones). Pasa de 100 ms hacia **~25 000–50 000 vectores**; con 100 000 son 413 ms frente a 18 ms binario (23×); con 1 M, 4,2 s frente a 0,17 s (25×). El presupuesto de 100 ms es supuesto mío, no una cifra de la spec.
+   - Memoria: la proyección binaria con rescoring desde disco evita tener el float32 residente (4 GB a 1 M vectores; ~250 MB de pico en la medición sintética). **Solo si además los chunks dejan de cargarse en RAM** (ver «Hallazgos»). Con el índice actual, el ahorro de RAM a 1 M sería falso.
    - Sugerencia: no activar por debajo de ~50 000 vectores. Entre 50 000 y 250 000 es opt-in por latencia. Por encima de ~250 000 (≥ 1 GB de float32) hace falta, y solo con chunks diferidos.
 4. **Disco.** La proyección añade almacenamiento, no lo ahorra: el float32 sigue siendo la fuente de verdad. Binario +3 % (1,4 MB sobre 44 MB), int8 +25 %.
 
@@ -31,6 +31,7 @@ Reproducción: `projects/savia-vaults/scripts/bench-quantization.ts` (`real` y `
 
 ## Método
 
+- **Segunda ejecución:** los datos de este informe son de una repetición completa tras corregir el script (la primera dio las mismas cifras de recall y solape; las latencias variaron con la carga de la máquina: float32 23 ms frente a 41 ms, embedding p50 910 ms frente a 156 ms). Las latencias absolutas son de una sola máquina y no son estables entre ejecuciones; las proporciones sí.
 - **Real:** copia de `~/.savia-vaults/rag/savia-docs` a un directorio temporal (borrado al terminar). No se escribe en `~/.savia-vaults`. Generación `83c28bd3fa22`, 10 796 chunks, `qwen3-embedding:0.6b` (el digest vivo coincide con el del índice, comprobado antes de medir), 1024 dims.
 - Banco: las 36 consultas de `eval/rag-savia-docs.json`. Búsqueda **densa sola** (no híbrida): lo que se cuantiza es el denso. La línea base híbrida registrada el 2026-09-29 es 0,806 / 0,566. La densa sola hoy es 0,736 / 0,561.
 - Recall@10 y MRR a nivel de documento con las `relevantPaths` del banco (misma semántica que `rag eval`). «Solape@10» es la intersección de chunks con el top-10 del float32 exacto. «Top-1» es el acuerdo con el primer resultado exacto.
@@ -39,23 +40,23 @@ Reproducción: `projects/savia-vaults/scripts/bench-quantization.ts` (`real` y `
 
 ## Resultados reales — savia-docs (medición propia)
 
-Embedding de la consulta: p50 910 ms, p95 1 588 ms. Construcción de la proyección: binaria 117 ms, int8 1 352 ms.
+Embedding de la consulta: p50 156 ms, p95 20 594 ms (cola por carga del modelo en Ollama). Construcción de la proyección: binaria 138 ms, int8 1 709 ms.
 
 | Variante | Recall@10 | MRR | Solape@10 | Top-1 | p50 ms | p95 ms | RSS pico−base MB | Disco MB |
 |---|---|---|---|---|---|---|---|---|
-| float32 exacto | 0,736 | 0,561 | 1,000 | 1,00 | 23,1 | 30,1 | 205 | 44,2 |
-| binario puro | 0,792 | 0,503 | 0,628 | 0,58 | 1,7 | 1,9 | 90 | 1,4 |
-| bin M=50, f32 en RAM | 0,736 | 0,561 | 0,964 | 1,00 | 1,9 | 2,2 | 207 | 45,6 |
-| bin M=50, f32 desde disco | 0,736 | 0,561 | 0,964 | 1,00 | 2,4 | 2,6 | 96 | 45,6 |
-| bin M=100, RAM | 0,736 | 0,561 | 0,986 | 1,00 | 2,2 | 3,9 | 207 | 45,6 |
-| bin M=100, disco | 0,736 | 0,561 | 0,986 | 1,00 | 3,1 | 3,6 | 101 | 45,6 |
-| bin M=200, RAM | 0,736 | 0,561 | 0,997 | 1,00 | 2,7 | 3,2 | 206 | 45,6 |
-| bin M=200, disco | 0,736 | 0,561 | 0,997 | 1,00 | 4,6 | 5,0 | 102 | 45,6 |
-| bin M=400, RAM | 0,736 | 0,561 | 1,000 | 1,00 | 3,7 | 4,3 | 207 | 45,6 |
-| bin M=400, disco | 0,736 | 0,561 | 1,000 | 1,00 | 7,3 | 7,9 | 106 | 45,6 |
-| int8 puro | 0,736 | 0,561 | 0,997 | 1,00 | 41,0 | 54,6 | 93 | 11,1 |
-| int8 M=100 + f32 disco | 0,736 | 0,561 | 1,000 | 1,00 | 42,5 | 63,8 | 93 | 55,3 |
-| int8 M=400 + f32 disco | 0,736 | 0,561 | 1,000 | 1,00 | 47,2 | 57,6 | 93 | 55,3 |
+| float32 exacto | 0,736 | 0,561 | 1,000 | 1,00 | 40,6 | 52,6 | 204 | 44,2 |
+| binario puro | 0,792 | 0,503 | 0,628 | 0,58 | 2,2 | 2,6 | 89 | 1,4 |
+| bin M=50, f32 en RAM | 0,736 | 0,561 | 0,964 | 1,00 | 2,6 | 3,8 | 207 | 45,6 |
+| bin M=50, f32 desde disco | 0,736 | 0,561 | 0,964 | 1,00 | 5,2 | 6,4 | 98 | 45,6 |
+| bin M=100, f32 en RAM | 0,736 | 0,561 | 0,986 | 1,00 | 3,5 | 6,4 | 207 | 45,6 |
+| bin M=100, f32 desde disco | 0,736 | 0,561 | 0,986 | 1,00 | 4,2 | 6,5 | 97 | 45,6 |
+| bin M=200, f32 en RAM | 0,736 | 0,561 | 0,997 | 1,00 | 6,0 | 7,0 | 207 | 45,6 |
+| bin M=200, f32 desde disco | 0,736 | 0,561 | 0,997 | 1,00 | 7,4 | 10,5 | 105 | 45,6 |
+| bin M=400, f32 en RAM | 0,736 | 0,561 | 1,000 | 1,00 | 4,7 | 5,3 | 207 | 45,6 |
+| bin M=400, f32 desde disco | 0,736 | 0,561 | 1,000 | 1,00 | 11,6 | 14,5 | 106 | 45,6 |
+| int8 puro | 0,736 | 0,561 | 0,997 | 1,00 | 65,6 | 91,5 | 92 | 11,1 |
+| int8 M=100 + f32 disco | 0,736 | 0,561 | 1,000 | 1,00 | 63,4 | 96,7 | 92 | 55,3 |
+| int8 M=400 + f32 disco | 0,736 | 0,561 | 1,000 | 1,00 | 54,1 | 85,3 | 93 | 55,3 |
 
 Lecturas y límites:
 - «Binario puro» da Recall@10 0,792 > 0,736, pero su MRR cae y el solape es 0,63. Con 36 consultas y sin IC pareado no se puede afirmar que sea mejor: no se interpreta como ganancia.
@@ -68,23 +69,23 @@ Solape@10 con el top-10 float32 exacto, p50/p95 en ms (solo búsqueda, sin embed
 
 | Variante | 10k solape | 10k p50/p95 | 100k solape | 100k p50/p95 | 1M solape | 1M p50/p95 |
 |---|---|---|---|---|---|---|
-| float32 exacto | 1,000 | 35 / 62 | 1,000 | 415 / 717 | 1,000 | 4 193 / 7 508 |
-| binario puro | 0,532 | 1,9 / 4,1 | 0,486 | 19,7 / 32,9 | 0,514 | 163 / 221 |
-| bin M=50 + f32 disco | 0,930 | 2,2 / 2,6 | 0,918 | 17,8 / 26,3 | 0,914 | 170 / 228 |
-| bin M=100 + f32 disco | 0,992 | 2,9 / 4,4 | 0,974 | 18,5 / 24,3 | 0,984 | 161 / 233 |
-| bin M=200 + f32 disco | 1,000 | 4,9 / 9,0 | 1,000 | 23,0 / 26,7 | 1,000 | 165 / 229 |
-| bin M=400 + f32 disco | 1,000 | 7,2 / 8,1 | 1,000 | 20,2 / 25,9 | 1,000 | 170 / 246 |
-| bin M=100 + f32 RAM | 0,992 | 2,0 / 2,2 | 0,974 | 18,0 / 28,0 | 0,984 | 159 / 257 |
-| int8 puro | 0,974 | 38,5 / 50,0 | 0,956 | 517 / 879 | 0,952 | 5 495 / 14 628 |
-| int8 M=100 + f32 disco | 1,000 | 39,7 / 50,6 | 1,000 | 488 / 764 | 1,000 | 5 839 / 16 522 |
+| float32 exacto | 1,000 | 44,4 / 95,5 | 1,000 | 413 / 525 | 1,000 | 4 205 / 4 364 |
+| binario puro | 0,532 | 2,0 / 3,3 | 0,486 | 15,8 / 20,5 | 0,514 | 201 / 403 |
+| bin M=50 + f32 disco | 0,930 | 3,2 / 5,2 | 0,918 | 18,0 / 21,4 | 0,914 | 186 / 207 |
+| bin M=100 + f32 disco | 0,992 | 3,8 / 4,1 | 0,974 | 18,3 / 25,3 | 0,984 | 169 / 207 |
+| bin M=200 + f32 disco | 1,000 | 5,8 / 9,0 | 1,000 | 20,9 / 29,9 | 1,000 | 172 / 193 |
+| bin M=400 + f32 disco | 1,000 | 8,8 / 11,8 | 1,000 | 24,7 / 29,9 | 1,000 | 166 / 190 |
+| bin M=100 + f32 RAM | 0,992 | 2,5 / 4,5 | 0,974 | 17,9 / 31,3 | 0,984 | 155 / 183 |
+| int8 puro | 0,974 | 45,0 / 59,7 | 0,956 | 496 / 620 | 0,952 | 4 771 / 5 316 |
+| int8 M=100 + f32 disco | 1,000 | 47,0 / 95,3 | 1,000 | 491 / 565 | 1,000 | 4 857 / 6 000 |
 
 | RSS pico MB | 10k | 100k | 1M |
 |---|---|---|---|
-| float32 exacto | 132 | 484 | 3 997 |
-| binario puro | 121 | 126 | 250 |
-| bin + f32 disco (M=100) | 119 | 131 | 253 |
-| bin + f32 RAM (M=100) | 147 | 524 | 4 156 |
-| int8 puro | 130 | 292 | 1 462 |
+| float32 exacto | 133 | 482 | 3 989 |
+| binario puro | 120 | 126 | 247 |
+| bin + f32 disco (M=100) | 112 | 123 | 249 |
+| bin + f32 RAM (M=100) | 151 | 520 | 4 158 |
+| int8 puro | 125 | 287 | 1 461 |
 
 | Disco MB | 10k | 100k | 1M |
 |---|---|---|---|
@@ -93,10 +94,10 @@ Solape@10 con el top-10 float32 exacto, p50/p95 en ms (solo búsqueda, sin embed
 | + int8 | +10,2 | +102 | +1 024 |
 
 Lecturas y límites:
-- A 1 M, M=100 con rescoring conserva el 98,4 % del top-10 con una latencia 26× menor; M=200 lo recupera entero en estos datos.
+- A 1 M, M=100 con rescoring conserva el 98,4 % del top-10 con una latencia ~25× menor; M=200 lo recupera entero en estos datos.
 - Los sintéticos tienen una estructura que he fabricado. El solape real puede diferir; la coincidencia con savia-docs (0,964–1,000 para M=50–400) es consistente, no una prueba.
-- El int8 en JS puro es más lento que el float32 (conversión int8 → double en el bucle) y no ahorra latencia: cuesta 5,5 s a 1 M. Un kernel nativo/SIMD es otra medición.
-- Los p95 de int8 a 1 M (14–16 s) vienen con 1 repetición y presión de memoria; son indicativos, no estables.
+- El int8 en JS puro es más lento que el float32 (conversión int8 → double en el bucle) y no ahorra latencia: cuesta 4,8 s a 1 M. Un kernel nativo/SIMD es otra medición.
+- Los p95 de 1 M salen de 50 muestras (1 repetición por consulta).
 
 ## Hallazgos de ingeniería
 
@@ -126,7 +127,8 @@ Lecturas y límites:
 
 ## Limitaciones de la medición
 
-- `rssLoadedMB` de los datos sintéticos con float32 residente se tomó antes de la carga perezosa de los vectores y es incorrecto. Esta tabla usa el pico de RSS, que sí es válido. El script conserva la medición tal cual se ejecutó.
+- `rssLoadedMB` de los datos sintéticos con float32 residente se toma antes de la carga perezosa de los vectores y es incorrecto; el informe usa el pico de RSS, que sí es válido.
+- `scripts/bench-quantization.ts` no es importable desde un test (despacha al cargarse) y fija la clasificación `N2`.
 - 36 consultas: sin IC por bootstrap pareado, y las diferencias de 1–2 consultas no son concluyentes.
 - El payload sellado usa el `binding` como datos asociados del AEAD; `accept` es obligatorio en `QuantizedIndex.search`; `dims` ≥ 65 535 se rechazan.
-- Tests: la suite de savia-vaults da 1 065 de 1 066. Un test e2e ajeno (`mcp-registry-reload`, `--rag-autosync`) agotó los 10 s en la ejecución completa con la máquina cargada; pasa solo en 3 s.
+- Tests: suite de savia-vaults 1 073/1 073 (en una ejecución anterior, un e2e ajeno agotó el timeout de 10 s con la máquina cargada).

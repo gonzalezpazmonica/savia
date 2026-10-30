@@ -159,6 +159,17 @@ describe('proyecciones M7', () => {
       expect(() => BinaryProjection.load(store, 'N4', xorCipher(9))).toThrow(/PROJECTION_MISMATCH/);
     });
 
+    it('la cabecera de una proyección sellada no filtra el hash del contenido en claro', async () => {
+      const cipher = xorCipher(7);
+      const { store } = await makeStore(home, { dims: 32, n: 8, cipher });
+      const clear = await makeStore(home, { dims: 32, n: 8, dome: 'C' });
+      const sealedHeader = BinaryProjection.build(store, 'N2', cipher).header;
+      const clearHeader = BinaryProjection.build(clear.store, 'N2').header;
+      // mismos vectores (misma semilla): el hash en claro coincidiría si la cabecera sellada lo filtrase
+      expect(Array.from(BinaryProjection.load(store, 'N2', cipher).words)).toEqual(Array.from(BinaryProjection.load(clear.store, 'N2').words));
+      expect(sealedHeader.payloadHash).not.toBe(clearHeader.payloadHash);
+    });
+
     it('AAD: el payload sellado de otra generación no se acepta aunque se reescriba la cabecera', async () => {
       const cipher = xorCipher(7);
       const a = await makeStore(home, { dims: 32, n: 8, digest: 'dig-A', cipher });
@@ -223,7 +234,9 @@ describe('proyecciones M7', () => {
       FlatVectorStore.write(dir, next, chunks, vectors);
       const s2 = FlatVectorStore.load(dir);
       BinaryProjection.build(s2, 'N2');
-      expect(gcProjections(dir, s2.manifest)).toBe(4); // json+bin de binary e int8 de seq 1
+      expect(gcProjections(dir, s2.manifest)).toBe(0); // dentro del periodo de gracia no se toca nada
+      expect(gcProjections(dir, undefined, 0)).toBe(0); // sin manifest legible tampoco
+      expect(gcProjections(dir, s2.manifest, 0)).toBe(4); // json+bin de binary e int8 de seq 1
       expect(fs.readdirSync(dir).filter((f) => f.startsWith('proj-1-'))).toEqual([]);
       expect(() => BinaryProjection.load(s2, 'N2')).not.toThrow();
     });
@@ -282,7 +295,12 @@ describe('proyecciones M7', () => {
         expect(projOf(A).filter((f) => f.startsWith('proj-1-'))).toHaveLength(4);
         expect(() => Int8Projection.load(s2, 'N2')).toThrow(/PROJECTION_MISMATCH/);
         await svc.gc('Docs');
+        expect(projOf(A).filter((f) => f.startsWith('proj-1-'))).toHaveLength(4); // gracia, como chunks y vectores
+        const old = new Date(Date.now() - 20 * 60 * 1000);
+        for (const f of projOf(A).filter((x) => x.startsWith('proj-1-'))) fs.utimesSync(path.join(genDir(A), f), old, old);
+        await svc.gc('Docs');
         expect(projOf(A).filter((f) => f.startsWith('proj-1-'))).toEqual([]);
+        expect(() => BinaryProjection.load(FlatVectorStore.load(genDir(A)), 'N2')).toThrow(/PROJECTION_MISMATCH/); // la seq 2 aún no se proyectó
 
         // B sale del puntero: el gc borra la generación entera, con sus proyecciones
         writeActive(ragHome, 'Docs', { active: A });

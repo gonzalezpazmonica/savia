@@ -405,7 +405,7 @@ export class RagService {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       if (!e.isDirectory()) continue;
       const full = path.join(dir, e.name);
-      if (keep.has(e.name)) removed += gcGeneration(full) + gcProjections(full, FlatVectorStore.readManifest(full));
+      if (keep.has(e.name)) removed += gcGeneration(full) + gcProjections(full, FlatVectorStore.readManifest(full)); // sin manifest legible: nada
       else { fs.rmSync(full, { recursive: true, force: true }); removed++; }
     }
     return removed;

@@ -70,7 +70,7 @@ export interface ProjectionHeader {
   chunkOrder: string;
   classification: string;
   sealed: boolean;
-  /** sha256 del payload en claro (integridad, además del AEAD si está sellado). */
+  /** sha256 de los bytes tal como están en disco (cifrados si la fuente está sellada: no filtra una huella del contenido en claro). */
   payloadHash: string;
   binding: string;
 }
@@ -120,10 +120,12 @@ function writeProjection(store: ProjectionSource, kind: ProjectionKind, classifi
   if (m.sealed && !cipher) throw new RagError('PROJECTION_MISMATCH', 'la fuente está cifrada: la proyección exige el mismo cifrador');
   ensureSafeHome(store.dir);
   const b = expectedBinding(store, kind, classification);
-  const header: ProjectionHeader = { ...b, payloadHash: sha(payload), binding: bindingOf(b) };
+  const binding = bindingOf(b);
+  const onDisk = m.sealed ? cipher!.seal(payload, sealPart(kind, m.seq, binding)) : payload;
+  const header: ProjectionHeader = { ...b, payloadHash: sha(onDisk), binding };
   const p = projectionPaths(store.dir, m.seq, kind);
   // Payload primero, cabecera después: sin cabecera válida la proyección no existe.
-  writeAtomic(p.payload, m.sealed ? cipher!.seal(payload, sealPart(kind, m.seq, header.binding)) : payload);
+  writeAtomic(p.payload, onDisk);
   writeAtomic(p.header, JSON.stringify(header, null, 2));
   return header;
 }
@@ -146,13 +148,13 @@ function readProjection(store: ProjectionSource, kind: ProjectionKind, classific
   }
   if (header.binding !== bindingOf(want)) throw new RagError('PROJECTION_MISMATCH', `binding de la proyección ${kind} no válido`);
   if (m.sealed && !cipher) throw new RagError('PROJECTION_MISMATCH', 'proyección cifrada sin cifrador');
+  if (sha(raw) !== header.payloadHash) throw new RagError('PROJECTION_MISMATCH', `contenido de la proyección ${kind} alterado`);
   let payload: Buffer;
   try {
     payload = m.sealed ? cipher!.open(raw, sealPart(kind, m.seq, header.binding)) : raw;
   } catch {
     throw new RagError('PROJECTION_MISMATCH', `no se pudo abrir la proyección ${kind}`);
   }
-  if (sha(payload) !== header.payloadHash) throw new RagError('PROJECTION_MISMATCH', `contenido de la proyección ${kind} alterado`);
   return { header, payload };
 }
 
@@ -250,17 +252,23 @@ export class Int8Projection {
 
 const PROJ_FILE = /^proj-(\d+)-(binary|int8)\.(json|bin)$/;
 
-/** Borra proyecciones de una generación que no corresponden a su manifest vigente (otra seq). Devuelve ficheros borrados. */
-export function gcProjections(dir: string, manifest: Manifest | undefined, tmpGraceMs = 10 * 60 * 1000): number {
+/**
+ * Borra proyecciones de una generación que no corresponden a su manifest vigente (otra seq) y temporales
+ * huérfanos. Como `gcGeneration`, respeta un periodo de gracia (lectores abiertos, builds en curso). Sin manifest
+ * legible no borra nada de una generación (misma cautela que `gcGeneration`); con `manifest` undefined se barre
+ * solo si `sweepAll` (generación huérfana).
+ */
+export function gcProjections(dir: string, manifest: Manifest | undefined, graceMs = 10 * 60 * 1000, sweepAll = false): number {
+  if (!manifest && !sweepAll) return 0;
   let removed = 0;
   for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
     const m = f.match(PROJ_FILE);
     const tmp = !m && /^proj-.*\.tmp-/.test(f);
     if (!m && !tmp) continue;
     if (m && manifest && Number(m[1]) === manifest.seq) continue;
-    // Un build en curso escribe un tmp y lo renombra: no se barre hasta pasado el periodo de gracia.
-    if (tmp && Date.now() - fs.statSync(path.join(dir, f)).mtimeMs < tmpGraceMs) continue;
-    fs.rmSync(path.join(dir, f), { force: true });
+    const full = path.join(dir, f);
+    if (graceMs > 0 && Date.now() - fs.statSync(full).mtimeMs < graceMs) continue;
+    fs.rmSync(full, { force: true });
     removed++;
   }
   return removed;
@@ -271,7 +279,7 @@ export function gcProjections(dir: string, manifest: Manifest | undefined, tmpGr
  * se borran enteras en el servicio (con sus proyecciones); aquí se barren además las proyecciones
  * obsoletas dentro de las que se conservan y cualquier directorio de generación huérfano.
  */
-export function reconcileProjections(home: string, dome: string): number {
+export function reconcileProjections(home: string, dome: string, graceMs = 0): number {
   const domeRoot = path.join(home, dome);
   const pointer = readActive(home, dome);
   // Puntero ausente o ilegible: no se destruye nada (readActive no distingue ambos casos).
@@ -281,8 +289,8 @@ export function reconcileProjections(home: string, dome: string): number {
   for (const e of fs.existsSync(domeRoot) ? fs.readdirSync(domeRoot, { withFileTypes: true }) : []) {
     if (!e.isDirectory()) continue;
     const full = path.join(domeRoot, e.name);
-    if (keep.has(e.name)) removed += gcProjections(full, FlatVectorStore.readManifest(full));
-    else removed += gcProjections(full, undefined);
+    if (keep.has(e.name)) removed += gcProjections(full, FlatVectorStore.readManifest(full), graceMs);
+    else removed += gcProjections(full, undefined, graceMs, true);
   }
   return removed;
 }

@@ -23,6 +23,9 @@ export interface QuantizedSearchOptions {
   accept: (index: number) => boolean;
 }
 
+/** Vectores residentes con identidad verificable (lo cumple FlatVectorStore). */
+export type ResidentRows = VectorRows & { readonly size: number; readonly manifest: { readonly generation: string; readonly seq: number } };
+
 export class QuantizedIndex {
   private bin?: BinaryProjection;
   private i8?: Int8Projection;
@@ -32,14 +35,13 @@ export class QuantizedIndex {
     readonly source: ProjectionSource,
     private readonly classification: string,
     private readonly cipher?: IndexCipher,
-    private readonly rows?: VectorRows,
+    private readonly rows?: ResidentRows,
   ) {}
 
   /** `rows` opcional: float32 residente para rescorar; sin él se leen las filas candidatas desde disco (solo índices en claro). */
-  static open(dir: string, classification: string, cipher?: IndexCipher, rows?: VectorRows): QuantizedIndex {
+  static open(dir: string, classification: string, cipher?: IndexCipher, rows?: ResidentRows): QuantizedIndex {
     const source = openProjectionSource(dir, cipher);
-    const r = rows as (VectorRows & { size?: number; manifest?: { generation: string; seq: number } }) | undefined;
-    if (r && ((r.size !== undefined && r.size !== source.size) || (r.manifest && (r.manifest.generation !== source.manifest.generation || r.manifest.seq !== source.manifest.seq)))) {
+    if (rows && (rows.size !== source.size || rows.manifest.generation !== source.manifest.generation || rows.manifest.seq !== source.manifest.seq)) {
       throw new RagError('CONTRACT_MISMATCH', 'los vectores en memoria no corresponden a la generación y seq de la proyección');
     }
     return new QuantizedIndex(source, classification, cipher, rows);
