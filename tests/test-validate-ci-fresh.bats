@@ -232,3 +232,10 @@ lock_dir() {
   [[ "$step" != *"if:"* ]]
   grep -qE '^[[:space:]]+run: bats .*tests/test-validate-ci-fresh\.bats' "$ci"
 }
+
+@test "propuestas-index-gen: el orden no depende del idioma del sistema (CI en C, máquinas en es_ES)" {
+  command -v locale >/dev/null && locale -a 2>/dev/null | grep -qi '^es_ES.utf' || skip "sin locale es_ES.UTF-8"
+  a=$(cd "$REPO_ROOT" && LC_ALL=C.UTF-8 bash scripts/propuestas-index-gen.sh --dry-run | grep -v 'Last regenerated')
+  b=$(cd "$REPO_ROOT" && LC_ALL=es_ES.UTF-8 bash scripts/propuestas-index-gen.sh --dry-run | grep -v 'Last regenerated')
+  [ "$a" = "$b" ]
+}
