@@ -1,0 +1,42 @@
+{
+  "description": "SE-481 R6 — pares casi idénticos que invierten el sentido. Sintético, sin datos reales.",
+  "pairs": [
+    {
+      "query": "no está permitido conectar el portátil a la red de invitados",
+      "expected": "neg/conectar-no.md",
+      "twin": "neg/conectar-si.md"
+    },
+    {
+      "query": "no se debe publicar el informe sin revisión",
+      "expected": "neg/publicar-no.md",
+      "twin": "neg/publicar-si.md"
+    },
+    {
+      "query": "the agent must not merge without approval",
+      "expected": "neg/merge-not.md",
+      "twin": "neg/merge-yes.md"
+    },
+    {
+      "query": "despliegue sin pruebas previas",
+      "expected": "neg/despliegue-sin.md",
+      "twin": "neg/despliegue-con.md"
+    },
+    {
+      "query": "ni lectura ni escritura en la carpeta compartida",
+      "expected": "neg/carpeta-ni.md",
+      "twin": "neg/carpeta-si.md"
+    }
+  ],
+  "docs": {
+    "neg/conectar-no.md": "# Red de invitados\n\nNo está permitido conectar el portátil a la red de invitados. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/conectar-si.md": "# Red de invitados\n\nEstá permitido conectar el portátil a la red de invitados. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/publicar-no.md": "# Informes\n\nNo se debe publicar el informe trimestral antes de la revisión. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/publicar-si.md": "# Informes\n\nSe debe publicar el informe trimestral antes de la revisión. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/merge-not.md": "# Approval\n\nThe agent must not merge a change without explicit approval. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/merge-yes.md": "# Approval\n\nThe agent must merge a change without explicit approval. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/despliegue-sin.md": "# Despliegues\n\nUn despliegue sin pruebas previas queda bloqueado. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/despliegue-con.md": "# Despliegues\n\nUn despliegue con pruebas previas queda bloqueado. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/carpeta-ni.md": "# Carpeta compartida\n\nNi lectura ni escritura en la carpeta compartida del equipo. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "neg/carpeta-si.md": "# Carpeta compartida\n\nLectura y escritura en la carpeta compartida del equipo. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. "
+  }
+}
