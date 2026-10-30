@@ -1,0 +1,27 @@
+{
+  "bench": "SE-489 R1 evidence-bench",
+  "version": 1,
+  "snapshot_commit": "c783d6bcf371530a49c33ad50abc511450f1b793",
+  "min_per_category": 50,
+  "test_ratio": 0.3,
+  "domes": {
+    "savia-docs": {
+      "source": "git",
+      "root": "",
+      "confidentiality": "N1",
+      "description": "documentación pública del repo en snapshot_commit"
+    },
+    "bench-legal": {
+      "source": "worktree",
+      "root": "projects/savia-vaults/eval/evidence-bench/corpus/bench-legal",
+      "confidentiality": "N2",
+      "description": "corpus sintético: contratos, anexos, normas con revisiones, circulares, avisos, notas"
+    },
+    "bench-restringida": {
+      "source": "worktree",
+      "root": "projects/savia-vaults/eval/evidence-bench/corpus/bench-restringida",
+      "confidentiality": "N3",
+      "description": "corpus sintético restringido; ningún caso lo autoriza"
+    }
+  }
+}
