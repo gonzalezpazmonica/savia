@@ -1591,6 +1591,16 @@
       "note": "Fases F1-F7 tras SE-481; cada una spec propia. Preguntas abiertas a la operadora antes de F1.",
       "evidence": "docs/specs/SE-482-vaults-governed-context.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-485",
+      "status": "APPROVED",
+      "priority": "P2",
+      "title": "Vaults: cinco fallos de la auditoría SVTC-00",
+      "note": "Backlinks por nombre, A2A /stats por cúpula y usuario, /context oculto igual que inexistente (sin oráculo), identificadores inexistentes marcados, includeStale en todas las vistas.",
+      "evidence": "docs/specs/SE-485-vaults-audit-fixes.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30: AskUserQuestion (spec y arreglo ya)"
     }
   ],
   "route": {
