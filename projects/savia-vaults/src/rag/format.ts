@@ -23,12 +23,14 @@ function leanHit(h: RagHit, withText: boolean) {
     ...(h.freshness.supersededBy ? { supersededBy: h.freshness.supersededBy } : {}),
     // SE-413: procedencia de fichero (documento, revisión, localizador) para citar.
     ...(h.source ? { source: h.source } : {}),
+    // SE-485 R4: vecino de un identificador buscado (false) o documento literal (true).
+    ...(h.exactMatch !== undefined ? { exactMatch: h.exactMatch } : {}),
   };
 }
 
 function lean(res: RagResponse) {
   return {
-    results: res.results.map(r => ({ query: r.query, hits: r.hits.map(h => leanHit(h, true)) })),
+    results: res.results.map(r => ({ query: r.query, hits: r.hits.map(h => leanHit(h, true)), ...(r.warnings ? { warnings: r.warnings } : {}) })),
     // Los textos ya van en `results`: `merged` solo ordena.
     ...(res.merged ? { merged: res.merged.map(h => leanHit(h, false)) } : {}),
     domes: res.domes.map(d => ({ name: d.name, status: d.status, ...(d.detail ? { detail: d.detail } : {}) })),
