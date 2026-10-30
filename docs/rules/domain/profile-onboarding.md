@@ -94,7 +94,7 @@ message: "Ready. Send command."
 
 **Humano:**
 ```
-🦉 Veo que hay perfiles configurados pero ninguno activo.
+Veo que hay perfiles configurados pero ninguno activo.
 ¿Quién eres hoy?
 ```
 Y lanzar `/profile-switch`.

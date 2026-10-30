@@ -104,8 +104,11 @@ teardown() {
   grep -q "Frontend" "$FACTS"
 }
 
-@test "AC5: contains Sprint field" {
-  grep -q "Sprint" "$FACTS"
+@test "AC5: contains Identidad field (SE-483, replaces Sprint)" {
+  grep -q "^- \*\*Identidad\*\*: " "$FACTS"
+  # SE-483: el hecho legado de sprint ya no está en el anchor
+  run grep -c "^- \*\*Sprint\*\*" "$FACTS"
+  [ "$output" = "0" ]
 }
 
 @test "AC5: contains Gates inmutables field" {

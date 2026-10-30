@@ -52,7 +52,7 @@ Crear `docs/critical-facts.md` con hard-cap de 150 tokens, cargado en cada turno
 - AC2: Validador rechaza fichero >150 tokens (test con fixture de 200 tokens falla, fixture de 140 tokens pasa).
 - AC3: CLAUDE.md carga `@docs/critical-facts.md` como primer import.
 - AC4: Auto-generacion del hook produce contenido determinista (mismo input -> mismo output).
-- AC5: BATS verifica que los 6 campos canonicos (idioma, sprint, persona, 3 gates) aparecen.
+- AC5: BATS verifica que los 6 campos canonicos (idioma, identidad, persona, 3 gates) aparecen. (2026-10-30, SE-483: el campo `Sprint` pasa a `Identidad` con la frase corta de `.claude/profiles/savia.md`.)
 - AC6: Hook PreCommit anade fichero al stage si el contenido cambio.
 - AC7: Si el fichero excede el cap, hook PreCommit sugiere que campos eliminar por relevancia.
 
