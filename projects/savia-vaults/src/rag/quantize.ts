@@ -107,7 +107,7 @@ export function quantizeInt8(v: ArrayLike<number>, cal: Int8Calibration, out?: I
 }
 
 /** Consulta pre-escalada para el producto escalar asimétrico. */
-export function scaleQuery(q: Float32Array, cal: Int8Calibration): Float32Array {
+export function scaleQuery(q: Float32Array, cal: Pick<Int8Calibration, "scale">): Float32Array {
   const out = new Float32Array(q.length);
   for (let j = 0; j < q.length; j++) out[j] = Number.isFinite(q[j]) ? q[j] * cal.scale[j] : 0;
   return out;

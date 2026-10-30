@@ -1,5 +1,5 @@
 import { popcount32 } from './quantize.js';
-import type { BinaryProjection } from './binary-store.js';
+
 
 /**
  * SE-489 M7 — Búsqueda Hamming sobre la proyección binaria: xor + popcount por palabra de 32 bits
@@ -7,10 +7,13 @@ import type { BinaryProjection } from './binary-store.js';
  * Top-M con desempate estable: menor distancia primero, y a igual distancia, menor índice.
  */
 
+/** Filas binarias alineadas a 32 bits (lo implementa BinaryProjection; los bancos sintéticos usan filas crudas). */
+export interface BinaryRows { readonly words: Uint32Array; readonly rowWords: number; readonly size: number }
+
 export interface HammingHit { index: number; distance: number }
 
 /** Distancias de la consulta a todas las filas. `accept` excluye filas (se marcan con 0xFFFF). */
-export function hammingDistances(proj: BinaryProjection, query: Uint32Array, accept?: (index: number) => boolean): Uint16Array {
+export function hammingDistances(proj: BinaryRows, query: Uint32Array, accept?: (index: number) => boolean): Uint16Array {
   const rw = proj.rowWords;
   if (query.length !== rw) throw new RangeError(`consulta de ${query.length} palabras, filas de ${rw}`);
   const n = proj.size;
@@ -47,6 +50,6 @@ export function topMFromDistances(dist: Uint16Array, m: number): HammingHit[] {
   return out.sort((a, b) => a.distance - b.distance || a.index - b.index).slice(0, m);
 }
 
-export function hammingTopM(proj: BinaryProjection, query: Uint32Array, m: number, accept?: (index: number) => boolean): HammingHit[] {
+export function hammingTopM(proj: BinaryRows, query: Uint32Array, m: number, accept?: (index: number) => boolean): HammingHit[] {
   return topMFromDistances(hammingDistances(proj, query, accept), m);
 }

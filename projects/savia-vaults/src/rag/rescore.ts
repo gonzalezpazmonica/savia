@@ -1,8 +1,9 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { scaleQuery } from './quantize.js';
-import type { Int8Projection } from './binary-store.js';
-import type { FlatVectorStore, TopKHit } from './store.js';
+import type { Int8Calibration } from './quantize.js';
+import type { ProjectionSource } from './binary-store.js';
+import type { TopKHit } from './store.js';
 import { RagError } from './types.js';
 
 /**
@@ -10,10 +11,16 @@ import { RagError } from './types.js';
  * o int8 solo decide qué filas se releen. Desempate estable: mayor score, y a igual score menor índice.
  */
 
+/** Filas float32 en memoria (lo implementa FlatVectorStore). */
+export interface VectorRows { readonly dims: number; vector(index: number): Float32Array }
+
+/** Filas int8 con su calibración (lo implementa Int8Projection). */
+export interface Int8Rows { readonly dims: number; readonly size: number; readonly calibration: Pick<Int8Calibration, 'scale' | 'dims'>; readonly codes: Int8Array }
+
 const byScore = (a: TopKHit, b: TopKHit) => b.score - a.score || a.index - b.index;
 
 /** Rescoring exacto en float32 con los vectores ya cargados del almacén. */
-export function rescoreFloat32(store: FlatVectorStore, query: Float32Array, candidates: number[], k: number): TopKHit[] {
+export function rescoreFloat32(store: VectorRows, query: Float32Array, candidates: number[], k: number): TopKHit[] {
   if (query.length !== store.dims) throw new RagError('CONTRACT_MISMATCH', `consulta de ${query.length} dims, índice ${store.dims}`);
   const out: TopKHit[] = candidates.map((index) => {
     const v = store.vector(index);
@@ -25,7 +32,7 @@ export function rescoreFloat32(store: FlatVectorStore, query: Float32Array, cand
 }
 
 /** Rescoring en int8 asimétrico (documento int8, consulta float32). */
-export function rescoreInt8(proj: Int8Projection, query: Float32Array, candidates: number[], k: number): TopKHit[] {
+export function rescoreInt8(proj: Int8Rows, query: Float32Array, candidates: number[], k: number): TopKHit[] {
   if (query.length !== proj.dims) throw new RagError('CONTRACT_MISMATCH', `consulta de ${query.length} dims, proyección ${proj.dims}`);
   const q = scaleQuery(query, proj.calibration);
   const d = proj.dims;
@@ -39,7 +46,7 @@ export function rescoreInt8(proj: Int8Projection, query: Float32Array, candidate
 }
 
 /** Top-k completo en int8 (sin preselección): comparación directa con el exacto. */
-export function topKInt8(proj: Int8Projection, query: Float32Array, k: number, accept?: (index: number) => boolean): TopKHit[] {
+export function topKInt8(proj: Int8Rows, query: Float32Array, k: number, accept?: (index: number) => boolean): TopKHit[] {
   const all: number[] = [];
   for (let i = 0; i < proj.size; i++) if (!accept || accept(i)) all.push(i);
   return rescoreInt8(proj, query, all, k);
@@ -55,7 +62,7 @@ export class DiskVectorReader {
   private readonly buf: Buffer;
   readonly dims: number;
 
-  constructor(store: FlatVectorStore) {
+  constructor(store: ProjectionSource) {
     if (store.manifest.sealed) throw new RagError('PROJECTION_MISMATCH', 'lectura de filas desde disco no disponible en índices cifrados');
     this.dims = store.dims;
     this.rowBytes = this.dims * 4;

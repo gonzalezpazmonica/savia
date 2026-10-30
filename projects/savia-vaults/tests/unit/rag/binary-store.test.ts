@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  BinaryProjection, Int8Projection, gcProjections, projectionPaths, reconcileProjections, rowWordsFor,
+  BinaryProjection, Int8Projection, gcProjections, openProjectionSource, projectionPaths, reconcileProjections, rowWordsFor,
 } from '../../../src/rag/binary-store.js';
 import { FlatVectorStore, writeActive } from '../../../src/rag/store.js';
 import { RagService, type RagDomeRef } from '../../../src/rag/service.js';
@@ -33,6 +33,31 @@ describe('proyecciones M7', () => {
     const h1 = BinaryProjection.build(store, 'N2').header.payloadHash;
     const h2 = BinaryProjection.build(store, 'N2').header.payloadHash;
     expect(h1).toBe(h2);
+  });
+
+  it('openProjectionSource sirve la proyección sin cargar los vectores y con las mismas garantías', async () => {
+    const { store, dir } = await makeStore(home, { dims: 32, n: 9 });
+    const b = BinaryProjection.build(store, 'N2');
+    const src = openProjectionSource(dir);
+    expect(src.size).toBe(9);
+    expect('vector' in src).toBe(false);
+    expect(Array.from(BinaryProjection.load(src, 'N2').words)).toEqual(Array.from(b.words));
+    expect(() => BinaryProjection.load(src, 'N3')).toThrow(/classification/);
+  });
+
+  it('openProjectionSource: sellado sin clave, contrato manipulado y chunks truncados fallan', async () => {
+    const cipher = xorCipher(5);
+    const s = await makeStore(home, { n: 4, cipher, dome: 'S' });
+    expect(() => openProjectionSource(s.dir)).toThrow(/CORRUPT_INDEX/);
+    expect(openProjectionSource(s.dir, cipher).size).toBe(4);
+    const c = await makeStore(home, { n: 4, dome: 'P' });
+    const mf = path.join(c.dir, 'manifest.json');
+    const m = JSON.parse(fs.readFileSync(mf, 'utf-8'));
+    fs.writeFileSync(mf, JSON.stringify({ ...m, chunkCount: 5 }));
+    expect(() => openProjectionSource(c.dir)).toThrow(/CORRUPT_INDEX/);
+    fs.writeFileSync(mf, JSON.stringify({ ...m, contract: { ...m.contract, dims: 31 } }));
+    expect(() => openProjectionSource(c.dir)).toThrow(/CORRUPT_INDEX/);
+    expect(() => openProjectionSource(path.join(home, 'nada'))).toThrow(/NOT_INDEXED/);
   });
 
   it('sin proyección → rechazo', async () => {

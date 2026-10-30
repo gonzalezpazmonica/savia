@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { calibrateInt8Rows, packSigns, packedBytes, QUANTIZER_VERSION, quantizeInt8, type Int8Calibration } from './quantize.js';
-import { ensureSafeHome, FlatVectorStore, readActive, writeAtomic } from './store.js';
-import { RagError, type IndexCipher, type Manifest } from './types.js';
+import { ensureSafeHome, FlatVectorStore, generationId, readActive, writeAtomic } from './store.js';
+import { RagError, type Chunk, type IndexCipher, type Manifest } from './types.js';
 
 /**
  * SE-489 M7 — Proyecciones derivadas (binaria e int8) de una generación.
@@ -15,6 +15,45 @@ import { RagError, type IndexCipher, type Manifest } from './types.js';
  */
 
 export type ProjectionKind = 'binary' | 'int8';
+
+/** Lo mínimo de una generación para validar y servir una proyección: no exige los vectores float32 en RAM. */
+export interface ProjectionSource {
+  readonly manifest: Manifest;
+  readonly chunks: Chunk[];
+  readonly size: number;
+  readonly dims: number;
+  readonly dir: string;
+}
+
+/** Fuente con acceso a los vectores: necesaria solo para construir. */
+export interface VectorSource extends ProjectionSource {
+  vector(index: number): Float32Array;
+}
+
+/**
+ * Abre manifest y chunks de una generación SIN cargar los vectores: es lo que permite servir
+ * búsqueda binaria/int8 con rescoring desde disco sin el float32 residente. Mismas comprobaciones
+ * de contrato y cifrado que FlatVectorStore.load.
+ */
+export function openProjectionSource(dir: string, cipher?: IndexCipher): ProjectionSource {
+  const manifest = FlatVectorStore.readManifest(dir);
+  if (!manifest) throw new RagError('NOT_INDEXED', `sin manifest en ${dir}`);
+  if (generationId(manifest.contract) !== manifest.generation) throw new RagError('CORRUPT_INDEX', `manifest de ${dir} no coincide con su contrato`);
+  if (manifest.sealed && !cipher) throw new RagError('CORRUPT_INDEX', `el índice de ${manifest.dome} está cifrado y falta su clave`);
+  let chunks: Chunk[];
+  try {
+    const raw = fs.readFileSync(path.join(dir, `chunks-${manifest.seq}.jsonl`));
+    const text = (manifest.sealed ? cipher!.open(raw, `chunks-${manifest.seq}`) : raw).toString('utf-8');
+    chunks = text.split('\n').filter(Boolean).map((line) => {
+      const c = JSON.parse(line) as Omit<Chunk, 'embedText'>;
+      return { ...c, embedText: `${c.heading}\n\n${c.text}` };
+    });
+  } catch (e) {
+    throw new RagError('CORRUPT_INDEX', `no se pudieron leer los chunks de ${manifest.generation}: ${e instanceof Error ? e.message : e}`);
+  }
+  if (chunks.length !== manifest.chunkCount) throw new RagError('CORRUPT_INDEX', `chunks ${chunks.length}/${manifest.chunkCount} en ${manifest.generation}`);
+  return { manifest, chunks, size: chunks.length, dims: manifest.contract.dims, dir };
+}
 const HEADER_VERSION = 1;
 
 export interface ProjectionHeader {
@@ -40,7 +79,7 @@ type Binding = Omit<ProjectionHeader, 'payloadHash' | 'binding'>;
 
 const sha = (data: string | Uint8Array): string => createHash('sha256').update(data).digest('hex');
 
-export function chunkOrderHash(store: FlatVectorStore): string {
+export function chunkOrderHash(store: ProjectionSource): string {
   const h = createHash('sha256');
   for (const c of store.chunks) h.update(`${c.id}\t${c.hash}\t${c.meta.confidentiality ?? ''}\n`);
   return h.digest('hex');
@@ -50,7 +89,7 @@ function bindingOf(b: Binding): string {
   return sha(JSON.stringify(Object.entries(b).sort(([x], [y]) => (x < y ? -1 : 1))));
 }
 
-export function expectedBinding(store: FlatVectorStore, kind: ProjectionKind, classification: string): Binding {
+export function expectedBinding(store: ProjectionSource, kind: ProjectionKind, classification: string): Binding {
   const m = store.manifest;
   return {
     headerVersion: HEADER_VERSION, kind, quantizer: QUANTIZER_VERSION, dome: m.dome, generation: m.generation, seq: m.seq,
@@ -69,7 +108,7 @@ function sealPart(kind: ProjectionKind, seq: number): string {
   return `${base(seq, kind)}`;
 }
 
-function writeProjection(store: FlatVectorStore, kind: ProjectionKind, classification: string, payload: Uint8Array, cipher?: IndexCipher): ProjectionHeader {
+function writeProjection(store: ProjectionSource, kind: ProjectionKind, classification: string, payload: Uint8Array, cipher?: IndexCipher): ProjectionHeader {
   const m = store.manifest;
   if (m.sealed && !cipher) throw new RagError('PROJECTION_MISMATCH', 'la fuente está cifrada: la proyección exige el mismo cifrador');
   ensureSafeHome(store.dir);
@@ -82,7 +121,7 @@ function writeProjection(store: FlatVectorStore, kind: ProjectionKind, classific
   return header;
 }
 
-function readProjection(store: FlatVectorStore, kind: ProjectionKind, classification: string, cipher?: IndexCipher): { header: ProjectionHeader; payload: Buffer } {
+function readProjection(store: ProjectionSource, kind: ProjectionKind, classification: string, cipher?: IndexCipher): { header: ProjectionHeader; payload: Buffer } {
   const m = store.manifest;
   const p = projectionPaths(store.dir, m.seq, kind);
   let header: ProjectionHeader;
@@ -139,7 +178,7 @@ export class BinaryProjection {
     return new Uint32Array(buf.buffer);
   }
 
-  static build(store: FlatVectorStore, classification: string, cipher?: IndexCipher): BinaryProjection {
+  static build(store: VectorSource, classification: string, cipher?: IndexCipher): BinaryProjection {
     const rw = rowWordsFor(store.dims);
     const bytes = new Uint8Array(store.size * rw * 4);
     for (let i = 0; i < store.size; i++) packSigns(store.vector(i), bytes.subarray(i * rw * 4, (i + 1) * rw * 4));
@@ -147,7 +186,7 @@ export class BinaryProjection {
     return new BinaryProjection(header, new Uint32Array(toBuffer(bytes)));
   }
 
-  static load(store: FlatVectorStore, classification: string, cipher?: IndexCipher): BinaryProjection {
+  static load(store: ProjectionSource, classification: string, cipher?: IndexCipher): BinaryProjection {
     const { header, payload } = readProjection(store, 'binary', classification, cipher);
     const rw = rowWordsFor(store.dims);
     if (payload.byteLength !== store.size * rw * 4) throw new RagError('PROJECTION_MISMATCH', 'tamaño de la proyección binaria inconsistente');
@@ -178,7 +217,7 @@ export class Int8Projection {
     return out;
   }
 
-  static build(store: FlatVectorStore, classification: string, cipher?: IndexCipher): Int8Projection {
+  static build(store: VectorSource, classification: string, cipher?: IndexCipher): Int8Projection {
     const d = store.dims;
     const cal = calibrateInt8Rows(store.size, d, (i) => store.vector(i));
     const codes = new Int8Array(store.size * d);
@@ -187,7 +226,7 @@ export class Int8Projection {
     return new Int8Projection(header, cal, codes);
   }
 
-  static load(store: FlatVectorStore, classification: string, cipher?: IndexCipher): Int8Projection {
+  static load(store: ProjectionSource, classification: string, cipher?: IndexCipher): Int8Projection {
     const { header, payload } = readProjection(store, 'int8', classification, cipher);
     const d = store.dims;
     if (payload.byteLength !== 8 + d * 4 + store.size * d) throw new RagError('PROJECTION_MISMATCH', 'tamaño de la proyección int8 inconsistente');
