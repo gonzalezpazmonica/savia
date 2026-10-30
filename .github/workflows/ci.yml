@@ -110,7 +110,7 @@ jobs:
       # (slugs de perfiles locales, rutas /home/<x>/ o C:\Users\<x>\, identidad del generador antiguo).
       - name: "SE-487: clon limpio neutral (ficheros de arranque)"
         run: |
-          bash scripts/clean-clone-guard.sh
+          bash scripts/validate-critical-facts-cap.sh --clean-clone
           bash scripts/generate-critical-facts.sh --check
 
       - name: "Gate: PR created via /pr-plan (Rule #25)"

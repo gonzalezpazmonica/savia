@@ -199,7 +199,7 @@ settings-hooks pin|bash scripts/contract-pin.sh check settings-hooks|revisar el 
 docs/propuestas/INDEX.md|bash scripts/propuestas-index-gen.sh --check|bash scripts/propuestas-index-gen.sh
 planning-state.json|bash scripts/roadmap.sh validate|corregir planning-state.json/LOG.md según el error y bash scripts/roadmap.sh render
 docs/critical-facts.md|bash scripts/generate-critical-facts.sh --check|bash scripts/generate-critical-facts.sh
-arranque sin datos personales (SE-487)|bash scripts/clean-clone-guard.sh|mover el dato personal a un fichero local gitignored (CLAUDE.local.md, perfil activo)'
+arranque sin datos personales (SE-487)|bash scripts/validate-critical-facts-cap.sh --clean-clone|mover el dato personal a un fichero local gitignored (CLAUDE.local.md, perfil activo)'
 REPO_ROOT_CI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 check_generated_fresh() {

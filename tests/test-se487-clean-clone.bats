@@ -9,7 +9,7 @@
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
   REPO="$(pwd)"
-  GUARD="$REPO/scripts/clean-clone-guard.sh"
+  GUARD="$REPO/scripts/validate-critical-facts-cap.sh"
   GENERATOR="$REPO/scripts/generate-critical-facts.sh"
   HOOK="${SE487_SESSION_INIT:-$REPO/.claude/hooks/session-init.sh}"
   TMP="$(mktemp -d)"
@@ -42,21 +42,21 @@ run_hook() {
 # ── R3 / AC-3: guardia ───────────────────────────────────────────────────────
 
 @test "AC-3: guard passes on the real versioned tree" {
-  run bash "$GUARD"
+  run bash "$GUARD" --clean-clone
   [ "$status" -eq 0 ]
-  [[ "$output" == *"PASS clean-clone-guard"* ]]
+  [[ "$output" == *"PASS clean-clone"* ]]
 }
 
 @test "AC-3: guard passes on a clean fixture with a local profile present" {
   fixture_tree "$TMP/t"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 0 ]
 }
 
 @test "AC-3 negative: slug of a local profile injected in critical-facts fails" {
   fixture_tree "$TMP/t"
   echo '- **Usuario activo**: zz-fixture' >> "$TMP/t/docs/critical-facts.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 1 ]
   [[ "$output" == *"docs/critical-facts.md"* ]]
   # El informe no repite el dato personal en los logs de la CI.
@@ -66,7 +66,7 @@ run_hook() {
 @test "AC-3 negative: local profile name inside an @import fails" {
   fixture_tree "$TMP/t"
   echo "Hola, Quetzal Fixturina." >> "$TMP/t/docs/extra.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 1 ]
   [[ "$output" == *"docs/extra.md"* ]]
 }
@@ -75,7 +75,7 @@ run_hook() {
   fixture_tree "$TMP/t"
   rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
   echo 'ANDROID_HOME=/home/someone/Android/Sdk' >> "$TMP/t/CLAUDE.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 1 ]
   [[ "$output" == *"CLAUDE.md: ruta personal"* ]]
 }
@@ -83,7 +83,7 @@ run_hook() {
 @test "AC-3 negative: C:\\Users\\<name>\\ path in AGENTS.md fails" {
   fixture_tree "$TMP/t"
   printf 'bash en C:\\Users\\someone\\AppData\\git\n' > "$TMP/t/AGENTS.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 1 ]
   [[ "$output" == *"AGENTS.md: ruta personal"* ]]
 }
@@ -92,33 +92,33 @@ run_hook() {
   fixture_tree "$TMP/t"
   rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
   echo '- **Usuario activo**: x · profile slug `x` · activated 2026-07-13T16:35:00+02:00' >> "$TMP/t/docs/critical-facts.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 1 ]
 }
 
 @test "edge: placeholder paths like /home/<usuaria>/ are not personal data" {
   fixture_tree "$TMP/t"
   echo 'Ejemplo: /home/<usuaria>/Android/Sdk' >> "$TMP/t/CLAUDE.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 0 ]
 }
 
 @test "edge: the template profile is never treated as personal data" {
   fixture_tree "$TMP/t"
   echo "Copia el perfil template." >> "$TMP/t/CLAUDE.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 0 ]
 }
 
 @test "fail-closed: missing CLAUDE.md is an error, not a pass" {
   fixture_tree "$TMP/t"
   rm -f "$TMP/t/CLAUDE.md"
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 2 ]
 }
 
 @test "fail-closed: unknown argument is an error" {
-  run bash "$GUARD" --nope
+  run bash "$GUARD" --clean-clone --nope
   [ "$status" -eq 2 ]
 }
 
@@ -133,7 +133,7 @@ run_hook() {
   [ "$status" -eq 0 ]
   run grep -E 'zz-fixture|2031-01-02|zzfrontend' "$TMP/t/docs/critical-facts.md"
   [ "$status" -eq 1 ]
-  run bash "$GUARD" --root "$TMP/t"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
   [ "$status" -eq 0 ]
 }
 
