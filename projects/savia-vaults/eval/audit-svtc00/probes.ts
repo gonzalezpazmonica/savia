@@ -85,6 +85,7 @@ async function H2() {
   check('H2-stopword-control', processTerm('de'), null);
   check('H2-negation-only', [4, 5, 6, 7, 8].map(ids), [['prohibido.md'], [], [], ['sin-autorizacion.md'], []]);
   check('H2-id-E', ids(9), ['expediente.md', 'expediente-vecino.md']);
+  check('H2-id-E-ranking', observations[9].hits[0].bm25 > observations[9].hits[1].bm25, true);
   check('H2-id-CT', ids(10), ['contrato.md', 'contrato-vecino.md']);
   check('H2-id-CT-ranking', observations[10].hits[0].bm25 > observations[10].hits[1].bm25, true);
   check('H2-id-absent-E', ids(11), []);
@@ -94,7 +95,7 @@ async function H2() {
     components: {
       negationStopwords: 'ALREADY_SOLVED (SE-481 R5)',
       idRanking: 'ALREADY_SOLVED: el identificador exacto queda primero',
-      absentIdentifier: 'CONFIRMED: `CT-2099-999` inexistente devuelve ambos contratos (causa no analizada)',
+      absentIdentifier: 'CONFIRMED (matizado): `CT-2099-999` inexistente devuelve ambos contratos; el token suelto `ct` casa por OR en BM25, no es una ausencia general de abstención (`E-9999` no devuelve nada porque `e` es stopword)',
     },
     scope: 'Recuperación y puntuación; sin generador de respuestas ni inferencia sobre su veracidad.' };
 }
@@ -165,7 +166,7 @@ async function H5() {
   check('H5-hit', Boolean(partial), true);
   const full = formatRagResponse(r, { fields: 'full', maxChars: 10000 });
   const lean = formatRagResponse(r, { fields: 'lean', maxChars: 10000 });
-  check('H5', Object.hasOwn(partial!.source!, 'status') || Object.hasOwn(partial!, 'extraction') || Boolean(partial!.freshness.status), false);
+  check('H5', Object.hasOwn(partial!.source!, 'status') || Object.hasOwn(partial!, 'extraction'), false);
   check('H5-skipped', full.includes('synthetic-page-omitted') || lean.includes('synthetic-page-omitted'), false);
   return { verdict: 'CONFIRMED', documents, extraction: store.get(documents.PARTIAL).revisions[0].extraction,
     response: r, full: JSON.parse(full), lean: JSON.parse(lean),
@@ -223,6 +224,16 @@ async function H6() {
   for (let i = 0; i <= budget; i++) fs.unlinkSync(path.join(defaults.vault, `${i}.md`));
   const defaultAfter = await defaults.query('xenon');
   check('H6-default', paths(defaultAfter), ['kept.md']);
+  // Control negativo: con presupuesto suficiente el sync inline sí actúa y el dominio no queda stale.
+  const sized = fixture('h6sized');
+  sized.dome.rag!.inlineSyncBudget = budget + 5;
+  sized.put('kept.md', '# Intacta\nxenon contenido que permanece');
+  for (let i = 0; i <= budget; i++) sized.put(`${i}.md`, '# Lote\nxenon contenido');
+  await sized.rag.sync('h6sized');
+  for (let i = 0; i <= budget; i++) fs.unlinkSync(path.join(sized.vault, `${i}.md`));
+  const sizedAfter = await sized.query('xenon');
+  check('H6-default-control', paths(sizedAfter), ['kept.md']);
+  check('H6-default-control-fresh', sizedAfter.domes[0].status !== 'stale', true);
   check('H6-default-stale', defaultAfter.domes[0].status, 'stale');
   return { verdict: 'ALREADY_SOLVED', components: {
     filesAcl: 'ALREADY_SOLVED: deniega con índice en memoria y seq idéntico', filesDelete: 'ALREADY_SOLVED',

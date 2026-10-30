@@ -7,7 +7,11 @@ import { FlatVectorStore, domeDir, readActive } from '../../src/rag/store.js';
 import type { VaultConfig } from '../../src/types.js';
 
 /** Aserciones AS-IS: un arreglo futuro debe romper la expectativa antigua. */
+let mutated = false;
+/** Falso si `AUDIT_MUTATE_CHECK` no coincidió con ninguna etiqueta (typo): la prueba de sensibilidad no vale. */
+export const mutationApplied = (): boolean => mutated;
 export function check(label: string, actual: unknown, expected: unknown): void {
+  if (process.env.AUDIT_MUTATE_CHECK === label) mutated = true;
   if (process.env.AUDIT_MUTATE_CHECK === label) assert.notDeepEqual(actual, expected, `mutación: ${label}`);
   else assert.deepEqual(actual, expected, label);
 }
