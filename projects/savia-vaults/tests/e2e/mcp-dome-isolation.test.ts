@@ -57,3 +57,47 @@ describe('SE-396 selected dome governs knowledge tools', () => {
     }
   }, 20000);
 });
+
+describe('SE-480 / SE-424: vault_rag_status no filtra el registro a quien lee una sola cúpula', () => {
+  it('un lector de B ve un error genérico y ninguna ruta; un registro roto no nombra cúpulas ajenas', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-rag-status-acl-'));
+    folders.push(root);
+    const mk = (conf: string) => {
+      const domes: Record<string, unknown> = {};
+      for (const name of ['b', 'topsecret']) {
+        fs.mkdirSync(path.join(root, name), { recursive: true });
+        domes[name] = { name, path: path.join(root, name), description: '', confidentiality: name === 'b' ? 'N2' : conf };
+      }
+      return JSON.stringify({ version: 1, defaultDome: 'b', domes });
+    };
+    const registry = path.join(root, 'domes.json');
+    fs.writeFileSync(registry, mk('N4'));
+    const users = new UserStore(path.join(root, 'savia-vaults.users.json'));
+    const token = users.createUser('reader-b');
+    users.setPermission('reader-b', 'b', 'reader');
+    users.save();
+    const loader = pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href;
+    const client = new Client({ name: 'acl-test', version: '1' });
+    await client.connect(new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', loader, path.resolve('src/cli/index.ts'), 'serve', '--transport', 'mcp', '--domes', registry],
+      cwd: root, env: { PATH: process.env.PATH || '', SAVIA_AUTH_TOKEN: token, SAVIA_VAULTS_RELOAD_MS: '0' },
+    }));
+    try {
+      const ok = await client.callTool({ name: 'vault_rag_status', arguments: { domes: ['b'] } });
+      expect(JSON.stringify(ok.content)).not.toContain(root); // ni la ruta del registro
+      fs.writeFileSync(registry, mk('N9')); // confidencialidad inválida en la cúpula ajena
+      const t = new Date(Date.now() + 60_000);
+      fs.utimesSync(registry, t, t);
+      const broken = await client.callTool({ name: 'vault_rag_status', arguments: { domes: ['b'] } });
+      const txt = JSON.stringify(broken.content);
+      expect(txt).toContain('registro de cúpulas inválido');
+      expect(txt).not.toContain('topsecret');
+      expect(txt).not.toContain(root);
+      const health = await client.callTool({ name: 'vault_health', arguments: { vault: 'b' } });
+      expect(JSON.stringify(health.content)).not.toContain('topsecret');
+    } finally {
+      await client.close();
+    }
+  }, 30000);
+});
