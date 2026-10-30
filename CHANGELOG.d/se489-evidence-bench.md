@@ -5,5 +5,5 @@ section: Added
 
 ### Added
 
-- SE-489 PROPOSED: banco de evidencias y rutas baratas antes que navegación en Savia Vaults; cuantización e inferencia especulativa descartadas por ahora con su condición de reapertura.
+- SE-489 APPROVED: recuperación adaptativa construida y medida en Savia Vaults (padre, reranker, árbol estructural, navegación con LLM local, grafo, router y cuantización en sombra) sobre un banco con verdad a nivel de evidencia.
 
