@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -310,6 +311,10 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
         _merge_set(sets, "identity.md", "role", plan["profile"]["role"], "identidad", errors)
     _merge_set(sets, "preferences.md", "onboarding_capabilities", [a["id"] for a in accepted], "onboarding", errors)
     answers, skipped, per_cap_steps = data.get("answers", {}), set(data.get("skipped", [])), []
+    known = {f"{c['id']}.{a['id']}" for c in cat["capabilities"] for a in c["asks"]}
+    plan["invalid_answers"] += [f"skipped: pregunta desconocida {k!r}" for k in sorted(skipped - known)]
+    for cid, per in answers.items():
+        plan["invalid_answers"] += [f"answers: pregunta desconocida '{cid}.{aid}'" for aid in per if f"{cid}.{aid}" not in known]
     for acc in accepted:
         cap = caps[acc["id"]]
         blocks, steps = [("capacidad", cap.get("configures", {}))], []
@@ -413,7 +418,9 @@ def _yaml_scalar(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def write_keys(path: Path, template: Path, items: list[dict]):
+def render_keys(path: Path, template: Path, items: list[dict]) -> str:
+    """Texto nuevo del fichero con las claves cambiadas. Un valor en bloque (líneas con sangría o
+    `- ` bajo la clave) se sustituye entero; el resultado tiene que seguir siendo YAML válido."""
     text = path.read_text(encoding="utf-8") if path.is_file() else template.read_text(encoding="utf-8")
     data, lines, end = frontmatter(text)
     if data is None:
@@ -424,9 +431,16 @@ def write_keys(path: Path, template: Path, items: list[dict]):
         if idx is None:
             lines.insert(end, new)
             end += 1
-        else:
-            lines[idx] = new
-    path.write_text("\n".join(lines), encoding="utf-8")
+            continue
+        stop = idx + 1
+        while stop < end and (lines[stop].startswith((" ", "\t", "- ")) or lines[stop] == "-"):
+            stop += 1
+        lines[idx:stop] = [new]
+        end -= stop - idx - 1
+    out = "\n".join(lines)
+    if frontmatter(out)[0] is None:
+        raise ValueError(f"{path.name}: el resultado no sería YAML válido; no se toca")
+    return out
 
 
 def check_destination(root: Path, profile_dir: Path):
@@ -456,6 +470,18 @@ def check_files(root: Path, profile_dir: Path, files: list[str]):
             fail(5, f"ERROR {fname} existe sin frontmatter; no se toca")
 
 
+def check_input_location(root: Path, input_path: str):
+    """El input lleva datos personales: dentro del repo solo se acepta si git lo ignora."""
+    if input_path == "-":
+        return
+    resolved = Path(input_path).resolve()
+    if root.resolve() not in resolved.parents:
+        return
+    probe = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", str(resolved)], capture_output=True, check=False)
+    if probe.returncode != 0:
+        fail(4, f"ERROR el input está en una ruta versionada: {input_path} (guárdalo en el directorio del perfil)")
+
+
 def run_checks(requires):
     out = []
     for r in requires:
@@ -468,21 +494,29 @@ def run_checks(requires):
 def apply(cat, data, root: Path, profile_dir: Path, confirm: bool, overwrite: set[str]):
     check_destination(root, profile_dir)
     plan = build_plan(cat, data, root, profile_dir)
-    if plan["profile"]["slug"] != profile_dir.name:
-        fail(4, f"ERROR el slug del plan ({plan['profile']['slug']}) no coincide con el directorio ({profile_dir.name})")
     if plan["status"] != "ready":
         print(json.dumps(plan, ensure_ascii=False, indent=2))
         fail(5, f"ERROR plan no aplicable: {plan['status']}")
+    if plan["profile"]["slug"] != profile_dir.name:
+        fail(4, f"ERROR el slug del plan ({plan['profile']['slug']}) no coincide con el directorio ({profile_dir.name})")
     plan["applied"], plan["diagnostics"] = False, run_checks(plan["requires"])
     todo = [w for w in plan["writes"] if w["action"] != "overwrite" or f"{w['file']}:{w['key']}" in overwrite]
     plan["skipped_overwrites"] = [f"{w['file']}:{w['key']}" for w in plan["writes"] if w not in todo]
     files = sorted({w["file"] for w in todo})
     check_files(root, profile_dir, files)
     if confirm:
-        profile_dir.mkdir(parents=False, exist_ok=True)
+        # Todo el contenido se calcula antes de tocar el disco; luego cada fichero se sustituye de forma
+        # atómica (temporal + os.replace) para que un fallo no deje ficheros a medio escribir.
         tpl_dir = root / cat["profile_template"]
-        for fname in files:
-            write_keys(profile_dir / fname, tpl_dir / fname, [w for w in todo if w["file"] == fname])
+        try:
+            rendered = {f: render_keys(profile_dir / f, tpl_dir / f, [w for w in todo if w["file"] == f]) for f in files}
+        except ValueError as exc:
+            fail(5, f"ERROR {exc}")
+        profile_dir.mkdir(parents=False, exist_ok=True)
+        for fname, text in rendered.items():
+            tmp = profile_dir / f".{fname}.tmp"
+            tmp.write_text(text, encoding="utf-8")
+            os.replace(tmp, profile_dir / fname)
         plan["applied"], plan["written"] = True, [f"{w['file']}:{w['key']}" for w in todo]
     return plan
 
@@ -531,7 +565,7 @@ def main(argv=None) -> int:
     ap.add_argument("--source", help="fuente de identidad (por defecto .claude/profiles/savia.md)")
     ap.add_argument("--fallback", action="store_true",
                     help="present: sin marcador en la fuente, «Soy Savia.» y aviso por stderr en vez de fallar")
-    ap.add_argument("--input", help="fichero JSON con la interpretación y las respuestas")
+    ap.add_argument("--input", help="fichero JSON con la interpretación y las respuestas ('-' = stdin)")
     ap.add_argument("--profile-dir")
     ap.add_argument("--render", choices=["askuser", "text"], default="text")
     ap.add_argument("--confirm", action="store_true", help="escribir de verdad (sin esto: simulación)")
@@ -560,8 +594,10 @@ def main(argv=None) -> int:
         return 0
     if not args.input:
         fail(2, "ERROR falta --input")
+    if args.cmd == "apply":
+        check_input_location(root, args.input)
     try:
-        data = json.loads(Path(args.input).read_text(encoding="utf-8"))
+        data = json.loads(sys.stdin.read() if args.input == "-" else Path(args.input).read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         fail(2, f"ERROR input ilegible: {exc}")
     errs = input_errors(data)

@@ -258,6 +258,22 @@ json.dump(d, open('$TMP/in.json','w'))"
   [[ "$output" != *"Traceback"* ]]
 }
 
+@test "AC-4 negativo [empty]: sin nombre el plan es inválido (código 5), no un error de destino" {
+  python3 -c "
+import json; d=json.load(open('$FX/pm.json')); d['name']=''; d.pop('slug')
+json.dump(d, open('$TMP/in.json','w'))"
+  run sandbox_apply --input "$TMP/in.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"nombre o slug vacío o no válido"* ]]
+}
+
+@test "AC-4 negativo [invalid]: saltar o responder una pregunta que no existe se señala" {
+  python3 -c "
+import json; d=json.load(open('$FX/pm.json')); d['skipped']=['project-management.cadense']; d['answers']['tone']['color']='azul'
+json.dump(d, open('$TMP/in.json','w'))"
+  plan_check "$TMP/in.json" "p['status']=='invalid_answers' and \"skipped: pregunta desconocida 'project-management.cadense'\" in p['invalid_answers'] and \"answers: pregunta desconocida 'tone.color'\" in p['invalid_answers']"
+}
+
 @test "AC-2: el nivel de sensibilidad del plan sale del catálogo, no de un valor fijo" {
   sed 's/level: N3, special_category: false, why: "Si hay alumnado/level: N4, special_category: false, why: "Si hay alumnado/' "$CATALOG" > "$TMP/cat.yaml"
   run python3 "$ENGINE" plan --catalog "$TMP/cat.yaml" --input "$FX/profesor.json"
@@ -299,6 +315,23 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "import json,sys; p=json.load(sys.stdin); sys.exit(0 if p['skipped_overwrites']==['workflow.md:reviews_agent_code'] else 1)"
   grep -qx 'reviews_agent_code: false' "$dir/workflow.md"
+}
+
+@test "AC-5: sobrescribir un valor en bloque lo sustituye entero y el YAML sigue siendo válido" {
+  dir="$SANDBOX/.claude/profiles/users/fx-programador"
+  sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm >/dev/null
+  python3 - "$dir/preferences.md" <<'EOF'
+import sys; p=sys.argv[1]; s=open(p).read()
+s=s.replace('harness_providers: ["claude", "codex"]', 'harness_providers:\n  - local\n  - claude')
+open(p,'w').write(s)
+EOF
+  run sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm --overwrite preferences.md:harness_providers
+  [ "$status" -eq 0 ]
+  python3 -c "
+import sys, yaml; t=open('$dir/preferences.md').read().split('---')[1]; d=yaml.safe_load(t)
+sys.exit(0 if d['harness_providers']==['claude','codex'] and 'vertical' in d else 1)"
+  run grep -c '^  - ' "$dir/preferences.md"
+  [ "$output" -eq 0 ]
 }
 
 @test "AC-5 límite [zero]: repetir el mismo onboarding no propone ningún cambio" {
@@ -364,6 +397,26 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ "$(cat "$dir/tone.md")" = "texto libre sin cabecera" ]
 }
 
+@test "AC-6 negativo [reject]: apply no acepta un input guardado en una ruta versionada" {
+  mkdir -p "$SANDBOX/docs"
+  cp "$FX/pm.json" "$SANDBOX/docs/in.json"
+  run sandbox_apply --input "$SANDBOX/docs/in.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"el input está en una ruta versionada"* ]]
+  [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm" ]
+}
+
+@test "AC-6: el input dentro del perfil ignorado o por stdin sí se acepta" {
+  dir="$SANDBOX/.claude/profiles/users/fx-pm"
+  mkdir -p "$dir"
+  cp "$FX/pm.json" "$dir/.onboarding-input.json"
+  run sandbox_apply --input "$dir/.onboarding-input.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 0 ]
+  run bash -c "python3 '$ENGINE' apply --root '$SANDBOX' --catalog '$REPO/$CATALOG' --input - --profile-dir '$dir' < '$FX/pm.json'"
+  [ "$status" -eq 0 ]
+  [ -z "$(git -C "$SANDBOX" status --porcelain)" ]
+}
+
 @test "AC-6 negativo [reject]: el slug del plan debe coincidir con el directorio" {
   run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-otra" --confirm
   [ "$status" -eq 4 ]
@@ -421,9 +474,14 @@ json.dump(d, open('$TMP/in.json','w'))"
 # ── AC-8: smoke dual Claude Code / OpenCode ─────────────────────────────────
 # cubre: questions, render
 
-@test "AC-8: OpenCode y Claude Code leen el mismo comando, que delega en el motor" {
-  cmp -s .claude/commands/profile-setup.md .opencode/commands/profile-setup.md
-  cmp -s .claude/commands/onboard.md .opencode/commands/onboard.md
+@test "AC-8: .opencode/commands resuelve a .claude/commands y el comando delega en el motor" {
+  # Hoy es un enlace al mismo directorio: si dejara de serlo, los ficheros tendrían que ser idénticos.
+  if [ -L .opencode/commands ]; then
+    [ "$(readlink -f .opencode/commands)" = "$(readlink -f .claude/commands)" ]
+  else
+    cmp -s .claude/commands/profile-setup.md .opencode/commands/profile-setup.md
+    cmp -s .claude/commands/onboard.md .opencode/commands/onboard.md
+  fi
   for f in .claude/commands/profile-setup.md .opencode/commands/profile-setup.md; do
     grep -q "scripts/onboarding-plan.py" "$f"
     grep -q "docs/onboarding/capabilities.yaml" "$f"
