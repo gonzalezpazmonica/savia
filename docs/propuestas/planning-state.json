@@ -1649,6 +1649,15 @@
       "note": "Toda aprobación que amplía autoridad es una PR en un repo privado de aprobaciones que la operadora fusiona en la app; recibo de merge verificable sin red (firma web-flow, autor, un fichero, huella, caducidad, nonce). GitHub App de agentes separada; el token de la máquina excluye el repo.",
       "evidence": "docs/specs/SE-488-approvals-by-pr-merge.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-489",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Vaults: banco de evidencias y rutas baratas antes que navegación",
+      "note": "De la investigación de recuperación adaptativa: medir primero (banco estratificado con verdad a nivel de evidencia, M0–M3 sin LLM: ampliación al padre, reranker, sección por encabezados). Árbol y grafo condicionados al informe. Cuantización e inferencia especulativa: no adoptar (presión medida ~90 MB; inferencia en la nube).",
+      "evidence": "docs/specs/SE-489-vaults-evidence-bench-cheap-routes-first.spec.md",
+      "phase": "D"
     }
   ],
   "route": {

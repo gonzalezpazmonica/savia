@@ -6,6 +6,10 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-30 SE-489 PROPOSED
+
+De la investigación de recuperación adaptativa, contrastada con main
+
 ## 2026-10-30 SE-488 PROPOSED
 
 Decisión de la operadora 2026-10-30 (Solo GitHub): aprobaciones por fusión de PR, verificadas sin red
