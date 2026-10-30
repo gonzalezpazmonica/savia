@@ -23,8 +23,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # SE-396/SE-378: roadmap validate comprueba que el PR de cada IMPLEMENTED está en los
-      # últimos 200 commits de origin/main; el checkout superficial no trae esa referencia.
+      # #1413: el mismo runner que el pre-commit local, sobre el diff de la PR, dentro de un job obligatorio
+      # en la protección de main. Es la autoridad de merge (el pre-commit local se puede esquivar). HEAD es
+      # el commit de fusión base+PR, así que base..HEAD da exactamente los cambios de la PR sin merge-base.
+      # La base se trae por SHA: no depende de que siga dentro de las 300 últimas de main. El runner sale
+      # del árbol de la PR; sus cambios piden revisión de CODEOWNERS.
+      - name: Compliance runner sobre el diff de la PR
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          bash .claude/compliance/runner.sh --range "$BASE_SHA..HEAD"
+
+      # SE-396/SE-378: roadmap validate comprueba que el PR de cada IMPLEMENTED está en el historial de
+      # origin/main; el checkout superficial no trae esa referencia.
+      # Va DESPUÉS del paso de compliance: `fetch --depth=1` de un commit ya presente recorta el historial
+      # de origin/main a ese commit y roadmap validate daría «sin PR mergeado verificable» (#1413).
       - name: Fetch main history for planning validation
         run: git fetch --no-tags --depth=300 origin +refs/heads/main:refs/remotes/origin/main
 
@@ -326,6 +341,10 @@ jobs:
         run: |
           bash scripts/validate-agent-permissions.sh .claude/agents
           bats tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats
+
+      # #1413: pre-commit y runner de compliance; sus suites viven fuera de tests/bats/ y ci-select-bats no las elige.
+      - name: Compliance pre-commit y runner (#1413)
+        run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats
 
       - name: Installer contracts and planner (SE-399 F1)
         run: python3 -m unittest tests/python/test_installer_plan.py

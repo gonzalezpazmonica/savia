@@ -17,7 +17,7 @@ for file in "$@"; do
     lines=$(wc -l < "$file")
     if (( lines > MAX_LINES )); then
       echo "❌ $file: $lines líneas (máx $MAX_LINES)"
-      ((VIOLATIONS++))
+      VIOLATIONS=$((VIOLATIONS + 1))
     fi
   fi
 done

@@ -106,13 +106,13 @@ repo() {
   printf 'x\n' > a.txt && git add a.txt
 }
 
-@test "compliance-gate ejecuta el runner por stdin y bloquea si falla" {
+@test "compliance-gate ya no ejecuta el runner por stdin: lo hace el pre-commit de git (#1413)" {
   export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR/.claude/compliance"
   printf '#!/bin/bash\necho runner-ejecutado >&2\nexit 1\n' > "$CLAUDE_PROJECT_DIR/.claude/compliance/runner.sh"
   payload Bash '{"command":"git commit -m \"mensaje suficientemente largo\""}' > "$TMP/in.json"
   run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
-  [ "$status" -eq 2 ]
-  [[ "$output" == *runner-ejecutado* ]]
+  [ "$status" -eq 0 ]
+  [[ "$output" != *runner-ejecutado* ]]
 }
 
 @test "compliance-gate no actúa cuando el texto solo se menciona" {
@@ -160,33 +160,9 @@ repo() {
 
 # ── Reproducciones de la revisión de refutación (otro proveedor) ──
 
-runner_falla() {
-  export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR/.claude/compliance"
-  printf '#!/bin/bash\nexit 1\n' > "$CLAUDE_PROJECT_DIR/.claude/compliance/runner.sh"
-}
-
-@test "compliance-gate: el prefijo command no elude el gate" {
-  runner_falla
-  payload Bash '{"command":"command git commit -m \"mensaje suficientemente largo\""}' > "$TMP/in.json"
-  run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
-  [ "$status" -eq 2 ]
-}
-
-@test "compliance-gate: -c con valor entre comillas y espacios no elude el gate" {
-  runner_falla
-  payload Bash '{"command":"git -c user.name=\"Jane Doe\" commit -m \"mensaje suficientemente largo\""}' > "$TMP/in.json"
-  run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
-  [ "$status" -eq 2 ]
-}
-
-@test "compliance-gate: sudo y bash -c tampoco lo eluden" {
-  runner_falla
-  for c in 'sudo git commit -m \"mensaje suficientemente largo\"' 'bash -c \"git commit -m mensaje-suficientemente-largo\"'; do
-    payload Bash "{\"command\":\"$c\"}" > "$TMP/in.json"
-    run bash .opencode/hooks/compliance-gate.sh < "$TMP/in.json"
-    [ "$status" -eq 2 ] || { echo "elude: $c"; return 1; }
-  done
-}
+# compliance-gate: las reproducciones de «prefijo command», «-c con comillas» y «bash -c» que antes
+# se probaban aquí sobre el texto de la orden se prueban ahora contra commits reales con el pre-commit
+# instalado (tests/test-compliance-precommit.bats), que es donde se verifica desde #1413.
 
 @test "pr-summary-gate: JSON con espacio inicial no elude el gate" {
   export CLAUDE_PROJECT_DIR="$TMP/proj"; mkdir -p "$CLAUDE_PROJECT_DIR"
