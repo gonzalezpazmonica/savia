@@ -117,7 +117,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | auto-grill-me.sh | si | TS_GUARD | warning | autoGrillMe |
 | PreToolUse | auto-zoom-out.sh | si | TS_GUARD | warning | autoZoomOut |
 | PreToolUse | blast-radius-hook.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
-| PreToolUse | compliance-gate.sh | no | GIT_HOOK | warning | git pre-commit/pre-push |
+| PreToolUse | compliance-gate.sh | no | GIT_HOOK | warning | sin efecto (exit 0); compliance en git pre-commit + CI Validate workspace |
 | PreToolUse | config-snapshot-hook.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PreToolUse | dome-guard.sh | si | TS_GUARD | warning | savia-gates domeGuardVerdict |
 | PreToolUse | model-tier-inject.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |

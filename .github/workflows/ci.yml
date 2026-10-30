@@ -29,13 +29,17 @@ jobs:
         run: git fetch --no-tags --depth=300 origin +refs/heads/main:refs/remotes/origin/main
 
       # #1413: el mismo runner que el pre-commit local, sobre el diff de la PR, dentro de un job obligatorio
-      # en la protección de main. Es la autoridad que no se puede saltar. HEAD es el commit de fusión
-      # base+PR, así que base..HEAD da exactamente los cambios de la PR sin necesitar merge-base.
+      # en la protección de main. Es la autoridad de merge (el pre-commit local se puede esquivar). HEAD es
+      # el commit de fusión base+PR, así que base..HEAD da exactamente los cambios de la PR sin merge-base.
+      # La base se trae por SHA: no depende de que siga dentro de las 300 últimas de main. El runner sale
+      # del árbol de la PR; sus cambios piden revisión de CODEOWNERS.
       - name: Compliance runner sobre el diff de la PR
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash .claude/compliance/runner.sh --range "$BASE_SHA..HEAD"
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          bash .claude/compliance/runner.sh --range "$BASE_SHA..HEAD"
 
       - name: Verify dependencies
         run: |
@@ -335,6 +339,10 @@ jobs:
         run: |
           bash scripts/validate-agent-permissions.sh .claude/agents
           bats tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats
+
+      # #1413: pre-commit y runner de compliance; sus suites viven fuera de tests/bats/ y ci-select-bats no las elige.
+      - name: Compliance pre-commit y runner (#1413)
+        run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats
 
       - name: Installer contracts and planner (SE-399 F1)
         run: python3 -m unittest tests/python/test_installer_plan.py

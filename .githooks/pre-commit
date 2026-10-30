@@ -5,8 +5,10 @@
 # Instalación: git config core.hooksPath .githooks (compartido por todos los worktrees del repo).
 #
 # Lo ejecuta git en el repo real del commit, con lo que de verdad va en stage. Funciona igual con
-# git -C, cd, subshell, heredoc, script o commit -a. La autoridad que no se puede saltar es la CI (job
-# «Compliance runner» del job obligatorio «Validate workspace»), con el mismo runner sobre el diff de la PR.
+# git -C, cd, subshell, heredoc, script o commit -a. Se puede esquivar (--no-verify, otro core.hooksPath):
+# la autoridad de merge es la CI, paso «Compliance runner» del job obligatorio «Validate workspace», con el
+# mismo runner sobre el diff de la PR. Ese runner sale del árbol de la PR: un cambio en .claude/compliance/
+# o .githooks/ exige revisión humana explícita (CODEOWNERS).
 
 set -uo pipefail
 
