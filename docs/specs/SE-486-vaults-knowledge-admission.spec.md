@@ -62,12 +62,13 @@ Las reglas se aplican en orden y gana la primera que se cumple:
 
 Una decisión positiva **explícita** sobre un objetivo prevalece sobre la herencia por contenido. Solo la toma alguien con `admit`, a sabiendas de que el mismo contenido está rechazado en otra ruta: `admission set` lo advierte y exige `--override-inherited`.
 
-`RESTRICTED` exige `scope` no vacío.
+`RESTRICTED` exige `scope` no vacío. Lo comprueba la CLI al escribir, que falla con `ADMIT_SCOPE_REQUIRED`. Si al cargar aparece una entrada firmada `RESTRICTED` sin `scope`, o cualquier entrada que no cumpla el esquema, se trata como **ledger inválido** (degradación, R2). La función pura nunca lanza al servir.
 
 Semántica de varias entradas:
 
 - La decisión vigente de un objetivo es su entrada de **mayor `seq`**.
 - Un rechazo solo se levanta con una decisión nueva de alguien con `admit`.
+- **Límite declarado: reutilización de ruta.** Un objetivo `REJECTED` sigue rechazado con cualquier digest. Una nota nueva e independiente creada después en la misma ruta nace `REJECTED`. `admission show` y `admission report` lo señalan como «rechazo propio anterior a este contenido», con el `seq` y la fecha.
 - **Conjunto de digests negativos (definición).** `negativeDigests` = { `e.digest` ↦ `e.admission` | `e` es la entrada vigente (mayor `seq`) de algún objetivo y `e.admission ∈ {REJECTED, QUARANTINED}` }.
   - Un digest **sale** del conjunto cuando ninguna entrada vigente lo aporta, por ejemplo porque el objetivo que lo aportaba recibe una decisión nueva no negativa.
   - Si varios objetivos aportan el mismo digest con estados distintos, gana `QUARANTINED` sobre `REJECTED`.
@@ -102,7 +103,7 @@ Reglas del ledger:
   3. si existe checkpoint y falta la marca, marcar `domes.<n>.admission.initialized: true` en el registro de cúpulas. Se hace en **cualquier** escritura, no solo en la primera, para cerrar el hueco de un fallo entre los pasos 2 y 3.
 
   Con el ledger inválido, `admission set` se niega (`ADMIT_LEDGER_INVALID`). Solo funciona `admission repair`.
-- Al cargar se lee **primero el checkpoint y después el ledger**. Así una escritura concurrente solo puede dejar el ledger por delante, que se tolera, y nunca por detrás, que sería un falso truncado. La recarga se dispara si cambia `(mtimeMs, size)` de cualquiera de los dos o el `seq` del checkpoint. Así se evita servir un ledger obsoleto cuando dos escrituras caen en el mismo tick de mtime.
+- Al cargar se lee **primero el checkpoint y después el ledger**. Así una escritura concurrente solo puede dejar el ledger por delante, que se tolera, y nunca por detrás, que sería un falso truncado. `admission repair` sí acorta el ledger. Por eso, ante un aparente truncado, el lector **reintenta la lectura una vez**, con el orden checkpoint → ledger, antes de declarar el ledger inválido. La recarga se dispara si cambia `(mtimeMs, size)` de cualquiera de los dos o el `seq` del checkpoint. Así se evita servir un ledger obsoleto cuando dos escrituras caen en el mismo tick de mtime.
 - Comprobaciones:
   - si el `seq` del checkpoint es mayor que el último `seq` del ledger, o su `head` no coincide con el hash de la entrada con ese `seq`, el ledger es inválido;
   - si falta el checkpoint y el ledger tiene entradas:
@@ -190,7 +191,8 @@ Reglas del ledger:
 
 ### R7 — Interruptor de rollback
 
-- `SAVIA_VAULTS_ADMISSION=off` hace que el retriever ignore el ledger: no hay campo `admission` y `REJECTED` vuelve a servirse.
+- `SAVIA_VAULTS_ADMISSION=off` hace que el retriever ignore el ledger **en las cúpulas `standard`**: no hay campo `admission` y `REJECTED` vuelve a servirse.
+- En las cúpulas `governed`, el interruptor **no tiene efecto**: se sigue aplicando la admisión y se registra un aviso. Para desactivar la admisión en una cúpula `governed`, primero hay que bajarla a `standard` con `dome governance`, que queda auditado.
 - **La cuarentena técnica sigue aplicándose.**
 - El ledger no se borra.
 
@@ -202,10 +204,10 @@ Reglas del ledger:
   - A pasa a `ACCEPTED` ⇒ su digest sale de `negativeDigests` y B sin decisión ⇒ `UNREVIEWED`;
   - dos objetivos aportan el mismo digest, uno `REJECTED` y otro `QUARANTINED` ⇒ `QUARANTINED`.
 
-  Otros casos: objetivo sin decisión, con `negativeDigests` que contiene su digest como `REJECTED` ⇒ `REJECTED` (copia o renombrado); el mismo sin el digest en el mapa ⇒ `UNREVIEWED`; `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). `RESTRICTED` sin `scope` lanza un error.
+  Otros casos: objetivo sin decisión, con `negativeDigests` que contiene su digest como `REJECTED` ⇒ `REJECTED` (copia o renombrado); el mismo sin el digest en el mapa ⇒ `UNREVIEWED`; `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). Una entrada `RESTRICTED` sin `scope` en el ledger hace que la carga lo marque como inválido, sin excepción al servir. La CLI rechaza escribirla con `ADMIT_SCOPE_REQUIRED`.
 - **AC-2 (autoadmisión por frontmatter):** una nota con `admission: accepted` y `status: approved` se sirve como `UNREVIEWED`, y `vault_health` cuenta 1 en `admission_claim_ignored`.
 - **AC-3 (edición y copia):**
-  - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until`;
+  - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until` a **otra fecha futura**. Si se edita a una fecha pasada, sale `SUPERSEDED` (regla 4);
   - una nota `REJECTED` cuyo cuerpo se edita **sigue** `REJECTED` y no se sirve;
   - una nota `REJECTED` renombrada o copiada a otra ruta con los mismos bytes sale `REJECTED` en las dos rutas y no se sirve;
   - una copia con otra ruta y un byte cambiado sale `UNREVIEWED` (límite declarado, que se prueba para que no cambie sin querer).
@@ -220,7 +222,7 @@ Reglas del ledger:
   - controles positivos: `grant-admit` sobre un humano sale con 0 y escribe `admit: true` en su permiso de esa cúpula; `token-create --admit --expires-days 7` crea una credencial con `admit: true` y caducidad ≤ 7 días;
   - negativos con error concreto: `grant-admit` sobre `service` falla con `ADMIT_SERVICE_FORBIDDEN` y `savia-vaults.users.json` queda idéntico byte a byte; `--expires-days 8` falla con `ADMIT_TTL_EXCEEDED`;
   - `admission set` con `stdin` no TTY falla con `ADMIT_REQUIRES_TTY` y el ledger no cambia;
-  - no existe ningún modo de pasar la credencial por variable de entorno ni por argv: un test lo recorre con las dos vías.
+  - canal de la credencial: con un lector de TTY inyectado que entrega un token `admit` válido, `admission set` sale con 0 y escribe la entrada (control positivo). Si el mismo token llega por `--token` o por `SAVIA_AUTH_TOKEN`, la CLI lo detecta y falla con `ADMIT_CREDENTIAL_CHANNEL_FORBIDDEN`, sin escribir;
 - **AC-6 (sin superficie de agente):**
   - un test enumera las herramientas MCP y las rutas A2A y HTTP registradas, y falla si alguna importa el módulo de escritura del ledger. Comprueba también que no acepta `admission` como entrada;
   - el recorrido de imports es **transitivo**, sobre el grafo de módulos que resuelve el compilador. Además, un test en tiempo de ejecución arranca el servidor MCP con un espía en la función de escritura del ledger, invoca cada herramienta con entradas válidas y comprueba que no se llama nunca. Así se cubren los imports dinámicos y los envoltorios;
@@ -230,14 +232,14 @@ Reglas del ledger:
   - (a) una entrada con la firma alterada;
   - (b) una entrada intermedia borrada;
   - (c) **las últimas entradas borradas (truncado de cola)**, comprobado con el checkpoint;
-  - (d) un checkpoint ausente con el ledger no vacío;
+  - (d) un checkpoint ausente con el ledger no vacío **y** (la cúpula marcada como inicializada **o** un ledger que no empieza en `seq` 1);
   - (e) la cúpula marcada como inicializada sin ledger ni checkpoint.
 
   En los cinco casos, una nota en cuarentena técnica **sigue** sin servirse, y `admission set` falla con `ADMIT_LEDGER_INVALID`.
 
-  Casos que deben ser **válidos**: (f) ledger con `seq` 1..n, cadena y firmas correctas, sin checkpoint ni marca (fallo de la primera escritura); y la entrada posterior al checkpoint descrita antes.
-
-  Caso que debe ser válido: una entrada firmada posterior al checkpoint (fallo entre la escritura y el checkpoint) se acepta.
+  Casos que deben ser **válidos**:
+  - (f) ledger con `seq` 1..n, cadena y firmas correctas, sin checkpoint **ni marca**: es el fallo de la primera escritura. El test de (f) y el de (d) con marca usan el **mismo ledger y difieren solo en la marca**, y deben dar resultados opuestos;
+  - (g) una entrada firmada posterior al checkpoint: es el fallo entre la escritura y el checkpoint.
 - **AC-8 (sin reembeber):** tras `admission set` sobre un documento indexado:
   - el hit refleja la nueva admisión **sin** sync. Esta es la aserción que falla en main;
   - el siguiente `rag sync` informa `chunks.embedded == 0` y la generación activa no cambia (invariante).
@@ -255,10 +257,11 @@ Reglas del ledger:
 - **AC-13 (rollback):** con `SAVIA_VAULTS_ADMISSION=off`:
   - (a) una nota `REJECTED` vuelve a servirse;
   - (b) los hits no llevan `admission`;
-  - (c) una nota en cuarentena técnica (SE-481) **sigue** sin servirse.
+  - (c) una nota en cuarentena técnica (SE-481) **sigue** sin servirse;
+  - (d) en una cúpula `governed`, el interruptor no tiene efecto: un `RESTRICTED` sigue sin servirse.
 - **AC-15 (reparación):** sobre el caso (c) de AC-7:
   - `admission repair` vuelve a anclar en el último prefijo válido, añade `REANCHOR` firmada y deja la cúpula válida;
-  - el `REJECTED` truncado deja de aplicarse, porque se perdió, y el informe de reparación lo dice con su `seq`;
+  - el informe de reparación da el **rango de `seq` perdido** (último válido + 1 .. `seq` del checkpoint) y declara que su contenido es irrecuperable. No dice qué decisiones eran: el test comprueba el rango, y que una decisión `REJECTED` que estaba en ese rango ya no se aplica tras la reparación;
   - sin `authorizeAdmit`, falla y no toca nada;
   - las entradas descartadas quedan archivadas, no borradas.
 - **AC-16 (requisitos sin AC hasta ahora):**
