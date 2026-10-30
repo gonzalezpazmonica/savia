@@ -7,16 +7,21 @@ import { DomeRegistry } from '../registry/domes.js';
 import { RagService, type EvalQueryInput } from '../rag/service.js';
 import { RagError, RAG_LIMITS, type RagMode } from '../rag/types.js';
 import { formatRagResponse } from '../rag/format.js';
+import { getRoute } from '../retrieval/route.js';
+import '../retrieval/routes/index.js';
+import { compareReports, evaluateRoute, legacyToCases, loadBench, type EvidenceCase, type RouteReport } from '../retrieval/evidence-eval.js';
 
 const program = new Command();
 program.name('savia-vaults');
 
-function ragService(domesFile: string): RagService {
+function ragService(domesFile: string, denied?: ReadonlySet<string>): RagService {
   const reg = new DomeRegistry(path.resolve(domesFile));
   reg.load();
   return new RagService({
     domes: () => reg.listActive().map(d => ({ name: d.name, path: d.path, confidentiality: d.confidentiality, rag: d.rag, files: d.files })),
     background: false,
+    // SE-489: en `rag eval`, los casos de categoría F simulan cúpulas denegadas por el plano de control.
+    ...(denied ? { authorize: async (dome: string) => { if (denied.has(dome)) throw new Error('acceso denegado'); return undefined; } } : {}),
   });
 }
 
@@ -138,15 +143,30 @@ ragCmd.command('status').description('Estado del índice y SLO por cúpula')
     } catch (e) { ragFail(e); }
   });
 
-ragCmd.command('eval').description('Evalúa recall@5/@10, MRR y latencia sobre un banco de consultas')
+ragCmd.command('eval').description('Evalúa recall@5/@10, MRR y latencia; con --route/--bench, métricas de evidencia por ruta (SE-489)')
   .option(...domesOpt).requiredOption('--dome <name>').option('--queries <file>', 'banco JSON (def. rag.evalSet de la cúpula)')
   .option('--generation <id>').option('--mode <mode>', 'hybrid|dense|bm25|all', 'all').option('--json', 'salida JSON', false)
+  .option('--route <ids>', 'SE-489: rutas a evaluar, separadas por comas (M0..M7)')
+  .option('--bench <dir>', 'SE-489: banco de evidencia (directorio con *.json/*.jsonl)')
+  .option('--baseline <id>', 'SE-489: ruta de referencia para la comparación pareada (def. la primera)')
+  .option('--split <split>', 'SE-489: dev|test').option('--seed <n>', 'SE-489: semilla de rutas y bootstrap', '0')
+  .option('--iterations <n>', 'SE-489: remuestreos del bootstrap', '2000').option('--k <n>', 'SE-489: hits por consulta', '20')
+  .option('--budget <json>', 'SE-489: presupuesto declarado, p. ej. {"maxModelCalls":8}')
   .action(async (opts) => {
     try {
-      const svc = ragService(opts.domesFile);
+      const denied = new Set<string>();
+      const svc = ragService(opts.domesFile, denied);
       const reg = new DomeRegistry(path.resolve(opts.domesFile)); reg.load();
       const dome = reg.get(opts.dome);
       if (!dome) throw new RagError('UNKNOWN_DOME', opts.dome);
+      const routed = opts.route !== undefined || opts.bench !== undefined;
+      if (!routed && (opts.baseline || opts.split || opts.budget)) {
+        throw new RagError('INVALID_INPUT', '--baseline, --split y --budget solo valen con --route o --bench');
+      }
+      if (routed) {
+        await routeEval(svc, opts, dome, denied);
+        return;
+      }
       const file = opts.queries ? path.resolve(opts.queries) : dome.rag?.evalSet ? path.resolve(dome.path, dome.rag.evalSet) : '';
       if (!file || !fs.existsSync(file)) throw new RagError('INVALID_INPUT', 'banco de eval no encontrado (--queries o rag.evalSet)');
       const queries = JSON.parse(fs.readFileSync(file, 'utf-8')) as EvalQueryInput[];
@@ -159,6 +179,69 @@ ragCmd.command('eval').description('Evalúa recall@5/@10, MRR y latencia sobre u
       }
     } catch (e) { ragFail(e); }
   });
+
+/** SE-489 R2: rutas sobre el banco de evidencia (o el de regresión), con comparación pareada. */
+async function routeEval(svc: RagService, opts: Record<string, string | boolean | undefined>, dome: { path: string; rag?: { evalSet?: string } }, denied: Set<string>): Promise<void> {
+  const int = (v: unknown, name: string) => {
+    const n = Number(v);
+    if (!Number.isSafeInteger(n) || n < 0) throw new RagError('INVALID_INPUT', `--${name}: entero ≥ 0`);
+    return n;
+  };
+  if (opts.generation) throw new RagError('INVALID_INPUT', '--generation no se combina con --route/--bench (las rutas usan la generación activa)');
+  if (opts.split !== undefined && opts.split !== 'dev' && opts.split !== 'test') throw new RagError('INVALID_INPUT', '--split: dev|test');
+  if (opts.split !== undefined && !opts.bench) throw new RagError('INVALID_INPUT', '--split solo vale con --bench (el banco de regresión no tiene splits)');
+  const routes = String(opts.route ?? 'M0').split(',').map(s => s.trim()).filter(Boolean);
+  if (!routes.length) throw new RagError('INVALID_INPUT', '--route: al menos una ruta');
+  for (const r of routes) getRoute(r);
+  const baseline = String(opts.baseline ?? routes[0]);
+  getRoute(baseline);
+  let cases: EvidenceCase[];
+  if (opts.bench) cases = loadBench(path.resolve(String(opts.bench)), { split: opts.split as 'dev' | 'test' | undefined });
+  else {
+    const file = opts.queries ? path.resolve(String(opts.queries)) : dome.rag?.evalSet ? path.resolve(dome.path, dome.rag.evalSet) : '';
+    if (!file || !fs.existsSync(file)) throw new RagError('INVALID_INPUT', 'banco no encontrado (--bench, --queries o rag.evalSet)');
+    cases = legacyToCases(JSON.parse(fs.readFileSync(file, 'utf-8')) as EvalQueryInput[]);
+  }
+  const mode = (opts.mode === 'all' ? 'hybrid' : opts.mode) as RagMode;
+  if (!['hybrid', 'dense', 'bm25'].includes(mode)) throw new RagError('INVALID_INPUT', `mode no válido: ${mode}`);
+  let budget: unknown;
+  if (opts.budget) { try { budget = JSON.parse(String(opts.budget)); } catch { throw new RagError('INVALID_INPUT', '--budget: JSON'); } }
+  const seed = int(opts.seed, 'seed');
+  const iterations = int(opts.iterations, 'iterations');
+  const k = int(opts.k, 'k');
+  if (k < 1 || k > RAG_LIMITS.maxK) throw new RagError('INVALID_INPUT', `--k: 1-${RAG_LIMITS.maxK}`);
+  const deny = (names: string[]) => { denied.clear(); for (const n of names) denied.add(n); };
+  const reports: RouteReport[] = [];
+  for (const r of [...new Set([baseline, ...routes])]) {
+    reports.push(await evaluateRoute(svc, cases, { route: r, mode, k, seed, iterations, budget, domes: [String(opts.dome)], deny }));
+  }
+  const base = reports.find(r => r.route === baseline)!;
+  const shown = reports.filter(r => routes.includes(r.route));
+  const comparisons = shown.map(r => compareReports(r, base, { iterations, seed }));
+  // Códigos de salida: 2 si hay lecturas no autorizadas (prevalece: es una fuga), 1 si algún caso falló.
+  const exitCode = reports.some(r => r.violations > 0) ? 2 : reports.some(r => r.errors > 0) ? 1 : 0;
+  const finish = () => {
+    for (const r of reports) {
+      if (r.errors) console.error(`[${r.route}] ${r.errors} casos con error: ${r.cases.filter(c => c.error).slice(0, 3).map(c => `${c.id}: ${c.error}`).join(' | ')}`);
+      if (r.violations) console.error(`[${r.route}] ALERTA: ${r.violations} casos con lecturas no autorizadas`);
+    }
+    if (exitCode) process.exit(exitCode);
+  };
+  if (opts.json) { console.log(JSON.stringify({ reports: shown, comparisons }, null, 2)); finish(); return; }
+  const f = (i: { mean: number; lo: number; hi: number; n: number }) => (i.n ? `${i.mean.toFixed(3)} [${i.lo.toFixed(3)}, ${i.hi.toFixed(3)}]` : '-');
+  for (const r of shown) {
+    console.log(`[${opts.dome}] ruta ${r.route} ${r.mode} n=${r.n} errores=${r.errors} violaciones=${r.violations} denegados=${r.deniedAttempts} p50=${r.latency.p50Ms}ms p95=${r.latency.p95Ms}ms RSS=${r.rssPeakMb}MB llamadas=${r.cost.modelCalls}`);
+    console.log(`   EvidenceRecall=${f(r.overall.evidenceRecall)} exact-id=${f(r.overall.exactIdentifierHit)} R@10=${f(r.overall.recallAt10)} MRR=${f(r.overall.mrr)} nDCG@10=${f(r.overall.ndcgAt10)}`);
+    console.log(`   no-autorizadas=${f(r.overall.unauthorizedReads)} prohibidas=${f(r.overall.forbiddenUsed)} abstención-correcta=${f(r.overall.correctAbstention)} falso-rechazo=${f(r.overall.falseAbstention)}`);
+    for (const [cat, m] of Object.entries(r.byCategory)) console.log(`   ${cat}: EvidenceRecall=${f(m!.evidenceRecall)} R@10=${f(m!.recallAt10)} abstención=${f(m!.correctAbstention)}`);
+  }
+  for (const c of comparisons) {
+    if (c.route === c.baseline) continue;
+    const d = c.overall.evidenceRecall;
+    console.log(`${c.route} − ${c.baseline}: ΔEvidenceRecall=${d ? `${d.diff.toFixed(3)} [${d.lo.toFixed(3)}, ${d.hi.toFixed(3)}] n=${d.n}` : '-'}`);
+  }
+  finish();
+}
 
 ragCmd.command('promote <dome> <generation>').description('Promueve una generación (gate de eval; --force = decisión humana)')
   .option(...domesOpt).option('--force', 'saltar el gate', false)
