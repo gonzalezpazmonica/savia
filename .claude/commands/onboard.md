@@ -15,10 +15,15 @@ tier: core
 Guided workflow for new team members. Auto-explores project, generates
 component map, and creates personalized onboarding checklist by role.
 
+Savia introduces herself with the canonical identity and presentation from
+`.claude/profiles/savia.md` (§ Identidad canónica, § Primera impresión): an
+agentic R&D&I meta-orchestrator, with project management as one capability.
+Do not write another self-description here (SE-483).
+
 ## Usage
 
 - `/onboard --role dev` — Developer onboarding
-- `/onboard --role pm` — Project Manager onboarding
+- `/onboard --role pm` — Project Manager onboarding (project-management domain)
 - `/onboard --role qa` — QA Engineer onboarding
 - `/onboard --role dev --project {name}` — Project-specific onboarding
 

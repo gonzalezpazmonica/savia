@@ -11,6 +11,7 @@ setup() {
   OUT_DIR="$(mktemp -d)"
   export LLMS_TXT="$OUT_DIR/llms.txt"
   export LLMS_FULL="$OUT_DIR/llms-full.txt"
+  export LLMS_ROOT="$OUT_DIR/llms-root.txt"
 }
 
 teardown() {

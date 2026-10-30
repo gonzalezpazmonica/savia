@@ -1,4 +1,4 @@
-# PM-Workspace — OpenCode entrypoint
+# Savia (pm-workspace) — OpenCode entrypoint
 # ── Este fichero solo redirige al canónico ─────────────────────────────────
 
 > **Fuente única de verdad**: `../CLAUDE.md` (raíz del workspace).

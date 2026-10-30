@@ -153,28 +153,63 @@ build_full_default() {
 
 > Esta sección NO se auto-genera. Edita libremente. Mapea términos comunes / sinónimos en español/inglés al target canónico.
 
+> Agrupada por capacidad (SE-483): metaorquestación, investigación, conocimiento, desarrollo y proyectos.
+
+### Metaorquestación (harnesses y agentes)
+
 | Sinónimo / alias | Target canónico | Notas |
 |---|---|---|
-| "estado del sprint", "sprint status", "cómo va el sprint" | skill:sprint-management | |
-| "informe semanal", "weekly", "weekly report" | skill:weekly-report | |
-| "imputaciones", "horas", "timesheet" | skill:time-tracking-report | |
-| "facturas", "presupuesto", "coste" | skill:cost-management | |
-| "descomponer PBI", "split PBI", "tareas de un PBI" | skill:pbi-decomposition | Antes de descomponer, usar `skill:product-discovery` |
-| "PRD", "discovery", "JTBD" | skill:product-discovery | Pre-requisito de pbi-decomposition |
+| "orquestar agentes", "harness", "metaharness", "bucle de agentes" | skill:harness-architecture | Diseño antes que ejecución |
+| "lanzar en paralelo", "repartir trabajo entre agentes" | skill:parallel-dispatch | |
+| "plan con dependencias", "DAG de agentes" | skill:dag-scheduling | |
+| "estado del run", "board de runs" | skill:agent-runs-board | |
+| "tribunal", "segunda opinión", "validar por panel" | skill:consensus-validation | |
+| "revisión por tribunal", "Code Review Court" | agent:court-orchestrator | E1 SIEMPRE humano (Rule 8) |
+| "noche autónoma", "overnight", "tareas mientras duermo" | skill:overnight-sprint | Doble opt-in SPEC-186 |
+| "Anthropic caído", "failover local", "LocalAI" | skill:emergency-mode | |
 | "buscar comando", "qué comando uso", "router" | skill:smart-routing | Para descubrir entre 559+ comandos |
+
+### Investigación
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
+| "investiga", "experimento", "hipótesis", "preregistro" | skill:savia-labs | |
+| "investigación técnica", "evaluar herramienta nueva" | skill:tech-research-agent | Doble opt-in SPEC-186 |
+| "buscar en la web", "estado del arte" | skill:web-research | |
+
+### Conocimiento
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
+| "cúpula", "vault", "conocimiento gobernado" | skill:savia-vaults | |
+| "diseñar cúpula", "auditar cúpula" | agent:context-dome-manager | |
+| "memoria de Savia", "recordar", "consolidar memoria" | skill:savia-memory | |
+| "grafo de conocimiento", "impacto entre specs" | skill:knowledge-graph | |
+| "reunión Teams", "transcripción", "acta" | skill:meeting-transcript-extract | Triage al digester correcto post-extract |
+
+### Desarrollo
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
 | "diseñar arquitectura", "architecture", "decisión técnica" | agent:architect | |
 | "implementar en C#", ".NET", "EF Core" | agent:dotnet-developer | Requiere Spec SDD aprobada |
 | "implementar en Python", "FastAPI", "Django" | agent:python-developer | |
 | "revisar código", "code review", "quality gate" | agent:code-reviewer | E1 SIEMPRE humano (Rule 8) |
 | "tests faltantes", "cobertura", "test runner" | agent:test-runner | |
 | "antes de commit", "pre-commit", "guardian" | agent:commit-guardian | Bloqueante por defecto |
-| "tabla de horas", "Excel imputación" | skill:time-tracking-report | |
-| "memoria de Savia", "recordar", "consolidar memoria" | skill:savia-memory | |
-| "reunión Teams", "transcripción", "acta" | skill:meeting-transcript-extract | Triage al digester correcto post-extract |
-| "investigación técnica", "evaluar herramienta nueva" | skill:tech-research-agent | Doble opt-in SPEC-186 |
-| "noche autónoma", "overnight", "tareas mientras duermo" | skill:overnight-sprint | Doble opt-in SPEC-186 |
 | "auditar seguridad", "red team / blue team" | skill:adversarial-security | Doble opt-in SPEC-186 |
-| "Anthropic caído", "failover local", "LocalAI" | skill:emergency-mode | |
+
+### Proyectos (dominio de gestión de proyectos)
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
+| "estado del sprint", "sprint status", "cómo va el sprint" | skill:sprint-management | |
+| "informe semanal", "weekly", "weekly report" | skill:weekly-report | |
+| "imputaciones", "horas", "timesheet" | skill:time-tracking-report | |
+| "tabla de horas", "Excel imputación" | skill:time-tracking-report | |
+| "facturas", "presupuesto", "coste" | skill:cost-management | |
+| "descomponer PBI", "split PBI", "tareas de un PBI" | skill:pbi-decomposition | Antes de descomponer, usar `skill:product-discovery` |
+| "PRD", "discovery", "JTBD" | skill:product-discovery | Pre-requisito de pbi-decomposition |
 
 ## AUTO — generado desde frontmatter
 

@@ -49,22 +49,24 @@ Terminar con:
 ```
 
 **Guardar catálogo completo** en `output/help-catalog.md` (por categorías, con descripciones).
-**Mostrar en chat SOLO resumen** (máx 15 líneas):
+**Mostrar en chat SOLO resumen** (máx 15 líneas). Orden fijo de secciones
+(SE-483, identidad de metaorquestadora): orquestación, investigación,
+conocimiento, desarrollo y proyectos. Ejemplos de comandos por sección:
 
 ```
-📋 Comandos disponibles: {N} / 83 total
+Comandos disponibles: {N} / {total}
 
-  Calidad y PRs (4) · Governance (5) · Legacy (3)
-  Project Onboarding (5) · Diagramas (4) · Infra (7)
-  Equipo (3) · Mensajería (6) · Conectores (12)
-  Utilidades (4)
+  Orquestación   — /dag-plan, /dag-execute, /agent-run, /team-orchestrator
+  Investigación  — /tech-research, /biblio-search, /experiment-log
+  Conocimiento   — /vault-status, /vault-sync, /memory-recall, /knowledge-prime
+  Desarrollo     — /spec-generate, /spec-implement, /pr-review, /court-review
+  Proyectos      — /sprint-status, /pbi-decompose, /report-executive
+  Otros          — Governance · Infra · Equipo · Mensajería · Conectores
 
-  No disponibles (Azure DevOps): Sprint (10), PBI (6), SDD (5),
-  Pipelines (5), Repos (6), DevOps Extended (5)
+  No disponibles ({stack}): {categorías sin conector}
 
-📄 Catálogo completo: output/help-catalog.md
-💡 Siguiente: /project-audit --project {nombre}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Catálogo completo: output/help-catalog.md
+Siguiente: el comando de la sección en la que vas a trabajar
 ```
 
 Si $ARGUMENTS filtra por categoría → mostrar solo esa categoría inline (pocas líneas).

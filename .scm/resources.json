@@ -1,5 +1,5 @@
 {
-  "hash": "f1eac6c8d0fd",
+  "hash": "8cc89dc786ea",
   "total": 1450,
   "resources": [
     {
@@ -11601,11 +11601,12 @@
         "docs",
         "full",
         "generate",
-        "llms"
+        "llms",
+        "raíz"
       ],
       "kind": "script",
       "path": "scripts/llms-txt-generate.sh",
-      "description": "llms-txt-generate.sh — Genera docs/llms.txt y docs/llms-full.txt (SE-269 S5)"
+      "description": "llms-txt-generate.sh — Genera llms.txt (raíz), docs/llms.txt y docs/llms-full.txt"
     },
     {
       "category": "planning",
