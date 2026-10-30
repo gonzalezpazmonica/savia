@@ -78,15 +78,29 @@ espejo local del repo de aprobaciones:
    idéntica. El verificador impone los límites aunque el fichero diga otra cosa:
    una ventana de un año no vale.
 7. `ahora < caduca`, y la fecha de commit de `M` está en `[emitida, caduca]`.
-   `ahora` es el reloj local. Un reloj atrasado alarga la vigencia, pero como
-   mucho a las 24 h del punto 6. Es un límite documentado: el verificador no
-   tiene una fuente de tiempo de confianza sin red.
+   `ahora` es el reloj local, y el verificador no tiene una fuente de tiempo de
+   confianza sin red. Por eso se fija un **suelo monótono**: `ahora` debe ser
+   igual o posterior a la marca más reciente que el verificador ya ha visto.
+   Esa marca es la mayor entre:
+   - la fecha firmada de la punta de `main` del espejo;
+   - la fecha de cada `M` verificado;
+   - el último `ahora` aceptado, que se guarda en el libro de consumidos.
+
+   Si `ahora` es anterior a ese suelo, no hay aprobación. Con red, además, la
+   fecha del servidor (`Date` de la respuesta de GitHub) sustituye a `ahora`.
+   **Riesgo residual declarado:** un agente que controle el reloj del proceso
+   (p. ej. `faketime`) y que además impida sincronizar el espejo puede usar
+   tarde un recibo **aún no consumido**. Solo sirve para lo exactamente
+   aprobado y una sola vez, porque el libro de consumidos lo sigue limitando. La
+   caducidad acota la vigencia nominal, no la efectiva frente a ese adversario.
 8. El libro de consumidos local registra cada uso por `(nonce, unidad)`. La
    unidad es el contrato, la PR del lote, la rama o el fichero. Una unidad ya
-   anotada no vale. El orden es atómico: se toma un cerrojo exclusivo
-   (`flock`), se comprueba, se ejecuta la acción y se anota solo si salió
-   bien, todo bajo el cerrojo. Dos usos concurrentes no pasan los dos. En un lote
-   `savia-merge`, cada PR se consume por separado y las demás siguen vigentes.
+   anotada no vale. Orden fail-closed: bajo un cerrojo exclusivo (`flock`) se
+   comprueba, **se anota como consumido y después se ejecuta la acción**. Si la
+   acción falla, el recibo queda gastado y hace falta otro. Nunca queda una
+   acción hecha con el recibo aún reutilizable. Dos usos concurrentes no pasan
+   los dos. En un lote `savia-merge`, cada PR se consume por separado y las
+   demás siguen vigentes.
 
 Cualquier fallo, herramienta ausente (`git`, `gpg`), clave no fijada o espejo sin
 sincronizar da **no aprobado**: fail-closed. `merged_by` de la API se guarda como
@@ -124,8 +138,13 @@ Alternativas descartadas:
     con un recibo `savia-force-push` vigente, y nunca hacia `main`. El hook
     resuelve además el SHA que se empuja (el refspec explícito, o la rama local
     si no lo hay) y exige que sea `a_sha`. `--force-with-lease` solo fija el
-    valor esperado del remoto, no el nuevo. Un refspec que no se pueda resolver
-    a un SHA es bloqueo;
+    valor esperado del remoto, no el nuevo. El **destino** del refspec
+    (`HEAD:<x>`, `refs/heads/<x>`) debe ser la `rama` del recibo, y el remoto
+    debe apuntar al `repo` del recibo. Un refspec que no se pueda resolver a
+    SHA y destino es bloqueo;
+  - en la vía de `operator-grant.sh`, el recibo se consume (`consume`) **antes**
+    de `gh pr merge`, bajo el mismo cerrojo que la comprobación (R2.8). Si el
+    merge falla, el recibo queda gastado;
   - una herramienta aplica un cambio de settings locales solo si el sha256 previo
     y el resultante casan con un recibo `savia-settings`.
 - **Yema:** ver R5.
@@ -135,7 +154,8 @@ Alternativas descartadas:
   TTY y el ticket: un **recibo de merge** (R2) de tipo `yema-contrato` para `cid`
   cuya huella completa empiece por `h8` y coincida con `contrato.huella(c)`. El
   recibo **no se borra**: se anota en `aprobaciones/consumidos.jsonl` con la
-  unidad `cid@huella`, bajo cerrojo y solo si la transición se guardó (R2.8).
+  unidad `cid@huella`, bajo cerrojo y **antes** de la transición (R2.8). Si la
+  transición falla, hace falta otro recibo.
 - `activar` y `transicion` a un estado de `HUMANAS` aceptan el mismo recibo.
 - La evidencia anota `via: "github:<sha12>"`.
 - `gobierno/politica.json` incorpora `aprobacion_github`: ruta del espejo, autor
@@ -162,7 +182,7 @@ son estimadas y se miden en el piloto (AC-8).
 | Reutilización | Libro de consumidos por `(nonce, unidad)` bajo cerrojo; el objeto ata id y huella (o PR y `head_sha`); caducidad |
 | Ventana de vigencia inflada por el agente que redacta el fichero | R2.6 impone `caduca − emitida ≤ 24 h` sea cual sea el contenido |
 | Push forzado de otro commit con un recibo válido | R4: el hook exige que el SHA empujado sea `a_sha`, no solo el `de_sha` del lease |
-| Reloj local atrasado | Alarga la vigencia, pero nunca más de 24 h desde `emitida` (límite documentado en R2.7) |
+| Reloj local atrasado o manipulado | Suelo monótono y fecha del servidor cuando hay red (R2.7). Riesgo residual declarado: con el reloj controlado y sin sincronizar, un recibo no consumido se puede usar tarde, una vez y solo para lo aprobado |
 | Borrado del libro de consumidos | Solo repite lo idéntico dentro de la vigencia (el mismo límite que `merge.spent`) |
 | Contrato cambiado tras aprobar | La huella sha256 del contenido material no casa (R2.6) |
 | Caducidad | `caduca` ≤ 24 h y la fecha firmada de `M` dentro de la ventana |
@@ -185,7 +205,11 @@ vuelve a revisión.
   - autor bot;
   - un solo padre;
   - dos ficheros;
+  - `M` fuera de la cadena first-parent de `main`;
+  - un solo padre, o un octopus de más de dos padres;
   - una entrada `M` (modifica un fichero existente) en vez de `A`;
+  - un borrado, un renombrado o un cambio de modo;
+  - `ahora` anterior al suelo monótono;
   - una ruta que no casa con el tipo, el id o el nonce;
   - esquema o nonce inválidos;
   - `caduca − emitida` > 24 h;
@@ -195,7 +219,8 @@ vuelve a revisión.
   - ya consumido.
 - **AC-1b:** en un lote `savia-merge` de dos PRs, consumir la primera no
   invalida la segunda, y reusar la primera falla. Dos procesos concurrentes
-  sobre la misma unidad: pasa uno y solo uno (test con dos procesos).
+  sobre la misma unidad: pasa uno y solo uno (test con dos procesos). Si la
+  acción falla después de consumir, el recibo no vuelve a valer (test).
 - **AC-2:** si falta `gpg` o la clave fijada, o el espejo no tiene la rama, el
   resultado es **no aprobado** (test).
 - **AC-3:** `operator-grant.sh check --scope merge` responde con los códigos
@@ -210,7 +235,10 @@ vuelve a revisión.
   - sigue bloqueando sin recibo, y hacia `main` aunque haya recibo;
   - deja pasar solo `--force-with-lease` con `de_sha` igual al del recibo y con
     el SHA empujado igual a `a_sha`;
-  - bloquea con otro `a_sha` o con un refspec que no se pueda resolver.
+  - bloquea con otro `a_sha`, con un refspec que no se pueda resolver, con un
+    destino distinto de la `rama` del recibo (`HEAD:otra`) o hacia `main` por un
+    refspec indirecto (`HEAD:main`, `refs/heads/main`), y también con un
+    remoto de otro repo.
 
   Se prueba con bats.
 - **AC-5:** en Yema, `yema aprobar` sin TTY ni ticket pasa con un recibo válido y
@@ -218,8 +246,9 @@ vuelve a revisión.
 - **AC-6:** el verificador de instalación falla si el token de la máquina ve el
   repo de aprobaciones, o si la App tiene `administration`.
 - **AC-7:** prueba real con la App: un intento de crear por API un commit con el
-  autor de la operadora falla R2.3 o R2.4. El resultado se documenta. La
-  spec no debe pasar a APPROVED, o al menos no implementarse, antes de este AC.
+  autor de la operadora falla R2.3 o R2.4. El resultado se documenta.
+  **Puerta:** pasar a APPROVED exige que el resultado de AC-7 esté documentado
+  y sea favorable. Si no lo es, la spec vuelve a PROPOSED con R2 rediseñado.
 - **AC-8:** piloto en el móvil: se registran los toques reales de cada tipo de
   aprobación.
 - **AC-9:** guard, `validate-ci-local.sh --quick` y SAM FRESH en verde.
