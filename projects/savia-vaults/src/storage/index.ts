@@ -7,6 +7,11 @@ import type { VaultConfig, Note, Receipt, VaultStats, CommitEntry, Frontmatter }
 import { signContent } from '../security/index.js';
 import { fileClassification, fileOutOfLevel, fileVerdict, isMarkdown, parseClassification, verdictOf } from './note-level.js';
 
+/** Nota ausente, fuera de nivel o en cuarentena: una sola causa visible para no revelar existencia (SE-485 R3). */
+export class NoteNotFoundError extends Error {
+  constructor() { super('Note not found'); this.name = 'NoteNotFoundError'; }
+}
+
 export class VaultStorage {
   private config: VaultConfig;
 
@@ -44,7 +49,7 @@ export class VaultStorage {
 
   async read(notePath: string): Promise<Note> {
     const fullPath = path.join(this.config.path, notePath);
-    if (!fs.existsSync(fullPath) || this.outOfLevel(notePath)) throw new Error('Note not found');
+    if (!fs.existsSync(fullPath) || this.outOfLevel(notePath)) throw new NoteNotFoundError();
 
     const raw = fs.readFileSync(fullPath, 'utf-8');
     const { frontmatter, content } = this.parseFrontmatter(raw);
@@ -208,7 +213,7 @@ export class VaultStorage {
   }
 
   async diff(notePath: string): Promise<string> {
-    if (this.outOfLevel(notePath)) throw new Error('Note not found');
+    if (this.outOfLevel(notePath)) throw new NoteNotFoundError();
     const git = simpleGit(this.config.path);
     try {
       const d = await git.diff([notePath]);
@@ -219,7 +224,7 @@ export class VaultStorage {
   }
 
   async log(notePath: string, maxCount = 20): Promise<CommitEntry[]> {
-    if (this.outOfLevel(notePath)) throw new Error('Note not found');
+    if (this.outOfLevel(notePath)) throw new NoteNotFoundError();
     const git = simpleGit(this.config.path);
     try {
       const history = await git.log({ file: notePath, maxCount });

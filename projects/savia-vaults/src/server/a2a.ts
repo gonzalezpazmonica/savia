@@ -2,7 +2,8 @@ import * as http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { VaultStorage } from '../storage/index.js';
+import { NoteNotFoundError, VaultStorage } from '../storage/index.js';
+import { resolveRagConfig } from '../rag/policy.js';
 import { SearchEngine } from '../search/index.js';
 import { RateLimiter } from './ratelimit.js';
 import { DomeRegistry } from '../registry/domes.js';
@@ -124,7 +125,7 @@ export class A2AServer {
   }
 
   /** Busca en UNA cupula (`dome`) o en todas las activas; devuelve resultados fusionados. */
-  searchAll(query: { query: string; maxResults?: number }, dome?: string, allow: (dome: string) => boolean = () => true): { path: string; score: number; snippet: string; dome: string }[] {
+  searchAll(query: { query: string; maxResults?: number; includeStale?: boolean }, dome?: string, allow: (dome: string) => boolean = () => true): { path: string; score: number; snippet: string; dome: string; exactMatch?: boolean; warnings?: string[] }[] {
     const max = query.maxResults || 20;
     const engines: { name: string; se: SearchEngine }[] = [];
     if (dome) {
@@ -140,14 +141,19 @@ export class A2AServer {
       engines.push({ name: this.config.name, se: this.search });
     }
 
-    const merged: { path: string; score: number; snippet: string; dome: string }[] = [];
+    const merged: { path: string; score: number; snippet: string; dome: string; exactMatch?: boolean; warnings?: string[] }[] = [];
     for (const { name, se } of engines) {
       se.buildIndex();
-      for (const r of se.search({ query: query.query, maxResults: max })) {
-        merged.push({ path: r.path, score: r.score, snippet: r.snippet, dome: name });
+      const excludeStatuses = resolveRagConfig(this.domeReg?.get(name)?.rag).excludeStatuses;
+      for (const r of se.search({ query: query.query, maxResults: max, includeStale: query.includeStale, excludeStatuses })) {
+        merged.push({
+          path: r.path, score: r.score, snippet: r.snippet, dome: name,
+          ...(r.exactMatch !== undefined ? { exactMatch: r.exactMatch } : {}),
+          ...(r.warnings ? { warnings: r.warnings } : {}),
+        });
       }
     }
-    merged.sort((a, b) => b.score - a.score);
+    merged.sort((a, b) => Number(!!b.exactMatch) - Number(!!a.exactMatch) || b.score - a.score);
     return merged.slice(0, max);
   }
 
@@ -280,7 +286,9 @@ export class A2AServer {
           // Sin cúpula: solo las que esta petición puede leer.
           const ok = new Set<string>();
           for (const d of this.domeReg?.listActive() ?? []) if (await allowed(d.name, 'read')) ok.add(d.name);
-          const results = this.searchAll({ query: q, maxResults: max }, dome, (d) => ok.has(d));
+          const stale = url.searchParams.get('includeStale');
+          const includeStale = stale === null ? undefined : stale === 'true';
+          const results = this.searchAll({ query: q, maxResults: max, includeStale }, dome, (d) => ok.has(d));
           res.writeHead(200);
           res.end(JSON.stringify({ results }));
         } else if (p.startsWith('/context/')) {
@@ -288,17 +296,26 @@ export class A2AServer {
           const dome = url.searchParams.get('dome') || undefined;
           const notePath = parts.slice(1).join('/');
           if (await denied(dome, 'read')) return;
-          const note = dome
-            ? await this.readDome(dome, notePath)
-            : await this.storage.read(notePath);
-          if (!note) { res.writeHead(404); res.end(JSON.stringify({ error: `Not found in dome ${dome || this.config.name}` })); }
-          else res.writeHead(200);
-          res.end(JSON.stringify(note ?? {}));
-        } else if (p === '/stats') {
-          if (await denied(undefined, 'read')) return;
-          const stats = await this.storage.stats();
+          // Ausente, fuera de nivel y en cuarentena: la misma respuesta (SE-485 R3, sin oráculo de existencia).
+          let note: Awaited<ReturnType<A2AServer['readDome']>> | undefined;
+          try {
+            note = dome ? await this.readDome(dome, notePath) : await this.storage.read(notePath);
+          } catch (e) {
+            if (!(e instanceof NoteNotFoundError)) throw e;
+          }
+          if (!note) { res.writeHead(404); res.end(JSON.stringify({ error: `Not found in dome ${dome || this.config.name}` })); return; }
           res.writeHead(200);
-          res.end(JSON.stringify(stats));
+          res.end(JSON.stringify(note));
+        } else if (p === '/stats') {
+          // SE-485 R2: por cúpula y autorizado como el resto; solo recuentos de lo visible
+          // (sin outOfLevel, quarantined ni commits: revelarían existencia de lo oculto).
+          const dome = url.searchParams.get('dome') || undefined;
+          if (await denied(dome, 'read')) return;
+          const st = dome ? this.domeStorage(dome) : this.storage;
+          if (!st) { res.writeHead(404); res.end(JSON.stringify({ error: `Not found in dome ${dome}` })); return; }
+          const { name, noteCount, totalSize } = await st.stats();
+          res.writeHead(200);
+          res.end(JSON.stringify({ name, noteCount, totalSize }));
         } else if (p === '/share' && req.method === 'POST') {
           let body = '';
           req.on('data', chunk => body += chunk);
