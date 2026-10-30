@@ -70,3 +70,11 @@ Hay una auditoría detallada en curso (SVTC-00), con reproducción de cada caso 
 1. ¿Quién puede admitir conocimiento (`ACCEPTED`) en cada cúpula, y cómo se separa ese permiso del de escritura?
 2. ¿Qué cúpulas se tratarán como críticas (perfil `governed`)?
 3. ¿Qué parte de AEK es real hoy y dónde estaría el punto de integración?
+
+## Respuestas de la operadora (2026-10-30)
+
+1. **Admisión:** es un **permiso nuevo, «admitir»**, distinto de «escribir». Por defecto solo lo tiene la propietaria de la cúpula. **Ningún agente lo tiene nunca.**
+2. **Cúpulas críticas:** **ninguna por defecto**. El perfil `governed` se activa por cúpula, en su configuración.
+3. AEK: sigue sin respuesta. F1 no depende de AEK.
+
+Con las respuestas 1 y 2, F1 se concreta en **SE-486** (PROPOSED).

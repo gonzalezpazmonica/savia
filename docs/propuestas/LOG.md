@@ -12,6 +12,10 @@
 
 Aprobada por la operadora 2026-10-30 (AskUserQuestion)
 
+## 2026-10-30 SE-486 PROPOSED
+
+F1 de SE-482 con respuestas de la operadora 2026-10-30
+
 ## 2026-10-30 SE-482 PROPOSED
 
 Paraguas de la propuesta de contexto gobernado
