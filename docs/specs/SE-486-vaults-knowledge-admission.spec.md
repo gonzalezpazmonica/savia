@@ -96,7 +96,7 @@ Cada entrada es un JSON canónico con estos campos:
 - `digest`, `admission`, `scope?`, `reason` (≤ 200 caracteres);
 - `subject`, `credential`, `at`;
 - `prev`: sha256 de la entrada anterior;
-- `sig`: Ed25519 con el firmante de recibos de Files (`files/receipts.ts`).
+- `sig`: Ed25519 con el firmante de `files/receipts.ts`, pero **separando dominios**: el payload firmado lleva el prefijo `savia-admission-v1\n`, y la verificación rechaza una firma sin ese prefijo. Así una firma de un recibo de Files no vale como entrada del ledger ni al revés. Comprometer o restaurar la clave compromete ambos dominios; la implementación puede usar una clave aparte si el coste es bajo.
 
 Reglas del ledger:
 
@@ -163,7 +163,7 @@ Reglas del ledger:
 - Cómo se usa:
   - La credencial de admitir se pide por prompt en la TTY, nunca por argv ni por variable de entorno. Si `stdin` no es una TTY, la CLI termina con `ADMIT_REQUIRES_TTY`.
   - **Punto de prueba**, sin atajos:
-    - el núcleo `recordDecision(ctx, auth: AdmitAuthorization, input)` solo acepta un `AdmitAuthorization`. El tipo estructural no basta: hace falta una **marca en tiempo de ejecución**. `authorizeAdmit()` registra cada autorización emitida en un `WeakSet` privado del módulo, y `recordDecision` comprueba que el objeto pertenece a ese conjunto y que no ha caducado (≤ 5 min). Si no, falla con `ADMIT_FORBIDDEN` y no escribe;
+    - el núcleo `recordDecision(ctx, auth: AdmitAuthorization, input)` solo acepta un `AdmitAuthorization`. El tipo estructural no basta: hace falta una **marca en tiempo de ejecución**. `authorizeAdmit()` registra cada autorización emitida en un `WeakMap` privado del módulo, con su instante de emisión como valor (el objeto emitido va congelado, así que la caducidad no se puede reescribir desde fuera), y `recordDecision` comprueba que el objeto pertenece al mapa y que no ha caducado (≤ 5 min), leyendo el reloj de un parámetro inyectable en código, no por variable de entorno ni flag. Si no, falla con `ADMIT_FORBIDDEN` y no escribe;
     - los tests llaman a `authorizeAdmit(token)` con la credencial como argumento de función, en un directorio de estado temporal;
     - la capa de prompt recibe el lector de TTY por inyección de dependencias en el código, **no** por variable de entorno ni por flag.
   - Un objetivo se confirma tecleando su id corto.
@@ -178,10 +178,15 @@ Reglas del ledger:
   - `coverage?: { status: 'PARTIAL', extracted, units, skipped }`.
 - `files/rag-source.ts` lleva `rev.extraction` al `FileSourceRef` del chunk.
 - `RagService` calcula la admisión efectiva de cada hit al servir, con el mismo patrón que la revalidación de SE-481 R3:
-  - el ledger se carga en memoria y se recarga si cambia su mtime;
+  - el ledger se carga en memoria y se recarga con la regla de R2 (cambia `(mtimeMs, size)` de cualquiera de los dos ficheros o el `seq` del checkpoint), no solo el mtime;
   - `REJECTED` y `QUARANTINED` se descartan siempre, también con `includeStale`, y se cuentan en `DomeOutcome.degradation.admission`, solo el número;
   - `SUPERSEDED` sigue la regla actual de `includeStale`;
   - `RESTRICTED`: en `standard` se sirve con advertencia y con el `scope` visible; en `governed` se descarta y se cuenta en `degradation.admission`. F1 **no** define un parámetro de propósito: evaluar el alcance contra un propósito declarado corresponde a F3 (ContextBundle).
+- **Las tres vías de lectura aplican la misma admisión efectiva** (hoy `vault_read`, `server/mcp.ts`, devuelve la nota íntegra y `vault_search`, `search/index.ts`, no pasan por `RagService`). Las tres llaman a una única función de servido, `effectiveAdmission(ctx, dome, target)`, que usa el mismo ledger, el mismo digest desde disco y las mismas reglas de R1:
+  - `vault_search`: descarta `REJECTED` y `QUARANTINED` (también con `includeStale`) y, en `governed`, `RESTRICTED`; cada hit lleva `admission`; el recuento de descartes va en `degradation.admission`, solo el número;
+  - `vault_read`: para `REJECTED` y `QUARANTINED` (y `RESTRICTED` en `governed`) **no devuelve el contenido**: responde con error `ADMISSION_BLOCKED` y el estado, sin ruta de otras notas ni motivo del ledger. Para el resto devuelve el contenido con el campo `admission` y la advertencia de R5. La lectura de una ruta concreta no es una vía de escape de lo rechazado;
+  - `vault_write` no cambia: escribir una nota no la admite (AC-2);
+  - con ledger inválido o `SAVIA_VAULTS_ADMISSION=off` las tres herramientas se comportan igual que `vault_rag` (R2, R7).
 - `rag/format.ts` antepone una advertencia a cada hit `UNREVIEWED`, `RESTRICTED` (con su alcance) o con `coverage` (`extracción parcial: n/m unidades`).
 - Campo **nuevo** `DomeOutcome.policyDigest = sha256(cabeza del ledger + excludeStatuses + perfil)`: hoy `DomeOutcome` no lo tiene.
 - El hash de la fuente virtual de Files **no** incluye la admisión.
@@ -255,7 +260,12 @@ Reglas del ledger:
   - el hit refleja la nueva admisión **sin** sync. Esta es la aserción que falla en main;
   - el siguiente `rag sync` informa `chunks.embedded == 0` y la generación activa no cambia (invariante).
 - **AC-9 (`PARTIAL` visible):** un documento de Files `PARTIAL` produce hits con `coverage` y advertencia en la salida de texto. Uno `READY` no lleva `coverage`.
-- **AC-10 (servido):** `REJECTED` y `QUARANTINED` no aparecen en `vault_rag`, tampoco con `includeStale: true`, y `degradation.admission` los cuenta sin rutas.
+- **AC-10 (servido):** `REJECTED` y `QUARANTINED` no aparecen en `vault_rag`, tampoco con `includeStale: true`, y `degradation.admission` los cuenta sin rutas. La misma nota `REJECTED`:
+  - no aparece en `vault_search`, tampoco con `includeStale: true`;
+  - con `vault_read` da `ADMISSION_BLOCKED` y la respuesta no contiene ningún byte del cuerpo de la nota;
+  - una nota `UNREVIEWED` sí se devuelve por las tres vías con `admission.state === 'UNREVIEWED'`;
+  - en `governed`, una nota `RESTRICTED` da `ADMISSION_BLOCKED` en `vault_read` y no aparece en `vault_search`; en `standard` se devuelve con advertencia y `scope`.
+  Estas aserciones fallan en main: `vault_search` y `vault_read` sirven hoy la nota rechazada.
 - **AC-11 (legado):** en una cúpula sin ledger:
   - las rutas, el orden y las puntuaciones de `vault_rag` son idénticos a los de main;
   - **cada hit vigente, sin `includeStale` y sin cuarentena técnica, lleva `admission.state === 'UNREVIEWED'`**. Es una aserción que falla en main porque el campo no existe. Con `includeStale`, los hits sustituidos llevan `SUPERSEDED`;
@@ -265,14 +275,14 @@ Reglas del ledger:
   - en `governed` no se sirve y cuenta 1 en `degradation.admission`.
 
   Una cúpula creada sin `governance` se comporta como `standard`.
-- **AC-13 (rollback):** con `SAVIA_VAULTS_ADMISSION=off`:
+- **AC-13 (rollback):** control: con el mismo fixture y el interruptor **sin definir**, la nota `REJECTED` no se sirve y los hits llevan `admission`. Con `SAVIA_VAULTS_ADMISSION=off`:
   - (a) una nota `REJECTED` vuelve a servirse;
   - (b) los hits no llevan `admission`;
   - (c) una nota en cuarentena técnica (SE-481) **sigue** sin servirse;
   - (d) en una cúpula `governed`, el interruptor no tiene efecto: un `RESTRICTED` sigue sin servirse.
 - **AC-15 (reparación):** sobre el caso (c) de AC-7:
   - `admission repair` vuelve a anclar en el último prefijo válido, añade `REANCHOR` firmada y deja la cúpula válida;
-  - el informe de reparación da el **rango de `seq` perdido** (último válido + 1 .. `seq` del checkpoint) y declara que su contenido es irrecuperable. No dice qué decisiones eran: el test comprueba el rango, y que una decisión `REJECTED` que estaba en ese rango ya no se aplica tras la reparación;
+  - el informe de reparación da el **rango de `seq` perdido** (último válido + 1 .. max(`seq` del checkpoint, último `seq` visto), el mismo máximo que usa R2 para `REANCHOR`) y declara que su contenido es irrecuperable. No dice qué decisiones eran: el test comprueba el rango, y que una decisión `REJECTED` que estaba en ese rango ya no se aplica tras la reparación;
   - sin `authorizeAdmit`, falla y no toca nada;
   - las entradas descartadas quedan archivadas, no borradas;
   - **prefijo vacío** (todas las entradas inválidas): la `REANCHOR` resultante tiene `prev` = hash cero y `seq` = `seq` del checkpoint + 1. El ledger reparado verifica como válido con ese hueco, y la cúpula queda marcada como inicializada.
@@ -282,14 +292,17 @@ Reglas del ledger:
   - en `governed`, `ACCEPTED` sobre un `PARTIAL` sin `--accept-partial` falla con `ADMIT_PARTIAL_REQUIRES_FLAG`; en `standard` no lo pide;
   - `dome create --owner <service>` falla con `ADMIT_SERVICE_FORBIDDEN` y no registra la cúpula;
   - `dome governance` deja una entrada de auditoría;
+  - en `governed`, un ledger firmado con una `keyId` distinta de la fijada en el registro de cúpulas degrada (0 hits); en `standard` no se exige;
+  - con `SAVIA_VAULTS_ADMISSION=off`, `DomeOutcome.detail` contiene `admission_disabled`; sin él, no;
   - con el ledger inválido, `standard` e `includeStale`, un hit sustituido sale `SUPERSEDED`;
   - con un fallo simulado entre los pasos 2 y 3 de la escritura, la siguiente escritura pone la marca;
-  - `--expires-days` acepta solo enteros entre 1 y 7. `0`, `-1`, `abc` y `8` fallan con `ADMIT_TTL_INVALID` o `ADMIT_TTL_EXCEEDED`;
+  - `--expires-days` acepta solo enteros entre 1 y 7. `0`, `-1` y `abc` fallan con `ADMIT_TTL_INVALID`; `8` falla con `ADMIT_TTL_EXCEEDED`; `1` y `7` se aceptan (límites);
   - `admission set ... REJECTED` sobre un objetivo cuyo digest coincide con el de otro objetivo `ACCEPTED` advierte de ese otro objetivo, que no se ve afectado (regla 3);
 - **AC-17 (autorización no falsificable):**
   - `recordDecision` con un literal estructuralmente idéntico a un `AdmitAuthorization` falla con `ADMIT_FORBIDDEN` y deja el ledger intacto, byte a byte;
   - con un objeto emitido por `authorizeAdmit()`, escribe. Esa es la aserción que falla si se quita la marca;
-  - un objeto emitido hace más de 5 min falla con `ADMIT_FORBIDDEN`;
+  - un objeto emitido hace más de 5 min falla con `ADMIT_FORBIDDEN`, y uno de 4 min 59 s escribe (límite). Con reloj inyectable, sin esperar;
+  - un objeto emitido y modificado después (`Object.isFrozen` falso o intento de reescribir su instante) no se acepta: o la asignación falla o sigue caducando según el instante registrado;
 - **AC-18 (cúpula legada que contiene el estado):** con una cúpula sin ledger cuya raíz es un ancestro del directorio de estado (por ejemplo `$HOME`):
   - el servidor arranca;
   - `vault_rag` de esa cúpula da los mismos resultados que main, más `admission: UNREVIEWED`;
@@ -308,7 +321,8 @@ Reglas del ledger:
 
 ## Riesgo residual (declarado)
 
-- `SAVIA_VAULTS_ADMISSION=off` se lee del entorno del proceso servidor. Quien edite la configuración del cliente MCP (`env`) puede desactivar la admisión en las cúpulas `standard`. En `governed` no tiene efecto (R7).
+- `SAVIA_ADMISSION_HOME` se lee del entorno del servidor. Quien lo controle puede apuntarlo a un directorio propio con ledger y clave propios que verifican entre sí. La mitigación en F1 es que, en `governed`, el registro de cúpulas fija la `keyId` esperada y el servidor degrada si el ledger se firma con otra; en `standard` queda como riesgo declarado, de la misma clase que la cuenta del SO.
+- `SAVIA_VAULTS_ADMISSION=off` se lee del entorno del proceso servidor. Con el interruptor activo, `DomeOutcome.detail` incluye `admission_disabled` y se audita, para que el apagado no sea silencioso. Quien edite la configuración del cliente MCP (`env`) puede desactivar la admisión en las cúpulas `standard`. En `governed` no tiene efecto (R7).
 - Durante un `admission repair`, un lector puede ver un truncado transitorio. Reintenta una vez, pero puede degradar la cúpula unos instantes (en `governed`, 0 hits).
 - La marca `initialized` vive en el registro de cúpulas (`savia-vaults.domes.json` o el registro que use el servidor), que tampoco está en ninguna cúpula. Entre un fallo de los pasos 2 y 3 de la primera escritura y la siguiente escritura, borrar el checkpoint es indistinguible del caso (f).
 
@@ -323,6 +337,7 @@ Por la misma razón, quien escriba en el directorio de estado del servidor puede
 - `EvidenceRef` y conflictos (F2), ContextBundle (F3), evals de respuesta (F4), gate de primera promoción (F5), AEK (F7).
 - Validación celda–encabezado de tablas y OCR: van en una spec de extracción propia.
 - Interfaz web de admisión. Segundo factor.
+- Otras herramientas que lean contenido de cúpulas y no sean `vault_rag`, `vault_search` ni `vault_read` (por ejemplo `vault_graph`, `vault_query`): si exponen texto de notas, las cubre una PR posterior; la implementación de F1 lista en su PR cuáles son y cuál es su exposición.
 - Admitir en bloque el contenido existente.
 - Parámetro de propósito y evaluación del alcance de `RESTRICTED` contra él: F3.
 - Una vía para que un escritor sin `admit` *proponga* un rechazo. Hoy solo puede editar, que devuelve el documento a `UNREVIEWED`, o marcarlo como sustituido.
@@ -349,7 +364,7 @@ Revert de la PR, o `SAVIA_VAULTS_ADMISSION=off` sin revertir.
 ### Verification protocol
 
 - [ ] Funciona en runtime OpenCode (mismo servidor MCP; sin código por frontend)
-- [ ] Tests vitest cubren el servidor y la CLI; los frontends solo consumen `vault_rag`
+- [ ] Tests vitest cubren el servidor y la CLI; los frontends solo consumen `vault_rag`, `vault_search` y `vault_read` (lectura)
 - [ ] No añade hooks
 - [ ] Ningún frontend expone escritura de admisión (AC-6)
 
