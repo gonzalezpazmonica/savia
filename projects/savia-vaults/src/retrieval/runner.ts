@@ -38,6 +38,8 @@ export interface RouteRunInput {
 export interface RouteRunOutput {
   result: RetrievalResult;
   domes: DomeOutcome[];
+  /** Fusión entre cúpulas de la última llamada a candidatos (como en RagResponse). */
+  fusion?: 'cosine' | 'rank';
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
@@ -125,6 +127,7 @@ export async function runRoute(rag: RagService, input: RouteRunInput): Promise<R
   const steps: TraceStep[] = [];
   const warnings = new Set<string>();
   let closed = false;
+  let fusion: RouteRunOutput['fusion'];
 
   const req: RetrievalRequest = Object.freeze({
     query, domes: Object.freeze(guard.authorizedDomes()), ...(asOf ? { asOf } : {}), budget: Object.freeze({ ...budget }),
@@ -151,6 +154,7 @@ export async function runRoute(rag: RagService, input: RouteRunInput): Promise<R
         if (!prev || rank[d.status] >= rank[prev.status]) outcomes.set(d.name, d);
       }
       for (const w of res.results[0]?.warnings ?? []) warnings.add(w);
+      if (res.fusion) fusion = res.fusion;
       const out: RagHit[] = [];
       for (const h of res.results[0]?.hits ?? []) {
         if (closed || !meter.consume('nodes')) break;
@@ -233,7 +237,7 @@ export async function runRoute(rag: RagService, input: RouteRunInput): Promise<R
     ...(output.abstain ? { abstain: true } : {}),
     ...(warnings.size ? { warnings: [...warnings] } : {}),
   };
-  return { result, domes: targets.map(d => outcomes.get(d.name)!) };
+  return { result, domes: targets.map(d => outcomes.get(d.name)!), ...(fusion ? { fusion } : {}) };
 }
 
 /** `vault_rag` con `route`: una ejecución por consulta, respuesta con la forma de RagResponse. */
@@ -245,8 +249,10 @@ export async function routeSearch(rag: RagService, input: Omit<RouteRunInput, 'q
   const results: RagResponse['results'] = [];
   const domes = new Map<string, DomeOutcome>();
   const order: string[] = [];
+  let fusion: RouteRunOutput['fusion'];
   for (const query of input.queries) {
-    const { result, domes: ds } = await runRoute(rag, { ...input, query });
+    const { result, domes: ds, fusion: f } = await runRoute(rag, { ...input, query });
+    if (f) fusion = fusion === 'rank' ? 'rank' : f;
     results.push({
       query, hits: result.hits, evidence: result.evidence, trace: result.trace, consumed: result.consumed,
       ...(result.abstain ? { abstain: true } : {}), ...(result.warnings ? { warnings: result.warnings } : {}),
@@ -264,6 +270,7 @@ export async function routeSearch(rag: RagService, input: Omit<RouteRunInput, 'q
     results, ...(merged ? { merged } : {}),
     domes: order.map(n => domes.get(n)!),
     timings: { totalMs: Date.now() - t0, embedMs: 0, syncMs: 0 },
+    ...(fusion ? { fusion } : {}),
     route: input.route,
   };
 }
