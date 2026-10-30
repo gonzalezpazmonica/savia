@@ -90,12 +90,25 @@ export interface RetrievalTrace {
   denied: number;
 }
 
+/** Resultado final de una ruta, tal como lo devuelve el runner tras el guard final. */
 export interface RetrievalResult {
   hits: RagHit[];
+  /** Una por hit (mismo `chunkId`), más la que la ruta aporte de nodos leídos y aún servibles. */
   evidence: Evidence[];
   trace: RetrievalTrace;
   consumed: BudgetUse;
   /** La ruta decide no responder (sin evidencia suficiente). */
+  abstain?: boolean;
+  warnings?: string[];
+}
+
+/**
+ * Lo que devuelve `run`. El runner (`runner.ts`) completa traza, presupuesto consumido y
+ * evidencia, y vuelve a pasar cada hit por el guard: lo que ya no es servible se descarta.
+ */
+export interface RouteOutput {
+  hits: RagHit[];
+  evidence?: Evidence[];
   abstain?: boolean;
   warnings?: string[];
 }
@@ -160,7 +173,7 @@ export interface RetrievalRoute {
   supportsAsOf: boolean;
   /** AC-7: la ruta no corre sin presupuesto declarado en la petición (p. ej. M4). */
   requiresDeclaredBudget: boolean;
-  run(req: RetrievalRequest, ctx: RouteContext): Promise<RetrievalResult>;
+  run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutput>;
 }
 
 export const AS_OF_UNSUPPORTED = 'AS_OF_UNSUPPORTED';

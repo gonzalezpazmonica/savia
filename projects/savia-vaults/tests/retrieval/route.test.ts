@@ -7,7 +7,7 @@ import {
 
 const dummy = (id: string, extra: Partial<RetrievalRoute> = {}): RetrievalRoute => ({
   id, description: 'test', contractVersion: ROUTE_CONTRACT_VERSION, supportsAsOf: false, requiresDeclaredBudget: false,
-  run: async () => ({ hits: [], evidence: [], trace: { route: id, reason: 't', seed: 0, steps: [], denied: 0 }, consumed: { latencyMs: 0, modelCalls: 0, nodes: 0, hops: 0, inputTokens: 0 } }),
+  run: async () => ({ hits: [] }),
   ...extra,
 });
 

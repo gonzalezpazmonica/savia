@@ -30,7 +30,13 @@ function leanHit(h: RagHit, withText: boolean) {
 
 function lean(res: RagResponse) {
   return {
-    results: res.results.map(r => ({ query: r.query, hits: r.hits.map(h => leanHit(h, true)), ...(r.warnings ? { warnings: r.warnings } : {}) })),
+    results: res.results.map(r => ({
+      query: r.query, hits: r.hits.map(h => leanHit(h, true)), ...(r.warnings ? { warnings: r.warnings } : {}),
+      // SE-489: solo con `route`.
+      ...(r.evidence ? { evidence: r.evidence } : {}), ...(r.trace ? { trace: r.trace } : {}),
+      ...(r.consumed ? { consumed: r.consumed } : {}), ...(r.abstain ? { abstain: true } : {}),
+    })),
+    ...(res.route ? { route: res.route } : {}),
     // Los textos ya van en `results`: `merged` solo ordena.
     ...(res.merged ? { merged: res.merged.map(h => leanHit(h, false)) } : {}),
     domes: res.domes.map(d => ({ name: d.name, status: d.status, ...(d.detail ? { detail: d.detail } : {}) })),
