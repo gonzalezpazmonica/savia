@@ -1,79 +1,57 @@
 ---
 name: onboard
 description: >
-  Guided onboarding for new team members — auto-explore project, generate
-  component map, create personalized plan by role.
-argument-hint: "--role {dev|pm|qa} [--project name]"
+  Onboarding guiado de una persona nueva en un proyecto: explora el proyecto, genera
+  el mapa de componentes y un plan personalizado a partir de su papel, descrito en texto libre.
+argument-hint: "--role \"<texto libre>\" [--project name]"
 allowed-tools: [Read, Write, Glob, Grep, Bash, Task]
 model_tier: mid
 context_cost: medium
 tier: core
 ---
 
-# /onboard — New Team Member Onboarding
+# /onboard — Incorporación de una persona a un proyecto
 
-Guided workflow for new team members. Auto-explores project, generates
-component map, and creates personalized onboarding checklist by role.
+Sin roles fijos: `--role` acepta texto libre («programo backend», «coordino el ensayo clínico»,
+«doy clase de física») y delega la interpretación en el flujo de `/profile-setup` (SE-484).
 
-## Usage
+## Uso
 
-- `/onboard --role dev` — Developer onboarding
-- `/onboard --role pm` — Project Manager onboarding
-- `/onboard --role qa` — QA Engineer onboarding
-- `/onboard --role dev --project {name}` — Project-specific onboarding
+- `/onboard --role "<texto libre>"` — incorporación general
+- `/onboard --role "<texto libre>" --project {name}` — incorporación a un proyecto concreto
 
-## Workflow
+## Paso 1 — Explorar el proyecto (si hay `--project`)
 
-```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎓 /onboard — Team Member Onboarding
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+1. Leer `projects/{name}/CLAUDE.md`
+2. Detectar el language pack por los ficheros del proyecto
+3. Recorrer la arquitectura: directorios, ficheros clave, configuración
+4. Generar el mapa de componentes (módulos, servicios, dependencias)
 
-### Step 1 — Auto-Explore Project
+## Paso 2 — Plan según su papel (delegado)
 
-1. Detect language pack from project files
-2. Scan architecture: directories, key files, config
-3. Identify tech stack, frameworks, patterns
-4. Generate component map (modules, services, dependencies)
+1. Interpretar el texto de `--role` igual que el paso 2 de `/profile-setup`: ids del catálogo
+   `docs/onboarding/capabilities.yaml`, cada uno con su motivo.
+2. Si la persona no tiene perfil o el plan propone cambios en el suyo, ejecutar los pasos 3-5 de
+   `/profile-setup` (preguntas, plan, confirmación). Sin confirmación no se escribe nada.
+3. Obtener el plan:
+   `python3 scripts/onboarding-plan.py plan --input <input> --profile-dir .claude/profiles/users/<slug>`
+4. Checklist = los tres `first_steps` del plan + los comandos que activa (`commands`) aplicados al
+   proyecto. Si `vertical.status` es `none`, se dice y no se inventa ninguna.
 
-### Step 2 — Role-Specific Checklist
+## Paso 3 — Plan temporal
 
-**Developer:**
-- [ ] Clone repo and run build
-- [ ] Understand architecture (layers, patterns)
-- [ ] Set up local dev environment
-- [ ] Read CLAUDE.md and key domain rules
-- [ ] Run test suite, understand coverage
-- [ ] Complete first small task (guided)
+1. Plan por plazos (día 1, semana 1, mes 1) a partir del checklist
+2. Sugerencia de mentor o persona de referencia, si el proyecto la tiene
+3. Contactos y canales clave del proyecto
+4. Fichero de seguimiento
 
-**PM / Scrum Master:**
-- [ ] Review active sprint and backlog
-- [ ] Understand team composition and capacity
-- [ ] Review recent retrospective actions
-- [ ] Familiarize with reporting commands
-- [ ] Set up Azure DevOps access
+## Salida
 
-**QA Engineer:**
-- [ ] Review test infrastructure
-- [ ] Understand test categories and coverage
-- [ ] Review quality gates and hooks
-- [ ] Set up test environment
-- [ ] Review recent bug patterns
+`output/onboarding/{slug}-{fecha}.md`, sin datos personales más allá del slug.
 
-### Step 3 — Personalized Plan
+## Integración
 
-1. Generate time-boxed plan (Day 1, Week 1, Month 1)
-2. Assign buddy/mentor suggestion
-3. List key contacts and channels
-4. Create onboarding tracker file
-
-## Output
-
-Saves to `output/onboarding/{name}-{role}-{date}.md`
-
-## Integration
-
-- Uses team-onboarding skill for checklist generation
-- Integrates with `/profile-setup` for new user profile
-- References `@docs/rules/domain/role-workflows.md` for role context
+- Flujo y catálogo: `/profile-setup` y `docs/rules/domain/profile-onboarding.md`
+- Checklist de equipo: skill `team-onboarding`
+- Contexto de cada papel: `docs/rules/domain/role-workflows.md`
+- Organizaciones enteras: `/onboard-enterprise` (no cambia)
