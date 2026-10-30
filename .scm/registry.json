@@ -17864,27 +17864,6 @@
       "frontend_support": [
         "opencode"
       ],
-      "id": "script:scripts/lib/savia-identity",
-      "intents": [
-        "fuente",
-        "identidad",
-        "identity",
-        "savia",
-        "scripts"
-      ],
-      "kind": "script",
-      "owner_domain": "planning",
-      "replaced_by": null,
-      "risk_level": null,
-      "source": "scripts/lib/savia-identity.sh",
-      "status": "active",
-      "tests": []
-    },
-    {
-      "depends_on": [],
-      "frontend_support": [
-        "opencode"
-      ],
       "id": "script:scripts/lib/slm-common",
       "intents": [
         "common",
@@ -29635,7 +29614,7 @@
       "tests": []
     }
   ],
-  "content_hash": "6356871781b9",
+  "content_hash": "8cc89dc786ea",
   "deferred_kinds": [
     "rule",
     "hook"

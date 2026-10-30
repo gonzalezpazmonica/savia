@@ -1,6 +1,6 @@
 {
-  "hash": "6356871781b9",
-  "total": 1451,
+  "hash": "8cc89dc786ea",
+  "total": 1450,
   "resources": [
     {
       "category": "analysis",
@@ -11565,20 +11565,6 @@
       "kind": "script",
       "path": "scripts/lib/planning-completion.sh",
       "description": "Shared completion-evidence validation for SE-396 P01."
-    },
-    {
-      "category": "planning",
-      "name": "lib/savia-identity",
-      "intents": [
-        "fuente",
-        "identidad",
-        "identity",
-        "savia",
-        "scripts"
-      ],
-      "kind": "script",
-      "path": "scripts/lib/savia-identity.sh",
-      "description": "scripts/lib/savia-identity.sh — Fuente única de la identidad de Savia (SE-483)"
     },
     {
       "category": "planning",

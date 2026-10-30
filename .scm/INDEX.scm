@@ -1,6 +1,6 @@
 # Savia Capability Map — INDEX
-> hash: 2324628fc8f7 | resources: 1451
-> 295 commands · 139 skills · 90 agents · 927 scripts
+> hash: 2cc8250515b3 | resources: 1450
+> 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
 [analysis] agent-activity — activity,agent,executions,recent,show — cmd:.claude/commands/agent-activity.md
@@ -875,7 +875,6 @@
 [planning] lib/mock-env — environment,library,mock,reusable,scripts — script:scripts/lib/mock-env.sh
 [planning] lib/os-detect — defaults,detect,detection,path,portable — script:scripts/lib/os-detect.sh
 [planning] lib/planning-completion — completion,evidence,shared,validation — script:scripts/lib/planning-completion.sh
-[planning] lib/savia-identity — fuente,identidad,identity,savia,scripts — script:scripts/lib/savia-identity.sh
 [planning] lib/slm-common — common,helpers,shared,slice,subcommands — script:scripts/lib/slm-common.sh
 [planning] lightpanda-browser — agpl,apache,browser,casos,cero — skill:.claude/skills/lightpanda-browser/SKILL.md
 [planning] llms-txt-generate — docs,full,generate,llms,raíz — script:scripts/llms-txt-generate.sh

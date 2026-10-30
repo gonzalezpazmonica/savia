@@ -1,5 +1,5 @@
 # planning — Savia Capability Map (L1)
-> 633 resources
+> 632 resources
 
 - **/decide-architecture** (cmd): Clasifica una tarea como WORKFLOW (deterministica) o AGENT (loop). Bias hacia workflow per Anthropic. Sugiere plantilla inicial. Mide accuracy contra corpus curado de 20 tareas.
 - **acceptance-cost** (script): acceptance-cost.sh — SE-360: costo por cambio aceptado (CLI wrapper).
@@ -322,7 +322,6 @@
 - **lib/mock-env** (script): mock-env.sh — Reusable mock environment library for pm-workspace scripts
 - **lib/os-detect** (script): scripts/lib/os-detect.sh — Portable OS detection and path defaults
 - **lib/planning-completion** (script): Shared completion-evidence validation for SE-396 P01.
-- **lib/savia-identity** (script): scripts/lib/savia-identity.sh — Fuente única de la identidad de Savia (SE-483)
 - **lib/slm-common** (script): slm-common.sh — Shared helpers for SLM subcommands (SE-049 Slice 1).
 - **lightpanda-browser** (skill): DEPRECATED 2026-09-04 — sustituida por obscura-browser. No usar en casos nuevos. Se conserva como referencia histórica: Obscura gana en licencia (Apache-2.0 vs AGPL), telemetría (cero vs ON por defecto) y recursos (41MB RAM).
 - **llms-txt-generate** (script): llms-txt-generate.sh — Genera llms.txt (raíz), docs/llms.txt y docs/llms-full.txt
