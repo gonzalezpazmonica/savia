@@ -17,6 +17,21 @@ Aprobada por la operadora 2026-10-30 (AskUserQuestion)
 ## 2026-10-30 SE-480 APPROVED
 
 Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+## 2026-10-29 SE-479 PROPOSED
+
+Alta desde la revisión de Anthropic Research (diseño en Savia Labs, privado): casos imposibles dentro del alcance en las baterías
+
+## 2026-10-29 SE-477 PROPOSED
+
+Alta desde la revisión de Anthropic Research (diseño en Savia Labs, privado): estadística mínima en las comparativas
+
+## 2026-10-29 SE-476 PROPOSED
+
+Alta desde la revisión de Anthropic Research (diseño en Savia Labs, privado): independencia de la verificación
+
+## 2026-10-29 SE-475 PROPOSED
+
+Alta desde la revisión de Anthropic Research (diseño en Savia Labs, privado): clase FORMA/POLÍTICA en los bloqueos de hook
 
 ## 2026-10-27 SE-474 PROPOSED
 
