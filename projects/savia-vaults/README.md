@@ -66,6 +66,8 @@ disparadores, deriva de modelo, gate de promoción, SLO):
 [`docs/rules/domain/rag-embedding-policy.md`](../../docs/rules/domain/rag-embedding-policy.md).
 El índice vive fuera del vault en `$SAVIA_RAG_HOME` (def. `~/.savia-vaults/rag/`).
 
+RAG autónomo (SE-480): el MCP y A2A releen el registro de cúpulas al cambiar, y `serve --transport a2a --rag-autosync <min>` sincroniza el índice solo. Detalle e instalación de la unidad systemd: [`docs/rag.md`](docs/rag.md).
+
 ## Savia Files (SE-413)
 
 Ficheros originales (PDF, DOCX, PPTX, XLSX, TXT, MD, CSV, JSON) en la cúpula,

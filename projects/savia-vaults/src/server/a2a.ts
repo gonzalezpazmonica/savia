@@ -1,3 +1,4 @@
+import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD } from '../rag/autosync.js';
 import * as http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -41,6 +42,10 @@ export class A2AServer {
   private corsOrigins: Set<string>;
   private access?: AccessController;
   private server?: http.Server;
+  /** SE-480 R2: lo llama refreshRegistry() tras una recarga (el autosync se entera de cúpulas nuevas). */
+  onRegistryReload?: () => void;
+  /** SE-480 R2: sincronizador activo del servicio; su estado (sin textos de error) sale en /health. */
+  autosync?: { getState(): { lastRunAt?: string; lastOk?: boolean; consecutiveFailures: number } };
 
   constructor(config: VaultConfig, domeReg?: DomeRegistry, options: A2AOptions = {}) {
     this.corsOrigins = new Set(options.corsOrigins ?? []);
@@ -54,8 +59,18 @@ export class A2AServer {
     this.initVault();
   }
 
+  /** SE-480 R1: cada petición vuelve a leer el registro si cambió; las cachés por cúpula se descartan. */
+  refreshRegistry(): boolean {
+    if (!this.domeReg?.reloadIfChanged()) return false;
+    this.domeSearches.clear();
+    this.domeStorages.clear();
+    this.onRegistryReload?.();
+    return true;
+  }
+
   /** Cupulas activas configurables (SE-310 S0-H): el registry si existe, si no la vault unica. */
   listDomes(): DomeInfo[] {
+    this.refreshRegistry();
     if (this.domeReg) {
       return this.domeReg.listActive();
     }
@@ -104,6 +119,7 @@ export class A2AServer {
 
   /** Escribe una nota en UNA cupula concreta (S0-H alimenta). Fallback a la vault de config. */
   async writeDome(dome: string, notePath: string, content: string): Promise<{ vault: string; path: string } | undefined> {
+    this.refreshRegistry();
     const st = this.domeStorage(dome);
     if (!st) return undefined;
     const note = await st.write(notePath, content);
@@ -112,6 +128,7 @@ export class A2AServer {
 
   /** Lee una nota de UNA cupula concreta (S0-H consume). Fallback a la vault de config. */
   async readDome(dome: string, notePath: string): Promise<{ path: string; name: string; frontmatter: unknown; tags: string[]; content: string } | undefined> {
+    this.refreshRegistry();
     const st = this.domeStorage(dome);
     if (!st) return undefined;
     const note = await st.read(notePath);
@@ -126,6 +143,7 @@ export class A2AServer {
 
   /** Busca en UNA cupula (`dome`) o en todas las activas; devuelve resultados fusionados. */
   searchAll(query: { query: string; maxResults?: number; includeStale?: boolean }, dome?: string, allow: (dome: string) => boolean = () => true): { path: string; score: number; snippet: string; dome: string; exactMatch?: boolean; warnings?: string[] }[] {
+    this.refreshRegistry();
     const max = query.maxResults || 20;
     const engines: { name: string; se: SearchEngine }[] = [];
     if (dome) {
@@ -209,6 +227,7 @@ export class A2AServer {
         res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
         return;
       }
+      this.refreshRegistry();
 
       // Modo de la petición: secreto compartido (solo loopback), usuario (token personal) o público.
       const bearer = (req.headers.authorization ?? '').startsWith('Bearer ') ? (req.headers.authorization as string).slice(7).trim() : '';
@@ -269,6 +288,7 @@ export class A2AServer {
             uptime: Math.floor((Date.now() - this.startTime) / 1000),
             vault: this.config.name,
             domes: this.domeReg ? this.domeReg.listActive().length : 1,
+            ...(this.autosync ? { autosync: (({ lastRunAt, lastOk, consecutiveFailures }) => ({ lastRunAt, lastOk, consecutiveFailures, ...(consecutiveFailures >= AUTOSYNC_FAIL_THRESHOLD ? { alert: AUTOSYNC_FAILING_ALERT } : {}) }))(this.autosync.getState()) } : {}),
           }));
         } else if (p === '/domes') {
           const list = this.listDomes();

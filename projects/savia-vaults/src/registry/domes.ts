@@ -7,6 +7,7 @@ import { VaultSecurity } from '../security/index.js';
 import type { VaultConfig } from '../types.js';
 import type { RagDomeConfig } from '../rag/types.js';
 import type { FilesDomeConfig } from '../files/types.js';
+import { envMs } from '../env-ms.js';
 
 export type ConfidentialityLevel = 'N1' | 'N2' | 'N3' | 'N4';
 
@@ -113,9 +114,62 @@ export class DomeRegistry {
   private origin: Map<string, Origin> = new Map();
   private localDefault: string = '';
   public defaultDome: string = '';
+  /** SE-480: huella (mtime:size:ino) de base y local en la última carga, intentada o fallida. */
+  private loadedKey = '';
+  private loadedAt = 0;
+  private lastCheck = 0;
+  private loadError: string | undefined;
+  /** SE-480: como mucho una comprobación de `stat` por este intervalo (ms); 0 desactiva el límite. */
+  public reloadMinIntervalMs: number = envMs(process.env.SAVIA_VAULTS_RELOAD_MS) ?? 1000;
 
   constructor(filePath: string = 'savia-vaults.domes.json') {
     this.filePath = filePath;
+  }
+
+  private statKey(): string {
+    const part = (f: string): string => {
+      try {
+        const st = fs.statSync(f);
+        return `${st.mtimeMs}:${st.size}:${st.ino}`;
+      } catch {
+        return 'missing';
+      }
+    };
+    return `${part(this.filePath)}|${part(this.getLocalFilePath())}`;
+  }
+
+  /**
+   * SE-480 R1: recarga el registro si base o local cambiaron en disco. Si el nuevo contenido no parsea o no
+   * valida, conserva el último registro válido y deja el error en `getState().error`. true si hubo recarga.
+   */
+  reloadIfChanged(): boolean {
+    const now = Date.now();
+    if (this.reloadMinIntervalMs > 0 && now - this.lastCheck < this.reloadMinIntervalMs) return false;
+    this.lastCheck = now;
+    const key = this.statKey();
+    if (key === this.loadedKey) return false;
+    const previous = this.loadError;
+    try {
+      this.load();
+    } catch (e) {
+      this.loadedKey = key;
+      this.loadError = e instanceof Error ? e.message : String(e);
+      if (this.loadError !== previous) console.error(`[registry] recarga rechazada, se conserva el último registro válido: ${this.loadError}`);
+      return false;
+    }
+    return true;
+  }
+
+  /** SE-480: frescura del registro para `vault_rag_status` y `vault_health`. */
+  getState(): { file: string; loadedAt: string | null; mtime: string | null; error?: string } {
+    let mtime: string | null = null;
+    try { mtime = fs.statSync(this.filePath).mtime.toISOString(); } catch { /* sin fichero base */ }
+    return {
+      file: this.getFilePath(),
+      loadedAt: this.loadedAt ? new Date(this.loadedAt).toISOString() : null,
+      mtime,
+      ...(this.loadError ? { error: this.loadError } : {}),
+    };
   }
 
   getFilePath(): string {
@@ -137,13 +191,12 @@ export class DomeRegistry {
       throw new Error(`Domes file not found: ${this.filePath}. Create one with 'savia-vaults dome create <name>' or use --path for single-dome mode.`);
     }
 
+    const key = this.statKey();
     const base = hasBase ? readDomesFile(this.filePath) : null;
     const loc = hasLocal ? readDomesFile(localPath) : null;
 
-    this.defaultDome = loc?.defaultDome || base?.defaultDome || '';
-    this.localDefault = loc?.defaultDome || '';
-    this.domes.clear();
-    this.origin.clear();
+    const domes = new Map<string, DomeInfo>();
+    const origins = new Map<string, Origin>();
 
     const sources: Array<[DomesFile | null, string, Origin]> = [[base, this.filePath, 'base'], [loc, localPath, 'local']];
     for (const [data, file, origin] of sources) {
@@ -163,7 +216,7 @@ export class DomeRegistry {
           throw new Error(`Invalid confidentiality level for dome "${name}": ${dome.confidentiality}. Must be N1, N2, N3, or N4.`);
         }
 
-        this.domes.set(name, {
+        domes.set(name, {
           name: dome.name || name,
           path: resolvedPath,
           description: dome.description || '',
@@ -173,9 +226,17 @@ export class DomeRegistry {
           ...(dome.files && typeof dome.files === 'object' ? { files: validFiles(name, dome.files) } : {}),
           active,
         });
-        this.origin.set(name, origin);
+        origins.set(name, origin);
       }
     }
+    // SE-480: se aplica solo si todo validó; un fichero a medias no deja el registro vacío.
+    this.defaultDome = loc?.defaultDome || base?.defaultDome || '';
+    this.localDefault = loc?.defaultDome || '';
+    this.domes = domes;
+    this.origin = origins;
+    this.loadedKey = key;
+    this.loadedAt = Date.now();
+    this.loadError = undefined;
   }
 
   list(): DomeInfo[] {
@@ -247,6 +308,8 @@ export class DomeRegistry {
     if (fs.existsSync(this.getLocalFilePath()) || Object.keys(byOrigin.local).length > 0) {
       write(this.getLocalFilePath(), this.localDefault, byOrigin.local);
     }
+    this.loadedKey = this.statKey();
+    this.loadError = undefined;
   }
 
   setDefault(name: string): void {
