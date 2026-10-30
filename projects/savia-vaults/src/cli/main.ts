@@ -16,6 +16,8 @@ import { DomeRegistry, isGitTracked } from '../registry/domes.js';
 import { UserStore, ConfidentialityGuard, AuditLogger, UserQuotaStore, AccessController } from '../auth/index.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { envMs } from '../env-ms.js';
+import { AUTOSYNC_MAX_INTERVAL_MIN } from '../rag/autosync.js';
 
 function makeConfig(name: string, vaultPath: string): VaultConfig {
   return { name, path: vaultPath, allowedExtensions: [], deniedPaths: [], maxDepth: 10, maxFileSize: 10 * 1024 * 1024 };
@@ -44,8 +46,17 @@ program.command('serve').description('Start MCP, A2A or HTTP (Savia Files) serve
   .option('--host <host>', 'Bind host', '127.0.0.1')
   .option('-p, --path <path>', 'Vault path (legacy single-dome)', process.cwd())
   .option('--domes <file>', 'Domes registry file', 'savia-vaults.domes.json')
+  .option('--rag-autosync <minutes>', 'a2a: sync incremental de RAG de las cúpulas habilitadas cada N minutos (SE-480; desactivado por defecto)')
   .action(async (opts, command) => {
     const authToken = process.env.SAVIA_VAULTS_TOKEN;
+    let autosyncMin: number | undefined;
+    if (opts.ragAutosync !== undefined) {
+      autosyncMin = Number(opts.ragAutosync);
+      if (!Number.isFinite(autosyncMin) || autosyncMin <= 0 || autosyncMin > AUTOSYNC_MAX_INTERVAL_MIN || opts.transport !== 'a2a') {
+        console.error(`--rag-autosync <minutos> exige minutos > 0 (máximo ${AUTOSYNC_MAX_INTERVAL_MIN}) y --transport a2a`);
+        process.exit(1);
+      }
+    }
 
     // SE-310: si --path se paso EXPLICITO, el usuario pide single-dome legacy;
     // el registry por defecto no debe secuestrar la ruta (bug: antes se cargaba
@@ -99,6 +110,20 @@ program.command('serve').description('Start MCP, A2A or HTTP (Savia Files) serve
         ? new AccessController(userStore ?? new UserStore('savia-vaults.users.json'), domeReg, new AuditLogger())
         : undefined;
       const server = new A2AServer(config, domeReg, { corsOrigins, access });
+      if (autosyncMin !== undefined && domeReg) {
+        const { RagService } = await import('../rag/service.js');
+        const { RagAutosync } = await import('../rag/autosync.js');
+        const rag = new RagService({
+          domes: () => domeReg.listActive().map(d => ({ name: d.name, path: d.path, confidentiality: d.confidentiality, rag: d.rag, files: d.files })),
+        });
+        const autosync = new RagAutosync(rag, { intervalMin: autosyncMin, refresh: () => { server.refreshRegistry(); }, onState: (st) => rag.persistAutosyncState(st), startDelayMs: envMs(process.env.SAVIA_RAG_AUTOSYNC_DELAY_MS) });
+        rag.setAutosyncState(() => autosync.getState());
+        server.onRegistryReload = () => autosync.onRegistryReload();
+        server.autosync = autosync;
+        autosync.start();
+      } else if (autosyncMin !== undefined) {
+        console.error('[serve] --rag-autosync ignorado: sin registro de cúpulas no hay RAG que sincronizar');
+      }
       try {
         await server.start(parseInt(opts.port ?? '8923', 10), opts.host, authToken || undefined);
       } catch (e) {
