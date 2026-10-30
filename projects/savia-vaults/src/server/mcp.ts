@@ -297,7 +297,7 @@ export class MCPVaultServer {
         { name: 'vault_introspect', description: 'Discover entity types, coverage, and available properties.', inputSchema: { type: 'object', properties: { vault: { type: 'string' }, entity: { type: 'string' } } } },
         { name: 'vault_graph', description: 'Query knowledge graph: traverse, search, or get stats.', inputSchema: { type: 'object', properties: { vault: { type: 'string' }, action: { type: 'string' }, id: { type: 'string' }, depth: { type: 'number' }, query: { type: 'string' } }, required: ['action'] } },
         { name: 'vault_query', description: 'Deterministic dotted-notation query for entities.', inputSchema: { type: 'object', properties: { vault: { type: 'string' }, expression: { type: 'string' } }, required: ['expression'] } },
-        { name: 'vault_health', description: 'Quality report: coverage, provenance, conflicts, freshness.', inputSchema: { type: 'object', properties: { vault: { type: 'string' } } } },
+        { name: 'vault_health', description: 'Quality report: coverage, provenance, conflicts, freshness, and quarantined-note counts by diagnostic code.', inputSchema: { type: 'object', properties: { vault: { type: 'string' } } } },
         {
           name: 'vault_wikilink_health',
           description: 'Report wikiLink health: total links, valid links, broken links, and most-linked entities.',
@@ -538,10 +538,13 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_health'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            // SE-481 R2: contador de cuarentena por código, sin rutas ni títulos (las rutas, solo por CLI local).
+            const q = inst.storage.quarantine();
+            const quarantine = `\n\nquarantine: ${JSON.stringify({ total: q.total, byCode: q.byCode })}`;
+            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: `No schema configured.${quarantine}` }] };
             const quality = new QualityEngine(inst.config);
             const indicators = await quality.assess();
-            return { content: [{ type: 'text', text: quality.formatReport(indicators) }] };
+            return { content: [{ type: 'text', text: quality.formatReport(indicators) + quarantine }] };
           }
 
           default:

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { chunkMarkdown, parseNote } from './chunker.js';
+import { chunkMarkdown } from './chunker.js';
 import type { Embedder } from './embedder.js';
 import { FlatVectorStore, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive } from './store.js';
 import { RAG_LIMITS, RagError, type Chunk, type EmbeddingContract, type Manifest, type ResolvedRagConfig, type SyncReport, type VirtualSource, type IndexCipher } from './types.js';
@@ -99,11 +99,14 @@ export function logEvent(home: string, event: Record<string, unknown>): void {
   } catch { /* el log nunca rompe un sync */ }
 }
 
+/** Prefijo de `skipped` para notas en cuarentena (SE-481); le sigue el código de diagnóstico. */
+const QUARANTINE = 'quarantine:';
+
 const sha256 = (data: string | Buffer) => createHash('sha256').update(data).digest('hex');
 
 /** CRIT-001: una nota con nivel superior al de su cúpula no se embebe (regla común, SE-420). */
 export { exceedsDomeLevel } from '../storage/note-level.js';
-import { exceedsDomeLevel } from '../storage/note-level.js';
+import { CLASSIFICATION_RULES, exceedsDomeLevel, parseClassification, verdictOf } from '../storage/note-level.js';
 
 export interface IndexerOptions {
   dome: string;
@@ -190,7 +193,8 @@ export class RagIndexer {
       const virtual = this.o.sources?.() ?? [];
       const report: SyncReport = {
         dome: this.o.dome, generation, promoted: false, shadow: false,
-        docs: { added: 0, updated: 0, deleted: 0, unchanged: 0, skipped: 0 },
+        docs: { added: 0, updated: 0, deleted: 0, unchanged: 0, skipped: 0, quarantined: 0 },
+        quarantine: {},
         chunks: { total: 0, embedded: 0, reused: 0 },
         durationMs: 0,
       };
@@ -215,28 +219,44 @@ export class RagIndexer {
         }
       };
 
+      // SE-481: si las reglas de clasificación cambiaron desde la generación previa, las notas
+      // reutilizadas se vuelven a clasificar (una vez) en lugar de arrastrarse sin mirar.
+      const recheck = !previous || previous.manifest.classificationRules !== CLASSIFICATION_RULES;
+      const quarantined = (code: string) => {
+        report.docs.quarantined++;
+        report.quarantine[code] = (report.quarantine[code] ?? 0) + 1;
+      };
       for (const f of files) {
         const prev = prevDocs[f.path];
-        if (prev && prev.mtimeMs === f.mtimeMs && previous) {
+        if (prev && prev.mtimeMs === f.mtimeMs && previous && !recheck) {
           this.carry(previous, prev.chunkIds, finalChunks, finalVectors);
           docs[f.path] = prev;
-          if (prev.skipped) report.docs.skipped++;
+          if (prev.skipped?.startsWith(QUARANTINE)) quarantined(prev.skipped.slice(QUARANTINE.length));
+          else if (prev.skipped) report.docs.skipped++;
           else report.docs.unchanged++;
           continue;
         }
         const buf = fs.readFileSync(path.join(this.o.vaultPath, f.path));
         const hash = sha256(buf);
-        if (prev && prev.hash === hash && previous) {
-          this.carry(previous, prev.chunkIds, finalChunks, finalVectors);
-          docs[f.path] = { ...prev, mtimeMs: f.mtimeMs };
-          report.docs.unchanged++;
-          mtimeOnly = true;
+        const raw = buf.toString('utf-8');
+        // R2: clasificación explícita no interpretable ⇒ cuarentena (no se indexa en ninguna cúpula).
+        const cls = parseClassification(f.path, raw);
+        const verdict = verdictOf(cls, this.o.domeLevel ?? 'N2');
+        if (verdict === 'quarantine') {
+          docs[f.path] = { hash, mtimeMs: f.mtimeMs, chunkIds: [], skipped: `${QUARANTINE}${cls.diagnostic}` };
+          quarantined(cls.diagnostic!);
           continue;
         }
-        const raw = buf.toString('utf-8');
-        const level = parseNote(f.path, raw).meta.confidentiality;
-        if (exceedsDomeLevel(level, this.o.domeLevel ?? 'N2')) {
-          docs[f.path] = { hash, mtimeMs: f.mtimeMs, chunkIds: [], skipped: `confidentiality:${level}` };
+        if (prev && prev.hash === hash && previous && !prev.skipped?.startsWith(QUARANTINE)) {
+          this.carry(previous, prev.chunkIds, finalChunks, finalVectors);
+          docs[f.path] = { ...prev, mtimeMs: f.mtimeMs };
+          if (prev.skipped) report.docs.skipped++;
+          else report.docs.unchanged++;
+          if (prev.mtimeMs !== f.mtimeMs) mtimeOnly = true;
+          continue;
+        }
+        if (verdict === 'out-of-level') {
+          docs[f.path] = { hash, mtimeMs: f.mtimeMs, chunkIds: [], skipped: `confidentiality:${cls.level}` };
           report.docs.skipped++;
           continue;
         }
@@ -286,12 +306,13 @@ export class RagIndexer {
         seq: changed ? (previous?.manifest.seq ?? 0) + 1 : previous!.manifest.seq,
         createdAt: previous?.manifest.createdAt ?? now, updatedAt: now,
         docs, chunkCount: finalChunks.length, fingerprint: fingerprintOf(files, virtual),
+        classificationRules: CLASSIFICATION_RULES,
       };
       if (changed) {
         FlatVectorStore.write(genDir, manifest, finalChunks, finalVectors as Float32Array[], this.o.cipher);
         // SE-417: en una cúpula cifrada no se esperan lectores de seq antiguos en claro: fuera ya.
         if (this.o.cipher) gcGeneration(genDir, 0);
-      } else if (mtimeOnly || manifest.fingerprint !== previous!.manifest.fingerprint) {
+      } else if (mtimeOnly || recheck || manifest.fingerprint !== previous!.manifest.fingerprint) {
         FlatVectorStore.updateManifest(genDir, manifest, this.o.cipher);
       }
 

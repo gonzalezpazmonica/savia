@@ -7,6 +7,7 @@ import { asPrincipal, canRead, type Principal } from '../files/policy.js';
 import { indexCipher } from '../files/keys.js';
 import { sodiumReady } from '../files/crypto.js';
 import { RagIndexer, listIndexable, logEvent } from './indexer.js';
+import { fileServable, isMarkdown } from '../storage/note-level.js';
 import { fanOut, withTimeout, TimeoutError } from './parallel.js';
 import { promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
@@ -423,7 +424,7 @@ export class RagService {
   private targetDomes(req: RagRequest): RagDomeRef[] {
     const all = this.o.domes();
     if (!req.domes || req.domes === '*') {
-      return all.filter(d => d.confidentiality !== 'N4' && this.config(d).enabled);
+      return all.filter(d => d.confidentiality !== 'N4' && d.confidentiality !== 'N4B' && this.config(d).enabled);
     }
     return [...new Set(req.domes)].map(n => this.dome(n));
   }
@@ -556,21 +557,37 @@ export class RagService {
         }
         return ok;
       };
+      // SE-481 R3: cada hit de nota se revalida con su estado ACTUAL en disco (borrada, fuera de
+      // nivel o en cuarentena ⇒ fuera), sin esperar al siguiente sync. `includeStale` no influye.
+      const servable = new Map<string, boolean>();
+      const noteOk = (relPath: string): boolean => {
+        let ok = servable.get(relPath);
+        if (ok === undefined) {
+          ok = isMarkdown(relPath) && fileServable(path.join(p.d.path, relPath), relPath, p.d.confidentiality);
+          servable.set(relPath, ok);
+        }
+        return ok;
+      };
       let filtered = 0;
+      let revalidated = 0;
       req.queries.forEach((query, qi) => {
         let hits: StoreHit[] = searchStore({
-          store: p.store, query, queryVec: vecs?.[qi], mode, k: files ? Math.min(opt.k * 4, 200) : opt.k, cfg: p.cfg,
+          store: p.store, query, queryVec: vecs?.[qi], mode, k: Math.min(opt.k * 4, 200), cfg: p.cfg,
           pathPrefix: req.pathPrefix, includeStale: req.includeStale,
         });
+        const before = hits.length;
+        hits = hits.filter(h => h.source?.documentId || noteOk(h.path));
+        revalidated += before - hits.length;
         if (files) {
-          const before = hits.length;
+          const n = hits.length;
           hits = hits.filter(h => !h.source?.documentId || canSee(h.source.documentId));
-          filtered += before - hits.length;
-          hits = hits.slice(0, opt.k);
+          filtered += n - hits.length;
         }
+        hits = hits.slice(0, opt.k);
         perQuery[qi].push(hits.map(h => ({ ...h, dome: p.d.name, confidentiality: p.d.confidentiality })));
       });
       if (filtered) outcomes.set(p.d.name, { ...outcomes.get(p.d.name)!, filtered });
+      if (revalidated) outcomes.set(p.d.name, { ...outcomes.get(p.d.name)!, degradation: { revalidated } });
     }
 
     // 6. Fusión entre cúpulas (SE-411 G1): por coseno global si todas comparten

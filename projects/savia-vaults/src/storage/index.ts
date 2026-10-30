@@ -5,7 +5,7 @@ import { simpleGit } from 'simple-git';
 import YAML from 'yaml';
 import type { VaultConfig, Note, Receipt, VaultStats, CommitEntry, Frontmatter } from '../types.js';
 import { signContent } from '../security/index.js';
-import { contentOutOfLevel, fileOutOfLevel } from './note-level.js';
+import { fileClassification, fileOutOfLevel, fileVerdict, isMarkdown, parseClassification, verdictOf } from './note-level.js';
 
 export class VaultStorage {
   private config: VaultConfig;
@@ -65,10 +65,20 @@ export class VaultStorage {
   async write(notePath: string, content: string, message?: string): Promise<Receipt> {
     const fullPath = path.join(this.config.path, notePath);
     // SE-420: ni se escribe una nota de nivel superior a la cúpula ni se pisa una que ya lo esté.
-    if (/\.(md|markdown)$/i.test(notePath) && contentOutOfLevel(notePath, content, this.config.confidentiality)) {
-      throw new Error(`POLICY_DENIED: la nota declara un nivel superior al de la cúpula (${this.config.confidentiality})`);
+    if (isMarkdown(notePath)) {
+      // SE-481 R2: una clasificación explícita no interpretable se rechaza antes de persistir.
+      const cls = parseClassification(notePath, content);
+      const verdict = verdictOf(cls, this.config.confidentiality);
+      if (verdict === 'quarantine') {
+        throw new Error(`INVALID_CLASSIFICATION: el frontmatter declara \`confidentiality\` pero no es un nivel válido (${cls.diagnostic}); usa N1, N2, N3, N4 o N4b`);
+      }
+      if (verdict === 'out-of-level') {
+        throw new Error(`POLICY_DENIED: la nota declara un nivel superior al de la cúpula (${this.config.confidentiality})`);
+      }
     }
-    if (this.outOfLevel(notePath)) throw new Error('POLICY_DENIED: en esa ruta hay una nota de nivel superior al de la cúpula');
+    const existing = fileVerdict(fullPath, notePath, this.config.confidentiality);
+    if (existing === 'quarantine') throw new Error('QUARANTINED_PATH: la nota de esa ruta está en cuarentena; corrige su frontmatter en local (savia-vaults dome quarantine)');
+    if (existing === 'out-of-level') throw new Error('POLICY_DENIED: en esa ruta hay una nota de nivel superior al de la cúpula');
     const dir = path.dirname(fullPath);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(fullPath, content);
@@ -170,13 +180,31 @@ export class VaultStorage {
       commitCount = log.total;
     } catch {}
 
+    const quarantined = this.quarantine().total;
     return {
       name: this.config.name,
       noteCount: files.length,
       totalSize,
       commitCount,
-      ...(this.config.confidentiality ? { outOfLevel: all.length - files.length } : {}),
+      ...(this.config.confidentiality ? { outOfLevel: all.length - files.length - quarantined } : {}),
+      ...(quarantined ? { quarantined } : {}),
     };
+  }
+
+  /**
+   * SE-481 R2: notas en cuarentena (clasificación explícita no interpretable).
+   * Las rutas solo deben salir por la CLI local (`dome quarantine`); MCP muestra `byCode`.
+   */
+  quarantine(): { total: number; byCode: Record<string, number>; notes: { path: string; code: string }[] } {
+    const byCode: Record<string, number> = {};
+    const notes: { path: string; code: string }[] = [];
+    for (const f of this.listAll()) {
+      const cls = fileClassification(path.join(this.config.path, f), f);
+      if (!cls || verdictOf(cls, undefined) !== 'quarantine') continue;
+      byCode[cls.diagnostic!] = (byCode[cls.diagnostic!] ?? 0) + 1;
+      notes.push({ path: f, code: cls.diagnostic! });
+    }
+    return { total: notes.length, byCode, notes };
   }
 
   async diff(notePath: string): Promise<string> {

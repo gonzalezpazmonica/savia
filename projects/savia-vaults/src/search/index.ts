@@ -32,7 +32,7 @@ const MINI_OPTIONS = {
 
 /** SE-412: solo markdown salvo que la cúpula declare `allowedExtensions`. */
 const DEFAULT_EXTENSIONS = ['.md', '.markdown'];
-const CACHE_VERSION = 3; // SE-420: descarta cachés que indexaban notas fuera de nivel
+const CACHE_VERSION = 4; // SE-420/SE-481: descarta cachés con notas fuera de nivel o en cuarentena
 
 export function defaultSearchCacheDir(): string {
   return process.env.SAVIA_SEARCH_CACHE || path.join(os.homedir(), '.savia-vaults', 'search-cache');

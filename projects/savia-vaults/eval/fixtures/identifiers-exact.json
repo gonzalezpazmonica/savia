@@ -1,0 +1,37 @@
+{
+  "description": "SE-481 R6 — identificadores con guiones y dígitos; la búsqueda exacta devuelve el documento exacto primero. Sintético. Los distractores repiten las partes del identificador: sin el término completo ganarían ellos.",
+  "queries": [
+    {
+      "query": "E-1047",
+      "expected": "ids/e-1047.md"
+    },
+    {
+      "query": "E-1048",
+      "expected": "ids/e-1048.md"
+    },
+    {
+      "query": "CT-2026-047",
+      "expected": "ids/ct-2026-047.md"
+    },
+    {
+      "query": "CT-2026-048",
+      "expected": "ids/ct-2026-048.md"
+    },
+    {
+      "query": "E-10470",
+      "expected": "ids/e-10470.md"
+    }
+  ],
+  "docs": {
+    "ids/e-1047.md": "# Incidencia\n\nRegistro de la incidencia E-1047 en el banco de pruebas. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/e-1048.md": "# Incidencia\n\nRegistro de la incidencia E-1048 en el banco de pruebas. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/e-10470.md": "# Incidencia\n\nRegistro de la incidencia E-10470 en el banco de pruebas. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ct-2026-047.md": "# Contrato\n\nAnexo del contrato CT-2026-047 con plazos de entrega. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ct-2026-048.md": "# Contrato\n\nAnexo del contrato CT-2026-048 con plazos de entrega. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ruido.md": "# Ruido\n\nLote 1047: 1047 piezas, caja 1047 y serie E. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ruido-ct.md": "# Resumen\n\nResumen CT: año 2026, tabla 047, CT 2026 y fila 047; CT. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ruido-10470.md": "# Lotes\n\nLote 10470: 10470 piezas y caja 10470 de la incidencia. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ruido-1048.md": "# Lotes\n\nLote 1048: 1048 piezas, caja 1048 y serie E. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. ",
+    "ids/ruido-ct48.md": "# Resumen\n\nResumen CT: año 2026, tabla 048, CT 2026 y fila 048; CT. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. Texto de relleno sintético que da longitud al fragmento con palabras ajenas a la consulta. "
+  }
+}

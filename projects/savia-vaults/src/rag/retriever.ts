@@ -19,10 +19,11 @@ export function rrf(lists: string[][], k: number = RAG_LIMITS.rrfK): Map<string,
 interface Bm25Doc { id: number; heading: string; text: string }
 
 // Stopwords es/en: sin ellas, términos como "de" o "que" dominan el OR de BM25
-// y el prefijo los expande a medio vocabulario.
+// y el prefijo los expande a medio vocabulario. SE-481 R5: las negaciones (no, not, ni,
+// sin, nada) NO son stopwords: invierten el sentido y deben puntuar.
 const STOPWORDS = new Set((
-  'a al algo ante antes como con contra cual cuando de del desde donde durante e el ella ellas ellos en entre era es esa ese eso esta este esto estos fue ha han hasta hay la las le les lo los mas me mi mientras muy nada ni no nos o os otra otro para pero poco por porque que quien se sea segun ser si sin sobre son su sus tambien te tiene todo tras tu un una uno unos y ya yo ' +
-  'a an and are as at be but by for from has have if in into is it its not of on or so that the their then there these this to was were will with'
+  'a al algo ante antes como con contra cual cuando de del desde donde durante e el ella ellas ellos en entre era es esa ese eso esta este esto estos fue ha han hasta hay la las le les lo los mas me mi mientras muy nos o os otra otro para pero poco por porque que quien se sea segun ser si sobre son su sus tambien te tiene todo tras tu un una uno unos y ya yo ' +
+  'a an and are as at be but by for from has have if in into is it its of on or so that the their then there these this to was were will with'
 ).split(' '));
 
 /** Normaliza un término: minúsculas, sin acentos; null si es stopword. */
@@ -31,16 +32,39 @@ export function processTerm(term: string): string | null {
   return STOPWORDS.has(t) ? null : t;
 }
 
+/** Exportada para tests (SE-481 R5). */
+export const BM25_STOPWORDS: ReadonlySet<string> = STOPWORDS;
+
+// Separadores de MiniSearch (espacios y puntuación Unicode).
+const SPLIT = /[\n\r\p{Z}\p{P}]+/u;
+// Identificador compuesto: letras/dígitos unidos por - _ . / (CT-2026-047, E-1047, SE-481).
+const COMPOUND = /^[\p{L}\p{N}]+(?:[-_./][\p{L}\p{N}]+)+$/u;
+
+/**
+ * SE-481 R5: tokeniza como MiniSearch y además conserva cada identificador compuesto con
+ * dígitos como término completo; así `E-1047` casa exacto y sus partes siguen indexadas.
+ */
+export function tokenize(text: string): string[] {
+  const out = text.split(SPLIT).filter(Boolean);
+  for (const raw of text.split(/\s+/)) {
+    const w = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if (COMPOUND.test(w) && /\p{N}/u.test(w)) out.push(w);
+  }
+  return out;
+}
+
 const bm25Cache = new WeakMap<FlatVectorStore, MiniSearch<Bm25Doc>>();
 
 /** Subir si cambian tokenización u opciones: invalida los índices BM25 persistidos. */
-const BM25_VERSION = 'v1';
+const BM25_VERSION = 'v2'; // SE-481: negaciones indexadas e identificadores compuestos
 
 const BM25_OPTIONS = {
   fields: ['heading', 'text'],
   idField: 'id',
   processTerm,
+  tokenize,
   searchOptions: {
+    tokenize,
     boost: { heading: 1.5 },
     prefix: (term: string) => term.length >= 4,
     fuzzy: (term: string) => (term.length >= 5 ? 0.1 : 0),
