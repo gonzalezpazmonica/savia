@@ -78,7 +78,7 @@ Semántica de varias entradas:
 
 ### R2 — Ledger de admisión
 
-El ledger vive en el **directorio de estado del servidor**, `~/.savia-vaults/admission/<cúpula>/`, el mismo sitio que `users.json`: **fuera de cualquier cúpula**. Así ni `vault_write`, ni A2A, ni el repo sincronizado de la cúpula pueden alcanzarlo. La clave de firma vive en el mismo directorio de estado, nunca dentro de la cúpula. Los efectos de esta ubicación:
+El ledger vive en el **directorio de estado del servidor**, `~/.savia-vaults/admission/<cúpula>/`, hermano del índice RAG (`defaultRagHome()` = `~/.savia-vaults/rag`) y protegido con `ensureSafeHome`: **fuera de cualquier cúpula**. Al arrancar, el servidor comprueba que esa ruta no queda bajo la raíz de ninguna cúpula registrada; si queda, falla con `ADMIT_LEDGER_INSIDE_DOME`. Así ni `vault_write`, ni A2A, ni el repo sincronizado de la cúpula pueden alcanzarlo. La clave de firma vive en el mismo directorio de estado, nunca dentro de la cúpula. Los efectos de esta ubicación:
 
 - el ledger no viaja con las notas (exportación, copias, federación);
 - no se respalda con `backup` de la cúpula: necesita su propio respaldo, que se documenta en la implementación.
@@ -96,10 +96,10 @@ Reglas del ledger:
 - Nunca contiene texto del documento.
 - El digest de una nota es `DocEntry.hash` (sha256 de los bytes del fichero). El de Files es `sha256(rev.sha256 + "\n" + (extraction.digest ?? ""))`. Una re-extracción con otra versión del extractor cambia el texto que se sirve, así que invalida los `ACCEPTED` previos. Es intencionado: se revisó otro texto.
 - **Ancla de cabeza contra el truncado.** Hay un checkpoint firmado `{dome, seq, head}`.
-- **Orden de escritura**, bajo un lock de cúpula (el patrón `acquireLock` del indexador), que comparten la CLI y el servidor:
+- **Orden de escritura**, bajo un lock de cúpula (`acquireLock` del indexador, que no bloquea; si está tomado, `admission set` reintenta durante 5 s y después falla con `ADMIT_LOCKED`). Los lectores no toman el lock: el orden de lectura los protege.
   1. añadir la entrada con fsync;
   2. reescribir el checkpoint de forma atómica (`writeAtomic`);
-  3. solo en la primera escritura de la cúpula, marcar `domes.<n>.admission.initialized: true` en el registro.
+  3. si existe checkpoint y falta la marca, marcar `domes.<n>.admission.initialized: true` en el registro de cúpulas. Se hace en **cualquier** escritura, no solo en la primera, para cerrar el hueco de un fallo entre los pasos 2 y 3.
 
   Con el ledger inválido, `admission set` se niega (`ADMIT_LEDGER_INVALID`). Solo funciona `admission repair`.
 - Al cargar se lee **primero el checkpoint y después el ledger**. Así una escritura concurrente solo puede dejar el ledger por delante, que se tolera, y nunca por detrás, que sería un falso truncado. La recarga se dispara si cambia `(mtimeMs, size)` de cualquiera de los dos o el `seq` del checkpoint. Así se evita servir un ledger obsoleto cuando dos escrituras caen en el mismo tick de mtime.
@@ -118,8 +118,8 @@ Reglas del ledger:
   - en `governed`, la cúpula **no sirve ningún hit** (`status` degradado) hasta que se repare;
 - **Reparación.** Solo por CLI local: `savia-vaults admission repair <cúpula>`, con `authorizeAdmit` y TTY:
   1. muestra el diagnóstico: qué comprobación falla y los `seq` de checkpoint y ledger, sin contenido;
-  2. propone volver a anclar en el **mayor prefijo válido** del ledger, con cadena y firmas correctas;
-  3. tras confirmar, descarta (archiva aparte, no borra) las entradas posteriores inválidas y añade una entrada firmada `REANCHOR` con `reason`, el `seq` y el `head` anteriores y el sujeto;
+  2. propone volver a anclar en el **mayor prefijo válido** del ledger, con cadena y firmas correctas. Si el prefijo válido está vacío, se vuelve a empezar con `prev` = hash cero y `seq` = 1, y la entrada `REANCHOR` es la primera;
+  3. tras confirmar, descarta las entradas posteriores inválidas (las archiva aparte, no las borra) y añade una entrada firmada de tipo `REANCHOR`. Lleva `kind: 'REANCHOR'`, `target: null`, `digest: null` y `admission: null`, junto con `reason`, el `seq` y el `head` anteriores y el sujeto. Las entradas `REANCHOR` **no** cuentan como decisión de ningún objetivo, así que no entran en el cálculo de la decisión vigente ni en `negativeDigests`;
   4. reescribe checkpoint y marca.
 
   No distingue por sí misma un truncado malicioso de un fallo benigno; eso lo decide la persona con el diagnóstico delante. Por eso queda auditado.
@@ -212,19 +212,20 @@ Reglas del ledger:
 - **AC-4 (permiso ortogonal):** `authorizeAdmit()` devuelve `forbidden` en cada uno de estos casos, y `allowed` solo cuando se cumplen las cuatro condiciones:
   - `admin` sin `admit`;
   - humano con `admit` pero con una credencial sin `admit`;
-  - usuario `service` con `admit:true` metido a mano en `users.json`;
+  - usuario `service` con `admit:true` metido a mano en `savia-vaults.users.json`;
   - credencial `admit` sobre una cúpula sin `admit`;
   - credencial `admit` caducada o revocada;
   - rol `reader` con `admit`.
 - **AC-5 (CLI):**
   - controles positivos: `grant-admit` sobre un humano sale con 0 y escribe `admit: true` en su permiso de esa cúpula; `token-create --admit --expires-days 7` crea una credencial con `admit: true` y caducidad ≤ 7 días;
-  - negativos con error concreto: `grant-admit` sobre `service` falla con `ADMIT_SERVICE_FORBIDDEN` y `users.json` queda idéntico byte a byte; `--expires-days 8` falla con `ADMIT_TTL_EXCEEDED`;
+  - negativos con error concreto: `grant-admit` sobre `service` falla con `ADMIT_SERVICE_FORBIDDEN` y `savia-vaults.users.json` queda idéntico byte a byte; `--expires-days 8` falla con `ADMIT_TTL_EXCEEDED`;
   - `admission set` con `stdin` no TTY falla con `ADMIT_REQUIRES_TTY` y el ledger no cambia;
   - no existe ningún modo de pasar la credencial por variable de entorno ni por argv: un test lo recorre con las dos vías.
 - **AC-6 (sin superficie de agente):**
   - un test enumera las herramientas MCP y las rutas A2A y HTTP registradas, y falla si alguna importa el módulo de escritura del ledger. Comprueba también que no acepta `admission` como entrada;
+  - el recorrido de imports es **transitivo**, sobre el grafo de módulos que resuelve el compilador. Además, un test en tiempo de ejecución arranca el servidor MCP con un espía en la función de escritura del ledger, invoca cada herramienta con entradas válidas y comprueba que no se llama nunca. Así se cubren los imports dinámicos y los envoltorios;
+  - aserción estructural con control positivo: `path.relative(raízDeCúpula, rutaDelLedger)` empieza por `..` para cada cúpula registrada. El control positivo es una cúpula de prueba cuya raíz contiene la ruta del ledger: el arranque falla con `ADMIT_LEDGER_INSIDE_DOME`;
   - `vault_write` con una ruta que intenta salir hacia el directorio de estado (`../`, ruta absoluta o enlace simbólico) se rechaza y el ledger no cambia.
-  - Es un invariante de no-regresión: en main no hay ledger, así que el test de rutas es el que puede fallar si el ledger se coloca dentro de la cúpula.
 - **AC-7 (ledger íntegro):** en cada uno de estos casos, con `standard` y sin `includeStale`, **todos** los hits de la cúpula salen exactamente `UNREVIEWED` y `DomeOutcome.detail` contiene `admission_ledger_invalid`. Con `governed`, la cúpula devuelve 0 hits con estado degradado:
   - (a) una entrada con la firma alterada;
   - (b) una entrada intermedia borrada;
@@ -260,7 +261,18 @@ Reglas del ledger:
   - el `REJECTED` truncado deja de aplicarse, porque se perdió, y el informe de reparación lo dice con su `seq`;
   - sin `authorizeAdmit`, falla y no toca nada;
   - las entradas descartadas quedan archivadas, no borradas.
-- **AC-14:** cada AC de AC-1 a AC-15, salvo AC-6, tiene al menos una aserción que falla contra main. AC-6 es un invariante y se valida con **dos** mutaciones, y cada una debe hacer fallar su test: (i) el ledger dentro de la cúpula; (ii) una herramienta MCP de prueba que importa el módulo de escritura del ledger. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
+- **AC-16 (requisitos sin AC hasta ahora):**
+  - `admission set` sobre un objetivo con estado heredado y sin `--override-inherited` falla con `ADMIT_INHERITED_NEGATIVE`; con el flag, sale `ACCEPTED`;
+  - un lote de 51 ids falla con `ADMIT_BATCH_TOO_LARGE` sin escribir nada, y `--all` no existe (error de opción);
+  - en `governed`, `ACCEPTED` sobre un `PARTIAL` sin `--accept-partial` falla con `ADMIT_PARTIAL_REQUIRES_FLAG`; en `standard` no lo pide;
+  - `dome create --owner <service>` falla con `ADMIT_SERVICE_FORBIDDEN` y no registra la cúpula;
+  - `dome governance` deja una entrada de auditoría;
+  - con el ledger inválido, `standard` e `includeStale`, un hit sustituido sale `SUPERSEDED`;
+  - con un fallo simulado entre los pasos 2 y 3 de la escritura, la siguiente escritura pone la marca.
+
+### Regla de los AC
+
+- **AC-14:** cada AC (AC-1 a AC-13, AC-15 y AC-16), salvo AC-6, tiene al menos una aserción **semántica** que falla contra main: un valor de estado, un código de error o un recuento. **No** cuenta como fallo que un import no compile o que un comando no exista, salvo que la aserción compruebe precisamente ese código de error. AC-6 es un invariante y se valida con **dos** mutaciones, cada una de las cuales debe hacer fallar su test: (i) colocar la ruta del ledger bajo una raíz de cúpula, que hace fallar la aserción estructural; (ii) una herramienta MCP de prueba que importa el módulo de escritura a través de un envoltorio, que hace fallar el recorrido transitivo y el espía. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
 
 ## Medidas que se dejan en la PR de implementación
 
@@ -290,7 +302,7 @@ Revert de la PR, o `SAVIA_VAULTS_ADMISSION=off` sin revertir.
 
 - El índice no cambia: la admisión no entra en las generaciones. No hace falta reconstruir nada.
 - El ledger queda en disco sin efecto y se puede borrar a mano.
-- Los permisos `admit` en `users.json` son campos opcionales que el código anterior ignora.
+- Los permisos `admit` en `savia-vaults.users.json` son campos opcionales que el código anterior ignora.
 - Revertir no reabre ninguna exposición de SE-481. Sí vuelve a servir los documentos `REJECTED`, y por eso la PR debe avisarlo.
 
 ## OpenCode Implementation Plan
