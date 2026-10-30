@@ -1,0 +1,32 @@
+{
+  "name": "Profesor Ficticio",
+  "role_text": "Doy clase de matemáticas en secundaria",
+  "proposed": [
+    {
+      "id": "teaching-learning",
+      "reason": "docente"
+    },
+    {
+      "id": "vertical",
+      "reason": "sector educativo",
+      "hints": {
+        "which": [
+          "education"
+        ]
+      }
+    }
+  ],
+  "answers": {
+    "teaching-learning": {
+      "learning_role": "teacher"
+    },
+    "vertical": {
+      "which": "education"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-profesor"
+}

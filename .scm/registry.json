@@ -19462,11 +19462,11 @@
       ],
       "id": "cmd:.claude/commands/profile-setup",
       "intents": [
-        "configuración",
-        "conoce",
-        "conversación",
-        "natural",
-        "perfil"
+        "adaptativo",
+        "configura",
+        "cual",
+        "oficio",
+        "onboarding"
       ],
       "kind": "cmd",
       "owner_domain": "planning",
@@ -29614,7 +29614,7 @@
       "tests": []
     }
   ],
-  "content_hash": "8cc89dc786ea",
+  "content_hash": "c397ceb06a6f",
   "deferred_kinds": [
     "rule",
     "hook"

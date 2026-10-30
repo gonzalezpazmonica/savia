@@ -400,7 +400,7 @@
 - **product-discovery** (skill): Usar antes de descomponer PBIs, cuando se necesita análisis JTBD y PRD del producto.
 - **professional-domain** (skill): Índice de las skills de dominio profesional (controlling, finanzas, laboral, legal, ventas). Usar cuando una tarea pide criterio de uno de esos dominios, para cargar la skill concreta.
 - **profile-discover** (script): profile-discover.sh — SE-219 S4: auto multi-profile discovery (abtop pattern)
-- **profile-setup** (cmd): Savia te conoce — configuración del perfil en conversación natural.
+- **profile-setup** (cmd): Onboarding adaptativo — Savia configura lo que necesita cualquier persona, sea cual sea su oficio (SE-484).
 - **profile-show** (cmd): Savia muestra tu perfil actual.
 - **profile-switch** (cmd): Savia cambia de usuario — cambiar perfil activo.
 - **project-activate** (cmd): Activa un proyecto como contexto activo en Savia: actualiza active-user.md y crea el directorio de memoria por proyecto si no existe. (SPEC-SE-093-ZERO-LEAK)

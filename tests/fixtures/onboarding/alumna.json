@@ -1,0 +1,30 @@
+{
+  "name": "Alumna Ficticia",
+  "role_text": "Estudio un grado de ingeniería y quiero aprender a programar",
+  "proposed": [
+    {
+      "id": "teaching-learning",
+      "reason": "estudiante"
+    },
+    {
+      "id": "sdd-development",
+      "reason": "aprende a programar"
+    }
+  ],
+  "answers": {
+    "teaching-learning": {
+      "learning_role": "learner"
+    },
+    "sdd-development": {
+      "languages": [
+        "python"
+      ],
+      "review": "other"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-alumna"
+}

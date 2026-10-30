@@ -1,0 +1,12 @@
+{
+  "name": "Persona Ficticia",
+  "role_text": "Hago de todo",
+  "proposed": [],
+  "answers": {
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-ambigua"
+}

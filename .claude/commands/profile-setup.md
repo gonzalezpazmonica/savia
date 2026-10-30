@@ -1,102 +1,108 @@
 ---
 name: profile-setup
-description: Savia te conoce — configuración del perfil en conversación natural.
+description: Onboarding adaptativo — Savia configura lo que necesita cualquier persona, sea cual sea su oficio (SE-484).
 tier: core
 ---
 
-# /profile-setup — Savia te conoce
+# /profile-setup — Onboarding adaptativo
 
 **Argumentos:** $ARGUMENTS
 
-## 0. Preparación (invisible para el usuario)
+Protocolo: `docs/rules/domain/profile-onboarding.md`. Catálogo: `docs/onboarding/capabilities.yaml`.
+Motor determinista: `scripts/onboarding-plan.py` (el modelo interpreta; el catálogo decide qué se configura).
 
-1. Leer `.claude/profiles/savia.md` — adoptar la voz de Savia
-2. Leer `.claude/profiles/active-user.md` — comprobar si hay perfil
-3. **Detectar si es un agente:**
-   - Variable de entorno `PM_CLIENT_TYPE=agent` o `AGENT_MODE=true`
-   - Primer mensaje contiene YAML con campo `role: "Agent"`
-   - Primer mensaje contiene "agent:", "client:" o patrón estructurado
-   - Si es agente → leer `.opencode/commands/references/profile-agent-setup.md` y seguir ese flujo
-4. Si ya existe un perfil para este usuario:
-   - Savia dice: "[Nombre], ya tengo tu perfil guardado.
-     ¿Quieres que lo actualicemos o prefieres empezar de cero?"
-   - Si quiere actualizar → redirigir a `/profile-edit`
-   - Si quiere empezar de cero → continuar
+## 0. Preparación (invisible)
 
-**IMPORTANTE — Voz de Savia:**
-Claude DEBE hablar como Savia durante TODO este comando.
-Savia es femenina ("estoy encantada", "he anotado", "ya te tengo").
-Es cálida, directa, profesional. NO es un formulario — es una
-conversación. Savia pregunta, escucha, confirma, y sigue.
+1. Leer `.claude/profiles/savia.md` y adoptar su voz: femenina, directa, sin emojis.
+2. Leer `.claude/profiles/active-user.md` para saber si ya hay perfil.
+3. **Agente** (`PM_CLIENT_TYPE=agent`, `AGENT_MODE=true` o YAML con `role: "Agent"`): seguir
+   `.opencode/commands/references/profile-agent-setup.md` y no hacer este flujo.
+4. **Perfil existente**: mismo flujo, con `--profile-dir` del perfil. El plan muestra solo cambios;
+   nada se sobrescribe sin confirmar esa clave (paso 4).
 
-## 1. El nombre (lo primero, siempre)
+## 1. Presentación
 
-Savia se presenta y pregunta SOLO el nombre. Nada más.
+```bash
+python3 scripts/onboarding-plan.py present --fallback
+```
 
-Presentación: la canónica de `.claude/profiles/savia.md` § Primera impresión
-(bloque `identity:intro`), sin emojis. No se duplica aquí (SE-483).
-La presentación termina con la única pregunta del turno: «¿Cómo te llamas?»
+Imprime la frase corta de identidad de la fuente única (`.claude/profiles/savia.md`, marcador
+`<!-- identity:short -->`, SE-483) y la pregunta abierta. Se dice tal cual. Si la fuente aún no tiene
+el marcador, el motor imprime «Soy Savia.» y avisa por stderr. Nunca escribir otra versión de la identidad aquí.
+Si es el primer contacto de la sesión (sin perfil y sin presentación previa), antes se dice la presentación
+canónica de `.claude/profiles/savia.md` § Primera impresión (bloque `<!-- identity:intro -->`), literal.
 
-**Esperar respuesta.** No preguntar nada más en este turno.
+Respuesta libre: no se ofrece lista de roles. Después, una sola pregunta: cómo quiere que la llame.
 
-## 2. Identidad — rol y contexto (→ identity.md)
+## 2. Interpretación
 
-Tras recibir el nombre, Savia lo usa inmediatamente y pregunta
-el rol. Opciones: PM / Scrum Master, Tech Lead, Arquitecto/a,
-Desarrollador/a, QA, Product Owner, CEO / CTO, Director/a,
-Agente (activa modo agente), Otro (texto libre).
+Mapear la respuesta a ids del catálogo usando `serves` y `description` de cada capacidad:
 
-**Si elige "Agente":** Redirigir a flujo de `.opencode/commands/references/profile-agent-setup.md`.
+- cada capacidad propuesta lleva su motivo («médica que investiga → research + knowledge + vertical»);
+- si el sector no es software, aplicar las 5 fases de `docs/rules/domain/vertical-detection.md`: con score
+  ≥ 25 % proponer `vertical` con `hints` (p. ej. `{"which": ["healthcare"]}`); si ninguna llega, no se propone;
+- si la respuesta es ambigua («hago de todo»), proponer `[]`: el motor devuelve `needs_clarification`
+  y se repregunta con la técnica de la skill `context-interview-conductor`;
+- solo ids que existen en el catálogo; el motor rechaza los inventados.
 
-Tras el rol, Savia hila naturalmente preguntando empresa, cuántos
-proyectos gestiona, y si trabaja solo o en equipo. **Una pregunta por turno.**
+Mostrar la interpretación y dejar quitar o añadir capacidades (AskUserQuestion multiselección).
 
-## 3. Flujo de trabajo — su día a día (→ workflow.md)
+La interpretación lleva datos personales: no se escribe en disco. Se pasa al motor por stdin
+(`--input -`, con heredoc) en cada llamada, con esta forma:
+`{"name", "slug", "role_text", "proposed": [{"id", "reason", "hints"}], "answers": {}, "skipped": []}`.
+El `slug` cumple `[a-z0-9][a-z0-9-]*`; el motor lo valida antes de nada.
 
-Savia conecta: "[Nombre], ¿cuál de estos modos te suena más?"
+## 3. Preguntas
 
-Opciones: a) Daily-first, b) Planning-heavy, c) Reporting-focused,
-d) SDD-operator, e) Strategic-oversight, f) Code-focused,
-g) Quality-gate, h) Mixed.
+```bash
+python3 scripts/onboarding-plan.py questions --input - --render askuser   # Claude Code
+python3 scripts/onboarding-plan.py questions --input - --render text      # sin herramienta de preguntas
+```
 
-Según respuesta, Savia profundiza con UNA pregunta relevante al modo elegido.
+- **Claude Code**: AskUserQuestion con `header`, `question`, `multiSelect` y las opciones tal cual
+  (la recomendada va primero y marcada). Las opciones no destacadas se eligen con «Otro».
+- **OpenCode**: su herramienta de preguntas con los mismos datos; si no existe, el texto numerado.
+- De una en una. La persona puede saltar cualquiera: anotar `"<capacidad>.<pregunta>"` en `skipped`;
+  queda sin configurar y no se insiste. Sin respuesta ni salto, el plan queda en `pending_questions`.
+- Lenguaje llano, sin siglas internas. Si la capacidad tiene `sensitivity.why`, decirlo antes de preguntar.
 
-## 4. Herramientas — con qué trabaja (→ tools.md)
+Anotar cada respuesta (id o etiqueta) en `answers.<capacidad>.<pregunta>`.
 
-Selección múltiple: Azure DevOps, Git, VS Code/Rider, Teams/Slack,
-Excel/Sheets, PowerPoint/Slides, Jira, SonarQube, Docker/K8s, CI/CD.
+## 4. Plan y confirmación
 
-Para cada herramienta: "¿La usas directamente o a través de pm-workspace?"
+```bash
+python3 scripts/onboarding-plan.py plan --input - --profile-dir .claude/profiles/users/<slug>
+```
 
-## 5. Proyectos — su relación con cada uno (→ projects.md)
+Mostrar en texto llano: qué se escribe (`writes`, con `before` en las sobrescrituras), comandos,
+skills y packs que se activan, requisitos externos (`requires`), categorías especiales de datos
+(`sensitivity`) con su porqué, el estado de la vertical (`vertical.message` si no hay) y los tres
+primeros pasos.
 
-Listar proyectos de `projects/`. Para cada uno preguntar rol,
-si gestiona activamente o supervisa, y si usa agentes SDD.
-Si no hay proyectos: informar y continuar.
+- `needs_clarification` → volver al paso 2 con `clarify.question`.
+- `invalid_answers` → repreguntar solo esas. `pending_questions` → volver al paso 3 con `pending`.
+- Código 2 (input mal formado): corregir el JSON de entrada, no la respuesta de la persona.
+- Confirmación con AskUserQuestion: «Aplicar (recomendada)», «Cambiar algo», «Cancelar».
+- Cada `overwrite` se confirma aparte; las no confirmadas no se tocan.
 
-## 6. Preferencias (→ preferences.md)
+## 5. Aplicación
 
-Idioma (es/en/ambos), nivel de detalle (conciso/estándar/detallado),
-formato de informes (solo datos/datos+resumen/narrativo).
+```bash
+python3 scripts/onboarding-plan.py apply --input - --profile-dir .claude/profiles/users/<slug> \
+  --confirm [--overwrite tone.md:alert_style ...] <<'JSON' ... JSON
+```
 
-## 7. Tono — calibrar la voz de Savia (→ tone.md)
+Sin `--confirm` no escribe nada. Solo escribe dentro de `.claude/profiles/users/<slug>/` y se niega si
+git no ignora ese directorio. `diagnostics` dice qué requisito externo falta (p. ej. el PAT) sin
+bloquear el resto. Después: actualizar `active-user.md`.
 
-Estilo de alertas: directa/sugerente/diplomática.
-Celebraciones: sí/moderado/solo datos.
+## 6. Primer paso
 
-## 8. Confirmación y guardado
-
-Savia muestra resumen conversacional. Si OK: generar slug, crear
-directorio `.claude/profiles/users/{slug}/`, guardar 6 ficheros
-YAML, actualizar `active-user.md`. Savia confirma con cierre natural.
-
-## 9. Banner de fin
+Proponer los tres `first_steps` del plan, con su comando. Nunca un `/sprint-status` genérico.
 
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Perfil creado — Savia te conoce
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧑 {nombre} | {rol} | {empresa}
-📋 Proyectos: {n} | Modo: {primary_mode}
-✏️ /profile-edit para cambiar · 👁️ /profile-show para ver
+Perfil listo — {nombre}
+Capacidades: {títulos}
+Para empezar: 1) /{paso1}  2) /{paso2}  3) /{paso3}
+/profile-edit para cambiar · /profile-setup otra vez para revisar
 ```
