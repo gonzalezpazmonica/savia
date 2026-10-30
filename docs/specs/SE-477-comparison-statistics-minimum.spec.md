@@ -68,7 +68,7 @@ infraestructura. Medido sobre `main` (7b434f9ae):
 | AC2 | `censoring`: con 4 terminadas y 2 `timeout` en un brazo, `worst_case` cuenta 2 fallos más; la sensibilidad excluyendo cortes se reporta aparte; ninguna política descarta cortes sin dejarlos en `censored`. |
 | AC3 | Validador de informe: rechaza JSON sin `ci95`, sin `design` o sin `censored`; acepta uno completo. |
 | AC4 | Texto de conclusión: con IC que incluye 0 el generador emite «sin diferencia demostrada» y un test negativo comprueba que no emite «mejor». |
-| AC5 | `bats tests/test-labs-preregister.bats`: sin `--design` o sin `--censoring-policy` sale con error; con ambos, el fichero de hipótesis los contiene. |
+| AC5 | `bats tests/test-labs-preregister.bats`. Inventario de llamadores a fecha de la spec: `grep -rn labs-preregister scripts tests docs` solo encuentra el propio script y esta spec, sin invocaciones ni tests previos, así que no hay llamadores existentes que romper (se revalida al implementar). Periodo de aviso: durante 2 semanas desde el merge, la ausencia de `--design` o `--censoring-policy` emite aviso por stderr y sale 0; pasado ese plazo sale con error. Con ambos presentes, el fichero de hipótesis los contiene. Test negativo en cada fase. |
 
 ## Riesgos
 

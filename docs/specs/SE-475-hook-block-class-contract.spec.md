@@ -1,6 +1,6 @@
 ---
 status: PROPOSED
-priority: P1
+priority: P2
 developer_type: agent-single
 created: 2026-10-29
 author: Savia

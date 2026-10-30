@@ -1530,7 +1530,7 @@
     {
       "id": "SE-475",
       "status": "PROPOSED",
-      "priority": "P1",
+      "priority": "P2",
       "title": "Clase del bloqueo en los mensajes de hook: FORMA o POLÍTICA",
       "note": "0 de 41 hooks con exit 2 y 27 guards TS declaran la clase del bloqueo; el agente adivina si puede reformular. Prefijo FORMA:/POLÍTICA:, biblioteca bash+TS y ratchet. Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
       "evidence": "docs/specs/SE-475-hook-block-class-contract.spec.md",
@@ -1552,15 +1552,6 @@
       "title": "Estadística mínima en las comparativas: intervalo, diferencia pareada y censura",
       "note": "labs-preregister.sh no pide IC, diseño pareado ni política de cortes; los timeouts no son aleatorios. Librería stdlib, contrato de informe y campos de preregistro. Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
       "evidence": "docs/specs/SE-477-comparison-statistics-minimum.spec.md",
-      "phase": "D"
-    },
-    {
-      "id": "SE-478",
-      "status": "PROPOSED",
-      "priority": "P2",
-      "title": "Protocolo de decisiones: triaje, simetría de argumentos y criterio previo",
-      "note": "Condicionada: no se implementa antes del resultado de una evaluación previa en Savia Labs (privado). Triaje técnica/autorización/juicio; en las de juicio, mismo esquema por opción y sin recomendada en la primera ronda. Revisión de Anthropic Research, 2026-10-29.",
-      "evidence": "docs/specs/SE-478-decision-triage-symmetry-protocol.spec.md",
       "phase": "D"
     },
     {
