@@ -1,5 +1,6 @@
 // SE-410 — Savia RAG: tipos compartidos.
 import type { Locator } from '../files/types.js';
+import type { BudgetUse, Evidence, RetrievalTrace } from '../retrieval/route.js';
 
 /** Mismo orden que `LEVELS` de storage/note-level.ts (SE-481 R4). */
 export type Confidentiality = 'N1' | 'N2' | 'N3' | 'N4' | 'N4B';
@@ -178,7 +179,13 @@ export interface DomeOutcome {
 }
 
 export interface RagResponse {
-  results: { query: string; hits: RagHit[]; /** SE-485 R4: avisos de la consulta. */ warnings?: string[] }[];
+  results: {
+    query: string; hits: RagHit[]; /** SE-485 R4: avisos de la consulta. */ warnings?: string[];
+    /** SE-489: solo con `route`: evidencia, traza, presupuesto consumido y abstención de la ruta. */
+    evidence?: Evidence[]; trace?: RetrievalTrace; consumed?: BudgetUse; abstain?: boolean;
+  }[];
+  /** SE-489: ruta de recuperación usada (ausente = pipeline por defecto). */
+  route?: string;
   merged?: RagHit[];
   domes: DomeOutcome[];
   timings: { totalMs: number; embedMs: number; syncMs: number };

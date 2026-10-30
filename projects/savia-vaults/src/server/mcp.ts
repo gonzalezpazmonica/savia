@@ -18,6 +18,8 @@ import { DomeRegistry, VaultInstance } from '../registry/domes.js';
 import { RagService } from '../rag/service.js';
 import { RagError, RAG_LIMITS } from '../rag/types.js';
 import { formatRagResponse, type RagFields } from '../rag/format.js';
+import { routeSearch } from '../retrieval/runner.js';
+import { RouteError } from '../retrieval/route.js';
 import { FilesService, FILES_TOOL, callFilesTool } from '../files/service.js';
 import { FilesError } from '../files/types.js';
 import { UserStore, AccessController, AuthError, AuditLogger, UserQuotaStore } from '../auth/index.js';
@@ -312,6 +314,10 @@ export class MCPVaultServer {
               includeStale: { type: 'boolean', description: 'Incluir documentos deprecated/superseded/vencidos' },
               maxChars: { type: 'number', description: 'Tamaño máximo de la respuesta en caracteres (def. 6000); se recorta el texto de los hits, nunca se omite uno' },
               fields: { type: 'string', enum: ['lean', 'full'], description: 'lean (def.): dome, confidentiality, path, heading, text, score; full: todas las señales' },
+              route: { type: 'string', description: 'SE-489: ruta de recuperación opt-in (M0 = híbrido actual). Sin route, el comportamiento por defecto; con route, cada resultado añade evidence, trace y consumed' },
+              budget: { type: 'object', description: 'SE-489 (con route): maxLatencyMs, maxModelCalls, maxNodes, maxHops, maxInputTokens; enteros ≥ 0', additionalProperties: false, properties: { maxLatencyMs: { type: 'number' }, maxModelCalls: { type: 'number' }, maxNodes: { type: 'number' }, maxHops: { type: 'number' }, maxInputTokens: { type: 'number' } } },
+              seed: { type: 'number', description: 'SE-489 (con route): semilla entera de las decisiones no deterministas de la ruta' },
+              asOf: { type: 'string', description: 'SE-489 (con route): fecha ISO para versiones y tiempo; una ruta que no lo soporta avisa AS_OF_UNSUPPORTED' },
             },
           },
         },
@@ -423,7 +429,18 @@ export class MCPVaultServer {
 
           case 'vault_rag': {
             const queries = Array.isArray(args.queries) ? (args.queries as string[]) : (typeof args.query === 'string' ? [args.query] : []);
-            const res = await this.rag.search({
+            // SE-489: `route` es opt-in; sin él, exactamente el pipeline por defecto (AC-4).
+            const res = args.route !== undefined ? await routeSearch(this.rag, {
+              route: typeof args.route === 'string' ? args.route : '',
+              queries,
+              domes: args.domes as string[] | '*' | undefined,
+              k: args.k as number | undefined,
+              mode: args.mode as 'hybrid' | 'dense' | 'bm25' | undefined,
+              pathPrefix: args.pathPrefix as string | undefined,
+              includeStale: args.includeStale as boolean | undefined,
+              maxChars: args.maxChars as number | undefined,
+              budget: args.budget, seed: args.seed, asOf: args.asOf as string | undefined,
+            }) : await this.rag.search({
               queries,
               domes: args.domes as string[] | '*' | undefined,
               k: args.k as number | undefined,
@@ -600,7 +617,7 @@ export class MCPVaultServer {
         if (e instanceof AuthError) {
           return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
         }
-        if (e instanceof RagError || e instanceof FilesError) {
+        if (e instanceof RagError || e instanceof FilesError || e instanceof RouteError) {
           return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
         }
         const msg = e instanceof Error ? e.message : String(e);
