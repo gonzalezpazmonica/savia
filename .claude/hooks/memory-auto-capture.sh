@@ -1,7 +1,12 @@
 #!/bin/bash
 # memory-auto-capture.sh — PostToolUse hook for automatic memory capture
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/savia-env.sh"
+# Early exit before sourcing savia-env.sh (it forks git/dirname/basename):
+# only Edit/Write trigger a capture, every other call returns without a fork.
+TOOL_NAME="${TOOL_NAME:-}"
+[[ "$TOOL_NAME" =~ ^(Edit|Write)$ ]] || exit 0
+
+source "${BASH_SOURCE[0]%/*}/../../scripts/savia-env.sh"
 export CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$SAVIA_WORKSPACE_DIR}"
 
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-.}"
@@ -10,12 +15,6 @@ RATE_LIMIT_FILE="$HOME/.pm-workspace/memory-capture-last.ts"
 RATE_LIMIT_MIN=5
 
 [[ ! -f "$STORE_SCRIPT" ]] && exit 0
-
-# Guard against unbound env vars under set -u
-TOOL_NAME="${TOOL_NAME:-}"
-
-# Only trigger for Edit and Write tools
-[[ "$TOOL_NAME" =~ ^(Edit|Write)$ ]] || exit 0
 
 # Check rate limit (skip if < 5 min since last capture)
 if [[ -f "$RATE_LIMIT_FILE" ]]; then
