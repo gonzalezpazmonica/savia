@@ -1,0 +1,53 @@
+{
+  "description": "SE-481 R6 — clasificación explícita malformada en una cúpula N2. Sintético; el marcador CANARIO no debe salir por ninguna vista.",
+  "domeLevel": "N2",
+  "notes": {
+    "mal/yaml-roto.md": {
+      "content": "---\ntitle: Reservada\nconfidentiality: [N4\n---\n# Reservada\n\nCANARIO-YAML texto protegido.\n",
+      "kind": "UNPARSABLE",
+      "diagnostic": "yaml-unparsable"
+    },
+    "mal/nivel-n7.md": {
+      "content": "---\ntitle: Reservada\nconfidentiality: N7\n---\n# Reservada\n\nCANARIO-N7 texto protegido.\n",
+      "kind": "UNKNOWN_LEVEL",
+      "diagnostic": "unknown-level"
+    },
+    "mal/lista.md": {
+      "content": "---\ntitle: Reservada\nconfidentiality: [N2]\n---\n# Reservada\n\nCANARIO-LISTA texto protegido.\n",
+      "kind": "INVALID",
+      "diagnostic": "non-string"
+    },
+    "mal/anchura-cero.md": {
+      "content": "---\ntitle: Reservada\nconfidentiality: N\u200b2\n---\n# Reservada\n\nCANARIO-ZW texto protegido.\n",
+      "kind": "INVALID",
+      "diagnostic": "forbidden-char"
+    },
+    "mal/secreto.md": {
+      "content": "---\ntitle: Reservada\nconfidentiality: secreto\n---\n# Reservada\n\nCANARIO-PALABRA texto protegido.\n",
+      "kind": "UNKNOWN_LEVEL",
+      "diagnostic": "unknown-level"
+    },
+    "ok/n2.md": {
+      "content": "---\ntitle: Abierta\nconfidentiality: N2\n---\n# Abierta\n\nVISIBLE-N2 texto corriente.\n",
+      "kind": "VALID",
+      "level": "N2"
+    },
+    "ok/n4b-minus.md": {
+      "content": "---\nconfidentiality: n4b\n---\n# Muy reservada\n\nOCULTA-N4B fuera de nivel.\n",
+      "kind": "VALID",
+      "level": "N4B"
+    },
+    "ok/sin-clave.md": {
+      "content": "---\ntitle: Sin clave\n---\n# Sin clave\n\nVISIBLE-SIN texto corriente.\n",
+      "kind": "ABSENT"
+    },
+    "ok/yaml-roto-sin-clave.md": {
+      "content": "---\ntitle: a: b: c\n---\n# Roto sin clave\n\nVISIBLE-ROTO texto corriente.\n",
+      "kind": "ABSENT"
+    },
+    "ok/sin-frontmatter.md": {
+      "content": "# Sin frontmatter\n\nVISIBLE-PLANO texto corriente.\n",
+      "kind": "ABSENT"
+    }
+  }
+}

@@ -1,7 +1,8 @@
 // SE-410 — Savia RAG: tipos compartidos.
 import type { Locator } from '../files/types.js';
 
-export type Confidentiality = 'N1' | 'N2' | 'N3' | 'N4';
+/** Mismo orden que `LEVELS` de storage/note-level.ts (SE-481 R4). */
+export type Confidentiality = 'N1' | 'N2' | 'N3' | 'N4' | 'N4B';
 export type RagMode = 'hybrid' | 'dense' | 'bm25';
 export type DomeRagStatus = 'ok' | 'stale' | 'degraded' | 'denied' | 'timeout' | 'error' | 'not_indexed';
 
@@ -106,6 +107,8 @@ export interface Manifest {
   fingerprint: string;
   /** SE-417: chunks, vectores y BM25 sellados con la clave de índice de la cúpula. */
   sealed?: boolean;
+  /** SE-481: versión de las reglas de clasificación con que se evaluaron las notas reutilizadas. */
+  classificationRules?: number;
 }
 
 /** SE-417: cifrado de los ficheros del índice de una cúpula cifrada. `part` va en los datos asociados. */
@@ -128,7 +131,9 @@ export interface SyncReport {
   generation: string;
   promoted: boolean;
   shadow: boolean;
-  docs: { added: number; updated: number; deleted: number; unchanged: number; skipped: number };
+  docs: { added: number; updated: number; deleted: number; unchanged: number; skipped: number; quarantined: number };
+  /** SE-481: notas en cuarentena por código de diagnóstico (sin rutas). */
+  quarantine: Record<string, number>;
   chunks: { total: number; embedded: number; reused: number };
   durationMs: number;
 }
@@ -166,6 +171,8 @@ export interface DomeOutcome {
   detail?: string;
   /** SE-419: hits de ficheros ocultos por permisos del documento (o borrados); solo el número. */
   filtered?: number;
+  /** SE-481 R3: hits de notas descartados al revalidar al servir (borradas, fuera de nivel o en cuarentena); solo el número. */
+  degradation?: { revalidated: number };
 }
 
 export interface RagResponse {

@@ -52,6 +52,8 @@ export interface VaultStats {
   commitCount?: number;
   /** SE-420: notas fuera de nivel (ocultas); solo el número. */
   outOfLevel?: number;
+  /** SE-481: notas en cuarentena (clasificación explícita no interpretable); solo el número. */
+  quarantined?: number;
 }
 
 export interface CommitEntry {
