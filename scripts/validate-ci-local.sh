@@ -197,7 +197,9 @@ FRESH_CHECKS_DEFAULT='rule-manifest.json|bash scripts/rule-manifest-generate.sh 
 settings-hooks pin|bash scripts/contract-pin.sh check settings-hooks|revisar el cambio de .claude/settings.json y, si es intencionado, bash scripts/contract-pin.sh pin settings-hooks --path .claude/settings.json
 .scm/sam.json|python3 scripts/sam.py check|python3 scripts/generate-capability-map.py, commit y python3 scripts/sam.py generate
 docs/propuestas/INDEX.md|bash scripts/propuestas-index-gen.sh --check|bash scripts/propuestas-index-gen.sh
-planning-state.json|bash scripts/roadmap.sh validate|corregir planning-state.json/LOG.md según el error y bash scripts/roadmap.sh render'
+planning-state.json|bash scripts/roadmap.sh validate|corregir planning-state.json/LOG.md según el error y bash scripts/roadmap.sh render
+docs/critical-facts.md|bash scripts/generate-critical-facts.sh --check|bash scripts/generate-critical-facts.sh
+arranque sin datos personales (SE-487)|bash scripts/clean-clone-guard.sh|mover el dato personal a un fichero local gitignored (CLAUDE.local.md, perfil activo)'
 REPO_ROOT_CI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 check_generated_fresh() {

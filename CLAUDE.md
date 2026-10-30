@@ -82,7 +82,7 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 
 ## Savia Mobile
 
-NEVER `assembleDebug` — use `./gradlew buildAndPublish`. `JAVA_HOME=/snap/android-studio/current/jbr` (JDK 25: Gradle ≥ 9.1, Kotlin ≥ 2.2) · `ANDROID_HOME=/home/monica/Android/Sdk` · paquetes con `$ANDROID_HOME/cmdline-tools/latest/bin/android sdk install` (`sdkmanager` está obsoleto).
+NEVER `assembleDebug` — use `./gradlew buildAndPublish`. `$JAVA_HOME` con JDK 25 (Gradle ≥ 9.1, Kotlin ≥ 2.2) · `$ANDROID_HOME` = SDK de Android · paquetes con `$ANDROID_HOME/cmdline-tools/latest/bin/android sdk install` (`sdkmanager` está obsoleto). Valores concretos de cada máquina: `CLAUDE.local.md` (gitignored).
 
 ## Hooks · Memoria
 
