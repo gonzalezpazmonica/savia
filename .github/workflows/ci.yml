@@ -106,6 +106,13 @@ jobs:
           fi
           echo "Secret scan complete."
 
+      # SE-487 R3: los ficheros versionados que se cargan al arrancar no llevan datos de ninguna persona
+      # (slugs de perfiles locales, rutas /home/<x>/ o C:\Users\<x>\, identidad del generador antiguo).
+      - name: "SE-487: clon limpio neutral (ficheros de arranque)"
+        run: |
+          bash scripts/validate-critical-facts-cap.sh --clean-clone
+          bash scripts/generate-critical-facts.sh --check
+
       - name: "Gate: PR created via /pr-plan (Rule #25)"
         if: github.event_name == 'pull_request'
         env:
@@ -355,6 +362,10 @@ jobs:
       # #1413: pre-commit y runner de compliance; sus suites viven fuera de tests/bats/ y ci-select-bats no las elige.
       - name: Compliance pre-commit y runner (#1413)
         run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats
+
+      # SE-487: guardia de clon limpio y arranque neutral; su suite vive fuera de tests/bats/.
+      - name: Clon limpio neutral (SE-487)
+        run: bats tests/test-se487-clean-clone.bats tests/test-critical-facts-cap.bats
 
       - name: Installer contracts, planner and detection (SE-399 F1+F2)
         run: python3 -m unittest tests/python/test_installer_plan.py tests/python/test_installer_f2.py
