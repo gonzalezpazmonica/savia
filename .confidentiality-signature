@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=62353758d2c86e75e1321fc08d5d6c0f5e6d7340e7c5262b968e6c74ed1d8bbb
-timestamp=2026-10-30T14:50:57Z
-branch=agent/identidad-specs-20261030
-head_commit=e2547ae0
-signature=51d1cec850db72f7da67f8c4c81630e51f24d8c9b8adb44cd3ef74bacfc36d27
+diff_hash=38b82954c75a38dae192af4578f9111f13a05f3b5795aa71283932b7a5d306fc
+timestamp=2026-10-30T15:04:00Z
+branch=dependabot/github_actions/github-actions-7b885950d1
+head_commit=bb88e4be
+signature=541b6736e3854762d5c316d1a36379510bfec85c119593434b78b92b61792154
