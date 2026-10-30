@@ -188,3 +188,5 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-471 [APPROVED] Relevo nocturno con evidencia: declarado, validado y aceptado — evidencia: docs/specs/SE-471-overnight-handoff-evidence-digest.spec.md
 - SE-472 [APPROVED] Vigencia de la autoridad comprobada antes de cada tarea nocturna — evidencia: docs/specs/SE-472-overnight-per-task-authority-check.spec.md
 - SE-473 [APPROVED] Lecciones contrastables: ámbito, evidencia, revalidación y refutación — evidencia: docs/specs/SE-473-contestable-lessons.spec.md
+- SE-480 [APPROVED] Vaults: RAG autónomo (recarga del registro y sincronización por el servicio) — evidencia: docs/specs/SE-480-vaults-rag-autonomous.spec.md
+- SE-481 [APPROVED] Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica — evidencia: docs/specs/SE-481-vaults-classification-fail-closed.spec.md
