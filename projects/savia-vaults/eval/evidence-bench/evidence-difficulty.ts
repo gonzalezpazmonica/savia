@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   const ragHome = process.env.SAVIA_RAG_HOME;
   if (!ragHome) throw new Error('SAVIA_RAG_HOME obligatorio (temporal, nunca la de producción)');
   const tmp = fs.realpathSync(os.tmpdir());
-  if (false && !path.resolve(ragHome).startsWith(tmp + path.sep)) throw new Error(`SAVIA_RAG_HOME debe estar bajo ${tmp} (temporal)`);
+  if (!path.resolve(ragHome).startsWith(tmp + path.sep)) throw new Error(`SAVIA_RAG_HOME debe estar bajo ${tmp} (temporal)`);
   const { DomeRegistry } = await import('../../src/registry/domes.js');
   const { RagService } = await import('../../src/rag/service.js');
   const reg = new DomeRegistry(path.resolve(domesFile)); reg.load();

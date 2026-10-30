@@ -116,3 +116,18 @@ PY
   [ "$status" -eq 2 ]
   [[ "$output" == *"ERROR"* ]]
 }
+
+@test "SE-489 R1 negative: evidence-difficulty rechaza SAVIA_RAG_HOME fuera de tmp" {
+  cd "$ROOT/projects/savia-vaults"
+  SAVIA_RAG_HOME=/var/lib/prod-rag run npx tsx eval/evidence-bench/evidence-difficulty.ts --domes-file "$TMPD/d.json" --cases "$BENCH/cases.jsonl"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"debe estar bajo"* ]]
+}
+
+@test "SE-489 R1 boundary: evidence-difficulty acepta SAVIA_RAG_HOME bajo tmp y falla después" {
+  cd "$ROOT/projects/savia-vaults"
+  SAVIA_RAG_HOME="$TMPD/rag" run npx tsx eval/evidence-bench/evidence-difficulty.ts --domes-file "$TMPD/d.json" --cases "$BENCH/cases.jsonl"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"debe estar bajo"* ]]
+  [[ "$output" == *"Domes file not found"* ]]
+}
