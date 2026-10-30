@@ -70,8 +70,20 @@ Se conserva la generación anterior para `rag rollback`; `rag gc` borra el resto
 contrato, chunks, pendientes, `staleRatio`, `lagHours`, memoria.
 
 - SLO: `staleRatio = 0` tras sync; `lagHours < 24` con cron activo.
-- Alerta (`status --check` sale 2): `staleRatio > 0,10`, digest distinto o cúpula
-  habilitada sin generación.
+- Alerta (`status --check` sale 2): `staleRatio > 0,10`, `lagHours >= 24`, digest
+  distinto, cúpula habilitada sin generación, o cúpula con índice y
+  `rag.enabled=false` (el cron la ignora y el índice envejece; L32/P8). Los
+  umbrales son `STALE_RATIO_ALERT` y `LAG_HOURS_ALERT` en `policy.ts`.
+- `rag sync --all` sale distinto de 0 (1; 2 con `--check`) con mensaje `ALERTA` en
+  stderr si no hay cúpulas habilitadas o hay cúpulas indexadas deshabilitadas, y
+  deja un evento `alert` en `rag.jsonl`. Cron: redirigir stderr al log y usar
+  `savia-vaults rag status --check` como `success_check` de la automatización.
+- Salida de la alerta por cúpula deshabilitada a propósito: `savia-vaults rag drop
+  <cúpula>` borra su índice (`rag gc` no sirve: conserva la generación activa).
+  `drop` rechaza cúpulas con `rag.enabled=true`. La misma alerta no se repite en
+  `rag.jsonl` el mismo día.
+- Límite: `lagHours` se mide desde el documento pendiente más antiguo; un cron
+  parado sin documentos nuevos no lo dispara. Eso lo cubre el `success_check`.
 - Eventos en `$SAVIA_RAG_HOME/logs/rag.jsonl` (sync, gate, promote, rollback, corrupt).
 
 ## P8 Checkpoint de pipeline

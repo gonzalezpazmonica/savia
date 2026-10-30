@@ -63,12 +63,22 @@ ragCmd.command('sync').description('Sincroniza el índice (incremental por hash)
   .action(async (opts) => {
     try {
       const svc = ragService(opts.domesFile);
-      const names = opts.all ? (await svc.status()).filter(s => s.enabled).map(s => s.name) : opts.dome ? [opts.dome] : [];
+      const all = opts.all ? await svc.status() : [];
+      const names = opts.all ? all.filter(s => s.enabled).map(s => s.name) : opts.dome ? [opts.dome] : [];
+      // Cúpulas con índice pero rag.enabled=false: el cron las ignoraba y envejecían sin aviso.
+      const orphans = all.filter(s => !s.enabled && (s.active || s.shadow || s.previous)).map(s => s.name);
+      const alertExit = opts.check ? 2 : 1;
+      if (orphans.length) {
+        const msg = `--all ignora cúpulas con índice y rag.enabled=false: ${orphans.join(', ')}; sus índices envejecen sin sincronizar`;
+        console.error(`ALERTA: ${msg}`);
+        svc.recordAlert('sync_disabled_indexed', { domes: orphans });
+      }
       if (!names.length) {
         if (opts.all) {
           // Registro sin cúpulas con rag.enabled: avería de configuración, no un "nada que hacer".
           console.error('ALERTA: --all no encontró ninguna cúpula con rag.enabled=true en el registro; no se indexa nada');
-          process.exit(opts.check ? 2 : 1);
+          svc.recordAlert('sync_no_enabled_domes', { registered: all.map(s => s.name) });
+          process.exit(alertExit);
         }
         throw new RagError('INVALID_INPUT', 'indica --dome <name> o --all');
       }
@@ -92,10 +102,16 @@ ragCmd.command('sync').description('Sincroniza el índice (incremental por hash)
       }
       if (failed) process.exit(1);
       if (opts.check) {
-        const st = await svc.status(names);
-        for (const s of st) for (const a of s.slo.alerts) console.log(`[${s.name}] ALERTA: ${a}`);
-        if (st.some(s => !s.slo.ok)) process.exit(2);
+        const st = await svc.status([...names, ...orphans]);
+        for (const s of st) for (const a of s.slo.alerts) {
+          console.error(`[${s.name}] ALERTA: ${a}`);
+        }
+        if (st.some(s => !s.slo.ok)) {
+          svc.recordAlert('slo', st.filter(s => !s.slo.ok).map(s => ({ dome: s.name, alerts: s.slo.alerts })));
+          process.exit(2);
+        }
       }
+      if (orphans.length) process.exit(alertExit);
     } catch (e) { ragFail(e); }
   });
 
@@ -111,10 +127,14 @@ ragCmd.command('status').description('Estado del índice y SLO por cúpula')
         console.log(`[${s.name}] ${s.enabled ? 'rag on' : 'rag off'} ${s.confidentiality} activa=${s.active ?? '-'} sombra=${s.shadow ?? '-'} anterior=${s.previous ?? '-'}`);
         if (s.enabled) {
           console.log(`   modelo=${s.contract?.model ?? '-'} digest ${s.digestMatch ? 'ok' : 'DISTINTO'} chunks=${s.chunks} docs=${s.totalDocs} pendientes=${s.pendingDocs} staleRatio=${s.staleRatio.toFixed(2)} lag=${s.lagHours}h mem=${(s.memoryBytes / 1048576).toFixed(1)}MB`);
-          for (const a of s.slo.alerts) console.log(`   ALERTA: ${a}`);
         }
+        for (const a of s.slo.alerts) console.log(`   ALERTA: ${a}`);
       }
-      if (opts.check && st.some(s => !s.slo.ok)) process.exit(2);
+      if (opts.check && st.some(s => !s.slo.ok)) {
+        for (const s of st) for (const a of s.slo.alerts) console.error(`[${s.name}] ALERTA: ${a}`);
+        svc.recordAlert('slo', st.filter(s => !s.slo.ok).map(s => ({ dome: s.name, alerts: s.slo.alerts })));
+        process.exit(2);
+      }
     } catch (e) { ragFail(e); }
   });
 
@@ -166,5 +186,11 @@ ragCmd.command('gc').description('Borra generaciones y ficheros no referenciados
     } catch (e) { ragFail(e); }
   });
 
+ragCmd.command('drop').description('Borra el índice de una cúpula con rag.enabled=false (limpia la alerta de índice huérfano)')
+  .argument('<dome>').option(...domesOpt)
+  .action(async (dome, opts) => {
+    try { console.log(`[${dome}] ${await ragService(opts.domesFile).drop(dome) ? 'índice eliminado' : 'sin índice'}`); }
+    catch (e) { ragFail(e); }
+  });
 
 program.parse();
