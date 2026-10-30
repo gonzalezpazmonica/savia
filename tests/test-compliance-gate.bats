@@ -58,3 +58,31 @@ gate() {  # gate <orden>: entrada JSON por stdin, como la entrega el runtime
 @test "coverage: la CI ejecuta runner.sh --range sobre el diff de la PR" {
   grep -q "runner.sh --range" .github/workflows/ci.yml
 }
+
+# #1413: `git fetch --depth=1 <sha>` de un commit ya presente recorta el historial de origin/main y
+# roadmap validate daba «IMPLEMENTED sin PR mergeado verificable» en la CI.
+@test "ci: el fetch de historial de main va después del fetch superficial de la base" {
+  local base hist
+  base=$(grep -n 'fetch --no-tags --depth=1 origin "\$BASE_SHA"' .github/workflows/ci.yml | head -1 | cut -d: -f1)
+  hist=$(grep -n 'fetch --no-tags --depth=300 origin +refs/heads/main' .github/workflows/ci.yml | head -1 | cut -d: -f1)
+  [ -n "$base" ] && [ -n "$hist" ]
+  [ "$hist" -gt "$base" ]
+}
+
+@test "ci: secuencia real de fetch conserva el historial de main (y la inversa lo recorta)" {
+  local src="$BATS_TEST_TMPDIR/src" ok="$BATS_TEST_TMPDIR/ok" bad="$BATS_TEST_TMPDIR/bad" sha
+  git init -q "$src"
+  for i in 1 2 3 4 5; do git -C "$src" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "c$i"; done
+  git -C "$src" branch -M main
+  sha=$(git -C "$src" rev-parse HEAD)
+  git clone -q --depth=1 --no-tags "file://$src" "$ok"
+  git clone -q --depth=1 --no-tags "file://$src" "$bad"
+  # orden de la CI actual: base por SHA, luego historial de main
+  git -C "$ok" fetch -q --no-tags --depth=1 "file://$src" "$sha"
+  git -C "$ok" fetch -q --no-tags --depth=300 "file://$src" +refs/heads/main:refs/remotes/origin/main
+  # orden antiguo: historial de main, luego base por SHA
+  git -C "$bad" fetch -q --no-tags --depth=300 "file://$src" +refs/heads/main:refs/remotes/origin/main
+  git -C "$bad" fetch -q --no-tags --depth=1 "file://$src" "$sha"
+  [ "$(git -C "$ok" rev-list --count origin/main)" -eq 5 ]
+  [ "$(git -C "$bad" rev-list --count origin/main)" -eq 1 ]
+}
