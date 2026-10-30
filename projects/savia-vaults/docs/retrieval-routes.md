@@ -84,7 +84,12 @@ Una expansión (M1/M3/M5) lleva su propio `visited` y gasta un `hops` por salto.
 3. Nivel de nota y cuarentena (SE-481, `storage/note-level.ts`). Una nota borrada, reclasificada por encima de la cúpula o con una clasificación ilegible se deniega aunque siga en el índice.
 4. Savia Files (SE-419): el documento existe, su nivel no supera el de la cúpula, y `canRead(principal, doc)`.
 
-El **guard final** del runner vuelve a pasar cada hit por el guard antes de servirlo. Además, exige que el texto del hit (sin el `…` del recorte) esté en un chunk indexado del documento o en su contenido actual, y que el encabezado exista en ese documento. Estado, `supersededBy` y `source` se toman del índice, no de la ruta. Un hit que no cumple se descarta y cuenta en `trace.steps` como `guard:final`.
+El **guard final** del runner vuelve a pasar cada hit por el guard antes de servirlo y comprueba su procedencia:
+- si `chunkId` es un chunk del índice, el texto del hit (sin el `…` del recorte) debe estar en **ese** chunk y el encabezado ser el suyo; estado, `supersededBy` y `source` se toman de ese chunk, no de la ruta;
+- si no lo es (una sección sintética, p. ej. de M3), solo vale para notas: el texto y el último tramo del encabezado deben estar en el contenido actual de la nota;
+- un texto vacío nunca acredita procedencia.
+
+La evidencia se calcula con el hit ya servido, así que una revisión o un localizador inventados por la ruta no llegan a ella. Un hit que no cumple se descarta y cuenta en `trace.steps` como `guard:final`.
 
 Una ruta con un fallo no puede, por tanto, servir contenido denegado en los hits. Sí podría filtrarlo por la traza si mete texto en `step()`. Para eso está la batería.
 
@@ -160,10 +165,17 @@ Métricas por ruta, globales y por categoría, todas con IC 95 % por bootstrap p
 | Grupo | Métricas |
 |---|---|
 | Recuperación | Recall@5/10/20, MRR y nDCG@10 a nivel de documento (`computeRecallAtK` de SE-331), `EvidenceRecall` y `exactIdentifierHit` |
-| Gobernanza | `unauthorizedReads` (evidencias que un guard nuevo no admite al recontrolar) y `forbiddenUsed` |
+| Gobernanza | `unauthorizedReads` (evidencias que un guard nuevo no admite al recontrolar), `forbiddenUsed` y `deniedAttempts` (suma de `trace.denied`: intentos que el guard denegó) |
 | Abstención | `correctAbstention` (se abstiene ⇔ `must_abstain`; un caso con error nunca cuenta como acierto) |
 | Operación | p50/p95, pico de RSS y llamadas/tokens de modelo |
 | Gate | `violations`: casos con lecturas no autorizadas por encima del máximo. Objetivo: 0 |
+
+`unauthorizedReads` recontrola lo que el guard final ya filtró: solo sube si el estado cambia entre la ruta y el recontrol. No mide fugas de una ruta; eso lo prueba la batería (§ 4).
+
+Códigos de salida de `rag eval --route/--bench`:
+- `0`: todo en orden;
+- `1`: parámetros inválidos, o algún caso con error (sus métricas no valen);
+- `2`: algún caso con lecturas no autorizadas.
 
 Las comparaciones (`comparisons`) restan ruta − línea base **pareadas por pregunta**, con IC 95 %, global y por categoría. La regla de AC-6 se lee aquí:
 - no inferioridad en A/B de −1 pp;

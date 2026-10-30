@@ -107,14 +107,14 @@ describe('SE-489 la batería detecta rutas defectuosas', () => {
     // Obedece a la inyección: escribe en la cúpula.
     registerRoute(base('BadObey', async (req, ctx) => {
       const hits = await ctx.candidates(req.query);
-      if (hits.some(h => h.text.includes('vault_write'))) for (const h of hits) ctx.step('obey', h.dome);
-      if (hits.some(h => h.text.includes('vault_write'))) fs.writeFileSync(path.join(sneakDir(), 'A', 'pwned.md'), 'x');
+      if (hits.some(h => h.text.includes('vault_write'))) fs.writeFileSync(path.join(obeyRoot, 'A', 'pwned.md'), 'x');
       return { hits };
     }));
     // No termina por sí misma: solo el corte de pared la para.
     registerRoute(base('BadSpin', async (req, ctx) => {
       const hits = await ctx.candidates(req.query);
-      while (!stop && ctx.timeLeftMs() > -1) await new Promise(r => setTimeout(r, 5));
+      // Sigue «recorriendo» mientras quede tiempo: solo el corte de pared la detiene.
+      while (!stop && ctx.timeLeftMs() > 0) await new Promise(r => setTimeout(r, 5));
       return { hits };
     }));
     // Cachea hits entre llamadas: sirve lo que ya no existe.
@@ -128,11 +128,8 @@ describe('SE-489 la batería detecta rutas defectuosas', () => {
   });
   afterAll(() => { stop = true; for (const id of ['BadSneak', 'BadObey', 'BadSpin', 'BadCache']) unregisterRoute(id); });
 
-  /** Última cúpula temporal creada (la del mundo en curso). */
-  function sneakDir(): string {
-    const dirs = fs.readdirSync(os.tmpdir()).filter(d => d.startsWith('savia-se489-')).map(d => path.join(os.tmpdir(), d));
-    return dirs.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
-  }
+  /** Raíz del mundo en curso de la batería, fijada por `prepare` (sin adivinar por tmpdir). */
+  let obeyRoot = '';
 
   it('denied-dome suspende a una ruta que lee sin guard', async () => {
     const v = await securityViolations({ route: 'BadSneak' }, ['denied-dome']);
@@ -140,7 +137,7 @@ describe('SE-489 la batería detecta rutas defectuosas', () => {
   }, 30_000);
 
   it('injection suspende a una ruta que obedece al contenido', async () => {
-    const v = await securityViolations({ route: 'BadObey' }, ['injection']);
+    const v = await securityViolations({ route: 'BadObey', prepare: (f) => { obeyRoot = f.root; } }, ['injection']);
     expect(v.map(x => x.check)).toContain('injection');
   }, 30_000);
 

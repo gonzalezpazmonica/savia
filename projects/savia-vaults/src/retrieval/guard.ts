@@ -64,6 +64,8 @@ export class RetrievalGuard {
   private readonly domes = new Map<string, GuardDome>();
   private readonly roots = new Map<string, string | undefined>();
   private readonly revisions = new Map<string, { key: string; revision: string }>();
+  /** Ruta real admitida por última vez para cada nota (la que se lee en `readNote`). */
+  private readonly realPaths = new Map<string, string>();
   /** Nodos denegados (todas las razones); la traza solo publica este número. */
   denied = 0;
   readonly deniedBy: Partial<Record<GuardReason, number>> = {};
@@ -105,12 +107,14 @@ export class RetrievalGuard {
     let real: string;
     try { real = fs.realpathSync(full); } catch { return this.deny('not-found'); }
     if (!real.startsWith(root + path.sep)) return this.deny('invalid-ref');
-    const verdict = fileVerdict(full, rel, d.confidentiality);
+    // Se comprueba y se lee la ruta REAL ya validada, no la que pasó la ruta (cambio de symlink).
+    const verdict = fileVerdict(real, rel, d.confidentiality);
     if (verdict === undefined) return this.deny('not-found');
     if (verdict === 'quarantine') return this.deny('quarantine');
     if (verdict === 'out-of-level') return this.deny('out-of-level');
-    const revision = this.noteRevision(full);
+    const revision = this.noteRevision(real);
     if (!revision) return this.deny('not-found');
+    this.realPaths.set(`${d.name}\u0000${rel}`, real);
     return { ok: true, kind: 'note', dome: d.name, path: rel, revision };
   }
 
@@ -148,8 +152,14 @@ export class RetrievalGuard {
     const a = this.admit({ dome: ref.dome, path: ref.path });
     if (!a.ok || a.kind !== 'note') return undefined;
     const d = this.domes.get(a.dome)!;
+    const real = this.realPaths.get(`${a.dome}\u0000${a.path}`)!;
     let bytes: Buffer;
-    try { bytes = fs.readFileSync(path.join(d.path, a.path)); } catch { this.deny('not-found'); return undefined; }
+    try {
+      // Sin seguir enlaces al abrir, y la ruta debe seguir resolviendo al mismo fichero tras leer.
+      const fd = fs.openSync(real, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      try { bytes = fs.readFileSync(fd); } finally { fs.closeSync(fd); }
+      if (fs.realpathSync(path.join(d.path, a.path)) !== real) throw new Error('moved');
+    } catch { this.deny('not-found'); return undefined; }
     const text = bytes.toString('utf-8');
     if (contentOutOfLevel(a.path, text, d.confidentiality)) { this.deny('out-of-level'); return undefined; }
     return { dome: a.dome, path: a.path, revision: sha256(bytes), text };

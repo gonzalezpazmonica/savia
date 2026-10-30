@@ -193,6 +193,7 @@ export interface BootstrapOptions { iterations: number; seed: number }
 
 /** Media con IC 95 % por bootstrap percentil (remuestreo de preguntas). */
 export function bootstrapMean(xs: number[], o: BootstrapOptions): Interval {
+  if (!Number.isSafeInteger(o.iterations) || o.iterations < 1) throw new RagError('INVALID_INPUT', 'iterations: entero ≥ 1');
   if (!xs.length) return { n: 0, mean: 0, lo: 0, hi: 0 };
   const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
   const rand = rng(o.seed);
@@ -219,6 +220,8 @@ export type MetricName = typeof METRICS[number];
 export interface CaseRecord {
   id: string; category: Category; latencyMs: number;
   metrics: CaseMetrics;
+  /** Nodos que el guard denegó durante la ruta (intentos, no lecturas): `trace.denied`. */
+  deniedAttempts: number;
   consumed: { modelCalls: number; inputTokens: number; nodes: number; hops: number };
   error?: string;
 }
@@ -233,8 +236,14 @@ export interface RouteReport {
   cost: { modelCalls: number; inputTokens: number };
   /** Pico de memoria residente del proceso (MB) durante la evaluación. */
   rssPeakMb: number;
-  /** Casos con más lecturas no autorizadas que su máximo (objetivo: 0). */
+  /**
+   * Casos con más lecturas no autorizadas que su máximo (objetivo: 0). Con el guard final del
+   * runner debe salir 0 salvo cambio de estado entre la ruta y el recontrol: no sustituye a la
+   * batería de seguridad (AC-2), que es la que prueba las fugas de una ruta.
+   */
   violations: number;
+  /** Suma de `trace.denied`: cuántas veces la ruta intentó abrir algo que el guard denegó. */
+  deniedAttempts: number;
   errors: number;
   cases: CaseRecord[];
 }
@@ -295,14 +304,14 @@ export async function evaluateRoute(rag: RagService, cases: EvidenceCase[], o: E
       const latencyMs = Date.now() - t;
       const unauthorized = await unauthorizedCount(rag, domes, result.evidence);
       records.push({
-        id: c.id, category: c.category, latencyMs, metrics: caseMetrics(c, result, unauthorized),
+        id: c.id, category: c.category, latencyMs, metrics: caseMetrics(c, result, unauthorized), deniedAttempts: result.trace.denied,
         consumed: { modelCalls: result.consumed.modelCalls, inputTokens: result.consumed.inputTokens, nodes: result.consumed.nodes, hops: result.consumed.hops },
       });
     } catch (e) {
       // Una ruta desconocida o un presupuesto inválido son errores de configuración: se propagan.
       if (e instanceof Error && /^(UNKNOWN_ROUTE|INVALID_BUDGET|BUDGET_REQUIRED):/.test(e.message)) throw e;
       records.push({
-        id: c.id, category: c.category, latencyMs: Date.now() - t, error: e instanceof Error ? e.message : String(e),
+        id: c.id, category: c.category, latencyMs: Date.now() - t, deniedAttempts: 0, error: e instanceof Error ? e.message : String(e),
         metrics: { ...caseMetrics(c, { hits: [], evidence: [] }, 0), correctAbstention: 0 }, consumed: { modelCalls: 0, inputTokens: 0, nodes: 0, hops: 0 },
       });
     }
@@ -322,6 +331,7 @@ export async function evaluateRoute(rag: RagService, cases: EvidenceCase[], o: E
     cost: { modelCalls: records.reduce((s, r) => s + r.consumed.modelCalls, 0), inputTokens: records.reduce((s, r) => s + r.consumed.inputTokens, 0) },
     rssPeakMb: Math.round((rssPeak / 1048576) * 10) / 10,
     violations: records.filter(r => r.metrics.violation).length,
+    deniedAttempts: records.reduce((s, r) => s + r.deniedAttempts, 0),
     errors: records.filter(r => r.error).length,
     cases: records,
   };

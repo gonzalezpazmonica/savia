@@ -203,6 +203,7 @@ async function routeEval(svc: RagService, opts: Record<string, string | boolean 
   const seed = int(opts.seed, 'seed');
   const iterations = int(opts.iterations, 'iterations');
   const k = int(opts.k, 'k');
+  if (k < 1 || k > RAG_LIMITS.maxK) throw new RagError('INVALID_INPUT', `--k: 1-${RAG_LIMITS.maxK}`);
   const deny = (names: string[]) => { denied.clear(); for (const n of names) denied.add(n); };
   const reports: RouteReport[] = [];
   for (const r of [...new Set([baseline, ...routes])]) {
@@ -211,10 +212,19 @@ async function routeEval(svc: RagService, opts: Record<string, string | boolean 
   const base = reports.find(r => r.route === baseline)!;
   const shown = reports.filter(r => routes.includes(r.route));
   const comparisons = shown.map(r => compareReports(r, base, { iterations, seed }));
-  if (opts.json) { console.log(JSON.stringify({ reports: shown, comparisons }, null, 2)); return; }
+  // Códigos de salida: 1 si algún caso falló (las métricas no valen), 2 si hay lecturas no autorizadas.
+  const exitCode = reports.some(r => r.errors > 0) ? 1 : reports.some(r => r.violations > 0) ? 2 : 0;
+  const finish = () => {
+    for (const r of reports) {
+      if (r.errors) console.error(`[${r.route}] ${r.errors} casos con error: ${r.cases.filter(c => c.error).slice(0, 3).map(c => `${c.id}: ${c.error}`).join(' | ')}`);
+      if (r.violations) console.error(`[${r.route}] ALERTA: ${r.violations} casos con lecturas no autorizadas`);
+    }
+    if (exitCode) process.exit(exitCode);
+  };
+  if (opts.json) { console.log(JSON.stringify({ reports: shown, comparisons }, null, 2)); finish(); return; }
   const f = (i: { mean: number; lo: number; hi: number; n: number }) => (i.n ? `${i.mean.toFixed(3)} [${i.lo.toFixed(3)}, ${i.hi.toFixed(3)}]` : '-');
   for (const r of shown) {
-    console.log(`[${opts.dome}] ruta ${r.route} ${r.mode} n=${r.n} errores=${r.errors} violaciones=${r.violations} p50=${r.latency.p50Ms}ms p95=${r.latency.p95Ms}ms RSS=${r.rssPeakMb}MB llamadas=${r.cost.modelCalls}`);
+    console.log(`[${opts.dome}] ruta ${r.route} ${r.mode} n=${r.n} errores=${r.errors} violaciones=${r.violations} denegados=${r.deniedAttempts} p50=${r.latency.p50Ms}ms p95=${r.latency.p95Ms}ms RSS=${r.rssPeakMb}MB llamadas=${r.cost.modelCalls}`);
     console.log(`   EvidenceRecall=${f(r.overall.evidenceRecall)} exact-id=${f(r.overall.exactIdentifierHit)} R@10=${f(r.overall.recallAt10)} MRR=${f(r.overall.mrr)} nDCG@10=${f(r.overall.ndcgAt10)}`);
     console.log(`   no-autorizadas=${f(r.overall.unauthorizedReads)} prohibidas=${f(r.overall.forbiddenUsed)} abstención-correcta=${f(r.overall.correctAbstention)}`);
     for (const [cat, m] of Object.entries(r.byCategory)) console.log(`   ${cat}: EvidenceRecall=${f(m!.evidenceRecall)} R@10=${f(m!.recallAt10)} abstención=${f(m!.correctAbstention)}`);
@@ -224,6 +234,7 @@ async function routeEval(svc: RagService, opts: Record<string, string | boolean 
     const d = c.overall.evidenceRecall;
     console.log(`${c.route} − ${c.baseline}: ΔEvidenceRecall=${d ? `${d.diff.toFixed(3)} [${d.lo.toFixed(3)}, ${d.hi.toFixed(3)}] n=${d.n}` : '-'}`);
   }
+  finish();
 }
 
 ragCmd.command('promote <dome> <generation>').description('Promueve una generación (gate de eval; --force = decisión humana)')

@@ -72,9 +72,11 @@ function validQuery(q: unknown): string {
 const WARNING_CODE = /^[A-Z][A-Z0-9_]{2,63}$/;
 
 /**
- * Procedencia de un hit admitido: su texto (sin el `…` del recorte por presupuesto) debe estar
- * en un chunk indexado del documento o, si es una nota, en su contenido actual; el encabezado,
- * en un chunk o en la nota. Estado, `supersededBy` y `source` se toman del índice, nunca de la ruta.
+ * Procedencia de un hit admitido. Si `chunkId` es un chunk del índice, el texto (sin el `…` del
+ * recorte por presupuesto) debe estar en ESE chunk y el encabezado ser el suyo; estado,
+ * `supersededBy` y `source` se toman de él, nunca de la ruta. Si no lo es (p. ej. una sección
+ * sintética de M3), solo vale para notas: el texto y el último tramo del encabezado deben estar en
+ * su contenido actual. Un texto vacío nunca acredita procedencia.
  */
 function provenance(
   h: RagHit, ev: Evidence,
@@ -83,19 +85,20 @@ function provenance(
   if (typeof h.text !== 'string' || typeof h.heading !== 'string' || typeof h.chunkId !== 'string') return undefined;
   if (!h.chunkId.startsWith(`${ev.document}#`)) return undefined;
   const core = h.text.endsWith('…') ? h.text.slice(0, -1) : h.text;
-  const cs = chunks();
-  const match = cs.find(c => c.id === h.chunkId && c.text.includes(core)) ?? cs.find(c => c.text.includes(core));
-  if (match) {
-    if (h.heading && !cs.some(c => c.heading === h.heading)) return undefined;
-    // `source` sale del índice: el guard ya exigió que su documentId case con la ruta del hit.
-    const { status, supersededBy, ...fresh } = h.freshness ?? { modified: match.meta.modified, decay: 1 };
+  if (!core.trim()) return undefined;
+  const chunk = chunks().find(c => c.id === h.chunkId);
+  if (chunk) {
+    if (!chunk.text.includes(core) || (h.heading && h.heading !== chunk.heading)) return undefined;
+    const { status, supersededBy, ...fresh } = h.freshness ?? { modified: chunk.meta.modified, decay: 1 };
     void status; void supersededBy;
+    const { source, ...rest } = h;
+    void source;
     return {
-      ...h, freshness: { ...fresh, ...(match.meta.status ? { status: match.meta.status } : {}), ...(match.meta.supersededBy ? { supersededBy: match.meta.supersededBy } : {}) },
-      ...(match.source ? { source: match.source } : {}),
+      ...rest, freshness: { ...fresh, ...(chunk.meta.status ? { status: chunk.meta.status } : {}), ...(chunk.meta.supersededBy ? { supersededBy: chunk.meta.supersededBy } : {}) },
+      ...(chunk.source ? { source: chunk.source } : {}),
     };
   }
-  if (h.source) return undefined;
+  if (h.source || ev.document.startsWith(FILES_PATH_PREFIX) && !isMarkdown(ev.document)) return undefined;
   const text = noteText();
   if (!text || !text.includes(core) || (h.heading && !text.includes(h.heading.split(' › ').pop()!))) return undefined;
   const { status, supersededBy, ...fresh } = h.freshness ?? { modified: '', decay: 1 };
@@ -210,10 +213,12 @@ export async function runRoute(rag: RagService, input: RouteRunInput): Promise<R
       if (!chunksOf.has(key)) chunksOf.set(key, rag.activeDocumentChunks(ev.dome, ev.document));
       return chunksOf.get(key)!;
     }, () => (h.source ? undefined : guard.readNote({ dome: ev.dome, path: ev.document })?.text));
-    if (!served) continue;
+    // La evidencia se calcula con el hit SERVIDO (fuente del índice), no con el propuesto por la ruta.
+    const servedEv = served && guard.evidence(served);
+    if (!served || !servedEv) continue;
     seen.add(`${ev.dome}\u0000${h.chunkId}`);
     hits.push({ ...served, confidentiality: levelOf.get(ev.dome)! });
-    evidence.push(ev);
+    evidence.push(servedEv);
   }
   for (const e of output.evidence ?? []) {
     if (seen.has(`${e.dome}\u0000${e.chunkId}`)) continue;

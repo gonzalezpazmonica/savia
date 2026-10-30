@@ -109,6 +109,10 @@ describe('SE-489 bootstrap', () => {
     expect(pairedBootstrap(a, b, { iterations: 50, seed: 1 }).n).toBe(1);
   });
 
+  it('iteraciones < 1 ⇒ INVALID_INPUT (no IC sin remuestreo)', () => {
+    expect(() => bootstrapMean([1, 0], { iterations: 0, seed: 1 })).toThrow(/INVALID_INPUT/);
+  });
+
   it('sin datos ⇒ n 0 y sin IC inventado', () => {
     expect(bootstrapMean([], { iterations: 10, seed: 1 })).toEqual({ n: 0, mean: 0, lo: 0, hi: 0 });
   });
@@ -193,18 +197,21 @@ describe('SE-489 evaluateRoute con M0', () => {
     expect(report.latency.p95Ms).toBeGreaterThanOrEqual(report.latency.p50Ms);
     expect(report.rssPeakMb).toBeGreaterThan(0);
     expect(report.cases.find(c => c.id === 'F-1')!.metrics.recallAt5).toBeUndefined();
-    // F-1: S denegada; A no tiene nada de «secreto reservado»… pero M0 devuelve vecinos: no se abstiene.
-    expect(report.cases.find(c => c.id === 'F-1')!.metrics.correctAbstention).toBe(0);
+    expect(report.deniedAttempts).toBe(0);
   });
 
   it('la cúpula denegada por caso se restablece para el siguiente', async () => {
     const seen: string[][] = [];
-    await evaluateRoute(svc(), [
+    const r = await evaluateRoute(svc(), [
       { ...base, id: 'X-1', query: 'fusionar', domes: ['A', 'S'], denied_domes: ['S'], required_evidence: [{ document: 'reglas/merge.md' }] },
-      { ...base, id: 'X-2', query: 'fusionar', domes: ['A', 'S'], required_evidence: [{ document: 'reglas/merge.md' }] },
+      { ...base, id: 'X-2', query: 'fusionar secreto reservado', domes: ['A', 'S'], required_evidence: [{ document: 'reservado.md', dome: 'S' }] },
+      { ...base, id: 'X-3', query: 'fusionar secreto reservado', domes: ['A', 'S'], denied_domes: ['S'], required_evidence: [{ document: 'reservado.md', dome: 'S' }] },
     ], { route: 'M0', mode: 'bm25', seed: 1, iterations: 50, deny: (names) => { seen.push(names); f.denied.clear(); for (const n of names) f.denied.add(n); } });
     // El último [] es el restablecimiento al terminar el banco.
-    expect(seen).toEqual([['S'], [], []]);
+    expect(seen).toEqual([['S'], [], ['S'], []]);
+    // X-2 ve S de verdad; X-3, con S denegada otra vez, no.
+    expect(r.cases.find(c => c.id === 'X-2')!.metrics.evidenceRecall).toBe(1);
+    expect(r.cases.find(c => c.id === 'X-3')!.metrics.evidenceRecall).toBe(0);
   });
 });
 
@@ -248,6 +255,17 @@ describe('SE-489 CLI rag eval --route --bench', () => {
       const routedLegacy = JSON.parse(run('eval', '--dome', 'a', '--route', 'M0', '--queries', legacyFile, '--mode', 'bm25', '--iterations', '50', '--json').stdout);
       expect(routedLegacy.reports[0]).toMatchObject({ route: 'M0', n: 1 });
       expect(routedLegacy.reports[0].byCategory.A.evidenceRecall.mean).toBe(1);
+      // Códigos de salida: parámetros inválidos y casos con error no salen 0.
+      const zero = run('eval', '--dome', 'a', '--route', 'M0', '--bench', bench, '--iterations', '0', '--json');
+      expect(zero.status).toBe(1);
+      expect(zero.stderr).toMatch(/iterations/);
+      expect(run('eval', '--dome', 'a', '--route', 'M0', '--bench', bench, '--k', '0', '--json').status).toBe(1);
+      fs.writeFileSync(path.join(bench, 'mal.json'), JSON.stringify([{ ...base, id: 'D-1', category: 'D', query: 'garza real', as_of: '2026-02-30', required_evidence: [{ document: 'otra.md' }] }]));
+      const bad = run('eval', '--dome', 'a', '--route', 'M0', '--bench', bench, '--mode', 'bm25', '--iterations', '50', '--json');
+      expect(bad.status).toBe(1);
+      expect(bad.stderr).toMatch(/D-1: INVALID_INPUT/);
+      expect(JSON.parse(bad.stdout).reports[0].errors).toBe(1);
+      fs.rmSync(path.join(bench, 'mal.json'));
       const ruta = run('eval', '--dome', 'a', '--route', 'M99', '--bench', bench, '--json');
       expect(ruta.status).toBe(1);
       expect(ruta.stderr).toMatch(/UNKNOWN_ROUTE/);
