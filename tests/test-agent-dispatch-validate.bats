@@ -172,3 +172,153 @@ teardown() { cd /; }
   files_after=$(find "$TMPDIR" -maxdepth 1 -type f 2>/dev/null | wc -l)
   [[ "$files_before" == "$files_after" ]]
 }
+
+# ── Tool Agent + prompts de solo lectura (P2 de #1405) ───────────────────
+# Entrada real: JSON por stdin con tool_name=Agent, perfil strict, HOME aislado.
+
+agent_run() {
+  local json
+  json=$(jq -n --arg p "$1" '{tool_name:"Agent",tool_input:{prompt:$p}}')
+  HOME="$BATS_TEST_TMPDIR/home" run bash "$HOOK" <<< "$json"
+}
+
+@test "agent read-only: leer CHANGELOG no se bloquea" {
+  agent_run "[solo-lectura] Lee CHANGELOG.md y resume los cambios."
+  [ "$status" -eq 0 ]
+}
+
+@test "agent read-only: leer un command no exige frontmatter" {
+  agent_run "[solo-lectura] Lee .claude/commands/foo.md y describe su contenido"
+  [ "$status" -eq 0 ]
+}
+
+@test "agent read-only: revisar una skill y una rule no avisa" {
+  agent_run "[solo-lectura] Revisa .claude/skills/x/SKILL.md y docs/rules/domain/y.md y explica las diferencias"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"DISPATCH"* ]]
+}
+
+@test "agent write: modificar CHANGELOG sigue bloqueando" {
+  agent_run "Modifica CHANGELOG.md con nueva entrada"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHANGELOG"* ]]
+}
+
+@test "agent mixed: leer y luego editar CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y añade una entrada"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write: crear command sin name sigue bloqueando" {
+  agent_run "Lee un ejemplo y crea .claude/commands/foo.md"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"name"* ]]
+}
+
+@test "agent sin verbo reconocible: se mantiene la validación" {
+  agent_run "CHANGELOG.md nueva entrada"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent: perfil standard sigue saltando el hook" {
+  SAVIA_HOOK_PROFILE=standard agent_run "Modifica CHANGELOG.md"
+  [ "$status" -eq 0 ]
+}
+
+# ── Revisión 2 de #1412: verbos de escritura con prefijo, tilde o cortos ──
+# Cada prompt contiene un verbo de lectura; si el de escritura no se detecta,
+# el hook marca solo lectura y se salta las reglas 1, 2, 3 y 5 (falso verde).
+
+@test "agent write prefijo: overwrite CHANGELOG sigue bloqueando" {
+  agent_run "Read CHANGELOG.md and overwrite it with the new release notes"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CHANGELOG"* ]]
+}
+
+@test "agent write prefijo: rewrite CHANGELOG sigue bloqueando" {
+  agent_run "Review CHANGELOG.md and rewrite the top section"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write prefijo: sobrescribe CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y sobrescribe la sección de cambios"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write prefijo: reescribe CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y reescribe la sección"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write tilde: reescríbelo sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y reescríbelo"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write tilde: añádele una entrada sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y añádele una entrada"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write prefijo: recreate command exige frontmatter" {
+  agent_run "Read .claude/commands/foo.md and recreate it"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"name"* ]]
+}
+
+@test "agent write prefijo: regenerate rule avisa" {
+  agent_run "Review docs/rules/domain/x.md and regenerate it"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DISPATCH"* ]]
+}
+
+@test "agent write corto: pon una entrada en CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y pon una entrada nueva al principio"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write corto: pon la lista en CHANGELOG sigue bloqueando" {
+  agent_run "Pon en CHANGELOG.md la lista de cambios"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent write: vacía CHANGELOG sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y vacía el fichero"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent read ambiguo: 'lead' no cuenta como verbo de lectura" {
+  agent_run "CHANGELOG.md lead entry"
+  [ "$status" -eq 2 ]
+}
+
+@test "agent read-only con tilde: léelo y descríbelo no se bloquea" {
+  agent_run "[solo-lectura] Abre CHANGELOG.md, léelo y descríbelo"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"DISPATCH"* ]]
+}
+
+@test "agent read-only: settings y output no cuentan como set/put" {
+  agent_run "[solo-lectura] Lee CHANGELOG.md y el output de settings.json y resume"
+  [ "$status" -eq 0 ]
+}
+
+@test "agent write prefijo: sobrescríbelo (sobr+escrib) sigue bloqueando" {
+  agent_run "Lee CHANGELOG.md y sobrescríbelo"
+  [ "$status" -eq 2 ]
+}
+
+@test "marca de solo lectura: sin la marca, un prompt que solo lee sigue pasando todas las reglas (#1412)" {
+  agent_run "Lee CHANGELOG.md y resume los cambios."
+  [ "$status" -eq 2 ]
+}
+
+@test "marca de solo lectura: a mitad del texto no exime (#1412)" {
+  agent_run "Lee CHANGELOG.md [solo-lectura] y resume"
+  [ "$status" -eq 2 ]
+}
+
+@test "marca de solo lectura: [read-only] con espacios delante también vale (#1412)" {
+  agent_run "   [read-only] Read CHANGELOG.md and summarize"
+  [ "$status" -eq 0 ]
+}

@@ -55,8 +55,20 @@ prompt_contains() {
   echo "$PROMPT" | grep -qiE "$1"
 }
 
+# ── Intención de solo lectura: marca explícita ───────────────────────────
+# Las reglas 1-3 y 5 detectan menciones de rutas, no escrituras. Quien encarga
+# un trabajo de solo lectura lo declara empezando el prompt con «[solo-lectura]»
+# o «[read-only]». Sin la marca se aplican todas las comprobaciones. No se
+# deduce de los verbos del texto: una lista de verbos de escritura siempre deja
+# alguno fuera y falla en abierto (decisión de la operadora, 2026-10-29, #1412).
+READ_ONLY=0
+_prompt_head="${PROMPT#"${PROMPT%%[![:space:]]*}"}"
+case "$_prompt_head" in
+  "[solo-lectura]"*|"[read-only]"*) READ_ONLY=1 ;;
+esac
+
 # ── 1. Si el agente va a crear commands (.opencode/commands/) ────────────
-if prompt_contains 'commands/.*\.md|crear.*command|create.*command'; then
+if [ "$READ_ONLY" -eq 0 ] && prompt_contains 'commands/.*\.md|crear.*command|create.*command'; then
   if ! prompt_contains 'name:|^name:|frontmatter.*name'; then
     ERRORS+="⚠ DISPATCH: prompt crea commands pero no menciona campo 'name' en frontmatter.\n"
     ERRORS+="  Añadir al prompt: 'Frontmatter obligatorio: name, description'\n"
@@ -71,7 +83,7 @@ if prompt_contains 'commands/.*\.md|crear.*command|create.*command'; then
 fi
 
 # ── 2. Si el agente va a modificar CHANGELOG.md ───────────────────────
-if prompt_contains 'CHANGELOG|changelog'; then
+if [ "$READ_ONLY" -eq 0 ] && prompt_contains 'CHANGELOG|changelog'; then
   if ! prompt_contains 'versión actual|current version|última versión|latest version|top|inicio'; then
     WARNINGS+="💡 DISPATCH: prompt modifica CHANGELOG sin indicar leer la versión actual primero.\n"
   fi
@@ -84,7 +96,7 @@ if prompt_contains 'CHANGELOG|changelog'; then
 fi
 
 # ── 3. Si el agente va a crear skills (.opencode/skills/) ───────────────
-if prompt_contains 'skills/.*SKILL\.md|crear.*skill|create.*skill'; then
+if [ "$READ_ONLY" -eq 0 ] && prompt_contains 'skills/.*SKILL\.md|crear.*skill|create.*skill'; then
   if ! prompt_contains '150 líneas|150 lines|max.*150|≤.*150'; then
     WARNINGS+="💡 DISPATCH: prompt crea skills sin mencionar límite de 150 líneas.\n"
   fi
@@ -101,7 +113,7 @@ if prompt_contains 'git push|gh pr|merge'; then
 fi
 
 # ── 5. Si el agente va a crear rules (docs/rules/) ────────────────
-if prompt_contains 'rules/.*\.md|crear.*rule|create.*rule'; then
+if [ "$READ_ONLY" -eq 0 ] && prompt_contains 'rules/.*\.md|crear.*rule|create.*rule'; then
   if ! prompt_contains '150 líneas|150 lines|max.*150|≤.*150'; then
     WARNINGS+="💡 DISPATCH: prompt crea rules sin mencionar límite de líneas.\n"
   fi
