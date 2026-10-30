@@ -104,19 +104,26 @@ export const projectionPaths = (dir: string, seq: number, kind: ProjectionKind) 
   payload: path.join(dir, `${base(seq, kind)}.bin`),
 });
 
-function sealPart(kind: ProjectionKind, seq: number): string {
-  return `${base(seq, kind)}`;
+/** Datos asociados del AEAD: el binding liga el payload sellado a su generación, modelo, orden y clasificación. */
+function sealPart(kind: ProjectionKind, seq: number, binding: string): string {
+  return `${base(seq, kind)}|${binding}`;
+}
+
+/** Las distancias Hamming van en Uint16 con 0xFFFF reservado para filas excluidas. */
+export function assertDimsSupported(dims: number): void {
+  if (rowWordsFor(dims) * 32 >= 0xffff) throw new RangeError(`dims=${dims} no soportado por la búsqueda binaria (distancia en 16 bits)`);
 }
 
 function writeProjection(store: ProjectionSource, kind: ProjectionKind, classification: string, payload: Uint8Array, cipher?: IndexCipher): ProjectionHeader {
   const m = store.manifest;
+  assertDimsSupported(store.dims);
   if (m.sealed && !cipher) throw new RagError('PROJECTION_MISMATCH', 'la fuente está cifrada: la proyección exige el mismo cifrador');
   ensureSafeHome(store.dir);
   const b = expectedBinding(store, kind, classification);
   const header: ProjectionHeader = { ...b, payloadHash: sha(payload), binding: bindingOf(b) };
   const p = projectionPaths(store.dir, m.seq, kind);
   // Payload primero, cabecera después: sin cabecera válida la proyección no existe.
-  writeAtomic(p.payload, m.sealed ? cipher!.seal(payload, sealPart(kind, m.seq)) : payload);
+  writeAtomic(p.payload, m.sealed ? cipher!.seal(payload, sealPart(kind, m.seq, header.binding)) : payload);
   writeAtomic(p.header, JSON.stringify(header, null, 2));
   return header;
 }
@@ -132,6 +139,7 @@ function readProjection(store: ProjectionSource, kind: ProjectionKind, classific
   } catch {
     throw new RagError('PROJECTION_MISMATCH', `sin proyección ${kind} para ${m.generation} seq ${m.seq}`);
   }
+  if (!header || typeof header !== 'object') throw new RagError('PROJECTION_MISMATCH', `cabecera de la proyección ${kind} no válida`);
   const want = expectedBinding(store, kind, classification);
   for (const k of Object.keys(want) as (keyof Binding)[]) {
     if (header[k] !== want[k]) throw new RagError('PROJECTION_MISMATCH', `proyección ${kind} obsoleta o ajena: difiere ${k}`);
@@ -140,7 +148,7 @@ function readProjection(store: ProjectionSource, kind: ProjectionKind, classific
   if (m.sealed && !cipher) throw new RagError('PROJECTION_MISMATCH', 'proyección cifrada sin cifrador');
   let payload: Buffer;
   try {
-    payload = m.sealed ? cipher!.open(raw, sealPart(kind, m.seq)) : raw;
+    payload = m.sealed ? cipher!.open(raw, sealPart(kind, m.seq, header.binding)) : raw;
   } catch {
     throw new RagError('PROJECTION_MISMATCH', `no se pudo abrir la proyección ${kind}`);
   }
@@ -243,12 +251,15 @@ export class Int8Projection {
 const PROJ_FILE = /^proj-(\d+)-(binary|int8)\.(json|bin)$/;
 
 /** Borra proyecciones de una generación que no corresponden a su manifest vigente (otra seq). Devuelve ficheros borrados. */
-export function gcProjections(dir: string, manifest: Manifest | undefined): number {
+export function gcProjections(dir: string, manifest: Manifest | undefined, tmpGraceMs = 10 * 60 * 1000): number {
   let removed = 0;
   for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
     const m = f.match(PROJ_FILE);
-    if (!m && !/^proj-.*\.tmp-/.test(f)) continue;
+    const tmp = !m && /^proj-.*\.tmp-/.test(f);
+    if (!m && !tmp) continue;
     if (m && manifest && Number(m[1]) === manifest.seq) continue;
+    // Un build en curso escribe un tmp y lo renombra: no se barre hasta pasado el periodo de gracia.
+    if (tmp && Date.now() - fs.statSync(path.join(dir, f)).mtimeMs < tmpGraceMs) continue;
     fs.rmSync(path.join(dir, f), { force: true });
     removed++;
   }
@@ -263,6 +274,8 @@ export function gcProjections(dir: string, manifest: Manifest | undefined): numb
 export function reconcileProjections(home: string, dome: string): number {
   const domeRoot = path.join(home, dome);
   const pointer = readActive(home, dome);
+  // Puntero ausente o ilegible: no se destruye nada (readActive no distingue ambos casos).
+  if (!pointer.updatedAt) return 0;
   const keep = new Set([pointer.active, pointer.previous, pointer.shadow].filter(Boolean) as string[]);
   let removed = 0;
   for (const e of fs.existsSync(domeRoot) ? fs.readdirSync(domeRoot, { withFileTypes: true }) : []) {

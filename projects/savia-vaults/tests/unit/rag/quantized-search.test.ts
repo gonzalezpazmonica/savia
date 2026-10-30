@@ -22,7 +22,7 @@ describe('QuantizedIndex', () => {
       const qi = QuantizedIndex.open(dir, 'N2', undefined, rows);
       try {
         for (const strategy of ['binary-rescore', 'int8-rescore'] as QuantizedStrategy[]) {
-          expect(qi.search(q, { strategy, k: 10, m: 150 }).map((h) => h.index)).toEqual(exact);
+          expect(qi.search(q, { strategy, k: 10, m: 150, accept: () => true }).map((h) => h.index)).toEqual(exact);
         }
       } finally { qi.close(); }
     }
@@ -41,10 +41,18 @@ describe('QuantizedIndex', () => {
     }
   });
 
+  it('rows de otro tamaño o de otra generación se rechazan al abrir', async () => {
+    const { store, dir } = await makeStore(home, { dims: 32, n: 10 });
+    const other = await makeStore(home, { dims: 32, n: 12, dome: 'E', digest: 'otro' });
+    BinaryProjection.build(store, 'N2');
+    expect(() => QuantizedIndex.open(dir, 'N2', undefined, other.store)).toThrow(/CONTRACT_MISMATCH/);
+    expect(() => QuantizedIndex.open(dir, 'N2', undefined, store)).not.toThrow();
+  });
+
   it('proyección ausente o de otra clasificación → rechaza, no sirve resultados', async () => {
     const { store, dir } = await makeStore(home, { n: 10 });
-    expect(() => QuantizedIndex.open(dir, 'N2').search(store.vector(0), { strategy: 'binary-pure', k: 3 })).toThrow(/PROJECTION_MISMATCH/);
+    expect(() => QuantizedIndex.open(dir, 'N2').search(store.vector(0), { strategy: 'binary-pure', k: 3, accept: () => true })).toThrow(/PROJECTION_MISMATCH/);
     BinaryProjection.build(store, 'N2');
-    expect(() => QuantizedIndex.open(dir, 'N4').search(store.vector(0), { strategy: 'binary-pure', k: 3 })).toThrow(/classification/);
+    expect(() => QuantizedIndex.open(dir, 'N4').search(store.vector(0), { strategy: 'binary-pure', k: 3, accept: () => true })).toThrow(/classification/);
   });
 });

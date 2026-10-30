@@ -71,6 +71,14 @@ describe('rescore', () => {
     expect(() => rescoreFloat32(store, new Float32Array(31), [1], 1)).toThrow(/dims/);
   });
 
+  it('DiskVectorReader rechaza un fichero de vectores con tamaño inconsistente', async () => {
+    const { store, manifest } = await makeStore(home, { dims: 24, n: 6 });
+    fs.truncateSync(path.join(store.dir, `vectors-${manifest.seq}.f32`), 24 * 4 * 5);
+    expect(() => new DiskVectorReader(store)).toThrow(/CORRUPT_INDEX/);
+    fs.rmSync(path.join(store.dir, `vectors-${manifest.seq}.f32`));
+    expect(() => new DiskVectorReader(store)).toThrow(/NOT_INDEXED/);
+  });
+
   it('DiskVectorReader da los mismos scores que la memoria; se niega en índices cifrados', async () => {
     const { store } = await makeStore(home, { dims: 24, n: 30 });
     const rd = new DiskVectorReader(store);

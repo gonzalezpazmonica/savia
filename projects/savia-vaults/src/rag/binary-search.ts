@@ -1,3 +1,4 @@
+import { assertDimsSupported } from './binary-store.js';
 import { popcount32 } from './quantize.js';
 
 
@@ -15,6 +16,7 @@ export interface HammingHit { index: number; distance: number }
 /** Distancias de la consulta a todas las filas. `accept` excluye filas (se marcan con 0xFFFF). */
 export function hammingDistances(proj: BinaryRows, query: Uint32Array, accept?: (index: number) => boolean): Uint16Array {
   const rw = proj.rowWords;
+  assertDimsSupported(rw * 32);
   if (query.length !== rw) throw new RangeError(`consulta de ${query.length} palabras, filas de ${rw}`);
   const n = proj.size;
   const words = proj.words;

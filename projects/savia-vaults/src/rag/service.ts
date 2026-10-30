@@ -13,6 +13,7 @@ import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD, readAutosyncState, wri
 import { excludedReason, promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
 import { containsIdentifier, IDENTIFIER_NOT_FOUND, queryIdentifiers } from '../search/identifiers.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
+import { gcProjections } from './binary-store.js';
 import {
   FlatVectorStore, defaultRagHome, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive,
 } from './store.js';
@@ -404,7 +405,7 @@ export class RagService {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       if (!e.isDirectory()) continue;
       const full = path.join(dir, e.name);
-      if (keep.has(e.name)) removed += gcGeneration(full);
+      if (keep.has(e.name)) removed += gcGeneration(full) + gcProjections(full, FlatVectorStore.readManifest(full));
       else { fs.rmSync(full, { recursive: true, force: true }); removed++; }
     }
     return removed;

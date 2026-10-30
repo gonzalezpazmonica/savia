@@ -63,11 +63,15 @@ export class DiskVectorReader {
   readonly dims: number;
 
   constructor(store: ProjectionSource) {
-    if (store.manifest.sealed) throw new RagError('PROJECTION_MISMATCH', 'lectura de filas desde disco no disponible en índices cifrados');
+    if (store.manifest.sealed) throw new RagError('INVALID_INPUT', 'lectura de filas desde disco no disponible en índices cifrados');
     this.dims = store.dims;
     this.rowBytes = this.dims * 4;
     this.buf = Buffer.alloc(this.rowBytes);
-    this.fd = fs.openSync(path.join(store.dir, `vectors-${store.manifest.seq}.f32`), 'r');
+    const file = path.join(store.dir, `vectors-${store.manifest.seq}.f32`);
+    let bytes: number;
+    try { bytes = fs.statSync(file).size; } catch { throw new RagError('NOT_INDEXED', `sin vectores para ${store.manifest.generation} seq ${store.manifest.seq}`); }
+    if (bytes !== store.size * this.rowBytes) throw new RagError('CORRUPT_INDEX', `vectores de ${store.manifest.generation}: ${bytes} bytes, esperados ${store.size * this.rowBytes}`);
+    this.fd = fs.openSync(file, 'r');
   }
 
   /** Producto escalar de la fila `index` con la consulta. */

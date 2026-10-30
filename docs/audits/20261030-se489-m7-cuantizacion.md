@@ -101,8 +101,8 @@ Lecturas y límites:
 ## Hallazgos de ingeniería
 
 1. **Los chunks dominan la RAM, no los vectores.** `FlatVectorStore.load` mantiene texto y metadatos de todos los chunks. En savia-docs son ~60–90 MB por 10,8 k chunks, es decir ~6–8 KB por chunk. A 1 M de chunks serían ~6 GB, más que los 4 GB de float32. La cuantización solo baja la RAM si los chunks se cargan bajo demanda. Está fuera del alcance de M7 y no se hace aquí.
-2. **Hueco de ciclo de vida en el `gc` actual.** `RagService.gc` borra enteros los directorios de generaciones retiradas (con sus proyecciones) pero, en las que conserva, `gcGeneration` solo limpia `chunks-/vectors-/bm25-`. Un test con el `RagService` real reproduce que las proyecciones de una seq anterior se quedan en disco. Contienen signos de contenido que pudo borrarse o reclasificarse. Se rechazan al cargar, pero siguen ahí. `reconcileProjections` las barre; **hay que llamarlo desde `gc`** (pendiente, cambio en `service.ts` fuera de este alcance).
-3. **`resealIndex` reescribe en la misma seq con otra clave.** Una proyección sellada con la clave anterior dejaría de abrirse (falla cerrada, correcto) y habría que reconstruirla. Pendiente en el mismo punto de integración.
+2. **Hueco de ciclo de vida en el `gc`, cerrado.** `RagService.gc` borraba enteras las generaciones retiradas (con sus proyecciones), pero en las que conserva `gcGeneration` solo limpiaba `chunks-/vectors-/bm25-`: las proyecciones de una seq anterior (signos de contenido que pudo borrarse o reclasificarse) se quedaban en disco. Ahora `gc` llama a `gcProjections`; un test con el `RagService` real recorre activa → sombra → promote → rollback → cambio de fuente → gc y comprueba que no queda ninguna proyección obsoleta (mutado: sin la llamada, el test falla).
+3. **`resealIndex` reescribe en la misma seq con otra clave.** Una proyección sellada con la clave anterior deja de abrirse (falla cerrada) y hay que reconstruirla. **Pendiente**: no se ha tocado `resealIndex` ni hay test que lo cubra.
 4. **El rescoring desde disco no vale con índices cifrados.** Exige descifrar el fichero entero; `DiskVectorReader` se niega. Un cifrado por bloques sería otro cambio.
 5. **Sin proyección o con proyección que no casa, se rechaza**; nunca se sirve un resultado de una proyección ajena.
 
@@ -121,11 +121,12 @@ Lecturas y límites:
 
 - La ruta M7 existe como punto de entrada (`QuantizedIndex.search`). **No está registrada como `RetrievalRoute`**: la base (`agent/se489-base-20261030`) no existía en origin al terminar. El adaptador pendiente es una envoltura de `search` con la traza y el `accept` de autorización.
 - No cambia el comportamiento por defecto de `vault_rag`.
-- AC-3 (M7): test de ciclo de vida con el `RagService` real que reproduce el hueco de `gc` y comprueba que `reconcileProjections` no deja proyecciones obsoletas. La integración en `gc` queda pendiente (hallazgo 2).
+- AC-3 (M7): cumplido para sombra/activa/rollback/GC (test con el `RagService` real). Pendiente la reconstrucción tras `resealIndex` (hallazgo 3).
 - Decisión de promoción de M7: **descartar como defecto; opt-in para cúpulas > 50 000 vectores cuando existan chunks diferidos.** Las reglas de promoción de AC-6 se evalúan sobre el banco del conjunto de rutas, no aquí.
 
 ## Limitaciones de la medición
 
 - `rssLoadedMB` de los datos sintéticos con float32 residente se tomó antes de la carga perezosa de los vectores y es incorrecto. Esta tabla usa el pico de RSS, que sí es válido. El script conserva la medición tal cual se ejecutó.
 - 36 consultas: sin IC por bootstrap pareado, y las diferencias de 1–2 consultas no son concluyentes.
+- El payload sellado usa el `binding` como datos asociados del AEAD; `accept` es obligatorio en `QuantizedIndex.search`; `dims` ≥ 65 535 se rechazan.
 - Tests: la suite de savia-vaults da 1 065 de 1 066. Un test e2e ajeno (`mcp-registry-reload`, `--rag-autosync`) agotó los 10 s en la ejecución completa con la máquina cargada; pasa solo en 3 s.

@@ -2,7 +2,7 @@ import { hammingTopM } from './binary-search.js';
 import { BinaryProjection, Int8Projection, openProjectionSource, type ProjectionSource } from './binary-store.js';
 import { DiskVectorReader, rescoreFloat32, topKInt8, type VectorRows } from './rescore.js';
 import type { TopKHit } from './store.js';
-import type { IndexCipher } from './types.js';
+import { RagError, type IndexCipher } from './types.js';
 
 /**
  * SE-489 M7 — Punto de entrada único de la ruta cuantizada. Aún no está registrada como ruta:
@@ -19,7 +19,8 @@ export interface QuantizedSearchOptions {
   k: number;
   /** Candidatos que se rescoran en float32 (ignorado en las variantes `-pure`). Por defecto 100. */
   m?: number;
-  accept?: (index: number) => boolean;
+  /** Autorización por fila (cúpula, nota, cuarentena): obligatoria; para «todo permitido» pasar `() => true` de forma explícita. */
+  accept: (index: number) => boolean;
 }
 
 export class QuantizedIndex {
@@ -36,7 +37,12 @@ export class QuantizedIndex {
 
   /** `rows` opcional: float32 residente para rescorar; sin él se leen las filas candidatas desde disco (solo índices en claro). */
   static open(dir: string, classification: string, cipher?: IndexCipher, rows?: VectorRows): QuantizedIndex {
-    return new QuantizedIndex(openProjectionSource(dir, cipher), classification, cipher, rows);
+    const source = openProjectionSource(dir, cipher);
+    const r = rows as (VectorRows & { size?: number; manifest?: { generation: string; seq: number } }) | undefined;
+    if (r && ((r.size !== undefined && r.size !== source.size) || (r.manifest && (r.manifest.generation !== source.manifest.generation || r.manifest.seq !== source.manifest.seq)))) {
+      throw new RagError('CONTRACT_MISMATCH', 'los vectores en memoria no corresponden a la generación y seq de la proyección');
+    }
+    return new QuantizedIndex(source, classification, cipher, rows);
   }
 
   search(query: Float32Array, o: QuantizedSearchOptions): TopKHit[] {

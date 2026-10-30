@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import {
   BinaryProjection, Int8Projection, gcProjections, openProjectionSource, projectionPaths, reconcileProjections, rowWordsFor,
 } from '../../../src/rag/binary-store.js';
-import { FlatVectorStore, writeActive } from '../../../src/rag/store.js';
+import { FlatVectorStore, readActive, writeActive } from '../../../src/rag/store.js';
 import { RagService, type RagDomeRef } from '../../../src/rag/service.js';
 import { HashEmbedder } from '../../../src/rag/embedder.js';
 import { makeStore, xorCipher } from './quant-fixture.js';
@@ -113,6 +113,18 @@ describe('proyecciones M7', () => {
     expect(() => BinaryProjection.load(store, 'N3')).toThrow(/classification/);
   });
 
+  it('cabecera JSON no objeto → RagError, no TypeError', async () => {
+    const { store, manifest } = await makeStore(home);
+    BinaryProjection.build(store, 'N2');
+    fs.writeFileSync(projectionPaths(store.dir, manifest.seq, 'binary').header, 'null');
+    expect(() => BinaryProjection.load(store, 'N2')).toThrow(/PROJECTION_MISMATCH.*no válida/);
+  });
+
+  it('dims que desbordarían la distancia de 16 bits se rechazan al construir', async () => {
+    const { store } = await makeStore(home, { dims: 65536, n: 1 });
+    expect(() => BinaryProjection.build(store, 'N2')).toThrow(RangeError);
+  });
+
   it('payload alterado → rechazo por hash (índice en claro)', async () => {
     const { store, manifest } = await makeStore(home, { dims: 32, n: 8 });
     BinaryProjection.build(store, 'N2');
@@ -145,6 +157,20 @@ describe('proyecciones M7', () => {
       expect(Array.from(BinaryProjection.load(store, 'N4', cipher).words)).toEqual(Array.from(b.words));
       expect(() => BinaryProjection.load(store, 'N4')).toThrow(/cifrador/);
       expect(() => BinaryProjection.load(store, 'N4', xorCipher(9))).toThrow(/PROJECTION_MISMATCH/);
+    });
+
+    it('AAD: el payload sellado de otra generación no se acepta aunque se reescriba la cabecera', async () => {
+      const cipher = xorCipher(7);
+      const a = await makeStore(home, { dims: 32, n: 8, digest: 'dig-A', cipher });
+      const b = await makeStore(home, { dims: 32, n: 8, digest: 'dig-B', cipher });
+      const ha = BinaryProjection.build(a.store, 'N4', cipher).header;
+      const hb = BinaryProjection.build(b.store, 'N4', cipher).header;
+      expect(ha.binding).not.toBe(hb.binding);
+      const pa = projectionPaths(a.dir, 1, 'binary');
+      const pb = projectionPaths(b.dir, 1, 'binary');
+      fs.copyFileSync(pa.payload, pb.payload);
+      fs.writeFileSync(pb.header, JSON.stringify({ ...hb, payloadHash: ha.payloadHash }));
+      expect(() => BinaryProjection.load(b.store, 'N4', cipher)).toThrow(/no se pudo abrir/);
     });
 
     it('fuente sellada sin cifrador → no se escribe nada en claro', async () => {
@@ -210,50 +236,82 @@ describe('proyecciones M7', () => {
         fs.mkdirSync(dome, { recursive: true });
         const write = (n: string, t: string) => fs.writeFileSync(path.join(dome, n), `# ${n}\n\n${`${t}. `.repeat(12)}`);
         write('a.md', 'regla alfa'); write('b.md', 'regla beta');
+        let model = 'm1';
         const domes: RagDomeRef[] = [{ name: 'Docs', confidentiality: 'N2', path: dome, rag: { enabled: true, model: 'm1' } }];
         const svc = new RagService({ domes: () => domes, home: ragHome, embedderFactory: (cfg) => new HashEmbedder(64, cfg, cfg.model) });
-        const first = await svc.sync('Docs');
         const genDir = (g: string) => path.join(ragHome, 'Docs', g);
         const projOf = (g: string) => fs.readdirSync(genDir(g)).filter((f) => f.startsWith('proj-'));
+        const project = (g: string) => {
+          const st = FlatVectorStore.load(genDir(g));
+          BinaryProjection.build(st, 'N2');
+          Int8Projection.build(st, 'N2');
+          return st;
+        };
 
-        // proyecciones de la activa (seq 1)
-        const s1 = FlatVectorStore.load(genDir(first.generation));
-        BinaryProjection.build(s1, 'N2');
-        Int8Projection.build(s1, 'N2');
-        expect(projOf(first.generation)).toHaveLength(4);
+        // activa A (m1) con proyecciones
+        const A = (await svc.sync('Docs')).generation;
+        project(A);
+        expect(projOf(A)).toHaveLength(4);
 
-        // cambia la fuente → seq 2 en la misma generación, y se proyecta de nuevo
+        // sombra B (otro modelo → otra generación) con las suyas; A sigue activa
+        domes[0].rag = { enabled: true, model: 'm2' }; model = 'm2';
+        const B = (await svc.sync('Docs')).generation;
+        expect(B).not.toBe(A);
+        const bStore = project(B);
+        expect(readActive(ragHome, 'Docs').active).toBe(A);
+
+        // la proyección de A no sirve contra la fuente de B, ni al revés
+        for (const ext of ['json', 'bin']) fs.copyFileSync(path.join(genDir(A), `proj-1-binary.${ext}`), path.join(genDir(B), `proj-1-binary.${ext}`));
+        expect(() => BinaryProjection.load(bStore, 'N2')).toThrow(/PROJECTION_MISMATCH/);
+        BinaryProjection.build(bStore, 'N2');
+
+        // promote B, rollback a A: cada proyección sigue sirviendo contra su propia fuente
+        await svc.promote('Docs', B, true);
+        expect(readActive(ragHome, 'Docs')).toMatchObject({ active: B, previous: A });
+        await svc.rollback('Docs');
+        expect(readActive(ragHome, 'Docs').active).toBe(A);
+        expect(() => BinaryProjection.load(FlatVectorStore.load(genDir(A)), 'N2')).not.toThrow();
+        expect(() => BinaryProjection.load(FlatVectorStore.load(genDir(B)), 'N2')).not.toThrow();
+
+        // la fuente cambia en A → seq 2; el gc del servicio barre las proyecciones de seq 1
+        domes[0].rag = { enabled: true, model: 'm1' }; model = 'm1';
         write('c.md', 'regla gamma');
         await svc.sync('Docs');
-        const s2 = FlatVectorStore.load(genDir(first.generation));
+        const s2 = FlatVectorStore.load(genDir(A));
         expect(s2.manifest.seq).toBe(2);
-        BinaryProjection.build(s2, 'N2');
-        expect(projOf(first.generation).filter((f) => f.startsWith('proj-1-'))).toHaveLength(4);
-
-        // gc del servicio: limpia chunks/vectors de seq 1 pero NO las proyecciones (hueco que cubre reconcile)
-        await svc.gc('Docs');
-        expect(projOf(first.generation).filter((f) => f.startsWith('proj-1-')).length).toBeGreaterThan(0);
-        // la proyección obsoleta no se puede cargar contra la fuente vigente
+        expect(projOf(A).filter((f) => f.startsWith('proj-1-'))).toHaveLength(4);
         expect(() => Int8Projection.load(s2, 'N2')).toThrow(/PROJECTION_MISMATCH/);
-        expect(reconcileProjections(ragHome, 'Docs')).toBe(4);
-        expect(projOf(first.generation).filter((f) => f.startsWith('proj-1-'))).toEqual([]);
-
-        // generación retirada: el directorio entero (con sus proyecciones) se va con el gc del servicio
-        const retired = path.join(ragHome, 'Docs', 'deadbeef0000');
-        fs.mkdirSync(retired, { recursive: true });
-        fs.writeFileSync(path.join(retired, 'proj-1-binary.bin'), 'x');
-        writeActive(ragHome, 'Docs', { active: first.generation });
         await svc.gc('Docs');
-        expect(fs.existsSync(retired)).toBe(false);
+        expect(projOf(A).filter((f) => f.startsWith('proj-1-'))).toEqual([]);
 
-        // rollback: una proyección de la generación anterior solo sirve contra su propia fuente
-        writeActive(ragHome, 'Docs', { active: first.generation, previous: first.generation });
-        await svc.rollback('Docs');
-        expect(reconcileProjections(ragHome, 'Docs')).toBe(0);
+        // B sale del puntero: el gc borra la generación entera, con sus proyecciones
+        writeActive(ragHome, 'Docs', { active: A });
+        await svc.gc('Docs');
+        expect(fs.existsSync(genDir(B))).toBe(false);
+        expect(model).toBe('m1');
       } finally {
         fs.rmSync(root, { recursive: true, force: true });
         fs.rmSync(ragHome, { recursive: true, force: true });
       }
+    });
+
+    it('reconcile no destruye nada si el puntero activo falta o es ilegible', async () => {
+      const { store, dir } = await makeStore(home, { n: 3 });
+      BinaryProjection.build(store, 'N2');
+      expect(reconcileProjections(home, 'D')).toBe(0);
+      fs.writeFileSync(path.join(home, 'D', 'active.json'), '{no json');
+      expect(reconcileProjections(home, 'D')).toBe(0);
+      expect(fs.readdirSync(dir).filter((f) => f.startsWith('proj-'))).toHaveLength(2);
+    });
+
+    it('gcProjections respeta el periodo de gracia de los temporales de un build en curso', async () => {
+      const { dir, manifest } = await makeStore(home, { n: 3 });
+      const tmp = path.join(dir, 'proj-1-binary.bin.tmp-123-1');
+      fs.writeFileSync(tmp, 'x');
+      expect(gcProjections(dir, manifest)).toBe(0);
+      expect(fs.existsSync(tmp)).toBe(true);
+      expect(gcProjections(dir, manifest, 0)).toBe(1);
+      expect(fs.existsSync(tmp)).toBe(false);
     });
 
     it('reconcile barre proyecciones sueltas en directorios de generación huérfanos', async () => {
@@ -262,7 +320,7 @@ describe('proyecciones M7', () => {
       fs.mkdirSync(orphan);
       fs.writeFileSync(path.join(orphan, 'proj-1-int8.bin'), 'x');
       fs.writeFileSync(path.join(orphan, 'proj-1-int8.json'), '{}');
-      // sin puntero activo: todo directorio de generación es huérfano
+      writeActive(home, 'D', { active: path.basename(dir) });
       expect(reconcileProjections(home, 'D')).toBe(2);
       expect(fs.existsSync(dir)).toBe(true);
     });
