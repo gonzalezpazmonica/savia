@@ -54,11 +54,13 @@ function effectiveAdmission(input: {
 Las reglas se aplican en orden y gana la primera que se cumple:
 
 1. cuarentena técnica → `QUARANTINED`;
-2. decisión `REJECTED` del objetivo, **con cualquier digest**, o `negativeDigests.get(currentDigest) === 'REJECTED'` → `REJECTED`;
-3. lo mismo con `QUARANTINED` → `QUARANTINED`;
+2. decisión **propia** vigente `REJECTED` o `QUARANTINED`, **con cualquier digest** → esa decisión;
+3. **herencia por contenido:** el objetivo no tiene una decisión propia `ACCEPTED`/`RESTRICTED` con digest igual al actual, **y** `negativeDigests.get(currentDigest)` existe → ese estado (`REJECTED` o `QUARANTINED`);
 4. `superseded` → `SUPERSEDED`;
-5. decisión `ACCEPTED` o `RESTRICTED` con digest igual al actual → esa decisión;
+5. decisión propia vigente `ACCEPTED` o `RESTRICTED` con digest igual al actual → esa decisión;
 6. en cualquier otro caso → `UNREVIEWED`.
+
+Una decisión positiva **explícita** sobre un objetivo prevalece sobre la herencia por contenido. Solo la toma alguien con `admit`, a sabiendas de que el mismo contenido está rechazado en otra ruta: `admission set` lo advierte y exige `--override-inherited`.
 
 `RESTRICTED` exige `scope` no vacío.
 
@@ -66,7 +68,11 @@ Semántica de varias entradas:
 
 - La decisión vigente de un objetivo es su entrada de **mayor `seq`**.
 - Un rechazo solo se levanta con una decisión nueva de alguien con `admit`.
-- **Conjunto de digests negativos.** Además de por objetivo, cada `REJECTED` y `QUARANTINED` vigente añade su digest a un conjunto de la cúpula. Una copia o un renombrado **con los mismos bytes** hereda el rechazo en cualquier ruta.
+- **Conjunto de digests negativos (definición).** `negativeDigests` = { `e.digest` ↦ `e.admission` | `e` es la entrada vigente (mayor `seq`) de algún objetivo y `e.admission ∈ {REJECTED, QUARANTINED}` }.
+  - Un digest **sale** del conjunto cuando ninguna entrada vigente lo aporta, por ejemplo porque el objetivo que lo aportaba recibe una decisión nueva no negativa.
+  - Si varios objetivos aportan el mismo digest con estados distintos, gana `QUARANTINED` sobre `REJECTED`.
+  - Una copia o un renombrado **con los mismos bytes** hereda el estado en cualquier ruta, salvo decisión positiva explícita propia (regla 3).
+  - `admission show <cúpula> <target>` indica si el estado es propio o heredado, y en ese caso de qué objetivo o objetivos y `seq` viene, para poder levantarlo.
 - **Límite declarado:** una copia con otra ruta **y** contenido modificado es contenido nuevo: queda `UNREVIEWED` y se sirve con advertencia. F1 no hace detección por similitud.
 - Si el fichero se edita y luego se revierte a los mismos bytes, el `ACCEPTED` previo vuelve a aplicarse, siempre que siga siendo la última entrada. Es intencionado: son exactamente los bytes revisados (caso ABA).
 
@@ -92,18 +98,31 @@ Reglas del ledger:
 - **Ancla de cabeza contra el truncado.** Hay un checkpoint firmado `{dome, seq, head}`.
 - **Orden de escritura**, bajo un lock de cúpula (el patrón `acquireLock` del indexador), que comparten la CLI y el servidor:
   1. añadir la entrada con fsync;
-  2. reescribir el checkpoint de forma atómica (`writeAtomic`).
-- Al cargar se lee **primero el checkpoint y después el ledger**. Así una escritura concurrente solo puede dejar el ledger por delante, que se tolera, y nunca por detrás, que sería un falso truncado. La recarga se dispara si cambia el mtime de cualquiera de los dos.
+  2. reescribir el checkpoint de forma atómica (`writeAtomic`);
+  3. solo en la primera escritura de la cúpula, marcar `domes.<n>.admission.initialized: true` en el registro.
+
+  Con el ledger inválido, `admission set` se niega (`ADMIT_LEDGER_INVALID`). Solo funciona `admission repair`.
+- Al cargar se lee **primero el checkpoint y después el ledger**. Así una escritura concurrente solo puede dejar el ledger por delante, que se tolera, y nunca por detrás, que sería un falso truncado. La recarga se dispara si cambia `(mtimeMs, size)` de cualquiera de los dos o el `seq` del checkpoint. Así se evita servir un ledger obsoleto cuando dos escrituras caen en el mismo tick de mtime.
 - Comprobaciones:
   - si el `seq` del checkpoint es mayor que el último `seq` del ledger, o su `head` no coincide con el hash de la entrada con ese `seq`, el ledger es inválido;
-  - si falta el checkpoint y el ledger tiene entradas, el ledger es inválido;
-  - si los dos faltan y la cúpula **no** está marcada como inicializada, el ledger está vacío y es válido. La primera escritura marca `domes.<n>.admission.initialized: true` en el registro. Si la marca existe y faltan los dos ficheros, el ledger es inválido. Si alguien borra también la marca, el ledger se da por vacío: es el residuo de quien escribe en el directorio de estado;
+  - si falta el checkpoint y el ledger tiene entradas:
+    - **válido** si la cúpula **no** está marcada como inicializada, el ledger empieza en `seq = 1` y su cadena y firmas cuadran. Es el fallo entre los pasos 1 y 3 de la primera escritura. La siguiente escritura completa el checkpoint y la marca;
+    - **inválido** en cualquier otro caso;
+  - si los dos faltan: válido y vacío si la cúpula no está marcada; inválido si lo está. Si alguien borra también la marca, el ledger se da por vacío: es el residuo de quien escribe en el directorio de estado;
   - se toleran entradas firmadas y encadenadas **posteriores** al checkpoint: es el caso de un fallo entre los pasos 1 y 2. La siguiente escritura adelanta el checkpoint.
 - **Ledger inválido.** Ocurre si una firma, la cadena `prev` o el ancla no cuadran, o si el ledger no se puede leer. Entonces la cúpula entra en **admisión degradada**:
   - ningún documento puede salir `ACCEPTED` ni `RESTRICTED`;
   - la cuarentena técnica (regla 1) **sigue aplicándose**: esos documentos no se sirven;
-  - en `standard`, todos los hits se sirven como `UNREVIEWED` y `DomeOutcome.detail` incluye `admission_ledger_invalid`, de modo que el aviso llega **en la respuesta** y no solo en `vault_health`;
+  - no se aplica la herencia por contenido, porque el conjunto tampoco es fiable;
+  - en `standard`, los hits vigentes se sirven como `UNREVIEWED` y, con `includeStale`, los sustituidos como `SUPERSEDED` (la vigencia no depende del ledger). `DomeOutcome.detail` incluye `admission_ledger_invalid`, de modo que el aviso llega **en la respuesta** y no solo en `vault_health`;
   - en `governed`, la cúpula **no sirve ningún hit** (`status` degradado) hasta que se repare;
+- **Reparación.** Solo por CLI local: `savia-vaults admission repair <cúpula>`, con `authorizeAdmit` y TTY:
+  1. muestra el diagnóstico: qué comprobación falla y los `seq` de checkpoint y ledger, sin contenido;
+  2. propone volver a anclar en el **mayor prefijo válido** del ledger, con cadena y firmas correctas;
+  3. tras confirmar, descarta (archiva aparte, no borra) las entradas posteriores inválidas y añade una entrada firmada `REANCHOR` con `reason`, el `seq` y el `head` anteriores y el sujeto;
+  4. reescribe checkpoint y marca.
+
+  No distingue por sí misma un truncado malicioso de un fallo benigno; eso lo decide la persona con el diagnóstico delante. Por eso queda auditado.
   - consecuencia declarada: en `standard`, un `REJECTED` vuelve a servirse con aviso mientras dure la degradación. Para provocarla hace falta escribir en el directorio de estado del servidor, que ninguna superficie de agente alcanza (R4, AC-6).
 - `admission:` en el frontmatter **se ignora** y se cuenta en `vault_health` como `admission_claim_ignored`, sin rutas.
 
@@ -132,6 +151,7 @@ Reglas del ledger:
   - `savia-vaults admission set <cúpula> <target> <ACCEPTED|RESTRICTED|REJECTED|QUARANTINED> --reason … [--scope …]`;
   - `admission show <cúpula> <target>`;
   - `admission report <cúpula>`, que da recuentos por estado efectivo, por estado técnico y por `admission_claim_ignored`, y solo en local las rutas.
+  - `admission repair <cúpula>` (R2).
 - Cómo se usa:
   - La credencial de admitir se pide por prompt en la TTY, nunca por argv ni por variable de entorno. Si `stdin` no es una TTY, la CLI termina con `ADMIT_REQUIRES_TTY`.
   - **Punto de prueba**, sin atajos:
@@ -176,7 +196,13 @@ Reglas del ledger:
 
 ## Criterios de aceptación
 
-- **AC-1 (función pura):** test de tabla que recorre las 6 reglas de R1 y el orden entre ellas. Por ejemplo: objetivo sin decisión, con `negativeDigests` que contiene su digest como `REJECTED` ⇒ `REJECTED` (copia o renombrado); el mismo sin el digest en el mapa ⇒ `UNREVIEWED`; `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). `RESTRICTED` sin `scope` lanza un error.
+- **AC-1 (función pura):** test de tabla que recorre las 6 reglas de R1 y el orden entre ellas. Incluye estos casos:
+  - el objetivo B sin decisión, copia de A `REJECTED` ⇒ `REJECTED` (heredado);
+  - B con `ACCEPTED` propio y digest igual ⇒ `ACCEPTED` (la decisión explícita prevalece);
+  - A pasa a `ACCEPTED` ⇒ su digest sale de `negativeDigests` y B sin decisión ⇒ `UNREVIEWED`;
+  - dos objetivos aportan el mismo digest, uno `REJECTED` y otro `QUARANTINED` ⇒ `QUARANTINED`.
+
+  Otros casos: objetivo sin decisión, con `negativeDigests` que contiene su digest como `REJECTED` ⇒ `REJECTED` (copia o renombrado); el mismo sin el digest en el mapa ⇒ `UNREVIEWED`; `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). `RESTRICTED` sin `scope` lanza un error.
 - **AC-2 (autoadmisión por frontmatter):** una nota con `admission: accepted` y `status: approved` se sirve como `UNREVIEWED`, y `vault_health` cuenta 1 en `admission_claim_ignored`.
 - **AC-3 (edición y copia):**
   - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until`;
@@ -199,14 +225,16 @@ Reglas del ledger:
   - un test enumera las herramientas MCP y las rutas A2A y HTTP registradas, y falla si alguna importa el módulo de escritura del ledger. Comprueba también que no acepta `admission` como entrada;
   - `vault_write` con una ruta que intenta salir hacia el directorio de estado (`../`, ruta absoluta o enlace simbólico) se rechaza y el ledger no cambia.
   - Es un invariante de no-regresión: en main no hay ledger, así que el test de rutas es el que puede fallar si el ledger se coloca dentro de la cúpula.
-- **AC-7 (ledger íntegro):** en cada uno de estos casos, con `standard`, **todos** los hits de la cúpula salen exactamente `UNREVIEWED` y `DomeOutcome.detail` contiene `admission_ledger_invalid`. Con `governed`, la cúpula devuelve 0 hits con estado degradado:
+- **AC-7 (ledger íntegro):** en cada uno de estos casos, con `standard` y sin `includeStale`, **todos** los hits de la cúpula salen exactamente `UNREVIEWED` y `DomeOutcome.detail` contiene `admission_ledger_invalid`. Con `governed`, la cúpula devuelve 0 hits con estado degradado:
   - (a) una entrada con la firma alterada;
   - (b) una entrada intermedia borrada;
   - (c) **las últimas entradas borradas (truncado de cola)**, comprobado con el checkpoint;
   - (d) un checkpoint ausente con el ledger no vacío;
   - (e) la cúpula marcada como inicializada sin ledger ni checkpoint.
 
-  En los cinco casos, una nota en cuarentena técnica **sigue** sin servirse.
+  En los cinco casos, una nota en cuarentena técnica **sigue** sin servirse, y `admission set` falla con `ADMIT_LEDGER_INVALID`.
+
+  Casos que deben ser **válidos**: (f) ledger con `seq` 1..n, cadena y firmas correctas, sin checkpoint ni marca (fallo de la primera escritura); y la entrada posterior al checkpoint descrita antes.
 
   Caso que debe ser válido: una entrada firmada posterior al checkpoint (fallo entre la escritura y el checkpoint) se acepta.
 - **AC-8 (sin reembeber):** tras `admission set` sobre un documento indexado:
@@ -227,7 +255,12 @@ Reglas del ledger:
   - (a) una nota `REJECTED` vuelve a servirse;
   - (b) los hits no llevan `admission`;
   - (c) una nota en cuarentena técnica (SE-481) **sigue** sin servirse.
-- **AC-14:** cada AC de AC-1 a AC-13, salvo AC-6, tiene al menos una aserción que falla contra main. AC-6 es un invariante y se valida mutándolo: con el ledger dentro de la cúpula, su test debe fallar. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
+- **AC-15 (reparación):** sobre el caso (c) de AC-7:
+  - `admission repair` vuelve a anclar en el último prefijo válido, añade `REANCHOR` firmada y deja la cúpula válida;
+  - el `REJECTED` truncado deja de aplicarse, porque se perdió, y el informe de reparación lo dice con su `seq`;
+  - sin `authorizeAdmit`, falla y no toca nada;
+  - las entradas descartadas quedan archivadas, no borradas.
+- **AC-14:** cada AC de AC-1 a AC-15, salvo AC-6, tiene al menos una aserción que falla contra main. AC-6 es un invariante y se valida con **dos** mutaciones, y cada una debe hacer fallar su test: (i) el ledger dentro de la cúpula; (ii) una herramienta MCP de prueba que importa el módulo de escritura del ledger. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
 
 ## Medidas que se dejan en la PR de implementación
 
@@ -235,6 +268,8 @@ Reglas del ledger:
 - Contador `admission_invalidated_by_edit` en `vault_health`, para decidir más adelante si atar la admisión a un subconjunto de campos en lugar del digest completo.
 
 ## Riesgo residual (declarado)
+
+`type: 'human'` **no es una barrera por sí solo**: `user create` y la migración v1 crean sujetos `human` por defecto, y el token que usa un agente suele ser de uno de ellos. Las barreras reales son tres: `admit` en el permiso **y** en la credencial, la TTY y la vida corta. La comprobación de tipo solo impide el caso explícito de `service`.
 
 Un agente que se ejecuta con la misma cuenta del sistema operativo que la propietaria, que emula una TTY y lee la credencial de admitir de donde ella la guarde, puede suplantarla. Ninguna comprobación dentro del proceso lo impide. Esta spec lo mitiga con la credencial aparte, su vida corta, la ausencia de superficie MCP y la auditoría firmada. Un segundo factor queda fuera de alcance hasta que la operadora lo pida.
 
