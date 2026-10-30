@@ -43,26 +43,76 @@ export function validateWikiLinks(
   }));
 }
 
+/** Nota destino de un backlink: ruta y, si existen, entidad y alias del frontmatter. */
+export interface BacklinkTarget {
+  path: string;
+  entityId?: string;
+  aliases?: string[];
+}
+
+export interface WikiNote {
+  path: string;
+  content: string;
+  frontmatter?: Record<string, unknown>;
+}
+
+const stripMd = (s: string): string => s.replace(/\.md$/i, '');
+
+/** Destino de un enlace sin ancla (`#sección`, `^bloque`) ni extensión, en minúsculas. */
+function linkKey(target: string): string {
+  return stripMd(target.split(/[#^]/)[0].trim()).toLowerCase();
+}
+
+/** Alias y entidad de una nota del frontmatter. */
+export function noteTargetOf(note: { path: string; frontmatter?: Record<string, unknown> }): BacklinkTarget {
+  const fm = note.frontmatter ?? {};
+  const entity = fm.entity as Record<string, unknown> | undefined;
+  const raw = fm.aliases ?? fm.alias;
+  const aliases = (Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : []).map(String);
+  return { path: note.path, ...(entity?.id ? { entityId: String(entity.id) } : {}), ...(aliases.length ? { aliases } : {}) };
+}
+
+/**
+ * Resuelve el destino de un wikilink a la ruta de una nota (SE-485 R1): ruta relativa con o sin
+ * extensión, entidad, alias y nombre sin extensión. Con varias notas del mismo nombre gana la
+ * de ruta más corta (como Obsidian), y a igualdad la primera por orden alfabético.
+ */
+export function resolveWikiTarget(target: string, notes: Array<{ path: string; frontmatter?: Record<string, unknown> }>): string | undefined {
+  const key = linkKey(target);
+  if (!key) return undefined;
+  const byRank = (a: string, b: string) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+  const exact = notes.find(n => stripMd(n.path).toLowerCase() === key);
+  if (exact) return exact.path;
+  const named = notes.map(noteTargetOf).filter(t =>
+    t.entityId?.toLowerCase() === key || t.aliases?.some(a => a.toLowerCase() === key));
+  if (named.length) return named.map(t => t.path).sort(byRank)[0];
+  const base = notes.filter(n => (stripMd(n.path).split('/').pop() ?? '').toLowerCase() === key.split('/').pop() && stripMd(n.path).toLowerCase().endsWith(key));
+  return base.length ? base.map(n => n.path).sort(byRank)[0] : undefined;
+}
+
 export function resolveBacklinks(
-  targetEntityId: string,
-  allNotes: Array<{ path: string; content: string }>,
+  target: string | BacklinkTarget,
+  allNotes: WikiNote[],
   maxResults = 50,
   contextChars = 200,
 ): BacklinkInfo[] {
+  const t: BacklinkTarget = typeof target === 'string' ? { path: target } : target;
+  // Si el destino no está entre las notas (cadena suelta), se añade para que pueda resolverse.
+  const universe = allNotes.some(n => n.path === t.path) ? allNotes : [...allNotes, { path: t.path, content: '', frontmatter: {} }];
+  const known = universe.map(n => n.path === t.path ? { ...n, frontmatter: { ...(n.frontmatter ?? {}), ...(t.entityId ? { entity: { id: t.entityId } } : {}), ...(t.aliases ? { aliases: t.aliases } : {}) } } : n);
   const backlinks: BacklinkInfo[] = [];
 
   for (const note of allNotes) {
-    if (note.path === targetEntityId) continue;
-
-    const links = extractWikiLinks(note.content);
-    for (const link of links) {
-      if (link.target === targetEntityId) {
-        const idx = note.content.indexOf(`[[${link.target}]]`) || note.content.indexOf(`[[${link.target}|`);
-        const start = Math.max(0, (idx > -1 ? idx : 0) - contextChars / 2);
-        const context = note.content.slice(start, start + contextChars).replace(/\n/g, ' ').trim();
-        backlinks.push({ source: note.path, context: `...${context}...` });
-        break;
-      }
+    if (note.path === t.path) continue;
+    for (const m of note.content.matchAll(WIKILINK_RE)) {
+      const inner = m[1];
+      const link = inner.includes('|') ? inner.slice(0, inner.indexOf('|')) : inner;
+      if (resolveWikiTarget(link, known) !== t.path) continue;
+      const idx = m.index ?? 0;
+      const start = Math.max(0, idx - contextChars / 2);
+      const context = note.content.slice(start, start + contextChars).replace(/\n/g, ' ').trim();
+      backlinks.push({ source: note.path, context: `...${context}...` });
+      break;
     }
     if (backlinks.length >= maxResults) break;
   }

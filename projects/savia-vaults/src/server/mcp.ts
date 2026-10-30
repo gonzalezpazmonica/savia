@@ -6,6 +6,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { VaultStorage } from '../storage/index.js';
 import { SearchEngine } from '../search/index.js';
+import { excludedReason, resolveRagConfig } from '../rag/policy.js';
+import { noteTargetOf } from '../knowledge/wikilink-validator.js';
 import { VaultSecurity } from '../security/index.js';
 import { Introspector } from '../knowledge/introspector.js';
 import { KnowledgeGraph } from '../knowledge/graph.js';
@@ -190,6 +192,7 @@ export class MCPVaultServer {
               query: { type: 'string', description: 'Search query' },
               maxResults: { type: 'number', description: 'Max results (default 10)' },
               pathPrefix: { type: 'string', description: 'Filter by path prefix' },
+              includeStale: { type: 'boolean', description: 'Incluir deprecated/superseded/archived y vencidos (def. false, como vault_rag)' },
             },
             required: ['query'],
           },
@@ -344,18 +347,24 @@ export class MCPVaultServer {
             try {
               const { resolveBacklinks, extractWikiLinks } = await import('../knowledge/wikilink-validator.js');
               const allNotes = await inst.storage.list();
-              const allContents: Array<{ path: string; content: string }> = [];
+              const allContents: Array<{ path: string; content: string; frontmatter: Record<string, unknown> }> = [];
               for (const notePath of allNotes.slice(0, 200)) {
                 try {
                   const n = await inst.storage.read(notePath);
-                  allContents.push({ path: n.path, content: n.content });
+                  allContents.push({ path: n.path, content: n.content, frontmatter: n.frontmatter });
                 } catch {}
               }
-              backlinks = resolveBacklinks(note.path, allContents);
+              backlinks = resolveBacklinks(noteTargetOf(note), allContents);
               outgoingLinks = extractWikiLinks(note.content).map(l => l.target);
             } catch { /* backlinks are optional */ }
 
-            return { content: [{ type: 'text', text: JSON.stringify({ path: note.path, name: note.name, frontmatter: note.frontmatter, tags: note.tags, content: note.content, ...(backlinks?.length ? { backlinks } : {}), ...(outgoingLinks?.length ? { outgoing_links: outgoingLinks } : {}) }, null, 2) }] };
+            // SE-485 R5: la lectura directa sirve la nota obsoleta, pero dice por qué lo es.
+            const fm = note.frontmatter as Record<string, unknown>;
+            const staleReason = excludedReason(
+              { title: note.name, status: typeof fm.status === 'string' ? fm.status : undefined, validUntil: fm.valid_until != null ? String(fm.valid_until) : undefined, modified: note.modified },
+              resolveRagConfig(this.domeRegistry?.get(dome)?.rag),
+            );
+            return { content: [{ type: 'text', text: JSON.stringify({ path: note.path, name: note.name, frontmatter: note.frontmatter, tags: note.tags, content: note.content, ...(staleReason ? { stale: staleReason } : {}), ...(backlinks?.length ? { backlinks } : {}), ...(outgoingLinks?.length ? { outgoing_links: outgoingLinks } : {}) }, null, 2) }] };
           }
 
           case 'vault_write': {
@@ -376,6 +385,8 @@ export class MCPVaultServer {
               query: args.query as string,
               maxResults: (args.maxResults as number) || 10,
               pathPrefix: args.pathPrefix as string | undefined,
+              includeStale: args.includeStale as boolean | undefined,
+              excludeStatuses: resolveRagConfig(this.domeRegistry?.get(dome)?.rag).excludeStatuses,
             });
             return { content: [{ type: 'text', text: JSON.stringify(results) }] };
           }
