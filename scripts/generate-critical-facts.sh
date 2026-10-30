@@ -13,7 +13,7 @@ set -uo pipefail
 CHECK=false
 [[ "${1:-}" == "--check" ]] && CHECK=true
 
-FILE="${CRITICAL_FACTS_FILE:-docs/critical-facts.md}"
+FILE="docs/critical-facts.md"
 SPRINT="PM-Workspace activo · cadencia 2 sem · daily 09:15"
 
 # Build new section content (no personal data: no slug, name, language or date)

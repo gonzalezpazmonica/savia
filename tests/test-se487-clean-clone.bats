@@ -136,6 +136,16 @@ run_hook() {
   [[ "$output" == *"docs/nested.md"* ]]
 }
 
+@test "AC-3 negative: nested @import resolves relative to the importing file" {
+  fixture_tree "$TMP/t"
+  rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
+  echo '@sub.md' >> "$TMP/t/docs/extra.md"
+  echo 'ANDROID_HOME=/home/someone/Android/Sdk' > "$TMP/t/docs/sub.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/sub.md: ruta personal"* ]]
+}
+
 @test "AC-3 negative: public snapshot docs/llms-full.txt is scanned" {
   fixture_tree "$TMP/t"
   rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"

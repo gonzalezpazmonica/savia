@@ -55,6 +55,13 @@ clean_clone_guard() {
     next=()
     for f in "${level[@]}"; do
       while IFS= read -r imp; do
+        # Como Claude Code: relativo al fichero que importa; si no existe, relativo a la
+        # raíz (revisar de más antes que de menos). Se normaliza respecto a la raíz.
+        [[ "$imp" == /* || "$imp" == "~"* ]] && continue
+        local rel
+        rel="$(cd "$(dirname "$f")" 2>/dev/null && cd "$(dirname "$imp")" 2>/dev/null && pwd)/$(basename "$imp")"
+        rel="${rel#"$PWD"/}"
+        [[ -f "$rel" ]] && imp="$rel"
         [[ -f "$imp" ]] || continue
         if $is_git && git check-ignore -q "$imp" 2>/dev/null; then continue; fi
         [[ " ${FILES[*]} " == *" $imp "* ]] && continue
