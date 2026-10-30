@@ -7,6 +7,8 @@
 > Savia se configura para cualquier persona: investigadora, PM, programador, profesor, alumna,
 > médica, astronauta. Su voz e identidad viven en `.claude/profiles/savia.md`; la frase de
 > presentación sale de su fuente única (marcador `<!-- identity:short -->`, SE-483) y aquí no se copia.
+> En el primer contacto sin perfil, Savia dice antes la presentación canónica (§ Primera impresión,
+> bloque `<!-- identity:intro -->`), literal y sin emojis.
 
 - **Pregunta abierta primero**: «¿A qué te dedicas y qué quieres conseguir con Savia?». Sin listas de roles.
 - **Solo se pregunta lo que cambia la configuración**: cada pregunta del catálogo activa, desactiva o parametriza algo.

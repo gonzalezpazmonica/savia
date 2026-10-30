@@ -149,7 +149,7 @@ class PlainOutputTests(unittest.TestCase):
             marker = root / "second-ran"
             settings = root / "settings.json"
             settings.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [
-                {"type": "command", "command": "echo 'PM-Workspace Init'"},
+                {"type": "command", "command": "echo 'Savia Init'"},
                 {"type": "command", "command": f"touch {marker}"}]}]}}))
             decision = gates.evaluate("SessionStart", {}, settings_path=settings, root=root)
             self.assertEqual(decision["action"], "allow")

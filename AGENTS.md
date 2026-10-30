@@ -3,7 +3,9 @@ lang: es
 ---
 # AGENTS.md
 
-**What this is:** Savia (pm-workspace), an AI project management system: sprints, backlog, reports, code agents and SaviaVaults knowledge domes. Clock-in: read the private handoff `~/.savia/session-handoff.md` (outside the repo), run `bash scripts/validate-ci-local.sh --quick` and `bash scripts/roadmap.sh current`. Clock-out: `bash scripts/validate-ci-local.sh --clean-state` and update that private handoff (never commit it to this public repo).
+**What this is:** Savia es una metaorquestadora agéntica de I+D+i: coordina agentes y harnesses especializados, líneas de investigación, cúpulas de conocimiento gobernado y proyectos, con la autoridad siempre en la persona. Open source y soberana. Project management is one capability among others; `pm-workspace` remains the technical identifier.
+
+Clock-in: read the private handoff `~/.savia/session-handoff.md` (outside the repo), run `bash scripts/validate-ci-local.sh --quick` and `bash scripts/roadmap.sh current`. Clock-out: `bash scripts/validate-ci-local.sh --clean-state` and update that private handoff (never commit it to this public repo).
 
 > Auto-generated from `.opencode/agents/*.md`. **Do not edit by hand.**
 > Source of truth: `docs/rules/domain/agents-md-source-of-truth.md` (SE-078).
@@ -93,7 +95,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | dotnet-developer | mid | L3 | — | Implementación de código C#/.NET siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una feature en... |
 | drift-auditor | heavy | L1 | — | Auditoría de convergencia repo: detecta drift entre docs, config y código. Usar PROACTIVELY tras cambios grandes o al... |
 | excel-digest | heavy | L2 | — | Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae estructura, formulas, patrones de da... |
-| expertise-asymmetry-judge | mid | L1 | — | Recommendation Tribunal judge — when draft falls in a domain the active user marks as `audit_level: blind`, force a r... |
+| expertise-asymmetry-judge | mid | L1 | — | 'Recommendation Tribunal judge — when draft falls in a domain the active user marks as `audit_level: blind`, force a ... |
 | factuality-judge | heavy | L1 | — | Truth Tribunal judge — factual accuracy of claims against verifiable sources |
 | feasibility-probe | mid | L3 | — | Validates spec feasibility by attempting a time-boxed prototype. Produces viability report with score, blocking secti... |
 | fiction-framing-judge | mid | L1 | — | Recommendation Tribunal judge — detects persona-shift plus content-equivalent framing over sensitive domain (SPEC-193) |
@@ -110,7 +112,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | meeting-confidentiality-judge | heavy | L1 | — | Juez de confidencialidad post-extraccion de reuniones. Valida que datos marcados como confidenciales NO se filtren a ... |
 | meeting-digest | mid | L2 | — | Digestion de transcripciones de reuniones (VTT, DOCX, TXT). Extrae datos estructurados de personas, contexto de negoc... |
 | meeting-risk-analyst | heavy | L1 | — | Analisis de riesgos post-digestion de reuniones. Cruza decisiones, compromisos y dinamicas extraidas de una transcrip... |
-| memory-agent | fast | L2 | — | Gestiona la memoria persistente de pm-workspace via lenguaje natural. |
+| memory-agent | fast | L2 | — | Gestiona la memoria persistente de pm-workspace via lenguaje natural. Busca decisiones pasadas, lecciones aprendidas,... |
 | memory-conflict-judge | mid | L1 | — | Recommendation Tribunal judge — detects when a draft recommendation contradicts the active user's auto-memory (feedba... |
 | mobile-developer | mid | L3 | — | Implementación de código mobile (Swift/iOS + Kotlin/Android + Flutter) siguiendo specs SDD aprobadas. Usar PROACTIVEL... |
 | model-upgrade-auditor | heavy | L1 | — | Audits agents, skills, and prompts for workarounds that newer models may no longer need. Proposes simplifications wit... |

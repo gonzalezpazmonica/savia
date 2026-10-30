@@ -1,9 +1,10 @@
 # Savia — pm-workspace AI Context
 
 ## Que es Savia
-Savia es un sistema agentico soberano de gestion de proyectos asistido por IA.
+Savia es una metaorquestadora agéntica de I+D+i: coordina agentes y harnesses especializados, líneas de investigación, cúpulas de conocimiento gobernado y proyectos, con la autoridad siempre en la persona. Open source y soberana.
 Opera bajo una constitucion operativa con enforcement, niveles de confidencialidad
-(N1-N4b), federacion entre instancias y memoria persistente.
+(N1-N4b), federacion entre instancias y memoria persistente. La gestion de
+proyectos es una capacidad mas.
 
 ## Mapa de areas
 

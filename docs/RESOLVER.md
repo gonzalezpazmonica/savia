@@ -17,28 +17,63 @@
 
 > Esta sección NO se auto-genera. Edita libremente. Mapea términos comunes / sinónimos en español/inglés al target canónico.
 
+> Agrupada por capacidad (SE-483): metaorquestación, investigación, conocimiento, desarrollo y proyectos.
+
+### Metaorquestación (harnesses y agentes)
+
 | Sinónimo / alias | Target canónico | Notas |
 |---|---|---|
-| "estado del sprint", "sprint status", "cómo va el sprint" | skill:sprint-management | |
-| "informe semanal", "weekly", "weekly report" | skill:weekly-report | |
-| "imputaciones", "horas", "timesheet" | skill:time-tracking-report | |
-| "facturas", "presupuesto", "coste" | skill:cost-management | |
-| "descomponer PBI", "split PBI", "tareas de un PBI" | skill:pbi-decomposition | Antes de descomponer, usar `skill:product-discovery` |
-| "PRD", "discovery", "JTBD" | skill:product-discovery | Pre-requisito de pbi-decomposition |
+| "orquestar agentes", "harness", "metaharness", "bucle de agentes" | skill:harness-architecture | Diseño antes que ejecución |
+| "lanzar en paralelo", "repartir trabajo entre agentes" | skill:parallel-dispatch | |
+| "plan con dependencias", "DAG de agentes" | skill:dag-scheduling | |
+| "estado del run", "board de runs" | skill:agent-runs-board | |
+| "tribunal", "segunda opinión", "validar por panel" | skill:consensus-validation | |
+| "revisión por tribunal", "Code Review Court" | agent:court-orchestrator | E1 SIEMPRE humano (Rule 8) |
+| "noche autónoma", "overnight", "tareas mientras duermo" | skill:overnight-sprint | Doble opt-in SPEC-186 |
+| "Anthropic caído", "failover local", "LocalAI" | skill:emergency-mode | |
 | "buscar comando", "qué comando uso", "router" | skill:smart-routing | Para descubrir entre 559+ comandos |
+
+### Investigación
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
+| "investiga", "experimento", "hipótesis", "preregistro" | skill:savia-labs | |
+| "investigación técnica", "evaluar herramienta nueva" | skill:tech-research-agent | Doble opt-in SPEC-186 |
+| "buscar en la web", "estado del arte" | skill:web-research | |
+
+### Conocimiento
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
+| "cúpula", "vault", "conocimiento gobernado" | skill:savia-vaults | |
+| "diseñar cúpula", "auditar cúpula" | agent:context-dome-manager | |
+| "memoria de Savia", "recordar", "consolidar memoria" | skill:savia-memory | |
+| "grafo de conocimiento", "impacto entre specs" | skill:knowledge-graph | |
+| "reunión Teams", "transcripción", "acta" | skill:meeting-transcript-extract | Triage al digester correcto post-extract |
+
+### Desarrollo
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
 | "diseñar arquitectura", "architecture", "decisión técnica" | agent:architect | |
 | "implementar en C#", ".NET", "EF Core" | agent:dotnet-developer | Requiere Spec SDD aprobada |
 | "implementar en Python", "FastAPI", "Django" | agent:python-developer | |
 | "revisar código", "code review", "quality gate" | agent:code-reviewer | E1 SIEMPRE humano (Rule 8) |
 | "tests faltantes", "cobertura", "test runner" | agent:test-runner | |
 | "antes de commit", "pre-commit", "guardian" | agent:commit-guardian | Bloqueante por defecto |
-| "tabla de horas", "Excel imputación" | skill:time-tracking-report | |
-| "memoria de Savia", "recordar", "consolidar memoria" | skill:savia-memory | |
-| "reunión Teams", "transcripción", "acta" | skill:meeting-transcript-extract | Triage al digester correcto post-extract |
-| "investigación técnica", "evaluar herramienta nueva" | skill:tech-research-agent | Doble opt-in SPEC-186 |
-| "noche autónoma", "overnight", "tareas mientras duermo" | skill:overnight-sprint | Doble opt-in SPEC-186 |
 | "auditar seguridad", "red team / blue team" | skill:adversarial-security | Doble opt-in SPEC-186 |
-| "Anthropic caído", "failover local", "LocalAI" | skill:emergency-mode | |
+
+### Proyectos (dominio de gestión de proyectos)
+
+| Sinónimo / alias | Target canónico | Notas |
+|---|---|---|
+| "estado del sprint", "sprint status", "cómo va el sprint" | skill:sprint-management | |
+| "informe semanal", "weekly", "weekly report" | skill:weekly-report | |
+| "imputaciones", "horas", "timesheet" | skill:time-tracking-report | |
+| "tabla de horas", "Excel imputación" | skill:time-tracking-report | |
+| "facturas", "presupuesto", "coste" | skill:cost-management | |
+| "descomponer PBI", "split PBI", "tareas de un PBI" | skill:pbi-decomposition | Antes de descomponer, usar `skill:product-discovery` |
+| "PRD", "discovery", "JTBD" | skill:product-discovery | Pre-requisito de pbi-decomposition |
 
 ## AUTO — generado desde frontmatter
 
@@ -46,7 +81,7 @@
 
 <!-- AUTO_BEGIN — do not edit; regenerate via scripts/resolver-md-generate.sh -->
 
-### Skills (138)
+### Skills (139)
 
 | Intent (skill) | Target | Cuándo usar |
 |---|---|---|
@@ -227,7 +262,7 @@
 | `dotnet-developer` | agent:dotnet-developer | Implementación de código C#/.NET siguiendo specs SDD aprobadas. Usar PROACTIVELY cuan... |
 | `drift-auditor` | agent:drift-auditor | Auditoría de convergencia repo: detecta drift entre docs, config y código. Usar PROAC... |
 | `excel-digest` | agent:excel-digest | Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae estr... |
-| `expertise-asymmetry-judge` | agent:expertise-asymmetry-judge | Recommendation Tribunal judge — when draft falls in a domain the active user marks as... |
+| `expertise-asymmetry-judge` | agent:expertise-asymmetry-judge | 'Recommendation Tribunal judge — when draft falls in a domain the active user marks a... |
 | `factuality-judge` | agent:factuality-judge | Truth Tribunal judge — factual accuracy of claims against verifiable sources |
 | `feasibility-probe` | agent:feasibility-probe | Validates spec feasibility by attempting a time-boxed prototype. Produces viability rep... |
 | `fiction-framing-judge` | agent:fiction-framing-judge | Recommendation Tribunal judge — detects persona-shift plus content-equivalent framing... |
@@ -244,7 +279,7 @@
 | `meeting-confidentiality-judge` | agent:meeting-confidentiality-judge | Juez de confidencialidad post-extraccion de reuniones. Valida que datos marcados como c... |
 | `meeting-digest` | agent:meeting-digest | Digestion de transcripciones de reuniones (VTT, DOCX, TXT). Extrae datos estructurados ... |
 | `meeting-risk-analyst` | agent:meeting-risk-analyst | Analisis de riesgos post-digestion de reuniones. Cruza decisiones, compromisos y dinami... |
-| `memory-agent` | agent:memory-agent | Gestiona la memoria persistente de pm-workspace via lenguaje natural. |
+| `memory-agent` | agent:memory-agent | Gestiona la memoria persistente de pm-workspace via lenguaje natural. Busca decisiones ... |
 | `memory-conflict-judge` | agent:memory-conflict-judge | Recommendation Tribunal judge — detects when a draft recommendation contradicts the a... |
 | `mobile-developer` | agent:mobile-developer | Implementación de código mobile (Swift/iOS + Kotlin/Android + Flutter) siguiendo spec... |
 | `model-upgrade-auditor` | agent:model-upgrade-auditor | Audits agents, skills, and prompts for workarounds that newer models may no longer need... |

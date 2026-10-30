@@ -184,7 +184,8 @@ wait_for_state() {
   : > "$SAVIA_PROBE_STATE"
   run_timed
   [ "$STATUS" -eq 0 ]
-  [[ "$OUT" == *"PM-Workspace Init"* ]]
+  [[ "$OUT" == *"Savia Init:"* ]]
+  [[ "$OUT" != *"PM-Workspace Init"* ]]
 }
 
 @test "edge: handles empty environment gracefully" {

@@ -29,6 +29,8 @@ python3 scripts/onboarding-plan.py present --fallback
 Imprime la frase corta de identidad de la fuente única (`.claude/profiles/savia.md`, marcador
 `<!-- identity:short -->`, SE-483) y la pregunta abierta. Se dice tal cual. Si la fuente aún no tiene
 el marcador, el motor imprime «Soy Savia.» y avisa por stderr. Nunca escribir otra versión de la identidad aquí.
+Si es el primer contacto de la sesión (sin perfil y sin presentación previa), antes se dice la presentación
+canónica de `.claude/profiles/savia.md` § Primera impresión (bloque `<!-- identity:intro -->`), literal.
 
 Respuesta libre: no se ofrece lista de roles. Después, una sola pregunta: cómo quiere que la llame.
 
