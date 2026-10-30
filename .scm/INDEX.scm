@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 3d3ae2a6264d | resources: 1450
+> hash: 6c3fbe45a509 | resources: 1450
 > 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -953,7 +953,7 @@
 [planning] product-discovery — análisis,descomponer,jtbd,pbis,producto — skill:.claude/skills/product-discovery/SKILL.md
 [planning] professional-domain — cargar,concreta,controlling,criterio,dominio — skill:.claude/skills/professional-domain/SKILL.md
 [planning] profile-discover — abtop,auto,discover,discovery,multi — script:scripts/profile-discover.sh
-[planning] profile-setup — configuración,conoce,conversación,natural,perfil — cmd:.claude/commands/profile-setup.md
+[planning] profile-setup — adaptativo,configura,cual,oficio,onboarding — cmd:.claude/commands/profile-setup.md
 [planning] profile-show — actual,muestra,perfil,savia — cmd:.claude/commands/profile-show.md
 [planning] profile-switch — activo,cambia,cambiar,perfil,savia — cmd:.claude/commands/profile-switch.md
 [planning] project-activate — activa,active,activo,actualiza,contexto — cmd:.claude/commands/project-activate.md
