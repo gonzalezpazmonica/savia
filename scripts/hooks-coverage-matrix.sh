@@ -83,10 +83,14 @@ if os.path.isdir(hooks_dir):
 GIT_HOOK_MITIGATED = {
     "block-force-push.sh",       # run-hook.sh block-force-push in pre-push
     "block-credential-leak.sh",  # TS_GUARD also, belt+suspenders
-    "compliance-gate.sh",        # git pre-commit calls compliance-gate.sh
+    "compliance-gate.sh",        # inerte: git pre-commit ejecuta .claude/compliance/runner.sh (#1413)
     "prompt-hook-commit.sh",     # git commit-msg calls prompt-hook-commit.sh
     "pre-commit-review.sh",      # git pre-commit calls pre-commit-review.sh
     "stop-quality-gate.sh",      # git pre-commit calls stop-quality-gate.sh
+}
+# Hooks registrados que ya no evalúan nada: la fila lo dice para que no cuenten como control activo.
+GIT_HOOK_NOTE = {
+    "compliance-gate.sh": "sin efecto (exit 0); compliance en git pre-commit + CI Validate workspace",
 }
 CI_JOB_MITIGATED = {
     "post-edit-lint.sh",
@@ -141,7 +145,7 @@ for event, entries in hooks_cfg.items():
                 mitigacion = ts_name
             elif script in GIT_HOOK_MITIGATED:
                 cobertura = "GIT_HOOK"
-                mitigacion = "git pre-commit/pre-push"
+                mitigacion = GIT_HOOK_NOTE.get(script, "git pre-commit/pre-push")
             elif script in CI_JOB_MITIGATED:
                 cobertura = "CI_JOB"
                 mitigacion = "CI validate-ci-local.sh"
