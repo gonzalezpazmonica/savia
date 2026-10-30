@@ -6,11 +6,11 @@
 #
 # --clean-clone [--root DIR] — SE-487 R3: los ficheros versionados que se cargan
 # al arrancar no llevan datos de ninguna persona. Revisa CLAUDE.md, sus @imports
-# versionados, AGENTS.md, .opencode/CLAUDE.md y docs/critical-facts.md. Falla si
-# alguno contiene:
+# versionados (también anidados, hasta 5 niveles), AGENTS.md, .opencode/CLAUDE.md,
+# docs/critical-facts.md y la instantánea docs/llms-full.txt. Falla si alguno contiene:
 #   - un slug de .claude/profiles/users/* distinto de «template» (perfiles locales);
 #   - el nombre (identity.md → name:) de esos perfiles locales;
-#   - una ruta personal: /home/<x>/, /Users/<x>/ o C:\Users\<x>\;
+#   - una ruta personal: /home/<x>, /Users/<x> (también /mnt/c/Users/<x>) o C:\Users\<x>, C:/Users/<x>;
 #   - restos del generador antiguo de critical-facts («profile slug `x`», «activated AAAA-»).
 # Las dos últimas reglas no dependen de datos locales: funcionan igual en la CI.
 # Fuera de un repo git se revisan todos los @imports existentes.
@@ -36,7 +36,8 @@ clean_clone_guard() {
 
   # ── Ficheros de arranque ─────────────────────────────────────────────────────
   REQUIRED=(CLAUDE.md docs/critical-facts.md)
-  OPTIONAL=(AGENTS.md .opencode/CLAUDE.md)
+  # docs/llms-full.txt no se carga al arrancar, pero es la instantánea pública de estos ficheros.
+  OPTIONAL=(AGENTS.md .opencode/CLAUDE.md docs/llms-full.txt)
   for f in "${REQUIRED[@]}"; do
     [[ -f "$f" ]] || { echo "ERROR: falta el fichero de arranque $f" >&2; return 2; }
   done
@@ -45,24 +46,38 @@ clean_clone_guard() {
 
   FILES=("${REQUIRED[@]}")
   for f in "${OPTIONAL[@]}"; do [[ -f "$f" ]] && FILES+=("$f"); done
-  # @imports de CLAUDE.md: los gitignored (perfil activo, memoria local) son locales por diseño.
-  while IFS= read -r imp; do
-    [[ -f "$imp" ]] || continue
-    if $is_git && git check-ignore -q "$imp" 2>/dev/null; then continue; fi
-    [[ " ${FILES[*]} " == *" $imp "* ]] && continue
-    FILES+=("$imp")
-  done < <(sed -n 's/^@\([^[:space:]]*\).*/\1/p' CLAUDE.md)
+  # @imports de CLAUDE.md y, como Claude Code, los anidados (hasta 5 niveles). Los
+  # gitignored (perfil activo, memoria local) son locales por diseño.
+  local -a level next
+  local depth
+  level=(CLAUDE.md)
+  for depth in 1 2 3 4 5; do
+    next=()
+    for f in "${level[@]}"; do
+      while IFS= read -r imp; do
+        [[ -f "$imp" ]] || continue
+        if $is_git && git check-ignore -q "$imp" 2>/dev/null; then continue; fi
+        [[ " ${FILES[*]} " == *" $imp "* ]] && continue
+        FILES+=("$imp"); next+=("$imp")
+      done < <(sed -n 's/^@\([^[:space:]]*\).*/\1/p' "$f")
+    done
+    [[ ${#next[@]} -eq 0 ]] && break
+    level=("${next[@]}")
+  done
 
   # ── Datos de perfiles locales ────────────────────────────────────────────────
+  # Términos de menos de 3 caracteres darían falsos positivos con -w: se omiten.
   TERMS=()
+  local profiles=0
   if [[ -d .claude/profiles/users ]]; then
     for d in .claude/profiles/users/*/; do
       [[ -d "$d" ]] || continue
       slug="$(basename "$d")"
       [[ "$slug" == "template" ]] && continue
-      TERMS+=("$slug")
-      name="$(awk '/^name:/{sub(/^name:[[:space:]]*/,""); gsub(/["]/,""); print; exit}' "$d/identity.md" 2>/dev/null)"
-      [[ -n "$name" ]] && TERMS+=("$name")
+      profiles=$((profiles+1))
+      [[ ${#slug} -ge 3 ]] && TERMS+=("$slug")
+      name="$(awk '/^name:/{sub(/^name:[[:space:]]*/,""); sub(/[[:space:]]+#.*$/,""); gsub(/["\047\r]/,""); sub(/[[:space:]]+$/,""); print; exit}' "$d/identity.md" 2>/dev/null)"
+      [[ ${#name} -ge 3 ]] && TERMS+=("$name")
     done
   fi
 
@@ -74,7 +89,7 @@ clean_clone_guard() {
     done
     while IFS= read -r hit; do
       _cc_report "$f" "ruta personal ${hit}"
-    done < <(grep -noE '/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/|[A-Za-z]:\\+Users\\+[A-Za-z0-9._ -]+\\' "$f" 2>/dev/null | cut -d: -f1 | sed 's/^/en la línea /')
+    done < <(grep -noE '/(home|Users)/[A-Za-z0-9._-]+([^A-Za-z0-9._<-]|$)|[A-Za-z]:[\\/]+Users[\\/]+[A-Za-z0-9._-]' "$f" 2>/dev/null | cut -d: -f1 | sort -u | sed 's/^/en la línea /')
     if grep -qE 'profile slug `|activated [0-9]{4}-[0-9]{2}-[0-9]{2}' "$f"; then
       _cc_report "$f" "identidad de una persona activa (formato del generador antiguo de critical-facts)"
     fi
@@ -84,7 +99,11 @@ clean_clone_guard() {
     echo "clean-clone: $FOUND hallazgo(s). Los datos de la persona van en ficheros locales gitignored (CLAUDE.local.md, perfil activo)." >&2
     return 1
   fi
-  echo "PASS clean-clone: ${#FILES[@]} ficheros de arranque sin datos personales"
+  if [[ "$profiles" -eq 0 ]]; then
+    echo "PASS clean-clone: ${#FILES[@]} ficheros de arranque sin rutas personales ni identidad del generador antiguo (0 perfiles locales: reglas de slug y nombre no evaluadas)"
+  else
+    echo "PASS clean-clone: ${#FILES[@]} ficheros de arranque sin datos personales ($profiles perfiles locales evaluados)"
+  fi
   return 0
 }
 

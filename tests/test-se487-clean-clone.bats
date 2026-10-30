@@ -110,6 +110,61 @@ run_hook() {
   [ "$status" -eq 0 ]
 }
 
+@test "AC-3 negative: home path without trailing slash inside backticks fails" {
+  fixture_tree "$TMP/t"
+  rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
+  echo '`ANDROID_HOME=/home/someone`' >> "$TMP/t/CLAUDE.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+}
+
+@test "AC-3 negative: C:/Users/<name> with forward slashes fails" {
+  fixture_tree "$TMP/t"
+  rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
+  echo 'Git Bash en C:/Users/someone/AppData' >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/extra.md: ruta personal"* ]]
+}
+
+@test "AC-3 negative: nested @import (import of an import) is scanned" {
+  fixture_tree "$TMP/t"
+  echo '@docs/nested.md' >> "$TMP/t/docs/extra.md"
+  echo 'Usuario: zz-fixture' > "$TMP/t/docs/nested.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/nested.md"* ]]
+}
+
+@test "AC-3 negative: public snapshot docs/llms-full.txt is scanned" {
+  fixture_tree "$TMP/t"
+  rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
+  echo 'ANDROID_HOME=/home/someone/Android/Sdk' > "$TMP/t/docs/llms-full.txt"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/llms-full.txt"* ]]
+}
+
+@test "AC-3 negative: profile name with trailing comment and CRLF is still detected" {
+  fixture_tree "$TMP/t"
+  printf 'name: "Quetzal Fixturina"  # nombre\r\n' > "$TMP/t/.claude/profiles/users/zz-fixture/identity.md"
+  # El slug no aparece: solo el nombre puede disparar la regla.
+  echo "Hola, Quetzal Fixturina." >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+}
+
+@test "edge: PASS says when slug and name rules could not run (no local profiles)" {
+  fixture_tree "$TMP/t"
+  rm -rf "$TMP/t/.claude/profiles/users/zz-fixture"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 perfiles locales: reglas de slug y nombre no evaluadas"* ]]
+  fixture_tree "$TMP/u"
+  run bash "$GUARD" --clean-clone --root "$TMP/u"
+  [[ "$output" == *"1 perfiles locales evaluados"* ]]
+}
+
 @test "fail-closed: missing CLAUDE.md is an error, not a pass" {
   fixture_tree "$TMP/t"
   rm -f "$TMP/t/CLAUDE.md"
@@ -174,4 +229,13 @@ run_hook() {
   run_hook "$TMP/t"
   [[ "$OUT" == *"Sin perfil: no sé quién eres"* ]]
   python3 -c 'import json,sys; json.loads(sys.argv[1])' "$OUT"
+}
+
+@test "AC-2 negative: backslashes and control chars in the profile name keep the JSON valid" {
+  fixture_tree "$TMP/t"
+  printf 'active_slug: "zz-fixture"\n' > "$TMP/t/.claude/profiles/active-user.md"
+  printf 'name: Que\\tzal\\x Fix\tturina\n' > "$TMP/t/.claude/profiles/users/zz-fixture/identity.md"
+  run_hook "$TMP/t"
+  python3 -c 'import json,sys; json.loads(sys.argv[1])' "$OUT"
+  [[ "$OUT" == *"slug zz-fixture"* ]]
 }
