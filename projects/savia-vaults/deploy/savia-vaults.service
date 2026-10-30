@@ -1,0 +1,27 @@
+# Plantilla de la unidad de usuario de systemd para el servicio A2A de SaviaVaults (SE-480).
+# Instalación y rutas: docs/rag.md. Ajusta WorkingDirectory y PATH a tu máquina antes de instalarla.
+[Unit]
+Description=Savia Vaults — Context Dome Server (A2A, local-first, CRIT-001)
+Documentation=file://%h/savia/projects/savia-vaults/CLAUDE.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/savia
+Environment=HOME=%h
+# Con nvm, pon aquí el bin de tu versión de Node: %h/.nvm/versions/node/<versión>/bin
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# SE-480: --rag-autosync 15 mantiene al día el índice RAG de las cúpulas habilitadas (sync incremental cada 15 min).
+ExecStart=/usr/bin/env node projects/savia-vaults/dist/cli/index.js serve --transport a2a --host 127.0.0.1 --port 8923 --domes projects/savia-vaults/savia-vaults.domes.json --rag-autosync 15
+# SE-480 R3: siempre en pie, también tras una salida limpia inesperada.
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/.savia/vaults/server.log
+StandardError=append:%h/.savia/vaults/server.log
+# CRIT-001: solo loopback (--host 127.0.0.1), sin egress. Hardening.
+NoNewPrivileges=true
+MemoryMax=1G
+
+[Install]
+WantedBy=default.target
