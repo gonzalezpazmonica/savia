@@ -37,6 +37,8 @@ cd savia && opencode
 
 **Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
+Requisito no Windows: **Git for Windows (inclui Git Bash)**. Se o Claude Code disser `Git Bash wasn't found`, instale o Git (https://git-scm.com/downloads/win) ou defina `CLAUDE_CODE_GIT_BASH_PATH` com o caminho do seu `bash.exe` e abra uma sessão nova.
+
 A Savia adapta-se ao seu papel — PM, developer, QA, Product Owner, CEO — e ao seu idioma. Compativel com Azure DevOps, Jira e Git-native (Savia Flow).
 
 ---
