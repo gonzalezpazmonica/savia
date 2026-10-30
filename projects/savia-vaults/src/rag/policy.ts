@@ -8,6 +8,8 @@ import { RAG_DEFAULTS, type ChunkMeta, type RagDomeConfig, type ResolvedRagConfi
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const MRR_TOLERANCE = 0.02;
 export const STALE_RATIO_ALERT = 0.1;
+/** SE-410 P7: «lagHours < 24 con cron activo». */
+export const LAG_HOURS_ALERT = 24;
 
 export function resolveRagConfig(
   dome: RagDomeConfig | undefined,
@@ -74,19 +76,26 @@ export function promotionDecision(input: PromotionInput): { promote: boolean; re
 export interface SloInput {
   enabled: boolean;
   hasGeneration: boolean;
+  /** Existe algún índice en disco (activa, sombra o anterior), aunque la cúpula esté deshabilitada. */
+  indexed?: boolean;
   totalDocs: number;
   pendingDocs: number;
+  lagHours?: number;
   digestMatch: boolean;
 }
 
 export function sloStatus(s: SloInput): { ok: boolean; staleRatio: number; alerts: string[] } {
   const staleRatio = s.totalDocs ? s.pendingDocs / s.totalDocs : 0;
   const alerts: string[] = [];
-  if (!s.enabled) return { ok: true, staleRatio, alerts };
-  if (!s.hasGeneration) alerts.push('cúpula habilitada sin generación activa');
-  else {
+  const indexed = s.hasGeneration || Boolean(s.indexed);
+  if (!s.enabled && !indexed) return { ok: true, staleRatio, alerts };
+  // Una cúpula con índice y rag.enabled=false queda fuera del cron: el índice envejece sin aviso.
+  if (!s.enabled) alerts.push('cúpula con índice y rag.enabled=false: el cron la ignora y el índice envejece');
+  if (s.enabled && !s.hasGeneration) alerts.push('cúpula habilitada sin generación activa');
+  else if (s.hasGeneration) {
     if (staleRatio > STALE_RATIO_ALERT) alerts.push(`staleRatio ${staleRatio.toFixed(2)} > ${STALE_RATIO_ALERT}`);
-    if (!s.digestMatch) alerts.push('digest del modelo distinto del contrato activo (P4)');
+    if ((s.lagHours ?? 0) >= LAG_HOURS_ALERT) alerts.push(`lagHours ${(s.lagHours ?? 0).toFixed(1)} >= ${LAG_HOURS_ALERT}`);
+    if (s.enabled && !s.digestMatch) alerts.push('digest del modelo distinto del contrato activo (P4)');
   }
   return { ok: alerts.length === 0, staleRatio, alerts };
 }
