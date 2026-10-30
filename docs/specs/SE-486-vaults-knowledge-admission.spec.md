@@ -79,7 +79,13 @@ Semántica de varias entradas:
 
 ### R2 — Ledger de admisión
 
-El ledger vive en el **directorio de estado del servidor**, `~/.savia-vaults/admission/<cúpula>/`, hermano del índice RAG (`defaultRagHome()` = `~/.savia-vaults/rag`) y protegido con `ensureSafeHome`: **fuera de cualquier cúpula**. Al arrancar, el servidor comprueba que esa ruta no queda bajo la raíz de ninguna cúpula registrada; si queda, falla con `ADMIT_LEDGER_INSIDE_DOME`. Así ni `vault_write`, ni A2A, ni el repo sincronizado de la cúpula pueden alcanzarlo. La clave de firma vive en el mismo directorio de estado, nunca dentro de la cúpula. Los efectos de esta ubicación:
+El ledger vive en el **directorio de estado del servidor**, `~/.savia-vaults/admission/<cúpula>/`, hermano del índice RAG (`defaultRagHome()` = `~/.savia-vaults/rag`) y protegido con `ensureSafeHome`: **fuera de cualquier cúpula**. La comprobación de que esa ruta (resuelta con `realpath`) no queda bajo la raíz `realpath` de ninguna cúpula registrada se hace al arrancar, en `dome create` y en cada recarga del registro. Si alguna cúpula la contiene:
+- el servidor **no** se aborta;
+- `admission set` y `repair` fallan con `ADMIT_LEDGER_INSIDE_DOME`;
+- las cúpulas **con** ledger entran en admisión degradada, con detalle `admission_ledger_inside_dome`;
+- las cúpulas **sin** ledger se comportan como en main (AC-11);
+- `vault_health` lo avisa;
+- la operadora puede reubicar el directorio de estado con `SAVIA_ADMISSION_HOME`, que indica una ubicación, no una credencial. Así ni `vault_write`, ni A2A, ni el repo sincronizado de la cúpula pueden alcanzarlo. La clave de firma vive en el mismo directorio de estado, nunca dentro de la cúpula. Los efectos de esta ubicación:
 
 - el ledger no viaja con las notas (exportación, copias, federación);
 - no se respalda con `backup` de la cúpula: necesita su propio respaldo, que se documenta en la implementación.
@@ -120,7 +126,7 @@ Reglas del ledger:
 - **Reparación.** Solo por CLI local: `savia-vaults admission repair <cúpula>`, con `authorizeAdmit` y TTY:
   1. muestra el diagnóstico: qué comprobación falla y los `seq` de checkpoint y ledger, sin contenido;
   2. propone volver a anclar en el **mayor prefijo válido** del ledger, con cadena y firmas correctas. Si el prefijo válido está vacío, se vuelve a empezar con `prev` = hash cero y `seq` = 1, y la entrada `REANCHOR` es la primera;
-  3. tras confirmar, descarta las entradas posteriores inválidas (las archiva aparte, no las borra) y añade una entrada firmada de tipo `REANCHOR`. Lleva `kind: 'REANCHOR'`, `target: null`, `digest: null` y `admission: null`, junto con `reason`, el `seq` y el `head` anteriores y el sujeto. Las entradas `REANCHOR` **no** cuentan como decisión de ningún objetivo, así que no entran en el cálculo de la decisión vigente ni en `negativeDigests`;
+  3. tras confirmar, descarta las entradas posteriores inválidas (las archiva aparte, no las borra) y añade, bajo el lock de admisión, una entrada firmada de tipo `REANCHOR` con `seq` = `seq` del checkpoint + 1, para que ningún `seq` se reutilice. Lleva `kind: 'REANCHOR'`, `target: null`, `digest: null` y `admission: null`, junto con `reason`, el `seq` y el `head` anteriores y el sujeto. Las entradas `REANCHOR` **no** cuentan como decisión de ningún objetivo, así que no entran en el cálculo de la decisión vigente ni en `negativeDigests`;
   4. reescribe checkpoint y marca.
 
   No distingue por sí misma un truncado malicioso de un fallo benigno; eso lo decide la persona con el diagnóstico delante. Por eso queda auditado.
@@ -139,7 +145,7 @@ Reglas del ledger:
 - `admin` **no** implica `admit`, y `maxRole` no lo concede.
 - Para otorgarlo solo hay CLI local: `user grant-admit <u> <cúpula>` y `user revoke-admit <u> <cúpula>`. Las dos rechazan usuarios `service`.
 - `user token-create <u> --admit [--expires-days N]`:
-  - N ≤ 7, por defecto 1;
+  - N entero entre 1 y 7, por defecto 1; si no, falla con `ADMIT_TTL_INVALID` (o `ADMIT_TTL_EXCEEDED` si es mayor que 7);
   - el secreto se muestra una vez;
   - no admite los formatos de salida para la configuración MCP.
 - `domes.json` gana `owner?: subjectId`:
@@ -156,7 +162,7 @@ Reglas del ledger:
 - Cómo se usa:
   - La credencial de admitir se pide por prompt en la TTY, nunca por argv ni por variable de entorno. Si `stdin` no es una TTY, la CLI termina con `ADMIT_REQUIRES_TTY`.
   - **Punto de prueba**, sin atajos:
-    - el núcleo `recordDecision(ctx, auth: AdmitAuthorization, input)` solo acepta un `AdmitAuthorization`, y ese objeto solo lo construye `authorizeAdmit()`;
+    - el núcleo `recordDecision(ctx, auth: AdmitAuthorization, input)` solo acepta un `AdmitAuthorization`. El tipo estructural no basta: hace falta una **marca en tiempo de ejecución**. `authorizeAdmit()` registra cada autorización emitida en un `WeakSet` privado del módulo, y `recordDecision` comprueba que el objeto pertenece a ese conjunto y que no ha caducado (≤ 5 min). Si no, falla con `ADMIT_FORBIDDEN` y no escribe;
     - los tests llaman a `authorizeAdmit(token)` con la credencial como argumento de función, en un directorio de estado temporal;
     - la capa de prompt recibe el lector de TTY por inyección de dependencias en el código, **no** por variable de entorno ni por flag.
   - Un objetivo se confirma tecleando su id corto.
@@ -176,7 +182,7 @@ Reglas del ledger:
   - `SUPERSEDED` sigue la regla actual de `includeStale`;
   - `RESTRICTED`: en `standard` se sirve con advertencia y con el `scope` visible; en `governed` se descarta y se cuenta en `degradation.admission`. F1 **no** define un parámetro de propósito: evaluar el alcance contra un propósito declarado corresponde a F3 (ContextBundle).
 - `rag/format.ts` antepone una advertencia a cada hit `UNREVIEWED`, `RESTRICTED` (con su alcance) o con `coverage` (`extracción parcial: n/m unidades`).
-- `DomeOutcome.policyDigest = sha256(cabeza del ledger + excludeStatuses + perfil)`.
+- Campo **nuevo** `DomeOutcome.policyDigest = sha256(cabeza del ledger + excludeStatuses + perfil)`: hoy `DomeOutcome` no lo tiene.
 - El hash de la fuente virtual de Files **no** incluye la admisión.
 
 ### R6 — Perfil `governed`
@@ -222,11 +228,15 @@ Reglas del ledger:
   - controles positivos: `grant-admit` sobre un humano sale con 0 y escribe `admit: true` en su permiso de esa cúpula; `token-create --admit --expires-days 7` crea una credencial con `admit: true` y caducidad ≤ 7 días;
   - negativos con error concreto: `grant-admit` sobre `service` falla con `ADMIT_SERVICE_FORBIDDEN` y `savia-vaults.users.json` queda idéntico byte a byte; `--expires-days 8` falla con `ADMIT_TTL_EXCEEDED`;
   - `admission set` con `stdin` no TTY falla con `ADMIT_REQUIRES_TTY` y el ledger no cambia;
-  - canal de la credencial: con un lector de TTY inyectado que entrega un token `admit` válido, `admission set` sale con 0 y escribe la entrada (control positivo). Si el mismo token llega por `--token` o por `SAVIA_AUTH_TOKEN`, la CLI lo detecta y falla con `ADMIT_CREDENTIAL_CHANNEL_FORBIDDEN`, sin escribir;
+  - canal de la credencial: con un lector de TTY inyectado que entrega un token `admit` válido, `admission set` sale con 0 y escribe la entrada (control positivo). Si se pasa `--token`, la CLI falla con `ADMIT_CREDENTIAL_CHANNEL_FORBIDDEN` y no escribe. `SAVIA_AUTH_TOKEN` **se ignora**: la CLI nunca lee de ahí la credencial de admitir. Con esa variable definida y `stdin` no TTY, falla con `ADMIT_REQUIRES_TTY`. Todo fallo de la CLI sale con código ≠ 0, y los tests lo comprueban junto al código textual;
 - **AC-6 (sin superficie de agente):**
   - un test enumera las herramientas MCP y las rutas A2A y HTTP registradas, y falla si alguna importa el módulo de escritura del ledger. Comprueba también que no acepta `admission` como entrada;
-  - el recorrido de imports es **transitivo**, sobre el grafo de módulos que resuelve el compilador. Además, un test en tiempo de ejecución arranca el servidor MCP con un espía en la función de escritura del ledger, invoca cada herramienta con entradas válidas y comprueba que no se llama nunca. Así se cubren los imports dinámicos y los envoltorios;
-  - aserción estructural con control positivo: `path.relative(raízDeCúpula, rutaDelLedger)` empieza por `..` para cada cúpula registrada. El control positivo es una cúpula de prueba cuya raíz contiene la ruta del ledger: el arranque falla con `ADMIT_LEDGER_INSIDE_DOME`;
+  - el recorrido de imports es **transitivo**, sobre el grafo de módulos que resuelve el compilador. Además, un test en tiempo de ejecución sustituye el módulo escritor del ledger con `vi.mock` (que también intercepta enlaces ESM), arranca el servidor MCP, invoca cada herramienta con entradas válidas y comprueba que el escritor no se llama nunca. Así se cubren los imports dinámicos y los envoltorios;
+  - aserción estructural con control positivo: `path.relative(realpath(raízDeCúpula), realpath(rutaDelLedger))` empieza por `..` para cada cúpula registrada. Controles positivos:
+    - una cúpula de prueba cuya raíz contiene la ruta del ledger;
+    - una cúpula cuya raíz es un enlace simbólico al directorio de estado.
+
+    En los dos, `admission set` falla con `ADMIT_LEDGER_INSIDE_DOME` y la cúpula con ledger sale degradada;
   - `vault_write` con una ruta que intenta salir hacia el directorio de estado (`../`, ruta absoluta o enlace simbólico) se rechaza y el ledger no cambia.
 - **AC-7 (ledger íntegro):** en cada uno de estos casos, con `standard` y sin `includeStale`, **todos** los hits de la cúpula salen exactamente `UNREVIEWED` y `DomeOutcome.detail` contiene `admission_ledger_invalid`. Con `governed`, la cúpula devuelve 0 hits con estado degradado:
   - (a) una entrada con la firma alterada;
@@ -271,11 +281,23 @@ Reglas del ledger:
   - `dome create --owner <service>` falla con `ADMIT_SERVICE_FORBIDDEN` y no registra la cúpula;
   - `dome governance` deja una entrada de auditoría;
   - con el ledger inválido, `standard` e `includeStale`, un hit sustituido sale `SUPERSEDED`;
-  - con un fallo simulado entre los pasos 2 y 3 de la escritura, la siguiente escritura pone la marca.
+  - con un fallo simulado entre los pasos 2 y 3 de la escritura, la siguiente escritura pone la marca;
+  - `--expires-days` acepta solo enteros entre 1 y 7. `0`, `-1`, `abc` y `8` fallan con `ADMIT_TTL_INVALID` o `ADMIT_TTL_EXCEEDED`;
+  - `admission set ... REJECTED` sobre un objetivo cuyo digest coincide con el de otro objetivo `ACCEPTED` advierte de ese otro objetivo, que no se ve afectado (regla 3);
+- **AC-17 (autorización no falsificable):**
+  - `recordDecision` con un literal estructuralmente idéntico a un `AdmitAuthorization` falla con `ADMIT_FORBIDDEN` y deja el ledger intacto, byte a byte;
+  - con un objeto emitido por `authorizeAdmit()`, escribe. Esa es la aserción que falla si se quita la marca;
+  - un objeto emitido hace más de 5 min falla con `ADMIT_FORBIDDEN`;
+- **AC-18 (cúpula legada que contiene el estado):** con una cúpula sin ledger cuya raíz es un ancestro del directorio de estado (por ejemplo `$HOME`):
+  - el servidor arranca;
+  - `vault_rag` de esa cúpula da los mismos resultados que main, más `admission: UNREVIEWED`;
+  - `vault_health` avisa;
+  - `admission set` falla con `ADMIT_LEDGER_INSIDE_DOME`;
+- **AC-19 (`policyDigest`):** `DomeOutcome.policyDigest` cambia tras `admission set` y tras `dome governance`, y no cambia tras una consulta sin escrituras.
 
 ### Regla de los AC
 
-- **AC-14:** cada AC (AC-1 a AC-13, AC-15 y AC-16), salvo AC-6, tiene al menos una aserción **semántica** que falla contra main: un valor de estado, un código de error o un recuento. **No** cuenta como fallo que un import no compile o que un comando no exista, salvo que la aserción compruebe precisamente ese código de error. AC-6 es un invariante y se valida con **dos** mutaciones, cada una de las cuales debe hacer fallar su test: (i) colocar la ruta del ledger bajo una raíz de cúpula, que hace fallar la aserción estructural; (ii) una herramienta MCP de prueba que importa el módulo de escritura a través de un envoltorio, que hace fallar el recorrido transitivo y el espía. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
+- **AC-14:** cada AC (AC-1 a AC-13 y AC-15 a AC-19), salvo AC-6, tiene al menos una aserción **semántica** que falla contra main: un valor de estado, un código de error o un recuento. **No** cuenta como fallo que un import no compile o que un comando no exista, salvo que la aserción compruebe precisamente ese código de error. AC-6 es un invariante y se valida con **dos** mutaciones, cada una de las cuales debe hacer fallar su test: (i) colocar la ruta del ledger bajo una raíz de cúpula, que hace fallar la aserción estructural; (ii) una herramienta MCP de prueba que importa el módulo de escritura a través de un envoltorio, que hace fallar el recorrido transitivo y el espía. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
 
 ## Medidas que se dejan en la PR de implementación
 
@@ -283,6 +305,10 @@ Reglas del ledger:
 - Contador `admission_invalidated_by_edit` en `vault_health`, para decidir más adelante si atar la admisión a un subconjunto de campos en lugar del digest completo.
 
 ## Riesgo residual (declarado)
+
+- `SAVIA_VAULTS_ADMISSION=off` se lee del entorno del proceso servidor. Quien edite la configuración del cliente MCP (`env`) puede desactivar la admisión en las cúpulas `standard`. En `governed` no tiene efecto (R7).
+- Durante un `admission repair`, un lector puede ver un truncado transitorio. Reintenta una vez, pero puede degradar la cúpula unos instantes (en `governed`, 0 hits).
+- La marca `initialized` vive en el registro de cúpulas (`savia-vaults.domes.json` o el registro que use el servidor), que tampoco está en ninguna cúpula. Entre un fallo de los pasos 2 y 3 de la primera escritura y la siguiente escritura, borrar el checkpoint es indistinguible del caso (f).
 
 `type: 'human'` **no es una barrera por sí solo**: `user create` y la migración v1 crean sujetos `human` por defecto, y el token que usa un agente suele ser de uno de ellos. Las barreras reales son tres: `admit` en el permiso **y** en la credencial, la TTY y la vida corta. La comprobación de tipo solo impide el caso explícito de `service`.
 
