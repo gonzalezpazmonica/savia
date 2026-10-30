@@ -125,8 +125,8 @@ Reglas del ledger:
   - en `governed`, la cúpula **no sirve ningún hit** (`status` degradado) hasta que se repare;
 - **Reparación.** Solo por CLI local: `savia-vaults admission repair <cúpula>`, con `authorizeAdmit` y TTY:
   1. muestra el diagnóstico: qué comprobación falla y los `seq` de checkpoint y ledger, sin contenido;
-  2. propone volver a anclar en el **mayor prefijo válido** del ledger, con cadena y firmas correctas. Si el prefijo válido está vacío, se vuelve a empezar con `prev` = hash cero y `seq` = 1, y la entrada `REANCHOR` es la primera;
-  3. tras confirmar, descarta las entradas posteriores inválidas (las archiva aparte, no las borra) y añade, bajo el lock de admisión, una entrada firmada de tipo `REANCHOR` con `seq` = `seq` del checkpoint + 1, para que ningún `seq` se reutilice. Lleva `kind: 'REANCHOR'`, `target: null`, `digest: null` y `admission: null`, junto con `reason`, el `seq` y el `head` anteriores y el sujeto. Las entradas `REANCHOR` **no** cuentan como decisión de ningún objetivo, así que no entran en el cálculo de la decisión vigente ni en `negativeDigests`;
+  2. propone volver a anclar en el **mayor prefijo válido** del ledger, con cadena y firmas correctas. Si el prefijo válido está vacío, `REANCHOR` es la primera entrada viva, con `prev` = hash cero, y su `seq` sigue la regla del paso 3;
+  3. tras confirmar, descarta las entradas posteriores inválidas (las archiva aparte, no las borra) y añade, bajo el lock de admisión, una entrada firmada de tipo `REANCHOR` con `seq` = max(`seq` del checkpoint, último `seq` visto) + 1, **también con el prefijo vacío**, para que ningún `seq` se reutilice. El verificador de cadena exige `seq` consecutivos **salvo** justo antes de una `REANCHOR`, que puede saltar y registra el hueco en `lostRange`. Como `repair` siempre escribe checkpoint y marca, un ledger reparado nunca cae en el caso (f) de AC-7, el de «empieza en `seq` 1 y no tiene marca». Lleva `kind: 'REANCHOR'`, `target: null`, `digest: null` y `admission: null`, junto con `reason`, el `seq` y el `head` anteriores y el sujeto. Las entradas `REANCHOR` **no** cuentan como decisión de ningún objetivo, así que no entran en el cálculo de la decisión vigente ni en `negativeDigests`;
   4. reescribe checkpoint y marca.
 
   No distingue por sí misma un truncado malicioso de un fallo benigno; eso lo decide la persona con el diagnóstico delante. Por eso queda auditado.
@@ -273,7 +273,8 @@ Reglas del ledger:
   - `admission repair` vuelve a anclar en el último prefijo válido, añade `REANCHOR` firmada y deja la cúpula válida;
   - el informe de reparación da el **rango de `seq` perdido** (último válido + 1 .. `seq` del checkpoint) y declara que su contenido es irrecuperable. No dice qué decisiones eran: el test comprueba el rango, y que una decisión `REJECTED` que estaba en ese rango ya no se aplica tras la reparación;
   - sin `authorizeAdmit`, falla y no toca nada;
-  - las entradas descartadas quedan archivadas, no borradas.
+  - las entradas descartadas quedan archivadas, no borradas;
+  - **prefijo vacío** (todas las entradas inválidas): la `REANCHOR` resultante tiene `prev` = hash cero y `seq` = `seq` del checkpoint + 1. El ledger reparado verifica como válido con ese hueco, y la cúpula queda marcada como inicializada.
 - **AC-16 (requisitos sin AC hasta ahora):**
   - `admission set` sobre un objetivo con estado heredado y sin `--override-inherited` falla con `ADMIT_INHERITED_NEGATIVE`; con el flag, sale `ACCEPTED`;
   - un lote de 51 ids falla con `ADMIT_BATCH_TOO_LARGE` sin escribir nada, y `--all` no existe (error de opción);
