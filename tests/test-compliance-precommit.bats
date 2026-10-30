@@ -113,3 +113,60 @@ EOF
   run bash -c 'printf "%s" "{\"tool_input\":{\"command\":\"git commit -m x\"}}" | bash "$1"' _ "$ROOT/.claude/hooks/compliance-gate.sh"
   [ "$status" -eq 0 ]
 }
+
+# ── Revisión de #1413 en e49de789b ──
+
+@test "runner --range: un comando sin frontmatter en el rango falla; con frontmatter pasa" {
+  mkdir -p "$R/.claude/commands"; cd "$R"
+  printf 'sin frontmatter\n' > .claude/commands/malo.md
+  git add .claude/commands/malo.md; git -c core.hooksPath=/dev/null commit -q -m malo
+  run bash .claude/compliance/runner.sh --range HEAD~1..HEAD
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"malo.md: comando sin frontmatter"* ]]
+  printf -- '---\nname: bueno\n---\n' > .claude/commands/malo.md
+  git add .claude/commands/malo.md; git -c core.hooksPath=/dev/null commit -q -m arreglo
+  run bash .claude/compliance/runner.sh --range HEAD~1..HEAD
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Frontmatter de comandos OK"* ]]
+}
+
+@test "pre-commit: se evalúa lo que va en stage, no el árbol de trabajo" {
+  violar "$R"; git -C "$R" add README.md; echo ok > "$R/README.md"   # en stage malo, en disco bueno
+  run git -C "$R" commit -m x
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"README.md: 151 líneas"* ]]
+  git -C "$R" add README.md; violar "$R"                              # en stage bueno, en disco malo
+  echo cambio >> "$R/base.txt"; git -C "$R" add base.txt
+  run git -C "$R" commit -m y
+  [ "$status" -eq 0 ]
+}
+
+@test "pre-commit sin nada en stage (--allow-empty): no evalúa el commit anterior" {
+  violar "$R"; git -C "$R" add README.md; git -C "$R" -c core.hooksPath=/dev/null commit -q -m v
+  run git -C "$R" commit --allow-empty -m vacio
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"README.md: 151"* ]]
+}
+
+@test "runner --range: un rango sin .. ni ... se rechaza (exit 2)" {
+  cd "$R"
+  for r in HEAD 'HEAD..' '..HEAD' 'HEAD....HEAD'; do
+    run bash .claude/compliance/runner.sh --range "$r"
+    [ "$status" -eq 2 ]
+  done
+}
+
+@test "nombre de fichero no ASCII: el límite de líneas se aplica igual" {
+  mkdir -p "$R/.claude/skills"; seq 1 151 > "$R/.claude/skills/ñ.md"
+  git -C "$R" add .claude/skills
+  run git -C "$R" commit -m x
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"ñ.md: 151 líneas"* ]]
+}
+
+@test "runner con violación: sale con 2 e imprime el resumen (no muere en la primera)" {
+  violar "$R"; git -C "$R" add README.md; cd "$R"
+  run bash .claude/compliance/runner.sh --staged
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"1 verificación(es) fallida(s)"* ]]
+}
