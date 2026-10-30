@@ -3,10 +3,12 @@ context_tier: L2
 token_budget: 2505
 ---
 
-# Regla: Configuración PM-Workspace
+# Regla: Configuración del dominio de gestión de proyectos
 # ── Constantes de configuración Azure DevOps y proyectos ─────────────────────
 
-> Esta regla se carga bajo demanda. Contiene los valores de configuración completos.
+> Dominio de gestión de proyectos: una de las capacidades de Savia (identidad
+> canónica en `.claude/profiles/savia.md`). Esta regla se carga bajo demanda.
+> Contiene los valores de configuración completos.
 
 ```
 # ── Azure DevOps ──────────────────────────────────────────────────────────────

@@ -57,7 +57,7 @@ Reglas 1-3 y 7: dominio de gestión de proyectos. 4-6 y 8: transversales.
 | Tema | Fichero | Leer cuando |
 |---|---|---|
 | Reglas 9-25 (secrets, infra, git, CI, UX, PII, etc.) | `docs/rules/domain/critical-rules-extended.md` | Primera vez en la sesión tocas git, infra, o docs |
-| Metaorquestación (harnesses: Yema, revisoras, proveedores externos; líneas de Savia Labs) | `.claude/skills/harness-architecture/SKILL.md` + `docs/rules/domain/agents-catalog.md` § Metaorquestación | Coordinas harnesses, delegas en un ejecutor externo o diseñas un bucle/sprint de agentes |
+| Metaorquestación (harnesses: Yema, revisoras, proveedores externos; líneas de Savia Labs) | `.claude/skills/harness-architecture/SKILL.md` + `docs/rules/domain/agents-catalog.md` § Por capacidad | Coordinas harnesses, delegas en un ejecutor externo o diseñas un bucle/sprint de agentes |
 | Dominio proyectos: config (constantes, paths) | `docs/rules/domain/pm-config.md` | Necesitas un path/constante de pm-workspace |
 | Proyectos activos privados | `.claude/rules/pm-config.local.md` | Necesitas identificar un proyecto real |
 | Dominio proyectos: cadencia scrum, comandos | `docs/rules/domain/pm-workflow.md` | Sprint planning, ceremonias, catálogo comandos |

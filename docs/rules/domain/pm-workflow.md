@@ -3,8 +3,10 @@ context_tier: L2
 token_budget: 530
 ---
 
-# Regla: Workflow PM — Convenciones, Cadencia y Comandos
+# Regla: Workflow del dominio de gestión de proyectos — Convenciones, Cadencia y Comandos
 # ── Referencia operativa compacta ────────────────────────────────────────────
+
+> Dominio de gestión de proyectos: una capacidad de Savia, no su propósito.
 
 ##  Cadencia Scrum
 

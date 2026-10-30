@@ -95,6 +95,33 @@ generate_table() {
   done | sort
 }
 
+# SE-483: capacidad de cada agente (metaorquestación primero; proyectos es un
+# dominio más). Clasificación determinista por nombre; lo no clasificado cae
+# en «Dominios especializados», nunca se pierde.
+classify_agent() {
+  case "$1" in
+    *-orchestrator|configurator|fix-assigner|reconciler|commit-guardian) echo "1|Metaorquestación (orquestadores y despacho)" ;;
+    *-judge|*-validator|feasibility-probe) echo "2|Tribunales y verificación" ;;
+    model-upgrade-auditor|drift-auditor) echo "3|Investigación y mejora continua" ;;
+    *-digest|context-dome-manager|memory-agent|meeting-*|tabular-analyst|code-twin-agent) echo "4|Conocimiento" ;;
+    *-developer|architect|diagram-architect|code-reviewer|test-*|frontend-test-runner|web-e2e-tester|visual-qa-agent|security-*|pentester|confidentiality-auditor|infrastructure-agent|sdd-spec-writer|tech-writer) echo "5|Desarrollo y seguridad" ;;
+    azure-devops-operator|business-analyst) echo "6|Proyectos (dominio de gestión de proyectos)" ;;
+    *) echo "7|Dominios especializados" ;;
+  esac
+}
+
+generate_capabilities() {
+  local f name
+  for f in "$AGENTS_DIR"/*.md; do
+    [[ -f "$f" ]] || continue
+    name=$(extract_field "$f" "name"); name="${name:-$(basename "$f" .md)}"
+    printf '%s|%s\n' "$(classify_agent "$name")" "$name"
+  done | LC_ALL=C sort -t'|' -k1,1n -k3,3 | awk -F'|' '
+    $2 != cur { if (cur != "") printf "\n"; cur = $2; printf "- **%s**: %s", $2, $3; next }
+    { printf ", %s", $3 }
+    END { if (cur != "") printf "\n" }'
+}
+
 TOTAL=$(ls "$AGENTS_DIR"/*.md 2>/dev/null | wc -l)
 TABLE=$(generate_table)
 
@@ -165,7 +192,11 @@ PY_FM
 > Source of truth: \`.opencode/agents/*.md\` frontmatter
 > Ref: SE-047, docs/rules/domain/autonomous-safety.md
 
+## Por capacidad
+
 HEADER
+    generate_capabilities >> "$tmp"
+    printf '\n## Catálogo completo\n\n' >> "$tmp"
     echo "$TABLE" >> "$tmp"
     mkdir -p "$(dirname "$CATALOG_PATH")"
     mv "$tmp" "$CATALOG_PATH"
