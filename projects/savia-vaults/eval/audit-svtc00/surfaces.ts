@@ -60,6 +60,7 @@ export async function surfaces() {
   // Solo las variables de aislamiento anteriores; nunca credenciales heredadas.
   for (const k of Object.keys(childEnv)) if (!['SAVIA_RAG_HOME', 'SAVIA_FILES_HOME', 'SAVIA_FILES_KEYS_HOME', 'SAVIA_SEARCH_CACHE', 'SAVIA_VAULTS_HOME'].includes(k)) delete childEnv[k];
   childEnv.PATH = process.env.PATH ?? '';
+  childEnv.HOME = process.env.HOME!;
   childEnv.SAVIA_AUTH_TOKEN = token;
   childEnv.SAVIA_RAG_TEST_PROVIDER = 'hash';
   const transport = new StdioClientTransport({ command: process.execPath,
@@ -115,6 +116,8 @@ export async function surfaces() {
     const list = JSON.parse(observations.vault_list.response); 
     check('surface-list-hidden', list.includes('hidden.md'), false);
     check('surface-list-old', list.includes('old.md'), true);
+    check('surface-search-invalid', search.some((h: any) => h.path === 'invalid.md'), false);
+    check('surface-list-invalid', list.includes('invalid.md'), false);
     for (const includeStale of [false, true]) {
       for (const fields of ['full', 'lean']) {
         const r = await client.callTool({ name: 'vault_rag', arguments: { query: 'surfaceprobe', domes: ['open', 'restricted', 'ungranted'], mode: 'bm25', k: 20, fields, includeStale, maxChars: 30000 } });
@@ -124,6 +127,7 @@ export async function surfaces() {
         const hits = b.results[0].hits;
         check(`surface-rag-hidden-${includeStale}-${fields}`, hits.some((h: any) => h.path === 'hidden.md'), false);
         check(`surface-rag-acl-${includeStale}-${fields}`, hits.some((h: any) => h.source?.documentId === doc.document.id), false);
+        check(`surface-rag-invalid-${includeStale}-${fields}`, hits.some((h: any) => h.path === 'invalid.md'), false);
         check(`surface-rag-old-${includeStale}-${fields}`, hits.some((h: any) => h.path === 'old.md'), includeStale);
         check(`surface-rag-denied-${includeStale}-${fields}`, b.domes.filter((d: any) => d.status === 'denied').length, 2);
         const hit = hits.find((h: any) => h.source?.documentId === partial.document.id);
@@ -153,6 +157,7 @@ export async function surfaces() {
     const search = await get('/search?q=surfaceprobe&dome=open&includeStale=false');
     check('surface-a2a-ok', search.status, 200);
     check('surface-a2a-hidden', search.body.results.some((r: any) => r.path === 'hidden.md'), false);
+    check('surface-a2a-invalid', search.body.results.some((r: any) => r.path === 'invalid.md'), false);
     check('surface-a2a-old', search.body.results.some((r: any) => r.path === 'old.md'), true);
     const denied = await get('/search?q=surfaceprobe&dome=restricted');
     check('surface-a2a-level', denied.status, 403);

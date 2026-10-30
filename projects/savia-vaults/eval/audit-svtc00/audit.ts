@@ -8,6 +8,10 @@ import { execFileSync } from 'node:child_process';
 const project = fileURLToPath(new URL('../../', import.meta.url));
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'svtc00-'));
 process.env.AUDIT_TMP = root;
+// HOME propio: ninguna ruta derivada de os.homedir() puede tocar el directorio real.
+process.env.HOME = path.join(root, 'home');
+fs.mkdirSync(process.env.HOME, { recursive: true });
+if (!os.homedir().startsWith(root)) throw new Error('aislamiento de HOME no efectivo');
 for (const [key, dir] of Object.entries({
   SAVIA_RAG_HOME: 'rag', SAVIA_FILES_HOME: 'files', SAVIA_FILES_KEYS_HOME: 'keys',
   SAVIA_SEARCH_CACHE: 'search-cache', SAVIA_VAULTS_HOME: 'vaults',
@@ -16,6 +20,9 @@ process.chdir(root);
 const chosen = process.argv[2] ?? 'all';
 const output = process.argv[3] ? path.resolve(process.argv[3]) : undefined;
 let failed = false;
+const git = (...args: string[]): string => {
+  try { return execFileSync('git', ['-C', project, ...args], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; }
+};
 try {
   const { probes } = await import('./probes.js');
   const { surfaces } = await import('./surfaces.js');
@@ -32,12 +39,16 @@ try {
       if (output) { fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(path.join(output, `${id}.json`), json + '\n'); }
     } catch (error) {
       failed = true;
-      console.error(`${id}: FAIL: ${error instanceof Error ? (process.env.AUDIT_STACK ? error.stack : error.message) : String(error)}`);
+      const message = error instanceof Error ? (process.env.AUDIT_STACK ? error.stack : error.message) : String(error);
+      console.error(`${id}: FAIL: ${message}`);
+      // Sobrescribe el JSON de una ejecución anterior para que un caso fallido no conserve un PASS viejo.
+      if (output) { fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(path.join(output, `${id}.json`), JSON.stringify({ case: id, run: 'FAIL', error: String(message).split(root).join('<TMP>') }, null, 2) + '\n'); }
     }
   }
   if (output) {
     fs.writeFileSync(path.join(output, 'environment.json'), JSON.stringify({
-      head: execFileSync('git', ['-C', project, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+      // `head` es el checkout ejecutado; `base` es el origin/main con el que se contrasta (la base auditada).
+      head: git('rev-parse', 'HEAD'), base: git('merge-base', 'HEAD', 'origin/main'),
       node: process.version, platform: process.platform, arch: process.arch,
       retrieval: 'BM25; HashEmbedder solo para construir el índice; ninguna llamada a Ollama',
       synthetic: true, failed,

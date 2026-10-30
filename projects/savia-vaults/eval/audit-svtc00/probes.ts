@@ -1,9 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { check, config, fixture, paths } from './common.js';
-import { parseNote } from '../../src/rag/chunker.js';
 import { processTerm } from '../../src/rag/retriever.js';
-import { exceedsDomeLevel } from '../../src/storage/note-level.js';
+import { exceedsDomeLevel, parseClassification } from '../../src/storage/note-level.js';
 import { VaultStorage } from '../../src/storage/index.js';
 import { ProvenanceEngine } from '../../src/knowledge/provenance.js';
 import { detectConflicts } from '../../src/knowledge/conflicts.js';
@@ -23,6 +22,7 @@ async function H1() {
   const f = fixture('h1');
   const inputs = {
     'broken.md': '---\nconfidentiality: N3\ninvalid: [\n---\n# Auditoría\nquasar metadatos rotos',
+    'nokey-broken.md': '---\ninvalid: [\n---\n# Auditoría\nquasar yaml roto sin clave de nivel',
     'unknown.md': '---\nconfidentiality: TOPSECRET\n---\n# Auditoría\nquasar nivel desconocido',
     'invalid-date.md': '---\nvalid_until: not-a-date\n---\n# Auditoría\nquasar fecha no válida',
     'public.md': '---\nconfidentiality: N2\n---\n# Auditoría\nquasar permitido',
@@ -32,13 +32,23 @@ async function H1() {
   for (const [p, raw] of Object.entries(inputs)) f.put(p, raw);
   await f.rag.sync('h1');
   const r = await f.query('quasar');
-  check('H1', paths(r).sort(), ['broken.md', 'invalid-date.md', 'public.md', 'unknown.md']);
+  const served = paths(r).sort();
+  // SE-481 R1/R2: YAML roto que menciona el nivel y nivel desconocido quedan en cuarentena.
+  check('H1', served, ['invalid-date.md', 'nokey-broken.md', 'public.md']);
   check('H1-level-control', exceedsDomeLevel('N3', 'N2'), true);
-  check('H1-unknown', exceedsDomeLevel('TOPSECRET', 'N2'), false);
-  const parsed = parseNote('broken.md', inputs['broken.md']);
-  check('H1-yaml', parsed.meta.confidentiality, undefined);
-  return { verdict: 'CONFIRMED', returned: paths(r), malformedMeta: parsed.meta,
-    negativeControls: 'N3 válida y fecha caducada excluidas; YAML roto, nivel desconocido y fecha inválida pasan', response: r };
+  check('H1-unknown', exceedsDomeLevel('TOPSECRET', 'N2'), true);
+  check('H1-yaml-kind', parseClassification('broken.md', inputs['broken.md']).kind, 'UNPARSABLE');
+  check('H1-unknown-kind', parseClassification('unknown.md', inputs['unknown.md']).kind, 'UNKNOWN_LEVEL');
+  // Control negativo: YAML roto que no menciona la clave mantiene la semántica heredada (ABSENT).
+  check('H1-nokey-kind', parseClassification('nokey-broken.md', inputs['nokey-broken.md']).kind, 'ABSENT');
+  const dateOpen = served.includes('invalid-date.md');
+  return { verdict: dateOpen ? 'PARTIALLY_CONFIRMED' : 'ALREADY_SOLVED', returned: served,
+    components: {
+      brokenYamlMentioningLevel: 'ALREADY_SOLVED (SE-481 R1/R2: cuarentena)',
+      unknownLevel: 'ALREADY_SOLVED (SE-481: exceedsDomeLevel cierra de forma segura)',
+      invalidValidUntil: dateOpen ? 'CONFIRMED: `Date.parse` devuelve NaN y la nota se sirve (policy.ts:35)' : 'ALREADY_SOLVED',
+    },
+    negativeControls: 'N3 válida y fecha caducada excluidas; YAML roto sin clave de nivel sigue como ABSENT', response: r };
 }
 
 async function H2() {
@@ -63,15 +73,30 @@ async function H2() {
     const r = await f.query(query);
     observations.push({ query, hits: r.results[0].hits.map(h => ({ path: h.path, score: h.score, bm25: h.signals.bm25, text: h.text })) });
   }
-  check('H2', observations[0].hits, observations[1].hits);
-  check('H2-sin', observations[2].hits, observations[3].hits);
-  check('H2-stopwords', ['no', 'not', 'ni', 'sin', 'nada'].map(processTerm), [null, null, null, null, null]);
-  check('H2-negation-only', observations.slice(4, 9).map(x => x.hits.length), [0, 0, 0, 0, 0]);
-  check('H2-id-E', observations[9].hits[0]?.path, 'expediente.md');
-  check('H2-id-CT', observations[10].hits[0]?.path, 'contrato.md');
-  check('H2-control', observations[13].hits.map(x => x.path), ['ruido.md']);
-  return { verdict: 'CONFIRMED', corpus, observations,
-    scope: 'Igualdad de recuperación y puntuación; sin generador de respuestas ni inferencia sobre su veracidad.' };
+  const top = (i: number) => observations[i].hits[0]?.path;
+  const ids = (i: number) => observations[i].hits.map(h => h.path);
+  // SE-481 R5: las negaciones puntúan y la polaridad cambia el primer resultado.
+  check('H2-pair-affirmative', top(0), 'permitido.md');
+  check('H2-pair-negated', top(1), 'prohibido.md');
+  check('H2-pair-sin', top(3), 'sin-autorizacion.md');
+  check('H2-pair-differs', JSON.stringify(observations[0].hits) === JSON.stringify(observations[1].hits), false);
+  check('H2-sin-differs', JSON.stringify(observations[2].hits) === JSON.stringify(observations[3].hits), false);
+  check('H2-stopwords', ['no', 'not', 'ni', 'sin', 'nada'].map(processTerm), ['no', 'not', 'ni', 'sin', 'nada']);
+  check('H2-stopword-control', processTerm('de'), null);
+  check('H2-negation-only', [4, 5, 6, 7, 8].map(ids), [['prohibido.md'], [], [], ['sin-autorizacion.md'], []]);
+  check('H2-id-E', ids(9), ['expediente.md', 'expediente-vecino.md']);
+  check('H2-id-CT', ids(10), ['contrato.md', 'contrato-vecino.md']);
+  check('H2-id-CT-ranking', observations[10].hits[0].bm25 > observations[10].hits[1].bm25, true);
+  check('H2-id-absent-E', ids(11), []);
+  check('H2-id-absent-CT', ids(12).sort(), ['contrato-vecino.md', 'contrato.md']);
+  check('H2-control', ids(13), ['ruido.md']);
+  return { verdict: ids(12).length > 0 ? 'PARTIALLY_CONFIRMED' : 'ALREADY_SOLVED', corpus, observations,
+    components: {
+      negationStopwords: 'ALREADY_SOLVED (SE-481 R5)',
+      idRanking: 'ALREADY_SOLVED: el identificador exacto queda primero',
+      absentIdentifier: 'CONFIRMED: `CT-2099-999` inexistente devuelve ambos contratos (causa no analizada)',
+    },
+    scope: 'Recuperación y puntuación; sin generador de respuestas ni inferencia sobre su veracidad.' };
 }
 
 async function H3() {
@@ -150,6 +175,7 @@ async function H5() {
 async function H6() {
   const f = fixture('h6', 'N2', true);
   f.put('removed.md', '# Borrado\nzirconio nota eliminable');
+  f.put('kept.md', '# Intacta\nzirconio nota sin cambios');
   f.put('raised.md', '---\nconfidentiality: N2\n---\n# Nivel\nzirconio nota reclasificable');
   let who: Principal | undefined = { username: 'audit-admin', role: 'admin' };
   const authorize = async () => who;
@@ -161,7 +187,7 @@ async function H6() {
   await rag.sync('h6');
   who = { username: 'audit-reader', role: 'reader' };
   const before = await query();
-  check('H6-before', paths(before).length, 3);
+  check('H6-before', paths(before).length, 4);
   check('H6-memory', rag.loadedMemoryBytes() > 0, true);
   const seq = f.store().manifest.seq;
   who = { username: 'audit-admin', role: 'admin' };
@@ -171,8 +197,9 @@ async function H6() {
   who = { username: 'audit-reader', role: 'reader' };
   const after = await query();
   const stale = await query(true);
-  check('H6', paths(after).sort(), ['raised.md', 'removed.md']);
-  check('H6-stale', paths(stale).sort(), ['raised.md', 'removed.md']);
+  // SE-481 R3: borrada, reclasificada y fichero revocado desaparecen sin sync; la nota intacta sigue.
+  check('H6', paths(after), ['kept.md']);
+  check('H6-stale', paths(stale), ['kept.md']);
   check('H6-no-sync', f.store().manifest.seq, seq);
   const storage = new VaultStorage(config(f.vault));
   await checkRejected(() => storage.read('raised.md'), 'H6-live-level');
@@ -184,21 +211,25 @@ async function H6() {
   await files.delete({ dome: 'h6', id: doc.documentId });
   check('H6-file-delete', paths(await query(true)).includes(`files/${doc.documentId}`), false);
   await rag.sync('h6');
-  const synced = await query();
-  check('H6-after-sync', paths(synced), []);
-  // Mismo defecto con presupuesto por defecto, al superar el lote permitido.
+  check('H6-after-sync', paths(await query()), ['kept.md']);
+  // Presupuesto por defecto: un lote mayor que el presupuesto impide el sync inline, pero los
+  // hits se revalidan al servir. El estado `stale` prueba que el sync inline no actuó.
   const defaults = fixture('h6default');
   const budget = resolveRagConfig({ enabled: true }).inlineSyncBudget;
   delete defaults.dome.rag!.inlineSyncBudget;
+  defaults.put('kept.md', '# Intacta\nxenon contenido que permanece');
   for (let i = 0; i <= budget; i++) defaults.put(`${i}.md`, '# Lote\nxenon contenido');
   await defaults.rag.sync('h6default');
   for (let i = 0; i <= budget; i++) fs.unlinkSync(path.join(defaults.vault, `${i}.md`));
   const defaultAfter = await defaults.query('xenon');
-  check('H6-default', paths(defaultAfter).length > 0, true);
-  return { verdict: 'PARTIALLY_CONFIRMED', components: {
+  check('H6-default', paths(defaultAfter), ['kept.md']);
+  check('H6-default-stale', defaultAfter.domes[0].status, 'stale');
+  return { verdict: 'ALREADY_SOLVED', components: {
     filesAcl: 'ALREADY_SOLVED: deniega con índice en memoria y seq idéntico', filesDelete: 'ALREADY_SOLVED',
-    markdownDelete: 'CONFIRMED', markdownRaise: 'CONFIRMED', bundles: 'NOT_REPRODUCED: superficie inexistente',
-  }, before, after, includeStale: stale, synced, defaultBudget: budget, defaultBatch: budget + 1, defaultAfter };
+    markdownDelete: 'ALREADY_SOLVED (SE-481 R3)', markdownRaise: 'ALREADY_SOLVED (SE-481 R3)',
+    defaultBudget: 'ALREADY_SOLVED (SE-481 R3): revalidación al servir con sync inline omitido',
+    bundles: 'NOT_REPRODUCED: superficie inexistente',
+  }, before, after, includeStale: stale, defaultBudget: budget, defaultBatch: budget + 1, defaultAfter };
 }
 
 async function checkRejected(fn: () => Promise<unknown>, label: string) {
