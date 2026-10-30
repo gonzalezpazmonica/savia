@@ -1,9 +1,10 @@
 ---
 version_bump: minor
-section: Changed
+section: Added
 ---
 
 ### Added
 
-- Spec SE-489 (APPROVED por la operadora en el chat, 2026-10-30): plan para construir y medir rutas de recuperación opt-in en Savia Vaults (padre, reranker, árbol estructural, navegación con LLM local, grafo, router y cuantización en sombra) sobre un banco con verdad a nivel de evidencia. Solo la spec; la implementación llega en PRs propias.
+- SE-489 R1: banco de evidencia de Vaults (projects/savia-vaults/eval/evidence-bench) con 302 casos en 6 categorías (A–F), esquema, validador contra ficheros en su revisión, corpus sintético inventado y validación de dificultad con el baseline híbrido (Recall@10 por categoría entre 0,50 y 0,86).
 
+- SE-489 R1 (revisión): el split del banco queda fijo por consulta (insertar o quitar casos no mueve a los demás); el validador rechaza ids H- fuera de modo oculto, documentos no UTF-8, enlaces simbólicos fuera de la cúpula y `false` donde se exige 0; `evidence-difficulty.ts` exige `SAVIA_RAG_HOME` bajo el directorio temporal.
