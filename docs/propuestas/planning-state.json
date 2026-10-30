@@ -1603,6 +1603,15 @@
       "approval": "Operadora 2026-10-30: AskUserQuestion (spec y arreglo ya)"
     },
     {
+      "id": "SE-486",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Vaults: admisión del conocimiento (F1 de SE-482)",
+      "note": "Estado de admisión separado del técnico, ledger firmado atado al digest, permiso «admitir» ortogonal y vedado a agentes, PARTIAL visible, perfil governed opt-in. Respuestas de la operadora 2026-10-30.",
+      "evidence": "docs/specs/SE-486-vaults-knowledge-admission.spec.md",
+      "phase": "D"
+    },
+    {
       "id": "SE-487",
       "status": "APPROVED",
       "priority": "P0",
