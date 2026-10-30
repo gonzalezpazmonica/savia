@@ -6,6 +6,8 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-30 SE-487 APPROVED
+
 ## 2026-10-30 SE-485 APPROVED
 
 Aprobada por la operadora 2026-10-30 (AskUserQuestion)

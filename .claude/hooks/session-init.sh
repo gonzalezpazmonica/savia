@@ -94,16 +94,21 @@ if [ -f "$ACTIVE_USER_FILE" ]; then
   PROFILE_DIR=$(dirname "$ACTIVE_USER_FILE")
   USERS_DIR="$PROFILE_DIR/users"
 
+  # SE-487: el slug viaja al contexto JSON sin escapar; solo se acepta un slug seguro.
+  [[ "$ACTIVE_SLUG" =~ ^[A-Za-z0-9._-]+$ ]] || ACTIVE_SLUG=""
   if [ -n "$ACTIVE_SLUG" ] && [ -d "$USERS_DIR/$ACTIVE_SLUG" ]; then
     PROFILE_NAME=$(awk '/^name:/{gsub(/[",]/,""); sub(/^[^:]*:[[:space:]]*/,""); print; exit}' "$USERS_DIR/$ACTIVE_SLUG/identity.md" 2>/dev/null || echo "")
     [ -n "$PROFILE_NAME" ] || PROFILE_NAME="$ACTIVE_SLUG"
     PROFILE_ROLE=$(awk '/^role:/{gsub(/[",]/,""); sub(/^[^:]*:[[:space:]]*/,""); print; exit}' "$USERS_DIR/$ACTIVE_SLUG/identity.md" 2>/dev/null || echo "")
     PROFILE_LANG=$(awk '/^language:/{gsub(/[",]/,""); sub(/^[^:]*:[[:space:]]*/,""); print; exit}' "$USERS_DIR/$ACTIVE_SLUG/preferences.md" 2>/dev/null || echo "")
+    # SE-487: nombre e idioma también van sin escapar al JSON; fuera barras invertidas y controles.
+    PROFILE_NAME=$(printf '%s' "$PROFILE_NAME" | tr -d '\\\000-\037')
+    PROFILE_LANG=$(printf '%s' "$PROFILE_LANG" | tr -d '\\\000-\037')
     if [ "$PROFILE_ROLE" = "Agent" ]; then
       AGENT_MODE="true"
-      ITEMS+=("Perfil: $PROFILE_NAME (Agent)")
+      ITEMS+=("Perfil: $PROFILE_NAME (Agent) · slug $ACTIVE_SLUG")
     else
-      ITEMS+=("Perfil: $PROFILE_NAME")
+      ITEMS+=("Perfil: $PROFILE_NAME · slug $ACTIVE_SLUG")
     fi
     [ -n "$PROFILE_LANG" ] && ITEMS+=("Idioma: $PROFILE_LANG")
 
@@ -126,10 +131,10 @@ if [ -f "$ACTIVE_USER_FILE" ]; then
       fi
     fi
   else
-    ITEMS+=("Sin perfil — /profile-setup")
+    ITEMS+=("Sin perfil: no sé quién eres — /profile-setup")
   fi
 else
-  ITEMS+=("Sin perfil — /profile-setup")
+  ITEMS+=("Sin perfil: no sé quién eres — /profile-setup")
 fi
 
 # ── Rama git ──

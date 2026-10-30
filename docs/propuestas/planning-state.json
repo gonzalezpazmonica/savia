@@ -1603,6 +1603,16 @@
       "approval": "Operadora 2026-10-30: AskUserQuestion (spec y arreglo ya)"
     },
     {
+      "id": "SE-487",
+      "status": "APPROVED",
+      "priority": "P0",
+      "title": "Clon limpio neutral y arranque en Windows",
+      "note": "critical-facts versionado llevaba el perfil de quien lo generó; CLAUDE.md con rutas personales; Windows sin Git Bash bloquea todo. Guardia de CI contra datos personales en ficheros de arranque.",
+      "evidence": "docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30: AskUserQuestion (Sí, P0 ya)"
+    },
+    {
       "id": "SE-483",
       "status": "APPROVED",
       "priority": "P1",
