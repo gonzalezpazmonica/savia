@@ -9,6 +9,9 @@ import { PPRRanker } from '../knowledge/ppr.js';
 import { ContextEnricher } from './enrichment.js';
 import type { VaultConfig, SearchQuery, SearchResult } from '../types.js';
 import { fileOutOfLevel } from '../storage/note-level.js';
+import { excludedReason } from '../rag/policy.js';
+import { RAG_DEFAULTS } from '../rag/types.js';
+import { containsIdentifier, IDENTIFIER_NOT_FOUND, queryIdentifiers } from './identifiers.js';
 
 interface IndexedDoc {
   id: string;
@@ -16,13 +19,18 @@ interface IndexedDoc {
   title: string;
   content: string;
   tags: string[];
+  status?: string;
+  validUntil?: string;
 }
+
+/** SE-485 R5: mismo valor por defecto que `vault_rag` (excluye obsoletos y vencidos). */
+export const DEFAULT_INCLUDE_STALE = false;
 
 const MINI_OPTIONS = {
   fields: ['title', 'content', 'tags'],
   // SE-412: sin `content`: el snippet se lee del fichero solo para los hits devueltos
   // (el texto completo era el 62 % del índice serializado).
-  storeFields: ['path', 'title', 'tags'],
+  storeFields: ['path', 'title', 'tags', 'status', 'validUntil'],
   searchOptions: {
     boost: { title: 2 },
     prefix: true,
@@ -32,7 +40,7 @@ const MINI_OPTIONS = {
 
 /** SE-412: solo markdown salvo que la cúpula declare `allowedExtensions`. */
 const DEFAULT_EXTENSIONS = ['.md', '.markdown'];
-const CACHE_VERSION = 4; // SE-420/SE-481: descarta cachés con notas fuera de nivel o en cuarentena
+const CACHE_VERSION = 5; // SE-485: el índice guarda status y valid_until (includeStale)
 
 export function defaultSearchCacheDir(): string {
   return process.env.SAVIA_SEARCH_CACHE || path.join(os.homedir(), '.savia-vaults', 'search-cache');
@@ -105,13 +113,15 @@ export class SearchEngine {
       const fullPath = path.join(this.config.path, f);
       try {
         const raw = fs.readFileSync(fullPath, 'utf-8');
-        const { title, content, tags } = this.parseNote(raw);
+        const { title, content, tags, status, validUntil } = this.parseNote(raw);
         this.engine.add({
           id: f,
           path: f,
           title,
           content,
           tags,
+          ...(status ? { status } : {}),
+          ...(validUntil ? { validUntil } : {}),
         });
       } catch {
         // skip files that can't be read
@@ -139,27 +149,46 @@ export class SearchEngine {
   search(query: SearchQuery): SearchResult[] {
     const rawResults = this.engine.search(query.query, {});
     const maxResults = query.maxResults || 20;
+    const includeStale = query.includeStale ?? DEFAULT_INCLUDE_STALE;
+    const cfg = { excludeStatuses: query.excludeStatuses?.map(s => s.toLowerCase()) ?? RAG_DEFAULTS.excludeStatuses };
+    // SE-485 R5: la misma función de frescura que RAG.
+    const allowed = (r: unknown): boolean => {
+      const d = r as { path: string; title?: string; status?: string; validUntil?: string };
+      if (query.pathPrefix && !d.path.startsWith(query.pathPrefix)) return false;
+      return includeStale || !excludedReason({ title: d.title ?? '', status: d.status, validUntil: d.validUntil, modified: '' }, cfg);
+    };
+
+    // SE-485 R4: documentos permitidos que contienen literalmente cada identificador de la consulta.
+    const ids = queryIdentifiers(query.query);
+    const literal = new Map<string, Set<string>>();
+    for (const id of ids) {
+      const paths = new Set<string>();
+      for (const c of this.engine.search(id, { prefix: false, fuzzy: false, combineWith: 'AND' })) {
+        if (allowed(c) && containsIdentifier(this.readRaw((c as unknown as { path: string }).path), id)) paths.add((c as unknown as { path: string }).path);
+      }
+      literal.set(id, paths);
+    }
+    const missing = ids.filter(id => literal.get(id)!.size === 0);
 
     const filtered = rawResults
-      .filter((r) => {
-        const p = (r as unknown as { path: string }).path;
-        if (query.pathPrefix) {
-          return p.startsWith(query.pathPrefix);
-        }
-        return true;
-      })
-      .slice(0, maxResults)
+      .filter(allowed)
       .map((r) => {
         const doc = r as unknown as { path: string; score: number; title: string; tags: string[] };
-        return {
+        const hit: SearchResult = {
           path: doc.path,
           score: doc.score,
           snippet: this.makeSnippet(this.readContent(doc.path), query.query, 120),
           tags: doc.tags || [],
         };
+        if (ids.length) {
+          hit.exactMatch = ids.some(id => literal.get(id)!.has(doc.path));
+          if (missing.length) hit.warnings = [IDENTIFIER_NOT_FOUND];
+        }
+        return hit;
       });
-
-    return filtered;
+    // El documento literal va primero; el resto conserva el orden de relevancia.
+    if (ids.length) filtered.sort((a, b) => Number(!!b.exactMatch) - Number(!!a.exactMatch));
+    return filtered.slice(0, maxResults);
   }
 
   /**
@@ -177,6 +206,15 @@ export class SearchEngine {
       return enricher.enrich(base, graph.getSnapshot() ?? { nodes: new Map() }, ppr);
     } catch {
       return base;
+    }
+  }
+
+  /** Texto íntegro de la nota; '' si ya no se puede leer. */
+  private readRaw(relPath: string): string {
+    try {
+      return fs.readFileSync(path.join(this.config.path, relPath), 'utf-8');
+    } catch {
+      return '';
     }
   }
 
@@ -235,12 +273,14 @@ export class SearchEngine {
     }
   }
 
-  private parseNote(raw: string): { title: string; content: string; tags: string[] } {
+  private parseNote(raw: string): { title: string; content: string; tags: string[]; status?: string; validUntil?: string } {
     const tags = new Set<string>();
 
     const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
     let title = '';
     let content = raw;
+    let status: string | undefined;
+    let validUntil: string | undefined;
 
     if (match) {
       const frontmatterBlock = match[1];
@@ -248,6 +288,12 @@ export class SearchEngine {
 
       const titleMatch = frontmatterBlock.match(/title:\s*(.+)/);
       if (titleMatch) title = titleMatch[1].trim();
+
+      const unquote = (v: string) => v.trim().replace(/^['"]|['"]$/g, '');
+      const statusMatch = frontmatterBlock.match(/^status:[ \t]*(.+)$/m);
+      if (statusMatch) status = unquote(statusMatch[1]);
+      const untilMatch = frontmatterBlock.match(/^valid_until:[ \t]*(.+)$/m);
+      if (untilMatch) validUntil = unquote(untilMatch[1]);
 
       const tagsMatch = frontmatterBlock.match(/tags:\s*\[(.+?)\]/);
       if (tagsMatch) {
@@ -270,7 +316,7 @@ export class SearchEngine {
       }
     }
 
-    return { title, content, tags: [...tags] };
+    return { title, content, tags: [...tags], status, validUntil };
   }
 
   private makeSnippet(content: string, query: string, maxLen: number): string {

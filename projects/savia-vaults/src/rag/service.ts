@@ -9,7 +9,8 @@ import { sodiumReady } from '../files/crypto.js';
 import { RagIndexer, listIndexable, logEvent } from './indexer.js';
 import { fileServable, isMarkdown } from '../storage/note-level.js';
 import { fanOut, withTimeout, TimeoutError } from './parallel.js';
-import { promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
+import { excludedReason, promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
+import { containsIdentifier, IDENTIFIER_NOT_FOUND, queryIdentifiers } from '../search/identifiers.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
 import {
   FlatVectorStore, defaultRagHome, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive,
@@ -552,6 +553,9 @@ export class RagService {
 
     // 5. Puntuación por (cúpula, consulta).
     const perQuery: RagHit[][][] = req.queries.map(() => []);
+    // SE-485 R4: identificadores de cada consulta y los que aparecen literales en algún documento servible.
+    const queryIds = req.queries.map(queryIdentifiers);
+    const foundIds = req.queries.map(() => new Set<string>());
     for (const p of ready) {
       const vecs = queryVecs.get(p.store.manifest.generation);
       const mode: RagMode = vecs ? opt.mode : 'bm25';
@@ -582,6 +586,15 @@ export class RagService {
       let filtered = 0;
       let revalidated = 0;
       req.queries.forEach((query, qi) => {
+        for (const id of queryIds[qi]) {
+          if (foundIds[qi].has(id)) continue;
+          const present = p.store.chunks.some(c =>
+            (req.includeStale || !excludedReason(c.meta, p.cfg))
+            && (!req.pathPrefix || c.path.startsWith(req.pathPrefix))
+            && containsIdentifier(c.text, id)
+            && (c.source?.documentId ? canSee(c.source.documentId) : noteOk(c.path)));
+          if (present) foundIds[qi].add(id);
+        }
         let hits: StoreHit[] = searchStore({
           store: p.store, query, queryVec: vecs?.[qi], mode, k: Math.min(opt.k * 4, 200), cfg: p.cfg,
           pathPrefix: req.pathPrefix, includeStale: req.includeStale,
@@ -595,7 +608,10 @@ export class RagService {
           filtered += n - hits.length;
         }
         hits = hits.slice(0, opt.k);
-        perQuery[qi].push(hits.map(h => ({ ...h, dome: p.d.name, confidentiality: p.d.confidentiality })));
+        perQuery[qi].push(hits.map(h => ({
+          ...h, dome: p.d.name, confidentiality: p.d.confidentiality,
+          ...(queryIds[qi].length ? { exactMatch: queryIds[qi].some(id => containsIdentifier(h.text, id)) } : {}),
+        })));
       });
       if (filtered) outcomes.set(p.d.name, { ...outcomes.get(p.d.name)!, filtered });
       if (revalidated) outcomes.set(p.d.name, { ...outcomes.get(p.d.name)!, degradation: { revalidated } });
@@ -605,13 +621,13 @@ export class RagService {
     //    contrato y hay vectores de consulta; si no, por rango con desempate determinista.
     const gens = new Set(ready.map(p => p.store.manifest.generation));
     const fusion: 'cosine' | 'rank' = ready.length > 1 && gens.size === 1 && queryVecs.size === 1 ? 'cosine' : 'rank';
-    const results = req.queries.map((query, qi) => ({
-      query,
-      hits: applyCharBudget(
-        fusion === 'cosine' ? fuseByCosine(perQuery[qi], opt.k) : fuseAcross(perQuery[qi], opt.k),
-        opt.maxChars,
-      ),
-    }));
+    const results = req.queries.map((query, qi) => {
+      const fused = fusion === 'cosine' ? fuseByCosine(perQuery[qi], opt.k) : fuseAcross(perQuery[qi], opt.k);
+      // El documento con el identificador literal va primero; el resto conserva su orden.
+      const ordered = queryIds[qi].length ? [...fused].sort((a, b) => Number(!!b.exactMatch) - Number(!!a.exactMatch)) : fused;
+      const missing = queryIds[qi].some(id => !foundIds[qi].has(id));
+      return { query, hits: applyCharBudget(ordered, opt.maxChars), ...(missing ? { warnings: [IDENTIFIER_NOT_FOUND] } : {}) };
+    });
     const merged = req.queries.length > 1
       ? applyCharBudget(fuseAcross(results.map(r => r.hits), opt.k), opt.maxChars)
       : undefined;
