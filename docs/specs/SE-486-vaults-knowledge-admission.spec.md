@@ -101,7 +101,8 @@ Cada entrada es un JSON canónico con estos campos:
 Reglas del ledger:
 
 - Nunca contiene texto del documento.
-- El digest de una nota es `DocEntry.hash` (sha256 de los bytes del fichero). El de Files es `sha256(rev.sha256 + "\n" + (extraction.digest ?? ""))`. Una re-extracción con otra versión del extractor cambia el texto que se sirve, así que invalida los `ACCEPTED` previos. Es intencionado: se revisó otro texto.
+- **Digest actual al servir.** No se toma del índice, porque `DocEntry.hash` solo cambia en `rag sync`. Se calcula **desde el disco** al servir: sha256 de los bytes actuales del fichero. Usa la misma caché acotada por ruta que la revalidación de SE-481 R3 (`fileServable`), con clave `(mtimeMs, ctimeMs, size)`, de modo que solo se vuelve a hashear si el fichero cambió. `superseded` se deriva en el mismo paso, del frontmatter actual en disco. En Files, el digest actual es el de la revisión vigente que devuelve el `FileStore` al servir.
+- El digest que se registra al admitir una nota es el sha256 de los bytes del fichero, el mismo cálculo que `DocEntry.hash`. El de Files es `sha256(rev.sha256 + "\n" + (extraction.digest ?? ""))`. Una re-extracción con otra versión del extractor cambia el texto que se sirve, así que invalida los `ACCEPTED` previos. Es intencionado: se revisó otro texto.
 - **Ancla de cabeza contra el truncado.** Hay un checkpoint firmado `{dome, seq, head}`.
 - **Orden de escritura**, bajo un lock de cúpula (`acquireLock` del indexador, que no bloquea; si está tomado, `admission set` reintenta durante 5 s y después falla con `ADMIT_LOCKED`). Los lectores no toman el lock: el orden de lectura los protege.
   1. añadir la entrada con fsync;
@@ -213,7 +214,7 @@ Reglas del ledger:
   Otros casos: objetivo sin decisión, con `negativeDigests` que contiene su digest como `REJECTED` ⇒ `REJECTED` (copia o renombrado); el mismo sin el digest en el mapa ⇒ `UNREVIEWED`; `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). Una entrada `RESTRICTED` sin `scope` en el ledger hace que la carga lo marque como inválido, sin excepción al servir. La CLI rechaza escribirla con `ADMIT_SCOPE_REQUIRED`.
 - **AC-2 (autoadmisión por frontmatter):** una nota con `admission: accepted` y `status: approved` se sirve como `UNREVIEWED`, y `vault_health` cuenta 1 en `admission_claim_ignored`.
 - **AC-3 (edición y copia):**
-  - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until` a **otra fecha futura**. Si se edita a una fecha pasada, sale `SUPERSEDED` (regla 4);
+  - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta, **sin `rag sync` entre la edición y la consulta**. Lo mismo si solo se edita `valid_until` a **otra fecha futura**. Si se edita a una fecha pasada, sale `SUPERSEDED` (regla 4);
   - una nota `REJECTED` cuyo cuerpo se edita **sigue** `REJECTED` y no se sirve;
   - una nota `REJECTED` renombrada o copiada a otra ruta con los mismos bytes sale `REJECTED` en las dos rutas y no se sirve;
   - una copia con otra ruta y un byte cambiado sale `UNREVIEWED` (límite declarado, que se prueba para que no cambie sin querer).
@@ -302,7 +303,7 @@ Reglas del ledger:
 
 ## Medidas que se dejan en la PR de implementación
 
-- p95 de `vault_rag` con y sin un ledger de 10⁴ entradas. Si sube más del 5 %, la búsqueda de admisión se cachea por `policyDigest`.
+- p95 de `vault_rag` con y sin un ledger de 10⁴ entradas, **incluido el hash desde disco** con la caché fría y caliente. Si sube más del 5 %, la búsqueda de admisión se cachea por `policyDigest`.
 - Contador `admission_invalidated_by_edit` en `vault_health`, para decidir más adelante si atar la admisión a un subconjunto de campos en lugar del digest completo.
 
 ## Riesgo residual (declarado)
