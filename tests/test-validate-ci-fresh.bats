@@ -161,10 +161,15 @@ lock_dir() {
   command -v npm >/dev/null || skip "npm no disponible"
   mkdir -p "$TMP/ci"
   cp "$REPO_ROOT/scripts/package-lock.json" "$TMP/ci/"
-  sed 's/"yargs": "17.7.2"/"yargs": "17.7.1"/' "$REPO_ROOT/scripts/package.json" > "$TMP/ci/package.json"
-  run bash -c "cd '$TMP/ci' && npm ci --offline --ignore-scripts --no-audit --no-fund"
+  # Hermético: caché vacía propia y un desajuste que npm detecta sin el registro. Cambiar la versión
+  # (17.7.1) obliga a npm a pedir el manifiesto y, sin caché, falla con ENOTCACHED antes de comparar
+  # el lock: el test pasaba solo en máquinas con yargs en caché y fallaba en la CI.
+  sed 's#"yargs": "17.7.2"#"yargs": "file:./no-existe"#' "$REPO_ROOT/scripts/package.json" > "$TMP/ci/package.json"
+  grep -q '"yargs": "file:./no-existe"' "$TMP/ci/package.json"
+  run bash -c "cd '$TMP/ci' && npm_config_cache='$TMP/npm-cache' npm ci --offline --ignore-scripts --no-audit --no-fund"
   [ "$status" -ne 0 ]
   [[ "$output" == *"in sync"* ]]
+  [[ "$output" != *"ENOTCACHED"* ]]
 }
 
 @test "SE-425 AC2: la CI instala con npm ci, audita el lock versionado y ejecuta la suite de savia-vaults" {
