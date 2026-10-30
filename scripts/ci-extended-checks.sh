@@ -185,6 +185,8 @@ if [[ -f "$hook_baseline" && -x "$hook_script" ]]; then
       fi
     else
       fail "Hook latency: $hook_cur critical violations > baseline $hook_base (regression)"
+      # Name the offenders: the count alone made #1412 undiagnosable.
+      grep -E '^- `[^`]+` \(critical\)' "$hook_report" | sed 's/^/    /'
     fi
   elif [[ "$hook_run_ok" -eq 1 ]]; then
     fail "Hook bench report not generated"

@@ -22,6 +22,10 @@ DATE_STR="$(date +%Y%m%d)"
 REPORT="$OUTPUT_DIR/hook-bench-report-$DATE_STR.md"
 
 RUNS="${RUNS:-5}"
+# A critical hook over the SLA with RUNS samples is re-measured with this many
+# samples before it counts as a violation: 5 samples on a shared CI runner
+# flip hooks that sit near the 20 ms line (causa de #1412: 6 > 5 sin tocar hooks).
+CONFIRM_RUNS="${CONFIRM_RUNS:-15}"
 SLA_CRITICAL_MS=20
 SLA_ANALYSIS_MS=100
 
@@ -106,9 +110,10 @@ measure_one() {
 # Collect stats for one hook.
 bench_hook() {
   local hook="$1"
+  local runs="${2:-$RUNS}"
   local i
   local samples=""
-  for i in $(seq 1 "$RUNS"); do
+  for i in $(seq 1 "$runs"); do
     samples="$samples"$'\n'"$(measure_one "$hook")"
   done
   local p50 p95 p99
@@ -143,6 +148,13 @@ while IFS= read -r hook; do
 
   if [[ "$category" == "critical" ]]; then
     critical_count=$((critical_count+1))
+    if [[ "$p50" -gt "$SLA_CRITICAL_MS" && "$CONFIRM_RUNS" -gt "$RUNS" ]]; then
+      stats=$(bench_hook "$hook" "$CONFIRM_RUNS")
+      p50="${stats%%|*}"
+      rest="${stats#*|}"
+      p95="${rest%%|*}"
+      p99="${rest##*|}"
+    fi
     if [[ "$p50" -gt "$SLA_CRITICAL_MS" ]]; then
       critical_violations=$((critical_violations+1))
     fi
