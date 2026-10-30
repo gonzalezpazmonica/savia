@@ -202,7 +202,8 @@ export type RagErrorCode =
   | 'UNSAFE_HOME'
   | 'EMBEDDER_UNAVAILABLE'
   | 'NOT_INDEXED'
-  | 'PROMOTION_REJECTED';
+  | 'PROMOTION_REJECTED'
+  | 'PROJECTION_MISMATCH';
 
 export class RagError extends Error {
   constructor(public readonly code: RagErrorCode, message: string) {
