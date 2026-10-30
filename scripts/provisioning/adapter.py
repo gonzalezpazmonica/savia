@@ -13,7 +13,12 @@ class HostFacts:
     distro: str = ""
     elevation_available: bool = False
     package_managers: tuple = ()
-    installed: dict = field(default_factory=dict)  # component id -> version
+    installed: dict = field(default_factory=dict)  # component id -> version ("unknown" when only presence is known)
+    disk_free_bytes: "int | None" = None  # None = not measured (unknown fails safe)
+    is_root: bool = False
+    is_wsl: bool = False
+    proxy_configured: bool = False  # presence only: proxy URLs may embed credentials and are never read
+    shell: str = ""  # basename only
 
 
 class PlatformAdapter(ABC):
@@ -42,4 +47,7 @@ class FixtureAdapter(PlatformAdapter):
             elevation_available=bool(r.get("elevation_available", False)),
             package_managers=tuple(sorted(r.get("package_managers", []))),
             installed=dict(r.get("installed", {})),
+            disk_free_bytes=r.get("disk_free_bytes"), is_root=bool(r.get("is_root", False)),
+            is_wsl=bool(r.get("is_wsl", False)), proxy_configured=bool(r.get("proxy_configured", False)),
+            shell=str(r.get("shell", "")),
         )

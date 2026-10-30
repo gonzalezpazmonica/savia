@@ -7,7 +7,7 @@ import os
 import re
 import shlex
 
-from . import schema_lite
+from . import graph, preflight, schema_lite
 from .adapter import HostFacts
 
 SCHEMA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "schemas", "installer")
@@ -149,7 +149,9 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
         installed = cid in host.installed
         if installed:
             # Nothing will run for this component: skip platform/integrity/privilege blockers.
-            if host.installed[cid] != m["version"]:
+            if host.installed[cid] == "unknown":  # presence detected without running anything (F2 LocalAdapter)
+                warnings.append({"code": "version_unknown", "component": cid, "message": "installed version not detected in read-only mode; F2 never upgrades"})
+            elif host.installed[cid] != m["version"]:
                 warnings.append({"code": "version_mismatch", "component": cid, "message": f"installed {host.installed[cid]} differs from manifest {m['version']}; F1 never upgrades"})
             act = t["actions"]["install"] if t else None
             steps.append({
@@ -200,6 +202,13 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
         "restarts": sorted(s["component"] for s in todo if s["_m"].get("requires_restart")),
         "changes": sorted((dict(c, component=s["component"]) for s in todo for c in s["changes"]), key=lambda c: (c["component"], c["kind"], c["target"])),
     }
+    pf = preflight.run(host, steps, preview)
+    for c in pf["checks"]:
+        if c["status"] == "blocker":
+            blockers.append({"code": f"preflight_{c['id']}", "component": c["component"] or "host", "message": c["message"]})
+        elif c["status"] == "warning":
+            warnings.append({"code": f"preflight_{c['id']}", "component": c["component"] or "host", "message": c["message"]})
+    dep_graph = graph.build_graph(manifests, steps)
     # plan_id must also bind what would run (invocations, compensation), not only the visible summary
     actions = {s["component"]: s["_t"].get("actions", {}) for s in todo}
     for s in steps:
@@ -211,6 +220,7 @@ def build_plan(manifests: dict, host: HostFacts, selection: list) -> dict:
         "schema_version": 1, "platform": plat, "selection": sorted(set(selection)),
         "status": "blocked" if blockers else ("ready_with_warnings" if warnings else "ready"),
         "steps": steps, "blockers": blockers, "warnings": warnings, "preview": preview,
+        "graph": dep_graph, "preflight": pf,
     }
     plan["plan_id"] = hashlib.sha256(json.dumps([plan, actions], sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return plan
