@@ -100,6 +100,12 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Salida: Cada slice publica su medición y sus tests con caso negativo; nada pasa a bloqueo sin datos.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: cierra vectores documentados fuera pero no observados aún; cada slice decide si sube o se mata; esfuerzo: tres slices pequeños independientes; SE-473 S2 medio.
 
+- **S21 · P2 · fase D** — Verificación honesta tras la revisión de Anthropic Research
+  Acción: SE-475: prefijo FORMA/POLÍTICA en los bloqueos de hook con biblioteca bash+TS. SE-476: acuerdo de jueces del mismo proveedor como correlacionado y autorrevisión fuera de la verificación. SE-477: IC, diferencia pareada y censura en comparativas. SE-479: casos imposibles dentro del alcance con control posible.
+  Entrada: Aprobación de SE-475, SE-476, SE-477 y SE-479 por la operadora (las cuatro PROPOSED); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.
+  Salida: Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica.
+  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479; esfuerzo: cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas.
+
 - **S07 · P2 · fase D** — Kernel mínimo y portabilidad
   Acción: Ablación acotada F0 revisada; SAM F5/F6; runtime/canaries comunes y coste de complejidad. Curación de skills sólo si demuestra utilidad.
   Entrada: Gate C; revisión F0 antes de F1; ninguna retirada unilateral.
