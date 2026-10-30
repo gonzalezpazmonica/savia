@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """installer-plan.py — SE-399 F1: read-only installation plan preview.
 
-Usage: installer-plan.py --manifests DIR --host FIXTURE.json --select ID [--select ID ...]
-Prints the deterministic plan as JSON. Exit 0 ready, 2 blocked, 1 invalid input.
+Usage: installer-plan.py --manifests DIR (--host FIXTURE.json | --local) --select ID [--select ID ...]
+       installer-plan.py --manifests DIR (--host FIXTURE.json | --local) --retire ID
+Prints the deterministic plan (or the retirement report) as JSON. Exit 0 ready, 2 blocked or
+retirement unsafe, 1 invalid input. --local detects the real host read-only (no commands run).
 Executes nothing and installs nothing.
 """
 from __future__ import annotations
@@ -14,6 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from provisioning.adapter import FixtureAdapter  # noqa: E402
+from provisioning.graph import retirement  # noqa: E402
+from provisioning.local import LocalAdapter  # noqa: E402
 from provisioning.planner import build_plan, find_secrets, load_manifests, validate  # noqa: E402
 
 
@@ -29,12 +33,28 @@ class _Parser(argparse.ArgumentParser):
 def main() -> int:
     ap = _Parser(description=__doc__)
     ap.add_argument("--manifests", required=True)
-    ap.add_argument("--host", required=True, help="fixture JSON for the fake platform adapter")
-    ap.add_argument("--select", action="append", required=True)
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--host", help="fixture JSON for the fake platform adapter")
+    src.add_argument("--local", action="store_true", help="detect the real host (read-only, runs nothing)")
+    act = ap.add_mutually_exclusive_group(required=True)
+    act.add_argument("--select", action="append")
+    act.add_argument("--retire", metavar="ID", help="report what depends on ID (can it be removed safely?)")
     a = ap.parse_args()
     try:
-        manifests, host = load_manifests(a.manifests), FixtureAdapter(a.host).discover()
-        unknown = sorted(set(a.select) - set(manifests) - set(host.installed))
+        manifests = load_manifests(a.manifests)
+        adapter = LocalAdapter(manifests) if a.local else FixtureAdapter(a.host)
+        host = adapter.discover()
+        if a.retire is not None:
+            if a.retire not in manifests and a.retire not in host.installed:
+                print(f"ERROR: unknown component(s): {a.retire}", file=sys.stderr)
+                return 1
+            # --local only sees bare-name detection on PATH; everything else has unknown presence
+            blind = adapter.undetectable() if a.local else []
+            report = retirement(manifests, set(host.installed), a.retire, blind)
+            report["presence_basis"] = "path_lookup_best_effort" if a.local else "fixture"
+            print(json.dumps(report, indent=2, sort_keys=True))
+            return 0 if report["safe"] else 2
+        unknown = sorted(set(a.select or []) - set(manifests) - set(host.installed))
         if unknown:  # a mistyped id is invalid input, not a blocked plan
             print(f"ERROR: unknown component(s): {', '.join(unknown)}", file=sys.stderr)
             return 1

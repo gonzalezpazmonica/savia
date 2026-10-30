@@ -352,8 +352,8 @@ jobs:
       - name: Compliance pre-commit y runner (#1413)
         run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats
 
-      - name: Installer contracts and planner (SE-399 F1)
-        run: python3 -m unittest tests/python/test_installer_plan.py
+      - name: Installer contracts, planner and detection (SE-399 F1+F2)
+        run: python3 -m unittest tests/python/test_installer_plan.py tests/python/test_installer_f2.py
 
       # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
       # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
