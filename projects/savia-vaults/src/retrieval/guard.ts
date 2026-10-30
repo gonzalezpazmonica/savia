@@ -57,7 +57,8 @@ const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /** Ruta relativa POSIX dentro de la cúpula, sin `..`, sin absolutas ni caracteres de control. */
 function safeRelPath(p: unknown): string | undefined {
   if (typeof p !== 'string' || !p || p.length > 1024) return undefined;
-  if (/[\u0000-\u001F\\]/.test(p) || p.startsWith('/') || /^[A-Za-z]:/.test(p)) return undefined;
+  // `\` es un carácter válido en un nombre POSIX (y `search` lo sirve); en Windows es separador.
+  if (/[\u0000-\u001F]/.test(p) || (process.platform === 'win32' && p.includes('\\')) || p.startsWith('/') || /^[A-Za-z]:/.test(p)) return undefined;
   const norm = path.posix.normalize(p);
   if (norm !== p || norm === '.' || norm.startsWith('../') || norm === '..' || norm.split('/').includes('..')) return undefined;
   return norm;

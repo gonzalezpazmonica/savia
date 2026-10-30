@@ -159,10 +159,11 @@ ragCmd.command('eval').description('Evalúa recall@5/@10, MRR y latencia; con --
       const reg = new DomeRegistry(path.resolve(opts.domesFile)); reg.load();
       const dome = reg.get(opts.dome);
       if (!dome) throw new RagError('UNKNOWN_DOME', opts.dome);
-      if (!opts.route && !opts.bench && (opts.baseline || opts.split || opts.budget)) {
+      const routed = opts.route !== undefined || opts.bench !== undefined;
+      if (!routed && (opts.baseline || opts.split || opts.budget)) {
         throw new RagError('INVALID_INPUT', '--baseline, --split y --budget solo valen con --route o --bench');
       }
-      if (opts.route || opts.bench) {
+      if (routed) {
         await routeEval(svc, opts, dome, denied);
         return;
       }

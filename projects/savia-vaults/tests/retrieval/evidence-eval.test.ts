@@ -313,6 +313,7 @@ describe('SE-489 CLI rag eval --route --bench', () => {
       expect(JSON.parse(bad.stdout).reports[0].errors).toBe(1);
       fs.rmSync(path.join(bench, 'mal.json'));
       expect(run('eval', '--dome', 'a', '--route', ',', '--bench', bench, '--json').stderr).toMatch(/al menos una ruta/);
+      expect(run('eval', '--dome', 'a', '--route', '', '--queries', legacyFile, '--json').stderr).toMatch(/al menos una ruta/);
       expect(run('eval', '--dome', 'a', '--route', 'M0', '--queries', legacyFile, '--split', 'test', '--json').stderr).toMatch(/--split solo vale con --bench/);
       expect(run('eval', '--dome', 'a', '--queries', legacyFile, '--baseline', 'M0', '--json').stderr).toMatch(/solo valen con --route/);
       expect(run('eval', '--dome', 'a', '--route', 'M0', '--bench', bench, '--split', 'test', '--json').stderr).toMatch(/vacío para split=test/);

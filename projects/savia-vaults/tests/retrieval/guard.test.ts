@@ -71,6 +71,11 @@ describe('SE-489 RetrievalGuard', () => {
       expect(r.ok).toBe(false);
     });
 
+  it.skipIf(process.platform === 'win32')('un nombre POSIX con «\\» se admite (search también lo sirve)', () => {
+    fs.writeFileSync(path.join(a.path, 'raro\\nombre.md'), note('Raro', 'barra invertida'));
+    expect(guard().admit({ dome: 'A', path: 'raro\\nombre.md' }).ok).toBe(true);
+  });
+
   it('un enlace simbólico que sale de la cúpula ⇒ denegado', () => {
     fs.symlinkSync(path.join(root, 'S', 'secreto.md'), path.join(a.path, 'enlace.md'));
     expect(guard().admit({ dome: 'A', path: 'enlace.md' }).ok).toBe(false);
