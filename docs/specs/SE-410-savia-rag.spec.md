@@ -238,8 +238,8 @@ mezcla espacios vectoriales.
 - **P7 Observabilidad.** `rag status` por cúpula: generación activa/sombra/anterior,
   contrato, digest actual vs contrato, chunks, documentos pendientes,
   `staleRatio`, `lagHours`, edad de la generación. SLO: `staleRatio = 0` tras sync;
-  `lagHours < 24` con cron. `status --check` sale 2 si `staleRatio > 0,10`, digest
-  distinto o cúpula habilitada sin generación. Eventos en `$SAVIA_RAG_HOME/logs/rag.jsonl`.
+  `lagHours < 24` con cron. `status --check` sale 2 si `staleRatio > 0,10`, `lagHours >= 24`, digest
+  distinto, cúpula habilitada sin generación o cúpula con índice y `rag.enabled=false`. Eventos en `$SAVIA_RAG_HOME/logs/rag.jsonl`.
 - **P8 Checkpoint.** Cambiar `CHUNKER_VERSION`, `chunkChars`, `overlap`, prefijos
   o modelo cambia el contrato ⇒ generación nueva completa, sujeta a P5.
 - **P9 Sin sustitutos silenciosos.** `HashEmbedder` nunca se usa fuera de tests.
