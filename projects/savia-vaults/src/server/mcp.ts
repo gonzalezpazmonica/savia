@@ -106,6 +106,18 @@ export class MCPVaultServer {
     });
   }
 
+  /** SE-480 R1: antes de resolver cúpulas, vuelve a leer el registro si cambió; las instancias siguen al registro. */
+  private refreshRegistry(): void {
+    if (!this.domeRegistry || !this.domeRegistry.reloadIfChanged()) return;
+    const next = new Map<string, VaultInstance>();
+    for (const dome of this.domeRegistry.listActive()) {
+      const prev = this.instances.get(dome.name);
+      const same = prev && prev.dome.path === dome.path && prev.dome.confidentiality === dome.confidentiality && prev.dome.schemaDir === dome.schemaDir;
+      next.set(dome.name, same ? prev : new VaultInstance(dome));
+    }
+    this.instances = next;
+  }
+
   private getInstance(vaultName?: string): VaultInstance {
     if (!this.domeRegistry) {
       return { config: this.config, dome: { name: this.config.name, path: this.config.path, description: '', confidentiality: 'N2', active: true }, storage: this.storage, search: this.search, security: this.security };
@@ -315,6 +327,7 @@ export class MCPVaultServer {
       const name = request.params.name;
       const args = (request.params.arguments || {}) as Record<string, unknown>;
       try {
+        this.refreshRegistry();
         switch (name) {
           case 'vault_domes': {
             if (!this.domeRegistry) {
@@ -405,7 +418,9 @@ export class MCPVaultServer {
             for (const n of names) {
               try { await this.authorize(n, 'read', 'vault_rag_status'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
             }
-            return { content: [{ type: 'text', text: JSON.stringify(await this.rag.status(names)) }] };
+            const registry = this.domeRegistry?.getState();
+            const reports = (await this.rag.status(names)).map(r => registry ? { ...r, registry } : r);
+            return { content: [{ type: 'text', text: JSON.stringify(reports) }] };
           }
 
           case 'vault_rag_sync': {
@@ -538,10 +553,12 @@ export class MCPVaultServer {
             const inst = this.getInstance(args.vault as string | undefined);
             const dome = this.getDomeName(args.vault as string | undefined);
             try { await this.authorize(dome, 'read', 'vault_health'); } catch (e) { if (e instanceof AuthError) return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true }; throw e; }
-            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: 'No schema configured.' }], isError: true };
+            const registryError = this.domeRegistry?.getState().error;
+            const registryNote = registryError ? `\n\nRegistro de cúpulas: recarga rechazada, se sirve el último válido. ${registryError}` : '';
+            if (!inst.config.schemaDir) return { content: [{ type: 'text', text: `No schema configured.${registryNote}` }], isError: true };
             const quality = new QualityEngine(inst.config);
             const indicators = await quality.assess();
-            return { content: [{ type: 'text', text: quality.formatReport(indicators) }] };
+            return { content: [{ type: 'text', text: quality.formatReport(indicators) + registryNote }] };
           }
 
           default:

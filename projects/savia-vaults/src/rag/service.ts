@@ -8,6 +8,7 @@ import { indexCipher } from '../files/keys.js';
 import { sodiumReady } from '../files/crypto.js';
 import { RagIndexer, listIndexable, logEvent } from './indexer.js';
 import { fanOut, withTimeout, TimeoutError } from './parallel.js';
+import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD, type AutosyncState } from './autosync.js';
 import { promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
 import {
@@ -76,6 +77,8 @@ export interface DomeStatusReport {
   generationAgeHours?: number;
   memoryBytes: number;
   slo: { ok: boolean; alerts: string[] };
+  /** SE-480 R2: estado del último ciclo del sincronizador del servicio, si está activo. */
+  autosync?: AutosyncState;
 }
 
 export type SyncResult = SyncReport & { gate?: { promote: boolean; reason: string } };
@@ -114,9 +117,21 @@ export class RagService {
   private readonly syncing = new Map<string, Promise<SyncResult>>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
 
+  private autosyncState?: () => AutosyncState | undefined;
+
   constructor(private readonly o: RagServiceOptions) {
     this.home = o.home ?? defaultRagHome();
     this.env = o.env ?? process.env;
+  }
+
+  /** SE-480: el sincronizador del servicio publica aquí su estado para `status`. */
+  setAutosyncState(provider: () => AutosyncState | undefined): void {
+    this.autosyncState = provider;
+  }
+
+  /** SE-480: nombres de las cúpulas con `rag.enabled:true` en el registro actual. */
+  enabledDomes(): string[] {
+    return this.o.domes().filter(d => this.config(d).enabled).map(d => d.name);
   }
 
   // ── Configuración y dependencias ──────────────────────────────────────
@@ -662,6 +677,9 @@ export class RagService {
         }
       }
       const slo = sloStatus({ enabled: cfg.enabled, hasGeneration: Boolean(manifest), indexed: Boolean(pointer.active || pointer.shadow || pointer.previous), totalDocs: pending.totalDocs, pendingDocs: pending.pendingDocs, lagHours: pending.lagHours, digestMatch });
+      const autosync = this.autosyncState?.();
+      const alerts = [...slo.alerts];
+      if (autosync && autosync.consecutiveFailures >= AUTOSYNC_FAIL_THRESHOLD && cfg.enabled) alerts.push(AUTOSYNC_FAILING_ALERT);
       out.push({
         name: d.name, enabled: cfg.enabled, confidentiality: d.confidentiality,
         active: pointer.active, shadow: pointer.shadow, previous: pointer.previous,
@@ -671,7 +689,8 @@ export class RagService {
         staleRatio: slo.staleRatio, lagHours: Number(pending.lagHours.toFixed(2)),
         generationAgeHours: manifest ? Number(((Date.now() - Date.parse(manifest.createdAt)) / 3.6e6).toFixed(2)) : undefined,
         memoryBytes: manifest ? manifest.chunkCount * manifest.contract.dims * 4 : 0,
-        slo: { ok: slo.ok, alerts: slo.alerts },
+        slo: { ok: alerts.length === 0, alerts },
+        ...(autosync ? { autosync } : {}),
       });
     }
     return out;
