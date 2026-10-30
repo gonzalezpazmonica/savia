@@ -377,11 +377,17 @@ sys.exit(0 if d['harness_providers']==['claude','codex'] else 1)"
   [[ "$output" == *"sets.../x.md.Mala-Clave: clave no válida"* ]]
 }
 
-@test "AC-2: una categoría especial no se repite aunque se active por dos caminos" {
+@test "AC-2: una opción sensible respondida dos veces cuenta una sola vez" {
+  sed 's/{id: python, label: Python, featured: true,/{id: python, label: Python, featured: true, sensitive: "prueba",/' "$CATALOG" > "$TMP/cat.yaml"
   python3 -c "
-import json; d=json.load(open('$FX/medica.json')); d['proposed'].append({'id':'accessibility','reason':'x'}); d['proposed'].append({'id':'accessibility','reason':'y'}); d['answers']['accessibility']={'adapt':'later'}
+import json; d=json.load(open('$FX/programador.json')); d['answers']['sdd-development']['languages']=['python','Python']
 json.dump(d, open('$TMP/in.json','w'))"
-  plan_check "$TMP/in.json" "[c['capability'] for c in p['sensitivity']['special_categories']]==['vertical','accessibility']"
+  run python3 "$ENGINE" plan --catalog "$TMP/cat.yaml" --input "$TMP/in.json"
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json,sys; p=json.load(sys.stdin)
+assert p['sensitivity']['special_categories']==[{'capability':'sdd-development','why':'prueba'}], p['sensitivity']
+assert p['packs'].count('docs/rules/languages/python-rules.md')==1 and p['status']=='ready'"
 }
 
 @test "AC-5 límite [zero]: repetir el mismo onboarding no propone ningún cambio" {

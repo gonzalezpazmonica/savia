@@ -350,9 +350,8 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
                 if cap["id"] == "vertical" and opt["id"] != "none":
                     plan["vertical"] = {"status": "selected", "id": opt["id"]}
         plan["sensitivity"]["level"] = max(plan["sensitivity"]["level"], cap["sensitivity"]["level"], key=LEVELS.index)
-        entry = {"capability": cap["id"], "why": cap["sensitivity"].get("why", "")}
-        if cap["sensitivity"]["special_category"] and entry not in plan["sensitivity"]["special_categories"]:
-            plan["sensitivity"]["special_categories"].append(entry)
+        if cap["sensitivity"]["special_category"]:  # cada capacidad se procesa una vez: sin duplicados
+            plan["sensitivity"]["special_categories"].append({"capability": cap["id"], "why": cap["sensitivity"].get("why", "")})
         for origin, conf in blocks:
             for fname, keys in conf.get("sets", {}).items():
                 for k, v in keys.items():
