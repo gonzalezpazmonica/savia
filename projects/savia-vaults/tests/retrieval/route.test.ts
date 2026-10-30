@@ -90,6 +90,15 @@ describe('SE-489 BudgetMeter', () => {
     expect(m.snapshot().latencyMs).toBe(100);
   });
 
+  it('consumeMany es todo o nada', () => {
+    const m = new BudgetMeter({ ...DEFAULT_BUDGET, maxModelCalls: 1, maxInputTokens: 10 });
+    expect(m.consumeMany([['modelCalls', 1], ['inputTokens', 11]])).toBe(false);
+    expect(m.snapshot()).toMatchObject({ modelCalls: 0, inputTokens: 0 });
+    expect(m.exhausted).toBe('inputTokens');
+    expect(m.consumeMany([['modelCalls', 1], ['inputTokens', 10]])).toBe(true);
+    expect(m.snapshot()).toMatchObject({ modelCalls: 1, inputTokens: 10 });
+  });
+
   it('rechaza cantidades negativas o no finitas', () => {
     const m = new BudgetMeter(DEFAULT_BUDGET);
     expect(m.consume('nodes', -1)).toBe(false);

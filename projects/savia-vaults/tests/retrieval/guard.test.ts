@@ -4,6 +4,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { RetrievalGuard, formatLocator, type GuardDome } from '../../src/retrieval/guard.js';
 import { FileStore } from '../../src/files/store.js';
 import { sodiumReady } from '../../src/files/crypto.js';
@@ -124,6 +125,8 @@ describe('SE-489 RetrievalGuard', () => {
     expect(ev).toMatchObject({ dome: 'A', document: 'ok.md', chunkId: 'ok.md#0', locator: '#0 Ok' });
     expect(ev.revision).toMatch(/^sha256:/);
     expect(ev.contentHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    // El id de blob coincide con el de git (lo usa el banco R1).
+    expect(ev.gitBlob).toBe(execFileSync('git', ['hash-object', path.join(a.path, 'ok.md')], { encoding: 'utf-8' }).trim());
     expect(g.evidence({ ...hit, dome: 'S', path: 'secreto.md' })).toBeUndefined();
   });
 

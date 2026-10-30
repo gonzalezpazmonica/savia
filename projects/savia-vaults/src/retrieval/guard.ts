@@ -35,6 +35,9 @@ export type Admission =
   | { ok: false; reason: GuardReason };
 
 export const sha256 = (data: string | Uint8Array): string => `sha256:${crypto.createHash('sha256').update(data).digest('hex')}`;
+/** Id de blob de git de unos bytes (`git hash-object`). */
+export const gitBlobId = (data: Buffer): string =>
+  crypto.createHash('sha1').update(`blob ${data.length}\0`).update(data).digest('hex');
 
 /** Forma canónica de un localizador de Savia Files. */
 export function formatLocator(l: Locator): string {
@@ -63,7 +66,7 @@ function safeRelPath(p: unknown): string | undefined {
 export class RetrievalGuard {
   private readonly domes = new Map<string, GuardDome>();
   private readonly roots = new Map<string, string | undefined>();
-  private readonly revisions = new Map<string, { key: string; revision: string }>();
+  private readonly revisions = new Map<string, { key: string; revision: string; gitBlob: string }>();
   /** Ruta real admitida por última vez para cada nota (la que se lee en `readNote`). */
   private readonly realPaths = new Map<string, string>();
   /** Nodos denegados (todas las razones); la traza solo publica este número. */
@@ -131,17 +134,22 @@ export class RetrievalGuard {
     return { ok: true, kind: 'file', dome: d.name, path: ref.path, revision: doc.currentRevision };
   }
 
-  /** Hash de los bytes actuales, con caché por mtime/ctime/tamaño. */
+  /** Hash de los bytes actuales (y su id de blob de git), con caché por mtime/ctime/tamaño. */
   private noteRevision(full: string): string | undefined {
+    return this.noteIds(full)?.revision;
+  }
+
+  private noteIds(full: string): { revision: string; gitBlob: string } | undefined {
     let st: fs.Stats;
     try { st = fs.statSync(full); } catch { return undefined; }
     const key = `${st.mtimeMs}:${st.ctimeMs}:${st.size}`;
     const hit = this.revisions.get(full);
-    if (hit?.key === key) return hit.revision;
-    let revision: string;
-    try { revision = sha256(fs.readFileSync(full)); } catch { return undefined; }
-    this.revisions.set(full, { key, revision });
-    return revision;
+    if (hit?.key === key) return hit;
+    let bytes: Buffer;
+    try { bytes = fs.readFileSync(full); } catch { return undefined; }
+    const ids = { key, revision: sha256(bytes), gitBlob: gitBlobId(bytes) };
+    this.revisions.set(full, ids);
+    return ids;
   }
 
   /**
@@ -174,9 +182,11 @@ export class RetrievalGuard {
     const locator = hit.source
       ? `${formatLocator(hit.source.locator)}${hit.source.locatorEnd ? `..${formatLocator(hit.source.locatorEnd)}` : ''}`
       : `#${ordinal} ${hit.heading}`.trim();
+    const blob = a.kind === 'note' ? this.noteIds(this.realPaths.get(`${a.dome}\u0000${a.path}`)!)?.gitBlob : undefined;
     return {
       chunkId: hit.chunkId, dome: a.dome, document: a.path,
       revision: hit.source ? hit.source.revisionId : a.revision,
+      ...(blob ? { gitBlob: blob } : {}),
       locator, contentHash: sha256(hit.text),
     };
   }

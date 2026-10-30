@@ -44,7 +44,7 @@ export interface RouteRunOutput {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
 
-function validAsOf(v: unknown): string | undefined {
+export function validAsOf(v: unknown): string | undefined {
   if (v === undefined) return undefined;
   if (typeof v !== 'string' || !ISO_DATE.test(v) || Number.isNaN(Date.parse(v))) {
     throw new RagError('INVALID_INPUT', 'asOf: fecha ISO (YYYY-MM-DD o fecha-hora)');
@@ -144,8 +144,11 @@ export async function runRoute(rag: RagService, input: RouteRunInput): Promise<R
     candidates: async (q, opts = {}) => {
       if (closed) return [];
       const m = opts.mode ?? mode;
-      if (m !== 'bm25' && !meter.consume('modelCalls', 1)) { steps.push({ step: 'budget', detail: 'maxModelCalls' }); return []; }
-      if (m !== 'bm25' && !meter.consume('inputTokens', estimateTokens(q))) { steps.push({ step: 'budget', detail: 'maxInputTokens' }); return []; }
+      // Llamada y tokens a la vez: si uno no cabe, no se gasta ninguno.
+      if (m !== 'bm25' && !meter.consumeMany([['modelCalls', 1], ['inputTokens', estimateTokens(q)]])) {
+        steps.push({ step: 'budget', detail: meter.exhausted === 'inputTokens' ? 'maxInputTokens' : 'maxModelCalls' });
+        return [];
+      }
       const names = guard.authorizedDomes().map(d => d.name);
       const res = await rag.search({
         queries: [validQuery(q)], domes: names, k: opts.k ?? k, mode: m,

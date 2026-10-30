@@ -67,6 +67,8 @@ export interface Evidence {
   document: string;
   /** Nota: `sha256:<hex>` de los bytes actuales; fichero: id de revisión. */
   revision: string;
+  /** Solo notas: id de blob de git (SHA-1 de `blob <n>\0<bytes>`), el que usa el banco R1. */
+  gitBlob?: string;
   /** Nota: `#<ordinal> <heading>`; fichero: localizador canónico (`page:3`, `cell:Hoja!B2`…). */
   locator: string;
   /** `sha256:<hex>` del texto servido en el hit. */
@@ -258,6 +260,17 @@ export class BudgetMeter {
     if (this.timeLeftMs() <= 0) { this.exhausted ??= 'latencyMs'; return false; }
     if (this.used[key] + n > this.budget[LIMIT_OF[key]]) { this.exhausted ??= key; return false; }
     this.used[key] += n;
+    return true;
+  }
+
+  /** Todo o nada: si alguna cantidad no cabe, no descuenta ninguna. */
+  consumeMany(items: [Exclude<BudgetKey, 'latencyMs'>, number][]): boolean {
+    if (this.timeLeftMs() <= 0) { this.exhausted ??= 'latencyMs'; return false; }
+    for (const [key, n] of items) {
+      if (!Number.isFinite(n) || n < 0) return false;
+      if (this.used[key] + n > this.budget[LIMIT_OF[key]]) { this.exhausted ??= key; return false; }
+    }
+    for (const [key, n] of items) this.used[key] += n;
     return true;
   }
 

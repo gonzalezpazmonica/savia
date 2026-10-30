@@ -159,6 +159,9 @@ ragCmd.command('eval').description('Evalúa recall@5/@10, MRR y latencia; con --
       const reg = new DomeRegistry(path.resolve(opts.domesFile)); reg.load();
       const dome = reg.get(opts.dome);
       if (!dome) throw new RagError('UNKNOWN_DOME', opts.dome);
+      if (!opts.route && !opts.bench && (opts.baseline || opts.split || opts.budget)) {
+        throw new RagError('INVALID_INPUT', '--baseline, --split y --budget solo valen con --route o --bench');
+      }
       if (opts.route || opts.bench) {
         await routeEval(svc, opts, dome, denied);
         return;
@@ -185,7 +188,9 @@ async function routeEval(svc: RagService, opts: Record<string, string | boolean 
   };
   if (opts.generation) throw new RagError('INVALID_INPUT', '--generation no se combina con --route/--bench (las rutas usan la generación activa)');
   if (opts.split !== undefined && opts.split !== 'dev' && opts.split !== 'test') throw new RagError('INVALID_INPUT', '--split: dev|test');
+  if (opts.split !== undefined && !opts.bench) throw new RagError('INVALID_INPUT', '--split solo vale con --bench (el banco de regresión no tiene splits)');
   const routes = String(opts.route ?? 'M0').split(',').map(s => s.trim()).filter(Boolean);
+  if (!routes.length) throw new RagError('INVALID_INPUT', '--route: al menos una ruta');
   for (const r of routes) getRoute(r);
   const baseline = String(opts.baseline ?? routes[0]);
   getRoute(baseline);
@@ -212,8 +217,8 @@ async function routeEval(svc: RagService, opts: Record<string, string | boolean 
   const base = reports.find(r => r.route === baseline)!;
   const shown = reports.filter(r => routes.includes(r.route));
   const comparisons = shown.map(r => compareReports(r, base, { iterations, seed }));
-  // Códigos de salida: 1 si algún caso falló (las métricas no valen), 2 si hay lecturas no autorizadas.
-  const exitCode = reports.some(r => r.errors > 0) ? 1 : reports.some(r => r.violations > 0) ? 2 : 0;
+  // Códigos de salida: 2 si hay lecturas no autorizadas (prevalece: es una fuga), 1 si algún caso falló.
+  const exitCode = reports.some(r => r.violations > 0) ? 2 : reports.some(r => r.errors > 0) ? 1 : 0;
   const finish = () => {
     for (const r of reports) {
       if (r.errors) console.error(`[${r.route}] ${r.errors} casos con error: ${r.cases.filter(c => c.error).slice(0, 3).map(c => `${c.id}: ${c.error}`).join(' | ')}`);
@@ -226,7 +231,7 @@ async function routeEval(svc: RagService, opts: Record<string, string | boolean 
   for (const r of shown) {
     console.log(`[${opts.dome}] ruta ${r.route} ${r.mode} n=${r.n} errores=${r.errors} violaciones=${r.violations} denegados=${r.deniedAttempts} p50=${r.latency.p50Ms}ms p95=${r.latency.p95Ms}ms RSS=${r.rssPeakMb}MB llamadas=${r.cost.modelCalls}`);
     console.log(`   EvidenceRecall=${f(r.overall.evidenceRecall)} exact-id=${f(r.overall.exactIdentifierHit)} R@10=${f(r.overall.recallAt10)} MRR=${f(r.overall.mrr)} nDCG@10=${f(r.overall.ndcgAt10)}`);
-    console.log(`   no-autorizadas=${f(r.overall.unauthorizedReads)} prohibidas=${f(r.overall.forbiddenUsed)} abstención-correcta=${f(r.overall.correctAbstention)}`);
+    console.log(`   no-autorizadas=${f(r.overall.unauthorizedReads)} prohibidas=${f(r.overall.forbiddenUsed)} abstención-correcta=${f(r.overall.correctAbstention)} falso-rechazo=${f(r.overall.falseAbstention)}`);
     for (const [cat, m] of Object.entries(r.byCategory)) console.log(`   ${cat}: EvidenceRecall=${f(m!.evidenceRecall)} R@10=${f(m!.recallAt10)} abstención=${f(m!.correctAbstention)}`);
   }
   for (const c of comparisons) {

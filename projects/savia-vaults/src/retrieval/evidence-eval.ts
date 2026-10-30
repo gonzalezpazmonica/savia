@@ -12,7 +12,7 @@ import { FILES_PATH_PREFIX } from '../files/rag-source.js';
 import { RagError, type RagHit, type RagMode } from '../rag/types.js';
 import type { EvalQueryInput, RagService } from '../rag/service.js';
 import { RetrievalGuard } from './guard.js';
-import { runRoute } from './runner.js';
+import { runRoute, validAsOf } from './runner.js';
 import type { Evidence } from './route.js';
 
 export const CATEGORIES = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
@@ -21,9 +21,12 @@ export type Category = typeof CATEGORIES[number];
 export interface EvidenceRef {
   document: string;
   dome?: string;
+  /** `sha256:` de la nota, id de blob de git (40 hex, formato R1) o id de revisión de Files. */
   revision?: string;
   /** `#<ordinal>`, localizador de Files (`page:3`) o el último tramo del encabezado («Anexo II»). */
   locator?: string;
+  /** Formato R1: cita literal que debe estar en el texto servido del hit. */
+  quote?: string;
 }
 
 export interface EvidenceCase {
@@ -42,10 +45,12 @@ export interface EvidenceCase {
   max_unauthorized_reads: 0;
   note?: string;
   source?: string;
+  /** Formato R1: intención del caso (identifier, negation…). */
+  intent?: string;
 }
 
-const KNOWN = new Set(['id', 'category', 'split', 'query', 'domes', 'denied_domes', 'as_of', 'required_evidence', 'forbidden_evidence', 'must_abstain', 'max_unauthorized_reads', 'note', 'source']);
-const REF_KEYS = new Set(['document', 'dome', 'revision', 'locator']);
+const KNOWN = new Set(['id', 'category', 'split', 'query', 'domes', 'denied_domes', 'as_of', 'required_evidence', 'forbidden_evidence', 'must_abstain', 'max_unauthorized_reads', 'note', 'source', 'intent']);
+const REF_KEYS = new Set(['document', 'dome', 'revision', 'locator', 'quote']);
 
 const strList = (v: unknown): boolean => Array.isArray(v) && v.every(x => typeof x === 'string' && x.length > 0);
 
@@ -56,7 +61,7 @@ function refErrors(v: unknown, field: string): string[] {
     if (!r || typeof r !== 'object' || Array.isArray(r)) { errs.push(`${field}[${i}]: objeto`); return; }
     const o = r as Record<string, unknown>;
     if (typeof o.document !== 'string' || !o.document) errs.push(`${field}[${i}].document: texto`);
-    for (const k of ['dome', 'revision', 'locator']) if (o[k] !== undefined && (typeof o[k] !== 'string' || !o[k])) errs.push(`${field}[${i}].${k}: texto`);
+    for (const k of ['dome', 'revision', 'locator', 'quote']) if (o[k] !== undefined && (typeof o[k] !== 'string' || !o[k])) errs.push(`${field}[${i}].${k}: texto`);
     for (const k of Object.keys(o)) if (!REF_KEYS.has(k)) errs.push(`${field}[${i}]: campo desconocido ${k}`);
   });
   return errs;
@@ -73,7 +78,7 @@ export function validateCase(c: unknown): string[] {
   if (typeof o.query !== 'string' || !o.query.trim() || o.query.length > 1000) errs.push('query: 1-1000 caracteres');
   if (o.domes !== undefined && !strList(o.domes)) errs.push('domes: lista de nombres');
   if (o.denied_domes !== undefined && !strList(o.denied_domes)) errs.push('denied_domes: lista de nombres');
-  if (o.as_of !== undefined && (typeof o.as_of !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(o.as_of) || Number.isNaN(Date.parse(o.as_of)))) errs.push('as_of: fecha ISO');
+  if (o.as_of !== undefined) { try { validAsOf(o.as_of); } catch { errs.push('as_of: fecha ISO existente'); } }
   errs.push(...refErrors(o.required_evidence, 'required_evidence'), ...refErrors(o.forbidden_evidence, 'forbidden_evidence'));
   if (typeof o.must_abstain !== 'boolean') errs.push('must_abstain: booleano');
   else if (!o.must_abstain && Array.isArray(o.required_evidence) && o.required_evidence.length === 0) errs.push('required_evidence: al menos una si must_abstain es false');
@@ -82,7 +87,43 @@ export function validateCase(c: unknown): string[] {
   return errs;
 }
 
-/** Lee un banco: `*.json` (lista o `{cases}`) y `*.jsonl` del directorio, sin recursión. */
+/**
+ * Caso en formato R1 (`eval/evidence-bench/schema.json`: `scope`, `expected`, localizador
+ * `{section, quote}`) al formato interno. Devuelve undefined si no tiene esa forma.
+ */
+export function fromR1(c: unknown): Record<string, unknown> | undefined {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return undefined;
+  const o = c as Record<string, unknown>;
+  if (!o.scope || !o.expected || typeof o.scope !== 'object' || typeof o.expected !== 'object') return undefined;
+  const scope = o.scope as Record<string, unknown>;
+  const exp = o.expected as Record<string, unknown>;
+  const ref = (r: unknown, withLocator: boolean): unknown => {
+    if (!r || typeof r !== 'object') return r;
+    const { dome, document, revision, locator } = r as Record<string, unknown>;
+    const loc = (withLocator && locator && typeof locator === 'object' ? locator : {}) as Record<string, unknown>;
+    return {
+      document, ...(dome !== undefined ? { dome } : {}), ...(revision !== undefined ? { revision } : {}),
+      ...(typeof loc.section === 'string' && loc.section ? { locator: loc.section } : {}),
+      ...(loc.quote !== undefined ? { quote: loc.quote } : {}),
+    };
+  };
+  const known = new Set(['id', 'category', 'query', 'intent', 'scope', 'expected', 'split']);
+  const extra = Object.keys(o).filter(k => !known.has(k));
+  return {
+    id: o.id, category: o.category, split: o.split, query: o.query, intent: o.intent,
+    domes: scope.allowed_domes, ...(scope.as_of !== null && scope.as_of !== undefined ? { as_of: scope.as_of } : {}),
+    required_evidence: Array.isArray(exp.required_evidence) ? exp.required_evidence.map(r => ref(r, true)) : exp.required_evidence,
+    forbidden_evidence: Array.isArray(exp.forbidden_evidence) ? exp.forbidden_evidence.map(r => ref(r, false)) : exp.forbidden_evidence,
+    must_abstain: exp.must_abstain, max_unauthorized_reads: exp.max_unauthorized_reads,
+    // Un campo desconocido en R1 se conserva para que validateCase lo rechace.
+    ...Object.fromEntries(extra.map(k => [k, o[k]])),
+  };
+}
+
+/**
+ * Lee un banco: `*.json` (lista o `{cases}`) y `*.jsonl` del directorio, sin recursión. Acepta
+ * el formato interno y el R1. Un banco (o un split) sin casos es un error: no hay nada que medir.
+ */
 export function loadBench(dir: string, opts: { split?: 'dev' | 'test' } = {}): EvidenceCase[] {
   let files: string[];
   try { files = fs.readdirSync(dir).filter(f => /\.(json|jsonl)$/.test(f)).sort(); } catch { throw new RagError('INVALID_INPUT', `banco no encontrado: ${dir}`); }
@@ -96,7 +137,8 @@ export function loadBench(dir: string, opts: { split?: 'dev' | 'test' } = {}): E
       if (f.endsWith('.jsonl')) items = raw.split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
       else { const j = JSON.parse(raw); items = Array.isArray(j) ? j : Array.isArray(j?.cases) ? j.cases : []; }
     } catch (e) { throw new RagError('INVALID_INPUT', `${f}: JSON no válido (${e instanceof Error ? e.message : e})`); }
-    items.forEach((c, i) => {
+    items.forEach((raw, i) => {
+      const c = fromR1(raw) ?? raw;
       const errs = validateCase(c);
       if (errs.length) { errors.push(`${f}[${i}]: ${errs.join('; ')}`); return; }
       const ec = c as EvidenceCase;
@@ -107,7 +149,9 @@ export function loadBench(dir: string, opts: { split?: 'dev' | 'test' } = {}): E
   }
   if (errors.length) throw new RagError('INVALID_INPUT', `banco no válido: ${errors.slice(0, 5).join(' | ')}${errors.length > 5 ? ` (+${errors.length - 5})` : ''}`);
   if (!cases.length) throw new RagError('INVALID_INPUT', `banco vacío: ${dir}`);
-  return opts.split ? cases.filter(c => c.split === opts.split) : cases;
+  const out = opts.split ? cases.filter(c => c.split === opts.split) : cases;
+  if (!out.length) throw new RagError('INVALID_INPUT', `banco vacío para split=${opts.split}: ${dir}`);
+  return out;
 }
 
 const LEGACY_CATEGORY: Record<string, Category> = { lexical: 'A', paraphrase: 'B', mixed: 'B' };
@@ -127,9 +171,14 @@ function locatorMatches(want: string, got: string): boolean {
   return heading === want || heading.endsWith(` › ${want}`);
 }
 
-function refMatches(r: EvidenceRef, e: Evidence): boolean {
-  return e.document === r.document && (!r.dome || r.dome === e.dome) && (!r.revision || r.revision === e.revision)
-    && (!r.locator || locatorMatches(r.locator, e.locator));
+const squash = (t: string): string => t.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** `text`: texto servido del hit de esa evidencia (para la cita del formato R1). */
+function refMatches(r: EvidenceRef, e: Evidence, text?: string): boolean {
+  return e.document === r.document && (!r.dome || r.dome === e.dome)
+    && (!r.revision || r.revision === e.revision || r.revision === e.gitBlob)
+    && (!r.locator || locatorMatches(r.locator, e.locator))
+    && (!r.quote || (text !== undefined && squash(text).includes(squash(r.quote))));
 }
 
 export interface CaseMetrics {
@@ -138,17 +187,22 @@ export interface CaseMetrics {
   exactIdentifierHit?: number;
   unauthorizedReads: number;
   forbiddenUsed: number;
-  correctAbstention: number;
+  /** Solo casos con `must_abstain`: 1 si se abstuvo. */
+  correctAbstention?: number;
+  /** Solo casos sin `must_abstain`: 1 si se abstuvo (falso rechazo). */
+  falseAbstention?: number;
   violation: boolean;
 }
 
 /** Métricas de un caso. `unauthorized` = evidencias que el recontrol del guard no admite. */
 export function caseMetrics(c: EvidenceCase, r: { hits: RagHit[]; evidence: Evidence[]; abstain?: boolean }, unauthorized: number): CaseMetrics {
   const abstained = Boolean(r.abstain) || r.hits.length === 0;
-  const forbiddenUsed = r.evidence.filter(e => c.forbidden_evidence.some(f => refMatches(f, e))).length;
+  const textOf = new Map(r.hits.map(h => [`${h.dome}\u0000${h.chunkId}`, h.text]));
+  const text = (e: Evidence) => textOf.get(`${e.dome}\u0000${e.chunkId}`);
+  const forbiddenUsed = r.evidence.filter(e => c.forbidden_evidence.some(f => refMatches(f, e, text(e)))).length;
   const m: CaseMetrics = {
     unauthorizedReads: unauthorized, forbiddenUsed,
-    correctAbstention: abstained === c.must_abstain ? 1 : 0,
+    ...(c.must_abstain ? { correctAbstention: abstained ? 1 : 0 } : { falseAbstention: abstained ? 1 : 0 }),
     violation: unauthorized > c.max_unauthorized_reads,
   };
   if (c.required_evidence.length) {
@@ -163,7 +217,7 @@ export function caseMetrics(c: EvidenceCase, r: { hits: RagHit[]; evidence: Evid
     const dcg = ranked.slice(0, 10).reduce((s, p, i) => s + (relevant.includes(p) ? 1 / Math.log2(i + 2) : 0), 0);
     const idcg = relevant.slice(0, 10).reduce((s, _p, i) => s + 1 / Math.log2(i + 2), 0);
     m.ndcgAt10 = idcg ? dcg / idcg : 0;
-    m.evidenceRecall = c.required_evidence.filter(req => r.evidence.some(e => refMatches(req, e))).length / c.required_evidence.length;
+    m.evidenceRecall = c.required_evidence.filter(req => r.evidence.some(e => refMatches(req, e, text(e)))).length / c.required_evidence.length;
     const ids = queryIdentifiers(c.query);
     if (ids.length) {
       const top = r.hits[0];
@@ -214,7 +268,7 @@ export function pairedBootstrap(a: Map<string, number>, b: Map<string, number>, 
   return { n: r.n, diff: r.mean, lo: r.lo, hi: r.hi };
 }
 
-export const METRICS = ['recallAt5', 'recallAt10', 'recallAt20', 'mrr', 'ndcgAt10', 'evidenceRecall', 'exactIdentifierHit', 'unauthorizedReads', 'forbiddenUsed', 'correctAbstention'] as const;
+export const METRICS = ['recallAt5', 'recallAt10', 'recallAt20', 'mrr', 'ndcgAt10', 'evidenceRecall', 'exactIdentifierHit', 'unauthorizedReads', 'forbiddenUsed', 'correctAbstention', 'falseAbstention'] as const;
 export type MetricName = typeof METRICS[number];
 
 export interface CaseRecord {
@@ -298,7 +352,8 @@ export async function evaluateRoute(rag: RagService, cases: EvidenceCase[], o: E
     const t = Date.now();
     try {
       const { result } = await runRoute(rag, {
-        route: o.route, query: c.query, domes, k: o.k ?? 20, mode, seed: o.seed ?? 0, tool: 'rag_eval',
+        // Sin recorte de texto: se mide la recuperación, no el formato (la cita R1 se busca en el texto).
+        route: o.route, query: c.query, domes, k: o.k ?? 20, mode, seed: o.seed ?? 0, tool: 'rag_eval', maxChars: 10_000_000,
         ...(c.as_of ? { asOf: c.as_of } : {}), ...(o.budget !== undefined ? { budget: o.budget } : {}),
       });
       const latencyMs = Date.now() - t;
@@ -312,7 +367,7 @@ export async function evaluateRoute(rag: RagService, cases: EvidenceCase[], o: E
       if (e instanceof Error && /^(UNKNOWN_ROUTE|INVALID_BUDGET|BUDGET_REQUIRED):/.test(e.message)) throw e;
       records.push({
         id: c.id, category: c.category, latencyMs: Date.now() - t, deniedAttempts: 0, error: e instanceof Error ? e.message : String(e),
-        metrics: { ...caseMetrics(c, { hits: [], evidence: [] }, 0), correctAbstention: 0 }, consumed: { modelCalls: 0, inputTokens: 0, nodes: 0, hops: 0 },
+        metrics: { ...caseMetrics(c, { hits: [], evidence: [] }, 0), ...(c.must_abstain ? { correctAbstention: 0 } : {}) }, consumed: { modelCalls: 0, inputTokens: 0, nodes: 0, hops: 0 },
       });
     }
     rssPeak = Math.max(rssPeak, process.memoryUsage().rss);

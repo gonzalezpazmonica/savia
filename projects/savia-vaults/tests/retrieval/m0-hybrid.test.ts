@@ -113,8 +113,8 @@ describe('SE-489 la batería detecta rutas defectuosas', () => {
     // No termina por sí misma: solo el corte de pared la para.
     registerRoute(base('BadSpin', async (req, ctx) => {
       const hits = await ctx.candidates(req.query);
-      // Sigue «recorriendo» mientras quede tiempo: solo el corte de pared la detiene.
-      while (!stop && ctx.timeLeftMs() > 0) await new Promise(r => setTimeout(r, 5));
+      // No para nunca por sí misma (hasta afterAll): solo el corte de pared del runner la detiene.
+      while (!stop) await new Promise(r => setTimeout(r, 5));
       return { hits };
     }));
     // Cachea hits entre llamadas: sirve lo que ya no existe.

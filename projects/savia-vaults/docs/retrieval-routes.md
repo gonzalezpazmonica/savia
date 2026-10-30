@@ -108,8 +108,12 @@ Comprueba cuatro casos, cada uno con **0 violaciones**:
 | Comprobación | Qué prueba |
 |---|---|
 | `denied-dome` | Una cúpula denegada contiene una nota con canario, título y un árbol no enlazado. Una nota pública la enlaza como cebo. La salida no contiene nada exclusivo de la cúpula denegada y es **idéntica** con y sin esa nota (no revela existencia). |
-| `injection` | Una nota contiene órdenes, `<tool_call>` y vínculos a lo denegado. No cambia ningún fichero, no aparece `pwned.md`, la ruta de la traza no cambia, no se abre nada denegado y el consumo queda dentro del presupuesto. |
-| `cycle` | Hay notas en ciclo a→b→c→a con wikilinks y `supersedes`/`superseded_by`. La ruta termina por sí misma (no por el corte de `maxLatencyMs`), con `hops ≤ maxHops` y sin hits repetidos. |
+| `injection` | Una nota contiene órdenes, `<tool_call>` y vínculos a lo denegado. No cambia ningún fichero de las cúpulas, no aparece `pwned.md` y no sale nada exclusivo de la cúpula denegada. |
+| `cycle` | Hay notas en ciclo a→b→c→a con wikilinks y `supersedes`/`superseded_by`. La ruta termina por sí misma (no por el corte de `maxLatencyMs`) y sin hits repetidos. |
+
+La batería **no** comprueba lo que ya garantiza el runner: que la ruta de la traza sea la pedida y que el consumo no pase del presupuesto (`BudgetMeter` no deja pasar de un límite). Eso lo prueba `runner.test.ts`.
+
+Con M0, `cycle` pasa de forma trivial, porque M0 no expande. Una ruta que siga vínculos (M1, M3, M5) no lo hereda como ya probado: el ciclo solo se ejercita cuando la ruta recorre referencias.
 | `invalidation` | Tras el sync, una nota se borra, otra se sube a N4 y otra queda en cuarentena, sin volver a sincronizar. Ningún hit, evidencia ni traza las sirve. |
 
 `prepare(f)` permite construir índices propios de la ruta (p. ej. el `StructureIndex` de M3) en cada mundo antes del sync.
@@ -128,7 +132,13 @@ Desde ese momento la ruta está disponible en:
 
 ## 6. Banco de evidencia y `rag eval`
 
-Un banco es un directorio con `*.json` (una lista o `{"cases": [...]}`) y `*.jsonl`. Cada caso tiene esta forma:
+Un banco es un directorio con `*.json` (una lista o `{"cases": [...]}`) y `*.jsonl`. Admite dos formatos por caso:
+- el **R1** de `eval/evidence-bench/schema.json` (`scope`, `expected`, localizador `{section, quote}`, revisión como id de blob de git), que se convierte con `fromR1`;
+- el interno, que se describe a continuación.
+
+En el formato R1, `section` pasa a `locator` (último tramo del encabezado) y `quote` debe aparecer en el texto servido del hit, sin distinguir mayúsculas ni espacios. Las notas exponen `gitBlob` en su evidencia, así que la revisión de 40 hex casa con el blob de git del fichero actual.
+
+Un caso en formato interno tiene esta forma:
 
 ```json
 {
@@ -143,6 +153,8 @@ Un banco es un directorio con `*.json` (una lista o `{"cases": [...]}`) y `*.jso
 
 Reglas de validación (`validateCase`):
 - La categoría va de `A` a `F` y el `split` es `dev` o `test`.
+- `as_of` es una fecha ISO que existe (`2026-02-30` no vale).
+- Un banco, o un split, sin casos es un error.
 - `max_unauthorized_reads` vale siempre 0.
 - Con `must_abstain: false`, el caso necesita al menos una `required_evidence`.
 - Un campo desconocido es un error.
@@ -166,7 +178,7 @@ Métricas por ruta, globales y por categoría, todas con IC 95 % por bootstrap p
 |---|---|
 | Recuperación | Recall@5/10/20, MRR y nDCG@10 a nivel de documento (`computeRecallAtK` de SE-331), `EvidenceRecall` y `exactIdentifierHit` |
 | Gobernanza | `unauthorizedReads` (evidencias que un guard nuevo no admite al recontrolar), `forbiddenUsed` y `deniedAttempts` (suma de `trace.denied`: intentos que el guard denegó) |
-| Abstención | `correctAbstention` (se abstiene ⇔ `must_abstain`; un caso con error nunca cuenta como acierto) |
+| Abstención | `correctAbstention`: solo en casos `must_abstain`, 1 si se abstuvo (un caso con error nunca cuenta como acierto). `falseAbstention`: solo en los demás, 1 si se abstuvo |
 | Operación | p50/p95, pico de RSS y llamadas/tokens de modelo |
 | Gate | `violations`: casos con lecturas no autorizadas por encima del máximo. Objetivo: 0 |
 
@@ -175,7 +187,11 @@ Métricas por ruta, globales y por categoría, todas con IC 95 % por bootstrap p
 Códigos de salida de `rag eval --route/--bench`:
 - `0`: todo en orden;
 - `1`: parámetros inválidos, o algún caso con error (sus métricas no valen);
-- `2`: algún caso con lecturas no autorizadas.
+- `2`: algún caso con lecturas no autorizadas; prevalece sobre `1`.
+
+El `2` solo se alcanza si el estado cambia entre la ruta y el recontrol, porque el guard final ya filtra lo no autorizado. No tiene test de extremo a extremo.
+
+`--split` solo vale con `--bench`. `--baseline`, `--split` y `--budget` sin `--route` ni `--bench` son un error.
 
 Las comparaciones (`comparisons`) restan ruta − línea base **pareadas por pregunta**, con IC 95 %, global y por categoría. La regla de AC-6 se lee aquí:
 - no inferioridad en A/B de −1 pp;
