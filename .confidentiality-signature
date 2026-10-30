@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=07173e4450b622629c031a7539ee7d8cbe403ae6a140a3d3b3463b5f986b94d1
-timestamp=2026-10-30T17:07:35Z
+diff_hash=f544912e3c4d4201bc69522b2f8d1abe38dfb4ce05236c7a825a6fd5d970b8c9
+timestamp=2026-10-30T18:04:16Z
 branch=agent/rule-manifest-20261023
-head_commit=88b016bf
-signature=186d38ed77ae80f891483f4703f2660914415ee6d9f6656b24627c620e7217e3
+head_commit=9b2db098a
+signature=840963f93f4252c17eb6f43b4d9407164457d1184896c679ef15af438d4e2caa
