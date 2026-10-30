@@ -1,8 +1,8 @@
 {
-  "generated": "2026-10-24T23:14:30Z",
-  "total": 318,
+  "generated": "2026-10-30T07:40:09Z",
+  "total": 319,
   "tier1_count": 4,
-  "tier2_count": 307,
+  "tier2_count": 308,
   "dormant_count": 7,
   "rules": {
     "ac-verifier-authority.md": {
@@ -138,6 +138,10 @@
       "consumers": ""
     },
     "auto-loop-gate.md": {
+      "tier": "tier2",
+      "consumers": ""
+    },
+    "autonomous-safety-merge-grant-reference.md": {
       "tier": "tier2",
       "consumers": ""
     },
