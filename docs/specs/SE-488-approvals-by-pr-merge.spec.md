@@ -20,7 +20,7 @@ timeline:
 
 La operadora gobierna desde el móvil: el chat del asistente y la app de GitHub.
 No tiene terminal ni edita ficheros. Varias aprobaciones que **amplían** la
-autoridad de un agente exigen hoy una de las dos cosas:
+autoridad de un agente exigen hoy una terminal o una firma local:
 
 1. **Contratos de Yema.** `yema aprobar`, `activar` y `transicion → aprobado|activo`
    exigen una TTY o un ticket de 5 minutos. Ese ticket lo deja la puerta tras el
@@ -29,9 +29,13 @@ autoridad de un agente exigen hoy una de las dos cosas:
 2. **Grants de merge (SE-343, SE-433 D7).** `scripts/operator-grant.sh` exige una
    firma ed25519 de la operadora (`ssh-keygen -Y sign`): en el móvil hace falta un
    emulador de terminal y pegar ficheros.
-3. **Push forzado.** `.claude/hooks/block-force-push.sh` lo bloquea sin excepción
-   posible.
-4. **Settings locales no versionados.** Solo se cambian editando en el equipo.
+3. **Settings locales no versionados.** Solo se cambian editando en el equipo.
+
+El push forzado **no** necesita esta vía. `.claude/hooks/block-force-push.sh`
+ya permite `--force-with-lease` en ramas que no son `main` (lo exige el rebase de
+PRs en cola, SPEC-105). Hacia `main`, y con `--force`, `+refspec` o `--mirror`,
+lo prohíbe por diseño: es una prohibición, no algo que se apruebe. Esta spec no
+lo cambia.
 
 Ya son móviles: el merge de PRs (botón de la app), la aprobación de specs
 (pregunta en el chat) y suspender o revocar (reducen autoridad, sin aprobación).
@@ -51,20 +55,34 @@ contra un espejo local. Lo que reduce autoridad no cambia.
 
 ### R1 — Artefacto de aprobación
 - La PR añade **exactamente un fichero**: `aprobaciones/<tipo>/<fecha>-<id>-<nonce8>.json`.
+  Tiene una lista blanca: `<tipo>` pertenece a un enum cerrado, `<id>` casa con
+  `^[a-z0-9-]{1,64}$`, `<fecha>` es `AAAAMMDD` y `<nonce8>` son 8 hex. No se
+  admiten `/`, `..` ni caracteres fuera de ASCII.
 - Esquema `aprobacion/1`: `tipo`, `nonce` (16 hex aleatorios), `emitida`,
   `caduca` (≤ 24 h), `objeto` y `resumen` en lenguaje llano.
 - Objetos por tipo:
   - `yema-contrato`: `{id, huella}`, con la huella sha256 **completa**;
   - `savia-merge`: `{repo, prs: [{numero, head_sha}]}`, que admite lotes;
-  - `savia-force-push`: `{repo, rama, de_sha, a_sha}`, nunca `main`;
-  - `savia-settings`: `{fichero, sha256_antes, sha256_despues}`.
-- El `resumen` y el cuerpo de la PR los genera la herramienta a partir del
-  `objeto`; ningún agente los redacta a mano.
+  - `savia-settings`: `{fichero, sha256_antes, sha256_despues, diff}`. El `diff`
+    es legible y el verificador comprueba que lleva de `sha256_antes` a
+    `sha256_despues`.
+- El `resumen` se genera de forma determinista a partir del `objeto`. El
+  verificador lo **regenera y rechaza** el fichero si no coincide byte a byte. El
+  cuerpo de la PR muestra el `objeto` literal. La herramienta que abre la PR la
+  ejecuta un agente, así que el cuerpo no es una defensa. Lo que se aprueba es el
+  `objeto` que la operadora ve en el fichero, el único que la PR cambia.
 
 ### R2 — Recibo de merge verificable sin red
 Un recibo vale solo si se cumplen todas estas condiciones, comprobadas sobre el
 espejo local del repo de aprobaciones:
-1. `M` está en la cadena first-parent de `main`.
+1. `M` está en la cadena first-parent de `main` del espejo, y esa cadena llega
+   al **commit génesis del repo de aprobaciones, fijado en el verificador**.
+   Cada commit de la cadena, salvo el génesis, cumple R2.2–R2.5. Así, un merge
+   firmado de otro repo (p. ej. una PR de `savia` que añadiera un fichero
+   `aprobaciones/…`) no se puede trasplantar: su primer padre no desciende del
+   génesis por una cadena de aprobaciones. El espejo solo avanza por
+   **fast-forward**: si `main` se reescribe, no hay aprobación hasta que la
+   operadora lo revise.
 2. `M` tiene dos padres. El repo solo permite *merge commits*.
 3. `git verify-commit M` es válido con la **clave pública de web-flow de GitHub
    fijada en el repo verificador**, no con el llavero del usuario.
@@ -94,13 +112,17 @@ espejo local del repo de aprobaciones:
    aprobado y una sola vez, porque el libro de consumidos lo sigue limitando. La
    caducidad acota la vigencia nominal, no la efectiva frente a ese adversario.
 8. El libro de consumidos local registra cada uso por `(nonce, unidad)`. La
-   unidad es el contrato, la PR del lote, la rama o el fichero. Una unidad ya
+   unidad es el contrato, la PR del lote o el fichero de settings. Una unidad ya
    anotada no vale. Orden fail-closed: bajo un cerrojo exclusivo (`flock`) se
    comprueba, **se anota como consumido y después se ejecuta la acción**. Si la
    acción falla, el recibo queda gastado y hace falta otro. Nunca queda una
    acción hecha con el recibo aún reutilizable. Dos usos concurrentes no pasan
    los dos. En un lote `savia-merge`, cada PR se consume por separado y las
-   demás siguen vigentes.
+   demás siguen vigentes. Borrar el libro reinicia los consumos **y** baja el
+   suelo de R2.7 hasta la fecha de la punta del espejo: los dos efectos figuran en
+   la tabla de amenazas.
+9. El tipo está **habilitado por separado** en la política del consumidor. No hay
+   un interruptor global: un tipo no habilitado no se acepta.
 
 Cualquier fallo, herramienta ausente (`git`, `gpg`), clave no fijada o espejo sin
 sincronizar da **no aprobado**: fail-closed. `merged_by` de la API se guarda como
@@ -134,14 +156,7 @@ Alternativas descartadas:
   - `operator-grant.sh check --scope merge` acepta un recibo `savia-merge` como
     alternativa a la firma ed25519. Se mantienen el `head_sha` exacto,
     `--match-head-commit`, el uso único y el máximo de 24 h;
-  - `block-force-push.sh` deja pasar solo `--force-with-lease=<rama>:<de_sha>`
-    con un recibo `savia-force-push` vigente, y nunca hacia `main`. El hook
-    resuelve además el SHA que se empuja (el refspec explícito, o la rama local
-    si no lo hay) y exige que sea `a_sha`. `--force-with-lease` solo fija el
-    valor esperado del remoto, no el nuevo. El **destino** del refspec
-    (`HEAD:<x>`, `refs/heads/<x>`) debe ser la `rama` del recibo, y el remoto
-    debe apuntar al `repo` del recibo. Un refspec que no se pueda resolver a
-    SHA y destino es bloqueo;
+  - `block-force-push.sh` **no cambia** (ver «Problema»);
   - en la vía de `operator-grant.sh`, el recibo se consume (`consume`) **antes**
     de `gh pr merge`, bajo el mismo cerrojo que la comprobación (R2.8). Si el
     merge falla, el recibo queda gastado;
@@ -159,8 +174,9 @@ Alternativas descartadas:
 - `activar` y `transicion` a un estado de `HUMANAS` aceptan el mismo recibo.
 - La evidencia anota `via: "github:<sha12>"`.
 - `gobierno/politica.json` incorpora `aprobacion_github`: ruta del espejo, autor
-  esperado, ruta de la clave web-flow fijada y caducidad máxima. Sin esa sección,
-  el camino está apagado.
+  esperado, ruta de la clave web-flow fijada, commit génesis del repo de
+  aprobaciones, caducidad máxima y tipos habilitados (solo `yema-contrato`). Sin
+  esa sección, el camino está apagado.
 - Órdenes nuevas:
   - `yema solicitar <id>`: crea el artefacto y abre la PR con la App; sin App,
     imprime el artefacto;
@@ -178,12 +194,14 @@ son estimadas y se miden en el piloto (AC-8).
 | Amenaza | Defensa |
 |---|---|
 | PR fabricada y fusionada por un agente | R3: sin credencial de la operadora para ese repo. Un merge de la App falla en R2.4; un commit local o reescrito falla en R2.3 |
-| PR engañosa (el cuerpo no coincide con el fichero) | El resumen se genera a partir del objeto; el verificador lee el objeto; R2.5 exige un solo fichero |
+| PR engañosa (el cuerpo no coincide con el fichero) | El cuerpo lo escribe el lado de los agentes, así que no es una defensa. El verificador regenera el `resumen` desde el `objeto` y rechaza si difiere (R1); el cuerpo muestra el `objeto` literal; R2.5 exige un solo fichero, que es lo que la operadora ve |
+| Trasplante de un merge legítimo de otro repo (p. ej. una PR de `savia` con un fichero `aprobaciones/…`), empujado por la App al `main` del repo de aprobaciones | R2.1: la cadena first-parent debe llegar al génesis fijado y estar hecha toda de merges aprobados; el espejo solo avanza por fast-forward |
+| La App reescribe `main` del repo de aprobaciones (no hay ruleset en plan gratuito) | Fast-forward obligatorio en el espejo (R2.1): una reescritura deja sin aprobación, fail-closed |
 | Reutilización | Libro de consumidos por `(nonce, unidad)` bajo cerrojo; el objeto ata id y huella (o PR y `head_sha`); caducidad |
 | Ventana de vigencia inflada por el agente que redacta el fichero | R2.6 impone `caduca − emitida ≤ 24 h` sea cual sea el contenido |
-| Push forzado de otro commit con un recibo válido | R4: el hook exige que el SHA empujado sea `a_sha`, no solo el `de_sha` del lease |
 | Reloj local atrasado o manipulado | Suelo monótono y fecha del servidor cuando hay red (R2.7). Riesgo residual declarado: con el reloj controlado y sin sincronizar, un recibo no consumido se puede usar tarde, una vez y solo para lo aprobado |
-| Borrado del libro de consumidos | Solo repite lo idéntico dentro de la vigencia (el mismo límite que `merge.spent`) |
+| Borrado del libro de consumidos | Reinicia los consumos y baja el suelo de R2.7 hasta la fecha de la punta del espejo. Solo permite repetir lo idéntico dentro de la vigencia (el mismo límite que `merge.spent`) |
+| `<id>` o `<tipo>` con `/`, `..` o caracteres confundibles | Lista blanca de R1, comprobada en R2.5 |
 | Contrato cambiado tras aprobar | La huella sha256 del contenido material no casa (R2.6) |
 | Caducidad | `caduca` ≤ 24 h y la fecha firmada de `M` dentro de la ventana |
 | Rotación de la clave de web-flow | Se actualiza por PR fusionada por la operadora; mientras tanto, fail-closed |
@@ -204,9 +222,16 @@ vuelve a revisión.
   - firma de otra clave;
   - autor bot;
   - un solo padre;
+  - más de dos padres (octopus);
   - dos ficheros;
   - `M` fuera de la cadena first-parent de `main`;
-  - un solo padre, o un octopus de más de dos padres;
+  - un merge válido trasplantado de otro repo (su cadena no llega al génesis);
+  - un commit intermedio de la cadena que no es un merge aprobado;
+  - un espejo cuyo `main` se reescribió (no fast-forward);
+  - un `<id>` con `/`, `..` o caracteres fuera de ASCII, o un `<tipo>` fuera del enum;
+  - un `resumen` que no coincide con el regenerado;
+  - un tipo no habilitado en la política;
+  - `savia-settings` con un `diff` que no lleva de `sha256_antes` a `sha256_despues`;
   - una entrada `M` (modifica un fichero existente) en vez de `A`;
   - un borrado, un renombrado o un cambio de modo;
   - `ahora` anterior al suelo monótono;
@@ -223,24 +248,20 @@ vuelve a revisión.
   acción falla después de consumir, el recibo no vuelve a valer (test).
 - **AC-2:** si falta `gpg` o la clave fijada, o el espejo no tiene la rama, el
   resultado es **no aprobado** (test).
-- **AC-3:** `operator-grant.sh check --scope merge` responde con los códigos
-  que ya define:
-  - 0 con un recibo `savia-merge` válido para `pr:<n>` y su `head_sha`;
-  - 1 (no vigente) si la cabeza difiere, el recibo caducó o ya se consumió;
-  - 2 (inválido) si el recibo es de otro repo o no cumple R2;
-  - 3 si no hay ni grant ni recibo.
+- **AC-3:** `operator-grant.sh check --scope merge` con recibos. Hoy el python
+  de `check` solo sale con 0 o 1, y el 2 se reserva a errores de entorno. El
+  código 2 para recibos es **nuevo**. Cada condición da un código y solo uno:
+  - 0: recibo `savia-merge` válido para `pr:<n>` con su `head_sha`;
+  - 1 (no vigente): recibo bien formado y anclado, pero la cabeza difiere, está
+    caducado (R2.7), consumido (R2.8) o por debajo del suelo;
+  - 2 (inválido): falla cualquier condición estructural (R2.1–R2.6 o R2.9) o el
+    recibo es de otro repo;
+  - 3: no hay ni grant ni recibo.
 
   Se prueba con bats, un caso por código.
-- **AC-4:** `block-force-push.sh`:
-  - sigue bloqueando sin recibo, y hacia `main` aunque haya recibo;
-  - deja pasar solo `--force-with-lease` con `de_sha` igual al del recibo y con
-    el SHA empujado igual a `a_sha`;
-  - bloquea con otro `a_sha`, con un refspec que no se pueda resolver, con un
-    destino distinto de la `rama` del recibo (`HEAD:otra`) o hacia `main` por un
-    refspec indirecto (`HEAD:main`, `refs/heads/main`), y también con un
-    remoto de otro repo.
-
-  Se prueba con bats.
+- **AC-4:** no regresión: `block-force-push.sh` no se modifica y sus tests
+  actuales siguen en verde, incluido `--force-with-lease` a ramas que no son
+  `main`, que exige SPEC-105.
 - **AC-5:** en Yema, `yema aprobar` sin TTY ni ticket pasa con un recibo válido y
   falla con uno consumido o con otra huella (pytest, en la PR de Yema).
 - **AC-6:** el verificador de instalación falla si el token de la máquina ve el
@@ -275,7 +296,6 @@ vuelve a revisión.
 |---|---|---|
 | Verificador de recibos | `scripts/approval-receipt.py` (CLI, sin dependencias del frontend) | mismo script |
 | Grant de merge | `scripts/operator-grant.sh` | mismo script |
-| Push forzado | `.claude/hooks/block-force-push.sh` (PreToolUse, stdin JSON) | plugin savia-gates → mismo hook |
 | Guard del repo de aprobaciones | hook PreToolUse sobre `gh` | plugin savia-gates |
 
 ### Verification protocol
