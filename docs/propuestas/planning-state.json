@@ -1562,6 +1562,35 @@
       "note": "Ninguna batería mide si el ejecutor para o rodea cuando la tarea es imposible dentro del alcance. Seis casos con control posible y evaluador determinista (PASS, FAIL_ESCAPE, FAIL_FALSE_DONE, FAIL_ATTEMPT). Revisión de Anthropic Research en Savia Labs (privado), 2026-10-29.",
       "evidence": "docs/specs/SE-479-no-in-scope-solution-battery.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-480",
+      "status": "APPROVED",
+      "priority": "P0",
+      "title": "Vaults: RAG autónomo (recarga del registro y sincronización por el servicio)",
+      "note": "El MCP leía el registro una sola vez; tras reactivar el RAG seguía viendo enabled:false. Recarga en caliente + autosync en el servicio A2A + Restart=always.",
+      "evidence": "docs/specs/SE-480-vaults-rag-autonomous.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30: AskUserQuestion (opción: recarga en caliente + servicio sincronizador)"
+    },
+    {
+      "id": "SE-481",
+      "status": "APPROVED",
+      "priority": "P0",
+      "title": "Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica",
+      "note": "H1 y H2 confirmados contra HEAD: confidentiality explícita rota se servía como sin nivel; negaciones eliminadas como stopwords.",
+      "evidence": "docs/specs/SE-481-vaults-classification-fail-closed.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30: AskUserQuestion (opción: cuarentena)"
+    },
+    {
+      "id": "SE-482",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Vaults: del RAG híbrido al contexto gobernado (paraguas)",
+      "note": "Fases F1-F7 tras SE-481; cada una spec propia. Preguntas abiertas a la operadora antes de F1.",
+      "evidence": "docs/specs/SE-482-vaults-governed-context.spec.md",
+      "phase": "D"
     }
   ],
   "route": {
