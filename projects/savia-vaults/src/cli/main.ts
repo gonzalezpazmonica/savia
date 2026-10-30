@@ -801,6 +801,26 @@ domeCmd.command('list').description('List registered domes')
     }
   });
 
+domeCmd.command('quarantine').description('SE-481: notas en cuarentena (clasificación explícita no interpretable), solo en local')
+  .option('--dome <name>', 'solo esta cúpula')
+  .option('--domes-file <file>', 'Registry de cúpulas')
+  .option('--json', 'JSON output')
+  .action((opts) => {
+    const registry = new DomeRegistry(opts.domesFile ? path.resolve(opts.domesFile) : undefined);
+    try { registry.load(); } catch { console.error('No domes registered.'); process.exit(1); }
+    const domes = opts.dome ? [registry.get(opts.dome)] : registry.list();
+    if (opts.dome && !domes[0]) { console.error(`Dome "${opts.dome}" not found.`); process.exit(1); }
+    const out = domes.filter((d): d is NonNullable<typeof d> => Boolean(d)).map((d) => {
+      const storage = new VaultStorage({ name: d.name, path: d.path, allowedExtensions: [], deniedPaths: [], maxDepth: 20, maxFileSize: 10 << 20, confidentiality: d.confidentiality });
+      return { dome: d.name, ...storage.quarantine() };
+    });
+    if (opts.json) { console.log(JSON.stringify(out, null, 2)); return; }
+    for (const q of out) {
+      console.log(`[${q.dome}] cuarentena: ${q.total}${q.total ? ' ' + JSON.stringify(q.byCode) : ''}`);
+      for (const n of q.notes) console.log(`  ${n.code}\t${n.path}`);
+    }
+  });
+
 domeCmd.command('info <name>').description('Show dome details')
   .option('--json', 'JSON output')
   .action((name, opts) => {
