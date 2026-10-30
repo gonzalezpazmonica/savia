@@ -12,6 +12,10 @@
 
 Aprobada por la operadora 2026-10-30 (AskUserQuestion)
 
+## 2026-10-30 SE-486 PROPOSED
+
+F1 de SE-482 con respuestas de la operadora 2026-10-30
+
 ## 2026-10-30 SE-482 PROPOSED
 
 Paraguas de la propuesta de contexto gobernado
@@ -23,6 +27,15 @@ Aprobada por la operadora 2026-10-30 (AskUserQuestion)
 ## 2026-10-30 SE-480 APPROVED
 
 Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+
+## 2026-10-30 SE-484 APPROVED
+
+Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+
+## 2026-10-30 SE-483 APPROVED
+
+Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+
 ## 2026-10-29 SE-479 PROPOSED
 
 Alta desde la revisión de Anthropic Research (diseño en Savia Labs, privado): casos imposibles dentro del alcance en las baterías

@@ -18,13 +18,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       # ─── Gate 1: PR Description Quality ───
       - name: "Gate 1: PR Description Quality"
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -72,7 +72,7 @@ jobs:
 
       # ─── Gate 2: Conventional Commits (PR title) ───
       - name: "Gate 2: Conventional Commits"
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const title = context.payload.pull_request.title;
@@ -208,7 +208,7 @@ jobs:
 
       # ─── Gate 5: Gitleaks Secret Scanning ───
       - name: "Gate 5: Gitleaks Secret Scanning"
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: false
@@ -319,7 +319,7 @@ jobs:
 
       # ─── Gate 7: Context Impact Summary ───
       - name: "Gate 7: Context Impact Summary"
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { execSync } = require('child_process');
@@ -412,7 +412,7 @@ jobs:
 
       # ─── Gate 8: CHANGELOG Required for Code Changes ───
       - name: "Gate 8: CHANGELOG Required"
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -495,7 +495,7 @@ jobs:
 
       # ─── Gate 8b: Spec Archive Required for feat(seXXX) PRs ───
       - name: "Gate 8b: Spec Archive Required"
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -527,7 +527,7 @@ jobs:
       # ─── Gate 9: PR Digest for Maintainer ───
       - name: "Gate 9: PR Digest"
         if: github.event.action == 'opened'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = context.payload.pull_request;
