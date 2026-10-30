@@ -1649,6 +1649,16 @@
       "note": "Toda aprobación que amplía autoridad es una PR en un repo privado de aprobaciones que la operadora fusiona en la app; recibo de merge verificable sin red (firma web-flow, autor, un fichero, huella, caducidad, nonce). GitHub App de agentes separada; el token de la máquina excluye el repo.",
       "evidence": "docs/specs/SE-488-approvals-by-pr-merge.spec.md",
       "phase": "D"
+    },
+    {
+      "id": "SE-489",
+      "status": "APPROVED",
+      "priority": "P1",
+      "title": "Vaults: recuperación adaptativa construida y medida (estructura, grafo, reranker, router y cuantización)",
+      "note": "Se construyen M1–M7 opt-in (padre, reranker, StructureIndex, navegación LLM local, grafo, router, cuantización en sombra) y se comparan con datos propios en un banco de ≥300 casos con verdad a nivel de evidencia. Promoción a defecto solo con datos y PR aparte.",
+      "evidence": "docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30, en el chat: «Construyes, haces pruebas empíricas y sacas datos reales contrastados»"
     }
   ],
   "route": {
