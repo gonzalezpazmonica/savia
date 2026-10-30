@@ -34,7 +34,7 @@ Sin roles fijos: `--role` acepta texto libre («programo backend», «coordino e
 2. Si la persona no tiene perfil o el plan propone cambios en el suyo, ejecutar los pasos 3-5 de
    `/profile-setup` (preguntas, plan, confirmación). Sin confirmación no se escribe nada.
 3. Obtener el plan:
-   `python3 scripts/onboarding-plan.py plan --input <input> --profile-dir .claude/profiles/users/<slug>`
+   `python3 scripts/onboarding-plan.py plan --input - <<'JSON' ... JSON --profile-dir .claude/profiles/users/<slug>`
 4. Checklist = los tres `first_steps` del plan + los comandos que activa (`commands`) aplicados al
    proyecto. Si `vertical.status` es `none`, se dice y no se inventa ninguna.
 

@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -133,6 +134,9 @@ def semantic_errors(cat) -> list[str]:
                 n = sum(1 for o in ask["options"] if o.get("featured"))
                 if not 1 <= n <= MAX_BUTTONS:
                     errs.append(f"{where}: con más de {MAX_BUTTONS} opciones hacen falta 1..{MAX_BUTTONS} 'featured' (hay {n})")
+                rec = next((o for o in ask["options"] if o["id"] == ask["recommended"]), None)
+                if rec is not None and not rec.get("featured"):
+                    errs.append(f"{where}: con más de {MAX_BUTTONS} opciones la recomendada '{ask['recommended']}' debe ser 'featured'")
         for where, conf in _configures_blocks(cap):
             for fname, keys in conf.get("sets", {}).items():
                 if not re.fullmatch(r"[a-z][a-z0-9-]*\.md", str(fname)):
@@ -404,8 +408,8 @@ def diff_writes(sets, root: Path, cat, profile_dir: Path | None):
             else:
                 # Un valor escrito en el fichero es de la persona aunque coincida con el de la plantilla:
                 # solo una clave ausente o vacía se considera hueco que se rellena sin pedir permiso.
-                have = current.get(key, default)
-                if have == value:
+                # Una clave ausente del fichero nunca cuenta como «igual»: el default de la plantilla no está escrito.
+                if key in current and current[key] == value:
                     unchanged += 1
                     continue
                 action = "add" if key not in current or current[key] in (None, "", []) else "overwrite"
@@ -465,6 +469,8 @@ def render_keys(path: Path, template: Path, items: list[dict]) -> str:
 def check_destination(root: Path, profile_dir: Path):
     users = (root / USERS_DIR).resolve()
     target = profile_dir.resolve()
+    if profile_dir.is_symlink():
+        fail(4, f"ERROR destino no permitido: {profile_dir} es un enlace; el perfil es un directorio real")
     if target.parent != users or target.name == "template":
         fail(4, f"ERROR destino no permitido: el perfil va en {USERS_DIR}/<slug>/")
     probe = subprocess.run(["git", "-C", str(root), "check-ignore", "-q", str(target / "identity.md")],
@@ -537,10 +543,17 @@ def apply(cat, data, root: Path, profile_dir: Path, confirm: bool, overwrite: se
         for fname, text in rendered.items():
             # mkstemp crea con O_EXCL un nombre nuevo (no sigue enlaces) y os.replace sustituye la entrada
             # del directorio, no el destino de un enlace.
+            dest = profile_dir / fname
             fd, tmp = tempfile.mkstemp(prefix=f".{fname}.", suffix=".tmp", dir=profile_dir)
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(text)
-            os.replace(tmp, profile_dir / fname)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(text)
+                if dest.is_file():
+                    os.chmod(tmp, stat.S_IMODE(dest.stat().st_mode))  # no cambiar los permisos que ya tenía
+                os.replace(tmp, dest)
+            except BaseException:
+                Path(tmp).unlink(missing_ok=True)
+                raise
         plan["applied"], plan["written"] = True, [f"{w['file']}:{w['key']}" for w in todo]
     return plan
 
@@ -583,7 +596,8 @@ def render(qs, mode: str) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("cmd", choices=["validate", "refs", "present", "questions", "plan", "apply"])
-    ap.add_argument("--root", default=str(ROOT))
+    ap.add_argument("--root", default=str(ROOT),
+                    help="raíz del repo; solo para pruebas: el confinamiento de apply es relativo a esta raíz")
     ap.add_argument("--catalog")
     ap.add_argument("--schema")
     ap.add_argument("--source", help="fuente de identidad (por defecto .claude/profiles/savia.md)")
@@ -615,7 +629,7 @@ def main(argv=None) -> int:
         except IdentityError as exc:
             if not args.fallback:
                 fail(3, str(exc))
-            print(f"AVISO {exc}; presentación mínima", file=sys.stderr)
+            print(f"AVISO {str(exc).removeprefix('ERROR ')}; presentación mínima", file=sys.stderr)
             phrase = "Soy Savia."
         print(phrase + "\n\n" + cat["open_question"])
         return 0
@@ -631,12 +645,15 @@ def main(argv=None) -> int:
     if errs:
         fail(2, "ERROR input mal formado:\n" + "\n".join(errs))
     profile_dir = Path(args.profile_dir) if args.profile_dir else None
-    if args.cmd == "apply":
-        if profile_dir is None:
-            fail(2, "ERROR apply necesita --profile-dir")
-        plan = apply(cat, data, root, profile_dir, args.confirm, set(args.overwrite))
-    else:
-        plan = build_plan(cat, data, root, profile_dir)
+    try:
+        if args.cmd == "apply":
+            if profile_dir is None:
+                fail(2, "ERROR apply necesita --profile-dir")
+            plan = apply(cat, data, root, profile_dir, args.confirm, set(args.overwrite))
+        else:
+            plan = build_plan(cat, data, root, profile_dir)
+    except (OSError, ValueError) as exc:  # ValueError incluye UnicodeDecodeError
+        fail(5, f"ERROR de E/S o de contenido en el perfil: {exc}")
     if args.cmd == "questions":
         print(render(questions(cat, plan), args.render))
     else:

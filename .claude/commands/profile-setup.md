@@ -45,15 +45,16 @@ Mapear la respuesta a ids del catálogo usando `serves` y `description` de cada 
 
 Mostrar la interpretación y dejar quitar o añadir capacidades (AskUserQuestion multiselección).
 
-Guardar la interpretación en el directorio del perfil (gitignored), nunca fuera:
-`.claude/profiles/users/<slug>/.onboarding-input.json` con
+La interpretación lleva datos personales: no se escribe en disco. Se pasa al motor por stdin
+(`--input -`, con heredoc) en cada llamada, con esta forma:
 `{"name", "slug", "role_text", "proposed": [{"id", "reason", "hints"}], "answers": {}, "skipped": []}`.
+El `slug` cumple `[a-z0-9][a-z0-9-]*`; el motor lo valida antes de nada.
 
 ## 3. Preguntas
 
 ```bash
-python3 scripts/onboarding-plan.py questions --input <input> --render askuser   # Claude Code
-python3 scripts/onboarding-plan.py questions --input <input> --render text      # sin herramienta de preguntas
+python3 scripts/onboarding-plan.py questions --input - --render askuser   # Claude Code
+python3 scripts/onboarding-plan.py questions --input - --render text      # sin herramienta de preguntas
 ```
 
 - **Claude Code**: AskUserQuestion con `header`, `question`, `multiSelect` y las opciones tal cual
@@ -68,7 +69,7 @@ Anotar cada respuesta (id o etiqueta) en `answers.<capacidad>.<pregunta>`.
 ## 4. Plan y confirmación
 
 ```bash
-python3 scripts/onboarding-plan.py plan --input <input> --profile-dir .claude/profiles/users/<slug>
+python3 scripts/onboarding-plan.py plan --input - --profile-dir .claude/profiles/users/<slug>
 ```
 
 Mostrar en texto llano: qué se escribe (`writes`, con `before` en las sobrescrituras), comandos,
@@ -85,13 +86,13 @@ primeros pasos.
 ## 5. Aplicación
 
 ```bash
-python3 scripts/onboarding-plan.py apply --input <input> --profile-dir .claude/profiles/users/<slug> \
-  --confirm [--overwrite tone.md:alert_style ...]
+python3 scripts/onboarding-plan.py apply --input - --profile-dir .claude/profiles/users/<slug> \
+  --confirm [--overwrite tone.md:alert_style ...] <<'JSON' ... JSON
 ```
 
 Sin `--confirm` no escribe nada. Solo escribe dentro de `.claude/profiles/users/<slug>/` y se niega si
 git no ignora ese directorio. `diagnostics` dice qué requisito externo falta (p. ej. el PAT) sin
-bloquear el resto. Después: actualizar `active-user.md` y borrar `.onboarding-input.json`.
+bloquear el resto. Después: actualizar `active-user.md`.
 
 ## 6. Primer paso
 

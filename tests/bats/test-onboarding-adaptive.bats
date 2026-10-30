@@ -351,7 +351,7 @@ sys.exit(0 if d['harness_providers']==['claude','codex'] else 1)"
   grep -qx '# nota de la persona' "$dir/preferences.md"
 }
 
-@test "AC-6 negativo [reject]: un temporal plantado como enlace no desvía la escritura" {
+@test "AC-6 negativo [reject]: un temporal con el nombre fijo antiguo plantado como enlace no desvía la escritura (regresión; la garantía de mkstemp no se prueba aquí)" {
   printf 'versionado\n' > "$SANDBOX/README.md"
   dir="$SANDBOX/.claude/profiles/users/fx-pm"
   mkdir -p "$dir"
@@ -504,7 +504,8 @@ assert p['packs'].count('docs/rules/languages/python-rules.md')==1 and p['status
   printf '# Savia\n\nSin marcador.\n' > "$TMP/savia.md"
   run python3 "$ENGINE" present --source "$TMP/savia.md" --fallback
   [ "$status" -eq 0 ]
-  [[ "${lines[0]}" == "AVISO ERROR "*"sin marcador <!-- identity:short -->"*"; presentación mínima" ]]
+  [[ "${lines[0]}" == "AVISO /"*"sin marcador <!-- identity:short -->"*"; presentación mínima" ]]
+  [[ "${lines[0]}" != *"AVISO ERROR"* ]]
   [ "${lines[1]}" = "Soy Savia." ]
   [ "${lines[2]}" = "¿A qué te dedicas y qué quieres conseguir con Savia?" ]
 }
@@ -567,4 +568,87 @@ assert q[0]['options'][0]['label']=='Python (recomendada)' and q[0]['multiSelect
 import json; d=json.load(open('$FX/pm.json')); d['answers']['project-management']['tracker']='Savia Flow (recomendada)'
 json.dump(d, open('$TMP/in.json','w'))"
   plan_check "$TMP/in.json" "p['status']=='ready' and 'flow-setup' in p['commands']"
+}
+
+# ── Segunda ronda de revisión (PR #1424) ─────────────────────────────────────
+
+@test "AC-6 negativo [reject]: un --profile-dir que es un enlace a otro perfil se rechaza sin escribir" {
+  users="$SANDBOX/.claude/profiles/users"
+  mkdir -p "$users/fx-otra"
+  ln -s fx-otra "$users/fx-pm"
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$users/fx-pm" --confirm
+  [ "$status" -eq 4 ]
+  [[ "$stderr" == *"es un enlace"* ]]
+  [ -z "$(ls -A "$users/fx-otra")" ]
+}
+
+@test "AC-6 negativo [reject]: un sets hacia un fichero ausente de la plantilla sale con código 5, sin traza" {
+  sed 's/tone\.md: {alert_style/zzz.md: {alert_style/' "$CATALOG" > "$TMP/zzz.yaml"
+  grep -q 'zzz.md' "$TMP/zzz.yaml"
+  run --separate-stderr python3 "$ENGINE" apply --root "$SANDBOX" --catalog "$TMP/zzz.yaml" --schema "$REPO/docs/onboarding/capabilities.schema.json" \
+    --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
+  [ "$status" -eq 5 ]
+  [[ "$stderr" == *"ERROR de E/S"* ]]
+  [[ "$stderr" != *"Traceback"* ]]
+  [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm/zzz.md" ]
+}
+
+@test "AC-6 negativo [reject]: un perfil existente con bytes no UTF-8 sale con código 5, sin traza" {
+  dir="$SANDBOX/.claude/profiles/users/fx-pm"
+  mkdir -p "$dir"
+  printf -- '---\nalert_style: \xff\xfe\n---\n' > "$dir/tone.md"
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 5 ]
+  [[ "$stderr" != *"Traceback"* ]]
+}
+
+@test "AC-6 negativo [reject]: si falla la sustitución no queda ningún temporal huérfano" {
+  dir="$SANDBOX/.claude/profiles/users/fx-pm"
+  mkdir -p "$dir/tone.md"   # un directorio donde iría el fichero: os.replace falla
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  [ "$status" -ne 0 ]
+  [[ "$stderr" != *"Traceback"* ]]
+  [ -z "$(find "$dir" -maxdepth 1 -name '.*.tmp')" ]
+}
+
+@test "AC-4: reescribir un fichero existente conserva sus permisos" {
+  dir="$SANDBOX/.claude/profiles/users/fx-pm"
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 0 ]
+  chmod 640 "$dir/tools.md"
+  printf '\n# nota\n' >> "$dir/tools.md"
+  sed -i 's/^tracking_extra:.*$/tracking_extra: ""/' "$dir/tools.md"
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 0 ]
+  [ "$(stat -c %a "$dir/tools.md")" = "640" ]
+  grep -qx 'tracking_extra: "savia-flow"' "$dir/tools.md"
+}
+
+@test "AC-4: una clave ausente del fichero se añade aunque su valor coincida con el default de la plantilla" {
+  dir="$SANDBOX/.claude/profiles/users/fx-programador"
+  mkdir -p "$dir"
+  printf -- '---\nsdd_active: true\n---\n' > "$dir/workflow.md"
+  python3 - "$FX/programador.json" "$TMP/in.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1])); d["answers"]["sdd-development"]["review"] = "other"
+json.dump(d, open(sys.argv[2], "w"))
+PY
+  run --separate-stderr sandbox_apply --input "$TMP/in.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 0 ]
+  grep -qx 'reviews_agent_code: false' "$dir/workflow.md"
+}
+
+@test "AC-1 negativo [invalid]: con más de 4 opciones la recomendada tiene que ser featured" {
+  sed '/recommended: python/,/id: typescript/ s/{id: python, label: Python, featured: true,/{id: python, label: Python,/' "$CATALOG" > "$TMP/nofeat.yaml"
+  run grep -c 'id: python, label: Python, featured' "$TMP/nofeat.yaml"
+  [ "$output" = "0" ]
+  run python3 "$ENGINE" validate --catalog "$TMP/nofeat.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"la recomendada 'python' debe ser 'featured'"* ]]
+}
+
+@test "AC-7: /profile-setup pasa la interpretación por stdin y no la escribe antes de validar el slug" {
+  grep -q -- '--input -' .claude/commands/profile-setup.md
+  run grep -c 'onboarding-input.json' .claude/commands/profile-setup.md
+  [ "$output" = "0" ]
 }
