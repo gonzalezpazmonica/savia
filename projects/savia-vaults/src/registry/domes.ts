@@ -7,6 +7,7 @@ import { VaultSecurity } from '../security/index.js';
 import type { VaultConfig } from '../types.js';
 import type { RagDomeConfig } from '../rag/types.js';
 import type { FilesDomeConfig } from '../files/types.js';
+import { envMs } from '../env-ms.js';
 
 export type ConfidentialityLevel = 'N1' | 'N2' | 'N3' | 'N4';
 
@@ -119,7 +120,7 @@ export class DomeRegistry {
   private lastCheck = 0;
   private loadError: string | undefined;
   /** SE-480: como mucho una comprobación de `stat` por este intervalo (ms); 0 desactiva el límite. */
-  public reloadMinIntervalMs: number = Number(process.env.SAVIA_VAULTS_RELOAD_MS ?? 1000);
+  public reloadMinIntervalMs: number = envMs(process.env.SAVIA_VAULTS_RELOAD_MS) ?? 1000;
 
   constructor(filePath: string = 'savia-vaults.domes.json') {
     this.filePath = filePath;

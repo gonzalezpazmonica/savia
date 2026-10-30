@@ -8,7 +8,7 @@ import { indexCipher } from '../files/keys.js';
 import { sodiumReady } from '../files/crypto.js';
 import { RagIndexer, listIndexable, logEvent } from './indexer.js';
 import { fanOut, withTimeout, TimeoutError } from './parallel.js';
-import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD, type AutosyncState } from './autosync.js';
+import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD, readAutosyncState, writeAutosyncState, type AutosyncState } from './autosync.js';
 import { promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
 import {
@@ -127,6 +127,11 @@ export class RagService {
   /** SE-480: el sincronizador del servicio publica aquí su estado para `status`. */
   setAutosyncState(provider: () => AutosyncState | undefined): void {
     this.autosyncState = provider;
+  }
+
+  /** SE-480: persiste el estado del autosync en el rag-home; `status` de otros procesos (MCP, CLI) lo lee. */
+  persistAutosyncState(state: AutosyncState): void {
+    writeAutosyncState(this.home, state);
   }
 
   /** SE-480: nombres de las cúpulas con `rag.enabled:true` en el registro actual. */
@@ -677,7 +682,7 @@ export class RagService {
         }
       }
       const slo = sloStatus({ enabled: cfg.enabled, hasGeneration: Boolean(manifest), indexed: Boolean(pointer.active || pointer.shadow || pointer.previous), totalDocs: pending.totalDocs, pendingDocs: pending.pendingDocs, lagHours: pending.lagHours, digestMatch });
-      const autosync = this.autosyncState?.();
+      const autosync = this.autosyncState?.() ?? readAutosyncState(this.home);
       const alerts = [...slo.alerts];
       if (autosync && autosync.consecutiveFailures >= AUTOSYNC_FAIL_THRESHOLD && cfg.enabled) alerts.push(AUTOSYNC_FAILING_ALERT);
       out.push({

@@ -16,6 +16,7 @@ import { DomeRegistry, isGitTracked } from '../registry/domes.js';
 import { UserStore, ConfidentialityGuard, AuditLogger, UserQuotaStore, AccessController } from '../auth/index.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { envMs } from '../env-ms.js';
 
 function makeConfig(name: string, vaultPath: string): VaultConfig {
   return { name, path: vaultPath, allowedExtensions: [], deniedPaths: [], maxDepth: 10, maxFileSize: 10 * 1024 * 1024 };
@@ -114,7 +115,7 @@ program.command('serve').description('Start MCP, A2A or HTTP (Savia Files) serve
         const rag = new RagService({
           domes: () => domeReg.listActive().map(d => ({ name: d.name, path: d.path, confidentiality: d.confidentiality, rag: d.rag, files: d.files })),
         });
-        const autosync = new RagAutosync(rag, { intervalMin: autosyncMin, refresh: () => { server.refreshRegistry(); }, startDelayMs: process.env.SAVIA_RAG_AUTOSYNC_DELAY_MS ? Number(process.env.SAVIA_RAG_AUTOSYNC_DELAY_MS) : undefined });
+        const autosync = new RagAutosync(rag, { intervalMin: autosyncMin, refresh: () => { server.refreshRegistry(); }, onState: (st) => rag.persistAutosyncState(st), startDelayMs: envMs(process.env.SAVIA_RAG_AUTOSYNC_DELAY_MS) });
         rag.setAutosyncState(() => autosync.getState());
         server.onRegistryReload = () => autosync.onRegistryReload();
         server.autosync = autosync;

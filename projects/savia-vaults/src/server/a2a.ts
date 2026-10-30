@@ -1,3 +1,4 @@
+import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD } from '../rag/autosync.js';
 import * as http from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -281,7 +282,7 @@ export class A2AServer {
             uptime: Math.floor((Date.now() - this.startTime) / 1000),
             vault: this.config.name,
             domes: this.domeReg ? this.domeReg.listActive().length : 1,
-            ...(this.autosync ? { autosync: (({ lastRunAt, lastOk, consecutiveFailures }) => ({ lastRunAt, lastOk, consecutiveFailures }))(this.autosync.getState()) } : {}),
+            ...(this.autosync ? { autosync: (({ lastRunAt, lastOk, consecutiveFailures }) => ({ lastRunAt, lastOk, consecutiveFailures, ...(consecutiveFailures >= AUTOSYNC_FAIL_THRESHOLD ? { alert: AUTOSYNC_FAILING_ALERT } : {}) }))(this.autosync.getState()) } : {}),
           }));
         } else if (p === '/domes') {
           const list = this.listDomes();

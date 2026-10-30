@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { RagService, type RagDomeRef } from '../../../src/rag/service.js';
+import { envMs } from '../../../src/env-ms.js';
 import { RagAutosync, AUTOSYNC_START_DELAY_MS, type AutosyncClock } from '../../../src/rag/autosync.js';
 import { HashEmbedder, type Embedder } from '../../../src/rag/embedder.js';
 import { acquireLock, releaseLock } from '../../../src/rag/indexer.js';
@@ -140,6 +141,55 @@ describe('RagAutosync (SE-480)', () => {
     await a.runCycle();
     expect(a.getState()).toMatchObject({ lastOk: true, consecutiveFailures: 0 });
     expect((await rag.status(['Docs']))[0].slo.alerts).not.toContain('autosync-failing');
+  });
+
+  it('P1 #1418: la alerta autosync-failing llega a un RagService de OTRO proceso (sin provider) vía estado persistido', async () => {
+    await rag.sync('Docs');
+    const a = autosync({ onState: (st) => rag.persistAutosyncState(st) });
+    embedder.fail = true;
+    const other = new RagService({ domes: () => [dome], home, embedderFactory: (_c: ResolvedRagConfig): Embedder => embedder });
+    for (let i = 1; i <= 2; i++) {
+      await a.runCycle();
+      const st = (await other.status(['Docs']))[0];
+      expect(st.autosync?.consecutiveFailures).toBe(i);
+      expect(st.slo.alerts).not.toContain('autosync-failing');
+    }
+    await a.runCycle();
+    const st = (await other.status(['Docs']))[0];
+    expect(st.slo.ok).toBe(false);
+    expect(st.slo.alerts).toContain('autosync-failing');
+    embedder.fail = false;
+    await a.runCycle();
+    expect((await other.status(['Docs']))[0].slo.alerts).not.toContain('autosync-failing');
+  });
+
+  it('P1 #1418 (negativo): sin fichero de estado, o corrupto, status no inventa autosync ni alerta', async () => {
+    await rag.sync('Docs');
+    expect((await rag.status(['Docs']))[0].autosync).toBeUndefined();
+    fs.writeFileSync(path.join(home, 'autosync-state.json'), '{"consecutiveFailures":"tres"');
+    expect((await rag.status(['Docs']))[0].autosync).toBeUndefined();
+    fs.writeFileSync(path.join(home, 'autosync-state.json'), '{"consecutiveFailures":"3"}');
+    const st = (await rag.status(['Docs']))[0];
+    expect(st.autosync).toBeUndefined();
+    expect(st.slo.alerts).not.toContain('autosync-failing');
+  });
+
+  it('onRegistryReload no propaga si enabledDomes() lanza (P2 #1418)', () => {
+    let boom = false;
+    const target = { enabledDomes: () => { if (boom) throw new Error('registro roto'); return []; }, sync: async () => undefined };
+    const logs: string[] = [];
+    const a = new RagAutosync(target, { intervalMin: 15, clock, log: (m) => logs.push(m) });
+    a.start();
+    boom = true;
+    expect(() => a.onRegistryReload()).not.toThrow();
+    expect(logs.join('\n')).toMatch(/registro roto/);
+    a.stop();
+  });
+
+  it('envMs: solo números finitos ≥ 0 (P2 #1418)', () => {
+    expect(envMs('250')).toBe(250);
+    expect(envMs('0')).toBe(0);
+    for (const bad of ['abc', 'NaN', '-5', '', undefined, 'Infinity']) expect(envMs(bad)).toBeUndefined();
   });
 
   it('nunca solapa ciclos: una llamada durante un ciclo en curso no lanza otro en paralelo', async () => {

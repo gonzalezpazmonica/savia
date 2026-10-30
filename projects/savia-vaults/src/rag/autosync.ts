@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { RagError } from './types.js';
 
 /**
@@ -9,6 +11,26 @@ import { RagError } from './types.js';
 export const AUTOSYNC_FAIL_THRESHOLD = 3;
 export const AUTOSYNC_FAILING_ALERT = 'autosync-failing';
 export const AUTOSYNC_START_DELAY_MS = 30_000;
+const STATE_FILE = 'autosync-state.json';
+
+/** Escribe el estado del ciclo en el rag-home (atómico) para que `status` de cualquier proceso lo vea. */
+export function writeAutosyncState(home: string, state: AutosyncState): void {
+  fs.mkdirSync(home, { recursive: true });
+  const f = path.join(home, STATE_FILE);
+  const tmp = `${f}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(state));
+  fs.renameSync(tmp, f);
+}
+
+/** Lee el estado persistido; ausente, ilegible o con forma inesperada → undefined. */
+export function readAutosyncState(home: string): AutosyncState | undefined {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(home, STATE_FILE), 'utf8')) as AutosyncState;
+    return typeof s?.consecutiveFailures === 'number' && Number.isFinite(s.consecutiveFailures) ? s : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export interface AutosyncState {
   intervalMin: number;
@@ -50,6 +72,8 @@ export interface AutosyncOptions {
   /** Se invoca al empezar cada ciclo para que el registro se relea aunque nadie haga peticiones. */
   refresh?: () => void;
   log?: (msg: string) => void;
+  /** Se invoca al terminar cada ciclo con el estado resultante (persistencia para otros procesos). */
+  onState?: (state: AutosyncState) => void;
 }
 
 export class RagAutosync {
@@ -97,7 +121,13 @@ export class RagAutosync {
   /** El registro cambió: si habilita una cúpula que no estaba habilitada, lanza un ciclo ya. */
   onRegistryReload(): void {
     if (this.stopped || this.refreshing) return;
-    const now = new Set(this.target.enabledDomes());
+    let now: Set<string>;
+    try {
+      now = new Set(this.target.enabledDomes());
+    } catch (e) {
+      this.log(`[autosync] registro recargado pero ilegible para RAG: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     const added = [...now].some(n => !this.known.has(n));
     this.known = now;
     if (added) void this.runCycle();
@@ -172,5 +202,6 @@ export class RagAutosync {
       this.state.consecutiveFailures = 0;
     }
     // Solo cúpulas bloqueadas o ninguna habilitada: ni éxito ni fallo, los contadores no se tocan.
+    try { this.o.onState?.(this.getState()); } catch (e) { this.log(`[autosync] no se pudo persistir el estado: ${e instanceof Error ? e.message : String(e)}`); }
   }
 }
