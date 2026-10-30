@@ -95,7 +95,7 @@ Reglas del ledger:
   - el secreto se muestra una vez;
   - no admite los formatos de salida para la configuración MCP.
 - `domes.json` gana `owner?: subjectId`:
-  - `dome create` lo rellena con el humano `admin` que la crea y le otorga `admit` en esa cúpula;
+  - `dome create --owner <usuario>` lo rellena y otorga `admin` + `admit` en esa cúpula a ese usuario. Si el usuario es `service`, falla. Sin `--owner`, queda vacío (la CLI local no sabe quién la ejecuta);
   - en las cúpulas existentes queda vacío, y nadie tiene `admit` hasta que la operadora lo otorgue.
 
 ### R4 — Superficie de admisión
