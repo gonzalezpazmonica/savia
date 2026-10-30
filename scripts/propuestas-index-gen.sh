@@ -29,6 +29,9 @@
 # Ref: SE-222 S2 OKF Adoptable Patterns (index.md progressive disclosure)
 
 set -uo pipefail
+# Orden determinista: `sort` depende del idioma del sistema; sin esto, una máquina en es_ES y la CI (C)
+# generan INDEX.md distintos y cada una ve desfasado lo que generó la otra.
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"

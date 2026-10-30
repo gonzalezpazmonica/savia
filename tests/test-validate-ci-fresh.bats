@@ -80,6 +80,40 @@ fake_table() {
   [[ "$output" == *"OK Generado al día: settings-hooks pin"* ]]
 }
 
+# ── --fresh-only: lo que ejecuta la CI (el hueco de #1401: el --check solo corría en local) ──
+@test "fresh-only: un artefacto desfasado sale con 1 y nombra artefacto y comando" {
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS="$(fake_table false true)" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Results:"* ]]
+  [[ "$output" == *"FAIL Generado desfasado: rule-manifest.json → regenerar: bash scripts/rule-manifest-generate.sh"* ]]
+}
+
+@test "fresh-only: todo al día sale con 0 y no ejecuta las demás comprobaciones" {
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS="$(fake_table true true)" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS Generado al día: rule-manifest.json"* ]]
+  [[ "$output" != *"Results:"* ]]
+}
+
+@test "fresh-only: fail-closed, sin ninguna comprobación no da OK" {
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS=" " bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 1 ]
+}
+
+@test "fresh-only: en un clon con rule-manifest desfasado falla con la comprobación real" {
+  git clone -q --shared --depth 1 "file://$REPO_ROOT" "$TMP/repo"
+  cp "$REPO_ROOT/$SCRIPT" "$TMP/repo/$SCRIPT"
+  printf '# Regla de prueba\n\nTexto.\n' > "$TMP/repo/docs/rules/domain/zz-regla-de-prueba.md"
+  run bash -c "cd '$TMP/repo' && bash $SCRIPT --fresh-only --quick"
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Results:"* ]]
+  [[ "$output" == *"desfasado: rule-manifest.json"* ]]
+}
+
+@test "la CI ejecuta --fresh-only (sin el paso, un artefacto desfasado llega a main)" {
+  grep -qE "^[[:space:]]+run: bash scripts/validate-ci-local\.sh --fresh-only" "$REPO_ROOT/.github/workflows/ci.yml"
+}
+
 # ── SE-425: lockfiles versionados (scripts/ y projects/savia-vaults/) ─────
 # Directorio npm mínimo: package.json y un lock cuya raíz declara `lockdeps` como dependencias.
 lock_dir() {
@@ -127,10 +161,15 @@ lock_dir() {
   command -v npm >/dev/null || skip "npm no disponible"
   mkdir -p "$TMP/ci"
   cp "$REPO_ROOT/scripts/package-lock.json" "$TMP/ci/"
-  sed 's/"yargs": "17.7.2"/"yargs": "17.7.1"/' "$REPO_ROOT/scripts/package.json" > "$TMP/ci/package.json"
-  run bash -c "cd '$TMP/ci' && npm ci --offline --ignore-scripts --no-audit --no-fund"
+  # Hermético: caché vacía propia y un desajuste que npm detecta sin el registro. Cambiar la versión
+  # (17.7.1) obliga a npm a pedir el manifiesto y, sin caché, falla con ENOTCACHED antes de comparar
+  # el lock: el test pasaba solo en máquinas con yargs en caché y fallaba en la CI.
+  sed 's#"yargs": "17.7.2"#"yargs": "file:./no-existe"#' "$REPO_ROOT/scripts/package.json" > "$TMP/ci/package.json"
+  grep -q '"yargs": "file:./no-existe"' "$TMP/ci/package.json"
+  run bash -c "cd '$TMP/ci' && npm_config_cache='$TMP/npm-cache' npm ci --offline --ignore-scripts --no-audit --no-fund"
   [ "$status" -ne 0 ]
   [[ "$output" == *"in sync"* ]]
+  [[ "$output" != *"ENOTCACHED"* ]]
 }
 
 @test "SE-425 AC2: la CI instala con npm ci, audita el lock versionado y ejecuta la suite de savia-vaults" {
@@ -158,4 +197,50 @@ lock_dir() {
   run bash "$TMP/scan/scripts/confidentiality-scan.sh" --staged --blocklist "$TMP/scan/blocklist.txt"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL persona@correo-real.es"* ]]
+}
+
+# ── Revisión independiente de #1421 ──
+@test "fresh-only: el veredicto no usa tuberías hacia grep -q (SIGPIPE + pipefail daba falso verde)" {
+  run grep -nE '\|[[:space:]]*grep -q' <(sed -n '/^if \$FRESH_ONLY/,/^fi$/p' "$REPO_ROOT/$SCRIPT")
+  [ "$status" -eq 1 ]
+}
+
+@test "fresh-only: un FAIL entre muchas comprobaciones nunca da OK (50 repeticiones)" {
+  table="$(printf 'a|false|regen-a\n'; for n in $(seq 1 30); do printf 'p%s|true|x\n' "$n"; done)"
+  for _ in $(seq 1 50); do
+    run env SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+    [ "$status" -eq 1 ]
+  done
+}
+
+@test "fresh-only: una comprobación que muere sin dejar resultado no da OK (fail-closed por recuento)" {
+  # El check mata su subshell contenedor: sin fichero 8-fresh-N para esa fila.
+  table="$(printf 'ok|true|x\nmuere|kill -9 $PPID|x\n')"
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 1 ]
+}
+
+@test "CI: la tabla de comprobaciones no se sobrescribe por entorno fuera de bats" {
+  table="fake-artefacto|false|regen-fake"
+  run env -u BATS_VERSION CI=true SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [[ "$output" != *"fake-artefacto"* ]]
+  # Con bats sigue siendo posible (las pruebas dependen de ello).
+  run env CI=true BATS_VERSION=1 SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [[ "$output" == *"FAIL Generado desfasado: fake-artefacto"* ]]
+}
+
+@test "CI: el paso --fresh-only no es opcional (sin continue-on-error ni if) y esta suite se ejecuta en CI" {
+  ci="$REPO_ROOT/.github/workflows/ci.yml"
+  step="$(awk '/- name: Generated artifacts fresh/{f=1;print;next} f&&/^      - name:/{exit} f' "$ci")"
+  [[ "$step" == *"run: bash scripts/validate-ci-local.sh --fresh-only"* ]]
+  [[ "$step" != *"continue-on-error"* ]]
+  [[ "$step" != *"if:"* ]]
+  grep -qE '^[[:space:]]+run: bats .*tests/test-validate-ci-fresh\.bats' "$ci"
+}
+
+@test "propuestas-index-gen: el orden no depende del idioma del sistema (CI en C, máquinas en es_ES)" {
+  command -v locale >/dev/null && locale -a 2>/dev/null | grep -qi '^es_ES.utf' || skip "sin locale es_ES.UTF-8"
+  a=$(cd "$REPO_ROOT" && LC_ALL=C.UTF-8 bash scripts/propuestas-index-gen.sh --dry-run | grep -v 'Last regenerated')
+  b=$(cd "$REPO_ROOT" && LC_ALL=es_ES.UTF-8 bash scripts/propuestas-index-gen.sh --dry-run | grep -v 'Last regenerated')
+  [ "$a" = "$b" ]
 }

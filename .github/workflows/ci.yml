@@ -349,6 +349,16 @@ jobs:
           bash scripts/validate-agent-permissions.sh .claude/agents
           bats tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats
 
+      # rule-manifest.json, settings-hooks pin, INDEX de propuestas y planning-state se regeneran a mano; el
+      # --check de cada uno solo corría en local (validate-ci-local.sh) y #1401 dejó main desfasado sin que la CI avisara.
+      # --quick omite sam.py check: ya lo ejecuta ci-extended-checks.sh (#11).
+      - name: Generated artifacts fresh
+        run: bash scripts/validate-ci-local.sh --fresh-only --quick
+
+      # Sus tests viven en tests/*.bats (ci-select-bats no los elige); sin este paso no se ejecutan.
+      - name: Tests de frescura de artefactos (validate-ci-local)
+        run: bats tests/test-validate-ci-fresh.bats
+
       # #1413: pre-commit y runner de compliance; sus suites viven fuera de tests/bats/ y ci-select-bats no las elige.
       - name: Compliance pre-commit y runner (#1413)
         run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats

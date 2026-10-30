@@ -3,19 +3,21 @@
 # Runs checks in parallel for speed (~5x faster on Windows).
 # Usage: bash scripts/validate-ci-local.sh [--quick] [--clean-state] | --clean-state-only [--repo DIR]
 # SE-407 S1: incluye la frescura de los artefactos generados (bloquea); --quick omite solo sam.py check.
+# --fresh-only: solo la frescura de los artefactos generados (lo ejecuta la CI en ci.yml; combinable con --quick).
 # SE-407 S2: --clean-state añade el estado limpio al cerrar (advisory: solo PASS/WARN).
 set -uo pipefail
 
 # Ningún test debe heredar GIT_DIR/GIT_WORK_TREE/... del agente: operarían sobre el repo real.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/mock-env.sh"; git_env_clean
 
-QUICK_MODE=false; CLEAN_STATE=false; CLEAN_ONLY=false
+QUICK_MODE=false; CLEAN_STATE=false; CLEAN_ONLY=false; FRESH_ONLY=false
 CLEAN_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quick) QUICK_MODE=true ;;
     --clean-state) CLEAN_STATE=true ;;
     --clean-state-only) CLEAN_ONLY=true ;;
+    --fresh-only) FRESH_ONLY=true ;;
     --repo) CLEAN_REPO="${2:-}"; shift ;;
   esac
   shift
@@ -202,8 +204,12 @@ docs/critical-facts.md|bash scripts/generate-critical-facts.sh --check|bash scri
 arranque sin datos personales (SE-487)|bash scripts/validate-critical-facts-cap.sh --clean-clone|mover el dato personal a un fichero local gitignored (CLAUDE.local.md, perfil activo)'
 REPO_ROOT_CI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+FRESH_EXPECTED=0  # nº de comprobaciones lanzadas; --fresh-only exige una línea PASS por cada una
 check_generated_fresh() {
-  local i=0 name check regen
+  local i=0 name check regen table
+  table="${SAVIA_FRESH_CHECKS_FOR_TESTS:-$FRESH_CHECKS_DEFAULT}"
+  # En CI la tabla por defecto no se sobrescribe por entorno: solo bats (BATS_VERSION) puede.
+  if [[ "${CI:-}" == "true" && -z "${BATS_VERSION:-}" ]]; then table="$FRESH_CHECKS_DEFAULT"; fi
   while IFS='|' read -r name check regen; do
     [[ -z "${name// /}" ]] && continue
     # --quick puede omitir sam.py check (el más lento), nunca los otros.
@@ -214,7 +220,8 @@ check_generated_fresh() {
       else
         echo "FAIL Generado desfasado: $name → regenerar: $regen"
       fi ) > "$TMPDIR_CI/8-fresh-$i" &
-  done <<< "${SAVIA_FRESH_CHECKS_FOR_TESTS:-$FRESH_CHECKS_DEFAULT}"
+  done <<< "$table"
+  FRESH_EXPECTED=$i
   wait
 }
 
@@ -283,6 +290,17 @@ report_unverified_coverage() {
 }
 
 # ── Run checks in parallel ───────────────────────────────────────────────
+if $FRESH_ONLY; then
+  check_generated_fresh
+  # Sin tuberías: con pipefail, un grep que sale pronto mata a cat con SIGPIPE y se pierde el FAIL (falso verde).
+  fresh_out=$(cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null)
+  [[ -n "$fresh_out" ]] && echo "$fresh_out"
+  # Fail-closed: ninguna FAIL y exactamente una PASS por comprobación lanzada (una perdida no es OK).
+  fresh_fail=$(grep -c '^FAIL' <<< "$fresh_out")
+  fresh_pass=$(grep -c '^PASS' <<< "$fresh_out")
+  [[ "$FRESH_EXPECTED" -gt 0 && "$fresh_fail" -eq 0 && "$fresh_pass" -eq "$FRESH_EXPECTED" ]] || exit 1
+  exit 0
+fi
 check_branch &
 check_coherence &
 check_file_sizes &
