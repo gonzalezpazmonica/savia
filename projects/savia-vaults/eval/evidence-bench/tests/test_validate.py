@@ -198,7 +198,15 @@ class ValidateTest(unittest.TestCase):
         man = copy.deepcopy(self.fx.manifest)
         man["snapshot_commit"] = "f" * 40
         errs = v.validate(self.fx.cases(), man, self.fx.root)
-        self.assertTrue(errs)
+        # Toda evidencia del corpus real falla con el diagnóstico explícito, no con un «no existe» genérico.
+        real = [e for e in errs if "savia-docs" in e]
+        self.assertTrue(real)
+        self.assertTrue(all("snapshot_commit" in e for e in real), real[:2])
+
+    def test_no_git_repo_is_fail_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            errs = v.validate(self.fx.cases(), self.fx.manifest, d)
+        self.assertTrue(any("snapshot_commit" in e for e in errs))
 
     def test_mini_schema_engine(self):
         s = {"type": "object", "required": ["a"], "additionalProperties": False,

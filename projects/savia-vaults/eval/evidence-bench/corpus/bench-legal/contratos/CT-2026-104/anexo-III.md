@@ -1,11 +1,8 @@
 ---
-title: "Anexo III de CT-2026-104 (ficticio)"
-doc_id: CT-2026-104-AIII
+title: "Anexo III (ficticio)"
 status: active
 ---
 # Anexo III — Subencargados autorizados
-
-Contrato de referencia: CT-2026-104.
 
 - SB-10
 - SB-11

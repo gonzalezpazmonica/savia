@@ -1,11 +1,8 @@
 ---
-title: "Anexo III de CT-2026-041 (ficticio)"
-doc_id: CT-2026-041-AIII
+title: "Anexo III (ficticio)"
 status: active
 ---
 # Anexo III — Subencargados autorizados
-
-Contrato de referencia: CT-2026-041.
 
 - SB-52
 - SB-53

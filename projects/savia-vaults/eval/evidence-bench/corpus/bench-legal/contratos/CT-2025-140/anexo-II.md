@@ -1,11 +1,8 @@
 ---
-title: "Anexo II de CT-2025-140 (ficticio)"
-doc_id: CT-2025-140-AII
+title: "Anexo II (ficticio)"
 status: active
 ---
 # Anexo II — Tarifas anuales
-
-Contrato de referencia: CT-2025-140.
 
 | Tramo | Equipos atendidos | Precio anual |
 |---|---|---|

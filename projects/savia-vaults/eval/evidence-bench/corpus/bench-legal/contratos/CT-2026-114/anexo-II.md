@@ -1,11 +1,8 @@
 ---
-title: "Anexo II de CT-2026-114 (ficticio)"
-doc_id: CT-2026-114-AII
+title: "Anexo II (ficticio)"
 status: active
 ---
 # Anexo II — Tarifas anuales
-
-Contrato de referencia: CT-2026-114.
 
 | Tramo | Equipos atendidos | Precio anual |
 |---|---|---|

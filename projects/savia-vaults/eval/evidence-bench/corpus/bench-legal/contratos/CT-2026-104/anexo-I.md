@@ -1,11 +1,8 @@
 ---
-title: "Anexo I de CT-2026-104 (ficticio)"
-doc_id: CT-2026-104-AI
+title: "Anexo I (ficticio)"
 status: active
 ---
 # Anexo I — Tiempos máximos de respuesta
-
-Contrato de referencia: CT-2026-104.
 
 | Severidad | Tiempo máximo de respuesta |
 |---|---|
