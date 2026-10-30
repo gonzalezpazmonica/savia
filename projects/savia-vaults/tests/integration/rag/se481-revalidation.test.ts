@@ -173,7 +173,7 @@ describe('SE-481 RAG', () => {
       expect(FlatVectorStore.readManifest(genDir)!.docs['r.md'].skipped).toBe('quarantine:unknown-level');
     });
 
-    it('el cambio de código de cuarentena se refleja en el manifiesto', async () => {
+    it('regresión: el cambio de código de cuarentena se refleja en el manifiesto (vía updateManifest)', async () => {
       writeDocs(vault, { 'c.md': `---\nconfidentiality: [N4\n---\n# C\n\n${long('la espátula común')}` });
       await service().sync('D');
       const genDir = path.join(home, 'D', readActive(home, 'D').active!);

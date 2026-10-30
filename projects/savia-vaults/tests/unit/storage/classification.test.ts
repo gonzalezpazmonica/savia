@@ -51,7 +51,7 @@ describe('SE-481 R1 parseClassification', () => {
   });
 
   it('frontmatter enorme: no se parsea; con la clave, cierra; sin ella, heredado', () => {
-    const filler = 'x: y\n'.repeat(20_000); // > 64 KiB
+    const filler = Array.from({ length: 8_000 }, (_, i) => `k${i}: y`).join('\n') + '\n'; // > 64 KiB, YAML válido
     expect(kindOf(`---\n${filler}confidentiality: N2\n# sin cierre\n`)).toEqual({ kind: 'UNPARSABLE', diagnostic: 'yaml-unparsable' });
     expect(kindOf(`---\n${filler}---\n# cerrado pero enorme, sin clave\n`)).toEqual({ kind: 'ABSENT' });
     expect(kindOf(fm('confidentiality: N2'))).toEqual({ kind: 'VALID', level: 'N2' }); // caso negativo: lo normal se parsea
