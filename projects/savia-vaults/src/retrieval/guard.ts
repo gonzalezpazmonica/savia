@@ -54,7 +54,6 @@ const DOC_ID = /^[A-Za-z0-9_-]{1,128}$/;
 /** Ruta relativa POSIX dentro de la cúpula, sin `..`, sin absolutas ni caracteres de control. */
 function safeRelPath(p: unknown): string | undefined {
   if (typeof p !== 'string' || !p || p.length > 1024) return undefined;
-  // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001F\\]/.test(p) || p.startsWith('/') || /^[A-Za-z]:/.test(p)) return undefined;
   const norm = path.posix.normalize(p);
   if (norm !== p || norm === '.' || norm.startsWith('../') || norm === '..' || norm.split('/').includes('..')) return undefined;
