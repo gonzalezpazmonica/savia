@@ -382,6 +382,17 @@ export class RagService {
     return removed;
   }
 
+  /** Borra todo el índice de una cúpula con rag.enabled=false; con rag.enabled=true se rechaza. */
+  async drop(name: string): Promise<boolean> {
+    const d = this.dome(name);
+    if (this.config(d).enabled) throw new RagError('INVALID_INPUT', `${name} tiene rag.enabled=true; deshabilítala antes de borrar su índice`);
+    const dir = domeDir(this.home, name);
+    if (!fs.existsSync(dir)) return false;
+    fs.rmSync(dir, { recursive: true, force: true });
+    logEvent(this.home, { event: 'drop', dome: name });
+    return true;
+  }
+
   /** Disparador de escritura (P3): debounce de 2 s por cúpula; solo en el servidor. */
   scheduleSync(name: string): void {
     if (!this.o.background) return;
@@ -678,7 +689,7 @@ export class RagService {
           // proveedor caído: no es deriva de modelo; se refleja en búsqueda como degraded
         }
       }
-      const slo = sloStatus({ enabled: cfg.enabled, hasGeneration: Boolean(manifest), totalDocs: pending.totalDocs, pendingDocs: pending.pendingDocs, digestMatch });
+      const slo = sloStatus({ enabled: cfg.enabled, hasGeneration: Boolean(manifest), indexed: Boolean(pointer.active || pointer.shadow || pointer.previous), totalDocs: pending.totalDocs, pendingDocs: pending.pendingDocs, lagHours: pending.lagHours, digestMatch });
       out.push({
         name: d.name, enabled: cfg.enabled, confidentiality: d.confidentiality,
         active: pointer.active, shadow: pointer.shadow, previous: pointer.previous,
@@ -692,6 +703,21 @@ export class RagService {
       });
     }
     return out;
+  }
+
+  /** Deja una alerta operativa en rag.jsonl (la lee el morning brief / success_checks). */
+  recordAlert(kind: string, detail: unknown): void {
+    // Sin repetir la misma alerta en el mismo día: una cron frecuente no debe crecer el log sin límite.
+    const key = JSON.stringify({ kind, detail });
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const lines = fs.readFileSync(path.join(this.home, 'logs', 'rag.jsonl'), 'utf-8').trim().split('\n').slice(-50);
+      for (const l of lines) {
+        const e = JSON.parse(l) as { ts?: string; event?: string; kind?: string; detail?: unknown };
+        if (e.event === 'alert' && e.ts?.startsWith(today) && JSON.stringify({ kind: e.kind, detail: e.detail }) === key) return;
+      }
+    } catch { /* sin log previo o línea ilegible: se registra */ }
+    logEvent(this.home, { event: 'alert', kind, detail });
   }
 
   /** Comprueba que el home es seguro antes de operar (AC11). */
