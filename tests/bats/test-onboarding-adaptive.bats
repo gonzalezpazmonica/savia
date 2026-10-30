@@ -289,8 +289,9 @@ json.dump(d, open('$TMP/in.json','w'))"
   sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm >/dev/null
   sed -i 's/^alert_style: .*/alert_style: "diplomatic"/' "$dir/tone.md"
   printf 'Nota propia de la persona.\n' >> "$dir/tone.md"
-  run sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
   [ "$status" -eq 0 ]
+  [ "$stderr" = "AVISO no se sobrescribe tone.md:alert_style sin --overwrite tone.md:alert_style" ]
   echo "$output" | python3 -c "import json,sys; p=json.load(sys.stdin); sys.exit(0 if [w['action'] for w in p['writes']]==['overwrite'] and p['writes'][0]['before']=='diplomatic' and p['skipped_overwrites']==['tone.md:alert_style'] and p['unchanged']>0 else 1)"
   grep -qx 'alert_style: "diplomatic"' "$dir/tone.md"
   grep -qx 'Nota propia de la persona.' "$dir/tone.md"
@@ -311,7 +312,7 @@ json.dump(d, open('$TMP/in.json','w'))"
   dir="$SANDBOX/.claude/profiles/users/fx-programador"
   sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm >/dev/null
   sed -i 's/^reviews_agent_code: .*/reviews_agent_code: false/' "$dir/workflow.md"
-  run sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm
+  run --separate-stderr sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "import json,sys; p=json.load(sys.stdin); sys.exit(0 if p['skipped_overwrites']==['workflow.md:reviews_agent_code'] else 1)"
   grep -qx 'reviews_agent_code: false' "$dir/workflow.md"
@@ -332,6 +333,55 @@ import sys, yaml; t=open('$dir/preferences.md').read().split('---')[1]; d=yaml.s
 sys.exit(0 if d['harness_providers']==['claude','codex'] and 'vertical' in d else 1)"
   run grep -c '^  - ' "$dir/preferences.md"
   [ "$output" -eq 0 ]
+}
+
+@test "AC-5 límite [boundary]: un bloque con línea en blanco se sustituye entero y conserva el comentario siguiente" {
+  dir="$SANDBOX/.claude/profiles/users/fx-programador"
+  sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm >/dev/null
+  python3 -c "
+import sys; p='$dir/preferences.md'; s=open(p).read()
+s=s.replace('harness_providers: [\"claude\", \"codex\"]', 'harness_providers:\n  - local\n\n  - claude\n# nota de la persona')
+open(p,'w').write(s)"
+  grep -qx '# nota de la persona' "$dir/preferences.md"
+  run --separate-stderr sandbox_apply --input "$FX/programador.json" --profile-dir "$dir" --confirm --overwrite preferences.md:harness_providers
+  [ "$status" -eq 0 ]
+  python3 -c "
+import sys, yaml; t=open('$dir/preferences.md').read().split('---')[1]; d=yaml.safe_load(t)
+sys.exit(0 if d['harness_providers']==['claude','codex'] else 1)"
+  grep -qx '# nota de la persona' "$dir/preferences.md"
+}
+
+@test "AC-6 negativo [reject]: un temporal plantado como enlace no desvía la escritura" {
+  printf 'versionado\n' > "$SANDBOX/README.md"
+  dir="$SANDBOX/.claude/profiles/users/fx-pm"
+  mkdir -p "$dir"
+  for f in identity preferences tone tools workflow; do ln -s ../../../../README.md "$dir/.$f.md.tmp"; done
+  run --separate-stderr sandbox_apply --input "$FX/pm.json" --profile-dir "$dir" --confirm
+  [ "$status" -eq 0 ]
+  [ "$(cat "$SANDBOX/README.md")" = "versionado" ]
+  grep -qx 'tracking_extra: "savia-flow"' "$dir/tools.md"
+}
+
+@test "AC-1 negativo [invalid]: plan se niega a usar un catálogo que no valida" {
+  sed 's/recommended: internal/recommended: inventada/' "$CATALOG" > "$TMP/bad.yaml"
+  run python3 "$ENGINE" plan --catalog "$TMP/bad.yaml" --input "$FX/pm.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"catálogo no válido"* ]]
+}
+
+@test "AC-1 negativo [invalid]: un fichero o una clave de sets con forma rara no valida" {
+  sed 's#sets: {tools.md: {tracking_extra: jira}}#sets: {"../x.md": {"Mala-Clave": jira}}#' "$CATALOG" > "$TMP/bad.yaml"
+  run python3 "$ENGINE" validate --catalog "$TMP/bad.yaml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sets.../x.md: nombre de fichero de perfil no válido"* ]]
+  [[ "$output" == *"sets.../x.md.Mala-Clave: clave no válida"* ]]
+}
+
+@test "AC-2: una categoría especial no se repite aunque se active por dos caminos" {
+  python3 -c "
+import json; d=json.load(open('$FX/medica.json')); d['proposed'].append({'id':'accessibility','reason':'x'}); d['proposed'].append({'id':'accessibility','reason':'y'}); d['answers']['accessibility']={'adapt':'later'}
+json.dump(d, open('$TMP/in.json','w'))"
+  plan_check "$TMP/in.json" "[c['capability'] for c in p['sensitivity']['special_categories']]==['vertical','accessibility']"
 }
 
 @test "AC-5 límite [zero]: repetir el mismo onboarding no propone ningún cambio" {

@@ -30,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -134,8 +135,12 @@ def semantic_errors(cat) -> list[str]:
                     errs.append(f"{where}: con más de {MAX_BUTTONS} opciones hacen falta 1..{MAX_BUTTONS} 'featured' (hay {n})")
         for where, conf in _configures_blocks(cap):
             for fname, keys in conf.get("sets", {}).items():
+                if not re.fullmatch(r"[a-z][a-z0-9-]*\.md", str(fname)):
+                    errs.append(f"{where}: sets.{fname}: nombre de fichero de perfil no válido")
                 if not isinstance(keys, dict) or not keys:
                     errs.append(f"{where}: sets.{fname} debe ser un mapa clave → valor")
+                    continue
+                errs += [f"{where}: sets.{fname}.{k}: clave no válida" for k in keys if not re.fullmatch(r"[a-z][a-z0-9_]*", str(k))]
     steps = list(cat["general_first_steps"])
     for cap in cat["capabilities"]:
         steps += cap.get("first_steps", [])
@@ -146,7 +151,8 @@ def semantic_errors(cat) -> list[str]:
 
 def validate_catalog(root: Path, catalog: str | None, schema_path: str | None = None) -> list[str]:
     cat = load_catalog(root, catalog)
-    schema = json.loads((Path(schema_path) if schema_path else root / SCHEMA).read_text(encoding="utf-8"))
+    # El esquema va con el motor (mismo repo que este script), no con el --root de destino.
+    schema = json.loads((Path(schema_path) if schema_path else ROOT / SCHEMA).read_text(encoding="utf-8"))
     errs = schema_errors(cat, schema, schema)
     return errs or semantic_errors(cat)
 
@@ -338,13 +344,15 @@ def build_plan(cat, data: dict, root: Path, profile_dir: Path | None = None) -> 
                     continue
                 blocks.append((f"{cap['id']}.{ask['id']}.{opt['id']}", opt.get("configures", {})))
                 steps += opt.get("first_steps", [])
-                if opt.get("sensitive"):
-                    plan["sensitivity"]["special_categories"].append({"capability": cap["id"], "why": opt["sensitive"]})
+                entry = {"capability": cap["id"], "why": opt.get("sensitive", "")}
+                if opt.get("sensitive") and entry not in plan["sensitivity"]["special_categories"]:
+                    plan["sensitivity"]["special_categories"].append(entry)
                 if cap["id"] == "vertical" and opt["id"] != "none":
                     plan["vertical"] = {"status": "selected", "id": opt["id"]}
         plan["sensitivity"]["level"] = max(plan["sensitivity"]["level"], cap["sensitivity"]["level"], key=LEVELS.index)
-        if cap["sensitivity"]["special_category"]:
-            plan["sensitivity"]["special_categories"].append({"capability": cap["id"], "why": cap["sensitivity"].get("why", "")})
+        entry = {"capability": cap["id"], "why": cap["sensitivity"].get("why", "")}
+        if cap["sensitivity"]["special_category"] and entry not in plan["sensitivity"]["special_categories"]:
+            plan["sensitivity"]["special_categories"].append(entry)
         for origin, conf in blocks:
             for fname, keys in conf.get("sets", {}).items():
                 for k, v in keys.items():
@@ -418,6 +426,18 @@ def _yaml_scalar(value) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
+def _is_continuation(lines, i, end) -> bool:
+    """Línea del valor en bloque de la clave anterior: con sangría o `- `; una línea en blanco solo si
+    lo que sigue también es continuación. Una clave o un comentario de primer nivel cierran el bloque."""
+    line = lines[i]
+    if line.startswith((" ", "\t", "- ")) or line == "-":
+        return True
+    if line.strip() == "":
+        nxt = next((j for j in range(i + 1, end) if lines[j].strip()), None)
+        return nxt is not None and lines[nxt].startswith((" ", "\t", "- "))
+    return False
+
+
 def render_keys(path: Path, template: Path, items: list[dict]) -> str:
     """Texto nuevo del fichero con las claves cambiadas. Un valor en bloque (líneas con sangría o
     `- ` bajo la clave) se sustituye entero; el resultado tiene que seguir siendo YAML válido."""
@@ -433,7 +453,7 @@ def render_keys(path: Path, template: Path, items: list[dict]) -> str:
             end += 1
             continue
         stop = idx + 1
-        while stop < end and (lines[stop].startswith((" ", "\t", "- ")) or lines[stop] == "-"):
+        while stop < end and _is_continuation(lines, stop, end):
             stop += 1
         lines[idx:stop] = [new]
         end -= stop - idx - 1
@@ -502,6 +522,8 @@ def apply(cat, data, root: Path, profile_dir: Path, confirm: bool, overwrite: se
     plan["applied"], plan["diagnostics"] = False, run_checks(plan["requires"])
     todo = [w for w in plan["writes"] if w["action"] != "overwrite" or f"{w['file']}:{w['key']}" in overwrite]
     plan["skipped_overwrites"] = [f"{w['file']}:{w['key']}" for w in plan["writes"] if w not in todo]
+    for k in plan["skipped_overwrites"]:
+        print(f"AVISO no se sobrescribe {k} sin --overwrite {k}", file=sys.stderr)
     files = sorted({w["file"] for w in todo})
     check_files(root, profile_dir, files)
     if confirm:
@@ -514,8 +536,11 @@ def apply(cat, data, root: Path, profile_dir: Path, confirm: bool, overwrite: se
             fail(5, f"ERROR {exc}")
         profile_dir.mkdir(parents=False, exist_ok=True)
         for fname, text in rendered.items():
-            tmp = profile_dir / f".{fname}.tmp"
-            tmp.write_text(text, encoding="utf-8")
+            # mkstemp crea con O_EXCL un nombre nuevo (no sigue enlaces) y os.replace sustituye la entrada
+            # del directorio, no el destino de un enlace.
+            fd, tmp = tempfile.mkstemp(prefix=f".{fname}.", suffix=".tmp", dir=profile_dir)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text)
             os.replace(tmp, profile_dir / fname)
         plan["applied"], plan["written"] = True, [f"{w['file']}:{w['key']}" for w in todo]
     return plan
@@ -576,6 +601,9 @@ def main(argv=None) -> int:
         errs = validate_catalog(root, args.catalog, args.schema)
         print("\n".join(errs) if errs else "OK catálogo válido")
         return 1 if errs else 0
+    errs = validate_catalog(root, args.catalog, args.schema)
+    if errs:
+        fail(1, "ERROR catálogo no válido; ejecuta validate:\n" + "\n".join(errs[:10]))
     cat = load_catalog(root, args.catalog)
     if args.cmd == "refs":
         errs = reference_errors(root, cat)
