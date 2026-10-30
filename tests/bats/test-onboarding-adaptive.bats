@@ -1,12 +1,15 @@
 #!/usr/bin/env bats
 # SE-484 — onboarding adaptativo: catálogo, plan determinista, simulación, reentrada y privacidad.
-# Fixtures sintéticos en tests/fixtures/onboarding/ (personas ficticias, slug fx-*).
+# Fixtures sintéticos en tests/fixtures/onboarding/ (personas ficticias, slug fx-*). Perfiles: SPEC-110.
 
-ENGINE="scripts/onboarding-plan.py"
+SCRIPT="scripts/onboarding-plan.py"
+ENGINE="$SCRIPT"
 CATALOG="docs/onboarding/capabilities.yaml"
 FX="tests/fixtures/onboarding"
 
 setup() {
+  # Los helpers encadenan el motor con python3: sin pipefail un fallo del motor quedaría oculto.
+  set -o pipefail
   REPO="$(git rev-parse --show-toplevel)"
   cd "$REPO"
   TMP="$(mktemp -d)"
@@ -47,6 +50,8 @@ sandbox_apply() {
 }
 
 # ── AC-1: esquema y referencias ─────────────────────────────────────────────
+# cubre: main, validate_catalog, load_catalog, schema_errors, _resolve, semantic_errors, _configures_blocks,
+#        reference_errors, template_keys, frontmatter
 
 @test "AC-1: el catálogo valida contra su esquema" {
   run python3 "$ENGINE" validate
@@ -54,28 +59,28 @@ sandbox_apply() {
   [[ "$output" == *"OK catálogo válido"* ]]
 }
 
-@test "AC-1 negativo: una recomendada que no es opción hace fallar la validación" {
+@test "AC-1 negativo [invalid]: una recomendada que no es opción hace fallar la validación" {
   sed 's/recommended: internal/recommended: inventada/' "$CATALOG" > "$TMP/bad.yaml"
   run python3 "$ENGINE" validate --catalog "$TMP/bad.yaml"
   [ "$status" -eq 1 ]
   [[ "$output" == *"knowledge.confidentiality: la recomendada 'inventada' no es una opción"* ]]
 }
 
-@test "AC-1 negativo: una clave fuera del esquema hace fallar la validación" {
+@test "AC-1 negativo [invalid]: una clave fuera del esquema hace fallar la validación" {
   sed 's/^version: 1$/version: 1\nsorpresa: true/' "$CATALOG" > "$TMP/bad.yaml"
   run python3 "$ENGINE" validate --catalog "$TMP/bad.yaml"
   [ "$status" -eq 1 ]
   [[ "$output" == *"clave no permitida 'sorpresa'"* ]]
 }
 
-@test "AC-1 límite: más de 4 opciones sin ninguna destacada falla" {
+@test "AC-1 límite [boundary]: más de 4 opciones sin ninguna destacada falla" {
   sed 's/, featured: true//' "$CATALOG" > "$TMP/bad.yaml"
   run python3 "$ENGINE" validate --catalog "$TMP/bad.yaml"
   [ "$status" -eq 1 ]
   [[ "$output" == *"sdd-development.languages: con más de 4 opciones hacen falta 1..4 'featured' (hay 0)"* ]]
 }
 
-@test "AC-1 negativo: /sprint-status no puede ser un primer paso" {
+@test "AC-1 negativo [reject]: /sprint-status no puede ser un primer paso" {
   sed 's/command: arch-detect/command: sprint-status/' "$CATALOG" > "$TMP/bad.yaml"
   run python3 "$ENGINE" validate --catalog "$TMP/bad.yaml"
   [ "$status" -eq 1 ]
@@ -88,7 +93,7 @@ sandbox_apply() {
   [[ "$output" == *"OK todas las referencias existen"* ]]
 }
 
-@test "AC-1 negativo: comando, skill, pack y clave inexistentes se detectan" {
+@test "AC-1 negativo [nonexistent]: comando, skill, pack y clave inexistentes se detectan" {
   sed -e 's/commands: \[vault-init, vault-status\]/commands: [vault-init, comando-fantasma]/' \
       -e 's/skills: \[savia-vaults\]/skills: [skill-fantasma]/' \
       -e 's#packs: \[docs/rules/domain/language-packs.md\]#packs: [docs/no-existe.md]#' \
@@ -102,6 +107,7 @@ sandbox_apply() {
 }
 
 # ── AC-2: mapeo determinista con capacidades propuestas fijas ───────────────
+# cubre: build_plan, _match_option, _merge_set, slugify, pick_first_steps, diff_writes
 
 @test "AC-2 investigadora: investigación + conocimiento + desarrollo, prerregistro obligatorio" {
   [ "$(caps_of "$FX/investigadora.json")" = "knowledge,research,sdd-development,tone" ]
@@ -142,7 +148,7 @@ sandbox_apply() {
   plan_check "$FX/cientifico.json" "{'file':'workflow.md','key':'sdd_languages','value':['python','rust'],'action':'create'} in p['writes']"
 }
 
-@test "AC-2 ambigua («hago de todo»): pide aclaración en vez de configurar de más" {
+@test "AC-2 ambigua [empty]: «hago de todo» pide aclaración en vez de configurar de más" {
   plan_check "$FX/ambigua.json" "p['status']=='needs_clarification' and [c['id'] for c in p['capabilities']]==['tone'] and p['clarify']['interview_skill']=='context-interview-conductor'"
   run python3 "$ENGINE" apply --root "$SANDBOX" --catalog "$REPO/$CATALOG" --input "$FX/ambigua.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-ambigua" --confirm
   [ "$status" -eq 5 ]
@@ -168,7 +174,7 @@ sandbox_apply() {
   plan_check "$FX/astronauta.json" "p['vertical']['status']=='none' and '/vertical-propose' in p['vertical']['message'] and not any(c.startswith('vertical-') for c in p['commands'])"
 }
 
-@test "AC-3 negativo: una capacidad o una opción inventadas se rechazan, no se configuran" {
+@test "AC-3 negativo [reject]: una capacidad o una opción inventadas se rechazan, no se configuran" {
   python3 -c "
 import json; d=json.load(open('$FX/astronauta.json'))
 d['proposed'].append({'id':'vertical-espacial','reason':'inventada'})
@@ -179,6 +185,7 @@ json.dump(d, open('$TMP/in.json','w'))"
 }
 
 # ── AC-4: sin confirmación no se escribe nada ───────────────────────────────
+# cubre: apply, write_keys, _yaml_scalar, run_checks, fail
 
 @test "AC-4: apply sin --confirm es una simulación y no crea nada" {
   run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm"
@@ -196,7 +203,7 @@ json.dump(d, open('$TMP/in.json','w'))"
   grep -qx 'azure_devops: false' "$SANDBOX/.claude/profiles/users/fx-pm/tools.md"
 }
 
-@test "AC-4: respuestas inválidas bloquean la aplicación aunque se confirme" {
+@test "AC-4 negativo [block]: respuestas inválidas bloquean la aplicación aunque se confirme" {
   python3 -c "
 import json; d=json.load(open('$FX/pm.json')); d['answers']['project-management']['tracker']=['jira','savia-flow']
 json.dump(d, open('$TMP/in.json','w'))"
@@ -206,7 +213,7 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm" ]
 }
 
-@test "AC-4: los requisitos externos se diagnostican sin bloquear el resto" {
+@test "AC-4 [missing]: los requisitos externos que faltan se diagnostican sin bloquear el resto" {
   python3 -c "
 import json; d=json.load(open('$FX/pm.json')); d['answers']['project-management']['tracker']='azure-devops'
 json.dump(d, open('$TMP/in.json','w'))"
@@ -240,7 +247,7 @@ json.dump(d, open('$TMP/in.json','w'))"
   grep -qx 'Nota propia de la persona.' "$dir/tone.md"
 }
 
-@test "AC-5: repetir el mismo onboarding no propone ningún cambio" {
+@test "AC-5 límite [zero]: repetir el mismo onboarding no propone ningún cambio" {
   dir="$SANDBOX/.claude/profiles/users/fx-medica"
   sandbox_apply --input "$FX/medica.json" --profile-dir "$dir" --confirm >/dev/null
   run sandbox_apply --input "$FX/medica.json" --profile-dir "$dir"
@@ -249,6 +256,7 @@ json.dump(d, open('$TMP/in.json','w'))"
 }
 
 # ── AC-6: ningún dato sale del directorio de perfiles ignorado ──────────────
+# cubre: check_destination
 
 @test "AC-6: tras un onboarding simulado el árbol versionado no tiene rastros" {
   for f in "$FX"/*.json; do
@@ -263,14 +271,14 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ "$(find "$SANDBOX" -path "$SANDBOX/.git" -prune -o -newer "$SANDBOX/.gitignore" -type f -print | grep -vc '/.claude/profiles/users/fx-')" -eq 0 ]
 }
 
-@test "AC-6 negativo: un destino fuera de profiles/users se rechaza y no se escribe" {
+@test "AC-6 negativo [reject]: un destino fuera de profiles/users se rechaza y no se escribe" {
   run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/docs/fx-pm" --confirm
   [ "$status" -eq 4 ]
   [[ "$output" == *"destino no permitido"* ]]
   [ ! -e "$SANDBOX/docs/fx-pm" ]
 }
 
-@test "AC-6 negativo: si git no ignora el directorio de perfiles, no se escribe" {
+@test "AC-6 negativo [block]: si git no ignora el directorio de perfiles, no se escribe" {
   printf '# sin regla\n' > "$SANDBOX/.gitignore"
   run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-pm" --confirm
   [ "$status" -eq 4 ]
@@ -278,13 +286,14 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ ! -e "$SANDBOX/.claude/profiles/users/fx-pm" ]
 }
 
-@test "AC-6 negativo: el slug del plan debe coincidir con el directorio" {
+@test "AC-6 negativo [reject]: el slug del plan debe coincidir con el directorio" {
   run sandbox_apply --input "$FX/pm.json" --profile-dir "$SANDBOX/.claude/profiles/users/fx-otra" --confirm
   [ "$status" -eq 4 ]
   [ ! -e "$SANDBOX/.claude/profiles/users/fx-otra" ]
 }
 
 # ── AC-7: presentación sin emojis con la frase de la fuente única ───────────
+# cubre: identity_short
 
 @test "AC-7: la presentación usa la frase corta de la fuente única y la pregunta abierta" {
   printf '# Savia\n\n## Identidad canónica\n\n<!-- identity:short -->\n> Frase corta de prueba.\n\nResto.\n' > "$TMP/savia.md"
@@ -294,7 +303,7 @@ json.dump(d, open('$TMP/in.json','w'))"
   [ "${lines[1]}" = "¿A qué te dedicas y qué quieres conseguir con Savia?" ]
 }
 
-@test "AC-7 negativo: sin marcador en la fuente o con emojis, la presentación falla cerrada" {
+@test "AC-7 negativo [missing]: sin marcador en la fuente o con emojis, la presentación falla cerrada" {
   printf '# Savia\n\nSin marcador.\n' > "$TMP/savia.md"
   run python3 "$ENGINE" present --source "$TMP/savia.md"
   [ "$status" -eq 3 ]
@@ -315,6 +324,7 @@ json.dump(d, open('$TMP/in.json','w'))"
 }
 
 # ── AC-8: smoke dual Claude Code / OpenCode ─────────────────────────────────
+# cubre: questions, render
 
 @test "AC-8: OpenCode y Claude Code leen el mismo comando, que delega en el motor" {
   cmp -s .claude/commands/profile-setup.md .opencode/commands/profile-setup.md
