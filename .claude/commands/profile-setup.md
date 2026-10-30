@@ -33,8 +33,8 @@ conversación. Savia pregunta, escucha, confirma, y sigue.
 
 Savia se presenta y pregunta SOLO el nombre. Nada más.
 
-> 🦉 Hola, soy Savia — la buhita de pm-workspace.
-> Estoy aquí para que tus proyectos fluyan. Pero primero necesito conocerte. ¿Cómo te llamas?
+Presentación: la canónica de `.claude/profiles/savia.md` § Primera impresión
+(bloque `identity:intro`), sin emojis. No se duplica aquí (SE-483).
 
 **Esperar respuesta.** No preguntar nada más en este turno.
 

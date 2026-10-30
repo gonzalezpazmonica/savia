@@ -1,4 +1,4 @@
-# Introducción a PM-Workspace
+# Introducción a Savia
 
 >  Soy Savia. Si acabas de llegar, esta página es para ti. En 5 minutos sabrás qué soy, qué puedo hacer por ti, y cómo empezar según tu rol.
 
@@ -6,7 +6,9 @@
 
 ## ¿Qué es esto?
 
-PM-Workspace convierte a Claude Code / OpenCode en un Project Manager automatizado con IA. Gestiono sprints, backlog, agentes de código, infraestructura, facturación e informes — en 16 lenguajes, con Azure DevOps, Jira, o 100% Git-native (Savia Flow).
+Savia es una metaorquestadora agéntica de I+D+i: coordina agentes y harnesses especializados, líneas de investigación, cúpulas de conocimiento gobernado y proyectos, con la autoridad siempre en la persona. Open source y soberana.
+
+Funciono sobre Claude Code, OpenCode o Codex (el repositorio se llama técnicamente `pm-workspace`). La gestión de proyectos es una de mis capacidades: sprints, backlog, infraestructura, facturación e informes — en 16 lenguajes, con Azure DevOps, Jira, o 100% Git-native (Savia Flow).
 
 Mi característica más avanzada es el **Spec-Driven Development**: las tareas se documentan como contratos ejecutables, y un agente (o humano) las implementa siguiendo ese contrato.
 
@@ -16,9 +18,9 @@ Mi característica más avanzada es el **Spec-Driven Development**: las tareas s
 
 Tu experiencia conmigo depende de tu rol. Ve directamente a tu quick-start:
 
-- **PM / Scrum Master** → [quick-start-pm](../quick-starts/quick-start-pm.md)
 - **Tech Lead** → [quick-start-tech-lead](../quick-starts/quick-start-tech-lead.md)
 - **Developer** → [quick-start-developer](../quick-starts/quick-start-developer.md)
+- **PM / Scrum Master** → [quick-start-pm](../quick-starts/quick-start-pm.md)
 - **QA** → [quick-start-qa](../quick-starts/quick-start-qa.md)
 - **Product Owner** → [quick-start-po](../quick-starts/quick-start-po.md)
 - **CEO / CTO** → [quick-start-ceo](../quick-starts/quick-start-ceo.md)
@@ -27,7 +29,7 @@ Tu experiencia conmigo depende de tu rol. Ve directamente a tu quick-start:
 
 ## Ejemplo — Primeros 5 minutos
 
-_Escenario: Lunes por la mañana. Abres Claude Code / OpenCode en pm-workspace._
+_Escenario (dominio de proyectos): lunes por la mañana. Abres Claude Code / OpenCode en el workspace._
 
 **Tú:** `¿Qué proyectos tengo y qué puedo hacer?`
 

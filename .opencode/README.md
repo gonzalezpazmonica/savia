@@ -1,6 +1,7 @@
-# PM-Workspace — OpenCode frontend
+# Savia (pm-workspace) — OpenCode frontend
 
-> Frontend OpenCode (v1.14+) para pm-workspace. Comparte recursos con Claude Code
+> Frontend OpenCode (v1.14+) de Savia, metaorquestadora agéntica de I+D+i
+> (identidad canónica en `../.claude/profiles/savia.md`). Comparte recursos con Claude Code
 > nativo vía symlinks; ejecuta hooks y commands sin duplicación de fuentes.
 >
 > **Fuente única de verdad**: `../CLAUDE.md` (raíz del workspace).
