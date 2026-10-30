@@ -299,7 +299,7 @@ export class RagIndexer {
 
       const changed = !previous || report.docs.added + report.docs.updated + report.docs.deleted > 0
         || (Boolean(this.o.cipher) && !previous.manifest.sealed) // SE-417: un índice en claro se re-escribe sellado
-        || Object.keys(docs).some(p => Boolean(docs[p].skipped) !== Boolean(prevDocs[p]?.skipped));
+        || Object.keys(docs).some(p => (docs[p].skipped ?? '') !== (prevDocs[p]?.skipped ?? '')); // SE-481: también cambio de código
       const now = new Date().toISOString();
       const manifest: Manifest = {
         version: 1, dome: this.o.dome, generation, contract,

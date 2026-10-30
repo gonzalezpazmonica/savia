@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   parseClassification, exceedsDomeLevel, verdictOf, contentOutOfLevel,
-  fileClassification, classificationCacheSize, type ParsedClassification,
+  fileClassification, classificationCacheSize, setClassificationCacheMax, type ParsedClassification,
 } from '../../../src/storage/note-level.js';
 
 const fm = (body: string) => `---\n${body}\n---\n# Nota\n\ncuerpo\n`;
@@ -43,6 +43,18 @@ describe('SE-481 R1 parseClassification', () => {
     ['N1', 'N1'], ['n2', 'N2'], [' N3 ', 'N3'], ['N4', 'N4'], ['N4B', 'N4B'], ['N4b', 'N4B'], ['"n4b"', 'N4B'],
   ])('nivel canónico %s → %s', (v, level) => {
     expect(kindOf(fm(`confidentiality: ${v}`))).toEqual({ kind: 'VALID', level });
+  });
+
+  it('anchura completa (NFKC) no esconde la clave', () => {
+    expect(kindOf(fm('\uFF43\uFF4F\uFF4E\uFF46\uFF49\uFF44\uFF45\uFF4E\uFF54\uFF49\uFF41\uFF4C\uFF49\uFF54\uFF59: N4')).kind).toBe('INVALID');
+    expect(kindOf(fm('\uFF43\uFF4F\uFF4E\uFF46\uFF49\uFF44\uFF45\uFF4E\uFF54\uFF49\uFF41\uFF4C\uFF49\uFF54\uFF59: [N4')).kind).toBe('UNPARSABLE');
+  });
+
+  it('frontmatter enorme: no se parsea; con la clave, cierra; sin ella, heredado', () => {
+    const filler = 'x: y\n'.repeat(20_000); // > 64 KiB
+    expect(kindOf(`---\n${filler}confidentiality: N2\n# sin cierre\n`)).toEqual({ kind: 'UNPARSABLE', diagnostic: 'yaml-unparsable' });
+    expect(kindOf(`---\n${filler}---\n# cerrado pero enorme, sin clave\n`)).toEqual({ kind: 'ABSENT' });
+    expect(kindOf(fm('confidentiality: N2'))).toEqual({ kind: 'VALID', level: 'N2' }); // caso negativo: lo normal se parsea
   });
 
   it('BOM y CRLF no esconden la clave', () => {
@@ -94,17 +106,23 @@ describe('SE-481 R3 caché de clasificación', () => {
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 
-  it('la caché está acotada', () => {
+  it('la caché está acotada: expulsa la entrada más antigua al llegar al tope', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-cls-bound-'));
+    setClassificationCacheMax(3);
     try {
-      for (let i = 0; i < 50; i++) {
+      for (let i = 0; i < 10; i++) {
         const f = path.join(dir, `n${i}.md`);
-        fs.writeFileSync(f, fm('title: x'));
+        fs.writeFileSync(f, fm(i === 0 ? 'confidentiality: N7' : 'title: x'));
         fileClassification(f, `n${i}.md`);
+        expect(classificationCacheSize()).toBe(Math.min(i + 1, 3));
       }
-      expect(classificationCacheSize()).toBeGreaterThan(0);
-      expect(classificationCacheSize()).toBeLessThanOrEqual(20_000);
-    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+      // la primera se expulsó; al volver a pedirla se relee y sigue en cuarentena
+      expect(fileClassification(path.join(dir, 'n0.md'), 'n0.md')?.kind).toBe('UNKNOWN_LEVEL');
+      expect(classificationCacheSize()).toBe(3);
+    } finally {
+      setClassificationCacheMax(20_000);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

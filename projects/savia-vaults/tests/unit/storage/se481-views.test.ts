@@ -23,7 +23,6 @@ const quarantined = Object.entries(fixture.notes).filter(([, n]) => n.diagnostic
 const absent = Object.entries(fixture.notes).filter(([, n]) => n.kind === 'ABSENT');
 
 // AC-1: `[N4` (YAML roto); AC-2: N7, [N2], anchura cero; además «secreto».
-const AC = (p: string) => (p === 'mal/yaml-roto.md' ? 'AC-1' : 'AC-2');
 
 describe('SE-481 cuarentena en todas las vistas', () => {
   let root: string;
@@ -57,7 +56,6 @@ describe('SE-481 cuarentena en todas las vistas', () => {
     expect(stats.quarantined).toBe(quarantined.length);
     expect(stats.outOfLevel).toBe(1);
     expect(JSON.stringify(stats)).not.toContain(canary(n.content));
-    expect(AC(p)).toMatch(/AC-[12]/);
   });
 
   it.each(quarantined)('%s: búsqueda, etiquetas, grafo y query no la incluyen', async (p, n) => {
@@ -125,6 +123,15 @@ describe('SE-481 cuarentena en todas las vistas', () => {
     const { confidentiality: _c, ...local } = cfg;
     await expect(new VaultStorage(local).write(target, n.content)).rejects.toThrow(/INVALID_CLASSIFICATION/);
     expect(fs.existsSync(path.join(vault, target))).toBe(false);
+  });
+
+  it('AC-6: sobre la ruta de una nota en cuarentena, write dice QUARANTINED_PATH y no la pisa', async () => {
+    const st = new VaultStorage(cfg);
+    const p = 'mal/yaml-roto.md';
+    const before = fs.readFileSync(path.join(vault, p), 'utf-8');
+    await expect(st.write(p, '---\nconfidentiality: N2\n---\nbien\n')).rejects.toThrow(/QUARANTINED_PATH/);
+    expect(fs.readFileSync(path.join(vault, p), 'utf-8')).toBe(before);
+    await expect(st.write('ok/n4b-minus.md', '# x\n')).rejects.toThrow(/POLICY_DENIED/); // fuera de nivel: mensaje propio
   });
 
   it('AC-6 caso negativo: una clasificación válida o ausente se escribe', async () => {

@@ -66,7 +66,12 @@ describe('SE-481 MCP cuarentena', () => {
         expect(JSON.stringify(rag.results[0].hits)).not.toContain(word);
         expect(JSON.stringify(rag.results[0].hits)).not.toContain(p);
       }
-      expect(listed).toContain('ok/n2.md'); // caso negativo: lo válido sí se sirve
+      // controles positivos: las mismas herramientas sí devuelven la nota válida
+      expect(listed).toContain('ok/n2.md');
+      expect(text(await call('vault_search', { query: 'VISIBLE-N2' }))).toContain('ok/n2.md');
+      expect(text(await call('vault_query', { expression: 'VISIBLE-N2' }))).toContain('ok/n2.md');
+      const okRag = JSON.parse(text(await call('vault_rag', { query: 'VISIBLE-N2 corriente', mode: 'bm25', fields: 'full' })));
+      expect(okRag.results[0].hits.map((h: { path: string }) => h.path)).toContain('ok/n2.md');
       const stats = JSON.parse(text(await call('vault_stats')));
       expect(stats).toMatchObject({ quarantined: bad.length, outOfLevel: 1 });
       const health = text(await call('vault_health'));

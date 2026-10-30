@@ -164,9 +164,25 @@ describe('SE-481 RAG', () => {
       expect(r.quarantine).toEqual({ 'unknown-level': 1 });
       expect(FlatVectorStore.readManifest(genDir)!.docs['r.md'].skipped).toBe('quarantine:unknown-level');
       // caso negativo: con la versión de reglas al día, el mtime igual se reutiliza sin releer
+      // (prueba observable: se corrige el contenido conservando el mtime; si releyera, saldría de cuarentena)
+      fs.writeFileSync(path.join(vault, 'r.md'), fs.readFileSync(path.join(vault, 'r.md'), 'utf-8').replace('N9', 'N2'));
+      fs.utimesSync(path.join(vault, 'r.md'), st.atime, st.mtime);
       const again = await service().sync('D');
       expect(again.docs.quarantined).toBe(1);
       expect(again.docs.added + again.docs.updated).toBe(0);
+      expect(FlatVectorStore.readManifest(genDir)!.docs['r.md'].skipped).toBe('quarantine:unknown-level');
+    });
+
+    it('el cambio de código de cuarentena se refleja en el manifiesto', async () => {
+      writeDocs(vault, { 'c.md': `---\nconfidentiality: [N4\n---\n# C\n\n${long('la espátula común')}` });
+      await service().sync('D');
+      const genDir = path.join(home, 'D', readActive(home, 'D').active!);
+      expect(FlatVectorStore.readManifest(genDir)!.docs['c.md'].skipped).toBe('quarantine:yaml-unparsable');
+      rewrite(path.join(vault, 'c.md'), fs.readFileSync(path.join(vault, 'c.md'), 'utf-8').replace('[N4', 'N7'));
+      await service().sync('D');
+      const after = FlatVectorStore.readManifest(path.join(home, 'D', readActive(home, 'D').active!))!;
+      expect(after.docs['c.md'].skipped).toBe('quarantine:unknown-level');
+      expect(after.docs['c.md'].mtimeMs).toBe(fs.statSync(path.join(vault, 'c.md')).mtimeMs);
     });
   });
 

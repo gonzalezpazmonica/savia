@@ -25,7 +25,9 @@ const KEY = 'confidentiality';
 const FORBIDDEN = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/u;
 const FORBIDDEN_ALL = new RegExp(FORBIDDEN.source, 'gu');
 /** Texto sin invisibles ni espacios, en minúsculas: para detectar la clave aunque esté camuflada. */
-const bare = (s: string): string => s.replace(FORBIDDEN_ALL, '').replace(/\s+/g, '').toLowerCase();
+const bare = (s: string): string => s.normalize('NFKC').replace(FORBIDDEN_ALL, '').replace(/\s+/g, '').toLowerCase();
+/** Tope del frontmatter que se intenta parsear (coste acotado ante notas grandes). */
+const UNCLOSED_MAX = 64 * 1024;
 
 /** Nivel canónico de una cadena (`n4b`, ` N2 `…) o undefined si no es N1..N4/N4B. */
 export function canonicalLevel(value: string): NoteLevel | undefined {
@@ -54,6 +56,8 @@ export function parseClassification(_relPath: string, raw: string): ParsedClassi
   const block = frontmatterBlock(raw);
   if (block === undefined) return { kind: 'ABSENT' };
   const mentions = bare(block).includes(KEY);
+  // Coste acotado: un bloque enorme (frontmatter sin cerrar) no se parsea; si menciona la clave, cierra.
+  if (block.length > UNCLOSED_MAX) return mentions ? quarantine('UNPARSABLE', 'yaml-unparsable') : { kind: 'ABSENT' };
   let parsed: unknown;
   try {
     parsed = YAML.parse(block, { logLevel: 'error' });
@@ -117,7 +121,7 @@ export function contentOutOfLevel(relPath: string, raw: string, domeLevel: strin
 }
 
 // Caché acotada por ruta; la clave incluye mtime, ctime y tamaño (R3).
-const CACHE_MAX = 20_000;
+let cacheMax = 20_000;
 const cache = new Map<string, { key: string; cls: ParsedClassification }>();
 
 /** Clasificación de una nota en disco, o undefined si no existe o no es markdown. */
@@ -132,7 +136,7 @@ export function fileClassification(fullPath: string, relPath: string): ParsedCla
   let cls: ParsedClassification;
   try { cls = parseClassification(relPath, fs.readFileSync(fullPath, 'utf-8')); } catch { cls = quarantine('UNPARSABLE', 'yaml-unparsable'); }
   cache.delete(fullPath);
-  if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
+  while (cache.size >= cacheMax) cache.delete(cache.keys().next().value as string);
   cache.set(fullPath, { key, cls });
   return cls;
 }
@@ -153,6 +157,9 @@ export function fileOutOfLevel(fullPath: string, relPath: string, domeLevel: str
 export function fileServable(fullPath: string, relPath: string, domeLevel: string | undefined): boolean {
   return fileVerdict(fullPath, relPath, domeLevel) === 'serve';
 }
+
+/** Solo tests: fija la cota de la caché y la vacía. */
+export function setClassificationCacheMax(n: number): void { cacheMax = Math.max(1, n); cache.clear(); }
 
 /** Tamaño actual de la caché (tests de cota). */
 export const classificationCacheSize = (): number => cache.size;
