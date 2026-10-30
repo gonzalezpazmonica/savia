@@ -1640,6 +1640,15 @@
       "evidence": "docs/specs/SE-484-adaptive-onboarding.spec.md",
       "phase": "D",
       "approval": "Operadora 2026-10-30: AskUserQuestion (onboarding interactivo e inteligente para cualquier perfil)"
+    },
+    {
+      "id": "SE-488",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Aprobaciones por fusión de PR (operación solo móvil)",
+      "note": "Toda aprobación que amplía autoridad es una PR en un repo privado de aprobaciones que la operadora fusiona en la app; recibo de merge verificable sin red (firma web-flow, autor, un fichero, huella, caducidad, nonce). GitHub App de agentes separada; el token de la máquina excluye el repo.",
+      "evidence": "docs/specs/SE-488-approvals-by-pr-merge.spec.md",
+      "phase": "D"
     }
   ],
   "route": {

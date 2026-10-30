@@ -1,0 +1,221 @@
+---
+status: PROPOSED
+priority: P1
+developer_type: agent-single
+created: 2026-10-30
+author: Savia
+phase: D
+risk: L4
+related_specs: [SE-343, SE-433, SE-362, SPEC-186]
+origin: decisión de la operadora 2026-10-30 (AskUserQuestion, «Solo GitHub») — opera la metaorquestación solo desde el móvil (chat y app de GitHub), sin terminal ni edición de ficheros; diseño previo en el vault privado de investigación
+timeline:
+  - from: "2026-10-30"
+    learned: "2026-10-30"
+    value: "PROPOSED"
+    source: "spec-lifecycle:auto"
+---
+# SE-488 — Aprobaciones por fusión de PR (operación solo móvil)
+
+## Problema (verificado en origin/main 3e24baa8f)
+
+La operadora gobierna desde el móvil: el chat del asistente y la app de GitHub.
+No tiene terminal ni edita ficheros. Varias aprobaciones que **amplían** la
+autoridad de un agente exigen hoy una de las dos cosas:
+
+1. **Contratos de Yema.** `yema aprobar`, `activar` y `transicion → aprobado|activo`
+   exigen una TTY o un ticket de 5 minutos. Ese ticket lo deja la puerta tras el
+   diálogo de permisos de una sesión **local** (`nucleo/yema.py::_persona_presente`).
+   Una enmienda es otra huella y se reaprueba igual.
+2. **Grants de merge (SE-343, SE-433 D7).** `scripts/operator-grant.sh` exige una
+   firma ed25519 de la operadora (`ssh-keygen -Y sign`): en el móvil hace falta un
+   emulador de terminal y pegar ficheros.
+3. **Push forzado.** `.claude/hooks/block-force-push.sh` lo bloquea sin excepción
+   posible.
+4. **Settings locales no versionados.** Solo se cambian editando en el equipo.
+
+Ya son móviles: el merge de PRs (botón de la app), la aprobación de specs
+(pregunta en el chat) y suspender o revocar (reducen autoridad, sin aprobación).
+
+El clasificador del arnés impide, con razón, que un agente se construya su propia
+vía de aprobación: tickets, scripts o reglas de permiso. Hace falta una vía que
+la operadora pueda usar desde el móvil y que ningún agente pueda imitar.
+
+## Decisión
+
+Toda aprobación que amplíe la autoridad de un agente es **una PR en un repo
+privado de aprobaciones**. La operadora la **fusiona** en la app de GitHub: ese
+merge es el acto humano. Yema y Savia verifican el **commit de merge**, sin red,
+contra un espejo local. Lo que reduce autoridad no cambia.
+
+## Requisitos
+
+### R1 — Artefacto de aprobación
+- La PR añade **exactamente un fichero**: `aprobaciones/<tipo>/<fecha>-<id>-<nonce8>.json`.
+- Esquema `aprobacion/1`: `tipo`, `nonce` (16 hex aleatorios), `emitida`,
+  `caduca` (≤ 24 h), `objeto` y `resumen` en lenguaje llano.
+- Objetos por tipo:
+  - `yema-contrato`: `{id, huella}`, con la huella sha256 **completa**;
+  - `savia-merge`: `{repo, prs: [{numero, head_sha}]}`, que admite lotes;
+  - `savia-force-push`: `{repo, rama, de_sha, a_sha}`, nunca `main`;
+  - `savia-settings`: `{fichero, sha256_antes, sha256_despues}`.
+- El `resumen` y el cuerpo de la PR los genera la herramienta a partir del
+  `objeto`; ningún agente los redacta a mano.
+
+### R2 — Recibo de merge verificable sin red
+Un recibo vale solo si se cumplen todas estas condiciones, comprobadas sobre el
+espejo local del repo de aprobaciones:
+1. `M` está en la cadena first-parent de `main`.
+2. `M` tiene dos padres. El repo solo permite *merge commits*.
+3. `git verify-commit M` es válido con la **clave pública de web-flow de GitHub
+   fijada en el repo verificador**, no con el llavero del usuario.
+4. El autor de `M` es la identidad configurada de la operadora.
+5. `M^1..M` añade exactamente un fichero, bajo `aprobaciones/`.
+6. Su contenido casa con el objeto esperado, con la huella idéntica.
+7. `ahora < caduca`, y la fecha de commit de `M` está en `[emitida, caduca]`.
+8. Ni el `nonce` ni `M` figuran en el libro de consumidos local; al usarlo se
+   anotan.
+
+Cualquier fallo, herramienta ausente (`git`, `gpg`), clave no fijada o espejo sin
+sincronizar da **no aprobado**: fail-closed. `merged_by` de la API se guarda como
+evidencia cuando hay red, pero no decide.
+
+### R3 — Separación de identidades (mitigación recomendada)
+GitHub no distingue un merge de la app de uno por API si ambos usan credenciales
+de la misma cuenta. En plan gratuito, además, un repo privado no admite rulesets
+ni protección de rama (verificado: la API responde 403). Por eso:
+- los agentes abren las PRs con una **GitHub App propia**, instalada **solo** en el
+  repo de aprobaciones, con `contents:write` y `pull_requests:write` y sin
+  `administration`. Si la App fusiona, el merge sale con autor bot y R2.4 lo
+  rechaza;
+- el token personal de la máquina **excluye** el repo de aprobaciones: el
+  verificador de instalación exige 404;
+- el espejo se sincroniza con una **deploy key de solo lectura**;
+- defensa en profundidad: un guard bloquea `gh pr merge`, `gh api …/merge` y
+  `…/reviews` contra el repo de aprobaciones;
+- un ruleset (1 aprobación, sin bypass) es una mejora opcional si hay plan de
+  pago. La verificación de R2 no depende de él.
+
+Alternativas descartadas:
+- **PAT sin permiso de merge.** Para abrir la PR hay que empujar una rama, y eso
+  exige `contents:write`, que en fine-grained ya permite fusionar.
+- **Solo ruleset.** Es de pago en un repo privado, y no impide que un token de
+  la misma cuenta apruebe y fusione.
+- **Solo guard.** Ve texto: es defensa en profundidad, no frontera.
+
+### R4 — Consumidores
+- **Savia:**
+  - `operator-grant.sh check --scope merge` acepta un recibo `savia-merge` como
+    alternativa a la firma ed25519. Se mantienen el `head_sha` exacto,
+    `--match-head-commit`, el uso único y el máximo de 24 h;
+  - `block-force-push.sh` deja pasar solo `--force-with-lease=<rama>:<de_sha>`
+    con un recibo `savia-force-push` vigente, y nunca hacia `main`;
+  - una herramienta aplica un cambio de settings locales solo si el sha256 previo
+    y el resultante casan con un recibo `savia-settings`.
+- **Yema:** ver R5.
+
+### R5 — Cambios en Yema (los implementa una PR propia en Yema tras aprobar esta spec)
+- `_persona_presente(raiz, cid, h8, tty)` acepta un tercer camino, además de la
+  TTY y el ticket: un **recibo de merge** (R2) de tipo `yema-contrato` para `cid`
+  cuya huella completa empiece por `h8` y coincida con `contrato.huella(c)`. El
+  recibo **no se borra**: se anota en `aprobaciones/consumidos.jsonl`.
+- `activar` y `transicion` a un estado de `HUMANAS` aceptan el mismo recibo.
+- La evidencia anota `via: "github:<sha12>"`.
+- `gobierno/politica.json` incorpora `aprobacion_github`: ruta del espejo, autor
+  esperado, ruta de la clave web-flow fijada y caducidad máxima. Sin esa sección,
+  el camino está apagado.
+- Órdenes nuevas:
+  - `yema solicitar <id>`: crea el artefacto y abre la PR con la App; sin App,
+    imprime el artefacto;
+  - `yema sincronizar`: `git fetch` del espejo.
+- Sin red, la verificación lee el espejo y la clave fijada. Sin sincronizar, no
+  hay aprobación.
+
+### R6 — Flujo móvil
+Una aprobación cuesta **3 toques** desde la notificación: abrir la PR, «Merge
+pull request» y «Confirmar». Con un ruleset de aprobación serían 6. Las cifras
+son estimadas y se miden en el piloto (AC-8).
+
+## Amenazas
+
+| Amenaza | Defensa |
+|---|---|
+| PR fabricada y fusionada por un agente | R3: sin credencial de la operadora para ese repo. Un merge de la App falla en R2.4; un commit local o reescrito falla en R2.3 |
+| PR engañosa (el cuerpo no coincide con el fichero) | El resumen se genera a partir del objeto; el verificador lee el objeto; R2.5 exige un solo fichero |
+| Reutilización | `nonce` + libro de consumidos; el objeto ata id y huella (o PR y `head_sha`); caducidad |
+| Borrado del libro de consumidos | Solo repite lo idéntico dentro de la vigencia (el mismo límite que `merge.spent`) |
+| Contrato cambiado tras aprobar | La huella sha256 del contenido material no casa (R2.6) |
+| Caducidad | `caduca` ≤ 24 h y la fecha firmada de `M` dentro de la ventana |
+| Rotación de la clave de web-flow | Se actualiza por PR fusionada por la operadora; mientras tanto, fail-closed |
+| Otra credencial de la operadora en la máquina | Auditoría en el verificador de instalación (AC-6). Es un requisito, no algo que garantice el código |
+
+**Supuesto por verificar (AC-7):** un commit creado por API por la App, con el
+autor puesto a mano con la identidad de la operadora, **no** lleva firma de
+web-flow. Si fallara, R2 debe exigir además `merged_by` con red, y el diseño
+vuelve a revisión.
+
+## Criterios de aceptación
+
+- **AC-1:** el verificador de recibos acepta un merge commit firmado por
+  web-flow, con autor de la operadora y un solo fichero válido (fixture con una
+  clave de prueba en lugar de web-flow). Rechaza cada caso por separado (un test
+  por condición de R2):
+  - sin firma;
+  - firma de otra clave;
+  - autor bot;
+  - un solo padre;
+  - dos ficheros;
+  - huella distinta;
+  - caducado;
+  - fecha de `M` fuera de la ventana;
+  - ya consumido.
+- **AC-2:** si falta `gpg` o la clave fijada, o el espejo no tiene la rama, el
+  resultado es **no aprobado** (test).
+- **AC-3:** `operator-grant.sh check --scope merge` da 0 con un recibo
+  `savia-merge` válido para `pr:<n>` y su `head_sha`, y 1 si la cabeza difiere
+  o el recibo es de otro repo (test bats).
+- **AC-4:** `block-force-push.sh` sigue bloqueando sin recibo y hacia `main`
+  aunque haya recibo, y deja pasar solo `--force-with-lease` con `de_sha` igual
+  al del recibo (test bats).
+- **AC-5:** en Yema, `yema aprobar` sin TTY ni ticket pasa con un recibo válido y
+  falla con uno consumido o con otra huella (pytest, en la PR de Yema).
+- **AC-6:** el verificador de instalación falla si el token de la máquina ve el
+  repo de aprobaciones, o si la App tiene `administration`.
+- **AC-7:** prueba real con la App: un intento de crear por API un commit con el
+  autor de la operadora no supera R2.3 ni R2.4. El resultado se documenta.
+- **AC-8:** piloto en el móvil: se registran los toques reales de cada tipo de
+  aprobación.
+- **AC-9:** guard, `validate-ci-local.sh --quick` y SAM FRESH en verde.
+
+## Rollback
+
+- Las vías actuales (TTY, ticket, firma ed25519) **se mantienen**. El recibo es
+  un camino adicional que se apaga quitando `aprobacion_github` de la política de
+  Yema y la configuración equivalente de Savia.
+- Quitar la App y la deploy key invalida la emisión de nuevos recibos. Los ya
+  consumidos quedan en la evidencia.
+
+## Fuera de alcance
+
+- Implementar Yema en esta spec (R5 va en una PR de Yema tras aprobarla).
+- Crear el repo, la App o la deploy key: eso lo hace la operadora en su cuenta.
+- Cambiar la aprobación de specs (ya es móvil) o la protección de `main` de Savia.
+
+## OpenCode Implementation Plan
+
+### Bindings touched
+
+| Componente | Claude Code | OpenCode v1.14 |
+|---|---|---|
+| Verificador de recibos | `scripts/approval-receipt.py` (CLI, sin dependencias del frontend) | mismo script |
+| Grant de merge | `scripts/operator-grant.sh` | mismo script |
+| Push forzado | `.claude/hooks/block-force-push.sh` (PreToolUse, stdin JSON) | plugin savia-gates → mismo hook |
+| Guard del repo de aprobaciones | hook PreToolUse sobre `gh` | plugin savia-gates |
+
+### Verification protocol
+
+- [ ] El verificador es un CLI puro: mismo veredicto desde ambos frontends.
+- [ ] Los hooks reciben el evento por stdin en ambos bindings.
+
+### Portability classification
+
+- [x] **DUAL_BINDING**
