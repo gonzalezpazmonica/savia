@@ -185,6 +185,47 @@ if ($Missing -eq 1) {
     exit 1
 }
 
+# Git Bash: Claude Code runs every bash hook through Git for Windows' bash.exe.
+# Without it, PreToolUse hooks time out and block even reads ("Git Bash wasn't found").
+function Find-GitBash {
+    $candidates = @()
+    if ($env:CLAUDE_CODE_GIT_BASH_PATH) { $candidates += $env:CLAUDE_CODE_GIT_BASH_PATH }
+    if ($env:ProgramFiles)           { $candidates += (Join-Path $env:ProgramFiles 'Git\bin\bash.exe') }
+    if (${env:ProgramFiles(x86)})    { $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Git\bin\bash.exe') }
+    if ($env:LOCALAPPDATA)           { $candidates += (Join-Path $env:LOCALAPPDATA 'Programs\Git\bin\bash.exe') }
+    $gc = Get-Command git -ErrorAction SilentlyContinue
+    if ($gc) {
+        # <root>\cmd\git.exe -> <root>\bin\bash.exe (never the WSL bash.exe in System32)
+        $candidates += (Join-Path (Split-Path (Split-Path $gc.Source)) 'bin\bash.exe')
+    }
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path $c)) { return $c }
+    }
+    return $null
+}
+
+$GitBashPath = Find-GitBash
+if (-not $GitBashPath) {
+    Write-Host ""
+    Write-Fail "Git Bash (bash.exe) not found. Claude Code needs it to run Savia's hooks."
+    Write-Fail "Install Git for Windows (includes Git Bash): https://git-scm.com/downloads/win"
+    Write-Fail "Then re-run this installer, or set CLAUDE_CODE_GIT_BASH_PATH to your bash.exe."
+    exit 1
+}
+Write-Ok "Git Bash: $GitBashPath"
+
+# Claude Code finds bash.exe from git.exe on PATH. If that route does not lead to the
+# bash we found (git not on PATH, non-standard install), pin it for the user.
+$gcmd = Get-Command git -ErrorAction SilentlyContinue
+$viaGit = if ($gcmd) { Join-Path (Split-Path (Split-Path $gcmd.Source)) 'bin\bash.exe' }
+$bashOnPath = $viaGit -and (Test-Path $viaGit) -and ($viaGit -eq $GitBashPath)
+if (-not $bashOnPath -and $env:CLAUDE_CODE_GIT_BASH_PATH -ne $GitBashPath) {
+    [Environment]::SetEnvironmentVariable('CLAUDE_CODE_GIT_BASH_PATH', $GitBashPath, 'User')
+    $env:CLAUDE_CODE_GIT_BASH_PATH = $GitBashPath
+    Write-Ok "CLAUDE_CODE_GIT_BASH_PATH set (user) to $GitBashPath"
+    Write-Warn "Open a NEW terminal before starting Claude Code so it picks up the variable."
+}
+
 # --- Step 3: OpenCode ----------------------------------------------------------
 Write-Step 3 "Checking OpenCode..."
 
@@ -266,8 +307,7 @@ if ($RunningFromRepo) {
 
 # Git for Windows checks symlinks out as text files (core.symlinks=false):
 # materialize them as junctions/hard links. Git Bash, never WSL bash.
-$gitCmd = Get-Command git -ErrorAction SilentlyContinue
-$gitBash = if ($gitCmd) { Join-Path (Split-Path (Split-Path $gitCmd.Source)) 'bin\bash.exe' }
+$gitBash = $GitBashPath
 if ($gitBash -and (Test-Path $gitBash)) {
     Push-Location $SaviaHome
     try {
