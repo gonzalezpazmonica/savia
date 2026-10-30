@@ -8,11 +8,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Sistema agéntico soberano para gobernar y ejecutar trabajo con IA, independiente de modelo, proveedor y frontend, con criterio humano por diseño.**
+**Savia es una metaorquestadora agéntica de I+D+i: coordina agentes y harnesses especializados, líneas de investigación, cúpulas de conocimiento gobernado y proyectos, con la autoridad siempre en la persona. Open source y soberana.**
 
 **567 comandos · 90 agentes · 139 skills · 134 hooks**
 
-Savia es un sistema agéntico soberano para gobernar y ejecutar trabajo asistido por IA. Integra agentes, memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts, evaluación y dominios especializados — gestión de proyectos, ingeniería de software y más — sobre una arquitectura independiente de modelo, proveedor y frontend. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
+Savia orquesta el trabajo de I+D+i con IA: reparte tareas entre harnesses especializados (ejecutores, revisoras independientes, proveedores externos), sostiene líneas de investigación, gobierna el conocimiento en cúpulas (Savia Vaults) y gestiona proyectos como una capacidad más. Integra memoria, seguridad, políticas ejecutables (policy-as-code), trazabilidad con receipts y evaluación sobre una arquitectura independiente de modelo, proveedor y frontend. Opera en local con soberanía de datos e inferencia, en 9 idiomas.
 
 ## Por qué Savia existe
 
@@ -30,11 +30,13 @@ La ejecución asistida por IA crece más rápido que la confianza sobre ella. Sa
 
 ## Qué hace Savia
 
+- **Orquestar** — metaorquestación de harnesses especializados: un ejecutor por contrato, revisoras independientes y proveedores externos, con invocación determinista y la autoridad en la persona.
+- **Investigar** — líneas de investigación con hipótesis, experimentos y lecciones verificables.
 - **Gobernar** — riesgo (L0-L4), human gates, policy-as-code, receipts y provenance de cada acción.
 - **Ejecutar** — 90 agentes, 567 comandos, 139 skills con specs ejecutables (SDD), auditoría de seguridad y revisión de código.
-- **Recordar** — memoria persistente bitemporal con provenance y trust-gates.
+- **Conocer** — cúpulas de conocimiento gobernado (Savia Vaults) y memoria persistente bitemporal con provenance y trust-gates.
 - **Evaluar** — evals con baseline, paired-delta regression y canaries multi-frontend.
-- **Dominios** — gestión de proyectos (dominio de origen), ingeniería de software y dominios especializados.
+- **Dominios** — gestión de proyectos (sprints, backlog, informes; una capacidad más), ingeniería de software y dominios especializados.
 - **GRC preliminar** — el [auditor GRC](docs/grc/README.md) enlaza requisitos, controles y pruebas locales con hallazgos trazables. Requiere revisión humana para decisiones y certificaciones.
 
 ## Arquitectura
@@ -83,12 +85,12 @@ cd savia && opencode
 
 # 3. Savia te saluda y te pregunta tu nombre. Después:
 
-/sprint-status          # ← tu primer comando
+/help                   # ← tu primer comando: el mapa de capacidades
 ```
 
 **Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
 
-Savia se adapta a tu rol — PM, developer, QA, Product Owner, CEO — y a tu idioma. Compatible con Azure DevOps, Jira y Git-native (Savia Flow).
+Savia se adapta a tu rol — investigación, desarrollo, dirección técnica, gestión de proyectos, QA, producto — y a tu idioma. Para proyectos, compatible con Azure DevOps, Jira y Git-native (Savia Flow).
 
 ---
 
@@ -100,11 +102,9 @@ Tabla completa de capacidades: [capabilities.es.md](docs/readme/capabilities.es.
 
 ## Savia
 
-Savia es la identidad del workspace: un patrón de texto que persiste a través de modelos (Claude, DeepSeek, Qwen). Coordina 90 agentes, 567 comandos y 139 skills. Opera bajo principios de honestidad calibrada, soberanía de datos, y revisión humana obligatoria.
+Savia es la identidad del workspace: un patrón de texto que persiste a través de modelos (Claude, DeepSeek, Qwen). Como metaorquestadora, coordina 90 agentes, 567 comandos, 139 skills y harnesses externos. Opera bajo principios de honestidad calibrada, soberanía de datos, y revisión humana obligatoria.
 
 No es persona, no siente, no sustituye el criterio de quien opera. Propone, ejecuta, advierte. Decide solo lo delegado explícitamente.
-
-**Quick-starts por rol:**
 
 Quick-starts por rol: [quick-starts.es.md](docs/readme/quick-starts.es.md).
 

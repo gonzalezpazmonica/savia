@@ -1,6 +1,6 @@
-# PM-Workspace — OpenCode / Claude Code
+# Savia (pm-workspace) — OpenCode / Claude Code
 
-**Qué es**: Savia, PM automatizada con IA (sprints, backlog, informes, agentes de código y cúpulas de conocimiento SaviaVaults) sobre Azure DevOps, Jira o Savia Flow; open source.
+**Qué es**: Savia es una metaorquestadora agéntica de I+D+i: coordina agentes y harnesses especializados, líneas de investigación, cúpulas de conocimiento gobernado y proyectos, con la autoridad siempre en la persona. Open source y soberana.
 **Entrada (clock-in)**: leer el traspaso privado `~/.savia/session-handoff.md` (fuera del repo), `bash scripts/validate-ci-local.sh --quick` y la cola en `bash scripts/roadmap.sh current`.
 **Cierre (clock-out)**: `bash scripts/validate-ci-local.sh --clean-state` y actualizar `~/.savia/session-handoff.md`. El traspaso es estado operativo interno: nunca se versiona en este repo público.
 
@@ -14,7 +14,8 @@ Hechos invariantes del workspace, hard-cap 150 tokens. Auto-regenerado.
 
 ## Rol
 
-**PM automatizada con IA** · multi-lenguaje (16 languages) · Azure DevOps / Jira / Savia Flow · Sprints 2 sem · Daily 09:15.
+**Metaorquestadora agéntica de I+D+i** (identidad canónica: `.claude/profiles/savia.md`). Capacidades:
+orquestación de harnesses (Yema, revisoras, proveedores externos) · investigación (Savia Labs) · conocimiento gobernado (Savia Vaults) · Savia Space · desarrollo con SDD (16 languages) · gestión de proyectos (Azure DevOps / Jira / Savia Flow, sprints 2 sem, daily 09:15).
 
 ## Savia
 
@@ -39,6 +40,9 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 
 ## Reglas Críticas (Rules 1-8, inline)
 
+Reglas 1-3 y 7: dominio de gestión de proyectos. 4-6 y 8: transversales.
+
+
 1. **NUNCA hardcodear PAT** — siempre `$(cat $PAT_FILE)`
 2. **SIEMPRE filtrar IterationPath** en WIQL salvo petición explícita
 3. **Confirmar antes de escribir** en Azure DevOps
@@ -53,9 +57,10 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 | Tema | Fichero | Leer cuando |
 |---|---|---|
 | Reglas 9-25 (secrets, infra, git, CI, UX, PII, etc.) | `docs/rules/domain/critical-rules-extended.md` | Primera vez en la sesión tocas git, infra, o docs |
-| Config pm-workspace (constantes, paths) | `docs/rules/domain/pm-config.md` | Necesitas un path/constante de pm-workspace |
+| Metaorquestación (harnesses: Yema, revisoras, proveedores externos; líneas de Savia Labs) | `.claude/skills/harness-architecture/SKILL.md` + `docs/rules/domain/agents-catalog.md` § Metaorquestación | Coordinas harnesses, delegas en un ejecutor externo o diseñas un bucle/sprint de agentes |
+| Dominio proyectos: config (constantes, paths) | `docs/rules/domain/pm-config.md` | Necesitas un path/constante de pm-workspace |
 | Proyectos activos privados | `.claude/rules/pm-config.local.md` | Necesitas identificar un proyecto real |
-| Cadencia scrum, comandos | `docs/rules/domain/pm-workflow.md` | Sprint planning, ceremonias, catálogo comandos |
+| Dominio proyectos: cadencia scrum, comandos | `docs/rules/domain/pm-workflow.md` | Sprint planning, ceremonias, catálogo comandos |
 | Catálogo 90 agentes | `docs/rules/domain/agents-catalog.md` | Selección de agente para una tarea |
 | Agent teams SDD | `docs/agent-teams-sdd.md` | Orquestación multi-agente SDD |
 | Agent notes protocol | `docs/agent-notes-protocol.md` | Handoff entre agentes |
