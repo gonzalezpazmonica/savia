@@ -120,7 +120,10 @@ Lecturas y límites:
 
 ## Estado respecto a SE-489
 
-- La ruta M7 existe como punto de entrada (`QuantizedIndex.search`). **No está registrada como `RetrievalRoute`**: la base (`agent/se489-base-20261030`) no existía en origin al terminar. El adaptador pendiente es una envoltura de `search` con la traza y el `accept` de autorización.
+- La ruta M7 existe como punto de entrada (`QuantizedIndex.search`). **No está registrada como `RetrievalRoute`**, aunque la base ya está en main (#1432, mezclada en esta rama). El motivo es de contrato, no de plazo: `RouteContext.candidates(query, {k, mode})` solo ofrece el híbrido de `RagService` y no deja a una ruta cambiar la búsqueda densa. Registrarla exige tocar la base:
+  1. una opción en `CandidateOptions` (p. ej. `dense`) que `RagService.search` pase a `searchStore`, y
+  2. la carga por cúpula de la proyección de la generación activa (`QuantizedIndex.open(dir, nivel, cifrador)`), con `accept` derivado del guard.
+  Es un cambio en el servicio y en el contexto de rutas; queda como seguimiento propio.
 - No cambia el comportamiento por defecto de `vault_rag`.
 - AC-3 (M7): cumplido para sombra/activa/rollback/GC (test con el `RagService` real). Pendiente la reconstrucción tras `resealIndex` (hallazgo 3).
 - Decisión de promoción de M7: **descartar como defecto; opt-in para cúpulas > 50 000 vectores cuando existan chunks diferidos.** Las reglas de promoción de AC-6 se evalúan sobre el banco del conjunto de rutas, no aquí.
