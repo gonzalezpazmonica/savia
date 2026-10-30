@@ -17,7 +17,7 @@ import {
   FlatVectorStore, defaultRagHome, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive,
 } from './store.js';
 import {
-  RAG_LIMITS, RagError, type Confidentiality, type DomeOutcome, type EmbeddingContract, type RagDomeConfig,
+  RAG_LIMITS, RagError, type Chunk, type Confidentiality, type DomeOutcome, type EmbeddingContract, type RagDomeConfig,
   type RagHit, type RagMode, type RagRequest, type RagResponse, type ResolvedRagConfig, type SyncReport, type IndexCipher,
 } from './types.js';
 
@@ -468,25 +468,52 @@ export class RagService {
     return [...new Set(req.domes)].map(n => this.dome(n));
   }
 
-  async search(req: RagRequest): Promise<RagResponse> {
-    await sodiumReady();
-    const t0 = Date.now();
-    const opt = this.validate(req);
-    const targets = this.targetDomes(req);
+  /**
+   * Cúpulas objetivo y autorización por cúpula (paso 2 de `search`): las denegadas se declaran,
+   * nunca se omiten. SE-489: el runner de rutas usa este mismo plano de control.
+   */
+  async authorizeTargets(domes: RagRequest['domes'], tool = 'vault_rag'): Promise<{
+    targets: RagDomeRef[]; allowed: RagDomeRef[]; principals: Map<string, Principal | undefined>; outcomes: Map<string, DomeOutcome>;
+  }> {
+    const targets = this.targetDomes({ queries: [], domes });
     const outcomes = new Map<string, DomeOutcome>(targets.map(d => [d.name, { name: d.name, status: 'ok' }]));
-    let syncMs = 0;
-
-    // 2. Autorización por cúpula: las denegadas se declaran, nunca se omiten.
     const allowed: RagDomeRef[] = [];
     const principals = new Map<string, Principal | undefined>();
     for (const d of targets) {
       try {
-        principals.set(d.name, asPrincipal(await this.o.authorize?.(d.name, 'read', 'vault_rag')));
+        principals.set(d.name, asPrincipal(await this.o.authorize?.(d.name, 'read', tool)));
         allowed.push(d);
       } catch (e) {
         outcomes.set(d.name, { name: d.name, status: 'denied', detail: e instanceof Error ? e.message : String(e) });
       }
     }
+    return { targets, allowed, principals, outcomes };
+  }
+
+  /** SE-489: almacén de Savia Files de una cúpula (para el guard), si lo tiene habilitado. */
+  filesStoreOf(d: RagDomeRef): FileStore | undefined {
+    return this.filesStore(d);
+  }
+
+  /**
+   * SE-489: chunks de un documento en la generación activa (vecinos/padre de una ruta). Solo
+   * el runner lo llama, y solo después de que el guard admita el documento.
+   */
+  activeDocumentChunks(name: string, docPath: string): Pick<Chunk, 'id' | 'ordinal' | 'heading' | 'text' | 'meta' | 'source'>[] {
+    const active = readActive(this.home, name).active;
+    if (!active) return [];
+    return this.loadStore(name, active).chunks
+      .filter(c => c.path === docPath)
+      .sort((a, b) => a.ordinal - b.ordinal)
+      .map(c => ({ id: c.id, ordinal: c.ordinal, heading: c.heading, text: c.text, meta: c.meta, ...(c.source ? { source: c.source } : {}) }));
+  }
+
+  async search(req: RagRequest): Promise<RagResponse> {
+    await sodiumReady();
+    const t0 = Date.now();
+    const opt = this.validate(req);
+    const { targets, allowed, principals, outcomes } = await this.authorizeTargets(req.domes);
+    let syncMs = 0;
 
     // 3. Frescura (P3-lectura) y carga del índice por cúpula, en paralelo con timeout.
     interface Prepared { d: RagDomeRef; cfg: ResolvedRagConfig; store: FlatVectorStore }
