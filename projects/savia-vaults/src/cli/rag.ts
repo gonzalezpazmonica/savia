@@ -87,7 +87,7 @@ ragCmd.command('sync').description('Sincroniza el índice (incremental por hash)
       }
       if (opts.json) console.log(JSON.stringify(reports, null, 2));
       else for (const r of reports) {
-        console.log(`[${r.dome}] gen=${r.generation}${r.promoted ? ' (activa)' : r.shadow ? ' (sombra)' : ''} docs +${r.docs.added} ~${r.docs.updated} -${r.docs.deleted} =${r.docs.unchanged} omitidos ${r.docs.skipped} chunks ${r.chunks.total} (embebidos ${r.chunks.embedded}, reutilizados ${r.chunks.reused}) ${r.durationMs} ms`);
+        console.log(`[${r.dome}] gen=${r.generation}${r.promoted ? ' (activa)' : r.shadow ? ' (sombra)' : ''} docs +${r.docs.added} ~${r.docs.updated} -${r.docs.deleted} =${r.docs.unchanged} omitidos ${r.docs.skipped} cuarentena ${r.docs.quarantined ?? 0} chunks ${r.chunks.total} (embebidos ${r.chunks.embedded}, reutilizados ${r.chunks.reused}) ${r.durationMs} ms`);
         if (r.gate) console.log(`   gate: ${r.gate.promote ? 'promovida' : 'no promovida'} — ${r.gate.reason}`);
       }
       if (failed) process.exit(1);
