@@ -150,6 +150,8 @@ export interface RagHit {
   freshness: { modified: string; status?: string; supersededBy?: string; decay: number };
   generation: string;
   source?: FileSourceRef;
+  /** SE-485 R4: solo si la consulta lleva un identificador con forma de código; falso = vecino, no respuesta. */
+  exactMatch?: boolean;
 }
 
 export interface RagRequest {
@@ -176,7 +178,7 @@ export interface DomeOutcome {
 }
 
 export interface RagResponse {
-  results: { query: string; hits: RagHit[] }[];
+  results: { query: string; hits: RagHit[]; /** SE-485 R4: avisos de la consulta. */ warnings?: string[] }[];
   merged?: RagHit[];
   domes: DomeOutcome[];
   timings: { totalMs: number; embedMs: number; syncMs: number };

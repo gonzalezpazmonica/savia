@@ -26,7 +26,12 @@ function setup(enabled: Record<string, boolean> = { a: true, b: true }) {
     '--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href,
     path.resolve('src/cli/index.ts'), 'rag', ...args, '--domes-file', registry,
   ], { env: { PATH: process.env.PATH || '', SAVIA_RAG_HOME: home, SAVIA_RAG_TEST_PROVIDER: 'hash' }, encoding: 'utf-8', timeout: 30000 });
-  return { root, home, run };
+  const disable = (...names: string[]) => {
+    const reg = JSON.parse(fs.readFileSync(registry, 'utf-8'));
+    for (const n of names) reg.domes[n].rag.enabled = false;
+    fs.writeFileSync(registry, JSON.stringify(reg));
+  };
+  return { root, home, run, disable };
 }
 
 describe('SE-410 CLI rag sync --all --check', () => {
@@ -101,5 +106,112 @@ describe('L32 registro sin cúpulas habilitadas y gc --all', () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('[a]');
     expect(r.stdout).toContain('[b]');
+  }, 30000);
+});
+
+describe('L32 SLO y sync ruidosos con cúpulas deshabilitadas pero indexadas', () => {
+  it('status --check sale 2 con alerta en stderr si una cúpula con índice se deshabilita', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    expect(run('status', '--check').status).toBe(0);
+    disable('a');
+    const r = run('status', '--check');
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('[a] ALERTA');
+    expect(r.stderr).toContain('rag.enabled=false');
+  }, 30000);
+
+  it('status --json: slo.ok=false con staleRatio alto en cúpula deshabilitada indexada', () => {
+    const { run, disable, root } = setup();
+    run('sync', '--all');
+    disable('a');
+    fs.writeFileSync(path.join(root, 'a', 'nuevo.md'), `# nuevo\n\n${'texto nuevo sin indexar. '.repeat(10)}`);
+    const st = JSON.parse(run('status', '--json').stdout) as Array<{ name: string; staleRatio: number; slo: { ok: boolean; alerts: string[] } }>;
+    const a = st.find(x => x.name === 'a')!;
+    expect(a.staleRatio).toBeGreaterThan(0.1);
+    expect(a.slo.ok).toBe(false);
+    expect(a.slo.alerts.some(x => x.includes('rag.enabled=false'))).toBe(true);
+    expect(a.slo.alerts.some(x => x.toLowerCase().includes('stale') || x.includes('pendientes') || x.includes('obsolet'))).toBe(true);
+  }, 30000);
+
+  it('sync --all con cúpulas indexadas pero todas deshabilitadas sale distinto de 0 con stderr', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    disable('a', 'b');
+    const r = run('sync', '--all');
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('ALERTA');
+    expect(r.stderr).toContain('a, b');
+  }, 30000);
+
+  it('sync --all con una cúpula habilitada y otra indexada deshabilitada: sincroniza la primera y falla', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    disable('b');
+    const r = run('sync', '--all');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('[a] gen=');
+    expect(r.stderr).toContain('rag.enabled=false: b');
+    expect(run('sync', '--all', '--check').status).toBe(2);
+  }, 30000);
+
+  it('la alerta queda en rag.jsonl para el morning brief', () => {
+    const { run, disable, home } = setup();
+    run('sync', '--all');
+    disable('b');
+    run('sync', '--all', '--check');
+    const lines = fs.readFileSync(path.join(home, 'logs', 'rag.jsonl'), 'utf-8').trim().split('\n').map(l => JSON.parse(l));
+    const orphan = lines.find(l => l.event === 'alert' && l.kind === 'sync_disabled_indexed');
+    expect(orphan.detail.domes).toEqual(['b']);
+    expect(lines.some(l => l.event === 'alert' && l.kind === 'slo')).toBe(true);
+  }, 30000);
+
+  it('la misma alerta repetida el mismo día no vuelve a escribirse en rag.jsonl', () => {
+    const { run, disable, home } = setup();
+    run('sync', '--all');
+    disable('b');
+    for (let i = 0; i < 3; i++) run('sync', '--all', '--check');
+    const lines = fs.readFileSync(path.join(home, 'logs', 'rag.jsonl'), 'utf-8').trim().split('\n').map(l => JSON.parse(l));
+    expect(lines.filter(l => l.event === 'alert' && l.kind === 'sync_disabled_indexed')).toHaveLength(1);
+    expect(lines.filter(l => l.event === 'alert' && l.kind === 'slo')).toHaveLength(1);
+  }, 60000);
+
+  it('cada alerta de sync --check sale una sola vez por stderr y ninguna por stdout', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    disable('b');
+    const r = run('sync', '--all', '--check');
+    expect(r.stderr.match(/\[b\] ALERTA: cúpula con índice y rag\.enabled=false/g)).toHaveLength(1);
+    expect(r.stdout).not.toContain('ALERTA');
+  }, 30000);
+
+  it('rag drop elimina el índice huérfano y deja sync --all y status --check en 0', () => {
+    const { run, disable } = setup();
+    run('sync', '--all');
+    disable('b');
+    expect(run('sync', '--all').status).toBe(1);
+    expect(run('status', '--check').status).toBe(2);
+    expect(run('gc', '--dome', 'b').status).toBe(0);
+    expect(run('status', '--check').status).toBe(2); // gc conserva la generación activa
+    const d = run('drop', 'b');
+    expect(d.status).toBe(0);
+    expect(d.stdout).toContain('índice eliminado');
+    expect(run('sync', '--all').status).toBe(0);
+    expect(run('status', '--check').status).toBe(0);
+    expect(run('drop', 'b').stdout).toContain('sin índice');
+  }, 60000);
+
+  it('negativo: rag drop rechaza una cúpula con rag.enabled=true y no borra nada', () => {
+    const { run } = setup();
+    run('sync', '--all');
+    const d = run('drop', 'a');
+    expect(d.status).not.toBe(0);
+    expect(d.stderr).toContain('rag.enabled=true');
+    expect(run('status', '--check').status).toBe(0);
+  }, 30000);
+
+  it('negativo: sin cúpulas indexadas deshabilitadas, sync --all sale 0', () => {
+    const { run } = setup({ a: true, b: true });
+    expect(run('sync', '--all').status).toBe(0);
   }, 30000);
 });
