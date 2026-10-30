@@ -327,6 +327,12 @@ jobs:
           bash scripts/validate-agent-permissions.sh .claude/agents
           bats tests/test-validate-agent-permissions.bats tests/test-validate-agent-permissions-excess.bats
 
+      # rule-manifest.json, settings-hooks pin, INDEX de propuestas y planning-state se regeneran a mano; el
+      # --check de cada uno solo corría en local (validate-ci-local.sh) y #1401 dejó main desfasado sin que la CI avisara.
+      # --quick omite sam.py check: ya lo ejecuta ci-extended-checks.sh (#11).
+      - name: Generated artifacts fresh
+        run: bash scripts/validate-ci-local.sh --fresh-only --quick
+
       - name: Installer contracts and planner (SE-399 F1)
         run: python3 -m unittest tests/python/test_installer_plan.py
 

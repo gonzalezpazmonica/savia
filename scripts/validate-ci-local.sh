@@ -3,19 +3,21 @@
 # Runs checks in parallel for speed (~5x faster on Windows).
 # Usage: bash scripts/validate-ci-local.sh [--quick] [--clean-state] | --clean-state-only [--repo DIR]
 # SE-407 S1: incluye la frescura de los artefactos generados (bloquea); --quick omite solo sam.py check.
+# --fresh-only: solo la frescura de los artefactos generados (lo ejecuta la CI en ci.yml; combinable con --quick).
 # SE-407 S2: --clean-state añade el estado limpio al cerrar (advisory: solo PASS/WARN).
 set -uo pipefail
 
 # Ningún test debe heredar GIT_DIR/GIT_WORK_TREE/... del agente: operarían sobre el repo real.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/mock-env.sh"; git_env_clean
 
-QUICK_MODE=false; CLEAN_STATE=false; CLEAN_ONLY=false
+QUICK_MODE=false; CLEAN_STATE=false; CLEAN_ONLY=false; FRESH_ONLY=false
 CLEAN_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quick) QUICK_MODE=true ;;
     --clean-state) CLEAN_STATE=true ;;
     --clean-state-only) CLEAN_ONLY=true ;;
+    --fresh-only) FRESH_ONLY=true ;;
     --repo) CLEAN_REPO="${2:-}"; shift ;;
   esac
   shift
@@ -281,6 +283,14 @@ report_unverified_coverage() {
 }
 
 # ── Run checks in parallel ───────────────────────────────────────────────
+if $FRESH_ONLY; then
+  check_generated_fresh
+  cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null
+  # Fail-closed: sin ninguna línea PASS, o con alguna FAIL, el gate no da OK.
+  cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null | grep -q '^PASS' || exit 1
+  cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null | grep -q '^FAIL' && exit 1
+  exit 0
+fi
 check_branch &
 check_coherence &
 check_file_sizes &

@@ -80,6 +80,40 @@ fake_table() {
   [[ "$output" == *"OK Generado al día: settings-hooks pin"* ]]
 }
 
+# ── --fresh-only: lo que ejecuta la CI (el hueco de #1401: el --check solo corría en local) ──
+@test "fresh-only: un artefacto desfasado sale con 1 y nombra artefacto y comando" {
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS="$(fake_table false true)" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Results:"* ]]
+  [[ "$output" == *"FAIL Generado desfasado: rule-manifest.json → regenerar: bash scripts/rule-manifest-generate.sh"* ]]
+}
+
+@test "fresh-only: todo al día sale con 0 y no ejecuta las demás comprobaciones" {
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS="$(fake_table true true)" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS Generado al día: rule-manifest.json"* ]]
+  [[ "$output" != *"Results:"* ]]
+}
+
+@test "fresh-only: fail-closed, sin ninguna comprobación no da OK" {
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS=" " bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 1 ]
+}
+
+@test "fresh-only: en un clon con rule-manifest desfasado falla con la comprobación real" {
+  git clone -q --shared --depth 1 "file://$REPO_ROOT" "$TMP/repo"
+  cp "$REPO_ROOT/$SCRIPT" "$TMP/repo/$SCRIPT"
+  printf '# Regla de prueba\n\nTexto.\n' > "$TMP/repo/docs/rules/domain/zz-regla-de-prueba.md"
+  run bash -c "cd '$TMP/repo' && bash $SCRIPT --fresh-only --quick"
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Results:"* ]]
+  [[ "$output" == *"desfasado: rule-manifest.json"* ]]
+}
+
+@test "la CI ejecuta --fresh-only (sin el paso, un artefacto desfasado llega a main)" {
+  grep -qE 'run: bash scripts/validate-ci-local\.sh --fresh-only' "$REPO_ROOT/.github/workflows/ci.yml"
+}
+
 # ── SE-425: lockfiles versionados (scripts/ y projects/savia-vaults/) ─────
 # Directorio npm mínimo: package.json y un lock cuya raíz declara `lockdeps` como dependencias.
 lock_dir() {
