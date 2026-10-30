@@ -348,6 +348,10 @@ jobs:
       - name: Generated artifacts fresh
         run: bash scripts/validate-ci-local.sh --fresh-only --quick
 
+      # Sus tests viven en tests/*.bats (ci-select-bats no los elige); sin este paso no se ejecutan.
+      - name: Tests de frescura de artefactos (validate-ci-local)
+        run: bats tests/test-validate-ci-fresh.bats
+
       # #1413: pre-commit y runner de compliance; sus suites viven fuera de tests/bats/ y ci-select-bats no las elige.
       - name: Compliance pre-commit y runner (#1413)
         run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats

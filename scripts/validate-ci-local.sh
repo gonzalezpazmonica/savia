@@ -202,8 +202,12 @@ docs/propuestas/INDEX.md|bash scripts/propuestas-index-gen.sh --check|bash scrip
 planning-state.json|bash scripts/roadmap.sh validate|corregir planning-state.json/LOG.md según el error y bash scripts/roadmap.sh render'
 REPO_ROOT_CI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+FRESH_EXPECTED=0  # nº de comprobaciones lanzadas; --fresh-only exige una línea PASS por cada una
 check_generated_fresh() {
-  local i=0 name check regen
+  local i=0 name check regen table
+  table="${SAVIA_FRESH_CHECKS_FOR_TESTS:-$FRESH_CHECKS_DEFAULT}"
+  # En CI la tabla por defecto no se sobrescribe por entorno: solo bats (BATS_VERSION) puede.
+  if [[ "${CI:-}" == "true" && -z "${BATS_VERSION:-}" ]]; then table="$FRESH_CHECKS_DEFAULT"; fi
   while IFS='|' read -r name check regen; do
     [[ -z "${name// /}" ]] && continue
     # --quick puede omitir sam.py check (el más lento), nunca los otros.
@@ -214,7 +218,8 @@ check_generated_fresh() {
       else
         echo "FAIL Generado desfasado: $name → regenerar: $regen"
       fi ) > "$TMPDIR_CI/8-fresh-$i" &
-  done <<< "${SAVIA_FRESH_CHECKS_FOR_TESTS:-$FRESH_CHECKS_DEFAULT}"
+  done <<< "$table"
+  FRESH_EXPECTED=$i
   wait
 }
 
@@ -285,10 +290,13 @@ report_unverified_coverage() {
 # ── Run checks in parallel ───────────────────────────────────────────────
 if $FRESH_ONLY; then
   check_generated_fresh
-  cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null
-  # Fail-closed: sin ninguna línea PASS, o con alguna FAIL, el gate no da OK.
-  cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null | grep -q '^PASS' || exit 1
-  cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null | grep -q '^FAIL' && exit 1
+  # Sin tuberías: con pipefail, un grep que sale pronto mata a cat con SIGPIPE y se pierde el FAIL (falso verde).
+  fresh_out=$(cat "$TMPDIR_CI"/8-fresh-* 2>/dev/null)
+  [[ -n "$fresh_out" ]] && echo "$fresh_out"
+  # Fail-closed: ninguna FAIL y exactamente una PASS por comprobación lanzada (una perdida no es OK).
+  fresh_fail=$(grep -c '^FAIL' <<< "$fresh_out")
+  fresh_pass=$(grep -c '^PASS' <<< "$fresh_out")
+  [[ "$FRESH_EXPECTED" -gt 0 && "$fresh_fail" -eq 0 && "$fresh_pass" -eq "$FRESH_EXPECTED" ]] || exit 1
   exit 0
 fi
 check_branch &

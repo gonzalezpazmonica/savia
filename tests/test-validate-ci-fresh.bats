@@ -111,7 +111,7 @@ fake_table() {
 }
 
 @test "la CI ejecuta --fresh-only (sin el paso, un artefacto desfasado llega a main)" {
-  grep -qE 'run: bash scripts/validate-ci-local\.sh --fresh-only' "$REPO_ROOT/.github/workflows/ci.yml"
+  grep -qE "^[[:space:]]+run: bash scripts/validate-ci-local\.sh --fresh-only" "$REPO_ROOT/.github/workflows/ci.yml"
 }
 
 # ── SE-425: lockfiles versionados (scripts/ y projects/savia-vaults/) ─────
@@ -192,4 +192,43 @@ lock_dir() {
   run bash "$TMP/scan/scripts/confidentiality-scan.sh" --staged --blocklist "$TMP/scan/blocklist.txt"
   [ "$status" -ne 0 ]
   [[ "$output" == *"FAIL persona@correo-real.es"* ]]
+}
+
+# ── Revisión independiente de #1421 ──
+@test "fresh-only: el veredicto no usa tuberías hacia grep -q (SIGPIPE + pipefail daba falso verde)" {
+  run grep -nE '\|[[:space:]]*grep -q' <(sed -n '/^if \$FRESH_ONLY/,/^fi$/p' "$REPO_ROOT/$SCRIPT")
+  [ "$status" -eq 1 ]
+}
+
+@test "fresh-only: un FAIL entre muchas comprobaciones nunca da OK (50 repeticiones)" {
+  table="$(printf 'a|false|regen-a\n'; for n in $(seq 1 30); do printf 'p%s|true|x\n' "$n"; done)"
+  for _ in $(seq 1 50); do
+    run env SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+    [ "$status" -eq 1 ]
+  done
+}
+
+@test "fresh-only: una comprobación que muere sin dejar resultado no da OK (fail-closed por recuento)" {
+  # El check mata su subshell contenedor: sin fichero 8-fresh-N para esa fila.
+  table="$(printf 'ok|true|x\nmuere|kill -9 $PPID|x\n')"
+  run env SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [ "$status" -eq 1 ]
+}
+
+@test "CI: la tabla de comprobaciones no se sobrescribe por entorno fuera de bats" {
+  table="fake-artefacto|false|regen-fake"
+  run env -u BATS_VERSION CI=true SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [[ "$output" != *"fake-artefacto"* ]]
+  # Con bats sigue siendo posible (las pruebas dependen de ello).
+  run env CI=true BATS_VERSION=1 SAVIA_FRESH_CHECKS_FOR_TESTS="$table" bash "$REPO_ROOT/$SCRIPT" --fresh-only --quick
+  [[ "$output" == *"FAIL Generado desfasado: fake-artefacto"* ]]
+}
+
+@test "CI: el paso --fresh-only no es opcional (sin continue-on-error ni if) y esta suite se ejecuta en CI" {
+  ci="$REPO_ROOT/.github/workflows/ci.yml"
+  step="$(awk '/- name: Generated artifacts fresh/{f=1;print;next} f&&/^      - name:/{exit} f' "$ci")"
+  [[ "$step" == *"run: bash scripts/validate-ci-local.sh --fresh-only"* ]]
+  [[ "$step" != *"continue-on-error"* ]]
+  [[ "$step" != *"if:"* ]]
+  grep -qE '^[[:space:]]+run: bats .*tests/test-validate-ci-fresh\.bats' "$ci"
 }
