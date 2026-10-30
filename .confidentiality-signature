@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=62595072bbfbc5d981eb02795e4e09309cf3279c32d3931a15b900227101ae97
-timestamp=2026-10-30T07:06:29Z
-branch=agent/lat-hooks-20261023
-head_commit=6d5936067
-signature=12d678f8d7f8fe92c7d62d47920b52c07821b0efa38a59b49ad949de10c1d61d
+diff_hash=f54954c7fb9cf1da498289c26cda5f5566fa8bfea5549cc43a3c368dbb8942c3
+timestamp=2026-10-30T07:24:49Z
+branch=agent/identidad-specs-20261030
+head_commit=fc4fe31ad
+signature=ff255f25a19eb90e0fca8835c58efce73fe6be9215651f2331d7fb2c9dea4fd3
