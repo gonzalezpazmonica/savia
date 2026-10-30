@@ -30,7 +30,7 @@ jobs:
       CONFIDENTIALITY_HMAC_KEY: ${{ secrets.CONFIDENTIALITY_HMAC_KEY }}
       CONFIDENTIALITY_REQUIRE_HMAC: '1'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     name: PII & Confidentiality Scan (PR)
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Full Repo Confidentiality Audit
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
