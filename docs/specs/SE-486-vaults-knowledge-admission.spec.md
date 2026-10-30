@@ -27,7 +27,7 @@ timeline:
 
 - **Dos ejes separados.** El técnico (extracción) no cambia. El de admisión es nuevo: `UNREVIEWED`, `ACCEPTED`, `RESTRICTED`, `REJECTED`, `SUPERSEDED`, `QUARANTINED`. El eje técnico solo puede **bajar** la admisión efectiva, nunca subirla.
 - **Una sola autoridad de vigencia.** `SUPERSEDED` **no se almacena**: se deriva de los campos que ya existen (`status ∈ excludeStatuses`, `superseded_by` o `valid_until` vencido; en Files, una revisión que ya no es la vigente).
-- **La admisión vive fuera del contenido.** Hay un ledger de admisión por cúpula, append-only y firmado, atado al **digest de contenido** que ya existe. Las decisiones positivas (`ACCEPTED`, `RESTRICTED`) caducan con cualquier edición: el documento vuelve a `UNREVIEWED`. Las negativas (`REJECTED`, `QUARANTINED`) **no** caducan al editar, porque si no, un escritor levantaría un rechazo cambiando un byte. Un escritor sin `admit` no escribe decisiones. Solo puede bajar la admisión indirectamente: editando, o marcando el documento como sustituido con los campos de vigencia.
+- **La admisión vive fuera del contenido.** Hay un ledger de admisión por cúpula, append-only y firmado. Vive en el directorio de estado del servidor, fuera del alcance de `vault_write`, y está atado al **digest de contenido** que ya existe. Las decisiones positivas (`ACCEPTED`, `RESTRICTED`) caducan con cualquier edición: el documento vuelve a `UNREVIEWED`. Las negativas (`REJECTED`, `QUARANTINED`) **no** caducan al editar, porque si no, un escritor levantaría un rechazo cambiando un byte. Un escritor sin `admit` no escribe decisiones. Solo puede bajar la admisión indirectamente: editando, o marcando el documento como sustituido con los campos de vigencia.
 - **«Admitir» es un permiso ortogonal**, solo para sujetos humanos, con una credencial específica y sin superficie MCP ni A2A. **Ningún agente lo tiene nunca.**
 - **La admisión se aplica al servir**, no al indexar. Cambiar la admisión no re-trocea ni re-embebe nada.
 - **Perfil `governed` opt-in por cúpula.** Por defecto, ninguna cúpula lo tiene.
@@ -53,8 +53,8 @@ function effectiveAdmission(input: {
 Las reglas se aplican en orden y gana la primera que se cumple:
 
 1. cuarentena técnica → `QUARANTINED`;
-2. decisión `REJECTED`, **con cualquier digest** → `REJECTED`;
-3. decisión `QUARANTINED`, **con cualquier digest** → `QUARANTINED`;
+2. decisión `REJECTED` del objetivo, **con cualquier digest**, o digest actual presente en el conjunto de digests rechazados de la cúpula → `REJECTED`;
+3. lo mismo con `QUARANTINED` → `QUARANTINED`;
 4. `superseded` → `SUPERSEDED`;
 5. decisión `ACCEPTED` o `RESTRICTED` con digest igual al actual → esa decisión;
 6. en cualquier otro caso → `UNREVIEWED`.
@@ -65,11 +65,18 @@ Semántica de varias entradas:
 
 - La decisión vigente de un objetivo es su entrada de **mayor `seq`**.
 - Un rechazo solo se levanta con una decisión nueva de alguien con `admit`.
+- **Conjunto de digests negativos.** Además de por objetivo, cada `REJECTED` y `QUARANTINED` vigente añade su digest a un conjunto de la cúpula. Una copia o un renombrado **con los mismos bytes** hereda el rechazo en cualquier ruta.
+- **Límite declarado:** una copia con otra ruta **y** contenido modificado es contenido nuevo: queda `UNREVIEWED` y se sirve con advertencia. F1 no hace detección por similitud.
 - Si el fichero se edita y luego se revierte a los mismos bytes, el `ACCEPTED` previo vuelve a aplicarse, siempre que siga siendo la última entrada. Es intencionado: son exactamente los bytes revisados (caso ABA).
 
 ### R2 — Ledger de admisión
 
-`<cúpula>/.savia-vaults/admission/` guarda un JSON canónico por entrada con estos campos:
+El ledger vive en el **directorio de estado del servidor**, `~/.savia-vaults/admission/<cúpula>/`, el mismo sitio que `users.json`: **fuera de cualquier cúpula**. Así ni `vault_write`, ni A2A, ni el repo sincronizado de la cúpula pueden alcanzarlo. La clave de firma vive en el mismo directorio de estado, nunca dentro de la cúpula. Los efectos de esta ubicación:
+
+- el ledger no viaja con las notas (exportación, copias, federación);
+- no se respalda con `backup` de la cúpula: necesita su propio respaldo, que se documenta en la implementación.
+
+Cada entrada es un JSON canónico con estos campos:
 
 - `seq`, `target` (`notes/<ruta>` o `files/<docId>`);
 - `digest`, `admission`, `scope?`, `reason` (≤ 200 caracteres);
@@ -80,12 +87,21 @@ Semántica de varias entradas:
 Reglas del ledger:
 
 - Nunca contiene texto del documento.
-- El digest de una nota es `DocEntry.hash` (sha256 de los bytes del fichero). El de Files es `sha256(rev.sha256 + "\n" + (extraction.digest ?? ""))`.
-- **Ancla de cabeza contra el truncado o la vuelta atrás.** Cada escritura actualiza, además del ledger, un checkpoint firmado `{dome, seq, head}`. El checkpoint está en el directorio de estado del servidor, **fuera** de la cúpula (junto a `users.json`). Al cargar:
+- El digest de una nota es `DocEntry.hash` (sha256 de los bytes del fichero). El de Files es `sha256(rev.sha256 + "\n" + (extraction.digest ?? ""))`. Una re-extracción con otra versión del extractor cambia el texto que se sirve, así que invalida los `ACCEPTED` previos. Es intencionado: se revisó otro texto.
+- **Ancla de cabeza contra el truncado.** Hay un checkpoint firmado `{dome, seq, head}`.
+- **Orden de escritura**, bajo un lock de cúpula (el patrón `acquireLock` del indexador), que comparten la CLI y el servidor:
+  1. añadir la entrada con fsync;
+  2. reescribir el checkpoint de forma atómica (`writeAtomic`).
+- Al cargar:
   - si el `seq` del checkpoint es mayor que el último `seq` del ledger, o su `head` no coincide con el hash de la entrada con ese `seq`, el ledger es inválido;
   - si falta el checkpoint y el ledger tiene entradas, el ledger es inválido;
-  - si los dos faltan, el ledger está vacío y es válido.
-- Si una firma, la cadena `prev` o el ancla no cuadran, o el ledger no se puede leer, **todos** los documentos de la cúpula son `UNREVIEWED` (fail-closed) y `vault_health` lo reporta como `admission_ledger_invalid`.
+  - si los dos faltan, el ledger está vacío y es válido;
+  - se toleran entradas firmadas y encadenadas **posteriores** al checkpoint: es el caso de un fallo entre los pasos 1 y 2. La siguiente escritura adelanta el checkpoint.
+- **Ledger inválido.** Ocurre si una firma, la cadena `prev` o el ancla no cuadran, o si el ledger no se puede leer. Entonces la cúpula entra en **admisión degradada**:
+  - ningún documento puede salir `ACCEPTED` ni `RESTRICTED`;
+  - en `standard`, todos los hits se sirven como `UNREVIEWED` y `DomeOutcome.detail` incluye `admission_ledger_invalid`, de modo que el aviso llega **en la respuesta** y no solo en `vault_health`;
+  - en `governed`, la cúpula **no sirve ningún hit** (`status` degradado) hasta que se repare;
+  - consecuencia declarada: en `standard`, un `REJECTED` vuelve a servirse con aviso mientras dure la degradación. Para provocarla hace falta escribir en el directorio de estado del servidor, que ninguna superficie de agente alcanza (R4, AC-6).
 - `admission:` en el frontmatter **se ignora** y se cuenta en `vault_health` como `admission_claim_ignored`, sin rutas.
 
 ### R3 — Permiso «admitir»
@@ -115,9 +131,9 @@ Reglas del ledger:
   - `admission report <cúpula>`, que da recuentos por estado efectivo, por estado técnico y por `admission_claim_ignored`, y solo en local las rutas.
 - Cómo se usa:
   - La credencial de admitir se pide por prompt en la TTY, nunca por argv ni por variable de entorno.
-  - Hay que confirmar tecleando el id corto del objetivo.
-  - El lote son ids explícitos, **≤ 50** por llamada. No existe `--all`.
-- **No** se añade ninguna herramienta MCP ni ruta A2A ni HTTP para escribir admisión. La lectura de la admisión efectiva sí aparece en los hits (R5).
+  - Un objetivo se confirma tecleando su id corto.
+  - El lote son ids explícitos, **≤ 50** por llamada, y se confirma tecleando el nombre de la cúpula y el número de objetivos. No existe `--all`.
+- **No** se añade ninguna herramienta MCP ni ruta A2A ni HTTP para escribir admisión. El ledger está fuera de la raíz de cualquier cúpula, así que el confinamiento de rutas de `vault_write` y de Files ya lo deja fuera de alcance; AC-6 lo prueba. La lectura de la admisión efectiva sí aparece en los hits (R5).
 - En `governed`, aceptar una revisión `PARTIAL` exige `--accept-partial`.
 
 ### R5 — Admisión y cobertura al servir
@@ -139,9 +155,10 @@ Reglas del ledger:
 
 - `domes.<n>.governance.profile: 'standard' | 'governed'`. Por defecto `standard`.
 - Se cambia solo por CLI local (`dome governance <n> <perfil>`), con auditoría.
-- Las únicas diferencias de `governed` en F1 son dos:
+- Las únicas diferencias de `governed` en F1 son tres:
   - `RESTRICTED` no se sirve en `vault_rag` (R5);
-  - aceptar un `PARTIAL` exige `--accept-partial` (R4).
+  - aceptar un `PARTIAL` exige `--accept-partial` (R4);
+  - con el ledger inválido no se sirve nada (R2).
 - Lo que el perfil haga en F3 y F5 se especifica allí.
 
 ### R7 — Interruptor de rollback
@@ -154,27 +171,38 @@ Reglas del ledger:
 
 - **AC-1 (función pura):** test de tabla que recorre las 6 reglas de R1 y el orden entre ellas (p. ej. `REJECTED` + `superseded` ⇒ `REJECTED`; `ACCEPTED` + `superseded` ⇒ `SUPERSEDED`; `ACCEPTED` con digest distinto ⇒ `UNREVIEWED`; **`REJECTED` con digest distinto ⇒ `REJECTED`**; con dos entradas para el mismo objetivo, gana la de mayor `seq`). `RESTRICTED` sin `scope` lanza un error.
 - **AC-2 (autoadmisión por frontmatter):** una nota con `admission: accepted` y `status: approved` se sirve como `UNREVIEWED`, y `vault_health` cuenta 1 en `admission_claim_ignored`.
-- **AC-3 (edición invalida):** una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until`. Una nota `REJECTED` cuyo cuerpo se edita **sigue** `REJECTED` y no se sirve (caso negativo).
+- **AC-3 (edición y copia):**
+  - una nota `ACCEPTED` cuyo cuerpo se edita pasa a `UNREVIEWED` en la siguiente consulta. Lo mismo si solo se edita `valid_until`;
+  - una nota `REJECTED` cuyo cuerpo se edita **sigue** `REJECTED` y no se sirve;
+  - una nota `REJECTED` renombrada o copiada a otra ruta con los mismos bytes sale `REJECTED` en las dos rutas y no se sirve;
+  - una copia con otra ruta y un byte cambiado sale `UNREVIEWED` (límite declarado, que se prueba para que no cambie sin querer).
 - **AC-4 (permiso ortogonal):** `authorizeAdmit()` devuelve `forbidden` en cada uno de estos casos, y `allowed` solo cuando se cumplen las cuatro condiciones:
   - `admin` sin `admit`;
   - humano con `admit` pero con una credencial sin `admit`;
   - usuario `service` con `admit:true` metido a mano en `users.json`;
-  - credencial `admit` sobre una cúpula sin `admit`.
+  - credencial `admit` sobre una cúpula sin `admit`;
+  - credencial `admit` caducada o revocada;
+  - rol `reader` con `admit`.
 - **AC-5 (CLI):** `grant-admit` sobre un usuario `service` termina con código ≠ 0 y no modifica `users.json`. `token-create --admit --expires-days 8` se rechaza.
-- **AC-6 (sin superficie de agente):** ninguna herramienta MCP ni ruta A2A o HTTP escribe en el ledger. Un test enumera las herramientas registradas y las rutas y falla si alguna acepta `admission` como entrada.
-- **AC-7 (ledger íntegro):** en todos estos casos, todos los hits de la cúpula salen `UNREVIEWED` o descartados, ninguno `ACCEPTED`, y `vault_health` reporta `admission_ledger_invalid`:
+- **AC-6 (sin superficie de agente):**
+  - un test enumera las herramientas MCP y las rutas A2A y HTTP registradas, y falla si alguna importa el módulo de escritura del ledger. Comprueba también que no acepta `admission` como entrada;
+  - `vault_write` con una ruta que intenta salir hacia el directorio de estado (`../`, ruta absoluta o enlace simbólico) se rechaza y el ledger no cambia.
+  - Es un invariante de no-regresión: en main no hay ledger, así que el test de rutas es el que puede fallar si el ledger se coloca dentro de la cúpula.
+- **AC-7 (ledger íntegro):** en cada uno de estos casos, con `standard`, **todos** los hits de la cúpula salen exactamente `UNREVIEWED` y `DomeOutcome.detail` contiene `admission_ledger_invalid`. Con `governed`, la cúpula devuelve 0 hits con estado degradado:
   - (a) una entrada con la firma alterada;
   - (b) una entrada intermedia borrada;
   - (c) **las últimas entradas borradas (truncado de cola)**, comprobado con el checkpoint;
   - (d) un checkpoint ausente con el ledger no vacío.
 
-  Un `REJECTED` truncado no vuelve a servirse sin la alerta.
-- **AC-8 (sin reembeber):** tras `admission set` sobre un documento indexado, el siguiente `rag sync` informa `chunks.embedded == 0`, la generación activa no cambia y el hit refleja la nueva admisión **sin** sync.
+  Caso que debe ser válido: una entrada firmada posterior al checkpoint (fallo entre la escritura y el checkpoint) se acepta.
+- **AC-8 (sin reembeber):** tras `admission set` sobre un documento indexado:
+  - el hit refleja la nueva admisión **sin** sync. Esta es la aserción que falla en main;
+  - el siguiente `rag sync` informa `chunks.embedded == 0` y la generación activa no cambia (invariante).
 - **AC-9 (`PARTIAL` visible):** un documento de Files `PARTIAL` produce hits con `coverage` y advertencia en la salida de texto. Uno `READY` no lleva `coverage`.
 - **AC-10 (servido):** `REJECTED` y `QUARANTINED` no aparecen en `vault_rag`, tampoco con `includeStale: true`, y `degradation.admission` los cuenta sin rutas.
 - **AC-11 (legado):** en una cúpula sin ledger:
   - las rutas, el orden y las puntuaciones de `vault_rag` son idénticos a los de main;
-  - **cada hit lleva `admission.state === 'UNREVIEWED'`**, una aserción que falla en main porque el campo no existe;
+  - **cada hit vigente, sin `includeStale` y sin cuarentena técnica, lleva `admission.state === 'UNREVIEWED'`**. Es una aserción que falla en main porque el campo no existe. Con `includeStale`, los hits sustituidos llevan `SUPERSEDED`;
   - el banco de recall@10 y MRR no se mueve.
 - **AC-12 (perfil):** el mismo documento `RESTRICTED`:
   - en `standard` se sirve con advertencia y `scope`;
@@ -185,7 +213,7 @@ Reglas del ledger:
   - (a) una nota `REJECTED` vuelve a servirse;
   - (b) los hits no llevan `admission`;
   - (c) una nota en cuarentena técnica (SE-481) **sigue** sin servirse.
-- **AC-14:** cada AC tiene al menos una aserción que falla contra main, o con la aserción mutada si la función no existe en main. Las partes de regresión (AC-11 identidad de resultados, AC-13c) se apoyan en esa aserción y no cuentan solas.
+- **AC-14:** cada AC de AC-1 a AC-13, salvo AC-6, tiene al menos una aserción que falla contra main. AC-6 es un invariante y se valida mutándolo: con el ledger dentro de la cúpula, su test debe fallar. Las partes de regresión (la identidad de resultados de AC-11, AC-8 `embedded == 0` y AC-13c) no cuentan solas.
 
 ## Medidas que se dejan en la PR de implementación
 
@@ -196,7 +224,7 @@ Reglas del ledger:
 
 Un agente que se ejecuta con la misma cuenta del sistema operativo que la propietaria, que emula una TTY y lee la credencial de admitir de donde ella la guarde, puede suplantarla. Ninguna comprobación dentro del proceso lo impide. Esta spec lo mitiga con la credencial aparte, su vida corta, la ausencia de superficie MCP y la auditoría firmada. Un segundo factor queda fuera de alcance hasta que la operadora lo pida.
 
-Por la misma razón, quien pueda escribir a la vez en la cúpula y en el directorio de estado del servidor puede hacer retroceder de forma coherente el ledger y el checkpoint. El ancla cubre el truncado accidental y el de quien solo tiene acceso a la cúpula (por ejemplo, un agente con `vault_write` o con acceso al repo sincronizado), no a la cuenta del SO.
+Por la misma razón, quien escriba en el directorio de estado del servidor puede hacer retroceder de forma coherente el ledger y el checkpoint, o provocar la admisión degradada (en `standard`, un `REJECTED` vuelve a servirse con aviso). Las superficies de agente (`vault_write`, Files, A2A, el repo de la cúpula) **no** alcanzan ese directorio. Una shell con la cuenta del SO, sí.
 
 ## Fuera de alcance
 
