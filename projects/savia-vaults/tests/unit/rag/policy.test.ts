@@ -1,6 +1,6 @@
 // SE-410 S4 — política de frescura, promoción y SLO
 import { describe, it, expect } from 'vitest';
-import { excludedReason, decayFactor, promotionDecision, sloStatus, resolveRagConfig } from '../../../src/rag/policy.js';
+import { excludedReason, decayFactor, promotionDecision, sloStatus, resolveRagConfig, LAG_HOURS_ALERT } from '../../../src/rag/policy.js';
 import { RAG_DEFAULTS } from '../../../src/rag/types.js';
 
 const now = new Date('2026-09-29T00:00:00Z');
@@ -74,5 +74,35 @@ describe('resolveRagConfig', () => {
     expect(r.chunkChars).toBe(200);
     expect(r.overlap).toBe(0.5);
     expect(r.inlineSyncBudget).toBe(0);
+  });
+});
+
+describe('sloStatus L32 (incidente de cúpulas deshabilitadas)', () => {
+  const base = { enabled: true, hasGeneration: true, totalDocs: 598, pendingDocs: 0, digestMatch: true };
+
+  it('staleRatio 0,48 con cúpula deshabilitada pero indexada: ok=false con alerta', () => {
+    const s = sloStatus({ ...base, enabled: false, indexed: true, pendingDocs: 288 });
+    expect(s.ok).toBe(false);
+    expect(s.alerts.join('\n')).toMatch(/rag\.enabled=false/);
+    expect(s.alerts.join('\n')).toMatch(/staleRatio 0\.48/);
+  });
+
+  it('lagHours por encima del umbral: ok=false aunque staleRatio sea bajo', () => {
+    const s = sloStatus({ ...base, pendingDocs: 1, lagHours: 535 });
+    expect(s.ok).toBe(false);
+    expect(s.alerts.join('\n')).toMatch(/lagHours 535\.0/);
+  });
+
+  it('límite: lagHours justo bajo el umbral pasa, en el umbral falla', () => {
+    expect(sloStatus({ ...base, pendingDocs: 1, lagHours: LAG_HOURS_ALERT - 0.1 }).ok).toBe(true);
+    expect(sloStatus({ ...base, pendingDocs: 1, lagHours: LAG_HOURS_ALERT }).ok).toBe(false);
+  });
+
+  it('cúpula deshabilitada y sin índice sigue siendo ok (negativo)', () => {
+    expect(sloStatus({ ...base, enabled: false, hasGeneration: false, indexed: false, pendingDocs: 598 }).ok).toBe(true);
+  });
+
+  it('cúpula con índice sombra deshabilitada falla aunque no haya activa', () => {
+    expect(sloStatus({ ...base, enabled: false, hasGeneration: false, indexed: true }).ok).toBe(false);
   });
 });
