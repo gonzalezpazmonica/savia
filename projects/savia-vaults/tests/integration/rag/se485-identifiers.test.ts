@@ -48,7 +48,6 @@ describe('SE-485 R4 RAG identificadores', () => {
     expect(r.results[0].hits.length).toBeGreaterThan(0);
     expect(r.results[0].hits.every(h => h.exactMatch === false)).toBe(true);
     expect(r.results[0].warnings?.join(' ')).toContain(NOTE);
-    expect(r.results[0].warnings?.join(' ')).toContain('CT-2099-999');
   });
 
   it('CT-2026-047 existente: su documento primero con exactMatch:true y sin aviso', async () => {
@@ -65,7 +64,7 @@ describe('SE-485 R4 RAG identificadores', () => {
     expect(r.results[0].warnings?.join(' ')).toContain(NOTE);
     // idéntico a un identificador que no existe en ningún sitio
     const nowhere = await ask('CT-2088-002');
-    expect(nowhere.results[0].warnings?.[0].replace('CT-2088-002', 'X')).toBe(r.results[0].warnings?.[0].replace('CT-2077-001', 'X'));
+    expect(nowhere.results[0].warnings).toEqual(r.results[0].warnings);
   });
 
   it('un identificador solo presente en una nota obsoleta: aviso salvo includeStale', async () => {

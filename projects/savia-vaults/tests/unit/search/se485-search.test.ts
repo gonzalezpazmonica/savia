@@ -61,6 +61,14 @@ describe('SE-485 SearchEngine', () => {
     expect(paths(engine.search({ query: 'zafiro', includeStale: true }))).toEqual(['caducada.md', 'vieja.md', 'vigente.md']);
   });
 
+  it('R5: sin includeStale el valor por defecto excluye lo obsoleto, como vault_rag', () => {
+    expect(paths(engine.search({ query: 'zafiro' }))).toEqual(['vigente.md']);
+  });
+
+  it('R5: excludeStatuses propio de la cúpula sustituye al de RAG por defecto', () => {
+    expect(paths(engine.search({ query: 'zafiro', excludeStatuses: ['archived'] }))).toEqual(['vieja.md', 'vigente.md']);
+  });
+
   it('R5: el identificador solo presente en una nota obsoleta no cuenta como encontrado con includeStale:false', () => {
     put('contrato-viejo.md', '---\nstatus: superseded\n---\n# Viejo\nCT-2001-001 contrato antiguo.');
     engine.buildIndex();

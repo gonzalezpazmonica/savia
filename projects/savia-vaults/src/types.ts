@@ -36,6 +36,10 @@ export interface SearchQuery {
   pathPrefix?: string;
   /** SE-330: enriquecer con score del grafo (context enrichment). */
   enrich?: boolean;
+  /** SE-485 R5: incluir deprecated/superseded/archived y vencidos (def. `DEFAULT_INCLUDE_STALE`). */
+  includeStale?: boolean;
+  /** SE-485 R5: estados excluidos cuando `includeStale` es falso (def. los de RAG). */
+  excludeStatuses?: string[];
 }
 
 export interface SearchResult {
@@ -43,6 +47,9 @@ export interface SearchResult {
   score: number;
   snippet: string;
   tags: string[];
+  /** SE-485 R4: solo si la consulta lleva un identificador con forma de código. */
+  exactMatch?: boolean;
+  warnings?: string[];
 }
 
 export interface VaultStats {
