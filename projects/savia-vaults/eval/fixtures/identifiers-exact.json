@@ -1,0 +1,33 @@
+{
+  "description": "SE-481 R6 — identificadores con guiones y dígitos; la búsqueda exacta devuelve el documento exacto primero. Sintético.",
+  "queries": [
+    {
+      "query": "E-1047",
+      "expected": "ids/e-1047.md"
+    },
+    {
+      "query": "E-1048",
+      "expected": "ids/e-1048.md"
+    },
+    {
+      "query": "CT-2026-047",
+      "expected": "ids/ct-2026-047.md"
+    },
+    {
+      "query": "CT-2026-048",
+      "expected": "ids/ct-2026-048.md"
+    },
+    {
+      "query": "incidencia E-10470",
+      "expected": "ids/e-10470.md"
+    }
+  ],
+  "docs": {
+    "ids/e-1047.md": "# Incidencia\n\nRegistro de la incidencia E-1047 en el banco de pruebas. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. ",
+    "ids/e-1048.md": "# Incidencia\n\nRegistro de la incidencia E-1048 en el banco de pruebas. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. ",
+    "ids/e-10470.md": "# Incidencia\n\nRegistro de la incidencia E-10470 en el banco de pruebas. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. ",
+    "ids/ct-2026-047.md": "# Contrato\n\nAnexo del contrato CT-2026-047 con plazos de entrega. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. ",
+    "ids/ct-2026-048.md": "# Contrato\n\nAnexo del contrato CT-2026-048 con plazos de entrega. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. ",
+    "ids/ruido.md": "# Ruido\n\nNotas sobre incidencias, contratos, anexos y el año 2026 con 1047 menciones. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. Texto de relleno sintético para dar longitud al fragmento sin añadir términos de la consulta. "
+  }
+}
