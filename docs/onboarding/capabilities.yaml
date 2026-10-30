@@ -1,0 +1,386 @@
+# SE-484 — Catálogo de capacidades del onboarding adaptativo.
+#
+# El modelo interpreta la respuesta libre («¿a qué te dedicas y qué quieres conseguir?»)
+# y propone ids de este catálogo. El catálogo decide qué se pregunta y qué se configura;
+# el motor determinista es scripts/onboarding-plan.py. Esquema: capabilities.schema.json.
+#
+# Reglas del catálogo:
+# - Todo lo que figura en `configures` existe en el repo (tests/bats/test-onboarding-adaptive.bats).
+# - `sets` solo escribe en ficheros y claves de la plantilla de perfil (.claude/profiles/users/template/).
+# - Una pregunta existe porque su respuesta cambia la configuración. Sin preguntas de relleno.
+# - Con más de 4 opciones, se marcan como `featured` las que caben en una pregunta con botones;
+#   el resto se elige escribiendo (texto numerado en frontends sin herramienta de preguntas).
+# - Ids de opción entre comillas si YAML pudiera leerlos como booleanos (yes, no, on, off).
+version: 1
+profile_template: .claude/profiles/users/template
+interview_skill: context-interview-conductor
+vertical_detection: docs/rules/domain/vertical-detection.md
+open_question: "¿A qué te dedicas y qué quieres conseguir con Savia?"
+clarify_question: "Para no configurarte de más: ¿cuál de estas cosas quieres hacer primero con Savia?"
+no_vertical_message: "No hay una vertical específica para tu perfil. Se configuran las capacidades generales; si echas en falta una, /vertical-propose prepara la propuesta."
+general_first_steps:
+  - {text: "Ver qué ha quedado configurado en tu perfil", command: profile-show}
+  - {text: "Recorrer los comandos disponibles", command: help}
+  - {text: "Ajustar cualquier respuesta del onboarding", command: profile-edit}
+
+capabilities:
+  - id: harness-orchestration
+    title: Orquestación de agentes y proveedores
+    description: "Coordinar agentes y harnesses especializados con varios proveedores de modelos: Claude, Codex o modelos locales."
+    serves: [cualquier persona que delega trabajo largo en agentes, desarrollo, investigación, automatización]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      skills: [harness-architecture]
+      packs: [docs/rules/domain/provider-agnostic-env.md]
+    asks:
+      - id: providers
+        header: Proveedores
+        question: "¿Con qué proveedores de modelos quieres que trabaje Savia?"
+        multi: true
+        recommended: claude
+        options:
+          - id: claude
+            label: Claude
+            description: "El proveedor por defecto de Savia; no necesita nada más."
+            configures: {sets: {preferences.md: {harness_providers: [claude]}}}
+          - id: codex
+            label: Codex
+            description: "Segundo proveedor independiente, útil como revisora o programadora."
+            configures:
+              sets: {preferences.md: {harness_providers: [codex]}}
+              requires:
+                - {id: codex-cli, description: "El cliente codex instalado y en el PATH", check: {type: command, value: codex}}
+          - id: local
+            label: Modelos locales
+            description: "Modelos en tu máquina con Ollama, sin salir a la nube."
+            configures:
+              sets: {preferences.md: {harness_providers: [local]}}
+              skills: [emergency-mode]
+              requires:
+                - {id: ollama, description: "Ollama instalado y en el PATH", check: {type: command, value: ollama}}
+    first_steps:
+      - {text: "Lanzar tu primera tarea larga con un agente", command: agent-run}
+
+  - id: research
+    title: Investigación
+    description: "Líneas de investigación en Savia Labs: prerregistro, experimentos y bibliografía."
+    serves: [investigadora, científico, doctorado, I+D+i, ensayos, experimentos]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      skills: [savia-labs, web-research]
+      commands: [biblio-search, experiment-log]
+    asks:
+      - id: preregistration
+        header: Prerregistro
+        question: "¿Quieres que cada experimento tenga hipótesis y métrica escritas antes de ejecutarlo (prerregistro)?"
+        multi: false
+        recommended: always
+        options:
+          - id: always
+            label: Sí, siempre
+            description: "Evita ajustar la hipótesis al resultado."
+            configures: {sets: {preferences.md: {research_preregistration: required}}}
+          - id: on-demand
+            label: Solo cuando lo pida
+            description: "Experimentos ligeros sin prerregistro por defecto."
+            configures: {sets: {preferences.md: {research_preregistration: optional}}}
+    first_steps:
+      - {text: "Buscar bibliografía de tu tema", command: biblio-search}
+      - {text: "Registrar tu primer experimento con hipótesis y métrica", command: experiment-log}
+
+  - id: knowledge
+    title: Conocimiento
+    description: "Cúpulas de conocimiento (Savia Vaults) con su nivel de confidencialidad."
+    serves: [cualquier persona con documentación, notas, lecciones o normativa que consultar]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      skills: [savia-vaults]
+      commands: [vault-init, vault-status]
+    asks:
+      - id: confidentiality
+        header: Confidencial
+        question: "¿Qué nivel de confidencialidad quieres por defecto para lo que guardes?"
+        multi: false
+        recommended: internal
+        options:
+          - id: public
+            label: Público
+            description: "Se puede publicar; útil para documentación abierta."
+            configures: {sets: {preferences.md: {knowledge_confidentiality: public}}}
+          - id: internal
+            label: Interno
+            description: "Solo para ti o tu organización; el término medio razonable."
+            configures: {sets: {preferences.md: {knowledge_confidentiality: internal}}}
+          - id: confidential
+            label: Confidencial
+            description: "Nunca sale de tu máquina; para datos clínicos, legales o personales."
+            configures: {sets: {preferences.md: {knowledge_confidentiality: confidential}}}
+    first_steps:
+      - {text: "Crear tu primera cúpula de conocimiento", command: vault-init}
+
+  - id: sdd-development
+    title: Desarrollo con specs
+    description: "Programar con agentes a partir de specs aprobadas (SDD), con las reglas de tu lenguaje."
+    serves: [programador, desarrollo, tech lead, arquitectura, QA, investigación con código]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      sets: {workflow.md: {sdd_active: true}, tools.md: {git: true}}
+      skills: [spec-driven-development]
+      commands: [spec-generate]
+      packs: [docs/rules/domain/language-packs.md]
+    asks:
+      - id: languages
+        header: Lenguajes
+        question: "¿En qué lenguajes programas? Activo sus reglas."
+        multi: true
+        recommended: python
+        options:
+          - {id: python, label: Python, featured: true, description: "Reglas de Python.", configures: {sets: {workflow.md: {sdd_languages: [python]}}, packs: [docs/rules/languages/python-rules.md]}}
+          - {id: typescript, label: TypeScript, featured: true, description: "Reglas de TypeScript y Node.", configures: {sets: {workflow.md: {sdd_languages: [typescript]}}, packs: [docs/rules/languages/typescript-rules.md]}}
+          - {id: dotnet, label: "C# / .NET", featured: true, description: "Convenciones de .NET.", configures: {sets: {workflow.md: {sdd_languages: [dotnet]}}, packs: [docs/rules/languages/dotnet-conventions.md, docs/rules/languages/csharp-rules.md]}}
+          - {id: java, label: Java, featured: true, description: "Reglas de Java.", configures: {sets: {workflow.md: {sdd_languages: [java]}}, packs: [docs/rules/languages/java-rules.md]}}
+          - {id: go, label: Go, description: "Reglas de Go.", configures: {sets: {workflow.md: {sdd_languages: [go]}}, packs: [docs/rules/languages/go-rules.md]}}
+          - {id: rust, label: Rust, description: "Convenciones de Rust.", configures: {sets: {workflow.md: {sdd_languages: [rust]}}, packs: [docs/rules/languages/rust-conventions.md]}}
+          - {id: php, label: PHP, description: "Convenciones de PHP.", configures: {sets: {workflow.md: {sdd_languages: [php]}}, packs: [docs/rules/languages/php-conventions.md]}}
+          - {id: ruby, label: Ruby, description: "Convenciones de Ruby.", configures: {sets: {workflow.md: {sdd_languages: [ruby]}}, packs: [docs/rules/languages/ruby-conventions.md]}}
+          - {id: kotlin, label: Kotlin, description: "Convenciones de Kotlin.", configures: {sets: {workflow.md: {sdd_languages: [kotlin]}}, packs: [docs/rules/languages/kotlin-conventions.md]}}
+          - {id: swift, label: Swift, description: "Convenciones de Swift.", configures: {sets: {workflow.md: {sdd_languages: [swift]}}, packs: [docs/rules/languages/swift-conventions.md]}}
+          - {id: flutter, label: Flutter, description: "Convenciones de Flutter.", configures: {sets: {workflow.md: {sdd_languages: [flutter]}}, packs: [docs/rules/languages/flutter-conventions.md]}}
+          - {id: angular, label: Angular, description: "Convenciones de Angular.", configures: {sets: {workflow.md: {sdd_languages: [angular]}}, packs: [docs/rules/languages/angular-conventions.md]}}
+          - {id: react, label: React, description: "Convenciones de React.", configures: {sets: {workflow.md: {sdd_languages: [react]}}, packs: [docs/rules/languages/react-conventions.md]}}
+          - {id: terraform, label: Terraform, description: "Convenciones de Terraform.", configures: {sets: {workflow.md: {sdd_languages: [terraform]}}, packs: [docs/rules/languages/terraform-conventions.md]}}
+          - {id: vbnet, label: VB.NET, description: "Convenciones de VB.NET.", configures: {sets: {workflow.md: {sdd_languages: [vbnet]}}, packs: [docs/rules/languages/vbnet-conventions.md]}}
+          - {id: cobol, label: COBOL, description: "Convenciones de COBOL.", configures: {sets: {workflow.md: {sdd_languages: [cobol]}}, packs: [docs/rules/languages/cobol-conventions.md]}}
+      - id: review
+        header: Revisión
+        question: "¿Quién revisa el código que escriben los agentes antes de integrarlo?"
+        multi: false
+        recommended: self
+        options:
+          - {id: self, label: Yo, description: "La revisión humana es obligatoria en Savia; así queda anotado.", configures: {sets: {workflow.md: {reviews_agent_code: true}}}}
+          - {id: other, label: Otra persona, description: "Revisa alguien de tu equipo.", configures: {sets: {workflow.md: {reviews_agent_code: false}}}}
+    first_steps:
+      - {text: "Detectar la arquitectura de tu repositorio", command: arch-detect}
+      - {text: "Escribir la spec de tu primera tarea", command: spec-generate}
+
+  - id: project-management
+    title: Gestión de proyectos
+    description: "Sprints, backlog e informes sobre Azure DevOps, Jira o Savia Flow."
+    serves: [PM, scrum master, product owner, coordinación, dirección de proyectos, investigación con entregables]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      skills: [pbi-decomposition]
+    asks:
+      - id: tracker
+        header: Herramienta
+        question: "¿Dónde llevas el trabajo del equipo?"
+        multi: false
+        recommended: savia-flow
+        options:
+          - id: savia-flow
+            label: Savia Flow
+            description: "Tablero local en ficheros, sin cuentas externas. Lo más rápido para empezar."
+            configures:
+              sets: {tools.md: {tracking_extra: savia-flow}}
+              skills: [savia-flow-practice]
+              commands: [flow-setup]
+            first_steps:
+              - {text: "Crear tu primer tablero", command: flow-setup}
+          - id: azure-devops
+            label: Azure DevOps
+            description: "Necesita un token personal (PAT) guardado en un fichero, nunca en el repo."
+            configures:
+              sets: {tools.md: {azure_devops: true}}
+              skills: [azure-devops-queries]
+              commands: [devops-validate]
+              requires:
+                - {id: azure-pat, description: "Token de Azure DevOps en ~/.azure/devops-pat", check: {type: file, value: "~/.azure/devops-pat"}}
+            first_steps:
+              - {text: "Validar la conexión con tu organización de Azure DevOps", command: devops-validate}
+          - id: jira
+            label: Jira
+            description: "Necesita la URL de tu Jira y un token de API."
+            configures:
+              sets: {tools.md: {tracking_extra: jira}}
+              commands: [jira-connect]
+            first_steps:
+              - {text: "Conectar tu Jira", command: jira-connect}
+      - id: cadence
+        header: Cadencia
+        question: "¿Cada cuánto planificas?"
+        multi: false
+        recommended: two-weeks
+        options:
+          - {id: one-week, label: Cada semana, description: "Sprints de una semana.", configures: {sets: {workflow.md: {planning_cadence: 1w}}}}
+          - {id: two-weeks, label: Cada dos semanas, description: "La cadencia por defecto de Savia.", configures: {sets: {workflow.md: {planning_cadence: 2w}}}}
+          - {id: continuous, label: Flujo continuo, description: "Sin sprints; kanban.", configures: {sets: {workflow.md: {planning_cadence: continuous}}}}
+    first_steps:
+      - {text: "Ordenar el backlog inicial", command: flow-backlog-groom}
+      - {text: "Planificar el primer ciclo", command: sprint-plan}
+
+  - id: teaching-learning
+    title: Enseñanza y aprendizaje
+    description: "Savia School: aulas, rúbricas, portafolio y progreso."
+    serves: [profesor, docente, formadora, alumna, estudiante, autoformación]
+    sensitivity: {level: N3, special_category: false, why: "Si hay alumnado menor de edad, sus datos se quedan en Savia School con su propio aviso de privacidad."}
+    configures:
+      skills: [savia-school]
+    asks:
+      - id: learning_role
+        header: Tu papel
+        question: "¿Enseñas o aprendes?"
+        multi: false
+        recommended: teacher
+        options:
+          - id: teacher
+            label: Enseño
+            description: "Aulas, rúbricas y evaluación."
+            configures:
+              sets: {preferences.md: {learning_role: teacher}}
+              commands: [school-setup, school-rubric]
+            first_steps:
+              - {text: "Crear tu aula", command: school-setup}
+              - {text: "Preparar la primera rúbrica", command: school-rubric}
+          - id: learner
+            label: Aprendo
+            description: "Portafolio, entregas y seguimiento de tu progreso."
+            configures:
+              sets: {preferences.md: {learning_role: learner}}
+              commands: [school-enroll, school-portfolio, my-learning]
+            first_steps:
+              - {text: "Ver tu plan de aprendizaje", command: my-learning}
+              - {text: "Empezar tu portafolio", command: school-portfolio}
+    first_steps: []
+
+  - id: vertical
+    title: Vertical de sector
+    description: "Reglas y comandos de un sector concreto: salud, legal, finanzas o educación."
+    serves: [médica, enfermería, sanidad, abogada, despacho, banca, finanzas, colegio, universidad]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      packs: [docs/rules/domain/vertical-detection.md]
+    asks:
+      - id: which
+        header: Sector
+        question: "¿Activo la vertical de tu sector?"
+        multi: false
+        recommended: none
+        options:
+          - id: healthcare
+            label: Salud
+            featured: true
+            description: "Reglas del sector sanitario. Para datos clínicos, elige «Confidencial» en Conocimiento."
+            sensitive: "Los datos de salud son categoría especial: solo se pregunta el sector, nunca datos de pacientes."
+            configures:
+              sets: {preferences.md: {vertical: healthcare}}
+              commands: [vertical-healthcare]
+            first_steps:
+              - {text: "Revisar lo que activa la vertical de salud", command: vertical-healthcare}
+          - id: legal
+            label: Legal
+            featured: true
+            description: "Plazos, plantillas y cumplimiento normativo."
+            configures:
+              sets: {preferences.md: {vertical: legal}}
+              commands: [vertical-legal]
+            first_steps:
+              - {text: "Revisar lo que activa la vertical legal", command: vertical-legal}
+          - id: finance
+            label: Finanzas
+            featured: true
+            description: "Banca, seguros y reporting financiero."
+            configures:
+              sets: {preferences.md: {vertical: finance}}
+              commands: [vertical-finance]
+            first_steps:
+              - {text: "Revisar lo que activa la vertical financiera", command: vertical-finance}
+          - id: education
+            label: Educación
+            description: "Centros educativos y gestión académica."
+            configures:
+              sets: {preferences.md: {vertical: education}}
+              commands: [vertical-education]
+            first_steps:
+              - {text: "Revisar lo que activa la vertical de educación", command: vertical-education}
+          - id: none
+            label: Ninguna
+            featured: true
+            description: "Sin vertical; las capacidades generales bastan."
+            configures:
+              sets: {preferences.md: {vertical: none}}
+    first_steps: []
+
+  - id: professional-domain
+    title: Dominio profesional
+    description: "Criterio experto de controlling, finanzas, laboral, legal o ventas."
+    serves: [controller, financiera, recursos humanos, laboralista, comercial, gerencia]
+    sensitivity: {level: N3, special_category: false}
+    configures:
+      skills: [professional-domain]
+    asks:
+      - id: families
+        header: Dominios
+        question: "¿Qué dominios profesionales usas en tu trabajo?"
+        multi: true
+        recommended: controlling
+        options:
+          - {id: controlling, label: Controlling, featured: true, description: "KPI, desviaciones e informes de gestión.", configures: {sets: {preferences.md: {professional_domains: [controlling]}}, packs: [.claude/skills/professional-domain/controlling]}}
+          - {id: finance, label: Finanzas, featured: true, description: "Tesorería, inversión e informes financieros.", configures: {sets: {preferences.md: {professional_domains: [finance]}}, packs: [.claude/skills/professional-domain/finance]}}
+          - {id: labour, label: Laboral, featured: true, description: "Derecho laboral español, altas, bajas y conflictos.", configures: {sets: {preferences.md: {professional_domains: [labour]}}, packs: [.claude/skills/professional-domain/labour]}}
+          - {id: legal, label: Legal, description: "Contratos y cumplimiento normativo.", configures: {sets: {preferences.md: {professional_domains: [legal]}}, packs: [.claude/skills/professional-domain/legal]}}
+          - {id: sales, label: Ventas, featured: true, description: "Cuentas, pipeline y propuestas.", configures: {sets: {preferences.md: {professional_domains: [sales]}}, packs: [.claude/skills/professional-domain/sales]}}
+    first_steps: []
+
+  - id: accessibility
+    title: Accesibilidad
+    description: "Adaptar la salida: lector de pantalla, alto contraste, menos movimiento o apoyo cognitivo."
+    serves: [cualquier persona que trabaje mejor con la salida adaptada]
+    sensitivity: {level: N3, special_category: true, why: "Las necesidades de accesibilidad pueden revelar datos de salud: solo se pregunta si quieres adaptar la salida; el detalle lo eliges tú en /accessibility-setup."}
+    configures:
+      packs: [docs/rules/domain/accessibility-output.md]
+    asks:
+      - id: adapt
+        header: Adaptar
+        question: "¿Quieres adaptar cómo te muestra Savia la información?"
+        multi: false
+        recommended: later
+        options:
+          - id: now
+            label: Sí, ahora
+            description: "Abre /accessibility-setup al terminar (dos minutos)."
+            configures: {commands: [accessibility-setup]}
+            first_steps:
+              - {text: "Ajustar la accesibilidad de la salida", command: accessibility-setup}
+          - id: later
+            label: Más adelante
+            description: "Sin cambios; puedes activarlo cuando quieras."
+            configures: {}
+    first_steps: []
+
+  - id: tone
+    title: Tono
+    description: "Cómo te da Savia las malas noticias y con qué registro te habla."
+    always: true
+    serves: [todas las personas]
+    sensitivity: {level: N3, special_category: false}
+    configures: {}
+    asks:
+      - id: alert_style
+        header: Alertas
+        question: "Cuando algo va mal, ¿cómo prefieres que te lo diga?"
+        multi: false
+        recommended: direct
+        options:
+          - {id: direct, label: Directa, description: "Problema, coste y arreglo, sin rodeos.", configures: {sets: {tone.md: {alert_style: direct}}}}
+          - {id: suggestive, label: Sugerente, description: "Problema, coste y una recomendación.", configures: {sets: {tone.md: {alert_style: suggestive}}}}
+          - {id: diplomatic, label: Diplomática, description: "Problema y coste, con el arreglo como pregunta.", configures: {sets: {tone.md: {alert_style: diplomatic}}}}
+      - id: formality
+        header: Registro
+        question: "¿Cómo quieres que te hable?"
+        multi: false
+        recommended: professional-casual
+        options:
+          - {id: casual, label: Cercano, description: "Tuteo y lenguaje coloquial.", configures: {sets: {tone.md: {formality: casual}}}}
+          - {id: professional-casual, label: Profesional, description: "Tuteo profesional.", configures: {sets: {tone.md: {formality: professional-casual}}}}
+          - {id: formal, label: Formal, description: "Usted y registro alto.", configures: {sets: {tone.md: {formality: formal}}}}
+    first_steps: []

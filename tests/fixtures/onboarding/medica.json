@@ -1,0 +1,39 @@
+{
+  "name": "Medica Ficticia",
+  "role_text": "Soy médica e investigo en ensayos clínicos",
+  "proposed": [
+    {
+      "id": "research",
+      "reason": "investiga ensayos"
+    },
+    {
+      "id": "knowledge",
+      "reason": "datos clínicos con confidencialidad alta"
+    },
+    {
+      "id": "vertical",
+      "reason": "sector salud",
+      "hints": {
+        "which": [
+          "healthcare"
+        ]
+      }
+    }
+  ],
+  "answers": {
+    "research": {
+      "preregistration": "always"
+    },
+    "knowledge": {
+      "confidentiality": "confidential"
+    },
+    "vertical": {
+      "which": "healthcare"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-medica"
+}

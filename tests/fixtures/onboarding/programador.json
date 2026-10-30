@@ -1,0 +1,34 @@
+{
+  "name": "Programador Ficticio",
+  "role_text": "Programo backend en Go y TypeScript y uso agentes",
+  "proposed": [
+    {
+      "id": "sdd-development",
+      "reason": "programa con agentes"
+    },
+    {
+      "id": "harness-orchestration",
+      "reason": "usa agentes"
+    }
+  ],
+  "answers": {
+    "sdd-development": {
+      "languages": [
+        "go",
+        "typescript"
+      ],
+      "review": "self"
+    },
+    "harness-orchestration": {
+      "providers": [
+        "claude",
+        "codex"
+      ]
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-programador"
+}

@@ -1,5 +1,5 @@
 {
-  "hash": "8cc89dc786ea",
+  "hash": "c397ceb06a6f",
   "total": 1450,
   "resources": [
     {
@@ -12603,15 +12603,15 @@
       "category": "planning",
       "name": "profile-setup",
       "intents": [
-        "configuración",
-        "conoce",
-        "conversación",
-        "natural",
-        "perfil"
+        "adaptativo",
+        "configura",
+        "cual",
+        "oficio",
+        "onboarding"
       ],
       "kind": "cmd",
       "path": ".claude/commands/profile-setup.md",
-      "description": "Savia te conoce — configuración del perfil en conversación natural."
+      "description": "Onboarding adaptativo — Savia configura lo que necesita cualquier persona, sea cual sea su oficio (SE-484)."
     },
     {
       "category": "planning",

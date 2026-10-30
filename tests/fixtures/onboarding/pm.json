@@ -1,0 +1,21 @@
+{
+  "name": "Gestora Ficticia",
+  "role_text": "Coordino un equipo de producto con sprints de dos semanas",
+  "proposed": [
+    {
+      "id": "project-management",
+      "reason": "coordina sprints"
+    }
+  ],
+  "answers": {
+    "project-management": {
+      "tracker": "savia-flow",
+      "cadence": "two-weeks"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-pm"
+}

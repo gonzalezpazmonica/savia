@@ -1,0 +1,38 @@
+{
+  "name": "Cientifico Ficticio",
+  "role_text": "Físico experimental; analizo datos de un detector",
+  "proposed": [
+    {
+      "id": "research",
+      "reason": "ciencia experimental"
+    },
+    {
+      "id": "sdd-development",
+      "reason": "análisis de datos con código"
+    },
+    {
+      "id": "knowledge",
+      "reason": "documentación del detector"
+    }
+  ],
+  "answers": {
+    "research": {
+      "preregistration": "always"
+    },
+    "sdd-development": {
+      "languages": [
+        "python",
+        "rust"
+      ],
+      "review": "self"
+    },
+    "knowledge": {
+      "confidentiality": "internal"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-cientifico"
+}

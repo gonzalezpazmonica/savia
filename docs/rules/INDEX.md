@@ -313,5 +313,5 @@
 | L0 | [critical-facts-anchor.md](domain/critical-facts-anchor.md) | Critical Facts Anchor | — |
 | — | [emotional-regulation.md](domain/emotional-regulation.md) | Savia Emotional Regulation Protocol | — |
 | — | [hooks-blocking-guards.md](domain/hooks-blocking-guards.md) | Regla: guards de seguridad con `blocking: true` (D23-5) | — |
-| — | [profile-onboarding.md](domain/profile-onboarding.md) | Regla: Profile Onboarding — Savia da la bienvenida | — |
+| — | [profile-onboarding.md](domain/profile-onboarding.md) | Regla: Profile Onboarding — onboarding adaptativo (SE-484) | — |
 | — | [verified-memory-axiom.md](domain/verified-memory-axiom.md) | Verified Memory Axiom — SE-072 | — |
