@@ -54,28 +54,29 @@ describe('SE-489 runRoute', () => {
     expect(JSON.stringify(out)).not.toMatch(/secreto|reservado/);
   });
 
-  it('el guard final descarta un hit autorizado con texto, encabezado o fuente sustituidos', async () => {
-    f.denied.add('S');
-    let original: RagHit[] = [];
+  it.each([
+    ['texto', (h: RagHit) => ({ ...h, text: 'texto que no está en la nota' })],
+    ['encabezado', (h: RagHit) => ({ ...h, heading: 'Encabezado inventado' })],
+    ['fuente', (h: RagHit) => ({ ...h, source: { kind: 'file' as const, documentId: 'x', revisionId: 'r', name: 'n', locator: { type: 'page' as const, page: 1 } } })],
+    ['chunkId de otro documento', (h: RagHit) => ({ ...h, chunkId: 'dos.md#0' })],
+  ])('el guard final descarta un hit autorizado con %s sustituido', async (_name, forge) => {
+    registerRoute(route('Tforge', async (req, ctx) => ({ hits: (await ctx.candidates(req.query)).slice(0, 1).map(forge) })));
+    const out = await runRoute(f.service(), { route: 'Tforge', query: 'gavilán colirrojo', domes: ['A'], mode: 'bm25' });
+    expect(out.result.hits).toEqual([]);
+    expect(out.result.trace.steps).toContainEqual({ step: 'guard:final', nodes: 1 });
+  });
+
+  it('estado y supersededBy salen del índice; los avisos solo como códigos', async () => {
     registerRoute(route('Tforge', async (req, ctx) => {
-      original = await ctx.candidates(req.query);
-      const h = original[0];
-      return {
-        hits: [
-          { ...h, text: 'texto que no está en la nota' },
-          { ...h, chunkId: `${h.path}#0`, heading: 'Encabezado inventado' },
-          { ...h, source: { kind: 'file', documentId: 'x', revisionId: 'r', name: 'n', locator: { type: 'page', page: 1 } } },
-          { ...h, freshness: { ...h.freshness, status: 'inventado', supersededBy: 'otra' } },
-        ],
-        warnings: ['texto libre con secreto', 'CODIGO_VALIDO'],
-      };
+      const [h] = await ctx.candidates(req.query);
+      return { hits: [{ ...h, freshness: { ...h.freshness, status: 'inventado', supersededBy: 'otra' } }], warnings: ['texto libre con secreto', 'CODIGO_VALIDO'] };
     }));
     const out = await runRoute(f.service(), { route: 'Tforge', query: 'gavilán colirrojo', domes: ['A'], mode: 'bm25' });
     expect(out.result.hits).toHaveLength(1);
+    expect(out.result.hits[0].text).toContain('gavilán colirrojo');
     expect(out.result.hits[0].freshness.status).toBeUndefined();
     expect(out.result.hits[0].freshness.supersededBy).toBeUndefined();
     expect(out.result.warnings).toEqual(['CODIGO_VALIDO']);
-    expect(out.result.trace.steps).toContainEqual({ step: 'guard:final', nodes: 3 });
   });
 
   it('cada hit servido lleva su evidencia', async () => {

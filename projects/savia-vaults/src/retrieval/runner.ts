@@ -87,7 +87,7 @@ function provenance(
   const match = cs.find(c => c.id === h.chunkId && c.text.includes(core)) ?? cs.find(c => c.text.includes(core));
   if (match) {
     if (h.heading && !cs.some(c => c.heading === h.heading)) return undefined;
-    if (h.source && (!match.source || match.source.documentId !== h.source.documentId)) return undefined;
+    // `source` sale del índice: el guard ya exigió que su documentId case con la ruta del hit.
     const { status, supersededBy, ...fresh } = h.freshness ?? { modified: match.meta.modified, decay: 1 };
     void status; void supersededBy;
     return {
