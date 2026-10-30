@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=891e095d099f0c42a34adcbb36fce4eefb2e24197add3c855d37819e6324ad6d
-timestamp=2026-10-30T08:21:26Z
+diff_hash=f3bdf91679fa6d52c5e162da665eeb4cf96c77ef9982d9657df1d1dc89d5dd3f
+timestamp=2026-10-30T08:21:58Z
 branch=agent/se486-vaults-admission-spec-20261030
-head_commit=7cd249b33
-signature=bb45a65f605b463d5cdae180aa91a97221e09ebd8f41673d98bb50086cbfd9d3
+head_commit=3d9820d1
+signature=e14e4a7d93b92dbec55f765c2ae78313bec1b8b906696b814cb6c586772cae4f
