@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "savia-vaults/eval/evidence-bench/schema.json",
+  "title": "SE-489 R1 — caso del banco de evidencia",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "category", "query", "intent", "scope", "expected", "split"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^(H-)?[A-F]-[0-9]{3}$" },
+    "category": { "enum": ["A", "B", "C", "D", "E", "F"] },
+    "query": { "type": "string", "minLength": 8 },
+    "intent": {
+      "enum": [
+        "identifier", "near-identifier", "negation", "paraphrase", "structure-annex",
+        "version-as-of", "multi-document", "aggregation", "unauthorized-dome", "quarantine",
+        "missing-annex", "contradiction", "injection", "nonexistent-id"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_domes", "as_of"],
+      "properties": {
+        "allowed_domes": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "as_of": { "type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["answer_facts", "required_evidence", "forbidden_evidence", "must_abstain", "max_unauthorized_reads"],
+      "properties": {
+        "answer_facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "required_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dome", "document", "revision", "locator"],
+            "properties": {
+              "dome": { "type": "string", "minLength": 1 },
+              "document": { "type": "string", "minLength": 1 },
+              "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+              "locator": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["section", "quote"],
+                "properties": {
+                  "section": { "type": ["string", "null"] },
+                  "quote": { "type": "string", "minLength": 8 }
+                }
+              }
+            }
+          }
+        },
+        "forbidden_evidence": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dome", "document", "reason"],
+            "properties": {
+              "dome": { "type": "string", "minLength": 1 },
+              "document": { "type": "string", "minLength": 1 },
+              "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+              "reason": { "type": "string", "minLength": 3 }
+            }
+          }
+        },
+        "must_abstain": { "type": "boolean" },
+        "max_unauthorized_reads": { "const": 0 }
+      }
+    },
+    "split": { "enum": ["dev", "test"] }
+  }
+}
