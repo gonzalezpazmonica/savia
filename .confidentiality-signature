@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=b6981e940cabcb41c63c84ff2ea8ed416c0efb109f33cfc25de84dd002666cb3
-timestamp=2026-10-30T16:07:24Z
-branch=agent/se483-20261023
-head_commit=a71b39fbe
-signature=63a3cb9ce3503507316eeaddf3aed2672bbdf25def3704f5a33b55dab4b6c2f7
+diff_hash=a4afd332f220e0eb8611e9d9941d23401c4ce284185998e6e9191600bc5c6ccd
+timestamp=2026-10-30T16:43:23Z
+branch=agent/aprobaciones-github-specs-20261030
+head_commit=ddafb69a3
+signature=7e7f7e63af5145a63620d83cb1bb7606ac907689e7ba0b934b2fb37df67cdab2
