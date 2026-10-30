@@ -1,9 +1,9 @@
 ---
 version_bump: minor
-section: Added
+section: Changed
 ---
 
 ### Added
 
-- SE-489 APPROVED: recuperación adaptativa construida y medida en Savia Vaults (padre, reranker, árbol estructural, navegación con LLM local, grafo, router y cuantización en sombra) sobre un banco con verdad a nivel de evidencia.
+- Spec SE-489 (APPROVED por la operadora en el chat, 2026-10-30): plan para construir y medir rutas de recuperación opt-in en Savia Vaults (padre, reranker, árbol estructural, navegación con LLM local, grafo, router y cuantización en sombra) sobre un banco con verdad a nivel de evidencia. Solo la spec; la implementación llega en PRs propias.
 
