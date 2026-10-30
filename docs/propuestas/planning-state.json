@@ -1620,6 +1620,26 @@
       "evidence": "docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md",
       "phase": "D",
       "approval": "Operadora 2026-10-30: AskUserQuestion (Sí, P0 ya)"
+    },
+    {
+      "id": "SE-483",
+      "status": "APPROVED",
+      "priority": "P1",
+      "title": "Identidad: Savia, metaorquestadora agéntica de I+D+i",
+      "note": "Frase canónica única en savia.md leída por generadores; CLAUDE.md, AGENTS.md, README, plugin, critical-facts, arranque; pm-workspace se queda como identificador técnico; PM pasa a capacidad.",
+      "evidence": "docs/specs/SE-483-savia-identity-rd-metaorchestrator.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30: AskUserQuestion (alcance identidad y flujos; PM como capacidad; frase Metaorquestadora I+D+i)"
+    },
+    {
+      "id": "SE-484",
+      "status": "APPROVED",
+      "priority": "P1",
+      "title": "Onboarding adaptativo: Savia se configura para cualquier persona",
+      "note": "Pregunta abierta, catálogo determinista de capacidades, preguntas solo si cambian la configuración, plan confirmado antes de escribir; cualquier perfil.",
+      "evidence": "docs/specs/SE-484-adaptive-onboarding.spec.md",
+      "phase": "D",
+      "approval": "Operadora 2026-10-30: AskUserQuestion (onboarding interactivo e inteligente para cualquier perfil)"
     }
   ],
   "route": {

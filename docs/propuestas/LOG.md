@@ -27,6 +27,15 @@ Aprobada por la operadora 2026-10-30 (AskUserQuestion)
 ## 2026-10-30 SE-480 APPROVED
 
 Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+
+## 2026-10-30 SE-484 APPROVED
+
+Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+
+## 2026-10-30 SE-483 APPROVED
+
+Aprobada por la operadora 2026-10-30 (AskUserQuestion)
+
 ## 2026-10-29 SE-479 PROPOSED
 
 Alta desde la revisión de Anthropic Research (diseño en Savia Labs, privado): casos imposibles dentro del alcance en las baterías
