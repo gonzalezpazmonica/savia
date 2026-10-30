@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Ref: SPEC-185 / docs/propuestas/SPEC-185-critical-facts-150tok-cap.md
 # Verifies docs/critical-facts.md respects the 150-token cap, has the
-# canonical fields, integrates into CLAUDE.md, and is regenerable.
+# canonical fields (SE-487: no personal data), integrates into CLAUDE.md, and is regenerable.
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
@@ -92,12 +92,21 @@ teardown() {
 
 # ── AC5: 6 canonical fields present ──────────────────────────────────────────
 
-@test "AC5: contains Idioma activo field" {
-  grep -q "Idioma activo" "$FACTS"
+# SE-487: la persona activa no se escribe en el fichero versionado; el campo
+# solo remite al arranque (perfil local gitignored).
+@test "AC5: contains Persona activa field pointing to the local profile" {
+  grep -q "Persona activa" "$FACTS"
+  grep -q "/profile-setup" "$FACTS"
 }
 
-@test "AC5: contains Usuario activo field" {
-  grep -q "Usuario activo" "$FACTS"
+@test "SE-487: versioned facts carry no profile slug nor activation date" {
+  run grep -E 'profile slug|perfil `|activated [0-9]{4}-' "$FACTS"
+  [ "$status" -eq 1 ]
+}
+
+@test "SE-487: generator --check passes on any machine (no local inputs)" {
+  run bash "$GENERATOR" --check
+  [ "$status" -eq 0 ]
 }
 
 @test "AC5: contains Frontend field" {

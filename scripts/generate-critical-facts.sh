@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # scripts/generate-critical-facts.sh
-# SPEC-185: Auto-regenerates the CRITICAL_FACTS section of docs/critical-facts.md
-# from authoritative sources (active profile, preferences, identidad canónica
-# de .claude/profiles/savia.md, CLAUDE.md gates).
-# Idempotent: same inputs → same output. Determinism is required for AC4.
+# SPEC-185: Auto-regenerates the CRITICAL_FACTS section of docs/critical-facts.md.
+# SE-487: the file is versioned in a public repo and imported by CLAUDE.md on
+# every turn, so it holds ONLY workspace invariants. It never reads the local
+# profile (.claude/profiles/active-user.md) nor ~/.savia/preferences.yaml: the
+# active person's facts are injected at startup by session-init.sh from the
+# gitignored profile. Same output on any machine (determinism, AC4).
 
 set -uo pipefail
 
@@ -12,36 +14,16 @@ CHECK=false
 [[ "${1:-}" == "--check" ]] && CHECK=true
 
 FILE="docs/critical-facts.md"
-PROFILE_FILE=".claude/profiles/active-user.md"
-PREFS_FILE="${HOME}/.savia/preferences.yaml"
-
-# Defaults (fallbacks if sources missing)
-LANG="español"
-USER_SLUG="unknown"
-ACTIVATED="unknown"
-FRONTEND="opencode"
 
 # Identidad: fuente única en .claude/profiles/savia.md (SE-483). Fail-closed.
 source "$(dirname "${BASH_SOURCE[0]}")/docs-identity-check.sh"
 IDENTITY=$(savia_identity short) || { echo "ERROR: identidad canónica no disponible" >&2; exit 2; }
 
-# Active user slug
-if [[ -f "$PROFILE_FILE" ]]; then
-  USER_SLUG=$(grep -E '^active_slug:' "$PROFILE_FILE" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
-  ACTIVATED=$(grep -E '^activated_at:' "$PROFILE_FILE" 2>/dev/null | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
-fi
-
-# Preferences
-if [[ -f "$PREFS_FILE" ]]; then
-  V=$(grep -E '^frontend:' "$PREFS_FILE" | awk '{print $2}'); [[ -n "$V" ]] && FRONTEND="$V"
-fi
-
-# Build new section content
+# Build new section content (no personal data: no slug, name, language or date)
 read -r -d '' NEW_CONTENT <<EOF || true
-- **Idioma activo**: $LANG (perfil \`$USER_SLUG\`)
-- **Usuario activo**: $USER_SLUG · profile slug \`$USER_SLUG\` · activated $ACTIVATED
-- **Frontend preferido**: $FRONTEND · modelos por tier heavy/mid/fast (\`model_tier\`), resueltos en local: \`~/.savia/preferences.yaml\` → \`tiers.<frontend>\` · default Claude Code opus/sonnet/haiku
 - **Identidad**: $IDENTITY
+- **Persona activa**: la inyecta el arranque desde el perfil local (gitignored). Sin perfil: «no sé quién eres» → \`/profile-setup\`. Nunca suponer identidad
+- **Frontend**: Claude Code u OpenCode · modelos por tier heavy/mid/fast (\`model_tier\`), resueltos en local: \`~/.savia/preferences.yaml\` → \`tiers.<frontend>\` · default Claude Code opus/sonnet/haiku
 - **Gates inmutables**: Rule 1 PAT via \$(cat \$PAT_FILE) · Rule 3 confirmar antes de escribir Azure DevOps · Rule 8 sin autoaprobación; merge con grant expreso · autonomous-safety: rama \`agent/*\` + PR Draft + revisión de la operadora única o reviewer elegible
 - **Tono**: Radical Honesty (Rule 24) · sin filler · femenino siempre (Savia)
 EOF
@@ -65,4 +47,4 @@ if $CHECK; then
   exit 1
 fi
 mv "$TMP" "$FILE"
-echo "Regenerated $FILE from active profile + preferences"
+echo "Regenerated $FILE (workspace invariants only, SE-487)"

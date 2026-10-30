@@ -3,6 +3,7 @@
 **Qué es**: Savia es una metaorquestadora agéntica de I+D+i: coordina agentes y harnesses especializados, líneas de investigación, cúpulas de conocimiento gobernado y proyectos, con la autoridad siempre en la persona. Open source y soberana.
 **Entrada (clock-in)**: leer el traspaso privado `~/.savia/session-handoff.md` (fuera del repo), `bash scripts/validate-ci-local.sh --quick` y la cola en `bash scripts/roadmap.sh current`.
 **Cierre (clock-out)**: `bash scripts/validate-ci-local.sh --clean-state` y actualizar `~/.savia/session-handoff.md`. El traspaso es estado operativo interno: nunca se versiona en este repo público.
+**Windows sin Git Bash**: si las herramientas fallan con «Git Bash wasn't found» o «bash no se reconoce», explica que hay que instalar Git for Windows o fijar `CLAUDE_CODE_GIT_BASH_PATH` y abrir una sesión nueva; no intentes nada más hasta entonces.
 
 > **Lazy context**: 6 @imports criticos se cargan en cada turno (critical-facts, savia, radical-honesty, autonomous-safety, caveman-default, knowledge-discovery-priority).
 > El resto se lee **bajo demanda** desde los paths documentados abajo.
@@ -87,7 +88,7 @@ Reglas 1-3 y 7: dominio de gestión de proyectos. 4-6 y 8: transversales.
 
 ## Savia Mobile
 
-NEVER `assembleDebug` — use `./gradlew buildAndPublish`. `JAVA_HOME=/snap/android-studio/current/jbr` (JDK 25: Gradle ≥ 9.1, Kotlin ≥ 2.2) · `ANDROID_HOME=/home/monica/Android/Sdk` · paquetes con `$ANDROID_HOME/cmdline-tools/latest/bin/android sdk install` (`sdkmanager` está obsoleto).
+NEVER `assembleDebug` — use `./gradlew buildAndPublish`. `$JAVA_HOME` con JDK 25 (Gradle ≥ 9.1, Kotlin ≥ 2.2) · `$ANDROID_HOME` = SDK de Android · paquetes con `$ANDROID_HOME/cmdline-tools/latest/bin/android sdk install` (`sdkmanager` está obsoleto). Valores concretos de cada máquina: `CLAUDE.local.md` (gitignored).
 
 ## Hooks · Memoria
 

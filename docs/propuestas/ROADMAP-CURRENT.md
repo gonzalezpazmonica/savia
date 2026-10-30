@@ -191,3 +191,4 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-480 [APPROVED] Vaults: RAG autónomo (recarga del registro y sincronización por el servicio) — evidencia: docs/specs/SE-480-vaults-rag-autonomous.spec.md
 - SE-481 [APPROVED] Vaults: clasificación con cierre seguro y polaridad en la búsqueda léxica — evidencia: docs/specs/SE-481-vaults-classification-fail-closed.spec.md
 - SE-485 [APPROVED] Vaults: cinco fallos de la auditoría SVTC-00 — evidencia: docs/specs/SE-485-vaults-audit-fixes.spec.md
+- SE-487 [APPROVED] Clon limpio neutral y arranque en Windows — evidencia: docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md

@@ -55,6 +55,7 @@ Crear `docs/critical-facts.md` con hard-cap de 150 tokens, cargado en cada turno
 - AC5: BATS verifica que los 6 campos canonicos (idioma, identidad, persona, 3 gates) aparecen. (2026-10-30, SE-483: el campo `Sprint` pasa a `Identidad` con la frase corta de `.claude/profiles/savia.md`.)
 - AC6: Hook PreCommit anade fichero al stage si el contenido cambio.
 - AC7: Si el fichero excede el cap, hook PreCommit sugiere que campos eliminar por relevancia.
+- Enmienda SE-487 (2026-10-30): el fichero es versionado y público, así que no lleva idioma, slug, nombre ni fecha de activación de ninguna persona. El campo «Persona activa» remite al arranque (`session-init.sh`), que inyecta la identidad desde el perfil local gitignored; sin perfil dice «Sin perfil: no sé quién eres». El generador no lee el perfil ni las preferencias locales.
 
 ## Slices
 

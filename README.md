@@ -88,7 +88,8 @@ cd savia && opencode
 /help                   # ← tu primer comando: el mapa de capacidades
 ```
 
-**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`
+**Windows:** `irm https://raw.githubusercontent.com/gonzalezpazmonica/savia/main/install.ps1 | iex`  
+Requisito en Windows: **Git for Windows (incluye Git Bash)**. Claude Code ejecuta los hooks con `bash.exe`; si dice `Git Bash wasn't found` (o `bash` no se reconoce), instala Git desde https://git-scm.com/downloads/win o fija `CLAUDE_CODE_GIT_BASH_PATH` con la ruta de tu `bash.exe` (`[Environment]::SetEnvironmentVariable('CLAUDE_CODE_GIT_BASH_PATH','C:\Program Files\Git\bin\bash.exe','User')`) y abre una sesión nueva. `install.ps1` lo detecta y lo fija por ti.
 
 Savia se adapta a tu rol — investigación, desarrollo, dirección técnica, gestión de proyectos, QA, producto — y a tu idioma. Para proyectos, compatible con Azure DevOps, Jira y Git-native (Savia Flow).
 
