@@ -1,0 +1,37 @@
+{
+  "name": "Investigadora Ficticia",
+  "role_text": "Investigo en biología computacional y quiero llevar experimentos y lecturas ordenados",
+  "proposed": [
+    {
+      "id": "research",
+      "reason": "investigación con experimentos"
+    },
+    {
+      "id": "knowledge",
+      "reason": "lecturas y notas"
+    },
+    {
+      "id": "sdd-development",
+      "reason": "biología computacional implica código"
+    }
+  ],
+  "answers": {
+    "research": {
+      "preregistration": "always"
+    },
+    "knowledge": {
+      "confidentiality": "internal"
+    },
+    "sdd-development": {
+      "languages": [
+        "python"
+      ],
+      "review": "self"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-investigadora"
+}

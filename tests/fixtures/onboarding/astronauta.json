@@ -1,0 +1,35 @@
+{
+  "name": "Astronauta Ficticia",
+  "role_text": "Soy astronauta y preparo una misión de seis meses",
+  "proposed": [
+    {
+      "id": "knowledge",
+      "reason": "procedimientos y manuales de misión"
+    },
+    {
+      "id": "project-management",
+      "reason": "preparación con hitos"
+    },
+    {
+      "id": "accessibility",
+      "reason": "posible trabajo con voz"
+    }
+  ],
+  "answers": {
+    "knowledge": {
+      "confidentiality": "confidential"
+    },
+    "project-management": {
+      "tracker": "savia-flow",
+      "cadence": "continuous"
+    },
+    "accessibility": {
+      "adapt": "later"
+    },
+    "tone": {
+      "alert_style": "direct",
+      "formality": "professional-casual"
+    }
+  },
+  "slug": "fx-astronauta"
+}
