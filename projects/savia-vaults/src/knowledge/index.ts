@@ -1,4 +1,4 @@
-export { extractWikiLinks, validateWikiLinks, resolveBacklinks, buildEntityIndex, computeWikiLinkHealth } from './wikilink-validator.js';
+export { extractWikiLinks, validateWikiLinks, resolveBacklinks, resolveWikiTarget, buildEntityIndex, computeWikiLinkHealth } from './wikilink-validator.js';
 export {
   validateOkfFrontmatter,
   convertWikiLinksToMarkdown,

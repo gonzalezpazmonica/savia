@@ -10,7 +10,8 @@ import { RagIndexer, listIndexable, logEvent } from './indexer.js';
 import { fileServable, isMarkdown } from '../storage/note-level.js';
 import { fanOut, withTimeout, TimeoutError } from './parallel.js';
 import { AUTOSYNC_FAILING_ALERT, AUTOSYNC_FAIL_THRESHOLD, readAutosyncState, writeAutosyncState, type AutosyncState } from './autosync.js';
-import { promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
+import { excludedReason, promotionDecision, resolveRagConfig, sloStatus, type EvalMetrics } from './policy.js';
+import { containsIdentifier, IDENTIFIER_NOT_FOUND, queryIdentifiers } from '../search/identifiers.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
 import {
   FlatVectorStore, defaultRagHome, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive,
@@ -402,6 +403,17 @@ export class RagService {
     return removed;
   }
 
+  /** Borra todo el índice de una cúpula con rag.enabled=false; con rag.enabled=true se rechaza. */
+  async drop(name: string): Promise<boolean> {
+    const d = this.dome(name);
+    if (this.config(d).enabled) throw new RagError('INVALID_INPUT', `${name} tiene rag.enabled=true; deshabilítala antes de borrar su índice`);
+    const dir = domeDir(this.home, name);
+    if (!fs.existsSync(dir)) return false;
+    fs.rmSync(dir, { recursive: true, force: true });
+    logEvent(this.home, { event: 'drop', dome: name });
+    return true;
+  }
+
   /** Disparador de escritura (P3): debounce de 2 s por cúpula; solo en el servidor. */
   scheduleSync(name: string): void {
     if (!this.o.background) return;
@@ -561,6 +573,9 @@ export class RagService {
 
     // 5. Puntuación por (cúpula, consulta).
     const perQuery: RagHit[][][] = req.queries.map(() => []);
+    // SE-485 R4: identificadores de cada consulta y los que aparecen literales en algún documento servible.
+    const queryIds = req.queries.map(queryIdentifiers);
+    const foundIds = req.queries.map(() => new Set<string>());
     for (const p of ready) {
       const vecs = queryVecs.get(p.store.manifest.generation);
       const mode: RagMode = vecs ? opt.mode : 'bm25';
@@ -591,6 +606,15 @@ export class RagService {
       let filtered = 0;
       let revalidated = 0;
       req.queries.forEach((query, qi) => {
+        for (const id of queryIds[qi]) {
+          if (foundIds[qi].has(id)) continue;
+          const present = p.store.chunks.some(c =>
+            (req.includeStale || !excludedReason(c.meta, p.cfg))
+            && (!req.pathPrefix || c.path.startsWith(req.pathPrefix))
+            && containsIdentifier(c.text, id)
+            && (c.source?.documentId ? canSee(c.source.documentId) : noteOk(c.path)));
+          if (present) foundIds[qi].add(id);
+        }
         let hits: StoreHit[] = searchStore({
           store: p.store, query, queryVec: vecs?.[qi], mode, k: Math.min(opt.k * 4, 200), cfg: p.cfg,
           pathPrefix: req.pathPrefix, includeStale: req.includeStale,
@@ -604,7 +628,10 @@ export class RagService {
           filtered += n - hits.length;
         }
         hits = hits.slice(0, opt.k);
-        perQuery[qi].push(hits.map(h => ({ ...h, dome: p.d.name, confidentiality: p.d.confidentiality })));
+        perQuery[qi].push(hits.map(h => ({
+          ...h, dome: p.d.name, confidentiality: p.d.confidentiality,
+          ...(queryIds[qi].length ? { exactMatch: queryIds[qi].some(id => containsIdentifier(h.text, id)) } : {}),
+        })));
       });
       if (filtered) outcomes.set(p.d.name, { ...outcomes.get(p.d.name)!, filtered });
       if (revalidated) outcomes.set(p.d.name, { ...outcomes.get(p.d.name)!, degradation: { revalidated } });
@@ -614,13 +641,13 @@ export class RagService {
     //    contrato y hay vectores de consulta; si no, por rango con desempate determinista.
     const gens = new Set(ready.map(p => p.store.manifest.generation));
     const fusion: 'cosine' | 'rank' = ready.length > 1 && gens.size === 1 && queryVecs.size === 1 ? 'cosine' : 'rank';
-    const results = req.queries.map((query, qi) => ({
-      query,
-      hits: applyCharBudget(
-        fusion === 'cosine' ? fuseByCosine(perQuery[qi], opt.k) : fuseAcross(perQuery[qi], opt.k),
-        opt.maxChars,
-      ),
-    }));
+    const results = req.queries.map((query, qi) => {
+      const fused = fusion === 'cosine' ? fuseByCosine(perQuery[qi], opt.k) : fuseAcross(perQuery[qi], opt.k);
+      // El documento con el identificador literal va primero; el resto conserva su orden.
+      const ordered = queryIds[qi].length ? [...fused].sort((a, b) => Number(!!b.exactMatch) - Number(!!a.exactMatch)) : fused;
+      const missing = queryIds[qi].some(id => !foundIds[qi].has(id));
+      return { query, hits: applyCharBudget(ordered, opt.maxChars), ...(missing ? { warnings: [IDENTIFIER_NOT_FOUND] } : {}) };
+    });
     const merged = req.queries.length > 1
       ? applyCharBudget(fuseAcross(results.map(r => r.hits), opt.k), opt.maxChars)
       : undefined;
@@ -720,6 +747,16 @@ export class RagService {
 
   /** Deja una alerta operativa en rag.jsonl (la lee el morning brief / success_checks). */
   recordAlert(kind: string, detail: unknown): void {
+    // Sin repetir la misma alerta en el mismo día: una cron frecuente no debe crecer el log sin límite.
+    const key = JSON.stringify({ kind, detail });
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const lines = fs.readFileSync(path.join(this.home, 'logs', 'rag.jsonl'), 'utf-8').trim().split('\n').slice(-50);
+      for (const l of lines) {
+        const e = JSON.parse(l) as { ts?: string; event?: string; kind?: string; detail?: unknown };
+        if (e.event === 'alert' && e.ts?.startsWith(today) && JSON.stringify({ kind: e.kind, detail: e.detail }) === key) return;
+      }
+    } catch { /* sin log previo o línea ilegible: se registra */ }
     logEvent(this.home, { event: 'alert', kind, detail });
   }
 

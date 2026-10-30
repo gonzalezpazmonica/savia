@@ -104,7 +104,6 @@ ragCmd.command('sync').description('Sincroniza el índice (incremental por hash)
       if (opts.check) {
         const st = await svc.status([...names, ...orphans]);
         for (const s of st) for (const a of s.slo.alerts) {
-          console.log(`[${s.name}] ALERTA: ${a}`);
           console.error(`[${s.name}] ALERTA: ${a}`);
         }
         if (st.some(s => !s.slo.ok)) {
@@ -187,5 +186,11 @@ ragCmd.command('gc').description('Borra generaciones y ficheros no referenciados
     } catch (e) { ragFail(e); }
   });
 
+ragCmd.command('drop').description('Borra el índice de una cúpula con rag.enabled=false (limpia la alerta de índice huérfano)')
+  .argument('<dome>').option(...domesOpt)
+  .action(async (dome, opts) => {
+    try { console.log(`[${dome}] ${await ragService(opts.domesFile).drop(dome) ? 'índice eliminado' : 'sin índice'}`); }
+    catch (e) { ragFail(e); }
+  });
 
 program.parse();
