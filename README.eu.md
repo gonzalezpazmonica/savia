@@ -8,6 +8,8 @@ lang: eu
 
 > Kortesiazko itzulpena. Erreferentziazko bertsioa: [gaztelania](README.md).
 > Azken sinkronizazioa: 2026-07-25.
+>
+> **Desfasada / Desfasatuta (2026-10-30):** itzulpen honek identitate zaharra deskribatzen du. Gaur egungo identitatea: [README.md](README.md) — «Savia es una metaorquestadora agéntica de I+D+i». Retraducción pendiente (SE-483).
 
 [![CI](https://img.shields.io/github/actions/workflow/status/gonzalezpazmonica/savia/ci.yml?branch=main&label=CI&logo=github)](https://github.com/gonzalezpazmonica/savia/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/gonzalezpazmonica/pm-workspace?logo=github)](https://github.com/gonzalezpazmonica/savia/releases)

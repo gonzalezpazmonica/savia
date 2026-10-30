@@ -1,19 +1,11 @@
 {
   "name": "pm-workspace",
   "version": "2.24.0",
-  "description": "Complete PM automation with AI agents — Azure DevOps, Jira, Scrum, SDD pipeline",
+  "description": "Savia — metaorquestadora agéntica de I+D+i, open source y soberana.",
   "author": "pm-workspace",
   "license": "MIT",
-  "categories": ["project-management", "agile", "devops"],
+  "categories": ["orchestration", "research", "knowledge", "development", "project-management"],
   "engines": { "claude-code": ">=1.0.0" },
-  "capabilities": {
-    "skills": 45,
-    "agents": 33,
-    "commands": 400,
-    "rules": 57,
-    "hooks": 16,
-    "languages": 16
-  },
   "install": {
     "commands_dir": ".claude/commands",
     "skills_dir": ".claude/skills",

@@ -2,10 +2,10 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "pm-workspace",
   "version": "2.24.0",
-  "description": "Complete PM automation with AI agents — Azure DevOps, Jira, Scrum, SDD pipeline",
+  "description": "Savia — metaorquestadora agéntica de I+D+i, open source y soberana.",
   "license": "MIT",
-  "keywords": ["project-management", "agile", "sdd", "azure-devops"],
+  "keywords": ["agentic-orchestration", "meta-harness", "research", "knowledge-governance", "sdd", "project-management"],
   "extensions": {
-    "com.savia.client": { "agents": 83, "commands": 570, "hooks": 108 }
+    "com.savia.client": { "identity_source": ".claude/profiles/savia.md" }
   }
 }

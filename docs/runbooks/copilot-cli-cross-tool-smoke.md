@@ -74,7 +74,7 @@ gh copilot chat 'what workspace am I in?' 2>&1
 **Resultado esperado:**
 
 - `session-init.sh` se ejecuta antes de que el modelo procese el prompt.
-- Respuesta del modelo incluye contexto inyectado por el hook (ej. "PM-Workspace Init").
+- Respuesta del modelo incluye contexto inyectado por el hook (ej. "Savia Init").
 
 **Si pasa:** ✅ SessionStart support funciona.
 **Si falla:** verificar logs en `~/.copilot/logs/` y reportar.

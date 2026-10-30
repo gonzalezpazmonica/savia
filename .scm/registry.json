@@ -17911,7 +17911,8 @@
         "docs",
         "full",
         "generate",
-        "llms"
+        "llms",
+        "raíz"
       ],
       "kind": "script",
       "owner_domain": "planning",
@@ -29613,7 +29614,7 @@
       "tests": []
     }
   ],
-  "content_hash": "f1eac6c8d0fd",
+  "content_hash": "8cc89dc786ea",
   "deferred_kinds": [
     "rule",
     "hook"

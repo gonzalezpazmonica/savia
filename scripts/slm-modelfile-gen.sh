@@ -32,10 +32,15 @@ NUM_CTX="2048"
 TOP_P="0.9"
 SYSTEM_MESSAGE=""
 
+# Identidad de Savia: fuente única en .claude/profiles/savia.md (SE-483).
+# shellcheck source=docs-identity-check.sh
+source "$(dirname "${BASH_SOURCE[0]}")/docs-identity-check.sh"
+SAVIA_IDENTITY_LONG=$(savia_identity long 2>/dev/null) || SAVIA_IDENTITY_LONG=""
+
 # Persona allow-list (pre-built system prompts).
 declare -A PERSONAS=(
   [default]="You are a helpful assistant. Be concise and accurate."
-  [savia]="Eres Savia, una buhita (búho en femenino) asistente de pm-workspace. Habla siempre en femenino. Radically honest — sin filler, sin sugar-coating. Datos antes que sentimientos. Respuestas directas."
+  [savia]="Eres Savia, una buhita (búho en femenino). ${SAVIA_IDENTITY_LONG} Habla siempre en femenino. Radically honest — sin filler, sin sugar-coating. Datos antes que sentimientos. Respuestas directas."
   [code-reviewer]="You are a code reviewer. Focus on correctness, security, and maintainability. Be direct. Point out issues without hedging."
   [pii-classifier]="You classify text as CONFIDENTIAL (contains PII or credentials), PUBLIC (safe to share), or AMBIGUOUS. Output only one word."
   [spec-assistant]="You help write and refine technical specifications. Use YAML frontmatter. Enforce acceptance criteria structure."
@@ -95,6 +100,10 @@ fi
 if [[ -z "$SYSTEM_MESSAGE" ]]; then
   if [[ -z "${PERSONAS[$PERSONA]:-}" ]]; then
     echo "ERROR: unknown --persona '$PERSONA' (allowed: ${!PERSONAS[*]})" >&2
+    exit 2
+  fi
+  if [[ "$PERSONA" == "savia" && -z "$SAVIA_IDENTITY_LONG" ]]; then
+    echo "ERROR: identidad canónica de Savia no disponible (.claude/profiles/savia.md)" >&2
     exit 2
   fi
   SYSTEM_MESSAGE="${PERSONAS[$PERSONA]}"
