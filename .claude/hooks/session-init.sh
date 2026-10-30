@@ -11,13 +11,13 @@ MAX_SECONDS=5
 
 check_timeout() {
   if (( SECONDS - SCRIPT_START > MAX_SECONDS )); then
-    printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"PM-Workspace Init (timeout):\\n- Savia lista (init parcial)"}}\n'
+    printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Savia Init (timeout):\\n- Savia lista (init parcial)"}}\n'
     exit 0
   fi
 }
 
 # ── Fallback: si algo falla, salida limpia ────────────────────────────────────
-trap 'printf "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"PM-Workspace Init (ERR line %s):\\n- Savia lista\"}}\n" "$LINENO"; exit 1' ERR
+trap 'printf "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Savia Init (ERR line %s):\\n- Savia lista\"}}\n" "$LINENO"; exit 1' ERR
 
 # ── Model capability detection (Era 100) ────────────────────────────────────
 for rpath in "$HOME/claude/scripts/model-capability-resolver.sh" "./scripts/model-capability-resolver.sh"; do
@@ -317,7 +317,7 @@ FOCAL_SUMMARY=$(timeout 0.5 bash "${_si_dir}/../../scripts/focal-status.sh" --su
 [ -n "$FOCAL_SUMMARY" ] && ITEMS+=("$FOCAL_SUMMARY")
 
 # ── Generar output (bash puro, sin jq) ───────────────────────────────────────
-CTX="PM-Workspace Init:"
+CTX="Savia Init:"
 for item in "${ITEMS[@]}"; do
   CTX="$CTX\\n- $item"
 done
