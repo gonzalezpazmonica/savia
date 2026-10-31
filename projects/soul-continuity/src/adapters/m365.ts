@@ -72,7 +72,15 @@ async function deltaFolder(ctx: AdapterContext, tok: string, folder: string, sel
   const initial = `/v1.0/me/mailFolders/${folder}/messages/delta?$select=${select}`;
   const saved = await cache.load(ctx.operator.ref, "m365-mail", key);
   let state: DeltaState = saved ?? { link: null, complete: false, items: {} };
-  let url = state.link ?? initial;
+  let url = initial;
+  if (state.link) {
+    // El enlace guardado se revalida: una caché manipulada no puede llevarse el token.
+    try {
+      url = sameOrigin(state.link, initial, "Graph (correo)");
+    } catch {
+      state = { link: null, complete: false, items: {} };
+    }
+  }
   let resynced = false;
   for (let pages = 0; ; ) {
     if (pages >= maxPages) {

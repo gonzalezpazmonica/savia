@@ -282,3 +282,26 @@ test("correo por delta: un cambio ilegible retira el elemento en vez de dejar su
   assert.deepEqual(keys(await a.read(ctxWith({ now: NOW, transport }))), ["m365-mail:awaiting_reply:c1@m1"]);
   assert.deepEqual(keys(await a.read(ctxWith({ now: NOW, transport }))), []);
 });
+
+test("correo por delta: un enlace manipulado en la caché no se sigue; se resincroniza desde cero", async () => {
+  const urls: string[] = [];
+  const transport = {
+    async request(req: { url: string }) {
+      urls.push(req.url);
+      const folder = req.url.includes("sentitems") ? "sentitems" : "inbox";
+      return { status: 200, headers: {}, body: { value: [], "@odata.deltaLink": `/v1.0/me/mailFolders/${folder}/messages/delta?$deltatoken=n` } };
+    },
+  };
+  const stale = { m9: { id: "m9", conv: "c9", from: "ana@alfa.example", to: [ME], cc: [], at: "2026-11-01T10:00:00.000Z", subject: "Viejo", auth: "unknown", flag_due: null } };
+  const cache = {
+    async load(_o: string, _a: string, key: string) {
+      return key.startsWith("inbox|") ? { link: "//atacante.example/robo", complete: true, items: stale } : null;
+    },
+    async save() {},
+    async clear() {},
+  };
+  const r = await makeM365Adapters({ cache })["m365-mail"].read(ctxWith({ now: NOW, transport }));
+  assert.deepEqual(keys(r), []); // los elementos de la caché manipulada se descartan
+  assert.ok(urls.every((u) => u.startsWith("/v1.0/me/mailFolders/") && !u.startsWith("//")), urls.join(" "));
+  assert.ok(urls[0].startsWith("/v1.0/me/mailFolders/inbox/messages/delta?$select="));
+});

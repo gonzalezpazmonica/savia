@@ -63,7 +63,16 @@ export class HttpTransport implements Transport {
   private resolve(req: TransportRequest): URL {
     const base = Object.prototype.hasOwnProperty.call(this.bases, req.service) ? this.bases[req.service] : undefined;
     if (!base) throw new TransportRefused(`servicio sin base configurada: ${req.service}`);
-    if (req.url.startsWith("/")) return new URL(`${base.pathname.replace(/\/$/, "")}${req.url}`, base.origin);
+    if (req.url.startsWith("/")) {
+      // `//host/x` o `/\host/x` serían otro host: se rechazan antes de resolver.
+      if (/^\/[/\\]/.test(req.url) || req.url.includes("\\")) throw new TransportRefused(`ruta no permitida para ${req.service}`);
+      const prefix = base.pathname.replace(/\/$/, "");
+      // Una ruta que ya trae el prefijo de la base no se duplica (enlaces de GitHub Enterprise).
+      const path = prefix && (req.url === prefix || req.url.startsWith(`${prefix}/`)) ? req.url : `${prefix}${req.url}`;
+      const rel = new URL(path, base.origin);
+      if (rel.origin !== base.origin) throw new TransportRefused(`origen no permitido para ${req.service}`);
+      return rel;
+    }
     let u: URL;
     try {
       u = new URL(req.url);

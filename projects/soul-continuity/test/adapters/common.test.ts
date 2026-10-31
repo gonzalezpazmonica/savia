@@ -86,6 +86,13 @@ test("sameOrigin: un enlace hacia otro host no se sigue con el token", () => {
   assert.equal(sameOrigin("https://cualquiera.example/v1.0/x?p=1", "/v1.0/x", "G"), "/v1.0/x?p=1");
 });
 
+test("sameOrigin: rutas relativas al esquema (//host, /\\host) se descartan", () => {
+  for (const link of ["//atacante.example/x", "/\\atacante.example/x", "https://malo.example//atacante.example/x", "https://malo.example/\\atacante.example/x"]) {
+    assert.throws(() => sameOrigin(link, "/v1.0/x", "G"), Stop, link);
+  }
+  assert.equal(sameOrigin("/v1.0/x?p=2", "/v1.0/x", "G"), "/v1.0/x?p=2");
+});
+
 test("token: traduce los errores del almacén por código, no por clase", async () => {
   const fail = (code: string) => ctxWith({ credentials: { async acquire() { throw Object.assign(new Error("x"), { code }); } } });
   await assert.rejects(token(fail("admin_consent_required"), "graph", ["Mail.Read"]),

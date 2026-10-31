@@ -126,3 +126,35 @@ test("un error de red no filtra el token en el mensaje", async () => {
   await assert.rejects(t.request({ service: "graph", method: "GET", url: "/x", headers: { Authorization: "Bearer secreto-123" } }),
     (e: Error) => !e.message.includes("secreto-123"));
 });
+
+test("una ruta relativa al esquema (//host o /\\host) no saca el token a otro host", async () => {
+  const seen: string[] = [];
+  const fetchFn = (async (u: URL | string) => {
+    seen.push(String(u));
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  // Base sin ruta, como Graph, GitHub o Google: el caso que antes resolvía a otro host.
+  const t = new HttpTransport({ bases: { graph: "https://graph.example" }, fetch: fetchFn });
+  for (const url of ["//atacante.example/x", "/\\atacante.example/x", "/v1.0/a\\b"]) {
+    await assert.rejects(t.request({ service: "graph", method: "GET", url, headers: { Authorization: "Bearer secreto" } }), TransportRefused);
+  }
+  assert.deepEqual(seen, []);
+  await t.request({ service: "graph", method: "GET", url: "/v1.0/me" });
+  assert.deepEqual(seen, ["https://graph.example/v1.0/me"]);
+});
+
+test("una ruta que ya trae el prefijo de la base no se duplica (GitHub Enterprise)", async () => {
+  const s = await serve((req, res) => json(res, 200, { path: req.url }));
+  try {
+    const t = new HttpTransport({ bases: { github: `${s.base}/api/v3` } });
+    const a = await t.request({ service: "github", method: "GET", url: "/search/issues?q=1" });
+    assert.deepEqual(a.body, { path: "/api/v3/search/issues?q=1" });
+    const b = await t.request({ service: "github", method: "GET", url: "/api/v3/search/issues?q=1&page=2" });
+    assert.deepEqual(b.body, { path: "/api/v3/search/issues?q=1&page=2" });
+    // Un prefijo parecido no cuenta como el mismo.
+    const c = await t.request({ service: "github", method: "GET", url: "/api/v30/x" });
+    assert.deepEqual(c.body, { path: "/api/v3/api/v30/x" });
+  } finally {
+    await s.close();
+  }
+});

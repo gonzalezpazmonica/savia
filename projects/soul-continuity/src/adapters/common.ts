@@ -138,7 +138,7 @@ export async function getJson(ctx: AdapterContext, service: string, tok: string,
  * respuesta manipulada no puede llevarse el token a otro host.
  */
 export function sameOrigin(link: string, first: string, label: string): string {
-  if (link.startsWith("/")) return link;
+  if (link.startsWith("/")) return localPath(link, label);
   let u: URL;
   try {
     u = new URL(link);
@@ -146,9 +146,18 @@ export function sameOrigin(link: string, first: string, label: string): string {
     throw new Stop("error", `${label}: enlace de paginación inválido.`);
   }
   // Petición relativa: el transporte pone la base del servicio; del enlace solo vale la ruta.
-  if (first.startsWith("/")) return `${u.pathname}${u.search}`;
+  if (first.startsWith("/")) return localPath(`${u.pathname}${u.search}`, label);
   if (new URL(first).origin !== u.origin) throw new Stop("error", `${label}: enlace de paginación hacia otro origen; se descarta.`);
   return link;
+}
+
+/**
+ * Una ruta relativa empieza por una sola `/` y no lleva `\`: `//host/x` o `/\host/x`
+ * se resolverían como URL de otro host y el token saldría con ellas.
+ */
+function localPath(p: string, label: string): string {
+  if (!/^\/(?![/\\])/.test(p) || p.includes("\\")) throw new Stop("error", `${label}: enlace de paginación hacia otro origen; se descarta.`);
+  return p;
 }
 
 /**
