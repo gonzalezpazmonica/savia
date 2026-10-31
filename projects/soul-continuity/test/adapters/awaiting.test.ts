@@ -37,7 +37,7 @@ test("esperando: un mensaje mío a mí misma no crea espera", () => {
 });
 
 test("esperando: identidades sin distinguir mayúsculas y varias direcciones", () => {
-  assert.deepEqual(ids(awaitingReply([m({ to: ["Alias@Alfa.Example"] })], ["yo@alfa.example", "alias@alfa.example"])), ["m1"]);
+  assert.deepEqual(ids(awaitingReply([m({ to: ["Alias@ALFA.example"] })], ["yo@alfa.example", "alias@alfa.example"])), ["m1"]);
 });
 
 test("esperando: un hilo por conversación, con el último mensaje entrante", () => {
