@@ -53,12 +53,14 @@ Cada afirmación conserva el modelo de la instantánea: `claim_type`, `state`, `
 
 ### Proceso por usuario y multiplataforma
 
-- **Tecnología:** Rust, el lenguaje del dominio de `space-soul`, compilado de forma cruzada para Windows, macOS y Linux en CI.
-  - El dominio se comparte como crate. Su única dependencia de Space (JSON canónico y hash) se sustituye por un crate mínimo propio.
-  - Los adaptadores, la política de atención y el canal son crates nuevos.
-  - La instantánea del prototipo de investigación (Python) es la referencia funcional y de banco, no el código que se distribuye.
-- **Núcleo:** reutiliza el dominio de `space-soul` y el contrato de la instantánea.
-  - Es un binario único para Windows, macOS y Linux, sin red entrante pública.
+- **Tecnología: sobre runtimes ya aprobados, sin ejecutables propios.** Decisión de la operadora del 2026-10-31.
+  - En equipos corporativos, un ejecutable propio sin firmar choca con SmartScreen, AppLocker o WDAC y con Gatekeeper.
+  - Soul Continuidad v1 es **código TypeScript que corre sobre el runtime oficial de Node.js LTS**, firmado por su editor. Se instala sin administrador desde la distribución portable del propio editor si el equipo no lo trae.
+  - Para el adaptador `web`, usa el **navegador ya instalado** (Edge o Chrome) en un perfil dedicado.
+  - Se descarta Electron como base: una app Electron empaquetada es un ejecutable propio que necesitaría firma.
+  - El dominio de `space-soul` (Rust) y el prototipo de la instantánea (Python) son la **referencia funcional y de banco**. Los invariantes se portan con sus tests: fail-safe durable, revocación y TTL.
+- **Núcleo:**
+  - Es un proceso único para Windows, macOS y Linux. No acepta conexiones salvo en las direcciones que configure el operador (ver canal).
   - Arranca sin Space, sin Yema, sin modelo y sin Internet; sin conexión, responde con lo último conocido marcado como tal.
 - **Instalación sin administrador:**
   - Windows: tarea de inicio de sesión del usuario;
@@ -74,10 +76,10 @@ Todos son opcionales, de solo lectura y con consentimiento propio. Cada uno decl
 
 | Adaptador | Fuente | Acceso |
 |---|---|---|
-| `m365-mail` | Correo | Microsoft Graph, permiso delegado de lectura |
-| `m365-calendar` | Calendario | Microsoft Graph, permiso delegado de lectura |
-| `m365-teams` | Menciones y chats | Microsoft Graph, permiso delegado de lectura |
-| `m365-files` | Documentos compartidos y comentarios | Microsoft Graph, permiso delegado de lectura |
+| `m365-mail` | Correo | Graph delegado si el inquilino lo permite; si no, ruta web (Outlook en la web) |
+| `m365-calendar` | Calendario | Graph delegado si el inquilino lo permite; si no, ruta web |
+| `m365-teams` | Menciones y chats | Graph delegado si el inquilino lo permite; si no, ruta web (Teams en la web) |
+| `m365-files` | Documentos compartidos y comentarios | Graph delegado si el inquilino lo permite; si no, ruta web (SharePoint/OneDrive) |
 | `google-workspace` | Equivalentes de Google | API de Google, solo lectura |
 | `jira` | Gestor de tareas | Conectores existentes de Savia |
 | `azure-devops` | Gestor de tareas | Conectores existentes de Savia |
@@ -93,22 +95,26 @@ Mucha información de trabajo solo vive en webs sin API, sin A2A y sin MCP: port
   - Es un perfil aparte del navegador de la instalación (Edge, Chrome o Firefox), donde el operador inicia sesión **solo** en las webs que quiere dar a Soul.
   - Soul nunca toca el perfil personal, sus cookies ni sus otras sesiones.
   - El control es local: un canal de depuración sobre tubería o `localhost` aleatorio con token, nunca expuesto a la red.
-- **Solo lectura, aplicada en la red, no en el prompt:**
-  - el adaptador aborta toda petición que no sea `GET`/`HEAD`, salvo las de renovación de sesión de una lista por sitio;
-  - no envía formularios;
-  - no pulsa elementos fuera de una lista cerrada de acciones de navegación de cada receta (paginar, expandir, cambiar de pestaña de la página);
-  - no descarga ni ejecuta ficheros.
+- **Solo lectura, aplicada fuera del modelo y en dos capas:**
+  - **URLs cerradas por receta.** Cada receta declara la lista exacta de patrones de URL que puede visitar. Las vistas de lista y los paneles de solo lectura van en ella; enlaces de acción (`/approve`, `/logout`, `/unsubscribe`, confirmaciones) nunca entran.
+    - Toda navegación, incluidas redirecciones y peticiones de la propia página iniciadas por un clic de la receta, se compara con esa lista. Lo que no casa se aborta.
+    - **La cobertura de solo lectura depende de esta lista, no del método HTTP:** un `GET` también puede cambiar estado.
+  - **Método en la red.** Se aborta toda petición que no sea `GET`/`HEAD`, salvo las de renovación de sesión de una lista por sitio.
+  - No envía formularios.
+  - No pulsa elementos fuera de una lista cerrada de acciones de navegación de cada receta (paginar, expandir, cambiar de pestaña de la página). Cada acción está ligada a las URLs que puede provocar.
+  - No abre elementos individuales cuando abrirlos cambia su estado (un correo pasa a «leído», una notificación a «vista»). En v1 las recetas leen **vistas de lista**.
+  - No descarga ni ejecuta ficheros.
 - **Lista de sitios permitidos** por el operador, cada uno con propósito, nivel de confidencialidad (por defecto N4), frecuencia máxima de visita y revocación. Una navegación fuera de la lista se bloquea.
 - **Recetas deterministas por sitio,** sin modelo: qué páginas visitar, qué selectores extraen elementos para Q1–Q4 (asignado a mí, pendiente, con fecha) y cómo se identifica cada elemento de forma estable.
   - Si no hay receta, solo se detecta «esta página cambió desde la última visita», con el enlace.
   - Las recetas son configuración del operador o plantillas genéricas del producto, nunca código específico de una organización en el repo.
 - **Contenido no fiable:** todo texto web es dato. Nunca selecciona acciones, nunca cambia la lista ni la receta y nunca eleva un aviso a alerta. Se guardan referencias y metadatos, no páginas completas.
 - **Sesión caducada:** el adaptador se detiene y avisa: «vuelve a iniciar sesión en X en el perfil de Soul». Nunca guarda contraseñas ni rellena credenciales.
-- **Si la política de la organización** no permite automatizar el navegador en el equipo corporativo, el adaptador queda desactivado. Lo documenta el paquete para TI.
+- **Ruta web para Microsoft 365 y Google.** Si el inquilino no permite que el propio usuario consienta los permisos de lectura de Graph (lo habitual para correo, chats y ficheros), el operador puede activar recetas sobre los clientes web oficiales: Outlook, Teams y SharePoint/OneDrive en la web, o Gmail, Calendar y Drive. Usa su propia sesión en el perfil dedicado, con las mismas reglas de solo lectura y vistas de lista.
 
 Reglas de los adaptadores:
 - **Autenticación delegada por el propio usuario** (flujo de dispositivo o navegador). Los tokens van al almacén de credenciales del sistema: Credential Manager, Keychain o Secret Service. Nunca a ficheros, logs, variables ni línea de órdenes.
-- **Fail-closed:** si el inquilino exige consentimiento de administración para un permiso, el adaptador no se activa. Lo dice con un mensaje claro y remite al paquete para TI. Nunca pide más permisos de los que necesita.
+- **Fail-closed:** si el inquilino exige consentimiento de administración para un permiso, la ruta Graph de ese adaptador no se activa. Lo dice con un mensaje claro y ofrece la ruta web. Nunca pide más permisos de los que necesita, ni usa identificadores de aplicación ajenos para sortear el consentimiento.
 - **«Esperando mi respuesta» solo con metadatos.** El hilo (`conversationId` o equivalente) cumple todas estas condiciones:
   - su último mensaje no es mío;
   - yo estoy entre los destinatarios directos;
@@ -120,7 +126,10 @@ Reglas de los adaptadores:
 ### Vista móvil (app de Savia Space)
 
 - **Pantalla «Continuidad»:** Q1–Q4, con «¿por qué lo sé?» (fuente y antigüedad), una corrección por elemento (marcar como resuelto o no aplica, guardado en el libro de revocaciones) y modo de atención declarado.
-- **Canal:** emparejamiento existente de la app y canal cifrado de extremo a extremo hasta el portátil, sin exposición pública.
+- **Canal:** red privada del operador entre el portátil y el móvil, sin relay ni push. Decisión de la operadora del 2026-10-31.
+  - Es una VPN de malla como Tailscale o WireGuard; la elige y gestiona el operador.
+  - Soul solo escucha en las direcciones de esa red que configure el operador, nunca en todas las interfaces. Usa TLS y el emparejamiento existente de la app (token por dispositivo, revocable).
+  - La app consulta cada 5 minutos.
 - **Nivel de detalle por instalación,** que decide el operador según la política de su empresa:
   - `completo`;
   - `títulos` (asunto y fuente, sin contenido; por defecto);
@@ -161,20 +170,13 @@ Soul y el operador se hablan en los dos sentidos desde la app.
 - El silencio del operador nunca es una respuesta. Ningún modelo eleva la urgencia.
 - Cada aviso enviado o diferido queda en un registro de demanda que el operador puede consultar: «¿por qué me avisaste?» y «¿qué me ahorraste?».
 
-**Transporte (dependencia de SE-430):**
-- SE-430 define hoy la app sin push: consulta al abrirse o cada ≥ 15 min. UnifiedPush figura como opcional y propuesto (D3).
-- SE-490 necesita dos cosas más: un canal entre el móvil y el portátil que atraviese NAT y redes corporativas sin red entrante pública, y push para los avisos.
-- **D-490-1 (transporte y push)** se cierra con el informe de viabilidad (permisos, relay cifrado de extremo a extremo frente a VPN o red local, FCM de datos frente a UnifiedPush) **antes del día 6**. Se decide en la PR que actualiza esta spec.
-- Mientras D-490-1 no esté cerrada, las ACs con latencia (avisos puntuales, «reunión en 15 min») quedan **condicionadas**. El modo degradado garantizado es:
-  - consulta cada ≤ 5 min con la app abierta;
-  - resúmenes de inicio y de cierre.
-
-  Las ACs de política, contenido y fugas valen igual en los dos modos.
-
-**Entrega:**
-- **Notificación push sin contenido:** solo un identificador opaco. El servicio de push del sistema móvil nunca ve asuntos, nombres ni texto.
-- La app recoge el contenido por el canal cifrado emparejado, con el nivel de detalle de la instalación.
-- Si el portátil no está alcanzable (apagado o fuera de red), no hay avisos. La app lo dice («sin contacto con tu equipo desde las 18:40»), no lo esconde.
+**Transporte. D-490-1 cerrada: VPN del operador y consulta periódica.** Amplía SE-430, que hoy consulta al abrir la app o cada ≥ 15 min.
+- La app consulta al portátil **cada 5 minutos** por la red privada del operador, también con la app en segundo plano: un servicio en primer plano de Android con su notificación persistente, porque el planificador del sistema no baja de 15 min.
+- **No hay relay, ni push, ni servicio intermedio.** Ningún tercero ve contenido ni metadatos de los avisos, salvo el proveedor de la VPN que elija el operador, y solo los de conexión.
+- Los avisos y alertas se muestran como **notificaciones locales** del móvil, generadas por la app tras cada consulta. Su contenido en pantalla de bloqueo respeta el nivel de detalle: con `recuentos`, solo «2 avisos, 1 alerta».
+- **Latencia máxima:** 5 min más el intervalo de lectura de la fuente. Lo que necesite menos («reunión en 15 min») se programa con antelación como notificación local en el móvil desde la consulta anterior.
+- Si el portátil no está alcanzable (apagado, sin VPN), no hay avisos. La app lo dice («sin contacto con tu equipo desde las 18:40») y no lo esconde.
+- Revisión de seguridad del canal antes de construirlo (AC-6): solo escucha en la VPN, emparejamiento y revocación del token, y móvil perdido.
 
 ### Datos y confidencialidad
 
@@ -182,18 +184,18 @@ Soul y el operador se hablan en los dos sentidos desde la app.
 - **Ningún dato de trabajo va a modelos en la nube en v1.** Eso incluye los frontends de agentes (Claude Code, OpenCode), cuyo modelo corre en la nube: por esa ruta solo salen recuentos (AC-4d).
 - No hay inferencias sobre personas: ni cansancio, ni rendimiento, ni estado emocional, ni horas de actividad de nadie (tesis de diseño en el vault de investigación; AI Act art. 5.1.f).
 
-### Cumplimiento con la organización del operador
+### Responsabilidad del operador y transparencia
 
-- La instalación en un equipo corporativo exige que el operador confirme que su organización lo permite.
-- El producto incluye un **paquete para TI y seguridad** (`docs/soul-continuity-it-pack.md`) con:
+- Soul Continuidad es una **herramienta personal del operador** para trabajar con los datos a los que ya accede, en su equipo y en su cúpula local. El operador decide qué instala y qué fuentes activa, y es responsable de su uso. Decisión de la operadora del 2026-10-31.
+  - Al activar cada adaptador de fuentes de una organización, la instalación lo registra con una declaración breve: «activo esta fuente bajo mi responsabilidad». No pide confirmación a terceros.
+- Soul no sortea controles técnicos de la organización: ni identificadores ajenos, ni reenvío de correo a cuentas personales, ni publicación de calendarios. Si un control bloquea una ruta, se dice y se ofrece la siguiente legítima (Graph → web → manual).
+- El producto incluye un **documento de transparencia** (`docs/soul-continuity-it-pack.md`). El operador puede compartirlo si quiere o si se lo piden:
   - flujo de datos;
-  - permisos exactos que pide cada adaptador;
-  - dónde se guarda cada cosa;
-  - qué sale del equipo y qué no;
+  - qué lee cada adaptador;
+  - dónde se guarda;
+  - qué sale del equipo;
   - cómo se revoca y se borra;
   - modelo de amenazas.
-
-  Sin esa confirmación, solo se activan adaptadores locales.
 
 ## Fuera de alcance de v1
 
@@ -206,7 +208,7 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
 
 ## Criterios de aceptación
 
-- **AC-1:** binarios de Windows, macOS y Linux construidos en CI. Arrancan sin administrador, sin red y sin Space; `status` responde en menos de 1 s en frío.
+- **AC-1:** el paquete corre en CI sobre Windows, macOS y Linux con el runtime oficial de Node.js LTS. No distribuye ejecutables propios y arranca sin administrador, sin red y sin Space. `status` responde en menos de 1 s en frío.
 - **AC-2:** banco de continuidad con verdad escrita antes de ejecutar.
   - Inquilinos sintéticos de Microsoft 365 y Google mediante dobles de las APIs, más Jira, Azure DevOps y GitHub.
   - Al menos 4 operadores sintéticos (dirección, PM, investigación, docencia) y una instalación mínima sin fuentes de oficina.
@@ -231,10 +233,14 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
     - en `DESCANSO` solo pasan las alertas marcadas para ese modo; las no marcadas se difieren;
     - una urgencia inyectada en un asunto no eleva el aviso;
     - una alerta marcada para el modo activo nunca se difiere: 0 omisiones dentro de su tope, y por encima del tope, un mensaje agrupado con todas.
-  - El payload push no contiene ningún dato (test que inspecciona el mensaje).
+  - La consulta cada 5 min funciona con la app en segundo plano.
+  - Con el nivel `recuentos`, las notificaciones locales no muestran asuntos ni nombres en la pantalla de bloqueo.
+  - Soul no escucha en ninguna interfaz fuera de las direcciones configuradas (test de puertos).
   - El texto libre sin modelo autorizado recibe la respuesta honesta y no se envía a ninguna parte.
 - **AC-4e (web):** sobre sitios locales de prueba con sesión simulada:
+  - **0 mutaciones en el estado del servidor simulado**, comprobadas en el servidor y no solo por el método HTTP. Un sitio de prueba incluye enlaces `GET` que mutan (`/approve?id=…`, `/logout`, marcar como leído al abrir) y otro, una redirección hacia uno de ellos;
   - 0 peticiones que no sean `GET`/`HEAD` fuera de la lista de renovación (log de red del navegador);
+  - 0 navegaciones fuera de la lista de URLs de la receta;
   - 0 envíos de formulario;
   - 0 navegaciones fuera de la lista;
   - 0 accesos al perfil personal;
@@ -242,7 +248,12 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
   - con sesión caducada, la parada es limpia;
   - las recetas extraen Q1–Q4 con la misma precisión exigida en AC-3 en al menos 3 sitios sintéticos de tipos distintos (portal de tareas, panel de aprobaciones, intranet de noticias).
 - **AC-5:** revocar un adaptador borra su caché y sus tokens. Desinstalar no deja estado.
-- **AC-6:** paquete para TI completo y revisado por la revisora de seguridad. Además, **antes de los días 6–9**, la revisora de seguridad revisa el modelo de amenazas del canal móvil, que va en la PR de D-490-1: quién opera el relay, qué metadatos ve, gestión, rotación y revocación de claves al desemparejar, y qué pasa si se pierde el móvil.
+- **AC-6:** documento de transparencia completo y revisado por la revisora de seguridad. Además, **antes de los días 6–9**, la revisora de seguridad revisa el modelo de amenazas del canal móvil:
+  - escucha solo en la VPN;
+  - TLS y emparejamiento;
+  - revocación del token al desemparejar;
+  - móvil perdido;
+  - qué ve el proveedor de la VPN.
 - **AC-7:** piloto real en una instalación, con el consentimiento de su operador y fuera de cualquier repo. Durante una semana laborable se miden:
   - precisión percibida por elemento (correcto / incorrecto / no aplica);
   - minutos de reconstrucción por la mañana frente a una línea base de dos días sin el producto;
@@ -257,12 +268,12 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
 
 | Días | Entregable |
 |---|---|
-| 1–2 | Núcleo multiplataforma, contrato de adaptadores, CLI y banco con verdad (paralelo) |
-| 3–5 | Adaptadores de Microsoft 365, de Google y de los gestores; almacén de credenciales por sistema |
-| 3–7 | Adaptador `web`: perfil dedicado, cortafuegos de solo lectura en la red, recetas y sitios de prueba (en paralelo) |
+| 1–2 | Núcleo en TypeScript sobre Node.js LTS, contrato de adaptadores, CLI y banco con verdad (paralelo) |
+| 3–5 | Adaptadores Graph de Microsoft 365, de Google y de los gestores; almacén de credenciales por sistema |
+| 3–7 | Adaptador `web`: perfil dedicado, URLs cerradas por receta, cortafuegos en la red, recetas de Outlook, Teams y SharePoint en la web, y sitios de prueba (en paralelo) |
 | 3–7 | Política de atención y registro de demanda (librería pura, en paralelo) |
-| 6–9 | Pantalla «Continuidad» y conversación en la app; canal emparejado; push sin contenido; resúmenes, avisos y alertas; niveles de detalle |
-| 8–9 | Paquete para TI, revisión de seguridad, instaladores sin administrador |
+| 6–9 | Pantalla «Continuidad» y conversación en la app; escucha en la VPN, consulta cada 5 min y notificaciones locales; resúmenes, avisos y alertas; niveles de detalle |
+| 8–9 | Documento de transparencia, revisión de seguridad e instalación sin administrador |
 | 10 | Piloto: instalación guiada y línea base |
 
 Las dos semanas son de **construcción** y terminan con la instalación del piloto y el arranque de la línea base. La medición del piloto (AC-7: dos días de línea base y una semana laborable) ocurre en las semanas siguientes, con el producto ya en uso.
@@ -279,7 +290,7 @@ Desinstalar el proceso y retirar la pantalla de la app. No hay datos canónicos 
 
 | Componente | Claude Code | OpenCode v1.14 |
 |---|---|---|
-| Proceso Soul Continuidad | binario independiente, CLI `soul` | mismo binario |
+| Proceso Soul Continuidad | paquete TypeScript sobre Node.js LTS, CLI `soul` | mismo paquete y CLI |
 | Consulta desde el frontend | comando `/continuidad` que invoca la CLI **con nivel `recuentos` forzado** salvo proveedor aprobado declarado (AC-4d) | mismo comando y misma restricción, vía AGENTS.md |
 
 ### Verification protocol
@@ -289,4 +300,4 @@ Desinstalar el proceso y retirar la pantalla de la app. No hay datos canónicos 
 
 ### Portability classification
 
-- [x] **DUAL_BINDING**: el producto es un binario y una app; los frontends solo lo invocan.
+- [x] **DUAL_BINDING**: el producto es un paquete sobre Node.js y una app; los frontends solo invocan su CLI.
