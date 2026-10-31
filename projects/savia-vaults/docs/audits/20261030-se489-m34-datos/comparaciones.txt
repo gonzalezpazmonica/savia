@@ -1,0 +1,154 @@
+# M3 y M4 frente a M0 limpio (lat/M0). M4 = segunda ejecución, en solitario.
+M3 − M0 (evidenceRecall, pp)
+  A: 0.0 [0.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: 21.0 [13.0, 28.0] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: 0.0 [0.0, 0.0] n=50
+  F: 0.0 [0.0, 0.0] n=24
+  global: 3.8 [2.4, 5.7] n=274
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=C → PASA
+M3 − M0 (recallAt10, pp)
+  A: 0.0 [0.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: 28.0 [21.0, 35.0] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -0.5 [-1.5, 0.0] n=50
+  F: 0.0 [0.0, 0.0] n=24
+  global: 5.0 [3.2, 7.1] n=274
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=C → PASA
+M3 − M0 (recallAt5, pp)
+  A: 0.0 [0.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: 23.0 [13.0, 32.0] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -5.5 [-9.8, -2.0] n=50
+  F: -4.2 [-10.4, 0.0] n=24
+  global: 2.8 [0.6, 5.2] n=274
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=C → PASA
+M3 − M0 (mrr, pp)
+  A: 0.0 [0.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: -5.0 [-7.1, -3.2] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -0.3 [-1.0, 0.0] n=50
+  F: -1.6 [-3.5, -0.2] n=24
+  global: -1.1 [-1.6, -0.7] n=274
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=ninguna → NO PASA
+M3 − M0 (ndcgAt10, pp)
+  A: 0.0 [0.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: 18.0 [12.3, 24.1] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -2.8 [-4.2, -1.5] n=50
+  F: -1.5 [-3.0, -0.3] n=24
+  global: 2.7 [1.3, 4.1] n=274
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=C → PASA
+M3 − M0 (forbiddenUsed, pp)
+  A: 0.0 [0.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: 2.0 [-4.0, 8.0] n=50
+  D: 0.0 [0.0, 0.0] n=52
+  E: -2.0 [-6.0, 0.0] n=50
+  F: 0.0 [0.0, 0.0] n=50
+  global: 0.0 [-1.3, 1.3] n=302
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=ninguna → NO PASA
+M3 − M0 (evidenceRecall, pp, split dev)
+  A: 0.0 [0.0, 0.0] n=35
+  B: 0.0 [0.0, 0.0] n=35
+  C: 24.3 [15.7, 32.9] n=35
+  D: 0.0 [0.0, 0.0] n=35
+  E: 0.0 [0.0, 0.0] n=35
+  F: 0.0 [0.0, 0.0] n=15
+  global: 4.5 [2.6, 6.6] n=190
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=C → PASA
+M3 − M0 (evidenceRecall, pp, split test)
+  A: 0.0 [0.0, 0.0] n=15
+  B: 0.0 [0.0, 0.0] n=15
+  C: 13.3 [0.0, 26.7] n=15
+  D: 0.0 [0.0, 0.0] n=15
+  E: 0.0 [0.0, 0.0] n=15
+  F: 0.0 [0.0, 0.0] n=9
+  global: 2.4 [-0.6, 5.4] n=84
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=ninguna → NO PASA
+M4 − M0 (evidenceRecall, pp)
+  A: 2.0 [-4.0, 8.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: -3.0 [-12.0, 6.0] n=50
+  D: 16.0 [6.0, 26.0] n=50
+  E: 0.0 [-3.0, 3.0] n=50
+  F: 0.0 [0.0, 0.0] n=24
+  global: 2.7 [0.0, 6.0] n=274
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=D → NO PASA
+M4 − M0 (recallAt10, pp)
+  A: -4.0 [-10.0, 0.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: 8.0 [3.0, 14.0] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -1.5 [-4.0, 0.0] n=50
+  F: 0.0 [0.0, 0.0] n=24
+  global: 0.5 [-1.3, 1.9] n=274
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=C → NO PASA
+M4 − M0 (recallAt5, pp)
+  A: -6.0 [-12.0, 0.0] n=50
+  B: -4.0 [-10.0, 0.0] n=50
+  C: 7.0 [1.0, 13.0] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -8.0 [-13.3, -3.3] n=50
+  F: -10.4 [-20.8, -2.1] n=24
+  global: -2.9 [-5.4, -0.6] n=274
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=C → NO PASA
+M4 − M0 (mrr, pp)
+  A: -1.8 [-3.1, -0.6] n=50
+  B: -1.4 [-2.7, -0.4] n=50
+  C: -1.2 [-2.1, -0.4] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -1.0 [-2.0, -0.3] n=50
+  F: -5.6 [-8.9, -2.6] n=24
+  global: -1.5 [-2.0, -1.0] n=274
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=ninguna → NO PASA
+M4 − M0 (ndcgAt10, pp)
+  A: -2.0 [-4.1, -0.4] n=50
+  B: -1.2 [-2.3, -0.3] n=50
+  C: 4.4 [1.2, 8.0] n=50
+  D: 0.0 [0.0, 0.0] n=50
+  E: -3.0 [-4.4, -1.9] n=50
+  F: -5.4 [-7.9, -3.0] n=24
+  global: -0.8 [-1.7, 0.0] n=274
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=C → NO PASA
+M4 − M0 (forbiddenUsed, pp)
+  A: 58.0 [10.0, 114.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: -4.0 [-12.0, 4.0] n=50
+  D: 100.0 [71.2, 130.8] n=52
+  E: -6.0 [-14.0, 0.0] n=50
+  F: 0.0 [0.0, 0.0] n=50
+  global: 25.2 [15.2, 37.1] n=302
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=D → PASA
+M4 − M0 (evidenceRecall, pp, split dev)
+  A: 2.9 [-5.7, 11.4] n=35
+  B: 0.0 [0.0, 0.0] n=35
+  C: -2.9 [-11.4, 7.1] n=35
+  D: 17.1 [5.7, 31.4] n=35
+  E: 1.4 [0.0, 4.3] n=35
+  F: 0.0 [0.0, 0.0] n=15
+  global: 3.4 [-0.3, 7.1] n=190
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=D → NO PASA
+M4 − M0 (evidenceRecall, pp, split test)
+  A: 0.0 [0.0, 0.0] n=15
+  B: 0.0 [0.0, 0.0] n=15
+  C: -3.3 [-23.3, 16.7] n=15
+  D: 13.3 [0.0, 33.3] n=15
+  E: -3.3 [-10.0, 0.0] n=15
+  F: 0.0 [0.0, 0.0] n=9
+  global: 1.2 [-3.6, 6.5] n=84
+  AC-6: no-inferioridad A/B=true ganancia C/D/E=ninguna → NO PASA
+M4 − M3 (evidenceRecall, pp)
+  A: 2.0 [-4.0, 8.0] n=50
+  B: 0.0 [0.0, 0.0] n=50
+  C: -24.0 [-33.0, -14.0] n=50
+  D: 16.0 [6.0, 26.0] n=50
+  E: 0.0 [-3.0, 3.0] n=50
+  F: 0.0 [0.0, 0.0] n=24
+  global: -1.1 [-4.2, 2.4] n=274
+  AC-6: no-inferioridad A/B=false ganancia C/D/E=D → NO PASA

@@ -7,7 +7,7 @@
 //   SAVIA_RAG_HOME=/tmp/x/rag npx tsx scripts/bench-m34.ts run --domes-file /tmp/x/domes.json \
 //     --route M4 --bench eval/evidence-bench --budget '{"maxModelCalls":4,"maxInputTokens":8000}' --out m4.json
 //   … run --route M0 --legacy eval/rag-savia-docs.json --dome savia-docs --out m0-36.json
-//   npx tsx scripts/bench-m34.ts compare --base m0.json --route m4.json [--out cmp.json]
+//   npx tsx scripts/bench-m34.ts compare --base m0.json --route m4.json [--metric m] [--bench dir --split test] [--out cmp.json]
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -63,8 +63,15 @@ async function run(): Promise<void> {
 /** AC-6: no inferioridad en A/B (IC inferior ≥ −1 pp) y ganancia en C/D/E con IC que excluye 0. */
 function compare(): void {
   const load = (f: string) => JSON.parse(fs.readFileSync(f, 'utf-8')) as { report: RouteReport };
-  const base = load(need('--base')).report;
-  const r = load(need('--route')).report;
+  let base = load(need('--base')).report;
+  let r = load(need('--route')).report;
+  const split = arg('--split');
+  if (split) {
+    // Solo los casos del split (dev/test) del banco: misma comparación pareada sobre ese subconjunto.
+    const ids = new Set(loadBench(path.resolve(need('--bench')), { split: split as 'dev' | 'test' }).map(c => c.id));
+    const only = (x: RouteReport): RouteReport => ({ ...x, cases: x.cases.filter(c => ids.has(c.id)), byCategory: Object.fromEntries(CATEGORIES.map(c => [c, x.byCategory[c]])) });
+    base = only(base); r = only(r);
+  }
   const cmp = compareReports(r, base, { iterations: 2000, seed: 0 });
   const metric = (arg('--metric') ?? 'evidenceRecall') as 'evidenceRecall';
   const ab = (['A', 'B'] as const).map(c => cmp.byCategory[c]?.[metric]).filter(Boolean);
@@ -73,7 +80,7 @@ function compare(): void {
   const out = { metric, comparison: cmp, ac6: { nonInferiorAB: nonInferior, gainsCDE: gains, pass: nonInferior && gains.length > 0 } };
   if (arg('--out')) fs.writeFileSync(arg('--out')!, JSON.stringify(out, null, 1));
   const f = (d?: { diff: number; lo: number; hi: number; n: number }) => (d ? `${(d.diff * 100).toFixed(1)} [${(d.lo * 100).toFixed(1)}, ${(d.hi * 100).toFixed(1)}] n=${d.n}` : '-');
-  console.log(`${r.route} − ${base.route} (${metric}, pp)`);
+  console.log(`${r.route} − ${base.route} (${metric}, pp${split ? `, split ${split}` : ''})`);
   for (const c of CATEGORIES) console.log(`  ${c}: ${f(cmp.byCategory[c]?.[metric])}`);
   console.log(`  global: ${f(cmp.overall[metric])}`);
   console.log(`  AC-6: no-inferioridad A/B=${nonInferior} ganancia C/D/E=${gains.join(',') || 'ninguna'} → ${out.ac6.pass ? 'PASA' : 'NO PASA'}`);
