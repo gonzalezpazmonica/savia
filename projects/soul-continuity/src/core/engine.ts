@@ -32,6 +32,10 @@ export interface Engine extends ContinuityImpl {
   /** Instantánea más reciente con `issued_at` ≤ `at` (para Q3 «desde»). */
   snapshotAt(stateDir: string, operatorRef: string, at: string): Snapshot | null;
   ledger(stateDir: string, operatorRef: string): unknown[];
+  /** Instantánea guardada con el libro actual aplicado (correcciones hechas después de leerla). */
+  applyCorrections(snap: Snapshot, stateDir: string, now: string): Snapshot;
+  /** AC-5: borra las afirmaciones de un adaptador de la caché y del historial. Devuelve ficheros tocados. */
+  purgeAdapter(stateDir: string, operatorRef: string, adapter: string): number;
 }
 
 const DAY = 86_400_000;
@@ -241,6 +245,30 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
 
     ledger(stateDir: string, operatorRef: string): unknown[] {
       return [...foldLedger(readJsonl(join(operatorDir(stateDir, operatorRef), LEDGER)), operatorRef).values()];
+    },
+
+    applyCorrections(snap: Snapshot, stateDir: string, now: string): Snapshot {
+      const t = parseTs(now);
+      const exp = parseTs(snap.expires_at);
+      if (t === null || exp === null) throw new Error("instante inválido");
+      const ledger = foldLedger(readJsonl(join(operatorDir(stateDir, snap.operator_ref), LEDGER)), snap.operator_ref);
+      return { ...snap, claims: applyLedgerAndTtl(snap.claims, ledger, t, exp) };
+    },
+
+    purgeAdapter(stateDir: string, operatorRef: string, adapter: string): number {
+      const dir = operatorDir(stateDir, operatorRef);
+      const h = join(dir, HISTORY);
+      const files = [join(dir, CACHE), ...(() => { try { return readdirSync(h).map((f) => join(h, f)); } catch { return []; } })()];
+      let n = 0;
+      for (const f of files) {
+        const s = readJson<Snapshot | null>(f, null);
+        if (!s) continue;
+        s.claims = s.claims.filter((c) => c.source_refs[0]?.adapter !== adapter && !c.key.startsWith(`${adapter}:`));
+        s.adapters[adapter] = { status: "consent_revoked" };
+        writeJson(f, s);
+        n++;
+      }
+      return n;
     },
   };
   return engine;

@@ -101,3 +101,23 @@ test("lastSnapshot devuelve la última instantánea del operador y null para otr
   assert.equal(e.lastSnapshot(stateDir, "op-a")?.operator_ref, "op-a");
   assert.equal(e.lastSnapshot(stateDir, "op-b"), null);
 });
+
+test("applyCorrections aplica el libro actual a una instantánea guardada", async () => {
+  const e = makeEngine({ github: fakeGithub({ n: 0 }) });
+  const stateDir = tmp();
+  const inst = install("op-a", [{ adapter: "github", purpose: "p", consent }]);
+  const s = await e.snapshot({ install: inst, now: NOW, stateDir, env });
+  await e.correct({ install: inst, stateDir, now: NOW, key: "github:review_request:r1#7", action: "revoke" });
+  assert.equal(s.claims[0].state, "OBSERVED");
+  assert.equal(e.applyCorrections(s, stateDir, NOW).claims[0].state, "REVOKED");
+});
+
+test("purgeAdapter borra las afirmaciones del adaptador en la caché y en el historial", async () => {
+  const e = makeEngine({ github: fakeGithub({ n: 0 }) });
+  const stateDir = tmp();
+  await e.snapshot({ install: install("op-a", [{ adapter: "github", purpose: "p", consent }]), now: NOW, stateDir, env });
+  assert.ok(e.purgeAdapter(stateDir, "op-a", "github") >= 2);
+  const all = filesUnder(stateDir).map((f) => readFileSync(f, "utf8")).join("\n");
+  assert.ok(!all.includes("r1#7"));
+  assert.equal(e.lastSnapshot(stateDir, "op-a")?.adapters.github.status, "consent_revoked");
+});
