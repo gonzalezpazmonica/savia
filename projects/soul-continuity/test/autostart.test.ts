@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { autostartPlan, installAutostart, uninstallAutostart } from "../src/startup/autostart.ts";
+import { autostartPlan, installAutostart, uninstallAutostart, winQuote } from "../src/startup/autostart.ts";
 import type { Run } from "../src/credentials/store.ts";
 
 const opts = (platform: NodeJS.Platform, home: string) => ({
@@ -79,4 +79,12 @@ test("si una orden de activación falla, install informa fallo (no OK)", async (
   const r = await installAutostart(opts("linux", home), run);
   assert.equal(r.ok, false);
   assert.match(r.message, /Failed to connect to bus/);
+});
+
+test("winQuote: reglas de CommandLineToArgvW (barras antes de comillas y al final se duplican)", () => {
+  assert.equal(winQuote("C:\\Program Files\\nodejs\\node.exe"), '"C:\\Program Files\\nodejs\\node.exe"');
+  assert.equal(winQuote("C:\\dir con espacio\\"), '"C:\\dir con espacio\\\\"');
+  assert.equal(winQuote('a"b'), '"a\\"b"');
+  assert.equal(winQuote('a\\"b'), '"a\\\\\\"b"');
+  assert.equal(winQuote(""), '""');
 });

@@ -32,7 +32,17 @@ const NODE_FLAGS = ["--experimental-strip-types", "--no-warnings"];
 
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const sdQuote = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-const winQuote = (s: string) => `"${s.replace(/"/g, '\\"')}"`;
+/** Un argumento para la línea de órdenes de Windows (reglas de CommandLineToArgvW). */
+export function winQuote(arg: string): string {
+  let out = '"';
+  let bs = 0;
+  for (const ch of arg) {
+    if (ch === "\\") { bs++; continue; }
+    out += ch === '"' ? "\\".repeat(bs * 2 + 1) + '"' : "\\".repeat(bs) + ch;
+    bs = 0;
+  }
+  return out + "\\".repeat(bs * 2) + '"';
+}
 
 export function autostartPlan(o: AutostartOptions): AutostartPlan {
   const argv = [...NODE_FLAGS, o.entry, "serve"];
