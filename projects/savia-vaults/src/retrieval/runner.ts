@@ -11,7 +11,7 @@ import type { RagService } from '../rag/service.js';
 import { RetrievalGuard } from './guard.js';
 import {
   AS_OF_UNSUPPORTED, BUDGET_EXHAUSTED, BudgetMeter, RouteError, estimateTokens, getRoute, resolveBudget,
-  type Evidence, type RetrievalRequest, type RetrievalResult, type RouteContext, type RouteOutput, type TraceStep,
+  type Evidence, type NodeRef, type RetrievalRequest, type RetrievalResult, type RouteContext, type RouteOutput, type TraceStep,
 } from './route.js';
 import './routes/index.js';
 
@@ -177,6 +177,22 @@ export async function runRoute(rag: RagService, input: RouteRunInput): Promise<R
       const a = guard.admit(ref);
       if (!a.ok) return undefined;
       return rag.activeDocumentChunks(a.dome, a.path).map(c => ({ chunkId: c.id, ordinal: c.ordinal, heading: c.heading, text: c.text }));
+    },
+    documentStructure: (ref) => {
+      if (closed || !meter.consume('nodes')) return undefined;
+      const a = guard.admit(ref);
+      if (!a.ok) return undefined;
+      const st = rag.activeDocumentStructure(a.dome, a.path);
+      if (!st) return undefined;
+      const siblings: NodeRef[] = [];
+      for (const s of st.siblings) {
+        if (!isMarkdown(s) || (req.pathPrefix && !s.startsWith(req.pathPrefix))) continue;
+        if (!req.includeStale && !rag.activeDocumentChunks(a.dome, s).some(c => !rag.isExcluded(a.dome, c.meta))) continue;
+        if (!guard.admit({ dome: a.dome, path: s }).ok) continue;
+        if (closed || !meter.consume('nodes')) break;
+        siblings.push({ dome: a.dome, path: s });
+      }
+      return { nodes: st.nodes, siblings };
     },
     consume: (key, n) => !closed && meter.consume(key, n),
     timeLeftMs: () => (closed ? 0 : meter.timeLeftMs()),

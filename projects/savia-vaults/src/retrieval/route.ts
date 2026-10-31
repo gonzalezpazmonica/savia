@@ -4,6 +4,7 @@
 // presupuesto consumido. Las rutas no abren contenido salvo a través de `RouteContext`, que
 // aplica el guard (`guard.ts`) a cada nodo antes de abrirlo. Guía: docs/retrieval-routes.md.
 import type { RagHit, RagMode } from '../rag/types.js';
+import type { StructureNode } from '../rag/structure-index.js';
 
 /** Contrato estable: sube si cambia de forma incompatible (las rutas declaran la versión que implementan). */
 export const ROUTE_CONTRACT_VERSION = 1;
@@ -139,6 +140,16 @@ export interface OpenedChunk {
   text: string;
 }
 
+/**
+ * Árbol de un documento (StructureIndex de M3) abierto por el guard: nodos en pre-orden (el primero
+ * es el documento) y los documentos Markdown de su directorio que el guard admite ahora y que no
+ * están excluidos por estado (salvo `includeStale`). Sin texto: el texto se lee con `documentChunks`.
+ */
+export interface OpenedStructure {
+  nodes: StructureNode[];
+  siblings: NodeRef[];
+}
+
 export interface CandidateOptions {
   k?: number;
   mode?: RagMode;
@@ -156,6 +167,11 @@ export interface RouteContext {
   openNote(ref: NodeRef): OpenedNote | undefined;
   /** Chunks del índice activo de un documento (vecinos/padre). */
   documentChunks(ref: NodeRef): OpenedChunk[] | undefined;
+  /**
+   * SE-489 M3 (aditivo, opcional para dobles de test): árbol del documento en la generación activa.
+   * 1 `nodes` por el documento y 1 por cada hermano devuelto.
+   */
+  documentStructure?(ref: NodeRef): OpenedStructure | undefined;
   /** Descuenta presupuesto; false si se agotaría (no descuenta). */
   consume(key: Exclude<BudgetKey, 'latencyMs'>, n?: number): boolean;
   /** Milisegundos que quedan del presupuesto de latencia. */

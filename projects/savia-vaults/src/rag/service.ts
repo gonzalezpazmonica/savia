@@ -19,7 +19,7 @@ import {
   FlatVectorStore, defaultRagHome, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive,
 } from './store.js';
 import {
-  RAG_LIMITS, RagError, type Chunk, type Confidentiality, type DomeOutcome, type EmbeddingContract, type RagDomeConfig,
+  RAG_LIMITS, RagError, type Chunk, type ChunkMeta, type Confidentiality, type DomeOutcome, type EmbeddingContract, type RagDomeConfig,
   type RagHit, type RagMode, type RagRequest, type RagResponse, type ResolvedRagConfig, type SyncReport, type IndexCipher,
 } from './types.js';
 
@@ -533,6 +533,11 @@ export class RagService {
       logEvent(this.home, { event: 'structure_error', dome: d.name, generation, detail: String(e) });
       return undefined;
     }
+  }
+
+  /** SE-489: el chunk está excluido por estado o vigencia (lo mismo que filtra `search` sin includeStale). */
+  isExcluded(name: string, meta: ChunkMeta): boolean {
+    return Boolean(excludedReason(meta, this.config(this.dome(name))));
   }
 
   /** SE-489 M3: StructureIndex de la generación activa. */
