@@ -1,0 +1,21 @@
+{
+  "name": "soul-continuity",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Soul Continuidad v1 (SE-490): gemelo operativo de solo lectura, por usuario y sin privilegios. TypeScript sobre Node.js LTS, sin dependencias de ejecución.",
+  "license": "MIT",
+  "engines": { "node": ">=22.6" },
+  "bin": { "soul": "bin/soul.mjs" },
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts bench/test/*.test.ts",
+    "bench": "node --experimental-strip-types --no-warnings bench/src/cli.ts bench --impl src/core/bench-impl.ts",
+    "bench:reference": "node --experimental-strip-types --no-warnings bench/src/cli.ts bench",
+    "mutants": "node --experimental-strip-types --no-warnings bench/src/cli.ts mutants",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}
