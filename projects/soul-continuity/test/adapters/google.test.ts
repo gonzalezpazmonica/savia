@@ -100,8 +100,9 @@ test("Google: tope de hilos limita lo leído sin inventar esperas", async () => 
   try {
     const r = await makeGoogleAdapter().read(ctx({ params: { max_threads: 2 } }));
     assert.equal(r.status, "ok");
-    assert.ok(keys(r).filter((k) => k.includes("awaiting")).every((k) => /t1@g1/.test(k)));
-    assert.ok(mock.log.filter((l) => /\/threads\/[^/?]+\?/.test(l.url)).length <= 2);
+    // Los dos hilos más recientes son t1 (espera) y t2 (ya contestado); t3 queda fuera del tope.
+    assert.deepEqual(keys(r).filter((k) => k.includes("awaiting")), ["google-workspace:awaiting_reply:t1@g1"]);
+    assert.equal(mock.log.filter((l) => /\/threads\/[^/?]+\?/.test(l.url)).length, 2);
   } finally {
     await mock.close();
   }
