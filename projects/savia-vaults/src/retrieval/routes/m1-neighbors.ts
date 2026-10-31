@@ -95,7 +95,9 @@ export function makeNeighborsRoute(id: string, perDoc: number): RetrievalRoute {
         if (!progress && level > 1) break;
       }
       ctx.step('m1:expand', `perDoc=${perDoc}`, added.length);
-      return { hits: [...anchors, ...added, ...rest] };
+      // Orden: anclas de M0, ampliados, resto de M0. Los ampliados no se reordenan por puntuación; al
+      // truncar a k, los ampliados desplazan al final de la lista de M0 (efecto medido en el informe).
+      return { hits: [...anchors, ...added, ...rest].slice(0, req.k) };
     },
   };
 }
