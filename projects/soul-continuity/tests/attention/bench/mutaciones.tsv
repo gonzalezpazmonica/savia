@@ -1,0 +1,37 @@
+mutacion	tests	evals	veredicto
+M01 sin comprobar ventana	FALLA	FALLA	MUERTA
+M02 sin presupuesto	FALLA	FALLA	MUERTA
+M03 alerta sin fuente autenticada	FALLA	FALLA	MUERTA
+M04 veto ignorado	FALLA	FALLA	MUERTA
+M05 silencio como permiso	FALLA	FALLA	MUERTA
+M06 el LLM eleva urgencia	FALLA	FALLA	MUERTA
+M07 reanudar desde cualquiera	FALLA	FALLA	MUERTA
+M08 disponibilidad implícita	FALLA	pasa	MUERTA
+M09 sin redacción	FALLA	FALLA	MUERTA
+M10 seguridad agrupable	FALLA	FALLA	MUERTA
+M11 contexto vencido ignorado	FALLA	FALLA	MUERTA
+M12 reintento ambiguo se registra	FALLA	FALLA	MUERTA
+M13 descanso declarado ignorado	FALLA	FALLA	MUERTA
+M14 PARA se pierde al reiniciar	FALLA	pasa	MUERTA
+M15 permiso fuera de contrato aceptado	FALLA	FALLA	MUERTA
+M16 agente declara el modo	FALLA	pasa	MUERTA
+M17 decisión repetida se vuelve a preguntar	FALLA	FALLA	MUERTA
+M18 estado ilegible aceptado	FALLA	pasa	MUERTA
+M19 alerta sin tope propio	FALLA	FALLA	MUERTA
+M20 alerta no marcada para el modo pasa	FALLA	FALLA	MUERTA
+M21 la alerta gasta presupuesto de avisos	FALLA	FALLA	MUERTA
+M22 alerta sobre el tope se pierde	FALLA	FALLA	MUERTA
+M23 urgencia inyectada eleva a alerta	FALLA	FALLA	MUERTA
+M24 regla de remitente en web es alerta	FALLA	FALLA	MUERTA
+M25 aviso repetido gasta presupuesto otra vez	FALLA	pasa	MUERTA
+M26 alerta repetida se duplica	FALLA	pasa	MUERTA
+M27 resumen antes de su hora	FALLA	FALLA	MUERTA
+M28 resumen repetido	FALLA	FALLA	MUERTA
+M29 el tope no se renueva por ventana	FALLA	pasa	MUERTA
+M30 resumen tardío se emite igual	FALLA	FALLA	MUERTA
+M31 «¿por qué?» dice siempre que avisó	FALLA	FALLA	MUERTA
+M32 «¿qué ahorraste?» no descuenta	FALLA	FALLA	MUERTA
+M33 presupuesto inválido abre el gate	FALLA	pasa	MUERTA
+M34 en DISPONIBLE la alerta exige marca	FALLA	pasa	MUERTA
+M35 sin modo declarado la alerta se entrega	FALLA	pasa	MUERTA
+M36 el estado guarda alertas agrupadas sin persistir	FALLA	pasa	MUERTA
