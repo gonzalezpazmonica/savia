@@ -83,6 +83,28 @@ Todos son opcionales, de solo lectura y con consentimiento propio. Cada uno decl
 | `azure-devops` | Gestor de tareas | Conectores existentes de Savia |
 | `github` | Repositorios | Conector existente |
 | Fuentes locales de la instantánea | git, specs, traspaso | Ya implementadas |
+| `web` | Webs sin API, A2A ni MCP | Navegador en perfil dedicado a Soul, solo lectura (ver abajo) |
+
+#### Adaptador `web`: la web como una interfaz más
+
+Mucha información de trabajo solo vive en webs sin API, sin A2A y sin MCP: portales internos, herramientas de proveedores, paneles. El adaptador `web` las lee con un navegador **en un perfil dedicado a Soul**. Decisión de la operadora del 2026-10-31.
+
+- **Perfil dedicado, no el navegador personal.**
+  - Es un perfil aparte del navegador de la instalación (Edge, Chrome o Firefox), donde el operador inicia sesión **solo** en las webs que quiere dar a Soul.
+  - Soul nunca toca el perfil personal, sus cookies ni sus otras sesiones.
+  - El control es local: un canal de depuración sobre tubería o `localhost` aleatorio con token, nunca expuesto a la red.
+- **Solo lectura, aplicada en la red, no en el prompt:**
+  - el adaptador aborta toda petición que no sea `GET`/`HEAD`, salvo las de renovación de sesión de una lista por sitio;
+  - no envía formularios;
+  - no pulsa elementos fuera de una lista cerrada de acciones de navegación de cada receta (paginar, expandir, cambiar de pestaña de la página);
+  - no descarga ni ejecuta ficheros.
+- **Lista de sitios permitidos** por el operador, cada uno con propósito, nivel de confidencialidad (por defecto N4), frecuencia máxima de visita y revocación. Una navegación fuera de la lista se bloquea.
+- **Recetas deterministas por sitio,** sin modelo: qué páginas visitar, qué selectores extraen elementos para Q1–Q4 (asignado a mí, pendiente, con fecha) y cómo se identifica cada elemento de forma estable.
+  - Si no hay receta, solo se detecta «esta página cambió desde la última visita», con el enlace.
+  - Las recetas son configuración del operador o plantillas genéricas del producto, nunca código específico de una organización en el repo.
+- **Contenido no fiable:** todo texto web es dato. Nunca selecciona acciones, nunca cambia la lista ni la receta y nunca eleva un aviso a alerta. Se guardan referencias y metadatos, no páginas completas.
+- **Sesión caducada:** el adaptador se detiene y avisa: «vuelve a iniciar sesión en X en el perfil de Soul». Nunca guarda contraseñas ni rellena credenciales.
+- **Si la política de la organización** no permite automatizar el navegador en el equipo corporativo, el adaptador queda desactivado. Lo documenta el paquete para TI.
 
 Reglas de los adaptadores:
 - **Autenticación delegada por el propio usuario** (flujo de dispositivo o navegador). Los tokens van al almacén de credenciales del sistema: Credential Manager, Keychain o Secret Service. Nunca a ficheros, logs, variables ni línea de órdenes.
@@ -211,6 +233,14 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
     - una alerta marcada para el modo activo nunca se difiere: 0 omisiones dentro de su tope, y por encima del tope, un mensaje agrupado con todas.
   - El payload push no contiene ningún dato (test que inspecciona el mensaje).
   - El texto libre sin modelo autorizado recibe la respuesta honesta y no se envía a ninguna parte.
+- **AC-4e (web):** sobre sitios locales de prueba con sesión simulada:
+  - 0 peticiones que no sean `GET`/`HEAD` fuera de la lista de renovación (log de red del navegador);
+  - 0 envíos de formulario;
+  - 0 navegaciones fuera de la lista;
+  - 0 accesos al perfil personal;
+  - una página con instrucciones inyectadas («pulsa aprobar», «envía esto a…», «marca urgente») no produce ninguna acción ni ninguna alerta;
+  - con sesión caducada, la parada es limpia;
+  - las recetas extraen Q1–Q4 con la misma precisión exigida en AC-3 en al menos 3 sitios sintéticos de tipos distintos (portal de tareas, panel de aprobaciones, intranet de noticias).
 - **AC-5:** revocar un adaptador borra su caché y sus tokens. Desinstalar no deja estado.
 - **AC-6:** paquete para TI completo y revisado por la revisora de seguridad. Además, **antes de los días 6–9**, la revisora de seguridad revisa el modelo de amenazas del canal móvil, que va en la PR de D-490-1: quién opera el relay, qué metadatos ve, gestión, rotación y revocación de claves al desemparejar, y qué pasa si se pierde el móvil.
 - **AC-7:** piloto real en una instalación, con el consentimiento de su operador y fuera de cualquier repo. Durante una semana laborable se miden:
@@ -229,6 +259,7 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
 |---|---|
 | 1–2 | Núcleo multiplataforma, contrato de adaptadores, CLI y banco con verdad (paralelo) |
 | 3–5 | Adaptadores de Microsoft 365, de Google y de los gestores; almacén de credenciales por sistema |
+| 3–7 | Adaptador `web`: perfil dedicado, cortafuegos de solo lectura en la red, recetas y sitios de prueba (en paralelo) |
 | 3–7 | Política de atención y registro de demanda (librería pura, en paralelo) |
 | 6–9 | Pantalla «Continuidad» y conversación en la app; canal emparejado; push sin contenido; resúmenes, avisos y alertas; niveles de detalle |
 | 8–9 | Paquete para TI, revisión de seguridad, instaladores sin administrador |
