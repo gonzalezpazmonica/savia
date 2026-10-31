@@ -49,6 +49,8 @@ interface DocNode {
   /** Aristas resueltas a notas abiertas: [tipo, ruta destino]. */
   edges: [EdgeKind, string][];
   viaSupersede: boolean;
+  /** La nota no se pudo abrir: sin frontmatter no se puede situar en el tiempo. */
+  unopened: boolean;
 }
 
 const key = (dome: string, p: string): string => `${dome}\u0000${p}`;
@@ -170,7 +172,7 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
     const { fm, body } = splitNote(note ? note.text : '');
     const node: DocNode = {
       dome, path: p, depth, score, seedHits: [], generation, meta: metaOf(fm), body, edges: [],
-      viaSupersede: via === 'supersedes' || via === 'superseded_by',
+      viaSupersede: via === 'supersedes' || via === 'superseded_by', unopened: !note,
     };
     nodes.set(k, node);
     order.push(node);
@@ -261,7 +263,8 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   const push = (h: RagHit): void => { if (!seen.has(h.chunkId)) { seen.add(h.chunkId); hits.push(h); } };
   let excluded = 0;
   for (const n of order) {
-    if (currency(n, successorsOf(n), asOf, includeStale) !== 'current') { excluded++; continue; }
+    // Con `asOf`, una semilla que no se pudo abrir no se sirve: no se sabe si estaba vigente.
+    if ((asOf !== undefined && n.unopened) || currency(n, successorsOf(n), asOf, includeStale) !== 'current') { excluded++; continue; }
     if (n.seedHits.length) { for (const h of n.seedHits) push(h); continue; }
     const chunks = ctx.documentChunks({ dome: n.dome, path: n.path });
     if (!chunks?.length) continue;

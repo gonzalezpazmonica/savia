@@ -218,16 +218,14 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
     await expect(ask('cuervo grande', { asOf: '31/12/2025', includeStale: true })).rejects.toThrow();
   });
 
-  it('el vecino lleva el nivel de su cúpula, no uno fijo', async () => {
-    (f.domes[0] as { confidentiality: string }).confidentiality = 'N3';
-    writeDocs(f.dir('A'), {
-      'inicio.md': note('Inicio', long('zarcero políglota') + '\n\n[[destino]]'),
-      'destino.md': note('Destino', long('anejo del zarcero')),
-    });
+  it('una semilla que no se pudo abrir se conserva sin asOf y no se sirve con asOf', async () => {
+    writeDocs(f.dir('A'), { 'sola.md': note('Sola', long('ostrero euroasiático marisma')) });
     await f.service().sync('A');
-    const out = await ask('zarcero políglota', { k: 8, budget: { maxHops: 1 } });
-    const dest = out.result.hits.find(h => h.path === 'destino.md');
-    expect(dest?.confidentiality).toBe('N3');
+    // maxNodes 1: el candidato gasta el único nodo y openNote falla.
+    const sin = await ask('ostrero euroasiático marisma', { k: 1, budget: { maxNodes: 1, maxHops: 1 } });
+    expect(paths(sin)).toEqual(['sola.md']);
+    const con = await ask('ostrero euroasiático marisma', { k: 1, asOf: '2026-01-01', budget: { maxNodes: 1, maxHops: 1 } });
+    expect(con.result.hits).toEqual([]);
   });
 
   it('superseded con inicio pero sin fin ni sucesor: con asOf no se sirve', async () => {
