@@ -8,10 +8,10 @@
  */
 
 import { X509Certificate, createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
-import { isIPv4, isIPv6 } from "node:net";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readJson, writeAtomic, writeJson } from "../core/store.ts";
+import { ipBytes } from "./listen.ts";
 
 // ---------------------------------------------------------------- DER mínimo
 
@@ -51,16 +51,6 @@ function oid(s: string): Buffer {
 function utcTime(d: Date): Buffer {
   const s = d.toISOString(); // AAAA-MM-DDTHH:MM:SS
   return tlv(0x17, Buffer.from(`${s.slice(2, 4)}${s.slice(5, 7)}${s.slice(8, 10)}${s.slice(11, 13)}${s.slice(14, 16)}${s.slice(17, 19)}Z`));
-}
-
-function ipBytes(ip: string): Buffer {
-  if (isIPv4(ip)) return Buffer.from(ip.split(".").map(Number));
-  if (!isIPv6(ip)) throw new Error(`no es una IP: ${ip}`);
-  const [head, tail = ""] = ip.split("::");
-  const h = head ? head.split(":") : [];
-  const t = ip.includes("::") ? (tail ? tail.split(":") : []) : [];
-  const groups = ip.includes("::") ? [...h, ...Array(8 - h.length - t.length).fill("0"), ...t] : h;
-  return Buffer.concat(groups.map((g) => { const b = Buffer.alloc(2); b.writeUInt16BE(parseInt(g || "0", 16)); return b; }));
 }
 
 // ---------------------------------------------------------------- certificado

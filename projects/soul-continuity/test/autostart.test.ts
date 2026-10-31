@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { autostartPlan, installAutostart, uninstallAutostart, winQuote } from "../src/startup/autostart.ts";
+import { autostartPlan, installAutostart, sdQuote, uninstallAutostart, winQuote } from "../src/startup/autostart.ts";
 import type { Run } from "../src/credentials/store.ts";
 
 const opts = (platform: NodeJS.Platform, home: string) => ({
@@ -87,4 +87,9 @@ test("winQuote: reglas de CommandLineToArgvW (barras antes de comillas y al fina
   assert.equal(winQuote('a"b'), '"a\\"b"');
   assert.equal(winQuote('a\\"b'), '"a\\\\\\"b"');
   assert.equal(winQuote(""), '""');
+});
+
+test("sdQuote: % y $ no se expanden en ExecStart", () => {
+  assert.equal(sdQuote("/opt/a%h$HOME/node"), '"/opt/a%%h$$HOME/node"');
+  assert.equal(sdQuote('a"b\\c'), '"a\\"b\\\\c"');
 });

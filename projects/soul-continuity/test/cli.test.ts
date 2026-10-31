@@ -247,3 +247,24 @@ test("pair desde un frontend de agente se rechaza", async () => {
   const s = setup({ env: { CLAUDECODE: "1" } });
   assert.equal(await runCli(["pair", "movil"], s.deps), 4);
 });
+
+test("configuración corrupta: stop, resume, help y uninstall siguen funcionando (el fail-safe no depende de ella)", async () => {
+  const s = setup();
+  (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), "{ roto");
+  assert.equal(await runCli(["q1"], s.deps), 1, "control: las preguntas sí fallan");
+  assert.equal(await runCli(["stop", "config", "rota"], s.deps), 0);
+  assert.ok(existsSync(join(s.dir, "STOP")));
+  assert.equal(await runCli(["resume"], s.deps), 0);
+  assert.equal(await runCli(["help"], s.deps), 0);
+  assert.equal(await runCli(["uninstall", "--yes"], s.deps), 0);
+  assert.equal(existsSync(s.dir), false);
+});
+
+test("correct mio no promete que «no volverá»", async () => {
+  const s = setup();
+  await runCli(["q2", "--json"], s.deps);
+  const id = JSON.parse(s.out[0]).items[0].id;
+  s.out.length = 0;
+  assert.equal(await runCli(["correct", id, "mio"], s.deps), 0);
+  assert.doesNotMatch(text(s), /No volverá/);
+});

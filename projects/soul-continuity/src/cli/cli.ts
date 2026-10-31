@@ -106,6 +106,49 @@ function parseDuration(s: string): number | null {
   return ms > 0 && ms <= 7 * 86_400_000 ? ms : null;
 }
 
+/** Órdenes que no leen la configuración: si `config.json` está roto siguen funcionando. */
+async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string, data: unknown) => void): Promise<number | null> {
+  switch (p.cmd) {
+    case "help":
+      deps.out(HELP);
+      return 0;
+
+    case "uninstall": {
+      const o = { platform: deps.platform, home: deps.home, env: deps.env, node: deps.node, entry: deps.entry };
+      if (p.flags.yes !== true) {
+        deps.err([
+          "Desinstalar borra todo el estado local y las credenciales de Soul. Repite con --yes para hacerlo:",
+          `  - directorio de datos: ${deps.dataDir} (${filesUnder(deps.dataDir).length} ficheros)`,
+          ...autostartPlan(o).files.map((f) => `  - arranque automático: ${f.path}`),
+          "  - credenciales de Soul en el almacén del sistema",
+        ].join("\n"));
+        return 2;
+      }
+      const creds = await deps.credentials.forgetAll();
+      const auto = await uninstallAutostart(o, deps.run);
+      removeTree(deps.dataDir);
+      const left = existsSync(deps.dataDir);
+      print(left ? "No se pudo borrar todo el directorio de datos." : "Desinstalado: no queda estado de Soul.", { removed: !left, credentials: creds.length, autostart: auto.message });
+      return left ? 1 : 0;
+    }
+
+    case "stop": {
+      const s = stop(deps.dataDir, p.args.join(" ") || "lo pide el operador", deps.now());
+      print("Detenido. No se leerá ninguna fuente hasta «soul resume», también tras reiniciar.", s);
+      return 0;
+    }
+
+    case "resume": {
+      const s = resume(deps.dataDir, deps.now());
+      print("Reanudado.", s);
+      return 0;
+    }
+
+    default:
+      return null;
+  }
+}
+
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   const p = parse(argv);
   const json = p.flags.json === true;
@@ -116,6 +159,9 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     if (caller.frontend && !AGENT_ALLOWED.has(p.cmd)) {
       throw new Exit(4, `«${p.cmd}» no está disponible desde un frontend de agente (${caller.frontend}). Hazlo en tu terminal.`);
     }
+    // El fail-safe, la ayuda y el borrado no dependen de que config.json sea válido.
+    const early = await runWithoutConfig(p, deps, print);
+    if (early !== null) return early;
     const cfg = loadConfig(deps.dataDir);
     const level = () => agentLevel(cfg, caller, cfg.detail.level);
     const audit = (cmd: string, lv: { level: Detail; forced: boolean; provider: string | null }, total: number) => {
@@ -123,10 +169,6 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     };
 
     switch (p.cmd) {
-      case "help":
-        deps.out(HELP);
-        return 0;
-
       case "status": {
         const st = stopState(deps.dataDir);
         let profile: string | null = null;
@@ -232,7 +274,8 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         const c = snap?.claims.find((x) => elementId(install.operator.ref, x.key) === id);
         if (!c) throw new Exit(1, `no conozco el elemento ${id}`);
         await engine.correct({ install, stateDir: deps.dataDir, now: deps.now(), key: c.key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo });
-        print(`Anotado: ${id} ${kind}. No volverá aunque la fuente lo repita.`, { id, tipo, aplicada: true, registrada_en: deps.now() });
+        const msg = tipo === "es_mio" ? "Anotado: vuelve a contar como tuyo." : "Anotado. No volverá aunque la fuente lo repita.";
+        print(`${id} ${kind}: ${msg}`, { id, tipo, aplicada: true, registrada_en: deps.now() });
         return 0;
       }
 
@@ -283,37 +326,6 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           writeJson(p.flags.out, data);
           deps.out(`Exportado a ${p.flags.out}`);
         } else deps.out(JSON.stringify(data, null, 1));
-        return 0;
-      }
-
-      case "uninstall": {
-        const o = { platform: deps.platform, home: deps.home, env: deps.env, node: deps.node, entry: deps.entry };
-        if (p.flags.yes !== true) {
-          deps.err([
-            "Desinstalar borra todo el estado local y las credenciales de Soul. Repite con --yes para hacerlo:",
-            `  - directorio de datos: ${deps.dataDir} (${filesUnder(deps.dataDir).length} ficheros)`,
-            ...autostartPlan(o).files.map((f) => `  - arranque automático: ${f.path}`),
-            "  - credenciales de Soul en el almacén del sistema",
-          ].join("\n"));
-          return 2;
-        }
-        const creds = await deps.credentials.forgetAll();
-        const auto = await uninstallAutostart(o, deps.run);
-        removeTree(deps.dataDir);
-        const left = existsSync(deps.dataDir);
-        print(left ? "No se pudo borrar todo el directorio de datos." : "Desinstalado: no queda estado de Soul.", { removed: !left, credentials: creds.length, autostart: auto.message });
-        return left ? 1 : 0;
-      }
-
-      case "stop": {
-        const s = stop(deps.dataDir, p.args.join(" ") || "lo pide el operador", deps.now());
-        print("Detenido. No se leerá ninguna fuente hasta «soul resume», también tras reiniciar.", s);
-        return 0;
-      }
-
-      case "resume": {
-        const s = resume(deps.dataDir, deps.now());
-        print("Reanudado.", s);
         return 0;
       }
 

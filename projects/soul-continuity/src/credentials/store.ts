@@ -104,6 +104,8 @@ export function macBackend(run: Run): SecretBackend {
 
 /** Script sin secretos: va como -EncodedCommand; los datos (y el secreto) llegan por stdin. */
 const PS_SCRIPT = String.raw`$ErrorActionPreference='Stop'
+[Console]::InputEncoding = [Text.Encoding]::UTF8
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $d = [Console]::In.ReadToEnd() | ConvertFrom-Json
 Add-Type -TypeDefinition @"
 using System; using System.Runtime.InteropServices; using System.Text;
@@ -116,7 +118,8 @@ public static class SoulCred {
   [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool CredWriteW(ref CREDENTIAL c, int flags);
   [DllImport("advapi32.dll", CharSet=CharSet.Unicode, SetLastError=true)] static extern bool CredDeleteW(string t, int type, int flags);
   [DllImport("advapi32.dll")] static extern void CredFree(IntPtr p);
-  public static string Read(string t) { IntPtr p; if (!CredReadW(t, 1, 0, out p)) return null;
+  public static string Read(string t) { IntPtr p;
+    if (!CredReadW(t, 1, 0, out p)) { if (Marshal.GetLastWin32Error() == 1168) return null; throw new Exception("CredRead"); }
     try { var c = (CREDENTIAL)Marshal.PtrToStructure(p, typeof(CREDENTIAL)); return Marshal.PtrToStringUni(c.CredentialBlob, c.CredentialBlobSize / 2); } finally { CredFree(p); } }
   public static bool Write(string t, string s) { var b = Encoding.Unicode.GetBytes(s); var c = new CREDENTIAL(); c.Type = 1; c.TargetName = t;
     c.UserName = "soul-continuity"; c.Persist = 2; c.CredentialBlobSize = b.Length; c.CredentialBlob = Marshal.AllocHGlobal(b.Length);

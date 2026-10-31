@@ -19,7 +19,7 @@ export interface AutostartOptions {
   env: Record<string, string | undefined>;
   /** Ruta del runtime oficial de Node.js. */
   node: string;
-  /** Punto de entrada de la CLI (`src/cli/main.ts`). */
+  /** Punto de entrada de la CLI (`src/cli/soul.ts`). */
   entry: string;
 }
 
@@ -31,7 +31,8 @@ const TASK = "Savia\\SoulContinuity";
 const NODE_FLAGS = ["--experimental-strip-types", "--no-warnings"];
 
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const sdQuote = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+/** Argumento de ExecStart: comillas y barras escapadas; `%` y `$` no se expanden. */
+export const sdQuote = (s: string) => `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%").replace(/\$/g, "$$$$")}"`;
 /** Un argumento para la línea de órdenes de Windows (reglas de CommandLineToArgvW). */
 export function winQuote(arg: string): string {
   let out = '"';

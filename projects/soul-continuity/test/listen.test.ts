@@ -6,7 +6,11 @@ import { listenOnly, validateListen } from "../src/api/listen.ts";
 
 test("validateListen: lista vacía, comodines y nombres se rechazan (fail-closed)", () => {
   assert.throws(() => validateListen([]), /ninguna dirección/);
-  for (const bad of ["0.0.0.0", "::", "::0", "localhost", "*", "100.64.0.1/24", ""]) assert.throws(() => validateListen([bad]), new RegExp(""), bad);
+  for (const bad of ["0.0.0.0", "::", "::0", "localhost", "*", "100.64.0.1/24", "",
+    // formas equivalentes de la dirección no especificada, mapeadas y con zona
+    "0::", "0:0::", "::0:0", "::0.0.0.0", "0:0:0:0:0:0:0.0.0.0", "::ffff:0.0.0.0", "::ffff:100.64.0.1", "fe80::1%eth0"]) {
+    assert.throws(() => validateListen([bad]), Error, bad);
+  }
   assert.deepEqual(validateListen(["100.64.0.7", "fd7a:115c:a1e0::1"]), ["100.64.0.7", "fd7a:115c:a1e0::1"]);
 });
 

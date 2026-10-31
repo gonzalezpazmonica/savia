@@ -62,3 +62,11 @@ npm test          # todos los tests
 npm run bench     # banco contra el núcleo
 npm run typecheck # tsc --strict (necesita npm install)
 ```
+
+## Límites conocidos (v1)
+
+- **DPoP**: la API exige la cabecera `DPoP`, pero no verifica todavía la prueba firmada. En la práctica, el token del dispositivo funciona como portador. Lo protegen TLS con huella fijada, un token de 256 bits y la revocación.
+- **AC-4d es de mejor esfuerzo frente a un agente adversario**: la detección del frontend usa variables de entorno y `--frontend`, y un agente podría borrarlas. Protege contra el uso normal desde Claude Code u OpenCode, no contra un agente que quiera saltárselo.
+- **Modo de atención y avisos de la API**: viven en memoria de `serve`. No se comparten con `soul mode`, que de momento solo deja constancia en `attention.json`, y no sobreviven a un reinicio. Tras reiniciar, la app tiene que volver a sondear sin cursor. La persistencia es de la parte `atencion`.
+- **Credenciales**: en Windows y macOS solo se han probado con un doble, no contra el almacén real. En Windows, `Add-Type` falla bajo Constrained Language Mode: entonces el almacén da error y el token no se guarda en ningún otro sitio.
+- **Lockfile**: `package-lock.json` está excluido por el `.gitignore` global. El CI instala las dependencias de desarrollo solo para `tsc`.

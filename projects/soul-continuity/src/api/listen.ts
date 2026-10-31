@@ -4,10 +4,22 @@
  * host son error (fail-closed). Un servidor por dirección, todos en el mismo puerto.
  */
 
-import { isIP } from "node:net";
+import { isIP, isIPv4 } from "node:net";
 import type { Server } from "node:net";
 
-const WILDCARD = new Set(["0.0.0.0", "::", "::0", "0:0:0:0:0:0:0:0"]);
+/**
+ * Bytes de una IP literal. IPv6 sin zona (`%eth0`) ni IPv4 incrustada (`::ffff:a.b.c.d`):
+ * esas formas se rechazan para que ninguna escritura equivalente se cuele.
+ */
+export function ipBytes(ip: string): Buffer {
+  if (isIPv4(ip)) return Buffer.from(ip.split(".").map(Number));
+  if (isIP(ip) !== 6 || ip.includes("%") || ip.includes(".")) throw new Error(`dirección no admitida (solo IPv4 o IPv6 sin zona ni IPv4 incrustada): ${ip}`);
+  const [head, tail = ""] = ip.split("::");
+  const h = head ? head.split(":") : [];
+  const t = ip.includes("::") ? (tail ? tail.split(":") : []) : [];
+  const groups = ip.includes("::") ? [...h, ...Array(8 - h.length - t.length).fill("0"), ...t] : h;
+  return Buffer.concat(groups.map((g) => { const b = Buffer.alloc(2); b.writeUInt16BE(parseInt(g || "0", 16)); return b; }));
+}
 
 export function validateListen(addresses: string[]): string[] {
   if (!Array.isArray(addresses) || addresses.length === 0) {
@@ -15,7 +27,8 @@ export function validateListen(addresses: string[]): string[] {
   }
   for (const a of addresses) {
     if (typeof a !== "string" || isIP(a) === 0) throw new Error(`dirección de escucha no válida (solo IP literal): ${String(a)}`);
-    if (WILDCARD.has(a)) throw new Error(`nunca se escucha en todas las interfaces: ${a}`);
+    // Cualquier escritura de la dirección no especificada (0.0.0.0, ::, 0::, ::0:0…) es un comodín.
+    if (ipBytes(a).every((b) => b === 0)) throw new Error(`nunca se escucha en todas las interfaces: ${a}`);
   }
   return [...new Set(addresses)];
 }

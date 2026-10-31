@@ -68,6 +68,8 @@ export interface Elemento {
   id: string; tipo: string; titulo: string; proyecto: string | null; personas: string[]; detalle: string | null;
   adaptador: string; ruta: string; dep: boolean; fecha: number | null; nace: number; estado: string; sens: string; refs: string[];
   observado?: number; mio?: boolean; noMio?: boolean; fijo?: boolean;
+  /** Fin de vigencia (TTL de la afirmación). Sin él, 24 h desde la observación (mundo simulado). */
+  validoHasta?: number | null;
 }
 export interface Regla { id: string; tipo: string; objetivo: string; palabra: string | null; modos: string[] }
 export interface ConfAvisos { activos: string[]; resumenInicio: string | null; resumenCierre: string | null; max: number; ventanaMin: number; tope: number }
@@ -110,6 +112,8 @@ export interface Mundo {
   paso?(ctx: CtxMundo, o: Op, i: number, t: number, minuto0: number): void;
   /** Una vez por petición (producción: refresca desde la instantánea del núcleo). */
   refrescar?(ctx: CtxMundo, o: Op, t: number): void;
+  /** Frescura real de lo servido: instante de la última lectura y si es lo último conocido. */
+  frescura?(o: Op, t: number): { ultimaLectura: number | null; obsoleto: boolean };
 }
 
 export interface OpcionesServidor {
@@ -246,7 +250,8 @@ export function crearServidor(opts: OpcionesServidor) {
   // -------------------------------------------------------------- vistas (el nivel se aplica al leer)
   const rango = (o: Op, n: string) => RANGO[o.nivel] >= RANGO[n];
   const nombre = (lista: { id: string; nombre: string }[], id: string) => lista.find((x) => x.id === id)?.nombre ?? id;
-  const vivo = (o: Op, id: string) => { const e = o.elementos.get(id); return e && !o.ledger.has(id) && ahora() <= (e.observado ?? e.nace) + DIA ? e : null; };
+  const validoHasta = (e: Elemento) => e.validoHasta ?? (e.observado ?? e.nace) + DIA;
+  const vivo = (o: Op, id: string) => { const e = o.elementos.get(id); return e && !o.ledger.has(id) && ahora() < validoHasta(e) ? e : null; };
   function vistaElemento(o: Op, e: Elemento, pregunta: string) {
     const completo = rango(o, "completo");
     return {
@@ -259,7 +264,12 @@ export function crearServidor(opts: OpcionesServidor) {
       correccion: e.mio ? "es_mio" : null,
     };
   }
-  function ultimaLectura() { const t = caidas ? (caidasDesde as number) : ahora(); return iso(Math.floor(t / (5 * MIN)) * 5 * MIN); }
+  function ultimaLectura(o: Op): string | null {
+    if (opts.mundo.frescura) { const f = opts.mundo.frescura(o, ahora()); return f.ultimaLectura == null ? null : iso(f.ultimaLectura); }
+    const t = caidas ? (caidasDesde as number) : ahora();
+    return iso(Math.floor(t / (5 * MIN)) * 5 * MIN);
+  }
+  const obsoleto = (o: Op) => caidas || (opts.mundo.frescura?.(o, ahora()).obsoleto ?? false);
   interface Filtro { proyecto: string | null; persona: string | null; desde: number | null; hasta: number | null; limite: number }
   function consulta(o: Op, pregunta: string, f: Filtro) {
     const todos = [...o.elementos.values()].filter((e) => vivo(o, e.id));
@@ -275,7 +285,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const por_fuente: Record<string, number> = {};
     for (const e of sel) { por_tipo[e.tipo] = (por_tipo[e.tipo] ?? 0) + 1; por_fuente[e.adaptador] = (por_fuente[e.adaptador] ?? 0) + 1; }
     return {
-      pregunta, nivel: o.nivel, generado_en: iso(ahora()), obsoleto: caidas, ultima_lectura: ultimaLectura(),
+      pregunta, nivel: o.nivel, generado_en: iso(ahora()), obsoleto: obsoleto(o), ultima_lectura: ultimaLectura(o),
       recuentos: { total: sel.length, por_tipo, por_fuente },
       elementos: o.nivel === "recuentos" ? [] : sel.slice(0, f.limite).map((e) => vistaElemento(o, e, pregunta)),
     };
@@ -301,7 +311,7 @@ export function crearServidor(opts: OpcionesServidor) {
       const ok = a.estado === "ok";
       return {
         id: a.id, ruta: a.ruta, estado: ok && caidas ? "detenido" : a.estado, motivo: ok && caidas ? "sin_conexion" : a.motivo, ruta_alternativa: a.alt,
-        ultima_lectura: ok ? ultimaLectura() : null, ttl_s: 900,
+        ultima_lectura: ok ? ultimaLectura(o) : null, ttl_s: 900,
       };
     }),
   });
@@ -332,7 +342,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const obs = e.observado ?? e.nace;
     return {
       id, nivel: o.nivel, fuente: { adaptador: e.adaptador, ruta: e.ruta }, antiguedad_s: Math.max(0, Math.floor((ahora() - obs) / 1000)),
-      observado_en: iso(obs), valido_hasta: iso(obs + DIA), estado: e.estado, tipo_afirmacion: e.tipo, sensibilidad: e.sens,
+      observado_en: iso(obs), valido_hasta: iso(validoHasta(e)), estado: e.estado, tipo_afirmacion: e.tipo, sensibilidad: e.sens,
       referencias: rango(o, "completo") ? e.refs.map(inerte) : [],
     };
   }

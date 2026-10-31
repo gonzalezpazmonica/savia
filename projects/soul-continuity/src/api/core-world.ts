@@ -56,7 +56,7 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       id, tipo, titulo: c.title ?? tipo, proyecto: null, personas: [], detalle: null,
       adaptador: c.source_refs[0].adapter, ruta: c.source_refs[0].route, dep: c.open && c.awaiting_operator,
       fecha: parseTs(c.due_at), nace: parseTs(c.event_at) ?? observado, observado, estado: c.state, sens: c.sensitivity,
-      refs: c.source_refs.map((r) => r.ref), mio: false, noMio: false, fijo: true,
+      refs: c.source_refs.map((r) => r.ref), mio: false, noMio: false, fijo: true, validoHasta: parseTs(c.valid_until),
     };
   }
 
@@ -109,12 +109,22 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       aplicar(ctx, o, engine.applyCorrections(snap, stateDir, snap.issued_at), t);
     },
 
+    frescura(o: Op, t: number) {
+      const snap = engine.lastSnapshot(stateDir, o.ref);
+      if (!snap) return { ultimaLectura: null, obsoleto: true };
+      const NO_RESPONDE = new Set(["unavailable", "error", "token_expired", "session_expired", "recipe_disabled"]);
+      const failed = Object.values(snap.adapters).some((a) => NO_RESPONDE.has(a.status));
+      return { ultimaLectura: parseTs(snap.issued_at), obsoleto: (parseTs(snap.expires_at) ?? 0) <= t || failed };
+    },
+
     conectar(s) {
       s.alCorregir((o, id, tipo, t) => {
         const key = keys.get(o.ref)?.get(id);
         if (!key) return;
         const install = { id: cfg.installation_id, operator: { ref: o.ref, identities: { emails: [] } }, sources: [] };
-        void engine.correct({ install, stateDir, now: new Date(t).toISOString(), key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo });
+        // Fallo al escribir el libro: se informa sin tumbar el servicio (y sin datos de trabajo en el log).
+        engine.correct({ install, stateDir, now: new Date(t).toISOString(), key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo })
+          .catch((e: Error) => process.stderr.write(`soul api: corrección no persistida (${e.name})\n`));
       });
     },
   };

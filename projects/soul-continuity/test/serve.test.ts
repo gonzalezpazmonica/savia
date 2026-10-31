@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request } from "node:https";
@@ -75,4 +75,30 @@ test("serve: TLS propio, dispositivo emparejado entra, revocado recibe 401, STOP
     assert.equal(await done, 0);
   }
   assert.ok(out.some((l) => /sha256\//.test(l)), "muestra la huella para fijar el certificado");
+});
+
+test("serve recarga la configuración en cada lectura: un revoke con el servicio en marcha deja de leer la fuente", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const cfg = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+  cfg.profiles.yo.sources = [{ adapter: "github", purpose: "p", consent: { granted_at: "2026-10-01T00:00:00Z" } }];
+  writeFileSync(join(dir, "config.json"), JSON.stringify(cfg));
+  let calls = 0;
+  const out: string[] = [];
+  const d = deps(dir, out, []);
+  d.adapters = { github: { name: "github", routes: ["api"], purpose: "t", async read() { calls++; return { status: "ok", route: "api", claims: [] }; } } };
+  const ac = new AbortController();
+  const done = serveFromCli(d, { signal: ac.signal, refreshMs: 50 });
+  try {
+    for (let i = 0; i < 40 && calls < 2; i++) await new Promise((r) => setTimeout(r, 25));
+    assert.ok(calls >= 2, "control: el servicio relee la fuente");
+    cfg.profiles.yo.sources[0].consent.revoked_at = "2026-10-02T00:00:00Z";
+    writeFileSync(join(dir, "config.json"), JSON.stringify(cfg));
+    await new Promise((r) => setTimeout(r, 120));
+    const after = calls;
+    await new Promise((r) => setTimeout(r, 250));
+    assert.equal(calls, after, "tras revocar, no se vuelve a leer");
+  } finally {
+    ac.abort();
+    await done;
+  }
 });

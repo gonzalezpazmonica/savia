@@ -19,7 +19,7 @@ import { crearServidor } from "./server.ts";
 
 export const REFRESH_MS = 5 * 60_000;
 
-export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; onListening?: () => void } = {}): Promise<number> {
+export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; onListening?: () => void; refreshMs?: number } = {}): Promise<number> {
   let listen: string[];
   const cfg = loadConfig(deps.dataDir);
   try {
@@ -34,9 +34,12 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
 
   const refresh = async () => {
     if (stopState(deps.dataDir).stopped) return;
-    for (const name of Object.keys(cfg.profiles)) {
+    // La configuración se relee en cada lectura: un revoke o un consentimiento nuevo se aplican sin reiniciar.
+    let now;
+    try { now = loadConfig(deps.dataDir); } catch (e) { deps.err(`configuración ilegible; no se leen fuentes (${(e as Error).name})`); return; }
+    for (const name of Object.keys(now.profiles)) {
       try {
-        const install = resolveInstall(cfg, { SOUL_PROFILE: name });
+        const install = resolveInstall(now, { SOUL_PROFILE: name });
         await engine.snapshot({ install, now: deps.now(), stateDir: deps.dataDir, env: deps.sourceEnv });
       } catch (e) {
         deps.err(`lectura fallida (${(e as Error).name})`); // sin datos de trabajo en el log
@@ -52,6 +55,8 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
       return v ? { ref: v.operator_ref, revocado: v.revoked } : null;
     },
     detenido: () => stopState(deps.dataDir).stopped,
+    // Una app sondea cada 5 min: 120 peticiones cada 10 s sobran y frenan un abuso.
+    peticionesPorVentana: 120,
   });
   world.conectar(server);
   const l = await server.escuchar(listen, cfg.api.port);
@@ -59,7 +64,7 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   deps.out(`Huella del certificado para emparejar: ${tls.pin}`);
   opts.onListening?.();
 
-  const timer = setInterval(() => { void refresh(); }, REFRESH_MS);
+  const timer = setInterval(() => { void refresh(); }, opts.refreshMs ?? REFRESH_MS);
   await new Promise<void>((resolve) => {
     const end = () => resolve();
     if (opts.signal) {

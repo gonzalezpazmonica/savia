@@ -108,3 +108,35 @@ test("estado de adaptadores del núcleo traducido al contrato", async () => {
     assert.equal(by.jira.ruta_alternativa, "manual");
   } finally { await s.cerrar(); }
 });
+
+test("frescura real: ultima_lectura es la de la instantánea; caducada => obsoleto y fuera lo que pasó su TTL", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-cw-"));
+  const cfg = emptyConfig("i");
+  cfg.active_profile = "yo";
+  cfg.profiles.yo = { operator: { ref: "op-yo", identities: { emails: [] } }, sources: [{ adapter: "m365-mail", purpose: "c", consent: { granted_at: "2026-10-01T00:00:00Z" } }] };
+  const engine = makeEngine({ "m365-mail": mail });
+  await engine.snapshot({ install: { id: "i", operator: cfg.profiles.yo.operator, sources: cfg.profiles.yo.sources }, now: NOW, stateDir: dir,
+    env: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "t" } } });
+  let now = T + 10 * 60_000;
+  const world = coreWorld({ cfg, engine, stateDir: dir });
+  const s = crearServidor({ tls: TLS, mundo: world, reloj: () => now, autenticar: () => ({ ref: "op-yo", revocado: false }) });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  const get = (path: string) => new Promise<any>((res, rej) => {
+    const q = request({ host: "127.0.0.1", port: l.port, path: "/api/v1/soul" + path, ca: TLS.cert, headers: { Authorization: "DPoP x", DPoP: "p" } }, (r) => {
+      let t = ""; r.on("data", (d) => { t += d; }); r.on("end", () => res(JSON.parse(t)));
+    });
+    q.on("error", rej); q.end();
+  });
+  try {
+    const fresh = await get("/q/q2");
+    assert.equal(fresh.ultima_lectura, NOW.replace("Z", ".000Z"));
+    assert.equal(fresh.obsoleto, false);
+    assert.equal(fresh.recuentos.total, 1);
+    const id = fresh.elementos[0].id;
+    assert.equal((await get(`/elementos/${id}/porque`)).valido_hasta, "2026-10-31T10:00:00.000Z");
+    now = Date.parse("2026-10-31T10:30:00Z"); // pasado el TTL de la afirmación y de la instantánea
+    const stale = await get("/q/q2");
+    assert.equal(stale.obsoleto, true);
+    assert.equal(stale.recuentos.total, 0, "lo caducado no se sirve como vigente");
+  } finally { await s.cerrar(); }
+});
