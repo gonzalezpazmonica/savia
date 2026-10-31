@@ -8,7 +8,8 @@
  *
  * Estado por operador en `<stateDir>/op-<hash>/`:
  *   ledger.jsonl     libro de correcciones (solo filas del operador)
- *   snapshot.json    última instantánea (metadatos y referencias, nunca cuerpos ni tokens)
+ *   snapshot.json    última instantánea sin el libro aplicado (solo TTL): el libro se aplica al
+ *                    leerla, así una restauración posterior a una revocación también vale en caché
  *   history/<ts>.json instantáneas anteriores para Q3 (las últimas HISTORY_MAX)
  */
 
@@ -32,8 +33,8 @@ export interface Engine extends ContinuityImpl {
   /** Instantánea más reciente con `issued_at` ≤ `at` (para Q3 «desde»). */
   snapshotAt(stateDir: string, operatorRef: string, at: string): Snapshot | null;
   ledger(stateDir: string, operatorRef: string): unknown[];
-  /** Instantánea guardada con el libro actual aplicado (correcciones hechas después de leerla). */
-  applyCorrections(snap: Snapshot, stateDir: string, now: string): Snapshot;
+  /** Última instantánea con el libro vigente y el TTL evaluados en `now` (correcciones posteriores incluidas). */
+  cachedSnapshot(stateDir: string, operatorRef: string, now: string): Snapshot | null;
   /** AC-5: borra las afirmaciones de un adaptador de la caché y del historial. Devuelve ficheros tocados. */
   purgeAdapter(stateDir: string, operatorRef: string, adapter: string): number;
 }
@@ -124,7 +125,7 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
       const snap: Snapshot = {
         schema: SNAPSHOT_SCHEMA, operator_ref: op.ref, issued_at: req.now, expires_at: iso(expires), claims: final, adapters: status,
       };
-      writeJson(join(dir, CACHE), snap);
+      writeJson(join(dir, CACHE), { ...snap, claims: applyLedgerAndTtl(claims, new Map(), now, expires) });
       saveHistory(dir, snap);
       return snap;
     },
@@ -226,7 +227,17 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
 
     lastSnapshot(stateDir: string, operatorRef: string): Snapshot | null {
       const s = readJson<Snapshot | null>(join(operatorDir(stateDir, operatorRef), CACHE), null);
-      return s && s.operator_ref === operatorRef ? s : null;
+      return s && s.operator_ref === operatorRef ? engine.cachedSnapshot(stateDir, operatorRef, s.issued_at) : null;
+    },
+
+    cachedSnapshot(stateDir: string, operatorRef: string, now: string): Snapshot | null {
+      const s = readJson<Snapshot | null>(join(operatorDir(stateDir, operatorRef), CACHE), null);
+      if (!s || s.operator_ref !== operatorRef) return null;
+      const t = parseTs(now);
+      const exp = parseTs(s.expires_at);
+      if (t === null || exp === null) throw new Error("instante inválido");
+      const ledger = foldLedger(readJsonl(join(operatorDir(stateDir, operatorRef), LEDGER)), operatorRef);
+      return { ...s, claims: applyLedgerAndTtl(s.claims, ledger, t, exp) };
     },
 
     snapshotAt(stateDir: string, operatorRef: string, at: string): Snapshot | null {
@@ -245,14 +256,6 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
 
     ledger(stateDir: string, operatorRef: string): unknown[] {
       return [...foldLedger(readJsonl(join(operatorDir(stateDir, operatorRef), LEDGER)), operatorRef).values()];
-    },
-
-    applyCorrections(snap: Snapshot, stateDir: string, now: string): Snapshot {
-      const t = parseTs(now);
-      const exp = parseTs(snap.expires_at);
-      if (t === null || exp === null) throw new Error("instante inválido");
-      const ledger = foldLedger(readJsonl(join(operatorDir(stateDir, snap.operator_ref), LEDGER)), snap.operator_ref);
-      return { ...snap, claims: applyLedgerAndTtl(snap.claims, ledger, t, exp) };
     },
 
     purgeAdapter(stateDir: string, operatorRef: string, adapter: string): number {

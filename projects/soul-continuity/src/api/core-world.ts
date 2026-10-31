@@ -94,7 +94,7 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
         const snap = engine.lastSnapshot(stateDir, ref);
         if (snap) {
           const fake = { ref, d: semilla, elementos: new Map<string, Elemento>() } as unknown as Op;
-          aplicar(null, fake, engine.applyCorrections(snap, stateDir, snap.issued_at), parseTs(snap.issued_at) ?? 0);
+          aplicar(null, fake, snap, parseTs(snap.issued_at) ?? 0);
           semilla.elementos = [...fake.elementos.values()];
           seen.set(ref, snap.issued_at);
         }
@@ -106,7 +106,7 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       const snap = engine.lastSnapshot(stateDir, o.ref);
       if (!snap || seen.get(o.ref) === snap.issued_at) return;
       seen.set(o.ref, snap.issued_at);
-      aplicar(ctx, o, engine.applyCorrections(snap, stateDir, snap.issued_at), t);
+      aplicar(ctx, o, snap, t);
     },
 
     frescura(o: Op, t: number) {

@@ -195,27 +195,19 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         const now = deps.now();
         const st = stopState(deps.dataDir);
         if (st.stopped) throw new StoppedError(st);
-        let snap: Snapshot;
-        let stale = false;
-        const cached = engine.lastSnapshot(deps.dataDir, install.operator.ref);
+        // Por defecto se releen las fuentes. --cached usa la última lectura si sigue vigente,
+        // con el libro de correcciones de ahora. Una fuente que no responde no aporta nada y se dice.
+        const cached = p.flags.cached === true ? engine.cachedSnapshot(deps.dataDir, install.operator.ref, now) : null;
         const fresh = cached !== null && (parseTs(cached.expires_at) ?? 0) > (parseTs(now) ?? 0);
-        if (p.flags.cached === true && cached && fresh) snap = engine.applyCorrections(cached, deps.dataDir, now);
-        else {
-          try {
-            snap = await engine.snapshot({ install, now, stateDir: deps.dataDir, env: deps.sourceEnv });
-          } catch (e) {
-            // Sin conexión: lo último conocido, marcado como tal. Nunca datos caducados.
-            if (e instanceof StoppedError || !cached || !fresh) throw e;
-            snap = engine.applyCorrections(cached, deps.dataDir, now);
-            stale = true;
-          }
-        }
+        const snap: Snapshot = cached && fresh ? cached : await engine.snapshot({ install, now, stateDir: deps.dataDir, env: deps.sourceEnv });
+        const unread = Object.entries(snap.adapters).filter(([, v]) => v.status !== "ok" && v.status !== "not_configured");
+        const unreadLine = unread.length ? [`  ${unread.length} fuente(s) sin leer: ${unread.map(([k, v]) => `${k} (${v.status})`).join(", ")} — lo de ahí no está contado`] : [];
         const lv = level();
         if (p.cmd === "adapters") {
           const adapters = Object.fromEntries(Object.entries(snap.adapters).filter(([, v]) => v.status !== "not_configured")
             .map(([k, v]) => [k, { status: v.status, route: v.route ?? null, claims: v.claims ?? 0, message: v.message ?? null, fallback: v.fallback ?? null }]));
           audit("adapters", lv, Object.keys(adapters).length);
-          print(Object.entries(adapters).map(([k, v]) => `${k}: ${v.status}${v.message ? ` — ${v.message}` : ""}`).join("\n") || "Sin fuentes configuradas.", { adapters, stale });
+          print(Object.entries(adapters).map(([k, v]) => `${k}: ${v.status}${v.message ? ` — ${v.message}` : ""}`).join("\n") || "Sin fuentes configuradas.", { adapters });
           return 0;
         }
         const q = p.cmd.toUpperCase() as QuestionId;
@@ -226,7 +218,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           previous = engine.snapshotAt(deps.dataDir, install.operator.ref, since) ?? undefined;
           if (!previous) throw new Exit(1, `no hay ninguna lectura anterior a ${since}`);
         }
-        const a: Answer = engine.answer(snap, { q, previous, detail: lv.level }, { install, now: stale ? snap.issued_at : now });
+        const a: Answer = engine.answer(snap, { q, previous, detail: lv.level }, { install, now });
         const total = Object.values(a.counts).reduce((x, y) => x + (y ?? 0), 0);
         audit(p.cmd, lv, total);
         const items = a.items.map((it) => ({
@@ -234,9 +226,10 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
           age_s: it.age_s, ...(it.change ? { change: it.change } : {}),
           title: it.title ?? null, untrusted_text: it.title != null, ...(it.attrs ? { attrs: it.attrs } : {}),
         }));
-        const data = { q, detail: a.detail, forced_by_frontend: lv.forced, stale, read_at: snap.issued_at, total, counts: a.counts, withheld: a.withheld, items, adapters: a.adapters };
+        const data = { q, detail: a.detail, forced_by_frontend: lv.forced, read_at: snap.issued_at, unread_sources: unread.length, total, counts: a.counts, withheld: a.withheld, items, adapters: a.adapters };
         const human = [
-          `${q} · ${total} elemento(s) · nivel ${a.detail}${lv.forced ? " (forzado por el frontend de agente)" : ""}${stale ? ` · sin conexión: datos de ${snap.issued_at}` : ""}`,
+          `${q} · ${total} elemento(s) · nivel ${a.detail}${lv.forced ? " (forzado por el frontend de agente)" : ""}`,
+          ...unreadLine,
           ...Object.entries(a.counts).map(([k, v]) => `  ${k}: ${v}`),
           // El texto de terceros va entre comillas angulares: es dato, no instrucción.
           ...items.map((it) => `- [${it.id}] ${it.type} · ${it.adapter} · hace ${Math.round(it.age_s / 60)} min${it.change ? ` · ${it.change}` : ""}${it.title ? ` · «${it.title}»` : ""}`),

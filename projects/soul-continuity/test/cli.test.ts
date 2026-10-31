@@ -285,3 +285,30 @@ test("uninstall no borra lo que no es de Soul en el directorio de datos", async 
   assert.equal(existsSync(join(s.dir, "config.json")), false);
   assert.equal(fs.readdirSync(s.dir).filter((f) => f.startsWith("op-")).length, 0, "no queda estado de Soul");
 });
+
+test("correct mio tras resuelto: vuelve a aparecer también con --cached", async () => {
+  const s = setup();
+  await runCli(["q2", "--json"], s.deps);
+  const id = JSON.parse(s.out[0]).items[0].id;
+  await runCli(["correct", id, "resuelto"], s.deps);
+  s.out.length = 0;
+  await runCli(["q2", "--json"], s.deps); // relectura: la caché se reescribe tras la corrección
+  assert.equal(JSON.parse(text(s)).items.length, 0, "control: resuelto lo oculta");
+  await runCli(["correct", id, "mio"], s.deps);
+  s.out.length = 0;
+  await runCli(["q2", "--json", "--cached"], s.deps);
+  assert.equal(JSON.parse(text(s)).items.length, 1, "mio lo restaura sin releer la fuente");
+});
+
+test("salida humana: si una fuente no se leyó, lo dice; no presenta «0» como «no tienes nada»", async () => {
+  const s = setup();
+  const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
+  cfg.profiles.yo.sources.push({ adapter: "jira", purpose: "tareas", consent: { granted_at: "2026-10-01T00:00:00Z" } });
+  (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), JSON.stringify(cfg));
+  assert.equal(await runCli(["q4"], s.deps), 0);
+  assert.match(text(s), /1 fuente\(s\) sin leer: jira/);
+  s.out.length = 0;
+  delete s.deps.adapters["m365-mail"];
+  await runCli(["q1"], s.deps);
+  assert.match(text(s), /2 fuente\(s\) sin leer/);
+});
