@@ -14,11 +14,12 @@ import { excludedReason, promotionDecision, resolveRagConfig, sloStatus, type Ev
 import { containsIdentifier, IDENTIFIER_NOT_FOUND, queryIdentifiers } from '../search/identifiers.js';
 import { applyCharBudget, fuseAcross, fuseByCosine, searchStore, warmBm25, type StoreHit } from './retriever.js';
 import { gcProjections } from './binary-store.js';
+import { ensureStructure, gcStructure, StructureIndex, type StructureNode } from './structure-index.js';
 import {
   FlatVectorStore, defaultRagHome, domeDir, ensureSafeHome, gcGeneration, generationId, readActive, writeActive,
 } from './store.js';
 import {
-  RAG_LIMITS, RagError, type Chunk, type Confidentiality, type DomeOutcome, type EmbeddingContract, type RagDomeConfig,
+  RAG_LIMITS, RagError, type Chunk, type ChunkMeta, type Confidentiality, type DomeOutcome, type EmbeddingContract, type RagDomeConfig,
   type RagHit, type RagMode, type RagRequest, type RagResponse, type ResolvedRagConfig, type SyncReport, type IndexCipher,
 } from './types.js';
 
@@ -124,6 +125,7 @@ export class RagService {
   private readonly env: NodeJS.ProcessEnv;
   private readonly embedders = new Map<string, Embedder>();
   private readonly stores = new Map<string, FlatVectorStore>();
+  private readonly structures = new Map<string, StructureIndex>();
   private readonly syncing = new Map<string, Promise<SyncResult>>();
   private readonly timers = new Map<string, NodeJS.Timeout>();
 
@@ -221,7 +223,7 @@ export class RagService {
       if (!m?.sealed) continue;
       const st = FlatVectorStore.load(genDir, undefined, cipher);
       FlatVectorStore.write(genDir, st.manifest, st.chunks, st.chunks.map((_, i) => new Float32Array(st.vector(i))), cipher);
-      for (const f of fs.readdirSync(genDir)) if (/^bm25-/.test(f)) fs.rmSync(path.join(genDir, f), { force: true });
+      for (const f of fs.readdirSync(genDir)) if (/^(bm25|structure)-/.test(f)) fs.rmSync(path.join(genDir, f), { force: true });
     }
     for (const k of this.stores.keys()) if (k.startsWith(`${name}/`)) this.stores.delete(k);
   }
@@ -298,6 +300,7 @@ export class RagService {
     const d = this.dome(name);
     const cfg = this.config(d);
     const report: SyncResult = await this.indexer(d, cfg).sync(opts);
+    this.structureFor(d, report.generation);
     if (report.shadow) {
       const { metrics, ...decision } = await this.gate(d, cfg, report.generation, false);
       report.gate = decision;
@@ -405,7 +408,7 @@ export class RagService {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       if (!e.isDirectory()) continue;
       const full = path.join(dir, e.name);
-      if (keep.has(e.name)) removed += gcGeneration(full) + gcProjections(full, FlatVectorStore.readManifest(full)); // sin manifest legible: nada
+      if (keep.has(e.name)) removed += gcGeneration(full) + gcProjections(full, FlatVectorStore.readManifest(full)) + gcStructure(full, FlatVectorStore.readManifest(full)); // sin manifest legible: nada
       else { fs.rmSync(full, { recursive: true, force: true }); removed++; }
     }
     return removed;
@@ -507,6 +510,50 @@ export class RagService {
       .filter(c => c.path === docPath)
       .sort((a, b) => a.ordinal - b.ordinal)
       .map(c => ({ id: c.id, ordinal: c.ordinal, heading: c.heading, text: c.text, meta: c.meta, ...(c.source ? { source: c.source } : {}) }));
+  }
+
+  /**
+   * SE-489 M3: StructureIndex de una generación (se construye en el sync; si falta o no casa con
+   * la generación, se reconstruye de la fuente). Nunca lanza: sin estructura válida, undefined.
+   */
+  private structureFor(d: RagDomeRef, generation: string): StructureIndex | undefined {
+    const dir = path.join(domeDir(this.home, d.name), generation);
+    const manifest = FlatVectorStore.readManifest(dir);
+    if (!manifest) return undefined;
+    const key = `${d.name}/${generation}/${manifest.seq}/${d.confidentiality}`;
+    const hit = this.structures.get(key);
+    if (hit) return hit;
+    try {
+      const { index, built } = ensureStructure(dir, d.confidentiality, this.cipherFor(d));
+      if (built) logEvent(this.home, { event: 'structure', dome: d.name, generation, seq: manifest.seq, nodes: index.nodeCount });
+      for (const k of this.structures.keys()) if (k.startsWith(`${d.name}/`)) this.structures.delete(k);
+      this.structures.set(key, index);
+      return index;
+    } catch (e) {
+      logEvent(this.home, { event: 'structure_error', dome: d.name, generation, detail: String(e) });
+      return undefined;
+    }
+  }
+
+  /** SE-489: el chunk está excluido por estado o vigencia (lo mismo que filtra `search` sin includeStale). */
+  isExcluded(name: string, meta: ChunkMeta): boolean {
+    return Boolean(excludedReason(meta, this.config(this.dome(name))));
+  }
+
+  /** SE-489 M3: StructureIndex de la generación activa. */
+  activeStructure(name: string): StructureIndex | undefined {
+    const active = readActive(this.home, name).active;
+    return active ? this.structureFor(this.dome(name), active) : undefined;
+  }
+
+  /**
+   * SE-489 M3: árbol de un documento y documentos de su mismo directorio en la generación activa.
+   * Solo el runner lo llama, y solo tras admitir el documento con el guard (los hermanos se admiten allí).
+   */
+  activeDocumentStructure(name: string, docPath: string): { nodes: StructureNode[]; siblings: string[] } | undefined {
+    const s = this.activeStructure(name);
+    const nodes = s?.document(docPath);
+    return s && nodes ? { nodes, siblings: s.siblingDocuments(docPath) } : undefined;
   }
 
   async search(req: RagRequest): Promise<RagResponse> {
