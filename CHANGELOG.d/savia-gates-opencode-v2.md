@@ -1,8 +1,0 @@
----
-version_bump: minor
-section: Added
----
-- savia-gates es ahora un plugin dual OpenCode 1 (>= 1.18.29) y 2. Hasta ahora solo cargaba en OpenCode 1: al actualizar a OpenCode 2 los guards desaparecían sin ningún error. Un objeto con `id` + `setup()` y `server()` sirve a ambos; las decisiones viven en `lib/gates.ts` y `lib/v1-adapter.ts` / `lib/v2-adapter.ts` solo traducen. En OpenCode 2 el bloqueo es fallo cerrado (`ctx.tool.hook("execute.before")`, `ctx.session.hook("prompt")`, política AUTONOMOUS_REVIEWER por `ctx.permission.hook("evaluate")`), con los nombres de herramienta de V2 (`shell`, `subagent`, `path`) normalizados antes de decidir, sin el `$` de Bun, y si los guards no arrancan se rechaza todo (`GUARDS_UNAVAILABLE`). Paridad con V1 en PreToolUse/PostToolUse, UserPromptSubmit (con el contexto de hooks filtrado por el proveedor de cada petición), eventos de ciclo de vida, FileChanged y CwdChanged; `command.execute.before` no tiene equivalente en V2 (el prompt del comando pasa por `prompt`).
-- `scripts/opencode-gates-real.py` y `scripts/opencode-gates-fake-llm.py`: prueba contra el motor real (OpenCode 2.0.32: 16 comprobaciones, 17 con `--pin`; OpenCode 1.19.3: 13) sin modelo ni red, aislada en un directorio temporal. Un modelo falso hace que el motor emita llamadas a herramientas de verdad; con el plugin anterior en OpenCode 2 fallan 12 de las 16. En bats, `SAVIA_GATES_REAL=1`.
-- `install.sh` / `install.ps1`: `SAVIA_OPENCODE_FLAVOR=v2|v1` (por defecto v2, recomendado). `scripts/opencode-install.sh --flavor v1|v2` escribe la clave de plugin de cada línea (`plugins` / `plugin`) con el directorio enlazado.
-- `docs/rules/domain/opencode-savia-bridge.md`: tabla de paridad V1 / V2.
