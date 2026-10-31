@@ -251,7 +251,7 @@ function route(d: MockData, req: IncomingMessage, u: URL, auth: string, raw: str
           { name: "From", value: `Nombre <${m.from}>` }, { name: "To", value: m.to.join(", ") },
           { name: "Cc", value: (m.cc ?? []).join(", ") }, { name: "Subject", value: m.subject },
         ];
-        if (m.dkim) headers.push({ name: "Authentication-Results", value: `mx.google.example; dkim=${m.dkim} header.i=@${m.d}; dmarc=${m.dmarc} header.from=${m.d}` });
+        if (m.dkim) headers.push({ name: "Authentication-Results", value: `mx.google.com; dkim=${m.dkim} header.i=@${m.d}; dmarc=${m.dmarc} header.from=${m.d}` });
         return { id: m.id, threadId: m.thread, labelIds: m.labels, internalDate: String(Date.parse(m.at)), snippet: BODY, payload: { headers } };
       }),
     });

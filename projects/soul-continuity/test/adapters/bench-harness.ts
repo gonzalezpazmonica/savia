@@ -176,7 +176,8 @@ export function makeHarness(o: HarnessOptions): ContinuityImpl {
         });
       }
       if (o.wrapTransport) transport = o.wrapTransport(transport);
-      const mine = makeApiAdapters({ cache: o.delta ? new FileDeltaCache(req.stateDir) : undefined });
+      // Los dobles del banco firman como `mx.google.example` (dominio reservado de pruebas).
+      const mine = makeApiAdapters({ cache: o.delta ? new FileDeltaCache(req.stateDir) : undefined, gmailAuthservIds: ["mx.google.example"] });
       const pick = (name: string, route: string): SourceAdapter | undefined => {
         if (name === "web" || route === "web") return web[name];
         return (mine as Record<string, SourceAdapter>)[name];

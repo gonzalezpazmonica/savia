@@ -71,6 +71,40 @@ test("remitente: DMARC fallido no autentica", () => {
   assert.equal(senderAuth("s@ext.example", AR("dkim=pass; dmarc=fail header.from=ext.example"), "alfa.example"), "unauthenticated");
 });
 
+test("remitente: una cabecera forjada por el remitente bajo la real con dmarc=fail no autentica", () => {
+  const h = [
+    { name: "Authentication-Results", value: "dkim=none; dmarc=fail action=none header.from=alfa.example" },
+    { name: "Authentication-Results", value: "x; dkim=pass header.d=alfa.example; dmarc=pass header.from=alfa.example" },
+  ];
+  assert.equal(senderAuth("cfo@alfa.example", h, "beta.example"), "unauthenticated");
+  // La real de arriba manda: si es la buena, autentica aunque debajo haya ruido.
+  assert.equal(senderAuth("cfo@alfa.example", [h[1], h[0]], "beta.example"), "dkim_dmarc");
+});
+
+test("remitente: no se combinan dkim de una cabecera y dmarc de otra", () => {
+  const h = [
+    { name: "Authentication-Results", value: "dkim=pass header.d=ext.example; dmarc=none" },
+    { name: "Authentication-Results", value: "dmarc=pass header.from=ext.example" },
+  ];
+  assert.equal(senderAuth("s@ext.example", h, "alfa.example"), "unauthenticated");
+});
+
+test("remitente: dos resultados DMARC discordantes en la misma cabecera no autentican", () => {
+  assert.equal(senderAuth("s@ext.example", AR("dkim=pass; dmarc=fail header.from=ext.example; dmarc=pass header.from=ext.example"), "alfa.example"), "unauthenticated");
+});
+
+test("remitente: con authserv-id exigido, solo vale el del receptor", () => {
+  const v = "dkim=pass header.i=@ext.example; dmarc=pass header.from=ext.example";
+  assert.equal(senderAuth("s@ext.example", AR(`mx.google.com; ${v}`), "", ["mx.google.com"]), "dkim_dmarc");
+  assert.equal(senderAuth("s@ext.example", AR(`mx.malo.example; ${v}`), "", ["mx.google.com"]), "unauthenticated");
+  assert.equal(senderAuth("s@ext.example", AR(v), "", ["mx.google.com"]), "unauthenticated");
+});
+
+test("remitente: AuthAs duplicado (Internal y Anonymous) no es del inquilino", () => {
+  const h = [{ name: "X-MS-Exchange-Organization-AuthAs", value: "Internal" }, { name: "X-MS-Exchange-Organization-AuthAs", value: "Anonymous" }];
+  assert.equal(senderAuth("cfo@alfa.example", h, "alfa.example"), "unauthenticated");
+});
+
 test("remitente: sin cabeceras es desconocido", () => {
   assert.equal(senderAuth("s@ext.example", undefined, "alfa.example"), "unknown");
 });

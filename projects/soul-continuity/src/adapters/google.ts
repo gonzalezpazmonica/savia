@@ -23,9 +23,13 @@ import { DESCRIPTORS } from "./descriptors.ts";
 
 export interface GoogleOptions {
   maxPages?: number;
+  /** `authserv-id` aceptados en `Authentication-Results` (por defecto, el receptor de Gmail). */
+  gmailAuthservIds?: string[];
 }
 
 const META_HEADERS = ["From", "To", "Cc", "Subject", "Authentication-Results"];
+/** `authserv-id` del receptor de Gmail: un `Authentication-Results` con otro id no es suyo. */
+export const GMAIL_AUTHSERV = ["mx.google.com"];
 
 function addrList(v: string): string[] {
   return v.split(",").map((s) => (/<([^>]+)>/.exec(s)?.[1] ?? s).trim().toLowerCase()).filter((s) => s.includes("@"));
@@ -43,6 +47,7 @@ function googleCheck(r: TransportResponse, label: string): J {
 
 export function makeGoogleAdapter(o: GoogleOptions = {}): SourceAdapter {
   const maxPages = o.maxPages ?? DEFAULT_MAX_PAGES;
+  const authserv = o.gmailAuthservIds ?? GMAIL_AUTHSERV;
 
   return adapter("google-workspace", async (ctx: AdapterContext) => {
     const withTasks = ctx.params.tasks === true;
@@ -87,8 +92,8 @@ export function makeGoogleAdapter(o: GoogleOptions = {}): SourceAdapter {
         msgs.push({
           id, conv: tid, from, to: addrList(h("To")), cc: addrList(h("Cc")), at: iso(at),
           sent: Array.isArray(x?.labelIds) && x.labelIds.includes("SENT"), subject: h("Subject"),
-          // En Google no hay «mismo inquilino» verificable: solo DKIM/DMARC.
-          auth: senderAuth(from, headers.filter((y) => String(y?.name).toLowerCase() === "authentication-results"), ""),
+          // En Google no hay «mismo inquilino» verificable: solo DKIM/DMARC del receptor de Gmail.
+          auth: senderAuth(from, headers.filter((y) => String(y?.name).toLowerCase() === "authentication-results"), "", authserv),
         });
       }
     }

@@ -21,12 +21,14 @@ export interface ApiAdapterOptions {
   cache?: DeltaCache;
   /** Tope de páginas por colección y lectura. */
   maxPages?: number;
+  /** `authserv-id` aceptados del receptor de Gmail (por defecto `mx.google.com`). */
+  gmailAuthservIds?: string[];
 }
 
 export function makeApiAdapters(o: ApiAdapterOptions = {}): Record<ApiAdapterName, SourceAdapter> {
   return {
     ...makeM365Adapters({ cache: o.cache, maxPages: o.maxPages }),
-    "google-workspace": makeGoogleAdapter({ maxPages: o.maxPages }),
+    "google-workspace": makeGoogleAdapter({ maxPages: o.maxPages, gmailAuthservIds: o.gmailAuthservIds }),
     jira: makeJiraAdapter({ maxPages: o.maxPages }),
     "azure-devops": makeAzureDevOpsAdapter(),
     github: makeGitHubAdapter({ maxPages: o.maxPages }),

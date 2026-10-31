@@ -57,14 +57,33 @@ export interface Header {
   value: string;
 }
 
-export function senderAuth(from: string, headers: Header[] | undefined | null, myDomain: string): SenderAuth {
+/**
+ * Identidad del remitente según el servidor receptor.
+ *
+ * Solo cuenta la cabecera `Authentication-Results` de más arriba: el receptor
+ * antepone la suya, y las de más abajo pueden venir del remitente (RFC 8601 §5).
+ * Con `authservIds`, además su `authserv-id` debe ser uno de ellos (Gmail pone
+ * `mx.google.com`; Exchange Online no pone ninguno, por eso es opcional).
+ * `dkim=pass`, `dmarc=pass` y `header.from` salen de esa misma cabecera; dentro de
+ * ella, un resultado DMARC discordante también deja sin autenticar.
+ */
+export function senderAuth(from: string, headers: Header[] | undefined | null, myDomain: string, authservIds?: string[]): SenderAuth {
   if (!Array.isArray(headers)) return "unknown";
   const dom = from.split("@")[1]?.toLowerCase() ?? "";
   if (!dom) return "unauthenticated";
-  const h = (n: string) => headers.filter((x) => String(x?.name).toLowerCase() === n.toLowerCase()).map((x) => String(x.value)).join(";");
-  if (h("X-MS-Exchange-Organization-AuthAs").trim() === "Internal" && dom === myDomain.toLowerCase()) return "tenant";
-  const ar = h("Authentication-Results");
-  const hf = /header\.from=([^\s;]+)/i.exec(ar)?.[1]?.toLowerCase();
-  if (/\bdkim=pass\b/i.test(ar) && /\bdmarc=pass\b/i.test(ar) && hf === dom) return "dkim_dmarc";
-  return "unauthenticated";
+  const all = (n: string) => headers.filter((x) => String(x?.name).toLowerCase() === n.toLowerCase()).map((x) => String(x.value));
+  const authAs = all("X-MS-Exchange-Organization-AuthAs");
+  if (authAs.length === 1 && authAs[0].trim() === "Internal" && dom === myDomain.toLowerCase()) return "tenant";
+  const top = all("Authentication-Results")[0];
+  if (top === undefined) return "unauthenticated";
+  const parts = top.split(";").map((p) => p.trim()).filter(Boolean);
+  if (authservIds) {
+    const id = parts[0] && !parts[0].includes("=") ? parts[0].split(/\s/)[0].toLowerCase() : "";
+    if (!authservIds.map((x) => x.toLowerCase()).includes(id)) return "unauthenticated";
+  }
+  const dmarc = parts.filter((p) => /^dmarc=/i.test(p));
+  if (dmarc.length !== 1 || !/^dmarc=pass\b/i.test(dmarc[0])) return "unauthenticated";
+  const hf = /\bheader\.from=([^\s;]+)/i.exec(dmarc[0])?.[1]?.toLowerCase();
+  if (!parts.some((p) => /^dkim=pass\b/i.test(p)) || hf !== dom) return "unauthenticated";
+  return "dkim_dmarc";
 }
