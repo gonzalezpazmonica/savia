@@ -1665,7 +1665,7 @@
       "status": "PROPOSED",
       "priority": "P0",
       "title": "Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional",
-      "note": "Proceso por usuario sin administrador (Win/macOS/Linux, Rust sobre el dominio de Soul). Lee correo, calendario, chat, documentos, gestores, repos y webs sin API (perfil de navegador dedicado, solo lectura en red) con consentimiento por fuente. Responde Q1–Q4. App de Space bidireccional con política de atención declarada y push sin contenido. Datos de empresa sin salida a la nube.",
+      "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
     }
