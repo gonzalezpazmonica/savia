@@ -44,8 +44,10 @@ describe('SE-489 M5 — revisiones y asOf', () => {
 
   it('una revisión superseded no se sirve como vigente con un asOf posterior', async () => {
     const out = await ask({ asOf: '2026-06-01', budget: { maxHops: 2 }, includeStale: true });
+    expect(paths(out)).toContain('normas/rev-3.md');
     expect(paths(out)).not.toContain('normas/rev-1.md');
     expect(paths(out)).not.toContain('normas/rev-2.md');
+    expect(out.result.evidence.length).toBeGreaterThan(0);
     expect(out.result.evidence.every(e => e.document === 'normas/rev-3.md')).toBe(true);
   });
 
@@ -58,6 +60,7 @@ describe('SE-489 M5 — revisiones y asOf', () => {
   it('el alcance de saltos limita la cadena: con 1 salto no llega a rev-1', async () => {
     const out = await ask({ asOf: '2023-02-22', budget: { maxHops: 1 } });
     expect(paths(out)).not.toContain('normas/rev-1.md');
+    expect(out.result.hits).toEqual([]);
     expect(out.result.consumed.hops).toBeLessThanOrEqual(1);
   });
 
@@ -75,11 +78,12 @@ describe('SE-489 M5 — revisiones y asOf', () => {
     await f.service().sync('A');
     const out = await runRoute(f.service(), { route: 'M5', query: 'protocolo de guardia', domes: ['A'], mode: 'bm25', asOf: '2026-01-01', includeStale: true });
     expect(paths(out)).not.toContain('sin-fechas/viejo.md');
+    expect([...new Set(paths(out))]).toEqual(['sin-fechas/nuevo.md']);
   });
 });
 
 describe('SE-489 M5 — currency (umbral de fechas)', () => {
-  const m = (o: Partial<Parameters<typeof currency>[0]['meta']>) => ({ meta: { supersedes: [], supersededBy: [], hasTemporal: true, ...o } });
+  const m = (o: Partial<Parameters<typeof currency>[0]['meta']>) => ({ meta: { supersedes: [], supersededBy: [], ...o } });
   it('la ventana es [from, to): el límite superior excluye', () => {
     const w = m({ from: Date.parse('2024-01-01'), to: Date.parse('2025-01-01') });
     expect(currency(w, [], Date.parse('2024-12-31'), false)).toBe('current');
@@ -90,7 +94,7 @@ describe('SE-489 M5 — currency (umbral de fechas)', () => {
     expect(currency(m({ supersededBy: ['x.md'] }), [], Date.parse('2026-01-01'), false)).toBe('unknown');
   });
   it('el sucesor fija el fin cuando no hay effective_to', () => {
-    const succ = { supersedes: [], supersededBy: [], hasTemporal: true, from: Date.parse('2025-01-01') };
+    const succ = { supersedes: [], supersededBy: [], from: Date.parse('2025-01-01') };
     expect(currency(m({ supersededBy: ['x.md'] }), [succ], Date.parse('2025-01-02'), false)).toBe('ended');
     expect(currency(m({ supersededBy: ['x.md'] }), [succ], Date.parse('2024-12-31'), false)).toBe('current');
   });
@@ -189,14 +193,62 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
     expect(paths(out)).toEqual(['raro.md']);
   });
 
-  it('el número de notas descubiertas está acotado', async () => {
-    const links = Array.from({ length: 60 }, (_, i) => `[[n${i}]]`).join(' ');
-    const docs: Record<string, string> = { 'hub.md': note('Hub', long('agateador norteño') + `\n\n${links}`) };
-    for (let i = 0; i < 60; i++) docs[`n${i}.md`] = note(`N${i}`, long('agateador norteño nodo'));
+  it('las notas descubiertas por vínculos están acotadas y las semillas no se pierden', async () => {
+    const docs: Record<string, string> = {};
+    for (let i = 0; i < 31; i++) {
+      docs[`sem-${i}.md`] = note(`Sem ${i}`, long('agateador norteño semilla') + `\n\n[[v${i}a]] [[v${i}b]]`);
+      docs[`v${i}a.md`] = note(`Va ${i}`, long(`nodo ${i} a`));
+      docs[`v${i}b.md`] = note(`Vb ${i}`, long(`nodo ${i} b`));
+    }
     writeDocs(f.dir('A'), docs);
     await f.service().sync('A');
-    const out = await ask('agateador norteño', { k: 50, budget: { maxHops: 4, maxNodes: 1000 } });
-    expect(new Set(paths(out)).size).toBeLessThanOrEqual(M5_MAX_DOCS);
+    const m0 = await runRoute(f.service(), { route: 'M0', query: 'agateador norteño', domes: ['A'], mode: 'bm25', k: 31 });
+    const out = await ask('agateador norteño', { k: 31, budget: { maxHops: 4, maxNodes: 1000 } });
+    // 31 semillas > M5_MAX_DOCS: ninguna se pierde; los vecinos (sin términos de la consulta) añaden como mucho M5_MAX_DOCS.
+    expect(new Set(paths(out))).toEqual(new Set(paths(m0)));
+    const opened = Number(out.result.trace.steps.find(st => st.step === 'm5:graph')?.detail?.replace('docs=', ''));
+    expect(opened).toBeGreaterThan(31);
+    expect(opened).toBeLessThanOrEqual(31 + M5_MAX_DOCS);
+    expect(out.result.warnings).toContain('GRAPH_TRUNCATED');
+  });
+
+  it('un asOf mal formado se rechaza antes de servir nada', async () => {
+    writeDocs(f.dir('A'), { 'x.md': note('X', long('cuervo grande'), 'status: superseded\nsuperseded_by: y.md\n'), 'y.md': note('Y', long('cuervo grande dos')) });
+    await f.service().sync('A');
+    await expect(ask('cuervo grande', { asOf: '31/12/2025', includeStale: true })).rejects.toThrow();
+  });
+
+  it('el vecino lleva el nivel de su cúpula, no uno fijo', async () => {
+    (f.domes[0] as { confidentiality: string }).confidentiality = 'N3';
+    writeDocs(f.dir('A'), {
+      'inicio.md': note('Inicio', long('zarcero políglota') + '\n\n[[destino]]'),
+      'destino.md': note('Destino', long('anejo del zarcero')),
+    });
+    await f.service().sync('A');
+    const out = await ask('zarcero políglota', { k: 8, budget: { maxHops: 1 } });
+    const dest = out.result.hits.find(h => h.path === 'destino.md');
+    expect(dest?.confidentiality).toBe('N3');
+  });
+
+  it('superseded con inicio pero sin fin ni sucesor: con asOf no se sirve', async () => {
+    writeDocs(f.dir('A'), {
+      'solo-inicio.md': note('Solo inicio', long('protocolo de vigilancia costera'), 'status: superseded\neffective_from: 2020-01-01\n'),
+    });
+    await f.service().sync('A');
+    const out = await runRoute(f.service(), { route: 'M5', query: 'protocolo de vigilancia costera', domes: ['A'], mode: 'bm25', asOf: '2026-01-01', includeStale: true });
+    expect(out.result.hits).toEqual([]);
+    expect(out.result.abstain).toBe(true);
+  });
+
+  it('pathPrefix no admite un hermano con el mismo comienzo', async () => {
+    writeDocs(f.dir('A'), {
+      'docs/inicio.md': note('Inicio', long('mochuelo boreal') + '\n\n[[../docs-privado/otro]]'),
+      'docs-privado/otro.md': note('Otro', long('anexo sobre censos de campo')),
+    });
+    await f.service().sync('A');
+    const out = await ask('mochuelo boreal', { pathPrefix: 'docs', budget: { maxHops: 1 } });
+    expect(out.result.trace.steps.find(st => st.step === 'm5:graph')?.detail).toBe('docs=1');
+    expect(paths(out)).toEqual(['docs/inicio.md']);
   });
 
   it('con poco tiempo restante no expande y conserva las semillas (no devuelve vacío)', async () => {

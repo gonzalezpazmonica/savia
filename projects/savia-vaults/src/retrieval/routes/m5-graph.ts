@@ -11,10 +11,10 @@
 import * as path from 'node:path';
 import YAML from 'yaml';
 import { extractWikiLinks } from '../../knowledge/wikilink-validator.js';
-import { RAG_DEFAULTS, RAG_LIMITS, type RagHit } from '../../rag/types.js';
+import { RAG_DEFAULTS, RAG_LIMITS, type Confidentiality, type RagHit } from '../../rag/types.js';
 import { ROUTE_CONTRACT_VERSION, registerRoute, type RetrievalRoute, type RouteContext, type RetrievalRequest, type RouteOutput } from '../route.js';
 
-/** Notas descubiertas como máximo (además del presupuesto de nodos). */
+/** Notas descubiertas por vínculos como máximo, además de las semillas y del presupuesto de nodos. */
 export const M5_MAX_DOCS = 24;
 /** Vínculos que se siguen por nota, en orden determinista. */
 export const M5_MAX_FANOUT = 6;
@@ -87,7 +87,16 @@ function metaOf(fm: Record<string, unknown>): Meta {
   };
 }
 
-const stripFences = (body: string): string => body.replace(/^\s*(```|~~~)[\s\S]*?^\s*\1.*$/gm, '');
+/** Quita los bloques de código (línea a línea: coste lineal aunque haya vallas sin cerrar). */
+function stripFences(body: string): string {
+  const out: string[] = [];
+  let fence: string | undefined;
+  for (const line of body.split('\n')) {
+    const m = line.match(/^\s*(```|~~~)/);
+    if (fence === undefined) { if (m) fence = m[1]; else out.push(line); } else if (m && m[1] === fence) fence = undefined;
+  }
+  return out.join('\n');
+}
 
 /** Rutas candidatas de una referencia, relativas a la cúpula; ninguna sale de ella. */
 function pathsOf(target: string, fromPath: string): string[] {
@@ -128,7 +137,8 @@ export function currency(n: { meta: Meta }, successors: Meta[], asOf: number | u
     if (!starts.length || successors.length < m.supersededBy.length) return 'unknown';
     return asOf >= Math.min(...starts) ? 'ended' : 'current';
   }
-  if (excluded && m.from === undefined && !includeStale) return 'stale';
+  // Con `asOf`, una revisión retirada sin fin ni sucesor conocidos no se puede situar en el tiempo.
+  if (excluded) return 'unknown';
   return 'current';
 }
 
@@ -136,21 +146,28 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   const seeds = await ctx.candidates(req.query, { k: req.k, mode: req.mode });
   ctx.step('m5:seeds', req.mode, seeds.length);
   const asOf = req.asOf ? Date.parse(req.asOf) : undefined;
+  // El runner ya valida `asOf`; aquí, cierre seguro por si la ruta se llama sin él.
+  if (asOf !== undefined && Number.isNaN(asOf)) return { hits: [], abstain: true, warnings: ['INVALID_AS_OF'] };
   const includeStale = req.includeStale === true;
-  const inScope = (p: string): boolean => !req.pathPrefix || p.startsWith(req.pathPrefix);
+  const inScope = (p: string): boolean => !req.pathPrefix || p === req.pathPrefix || p.startsWith(req.pathPrefix.endsWith('/') ? req.pathPrefix : `${req.pathPrefix}/`);
 
+  // La etiqueta de un vecino es el nivel de su cúpula (la más restrictiva si no se conoce).
+  const LEVELS: readonly string[] = ['N1', 'N2', 'N3', 'N4', 'N4B'];
+  const levels = new Map(req.domes.filter(d => LEVELS.includes(d.confidentiality)).map(d => [d.name, d.confidentiality as Confidentiality]));
   const nodes = new Map<string, DocNode>();
   const failed = new Set<string>();
+  let seedCount = 0;
   const order: DocNode[] = [];
   const warnings: string[] = [];
 
   /** Abre una nota por el contexto y la registra; undefined si no se puede abrir o ya estaba. */
   const discover = (dome: string, p: string, depth: number, score: number, generation: string, via: EdgeKind | 'seed'): DocNode | undefined => {
     const k = key(dome, p);
-    if (nodes.has(k) || failed.has(k) || order.length >= M5_MAX_DOCS) return undefined;
+    // Las semillas de M0 nunca se pierden: ni el tope de notas ni un fallo al abrirlas las quita.
+    if (nodes.has(k) || (via !== 'seed' && (failed.has(k) || order.length - seedCount >= M5_MAX_DOCS))) return undefined;
     const note = ctx.openNote({ dome, path: p });
-    if (!note) { failed.add(k); return undefined; }
-    const { fm, body } = splitNote(note.text);
+    if (!note && via !== 'seed') { failed.add(k); return undefined; }
+    const { fm, body } = splitNote(note ? note.text : '');
     const node: DocNode = {
       dome, path: p, depth, score, seedHits: [], generation, meta: metaOf(fm), body, edges: [],
       viaSupersede: via === 'supersedes' || via === 'superseded_by',
@@ -195,6 +212,7 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
 
   // Un vecino nunca desplaza a una semilla de M0: su score parte del mínimo de las semillas.
   const floor = order.length ? Math.min(...order.map(n => n.score)) : 0;
+  seedCount = order.length;
   let frontier = order.filter(n => n.depth === 0);
   for (let depth = 1; frontier.length > 0; depth++) {
     if (ctx.timeLeftMs() <= M5_RESERVE_MS || !ctx.consume('hops')) { warnings.push('GRAPH_TRUNCATED'); break; }
@@ -216,13 +234,13 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
         if (resolved === undefined || !target) continue;
         n.edges.push([ref.kind, resolved]);
         followed++;
-        if (target.depth === depth) next.push(target);
+        if (target.depth === depth && !next.includes(target)) next.push(target);
       }
     }
     ctx.step('m5:hop', `${depth}`, next.length);
     frontier = next;
   }
-  if (order.length >= M5_MAX_DOCS && !warnings.includes('GRAPH_TRUNCATED')) warnings.push('GRAPH_TRUNCATED');
+  if (order.length - seedCount >= M5_MAX_DOCS && !warnings.includes('GRAPH_TRUNCATED')) warnings.push('GRAPH_TRUNCATED');
 
   // Sucesores: los que la nota declara (`superseded_by`) y los que la declaran a ella (`supersedes`).
   const successorsOf = (n: DocNode): Meta[] => {
@@ -252,7 +270,7 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
       .sort((a, b) => b.o - a.o || a.c.ordinal - b.c.ordinal);
     for (const { c } of ranked.slice(0, RAG_LIMITS.maxChunksPerDoc)) {
       push({
-        dome: n.dome, confidentiality: 'N2', path: n.path, chunkId: c.chunkId, heading: c.heading, text: c.text,
+        dome: n.dome, confidentiality: levels.get(n.dome) ?? 'N4B', path: n.path, chunkId: c.chunkId, heading: c.heading, text: c.text,
         score: n.score, signals: {}, generation: n.generation,
         freshness: { modified: '', decay: 1, ...(n.meta.status ? { status: n.meta.status } : {}) },
       });
