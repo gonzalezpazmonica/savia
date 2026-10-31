@@ -128,7 +128,7 @@ Soul y el operador se hablan en los dos sentidos desde la app.
 | Resumen de inicio | Qué cambió, qué depende de ti hoy, primeras reuniones | A la hora que fija el operador |
 | Resumen de cierre | Qué quedó abierto y qué espera a mañana | A la hora que fija el operador |
 | Aviso | Reunión en 15 min con documentos compartidos sin leer; vencimiento mañana | Según reglas activadas por el operador |
-| Alerta | Algo que el operador ha declarado como urgente (lista cerrada definida por él: p. ej. una persona o un proyecto concretos, una palabra en el asunto de un remitente concreto) | Siempre que el modo lo permita, o también en descanso si así lo marcó |
+| Alerta | Algo que el operador ha declarado como urgente (lista cerrada definida por él: p. ej. una persona o un proyecto concretos, una palabra en el asunto de un remitente concreto). El remitente se casa por identidad **autenticada**: mismo inquilino con identificador de la API, o DKIM/DMARC superados. Nunca solo por la cabecera `From` | Siempre que el modo lo permita, o también en descanso si así lo marcó |
 | Mensaje | Respuesta a una pregunta o confirmación de una corrección | Al momento |
 
 **Política de atención (determinista, decidida por el operador):**
@@ -157,7 +157,7 @@ Soul y el operador se hablan en los dos sentidos desde la app.
 ### Datos y confidencialidad
 
 - Todo lo que leen los adaptadores de empresa se trata como **N4** (datos de la organización y de terceros). No sale del equipo del operador salvo hacia su propia app emparejada, con el nivel de detalle elegido.
-- **Ningún dato de trabajo va a modelos en la nube en v1.**
+- **Ningún dato de trabajo va a modelos en la nube en v1.** Eso incluye los frontends de agentes (Claude Code, OpenCode), cuyo modelo corre en la nube: por esa ruta solo salen recuentos (AC-4d).
 - No hay inferencias sobre personas: ni cansancio, ni rendimiento, ni estado emocional, ni horas de actividad de nadie (tesis de diseño en el vault de investigación; AI Act art. 5.1.f).
 
 ### Cumplimiento con la organización del operador
@@ -198,7 +198,9 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
     - token caducado;
     - hilos «esperando mi respuesta» con respuestas desde otro cliente, respuestas a todos y reenvíos (al menos 8 escenarios).
 - **AC-3:** en ese banco, precisión ≥ 90 % por pregunta. 0 uso de hechos revocados, 0 fugas entre operadores y entre niveles, 0 cuerpos de mensaje persistidos y 0 tokens en disco fuera del almacén del sistema. p95 de Q1 < 2 s con fuentes cacheadas.
-- **AC-4:** la vista móvil muestra Q1–Q4 con fuente y antigüedad en los tres niveles de detalle. Con `recuentos`, ningún asunto ni nombre llega al dispositivo (test que inspecciona el tráfico).
+- **AC-4:** la vista móvil muestra Q1–Q4 con fuente y antigüedad en los tres niveles de detalle. Con `recuentos`, ningún asunto ni nombre llega al dispositivo (test que inspecciona el tráfico). Todo texto de terceros se muestra como **texto inerte**: sin markdown activo, sin enlaces ni deep links que la app abra por sí misma, y sin HTML. Hay un test con payloads de inyección.
+- **AC-4c:** una alerta con el remitente suplantado (`From` falsificado, sin DKIM/DMARC o de otro inquilino) no se dispara. Hay escenario en el banco.
+- **AC-4d (frontends de agente):** la salida que llega a Claude Code, OpenCode u otro frontend cuyo modelo corre en la nube es siempre de nivel `recuentos`. Solo sube de nivel si la instalación declara ese proveedor como aprobado por la organización para N4, en configuración local y auditada. Un test verifica que, sin esa declaración, ni asuntos, ni nombres, ni remitentes salen por esa ruta.
 - **AC-4b:** comunicación bidireccional.
   - Las órdenes estructuradas y las correcciones del operador se aplican y persisten.
   - Los resúmenes salen a la hora fijada.
@@ -210,7 +212,7 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
   - El payload push no contiene ningún dato (test que inspecciona el mensaje).
   - El texto libre sin modelo autorizado recibe la respuesta honesta y no se envía a ninguna parte.
 - **AC-5:** revocar un adaptador borra su caché y sus tokens. Desinstalar no deja estado.
-- **AC-6:** paquete para TI completo y revisado por la revisora de seguridad.
+- **AC-6:** paquete para TI completo y revisado por la revisora de seguridad. Además, **antes de los días 6–9**, la revisora de seguridad revisa el modelo de amenazas del canal móvil, que va en la PR de D-490-1: quién opera el relay, qué metadatos ve, gestión, rotación y revocación de claves al desemparejar, y qué pasa si se pierde el móvil.
 - **AC-7:** piloto real en una instalación, con el consentimiento de su operador y fuera de cualquier repo. Durante una semana laborable se miden:
   - precisión percibida por elemento (correcto / incorrecto / no aplica);
   - minutos de reconstrucción por la mañana frente a una línea base de dos días sin el producto;
@@ -247,7 +249,7 @@ Desinstalar el proceso y retirar la pantalla de la app. No hay datos canónicos 
 | Componente | Claude Code | OpenCode v1.14 |
 |---|---|---|
 | Proceso Soul Continuidad | binario independiente, CLI `soul` | mismo binario |
-| Consulta desde el frontend | comando `/continuidad` que invoca la CLI | mismo comando, vía AGENTS.md |
+| Consulta desde el frontend | comando `/continuidad` que invoca la CLI **con nivel `recuentos` forzado** salvo proveedor aprobado declarado (AC-4d) | mismo comando y misma restricción, vía AGENTS.md |
 
 ### Verification protocol
 
