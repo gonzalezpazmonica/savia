@@ -1,2 +1,5 @@
 node_modules/
 resultados/mutantes/
+# Grabaciones del tráfico real (N4: cookies y cuerpos): nunca en el repo.
+*.har
+grabaciones/
