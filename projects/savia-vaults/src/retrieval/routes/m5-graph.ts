@@ -106,10 +106,11 @@ function stripFences(body: string): string {
 /** Rutas candidatas de una referencia, relativas a la cúpula; ninguna sale de ella. */
 function pathsOf(target: string, fromPath: string): string[] {
   const t = target.split(/[#^]/)[0].trim();
-  if (!t || t.length > MAX_TARGET_CHARS || /[\u0000-\u001F]/.test(t) || t.startsWith('/') || /^[A-Za-z]:/.test(t)) return [];
+  if (!t || t.length > MAX_TARGET_CHARS || /[\u0000-\u001F]/.test(t) || t.startsWith('/') || t.includes('\\') || /^[A-Za-z]:/.test(t)) return [];
   const withExt = /\.md$/i.test(t) ? t : `${t}.md`;
   const out: string[] = [];
-  for (const base of [path.posix.dirname(fromPath), '.']) {
+  // Una referencia con `/` se resuelve primero desde la raíz de la cúpula; sin ella, junto a la nota.
+  for (const base of t.includes('/') ? ['.', path.posix.dirname(fromPath)] : [path.posix.dirname(fromPath), '.']) {
     const p = path.posix.normalize(path.posix.join(base, withExt));
     if (p.startsWith('..') || p.split('/').includes('..') || out.includes(p)) continue;
     out.push(p);
@@ -220,7 +221,7 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   };
 
   // Un vecino nunca desplaza a una semilla de M0: su score parte del mínimo de las semillas.
-  const floor = order.length ? Math.min(...order.map(n => n.score)) : 0;
+  const floor = seeds.length ? Math.min(...seeds.map(h => h.score)) : 0;
   seedCount = order.length;
   let frontier = order.filter(n => n.depth === 0);
   for (let depth = 1; frontier.length > 0; depth++) {

@@ -68,6 +68,7 @@ describe('SE-489 M5 — revisiones y asOf', () => {
     expect([...new Set(paths(await ask({ budget: { maxHops: 2 } })))]).toEqual(['normas/rev-3.md']);
     const all = new Set(paths(await ask({ budget: { maxHops: 2 }, includeStale: true })));
     expect(all.has('normas/rev-3.md')).toBe(true);
+    expect(all.has('normas/rev-2.md') && all.has('normas/rev-1.md')).toBe(true);
   });
 
   it('sin fechas que decidan, una superseded con asOf no se sirve (cierre seguro)', async () => {
@@ -79,6 +80,20 @@ describe('SE-489 M5 — revisiones y asOf', () => {
     const out = await runRoute(f.service(), { route: 'M5', query: 'protocolo de guardia', domes: ['A'], mode: 'bm25', asOf: '2026-01-01', includeStale: true });
     expect(paths(out)).not.toContain('sin-fechas/viejo.md');
     expect([...new Set(paths(out))]).toEqual(['sin-fechas/nuevo.md']);
+  });
+});
+
+describe('SE-489 M5 — currency sin asOf', () => {
+  const m = (o: Partial<Parameters<typeof currency>[0]['meta']>) => ({ meta: { supersedes: [], supersededBy: [], ...o } });
+  it('superseded_by o estado excluido: stale salvo includeStale', () => {
+    expect(currency(m({ supersededBy: ['x.md'] }), [], undefined, false)).toBe('stale');
+    expect(currency(m({ supersededBy: ['x.md'] }), [], undefined, true)).toBe('current');
+    expect(currency(m({ status: 'superseded' }), [], undefined, false)).toBe('stale');
+    expect(currency(m({ validUntil: Date.parse('2020-01-01') }), [], undefined, false)).toBe('stale');
+  });
+  it('una nota vigente lo es con y sin includeStale', () => {
+    expect(currency(m({ status: 'active' }), [], undefined, false)).toBe('current');
+    expect(currency(m({}), [], undefined, true)).toBe('current');
   });
 });
 
@@ -217,7 +232,7 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
   it('un asOf mal formado se rechaza antes de servir nada', async () => {
     writeDocs(f.dir('A'), { 'x.md': note('X', long('cuervo grande'), 'status: superseded\nsuperseded_by: y.md\n'), 'y.md': note('Y', long('cuervo grande dos')) });
     await f.service().sync('A');
-    await expect(ask('cuervo grande', { asOf: '31/12/2025', includeStale: true })).rejects.toThrow();
+    await expect(ask('cuervo grande', { asOf: '31/12/2025', includeStale: true })).rejects.toThrow(/asOf/);
   });
 
   it('una semilla que no se pudo abrir se conserva sin asOf y no se sirve con asOf', async () => {
