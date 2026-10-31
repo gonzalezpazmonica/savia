@@ -128,7 +128,7 @@ test("AC-4d: why por un frontend de agente no revela referencia ni título", asy
 });
 
 test("AC-4d: proveedor aprobado para N4 declarado en la configuración local => nivel de la instalación, y queda auditado", async () => {
-  const s = setup({ env: { CLAUDECODE: "1", SOUL_AGENT_PROVIDER: "prov-org" }, providers: [{ id: "prov-org", approved_by: "seguridad de la organización", approved_at: "2026-10-30T00:00:00Z", scope: "N4" }] });
+  const s = setup({ env: { CLAUDECODE: "1" }, providers: [{ id: "prov-org", approved_by: "seguridad de la organización", approved_at: "2026-10-30T00:00:00Z", scope: "N4", frontends: ["claude-code"] }] });
   await runCli(["q1", "--json"], s.deps);
   assert.ok(text(s).includes(TITLE));
   const audit = readFileSync(join(s.dir, "audit.jsonl"), "utf8");
@@ -311,4 +311,14 @@ test("salida humana: si una fuente no se leyó, lo dice; no presenta «0» como 
   delete s.deps.adapters["m365-mail"];
   await runCli(["q1"], s.deps);
   assert.match(text(s), /2 fuente\(s\) sin leer/);
+});
+
+test("AC-4d: un agente no se sube de nivel declarando proveedor ni haciéndose pasar por otro frontend", async () => {
+  const s = setup({ env: { CLAUDECODE: "1" }, providers: [{ id: "prov-org", approved_by: "seguridad", approved_at: "2026-10-30T00:00:00Z", scope: "N4", frontends: ["opencode"] }] });
+  for (const args of [["q1", "--json", "--provider", "prov-org"], ["q1", "--json", "--frontend", "opencode"]]) {
+    s.out.length = 0;
+    assert.equal(await runCli(args, s.deps), 0);
+    assert.equal(JSON.parse(text(s)).detail, "recuentos", args.join(" "));
+    assert.ok(!text(s).includes(TITLE));
+  }
 });

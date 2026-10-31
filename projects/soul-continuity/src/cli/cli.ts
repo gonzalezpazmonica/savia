@@ -67,14 +67,14 @@ const HELP = `Órdenes de soul (sin texto libre):
   bench                          banco de continuidad contra este núcleo
   serve                          API local para la app (solo en las direcciones configuradas)
   pair <nombre> | unpair <id> | devices   dispositivos emparejados con la app
-Opciones: --json · --frontend <nombre> · --provider <id>`;
+Opciones: --json · --frontend <nombre>`;
 
 interface Parsed { cmd: string; args: string[]; flags: Record<string, string | true> }
 
 function parse(argv: string[]): Parsed {
   const args: string[] = [];
   const flags: Record<string, string | true> = {};
-  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--provider"]);
+  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (withValue.has(a)) flags[a.slice(2)] = argv[++i] ?? "";
@@ -84,14 +84,16 @@ function parse(argv: string[]): Parsed {
   return { cmd: args[0] ?? "help", args: args.slice(1), flags };
 }
 
-/** Frontend de agente que invoca la CLI. Fail-closed: cualquier señal cuenta. */
+/**
+ * Frontend de agente que invoca la CLI. Fail-closed: cualquier señal cuenta, y la detección por
+ * entorno manda sobre `--frontend` (un agente no puede hacerse pasar por otro frontend).
+ */
 export function detectCaller(env: Record<string, string | undefined>, flags: Record<string, string | true>): Caller {
-  const provider = (typeof flags.provider === "string" ? flags.provider : env.SOUL_AGENT_PROVIDER) || null;
-  if (typeof flags.frontend === "string" && flags.frontend) return { frontend: flags.frontend, provider };
-  if (env.SOUL_AGENT_FRONTEND) return { frontend: env.SOUL_AGENT_FRONTEND, provider };
-  if (env.CLAUDECODE || env.CLAUDE_CODE_ENTRYPOINT) return { frontend: "claude-code", provider };
-  if (env.OPENCODE || env.OPENCODE_BIN_PATH || env.OPENCODE_SESSION) return { frontend: "opencode", provider };
-  return { frontend: null, provider: null };
+  if (env.CLAUDECODE || env.CLAUDE_CODE_ENTRYPOINT) return { frontend: "claude-code" };
+  if (env.OPENCODE || env.OPENCODE_BIN_PATH || env.OPENCODE_SESSION) return { frontend: "opencode" };
+  if (env.SOUL_AGENT_FRONTEND) return { frontend: env.SOUL_AGENT_FRONTEND };
+  if (typeof flags.frontend === "string" && flags.frontend) return { frontend: flags.frontend };
+  return { frontend: null };
 }
 
 class Exit extends Error {

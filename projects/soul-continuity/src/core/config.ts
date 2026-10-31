@@ -30,6 +30,8 @@ export interface ApprovedProvider {
   approved_at: string;
   /** Nivel de datos aprobado. Solo «N4» permite subir de `recuentos`. */
   scope: string;
+  /** Frontends que el operador declara que corren con este proveedor (claude-code, opencode…). */
+  frontends: string[];
 }
 
 export interface SoulConfig {
@@ -122,15 +124,16 @@ export function elementId(operatorRef: string, key: string): string {
 export interface Caller {
   /** Frontend de agente que invoca la CLI (claude-code, opencode…) o null si es una persona en su terminal. */
   frontend: string | null;
-  provider?: string | null;
 }
 
-/** AC-4d: nivel efectivo para quien llama. Fail-closed: cualquier duda => recuentos. */
+/**
+ * AC-4d: nivel efectivo para quien llama. Fail-closed: cualquier duda => recuentos.
+ * El proveedor no lo declara quien llama: la configuración local (que solo escribe el operador)
+ * fija qué frontends corren con cada proveedor aprobado.
+ */
 export function agentLevel(cfg: SoulConfig, caller: Caller, installLevel: Detail): { level: Detail; forced: boolean; provider: string | null } {
   if (!caller.frontend) return { level: installLevel, forced: false, provider: null };
-  const p = caller.provider
-    ? cfg.agent_frontend.approved_providers.find((x) => x.id === caller.provider)
-    : undefined;
+  const p = cfg.agent_frontend.approved_providers.find((x) => Array.isArray(x.frontends) && x.frontends.includes(caller.frontend as string));
   const approved = p && p.scope === "N4" && typeof p.approved_by === "string" && p.approved_by.trim() !== "" && parseTs(p.approved_at) !== null;
   if (!approved) return { level: "recuentos", forced: installLevel !== "recuentos", provider: null };
   return { level: installLevel, forced: false, provider: p.id };

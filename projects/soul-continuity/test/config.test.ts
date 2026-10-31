@@ -63,20 +63,27 @@ test("AC-4d: frontend de agente sin declaración => recuentos", () => {
   assert.deepEqual(agentLevel(cfg, { frontend: "claude-code" }, "completo"), { level: "recuentos", forced: true, provider: null });
 });
 
-test("AC-4d: proveedor declarado pero sin aprobación auditada => recuentos", () => {
-  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [{ id: "prov-x", approved_by: "", approved_at: "2026-10-30T00:00:00Z", scope: "N4" }] } };
-  assert.equal(agentLevel(cfg, { frontend: "opencode", provider: "prov-x" }, "completo").level, "recuentos");
-});
+const prov = (over: Record<string, unknown> = {}) => ({ id: "prov-x", approved_by: "operador", approved_at: "2026-10-30T00:00:00Z", scope: "N4", frontends: ["opencode"], ...over });
 
-test("AC-4d: otro proveedor que el aprobado => recuentos", () => {
-  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [{ id: "prov-x", approved_by: "operador", approved_at: "2026-10-30T00:00:00Z", scope: "N4" }] } };
-  assert.equal(agentLevel(cfg, { frontend: "opencode", provider: "prov-y" }, "completo").level, "recuentos");
+test("AC-4d: proveedor sin aprobación auditada (approved_by vacío) => recuentos", () => {
+  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [prov({ approved_by: "" })] } };
   assert.equal(agentLevel(cfg, { frontend: "opencode" }, "completo").level, "recuentos");
 });
 
-test("AC-4d: proveedor aprobado para N4 => nivel de la instalación, nunca por encima", () => {
-  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [{ id: "prov-x", approved_by: "operador", approved_at: "2026-10-30T00:00:00Z", scope: "N4" }] } };
-  assert.deepEqual(agentLevel(cfg, { frontend: "opencode", provider: "prov-x" }, "titulos"), { level: "titulos", forced: false, provider: "prov-x" });
+test("AC-4d: el proveedor lo fija la configuración por frontend, no quien llama", () => {
+  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [prov()] } };
+  assert.equal(agentLevel(cfg, { frontend: "claude-code" }, "completo").level, "recuentos", "otro frontend no hereda la aprobación");
+  assert.equal(agentLevel(cfg, { frontend: "claude-code", provider: "prov-x" } as never, "completo").level, "recuentos", "declarar el proveedor no sirve");
+});
+
+test("AC-4d: alcance distinto de N4 => recuentos", () => {
+  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [prov({ scope: "N3" })] } };
+  assert.equal(agentLevel(cfg, { frontend: "opencode" }, "completo").level, "recuentos");
+});
+
+test("AC-4d: frontend con proveedor aprobado para N4 => nivel de la instalación, nunca por encima", () => {
+  const cfg = { ...emptyConfig("i"), agent_frontend: { approved_providers: [prov()] } };
+  assert.deepEqual(agentLevel(cfg, { frontend: "opencode" }, "titulos"), { level: "titulos", forced: false, provider: "prov-x" });
 });
 
 test("sin frontend de agente, el nivel es el de la instalación", () => {
