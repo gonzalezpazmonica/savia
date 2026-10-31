@@ -194,3 +194,4 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-487 [APPROVED] Clon limpio neutral y arranque en Windows — evidencia: docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md
 - SE-483 [APPROVED] Identidad: Savia, metaorquestadora agéntica de I+D+i — evidencia: docs/specs/SE-483-savia-identity-rd-metaorchestrator.spec.md
 - SE-484 [APPROVED] Onboarding adaptativo: Savia se configura para cualquier persona — evidencia: docs/specs/SE-484-adaptive-onboarding.spec.md
+- SE-489 [APPROVED] Vaults: recuperación adaptativa construida y medida (estructura, grafo, reranker, router y cuantización) — evidencia: docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md
