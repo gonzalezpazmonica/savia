@@ -7,7 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { runRoute } from '../../src/retrieval/runner.js';
 import { getRoute, ROUTE_CONTRACT_VERSION } from '../../src/retrieval/route.js';
-import { RERANK_FALLBACK, setRerankerForTests, takeRerankTimings } from '../../src/retrieval/routes/m2-rerank.js';
+import { RERANK_FALLBACK, setRerankerForTests, takeRerankFallbacks, takeRerankTimings } from '../../src/retrieval/routes/m2-rerank.js';
 import { loadOnnxCrossEncoder, resolveRerankConfig, type RerankScorer } from '../../src/retrieval/rerank/cross-encoder.js';
 import { describeSecurityBattery } from './security-battery.js';
 import { fixture, long, note, writeDocs, type Fixture } from './helpers.js';
@@ -31,6 +31,7 @@ describe('SE-489 M2 reranker', () => {
     await f.service().sync('A');
     await f.service().sync('B');
     takeRerankTimings();
+    takeRerankFallbacks();
   });
   afterEach(() => { f.cleanup(); setRerankerForTests(undefined); });
 
@@ -99,6 +100,7 @@ describe('SE-489 M2 reranker', () => {
     it('el modelo lanza', async () => {
       install({ id: 'roto', digest: 'b'.repeat(64), score: async () => { throw new Error('boom'); } });
       await expectM0Order(/error: boom/);
+      expect(takeRerankFallbacks()).toContain('error');
       expect(takeRerankTimings()[0]).toMatchObject({ ok: false });
     });
 
@@ -117,9 +119,20 @@ describe('SE-489 M2 reranker', () => {
       expect(called).toBe(0);
       expect(out.warnings).toContain(RERANK_FALLBACK);
       expect(out.trace.steps.find(s => s.step === 'm2:fallback')?.detail).toBe('presupuesto');
+      expect(takeRerankFallbacks()).toEqual(['presupuesto']);
       // Con una llamada de sobra, sí.
       await run({ mode: 'hybrid', budget: { maxModelCalls: 2 } });
       expect(called).toBe(1);
+    });
+
+    it('sin presupuesto de tokens de entrada: cae a M0 y lo cuenta; con presupuesto suficiente puntúa', async () => {
+      install(fake((_q, d) => d.length));
+      const pocos = (await run({ budget: { maxInputTokens: 5 } })).result;
+      expect(pocos.warnings).toContain(RERANK_FALLBACK);
+      expect(takeRerankFallbacks()).toEqual(['presupuesto']);
+      const bastan = (await run({ budget: { maxInputTokens: 50_000 } })).result;
+      expect(bastan.warnings ?? []).not.toContain(RERANK_FALLBACK);
+      expect(takeRerankFallbacks()).toEqual([]);
     });
 
     it('pasa de la latencia del reranker: cae a M0', async () => {

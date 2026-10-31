@@ -14,6 +14,10 @@ const timings: RerankTiming[] = [];
 /** Latencias del reranker desde la última llamada (para medirlas aparte de la ruta entera). */
 export const takeRerankTimings = (): RerankTiming[] => timings.splice(0);
 
+const fallbackLog: string[] = [];
+/** Motivos de fallback (sin-reranker, presupuesto, error, puntuaciones no válidas) desde la última llamada. */
+export const takeRerankFallbacks = (): string[] => fallbackLog.splice(0);
+
 interface Setup { scorer: RerankScorer; topN: number; maxMs: number }
 let override: Setup | undefined;
 let cached: { key: string; setup: Promise<Setup> } | undefined;
@@ -54,6 +58,7 @@ export const M2_RERANK: RetrievalRoute = {
     ctx.step('m2:candidates', req.mode, hits.length);
     const fallback = (why: string): { hits: RagHit[]; warnings: string[] } => {
       ctx.step('m2:fallback', why);
+      fallbackLog.push(why.split(':')[0]);
       return { hits, warnings: [RERANK_FALLBACK] };
     };
     if (!setup) return fallback(`sin-reranker: ${loadError}`);

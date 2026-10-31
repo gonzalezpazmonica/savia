@@ -7,6 +7,9 @@
 //   SAVIA_RAG_HOME=/tmp/x/rag npx tsx eval/evidence-bench/m2-bench.ts --domes-file /tmp/x/domes.json \
 //     --bench eval/evidence-bench --legacy eval/rag-savia-docs.json \
 //     --model bge=/models/bge --model mmarco=/models/mmarco --out /tmp/x/m2.json [--limit 40 | --per-category 10]
+//     [--sets dev,test,legacy36] [--budget-tokens 60000]
+// --budget-tokens declara maxInputTokens: el defecto del contrato (8000) no cubre 50 pasajes, y la ruta
+// cae a M0 por presupuesto (se cuenta en `fallbacks`). Por defecto aquí es 60000 para medir al reranker.
 // --per-category N toma los N primeros casos de cada categoría en el orden fijo del banco (muestra
 // estratificada y reproducible); --limit N toma los N primeros sin estratificar.
 import * as crypto from 'node:crypto';
@@ -59,7 +62,7 @@ async function main(): Promise<void> {
   const { DomeRegistry } = await import('../../src/registry/domes.js');
   const { RagService } = await import('../../src/rag/service.js');
   const { evaluateRoute, compareReports, loadBench, legacyToCases } = await import('../../src/retrieval/evidence-eval.js');
-  const { takeRerankTimings } = await import('../../src/retrieval/routes/m2-rerank.js');
+  const { takeRerankTimings, takeRerankFallbacks } = await import('../../src/retrieval/routes/m2-rerank.js');
   const { loadOnnxCrossEncoder, resolveRerankConfig } = await import('../../src/retrieval/rerank/cross-encoder.js');
 
   const denied = new Set<string>();
@@ -82,8 +85,12 @@ async function main(): Promise<void> {
     dev: take(loadBench(path.resolve(benchDir), { split: 'dev' })),
     test: take(loadBench(path.resolve(benchDir), { split: 'test' })),
   };
-  if (opt('--legacy')) sets.legacy36 = take(legacyToCases(JSON.parse(fs.readFileSync(path.resolve(opt('--legacy')!), 'utf-8'))));
+  const only = opt('--sets')?.split(',');
+  if (only) for (const k of Object.keys(sets)) if (!only.includes(k)) delete sets[k];
+  if (opt('--legacy') && (!only || only.includes('legacy36'))) sets.legacy36 = take(legacyToCases(JSON.parse(fs.readFileSync(path.resolve(opt('--legacy')!), 'utf-8'))));
 
+  const budgetTokens = Number(opt('--budget-tokens') ?? 60000);
+  if (!Number.isInteger(budgetTokens) || budgetTokens < 1) throw new Error('--budget-tokens: entero ≥ 1');
   const boot = { iterations: 2000, seed: 0 };
   const base = { mode: 'hybrid' as const, k: 20, seed: 0, iterations: boot.iterations, deny };
   const result: Record<string, unknown> = { generatedAt: new Date().toISOString(), k: base.k, models: {}, sets: {} };
@@ -113,13 +120,15 @@ async function main(): Promise<void> {
     for (const m of models) {
       for (const topN of [20, 50]) {
         pin(m, topN);
-        takeRerankTimings();
+        takeRerankTimings(); takeRerankFallbacks();
         const t0 = Date.now();
-        const rep = await evaluateRoute(svc, cases, { ...base, route: 'M2', domes, budget: { maxLatencyMs: 120000 } });
+        const rep = await evaluateRoute(svc, cases, { ...base, route: 'M2', domes, budget: { maxLatencyMs: 120000, maxInputTokens: budgetTokens } });
         const lat = latencySummary(takeRerankTimings());
+        const fallbacks: Record<string, number> = {};
+        for (const why of takeRerankFallbacks()) fallbacks[why] = (fallbacks[why] ?? 0) + 1;
         const label = `${m.name}-N${topN}`;
-        configs[label] = { report: rep, vsM0: compareReports(rep, m0, boot), rerankerLatency: lat, wallMs: Date.now() - t0 };
-        console.log(`${setName} ${label} n=${cases.length} errores=${rep.errors} viol=${rep.violations} rerank p50=${lat.p50Ms}ms p95=${lat.p95Ms}ms fallos=${lat.failed}`);
+        configs[label] = { report: rep, vsM0: compareReports(rep, m0, boot), rerankerLatency: lat, fallbacks, wallMs: Date.now() - t0 };
+        console.log(`${setName} ${label} n=${cases.length} errores=${rep.errors} viol=${rep.violations} rerank p50=${lat.p50Ms}ms p95=${lat.p95Ms}ms fallos=${lat.failed} fallbacks=${JSON.stringify(fallbacks)}`);
       }
     }
     (result.sets as Record<string, unknown>)[setName] = { n: cases.length, M0: m0, configs };
