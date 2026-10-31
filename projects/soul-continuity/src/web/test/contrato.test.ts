@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
+import { guardarRecibo } from "../adaptador/activacion.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateAdapterResult, type AdapterContext } from "../../contract/adapter.ts";
@@ -178,4 +179,35 @@ test("una receta inválida en params no llega al navegador → not_configured", 
   const r = await crearAdaptadorWeb(d).read(ctx(base({ recetas: [mala] })));
   assert.equal(r.status, "not_configured");
   assert.equal(d.llamadas, 0);
+});
+
+test("una página vigilada mal configurada → not_configured sin abrir el navegador", async () => {
+  for (const v of [{ id: "p", sitio: "s", url: "javascript:alert(1)" }, { id: "p", sitio: "s", url: "https://s.example/logout" }, { id: "p", sitio: "s" }]) {
+    let vistas = 0;
+    const d = { ...deps(resultado("OK")), vigilar: async () => { vistas++; return vig("SIN_CAMBIOS"); } };
+    const r = await crearAdaptadorWeb(d).read(ctx(base({ vigiladas: [v], huellas: "/x/h.json" })));
+    assert.equal(r.status, "not_configured", JSON.stringify(v));
+    assert.equal(d.llamadas + vistas, 0);
+  }
+});
+
+test("receta experimental con recibo válido se ejecuta a través del adaptador", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-contrato-"));
+  const r = experimental();
+  guardarRecibo(dir, r, { peticiones: 1, permitidas: 1, operaciones_lectura: 1 });
+  const d = deps(resultado("OK"));
+  const res = await crearAdaptadorWeb(d).read(ctx(base({ recetas: [r], validaciones: dir })));
+  assert.equal(d.llamadas, 1);
+  assert.equal(res.status, "ok");
+});
+
+test("una receta configurada que no se activa no se omite en silencio aunque haya páginas vigiladas", async () => {
+  const d = deps(resultado("OK"), vig("SIN_CAMBIOS"));
+  const p = base({ recetas: [receta(), experimental()], vigiladas: [{ id: "p", sitio: "s", url: "https://s.example/avisos" }],
+    huellas: join(mkdtempSync(join(tmpdir(), "soul-contrato-")), "h.json") });
+  const r = await crearAdaptadorWeb(d).read(ctx(p));
+  assert.deepEqual(validateAdapterResult(r, "web"), []);
+  assert.equal(r.status, "recipe_disabled");
+  assert.match("message" in r ? r.message : "", /experimental/);
+  assert.equal(d.llamadas, 1, "las recetas activas se siguen ejecutando (una sesión caducada mandaría)");
 });

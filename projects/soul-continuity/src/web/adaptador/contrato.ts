@@ -12,7 +12,7 @@ import { claimKey, cleanText, iso, parseTs, type Claim, type ClaimType } from ".
 import type { AdapterContext, AdapterResult, AdapterStatus, SourceAdapter } from "../../contract/adapter.ts";
 import { comprobarActivacion } from "./activacion.ts";
 import { AlmacenRecetas, ejecutarReceta, type Campo, type Opciones, type Resultado } from "./ejecutor.ts";
-import { AlmacenHuellas, vigilarPagina, type OpcionesVigilancia, type ResultadoVigilancia, type Vigilada } from "./vigilancia.ts";
+import { AlmacenHuellas, recetaDeVigilancia, vigilarPagina, type OpcionesVigilancia, type ResultadoVigilancia, type Vigilada } from "./vigilancia.ts";
 import type { Receta } from "../receta/tipos.ts";
 import { validarReceta } from "../receta/validar.ts";
 
@@ -133,6 +133,13 @@ function leerParametros(p: Record<string, unknown>): ParametrosWeb | string {
   for (const r of (p.recetas ?? []) as unknown[]) {
     try { validarReceta(r as Receta); } catch (e) { return `receta inválida (${primeraLinea(e)})`; }
   }
+  // Una página vigilada mal escrita es configuración, no un fallo de lectura.
+  for (const v of (p.vigiladas ?? []) as Vigilada[]) {
+    if (!v || typeof v.id !== "string" || !v.id || typeof v.sitio !== "string" || typeof v.url !== "string") {
+      return "página vigilada sin id, sitio o url";
+    }
+    try { recetaDeVigilancia(v); } catch (e) { return `página vigilada ${v.id} inválida (${primeraLinea(e)})`; }
+  }
   if (Array.isArray(p.vigiladas) && p.vigiladas.length && typeof p.huellas !== "string") {
     return "páginas vigiladas sin fichero de huellas (params.huellas)";
   }
@@ -152,14 +159,19 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
       const yo = ctx.operator.identities.emails[0];
       if (!yo) return fallo({ status: "not_configured", message: "El perfil del operador no tiene identidad de correo." });
 
-      // Las experimentales sin recibo no son un fallo: simplemente no se ejecutan.
-      const activas = (p.recetas ?? []).filter((r) => comprobarActivacion(r, p.validaciones).activa);
-      const vigiladas = p.vigiladas ?? [];
-      if (!activas.length && !vigiladas.length) {
-        return fallo({ status: "recipe_disabled",
-          message: "No hay recetas activas ni páginas vigiladas. Las recetas experimentales necesitan un recibo de validación local." });
-      }
+      // Una receta sin recibo no abre el navegador. Tampoco se omite en silencio:
+      // es `recipe_disabled` (fail-closed), por debajo de una sesión caducada.
       const fallos: Fallo[] = [];
+      const activas: Receta[] = [];
+      for (const r of p.recetas ?? []) {
+        const a = comprobarActivacion(r, p.validaciones);
+        if (a.activa) activas.push(r);
+        else fallos.push({ status: "recipe_disabled", message: a.aviso ?? `Receta ${r.id} sin activar.` });
+      }
+      const vigiladas = p.vigiladas ?? [];
+      if (!activas.length && !vigiladas.length && !fallos.length) {
+        return fallo({ status: "recipe_disabled", message: "No hay recetas activas ni páginas vigiladas." });
+      }
       const claims: Claim[] = [];
       const almacen = p.desactivadas ? new AlmacenRecetas(p.desactivadas) : undefined;
       for (const r of activas) {

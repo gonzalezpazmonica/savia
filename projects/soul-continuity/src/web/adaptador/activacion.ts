@@ -24,7 +24,21 @@ export function huellaReceta(r: Receta): string {
 }
 
 export function rutaRecibo(dir: string, id: string) {
+  // El id forma parte de la ruta: nada de `../` ni separadores.
+  if (!/^[a-z0-9-]+$/.test(id)) throw new Error(`id de receta inválido para un recibo: ${id}`);
   return join(dir, `${id}.json`);
+}
+
+/** Directorio de recibos de la CLI. El adaptador no lo supone: usa `params.validaciones`. */
+export function dirValidacionesPorDefecto(datos: string): string {
+  return join(datos, "web", "validaciones");
+}
+
+/** ¿Origen del banco sintético (bucle local)? Solo ahí vale `estable` sin recibo. */
+export function origenLocal(origen: string): boolean {
+  let h: string;
+  try { h = new URL(origen).hostname; } catch { return false; }
+  return h === "localhost" || h === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
 }
 
 export function guardarRecibo(dir: string, r: Receta, resumen: Recibo["resumen"]): string {
@@ -38,17 +52,22 @@ export function guardarRecibo(dir: string, r: Receta, resumen: Recibo["resumen"]
   return ruta;
 }
 
-/** ¿Puede ejecutarse? Las `estable` sí. Las `experimental`, solo con recibo
- *  válido para ESTA receta. Fail-closed: sin directorio o recibo ilegible, no. */
+/** ¿Puede ejecutarse? Sin recibo, solo las `estable` del banco sintético (origen
+ *  local): el campo `estado` lo escribe la propia receta, así que una receta de
+ *  un sitio real que se declare `estable` necesita recibo igual que una
+ *  `experimental`. Las demás, solo con recibo válido para ESTA receta.
+ *  Fail-closed: sin directorio, id inválido o recibo ilegible, no. */
 export function comprobarActivacion(r: Receta, dirValidaciones: string | undefined): { activa: boolean; aviso: string | null } {
-  if (r.estado === "estable") return { activa: true, aviso: null };
+  if (r.estado === "estable" && origenLocal(r.origen)) return { activa: true, aviso: null };
+  const clase = r.estado === "estable" ? "se declara estable, pero es de un sitio real," : "es experimental";
   const no = (porque: string) => ({
     activa: false,
-    aviso: `La receta de ${r.sitio} es experimental y ${porque}: graba tu tráfico en el perfil de Soul y valídala ` +
+    aviso: `La receta de ${r.sitio} ${clase} y ${porque}: graba tu tráfico en el perfil de Soul y valídala ` +
       `(validar-grabacion) antes de activarla. No se ha abierto el navegador.`,
   });
   if (!dirValidaciones) return no("no hay directorio de validaciones");
-  const ruta = rutaRecibo(dirValidaciones, r.id);
+  let ruta: string;
+  try { ruta = rutaRecibo(dirValidaciones, r.id); } catch { return no("su id no es válido"); }
   if (!existsSync(ruta)) return no("no está validada en esta instalación");
   let recibo: Partial<Recibo>;
   try { recibo = JSON.parse(readFileSync(ruta, "utf8")); } catch { return no("su recibo de validación es ilegible"); }

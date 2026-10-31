@@ -55,3 +55,29 @@ test("recibo ilegible o de otra receta o sin PASA: fail-closed", () => {
     assert.equal(comprobarActivacion(r, dir).activa, false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("estable sin recibo solo en un origen local: con origen remoto declararse estable no salta la puerta", () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-val-"));
+  try {
+    for (const origen of ["http://localhost:8490", "http://127.0.0.5:8490", "http://[::1]:8490"]) {
+      assert.equal(comprobarActivacion({ ...R("tareas"), origen }, undefined).activa, true, origen);
+    }
+    const remota = { ...R("tareas"), origen: "https://intranet.example" };
+    for (const d of [undefined, dir]) {
+      const a = comprobarActivacion(remota, d);
+      assert.equal(a.activa, false);
+      assert.match(a.aviso ?? "", /estable/);
+    }
+    guardarRecibo(dir, remota, resumen);
+    assert.equal(comprobarActivacion(remota, dir).activa, true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("un id que no es [a-z0-9-] no se convierte en ruta de recibo", () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-val-"));
+  try {
+    assert.throws(() => rutaRecibo(dir, "../otra"), /id/);
+    const r = { ...R("tareas"), id: "../otra", estado: "experimental" as const };
+    assert.equal(comprobarActivacion(r, dir).activa, false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

@@ -110,3 +110,7 @@ test("login SSO: origen entero, nunca el de la receta ni con URLs en la lista", 
   rechaza((r) => { r.sesion.login.push("https://sso.example/authorize"); }, /origen entero/);
   rechaza((r) => { r.urls.push("https://sso.example/a.js"); r.sesion.login.push("https://sso.example"); }, /URLs en la lista/);
 });
+
+test("websocket.mantenimiento no admite el marcador de mensaje binario", () => {
+  rechaza((r) => { r.websocket.mantenimiento = ["<binario>"]; }, /binario/);
+});

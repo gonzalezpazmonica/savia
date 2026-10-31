@@ -1,6 +1,6 @@
 // Mutantes del cortafuegos: cada uno quita UNA defensa. La batería tiene que
-// matarlos todos (al menos una comprobación falla). Un mutante vivo es una
-// defensa que la batería no prueba.
+// matarlos todos: falla al menos una comprobación de SU defensa
+// (bench/mapa-mutantes.ts). Un mutante vivo es una defensa que la batería no prueba.
 //
 // Uso: node --experimental-strip-types bench/mutantes.ts [--paralelo 1] [--solo a,b]
 // En paralelo, varios Chrome a la vez llegaron a colgar la batería: por defecto, en serie
@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MUTANTES } from "../cortafuegos/decision.ts";
 import type { Informe } from "./bateria.ts";
+import { clasificarMutante } from "./mapa-mutantes.ts";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SALIDA = join(RAIZ, "resultados", "mutantes");
@@ -35,15 +36,19 @@ function correr(m: string): Promise<Informe | null> {
   });
 }
 
-const filas: { mutante: string; estado: string; fallidas: number; muertoPor: string[] }[] = [];
+// Fail-closed: sin informe, o sin fallar ninguna comprobación de SU defensa, el mutante NO cuenta como muerto.
+function fila(m: string, inf: Informe | null) {
+  const fallos = inf ? inf.comprobaciones.filter((c) => !c.ok).map((c) => c.id) : null;
+  const c = clasificarMutante(m, fallos);
+  return { mutante: m, estado: c.estado, fallidas: fallos?.length ?? 0, ajenos: c.ajenos, muertoPor: c.muertoPor.slice(0, 6) };
+}
+
+const filas: ReturnType<typeof fila>[] = [];
 const cola = [...lista];
 await Promise.all(Array.from({ length: paralelo }, async () => {
   for (let m = cola.shift(); m; m = cola.shift()) {
-    const inf = await correr(m);
-    // Fail-closed: si la batería no produjo informe, el mutante NO cuenta como muerto.
-    const fallos = inf ? inf.comprobaciones.filter((c) => !c.ok).map((c) => c.id) : [];
-    filas.push({ mutante: m, estado: !inf ? "SIN_INFORME" : fallos.length ? "MUERTO" : "VIVO", fallidas: fallos.length, muertoPor: fallos.slice(0, 6) });
-    console.log(`${m}: ${filas.at(-1)!.estado} (${fallos.length} fallos)`);
+    filas.push(fila(m, await correr(m)));
+    console.log(`${m}: ${filas.at(-1)!.estado} (${filas.at(-1)!.fallidas} fallos, ${filas.at(-1)!.ajenos} ajenos)`);
   }
 }));
 // Resumen sobre TODOS los mutantes, con el último informe de cada uno.
@@ -51,8 +56,7 @@ filas.length = 0;
 for (const m of MUTANTES) {
   let inf: Informe | null = null;
   try { inf = JSON.parse(readFileSync(join(SALIDA, `bateria-${m}.json`), "utf8")); } catch { inf = null; }
-  const fallos = inf ? inf.comprobaciones.filter((c) => !c.ok).map((c) => c.id) : [];
-  filas.push({ mutante: m, estado: !inf ? "SIN_INFORME" : fallos.length ? "MUERTO" : "VIVO", fallidas: fallos.length, muertoPor: fallos.slice(0, 6) });
+  filas.push(fila(m, inf));
 }
 const muertos = filas.filter((f) => f.estado === "MUERTO").length;
 writeFileSync(join(RAIZ, "resultados", "mutantes.json"), JSON.stringify({ muertos, total: filas.length, filas }, null, 2) + "\n");

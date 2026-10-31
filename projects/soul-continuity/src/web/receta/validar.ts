@@ -104,6 +104,7 @@ export function validarReceta(r: Receta): Receta {
   exige(r.websocket && Array.isArray(r.websocket.urls), "websocket");
   r.websocket.urls.forEach((p) => patron(p, "websocket.urls", WS));
   lista(r.websocket.mantenimiento, "websocket.mantenimiento");
+  exige(!r.websocket.mantenimiento.includes("<binario>"), "websocket.mantenimiento: los mensajes binarios nunca son de mantenimiento");
 
   exige(Array.isArray(r.acciones), "acciones");
   for (const a of r.acciones) {

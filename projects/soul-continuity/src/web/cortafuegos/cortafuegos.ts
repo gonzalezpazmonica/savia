@@ -94,8 +94,8 @@ export class Cortafuegos {
       if (!permitido) return void ws.close({ code: 1008, reason: "soul: fuera de la receta" });
       const servidor = ws.connectToServer();
       ws.onMessage((m) => {
-        const texto = typeof m === "string" ? m : "<binario>";
-        const ok = !this.bloqueoTotal && decidirEnvioWs(this.receta, texto, this.mutante);
+        // Un mensaje binario nunca es de mantenimiento: la lista solo casa texto.
+        const ok = !this.bloqueoTotal && typeof m === "string" && decidirEnvioWs(this.receta, m, this.mutante);
         this.anotar({ tipo: "ws-envio", url, permitida: ok, motivo: ok ? "ws_mantenimiento" : "ws_envio" });
         if (ok) servidor.send(m);
       });
