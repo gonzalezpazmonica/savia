@@ -2,3 +2,4 @@
 // (docs/retrieval-routes.md § Registro).
 import './m0-hybrid.js';
 import './m1-neighbors.js';
+import './m5-graph.js';
