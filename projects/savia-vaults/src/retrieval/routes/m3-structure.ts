@@ -16,7 +16,7 @@ import type { StructureNode } from '../../rag/structure-index.js';
 export const STRUCTURE_UNAVAILABLE = 'STRUCTURE_UNAVAILABLE';
 
 /** Documentos de cabeza que se navegan, unidades por sección citada y por anexo, referencias seguidas. */
-export const M3_LIMITS = Object.freeze({ docs: 5, sectionUnits: 3, annexUnits: 2, refsPerDoc: 3, siblingProbes: 6 });
+export const M3_LIMITS = Object.freeze({ docs: 5, sectionUnits: 3, annexUnits: 2, refsPerDoc: 3, siblingProbes: 6, siblings: 32 });
 
 const ROMAN: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100 };
 function romanValue(s: string): number | undefined {
@@ -98,11 +98,13 @@ async function navigate(req: Parameters<RetrievalRoute['run']>[0], ctx: RouteCon
     }
     const refs = [...new Set([...queryCues, ...structuralCues(texts.join('\n'))])].filter(isAnnex).slice(0, M3_LIMITS.refsPerDoc);
     // 3. Documento hermano que nombra cada referencia: por nombre de fichero, o por título.
+    //    Los hermanos solo se listan si hay referencias (cada uno cuesta 1 `nodes`).
+    const siblings = refs.length ? ctx.documentStructure(g.ref, { maxSiblings: M3_LIMITS.siblings })?.siblings ?? [] : [];
     const titleCues = new Map<string, string[]>();
     for (const cue of refs) {
-      let target = st.siblings.find(s => structuralCues(basename(s.path).replace(/[-_]/g, ' ')).includes(cue));
+      let target = siblings.find(s => structuralCues(basename(s.path).replace(/[-_]/g, ' ')).includes(cue));
       if (!target) {
-        for (const s of st.siblings.slice(0, M3_LIMITS.siblingProbes)) {
+        for (const s of siblings.slice(0, M3_LIMITS.siblingProbes)) {
           const k = keyOf(s.dome, s.path);
           if (!titleCues.has(k)) {
             const t = ctx.documentStructure(s);
@@ -130,8 +132,8 @@ export const M3_STRUCTURE: RetrievalRoute = {
   supportsAsOf: false,
   requiresDeclaredBudget: false,
   async run(req, ctx) {
-    const pool = Math.min(50, Math.max(req.k * 2, 20));
-    const cands = await ctx.candidates(req.query, { k: pool, mode: req.mode });
+    // Mismo k que M0: con otro k la fusión RRF reordena y la línea base deja de ser la de M0.
+    const cands = await ctx.candidates(req.query, { k: req.k, mode: req.mode });
     ctx.step('m3:candidates', req.mode, cands.length);
     if (!cands.length) return { hits: [] };
     if (!ctx.documentStructure) return { hits: cands, warnings: [STRUCTURE_UNAVAILABLE] };

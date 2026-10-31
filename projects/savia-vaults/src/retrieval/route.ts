@@ -150,6 +150,9 @@ export interface OpenedStructure {
   siblings: NodeRef[];
 }
 
+/** Tope de hermanos que `documentStructure` lista en una llamada. */
+export const MAX_SIBLINGS = 64;
+
 export interface CandidateOptions {
   k?: number;
   mode?: RagMode;
@@ -169,9 +172,10 @@ export interface RouteContext {
   documentChunks(ref: NodeRef): OpenedChunk[] | undefined;
   /**
    * SE-489 M3 (aditivo, opcional para dobles de test): árbol del documento en la generación activa.
+   * Hermanos solo si se piden (`maxSiblings`, tope `MAX_SIBLINGS`), en orden de ruta.
    * 1 `nodes` por el documento y 1 por cada hermano devuelto.
    */
-  documentStructure?(ref: NodeRef): OpenedStructure | undefined;
+  documentStructure?(ref: NodeRef, opts?: { maxSiblings?: number }): OpenedStructure | undefined;
   /** Descuenta presupuesto; false si se agotaría (no descuenta). */
   consume(key: Exclude<BudgetKey, 'latencyMs'>, n?: number): boolean;
   /** Milisegundos que quedan del presupuesto de latencia. */

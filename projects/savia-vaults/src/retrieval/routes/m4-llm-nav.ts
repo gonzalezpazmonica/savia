@@ -23,7 +23,7 @@ export const STRUCTURE_UNAVAILABLE = 'STRUCTURE_UNAVAILABLE';
 /** Límites propios de la ruta, además del presupuesto de la petición. */
 export const M4_LIMITS = Object.freeze({
   docs: 4, options: 24, rounds: 2, picksPerCall: 3, unitsPerPick: 3, snippetChars: 280, snippets: 4,
-  labelChars: 90, maxOutputTokens: 48,
+  labelChars: 90, maxOutputTokens: 48, siblings: 8,
 });
 
 export interface NavigatorReply {
@@ -188,7 +188,7 @@ function buildOptions(ctx: RouteContext & Required<Pick<RouteContext, 'documentS
   const offeredDocs = new Set<string>();
   for (let gi = 0; gi < Math.min(groups.length, M4_LIMITS.docs) && options.length < M4_LIMITS.options; gi++) {
     const g = groups[gi];
-    const st = ctx.documentStructure(g.ref);
+    const st = ctx.documentStructure(g.ref, { maxSiblings: M4_LIMITS.siblings });
     if (!st) continue;
     const held = new Set(g.hits.map(h => h.chunkId));
     for (const s of st.nodes) {
@@ -220,8 +220,8 @@ export function createM4Route(o: M4Options): RetrievalRoute {
     supportsAsOf: false,
     requiresDeclaredBudget: true,
     async run(req: RetrievalRequest, ctx: RouteContext) {
-      const pool = Math.min(50, Math.max(req.k * 2, 20));
-      const cands = await ctx.candidates(req.query, { k: pool, mode: req.mode });
+      // Mismo k que M0: con otro k la fusión RRF reordena y la línea base deja de ser la de M0.
+      const cands = await ctx.candidates(req.query, { k: req.k, mode: req.mode });
       ctx.step('m4:candidates', req.mode, cands.length);
       if (!cands.length) return { hits: [] };
       if (!ctx.documentStructure) return { hits: cands, warnings: [STRUCTURE_UNAVAILABLE] };

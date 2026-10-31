@@ -4,11 +4,22 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { runRoute } from '../../src/retrieval/runner.js';
-import { getRoute, type RetrievalRequest, type RouteContext } from '../../src/retrieval/route.js';
+import { MAX_SIBLINGS, ROUTE_CONTRACT_VERSION, getRoute, registerRoute, unregisterRoute, type RetrievalRequest, type RouteContext } from '../../src/retrieval/route.js';
 import { M3_STRUCTURE, structuralCues } from '../../src/retrieval/routes/m3-structure.js';
 import type { RagHit } from '../../src/rag/types.js';
 import { describeSecurityBattery } from './security-battery.js';
 import { fixture, long, note, writeDocs, type Fixture } from './helpers.js';
+
+/** Ruta de prueba que solo ejecuta `body` con el contexto real del runner. */
+let probes = 0;
+function createProbe(body: (ctx: RouteContext) => Promise<void>): string {
+  const id = `M3probe${probes++}`;
+  registerRoute({
+    id, description: 'sonda', contractVersion: ROUTE_CONTRACT_VERSION, supportsAsOf: false, requiresDeclaredBudget: false,
+    async run(_req, ctx) { await body(ctx); return { hits: [] }; },
+  });
+  return id;
+}
 
 const CONTRATO = note('Contrato CT-1', [
   '## Cláusula 1. Objeto', long('servicio de custodia de copias'),
@@ -107,6 +118,51 @@ describe('SE-489 M3 — navegación por estructura', () => {
     const a = await run(q);
     const b = await run(q);
     expect(b.result.hits).toEqual(a.result.hits);
+  });
+});
+
+describe('SE-489 M3 — línea base y directorios grandes', () => {
+  let f: Fixture;
+  beforeEach(async () => {
+    f = fixture(['A']);
+    const docs: Record<string, string> = {};
+    for (let i = 0; i < 120; i++) {
+      docs[`specs/SE-${100 + i}.md`] = note(`SE-${100 + i}`, `## Criterios\n\n${long(`criterio ${i} de la especificacion ${i % 7} sobre gobierno y despliegue`)}\n\n## Riesgos\n\n${long(`riesgo ${i} medio`)}`);
+    }
+    writeDocs(f.dir('A'), docs);
+    await f.service().sync('A');
+  });
+  afterEach(() => f.cleanup());
+
+  it('sin señales estructurales devuelve exactamente los hits de M0 (mismo k en la fusión híbrida)', async () => {
+    for (const q of ['criterio de gobierno y despliegue', 'riesgo medio de la especificacion 3', 'criterio 42']) {
+      const m0 = await runRoute(f.service(), { route: 'M0', query: q, domes: ['A'], mode: 'hybrid', k: 10 });
+      const m3 = await runRoute(f.service(), { route: 'M3', query: q, domes: ['A'], mode: 'hybrid', k: 10 });
+      expect(m3.result.hits.map(h => h.chunkId)).toEqual(m0.result.hits.map(h => h.chunkId));
+    }
+  });
+
+  it('en un directorio de 120 documentos no lista hermanos si no hay referencias (no agota maxNodes)', async () => {
+    const out = await runRoute(f.service(), { route: 'M3', query: 'criterio de gobierno y despliegue', domes: ['A'], mode: 'bm25', k: 10 });
+    expect(out.result.warnings ?? []).not.toContain('BUDGET_EXHAUSTED');
+    // 10 candidatos + 1 árbol y 1 lectura de chunks por documento navegado (5): muy por debajo de 120.
+    expect(out.result.consumed.nodes).toBeLessThanOrEqual(10 + 2 * 5);
+  });
+
+  it('documentStructure solo lista hermanos si se piden, con tope y 1 nodo por hermano', async () => {
+    let seen: { plain?: number; asked?: number; capped?: number } = {};
+    const probe = createProbe(async (ctx) => {
+      const ref = { dome: 'A', path: 'specs/SE-100.md' };
+      seen = {
+        plain: ctx.documentStructure!(ref)!.siblings.length,
+        asked: ctx.documentStructure!(ref, { maxSiblings: 5 })!.siblings.length,
+        capped: ctx.documentStructure!(ref, { maxSiblings: 10_000 })!.siblings.length,
+      };
+    });
+    const out = await runRoute(f.service(), { route: probe, query: 'x', domes: ['A'], mode: 'bm25', k: 1 });
+    expect(seen).toEqual({ plain: 0, asked: 5, capped: MAX_SIBLINGS });
+    expect(out.result.consumed.nodes).toBe(3 + 5 + MAX_SIBLINGS);
+    unregisterRoute(probe);
   });
 });
 
