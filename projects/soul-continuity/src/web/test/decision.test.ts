@@ -137,3 +137,33 @@ test("POST de lectura a un origen absoluto de la lista se decide por su operaci�
   assert.deepEqual([decidirHttp(r, sin, p("Marcar")).permitir, decidirHttp(r, sin, p("Marcar")).motivo], [false, "escritura_conocida"]);
   assert.equal(decidirHttp(r, sin, p("Nueva")).desactivar, true);
 });
+
+test("un endpoint de operaciones solo admite POST: GET/HEAD a él se cortan aunque la URL esté en la lista", () => {
+  for (const m of ["GET", "HEAD"]) {
+    for (const ruta of ["/correo/api/servicio", "/correo/api/servicio?x-accion=MarcarLeido", "/correo/graphql"]) {
+      const d = decidirHttp(correo, sin, pet({ metodo: m, url: `${O}${ruta}`, navegacion: false }));
+      assert.deepEqual([d.permitir, d.motivo], [false, "metodo"], `${m} ${ruta}`);
+    }
+  }
+  // Una URL de la lista sin operaciones declaradas sigue pasando por GET.
+  assert.equal(decidirHttp(correo, sin, pet({ url: `${O}/correo/app.js`, navegacion: false })).permitir, true);
+  // El mutante quita esta defensa.
+  const m = decidirHttp(correo, sin, pet({ url: `${O}/correo/api/servicio?x-accion=MarcarLeido`, navegacion: false }), "post_lectura_por_get");
+  assert.equal(m.permitir, true);
+});
+
+test("la operación de la consulta tiene que coincidir con la declarada: si no, se corta y desactiva", () => {
+  const ok = decidirHttp(correo, sin, post("/correo/api/servicio?x-accion=BuscarElementos", { "x-accion": "BuscarElementos" }, {}));
+  assert.deepEqual([ok.permitir, ok.motivo], [true, "post_lectura"]);
+  const d = decidirHttp(correo, sin, post("/correo/api/servicio?x-accion=MarcarLeido", { "x-accion": "BuscarElementos" }, {}));
+  assert.deepEqual([d.permitir, d.motivo, d.desactivar], [false, "operacion_url_distinta", true]);
+  // Otra grafía de la clave no casa con el patrón: se corta antes.
+  assert.equal(decidirHttp(correo, sin, post("/correo/api/servicio?X-Accion=MarcarLeido", { "x-accion": "BuscarElementos" }, {})).permitir, false);
+  // También con la operación en el cuerpo JSON (GraphQL `operationName`).
+  const g = decidirHttp(validarReceta({ ...correo, urls: [...correo.urls, "/correo/graphql?operationName=*"],
+    post_lectura: [...correo.post_lectura, { ...correo.post_lectura[2], url: "/correo/graphql?operationName=*" }] }), sin,
+    post("/correo/graphql?operationName=MarcarChatVisto", {}, { operationName: "ListarChats", query: "query ListarChats { chats { id } }" }));
+  assert.deepEqual([g.permitir, g.motivo], [false, "operacion_url_distinta"]);
+  const m = decidirHttp(correo, sin, post("/correo/api/servicio?x-accion=MarcarLeido", { "x-accion": "BuscarElementos" }, {}), "operacion_url_sin_cotejar");
+  assert.equal(m.permitir, true);
+});

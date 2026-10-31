@@ -31,6 +31,8 @@ export interface ResultadoVigilancia {
   registro: Registro[];
   ventanasAccion: { accion: string; desde: number; hasta: number }[];
   descargas: number;
+  /** Huella leída en esta visita (si se leyó). Con `diferirHuella`, la guarda quien llama. */
+  huella?: string;
 }
 
 export function recetaDeVigilancia(v: Vigilada): Receta {
@@ -81,6 +83,8 @@ export interface OpcionesVigilancia {
   hogar?: string;
   mutante?: Mutante;
   perfilPersonal?: string;
+  /** No guardar la huella: quien llama la confirma solo si entrega el resultado. */
+  diferirHuella?: boolean;
 }
 
 export async function vigilarPagina(o: OpcionesVigilancia): Promise<ResultadoVigilancia> {
@@ -98,7 +102,11 @@ export async function vigilarPagina(o: OpcionesVigilancia): Promise<ResultadoVig
     await fw.instalar(nav.ctx);
     if (o.cookies?.length) await nav.ctx.addCookies(o.cookies);
     const page = nav.ctx.pages()[0] ?? (await nav.ctx.newPage());
-    await page.goto(v.url, { waitUntil: "domcontentloaded" }).catch(() => {});
+    const resp = await page.goto(v.url, { waitUntil: "domcontentloaded" }).catch((e: Error) => e);
+    // Fallo de red sin corte del cortafuegos: no es una redirección ni una sesión caducada.
+    if (resp instanceof Error && !fw.sesionCaducada && !fw.registro.some((g) => !g.permitida)) {
+      throw new Error(`no se pudo cargar: ${resp.message.split("\n")[0]}`);
+    }
     await page.waitForTimeout(450);
     final = page.url();
     const t = await evaluarAislado(page, "document.body ? document.body.textContent : ''");
@@ -120,8 +128,8 @@ export async function vigilarPagina(o: OpcionesVigilancia): Promise<ResultadoVig
   }
   const huella = huellaTexto(texto);
   const previa = o.almacen.anterior(v.id);
-  o.almacen.guardar(v.id, v.url, huella);
-  if (previa === null) return { ...comun, estado: "PRIMERA_VISITA", aviso: null };
-  if (previa === huella) return { ...comun, estado: "SIN_CAMBIOS", aviso: null };
-  return { ...comun, estado: "CAMBIADA", aviso: `La página de ${v.sitio} cambió desde la última visita: ${v.url}` };
+  if (!o.diferirHuella) o.almacen.guardar(v.id, v.url, huella);
+  if (previa === null) return { ...comun, huella, estado: "PRIMERA_VISITA", aviso: null };
+  if (previa === huella) return { ...comun, huella, estado: "SIN_CAMBIOS", aviso: null };
+  return { ...comun, huella, estado: "CAMBIADA", aviso: `La página de ${v.sitio} cambió desde la última visita: ${v.url}` };
 }

@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { ejecutarReceta } from "../adaptador/ejecutor.ts";
+import { AlmacenRecetas, ejecutarReceta } from "../adaptador/ejecutor.ts";
 import { buscarNavegador } from "../cortafuegos/perfil.ts";
 import { cargarReceta } from "../receta/validar.ts";
 import { Banco } from "../banco/servidor.ts";
@@ -49,5 +49,44 @@ test("perfil persistente del directorio de datos: se usa y NO se borra al termin
   } finally {
     await b.parar();
     rmSync(datos, { recursive: true, force: true });
+  }
+});
+
+test("sitio inalcanzable → ERROR transitorio: la receta NO se desactiva ni queda apagada", { timeout: 60_000 }, async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "soul-estado-"));
+  const b = await new Banco().arrancar();
+  const r = receta(b);
+  await b.parar(); // el puerto queda cerrado: conexión rechazada
+  try {
+    const almacen = new AlmacenRecetas(join(dir, "recetas-estado.json"));
+    const res = await ejecutarReceta({ receta: r, yo: "ana.prueba", ejecutable: buscarNavegador().ruta, almacen });
+    assert.equal(res.estado, "ERROR", `${res.estado} ${res.aviso}`);
+    assert.match(res.aviso ?? "", /no se pudo cargar/i);
+    assert.equal(almacen.aviso(r.id), null, "un fallo de red no apaga la receta");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("AlmacenRecetas: desactivar persiste con permisos 0600, reactivar la devuelve y un fichero corrupto deja todo desactivado", async () => {
+  const { mkdtempSync, rmSync, statSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "soul-estado-"));
+  try {
+    const ruta = join(dir, "sub", "recetas-estado.json");
+    const a = new AlmacenRecetas(ruta);
+    a.desactivar("r1", "dejó de ser fiable");
+    assert.equal(new AlmacenRecetas(ruta).aviso("r1"), "dejó de ser fiable");
+    assert.equal(statSync(ruta).mode & 0o777, 0o600);
+    assert.equal(a.reactivar("r1"), true);
+    assert.equal(a.aviso("r1"), null);
+    assert.equal(a.reactivar("r1"), false);
+    writeFileSync(ruta, "{no json");
+    // Fail-closed: un estado ilegible no reactiva en silencio lo que estaba apagado.
+    assert.match(a.aviso("otra") ?? "", /ilegible/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

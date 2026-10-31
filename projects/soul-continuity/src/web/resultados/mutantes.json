@@ -1,6 +1,6 @@
 {
-  "muertos": 20,
-  "total": 20,
+  "muertos": 22,
+  "total": 22,
   "filas": [
     {
       "mutante": "redireccion_directa",
@@ -215,6 +215,27 @@
       "muertoPor": [
         "experimental:tareas:sin_recibo_desactivada",
         "experimental:tareas:sin_recibo_sin_peticiones"
+      ]
+    },
+    {
+      "mutante": "post_lectura_por_get",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "operacion_en_url:correo:mutaciones_servidor",
+        "operacion_en_url:correo:get_cortado"
+      ]
+    },
+    {
+      "mutante": "operacion_url_sin_cotejar",
+      "estado": "MUERTO",
+      "fallidas": 5,
+      "muertoPor": [
+        "operacion_en_url:correo:mutaciones_servidor",
+        "operacion_en_url:correo:peticiones_no_get_fuera_de_lista",
+        "operacion_en_url:correo:operaciones_post_fuera_de_lista",
+        "operacion_en_url:correo:post_cortado",
+        "operacion_en_url:correo:desactivada"
       ]
     }
   ]

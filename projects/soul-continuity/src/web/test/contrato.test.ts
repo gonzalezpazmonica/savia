@@ -3,11 +3,13 @@
 // de la vigilancia; el cortafuegos se prueba en la batería.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { validateAdapterResult, type AdapterContext } from "../../contract/adapter.ts";
 import { crearAdaptadorWeb, type Dependencias } from "../adaptador/contrato.ts";
 import type { Resultado } from "../adaptador/ejecutor.ts";
-import type { ResultadoVigilancia } from "../adaptador/vigilancia.ts";
+import { AlmacenHuellas, type OpcionesVigilancia, type ResultadoVigilancia } from "../adaptador/vigilancia.ts";
 import { cargarReceta } from "../receta/validar.ts";
 
 const receta = () => cargarReceta(join(import.meta.dirname, "..", "recetas", "sinteticas", "tareas.json"), { puerto: 1 });
@@ -150,4 +152,30 @@ test("página vigilada cambiada → web_page_change cerrada con event_at; rediri
 test("páginas vigiladas sin fichero de huellas → not_configured", async () => {
   const r = await crearAdaptadorWeb(deps(resultado("OK"))).read(ctx(base({ recetas: [], vigiladas: [{ id: "p", sitio: "s", url: "https://s.example/" }] })));
   assert.equal(r.status, "not_configured");
+});
+
+test("la huella de una página vigilada solo se confirma si el adaptador entrega: un fallo no consume el cambio", async () => {
+  const fichero = join(mkdtempSync(join(tmpdir(), "soul-contrato-")), "huellas.json");
+  const v = { id: "p1", sitio: "intranet", url: "https://intranet.example/avisos" };
+  const p = base({ vigiladas: [v], huellas: fichero });
+  const vistos: OpcionesVigilancia[] = [];
+  const dep = (receta: Resultado): Dependencias => ({
+    ejecutar: async () => receta,
+    vigilar: async (o) => { vistos.push(o); return { ...vig("CAMBIADA"), huella: "h-nueva" }; },
+  });
+  const fallo = await crearAdaptadorWeb(dep(resultado("ERROR"))).read(ctx(p));
+  assert.equal(fallo.status, "error");
+  assert.equal(vistos[0].diferirHuella, true, "la vigilancia no debe guardar la huella por su cuenta");
+  assert.equal(new AlmacenHuellas(fichero).anterior("p1"), null, "el cambio descartado no puede quedar como visto");
+  const bien = await crearAdaptadorWeb(dep(resultado("OK"))).read(ctx(p));
+  assert.equal(bien.status, "ok");
+  assert.equal(new AlmacenHuellas(fichero).anterior("p1"), "h-nueva");
+});
+
+test("una receta inválida en params no llega al navegador → not_configured", async () => {
+  const d = deps(resultado("OK"));
+  const mala = { ...receta(), urls: ["/tareas/*"], paginas: ["/otra"] };
+  const r = await crearAdaptadorWeb(d).read(ctx(base({ recetas: [mala] })));
+  assert.equal(r.status, "not_configured");
+  assert.equal(d.llamadas, 0);
 });

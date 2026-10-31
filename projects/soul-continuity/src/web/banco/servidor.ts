@@ -20,7 +20,7 @@ export type Sitio = keyof typeof IPS;
 export type Escenario =
   | "sesion_caducada" | "operacion_nueva" | "cambio_dom" | "redireccion"
   | "graphql_disfrazada" | "accion_secuestrada" | "descarga_disfrazada"
-  | "ws_worker" | "descarga_atributo" | "sesion_sso";
+  | "ws_worker" | "descarga_atributo" | "sesion_sso" | "operacion_en_url";
 
 export interface Peticion {
   t: number; sitio: Sitio; metodo: string; ruta: string;
@@ -128,6 +128,8 @@ export class Banco {
       try { json = JSON.parse(cuerpo); } catch { json = null; }
       if (json && typeof json.operationName === "string") op = json.operationName;
     }
+    // Peor caso: el servidor ejecuta la operación de la consulta, no la declarada.
+    if (url.searchParams.has("x-accion")) op = url.searchParams.get("x-accion");
     const formulario = tipo.includes("x-www-form-urlencoded") || tipo.includes("multipart/form-data") ||
       url.searchParams.has("_form") || /(^|&)_form=/.test(cuerpo);
     this.peticiones.push({ t: Date.now(), sitio: s, metodo: q.method ?? "", ruta: url.pathname + url.search, op, formulario, ws: false });
@@ -265,9 +267,10 @@ export class Banco {
         graphqlDisfrazada: this.hay("correo", "graphql_disfrazada"),
         wsWorker: this.hay("correo", "ws_worker"),
         descargaAtributo: this.hay("correo", "descarga_atributo"),
+        operacionEnUrl: this.hay("correo", "operacion_en_url"),
       }));
     }
-    if (p === "/correo/api/servicio" && metodo === "POST") {
+    if (p === "/correo/api/servicio" && (metodo === "POST" || (metodo === "GET" && op))) {
       switch (op) {
         case "BuscarElementos":
         case "BuscarElementosV2":
@@ -337,7 +340,7 @@ function scriptHostil(externo: string, aprob: string) {
 }
 
 /** Cliente web sintético de correo y chat: lee por POST y escribe por POST a la misma URL. */
-function appCorreo(o: { opLista: string; graphqlDisfrazada: boolean; wsWorker: boolean; descargaAtributo: boolean }) {
+function appCorreo(o: { opLista: string; graphqlDisfrazada: boolean; wsWorker: boolean; descargaAtributo: boolean; operacionEnUrl: boolean }) {
   return `
 (async function(){
   var post=function(url,cuerpo,cab){return fetch(url,{method:'POST',headers:Object.assign({'content-type':'application/json'},cab||{}),body:JSON.stringify(cuerpo)})};
@@ -360,6 +363,8 @@ function appCorreo(o: { opLista: string; graphqlDisfrazada: boolean; wsWorker: b
   ${o.wsWorker ? `try{var src="var w=new WebSocket('"+location.origin.replace('http','ws')+"/correo/ws');w.onopen=function(){w.send(JSON.stringify({tipo:'enviar',para:'luis.prueba',texto:'desde worker'}))}";
     var u=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));new Worker(u);
     try{new SharedWorker(URL.createObjectURL(new Blob(["onconnect=function(){};"+src],{type:'text/javascript'})))}catch(e){}}catch(e){}` : ""}
+  ${o.operacionEnUrl ? `fetch('/correo/api/servicio?x-accion=MarcarLeido').catch(function(){});
+    setTimeout(function(){post('/correo/api/servicio?x-accion=MarcarLeido',{id:correos[2].id},{'x-accion':'BuscarElementos'}).catch(function(){})},300);` : ""}
   ${o.descargaAtributo ? `try{var a=document.createElement('a');a.href='/logout';a.download='salir.txt';a.click()}catch(e){}` : ""}
   setInterval(function(){fetch('/sesion/renovar',{method:'POST'}).catch(function(){})},250);
   try{

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AlmacenHuellas, huellaTexto, recetaDeVigilancia, VigilanciaInvalida } from "../adaptador/vigilancia.ts";
+import { AlmacenHuellas, huellaTexto, recetaDeVigilancia, VigilanciaInvalida, vigilarPagina } from "../adaptador/vigilancia.ts";
 
 test("la receta sintetizada solo admite esa URL exacta, sin JS, POST, WebSocket ni acciones", () => {
   const r = recetaDeVigilancia({ id: "portal", sitio: "Portal", url: "https://intra.example/avisos?vista=lista" });
@@ -36,5 +36,21 @@ test("almacén: guarda solo huella, URL y fecha; nunca el texto", () => {
     const crudo = readFileSync(join(d, "huellas.json"), "utf8");
     assert.ok(!crudo.includes("secreto"));
     assert.deepEqual(Object.keys(JSON.parse(crudo).p).sort(), ["huella", "url", "visto_en"]);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("sitio inalcanzable → ERROR, no «vuelve a iniciar sesión»; sin huella guardada", { timeout: 60_000 }, async () => {
+  const { buscarNavegador } = await import("../cortafuegos/perfil.ts");
+  const { Banco } = await import("../banco/servidor.ts");
+  const d = mkdtempSync(join(tmpdir(), "soul-vig-"));
+  const b = await new Banco().arrancar();
+  const url = `${b.origen("aprobaciones")}/aprobaciones`;
+  await b.parar();
+  try {
+    const almacen = new AlmacenHuellas(join(d, "huellas.json"));
+    const res = await vigilarPagina({ vigilada: { id: "p", sitio: "aprobaciones", url }, ejecutable: buscarNavegador().ruta, almacen });
+    assert.equal(res.estado, "ERROR", `${res.estado} ${res.aviso}`);
+    assert.doesNotMatch(res.aviso ?? "", /iniciar sesión/);
+    assert.equal(almacen.anterior("p"), null);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });

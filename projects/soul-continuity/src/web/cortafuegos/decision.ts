@@ -13,7 +13,7 @@ export const MUTANTES = [
   "sin_guardia", "workers_libres",
   // Defensas añadidas en el producto (no estaban en Labs):
   "sin_login_externo", "absoluto_navegable", "extraccion_mundo_principal", "vigilancia_con_js",
-  "experimental_sin_recibo",
+  "experimental_sin_recibo", "post_lectura_por_get", "operacion_url_sin_cotejar",
 ] as const;
 export type Mutante = "ninguno" | (typeof MUTANTES)[number];
 
@@ -28,7 +28,7 @@ export interface PeticionHttp {
 export type Motivo =
   | "lista" | "renovacion" | "post_lectura"
   | "fuera_de_lista" | "login" | "accion_no_ligada" | "metodo" | "escritura_conocida"
-  | "operacion_desconocida" | "graphql_no_consulta" | "esquema" | "otro_origen";
+  | "operacion_desconocida" | "graphql_no_consulta" | "esquema" | "otro_origen" | "operacion_url_distinta";
 
 export interface Decision {
   permitir: boolean;
@@ -85,6 +85,18 @@ export function operacionDe(o: OperacionesPost, p: PeticionHttp): { op: string |
   return { op: typeof v === "string" && v.length > 0 ? v : null, json };
 }
 
+/** ¿La consulta repite la operación con otro valor? El servidor podría ejecutar
+ *  la de la URL y no la declarada: se coteja el parámetro con el mismo nombre
+ *  que la cabecera (o que la última clave de `cuerpo_json`). */
+export function operacionEnConsultaCasa(o: OperacionesPost, u: URL, op: string): boolean {
+  const f = o.operacion;
+  const nombre = ("cabecera" in f ? f.cabecera : f.cuerpo_json.split(".").at(-1) ?? "").toLowerCase();
+  for (const [k, v] of u.searchParams) {
+    if (k.toLowerCase() === nombre && v !== op) return false;
+  }
+  return true;
+}
+
 export interface EstadoCortafuegos {
   accion: AccionNavegacion | null;
 }
@@ -116,14 +128,22 @@ export function decidirHttp(r: Receta, est: EstadoCortafuegos, p: PeticionHttp, 
   if (est.accion && p.navegacion && mutante !== "sin_accion" && !casa(p.url, r.origen, est.accion.urls, prefijo)) {
     return { permitir: false, motivo: "accion_no_ligada" };
   }
+  const ops = r.post_lectura.filter((o) => casa(p.url, r.origen, [o.url]));
+  // Un endpoint de operaciones solo se usa por POST: por GET la operación no se
+  // clasificaría (iría en la URL, sin cabecera ni cuerpo que mirar).
+  if (ops.length && metodo !== "POST" && mutante !== "post_lectura_por_get" && mutante !== "metodo_laxo") {
+    return { permitir: false, motivo: "metodo" };
+  }
   if (metodo === "GET" || metodo === "HEAD" || mutante === "metodo_laxo") return { permitir: true, motivo: "lista" };
   if (metodo !== "POST") return { permitir: false, motivo: "metodo" };
 
-  const ops = r.post_lectura.filter((o) => casa(p.url, r.origen, [o.url]));
   if (ops.length === 0) return { permitir: false, motivo: "metodo" };
   for (const o of ops) {
     const { op, json } = operacionDe(o, p);
     if (op === null) continue;
+    if (mutante !== "operacion_url_sin_cotejar" && !operacionEnConsultaCasa(o, u, op)) {
+      return { permitir: false, motivo: "operacion_url_distinta", op, desactivar: true };
+    }
     if (o.lectura.includes(op)) {
       const f = o.operacion;
       if ("cuerpo_json" in f && f.graphql && mutante !== "graphql_sin_documento") {

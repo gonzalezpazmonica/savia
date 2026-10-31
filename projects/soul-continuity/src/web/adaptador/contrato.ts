@@ -14,6 +14,7 @@ import { comprobarActivacion } from "./activacion.ts";
 import { AlmacenRecetas, ejecutarReceta, type Campo, type Opciones, type Resultado } from "./ejecutor.ts";
 import { AlmacenHuellas, vigilarPagina, type OpcionesVigilancia, type ResultadoVigilancia, type Vigilada } from "./vigilancia.ts";
 import type { Receta } from "../receta/tipos.ts";
+import { validarReceta } from "../receta/validar.ts";
 
 /** Parámetros del adaptador en la configuración de la fuente (`params`). */
 export interface ParametrosWeb {
@@ -120,19 +121,23 @@ function falloDeVigilancia(v: Vigilada, r: ResultadoVigilancia): Fallo | null {
   return null;
 }
 
+const primeraLinea = (e: unknown) => (e as Error).message.split("\n")[0];
+
 function leerParametros(p: Record<string, unknown>): ParametrosWeb | string {
   if (typeof p.ejecutable !== "string" || !p.ejecutable) return "falta el navegador instalado (params.ejecutable)";
   if (typeof p.perfil !== "string" || !p.perfil) return "falta el perfil dedicado de Soul (params.perfil)";
   for (const k of ["recetas", "vigiladas"] as const) {
     if (p[k] !== undefined && !Array.isArray(p[k])) return `params.${k} debe ser una lista`;
   }
+  // Las recetas pasan siempre por el validador: una inválida no llega al navegador.
+  for (const r of (p.recetas ?? []) as unknown[]) {
+    try { validarReceta(r as Receta); } catch (e) { return `receta inválida (${primeraLinea(e)})`; }
+  }
   if (Array.isArray(p.vigiladas) && p.vigiladas.length && typeof p.huellas !== "string") {
     return "páginas vigiladas sin fichero de huellas (params.huellas)";
   }
   return p as unknown as ParametrosWeb;
 }
-
-const primeraLinea = (e: unknown) => (e as Error).message.split("\n")[0];
 
 export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta, vigilar: vigilarPagina }): SourceAdapter {
   return {
@@ -167,12 +172,16 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
         }
       }
       const huellas = new AlmacenHuellas(p.huellas ?? "");
+      // Las huellas se confirman solo si el adaptador entrega: si se descartan las
+      // afirmaciones (fail-closed), el cambio tiene que volver a verse.
+      const pendientes: { v: Vigilada; huella: string }[] = [];
       for (const v of vigiladas) {
         try {
-          const res = await dep.vigilar({ vigilada: v, ejecutable: p.ejecutable, perfil: p.perfil, almacen: huellas });
+          const res = await dep.vigilar({ vigilada: v, ejecutable: p.ejecutable, perfil: p.perfil, almacen: huellas, diferirHuella: true });
           const f = falloDeVigilancia(v, res);
-          if (f) fallos.push(f);
-          else if (res.estado === "CAMBIADA") {
+          if (f) { fallos.push(f); continue; }
+          if (res.huella) pendientes.push({ v, huella: res.huella });
+          if (res.estado === "CAMBIADA") {
             claims.push(afirmacion(ctx, "web_page_change", v.sitio, v.id, v.url,
               { open: false, awaiting_operator: false, event_at: iso(parseTs(ctx.now) as number), attrs: { sender_auth: "unknown" } }));
           }
@@ -181,6 +190,7 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
         }
       }
       if (fallos.length) return fallo(peor(fallos));
+      for (const x of pendientes) huellas.guardar(x.v.id, x.v.url, x.huella);
       return { status: "ok", route: "web", claims };
     },
   };

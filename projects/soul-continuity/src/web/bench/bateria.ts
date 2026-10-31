@@ -231,6 +231,14 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
     // 11) WebSocket desde workers y 12) descarga por atributo `download` hacia un GET que muta.
     await escenario("correo", "ws_worker");
     await escenario("correo", "descarga_atributo");
+    // 17) Operación en la URL: GET al endpoint de operaciones y POST con la consulta
+    // distinta de la cabecera (el servidor del banco ejecuta la de la consulta).
+    {
+      const x = await escenario("correo", "operacion_en_url");
+      ok("operacion_en_url:correo:get_cortado", x.res.registro.some((g) => !g.permitida && g.motivo === "metodo" && g.url.includes("x-accion=")), "");
+      ok("operacion_en_url:correo:post_cortado", x.res.registro.some((g) => !g.permitida && g.motivo === "operacion_url_distinta"), "");
+      ok("operacion_en_url:correo:desactivada", x.res.estado === "DESACTIVADA", `${x.res.estado}`);
+    }
 
     // 14) Login federado: la sesión caducada salta a otro origen (SSO).
     {

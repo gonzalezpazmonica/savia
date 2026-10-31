@@ -5,7 +5,8 @@
 // Guarda referencias y metadatos, nunca páginas completas. El texto de la
 // web es dato: nada de lo extraído decide acciones ni eleva avisos.
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Page } from "playwright-core";
 import { abrirNavegador, evaluarAislado } from "./navegador.ts";
 import { comprobarActivacion } from "./activacion.ts";
@@ -31,18 +32,38 @@ export interface Resultado {
   canal: ReturnType<typeof canalDepuracion>;
 }
 
-/** Recetas desactivadas por la prueba de humo o por operación desconocida (persiste). */
+/** Recetas desactivadas por la prueba de humo o por operación desconocida (persiste).
+ *  Se reactivan con `reactivar` tras revisar la receta (README). */
 export class AlmacenRecetas {
   readonly ruta: string;
   constructor(ruta: string) { this.ruta = ruta; }
-  private leer(): Record<string, { aviso: string; en: string }> {
-    return existsSync(this.ruta) ? JSON.parse(readFileSync(this.ruta, "utf8")) : {};
+  private leer(): Record<string, { aviso: string; en: string }> | null {
+    if (!existsSync(this.ruta)) return {};
+    try { return JSON.parse(readFileSync(this.ruta, "utf8")); } catch { return null; }
   }
-  aviso(id: string): string | null { return this.leer()[id]?.aviso ?? null; }
-  desactivar(id: string, aviso: string) {
+  private escribir(d: Record<string, { aviso: string; en: string }>) {
+    mkdirSync(dirname(this.ruta), { recursive: true });
+    writeFileSync(this.ruta, JSON.stringify(d, null, 2), { mode: 0o600 });
+    chmodSync(this.ruta, 0o600);
+  }
+  /** Fail-closed: con el estado ilegible, ninguna receta se ejecuta. */
+  aviso(id: string): string | null {
     const d = this.leer();
+    if (d === null) return `El estado de las recetas (${this.ruta}) es ilegible; revísalo o bórralo para reactivarlas.`;
+    return d[id]?.aviso ?? null;
+  }
+  desactivar(id: string, aviso: string) {
+    const d = this.leer() ?? {};
     d[id] = { aviso, en: new Date().toISOString() };
-    writeFileSync(this.ruta, JSON.stringify(d, null, 2));
+    this.escribir(d);
+  }
+  /** Devuelve la receta al servicio. `false` si no estaba desactivada. */
+  reactivar(id: string): boolean {
+    const d = this.leer();
+    if (!d || !(id in d)) return false;
+    delete d[id];
+    this.escribir(d);
+    return true;
   }
 }
 
@@ -170,9 +191,17 @@ export async function ejecutarReceta(o: Opciones): Promise<Resultado> {
 
     for (const pagina of r.paginas) {
       if (parar()) break;
-      await page.goto(r.origen + pagina, { waitUntil: "domcontentloaded" }).catch(() => {});
+      const cortesAntes = fw.registro.filter((g) => !g.permitida).length;
+      const resp = await page.goto(r.origen + pagina, { waitUntil: "domcontentloaded" }).catch((e: Error) => e);
       await asentar();
       if (parar()) break;
+      // «No cargó» no es «la web cambió»: un fallo de red o un estado no 2xx sin
+      // corte del cortafuegos es transitorio (ERROR) y no apaga la receta.
+      const cortada = fw.sesionCaducada || fw.desactivada || fw.registro.filter((g) => !g.permitida).length > cortesAntes;
+      if (!cortada && (resp instanceof Error || (resp && !resp.ok()))) {
+        fallo = `no se pudo cargar ${pagina}: ${resp instanceof Error ? resp.message.split("\n")[0] : `HTTP ${resp.status()}`}`;
+        break;
+      }
       if (pagina === r.humo.pagina) {
         const muestra = await extraer(page, r.extraccion, mutante === "extraccion_mundo_principal");
         const sano = muestra.length >= r.humo.minimo && muestra.every((m) => m.id &&
