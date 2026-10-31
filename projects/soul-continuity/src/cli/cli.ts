@@ -25,6 +25,9 @@ import { type AdapterRegistry, makeEngine } from "../core/engine.ts";
 import { StoppedError, resume, stop, stopState } from "../core/failsafe.ts";
 import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeTree, writeJson } from "../core/store.ts";
 import { autostartPlan, installAutostart, uninstallAutostart } from "../startup/autostart.ts";
+import { ensureInstallCert } from "../api/cert.ts";
+import { listDevices, pairDevice, revokeDevice } from "../api/devices.ts";
+import { validateListen } from "../api/listen.ts";
 import type { Run } from "../credentials/store.ts";
 
 export interface CliDeps {
@@ -63,6 +66,7 @@ const HELP = `Órdenes de soul (sin texto libre):
   autostart install|uninstall [--dry-run]
   bench                          banco de continuidad contra este núcleo
   serve                          API local para la app (solo en las direcciones configuradas)
+  pair <nombre> | unpair <id> | devices   dispositivos emparejados con la app
 Opciones: --json · --frontend <nombre> · --provider <id>`;
 
 interface Parsed { cmd: string; args: string[]; flags: Record<string, string | true> }
@@ -330,6 +334,34 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         print([`Banco SE-490 — ${r.impl}: ${r.gate.pass ? "PASS" : "FAIL"}`, ...r.gate.failures.map((f) => `  ${f}`),
           ...Object.entries(r.metrics.per_question).map(([q, v]) => `  ${q}: ${(v.precision * 100).toFixed(1)} %`)].join("\n"), { gate: r.gate, metrics: r.metrics });
         return r.gate.pass ? 0 : 1;
+      }
+
+      case "pair": {
+        const name = activeProfileName(cfg, deps.env);
+        if (!p.args[0]) throw new Exit(2, "pair <nombre del dispositivo>");
+        const listen = validateListen(cfg.api.listen);
+        const tls = ensureInstallCert(deps.dataDir, listen);
+        const d = pairDevice(deps.dataDir, cfg.profiles[name].operator.ref, p.args[0], deps.now());
+        const direcciones = listen.map((a) => `${a.includes(":") ? `[${a}]` : a}:${cfg.api.port}`);
+        print([
+          `Emparejado «${p.args[0]}» (${d.id}). Introduce en la app, solo esta vez:`,
+          `  token: ${d.token}`, `  huella: ${tls.pin}`, `  dirección: ${direcciones.join(", ")}`,
+          "El token no se vuelve a mostrar; si se pierde, desempareja y vuelve a emparejar.",
+        ].join("\n"), { id: d.id, token: d.token, pin: tls.pin, direcciones });
+        return 0;
+      }
+
+      case "unpair": {
+        if (!p.args[0]) throw new Exit(2, "unpair <id>");
+        if (!revokeDevice(deps.dataDir, p.args[0], deps.now())) throw new Exit(1, `no hay ningún dispositivo ${p.args[0]}`);
+        print(`Desemparejado ${p.args[0]}: su token deja de valer.`, { id: p.args[0], revoked: true });
+        return 0;
+      }
+
+      case "devices": {
+        const devices = listDevices(deps.dataDir).map(({ token_sha256: _h, ...d }) => d);
+        print(devices.map((d) => `${d.id} ${d.name}${d.revoked_at ? " (revocado)" : ""}`).join("\n") || "Sin dispositivos.", { devices });
+        return 0;
       }
 
       case "serve":

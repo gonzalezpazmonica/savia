@@ -30,7 +30,7 @@ const deps: CliDeps = {
   run: hostRun,
   node: process.execPath,
   entry: fileURLToPath(import.meta.url),
-  // serve: se conecta con la API local (src/api).
+  serve: async (d) => (await import("../api/serve.ts")).serveFromCli(d),
 };
 
 process.exitCode = await runCli(process.argv.slice(2), deps);
