@@ -35,6 +35,8 @@ export interface Meta {
   supersededBy: string[];
   from?: number;
   to?: number;
+  /** Solo `valid_until` (la frescura de M0): vencida, la nota no es vigente sin `asOf`. */
+  validUntil?: number;
 }
 
 interface DocNode {
@@ -81,11 +83,12 @@ function splitNote(text: string): { fm: Record<string, unknown>; body: string } 
 
 function metaOf(fm: Record<string, unknown>): Meta {
   const from = asDate(fm.effective_from ?? fm.valid_from);
+  const validUntil = asDate(fm.valid_until);
   const to = asDate(fm.effective_to ?? fm.valid_until);
   const status = typeof fm.status === 'string' ? fm.status.toLowerCase() : undefined;
   return {
     ...(status ? { status } : {}), supersedes: asStrings(fm.supersedes), supersededBy: asStrings(fm.superseded_by),
-    ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}),
+    ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}), ...(validUntil !== undefined ? { validUntil } : {}),
   };
 }
 
@@ -130,7 +133,8 @@ export type Currency = 'current' | 'stale' | 'ended' | 'future' | 'unknown';
  */
 export function currency(n: { meta: Meta }, successors: Meta[], asOf: number | undefined, includeStale: boolean): Currency {
   const m = n.meta;
-  const excluded = (m.status !== undefined && RAG_DEFAULTS.excludeStatuses.includes(m.status)) || m.supersededBy.length > 0;
+  const excluded = (m.status !== undefined && RAG_DEFAULTS.excludeStatuses.includes(m.status)) || m.supersededBy.length > 0
+    || (m.validUntil !== undefined && m.validUntil < Date.now());
   if (asOf === undefined) return excluded && !includeStale ? 'stale' : 'current';
   if (m.from !== undefined && asOf < m.from) return 'future';
   if (m.to !== undefined) return asOf >= m.to ? 'ended' : 'current';
@@ -159,6 +163,7 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   const nodes = new Map<string, DocNode>();
   const failed = new Set<string>();
   let seedCount = 0;
+  let capHit = false;
   const order: DocNode[] = [];
   const warnings: string[] = [];
 
@@ -166,7 +171,9 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   const discover = (dome: string, p: string, depth: number, score: number, generation: string, via: EdgeKind | 'seed'): DocNode | undefined => {
     const k = key(dome, p);
     // Las semillas de M0 nunca se pierden: ni el tope de notas ni un fallo al abrirlas las quita.
-    if (nodes.has(k) || (via !== 'seed' && (failed.has(k) || order.length - seedCount >= M5_MAX_DOCS))) return undefined;
+    if (nodes.has(k)) return undefined;
+    if (via !== 'seed' && failed.has(k)) return undefined;
+    if (via !== 'seed' && order.length - seedCount >= M5_MAX_DOCS) { capHit = true; return undefined; }
     const note = ctx.openNote({ dome, path: p });
     if (!note && via !== 'seed') { failed.add(k); return undefined; }
     const { fm, body } = splitNote(note ? note.text : '');
@@ -217,7 +224,11 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   seedCount = order.length;
   let frontier = order.filter(n => n.depth === 0);
   for (let depth = 1; frontier.length > 0; depth++) {
-    if (ctx.timeLeftMs() <= M5_RESERVE_MS || !ctx.consume('hops')) { warnings.push('GRAPH_TRUNCATED'); break; }
+    if (ctx.timeLeftMs() <= M5_RESERVE_MS || !ctx.consume('hops')) {
+      // Solo es truncamiento si había algo que seguir.
+      if (frontier.some(n => referencesOf(n).length > 0)) warnings.push('GRAPH_TRUNCATED');
+      break;
+    }
     const next: DocNode[] = [];
     for (const n of frontier) {
       let followed = 0;
@@ -242,7 +253,7 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
     ctx.step('m5:hop', `${depth}`, next.length);
     frontier = next;
   }
-  if (order.length - seedCount >= M5_MAX_DOCS && !warnings.includes('GRAPH_TRUNCATED')) warnings.push('GRAPH_TRUNCATED');
+  if (capHit && !warnings.includes('GRAPH_TRUNCATED')) warnings.push('GRAPH_TRUNCATED');
 
   // Sucesores: los que la nota declara (`superseded_by`) y los que la declaran a ella (`supersedes`).
   const successorsOf = (n: DocNode): Meta[] => {

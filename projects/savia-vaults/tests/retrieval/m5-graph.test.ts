@@ -106,18 +106,20 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
   afterEach(() => f.cleanup());
   const ask = (query: string, extra: Record<string, unknown> = {}) => runRoute(f.service(), { route: 'M5', query, domes: ['A'], mode: 'bm25', k: 8, ...extra });
 
-  it('sigue un wikilink hasta una nota que M0 no devolvió con k pequeño', async () => {
+  it('sigue un wikilink hasta una nota que M0 no devuelve (mismo k, control con maxHops 0)', async () => {
     writeDocs(f.dir('A'), {
       'inicio.md': note('Inicio', long('zorzal alirrojo invernada') + '\n\nDetalle en [[destino]].'),
-      'destino.md': note('Destino', long('anexo técnico del zorzal en el comedero')),
-      ...Object.fromEntries([1, 2, 3, 4].map(i => [`ruido-${i}.md`, note(`Ruido ${i}`, long('zorzal alirrojo invernada zorzal'))])),
+      // «cazazorzal» contiene el término de la consulta como subcadena pero BM25 no lo empareja: no es semilla.
+      'destino.md': note('Destino', long('anexo técnico del cazazorzal en el comedero')),
     });
     await f.service().sync('A');
-    const m0 = await runRoute(f.service(), { route: 'M0', query: 'zorzal alirrojo invernada', domes: ['A'], mode: 'bm25', k: 3 });
-    const m5 = await ask('zorzal alirrojo invernada', { k: 8, budget: { maxHops: 1 } });
-    expect(paths(m0)).not.toContain('destino.md');
-    expect(paths(m5)).toContain('destino.md');
-    expect(m5.result.consumed.hops).toBe(1);
+    const m0 = await runRoute(f.service(), { route: 'M0', query: 'zorzal alirrojo invernada', domes: ['A'], mode: 'bm25', k: 8 });
+    const sin = await ask('zorzal alirrojo invernada', { k: 8, budget: { maxHops: 0 } });
+    const con = await ask('zorzal alirrojo invernada', { k: 8, budget: { maxHops: 1 } });
+    expect(paths(m0)).toEqual(['inicio.md']);
+    expect(paths(sin)).toEqual(['inicio.md']);
+    expect(paths(con)).toContain('destino.md');
+    expect(con.result.consumed.hops).toBe(1);
   });
 
   it('maxHops 0 no expande: solo las semillas de M0', async () => {
@@ -247,6 +249,25 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
     const out = await ask('mochuelo boreal', { pathPrefix: 'docs', budget: { maxHops: 1 } });
     expect(out.result.trace.steps.find(st => st.step === 'm5:graph')?.detail).toBe('docs=1');
     expect(paths(out)).toEqual(['docs/inicio.md']);
+  });
+
+  it('sin asOf, un vecino con valid_until vencido no se sirve (como M0); con includeStale, sí', async () => {
+    writeDocs(f.dir('A'), {
+      'inicio.md': note('Inicio', long('somormujo lavanco') + '\n\n[[caducada]]'),
+      'caducada.md': note('Caducada', long('nota de los somormujos'), 'valid_until: 2020-01-01\n'),
+    });
+    await f.service().sync('A');
+    const out = await ask('somormujo lavanco', { budget: { maxHops: 1 } });
+    expect(paths(out)).toEqual(['inicio.md']);
+    const all = await ask('somormujo lavanco', { includeStale: true, budget: { maxHops: 1 } });
+    expect(paths(all)).toContain('caducada.md');
+  });
+
+  it('no avisa de GRAPH_TRUNCATED si no hay nada que seguir ni se llegó al tope', async () => {
+    writeDocs(f.dir('A'), { 'solo.md': note('Solo', long('torcaz común arboleda')) });
+    await f.service().sync('A');
+    const out = await ask('torcaz común arboleda', { budget: { maxHops: 0 } });
+    expect(out.result.warnings ?? []).not.toContain('GRAPH_TRUNCATED');
   });
 
   it('con poco tiempo restante no expande y conserva las semillas (no devuelve vacío)', async () => {
