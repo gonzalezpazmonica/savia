@@ -109,6 +109,15 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       aplicar(ctx, o, snap, t);
     },
 
+    seleccion(o: Op, pregunta: string, t: number) {
+      const snap = engine.lastSnapshot(stateDir, o.ref);
+      if (!snap || (parseTs(snap.expires_at) ?? 0) <= t) return new Set<string>();
+      const install = { id: cfg.installation_id, operator: { ref: o.ref, identities: { emails: [] } }, sources: [] };
+      const q = pregunta.toUpperCase() as "Q1" | "Q2" | "Q4";
+      const a = engine.answer(snap, { q, detail: "titulos" }, { install, now: new Date(t).toISOString() });
+      return new Set(a.items.map((it) => elementId(o.ref, it.key)));
+    },
+
     frescura(o: Op, t: number) {
       const snap = engine.lastSnapshot(stateDir, o.ref);
       if (!snap) return { ultimaLectura: null, obsoleto: true };

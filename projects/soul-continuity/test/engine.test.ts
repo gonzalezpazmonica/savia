@@ -1,12 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InstallationConfig, SourceAdapter } from "../src/contract/adapter.ts";
 import { makeEngine } from "../src/core/engine.ts";
 import { StoppedError, stop } from "../src/core/failsafe.ts";
-import { filesUnder } from "../src/core/store.ts";
+import { filesUnder, operatorDirName } from "../src/core/store.ts";
 
 const NOW = "2026-10-31T09:00:00Z";
 const tmp = () => mkdtempSync(join(tmpdir(), "soul-en-"));
@@ -127,4 +127,19 @@ test("purgeAdapter borra las afirmaciones del adaptador en la caché y en el his
   const all = filesUnder(stateDir).map((f) => readFileSync(f, "utf8")).join("\n");
   assert.ok(!all.includes("r1#7"));
   assert.equal(e.lastSnapshot(stateDir, "op-a")?.adapters.github.status, "consent_revoked");
+});
+
+test("historial de Q3: con una lectura cada 5 min se conserva el día anterior (poda por antigüedad)", async () => {
+  const e = makeEngine({ github: fakeGithub({ n: 0 }) });
+  const stateDir = tmp();
+  const inst = install("op-a", [{ adapter: "github", purpose: "p", consent }]);
+  const t0 = Date.parse("2026-10-30T08:00:00Z");
+  for (let i = 0; i <= 12 * 30; i++) { // 30 h de lecturas cada 5 min
+    await e.snapshot({ install: inst, now: new Date(t0 + i * 300_000).toISOString(), stateDir, env });
+  }
+  const now = new Date(t0 + 30 * 3_600_000).toISOString();
+  assert.ok(e.snapshotAt(stateDir, "op-a", "2026-10-30T09:30:00Z"), "lo de ayer por la mañana sigue");
+  assert.ok(e.snapshotAt(stateDir, "op-a", new Date(Date.parse(now) - 20 * 60_000).toISOString()), "y lo reciente con detalle");
+  const files = readdirSync(join(stateDir, operatorDirName("op-a"), "history")).length;
+  assert.ok(files <= 24 + 24 * 7 + 1, `historial acotado (${files})`);
 });

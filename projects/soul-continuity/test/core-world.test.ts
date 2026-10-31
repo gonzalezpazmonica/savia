@@ -143,3 +143,34 @@ test("frescura real: ultima_lectura es la de la instantánea; caducada => obsole
     assert.equal(stale.recuentos.total, 0, "lo caducado no se sirve como vigente");
   } finally { await s.cerrar(); }
 });
+
+test("la API selecciona Q1/Q2/Q4 como el núcleo: ni cerrados ni reuniones fuera de ventana", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-cw-"));
+  const cfg = emptyConfig("i");
+  cfg.active_profile = "yo";
+  cfg.profiles.yo = { operator: { ref: "op-yo", identities: { emails: [] } }, sources: [{ adapter: "jira", purpose: "t", consent: { granted_at: "2026-10-01T00:00:00Z" } }, { adapter: "m365-calendar", purpose: "c", consent: { granted_at: "2026-10-01T00:00:00Z" } }] };
+  const claim = (adapter: string, type: any, ref: string, over: any) => ({ key: `${adapter}:${type}:${ref}`, claim_type: type, state: "OBSERVED", source_refs: [{ adapter, route: "api", ref }],
+    sensitivity: "N4", observed_at: NOW, valid_until: "2026-10-31T10:00:00Z", open: true, awaiting_operator: false, attrs: {}, title: ref, untrusted_text: true, ...over });
+  const jira: SourceAdapter = { name: "jira", routes: ["api"], purpose: "t", async read() { return { status: "ok", route: "api", claims: [
+    claim("jira", "task_assigned", "ABIERTA-1", { awaiting_operator: true }), claim("jira", "task_assigned", "CERRADA-2", { open: false, awaiting_operator: true })] as any }; } };
+  const cal: SourceAdapter = { name: "m365-calendar", routes: ["api"], purpose: "t", async read() { return { status: "ok", route: "api", claims: [
+    claim("m365-calendar", "meeting", "HOY", { due_at: "2026-10-31T15:00:00Z" }), claim("m365-calendar", "meeting", "LEJANA", { due_at: "2026-11-25T15:00:00Z" })] as any }; } };
+  const engine = makeEngine({ jira, "m365-calendar": cal });
+  await engine.snapshot({ install: { id: "i", operator: cfg.profiles.yo.operator, sources: cfg.profiles.yo.sources }, now: NOW, stateDir: dir,
+    env: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "t" } } });
+  const world = coreWorld({ cfg, engine, stateDir: dir });
+  const s = crearServidor({ tls: TLS, mundo: world, reloj: () => T, autenticar: () => ({ ref: "op-yo", revocado: false }) });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  const get = (path: string) => new Promise<any>((res, rej) => {
+    const q = request({ host: "127.0.0.1", port: l.port, path: "/api/v1/soul" + path, ca: TLS.cert, headers: { Authorization: "DPoP x", DPoP: "p" } }, (r) => {
+      let t = ""; r.on("data", (d) => { t += d; }); r.on("end", () => res(JSON.parse(t)));
+    });
+    q.on("error", rej); q.end();
+  });
+  try {
+    const titles = (j: any) => j.elementos.map((e: any) => e.titulo.texto).sort();
+    assert.deepEqual(titles(await get("/q/q1")), ["ABIERTA-1", "HOY"]);
+    assert.deepEqual(titles(await get("/q/q2")), ["ABIERTA-1"]);
+    assert.ok(!titles(await get("/q/q4")).includes("CERRADA-2"));
+  } finally { await s.cerrar(); }
+});

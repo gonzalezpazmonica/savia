@@ -10,7 +10,7 @@
  *   ledger.jsonl     libro de correcciones (solo filas del operador)
  *   snapshot.json    última instantánea sin el libro aplicado (solo TTL): el libro se aplica al
  *                    leerla, así una restauración posterior a una revocación también vale en caché
- *   history/<ts>.json instantáneas anteriores para Q3 (las últimas HISTORY_MAX)
+ *   history/<ts>.json instantáneas anteriores para Q3 (todo 2 h; una por hora durante 7 días)
  */
 
 import { readdirSync, rmSync } from "node:fs";
@@ -43,7 +43,6 @@ const DAY = 86_400_000;
 const LEDGER = "ledger.jsonl";
 const CACHE = "snapshot.json";
 const HISTORY = "history";
-export const HISTORY_MAX = 50;
 
 function consentProblem(s: InstallationConfig["sources"][number], now: number): string | null {
   if (typeof s.purpose !== "string" || !s.purpose.trim()) return "no_purpose";
@@ -56,11 +55,29 @@ function consentProblem(s: InstallationConfig["sources"][number], now: number): 
   return null;
 }
 
+const HOUR = 3_600_000;
+/** Retención del historial de Q3: todo lo de las últimas 2 h y una lectura por hora durante 7 días. */
+export const HISTORY_DETAIL_MS = 2 * HOUR;
+export const HISTORY_DAYS = 7;
+
+function historyTime(f: string): number | null {
+  const m = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})(?:-(\d+))?Z\.json$/.exec(f);
+  return m ? parseTs(`${m[1]}:${m[2]}:${m[3]}${m[4] ? `.${m[4]}` : ""}Z`) : null;
+}
+
 function saveHistory(dir: string, snap: Snapshot): void {
   const h = ensureDir(join(dir, HISTORY));
   writeJson(join(h, `${snap.issued_at.replace(/[:.]/g, "-")}.json`), snap);
-  const files = readdirSync(h).filter((f) => f.endsWith(".json")).sort();
-  for (const f of files.slice(0, Math.max(0, files.length - HISTORY_MAX))) rmSync(join(h, f), { force: true });
+  const now = parseTs(snap.issued_at) ?? Date.now();
+  const hours = new Set<number>();
+  for (const f of readdirSync(h).filter((x) => x.endsWith(".json")).sort()) {
+    const t = historyTime(f);
+    const age = t === null ? Infinity : now - t;
+    if (age <= HISTORY_DETAIL_MS) continue;
+    const bucket = Math.floor((t ?? 0) / HOUR);
+    if (age <= HISTORY_DAYS * 24 * HOUR && !hours.has(bucket)) { hours.add(bucket); continue; }
+    rmSync(join(h, f), { force: true });
+  }
 }
 
 export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engine {
