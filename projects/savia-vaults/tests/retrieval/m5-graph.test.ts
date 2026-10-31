@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { runRoute } from '../../src/retrieval/runner.js';
 import { getRoute } from '../../src/retrieval/route.js';
-import { currency, M5_MAX_DOCS } from '../../src/retrieval/routes/m5-graph.js';
+import { currency, M5_MAX_DOCS, M5_MAX_ID_LOOKUPS } from '../../src/retrieval/routes/m5-graph.js';
 import { describeSecurityBattery } from './security-battery.js';
 import { fixture, long, note, rewrite, writeDocs, type Fixture } from './helpers.js';
 
@@ -152,11 +152,14 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
   it('resuelve un ID de spec a su nota', async () => {
     writeDocs(f.dir('A'), {
       'informe.md': note('Informe', long('verderón serrano migración') + '\n\nCumple lo de SE-777.'),
-      'specs/SE-777-pasillo.md': note('SE-777 pasillo', long('verderón serrano pasillo ecológico')),
+      'specs/SE-777-pasillo.md': note('SE-777 pasillo', long('pasillo ecológico de montaña')),
     });
     await f.service().sync('A');
     const out = await ask('verderón serrano', { k: 8, budget: { maxHops: 1 } });
-    expect(paths(out)).toContain('specs/SE-777-pasillo.md');
+    // El destino no comparte términos con la consulta: no es semilla; solo el ID lo alcanza.
+    const m0 = await runRoute(f.service(), { route: 'M0', query: 'verderón serrano', domes: ['A'], mode: 'bm25', k: 8 });
+    expect(paths(m0)).not.toContain('specs/SE-777-pasillo.md');
+    expect(out.result.trace.steps.find(st => st.step === 'm5:graph')?.detail).toBe('docs=2');
   });
 
   it('un vínculo a una nota reclasificada o en cuarentena no la sirve ni deja rastro', async () => {
@@ -194,6 +197,46 @@ describe('SE-489 M5 — expansión, ciclos y guard', () => {
     await f.service().sync('A');
     const out = await ask('agateador norteño', { k: 50, budget: { maxHops: 4, maxNodes: 1000 } });
     expect(new Set(paths(out)).size).toBeLessThanOrEqual(M5_MAX_DOCS);
+  });
+
+  it('con poco tiempo restante no expande y conserva las semillas (no devuelve vacío)', async () => {
+    writeDocs(f.dir('A'), {
+      'inicio.md': note('Inicio', long('collalba gris pedregal') + '\n\n[[destino]]'),
+      'destino.md': note('Destino', long('apéndice sobre mediciones de campo')),
+    });
+    await f.service().sync('A');
+    const out = await ask('collalba gris pedregal', { budget: { maxHops: 2, maxLatencyMs: 1000 } });
+    expect(paths(out)).toEqual(['inicio.md']);
+    expect(out.result.warnings).toContain('GRAPH_TRUNCATED');
+  });
+
+  it('las búsquedas para resolver IDs de spec están acotadas', async () => {
+    const ids = Array.from({ length: M5_MAX_ID_LOOKUPS + 4 }, (_, i) => `SE-${700 + i}`);
+    const docs: Record<string, string> = { 'ref.md': note('Ref', long('alondra ricotí secano') + `\n\nVer ${ids.join(', ')}.`) };
+    for (const id of ids) docs[`specs/${id}-x.md`] = note(id, long(`prescripciones de ${id}`));
+    writeDocs(f.dir('A'), docs);
+    await f.service().sync('A');
+    const out = await ask('alondra ricotí secano', { k: 20, budget: { maxHops: 1 } });
+    // Los vecinos no comparten términos con la consulta (no salen como hits); se cuentan las notas abiertas.
+    const opened = Number(out.result.trace.steps.find(st => st.step === 'm5:graph')?.detail?.replace('docs=', ''));
+    expect(opened).toBeGreaterThan(1);
+    expect(opened).toBeLessThanOrEqual(1 + M5_MAX_ID_LOOKUPS);
+  });
+
+  it('un vecino nunca desplaza a una semilla de M0 dentro de k', async () => {
+    // Con RRF, 1/(60+rango): un vecino al 0,9 del primero supera al décimo. Debe quedar siempre por debajo.
+    const docs: Record<string, string> = {
+      'fuerte.md': note('Bisbita alpino roquedo', long('bisbita alpino roquedo').repeat(3) + '\n\n[[vecino]]'),
+      'vecino.md': note('Vecino', 'bisbita ' + 'registro de campo sin relación. '.repeat(40)),
+    };
+    for (let i = 0; i < 12; i++) docs[`ruido-${i}.md`] = note(`Ruido ${i}`, long('bisbita alpino roquedo'));
+    writeDocs(f.dir('A'), docs);
+    await f.service().sync('A');
+    const m0 = await runRoute(f.service(), { route: 'M0', query: 'bisbita alpino roquedo', domes: ['A'], mode: 'bm25', k: 10 });
+    const out = await ask('bisbita alpino roquedo', { k: 10, budget: { maxHops: 1 } });
+    expect(paths(m0)[0]).toBe('fuerte.md');
+    expect(paths(m0)).not.toContain('vecino.md');
+    expect(paths(out)).toEqual(paths(m0));
   });
 
   it('declara su contrato', () => {

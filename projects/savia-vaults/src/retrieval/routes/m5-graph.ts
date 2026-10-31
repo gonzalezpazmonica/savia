@@ -18,8 +18,12 @@ import { ROUTE_CONTRACT_VERSION, registerRoute, type RetrievalRoute, type RouteC
 export const M5_MAX_DOCS = 24;
 /** Vínculos que se siguen por nota, en orden determinista. */
 export const M5_MAX_FANOUT = 6;
+/** Búsquedas BM25 para resolver IDs de spec, por consulta (cada una es una pasada por el índice). */
+export const M5_MAX_ID_LOOKUPS = 4;
+/** Reserva de pared: la expansión para antes de agotar `maxLatencyMs`, o el runner descarta todo. */
+export const M5_RESERVE_MS = 1500;
 const MAX_TARGET_CHARS = 256;
-/** Factor de score por nivel: el vecino queda justo por debajo de su origen. */
+/** Factor de score por nivel: los vecinos quedan por debajo de todas las semillas. */
 const HOP_DECAY = 0.9;
 const SPEC_ID = /\b(?:SE|SPEC)-\d{1,4}\b/g;
 
@@ -177,21 +181,29 @@ async function run(req: RetrievalRequest, ctx: RouteContext): Promise<RouteOutpu
   };
 
   /** Resuelve un ID de spec a una nota por BM25 (sin modelo): la que lo lleve en la ruta. */
+  const idCache = new Map<string, string | undefined>();
   const resolveId = async (id: string): Promise<string | undefined> => {
+    if (idCache.has(id)) return idCache.get(id);
+    if (idCache.size >= M5_MAX_ID_LOOKUPS) return undefined;
+    idCache.set(id, undefined);
     const hits = await ctx.candidates(id, { k: 3, mode: 'bm25' });
     const low = id.toLowerCase();
-    return hits.find(h => h.path.toLowerCase().includes(low))?.path;
+    const found = hits.find(h => h.path.toLowerCase().includes(low))?.path;
+    idCache.set(id, found);
+    return found;
   };
 
+  // Un vecino nunca desplaza a una semilla de M0: su score parte del mínimo de las semillas.
+  const floor = order.length ? Math.min(...order.map(n => n.score)) : 0;
   let frontier = order.filter(n => n.depth === 0);
   for (let depth = 1; frontier.length > 0; depth++) {
-    if (!ctx.consume('hops')) { warnings.push('GRAPH_TRUNCATED'); break; }
+    if (ctx.timeLeftMs() <= M5_RESERVE_MS || !ctx.consume('hops')) { warnings.push('GRAPH_TRUNCATED'); break; }
     const next: DocNode[] = [];
     for (const n of frontier) {
       let followed = 0;
       for (const ref of referencesOf(n)) {
-        if (followed >= M5_MAX_FANOUT || ctx.timeLeftMs() <= 0) break;
-        const score = n.score * HOP_DECAY ** depth;
+        if (followed >= M5_MAX_FANOUT || ctx.timeLeftMs() <= M5_RESERVE_MS) break;
+        const score = floor * HOP_DECAY ** depth;
         let target: DocNode | undefined;
         let resolved: string | undefined;
         const candidates = ref.kind === 'id' ? [await resolveId(ref.target)].filter((p): p is string => p !== undefined) : pathsOf(ref.target, n.path);
