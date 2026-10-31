@@ -6,6 +6,10 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-10-31 SE-490 PROPOSED
+
+Soul Continuidad v1, gemelo operativo prioritario para la operadora. Se aprueba al fusionar la PR (SE-488).
+
 ## 2026-10-30 SE-489 APPROVED
 
 Aprobada por la operadora en el chat: construir, probar y medir

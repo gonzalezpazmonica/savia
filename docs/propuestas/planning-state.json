@@ -1659,6 +1659,15 @@
       "evidence": "docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md",
       "phase": "D",
       "approval": "Operadora 2026-10-30, en el chat: «Construyes, haces pruebas empíricas y sacas datos reales contrastados»"
+    },
+    {
+      "id": "SE-490",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional",
+      "note": "Proceso por usuario sin administrador (Win/macOS/Linux, Rust sobre el dominio de Soul). Lee correo, calendario, chat, documentos, gestores, repos y webs sin API (perfil de navegador dedicado, solo lectura en red) con consentimiento por fuente. Responde Q1–Q4. App de Space bidireccional con política de atención declarada y push sin contenido. Datos de empresa sin salida a la nube.",
+      "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
