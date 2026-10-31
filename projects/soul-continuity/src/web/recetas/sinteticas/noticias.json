@@ -1,0 +1,33 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "noticias-sintetico",
+  "sitio": "Intranet de noticias (sintética)",
+  "estado": "estable",
+  "origen": "http://127.0.0.4:{puerto}",
+  "javascript": false,
+  "urls": ["/noticias?seccion=portada", "/noticias?seccion=avisos"],
+  "renovacion_sesion": [],
+  "post_lectura": [],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/noticias?seccion=portada"],
+  "acciones": [
+    { "id": "pestana-avisos", "selector": "a.pestana[data-pestana=\"avisos\"]", "urls": ["/noticias?seccion=avisos"], "max_repeticiones": 1 }
+  ],
+  "extraccion": {
+    "elemento": "article.noticia",
+    "id": { "attr": "data-id" },
+    "campos": {
+      "titulo": { "sel": "h2" },
+      "autor": { "sel": ".autor" },
+      "menciona": { "attr": "data-menciona", "tipo": "lista" },
+      "accion_antes": { "sel": "time.accion-antes", "tipo": "fecha" }
+    }
+  },
+  "preguntas": {
+    "q1": { "todas": [ { "campo": "menciona", "op": "contiene", "valor": "{yo}" }, { "campo": "accion_antes", "op": "existe" } ] },
+    "q2": { "campo": "menciona", "op": "contiene", "valor": "{yo}" },
+    "q4": { "todas": [ { "campo": "menciona", "op": "contiene", "valor": "{yo}" }, { "campo": "accion_antes", "op": "existe" } ] }
+  },
+  "sesion": { "login": ["/login", "/login?vuelta=*"] },
+  "humo": { "pagina": "/noticias?seccion=portada", "minimo": 1, "campos_obligatorios": ["titulo", "autor"] }
+}

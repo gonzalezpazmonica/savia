@@ -1,0 +1,44 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "tareas-sintetico",
+  "sitio": "Portal de tareas (sintético)",
+  "estado": "estable",
+  "origen": "http://127.0.0.2:{puerto}",
+  "javascript": false,
+  "urls": ["/tareas?pagina=*", "/tareas?vista=resumen"],
+  "renovacion_sesion": [],
+  "post_lectura": [],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/tareas?pagina=1"],
+  "acciones": [
+    { "id": "siguiente", "selector": "a.siguiente", "urls": ["/tareas?pagina=*"], "max_repeticiones": 5 }
+  ],
+  "extraccion": {
+    "elemento": "li.tarea",
+    "id": { "attr": "data-id" },
+    "campos": {
+      "titulo": { "sel": "a.titulo" },
+      "asignado": { "attr": "data-asignado" },
+      "revisor": { "attr": "data-revisor" },
+      "creador": { "attr": "data-creador" },
+      "estado": { "attr": "data-estado" },
+      "prioridad": { "attr": "data-prioridad" },
+      "vence": { "sel": ".vence", "tipo": "fecha" }
+    }
+  },
+  "preguntas": {
+    "q1": { "todas": [
+      { "alguna": [ { "campo": "asignado", "op": "igual", "valor": "{yo}" }, { "campo": "revisor", "op": "igual", "valor": "{yo}" } ] },
+      { "campo": "estado", "op": "distinto", "valor": "hecha" } ] },
+    "q2": { "todas": [
+      { "alguna": [ { "campo": "asignado", "op": "igual", "valor": "{yo}" }, { "campo": "revisor", "op": "igual", "valor": "{yo}" } ] },
+      { "campo": "estado", "op": "distinto", "valor": "hecha" },
+      { "campo": "creador", "op": "distinto", "valor": "{yo}" } ] },
+    "q4": { "todas": [
+      { "alguna": [ { "campo": "asignado", "op": "igual", "valor": "{yo}" }, { "campo": "revisor", "op": "igual", "valor": "{yo}" } ] },
+      { "campo": "estado", "op": "distinto", "valor": "hecha" },
+      { "campo": "vence", "op": "existe" } ] }
+  },
+  "sesion": { "login": ["/login", "/login?vuelta=*"] },
+  "humo": { "pagina": "/tareas?pagina=1", "minimo": 1, "campos_obligatorios": ["titulo", "estado", "asignado"] }
+}

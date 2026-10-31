@@ -1,0 +1,144 @@
+# Soul Continuidad · adaptador `web` (SE-490)
+
+Lee webs sin API con el navegador ya instalado (Chrome o Edge) en un **perfil dedicado a Soul**, en solo lectura y sin modelo. Lo que no está en la receta se corta en la red, fuera del modelo y fuera de la página.
+
+Viene de la preparación de Labs (`se490-prep/web`): formato de receta, validador, cortafuegos de tres capas, ejecutor, sitios sintéticos y batería AC-4e con sus 15 mutantes. Aquí se ha portado, comprobado con `tsc --strict` y ampliado con cinco defensas, cada una con su mutante.
+
+- Node.js ≥ 22.6, TypeScript con `--experimental-strip-types`, sin compilar.
+- Dependencia de ejecución: `playwright-core` 1.64.1, JavaScript puro. Desarrollo: `typescript` y `@types/node`.
+- No se descargan navegadores: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts`.
+- Navegador: `buscarNavegador()` o `SOUL_NAVEGADOR=<ruta>`. Chromium del sistema solo como último recurso, y entonces lo avisa.
+
+```bash
+npm run typecheck   # tsc --strict, sin emitir
+npm run test:unit   # tests sin navegador
+npm test            # todo: unitarios, ejecutor y batería completa (~4 min, Chrome sin interfaz)
+npm run bateria     # solo la batería; --salida <dir> escribe el JSON
+npm run mutantes    # la batería contra cada mutante, en serie (~1 h)
+```
+
+## Qué hay
+
+| Ruta | Qué es |
+|---|---|
+| `receta/` | Formato `soul-receta-web/1` (`tipos.ts`), patrones de URL estrictos (`patrones.ts`) y validación fail-closed (`validar.ts`). |
+| `cortafuegos/` | Decisión pura (`decision.ts`), las tres capas (`cortafuegos.ts`), y perfil dedicado, directorio de datos y detección del navegador (`perfil.ts`). |
+| `adaptador/ejecutor.ts` | Ejecutor determinista: vistas de lista, acciones ligadas, prueba de humo, sesión caducada y Q1/Q2/Q4 (Q3 por diferencia). |
+| `adaptador/contrato.ts` | `SourceAdapter` `web` del contrato compartido (`../contract/`): afirmaciones `web:*` y estado del adaptador. |
+| `adaptador/navegador.ts` | Arranque del navegador sobre el perfil dedicado y lectura en un mundo aislado. |
+| `adaptador/vigilancia.ts` | Sin receta: solo «esta página cambió», con el enlace. |
+| `adaptador/activacion.ts` · `grabacion.ts` · `cli-grabacion.ts` | Puerta de las recetas experimentales y su validación contra el tráfico grabado del operador. |
+| `recetas/sinteticas/` | Recetas de los cuatro sitios del banco (`estable`). |
+| `recetas/producto/` | Plantillas genéricas de Outlook (correo y calendario), Teams y OneDrive/SharePoint en la web: **experimentales y desactivadas**. |
+| `banco/` · `bench/` · `verdad/` | Sitios sintéticos, batería AC-4e y mutantes, y la verdad escrita antes del código. |
+| `resultados/` | `bateria-ninguno.json` y `mutantes.json` de la última ejecución. |
+
+## Cortafuegos: tres capas con la misma decisión
+
+`decidirHttp(receta, estado, petición)` es pura. Sigue este orden: esquema, login (sesión caducada), renovación de sesión, lista de URLs, **otro origen**, acción en curso, `GET`/`HEAD`, y `POST` con su operación. Todo lo demás se corta.
+
+- **A · Guardia del navegador** (CDP `Fetch`, petición y respuesta). Ve cada salto de una redirección, las descargas por `<a download>`, el favicon y los scripts de workers. Corta adjuntos y detecta 401. Sin ella no se ejecuta.
+- **B · `context.route`.** Aplica la misma decisión. Responde 204 a una navegación cortada y, si la petición pasa, usa `continue`.
+- **C · WebSocket y workers.** Solo salen los mensajes exactos de mantenimiento. Los workers dedicados se quedan en pausa y `--disable-shared-workers` elimina los compartidos.
+
+El canal de control va por tubería (`--remote-debugging-pipe`), nunca por puerto. El proceso del navegador recibe `HOME` y `XDG_*` dentro del perfil dedicado. La página no puede enviar formularios.
+
+### Defensas añadidas en el producto
+
+| Defensa | Por qué | Mutante que la quita |
+|---|---|---|
+| **Login federado (SSO).** `sesion.login` admite un origen entero (`https://login.example`). | Los clientes reales caducan hacia otro origen. Antes eso acababa en `DESACTIVADA` por la prueba de humo, no en `SESION_CADUCADA`. | `sin_login_externo` |
+| **Patrones absolutos solo para subrecursos.** `urls` admite `https://cdn.example/…`, pero navegar a otro origen se corta (`otro_origen`). | Los clientes reales cargan scripts o leen datos de otro origen. La página nunca debe salir del suyo. | `absoluto_navegable` |
+| **Lectura en un mundo aislado** (`Page.createIsolatedWorld`). | Con `$$eval` en el mundo de la página, un script hostil podía falsear lo extraído parcheando `getAttribute`. Ahora el banco lo intenta. | `extraccion_mundo_principal` |
+| **Vigilancia sin receta, siempre sin JavaScript.** | Leer una página desconocida no debe ejecutar su código. | `vigilancia_con_js` |
+| **Recetas experimentales tras un recibo.** No abren el navegador sin un recibo local, ligado a la huella exacta de la receta. | Las plantillas de clientes reales no están validadas contra tráfico real. | `experimental_sin_recibo` |
+
+## Perfil dedicado y credenciales
+
+- `prepararPerfilSoul(directorioDatos())` crea un perfil persistente en `<datos>/web/perfil` con la marca `.perfil-soul`.
+  - Se rechaza si está dentro de un perfil personal de Chrome, Edge, Chromium o Firefox.
+  - En cada preparación reimpone las preferencias que apagan el gestor de contraseñas y el autorrelleno.
+- El directorio de datos es `SOUL_DATA_DIR`, o el del sistema:
+  - Linux: `$XDG_DATA_HOME/soul-continuity`;
+  - macOS: `~/Library/Application Support/SoulContinuity`;
+  - Windows: `%LOCALAPPDATA%\SoulContinuity`.
+- El operador inicia sesión **a mano** en ese perfil, y solo en las webs que da a Soul. Soul no guarda contraseñas, no rellena credenciales y no inyecta cookies: el parámetro `cookies` solo existe para el banco.
+- Sesión caducada: parada limpia, 0 elementos y el aviso «Vuelve a iniciar sesión en X en el perfil de Soul».
+
+## Sin receta: «esta página cambió»
+
+`vigilarPagina({ vigilada: { id, sitio, url }, … })` pasa por el mismo cortafuegos con una receta mínima: esa URL exacta, sin JavaScript, sin `POST`, sin WebSocket y sin acciones. Guarda la huella SHA-256 del texto, nunca el texto. Los estados posibles son:
+
+- `PRIMERA_VISITA`, `SIN_CAMBIOS` o `CAMBIADA`, con el enlace;
+- `REDIRIGIDA`, si la página salta fuera de la URL; probablemente sea el inicio de sesión;
+- `ERROR`.
+
+Una URL con aspecto de acción (`approve`, `logout`, `confirm…`) se rechaza al darla de alta.
+
+## Recetas de clientes reales: experimentales y desactivadas
+
+Las plantillas de `recetas/producto/` **no** se han validado contra tráfico real. URLs, operaciones y selectores son de partida. Por eso:
+
+- llevan `"estado": "experimental"` y no se ejecutan sin un recibo de validación en `<datos>/web/validaciones/`;
+- el recibo queda ligado a la huella de la receta ya completada: cualquier cambio lo invalida;
+- si el cliente cambia, la prueba de humo desactiva la receta y avisa: «La receta de X dejó de ser fiable». Una operación `POST` desconocida hace lo mismo, sin devolver datos.
+
+### Procedimiento del operador para activar una receta
+
+Todo ocurre en local y fuera de cualquier repositorio. La grabación lleva datos de la empresa (N4).
+
+1. **Abre el perfil de Soul** con el navegador instalado. En Linux, con el perfil por defecto:
+   `google-chrome --user-data-dir="$HOME/.local/share/soul-continuity/web/perfil"`.
+   Inicia sesión en el cliente, y solo en él.
+2. **Graba solo lectura.** Abre DevTools, pestaña Red, y marca «Conservar registro». Carga la página de la receta (por ejemplo, la bandeja de entrada en vista de lista) y espera a que se pinte.
+   - **No abras elementos**, no respondas y no pulses nada más.
+   - Si el cliente lanza escrituras solo (marcar como leído, sincronizar), aparecerán en la grabación. Es lo que se busca: hay que clasificarlas.
+3. **Exporta el HAR** con contenido a `<datos>/web/grabaciones/` (permisos 0700). Nunca dentro de un repositorio.
+4. **Copia la plantilla** a `<datos>/web/recetas/` y complétala. Las variables (`{inquilino}`, `{region}`) salen de la barra de direcciones y de la grabación.
+5. **Valida:**
+   ```bash
+   npm run validar-grabacion -- --receta <datos>/web/recetas/outlook-web-correo.json \
+     --har <datos>/web/grabaciones/outlook.har --var inquilino=… --var region=…
+   ```
+   El informe está enmascarado: sin valores de consulta, sin cuerpos y sin identificadores largos. La validación falla si:
+   - un `POST` a una URL de lectura no declara su operación (no se distingue lectura de escritura: la receta no se publica);
+   - aparece una operación desconocida;
+   - una lectura tiene nombre de escritura;
+   - un documento GraphQL de «lectura» trae `mutation`;
+   - la grabación no cubre las páginas de la receta.
+6. **Ajusta la receta** con el informe: operaciones en `lectura` o `escritura_conocida`, y URLs de la lista. Repite hasta que pase. **No relajes la regla.** Si el cliente no permite distinguir lectura de escritura, esa fuente se queda sin ruta web.
+7. **Emite el recibo** repitiendo la orden con `--emitir-recibo`.
+8. **Ejecuta la batería** (`npm test`) para confirmar que el cortafuegos de esta instalación sigue dando 0 efectos en el banco.
+9. **Borra la grabación** (`<datos>/web/grabaciones/`). El recibo no contiene datos de la grabación.
+
+La validación reproduce cada petición grabada por la misma decisión del cortafuegos. **No** sustituye a la batería con mutaciones medidas en el servidor: el servidor real no se puede instrumentar. La garantía de 0 efectos la dan el cortafuegos, probado en el banco, y la lista cerrada que fija la grabación.
+
+## Adaptador del contrato (`adaptador/contrato.ts`)
+
+`crearAdaptadorWeb()` cumple `SourceAdapter` de `src/contract/adapter.ts`:
+
+- **Parámetros** (`params` de la fuente): `ejecutable` (navegador instalado) y `perfil` (perfil dedicado de Soul) son obligatorios; sin ellos, `not_configured`. Además `recetas`, `vigiladas`, `validaciones`, `desactivadas` y `huellas` (obligatorio si hay páginas vigiladas).
+- **Afirmaciones.** Un elemento en Q1 o Q2 de la receta es `web:task_assigned:<receta>~<id>`, con `awaiting_operator` si está en Q2. Uno que solo está en Q4 es `web:dated_commitment:<receta>~<id>`. Una página vigilada que cambió es `web:web_page_change:<sitio>~<id>`, cerrada y con `event_at`. Las partes de la referencia van codificadas en URL, sin `:`, espacios ni `~`. `due_at` sale del primer campo `vence`, `limite` o `fecha` con forma `AAAA-MM-DD`. El título, del primer campo `titulo`, `asunto`, `nombre`, `concepto` o `resumen`, limpio y marcado `untrusted_text`. `sender_auth` es siempre `unknown`.
+- **Estados.** Sesión caducada (o página vigilada redirigida) → `session_expired`. Prueba de humo u operación nueva → `recipe_disabled`. Fallo de lectura → `error`. Sin recetas activas ni páginas vigiladas → `recipe_disabled`. Una receta experimental sin recibo no cuenta como fallo: no se ejecuta.
+- **Fail-closed.** Si falla cualquier receta o página, el adaptador entero no aporta afirmaciones. Manda `session_expired` sobre `error` y sobre `recipe_disabled`, porque el operador puede arreglarlo.
+- No usa `ctx.transport` ni `ctx.credentials`. Navega con el navegador sobre el perfil dedicado; la sesión es la que inició el operador ahí.
+
+## Resultados (Chrome, Linux)
+
+Los números exactos de la última ejecución están en `resultados/`.
+
+- **Batería: 329 de 329 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 86 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada y navegación a otro origen.
+- **Mutantes: 20 de 20 muertos**: los 15 de Labs y los 5 nuevos, en serie y con informe de cada uno.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 104 tests en verde, 14 de ellos del adaptador del contrato.
+
+## Lo que queda abierto
+
+- **Recetas de clientes reales sin validar.** Sin tráfico real grabado, su contenido es de partida. Teams usa WebSocket y workers que v1 no admite. Si el cliente no pinta sin ellos, la receta no se publica.
+- **Operación en la ruta.** OneDrive y SharePoint pueden listar con `RenderListDataAsStream`, con la operación en la URL. El formato v1 solo la lee de una cabecera o del cuerpo JSON, así que esa receta no pasaría.
+- **Workers.** No arrancan en v1. Habilitarlos exige un *shim* de `WebSocket` dentro del worker antes de reanudarlo.
+- **Cobertura con JavaScript hostil:** la precisión se mantiene en 1,0, pero la cobertura cae (Q1: 0,5), igual que en Labs. Es una denegación, no una fuga.
+- **Solo probado en Linux con HTTP de loopback y Chrome.**
+  - Sin probar: HTTPS, Edge, Windows y macOS.
+  - Sin comprobar: dónde escribe Chrome `Crash Reports` en Windows y macOS. En Linux se cierra dando `HOME` y `XDG_*` dentro del perfil.
+  - La comprobación del canal de depuración por tubería usa `/proc`, así que solo funciona en Linux.
+- **Varias ejecuciones sobre el mismo perfil persistente** no pueden ir a la vez (bloqueo del navegador). Quien orqueste los adaptadores debe ponerlas en serie.

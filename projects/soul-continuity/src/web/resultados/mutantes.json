@@ -1,0 +1,221 @@
+{
+  "muertos": 20,
+  "total": 20,
+  "filas": [
+    {
+      "mutante": "redireccion_directa",
+      "estado": "MUERTO",
+      "fallidas": 21,
+      "muertoPor": [
+        "sesion_caducada:tareas:navegaciones_fuera_de_lista",
+        "sesion_caducada:tareas:peticiones_sin_pasar_por_cortafuegos",
+        "sesion_caducada:tareas:estado",
+        "sesion_caducada:tareas:aviso",
+        "sesion_caducada:correo:navegaciones_fuera_de_lista",
+        "sesion_caducada:correo:peticiones_sin_pasar_por_cortafuegos"
+      ]
+    },
+    {
+      "mutante": "metodo_laxo",
+      "estado": "MUERTO",
+      "fallidas": 21,
+      "muertoPor": [
+        "base:correo:mutaciones_servidor",
+        "base:correo:peticiones_no_get_fuera_de_lista",
+        "base:correo:operaciones_post_fuera_de_lista",
+        "operacion_nueva:correo:mutaciones_servidor",
+        "operacion_nueva:correo:peticiones_no_get_fuera_de_lista",
+        "operacion_nueva:correo:operaciones_post_fuera_de_lista"
+      ]
+    },
+    {
+      "mutante": "escritura_permitida",
+      "estado": "MUERTO",
+      "fallidas": 9,
+      "muertoPor": [
+        "base:correo:mutaciones_servidor",
+        "base:correo:peticiones_no_get_fuera_de_lista",
+        "base:correo:operaciones_post_fuera_de_lista",
+        "ws_worker:correo:mutaciones_servidor",
+        "ws_worker:correo:peticiones_no_get_fuera_de_lista",
+        "ws_worker:correo:operaciones_post_fuera_de_lista"
+      ]
+    },
+    {
+      "mutante": "graphql_sin_documento",
+      "estado": "MUERTO",
+      "fallidas": 1,
+      "muertoPor": [
+        "graphql_disfrazada:correo:mutaciones_servidor"
+      ]
+    },
+    {
+      "mutante": "ws_libre",
+      "estado": "MUERTO",
+      "fallidas": 6,
+      "muertoPor": [
+        "base:correo:mutaciones_servidor",
+        "base:correo:envios_websocket_fuera_de_mantenimiento",
+        "ws_worker:correo:mutaciones_servidor",
+        "ws_worker:correo:envios_websocket_fuera_de_mantenimiento",
+        "descarga_atributo:correo:mutaciones_servidor",
+        "descarga_atributo:correo:envios_websocket_fuera_de_mantenimiento"
+      ]
+    },
+    {
+      "mutante": "ws_sin_lista",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "contenido_hostil:noticias:mutaciones_servidor",
+        "contenido_hostil:noticias:peticiones_a_externo"
+      ]
+    },
+    {
+      "mutante": "patron_prefijo",
+      "estado": "MUERTO",
+      "fallidas": 8,
+      "muertoPor": [
+        "accion_secuestrada:tareas:peticiones_fuera_de_accion",
+        "accion_secuestrada:tareas:corte_registrado",
+        "contenido_hostil:noticias:mutaciones_servidor",
+        "contenido_hostil:noticias:navegaciones_fuera_de_lista",
+        "contenido_hostil:noticias:envios_formulario",
+        "contenido_hostil:noticias:q1:precision>=0.9"
+      ]
+    },
+    {
+      "mutante": "sin_accion",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "accion_secuestrada:tareas:peticiones_fuera_de_accion",
+        "accion_secuestrada:tareas:corte_registrado"
+      ]
+    },
+    {
+      "mutante": "sin_descargas",
+      "estado": "MUERTO",
+      "fallidas": 1,
+      "muertoPor": [
+        "descarga_disfrazada:tareas:descargas"
+      ]
+    },
+    {
+      "mutante": "sin_desactivar",
+      "estado": "MUERTO",
+      "fallidas": 5,
+      "muertoPor": [
+        "operacion_nueva:correo:estado",
+        "operacion_nueva:correo:aviso",
+        "operacion_nueva:correo:persistente",
+        "cambio_dom:tareas:estado",
+        "cambio_dom:tareas:aviso"
+      ]
+    },
+    {
+      "mutante": "sin_login",
+      "estado": "MUERTO",
+      "fallidas": 6,
+      "muertoPor": [
+        "sesion_caducada:tareas:estado",
+        "sesion_caducada:tareas:aviso",
+        "sesion_caducada:correo:estado",
+        "sesion_caducada:correo:aviso",
+        "sesion_sso:tareas:estado",
+        "sesion_sso:tareas:aviso"
+      ]
+    },
+    {
+      "mutante": "perfil_personal",
+      "estado": "MUERTO",
+      "fallidas": 68,
+      "muertoPor": [
+        "ejecucion:tareas:sin_excepcion",
+        "base:tareas:estado",
+        "base:tareas:q1:precision>=0.9",
+        "base:tareas:q2:precision>=0.9",
+        "base:tareas:q4:precision>=0.9",
+        "ejecucion:tareas:sin_excepcion"
+      ]
+    },
+    {
+      "mutante": "subrecurso_libre",
+      "estado": "MUERTO",
+      "fallidas": 24,
+      "muertoPor": [
+        "base:correo:mutaciones_servidor",
+        "base:correo:peticiones_no_get_fuera_de_lista",
+        "base:correo:operaciones_post_fuera_de_lista",
+        "operacion_nueva:correo:mutaciones_servidor",
+        "operacion_nueva:correo:peticiones_no_get_fuera_de_lista",
+        "operacion_nueva:correo:operaciones_post_fuera_de_lista"
+      ]
+    },
+    {
+      "mutante": "sin_guardia",
+      "estado": "MUERTO",
+      "fallidas": 26,
+      "muertoPor": [
+        "sesion_caducada:tareas:navegaciones_fuera_de_lista",
+        "sesion_caducada:tareas:peticiones_sin_pasar_por_cortafuegos",
+        "sesion_caducada:tareas:estado",
+        "sesion_caducada:tareas:aviso",
+        "sesion_caducada:correo:navegaciones_fuera_de_lista",
+        "sesion_caducada:correo:peticiones_sin_pasar_por_cortafuegos"
+      ]
+    },
+    {
+      "mutante": "workers_libres",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "ws_worker:correo:mutaciones_servidor",
+        "ws_worker:correo:envios_websocket_fuera_de_mantenimiento"
+      ]
+    },
+    {
+      "mutante": "sin_login_externo",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "sesion_sso:tareas:estado",
+        "sesion_sso:tareas:aviso"
+      ]
+    },
+    {
+      "mutante": "absoluto_navegable",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "contenido_hostil:noticias:mutaciones_servidor",
+        "contenido_hostil:noticias:peticiones_a_externo"
+      ]
+    },
+    {
+      "mutante": "extraccion_mundo_principal",
+      "estado": "MUERTO",
+      "fallidas": 1,
+      "muertoPor": [
+        "contenido_hostil:noticias:q2:precision>=0.9"
+      ]
+    },
+    {
+      "mutante": "vigilancia_con_js",
+      "estado": "MUERTO",
+      "fallidas": 1,
+      "muertoPor": [
+        "vigilancia:noticias:sin_javascript"
+      ]
+    },
+    {
+      "mutante": "experimental_sin_recibo",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "muertoPor": [
+        "experimental:tareas:sin_recibo_desactivada",
+        "experimental:tareas:sin_recibo_sin_peticiones"
+      ]
+    }
+  ]
+}

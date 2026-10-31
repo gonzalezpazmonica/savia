@@ -1,0 +1,2074 @@
+{
+  "mutante": "ninguno",
+  "navegador": "Chrome",
+  "aviso_navegador": null,
+  "comprobaciones": [
+    {
+      "id": "base:tareas:estado",
+      "ok": true,
+      "detalle": "OK "
+    },
+    {
+      "id": "base:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:tareas:q1:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:tareas:q2:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:tareas:q4:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:tareas:canal_depuracion_por_tuberia",
+      "ok": true,
+      "detalle": "{\"procesos\":9,\"tuberia\":true,\"puerto\":false}"
+    },
+    {
+      "id": "q3:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:tareas:diferencias",
+      "ok": true,
+      "detalle": "{\"entran\":[\"T-108\"],\"salen\":[\"T-102\"]}"
+    },
+    {
+      "id": "base:aprobaciones:estado",
+      "ok": true,
+      "detalle": "OK "
+    },
+    {
+      "id": "base:aprobaciones:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:aprobaciones:q1:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:aprobaciones:q2:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:aprobaciones:q4:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:aprobaciones:canal_depuracion_por_tuberia",
+      "ok": true,
+      "detalle": "{\"procesos\":9,\"tuberia\":true,\"puerto\":false}"
+    },
+    {
+      "id": "q3:aprobaciones:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:aprobaciones:diferencias",
+      "ok": true,
+      "detalle": "{\"entran\":[\"A-8\"],\"salen\":[\"A-2\"]}"
+    },
+    {
+      "id": "base:noticias:estado",
+      "ok": true,
+      "detalle": "OK "
+    },
+    {
+      "id": "base:noticias:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:noticias:q1:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:noticias:q2:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:noticias:q4:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:noticias:canal_depuracion_por_tuberia",
+      "ok": true,
+      "detalle": "{\"procesos\":9,\"tuberia\":true,\"puerto\":false}"
+    },
+    {
+      "id": "q3:noticias:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "q3:noticias:diferencias",
+      "ok": true,
+      "detalle": "{\"entran\":[\"N-7\"],\"salen\":[\"N-2\"]}"
+    },
+    {
+      "id": "inyeccion:tareas:prioridad_no_alterada",
+      "ok": true,
+      "detalle": "normal"
+    },
+    {
+      "id": "base:correo:estado",
+      "ok": true,
+      "detalle": "OK "
+    },
+    {
+      "id": "base:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "base:correo:q1:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:correo:q2:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":1}"
+    },
+    {
+      "id": "base:correo:websocket_abierto_y_mantenimiento",
+      "ok": true,
+      "detalle": "el banco necesita ver el ping para que «0 envíos» signifique algo"
+    },
+    {
+      "id": "sesion_caducada:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:estado",
+      "ok": true,
+      "detalle": "SESION_CADUCADA"
+    },
+    {
+      "id": "sesion_caducada:tareas:aviso",
+      "ok": true,
+      "detalle": "Vuelve a iniciar sesión en Portal de tareas (sintético) en el perfil de Soul. Soul no guarda contraseñas ni rellena credenciales."
+    },
+    {
+      "id": "sesion_caducada:tareas:sin_elementos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:tareas:sin_intentos_login",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:estado",
+      "ok": true,
+      "detalle": "SESION_CADUCADA"
+    },
+    {
+      "id": "sesion_caducada:correo:aviso",
+      "ok": true,
+      "detalle": "Vuelve a iniciar sesión en Cliente de correo y chat (sintético) en el perfil de Soul. Soul no guarda contraseñas ni rellena credenciales."
+    },
+    {
+      "id": "sesion_caducada:correo:sin_elementos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:sin_intentos_login",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:estado",
+      "ok": true,
+      "detalle": "DESACTIVADA"
+    },
+    {
+      "id": "operacion_nueva:correo:aviso",
+      "ok": true,
+      "detalle": "La receta de Cliente de correo y chat (sintético) dejó de ser fiable (operación BuscarElementosV2 en /correo/api/servicio); se ha desactivado y no devuelve datos."
+    },
+    {
+      "id": "operacion_nueva:correo:sin_elementos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_nueva:correo:persistente",
+      "ok": true,
+      "detalle": "DESACTIVADA, 0 peticiones"
+    },
+    {
+      "id": "cambio_dom:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "cambio_dom:tareas:estado",
+      "ok": true,
+      "detalle": "DESACTIVADA"
+    },
+    {
+      "id": "cambio_dom:tareas:aviso",
+      "ok": true,
+      "detalle": "La receta de Portal de tareas (sintético) dejó de ser fiable (la prueba de humo falló en /tareas?pagina=1); se ha desactivado y no devuelve datos."
+    },
+    {
+      "id": "cambio_dom:tareas:sin_elementos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "redireccion:aprobaciones:salto_cortado",
+      "ok": true,
+      "detalle": "el registro debe mostrar el corte del segundo salto"
+    },
+    {
+      "id": "graphql_disfrazada:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "accion_secuestrada:tareas:corte_registrado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "id": "descarga_disfrazada:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_disfrazada:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "contenido_hostil:noticias:q1:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":0.5}"
+    },
+    {
+      "id": "contenido_hostil:noticias:q2:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":0.6666666666666666}"
+    },
+    {
+      "id": "contenido_hostil:noticias:q4:precision>=0.9",
+      "ok": true,
+      "detalle": "{\"precision\":1,\"recall\":0.5}"
+    },
+    {
+      "id": "contenido_hostil:noticias:ataque_ejecutado",
+      "ok": true,
+      "detalle": "el script hostil debe haber intentado salir (si no, la prueba no prueba nada)"
+    },
+    {
+      "id": "ws_worker:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "descarga_atributo:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "sesion_sso:tareas:estado",
+      "ok": true,
+      "detalle": "SESION_CADUCADA"
+    },
+    {
+      "id": "sesion_sso:tareas:aviso",
+      "ok": true,
+      "detalle": "Vuelve a iniciar sesión en Portal de tareas (sintético) en el perfil de Soul. Soul no guarda contraseñas ni rellena credenciales."
+    },
+    {
+      "id": "sesion_sso:tareas:sin_elementos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:sin_recibo_desactivada",
+      "ok": true,
+      "detalle": "DESACTIVADA"
+    },
+    {
+      "id": "experimental:tareas:sin_recibo_sin_peticiones",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "experimental:tareas:con_recibo_ok",
+      "ok": true,
+      "detalle": "OK "
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_primera:aprobaciones:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_igual:aprobaciones:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_cambio:aprobaciones:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:aprobaciones:estados",
+      "ok": true,
+      "detalle": "PRIMERA_VISITA,SIN_CAMBIOS,CAMBIADA"
+    },
+    {
+      "id": "vigilancia:noticias:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia:noticias:sin_javascript",
+      "ok": true,
+      "detalle": "0 intentos cortados: la página hostil no debe ejecutar nada"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "vigilancia_sesion:tareas:redirigida",
+      "ok": true,
+      "detalle": "REDIRIGIDA"
+    },
+    {
+      "id": "perfil_personal:sin_cambios",
+      "ok": true,
+      "detalle": ""
+    }
+  ],
+  "aprobadas": 329,
+  "fallidas": 0,
+  "metricas": {
+    "base:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "q3:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "base:aprobaciones": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "q3:aprobaciones": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "base:noticias": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "q3:noticias": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "base:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "sesion_caducada:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "sesion_caducada:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "operacion_nueva:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "cambio_dom:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "redireccion:aprobaciones": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "graphql_disfrazada:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "accion_secuestrada:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "descarga_disfrazada:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "contenido_hostil:noticias": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "ws_worker:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "descarga_atributo:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "sesion_sso:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "experimental:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "vigilancia_primera:aprobaciones": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "vigilancia_igual:aprobaciones": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "vigilancia_cambio:aprobaciones": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "vigilancia:noticias": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "vigilancia_sesion:tareas": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    }
+  },
+  "precision": {
+    "base:tareas": {
+      "q1": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q2": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q4": {
+        "precision": 1,
+        "recall": 1
+      }
+    },
+    "base:aprobaciones": {
+      "q1": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q2": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q4": {
+        "precision": 1,
+        "recall": 1
+      }
+    },
+    "base:noticias": {
+      "q1": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q2": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q4": {
+        "precision": 1,
+        "recall": 1
+      }
+    },
+    "base:correo": {
+      "q1": {
+        "precision": 1,
+        "recall": 1
+      },
+      "q2": {
+        "precision": 1,
+        "recall": 1
+      }
+    },
+    "contenido_hostil:noticias": {
+      "q1": {
+        "precision": 1,
+        "recall": 0.5
+      },
+      "q2": {
+        "precision": 1,
+        "recall": 0.6666666666666666
+      },
+      "q4": {
+        "precision": 1,
+        "recall": 0.5
+      }
+    }
+  }
+}
