@@ -231,6 +231,20 @@ test('el contenido sobre el nivel del canal no viaja en el mensaje agrupado', ()
 const porRemitente = (extra: Partial<Config> = {}): Config =>
   cfg({ alertas: [{ codigo: 'jefa', modos: ['DISPONIBLE', 'FOCO', 'DESCANSO', 'FUERA'], porRemitente: true }], ...extra });
 
+test('si la entrega del mensaje agrupado falla, reencolarlo no pierde ni duplica alertas', () => {
+  const pol = new Politica(cfg({ topeAlertas: 0 }));
+  const ahora = t(1, 3, 0);
+  pol.decidir(alerta('r1', 'todos'), ahora);
+  pol.decidir(alerta('r2', 'todos'), ahora);
+  const fallido = pol.drenarAlertasAgrupadas();
+  assert.deepEqual(fallido?.eventoIds, ['r1', 'r2']);
+  pol.decidir(alerta('r3', 'todos'), ahora);
+  pol.reencolarAlertasAgrupadas(fallido!);
+  pol.reencolarAlertasAgrupadas(fallido!);
+  assert.deepEqual(pol.drenarAlertasAgrupadas()?.eventoIds, ['r1', 'r2', 'r3']);
+  assert.equal(pol.drenarAlertasAgrupadas(), null);
+});
+
 test('en la ruta web una regla de remitente nunca produce alerta, solo aviso', () => {
   const mismo: Evento = { ...alerta('m', 'jefa') };
   const api = new Politica(porRemitente()).decidir(mismo, t(1, 3, 0));
@@ -248,10 +262,28 @@ test('en la ruta web una regla de remitente nunca produce alerta, solo aviso', (
   assert.ok(dentro.degradadaAAviso);
 });
 
-test('una regla que no es de remitente sigue siendo alerta en la ruta web', () => {
+test('en la ruta web ninguna regla produce alerta: la que no es de remitente también baja a aviso', () => {
+  // Sin API no hay identidad autenticada de nada de lo que llega; la librería no depende del puente.
   const pol = new Politica(cfg());
   const d = pol.decidir({ ...alerta('x', 'todos'), ruta: 'WEB' }, t(1, 3, 0));
-  assert.ok(d.contactarAhora && !d.degradadaAAviso);
+  assert.ok(d.degradadaAAviso);
+  assert.ok(!d.contactarAhora && !mismoMotivo(d.motivo, motivo('ALERTA')));
+  assert.equal(pol.estado.alertasUsadas.size, 0);
+  const api = new Politica(cfg()).decidir(alerta('y', 'todos'), t(1, 3, 0));
+  assert.ok(api.contactarAhora && !api.degradadaAAviso, 'por API la misma regla sí alerta');
+});
+
+test('un nivel fuera de 1..4 o un canal mal configurado redactan (fail-closed)', () => {
+  for (const nivel of [undefined, Number.NaN, 7, 0.5]) {
+    const pol = new Politica(cfg());
+    const d = pol.decidir({ ...alerta(`n${nivel}`, 'todos'), nivel: nivel as never, texto: 'secreto' }, t(0, 10, 0));
+    assert.ok(d.redactado, `nivel ${nivel}`);
+    assert.equal(pol.bandeja.porEvento(`n${nivel}`)?.texto, null);
+  }
+  const canalRoto = new Politica(cfg({ canalNivelMax: undefined as never }));
+  assert.ok(canalRoto.decidir({ ...alerta('c', 'todos'), nivel: 1 }, t(0, 10, 0)).redactado);
+  const ok = new Politica(cfg({ canalNivelMax: 2 }));
+  assert.ok(!ok.decidir({ ...alerta('k', 'todos'), nivel: 2 }, t(0, 10, 0)).redactado, 'en el límite no redacta');
 });
 
 test('las alertas de remitente degradadas en web no consumen el tope y sí el presupuesto', () => {

@@ -22,7 +22,7 @@ M20 alerta no marcada para el modo pasa	FALLA	FALLA	MUERTA
 M21 la alerta gasta presupuesto de avisos	FALLA	FALLA	MUERTA
 M22 alerta sobre el tope se pierde	FALLA	FALLA	MUERTA
 M23 urgencia inyectada eleva a alerta	FALLA	FALLA	MUERTA
-M24 regla de remitente en web es alerta	FALLA	FALLA	MUERTA
+M24 regla en web es alerta	FALLA	FALLA	MUERTA
 M25 aviso repetido gasta presupuesto otra vez	FALLA	pasa	MUERTA
 M26 alerta repetida se duplica	FALLA	pasa	MUERTA
 M27 resumen antes de su hora	FALLA	FALLA	MUERTA
@@ -35,3 +35,8 @@ M33 presupuesto inválido abre el gate	FALLA	pasa	MUERTA
 M34 en DISPONIBLE la alerta exige marca	FALLA	pasa	MUERTA
 M35 sin modo declarado la alerta se entrega	FALLA	pasa	MUERTA
 M36 el estado guarda alertas agrupadas sin persistir	FALLA	pasa	MUERTA
+M37 nivel fuera del contrato sin forzar a N4	FALLA	pasa	MUERTA
+M38 redacción sin validar el nivel	FALLA	pasa	MUERTA
+M39 en la web solo se degradan las reglas de remitente	FALLA	pasa	MUERTA
+M40 el puente descarta todo lo que llega por la web	FALLA	pasa	MUERTA
+M41 el puente acepta cualquier remitente por la web	FALLA	pasa	MUERTA

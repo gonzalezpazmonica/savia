@@ -19,7 +19,10 @@ import { DIA, type Minuto, instanciaEn, siguienteInicioEn } from './tiempo.ts';
 
 type Hueco = { ok: true; instancia: Minuto } | { ok: false; motivo: Motivo; hasta: Minuto | null };
 
-/** Mensaje único con las alertas que superaron el tope propio. Nada se pierde. */
+/**
+ * Mensaje único con las alertas que superaron el tope propio. Si la entrega falla, quien
+ * llama lo devuelve con `reencolarAlertasAgrupadas` para que no se pierda.
+ */
 export interface MensajeAlertasAgrupadas {
   n: number;
   eventoIds: string[];
@@ -31,6 +34,11 @@ export interface MensajeAlertasAgrupadas {
 export type { MensajeResumen, TipoResumen };
 
 const ENTERO_NO_NEGATIVO = (n: number): boolean => Number.isInteger(n) && n >= 0;
+const NIVEL_VALIDO = (n: unknown): boolean => n === 1 || n === 2 || n === 3 || n === 4;
+
+/** Solo viaja en claro un nivel válido que no supera el del canal; lo demás se redacta. */
+const redactar = (nivel: unknown, canal: unknown): boolean =>
+  !(NIVEL_VALIDO(nivel) && NIVEL_VALIDO(canal) && (nivel as number) <= (canal as number));
 
 export class Politica {
   readonly config: Config;
@@ -162,7 +170,7 @@ export class Politica {
   decidir(ev: Evento, ahora: Minuto): Decision {
     const urgenciaIgnorada = ev.urgenciaEnContenido !== 'NORMAL'
       || (ev.urgenciaSugeridaLlm !== null && ev.urgenciaSugeridaLlm !== 'NORMAL');
-    const redactado = ev.nivel > this.config.canalNivelMax;
+    const redactado = redactar(ev.nivel, this.config.canalNivelMax);
     let degradadaAAviso = false;
     const d = (accion: Accion, motivo: Motivo, contactarAhora: boolean, hasta: Minuto | null): Decision => ({
       accion, motivo, contactarAhora, hasta, redactado, urgenciaIgnorada, degradadaAAviso,
@@ -183,8 +191,9 @@ export class Politica {
     const regla = this.reglaDe(ev);
     let tipo = ev.tipo;
     if (regla !== null) {
-      if (regla.porRemitente === true && ev.ruta === 'WEB') {
-        // Sin API no hay identidad autenticada del remitente: nunca es alerta, solo aviso.
+      if (ev.ruta === 'WEB') {
+        // Sin API no hay identidad autenticada de lo que llega: nunca es alerta, solo aviso.
+        // Vale para toda regla, sea o no de remitente, aunque el llamador no use el puente.
         degradadaAAviso = true;
         tipo = { k: 'NOTIFICACION' };
       } else {
@@ -361,5 +370,11 @@ export class Politica {
     this.estado.excedidas = [];
     const textos = ids.map((id) => this.bandeja.porEvento(id)?.texto ?? null);
     return { n: ids.length, eventoIds: [...ids], textos, texto: `hay ${ids.length} alertas más` };
+  }
+
+  /** Devuelve a la cola, delante y sin duplicar, las alertas de un mensaje que no se entregó. */
+  reencolarAlertasAgrupadas(msg: MensajeAlertasAgrupadas): void {
+    const pendientes = this.estado.excedidas.filter((id) => !msg.eventoIds.includes(id));
+    this.estado.excedidas = [...msg.eventoIds, ...pendientes];
   }
 }

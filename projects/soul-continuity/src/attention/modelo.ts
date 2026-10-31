@@ -24,7 +24,10 @@ export interface ReglaAlerta {
   codigo: string;
   /** Modos en los que la persona marcó que esta alerta llega aunque el modo difiera todo. */
   modos: readonly Modo[];
-  /** Regla por remitente: en la ruta web no hay identidad autenticada y se degrada a aviso. */
+  /**
+   * Regla por remitente. La configuración lo declara para que se vea; en la ruta web ninguna
+   * regla produce alerta (de remitente o no), solo aviso, porque allí no hay identidad.
+   */
   porRemitente?: boolean;
 }
 

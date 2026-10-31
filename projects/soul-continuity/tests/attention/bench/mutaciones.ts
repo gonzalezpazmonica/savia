@@ -7,6 +7,7 @@
 //
 // M01–M18: las 18 mutaciones de Labs (soul-atencion), reescritas contra el código TypeScript.
 // M19–M36: las de AC-4b (alertas con tope, modos, remitente, resúmenes, registro de demanda).
+// M37–M41: redacción fail-closed y puente con el contrato (`src/contract`, que también se copia).
 //
 // Uso: node --experimental-strip-types tests/attention/bench/mutaciones.ts
 import { spawnSync } from 'node:child_process';
@@ -19,6 +20,7 @@ const POL = 'src/attention/politica.ts';
 const EST = 'src/attention/estado.ts';
 const RES = 'src/attention/resumen.ts';
 const LED = 'src/attention/ledger.ts';
+const PUE = 'src/attention/contrato.ts';
 
 const TODOS = "['DISPONIBLE', 'FOCO', 'DESCANSO', 'FUERA'] as const";
 
@@ -31,7 +33,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M06 el LLM eleva urgencia', POL, 'return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? null;', "return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? (ev.urgenciaSugeridaLlm === 'CRITICA' ? (this.config.alertas[0] ?? null) : null);"],
   ['M07 reanudar desde cualquiera', POL, "case 'REANUDAR':\n        if (!persona) return false;", "case 'REANUDAR':"],
   ['M08 disponibilidad implícita', POL, 'return this.config.modoPorDefecto;\n  }', "return this.config.modoPorDefecto ?? 'DISPONIBLE';\n  }"],
-  ['M09 sin redacción', POL, 'const redactado = ev.nivel > this.config.canalNivelMax;', 'const redactado = false;'],
+  ['M09 sin redacción', POL, 'const redactado = redactar(ev.nivel, this.config.canalNivelMax);', 'const redactado = false;'],
   ['M10 seguridad agrupable', POL, "[tipo.decisionId, 'APROBACION', true,", "[tipo.decisionId, 'APROBACION', false,"],
   ['M11 contexto vencido ignorado', POL, "} else if (ev.caduca !== null && ev.caduca <= ahora) {\n      bloqueo = m('CONTEXTO_VENCIDO');", "} else if (false) {\n      bloqueo = m('CONTEXTO_VENCIDO');"],
   ['M12 reintento ambiguo se registra', POL, "tipo.efectoPrevio === 'NO_OCURRIO'", 'true'],
@@ -46,7 +48,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M21 la alerta gasta presupuesto de avisos', POL, 'this.estado.alertasUsadas.set(cubo, usadas + 1);', 'this.estado.alertasUsadas.set(cubo, usadas + 1);\n        const v = instanciaEn(this.config.ventanas, ahora);\n        if (v !== null) this.estado.usados.set(v, (this.estado.usados.get(v) ?? 0) + 1);'],
   ['M22 alerta sobre el tope se pierde', POL, 'this.estado.excedidas.push(ev.id);', 'void 0;'],
   ['M23 urgencia inyectada eleva a alerta', POL, 'const regla = this.reglaDe(ev);', `const regla = this.reglaDe(ev) ?? (ev.urgenciaEnContenido === 'CRITICA' ? { codigo: 'x', modos: ${TODOS} } : null);`],
-  ['M24 regla de remitente en web es alerta', POL, "regla.porRemitente === true && ev.ruta === 'WEB'", 'false'],
+  ['M24 regla en web es alerta', POL, "if (ev.ruta === 'WEB') {", 'if (false) {'],
   ['M25 aviso repetido gasta presupuesto otra vez', POL, 'this.estado.preguntadas.add(ev.id);\n      this.aBandeja(ev, null, false, ap, redactado);', 'this.aBandeja(ev, null, false, ap, redactado);'],
   ['M26 alerta repetida se duplica', POL, 'if (this.estado.preguntadas.has(ev.id)) {\n      const dec', 'if (false) {\n      const dec'],
   ['M27 resumen antes de su hora', RES, 'return hoy <= ahora ? hoy : hoy - DIA;', 'return hoy;'],
@@ -59,11 +61,24 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M34 en DISPONIBLE la alerta exige marca', POL, "modo === 'DISPONIBLE' || (modo !== null", '(modo !== null'],
   ['M35 sin modo declarado la alerta se entrega', POL, 'const marcada = modo === ', 'const marcada = modo === null || modo === '],
   ['M36 el estado guarda alertas agrupadas sin persistir', EST, 'for (const id of e.excedidas) out +=', 'for (const id of []) out +='],
+  ['M37 nivel fuera del contrato sin forzar a N4', PUE, '? NIVELES[level as Level] : 4;', '? NIVELES[level as Level] : (undefined as never);'],
+  ['M38 redacción sin validar el nivel', POL, '!(NIVEL_VALIDO(nivel) && NIVEL_VALIDO(canal) && (nivel as number) <= (canal as number))', '(nivel as number) > (canal as number)'],
+  ['M39 en la web solo se degradan las reglas de remitente', POL, "if (ev.ruta === 'WEB') {", "if (regla.porRemitente === true && ev.ruta === 'WEB') {"],
+  ['M40 el puente descarta todo lo que llega por la web', PUE, "if (route === 'web') return auth === 'unknown' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';", "if (route === 'web') return 'NO_AUTENTICADO';"],
+  ['M41 el puente acepta cualquier remitente por la web', PUE, "if (route === 'web') return auth === 'unknown' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';", "if (route === 'web') return 'AGENTE_AUTENTICADO';"],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const proyecto = join(aqui, '..', '..', '..');
 const NODE = ['--experimental-strip-types', '--no-warnings'];
+
+const TESTS = ['--test', 'tests/attention/politica.test.ts', 'tests/attention/ac4b.test.ts', 'tests/attention/contrato.test.ts'];
+
+/** Copia lo que necesitan los tests: la librería, el contrato del que tira el puente y los tests. */
+function copiar(dest: string): void {
+  for (const d of [['src', 'attention'], ['src', 'contract']]) cpSync(join(proyecto, ...d), join(dest, ...d), { recursive: true });
+  cpSync(join(proyecto, 'tests', 'attention'), join(dest, 'tests', 'attention'), { recursive: true, filter: (s) => !s.includes('bench') });
+}
 
 function correr(args: string[], cwd: string): number {
   return spawnSync(process.execPath, [...NODE, ...args], { cwd, stdio: 'ignore' }).status ?? 1;
@@ -74,9 +89,8 @@ function main(): number {
   let vivas = 0;
   // La base debe estar verde: si no, todo parecería «muerto».
   const base = mkdtempSync(join(tmpdir(), 'mut-base-'));
-  cpSync(join(proyecto, 'src', 'attention'), join(base, 'src', 'attention'), { recursive: true });
-  cpSync(join(proyecto, 'tests', 'attention'), join(base, 'tests', 'attention'), { recursive: true, filter: (s) => !s.includes('bench') });
-  const tb = correr(['--test', 'tests/attention/politica.test.ts', 'tests/attention/ac4b.test.ts'], base);
+  copiar(base);
+  const tb = correr(TESTS, base);
   const eb = correr(['tests/attention/evals.ts'], base);
   rmSync(base, { recursive: true, force: true });
   if (tb !== 0 || eb !== 0) {
@@ -86,8 +100,7 @@ function main(): number {
   for (const [nombre, fichero, antes, despues] of MUTACIONES) {
     const tmp = mkdtempSync(join(tmpdir(), 'mut-'));
     try {
-      cpSync(join(proyecto, 'src', 'attention'), join(tmp, 'src', 'attention'), { recursive: true });
-      cpSync(join(proyecto, 'tests', 'attention'), join(tmp, 'tests', 'attention'), { recursive: true, filter: (s) => !s.includes('bench') });
+      copiar(tmp);
       const ruta = join(tmp, fichero);
       const texto = readFileSync(ruta, 'utf8');
       if (texto.split(antes).length - 1 !== 1) {
@@ -95,7 +108,7 @@ function main(): number {
         return 2;
       }
       writeFileSync(ruta, texto.replace(antes, () => despues));
-      const t = correr(['--test', 'tests/attention/politica.test.ts', 'tests/attention/ac4b.test.ts'], tmp);
+      const t = correr(TESTS, tmp);
       const e = correr(['tests/attention/evals.ts'], tmp);
       const muerta = t !== 0 || e !== 0;
       if (!muerta) vivas++;
