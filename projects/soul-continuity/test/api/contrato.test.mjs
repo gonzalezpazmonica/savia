@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validar } from '../lib/schema.mjs';
+import { validar } from '../../src/api/schema.ts';
 import { OPENAPI, MIN, arrancar, llamar, conforme, esquemaRespuesta, cadenas, fugas } from './ayudas.mjs';
-import { OPERADORES, CARGAS } from '../mock/datos.mjs';
+import { OPERADORES, CARGAS } from './datos.mjs';
 
 const GET = (b, r, o) => llamar(b, 'GET', r, o);
 const ids = (j) => j.elementos.map((e) => e.id);
@@ -92,9 +92,11 @@ test('el servidor simulado cumple el OpenAPI en todas las operaciones y solo sir
   } finally { await cerrar(); }
 });
 
-test('el mock solo escucha en loopback (puerto cerrado al resto de interfaces)', async () => {
+test('el servidor solo escucha en la dirección configurada (el test de puertos completo está en test/listen.test.ts)', async () => {
   const { mock, cerrar } = await arrancar();
-  try { assert.match(mock.direccion().address, /^(127\.0\.0\.1|::1)$/); } finally { await cerrar(); }
+  try {
+    assert.deepEqual(mock.direcciones().map((a) => a.address), ['127.0.0.1']);
+  } finally { await cerrar(); }
 });
 
 // ---------------------------------------------------------------- recuentos: ningún asunto ni nombre
@@ -577,7 +579,7 @@ test('adaptadores: estado, motivo y ruta alternativa; fuentes caídas marcan la 
 // ---------------------------------------------------------------- órdenes
 test('órdenes: cada ejemplo válido de GRAMATICA.md se ejecuta y devuelve el mismo cuerpo que su endpoint', async () => {
   const { readFileSync } = await import('node:fs');
-  const md = readFileSync(new URL('../GRAMATICA.md', import.meta.url), 'utf8');
+  const md = readFileSync(new URL('../../src/contract/GRAMATICA.md', import.meta.url), 'utf8');
   const bloque = md.split('Válidas')[1].split('```')[1].split('\n').map((l) => l.trim()).filter((l) => l && l !== 'text');
   assert.ok(bloque.length >= 12);
   const { base, cerrar } = await arrancar();
