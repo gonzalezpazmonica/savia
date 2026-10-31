@@ -48,7 +48,7 @@ Cada adaptador declara en `descriptors.ts`:
   - Hay una entrada por operador, servicio y permisos.
   - Si no hay almacén reconocido, el adaptador no se activa.
 - **Autenticación.** Flujo de dispositivo (RFC 8628) o de navegador con PKCE y redirección a `127.0.0.1` (`oauth.ts`). Solo se aceptan identificadores de aplicación propios del operador o de su organización. Los de aplicaciones conocidas de Microsoft o Google se rechazan.
-- **Revocación (AC-5).** `revokeAdapter` borra la caché local del adaptador y sus tokens, en todas las variantes de permisos. No toca otros adaptadores ni otros operadores.
+- **Revocación (AC-5).** `revokeAdapter` borra la caché local del adaptador y sus tokens, en todas las variantes de permisos. No toca otros adaptadores ni otros operadores. No invalida la concesión en el proveedor: el refresh token sigue vigente allí hasta que caduque o la persona retire el acceso de la aplicación desde su cuenta.
 
 ## Límites conocidos
 

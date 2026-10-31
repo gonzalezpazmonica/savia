@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  MemoryBackend, SecretToolBackend, SystemCredentialStore, entryKey, macosCommands, windowsCommands,
+  CommandBackend, MemoryBackend, SecretToolBackend, SystemCredentialStore, entryKey, macosCommands, windowsCommands,
 } from "../../src/adapters/credential-store.ts";
 
 const NOW = 1_000_000_000;
@@ -94,6 +94,42 @@ else if(cmd==="clear"){delete db[acc];fs.writeFileSync(f,JSON.stringify(db));}
   assert.equal(await b.get("soul-continuity/x/graph/y"), null);
   assert.ok(existsSync(argvLog));
   assert.ok(!readFileSync(argvLog, "utf8").includes("SECRETO-123"), "el secreto no aparece en la línea de órdenes");
+});
+
+test("secret-tool: si clear falla, delete lanza en vez de informar de un borrado", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "s490-st-"));
+  const fake = join(dir, "secret-tool");
+  // Doble: lookup siempre encuentra la entrada y clear falla (almacén bloqueado).
+  writeFileSync(fake, `#!/usr/bin/env node
+const [cmd]=process.argv.slice(2);
+if(cmd==="lookup")process.stdout.write("SECRETO");else if(cmd==="clear")process.exit(1);
+`);
+  chmodSync(fake, 0o755);
+  await assert.rejects(new SecretToolBackend({ command: fake }).delete("soul-continuity/x/graph/y"), /no borró/);
+  // Si no había entrada, no hay nada que borrar: false, sin error.
+  const none = join(dir, "secret-tool-vacio");
+  writeFileSync(none, "#!/usr/bin/env node\nprocess.exit(1);\n");
+  chmodSync(none, 0o755);
+  assert.equal(await new SecretToolBackend({ command: none }).delete("soul-continuity/x/graph/y"), false);
+});
+
+test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
+  const sh = (name: string, body: string) => {
+    const f = join(dir, name);
+    writeFileSync(f, `#!/usr/bin/env node\n${body}\n`);
+    chmodSync(f, 0o755);
+    return f;
+  };
+  const found = sh("found", 'process.stdout.write("U0VDUkVUTw==\\n");');
+  const fail = sh("fail", "process.exit(1);");
+  const cmds = (get: string, del: string) => ({
+    ...macosCommands,
+    get: () => ({ cmd: get, args: [], stdin: "" }),
+    delete: () => ({ cmd: del, args: [], stdin: "" }),
+  }) as typeof macosCommands;
+  await assert.rejects(new CommandBackend(cmds(found, fail), true).delete("k"), /no borró/);
+  assert.equal(await new CommandBackend(cmds(fail, fail), true).delete("k"), false);
 });
 
 test("secret-tool ausente: falla cerrado con error, no devuelve vacío", async () => {

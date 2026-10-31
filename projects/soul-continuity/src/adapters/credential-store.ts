@@ -153,7 +153,9 @@ export class SecretToolBackend implements SecretBackend {
   }
   async delete(k: string): Promise<boolean> {
     const had = (await this.get(k)) !== null;
-    await run(this.cmd, ["clear", "service", SERVICE, "account", checkKey(k)], "");
+    const r = await run(this.cmd, ["clear", "service", SERVICE, "account", checkKey(k)], "");
+    // Se comprueba el borrado releyendo: no se informa de un borrado que no ocurrió.
+    if ((had && r.code !== 0) || (await this.get(k)) !== null) throw new Error("secret-tool no borró la credencial");
     return had;
   }
 }
@@ -186,7 +188,8 @@ export const windowsCommands = {
   }),
 };
 
-class CommandBackend implements SecretBackend {
+/** Almacén por órdenes de sistema (Llavero de macOS, PasswordVault de Windows). */
+export class CommandBackend implements SecretBackend {
   private readonly c: typeof macosCommands;
   private readonly decode: boolean;
   constructor(c: typeof macosCommands, decode: boolean) {
@@ -207,7 +210,10 @@ class CommandBackend implements SecretBackend {
   }
   async delete(k: string) {
     const x = this.c.delete(k);
-    return (await run(x.cmd, x.args, x.stdin)).code === 0;
+    const ok = (await run(x.cmd, x.args, x.stdin)).code === 0;
+    // Un código distinto de 0 puede ser «no había nada»; releer distingue ese caso de un fallo.
+    if ((await this.get(k)) !== null) throw new Error("el almacén del sistema no borró la credencial");
+    return ok;
   }
 }
 

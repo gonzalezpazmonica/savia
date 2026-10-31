@@ -15,6 +15,8 @@ test("cada adaptador de API declara propósito, nivel, TTL, permisos y revocaci�
     assert.ok(d!.scopes.length > 0 && d!.scopes.every((s) => s.length > 0), `${n}: permisos`);
     assert.match(d!.revocation, /caché/);
     assert.match(d!.revocation, /tokens/);
+    // Borrar la copia local no revoca en el proveedor: el texto no puede prometer más.
+    assert.match(d!.revocation, /No invalida la concesión en el proveedor/);
   }
 });
 

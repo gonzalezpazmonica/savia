@@ -31,7 +31,9 @@ export interface AdapterDescriptor {
 }
 
 const G = "https://www.googleapis.com/auth/";
-const REVOKE = "Borra la caché local del adaptador (sincronización y metadatos) y sus tokens del almacén de credenciales del sistema.";
+const REVOKE = "Borra la caché local del adaptador (sincronización y metadatos) y sus tokens del almacén de credenciales del sistema. "
+  + "No invalida la concesión en el proveedor: el refresh token sigue vigente allí hasta que caduque o se retire el acceso "
+  + "de la aplicación desde la cuenta (Microsoft: Mis aplicaciones; Google: Seguridad > Acceso de terceros; GitHub, Jira y Azure DevOps: tokens o aplicaciones autorizadas).";
 const NO_BODIES = "Cuerpos de correos, mensajes, comentarios y descripciones; solo metadatos y referencias.";
 
 export const DESCRIPTORS: Record<ApiAdapterName, AdapterDescriptor> = {
