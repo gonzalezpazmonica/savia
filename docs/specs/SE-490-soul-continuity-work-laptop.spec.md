@@ -6,6 +6,7 @@ created: 2026-10-31
 author: Savia
 phase: A
 risk: L3
+depends_on: [SE-430]
 related_specs: [SE-431, SE-430, SE-482, SE-484, SE-487, SE-488, SE-401]
 origin: "Decisión de la operadora 2026-10-31 (AskUserQuestion): el gemelo operativo es el objetivo prioritario; plazo de dos semanas; fuentes de trabajo de quien dirige equipos y proyectos; corre en el portátil de la empresa; se usa desde la app móvil de Savia Space; la prioridad es la continuidad y los compromisos. Diseño previo en el vault privado de investigación (línea del gemelo operativo, prototipo de instantánea de solo lectura medido)."
 timeline:
@@ -52,6 +53,10 @@ Cada afirmación conserva el modelo de la instantánea: `claim_type`, `state`, `
 
 ### Proceso por usuario y multiplataforma
 
+- **Tecnología:** Rust, el lenguaje del dominio de `space-soul`, compilado de forma cruzada para Windows, macOS y Linux en CI.
+  - El dominio se comparte como crate. Su única dependencia de Space (JSON canónico y hash) se sustituye por un crate mínimo propio.
+  - Los adaptadores, la política de atención y el canal son crates nuevos.
+  - La instantánea del prototipo de investigación (Python) es la referencia funcional y de banco, no el código que se distribuye.
 - **Núcleo:** reutiliza el dominio de `space-soul` y el contrato de la instantánea.
   - Es un binario único para Windows, macOS y Linux, sin red entrante pública.
   - Arranca sin Space, sin Yema, sin modelo y sin Internet; sin conexión, responde con lo último conocido marcado como tal.
@@ -82,6 +87,12 @@ Todos son opcionales, de solo lectura y con consentimiento propio. Cada uno decl
 Reglas de los adaptadores:
 - **Autenticación delegada por el propio usuario** (flujo de dispositivo o navegador). Los tokens van al almacén de credenciales del sistema: Credential Manager, Keychain o Secret Service. Nunca a ficheros, logs, variables ni línea de órdenes.
 - **Fail-closed:** si el inquilino exige consentimiento de administración para un permiso, el adaptador no se activa. Lo dice con un mensaje claro y remite al paquete para TI. Nunca pide más permisos de los que necesita.
+- **«Esperando mi respuesta» solo con metadatos.** El hilo (`conversationId` o equivalente) cumple todas estas condiciones:
+  - su último mensaje no es mío;
+  - yo estoy entre los destinatarios directos;
+  - no hay ningún mensaje mío posterior en elementos enviados del mismo buzón. Así se cuentan las respuestas desde cualquier cliente: web, móvil u Outlook.
+
+  Las respuestas fuera del buzón (otra cuenta, llamada) se corrigen con «resuelto».
 - **Lectura mínima.** Se guardan metadatos y referencias: remitente, asunto, fecha, estado, enlace. El cuerpo de un correo o de un mensaje no se persiste. El texto de terceros solo se muestra si la vista lo pide, y se lee en ese momento.
 
 ### Vista móvil (app de Savia Space)
@@ -122,10 +133,21 @@ Soul y el operador se hablan en los dos sentidos desde la app.
 
 **Política de atención (determinista, decidida por el operador):**
 - Cada evento pasa por la política antes de convertirse en mensaje: registrar, agrupar, avisar o diferir.
-- En `FOCO`, `DESCANSO` y `FUERA` todo se difiere, salvo las alertas que el operador marcó para ese modo.
-- Presupuesto de avisos por ventana, que fija el operador. Lo que excede se agrupa en el siguiente resumen.
+- En `FOCO`, `DESCANSO` y `FUERA` todo se difiere, salvo las alertas que el operador marcó **para el modo activo**. Una alerta definida pero no marcada para ese modo se difiere como cualquier aviso.
+- **Presupuesto de avisos** por ventana, que fija el operador. Lo que excede se agrupa en el siguiente resumen.
+- Las alertas **no consumen** ese presupuesto. Tienen un **tope propio**, que fija el operador (por defecto 3 por ventana). Si se supera, las siguientes se agrupan en un único mensaje: «hay N alertas más», con la lista. Nunca se pierden.
 - El silencio del operador nunca es una respuesta. Ningún modelo eleva la urgencia.
 - Cada aviso enviado o diferido queda en un registro de demanda que el operador puede consultar: «¿por qué me avisaste?» y «¿qué me ahorraste?».
+
+**Transporte (dependencia de SE-430):**
+- SE-430 define hoy la app sin push: consulta al abrirse o cada ≥ 15 min. UnifiedPush figura como opcional y propuesto (D3).
+- SE-490 necesita dos cosas más: un canal entre el móvil y el portátil que atraviese NAT y redes corporativas sin red entrante pública, y push para los avisos.
+- **D-490-1 (transporte y push)** se cierra con el informe de viabilidad (permisos, relay cifrado de extremo a extremo frente a VPN o red local, FCM de datos frente a UnifiedPush) **antes del día 6**. Se decide en la PR que actualiza esta spec.
+- Mientras D-490-1 no esté cerrada, las ACs con latencia (avisos puntuales, «reunión en 15 min») quedan **condicionadas**. El modo degradado garantizado es:
+  - consulta cada ≤ 5 min con la app abierta;
+  - resúmenes de inicio y de cierre.
+
+  Las ACs de política, contenido y fugas valen igual en los dos modos.
 
 **Entrega:**
 - **Notificación push sin contenido:** solo un identificador opaco. El servicio de push del sistema móvil nunca ve asuntos, nombres ni texto.
@@ -173,17 +195,18 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
     - datos de terceros;
     - inyección en asuntos y comentarios;
     - inquilino que exige consentimiento de administración;
-    - token caducado.
+    - token caducado;
+    - hilos «esperando mi respuesta» con respuestas desde otro cliente, respuestas a todos y reenvíos (al menos 8 escenarios).
 - **AC-3:** en ese banco, precisión ≥ 90 % por pregunta. 0 uso de hechos revocados, 0 fugas entre operadores y entre niveles, 0 cuerpos de mensaje persistidos y 0 tokens en disco fuera del almacén del sistema. p95 de Q1 < 2 s con fuentes cacheadas.
 - **AC-4:** la vista móvil muestra Q1–Q4 con fuente y antigüedad en los tres niveles de detalle. Con `recuentos`, ningún asunto ni nombre llega al dispositivo (test que inspecciona el tráfico).
 - **AC-4b:** comunicación bidireccional.
   - Las órdenes estructuradas y las correcciones del operador se aplican y persisten.
   - Los resúmenes salen a la hora fijada.
   - Evals de la política de atención, con verdad escrita antes:
-    - 100 eventos simultáneos no superan el presupuesto;
-    - en `DESCANSO` solo pasan las alertas marcadas para ese modo;
+    - 100 eventos simultáneos no superan el presupuesto de avisos;
+    - en `DESCANSO` solo pasan las alertas marcadas para ese modo; las no marcadas se difieren;
     - una urgencia inyectada en un asunto no eleva el aviso;
-    - una alerta definida nunca se difiere (0 omisiones).
+    - una alerta marcada para el modo activo nunca se difiere: 0 omisiones dentro de su tope, y por encima del tope, un mensaje agrupado con todas.
   - El payload push no contiene ningún dato (test que inspecciona el mensaje).
   - El texto libre sin modelo autorizado recibe la respuesta honesta y no se envía a ninguna parte.
 - **AC-5:** revocar un adaptador borra su caché y sus tokens. Desinstalar no deja estado.
@@ -208,6 +231,8 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
 | 6–9 | Pantalla «Continuidad» y conversación en la app; canal emparejado; push sin contenido; resúmenes, avisos y alertas; niveles de detalle |
 | 8–9 | Paquete para TI, revisión de seguridad, instaladores sin administrador |
 | 10 | Piloto: instalación guiada y línea base |
+
+Las dos semanas son de **construcción** y terminan con la instalación del piloto y el arranque de la línea base. La medición del piloto (AC-7: dos días de línea base y una semana laborable) ocurre en las semanas siguientes, con el producto ya en uso.
 
 Cada pieza va en su propia PR Draft con revisión independiente; la fusión sigue SE-488.
 
