@@ -90,7 +90,9 @@ export function makeSelfSigned(addresses: string[], now: Date, days = 397): Inst
   );
   const der = seq(tbs, ECDSA_SHA256, bits(sign("sha256", tbs, privateKey)));
   const b64 = der.toString("base64").match(/.{1,64}/g)?.join("\n") ?? "";
-  return { cert: `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`, key: privateKey.export({ type: "pkcs8", format: "pem" }).toString() };
+  const cert = `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`;
+  const key = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+  return { cert, key };
 }
 
 /** Huella SPKI que fija la app (`sha256/<base64>`). */
