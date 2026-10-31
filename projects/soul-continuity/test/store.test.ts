@@ -11,10 +11,10 @@ const tmp = () => mkdtempSync(join(tmpdir(), "soul-st-"));
 
 test("dataDir: directorio de datos del usuario por sistema, sin rutas de administrador", () => {
   const home = "/h";
-  assert.equal(dataDir({ platform: "linux", env: {}, home }), "/h/.local/share/savia/soul-continuity");
-  assert.equal(dataDir({ platform: "linux", env: { XDG_DATA_HOME: "/x" }, home }), "/x/savia/soul-continuity");
-  assert.equal(dataDir({ platform: "darwin", env: {}, home }), "/h/Library/Application Support/Savia/soul-continuity");
-  assert.match(dataDir({ platform: "win32", env: { LOCALAPPDATA: "C:/U/AppData/Local" }, home }), /^C:\/U\/AppData\/Local.Savia.soul-continuity$/);
+  assert.equal(dataDir({ platform: "linux", env: {}, home }), join("/h", ".local", "share", "savia", "soul-continuity"));
+  assert.equal(dataDir({ platform: "linux", env: { XDG_DATA_HOME: "/x" }, home }), join("/x", "savia", "soul-continuity"));
+  assert.equal(dataDir({ platform: "darwin", env: {}, home }), join("/h", "Library", "Application Support", "Savia", "soul-continuity"));
+  assert.equal(dataDir({ platform: "win32", env: { LOCALAPPDATA: "C:/U/AppData/Local" }, home }), join("C:/U/AppData/Local", "Savia", "soul-continuity"));
   assert.equal(dataDir({ platform: "linux", env: { SOUL_DATA_DIR: "/d" }, home }), "/d");
 });
 

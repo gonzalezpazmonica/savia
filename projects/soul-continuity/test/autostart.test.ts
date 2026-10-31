@@ -14,7 +14,7 @@ const ADMIN = /sudo|runas|\/Library\/LaunchDaemons|\/etc\/systemd|\/lib\/systemd
 
 for (const p of ["linux", "darwin", "win32"] as const) {
   test(`${p}: los ficheros quedan bajo el perfil del usuario y no piden privilegios`, () => {
-    const home = "/home/u";
+    const home = join("/home", "u");
     const plan = autostartPlan(opts(p, home));
     assert.ok(plan.files.length >= 1);
     for (const f of plan.files) {
@@ -28,7 +28,7 @@ for (const p of ["linux", "darwin", "win32"] as const) {
 
 test("linux: unidad de usuario con Restart y sin privilegios nuevos", () => {
   const f = autostartPlan(opts("linux", "/home/u")).files[0];
-  assert.equal(f.path, "/home/u/.config/systemd/user/soul-continuity.service");
+  assert.equal(f.path, join("/home/u", ".config", "systemd", "user", "soul-continuity.service"));
   assert.match(f.content, /NoNewPrivileges=yes/);
   assert.match(f.content, /WantedBy=default.target/);
 });
@@ -54,7 +54,7 @@ test("install escribe los ficheros y ejecuta solo las órdenes del plan; uninsta
   const o = opts("linux", home);
   const r = await installAutostart(o, run);
   assert.equal(r.ok, true);
-  const unit = join(home, ".config/systemd/user/soul-continuity.service");
+  const unit = join(home, ".config", "systemd", "user", "soul-continuity.service");
   assert.ok(existsSync(unit));
   assert.match(readFileSync(unit, "utf8"), /ExecStart=/);
   assert.deepEqual(calls, autostartPlan(o).enable.map((c) => [c.cmd, ...c.args].join(" ")));
@@ -69,7 +69,7 @@ test("dry-run no escribe ni ejecuta nada", async () => {
   const run: Run = async () => { n++; return { code: 0, stdout: "", stderr: "" }; };
   const r = await installAutostart(opts("darwin", home), run, { dryRun: true });
   assert.equal(n, 0);
-  assert.equal(existsSync(join(home, "Library/LaunchAgents/org.savia.soul-continuity.plist")), false);
+  assert.equal(existsSync(join(home, "Library", "LaunchAgents", "org.savia.soul-continuity.plist")), false);
   assert.ok(r.planned.length > 0);
 });
 
