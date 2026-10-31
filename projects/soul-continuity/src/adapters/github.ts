@@ -33,6 +33,10 @@ export function makeGitHubAdapter(o: GitHubOptions = {}): SourceAdapter {
       for (let i = 0; url; i++) {
         if (i >= maxPages) throw new Stop("unavailable", `GitHub: supera el tope de ${maxPages} páginas; no se dan datos incompletos.`);
         const r = await ctx.transport.request({ service: "github", method: "GET", url, headers: H });
+        // GitHub responde 403 (no 429) al límite de tasa, primario o secundario: es esperar, no un error.
+        if (r.status === 403 && (r.headers["retry-after"] !== undefined || r.headers["x-ratelimit-remaining"] === "0")) {
+          throw new Stop("unavailable", "GitHub limita las peticiones; se reintentará en la próxima lectura.");
+        }
         const b = check(r, "GitHub");
         if (Array.isArray(b.items)) out.push(...b.items);
         // Del enlace solo se toma la ruta: el transporte la manda a la base configurada,

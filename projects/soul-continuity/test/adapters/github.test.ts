@@ -71,3 +71,13 @@ test("GitHub: credencial inválida", async () => {
     await mock.close();
   }
 });
+
+test("GitHub: 403 por límite de tasa es «unavailable»; un 403 sin señal de límite sigue siendo error", async () => {
+  const read = (headers: Record<string, string>) => makeGitHubAdapter().read(ctxWith({
+    route: "api", transport: { async request() { return { status: 403, headers, body: { message: "x" } }; } },
+  }));
+  assert.equal((await read({ "retry-after": "60" })).status, "unavailable");
+  assert.equal((await read({ "x-ratelimit-remaining": "0" })).status, "unavailable");
+  assert.equal((await read({ "x-ratelimit-remaining": "12" })).status, "error");
+  assert.equal((await read({})).status, "error");
+});
