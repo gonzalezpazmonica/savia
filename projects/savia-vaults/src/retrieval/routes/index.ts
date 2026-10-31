@@ -2,3 +2,4 @@
 // (docs/retrieval-routes.md § Registro).
 import './m0-hybrid.js';
 import './m3-structure.js';
+import './m4-llm-nav.js';
