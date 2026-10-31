@@ -99,7 +99,12 @@ Mucha información de trabajo solo vive en webs sin API, sin A2A y sin MCP: port
   - **URLs cerradas por receta.** Cada receta declara la lista exacta de patrones de URL que puede visitar. Las vistas de lista y los paneles de solo lectura van en ella; enlaces de acción (`/approve`, `/logout`, `/unsubscribe`, confirmaciones) nunca entran.
     - Toda navegación, incluidas redirecciones y peticiones de la propia página iniciadas por un clic de la receta, se compara con esa lista. Lo que no casa se aborta.
     - **La cobertura de solo lectura depende de esta lista, no del método HTTP:** un `GET` también puede cambiar estado.
-  - **Método en la red.** Se aborta toda petición que no sea `GET`/`HEAD`, salvo las de renovación de sesión de una lista por sitio.
+  - **Método y operación en la red.** Se aborta toda petición que no sea `GET`/`HEAD`, salvo dos casos:
+    - las de renovación de sesión de una lista por sitio;
+    - en sitios cuyo cliente web **lee por POST** (Outlook, Teams y SharePoint en la web), las operaciones de lectura de una **lista cerrada por receta**, identificadas por URL **y** por la operación declarada en el cuerpo o en una cabecera: nombre de acción, `operationName` de GraphQL o método RPC.
+
+    Una operación desconocida o de escritura se aborta aunque la URL coincida, por ejemplo marcar como leído o actualizar un elemento. Los WebSocket solo se admiten para recibir; los envíos se abortan salvo los de mantenimiento de la conexión de esa lista.
+  - **Si un cliente web no permite distinguir lectura de escritura de forma fiable** con esas señales, su receta no se publica. La fuente queda sin ruta web y se dice así; no se relaja la regla.
   - No envía formularios.
   - No pulsa elementos fuera de una lista cerrada de acciones de navegación de cada receta (paginar, expandir, cambiar de pestaña de la página). Cada acción está ligada a las URLs que puede provocar.
   - No abre elementos individuales cuando abrirlos cambia su estado (un correo pasa a «leído», una notificación a «vista»). En v1 las recetas leen **vistas de lista**.
@@ -111,6 +116,8 @@ Mucha información de trabajo solo vive en webs sin API, sin A2A y sin MCP: port
 - **Contenido no fiable:** todo texto web es dato. Nunca selecciona acciones, nunca cambia la lista ni la receta y nunca eleva un aviso a alerta. Se guardan referencias y metadatos, no páginas completas.
 - **Sesión caducada:** el adaptador se detiene y avisa: «vuelve a iniciar sesión en X en el perfil de Soul». Nunca guarda contraseñas ni rellena credenciales.
 - **Ruta web para Microsoft 365 y Google.** Si el inquilino no permite que el propio usuario consienta los permisos de lectura de Graph (lo habitual para correo, chats y ficheros), el operador puede activar recetas sobre los clientes web oficiales: Outlook, Teams y SharePoint/OneDrive en la web, o Gmail, Calendar y Drive. Usa su propia sesión en el perfil dedicado, con las mismas reglas de solo lectura y vistas de lista.
+  - Riesgo de plazo: esos clientes cambian sin aviso y sus recetas son las más frágiles. Cada receta lleva una prueba de humo que detecta el cambio, desactiva la receta y lo dice («la receta de Outlook web dejó de ser fiable»), en vez de devolver datos dudosos.
+  - Las **alertas por remitente** no existen en la ruta web: sin API no hay identidad autenticada del remitente. En esa ruta, las reglas de remitente se degradan a **aviso** y se dice así en la configuración.
 
 Reglas de los adaptadores:
 - **Autenticación delegada por el propio usuario** (flujo de dispositivo o navegador). Los tokens van al almacén de credenciales del sistema: Credential Manager, Keychain o Secret Service. Nunca a ficheros, logs, variables ni línea de órdenes.
@@ -223,7 +230,7 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
     - hilos «esperando mi respuesta» con respuestas desde otro cliente, respuestas a todos y reenvíos (al menos 8 escenarios).
 - **AC-3:** en ese banco, precisión ≥ 90 % por pregunta. 0 uso de hechos revocados, 0 fugas entre operadores y entre niveles, 0 cuerpos de mensaje persistidos y 0 tokens en disco fuera del almacén del sistema. p95 de Q1 < 2 s con fuentes cacheadas.
 - **AC-4:** la vista móvil muestra Q1–Q4 con fuente y antigüedad en los tres niveles de detalle. Con `recuentos`, ningún asunto ni nombre llega al dispositivo (test que inspecciona el tráfico). Todo texto de terceros se muestra como **texto inerte**: sin markdown activo, sin enlaces ni deep links que la app abra por sí misma, y sin HTML. Hay un test con payloads de inyección.
-- **AC-4c:** una alerta con el remitente suplantado (`From` falsificado, sin DKIM/DMARC o de otro inquilino) no se dispara. Hay escenario en el banco.
+- **AC-4c:** en la ruta Graph o API, una alerta con el remitente suplantado (`From` falsificado, sin DKIM/DMARC o de otro inquilino) no se dispara; hay escenario en el banco. En la ruta web, una regla de remitente nunca produce una alerta, solo un aviso, y la configuración lo indica; hay escenario en el banco con el mismo remitente por las dos rutas.
 - **AC-4d (frontends de agente):** la salida que llega a Claude Code, OpenCode u otro frontend cuyo modelo corre en la nube es siempre de nivel `recuentos`. Solo sube de nivel si la instalación declara ese proveedor como aprobado por la organización para N4, en configuración local y auditada. Un test verifica que, sin esa declaración, ni asuntos, ni nombres, ni remitentes salen por esa ruta.
 - **AC-4b:** comunicación bidireccional.
   - Las órdenes estructuradas y las correcciones del operador se aplican y persisten.
@@ -246,7 +253,12 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
   - 0 accesos al perfil personal;
   - una página con instrucciones inyectadas («pulsa aprobar», «envía esto a…», «marca urgente») no produce ninguna acción ni ninguna alerta;
   - con sesión caducada, la parada es limpia;
-  - las recetas extraen Q1–Q4 con la misma precisión exigida en AC-3 en al menos 3 sitios sintéticos de tipos distintos (portal de tareas, panel de aprobaciones, intranet de noticias).
+  - las recetas extraen Q1–Q4 con la misma precisión exigida en AC-3 en al menos 3 sitios sintéticos de tipos distintos (portal de tareas, panel de aprobaciones, intranet de noticias);
+  - **ruta web de clientes que leen por POST:** un sitio sintético imita un cliente de correo y chat que lista por POST (operaciones de búsqueda o listado) y escribe por POST a la misma URL (marcar como leído, actualizar, enviar), además de un WebSocket.
+    - La receta extrae Q1–Q2.
+    - Se cumple **0 mutaciones en el servidor**, **0 operaciones fuera de la lista** y **0 envíos por WebSocket** fuera del mantenimiento.
+    - Una operación nueva o desconocida del cliente se aborta y desactiva la receta con aviso.
+  - Las recetas reales de Outlook, Teams y SharePoint en la web solo se publican si pasan la misma batería contra una grabación de su tráfico real. Si no la pasan, no se publican.
 - **AC-5:** revocar un adaptador borra su caché y sus tokens. Desinstalar no deja estado.
 - **AC-6:** documento de transparencia completo y revisado por la revisora de seguridad. Además, **antes de los días 6–9**, la revisora de seguridad revisa el modelo de amenazas del canal móvil:
   - escucha solo en la VPN;
