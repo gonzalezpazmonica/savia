@@ -64,6 +64,7 @@ Una ruta **no importa `fs` ni `RagService`**. Todo lo que lee pasa por `RouteCon
 | `candidates(query, {k, mode})` | Candidatos de `RagService` (BM25 + denso + RRF) en las cúpulas autorizadas, cada uno admitido por el guard | 1 `modelCalls` + tokens si `mode ≠ bm25`; 1 `nodes` por hit |
 | `openNote({dome, path})` | Contenido actual de una nota admitida (revalida la clasificación sobre los bytes leídos) | 1 `nodes` |
 | `documentChunks({dome, path, documentId?})` | Chunks del índice activo de un documento admitido (vecinos, padre) | 1 `nodes` |
+| `documentStructure?({dome, path})` | Árbol del documento en el `StructureIndex` activo (M3) y sus documentos hermanos del mismo directorio que el guard admite ahora. Opcional: un doble de test puede no tenerlo; la ruta degrada con `STRUCTURE_UNAVAILABLE` | 1 `nodes` + 1 por hermano |
 | `consume(key, n)` | Gasto propio: `hops`, `modelCalls`, `inputTokens`, `nodes`. `false` si no queda y entonces no descuenta | — |
 | `timeLeftMs()` | Lo que queda de `maxLatencyMs` | — |
 | `step(step, detail?, nodes?)` | Paso de la traza. No metas en `detail` contenido de nodos | — |
@@ -200,3 +201,18 @@ Las comparaciones (`comparisons`) restan ruta − línea base **pareadas por pre
 Fuera del alcance de la base, pendiente de las rutas que lo necesiten:
 - latencia **por fase** (hoy solo la total por caso);
 - la segunda fase de R2: la evidencia entregada a un generador y la condición *oracle evidence*.
+
+## 7. Rutas de estructura: M3 y M4
+
+**`StructureIndex` (`src/rag/structure-index.ts`).** Árbol documento → sección → unidad de cada generación, construido en el sync desde los chunks (encabezados del chunker en Markdown; página, diapositiva u hoja en Savia Files). Cada nodo lleva `nodeId` estable (depende de la ruta estructural, no del contenido), localizador y `contentHash` (unidad: hash del texto; sección y documento: Merkle de los hijos). No guarda texto: las unidades apuntan a `chunkId`. Es una proyección de la generación: vive en su directorio (`structure-<seq>.*`), va ligada por hash a generación, `seq`, orden y contenido de chunks y clasificación, se cifra si la fuente está sellada, se retira con el rollback y la barre el GC. Nunca se escribe dentro de un repo git.
+
+**M3 (`routes/m3-structure.ts`).** Determinista, sin modelo. Sobre los candidatos de M0: trae las unidades de la sección que la consulta nombra («cláusula 5», «anexo II», «§ 4.2»), busca referencias a anexos en la sección de cada hit y sigue cada una al documento hermano que la nombra (un `hops` por salto). Lo añadido va tras el grupo del documento que lo cita; el orden de documentos de M0 no cambia.
+
+**M4 (`routes/m4-llm-nav.ts`).** Un modelo **local** (Ollama, solo loopback; `SAVIA_M4_MODEL`, `SAVIA_OLLAMA_URL`) elige qué abrir entre opciones numeradas: secciones de los primeros documentos y documentos hermanos, todo ya admitido por el guard.
+- `requiresDeclaredBudget: true` (AC-7): sin `budget` en la petición, `BUDGET_REQUIRED`.
+- Cada ronda descuenta antes de llamar sus tokens estimados y 1 `modelCalls`; cada documento hermano abierto, 1 `hops`. Topes propios en `M4_LIMITS` (rondas, opciones, elecciones, unidades y tokens de salida).
+- El texto leído va en un bloque de DATOS; la respuesta solo se acepta como `{"open":[n…]}` dentro de rango. Un modelo que obedezca a una inyección no puede abrir nada que no estuviera ya en la lista.
+- Si el modelo falla, sirve los candidatos con `LOCAL_LLM_UNAVAILABLE`.
+
+Medición: `scripts/bench-m34.ts` (una ruta por proceso, y `compare` con la regla de AC-6).
+
