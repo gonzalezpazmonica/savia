@@ -131,9 +131,9 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 
 Los números exactos de la última ejecución están en `resultados/`.
 
-- **Batería: 329 de 329 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 86 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada y navegación a otro origen.
-- **Mutantes: 20 de 20 muertos**: los 15 de Labs y los 5 nuevos, en serie y con informe de cada uno.
-- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 104 tests en verde, 14 de ellos del adaptador del contrato.
+- **Batería: 343 de 343 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 100 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL.
+- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, en serie y con informe de cada uno.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 111 tests en verde, 16 de ellos del adaptador del contrato.
 
 ## Lo que queda abierto
 

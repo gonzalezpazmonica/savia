@@ -18,7 +18,7 @@
     {
       "mutante": "metodo_laxo",
       "estado": "MUERTO",
-      "fallidas": 21,
+      "fallidas": 27,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:peticiones_no_get_fuera_de_lista",
@@ -31,7 +31,7 @@
     {
       "mutante": "escritura_permitida",
       "estado": "MUERTO",
-      "fallidas": 9,
+      "fallidas": 12,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:peticiones_no_get_fuera_de_lista",
@@ -52,7 +52,7 @@
     {
       "mutante": "ws_libre",
       "estado": "MUERTO",
-      "fallidas": 6,
+      "fallidas": 8,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:envios_websocket_fuera_de_mantenimiento",
@@ -104,13 +104,14 @@
     {
       "mutante": "sin_desactivar",
       "estado": "MUERTO",
-      "fallidas": 5,
+      "fallidas": 6,
       "muertoPor": [
         "operacion_nueva:correo:estado",
         "operacion_nueva:correo:aviso",
         "operacion_nueva:correo:persistente",
         "cambio_dom:tareas:estado",
-        "cambio_dom:tareas:aviso"
+        "cambio_dom:tareas:aviso",
+        "operacion_en_url:correo:desactivada"
       ]
     },
     {
@@ -129,7 +130,7 @@
     {
       "mutante": "perfil_personal",
       "estado": "MUERTO",
-      "fallidas": 68,
+      "fallidas": 72,
       "muertoPor": [
         "ejecucion:tareas:sin_excepcion",
         "base:tareas:estado",
@@ -142,7 +143,7 @@
     {
       "mutante": "subrecurso_libre",
       "estado": "MUERTO",
-      "fallidas": 24,
+      "fallidas": 30,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:peticiones_no_get_fuera_de_lista",
