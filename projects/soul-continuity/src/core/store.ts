@@ -11,7 +11,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import {
-  closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
+  closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, statSync,
   writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -105,6 +105,18 @@ export function filesUnder(dir: string): string[] {
   return out;
 }
 
-export function removeTree(dir: string): void {
-  rmSync(dir, { recursive: true, force: true });
+/** Lo que Soul crea en su directorio de datos. Nada más se borra al desinstalar. */
+const OWN = /^(config\.json|STOP|failsafe\.jsonl|audit\.jsonl|devices\.json|credentials-index\.json|autostart-task\.xml|tls|op-[0-9a-f]{16}|.+\.\d+\.[0-9a-f]{8}\.tmp)$/;
+
+/**
+ * Borra solo el estado de Soul en `dir` y, si queda vacío, el directorio. Lo ajeno se conserva
+ * (con `SOUL_DATA_DIR` apuntando a una carpeta compartida no se pierde nada que no sea de Soul).
+ * Devuelve lo ajeno que quedó.
+ */
+export function removeSoulState(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  for (const f of readdirSync(dir)) if (OWN.test(f)) rmSync(join(dir, f), { recursive: true, force: true });
+  const left = readdirSync(dir);
+  if (!left.length) rmdirSync(dir);
+  return left;
 }

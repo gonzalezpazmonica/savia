@@ -216,7 +216,8 @@ export function crearServidor(opts: OpcionesServidor) {
       mensajes: [], seq: 0, base: 0, pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
-    for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: Math.max(e.nace, minuto0 - 60 * MIN), mio: false, noMio: false, fijo: true });
+    // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
+    for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: false, noMio: false, fijo: true });
     iniciarVentana(o, minuto0);
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
       const cat = CATEGORIA[e.tipo];

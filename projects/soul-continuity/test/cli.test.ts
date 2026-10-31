@@ -12,11 +12,13 @@ import type { Run } from "../src/credentials/store.ts";
 const NOW = "2026-10-31T09:00:00Z";
 const TITLE = "Asunto-confidencial-de-tercero";
 const PERSON = "persona.tercera@example.test";
+const CLI_TOKEN = "tok-canario-cli-91c2";
 
 function adapter(): SourceAdapter {
   return {
     name: "m365-mail", routes: ["graph"], purpose: "t",
     async read(ctx) {
+      await ctx.credentials.acquire("m365-mail", ["Mail.ReadBasic"]);
       return {
         status: "ok", route: "graph", claims: [{
           key: "m365-mail:awaiting_reply:c1@m1", claim_type: "awaiting_reply", state: "OBSERVED",
@@ -54,7 +56,7 @@ function setup(opts: { profile?: boolean; level?: "completo" | "titulos" | "recu
   const deps: CliDeps = {
     dataDir: dir, env: { ...(opts.env ?? {}) }, now: () => NOW, out: (s) => out.push(s), err: (s) => err.push(s),
     adapters: { "m365-mail": adapter() },
-    sourceEnv: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "tok" } },
+    sourceEnv: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => CLI_TOKEN } },
     credentials: { forget: async (s: string) => { forgotten.push(s); return [s]; }, forgetAll: async () => { forgotten.push("*"); return []; } },
     platform: "linux", home, run, node: "/n/node", entry: "/e/main.ts",
   };
@@ -198,7 +200,8 @@ test("export incluye libro e instantánea, y no lleva tokens", async () => {
   assert.equal(await runCli(["export"], s.deps), 0);
   const j = JSON.parse(text(s));
   assert.equal(j.operators[0].ledger.length, 1);
-  assert.ok(!text(s).includes('"tok"'));
+  assert.ok(!text(s).includes(CLI_TOKEN), "la exportación no lleva tokens");
+  assert.ok(!filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes(CLI_TOKEN)), "0 tokens en disco");
 });
 
 test("AC-5: uninstall sin --yes no borra nada; con --yes no deja estado", async () => {
@@ -267,4 +270,18 @@ test("correct mio no promete que «no volverá»", async () => {
   s.out.length = 0;
   assert.equal(await runCli(["correct", id, "mio"], s.deps), 0);
   assert.doesNotMatch(text(s), /No volverá/);
+});
+
+test("uninstall no borra lo que no es de Soul en el directorio de datos", async () => {
+  const s = setup();
+  await runCli(["q1"], s.deps);
+  const fs = await import("node:fs");
+  fs.writeFileSync(join(s.dir, "foto-ajena.jpg"), "x");
+  fs.mkdirSync(join(s.dir, "carpeta-ajena"));
+  fs.writeFileSync(join(s.dir, "carpeta-ajena", "nota.txt"), "y");
+  assert.equal(await runCli(["uninstall", "--yes"], s.deps), 0);
+  assert.ok(existsSync(join(s.dir, "foto-ajena.jpg")));
+  assert.ok(existsSync(join(s.dir, "carpeta-ajena", "nota.txt")));
+  assert.equal(existsSync(join(s.dir, "config.json")), false);
+  assert.equal(fs.readdirSync(s.dir).filter((f) => f.startsWith("op-")).length, 0, "no queda estado de Soul");
 });

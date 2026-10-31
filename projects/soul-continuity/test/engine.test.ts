@@ -23,6 +23,8 @@ function fakeGithub(calls: { n: number }): SourceAdapter {
     name: "github", routes: ["api"], purpose: "test",
     async read(ctx) {
       calls.n++;
+      await ctx.credentials.acquire("github", ["repo"]); // el token entra en memoria del proceso
+
       return {
         status: "ok", route: "api", claims: [{
           key: "github:review_request:r1#7", claim_type: "review_request", state: "OBSERVED",
@@ -35,7 +37,8 @@ function fakeGithub(calls: { n: number }): SourceAdapter {
   };
 }
 
-const env = { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "x" } };
+const TOKEN = "tok-canario-engine-7f3a";
+const env = { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => TOKEN } };
 
 test("lo revocado no vuelve aunque la fuente lo repita", async () => {
   const calls = { n: 0 };
@@ -91,7 +94,7 @@ test("la caché del operador solo guarda metadatos: ni cuerpos ni el token", asy
   await e.snapshot({ install: install("op-a", [{ adapter: "github", purpose: "p", consent }]), now: NOW, stateDir, env });
   const all = filesUnder(stateDir).map((f) => readFileSync(f, "utf8")).join("\n");
   assert.ok(all.includes("r1#7"));
-  assert.ok(!all.includes('"x"'), "el token del almacén no se persiste");
+  assert.ok(!all.includes(TOKEN), "el token del almacén no se persiste");
 });
 
 test("lastSnapshot devuelve la última instantánea del operador y null para otro", async () => {

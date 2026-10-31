@@ -133,7 +133,10 @@ test("frescura real: ultima_lectura es la de la instantánea; caducada => obsole
     assert.equal(fresh.obsoleto, false);
     assert.equal(fresh.recuentos.total, 1);
     const id = fresh.elementos[0].id;
-    assert.equal((await get(`/elementos/${id}/porque`)).valido_hasta, "2026-10-31T10:00:00.000Z");
+    const pq = await get(`/elementos/${id}/porque`);
+    assert.equal(pq.valido_hasta, "2026-10-31T10:00:00.000Z");
+    assert.equal(pq.observado_en, "2026-10-31T09:00:00.000Z", "la observación real, no una fabricada al arrancar");
+    assert.equal(pq.antiguedad_s, 600);
     now = Date.parse("2026-10-31T10:30:00Z"); // pasado el TTL de la afirmación y de la instantánea
     const stale = await get("/q/q2");
     assert.equal(stale.obsoleto, true);

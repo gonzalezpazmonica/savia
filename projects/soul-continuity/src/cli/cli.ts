@@ -23,7 +23,7 @@ import {
 } from "../core/config.ts";
 import { type AdapterRegistry, makeEngine } from "../core/engine.ts";
 import { StoppedError, resume, stop, stopState } from "../core/failsafe.ts";
-import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeTree, writeJson } from "../core/store.ts";
+import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeSoulState, writeJson } from "../core/store.ts";
 import { autostartPlan, installAutostart, uninstallAutostart } from "../startup/autostart.ts";
 import { ensureInstallCert } from "../api/cert.ts";
 import { listDevices, pairDevice, revokeDevice } from "../api/devices.ts";
@@ -126,10 +126,12 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       }
       const creds = await deps.credentials.forgetAll();
       const auto = await uninstallAutostart(o, deps.run);
-      removeTree(deps.dataDir);
-      const left = existsSync(deps.dataDir);
-      print(left ? "No se pudo borrar todo el directorio de datos." : "Desinstalado: no queda estado de Soul.", { removed: !left, credentials: creds.length, autostart: auto.message });
-      return left ? 1 : 0;
+      const ajeno = removeSoulState(deps.dataDir);
+      const quedaSoul = existsSync(deps.dataDir) && readdirSync(deps.dataDir).some((f) => !ajeno.includes(f));
+      print(ajeno.length
+        ? `Desinstalado: no queda estado de Soul. Se conservan ${ajeno.length} elemento(s) ajenos en ${deps.dataDir}.`
+        : "Desinstalado: no queda estado de Soul.", { removed: !quedaSoul, kept_foreign: ajeno.length, credentials: creds.length, autostart: auto.message });
+      return quedaSoul ? 1 : 0;
     }
 
     case "stop": {
