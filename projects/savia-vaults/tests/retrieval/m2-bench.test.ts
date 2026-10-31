@@ -1,6 +1,6 @@
 // SE-489 M2 — resumen de latencia del reranker del script de medición (aparte de la ruta entera).
 import { describe, expect, it } from 'vitest';
-import { latencySummary, stratify } from '../../eval/evidence-bench/m2-bench.js';
+import { latencySummary, positive, stratify } from '../../eval/evidence-bench/m2-bench.js';
 
 describe('latencySummary', () => {
   it('percentiles y coste por par solo con las llamadas correctas', () => {
@@ -25,5 +25,15 @@ describe('stratify', () => {
   it('N mayor que la categoría devuelve todo; N = 0 no devuelve nada', () => {
     expect(stratify(cs, 99)).toHaveLength(cs.length);
     expect(stratify(cs, 0)).toEqual([]);
+  });
+});
+
+describe('positive (--limit / --per-category)', () => {
+  it('sin la opción no hay límite; un entero ≥ 1 se respeta', () => {
+    expect(positive('--limit', undefined)).toBeUndefined();
+    expect(positive('--limit', '5')).toBe(5);
+  });
+  it('0, negativos, decimales y texto fallan en vez de medir el banco entero', () => {
+    for (const v of ['0', '-1', '1.5', 'x', '']) expect(() => positive('--limit', v)).toThrow(/entero ≥ 1/);
   });
 });

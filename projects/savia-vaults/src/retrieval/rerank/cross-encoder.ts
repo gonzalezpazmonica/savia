@@ -26,8 +26,24 @@ export interface RerankConfig {
   maxMs: number;
 }
 
-export const RERANK_MAX_TOKENS = 512;
 const BATCH = 8;
+export const RERANK_MAX_TOKENS = 512;
+/** Tope de la consulta: si la consulta sola llenara el par, el documento se truncaría entero. */
+export const RERANK_MAX_QUERY_CHARS = 1024;
+
+/** Error con mensaje propio, apto para la traza (sin rutas ni detalle de librerías). */
+export class RerankError extends Error {}
+
+/** Puntúa por lotes y comprueba el plazo antes y después de cada lote. */
+export async function scoreInBatches(scoreBatch: (docs: string[]) => Promise<number[]>, docs: string[], deadline: number, batch = BATCH): Promise<number[]> {
+  const scores: number[] = [];
+  for (let i = 0; i < docs.length; i += batch) {
+    if (Date.now() > deadline) throw new RerankError('tiempo del reranker agotado');
+    scores.push(...await scoreBatch(docs.slice(i, i + batch)));
+    if (Date.now() > deadline) throw new RerankError('tiempo del reranker agotado');
+  }
+  return scores;
+}
 const SHA = /^[0-9a-f]{64}$/;
 
 export type RerankConfigResult = { ok: true; config: RerankConfig } | { ok: false; reason: string };
@@ -46,12 +62,7 @@ export function resolveRerankConfig(env: NodeJS.ProcessEnv = process.env): Reran
   return { ok: true, config: { modelDir: path.resolve(modelDir), modelSha256, tokenizerSha256, topN, maxMs } };
 }
 
-function sha256File(file: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const h = crypto.createHash('sha256');
-    fs.createReadStream(file).on('data', c => h.update(c)).on('error', reject).on('end', () => resolve(h.digest('hex')));
-  });
-}
+const sha256 = (b: Buffer): string => crypto.createHash('sha256').update(b).digest('hex');
 
 interface Encoded { ids: number[] }
 interface TokenizerLike { encode(text: string, opts: { text_pair: string }): Encoded }
@@ -60,21 +71,31 @@ interface TokenizerLike { encode(text: string, opts: { text_pair: string }): Enc
 export async function loadOnnxCrossEncoder(cfg: RerankConfig): Promise<RerankScorer> {
   const modelFile = path.join(cfg.modelDir, 'model.onnx');
   const tokFile = path.join(cfg.modelDir, 'tokenizer.json');
-  if (!fs.existsSync(modelFile) || !fs.existsSync(tokFile)) throw new Error('modelo o tokenizador ausentes');
-  if (await sha256File(modelFile) !== cfg.modelSha256) throw new Error('digest del modelo distinto del fijado');
-  if (await sha256File(tokFile) !== cfg.tokenizerSha256) throw new Error('digest del tokenizador distinto del fijado');
+  if (!fs.existsSync(modelFile) || !fs.existsSync(tokFile)) throw new RerankError('modelo o tokenizador ausentes');
+  // Cada fichero se lee UNA vez: se hashea y se carga esa misma copia (sin ventana entre verificar y usar).
+  const modelBytes = fs.readFileSync(modelFile);
+  if (sha256(modelBytes) !== cfg.modelSha256) throw new RerankError('digest del modelo distinto del fijado');
+  const tokBytes = fs.readFileSync(tokFile);
+  if (sha256(tokBytes) !== cfg.tokenizerSha256) throw new RerankError('digest del tokenizador distinto del fijado');
   // Dependencias opcionales: si no están instaladas, el reranker no existe (fail-open).
-  const ort = await import('onnxruntime-node');
-  const { Tokenizer } = await import('@huggingface/tokenizers');
-  const tok = new Tokenizer(JSON.parse(fs.readFileSync(tokFile, 'utf-8')), {}) as unknown as TokenizerLike;
-  const session = await ort.InferenceSession.create(modelFile, { graphOptimizationLevel: 'all' });
-  if (!session.inputNames.includes('input_ids') || !session.inputNames.includes('attention_mask')) throw new Error('entradas del modelo no reconocidas');
+  let ort: typeof import('onnxruntime-node');
+  let tok: TokenizerLike;
+  let session: Awaited<ReturnType<typeof import('onnxruntime-node').InferenceSession.create>>;
+  try {
+    ort = await import('onnxruntime-node');
+    const { Tokenizer } = await import('@huggingface/tokenizers');
+    tok = new Tokenizer(JSON.parse(tokBytes.toString('utf-8')), {}) as unknown as TokenizerLike;
+    session = await ort.InferenceSession.create(modelBytes, { graphOptimizationLevel: 'all' });
+  } catch {
+    throw new RerankError('dependencia o modelo no cargables');
+  }
+  if (!session.inputNames.includes('input_ids') || !session.inputNames.includes('attention_mask')) throw new RerankError('entradas del modelo no reconocidas');
   const withTypes = session.inputNames.includes('token_type_ids');
   const out = session.outputNames[0];
 
   async function scoreBatch(query: string, docs: string[]): Promise<number[]> {
     const enc = docs.map(d => {
-      const ids = tok.encode(query, { text_pair: d }).ids;
+      const ids = tok.encode(query.slice(0, RERANK_MAX_QUERY_CHARS), { text_pair: d }).ids;
       // Truncado por la cola conservando el separador final (</s>, id 2 en XLM-R).
       return ids.length > RERANK_MAX_TOKENS ? [...ids.slice(0, RERANK_MAX_TOKENS - 1), ids[ids.length - 1]] : ids;
     });
@@ -89,19 +110,12 @@ export async function loadOnnxCrossEncoder(cfg: RerankConfig): Promise<RerankSco
     if (withTypes) feeds.token_type_ids = new ort.Tensor('int64', new BigInt64Array(enc.length * len), shape);
     const res = await session.run(feeds);
     const data = Array.from(res[out].data as ArrayLike<number>);
-    if (data.length !== docs.length || data.some(x => !Number.isFinite(x))) throw new Error('salida del modelo no válida');
+    if (data.length !== docs.length || data.some(x => !Number.isFinite(x))) throw new RerankError('salida del modelo no válida');
     return data;
   }
 
   return {
     id: path.basename(cfg.modelDir), digest: cfg.modelSha256,
-    async score(query, docs, deadline) {
-      const scores: number[] = [];
-      for (let i = 0; i < docs.length; i += BATCH) {
-        if (Date.now() > deadline) throw new Error('tiempo del reranker agotado');
-        scores.push(...await scoreBatch(query, docs.slice(i, i + BATCH)));
-      }
-      return scores;
-    },
+    score: (query, docs, deadline) => scoreInBatches(b => scoreBatch(query, b), docs, deadline),
   };
 }

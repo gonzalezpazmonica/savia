@@ -7,8 +7,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { runRoute } from '../../src/retrieval/runner.js';
 import { getRoute, ROUTE_CONTRACT_VERSION } from '../../src/retrieval/route.js';
-import { RERANK_FALLBACK, setRerankerForTests, takeRerankFallbacks, takeRerankTimings } from '../../src/retrieval/routes/m2-rerank.js';
-import { loadOnnxCrossEncoder, resolveRerankConfig, type RerankScorer } from '../../src/retrieval/rerank/cross-encoder.js';
+import { LOAD_RETRY_MS, MEASURE_CAP, RERANK_FALLBACK, keep, setRerankerForTests, takeRerankFallbacks, takeRerankTimings } from '../../src/retrieval/routes/m2-rerank.js';
+import { RerankError, loadOnnxCrossEncoder, resolveRerankConfig, scoreInBatches, type RerankScorer } from '../../src/retrieval/rerank/cross-encoder.js';
 import { describeSecurityBattery } from './security-battery.js';
 import { fixture, long, note, writeDocs, type Fixture } from './helpers.js';
 
@@ -82,6 +82,71 @@ describe('SE-489 M2 reranker', () => {
     expect(new Set(out.slice(0, 2))).toEqual(new Set(base.slice(0, 2).map(h => h.chunkId)));
   });
 
+  // El runner también recorta a k, así que se ejerce la ruta sola con un contexto mínimo.
+  describe('la ruta devuelve como mucho k hits (sin depender del runner)', () => {
+    const mk = (i: number) => ({ dome: 'A', confidentiality: 'N1', path: `p${i}.md`, chunkId: `c${i}`, heading: `h${i}`, text: `t${i}`, score: 1 - i / 100, signals: {}, freshness: { modified: '', decay: 1 }, generation: 'g' }) as never;
+    const pool = Array.from({ length: 12 }, (_, i) => mk(i));
+    const ctxOf = (asked: number[]) => ({
+      candidates: async (_q: string, o?: { k?: number }) => { asked.push(o?.k ?? -1); return pool.slice(0, o?.k ?? 12); },
+      consume: () => true, timeLeftMs: () => 10_000, step: () => undefined,
+    }) as never;
+    const req = (k: number) => ({ route: 'M2', query: 'q', domes: ['A'], mode: 'bm25', k }) as never;
+    const ids = (r: { hits: { chunkId: string }[] }) => r.hits.map(h => h.chunkId);
+
+    it('con reranker (k < N): reordena N=10 y devuelve k=3', async () => {
+      install(fake((_q, d) => (d === 'h9\nt9' ? 5 : 0)), 10); // el candidato 9 sube al primer puesto
+      const asked: number[] = [];
+      const r = await getRoute('M2')!.run(req(3), ctxOf(asked));
+      expect(asked).toEqual([10]);
+      expect(ids(r)).toEqual(['c9', 'c0', 'c1']);
+    });
+
+    it('en fallback devuelve exactamente k, igual que M0', async () => {
+      install({ id: 'roto', digest: 'b'.repeat(64), score: async () => { throw new Error('boom'); } }, 10);
+      const r = await getRoute('M2')!.run(req(3), ctxOf([]));
+      expect(ids(r)).toEqual(['c0', 'c1', 'c2']);
+      expect(r.warnings).toContain(RERANK_FALLBACK);
+    });
+
+    it('sin reranker configurado respeta k y pide solo k a M0', async () => {
+      const prev = process.env.SAVIA_RERANK_MODEL_DIR;
+      delete process.env.SAVIA_RERANK_MODEL_DIR;
+      try {
+        const asked: number[] = [];
+        const r = await getRoute('M2')!.run(req(3), ctxOf(asked));
+        expect(asked).toEqual([3]);
+        expect(ids(r)).toEqual(['c0', 'c1', 'c2']);
+      } finally { if (prev !== undefined) process.env.SAVIA_RERANK_MODEL_DIR = prev; }
+    });
+  });
+
+  it('tras un fallo de carga no vuelve a leer el modelo hasta pasado LOAD_RETRY_MS', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'savia-m2-retry-'));
+    const saved = { ...process.env };
+    try {
+      process.env.SAVIA_RERANK_MODEL_DIR = path.join(dir, 'm');
+      process.env.SAVIA_RERANK_MODEL_SHA256 = 'a'.repeat(64);
+      process.env.SAVIA_RERANK_TOKENIZER_SHA256 = 'b'.repeat(64);
+      setRerankerForTests(undefined);
+      const reason = async () => (await run()).result.trace.steps.find(s => s.step === 'm2:fallback')?.detail;
+      expect(await reason()).toMatch(/ausentes/);
+      // El modelo aparece (con digest erróneo): dentro de la ventana sigue el fallo cacheado.
+      fs.mkdirSync(path.join(dir, 'm'));
+      fs.writeFileSync(path.join(dir, 'm', 'model.onnx'), 'x');
+      fs.writeFileSync(path.join(dir, 'm', 'tokenizer.json'), '{}');
+      expect(await reason()).toMatch(/ausentes/);
+      const real = Date.now;
+      Date.now = () => real() + LOAD_RETRY_MS + 1;
+      try { expect(await reason()).toMatch(/digest del modelo/); } finally { Date.now = real; }
+    } finally {
+      for (const k of ['SAVIA_RERANK_MODEL_DIR', 'SAVIA_RERANK_MODEL_SHA256', 'SAVIA_RERANK_TOKENIZER_SHA256']) {
+        if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k];
+      }
+      setRerankerForTests(undefined);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   describe('fail-open en calidad', () => {
     const expectM0Order = async (why: RegExp) => {
       const out = (await run()).result;
@@ -92,16 +157,24 @@ describe('SE-489 M2 reranker', () => {
     };
 
     it('sin reranker configurado', async () => {
-      const env = { ...process.env };
+      const prev = process.env.SAVIA_RERANK_MODEL_DIR;
       delete process.env.SAVIA_RERANK_MODEL_DIR;
-      try { await expectM0Order(/sin-reranker/); } finally { process.env = env; }
+      try { await expectM0Order(/sin-reranker/); } finally { if (prev !== undefined) process.env.SAVIA_RERANK_MODEL_DIR = prev; }
     });
 
     it('el modelo lanza', async () => {
       install({ id: 'roto', digest: 'b'.repeat(64), score: async () => { throw new Error('boom'); } });
-      await expectM0Order(/error: boom/);
+      await expectM0Order(/^error: fallo al puntuar$/);
       expect(takeRerankFallbacks()).toContain('error');
       expect(takeRerankTimings()[0]).toMatchObject({ ok: false });
+    });
+
+    it('la traza no filtra rutas ni detalle de la librería; los motivos propios sí salen', async () => {
+      install({ id: 'ruta', digest: 'b'.repeat(64), score: async () => { throw new Error('Load model from /home/usuario/m.onnx failed'); } });
+      const out = (await run()).result;
+      expect(JSON.stringify(out.trace)).not.toContain('/home/usuario');
+      install({ id: 'propio', digest: 'b'.repeat(64), score: async () => { throw new RerankError('tiempo del reranker agotado'); } });
+      await expectM0Order(/tiempo del reranker agotado/);
     });
 
     it('puntuaciones inválidas (NaN o longitud errónea)', async () => {
@@ -138,7 +211,7 @@ describe('SE-489 M2 reranker', () => {
     it('pasa de la latencia del reranker: cae a M0', async () => {
       setRerankerForTests({
         topN: 20, maxMs: 30,
-        scorer: { id: 'lento', digest: 'f'.repeat(64), score: async (_q, d, deadline) => { await new Promise(r => setTimeout(r, 60)); if (Date.now() > deadline) throw new Error('tiempo del reranker agotado'); return d.map(() => 0); } },
+        scorer: { id: 'lento', digest: 'f'.repeat(64), score: async (_q, d, deadline) => { await new Promise(r => setTimeout(r, 60)); if (Date.now() > deadline) throw new RerankError('tiempo del reranker agotado'); return d.map(() => 0); } },
       });
       await expectM0Order(/tiempo/);
     });
@@ -150,6 +223,28 @@ describe('SE-489 M2 reranker', () => {
     const out = await run({ domes: ['A', 'B'] });
     expect(out.result.hits.every(h => h.dome === 'A')).toBe(true);
     expect(out.domes.find(d => d.name === 'B')?.status).toBe('denied');
+  });
+});
+
+describe('SE-489 M2 plazo y registros acotados', () => {
+  it('el plazo se comprueba también tras el último lote', async () => {
+    const lento = async (d: string[]) => { await new Promise(r => setTimeout(r, 40)); return d.map(() => 1); };
+    // Un solo lote que termina fuera de plazo: antes se aceptaba, ahora lanza.
+    await expect(scoreInBatches(lento, ['a', 'b'], Date.now() + 10, 8)).rejects.toThrow(/tiempo del reranker/);
+    // Dentro de plazo puntúa todos, por lotes.
+    await expect(scoreInBatches(async d => d.map(() => 1), ['a', 'b', 'c'], Date.now() + 5000, 2)).resolves.toEqual([1, 1, 1]);
+    // Plazo ya vencido: ni empieza.
+    let calls = 0;
+    await expect(scoreInBatches(async d => { calls++; return d.map(() => 1); }, ['a'], Date.now() - 1)).rejects.toThrow(/tiempo/);
+    expect(calls).toBe(0);
+  });
+
+  it('los registros de medición tienen tope', () => {
+    const log: number[] = [];
+    for (let i = 0; i < MEASURE_CAP + 50; i++) keep(log, i);
+    expect(log).toHaveLength(MEASURE_CAP);
+    expect(log[0]).toBe(50);
+    expect(log[log.length - 1]).toBe(MEASURE_CAP + 49);
   });
 });
 

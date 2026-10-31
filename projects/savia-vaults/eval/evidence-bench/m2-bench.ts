@@ -48,6 +48,14 @@ function sha256(file: string): string {
   return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
+/** Entero ≥ 1 o error: 0, vacío o no numérico no deben medir el banco entero en silencio. */
+export function positive(flag: string, v: string | undefined): number | undefined {
+  if (v === undefined) return undefined;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`${flag}: entero ≥ 1`);
+  return n;
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const opt = (k: string): string | undefined => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
@@ -74,12 +82,12 @@ async function main(): Promise<void> {
   });
   const deny = (names: string[]) => { denied.clear(); for (const n of names) denied.add(n); };
 
-  const limit = opt('--limit') ? Number(opt('--limit')) : undefined;
-  const perCat = opt('--per-category') ? Number(opt('--per-category')) : undefined;
+  const limit = positive('--limit', opt('--limit'));
+  const perCat = positive('--per-category', opt('--per-category'));
   if (limit !== undefined && perCat !== undefined) throw new Error('--limit y --per-category son excluyentes');
   const take = (xs: EvidenceCase[]): EvidenceCase[] => {
-    if (perCat) return stratify(xs, perCat);
-    return limit ? xs.slice(0, limit) : xs;
+    if (perCat !== undefined) return stratify(xs, perCat);
+    return limit !== undefined ? xs.slice(0, limit) : xs;
   };
   const sets: Record<string, EvidenceCase[]> = {
     dev: take(loadBench(path.resolve(benchDir), { split: 'dev' })),
