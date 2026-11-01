@@ -39,6 +39,7 @@ const vig = (estado: ResultadoVigilancia["estado"]): ResultadoVigilancia =>
 function deps(ejec: Resultado | Error, v: ResultadoVigilancia = vig("SIN_CAMBIOS")): Dependencias & { llamadas: number } {
   const d = {
     llamadas: 0,
+    banco: true,
     ejecutar: async () => { d.llamadas++; if (ejec instanceof Error) throw ejec; return ejec; },
     vigilar: async () => v,
   };
@@ -98,7 +99,7 @@ for (const [estado, status] of [["SESION_CADUCADA", "session_expired"], ["DESACT
 test("una receta caducada tumba el adaptador aunque otra vaya bien (fail-closed, gana la sesión)", async () => {
   const ok = resultado("OK", { elementos: [el("t1", { titulo: "x" })], preguntas: { q1: ["t1"], q2: [], q4: [] } });
   const seq = [resultado("ERROR"), ok, resultado("SESION_CADUCADA")];
-  const d: Dependencias = { ejecutar: async () => seq.shift()!, vigilar: async () => vig("SIN_CAMBIOS") };
+  const d: Dependencias = { banco: true, ejecutar: async () => seq.shift()!, vigilar: async () => vig("SIN_CAMBIOS") };
   const r = await crearAdaptadorWeb(d).read(ctx(base({ recetas: [receta(), receta(), receta()] })));
   assert.equal(r.status, "session_expired");
   assert.ok(!("claims" in r));
@@ -115,6 +116,15 @@ test("receta experimental sin recibo no se ejecuta; sin nada activo → recipe_d
   const d = deps(resultado("OK"));
   const r = await crearAdaptadorWeb(d).read(ctx(base({ recetas: [experimental()] })));
   assert.equal(d.llamadas, 0);
+  assert.equal(r.status, "recipe_disabled");
+});
+
+test("en producto (sin banco) una estable de origen local tampoco se ejecuta sin recibo (revisión #1443 P2-3)", async () => {
+  const d = { ...deps(resultado("OK")), banco: undefined };
+  let llamadas = 0;
+  d.ejecutar = async () => { llamadas++; return resultado("OK"); };
+  const r = await crearAdaptadorWeb(d).read(ctx(base()));
+  assert.equal(llamadas, 0);
   assert.equal(r.status, "recipe_disabled");
 });
 
@@ -161,6 +171,7 @@ test("la huella de una página vigilada solo se confirma si el adaptador entrega
   const p = base({ vigiladas: [v], huellas: fichero });
   const vistos: OpcionesVigilancia[] = [];
   const dep = (receta: Resultado): Dependencias => ({
+    banco: true,
     ejecutar: async () => receta,
     vigilar: async (o) => { vistos.push(o); return { ...vig("CAMBIADA"), huella: "h-nueva" }; },
   });

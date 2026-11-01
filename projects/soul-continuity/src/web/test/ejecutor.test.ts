@@ -15,7 +15,7 @@ test("error en la página → ERROR sin elementos, sin excepción", { timeout: 6
   try {
     const r = receta(b);
     r.extraccion.elemento = "li.tarea:::no-es-css";
-    const res = await ejecutarReceta({ receta: r, yo: "ana.prueba", ejecutable: buscarNavegador().ruta, cookies: [b.cookieSesion("tareas")] });
+    const res = await ejecutarReceta({ receta: r, yo: "ana.prueba", ejecutable: buscarNavegador().ruta, banco: true, cookies: [b.cookieSesion("tareas")] });
     assert.equal(res.estado, "ERROR");
     assert.equal(res.elementos.length, 0);
     assert.match(res.aviso ?? "", /no se devuelven datos/);
@@ -26,7 +26,7 @@ test("error en la página → ERROR sin elementos, sin excepción", { timeout: 6
 test("receta sana → OK con elementos", { timeout: 60_000 }, async () => {
   const b = await new Banco().arrancar();
   try {
-    const res = await ejecutarReceta({ receta: receta(b), yo: "ana.prueba", ejecutable: buscarNavegador().ruta, cookies: [b.cookieSesion("tareas")] });
+    const res = await ejecutarReceta({ receta: receta(b), yo: "ana.prueba", ejecutable: buscarNavegador().ruta, banco: true, cookies: [b.cookieSesion("tareas")] });
     assert.equal(res.estado, "OK");
     assert.equal(res.elementos.length, 7);
   } finally { await b.parar(); }
@@ -40,7 +40,7 @@ test("perfil persistente del directorio de datos: se usa y NO se borra al termin
   const b = await new Banco().arrancar();
   try {
     const perfil = prepararPerfilSoul(datos);
-    const res = await ejecutarReceta({ receta: receta(b), yo: "ana.prueba", ejecutable: buscarNavegador().ruta, perfil,
+    const res = await ejecutarReceta({ receta: receta(b), yo: "ana.prueba", ejecutable: buscarNavegador().ruta, banco: true, perfil,
       cookies: [b.cookieSesion("tareas")] });
     assert.equal(res.estado, "OK");
     assert.ok(existsSync(join(perfil, MARCA)), "el perfil persistente sigue ahí");
@@ -61,7 +61,7 @@ test("sitio inalcanzable → ERROR transitorio: la receta NO se desactiva ni que
   await b.parar(); // el puerto queda cerrado: conexión rechazada
   try {
     const almacen = new AlmacenRecetas(join(dir, "recetas-estado.json"));
-    const res = await ejecutarReceta({ receta: r, yo: "ana.prueba", ejecutable: buscarNavegador().ruta, almacen });
+    const res = await ejecutarReceta({ receta: r, yo: "ana.prueba", ejecutable: buscarNavegador().ruta, banco: true, almacen });
     assert.equal(res.estado, "ERROR", `${res.estado} ${res.aviso}`);
     assert.match(res.aviso ?? "", /no se pudo cargar/i);
     assert.equal(almacen.aviso(r.id), null, "un fallo de red no apaga la receta");

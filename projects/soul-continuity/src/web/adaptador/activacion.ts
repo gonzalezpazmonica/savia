@@ -64,13 +64,14 @@ export function guardarRecibo(dir: string, r: Receta, resumen: Recibo["resumen"]
   return ruta;
 }
 
-/** ¿Puede ejecutarse? Sin recibo, solo las `estable` del banco sintético (origen
- *  local): el campo `estado` lo escribe la propia receta, así que una receta de
- *  un sitio real que se declare `estable` necesita recibo igual que una
- *  `experimental`. Las demás, solo con recibo válido para ESTA receta.
+/** ¿Puede ejecutarse? Sin recibo, solo las `estable` del banco sintético: origen
+ *  local Y `banco`, que lo pone el código del banco (nunca la receta ni la
+ *  configuración). El campo `estado` lo escribe la propia receta y un servicio
+ *  real también puede correr en local, así que fuera del banco toda receta
+ *  necesita recibo válido para ESTA receta.
  *  Fail-closed: sin directorio, id inválido o recibo ilegible, no. */
-export function comprobarActivacion(r: Receta, dirValidaciones: string | undefined): { activa: boolean; aviso: string | null } {
-  if (r.estado === "estable" && origenLocal(r.origen)) return { activa: true, aviso: null };
+export function comprobarActivacion(r: Receta, dirValidaciones: string | undefined, banco = false): { activa: boolean; aviso: string | null } {
+  if (banco && r.estado === "estable" && origenLocal(r.origen)) return { activa: true, aviso: null };
   const clase = r.estado === "estable" ? "se declara estable, pero es de un sitio real," : "es experimental";
   const no = (porque: string) => ({
     activa: false,

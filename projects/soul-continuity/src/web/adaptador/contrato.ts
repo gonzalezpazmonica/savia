@@ -35,6 +35,8 @@ export interface ParametrosWeb {
 export interface Dependencias {
   ejecutar: (o: Opciones) => Promise<Resultado>;
   vigilar: (o: OpcionesVigilancia) => Promise<ResultadoVigilancia>;
+  /** Solo el banco (código, no configuración): exime de recibo a las `estable` locales. */
+  banco?: boolean;
 }
 
 /** Vida de una afirmación web: la misma que el resto de adaptadores del banco. */
@@ -164,7 +166,7 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
       const fallos: Fallo[] = [];
       const activas: Receta[] = [];
       for (const r of p.recetas ?? []) {
-        const a = comprobarActivacion(r, p.validaciones);
+        const a = comprobarActivacion(r, p.validaciones, dep.banco);
         if (a.activa) activas.push(r);
         else fallos.push({ status: "recipe_disabled", message: a.aviso ?? `Receta ${r.id} sin activar.` });
       }
@@ -176,7 +178,7 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
       const almacen = p.desactivadas ? new AlmacenRecetas(p.desactivadas) : undefined;
       for (const r of activas) {
         try {
-          const res = await dep.ejecutar({ receta: r, yo, ejecutable: p.ejecutable, perfil: p.perfil, validaciones: p.validaciones, almacen });
+          const res = await dep.ejecutar({ receta: r, yo, ejecutable: p.ejecutable, perfil: p.perfil, validaciones: p.validaciones, almacen, banco: dep.banco });
           const f = falloDe(res);
           if (f) fallos.push(f); else claims.push(...afirmacionesDeReceta(ctx, r, res));
         } catch (e) {

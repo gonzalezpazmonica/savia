@@ -10,8 +10,21 @@ import { cargarReceta } from "../receta/validar.ts";
 const R = (n: string) => cargarReceta(join(import.meta.dirname, "..", "recetas", "sinteticas", `${n}.json`), { puerto: 8490 });
 const resumen = { peticiones: 3, permitidas: 3, operaciones_lectura: 1 };
 
-test("una receta estable se ejecuta sin recibo", () => {
-  assert.deepEqual(comprobarActivacion(R("tareas"), undefined), { activa: true, aviso: null });
+test("una receta estable del banco se ejecuta sin recibo", () => {
+  assert.deepEqual(comprobarActivacion(R("tareas"), undefined, true), { activa: true, aviso: null });
+});
+
+test("fuera del banco, una estable de origen local también necesita recibo (revisión #1443 P2-3)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-val-"));
+  try {
+    for (const d of [undefined, dir]) {
+      const a = comprobarActivacion(R("tareas"), d);
+      assert.equal(a.activa, false);
+      assert.match(a.aviso ?? "", /validar-grabacion/);
+    }
+    guardarRecibo(dir, R("tareas"), resumen);
+    assert.equal(comprobarActivacion(R("tareas"), dir).activa, true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test("experimental sin directorio ni recibo: no se activa y lo dice", () => {
@@ -60,11 +73,11 @@ test("estable sin recibo solo en un origen local: con origen remoto declararse e
   const dir = mkdtempSync(join(tmpdir(), "soul-val-"));
   try {
     for (const origen of ["http://localhost:8490", "http://127.0.0.5:8490", "http://[::1]:8490"]) {
-      assert.equal(comprobarActivacion({ ...R("tareas"), origen }, undefined).activa, true, origen);
+      assert.equal(comprobarActivacion({ ...R("tareas"), origen }, undefined, true).activa, true, origen);
     }
     const remota = { ...R("tareas"), origen: "https://intranet.example" };
     for (const d of [undefined, dir]) {
-      const a = comprobarActivacion(remota, d);
+      const a = comprobarActivacion(remota, d, true);
       assert.equal(a.activa, false);
       assert.match(a.aviso ?? "", /estable/);
     }

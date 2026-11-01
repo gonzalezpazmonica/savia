@@ -76,6 +76,8 @@ export interface Opciones {
   perfil?: string;
   /** Solo el banco: la sesión simulada. El producto nunca inyecta cookies. */
   cookies?: Parameters<import("playwright-core").BrowserContext["addCookies"]>[0];
+  /** Solo el banco: las recetas `estable` de origen local no piden recibo. */
+  banco?: boolean;
   /** Directorio de recibos de validación de recetas experimentales. */
   validaciones?: string;
   mutante?: Mutante;
@@ -158,7 +160,7 @@ export async function ejecutarReceta(o: Opciones): Promise<Resultado> {
   const mutante = o.mutante ?? "ninguno";
   const previo = o.almacen?.aviso(r.id);
   if (previo) return vacio(r, "DESACTIVADA", previo);
-  const activacion = comprobarActivacion(r, o.validaciones);
+  const activacion = comprobarActivacion(r, o.validaciones, o.banco);
   if (!activacion.activa && mutante !== "experimental_sin_recibo") return vacio(r, "DESACTIVADA", activacion.aviso);
 
   const espera = o.esperaMs ?? 450;

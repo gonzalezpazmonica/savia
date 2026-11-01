@@ -93,7 +93,7 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
     let res: Resultado;
     try {
       res = await ejecutarReceta({
-        receta: r, yo: YO, ejecutable: nav.ruta, cookies: [b.cookieSesion(s)], mutante,
+        receta: r, yo: YO, ejecutable: nav.ruta, cookies: [b.cookieSesion(s)], mutante, banco: true,
         hogar: canario.hogar, perfilPersonal: canario.perfilPersonal,
         esperaMs: extra.esperaMs ?? (s === "correo" ? 1500 : 450), almacen: extra.almacen, validaciones: extra.validaciones,
       });
