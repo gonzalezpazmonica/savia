@@ -34,9 +34,9 @@ test("GitHub: revisiones, asignaciones y menciones sin duplicar, con paginación
   try {
     const r = await makeGitHubAdapter().read(ctx());
     const ks = keys(r);
-    assert.ok(ks.includes("github:review_request:api#1"));
-    assert.ok(!ks.includes("github:mention:api#1"), "la mención de una revisión pedida no se duplica");
-    assert.ok(ks.includes("github:mention:web#3"));
+    assert.ok(ks.includes("github:review_request:org/api#1"));
+    assert.ok(!ks.includes("github:mention:org/api#1"), "la mención de una revisión pedida no se duplica");
+    assert.ok(ks.includes("github:mention:org/web#3"));
     assert.equal(ks.filter((k) => k.includes("task_assigned")).length, 6);
     assert.ok(!ks.some((k) => k.endsWith("#99")));
     assert.ok(!JSON.stringify(r).includes(BODY) && !JSON.stringify(r).includes("mergea"));
@@ -46,6 +46,23 @@ test("GitHub: revisiones, asignaciones y menciones sin duplicar, con paginación
   } finally {
     await mock.close();
   }
+});
+
+test("GitHub: mismo repositorio y número en dos propietarios son dos elementos distintos", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.github.items.push({ owner: "org1", repo: "app", number: 5, title: "Revisa", is_pr: true, assignees: [], requested: ["yo-gh"], mentions: [] });
+    d.github.items.push({ owner: "org2", repo: "app", number: 5, title: "Asignada", is_pr: false, assignees: ["yo-gh"], requested: [], mentions: [] });
+  });
+  try {
+    assert.deepEqual(keys(await makeGitHubAdapter().read(ctx())), ["github:review_request:org1/app#5", "github:task_assigned:org2/app#5"]);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("GitHub: un repository_url sin propietario no produce elemento", async () => {
+  const fake = { async request() { return { status: 200, headers: {}, body: { items: [{ number: 5, title: "x", repository_url: "app" }] } }; } };
+  assert.deepEqual(keys(await makeGitHubAdapter().read(ctxWith({ route: "api", transport: fake }))), []);
 });
 
 test("GitHub: de un Link hacia otro host solo se sigue la ruta, contra la base configurada", async () => {

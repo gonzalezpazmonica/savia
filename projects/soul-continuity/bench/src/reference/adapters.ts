@@ -291,7 +291,7 @@ export function makeAdapters(m: Mutations): Record<string, SourceAdapter> {
   const github = run("github", ["api"], "Revisiones, asignaciones y menciones", async (ctx) => {
     const tok = await token(ctx, "github", ["repo:read"], "api");
     const search = async (q: string) => (check(await ctx.transport.request({ service: "github", method: "GET", url: `/search/issues?q=${encodeURIComponent(q)}`, headers: { Authorization: `Bearer ${tok}` } }), "GitHub").items ?? []) as J[];
-    const ref = (i: J) => `${String(i.repository_url).split("/").pop()}#${i.number}`;
+    const ref = (i: J) => `${String(i.repository_url).split("/").slice(-2).join("/")}#${i.number}`;
     const out: Claim[] = [];
     const seen = new Set<string>();
     for (const i of await search("is:open is:pr review-requested:@me")) { seen.add(ref(i)); out.push(base(ctx, "github", "review_request", ref(i), { title: i.title, awaiting_operator: true })); }

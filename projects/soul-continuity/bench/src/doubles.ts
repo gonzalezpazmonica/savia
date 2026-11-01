@@ -447,8 +447,8 @@ function github(req: TransportRequest, u: URL, w: Json, auth: Auth): Res {
     total_count: items.length,
     items: items.map((i) => ({
       number: i.number, title: i.title, state: i.state,
-      repository_url: `https://api.github.example/repos/org/${i.repo}`,
-      html_url: `https://github.example/org/${i.repo}/${i.is_pr ? "pull" : "issues"}/${i.number}`,
+      repository_url: `https://api.github.example/repos/${i.owner ?? "org"}/${i.repo}`,
+      html_url: `https://github.example/${i.owner ?? "org"}/${i.repo}/${i.is_pr ? "pull" : "issues"}/${i.number}`,
       assignees: i.assignees.map((l: string) => ({ login: l })),
       ...(i.is_pr ? { pull_request: { url: "…" } } : {}),
     })),

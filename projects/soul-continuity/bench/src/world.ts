@@ -90,7 +90,7 @@ export function ownership(worldNames: string[]): Map<string, string> {
     for (const x of w.jira?.issues ?? []) put(x.key, x.assignee === w.jira.me ? op : "tercero");
     for (const x of w.ado?.workitems ?? []) put(x.id, x.assignedTo === w.ado.me ? op : "tercero");
     for (const x of w.ado?.prs ?? []) put(`${x.repo}!${x.id}`);
-    for (const x of w.github?.items ?? []) put(`${x.repo}#${x.number}`);
+    for (const x of w.github?.items ?? []) put(`${x.owner ?? "org"}/${x.repo}#${x.number}`);
     for (const s of w.web?.sites ?? []) {
       for (const x of s.rows ?? []) put(`${s.id}~${x.id}`);
       for (const x of s.pages ?? []) put(`${s.id}~${x.id}`);

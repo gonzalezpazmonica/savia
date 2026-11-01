@@ -46,10 +46,14 @@ export function makeGitHubAdapter(o: GitHubOptions = {}): SourceAdapter {
       }
       return out;
     };
+    // `owner/repo#n`: con solo el repositorio, `org1/app#5` y `org2/app#5` colisionan
+    // y uno de los dos desaparece en silencio.
     const ref = (i: J): string | null => {
-      const repo = safeRef(String(i?.repository_url ?? "").split("/").pop());
+      const m = /\/repos\/([^/]+)\/([^/]+)\/?$/.exec(String(i?.repository_url ?? ""));
+      const owner = safeRef(m?.[1]);
+      const repo = safeRef(m?.[2]);
       const n = safeRef(i?.number);
-      return repo && n ? `${repo}#${n}` : null;
+      return owner && repo && n ? `${owner}/${repo}#${n}` : null;
     };
     const out: Claim[] = [];
     const seen = new Set<string>();

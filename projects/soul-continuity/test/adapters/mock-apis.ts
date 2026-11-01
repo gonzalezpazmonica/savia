@@ -41,7 +41,7 @@ export interface MockData {
   };
   jira: { me: string; legacyOnly?: boolean; issues: { key: string; summary: string; assignee: string; status: string; duedate?: string | null; description?: string }[] };
   ado: { me: string; workitems: { id: number; title: string; assignedTo: string; state: string; due?: string }[]; prs: { id: number; repo: string; title: string; status: string; reviewers: { id: string; vote: number }[] }[] };
-  github: { me: string; items: { repo: string; number: number; title: string; is_pr: boolean; assignees: string[]; requested: string[]; mentions: string[]; body?: string }[] };
+  github: { me: string; items: { owner?: string; repo: string; number: number; title: string; is_pr: boolean; assignees: string[]; requested: string[]; mentions: string[]; body?: string }[] };
   /** Paginación por defecto (elementos por página). */
   pageSize: number;
   /** 429 en cada N-ésima petición (0 = nunca), con este Retry-After. */
@@ -345,7 +345,7 @@ function route(d: MockData, req: IncomingMessage, u: URL, auth: string, raw: str
     }
     return reply(200, {
       total_count: items.length,
-      items: items.slice((pg - 1) * per, pg * per).map((i) => ({ number: i.number, title: i.title, repository_url: `https://api.github.example/repos/org/${i.repo}`, body: i.body ?? BODY })),
+      items: items.slice((pg - 1) * per, pg * per).map((i) => ({ number: i.number, title: i.title, repository_url: `https://api.github.example/repos/${i.owner ?? "org"}/${i.repo}`, body: i.body ?? BODY })),
     }, headers);
   }
   reply(404, { error: { code: "NotFound" } });

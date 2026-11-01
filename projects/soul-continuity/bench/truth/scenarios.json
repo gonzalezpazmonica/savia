@@ -17,8 +17,8 @@
     "q": "Q1"
    },
    "expect": [
-    "github:review_request:pm-portal#12",
-    "github:task_assigned:pm-portal#14",
+    "github:review_request:org/pm-portal#12",
+    "github:task_assigned:org/pm-portal#14",
     "jira:task_assigned:PMX-1",
     "jira:task_assigned:PMX-4",
     "jira:task_assigned:PMX-5",
@@ -58,9 +58,9 @@
     "q": "Q1"
    },
    "expect": [
-    "github:review_request:pm-portal#12",
-    "github:review_request:pm-portal#16",
-    "github:task_assigned:pm-portal#14",
+    "github:review_request:org/pm-portal#12",
+    "github:review_request:org/pm-portal#16",
+    "github:task_assigned:org/pm-portal#14",
     "jira:task_assigned:PMX-1",
     "jira:task_assigned:PMX-4",
     "jira:task_assigned:PMX-5",
@@ -100,9 +100,9 @@
     "q": "Q2"
    },
    "expect": [
-    "github:mention:pm-portal#15",
-    "github:review_request:pm-portal#12",
-    "github:task_assigned:pm-portal#14",
+    "github:mention:org/pm-portal#15",
+    "github:review_request:org/pm-portal#12",
+    "github:task_assigned:org/pm-portal#14",
     "jira:task_assigned:PMX-1",
     "jira:task_assigned:PMX-4",
     "jira:task_assigned:PMX-5",
@@ -140,7 +140,7 @@
     "since": "t0"
    },
    "expect": [
-    "github:review_request:pm-portal#16",
+    "github:review_request:org/pm-portal#16",
     "jira:task_assigned:PMX-5",
     "jira:task_assigned:PMX-6",
     "m365-calendar:meeting:pm-e05",
@@ -274,9 +274,9 @@
     "q": "Q1"
    },
    "expect": [
-    "github:review_request:inv-lab#3",
-    "github:task_assigned:inv-lab#4",
-    "github:task_assigned:inv-lab#5",
+    "github:review_request:org/inv-lab#3",
+    "github:task_assigned:org/inv-lab#4",
+    "github:task_assigned:org/inv-lab#5",
     "google-workspace:awaiting_reply:inv-t01@inv-g01",
     "google-workspace:awaiting_reply:inv-t04@inv-g07",
     "google-workspace:awaiting_reply:inv-t05@inv-g08",
@@ -298,10 +298,10 @@
     "q": "Q2"
    },
    "expect": [
-    "github:mention:inv-lab#6",
-    "github:review_request:inv-lab#3",
-    "github:task_assigned:inv-lab#4",
-    "github:task_assigned:inv-lab#5",
+    "github:mention:org/inv-lab#6",
+    "github:review_request:org/inv-lab#3",
+    "github:task_assigned:org/inv-lab#4",
+    "github:task_assigned:org/inv-lab#5",
     "google-workspace:awaiting_reply:inv-t01@inv-g01",
     "google-workspace:awaiting_reply:inv-t04@inv-g07",
     "google-workspace:awaiting_reply:inv-t05@inv-g08",
@@ -440,8 +440,8 @@
     "q": "Q1"
    },
    "expect": [
-    "github:review_request:min-tools#2",
-    "github:task_assigned:min-tools#1"
+    "github:review_request:org/min-tools#2",
+    "github:task_assigned:org/min-tools#1"
    ]
   },
   {
@@ -456,8 +456,8 @@
     "q": "Q2"
    },
    "expect": [
-    "github:review_request:min-tools#2",
-    "github:task_assigned:min-tools#1"
+    "github:review_request:org/min-tools#2",
+    "github:task_assigned:org/min-tools#1"
    ]
   },
   {
@@ -1037,7 +1037,7 @@
     "since": "t0"
    },
    "expect": [
-    "github:review_request:pm-portal#16",
+    "github:review_request:org/pm-portal#16",
     "jira:task_assigned:PMX-5",
     "jira:task_assigned:PMX-6",
     "m365-calendar:meeting:pm-e05",
@@ -1233,9 +1233,9 @@
     }
    },
    "expect": [
-    "github:mention:pm-portal#15",
-    "github:review_request:pm-portal#12",
-    "github:task_assigned:pm-portal#14",
+    "github:mention:org/pm-portal#15",
+    "github:review_request:org/pm-portal#12",
+    "github:task_assigned:org/pm-portal#14",
     "jira:task_assigned:PMX-1",
     "jira:task_assigned:PMX-4",
     "jira:task_assigned:PMX-5",
@@ -1499,9 +1499,9 @@
     "q": "Q1"
    },
    "expect": [
-    "github:review_request:inv-lab#3",
-    "github:task_assigned:inv-lab#4",
-    "github:task_assigned:inv-lab#5"
+    "github:review_request:org/inv-lab#3",
+    "github:task_assigned:org/inv-lab#4",
+    "github:task_assigned:org/inv-lab#5"
    ],
    "expect_adapters": {
     "google-workspace": "token_expired",
@@ -1566,8 +1566,8 @@
     "max_level": "N2"
    },
    "expect": [
-    "github:review_request:pm-portal#12",
-    "github:task_assigned:pm-portal#14"
+    "github:review_request:org/pm-portal#12",
+    "github:task_assigned:org/pm-portal#14"
    ],
    "expect_withheld": 24
   },
@@ -1662,7 +1662,7 @@
     }
    },
    "expect": [
-    "github:mention:pm-portal#15"
+    "github:mention:org/pm-portal#15"
    ],
    "expect_adapters": {
     "m365-teams": "consent_revoked"
@@ -1863,9 +1863,9 @@
     }
    },
    "expect": [
-    "github:mention:inv-lab#6",
-    "github:task_assigned:inv-lab#4",
-    "github:task_assigned:inv-lab#5"
+    "github:mention:org/inv-lab#6",
+    "github:task_assigned:org/inv-lab#4",
+    "github:task_assigned:org/inv-lab#5"
    ]
   },
   {
