@@ -226,10 +226,18 @@ export class SystemCredentialStore implements CredentialStore {
     checkName(service, account);
     this.saveIndex([...this.index(), { service, account }]);
     await this.backend.set(service, account, secret);
+    // Se relee: un almacén que trunca o no guarda (y sale con 0) no deja un login roto en silencio.
+    if ((await this.backend.get(service, account)) !== secret) throw new Error("el almacén del sistema no guardó la credencial completa");
+  }
+
+  /** Borra y relee: no se informa de un borrado que no ocurrió (Credential Manager sale con 0 aunque falle). */
+  private async deleteVerified(service: string, account: string): Promise<void> {
+    await this.backend.delete(service, account);
+    if ((await this.backend.get(service, account)) !== null) throw new Error("el almacén del sistema no borró la credencial");
   }
 
   private async remove(service: string, account: string): Promise<void> {
-    await this.backend.delete(service, account);
+    await this.deleteVerified(service, account);
     this.saveIndex(this.index().filter((e) => !(e.service === service && e.account === account)));
   }
 
@@ -257,7 +265,7 @@ export class SystemCredentialStore implements CredentialStore {
     const all = this.index();
     const failed: IndexEntry[] = [];
     for (const e of all) {
-      try { await this.backend.delete(e.service, e.account); } catch { failed.push(e); }
+      try { await this.deleteVerified(e.service, e.account); } catch { failed.push(e); }
     }
     this.saveIndex(failed);
     if (failed.length) throw new Error(`no se pudieron borrar ${failed.length} credencial(es) del almacén del sistema`);

@@ -187,3 +187,25 @@ test("hostRun: una herramienta que sale sin leer stdin no tumba el proceso (EPIP
   const r = await hostRun(process.execPath, ["-e", "process.exit(3)"], "x".repeat(4 * 1024 * 1024));
   assert.equal(r.code, 3);
 });
+
+for (const [kind, make] of [["linux", linuxBackend], ["mac", macBackend], ["win", windowsBackend]] as const) {
+  test(`${kind}: un almacén que trunca al guardar hace fallar put; uno íntegro, no (control)`, async () => {
+    const f = fakeRunner(kind);
+    const trunc: Run = async (cmd, args, input = "") => f.run(cmd, args, input.replace(SECRET, SECRET.slice(0, 8)));
+    await assert.rejects(new SystemCredentialStore(make(trunc), mkdtempSync(join(tmpdir(), "soul-cr-"))).put("graph", SECRET), /no guardó/);
+    await new SystemCredentialStore(make(f.run), mkdtempSync(join(tmpdir(), "soul-cr-"))).put("graph", SECRET);
+  });
+
+  test(`${kind}: un borrado que sale con 0 sin borrar hace fallar forget y forgetAll, y la entrada sigue en el índice`, async () => {
+    const f = fakeRunner(kind);
+    const sordo: Run = async (cmd, args, input = "") => {
+      const borra = args[0] === "clear" || args[0] === "delete-generic-password" || /"op":"delete"/.test(input);
+      return borra ? { code: 0, stdout: "", stderr: "" } : f.run(cmd, args, input);
+    };
+    const core = new SystemCredentialStore(make(sordo), mkdtempSync(join(tmpdir(), "soul-cr-")));
+    await core.put("graph", SECRET);
+    await assert.rejects(core.forget("graph"), /no borró/);
+    await assert.rejects(core.forgetAll(), /no se pudieron borrar 1/);
+    assert.deepEqual(core.index(), [{ service: "graph", account: "default" }]);
+  });
+}
