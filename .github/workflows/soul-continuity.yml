@@ -77,3 +77,18 @@ jobs:
 
       - name: Tipos
         run: npm run typecheck
+
+      # El adaptador web es un paquete propio con sus dependencias (playwright-core).
+      - name: Dependencias del adaptador web (sin descarga de navegador)
+        working-directory: projects/soul-continuity/src/web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tipos del adaptador web
+        working-directory: projects/soul-continuity/src/web
+        run: npm run typecheck
+
+      - name: Tests unitarios del adaptador web (sin navegador)
+        working-directory: projects/soul-continuity/src/web
+        run: npm run test:unit
