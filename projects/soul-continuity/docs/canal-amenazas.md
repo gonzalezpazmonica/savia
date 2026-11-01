@@ -36,14 +36,14 @@
 
 **Lo que hace el código.**
 
-- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:165`). Versión mínima TLS 1.3 (`src/api/server.ts:605`).
+- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:165`). Versión mínima TLS 1.3 (`src/api/server.ts:631`).
 - El certificado X.509 v3 es propio de la instalación y autofirmado:
   - clave EC P-256;
   - `CA:false`, uso «firma digital», `serverAuth`;
   - SAN con las IP de escucha;
   - 397 días de validez (`src/api/cert.ts:63-86`).
 - La clave privada se guarda en `tls/key.pem` con permisos 0600 (`src/core/store.ts:46-57`).
-- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:110`, `src/cli/cli.ts:419`).
+- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:118`, `src/cli/cli.ts:419`).
 
 **Tests.** `test/cert.test.ts:11` (certificado válido para las IP), `:23` (TLS real: el cliente que fija el certificado conecta y uno sin él es rechazado) y `:38` (se reutiliza y se regenera si cambian las direcciones).
 
@@ -58,7 +58,7 @@
 
 **Lo que hace el código.**
 
-- Se empareja **en el terminal del portátil** (`soul pair <nombre>`), no por la red: la API no tiene ningún endpoint de emparejamiento (`src/api/server.ts:614-605`).
+- Se empareja **en el terminal del portátil** (`soul pair <nombre>`), no por la red: la API no tiene ningún endpoint de emparejamiento (`src/api/server.ts:640-631`).
 - El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:33-38`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
 - `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:68,212-181`). Así, el token no pasa por el modelo de un agente.
@@ -71,30 +71,38 @@
 - No hay código de emparejamiento de un solo uso: lo que se teclea en la app es el token permanente del dispositivo. El README del proyecto dice «token de un solo uso», y eso no es exacto → **P2-6**.
 - La detección del frontend de agente es de mejor esfuerzo, por variables de entorno. Un agente que las borre podría ejecutar `pair` y leer el token (límite conocido del README) → **P2-7**.
 
+### 3 bis. Emparejamiento directo (integración)
+
+Con la integración, la app puede emparejarse por la red con un código de un solo uso que muestra `soul pair` (ventana de 10 minutos, 3 fallos invalidan el código, como mucho 10 desafíos por ventana). La clave del móvil queda ligada al crear el dispositivo, así que no hay primer uso que ganar.
+
+**No cubierto.** El servidor entrega la prueba `HMAC(código, …)` en `/v1/pair/challenge` sin que el cliente demuestre antes conocer el código (`src/api/pairing.ts:134-143`). Quien esté dentro de la VPN durante la ventana puede pedir un desafío y adivinar el código de 50 bits sin conexión: el límite de 3 intentos solo cuenta los `complete` fallidos. En 10 minutos haría falta del orden de cientos de GPU, así que el riesgo está acotado, pero no es el que promete un código de un solo uso → **P2-12**.
+
+Tampoco cubierto: quien pueda escribir `config.json` decide adónde van los tokens de los adaptadores (`connectors.bases`). El navegador del adaptador web, en cambio, ya no sale de la configuración → **P2-13**.
+
 ## 4. Revocación del token por dispositivo
 
 **Lo que hace el código.**
 
 - `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:68-42`, `src/cli/cli.ts:426-388`).
 - `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:53-81`, `src/api/devices.ts:50-54`). La revocación vale en el acto, sin reiniciar.
-- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:587,680`).
-- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:678`).
+- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:613,706`).
+- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:704`).
 
 **Tests.** `test/devices.test.ts:21,30`; `test/serve.test.ts:80` (el dispositivo revocado recibe 401 con el servicio en marcha); `test/api/contrato.test.mjs:188`.
 
 **No cubierto.**
 
-- Los tokens no caducan ni rotan en producción. La caducidad que prueba `contrato.test.mjs:213` es una opción del servidor solo para tests (`caducidadToken`, `src/api/server.ts:593`). `serve` no la usa → **P2-8**.
+- Los tokens no caducan ni rotan en producción. La caducidad que prueba `contrato.test.mjs:213` es una opción del servidor solo para tests (`caducidadToken`, `src/api/server.ts:619`). `serve` no la usa → **P2-8**.
 - Solo se puede revocar desde el portátil. Ver el punto 5.
 
 ## 5. Móvil perdido o robado
 
-**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:519-529`; límite conocido del README). El token funciona, por tanto, como un token portador.
+**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:544-554`; límite conocido del README). El token funciona, por tanto, como un token portador.
 
 **Qué puede hacer quien tiene el móvil, mientras no se revoque:**
 
 - leer Q1–Q4 con el nivel de detalle vigente;
-- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:457-461`);
+- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:482-486`);
 - marcar elementos como resueltos, que desaparecen de la vista del operador;
 - cambiar el modo de atención y la configuración de avisos.
 
@@ -120,13 +128,13 @@ Con P1-1 cerrado, un token copiado ya no vale sin la clave del móvil; aun así,
 **Lo que hace el código.**
 
 - **Fuerza bruta del token:** el espacio es de 2^256. La comparación se hace sobre el SHA-256, en tiempo constante (`src/api/devices.ts:50-54`).
-- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:89`, `src/api/server.ts:563-516,615`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:568-571`).
-- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:596-612`).
+- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:89`, `src/api/server.ts:589-541,641`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:594-597`).
+- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:622-638`).
 - **Reenvío de solicitudes:**
   - TLS 1.3 impide capturarlas desde la red.
   - Las correcciones son idempotentes (`test/api/contrato.test.mjs:394`).
-  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:463-411`, `test/api/contrato.test.mjs:323`).
-- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:671`).
+  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:488-436`, `test/api/contrato.test.mjs:323`).
+- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:697`).
 
 **Tests.** `test/server.test.ts:64` (agotar el cupo desde una dirección no deja sin servicio a otra), `test/api/contrato.test.mjs:251` (429 con `Retry-After`) y `:213` (401 genérico ante token desconocido, cabecera ausente, esquema `Bearer` o falta de DPoP).
 
@@ -177,6 +185,8 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 | P2-9 | No hay límite de conexiones ni tiempos de espera propios | Fijar `maxConnections` (por ejemplo 32), `headersTimeout` 10 s, `requestTimeout` 15 s y `keepAliveTimeout` 5 s, con un test de conexiones lentas — **Cerrado en la integración:** `src/api/server.ts:152-162` fija `maxConnections` 32, `headersTimeout` 10 s, `requestTimeout` 15 s, `keepAliveTimeout` 5 s y saludo TLS de 10 s. El test comprueba la configuración, no una carga de conexiones lentas |
 | P2-10 | En Windows, la tarea de inicio de sesión no reintenta si la VPN no está lista | `RestartOnFailure` en el XML de la tarea (intervalo de 1 minuto, varios reintentos) o reintento interno de `serve` mientras la dirección no exista, con test |
 | P2-11 | No se ha verificado el comportamiento al volver la VPN, ni hay vigilancia de cambio de dirección | Reintento interno de la escucha: si la dirección desaparece, cerrar; si vuelve, abrir de nuevo. Test con una dirección que se añade y se quita (en Linux, `127.0.0.x` como sustituto) |
+| P2-12 | El desafío de emparejamiento da `HMAC(código, …)` sin compromiso previo del cliente: el código se puede adivinar sin conexión durante la ventana | Un PAKE (CPace o SPAKE2), o que el cliente se comprometa primero con el código, o un código más largo. Cambia el protocolo de la app: va con su propia spec |
+| P2-13 | Quien pueda escribir `config.json` (por ejemplo un frontend de agente con acceso a ficheros) decide adónde van los tokens (`connectors.bases`, cualquier host https) | La frontera de confianza es la cuenta local. `connectors.bases` no se restringe porque GitHub Enterprise, Jira y Azure DevOps viven en hosts propios de cada empresa. El navegador del adaptador web ya no sale de la configuración: solo de `SOUL_NAVEGADOR` o de las rutas conocidas (`src/core/connectors.ts:131-133`) |
 
 ## Cómo se ha verificado
 

@@ -124,8 +124,28 @@ const WEB_INSTALADO = existsSync(new URL("../src/web/node_modules/playwright-cor
 
 test("el registro carga el adaptador web real de src/web (rutas de importación correctas)", { skip: !WEB_INSTALADO && "playwright-core no instalado en src/web" }, async () => {
   const d = tmp();
-  const r = await productionAdapters({ dataDir: d, connectors: { enabled: ["web"] } }).web?.read(ctx({ params: { ejecutable: "/no/existe" } }));
+  const antes = process.env.SOUL_NAVEGADOR;
+  process.env.SOUL_NAVEGADOR = process.execPath; // existe en cualquier máquina; sin recetas no se lanza
+  let r;
+  try { r = await productionAdapters({ dataDir: d, connectors: { enabled: ["web"] } }).web?.read(ctx({ params: {} })); }
+  finally { if (antes === undefined) delete process.env.SOUL_NAVEGADOR; else process.env.SOUL_NAVEGADOR = antes; }
   // Sin recetas ni páginas vigiladas no abre el navegador: el módulo real responde «sin configurar» (#1443), no «no instalado».
   assert.equal(r?.status, "not_configured");
   assert.ok(existsSync(join(webDir(d), "perfil", ".perfil-soul")), "perfil dedicado dentro del directorio de datos de Soul");
+});
+
+test("el ejecutable del navegador no sale de config.json: params.ejecutable se ignora y manda buscarNavegador()", async () => {
+  let visto: unknown;
+  type Load = NonNullable<Parameters<typeof productionWebAdapter>[1]>;
+  const load: Load = async () => ({
+    crearAdaptadorWeb: () => ({ name: "web", routes: ["web"], purpose: "", read: async (c: AdapterContext) => { visto = c.params.ejecutable; return { status: "ok" as const, route: "web", claims: [] }; } }),
+    prepararPerfilSoul: (datos: string) => join(datos, "web", "perfil"),
+    buscarNavegador: () => ({ ruta: "/ruta/conocida/chrome" }),
+  });
+  const r = await productionWebAdapter(tmp(), load).read(ctx({ params: { ejecutable: "/tmp/otro-binario" } }));
+  assert.equal(r.status, "ok");
+  assert.equal(visto, "/ruta/conocida/chrome");
+  // Sin navegador conocido, falla cerrado aunque la configuración nombre uno.
+  const sin: Load = async () => ({ ...(await load()), buscarNavegador: () => { throw new Error("No hay Chrome"); } });
+  assert.equal((await productionWebAdapter(tmp(), sin).read(ctx({ params: { ejecutable: "/tmp/otro-binario" } }))).status, "error");
 });

@@ -60,10 +60,10 @@ test("el documento de transparencia describe el código integrado: ninguna cita 
   assert.doesNotMatch(md, /`\[(adapters|web|atencion)\] /, "una cita a otra rama no se comprueba contra el código");
 });
 
-test("los huecos H-1…H-5 constan como cerrados y cada cierre cita su prueba en el anexo", () => {
+test("los huecos H-1…H-5 y H-11 constan como cerrados y cada cierre cita su prueba en el anexo", () => {
   const md = readFileSync(IT_PACK, "utf8");
-  for (const h of ["H-1", "H-2", "H-3", "H-4", "H-5"]) assert.match(md, new RegExp(`^\\| ${h} \\| Cerrado`, "m"), h);
-  for (const a of ["A32", "A33", "A34", "A35", "A36", "A39", "A40", "A41", "A42", "A43", "A44"]) assert.match(md, new RegExp(`^- \\*\\*${a}\\*\\* `, "m"), a);
+  for (const h of ["H-1", "H-2", "H-3", "H-4", "H-5", "H-11"]) assert.match(md, new RegExp(`^\\| ${h} \\| Cerrado`, "m"), h);
+  for (const a of ["A32", "A33", "A34", "A35", "A36", "A39", "A40", "A41", "A42", "A43", "A44", "A45"]) assert.match(md, new RegExp(`^- \\*\\*${a}\\*\\* `, "m"), a);
 });
 
 test("las citas al código del modelo de amenazas del canal existen", () => {

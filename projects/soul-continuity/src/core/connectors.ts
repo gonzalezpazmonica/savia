@@ -128,7 +128,9 @@ export function productionWebAdapter(dataDir: string, load: () => Promise<WebMod
       }
       const dir = webDir(dataDir);
       try {
-        const ejecutable = typeof ctx.params.ejecutable === "string" && ctx.params.ejecutable ? ctx.params.ejecutable : m.buscarNavegador().ruta;
+        // El navegador sale de SOUL_NAVEGADOR o de las rutas conocidas, nunca de config.json: quien
+        // pueda escribir la configuración no elige qué binario arranca Soul.
+        const ejecutable = m.buscarNavegador().ruta;
         const perfil = m.prepararPerfilSoul(dataDir);
         const params = {
           ...ctx.params, ejecutable, perfil,
