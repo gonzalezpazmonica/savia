@@ -49,6 +49,39 @@ test("fetchTransport: solo https salvo loopback", async () => {
   await assert.rejects(t.request({ service: "x", method: "GET", url: "http://example.test/a" }), /https/);
 });
 
+test("fetchTransport: «localhost» no cuenta como loopback (se resuelve por DNS); los literales sí", async () => {
+  const s = await server();
+  const t = fetchTransport();
+  await assert.rejects(t.request({ service: "x", method: "GET", url: `${s.base.replace("127.0.0.1", "localhost")}/a` }), /https/);
+  assert.equal((await t.request({ service: "x", method: "GET", url: `${s.base}/a` })).status, 200, "control: 127.0.0.1 sí");
+  await s.close();
+});
+
+test("fetchTransport: corta una respuesta sin fin por encima del límite sin esperar a recibirla entera", async () => {
+  const s = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" }); // sin content-length: chunked
+    const chunk = "x".repeat(16 * 1024);
+    const iv = setInterval(() => res.write(chunk), 1);
+    res.on("close", () => clearInterval(iv));
+  });
+  await new Promise<void>((r) => s.listen(0, "127.0.0.1", () => r()));
+  const base = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  const t = fetchTransport({ maxBody: 64 * 1024, timeoutMs: 5000 });
+  await assert.rejects(t.request({ service: "x", method: "GET", url: `${base}/big` }), /demasiado grande/);
+  s.closeAllConnections();
+  await new Promise<void>((r) => s.close(() => r()));
+});
+
+test("fetchTransport: content-length declarado por encima del límite se rechaza; por debajo pasa", async () => {
+  const body = JSON.stringify({ a: "y".repeat(2000) });
+  const s = createServer((_req, res) => { res.writeHead(200, { "content-type": "application/json", "content-length": Buffer.byteLength(body) }); res.end(body); });
+  await new Promise<void>((r) => s.listen(0, "127.0.0.1", () => r()));
+  const base = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+  await assert.rejects(fetchTransport({ maxBody: 1000 }).request({ service: "x", method: "GET", url: `${base}/a` }), /demasiado grande/);
+  assert.equal((await fetchTransport({ maxBody: 4000 }).request({ service: "x", method: "GET", url: `${base}/a` })).status, 200, "control: dentro del límite");
+  await new Promise<void>((r) => s.close(() => r()));
+});
+
 test("productionAdapters: solo nombres del contrato", () => {
   const ad = productionAdapters();
   for (const [k, v] of Object.entries(ad)) assert.equal(v?.name, k);
