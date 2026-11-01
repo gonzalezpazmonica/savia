@@ -227,6 +227,9 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
       precisionDe("contenido_hostil:noticias", "noticias", x.res, ["q1", "q2", "q4"]);
       ok("contenido_hostil:noticias:ataque_ejecutado", x.res.registro.filter((g) => !g.permitida).length >= 5,
         "el script hostil debe haber intentado salir (si no, la prueba no prueba nada)");
+      // Una comprobación por defensa, para que el mapa de mutantes no comparta ids.
+      ok("contenido_hostil:noticias:ws_cortado", x.res.registro.some((g) => g.tipo === "ws" && !g.permitida && g.motivo === "ws_fuera"), "");
+      ok("contenido_hostil:noticias:navegacion_externa_cortada", x.res.registro.some((g) => !g.permitida && g.motivo === "otro_origen"), "");
     }
     // 11) WebSocket desde workers y 12) descarga por atributo `download` hacia un GET que muta.
     await escenario("correo", "ws_worker");

@@ -25,3 +25,18 @@ test("fail-closed: sin informe o mutante sin mapa no cuenta como muerto", () => 
   assert.equal(clasificarMutante("sin_descargas", null).estado, "SIN_INFORME");
   assert.equal(clasificarMutante("inventado", ["descarga_disfrazada:tareas:descargas"]).estado, "SIN_MAPA");
 });
+
+test("dos mutantes no se matan con la misma comprobación (revisión #1443, P2-5 de corrección)", () => {
+  const pares: [string, string, string][] = [
+    ["post_lectura_por_get", "operacion_url_sin_cotejar", "operacion_en_url:correo:get_cortado"],
+    ["operacion_url_sin_cotejar", "post_lectura_por_get", "operacion_en_url:correo:post_cortado"],
+    ["ws_sin_lista", "absoluto_navegable", "contenido_hostil:noticias:ws_cortado"],
+    ["absoluto_navegable", "ws_sin_lista", "contenido_hostil:noticias:navegacion_externa_cortada"],
+  ];
+  for (const [suyo, otro, f] of pares) {
+    assert.equal(clasificarMutante(suyo, [f]).estado, "MUERTO", `${suyo} ← ${f}`);
+    assert.equal(clasificarMutante(otro, [f]).estado, "VIVO", `${otro} ← ${f}`);
+  }
+  // Ni un fallo genérico del escenario basta.
+  assert.equal(clasificarMutante("ws_sin_lista", ["contenido_hostil:noticias:peticiones_a_externo"]).estado, "VIVO");
+});
