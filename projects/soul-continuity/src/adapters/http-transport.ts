@@ -69,23 +69,29 @@ export class HttpTransport implements Transport {
   private resolve(req: TransportRequest): URL {
     const base = Object.prototype.hasOwnProperty.call(this.bases, req.service) ? this.bases[req.service] : undefined;
     if (!base) throw new TransportRefused(`servicio sin base configurada: ${req.service}`);
+    const prefix = base.pathname.replace(/\/$/, "");
+    let u: URL;
     if (req.url.startsWith("/")) {
       // `//host/x` o `/\host/x` serían otro host: se rechazan antes de resolver.
       if (/^\/[/\\]/.test(req.url) || req.url.includes("\\")) throw new TransportRefused(`ruta no permitida para ${req.service}`);
-      const prefix = base.pathname.replace(/\/$/, "");
-      // Una ruta que ya trae el prefijo de la base no se duplica (enlaces de GitHub Enterprise).
-      const path = prefix && (req.url === prefix || req.url.startsWith(`${prefix}/`)) ? req.url : `${prefix}${req.url}`;
-      const rel = new URL(path, base.origin);
-      if (rel.origin !== base.origin) throw new TransportRefused(`origen no permitido para ${req.service}`);
-      return rel;
-    }
-    let u: URL;
-    try {
-      u = new URL(req.url);
-    } catch {
-      throw new TransportRefused("URL inválida");
+      // Segmentos `.` o `..` (también codificados): `new URL` los normaliza y sacarían la
+      // ruta del prefijo de la base dentro del mismo origen.
+      const path = req.url.split(/[?#]/, 1)[0];
+      if (path.split("/").some((seg) => /^(?:\.|%2e){1,2}$/i.test(seg))) throw new TransportRefused(`ruta no permitida para ${req.service}`);
+      // Siempre se antepone el prefijo: adivinar si «ya lo trae» confundía un proyecto de
+      // Azure DevOps llamado como la organización con la propia organización.
+      u = new URL(`${prefix}${req.url}`, base.origin);
+    } else {
+      try {
+        u = new URL(req.url);
+      } catch {
+        throw new TransportRefused("URL inválida");
+      }
     }
     if (u.origin !== base.origin) throw new TransportRefused(`origen no permitido para ${req.service}`);
+    // Ningún método, tampoco GET, sale con el token fuera de la ruta de la base
+    // (p. ej. hacia otra organización de Azure DevOps en el mismo origen).
+    if (prefix && u.pathname !== prefix && !u.pathname.startsWith(`${prefix}/`)) throw new TransportRefused(`ruta fuera de la base para ${req.service}`);
     return u;
   }
 
@@ -94,9 +100,6 @@ export class HttpTransport implements Transport {
     if (m === "GET" || m === "HEAD") return true;
     if (m !== "POST") return false;
     const prefix = this.bases[req.service].pathname.replace(/\/$/, "");
-    // Una URL absoluta del mismo origen pero fuera de la ruta de la base (otra
-    // organización de Azure DevOps) no recibe el POST con el token.
-    if (prefix && !u.pathname.startsWith(`${prefix}/`)) return false;
     const rel = u.pathname.slice(prefix.length);
     return READ_POSTS.some((r) => r.service === req.service && r.path.test(rel));
   }
