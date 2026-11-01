@@ -1,0 +1,12 @@
+{
+  "_doc": "Instalación mínima sin fuentes de oficina: solo GitHub.",
+  "operator": "min",
+  "github": {
+    "me": "min-gh",
+    "items": [
+      {"repo": "min-tools", "number": 1, "title": "Arreglar el instalador", "is_pr": false, "state": "open", "assignees": ["min-gh"], "requested_reviewers": [], "mentions": []},
+      {"repo": "min-tools", "number": 2, "title": "Nueva opción de exportación", "is_pr": true, "state": "open", "assignees": [], "requested_reviewers": ["min-gh"], "mentions": []},
+      {"repo": "min-tools", "number": 3, "title": "Versión 1.0", "is_pr": false, "state": "closed", "assignees": ["min-gh"], "requested_reviewers": [], "mentions": []}
+    ]
+  }
+}

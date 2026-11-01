@@ -1,0 +1,1895 @@
+{
+ "_doc": "Verdad del banco SE-490, escrita a mano antes de ejecutar ninguna implementación.",
+ "instants": {
+  "t0": "2026-11-02T08:00:00Z",
+  "t1": "2026-11-03T08:00:00Z"
+ },
+ "scenarios": [
+  {
+   "id": "B01",
+   "title": "PM: qué tengo abierto (t1)",
+   "tags": [
+    "base"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "github:review_request:pm-portal#12",
+    "github:task_assigned:pm-portal#14",
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-4",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9",
+    "m365-calendar:meeting:pm-e02",
+    "m365-calendar:meeting:pm-e03",
+    "m365-calendar:meeting:pm-e08",
+    "m365-files:document_comments:pm-f01",
+    "m365-files:document_comments:pm-f03",
+    "m365-mail:awaiting_reply:pm-th01@pm-m01",
+    "m365-mail:awaiting_reply:pm-th03@pm-m06",
+    "m365-mail:awaiting_reply:pm-th06@pm-m10",
+    "m365-mail:awaiting_reply:pm-th07@pm-m14",
+    "m365-mail:awaiting_reply:pm-th10@pm-m18",
+    "m365-mail:awaiting_reply:pm-th12@pm-m22",
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th14@pm-m24",
+    "m365-mail:awaiting_reply:pm-th15@pm-m25",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26",
+    "m365-mail:awaiting_reply:pm-th17@pm-m27",
+    "m365-mail:awaiting_reply:pm-th19@pm-m29"
+   ]
+  },
+  {
+   "id": "B02",
+   "title": "PM: qué tengo abierto (t0)",
+   "tags": [
+    "base",
+    "dos-instantes"
+   ],
+   "install": "pm",
+   "at": "t0",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "github:review_request:pm-portal#12",
+    "github:review_request:pm-portal#16",
+    "github:task_assigned:pm-portal#14",
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-4",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9",
+    "m365-calendar:meeting:pm-e01",
+    "m365-calendar:meeting:pm-e02",
+    "m365-calendar:meeting:pm-e05",
+    "m365-calendar:meeting:pm-e08",
+    "m365-files:document_comments:pm-f01",
+    "m365-files:document_comments:pm-f03",
+    "m365-files:document_comments:pm-f04",
+    "m365-mail:awaiting_reply:pm-th01@pm-m01",
+    "m365-mail:awaiting_reply:pm-th03@pm-m06",
+    "m365-mail:awaiting_reply:pm-th06@pm-m10",
+    "m365-mail:awaiting_reply:pm-th07@pm-m14",
+    "m365-mail:awaiting_reply:pm-th11@pm-m19",
+    "m365-mail:awaiting_reply:pm-th12@pm-m21",
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th14@pm-m24",
+    "m365-mail:awaiting_reply:pm-th15@pm-m25",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26",
+    "m365-mail:awaiting_reply:pm-th17@pm-m27",
+    "m365-mail:awaiting_reply:pm-th19@pm-m29"
+   ]
+  },
+  {
+   "id": "B03",
+   "title": "PM: qué depende de mí",
+   "tags": [
+    "base"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "github:mention:pm-portal#15",
+    "github:review_request:pm-portal#12",
+    "github:task_assigned:pm-portal#14",
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-4",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9",
+    "m365-mail:awaiting_reply:pm-th01@pm-m01",
+    "m365-mail:awaiting_reply:pm-th03@pm-m06",
+    "m365-mail:awaiting_reply:pm-th06@pm-m10",
+    "m365-mail:awaiting_reply:pm-th07@pm-m14",
+    "m365-mail:awaiting_reply:pm-th10@pm-m18",
+    "m365-mail:awaiting_reply:pm-th12@pm-m22",
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th14@pm-m24",
+    "m365-mail:awaiting_reply:pm-th15@pm-m25",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26",
+    "m365-mail:awaiting_reply:pm-th17@pm-m27",
+    "m365-mail:awaiting_reply:pm-th19@pm-m29",
+    "m365-teams:mention:pm-cm01",
+    "m365-teams:mention:pm-cm05"
+   ]
+  },
+  {
+   "id": "B04",
+   "title": "PM: qué cambió desde t0",
+   "tags": [
+    "base",
+    "dos-instantes"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": [
+    "github:review_request:pm-portal#16",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "m365-calendar:meeting:pm-e05",
+    "m365-calendar:meeting:pm-e08",
+    "m365-files:document_comments:pm-f04",
+    "m365-mail:awaiting_reply:pm-th10@pm-m18",
+    "m365-mail:awaiting_reply:pm-th11@pm-m19",
+    "m365-mail:awaiting_reply:pm-th12@pm-m21",
+    "m365-mail:awaiting_reply:pm-th12@pm-m22",
+    "m365-teams:mention:pm-cm05"
+   ]
+  },
+  {
+   "id": "B05",
+   "title": "PM: compromisos con fecha",
+   "tags": [
+    "base"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q4"
+   },
+   "expect": [
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-8",
+    "m365-calendar:meeting:pm-e02",
+    "m365-calendar:meeting:pm-e03",
+    "m365-calendar:meeting:pm-e06",
+    "m365-calendar:meeting:pm-e08",
+    "m365-mail:dated_commitment:pm-m27"
+   ]
+  },
+  {
+   "id": "B06",
+   "title": "Dirección: qué tengo abierto",
+   "tags": [
+    "base",
+    "ruta-web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7",
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "m365-calendar:meeting:dir-e01",
+    "m365-calendar:meeting:dir-e02",
+    "m365-mail:awaiting_reply:dir-th01@dir-m01",
+    "m365-mail:awaiting_reply:dir-th03@dir-m04",
+    "web:task_assigned:aprobaciones~ap-2"
+   ]
+  },
+  {
+   "id": "B07",
+   "title": "Dirección: qué depende de mí",
+   "tags": [
+    "base",
+    "ruta-web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7",
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "m365-mail:awaiting_reply:dir-th01@dir-m01",
+    "m365-mail:awaiting_reply:dir-th03@dir-m04",
+    "web:task_assigned:aprobaciones~ap-2"
+   ]
+  },
+  {
+   "id": "B08",
+   "title": "Dirección: qué cambió desde t0",
+   "tags": [
+    "base",
+    "dos-instantes",
+    "web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!9",
+    "azure-devops:task_assigned:104",
+    "m365-mail:awaiting_reply:dir-th03@dir-m04",
+    "web:web_page_change:intranet~inicio"
+   ]
+  },
+  {
+   "id": "B09",
+   "title": "Dirección: compromisos con fecha",
+   "tags": [
+    "base",
+    "web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q4"
+   },
+   "expect": [
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "m365-calendar:meeting:dir-e01",
+    "m365-calendar:meeting:dir-e02",
+    "m365-calendar:meeting:dir-e04",
+    "web:dated_commitment:aprobaciones~ap-1"
+   ]
+  },
+  {
+   "id": "B10",
+   "title": "Investigación: qué tengo abierto",
+   "tags": [
+    "base",
+    "google"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "github:review_request:inv-lab#3",
+    "github:task_assigned:inv-lab#4",
+    "github:task_assigned:inv-lab#5",
+    "google-workspace:awaiting_reply:inv-t01@inv-g01",
+    "google-workspace:awaiting_reply:inv-t04@inv-g07",
+    "google-workspace:awaiting_reply:inv-t05@inv-g08",
+    "google-workspace:awaiting_reply:inv-t06@inv-g09",
+    "google-workspace:document_comments:inv-d01",
+    "google-workspace:meeting:inv-e01"
+   ]
+  },
+  {
+   "id": "B11",
+   "title": "Investigación: qué depende de mí",
+   "tags": [
+    "base",
+    "google"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "github:mention:inv-lab#6",
+    "github:review_request:inv-lab#3",
+    "github:task_assigned:inv-lab#4",
+    "github:task_assigned:inv-lab#5",
+    "google-workspace:awaiting_reply:inv-t01@inv-g01",
+    "google-workspace:awaiting_reply:inv-t04@inv-g07",
+    "google-workspace:awaiting_reply:inv-t05@inv-g08",
+    "google-workspace:awaiting_reply:inv-t06@inv-g09"
+   ]
+  },
+  {
+   "id": "B12",
+   "title": "Investigación: qué cambió desde t0",
+   "tags": [
+    "base",
+    "dos-instantes",
+    "web"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": [
+    "google-workspace:awaiting_reply:inv-t04@inv-g07",
+    "web:web_page_change:revista~estado-envio"
+   ]
+  },
+  {
+   "id": "B13",
+   "title": "Investigación: compromisos con fecha",
+   "tags": [
+    "base",
+    "google"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q4"
+   },
+   "expect": [
+    "google-workspace:meeting:inv-e01",
+    "google-workspace:meeting:inv-e03"
+   ]
+  },
+  {
+   "id": "B14",
+   "title": "Docencia: qué tengo abierto",
+   "tags": [
+    "base",
+    "google",
+    "web"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "google-workspace:awaiting_reply:doc-t01@doc-g01",
+    "google-workspace:awaiting_reply:doc-t04@doc-g07",
+    "google-workspace:awaiting_reply:doc-t05@doc-g08",
+    "google-workspace:document_comments:doc-d01",
+    "google-workspace:document_comments:doc-d02",
+    "google-workspace:meeting:doc-e01",
+    "google-workspace:meeting:doc-e02",
+    "web:task_assigned:campus~tarea-1",
+    "web:task_assigned:campus~tarea-2"
+   ]
+  },
+  {
+   "id": "B15",
+   "title": "Docencia: qué depende de mí",
+   "tags": [
+    "base",
+    "google",
+    "web"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "google-workspace:awaiting_reply:doc-t01@doc-g01",
+    "google-workspace:awaiting_reply:doc-t04@doc-g07",
+    "google-workspace:awaiting_reply:doc-t05@doc-g08",
+    "web:task_assigned:campus~tarea-1",
+    "web:task_assigned:campus~tarea-2"
+   ]
+  },
+  {
+   "id": "B16",
+   "title": "Docencia: qué cambió desde t0",
+   "tags": [
+    "base",
+    "dos-instantes"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": [
+    "google-workspace:document_comments:doc-d02",
+    "web:task_assigned:campus~tarea-3"
+   ]
+  },
+  {
+   "id": "B17",
+   "title": "Docencia: compromisos con fecha",
+   "tags": [
+    "base",
+    "web"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q4"
+   },
+   "expect": [
+    "google-workspace:meeting:doc-e01",
+    "google-workspace:meeting:doc-e02",
+    "google-workspace:meeting:doc-e03",
+    "web:dated_commitment:campus~acta-1",
+    "web:task_assigned:campus~tarea-1"
+   ]
+  },
+  {
+   "id": "B18",
+   "title": "Mínima: qué tengo abierto",
+   "tags": [
+    "minima"
+   ],
+   "install": "min",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "github:review_request:min-tools#2",
+    "github:task_assigned:min-tools#1"
+   ]
+  },
+  {
+   "id": "B19",
+   "title": "Mínima: qué depende de mí",
+   "tags": [
+    "minima"
+   ],
+   "install": "min",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "github:review_request:min-tools#2",
+    "github:task_assigned:min-tools#1"
+   ]
+  },
+  {
+   "id": "B20",
+   "title": "Mínima: qué cambió (nada)",
+   "tags": [
+    "minima",
+    "dos-instantes"
+   ],
+   "install": "min",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": []
+  },
+  {
+   "id": "B21",
+   "title": "Mínima: compromisos (ninguno con fecha)",
+   "tags": [
+    "minima"
+   ],
+   "install": "min",
+   "at": "t1",
+   "ask": {
+    "q": "Q4"
+   },
+   "expect": []
+  },
+  {
+   "id": "B22",
+   "title": "Instalación sin fuentes: nada y lo dice",
+   "tags": [
+    "minima"
+   ],
+   "install": "min-vacia",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [],
+   "expect_adapters": {
+    "m365-mail": "not_configured",
+    "github": "not_configured",
+    "jira": "not_configured"
+   }
+  },
+  {
+   "id": "W01",
+   "title": "Hilo dirigido a mí sin respuesta",
+   "tags": [
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th01@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th01@pm-m01"
+   ]
+  },
+  {
+   "id": "W02",
+   "title": "Respondido desde el móvil (enviados)",
+   "tags": [
+    "esperando",
+    "otro-cliente"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th02@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W03",
+   "title": "Respondí a todos y otra persona respondió a todos conmigo en Para",
+   "tags": [
+    "esperando",
+    "responder-a-todos"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th03@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th03@pm-m06"
+   ]
+  },
+  {
+   "id": "W04",
+   "title": "Solo en CC",
+   "tags": [
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th04@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W05",
+   "title": "Reenvío mío en la misma conversación",
+   "tags": [
+    "esperando",
+    "reenvio"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th05@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W06",
+   "title": "Reenvío mío en conversación nueva: el original sigue esperando",
+   "tags": [
+    "esperando",
+    "reenvio"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th06"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th06@pm-m10"
+   ]
+  },
+  {
+   "id": "W07",
+   "title": "Mi respuesta es anterior al último mensaje entrante",
+   "tags": [
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th07@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th07@pm-m14"
+   ]
+  },
+  {
+   "id": "W08",
+   "title": "Mensaje a mí mismo",
+   "tags": [
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th08@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W09",
+   "title": "Dirigido a una lista, no a mí",
+   "tags": [
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th09@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W10",
+   "title": "Esperando en t0",
+   "tags": [
+    "esperando",
+    "dos-instantes"
+   ],
+   "install": "pm",
+   "at": "t0",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th11@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th11@pm-m19"
+   ]
+  },
+  {
+   "id": "W11",
+   "title": "Respondido desde otro cliente entre t0 y t1",
+   "tags": [
+    "esperando",
+    "otro-cliente",
+    "dos-instantes"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th11@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W12",
+   "title": "Gmail: respondido desde el móvil",
+   "tags": [
+    "esperando",
+    "otro-cliente",
+    "google"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "inv-t02@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W13",
+   "title": "Gmail: respondí a todos y luego me dejan en CC",
+   "tags": [
+    "esperando",
+    "responder-a-todos",
+    "google"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "inv-t03@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W14",
+   "title": "Gmail: reenvío en el mismo hilo",
+   "tags": [
+    "esperando",
+    "reenvio",
+    "google"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "doc-t02@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "W15",
+   "title": "Gmail: nueva pregunta tras mi respuesta",
+   "tags": [
+    "esperando",
+    "google"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "doc-t04@"
+    }
+   },
+   "expect": [
+    "google-workspace:awaiting_reply:doc-t04@doc-g07"
+   ]
+  },
+  {
+   "id": "W16",
+   "title": "Ruta web: respondido desde Outlook de escritorio",
+   "tags": [
+    "esperando",
+    "otro-cliente",
+    "ruta-web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "dir-th02@"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "R01",
+   "title": "Revocado no vuelve aunque la fuente lo repita",
+   "tags": [
+    "revocacion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th01@"
+    }
+   },
+   "expect": [],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "m365-mail:awaiting_reply:pm-th01@pm-m01",
+     "action": "revoke",
+     "at": "t0"
+    }
+   ]
+  },
+  {
+   "id": "R02",
+   "title": "«No aplica» sobre una tarea de Jira",
+   "tags": [
+    "revocacion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "filter": {
+     "types": [
+      "task_assigned"
+     ],
+     "adapters": [
+      "jira"
+     ]
+    }
+   },
+   "expect": [
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9"
+   ],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "jira:task_assigned:PMX-4",
+     "action": "revoke",
+     "at": "t0"
+    }
+   ]
+  },
+  {
+   "id": "R03",
+   "title": "Hilo resuelto que recibe un mensaje nuevo: hecho nuevo, clave nueva",
+   "tags": [
+    "revocacion",
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th12@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th12@pm-m22"
+   ],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "m365-mail:awaiting_reply:pm-th12@pm-m21",
+     "action": "revoke",
+     "at": "t0"
+    }
+   ]
+  },
+  {
+   "id": "R04",
+   "title": "Sustituido no vuelve",
+   "tags": [
+    "revocacion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "task_assigned"
+     ],
+     "adapters": [
+      "jira"
+     ]
+    }
+   },
+   "expect": [
+    "jira:task_assigned:PMX-4",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9"
+   ],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "jira:task_assigned:PMX-1",
+     "action": "supersede",
+     "at": "t0",
+     "superseded_by": "jira:task_assigned:PMX-6"
+    }
+   ]
+  },
+  {
+   "id": "R05",
+   "title": "Revocar y restaurar",
+   "tags": [
+    "revocacion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th07@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th07@pm-m14"
+   ],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "m365-mail:awaiting_reply:pm-th07@pm-m14",
+     "action": "revoke",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "m365-mail:awaiting_reply:pm-th07@pm-m14",
+     "action": "restore",
+     "at": "t0"
+    }
+   ]
+  },
+  {
+   "id": "R06",
+   "title": "Revocado después de t0 no sale como «desaparecido» en Q3",
+   "tags": [
+    "revocacion",
+    "dos-instantes"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": [
+    "github:review_request:pm-portal#16",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "m365-calendar:meeting:pm-e05",
+    "m365-calendar:meeting:pm-e08",
+    "m365-files:document_comments:pm-f04",
+    "m365-mail:awaiting_reply:pm-th10@pm-m18",
+    "m365-mail:awaiting_reply:pm-th11@pm-m19",
+    "m365-mail:awaiting_reply:pm-th12@pm-m21",
+    "m365-mail:awaiting_reply:pm-th12@pm-m22",
+    "m365-teams:mention:pm-cm05"
+   ],
+   "steps": [
+    {
+     "do": "correct",
+     "key": "m365-mail:awaiting_reply:pm-th01@pm-m01",
+     "action": "revoke",
+     "at": "t0"
+    }
+   ]
+  },
+  {
+   "id": "P01",
+   "title": "Cambio de perfil PM → dirección en la misma instalación",
+   "tags": [
+    "perfil"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7",
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "m365-mail:awaiting_reply:dir-th01@dir-m01",
+    "m365-mail:awaiting_reply:dir-th03@dir-m04",
+    "web:task_assigned:aprobaciones~ap-2"
+   ],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0",
+     "install": "pm"
+    },
+    {
+     "do": "correct",
+     "key": "jira:task_assigned:PMX-4",
+     "action": "revoke",
+     "at": "t0",
+     "install": "pm"
+    }
+   ]
+  },
+  {
+   "id": "P02",
+   "title": "Vuelta a PM: su libro sigue y el de dirección no le afecta",
+   "tags": [
+    "perfil",
+    "revocacion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "task_assigned"
+     ],
+     "adapters": [
+      "jira"
+     ]
+    }
+   },
+   "expect": [
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9"
+   ],
+   "steps": [
+    {
+     "do": "snapshot",
+     "at": "t0"
+    },
+    {
+     "do": "correct",
+     "key": "jira:task_assigned:PMX-4",
+     "action": "revoke",
+     "at": "t0"
+    },
+    {
+     "do": "snapshot",
+     "at": "t0",
+     "install": "dir"
+    },
+    {
+     "do": "correct",
+     "key": "jira:task_assigned:PMX-1",
+     "action": "revoke",
+     "at": "t0",
+     "install": "dir"
+    }
+   ]
+  },
+  {
+   "id": "P03",
+   "title": "Q3 contra la instantánea de otro operador se rechaza",
+   "tags": [
+    "perfil",
+    "dos-instantes"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0",
+    "previous_install": "pm"
+   },
+   "expect_error": true
+  },
+  {
+   "id": "T01",
+   "title": "Calendario delegado de otra persona: no se lee",
+   "tags": [
+    "terceros"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "filter": {
+     "types": [
+      "meeting"
+     ]
+    }
+   },
+   "expect": [
+    "m365-calendar:meeting:pm-e02",
+    "m365-calendar:meeting:pm-e03",
+    "m365-calendar:meeting:pm-e08"
+   ]
+  },
+  {
+   "id": "T02",
+   "title": "Buzón compartido: no es mi bandeja",
+   "tags": [
+    "terceros",
+    "esperando"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ]
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th01@pm-m01",
+    "m365-mail:awaiting_reply:pm-th03@pm-m06",
+    "m365-mail:awaiting_reply:pm-th06@pm-m10",
+    "m365-mail:awaiting_reply:pm-th07@pm-m14",
+    "m365-mail:awaiting_reply:pm-th10@pm-m18",
+    "m365-mail:awaiting_reply:pm-th12@pm-m22",
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th14@pm-m24",
+    "m365-mail:awaiting_reply:pm-th15@pm-m25",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26",
+    "m365-mail:awaiting_reply:pm-th17@pm-m27",
+    "m365-mail:awaiting_reply:pm-th19@pm-m29"
+   ]
+  },
+  {
+   "id": "T03",
+   "title": "Tarea de una colega y revisión pedida a otra persona",
+   "tags": [
+    "terceros"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "adapters": [
+      "jira",
+      "github"
+     ]
+    }
+   },
+   "expect": [
+    "github:mention:pm-portal#15",
+    "github:review_request:pm-portal#12",
+    "github:task_assigned:pm-portal#14",
+    "jira:task_assigned:PMX-1",
+    "jira:task_assigned:PMX-4",
+    "jira:task_assigned:PMX-5",
+    "jira:task_assigned:PMX-6",
+    "jira:task_assigned:PMX-7",
+    "jira:task_assigned:PMX-8",
+    "jira:task_assigned:PMX-9"
+   ]
+  },
+  {
+   "id": "I01",
+   "title": "Asunto con instrucciones, controles y HTML: dato inerte",
+   "tags": [
+    "inyeccion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "pm-th19@"
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th19@pm-m29"
+   ]
+  },
+  {
+   "id": "I02",
+   "title": "Mensaje de chat que pide revocar otro hecho: no revoca nada",
+   "tags": [
+    "inyeccion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply",
+      "mention"
+     ],
+     "adapters": [
+      "m365-mail",
+      "m365-teams"
+     ]
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:pm-th01@pm-m01",
+    "m365-mail:awaiting_reply:pm-th03@pm-m06",
+    "m365-mail:awaiting_reply:pm-th06@pm-m10",
+    "m365-mail:awaiting_reply:pm-th07@pm-m14",
+    "m365-mail:awaiting_reply:pm-th10@pm-m18",
+    "m365-mail:awaiting_reply:pm-th12@pm-m22",
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th14@pm-m24",
+    "m365-mail:awaiting_reply:pm-th15@pm-m25",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26",
+    "m365-mail:awaiting_reply:pm-th17@pm-m27",
+    "m365-mail:awaiting_reply:pm-th19@pm-m29",
+    "m365-teams:mention:pm-cm01",
+    "m365-teams:mention:pm-cm05"
+   ]
+  },
+  {
+   "id": "I03",
+   "title": "Comentario que pide resolver todo: el documento sigue abierto",
+   "tags": [
+    "inyeccion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "filter": {
+     "types": [
+      "document_comments"
+     ]
+    }
+   },
+   "expect": [
+    "m365-files:document_comments:pm-f01",
+    "m365-files:document_comments:pm-f03"
+   ]
+  },
+  {
+   "id": "I04",
+   "title": "Resumen de Jira con HTML, enlace y bidi",
+   "tags": [
+    "inyeccion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "filter": {
+     "adapters": [
+      "jira"
+     ],
+     "ref_prefix": "PMX-9"
+    }
+   },
+   "expect": [
+    "jira:task_assigned:PMX-9"
+   ]
+  },
+  {
+   "id": "I05",
+   "title": "Gmail: asunto con instrucciones",
+   "tags": [
+    "inyeccion",
+    "google"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "awaiting_reply"
+     ],
+     "ref_prefix": "doc-t05@"
+    }
+   },
+   "expect": [
+    "google-workspace:awaiting_reply:doc-t05@doc-g08"
+   ]
+  },
+  {
+   "id": "I06",
+   "title": "Comentario con HTML en Drive",
+   "tags": [
+    "inyeccion",
+    "google"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "filter": {
+     "types": [
+      "document_comments"
+     ]
+    }
+   },
+   "expect": [
+    "google-workspace:document_comments:doc-d01",
+    "google-workspace:document_comments:doc-d02"
+   ]
+  },
+  {
+   "id": "I07",
+   "title": "Fila web con instrucciones y no asignada: no entra ni actúa",
+   "tags": [
+    "inyeccion",
+    "web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "adapters": [
+      "web"
+     ]
+    }
+   },
+   "expect": [
+    "web:task_assigned:aprobaciones~ap-2"
+   ]
+  },
+  {
+   "id": "A01",
+   "title": "Inquilino que exige consentimiento de administración: Q1 sin correo y lo dice",
+   "tags": [
+    "consentimiento-admin"
+   ],
+   "install": "dir-graph",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7",
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "m365-calendar:meeting:dir-e01",
+    "m365-calendar:meeting:dir-e02",
+    "web:task_assigned:aprobaciones~ap-2"
+   ],
+   "expect_adapters": {
+    "m365-mail": "admin_consent_required",
+    "m365-teams": "admin_consent_required",
+    "m365-calendar": "ok"
+   },
+   "expect_fallback": {
+    "m365-mail": "web",
+    "m365-teams": "web"
+   }
+  },
+  {
+   "id": "A02",
+   "title": "Consentimiento de administración: Q2 solo con lo que sí se puede leer",
+   "tags": [
+    "consentimiento-admin"
+   ],
+   "install": "dir-graph",
+   "at": "t1",
+   "ask": {
+    "q": "Q2"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7",
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "web:task_assigned:aprobaciones~ap-2"
+   ],
+   "expect_adapters": {
+    "m365-mail": "admin_consent_required",
+    "m365-teams": "admin_consent_required"
+   }
+  },
+  {
+   "id": "A03",
+   "title": "Ruta web como alternativa legítima",
+   "tags": [
+    "consentimiento-admin",
+    "ruta-web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "adapters": [
+      "m365-mail"
+     ]
+    }
+   },
+   "expect": [
+    "m365-mail:awaiting_reply:dir-th01@dir-m01",
+    "m365-mail:awaiting_reply:dir-th03@dir-m04"
+   ],
+   "expect_adapters": {
+    "m365-mail": "ok"
+   }
+  },
+  {
+   "id": "K01",
+   "title": "Token de Google caducado: se dice y no se inventa",
+   "tags": [
+    "token-caducado"
+   ],
+   "install": "inv-expired",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "github:review_request:inv-lab#3",
+    "github:task_assigned:inv-lab#4",
+    "github:task_assigned:inv-lab#5"
+   ],
+   "expect_adapters": {
+    "google-workspace": "token_expired",
+    "github": "ok"
+   }
+  },
+  {
+   "id": "K02",
+   "title": "Token caducado en t1: lo de Google no sale como «desaparecido»",
+   "tags": [
+    "token-caducado",
+    "dos-instantes"
+   ],
+   "install": "inv-expired",
+   "at": "t1",
+   "ask": {
+    "q": "Q3",
+    "since": "t0"
+   },
+   "expect": [
+    "web:web_page_change:revista~estado-envio"
+   ],
+   "expect_adapters": {
+    "google-workspace": "token_expired"
+   }
+  },
+  {
+   "id": "K03",
+   "title": "Sesión web caducada en el perfil dedicado",
+   "tags": [
+    "token-caducado",
+    "web"
+   ],
+   "install": "doc-session",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "expect": [
+    "google-workspace:awaiting_reply:doc-t01@doc-g01",
+    "google-workspace:awaiting_reply:doc-t04@doc-g07",
+    "google-workspace:awaiting_reply:doc-t05@doc-g08",
+    "google-workspace:document_comments:doc-d01",
+    "google-workspace:document_comments:doc-d02",
+    "google-workspace:meeting:doc-e01",
+    "google-workspace:meeting:doc-e02"
+   ],
+   "expect_adapters": {
+    "web": "session_expired"
+   }
+  },
+  {
+   "id": "L01",
+   "title": "Vista N2: lo de oficina se retiene y solo se cuenta",
+   "tags": [
+    "niveles"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "max_level": "N2"
+   },
+   "expect": [
+    "github:review_request:pm-portal#12",
+    "github:task_assigned:pm-portal#14"
+   ],
+   "expect_withheld": 24
+  },
+  {
+   "id": "L02",
+   "title": "Recuentos: solo cifras",
+   "tags": [
+    "niveles",
+    "recuentos"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "detail": "recuentos"
+   },
+   "expect_counts": {
+    "meeting": 3,
+    "task_assigned": 8,
+    "review_request": 1,
+    "awaiting_reply": 12,
+    "document_comments": 2
+   }
+  },
+  {
+   "id": "L03",
+   "title": "Títulos: sin atributos",
+   "tags": [
+    "niveles"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "detail": "titulos"
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7",
+    "azure-devops:task_assigned:101",
+    "azure-devops:task_assigned:104",
+    "m365-mail:awaiting_reply:dir-th01@dir-m01",
+    "m365-mail:awaiting_reply:dir-th03@dir-m04",
+    "web:task_assigned:aprobaciones~ap-2"
+   ]
+  },
+  {
+   "id": "L04",
+   "title": "Recuentos en docencia",
+   "tags": [
+    "niveles",
+    "recuentos"
+   ],
+   "install": "doc",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "detail": "recuentos"
+   },
+   "expect_counts": {
+    "awaiting_reply": 3,
+    "task_assigned": 2
+   }
+  },
+  {
+   "id": "E01",
+   "title": "Instantánea caducada no se usa",
+   "tags": [
+    "ttl"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1"
+   },
+   "reuse_snapshot": "t0",
+   "expect_error": true
+  },
+  {
+   "id": "C01",
+   "title": "Consentimiento de Teams revocado: sus menciones no salen",
+   "tags": [
+    "consentimiento"
+   ],
+   "install": "pm-teams-revoked",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "mention"
+     ]
+    }
+   },
+   "expect": [
+    "github:mention:pm-portal#15"
+   ],
+   "expect_adapters": {
+    "m365-teams": "consent_revoked"
+   }
+  },
+  {
+   "id": "D01",
+   "title": "Adaptador duplicado o desconocido: fail-closed",
+   "tags": [
+    "configuracion"
+   ],
+   "install": "pm-dup",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "adapters": [
+      "jira"
+     ]
+    }
+   },
+   "expect": [],
+   "expect_adapters": {
+    "jira": "duplicate_adapter",
+    "slack": "unknown_adapter"
+   }
+  },
+  {
+   "id": "S01",
+   "title": "Graph: CFO autenticado alerta; suplantado y de otro inquilino no; inyección URGENTE no",
+   "tags": [
+    "ac4c",
+    "inyeccion"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "ALERT"
+   },
+   "expect_alerts": [
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26"
+   ],
+   "expect_notices": []
+  },
+  {
+   "id": "S02",
+   "title": "Ruta web: el mismo remitente solo da aviso, nunca alerta",
+   "tags": [
+    "ac4c",
+    "ruta-web"
+   ],
+   "install": "pm-web",
+   "at": "t1",
+   "ask": {
+    "q": "ALERT"
+   },
+   "expect_alerts": [],
+   "expect_notices": [
+    "m365-mail:awaiting_reply:pm-th13@pm-m23",
+    "m365-mail:awaiting_reply:pm-th14@pm-m24",
+    "m365-mail:awaiting_reply:pm-th15@pm-m25",
+    "m365-mail:awaiting_reply:pm-th16@pm-m26"
+   ]
+  },
+  {
+   "id": "S03",
+   "title": "Ruta web en dirección: regla de remitente degradada a aviso",
+   "tags": [
+    "ac4c",
+    "ruta-web"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "ALERT"
+   },
+   "expect_alerts": [],
+   "expect_notices": [
+    "m365-mail:awaiting_reply:dir-th03@dir-m04"
+   ]
+  },
+  {
+   "id": "S04",
+   "title": "Google: DKIM/DMARC superados alerta; fallidos no",
+   "tags": [
+    "ac4c",
+    "google"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "ALERT"
+   },
+   "expect_alerts": [
+    "google-workspace:awaiting_reply:inv-t06@inv-g09"
+   ],
+   "expect_notices": []
+  },
+  {
+   "id": "F01",
+   "title": "Correo marcado con fecha como compromiso",
+   "tags": [
+    "q4"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q4",
+    "filter": {
+     "types": [
+      "dated_commitment"
+     ]
+    }
+   },
+   "expect": [
+    "m365-mail:dated_commitment:pm-m27"
+   ]
+  },
+  {
+   "id": "F02",
+   "title": "Reunión cancelada en t1 sale de Q1",
+   "tags": [
+    "dos-instantes"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q1",
+    "filter": {
+     "types": [
+      "meeting"
+     ],
+     "ref_prefix": "pm-e05"
+    }
+   },
+   "expect": []
+  },
+  {
+   "id": "F03",
+   "title": "Reunión movida: cambia la fecha",
+   "tags": [
+    "q4"
+   ],
+   "install": "pm",
+   "at": "t1",
+   "ask": {
+    "q": "Q4",
+    "filter": {
+     "types": [
+      "meeting"
+     ],
+     "ref_prefix": "pm-e08"
+    }
+   },
+   "expect": [
+    "m365-calendar:meeting:pm-e08"
+   ]
+  },
+  {
+   "id": "F04",
+   "title": "Azure DevOps: revisión con voto emitido no cuenta",
+   "tags": [
+    "ado"
+   ],
+   "install": "dir",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "review_request"
+     ]
+    }
+   },
+   "expect": [
+    "azure-devops:review_request:cartera-api!7"
+   ]
+  },
+  {
+   "id": "F05",
+   "title": "GitHub: asignada y mencionada cuenta una vez, como tarea",
+   "tags": [
+    "github"
+   ],
+   "install": "inv",
+   "at": "t1",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "task_assigned",
+      "mention"
+     ],
+     "adapters": [
+      "github"
+     ]
+    }
+   },
+   "expect": [
+    "github:mention:inv-lab#6",
+    "github:task_assigned:inv-lab#4",
+    "github:task_assigned:inv-lab#5"
+   ]
+  },
+  {
+   "id": "F06",
+   "title": "Menciones de chat: antigua o ya contestada no cuentan",
+   "tags": [
+    "teams"
+   ],
+   "install": "pm",
+   "at": "t0",
+   "ask": {
+    "q": "Q2",
+    "filter": {
+     "types": [
+      "mention"
+     ],
+     "adapters": [
+      "m365-teams"
+     ]
+    }
+   },
+   "expect": [
+    "m365-teams:mention:pm-cm01"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,37 @@
+{
+ "_doc": "Inquilinos sintéticos. user_consent: permisos que el propio usuario puede consentir; el resto exige consentimiento de administración.",
+ "m365": {
+  "alfa": {
+   "domain": "alfa.example",
+   "user_consent": [
+    "User.Read",
+    "Mail.ReadBasic",
+    "Mail.Read",
+    "Calendars.ReadBasic",
+    "Calendars.Read",
+    "Chat.Read",
+    "Files.Read.All"
+   ]
+  },
+  "beta": {
+   "domain": "beta.example",
+   "user_consent": [
+    "User.Read",
+    "Calendars.ReadBasic"
+   ]
+  }
+ },
+ "google": {
+  "gamma.example": {
+   "user_consent": [
+    "https://www.googleapis.com/auth/gmail.metadata",
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/drive.readonly"
+   ]
+  }
+ },
+ "instants": {
+  "t0": "2026-11-02T08:00:00Z",
+  "t1": "2026-11-03T08:00:00Z"
+ }
+}
