@@ -1,0 +1,40 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "sharepoint-compartido",
+  "sitio": "OneDrive y SharePoint (compartido conmigo)",
+  "estado": "experimental",
+  "notas": [
+    "Plantilla genérica SIN validar contra tráfico real: URLs, operaciones y selectores son de partida.",
+    "Desactivada por defecto: no se ejecuta sin un recibo de validar-grabacion sobre la grabación del propio operador.",
+    "{inquilino} es el prefijo de tu inquilino en sharepoint.com (aparece en la barra de direcciones).",
+    "Lee la vista «Compartido conmigo» como lista; nunca abre un documento (abrirlo deja rastro de acceso).",
+    "Si el cliente lista por POST con la operación en la ruta (RenderListDataAsStream), el formato v1 no puede declararla: la receta no pasará la validación y no se publica."
+  ],
+  "origen": "https://{inquilino}-my.sharepoint.com",
+  "javascript": true,
+  "urls": [
+    "/_layouts/15/onedrive.aspx?view=*",
+    "/_api/v2.1/drives/me/sharedWithMe",
+    "https://res-1.cdn.office.net/files/*/*.js"
+  ],
+  "renovacion_sesion": [],
+  "post_lectura": [],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/_layouts/15/onedrive.aspx?view=1"],
+  "acciones": [],
+  "extraccion": {
+    "elemento": "[role=\"row\"][data-automationid=\"DetailsRow\"]",
+    "id": { "attr": "data-item-key" },
+    "campos": {
+      "nombre": { "sel": "[data-automationid=\"FieldRenderer-name\"]" },
+      "compartido_por": { "sel": "[data-automationid=\"FieldRenderer-sharedBy\"]" },
+      "fecha": { "sel": "[data-automationid=\"FieldRenderer-sharedDate\"]", "tipo": "fecha" }
+    }
+  },
+  "preguntas": {
+    "q1": { "campo": "nombre", "op": "existe" },
+    "q4": { "campo": "fecha", "op": "existe" }
+  },
+  "sesion": { "login": ["https://login.microsoftonline.com"] },
+  "humo": { "pagina": "/_layouts/15/onedrive.aspx?view=1", "minimo": 1, "campos_obligatorios": ["nombre"] }
+}

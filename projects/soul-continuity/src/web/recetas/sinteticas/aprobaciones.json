@@ -1,0 +1,36 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "aprobaciones-sintetico",
+  "sitio": "Panel de aprobaciones (sintético)",
+  "estado": "estable",
+  "origen": "http://127.0.0.3:{puerto}",
+  "javascript": false,
+  "urls": ["/aprobaciones?pagina=*"],
+  "renovacion_sesion": [],
+  "post_lectura": [],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/aprobaciones?pagina=1"],
+  "acciones": [
+    { "id": "siguiente", "selector": "a.siguiente", "urls": ["/aprobaciones?pagina=*"], "max_repeticiones": 5 }
+  ],
+  "extraccion": {
+    "elemento": "tr.solicitud",
+    "id": { "attr": "data-id" },
+    "campos": {
+      "solicitante": { "sel": ".solicitante" },
+      "concepto": { "sel": ".concepto" },
+      "aprobador": { "sel": ".aprobador" },
+      "estado": { "sel": ".estado" },
+      "limite": { "sel": ".limite", "tipo": "fecha" }
+    }
+  },
+  "preguntas": {
+    "q1": { "todas": [ { "campo": "aprobador", "op": "igual", "valor": "{yo}" }, { "campo": "estado", "op": "igual", "valor": "pendiente" } ] },
+    "q2": { "todas": [ { "campo": "aprobador", "op": "igual", "valor": "{yo}" }, { "campo": "estado", "op": "igual", "valor": "pendiente" },
+                       { "campo": "solicitante", "op": "distinto", "valor": "{yo}" } ] },
+    "q4": { "todas": [ { "campo": "aprobador", "op": "igual", "valor": "{yo}" }, { "campo": "estado", "op": "igual", "valor": "pendiente" },
+                       { "campo": "limite", "op": "existe" } ] }
+  },
+  "sesion": { "login": ["/login", "/login?vuelta=*"] },
+  "humo": { "pagina": "/aprobaciones?pagina=1", "minimo": 1, "campos_obligatorios": ["solicitante", "aprobador", "estado"] }
+}
