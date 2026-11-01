@@ -264,6 +264,19 @@ test('PARA bloquea lo que pide efecto y un agente no reanuda', () => {
   assert.ok(pol.decidir(decision('3', 'g'), ahora).contactarAhora);
 });
 
+test('un bloqueo reenviado por el sondeo no duplica la bandeja ni el ledger', () => {
+  const pol = p(opA());
+  pol.control({ k: 'PARA' }, 'PERSONA', t(0, 10, 0));
+  for (let i = 0; i < 3; i++) es(pol.decidir(decision('1', 'g'), t(0, 10, 5 * i)), 'BLOQUEAR_Y_ELEVAR', motivo('PARADO'), false);
+  assert.equal(pol.bandeja.items().filter((x) => x.decisionId === 'd-1').length, 1, 'una sola entrada en la bandeja');
+  assert.equal(pol.ledger.entradas().length, 1, 'una sola demanda en el ledger');
+  assert.equal(pol.bandeja.porDecision('d-1')?.historial.length, 3, 'cada reenvío queda anotado');
+  // Caso negativo: otra decisión bloqueada sí es una entrada nueva.
+  pol.decidir(decision('2', 'g'), t(0, 10, 20));
+  assert.equal(pol.bandeja.items().length, 2);
+  assert.equal(pol.ledger.entradas().length, 2);
+});
+
 test('una alerta marcada llega aunque esté parado', () => {
   const pol = p(opA());
   pol.control({ k: 'PARA' }, 'PERSONA', t(0, 10, 0));
