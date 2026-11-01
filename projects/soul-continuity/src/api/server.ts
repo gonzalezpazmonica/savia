@@ -18,7 +18,7 @@
 
 import { createServer as createHttps, type Server } from "node:https";
 import type { IncomingMessage } from "node:http";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { validar } from "./schema.ts";
 import { type Listening, listenOnly } from "./listen.ts";
@@ -92,6 +92,8 @@ export interface Op {
   ref: string; d: SemillaOperador; ultimo: number; nivel: Nivel; modo: string; hasta: number | null;
   avisos: ConfAvisos; alertas: Regla[]; elementos: Map<string, Elemento>; ledger: Map<string, { tipo: string; en: number }>;
   corr: Map<string, { tipo: string; en: number }>; mensajes: Msg[]; seq: number; base: number;
+  /** D4/D5: identifica esta secuencia de mensajes. Cambia si el estado se pierde: ids y cursores no se reutilizan. */
+  epoca: string;
   pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: { idx: number; avisos: number; alertas: number };
   registro: { en: string; decision: string; motivo: string; categoria: string }[]; ahorrados: number;
   st: { avisosGenerados: number; alertasGeneradas: number; reobservaciones: number; rebotadas: number };
@@ -103,6 +105,8 @@ export interface EstadoAtencion {
   pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: Op["ventana"]; registro: Op["registro"]; ahorrados: number; avisados: string[];
   /** `at` de la última declaración de `soul mode` ya aplicada: tras reiniciar no se vuelve a aplicar. */
   cli_at?: string | null;
+  /** Época de la secuencia (ausente en estados anteriores: se crea una nueva). */
+  epoca?: string;
 }
 export interface Evento { tipo: string; categoria?: string; ids: string[]; programar?: number | null; regla?: Regla; efectiva?: string; avisoDe?: string }
 
@@ -188,7 +192,7 @@ export function crearServidor(opts: OpcionesServidor) {
   }
   function emitir(o: Op, t: number, m: Partial<Msg> & { tipo: string; categoria: string }) {
     o.seq++;
-    o.mensajes.push({ id: `m-${o.ref}-${o.seq}`, seq: o.seq, creado: t, programar: null, caduca: null, agrupa: 1, ids: [], ...m });
+    o.mensajes.push({ id: `m-${o.ref}-${o.epoca}-${o.seq}`, seq: o.seq, creado: t, programar: null, caduca: null, agrupa: 1, ids: [], ...m });
   }
   function iniciarVentana(o: Op, t: number) { o.ventana = { idx: Math.floor(t / (o.avisos.ventanaMin * MIN)), avisos: 0, alertas: 0 }; }
   function volcarPendientes(o: Op, t: number, avisosTambien: boolean) {
@@ -265,7 +269,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const e: EstadoAtencion = {
       v: 1, modo: o.modo, hasta: o.hasta, avisos: o.avisos, alertas: o.alertas, mensajes: o.mensajes, seq: o.seq, base: o.base,
       pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
-      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null,
+      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca,
     };
     try { opts.persistencia.guardar(o.ref, e); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
   }
@@ -274,7 +278,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const o: Op = ops[d.ref] = {
       ref: d.ref, d, ultimo: minuto0, nivel: RANGO[d.nivel] > RANGO[d.nivelMax] ? d.nivelMax : d.nivel, modo: "DISPONIBLE", hasta: null,
       avisos: structuredClone(d.avisos), alertas: structuredClone(d.alertas), elementos: new Map(), ledger: new Map(), corr: new Map(),
-      mensajes: [], seq: 0, base: 0, pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
+      mensajes: [], seq: 0, base: 0, epoca: randomBytes(4).toString("hex"), pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
@@ -287,6 +291,8 @@ export function crearServidor(opts: OpcionesServidor) {
         base: previo.base, pendAvisos: previo.pendAvisos, pendAlertas: previo.pendAlertas, ventana: previo.ventana, registro: previo.registro, ahorrados: previo.ahorrados });
       for (const id of previo.avisados) avisados(o).add(id);
       if (typeof previo.cli_at === "string") cliAt.set(d.ref, previo.cli_at);
+      // Un estado de antes de las épocas sigue con una nueva: sus cursores dan 410 y la app vuelve a sondear.
+      if (typeof previo.epoca === "string" && /^[0-9a-f]{8}$/.test(previo.epoca)) o.epoca = previo.epoca;
       continue;
     }
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
@@ -479,22 +485,26 @@ export function crearServidor(opts: OpcionesServidor) {
   // El cursor va ligado al operador: un cursor de otro no casa con esta etiqueta.
   // Estable entre reinicios si quien llama lo da (producción: derivado de la clave TLS); si no, por proceso.
   const secreto = createHash("sha256").update(opts.secretoCursor ?? randomUUID()).digest("hex");
-  function tag(o: Op, seq: number) { return createHash("sha256").update(`${secreto}|${o.ref}|${seq}`).digest("hex").slice(0, 8); }
+  function tag(o: Op, epoca: string, seq: number) { return createHash("sha256").update(`${secreto}|${o.ref}|${epoca}|${seq}`).digest("hex").slice(0, 8); }
   function opSondeo(o: Op, q: Record<string, string>) {
     let limite = 50;
     let desde = 0;
     if (q.limite != null) { if (!/^\d{1,3}$/.test(q.limite) || Number(q.limite) < 1 || Number(q.limite) > 100) throw invalida(); limite = Number(q.limite); }
     if (q.cursor != null) {
-      const m = /^c1\.(\d{1,9})\.([0-9a-f]{8})$/.exec(q.cursor);
-      if (!m || m[2] !== tag(o, Number(m[1])) || Number(m[1]) > o.seq) throw invalida();
-      desde = Number(m[1]);
+      // D4: un cursor auténtico de otra época (estado perdido o anterior a las épocas) da 410:
+      // la app vuelve a sondear sin cursor. Ajeno, manipulado o imposible: 400.
+      const m = /^c2\.([0-9a-f]{8})\.(\d{1,9})\.([0-9a-f]{8})$/.exec(q.cursor);
+      if (!m || m[3] !== tag(o, m[1], Number(m[2]))) throw invalida();
+      if (m[1] !== o.epoca) throw new ErrorApi(410, "GONE");
+      if (Number(m[2]) > o.seq) throw invalida();
+      desde = Number(m[2]);
       if (desde < o.base) throw new ErrorApi(410, "GONE");
     }
     const pendientes = o.mensajes.filter((m) => m.seq > desde);
     const pagina = pendientes.slice(0, limite);
     const ultimo = pagina.length ? (pagina.at(-1) as Msg).seq : desde;
     return {
-      cursor: `c1.${ultimo}.${tag(o, ultimo)}`, hay_mas: pendientes.length > pagina.length, nivel: o.nivel, modo: o.modo,
+      cursor: `c2.${o.epoca}.${ultimo}.${tag(o, o.epoca, ultimo)}`, hay_mas: pendientes.length > pagina.length, nivel: o.nivel, modo: o.modo,
       generado_en: iso(ahora()), siguiente_sondeo_s: 300, mensajes: pagina.map((m) => vistaMensaje(o, m)),
     };
   }

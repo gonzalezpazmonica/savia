@@ -14,6 +14,7 @@ import { operatorDir } from "../src/core/store.ts";
 
 const NOW = "2026-10-31T09:00:00Z";
 const T = Date.parse(NOW);
+const MIN = 60_000;
 const TLS = makeSelfSigned(["127.0.0.1"], new Date(T));
 const TITLE = "Asunto de tercero <b>urgente</b>";
 
@@ -301,4 +302,76 @@ test("«es mío» sobrevive a reiniciar el servicio: sale del libro, no de memor
     const e = r.elementos.find((x: any) => x.id === id);
     assert.equal(e.correccion, "es_mio");
   } finally { await s2.cerrar(); }
+});
+
+test("D8: proyectos, personas y reglas de alerta salen de los adaptadores y del perfil; la alerta solo con remitente autenticado", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-cw-"));
+  const cfg = emptyConfig("i");
+  cfg.detail = { level: "completo", max: "completo" };
+  cfg.active_profile = "yo";
+  cfg.profiles.yo = {
+    operator: { ref: "op-yo", identities: { emails: ["yo@example.test"] } },
+    sources: [
+      { adapter: "m365-mail", purpose: "correo", consent: { granted_at: "2026-10-01T00:00:00Z" } },
+      { adapter: "jira", purpose: "tareas", consent: { granted_at: "2026-10-01T00:00:00Z" } },
+    ],
+    alert_rules: [{ id: "jefa", sender: "Jefa@Example.test" }],
+  };
+  const hilo = (ref: string, from: string, auth: string, now: string) => ({
+    key: `m365-mail:awaiting_reply:${ref}`, claim_type: "awaiting_reply", state: "OBSERVED", source_refs: [{ adapter: "m365-mail", route: "graph", ref }],
+    sensitivity: "N4", observed_at: now, valid_until: "2026-10-31T12:00:00Z", event_at: now, open: true, awaiting_operator: true,
+    title: `hilo ${ref}`, untrusted_text: true, attrs: { last_from: from, sender_auth: auth },
+  });
+  let lectura = 1;
+  const mail: SourceAdapter = { name: "m365-mail", routes: ["graph"], purpose: "t", async read(ctx) {
+    const c: any[] = [hilo("c1@m1", "jefa@example.test", "tenant", ctx.now)];
+    if (lectura === 2) c.push(hilo("c2@m2", "jefa@example.test", "tenant", ctx.now), hilo("c3@m3", "jefa@example.test", "unauthenticated", ctx.now));
+    return { status: "ok", route: "graph", claims: c };
+  } };
+  const jira: SourceAdapter = { name: "jira", routes: ["api"], purpose: "t", async read(ctx) {
+    return { status: "ok", route: "api", claims: [{ key: "jira:task_assigned:ALFA-12", claim_type: "task_assigned", state: "OBSERVED", source_refs: [{ adapter: "jira", route: "api", ref: "ALFA-12" }],
+      sensitivity: "N4", observed_at: ctx.now, valid_until: "2026-10-31T12:00:00Z", event_at: ctx.now, open: true, awaiting_operator: true, title: "Tarea", untrusted_text: true, attrs: {} }] as any };
+  } };
+  const engine = makeEngine({ "m365-mail": mail, jira });
+  const install = { id: "i", operator: cfg.profiles.yo.operator, sources: cfg.profiles.yo.sources };
+  const env = { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "t" } };
+  await engine.snapshot({ install, now: NOW, stateDir: dir, env });
+  const world = coreWorld({ cfg, engine, stateDir: dir });
+  let reloj = T;
+  const s = crearServidor({ tls: TLS, mundo: world, reloj: () => reloj, autenticar: () => ({ ref: "op-yo", revocado: false }) });
+  world.conectar(s);
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  const get = (path: string) => new Promise<any>((res, rej) => {
+    const q = request({ host: "127.0.0.1", port: l.port, path: "/api/v1/soul" + path, ca: TLS.cert, headers: { Authorization: "DPoP x", DPoP: "p" } }, (r) => {
+      let t = ""; r.on("data", (d) => { t += d; }); r.on("end", () => res(JSON.parse(t)));
+    });
+    q.on("error", rej); q.end();
+  });
+  try {
+    const f = await get("/filtros");
+    assert.deepEqual(f.proyectos.map((p: any) => p.nombre.texto), ["ALFA"]);
+    assert.deepEqual(f.personas.map((p: any) => p.nombre.texto), ["jefa@example.test"]);
+    const els = (await get("/q/q1")).elementos;
+    const tarea = els.find((e: any) => e.tipo === "tarea");
+    assert.equal(tarea.proyecto.texto, "ALFA");
+    const h = els.find((e: any) => e.tipo === "hilo_espera");
+    assert.deepEqual(h.personas.map((p: any) => p.texto), ["jefa@example.test"]);
+    // El filtro por proyecto usa los ids de /filtros.
+    assert.deepEqual((await get(`/q/q1?proyecto=${f.proyectos[0].id}`)).elementos.map((e: any) => e.tipo), ["tarea"]);
+    const av = await get("/avisos");
+    assert.equal(av.alertas.length, 1);
+    assert.equal(av.alertas[0].tipo, "persona");
+    assert.equal(av.alertas[0].objetivo, f.personas[0].id, "la regla del perfil apunta a la persona (correo normalizado)");
+
+    const antes = (await get("/sondeo")).cursor;
+    lectura = 2;
+    reloj += 5 * MIN;
+    await engine.snapshot({ install, now: new Date(reloj).toISOString(), stateDir: dir, env });
+    const sondeo = await get(`/sondeo?cursor=${encodeURIComponent(antes)}`);
+    const alertas = sondeo.mensajes.filter((m: any) => m.tipo === "alerta");
+    const id2 = elementId("op-yo", "m365-mail:awaiting_reply:c2@m2");
+    const id3 = elementId("op-yo", "m365-mail:awaiting_reply:c3@m3");
+    assert.deepEqual(alertas.map((m: any) => m.elemento_ids), [[id2]], "solo el remitente autenticado dispara la alerta");
+    assert.ok(sondeo.mensajes.some((m: any) => m.tipo === "aviso" && m.elemento_ids.includes(id3)), "el no autenticado llega como aviso");
+  } finally { await s.cerrar(); }
 });

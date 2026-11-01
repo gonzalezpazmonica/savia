@@ -91,3 +91,44 @@ test("un operator_ref «constructor» o «__proto__» no autentica contra el pro
     assert.equal((await get(l.port, "/estado")).status, 200, "control: el operador real sí");
   } finally { await s.cerrar(); }
 });
+
+test("D4/D5: con el estado perdido, el cursor anterior da 410 (no 400) y los ids nuevos no repiten los ya vistos", async () => {
+  const sem = () => ({ ...semilla(), avisos: { ...semilla().avisos, activos: ["vencimiento"] } });
+  const disco = new Map<string, any>();
+  const persistencia = { cargar: (r: string) => disco.get(r) ?? null, guardar: (r: string, e: any) => { disco.set(r, structuredClone(e)); } };
+  const arrancar = async () => {
+    const s = crearServidor({ tls: CERT, mundo: { semillas: () => [sem()] }, reloj: () => T0, persistencia, secretoCursor: "fijo" });
+    return { s, port: (await s.escuchar(["127.0.0.1"], 0)).port };
+  };
+  let a = await arrancar();
+  let cursor: string;
+  let ids: string[];
+  try {
+    const j = JSON.parse((await get(a.port, "/sondeo")).body);
+    cursor = j.cursor;
+    ids = j.mensajes.map((m: { id: string }) => m.id);
+    assert.ok(ids.length >= 1, "control: el arranque avisa del vencimiento");
+  } finally { await a.s.cerrar(); }
+
+  // Reinicio con el estado guardado: el cursor sigue valiendo y no se reemite nada.
+  a = await arrancar();
+  try {
+    const r = await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor)}`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(r.body).mensajes, [], "tras reiniciar no se reemiten los avisos ya dados");
+  } finally { await a.s.cerrar(); }
+
+  // Reinicio con el estado perdido (fichero borrado o ilegible).
+  disco.clear();
+  a = await arrancar();
+  try {
+    const r = await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor)}`);
+    assert.equal(r.status, 410, r.body);
+    assert.equal(JSON.parse(r.body).code, "GONE");
+    const nuevos = JSON.parse((await get(a.port, "/sondeo")).body).mensajes.map((m: { id: string }) => m.id);
+    assert.ok(nuevos.length >= 1);
+    assert.deepEqual(nuevos.filter((id: string) => ids.includes(id)), [], "ningún id nuevo coincide con uno ya entregado");
+    // Un cursor manipulado sigue siendo 400.
+    assert.equal((await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor.replace(/.$/, (c) => (c === "0" ? "1" : "0")))}`)).status, 400);
+  } finally { await a.s.cerrar(); }
+});

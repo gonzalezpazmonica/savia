@@ -137,6 +137,15 @@ test("e2e: instalar, emparejar, consultar Q1–Q4 por cursor, corregir, revocar 
     assert.equal(rv.c, 0, err.join("\n"));
     assert.equal(rv.j.tokens_removed, 1);
     assert.equal(st.vault.size, 0, "ningún token en el almacén tras revocar");
+    // Una lectura que ya estaba en curso al revocar puede terminar después: se espera a que acabe
+    // (las lecturas no se solapan) y desde ahí ningún tic debe volver a leer GitHub.
+    const lecturas = () => mock.log.filter((l: { url: string }) => l.url.includes("search/issues")).length;
+    for (let n = lecturas(), quieto = 0, i = 0; quieto < 3 && i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const m = lecturas();
+      quieto = m === n ? quieto + 1 : 0;
+      n = m;
+    }
     const antes = mock.log.length;
     await new Promise((r) => setTimeout(r, 400)); // varios tics de serve (refreshMs 100)
     assert.equal(mock.log.slice(antes).filter((l: { url: string }) => l.url.includes("search/issues")).length, 0, "el servicio deja de leer la fuente revocada");
