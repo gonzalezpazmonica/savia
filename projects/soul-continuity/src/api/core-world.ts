@@ -39,7 +39,7 @@ export function adapterView(id: string, s: AdapterStatusEntry): VistaAdaptadorSe
 
 export interface CoreWorld extends Mundo {
   /** Conecta el servidor: las correcciones de la app pasan al libro del núcleo. */
-  conectar(s: { alCorregir(f: (o: Op, id: string, tipo: string, t: number) => void): void }): void;
+  conectar(s: { alCorregir(f: (o: Op, id: string, tipo: string, t: number) => void | Promise<void>): void }): void;
 }
 
 export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: string }): CoreWorld {
@@ -155,13 +155,14 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
     },
 
     conectar(s) {
-      s.alCorregir((o, id, tipo, t) => {
+      s.alCorregir(async (o, id, tipo, t) => {
         const key = keys.get(o.ref)?.get(id);
-        if (!key) return;
+        // Sin clave no hay a qué apuntar en el libro: no se confirma una corrección que no se guardaría.
+        if (!key) throw new ErrorApi(503, "UNAVAILABLE");
         const install = { id: cfg.installation_id, operator: { ref: o.ref, identities: { emails: [] } }, sources: [] };
-        // Fallo al escribir el libro: se informa sin tumbar el servicio (y sin datos de trabajo en el log).
-        engine.correct({ install, stateDir, now: new Date(t).toISOString(), key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo })
-          .catch((e: Error) => process.stderr.write(`soul api: corrección no persistida (${e.name})\n`));
+        // Fallo al escribir el libro: 503 a la app y aviso sin datos de trabajo; el servicio sigue.
+        await engine.correct({ install, stateDir, now: new Date(t).toISOString(), key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo })
+          .catch((e: Error) => { process.stderr.write(`soul api: corrección no persistida (${e.name})\n`); throw new ErrorApi(503, "UNAVAILABLE"); });
       });
     },
   };

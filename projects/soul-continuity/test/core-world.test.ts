@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request } from "node:https";
@@ -10,6 +10,7 @@ import { crearServidor } from "../src/api/server.ts";
 import { coreWorld } from "../src/api/core-world.ts";
 import { emptyConfig, elementId } from "../src/core/config.ts";
 import { makeEngine } from "../src/core/engine.ts";
+import { operatorDir } from "../src/core/store.ts";
 
 const NOW = "2026-10-31T09:00:00Z";
 const T = Date.parse(NOW);
@@ -256,5 +257,20 @@ test("Q3 de la API es la diferencia del núcleo (como `soul q3 --since`), no la 
     const prev = engine.snapshotAt(dir, "op-yo", "2026-10-31T08:30:00Z");
     const cli = engine.answer(engine.cachedSnapshot(dir, "op-yo", NOW) as any, { q: "Q3", detail: "titulos", previous: prev as any }, { install, now: NOW });
     assert.deepEqual(cli.items.map((i) => i.key.split(":")[2]).sort(), ["CAMBIA-2", "NUEVA-ANTIGUA-3"]);
+  } finally { await s.cerrar(); }
+});
+
+test("si el libro no se puede escribir, la API responde 503 y no confirma la corrección", async () => {
+  const { dir, engine, s, call } = await setup();
+  try {
+    const id = (await call("GET", "/q/q2")).json.elementos[0].id;
+    writeFileSync(join(operatorDir(dir, "op-yo"), "ledger.jsonl"), "", { mode: 0o400 }); // libro de solo lectura: append falla
+    const r = await call("POST", `/elementos/${id}/correccion`, { tipo: "resuelto" });
+    assert.equal(r.status, 503);
+    assert.equal(r.json.code, "UNAVAILABLE");
+    assert.equal(engine.ledger(dir, "op-yo").length, 0);
+    assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 200, "no se da por resuelto lo que no se guardó");
+    const o = await call("POST", "/ordenes", { orden: `resuelto ${id}` });
+    assert.equal(o.status, 503, "también por la orden de texto");
   } finally { await s.cerrar(); }
 });

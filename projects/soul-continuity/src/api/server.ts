@@ -361,14 +361,17 @@ export function crearServidor(opts: OpcionesServidor) {
     const e = o.elementos.get(id);
     if (!e || (!o.ledger.has(id) && !vivo(o, id))) throw noEncontrado();
     const previa = o.corr.get(id);
-    if (previa?.tipo === tipo) return { id, tipo, aplicada: true, registrada_en: iso(previa.en) };
+    if (previa?.tipo === tipo) return Promise.resolve({ id, tipo, aplicada: true, registrada_en: iso(previa.en) });
     const t = ahora();
-    o.corr.set(id, { tipo, en: t });
-    if (tipo === "resuelto" || tipo === "no_aplica") o.ledger.set(id, { tipo, en: t });
-    else { e.mio = tipo === "es_mio"; e.noMio = tipo === "no_es_mio"; o.ledger.delete(id); }
-    hooks.correccion?.(o, id, tipo, t);
-    emitir(o, t, { tipo: "respuesta", categoria: "correccion_confirmada", ids: [id] });
-    return { id, tipo, aplicada: true, registrada_en: iso(t) };
+    // Primero se persiste (producción: libro del núcleo); solo entonces se aplica y se confirma.
+    // Si no se puede persistir, 503 y nada cambia: no se promete lo que volvería tras reiniciar.
+    return Promise.resolve(hooks.correccion?.(o, id, tipo, t)).then(() => {
+      o.corr.set(id, { tipo, en: t });
+      if (tipo === "resuelto" || tipo === "no_aplica") o.ledger.set(id, { tipo, en: t });
+      else { e.mio = tipo === "es_mio"; e.noMio = tipo === "no_es_mio"; o.ledger.delete(id); }
+      emitir(o, t, { tipo: "respuesta", categoria: "correccion_confirmada", ids: [id] });
+      return { id, tipo, aplicada: true, registrada_en: iso(t) };
+    });
   }
   function opAtencion(o: Op, c: { modo: string; hasta?: string | null }) {
     if (!MODOS.includes(c.modo)) throw invalida();
@@ -460,7 +463,7 @@ export function crearServidor(opts: OpcionesServidor) {
       }
       if (verbo === "porque") return args.length === 1 ? ok("porque", opPorque(o, args[0])) : malo();
       const corr: Record<string, string> = { resuelto: "resuelto", "no-aplica": "no_aplica", mio: "es_mio", "no-mio": "no_es_mio" };
-      if (verbo in corr) return args.length === 1 ? ok("correccion", opCorreccion(o, args[0], corr[verbo])) : malo();
+      if (verbo in corr) return args.length === 1 ? opCorreccion(o, args[0], corr[verbo]).then((r) => ok("correccion", r)) : malo();
       if (verbo === "modo") {
         const modo = norm(args[0] ?? "").toUpperCase();
         if (!MODOS.includes(modo)) return malo();
@@ -622,7 +625,7 @@ export function crearServidor(opts: OpcionesServidor) {
     }
   });
 
-  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number) => void } = {};
+  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number) => void | Promise<void> } = {};
   let escucha: Listening | null = null;
   return {
     /** Escucha solo en esas direcciones (las de la VPN del operador) y por TLS. */
@@ -641,7 +644,7 @@ export function crearServidor(opts: OpcionesServidor) {
     egresos: () => 0,
     volcarEstado: () => JSON.stringify(Object.values(ops), (_k, v) => (v instanceof Map ? [...v] : v)),
     /** Producción: persiste las correcciones en el libro del núcleo. */
-    alCorregir: (f: (o: Op, id: string, tipo: string, t: number) => void) => { hooks.correccion = f; },
+    alCorregir: (f: (o: Op, id: string, tipo: string, t: number) => void | Promise<void>) => { hooks.correccion = f; },
     operador: (ref: string) => ops[ref],
   };
 }
