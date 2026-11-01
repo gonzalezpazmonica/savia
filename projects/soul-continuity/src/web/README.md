@@ -137,9 +137,9 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 Los números exactos de la última ejecución están en `resultados/`.
 
 - **Batería: 356 de 356 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs, 102 de los escenarios nuevos (SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL) y 11 comprobaciones propias de defensas que antes solo se veían en métricas compartidas: cada una exige en el registro del cortafuegos un corte con el motivo de esa defensa.
-- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, en serie y con informe de cada uno. Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte. Ningún id de la batería casa con dos mutantes: `test/mapa-mutantes.test.ts` lo comprueba contra los ids reales de `resultados/bateria-ninguno.json`.
+- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, con informe de cada uno (la última ejecución, con `--paralelo 3`). Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte. Ningún id de la batería casa con dos mutantes: `test/mapa-mutantes.test.ts` lo comprueba contra los ids reales de `resultados/bateria-ninguno.json`.
 - Cada informe lleva `huella_codigo`, la huella del código y los datos que decide la batería. Un informe de otro código no cuenta (`SIN_INFORME`, marcado `obsoleto`), y un test exige que los resultados versionados sean del código actual.
-- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 148 tests en verde, 23 de ellos del adaptador del contrato.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 153 tests en verde, 23 de ellos del adaptador del contrato.
 
 ## Lo que queda abierto
 

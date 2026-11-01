@@ -2,7 +2,7 @@
   "mutante": "ninguno",
   "navegador": "Chrome",
   "aviso_navegador": null,
-  "huella_codigo": "54c71fffc13339e6",
+  "huella_codigo": "c1c670f2f23af609",
   "comprobaciones": [
     {
       "id": "base:tareas:estado",
@@ -1775,9 +1775,9 @@
       "detalle": "0"
     },
     {
-      "id": "vigilancia_sesion:tareas:redirigida",
+      "id": "vigilancia_sesion:tareas:sesion_caducada",
       "ok": true,
-      "detalle": "REDIRIGIDA"
+      "detalle": "SESION_CADUCADA"
     },
     {
       "id": "perfil_personal:sin_cambios",
