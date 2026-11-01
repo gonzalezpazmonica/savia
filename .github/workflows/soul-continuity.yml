@@ -1,0 +1,71 @@
+name: Soul Continuidad (SE-490)
+
+# AC-1: el paquete corre en Windows, macOS y Linux con el runtime oficial de Node.js LTS,
+# sin ejecutables propios. Tests, banco de continuidad (AC-3) y comprobación de tipos.
+on:
+  pull_request:
+    paths:
+      - "projects/soul-continuity/**"
+      - ".github/workflows/soul-continuity.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/soul-continuity/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soul-continuity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests y banco (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ["22.x"]
+    defaults:
+      run:
+        working-directory: projects/soul-continuity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node.js oficial
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Tests (sin dependencias de ejecución)
+        run: npm test
+
+      - name: Banco de continuidad contra el núcleo (gate AC-3)
+        run: npm run bench
+
+  typecheck:
+    name: tsc --strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: projects/soul-continuity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node.js oficial
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.x"
+
+      - name: Dependencias de desarrollo (typescript, @types/node; versiones exactas, lockfile con integridad, sin scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tipos
+        run: npm run typecheck
