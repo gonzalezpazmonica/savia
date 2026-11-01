@@ -25,6 +25,9 @@ export class DpopError extends Error {
 
 const B64URL = /^[A-Za-z0-9_-]+$/;
 
+/** Coordenada P-256 canónica: 32 bytes en base64url sin relleno (43 caracteres). Otra forma daría otra huella. */
+export const validJwkCoord = (v: unknown): v is string => typeof v === "string" && /^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/.test(v);
+
 export function thumbprint(jwk: { x: string; y: string }): string {
   // RFC 7638: miembros obligatorios en orden lexicográfico, sin espacios.
   return createHash("sha256").update(`{"crv":"P-256","kty":"EC","x":"${jwk.x}","y":"${jwk.y}"}`).digest("base64url");
@@ -62,7 +65,7 @@ export function makeDpopVerifier(o: { maxJti?: number } = {}) {
     const p = part(parts[1]);
     const jwk = h.jwk as Record<string, unknown> | undefined;
     if (h.typ !== "dpop+jwt" || h.alg !== "ES256" || !jwk || typeof jwk !== "object") throw new DpopError("cabecera");
-    if (jwk.kty !== "EC" || jwk.crv !== "P-256" || typeof jwk.x !== "string" || typeof jwk.y !== "string" || "d" in jwk) throw new DpopError("cabecera");
+    if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !validJwkCoord(jwk.x) || !validJwkCoord(jwk.y) || "d" in jwk) throw new DpopError("cabecera");
     let ok = false;
     try {
       const key = createPublicKey({ key: { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y }, format: "jwk" });

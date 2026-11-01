@@ -298,34 +298,37 @@ test("orden desconocida o texto libre: ayuda y código 2, sin interpretar", asyn
   assert.match(s.err.join("\n"), /órdenes/);
 });
 
-test("pair: token una sola vez, huella del certificado y direcciones; en disco solo el hash", async () => {
+test("pair: abre una ventana con código, IP, puerto y huella corta; no muestra ni guarda ningún token", async () => {
   const s = setup();
   const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
   cfg.api = { listen: ["127.0.0.1"], port: 8787 };
   (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), JSON.stringify(cfg));
-  assert.equal(await runCli(["pair", "movil", "--json"], s.deps), 0);
+  assert.equal(await runCli(["pair", "--json"], s.deps), 0);
   const j = JSON.parse(text(s));
-  assert.match(j.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(j.codigo, /^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/);
+  assert.equal(j.token, undefined);
   assert.match(j.pin, /^sha256\//);
-  assert.deepEqual(j.direcciones, ["127.0.0.1:8787"]);
-  assert.ok(!filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes(j.token)));
+  assert.deepEqual(j.direcciones, ["127.0.0.1"]);
+  assert.equal(j.puerto, 8787);
+  assert.equal(j.qr, `soul://pair?h=127.0.0.1&p=8787&c=${j.codigo}`);
   s.out.length = 0;
   assert.equal(await runCli(["devices", "--json"], s.deps), 0);
-  assert.equal(JSON.parse(text(s)).devices[0].name, "movil");
-  assert.ok(!text(s).includes("token_sha256"), "devices no enseña ni el hash");
-  assert.equal(await runCli(["unpair", j.id], s.deps), 0);
+  assert.deepEqual(JSON.parse(text(s)).devices, [], "abrir la ventana no da de alta ningún dispositivo");
   assert.equal(await runCli(["unpair", "d-nada"], s.deps), 1);
+  assert.equal(await runCli(["pair", "movil"], s.deps), 2, "el nombre lo pone la app: un argumento es error de uso");
+  assert.equal(await runCli(["pair", "--days", "0"], s.deps), 2);
 });
 
-test("pair sin direcciones de escucha: error, sin token", async () => {
+test("pair sin direcciones de escucha: error, sin ventana", async () => {
   const s = setup();
-  assert.equal(await runCli(["pair", "movil"], s.deps), 1);
+  assert.equal(await runCli(["pair"], s.deps), 1);
+  assert.equal(existsSync(join(s.dir, "pairing.json")), false);
   assert.match(s.err.join("\n"), /ninguna dirección/);
 });
 
 test("pair desde un frontend de agente se rechaza", async () => {
   const s = setup({ env: { CLAUDECODE: "1" } });
-  assert.equal(await runCli(["pair", "movil"], s.deps), 4);
+  assert.equal(await runCli(["pair"], s.deps), 4);
 });
 
 test("configuración corrupta: stop, resume, help y uninstall siguen funcionando (el fail-safe no depende de ella)", async () => {

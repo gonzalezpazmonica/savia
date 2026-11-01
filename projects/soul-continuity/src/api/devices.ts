@@ -41,7 +41,8 @@ function save(dataDir: string, devices: Device[]): void {
   writeJson(join(dataDir, FILE), { devices });
 }
 
-export function pairDevice(dataDir: string, operatorRef: string, name: string, now: string, days = TOKEN_DAYS): { id: string; token: string; expires_at: string } {
+/** `jkt`: huella de la clave del dispositivo cuando el emparejamiento ya la conoce (emparejamiento directo). */
+export function pairDevice(dataDir: string, operatorRef: string, name: string, now: string, days = TOKEN_DAYS, jkt: string | null = null): { id: string; token: string; expires_at: string } {
   if (!/^[\p{L}\p{N} ._-]{1,40}$/u.test(name)) throw new Error("nombre de dispositivo no admitido");
   if (!Number.isInteger(days) || days < 1 || days > 397) throw new Error("caducidad del token: entre 1 y 397 días");
   const t = Date.parse(now);
@@ -49,7 +50,7 @@ export function pairDevice(dataDir: string, operatorRef: string, name: string, n
   const token = randomBytes(32).toString("base64url");
   const id = "d" + randomBytes(6).toString("hex");
   const expires_at = new Date(t + days * DAY).toISOString();
-  save(dataDir, [...listDevices(dataDir), { id, name, operator_ref: operatorRef, token_sha256: hash(token), created_at: now, revoked_at: null, expires_at, jkt: null }]);
+  save(dataDir, [...listDevices(dataDir), { id, name, operator_ref: operatorRef, token_sha256: hash(token), created_at: now, revoked_at: null, expires_at, jkt }]);
   return { id, token, expires_at };
 }
 

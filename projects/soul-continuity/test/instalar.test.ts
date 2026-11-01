@@ -61,9 +61,10 @@ test("instalar.md: init, status, login, pair, autostart y uninstall con HOME fal
   const cfg = JSON.parse(readFileSync(join(s.data, "config.json"), "utf8"));
   cfg.api.listen = ["127.0.0.1"];
   writeFileSync(join(s.data, "config.json"), JSON.stringify(cfg));
-  r = s.soul(["pair", "movil", "--json"]);
+  r = s.soul(["pair", "--json"]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(JSON.parse(r.stdout).pin, /^sha256\//);
+  assert.match(JSON.parse(r.stdout).codigo, /^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
 
   r = s.soul(["autostart", "install", "--dry-run"]);
   assert.equal(r.status, 0, r.stderr);

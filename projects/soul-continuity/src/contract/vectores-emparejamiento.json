@@ -1,0 +1,49 @@
+{
+ "descripcion": "Vectores fijos del emparejamiento directo soul-pair-v1 (SE-490). Los comprueban el núcleo (test/pairing.test.ts) y la app Android, que copia este fichero tal cual. Calculados con una implementación independiente (Python hashlib/hmac).",
+ "version": "soul-pair-v1",
+ "codigo": {
+  "mostrado": "7K2MD-9QX4F",
+  "tecleado": "7k2md 9qx4f",
+  "normalizado": "7K2MD9QX4F",
+  "equivalentes": [
+   "7K2MD-9QX4F",
+   "7k2md9qx4f",
+   " 7K2MD 9QX4F "
+  ],
+  "invalidos": [
+   "7K2MD-9QX4",
+   "7K2MD-9QX4FF",
+   "7K2MD-9QX4U",
+   "",
+   "7K2MD_9QX4F"
+  ],
+  "alias": {
+   "entrada": "1L0O1-ILOO1",
+   "normalizado": "1100111001"
+  }
+ },
+ "client_nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+ "server_nonce": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+ "spki_der_base64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWu9PwVwkca9ZAT7/B9Gwex56I+/49smHqH+yVU1qSbj3qua+U09Nzsld7xSWyTn/M2SvNh2CKVREmsfxQE6f+Q==",
+ "spki_sha256": "IOJ0l-g0vFaI8beocfhK5EXu_IRPODKtH01o8EIkl4k",
+ "pin": "sha256/IOJ0l+g0vFaI8beocfhK5EXu/IRPODKtH01o8EIkl4k=",
+ "huella_corta": "20e2 7497 e834 bc56",
+ "device_jwk": {
+  "kty": "EC",
+  "crv": "P-256",
+  "x": "f5NTFdLgogR9i2BCBczQdMOp2da2hPhRgqCzR_wcQ_o",
+  "y": "kdtn9TmgTmxkADCUMuVyxs20RimduR91GH5uRXN7ZYw"
+ },
+ "jwk_thumbprint": "5dDcnbnQch1ynp2FJm2ijuOTXN9dViNYnMmupCTl404",
+ "mensaje_servidor": "soul-pair-v1|server|AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8|ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8|IOJ0l-g0vFaI8beocfhK5EXu_IRPODKtH01o8EIkl4k",
+ "proof_servidor": "Y2L29bQEkw6qWkK9nKTr1nti239u6QAGC5-2dUuo15M",
+ "mensaje_cliente": "soul-pair-v1|client|AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8|ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8|5dDcnbnQch1ynp2FJm2ijuOTXN9dViNYnMmupCTl404",
+ "proof_cliente": "24xyLFQOxVrU7aseX6oemqd8_prvrPBAJB4BGzi58EU",
+ "proof_servidor_con_codigo_erroneo": "lMi-Wy6XZEfDJF_O6oTJS8peJMfgMZXAmF2NimmrzC8",
+ "errores": {
+  "PAIR_EXPIRED": 410,
+  "PAIR_BAD_PROOF": 401,
+  "PAIR_LOCKED": 423,
+  "PAIR_RATE": 429
+ }
+}

@@ -1,8 +1,8 @@
 /**
  * Punta a punta (SE-490): la composición de producción con un adaptador real (GitHub) contra un
  * doble HTTP local, el almacén único sobre un doble de `secret-tool` y la API por TLS propio.
- * init → login → pair → serve → Q1–Q4 y sondeo por cursor con DPoP → corrección ligada al
- * dispositivo → revoke → uninstall, sin dejar estado ni tokens.
+ * init → login → serve → pair por código (soul-pair-v1) → Q1–Q4 y sondeo por cursor con DPoP → corrección ligada al
+ * dispositivo → revoke de la fuente y unpair del móvil → uninstall, sin dejar estado ni tokens.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,6 +21,7 @@ import { SystemCredentialStore as ApiTokenStore } from "../src/adapters/credenti
 import { serveFromCli } from "../src/api/serve.ts";
 import { emptyData, startMock } from "./adapters/mock-apis.ts";
 import { newKey, proof } from "./dpop-helper.ts";
+import { emparejarComoApp } from "./pair-helper.ts";
 
 const MOCK_TOKEN = "tok-e2e-canario-55aa";
 
@@ -84,15 +85,16 @@ test("e2e: instalar, emparejar, consultar Q1–Q4 por cursor, corregir, revocar 
     assert.equal(q1cli.c, 0, err.join("\n"));
     assert.equal(q1cli.j.total, 2, `la CLI lee GitHub con el adaptador real: ${JSON.stringify(q1cli.j.adapters)}`);
 
-    // 2. Emparejar y arrancar la API con su certificado propio.
-    const pair = await cli("pair", "movil", "--json");
-    assert.equal(pair.c, 0, err.join("\n"));
-    const { token, id: device } = pair.j;
+    // 2. Arrancar la API con su certificado propio y emparejar por código, como la app.
     served = serveFromCli(deps, { signal: ac.signal, refreshMs: 100 });
     for (let i = 0; i < 80 && !out.some((l) => l.includes("Escuchando")); i++) await new Promise((r) => setTimeout(r, 25));
     const port = cfg.api.port;
     const ca = readFileSync(join(dir, "tls", "cert.pem"), "utf8");
+    const pair = await cli("pair", "--json");
+    assert.equal(pair.c, 0, err.join("\n"));
+    assert.equal(pair.j.token, undefined, "la CLI ya no muestra ningún token");
     const key = newKey();
+    const { token, device_id: device } = await emparejarComoApp(port, pair.j.codigo.toLowerCase(), key);
     const api = (path: string, method = "GET", body?: unknown) => new Promise<{ status: number; json: any }>((res, rej) => {
       const p = proof(key, { htm: method, htu: `https://127.0.0.1:${port}${path.split("?")[0]}`, iat: Date.now(), token });
       const q = request({ host: "127.0.0.1", port, path, method, ca, headers: { Authorization: `DPoP ${token}`, DPoP: p, ...(body ? { "Content-Type": "application/json" } : {}) } }, (r) => {
@@ -138,13 +140,20 @@ test("e2e: instalar, emparejar, consultar Q1–Q4 por cursor, corregir, revocar 
     const antes = mock.log.length;
     await new Promise((r) => setTimeout(r, 400)); // varios tics de serve (refreshMs 100)
     assert.equal(mock.log.slice(antes).filter((l: { url: string }) => l.url.includes("search/issues")).length, 0, "el servicio deja de leer la fuente revocada");
+
+    // 6. Revocar el móvil: su token deja de valer.
+    assert.equal((await api("/api/v1/soul/estado")).status, 200, "control: el móvil entra antes de revocarlo");
+    assert.equal((await cli("unpair", device)).c, 0, err.join("\n"));
+    const r = await api("/api/v1/soul/estado");
+    assert.equal(r.status, 401);
+    assert.equal(r.json.error, "DEVICE_REVOKED");
   } finally {
     ac.abort();
     if (served) assert.equal(await served, 0);
     await mock.close();
   }
 
-  // 6. Desinstalar: no queda nada.
+  // 7. Desinstalar: no queda nada.
   assert.equal((await cli("uninstall", "--yes")).c, 0, err.join("\n"));
   assert.equal(existsSync(dir), false, "no queda el directorio de datos");
   assert.equal(st.vault.size, 0);

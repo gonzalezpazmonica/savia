@@ -135,10 +135,11 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       let actual = snap;
       if (q === "Q3") {
         // Como `soul q3 --since`: diferencia entre la lectura vigente en `desde` y la actual (o la
-        // vigente en `hasta`). Sin lectura anterior no hay con qué comparar: error, no «nada cambió».
+        // vigente en `hasta`). D6: sin ninguna lectura anterior a `desde`, la base es la primera
+        // guardada («qué cambió desde que Soul empezó a leer»), no un 400 indistinguible de un error.
         if (rango?.desde == null) throw new ErrorApi(400, "INVALID_INPUT");
-        previous = engine.snapshotAt(stateDir, o.ref, new Date(rango.desde).toISOString()) ?? undefined;
-        if (!previous) throw new ErrorApi(400, "INVALID_INPUT");
+        previous = engine.snapshotAt(stateDir, o.ref, new Date(rango.desde).toISOString())
+          ?? engine.firstSnapshot(stateDir, o.ref) ?? snap;
         if (rango.hasta != null && rango.hasta < t) {
           const h = engine.snapshotAt(stateDir, o.ref, new Date(rango.hasta).toISOString());
           if (h) actual = h;

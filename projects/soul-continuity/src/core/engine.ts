@@ -33,6 +33,8 @@ export interface Engine extends ContinuityImpl {
   lastSnapshot(stateDir: string, operatorRef: string): Snapshot | null;
   /** Instantánea más reciente con `issued_at` ≤ `at` (para Q3 «desde»). */
   snapshotAt(stateDir: string, operatorRef: string, at: string): Snapshot | null;
+  /** Instantánea guardada más antigua (base de Q3 cuando no hay ninguna anterior a «desde»). */
+  firstSnapshot(stateDir: string, operatorRef: string): Snapshot | null;
   ledger(stateDir: string, operatorRef: string): unknown[];
   /** Última instantánea con el libro vigente y el TTL evaluados en `now` (correcciones posteriores incluidas). */
   cachedSnapshot(stateDir: string, operatorRef: string, now: string): Snapshot | null;
@@ -87,6 +89,23 @@ function saveHistory(dir: string, snap: Snapshot): void {
     if (age <= HISTORY_DAYS * 24 * HOUR && !hours.has(bucket)) { hours.add(bucket); continue; }
     rmSync(join(h, f), { force: true });
   }
+}
+
+/** Recorre el historial y se queda con la instantánea que prefiere `mejor` (por `issued_at`). */
+function pickSnapshot(stateDir: string, operatorRef: string, mejor: (it: number, best: number | null) => boolean): Snapshot | null {
+  const h = join(operatorDir(stateDir, operatorRef), HISTORY);
+  let best: Snapshot | null = null;
+  let bt: number | null = null;
+  for (const f of (() => { try { return readdirSync(h); } catch { return []; } })()) {
+    // Una instantánea ilegible (corte a mitad de escritura) no sirve de base ni tumba Q3.
+    let s: Snapshot | null;
+    try { s = readJson<Snapshot | null>(join(h, f), null); } catch { continue; }
+    const it = s ? parseTs(s.issued_at) : null;
+    if (!s || s.operator_ref !== operatorRef || it === null || !mejor(it, bt)) continue;
+    best = s;
+    bt = it;
+  }
+  return best;
 }
 
 export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engine {
@@ -291,17 +310,11 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
     snapshotAt(stateDir: string, operatorRef: string, at: string): Snapshot | null {
       const t = parseTs(at);
       if (t === null) throw new Error("instante inválido");
-      const h = join(operatorDir(stateDir, operatorRef), HISTORY);
-      let best: Snapshot | null = null;
-      for (const f of (() => { try { return readdirSync(h); } catch { return []; } })()) {
-        // Una instantánea ilegible (corte a mitad de escritura) no sirve de «desde» ni tumba Q3.
-        let s: Snapshot | null;
-        try { s = readJson<Snapshot | null>(join(h, f), null); } catch { continue; }
-        const it = s ? parseTs(s.issued_at) : null;
-        if (!s || s.operator_ref !== operatorRef || it === null || it > t) continue;
-        if (!best || it > (parseTs(best.issued_at) as number)) best = s;
-      }
-      return best;
+      return pickSnapshot(stateDir, operatorRef, (it, best) => it <= t && (best === null || it > best));
+    },
+
+    firstSnapshot(stateDir: string, operatorRef: string): Snapshot | null {
+      return pickSnapshot(stateDir, operatorRef, (it, best) => best === null || it < best);
     },
 
     ledger(stateDir: string, operatorRef: string): unknown[] {

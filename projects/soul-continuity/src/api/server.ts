@@ -150,6 +150,8 @@ export interface OpcionesServidor {
   textoLibre?: "desactivado" | "modelo_local" | "proveedor_aprobado";
   /** Secreto de los cursores del sondeo; con él, un cursor sigue valiendo tras reiniciar. */
   secretoCursor?: string;
+  /** Emparejamiento directo (`/v1/pair/challenge` y `/v1/pair/complete`, sin token). Sin él, 404. */
+  emparejamiento?: { challenge(c: unknown): unknown; complete(c: unknown): unknown };
   /** P2-9: límites de conexión (por defecto `LIMITES`). */
   limites?: Partial<typeof LIMITES>;
 }
@@ -625,8 +627,22 @@ export function crearServidor(opts: OpcionesServidor) {
     if (u.claves.some((k) => !permitidos.includes(k)) || new Set(u.claves).size !== u.claves.length) throw invalida();
   };
 
+  const RUTAS_PAR: Record<string, "challenge" | "complete"> = { "/v1/pair/challenge": "challenge", "/v1/pair/complete": "complete" };
+  async function emparejar(req: IncomingMessage, paso: "challenge" | "complete") {
+    if (req.method !== "POST" || !opts.emparejamiento || new URL(req.url ?? "/", "http://x").search) throw noEncontrado();
+    if (opts.detenido?.()) throw new ErrorApi(503, "UNAVAILABLE");
+    const c = await cuerpo(req);
+    try { return opts.emparejamiento[paso](c); } catch (e) {
+      const st = (e as { status?: unknown }).status, code = (e as { code?: unknown }).code;
+      if (typeof st === "number" && typeof code === "string" && /^(PAIR_[A-Z_]+|INVALID_INPUT)$/.test(code)) throw new ErrorApi(st, code, st === 429 ? { retryAfter: 60 } : {});
+      throw e;
+    }
+  }
+
   async function manejar(req: IncomingMessage) {
     limitar(req.socket.remoteAddress ?? "desconocido", Date.now());
+    const paso = RUTAS_PAR[new URL(req.url ?? "/", "http://x").pathname];
+    if (paso) return emparejar(req, paso);
     const { o, dispositivo } = autenticar(req);
     if (opts.detenido?.()) throw new ErrorApi(503, "UNAVAILABLE");
     sincronizar(o);
@@ -692,7 +708,7 @@ export function crearServidor(opts: OpcionesServidor) {
       const e = err instanceof ErrorApi ? err : (process.stderr.write(`soul api: ${(err as Error)?.name ?? "error"}\n`), new ErrorApi(503, "UNAVAILABLE"));
       const sobre: Record<string, unknown> = { code: e.code, message: e.revocado ? "device revoked" : e.code.toLowerCase().replace(/_/g, " "), requestId: randomUUID(), retryable: e.code === "RATE_LIMITED" || e.code === "UNAVAILABLE" };
       if (e.revocado) sobre.error = "DEVICE_REVOKED";
-      const extra: Record<string, string> = e.status === 401 ? { "WWW-Authenticate": "DPoP" } : e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {};
+      const extra: Record<string, string> = e.code === "UNAUTHENTICATED" ? { "WWW-Authenticate": "DPoP" } : e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {};
       salir(e.status, sobre, extra);
     }
   }), opts.limites);

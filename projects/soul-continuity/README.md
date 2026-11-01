@@ -38,7 +38,7 @@ node bin/soul.mjs q3 --since 2026-10-30T09:00:00Z
 node bin/soul.mjs why <id>           # ¿por qué lo sé?
 node bin/soul.mjs correct <id> resuelto
 node bin/soul.mjs stop | resume      # fail-safe que sobrevive a reinicios
-node bin/soul.mjs pair movil         # token (se muestra una vez), huella del certificado y dirección
+node bin/soul.mjs pair               # emparejar la app: IP, puerto, código de 10 min y huella corta
 node bin/soul.mjs serve              # API para la app
 ```
 
@@ -61,7 +61,8 @@ Sin perfil activo, Soul responde «no sé quién eres». Sin direcciones en `api
 | H-1: nada activo por defecto; solo los adaptadores que nombra el operador | `test/connectors.test.ts` |
 | Banco AC-3 del núcleo con los adaptadores reales de API contra los dobles | `test/bench-impl.test.ts` |
 | Canal: DPoP verificado y clave ligada al dispositivo, tokens con caducidad, límites de conexión | `test/dpop.test.ts`, `test/devices.test.ts`, `test/serve.test.ts` |
-| Punta a punta: init, login, pair, serve, Q1–Q4 por cursor, corrección, revoke y uninstall | `test/e2e.test.ts`, `test/instalar.test.ts` |
+| Emparejamiento directo por código (soul-pair-v1): vectores comunes con la app, intermediario, bloqueo, caducidad | `test/pairing.test.ts`, `src/contract/vectores-emparejamiento.json` |
+| Punta a punta: init, login, serve, pair por código, Q1–Q4 por cursor, corrección, revoke, unpair y uninstall | `test/e2e.test.ts`, `test/instalar.test.ts` |
 | 0 tokens en disco: el secreto solo por stdin al almacén del sistema; el núcleo descarta la lectura de un adaptador que devuelve el token | `test/credentials.test.ts`, `test/engine.test.ts`, `test/cli.test.ts` |
 | Solo escucha en las direcciones configuradas (test de puertos) | `test/listen.test.ts` |
 | Contrato de la app: 27 tests de Labs contra el servidor del producto | `test/api/contrato.test.mjs` |
@@ -75,9 +76,10 @@ npm run typecheck # tsc --strict (necesita npm install)
 
 ## Límites conocidos (v1)
 
-- **DPoP**: la API verifica la prueba (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`) y liga la clave en la **primera** conexión. Quien use el token antes que el móvil legítimo liga su clave: el token se muestra una sola vez y hay que introducirlo enseguida en la app.
+- **DPoP**: la API verifica la prueba (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`). Con el emparejamiento por código la clave queda ligada al emparejar. Los dispositivos emparejados antes, con token por CLI, la ligan en su primera conexión. La ventana de `jti` vive en memoria: tras reiniciar `serve`, una prueba capturada podría repetirse durante 60 s como mucho.
+- **Emparejamiento**: el código se guarda en `pairing.json` (0600) mientras la ventana está abierta, no solo su hash, porque es la clave del HMAC. Se borra al usarse, caducar o bloquearse. Una respuesta capturada del reto permite un ataque offline contra el código (50 bits) durante los 10 minutos de la ventana.
 - **AC-4d es de mejor esfuerzo frente a un agente adversario**: la detección del frontend usa variables de entorno y `--frontend`, y un agente podría borrarlas. Protege contra el uso normal desde Claude Code u OpenCode, no contra un agente que quiera saltárselo.
 - **Política de atención de la API**: el estado (modo, avisos, alertas, pendientes, registro de demanda y mensajes del sondeo) persiste por operador en `attention-state.json` y sobrevive a reiniciar `serve`; `soul mode` se aplica en el siguiente tic. Pero las decisiones las sigue tomando la aproximación de Labs que lleva el servidor, no la librería `src/attention/` (presupuesto por ventana fija, sin franjas declaradas ni descansos). Sustituirla es el siguiente paso de la integración.
-- **Q3 en la app**: sale del núcleo, como `soul q3 --since` (claves nuevas y con otra huella). Lo retirado (`removed`) no se sirve todavía, porque el contrato de la app no tiene cómo marcar un elemento como desaparecido; la CLI sí lo da. Sin ninguna lectura anterior a `desde`, la API responde 400 en lugar de «nada cambió».
+- **Q3 en la app**: sale del núcleo, como `soul q3 --since` (claves nuevas y con otra huella). Lo retirado (`removed`) no se sirve todavía, porque el contrato de la app no tiene cómo marcar un elemento como desaparecido; la CLI sí lo da. Sin ninguna lectura anterior a `desde`, la base es la primera lectura guardada: responde «qué cambió desde que Soul empezó a leer» (D6).
 - **Configuración en caliente**: `serve` relee `config.json` en cada lectura, pero los operadores de la API (perfiles) y su nivel de detalle se fijan al arrancar. Un perfil añadido con el servicio en marcha recibe 401 hasta reiniciar `serve`.
 - **Credenciales**: en Windows y macOS solo se han probado con un doble, no contra el almacén real. En Windows, `Add-Type` falla bajo Constrained Language Mode: entonces el almacén da error y el token no se guarda en ningún otro sitio.

@@ -252,7 +252,10 @@ test("Q3 de la API es la diferencia del núcleo (como `soul q3 --since`), no la 
     const titles = (j: any) => j.elementos.map((e: any) => e.titulo.texto).sort();
     // Ni FIJA-1 (sin cambios) ni la ausencia de NUEVA-ANTIGUA-3/CAMBIA-2 por tener event_at viejo.
     assert.deepEqual(titles((await get("/q/q3?desde=2026-10-31T08:30:00Z")).json), ["CAMBIA-2", "NUEVA-ANTIGUA-3"]);
-    assert.equal((await get("/q/q3?desde=2026-10-31T07:00:00Z")).status, 400, "sin lectura anterior a desde no se responde «nada cambió»");
+    // D6: sin lectura anterior a desde, la base es la primera lectura guardada (08:00), no un 400.
+    const sinBase = await get("/q/q3?desde=2026-10-31T07:00:00Z");
+    assert.equal(sinBase.status, 200);
+    assert.deepEqual(titles(sinBase.json), ["CAMBIA-2", "NUEVA-ANTIGUA-3"]);
     // Mismo resultado que el núcleo con la CLI.
     const prev = engine.snapshotAt(dir, "op-yo", "2026-10-31T08:30:00Z");
     const cli = engine.answer(engine.cachedSnapshot(dir, "op-yo", NOW) as any, { q: "Q3", detail: "titulos", previous: prev as any }, { install, now: NOW });

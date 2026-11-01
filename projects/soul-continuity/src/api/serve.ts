@@ -3,8 +3,10 @@
  *
  * - Escucha solo en `api.listen` (las IP de la VPN del operador); sin direcciones no arranca.
  * - TLS con el certificado propio de la instalación; muestra la huella SPKI para fijarlo.
- * - Autentica dispositivos emparejados (`soul pair`); revocado => 401 DEVICE_REVOKED. Exige una
- *   prueba DPoP válida y liga su clave al dispositivo en el primer uso (P1-1); token caducado => 401.
+ * - Emparejamiento directo por código (`soul pair` abre la ventana; `/v1/pair/*`, ver pairing.ts):
+ *   el dispositivo queda ligado a su clave al emparejar.
+ * - Autentica dispositivos emparejados; revocado => 401 DEVICE_REVOKED. Exige una prueba DPoP
+ *   válida con la clave ligada; token caducado => 401.
  * - Estado de atención por operador en disco (`attention-state.json`): modo, avisos, alertas,
  *   pendientes, registro de demanda y mensajes del sondeo sobreviven a un reinicio. `soul mode`
  *   (`attention.json`) se aplica en el siguiente tic.
@@ -22,6 +24,7 @@ import { join } from "node:path";
 import { operatorDir, readJson, writeJson } from "../core/store.ts";
 import { bindKey, verifyToken } from "./devices.ts";
 import { DpopError, makeDpopVerifier } from "./dpop.ts";
+import { makePairing } from "./pairing.ts";
 import { validateListen } from "./listen.ts";
 import { type EstadoAtencion, crearServidor } from "./server.ts";
 
@@ -85,6 +88,8 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
       guardar: (ref, e) => writeJson(join(operatorDir(deps.dataDir, ref), ATTENTION_STATE), e),
     },
     detenido: () => stopState(deps.dataDir).stopped,
+    // Emparejamiento directo: la ventana la abre `soul pair` (pairing.json); aquí solo se consume.
+    emparejamiento: makePairing({ dataDir: deps.dataDir, certPem: tls.cert }),
     // Una app sondea cada 5 min: 120 peticiones cada 10 s sobran y frenan un abuso.
     peticionesPorVentana: 120,
   });
