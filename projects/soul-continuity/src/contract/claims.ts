@@ -167,6 +167,11 @@ export function fingerprint(c: Claim): string {
 
 const KEY_RE = /^[a-z0-9-]+:[a-z_]+:[^:\s]+$/;
 
+/** Regla única de clave: la usan la validación de afirmaciones, el libro y las correcciones. */
+export function isClaimKey(key: unknown): key is string {
+  return typeof key === "string" && KEY_RE.test(key);
+}
+
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -180,7 +185,7 @@ export function validateClaim(v: unknown): string[] {
   const p: string[] = [];
   if (!isObj(v)) return ["la afirmación no es un objeto"];
   const key = v.key;
-  if (typeof key !== "string" || !KEY_RE.test(key)) p.push(`clave inválida: ${String(key).slice(0, 60)}`);
+  if (!isClaimKey(key)) p.push(`clave inválida: ${String(key).slice(0, 60)}`);
   if (!oneOf(CLAIM_TYPES, v.claim_type)) p.push(`tipo desconocido: ${String(v.claim_type)}`);
   if (typeof key === "string" && parseKey(key)?.type !== v.claim_type) p.push("la clave no casa con claim_type");
   if (!oneOf(STATES, v.state)) p.push(`estado desconocido: ${String(v.state)}`);
@@ -268,7 +273,7 @@ export function foldLedger(rows: unknown[], operatorRef: string): Map<string, Le
   const out = new Map<string, LedgerRow>();
   for (const r of rows) {
     if (!isObj(r) || r.operator_ref !== operatorRef || !oneOf(LEDGER_ACTIONS, r.action)) continue;
-    if (typeof r.key !== "string" || !KEY_RE.test(r.key)) continue;
+    if (!isClaimKey(r.key)) continue;
     if (r.action === "supersede" && typeof r.superseded_by !== "string") continue;
     out.set(r.key, r as unknown as LedgerRow);
   }
