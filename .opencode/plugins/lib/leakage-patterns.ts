@@ -6,6 +6,10 @@
 // from concatenated parts so the source file itself does not match the
 // workspace's own block-gitignored hook scanning this file.
 
+import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dirname, isAbsolute, resolve } from "node:path";
+
 const part = (s: string) => s; // alias to make concatenation explicit
 
 const localCfgRx = new RegExp(part("conf") + part("ig") + "\\.local/");
@@ -29,6 +33,57 @@ const RULES: Array<{ rx: RegExp; tag: string }> = [
   { rx: vulnCountRx,   tag: "Internal audit vulnerability count" },
   { rx: humanMapsRx,   tag: "Project-internal mapping reference" },
 ];
+
+// Rule 9 of the bash hook: project references. Same literal-splitting trick.
+const PROJ = part("pro") + part("jects");
+const projRefRx = new RegExp(PROJ + "/([a-z][a-z0-9_-]+)/", "g");
+const AUTH_REL = ".claude/." + "project-authorizations";
+
+/** Root of the git repo that contains `filePath` (walks up to the first existing dir). Null if none. */
+export function repoRootOf(filePath: string, projectDir: string): string | null {
+  let dir = dirname(isAbsolute(filePath) ? filePath : resolve(projectDir, filePath));
+  while (!existsSync(dir) && dir !== dirname(dir)) dir = dirname(dir);
+  const res = spawnSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8", timeout: 3000 });
+  if (res.status !== 0 || typeof res.stdout !== "string") return null;
+  const root = res.stdout.trim();
+  return root || null;
+}
+
+/** Exact-line set from a file; null if missing or unreadable (callers treat null as "nothing allowed"). */
+function readLines(path: string): string[] | null {
+  try {
+    return readFileSync(path, "utf8").split("\n");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Project references (`<projects>/<name>/`) not allowed in a public file. A name is allowed when it is
+ * whitelisted in .gitignore (`!<projects>/<name>/`) or authorized by the operator
+ * (scripts/protect-project-privacy.sh --authorize), as an exact line of .claude/.project-authorizations.
+ * Both files are read from the repo of the EDITED FILE, not the cwd. Fail-closed: no repo, missing or
+ * unreadable authorizations, or no exact match → violation. Like the bash hook, the check only runs
+ * when the .gitignore declares a whitelist.
+ */
+export function detectProjectLeakage(content: string, filePath: string, projectDir: string): string[] {
+  if (!content) return [];
+  const repoRoot = repoRootOf(filePath, projectDir);
+  const gitignore = readLines(resolve(repoRoot ?? projectDir, ".gitignore"));
+  if (!gitignore) return [];
+  const wlPrefix = "!" + PROJ + "/";
+  const whitelist = gitignore
+    .filter((l) => l.startsWith(wlPrefix))
+    .map((l) => l.slice(wlPrefix.length).replace(/\/$/, ""));
+  if (whitelist.length === 0) return [];
+  const authorized = repoRoot ? readLines(resolve(repoRoot, AUTH_REL)) ?? [] : [];
+  const allowed = (name: string) => whitelist.includes(name) || authorized.includes(name);
+
+  const names = [...new Set([...content.matchAll(projRefRx)].map((m) => m[1]))].sort();
+  return names
+    .filter((n) => !allowed(n))
+    .map((n) => `Reference to ${PROJ}/${n}/ (project neither whitelisted nor authorized)`);
+}
 
 /**
  * Inspect content for gitignored-style leakage signatures.
