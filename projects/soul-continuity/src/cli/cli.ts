@@ -29,6 +29,9 @@ import { ensureInstallCert } from "../api/cert.ts";
 import { listDevices, pairDevice, revokeDevice } from "../api/devices.ts";
 import { validateListen } from "../api/listen.ts";
 import type { Run } from "../credentials/store.ts";
+import type { TokenSet } from "../adapters/oauth.ts";
+import { randomBytes } from "node:crypto";
+import { LoginUsage, PROFILE_NAME, initConfig, runLogin } from "./login.ts";
 
 export interface CliDeps {
   dataDir: string;
@@ -48,6 +51,10 @@ export interface CliDeps {
     /** Todas las credenciales del índice del almacén único (desinstalar). */
     forgetAll(): Promise<string[]>;
   };
+  /** Tokens de los adaptadores de API de un operador (almacén único). Necesario para `login`. */
+  tokenStore?: (operatorRef: string, cfg: SoulConfig) => { put(service: string, scopes: string[], t: TokenSet): Promise<void> };
+  /** Lee un secreto de stdin sin eco (solo `login --token-stdin`). */
+  readSecret?: () => Promise<string>;
   platform: NodeJS.Platform;
   home: string;
   run: Run;
@@ -61,6 +68,8 @@ const CORRECTIONS: Record<string, string> = { resuelto: "resuelto", "no-aplica":
 const AGENT_ALLOWED = new Set(["status", "q1", "q2", "q3", "q4", "why", "adapters", "stop", "bench", "help"]);
 
 const HELP = `Órdenes de soul (sin texto libre):
+  init <perfil> [--email a@b]    crea la instalación: perfil sin fuentes ni adaptadores activos
+  login <adaptador> [--token-stdin] [--days N]   inicia sesión (M365/Google: código; resto: token por stdin)
   status                         estado sin red: perfil, STOP, última lectura
   q1 | q2 | q4 [--cached]        qué tengo abierto · qué depende de mí · compromisos con fecha
   q3 --since <ISO>               qué cambió desde ese instante
@@ -85,7 +94,7 @@ interface Parsed { cmd: string; args: string[]; flags: Record<string, string | t
 function parse(argv: string[]): Parsed {
   const args: string[] = [];
   const flags: Record<string, string | true> = {};
-  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days"]);
+  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days", "--email"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (withValue.has(a)) flags[a.slice(2)] = argv[++i] ?? "";
@@ -144,6 +153,18 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       print(ajeno.length
         ? `Desinstalado: no queda estado de Soul. Se conservan ${ajeno.length} elemento(s) ajenos en ${deps.dataDir}.`
         : "Desinstalado: no queda estado de Soul.", { removed: true, kept_foreign: ajeno.length, credentials: creds.length, autostart: auto.message });
+      return 0;
+    }
+
+    case "init": {
+      const name = p.args[0] ?? "";
+      if (!PROFILE_NAME.test(name)) { deps.err("init <perfil> [--email a@b]: perfil en minúsculas, cifras, - y _"); return 2; }
+      if (existsSync(join(deps.dataDir, "config.json"))) { deps.err(`ya hay una instalación en ${deps.dataDir}; no se pisa`); return 1; }
+      const emails = typeof p.flags.email === "string" ? p.flags.email.split(",").map((e) => e.trim()).filter(Boolean) : [];
+      const cfg = initConfig(name, emails, `inst-${randomBytes(6).toString("hex")}`);
+      saveConfig(deps.dataDir, cfg);
+      print(`Instalación creada en ${deps.dataDir} con el perfil «${name}». Ninguna fuente ni adaptador está activo: actívalos en config.json (ver docs/instalar.md).`,
+        { data_dir: deps.dataDir, profile: name, operator_ref: cfg.profiles[name].operator.ref });
       return 0;
     }
 
@@ -434,6 +455,24 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
       case "devices": {
         const devices = listDevices(deps.dataDir).map(({ token_sha256: _h, ...d }) => d);
         print(devices.map((d) => `${d.id} ${d.name}${d.revoked_at ? " (revocado)" : ""}`).join("\n") || "Sin dispositivos.", { devices });
+        return 0;
+      }
+
+      case "login": {
+        const install = resolveInstall(cfg, deps.env);
+        const adapter = p.args[0] ?? "";
+        if (!deps.tokenStore || !deps.readSecret) throw new Exit(1, "el inicio de sesión no está disponible en este punto de entrada");
+        const days = typeof p.flags.days === "string" ? Number(p.flags.days) : undefined;
+        try {
+          const msg = await runLogin(adapter, { tokenStdin: p.flags["token-stdin"] === true, days }, {
+            connectors: cfg.connectors, store: deps.tokenStore(install.operator.ref, cfg), readSecret: deps.readSecret,
+            say: deps.err, now: () => parseTs(deps.now()) ?? Date.now(),
+          });
+          print(msg, { adapter, stored: true });
+        } catch (e) {
+          if (e instanceof LoginUsage) throw new Exit(2, e.message);
+          throw e;
+        }
         return 0;
       }
 

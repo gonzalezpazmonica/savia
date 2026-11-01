@@ -28,6 +28,11 @@ export interface ConnectorsConfig {
   enabled: string[];
   /** Bases HTTPS por servicio lógico (graph, google, github, jira, ado). */
   bases?: Record<string, string>;
+  /** Aplicación OAuth propia del operador o de su organización (sin secretos salvo el de app instalada de Google). */
+  oauth?: {
+    microsoft?: { client_id: string; tenant: string; owner: "operator" | "organization" };
+    google?: { client_id: string; client_secret?: string; owner: "operator" | "organization" };
+  };
 }
 
 export const DEFAULT_BASES: Readonly<Record<string, string>> = {
@@ -61,6 +66,18 @@ export function validateConnectors(c: unknown): string[] {
       for (const [k, b] of Object.entries(v.bases)) {
         if (!SERVICES.has(k)) { p.push(`connectors.bases: servicio desconocido ${k.slice(0, 20)}`); continue; }
         if (typeof b !== "string" || !isSafeBase(b)) p.push(`connectors.bases.${k}: solo https (o http a 127.0.0.1/[::1]), sin usuario, consulta ni fragmento`);
+      }
+    }
+  }
+  if (v.oauth !== undefined) {
+    const o = v.oauth as Record<string, Record<string, unknown>> | null;
+    if (typeof o !== "object" || o === null) p.push("connectors.oauth debe ser un objeto");
+    else {
+      for (const [k, c] of Object.entries(o)) {
+        if (k !== "microsoft" && k !== "google") { p.push(`connectors.oauth: proveedor desconocido ${k.slice(0, 20)}`); continue; }
+        if (typeof c?.client_id !== "string" || !/^[A-Za-z0-9._-]{1,200}$/.test(c.client_id)) p.push(`connectors.oauth.${k}.client_id inválido`);
+        if (c?.owner !== "operator" && c?.owner !== "organization") p.push(`connectors.oauth.${k}.owner: operator | organization`);
+        if (k === "microsoft" && (typeof c?.tenant !== "string" || !/^[A-Za-z0-9.-]{1,100}$/.test(c.tenant))) p.push("connectors.oauth.microsoft.tenant inválido");
       }
     }
   }
