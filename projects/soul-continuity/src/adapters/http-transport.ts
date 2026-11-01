@@ -66,6 +66,9 @@ export class HttpTransport implements Transport {
     if (req.url.startsWith("/")) {
       // `//host/x` o `/\host/x` serían otro host: se rechazan antes de resolver.
       if (/^\/[/\\]/.test(req.url) || req.url.includes("\\")) throw new TransportRefused(`ruta no permitida para ${req.service}`);
+      // Segmentos «.» o «..» (también codificados) saldrían del prefijo de la base.
+      const ruta = req.url.split(/[?#]/)[0];
+      if (ruta.split("/").some((g) => /^(\.|%2e){1,2}$/i.test(g))) throw new TransportRefused(`ruta no permitida para ${req.service}`);
       const prefix = base.pathname.replace(/\/$/, "");
       // Una ruta que ya trae el prefijo de la base no se duplica (enlaces de GitHub Enterprise).
       const path = prefix && (req.url === prefix || req.url.startsWith(`${prefix}/`)) ? req.url : `${prefix}${req.url}`;
@@ -126,7 +129,7 @@ export class HttpTransport implements Transport {
   private async read(res: Response): Promise<TransportResponse> {
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    const text = await res.text();
+    const text = await leerAcotado(res);
     let body: unknown = text;
     if (/json/i.test(headers["content-type"] ?? "") || /^[[{]/.test(text.trim())) {
       try {
@@ -138,4 +141,22 @@ export class HttpTransport implements Transport {
     if (text === "") body = null;
     return { status: res.status, headers, body };
   }
+}
+
+/** Tope del cuerpo de una respuesta: un host comprometido o mal configurado no agota la memoria de `serve`. */
+export const MAX_BODY = 8 * 1024 * 1024;
+
+async function leerAcotado(res: Response): Promise<string> {
+  if (!res.body) return "";
+  const trozos: Uint8Array[] = [];
+  let n = 0;
+  const r = res.body.getReader();
+  for (;;) {
+    const { done, value } = await r.read();
+    if (done) break;
+    n += value.byteLength;
+    if (n > MAX_BODY) { await r.cancel(); throw new Error("respuesta demasiado grande"); }
+    trozos.push(value);
+  }
+  return Buffer.concat(trozos).toString("utf8");
 }

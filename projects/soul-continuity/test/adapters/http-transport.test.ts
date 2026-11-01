@@ -158,3 +158,32 @@ test("una ruta que ya trae el prefijo de la base no se duplica (GitHub Enterpris
     await s.close();
   }
 });
+
+test("respuesta mayor que el tope (8 MiB): se corta y falla, no se lee entera; justo en el tope sí vale", async () => {
+  const s = await serve((req, res) => {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("x".repeat(req.url?.includes("grande") ? 8 * 1024 * 1024 + 1 : 8 * 1024 * 1024));
+  });
+  try {
+    const t = new HttpTransport({ bases: { jira: s.base } });
+    const ok = await t.request({ service: "jira", method: "GET", url: "/justo" });
+    assert.equal((ok.body as string).length, 8 * 1024 * 1024);
+    await assert.rejects(t.request({ service: "jira", method: "GET", url: "/grande" }), /respuesta demasiado grande/);
+  } finally {
+    await s.close();
+  }
+});
+
+test("una ruta con segmentos . o .. (también codificados) se rechaza: no sale del prefijo de la base", async () => {
+  const s = await serve((req, res) => json(res, 200, { path: req.url }));
+  try {
+    const t = new HttpTransport({ bases: { jira: `${s.base}/jira` } });
+    for (const url of ["/../x", "/a/../../x", "/./x", "/%2e%2e/x", "/%2E%2e/x", "/a/%2e/x"]) {
+      await assert.rejects(t.request({ service: "jira", method: "GET", url }), TransportRefused, url);
+    }
+    const r = await t.request({ service: "jira", method: "GET", url: "/rest/api/2/a..b" });
+    assert.deepEqual(r.body, { path: "/jira/rest/api/2/a..b" }, "control: «..» dentro de un nombre no es un segmento");
+  } finally {
+    await s.close();
+  }
+});

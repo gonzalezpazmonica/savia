@@ -113,7 +113,10 @@ import { almacenClaves } from "../cortafuegos/perfil.ts";
 
 test("H-5: perfil persistente en Linux → llavero del sistema; temporal → basic; otros sistemas sin indicador", () => {
   assert.deepEqual(almacenClaves({ persistente: true, plataforma: "linux", env: { DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1/bus" } }), ["--password-store=gnome-libsecret"]);
-  assert.deepEqual(almacenClaves({ persistente: true, plataforma: "linux", env: { XDG_RUNTIME_DIR: "/run/user/1" } }), ["--password-store=gnome-libsecret"]);
+  const rt = mkdtempSync(join(tmpdir(), "soul-rt-"));
+  writeFileSync(join(rt, "bus"), "");
+  assert.deepEqual(almacenClaves({ persistente: true, plataforma: "linux", env: { XDG_RUNTIME_DIR: rt } }), ["--password-store=gnome-libsecret"], "con el socket del bus en XDG_RUNTIME_DIR");
+  rmSync(rt, { recursive: true, force: true });
   assert.deepEqual(almacenClaves({ persistente: false, plataforma: "linux", env: {} }), ["--password-store=basic"]);
   assert.deepEqual(almacenClaves({ persistente: true, plataforma: "darwin", env: {} }), []);
   assert.deepEqual(almacenClaves({ persistente: true, plataforma: "win32", env: {} }), []);
@@ -121,4 +124,8 @@ test("H-5: perfil persistente en Linux → llavero del sistema; temporal → bas
 
 test("H-5: perfil persistente en Linux sin bus de sesión no se abre (no cae a la clave fija)", () => {
   assert.throws(() => almacenClaves({ persistente: true, plataforma: "linux", env: {} }), /llavero/);
+  // Una sesión systemd sin bus (p. ej. SSH) tiene XDG_RUNTIME_DIR pero no el socket: tampoco se abre.
+  const rt = mkdtempSync(join(tmpdir(), "soul-rt-"));
+  try { assert.throws(() => almacenClaves({ persistente: true, plataforma: "linux", env: { XDG_RUNTIME_DIR: rt } }), /llavero/); }
+  finally { rmSync(rt, { recursive: true, force: true }); }
 });

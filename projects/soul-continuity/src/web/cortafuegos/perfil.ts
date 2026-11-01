@@ -41,7 +41,8 @@ export function almacenClaves(o: { persistente: boolean; plataforma?: NodeJS.Pla
   const env = o.env ?? process.env;
   if (plataforma !== "linux") return [];
   if (!o.persistente) return ["--password-store=basic"];
-  if (!env.DBUS_SESSION_BUS_ADDRESS && !env.XDG_RUNTIME_DIR) {
+  // XDG_RUNTIME_DIR existe en casi cualquier sesión systemd (también por SSH sin llavero): solo cuenta si tiene el socket del bus.
+  if (!env.DBUS_SESSION_BUS_ADDRESS && !(env.XDG_RUNTIME_DIR && existsSync(join(env.XDG_RUNTIME_DIR, "bus")))) {
     throw new Error("sin bus de sesión no hay llavero del sistema: el perfil persistente de Soul no se abre (sus cookies quedarían con la clave fija de Chromium)");
   }
   return ["--password-store=gnome-libsecret"];
