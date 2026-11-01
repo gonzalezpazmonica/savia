@@ -1,0 +1,105 @@
+name: Soul Continuidad · adaptador web (SE-490, AC-4e)
+
+# Batería AC-4e y mutantes del cortafuegos web con un navegador real. El Chromium de
+# Playwright se descarga en el runner, en $RUNNER_TEMP, y se pasa por SOUL_NAVEGADOR:
+# `buscarNavegador` falla si esa ruta no existe, así que nunca se cae en silencio al
+# Chrome preinstalado del runner. Sitios sintéticos del banco en loopback, perfil
+# temporal y HOME canario; ninguna cuenta real.
+on:
+  pull_request:
+    paths:
+      - "projects/soul-continuity/src/web/**"
+      - "projects/soul-continuity/src/contract/**"
+      - ".github/workflows/soul-continuity-web.yml"
+  push:
+    branches: [main]
+    paths:
+      - "projects/soul-continuity/src/web/**"
+      - "projects/soul-continuity/src/contract/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soul-continuity-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bateria:
+    name: Tipos, tests y batería AC-4e (Chromium de Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: projects/soul-continuity/src/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node.js oficial
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.x"
+
+      - name: Dependencias (versiones exactas, lockfile con integridad, sin scripts ni navegadores)
+        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tipos (tsc --strict)
+        run: npm run typecheck
+
+      - name: Chromium de Playwright en el directorio temporal del runner
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw-navegadores"
+          node node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+          ruta=$(node -e "import('playwright-core').then((m) => console.log(m.chromium.executablePath()))")
+          case "$ruta" in "$RUNNER_TEMP"/*) ;; *) echo "::error::Chromium fuera de RUNNER_TEMP: $ruta"; exit 1 ;; esac
+          test -x "$ruta"
+          "$ruta" --version
+          echo "SOUL_NAVEGADOR=$ruta" >> "$GITHUB_ENV"
+
+      - name: Tests y batería AC-4e (0 fallos, ≥ 300 comprobaciones)
+        run: npm test
+
+  mutantes:
+    name: Mutantes del cortafuegos (todos muertos por su defensa)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: projects/soul-continuity/src/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node.js oficial
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.x"
+
+      - name: Dependencias (versiones exactas, lockfile con integridad, sin scripts ni navegadores)
+        run: PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Chromium de Playwright en el directorio temporal del runner
+        run: |
+          export PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw-navegadores"
+          node node_modules/playwright-core/cli.js install --with-deps --no-shell chromium
+          ruta=$(node -e "import('playwright-core').then((m) => console.log(m.chromium.executablePath()))")
+          case "$ruta" in "$RUNNER_TEMP"/*) ;; *) echo "::error::Chromium fuera de RUNNER_TEMP: $ruta"; exit 1 ;; esac
+          test -x "$ruta"
+          "$ruta" --version
+          echo "SOUL_NAVEGADOR=$ruta" >> "$GITHUB_ENV"
+
+      # Sale con 1 si queda algún mutante vivo, sin informe o con informe de otro código.
+      - name: Mutantes (en paralelo de 2; tiempo máximo por mutante en el propio script)
+        run: npm run mutantes -- --paralelo 2
+
+      - name: Informes de los mutantes
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: soul-web-mutantes
+          path: |
+            projects/soul-continuity/src/web/resultados/mutantes.json
+            projects/soul-continuity/src/web/resultados/mutantes/
+          retention-days: 14

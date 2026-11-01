@@ -7,7 +7,7 @@ Viene de la preparación de Labs (`se490-prep/web`): formato de receta, validado
 - Node.js ≥ 22.6, TypeScript con `--experimental-strip-types`, sin compilar.
 - Dependencia de ejecución: `playwright-core` 1.64.1, JavaScript puro. Desarrollo: `typescript` y `@types/node`.
 - No se descargan navegadores: `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts`.
-- Navegador: `buscarNavegador()` o `SOUL_NAVEGADOR=<ruta>`. Chromium del sistema solo como último recurso, y entonces lo avisa.
+- Navegador: `buscarNavegador()` o `SOUL_NAVEGADOR=<ruta>`. Si `SOUL_NAVEGADOR` apunta a una ruta que no existe, falla: no cae en otro navegador. Chromium del sistema solo como último recurso, y entonces lo avisa.
 
 ```bash
 npm run typecheck   # tsc --strict, sin emitir
@@ -139,7 +139,8 @@ Los números exactos de la última ejecución están en `resultados/`.
 - **Batería: 356 de 356 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs, 102 de los escenarios nuevos (SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL) y 11 comprobaciones propias de defensas que antes solo se veían en métricas compartidas: cada una exige en el registro del cortafuegos un corte con el motivo de esa defensa.
 - **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, con informe de cada uno (la última ejecución, con `--paralelo 3`). Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte. Ningún id de la batería casa con dos mutantes: `test/mapa-mutantes.test.ts` lo comprueba contra los ids reales de `resultados/bateria-ninguno.json`.
 - Cada informe lleva `huella_codigo`, la huella del código y los datos que decide la batería. Un informe de otro código no cuenta (`SIN_INFORME`, marcado `obsoleto`), y un test exige que los resultados versionados sean del código actual.
-- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 153 tests en verde, 23 de ellos del adaptador del contrato.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 154 tests en verde, 23 de ellos del adaptador del contrato.
+- **CI** (`.github/workflows/soul-continuity-web.yml`): tipos, `npm test` con la batería y los 22 mutantes con el Chromium de Playwright, descargado en `$RUNNER_TEMP` del runner y pasado por `SOUL_NAVEGADOR`. En local, la batería da 356 de 356 con Chrome y con ese Chromium.
 
 ## Lo que queda abierto
 
@@ -147,7 +148,7 @@ Los números exactos de la última ejecución están en `resultados/`.
 - **Operación en la ruta.** OneDrive y SharePoint pueden listar con `RenderListDataAsStream`, con la operación en la URL. El formato v1 solo la lee de una cabecera o del cuerpo JSON, así que esa receta no pasaría.
 - **Workers.** No arrancan en v1. Habilitarlos exige un *shim* de `WebSocket` dentro del worker antes de reanudarlo.
 - **Cobertura con JavaScript hostil:** la precisión se mantiene en 1,0, pero la cobertura cae (Q1: 0,5), igual que en Labs. Es una denegación, no una fuga.
-- **Solo probado en Linux con HTTP de loopback y Chrome.**
+- **Solo probado en Linux con HTTP de loopback, Chrome y el Chromium de Playwright.**
   - Sin probar: HTTPS, Edge, Windows y macOS.
   - Sin comprobar: dónde escribe Chrome `Crash Reports` en Windows y macOS. En Linux se cierra dando `HOME` y `XDG_*` dentro del perfil.
   - La comprobación del canal de depuración por tubería usa `/proc`, así que solo funciona en Linux.
