@@ -20,7 +20,7 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const POL = 'src/attention/politica.ts';
@@ -94,6 +94,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M59 reencolar no la vuelve a dejar pendiente', POL, 'if (i) i.pendiente = true;', ''],
   ['M60 el resumen no saca la alerta de la cola agrupada', RES, 'if (dados.size > 0) pol.estado.excedidas', 'if (false) pol.estado.excedidas'],
   ['M61 una regla convierte cualquier tipo en alerta', POL, "} else if (!sinAutenticar && (tipo.k === 'AVISO' || tipo.k === 'NOTIFICACION')) {", '} else if (!sinAutenticar) {'],
+  ['M62 un bloqueo reenviado vuelve a entrar en la bandeja', POL, 'if (this.bandeja.porDecision(clave) !== undefined) {\n        this.bandeja.anotar(clave, ap);', 'if (false) {\n        this.bandeja.anotar(clave, ap);'],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -109,19 +110,26 @@ const TESTS = [
 /** Copia lo que necesitan los tests: la librería, el contrato del que tira el puente y los tests. */
 function copiar(dest: string): void {
   for (const d of [['src', 'attention'], ['src', 'contract']]) cpSync(join(proyecto, ...d), join(dest, ...d), { recursive: true });
-  cpSync(join(proyecto, 'tests', 'attention'), join(dest, 'tests', 'attention'), { recursive: true, filter: (s) => !s.includes('bench') });
+  const origen = join(proyecto, 'tests', 'attention');
+  const banco = join(origen, 'bench');
+  cpSync(origen, join(dest, 'tests', 'attention'), { recursive: true, filter: (s) => s !== banco && !s.startsWith(banco + sep) });
 }
 
 type Salida = 'pasa' | 'FALLA' | 'CRASH';
 
-function correr(args: string[], cwd: string): { status: number; out: string } {
-  const r = spawnSync(process.execPath, [...NODE, ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  return { status: r.status ?? 1, out: r.stdout ?? '' };
+/** Un mutante que cuelga la ejecución no debe bloquear el job: pasado este plazo, no arrancó. */
+const PLAZO_MS = 120_000;
+
+function correr(args: string[], cwd: string): { status: number; out: string; colgado: boolean } {
+  const r = spawnSync(process.execPath, [...NODE, ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: PLAZO_MS });
+  const colgado = (r.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT';
+  return { status: r.status ?? 1, out: r.stdout ?? '', colgado };
 }
 
 /** Los tests solo matan si falla una aserción; cualquier otro fallo es que no arrancó. */
 function tests(cwd: string): Salida {
   const r = correr(TESTS, cwd);
+  if (r.colgado) return 'CRASH';
   if (r.status === 0) return 'pasa';
   return r.out.includes("code: 'ERR_ASSERTION'") ? 'FALLA' : 'CRASH';
 }
@@ -129,6 +137,7 @@ function tests(cwd: string): Salida {
 /** Las evals solo matan si terminan y alguna métrica falla; sin resumen final, no arrancaron. */
 function evals(cwd: string): Salida {
   const r = correr(['tests/attention/evals.ts'], cwd);
+  if (r.colgado) return 'CRASH';
   const fin = /^PASS (\d+) · FAIL (\d+)$/m.exec(r.out);
   if (r.status === 0 && fin !== null && fin[2] === '0') return 'pasa';
   return fin !== null && fin[2] !== '0' ? 'FALLA' : 'CRASH';

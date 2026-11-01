@@ -303,7 +303,13 @@ export class Politica {
     }
     if (bloqueo !== null) {
       const dec = d('BLOQUEAR_Y_ELEVAR', bloqueo, false, null);
-      this.aBandeja(ev, clave, true, { en: ahora, accion: dec.accion, motivo: bloqueo, hasta: null }, redactado);
+      const ap = { en: ahora, accion: dec.accion, motivo: bloqueo, hasta: null };
+      // El sondeo reenvía lo bloqueado: se anota el reenvío, no es una demanda nueva.
+      if (this.bandeja.porDecision(clave) !== undefined) {
+        this.bandeja.anotar(clave, ap);
+        return dec;
+      }
+      this.aBandeja(ev, clave, true, ap, redactado);
       this.anotarLedger(ev, clase, ahora, dec);
       return dec;
     }

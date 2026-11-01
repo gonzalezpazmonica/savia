@@ -60,3 +60,4 @@ M58 la alerta drenada sigue pendiente	FALLA	pasa	MUERTA
 M59 reencolar no la vuelve a dejar pendiente	FALLA	pasa	MUERTA
 M60 el resumen no saca la alerta de la cola agrupada	FALLA	pasa	MUERTA
 M61 una regla convierte cualquier tipo en alerta	FALLA	pasa	MUERTA
+M62 un bloqueo reenviado vuelve a entrar en la bandeja	FALLA	pasa	MUERTA
