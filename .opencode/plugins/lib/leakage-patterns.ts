@@ -63,23 +63,26 @@ function readLines(path: string): string[] | null {
  * whitelisted in .gitignore (`!<projects>/<name>/`) or authorized by the operator
  * (scripts/protect-project-privacy.sh --authorize), as an exact line of .claude/.project-authorizations.
  * Both files are read from the repo of the EDITED FILE, not the cwd. Fail-closed: no repo, missing or
- * unreadable authorizations, or no exact match → violation. Like the bash hook, the check only runs
- * when the .gitignore declares a whitelist.
+ * unreadable authorizations, or no exact match → violation. When the file's repo declares no
+ * whitelist, the workspace (`projectDir`) whitelist applies, so a file in another repo still cannot
+ * cite the workspace's private projects. The check is skipped only when neither declares a whitelist.
  */
 export function detectProjectLeakage(content: string, filePath: string, projectDir: string): string[] {
   if (!content) return [];
+  const names = [...new Set([...content.matchAll(projRefRx)].map((m) => m[1]))].sort();
+  if (names.length === 0) return []; // nothing to check: no git process on every edit
   const repoRoot = repoRootOf(filePath, projectDir);
-  const gitignore = readLines(resolve(repoRoot ?? projectDir, ".gitignore"));
-  if (!gitignore) return [];
   const wlPrefix = "!" + PROJ + "/";
-  const whitelist = gitignore
-    .filter((l) => l.startsWith(wlPrefix))
-    .map((l) => l.slice(wlPrefix.length).replace(/\/$/, ""));
+  const whitelistOf = (root: string) =>
+    (readLines(resolve(root, ".gitignore")) ?? [])
+      .filter((l) => l.startsWith(wlPrefix))
+      .map((l) => l.slice(wlPrefix.length).replace(/\/$/, ""));
+  let whitelist = repoRoot ? whitelistOf(repoRoot) : [];
+  if (whitelist.length === 0) whitelist = whitelistOf(projectDir);
   if (whitelist.length === 0) return [];
   const authorized = repoRoot ? readLines(resolve(repoRoot, AUTH_REL)) ?? [] : [];
   const allowed = (name: string) => whitelist.includes(name) || authorized.includes(name);
 
-  const names = [...new Set([...content.matchAll(projRefRx)].map((m) => m[1]))].sort();
   return names
     .filter((n) => !allowed(n))
     .map((n) => `Reference to ${PROJ}/${n}/ (project neither whitelisted nor authorized)`);

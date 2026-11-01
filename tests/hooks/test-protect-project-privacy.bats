@@ -106,7 +106,7 @@ prep_script() {
 
 @test "Bash: sed -i que añade whitelist no autorizada se bloquea en el commit" {
   cd "$TMPDIR/repo" && prep_script
-  sed -i '$a !projects/secret-client/' .gitignore
+  printf '%s\n' '!projects/secret-client/' >> .gitignore
   git add .gitignore
   run bash scripts/protect-project-privacy.sh --hook
   [ "$status" -eq 1 ]
@@ -116,7 +116,7 @@ prep_script() {
 @test "Bash: sed -i con proyecto autorizado pasa el commit" {
   cd "$TMPDIR/repo" && prep_script
   echo "soul-demo" > .claude/.project-authorizations
-  sed -i '$a !projects/soul-demo/' .gitignore
+  printf '%s\n' '!projects/soul-demo/' >> .gitignore
   git add .gitignore
   run bash scripts/protect-project-privacy.sh --hook
   [ "$status" -eq 0 ]
@@ -134,7 +134,7 @@ prep_script() {
 
 @test "Bash: whitelist anclada (!/projects/x/) pasa la línea, pero los ficheros del proyecto se bloquean" {
   cd "$TMPDIR/repo" && prep_script
-  sed -i '$a !/projects/sneaky/' .gitignore
+  printf '%s\n' '!/projects/sneaky/' >> .gitignore
   mkdir -p projects/sneaky && echo dato > projects/sneaky/data.txt
   git add .gitignore projects/sneaky/data.txt
   run bash scripts/protect-project-privacy.sh --hook
@@ -144,7 +144,7 @@ prep_script() {
 
 @test "Bash: borrar la exclusión projects/* no permite commitear ficheros de proyecto" {
   cd "$TMPDIR/repo" && prep_script
-  sed -i '/^projects\/\*$/d' .gitignore
+  grep -vx 'projects/\*' .gitignore > .gitignore.new && mv .gitignore.new .gitignore
   mkdir -p projects/other && echo dato > projects/other/data.txt
   git add .gitignore projects/other/data.txt
   run bash scripts/protect-project-privacy.sh --hook
@@ -159,6 +159,28 @@ prep_script() {
   run bash scripts/protect-project-privacy.sh --hook
   [ "$status" -eq 1 ]
   [[ "$output" == *"secret"* ]]
+}
+
+@test "autorización con metacaracteres: !projects/.*/ no casa con cualquier línea autorizada" {
+  cd "$TMPDIR/repo" && prep_script
+  echo "soul-demo" > .claude/.project-authorizations
+  printf '%s\n' '!projects/.*/' >> .gitignore
+  git add .gitignore
+  run bash scripts/protect-project-privacy.sh --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'.*'"* ]]
+}
+
+@test "whitelist con metacaracteres: axb en la whitelist no deja pasar ficheros de a.b" {
+  cd "$TMPDIR/repo" && prep_script
+  printf '%s\n' '!projects/axb/' >> .gitignore
+  echo "axb" > .claude/.project-authorizations
+  git add .gitignore && git commit -qm wl
+  mkdir -p projects/a.b && echo dato > projects/a.b/data.txt
+  git add -f projects/a.b/data.txt
+  run bash scripts/protect-project-privacy.sh --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"a.b"* ]]
 }
 
 # ── Edge cases ──

@@ -221,7 +221,7 @@ run_proj() {
 
 @test "PROJ BLOCK: fichero fuera de todo repo no hereda autorizaciones (fail-closed)" {
   cwd=$(fixture 'soul-demo\n')
-  outside="$(mktemp -d)"
+  outside="$(mktemp -d "$BATS_TEST_TMPDIR/nogit.XXXX")"
   run_proj "$cwd" '!projects/soul-demo/' "$cwd" "$outside/notes.md"
   [[ "$status" -eq 2 ]]
 }

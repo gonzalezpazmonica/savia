@@ -39,7 +39,8 @@ test("blockGitignoredReferences: skips when target is a hook source file (legiti
 // ── Project references vs operator authorizations (.claude/.project-authorizations) ──
 // Same inputs as tests/test-block-gitignored-references.bats (bash port). Literals are split so the
 // workspace's own guard does not flag this file.
-import { mkdtempSync, writeFileSync, mkdirSync, chmodSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, chmodSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { detectProjectLeakage } from "../lib/leakage-patterns.ts";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -132,6 +133,49 @@ test("projects: file outside any git repo gets no authorizations (fail-closed)",
   writeFileSync(join(outside, ".gitignore"), `${P}/*\n!${P}/public-demo/\n`);
   // no repo for the file → .gitignore of the project dir is used, authorizations are not
   expect(await run(cwdRepo, `!${P}/soul-demo/`, cwdRepo, join(outside, "notes.md"))).toMatch(/soul-demo/);
+});
+
+test("projects: file in another repo without whitelist falls back to the workspace whitelist", async () => {
+  const workspace = fixture(null);
+  const other = mkdtempSync(join(tmpdir(), "bgr-other-"));
+  tmpRoots.push(other);
+  spawnSync("git", ["init", "-q", other]);
+  writeFileSync(join(other, ".gitignore"), "node_modules/\n");
+  const readme = join(other, "README.md");
+  expect(await run(other, `see ${P}/secret-client/`, workspace, readme)).toMatch(/secret-client/);
+  expect(await run(other, `see ${P}/public-demo/`, workspace, readme)).toBe("allow");
+});
+
+test("projects: rule skipped only when neither the file repo nor the workspace declares a whitelist", async () => {
+  const mk = () => {
+    const d = mkdtempSync(join(tmpdir(), "bgr-nowl-"));
+    tmpRoots.push(d);
+    spawnSync("git", ["init", "-q", d]);
+    writeFileSync(join(d, ".gitignore"), "node_modules/\n");
+    return d;
+  };
+  const ws = mk(), other = mk();
+  expect(await run(other, `see ${P}/secret-client/`, ws, join(other, "README.md"))).toBe("allow");
+});
+
+test("projects: no git process when content has no project reference", async () => {
+  const bin = mkdtempSync(join(tmpdir(), "bgr-bin-"));
+  tmpRoots.push(bin);
+  const marker = join(bin, "called");
+  writeFileSync(join(bin, "git"), `#!/bin/sh\necho x >> "${marker}"\nexit 1\n`);
+  chmodSync(join(bin, "git"), 0o755);
+  const r = fixture(null);
+  const prevPath = process.env.PATH;
+  process.env.PATH = `${bin}:${prevPath}`;
+  try {
+    expect(detectProjectLeakage("clean content", join(r, "README.md"), r)).toEqual([]);
+    expect(existsSync(marker)).toBe(false);
+    // control: with a reference the fake git is used (so the probe can fail)
+    detectProjectLeakage(`see ${P}/x-y/`, join(r, "README.md"), r);
+    expect(existsSync(marker)).toBe(true);
+  } finally {
+    process.env.PATH = prevPath;
+  }
 });
 
 test("mutant: removing the authorizations lookup makes the authorized case block", async () => {
