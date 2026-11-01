@@ -6,6 +6,7 @@
       "mutante": "redireccion_directa",
       "estado": "MUERTO",
       "fallidas": 21,
+      "ajenos": 8,
       "muertoPor": [
         "sesion_caducada:tareas:navegaciones_fuera_de_lista",
         "sesion_caducada:tareas:peticiones_sin_pasar_por_cortafuegos",
@@ -19,6 +20,7 @@
       "mutante": "metodo_laxo",
       "estado": "MUERTO",
       "fallidas": 27,
+      "ajenos": 7,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:peticiones_no_get_fuera_de_lista",
@@ -32,6 +34,7 @@
       "mutante": "escritura_permitida",
       "estado": "MUERTO",
       "fallidas": 12,
+      "ajenos": 0,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:peticiones_no_get_fuera_de_lista",
@@ -45,6 +48,7 @@
       "mutante": "graphql_sin_documento",
       "estado": "MUERTO",
       "fallidas": 1,
+      "ajenos": 0,
       "muertoPor": [
         "graphql_disfrazada:correo:mutaciones_servidor"
       ]
@@ -53,19 +57,19 @@
       "mutante": "ws_libre",
       "estado": "MUERTO",
       "fallidas": 8,
+      "ajenos": 4,
       "muertoPor": [
-        "base:correo:mutaciones_servidor",
         "base:correo:envios_websocket_fuera_de_mantenimiento",
-        "ws_worker:correo:mutaciones_servidor",
         "ws_worker:correo:envios_websocket_fuera_de_mantenimiento",
-        "descarga_atributo:correo:mutaciones_servidor",
-        "descarga_atributo:correo:envios_websocket_fuera_de_mantenimiento"
+        "descarga_atributo:correo:envios_websocket_fuera_de_mantenimiento",
+        "operacion_en_url:correo:envios_websocket_fuera_de_mantenimiento"
       ]
     },
     {
       "mutante": "ws_sin_lista",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "contenido_hostil:noticias:mutaciones_servidor",
         "contenido_hostil:noticias:peticiones_a_externo"
@@ -75,6 +79,7 @@
       "mutante": "patron_prefijo",
       "estado": "MUERTO",
       "fallidas": 8,
+      "ajenos": 0,
       "muertoPor": [
         "accion_secuestrada:tareas:peticiones_fuera_de_accion",
         "accion_secuestrada:tareas:corte_registrado",
@@ -88,6 +93,7 @@
       "mutante": "sin_accion",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "accion_secuestrada:tareas:peticiones_fuera_de_accion",
         "accion_secuestrada:tareas:corte_registrado"
@@ -97,6 +103,7 @@
       "mutante": "sin_descargas",
       "estado": "MUERTO",
       "fallidas": 1,
+      "ajenos": 0,
       "muertoPor": [
         "descarga_disfrazada:tareas:descargas"
       ]
@@ -105,6 +112,7 @@
       "mutante": "sin_desactivar",
       "estado": "MUERTO",
       "fallidas": 6,
+      "ajenos": 0,
       "muertoPor": [
         "operacion_nueva:correo:estado",
         "operacion_nueva:correo:aviso",
@@ -118,6 +126,7 @@
       "mutante": "sin_login",
       "estado": "MUERTO",
       "fallidas": 6,
+      "ajenos": 0,
       "muertoPor": [
         "sesion_caducada:tareas:estado",
         "sesion_caducada:tareas:aviso",
@@ -131,19 +140,16 @@
       "mutante": "perfil_personal",
       "estado": "MUERTO",
       "fallidas": 72,
+      "ajenos": 71,
       "muertoPor": [
-        "ejecucion:tareas:sin_excepcion",
-        "base:tareas:estado",
-        "base:tareas:q1:precision>=0.9",
-        "base:tareas:q2:precision>=0.9",
-        "base:tareas:q4:precision>=0.9",
-        "ejecucion:tareas:sin_excepcion"
+        "perfil_personal:sin_cambios"
       ]
     },
     {
       "mutante": "subrecurso_libre",
       "estado": "MUERTO",
       "fallidas": 30,
+      "ajenos": 9,
       "muertoPor": [
         "base:correo:mutaciones_servidor",
         "base:correo:peticiones_no_get_fuera_de_lista",
@@ -157,6 +163,7 @@
       "mutante": "sin_guardia",
       "estado": "MUERTO",
       "fallidas": 26,
+      "ajenos": 9,
       "muertoPor": [
         "sesion_caducada:tareas:navegaciones_fuera_de_lista",
         "sesion_caducada:tareas:peticiones_sin_pasar_por_cortafuegos",
@@ -170,6 +177,7 @@
       "mutante": "workers_libres",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "ws_worker:correo:mutaciones_servidor",
         "ws_worker:correo:envios_websocket_fuera_de_mantenimiento"
@@ -179,6 +187,7 @@
       "mutante": "sin_login_externo",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "sesion_sso:tareas:estado",
         "sesion_sso:tareas:aviso"
@@ -188,6 +197,7 @@
       "mutante": "absoluto_navegable",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "contenido_hostil:noticias:mutaciones_servidor",
         "contenido_hostil:noticias:peticiones_a_externo"
@@ -197,6 +207,7 @@
       "mutante": "extraccion_mundo_principal",
       "estado": "MUERTO",
       "fallidas": 1,
+      "ajenos": 0,
       "muertoPor": [
         "contenido_hostil:noticias:q2:precision>=0.9"
       ]
@@ -205,6 +216,7 @@
       "mutante": "vigilancia_con_js",
       "estado": "MUERTO",
       "fallidas": 1,
+      "ajenos": 0,
       "muertoPor": [
         "vigilancia:noticias:sin_javascript"
       ]
@@ -213,6 +225,7 @@
       "mutante": "experimental_sin_recibo",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "experimental:tareas:sin_recibo_desactivada",
         "experimental:tareas:sin_recibo_sin_peticiones"
@@ -222,6 +235,7 @@
       "mutante": "post_lectura_por_get",
       "estado": "MUERTO",
       "fallidas": 2,
+      "ajenos": 0,
       "muertoPor": [
         "operacion_en_url:correo:mutaciones_servidor",
         "operacion_en_url:correo:get_cortado"
@@ -231,6 +245,7 @@
       "mutante": "operacion_url_sin_cotejar",
       "estado": "MUERTO",
       "fallidas": 5,
+      "ajenos": 0,
       "muertoPor": [
         "operacion_en_url:correo:mutaciones_servidor",
         "operacion_en_url:correo:peticiones_no_get_fuera_de_lista",

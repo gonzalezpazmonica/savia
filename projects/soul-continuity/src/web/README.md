@@ -135,7 +135,7 @@ Los números exactos de la última ejecución están en `resultados/`.
 
 - **Batería: 343 de 343 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 100 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL.
 - **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, en serie y con informe de cada uno. Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte.
-- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 128 tests en verde, 22 de ellos del adaptador del contrato.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 123 tests en verde, 19 de ellos del adaptador del contrato.
 
 ## Lo que queda abierto
 
