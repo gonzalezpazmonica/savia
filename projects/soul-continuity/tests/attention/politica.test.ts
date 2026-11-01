@@ -347,3 +347,56 @@ test('pideDecision distingue lo que exige respuesta', () => {
   assert.ok(!pideDecision(aviso('a')));
   assert.ok(!pideDecision(deAgente('n', { k: 'NOTIFICACION' })));
 });
+
+// --- revisión de #1441: alertas vetadas o vencidas, control, franjas y estado ---------------
+
+test('una alerta de un objetivo vetado se registra y llega al levantar el veto', () => {
+  const pol = p(opA());
+  const ahora = t(0, 10, 0);
+  assert.ok(pol.control({ k: 'VETAR', objetivo: 'g' }, 'PERSONA', ahora));
+  const ev: Evento = { ...alerta('av', 'fuga-detectada'), objetivo: 'g' };
+  es(pol.decidir(ev, ahora), 'REGISTRAR', motivo('VETADO'), false);
+  assert.equal(pol.bandeja.porEvento('av'), undefined);
+  assert.ok(pol.control({ k: 'LEVANTAR_VETO', objetivo: 'g' }, 'PERSONA', ahora));
+  es(pol.decidir(ev, ahora + 1), 'BLOQUEAR_Y_ELEVAR', motivo('ALERTA'), true);
+  es(p(opA()).decidir({ ...ev, objetivo: 'otro' }, ahora), 'BLOQUEAR_Y_ELEVAR', motivo('ALERTA'), true);
+});
+
+test('una alerta con el contexto vencido se registra; un minuto antes, llega', () => {
+  const ahora = t(0, 10, 0);
+  es(p(opA()).decidir({ ...alerta('ac', 'fuga-detectada'), caduca: ahora }, ahora), 'REGISTRAR', motivo('CONTEXTO_VENCIDO'), false);
+  es(p(opA()).decidir({ ...alerta('ad', 'fuga-detectada'), caduca: ahora + 1 }, ahora), 'BLOQUEAR_Y_ELEVAR', motivo('ALERTA'), true);
+});
+
+test('un agente autenticado puede detener y vetar; un veto vacío no se acepta', () => {
+  const pol = p(opA());
+  assert.ok(pol.control({ k: 'VETAR', objetivo: 'g' }, 'AGENTE_AUTENTICADO', t(0, 10, 0)));
+  assert.ok(!pol.control({ k: 'VETAR', objetivo: '' }, 'PERSONA', t(0, 10, 0)));
+  assert.deepEqual([...pol.estado.vetos], ['g']);
+});
+
+test('una franja con horas fuera de rango no contiene ningún minuto ni tiene inicio', () => {
+  const todos = [0, 1, 2, 3, 4, 5, 6];
+  for (const [i, f] of [[[24, 0], [9, 0]], [[9, 0], [9, 60]], [[-1, 0], [9, 0]], [[9.5, 0], [12, 0]], [[9, 0], [25, 0]]] as const) {
+    const fr = Franja.nueva(todos, i, f);
+    for (let m = 0; m < 2 * 1440; m += 30) assert.equal(fr.instancia(LUNES + m), null, `${i}-${f}`);
+    assert.equal(fr.siguienteInicio(LUNES), null, `${i}-${f}`);
+  }
+  const limite = Franja.nueva(todos, [23, 59], [0, 0]);
+  assert.equal(limite.instancia(LUNES + 23 * 60 + 59), LUNES + 23 * 60 + 59, '23:59 es válida');
+});
+
+test('una franja que cruza la medianoche contiene la madrugada del primer día', () => {
+  const fr = Franja.nueva([0, 1, 2, 3, 4, 5, 6], [22, 0], [2, 0]);
+  assert.equal(fr.instancia(60), -120);
+  assert.equal(fr.instancia(3 * 60), null);
+});
+
+test('un estado con vetos, ids vacíos o alertas agrupadas duplicadas falla cerrado', () => {
+  const cab = 'soul-atencion-estado v2\nparado=0\n';
+  assert.equal(estadoDesdeTexto(`${cab}veto=\n`), null, 'veto vacío');
+  assert.equal(estadoDesdeTexto(`${cab}preguntada=\n`), null, 'preguntada vacía');
+  assert.equal(estadoDesdeTexto(`${cab}excedida=\n`), null, 'excedida vacía');
+  assert.equal(estadoDesdeTexto(`${cab}excedida=a\nexcedida=a\n`), null, 'excedida duplicada');
+  assert.deepEqual(estadoDesdeTexto(`${cab}excedida=a\nexcedida=b\n`)?.excedidas, ['a', 'b']);
+});

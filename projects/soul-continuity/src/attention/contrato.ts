@@ -17,14 +17,16 @@ export function rutaDeContrato(route: Route): Ruta {
 }
 
 /**
- * Fuera de la web, solo `tenant` y `dkim_dmarc` autentican; `unauthenticated`, `unknown` y
- * cualquier valor inesperado no autentican (fail-closed).
+ * Solo `tenant` y `dkim_dmarc` fuera de la web autentican. `unknown` es `DESCONOCIDO`, que
+ * tampoco autentica; `unauthenticated` y cualquier valor inesperado, `NO_AUTENTICADO`
+ * (fail-closed).
  *
- * En la web el contrato fija el remitente a `unknown`: el evento lo trae el adaptador y llega
- * a la política con ruta `WEB`, que nunca produce alerta, solo aviso (AC-4c). Cualquier otro
- * valor en la web contradice el contrato y no autentica.
+ * En la web el contrato fija el remitente a `unknown` y nada autentica, diga lo que diga
+ * `auth`. La política reconoce la ruta `WEB` por sí misma: baja a aviso las reglas de alerta
+ * (AC-4c) y lo demás que llega por la web no pide nada a la persona.
  */
 export function origenDeContrato(auth: SenderAuth | string | null | undefined, route: Route): Origen {
-  if (route === 'web') return auth === 'unknown' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';
+  if (auth === 'unknown') return 'DESCONOCIDO';
+  if (route === 'web') return 'NO_AUTENTICADO';
   return auth === 'tenant' || auth === 'dkim_dmarc' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';
 }

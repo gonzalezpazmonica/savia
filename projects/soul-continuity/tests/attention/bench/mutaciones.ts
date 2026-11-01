@@ -8,6 +8,8 @@
 // M01–M18: las 18 mutaciones de Labs (soul-atencion), reescritas contra el código TypeScript.
 // M19–M36: las de AC-4b (alertas con tope, modos, remitente, resúmenes, registro de demanda).
 // M37–M41: redacción fail-closed y puente con el contrato (`src/contract`, que también se copia).
+// M42–M50: revisión de la PR #1441 (la web no autentica, alertas vetadas o vencidas, control,
+// franjas y estado).
 //
 // Uso: node --experimental-strip-types tests/attention/bench/mutaciones.ts
 import { spawnSync } from 'node:child_process';
@@ -21,13 +23,14 @@ const EST = 'src/attention/estado.ts';
 const RES = 'src/attention/resumen.ts';
 const LED = 'src/attention/ledger.ts';
 const PUE = 'src/attention/contrato.ts';
+const TIE = 'src/attention/tiempo.ts';
 
 const TODOS = "['DISPONIBLE', 'FOCO', 'DESCANSO', 'FUERA'] as const";
 
 const MUTACIONES: Array<[string, string, string, string]> = [
   ['M01 sin comprobar ventana', POL, 'const inst = instanciaEn(ventanas, ahora);', 'const inst = instanciaEn(ventanas, ahora) ?? 0;'],
   ['M02 sin presupuesto', POL, '>= this.presupuesto) {', '>= Number.MAX_SAFE_INTEGER) {'],
-  ['M03 alerta sin fuente autenticada', POL, "if (ev.origen === 'NO_AUTENTICADO' || ev.codigoAlerta === null) return null;", 'if (ev.codigoAlerta === null) return null;'],
+  ['M03 alerta sin fuente autenticada', POL, '} else if (!sinAutenticar) {\n        return this.decidirAlerta', '} else {\n        return this.decidirAlerta'],
   ['M04 veto ignorado', POL, "} else if (ev.objetivo !== null && this.estado.vetos.has(ev.objetivo)) {\n      bloqueo = m('VETADO');", "} else if (false) {\n      bloqueo = m('VETADO');"],
   ['M05 silencio como permiso', POL, 'this.bandeja.anotar(ev.tipo.decisionId, {', 'this.bandeja.resolver(ev.tipo.decisionId);\n      this.bandeja.anotar(ev.tipo.decisionId, {'],
   ['M06 el LLM eleva urgencia', POL, 'return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? null;', "return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? (ev.urgenciaSugeridaLlm === 'CRITICA' ? (this.config.alertas[0] ?? null) : null);"],
@@ -39,7 +42,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M12 reintento ambiguo se registra', POL, "tipo.efectoPrevio === 'NO_OCURRIO'", 'true'],
   ['M13 descanso declarado ignorado', POL, "if (instanciaEn(this.config.descansos, ahora) !== null) return 'DESCANSO';", "if (false) return 'DESCANSO';"],
   ['M14 PARA se pierde al reiniciar', EST, "e.parado = v === '1';", 'e.parado = false;'],
-  ['M15 permiso fuera de contrato aceptado', POL, '(!tipo.dentroDeContrato || ev.origen', '(false || ev.origen'],
+  ['M15 permiso fuera de contrato aceptado', POL, '(!tipo.dentroDeContrato || sinAutenticar)', '(false || sinAutenticar)'],
   ['M16 agente declara el modo', POL, "case 'DECLARAR_MODO':\n        if (!persona) return false;", "case 'DECLARAR_MODO':"],
   ['M17 decisión repetida se vuelve a preguntar', POL, 'if (this.estado.preguntadas.has(clave) || this.bandeja.porDecision(clave) !== undefined) {', 'if (false) {'],
   ['M18 estado ilegible aceptado', EST, 'default:\n        return null;', 'default:\n        break;'],
@@ -48,7 +51,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M21 la alerta gasta presupuesto de avisos', POL, 'this.estado.alertasUsadas.set(cubo, usadas + 1);', 'this.estado.alertasUsadas.set(cubo, usadas + 1);\n        const v = instanciaEn(this.config.ventanas, ahora);\n        if (v !== null) this.estado.usados.set(v, (this.estado.usados.get(v) ?? 0) + 1);'],
   ['M22 alerta sobre el tope se pierde', POL, 'this.estado.excedidas.push(ev.id);', 'void 0;'],
   ['M23 urgencia inyectada eleva a alerta', POL, 'const regla = this.reglaDe(ev);', `const regla = this.reglaDe(ev) ?? (ev.urgenciaEnContenido === 'CRITICA' ? { codigo: 'x', modos: ${TODOS} } : null);`],
-  ['M24 regla en web es alerta', POL, "if (ev.ruta === 'WEB') {", 'if (false) {'],
+  ['M24 regla en web es alerta', POL, '      if (web) {\n        // Por la web', '      if (false) {\n        // Por la web'],
   ['M25 aviso repetido gasta presupuesto otra vez', POL, 'this.estado.preguntadas.add(ev.id);\n      this.aBandeja(ev, null, false, ap, redactado);', 'this.aBandeja(ev, null, false, ap, redactado);'],
   ['M26 alerta repetida se duplica', POL, 'if (this.estado.preguntadas.has(ev.id)) {\n      const dec', 'if (false) {\n      const dec'],
   ['M27 resumen antes de su hora', RES, 'return hoy <= ahora ? hoy : hoy - DIA;', 'return hoy;'],
@@ -63,9 +66,18 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M36 el estado guarda alertas agrupadas sin persistir', EST, 'for (const id of e.excedidas) out +=', 'for (const id of []) out +='],
   ['M37 nivel fuera del contrato sin forzar a N4', PUE, '? NIVELES[level as Level] : 4;', '? NIVELES[level as Level] : (undefined as never);'],
   ['M38 redacción sin validar el nivel', POL, '!(NIVEL_VALIDO(nivel) && NIVEL_VALIDO(canal) && (nivel as number) <= (canal as number))', '(nivel as number) > (canal as number)'],
-  ['M39 en la web solo se degradan las reglas de remitente', POL, "if (ev.ruta === 'WEB') {", "if (regla.porRemitente === true && ev.ruta === 'WEB') {"],
-  ['M40 el puente descarta todo lo que llega por la web', PUE, "if (route === 'web') return auth === 'unknown' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';", "if (route === 'web') return 'NO_AUTENTICADO';"],
-  ['M41 el puente acepta cualquier remitente por la web', PUE, "if (route === 'web') return auth === 'unknown' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';", "if (route === 'web') return 'AGENTE_AUTENTICADO';"],
+  ['M39 en la web solo se degradan las reglas de remitente', POL, '      if (web) {\n        // Por la web', '      if (regla.porRemitente === true && web) {\n        // Por la web'],
+  ['M40 el puente autentica remitentes de la web', PUE, "  if (route === 'web') return 'NO_AUTENTICADO';\n", ''],
+  ['M41 el puente autentica el remitente desconocido', PUE, "if (auth === 'unknown') return 'DESCONOCIDO';", "if (auth === 'unknown') return 'AGENTE_AUTENTICADO';"],
+  ['M42 la política se fía del origen declarado en la web', POL, 'let sinAutenticar = web || (', 'let sinAutenticar = ('],
+  ['M43 lo desconocido autentica', POL, "(ev.origen !== 'PERSONA' && ev.origen !== 'AGENTE_AUTENTICADO')", "ev.origen === 'NO_AUTENTICADO'"],
+  ['M44 una regla web de remitente suplantado avisa', POL, "sinAutenticar = ev.origen === 'NO_AUTENTICADO';", 'sinAutenticar = false;'],
+  ['M45 la alerta de un objetivo vetado se entrega', POL, "if (ev.objetivo !== null && this.estado.vetos.has(ev.objetivo)) descarte = m('VETADO');", "if (false) descarte = m('VETADO');"],
+  ['M46 la alerta con el contexto vencido se entrega', POL, "else if (ev.caduca !== null && ev.caduca <= ahora) descarte", 'else if (false) descarte'],
+  ['M47 un origen sin autenticar detiene', POL, "if (!autenticado) return false;\n        this.estado.parado = true;", 'this.estado.parado = true;'],
+  ['M48 un origen sin autenticar veta', POL, "if (!autenticado || c.objetivo === '') return false;", "if (c.objetivo === '') return false;"],
+  ['M49 franja con horas fuera de rango', TIE, 'hh >= 0 && hh < 24', 'hh >= 0 && hh <= 24'],
+  ['M50 el estado acepta alertas agrupadas duplicadas', EST, "if (v === '' || e.excedidas.includes(decod(v))) return null;", "if (v === '') return null;"],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));

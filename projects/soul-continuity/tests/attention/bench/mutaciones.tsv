@@ -38,5 +38,14 @@ M36 el estado guarda alertas agrupadas sin persistir	FALLA	pasa	MUERTA
 M37 nivel fuera del contrato sin forzar a N4	FALLA	pasa	MUERTA
 M38 redacción sin validar el nivel	FALLA	pasa	MUERTA
 M39 en la web solo se degradan las reglas de remitente	FALLA	pasa	MUERTA
-M40 el puente descarta todo lo que llega por la web	FALLA	pasa	MUERTA
-M41 el puente acepta cualquier remitente por la web	FALLA	pasa	MUERTA
+M40 el puente autentica remitentes de la web	FALLA	pasa	MUERTA
+M41 el puente autentica el remitente desconocido	FALLA	pasa	MUERTA
+M42 la política se fía del origen declarado en la web	FALLA	pasa	MUERTA
+M43 lo desconocido autentica	FALLA	pasa	MUERTA
+M44 una regla web de remitente suplantado avisa	FALLA	FALLA	MUERTA
+M45 la alerta de un objetivo vetado se entrega	FALLA	pasa	MUERTA
+M46 la alerta con el contexto vencido se entrega	FALLA	pasa	MUERTA
+M47 un origen sin autenticar detiene	FALLA	pasa	MUERTA
+M48 un origen sin autenticar veta	FALLA	pasa	MUERTA
+M49 franja con horas fuera de rango	FALLA	pasa	MUERTA
+M50 el estado acepta alertas agrupadas duplicadas	FALLA	pasa	MUERTA

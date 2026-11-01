@@ -88,6 +88,7 @@ export function estadoDesdeTexto(s: string): Estado | null {
         vistoParado = true;
         break;
       case 'veto':
+        if (v === '') return null;
         e.vetos.add(decod(v));
         break;
       case 'modo': {
@@ -111,9 +112,11 @@ export function estadoDesdeTexto(s: string): Estado | null {
         break;
       }
       case 'excedida':
+        if (v === '' || e.excedidas.includes(decod(v))) return null;
         e.excedidas.push(decod(v));
         break;
       case 'preguntada':
+        if (v === '') return null;
         e.preguntadas.add(decod(v));
         break;
       case 'resumen_inicio':

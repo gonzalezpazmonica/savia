@@ -4,9 +4,9 @@ import { test } from 'node:test';
 
 import { LEVELS, SENDER_AUTH, ROUTES, type Level } from '../../src/contract/claims.ts';
 import {
-  Politica, mismoMotivo, motivo, nivelDeContrato, origenDeContrato, rutaDeContrato, type Evento,
+  Politica, deAgente, mismoMotivo, motivo, nivelDeContrato, origenDeContrato, rutaDeContrato, type Evento,
 } from '../../src/attention/index.ts';
-import { alerta, opA, t } from './comun.ts';
+import { alerta, aprobacion, aviso, decision, notificacion, opA, t } from './comun.ts';
 
 test('cada nivel del contrato tiene su equivalente numérico', () => {
   assert.deepEqual(LEVELS.map(nivelDeContrato), [1, 2, 3, 4]);
@@ -27,11 +27,17 @@ test('un nivel desconocido llega redactado al canal, en la bandeja y en las aler
   assert.ok(!JSON.stringify(pol.drenarAlertasAgrupadas()).includes('secreto'));
 });
 
-test('fuera de la web solo tenant y dkim_dmarc autentican; en la web, solo unknown', () => {
+test('solo tenant y dkim_dmarc fuera de la web autentican; en la web, nada', () => {
+  const esperado: Record<string, Record<string, string>> = {
+    tenant: { web: 'NO_AUTENTICADO', otra: 'AGENTE_AUTENTICADO' },
+    dkim_dmarc: { web: 'NO_AUTENTICADO', otra: 'AGENTE_AUTENTICADO' },
+    unauthenticated: { web: 'NO_AUTENTICADO', otra: 'NO_AUTENTICADO' },
+    unknown: { web: 'DESCONOCIDO', otra: 'DESCONOCIDO' },
+  };
+  assert.deepEqual(Object.keys(esperado).sort(), [...SENDER_AUTH].sort(), 'la tabla cubre todo el contrato');
   for (const route of ROUTES) {
     for (const auth of SENDER_AUTH) {
-      const esperado = route === 'web' ? auth === 'unknown' : auth === 'tenant' || auth === 'dkim_dmarc';
-      assert.equal(origenDeContrato(auth, route) === 'AGENTE_AUTENTICADO', esperado, `${route}/${auth}`);
+      assert.equal(origenDeContrato(auth, route), esperado[auth]![route === 'web' ? 'web' : 'otra'], `${route}/${auth}`);
     }
   }
 });
@@ -47,8 +53,8 @@ test('la ruta web se traduce a WEB y el resto a API', () => {
   for (const r of ['graph', 'api', 'local'] as const) assert.equal(rutaDeContrato(r), 'API');
 });
 
-test('la ruta web solo acepta el remitente `unknown` que fija el contrato', () => {
-  assert.equal(origenDeContrato('unknown', 'web'), 'AGENTE_AUTENTICADO');
+test('la ruta web nunca autentica: `unknown` es desconocido y el resto, sin autenticar', () => {
+  assert.equal(origenDeContrato('unknown', 'web'), 'DESCONOCIDO');
   for (const v of ['tenant', 'dkim_dmarc', 'unauthenticated', null, undefined, '']) {
     assert.equal(origenDeContrato(v, 'web'), 'NO_AUTENTICADO', String(v));
   }
@@ -85,4 +91,49 @@ test('de extremo a extremo: por web la alerta baja a aviso (diferido de noche, a
   assert.ok(ventana.degradadaAAviso);
   assert.equal(ventana.accion, 'AVISAR');
   assert.ok(mismoMotivo(ventana.motivo, motivo('DISPONIBLE')));
+});
+
+// La web solo puede avisar por una regla de alerta; nada de lo que llega por ella pide una
+// decisión, un permiso o una aprobación a la persona, ni gasta presupuesto (revisión de #1441).
+const pideAlgo = (id: string): Array<[string, Evento]> => [
+  ['DECISION', decision(id, 'g')],
+  ['APROBACION_SEGURIDAD', aprobacion(`${id}a`, 'g')],
+  ['PETICION_PERMISO', deAgente(`${id}p`, { k: 'PETICION_PERMISO', dentroDeContrato: true })],
+  ['REINTENTO', deAgente(`${id}r`, { k: 'REINTENTO', efectoPrevio: 'DESCONOCIDO' })],
+  ['NOTIFICACION', notificacion(`${id}n`)],
+  ['AVISO', aviso(`${id}v`)],
+];
+
+for (const [como, origen] of [['por el puente', origenDeContrato('unknown', 'web')], ['con origen declarado', 'AGENTE_AUTENTICADO']] as const) {
+  test(`por la web, ${como}, nada pide decisión ni gasta presupuesto`, () => {
+    for (const [tipo, base] of pideAlgo('w')) {
+      const pol = new Politica(opA());
+      const d = pol.decidir({ ...base, origen, ruta: 'WEB' }, t(0, 10, 0));
+      assert.ok(!d.contactarAhora, tipo);
+      assert.equal(pol.estado.usados.size, 0, `${tipo}: presupuesto`);
+      if (tipo === 'PETICION_PERMISO') {
+        assert.equal(d.accion, 'BLOQUEAR_Y_ELEVAR', tipo);
+        assert.ok(mismoMotivo(d.motivo, motivo('PERMISO_ILEGITIMO')), tipo);
+      } else {
+        assert.equal(d.accion, 'REGISTRAR', tipo);
+        assert.ok(mismoMotivo(d.motivo, motivo('ORIGEN_NO_AUTENTICADO')), tipo);
+      }
+    }
+  });
+}
+
+test('control: la web y lo desconocido no detienen ni vetan', () => {
+  for (const origen of [origenDeContrato('unknown', 'web'), origenDeContrato('unknown', 'graph'), 'NO_AUTENTICADO'] as const) {
+    const pol = new Politica(opA());
+    assert.ok(!pol.control({ k: 'PARA' }, origen, t(0, 10, 0)), `${origen}: PARA`);
+    assert.ok(!pol.control({ k: 'VETAR', objetivo: 'g' }, origen, t(0, 10, 0)), `${origen}: VETAR`);
+    assert.ok(!pol.estado.parado && pol.estado.vetos.size === 0, origen);
+  }
+});
+
+test('por API, un remitente desconocido (sin cabeceras) no alerta', () => {
+  const d = new Politica(opA()).decidir(porPuente('e5', 'unknown', 'api'), t(1, 3, 0));
+  assert.equal(d.accion, 'REGISTRAR');
+  assert.ok(mismoMotivo(d.motivo, motivo('ORIGEN_NO_AUTENTICADO')));
+  assert.ok(!d.contactarAhora && !d.degradadaAAviso);
 });

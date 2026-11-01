@@ -57,7 +57,11 @@ export interface Config {
 
 export const TOPE_ALERTAS_POR_DEFECTO = 3;
 
-export type Origen = 'PERSONA' | 'AGENTE_AUTENTICADO' | 'NO_AUTENTICADO';
+/**
+ * `DESCONOCIDO`: no hay forma de saber quién lo envía (la ruta web, o el correo sin cabeceras).
+ * No autentica nada; solo distingue «no se sabe» de «se sabe que no» (`NO_AUTENTICADO`).
+ */
+export type Origen = 'PERSONA' | 'AGENTE_AUTENTICADO' | 'DESCONOCIDO' | 'NO_AUTENTICADO';
 export type Urgencia = 'NORMAL' | 'ALTA' | 'CRITICA';
 export type CosteRetraso = 'BAJO' | 'MEDIO' | 'ALTO';
 export type EfectoPrevio = 'NO_OCURRIO' | 'DESCONOCIDO';

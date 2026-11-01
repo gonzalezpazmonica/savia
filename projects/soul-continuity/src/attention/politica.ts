@@ -63,17 +63,21 @@ export class Politica {
   }
 
   /**
-   * Aplica una orden de control. Devuelve si se aceptó. Detener y vetar se aceptan de
-   * cualquier origen (es lo seguro); reanudar, levantar un veto, declarar el modo y responder,
-   * solo desde el canal de la persona.
+   * Aplica una orden de control. Devuelve si se aceptó. Detener y vetar se aceptan de la
+   * persona o de un agente autenticado (es lo seguro), nunca de un origen sin autenticar: un
+   * veto calla los avisos y las alertas de su objetivo. Reanudar, levantar un veto, declarar el
+   * modo y responder, solo desde el canal de la persona.
    */
   control(c: Control, origen: Origen, _ahora: Minuto): boolean {
     const persona = origen === 'PERSONA';
+    const autenticado = persona || origen === 'AGENTE_AUTENTICADO';
     switch (c.k) {
       case 'PARA':
+        if (!autenticado) return false;
         this.estado.parado = true;
         return true;
       case 'VETAR':
+        if (!autenticado || c.objetivo === '') return false;
         this.estado.vetos.add(c.objetivo);
         return true;
       case 'REANUDAR':
@@ -140,9 +144,9 @@ export class Politica {
     return null;
   }
 
-  /** Regla de alerta que casa con el evento. La fuente debe estar autenticada. */
+  /** Regla de alerta declarada con el código del evento, sin mirar el origen. */
   private reglaDe(ev: Evento): ReglaAlerta | null {
-    if (ev.origen === 'NO_AUTENTICADO' || ev.codigoAlerta === null) return null;
+    if (ev.codigoAlerta === null) return null;
     return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? null;
   }
 
@@ -187,16 +191,23 @@ export class Politica {
       return d('REGISTRAR', m('SILENCIO_NO_ES_PERMISO'), false, null);
     }
 
+    // Solo la persona y un agente autenticado autentican. La web nunca (AC-4c), aunque el
+    // llamador no use el puente y declare otro origen.
+    const web = ev.ruta === 'WEB';
+    let sinAutenticar = web || (ev.origen !== 'PERSONA' && ev.origen !== 'AGENTE_AUTENTICADO');
+
     // 2. Alerta declarada por la persona: no gasta presupuesto; tiene tope propio.
     const regla = this.reglaDe(ev);
     let tipo = ev.tipo;
     if (regla !== null) {
-      if (ev.ruta === 'WEB') {
-        // Sin API no hay identidad autenticada de lo que llega: nunca es alerta, solo aviso.
-        // Vale para toda regla, sea o no de remitente, aunque el llamador no use el puente.
+      if (web) {
+        // Por la web una regla nunca es alerta, solo aviso, sea o no de remitente. Es lo único
+        // de la web que puede avisar, porque lo pide una regla de la persona; un remitente que
+        // se sabe suplantado (`NO_AUTENTICADO`) ni eso.
         degradadaAAviso = true;
+        sinAutenticar = ev.origen === 'NO_AUTENTICADO';
         tipo = { k: 'NOTIFICACION' };
-      } else {
+      } else if (!sinAutenticar) {
         return this.decidirAlerta(ev, regla, ahora, d);
       }
     }
@@ -207,7 +218,7 @@ export class Politica {
       let motivo: Motivo;
       if (this.estado.parado) motivo = m('PARADO');
       else if (ev.objetivo !== null && this.estado.vetos.has(ev.objetivo)) motivo = m('VETADO');
-      else if (ev.origen === 'NO_AUTENTICADO') motivo = m('ORIGEN_NO_AUTENTICADO');
+      else if (sinAutenticar) motivo = m('ORIGEN_NO_AUTENTICADO');
       else if (ev.caduca !== null && ev.caduca <= ahora) motivo = m('CONTEXTO_VENCIDO');
       else if (rutinario) motivo = m('AVISO_RUTINARIO');
       else {
@@ -224,7 +235,7 @@ export class Politica {
       let motivo: Motivo | null = null;
       if (this.estado.parado) motivo = m('PARADO');
       else if (ev.objetivo !== null && this.estado.vetos.has(ev.objetivo)) motivo = m('VETADO');
-      else if (ev.origen === 'NO_AUTENTICADO') motivo = m('ORIGEN_NO_AUTENTICADO');
+      else if (sinAutenticar) motivo = m('ORIGEN_NO_AUTENTICADO');
       else if (ev.caduca !== null && ev.caduca <= ahora) motivo = m('CONTEXTO_VENCIDO');
       else if (this.estado.preguntadas.has(ev.id)) motivo = m('YA_PREGUNTADA');
       if (motivo !== null) return sinDemanda('REGISTRAR', motivo);
@@ -268,9 +279,9 @@ export class Politica {
     }
 
     let bloqueo: Motivo | null = null;
-    if (tipo.k === 'PETICION_PERMISO' && (!tipo.dentroDeContrato || ev.origen === 'NO_AUTENTICADO')) {
+    if (tipo.k === 'PETICION_PERMISO' && (!tipo.dentroDeContrato || sinAutenticar)) {
       bloqueo = m('PERMISO_ILEGITIMO');
-    } else if (ev.origen === 'NO_AUTENTICADO') {
+    } else if (sinAutenticar) {
       return sinDemanda('REGISTRAR', m('ORIGEN_NO_AUTENTICADO'));
     } else if (this.estado.parado) {
       bloqueo = m('PARADO');
@@ -315,7 +326,10 @@ export class Politica {
     return dec;
   }
 
-  /** Alerta de una fuente autenticada con regla declarada. Nunca se pierde. */
+  /**
+   * Alerta de una fuente autenticada con regla declarada. No se pierde: llega aunque esté
+   * PARA; solo la callan un veto de su objetivo o un contexto vencido.
+   */
   private decidirAlerta(
     ev: Evento,
     regla: ReglaAlerta,
@@ -324,6 +338,16 @@ export class Politica {
   ): Decision {
     if (this.estado.preguntadas.has(ev.id)) {
       const dec = d('REGISTRAR', m('YA_PREGUNTADA'), false, null);
+      this.ledger.descartar({ eventoId: ev.id, en: ahora, accion: dec.accion, motivo: dec.motivo });
+      return dec;
+    }
+    // Un veto es una orden de la persona y un contexto vencido ya no pide nada: se registra
+    // sin marcarla como tratada, para que llegue si se levanta el veto o vuelve con contexto.
+    let descarte: Motivo | null = null;
+    if (ev.objetivo !== null && this.estado.vetos.has(ev.objetivo)) descarte = m('VETADO');
+    else if (ev.caduca !== null && ev.caduca <= ahora) descarte = m('CONTEXTO_VENCIDO');
+    if (descarte !== null) {
+      const dec = d('REGISTRAR', descarte, false, null);
       this.ledger.descartar({ eventoId: ev.id, en: ahora, accion: dec.accion, motivo: dec.motivo });
       return dec;
     }

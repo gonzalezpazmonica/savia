@@ -6,11 +6,18 @@ export const DIA: Minuto = 1440;
 
 /** 0 = lunes … 6 = domingo (1970-01-01 fue jueves). */
 export function diaSemana(t: Minuto): number {
-  return (Math.floor(t / DIA) + 3) % 7;
+  return (((Math.floor(t / DIA) + 3) % 7) + 7) % 7;
 }
 
 export function minutoDelDia(t: Minuto): number {
-  return t % DIA;
+  return ((t % DIA) + DIA) % DIA;
+}
+
+/** Hora `[hh, mm]` válida (0–23, 0–59) en minutos del día; si no, `null`. */
+function hora(h: readonly [number, number]): number | null {
+  const [hh, mm] = h;
+  const ok = Number.isInteger(hh) && Number.isInteger(mm) && hh >= 0 && hh < 24 && mm >= 0 && mm < 60;
+  return ok ? hh * 60 + mm : null;
 }
 
 /**
@@ -29,13 +36,19 @@ export class Franja {
     this.fin = fin;
   }
 
-  /** `dias`: 0 = lunes … 6 = domingo. Horas como `[hh, mm]`. */
+  /**
+   * `dias`: 0 = lunes … 6 = domingo. Horas como `[hh, mm]`. Una hora fuera de rango da una
+   * franja vacía, que no contiene ningún minuto ni tiene inicio (falla cerrado).
+   */
   static nueva(dias: readonly number[], inicio: readonly [number, number], fin: readonly [number, number]): Franja {
+    const i = hora(inicio);
+    const f = hora(fin);
+    if (i === null || f === null) return new Franja(0, 0, 0);
     let mascara = 0;
     for (const d of dias) {
       if (Number.isInteger(d) && d >= 0 && d < 7) mascara |= 1 << d;
     }
-    return new Franja(mascara, inicio[0] * 60 + inicio[1], fin[0] * 60 + fin[1]);
+    return new Franja(mascara, i, f);
   }
 
   private diaIncluido(diaAbs: number): boolean {
@@ -50,7 +63,7 @@ export class Franja {
       if (this.diaIncluido(d) && m >= this.inicio && m < this.fin) return d * DIA + this.inicio;
     } else if (this.inicio > this.fin) {
       if (this.diaIncluido(d) && m >= this.inicio) return d * DIA + this.inicio;
-      if (d > 0 && this.diaIncluido(d - 1) && m < this.fin) return (d - 1) * DIA + this.inicio;
+      if (this.diaIncluido(d - 1) && m < this.fin) return (d - 1) * DIA + this.inicio;
     }
     return null;
   }
