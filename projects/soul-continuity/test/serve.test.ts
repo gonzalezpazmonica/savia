@@ -259,8 +259,20 @@ test("attention.json sin «at» no se aplica y se avisa", async () => {
   const err: string[] = [];
   const out: string[] = [];
   const s = await start(dir, out, deps(dir, out, err));
-  await s.stop();
-  assert.ok(err.some((l) => /sin modo o sin «at»/.test(l)), err.join("\n"));
+  const avisos = () => err.filter((l) => /sin modo o sin «at»/.test(l)).length;
+  let antes = -1;
+  try {
+    await new Promise((r) => setTimeout(r, 400)); // varios tics de 50 ms
+    antes = avisos();
+    // Otro contenido igual de inválido sí se vuelve a avisar.
+    writeFileSync(join(operatorDir(dir, "op-yo"), "attention.json"), JSON.stringify({ modo: "DESCANSO" }));
+    for (let i = 0; i < 40 && avisos() < 2; i++) await new Promise((r) => setTimeout(r, 25));
+    await new Promise((r) => setTimeout(r, 200));
+  } finally {
+    await s.stop();
+  }
+  assert.equal(antes, 1, "se avisa una vez, no en cada tic");
+  assert.equal(avisos(), 2, err.join("\n"));
 });
 
 test("P1-A: tras reiniciar serve, una declaración de soul mode ya aplicada no pisa el modo que fijó después la app", async () => {

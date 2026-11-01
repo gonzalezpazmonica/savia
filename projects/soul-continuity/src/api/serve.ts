@@ -95,6 +95,8 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   });
   world.conectar(server);
   // `soul mode` deja el modo en attention.json: se aplica una vez por declaración (por su `at`, persistido).
+  // Un attention.json sin «at» se avisa una vez por contenido, no en cada tic.
+  const avisadoSinAt = new Map<string, string>();
   const modoDeCli = () => {
     let c;
     try { c = loadConfig(deps.dataDir); } catch { return; }
@@ -105,7 +107,13 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
       const a = (() => { try { return readJson<Declarado | null>(join(operatorDir(deps.dataDir, ref), "attention.json"), null); } catch { return null; } })();
       // Ya aplicada (también antes de un reinicio: el `at` se guarda con el estado): no pisa lo que fijó después la app.
       if (!a) continue;
-      if (typeof a.at !== "string" || typeof a.modo !== "string") { deps.err("attention.json sin modo o sin «at»: se ignora (vuelve a ejecutar soul mode)"); continue; }
+      if (typeof a.at !== "string" || typeof a.modo !== "string") {
+        const firma = JSON.stringify(a);
+        if (avisadoSinAt.get(ref) !== firma) deps.err("attention.json sin modo o sin «at»: se ignora (vuelve a ejecutar soul mode)");
+        avisadoSinAt.set(ref, firma);
+        continue;
+      }
+      avisadoSinAt.delete(ref);
       if (server.declaracionCli(ref) === a.at) continue;
       // Sin operador en la API (perfil creado tras arrancar) no se marca: se reintenta en el siguiente tic.
       const r = server.declararModo(ref, a.modo, typeof a.hasta === "string" ? a.hasta : null, a.at);

@@ -134,6 +134,27 @@ test("D4/D5: con el estado perdido, el cursor anterior da 410 (no 400) y los ids
   } finally { await a.s.cerrar(); }
 });
 
+test("estado guardado con avisos, ventana o pendientes ausentes o mal tipados: arranca con los de la semilla, no da 503", async () => {
+  const sem = () => ({ ...semilla(), avisos: { ...semilla().avisos, activos: ["vencimiento"] } });
+  const disco = new Map<string, any>();
+  const persistencia = { cargar: (r: string) => disco.get(r) ?? null, guardar: (r: string, e: any) => { disco.set(r, structuredClone(e)); } };
+  let t = T0;
+  const arrancar = async () => {
+    const s = crearServidor({ tls: CERT, mundo: { semillas: () => [sem()] }, reloj: () => t, persistencia, secretoCursor: "fijo" });
+    return { s, port: (await s.escuchar(["127.0.0.1"], 0)).port };
+  };
+  let a = await arrancar();
+  try { assert.equal((await get(a.port, "/sondeo")).status, 200); } finally { await a.s.cerrar(); }
+  const e = disco.get("op");
+  assert.ok(e, "control: el estado se guardó");
+  disco.set("op", { ...e, avisos: undefined, ventana: "x", pendAvisos: null, pendAlertas: 7, registro: undefined, alertas: {}, ahorrados: "n" });
+  a = await arrancar();
+  try {
+    t += 3 * 3_600_000; // con el servicio en marcha: sincronizar recorre ventanas y presupuesto
+    for (const p of ["/sondeo", "/estado"]) assert.equal((await get(a.port, p)).status, 200, p);
+  } finally { await a.s.cerrar(); }
+});
+
 test("H-11: decide la Politica de src/attention (alerta declarada pasa en DISPONIBLE) y su estado se persiste con estadoATexto", async () => {
   const regla = { id: "r-jefa", tipo: "persona", objetivo: "h1", palabra: null, modos: ["FOCO"] };
   const disco = new Map<string, any>();

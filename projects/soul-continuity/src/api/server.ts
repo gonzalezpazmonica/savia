@@ -200,12 +200,18 @@ export function crearServidor(opts: OpcionesServidor) {
     o.mensajes.push({ id: `m-${o.ref}-${o.epoca}-${o.seq}`, seq: o.seq, creado: t, programar: null, caduca: null, agrupa: 1, ids: [], ...m });
   }
   /** Ventanas de presupuesto: el día en tramos de `ventanaMin` desde las 00:00 UTC (la última cruza la medianoche si toca). */
+  // Cacheadas por `ventanaMin` (5–1440): se piden en cada minuto de `sincronizar` y en cada evento.
+  const franjasPorV = new Map<number, readonly Franja[]>();
   function franjas(v: number): Franja[] {
-    const todos = (1 << 7) - 1;
-    if (v >= 1440) return [new Franja(todos, 1, 0)];
-    const out: Franja[] = [];
-    for (let i = 0; i < 1440; i += v) out.push(new Franja(todos, i, Math.min(i + v, 1440) % 1440));
-    return out;
+    let out = franjasPorV.get(v);
+    if (!out) {
+      const todos = (1 << 7) - 1;
+      const l: Franja[] = [];
+      if (v >= 1440) l.push(new Franja(todos, 1, 0));
+      else for (let i = 0; i < 1440; i += v) l.push(new Franja(todos, i, Math.min(i + v, 1440) % 1440));
+      franjasPorV.set(v, (out = Object.freeze(l)));
+    }
+    return out as Franja[];
   }
   const ventanaDe = (o: Op, t: number) => instanciaEn(franjas(o.avisos.ventanaMin), Math.floor(t / MIN)) ?? Math.floor(t / MIN);
   function iniciarVentana(o: Op, t: number) { o.ventana = { idx: ventanaDe(o, t), avisos: 0, alertas: 0 }; }
@@ -302,6 +308,25 @@ export function crearServidor(opts: OpcionesServidor) {
       return e && e.v === 1 && Array.isArray(e.mensajes) && Number.isInteger(e.seq) ? e : null;
     } catch { return null; } // ilegible: se empieza de cero y la app vuelve a sondear sin cursor
   }
+  /** Lo restaurable de un estado guardado, solo si tiene la forma esperada. */
+  function restaurables(e: EstadoAtencion): Partial<Op> {
+    const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+    const out: Partial<Op> = {};
+    if (typeof e.modo === "string") out.modo = e.modo;
+    if (e.hasta === null || num(e.hasta)) out.hasta = e.hasta;
+    const a = e.avisos as Partial<ConfAvisos> | undefined;
+    if (a && Array.isArray(a.activos) && a.activos.every((x) => typeof x === "string") && num(a.max) && num(a.ventanaMin) && (a.ventanaMin as number) >= 1 && num(a.tope)
+      && (a.resumenInicio === null || typeof a.resumenInicio === "string") && (a.resumenCierre === null || typeof a.resumenCierre === "string")) out.avisos = e.avisos;
+    if (Array.isArray(e.alertas)) out.alertas = e.alertas;
+    if (Number.isInteger(e.base) && e.base >= 0 && e.base <= e.seq) out.base = e.base;
+    if (Array.isArray(e.pendAvisos)) out.pendAvisos = e.pendAvisos;
+    if (Array.isArray(e.pendAlertas)) out.pendAlertas = e.pendAlertas;
+    const v = e.ventana as Partial<Op["ventana"]> | undefined;
+    if (v && Number.isInteger(v.idx) && num(v.avisos) && num(v.alertas)) out.ventana = e.ventana;
+    if (Array.isArray(e.registro)) out.registro = e.registro;
+    if (num(e.ahorrados)) out.ahorrados = e.ahorrados;
+    return out;
+  }
   function guardarEstado(o: Op) {
     if (!opts.persistencia) return;
     const e: EstadoAtencion = {
@@ -325,11 +350,11 @@ export function crearServidor(opts: OpcionesServidor) {
     const previo = cargarEstado(d.ref);
     if (previo) {
       // Tras un reinicio sigue el mismo estado: el cursor de la app vale y lo ya avisado no se repite.
-      Object.assign(o, { modo: previo.modo, hasta: previo.hasta, avisos: previo.avisos, alertas: previo.alertas, mensajes: previo.mensajes, seq: previo.seq,
-        base: previo.base, pendAvisos: previo.pendAvisos, pendAlertas: previo.pendAlertas, ventana: previo.ventana, registro: previo.registro, ahorrados: previo.ahorrados });
-      for (const id of previo.avisados) avisados(o).add(id);
+      // Campo a campo: uno ausente o mal tipado (fichero editado a mano) conserva el valor de la semilla.
+      Object.assign(o, { mensajes: previo.mensajes, seq: previo.seq, ...restaurables(previo) });
+      if (Array.isArray(previo.avisados)) for (const id of previo.avisados) if (typeof id === "string") avisados(o).add(id);
       if (typeof previo.cli_at === "string") cliAt.set(d.ref, previo.cli_at);
-      // Un estado de antes de las épocas sigue con una nueva: sus cursores dan 410 y la app vuelve a sondear.
+      // Un estado de antes de las épocas sigue con una nueva; sus cursores `c1.` dan 400 (no se pueden autenticar).
       if (typeof previo.epoca === "string" && /^[0-9a-f]{8}$/.test(previo.epoca)) o.epoca = previo.epoca;
       // Estado de la política ilegible: se avisa y se empieza de cero (la API no usa PARA; el STOP es aparte).
       const pol = typeof previo.politica === "string" ? estadoDesdeTexto(previo.politica) : null;
@@ -533,8 +558,9 @@ export function crearServidor(opts: OpcionesServidor) {
     let desde = 0;
     if (q.limite != null) { if (!/^\d{1,3}$/.test(q.limite) || Number(q.limite) < 1 || Number(q.limite) > 100) throw invalida(); limite = Number(q.limite); }
     if (q.cursor != null) {
-      // D4: un cursor auténtico de otra época (estado perdido o anterior a las épocas) da 410:
-      // la app vuelve a sondear sin cursor. Ajeno, manipulado o imposible: 400.
+      // D4: un cursor auténtico de otra época (estado perdido o reiniciado) da 410: la app vuelve
+      // a sondear sin cursor. Ajeno, manipulado o imposible: 400. Un cursor del formato anterior
+      // (`c1.`, sin época) no se puede autenticar y da 400, como antes de las épocas tras reiniciar.
       const m = /^c2\.([0-9a-f]{8})\.(\d{1,9})\.([0-9a-f]{8})$/.exec(q.cursor);
       if (!m || m[3] !== tag(o, m[1], Number(m[2]))) throw invalida();
       if (m[1] !== o.epoca) throw new ErrorApi(410, "GONE");
