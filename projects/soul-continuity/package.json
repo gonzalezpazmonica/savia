@@ -8,7 +8,8 @@
   "engines": { "node": ">=22.6" },
   "bin": { "soul": "bin/soul.mjs" },
   "scripts": {
-    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts test/api/*.test.mjs bench/test/*.test.ts tests/attention/*.test.ts",
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts test/adapters/*.test.ts test/api/*.test.mjs bench/test/*.test.ts tests/attention/*.test.ts",
+    "test:adapters": "node --experimental-strip-types --no-warnings --test test/adapters/*.test.ts",
     "evals:attention": "node --experimental-strip-types --no-warnings tests/attention/evals.ts",
     "mutants:attention": "node --experimental-strip-types --no-warnings tests/attention/bench/mutaciones.ts",
     "bench": "node --experimental-strip-types --no-warnings bench/src/cli.ts bench --impl src/core/bench-impl.ts",
