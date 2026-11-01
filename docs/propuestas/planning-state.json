@@ -1668,6 +1668,15 @@
       "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-492",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Estado declarado, no inferido: sustituir las 9 inferencias de estado de la persona por declaraciones y demanda del sistema",
+      "note": "Retira fatigue_score por la hora, override_rate, cognitive_load_score, fast-accept atribuido a la persona, break_compliance exportado y el score de burnout por miembro. Los sustituye por la ventana declarada (multioperador, sin umbral universal), un registro de demanda del sistema y /work-conditions de equipo sin identificar personas (mínimo 3). Telemetría solo en settings.local.json.",
+      "evidence": "docs/specs/SE-492-declared-state-not-inferred.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
