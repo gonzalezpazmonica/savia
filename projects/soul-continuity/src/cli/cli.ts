@@ -244,7 +244,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         const install = resolveInstall(cfg, deps.env);
         const id = p.args[0];
         if (!id) throw new Exit(2, "why <id>");
-        const snap = engine.lastSnapshot(deps.dataDir, install.operator.ref);
+        const snap = engine.cachedSnapshot(deps.dataDir, install.operator.ref, deps.now());
         const c = snap?.claims.find((x) => elementId(install.operator.ref, x.key) === id);
         if (!snap || !c) throw new Exit(1, `no conozco el elemento ${id}`);
         const lv = level();

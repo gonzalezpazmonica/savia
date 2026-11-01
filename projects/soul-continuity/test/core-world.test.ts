@@ -174,3 +174,20 @@ test("la API selecciona Q1/Q2/Q4 como el núcleo: ni cerrados ni reuniones fuera
     assert.ok(!titles(await get("/q/q4")).includes("CERRADA-2"));
   } finally { await s.cerrar(); }
 });
+
+test("TTL por afirmación evaluado en la petición: valid_until anterior a la caducidad de la instantánea", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-cw-"));
+  const cfg = emptyConfig("i");
+  cfg.active_profile = "yo";
+  cfg.profiles.yo = { operator: { ref: "op-yo", identities: { emails: [] } }, sources: [{ adapter: "jira", purpose: "t", consent: { granted_at: "2026-10-01T00:00:00Z" } }] };
+  const jira: SourceAdapter = { name: "jira", routes: ["api"], purpose: "t", async read(ctx) { return { status: "ok", route: "api", claims: [{
+    key: "jira:task_assigned:CORTA-1", claim_type: "task_assigned", state: "OBSERVED", source_refs: [{ adapter: "jira", route: "api", ref: "CORTA-1" }],
+    sensitivity: "N4", observed_at: ctx.now, valid_until: "2026-10-31T09:10:00Z", open: true, awaiting_operator: true, attrs: {} }] }; } };
+  const engine = makeEngine({ jira });
+  await engine.snapshot({ install: { id: "i", operator: cfg.profiles.yo.operator, sources: cfg.profiles.yo.sources }, now: NOW, stateDir: dir,
+    env: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "t" } } });
+  const world = coreWorld({ cfg, engine, stateDir: dir });
+  const op = { ref: "op-yo" } as never;
+  assert.equal(world.seleccion?.(op, "q2", Date.parse("2026-10-31T09:05:00Z"))?.size, 1, "control: vigente");
+  assert.equal(world.seleccion?.(op, "q2", Date.parse("2026-10-31T09:20:00Z"))?.size, 0, "pasado su valid_until, fuera aunque la instantánea siga vigente");
+});

@@ -110,7 +110,8 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
     },
 
     seleccion(o: Op, pregunta: string, t: number) {
-      const snap = engine.lastSnapshot(stateDir, o.ref);
+      // TTL de cada afirmación evaluado en el instante de la petición, no en el de la lectura.
+      const snap = engine.cachedSnapshot(stateDir, o.ref, new Date(t).toISOString());
       if (!snap || (parseTs(snap.expires_at) ?? 0) <= t) return new Set<string>();
       const install = { id: cfg.installation_id, operator: { ref: o.ref, identities: { emails: [] } }, sources: [] };
       const q = pregunta.toUpperCase() as "Q1" | "Q2" | "Q4";
