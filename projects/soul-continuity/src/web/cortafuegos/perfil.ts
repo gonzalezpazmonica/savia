@@ -136,9 +136,14 @@ export function crearHogarCanario(): { hogar: string; perfilPersonal: string } {
 }
 
 /** Navegador instalado: Chrome o Edge; Chromium del sistema como último recurso, avisándolo. */
-export function buscarNavegador(): { ruta: string; nombre: string; aviso?: string } {
-  const env = process.env.SOUL_NAVEGADOR;
-  if (env && existsSync(env)) return { ruta: env, nombre: "configurado" };
+export function buscarNavegador(entorno: NodeJS.ProcessEnv = process.env): { ruta: string; nombre: string; aviso?: string } {
+  // Fail-closed: una ruta configurada que no existe es un error, no una invitación a
+  // usar otro navegador (en CI acabaría probando el Chrome del runner, no el pedido).
+  const env = entorno.SOUL_NAVEGADOR;
+  if (env) {
+    if (!existsSync(env)) throw new Error(`SOUL_NAVEGADOR apunta a una ruta que no existe: ${env}`);
+    return { ruta: env, nombre: "configurado" };
+  }
   const candidatos: [string, string][] = [
     ["/usr/bin/google-chrome-stable", "Chrome"], ["/usr/bin/google-chrome", "Chrome"],
     ["/usr/bin/microsoft-edge-stable", "Edge"], ["/usr/bin/microsoft-edge", "Edge"],
