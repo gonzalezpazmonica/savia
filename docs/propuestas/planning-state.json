@@ -1668,6 +1668,15 @@
       "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-494",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Trazas a regresiones herméticas: extensión de SE-364",
+      "note": "Corrige SE-364 (to_evals emite casos open en contra de su spec, nivel ausente tratado como N1, IDs por posición, wrapper que traga argumentos, paired-delta en verde con cero pares). Añade el esquema savia.trace/v1 (plan, llamada, decisión de política, decisión de autoridad, efecto, observación, recibo) sin texto libre ni secretos, 10 fallos verificados congelados como casos offline con invariantes y fail-to-pass, un gate en CI donde FAIL, INCOMPLETE y NO_COVERAGE bloquean, y OTLP opcional. Patrón tomado de Tracely-ai, leído y no ejecutado.",
+      "evidence": "docs/specs/SE-494-trace-hermetic-regressions.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
