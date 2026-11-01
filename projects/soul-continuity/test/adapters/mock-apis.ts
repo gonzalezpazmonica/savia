@@ -31,7 +31,7 @@ export interface MockData {
   /** deltatokens por debajo de esta secuencia devuelven 410. */
   minDeltaSeq: number;
   events: { id: string; subject: string; start: string; cancelled?: boolean; response?: string }[];
-  chats: { id: string; topic: string; messages: { id: string; from: string; at: string; mentions?: string[]; text?: string }[] }[];
+  chats: { id: string; topic: string; messages: { id: string; from: string; at: string; mentions?: string[]; text?: string; deleted?: string }[] }[];
   files: { id: string; name: string; comments: { id: string; at: string; resolved?: boolean; text?: string }[] }[];
   google: {
     messages: { id: string; thread: string; from: string; to: string[]; cc?: string[]; at: string; subject: string; labels: string[]; dkim?: string; dmarc?: string; d?: string }[];
@@ -217,7 +217,7 @@ function route(d: MockData, req: IncomingMessage, u: URL, auth: string, raw: str
     const c = d.chats.find((x) => x.id === decodeURIComponent(chat[1]));
     if (!c) return reply(404, { error: { code: "NotFound" } });
     const items = [...c.messages].sort((a, b) => b.at.localeCompare(a.at)).map((m) => ({
-      id: m.id, createdDateTime: m.at, from: { user: { id: m.from } },
+      id: m.id, createdDateTime: m.at, deletedDateTime: m.deleted ?? null, from: { user: { id: m.from } },
       mentions: (m.mentions ?? []).map((x, i) => ({ id: i, mentioned: { user: { id: x } } })),
       body: { content: `${BODY} ${m.text ?? ""}` },
     }));

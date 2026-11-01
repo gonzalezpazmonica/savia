@@ -232,6 +232,8 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
         let old = false;
         for (const { x, t } of items) {
           if (t < now - 7 * DAY) { old = true; break; }
+          // Un mensaje borrado ni pide respuesta ni cuenta como respuesta mía.
+          if (x?.deletedDateTime != null) continue;
           if (isMe(x?.from?.user?.id)) { mineAfter = Math.max(mineAfter ?? t, t); continue; }
           const mentioned = (Array.isArray(x?.mentions) ? x.mentions : []).some((m: J) => isMe(m?.mentioned?.user?.id));
           const id = safeRef(x?.id);

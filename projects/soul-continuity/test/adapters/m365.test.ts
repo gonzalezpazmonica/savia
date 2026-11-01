@@ -298,6 +298,23 @@ test("Teams: con ids de Entra, el id se resuelve con /me o llega por m365_user_i
   }
 });
 
+test("Teams: un mensaje borrado no cuenta: ni la mención borrada ni mi respuesta borrada", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.meId = "uid-yo";
+    d.chats.push({ id: "19:a", topic: "T", messages: [
+      { id: "t1", from: "uid-ana", at: "2026-11-01T10:00:00Z", mentions: ["uid-yo"], deleted: "2026-11-01T10:05:00Z" },
+      { id: "t2", from: "uid-ana", at: "2026-11-01T11:00:00Z", mentions: ["uid-yo"] },
+      { id: "t3", from: "uid-yo", at: "2026-11-01T12:00:00Z", deleted: "2026-11-01T12:01:00Z" },
+      { id: "t4", from: "uid-ana", at: "2026-11-01T09:00:00Z", mentions: ["uid-yo"] },
+    ] });
+  });
+  try {
+    assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx())), ["m365-teams:mention:t2", "m365-teams:mention:t4"]);
+  } finally {
+    await mock.close();
+  }
+});
+
 test("Teams: sin m365_user_id y sin poder leer /me falla cerrado, no da «ok» vacío", async () => {
   const { mock, ctx } = await setup((d) => {
     d.meId = null;
@@ -306,7 +323,7 @@ test("Teams: sin m365_user_id y sin poder leer /me falla cerrado, no da «ok» v
   try {
     const r = await makeM365Adapters()["m365-teams"].read(ctx());
     assert.equal(r.status, "error");
-    assert.match(r.status === "ok" ? "" : r.message, /m365_user_id/);
+    assert.match(r.status === "error" ? r.message : "", /m365_user_id/);
   } finally {
     await mock.close();
   }
