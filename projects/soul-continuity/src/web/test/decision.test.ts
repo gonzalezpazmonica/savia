@@ -73,6 +73,24 @@ test("soloConsultas: cadenas y comentarios no engañan; vacío falla", () => {
   assert.equal(soloConsultas("query A { f "), false);
 });
 
+test("soloConsultas: una comilla en un comentario no se traga la mutación siguiente (revisión #1443 P1-1)", () => {
+  assert.equal(soloConsultas('query Z { a } # "\nmutation ListarChats { marcarChatVisto(id: 1) } # "'), false);
+  assert.equal(soloConsultas('query Z { a } # """\nmutation M { x } # """'), false);
+  // Cadena normal que cruza una línea: GraphQL no la admite; fail-closed.
+  assert.equal(soloConsultas('query Z { a(x: "\nmutation M { x }\n") }'), false);
+  // Cadena sin cerrar: fail-closed.
+  assert.equal(soloConsultas('query Z { a(x: "abc) }'), false);
+  assert.equal(soloConsultas('query Z { a(x: """abc) }'), false);
+  // Lo legítimo sigue pasando: escapes, cadenas de bloque con comillas y \""" dentro.
+  assert.equal(soloConsultas('query A { f(x: "a\\"b # c", y: """dice "hola" \\""" mutation""") } # fin'), true);
+});
+
+test("decidirHttp: la mutación escondida tras un comentario con comilla se corta y desactiva", () => {
+  const query = 'query Z { a } # "\nmutation ListarChats { marcarChatVisto(id: 1) } # "';
+  const d = decidirHttp(correo, sin, post("/correo/graphql", {}, { operationName: "ListarChats", query }));
+  assert.deepEqual([d.permitir, d.motivo, d.desactivar], [false, "graphql_no_consulta", true]);
+});
+
 test("operacionDe: cuerpo no JSON u objeto raro = desconocida", () => {
   const o = correo.post_lectura[1];
   assert.equal(operacionDe(o, pet({ cuerpo: "no json" })).op, null);

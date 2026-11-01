@@ -40,15 +40,52 @@ export interface Decision {
   sesion?: boolean;
 }
 
-/** ¿El documento GraphQL contiene solo operaciones `query`? Fail-closed si está vacío. */
+/** Fichas `{`, `}` y nombres del documento, en una sola pasada que trata a la vez
+ *  comentarios, cadenas y cadenas de bloque (como el servidor). `null` si el
+ *  documento no es léxicamente válido: cadena sin cerrar o que cruza una línea. */
+function fichasGraphql(doc: string): string[] | null {
+  const fichas: string[] = [];
+  let i = 0;
+  while (i < doc.length) {
+    const c = doc[i];
+    if (c === "#") {
+      while (i < doc.length && doc[i] !== "\n" && doc[i] !== "\r") i++;
+    } else if (doc.startsWith('"""', i)) {
+      i += 3;
+      for (;;) {
+        if (i >= doc.length) return null;
+        if (doc.startsWith('\\"""', i)) { i += 4; continue; }
+        if (doc.startsWith('"""', i)) { i += 3; break; }
+        i++;
+      }
+    } else if (c === '"') {
+      i++;
+      for (;;) {
+        if (i >= doc.length || doc[i] === "\n" || doc[i] === "\r") return null;
+        if (doc[i] === "\\") { i += 2; continue; }
+        if (doc[i] === '"') { i++; break; }
+        i++;
+      }
+    } else if (c === "{" || c === "}") {
+      fichas.push(c);
+      i++;
+    } else if (/[_A-Za-z]/.test(c)) {
+      const ini = i;
+      while (i < doc.length && /[_0-9A-Za-z]/.test(doc[i])) i++;
+      fichas.push(doc.slice(ini, i));
+    } else {
+      i++;
+    }
+  }
+  return fichas;
+}
+
+/** ¿El documento GraphQL contiene solo operaciones `query`? Fail-closed si está
+ *  vacío o no se puede tokenizar. */
 export function soloConsultas(doc: string): boolean {
-  const limpio = doc
-    .replace(/"""[\s\S]*?"""/g, '""')
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/#[^\n]*/g, "");
-  if (!limpio.trim()) return false;
+  const fichas = fichasGraphql(doc);
+  if (!fichas) return false;
   let prof = 0;
-  const fichas = limpio.match(/[{}]|[_A-Za-z][_0-9A-Za-z]*/g) ?? [];
   let operaciones = 0;
   for (const f of fichas) {
     if (f === "{") { if (prof === 0) operaciones++; prof++; continue; }
