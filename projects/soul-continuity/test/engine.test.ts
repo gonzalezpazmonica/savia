@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InstallationConfig, SourceAdapter } from "../src/contract/adapter.ts";
@@ -177,4 +177,67 @@ test("correct usa la misma regla de clave que el libro: lo que el libro ignorar�
   // control: una clave válida sí entra en el libro y tiene efecto
   await e.correct({ install: inst, stateDir, now: NOW, key: "github:review_request:r1#7", action: "revoke" });
   assert.equal(e.ledger(stateDir, "op-a").length, 1);
+});
+
+/** Adaptador de Jira que refleja el token recibido del almacén en el campo indicado. */
+function leakyJira(where: "title" | "attrs" | "extra" | "message" | "none"): SourceAdapter {
+  return {
+    name: "jira", routes: ["api"], purpose: "test",
+    async read(ctx) {
+      const tok = await ctx.credentials.acquire("jira", ["read"]);
+      if (where === "message") return { status: "error", route: "api", message: `fallo con ${tok}` };
+      const claim: any = {
+        key: "jira:task_assigned:J-1", claim_type: "task_assigned", state: "OBSERVED",
+        source_refs: [{ adapter: "jira", route: "api", ref: "J-1" }], sensitivity: ctx.sensitivity,
+        observed_at: ctx.now, valid_until: "2026-10-31T10:00:00Z", open: true, awaiting_operator: true,
+        attrs: where === "attrs" ? { etag: `W/${tok}` } : {},
+        title: where === "title" ? `Tarea ${tok}` : "Tarea", untrusted_text: true,
+      };
+      if (where === "extra") claim.raw = { authorization: `Bearer ${tok}` };
+      return { status: "ok", route: "api", claims: [claim] };
+    },
+  };
+}
+
+for (const where of ["title", "attrs", "extra", "message"] as const) {
+  test(`un adaptador que devuelve el token (en ${where}) no lo lleva a disco y se descarta su lectura`, async () => {
+    const e = makeEngine({ github: fakeGithub({ n: 0 }), jira: leakyJira(where) });
+    const stateDir = tmp();
+    const inst = install("op-a", [{ adapter: "github", purpose: "p", consent }, { adapter: "jira", purpose: "p", consent }]);
+    const s = await e.snapshot({ install: inst, now: NOW, stateDir, env });
+    const all = filesUnder(stateDir).map((f) => readFileSync(f, "utf8")).join("\n");
+    assert.ok(all.includes("r1#7"), "control: lo del adaptador limpio sí se guarda");
+    assert.ok(!all.includes(TOKEN), "0 tokens en disco");
+    assert.ok(!JSON.stringify(s).includes(TOKEN), "ni en la instantánea devuelta");
+    assert.equal(s.adapters.jira.status, "error");
+    assert.ok(!s.claims.some((c) => c.key.startsWith("jira:")));
+  });
+}
+
+test("el token se detecta también escapado en JSON; sin reflejo, la lectura cuenta", async () => {
+  const QUOTED = 'tok"con\\comillas';
+  const e = makeEngine({ jira: leakyJira("title") });
+  const stateDir = tmp();
+  const inst = install("op-a", [{ adapter: "jira", purpose: "p", consent }]);
+  const s = await e.snapshot({ install: inst, now: NOW, stateDir, env: { ...env, credentials: { acquire: async () => QUOTED } } });
+  assert.equal(s.adapters.jira.status, "error");
+  assert.ok(!filesUnder(stateDir).some((f) => readFileSync(f, "utf8").includes(JSON.stringify(QUOTED).slice(1, -1))));
+  const ok = await makeEngine({ jira: leakyJira("none") }).snapshot({ install: inst, now: NOW, stateDir: tmp(), env });
+  assert.equal(ok.adapters.jira.status, "ok", "control negativo: un adaptador que no refleja el token no se descarta");
+});
+
+test("una instantánea corrupta en el historial no tumba Q3 ni la purga, y la purga la elimina", async () => {
+  const e = makeEngine({ github: fakeGithub({ n: 0 }) });
+  const stateDir = tmp();
+  const inst = install("op-a", [{ adapter: "github", purpose: "p", consent }]);
+  await e.snapshot({ install: inst, now: NOW, stateDir, env });
+  await e.snapshot({ install: inst, now: "2026-10-31T09:05:00Z", stateDir, env });
+  const h = join(stateDir, operatorDirName("op-a"), "history");
+  const files = readdirSync(h).sort();
+  assert.equal(files.length, 2);
+  writeFileSync(join(h, files[1]), '{"schema":"se490/snap'); // corte a mitad de escritura
+  assert.equal(e.snapshotAt(stateDir, "op-a", "2026-10-31T09:10:00Z")?.issued_at, NOW, "se usa la legible anterior");
+  assert.ok(e.purgeAdapter(stateDir, "op-a", "github") >= 2);
+  assert.deepEqual(readdirSync(h), [files[0]], "la ilegible se borra: no se puede filtrar");
+  assert.ok(!filesUnder(stateDir).map((f) => readFileSync(f, "utf8")).join("\n").includes("r1#7"), "y nada del adaptador queda");
 });

@@ -47,10 +47,14 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
   const keys = new Map<string, Map<string, string>>(); // operador → id opaco → clave
   const seen = new Map<string, string>(); // operador → versión (lectura + libro) ya aplicada
 
-  /** Versión de lo que ve el operador: cambia con una lectura nueva o con una corrección (p. ej. `soul correct`). */
+  /**
+   * Versión de lo que ve el operador: cambia con una lectura nueva, con una corrección (p. ej.
+   * `soul correct`) o con una purga de la caché sin lectura nueva (`soul revoke`).
+   */
   function version(ref: string, snap: Snapshot): string {
     const libro = createHash("sha256").update(JSON.stringify(engine.ledger(stateDir, ref))).digest("hex");
-    return `${snap.issued_at}|${libro}`;
+    const contenido = createHash("sha256").update(JSON.stringify([snap.adapters, snap.claims.map((c) => [c.key, c.state])])).digest("hex");
+    return `${snap.issued_at}|${libro}|${contenido}`;
   }
 
   function elemento(ref: string, c: Claim): Elemento | null {

@@ -204,3 +204,15 @@ test("una corrección desde la CLI (sin lectura nueva) se ve en la API sin esper
     assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 200, "restaurado: vuelve");
   } finally { await s.cerrar(); }
 });
+
+test("soul revoke (purga sin lectura nueva) saca de la API lo del adaptador revocado", async () => {
+  const { dir, engine, s, call } = await setup();
+  try {
+    const id = (await call("GET", "/q/q2")).json.elementos[0].id;
+    assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 200, "control: el elemento existe");
+    assert.ok(engine.purgeAdapter(dir, "op-yo", "m365-mail") > 0);
+    assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 404, "purgado: fuera de la API sin esperar a la relectura");
+    const by = Object.fromEntries((await call("GET", "/adaptadores")).json.adaptadores.map((x: any) => [x.id, x]));
+    assert.equal(by["m365-mail"].estado, "revocado");
+  } finally { await s.cerrar(); }
+});

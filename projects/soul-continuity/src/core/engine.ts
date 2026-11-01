@@ -13,7 +13,7 @@
  *   history/<ts>.json instantáneas anteriores para Q3 (todo 2 h; una por hora durante 7 días)
  */
 
-import { readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Claim, LEVELS, SNAPSHOT_SCHEMA, type Snapshot, TTL_MAX_S, applyLedgerAndTtl, fingerprint, foldLedger, isUsable,
@@ -103,6 +103,17 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
         if (entries.has(s.adapter)) { entries.set(s.adapter, null); status[s.adapter] = { status: "duplicate_adapter" }; continue; }
         entries.set(s.adapter, s);
       }
+      // Cada credencial que entrega el almacén queda anotada (solo en memoria): si un adaptador la
+      // devuelve en cualquier campo, su resultado se descarta entero antes de llegar a disco.
+      const issued: string[] = [];
+      const credentials = {
+        async acquire(service: string, scopes: string[]): Promise<string> {
+          const t = await req.env.credentials.acquire(service, scopes);
+          if (typeof t === "string" && t) issued.push(t, JSON.stringify(t).slice(1, -1));
+          return t;
+        },
+      };
+      const leaks = (v: unknown) => { const s = JSON.stringify(v) ?? ""; return issued.some((t) => s.includes(t)); };
       const claims: Claim[] = [];
       for (const an of ADAPTERS) {
         if (!entries.has(an)) { status[an] = { status: "not_configured" }; continue; }
@@ -122,7 +133,7 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
         try {
           r = await ad.read({
             operator: op, now: req.now, sensitivity: level, route, params: { ...(s.params ?? {}) },
-            transport: req.env.transport, credentials: req.env.credentials,
+            transport: req.env.transport, credentials,
           });
         } catch {
           // Fail-closed: un adaptador que revienta no aporta nada y no tumba a los demás.
@@ -132,6 +143,10 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
         // Fail-closed: un resultado que no cumple el contrato no aporta nada y no tumba a los demás.
         if (validateAdapterResult(r, an).length) {
           status[an] = { status: "error", route, message: "el adaptador devolvió un resultado que no cumple el contrato" };
+          continue;
+        }
+        if (leaks(r)) {
+          status[an] = { status: "error", route, message: "el adaptador devolvió una credencial; se descarta su lectura" };
           continue;
         }
         if (r.status === "ok") {
@@ -270,7 +285,9 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
       const h = join(operatorDir(stateDir, operatorRef), HISTORY);
       let best: Snapshot | null = null;
       for (const f of (() => { try { return readdirSync(h); } catch { return []; } })()) {
-        const s = readJson<Snapshot | null>(join(h, f), null);
+        // Una instantánea ilegible (corte a mitad de escritura) no sirve de «desde» ni tumba Q3.
+        let s: Snapshot | null;
+        try { s = readJson<Snapshot | null>(join(h, f), null); } catch { continue; }
         const it = s ? parseTs(s.issued_at) : null;
         if (!s || s.operator_ref !== operatorRef || it === null || it > t) continue;
         if (!best || it > (parseTs(best.issued_at) as number)) best = s;
@@ -288,8 +305,14 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
       const files = [join(dir, CACHE), ...(() => { try { return readdirSync(h).map((f) => join(h, f)); } catch { return []; } })()];
       let n = 0;
       for (const f of files) {
-        const s = readJson<Snapshot | null>(f, null);
-        if (!s) continue;
+        let s: Snapshot | null;
+        try { s = readJson<Snapshot | null>(f, null); } catch { s = null; }
+        if (!s || !Array.isArray(s.claims) || typeof s.adapters !== "object" || s.adapters === null) {
+          // Ilegible o sin forma de instantánea: podría llevar datos del adaptador revocado y no se
+          // puede filtrar. Caché e historial se regeneran en la próxima lectura: se borra y se sigue.
+          if (existsSync(f)) { rmSync(f, { force: true }); n++; }
+          continue;
+        }
         s.claims = s.claims.filter((c) => c.source_refs[0]?.adapter !== adapter && !c.key.startsWith(`${adapter}:`));
         s.adapters[adapter] = { status: "consent_revoked" };
         writeJson(f, s);
