@@ -252,6 +252,40 @@ test("Teams: identidad por m365_user_id cuando la API da ids de Entra", async ()
   }
 });
 
+// Graph pagina mensajes de chat: por defecto en orden de última modificación; con
+// $orderby=createdDateTime desc, por creación. El doble reproduce las dos cosas.
+function teamsFake(pages: (orderByCreated: boolean) => J[][]) {
+  const urls: string[] = [];
+  return { urls, transport: { async request(req: { url: string }) {
+    urls.push(req.url);
+    if (req.url.startsWith("/v1.0/me/chats?")) return { status: 200, headers: {}, body: { value: [{ id: "19:z", topic: "Z" }] } };
+    const u = new URL(req.url, "https://graph.example");
+    const ps = pages(u.searchParams.get("$orderby") === "createdDateTime desc");
+    const i = Number(u.searchParams.get("pg") ?? 0);
+    const next = i + 1 < ps.length ? `${u.pathname}?${u.searchParams.toString().replace(/&?pg=\d+/, "")}&pg=${i + 1}` : undefined;
+    return { status: 200, headers: {}, body: { value: ps[i], ...(next ? { "@odata.nextLink": next } : {}) } };
+  } } };
+}
+type J = Record<string, unknown>;
+const tmsg = (id: string, from: string, at: string, mentions: string[] = []) => ({ id, createdDateTime: at, from: { user: { id: from } }, mentions: mentions.map((x) => ({ mentioned: { user: { id: x } } })) });
+
+test("Teams: un mensaje viejo editado no corta la lectura (orden por creación)", async () => {
+  const oldEdited = tmsg("t-old", "ana@alfa.example", "2026-10-01T10:00:00Z");
+  const mention = tmsg("t-new", "ana@alfa.example", "2026-11-01T10:00:00Z", [ME]);
+  const f = teamsFake((byCreated) => (byCreated ? [[mention], [oldEdited]] : [[oldEdited], [mention]]));
+  const r = await makeM365Adapters()["m365-teams"].read(ctxWith({ now: NOW, transport: f.transport }));
+  assert.deepEqual(keys(r), ["m365-teams:mention:t-new"]);
+  assert.ok(f.urls.filter((u) => u.includes("/messages")).every((u) => new URL(u, "https://graph.example").searchParams.get("$orderby") === "createdDateTime desc"));
+});
+
+test("Teams: superar el tope de páginas dentro de la ventana falla cerrado; al salir de la ventana, no", async () => {
+  const recent = (n: number) => [tmsg(`r${n}`, "ana@alfa.example", `2026-11-01T1${n}:00:00Z`, [ME])];
+  const f = teamsFake(() => [recent(2), recent(1)]);
+  assert.equal((await makeM365Adapters({ maxPages: 1 })["m365-teams"].read(ctxWith({ now: NOW, transport: f.transport }))).status, "unavailable");
+  const g = teamsFake(() => [recent(2), [tmsg("viejo", "ana@alfa.example", "2026-10-01T10:00:00Z")], recent(0)]);
+  assert.deepEqual(keys(await makeM365Adapters({ maxPages: 2 })["m365-teams"].read(ctxWith({ now: NOW, transport: g.transport }))), ["m365-teams:mention:r2"]);
+});
+
 test("ficheros: solo documentos con comentarios sin resolver, sin su contenido", async () => {
   const { mock, ctx } = await setup((d) => {
     d.files.push({ id: "f1", name: "Plan.docx", comments: [{ id: "k1", at: "2026-11-01T10:00:00Z" }, { id: "k2", at: "2026-11-01T12:00:00Z", resolved: true }] });

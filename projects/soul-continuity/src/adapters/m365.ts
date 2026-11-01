@@ -189,12 +189,15 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
     for (const c of await odataAll(ctx, "graph", tok, `/v1.0/me/chats?$top=50`, "Graph (Teams)", { ...G, maxPages })) {
       const chatId = typeof c?.id === "string" ? c.id : null;
       if (!chatId) continue;
-      // Mensajes del más reciente al más antiguo: se para al salir de la ventana de 7 días.
-      // Leer menos solo puede omitir menciones, nunca inventarlas: lo posterior ya se vio.
-      let url: string | undefined = `/v1.0/me/chats/${encodeURIComponent(chatId)}/messages?$top=50`;
+      // Mensajes por fecha de creación, del más reciente al más antiguo (por defecto Graph
+      // ordena por última modificación y un mensaje viejo editado cortaría la lectura):
+      // se para al salir de la ventana de 7 días. Superar el tope de páginas dentro de la
+      // ventana falla cerrado, como el resto de colecciones.
+      let url: string | undefined = `/v1.0/me/chats/${encodeURIComponent(chatId)}/messages?$top=50&$orderby=${encodeURIComponent("createdDateTime desc")}`;
       const first = url;
       let mineAfter: number | null = null;
-      for (let pg = 0; url && pg < maxPages; pg++) {
+      for (let pg = 0; url; pg++) {
+        if (pg >= maxPages) throw new Stop("unavailable", `Graph (Teams): supera el tope de ${maxPages} páginas en un chat; no se dan datos incompletos.`);
         const b = check(await ctx.transport.request({ service: "graph", method: "GET", url, headers: { Authorization: `Bearer ${tok}` } }), "Graph (Teams)", G);
         const items = (Array.isArray(b.value) ? b.value : []).map((x: J) => ({ x, t: Date.parse(String(x?.createdDateTime)) }))
           .filter((y: { t: number }) => Number.isFinite(y.t)).sort((a: { t: number }, z: { t: number }) => z.t - a.t);
