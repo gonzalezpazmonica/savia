@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CredentialError } from "../src/contract/adapter.ts";
@@ -100,5 +100,84 @@ test("forgetAll borra todas las credenciales registradas", async () => {
   await s.put("graph", "a");
   await s.put("jira", "b");
   assert.deepEqual((await s.forgetAll()).sort(), ["graph", "jira"]);
+  assert.equal(f.vault.size, 0);
+});
+
+// ---------------------------------------------------------------- almacén único (H-2)
+
+import { SystemCredentialStore as ApiTokenStore, entryKey } from "../src/adapters/credential-store.ts";
+
+const TOKENS = JSON.stringify({ access_token: SECRET, refresh_token: "rt-canario", expires_at: 9e15, scopes: ["Mail.Read"] });
+
+for (const kind of ["linux", "mac", "win"] as const) {
+  test(`${kind}: los tokens de un adaptador de API van al almacén único y quedan en su índice (H-2)`, async () => {
+    const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+    const f = fakeRunner(kind);
+    const core = new SystemCredentialStore(backendFor(kind === "linux" ? "linux" : kind === "mac" ? "darwin" : "win32", f.run), d);
+    const api = new ApiTokenStore({ backend: core.keyed(), operatorRef: "op-a", now: () => 0 });
+    // El JSON del token lleva comillas: el llavero de macOS las rechazaría sin la codificación.
+    await api.put("graph", ["Mail.Read"], JSON.parse(TOKENS));
+    assert.equal(await api.acquire("graph", ["Mail.Read"]), SECRET);
+    assert.equal(core.index().length, 1);
+    assert.match(core.index()[0].service, /^api-graph$/);
+    const disk = filesUnder(d).map((p) => readFileSync(p, "utf8")).join("\n");
+    assert.ok(!disk.includes(SECRET) && !disk.includes("rt-canario") && !disk.includes("op-a"), "índice sin secretos ni operador en claro");
+    for (const c of f.calls) assert.ok(!c.args.join(" ").includes(SECRET), "el token nunca en argv");
+  });
+}
+
+test("desinstalar (forgetAll) borra también los tokens de los adaptadores de API y los del núcleo", async () => {
+  const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+  const f = fakeRunner("linux");
+  const core = new SystemCredentialStore(linuxBackend(f.run), d);
+  await core.put("legado", "x");
+  await new ApiTokenStore({ backend: core.keyed(), operatorRef: "op-a" }).put("graph", ["Mail.Read"], JSON.parse(TOKENS));
+  await new ApiTokenStore({ backend: core.keyed(), operatorRef: "op-b" }).put("github", ["repo:read"], JSON.parse(TOKENS));
+  assert.equal(f.vault.size, 3);
+  assert.equal((await core.forgetAll()).length, 3);
+  assert.equal(f.vault.size, 0, "no queda ningún secreto en el almacén del sistema");
+  assert.deepEqual(core.index(), []);
+});
+
+test("revocar un adaptador borra sus tokens del almacén único y los saca del índice; los de otro operador siguen", async () => {
+  const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+  const f = fakeRunner("linux");
+  const core = new SystemCredentialStore(linuxBackend(f.run), d);
+  const a = new ApiTokenStore({ backend: core.keyed(), operatorRef: "op-a" });
+  await a.put("graph", ["Mail.Read"], JSON.parse(TOKENS));
+  await new ApiTokenStore({ backend: core.keyed(), operatorRef: "op-b" }).put("graph", ["Mail.Read"], JSON.parse(TOKENS));
+  assert.equal(await a.revoke("graph", ["Mail.Read"]), true);
+  assert.equal(await a.revoke("graph", ["Mail.Read"]), false, "segunda vez: no había nada");
+  assert.equal(f.vault.size, 1);
+  assert.equal(core.index().length, 1);
+});
+
+test("forgetAll con un borrado que falla: borra los demás, conserva en el índice el fallido y lanza", async () => {
+  const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+  const f = fakeRunner("linux");
+  const run: Run = async (cmd, args, input) => (args[0] === "clear" && args.includes("roto") ? { code: 1, stdout: "", stderr: "dbus" } : f.run(cmd, args, input));
+  const core = new SystemCredentialStore(linuxBackend(run), d);
+  await core.put("bien", "1");
+  await core.put("roto", "2");
+  await assert.rejects(core.forgetAll(), /no se pudieron borrar 1/);
+  assert.deepEqual(core.index(), [{ service: "roto", account: "default" }]);
+  assert.equal(f.vault.size, 1);
+});
+
+test("keyed() rechaza una clave que no es de un adaptador de API (fail-closed)", async () => {
+  const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+  const core = new SystemCredentialStore(linuxBackend(fakeRunner("linux").run), d);
+  await assert.rejects(core.keyed().set("../otra-app/clave", "v"), /no admitida/);
+  await assert.rejects(core.keyed().get("soul-continuity/xx/graph/yy"), /no admitida/);
+  assert.match(entryKey("op", "graph", ["a"]), /^soul-continuity\//);
+});
+
+test("índice en el formato anterior (`services`) se sigue leyendo y se borra al desinstalar", async () => {
+  const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+  const f = fakeRunner("linux");
+  await linuxBackend(f.run).set("graph", "default", "viejo");
+  writeFileSync(join(d, "credentials-index.json"), JSON.stringify({ services: ["graph"] }));
+  const core = new SystemCredentialStore(linuxBackend(f.run), d);
+  assert.deepEqual(await core.forgetAll(), ["graph"]);
   assert.equal(f.vault.size, 0);
 });

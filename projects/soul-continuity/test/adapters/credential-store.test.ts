@@ -1,10 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
-  CommandBackend, MemoryBackend, SecretToolBackend, SystemCredentialStore, entryKey, macosCommands, windowsCommands,
+  MemoryBackend, SystemCredentialStore, entryKey,
 } from "../../src/adapters/credential-store.ts";
 
 const NOW = 1_000_000_000;
@@ -73,94 +70,5 @@ test("put y revoke: guardar un login y revocarlo deja el almacén sin la entrada
   assert.equal(await s.revoke("graph", ["Chat.Read"]), false);
 });
 
-test("secret-tool: el secreto viaja por stdin, nunca en argv", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "s490-st-"));
-  const store = join(dir, "store.json");
-  const argvLog = join(dir, "argv.log");
-  const fake = join(dir, "secret-tool");
-  // Doble de secret-tool: guarda por atributo account en un JSON de prueba.
-  writeFileSync(fake, `#!/usr/bin/env node
-const fs=require("fs");const [cmd,...a]=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(argvLog)},JSON.stringify(process.argv.slice(2))+"\\n");
-const f=${JSON.stringify(store)};const db=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):{};const acc=a[a.indexOf("account")+1];
-if(cmd==="store"){let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{db[acc]=s;fs.writeFileSync(f,JSON.stringify(db));});}
-else if(cmd==="lookup"){if(acc in db)process.stdout.write(db[acc]);else process.exit(1);}
-else if(cmd==="clear"){delete db[acc];fs.writeFileSync(f,JSON.stringify(db));}
-`);
-  chmodSync(fake, 0o755);
-  const b = new SecretToolBackend({ command: fake });
-  await b.set("soul-continuity/x/graph/y", "SECRETO-123");
-  assert.equal(await b.get("soul-continuity/x/graph/y"), "SECRETO-123");
-  await b.delete("soul-continuity/x/graph/y");
-  assert.equal(await b.get("soul-continuity/x/graph/y"), null);
-  assert.ok(existsSync(argvLog));
-  assert.ok(!readFileSync(argvLog, "utf8").includes("SECRETO-123"), "el secreto no aparece en la línea de órdenes");
-});
-
-test("secret-tool: si clear falla, delete lanza en vez de informar de un borrado", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "s490-st-"));
-  const fake = join(dir, "secret-tool");
-  // Doble: lookup siempre encuentra la entrada y clear falla (almacén bloqueado).
-  writeFileSync(fake, `#!/usr/bin/env node
-const [cmd]=process.argv.slice(2);
-if(cmd==="lookup")process.stdout.write("SECRETO");else if(cmd==="clear")process.exit(1);
-`);
-  chmodSync(fake, 0o755);
-  await assert.rejects(new SecretToolBackend({ command: fake }).delete("soul-continuity/x/graph/y"), /no borró/);
-  // Si no había entrada, no hay nada que borrar: false, sin error.
-  const none = join(dir, "secret-tool-vacio");
-  writeFileSync(none, "#!/usr/bin/env node\nprocess.exit(1);\n");
-  chmodSync(none, 0o755);
-  assert.equal(await new SecretToolBackend({ command: none }).delete("soul-continuity/x/graph/y"), false);
-});
-
-test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
-  const sh = (name: string, body: string) => {
-    const f = join(dir, name);
-    writeFileSync(f, `#!/usr/bin/env node\n${body}\n`);
-    chmodSync(f, 0o755);
-    return f;
-  };
-  const found = sh("found", 'process.stdout.write("U0VDUkVUTw==\\n");');
-  const fail = sh("fail", "process.exit(1);");
-  const cmds = (get: string, del: string) => ({
-    ...macosCommands,
-    get: () => ({ cmd: get, args: [], stdin: "" }),
-    delete: () => ({ cmd: del, args: [], stdin: "" }),
-  }) as typeof macosCommands;
-  await assert.rejects(new CommandBackend(cmds(found, fail), true).delete("k"), /no borró/);
-  assert.equal(await new CommandBackend(cmds(fail, fail), true).delete("k"), false);
-});
-
-test("macOS y Windows: set relee y falla si el almacén truncó o no guardó el valor", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
-  const sh = (name: string, body: string) => {
-    const f = join(dir, name);
-    writeFileSync(f, `#!/usr/bin/env node\n${body}\n`);
-    chmodSync(f, 0o755);
-    return f;
-  };
-  const okCmd = sh("ok", "process.exit(0);");
-  const stored = sh("stored", 'process.stdout.write("U0VDUkVUTw==\\n");'); // «SECRETO»
-  const cmds = { ...macosCommands, set: () => ({ cmd: okCmd, args: [], stdin: "" }), get: () => ({ cmd: stored, args: [], stdin: "" }) } as typeof macosCommands;
-  await new CommandBackend(cmds, true).set("k", "SECRETO");
-  await assert.rejects(new CommandBackend(cmds, true).set("k", "SECRETO-MAS-LARGO"), /íntegra/);
-});
-
-test("secret-tool ausente: falla cerrado con error, no devuelve vacío", async () => {
-  const b = new SecretToolBackend({ command: "/nonexistent/secret-tool" });
-  await assert.rejects(b.set("k", "v"));
-  await assert.rejects(b.get("k"));
-});
-
-test("macOS y Windows: órdenes con el secreto solo en stdin", () => {
-  const m = macosCommands.set("soul-continuity/x/graph/y", "SECRETO-123");
-  assert.ok(!m.args.join(" ").includes("SECRETO"));
-  assert.ok(m.stdin.includes(Buffer.from("SECRETO-123").toString("base64")));
-  assert.ok(!m.stdin.includes("SECRETO-123"));
-  const w = windowsCommands.set("soul-continuity/x/graph/y", "SECRETO-123");
-  assert.ok(!w.args.join(" ").includes("SECRETO"));
-  assert.ok(w.stdin.includes(Buffer.from("SECRETO-123").toString("base64")));
-  assert.ok(!w.stdin.includes("SECRETO-123"));
-  assert.throws(() => macosCommands.set('k"; rm', "v"), /clave/);
-});
+// Los backends del sistema (Secret Service, Llavero, Credential Manager) son los del almacén único
+// del núcleo: sus pruebas están en test/credentials.test.ts, junto a las de su vista `keyed()`.
