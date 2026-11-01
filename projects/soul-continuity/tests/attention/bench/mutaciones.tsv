@@ -1,0 +1,63 @@
+mutacion	tests	evals	veredicto
+M01 sin comprobar ventana	FALLA	FALLA	MUERTA
+M02 sin presupuesto	FALLA	FALLA	MUERTA
+M03 alerta sin fuente autenticada	FALLA	FALLA	MUERTA
+M04 veto ignorado	FALLA	FALLA	MUERTA
+M05 silencio como permiso	FALLA	FALLA	MUERTA
+M06 el LLM eleva urgencia	FALLA	FALLA	MUERTA
+M07 reanudar desde cualquiera	FALLA	FALLA	MUERTA
+M08 disponibilidad implícita	FALLA	pasa	MUERTA
+M09 sin redacción	FALLA	FALLA	MUERTA
+M10 seguridad agrupable	FALLA	FALLA	MUERTA
+M11 contexto vencido ignorado	FALLA	FALLA	MUERTA
+M12 reintento ambiguo se registra	FALLA	FALLA	MUERTA
+M13 descanso declarado ignorado	FALLA	FALLA	MUERTA
+M14 PARA se pierde al reiniciar	FALLA	pasa	MUERTA
+M15 permiso fuera de contrato aceptado	FALLA	FALLA	MUERTA
+M16 agente declara el modo	FALLA	pasa	MUERTA
+M17 decisión repetida se vuelve a preguntar	FALLA	FALLA	MUERTA
+M18 estado ilegible aceptado	FALLA	pasa	MUERTA
+M19 alerta sin tope propio	FALLA	FALLA	MUERTA
+M20 alerta no marcada para el modo pasa	FALLA	FALLA	MUERTA
+M21 la alerta gasta presupuesto de avisos	FALLA	FALLA	MUERTA
+M22 alerta sobre el tope se pierde	FALLA	FALLA	MUERTA
+M23 urgencia inyectada eleva a alerta	FALLA	FALLA	MUERTA
+M24 regla en web es alerta	FALLA	FALLA	MUERTA
+M25 aviso repetido gasta presupuesto otra vez	FALLA	pasa	MUERTA
+M26 alerta repetida se duplica	FALLA	pasa	MUERTA
+M27 resumen antes de su hora	FALLA	FALLA	MUERTA
+M28 resumen repetido	FALLA	FALLA	MUERTA
+M29 el tope no se renueva por ventana	FALLA	pasa	MUERTA
+M30 resumen tardío se emite igual	FALLA	FALLA	MUERTA
+M31 «¿por qué?» dice siempre que avisó	FALLA	FALLA	MUERTA
+M32 «¿qué ahorraste?» no descuenta	FALLA	FALLA	MUERTA
+M33 presupuesto inválido abre el gate	FALLA	pasa	MUERTA
+M34 en DISPONIBLE la alerta exige marca	FALLA	pasa	MUERTA
+M35 sin modo declarado la alerta se entrega	FALLA	pasa	MUERTA
+M36 el estado guarda alertas agrupadas sin persistir	FALLA	pasa	MUERTA
+M37 nivel fuera del contrato sin forzar a N4	FALLA	pasa	MUERTA
+M38 redacción sin validar el nivel	FALLA	pasa	MUERTA
+M39 en la web solo se degradan las reglas de remitente	FALLA	pasa	MUERTA
+M40 el puente autentica remitentes de la web	FALLA	pasa	MUERTA
+M41 el puente autentica el remitente desconocido	FALLA	pasa	MUERTA
+M42 la política se fía del origen declarado en la web	FALLA	pasa	MUERTA
+M43 lo desconocido autentica	FALLA	pasa	MUERTA
+M44 una regla web de remitente suplantado avisa	FALLA	FALLA	MUERTA
+M45 la alerta de un objetivo vetado se entrega	FALLA	pasa	MUERTA
+M46 la alerta con el contexto vencido se entrega	FALLA	pasa	MUERTA
+M47 un origen sin autenticar detiene	FALLA	pasa	MUERTA
+M48 un origen sin autenticar veta	FALLA	pasa	MUERTA
+M49 franja con horas fuera de rango	FALLA	pasa	MUERTA
+M50 el estado acepta alertas agrupadas duplicadas	FALLA	pasa	MUERTA
+M51 lo avisado ahora sigue pendiente	FALLA	pasa	MUERTA
+M52 el resumen resuelve decisiones	FALLA	pasa	MUERTA
+M53 el resumen repite lo ya entregado	FALLA	pasa	MUERTA
+M54 la web degrada cualquier tipo con regla	FALLA	pasa	MUERTA
+M55 una ruta desconocida es API	FALLA	pasa	MUERTA
+M56 el estado acepta un PARA repetido	FALLA	pasa	MUERTA
+M57 contadores repetidos por ventana se aceptan	FALLA	pasa	MUERTA
+M58 la alerta drenada sigue pendiente	FALLA	pasa	MUERTA
+M59 reencolar no la vuelve a dejar pendiente	FALLA	pasa	MUERTA
+M60 el resumen no saca la alerta de la cola agrupada	FALLA	pasa	MUERTA
+M61 una regla convierte cualquier tipo en alerta	FALLA	pasa	MUERTA
+M62 un bloqueo reenviado vuelve a entrar en la bandeja	FALLA	pasa	MUERTA
