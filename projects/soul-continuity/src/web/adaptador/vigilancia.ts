@@ -5,11 +5,12 @@
 // huella del texto, nunca el texto.
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { Cortafuegos, type Registro } from "../cortafuegos/cortafuegos.ts";
 import type { Mutante } from "../cortafuegos/decision.ts";
 import type { Receta } from "../receta/tipos.ts";
-import { ACCION } from "../receta/validar.ts";
+import { pareceAccion } from "../receta/validar.ts";
 import { abrirNavegador, evaluarAislado } from "./navegador.ts";
 
 export class VigilanciaInvalida extends Error {}
@@ -44,7 +45,7 @@ export function recetaDeVigilancia(v: Vigilada): Receta {
   if (u.hash || v.url.includes("#")) throw new VigilanciaInvalida("URL con fragmento");
   const ruta = u.pathname + u.search;
   if (ruta.includes("*")) throw new VigilanciaInvalida("URL con comodín");
-  if (ACCION.test(ruta)) throw new VigilanciaInvalida(`la URL parece un enlace de acción: ${ruta}`);
+  if (pareceAccion(ruta)) throw new VigilanciaInvalida(`la URL parece un enlace de acción: ${ruta}`);
   return {
     formato: "soul-receta-web/1", id: `vigilancia-${v.id}`, sitio: v.sitio, estado: "estable",
     origen: u.origin, javascript: false, urls: [ruta], renovacion_sesion: [], post_lectura: [],
@@ -75,6 +76,7 @@ export class AlmacenHuellas {
   guardar(id: string, url: string, huella: string) {
     const d = this.leer();
     d[id] = { huella, url, visto_en: new Date().toISOString() };
+    mkdirSync(dirname(this.ruta), { recursive: true, mode: 0o700 });
     writeFileSync(this.ruta, JSON.stringify(d, null, 2), { mode: 0o600 });
   }
 }
