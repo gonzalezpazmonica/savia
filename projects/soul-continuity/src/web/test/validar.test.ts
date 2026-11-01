@@ -114,3 +114,11 @@ test("login SSO: origen entero, nunca el de la receta ni con URLs en la lista", 
 test("websocket.mantenimiento no admite el marcador de mensaje binario", () => {
   rechaza((r) => { r.websocket.mantenimiento = ["<binario>"]; }, /binario/);
 });
+
+test("renovacion_sesion no admite comodines ni verbos en camelCase (revisión #1443, P2-1/P2-3 de seguridad)", () => {
+  rechaza((r) => { r.renovacion_sesion = ["/sesion/*"]; }, /comodines/);
+  rechaza((r) => { r.urls.push("/api/approveTask"); }, /acción/);
+  rechaza((r) => { r.urls.push("/x/logout.aspx"); }, /acción/);
+  // Caso negativo: la renovación exacta de la receta sigue siendo válida.
+  assert.ok(validarReceta(base()));
+});

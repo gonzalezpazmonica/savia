@@ -195,3 +195,23 @@ test("decidirHttp: un comodín relleno con un verbo de acción se corta (revisi�
   assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/aprobaciones-pendientes` })).permitir, true);
   assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/approve` })).motivo, "accion_en_url");
 });
+
+test("accionEnUrl: verbo seguido de extensión, `;` o pegado en camelCase en el camino (revisión #1443, P2-1 de seguridad)", () => {
+  const r = { ...tareas, urls: [...tareas.urls, "/x/*", "/api/*"] };
+  for (const ruta of ["/x/approve.php", "/x/logout.aspx", "/x/delete;v1", "/api/approveTask", "/api/itemMarkRead"]) {
+    assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}${ruta}` })).motivo, "accion_en_url", ruta);
+  }
+  // Casos negativos: palabras que solo empiezan como un verbo, y nombres de operación en la consulta.
+  for (const ruta of ["/x/readme-pendientes", "/api/getSettings", "/x/listado.html"]) {
+    assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}${ruta}` })).permitir, true, ruta);
+  }
+  assert.equal(decidirHttp(correo, sin, post("/correo/api/servicio?x-accion=BuscarElementos", { "x-accion": "BuscarElementos" }, {})).permitir, true);
+});
+
+test("renovación de sesión: una URL de acción no se acepta como renovación (revisión #1443, P2-3 de seguridad)", () => {
+  const r = { ...correo, renovacion_sesion: ["/sesion/renovar", "/sesion/logout"] };
+  assert.equal(decidirHttp(r, sin, post("/sesion/renovar", {}, {})).motivo, "renovacion");
+  const d = decidirHttp(r, sin, post("/sesion/logout", {}, {}));
+  assert.equal(d.permitir, false);
+  assert.notEqual(d.motivo, "renovacion");
+});

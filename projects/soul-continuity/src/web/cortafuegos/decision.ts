@@ -3,7 +3,7 @@
 // aborta (fail-closed).
 
 import { casa, casaLogin } from "../receta/patrones.ts";
-import { ACCION } from "../receta/validar.ts";
+import { pareceAccion } from "../receta/validar.ts";
 import type { AccionNavegacion, OperacionesPost, Receta } from "../receta/tipos.ts";
 
 /** Mutantes del banco: cada uno quita UNA defensa. `ninguno` es el cortafuegos real. */
@@ -38,7 +38,7 @@ export type Motivo =
 export function accionEnUrl(u: URL): boolean {
   let ruta: string;
   try { ruta = decodeURIComponent(u.pathname + u.search); } catch { return true; }
-  return ACCION.test(ruta);
+  return pareceAccion(ruta);
 }
 
 export interface Decision {
@@ -165,7 +165,7 @@ export function decidirHttp(r: Receta, est: EstadoCortafuegos, p: PeticionHttp, 
     return { permitir: false, motivo: "login", sesion: true };
   }
   const metodo = p.metodo.toUpperCase();
-  if (metodo === "POST" && casa(p.url, r.origen, r.renovacion_sesion)) {
+  if (metodo === "POST" && casa(p.url, r.origen, r.renovacion_sesion) && !accionEnUrl(u)) {
     return { permitir: true, motivo: "renovacion" };
   }
   if (!casa(p.url, r.origen, r.urls, prefijo)) return { permitir: false, motivo: "fuera_de_lista" };
