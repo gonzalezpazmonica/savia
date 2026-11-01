@@ -1,7 +1,8 @@
 name: Soul Continuidad (SE-490)
 
 # AC-1: el paquete corre en Windows, macOS y Linux con el runtime oficial de Node.js LTS,
-# sin ejecutables propios. Tests, banco de continuidad (AC-3) y comprobación de tipos.
+# sin ejecutables propios. Tests, banco de continuidad (AC-3), evals y mutantes de la política
+# de atención (AC-4b) y comprobación de tipos.
 on:
   pull_request:
     paths:
@@ -47,6 +48,13 @@ jobs:
 
       - name: Banco de continuidad contra el núcleo (gate AC-3)
         run: npm run bench
+
+      - name: Evals de la política de atención (AC-4b)
+        run: npm run evals:attention
+
+      - name: Mutantes de la política de atención (0 vivos, 0 rotos)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run mutants:attention
 
   typecheck:
     name: tsc --strict
