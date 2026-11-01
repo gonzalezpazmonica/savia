@@ -1,0 +1,6 @@
+{
+  "name": "soul-continuity-attention",
+  "private": true,
+  "type": "module",
+  "description": "Política de atención y registro de demanda de Soul Continuidad (SE-490). Librería pura: sin red, sin LLM, sin reloj propio."
+}
