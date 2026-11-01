@@ -89,3 +89,13 @@ test("AC-4d: frontend con proveedor aprobado para N4 => nivel de la instalación
 test("sin frontend de agente, el nivel es el de la instalación", () => {
   assert.equal(agentLevel(emptyConfig("i"), { frontend: null }, "completo").level, "completo");
 });
+
+test("operator.ref con forma cerrada: «__proto__», «constructor» o con barras se rechazan (control: op-yo vale)", () => {
+  const d = tmp();
+  for (const bad of ["__proto__", "constructor", "../x", "a b", ""]) {
+    writeFileSync(join(d, CONFIG_FILE), JSON.stringify({ ...emptyConfig("i"), profiles: { yo: profile(bad) } }));
+    assert.throws(() => loadConfig(d), ConfigError, bad);
+  }
+  writeFileSync(join(d, CONFIG_FILE), JSON.stringify({ ...emptyConfig("i"), profiles: { yo: profile("op-yo") } }));
+  assert.equal(loadConfig(d).profiles.yo.operator.ref, "op-yo");
+});

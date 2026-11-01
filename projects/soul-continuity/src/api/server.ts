@@ -114,8 +114,11 @@ export interface Mundo {
   refrescar?(ctx: CtxMundo, o: Op, t: number): void;
   /** Frescura real de lo servido: instante de la última lectura y si es lo último conocido. */
   frescura?(o: Op, t: number): { ultimaLectura: number | null; obsoleto: boolean };
-  /** Ids que entran en q1/q2/q4 según el núcleo (misma respuesta que la CLI). null = selección propia. */
-  seleccion?(o: Op, pregunta: string, t: number): Set<string> | null;
+  /**
+   * Ids que entran en q1–q4 según el núcleo (misma respuesta que la CLI). null = selección propia.
+   * Q3 recibe `desde` (y `hasta`, si viene): diferencia entre las instantáneas de esos instantes.
+   */
+  seleccion?(o: Op, pregunta: string, t: number, rango?: { desde: number | null; hasta: number | null }): Set<string> | null;
 }
 
 export interface OpcionesServidor {
@@ -209,7 +212,8 @@ export function crearServidor(opts: OpcionesServidor) {
   const ctx: CtxMundo = { evento, efectiva, ahora };
 
   // -------------------------------------------------------------- estado por operador
-  const ops: Record<string, Op> = {};
+  // Sin prototipo: un operator_ref «constructor» o «__proto__» no autentica contra Object.prototype.
+  const ops: Record<string, Op> = Object.create(null);
   const minuto0 = Math.floor(ahora() / MIN) * MIN;
   for (const d of opts.mundo.semillas()) {
     const o: Op = ops[d.ref] = {
@@ -219,7 +223,7 @@ export function crearServidor(opts: OpcionesServidor) {
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
-    for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: false, noMio: false, fijo: true });
+    for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: e.mio ?? false, noMio: e.noMio ?? false, fijo: true });
     iniciarVentana(o, minuto0);
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
       const cat = CATEGORIA[e.tipo];
@@ -277,7 +281,7 @@ export function crearServidor(opts: OpcionesServidor) {
   function consulta(o: Op, pregunta: string, f: Filtro) {
     const todos = [...o.elementos.values()].filter((e) => vivo(o, e.id));
     let sel: Elemento[];
-    const delNucleo = pregunta === "q3" ? null : opts.mundo.seleccion?.(o, pregunta, ahora()) ?? null;
+    const delNucleo = opts.mundo.seleccion?.(o, pregunta, ahora(), { desde: f.desde, hasta: f.hasta }) ?? null;
     if (delNucleo) sel = todos.filter((e) => delNucleo.has(e.id) && !e.noMio
       && (pregunta !== "q4" || ((f.desde == null || (e.fecha ?? 0) >= f.desde) && (f.hasta == null || (e.fecha ?? 0) <= f.hasta))));
     else if (pregunta === "q1") sel = todos.filter((e) => ["reunion", "tarea", "revision", "hilo_espera", "documento"].includes(e.tipo) && !e.noMio);
@@ -358,14 +362,17 @@ export function crearServidor(opts: OpcionesServidor) {
     const e = o.elementos.get(id);
     if (!e || (!o.ledger.has(id) && !vivo(o, id))) throw noEncontrado();
     const previa = o.corr.get(id);
-    if (previa?.tipo === tipo) return { id, tipo, aplicada: true, registrada_en: iso(previa.en) };
+    if (previa?.tipo === tipo) return Promise.resolve({ id, tipo, aplicada: true, registrada_en: iso(previa.en) });
     const t = ahora();
-    o.corr.set(id, { tipo, en: t });
-    if (tipo === "resuelto" || tipo === "no_aplica") o.ledger.set(id, { tipo, en: t });
-    else { e.mio = tipo === "es_mio"; e.noMio = tipo === "no_es_mio"; o.ledger.delete(id); }
-    hooks.correccion?.(o, id, tipo, t);
-    emitir(o, t, { tipo: "respuesta", categoria: "correccion_confirmada", ids: [id] });
-    return { id, tipo, aplicada: true, registrada_en: iso(t) };
+    // Primero se persiste (producción: libro del núcleo); solo entonces se aplica y se confirma.
+    // Si no se puede persistir, 503 y nada cambia: no se promete lo que volvería tras reiniciar.
+    return Promise.resolve(hooks.correccion?.(o, id, tipo, t)).then(() => {
+      o.corr.set(id, { tipo, en: t });
+      if (tipo === "resuelto" || tipo === "no_aplica") o.ledger.set(id, { tipo, en: t });
+      else { e.mio = tipo === "es_mio"; e.noMio = tipo === "no_es_mio"; o.ledger.delete(id); }
+      emitir(o, t, { tipo: "respuesta", categoria: "correccion_confirmada", ids: [id] });
+      return { id, tipo, aplicada: true, registrada_en: iso(t) };
+    });
   }
   function opAtencion(o: Op, c: { modo: string; hasta?: string | null }) {
     if (!MODOS.includes(c.modo)) throw invalida();
@@ -457,7 +464,7 @@ export function crearServidor(opts: OpcionesServidor) {
       }
       if (verbo === "porque") return args.length === 1 ? ok("porque", opPorque(o, args[0])) : malo();
       const corr: Record<string, string> = { resuelto: "resuelto", "no-aplica": "no_aplica", mio: "es_mio", "no-mio": "no_es_mio" };
-      if (verbo in corr) return args.length === 1 ? ok("correccion", opCorreccion(o, args[0], corr[verbo])) : malo();
+      if (verbo in corr) return args.length === 1 ? opCorreccion(o, args[0], corr[verbo]).then((r) => ok("correccion", r)) : malo();
       if (verbo === "modo") {
         const modo = norm(args[0] ?? "").toUpperCase();
         if (!MODOS.includes(modo)) return malo();
@@ -523,7 +530,7 @@ export function crearServidor(opts: OpcionesServidor) {
     if (!m || dp?.length !== 1 || !dp[0]) throw new ErrorApi(401, "UNAUTHENTICATED");
     if (opts.autenticar) {
       const r = opts.autenticar(m[1]);
-      if (!r || !ops[r.ref]) throw new ErrorApi(401, "UNAUTHENTICATED");
+      if (!r || !Object.hasOwn(ops, r.ref)) throw new ErrorApi(401, "UNAUTHENTICATED");
       if (r.revocado) throw new ErrorApi(401, "UNAUTHENTICATED", { revocado: true });
       return ops[r.ref];
     }
@@ -619,7 +626,7 @@ export function crearServidor(opts: OpcionesServidor) {
     }
   });
 
-  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number) => void } = {};
+  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number) => void | Promise<void> } = {};
   let escucha: Listening | null = null;
   return {
     /** Escucha solo en esas direcciones (las de la VPN del operador) y por TLS. */
@@ -638,7 +645,7 @@ export function crearServidor(opts: OpcionesServidor) {
     egresos: () => 0,
     volcarEstado: () => JSON.stringify(Object.values(ops), (_k, v) => (v instanceof Map ? [...v] : v)),
     /** Producción: persiste las correcciones en el libro del núcleo. */
-    alCorregir: (f: (o: Op, id: string, tipo: string, t: number) => void) => { hooks.correccion = f; },
+    alCorregir: (f: (o: Op, id: string, tipo: string, t: number) => void | Promise<void>) => { hooks.correccion = f; },
     operador: (ref: string) => ops[ref],
   };
 }
