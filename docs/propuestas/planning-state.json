@@ -1668,6 +1668,15 @@
       "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-491",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Autorizaciones de publicación de proyectos que un agente no puede fabricar",
+      "note": "La autorización deja de ser una línea editable en .claude/.project-authorizations: pasa a una firma ed25519 de operador (namespace savia-project-publish) versionada en config/project-authorizations/ y verificada contra los firmantes de origin/main. La whitelist de origin/main, no la de la copia de trabajo, dice qué ya es público. Un verificador único para protect-project-privacy.sh, block-gitignored-references (bash y TS) y block-project-whitelist (bash y TS nuevo), aviso PostToolUse tras Bash sobre .gitignore y paso en CI.",
+      "evidence": "docs/specs/SE-491-project-publication-authorizations.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
