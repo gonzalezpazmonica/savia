@@ -49,7 +49,7 @@ Cada adaptador declara en `descriptors.ts`:
 - **Throttling.** `HttpTransport` respeta `Retry-After` en 429 y 503, con un máximo de reintentos y de espera. Si la espera pedida supera el tope, el adaptador queda `unavailable` hasta la siguiente lectura. Google señala la cuota con 403 `rateLimitExceeded`, y eso también se trata como `unavailable`.
 - **Fail-closed por consentimiento.** Si el almacén o el proveedor de identidad dicen que el inquilino exige administración, el adaptador no llama a la API, responde `admin_consent_required` y ofrece `fallback: "web"`. Un 403 de Graph se interpreta igual.
 - **Credenciales.**
-  - `SystemCredentialStore` guarda los tokens solo en el almacén del sistema: Secret Service, Llavero o Credential Manager.
+  - `SystemCredentialStore` guarda los tokens solo en el almacén del sistema, a través del almacén único del núcleo (`src/credentials/store.ts`, vista `keyed()`): Secret Service, Llavero o Credential Manager, con cada entrada en su índice sin secretos para que `soul uninstall` las borre todas.
   - El secreto viaja por stdin y nunca en argv.
   - Hay una entrada por operador, servicio y permisos.
   - El transporte corta cualquier respuesta de más de 16 MiB (`maxBytes`) con error.
@@ -70,7 +70,7 @@ Cada adaptador declara en `descriptors.ts`:
 - **Gmail.** `gmail.metadata` no admite `q`, así que el adaptador recorre los `max_threads` hilos más recientes (300 por defecto). Leer menos solo puede omitir esperas antiguas, nunca inventarlas. Google no tiene delta: se lee completo con tope.
 - **Calendario.** Se lee con `calendarView` y paginación, sin delta. La viabilidad lo midió en 1–2 peticiones por ciclo.
 - **Jira.** Usa `/rest/api/3/search/jql` y, si el sitio devuelve 404, cae a `/rest/api/3/search`.
-- **macOS y Windows.** Las órdenes del almacén se prueban como construcción de órdenes (el secreto va solo en stdin), no contra el sistema real. Eso queda para la CI multiplataforma de AC-1.
+- **macOS y Windows.** Los backends del almacén son los del núcleo y se prueban con dobles de `security` y PowerShell (el secreto va solo en stdin), no contra el sistema real. Eso queda para la CI multiplataforma de AC-1.
 
 ## Pruebas
 

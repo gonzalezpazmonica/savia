@@ -13,22 +13,27 @@
  * Códigos de salida: 0 bien · 1 error · 2 uso · 3 sin perfil · 4 rechazado al frontend · 5 detenido.
  */
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Answer, Detail, QuestionId, SourceEnv } from "../contract/adapter.ts";
 import { type Snapshot, iso, parseTs } from "../contract/claims.ts";
 import {
-  type Caller, ConfigError, NoProfileError, RANK, activeProfileName, agentLevel, elementId, loadConfig, resolveInstall,
-  type SoulConfig, saveConfig,
+  type Caller, ConfigError, NoProfileError, RANK, type SoulConfig, activeProfileName, agentLevel, elementId, loadConfig, resolveInstall,
+  saveConfig,
 } from "../core/config.ts";
 import { type AdapterRegistry, makeEngine } from "../core/engine.ts";
 import { StoppedError, resume, stop, stopState } from "../core/failsafe.ts";
 import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeSoulState, writeJson } from "../core/store.ts";
 import { autostartPlan, installAutostart, uninstallAutostart } from "../startup/autostart.ts";
 import { ensureInstallCert } from "../api/cert.ts";
-import { listDevices, pairDevice, revokeDevice } from "../api/devices.ts";
+import { listDevices, revokeDevice } from "../api/devices.ts";
+import { closePairingWindow, openPairingWindow, pairLink, shortFingerprint } from "../api/pairing.ts";
+import { encodeQr, qrToPng, qrToTerminal } from "../api/qr.ts";
 import { validateListen } from "../api/listen.ts";
 import type { Run } from "../credentials/store.ts";
+import type { TokenSet } from "../adapters/oauth.ts";
+import { randomBytes } from "node:crypto";
+import { LoginUsage, PROFILE_NAME, initConfig, runLogin } from "./login.ts";
 
 export interface CliDeps {
   dataDir: string;
@@ -37,8 +42,21 @@ export interface CliDeps {
   out: (s: string) => void;
   err: (s: string) => void;
   adapters: AdapterRegistry;
+  /** Registro según la configuración (producción: solo los adaptadores que activó el operador). */
+  adaptersFor?: (cfg: SoulConfig) => AdapterRegistry;
   sourceEnv: SourceEnv;
-  credentials: { forget(service: string): Promise<string[]>; forgetAll(): Promise<string[]> };
+  /** Entorno de lectura de un operador: sus credenciales y el transporte de la configuración. */
+  sourceEnvFor?: (operatorRef: string, cfg: SoulConfig) => SourceEnv;
+  credentials: {
+    /** AC-5: tokens y caché propia del adaptador (todas sus variantes de permisos). */
+    revoke(adapter: string, operatorRef: string): Promise<{ tokens_removed: number; cache_removed: boolean }>;
+    /** Todas las credenciales del índice del almacén único (desinstalar). */
+    forgetAll(): Promise<string[]>;
+  };
+  /** Tokens de los adaptadores de API de un operador (almacén único). Necesario para `login`. */
+  tokenStore?: (operatorRef: string, cfg: SoulConfig) => { put(service: string, scopes: string[], t: TokenSet): Promise<void> };
+  /** Lee un secreto de stdin sin eco (solo `login --token-stdin`). */
+  readSecret?: () => Promise<string>;
   platform: NodeJS.Platform;
   home: string;
   run: Run;
@@ -52,6 +70,8 @@ const CORRECTIONS: Record<string, string> = { resuelto: "resuelto", "no-aplica":
 const AGENT_ALLOWED = new Set(["status", "q1", "q2", "q3", "q4", "why", "adapters", "stop", "bench", "help"]);
 
 const HELP = `Órdenes de soul (sin texto libre):
+  init <perfil> [--email a@b]    crea la instalación: perfil sin fuentes ni adaptadores activos
+  login <adaptador> [--token-stdin] [--days N]   inicia sesión (M365/Google: código; resto: token por stdin)
   status                         estado sin red: perfil, STOP, última lectura
   q1 | q2 | q4 [--cached]        qué tengo abierto · qué depende de mí · compromisos con fecha
   q3 --since <ISO>               qué cambió desde ese instante
@@ -66,7 +86,9 @@ const HELP = `Órdenes de soul (sin texto libre):
   autostart install|uninstall [--dry-run]
   bench                          banco de continuidad contra este núcleo
   serve                          API local para la app (solo en las direcciones configuradas)
-  pair <nombre> | unpair <id> | devices   dispositivos emparejados con la app
+  pair [--days N] [--qr-png F] | unpair <id> [--undo] | devices   emparejar la app con clave y QR (10 min) y dispositivos
+  corrections --device <id>      correcciones vigentes hechas desde ese dispositivo
+  undo-device <id>               deshace las correcciones de ese dispositivo (móvil perdido)
 Opciones: --json · --frontend <nombre>`;
 
 interface Parsed { cmd: string; args: string[]; flags: Record<string, string | true> }
@@ -74,7 +96,7 @@ interface Parsed { cmd: string; args: string[]; flags: Record<string, string | t
 function parse(argv: string[]): Parsed {
   const args: string[] = [];
   const flags: Record<string, string | true> = {};
-  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend"]);
+  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days", "--email", "--qr-png"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (withValue.has(a)) flags[a.slice(2)] = argv[++i] ?? "";
@@ -143,6 +165,18 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       return 0;
     }
 
+    case "init": {
+      const name = p.args[0] ?? "";
+      if (!PROFILE_NAME.test(name)) { deps.err("init <perfil> [--email a@b]: perfil en minúsculas, cifras, - y _"); return 2; }
+      if (existsSync(join(deps.dataDir, "config.json"))) { deps.err(`ya hay una instalación en ${deps.dataDir}; no se pisa`); return 1; }
+      const emails = typeof p.flags.email === "string" ? p.flags.email.split(",").map((e) => e.trim()).filter(Boolean) : [];
+      const cfg = initConfig(name, emails, `inst-${randomBytes(6).toString("hex")}`);
+      saveConfig(deps.dataDir, cfg);
+      print(`Instalación creada en ${deps.dataDir} con el perfil «${name}». Ninguna fuente ni adaptador está activo: actívalos en config.json (ver docs/instalar.md).`,
+        { data_dir: deps.dataDir, profile: name, operator_ref: cfg.profiles[name].operator.ref });
+      return 0;
+    }
+
     case "stop": {
       const s = stop(deps.dataDir, p.args.join(" ") || "lo pide el operador", deps.now());
       print("Detenido. No se leerá ninguna fuente hasta «soul resume», también tras reiniciar.", s);
@@ -183,7 +217,6 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
 async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { done: boolean }): Promise<number> {
   const json = p.flags.json === true;
   const print = (human: string, data: unknown) => deps.out(json ? JSON.stringify(data, null, 1) : human);
-  const engine = makeEngine(deps.adapters);
   try {
     if (caller.frontend && !AGENT_ALLOWED.has(p.cmd)) {
       throw new Exit(4, `«${p.cmd}» no está disponible desde un frontend de agente (${caller.frontend}). Hazlo en tu terminal.`);
@@ -202,6 +235,8 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
       ].join("\n"), { config_unreadable: true, error: (e as Error).name, stopped: st.stopped, stop_reason: caller.frontend ? null : st.reason ?? null });
       return 1;
     }
+    const engine = makeEngine(deps.adaptersFor?.(cfg) ?? deps.adapters);
+    const envFor = (ref: string) => deps.sourceEnvFor?.(ref, cfg) ?? deps.sourceEnv;
     const level = () => agentLevel(cfg, caller, cfg.detail.level);
     const audit = (cmd: string, lv: { level: Detail; forced: boolean; provider: string | null }, total: number) => {
       audited.done = true;
@@ -245,7 +280,7 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         // con el libro de correcciones de ahora. Una fuente que no responde no aporta nada y se dice.
         const cached = p.flags.cached === true ? engine.cachedSnapshot(deps.dataDir, install.operator.ref, now) : null;
         const fresh = cached !== null && (parseTs(cached.expires_at) ?? 0) > (parseTs(now) ?? 0);
-        const snap: Snapshot = cached && fresh ? cached : await engine.snapshot({ install, now, stateDir: deps.dataDir, env: deps.sourceEnv });
+        const snap: Snapshot = cached && fresh ? cached : await engine.snapshot({ install, now, stateDir: deps.dataDir, env: envFor(install.operator.ref) });
         const unread = Object.entries(snap.adapters).filter(([, v]) => v.status !== "ok" && v.status !== "not_configured");
         const unreadLine = unread.length ? [`  ${unread.length} fuente(s) sin leer: ${unread.map(([k, v]) => `${k} (${v.status})`).join(", ")} — lo de ahí no está contado`] : [];
         const lv = level();
@@ -345,9 +380,12 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         if (!adapter || !src.length) throw new Exit(1, `el adaptador ${adapter ?? ""} no está configurado en este perfil`);
         for (const s of src) s.consent = { ...s.consent, revoked_at: deps.now() };
         saveConfig(deps.dataDir, cfg);
-        const purged = engine.purgeAdapter(deps.dataDir, cfg.profiles[name].operator.ref, adapter);
-        const creds = await deps.credentials.forget(adapter);
-        print(`Revocado ${adapter}: consentimiento retirado, ${purged} fichero(s) de caché limpiados, credencial borrada.`, { adapter, purged, credentials: creds });
+        const ref = cfg.profiles[name].operator.ref;
+        const purged = engine.purgeAdapter(deps.dataDir, ref, adapter);
+        const r = await deps.credentials.revoke(adapter, ref);
+        print(`Revocado ${adapter}: consentimiento retirado, ${purged} fichero(s) de instantánea limpiados, `
+          + `${r.tokens_removed} credencial(es) borrada(s)${r.cache_removed ? ", caché propia del adaptador borrada" : ""}.`,
+        { adapter, purged, tokens_removed: r.tokens_removed, adapter_cache_removed: r.cache_removed });
         return 0;
       }
 
@@ -389,30 +427,91 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
       }
 
       case "pair": {
+        // Emparejamiento directo (soul-pair-v2): abre una ventana de 10 min con una clave de un solo
+        // uso. La app no recibe el token del dispositivo por aquí: lo obtiene al completar contra `serve`.
         const name = activeProfileName(cfg, deps.env);
-        if (!p.args[0]) throw new Exit(2, "pair <nombre del dispositivo>");
+        if (p.args.length) throw new Exit(2, "pair [--days N] [--qr-png F] (el nombre lo pone la app)");
+        const png = p.flags["qr-png"];
+        if (png === "" || png === true) throw new Exit(2, "--qr-png <fichero>");
         const listen = validateListen(cfg.api.listen);
         const tls = ensureInstallCert(deps.dataDir, listen);
-        const d = pairDevice(deps.dataDir, cfg.profiles[name].operator.ref, p.args[0], deps.now());
-        const direcciones = listen.map((a) => `${a.includes(":") ? `[${a}]` : a}:${cfg.api.port}`);
+        const days = typeof p.flags.days === "string" ? Number(p.flags.days) : undefined;
+        if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 397)) throw new Exit(2, "--days: entre 1 y 397 días");
+        const w = openPairingWindow(deps.dataDir, cfg.profiles[name].operator.ref, Date.parse(deps.now()), days);
+        const huella = shortFingerprint(tls.cert);
+        const qr = pairLink(listen[0], cfg.api.port, w.token, huella);
+        const matriz = encodeQr(qr).modules;
+        if (typeof png === "string") {
+          // Solo para quien lo pide; 0600 y sin sobrescribir. Si no se puede escribir, la ventana se cierra.
+          try { writeFileSync(png, qrToPng(matriz), { mode: 0o600, flag: "wx" }); } catch (e) {
+            closePairingWindow(deps.dataDir);
+            throw new Exit(1, `--qr-png: no se pudo crear ${png} (${(e as NodeJS.ErrnoException).code ?? "error"}); ventana cerrada`);
+          }
+        }
         print([
-          `Emparejado «${p.args[0]}» (${d.id}). Introduce en la app, solo esta vez:`,
-          `  token: ${d.token}`, `  huella: ${tls.pin}`, `  dirección: ${direcciones.join(", ")}`,
-          "El token no se vuelve a mostrar; si se pierde, desempareja y vuelve a emparejar.",
-        ].join("\n"), { id: d.id, token: d.token, pin: tls.pin, direcciones });
+          "Emparejar la app (modo directo). En la app, «Escanear QR» con este código:",
+          qrToTerminal(matriz),
+          "O pega en la app:",
+          `  IP: ${listen.join(", ")}`, `  puerto: ${cfg.api.port}`, `  clave de emparejamiento: ${w.token}`,
+          `  huella del certificado: ${huella} (compárala con la que muestra la app)`,
+          `  o enlace para QR: ${qr}`,
+          `Válido hasta ${w.expires_at.slice(11, 16)} UTC (10 min), un solo uso y 3 intentos. «soul serve» tiene que estar en marcha.`,
+          typeof png === "string" ? `QR guardado en ${png} (0600): bórralo al terminar.` : "Si el QR no se ve bien en esta terminal: soul pair --qr-png <fichero>.",
+          "La clave y el QR son secretos mientras dure la ventana: no compartas capturas de esta pantalla.",
+        ].join("\n"), { clave: w.token, ...(typeof png === "string" ? { qr_png: png } : {}), direcciones: listen, puerto: cfg.api.port, huella_corta: huella, pin: tls.pin, qr, caduca: w.expires_at });
         return 0;
       }
 
       case "unpair": {
-        if (!p.args[0]) throw new Exit(2, "unpair <id>");
-        if (!revokeDevice(deps.dataDir, p.args[0], deps.now())) throw new Exit(1, `no hay ningún dispositivo ${p.args[0]}`);
-        print(`Desemparejado ${p.args[0]}: su token deja de valer.`, { id: p.args[0], revoked: true });
+        if (!p.args[0]) throw new Exit(2, "unpair <id> [--undo]");
+        const dev = listDevices(deps.dataDir).find((d) => d.id === p.args[0]);
+        if (!dev || !revokeDevice(deps.dataDir, p.args[0], deps.now())) throw new Exit(1, `no hay ningún dispositivo ${p.args[0]}`);
+        const undone = p.flags.undo === true ? await engine.undoDevice(deps.dataDir, dev.operator_ref, dev.id, deps.now()) : 0;
+        const pending = engine.deviceCorrections(deps.dataDir, dev.operator_ref, dev.id).length;
+        print(`Desemparejado ${p.args[0]}: su token deja de valer.${undone ? ` ${undone} corrección(es) suya(s) deshecha(s).` : pending ? ` Tiene ${pending} corrección(es) vigente(s): «soul undo-device ${dev.id}» las deshace.` : ""}`,
+          { id: p.args[0], revoked: true, undone, corrections_pending: pending });
+        return 0;
+      }
+
+      case "corrections": {
+        const id = typeof p.flags.device === "string" ? p.flags.device : "";
+        const dev = listDevices(deps.dataDir).find((d) => d.id === id);
+        if (!dev) throw new Exit(2, "corrections --device <id de «soul devices»>");
+        const list = engine.deviceCorrections(deps.dataDir, dev.operator_ref, dev.id)
+          .map((c) => ({ id: elementId(dev.operator_ref, c.key), action: c.action, at: c.at }));
+        print(list.map((c) => `${c.id} ${c.action} ${c.at}`).join("\n") || "Sin correcciones vigentes de ese dispositivo.", { device: dev.id, corrections: list });
+        return 0;
+      }
+
+      case "undo-device": {
+        const dev = listDevices(deps.dataDir).find((d) => d.id === p.args[0]);
+        if (!dev) throw new Exit(2, "undo-device <id de «soul devices»>");
+        const n = await engine.undoDevice(deps.dataDir, dev.operator_ref, dev.id, deps.now());
+        print(`${n} corrección(es) de ${dev.id} deshecha(s): cada elemento vuelve a su estado anterior.`, { device: dev.id, undone: n });
         return 0;
       }
 
       case "devices": {
         const devices = listDevices(deps.dataDir).map(({ token_sha256: _h, ...d }) => d);
         print(devices.map((d) => `${d.id} ${d.name}${d.revoked_at ? " (revocado)" : ""}`).join("\n") || "Sin dispositivos.", { devices });
+        return 0;
+      }
+
+      case "login": {
+        const install = resolveInstall(cfg, deps.env);
+        const adapter = p.args[0] ?? "";
+        if (!deps.tokenStore || !deps.readSecret) throw new Exit(1, "el inicio de sesión no está disponible en este punto de entrada");
+        const days = typeof p.flags.days === "string" ? Number(p.flags.days) : undefined;
+        try {
+          const msg = await runLogin(adapter, { tokenStdin: p.flags["token-stdin"] === true, days }, {
+            connectors: cfg.connectors, store: deps.tokenStore(install.operator.ref, cfg), readSecret: deps.readSecret,
+            say: deps.err, now: () => parseTs(deps.now()) ?? Date.now(),
+          });
+          print(msg, { adapter, stored: true });
+        } catch (e) {
+          if (e instanceof LoginUsage) throw new Exit(2, e.message);
+          throw e;
+        }
         return 0;
       }
 

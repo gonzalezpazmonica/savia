@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=36736771bd9172a85eeea1b2c6d980eebee9724380f0e01e111da9b377e4a75b
-timestamp=2026-11-01T13:22:27Z
-branch=agent/hook-gitignored-aut-20261023
-head_commit=dac64a246
-signature=00dfb18c96e309fdc7976ca0e9d0d29b01fab4befe12d6e4f09e6d7f25398d01
+diff_hash=68063170c28a58dde85c516a3a15d9e8c6721140b5df8a8b50f53666cc3d6403
+timestamp=2026-11-01T14:03:00Z
+branch=agent/s490-integracion-20261023
+head_commit=ce381f365
+signature=635dd5d842976056d50b5b84700da3f37c4f93d7b786af2ee518703ba465d1b7

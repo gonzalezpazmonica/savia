@@ -11,16 +11,17 @@
  *
  * Transporte: solo HTTPS (certificado propio de la instalación) y solo en las direcciones
  * configuradas (`listen.ts`). Con STOP del fail-safe todo responde 503.
- * La política de atención de aquí es la aproximación del simulado de Labs (presupuesto,
- * tope de alertas, aplazamiento por modo y agrupación sin pérdida); la política real es la
- * parte `atencion` de SE-490 y se enchufa en `evento`.
+ * Decide la política de atención de SE-490 (`src/attention`, `Politica`), con su estado
+ * persistido (`estadoATexto`). Aquí solo se traduce: el evento de la API entra como evento de
+ * la política y su decisión sale como mensaje del sondeo, pendiente agrupado o registro.
  */
 
 import { createServer as createHttps, type Server } from "node:https";
 import type { IncomingMessage } from "node:http";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { validar } from "./schema.ts";
+import { Franja, Politica, estadoATexto, estadoDesdeTexto, estadoVacio, instanciaEn, type Estado as EstadoPolitica, type Evento as EventoPolitica, type Modo, type Motivo } from "../attention/index.ts";
 import { type Listening, listenOnly } from "./listen.ts";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- cuerpos JSON del contrato */
@@ -60,6 +61,10 @@ export class ErrorApi extends Error {
   }
 }
 const invalida = () => new ErrorApi(400, "INVALID_INPUT");
+/** Mensajes que la app puede mostrar tal cual cuando el código solo no basta. */
+const MENSAJES: Record<string, string> = {
+  PAIR_VERSION: "soul-pair-v1 retirado: actualiza la app; este Soul solo empareja con soul-pair-v2 (clave soulpk_)",
+};
 const noEncontrado = () => new ErrorApi(404, "NOT_FOUND");
 
 // ---------------------------------------------------------------- modelo
@@ -92,11 +97,26 @@ export interface Op {
   ref: string; d: SemillaOperador; ultimo: number; nivel: Nivel; modo: string; hasta: number | null;
   avisos: ConfAvisos; alertas: Regla[]; elementos: Map<string, Elemento>; ledger: Map<string, { tipo: string; en: number }>;
   corr: Map<string, { tipo: string; en: number }>; mensajes: Msg[]; seq: number; base: number;
+  /** H-11: estado de la política de atención (presupuesto por ventana, tope de alertas, ya tratados). */
+  pol: EstadoPolitica;
+  /** D4/D5: identifica esta secuencia de mensajes. Cambia si el estado se pierde: ids y cursores no se reutilizan. */
+  epoca: string;
   pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: { idx: number; avisos: number; alertas: number };
   registro: { en: string; decision: string; motivo: string; categoria: string }[]; ahorrados: number;
   st: { avisosGenerados: number; alertasGeneradas: number; reobservaciones: number; rebotadas: number };
 }
-interface Msg { id: string; seq: number; tipo: string; categoria: string; creado: number; programar: number | null; caduca: number | null; agrupa: number; ids: string[] }
+export interface Msg { id: string; seq: number; tipo: string; categoria: string; creado: number; programar: number | null; caduca: number | null; agrupa: number; ids: string[] }
+/** Lo que sobrevive a un reinicio de `serve`: modo, avisos, alertas, pendientes, registro de demanda y mensajes del sondeo. */
+export interface EstadoAtencion {
+  v: 1; modo: string; hasta: number | null; avisos: ConfAvisos; alertas: Regla[]; mensajes: Msg[]; seq: number; base: number;
+  pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: Op["ventana"]; registro: Op["registro"]; ahorrados: number; avisados: string[];
+  /** `at` de la última declaración de `soul mode` ya aplicada: tras reiniciar no se vuelve a aplicar. */
+  cli_at?: string | null;
+  /** Época de la secuencia (ausente en estados anteriores: se crea una nueva). */
+  epoca?: string;
+  /** H-11: estado de `Politica` como texto (`estadoATexto`). */
+  politica?: string;
+}
 export interface Evento { tipo: string; categoria?: string; ids: string[]; programar?: number | null; regla?: Regla; efectiva?: string; avisoDe?: string }
 
 /** Lo que el mundo puede hacer sobre un operador. */
@@ -131,11 +151,34 @@ export interface OpcionesServidor {
   retencionMs?: number;
   peticionesPorVentana?: number;
   caducidadToken?: boolean;
-  /** Autenticación de dispositivos (producción). Por defecto, los tokens de las semillas. */
-  autenticar?: (token: string) => { ref: string; revocado: boolean } | null;
+  /**
+   * Autenticación de dispositivos (producción): token y prueba DPoP de la petición. Por defecto,
+   * los tokens de las semillas (pruebas). `dispositivo` liga cada corrección a quien la hizo (P1-2).
+   */
+  autenticar?: (token: string, prueba: { proof: string; method: string; path: string; host: string }) => { ref: string; revocado: boolean; dispositivo?: string } | null;
+  /** Estado de atención persistente por operador (producción). Sin él, vive en memoria. */
+  persistencia?: { cargar(ref: string): EstadoAtencion | null; guardar(ref: string, e: EstadoAtencion): void };
   /** Fail-safe: con STOP todo responde 503. */
   detenido?: () => boolean;
   textoLibre?: "desactivado" | "modelo_local" | "proveedor_aprobado";
+  /** Secreto de los cursores del sondeo; con él, un cursor sigue valiendo tras reiniciar. */
+  secretoCursor?: string;
+  /** Emparejamiento directo (`/v1/pair/challenge` y `/v1/pair/complete`, sin token). Sin él, 404. */
+  emparejamiento?: { challenge(c: unknown): unknown; complete(c: unknown): unknown };
+  /** P2-9: límites de conexión (por defecto `LIMITES`). */
+  limites?: Partial<typeof LIMITES>;
+}
+
+/** P2-9: conexiones simultáneas y tiempos de espera propios (no los de Node.js por defecto). */
+export const LIMITES = { maxConnections: 32, headersTimeout: 10_000, requestTimeout: 15_000, keepAliveTimeout: 5_000 };
+
+export function limitesConexion<S extends Server>(s: S, l: Partial<typeof LIMITES> = {}): S {
+  const x = { ...LIMITES, ...l };
+  s.maxConnections = x.maxConnections;
+  s.headersTimeout = x.headersTimeout;
+  s.requestTimeout = x.requestTimeout;
+  s.keepAliveTimeout = x.keepAliveTimeout;
+  return s;
 }
 
 export function crearServidor(opts: OpcionesServidor) {
@@ -158,9 +201,36 @@ export function crearServidor(opts: OpcionesServidor) {
   }
   function emitir(o: Op, t: number, m: Partial<Msg> & { tipo: string; categoria: string }) {
     o.seq++;
-    o.mensajes.push({ id: `m-${o.ref}-${o.seq}`, seq: o.seq, creado: t, programar: null, caduca: null, agrupa: 1, ids: [], ...m });
+    o.mensajes.push({ id: `m-${o.ref}-${o.epoca}-${o.seq}`, seq: o.seq, creado: t, programar: null, caduca: null, agrupa: 1, ids: [], ...m });
   }
-  function iniciarVentana(o: Op, t: number) { o.ventana = { idx: Math.floor(t / (o.avisos.ventanaMin * MIN)), avisos: 0, alertas: 0 }; }
+  /** Ventanas de presupuesto: el día en tramos de `ventanaMin` desde las 00:00 UTC (la última cruza la medianoche si toca). */
+  // Cacheadas por `ventanaMin` (5–1440): se piden en cada minuto de `sincronizar` y en cada evento.
+  const franjasPorV = new Map<number, readonly Franja[]>();
+  function franjas(v: number): Franja[] {
+    let out = franjasPorV.get(v);
+    if (!out) {
+      const todos = (1 << 7) - 1;
+      const l: Franja[] = [];
+      if (v >= 1440) l.push(new Franja(todos, 1, 0));
+      else for (let i = 0; i < 1440; i += v) l.push(new Franja(todos, i, Math.min(i + v, 1440) % 1440));
+      franjasPorV.set(v, (out = Object.freeze(l)));
+    }
+    return out as Franja[];
+  }
+  const ventanaDe = (o: Op, t: number) => instanciaEn(franjas(o.avisos.ventanaMin), Math.floor(t / MIN)) ?? Math.floor(t / MIN);
+  function iniciarVentana(o: Op, t: number) { o.ventana = { idx: ventanaDe(o, t), avisos: 0, alertas: 0 }; }
+  function politica(o: Op): Politica {
+    const p = new Politica({
+      ventanas: franjas(o.avisos.ventanaMin), descansos: [], presupuesto: o.avisos.max, topeAlertas: o.avisos.tope, modoPorDefecto: "DISPONIBLE",
+      alertas: o.alertas.map((r) => ({ codigo: r.id, modos: r.modos as Modo[], porRemitente: r.tipo === "remitente_palabra" })), canalNivelMax: 4,
+    }, o.pol);
+    // El modo lo declara la persona desde la app o `soul mode`; la API lo tiene en `o.modo`.
+    p.estado.modoDeclarado = o.modo === "DISPONIBLE" ? null : { modo: o.modo as Modo, hasta: o.hasta == null ? null : Math.floor(o.hasta / MIN) };
+    return p;
+  }
+  /** Motivo de la política → motivo del registro del contrato. */
+  const motivoApi = (m: Motivo) => m.k === "PRESUPUESTO_AGOTADO" ? "presupuesto_agotado" : m.k === "TOPE_ALERTAS" ? "tope_alertas"
+    : m.k === "MODO_NO_DISPONIBLE" ? "modo_activo" : m.k === "ALERTA" ? "alerta_marcada_para_el_modo" : "regla_activa";
   function volcarPendientes(o: Op, t: number, avisosTambien: boolean) {
     if (o.pendAlertas.length) {
       emitir(o, t, { tipo: "alerta", categoria: "agrupado", agrupa: o.pendAlertas.length, ids: o.pendAlertas.flatMap((p) => p.ids).slice(0, 50) });
@@ -174,28 +244,46 @@ export function crearServidor(opts: OpcionesServidor) {
     }
   }
   function evento(o: Op, ev: Evento, t: number) {
-    if (ev.tipo === "alerta" && ev.regla) {
-      const marcada = ev.regla.modos.includes(o.modo);
-      if (ev.efectiva === "alerta" && marcada) {
-        o.st.alertasGeneradas++;
-        if (o.ventana.alertas < o.avisos.tope) {
-          o.ventana.alertas++;
-          emitir(o, t, { tipo: "alerta", categoria: "alerta_definida", ids: ev.ids });
-          registrar(o, t, "avisar", "alerta_marcada_para_el_modo", "alerta_definida");
-        } else { o.pendAlertas.push(ev); registrar(o, t, "agrupar", "tope_alertas", "alerta_definida"); }
-        return;
-      }
-      ev = { tipo: "aviso", categoria: "alerta_definida", ids: ev.ids, programar: null, avisoDe: "espera_respuesta" };
+    // Un elemento ya avisado no se vuelve a avisar (también tras reiniciar `serve`).
+    if (ev.ids.length === 1 && ev.tipo === "aviso") {
+      const k = `${ev.categoria ?? ""}|${ev.ids[0]}`;
+      if (avisados(o).has(k)) return;
+      avisados(o).add(k);
     }
-    const categoria = ev.categoria ?? "";
-    const tipoAviso = ev.avisoDe ?? AVISO_DE[categoria];
-    if (!o.avisos.activos.includes(tipoAviso)) { registrar(o, t, "registrar", "regla_activa", categoria); return; }
-    o.st.avisosGenerados++;
-    if (o.modo !== "DISPONIBLE") { o.pendAvisos.push(ev); registrar(o, t, "diferir", "modo_activo", categoria); return; }
-    if (o.ventana.avisos >= o.avisos.max) { o.pendAvisos.push(ev); registrar(o, t, "agrupar", "presupuesto_agotado", categoria); return; }
-    o.ventana.avisos++;
-    emitir(o, t, { tipo: "aviso", categoria, ids: ev.ids, programar: ev.programar ?? null });
-    registrar(o, t, "avisar", "regla_activa", categoria);
+    const categoria = ev.tipo === "alerta" ? "alerta_definida" : ev.categoria ?? "";
+    const regla = ev.tipo === "alerta" ? ev.regla ?? null : null;
+    // Los tipos de aviso apagados por la persona no entran en la política: solo se registran.
+    const tipoAviso = regla ? "espera_respuesta" : ev.avisoDe ?? AVISO_DE[categoria];
+    if (!regla && !o.avisos.activos.includes(tipoAviso)) { registrar(o, t, "registrar", "regla_activa", categoria); return; }
+    // Una regla por la web (sin identidad del remitente) entra por la ruta WEB: la política la baja a aviso.
+    const pe: EventoPolitica = {
+      id: `${o.epoca}|${o.seq}|${categoria}|${ev.ids.join(",")}|${t}`, origen: "AGENTE_AUTENTICADO", tipo: { k: "NOTIFICACION" },
+      ruta: regla && ev.efectiva === "aviso" ? "WEB" : "API", objetivo: null, plazo: null, costeRetraso: "MEDIO", nivel: 1, caduca: null,
+      codigoAlerta: regla?.id ?? null, urgenciaEnContenido: "NORMAL", urgenciaSugeridaLlm: null, texto: "",
+    };
+    const p = politica(o);
+    const d = p.decidir(pe, Math.floor(t / MIN));
+    o.pol = p.estado;
+    // Cuenta como alerta lo que la política trata como alerta; una diferida o bajada a aviso es un aviso.
+    if (d.motivo.k === "ALERTA" || d.motivo.k === "TOPE_ALERTAS") o.st.alertasGeneradas++; else o.st.avisosGenerados++;
+    // Acotado: el id del evento es único (la API deduplica por elemento) y las ventanas pasadas no cuentan.
+    o.pol.preguntadas.delete(pe.id);
+    const viejo = Math.floor(t / MIN) - 2 * 1440;
+    for (const m of [o.pol.usados, o.pol.alertasUsadas]) for (const k of m.keys()) if (k >= 0 && k < viejo) m.delete(k);
+    const comoAviso: Evento = regla ? { tipo: "aviso", categoria, ids: ev.ids, programar: null, avisoDe: "espera_respuesta" } : ev;
+    if (d.contactarAhora) {
+      const alerta = d.motivo.k === "ALERTA";
+      if (alerta) o.ventana.alertas++; else o.ventana.avisos++;
+      emitir(o, t, { tipo: alerta ? "alerta" : "aviso", categoria, ids: ev.ids, programar: alerta ? null : ev.programar ?? null });
+      registrar(o, t, "avisar", motivoApi(d.motivo), categoria);
+    } else if (d.motivo.k === "TOPE_ALERTAS") {
+      o.pendAlertas.push(ev);
+      registrar(o, t, "agrupar", "tope_alertas", categoria);
+    } else if (d.accion === "AGRUPAR" || d.accion === "DIFERIR") {
+      // Nada se pierde: lo aplazado sale agrupado al volver a DISPONIBLE o al cambiar de ventana.
+      o.pendAvisos.push(comoAviso);
+      registrar(o, t, d.motivo.k === "MODO_NO_DISPONIBLE" ? "diferir" : "agrupar", motivoApi(d.motivo), categoria);
+    } else registrar(o, t, "registrar", "regla_activa", categoria);
   }
   function resumenes(o: Op, desde: number, hasta: number) {
     for (let t = Math.floor(desde / MIN) * MIN + MIN; t <= hasta; t += MIN) {
@@ -214,17 +302,70 @@ export function crearServidor(opts: OpcionesServidor) {
   // -------------------------------------------------------------- estado por operador
   // Sin prototipo: un operator_ref «constructor» o «__proto__» no autentica contra Object.prototype.
   const ops: Record<string, Op> = Object.create(null);
+  const yaAvisados = new Map<string, Set<string>>();
+  const cliAt = new Map<string, string>();
+  const avisados = (o: Op) => { let x = yaAvisados.get(o.ref); if (!x) yaAvisados.set(o.ref, (x = new Set())); return x; };
+  function cargarEstado(ref: string): EstadoAtencion | null {
+    if (!opts.persistencia) return null;
+    try {
+      const e = opts.persistencia.cargar(ref);
+      return e && e.v === 1 && Array.isArray(e.mensajes) && Number.isInteger(e.seq) ? e : null;
+    } catch { return null; } // ilegible: se empieza de cero y la app vuelve a sondear sin cursor
+  }
+  /** Lo restaurable de un estado guardado, solo si tiene la forma esperada. */
+  function restaurables(e: EstadoAtencion): Partial<Op> {
+    const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+    const out: Partial<Op> = {};
+    if (typeof e.modo === "string") out.modo = e.modo;
+    if (e.hasta === null || num(e.hasta)) out.hasta = e.hasta;
+    const a = e.avisos as Partial<ConfAvisos> | undefined;
+    if (a && Array.isArray(a.activos) && a.activos.every((x) => typeof x === "string") && num(a.max) && num(a.ventanaMin) && (a.ventanaMin as number) >= 1 && num(a.tope)
+      && (a.resumenInicio === null || typeof a.resumenInicio === "string") && (a.resumenCierre === null || typeof a.resumenCierre === "string")) out.avisos = e.avisos;
+    if (Array.isArray(e.alertas)) out.alertas = e.alertas;
+    if (Number.isInteger(e.base) && e.base >= 0 && e.base <= e.seq) out.base = e.base;
+    if (Array.isArray(e.pendAvisos)) out.pendAvisos = e.pendAvisos;
+    if (Array.isArray(e.pendAlertas)) out.pendAlertas = e.pendAlertas;
+    const v = e.ventana as Partial<Op["ventana"]> | undefined;
+    if (v && Number.isInteger(v.idx) && num(v.avisos) && num(v.alertas)) out.ventana = e.ventana;
+    if (Array.isArray(e.registro)) out.registro = e.registro;
+    if (num(e.ahorrados)) out.ahorrados = e.ahorrados;
+    return out;
+  }
+  function guardarEstado(o: Op) {
+    if (!opts.persistencia) return;
+    const e: EstadoAtencion = {
+      v: 1, modo: o.modo, hasta: o.hasta, avisos: o.avisos, alertas: o.alertas, mensajes: o.mensajes, seq: o.seq, base: o.base,
+      pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
+      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca, politica: estadoATexto(o.pol),
+    };
+    try { opts.persistencia.guardar(o.ref, e); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
+  }
   const minuto0 = Math.floor(ahora() / MIN) * MIN;
   for (const d of opts.mundo.semillas()) {
     const o: Op = ops[d.ref] = {
       ref: d.ref, d, ultimo: minuto0, nivel: RANGO[d.nivel] > RANGO[d.nivelMax] ? d.nivelMax : d.nivel, modo: "DISPONIBLE", hasta: null,
       avisos: structuredClone(d.avisos), alertas: structuredClone(d.alertas), elementos: new Map(), ledger: new Map(), corr: new Map(),
-      mensajes: [], seq: 0, base: 0, pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
+      mensajes: [], seq: 0, base: 0, epoca: randomBytes(4).toString("hex"), pol: estadoVacio(), pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
     for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: e.mio ?? false, noMio: e.noMio ?? false, fijo: true });
     iniciarVentana(o, minuto0);
+    const previo = cargarEstado(d.ref);
+    if (previo) {
+      // Tras un reinicio sigue el mismo estado: el cursor de la app vale y lo ya avisado no se repite.
+      // Campo a campo: uno ausente o mal tipado (fichero editado a mano) conserva el valor de la semilla.
+      Object.assign(o, { mensajes: previo.mensajes, seq: previo.seq, ...restaurables(previo) });
+      if (Array.isArray(previo.avisados)) for (const id of previo.avisados) if (typeof id === "string") avisados(o).add(id);
+      if (typeof previo.cli_at === "string") cliAt.set(d.ref, previo.cli_at);
+      // Un estado de antes de las épocas sigue con una nueva; sus cursores `c1.` dan 400 (no se pueden autenticar).
+      if (typeof previo.epoca === "string" && /^[0-9a-f]{8}$/.test(previo.epoca)) o.epoca = previo.epoca;
+      // Estado de la política ilegible: se avisa y se empieza de cero (la API no usa PARA; el STOP es aparte).
+      const pol = typeof previo.politica === "string" ? estadoDesdeTexto(previo.politica) : null;
+      if (pol) o.pol = pol;
+      else if (previo.politica != null) process.stderr.write("soul api: estado de la política de atención ilegible; se empieza de cero\n");
+      continue;
+    }
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
       const cat = CATEGORIA[e.tipo];
       if (cat && (e.fecha != null ? e.fecha - minuto0 <= DIA : true)) {
@@ -241,7 +382,7 @@ export function crearServidor(opts: OpcionesServidor) {
     for (let t = o.ultimo + MIN; t <= objetivo; t += MIN) {
       const i = (t - minuto0) / MIN;
       if (o.hasta != null && o.hasta <= t) volverADisponible(o, t);
-      const w = Math.floor(t / (o.avisos.ventanaMin * MIN));
+      const w = ventanaDe(o, t);
       if (w !== o.ventana.idx) { volcarPendientes(o, t, o.modo === "DISPONIBLE"); iniciarVentana(o, t); }
       resumenes(o, t - MIN, t);
       if (caidas) continue;
@@ -249,6 +390,9 @@ export function crearServidor(opts: OpcionesServidor) {
     }
     o.ultimo = Math.max(o.ultimo, objetivo);
     if (!caidas) opts.mundo.refrescar?.(ctx, o, ahora());
+    // Solo se recuerda lo avisado de elementos vivos: uno que desaparece y vuelve se avisa de nuevo,
+    // y el conjunto no crece sin tope.
+    if (!caidas) for (const k of avisados(o)) if (!o.elementos.has(k.slice(k.indexOf("|") + 1))) avisados(o).delete(k);
     const lim = ahora() - retencionMs;
     while (o.mensajes.length && o.mensajes[0].creado < lim) o.base = (o.mensajes.shift() as Msg).seq;
     for (const [id, e] of o.elementos) if (!e.fijo && o.elementos.size > 400 && e.nace < lim) o.elementos.delete(id);
@@ -356,7 +500,7 @@ export function crearServidor(opts: OpcionesServidor) {
       referencias: rango(o, "completo") ? e.refs.map(inerte) : [],
     };
   }
-  function opCorreccion(o: Op, id: string, tipo: string) {
+  function opCorreccion(o: Op, id: string, tipo: string, dispositivo: string | null = null) {
     if (!ID.test(id)) throw invalida();
     if (!["resuelto", "no_aplica", "es_mio", "no_es_mio"].includes(tipo)) throw invalida();
     const e = o.elementos.get(id);
@@ -366,7 +510,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const t = ahora();
     // Primero se persiste (producción: libro del núcleo); solo entonces se aplica y se confirma.
     // Si no se puede persistir, 503 y nada cambia: no se promete lo que volvería tras reiniciar.
-    return Promise.resolve(hooks.correccion?.(o, id, tipo, t)).then(() => {
+    return Promise.resolve(hooks.correccion?.(o, id, tipo, t, dispositivo)).then(() => {
       o.corr.set(id, { tipo, en: t });
       if (tipo === "resuelto" || tipo === "no_aplica") o.ledger.set(id, { tipo, en: t });
       else { e.mio = tipo === "es_mio"; e.noMio = tipo === "no_es_mio"; o.ledger.delete(id); }
@@ -410,23 +554,29 @@ export function crearServidor(opts: OpcionesServidor) {
     return vistaDetalle(o);
   }
   // El cursor va ligado al operador: un cursor de otro no casa con esta etiqueta.
-  const secreto = createHash("sha256").update(randomUUID()).digest("hex");
-  function tag(o: Op, seq: number) { return createHash("sha256").update(`${secreto}|${o.ref}|${seq}`).digest("hex").slice(0, 8); }
+  // Estable entre reinicios si quien llama lo da (producción: derivado de la clave TLS); si no, por proceso.
+  const secreto = createHash("sha256").update(opts.secretoCursor ?? randomUUID()).digest("hex");
+  function tag(o: Op, epoca: string, seq: number) { return createHash("sha256").update(`${secreto}|${o.ref}|${epoca}|${seq}`).digest("hex").slice(0, 8); }
   function opSondeo(o: Op, q: Record<string, string>) {
     let limite = 50;
     let desde = 0;
     if (q.limite != null) { if (!/^\d{1,3}$/.test(q.limite) || Number(q.limite) < 1 || Number(q.limite) > 100) throw invalida(); limite = Number(q.limite); }
     if (q.cursor != null) {
-      const m = /^c1\.(\d{1,9})\.([0-9a-f]{8})$/.exec(q.cursor);
-      if (!m || m[2] !== tag(o, Number(m[1])) || Number(m[1]) > o.seq) throw invalida();
-      desde = Number(m[1]);
+      // D4: un cursor auténtico de otra época (estado perdido o reiniciado) da 410: la app vuelve
+      // a sondear sin cursor. Ajeno, manipulado o imposible: 400. Un cursor del formato anterior
+      // (`c1.`, sin época) no se puede autenticar y da 400, como antes de las épocas tras reiniciar.
+      const m = /^c2\.([0-9a-f]{8})\.(\d{1,9})\.([0-9a-f]{8})$/.exec(q.cursor);
+      if (!m || m[3] !== tag(o, m[1], Number(m[2]))) throw invalida();
+      if (m[1] !== o.epoca) throw new ErrorApi(410, "GONE");
+      if (Number(m[2]) > o.seq) throw invalida();
+      desde = Number(m[2]);
       if (desde < o.base) throw new ErrorApi(410, "GONE");
     }
     const pendientes = o.mensajes.filter((m) => m.seq > desde);
     const pagina = pendientes.slice(0, limite);
     const ultimo = pagina.length ? (pagina.at(-1) as Msg).seq : desde;
     return {
-      cursor: `c1.${ultimo}.${tag(o, ultimo)}`, hay_mas: pendientes.length > pagina.length, nivel: o.nivel, modo: o.modo,
+      cursor: `c2.${o.epoca}.${ultimo}.${tag(o, o.epoca, ultimo)}`, hay_mas: pendientes.length > pagina.length, nivel: o.nivel, modo: o.modo,
       generado_en: iso(ahora()), siguiente_sondeo_s: 300, mensajes: pagina.map((m) => vistaMensaje(o, m)),
     };
   }
@@ -445,7 +595,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const ms = Number(m[1]) * (m[2] === "h" ? 60 : 1) * MIN;
     return ms > 0 && ms <= 7 * DIA ? ms : null;
   }
-  function opOrden(o: Op, texto: string) {
+  function opOrden(o: Op, texto: string, dispositivo: string | null = null) {
     const tk = texto.trim().split(/\s+/);
     const verbo = norm(tk[0]);
     const args = tk.slice(1);
@@ -464,7 +614,7 @@ export function crearServidor(opts: OpcionesServidor) {
       }
       if (verbo === "porque") return args.length === 1 ? ok("porque", opPorque(o, args[0])) : malo();
       const corr: Record<string, string> = { resuelto: "resuelto", "no-aplica": "no_aplica", mio: "es_mio", "no-mio": "no_es_mio" };
-      if (verbo in corr) return args.length === 1 ? opCorreccion(o, args[0], corr[verbo]).then((r) => ok("correccion", r)) : malo();
+      if (verbo in corr) return args.length === 1 ? opCorreccion(o, args[0], corr[verbo], dispositivo).then((r) => ok("correccion", r)) : malo();
       if (verbo === "modo") {
         const modo = norm(args[0] ?? "").toUpperCase();
         if (!MODOS.includes(modo)) return malo();
@@ -523,22 +673,23 @@ export function crearServidor(opts: OpcionesServidor) {
     }
     if (++v.n > limiteVentana) throw new ErrorApi(429, "RATE_LIMITED", { retryAfter: Math.max(1, Math.ceil((v.inicio + 10_000 - t) / 1000)) });
   }
-  function autenticar(req: IncomingMessage): Op {
+  function autenticar(req: IncomingMessage): { o: Op; dispositivo: string | null } {
     const au = req.headersDistinct.authorization;
     const dp = req.headersDistinct.dpop;
     const m = au?.length === 1 ? /^DPoP ([A-Za-z0-9._~+/=-]{1,512})$/.exec(au[0]) : null;
     if (!m || dp?.length !== 1 || !dp[0]) throw new ErrorApi(401, "UNAUTHENTICATED");
     if (opts.autenticar) {
-      const r = opts.autenticar(m[1]);
+      const path = new URL(req.url ?? "/", "http://x").pathname;
+      const r = opts.autenticar(m[1], { proof: dp[0], method: req.method ?? "", path, host: req.headers.host ?? "" });
       if (!r || !Object.hasOwn(ops, r.ref)) throw new ErrorApi(401, "UNAUTHENTICATED");
       if (r.revocado) throw new ErrorApi(401, "UNAUTHENTICATED", { revocado: true });
-      return ops[r.ref];
+      return { o: ops[r.ref], dispositivo: r.dispositivo ?? null };
     }
     const d = tokens.get(m[1]);
     if (!d) throw new ErrorApi(401, "UNAUTHENTICATED");
     if (d.revocado) throw new ErrorApi(401, "UNAUTHENTICATED", { revocado: true });
     if (opts.caducidadToken && ahora() > d.expira) throw new ErrorApi(401, "UNAUTHENTICATED");
-    return d.op;
+    return { o: d.op, dispositivo: null };
   }
   async function cuerpo(req: IncomingMessage): Promise<any> {
     const trozos: Buffer[] = [];
@@ -558,11 +709,29 @@ export function crearServidor(opts: OpcionesServidor) {
     if (u.claves.some((k) => !permitidos.includes(k)) || new Set(u.claves).size !== u.claves.length) throw invalida();
   };
 
+  const RUTAS_PAR: Record<string, "challenge" | "complete"> = { "/v1/pair/challenge": "challenge", "/v1/pair/complete": "complete" };
+  async function emparejar(req: IncomingMessage, paso: "challenge" | "complete") {
+    if (req.method !== "POST" || !opts.emparejamiento || new URL(req.url ?? "/", "http://x").search) throw noEncontrado();
+    if (opts.detenido?.()) throw new ErrorApi(503, "UNAVAILABLE");
+    const c = await cuerpo(req);
+    try { return opts.emparejamiento[paso](c); } catch (e) {
+      const st = (e as { status?: unknown }).status, code = (e as { code?: unknown }).code;
+      if (typeof st === "number" && typeof code === "string" && /^(PAIR_[A-Z_]+|INVALID_INPUT)$/.test(code)) throw new ErrorApi(st, code, st === 429 ? { retryAfter: 60 } : {});
+      throw e;
+    }
+  }
+
   async function manejar(req: IncomingMessage) {
     limitar(req.socket.remoteAddress ?? "desconocido", Date.now());
-    const o = autenticar(req);
+    const paso = RUTAS_PAR[new URL(req.url ?? "/", "http://x").pathname];
+    if (paso) return emparejar(req, paso);
+    const { o, dispositivo } = autenticar(req);
     if (opts.detenido?.()) throw new ErrorApi(503, "UNAVAILABLE");
     sincronizar(o);
+    try { return await rutas(req, o, dispositivo); } finally { guardarEstado(o); }
+  }
+
+  async function rutas(req: IncomingMessage, o: Op, dispositivo: string | null) {
     const u = quien(req);
     const m = req.method;
     if (!u.ruta.startsWith(PREFIJO + "/")) throw noEncontrado();
@@ -582,7 +751,7 @@ export function crearServidor(opts: OpcionesServidor) {
     if (m === "POST" && (x = /^\/elementos\/([^/]+)\/correccion$/.exec(r))) {
       const c = await cuerpo(req);
       if (validar(OPENAPI, OPENAPI.components.schemas.PeticionCorreccion, c).length) throw invalida();
-      return opCorreccion(o, x[1], c.tipo);
+      return opCorreccion(o, x[1], c.tipo, dispositivo);
     }
     if (m === "GET" && r === "/atencion") { sinParametros(u, []); return vistaAtencion(o); }
     if (m === "PUT" && r === "/atencion") {
@@ -604,12 +773,12 @@ export function crearServidor(opts: OpcionesServidor) {
     if (m === "POST" && r === "/ordenes") {
       const c = await cuerpo(req);
       if (validar(OPENAPI, OPENAPI.components.schemas.PeticionOrden, c).length) throw invalida();
-      return opOrden(o, c.orden);
+      return opOrden(o, c.orden, dispositivo);
     }
     throw noEncontrado();
   }
 
-  const servidor = (): Server => createHttps({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.3" }, async (req, res) => {
+  const servidor = (): Server => limitesConexion(createHttps({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.3", handshakeTimeout: 10_000 }, async (req, res) => {
     const salir = (status: number, json: unknown, extra: Record<string, string> = {}) => {
       res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
       res.end(JSON.stringify(json));
@@ -619,14 +788,14 @@ export function crearServidor(opts: OpcionesServidor) {
     } catch (err) {
       // Nunca se registran datos de trabajo: solo el tipo de error.
       const e = err instanceof ErrorApi ? err : (process.stderr.write(`soul api: ${(err as Error)?.name ?? "error"}\n`), new ErrorApi(503, "UNAVAILABLE"));
-      const sobre: Record<string, unknown> = { code: e.code, message: e.revocado ? "device revoked" : e.code.toLowerCase().replace(/_/g, " "), requestId: randomUUID(), retryable: e.code === "RATE_LIMITED" || e.code === "UNAVAILABLE" };
+      const sobre: Record<string, unknown> = { code: e.code, message: e.revocado ? "device revoked" : MENSAJES[e.code] ?? e.code.toLowerCase().replace(/_/g, " "), requestId: randomUUID(), retryable: e.code === "RATE_LIMITED" || e.code === "UNAVAILABLE" };
       if (e.revocado) sobre.error = "DEVICE_REVOKED";
-      const extra: Record<string, string> = e.status === 401 ? { "WWW-Authenticate": "DPoP" } : e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {};
+      const extra: Record<string, string> = e.code === "UNAUTHENTICATED" ? { "WWW-Authenticate": "DPoP" } : e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {};
       salir(e.status, sobre, extra);
     }
-  });
+  }), opts.limites);
 
-  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number) => void | Promise<void> } = {};
+  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number, dispositivo: string | null) => void | Promise<void> } = {};
   let escucha: Listening | null = null;
   return {
     /** Escucha solo en esas direcciones (las de la VPN del operador) y por TLS. */
@@ -645,7 +814,21 @@ export function crearServidor(opts: OpcionesServidor) {
     egresos: () => 0,
     volcarEstado: () => JSON.stringify(Object.values(ops), (_k, v) => (v instanceof Map ? [...v] : v)),
     /** Producción: persiste las correcciones en el libro del núcleo. */
-    alCorregir: (f: (o: Op, id: string, tipo: string, t: number) => void | Promise<void>) => { hooks.correccion = f; },
+    alCorregir: (f: (o: Op, id: string, tipo: string, t: number, dispositivo: string | null) => void | Promise<void>) => { hooks.correccion = f; },
     operador: (ref: string) => ops[ref],
+    /** Modo declarado fuera de la API (`soul mode`): se aplica como si llegara de la app y se persiste. */
+    declararModo: (ref: string, modo: string, hasta: string | null, at: string) => {
+      const o = ops[ref];
+      if (!o) return "sin_operador" as const;
+      sincronizar(o);
+      let r: "aplicada" | "invalida" = "aplicada";
+      try { opAtencion(o, modo === "DISPONIBLE" ? { modo } : { modo, hasta }); } catch { r = "invalida"; }
+      // Una declaración inválida (p. ej. ventana ya vencida) se consume: reintentarla no la arregla.
+      cliAt.set(ref, at);
+      guardarEstado(o);
+      return r;
+    },
+    /** `at` de la última declaración de `soul mode` aplicada (persistida con el estado). */
+    declaracionCli: (ref: string) => cliAt.get(ref) ?? null,
   };
 }

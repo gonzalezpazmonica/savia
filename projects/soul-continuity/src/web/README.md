@@ -61,13 +61,10 @@ El canal de control va por tubería (`--remote-debugging-pipe`), nunca por puert
 - `prepararPerfilSoul(directorioDatos())` crea un perfil persistente en `<datos>/web/perfil` con la marca `.perfil-soul`.
   - Se rechaza si está dentro de un perfil personal de Chrome, Edge, Chromium o Firefox.
   - En cada preparación reimpone las preferencias que apagan el gestor de contraseñas y el autorrelleno.
-- El directorio de datos es `SOUL_DATA_DIR`, o el del sistema:
-  - Linux: `$XDG_DATA_HOME/soul-continuity`;
-  - macOS: `~/Library/Application Support/SoulContinuity`;
-  - Windows: `%LOCALAPPDATA%\SoulContinuity`.
+- El directorio de datos es el del núcleo (`SOUL_DATA_DIR`, o el del sistema: Linux `$XDG_DATA_HOME/savia/soul-continuity`, macOS `~/Library/Application Support/Savia/soul-continuity`, Windows `%LOCALAPPDATA%\Savia\soul-continuity`). En producto, `src/core/connectors.ts` fija perfil, huellas, desactivadas y recibos dentro de `<datos>/web/`, y `soul uninstall` o `soul revoke web` lo borran entero.
 - El operador inicia sesión **a mano** en ese perfil, y solo en las webs que da a Soul. Soul no guarda contraseñas, no rellena credenciales y no inyecta cookies: el parámetro `cookies` solo existe para el banco.
 - Sesión caducada: parada limpia, 0 elementos y el aviso «Vuelve a iniciar sesión en X en el perfil de Soul».
-- **Riesgo conocido (Linux):** el navegador arranca con `--password-store=basic`, así que las cookies de sesión del perfil se cifran con la clave fija de Chromium, no con el llavero del sistema. Quien lea el perfil (0700) puede reutilizar la sesión. Protege el directorio de datos como una credencial: disco cifrado y cuenta de usuario propia. Los ficheros de estado que escribe Soul (`desactivadas`, huellas, recibos) van con 0600.
+- **Claves de las cookies (Linux):** el perfil persistente arranca con `--password-store=gnome-libsecret`: la clave que cifra sus cookies queda en el llavero del sistema, como los tokens de Soul. Sin bus de sesión (ni `DBUS_SESSION_BUS_ADDRESS` ni `XDG_RUNTIME_DIR`), el perfil no se abre. El perfil temporal del banco sigue con `basic` porque se borra al cerrar. **Riesgo residual:** si el bus existe pero el llavero no responde, Chromium puede caer a su clave fija sin avisar; eso no se ha verificado contra un llavero real. Protege el directorio de datos como una credencial. Los ficheros de estado que escribe Soul (`desactivadas`, huellas, recibos) van con 0600.
 
 ## Sin receta: «esta página cambió»
 
@@ -95,7 +92,7 @@ Las plantillas de `recetas/producto/` **no** se han validado contra tráfico rea
 Todo ocurre en local y fuera de cualquier repositorio. La grabación lleva datos de la empresa (N4).
 
 1. **Abre el perfil de Soul** con el navegador instalado. En Linux, con el perfil por defecto:
-   `google-chrome --user-data-dir="$HOME/.local/share/soul-continuity/web/perfil"`.
+   `google-chrome --password-store=gnome-libsecret --user-data-dir="$HOME/.local/share/savia/soul-continuity/web/perfil"`.
    Inicia sesión en el cliente, y solo en él.
 2. **Graba solo lectura.** Abre DevTools, pestaña Red, y marca «Conservar registro». Carga la página de la receta (por ejemplo, la bandeja de entrada en vista de lista) y espera a que se pinte.
    - **No abras elementos**, no respondas y no pulses nada más.
@@ -125,7 +122,7 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 
 `crearAdaptadorWeb()` cumple `SourceAdapter` de `src/contract/adapter.ts`:
 
-- **Parámetros** (`params` de la fuente): `ejecutable` (navegador instalado) y `perfil` (perfil dedicado de Soul) son obligatorios; sin ellos, `not_configured`. Además `recetas`, `vigiladas`, `validaciones`, `desactivadas` (obligatorio si hay recetas: sin él, una receta desactivada se reintentaría en la siguiente lectura) y `huellas` (obligatorio si hay páginas vigiladas). Sin recetas ni páginas vigiladas, `not_configured`. El adaptador no supone directorios: para usar los recibos que emite `validar-grabacion`, `validaciones` tiene que apuntar a `<datos>/web/validaciones` (`dirValidacionesPorDefecto`).
+- **Parámetros** (`params` de la fuente): `ejecutable` (navegador instalado) y `perfil` (perfil dedicado de Soul) son obligatorios (en el producto los fija el núcleo: el navegador sale de `SOUL_NAVEGADOR` o de las rutas conocidas, nunca de `config.json`); sin ellos, `not_configured`. Además `recetas`, `vigiladas`, `validaciones`, `desactivadas` (obligatorio si hay recetas: sin él, una receta desactivada se reintentaría en la siguiente lectura) y `huellas` (obligatorio si hay páginas vigiladas). Sin recetas ni páginas vigiladas, `not_configured`. El adaptador no supone directorios: para usar los recibos que emite `validar-grabacion`, `validaciones` tiene que apuntar a `<datos>/web/validaciones` (`dirValidacionesPorDefecto`).
 - **Afirmaciones.** Un elemento en Q1 o Q2 de la receta es `web:task_assigned:<receta>~<id>`, con `awaiting_operator` si está en Q2. Uno que solo está en Q4 es `web:dated_commitment:<receta>~<id>`. Una página vigilada que cambió es `web:web_page_change:<sitio>~<id>`, cerrada y con `event_at`. Las partes de la referencia van codificadas en URL, sin `:`, espacios ni `~`. `due_at` sale del primer campo `vence`, `limite` o `fecha` con forma `AAAA-MM-DD`. El título, del primer campo `titulo`, `asunto`, `nombre`, `concepto` o `resumen`, limpio y marcado `untrusted_text`. `sender_auth` es siempre `unknown`.
 - **Estados.** Sesión caducada (también la de una página vigilada) → `session_expired`; una página vigilada redirigida a otra URL que no es el inicio de sesión → `error`, porque no se arregla iniciando sesión; una página vigilada que no carga por la red o responde con un estado HTTP de error (404, 5xx) es `error`, no sesión caducada ni «página cambiada». Un fichero de huellas ilegible también es `error`: no se trata como primera visita ni se sobrescribe. Prueba de humo u operación nueva → `recipe_disabled`. Fallo de lectura → `error`. Una receta configurada sin recibo válido no abre el navegador y da `recipe_disabled` con su aviso, aunque haya otras fuentes que sí funcionen: no se omite en silencio. Una página vigilada mal escrita (sin `id`, `sitio` o `url`, o con URL de acción, comodín o credenciales) → `not_configured`.
 - **Fail-closed.** Si falla cualquier receta o página, el adaptador entero no aporta afirmaciones. Manda `session_expired` sobre `error` y sobre `recipe_disabled`, porque el operador puede arreglarlo. Las huellas de las páginas vigiladas solo se guardan si el adaptador entrega, para que un cambio descartado vuelva a verse en la siguiente lectura; si no se pueden guardar, el resultado es `error` y no se entrega el cambio. El directorio de huellas se crea si falta.

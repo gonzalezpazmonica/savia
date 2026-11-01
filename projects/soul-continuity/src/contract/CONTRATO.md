@@ -91,3 +91,14 @@ Filtros: `types`, `adapters` y `ref_prefix` (prefijo del `ref` nativo).
 - `correct` anota en el libro **del operador activo**. El estado de una instalación es común a sus perfiles, pero cada operador solo ve su libro y su caché.
 - `snapshot` aplica el libro en cada reconstrucción: lo revocado no vuelve aunque la fuente lo repita.
 - Nada de lo que escribe la implementación en `stateDir` puede contener cuerpos de mensajes ni tokens.
+
+## Emparejamiento directo app ↔ Soul (`soul-pair-v2`)
+
+La app se conecta en **modo Space** (a través del servidor de escritorio de Space) o en **modo directo** (al núcleo de Soul en el portátil, por la VPN). En modo directo:
+
+1. `soul pair` abre una ventana de 10 minutos y muestra IP, puerto, una **clave de emparejamiento** de un solo uso al estilo de las API key, `soulpk_<30 base62>_<6 base62>` (178 bits de un CSPRNG; el sufijo es el CRC32 de la parte aleatoria y solo detecta errores de copia), la **huella corta** del certificado (16 primeros hex de SHA-256(SPKI), en grupos de 4) y un **QR** con `soul://pair?v=2&h=<ip>&p=<puerto>&k=<clave>&f=<huella corta sin espacios>`. La clave es sensible a mayúsculas: solo se quitan los espacios en blanco de los extremos. La app valida formato y checksum antes de enviar nada.
+2. `POST /v1/pair/challenge` `{version: "soul-pair-v2", client_nonce}` → `{server_nonce, spki_sha256, proof}` con `proof = HMAC-SHA256(clave, "soul-pair-v2|server|" + client_nonce + "|" + server_nonce + "|" + spki_sha256)`. La app compara `spki_sha256` con el certificado que ve y verifica `proof` con la clave pegada o leída del QR; si algo no casa, aborta. La clave nunca viaja.
+3. `POST /v1/pair/complete` `{server_nonce, device_name, device_jwk, proof}` con `proof = HMAC-SHA256(clave, "soul-pair-v2|client|" + client_nonce + "|" + server_nonce + "|" + jwk_thumbprint)`. Soul registra el dispositivo **ya ligado a esa clave** y devuelve `{device_id, token, expires_at}`. Las peticiones siguientes llevan el token y la prueba DPoP con esa clave.
+4. La app fija `sha256/<base64 SPKI>` del certificado hoja autofirmado (`CA:false`). Si el certificado se renueva, hay que volver a emparejar.
+
+Nonces, HMAC y huellas en base64url sin relleno. Errores con el sobre de la API: `PAIR_EXPIRED` 410 (sin ventana, caducada o usada), `PAIR_BAD_PROOF` 401, `PAIR_LOCKED` 423 (tras 3 pruebas fallidas), `PAIR_RATE` 429 (más de 10 retos por ventana), `PAIR_VERSION` 426 (reto sin `version` o con otra: cliente soul-pair-v1, retirado; el mensaje pide actualizar la app) e `INVALID_INPUT` 400. Esquemas en `openapi.json` (`x-emparejamiento-directo`). Los vectores fijos están en `vectores-emparejamiento.json`; la app copia ese fichero tal cual y el núcleo lo comprueba en `test/pairing.test.ts`.

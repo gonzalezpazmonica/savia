@@ -6,7 +6,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import type { Mutante } from "../cortafuegos/decision.ts";
-import { canalDepuracion, comprobarPerfilDedicado, crearPerfilDedicado, rutasPerfilPersonal } from "../cortafuegos/perfil.ts";
+import { almacenClaves, canalDepuracion, comprobarPerfilDedicado, crearPerfilDedicado, rutasPerfilPersonal } from "../cortafuegos/perfil.ts";
 
 export interface OpcionesNavegador {
   ejecutable: string;
@@ -33,7 +33,8 @@ export interface Navegador {
 function entornoNavegador(hogar: string): Record<string, string> {
   for (const d of [".config", ".cache", ".local/share"]) mkdirSync(join(hogar, d), { recursive: true });
   const env: Record<string, string> = {};
-  for (const k of ["PATH", "LANG", "TZ", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "TMPDIR"]) {
+  // DBUS_SESSION_BUS_ADDRESS: el perfil persistente guarda la clave de sus cookies en el llavero (H-5).
+  for (const k of ["PATH", "LANG", "TZ", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "TMPDIR"]) {
     const v = process.env[k];
     if (v) env[k] = v;
   }
@@ -47,6 +48,7 @@ export async function abrirNavegador(o: OpcionesNavegador): Promise<Navegador> {
   const temporal = !o.perfil;
   const perfil = mutante === "perfil_personal" && o.perfilPersonal ? o.perfilPersonal : o.perfil ?? crearPerfilDedicado();
   if (mutante !== "perfil_personal") comprobarPerfilDedicado(perfil, rutasPerfilPersonal(hogar));
+  const claves = almacenClaves({ persistente: !temporal });
   let ctx: BrowserContext;
   try {
     ctx = await chromium.launchPersistentContext(perfil, {
@@ -59,7 +61,7 @@ export async function abrirNavegador(o: OpcionesNavegador): Promise<Navegador> {
       // Chrome escribe `Crash Reports` bajo $XDG_CONFIG_HOME/google-chrome aunque se le dé
       // --user-data-dir, y la base NSS en $HOME/.pki: todo va dentro del perfil dedicado.
       env: entornoNavegador(mutante === "perfil_personal" ? hogar : join(perfil, "hogar")),
-      args: ["--no-first-run", "--no-default-browser-check", "--disable-sync", "--password-store=basic",
+      args: ["--no-first-run", "--no-default-browser-check", "--disable-sync", ...claves,
         "--disable-features=AutofillServerCommunication,PasswordManagerOnboarding",
         // Un SharedWorker cuelga del navegador y otro cliente CDP lo reanuda: fuera del todo.
         ...(mutante === "workers_libres" ? [] : ["--disable-shared-workers"])],

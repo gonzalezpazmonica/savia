@@ -35,6 +35,9 @@ export const hostRun: Run = (cmd, args, input = "") => new Promise((resolve) => 
   p.stderr.on("data", (b) => { stderr += b; });
   p.on("error", (e) => resolve({ code: 127, stdout: "", stderr: String(e.message) }));
   p.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+  // Si la herramienta sale sin leer stdin, escribir da EPIPE: no es un fallo del proceso de Soul,
+  // el resultado lo dice el código de salida.
+  p.stdin.on("error", () => {});
   p.stdin.end(input);
 });
 
@@ -173,7 +176,24 @@ export function backendFor(platform: string, run: Run = hostRun): SecretBackend 
 const INDEX = "credentials-index.json";
 const ACCOUNT = "default";
 
-/** `CredentialStore` del contrato sobre el almacén del sistema, con índice de servicios (sin secretos). */
+/** Entrada del índice: dónde está un secreto en el almacén del sistema (nunca el secreto). */
+export interface IndexEntry { service: string; account: string }
+
+/** Claves de los tokens de los adaptadores de API (`src/adapters/credential-store.ts`, `entryKey`). */
+const API_KEY = /^soul-continuity\/([0-9a-f]{16})\/([a-z0-9-]{1,40})\/([0-9a-f]{16})$/;
+
+/** Interfaz de clave única que usan los adaptadores de API para guardar sus tokens. */
+export interface KeyedSecrets {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<boolean>;
+}
+
+/**
+ * El único almacén de credenciales de Soul (SE-490, H-2): el del sistema, con un índice en disco
+ * sin secretos. Todo lo que guarda Soul pasa por aquí y queda en el índice, también los tokens de
+ * los adaptadores de API (`keyed()`), así que `forgetAll` (desinstalar) no deja ninguno atrás.
+ */
 export class SystemCredentialStore implements CredentialStore {
   readonly backend: SecretBackend;
   readonly dataDir: string;
@@ -182,36 +202,103 @@ export class SystemCredentialStore implements CredentialStore {
     this.dataDir = dataDir;
   }
 
-  private index(): string[] {
-    return readJson<{ services: string[] }>(join(this.dataDir, INDEX), { services: [] }).services;
+  /** Entradas registradas. Lee también el formato anterior (`services`, cuenta `default`). */
+  index(): IndexEntry[] {
+    const raw = readJson<{ services?: unknown; entries?: unknown }>(join(this.dataDir, INDEX), {});
+    const out: IndexEntry[] = [];
+    if (Array.isArray(raw.services)) for (const s of raw.services) if (typeof s === "string") out.push({ service: s, account: ACCOUNT });
+    if (Array.isArray(raw.entries)) {
+      for (const e of raw.entries as Partial<IndexEntry>[]) {
+        if (typeof e?.service === "string" && typeof e?.account === "string") out.push({ service: e.service, account: e.account });
+      }
+    }
+    return out;
   }
 
-  private saveIndex(services: string[]): void {
-    writeJson(join(this.dataDir, INDEX), { services: [...new Set(services)].sort() });
+  private saveIndex(entries: IndexEntry[]): void {
+    const seen = new Map(entries.map((e) => [`${e.service}\u0000${e.account}`, e]));
+    const list = [...seen.values()].sort((a, b) => `${a.service}/${a.account}`.localeCompare(`${b.service}/${b.account}`));
+    writeJson(join(this.dataDir, INDEX), { entries: list });
+  }
+
+  /** Se anota antes de guardar: si el guardado falla, desinstalar borra una entrada vacía; nunca queda un secreto sin índice. */
+  private async store(service: string, account: string, secret: string): Promise<void> {
+    checkName(service, account);
+    this.saveIndex([...this.index(), { service, account }]);
+    await this.backend.set(service, account, secret);
+    // Se relee: un almacén que trunca o no guarda (y sale con 0) no deja un login roto en silencio.
+    if ((await this.backend.get(service, account)) !== secret) throw new Error("el almacén del sistema no guardó la credencial completa");
+  }
+
+  /** Borra y relee: no se informa de un borrado que no ocurrió (Credential Manager sale con 0 aunque falle). */
+  private async deleteVerified(service: string, account: string): Promise<void> {
+    await this.backend.delete(service, account);
+    if ((await this.backend.get(service, account)) !== null) throw new Error("el almacén del sistema no borró la credencial");
+  }
+
+  private async remove(service: string, account: string): Promise<void> {
+    await this.deleteVerified(service, account);
+    this.saveIndex(this.index().filter((e) => !(e.service === service && e.account === account)));
   }
 
   async acquire(service: string, _scopes: string[]): Promise<string> {
     const v = await this.backend.get(service, ACCOUNT);
-    if (v === null || v === "") throw new CredentialError("no_credential", `sin credencial para ${service}: inicia sesión con «soul login ${service}»`);
+    if (v === null || v === "") throw new CredentialError("no_credential", `sin credencial para ${service}: inicia sesión con «soul login»`);
     return v;
   }
 
   async put(service: string, secret: string): Promise<void> {
-    await this.backend.set(service, ACCOUNT, secret);
-    this.saveIndex([...this.index(), service]);
+    await this.store(service, ACCOUNT, secret);
   }
 
   /** Borra la credencial del servicio. Devuelve lo borrado. */
   async forget(service: string): Promise<string[]> {
-    await this.backend.delete(service, ACCOUNT);
-    this.saveIndex(this.index().filter((s) => s !== service));
+    await this.remove(service, ACCOUNT);
     return [service];
   }
 
+  /**
+   * Borra todas las credenciales del índice. Si alguna no se puede borrar, sigue con las demás,
+   * deja en el índice solo las que fallaron y lanza: no se informa de un borrado que no ocurrió.
+   */
   async forgetAll(): Promise<string[]> {
     const all = this.index();
-    for (const s of all) await this.backend.delete(s, ACCOUNT);
-    this.saveIndex([]);
-    return all;
+    const failed: IndexEntry[] = [];
+    for (const e of all) {
+      try { await this.deleteVerified(e.service, e.account); } catch { failed.push(e); }
+    }
+    this.saveIndex(failed);
+    if (failed.length) throw new Error(`no se pudieron borrar ${failed.length} credencial(es) del almacén del sistema`);
+    return all.map((e) => (e.account === ACCOUNT ? e.service : `${e.service}/${e.account}`));
+  }
+
+  /**
+   * Vista de clave única para los tokens de los adaptadores de API. Cada clave se traduce a
+   * servicio `api-<servicio>` y cuenta `<operador>.<permisos>` (hashes), y queda en el índice.
+   * El valor va en base64: el JSON del token lleva comillas que el llavero de macOS no admite.
+   */
+  keyed(): KeyedSecrets {
+    const split = (key: string): IndexEntry => {
+      const m = API_KEY.exec(key);
+      if (!m) throw new Error("clave de credencial no admitida");
+      return { service: `api-${m[2]}`, account: `${m[1]}.${m[3]}` };
+    };
+    return {
+      get: async (key) => {
+        const e = split(key);
+        const v = await this.backend.get(e.service, e.account);
+        return v === null || v === "" ? null : Buffer.from(v, "base64").toString("utf8");
+      },
+      set: async (key, value) => {
+        const e = split(key);
+        await this.store(e.service, e.account, Buffer.from(value, "utf8").toString("base64"));
+      },
+      delete: async (key) => {
+        const e = split(key);
+        const had = (await this.backend.get(e.service, e.account)) !== null;
+        await this.remove(e.service, e.account);
+        return had;
+      },
+    };
   }
 }

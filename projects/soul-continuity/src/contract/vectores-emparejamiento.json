@@ -1,0 +1,65 @@
+{
+ "descripcion": "Vectores fijos del emparejamiento directo soul-pair-v2 (SE-490). Sustituyen a los de soul-pair-v1, que se retira. Los comprueban el núcleo (test/pairing.test.ts) y la app Android, que copia este fichero tal cual. Calculados con una implementación independiente (Python hashlib/hmac/zlib).",
+ "version": "soul-pair-v2",
+ "clave": {
+  "formato": "soulpk_<30 caracteres base62>_<6 caracteres base62: CRC32 (IEEE, el de zlib) de los 30 caracteres en ASCII, big-endian, rellenado con 0 a la izquierda>",
+  "alfabeto_base62": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+  "regex": "^soulpk_[0-9A-Za-z]{30}_[0-9A-Za-z]{6}$",
+  "entropia_bits": 178.6,
+  "nota": "Sensible a mayúsculas. Solo se quitan los espacios en blanco al principio y al final. El checksum solo detecta errores de copia; no aporta seguridad.",
+  "valida": "soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow1",
+  "aleatorio": "7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY",
+  "crc32": 2368699461,
+  "checksum": "2aIow1",
+  "ceros": "soulpk_000000000000000000000000000000_2C8GjS",
+  "equivalentes": [
+   "soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow1",
+   "  soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow1\n",
+   "\tsoulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow1 "
+  ],
+  "invalidas": {
+   "checksum_erroneo": "soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sZ_2aIow1",
+   "en_minusculas": "soulpk_7kq2mdx9qxf4pzr8tbw1nvc3lhj6sy_2aiow1",
+   "prefijo_en_mayusculas": "SOULPK_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow1",
+   "recortada": "soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow",
+   "espacio_dentro": "soulpk_7Kq2MdX9QxF4pZr8 TbW1nVc3LhJ6sY_2aIow1",
+   "caracter_fuera_de_base62": "soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6s-_2aIow1",
+   "codigo_v1": "7K2MD-9QX4F",
+   "vacia": ""
+  }
+ },
+ "client_nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+ "server_nonce": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+ "spki_der_base64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEWu9PwVwkca9ZAT7/B9Gwex56I+/49smHqH+yVU1qSbj3qua+U09Nzsld7xSWyTn/M2SvNh2CKVREmsfxQE6f+Q==",
+ "spki_sha256": "IOJ0l-g0vFaI8beocfhK5EXu_IRPODKtH01o8EIkl4k",
+ "pin": "sha256/IOJ0l+g0vFaI8beocfhK5EXu/IRPODKtH01o8EIkl4k=",
+ "huella_corta": "20e2 7497 e834 bc56",
+ "device_jwk": {
+  "kty": "EC",
+  "crv": "P-256",
+  "x": "f5NTFdLgogR9i2BCBczQdMOp2da2hPhRgqCzR_wcQ_o",
+  "y": "kdtn9TmgTmxkADCUMuVyxs20RimduR91GH5uRXN7ZYw"
+ },
+ "jwk_thumbprint": "5dDcnbnQch1ynp2FJm2ijuOTXN9dViNYnMmupCTl404",
+ "hmac": "HMAC-SHA256 con clave = la clave completa (soulpk_..., UTF-8), salida base64url sin relleno",
+ "mensaje_servidor": "soul-pair-v2|server|AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8|ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8|IOJ0l-g0vFaI8beocfhK5EXu_IRPODKtH01o8EIkl4k",
+ "proof_servidor": "loStHL1bz8J8eHEx2DtqRZoK5gu3DnpZvV75VJ2sIRw",
+ "mensaje_cliente": "soul-pair-v2|client|AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8|ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8|5dDcnbnQch1ynp2FJm2ijuOTXN9dViNYnMmupCTl404",
+ "proof_cliente": "ezDOKfIc-QBN5gn9FldXvCUwDttS5vsf_14V89t7s9Y",
+ "otra_clave": "soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sZ_0MsPKJ",
+ "proof_servidor_con_otra_clave": "_po_4I20-o32Qmp87o563a0E0LjW6vmLfUmU_u4dTO8",
+ "proof_servidor_con_etiqueta_v1": "dVMZV_l3HpnIhQcMkQfHiv2IaRyiYofgZY9MEW7-9aQ",
+ "peticion_reto": {
+  "version": "soul-pair-v2",
+  "client_nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+ },
+ "qr": "soul://pair?v=2&h=100.64.0.1&p=8443&k=soulpk_7Kq2MdX9QxF4pZr8TbW1nVc3LhJ6sY_2aIow1&f=20e27497e834bc56",
+ "errores": {
+  "PAIR_EXPIRED": 410,
+  "PAIR_BAD_PROOF": 401,
+  "PAIR_LOCKED": 423,
+  "PAIR_RATE": 429,
+  "PAIR_VERSION": 426
+ },
+ "rechazo_v1": "Un reto sin \"version\" (cliente soul-pair-v1) o con otra versión recibe 426 PAIR_VERSION: hay que actualizar la app. Una ventana v1 que quede en disco se trata como caducada (410) y se borra."
+}

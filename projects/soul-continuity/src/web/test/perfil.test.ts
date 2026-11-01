@@ -55,14 +55,19 @@ test("la huella anota enlaces colgantes sin reventar (Chrome deja SingletonCooki
 });
 
 // --- Perfil persistente en el directorio de datos (producto) ---
+import { dataDir } from "../../core/store.ts";
 import { directorioDatos, fijarPreferencias, prepararPerfilSoul, MARCA as MARCA_SOUL } from "../cortafuegos/perfil.ts";
 
 test("directorio de datos por sistema; SOUL_DATA_DIR manda", () => {
   assert.equal(directorioDatos({ SOUL_DATA_DIR: "/d" }, "linux", "/h"), "/d");
-  assert.equal(directorioDatos({}, "linux", "/h"), join("/h", ".local", "share", "soul-continuity"));
-  assert.equal(directorioDatos({ XDG_DATA_HOME: "/x" }, "linux", "/h"), join("/x", "soul-continuity"));
-  assert.equal(directorioDatos({}, "darwin", "/h"), join("/h", "Library", "Application Support", "SoulContinuity"));
-  assert.equal(directorioDatos({ LOCALAPPDATA: "C:/L" }, "win32", "/h"), join("C:/L", "SoulContinuity"));
+  // H-4: el mismo directorio que el núcleo, para que `soul uninstall` borre también `<datos>/web`.
+  assert.equal(directorioDatos({}, "linux", "/h"), join("/h", ".local", "share", "savia", "soul-continuity"));
+  assert.equal(directorioDatos({ XDG_DATA_HOME: "/x" }, "linux", "/h"), join("/x", "savia", "soul-continuity"));
+  assert.equal(directorioDatos({}, "darwin", "/h"), join("/h", "Library", "Application Support", "Savia", "soul-continuity"));
+  assert.equal(directorioDatos({ LOCALAPPDATA: "C:/L" }, "win32", "/h"), join("C:/L", "Savia", "soul-continuity"));
+  for (const [env, pl] of [[{}, "linux"], [{}, "darwin"], [{ LOCALAPPDATA: "C:/L" }, "win32"]] as const) {
+    assert.equal(directorioDatos(env, pl, "/h"), dataDir({ platform: pl, env, home: "/h" }));
+  }
 });
 
 test("prepararPerfilSoul: perfil persistente con marca y sin gestor de contraseñas", () => {
@@ -101,4 +106,26 @@ test("fijarPreferencias tolera Preferences corrupto (lo reescribe con las de Sou
     fijarPreferencias(p);
     assert.equal(JSON.parse(readFileSync(join(p, "Default", "Preferences"), "utf8")).credentials_enable_service, false);
   } finally { rmSync(p, { recursive: true, force: true }); }
+});
+
+// --- H-5: claves de cookies del perfil persistente en el llavero del sistema ---
+import { almacenClaves } from "../cortafuegos/perfil.ts";
+
+test("H-5: perfil persistente en Linux → llavero del sistema; temporal → basic; otros sistemas sin indicador", () => {
+  assert.deepEqual(almacenClaves({ persistente: true, plataforma: "linux", env: { DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1/bus" } }), ["--password-store=gnome-libsecret"]);
+  const rt = mkdtempSync(join(tmpdir(), "soul-rt-"));
+  writeFileSync(join(rt, "bus"), "");
+  assert.deepEqual(almacenClaves({ persistente: true, plataforma: "linux", env: { XDG_RUNTIME_DIR: rt } }), ["--password-store=gnome-libsecret"], "con el socket del bus en XDG_RUNTIME_DIR");
+  rmSync(rt, { recursive: true, force: true });
+  assert.deepEqual(almacenClaves({ persistente: false, plataforma: "linux", env: {} }), ["--password-store=basic"]);
+  assert.deepEqual(almacenClaves({ persistente: true, plataforma: "darwin", env: {} }), []);
+  assert.deepEqual(almacenClaves({ persistente: true, plataforma: "win32", env: {} }), []);
+});
+
+test("H-5: perfil persistente en Linux sin bus de sesión no se abre (no cae a la clave fija)", () => {
+  assert.throws(() => almacenClaves({ persistente: true, plataforma: "linux", env: {} }), /llavero/);
+  // Una sesión systemd sin bus (p. ej. SSH) tiene XDG_RUNTIME_DIR pero no el socket: tampoco se abre.
+  const rt = mkdtempSync(join(tmpdir(), "soul-rt-"));
+  try { assert.throws(() => almacenClaves({ persistente: true, plataforma: "linux", env: { XDG_RUNTIME_DIR: rt } }), /llavero/); }
+  finally { rmSync(rt, { recursive: true, force: true }); }
 });

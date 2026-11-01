@@ -1,18 +1,17 @@
 /**
  * Almacén de credenciales del sistema para los adaptadores de API (SE-490).
  *
- * Los tokens van al almacén del sistema operativo y a ningún otro sitio:
- * Secret Service (`secret-tool`) en Linux, Llavero (`security`) en macOS y
- * Windows Credential Manager (`PasswordVault` vía PowerShell) en Windows. El
- * secreto siempre viaja por stdin, nunca en la línea de órdenes, en variables
- * de entorno, en ficheros ni en logs. Sin dependencias nativas.
+ * Los tokens van al almacén del sistema operativo y a ningún otro sitio. El
+ * backend en producción es la vista `keyed()` del almacén único del núcleo
+ * (`src/credentials/store.ts`): Secret Service, Llavero o Credential Manager,
+ * con el secreto por stdin y cada entrada anotada en su índice sin secretos,
+ * así que desinstalar borra también estos tokens (H-2). Sin dependencias nativas.
  *
  * Una entrada por operador, servicio y conjunto de permisos (`entryKey`), así
  * que revocar un adaptador borra solo sus tokens. Si el inquilino exige
  * administración, se guarda una marca (sin secreto) y `acquire` falla cerrado.
  */
 
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { CredentialStore } from "../contract/adapter.ts";
 import type { TokenSet } from "./oauth.ts";
@@ -33,7 +32,6 @@ export class CredentialStoreError extends Error {
 
 const h16 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 const SERVICE = "soul-continuity";
-const KEY_RE = /^[a-z0-9/-]+$/;
 
 export function entryKey(operatorRef: string, service: string, scopes: string[]): string {
   if (!/^[a-z0-9-]+$/.test(service)) throw new Error("servicio inválido");
@@ -125,122 +123,4 @@ export class MemoryBackend implements SecretBackend {
   async get(k: string) { return this.m.get(k) ?? null; }
   async set(k: string, v: string) { this.m.set(k, v); }
   async delete(k: string) { return this.m.delete(k); }
-}
-
-interface Run { code: number; stdout: string }
-
-function run(cmd: string, args: string[], stdin: string): Promise<Run> {
-  return new Promise((resolve, reject) => {
-    let child;
-    try {
-      child = spawn(cmd, args, { stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
-    } catch (e) {
-      reject(new Error(`almacén del sistema no disponible: ${(e as Error).name}`));
-      return;
-    }
-    let out = "";
-    child.stdout.on("data", (c) => (out += c));
-    child.on("error", (e) => reject(new Error(`almacén del sistema no disponible (${(e as NodeJS.ErrnoException).code ?? e.name})`)));
-    child.on("close", (code) => resolve({ code: code ?? 1, stdout: out }));
-    child.stdin.end(stdin);
-  });
-}
-
-function checkKey(k: string): string {
-  if (!KEY_RE.test(k)) throw new Error("clave del almacén inválida");
-  return k;
-}
-
-/** Linux: Secret Service por `secret-tool` (libsecret). El secreto entra por stdin. */
-export class SecretToolBackend implements SecretBackend {
-  private readonly cmd: string;
-  private readonly pre: string[];
-  /** `commandArgs` va delante de los argumentos de secret-tool (p. ej. un intérprete y su script). */
-  constructor(o: { command?: string; commandArgs?: string[] } = {}) {
-    this.cmd = o.command ?? "secret-tool";
-    this.pre = o.commandArgs ?? [];
-  }
-  async get(k: string): Promise<string | null> {
-    const r = await run(this.cmd, [...this.pre, "lookup", "service", SERVICE, "account", checkKey(k)], "");
-    return r.code === 0 && r.stdout ? r.stdout : null;
-  }
-  async set(k: string, v: string): Promise<void> {
-    const r = await run(this.cmd, [...this.pre, "store", `--label=Soul Continuidad`, "service", SERVICE, "account", checkKey(k)], v);
-    if (r.code !== 0) throw new Error("secret-tool no guardó la credencial");
-  }
-  async delete(k: string): Promise<boolean> {
-    const had = (await this.get(k)) !== null;
-    const r = await run(this.cmd, [...this.pre, "clear", "service", SERVICE, "account", checkKey(k)], "");
-    // Se comprueba el borrado releyendo: no se informa de un borrado que no ocurrió.
-    if ((had && r.code !== 0) || (await this.get(k)) !== null) throw new Error("secret-tool no borró la credencial");
-    return had;
-  }
-}
-
-/** Órdenes del Llavero de macOS: `security -i` lee las órdenes de stdin; el valor va en base64. */
-export const macosCommands = {
-  get: (k: string) => ({ cmd: "/usr/bin/security", args: ["find-generic-password", "-s", SERVICE, "-a", checkKey(k), "-w"], stdin: "" }),
-  set: (k: string, v: string) => ({
-    cmd: "/usr/bin/security", args: ["-i"],
-    stdin: `add-generic-password -U -s ${SERVICE} -a ${checkKey(k)} -w ${Buffer.from(v).toString("base64")}\n`,
-  }),
-  delete: (k: string) => ({ cmd: "/usr/bin/security", args: ["delete-generic-password", "-s", SERVICE, "-a", checkKey(k)], stdin: "" }),
-};
-
-const PS_VAULT = "[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime];$v=New-Object Windows.Security.Credentials.PasswordVault;";
-
-/** Órdenes de Windows Credential Manager (PasswordVault); el script entra por stdin, el valor en base64. */
-export const windowsCommands = {
-  get: (k: string) => ({
-    cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", "-"],
-    stdin: `${PS_VAULT}try{$c=$v.Retrieve('${SERVICE}','${checkKey(k)}');$c.RetrievePassword();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.Password)))}catch{exit 1}\n`,
-  }),
-  set: (k: string, v: string) => ({
-    cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", "-"],
-    stdin: `${PS_VAULT}$v.Add((New-Object Windows.Security.Credentials.PasswordCredential('${SERVICE}','${checkKey(k)}','${Buffer.from(v).toString("base64")}')))\n`,
-  }),
-  delete: (k: string) => ({
-    cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", "-"],
-    stdin: `${PS_VAULT}try{$v.Remove($v.Retrieve('${SERVICE}','${checkKey(k)}'))}catch{exit 1}\n`,
-  }),
-};
-
-/** Almacén por órdenes de sistema (Llavero de macOS, PasswordVault de Windows). */
-export class CommandBackend implements SecretBackend {
-  private readonly c: typeof macosCommands;
-  private readonly decode: boolean;
-  constructor(c: typeof macosCommands, decode: boolean) {
-    this.c = c;
-    this.decode = decode;
-  }
-  async get(k: string) {
-    const x = this.c.get(k);
-    const r = await run(x.cmd, x.args, x.stdin);
-    if (r.code !== 0 || !r.stdout) return null;
-    const v = r.stdout.replace(/\r?\n$/, "");
-    return this.decode ? Buffer.from(v, "base64").toString("utf8") : v;
-  }
-  async set(k: string, v: string) {
-    const x = this.c.set(k, v);
-    const r = await run(x.cmd, x.args, x.stdin);
-    if (r.code !== 0) throw new Error("el almacén del sistema no guardó la credencial");
-    // Llavero y Credential Manager tienen límites de tamaño: releer detecta un valor truncado
-    // o rechazado en silencio en vez de dar por guardado un token que no sirve.
-    if ((await this.get(k)) !== v) throw new Error("el almacén del sistema no guardó la credencial íntegra (¿supera su tamaño máximo?)");
-  }
-  async delete(k: string) {
-    const x = this.c.delete(k);
-    const ok = (await run(x.cmd, x.args, x.stdin)).code === 0;
-    // Un código distinto de 0 puede ser «no había nada»; releer distingue ese caso de un fallo.
-    if ((await this.get(k)) !== null) throw new Error("el almacén del sistema no borró la credencial");
-    return ok;
-  }
-}
-
-/** Backend del sistema según la plataforma. Sin almacén reconocido, falla cerrado. */
-export function systemBackend(platform: NodeJS.Platform = process.platform): SecretBackend {
-  if (platform === "linux") return new SecretToolBackend();
-  if (platform === "darwin") return new CommandBackend(macosCommands, true);
-  if (platform === "win32") return new CommandBackend(windowsCommands, false);
-  throw new Error(`Sin almacén de credenciales reconocido para ${platform}: los adaptadores de API no se activan.`);
 }

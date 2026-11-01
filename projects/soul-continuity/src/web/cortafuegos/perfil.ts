@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
+import { dataDir } from "../../core/store.ts";
 
 export const MARCA = ".perfil-soul";
 
@@ -21,12 +22,30 @@ export function rutasPerfilPersonal(hogar: string, localAppData = process.env.LO
   return r;
 }
 
-/** Directorio de datos de Soul del usuario del sistema. `SOUL_DATA_DIR` manda. */
+/** Directorio de datos de Soul del usuario del sistema: el mismo que el del núcleo
+ *  (`src/core/store.ts`), así `soul uninstall` borra también `<datos>/web` (H-4). `SOUL_DATA_DIR` manda. */
 export function directorioDatos(env: NodeJS.ProcessEnv = process.env, plataforma = process.platform, hogar = homedir()): string {
-  if (env.SOUL_DATA_DIR) return env.SOUL_DATA_DIR;
-  if (plataforma === "win32") return join(env.LOCALAPPDATA ?? join(hogar, "AppData", "Local"), "SoulContinuity");
-  if (plataforma === "darwin") return join(hogar, "Library", "Application Support", "SoulContinuity");
-  return join(env.XDG_DATA_HOME ?? join(hogar, ".local", "share"), "soul-continuity");
+  return dataDir({ platform: plataforma, env, home: hogar });
+}
+
+/**
+ * Almacén de las claves de cookies del navegador en Linux (H-5). Un perfil **persistente** (el del
+ * producto, con sesiones del operador) cifra sus cookies con una clave guardada en el llavero del
+ * sistema (`gnome-libsecret`), como los tokens de Soul. Sin bus de sesión no hay llavero: no se abre
+ * (fail-closed), en vez de caer a la clave fija de Chromium. Un perfil **temporal** (banco y
+ * vigilancia de prueba) se borra al cerrar y usa `basic`: no deja sesiones. En macOS y Windows el
+ * navegador usa el Llavero y DPAPI por defecto y no hace falta indicador.
+ */
+export function almacenClaves(o: { persistente: boolean; plataforma?: NodeJS.Platform; env?: NodeJS.ProcessEnv }): string[] {
+  const plataforma = o.plataforma ?? process.platform;
+  const env = o.env ?? process.env;
+  if (plataforma !== "linux") return [];
+  if (!o.persistente) return ["--password-store=basic"];
+  // XDG_RUNTIME_DIR existe en casi cualquier sesión systemd (también por SSH sin llavero): solo cuenta si tiene el socket del bus.
+  if (!env.DBUS_SESSION_BUS_ADDRESS && !(env.XDG_RUNTIME_DIR && existsSync(join(env.XDG_RUNTIME_DIR, "bus")))) {
+    throw new Error("sin bus de sesión no hay llavero del sistema: el perfil persistente de Soul no se abre (sus cookies quedarían con la clave fija de Chromium)");
+  }
+  return ["--password-store=gnome-libsecret"];
 }
 
 /** Preferencias que el perfil de Soul fija en cada arranque: el navegador no

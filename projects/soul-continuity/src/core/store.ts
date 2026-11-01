@@ -108,7 +108,7 @@ export function filesUnder(dir: string): string[] {
 }
 
 /** Lo que Soul crea en su directorio de datos. Nada más se borra al desinstalar. */
-const OWN = /^(config\.json|STOP|failsafe\.jsonl|audit\.jsonl|devices\.json|credentials-index\.json|autostart-task\.xml|tls|op-[0-9a-f]{16}|.+\.\d+\.[0-9a-f]{8}\.tmp)$/;
+const OWN = /^(config\.json|STOP|failsafe\.jsonl|audit\.jsonl|devices\.json|pairing\.json|credentials-index\.json|autostart-task\.xml|tls|web|op-[0-9a-f]{16}|.+\.\d+\.[0-9a-f]{8}\.tmp)$/;
 
 /**
  * Borra solo el estado de Soul en `dir` y, si queda vacío, el directorio. Lo ajeno se conserva

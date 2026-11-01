@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { request } from "node:https";
 import { makeSelfSigned } from "../src/api/cert.ts";
 import { crearServidor, type SemillaOperador } from "../src/api/server.ts";
+import { estadoDesdeTexto } from "../src/attention/index.ts";
 
 const T0 = Date.parse("2026-10-31T08:00:00Z");
 const CERT = makeSelfSigned(["127.0.0.1"], new Date(T0));
@@ -89,5 +90,92 @@ test("un operator_ref «constructor» o «__proto__» no autentica contra el pro
     assert.equal((await get(l.port, "/estado")).status, 401);
     ref = "op";
     assert.equal((await get(l.port, "/estado")).status, 200, "control: el operador real sí");
+  } finally { await s.cerrar(); }
+});
+
+test("D4/D5: con el estado perdido, el cursor anterior da 410 (no 400) y los ids nuevos no repiten los ya vistos", async () => {
+  const sem = () => ({ ...semilla(), avisos: { ...semilla().avisos, activos: ["vencimiento"] } });
+  const disco = new Map<string, any>();
+  const persistencia = { cargar: (r: string) => disco.get(r) ?? null, guardar: (r: string, e: any) => { disco.set(r, structuredClone(e)); } };
+  const arrancar = async () => {
+    const s = crearServidor({ tls: CERT, mundo: { semillas: () => [sem()] }, reloj: () => T0, persistencia, secretoCursor: "fijo" });
+    return { s, port: (await s.escuchar(["127.0.0.1"], 0)).port };
+  };
+  let a = await arrancar();
+  let cursor: string;
+  let ids: string[];
+  try {
+    const j = JSON.parse((await get(a.port, "/sondeo")).body);
+    cursor = j.cursor;
+    ids = j.mensajes.map((m: { id: string }) => m.id);
+    assert.ok(ids.length >= 1, "control: el arranque avisa del vencimiento");
+  } finally { await a.s.cerrar(); }
+
+  // Reinicio con el estado guardado: el cursor sigue valiendo y no se reemite nada.
+  a = await arrancar();
+  try {
+    const r = await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor)}`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(JSON.parse(r.body).mensajes, [], "tras reiniciar no se reemiten los avisos ya dados");
+  } finally { await a.s.cerrar(); }
+
+  // Reinicio con el estado perdido (fichero borrado o ilegible).
+  disco.clear();
+  a = await arrancar();
+  try {
+    const r = await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor)}`);
+    assert.equal(r.status, 410, r.body);
+    assert.equal(JSON.parse(r.body).code, "GONE");
+    const nuevos = JSON.parse((await get(a.port, "/sondeo")).body).mensajes.map((m: { id: string }) => m.id);
+    assert.ok(nuevos.length >= 1);
+    assert.deepEqual(nuevos.filter((id: string) => ids.includes(id)), [], "ningún id nuevo coincide con uno ya entregado");
+    // Un cursor manipulado sigue siendo 400.
+    assert.equal((await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor.replace(/.$/, (c) => (c === "0" ? "1" : "0")))}`)).status, 400);
+  } finally { await a.s.cerrar(); }
+});
+
+test("estado guardado con avisos, ventana o pendientes ausentes o mal tipados: arranca con los de la semilla, no da 503", async () => {
+  const sem = () => ({ ...semilla(), avisos: { ...semilla().avisos, activos: ["vencimiento"] } });
+  const disco = new Map<string, any>();
+  const persistencia = { cargar: (r: string) => disco.get(r) ?? null, guardar: (r: string, e: any) => { disco.set(r, structuredClone(e)); } };
+  let t = T0;
+  const arrancar = async () => {
+    const s = crearServidor({ tls: CERT, mundo: { semillas: () => [sem()] }, reloj: () => t, persistencia, secretoCursor: "fijo" });
+    return { s, port: (await s.escuchar(["127.0.0.1"], 0)).port };
+  };
+  let a = await arrancar();
+  try { assert.equal((await get(a.port, "/sondeo")).status, 200); } finally { await a.s.cerrar(); }
+  const e = disco.get("op");
+  assert.ok(e, "control: el estado se guardó");
+  disco.set("op", { ...e, avisos: undefined, ventana: "x", pendAvisos: null, pendAlertas: 7, registro: undefined, alertas: {}, ahorrados: "n" });
+  a = await arrancar();
+  try {
+    t += 3 * 3_600_000; // con el servicio en marcha: sincronizar recorre ventanas y presupuesto
+    for (const p of ["/sondeo", "/estado"]) assert.equal((await get(a.port, p)).status, 200, p);
+  } finally { await a.s.cerrar(); }
+});
+
+test("H-11: decide la Politica de src/attention (alerta declarada pasa en DISPONIBLE) y su estado se persiste con estadoATexto", async () => {
+  const regla = { id: "r-jefa", tipo: "persona", objetivo: "h1", palabra: null, modos: ["FOCO"] };
+  const disco = new Map<string, any>();
+  let disparar = true;
+  const s = crearServidor({
+    tls: CERT, reloj: () => T0, secretoCursor: "fijo",
+    persistencia: { cargar: (r) => disco.get(r) ?? null, guardar: (r, e) => { disco.set(r, structuredClone(e)); } },
+    mundo: {
+      semillas: () => [{ ...semilla(), elementos: [], alertas: [regla], avisos: { ...semilla().avisos, activos: ["espera_respuesta"] } }],
+      refrescar: (ctx, o, t) => { if (disparar) { disparar = false; ctx.evento(o, { tipo: "alerta", regla, efectiva: "alerta", ids: ["e-1"] }, t); } },
+    },
+  });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  try {
+    const m = JSON.parse((await get(l.port, "/sondeo")).body).mensajes;
+    // La aproximación anterior solo la daba por alerta si DISPONIBLE estaba entre sus modos.
+    assert.deepEqual(m.map((x: { tipo: string; categoria: string }) => [x.tipo, x.categoria]), [["alerta", "alerta_definida"]]);
+    const e = disco.get("op");
+    assert.equal(typeof e.politica, "string", "el estado de la política va con el de la API");
+    const pol = estadoDesdeTexto(e.politica);
+    assert.ok(pol, "es texto de estadoATexto");
+    assert.deepEqual([...pol!.alertasUsadas.values()], [1], "la alerta gastó el tope propio de la política");
   } finally { await s.cerrar(); }
 });

@@ -58,7 +58,7 @@ function setup(opts: { profile?: boolean; level?: "completo" | "titulos" | "recu
     dataDir: dir, env: { ...(opts.env ?? {}) }, now: () => NOW, out: (s) => out.push(s), err: (s) => err.push(s),
     adapters: { "m365-mail": adapter() },
     sourceEnv: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => CLI_TOKEN } },
-    credentials: { forget: async (s: string) => { forgotten.push(s); return [s]; }, forgetAll: async () => { forgotten.push("*"); return []; } },
+    credentials: { revoke: async (a: string, ref: string) => { forgotten.push(`${a}@${ref}`); return { tokens_removed: 1, cache_removed: false }; }, forgetAll: async () => { forgotten.push("*"); return []; } },
     platform: "linux", home, run, node: "/n/node", entry: "/e/main.ts",
   };
   return { dir, home, deps, out, err, forgotten, runs };
@@ -179,7 +179,7 @@ test("AC-5: revoke borra la caché del adaptador y su credencial, y deja de leer
   assert.ok(filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes("c1@m1")));
   assert.equal(await runCli(["revoke", "m365-mail"], s.deps), 0);
   assert.ok(!filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes("c1@m1")), "caché del adaptador borrada");
-  assert.deepEqual(s.forgotten, ["m365-mail"]);
+  assert.deepEqual(s.forgotten, ["m365-mail@op-yo"], "revoca los tokens del adaptador para el operador del perfil");
   s.out.length = 0;
   await runCli(["adapters", "--json"], s.deps);
   assert.equal(JSON.parse(text(s)).adapters["m365-mail"].status, "consent_revoked");
@@ -298,34 +298,68 @@ test("orden desconocida o texto libre: ayuda y código 2, sin interpretar", asyn
   assert.match(s.err.join("\n"), /órdenes/);
 });
 
-test("pair: token una sola vez, huella del certificado y direcciones; en disco solo el hash", async () => {
+test("pair: abre una ventana con clave soulpk_, IP, puerto y huella corta; no muestra ni guarda ningún token de dispositivo", async () => {
   const s = setup();
   const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
   cfg.api = { listen: ["127.0.0.1"], port: 8787 };
   (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), JSON.stringify(cfg));
-  assert.equal(await runCli(["pair", "movil", "--json"], s.deps), 0);
+  assert.equal(await runCli(["pair", "--json"], s.deps), 0);
   const j = JSON.parse(text(s));
-  assert.match(j.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.match(j.clave, /^soulpk_[0-9A-Za-z]{30}_[0-9A-Za-z]{6}$/);
+  assert.equal(j.codigo, undefined, "sin código v1");
+  assert.equal(j.token, undefined);
   assert.match(j.pin, /^sha256\//);
-  assert.deepEqual(j.direcciones, ["127.0.0.1:8787"]);
-  assert.ok(!filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes(j.token)));
+  assert.deepEqual(j.direcciones, ["127.0.0.1"]);
+  assert.equal(j.puerto, 8787);
+  assert.equal(j.qr, `soul://pair?v=2&h=127.0.0.1&p=8787&k=${j.clave}&f=${j.huella_corta.replace(/ /g, "")}`);
   s.out.length = 0;
   assert.equal(await runCli(["devices", "--json"], s.deps), 0);
-  assert.equal(JSON.parse(text(s)).devices[0].name, "movil");
-  assert.ok(!text(s).includes("token_sha256"), "devices no enseña ni el hash");
-  assert.equal(await runCli(["unpair", j.id], s.deps), 0);
+  assert.deepEqual(JSON.parse(text(s)).devices, [], "abrir la ventana no da de alta ningún dispositivo");
   assert.equal(await runCli(["unpair", "d-nada"], s.deps), 1);
+  assert.equal(await runCli(["pair", "movil"], s.deps), 2, "el nombre lo pone la app: un argumento es error de uso");
+  assert.equal(await runCli(["pair", "--days", "0"], s.deps), 2);
 });
 
-test("pair sin direcciones de escucha: error, sin token", async () => {
+test("pair: pinta el QR del enlace en la terminal y --qr-png lo guarda en 0600 sin sobrescribir", async () => {
+  const { encodeQr, qrToTerminal } = await import("../src/api/qr.ts");
   const s = setup();
-  assert.equal(await runCli(["pair", "movil"], s.deps), 1);
+  const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
+  cfg.api = { listen: ["127.0.0.1"], port: 8787 };
+  (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), JSON.stringify(cfg));
+  assert.equal(await runCli(["pair"], s.deps), 0);
+  const t = text(s);
+  const clave = /clave de emparejamiento: (soulpk_\S+)/.exec(t)![1];
+  const enlace = /enlace para QR: (\S+)/.exec(t)![1];
+  assert.match(enlace, new RegExp(`&k=${clave}&`));
+  assert.ok(t.includes(qrToTerminal(encodeQr(enlace).modules)), "el QR que se ve es el del enlace con la clave de esta ventana");
+  assert.match(t, /no compartas capturas/);
+
+  const png = join(s.dir, "qr.png");
+  s.out.length = 0;
+  assert.equal(await runCli(["pair", "--qr-png", png, "--json"], s.deps), 0);
+  const j = JSON.parse(text(s));
+  assert.equal(j.qr_png, png);
+  const b = readFileSync(png);
+  assert.equal(b.subarray(1, 4).toString("ascii"), "PNG");
+  if (process.platform !== "win32") assert.equal((await import("node:fs")).statSync(png).mode & 0o777, 0o600);
+  // Ya existe: no se sobrescribe y la ventana recién abierta se cierra (la clave no queda en disco).
+  assert.equal(await runCli(["pair", "--qr-png", png], s.deps), 1);
+  assert.match(s.err.join("\n"), /--qr-png: no se pudo crear .*EEXIST.*ventana cerrada/);
+  assert.equal(existsSync(join(s.dir, "pairing.json")), false);
+  assert.deepEqual(readFileSync(png), b);
+  assert.equal(await runCli(["pair", "--qr-png"], s.deps), 2, "sin fichero es error de uso");
+});
+
+test("pair sin direcciones de escucha: error, sin ventana", async () => {
+  const s = setup();
+  assert.equal(await runCli(["pair"], s.deps), 1);
+  assert.equal(existsSync(join(s.dir, "pairing.json")), false);
   assert.match(s.err.join("\n"), /ninguna dirección/);
 });
 
 test("pair desde un frontend de agente se rechaza", async () => {
   const s = setup({ env: { CLAUDECODE: "1" } });
-  assert.equal(await runCli(["pair", "movil"], s.deps), 4);
+  assert.equal(await runCli(["pair"], s.deps), 4);
 });
 
 test("configuración corrupta: stop, resume, help y uninstall siguen funcionando (el fail-safe no depende de ella)", async () => {

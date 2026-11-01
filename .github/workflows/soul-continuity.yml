@@ -43,8 +43,23 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      # El adaptador web es el único con dependencia de ejecución (playwright-core, JavaScript puro).
+      # Sin descargar navegadores ni ejecutar scripts. Con él, test/connectors.test.ts carga el
+      # adaptador web real por las rutas de producción en lugar de saltarse ese caso.
+      - name: Dependencias del adaptador web (sin navegadores)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: projects/soul-continuity/src/web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Tests (sin dependencias de ejecución)
         run: npm test
+
+      - name: Tests unitarios del adaptador web (sin navegador)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: projects/soul-continuity/src/web
+        run: npm run test:unit
 
       - name: Banco de continuidad contra el núcleo (gate AC-3)
         run: npm run bench
@@ -77,3 +92,12 @@ jobs:
 
       - name: Tipos
         run: npm run typecheck
+
+      - name: Dependencias del adaptador web (sin navegadores ni scripts)
+        working-directory: projects/soul-continuity/src/web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tipos del adaptador web
+        run: npm run typecheck:web
