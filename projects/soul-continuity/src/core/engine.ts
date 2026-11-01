@@ -29,6 +29,7 @@ import { appendJsonl, ensureDir, operatorDir, readJson, readJsonl, writeJson } f
 export type AdapterRegistry = Partial<Record<string, SourceAdapter>>;
 
 export interface Engine extends ContinuityImpl {
+  correct(req: DeviceCorrection): Promise<void>;
   lastSnapshot(stateDir: string, operatorRef: string): Snapshot | null;
   /** Instantánea más reciente con `issued_at` ≤ `at` (para Q3 «desde»). */
   snapshotAt(stateDir: string, operatorRef: string, at: string): Snapshot | null;
@@ -37,7 +38,14 @@ export interface Engine extends ContinuityImpl {
   cachedSnapshot(stateDir: string, operatorRef: string, now: string): Snapshot | null;
   /** AC-5: borra las afirmaciones de un adaptador de la caché y del historial. Devuelve ficheros tocados. */
   purgeAdapter(stateDir: string, operatorRef: string, adapter: string): number;
+  /** P1-2: correcciones vigentes hechas desde un dispositivo (la última fila de su clave es suya). */
+  deviceCorrections(stateDir: string, operatorRef: string, device: string): { key: string; action: string; at: string }[];
+  /** P1-2: deshace esas correcciones devolviendo cada clave a su estado anterior. Devuelve cuántas. */
+  undoDevice(stateDir: string, operatorRef: string, device: string, now: string): Promise<number>;
 }
+
+/** Corrección con el dispositivo que la hizo (P1-2). El contrato no lo exige; el núcleo lo anota. */
+export type DeviceCorrection = CorrectionRequest & { device?: string | null };
 
 const DAY = 86_400_000;
 const LEDGER = "ledger.jsonl";
@@ -168,7 +176,7 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
       return snap;
     },
 
-    async correct(req: CorrectionRequest): Promise<void> {
+    async correct(req: DeviceCorrection): Promise<void> {
       // Misma regla que foldLedger: una clave que el libro ignoraría no se escribe.
       if (!isClaimKey(req.key)) throw new Error("clave inválida");
       if (parseTs(req.now) === null) throw new Error("instante inválido");
@@ -177,6 +185,7 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
       appendJsonl(join(dir, LEDGER), {
         operator_ref: req.install.operator.ref, action: req.action, key: req.key, at: req.now,
         reason: req.reason ?? "", superseded_by: req.superseded_by ?? null,
+        ...(typeof req.device === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(req.device) ? { device: req.device } : {}),
       });
     },
 
@@ -297,6 +306,30 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
 
     ledger(stateDir: string, operatorRef: string): unknown[] {
       return [...foldLedger(readJsonl(join(operatorDir(stateDir, operatorRef), LEDGER)), operatorRef).values()];
+    },
+
+    deviceCorrections(stateDir: string, operatorRef: string, device: string) {
+      const rows = readJsonl(join(operatorDir(stateDir, operatorRef), LEDGER));
+      return [...foldLedger(rows, operatorRef).values()]
+        .filter((r) => (r as { device?: unknown }).device === device)
+        .map((r) => ({ key: r.key, action: r.action, at: String((r as { at?: unknown }).at ?? "") }));
+    },
+
+    async undoDevice(stateDir: string, operatorRef: string, device: string, now: string): Promise<number> {
+      const rows = readJsonl(join(operatorDir(stateDir, operatorRef), LEDGER));
+      let n = 0;
+      for (const c of engine.deviceCorrections(stateDir, operatorRef, device)) {
+        // Estado anterior: la última fila de esa clave que no es del dispositivo; sin ella, sin corrección.
+        const others = rows.filter((r) => (r as { key?: unknown }).key === c.key && (r as { device?: unknown }).device !== device);
+        const prev = [...foldLedger(others, operatorRef).values()][0];
+        const action = prev && prev.action !== "restore" ? prev.action : "restore";
+        await engine.correct({
+          install: { id: "", operator: { ref: operatorRef, identities: { emails: [] } }, sources: [] }, stateDir, now, key: c.key,
+          action, reason: `deshecho:${device}`, superseded_by: prev?.superseded_by ?? undefined,
+        });
+        n++;
+      }
+      return n;
     },
 
     purgeAdapter(stateDir: string, operatorRef: string, adapter: string): number {

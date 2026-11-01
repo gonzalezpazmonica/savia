@@ -75,7 +75,9 @@ const HELP = `Órdenes de soul (sin texto libre):
   autostart install|uninstall [--dry-run]
   bench                          banco de continuidad contra este núcleo
   serve                          API local para la app (solo en las direcciones configuradas)
-  pair <nombre> | unpair <id> | devices   dispositivos emparejados con la app
+  pair <nombre> [--days N] | unpair <id> [--undo] | devices   dispositivos emparejados con la app
+  corrections --device <id>      correcciones vigentes hechas desde ese dispositivo
+  undo-device <id>               deshace las correcciones de ese dispositivo (móvil perdido)
 Opciones: --json · --frontend <nombre>`;
 
 interface Parsed { cmd: string; args: string[]; flags: Record<string, string | true> }
@@ -83,7 +85,7 @@ interface Parsed { cmd: string; args: string[]; flags: Record<string, string | t
 function parse(argv: string[]): Parsed {
   const args: string[] = [];
   const flags: Record<string, string | true> = {};
-  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend"]);
+  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (withValue.has(a)) flags[a.slice(2)] = argv[++i] ?? "";
@@ -388,20 +390,44 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         if (!p.args[0]) throw new Exit(2, "pair <nombre del dispositivo>");
         const listen = validateListen(cfg.api.listen);
         const tls = ensureInstallCert(deps.dataDir, listen);
-        const d = pairDevice(deps.dataDir, cfg.profiles[name].operator.ref, p.args[0], deps.now());
+        const days = typeof p.flags.days === "string" ? Number(p.flags.days) : undefined;
+        const d = pairDevice(deps.dataDir, cfg.profiles[name].operator.ref, p.args[0], deps.now(), days);
         const direcciones = listen.map((a) => `${a.includes(":") ? `[${a}]` : a}:${cfg.api.port}`);
         print([
           `Emparejado «${p.args[0]}» (${d.id}). Introduce en la app, solo esta vez:`,
           `  token: ${d.token}`, `  huella: ${tls.pin}`, `  dirección: ${direcciones.join(", ")}`,
+          `Caduca el ${d.expires_at.slice(0, 10)}. La primera conexión de la app liga su clave al token: después solo vale ese móvil.`,
           "El token no se vuelve a mostrar; si se pierde, desempareja y vuelve a emparejar.",
-        ].join("\n"), { id: d.id, token: d.token, pin: tls.pin, direcciones });
+        ].join("\n"), { id: d.id, token: d.token, pin: tls.pin, direcciones, expires_at: d.expires_at });
         return 0;
       }
 
       case "unpair": {
-        if (!p.args[0]) throw new Exit(2, "unpair <id>");
-        if (!revokeDevice(deps.dataDir, p.args[0], deps.now())) throw new Exit(1, `no hay ningún dispositivo ${p.args[0]}`);
-        print(`Desemparejado ${p.args[0]}: su token deja de valer.`, { id: p.args[0], revoked: true });
+        if (!p.args[0]) throw new Exit(2, "unpair <id> [--undo]");
+        const dev = listDevices(deps.dataDir).find((d) => d.id === p.args[0]);
+        if (!dev || !revokeDevice(deps.dataDir, p.args[0], deps.now())) throw new Exit(1, `no hay ningún dispositivo ${p.args[0]}`);
+        const undone = p.flags.undo === true ? await engine.undoDevice(deps.dataDir, dev.operator_ref, dev.id, deps.now()) : 0;
+        const pending = engine.deviceCorrections(deps.dataDir, dev.operator_ref, dev.id).length;
+        print(`Desemparejado ${p.args[0]}: su token deja de valer.${undone ? ` ${undone} corrección(es) suya(s) deshecha(s).` : pending ? ` Tiene ${pending} corrección(es) vigente(s): «soul undo-device ${dev.id}» las deshace.` : ""}`,
+          { id: p.args[0], revoked: true, undone, corrections_pending: pending });
+        return 0;
+      }
+
+      case "corrections": {
+        const id = typeof p.flags.device === "string" ? p.flags.device : "";
+        const dev = listDevices(deps.dataDir).find((d) => d.id === id);
+        if (!dev) throw new Exit(2, "corrections --device <id de «soul devices»>");
+        const list = engine.deviceCorrections(deps.dataDir, dev.operator_ref, dev.id)
+          .map((c) => ({ id: elementId(dev.operator_ref, c.key), action: c.action, at: c.at }));
+        print(list.map((c) => `${c.id} ${c.action} ${c.at}`).join("\n") || "Sin correcciones vigentes de ese dispositivo.", { device: dev.id, corrections: list });
+        return 0;
+      }
+
+      case "undo-device": {
+        const dev = listDevices(deps.dataDir).find((d) => d.id === p.args[0]);
+        if (!dev) throw new Exit(2, "undo-device <id de «soul devices»>");
+        const n = await engine.undoDevice(deps.dataDir, dev.operator_ref, dev.id, deps.now());
+        print(`${n} corrección(es) de ${dev.id} deshecha(s): cada elemento vuelve a su estado anterior.`, { device: dev.id, undone: n });
         return 0;
       }
 

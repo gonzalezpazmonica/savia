@@ -9,6 +9,11 @@ import { emptyConfig, saveConfig } from "../src/core/config.ts";
 import { serveFromCli } from "../src/api/serve.ts";
 import { pairDevice, revokeDevice } from "../src/api/devices.ts";
 import { stop } from "../src/core/failsafe.ts";
+import { newKey, proof } from "./dpop-helper.ts";
+import { listDevices } from "../src/api/devices.ts";
+import { ATTENTION_STATE } from "../src/api/serve.ts";
+import { operatorDir } from "../src/core/store.ts";
+import { LIMITES, crearServidor } from "../src/api/server.ts";
 import type { CliDeps } from "../src/cli/cli.ts";
 
 function deps(dir: string, out: string[], err: string[]): CliDeps {
@@ -38,11 +43,31 @@ function setup(listen: string[], port = 8787) {
   return dir;
 }
 
-const get = (port: number, ca: string, token: string) => new Promise<number>((res, rej) => {
-  const q = request({ host: "127.0.0.1", port, path: "/api/v1/soul/estado", ca, headers: { Authorization: `DPoP ${token}`, DPoP: "p" } }, (r) => { r.resume(); r.on("end", () => res(r.statusCode ?? 0)); });
-  q.on("error", rej);
-  q.end();
-});
+const KEY = newKey();
+/** Petición como la de la app: `Authorization: DPoP <token>` y una prueba nueva firmada con la clave del móvil. */
+const call = (port: number, ca: string, token: string, o: { key?: ReturnType<typeof newKey>; path?: string; method?: string; body?: unknown; proofOverride?: string } = {}) =>
+  new Promise<{ status: number; json: any }>((res, rej) => {
+    const path = o.path ?? "/api/v1/soul/estado";
+    const method = o.method ?? "GET";
+    const prueba = o.proofOverride ?? proof(o.key ?? KEY, { htm: method, htu: `https://127.0.0.1:${port}${path.split("?")[0]}`, iat: Date.now(), token });
+    const q = request({ host: "127.0.0.1", port, path, method, ca, headers: { Authorization: `DPoP ${token}`, DPoP: prueba, ...(o.body ? { "Content-Type": "application/json" } : {}) } }, (r) => {
+      let b = "";
+      r.on("data", (c) => (b += c));
+      r.on("end", () => { let j: any = null; try { j = JSON.parse(b); } catch { j = null; } res({ status: r.statusCode ?? 0, json: j }); });
+    });
+    q.on("error", rej);
+    q.end(o.body ? JSON.stringify(o.body) : undefined);
+  });
+const get = async (port: number, ca: string, token: string, key?: ReturnType<typeof newKey>) => (await call(port, ca, token, { key })).status;
+
+async function start(dir: string, out: string[], d = deps(dir, out, [])) {
+  const ac = new AbortController();
+  const done = serveFromCli(d, { signal: ac.signal, refreshMs: 50 });
+  for (let i = 0; i < 80 && !out.some((l) => l.includes("Escuchando")); i++) await new Promise((r) => setTimeout(r, 25));
+  const port = Number(/:(\d+)/.exec(out.find((l) => l.includes("Escuchando")) ?? "")?.[1]);
+  const ca = readFileSync(join(dir, "tls", "cert.pem"), "utf8");
+  return { port, ca, stop: async () => { ac.abort(); return done; } };
+}
 
 test("serve sin direcciones configuradas no arranca: error claro y código 1", async () => {
   const dir = setup([]);
@@ -126,4 +151,87 @@ test("serve no solapa lecturas: una lectura lenta no acumula otras en paralelo",
     ac.abort();
     await done;
   }
+});
+
+test("P1-1: la primera clave queda ligada; un token copiado con otra clave, sin prueba o con prueba repetida => 401", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const out: string[] = [];
+  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const s = await start(dir, out);
+  try {
+    assert.equal(await get(s.port, s.ca, p.token), 200, "control: la app con su clave entra");
+    assert.ok(listDevices(dir)[0].jkt, "huella de la clave ligada al dispositivo");
+    assert.equal(await get(s.port, s.ca, p.token, newKey()), 401, "mismo token desde otra clave");
+    assert.equal((await call(s.port, s.ca, p.token, { proofOverride: "p" })).status, 401, "sin prueba válida");
+    const una = proof(KEY, { htu: `https://127.0.0.1:${s.port}/api/v1/soul/estado`, iat: Date.now(), token: p.token });
+    assert.equal((await call(s.port, s.ca, p.token, { proofOverride: una })).status, 200);
+    assert.equal((await call(s.port, s.ca, p.token, { proofOverride: una })).status, 401, "jti repetido");
+    const vieja = proof(KEY, { htu: `https://127.0.0.1:${s.port}/api/v1/soul/estado`, iat: Date.now() - 5 * 60_000, token: p.token });
+    assert.equal((await call(s.port, s.ca, p.token, { proofOverride: vieja })).status, 401, "prueba caducada");
+  } finally { assert.equal(await s.stop(), 0); }
+});
+
+test("P2-8: un token caducado no entra aunque la prueba sea buena", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const out: string[] = [];
+  const p = pairDevice(dir, "op-yo", "movil", new Date(Date.now() - 2 * 86_400_000).toISOString(), 1);
+  const s = await start(dir, out);
+  try { assert.equal(await get(s.port, s.ca, p.token), 401); } finally { await s.stop(); }
+});
+
+test("atención persistente: el modo declarado por la app sobrevive a reiniciar serve y el cursor sigue valiendo", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const hasta = new Date(Date.now() + 2 * 3_600_000).toISOString();
+  let s = await start(dir, []);
+  let cursor = "";
+  try {
+    const r = await call(s.port, s.ca, p.token, { method: "PUT", path: "/api/v1/soul/atencion", body: { modo: "FOCO", hasta } });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    const sondeo = await call(s.port, s.ca, p.token, { path: "/api/v1/soul/sondeo" });
+    assert.equal(sondeo.status, 200);
+    cursor = sondeo.json.cursor;
+  } finally { await s.stop(); }
+  assert.ok(readFileSync(join(operatorDir(dir, "op-yo"), ATTENTION_STATE), "utf8").includes("FOCO"));
+  s = await start(dir, []);
+  try {
+    const a = await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" });
+    assert.equal(a.json.modo, "FOCO", "el modo no se pierde al reiniciar");
+    const sondeo = await call(s.port, s.ca, p.token, { path: `/api/v1/soul/sondeo?cursor=${encodeURIComponent(cursor)}` });
+    assert.equal(sondeo.status, 200, "el cursor anterior al reinicio sigue valiendo");
+  } finally { await s.stop(); }
+});
+
+test("atención compartida: soul mode (attention.json) se aplica en serve sin reiniciar", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const s = await start(dir, []);
+  try {
+    assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "DISPONIBLE", "control");
+    writeFileSync(join(operatorDir(dir, "op-yo"), "attention.json"), JSON.stringify({ modo: "DESCANSO", hasta: new Date(Date.now() + 3_600_000).toISOString(), at: new Date().toISOString() }));
+    let modo = "";
+    for (let i = 0; i < 40 && modo !== "DESCANSO"; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      modo = (await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo;
+    }
+    assert.equal(modo, "DESCANSO");
+  } finally { await s.stop(); }
+});
+
+test("P2-9: límites de conexión y tiempos de espera propios en el servidor TLS", async () => {
+  const tlsDir = setup(["127.0.0.1"], await freePort());
+  const out: string[] = [];
+  const s = await start(tlsDir, out);
+  await s.stop();
+  const { ensureInstallCert } = await import("../src/api/cert.ts");
+  const tls = ensureInstallCert(tlsDir, ["127.0.0.1"]);
+  const srv = crearServidor({ tls, mundo: { semillas: () => [] } });
+  const l = await srv.escuchar(["127.0.0.1"], 0);
+  try {
+    const h = (l as unknown as { servers: import("node:https").Server[] }).servers[0];
+    assert.equal(h.maxConnections, LIMITES.maxConnections);
+    assert.equal(h.headersTimeout, 10_000);
+    assert.equal(h.requestTimeout, 15_000);
+    assert.equal(h.keepAliveTimeout, 5_000);
+  } finally { await srv.cerrar(); }
 });

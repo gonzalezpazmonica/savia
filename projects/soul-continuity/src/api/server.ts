@@ -96,7 +96,12 @@ export interface Op {
   registro: { en: string; decision: string; motivo: string; categoria: string }[]; ahorrados: number;
   st: { avisosGenerados: number; alertasGeneradas: number; reobservaciones: number; rebotadas: number };
 }
-interface Msg { id: string; seq: number; tipo: string; categoria: string; creado: number; programar: number | null; caduca: number | null; agrupa: number; ids: string[] }
+export interface Msg { id: string; seq: number; tipo: string; categoria: string; creado: number; programar: number | null; caduca: number | null; agrupa: number; ids: string[] }
+/** Lo que sobrevive a un reinicio de `serve`: modo, avisos, alertas, pendientes, registro de demanda y mensajes del sondeo. */
+export interface EstadoAtencion {
+  v: 1; modo: string; hasta: number | null; avisos: ConfAvisos; alertas: Regla[]; mensajes: Msg[]; seq: number; base: number;
+  pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: Op["ventana"]; registro: Op["registro"]; ahorrados: number; avisados: string[];
+}
 export interface Evento { tipo: string; categoria?: string; ids: string[]; programar?: number | null; regla?: Regla; efectiva?: string; avisoDe?: string }
 
 /** Lo que el mundo puede hacer sobre un operador. */
@@ -128,11 +133,32 @@ export interface OpcionesServidor {
   retencionMs?: number;
   peticionesPorVentana?: number;
   caducidadToken?: boolean;
-  /** Autenticación de dispositivos (producción). Por defecto, los tokens de las semillas. */
-  autenticar?: (token: string) => { ref: string; revocado: boolean } | null;
+  /**
+   * Autenticación de dispositivos (producción): token y prueba DPoP de la petición. Por defecto,
+   * los tokens de las semillas (pruebas). `dispositivo` liga cada corrección a quien la hizo (P1-2).
+   */
+  autenticar?: (token: string, prueba: { proof: string; method: string; path: string; host: string }) => { ref: string; revocado: boolean; dispositivo?: string } | null;
+  /** Estado de atención persistente por operador (producción). Sin él, vive en memoria. */
+  persistencia?: { cargar(ref: string): EstadoAtencion | null; guardar(ref: string, e: EstadoAtencion): void };
   /** Fail-safe: con STOP todo responde 503. */
   detenido?: () => boolean;
   textoLibre?: "desactivado" | "modelo_local" | "proveedor_aprobado";
+  /** Secreto de los cursores del sondeo; con él, un cursor sigue valiendo tras reiniciar. */
+  secretoCursor?: string;
+  /** P2-9: límites de conexión (por defecto `LIMITES`). */
+  limites?: Partial<typeof LIMITES>;
+}
+
+/** P2-9: conexiones simultáneas y tiempos de espera propios (no los de Node.js por defecto). */
+export const LIMITES = { maxConnections: 32, headersTimeout: 10_000, requestTimeout: 15_000, keepAliveTimeout: 5_000 };
+
+export function limitesConexion<S extends Server>(s: S, l: Partial<typeof LIMITES> = {}): S {
+  const x = { ...LIMITES, ...l };
+  s.maxConnections = x.maxConnections;
+  s.headersTimeout = x.headersTimeout;
+  s.requestTimeout = x.requestTimeout;
+  s.keepAliveTimeout = x.keepAliveTimeout;
+  return s;
 }
 
 export function crearServidor(opts: OpcionesServidor) {
@@ -171,6 +197,12 @@ export function crearServidor(opts: OpcionesServidor) {
     }
   }
   function evento(o: Op, ev: Evento, t: number) {
+    // Un elemento ya avisado no se vuelve a avisar (también tras reiniciar `serve`).
+    if (ev.ids.length === 1 && ev.tipo === "aviso") {
+      const k = `${ev.categoria ?? ""}|${ev.ids[0]}`;
+      if (avisados(o).has(k)) return;
+      avisados(o).add(k);
+    }
     if (ev.tipo === "alerta" && ev.regla) {
       const marcada = ev.regla.modos.includes(o.modo);
       if (ev.efectiva === "alerta" && marcada) {
@@ -210,6 +242,24 @@ export function crearServidor(opts: OpcionesServidor) {
 
   // -------------------------------------------------------------- estado por operador
   const ops: Record<string, Op> = {};
+  const yaAvisados = new Map<string, Set<string>>();
+  const avisados = (o: Op) => { let x = yaAvisados.get(o.ref); if (!x) yaAvisados.set(o.ref, (x = new Set())); return x; };
+  function cargarEstado(ref: string): EstadoAtencion | null {
+    if (!opts.persistencia) return null;
+    try {
+      const e = opts.persistencia.cargar(ref);
+      return e && e.v === 1 && Array.isArray(e.mensajes) && Number.isInteger(e.seq) ? e : null;
+    } catch { return null; } // ilegible: se empieza de cero y la app vuelve a sondear sin cursor
+  }
+  function guardarEstado(o: Op) {
+    if (!opts.persistencia) return;
+    const e: EstadoAtencion = {
+      v: 1, modo: o.modo, hasta: o.hasta, avisos: o.avisos, alertas: o.alertas, mensajes: o.mensajes, seq: o.seq, base: o.base,
+      pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
+      avisados: [...avisados(o)].slice(-2000),
+    };
+    try { opts.persistencia.guardar(o.ref, e); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
+  }
   const minuto0 = Math.floor(ahora() / MIN) * MIN;
   for (const d of opts.mundo.semillas()) {
     const o: Op = ops[d.ref] = {
@@ -221,6 +271,14 @@ export function crearServidor(opts: OpcionesServidor) {
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
     for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: false, noMio: false, fijo: true });
     iniciarVentana(o, minuto0);
+    const previo = cargarEstado(d.ref);
+    if (previo) {
+      // Tras un reinicio sigue el mismo estado: el cursor de la app vale y lo ya avisado no se repite.
+      Object.assign(o, { modo: previo.modo, hasta: previo.hasta, avisos: previo.avisos, alertas: previo.alertas, mensajes: previo.mensajes, seq: previo.seq,
+        base: previo.base, pendAvisos: previo.pendAvisos, pendAlertas: previo.pendAlertas, ventana: previo.ventana, registro: previo.registro, ahorrados: previo.ahorrados });
+      for (const id of previo.avisados) avisados(o).add(id);
+      continue;
+    }
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
       const cat = CATEGORIA[e.tipo];
       if (cat && (e.fecha != null ? e.fecha - minuto0 <= DIA : true)) {
@@ -352,7 +410,7 @@ export function crearServidor(opts: OpcionesServidor) {
       referencias: rango(o, "completo") ? e.refs.map(inerte) : [],
     };
   }
-  function opCorreccion(o: Op, id: string, tipo: string) {
+  function opCorreccion(o: Op, id: string, tipo: string, dispositivo: string | null = null) {
     if (!ID.test(id)) throw invalida();
     if (!["resuelto", "no_aplica", "es_mio", "no_es_mio"].includes(tipo)) throw invalida();
     const e = o.elementos.get(id);
@@ -363,7 +421,7 @@ export function crearServidor(opts: OpcionesServidor) {
     o.corr.set(id, { tipo, en: t });
     if (tipo === "resuelto" || tipo === "no_aplica") o.ledger.set(id, { tipo, en: t });
     else { e.mio = tipo === "es_mio"; e.noMio = tipo === "no_es_mio"; o.ledger.delete(id); }
-    hooks.correccion?.(o, id, tipo, t);
+    hooks.correccion?.(o, id, tipo, t, dispositivo);
     emitir(o, t, { tipo: "respuesta", categoria: "correccion_confirmada", ids: [id] });
     return { id, tipo, aplicada: true, registrada_en: iso(t) };
   }
@@ -403,7 +461,8 @@ export function crearServidor(opts: OpcionesServidor) {
     return vistaDetalle(o);
   }
   // El cursor va ligado al operador: un cursor de otro no casa con esta etiqueta.
-  const secreto = createHash("sha256").update(randomUUID()).digest("hex");
+  // Estable entre reinicios si quien llama lo da (producción: derivado de la clave TLS); si no, por proceso.
+  const secreto = createHash("sha256").update(opts.secretoCursor ?? randomUUID()).digest("hex");
   function tag(o: Op, seq: number) { return createHash("sha256").update(`${secreto}|${o.ref}|${seq}`).digest("hex").slice(0, 8); }
   function opSondeo(o: Op, q: Record<string, string>) {
     let limite = 50;
@@ -438,7 +497,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const ms = Number(m[1]) * (m[2] === "h" ? 60 : 1) * MIN;
     return ms > 0 && ms <= 7 * DIA ? ms : null;
   }
-  function opOrden(o: Op, texto: string) {
+  function opOrden(o: Op, texto: string, dispositivo: string | null = null) {
     const tk = texto.trim().split(/\s+/);
     const verbo = norm(tk[0]);
     const args = tk.slice(1);
@@ -457,7 +516,7 @@ export function crearServidor(opts: OpcionesServidor) {
       }
       if (verbo === "porque") return args.length === 1 ? ok("porque", opPorque(o, args[0])) : malo();
       const corr: Record<string, string> = { resuelto: "resuelto", "no-aplica": "no_aplica", mio: "es_mio", "no-mio": "no_es_mio" };
-      if (verbo in corr) return args.length === 1 ? ok("correccion", opCorreccion(o, args[0], corr[verbo])) : malo();
+      if (verbo in corr) return args.length === 1 ? ok("correccion", opCorreccion(o, args[0], corr[verbo], dispositivo)) : malo();
       if (verbo === "modo") {
         const modo = norm(args[0] ?? "").toUpperCase();
         if (!MODOS.includes(modo)) return malo();
@@ -516,22 +575,23 @@ export function crearServidor(opts: OpcionesServidor) {
     }
     if (++v.n > limiteVentana) throw new ErrorApi(429, "RATE_LIMITED", { retryAfter: Math.max(1, Math.ceil((v.inicio + 10_000 - t) / 1000)) });
   }
-  function autenticar(req: IncomingMessage): Op {
+  function autenticar(req: IncomingMessage): { o: Op; dispositivo: string | null } {
     const au = req.headersDistinct.authorization;
     const dp = req.headersDistinct.dpop;
     const m = au?.length === 1 ? /^DPoP ([A-Za-z0-9._~+/=-]{1,512})$/.exec(au[0]) : null;
     if (!m || dp?.length !== 1 || !dp[0]) throw new ErrorApi(401, "UNAUTHENTICATED");
     if (opts.autenticar) {
-      const r = opts.autenticar(m[1]);
+      const path = new URL(req.url ?? "/", "http://x").pathname;
+      const r = opts.autenticar(m[1], { proof: dp[0], method: req.method ?? "", path, host: req.headers.host ?? "" });
       if (!r || !ops[r.ref]) throw new ErrorApi(401, "UNAUTHENTICATED");
       if (r.revocado) throw new ErrorApi(401, "UNAUTHENTICATED", { revocado: true });
-      return ops[r.ref];
+      return { o: ops[r.ref], dispositivo: r.dispositivo ?? null };
     }
     const d = tokens.get(m[1]);
     if (!d) throw new ErrorApi(401, "UNAUTHENTICATED");
     if (d.revocado) throw new ErrorApi(401, "UNAUTHENTICATED", { revocado: true });
     if (opts.caducidadToken && ahora() > d.expira) throw new ErrorApi(401, "UNAUTHENTICATED");
-    return d.op;
+    return { o: d.op, dispositivo: null };
   }
   async function cuerpo(req: IncomingMessage): Promise<any> {
     const trozos: Buffer[] = [];
@@ -553,9 +613,13 @@ export function crearServidor(opts: OpcionesServidor) {
 
   async function manejar(req: IncomingMessage) {
     limitar(req.socket.remoteAddress ?? "desconocido", Date.now());
-    const o = autenticar(req);
+    const { o, dispositivo } = autenticar(req);
     if (opts.detenido?.()) throw new ErrorApi(503, "UNAVAILABLE");
     sincronizar(o);
+    try { return await rutas(req, o, dispositivo); } finally { guardarEstado(o); }
+  }
+
+  async function rutas(req: IncomingMessage, o: Op, dispositivo: string | null) {
     const u = quien(req);
     const m = req.method;
     if (!u.ruta.startsWith(PREFIJO + "/")) throw noEncontrado();
@@ -575,7 +639,7 @@ export function crearServidor(opts: OpcionesServidor) {
     if (m === "POST" && (x = /^\/elementos\/([^/]+)\/correccion$/.exec(r))) {
       const c = await cuerpo(req);
       if (validar(OPENAPI, OPENAPI.components.schemas.PeticionCorreccion, c).length) throw invalida();
-      return opCorreccion(o, x[1], c.tipo);
+      return opCorreccion(o, x[1], c.tipo, dispositivo);
     }
     if (m === "GET" && r === "/atencion") { sinParametros(u, []); return vistaAtencion(o); }
     if (m === "PUT" && r === "/atencion") {
@@ -597,12 +661,12 @@ export function crearServidor(opts: OpcionesServidor) {
     if (m === "POST" && r === "/ordenes") {
       const c = await cuerpo(req);
       if (validar(OPENAPI, OPENAPI.components.schemas.PeticionOrden, c).length) throw invalida();
-      return opOrden(o, c.orden);
+      return opOrden(o, c.orden, dispositivo);
     }
     throw noEncontrado();
   }
 
-  const servidor = (): Server => createHttps({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.3" }, async (req, res) => {
+  const servidor = (): Server => limitesConexion(createHttps({ cert: opts.tls.cert, key: opts.tls.key, minVersion: "TLSv1.3", handshakeTimeout: 10_000 }, async (req, res) => {
     const salir = (status: number, json: unknown, extra: Record<string, string> = {}) => {
       res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
       res.end(JSON.stringify(json));
@@ -617,9 +681,9 @@ export function crearServidor(opts: OpcionesServidor) {
       const extra: Record<string, string> = e.status === 401 ? { "WWW-Authenticate": "DPoP" } : e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {};
       salir(e.status, sobre, extra);
     }
-  });
+  }), opts.limites);
 
-  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number) => void } = {};
+  const hooks: { correccion?: (o: Op, id: string, tipo: string, t: number, dispositivo: string | null) => void } = {};
   let escucha: Listening | null = null;
   return {
     /** Escucha solo en esas direcciones (las de la VPN del operador) y por TLS. */
@@ -638,7 +702,15 @@ export function crearServidor(opts: OpcionesServidor) {
     egresos: () => 0,
     volcarEstado: () => JSON.stringify(Object.values(ops), (_k, v) => (v instanceof Map ? [...v] : v)),
     /** Producción: persiste las correcciones en el libro del núcleo. */
-    alCorregir: (f: (o: Op, id: string, tipo: string, t: number) => void) => { hooks.correccion = f; },
+    alCorregir: (f: (o: Op, id: string, tipo: string, t: number, dispositivo: string | null) => void) => { hooks.correccion = f; },
     operador: (ref: string) => ops[ref],
+    /** Modo declarado fuera de la API (`soul mode`): se aplica como si llegara de la app y se persiste. */
+    declararModo: (ref: string, modo: string, hasta: string | null) => {
+      const o = ops[ref];
+      if (!o) return false;
+      sincronizar(o);
+      try { opAtencion(o, modo === "DISPONIBLE" ? { modo } : { modo, hasta }); } catch { return false; } finally { guardarEstado(o); }
+      return true;
+    },
   };
 }

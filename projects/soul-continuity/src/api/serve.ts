@@ -3,7 +3,11 @@
  *
  * - Escucha solo en `api.listen` (las IP de la VPN del operador); sin direcciones no arranca.
  * - TLS con el certificado propio de la instalación; muestra la huella SPKI para fijarlo.
- * - Autentica dispositivos emparejados (`soul pair`); revocado => 401 DEVICE_REVOKED.
+ * - Autentica dispositivos emparejados (`soul pair`); revocado => 401 DEVICE_REVOKED. Exige una
+ *   prueba DPoP válida y liga su clave al dispositivo en el primer uso (P1-1); token caducado => 401.
+ * - Estado de atención por operador en disco (`attention-state.json`): modo, avisos, alertas,
+ *   pendientes, registro de demanda y mensajes del sondeo sobreviven a un reinicio. `soul mode`
+ *   (`attention.json`) se aplica en el siguiente tic.
  * - Relee las fuentes al arrancar y cada 5 min; con STOP no lee nada y la API da 503.
  */
 
@@ -13,9 +17,15 @@ import { stopState } from "../core/failsafe.ts";
 import type { CliDeps } from "../cli/cli.ts";
 import { ensureInstallCert } from "./cert.ts";
 import { coreWorld } from "./core-world.ts";
-import { verifyToken } from "./devices.ts";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { operatorDir, readJson, writeJson } from "../core/store.ts";
+import { bindKey, verifyToken } from "./devices.ts";
+import { DpopError, makeDpopVerifier } from "./dpop.ts";
 import { validateListen } from "./listen.ts";
-import { crearServidor } from "./server.ts";
+import { type EstadoAtencion, crearServidor } from "./server.ts";
+
+export const ATTENTION_STATE = "attention-state.json";
 
 export const REFRESH_MS = 5 * 60_000;
 
@@ -51,17 +61,50 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   };
   await refresh();
 
+  const dpop = makeDpopVerifier();
   const server = crearServidor({
     tls, mundo: world, reloj: () => Date.now(),
-    autenticar: (token) => {
+    autenticar: (token, prueba) => {
       const v = verifyToken(deps.dataDir, token);
-      return v ? { ref: v.operator_ref, revocado: v.revoked } : null;
+      if (!v) return null;
+      if (v.revoked) return { ref: v.operator_ref, revocado: true };
+      if (v.expired) return null;
+      let jkt: string;
+      try {
+        jkt = dpop({ proof: prueba.proof, method: prueba.method, path: prueba.path, host: prueba.host, token, now: Date.now(), expectedJkt: v.jkt }).jkt;
+      } catch (e) {
+        if (e instanceof DpopError) return null;
+        throw e;
+      }
+      if (!v.jkt && bindKey(deps.dataDir, v.device, jkt) !== jkt) return null;
+      return { ref: v.operator_ref, revocado: false, dispositivo: v.device };
+    },
+    secretoCursor: createHash("sha256").update(`soul-cursor|${tls.key}`).digest("hex"),
+    persistencia: {
+      cargar: (ref) => readJson<EstadoAtencion | null>(join(operatorDir(deps.dataDir, ref), ATTENTION_STATE), null),
+      guardar: (ref, e) => writeJson(join(operatorDir(deps.dataDir, ref), ATTENTION_STATE), e),
     },
     detenido: () => stopState(deps.dataDir).stopped,
     // Una app sondea cada 5 min: 120 peticiones cada 10 s sobran y frenan un abuso.
     peticionesPorVentana: 120,
   });
   world.conectar(server);
+  // `soul mode` deja el modo en attention.json: se aplica una vez por declaración (por su `at`).
+  const aplicados = new Map<string, string>();
+  const modoDeCli = () => {
+    let c;
+    try { c = loadConfig(deps.dataDir); } catch { return; }
+    for (const p of Object.values(c.profiles)) {
+      const ref = p.operator?.ref;
+      if (!ref) continue;
+      type Declarado = { modo?: unknown; hasta?: unknown; at?: unknown };
+      const a = (() => { try { return readJson<Declarado | null>(join(operatorDir(deps.dataDir, ref), "attention.json"), null); } catch { return null; } })();
+      if (!a || typeof a.at !== "string" || typeof a.modo !== "string" || aplicados.get(ref) === a.at) continue;
+      aplicados.set(ref, a.at);
+      server.declararModo(ref, a.modo, typeof a.hasta === "string" ? a.hasta : null);
+    }
+  };
+  modoDeCli();
   const l = await server.escuchar(listen, cfg.api.port);
   deps.out(`Escuchando en ${l.addresses.map((a) => `${a.address.includes(":") ? `[${a.address}]` : a.address}:${a.port}`).join(", ")} (TLS)`);
   deps.out(`Huella del certificado para emparejar: ${tls.pin}`);
@@ -72,7 +115,7 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   const timer = setInterval(() => {
     if (leyendo) return;
     leyendo = true;
-    void refresh().finally(() => { leyendo = false; });
+    void refresh().then(modoDeCli).finally(() => { leyendo = false; });
   }, opts.refreshMs ?? REFRESH_MS);
   await new Promise<void>((resolve) => {
     const end = () => resolve();
