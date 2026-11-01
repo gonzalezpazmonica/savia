@@ -123,6 +123,8 @@ export function openPairingWindow(dataDir: string, operatorRef: string, now: num
 }
 
 const cerrar = (dataDir: string) => rmSync(join(dataDir, PAIR_FILE), { force: true });
+/** Cierra la ventana abierta (la clave sale del disco). */
+export const closePairingWindow = cerrar;
 
 /** Ventana vigente o el error que toca. Una ilegible, caducada o de v1 se borra: la clave no se queda en disco. */
 function vigente(dataDir: string, now: number): Ventana {

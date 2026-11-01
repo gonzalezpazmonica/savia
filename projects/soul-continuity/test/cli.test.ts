@@ -320,6 +320,36 @@ test("pair: abre una ventana con clave soulpk_, IP, puerto y huella corta; no mu
   assert.equal(await runCli(["pair", "--days", "0"], s.deps), 2);
 });
 
+test("pair: pinta el QR del enlace en la terminal y --qr-png lo guarda en 0600 sin sobrescribir", async () => {
+  const { encodeQr, qrToTerminal } = await import("../src/api/qr.ts");
+  const s = setup();
+  const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
+  cfg.api = { listen: ["127.0.0.1"], port: 8787 };
+  (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), JSON.stringify(cfg));
+  assert.equal(await runCli(["pair"], s.deps), 0);
+  const t = text(s);
+  const clave = /clave de emparejamiento: (soulpk_\S+)/.exec(t)![1];
+  const enlace = /enlace para QR: (\S+)/.exec(t)![1];
+  assert.match(enlace, new RegExp(`&k=${clave}&`));
+  assert.ok(t.includes(qrToTerminal(encodeQr(enlace).modules)), "el QR que se ve es el del enlace con la clave de esta ventana");
+  assert.match(t, /no compartas capturas/);
+
+  const png = join(s.dir, "qr.png");
+  s.out.length = 0;
+  assert.equal(await runCli(["pair", "--qr-png", png, "--json"], s.deps), 0);
+  const j = JSON.parse(text(s));
+  assert.equal(j.qr_png, png);
+  const b = readFileSync(png);
+  assert.equal(b.subarray(1, 4).toString("ascii"), "PNG");
+  if (process.platform !== "win32") assert.equal((await import("node:fs")).statSync(png).mode & 0o777, 0o600);
+  // Ya existe: no se sobrescribe y la ventana recién abierta se cierra (la clave no queda en disco).
+  assert.equal(await runCli(["pair", "--qr-png", png], s.deps), 1);
+  assert.match(s.err.join("\n"), /--qr-png: no se pudo crear .*EEXIST.*ventana cerrada/);
+  assert.equal(existsSync(join(s.dir, "pairing.json")), false);
+  assert.deepEqual(readFileSync(png), b);
+  assert.equal(await runCli(["pair", "--qr-png"], s.deps), 2, "sin fichero es error de uso");
+});
+
 test("pair sin direcciones de escucha: error, sin ventana", async () => {
   const s = setup();
   assert.equal(await runCli(["pair"], s.deps), 1);

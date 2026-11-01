@@ -13,7 +13,7 @@
  * Códigos de salida: 0 bien · 1 error · 2 uso · 3 sin perfil · 4 rechazado al frontend · 5 detenido.
  */
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Answer, Detail, QuestionId, SourceEnv } from "../contract/adapter.ts";
 import { type Snapshot, iso, parseTs } from "../contract/claims.ts";
@@ -27,7 +27,8 @@ import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeSoulSt
 import { autostartPlan, installAutostart, uninstallAutostart } from "../startup/autostart.ts";
 import { ensureInstallCert } from "../api/cert.ts";
 import { listDevices, revokeDevice } from "../api/devices.ts";
-import { openPairingWindow, pairLink, shortFingerprint } from "../api/pairing.ts";
+import { closePairingWindow, openPairingWindow, pairLink, shortFingerprint } from "../api/pairing.ts";
+import { encodeQr, qrToPng, qrToTerminal } from "../api/qr.ts";
 import { validateListen } from "../api/listen.ts";
 import type { Run } from "../credentials/store.ts";
 import type { TokenSet } from "../adapters/oauth.ts";
@@ -85,7 +86,7 @@ const HELP = `Órdenes de soul (sin texto libre):
   autostart install|uninstall [--dry-run]
   bench                          banco de continuidad contra este núcleo
   serve                          API local para la app (solo en las direcciones configuradas)
-  pair [--days N] | unpair <id> [--undo] | devices   emparejar la app por código (10 min) y dispositivos
+  pair [--days N] [--qr-png F] | unpair <id> [--undo] | devices   emparejar la app con clave y QR (10 min) y dispositivos
   corrections --device <id>      correcciones vigentes hechas desde ese dispositivo
   undo-device <id>               deshace las correcciones de ese dispositivo (móvil perdido)
 Opciones: --json · --frontend <nombre>`;
@@ -95,7 +96,7 @@ interface Parsed { cmd: string; args: string[]; flags: Record<string, string | t
 function parse(argv: string[]): Parsed {
   const args: string[] = [];
   const flags: Record<string, string | true> = {};
-  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days", "--email"]);
+  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days", "--email", "--qr-png"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (withValue.has(a)) flags[a.slice(2)] = argv[++i] ?? "";
@@ -429,7 +430,9 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         // Emparejamiento directo (soul-pair-v2): abre una ventana de 10 min con una clave de un solo
         // uso. La app no recibe el token del dispositivo por aquí: lo obtiene al completar contra `serve`.
         const name = activeProfileName(cfg, deps.env);
-        if (p.args.length) throw new Exit(2, "pair [--days N] (el nombre lo pone la app)");
+        if (p.args.length) throw new Exit(2, "pair [--days N] [--qr-png F] (el nombre lo pone la app)");
+        const png = p.flags["qr-png"];
+        if (png === "" || png === true) throw new Exit(2, "--qr-png <fichero>");
         const listen = validateListen(cfg.api.listen);
         const tls = ensureInstallCert(deps.dataDir, listen);
         const days = typeof p.flags.days === "string" ? Number(p.flags.days) : undefined;
@@ -437,14 +440,25 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         const w = openPairingWindow(deps.dataDir, cfg.profiles[name].operator.ref, Date.parse(deps.now()), days);
         const huella = shortFingerprint(tls.cert);
         const qr = pairLink(listen[0], cfg.api.port, w.token, huella);
+        const matriz = encodeQr(qr).modules;
+        if (typeof png === "string") {
+          // Solo para quien lo pide; 0600 y sin sobrescribir. Si no se puede escribir, la ventana se cierra.
+          try { writeFileSync(png, qrToPng(matriz), { mode: 0o600, flag: "wx" }); } catch (e) {
+            closePairingWindow(deps.dataDir);
+            throw new Exit(1, `--qr-png: no se pudo crear ${png} (${(e as NodeJS.ErrnoException).code ?? "error"}); ventana cerrada`);
+          }
+        }
         print([
-          "Emparejar la app (modo directo). Pega en la app:",
+          "Emparejar la app (modo directo). En la app, «Escanear QR» con este código:",
+          qrToTerminal(matriz),
+          "O pega en la app:",
           `  IP: ${listen.join(", ")}`, `  puerto: ${cfg.api.port}`, `  clave de emparejamiento: ${w.token}`,
           `  huella del certificado: ${huella} (compárala con la que muestra la app)`,
           `  o enlace para QR: ${qr}`,
           `Válido hasta ${w.expires_at.slice(11, 16)} UTC (10 min), un solo uso y 3 intentos. «soul serve» tiene que estar en marcha.`,
-          "La clave es un secreto mientras dure la ventana: no compartas capturas de esta pantalla.",
-        ].join("\n"), { clave: w.token, direcciones: listen, puerto: cfg.api.port, huella_corta: huella, pin: tls.pin, qr, caduca: w.expires_at });
+          typeof png === "string" ? `QR guardado en ${png} (0600): bórralo al terminar.` : "Si el QR no se ve bien en esta terminal: soul pair --qr-png <fichero>.",
+          "La clave y el QR son secretos mientras dure la ventana: no compartas capturas de esta pantalla.",
+        ].join("\n"), { clave: w.token, ...(typeof png === "string" ? { qr_png: png } : {}), direcciones: listen, puerto: cfg.api.port, huella_corta: huella, pin: tls.pin, qr, caduca: w.expires_at });
         return 0;
       }
 
