@@ -1104,6 +1104,16 @@
       "detalle": "el script hostil debe haber intentado salir (si no, la prueba no prueba nada)"
     },
     {
+      "id": "contenido_hostil:noticias:ws_cortado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "id": "contenido_hostil:noticias:navegacion_externa_cortada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
       "id": "ws_worker:correo:mutaciones_servidor",
       "ok": true,
       "detalle": "0"
@@ -1212,6 +1222,76 @@
       "id": "descarga_atributo:correo:peticiones_fuera_de_accion",
       "ok": true,
       "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:mutaciones_servidor",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:peticiones_no_get_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:operaciones_post_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:envios_websocket_fuera_de_mantenimiento",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:navegaciones_fuera_de_lista",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:envios_formulario",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:peticiones_a_externo",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:descargas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:alertas_producidas",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:peticiones_sin_pasar_por_cortafuegos",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:peticiones_fuera_de_accion",
+      "ok": true,
+      "detalle": "0"
+    },
+    {
+      "id": "operacion_en_url:correo:get_cortado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "id": "operacion_en_url:correo:post_cortado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "id": "operacion_en_url:correo:desactivada",
+      "ok": true,
+      "detalle": "DESACTIVADA"
     },
     {
       "id": "sesion_sso:tareas:mutaciones_servidor",
@@ -1649,7 +1729,7 @@
       "detalle": ""
     }
   ],
-  "aprobadas": 329,
+  "aprobadas": 345,
   "fallidas": 0,
   "metricas": {
     "base:tareas": {
@@ -1891,6 +1971,20 @@
       "peticiones_fuera_de_accion": 0
     },
     "descarga_atributo:correo": {
+      "mutaciones_servidor": 0,
+      "peticiones_no_get_fuera_de_lista": 0,
+      "operaciones_post_fuera_de_lista": 0,
+      "envios_websocket_fuera_de_mantenimiento": 0,
+      "navegaciones_fuera_de_lista": 0,
+      "envios_formulario": 0,
+      "peticiones_a_externo": 0,
+      "descargas": 0,
+      "alertas_producidas": 0,
+      "intentos_login": 0,
+      "peticiones_sin_pasar_por_cortafuegos": 0,
+      "peticiones_fuera_de_accion": 0
+    },
+    "operacion_en_url:correo": {
       "mutaciones_servidor": 0,
       "peticiones_no_get_fuera_de_lista": 0,
       "operaciones_post_fuera_de_lista": 0,

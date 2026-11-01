@@ -68,17 +68,16 @@
     {
       "mutante": "ws_sin_lista",
       "estado": "MUERTO",
-      "fallidas": 2,
-      "ajenos": 0,
+      "fallidas": 3,
+      "ajenos": 2,
       "muertoPor": [
-        "contenido_hostil:noticias:mutaciones_servidor",
-        "contenido_hostil:noticias:peticiones_a_externo"
+        "contenido_hostil:noticias:ws_cortado"
       ]
     },
     {
       "mutante": "patron_prefijo",
       "estado": "MUERTO",
-      "fallidas": 8,
+      "fallidas": 9,
       "ajenos": 0,
       "muertoPor": [
         "accion_secuestrada:tareas:peticiones_fuera_de_accion",
@@ -139,8 +138,8 @@
     {
       "mutante": "perfil_personal",
       "estado": "MUERTO",
-      "fallidas": 72,
-      "ajenos": 71,
+      "fallidas": 74,
+      "ajenos": 73,
       "muertoPor": [
         "perfil_personal:sin_cambios"
       ]
@@ -196,11 +195,10 @@
     {
       "mutante": "absoluto_navegable",
       "estado": "MUERTO",
-      "fallidas": 2,
-      "ajenos": 0,
+      "fallidas": 3,
+      "ajenos": 2,
       "muertoPor": [
-        "contenido_hostil:noticias:mutaciones_servidor",
-        "contenido_hostil:noticias:peticiones_a_externo"
+        "contenido_hostil:noticias:navegacion_externa_cortada"
       ]
     },
     {
@@ -235,9 +233,8 @@
       "mutante": "post_lectura_por_get",
       "estado": "MUERTO",
       "fallidas": 2,
-      "ajenos": 0,
+      "ajenos": 1,
       "muertoPor": [
-        "operacion_en_url:correo:mutaciones_servidor",
         "operacion_en_url:correo:get_cortado"
       ]
     },
@@ -245,11 +242,8 @@
       "mutante": "operacion_url_sin_cotejar",
       "estado": "MUERTO",
       "fallidas": 5,
-      "ajenos": 0,
+      "ajenos": 3,
       "muertoPor": [
-        "operacion_en_url:correo:mutaciones_servidor",
-        "operacion_en_url:correo:peticiones_no_get_fuera_de_lista",
-        "operacion_en_url:correo:operaciones_post_fuera_de_lista",
         "operacion_en_url:correo:post_cortado",
         "operacion_en_url:correo:desactivada"
       ]
