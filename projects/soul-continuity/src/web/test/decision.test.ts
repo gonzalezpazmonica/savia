@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decidirEnvioWs, decidirHttp, operacionDe, soloConsultas, type PeticionHttp } from "../cortafuegos/decision.ts";
+import { accionEnUrl, clavesDuplicadas, decidirEnvioWs, decidirHttp, operacionDe, soloConsultas, type PeticionHttp } from "../cortafuegos/decision.ts";
 import { validarReceta } from "../receta/validar.ts";
 import type { Receta } from "../receta/tipos.ts";
 
@@ -214,4 +214,28 @@ test("renovación de sesión: una URL de acción no se acepta como renovación (
   const d = decidirHttp(r, sin, post("/sesion/logout", {}, {}));
   assert.equal(d.permitir, false);
   assert.notEqual(d.motivo, "renovacion");
+});
+
+test("cuerpo JSON con la clave de operación repetida: operación ambigua, se corta y desactiva (revisión #1443, P2-2 de seguridad)", () => {
+  const r = structuredClone(correo);
+  r.post_lectura = [{ url: "/correo/api/op", operacion: { cuerpo_json: "op" }, lectura: ["Leer"], escritura_conocida: ["Escribir"] }];
+  r.urls = [...r.urls, "/correo/api/op"];
+  const p = (cuerpo: string) => pet({ url: `${O}/correo/api/op`, metodo: "POST", cuerpo, navegacion: false });
+  assert.equal(decidirHttp(r, sin, p('{"op":"Leer"}')).permitir, true);
+  for (const c of ['{"op":"Escribir","op":"Leer"}', '{"op":"Escribir","o\\u0070":"Leer"}']) {
+    const d = decidirHttp(r, sin, p(c));
+    assert.deepEqual([d.permitir, d.motivo, d.desactivar], [false, "operacion_desconocida", true], c);
+  }
+  assert.equal(clavesDuplicadas('{"a":{"op":1},"op":2,"b":[{"op":3},{"op":4}]}'), false);
+  assert.equal(clavesDuplicadas('{"a":{"x":1,"x":2}}'), true);
+  assert.equal(clavesDuplicadas('{"a":"op","op":"a,\\"op\\":"}'), false);
+});
+
+test("accionEnUrl y comodín: la doble codificación no esconde `/` ni un verbo (revisión #1443, P2-1 de seguridad)", () => {
+  assert.equal(accionEnUrl(new URL(`${O}/tareas?pagina=%2561pprove`)), true);
+  assert.equal(accionEnUrl(new URL(`${O}/tareas?pagina=%25252561pprove`)), true);
+  assert.equal(accionEnUrl(new URL(`${O}/tareas?pagina=2`)), false);
+  const t = decidirHttp(tareas, sin, pet({ url: `${tareas.origen}/tareas?pagina=1%252Fx` }));
+  assert.deepEqual([t.permitir, t.motivo], [false, "fuera_de_lista"]);
+  assert.equal(decidirHttp(tareas, sin, pet({ url: `${tareas.origen}/tareas?pagina=1` })).permitir, true);
 });

@@ -42,7 +42,7 @@ export class AlmacenRecetas {
     try { return JSON.parse(readFileSync(this.ruta, "utf8")); } catch { return null; }
   }
   private escribir(d: Record<string, { aviso: string; en: string }>) {
-    mkdirSync(dirname(this.ruta), { recursive: true });
+    mkdirSync(dirname(this.ruta), { recursive: true, mode: 0o700 });
     writeFileSync(this.ruta, JSON.stringify(d, null, 2), { mode: 0o600 });
     chmodSync(this.ruta, 0o600);
   }
@@ -238,16 +238,24 @@ export async function ejecutarReceta(o: Opciones): Promise<Resultado> {
   }
 
   const base = { registro: fw.registro, ventanasAccion, descargas: nav.descargas(), canal };
+  return cerrarLectura(r, fw, fallo, o.almacen, base, [...porId.values()], o.yo);
+}
+
+/** Estado final de una lectura. Una desactivación manda sobre un fallo posterior
+ *  (la extracción puede lanzar después de que el cortafuegos desactive): si no,
+ *  no se persistiría y la receta se reintentaría (revisión #1443, P2-1 de corrección). */
+export function cerrarLectura(r: Receta, fw: Pick<Cortafuegos, "sesionCaducada" | "desactivada">, fallo: string | null,
+  almacen: AlmacenRecetas | undefined, base: Pick<Resultado, "registro" | "ventanasAccion" | "descargas" | "canal">,
+  elementos: Elemento[], yo: string): Resultado {
   if (fw.sesionCaducada) {
     return { ...vacio(r, "SESION_CADUCADA", `Vuelve a iniciar sesión en ${r.sitio} en el perfil de Soul. Soul no guarda contraseñas ni rellena credenciales.`), ...base };
+  }
+  if (fw.desactivada) {
+    almacen?.desactivar(r.id, fw.desactivada);
+    return { ...vacio(r, "DESACTIVADA", fw.desactivada), ...base };
   }
   if (fallo !== null) {
     return { ...vacio(r, "ERROR", `La lectura de ${r.sitio} falló (${fallo}); no se devuelven datos.`), ...base };
   }
-  if (fw.desactivada) {
-    o.almacen?.desactivar(r.id, fw.desactivada);
-    return { ...vacio(r, "DESACTIVADA", fw.desactivada), ...base };
-  }
-  const elementos = [...porId.values()];
-  return { ...vacio(r, "OK", null), ...base, elementos, preguntas: clasificar(r, elementos, o.yo) };
+  return { ...vacio(r, "OK", null), ...base, elementos, preguntas: clasificar(r, elementos, yo) };
 }

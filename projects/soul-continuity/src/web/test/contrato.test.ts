@@ -143,7 +143,7 @@ test("ruta distinta de web → error", async () => {
   assert.equal(r.status, "error");
 });
 
-test("página vigilada cambiada → web_page_change cerrada con event_at; redirigida → session_expired", async () => {
+test("página vigilada cambiada → web_page_change cerrada con event_at; login → session_expired; otra redirección → error", async () => {
   const v = { id: "p1", sitio: "intranet", url: "https://intranet.example/avisos" };
   const p = base({ recetas: [], vigiladas: [v], huellas: "/x/huellas.json" });
   const r = await crearAdaptadorWeb(deps(resultado("OK"), vig("CAMBIADA"))).read(ctx(p));
@@ -157,8 +157,11 @@ test("página vigilada cambiada → web_page_change cerrada con event_at; rediri
   const sin = await crearAdaptadorWeb(deps(resultado("OK"), vig("SIN_CAMBIOS"))).read(ctx(p));
   assert.equal(sin.status, "ok");
   if (sin.status === "ok") assert.equal(sin.claims.length, 0);
+  const login = await crearAdaptadorWeb(deps(resultado("OK"), vig("SESION_CADUCADA"))).read(ctx(p));
+  assert.equal(login.status, "session_expired");
+  // Una redirección que no es el login no se arregla iniciando sesión (revisión #1443, P2-2 de corrección).
   const red = await crearAdaptadorWeb(deps(resultado("OK"), vig("REDIRIGIDA"))).read(ctx(p));
-  assert.equal(red.status, "session_expired");
+  assert.equal(red.status, "error");
 });
 
 test("páginas vigiladas sin fichero de huellas → not_configured", async () => {

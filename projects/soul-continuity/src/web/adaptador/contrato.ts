@@ -119,7 +119,9 @@ function falloDe(r: Resultado): Fallo | null {
 }
 
 function falloDeVigilancia(v: Vigilada, r: ResultadoVigilancia): Fallo | null {
-  if (r.estado === "REDIRIGIDA") return { status: "session_expired", message: r.aviso ?? `Sesión caducada en ${v.sitio}.` };
+  if (r.estado === "SESION_CADUCADA") return { status: "session_expired", message: r.aviso ?? `Sesión caducada en ${v.sitio}.` };
+  // Una redirección que no lleva al inicio de sesión no se arregla iniciando sesión.
+  if (r.estado === "REDIRIGIDA") return { status: "error", message: r.aviso ?? `La página vigilada de ${v.sitio} redirige fuera de su URL.` };
   if (r.estado === "ERROR") return { status: "error", message: r.aviso ?? `No se pudo leer ${v.sitio}.` };
   return null;
 }

@@ -22,12 +22,15 @@ function main(argv: string[]): number {
   const valor = (n: string) => { const i = argv.indexOf(n); const v = i >= 0 ? argv[i + 1] : undefined; return v && !v.startsWith("--") ? v : undefined; };
   const receta = valor("--receta"), har = valor("--har");
   if (!receta || !har) return uso();
+  // `--var` exige `clave=valor` con clave no vacía; otra opción o un valor sin `=` es uso incorrecto.
   const variables: Record<string, string> = {};
-  argv.forEach((a, i) => {
-    if (a !== "--var") return;
-    const [k, ...v] = (argv[i + 1] ?? "").split("=");
-    variables[k] = v.join("=");
-  });
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] !== "--var") continue;
+    const par = argv[i + 1] ?? "";
+    const eq = par.indexOf("=");
+    if (par.startsWith("--") || eq <= 0) return uso();
+    variables[par.slice(0, eq)] = par.slice(eq + 1);
+  }
   let r;
   let datos: unknown;
   try {

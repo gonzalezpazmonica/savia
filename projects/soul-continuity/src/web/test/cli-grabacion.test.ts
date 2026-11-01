@@ -27,6 +27,17 @@ test("una opción sin valor (seguida de otra opción) es uso incorrecto: código
   assert.match(r.stderr, /uso:/);
 });
 
+test("--var sin `clave=valor` (otra opción, sin `=` o clave vacía) es uso incorrecto: código 2 (revisión #1443, P2-4 de corrección)", () => {
+  for (const v of ["--emitir-recibo", "puerto", "=8490", ""]) {
+    const r = cli("--receta", RECETA, "--har", "x.har", "--var", ...(v ? [v] : []));
+    assert.equal(r.status, 2, `${v}: ${r.stderr}`);
+    assert.match(r.stderr, /uso:/);
+  }
+  // Caso positivo: un `--var` bien formado no es error de uso (falla después, por el HAR inexistente: código 1).
+  const ok = cli("--receta", RECETA, "--har", join(DATOS, "no-existe.har"), "--var", "puerto=8490");
+  assert.equal(ok.status, 1, ok.stderr);
+});
+
 test("pasa pero no se puede guardar el recibo: código 1 con mensaje claro, sin traza", () => {
   const d = mkdtempSync(join(tmpdir(), "soul-cli-"));
   try {

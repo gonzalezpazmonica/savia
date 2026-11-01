@@ -10,9 +10,10 @@ import type { PatronUrl } from "./tipos.ts";
 
 // Un segmento comodín no cruza / ? & = # ni su forma codificada (%2F, %3F,
 // %26, %3D, %23) ni la barra invertida (%5C): hay servidores que las decodifican.
+// Tampoco el propio `%` codificado (%25): `%252F` es `/` tras dos decodificaciones.
 // Los patrones de login son detección (más ancho = más seguro) y sí los admiten:
 // `/login?vuelta=%2Ftareas`.
-const COMODIN = "(?:[^/?&=#%]|%(?!2[Ff]|3[Ff]|26|3[Dd]|23|5[Cc]))+";
+const COMODIN = "(?:[^/?&=#%]|%(?!2[Ff]|3[Ff]|26|3[Dd]|23|5[Cc]|25))+";
 const COMODIN_LOGIN = "[^/?&=#]+";
 const ABSOLUTO = /^(https?|wss?):\/\/([^/?#*{}@]+)(\/.*)$/;
 const SOLO_ORIGEN = /^(https?):\/\/([^/?#*{}@]+)$/;

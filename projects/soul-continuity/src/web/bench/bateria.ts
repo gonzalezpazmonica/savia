@@ -320,7 +320,7 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
       b.activar("tareas", "sesion_caducada");
       const c = await vigilar("tareas", "/tareas?pagina=1");
       invariantes("vigilancia_sesion:tareas", c.m);
-      ok("vigilancia_sesion:tareas:redirigida", c.res.estado === "REDIRIGIDA" && /iniciar sesión/.test(c.res.aviso ?? ""), `${c.res.estado}`);
+      ok("vigilancia_sesion:tareas:sesion_caducada", c.res.estado === "SESION_CADUCADA" && /iniciar sesión/.test(c.res.aviso ?? ""), `${c.res.estado}`);
     }
 
     // 13) Perfil personal intacto en todo el banco.

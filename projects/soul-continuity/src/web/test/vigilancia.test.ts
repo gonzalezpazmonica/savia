@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AlmacenHuellas, huellaTexto, recetaDeVigilancia, VigilanciaInvalida, vigilarPagina } from "../adaptador/vigilancia.ts";
+import { AlmacenHuellas, clasificarSalida, huellaTexto, recetaDeVigilancia, VigilanciaInvalida, vigilarPagina } from "../adaptador/vigilancia.ts";
 
 test("la receta sintetizada solo admite esa URL exacta, sin JS, POST, WebSocket ni acciones", () => {
   const r = recetaDeVigilancia({ id: "portal", sitio: "Portal", url: "https://intra.example/avisos?vista=lista" });
@@ -92,4 +92,19 @@ test("página con estado HTTP de error (503, 404) → ERROR y sin huella (revisi
     const ok = await vigilarPagina({ vigilada: { id: "p", sitio: "portal", url }, ejecutable: buscarNavegador().ruta, almacen });
     assert.equal(ok.estado, "PRIMERA_VISITA");
   } finally { srv.close(); rmSync(d, { recursive: true, force: true }); }
+});
+
+test("salida de la URL vigilada: el login es sesión caducada; otra redirección no (revisión #1443, P2-2 de corrección)", () => {
+  const v = { id: "p", sitio: "intranet", url: "https://intra.example/avisos" };
+  const fw = (urls: string[], sesionCaducada = false) => ({ sesionCaducada,
+    registro: urls.map((url) => ({ t: 0, tipo: "redireccion" as const, url, permitida: false, motivo: "redireccion_fuera" as const })) });
+  assert.equal(clasificarSalida(v, fw([]), ""), null);
+  assert.equal(clasificarSalida(v, fw([]), "https://intra.example/avisos"), null);
+  assert.equal(clasificarSalida(v, fw(["https://intra.example/avisos/"]), ""), "REDIRIGIDA");
+  assert.equal(clasificarSalida(v, fw([]), "https://intra.example/portada"), "REDIRIGIDA");
+  // «authors» no es «auth»: la palabra tiene que ir entera.
+  assert.equal(clasificarSalida(v, fw(["https://intra.example/authors"]), ""), "REDIRIGIDA");
+  assert.equal(clasificarSalida(v, fw(["https://intra.example/login?vuelta=%2Favisos"]), ""), "SESION_CADUCADA");
+  assert.equal(clasificarSalida(v, fw(["https://login.idp.example/oauth2/authorize"]), ""), "SESION_CADUCADA");
+  assert.equal(clasificarSalida(v, fw([], true), ""), "SESION_CADUCADA");
 });
