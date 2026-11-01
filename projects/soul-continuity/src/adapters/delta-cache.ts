@@ -1,0 +1,121 @@
+/**
+ * Caché de sincronización de los adaptadores (delta queries de Graph).
+ *
+ * Guarda, por operador y adaptador, el enlace delta o de continuación y los
+ * metadatos mínimos de cada elemento (id, hilo, remitente, destinatarios, asunto,
+ * fecha, marca). Nunca cuerpos ni tokens: `save` rechaza campos de cuerpo.
+ *
+ * El directorio del operador usa el mismo hash que el núcleo de referencia
+ * (`op-<sha256(ref)[:16]>`), así que la caché vive junto a su libro y se borra
+ * con él. Ficheros con permisos 0600.
+ */
+
+import { createHash, randomBytes } from "node:crypto";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+export type Meta = Record<string, string | number | boolean | null | string[]>;
+
+export interface DeltaState {
+  /** Enlace a seguir en la próxima lectura: `@odata.deltaLink` o, si la ronda quedó a medias, `@odata.nextLink`. */
+  link: string | null;
+  /** La ronda en curso terminó con un `deltaLink`: los elementos son la foto completa. */
+  complete: boolean;
+  items: Record<string, Meta>;
+}
+
+export interface DeltaCache {
+  load(operatorRef: string, adapter: string, key: string): Promise<DeltaState | null>;
+  save(operatorRef: string, adapter: string, key: string, state: DeltaState): Promise<void>;
+  clear(operatorRef: string, adapter: string): Promise<void>;
+}
+
+const BODY_FIELD = /^(body|bodyPreview|content|snippet|text|uniqueBody|description)$/i;
+
+function assertNoBodies(state: DeltaState): void {
+  for (const [id, m] of Object.entries(state.items)) {
+    for (const k of Object.keys(m)) if (BODY_FIELD.test(k)) throw new Error(`campo de cuerpo en la caché (${id}): ${k}`);
+  }
+}
+
+const metaValue = (x: unknown) => x === null || ["string", "number", "boolean"].includes(typeof x)
+  || (Array.isArray(x) && x.every((y) => typeof y === "string"));
+const isMeta = (m: unknown): m is Meta => typeof m === "object" && m !== null && !Array.isArray(m) && Object.values(m).every(metaValue);
+
+const h16 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+
+export function operatorDir(stateDir: string, operatorRef: string): string {
+  return join(stateDir, `op-${h16(operatorRef)}`);
+}
+
+export function adapterCacheDir(stateDir: string, operatorRef: string, adapter: string): string {
+  if (!/^[a-z0-9-]+$/.test(adapter)) throw new Error("nombre de adaptador inválido");
+  return join(operatorDir(stateDir, operatorRef), "adapters", adapter);
+}
+
+export class FileDeltaCache implements DeltaCache {
+  private readonly stateDir: string;
+  constructor(stateDir: string) {
+    this.stateDir = stateDir;
+  }
+
+  async load(op: string, adapter: string, key: string): Promise<DeltaState | null> {
+    try {
+      const v = JSON.parse(readFileSync(join(adapterCacheDir(this.stateDir, op, adapter), `${h16(key)}.json`), "utf8"));
+      if (typeof v !== "object" || v === null || typeof v.items !== "object" || v.items === null || Array.isArray(v.items)) return null;
+      if (v.link !== null && typeof v.link !== "string") return null;
+      const state: DeltaState = { link: v.link, complete: v.complete === true, items: v.items };
+      // Lo leído se valida como lo guardado: tipos de `Meta` y sin campos de cuerpo. Si no
+      // cumple, la caché no existe (se resincroniza) en vez de colar datos de otra forma.
+      if (!Object.values(state.items).every(isMeta)) return null;
+      assertNoBodies(state);
+      return state;
+    } catch {
+      return null;
+    }
+  }
+
+  async save(op: string, adapter: string, key: string, state: DeltaState): Promise<void> {
+    assertNoBodies(state);
+    const dir = adapterCacheDir(this.stateDir, op, adapter);
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // mkdir no endurece directorios que ya existían (p. ej. op-* creado por otro): se fuerza 0700
+    // en los tres niveles propios. En Windows chmod no aplica ACL y es inocuo.
+    for (const d of [dir, dirname(dir), operatorDir(this.stateDir, op)]) chmodSync(d, 0o700);
+    const f = join(dir, `${h16(key)}.json`);
+    // Temporal único y exclusivo («wx»): un .tmp previo con otros permisos no se reutiliza.
+    const tmp = `${f}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify(state), { mode: 0o600, flag: "wx" });
+      renameSync(tmp, f);
+    } catch (e) {
+      rmSync(tmp, { force: true });
+      throw e;
+    }
+  }
+
+  async clear(op: string, adapter: string): Promise<void> {
+    rmSync(adapterCacheDir(this.stateDir, op, adapter), { recursive: true, force: true });
+  }
+}
+
+export class MemoryDeltaCache implements DeltaCache {
+  private readonly m = new Map<string, string>();
+  private k(op: string, adapter: string, key: string) {
+    return JSON.stringify([op, adapter, key]);
+  }
+  async load(op: string, adapter: string, key: string): Promise<DeltaState | null> {
+    const v = this.m.get(this.k(op, adapter, key));
+    return v ? JSON.parse(v) : null;
+  }
+  async save(op: string, adapter: string, key: string, state: DeltaState): Promise<void> {
+    assertNoBodies(state);
+    this.m.set(this.k(op, adapter, key), JSON.stringify(state));
+  }
+  async clear(op: string, adapter: string): Promise<void> {
+    for (const k of [...this.m.keys()]) {
+      const [o, a] = JSON.parse(k);
+      if (o === op && a === adapter) this.m.delete(k);
+    }
+  }
+}
