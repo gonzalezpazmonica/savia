@@ -3,7 +3,8 @@
  * citan el código que respaldan sus afirmaciones. Este test comprueba que cada cita
  * a este proyecto apunta a un fichero que existe y a líneas que existen, que están
  * los apartados que pide la spec y que cada hueco citado está en su lista.
- * Las citas a otras ramas (`[adapters] …`, `[web] …`, `[atencion] …`) no se comprueban aquí.
+ * Con las partes ya integradas, el documento de transparencia no cita otras ramas: todas sus
+ * citas se resuelven contra este árbol.
  */
 
 import { test } from "node:test";
@@ -52,6 +53,17 @@ function comprobarCitas(md: string, nombre: string): number {
 
 test("las citas al código del documento de transparencia existen", () => {
   assert.ok(comprobarCitas(readFileSync(IT_PACK, "utf8"), "it-pack") >= 40, "el anexo debe citar el código");
+});
+
+test("el documento de transparencia describe el código integrado: ninguna cita a otra rama", () => {
+  const md = readFileSync(IT_PACK, "utf8");
+  assert.doesNotMatch(md, /`\[(adapters|web|atencion)\] /, "una cita a otra rama no se comprueba contra el código");
+});
+
+test("los huecos H-1…H-5 constan como cerrados y cada cierre cita su prueba en el anexo", () => {
+  const md = readFileSync(IT_PACK, "utf8");
+  for (const h of ["H-1", "H-2", "H-3", "H-4", "H-5"]) assert.match(md, new RegExp(`^\\| ${h} \\| Cerrado`, "m"), h);
+  for (const a of ["A32", "A33", "A34", "A35", "A36", "A39", "A40", "A41", "A42", "A43", "A44"]) assert.match(md, new RegExp(`^- \\*\\*${a}\\*\\* `, "m"), a);
 });
 
 test("las citas al código del modelo de amenazas del canal existen", () => {

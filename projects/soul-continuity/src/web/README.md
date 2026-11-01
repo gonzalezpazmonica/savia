@@ -61,13 +61,10 @@ El canal de control va por tubería (`--remote-debugging-pipe`), nunca por puert
 - `prepararPerfilSoul(directorioDatos())` crea un perfil persistente en `<datos>/web/perfil` con la marca `.perfil-soul`.
   - Se rechaza si está dentro de un perfil personal de Chrome, Edge, Chromium o Firefox.
   - En cada preparación reimpone las preferencias que apagan el gestor de contraseñas y el autorrelleno.
-- El directorio de datos es `SOUL_DATA_DIR`, o el del sistema:
-  - Linux: `$XDG_DATA_HOME/soul-continuity`;
-  - macOS: `~/Library/Application Support/SoulContinuity`;
-  - Windows: `%LOCALAPPDATA%\SoulContinuity`.
+- El directorio de datos es el del núcleo (`SOUL_DATA_DIR`, o el del sistema: Linux `$XDG_DATA_HOME/savia/soul-continuity`, macOS `~/Library/Application Support/Savia/soul-continuity`, Windows `%LOCALAPPDATA%\Savia\soul-continuity`). En producto, `src/core/connectors.ts` fija perfil, huellas, desactivadas y recibos dentro de `<datos>/web/`, y `soul uninstall` o `soul revoke web` lo borran entero.
 - El operador inicia sesión **a mano** en ese perfil, y solo en las webs que da a Soul. Soul no guarda contraseñas, no rellena credenciales y no inyecta cookies: el parámetro `cookies` solo existe para el banco.
 - Sesión caducada: parada limpia, 0 elementos y el aviso «Vuelve a iniciar sesión en X en el perfil de Soul».
-- **Riesgo conocido (Linux):** el navegador arranca con `--password-store=basic`, así que las cookies de sesión del perfil se cifran con la clave fija de Chromium, no con el llavero del sistema. Quien lea el perfil (0700) puede reutilizar la sesión. Protege el directorio de datos como una credencial: disco cifrado y cuenta de usuario propia. Los ficheros de estado que escribe Soul (`desactivadas`, huellas, recibos) van con 0600.
+- **Claves de las cookies (Linux):** el perfil persistente arranca con `--password-store=gnome-libsecret`: la clave que cifra sus cookies queda en el llavero del sistema, como los tokens de Soul. Sin bus de sesión (ni `DBUS_SESSION_BUS_ADDRESS` ni `XDG_RUNTIME_DIR`), el perfil no se abre. El perfil temporal del banco sigue con `basic` porque se borra al cerrar. **Riesgo residual:** si el bus existe pero el llavero no responde, Chromium puede caer a su clave fija sin avisar; eso no se ha verificado contra un llavero real. Protege el directorio de datos como una credencial. Los ficheros de estado que escribe Soul (`desactivadas`, huellas, recibos) van con 0600.
 
 ## Sin receta: «esta página cambió»
 
@@ -94,7 +91,7 @@ Las plantillas de `recetas/producto/` **no** se han validado contra tráfico rea
 Todo ocurre en local y fuera de cualquier repositorio. La grabación lleva datos de la empresa (N4).
 
 1. **Abre el perfil de Soul** con el navegador instalado. En Linux, con el perfil por defecto:
-   `google-chrome --user-data-dir="$HOME/.local/share/soul-continuity/web/perfil"`.
+   `google-chrome --password-store=gnome-libsecret --user-data-dir="$HOME/.local/share/savia/soul-continuity/web/perfil"`.
    Inicia sesión en el cliente, y solo en él.
 2. **Graba solo lectura.** Abre DevTools, pestaña Red, y marca «Conservar registro». Carga la página de la receta (por ejemplo, la bandeja de entrada en vista de lista) y espera a que se pinte.
    - **No abras elementos**, no respondas y no pulses nada más.
