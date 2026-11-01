@@ -78,3 +78,16 @@ test("límite de peticiones por origen: agotarlo desde una dirección no deja si
     assert.equal(await desde("::1"), 200, "otro origen sigue con servicio");
   } finally { await s.cerrar(); }
 });
+
+test("un operator_ref «constructor» o «__proto__» no autentica contra el prototipo (401, no 503)", async () => {
+  let ref = "constructor";
+  const s = crearServidor({ tls: CERT, mundo: { semillas: () => [semilla()] }, reloj: () => T0, autenticar: () => ({ ref, revocado: false }) });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  try {
+    assert.equal((await get(l.port, "/estado")).status, 401);
+    ref = "__proto__";
+    assert.equal((await get(l.port, "/estado")).status, 401);
+    ref = "op";
+    assert.equal((await get(l.port, "/estado")).status, 200, "control: el operador real sí");
+  } finally { await s.cerrar(); }
+});

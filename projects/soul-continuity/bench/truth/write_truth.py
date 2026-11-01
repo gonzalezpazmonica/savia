@@ -11,7 +11,7 @@ def gaw(th, msg): return aw(th, msg, "google-workspace")
 def mt(e, a="m365-calendar"): return f"{a}:meeting:{e}"
 def gmt(e): return mt(e, "google-workspace")
 def jira(k): return f"jira:task_assigned:{k}"
-def gh(kind, repo, n, owner="org"): return f"github:{kind}:{owner}/{repo}#{n}"
+def gh(kind, repo, n): return f"github:{kind}:{repo}#{n}"
 def ado(n): return f"azure-devops:task_assigned:{n}"
 def adopr(r, n): return f"azure-devops:review_request:{r}!{n}"
 def web(kind, site, item): return f"web:{kind}:{site}~{item}"

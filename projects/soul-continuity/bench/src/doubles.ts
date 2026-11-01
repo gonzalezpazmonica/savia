@@ -226,12 +226,6 @@ function graph(req: TransportRequest, u: URL, w: Json, auth: Auth): Res {
     if (decodeURIComponent(shared[1]) !== tp.shared_mailbox) return fail(404, "ErrorItemNotFound");
     return ok(page((tp.shared_messages ?? []).map((m: Json) => graphMessage(m, a.scopes, select)), u));
   }
-  if (p === "/me") {
-    if (!has("User.Read")) return fail(403, "Authorization_RequestDenied");
-    // Id del operador: en estos dobles los ids de Teams son correos.
-    const id = m365.me ?? `${w.operator}@${m365.tenant}.example`;
-    return ok({ id, mail: id });
-  }
   if (p === "/me/chats") {
     if (!has("Chat.Read")) return fail(403, "Forbidden");
     return ok({ value: (m365.chats ?? []).map((c: Json) => ({ id: c.id, topic: c.topic })) });
@@ -453,8 +447,8 @@ function github(req: TransportRequest, u: URL, w: Json, auth: Auth): Res {
     total_count: items.length,
     items: items.map((i) => ({
       number: i.number, title: i.title, state: i.state,
-      repository_url: `https://api.github.example/repos/${i.owner ?? "org"}/${i.repo}`,
-      html_url: `https://github.example/${i.owner ?? "org"}/${i.repo}/${i.is_pr ? "pull" : "issues"}/${i.number}`,
+      repository_url: `https://api.github.example/repos/org/${i.repo}`,
+      html_url: `https://github.example/org/${i.repo}/${i.is_pr ? "pull" : "issues"}/${i.number}`,
       assignees: i.assignees.map((l: string) => ({ login: l })),
       ...(i.is_pr ? { pull_request: { url: "…" } } : {}),
     })),
