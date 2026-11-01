@@ -2,14 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { FileDeltaCache, MemoryDeltaCache, adapterCacheDir, operatorDir } from "../../src/adapters/delta-cache.ts";
 
 const st = { link: "/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=abc", complete: true, items: { m1: { id: "m1", subject: "Hola" } } };
 
 test("operatorDir: hash estable del operador, sin el ref en claro", () => {
   const d = operatorDir("/s", "op-pm");
-  assert.match(d, /^\/s\/op-[0-9a-f]{16}$/);
+  // Separador de la plataforma: en Windows `join` usa «\».
+  assert.equal(dirname(d), join("/s"));
+  assert.match(basename(d), /^op-[0-9a-f]{16}$/);
   assert.equal(d, operatorDir("/s", "op-pm"));
   assert.notEqual(d, operatorDir("/s", "op-dir"));
   assert.equal(adapterCacheDir("/s", "op-pm", "m365-mail"), join(d, "adapters", "m365-mail"));
@@ -54,6 +56,25 @@ test("FileDeltaCache: rechaza campos de cuerpo en lo que se guarda", async () =>
   const c = new FileDeltaCache(dir);
   await assert.rejects(c.save("op-pm", "m365-mail", "k", { link: null, complete: true, items: { m1: { id: "m1", body: "x" } } }));
   await assert.rejects(c.save("op-pm", "m365-mail", "k", { link: null, complete: true, items: { m1: { id: "m1", bodyPreview: "x" } } }));
+});
+
+test("FileDeltaCache: lo cargado se valida como lo guardado (sin cuerpos, tipos de Meta)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "s490-dc-"));
+  const c = new FileDeltaCache(dir);
+  await c.save("op-pm", "m365-mail", "k", st);
+  const d = adapterCacheDir(dir, "op-pm", "m365-mail");
+  const f = join(d, readdirSync(d)[0]);
+  const put = (items: unknown) => writeFileSync(f, JSON.stringify({ link: null, complete: true, items }));
+  put({ m1: { id: "m1", to: ["a@b.example"], n: 1, ok: true, due: null } });
+  assert.deepEqual((await c.load("op-pm", "m365-mail", "k"))!.items.m1.to, ["a@b.example"], "una Meta válida se carga");
+  put({ m1: { id: "m1", body: "texto" } });
+  assert.equal(await c.load("op-pm", "m365-mail", "k"), null, "un campo de cuerpo manipulado no se carga");
+  put({ m1: { id: "m1", to: { x: 1 } } });
+  assert.equal(await c.load("op-pm", "m365-mail", "k"), null, "un valor que no es de Meta no se carga");
+  put({ m1: "texto" });
+  assert.equal(await c.load("op-pm", "m365-mail", "k"), null);
+  put([{ id: "m1" }]);
+  assert.equal(await c.load("op-pm", "m365-mail", "k"), null);
 });
 
 test("MemoryDeltaCache: aislada por operador y copia profunda", async () => {

@@ -154,20 +154,23 @@ function checkKey(k: string): string {
 /** Linux: Secret Service por `secret-tool` (libsecret). El secreto entra por stdin. */
 export class SecretToolBackend implements SecretBackend {
   private readonly cmd: string;
-  constructor(o: { command?: string } = {}) {
+  private readonly pre: string[];
+  /** `commandArgs` va delante de los argumentos de secret-tool (p. ej. un intérprete y su script). */
+  constructor(o: { command?: string; commandArgs?: string[] } = {}) {
     this.cmd = o.command ?? "secret-tool";
+    this.pre = o.commandArgs ?? [];
   }
   async get(k: string): Promise<string | null> {
-    const r = await run(this.cmd, ["lookup", "service", SERVICE, "account", checkKey(k)], "");
+    const r = await run(this.cmd, [...this.pre, "lookup", "service", SERVICE, "account", checkKey(k)], "");
     return r.code === 0 && r.stdout ? r.stdout : null;
   }
   async set(k: string, v: string): Promise<void> {
-    const r = await run(this.cmd, ["store", `--label=Soul Continuidad`, "service", SERVICE, "account", checkKey(k)], v);
+    const r = await run(this.cmd, [...this.pre, "store", `--label=Soul Continuidad`, "service", SERVICE, "account", checkKey(k)], v);
     if (r.code !== 0) throw new Error("secret-tool no guardó la credencial");
   }
   async delete(k: string): Promise<boolean> {
     const had = (await this.get(k)) !== null;
-    const r = await run(this.cmd, ["clear", "service", SERVICE, "account", checkKey(k)], "");
+    const r = await run(this.cmd, [...this.pre, "clear", "service", SERVICE, "account", checkKey(k)], "");
     // Se comprueba el borrado releyendo: no se informa de un borrado que no ocurrió.
     if ((had && r.code !== 0) || (await this.get(k)) !== null) throw new Error("secret-tool no borró la credencial");
     return had;

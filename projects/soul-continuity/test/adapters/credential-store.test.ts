@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -88,21 +88,29 @@ test("put y revoke: guardar un login y revocarlo deja el almacén sin la entrada
   assert.equal(await s.revoke("graph", ["Chat.Read"]), false);
 });
 
+// Dobles de ejecutable portables: un script .cjs lanzado con el propio Node. Un fichero
+// con shebang no se puede lanzar sin shell en Windows (ENOENT).
+function double(dir: string, name: string, body: string): { cmd: string; args: string[] } {
+  const f = join(dir, `${name}.cjs`);
+  writeFileSync(f, body);
+  return { cmd: process.execPath, args: [f] };
+}
+const toolDouble = (dir: string, name: string, body: string) => {
+  const d = double(dir, name, body);
+  return new SecretToolBackend({ command: d.cmd, commandArgs: d.args });
+};
+
 test("secret-tool: el secreto viaja por stdin, nunca en argv", async () => {
   const dir = mkdtempSync(join(tmpdir(), "s490-st-"));
   const store = join(dir, "store.json");
   const argvLog = join(dir, "argv.log");
-  const fake = join(dir, "secret-tool");
   // Doble de secret-tool: guarda por atributo account en un JSON de prueba.
-  writeFileSync(fake, `#!/usr/bin/env node
-const fs=require("fs");const [cmd,...a]=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(argvLog)},JSON.stringify(process.argv.slice(2))+"\\n");
+  const b = toolDouble(dir, "secret-tool", `const fs=require("fs");const [cmd,...a]=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(argvLog)},JSON.stringify(process.argv.slice(2))+"\\n");
 const f=${JSON.stringify(store)};const db=fs.existsSync(f)?JSON.parse(fs.readFileSync(f,"utf8")):{};const acc=a[a.indexOf("account")+1];
 if(cmd==="store"){let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{db[acc]=s;fs.writeFileSync(f,JSON.stringify(db));});}
 else if(cmd==="lookup"){if(acc in db)process.stdout.write(db[acc]);else process.exit(1);}
 else if(cmd==="clear"){delete db[acc];fs.writeFileSync(f,JSON.stringify(db));}
 `);
-  chmodSync(fake, 0o755);
-  const b = new SecretToolBackend({ command: fake });
   await b.set("soul-continuity/x/graph/y", "SECRETO-123");
   assert.equal(await b.get("soul-continuity/x/graph/y"), "SECRETO-123");
   await b.delete("soul-continuity/x/graph/y");
@@ -113,35 +121,24 @@ else if(cmd==="clear"){delete db[acc];fs.writeFileSync(f,JSON.stringify(db));}
 
 test("secret-tool: si clear falla, delete lanza en vez de informar de un borrado", async () => {
   const dir = mkdtempSync(join(tmpdir(), "s490-st-"));
-  const fake = join(dir, "secret-tool");
   // Doble: lookup siempre encuentra la entrada y clear falla (almacén bloqueado).
-  writeFileSync(fake, `#!/usr/bin/env node
-const [cmd]=process.argv.slice(2);
+  const stuck = toolDouble(dir, "secret-tool", `const [cmd]=process.argv.slice(2);
 if(cmd==="lookup")process.stdout.write("SECRETO");else if(cmd==="clear")process.exit(1);
 `);
-  chmodSync(fake, 0o755);
-  await assert.rejects(new SecretToolBackend({ command: fake }).delete("soul-continuity/x/graph/y"), /no borró/);
+  await assert.rejects(stuck.delete("soul-continuity/x/graph/y"), /no borró/);
   // Si no había entrada, no hay nada que borrar: false, sin error.
-  const none = join(dir, "secret-tool-vacio");
-  writeFileSync(none, "#!/usr/bin/env node\nprocess.exit(1);\n");
-  chmodSync(none, 0o755);
-  assert.equal(await new SecretToolBackend({ command: none }).delete("soul-continuity/x/graph/y"), false);
+  assert.equal(await toolDouble(dir, "secret-tool-vacio", "process.exit(1);\n").delete("soul-continuity/x/graph/y"), false);
 });
 
 test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", async () => {
   const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
-  const sh = (name: string, body: string) => {
-    const f = join(dir, name);
-    writeFileSync(f, `#!/usr/bin/env node\n${body}\n`);
-    chmodSync(f, 0o755);
-    return f;
-  };
+  const sh = (name: string, body: string) => double(dir, name, body);
   const found = sh("found", 'process.stdout.write("U0VDUkVUTw==\\n");');
   const fail = sh("fail", "process.exit(1);");
-  const cmds = (get: string, del: string) => ({
+  const cmds = (get: { cmd: string; args: string[] }, del: { cmd: string; args: string[] }) => ({
     ...macosCommands,
-    get: () => ({ cmd: get, args: [], stdin: "" }),
-    delete: () => ({ cmd: del, args: [], stdin: "" }),
+    get: () => ({ ...get, stdin: "" }),
+    delete: () => ({ ...del, stdin: "" }),
   }) as typeof macosCommands;
   await assert.rejects(new CommandBackend(cmds(found, fail), true).delete("k"), /no borró/);
   assert.equal(await new CommandBackend(cmds(fail, fail), true).delete("k"), false);
@@ -149,15 +146,10 @@ test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", a
 
 test("macOS y Windows: set relee y falla si el almacén truncó o no guardó el valor", async () => {
   const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
-  const sh = (name: string, body: string) => {
-    const f = join(dir, name);
-    writeFileSync(f, `#!/usr/bin/env node\n${body}\n`);
-    chmodSync(f, 0o755);
-    return f;
-  };
+  const sh = (name: string, body: string) => double(dir, name, body);
   const okCmd = sh("ok", "process.exit(0);");
   const stored = sh("stored", 'process.stdout.write("U0VDUkVUTw==\\n");'); // «SECRETO»
-  const cmds = { ...macosCommands, set: () => ({ cmd: okCmd, args: [], stdin: "" }), get: () => ({ cmd: stored, args: [], stdin: "" }) } as typeof macosCommands;
+  const cmds = { ...macosCommands, set: () => ({ ...okCmd, stdin: "" }), get: () => ({ ...stored, stdin: "" }) } as typeof macosCommands;
   await new CommandBackend(cmds, true).set("k", "SECRETO");
   await assert.rejects(new CommandBackend(cmds, true).set("k", "SECRETO-MAS-LARGO"), /íntegra/);
 });
