@@ -6,6 +6,10 @@
 // destination (writing TO gitignored is fine) or a hook source file
 // (self-reference legitimate).
 //
+// Project references follow rule 9 of the bash hook: allowed only when the name is whitelisted in
+// .gitignore or authorized by the operator in .claude/.project-authorizations of the edited file's
+// repo (fail-closed). See detectProjectLeakage.
+//
 // Reference: SPEC-127 Slice 2b-ii AC-2.2 (PV-02 critical safety hook)
 
 import {
@@ -15,7 +19,7 @@ import {
   type ToolInput,
   type ToolOutput,
 } from "../lib/hook-input.ts";
-import { detectLeakage } from "../lib/leakage-patterns.ts";
+import { detectLeakage, detectProjectLeakage } from "../lib/leakage-patterns.ts";
 
 const PRIVATE_DESTINATIONS = [
   /\/projects\//,
@@ -60,7 +64,8 @@ export async function blockGitignoredReferences(input: ToolInput, output: ToolOu
   const content = extractContent(input, output);
   if (!content) return;
 
-  const violations = detectLeakage(content);
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const violations = [...detectLeakage(content), ...detectProjectLeakage(content, filePath, projectDir)];
   if (violations.length > 0) {
     const list = violations.map((v) => `  - ${v}`).join("\n");
     throw new Error(
