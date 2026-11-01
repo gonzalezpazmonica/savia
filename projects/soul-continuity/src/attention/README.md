@@ -16,7 +16,7 @@ Librería TypeScript pura: sin red, sin LLM, sin dependencias y sin reloj propio
 cd projects/soul-continuity
 node --experimental-strip-types --test tests/attention/*.test.ts      # tests
 node --experimental-strip-types tests/attention/evals.ts              # 228 evals (120 de Labs + 108 de AC-4b)
-node --experimental-strip-types tests/attention/bench/mutaciones.ts   # 61 mutantes (18 de Labs + 18 de AC-4b + 5 del puente y la redacción + 20 de las revisiones); falla si alguno vive o no arranca
+node --experimental-strip-types tests/attention/bench/mutaciones.ts   # 62 mutantes (18 de Labs + 18 de AC-4b + 5 del puente y la redacción + 21 de las revisiones); falla si alguno vive o no arranca
 tsc -p src/attention/tsconfig.json                                    # strict, sin emitir
 ```
 
@@ -32,3 +32,7 @@ Node ≥ 22.6. Los tests y las evals usan solo operadores sintéticos.
 - Los ids ya tratados (`preguntadas`) no se purgan: el estado crece con cada evento atendido. Purgarlos exige saber cuándo deja de poder repetirse un evento, y eso lo decide quien integre el transporte.
 - Una decisión diferida por `PUEDE_ESPERAR` no se marca como tratada: su deduplicación vive en la bandeja, que está en memoria. Tras un reinicio, si vuelve a llegar, se encola de nuevo; es lo que evita perderla, porque la bandeja anterior ya no existe.
 - Una hora de franja fuera de 0–23 / 0–59 da una franja vacía.
+- Autenticado no es autorizado: cualquier origen `AGENTE_AUTENTICADO` (p. ej. `dkim_dmarc`, que solo prueba el dominio) puede detener, vetar y disparar una alerta con cualquier código de regla, porque las reglas no están ligadas a un remitente. Hoy no hay transporte conectado; al integrarlo hay que ligar regla ↔ remitente y limitar PARA y veto a orígenes que la persona declare.
+- Un bloqueo (PARA, veto, contexto vencido, permiso ilegítimo) que el sondeo reenvía no entra otra vez en la bandeja ni en el registro: se anota el reenvío en el historial del que ya estaba.
+- Tras un reinicio, lo informativo ya marcado como tratado (`preguntada=`: avisos notificados o aplazados, alertas diferidas o sobre el tope) que el transporte reenvía se registra como `YA_PREGUNTADA` y no sale en ningún resumen, porque la bandeja que lo tenía ya no existe. `excedidas` sobrevive, pero su texto no: `drenarAlertasAgrupadas` da `null` en esas entradas. «Una sola vez» vale dentro de una misma ejecución; tras un reinicio, lo pendiente informativo se puede perder.
+- `resumenesDebidos` da el resumen por entregado al generarlo: si la entrega falla, lo informativo que llevaba no vuelve (lo que pide decisión sí). No hay equivalente de `reencolarAlertasAgrupadas` para resúmenes. Un resumen a su hora sin nada pendiente sale igual, con «0 pendientes»: la spec fija la hora, no el contenido mínimo.
