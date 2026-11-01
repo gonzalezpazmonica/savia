@@ -181,3 +181,9 @@ test("índice en el formato anterior (`services`) se sigue leyendo y se borra al
   assert.deepEqual(await core.forgetAll(), ["graph"]);
   assert.equal(f.vault.size, 0);
 });
+
+test("hostRun: una herramienta que sale sin leer stdin no tumba el proceso (EPIPE) y su código manda", async () => {
+  const { hostRun } = await import("../src/credentials/store.ts");
+  const r = await hostRun(process.execPath, ["-e", "process.exit(3)"], "x".repeat(4 * 1024 * 1024));
+  assert.equal(r.code, 3);
+});

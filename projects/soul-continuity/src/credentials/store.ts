@@ -35,6 +35,9 @@ export const hostRun: Run = (cmd, args, input = "") => new Promise((resolve) => 
   p.stderr.on("data", (b) => { stderr += b; });
   p.on("error", (e) => resolve({ code: 127, stdout: "", stderr: String(e.message) }));
   p.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
+  // Si la herramienta sale sin leer stdin, escribir da EPIPE: no es un fallo del proceso de Soul,
+  // el resultado lo dice el código de salida.
+  p.stdin.on("error", () => {});
   p.stdin.end(input);
 });
 
