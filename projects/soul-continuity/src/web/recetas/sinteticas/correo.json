@@ -1,0 +1,55 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "correo-chat-sintetico",
+  "sitio": "Cliente de correo y chat (sintético)",
+  "estado": "estable",
+  "origen": "http://127.0.0.5:{puerto}",
+  "javascript": true,
+  "urls": ["/correo", "/correo/app.js", "/correo/api/servicio", "/correo/api/servicio?x-accion=*", "/correo/graphql"],
+  "renovacion_sesion": ["/sesion/renovar"],
+  "post_lectura": [
+    { "url": "/correo/api/servicio", "operacion": { "cabecera": "x-accion" },
+      "lectura": ["BuscarElementos", "ObtenerCarpetas"],
+      "escritura_conocida": ["MarcarLeido", "ActualizarElemento", "EnviarCorreo"] },
+    { "url": "/correo/api/servicio?x-accion=*", "operacion": { "cabecera": "x-accion" },
+      "lectura": ["BuscarElementos", "ObtenerCarpetas"],
+      "escritura_conocida": ["MarcarLeido", "ActualizarElemento", "EnviarCorreo"] },
+    { "url": "/correo/graphql", "operacion": { "cuerpo_json": "operationName", "graphql": true },
+      "lectura": ["ListarChats"],
+      "escritura_conocida": ["MarcarChatVisto"] }
+  ],
+  "websocket": { "urls": ["/correo/ws"], "mantenimiento": ["{\"tipo\":\"ping\"}"] },
+  "paginas": ["/correo"],
+  "acciones": [],
+  "extraccion": {
+    "elemento": "li.elemento",
+    "id": { "attr": "data-id" },
+    "campos": {
+      "clase": { "attr": "data-clase" },
+      "titulo": { "sel": ".asunto" },
+      "de": { "attr": "data-de" },
+      "para": { "attr": "data-para", "tipo": "lista" },
+      "cc": { "attr": "data-cc", "tipo": "lista" },
+      "respondido": { "attr": "data-respondido", "tipo": "booleano" },
+      "marca": { "attr": "data-marca", "tipo": "fecha" },
+      "tipo": { "attr": "data-tipo" },
+      "ultimo_de": { "attr": "data-ultimo-de" },
+      "menciona": { "attr": "data-menciona", "tipo": "booleano" }
+    }
+  },
+  "preguntas": {
+    "q1": { "alguna": [
+      { "todas": [ { "campo": "clase", "op": "igual", "valor": "correo" },
+                   { "alguna": [ { "campo": "para", "op": "contiene", "valor": "{yo}" }, { "campo": "cc", "op": "contiene", "valor": "{yo}" } ] },
+                   { "campo": "respondido", "op": "falso" }, { "campo": "de", "op": "distinto", "valor": "{yo}" } ] },
+      { "todas": [ { "campo": "clase", "op": "igual", "valor": "chat" }, { "campo": "ultimo_de", "op": "distinto", "valor": "{yo}" } ] } ] },
+    "q2": { "alguna": [
+      { "todas": [ { "campo": "clase", "op": "igual", "valor": "correo" }, { "campo": "para", "op": "contiene", "valor": "{yo}" },
+                   { "campo": "respondido", "op": "falso" }, { "campo": "de", "op": "distinto", "valor": "{yo}" } ] },
+      { "todas": [ { "campo": "clase", "op": "igual", "valor": "chat" },
+                   { "alguna": [ { "campo": "menciona", "op": "verdadero" },
+                                 { "todas": [ { "campo": "tipo", "op": "igual", "valor": "directo" }, { "campo": "ultimo_de", "op": "distinto", "valor": "{yo}" } ] } ] } ] } ] }
+  },
+  "sesion": { "login": ["/login", "/login?vuelta=*"] },
+  "humo": { "pagina": "/correo", "minimo": 1, "campos_obligatorios": ["clase", "titulo"] }
+}

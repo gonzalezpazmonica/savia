@@ -1,0 +1,220 @@
+{
+  "huella_codigo": "c1c670f2f23af609",
+  "muertos": 22,
+  "total": 22,
+  "filas": [
+    {
+      "mutante": "redireccion_directa",
+      "estado": "MUERTO",
+      "fallidas": 25,
+      "ajenos": 24,
+      "muertoPor": [
+        "redireccion:aprobaciones:corte_en_salto"
+      ]
+    },
+    {
+      "mutante": "metodo_laxo",
+      "estado": "MUERTO",
+      "fallidas": 31,
+      "ajenos": 30,
+      "muertoPor": [
+        "contenido_hostil:noticias:metodo_cortado"
+      ]
+    },
+    {
+      "mutante": "escritura_permitida",
+      "estado": "MUERTO",
+      "fallidas": 14,
+      "ajenos": 13,
+      "muertoPor": [
+        "base:correo:escritura_cortada"
+      ]
+    },
+    {
+      "mutante": "graphql_sin_documento",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "ajenos": 1,
+      "muertoPor": [
+        "graphql_disfrazada:correo:graphql_cortado"
+      ]
+    },
+    {
+      "mutante": "ws_libre",
+      "estado": "MUERTO",
+      "fallidas": 8,
+      "ajenos": 4,
+      "muertoPor": [
+        "base:correo:envios_websocket_fuera_de_mantenimiento",
+        "ws_worker:correo:envios_websocket_fuera_de_mantenimiento",
+        "descarga_atributo:correo:envios_websocket_fuera_de_mantenimiento",
+        "operacion_en_url:correo:envios_websocket_fuera_de_mantenimiento"
+      ]
+    },
+    {
+      "mutante": "ws_sin_lista",
+      "estado": "MUERTO",
+      "fallidas": 3,
+      "ajenos": 2,
+      "muertoPor": [
+        "contenido_hostil:noticias:ws_cortado"
+      ]
+    },
+    {
+      "mutante": "patron_prefijo",
+      "estado": "MUERTO",
+      "fallidas": 11,
+      "ajenos": 10,
+      "muertoPor": [
+        "contenido_hostil:noticias:extension_cortada"
+      ]
+    },
+    {
+      "mutante": "sin_accion",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "ajenos": 1,
+      "muertoPor": [
+        "accion_secuestrada:tareas:corte_registrado"
+      ]
+    },
+    {
+      "mutante": "sin_descargas",
+      "estado": "MUERTO",
+      "fallidas": 1,
+      "ajenos": 0,
+      "muertoPor": [
+        "descarga_disfrazada:tareas:descargas"
+      ]
+    },
+    {
+      "mutante": "sin_desactivar",
+      "estado": "MUERTO",
+      "fallidas": 6,
+      "ajenos": 1,
+      "muertoPor": [
+        "operacion_nueva:correo:estado",
+        "operacion_nueva:correo:aviso",
+        "operacion_nueva:correo:persistente",
+        "cambio_dom:tareas:estado",
+        "cambio_dom:tareas:aviso"
+      ]
+    },
+    {
+      "mutante": "sin_login",
+      "estado": "MUERTO",
+      "fallidas": 9,
+      "ajenos": 7,
+      "muertoPor": [
+        "sesion_caducada:tareas:corte_login",
+        "sesion_caducada:correo:corte_login"
+      ]
+    },
+    {
+      "mutante": "perfil_personal",
+      "estado": "MUERTO",
+      "fallidas": 85,
+      "ajenos": 84,
+      "muertoPor": [
+        "perfil_personal:sin_cambios"
+      ]
+    },
+    {
+      "mutante": "subrecurso_libre",
+      "estado": "MUERTO",
+      "fallidas": 34,
+      "ajenos": 33,
+      "muertoPor": [
+        "base:correo:subrecurso_cortado"
+      ]
+    },
+    {
+      "mutante": "sin_guardia",
+      "estado": "MUERTO",
+      "fallidas": 30,
+      "ajenos": 23,
+      "muertoPor": [
+        "sesion_caducada:tareas:peticiones_sin_pasar_por_cortafuegos",
+        "sesion_caducada:correo:peticiones_sin_pasar_por_cortafuegos",
+        "redireccion:aprobaciones:peticiones_sin_pasar_por_cortafuegos",
+        "contenido_hostil:noticias:peticiones_sin_pasar_por_cortafuegos",
+        "descarga_atributo:correo:peticiones_sin_pasar_por_cortafuegos",
+        "sesion_sso:tareas:peticiones_sin_pasar_por_cortafuegos"
+      ]
+    },
+    {
+      "mutante": "workers_libres",
+      "estado": "MUERTO",
+      "fallidas": 3,
+      "ajenos": 2,
+      "muertoPor": [
+        "ws_worker:correo:worker_bloqueado"
+      ]
+    },
+    {
+      "mutante": "sin_login_externo",
+      "estado": "MUERTO",
+      "fallidas": 3,
+      "ajenos": 2,
+      "muertoPor": [
+        "sesion_sso:tareas:corte_login_externo"
+      ]
+    },
+    {
+      "mutante": "absoluto_navegable",
+      "estado": "MUERTO",
+      "fallidas": 3,
+      "ajenos": 2,
+      "muertoPor": [
+        "contenido_hostil:noticias:navegacion_externa_cortada"
+      ]
+    },
+    {
+      "mutante": "extraccion_mundo_principal",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "ajenos": 1,
+      "muertoPor": [
+        "contenido_hostil:noticias:extraccion_aislada"
+      ]
+    },
+    {
+      "mutante": "vigilancia_con_js",
+      "estado": "MUERTO",
+      "fallidas": 1,
+      "ajenos": 0,
+      "muertoPor": [
+        "vigilancia:noticias:sin_javascript"
+      ]
+    },
+    {
+      "mutante": "experimental_sin_recibo",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "ajenos": 0,
+      "muertoPor": [
+        "experimental:tareas:sin_recibo_desactivada",
+        "experimental:tareas:sin_recibo_sin_peticiones"
+      ]
+    },
+    {
+      "mutante": "post_lectura_por_get",
+      "estado": "MUERTO",
+      "fallidas": 2,
+      "ajenos": 1,
+      "muertoPor": [
+        "operacion_en_url:correo:get_cortado"
+      ]
+    },
+    {
+      "mutante": "operacion_url_sin_cotejar",
+      "estado": "MUERTO",
+      "fallidas": 5,
+      "ajenos": 3,
+      "muertoPor": [
+        "operacion_en_url:correo:post_cortado",
+        "operacion_en_url:correo:desactivada"
+      ]
+    }
+  ]
+}
