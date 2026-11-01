@@ -30,6 +30,7 @@ export function makeGitHubAdapter(o: GitHubOptions = {}): SourceAdapter {
       const first = `/search/issues?q=${encodeURIComponent(q)}&per_page=100`;
       const out: J[] = [];
       let url: string | undefined = first;
+      let total: number | undefined;
       for (let i = 0; url; i++) {
         if (i >= maxPages) throw new Stop("unavailable", `GitHub: supera el tope de ${maxPages} páginas; no se dan datos incompletos.`);
         const r = await ctx.transport.request({ service: "github", method: "GET", url, headers: H });
@@ -41,12 +42,18 @@ export function makeGitHubAdapter(o: GitHubOptions = {}): SourceAdapter {
         // La búsqueda puede responder 200 con resultados parciales (tiempo agotado en GitHub).
         if (b.incomplete_results === true) throw new Stop("unavailable", "GitHub: la búsqueda devolvió resultados incompletos; no se dan datos incompletos.");
         if (Array.isArray(b.items)) out.push(...b.items);
+        if (i === 0 && typeof b.total_count === "number") total = b.total_count;
         // Del enlace solo se toma la consulta (`?q=…&page=N`): la ruta es siempre
         // `/search/issues` y el transporte le pone la base configurada. Así un `Link`
         // manipulado no se lleva el token a otro host ni a otro endpoint, y en GitHub
         // Enterprise el prefijo de la base (`/api/v3`) no se duplica.
         const n = nextLink(r.headers.link ?? r.headers.Link);
         url = n ? `/search/issues${new URL(sameOrigin(n, first, "GitHub"), "http://ruta.invalid").search}` : undefined;
+      }
+      // La búsqueda de GitHub no pasa de 1000 resultados: deja de dar `rel="next"` aunque
+      // haya más. Si lo recogido no llega al total anunciado, es parcial y no se da.
+      if (total !== undefined && out.length < total) {
+        throw new Stop("unavailable", `GitHub: la búsqueda anuncia ${total} resultados y solo devuelve ${out.length}; no se dan datos incompletos.`);
       }
       return out;
     };

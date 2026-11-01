@@ -80,6 +80,17 @@ test("GitHub: `incomplete_results: true` con 200 es «unavailable», no una cole
   assert.deepEqual(keys(await read(false)), ["github:review_request:app#5"]);
 });
 
+test("GitHub: más resultados que los que la búsqueda deja recorrer (tope de 1000) es «unavailable»", async () => {
+  const item = { number: 5, title: "x", repository_url: "https://api.github.example/repos/o/app" };
+  // Sin `rel="next"` y con un total mayor que lo devuelto: GitHub truncó la búsqueda.
+  const read = (total: number) => makeGitHubAdapter().read(ctxWith({
+    route: "api", transport: { async request() { return { status: 200, headers: {}, body: { total_count: total, incomplete_results: false, items: [item] } }; } },
+  }));
+  assert.equal((await read(1001)).status, "unavailable");
+  assert.equal((await read(2)).status, "unavailable", "límite: uno de más ya es parcial");
+  assert.deepEqual(keys(await read(1)), ["github:review_request:app#5"]);
+});
+
 test("GitHub: un repository_url sin propietario no produce elemento", async () => {
   const fake = { async request() { return { status: 200, headers: {}, body: { items: [{ number: 5, title: "x", repository_url: "app" }] } }; } };
   assert.deepEqual(keys(await makeGitHubAdapter().read(ctxWith({ route: "api", transport: fake }))), []);

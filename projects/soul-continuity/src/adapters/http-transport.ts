@@ -89,6 +89,9 @@ export class HttpTransport implements Transport {
       }
     }
     if (u.origin !== base.origin) throw new TransportRefused(`origen no permitido para ${req.service}`);
+    // `%2f`/`%5c` en la ruta: un servidor que los decodifique antes de enrutar sacaría la
+    // petición del prefijo de la base. Ningún adaptador los necesita en la ruta.
+    if (/%(?:2f|5c)/i.test(u.pathname)) throw new TransportRefused(`ruta no permitida para ${req.service}`);
     // Ningún método, tampoco GET, sale con el token fuera de la ruta de la base
     // (p. ej. hacia otra organización de Azure DevOps en el mismo origen).
     if (prefix && u.pathname !== prefix && !u.pathname.startsWith(`${prefix}/`)) throw new TransportRefused(`ruta fuera de la base para ${req.service}`);

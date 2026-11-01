@@ -196,13 +196,16 @@ test("segmentos `.` y `..` (también codificados) se rechazan: no sacan la ruta 
     return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
   const t = new HttpTransport({ bases: { ado: "https://dev.example/contoso" }, fetch: fetchFn });
-  for (const url of ["/../otra/_apis/x", "/a/./b", "/%2e%2e/otra/x", "/.%2E/otra/x", "/%2E/x"]) {
+  for (const url of ["/../otra/_apis/x", "/a/./b", "/%2e%2e/otra/x", "/.%2E/otra/x", "/%2E/x",
+    "/proj%2f..%2fotra/_apis/x", "/proj%2F..%2Fotra/x", "/proj%5c..%5cotra/x", "https://dev.example/contoso/p%2f..%2fotra/x"]) {
     await assert.rejects(t.request({ service: "ado", method: "GET", url, headers: { Authorization: "Bearer secreto" } }), TransportRefused, url);
   }
   assert.deepEqual(seen, []);
   // Un punto dentro de un segmento no es un segmento de punto, ni lo es en la consulta.
   await t.request({ service: "ado", method: "GET", url: "/proj/v1.2/x?q=../a" });
-  assert.deepEqual(seen, ["https://dev.example/contoso/proj/v1.2/x?q=../a"]);
+  // `%2f` en la consulta no es ruta: se permite.
+  await t.request({ service: "ado", method: "GET", url: "/proj/x?q=a%2Fb" });
+  assert.deepEqual(seen, ["https://dev.example/contoso/proj/v1.2/x?q=../a", "https://dev.example/contoso/proj/x?q=a%2Fb"]);
 });
 
 test("GET absoluto del mismo origen fuera del prefijo de la base: rechazado, no solo el POST", async () => {
