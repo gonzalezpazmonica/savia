@@ -101,6 +101,8 @@ export interface Msg { id: string; seq: number; tipo: string; categoria: string;
 export interface EstadoAtencion {
   v: 1; modo: string; hasta: number | null; avisos: ConfAvisos; alertas: Regla[]; mensajes: Msg[]; seq: number; base: number;
   pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: Op["ventana"]; registro: Op["registro"]; ahorrados: number; avisados: string[];
+  /** `at` de la última declaración de `soul mode` ya aplicada: tras reiniciar no se vuelve a aplicar. */
+  cli_at?: string | null;
 }
 export interface Evento { tipo: string; categoria?: string; ids: string[]; programar?: number | null; regla?: Regla; efectiva?: string; avisoDe?: string }
 
@@ -243,6 +245,7 @@ export function crearServidor(opts: OpcionesServidor) {
   // -------------------------------------------------------------- estado por operador
   const ops: Record<string, Op> = {};
   const yaAvisados = new Map<string, Set<string>>();
+  const cliAt = new Map<string, string>();
   const avisados = (o: Op) => { let x = yaAvisados.get(o.ref); if (!x) yaAvisados.set(o.ref, (x = new Set())); return x; };
   function cargarEstado(ref: string): EstadoAtencion | null {
     if (!opts.persistencia) return null;
@@ -256,7 +259,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const e: EstadoAtencion = {
       v: 1, modo: o.modo, hasta: o.hasta, avisos: o.avisos, alertas: o.alertas, mensajes: o.mensajes, seq: o.seq, base: o.base,
       pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
-      avisados: [...avisados(o)].slice(-2000),
+      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null,
     };
     try { opts.persistencia.guardar(o.ref, e); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
   }
@@ -277,6 +280,7 @@ export function crearServidor(opts: OpcionesServidor) {
       Object.assign(o, { modo: previo.modo, hasta: previo.hasta, avisos: previo.avisos, alertas: previo.alertas, mensajes: previo.mensajes, seq: previo.seq,
         base: previo.base, pendAvisos: previo.pendAvisos, pendAlertas: previo.pendAlertas, ventana: previo.ventana, registro: previo.registro, ahorrados: previo.ahorrados });
       for (const id of previo.avisados) avisados(o).add(id);
+      if (typeof previo.cli_at === "string") cliAt.set(d.ref, previo.cli_at);
       continue;
     }
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
@@ -303,6 +307,9 @@ export function crearServidor(opts: OpcionesServidor) {
     }
     o.ultimo = Math.max(o.ultimo, objetivo);
     if (!caidas) opts.mundo.refrescar?.(ctx, o, ahora());
+    // Solo se recuerda lo avisado de elementos vivos: uno que desaparece y vuelve se avisa de nuevo,
+    // y el conjunto no crece sin tope.
+    for (const k of avisados(o)) if (!o.elementos.has(k.slice(k.indexOf("|") + 1))) avisados(o).delete(k);
     const lim = ahora() - retencionMs;
     while (o.mensajes.length && o.mensajes[0].creado < lim) o.base = (o.mensajes.shift() as Msg).seq;
     for (const [id, e] of o.elementos) if (!e.fijo && o.elementos.size > 400 && e.nace < lim) o.elementos.delete(id);
@@ -705,12 +712,18 @@ export function crearServidor(opts: OpcionesServidor) {
     alCorregir: (f: (o: Op, id: string, tipo: string, t: number, dispositivo: string | null) => void) => { hooks.correccion = f; },
     operador: (ref: string) => ops[ref],
     /** Modo declarado fuera de la API (`soul mode`): se aplica como si llegara de la app y se persiste. */
-    declararModo: (ref: string, modo: string, hasta: string | null) => {
+    declararModo: (ref: string, modo: string, hasta: string | null, at: string) => {
       const o = ops[ref];
-      if (!o) return false;
+      if (!o) return "sin_operador" as const;
       sincronizar(o);
-      try { opAtencion(o, modo === "DISPONIBLE" ? { modo } : { modo, hasta }); } catch { return false; } finally { guardarEstado(o); }
-      return true;
+      let r: "aplicada" | "invalida" = "aplicada";
+      try { opAtencion(o, modo === "DISPONIBLE" ? { modo } : { modo, hasta }); } catch { r = "invalida"; }
+      // Una declaración inválida (p. ej. ventana ya vencida) se consume: reintentarla no la arregla.
+      cliAt.set(ref, at);
+      guardarEstado(o);
+      return r;
     },
+    /** `at` de la última declaración de `soul mode` aplicada (persistida con el estado). */
+    declaracionCli: (ref: string) => cliAt.get(ref) ?? null,
   };
 }

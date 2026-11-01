@@ -128,10 +128,16 @@ test("e2e: instalar, emparejar, consultar Q1–Q4 por cursor, corregir, revocar 
     assert.equal((await api("/api/v1/soul/q/q1")).json.recuentos.total, 1, "lo resuelto no vuelve");
 
     // 5. Revocar la fuente: tokens y caché fuera; el servicio deja de leerla.
+    const control = mock.log.length;
+    await new Promise((r) => setTimeout(r, 400));
+    assert.ok(mock.log.slice(control).some((l: { url: string }) => l.url.includes("search/issues")), "control: serve relee GitHub en cada tic");
     const rv = await cli("revoke", "github", "--json");
     assert.equal(rv.c, 0, err.join("\n"));
     assert.equal(rv.j.tokens_removed, 1);
     assert.equal(st.vault.size, 0, "ningún token en el almacén tras revocar");
+    const antes = mock.log.length;
+    await new Promise((r) => setTimeout(r, 400)); // varios tics de serve (refreshMs 100)
+    assert.equal(mock.log.slice(antes).filter((l: { url: string }) => l.url.includes("search/issues")).length, 0, "el servicio deja de leer la fuente revocada");
   } finally {
     ac.abort();
     if (served) assert.equal(await served, 0);

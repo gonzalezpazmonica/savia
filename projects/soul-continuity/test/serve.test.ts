@@ -235,3 +235,49 @@ test("P2-9: límites de conexión y tiempos de espera propios en el servidor TLS
     assert.equal(h.keepAliveTimeout, 5_000);
   } finally { await srv.cerrar(); }
 });
+
+test("P1-A: tras reiniciar serve, una declaración de soul mode ya aplicada no pisa el modo que fijó después la app", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  writeFileSync(join(operatorDir(dir, "op-yo"), "attention.json"), JSON.stringify({ modo: "FOCO", hasta: new Date(Date.now() + 3_600_000).toISOString(), at: new Date().toISOString() }));
+  let s = await start(dir, []);
+  try {
+    assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "FOCO", "control: se aplica al arrancar");
+    assert.equal((await call(s.port, s.ca, p.token, { method: "PUT", path: "/api/v1/soul/atencion", body: { modo: "DISPONIBLE" } })).status, 200);
+  } finally { await s.stop(); }
+  s = await start(dir, []);
+  try {
+    await new Promise((r) => setTimeout(r, 200)); // varios tics de serve
+    assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "DISPONIBLE", "lo último lo decidió la app");
+  } finally { await s.stop(); }
+  // Una declaración nueva de soul mode sí se aplica.
+  writeFileSync(join(operatorDir(dir, "op-yo"), "attention.json"), JSON.stringify({ modo: "DESCANSO", hasta: new Date(Date.now() + 3_600_000).toISOString(), at: new Date(Date.now() + 1000).toISOString() }));
+  s = await start(dir, []);
+  try { assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "DESCANSO"); } finally { await s.stop(); }
+});
+
+test("avisos: un elemento que desaparece y vuelve se avisa de nuevo; uno que sigue vivo no se repite", () => {
+  const e = { id: "e1", tipo: "tarea", titulo: "t", proyecto: null, personas: [], detalle: null, adaptador: "github", ruta: "api", dep: true, fecha: null, nace: Date.now(), observado: Date.now(), estado: "OBSERVED", sens: "N2", refs: [], mio: false, noMio: false, fijo: true, validoHasta: Date.now() + 86_400_000 } as any;
+  let presente = true;
+  let fase = 0;
+  const srv = crearServidor({
+    tls: { cert: "x", key: "y" },
+    mundo: {
+      semillas: () => [{ ref: "op", tokens: ["t"], nivel: "titulos", nivelMax: "titulos", proyectos: [], personas: [], elementos: [], adaptadores: [],
+        avisos: { activos: ["vencimiento"], resumenInicio: null, resumenCierre: null, max: 50, ventanaMin: 60, tope: 3 }, alertas: [] }],
+      refrescar: (ctx, o, t) => {
+        fase++;
+        if (presente && !o.elementos.has("e1")) { o.elementos.set("e1", { ...e }); ctx.evento(o, { tipo: "aviso", categoria: "vencimiento", ids: ["e1"] }, t); }
+        else if (presente) ctx.evento(o, { tipo: "aviso", categoria: "vencimiento", ids: ["e1"] }, t);
+        if (!presente) o.elementos.delete("e1");
+      },
+    },
+  });
+  const avisos = () => srv.operador("op").mensajes.filter((m: { ids: string[]; tipo: string }) => m.tipo === "aviso" && m.ids.includes("e1")).length;
+  srv.estadisticas("op"); srv.estadisticas("op");
+  assert.equal(avisos(), 1, "vivo: no se repite");
+  presente = false; srv.estadisticas("op");
+  presente = true; srv.estadisticas("op");
+  assert.equal(avisos(), 2, "reaparece: se avisa otra vez");
+  assert.ok(fase >= 4);
+});

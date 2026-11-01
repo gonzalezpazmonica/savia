@@ -18,8 +18,12 @@ test("P1-1: una prueba válida de la app verifica y devuelve la huella de su cla
   assert.match(r.jkt, /^[A-Za-z0-9_-]{43}$/);
 });
 
-test("P1-1: la consulta de la URL no entra en el htu (como hace la app)", () => {
-  assert.equal(code(() => makeDpopVerifier()(req(proof(newKey()), { path: "/api/v1/soul/q/q1" }))), "ok");
+test("P1-1: el htu va sin consulta (como la app); una prueba cuyo htu lleva la consulta se rechaza", () => {
+  const k = newKey();
+  const v = makeDpopVerifier();
+  // Quien llama pasa la ruta sin consulta (serve la quita): la prueba de la app, sin consulta, casa.
+  assert.equal(code(() => v(req(proof(k), { path: "/api/v1/soul/q/q1" }))), "ok");
+  assert.equal(code(() => v(req(proof(k, { htu: `${HTU}?limite=5` }), { path: "/api/v1/soul/q/q1" }))), "htu");
 });
 
 test("P1-1: prueba firmada con otra clave que la ligada al dispositivo => clave", () => {

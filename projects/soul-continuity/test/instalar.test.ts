@@ -84,4 +84,7 @@ test("instalar.md: desde un frontend de agente, init y login se rechazan (códig
   const r = spawnSync(process.execPath, [BIN, "init", "trabajo"], { env: { PATH: process.env.PATH, HOME: s.home, CLAUDECODE: "1" }, encoding: "utf8" });
   assert.equal(r.status, 4);
   assert.equal(existsSync(join(s.data, "config.json")), false, "no crea la instalación (solo queda la auditoría de la llamada)");
+  const l = spawnSync(process.execPath, [BIN, "login", "github", "--token-stdin"], { env: { PATH: process.env.PATH, HOME: s.home, CLAUDECODE: "1" }, input: `${TOKEN}\n`, encoding: "utf8" });
+  assert.equal(l.status, 4);
+  assert.equal(existsSync(join(s.home, ".llavero-falso")), false, "no llega al llavero");
 });

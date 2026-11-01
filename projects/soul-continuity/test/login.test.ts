@@ -71,7 +71,7 @@ test("login --token-stdin con token vacío o adaptador desconocido falla sin gua
   assert.equal(await runCli(["login", "github", "--token-stdin"], s.deps), 2);
   assert.equal(await runCli(["login", "otro", "--token-stdin"], s.deps), 2);
   assert.equal(await runCli(["login", "web", "--token-stdin"], s.deps), 2, "web no tiene token: se inicia sesión en su perfil");
-  assert.equal(await s.backend.get("x"), null);
+  assert.equal((s.backend as unknown as { m: Map<string, string> }).m.size, 0, "ningún token guardado");
 });
 
 test("login desde un frontend de agente se rechaza (código 4)", async () => {
