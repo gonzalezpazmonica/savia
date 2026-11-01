@@ -13,5 +13,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "bench/src/**/*.ts", "bench/test/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "bench/src/**/*.ts", "bench/test/**/*.ts", "test/**/*.ts"],
+  "exclude": ["src/web/**"]
 }
