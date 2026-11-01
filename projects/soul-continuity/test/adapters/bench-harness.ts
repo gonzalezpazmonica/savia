@@ -202,8 +202,12 @@ export function makeHarness(o: HarnessOptions): ContinuityImpl {
         if (!a || !a.routes.includes(route)) { status[name] = { status: "error", message: "ruta no admitida" }; continue; }
         const level = maxLevel(isLevel(s.sensitivity) ? s.sensitivity : DEFAULT_SENSITIVITY[name], DEFAULT_SENSITIVITY[name]);
         const isWeb = name === "web" || route === "web";
+        // Los dobles del banco no sirven `/me` y en ellos el id de Teams es el correo:
+        // se da como `m365_user_id`, igual que lo configuraría el operador. El banco no se toca.
+        const params: Record<string, unknown> = { ...(s.params ?? {}) };
+        if (name === "m365-teams" && params.m365_user_id === undefined && op.identities.emails[0]) params.m365_user_id = op.identities.emails[0];
         const r = await a.read({
-          operator: op, now: req.now, sensitivity: level, route, params: { ...(s.params ?? {}) },
+          operator: op, now: req.now, sensitivity: level, route, params,
           transport: isWeb ? req.env.transport : transport, credentials: req.env.credentials,
         });
         if (r.status === "ok") {
