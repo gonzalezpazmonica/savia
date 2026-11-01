@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=50ea2cdfa40e5455a9dd797f1fbdd2b2c424b0223683579e3facf43766eda1f9
-timestamp=2026-11-01T13:55:46Z
-branch=agent/fix-soul-tsc-web-20261101
-head_commit=3847d491
-signature=312eafc386852c156e0ef942e18648ba5d038904e49f1b50c8c9d48a930d98fa
+diff_hash=dfe9dd7f656f4f9d9ecb879c37a31b48bac826e0ce7836a121356cfb2eb2c79c
+timestamp=2026-11-01T21:35:07Z
+branch=agent/spec-autorizaciones-20261023
+head_commit=03baef0a
+signature=666eeefdfade874aa6e7131526f0a2c2d94220039c60aa7d1d038eb20227c700
