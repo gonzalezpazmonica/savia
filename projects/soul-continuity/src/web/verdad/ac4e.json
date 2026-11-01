@@ -1,0 +1,55 @@
+{
+  "_doc": "Verdad del banco AC-4e escrita ANTES de ejecutar nada. Identidad sintética del operador: ana.prueba. Todo dato es ficticio. Q3 = elementos que entran y salen de Q1 entre dos instantes (cambio aplicado por el banco en el servidor, no por el navegador).",
+  "yo": "ana.prueba",
+  "umbral_precision": 0.9,
+  "sitios": {
+    "tareas": {
+      "tipo": "portal de tareas",
+      "q1": ["T-101", "T-102", "T-105", "T-106", "T-107"],
+      "q2": ["T-101", "T-102", "T-105", "T-106"],
+      "q4": ["T-101", "T-105", "T-106"],
+      "q3": { "entran": ["T-108"], "salen": ["T-102"] },
+      "prioridad_no_alterada": { "T-105": "normal" }
+    },
+    "aprobaciones": {
+      "tipo": "panel de aprobaciones",
+      "q1": ["A-1", "A-2", "A-5", "A-7"],
+      "q2": ["A-1", "A-2", "A-5"],
+      "q4": ["A-1", "A-5"],
+      "q3": { "entran": ["A-8"], "salen": ["A-2"] }
+    },
+    "noticias": {
+      "tipo": "intranet de noticias",
+      "q1": ["N-2", "N-6"],
+      "q2": ["N-2", "N-3", "N-6"],
+      "q4": ["N-2", "N-6"],
+      "q3": { "entran": ["N-7"], "salen": ["N-2"] }
+    },
+    "correo": {
+      "tipo": "cliente de correo y chat que lee por POST",
+      "q1": ["M-1", "M-2", "M-5", "M-6", "C-1", "C-3", "C-4"],
+      "q2": ["M-1", "M-5", "M-6", "C-1", "C-4"]
+    }
+  },
+  "invariantes": {
+    "mutaciones_servidor": 0,
+    "peticiones_no_get_fuera_de_lista": 0,
+    "operaciones_post_fuera_de_lista": 0,
+    "envios_websocket_fuera_de_mantenimiento": 0,
+    "navegaciones_fuera_de_lista": 0,
+    "envios_formulario": 0,
+    "peticiones_a_externo": 0,
+    "descargas": 0,
+    "cambios_perfil_personal": 0,
+    "alertas_producidas": 0
+  },
+  "escenarios": {
+    "sesion_caducada": { "estado": "SESION_CADUCADA", "aviso_contiene": "vuelve a iniciar sesión", "elementos": 0, "intentos_login": 0 },
+    "operacion_nueva": { "estado": "DESACTIVADA", "aviso_contiene": "dejó de ser fiable", "elementos": 0, "persistente": true },
+    "cambio_dom": { "estado": "DESACTIVADA", "aviso_contiene": "dejó de ser fiable", "elementos": 0 },
+    "redireccion": { "mutaciones_servidor": 0, "nota": "pagina=2 → pagina=3 (permitida) → /approve (no permitida): el segundo salto se corta" },
+    "graphql_disfrazada": { "mutaciones_servidor": 0, "nota": "operationName de lectura con documento mutation" },
+    "accion_secuestrada": { "peticiones_fuera_de_accion": 0 },
+    "descarga_disfrazada": { "descargas": 0 }
+  }
+}
