@@ -122,7 +122,8 @@ export function autostartPlan(o: AutostartOptions): AutostartPlan {
   throw new Error(`arranque automático no soportado en ${o.platform}`);
 }
 
-export interface AutostartResult { ok: boolean; message: string; planned: string[] }
+/** `maybeActive`: estaba instalado y la desactivación falló; puede seguir en marcha hasta reiniciar sesión. */
+export interface AutostartResult { ok: boolean; message: string; planned: string[]; maybeActive?: boolean }
 
 const show = (c: Command) => [c.cmd, ...c.args].join(" ");
 
@@ -148,6 +149,7 @@ export async function uninstallAutostart(o: AutostartOptions, run: Run, opts: { 
   const planned = [...plan.disable.map(show), ...plan.files.map((f) => `borrar ${f.path}`)];
   if (opts.dryRun) return { ok: true, message: "simulación: no se ha borrado ni ejecutado nada", planned };
   const errors: string[] = [];
+  const installed = plan.files.some((f) => existsSync(f.path));
   // Desactivar puede fallar si nunca se activó: se sigue y se borran los ficheros igualmente.
   for (const c of plan.disable) {
     const r = await run(c.cmd, c.args);
@@ -155,6 +157,8 @@ export async function uninstallAutostart(o: AutostartOptions, run: Run, opts: { 
   }
   for (const f of plan.files) if (existsSync(f.path)) rmSync(f.path, { force: true });
   const left = plan.files.filter((f) => existsSync(f.path)).map((f) => f.path);
-  if (left.length) return { ok: false, message: `no se pudieron borrar: ${left.join(", ")}`, planned };
+  if (left.length) return { ok: false, message: `no se pudieron borrar: ${left.join(", ")}`, planned, maybeActive: true };
+  // Instalado y sin poder desactivarlo: los ficheros ya no están, pero el proceso puede seguir vivo.
+  if (installed && errors.length) return { ok: false, message: `ficheros borrados, pero falló la desactivación (puede seguir en marcha hasta reiniciar sesión): ${errors.join("; ")}`, planned, maybeActive: true };
   return { ok: true, message: errors.length ? `ficheros borrados; avisos al desactivar: ${errors.join("; ")}` : "arranque automático retirado", planned };
 }
