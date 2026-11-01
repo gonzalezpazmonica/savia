@@ -315,6 +315,21 @@ test('un estado ilegible falla cerrado', () => {
   assert.notEqual(estadoDesdeTexto(`${cab}parado=0\n`), null);
 });
 
+test('un estado con líneas repetidas falla cerrado (no se levanta un PARA en silencio)', () => {
+  const cab = 'soul-atencion-estado v2\nparado=1\n';
+  for (const extra of [
+    'parado=0', 'modo=FOCO,-\nmodo=DISPONIBLE,-', 'usado=10,1\nusado=10,0', 'usado=10,1\nusado=010,0', 'alerta_usada=10,1\nalerta_usada=10,0',
+    'resumen_inicio=5\nresumen_inicio=1', 'resumen_cierre=5\nresumen_cierre=5', 'veto=g\nveto=g', 'preguntada=a\npreguntada=a',
+  ]) {
+    assert.equal(estadoDesdeTexto(`${cab}${extra}\n`), null, extra);
+  }
+  // Claves distintas del mismo tipo sí conviven.
+  const ok = estadoDesdeTexto(`${cab}usado=10,1\nusado=20,2\nveto=g\nveto=h\npreguntada=a\npreguntada=b\n`);
+  assert.ok(ok?.parado);
+  assert.equal(ok?.usados.size, 2);
+  assert.equal(ok?.vetos.size, 2);
+});
+
 // --- niveles y ledger -----------------------------------------------------
 
 test('el contenido por encima del canal se redacta', () => {
@@ -398,5 +413,6 @@ test('un estado con vetos, ids vacíos o alertas agrupadas duplicadas falla cerr
   assert.equal(estadoDesdeTexto(`${cab}preguntada=\n`), null, 'preguntada vacía');
   assert.equal(estadoDesdeTexto(`${cab}excedida=\n`), null, 'excedida vacía');
   assert.equal(estadoDesdeTexto(`${cab}excedida=a\nexcedida=a\n`), null, 'excedida duplicada');
+  assert.equal(estadoDesdeTexto(`${cab}excedida=a%\nexcedida=a%25\n`), null, 'excedida duplicada tras decodificar');
   assert.deepEqual(estadoDesdeTexto(`${cab}excedida=a\nexcedida=b\n`)?.excedidas, ['a', 'b']);
 });

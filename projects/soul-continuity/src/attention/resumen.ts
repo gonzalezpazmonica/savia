@@ -1,8 +1,10 @@
 // Resúmenes de inicio y de cierre a la hora fijada por la persona. Son mensajes programados:
 // no gastan presupuesto. Recogen lo que quedó pendiente en la bandeja (avisos que excedieron
-// el presupuesto, diferidos por el modo, alertas sin marcar) sin tocar su estado: solo la
-// persona resuelve algo.
+// el presupuesto, diferidos por el modo, alertas sin marcar). Lo que solo informa sale una vez:
+// tras el resumen ya está entregado. Lo que pide una decisión sigue pendiente hasta que la
+// persona responde; el resumen nunca resuelve una decisión.
 
+import type { Item } from './bandeja.ts';
 import type { Politica } from './politica.ts';
 import { DIA, type Minuto } from './tiempo.ts';
 
@@ -42,6 +44,7 @@ export function resumenesDebidos(pol: Politica, ahora: Minuto): MensajeResumen[]
   const cfg = pol.config.resumenes;
   if (!cfg) return [];
   const salida: MensajeResumen[] = [];
+  const entregados = new Set<Item>();
   const casos: Array<[TipoResumen, number | undefined, 'inicio' | 'cierre']> = [
     ['INICIO', cfg.inicio, 'inicio'],
     ['CIERRE', cfg.cierre, 'cierre'],
@@ -55,7 +58,10 @@ export function resumenesDebidos(pol: Politica, ahora: Minuto): MensajeResumen[]
     pol.estado.resumenes[clave] = programado;
     const grupos: GrupoResumen[] = pol.bandeja.grupos().map(([k, items]) => ({
       objetivo: k === null ? null : k.objetivo,
-      lineas: items.map((i) => ({ eventoId: i.eventoId, texto: i.texto })),
+      lineas: items.map((i) => {
+        if (i.decisionId === null) entregados.add(i);
+        return { eventoId: i.eventoId, texto: i.texto };
+      }),
     }));
     const pendientes = grupos.reduce((n, g) => n + g.lineas.length, 0);
     const titulo = tipo === 'INICIO' ? 'Resumen de inicio' : 'Resumen de cierre';
@@ -64,5 +70,7 @@ export function resumenesDebidos(pol: Politica, ahora: Minuto): MensajeResumen[]
       texto: `${titulo}: ${pendientes} ${pendientes === 1 ? 'pendiente' : 'pendientes'}.`,
     });
   }
+  // Al final, para que inicio y cierre debidos a la vez lleven lo mismo.
+  for (const i of entregados) i.pendiente = false;
   return salida;
 }

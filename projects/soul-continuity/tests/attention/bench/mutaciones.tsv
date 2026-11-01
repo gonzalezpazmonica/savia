@@ -49,3 +49,10 @@ M47 un origen sin autenticar detiene	FALLA	pasa	MUERTA
 M48 un origen sin autenticar veta	FALLA	pasa	MUERTA
 M49 franja con horas fuera de rango	FALLA	pasa	MUERTA
 M50 el estado acepta alertas agrupadas duplicadas	FALLA	pasa	MUERTA
+M51 lo avisado ahora sigue pendiente	FALLA	pasa	MUERTA
+M52 el resumen resuelve decisiones	FALLA	pasa	MUERTA
+M53 el resumen repite lo ya entregado	FALLA	pasa	MUERTA
+M54 la web degrada cualquier tipo con regla	FALLA	pasa	MUERTA
+M55 una ruta desconocida es API	FALLA	pasa	MUERTA
+M56 el estado acepta un PARA repetido	FALLA	pasa	MUERTA
+M57 contadores repetidos por ventana se aceptan	FALLA	pasa	MUERTA

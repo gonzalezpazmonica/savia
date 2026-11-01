@@ -29,8 +29,9 @@ test('100 avisos simultáneos en ventana no superan el presupuesto', () => {
   let contactos = 0;
   for (let i = 0; i < 100; i++) if (pol.decidir(notificacion(`n${i}`), ahora).contactarAhora) contactos++;
   assert.equal(contactos, 3);
-  // el resto no se pierde: espera en la bandeja para el siguiente resumen
-  assert.equal(pol.bandeja.grupos().flatMap(([, v]) => v).length, 100);
+  // el resto no se pierde: espera en la bandeja para el siguiente resumen; lo avisado ya llegó
+  assert.equal(pol.bandeja.grupos().flatMap(([, v]) => v).length, 97);
+  assert.equal(pol.bandeja.items().length, 100, 'lo avisado sigue en la bandeja para explicarlo');
 });
 
 test('el presupuesto se comparte entre avisos y preguntas y no cuenta alertas', () => {
@@ -328,17 +329,52 @@ test('un resumen que llega muy tarde no se emite; sin horas configuradas, ningun
   assert.deepEqual(new Politica(cfg({ resumenes: { inicio: DIA } })).resumenesDebidos(t(1, 0, 0)), [], 'hora inválida');
 });
 
-test('el resumen recoge lo diferido y excedido sin resolverlo, y redacta lo que no puede viajar', () => {
+test('el resumen recoge lo diferido y excedido sin resolver decisiones, y redacta lo que no puede viajar', () => {
   const pol = new Politica(conResumenes());
   for (let i = 0; i < 5; i++) pol.decidir({ ...notificacion(`n${i}`), objetivo: 'g', texto: `aviso ${i}` }, t(0, 10, 0));
   pol.decidir({ ...conNivel(aviso('sec'), 4), texto: 'dato N4' }, t(0, 10, 0));
   pol.decidir(alerta('al', 'solo-foco'), t(1, 3, 0));
+  pol.decidir(deAgente('q', { k: 'DECISION', decisionId: 'd-q' }), t(1, 3, 0));
   const [r] = pol.resumenesDebidos(t(1, 8, 30));
   assert.ok(r);
-  assert.equal(r.pendientes, 7);
+  // 2 avisos excedidos + aviso N4 agrupado + alerta diferida + decisión fuera de ventana;
+  // los 3 avisos ya entregados no cuentan.
+  assert.equal(r.pendientes, 5);
+  const ids = r.grupos.flatMap((g) => g.lineas).map((l) => l.eventoId);
+  for (const id of ['n0', 'n1', 'n2']) assert.ok(!ids.includes(id), `${id} ya se avisó`);
   assert.ok(!JSON.stringify(r).includes('dato N4'));
   assert.equal(r.grupos.flatMap((g) => g.lineas).find((l) => l.eventoId === 'sec')?.texto, null);
-  assert.equal(pol.bandeja.items().every((i) => i.pendiente), true, 'resumir no resuelve');
+  assert.equal(pol.bandeja.porDecision('d-q')?.pendiente, true, 'resumir no resuelve una decisión');
+});
+
+test('lo que solo informa sale en un resumen una vez; la decisión sigue hasta que se responde', () => {
+  const pol = new Politica(conResumenes());
+  for (let i = 0; i < 4; i++) pol.decidir(notificacion(`n${i}`), t(0, 10, 0));
+  const c = pol.resumenesDebidos(t(0, 17, 45));
+  assert.deepEqual(c[0]?.grupos.flatMap((g) => g.lineas).map((l) => l.eventoId), ['n3']);
+  pol.decidir(deAgente('q', { k: 'DECISION', decisionId: 'd-q' }), t(0, 20, 0));
+  const [i1] = pol.resumenesDebidos(t(1, 8, 30));
+  assert.ok(i1);
+  assert.deepEqual(i1.grupos.flatMap((g) => g.lineas).map((l) => l.eventoId), ['q'], 'n3 no se repite');
+  const [c1] = pol.resumenesDebidos(t(1, 17, 45));
+  assert.equal(c1?.pendientes, 1, 'la decisión sin responder vuelve');
+  assert.ok(pol.control({ k: 'RESPONDER', decisionId: 'd-q' }, 'PERSONA', t(1, 18, 0)));
+  assert.equal(pol.resumenesDebidos(t(2, 8, 30))[0]?.pendientes, 0);
+});
+
+test('una alerta entregada no vuelve en el resumen; la que superó el tope, sí', () => {
+  const pol = new Politica({ ...conResumenes(), topeAlertas: 1 });
+  pol.decidir(alerta('a0', 'todos'), t(0, 10, 0));
+  pol.decidir(alerta('a1', 'todos'), t(0, 10, 0));
+  const [c] = pol.resumenesDebidos(t(0, 17, 45));
+  assert.deepEqual(c?.grupos.flatMap((g) => g.lineas).map((l) => l.eventoId), ['a1']);
+});
+
+test('inicio y cierre debidos a la vez llevan lo mismo', () => {
+  const pol = new Politica(cfg({ resumenes: { inicio: 8 * 60, cierre: 8 * 60 + 30 } }));
+  for (let i = 0; i < 4; i++) pol.decidir(notificacion(`n${i}`), t(0, 10, 0));
+  const r = pol.resumenesDebidos(t(1, 8, 45));
+  assert.deepEqual(r.map((x) => x.pendientes), [1, 1]);
 });
 
 test('un resumen emitido no se repite tras un reinicio', () => {

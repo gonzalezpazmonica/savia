@@ -69,18 +69,29 @@ function par(v: string): [number, number] | null {
   return x === null || y === null || y < 0 ? null : [x, y];
 }
 
-/** Cualquier línea desconocida o mal formada devuelve `null`. */
+const SINGULARES: ReadonlySet<string> = new Set(['parado', 'modo', 'resumen_inicio', 'resumen_cierre']);
+
+/** Cualquier línea desconocida, mal formada o repetida devuelve `null`. */
 export function estadoDesdeTexto(s: string): Estado | null {
   const lineas = s.split('\n');
   if (lineas.at(-1) === '') lineas.pop();
   if (lineas[0] !== CABECERA) return null;
   const e = estadoVacio();
   let vistoParado = false;
+  // El serializador nunca repite una línea: un duplicado es un fichero corrupto o manipulado
+  // (p. ej. `parado=1` seguido de `parado=0` levantaría el PARA) y se rechaza entero.
+  const vistas = new Set<string>();
   for (const l of lineas.slice(1)) {
     const ix = l.indexOf('=');
     if (ix < 0) return null;
     const k = l.slice(0, ix);
     const v = l.slice(ix + 1);
+    // Una ventana por contador, una vez cada clave singular, un valor (decodificado) por lista.
+    const unica = k === 'usado' || k === 'alerta_usada'
+      ? `${k}=${entero(v.split(',')[0] ?? '')}`
+      : SINGULARES.has(k) ? k : `${k}=${decod(v)}`;
+    if (vistas.has(unica)) return null;
+    vistas.add(unica);
     switch (k) {
       case 'parado':
         if (v !== '0' && v !== '1') return null;
@@ -112,7 +123,7 @@ export function estadoDesdeTexto(s: string): Estado | null {
         break;
       }
       case 'excedida':
-        if (v === '' || e.excedidas.includes(decod(v))) return null;
+        if (v === '') return null;
         e.excedidas.push(decod(v));
         break;
       case 'preguntada':

@@ -10,6 +10,8 @@
 // M37–M41: redacción fail-closed y puente con el contrato (`src/contract`, que también se copia).
 // M42–M50: revisión de la PR #1441 (la web no autentica, alertas vetadas o vencidas, control,
 // franjas y estado).
+// M51–M57: segunda revisión de la PR #1441 (lo entregado no queda pendiente, la web solo
+// degrada avisos, ruta desconocida fail-closed y estado sin líneas repetidas).
 //
 // Uso: node --experimental-strip-types tests/attention/bench/mutaciones.ts
 import { spawnSync } from 'node:child_process';
@@ -52,7 +54,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M22 alerta sobre el tope se pierde', POL, 'this.estado.excedidas.push(ev.id);', 'void 0;'],
   ['M23 urgencia inyectada eleva a alerta', POL, 'const regla = this.reglaDe(ev);', `const regla = this.reglaDe(ev) ?? (ev.urgenciaEnContenido === 'CRITICA' ? { codigo: 'x', modos: ${TODOS} } : null);`],
   ['M24 regla en web es alerta', POL, '      if (web) {\n        // Por la web', '      if (false) {\n        // Por la web'],
-  ['M25 aviso repetido gasta presupuesto otra vez', POL, 'this.estado.preguntadas.add(ev.id);\n      this.aBandeja(ev, null, false, ap, redactado);', 'this.aBandeja(ev, null, false, ap, redactado);'],
+  ['M25 aviso repetido gasta presupuesto otra vez', POL, 'this.estado.preguntadas.add(ev.id);\n      this.aBandeja(ev, null, false, ap, redactado, dec.contactarAhora);', 'this.aBandeja(ev, null, false, ap, redactado, dec.contactarAhora);'],
   ['M26 alerta repetida se duplica', POL, 'if (this.estado.preguntadas.has(ev.id)) {\n      const dec', 'if (false) {\n      const dec'],
   ['M27 resumen antes de su hora', RES, 'return hoy <= ahora ? hoy : hoy - DIA;', 'return hoy;'],
   ['M28 resumen repetido', RES, 'if (previo !== null && previo >= programado) continue;', ''],
@@ -67,7 +69,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M37 nivel fuera del contrato sin forzar a N4', PUE, '? NIVELES[level as Level] : 4;', '? NIVELES[level as Level] : (undefined as never);'],
   ['M38 redacción sin validar el nivel', POL, '!(NIVEL_VALIDO(nivel) && NIVEL_VALIDO(canal) && (nivel as number) <= (canal as number))', '(nivel as number) > (canal as number)'],
   ['M39 en la web solo se degradan las reglas de remitente', POL, '      if (web) {\n        // Por la web', '      if (regla.porRemitente === true && web) {\n        // Por la web'],
-  ['M40 el puente autentica remitentes de la web', PUE, "  if (route === 'web') return 'NO_AUTENTICADO';\n", ''],
+  ['M40 el puente autentica remitentes de la web', PUE, "  if (rutaDeContrato(route) === 'WEB') return 'NO_AUTENTICADO';\n", ''],
   ['M41 el puente autentica el remitente desconocido', PUE, "if (auth === 'unknown') return 'DESCONOCIDO';", "if (auth === 'unknown') return 'AGENTE_AUTENTICADO';"],
   ['M42 la política se fía del origen declarado en la web', POL, 'let sinAutenticar = web || (', 'let sinAutenticar = ('],
   ['M43 lo desconocido autentica', POL, "(ev.origen !== 'PERSONA' && ev.origen !== 'AGENTE_AUTENTICADO')", "ev.origen === 'NO_AUTENTICADO'"],
@@ -77,7 +79,14 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M47 un origen sin autenticar detiene', POL, "if (!autenticado) return false;\n        this.estado.parado = true;", 'this.estado.parado = true;'],
   ['M48 un origen sin autenticar veta', POL, "if (!autenticado || c.objetivo === '') return false;", "if (c.objetivo === '') return false;"],
   ['M49 franja con horas fuera de rango', TIE, 'hh >= 0 && hh < 24', 'hh >= 0 && hh <= 24'],
-  ['M50 el estado acepta alertas agrupadas duplicadas', EST, "if (v === '' || e.excedidas.includes(decod(v))) return null;", "if (v === '') return null;"],
+  ['M50 el estado acepta alertas agrupadas duplicadas', EST, "SINGULARES.has(k) ? k : `${k}=${decod(v)}`;", "SINGULARES.has(k) ? k : `${l}#${vistas.size}`;"],
+  ['M51 lo avisado ahora sigue pendiente', POL, 'pendiente: !(entregado && decisionId === null),', 'pendiente: true,'],
+  ['M52 el resumen resuelve decisiones', RES, 'if (i.decisionId === null) entregados.add(i);', 'entregados.add(i);'],
+  ['M53 el resumen repite lo ya entregado', RES, 'for (const i of entregados) i.pendiente = false;', ''],
+  ['M54 la web degrada cualquier tipo con regla', POL, "if (tipo.k === 'AVISO' || tipo.k === 'NOTIFICACION') {\n          degradadaAAviso", 'if (true) {\n          degradadaAAviso'],
+  ['M55 una ruta desconocida es API', PUE, "return RUTAS_API.has(route as string) ? 'API' : 'WEB';", "return route === 'web' ? 'WEB' : 'API';"],
+  ['M56 el estado acepta un PARA repetido', EST, 'if (vistas.has(unica)) return null;', ''],
+  ['M57 contadores repetidos por ventana se aceptan', EST, "? `${k}=${entero(v.split(',')[0] ?? '')}`", "? l"],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));

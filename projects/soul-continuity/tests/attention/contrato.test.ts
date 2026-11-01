@@ -48,9 +48,36 @@ test('valores ausentes o desconocidos no autentican (fail-closed)', () => {
   }
 });
 
-test('la ruta web se traduce a WEB y el resto a API', () => {
+test('la ruta web se traduce a WEB y las rutas del contrato con identidad, a API', () => {
   assert.equal(rutaDeContrato('web'), 'WEB');
   for (const r of ['graph', 'api', 'local'] as const) assert.equal(rutaDeContrato(r), 'API');
+  assert.deepEqual(ROUTES.filter((r) => rutaDeContrato(r) === 'API').sort(), ['api', 'graph', 'local'], 'la tabla cubre el contrato');
+});
+
+test('una ruta desconocida es WEB y no autentica (fail-closed)', () => {
+  for (const r of ['WEB', 'Api', 'smtp', '', null, undefined]) {
+    assert.equal(rutaDeContrato(r), 'WEB', String(r));
+    assert.equal(origenDeContrato('tenant', r), 'NO_AUTENTICADO', String(r));
+  }
+});
+
+test('por la web, un permiso, decisión o reintento con código de regla no se degrada a aviso', () => {
+  const casos: Array<[Evento, string, string]> = [
+    [deAgente('p', { k: 'PETICION_PERMISO', dentroDeContrato: false }), 'BLOQUEAR_Y_ELEVAR', 'PERMISO_ILEGITIMO'],
+    [deAgente('p2', { k: 'PETICION_PERMISO', dentroDeContrato: true }), 'BLOQUEAR_Y_ELEVAR', 'PERMISO_ILEGITIMO'],
+    [decision('d', 'g'), 'REGISTRAR', 'ORIGEN_NO_AUTENTICADO'],
+    [aprobacion('s', 'g'), 'REGISTRAR', 'ORIGEN_NO_AUTENTICADO'],
+    [deAgente('r', { k: 'REINTENTO', efectoPrevio: 'DESCONOCIDO' }), 'REGISTRAR', 'ORIGEN_NO_AUTENTICADO'],
+  ];
+  for (const [base, accion, mot] of casos) {
+    const ev: Evento = { ...base, codigoAlerta: 'fuga-detectada', origen: 'DESCONOCIDO', ruta: 'WEB' };
+    const pol = new Politica(opA());
+    const d = pol.decidir(ev, t(0, 10, 0));
+    assert.equal(d.accion, accion, base.id);
+    assert.ok(mismoMotivo(d.motivo, motivo(mot as never)), base.id);
+    assert.ok(!d.contactarAhora && !d.degradadaAAviso, base.id);
+    assert.equal(pol.estado.usados.size, 0, `${base.id} no gasta presupuesto`);
+  }
 });
 
 test('la ruta web nunca autentica: `unknown` es desconocido y el resto, sin autenticar', () => {

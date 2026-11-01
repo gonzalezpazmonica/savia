@@ -11,9 +11,14 @@ export function nivelDeContrato(level: Level | string | null | undefined): Nivel
   return Object.hasOwn(NIVELES, level as string) ? NIVELES[level as Level] : 4;
 }
 
-/** La ruta `web` no tiene identidad autenticada; cualquier otra ruta es API. */
-export function rutaDeContrato(route: Route): Ruta {
-  return route === 'web' ? 'WEB' : 'API';
+const RUTAS_API: ReadonlySet<string> = new Set<Route>(['graph', 'api', 'local']);
+
+/**
+ * Solo las rutas con identidad del contrato son API. `web` y cualquier valor inesperado (dato
+ * externo, versión nueva, mayúsculas) son `WEB`, que no autentica (fail-closed).
+ */
+export function rutaDeContrato(route: Route | string | null | undefined): Ruta {
+  return RUTAS_API.has(route as string) ? 'API' : 'WEB';
 }
 
 /**
@@ -25,8 +30,11 @@ export function rutaDeContrato(route: Route): Ruta {
  * `auth`. La política reconoce la ruta `WEB` por sí misma: baja a aviso las reglas de alerta
  * (AC-4c) y lo demás que llega por la web no pide nada a la persona.
  */
-export function origenDeContrato(auth: SenderAuth | string | null | undefined, route: Route): Origen {
+export function origenDeContrato(
+  auth: SenderAuth | string | null | undefined,
+  route: Route | string | null | undefined,
+): Origen {
   if (auth === 'unknown') return 'DESCONOCIDO';
-  if (route === 'web') return 'NO_AUTENTICADO';
+  if (rutaDeContrato(route) === 'WEB') return 'NO_AUTENTICADO';
   return auth === 'tenant' || auth === 'dkim_dmarc' ? 'AGENTE_AUTENTICADO' : 'NO_AUTENTICADO';
 }

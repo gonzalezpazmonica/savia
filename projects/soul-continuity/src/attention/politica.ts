@@ -163,10 +163,15 @@ export class Politica {
     });
   }
 
-  private aBandeja(ev: Evento, decisionId: string | null, individual: boolean, ap: Aplazamiento | null, redactado: boolean): void {
+  /**
+   * Mete el evento en la bandeja. Lo que no pide decisión (`decisionId` nulo) y ya se entregó
+   * ahora no queda pendiente: el resumen no debe repetir lo que la persona ya recibió.
+   */
+  private aBandeja(ev: Evento, decisionId: string | null, individual: boolean, ap: Aplazamiento | null, redactado: boolean, entregado = false): void {
     const item: Item = {
       eventoId: ev.id, decisionId, objetivo: ev.objetivo, plazo: ev.plazo, coste: ev.costeRetraso,
-      individual, texto: redactado ? null : ev.texto, historial: ap ? [ap] : [], pendiente: true,
+      individual, texto: redactado ? null : ev.texto, historial: ap ? [ap] : [],
+      pendiente: !(entregado && decisionId === null),
     };
     this.bandeja.meter(item);
   }
@@ -203,10 +208,14 @@ export class Politica {
       if (web) {
         // Por la web una regla nunca es alerta, solo aviso, sea o no de remitente. Es lo único
         // de la web que puede avisar, porque lo pide una regla de la persona; un remitente que
-        // se sabe suplantado (`NO_AUTENTICADO`) ni eso.
-        degradadaAAviso = true;
-        sinAutenticar = ev.origen === 'NO_AUTENTICADO';
-        tipo = { k: 'NOTIFICACION' };
+        // se sabe suplantado (`NO_AUTENTICADO`) ni eso. Solo se degrada lo que ya era aviso: un
+        // permiso, una decisión o un reintento por la web siguen sin autenticar y se bloquean
+        // o se registran como tales.
+        if (tipo.k === 'AVISO' || tipo.k === 'NOTIFICACION') {
+          degradadaAAviso = true;
+          sinAutenticar = ev.origen === 'NO_AUTENTICADO';
+          tipo = { k: 'NOTIFICACION' };
+        }
       } else if (!sinAutenticar) {
         return this.decidirAlerta(ev, regla, ahora, d);
       }
@@ -250,7 +259,7 @@ export class Politica {
         ap = { en: ahora, accion: dec.accion, motivo: dec.motivo, hasta: h.hasta };
       }
       this.estado.preguntadas.add(ev.id);
-      this.aBandeja(ev, null, false, ap, redactado);
+      this.aBandeja(ev, null, false, ap, redactado, dec.contactarAhora);
       this.anotarLedger(ev, 'AVISO', ahora, dec);
       return dec;
     }
@@ -374,7 +383,7 @@ export class Politica {
         ap = { en: ahora, accion: dec.accion, motivo: dec.motivo, hasta: null };
       }
     }
-    this.aBandeja(ev, null, true, ap, dec.redactado);
+    this.aBandeja(ev, null, true, ap, dec.redactado, dec.contactarAhora);
     this.anotarLedger(ev, 'ALERTA', ahora, dec);
     return dec;
   }
