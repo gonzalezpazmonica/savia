@@ -1,10 +1,10 @@
-/** Lado de la app del emparejamiento directo (soul-pair-v1), para las pruebas de punta a punta. */
+/** Lado de la app del emparejamiento directo (soul-pair-v2), para las pruebas de punta a punta. */
 import { randomBytes } from "node:crypto";
 import { request } from "node:https";
 import { connect as tlsConnect } from "node:tls";
 import type { KeyObject } from "node:crypto";
 import { thumbprint } from "../src/api/dpop.ts";
-import { clientProof, normalizeCode, serverProof, spkiSha256Der } from "../src/api/pairing.ts";
+import { PAIR_VERSION, clientProof, parseToken, serverProof, spkiSha256Der } from "../src/api/pairing.ts";
 
 /** SPKI (SHA-256, base64url) del certificado que la app ve en la conexión. */
 export function spkiVisto(port: number): Promise<string> {
@@ -35,14 +35,14 @@ export const jwkDe = (k: { publicKey: KeyObject }) => {
 };
 
 /** Empareja como la app: comprueba la huella que ve y la prueba del servidor antes de enviar la suya. */
-export async function emparejarComoApp(port: number, tecleado: string, key: { publicKey: KeyObject }, nombre = "movil") {
-  const code = normalizeCode(tecleado);
-  if (!code) throw new Error("código mal tecleado");
+export async function emparejarComoApp(port: number, pegado: string, key: { publicKey: KeyObject }, nombre = "movil") {
+  const code = parseToken(pegado);
+  if (!code) throw new Error("clave mal copiada");
   const cn = randomBytes(32).toString("base64url");
-  const ch = await postPair(port, "/v1/pair/challenge", { client_nonce: cn });
+  const ch = await postPair(port, "/v1/pair/challenge", { version: PAIR_VERSION, client_nonce: cn });
   if (ch.status !== 200) throw new Error(`reto: ${ch.status} ${ch.json?.code}`);
   if (ch.json.spki_sha256 !== await spkiVisto(port)) throw new Error("intermediario: la huella no es la del certificado que se ve");
-  if (ch.json.proof !== serverProof(code, cn, ch.json.server_nonce, ch.json.spki_sha256)) throw new Error("la prueba del servidor no casa con el código");
+  if (ch.json.proof !== serverProof(code, cn, ch.json.server_nonce, ch.json.spki_sha256)) throw new Error("la prueba del servidor no casa con la clave");
   const jkt = thumbprint(jwkDe(key));
   const fin = await postPair(port, "/v1/pair/complete", { server_nonce: ch.json.server_nonce, device_name: nombre, device_jwk: jwkDe(key), proof: clientProof(code, cn, ch.json.server_nonce, jkt) });
   if (fin.status !== 200) throw new Error(`completar: ${fin.status} ${fin.json?.code}`);

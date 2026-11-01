@@ -298,19 +298,20 @@ test("orden desconocida o texto libre: ayuda y código 2, sin interpretar", asyn
   assert.match(s.err.join("\n"), /órdenes/);
 });
 
-test("pair: abre una ventana con código, IP, puerto y huella corta; no muestra ni guarda ningún token", async () => {
+test("pair: abre una ventana con clave soulpk_, IP, puerto y huella corta; no muestra ni guarda ningún token de dispositivo", async () => {
   const s = setup();
   const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));
   cfg.api = { listen: ["127.0.0.1"], port: 8787 };
   (await import("node:fs")).writeFileSync(join(s.dir, "config.json"), JSON.stringify(cfg));
   assert.equal(await runCli(["pair", "--json"], s.deps), 0);
   const j = JSON.parse(text(s));
-  assert.match(j.codigo, /^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/);
+  assert.match(j.clave, /^soulpk_[0-9A-Za-z]{30}_[0-9A-Za-z]{6}$/);
+  assert.equal(j.codigo, undefined, "sin código v1");
   assert.equal(j.token, undefined);
   assert.match(j.pin, /^sha256\//);
   assert.deepEqual(j.direcciones, ["127.0.0.1"]);
   assert.equal(j.puerto, 8787);
-  assert.equal(j.qr, `soul://pair?h=127.0.0.1&p=8787&c=${j.codigo}`);
+  assert.equal(j.qr, `soul://pair?v=2&h=127.0.0.1&p=8787&k=${j.clave}&f=${j.huella_corta.replace(/ /g, "")}`);
   s.out.length = 0;
   assert.equal(await runCli(["devices", "--json"], s.deps), 0);
   assert.deepEqual(JSON.parse(text(s)).devices, [], "abrir la ventana no da de alta ningún dispositivo");

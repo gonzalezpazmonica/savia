@@ -64,7 +64,7 @@ test("instalar.md: init, status, login, pair, autostart y uninstall con HOME fal
   r = s.soul(["pair", "--json"]);
   assert.equal(r.status, 0, r.stderr);
   assert.match(JSON.parse(r.stdout).pin, /^sha256\//);
-  assert.match(JSON.parse(r.stdout).codigo, /^[0-9A-Z]{5}-[0-9A-Z]{5}$/);
+  assert.match(JSON.parse(r.stdout).clave, /^soulpk_[0-9A-Za-z]{30}_[0-9A-Za-z]{6}$/);
 
   r = s.soul(["autostart", "install", "--dry-run"]);
   assert.equal(r.status, 0, r.stderr);

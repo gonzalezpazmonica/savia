@@ -15,16 +15,16 @@
     "modo_directo": "Ver `x-emparejamiento-directo`: `soul pair` abre la ventana y el núcleo sirve el alta en la raíz (no bajo /api/v1/soul)."
   },
   "x-emparejamiento-directo": {
-    "version": "soul-pair-v1",
+    "version": "soul-pair-v2",
     "vectores": "src/contract/vectores-emparejamiento.json (los comprueban el núcleo y la app; la app copia el fichero tal cual)",
-    "ventana": "`soul pair` abre 10 minutos con un código de un solo uso: 10 caracteres Crockford base32 agrupados XXXXX-XXXXX. Normalización: mayúsculas, sin guiones ni espacios, I y L → 1, O → 0. Muestra IP, puerto, el código, la huella corta (16 primeros hex de SHA-256(SPKI) en grupos de 4) y el enlace `soul://pair?h=<ip>&p=<puerto>&c=<código>`. 3 pruebas fallidas bloquean la ventana; más de 10 retos por ventana dan PAIR_RATE.",
+    "ventana": "`soul pair` abre 10 minutos con una clave de emparejamiento de un solo uso al estilo de las API key: `soulpk_<30 base62>_<6 base62>` (178 bits de un CSPRNG; el sufijo es el CRC32 de la parte aleatoria y solo detecta errores de copia). Sensible a mayúsculas: solo se quitan los espacios en blanco de los extremos; la app valida formato y checksum antes de enviar nada. Muestra IP, puerto, la clave, la huella corta (16 primeros hex de SHA-256(SPKI) en grupos de 4) y un QR con `soul://pair?v=2&h=<ip>&p=<puerto>&k=<clave>&f=<huella corta sin espacios>`. 3 pruebas fallidas bloquean la ventana; más de 10 retos por ventana dan PAIR_RATE. soul-pair-v1 (código XXXXX-XXXXX) está retirado: PAIR_VERSION 426.",
     "tls": "Certificado hoja autofirmado (CA:false), sin cadena. Durante el alta la app no confía aún en él (TOFU provisional) y lo comprueba con `spki_sha256` y la prueba del servidor. Después fija `sha256/<base64 SPKI>`; si el certificado se renueva, hay que volver a emparejar.",
-    "hmac": "HMAC-SHA256 con clave = código normalizado (UTF-8); salida en base64url sin relleno. Servidor: \"soul-pair-v1|server|\" + client_nonce + \"|\" + server_nonce + \"|\" + spki_sha256. Cliente: \"soul-pair-v1|client|\" + client_nonce + \"|\" + server_nonce + \"|\" + jwk_thumbprint (RFC 7638).",
+    "hmac": "HMAC-SHA256 con clave = la clave de emparejamiento completa (UTF-8); salida en base64url sin relleno. Servidor: \"soul-pair-v2|server|\" + client_nonce + \"|\" + server_nonce + \"|\" + spki_sha256. Cliente: \"soul-pair-v2|client|\" + client_nonce + \"|\" + server_nonce + \"|\" + jwk_thumbprint (RFC 7638).",
     "operaciones": {
-      "POST /v1/pair/challenge": { "peticion": { "$ref": "#/components/schemas/PeticionRetoPar" }, "200": { "$ref": "#/components/schemas/RetoPar" }, "errores": [400, 410, 423, 429, 503] },
+      "POST /v1/pair/challenge": { "peticion": { "$ref": "#/components/schemas/PeticionRetoPar" }, "200": { "$ref": "#/components/schemas/RetoPar" }, "errores": [400, 410, 423, 426, 429, 503] },
       "POST /v1/pair/complete": { "peticion": { "$ref": "#/components/schemas/PeticionCompletarPar" }, "200": { "$ref": "#/components/schemas/ParCompletado" }, "errores": [400, 401, 410, 423, 503] }
     },
-    "errores": { "PAIR_EXPIRED": 410, "PAIR_BAD_PROOF": 401, "PAIR_LOCKED": 423, "PAIR_RATE": 429 },
+    "errores": { "PAIR_EXPIRED": 410, "PAIR_BAD_PROOF": 401, "PAIR_LOCKED": 423, "PAIR_RATE": 429, "PAIR_VERSION": 426 },
     "sin_dpop": "Estas dos operaciones no llevan token ni DPoP. Las siguientes peticiones llevan el token devuelto y la prueba DPoP con la clave registrada."
   },
   "paths": {
@@ -147,8 +147,8 @@
     },
     "schemas": {
       "PeticionRetoPar": {
-        "type": "object", "additionalProperties": false, "required": ["client_nonce"],
-        "properties": { "client_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "32 bytes aleatorios en base64url sin relleno." } }
+        "type": "object", "additionalProperties": false, "required": ["version", "client_nonce"],
+        "properties": { "version": { "const": "soul-pair-v2", "description": "Sin este campo (cliente soul-pair-v1) o con otro valor: 426 PAIR_VERSION." }, "client_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "32 bytes aleatorios en base64url sin relleno." } }
       },
       "RetoPar": {
         "type": "object", "additionalProperties": false, "required": ["server_nonce", "spki_sha256", "proof"],
@@ -179,7 +179,7 @@
         "type": "object", "additionalProperties": false, "required": ["code", "message", "requestId", "retryable"],
         "description": "Mismo sobre que Space (ErrorEnvelope, camelCase). `error` solo aparece con `DEVICE_REVOKED`.",
         "properties": {
-          "code": { "enum": ["INVALID_INPUT", "UNAUTHENTICATED", "ORIGIN_DENIED", "NOT_FOUND", "CONFLICT", "GONE", "LEVEL_NOT_ALLOWED", "RATE_LIMITED", "UNAVAILABLE", "PAIR_EXPIRED", "PAIR_BAD_PROOF", "PAIR_LOCKED", "PAIR_RATE"] },
+          "code": { "enum": ["INVALID_INPUT", "UNAUTHENTICATED", "ORIGIN_DENIED", "NOT_FOUND", "CONFLICT", "GONE", "LEVEL_NOT_ALLOWED", "RATE_LIMITED", "UNAVAILABLE", "PAIR_EXPIRED", "PAIR_BAD_PROOF", "PAIR_LOCKED", "PAIR_RATE", "PAIR_VERSION"] },
           "message": { "type": "string", "maxLength": 200 },
           "requestId": { "type": "string", "format": "uuid" },
           "retryable": { "type": "boolean" },

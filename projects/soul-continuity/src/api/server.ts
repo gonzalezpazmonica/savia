@@ -61,6 +61,10 @@ export class ErrorApi extends Error {
   }
 }
 const invalida = () => new ErrorApi(400, "INVALID_INPUT");
+/** Mensajes que la app puede mostrar tal cual cuando el código solo no basta. */
+const MENSAJES: Record<string, string> = {
+  PAIR_VERSION: "soul-pair-v1 retirado: actualiza la app; este Soul solo empareja con soul-pair-v2 (clave soulpk_)",
+};
 const noEncontrado = () => new ErrorApi(404, "NOT_FOUND");
 
 // ---------------------------------------------------------------- modelo
@@ -784,7 +788,7 @@ export function crearServidor(opts: OpcionesServidor) {
     } catch (err) {
       // Nunca se registran datos de trabajo: solo el tipo de error.
       const e = err instanceof ErrorApi ? err : (process.stderr.write(`soul api: ${(err as Error)?.name ?? "error"}\n`), new ErrorApi(503, "UNAVAILABLE"));
-      const sobre: Record<string, unknown> = { code: e.code, message: e.revocado ? "device revoked" : e.code.toLowerCase().replace(/_/g, " "), requestId: randomUUID(), retryable: e.code === "RATE_LIMITED" || e.code === "UNAVAILABLE" };
+      const sobre: Record<string, unknown> = { code: e.code, message: e.revocado ? "device revoked" : MENSAJES[e.code] ?? e.code.toLowerCase().replace(/_/g, " "), requestId: randomUUID(), retryable: e.code === "RATE_LIMITED" || e.code === "UNAVAILABLE" };
       if (e.revocado) sobre.error = "DEVICE_REVOKED";
       const extra: Record<string, string> = e.code === "UNAUTHENTICATED" ? { "WWW-Authenticate": "DPoP" } : e.retryAfter ? { "Retry-After": String(e.retryAfter) } : {};
       salir(e.status, sobre, extra);

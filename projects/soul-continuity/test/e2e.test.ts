@@ -1,7 +1,7 @@
 /**
  * Punta a punta (SE-490): la composición de producción con un adaptador real (GitHub) contra un
  * doble HTTP local, el almacén único sobre un doble de `secret-tool` y la API por TLS propio.
- * init → login → serve → pair por código (soul-pair-v1) → Q1–Q4 y sondeo por cursor con DPoP → corrección ligada al
+ * init → login → serve → pair por clave (soul-pair-v2) → Q1–Q4 y sondeo por cursor con DPoP → corrección ligada al
  * dispositivo → revoke de la fuente y unpair del móvil → uninstall, sin dejar estado ni tokens.
  */
 import { test } from "node:test";
@@ -94,7 +94,7 @@ test("e2e: instalar, emparejar, consultar Q1–Q4 por cursor, corregir, revocar 
     assert.equal(pair.c, 0, err.join("\n"));
     assert.equal(pair.j.token, undefined, "la CLI ya no muestra ningún token");
     const key = newKey();
-    const { token, device_id: device } = await emparejarComoApp(port, pair.j.codigo.toLowerCase(), key);
+    const { token, device_id: device } = await emparejarComoApp(port, `  ${pair.j.clave}\n`, key);
     const api = (path: string, method = "GET", body?: unknown) => new Promise<{ status: number; json: any }>((res, rej) => {
       const p = proof(key, { htm: method, htu: `https://127.0.0.1:${port}${path.split("?")[0]}`, iat: Date.now(), token });
       const q = request({ host: "127.0.0.1", port, path, method, ca, headers: { Authorization: `DPoP ${token}`, DPoP: p, ...(body ? { "Content-Type": "application/json" } : {}) } }, (r) => {

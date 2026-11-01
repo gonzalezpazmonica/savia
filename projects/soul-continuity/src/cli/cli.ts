@@ -27,7 +27,7 @@ import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeSoulSt
 import { autostartPlan, installAutostart, uninstallAutostart } from "../startup/autostart.ts";
 import { ensureInstallCert } from "../api/cert.ts";
 import { listDevices, revokeDevice } from "../api/devices.ts";
-import { formatCode, openPairingWindow, shortFingerprint } from "../api/pairing.ts";
+import { openPairingWindow, pairLink, shortFingerprint } from "../api/pairing.ts";
 import { validateListen } from "../api/listen.ts";
 import type { Run } from "../credentials/store.ts";
 import type { TokenSet } from "../adapters/oauth.ts";
@@ -426,8 +426,8 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
       }
 
       case "pair": {
-        // Emparejamiento directo: abre una ventana de 10 min con un código de un solo uso. La app
-        // no recibe ningún token por aquí: lo obtiene al completar el emparejamiento contra `serve`.
+        // Emparejamiento directo (soul-pair-v2): abre una ventana de 10 min con una clave de un solo
+        // uso. La app no recibe el token del dispositivo por aquí: lo obtiene al completar contra `serve`.
         const name = activeProfileName(cfg, deps.env);
         if (p.args.length) throw new Exit(2, "pair [--days N] (el nombre lo pone la app)");
         const listen = validateListen(cfg.api.listen);
@@ -435,17 +435,16 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         const days = typeof p.flags.days === "string" ? Number(p.flags.days) : undefined;
         if (days !== undefined && (!Number.isInteger(days) || days < 1 || days > 397)) throw new Exit(2, "--days: entre 1 y 397 días");
         const w = openPairingWindow(deps.dataDir, cfg.profiles[name].operator.ref, Date.parse(deps.now()), days);
-        const codigo = formatCode(w.code);
         const huella = shortFingerprint(tls.cert);
-        const ip = (a: string) => (a.includes(":") ? `[${a}]` : a);
-        const qr = `soul://pair?h=${ip(listen[0])}&p=${cfg.api.port}&c=${codigo}`;
+        const qr = pairLink(listen[0], cfg.api.port, w.token, huella);
         print([
-          "Emparejar la app (modo directo). Introduce en la app:",
-          `  IP: ${listen.join(", ")}`, `  puerto: ${cfg.api.port}`, `  código: ${codigo}`,
+          "Emparejar la app (modo directo). Pega en la app:",
+          `  IP: ${listen.join(", ")}`, `  puerto: ${cfg.api.port}`, `  clave de emparejamiento: ${w.token}`,
           `  huella del certificado: ${huella} (compárala con la que muestra la app)`,
           `  o enlace para QR: ${qr}`,
           `Válido hasta ${w.expires_at.slice(11, 16)} UTC (10 min), un solo uso y 3 intentos. «soul serve» tiene que estar en marcha.`,
-        ].join("\n"), { codigo, direcciones: listen, puerto: cfg.api.port, huella_corta: huella, pin: tls.pin, qr, caduca: w.expires_at });
+          "La clave es un secreto mientras dure la ventana: no compartas capturas de esta pantalla.",
+        ].join("\n"), { clave: w.token, direcciones: listen, puerto: cfg.api.port, huella_corta: huella, pin: tls.pin, qr, caduca: w.expires_at });
         return 0;
       }
 
