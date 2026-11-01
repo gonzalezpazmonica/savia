@@ -400,3 +400,22 @@ test("correo por delta: un enlace manipulado en la caché no se sigue; se resinc
   assert.ok(urls.every((u) => u.startsWith("/v1.0/me/mailFolders/") && !u.startsWith("//")), urls.join(" "));
   assert.ok(urls[0].startsWith("/v1.0/me/mailFolders/inbox/messages/delta?$select="));
 });
+
+// Un enviado mío cierra el hilo por su sentDateTime; sin fecha legible, falla cerrado.
+function mailFake(sent: J) {
+  const inbox = { id: "m1", conversationId: "c1", subject: "S", from: { emailAddress: { address: "ana@alfa.example" } }, toRecipients: [{ emailAddress: { address: ME } }], receivedDateTime: "2026-11-01T10:00:00Z" };
+  return { async request(req: { url: string }) {
+    const value = req.url.includes("/inbox/") ? [inbox] : [{ id: "m2", conversationId: "c1", subject: "Re: S", from: { emailAddress: { address: ME } }, toRecipients: [{ emailAddress: { address: "ana@alfa.example" } }], ...sent }];
+    return { status: 200, headers: {}, body: { value } };
+  } };
+}
+
+test("correo: un enviado con solo sentDateTime cierra la espera", async () => {
+  const r = await makeM365Adapters()["m365-mail"].read(ctxWith({ now: NOW, transport: mailFake({ sentDateTime: "2026-11-01T11:00:00Z" }) }));
+  assert.deepEqual(keys(r), []);
+});
+
+test("correo: un enviado sin fecha legible da error, no una espera abierta", async () => {
+  const r = await makeM365Adapters()["m365-mail"].read(ctxWith({ now: NOW, transport: mailFake({ sentDateTime: "ayer" }) }));
+  assert.equal(r.status, "error");
+});

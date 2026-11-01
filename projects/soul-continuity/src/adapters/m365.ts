@@ -35,7 +35,7 @@ export interface M365Options {
 }
 
 const G = { forbiddenIsConsent: true };
-const MAIL_FIELDS = "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,flag,webLink";
+const MAIL_FIELDS = "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,flag,webLink";
 const FOLDERS = ["inbox", "sentitems"] as const;
 
 function addrs(list: unknown): string[] {
@@ -43,17 +43,21 @@ function addrs(list: unknown): string[] {
 }
 
 /** Metadatos mínimos de un mensaje: lo único que se guarda en caché. */
-function mailMeta(x: J, myDomain: string, headers: boolean, authserv?: string[]): Meta | null {
+function mailMeta(x: J, myDomain: string, headers: boolean, authserv: string[] | undefined, sent: boolean): Meta | null {
   const id = safeRef(x?.id);
   const conv = typeof x?.conversationId === "string" ? x.conversationId : null;
   if (!id || !conv) return null;
+  // Un enviado mío sin fecha no puede cerrar su hilo: descartarlo dejaría la espera
+  // abierta (error en la dirección peligrosa). Se falla cerrado.
+  const at = sent ? toIso(x?.sentDateTime) ?? toIso(x?.receivedDateTime) : toIso(x?.receivedDateTime);
+  if (sent && !at) throw new Stop("error", "Graph (correo): un mensaje enviado no trae fecha legible; no se da una espera que podría estar cerrada.");
   const from = String(x?.from?.emailAddress?.address ?? "");
   const flagged = x?.flag?.flagStatus === "flagged" ? toIso(x?.flag?.dueDateTime?.dateTime, x?.flag?.dueDateTime?.timeZone === "UTC") : null;
   return {
     id, conv, from,
     to: addrs(x?.toRecipients),
     cc: addrs(x?.ccRecipients),
-    at: toIso(x?.receivedDateTime) ?? "",
+    at: at ?? "",
     subject: typeof x?.subject === "string" ? x.subject : "",
     auth: headers ? senderAuth(from, x?.internetMessageHeaders, myDomain, authserv) : "unknown",
     flag_due: flagged,
@@ -140,16 +144,16 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
       throw new Stop("error", "params.authserv_ids inválido.");
     }
     const authserv = as as string[] | undefined;
-    const toMeta = (x: J) => mailMeta(x, dom, headers, authserv);
+    const toMeta = (folder: string) => (x: J) => mailMeta(x, dom, headers, authserv, folder === "sentitems");
     const variant = `${dom}|${(authserv ?? []).map((v) => v.toLowerCase()).sort().join(",")}`;
     const msgs: Msg[] = [];
     const out: Claim[] = [];
     for (const folder of FOLDERS) {
       let metas: Meta[];
-      if (o.cache) metas = Object.values(await deltaFolder(ctx, tok, folder, select, toMeta, o.cache, maxPages, pageSize, variant));
+      if (o.cache) metas = Object.values(await deltaFolder(ctx, tok, folder, select, toMeta(folder), o.cache, maxPages, pageSize, variant));
       else {
         const items = await odataAll(ctx, "graph", tok, `/v1.0/me/mailFolders/${folder}/messages?$top=${pageSize}&$select=${select}`, "Graph (correo)", { ...G, maxPages });
-        metas = items.map(toMeta).filter((m): m is Meta => m !== null);
+        metas = items.map(toMeta(folder)).filter((m): m is Meta => m !== null);
       }
       for (const m of metas) {
         msgs.push({
