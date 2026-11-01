@@ -102,13 +102,8 @@ export function macBackend(run: Run): SecretBackend {
 
 // ---------------------------------------------------------------------------- Windows
 
-/** Script sin secretos: va como -EncodedCommand; los datos (y el secreto) llegan por stdin. */
-const PS_SCRIPT = String.raw`$ErrorActionPreference='Stop'
-[Console]::InputEncoding = [Text.Encoding]::UTF8
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-$d = [Console]::In.ReadToEnd() | ConvertFrom-Json
-Add-Type -TypeDefinition @"
-using System; using System.Runtime.InteropServices; using System.Text;
+/** Tipo C# sobre advapi32 (CredRead/CredWrite/CredDelete); también lo usa el almacén de los adaptadores. */
+export const SOUL_CRED_CS = String.raw`using System; using System.Runtime.InteropServices; using System.Text;
 public static class SoulCred {
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
   public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment;
@@ -125,7 +120,15 @@ public static class SoulCred {
     c.UserName = "soul-continuity"; c.Persist = 2; c.CredentialBlobSize = b.Length; c.CredentialBlob = Marshal.AllocHGlobal(b.Length);
     try { Marshal.Copy(b, 0, c.CredentialBlob, b.Length); return CredWriteW(ref c, 0); } finally { Marshal.FreeHGlobal(c.CredentialBlob); } }
   public static bool Delete(string t) { return CredDeleteW(t, 1, 0); }
-}
+}`;
+
+/** Script sin secretos: va como -EncodedCommand; los datos (y el secreto) llegan por stdin. */
+const PS_SCRIPT = String.raw`$ErrorActionPreference='Stop'
+[Console]::InputEncoding = [Text.Encoding]::UTF8
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$d = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Add-Type -TypeDefinition @"
+${SOUL_CRED_CS}
 "@
 switch ($d.op) {
   'get' { $v = [SoulCred]::Read($d.target); if ($null -eq $v) { exit 3 }; [Console]::Out.Write($v); exit 0 }
