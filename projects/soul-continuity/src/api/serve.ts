@@ -99,7 +99,9 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
       type Declarado = { modo?: unknown; hasta?: unknown; at?: unknown };
       const a = (() => { try { return readJson<Declarado | null>(join(operatorDir(deps.dataDir, ref), "attention.json"), null); } catch { return null; } })();
       // Ya aplicada (también antes de un reinicio: el `at` se guarda con el estado): no pisa lo que fijó después la app.
-      if (!a || typeof a.at !== "string" || typeof a.modo !== "string" || server.declaracionCli(ref) === a.at) continue;
+      if (!a) continue;
+      if (typeof a.at !== "string" || typeof a.modo !== "string") { deps.err("attention.json sin modo o sin «at»: se ignora (vuelve a ejecutar soul mode)"); continue; }
+      if (server.declaracionCli(ref) === a.at) continue;
       // Sin operador en la API (perfil creado tras arrancar) no se marca: se reintenta en el siguiente tic.
       const r = server.declararModo(ref, a.modo, typeof a.hasta === "string" ? a.hasta : null, a.at);
       if (r === "invalida") deps.err("soul mode no aplicado: modo o ventana inválidos (vuelve a declararlo)");

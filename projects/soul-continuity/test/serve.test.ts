@@ -14,7 +14,7 @@ import { listDevices } from "../src/api/devices.ts";
 import { ATTENTION_STATE } from "../src/api/serve.ts";
 import { operatorDir } from "../src/core/store.ts";
 import { LIMITES, crearServidor } from "../src/api/server.ts";
-import type { CliDeps } from "../src/cli/cli.ts";
+import { type CliDeps, runCli } from "../src/cli/cli.ts";
 
 function deps(dir: string, out: string[], err: string[]): CliDeps {
   return {
@@ -234,6 +234,33 @@ test("P2-9: límites de conexión y tiempos de espera propios en el servidor TLS
     assert.equal(h.requestTimeout, 15_000);
     assert.equal(h.keepAliveTimeout, 5_000);
   } finally { await srv.cerrar(); }
+});
+
+test("contrato soul mode → serve: la orden real de la CLI escribe lo que serve aplica (attention.json con at)", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const s = await start(dir, []);
+  try {
+    assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "DISPONIBLE", "control");
+    const d = deps(dir, [], []);
+    assert.equal(await runCli(["mode", "FOCO", "--for", "2h"], d), 0);
+    let modo = "";
+    for (let i = 0; i < 40 && modo !== "FOCO"; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      modo = (await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo;
+    }
+    assert.equal(modo, "FOCO", "lo que escribe `soul mode` llega a la app");
+  } finally { await s.stop(); }
+});
+
+test("attention.json sin «at» no se aplica y se avisa", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  writeFileSync(join(operatorDir(dir, "op-yo"), "attention.json"), JSON.stringify({ modo: "FOCO", hasta: new Date(Date.now() + 3_600_000).toISOString() }));
+  const err: string[] = [];
+  const out: string[] = [];
+  const s = await start(dir, out, deps(dir, out, err));
+  await s.stop();
+  assert.ok(err.some((l) => /sin modo o sin «at»/.test(l)), err.join("\n"));
 });
 
 test("P1-A: tras reiniciar serve, una declaración de soul mode ya aplicada no pisa el modo que fijó después la app", async () => {

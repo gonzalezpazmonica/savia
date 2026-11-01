@@ -309,7 +309,7 @@ export function crearServidor(opts: OpcionesServidor) {
     if (!caidas) opts.mundo.refrescar?.(ctx, o, ahora());
     // Solo se recuerda lo avisado de elementos vivos: uno que desaparece y vuelve se avisa de nuevo,
     // y el conjunto no crece sin tope.
-    for (const k of avisados(o)) if (!o.elementos.has(k.slice(k.indexOf("|") + 1))) avisados(o).delete(k);
+    if (!caidas) for (const k of avisados(o)) if (!o.elementos.has(k.slice(k.indexOf("|") + 1))) avisados(o).delete(k);
     const lim = ahora() - retencionMs;
     while (o.mensajes.length && o.mensajes[0].creado < lim) o.base = (o.mensajes.shift() as Msg).seq;
     for (const [id, e] of o.elementos) if (!e.fijo && o.elementos.size > 400 && e.nace < lim) o.elementos.delete(id);
