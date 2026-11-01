@@ -1,0 +1,24 @@
+{
+  "name": "soul-continuity-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Adaptador web de Soul Continuidad (SE-490): recetas de solo lectura y cortafuegos de tres capas sobre el navegador instalado",
+  "type": "module",
+  "engines": { "node": ">=22.6" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
+    "test:unit": "node --experimental-strip-types --no-warnings --test test/[!be]*.test.ts",
+    "bateria": "node --experimental-strip-types --no-warnings bench/bateria.ts",
+    "mutantes": "node --experimental-strip-types --no-warnings bench/mutantes.ts",
+    "sitios": "node --experimental-strip-types --no-warnings banco/servidor.ts",
+    "validar-grabacion": "node --experimental-strip-types --no-warnings adaptador/cli-grabacion.ts"
+  },
+  "dependencies": {
+    "playwright-core": "1.64.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "typescript": "5.8.3"
+  }
+}
