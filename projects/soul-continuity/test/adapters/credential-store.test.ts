@@ -132,6 +132,21 @@ test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", a
   assert.equal(await new CommandBackend(cmds(fail, fail), true).delete("k"), false);
 });
 
+test("macOS y Windows: set relee y falla si el almacén truncó o no guardó el valor", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
+  const sh = (name: string, body: string) => {
+    const f = join(dir, name);
+    writeFileSync(f, `#!/usr/bin/env node\n${body}\n`);
+    chmodSync(f, 0o755);
+    return f;
+  };
+  const okCmd = sh("ok", "process.exit(0);");
+  const stored = sh("stored", 'process.stdout.write("U0VDUkVUTw==\\n");'); // «SECRETO»
+  const cmds = { ...macosCommands, set: () => ({ cmd: okCmd, args: [], stdin: "" }), get: () => ({ cmd: stored, args: [], stdin: "" }) } as typeof macosCommands;
+  await new CommandBackend(cmds, true).set("k", "SECRETO");
+  await assert.rejects(new CommandBackend(cmds, true).set("k", "SECRETO-MAS-LARGO"), /íntegra/);
+});
+
 test("secret-tool ausente: falla cerrado con error, no devuelve vacío", async () => {
   const b = new SecretToolBackend({ command: "/nonexistent/secret-tool" });
   await assert.rejects(b.set("k", "v"));

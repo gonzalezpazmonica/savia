@@ -207,6 +207,9 @@ export class CommandBackend implements SecretBackend {
     const x = this.c.set(k, v);
     const r = await run(x.cmd, x.args, x.stdin);
     if (r.code !== 0) throw new Error("el almacén del sistema no guardó la credencial");
+    // Llavero y Credential Manager tienen límites de tamaño: releer detecta un valor truncado
+    // o rechazado en silencio en vez de dar por guardado un token que no sirve.
+    if ((await this.get(k)) !== v) throw new Error("el almacén del sistema no guardó la credencial íntegra (¿supera su tamaño máximo?)");
   }
   async delete(k: string) {
     const x = this.c.delete(k);

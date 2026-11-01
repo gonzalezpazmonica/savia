@@ -15,7 +15,9 @@ El adaptador `web` (navegador en un perfil dedicado, con recetas) y la ruta web 
 | `google-workspace` | `gmail.metadata`, `calendar.readonly`, `drive.readonly` y, opcional, `tasks.readonly` | Cabeceras de Gmail, calendario `primary`, Drive compartido y Tasks | `awaiting_reply`, `meeting`, `document_comments` y `dated_commitment` |
 | `jira` | `read:jira-work` | JQL `assignee = currentUser() AND statusCategory != Done` | `task_assigned` |
 | `azure-devops` | `vso.work`, `vso.code` | WIQL `@Me` en estado abierto; PR activas con revisión pedida | `task_assigned`, `review_request` |
-| `github` | `repo:read` | Búsqueda de revisiones pedidas, asignaciones y menciones | `review_request`, `task_assigned`, `mention` |
+| `github` | `repo:read` (etiqueta lógica, ver abajo) | Búsqueda de revisiones pedidas, asignaciones y menciones | `review_request`, `task_assigned`, `mention` |
+
+`repo:read` no es un scope OAuth de GitHub: es la etiqueta con la que se guarda la credencial. Con una app OAuth clásica, leer incidencias privadas exige `repo`, que incluye escritura, así que el mínimo privilegio no se cumple por esa vía. Hay que usar una GitHub App o un PAT de grano fino con Issues y Pull requests en solo lectura. El adaptador nunca escribe (`HttpTransport` solo deja salir GET), pero eso no limita lo que el token permitiría.
 
 `Mail.Read` se pide solo porque las cabeceras de autenticación del remitente (`internetMessageHeaders`) no llegan con `Mail.ReadBasic`. Sin ellas no hay alertas por remitente autenticado (AC-4c). Con `sender_identity: false`, el remitente queda `unknown` y no se dispara ninguna alerta.
 
@@ -33,7 +35,11 @@ Cada adaptador declara en `descriptors.ts`:
 - **Solo lectura.** `HttpTransport` deja salir GET y HEAD. Admite un POST solo si es una lectura de la lista cerrada `READ_POSTS`, que hoy contiene solo el WIQL de Azure DevOps. Cualquier otra petición se rechaza antes de salir.
 - **Solo metadatos.** Las peticiones de Graph usan `$select` y Gmail se lee con `format=metadata`. Si la API devuelve cuerpos de todos modos, el adaptador los descarta campo a campo. Hay un test del banco que lo comprueba con una API que ignora `$select`.
 - **«Esperando mi respuesta».** Se calcula solo con metadatos (`awaiting.ts`). El último mensaje del hilo no es del operador, el operador está en `To` (CC no cuenta) y no hay ningún enviado suyo posterior en el mismo buzón. Por eso cuenta una respuesta enviada desde cualquier cliente.
-- **Remitente autenticado (AC-4c).** El remitente cuenta como autenticado si es del mismo inquilino (`X-MS-Exchange-Organization-AuthAs: Internal` y su dominio) o si pasa DKIM y DMARC con `header.from` igual al dominio de `From`. La cabecera `From` sola nunca basta.
+- **Remitente autenticado (AC-4c).** El remitente cuenta como autenticado si es del mismo inquilino (`X-MS-Exchange-Organization-AuthAs: Internal` y su dominio) o si pasa DKIM y DMARC con `header.from` igual al dominio de `From`. La cabecera `From` sola nunca basta. En M365 se puede configurar:
+  - `params.tenant_domain`: dominio del inquilino. Si no se configura, se usa el de la primera identidad del operador.
+  - `params.authserv_ids`: `authserv-id` aceptados. Hace falta si delante de Exchange Online hay una pasarela de terceros o un escenario híbrido; sin él, se usa la primera `Authentication-Results`.
+
+  Un valor inválido falla cerrado (`error`).
 - **Paginación con tope.** Si una colección supera el tope de páginas, el adaptador falla cerrado (`unavailable`) y no entrega datos parciales. Para paginar, de un enlace `nextLink` o `Link` solo se usa la ruta: el token no puede salir hacia otro host.
 - **Delta queries del correo (riesgo R3).** Funcionan con `FileDeltaCache`:
   - cada lectura tiene un tope de páginas;
@@ -47,12 +53,15 @@ Cada adaptador declara en `descriptors.ts`:
   - El secreto viaja por stdin y nunca en argv.
   - Hay una entrada por operador, servicio y permisos.
   - Si no hay almacén reconocido, el adaptador no se activa.
-- **Autenticación.** Flujo de dispositivo (RFC 8628) o de navegador con PKCE y redirección a `127.0.0.1` (`oauth.ts`). Solo se aceptan identificadores de aplicación propios del operador o de su organización. Los de aplicaciones conocidas de Microsoft o Google se rechazan.
-- **Revocación (AC-5).** `revokeAdapter` borra la caché local del adaptador y sus tokens, en todas las variantes de permisos. No toca otros adaptadores ni otros operadores. No invalida la concesión en el proveedor: el refresh token sigue vigente allí hasta que caduque o la persona retire el acceso de la aplicación desde su cuenta.
+- **Autenticación.** Flujo de dispositivo (RFC 8628) o de navegador con PKCE y redirección a `127.0.0.1` (`oauth.ts`). Hay que usar un identificador de aplicación propio del operador o de su organización. `assertOwnClient` rechaza los de aplicaciones conocidas de Microsoft y Google, pero es una salvaguarda contra errores, no un control: la lista es incompleta por naturaleza y el propietario lo declara el operador.
+- **Revocación (AC-5).** `revokeAdapter` borra primero la caché local del adaptador y después sus tokens, en todas las variantes de permisos. No toca otros adaptadores ni otros operadores. No invalida la concesión en el proveedor: el refresh token sigue vigente allí hasta que caduque o la persona retire el acceso de la aplicación desde su cuenta.
 
 ## Límites conocidos
 
-- **Teams.** Graph identifica a las personas por su id de Entra. Para casar las menciones hace falta `params.m365_user_id`; el núcleo puede obtenerlo con `/me` y `User.Read`. Sin ese dato, solo casan las direcciones de correo. El contrato no tiene ese campo en `identities`.
+- **Teams.** Graph identifica a las personas por su id de Entra. Para casar las menciones hace falta `params.m365_user_id`; el núcleo puede obtenerlo con `/me` y `User.Read`. Sin ese dato, solo casan las direcciones de correo y, contra Graph real, no se detecta ninguna mención. Los dobles de prueba usan direcciones como id, así que los tests no lo muestran. El contrato no tiene ese campo en `identities`. Los mensajes se piden en orden de creación (`$orderby=createdDateTime desc`).
+- **Correo M365 sin ventana temporal.** El contrato no limita «esperando mi respuesta» en el tiempo, así que el delta inicial recorre todo el buzón por rondas. Sin `FileDeltaCache`, una carpeta con más de `maxPages × pageSize` mensajes queda `unavailable` en cada lectura. En producción hay que usar la caché.
+- **Claves de GitHub.** La referencia es `repo#n`, como en el banco de Labs. Dos organizaciones con un repositorio del mismo nombre y el mismo número colisionarían. Cambiarlo a `owner/repo#n` exige cambiar también la verdad del banco.
+- **Tamaño de la credencial.** En macOS y Windows se guarda el JSON con access y refresh token. Credential Manager limita el valor; si el almacén lo trunca, `set` lo detecta al releer y falla. Guardar solo el refresh token queda pendiente.
 - **Comentarios de documentos.** `/drives/{d}/items/{i}/comments` es la misma aproximación que usa el banco; en Graph v1.0 no existe tal cual. Hay que validarlo contra un inquilino real antes del piloto.
 - **Gmail.** `gmail.metadata` no admite `q`, así que el adaptador recorre los `max_threads` hilos más recientes (300 por defecto). Leer menos solo puede omitir esperas antiguas, nunca inventarlas. Google no tiene delta: se lee completo con tope.
 - **Calendario.** Se lee con `calendarView` y paginación, sin delta. La viabilidad lo midió en 1–2 peticiones por ciclo.
