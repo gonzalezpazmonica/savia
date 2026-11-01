@@ -274,3 +274,28 @@ test("si el libro no se puede escribir, la API responde 503 y no confirma la cor
     assert.equal(o.status, 503, "también por la orden de texto");
   } finally { await s.cerrar(); }
 });
+
+test("«es mío» sobrevive a reiniciar el servicio: sale del libro, no de memoria", async () => {
+  const { dir, engine, s, call } = await setup();
+  let id: string;
+  try {
+    id = (await call("GET", "/q/q2")).json.elementos[0].id;
+    assert.equal((await call("POST", `/elementos/${id}/correccion`, { tipo: "es_mio" })).status, 200);
+  } finally { await s.cerrar(); }
+  const cfg = emptyConfig("i");
+  cfg.active_profile = "yo";
+  cfg.profiles.yo = { operator: { ref: "op-yo", identities: { emails: [] } }, sources: [] };
+  const world = coreWorld({ cfg, engine, stateDir: dir }); // servicio nuevo, mismo directorio de datos
+  const s2 = crearServidor({ tls: TLS, mundo: world, reloj: () => T, autenticar: () => ({ ref: "op-yo", revocado: false }) });
+  const l = await s2.escuchar(["127.0.0.1"], 0);
+  try {
+    const r = await new Promise<any>((res, rej) => {
+      const q = request({ host: "127.0.0.1", port: l.port, path: "/api/v1/soul/q/q2", ca: TLS.cert, headers: { Authorization: "DPoP x", DPoP: "p" } }, (x) => {
+        let t = ""; x.on("data", (d) => { t += d; }); x.on("end", () => res(JSON.parse(t)));
+      });
+      q.on("error", rej); q.end();
+    });
+    const e = r.elementos.find((x: any) => x.id === id);
+    assert.equal(e.correccion, "es_mio");
+  } finally { await s2.cerrar(); }
+});

@@ -74,13 +74,16 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
   function aplicar(ctx: CtxMundo | null, o: Op, snap: Snapshot, t: number) {
     const nuevos: Elemento[] = [];
     const vivos = new Set<string>();
+    // «es mío» vive en el libro (restore con motivo es_mio): sobrevive a reiniciar el servicio.
+    const mioLibro = new Set((engine.ledger(stateDir, o.ref) as { action?: string; reason?: string; key?: string }[])
+      .filter((r) => r.action === "restore" && r.reason === "es_mio").map((r) => r.key));
     for (const c of snap.claims) {
       const e = elemento(o.ref, c);
       if (!e) continue;
       vivos.add(e.id);
       const prev = o.elementos.get(e.id);
       if (!prev) nuevos.push(e);
-      o.elementos.set(e.id, { ...e, mio: prev?.mio ?? false, noMio: prev?.noMio ?? false });
+      o.elementos.set(e.id, { ...e, mio: prev?.mio ?? mioLibro.has(c.key), noMio: prev?.noMio ?? false });
     }
     for (const id of [...o.elementos.keys()]) if (!vivos.has(id)) o.elementos.delete(id);
     o.d.adaptadores = Object.entries(snap.adapters).filter(([, s]) => s.status !== "not_configured").map(([k, s]) => adapterView(k, s));

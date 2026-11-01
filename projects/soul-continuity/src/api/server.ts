@@ -212,7 +212,8 @@ export function crearServidor(opts: OpcionesServidor) {
   const ctx: CtxMundo = { evento, efectiva, ahora };
 
   // -------------------------------------------------------------- estado por operador
-  const ops: Record<string, Op> = {};
+  // Sin prototipo: un operator_ref «constructor» o «__proto__» no autentica contra Object.prototype.
+  const ops: Record<string, Op> = Object.create(null);
   const minuto0 = Math.floor(ahora() / MIN) * MIN;
   for (const d of opts.mundo.semillas()) {
     const o: Op = ops[d.ref] = {
@@ -222,7 +223,7 @@ export function crearServidor(opts: OpcionesServidor) {
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
-    for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: false, noMio: false, fijo: true });
+    for (const e of d.elementos) o.elementos.set(e.id, { ...e, observado: e.observado ?? Math.max(e.nace, minuto0 - 60 * MIN), mio: e.mio ?? false, noMio: e.noMio ?? false, fijo: true });
     iniciarVentana(o, minuto0);
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
       const cat = CATEGORIA[e.tipo];
@@ -529,7 +530,7 @@ export function crearServidor(opts: OpcionesServidor) {
     if (!m || dp?.length !== 1 || !dp[0]) throw new ErrorApi(401, "UNAUTHENTICATED");
     if (opts.autenticar) {
       const r = opts.autenticar(m[1]);
-      if (!r || !ops[r.ref]) throw new ErrorApi(401, "UNAUTHENTICATED");
+      if (!r || !Object.hasOwn(ops, r.ref)) throw new ErrorApi(401, "UNAUTHENTICATED");
       if (r.revocado) throw new ErrorApi(401, "UNAUTHENTICATED", { revocado: true });
       return ops[r.ref];
     }
