@@ -147,3 +147,93 @@ make_input() {
   run bash -c "printf '%s' '$(make_input ".opencode/hooks/my-hook.sh" "output/20260407 config.local/")' | bash $HOOK"
   [[ "$status" -eq 0 ]]
 }
+
+# === PROJECTS: referencias projects/<nombre>/ frente a autorizaciones de la operadora ===
+# Mismas entradas que .opencode/plugins/__tests__/block-gitignored-references.test.ts (port TS).
+# Fixture: repo git cuyo .gitignore whitelistea public-demo; $2 = contenido de las autorizaciones
+# (ausente si se omite).
+fixture() {
+  local d; d="$(mktemp -d "$BATS_TEST_TMPDIR/repo.XXXX")"
+  git init -q "$d"
+  printf 'projects/*\n!projects/public-demo/\n' > "$d/.gitignore"
+  if [[ $# -ge 1 ]]; then mkdir -p "$d/.claude"; printf '%b' "$1" > "$d/.claude/.project-authorizations"; fi
+  echo "$d"
+}
+# run_proj <repo-del-fichero> <contenido> [cwd/CLAUDE_PROJECT_DIR] [fichero]
+run_proj() {
+  local repo="$1" content="$2" cwd="${3:-$1}" file="${4:-$1/.gitignore}" hook="${HOOK_BIN:-$PWD/$HOOK}"
+  local json; json=$(jq -cn --arg f "$file" --arg c "$content" '{tool_input:{file_path:$f,content:$c}}')
+  run bash -c 'cd "$1" && CLAUDE_PROJECT_DIR="$1" bash "$2" <<<"$3"' _ "$cwd" "$hook" "$json"
+}
+
+@test "PROJ ALLOW: nombre autorizado puede whitelistearse en .gitignore" {
+  r=$(fixture 'other\nsoul-demo\n')
+  run_proj "$r" '!projects/soul-demo/'
+  [[ "$status" -eq 0 ]]
+}
+
+@test "PROJ ALLOW: nombre ya whitelisteado sin fichero de autorizaciones" {
+  r=$(fixture)
+  run_proj "$r" 'ver projects/public-demo/README.md'
+  [[ "$status" -eq 0 ]]
+}
+
+@test "PROJ BLOCK: nombre no autorizado" {
+  r=$(fixture 'soul-demo\n')
+  run_proj "$r" '!projects/secret-client/'
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"projects/secret-client/"* ]]
+}
+
+@test "PROJ BLOCK: sin fichero de autorizaciones (fail-closed)" {
+  r=$(fixture)
+  run_proj "$r" '!projects/soul-demo/'
+  [[ "$status" -eq 2 ]]
+  [[ "$output" == *"soul-demo"* ]]
+}
+
+@test "PROJ BLOCK: fichero de autorizaciones ilegible (fail-closed)" {
+  [[ "$(id -u)" -eq 0 ]] && skip "root lee ficheros 000: el caso no se puede construir"
+  r=$(fixture 'soul-demo\n')
+  chmod 000 "$r/.claude/.project-authorizations"
+  run_proj "$r" '!projects/soul-demo/'
+  chmod 644 "$r/.claude/.project-authorizations"
+  [[ "$status" -eq 2 ]]
+}
+
+@test "PROJ BLOCK: prefijo, nombre más largo, mayúsculas y rutas no casan" {
+  r=$(fixture 'soul\nSoul-Demo\n../soul-demo\nsoul-demo/\nx/soul-demo\n')
+  for name in soul-demo soul-demo-x so; do
+    run_proj "$r" "!projects/$name/"
+    [[ "$status" -eq 2 ]]
+    [[ "$output" == *"projects/$name/"* ]]
+  done
+}
+
+@test "PROJ: las autorizaciones salen del repo del fichero editado, no del cwd" {
+  authorized=$(fixture 'soul-demo\n')
+  plain=$(fixture)
+  run_proj "$authorized" '!projects/soul-demo/' "$plain"
+  [[ "$status" -eq 0 ]]
+  run_proj "$plain" '!projects/soul-demo/' "$authorized"
+  [[ "$status" -eq 2 ]]
+}
+
+@test "PROJ BLOCK: fichero fuera de todo repo no hereda autorizaciones (fail-closed)" {
+  cwd=$(fixture 'soul-demo\n')
+  outside="$(mktemp -d "$BATS_TEST_TMPDIR/nogit.XXXX")"
+  run_proj "$cwd" '!projects/soul-demo/' "$cwd" "$outside/notes.md"
+  [[ "$status" -eq 2 ]]
+}
+
+@test "mutante: sin la consulta de autorizaciones el caso autorizado se bloquea" {
+  m="$BATS_TEST_TMPDIR/mut"; mkdir -p "$m/.claude/hooks"
+  ln -s "$PWD/scripts" "$m/scripts"; ln -s "$PWD/.claude/hooks/lib" "$m/.claude/hooks/lib"
+  sed '/"\$AUTH_FILE" 2>\/dev\/null/d' "$PWD/.claude/hooks/block-gitignored-references.sh" \
+    > "$m/.claude/hooks/block-gitignored-references.sh"
+  run cmp -s "$PWD/.claude/hooks/block-gitignored-references.sh" "$m/.claude/hooks/block-gitignored-references.sh"
+  [[ "$status" -ne 0 ]]
+  r=$(fixture 'soul-demo\n')
+  HOOK_BIN="$m/.claude/hooks/block-gitignored-references.sh" run_proj "$r" '!projects/soul-demo/'
+  [[ "$status" -eq 2 ]]
+}
