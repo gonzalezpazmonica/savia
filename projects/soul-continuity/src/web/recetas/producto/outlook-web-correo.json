@@ -1,0 +1,48 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "outlook-web-correo",
+  "sitio": "Outlook en la web (correo)",
+  "estado": "experimental",
+  "notas": [
+    "Plantilla genérica SIN validar contra tráfico real: URLs, operaciones y selectores son de partida.",
+    "Desactivada por defecto: no se ejecuta sin un recibo de validar-grabacion sobre la grabación del propio operador.",
+    "Lee la bandeja de entrada en vista de lista; nunca abre un mensaje (abrirlo lo marca como leído).",
+    "Si el cliente sirve desde otro origen (p. ej. outlook.cloud.microsoft), copia la receta y cambia el origen.",
+    "Ruta web: las reglas por remitente solo producen avisos, nunca alertas (no hay identidad autenticada del remitente)."
+  ],
+  "origen": "https://outlook.office.com",
+  "javascript": true,
+  "urls": [
+    "/mail/",
+    "/mail/inbox",
+    "/owa/service.svc?action=*&app=Mail&n=*",
+    "/owa/startupdata.ashx?app=Mail&n=*",
+    "https://res.cdn.office.net/owamail/*/scripts/*.js"
+  ],
+  "renovacion_sesion": [],
+  "post_lectura": [
+    { "url": "/owa/service.svc?action=*&app=Mail&n=*", "operacion": { "cabecera": "action" },
+      "lectura": ["FindConversation", "FindItem", "FindFolder", "GetFolder"],
+      "escritura_conocida": ["UpdateItem", "MarkAllItemsAsRead", "SetUserConfiguration"] },
+    { "url": "/owa/startupdata.ashx?app=Mail&n=*", "operacion": { "cabecera": "action" },
+      "lectura": ["StartupData"],
+      "escritura_conocida": [] }
+  ],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/mail/inbox"],
+  "acciones": [],
+  "extraccion": {
+    "elemento": "div[role=\"option\"][data-convid]",
+    "id": { "attr": "data-convid" },
+    "campos": {
+      "resumen": { "attr": "aria-label" },
+      "asunto": { "sel": "span[title]" }
+    }
+  },
+  "preguntas": {
+    "q1": { "campo": "resumen", "op": "existe" },
+    "q2": { "campo": "resumen", "op": "contiene", "valor": "{yo}" }
+  },
+  "sesion": { "login": ["https://login.microsoftonline.com", "https://login.live.com"] },
+  "humo": { "pagina": "/mail/inbox", "minimo": 1, "campos_obligatorios": ["resumen"] }
+}

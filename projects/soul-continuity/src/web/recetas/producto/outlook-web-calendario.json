@@ -1,0 +1,46 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "outlook-web-calendario",
+  "sitio": "Outlook en la web (calendario)",
+  "estado": "experimental",
+  "notas": [
+    "Plantilla genérica SIN validar contra tráfico real: URLs, operaciones y selectores son de partida.",
+    "Desactivada por defecto: no se ejecuta sin un recibo de validar-grabacion sobre la grabación del propio operador.",
+    "Lee la vista de día como lista de eventos; nunca abre un evento ni responde a una invitación.",
+    "Las respuestas a invitaciones son escrituras: si el cliente las lanza solo, van en escritura_conocida."
+  ],
+  "origen": "https://outlook.office.com",
+  "javascript": true,
+  "urls": [
+    "/calendar/view/day",
+    "/owa/service.svc?action=*&app=Calendar&n=*",
+    "/owa/startupdata.ashx?app=Calendar&n=*",
+    "https://res.cdn.office.net/owamail/*/scripts/*.js"
+  ],
+  "renovacion_sesion": [],
+  "post_lectura": [
+    { "url": "/owa/service.svc?action=*&app=Calendar&n=*", "operacion": { "cabecera": "action" },
+      "lectura": ["GetCalendarView", "GetCalendarFolders", "FindItem"],
+      "escritura_conocida": ["UpdateItem", "RespondToCalendarEvent", "SetUserConfiguration"] },
+    { "url": "/owa/startupdata.ashx?app=Calendar&n=*", "operacion": { "cabecera": "action" },
+      "lectura": ["StartupData"],
+      "escritura_conocida": [] }
+  ],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/calendar/view/day"],
+  "acciones": [],
+  "extraccion": {
+    "elemento": "div[role=\"button\"][data-calitemid]",
+    "id": { "attr": "data-calitemid" },
+    "campos": {
+      "resumen": { "attr": "aria-label" },
+      "titulo": { "sel": "span[title]" }
+    }
+  },
+  "preguntas": {
+    "q1": { "campo": "resumen", "op": "existe" },
+    "q4": { "campo": "resumen", "op": "existe" }
+  },
+  "sesion": { "login": ["https://login.microsoftonline.com", "https://login.live.com"] },
+  "humo": { "pagina": "/calendar/view/day", "minimo": 1, "campos_obligatorios": ["resumen"] }
+}

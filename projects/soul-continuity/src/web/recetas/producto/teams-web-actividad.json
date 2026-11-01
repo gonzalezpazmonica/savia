@@ -1,0 +1,39 @@
+{
+  "formato": "soul-receta-web/1",
+  "id": "teams-web-actividad",
+  "sitio": "Teams en la web (actividad y menciones)",
+  "estado": "experimental",
+  "notas": [
+    "Plantilla genérica SIN validar contra tráfico real: URLs, operaciones y selectores son de partida.",
+    "Desactivada por defecto: no se ejecuta sin un recibo de validar-grabacion sobre la grabación del propio operador.",
+    "{region} es la región del servicio de mensajería de tu inquilino (aparece en la grabación).",
+    "Teams recibe por WebSocket; aquí no se admite ninguno. Si el cliente no pinta la actividad sin él, la prueba de humo desactiva la receta y la fuente se queda sin ruta web.",
+    "Teams usa workers; en v1 no arrancan (cortafuegos). Si el cliente los necesita, la receta no se publica."
+  ],
+  "origen": "https://teams.microsoft.com",
+  "javascript": true,
+  "urls": [
+    "/v2/",
+    "https://statics.teams.cdn.office.net/*/*.js",
+    "https://{region}.ng.msg.teams.microsoft.com/v1/users/ME/conversations/48:notifications/messages?view=*&pageSize=*"
+  ],
+  "renovacion_sesion": [],
+  "post_lectura": [],
+  "websocket": { "urls": [], "mantenimiento": [] },
+  "paginas": ["/v2/"],
+  "acciones": [],
+  "extraccion": {
+    "elemento": "[data-tid=\"activity-feed-item\"]",
+    "id": { "attr": "data-item-id" },
+    "campos": {
+      "resumen": { "attr": "aria-label" },
+      "tipo": { "attr": "data-activity-type" }
+    }
+  },
+  "preguntas": {
+    "q1": { "campo": "resumen", "op": "existe" },
+    "q2": { "campo": "tipo", "op": "igual", "valor": "mention" }
+  },
+  "sesion": { "login": ["https://login.microsoftonline.com"] },
+  "humo": { "pagina": "/v2/", "minimo": 1, "campos_obligatorios": ["resumen"] }
+}
