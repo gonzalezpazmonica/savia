@@ -8,17 +8,22 @@
 
 import type { PatronUrl } from "./tipos.ts";
 
-const COMODIN = "[^/?&=#]+";
+// Un segmento comodín no cruza / ? & = # ni su forma codificada (%2F, %3F,
+// %26, %3D, %23) ni la barra invertida (%5C): hay servidores que las decodifican.
+// Los patrones de login son detección (más ancho = más seguro) y sí los admiten:
+// `/login?vuelta=%2Ftareas`.
+const COMODIN = "(?:[^/?&=#%]|%(?!2[Ff]|3[Ff]|26|3[Dd]|23|5[Cc]))+";
+const COMODIN_LOGIN = "[^/?&=#]+";
 const ABSOLUTO = /^(https?|wss?):\/\/([^/?#*{}@]+)(\/.*)$/;
 const SOLO_ORIGEN = /^(https?):\/\/([^/?#*{}@]+)$/;
 
-export function compilarPatron(patron: PatronUrl): RegExp {
+export function compilarPatron(patron: PatronUrl, login = false): RegExp {
   const ruta = esAbsoluto(patron) ? partirAbsoluto(patron).ruta : patron;
   if (!ruta.startsWith("/")) throw new Error(`patrón sin barra inicial: ${patron}`);
   if (ruta.includes("**")) throw new Error(`patrón con **: ${patron}`);
   if (ruta.includes("#")) throw new Error(`patrón con fragmento: ${patron}`);
   const partes = ruta.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
-  return new RegExp(`^${partes.join(COMODIN)}$`);
+  return new RegExp(`^${partes.join(login ? COMODIN_LOGIN : COMODIN)}$`);
 }
 
 export function esAbsoluto(patron: PatronUrl): boolean {
@@ -51,7 +56,7 @@ export function mismoOrigen(url: URL, origen: string): boolean {
 
 /** ¿Casa `url` con algún patrón de `patrones` bajo `origen`? `prefijo` solo lo
  *  usa el mutante del banco (coincidencia por prefijo, el error típico). */
-export function casa(url: string, origen: string, patrones: PatronUrl[], prefijo = false): boolean {
+export function casa(url: string, origen: string, patrones: PatronUrl[], prefijo = false, login = false): boolean {
   let u: URL;
   try {
     u = new URL(url);
@@ -69,9 +74,9 @@ export function casa(url: string, origen: string, patrones: PatronUrl[], prefijo
     if (esAbsoluto(p)) {
       let a: { origen: string; ruta: string };
       try { a = partirAbsoluto(p); } catch { return false; }
-      return u.origin === a.origen && compilarPatron(p).test(ruta);
+      return u.origin === a.origen && compilarPatron(p, login).test(ruta);
     }
-    return mismoOrigen(u, origen) && compilarPatron(p).test(ruta);
+    return mismoOrigen(u, origen) && compilarPatron(p, login).test(ruta);
   });
 }
 
@@ -79,7 +84,7 @@ export function casa(url: string, origen: string, patrones: PatronUrl[], prefijo
  *  orígenes enteros de login federado (SSO). `sinExterno` solo para el mutante. */
 export function casaLogin(url: string, origen: string, login: PatronUrl[], prefijo = false, sinExterno = false): boolean {
   const relativos = login.filter((p) => !esOrigenLogin(p));
-  if (casa(url, origen, relativos, prefijo)) return true;
+  if (casa(url, origen, relativos, prefijo, true)) return true;
   if (sinExterno) return false;
   let u: URL;
   try { u = new URL(url); } catch { return false; }

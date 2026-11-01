@@ -18,9 +18,21 @@ export interface Recibo {
   resumen: { peticiones: number; permitidas: number; operaciones_lectura: number };
 }
 
+/** JSON con las claves ordenadas: la huella no depende del orden en que se
+ *  escribió la receta (la CLI la lee del fichero; el adaptador, de su configuración). */
+function canonico(x: unknown): string {
+  if (Array.isArray(x)) return `[${x.map(canonico).join(",")}]`;
+  if (x && typeof x === "object") {
+    const o = x as Record<string, unknown>;
+    return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort()
+      .map((k) => `${JSON.stringify(k)}:${canonico(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(x) ?? "null";
+}
+
 /** Huella del contenido de la receta ya completada (variables sustituidas). */
 export function huellaReceta(r: Receta): string {
-  return createHash("sha256").update(JSON.stringify(r)).digest("hex");
+  return createHash("sha256").update(canonico(r)).digest("hex");
 }
 
 export function rutaRecibo(dir: string, id: string) {

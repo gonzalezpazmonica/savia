@@ -77,3 +77,12 @@ test("login: relativo estricto u origen entero de SSO; el mutante ignora el SSO"
   assert.equal(casaLogin(`${O}/login/otra`, O, login), false);
   assert.equal(casaLogin("https://sso.example/a", O, login, false, true), false);
 });
+
+test("el comodín no cruza separadores codificados (%2F, %3F, %26, %3D, %23, %5C) (revisión #1443 P2-1)", () => {
+  const p = ["/x/*"];
+  for (const s of ["..%2Fapprove", "a%2fb", "a%3Fb", "a%26b", "a%3Db", "a%23b", "..%5Capprove"]) {
+    assert.equal(casa(`${O}/x/${s}`, O, p), false, s);
+  }
+  // Lo codificado que no separa sigue casando.
+  assert.equal(casa(`${O}/x/caf%C3%A9%20nuevo`, O, p), true);
+});

@@ -80,3 +80,13 @@ test("el informe nunca lleva valores de consulta, cuerpos ni identificadores lar
   for (const s of ["secreto@empresa", "cuerpo-secreto", "AAMkAGI2THVSAAA1234567890abcdef"]) assert.ok(!i.includes(s), s);
   assert.equal(enmascarar(`${O}/a/AAMkAGI2THVSAAA1234567890abcdef?u=x@y&k=2`), `${O}/a/…?u=…&k=…`);
 });
+
+test("pareceEscritura: verbos en mitad de un camelCase; sin confundir palabras que empiezan igual (revisión #1443 P2-5)", async () => {
+  const { pareceEscritura } = await import("../adaptador/grabacion.ts");
+  for (const op of ["GetAndUpdateItem", "itemMarkRead", "ListarYMarcarChats", "UpdateItem", "mark_read"]) {
+    assert.equal(pareceEscritura(op), true, op);
+  }
+  for (const op of ["GetSettings", "ListarChats", "BuscarElementos", "GetAddresses", "ReadMessages"]) {
+    assert.equal(pareceEscritura(op), false, op);
+  }
+});

@@ -13,6 +13,7 @@ import { ACCION } from "../receta/validar.ts";
 import { abrirNavegador, evaluarAislado } from "./navegador.ts";
 
 export class VigilanciaInvalida extends Error {}
+export class HuellasIlegibles extends Error {}
 
 export interface Vigilada {
   id: string;
@@ -63,7 +64,12 @@ export class AlmacenHuellas {
   constructor(ruta: string) { this.ruta = ruta; }
   private leer(): Record<string, { huella: string; url: string; visto_en: string }> {
     if (!existsSync(this.ruta)) return {};
-    try { return JSON.parse(readFileSync(this.ruta, "utf8")); } catch { return {}; }
+    // Fail-closed: un fichero ilegible no es «nunca visto» (eso callaría los
+    // cambios y el siguiente guardado borraría las demás huellas).
+    let d: unknown;
+    try { d = JSON.parse(readFileSync(this.ruta, "utf8")); } catch { d = null; }
+    if (!d || typeof d !== "object" || Array.isArray(d)) throw new HuellasIlegibles(`fichero de huellas ilegible: ${this.ruta}`);
+    return d as Record<string, { huella: string; url: string; visto_en: string }>;
   }
   anterior(id: string): string | null { return this.leer()[id]?.huella ?? null; }
   guardar(id: string, url: string, huella: string) {
@@ -107,6 +113,8 @@ export async function vigilarPagina(o: OpcionesVigilancia): Promise<ResultadoVig
     if (resp instanceof Error && !fw.sesionCaducada && !fw.registro.some((g) => !g.permitida)) {
       throw new Error(`no se pudo cargar: ${resp.message.split("\n")[0]}`);
     }
+    // Una página de error (404, 5xx) no es contenido: huellarla daría dos «cambió» falsos.
+    if (resp && !(resp instanceof Error) && !resp.ok()) throw new Error(`HTTP ${resp.status()}`);
     await page.waitForTimeout(450);
     final = page.url();
     const t = await evaluarAislado(page, "document.body ? document.body.textContent : ''");

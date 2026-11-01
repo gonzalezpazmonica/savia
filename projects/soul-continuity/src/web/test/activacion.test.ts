@@ -81,3 +81,21 @@ test("un id que no es [a-z0-9-] no se convierte en ruta de recibo", () => {
     assert.equal(comprobarActivacion(r, dir).activa, false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("la huella no depende del orden de claves; sí del contenido (revisión #1443 P2-4)", async () => {
+  const { huellaReceta } = await import("../adaptador/activacion.ts");
+  const r = R("correo");
+  const invertir = (x: unknown): unknown => Array.isArray(x) ? x.map(invertir)
+    : x && typeof x === "object" ? Object.fromEntries(Object.entries(x).reverse().map(([k, v]) => [k, invertir(v)])) : x;
+  const otra = invertir(r) as typeof r;
+  assert.notEqual(JSON.stringify(otra), JSON.stringify(r));
+  assert.equal(huellaReceta(otra), huellaReceta(r));
+  assert.notEqual(huellaReceta({ ...r, urls: [...r.urls, "/otra"] }), huellaReceta(r));
+  // Viaje CLI → adaptador: el recibo escrito para una receta vale para la misma con otro orden.
+  const d = mkdtempSync(join(tmpdir(), "soul-act-"));
+  try {
+    const exp = { ...otra, estado: "experimental" as const };
+    guardarRecibo(d, { ...r, estado: "experimental" }, resumen);
+    assert.equal(comprobarActivacion(exp, d).activa, true);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});

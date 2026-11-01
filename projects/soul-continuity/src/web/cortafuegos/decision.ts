@@ -3,6 +3,7 @@
 // aborta (fail-closed).
 
 import { casa, casaLogin } from "../receta/patrones.ts";
+import { ACCION } from "../receta/validar.ts";
 import type { AccionNavegacion, OperacionesPost, Receta } from "../receta/tipos.ts";
 
 /** Mutantes del banco: cada uno quita UNA defensa. `ninguno` es el cortafuegos real. */
@@ -28,7 +29,17 @@ export interface PeticionHttp {
 export type Motivo =
   | "lista" | "renovacion" | "post_lectura"
   | "fuera_de_lista" | "login" | "accion_no_ligada" | "metodo" | "escritura_conocida"
-  | "operacion_desconocida" | "graphql_no_consulta" | "esquema" | "otro_origen" | "operacion_url_distinta";
+  | "operacion_desconocida" | "graphql_no_consulta" | "esquema" | "otro_origen" | "operacion_url_distinta"
+  | "accion_en_url";
+
+/** ¿La URL concreta (decodificada) parece un enlace de acción? Los patrones ya
+ *  se validan con ACCION, pero un comodín puede rellenarse con `approve`.
+ *  Fail-closed si la ruta no se puede decodificar. */
+export function accionEnUrl(u: URL): boolean {
+  let ruta: string;
+  try { ruta = decodeURIComponent(u.pathname + u.search); } catch { return true; }
+  return ACCION.test(ruta);
+}
 
 export interface Decision {
   permitir: boolean;
@@ -158,6 +169,7 @@ export function decidirHttp(r: Receta, est: EstadoCortafuegos, p: PeticionHttp, 
     return { permitir: true, motivo: "renovacion" };
   }
   if (!casa(p.url, r.origen, r.urls, prefijo)) return { permitir: false, motivo: "fuera_de_lista" };
+  if (accionEnUrl(u)) return { permitir: false, motivo: "accion_en_url" };
   // Los patrones absolutos (otro origen) son solo para subrecursos: la página nunca sale del origen.
   if (p.navegacion && u.origin !== new URL(r.origen).origin && mutante !== "absoluto_navegable") {
     return { permitir: false, motivo: "otro_origen" };

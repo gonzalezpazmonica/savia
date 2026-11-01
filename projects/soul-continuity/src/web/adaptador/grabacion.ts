@@ -27,7 +27,17 @@ export interface InformeGrabacion {
 }
 
 /** Nombres de operación que delatan una escritura aunque la receta los llame lectura. */
-const ESCRITURA = /(^|[^a-z])(update|set|mark|create|delete|remove|send|move|patch|add|edit|save|upsert|archive|flag|dismiss|accept|decline|approve|reject|ack|marcar|actualizar|enviar|borrar|crear|mover|aprobar)/i;
+const VERBOS = "update|set|mark|create|delete|remove|send|move|patch|add|edit|save|upsert|archive|flag|dismiss|accept|decline|approve|reject|ack|marcar|actualizar|enviar|borrar|crear|mover|aprobar";
+const ESCRITURA = new RegExp(`(^|[^a-z])(${VERBOS})`, "i");
+const VERBO = new RegExp(`^(${VERBOS})$`, "i");
+
+/** ¿El nombre delata una escritura? Al inicio o tras un separador (`mark_read`),
+ *  o como palabra entera dentro de un camelCase (`GetAndUpdateItem`, `itemMarkRead`).
+ *  Palabra entera para no confundir `GetSettings` con `set`. Heurística secundaria. */
+export function pareceEscritura(op: string): boolean {
+  if (ESCRITURA.test(op)) return true;
+  return op.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z])([A-Z][a-z])/g, "$1 $2").split(/[^A-Za-z]+/).some((w) => VERBO.test(w));
+}
 
 /** Origen + ruta con segmentos largos ocultos + solo las claves de la consulta. */
 export function enmascarar(url: string): string {
@@ -113,7 +123,7 @@ export function validarGrabacion(r: Receta, har: unknown): InformeGrabacion {
   }
   for (const o of r.post_lectura) {
     for (const op of o.lectura) {
-      if (ESCRITURA.test(op)) inf.fallos.push(`${op} figura como lectura pero su nombre es de escritura`);
+      if (pareceEscritura(op)) inf.fallos.push(`${op} figura como lectura pero su nombre es de escritura`);
       if (![...ops.values()].some((x) => x.op === op)) inf.avisos.push(`la lectura ${op} no aparece en la grabación`);
     }
   }

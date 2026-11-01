@@ -185,3 +185,13 @@ test("la operación de la consulta tiene que coincidir con la declarada: si no, 
   const m = decidirHttp(correo, sin, post("/correo/api/servicio?x-accion=MarcarLeido", { "x-accion": "BuscarElementos" }, {}), "operacion_url_sin_cotejar");
   assert.equal(m.permitir, true);
 });
+
+test("decidirHttp: un comodín relleno con un verbo de acción se corta (revisión #1443 P2-1)", () => {
+  const r = { ...tareas, urls: [...tareas.urls, "/x/*"] };
+  for (const s of ["approve", "logout", "..%2Fapprove", "T-1%2Fcerrar", "%E0%A4%A"]) {
+    const d = decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/${s}` }));
+    assert.equal(d.permitir, false, s);
+  }
+  assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/aprobaciones-pendientes` })).permitir, true);
+  assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/approve` })).motivo, "accion_en_url");
+});

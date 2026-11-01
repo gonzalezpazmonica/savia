@@ -54,3 +54,42 @@ test("sitio inalcanzable → ERROR, no «vuelve a iniciar sesión»; sin huella 
     assert.equal(almacen.anterior("p"), null);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
+
+test("almacén ilegible: falla en vez de tratar todo como primera visita (revisión #1443 P2-3)", async () => {
+  const { writeFileSync } = await import("node:fs");
+  const { HuellasIlegibles } = await import("../adaptador/vigilancia.ts");
+  const d = mkdtempSync(join(tmpdir(), "soul-vig-"));
+  try {
+    for (const crudo of ["{no json", "[]", "null"]) {
+      const f = join(d, "huellas.json");
+      writeFileSync(f, crudo);
+      const a = new AlmacenHuellas(f);
+      assert.throws(() => a.anterior("p"), HuellasIlegibles, crudo);
+      assert.throws(() => a.guardar("p", "https://intra.example/a", "h"), HuellasIlegibles, crudo);
+      assert.equal(readFileSync(f, "utf8"), crudo, "no se sobrescribe");
+    }
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test("página con estado HTTP de error (503, 404) → ERROR y sin huella (revisión #1443 P2-1 de corrección)", { timeout: 60_000 }, async () => {
+  const { createServer } = await import("node:http");
+  const { buscarNavegador } = await import("../cortafuegos/perfil.ts");
+  const d = mkdtempSync(join(tmpdir(), "soul-vig-"));
+  let estado = 503;
+  const srv = createServer((_q, r) => { r.writeHead(estado, { "content-type": "text/html" }); r.end("<p>servicio caído</p>"); });
+  await new Promise<void>((ok) => srv.listen(0, "127.0.0.1", ok));
+  const url = `http://127.0.0.1:${(srv.address() as { port: number }).port}/avisos`;
+  try {
+    const almacen = new AlmacenHuellas(join(d, "huellas.json"));
+    for (const st of [503, 404]) {
+      estado = st;
+      const res = await vigilarPagina({ vigilada: { id: "p", sitio: "portal", url }, ejecutable: buscarNavegador().ruta, almacen });
+      assert.equal(res.estado, "ERROR", `${st}: ${res.estado} ${res.aviso}`);
+      assert.match(res.aviso ?? "", new RegExp(`HTTP ${st}`));
+      assert.equal(almacen.anterior("p"), null);
+    }
+    estado = 200;
+    const ok = await vigilarPagina({ vigilada: { id: "p", sitio: "portal", url }, ejecutable: buscarNavegador().ruta, almacen });
+    assert.equal(ok.estado, "PRIMERA_VISITA");
+  } finally { srv.close(); rmSync(d, { recursive: true, force: true }); }
+});
