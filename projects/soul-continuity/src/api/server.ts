@@ -11,9 +11,9 @@
  *
  * Transporte: solo HTTPS (certificado propio de la instalación) y solo en las direcciones
  * configuradas (`listen.ts`). Con STOP del fail-safe todo responde 503.
- * La política de atención de aquí es la aproximación del simulado de Labs (presupuesto,
- * tope de alertas, aplazamiento por modo y agrupación sin pérdida); la política real es la
- * parte `atencion` de SE-490 y se enchufa en `evento`.
+ * Decide la política de atención de SE-490 (`src/attention`, `Politica`), con su estado
+ * persistido (`estadoATexto`). Aquí solo se traduce: el evento de la API entra como evento de
+ * la política y su decisión sale como mensaje del sondeo, pendiente agrupado o registro.
  */
 
 import { createServer as createHttps, type Server } from "node:https";
@@ -21,6 +21,7 @@ import type { IncomingMessage } from "node:http";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { validar } from "./schema.ts";
+import { Franja, Politica, estadoATexto, estadoDesdeTexto, estadoVacio, instanciaEn, type Estado as EstadoPolitica, type Evento as EventoPolitica, type Modo, type Motivo } from "../attention/index.ts";
 import { type Listening, listenOnly } from "./listen.ts";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- cuerpos JSON del contrato */
@@ -92,6 +93,8 @@ export interface Op {
   ref: string; d: SemillaOperador; ultimo: number; nivel: Nivel; modo: string; hasta: number | null;
   avisos: ConfAvisos; alertas: Regla[]; elementos: Map<string, Elemento>; ledger: Map<string, { tipo: string; en: number }>;
   corr: Map<string, { tipo: string; en: number }>; mensajes: Msg[]; seq: number; base: number;
+  /** H-11: estado de la política de atención (presupuesto por ventana, tope de alertas, ya tratados). */
+  pol: EstadoPolitica;
   /** D4/D5: identifica esta secuencia de mensajes. Cambia si el estado se pierde: ids y cursores no se reutilizan. */
   epoca: string;
   pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: { idx: number; avisos: number; alertas: number };
@@ -107,6 +110,8 @@ export interface EstadoAtencion {
   cli_at?: string | null;
   /** Época de la secuencia (ausente en estados anteriores: se crea una nueva). */
   epoca?: string;
+  /** H-11: estado de `Politica` como texto (`estadoATexto`). */
+  politica?: string;
 }
 export interface Evento { tipo: string; categoria?: string; ids: string[]; programar?: number | null; regla?: Regla; efectiva?: string; avisoDe?: string }
 
@@ -194,7 +199,28 @@ export function crearServidor(opts: OpcionesServidor) {
     o.seq++;
     o.mensajes.push({ id: `m-${o.ref}-${o.epoca}-${o.seq}`, seq: o.seq, creado: t, programar: null, caduca: null, agrupa: 1, ids: [], ...m });
   }
-  function iniciarVentana(o: Op, t: number) { o.ventana = { idx: Math.floor(t / (o.avisos.ventanaMin * MIN)), avisos: 0, alertas: 0 }; }
+  /** Ventanas de presupuesto: el día en tramos de `ventanaMin` desde las 00:00 UTC (la última cruza la medianoche si toca). */
+  function franjas(v: number): Franja[] {
+    const todos = (1 << 7) - 1;
+    if (v >= 1440) return [new Franja(todos, 1, 0)];
+    const out: Franja[] = [];
+    for (let i = 0; i < 1440; i += v) out.push(new Franja(todos, i, Math.min(i + v, 1440) % 1440));
+    return out;
+  }
+  const ventanaDe = (o: Op, t: number) => instanciaEn(franjas(o.avisos.ventanaMin), Math.floor(t / MIN)) ?? Math.floor(t / MIN);
+  function iniciarVentana(o: Op, t: number) { o.ventana = { idx: ventanaDe(o, t), avisos: 0, alertas: 0 }; }
+  function politica(o: Op): Politica {
+    const p = new Politica({
+      ventanas: franjas(o.avisos.ventanaMin), descansos: [], presupuesto: o.avisos.max, topeAlertas: o.avisos.tope, modoPorDefecto: "DISPONIBLE",
+      alertas: o.alertas.map((r) => ({ codigo: r.id, modos: r.modos as Modo[], porRemitente: r.tipo === "remitente_palabra" })), canalNivelMax: 4,
+    }, o.pol);
+    // El modo lo declara la persona desde la app o `soul mode`; la API lo tiene en `o.modo`.
+    p.estado.modoDeclarado = o.modo === "DISPONIBLE" ? null : { modo: o.modo as Modo, hasta: o.hasta == null ? null : Math.floor(o.hasta / MIN) };
+    return p;
+  }
+  /** Motivo de la política → motivo del registro del contrato. */
+  const motivoApi = (m: Motivo) => m.k === "PRESUPUESTO_AGOTADO" ? "presupuesto_agotado" : m.k === "TOPE_ALERTAS" ? "tope_alertas"
+    : m.k === "MODO_NO_DISPONIBLE" ? "modo_activo" : m.k === "ALERTA" ? "alerta_marcada_para_el_modo" : "regla_activa";
   function volcarPendientes(o: Op, t: number, avisosTambien: boolean) {
     if (o.pendAlertas.length) {
       emitir(o, t, { tipo: "alerta", categoria: "agrupado", agrupa: o.pendAlertas.length, ids: o.pendAlertas.flatMap((p) => p.ids).slice(0, 50) });
@@ -214,28 +240,40 @@ export function crearServidor(opts: OpcionesServidor) {
       if (avisados(o).has(k)) return;
       avisados(o).add(k);
     }
-    if (ev.tipo === "alerta" && ev.regla) {
-      const marcada = ev.regla.modos.includes(o.modo);
-      if (ev.efectiva === "alerta" && marcada) {
-        o.st.alertasGeneradas++;
-        if (o.ventana.alertas < o.avisos.tope) {
-          o.ventana.alertas++;
-          emitir(o, t, { tipo: "alerta", categoria: "alerta_definida", ids: ev.ids });
-          registrar(o, t, "avisar", "alerta_marcada_para_el_modo", "alerta_definida");
-        } else { o.pendAlertas.push(ev); registrar(o, t, "agrupar", "tope_alertas", "alerta_definida"); }
-        return;
-      }
-      ev = { tipo: "aviso", categoria: "alerta_definida", ids: ev.ids, programar: null, avisoDe: "espera_respuesta" };
-    }
-    const categoria = ev.categoria ?? "";
-    const tipoAviso = ev.avisoDe ?? AVISO_DE[categoria];
-    if (!o.avisos.activos.includes(tipoAviso)) { registrar(o, t, "registrar", "regla_activa", categoria); return; }
-    o.st.avisosGenerados++;
-    if (o.modo !== "DISPONIBLE") { o.pendAvisos.push(ev); registrar(o, t, "diferir", "modo_activo", categoria); return; }
-    if (o.ventana.avisos >= o.avisos.max) { o.pendAvisos.push(ev); registrar(o, t, "agrupar", "presupuesto_agotado", categoria); return; }
-    o.ventana.avisos++;
-    emitir(o, t, { tipo: "aviso", categoria, ids: ev.ids, programar: ev.programar ?? null });
-    registrar(o, t, "avisar", "regla_activa", categoria);
+    const categoria = ev.tipo === "alerta" ? "alerta_definida" : ev.categoria ?? "";
+    const regla = ev.tipo === "alerta" ? ev.regla ?? null : null;
+    // Los tipos de aviso apagados por la persona no entran en la política: solo se registran.
+    const tipoAviso = regla ? "espera_respuesta" : ev.avisoDe ?? AVISO_DE[categoria];
+    if (!regla && !o.avisos.activos.includes(tipoAviso)) { registrar(o, t, "registrar", "regla_activa", categoria); return; }
+    // Una regla por la web (sin identidad del remitente) entra por la ruta WEB: la política la baja a aviso.
+    const pe: EventoPolitica = {
+      id: `${o.epoca}|${o.seq}|${categoria}|${ev.ids.join(",")}|${t}`, origen: "AGENTE_AUTENTICADO", tipo: { k: "NOTIFICACION" },
+      ruta: regla && ev.efectiva === "aviso" ? "WEB" : "API", objetivo: null, plazo: null, costeRetraso: "MEDIO", nivel: 1, caduca: null,
+      codigoAlerta: regla?.id ?? null, urgenciaEnContenido: "NORMAL", urgenciaSugeridaLlm: null, texto: "",
+    };
+    const p = politica(o);
+    const d = p.decidir(pe, Math.floor(t / MIN));
+    o.pol = p.estado;
+    // Cuenta como alerta lo que la política trata como alerta; una diferida o bajada a aviso es un aviso.
+    if (d.motivo.k === "ALERTA" || d.motivo.k === "TOPE_ALERTAS") o.st.alertasGeneradas++; else o.st.avisosGenerados++;
+    // Acotado: el id del evento es único (la API deduplica por elemento) y las ventanas pasadas no cuentan.
+    o.pol.preguntadas.delete(pe.id);
+    const viejo = Math.floor(t / MIN) - 2 * 1440;
+    for (const m of [o.pol.usados, o.pol.alertasUsadas]) for (const k of m.keys()) if (k >= 0 && k < viejo) m.delete(k);
+    const comoAviso: Evento = regla ? { tipo: "aviso", categoria, ids: ev.ids, programar: null, avisoDe: "espera_respuesta" } : ev;
+    if (d.contactarAhora) {
+      const alerta = d.motivo.k === "ALERTA";
+      if (alerta) o.ventana.alertas++; else o.ventana.avisos++;
+      emitir(o, t, { tipo: alerta ? "alerta" : "aviso", categoria, ids: ev.ids, programar: alerta ? null : ev.programar ?? null });
+      registrar(o, t, "avisar", motivoApi(d.motivo), categoria);
+    } else if (d.motivo.k === "TOPE_ALERTAS") {
+      o.pendAlertas.push(ev);
+      registrar(o, t, "agrupar", "tope_alertas", categoria);
+    } else if (d.accion === "AGRUPAR" || d.accion === "DIFERIR") {
+      // Nada se pierde: lo aplazado sale agrupado al volver a DISPONIBLE o al cambiar de ventana.
+      o.pendAvisos.push(comoAviso);
+      registrar(o, t, d.motivo.k === "MODO_NO_DISPONIBLE" ? "diferir" : "agrupar", motivoApi(d.motivo), categoria);
+    } else registrar(o, t, "registrar", "regla_activa", categoria);
   }
   function resumenes(o: Op, desde: number, hasta: number) {
     for (let t = Math.floor(desde / MIN) * MIN + MIN; t <= hasta; t += MIN) {
@@ -269,7 +307,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const e: EstadoAtencion = {
       v: 1, modo: o.modo, hasta: o.hasta, avisos: o.avisos, alertas: o.alertas, mensajes: o.mensajes, seq: o.seq, base: o.base,
       pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
-      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca,
+      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca, politica: estadoATexto(o.pol),
     };
     try { opts.persistencia.guardar(o.ref, e); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
   }
@@ -278,7 +316,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const o: Op = ops[d.ref] = {
       ref: d.ref, d, ultimo: minuto0, nivel: RANGO[d.nivel] > RANGO[d.nivelMax] ? d.nivelMax : d.nivel, modo: "DISPONIBLE", hasta: null,
       avisos: structuredClone(d.avisos), alertas: structuredClone(d.alertas), elementos: new Map(), ledger: new Map(), corr: new Map(),
-      mensajes: [], seq: 0, base: 0, epoca: randomBytes(4).toString("hex"), pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
+      mensajes: [], seq: 0, base: 0, epoca: randomBytes(4).toString("hex"), pol: estadoVacio(), pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
@@ -293,6 +331,10 @@ export function crearServidor(opts: OpcionesServidor) {
       if (typeof previo.cli_at === "string") cliAt.set(d.ref, previo.cli_at);
       // Un estado de antes de las épocas sigue con una nueva: sus cursores dan 410 y la app vuelve a sondear.
       if (typeof previo.epoca === "string" && /^[0-9a-f]{8}$/.test(previo.epoca)) o.epoca = previo.epoca;
+      // Estado de la política ilegible: se avisa y se empieza de cero (la API no usa PARA; el STOP es aparte).
+      const pol = typeof previo.politica === "string" ? estadoDesdeTexto(previo.politica) : null;
+      if (pol) o.pol = pol;
+      else if (previo.politica != null) process.stderr.write("soul api: estado de la política de atención ilegible; se empieza de cero\n");
       continue;
     }
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
@@ -311,7 +353,7 @@ export function crearServidor(opts: OpcionesServidor) {
     for (let t = o.ultimo + MIN; t <= objetivo; t += MIN) {
       const i = (t - minuto0) / MIN;
       if (o.hasta != null && o.hasta <= t) volverADisponible(o, t);
-      const w = Math.floor(t / (o.avisos.ventanaMin * MIN));
+      const w = ventanaDe(o, t);
       if (w !== o.ventana.idx) { volcarPendientes(o, t, o.modo === "DISPONIBLE"); iniciarVentana(o, t); }
       resumenes(o, t - MIN, t);
       if (caidas) continue;

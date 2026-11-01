@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { request } from "node:https";
 import { makeSelfSigned } from "../src/api/cert.ts";
 import { crearServidor, type SemillaOperador } from "../src/api/server.ts";
+import { estadoDesdeTexto } from "../src/attention/index.ts";
 
 const T0 = Date.parse("2026-10-31T08:00:00Z");
 const CERT = makeSelfSigned(["127.0.0.1"], new Date(T0));
@@ -131,4 +132,29 @@ test("D4/D5: con el estado perdido, el cursor anterior da 410 (no 400) y los ids
     // Un cursor manipulado sigue siendo 400.
     assert.equal((await get(a.port, `/sondeo?cursor=${encodeURIComponent(cursor.replace(/.$/, (c) => (c === "0" ? "1" : "0")))}`)).status, 400);
   } finally { await a.s.cerrar(); }
+});
+
+test("H-11: decide la Politica de src/attention (alerta declarada pasa en DISPONIBLE) y su estado se persiste con estadoATexto", async () => {
+  const regla = { id: "r-jefa", tipo: "persona", objetivo: "h1", palabra: null, modos: ["FOCO"] };
+  const disco = new Map<string, any>();
+  let disparar = true;
+  const s = crearServidor({
+    tls: CERT, reloj: () => T0, secretoCursor: "fijo",
+    persistencia: { cargar: (r) => disco.get(r) ?? null, guardar: (r, e) => { disco.set(r, structuredClone(e)); } },
+    mundo: {
+      semillas: () => [{ ...semilla(), elementos: [], alertas: [regla], avisos: { ...semilla().avisos, activos: ["espera_respuesta"] } }],
+      refrescar: (ctx, o, t) => { if (disparar) { disparar = false; ctx.evento(o, { tipo: "alerta", regla, efectiva: "alerta", ids: ["e-1"] }, t); } },
+    },
+  });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  try {
+    const m = JSON.parse((await get(l.port, "/sondeo")).body).mensajes;
+    // La aproximación anterior solo la daba por alerta si DISPONIBLE estaba entre sus modos.
+    assert.deepEqual(m.map((x: { tipo: string; categoria: string }) => [x.tipo, x.categoria]), [["alerta", "alerta_definida"]]);
+    const e = disco.get("op");
+    assert.equal(typeof e.politica, "string", "el estado de la política va con el de la API");
+    const pol = estadoDesdeTexto(e.politica);
+    assert.ok(pol, "es texto de estadoATexto");
+    assert.deepEqual([...pol!.alertasUsadas.values()], [1], "la alerta gastó el tope propio de la política");
+  } finally { await s.cerrar(); }
 });
