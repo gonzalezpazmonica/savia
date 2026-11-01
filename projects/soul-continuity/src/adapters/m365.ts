@@ -47,21 +47,30 @@ function mailMeta(x: J, myDomain: string, headers: boolean, authserv: string[] |
   const id = safeRef(x?.id);
   const conv = typeof x?.conversationId === "string" ? x.conversationId : null;
   if (!id || !conv) return null;
-  // Un enviado mío sin fecha no puede cerrar su hilo: descartarlo dejaría la espera
-  // abierta (error en la dirección peligrosa). Se falla cerrado.
+  // Sin fecha legible un mensaje no se puede ordenar en su hilo. Un enviado mío descartado
+  // dejaría la espera abierta; uno recibido descartado anclaría el hilo a un mensaje anterior.
+  // En ambos casos se falla cerrado.
   const at = sent ? toIso(x?.sentDateTime) ?? toIso(x?.receivedDateTime) : toIso(x?.receivedDateTime);
-  if (sent && !at) throw new Stop("error", "Graph (correo): un mensaje enviado no trae fecha legible; no se da una espera que podría estar cerrada.");
+  if (!at) throw new Stop("error", `Graph (correo): un mensaje ${sent ? "enviado" : "recibido"} no trae fecha legible; no se da una espera que podría ser falsa.`);
   const from = String(x?.from?.emailAddress?.address ?? "");
   const flagged = x?.flag?.flagStatus === "flagged" ? toIso(x?.flag?.dueDateTime?.dateTime, x?.flag?.dueDateTime?.timeZone === "UTC") : null;
   return {
     id, conv, from,
     to: addrs(x?.toRecipients),
     cc: addrs(x?.ccRecipients),
-    at: at ?? "",
+    at,
     subject: typeof x?.subject === "string" ? x.subject : "",
     auth: headers ? senderAuth(from, x?.internetMessageHeaders, myDomain, authserv) : "unknown",
     flag_due: flagged,
   };
+}
+
+const strs = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/** Forma de `mailMeta`: lo que `awaitingReply` lee de cada elemento de la caché. */
+function isMailMeta(m: Meta): boolean {
+  return ["id", "conv", "from", "at", "subject", "auth"].every((k) => typeof m[k] === "string")
+    && strs(m.to) && strs(m.cc) && (m.flag_due === null || typeof m.flag_due === "string");
 }
 
 function isResync(status: number, body: J): boolean {
@@ -76,7 +85,9 @@ async function deltaFolder(ctx: AdapterContext, tok: string, folder: string, sel
   const key = `${folder}|${select}|${variant}`;
   const initial = `/v1.0/me/mailFolders/${folder}/messages/delta?$select=${select}`;
   const saved = await cache.load(ctx.operator.ref, "m365-mail", key);
-  let state: DeltaState = saved ?? { link: null, complete: false, items: {} };
+  // Una caché antigua o con otra forma no se usa: se resincroniza desde cero en vez de fallar
+  // en cada lectura hasta que alguien la borre a mano.
+  let state: DeltaState = saved && Object.values(saved.items).every(isMailMeta) ? saved : { link: null, complete: false, items: {} };
   let url = initial;
   if (state.link) {
     // El enlace guardado se revalida: una caché manipulada no puede llevarse el token.

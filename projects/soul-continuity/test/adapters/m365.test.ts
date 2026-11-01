@@ -418,6 +418,38 @@ test("correo por delta: un enlace manipulado en la caché no se sigue; se resinc
   assert.ok(urls[0].startsWith("/v1.0/me/mailFolders/inbox/messages/delta?$select="));
 });
 
+test("correo por delta: una caché con otra forma se descarta y se resincroniza, sin error", async () => {
+  const urls: string[] = [];
+  const transport = {
+    async request(req: { url: string }) {
+      urls.push(req.url);
+      const folder = req.url.includes("sentitems") ? "sentitems" : "inbox";
+      return { status: 200, headers: {}, body: { value: [], "@odata.deltaLink": `/v1.0/me/mailFolders/${folder}/messages/delta?$deltatoken=n` } };
+    },
+  };
+  // `to` no es lista: `awaitingReply` lanzaría TypeError en cada lectura.
+  const bad = { m9: { id: "m9", conv: "c9", from: "ana@alfa.example", to: "yo", cc: [], at: "2026-11-01T10:00:00.000Z", subject: "Viejo", auth: "unknown", flag_due: null } };
+  const cache = {
+    async load(_o: string, _a: string, key: string) {
+      return key.startsWith("inbox|") ? { link: "/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=viejo", complete: true, items: bad } : null;
+    },
+    async save() {},
+    async clear() {},
+  };
+  const r = await makeM365Adapters({ cache })["m365-mail"].read(ctxWith({ now: NOW, transport }));
+  assert.equal(r.status, "ok");
+  assert.deepEqual(keys(r), []);
+  assert.ok(urls[0].startsWith("/v1.0/me/mailFolders/inbox/messages/delta?$select="), "resincroniza desde el inicio, no sigue el enlace viejo");
+});
+
+test("correo: un recibido sin fecha legible da error, no se descarta en silencio", async () => {
+  const transport = { async request(req: { url: string }) {
+    const value = req.url.includes("/inbox/") ? [{ id: "m1", conversationId: "c1", subject: "S", from: { emailAddress: { address: "ana@alfa.example" } }, toRecipients: [{ emailAddress: { address: ME } }], receivedDateTime: "ayer" }] : [];
+    return { status: 200, headers: {}, body: { value } };
+  } };
+  assert.equal((await makeM365Adapters()["m365-mail"].read(ctxWith({ now: NOW, transport }))).status, "error");
+});
+
 // Un enviado mío cierra el hilo por su sentDateTime; sin fecha legible, falla cerrado.
 function mailFake(sent: J) {
   const inbox = { id: "m1", conversationId: "c1", subject: "S", from: { emailAddress: { address: "ana@alfa.example" } }, toRecipients: [{ emailAddress: { address: ME } }], receivedDateTime: "2026-11-01T10:00:00Z" };
