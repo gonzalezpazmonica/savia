@@ -10,9 +10,9 @@
  * con él. Ficheros con permisos 0600.
  */
 
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, writeFileSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync, renameSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export type Meta = Record<string, string | number | boolean | null | string[]>;
 
@@ -70,10 +70,19 @@ export class FileDeltaCache implements DeltaCache {
     assertNoBodies(state);
     const dir = adapterCacheDir(this.stateDir, op, adapter);
     mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // mkdir no endurece directorios que ya existían (p. ej. op-* creado por otro): se fuerza 0700
+    // en los tres niveles propios. En Windows chmod no aplica ACL y es inocuo.
+    for (const d of [dir, dirname(dir), operatorDir(this.stateDir, op)]) chmodSync(d, 0o700);
     const f = join(dir, `${h16(key)}.json`);
-    const tmp = `${f}.tmp`;
-    writeFileSync(tmp, JSON.stringify(state), { mode: 0o600 });
-    renameSync(tmp, f);
+    // Temporal único y exclusivo («wx»): un .tmp previo con otros permisos no se reutiliza.
+    const tmp = `${f}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify(state), { mode: 0o600, flag: "wx" });
+      renameSync(tmp, f);
+    } catch (e) {
+      rmSync(tmp, { force: true });
+      throw e;
+    }
   }
 
   async clear(op: string, adapter: string): Promise<void> {

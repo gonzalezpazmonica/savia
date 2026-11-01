@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileDeltaCache, MemoryDeltaCache, adapterCacheDir, operatorDir } from "../../src/adapters/delta-cache.ts";
@@ -63,4 +63,24 @@ test("MemoryDeltaCache: aislada por operador y copia profunda", async () => {
   (got!.items.m1 as Record<string, unknown>).subject = "cambiado";
   assert.equal((await c.load("op-pm", "m365-mail", "k"))!.items.m1.subject, "Hola");
   assert.equal(await c.load("op-otro", "m365-mail", "k"), null);
+});
+
+test("FileDeltaCache: endurece a 0700 directorios previos y no reutiliza un .tmp ajeno", { skip: process.platform === "win32" }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "s490-dc-"));
+  const ad = adapterCacheDir(dir, "op-pm", "m365-mail");
+  mkdirSync(ad, { recursive: true, mode: 0o755 });
+  for (const d of [ad, join(ad, ".."), operatorDir(dir, "op-pm")]) chmodSync(d, 0o755);
+  // Un .tmp de nombre fijo con permisos abiertos, como el que dejaba la versión anterior.
+  const files0 = new FileDeltaCache(dir);
+  await files0.save("op-pm", "m365-mail", "k", st);
+  const f = join(ad, readdirSync(ad)[0]);
+  writeFileSync(`${f}.tmp`, "{}", { mode: 0o644 });
+  chmodSync(`${f}.tmp`, 0o644);
+  chmodSync(f, 0o644);
+  for (const d of [ad, join(ad, ".."), operatorDir(dir, "op-pm")]) chmodSync(d, 0o755);
+  await files0.save("op-pm", "m365-mail", "k", st);
+  for (const d of [ad, join(ad, ".."), operatorDir(dir, "op-pm")]) assert.equal(statSync(d).mode & 0o777, 0o700, d);
+  assert.equal(statSync(f).mode & 0o777, 0o600, "el fichero final sale de un temporal nuevo con 0600");
+  const stale = `${readdirSync(ad).find((y) => y.endsWith(".json"))}.tmp`;
+  assert.deepEqual(readdirSync(ad).filter((x) => x.endsWith(".tmp") && x !== stale), [], "no quedan temporales propios");
 });

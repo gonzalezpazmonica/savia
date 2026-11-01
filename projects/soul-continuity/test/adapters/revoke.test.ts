@@ -51,5 +51,7 @@ test("si el almacén falla, la revocación no dice que borró los tokens", async
   const stateDir = mkdtempSync(join(tmpdir(), "s490-rv-"));
   const broken = { async get() { return null; }, async set() {}, async delete(): Promise<boolean> { throw new Error("sin almacén"); } };
   const store = new SystemCredentialStore({ backend: broken, operatorRef: "op" });
+  await new FileDeltaCache(stateDir).save("op", "jira", "k", { link: null, complete: true, items: { j1: { id: "j1", subject: "Asunto" } } });
   await assert.rejects(revokeAdapter({ adapter: "jira", operatorRef: "op", stateDir, store }), /sin almacén/);
+  assert.equal(existsSync(adapterCacheDir(stateDir, "op", "jira")), false, "la caché con datos personales se borra aunque falle el almacén");
 });
