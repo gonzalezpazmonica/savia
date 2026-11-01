@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { AlmacenRecetas, ejecutarReceta } from "../adaptador/ejecutor.ts";
+import { AlmacenRecetas, cerrarLectura, ejecutarReceta } from "../adaptador/ejecutor.ts";
 import { buscarNavegador } from "../cortafuegos/perfil.ts";
 import { cargarReceta } from "../receta/validar.ts";
 import { Banco } from "../banco/servidor.ts";
@@ -80,6 +80,8 @@ test("AlmacenRecetas: desactivar persiste con permisos 0600, reactivar la devuel
     a.desactivar("r1", "dejó de ser fiable");
     assert.equal(new AlmacenRecetas(ruta).aviso("r1"), "dejó de ser fiable");
     assert.equal(statSync(ruta).mode & 0o777, 0o600);
+    // El directorio también es privado, como el de recibos y huellas (revisión #1443, P2-4 de seguridad).
+    assert.equal(statSync(join(dir, "sub")).mode & 0o777, 0o700);
     assert.equal(a.reactivar("r1"), true);
     assert.equal(a.aviso("r1"), null);
     assert.equal(a.reactivar("r1"), false);
@@ -89,4 +91,27 @@ test("AlmacenRecetas: desactivar persiste con permisos 0600, reactivar la devuel
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("desactivada y luego una excepción: manda DESACTIVADA y se persiste (revisión #1443, P2-1 de corrección)", async () => {
+  const { mkdtempSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = mkdtempSync(join(tmpdir(), "soul-cierre-"));
+  try {
+    const r = cargarReceta(join(import.meta.dirname, "..", "recetas", "sinteticas", "tareas.json"), { puerto: 8490 });
+    const almacen = new AlmacenRecetas(join(dir, "desactivadas.json"));
+    const base = { registro: [], ventanasAccion: [], descargas: 0, canal: null };
+    const fw = { sesionCaducada: false, desactivada: "operación Nueva en /api" };
+    const res = cerrarLectura(r, fw, "extracción: resultado no es una lista", almacen, base, [], "ana.prueba");
+    assert.equal(res.estado, "DESACTIVADA");
+    assert.equal(almacen.aviso(r.id), "operación Nueva en /api");
+    // Caso negativo: sin desactivación, el mismo fallo es ERROR y no apaga la receta.
+    const otro = cerrarLectura(r, { sesionCaducada: false, desactivada: null }, "fallo", almacen, base, [], "ana.prueba");
+    assert.equal(otro.estado, "ERROR");
+    assert.equal(almacen.reactivar(r.id), true);
+    assert.equal(cerrarLectura(r, { sesionCaducada: false, desactivada: null }, "fallo", almacen, base, [], "ana.prueba").estado, "ERROR");
+    assert.equal(almacen.aviso(r.id), null);
+    // La sesión caducada sigue mandando sobre todo.
+    assert.equal(cerrarLectura(r, { sesionCaducada: true, desactivada: "x" }, "fallo", almacen, base, [], "ana.prueba").estado, "SESION_CADUCADA");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { decidirEnvioWs, decidirHttp, operacionDe, soloConsultas, type PeticionHttp } from "../cortafuegos/decision.ts";
+import { accionEnUrl, clavesDuplicadas, decidirEnvioWs, decidirHttp, operacionDe, soloConsultas, type PeticionHttp } from "../cortafuegos/decision.ts";
 import { validarReceta } from "../receta/validar.ts";
 import type { Receta } from "../receta/tipos.ts";
 
@@ -194,4 +194,48 @@ test("decidirHttp: un comodín relleno con un verbo de acción se corta (revisi�
   }
   assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/aprobaciones-pendientes` })).permitir, true);
   assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}/x/approve` })).motivo, "accion_en_url");
+});
+
+test("accionEnUrl: verbo seguido de extensión, `;` o pegado en camelCase en el camino (revisión #1443, P2-1 de seguridad)", () => {
+  const r = { ...tareas, urls: [...tareas.urls, "/x/*", "/api/*"] };
+  for (const ruta of ["/x/approve.php", "/x/logout.aspx", "/x/delete;v1", "/api/approveTask", "/api/itemMarkRead"]) {
+    assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}${ruta}` })).motivo, "accion_en_url", ruta);
+  }
+  // Casos negativos: palabras que solo empiezan como un verbo, y nombres de operación en la consulta.
+  for (const ruta of ["/x/readme-pendientes", "/api/getSettings", "/x/listado.html"]) {
+    assert.equal(decidirHttp(r, sin, pet({ url: `${tareas.origen}${ruta}` })).permitir, true, ruta);
+  }
+  assert.equal(decidirHttp(correo, sin, post("/correo/api/servicio?x-accion=BuscarElementos", { "x-accion": "BuscarElementos" }, {})).permitir, true);
+});
+
+test("renovación de sesión: una URL de acción no se acepta como renovación (revisión #1443, P2-3 de seguridad)", () => {
+  const r = { ...correo, renovacion_sesion: ["/sesion/renovar", "/sesion/logout"] };
+  assert.equal(decidirHttp(r, sin, post("/sesion/renovar", {}, {})).motivo, "renovacion");
+  const d = decidirHttp(r, sin, post("/sesion/logout", {}, {}));
+  assert.equal(d.permitir, false);
+  assert.notEqual(d.motivo, "renovacion");
+});
+
+test("cuerpo JSON con la clave de operación repetida: operación ambigua, se corta y desactiva (revisión #1443, P2-2 de seguridad)", () => {
+  const r = structuredClone(correo);
+  r.post_lectura = [{ url: "/correo/api/op", operacion: { cuerpo_json: "op" }, lectura: ["Leer"], escritura_conocida: ["Escribir"] }];
+  r.urls = [...r.urls, "/correo/api/op"];
+  const p = (cuerpo: string) => pet({ url: `${O}/correo/api/op`, metodo: "POST", cuerpo, navegacion: false });
+  assert.equal(decidirHttp(r, sin, p('{"op":"Leer"}')).permitir, true);
+  for (const c of ['{"op":"Escribir","op":"Leer"}', '{"op":"Escribir","o\\u0070":"Leer"}']) {
+    const d = decidirHttp(r, sin, p(c));
+    assert.deepEqual([d.permitir, d.motivo, d.desactivar], [false, "operacion_desconocida", true], c);
+  }
+  assert.equal(clavesDuplicadas('{"a":{"op":1},"op":2,"b":[{"op":3},{"op":4}]}'), false);
+  assert.equal(clavesDuplicadas('{"a":{"x":1,"x":2}}'), true);
+  assert.equal(clavesDuplicadas('{"a":"op","op":"a,\\"op\\":"}'), false);
+});
+
+test("accionEnUrl y comodín: la doble codificación no esconde `/` ni un verbo (revisión #1443, P2-1 de seguridad)", () => {
+  assert.equal(accionEnUrl(new URL(`${O}/tareas?pagina=%2561pprove`)), true);
+  assert.equal(accionEnUrl(new URL(`${O}/tareas?pagina=%25252561pprove`)), true);
+  assert.equal(accionEnUrl(new URL(`${O}/tareas?pagina=2`)), false);
+  const t = decidirHttp(tareas, sin, pet({ url: `${tareas.origen}/tareas?pagina=1%252Fx` }));
+  assert.deepEqual([t.permitir, t.motivo], [false, "fuera_de_lista"]);
+  assert.equal(decidirHttp(tareas, sin, pet({ url: `${tareas.origen}/tareas?pagina=1` })).permitir, true);
 });

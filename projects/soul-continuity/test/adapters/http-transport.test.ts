@@ -100,6 +100,39 @@ test("solo lectura: rechaza POST salvo las lecturas por POST de la lista cerrada
   }
 });
 
+test("POST de lectura: una URL absoluta del mismo origen fuera de la ruta de la base se rechaza", async () => {
+  let hits = 0;
+  const s = await serve((_q, res) => { hits++; json(res, 200, { ok: true }); });
+  try {
+    const t = new HttpTransport({ bases: { ado: `${s.base}/org` } });
+    await assert.rejects(t.request({ service: "ado", method: "POST", url: `${s.base}/abc/proj/_apis/wit/wiql`, body: {} }), TransportRefused);
+    await assert.rejects(t.request({ service: "ado", method: "POST", url: `${s.base}/orgx/_apis/wit/wiql`, body: {} }), TransportRefused);
+    assert.equal(hits, 0);
+    assert.equal((await t.request({ service: "ado", method: "POST", url: `${s.base}/org/proj/_apis/wit/wiql`, body: {} })).status, 200);
+    assert.equal((await t.request({ service: "ado", method: "POST", url: "/proj/_apis/wit/wiql", body: {} })).status, 200);
+  } finally {
+    await s.close();
+  }
+});
+
+test("respuesta por encima de maxBytes: error, con o sin Content-Length; en el tope, se lee", async () => {
+  const big = "x".repeat(2000);
+  const s = await serve((req, res) => {
+    if (req.url === "/chunked") { res.writeHead(200, { "content-type": "text/plain" }); res.write(big); res.end(big); return; }
+    if (req.url === "/justo") { res.writeHead(200, { "content-type": "text/plain" }); res.end("y".repeat(1000)); return; }
+    res.writeHead(200, { "content-type": "text/plain", "content-length": String(big.length) });
+    res.end(big);
+  });
+  try {
+    const t = new HttpTransport({ bases: { graph: s.base }, maxBytes: 1000 });
+    await assert.rejects(t.request({ service: "graph", method: "GET", url: "/declarada" }), /supera 1000 bytes/);
+    await assert.rejects(t.request({ service: "graph", method: "GET", url: "/chunked" }), /supera 1000 bytes/);
+    assert.equal((await t.request({ service: "graph", method: "GET", url: "/justo" })).body, "y".repeat(1000));
+  } finally {
+    await s.close();
+  }
+});
+
 test("rechaza URL absoluta de otro origen y servicios sin base", async () => {
   const t = new HttpTransport({ bases: { graph: "https://graph.example" } });
   await assert.rejects(t.request({ service: "graph", method: "GET", url: "https://malo.example/v1.0/me" }), TransportRefused);
@@ -143,47 +176,49 @@ test("una ruta relativa al esquema (//host o /\\host) no saca el token a otro ho
   assert.deepEqual(seen, ["https://graph.example/v1.0/me"]);
 });
 
-test("una ruta que ya trae el prefijo de la base no se duplica (GitHub Enterprise)", async () => {
+test("la ruta relativa siempre lleva el prefijo de la base, aunque empiece igual (proyecto de ADO llamado como la organización)", async () => {
   const s = await serve((req, res) => json(res, 200, { path: req.url }));
   try {
-    const t = new HttpTransport({ bases: { github: `${s.base}/api/v3` } });
-    const a = await t.request({ service: "github", method: "GET", url: "/search/issues?q=1" });
-    assert.deepEqual(a.body, { path: "/api/v3/search/issues?q=1" });
-    const b = await t.request({ service: "github", method: "GET", url: "/api/v3/search/issues?q=1&page=2" });
-    assert.deepEqual(b.body, { path: "/api/v3/search/issues?q=1&page=2" });
-    // Un prefijo parecido no cuenta como el mismo.
-    const c = await t.request({ service: "github", method: "GET", url: "/api/v30/x" });
-    assert.deepEqual(c.body, { path: "/api/v3/api/v30/x" });
+    const t = new HttpTransport({ bases: { ado: `${s.base}/contoso` } });
+    const a = await t.request({ service: "ado", method: "POST", url: "/contoso/_apis/wit/wiql?api-version=7.1", body: { query: "x" } });
+    assert.deepEqual(a.body, { path: "/contoso/contoso/_apis/wit/wiql?api-version=7.1" });
+    const b = await t.request({ service: "ado", method: "GET", url: "/contoso" });
+    assert.deepEqual(b.body, { path: "/contoso/contoso" });
   } finally {
     await s.close();
   }
 });
 
-test("respuesta mayor que el tope (8 MiB): se corta y falla, no se lee entera; justo en el tope sí vale", async () => {
-  const s = await serve((req, res) => {
-    res.writeHead(200, { "content-type": "text/plain" });
-    res.end("x".repeat(req.url?.includes("grande") ? 8 * 1024 * 1024 + 1 : 8 * 1024 * 1024));
-  });
-  try {
-    const t = new HttpTransport({ bases: { jira: s.base } });
-    const ok = await t.request({ service: "jira", method: "GET", url: "/justo" });
-    assert.equal((ok.body as string).length, 8 * 1024 * 1024);
-    await assert.rejects(t.request({ service: "jira", method: "GET", url: "/grande" }), /respuesta demasiado grande/);
-  } finally {
-    await s.close();
+test("segmentos `.` y `..` (también codificados) se rechazan: no sacan la ruta del prefijo", async () => {
+  const seen: string[] = [];
+  const fetchFn = (async (u: URL | string) => {
+    seen.push(String(u));
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  const t = new HttpTransport({ bases: { ado: "https://dev.example/contoso" }, fetch: fetchFn });
+  for (const url of ["/../otra/_apis/x", "/a/./b", "/%2e%2e/otra/x", "/.%2E/otra/x", "/%2E/x",
+    "/proj%2f..%2fotra/_apis/x", "/proj%2F..%2Fotra/x", "/proj%5c..%5cotra/x", "https://dev.example/contoso/p%2f..%2fotra/x"]) {
+    await assert.rejects(t.request({ service: "ado", method: "GET", url, headers: { Authorization: "Bearer secreto" } }), TransportRefused, url);
   }
+  assert.deepEqual(seen, []);
+  // Un punto dentro de un segmento no es un segmento de punto, ni lo es en la consulta.
+  await t.request({ service: "ado", method: "GET", url: "/proj/v1.2/x?q=../a" });
+  // `%2f` en la consulta no es ruta: se permite.
+  await t.request({ service: "ado", method: "GET", url: "/proj/x?q=a%2Fb" });
+  assert.deepEqual(seen, ["https://dev.example/contoso/proj/v1.2/x?q=../a", "https://dev.example/contoso/proj/x?q=a%2Fb"]);
 });
 
-test("una ruta con segmentos . o .. (también codificados) se rechaza: no sale del prefijo de la base", async () => {
-  const s = await serve((req, res) => json(res, 200, { path: req.url }));
-  try {
-    const t = new HttpTransport({ bases: { jira: `${s.base}/jira` } });
-    for (const url of ["/../x", "/a/../../x", "/./x", "/%2e%2e/x", "/%2E%2e/x", "/a/%2e/x"]) {
-      await assert.rejects(t.request({ service: "jira", method: "GET", url }), TransportRefused, url);
-    }
-    const r = await t.request({ service: "jira", method: "GET", url: "/rest/api/2/a..b" });
-    assert.deepEqual(r.body, { path: "/jira/rest/api/2/a..b" }, "control: «..» dentro de un nombre no es un segmento");
-  } finally {
-    await s.close();
+test("GET absoluto del mismo origen fuera del prefijo de la base: rechazado, no solo el POST", async () => {
+  const seen: string[] = [];
+  const fetchFn = (async (u: URL | string) => {
+    seen.push(String(u));
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  const t = new HttpTransport({ bases: { ado: "https://dev.example/contoso" }, fetch: fetchFn });
+  for (const url of ["https://dev.example/otra-org/_apis/x", "https://dev.example/contoso-b/_apis/x"]) {
+    await assert.rejects(t.request({ service: "ado", method: "GET", url, headers: { Authorization: "Bearer secreto" } }), TransportRefused, url);
   }
+  assert.deepEqual(seen, []);
+  await t.request({ service: "ado", method: "GET", url: "https://dev.example/contoso/_apis/x" });
+  assert.deepEqual(seen, ["https://dev.example/contoso/_apis/x"]);
 });

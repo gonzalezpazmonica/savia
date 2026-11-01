@@ -48,6 +48,54 @@ test("GitHub: revisiones, asignaciones y menciones sin duplicar, con paginación
   }
 });
 
+test("GitHub: mismo repositorio y número en dos propietarios no se fusionan en silencio: «unavailable»", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.github.items.push({ owner: "org1", repo: "app", number: 5, title: "Revisa", is_pr: true, assignees: [], requested: ["yo-gh"], mentions: [] });
+    d.github.items.push({ owner: "org2", repo: "app", number: 5, title: "Asignada", is_pr: false, assignees: ["yo-gh"], requested: [], mentions: [] });
+  });
+  try {
+    assert.deepEqual(keys(await makeGitHubAdapter().read(ctx())), ["<unavailable>"]);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("GitHub: el mismo propietario en dos búsquedas no es colisión; la clave sigue el contrato `<repo>#<n>`", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.github.items.push({ owner: "org1", repo: "app", number: 5, title: "Revisa", is_pr: true, assignees: [], requested: ["yo-gh"], mentions: ["yo-gh"] });
+    d.github.items.push({ owner: "org1", repo: "app", number: 6, title: "Asignada", is_pr: false, assignees: ["yo-gh"], requested: [], mentions: [] });
+  });
+  try {
+    assert.deepEqual(keys(await makeGitHubAdapter().read(ctx())), ["github:review_request:app#5", "github:task_assigned:app#6"]);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("GitHub: `incomplete_results: true` con 200 es «unavailable», no una colección completa", async () => {
+  const read = (incomplete: unknown) => makeGitHubAdapter().read(ctxWith({
+    route: "api", transport: { async request() { return { status: 200, headers: {}, body: { incomplete_results: incomplete, items: [{ number: 5, title: "x", repository_url: "https://api.github.example/repos/o/app" }] } }; } },
+  }));
+  assert.equal((await read(true)).status, "unavailable");
+  assert.deepEqual(keys(await read(false)), ["github:review_request:app#5"]);
+});
+
+test("GitHub: más resultados que los que la búsqueda deja recorrer (tope de 1000) es «unavailable»", async () => {
+  const item = { number: 5, title: "x", repository_url: "https://api.github.example/repos/o/app" };
+  // Sin `rel="next"` y con un total mayor que lo devuelto: GitHub truncó la búsqueda.
+  const read = (total: number) => makeGitHubAdapter().read(ctxWith({
+    route: "api", transport: { async request() { return { status: 200, headers: {}, body: { total_count: total, incomplete_results: false, items: [item] } }; } },
+  }));
+  assert.equal((await read(1001)).status, "unavailable");
+  assert.equal((await read(2)).status, "unavailable", "límite: uno de más ya es parcial");
+  assert.deepEqual(keys(await read(1)), ["github:review_request:app#5"]);
+});
+
+test("GitHub: un repository_url sin propietario no produce elemento", async () => {
+  const fake = { async request() { return { status: 200, headers: {}, body: { items: [{ number: 5, title: "x", repository_url: "app" }] } }; } };
+  assert.deepEqual(keys(await makeGitHubAdapter().read(ctxWith({ route: "api", transport: fake }))), []);
+});
+
 test("GitHub: de un Link hacia otro host solo se sigue la ruta, contra la base configurada", async () => {
   const urls: string[] = [];
   const fake = {
@@ -80,4 +128,16 @@ test("GitHub: 403 por límite de tasa es «unavailable»; un 403 sin señal de l
   assert.equal((await read({ "x-ratelimit-remaining": "0" })).status, "unavailable");
   assert.equal((await read({ "x-ratelimit-remaining": "12" })).status, "error");
   assert.equal((await read({})).status, "error");
+});
+
+test("GitHub Enterprise: el `Link` absoluto con `/api/v3` no duplica el prefijo de la base", async () => {
+  const seen: string[] = [];
+  const fetchFn = (async (u: URL | string) => {
+    seen.push(String(u));
+    const link = seen.length === 1 ? '<https://ghe.example/api/v3/search/issues?q=x&page=2>; rel="next"' : "";
+    return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { "content-type": "application/json", link } });
+  }) as typeof fetch;
+  const r = await makeGitHubAdapter().read(ctxWith({ route: "api", transport: new HttpTransport({ bases: { github: "https://ghe.example/api/v3" }, fetch: fetchFn }) }));
+  assert.ok(r.status === "ok");
+  assert.equal(seen.filter((u) => u.includes("page=2"))[0], "https://ghe.example/api/v3/search/issues?q=x&page=2");
 });

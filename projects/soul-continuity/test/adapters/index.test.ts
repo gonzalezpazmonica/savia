@@ -12,6 +12,8 @@ import { makeApiAdapters } from "../../src/adapters/index.ts";
 import { BODY_CANARY } from "../../bench/src/world.ts";
 import { makeHarness } from "./bench-harness.ts";
 
+const ZERO = ["revoked_used", "cross_operator_leaks", "level_leaks", "bodies_persisted", "bodies_in_snapshot", "tokens_on_disk", "source_mutations", "contract_violations", "unexpected_errors", "critical_failed"] as const;
+
 const summary = (r: Awaited<ReturnType<typeof runBench>>) =>
   `${r.gate.failures.join(" | ")} :: ${r.scenarios.filter((s) => !s.pass).map((s) => `${s.id}: ${s.reasons.slice(0, 2).join("; ")}`).join(" || ")}`;
 
@@ -28,17 +30,16 @@ test("banco (dobles en memoria): gate AC-3 PASS con los adaptadores de API", asy
   const r = await runBench(makeHarness({ mode: "memory" }));
   assert.equal(r.metrics.scenarios, 80);
   assert.ok(r.gate.pass, summary(r));
-  for (const k of ["revoked_used", "cross_operator_leaks", "level_leaks", "bodies_persisted", "bodies_in_snapshot", "tokens_on_disk", "source_mutations", "contract_violations", "unexpected_errors", "critical_failed"] as const) {
-    assert.equal(r.metrics[k], 0, k);
-  }
+  for (const k of ZERO) assert.equal(r.metrics[k], 0, k);
   for (const [q, v] of Object.entries(r.metrics.per_question)) assert.equal(v.precision, 1, `${q}: ${v.passed}/${v.total}`);
 });
 
 test("banco por HTTP local con delta del correo entre instantes: gate PASS", async () => {
   const r = await runBench(makeHarness({ mode: "http", delta: true }));
+  assert.equal(r.metrics.scenarios, 80);
   assert.ok(r.gate.pass, summary(r));
-  assert.equal(r.metrics.bodies_persisted, 0);
-  assert.equal(r.metrics.tokens_on_disk, 0);
+  for (const k of ZERO) assert.equal(r.metrics[k], 0, k);
+  for (const [q, v] of Object.entries(r.metrics.per_question)) assert.equal(v.precision, 1, `${q}: ${v.passed}/${v.total}`);
   assert.ok(r.metrics.p95_q1_ms < 2000);
 });
 
@@ -66,6 +67,9 @@ test("sensibilidad: un 403 en Graph tratado como vacío por un adaptador sí se 
   // Con 403 los adaptadores fallan cerrado (admin_consent_required): no inventan nada, pero tampoco aciertan B01/B03.
   assert.equal(r.gate.pass, false);
   assert.equal(r.metrics.unexpected_errors, 0);
+  // El fallo tiene que ser el cierre por consentimiento, no cualquier otro.
+  const a01 = r.scenarios.find((s) => s.id === "A01");
+  assert.ok(a01?.reasons.includes("m365-calendar: admin_consent_required ≠ ok"), a01?.reasons.join(" | "));
 });
 
 test("robustez: aunque la API ignore $select y mande cuerpos, no llegan al disco ni a la instantánea", async () => {

@@ -3,7 +3,7 @@
 // aborta (fail-closed).
 
 import { casa, casaLogin } from "../receta/patrones.ts";
-import { ACCION } from "../receta/validar.ts";
+import { pareceAccion } from "../receta/validar.ts";
 import type { AccionNavegacion, OperacionesPost, Receta } from "../receta/tipos.ts";
 
 /** Mutantes del banco: cada uno quita UNA defensa. `ninguno` es el cortafuegos real. */
@@ -34,11 +34,44 @@ export type Motivo =
 
 /** ¿La URL concreta (decodificada) parece un enlace de acción? Los patrones ya
  *  se validan con ACCION, pero un comodín puede rellenarse con `approve`.
- *  Fail-closed si la ruta no se puede decodificar. */
+ *  Se decodifica hasta un punto fijo: `%2561pprove` es `approve` para un
+ *  servidor que decodifique dos veces. Fail-closed si la ruta no se puede
+ *  decodificar o no se estabiliza. */
 export function accionEnUrl(u: URL): boolean {
-  let ruta: string;
-  try { ruta = decodeURIComponent(u.pathname + u.search); } catch { return true; }
-  return ACCION.test(ruta);
+  let ruta = u.pathname + u.search;
+  for (let i = 0; ; i++) {
+    if (pareceAccion(ruta)) return true;
+    let sig: string;
+    try { sig = decodeURIComponent(ruta); } catch { return true; }
+    if (sig === ruta) return false;
+    if (i >= 8) return true;
+    ruta = sig;
+  }
+}
+
+/** ¿Algún objeto del JSON (ya válido) repite una clave? `JSON.parse` se queda con
+ *  la última y un servidor puede quedarse con la primera: la operación sería
+ *  ambigua. Las claves se comparan decodificadas (`"op"` es `"op"`). */
+export function clavesDuplicadas(texto: string): boolean {
+  const pila: ({ claves: Set<string>; esperaClave: boolean } | null)[] = [];
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i];
+    const cima = pila.at(-1);
+    if (c === '"') {
+      const ini = i;
+      for (i++; texto[i] !== '"'; i++) if (texto[i] === "\\") i++;
+      if (cima && cima.esperaClave) {
+        const k = JSON.parse(texto.slice(ini, i + 1)) as string;
+        if (cima.claves.has(k)) return true;
+        cima.claves.add(k);
+        cima.esperaClave = false;
+      }
+    } else if (c === "{") pila.push({ claves: new Set(), esperaClave: true });
+    else if (c === "[") pila.push(null);
+    else if (c === "}" || c === "]") pila.pop();
+    else if (c === "," && cima) cima.esperaClave = true;
+  }
+  return false;
 }
 
 export interface Decision {
@@ -129,6 +162,7 @@ export function operacionDe(o: OperacionesPost, p: PeticionHttp): { op: string |
     return { op: null, json: null };
   }
   if (!json || typeof json !== "object" || Array.isArray(json)) return { op: null, json: null };
+  if (clavesDuplicadas(p.cuerpo ?? "")) return { op: null, json: null };
   const v = leerRuta(json, f.cuerpo_json);
   return { op: typeof v === "string" && v.length > 0 ? v : null, json };
 }
@@ -165,7 +199,7 @@ export function decidirHttp(r: Receta, est: EstadoCortafuegos, p: PeticionHttp, 
     return { permitir: false, motivo: "login", sesion: true };
   }
   const metodo = p.metodo.toUpperCase();
-  if (metodo === "POST" && casa(p.url, r.origen, r.renovacion_sesion)) {
+  if (metodo === "POST" && casa(p.url, r.origen, r.renovacion_sesion) && !accionEnUrl(u)) {
     return { permitir: true, motivo: "renovacion" };
   }
   if (!casa(p.url, r.origen, r.urls, prefijo)) return { permitir: false, motivo: "fuera_de_lista" };

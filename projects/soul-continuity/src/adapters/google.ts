@@ -31,8 +31,35 @@ const META_HEADERS = ["From", "To", "Cc", "Subject", "Authentication-Results"];
 /** `authserv-id` del receptor de Gmail: un `Authentication-Results` con otro id no es suyo. */
 export const GMAIL_AUTHSERV = ["mx.google.com"];
 
-function addrList(v: string): string[] {
-  return v.split(",").map((s) => (/<([^>]+)>/.exec(s)?.[1] ?? s).trim().toLowerCase()).filter((s) => s.includes("@"));
+/**
+ * Direcciones de una cabecera de buzones (RFC 5322, lo necesario): las comas dentro
+ * de comillas, comentarios o `<…>` no separan, y de cada buzón cuenta la dirección
+ * entre `<>`. Así `"yo@alfa.example, x" <evil@x>` es `evil@x`, no `yo@alfa.example`.
+ */
+export function addrList(v: string): string[] {
+  const parts: string[] = [];
+  let cur = "";
+  let quoted = false;
+  let angle = false;
+  let depth = 0;
+  for (let i = 0; i < v.length; i++) {
+    const ch = v[i];
+    if (quoted) {
+      if (ch === "\\") { cur += ch + (v[++i] ?? ""); continue; }
+      if (ch === '"') quoted = false;
+    } else if (ch === '"') quoted = true;
+    else if (ch === "(") depth++;
+    else if (ch === ")" && depth > 0) depth--;
+    else if (ch === "<" && !depth) angle = true;
+    else if (ch === ">" && !depth) angle = false;
+    else if (ch === "," && !angle && !depth) { parts.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  parts.push(cur);
+  return parts.map((s) => {
+    const a = /<([^<>]*)>\s*(\([^)]*\)\s*)*$/.exec(s)?.[1] ?? s.replace(/"(?:[^"\\]|\\.)*"/g, "").replace(/\([^)]*\)/g, "");
+    return a.trim().toLowerCase();
+  }).filter((s) => /^[^\s@"<>(),]+@[^\s@"<>(),]+$/.test(s));
 }
 
 function googleCheck(r: TransportResponse, label: string): J {

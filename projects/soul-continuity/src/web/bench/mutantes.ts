@@ -12,16 +12,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MUTANTES } from "../cortafuegos/decision.ts";
 import type { Informe } from "./bateria.ts";
-import { clasificarMutante } from "./mapa-mutantes.ts";
+import { clasificarMutante, fallosVigentes, huellaCodigo } from "./mapa-mutantes.ts";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SALIDA = join(RAIZ, "resultados", "mutantes");
 mkdirSync(SALIDA, { recursive: true });
 
 const arg = (n: string) => { const i = process.argv.indexOf(n); return i > 0 ? process.argv[i + 1] : undefined; };
-const paralelo = Number(arg("--paralelo") ?? 1);
 const MAX_MS = 9 * 60_000;
+// Argumentos fail-closed: un `--paralelo` que no es un entero 1–8 no lanzaría
+// ningún worker y el resumen leería solo informes viejos (revisión #1443, P2-3).
+const paralelo = Number(arg("--paralelo") ?? 1);
 const lista = arg("--solo")?.split(",") ?? [...MUTANTES];
+const malos = lista.filter((m) => !(MUTANTES as readonly string[]).includes(m));
+if (!Number.isInteger(paralelo) || paralelo < 1 || paralelo > 8 || malos.length) {
+  console.error(`uso: mutantes.ts [--paralelo 1..8] [--solo a,b]${malos.length ? ` (mutantes desconocidos: ${malos.join(",")})` : ""}`);
+  process.exit(2);
+}
+const HUELLA = huellaCodigo();
 
 function correr(m: string): Promise<Informe | null> {
   rmSync(join(SALIDA, `bateria-${m}.json`), { force: true });
@@ -37,10 +45,12 @@ function correr(m: string): Promise<Informe | null> {
 }
 
 // Fail-closed: sin informe, o sin fallar ninguna comprobación de SU defensa, el mutante NO cuenta como muerto.
+// Un informe de otro código (otra huella) tampoco: con `--solo`, los demás pueden ser viejos.
 function fila(m: string, inf: Informe | null) {
-  const fallos = inf ? inf.comprobaciones.filter((c) => !c.ok).map((c) => c.id) : null;
+  const fallos = fallosVigentes(inf, HUELLA);
   const c = clasificarMutante(m, fallos);
-  return { mutante: m, estado: c.estado, fallidas: fallos?.length ?? 0, ajenos: c.ajenos, muertoPor: c.muertoPor.slice(0, 6) };
+  return { mutante: m, estado: c.estado, ...(inf && fallos === null ? { obsoleto: true } : {}),
+    fallidas: fallos?.length ?? 0, ajenos: c.ajenos, muertoPor: c.muertoPor.slice(0, 6) };
 }
 
 const filas: ReturnType<typeof fila>[] = [];
@@ -59,6 +69,6 @@ for (const m of MUTANTES) {
   filas.push(fila(m, inf));
 }
 const muertos = filas.filter((f) => f.estado === "MUERTO").length;
-writeFileSync(join(RAIZ, "resultados", "mutantes.json"), JSON.stringify({ muertos, total: filas.length, filas }, null, 2) + "\n");
+writeFileSync(join(RAIZ, "resultados", "mutantes.json"), JSON.stringify({ huella_codigo: HUELLA, muertos, total: filas.length, filas }, null, 2) + "\n");
 console.log(`muertos=${muertos}/${filas.length}`);
 process.exitCode = muertos === filas.length ? 0 : 1;

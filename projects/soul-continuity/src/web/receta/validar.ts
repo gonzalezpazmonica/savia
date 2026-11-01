@@ -5,7 +5,17 @@ import { casa, compilarPatron, esAbsoluto, esOrigenLogin, partirAbsoluto } from 
 import type { Condicion, Receta, Valor } from "./tipos.ts";
 
 /** Segmentos que delatan un enlace de acción: nunca pueden entrar en la lista. */
-export const ACCION = /(^|[/?&=_-])(approve|aprobar|reject|rechazar|logout|salir|signout|unsubscribe|baja|confirm\w*|delete|borrar|eliminar|cerrar|close|enviar|send|marcar|mark\w*|leido|read|ack)([/?&=_-]|$)/i;
+export const ACCION = /(^|[/?&=_.;-])(approve|aprobar|reject|rechazar|logout|salir|signout|unsubscribe|baja|confirm\w*|delete|borrar|eliminar|cerrar|close|enviar|send|marcar|mark\w*|leido|read|ack)([/?&=_.;-]|$)/i;
+
+/** ¿La ruta parece un enlace de acción? También con el verbo pegado en camelCase
+ *  dentro del camino (`/api/approveTask`). En la consulta no se parte: ahí van
+ *  nombres de operación, que clasifica `post_lectura` (revisión #1443, P2-1 de seguridad). */
+export function pareceAccion(ruta: string): boolean {
+  if (ACCION.test(ruta)) return true;
+  const q = ruta.indexOf("?");
+  const camino = q < 0 ? ruta : ruta.slice(0, q);
+  return ACCION.test(camino.replace(/([a-z0-9])([A-Z])/g, "$1-$2"));
+}
 
 export class RecetaInvalida extends Error {}
 
@@ -36,7 +46,7 @@ function patron(p: string, donde: string, absolutos: Esquemas = []) {
     throw new RecetaInvalida(`${donde}: ${(e as Error).message}`);
   }
   const ruta = esAbsoluto(p) ? partirAbsoluto(p).ruta : p;
-  exige(!ACCION.test(ruta), `${donde}: el patrón ${p} parece un enlace de acción`);
+  exige(!pareceAccion(ruta), `${donde}: el patrón ${p} parece un enlace de acción`);
 }
 
 function valor(v: Valor, donde: string) {
@@ -85,7 +95,12 @@ export function validarReceta(r: Receta): Receta {
       `${donde}: ${p} no casa con urls (o no es relativo al origen)`);
 
   lista(r.renovacion_sesion, "renovacion_sesion");
-  r.renovacion_sesion.forEach((p) => patron(p, "renovacion_sesion"));
+  r.renovacion_sesion.forEach((p) => {
+    patron(p, "renovacion_sesion");
+    // Un POST de renovación se acepta antes que casi todo: sin comodines que una
+    // página hostil pueda rellenar con un verbo (revisión #1443, P2-3 de seguridad).
+    exige(!p.includes("*"), `renovacion_sesion: ${p} no puede llevar comodines`);
+  });
   lista(r.paginas, "paginas", false);
   r.paginas.forEach((p) => visitable(p, "paginas"));
 

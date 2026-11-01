@@ -3,7 +3,7 @@
 // de la vigilancia; el cortafuegos se prueba en la batería.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { guardarRecibo } from "../adaptador/activacion.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,7 +26,8 @@ function ctx(params: Record<string, unknown>, route: AdapterContext["route"] = "
     credentials: { acquire: async () => { throw new Error("el adaptador web no pide credenciales"); } },
   };
 }
-const base = (extra: Record<string, unknown> = {}) => ({ ejecutable: "/x/chrome", perfil: "/x/perfil", recetas: [receta()], ...extra });
+const base = (extra: Record<string, unknown> = {}) =>
+  ({ ejecutable: "/x/chrome", perfil: "/x/perfil", recetas: [receta()], desactivadas: "/x/desactivadas.json", ...extra });
 
 function resultado(estado: Resultado["estado"], over: Partial<Resultado> = {}): Resultado {
   return { receta: "tareas", estado, aviso: estado === "OK" ? null : `aviso ${estado}`, elementos: [],
@@ -142,7 +143,7 @@ test("ruta distinta de web → error", async () => {
   assert.equal(r.status, "error");
 });
 
-test("página vigilada cambiada → web_page_change cerrada con event_at; redirigida → session_expired", async () => {
+test("página vigilada cambiada → web_page_change cerrada con event_at; login → session_expired; otra redirección → error", async () => {
   const v = { id: "p1", sitio: "intranet", url: "https://intranet.example/avisos" };
   const p = base({ recetas: [], vigiladas: [v], huellas: "/x/huellas.json" });
   const r = await crearAdaptadorWeb(deps(resultado("OK"), vig("CAMBIADA"))).read(ctx(p));
@@ -156,8 +157,11 @@ test("página vigilada cambiada → web_page_change cerrada con event_at; rediri
   const sin = await crearAdaptadorWeb(deps(resultado("OK"), vig("SIN_CAMBIOS"))).read(ctx(p));
   assert.equal(sin.status, "ok");
   if (sin.status === "ok") assert.equal(sin.claims.length, 0);
+  const login = await crearAdaptadorWeb(deps(resultado("OK"), vig("SESION_CADUCADA"))).read(ctx(p));
+  assert.equal(login.status, "session_expired");
+  // Una redirección que no es el login no se arregla iniciando sesión (revisión #1443, P2-2 de corrección).
   const red = await crearAdaptadorWeb(deps(resultado("OK"), vig("REDIRIGIDA"))).read(ctx(p));
-  assert.equal(red.status, "session_expired");
+  assert.equal(red.status, "error");
 });
 
 test("páginas vigiladas sin fichero de huellas → not_configured", async () => {
@@ -221,4 +225,40 @@ test("una receta configurada que no se activa no se omite en silencio aunque hay
   assert.equal(r.status, "recipe_disabled");
   assert.match("message" in r ? r.message : "", /experimental/);
   assert.equal(d.llamadas, 1, "las recetas activas se siguen ejecutando (una sesión caducada mandaría)");
+});
+
+test("recetas sin fichero de desactivadas → not_configured: la desactivación tiene que persistir (revisión #1443 P2-2)", async () => {
+  const d = deps(resultado("OK"));
+  for (const desactivadas of [undefined, ""]) {
+    const r = await crearAdaptadorWeb(d).read(ctx(base({ desactivadas })));
+    assert.equal(r.status, "not_configured");
+    assert.match("message" in r ? r.message : "", /desactivadas/);
+  }
+  assert.equal(d.llamadas, 0);
+  // Caso negativo: solo páginas vigiladas, sin recetas, no lo necesita.
+  const v = { id: "p1", sitio: "intranet", url: "https://intranet.example/avisos" };
+  const solo = await crearAdaptadorWeb(d).read(ctx(base({ recetas: [], desactivadas: undefined, vigiladas: [v], huellas: "/x/h.json" })));
+  assert.equal(solo.status, "ok");
+});
+
+test("sin recetas ni páginas vigiladas → not_configured, no recipe_disabled (revisión #1443 P2-4)", async () => {
+  const r = await crearAdaptadorWeb(deps(resultado("OK"))).read(ctx(base({ recetas: [] })));
+  assert.equal(r.status, "not_configured");
+});
+
+test("no poder guardar la huella es error y no entrega el cambio; el directorio se crea si falta (revisión #1443 P2-1)", async () => {
+  const v = { id: "p1", sitio: "intranet", url: "https://intranet.example/avisos" };
+  const dep: Dependencias = { banco: true, ejecutar: async () => resultado("OK"),
+    vigilar: async () => ({ ...vig("CAMBIADA"), huella: "h-nueva" }) };
+  // Un fichero de huellas cuyo «directorio» es un fichero: no se puede escribir.
+  const raiz = mkdtempSync(join(tmpdir(), "soul-contrato-"));
+  writeFileSync(join(raiz, "fichero"), "x");
+  const r = await crearAdaptadorWeb(dep).read(ctx(base({ vigiladas: [v], huellas: join(raiz, "fichero", "h.json") })));
+  assert.equal(r.status, "error");
+  assert.match("message" in r ? r.message : "", /huellas/);
+  // Caso negativo: un directorio que aún no existe se crea y la huella queda guardada.
+  const nuevo = join(raiz, "aun", "no", "h.json");
+  const ok = await crearAdaptadorWeb(dep).read(ctx(base({ vigiladas: [v], huellas: nuevo })));
+  assert.equal(ok.status, "ok");
+  assert.equal(new AlmacenHuellas(nuevo).anterior("p1"), "h-nueva");
 });

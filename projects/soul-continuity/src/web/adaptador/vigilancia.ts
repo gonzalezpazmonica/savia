@@ -5,11 +5,12 @@
 // huella del texto, nunca el texto.
 
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { Cortafuegos, type Registro } from "../cortafuegos/cortafuegos.ts";
 import type { Mutante } from "../cortafuegos/decision.ts";
 import type { Receta } from "../receta/tipos.ts";
-import { ACCION } from "../receta/validar.ts";
+import { pareceAccion } from "../receta/validar.ts";
 import { abrirNavegador, evaluarAislado } from "./navegador.ts";
 
 export class VigilanciaInvalida extends Error {}
@@ -24,7 +25,7 @@ export interface Vigilada {
 
 export interface ResultadoVigilancia {
   id: string;
-  estado: "PRIMERA_VISITA" | "SIN_CAMBIOS" | "CAMBIADA" | "REDIRIGIDA" | "ERROR";
+  estado: "PRIMERA_VISITA" | "SIN_CAMBIOS" | "CAMBIADA" | "SESION_CADUCADA" | "REDIRIGIDA" | "ERROR";
   aviso: string | null;
   enlace: string;
   /** Mismos campos que el ejecutor de recetas, para medir con la misma batería. */
@@ -44,7 +45,7 @@ export function recetaDeVigilancia(v: Vigilada): Receta {
   if (u.hash || v.url.includes("#")) throw new VigilanciaInvalida("URL con fragmento");
   const ruta = u.pathname + u.search;
   if (ruta.includes("*")) throw new VigilanciaInvalida("URL con comodín");
-  if (ACCION.test(ruta)) throw new VigilanciaInvalida(`la URL parece un enlace de acción: ${ruta}`);
+  if (pareceAccion(ruta)) throw new VigilanciaInvalida(`la URL parece un enlace de acción: ${ruta}`);
   return {
     formato: "soul-receta-web/1", id: `vigilancia-${v.id}`, sitio: v.sitio, estado: "estable",
     origen: u.origin, javascript: false, urls: [ruta], renovacion_sesion: [], post_lectura: [],
@@ -75,8 +76,31 @@ export class AlmacenHuellas {
   guardar(id: string, url: string, huella: string) {
     const d = this.leer();
     d[id] = { huella, url, visto_en: new Date().toISOString() };
+    mkdirSync(dirname(this.ruta), { recursive: true, mode: 0o700 });
     writeFileSync(this.ruta, JSON.stringify(d, null, 2), { mode: 0o600 });
   }
+}
+
+// Un salto a una página de inicio de sesión (propia o de SSO) se reconoce por la
+// ruta o el nombre del servidor. La receta de vigilancia no tiene patrones de
+// login: sin esto, cualquier redirección benigna (`/avisos` → `/avisos/`) sería
+// «vuelve a iniciar sesión» (revisión #1443, P2-2 de corrección).
+const PARECE_LOGIN = /(^|[/._-])(login|logon|signin|sign-in|sign_in|auth|oauth2?|sso|saml|adfs|accounts)([/._?&=-]|$)/i;
+
+/** Destinos fuera de la URL vigilada: saltos cortados y la URL final, sin consulta. */
+function destinos(v: Vigilada, fw: Pick<Cortafuegos, "registro">, final: string): string[] {
+  const urls = fw.registro.filter((g) => g.motivo === "redireccion_fuera").map((g) => g.url);
+  if (final !== "" && final !== new URL(v.url).href) urls.push(final);
+  return [...new Set(urls.map((x) => { try { const u = new URL(x); return u.origin + u.pathname; } catch { return "URL inválida"; } }))];
+}
+
+/** ¿La visita salió de la URL vigilada, y hacia dónde? `null` si no salió. */
+export function clasificarSalida(v: Vigilada, fw: Pick<Cortafuegos, "sesionCaducada" | "registro">, final: string): "SESION_CADUCADA" | "REDIRIGIDA" | null {
+  if (fw.sesionCaducada) return "SESION_CADUCADA";
+  const d = destinos(v, fw, final);
+  if (d.length === 0) return null;
+  return d.some((x) => { try { const u = new URL(x); return PARECE_LOGIN.test(u.hostname) || PARECE_LOGIN.test(u.pathname); } catch { return false; } })
+    ? "SESION_CADUCADA" : "REDIRIGIDA";
 }
 
 export interface OpcionesVigilancia {
@@ -126,10 +150,14 @@ export async function vigilarPagina(o: OpcionesVigilancia): Promise<ResultadoVig
     await nav.cerrar();
   }
   const comun = { ...base, descargas: nav.descargas() };
-  const redirigida = fw.sesionCaducada || fw.registro.some((g) => g.motivo === "redireccion_fuera") || (final !== "" && final !== new URL(v.url).href);
-  if (redirigida) {
-    return { ...comun, estado: "REDIRIGIDA",
-      aviso: `La página de ${v.sitio} redirige fuera de la URL vigilada. Si es el inicio de sesión, vuelve a iniciar sesión en ${v.sitio} en el perfil de Soul.` };
+  const salida = clasificarSalida(v, fw, final);
+  if (salida === "SESION_CADUCADA") {
+    return { ...comun, estado: salida,
+      aviso: `La página de ${v.sitio} pide iniciar sesión: vuelve a iniciar sesión en ${v.sitio} en el perfil de Soul.` };
+  }
+  if (salida === "REDIRIGIDA") {
+    return { ...comun, estado: salida,
+      aviso: `La página de ${v.sitio} redirige fuera de la URL vigilada (${destinos(v, fw, final).join(", ")}). Revisa la URL vigilada; si es el inicio de sesión, vuelve a iniciar sesión en ${v.sitio} en el perfil de Soul.` };
   }
   if (fallo !== null || texto === null) {
     return { ...comun, estado: "ERROR", aviso: `No se pudo leer ${v.sitio} (${fallo ?? "sin texto"}).` };

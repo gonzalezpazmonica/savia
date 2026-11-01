@@ -9,7 +9,7 @@ import {
 
 const CLIENT = { client_id: "11111111-2222-4333-8444-555555555555", owner: "organization" as const };
 
-interface Mode { device: "ok" | "admin" | "declined"; pendings: number; slowDown: boolean; refresh: "ok" | "expired" | "admin" }
+interface Mode { device: "ok" | "admin" | "declined"; pendings: number; slowDown: boolean; refresh: "ok" | "expired" | "admin" | "unconsented" }
 
 async function idp(mode: Mode) {
   const seen: { path: string; form: URLSearchParams }[] = [];
@@ -47,7 +47,8 @@ async function idp(mode: Mode) {
         }
         if (g === "refresh_token") {
           if (mode.refresh === "expired") return send(400, { error: "invalid_grant", error_description: "AADSTS700082: The refresh token has expired." });
-          if (mode.refresh === "admin") return send(400, { error: "invalid_grant", error_description: "AADSTS65001: The user or administrator has not consented." });
+          if (mode.refresh === "admin") return send(400, { error: "invalid_grant", error_codes: [90094], error_description: "AADSTS90094: Admin approval required." });
+          if (mode.refresh === "unconsented") return send(400, { error: "invalid_grant", error_codes: [65001], error_description: "AADSTS65001: The user or administrator has not consented." });
           return send(200, { access_token: "at-2", expires_in: 3600 });
         }
       }
@@ -152,8 +153,8 @@ test("flujo de navegador: error de consentimiento en la redirección → admin_c
   }
 });
 
-test("renovación: ok, caducada (no_credential) y consentimiento retirado (admin_consent_required)", async () => {
-  for (const [mode, expect] of [["ok", "at-2"], ["expired", "no_credential"], ["admin", "admin_consent_required"]] as const) {
+test("renovación: ok, caducada y sin consentimiento (no_credential), administración exigida (admin_consent_required)", async () => {
+  for (const [mode, expect] of [["ok", "at-2"], ["expired", "no_credential"], ["unconsented", "no_credential"], ["admin", "admin_consent_required"]] as const) {
     const s = await idp({ device: "ok", pendings: 0, slowDown: false, refresh: mode });
     try {
       const p = refreshToken({ provider: provider(s.base), client: CLIENT, refresh_token: "rt-1", scopes: ["Mail.Read"], now: () => 0 });
@@ -169,9 +170,14 @@ test("renovación: ok, caducada (no_credential) y consentimiento retirado (admin
 });
 
 test("classifyOAuthError: códigos de Microsoft y de Google", () => {
-  assert.equal(classifyOAuthError({ error: "invalid_grant", error_description: "AADSTS65001: not consented" }), "admin_consent_required");
+  // 65001 lo resuelve la persona con un nuevo inicio de sesión: no es de administración.
+  assert.equal(classifyOAuthError({ error: "invalid_grant", error_description: "AADSTS65001: not consented" }), "no_credential");
+  assert.equal(classifyOAuthError({ error: "invalid_grant", error_codes: [65001] }), "no_credential");
   assert.equal(classifyOAuthError({ error: "admin_policy_enforced" }), "admin_consent_required");
   assert.equal(classifyOAuthError({ error: "access_denied", error_description: "AADSTS90094" }), "admin_consent_required");
+  assert.equal(classifyOAuthError({ error: "access_denied", error_codes: [90095] }), "admin_consent_required");
+  assert.equal(classifyOAuthError({ error: "access_denied", error_description: "AADSTS65004: User declined to consent" }), "no_credential");
+  assert.equal(classifyOAuthError({ error: "access_denied", error_codes: [65004] }), "no_credential");
   assert.equal(classifyOAuthError({ error: "authorization_pending" }), "pending");
   assert.equal(classifyOAuthError({ error: "slow_down" }), "slow_down");
   assert.equal(classifyOAuthError({ error: "expired_token" }), "no_credential");

@@ -31,7 +31,7 @@ export interface MockData {
   /** deltatokens por debajo de esta secuencia devuelven 410. */
   minDeltaSeq: number;
   events: { id: string; subject: string; start: string; cancelled?: boolean; response?: string }[];
-  chats: { id: string; topic: string; messages: { id: string; from: string; at: string; mentions?: string[]; text?: string }[] }[];
+  chats: { id: string; topic: string; messages: { id: string; from: string; at: string; mentions?: string[]; text?: string; deleted?: string }[] }[];
   files: { id: string; name: string; comments: { id: string; at: string; resolved?: boolean; text?: string }[] }[];
   google: {
     messages: { id: string; thread: string; from: string; to: string[]; cc?: string[]; at: string; subject: string; labels: string[]; dkim?: string; dmarc?: string; d?: string }[];
@@ -41,7 +41,9 @@ export interface MockData {
   };
   jira: { me: string; legacyOnly?: boolean; issues: { key: string; summary: string; assignee: string; status: string; duedate?: string | null; description?: string }[] };
   ado: { me: string; workitems: { id: number; title: string; assignedTo: string; state: string; due?: string }[]; prs: { id: number; repo: string; title: string; status: string; reviewers: { id: string; vote: number }[] }[] };
-  github: { me: string; items: { repo: string; number: number; title: string; is_pr: boolean; assignees: string[]; requested: string[]; mentions: string[]; body?: string }[] };
+  github: { me: string; items: { owner?: string; repo: string; number: number; title: string; is_pr: boolean; assignees: string[]; requested: string[]; mentions: string[]; body?: string }[] };
+  /** Id de Entra que devuelve `/v1.0/me` (exige User.Read); `null` = 403. */
+  meId: string | null;
   /** Paginación por defecto (elementos por página). */
   pageSize: number;
   /** 429 en cada N-ésima petición (0 = nunca), con este Retry-After. */
@@ -58,7 +60,7 @@ export function emptyData(): MockData {
     tokens: {}, messages: [], removed: [], seq: 0, minDeltaSeq: 0, events: [], chats: [], files: [],
     google: { messages: [], events: [], files: [], tasks: [] },
     jira: { me: "acc-yo", issues: [] }, ado: { me: "ado-yo", workitems: [], prs: [] }, github: { me: "yo-gh", items: [] },
-    pageSize: 10, throttleEvery: 0, retryAfter: "1",
+    meId: "yo@alfa.example", pageSize: 10, throttleEvery: 0, retryAfter: "1",
   };
 }
 
@@ -201,6 +203,10 @@ function route(d: MockData, req: IncomingMessage, u: URL, auth: string, raw: str
     }));
     return reply(200, page(items, u, Number(u.searchParams.get("$top") ?? d.pageSize), p));
   }
+  if (p === "/v1.0/me") {
+    if (d.meId === null || !has("User.Read")) return reply(403, { error: { code: "Authorization_RequestDenied" } });
+    return reply(200, { id: d.meId });
+  }
   if (p === "/v1.0/me/chats") {
     if (!has("Chat.Read")) return reply(403, { error: { code: "Forbidden" } });
     return reply(200, page(d.chats.map((c) => ({ id: c.id, topic: c.topic })), u, d.pageSize, p));
@@ -211,7 +217,7 @@ function route(d: MockData, req: IncomingMessage, u: URL, auth: string, raw: str
     const c = d.chats.find((x) => x.id === decodeURIComponent(chat[1]));
     if (!c) return reply(404, { error: { code: "NotFound" } });
     const items = [...c.messages].sort((a, b) => b.at.localeCompare(a.at)).map((m) => ({
-      id: m.id, createdDateTime: m.at, from: { user: { id: m.from } },
+      id: m.id, createdDateTime: m.at, deletedDateTime: m.deleted ?? null, from: { user: { id: m.from } },
       mentions: (m.mentions ?? []).map((x, i) => ({ id: i, mentioned: { user: { id: x } } })),
       body: { content: `${BODY} ${m.text ?? ""}` },
     }));
@@ -345,7 +351,7 @@ function route(d: MockData, req: IncomingMessage, u: URL, auth: string, raw: str
     }
     return reply(200, {
       total_count: items.length,
-      items: items.slice((pg - 1) * per, pg * per).map((i) => ({ number: i.number, title: i.title, repository_url: `https://api.github.example/repos/org/${i.repo}`, body: i.body ?? BODY })),
+      items: items.slice((pg - 1) * per, pg * per).map((i) => ({ number: i.number, title: i.title, repository_url: `https://api.github.example/repos/${i.owner ?? "org"}/${i.repo}`, body: i.body ?? BODY })),
     }, headers);
   }
   reply(404, { error: { code: "NotFound" } });

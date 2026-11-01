@@ -41,6 +41,21 @@ test("acquire: caducado → renueva con el refresh y guarda el nuevo en el almac
   assert.equal(JSON.parse((await b.get(key))!).access_token, "at-new");
 });
 
+test("acquire: dos lecturas a la vez con el token caducado renuevan una sola vez", async () => {
+  const b = new MemoryBackend();
+  await b.set(entryKey("op-pm", "graph", ["Mail.Read"]), set({ expires_at: NOW - 1 }));
+  let calls = 0;
+  const s = new SystemCredentialStore({
+    backend: b, operatorRef: "op-pm", now: () => NOW,
+    refresh: async (_s, _rt, scopes) => { calls++; await new Promise((r) => setTimeout(r, 10)); return { access_token: `at-${calls}`, refresh_token: `rt-${calls}`, expires_at: NOW + 3600_000, scopes }; },
+  });
+  assert.deepEqual(await Promise.all([s.acquire("graph", ["Mail.Read"]), s.acquire("graph", ["Mail.Read"])]), ["at-1", "at-1"]);
+  assert.equal(calls, 1);
+  // Terminada la renovación, la siguiente lectura usa el token guardado sin renovar.
+  assert.equal(await s.acquire("graph", ["Mail.Read"]), "at-1");
+  assert.equal(calls, 1);
+});
+
 test("acquire: caducado sin forma de renovar → no_credential; renovación con administración → admin_consent_required", async () => {
   const b = new MemoryBackend();
   await b.set(entryKey("op-pm", "graph", ["Mail.Read"]), set({ expires_at: NOW - 1 }));

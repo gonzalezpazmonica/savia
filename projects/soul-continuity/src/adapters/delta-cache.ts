@@ -38,6 +38,10 @@ function assertNoBodies(state: DeltaState): void {
   }
 }
 
+const metaValue = (x: unknown) => x === null || ["string", "number", "boolean"].includes(typeof x)
+  || (Array.isArray(x) && x.every((y) => typeof y === "string"));
+const isMeta = (m: unknown): m is Meta => typeof m === "object" && m !== null && !Array.isArray(m) && Object.values(m).every(metaValue);
+
 const h16 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
 export function operatorDir(stateDir: string, operatorRef: string): string {
@@ -58,9 +62,14 @@ export class FileDeltaCache implements DeltaCache {
   async load(op: string, adapter: string, key: string): Promise<DeltaState | null> {
     try {
       const v = JSON.parse(readFileSync(join(adapterCacheDir(this.stateDir, op, adapter), `${h16(key)}.json`), "utf8"));
-      if (typeof v !== "object" || v === null || typeof v.items !== "object" || v.items === null) return null;
+      if (typeof v !== "object" || v === null || typeof v.items !== "object" || v.items === null || Array.isArray(v.items)) return null;
       if (v.link !== null && typeof v.link !== "string") return null;
-      return { link: v.link, complete: v.complete === true, items: v.items };
+      const state: DeltaState = { link: v.link, complete: v.complete === true, items: v.items };
+      // Lo leído se valida como lo guardado: tipos de `Meta` y sin campos de cuerpo. Si no
+      // cumple, la caché no existe (se resincroniza) en vez de colar datos de otra forma.
+      if (!Object.values(state.items).every(isMeta)) return null;
+      assertNoBodies(state);
+      return state;
     } catch {
       return null;
     }

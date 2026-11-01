@@ -26,7 +26,8 @@ export interface ParametrosWeb {
   vigiladas?: Vigilada[];
   /** Recibos locales de validación de recetas experimentales. */
   validaciones?: string;
-  /** Fichero de recetas desactivadas por la prueba de humo. */
+  /** Fichero de recetas desactivadas por la prueba de humo (obligatorio si hay
+   *  recetas: sin él, una receta desactivada se reintentaría en la siguiente lectura). */
   desactivadas?: string;
   /** Fichero de huellas de páginas vigiladas (obligatorio si hay vigiladas). */
   huellas?: string;
@@ -118,7 +119,9 @@ function falloDe(r: Resultado): Fallo | null {
 }
 
 function falloDeVigilancia(v: Vigilada, r: ResultadoVigilancia): Fallo | null {
-  if (r.estado === "REDIRIGIDA") return { status: "session_expired", message: r.aviso ?? `Sesión caducada en ${v.sitio}.` };
+  if (r.estado === "SESION_CADUCADA") return { status: "session_expired", message: r.aviso ?? `Sesión caducada en ${v.sitio}.` };
+  // Una redirección que no lleva al inicio de sesión no se arregla iniciando sesión.
+  if (r.estado === "REDIRIGIDA") return { status: "error", message: r.aviso ?? `La página vigilada de ${v.sitio} redirige fuera de su URL.` };
   if (r.estado === "ERROR") return { status: "error", message: r.aviso ?? `No se pudo leer ${v.sitio}.` };
   return null;
 }
@@ -141,6 +144,9 @@ function leerParametros(p: Record<string, unknown>): ParametrosWeb | string {
       return "página vigilada sin id, sitio o url";
     }
     try { recetaDeVigilancia(v); } catch (e) { return `página vigilada ${v.id} inválida (${primeraLinea(e)})`; }
+  }
+  if (Array.isArray(p.recetas) && p.recetas.length && (typeof p.desactivadas !== "string" || !p.desactivadas)) {
+    return "recetas sin fichero de recetas desactivadas (params.desactivadas)";
   }
   if (Array.isArray(p.vigiladas) && p.vigiladas.length && typeof p.huellas !== "string") {
     return "páginas vigiladas sin fichero de huellas (params.huellas)";
@@ -172,10 +178,10 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
       }
       const vigiladas = p.vigiladas ?? [];
       if (!activas.length && !vigiladas.length && !fallos.length) {
-        return fallo({ status: "recipe_disabled", message: "No hay recetas activas ni páginas vigiladas." });
+        return fallo({ status: "not_configured", message: "Ruta web sin configurar: no hay recetas ni páginas vigiladas." });
       }
       const claims: Claim[] = [];
-      const almacen = p.desactivadas ? new AlmacenRecetas(p.desactivadas) : undefined;
+      const almacen = activas.length ? new AlmacenRecetas(p.desactivadas as string) : undefined;
       for (const r of activas) {
         try {
           const res = await dep.ejecutar({ receta: r, yo, ejecutable: p.ejecutable, perfil: p.perfil, validaciones: p.validaciones, almacen, banco: dep.banco });
@@ -204,7 +210,13 @@ export function crearAdaptadorWeb(dep: Dependencias = { ejecutar: ejecutarReceta
         }
       }
       if (fallos.length) return fallo(peor(fallos));
-      for (const x of pendientes) huellas.guardar(x.v.id, x.v.url, x.huella);
+      // Fail-closed también al confirmar: si no se puede guardar la huella, no se
+      // entrega el cambio (volverá a verse en la siguiente lectura).
+      try {
+        for (const x of pendientes) huellas.guardar(x.v.id, x.v.url, x.huella);
+      } catch (e) {
+        return fallo({ status: "error", message: `No se pudieron guardar las huellas de las páginas vigiladas (${primeraLinea(e)}).` });
+      }
       return { status: "ok", route: "web", claims };
     },
   };

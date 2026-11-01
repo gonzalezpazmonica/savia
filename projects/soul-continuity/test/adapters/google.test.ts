@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { validateAdapterResult, type AdapterContext, type AdapterResult } from "../../src/contract/adapter.ts";
-import { makeGoogleAdapter } from "../../src/adapters/google.ts";
+import { addrList, makeGoogleAdapter } from "../../src/adapters/google.ts";
 import { HttpTransport } from "../../src/adapters/http-transport.ts";
 import { BODY, type MockData, emptyData, startMock } from "./mock-apis.ts";
 import { ctxWith } from "./support.ts";
@@ -137,4 +137,12 @@ test("Google: 403 por cuota (rateLimitExceeded) es unavailable, no consentimient
   const fake = { async request() { return { status: 403, headers: {}, body: { error: { errors: [{ reason: "userRateLimitExceeded" }] } } }; } };
   const r = await makeGoogleAdapter().read(ctxWith({ route: "api", transport: fake }));
   assert.equal(r.status, "unavailable");
+});
+
+test("addrList: las comas entre comillas, comentarios o <> no separan buzones", () => {
+  assert.deepEqual(addrList('"yo@gamma.example, x" <evil@x.example>'), ["evil@x.example"]);
+  assert.deepEqual(addrList('"Pérez, Ana" <Ana@Ext.example>, luis@ext.example'), ["ana@ext.example", "luis@ext.example"]);
+  assert.deepEqual(addrList('ana@ext.example (yo@gamma.example, jefa)'), ["ana@ext.example"]);
+  assert.deepEqual(addrList('"a\\" yo@gamma.example," <b@ext.example>'), ["b@ext.example"]);
+  assert.deepEqual(addrList("sin dirección"), []);
 });

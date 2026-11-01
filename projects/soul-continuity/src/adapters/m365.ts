@@ -35,7 +35,7 @@ export interface M365Options {
 }
 
 const G = { forbiddenIsConsent: true };
-const MAIL_FIELDS = "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,flag,webLink";
+const MAIL_FIELDS = "id,conversationId,subject,from,toRecipients,ccRecipients,receivedDateTime,sentDateTime,flag,webLink";
 const FOLDERS = ["inbox", "sentitems"] as const;
 
 function addrs(list: unknown): string[] {
@@ -43,21 +43,34 @@ function addrs(list: unknown): string[] {
 }
 
 /** Metadatos mínimos de un mensaje: lo único que se guarda en caché. */
-function mailMeta(x: J, myDomain: string, headers: boolean, authserv?: string[]): Meta | null {
+function mailMeta(x: J, myDomain: string, headers: boolean, authserv: string[] | undefined, sent: boolean): Meta | null {
   const id = safeRef(x?.id);
   const conv = typeof x?.conversationId === "string" ? x.conversationId : null;
   if (!id || !conv) return null;
+  // Sin fecha legible un mensaje no se puede ordenar en su hilo. Un enviado mío descartado
+  // dejaría la espera abierta; uno recibido descartado anclaría el hilo a un mensaje anterior.
+  // En ambos casos se falla cerrado.
+  const at = sent ? toIso(x?.sentDateTime) ?? toIso(x?.receivedDateTime) : toIso(x?.receivedDateTime);
+  if (!at) throw new Stop("error", `Graph (correo): un mensaje ${sent ? "enviado" : "recibido"} no trae fecha legible; no se da una espera que podría ser falsa.`);
   const from = String(x?.from?.emailAddress?.address ?? "");
   const flagged = x?.flag?.flagStatus === "flagged" ? toIso(x?.flag?.dueDateTime?.dateTime, x?.flag?.dueDateTime?.timeZone === "UTC") : null;
   return {
     id, conv, from,
     to: addrs(x?.toRecipients),
     cc: addrs(x?.ccRecipients),
-    at: toIso(x?.receivedDateTime) ?? "",
+    at,
     subject: typeof x?.subject === "string" ? x.subject : "",
     auth: headers ? senderAuth(from, x?.internetMessageHeaders, myDomain, authserv) : "unknown",
     flag_due: flagged,
   };
+}
+
+const strs = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x === "string");
+
+/** Forma de `mailMeta`: lo que `awaitingReply` lee de cada elemento de la caché. */
+function isMailMeta(m: Meta): boolean {
+  return ["id", "conv", "from", "at", "subject", "auth"].every((k) => typeof m[k] === "string")
+    && strs(m.to) && strs(m.cc) && (m.flag_due === null || typeof m.flag_due === "string");
 }
 
 function isResync(status: number, body: J): boolean {
@@ -72,7 +85,9 @@ async function deltaFolder(ctx: AdapterContext, tok: string, folder: string, sel
   const key = `${folder}|${select}|${variant}`;
   const initial = `/v1.0/me/mailFolders/${folder}/messages/delta?$select=${select}`;
   const saved = await cache.load(ctx.operator.ref, "m365-mail", key);
-  let state: DeltaState = saved ?? { link: null, complete: false, items: {} };
+  // Una caché antigua o con otra forma no se usa: se resincroniza desde cero en vez de fallar
+  // en cada lectura hasta que alguien la borre a mano.
+  let state: DeltaState = saved && Object.values(saved.items).every(isMailMeta) ? saved : { link: null, complete: false, items: {} };
   let url = initial;
   if (state.link) {
     // El enlace guardado se revalida: una caché manipulada no puede llevarse el token.
@@ -140,16 +155,16 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
       throw new Stop("error", "params.authserv_ids inválido.");
     }
     const authserv = as as string[] | undefined;
-    const toMeta = (x: J) => mailMeta(x, dom, headers, authserv);
+    const toMeta = (folder: string) => (x: J) => mailMeta(x, dom, headers, authserv, folder === "sentitems");
     const variant = `${dom}|${(authserv ?? []).map((v) => v.toLowerCase()).sort().join(",")}`;
     const msgs: Msg[] = [];
     const out: Claim[] = [];
     for (const folder of FOLDERS) {
       let metas: Meta[];
-      if (o.cache) metas = Object.values(await deltaFolder(ctx, tok, folder, select, toMeta, o.cache, maxPages, pageSize, variant));
+      if (o.cache) metas = Object.values(await deltaFolder(ctx, tok, folder, select, toMeta(folder), o.cache, maxPages, pageSize, variant));
       else {
         const items = await odataAll(ctx, "graph", tok, `/v1.0/me/mailFolders/${folder}/messages?$top=${pageSize}&$select=${select}`, "Graph (correo)", { ...G, maxPages });
-        metas = items.map(toMeta).filter((m): m is Meta => m !== null);
+        metas = items.map(toMeta(folder)).filter((m): m is Meta => m !== null);
       }
       for (const m of metas) {
         msgs.push({
@@ -191,10 +206,23 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
   });
 
   const teams = adapter("m365-teams", async (ctx) => {
-    const tok = await token(ctx, "graph", ["Chat.Read"]);
+    const tok = await token(ctx, "graph", ["Chat.Read", "User.Read"]);
     const now = nowMs(ctx);
+    // Graph identifica a las personas en Teams por su id de Entra, no por el correo.
+    // Sin `m365_user_id` se resuelve con `/me`; si tampoco se puede, se falla cerrado:
+    // comparar solo correos daría «ok» con cero menciones contra Graph real.
     const me = emailsOf(ctx);
-    if (typeof ctx.params.m365_user_id === "string") me.add(ctx.params.m365_user_id.toLowerCase());
+    let uid = typeof ctx.params.m365_user_id === "string" && ctx.params.m365_user_id ? ctx.params.m365_user_id : null;
+    if (!uid) {
+      const r = await ctx.transport.request({ service: "graph", method: "GET", url: "/v1.0/me?$select=id", headers: { Authorization: `Bearer ${tok}` } });
+      const id = r.status === 200 ? (r.body as J)?.id : undefined;
+      if (typeof id !== "string" || !id) {
+        if (r.status === 401) check(r, "Graph (Teams)", G);
+        throw new Stop("error", "Graph (Teams): no se pudo obtener el id de Entra con /me (hace falta User.Read) y no hay params.m365_user_id; sin él no se detectan menciones.");
+      }
+      uid = id;
+    }
+    me.add(uid.toLowerCase());
     const isMe = (v: unknown) => typeof v === "string" && me.has(v.toLowerCase());
     const out: Claim[] = [];
     for (const c of await odataAll(ctx, "graph", tok, `/v1.0/me/chats?$top=50`, "Graph (Teams)", { ...G, maxPages })) {
@@ -215,6 +243,8 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
         let old = false;
         for (const { x, t } of items) {
           if (t < now - 7 * DAY) { old = true; break; }
+          // Un mensaje borrado ni pide respuesta ni cuenta como respuesta mía.
+          if (x?.deletedDateTime != null) continue;
           if (isMe(x?.from?.user?.id)) { mineAfter = Math.max(mineAfter ?? t, t); continue; }
           const mentioned = (Array.isArray(x?.mentions) ? x.mentions : []).some((m: J) => isMe(m?.mentioned?.user?.id));
           const id = safeRef(x?.id);

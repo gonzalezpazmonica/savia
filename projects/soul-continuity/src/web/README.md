@@ -35,7 +35,7 @@ npm run mutantes    # la batería contra cada mutante, en serie (~1 h)
 
 ## Cortafuegos: tres capas con la misma decisión
 
-`decidirHttp(receta, estado, petición)` es pura. Sigue este orden: esquema, login (sesión caducada), renovación de sesión, lista de URLs, **otro origen**, acción en curso, endpoint de operaciones solo por `POST`, `GET`/`HEAD`, y `POST` con su operación cotejada con la de la consulta. Todo lo demás se corta.
+`decidirHttp(receta, estado, petición)` es pura. Sigue este orden: esquema, login (sesión caducada), renovación de sesión (patrón exacto, sin comodines, y nunca una URL de acción), lista de URLs, acción en la URL concreta, **otro origen**, acción en curso, endpoint de operaciones solo por `POST`, `GET`/`HEAD`, y `POST` con su operación cotejada con la de la consulta. Todo lo demás se corta.
 
 - **A · Guardia del navegador** (CDP `Fetch`, petición y respuesta). Ve cada salto de una redirección, las descargas por `<a download>`, el favicon y los scripts de workers. Corta adjuntos y detecta 401. Sin ella no se ejecuta.
 - **B · `context.route`.** Aplica la misma decisión. Responde 204 a una navegación cortada y, si la petición pasa, usa `continue`.
@@ -71,10 +71,11 @@ El canal de control va por tubería (`--remote-debugging-pipe`), nunca por puert
 `vigilarPagina({ vigilada: { id, sitio, url }, … })` pasa por el mismo cortafuegos con una receta mínima: esa URL exacta, sin JavaScript, sin `POST`, sin WebSocket y sin acciones. Guarda la huella SHA-256 del texto, nunca el texto. Los estados posibles son:
 
 - `PRIMERA_VISITA`, `SIN_CAMBIOS` o `CAMBIADA`, con el enlace;
-- `REDIRIGIDA`, si la página salta fuera de la URL; probablemente sea el inicio de sesión;
+- `SESION_CADUCADA`, si responde 401 o salta a una página de inicio de sesión (la ruta o el servidor llevan `login`, `signin`, `auth`, `oauth`, `sso`, `saml`, `adfs`… como palabra entera, también un proveedor de identidad de otro origen);
+- `REDIRIGIDA`, si salta a cualquier otra URL (por ejemplo `/avisos` → `/avisos/`): el aviso da el destino, sin consulta, para corregir la URL vigilada;
 - `ERROR`.
 
-Una URL con aspecto de acción (`approve`, `logout`, `confirm…`) se rechaza al darla de alta.
+Una URL con aspecto de acción (`approve`, `logout`, `confirm…`) se rechaza al darla de alta, también con el verbo seguido de una extensión o de `;` (`/logout.aspx`) o pegado en camelCase en el camino (`/api/approveTask`). En la consulta no se parte el camelCase: ahí van nombres de operación, que clasifica `post_lectura`.
 
 ## Recetas de clientes reales: experimentales y desactivadas
 
@@ -108,6 +109,7 @@ Todo ocurre en local y fuera de cualquier repositorio. La grabación lleva datos
    - aparece una operación desconocida;
    - una lectura tiene nombre de escritura;
    - un documento GraphQL de «lectura» trae `mutation`;
+   - un `POST` a un endpoint declarado no sale ni como lectura ni como escritura conocida: por ejemplo, la consulta repite la operación con otro valor (`operacion_url_distinta`) o la URL parece de acción. El cortafuegos lo cortaría y la validación no lo da por bueno;
    - la grabación no cubre las páginas de la receta.
 6. **Ajusta la receta** con el informe: operaciones en `lectura` o `escritura_conocida`, y URLs de la lista. Repite hasta que pase. **No relajes la regla.** Si el cliente no permite distinguir lectura de escritura, esa fuente se queda sin ruta web.
 7. **Emite el recibo** repitiendo la orden con `--emitir-recibo`.
@@ -120,10 +122,10 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 
 `crearAdaptadorWeb()` cumple `SourceAdapter` de `src/contract/adapter.ts`:
 
-- **Parámetros** (`params` de la fuente): `ejecutable` (navegador instalado) y `perfil` (perfil dedicado de Soul) son obligatorios; sin ellos, `not_configured`. Además `recetas`, `vigiladas`, `validaciones`, `desactivadas` y `huellas` (obligatorio si hay páginas vigiladas). El adaptador no supone directorios: para usar los recibos que emite `validar-grabacion`, `validaciones` tiene que apuntar a `<datos>/web/validaciones` (`dirValidacionesPorDefecto`).
+- **Parámetros** (`params` de la fuente): `ejecutable` (navegador instalado) y `perfil` (perfil dedicado de Soul) son obligatorios; sin ellos, `not_configured`. Además `recetas`, `vigiladas`, `validaciones`, `desactivadas` (obligatorio si hay recetas: sin él, una receta desactivada se reintentaría en la siguiente lectura) y `huellas` (obligatorio si hay páginas vigiladas). Sin recetas ni páginas vigiladas, `not_configured`. El adaptador no supone directorios: para usar los recibos que emite `validar-grabacion`, `validaciones` tiene que apuntar a `<datos>/web/validaciones` (`dirValidacionesPorDefecto`).
 - **Afirmaciones.** Un elemento en Q1 o Q2 de la receta es `web:task_assigned:<receta>~<id>`, con `awaiting_operator` si está en Q2. Uno que solo está en Q4 es `web:dated_commitment:<receta>~<id>`. Una página vigilada que cambió es `web:web_page_change:<sitio>~<id>`, cerrada y con `event_at`. Las partes de la referencia van codificadas en URL, sin `:`, espacios ni `~`. `due_at` sale del primer campo `vence`, `limite` o `fecha` con forma `AAAA-MM-DD`. El título, del primer campo `titulo`, `asunto`, `nombre`, `concepto` o `resumen`, limpio y marcado `untrusted_text`. `sender_auth` es siempre `unknown`.
-- **Estados.** Sesión caducada (o página vigilada redirigida) → `session_expired`; una página vigilada que no carga por la red o responde con un estado HTTP de error (404, 5xx) es `error`, no sesión caducada ni «página cambiada». Un fichero de huellas ilegible también es `error`: no se trata como primera visita ni se sobrescribe. Prueba de humo u operación nueva → `recipe_disabled`. Fallo de lectura → `error`. Una receta configurada sin recibo válido no abre el navegador y da `recipe_disabled` con su aviso, aunque haya otras fuentes que sí funcionen: no se omite en silencio. Una página vigilada mal escrita (sin `id`, `sitio` o `url`, o con URL de acción, comodín o credenciales) → `not_configured`.
-- **Fail-closed.** Si falla cualquier receta o página, el adaptador entero no aporta afirmaciones. Manda `session_expired` sobre `error` y sobre `recipe_disabled`, porque el operador puede arreglarlo. Las huellas de las páginas vigiladas solo se guardan si el adaptador entrega, para que un cambio descartado vuelva a verse en la siguiente lectura.
+- **Estados.** Sesión caducada (también la de una página vigilada) → `session_expired`; una página vigilada redirigida a otra URL que no es el inicio de sesión → `error`, porque no se arregla iniciando sesión; una página vigilada que no carga por la red o responde con un estado HTTP de error (404, 5xx) es `error`, no sesión caducada ni «página cambiada». Un fichero de huellas ilegible también es `error`: no se trata como primera visita ni se sobrescribe. Prueba de humo u operación nueva → `recipe_disabled`. Fallo de lectura → `error`. Una receta configurada sin recibo válido no abre el navegador y da `recipe_disabled` con su aviso, aunque haya otras fuentes que sí funcionen: no se omite en silencio. Una página vigilada mal escrita (sin `id`, `sitio` o `url`, o con URL de acción, comodín o credenciales) → `not_configured`.
+- **Fail-closed.** Si falla cualquier receta o página, el adaptador entero no aporta afirmaciones. Manda `session_expired` sobre `error` y sobre `recipe_disabled`, porque el operador puede arreglarlo. Las huellas de las páginas vigiladas solo se guardan si el adaptador entrega, para que un cambio descartado vuelva a verse en la siguiente lectura; si no se pueden guardar, el resultado es `error` y no se entrega el cambio. El directorio de huellas se crea si falta.
 - Las recetas de `params.recetas` pasan siempre por `validarReceta`; una inválida da `not_configured` sin abrir el navegador.
 - No usa `ctx.transport` ni `ctx.credentials`. Navega con el navegador sobre el perfil dedicado; la sesión es la que inició el operador ahí.
 
@@ -131,9 +133,10 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 
 Los números exactos de la última ejecución están en `resultados/`.
 
-- **Batería: 345 de 345 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 102 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL.
-- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, en serie y con informe de cada uno. Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte, y dos mutantes no comparten comprobación.
-- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 136 tests en verde, 20 de ellos del adaptador del contrato.
+- **Batería: 356 de 356 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs, 102 de los escenarios nuevos (SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL) y 11 comprobaciones propias de defensas que antes solo se veían en métricas compartidas: cada una exige en el registro del cortafuegos un corte con el motivo de esa defensa.
+- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, con informe de cada uno (la última ejecución, con `--paralelo 3`). Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte. Ningún id de la batería casa con dos mutantes: `test/mapa-mutantes.test.ts` lo comprueba contra los ids reales de `resultados/bateria-ninguno.json`.
+- Cada informe lleva `huella_codigo`, la huella del código y los datos que decide la batería. Un informe de otro código no cuenta (`SIN_INFORME`, marcado `obsoleto`), y un test exige que los resultados versionados sean del código actual.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 153 tests en verde, 23 de ellos del adaptador del contrato.
 
 ## Lo que queda abierto
 

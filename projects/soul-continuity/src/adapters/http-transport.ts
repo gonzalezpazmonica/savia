@@ -8,6 +8,8 @@
  * - 429 y 503: respeta `Retry-After` hasta `maxRetries` y `maxWaitMs`; si la
  *   espera pedida supera el tope, devuelve la respuesta y el adaptador queda
  *   `unavailable` hasta la siguiente lectura.
+ * - Respuesta con tope de tamaño (`maxBytes`, 16 MiB por defecto): una API
+ *   comprometida no agota la memoria; superarlo es un error.
  * - No sigue redirecciones (el token no viaja a otro host) y nunca pone
  *   cabeceras ni URLs con token en los mensajes de error.
  * Usa el `fetch` de Node.js: sin dependencias.
@@ -28,6 +30,8 @@ export interface HttpTransportOptions {
   maxRetries?: number;
   maxWaitMs?: number;
   timeoutMs?: number;
+  /** Tope del cuerpo de una respuesta, en bytes. */
+  maxBytes?: number;
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
 }
@@ -47,6 +51,7 @@ export class HttpTransport implements Transport {
   private readonly maxRetries: number;
   private readonly maxWaitMs: number;
   private readonly timeoutMs: number;
+  private readonly maxBytes: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
 
@@ -56,6 +61,7 @@ export class HttpTransport implements Transport {
     this.maxRetries = o.maxRetries ?? 3;
     this.maxWaitMs = o.maxWaitMs ?? 60_000;
     this.timeoutMs = o.timeoutMs ?? 30_000;
+    this.maxBytes = o.maxBytes ?? 16 * 1024 * 1024;
     this.sleep = o.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.now = o.now ?? Date.now;
   }
@@ -63,26 +69,32 @@ export class HttpTransport implements Transport {
   private resolve(req: TransportRequest): URL {
     const base = Object.prototype.hasOwnProperty.call(this.bases, req.service) ? this.bases[req.service] : undefined;
     if (!base) throw new TransportRefused(`servicio sin base configurada: ${req.service}`);
+    const prefix = base.pathname.replace(/\/$/, "");
+    let u: URL;
     if (req.url.startsWith("/")) {
       // `//host/x` o `/\host/x` serían otro host: se rechazan antes de resolver.
       if (/^\/[/\\]/.test(req.url) || req.url.includes("\\")) throw new TransportRefused(`ruta no permitida para ${req.service}`);
-      // Segmentos «.» o «..» (también codificados) saldrían del prefijo de la base.
-      const ruta = req.url.split(/[?#]/)[0];
-      if (ruta.split("/").some((g) => /^(\.|%2e){1,2}$/i.test(g))) throw new TransportRefused(`ruta no permitida para ${req.service}`);
-      const prefix = base.pathname.replace(/\/$/, "");
-      // Una ruta que ya trae el prefijo de la base no se duplica (enlaces de GitHub Enterprise).
-      const path = prefix && (req.url === prefix || req.url.startsWith(`${prefix}/`)) ? req.url : `${prefix}${req.url}`;
-      const rel = new URL(path, base.origin);
-      if (rel.origin !== base.origin) throw new TransportRefused(`origen no permitido para ${req.service}`);
-      return rel;
-    }
-    let u: URL;
-    try {
-      u = new URL(req.url);
-    } catch {
-      throw new TransportRefused("URL inválida");
+      // Segmentos `.` o `..` (también codificados): `new URL` los normaliza y sacarían la
+      // ruta del prefijo de la base dentro del mismo origen.
+      const path = req.url.split(/[?#]/, 1)[0];
+      if (path.split("/").some((seg) => /^(?:\.|%2e){1,2}$/i.test(seg))) throw new TransportRefused(`ruta no permitida para ${req.service}`);
+      // Siempre se antepone el prefijo: adivinar si «ya lo trae» confundía un proyecto de
+      // Azure DevOps llamado como la organización con la propia organización.
+      u = new URL(`${prefix}${req.url}`, base.origin);
+    } else {
+      try {
+        u = new URL(req.url);
+      } catch {
+        throw new TransportRefused("URL inválida");
+      }
     }
     if (u.origin !== base.origin) throw new TransportRefused(`origen no permitido para ${req.service}`);
+    // `%2f`/`%5c` en la ruta: un servidor que los decodifique antes de enrutar sacaría la
+    // petición del prefijo de la base. Ningún adaptador los necesita en la ruta.
+    if (/%(?:2f|5c)/i.test(u.pathname)) throw new TransportRefused(`ruta no permitida para ${req.service}`);
+    // Ningún método, tampoco GET, sale con el token fuera de la ruta de la base
+    // (p. ej. hacia otra organización de Azure DevOps en el mismo origen).
+    if (prefix && u.pathname !== prefix && !u.pathname.startsWith(`${prefix}/`)) throw new TransportRefused(`ruta fuera de la base para ${req.service}`);
     return u;
   }
 
@@ -90,8 +102,8 @@ export class HttpTransport implements Transport {
     const m = req.method.toUpperCase();
     if (m === "GET" || m === "HEAD") return true;
     if (m !== "POST") return false;
-    const base = this.bases[req.service];
-    const rel = u.pathname.slice(base.pathname.replace(/\/$/, "").length);
+    const prefix = this.bases[req.service].pathname.replace(/\/$/, "");
+    const rel = u.pathname.slice(prefix.length);
     return READ_POSTS.some((r) => r.service === req.service && r.path.test(rel));
   }
 
@@ -114,7 +126,7 @@ export class HttpTransport implements Transport {
         // Sin cabeceras ni URL completa: el mensaje no puede llevar el token.
         throw new Error(`${req.service}: fallo de red (${(e as Error).name})`);
       }
-      const out = await this.read(res);
+      const out = await this.read(res, req.service);
       if ((out.status === 429 || out.status === 503) && attempt < this.maxRetries) {
         const wait = parseRetryAfter(out.headers["retry-after"], this.now()) ?? Math.min(1000 * 2 ** attempt, this.maxWaitMs);
         if (wait <= this.maxWaitMs) {
@@ -126,10 +138,10 @@ export class HttpTransport implements Transport {
     }
   }
 
-  private async read(res: Response): Promise<TransportResponse> {
+  private async read(res: Response, service: string): Promise<TransportResponse> {
     const headers: Record<string, string> = {};
     res.headers.forEach((v, k) => { headers[k.toLowerCase()] = v; });
-    const text = await leerAcotado(res);
+    const text = await this.text(res, service);
     let body: unknown = text;
     if (/json/i.test(headers["content-type"] ?? "") || /^[[{]/.test(text.trim())) {
       try {
@@ -141,22 +153,28 @@ export class HttpTransport implements Transport {
     if (text === "") body = null;
     return { status: res.status, headers, body };
   }
-}
 
-/** Tope del cuerpo de una respuesta: un host comprometido o mal configurado no agota la memoria de `serve`. */
-export const MAX_BODY = 8 * 1024 * 1024;
-
-async function leerAcotado(res: Response): Promise<string> {
-  if (!res.body) return "";
-  const trozos: Uint8Array[] = [];
-  let n = 0;
-  const r = res.body.getReader();
-  for (;;) {
-    const { done, value } = await r.read();
-    if (done) break;
-    n += value.byteLength;
-    if (n > MAX_BODY) { await r.cancel(); throw new Error("respuesta demasiado grande"); }
-    trozos.push(value);
+  /** Cuerpo como texto, leído por trozos y cortado al superar `maxBytes`. */
+  private async text(res: Response, service: string): Promise<string> {
+    const tooBig = () => new Error(`${service}: la respuesta supera ${this.maxBytes} bytes`);
+    if (Number(res.headers.get("content-length") ?? 0) > this.maxBytes) {
+      await res.body?.cancel();
+      throw tooBig();
+    }
+    if (!res.body) return "";
+    const reader = res.body.getReader();
+    const parts: Uint8Array[] = [];
+    let n = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      n += value.byteLength;
+      if (n > this.maxBytes) {
+        await reader.cancel();
+        throw tooBig();
+      }
+      parts.push(value);
+    }
+    return Buffer.concat(parts).toString("utf8");
   }
-  return Buffer.concat(trozos).toString("utf8");
 }

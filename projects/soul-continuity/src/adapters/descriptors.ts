@@ -57,7 +57,7 @@ export const DESCRIPTORS: Record<ApiAdapterName, AdapterDescriptor> = {
     name: "m365-teams",
     purpose: "Menciones en mis chats de Teams sin respuesta mía posterior",
     sensitivity: "N4", ttl_s: 1800, routes: ["graph"], service: "graph",
-    scopes: [["Chat.Read"]],
+    scopes: [["Chat.Read", "User.Read"]],
     revocation: REVOKE, never_persists: NO_BODIES,
   },
   "m365-files": {
@@ -94,6 +94,7 @@ export const DESCRIPTORS: Record<ApiAdapterName, AdapterDescriptor> = {
     name: "github",
     purpose: "Revisiones pedidas, asignaciones y menciones abiertas",
     sensitivity: "N2", ttl_s: 3600, routes: ["api"], service: "github",
+    // GitHub no tiene un scope `repo:read`: es solo la clave de la entrada en el almacén.
     scopes: [["repo:read"]],
     revocation: REVOKE, never_persists: "Cuerpos de incidencias, PR y comentarios.",
   },

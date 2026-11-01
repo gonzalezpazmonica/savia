@@ -18,7 +18,7 @@ function filesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? filesUnder(join(dir, f)) : [join(dir, f)]));
 }
 
-async function setup(fill: (d: MockData) => void, scopes = ["Mail.Read", "Calendars.ReadBasic", "Chat.Read", "Files.Read.All"]) {
+async function setup(fill: (d: MockData) => void, scopes = ["Mail.Read", "Calendars.ReadBasic", "Chat.Read", "User.Read", "Files.Read.All"]) {
   const d = emptyData();
   d.tokens["tok-1"] = scopes;
   fill(d);
@@ -281,13 +281,49 @@ test("Teams: mención reciente sin respuesta mía; la inyección en el texto no 
   }
 });
 
-test("Teams: identidad por m365_user_id cuando la API da ids de Entra", async () => {
-  const { mock, ctx } = await setup((d) => {
+test("Teams: con ids de Entra, el id se resuelve con /me o llega por m365_user_id", async () => {
+  const { d, mock, ctx } = await setup((d) => {
+    d.meId = "uid-yo";
     d.chats.push({ id: "19:a", topic: "T", messages: [{ id: "t1", from: "uid-ana", at: "2026-11-01T10:00:00Z", mentions: ["uid-yo"] }] });
   });
   try {
-    assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx())), []);
+    assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx())), ["m365-teams:mention:t1"]);
+    assert.ok(mock.log.some((l) => l.url.startsWith("/v1.0/me?")));
+    d.meId = null;
+    mock.log.length = 0;
     assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx({ params: { m365_user_id: "uid-yo" } }))), ["m365-teams:mention:t1"]);
+    assert.ok(!mock.log.some((l) => l.url.startsWith("/v1.0/me?")), "con m365_user_id no se pide /me");
+  } finally {
+    await mock.close();
+  }
+});
+
+test("Teams: un mensaje borrado no cuenta: ni la mención borrada ni mi respuesta borrada", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.meId = "uid-yo";
+    d.chats.push({ id: "19:a", topic: "T", messages: [
+      { id: "t1", from: "uid-ana", at: "2026-11-01T10:00:00Z", mentions: ["uid-yo"], deleted: "2026-11-01T10:05:00Z" },
+      { id: "t2", from: "uid-ana", at: "2026-11-01T11:00:00Z", mentions: ["uid-yo"] },
+      { id: "t3", from: "uid-yo", at: "2026-11-01T12:00:00Z", deleted: "2026-11-01T12:01:00Z" },
+      { id: "t4", from: "uid-ana", at: "2026-11-01T09:00:00Z", mentions: ["uid-yo"] },
+    ] });
+  });
+  try {
+    assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx())), ["m365-teams:mention:t2", "m365-teams:mention:t4"]);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("Teams: sin m365_user_id y sin poder leer /me falla cerrado, no da «ok» vacío", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.meId = null;
+    d.chats.push({ id: "19:a", topic: "T", messages: [{ id: "t1", from: "uid-ana", at: "2026-11-01T10:00:00Z", mentions: ["uid-yo"] }] });
+  });
+  try {
+    const r = await makeM365Adapters()["m365-teams"].read(ctx());
+    assert.equal(r.status, "error");
+    assert.match(r.status === "error" ? r.message : "", /m365_user_id/);
   } finally {
     await mock.close();
   }
@@ -299,6 +335,7 @@ function teamsFake(pages: (orderByCreated: boolean) => J[][]) {
   const urls: string[] = [];
   return { urls, transport: { async request(req: { url: string }) {
     urls.push(req.url);
+    if (req.url.startsWith("/v1.0/me?")) return { status: 200, headers: {}, body: { id: ME } };
     if (req.url.startsWith("/v1.0/me/chats?")) return { status: 200, headers: {}, body: { value: [{ id: "19:z", topic: "Z" }] } };
     const u = new URL(req.url, "https://graph.example");
     const ps = pages(u.searchParams.get("$orderby") === "createdDateTime desc");
@@ -379,4 +416,55 @@ test("correo por delta: un enlace manipulado en la caché no se sigue; se resinc
   assert.deepEqual(keys(r), []); // los elementos de la caché manipulada se descartan
   assert.ok(urls.every((u) => u.startsWith("/v1.0/me/mailFolders/") && !u.startsWith("//")), urls.join(" "));
   assert.ok(urls[0].startsWith("/v1.0/me/mailFolders/inbox/messages/delta?$select="));
+});
+
+test("correo por delta: una caché con otra forma se descarta y se resincroniza, sin error", async () => {
+  const urls: string[] = [];
+  const transport = {
+    async request(req: { url: string }) {
+      urls.push(req.url);
+      const folder = req.url.includes("sentitems") ? "sentitems" : "inbox";
+      return { status: 200, headers: {}, body: { value: [], "@odata.deltaLink": `/v1.0/me/mailFolders/${folder}/messages/delta?$deltatoken=n` } };
+    },
+  };
+  // `to` no es lista: `awaitingReply` lanzaría TypeError en cada lectura.
+  const bad = { m9: { id: "m9", conv: "c9", from: "ana@alfa.example", to: "yo", cc: [], at: "2026-11-01T10:00:00.000Z", subject: "Viejo", auth: "unknown", flag_due: null } };
+  const cache = {
+    async load(_o: string, _a: string, key: string) {
+      return key.startsWith("inbox|") ? { link: "/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=viejo", complete: true, items: bad } : null;
+    },
+    async save() {},
+    async clear() {},
+  };
+  const r = await makeM365Adapters({ cache })["m365-mail"].read(ctxWith({ now: NOW, transport }));
+  assert.equal(r.status, "ok");
+  assert.deepEqual(keys(r), []);
+  assert.ok(urls[0].startsWith("/v1.0/me/mailFolders/inbox/messages/delta?$select="), "resincroniza desde el inicio, no sigue el enlace viejo");
+});
+
+test("correo: un recibido sin fecha legible da error, no se descarta en silencio", async () => {
+  const transport = { async request(req: { url: string }) {
+    const value = req.url.includes("/inbox/") ? [{ id: "m1", conversationId: "c1", subject: "S", from: { emailAddress: { address: "ana@alfa.example" } }, toRecipients: [{ emailAddress: { address: ME } }], receivedDateTime: "ayer" }] : [];
+    return { status: 200, headers: {}, body: { value } };
+  } };
+  assert.equal((await makeM365Adapters()["m365-mail"].read(ctxWith({ now: NOW, transport }))).status, "error");
+});
+
+// Un enviado mío cierra el hilo por su sentDateTime; sin fecha legible, falla cerrado.
+function mailFake(sent: J) {
+  const inbox = { id: "m1", conversationId: "c1", subject: "S", from: { emailAddress: { address: "ana@alfa.example" } }, toRecipients: [{ emailAddress: { address: ME } }], receivedDateTime: "2026-11-01T10:00:00Z" };
+  return { async request(req: { url: string }) {
+    const value = req.url.includes("/inbox/") ? [inbox] : [{ id: "m2", conversationId: "c1", subject: "Re: S", from: { emailAddress: { address: ME } }, toRecipients: [{ emailAddress: { address: "ana@alfa.example" } }], ...sent }];
+    return { status: 200, headers: {}, body: { value } };
+  } };
+}
+
+test("correo: un enviado con solo sentDateTime cierra la espera", async () => {
+  const r = await makeM365Adapters()["m365-mail"].read(ctxWith({ now: NOW, transport: mailFake({ sentDateTime: "2026-11-01T11:00:00Z" }) }));
+  assert.deepEqual(keys(r), []);
+});
+
+test("correo: un enviado sin fecha legible da error, no una espera abierta", async () => {
+  const r = await makeM365Adapters()["m365-mail"].read(ctxWith({ now: NOW, transport: mailFake({ sentDateTime: "ayer" }) }));
+  assert.equal(r.status, "error");
 });
