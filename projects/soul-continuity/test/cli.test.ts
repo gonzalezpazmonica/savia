@@ -395,6 +395,8 @@ test("salida humana: si una fuente no se leyó, lo dice; no presenta «0» como 
 
 test("AC-4d: un agente no se sube de nivel declarando proveedor ni haciéndose pasar por otro frontend", async () => {
   const s = setup({ env: { CLAUDECODE: "1" }, providers: [{ id: "prov-org", approved_by: "seguridad", approved_at: "2026-10-30T00:00:00Z", scope: "N4", frontends: ["opencode"] }] });
+  // `--provider` no existe: el proveedor solo se liga en config.json. Se prueba que un agente que lo
+  // intenta igualmente (flag desconocido + argumento suelto) no gana nivel.
   for (const args of [["q1", "--json", "--provider", "prov-org"], ["q1", "--json", "--frontend", "opencode"]]) {
     s.out.length = 0;
     assert.equal(await runCli(args, s.deps), 0);
@@ -418,4 +420,15 @@ test("uninstall sin arranque instalado: el fallo de desactivar lo que nunca se a
   s.deps.run = async () => ({ code: 1, stdout: "", stderr: "Unit not found" });
   assert.equal(await runCli(["uninstall", "--yes"], s.deps), 0);
   assert.match(text(s), /^Desinstalado/);
+});
+
+test("q3 sin --since: código 2 sin leer ninguna fuente", async () => {
+  const s = setup();
+  let reads = 0;
+  const base = adapter();
+  s.deps.adapters = { "m365-mail": { ...base, read: async (ctx) => { reads++; return base.read(ctx); } } };
+  assert.equal(await runCli(["q3"], s.deps), 2);
+  assert.equal(reads, 0);
+  assert.equal(await runCli(["q3", "--since", "2026-10-30T00:00:00Z"], s.deps), 1, "control: con --since lee (y no hay lectura anterior)");
+  assert.equal(reads, 1);
 });

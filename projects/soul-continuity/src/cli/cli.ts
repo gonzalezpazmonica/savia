@@ -235,6 +235,8 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
       }
 
       case "q1": case "q2": case "q3": case "q4": case "adapters": {
+        // Uso incorrecto antes de tocar ninguna fuente.
+        if (p.cmd === "q3" && parseTs(typeof p.flags.since === "string" ? p.flags.since : "") === null) throw new Exit(2, "q3 necesita --since <instante ISO con zona>");
         const install = resolveInstall(cfg, deps.env);
         const now = deps.now();
         const st = stopState(deps.dataDir);
@@ -257,8 +259,7 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         const q = p.cmd.toUpperCase() as QuestionId;
         let previous: Snapshot | undefined;
         if (q === "Q3") {
-          const since = typeof p.flags.since === "string" ? p.flags.since : "";
-          if (parseTs(since) === null) throw new Exit(2, "q3 necesita --since <instante ISO con zona>");
+          const since = p.flags.since as string; // validado arriba
           previous = engine.snapshotAt(deps.dataDir, install.operator.ref, since) ?? undefined;
           if (!previous) throw new Exit(1, `no hay ninguna lectura anterior a ${since}`);
         }
