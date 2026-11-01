@@ -1,13 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { SourceAdapter } from "../src/contract/adapter.ts";
 import { emptyConfig, saveConfig } from "../src/core/config.ts";
 import { filesUnder } from "../src/core/store.ts";
 import { type CliDeps, runCli } from "../src/cli/cli.ts";
 import type { Run } from "../src/credentials/store.ts";
+import { autostartPlan } from "../src/startup/autostart.ts";
 
 const NOW = "2026-10-31T09:00:00Z";
 const TITLE = "Asunto-confidencial-de-tercero";
@@ -335,6 +336,9 @@ test("configuración corrupta: stop, resume, help y uninstall siguen funcionando
   assert.ok(existsSync(join(s.dir, "STOP")));
   assert.equal(await runCli(["resume"], s.deps), 0);
   assert.equal(await runCli(["help"], s.deps), 0);
+  s.out.length = 0;
+  assert.equal(await runCli(["status", "--json"], s.deps), 1, "status responde aunque falle: diagnóstico y código 1");
+  assert.equal(JSON.parse(s.out[0]).config_unreadable, true);
   assert.equal(await runCli(["uninstall", "--yes"], s.deps), 0);
   assert.equal(existsSync(s.dir), false);
 });
@@ -391,10 +395,40 @@ test("salida humana: si una fuente no se leyó, lo dice; no presenta «0» como 
 
 test("AC-4d: un agente no se sube de nivel declarando proveedor ni haciéndose pasar por otro frontend", async () => {
   const s = setup({ env: { CLAUDECODE: "1" }, providers: [{ id: "prov-org", approved_by: "seguridad", approved_at: "2026-10-30T00:00:00Z", scope: "N4", frontends: ["opencode"] }] });
+  // `--provider` no existe: el proveedor solo se liga en config.json. Se prueba que un agente que lo
+  // intenta igualmente (flag desconocido + argumento suelto) no gana nivel.
   for (const args of [["q1", "--json", "--provider", "prov-org"], ["q1", "--json", "--frontend", "opencode"]]) {
     s.out.length = 0;
     assert.equal(await runCli(args, s.deps), 0);
     assert.equal(JSON.parse(text(s)).detail, "recuentos", args.join(" "));
     assert.ok(!text(s).includes(TITLE));
   }
+});
+
+test("uninstall con el arranque automático instalado y la desactivación fallida: aviso y código 1, no «Desinstalado»", async () => {
+  const s = setup();
+  const o = { platform: s.deps.platform, home: s.deps.home, env: s.deps.env, node: s.deps.node, entry: s.deps.entry };
+  for (const f of autostartPlan(o).files) { mkdirSync(dirname(f.path), { recursive: true }); writeFileSync(f.path, "x"); }
+  s.deps.run = async (cmd, args) => { s.runs.push([cmd, ...args].join(" ")); return args.includes("disable") ? { code: 1, stdout: "", stderr: "Failed to connect to bus" } : { code: 0, stdout: "", stderr: "" }; };
+  assert.equal(await runCli(["uninstall", "--yes"], s.deps), 1);
+  assert.doesNotMatch(text(s), /^Desinstalado/);
+  assert.match(s.err.join("\n"), /Failed to connect to bus/);
+});
+
+test("uninstall sin arranque instalado: el fallo de desactivar lo que nunca se activó no cuenta (control)", async () => {
+  const s = setup();
+  s.deps.run = async () => ({ code: 1, stdout: "", stderr: "Unit not found" });
+  assert.equal(await runCli(["uninstall", "--yes"], s.deps), 0);
+  assert.match(text(s), /^Desinstalado/);
+});
+
+test("q3 sin --since: código 2 sin leer ninguna fuente", async () => {
+  const s = setup();
+  let reads = 0;
+  const base = adapter();
+  s.deps.adapters = { "m365-mail": { ...base, read: async (ctx) => { reads++; return base.read(ctx); } } };
+  assert.equal(await runCli(["q3"], s.deps), 2);
+  assert.equal(reads, 0);
+  assert.equal(await runCli(["q3", "--since", "2026-10-30T00:00:00Z"], s.deps), 1, "control: con --since lee (y no hay lectura anterior)");
+  assert.equal(reads, 1);
 });

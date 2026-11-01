@@ -78,6 +78,13 @@ export function validateConfig(c: unknown): string[] {
   if (typeof v.installation_id !== "string" || !v.installation_id) p.push("installation_id obligatorio");
   if (v.active_profile !== null && typeof v.active_profile !== "string") p.push("active_profile inválido");
   if (typeof v.profiles !== "object" || v.profiles === null) p.push("profiles debe ser un objeto");
+  else for (const [n, pr] of Object.entries(v.profiles as Record<string, any>)) {
+    // operator.ref es clave de directorios, ids y operadores de la API: forma cerrada.
+    const ref = pr?.operator?.ref;
+    if (ref !== undefined && (typeof ref !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(ref) || ref === "__proto__" || ref === "constructor" || ref === "prototype")) {
+      p.push(`profiles.${n}.operator.ref inválido`);
+    }
+  }
   if (!isDetail(v.detail?.level) || !isDetail(v.detail?.max)) p.push("detail.level y detail.max: completo | titulos | recuentos");
   else if (RANK[v.detail.level as Detail] > RANK[v.detail.max as Detail]) p.push("detail.level supera detail.max");
   if (!Array.isArray(v.agent_frontend?.approved_providers)) p.push("agent_frontend.approved_providers debe ser una lista");

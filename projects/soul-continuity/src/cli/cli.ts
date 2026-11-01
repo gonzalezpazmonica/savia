@@ -150,9 +150,16 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       const auto = await uninstallAutostart(o, deps.run);
       const ajeno = removeSoulState(deps.dataDir);
       // removeSoulState lanza si no puede borrar algo propio (rmSync); eso acaba en exit 1 por el catch.
+      const data = { removed: auto.ok, kept_foreign: ajeno.length, credentials: creds.length, autostart: auto.message, autostart_ok: auto.ok };
+      if (!auto.ok) {
+        // El estado ya no está, pero el arranque automático puede seguir relanzando `soul serve`.
+        print(`Desinstalación incompleta: el arranque automático no se retiró del todo (${auto.message}).`, data);
+        deps.err(`aviso: arranque automático sin retirar: ${auto.message}`);
+        return 1;
+      }
       print(ajeno.length
         ? `Desinstalado: no queda estado de Soul. Se conservan ${ajeno.length} elemento(s) ajenos en ${deps.dataDir}.`
-        : "Desinstalado: no queda estado de Soul.", { removed: true, kept_foreign: ajeno.length, credentials: creds.length, autostart: auto.message });
+        : "Desinstalado: no queda estado de Soul.", data);
       return 0;
     }
 
@@ -215,7 +222,17 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
     // El fail-safe, la ayuda y el borrado no dependen de que config.json sea válido.
     const early = await runWithoutConfig(p, deps, print);
     if (early !== null) return early;
-    const cfg = loadConfig(deps.dataDir);
+    let cfg: SoulConfig;
+    try { cfg = loadConfig(deps.dataDir); } catch (e) {
+      if (p.cmd !== "status") throw e;
+      // status responde siempre: con config.json ilegible dice eso y el estado del STOP, y sale con 1.
+      const st = stopState(deps.dataDir);
+      print([
+        "Configuración ilegible (config.json): revísala o reinstala. Las preguntas no funcionarán hasta entonces.",
+        st.stopped ? "DETENIDO — «soul resume» para reanudar" : "En marcha",
+      ].join("\n"), { config_unreadable: true, error: (e as Error).name, stopped: st.stopped, stop_reason: caller.frontend ? null : st.reason ?? null });
+      return 1;
+    }
     const engine = makeEngine(deps.adaptersFor?.(cfg) ?? deps.adapters);
     const envFor = (ref: string) => deps.sourceEnvFor?.(ref, cfg) ?? deps.sourceEnv;
     const level = () => agentLevel(cfg, caller, cfg.detail.level);
@@ -251,6 +268,8 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
       }
 
       case "q1": case "q2": case "q3": case "q4": case "adapters": {
+        // Uso incorrecto antes de tocar ninguna fuente.
+        if (p.cmd === "q3" && parseTs(typeof p.flags.since === "string" ? p.flags.since : "") === null) throw new Exit(2, "q3 necesita --since <instante ISO con zona>");
         const install = resolveInstall(cfg, deps.env);
         const now = deps.now();
         const st = stopState(deps.dataDir);
@@ -273,8 +292,7 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         const q = p.cmd.toUpperCase() as QuestionId;
         let previous: Snapshot | undefined;
         if (q === "Q3") {
-          const since = typeof p.flags.since === "string" ? p.flags.since : "";
-          if (parseTs(since) === null) throw new Exit(2, "q3 necesita --since <instante ISO con zona>");
+          const since = p.flags.since as string; // validado arriba
           previous = engine.snapshotAt(deps.dataDir, install.operator.ref, since) ?? undefined;
           if (!previous) throw new Exit(1, `no hay ninguna lectura anterior a ${since}`);
         }
