@@ -8,6 +8,7 @@
  * - Las correcciones de la app van al libro del núcleo: no vuelven aunque la fuente repita.
  */
 
+import { createHash } from "node:crypto";
 import { type Claim, isUsable, parseTs } from "../contract/claims.ts";
 import type { AdapterStatusEntry, Snapshot } from "../contract/claims.ts";
 import { type SoulConfig, elementId } from "../core/config.ts";
@@ -44,7 +45,13 @@ export interface CoreWorld extends Mundo {
 export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: string }): CoreWorld {
   const { cfg, engine, stateDir } = opts;
   const keys = new Map<string, Map<string, string>>(); // operador → id opaco → clave
-  const seen = new Map<string, string>(); // operador → issued_at ya aplicado
+  const seen = new Map<string, string>(); // operador → versión (lectura + libro) ya aplicada
+
+  /** Versión de lo que ve el operador: cambia con una lectura nueva o con una corrección (p. ej. `soul correct`). */
+  function version(ref: string, snap: Snapshot): string {
+    const libro = createHash("sha256").update(JSON.stringify(engine.ledger(stateDir, ref))).digest("hex");
+    return `${snap.issued_at}|${libro}`;
+  }
 
   function elemento(ref: string, c: Claim): Elemento | null {
     const tipo = TIPO[c.claim_type];
@@ -96,7 +103,7 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
           const fake = { ref, d: semilla, elementos: new Map<string, Elemento>() } as unknown as Op;
           aplicar(null, fake, snap, parseTs(snap.issued_at) ?? 0);
           semilla.elementos = [...fake.elementos.values()];
-          seen.set(ref, snap.issued_at);
+          seen.set(ref, version(ref, snap));
         }
         return semilla;
       });
@@ -104,8 +111,10 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
 
     refrescar(ctx: CtxMundo, o: Op, t: number) {
       const snap = engine.lastSnapshot(stateDir, o.ref);
-      if (!snap || seen.get(o.ref) === snap.issued_at) return;
-      seen.set(o.ref, snap.issued_at);
+      if (!snap) return;
+      const v = version(o.ref, snap);
+      if (seen.get(o.ref) === v) return;
+      seen.set(o.ref, v);
       aplicar(ctx, o, snap, t);
     },
 

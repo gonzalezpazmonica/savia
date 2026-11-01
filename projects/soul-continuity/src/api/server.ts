@@ -501,7 +501,21 @@ export function crearServidor(opts: OpcionesServidor) {
   }
 
   // -------------------------------------------------------------- HTTP
-  const ventana = { inicio: 0, n: 0 };
+  // Una ventana por dirección de origen: un equipo de la VPN sin token no agota el cupo de la app legítima.
+  const ventanas = new Map<string, { inicio: number; n: number }>();
+  function limitar(origen: string, t: number) {
+    let v = ventanas.get(origen);
+    if (!v || t - v.inicio > 10_000) {
+      if (!v && ventanas.size >= 1024) {
+        for (const [k, w] of ventanas) if (t - w.inicio > 10_000) ventanas.delete(k);
+        // Memoria acotada: con 1024 orígenes vivos a la vez, uno nuevo espera (fail-closed).
+        if (ventanas.size >= 1024) throw new ErrorApi(429, "RATE_LIMITED", { retryAfter: 10 });
+      }
+      v = { inicio: t, n: 0 };
+      ventanas.set(origen, v);
+    }
+    if (++v.n > limiteVentana) throw new ErrorApi(429, "RATE_LIMITED", { retryAfter: Math.max(1, Math.ceil((v.inicio + 10_000 - t) / 1000)) });
+  }
   function autenticar(req: IncomingMessage): Op {
     const au = req.headersDistinct.authorization;
     const dp = req.headersDistinct.dpop;
@@ -538,9 +552,7 @@ export function crearServidor(opts: OpcionesServidor) {
   };
 
   async function manejar(req: IncomingMessage) {
-    const t = Date.now();
-    if (t - ventana.inicio > 10_000) { ventana.inicio = t; ventana.n = 0; }
-    if (++ventana.n > limiteVentana) throw new ErrorApi(429, "RATE_LIMITED", { retryAfter: Math.max(1, Math.ceil((ventana.inicio + 10_000 - t) / 1000)) });
+    limitar(req.socket.remoteAddress ?? "desconocido", Date.now());
     const o = autenticar(req);
     if (opts.detenido?.()) throw new ErrorApi(503, "UNAVAILABLE");
     sincronizar(o);

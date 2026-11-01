@@ -28,7 +28,12 @@ export function validateListen(addresses: string[]): string[] {
   for (const a of addresses) {
     if (typeof a !== "string" || isIP(a) === 0) throw new Error(`dirección de escucha no válida (solo IP literal): ${String(a)}`);
     // Cualquier escritura de la dirección no especificada (0.0.0.0, ::, 0::, ::0:0…) es un comodín.
-    if (ipBytes(a).every((b) => b === 0)) throw new Error(`nunca se escucha en todas las interfaces: ${a}`);
+    const b = ipBytes(a);
+    if (b.every((x) => x === 0)) throw new Error(`nunca se escucha en todas las interfaces: ${a}`);
+    // IPv4 mapeada en hexadecimal (::ffff:0:0 = 0.0.0.0, ::ffff:7f00:1…): misma familia que la forma con puntos, rechazada.
+    if (b.length === 16 && b.subarray(0, 10).every((x) => x === 0) && b[10] === 0xff && b[11] === 0xff) {
+      throw new Error(`dirección no admitida (IPv4 mapeada en IPv6): ${a}`);
+    }
   }
   return [...new Set(addresses)];
 }

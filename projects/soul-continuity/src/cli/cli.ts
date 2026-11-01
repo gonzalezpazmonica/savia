@@ -129,11 +129,11 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       const creds = await deps.credentials.forgetAll();
       const auto = await uninstallAutostart(o, deps.run);
       const ajeno = removeSoulState(deps.dataDir);
-      const quedaSoul = existsSync(deps.dataDir) && readdirSync(deps.dataDir).some((f) => !ajeno.includes(f));
+      // removeSoulState lanza si no puede borrar algo propio (rmSync); eso acaba en exit 1 por el catch.
       print(ajeno.length
         ? `Desinstalado: no queda estado de Soul. Se conservan ${ajeno.length} elemento(s) ajenos en ${deps.dataDir}.`
-        : "Desinstalado: no queda estado de Soul.", { removed: !quedaSoul, kept_foreign: ajeno.length, credentials: creds.length, autostart: auto.message });
-      return quedaSoul ? 1 : 0;
+        : "Desinstalado: no queda estado de Soul.", { removed: true, kept_foreign: ajeno.length, credentials: creds.length, autostart: auto.message });
+      return 0;
     }
 
     case "stop": {

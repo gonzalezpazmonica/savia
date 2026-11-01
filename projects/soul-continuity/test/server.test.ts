@@ -60,3 +60,21 @@ test("con STOP la API responde 503 y no sirve datos", async () => {
 test("sin TLS no se crea el servidor", () => {
   assert.throws(() => crearServidor({ tls: { cert: "", key: "" }, mundo: { semillas: () => [] } }), /TLS/);
 });
+
+test("límite de peticiones por origen: agotarlo desde una dirección no deja sin servicio a otra", async () => {
+  const cert = makeSelfSigned(["127.0.0.1", "::1"], new Date(T0));
+  const s = crearServidor({ tls: cert, mundo: { semillas: () => [semilla()] }, reloj: () => T0, peticionesPorVentana: 3 });
+  const l = await s.escuchar(["127.0.0.1", "::1"], 0);
+  const desde = (host: string, headers: Record<string, string> = { Authorization: "DPoP tok-1", DPoP: "p" }) =>
+    new Promise<number>((res, rej) => {
+      const q = request({ host, port: l.port, path: "/api/v1/soul/estado", ca: cert.cert, headers }, (r) => { r.resume(); r.on("end", () => res(r.statusCode ?? 0)); });
+      q.on("error", rej);
+      q.end();
+    });
+  try {
+    const atacante: number[] = [];
+    for (let i = 0; i < 5; i++) atacante.push(await desde("127.0.0.1", {})); // sin token
+    assert.deepEqual(atacante, [401, 401, 401, 429, 429], "control: el origen que abusa sí se frena");
+    assert.equal(await desde("::1"), 200, "otro origen sigue con servicio");
+  } finally { await s.cerrar(); }
+});

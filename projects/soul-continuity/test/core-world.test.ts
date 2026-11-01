@@ -191,3 +191,16 @@ test("TTL por afirmación evaluado en la petición: valid_until anterior a la ca
   assert.equal(world.seleccion?.(op, "q2", Date.parse("2026-10-31T09:05:00Z"))?.size, 1, "control: vigente");
   assert.equal(world.seleccion?.(op, "q2", Date.parse("2026-10-31T09:20:00Z"))?.size, 0, "pasado su valid_until, fuera aunque la instantánea siga vigente");
 });
+
+test("una corrección desde la CLI (sin lectura nueva) se ve en la API sin esperar a la siguiente lectura", async () => {
+  const { dir, engine, s, call } = await setup();
+  try {
+    const id = (await call("GET", "/q/q2")).json.elementos[0].id;
+    assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 200, "control: el elemento existe");
+    const install = { id: "i", operator: { ref: "op-yo", identities: { emails: [] } }, sources: [] };
+    await engine.correct({ install, stateDir: dir, now: NOW, key: "m365-mail:awaiting_reply:c1@m1", action: "revoke" });
+    assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 404, "revocado: fuera de las listas de la API");
+    await engine.correct({ install, stateDir: dir, now: NOW, key: "m365-mail:awaiting_reply:c1@m1", action: "restore" });
+    assert.equal((await call("GET", `/elementos/${id}/porque`)).status, 200, "restaurado: vuelve");
+  } finally { await s.cerrar(); }
+});

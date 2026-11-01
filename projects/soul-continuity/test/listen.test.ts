@@ -14,6 +14,14 @@ test("validateListen: lista vacía, comodines y nombres se rechazan (fail-closed
   assert.deepEqual(validateListen(["100.64.0.7", "fd7a:115c:a1e0::1"]), ["100.64.0.7", "fd7a:115c:a1e0::1"]);
 });
 
+test("validateListen: IPv4 mapeada en hexadecimal se rechaza (::ffff:0:0 es 0.0.0.0)", () => {
+  for (const bad of ["::ffff:0:0", "::ffff:7f00:1", "0:0:0:0:0:ffff:6440:1", "::FFFF:6440:1"]) {
+    assert.throws(() => validateListen([bad]), /IPv4 mapeada/, bad);
+  }
+  // control: un prefijo parecido que no es el de mapeo sigue admitido
+  assert.deepEqual(validateListen(["::fffe:6440:1", "fd00::ffff:0:0"]), ["::fffe:6440:1", "fd00::ffff:0:0"]);
+});
+
 function tryConnect(host: string, port: number): Promise<boolean> {
   return new Promise((res) => {
     const s = connect({ host, port, timeout: 800 });

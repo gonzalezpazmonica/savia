@@ -88,6 +88,7 @@ test("q1 en terminal de la persona, nivel completo: muestra el título como text
   assert.equal(j.detail, "completo");
   assert.equal(j.items[0].title, TITLE);
   assert.equal(j.items[0].untrusted_text, true);
+  assert.ok(text(s).includes(PERSON), "control: a nivel completo el remitente sí sale, así que su ausencia en AC-4d discrimina");
 });
 
 // AC-4d — el control positivo de arriba prueba que el test puede ver el título si sale.
@@ -158,6 +159,11 @@ test("correct con un id que no existe: error y nada en el libro", async () => {
   const s = setup();
   await runCli(["q1", "--json"], s.deps);
   assert.equal(await runCli(["correct", "e0000", "resuelto"], s.deps), 1);
+  assert.ok(!filesUnder(s.dir).some((f) => f.endsWith("ledger.jsonl")), "el libro no se crea");
+  // control: con un id real el libro sí aparece
+  const id = JSON.parse(s.out[0]).items[0].id;
+  assert.equal(await runCli(["correct", id, "resuelto"], s.deps), 0);
+  assert.ok(filesUnder(s.dir).some((f) => f.endsWith("ledger.jsonl")));
 });
 
 test("AC-5: revoke borra la caché del adaptador y su credencial, y deja de leerlo", async () => {

@@ -102,3 +102,28 @@ test("serve recarga la configuración en cada lectura: un revoke con el servicio
     await done;
   }
 });
+
+test("serve no solapa lecturas: una lectura lenta no acumula otras en paralelo", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const cfg = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+  cfg.profiles.yo.sources = [{ adapter: "github", purpose: "p", consent: { granted_at: "2026-10-01T00:00:00Z" } }];
+  writeFileSync(join(dir, "config.json"), JSON.stringify(cfg));
+  let enCurso = 0, maximo = 0, calls = 0;
+  const d = deps(dir, [], []);
+  d.adapters = { github: { name: "github", routes: ["api"], purpose: "t", async read() {
+    calls++; enCurso++; maximo = Math.max(maximo, enCurso);
+    await new Promise((r) => setTimeout(r, 150));
+    enCurso--;
+    return { status: "ok", route: "api", claims: [] };
+  } } };
+  const ac = new AbortController();
+  const done = serveFromCli(d, { signal: ac.signal, refreshMs: 10 });
+  try {
+    for (let i = 0; i < 60 && calls < 3; i++) await new Promise((r) => setTimeout(r, 25));
+    assert.ok(calls >= 3, `control: el servicio sigue releyendo (${calls})`);
+    assert.equal(maximo, 1, "nunca dos lecturas a la vez");
+  } finally {
+    ac.abort();
+    await done;
+  }
+});

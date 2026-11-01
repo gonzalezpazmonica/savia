@@ -152,3 +152,29 @@ test("resultado de adaptador mal formado: falla cerrado solo ese adaptador, el r
   assert.equal(s.adapters.github.status, "ok");
   assert.deepEqual(s.claims.map((c) => c.key), ["github:review_request:r1#7"]);
 });
+
+test("historial: un instante con offset o sin segundos se guarda y sirve de base a Q3", async () => {
+  const e = makeEngine({ github: fakeGithub({ n: 0 }) });
+  const stateDir = tmp();
+  const inst = install("op-a", [{ adapter: "github", purpose: "p", consent }]);
+  await e.snapshot({ install: inst, now: "2026-10-31T11:00+02:00", stateDir, env });
+  const h = readdirSync(join(stateDir, operatorDirName("op-a"), "history"));
+  assert.deepEqual(h, ["2026-10-31T09-00-00-000Z.json"], "nombre normalizado a UTC");
+  assert.ok(e.snapshotAt(stateDir, "op-a", "2026-10-31T09:01:00Z"), "la instantánea recién escrita no se poda");
+  // control: con la misma hora en Z también
+  await e.snapshot({ install: inst, now: "2026-10-31T09:05:00Z", stateDir, env });
+  assert.equal(readdirSync(join(stateDir, operatorDirName("op-a"), "history")).length, 2);
+});
+
+test("correct usa la misma regla de clave que el libro: lo que el libro ignoraría no se escribe", async () => {
+  const e = makeEngine({ github: fakeGithub({ n: 0 }) });
+  const stateDir = tmp();
+  const inst = install("op-a", [{ adapter: "github", purpose: "p", consent }]);
+  for (const bad of ["GitHub:review_request:r1#7", "github:review_request:r1 7", "git hub:review_request:r1#7"]) {
+    await assert.rejects(e.correct({ install: inst, stateDir, now: NOW, key: bad, action: "revoke" }), /clave inválida/, bad);
+  }
+  assert.equal(e.ledger(stateDir, "op-a").length, 0);
+  // control: una clave válida sí entra en el libro y tiene efecto
+  await e.correct({ install: inst, stateDir, now: NOW, key: "github:review_request:r1#7", action: "revoke" });
+  assert.equal(e.ledger(stateDir, "op-a").length, 1);
+});

@@ -64,7 +64,13 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   deps.out(`Huella del certificado para emparejar: ${tls.pin}`);
   opts.onListening?.();
 
-  const timer = setInterval(() => { void refresh(); }, opts.refreshMs ?? REFRESH_MS);
+  // Sin solapes: si una lectura tarda más que el intervalo, el siguiente tic se salta.
+  let leyendo = false;
+  const timer = setInterval(() => {
+    if (leyendo) return;
+    leyendo = true;
+    void refresh().finally(() => { leyendo = false; });
+  }, opts.refreshMs ?? REFRESH_MS);
   await new Promise<void>((resolve) => {
     const end = () => resolve();
     if (opts.signal) {

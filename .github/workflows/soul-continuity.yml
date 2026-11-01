@@ -64,8 +64,8 @@ jobs:
         with:
           node-version: "22.x"
 
-      - name: Dependencias de desarrollo (typescript, @types/node)
-        run: npm install --no-audit --no-fund
+      - name: Dependencias de desarrollo (typescript, @types/node; versiones exactas, lockfile con integridad, sin scripts)
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Tipos
         run: npm run typecheck

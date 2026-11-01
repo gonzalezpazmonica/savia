@@ -17,7 +17,7 @@ import { readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Claim, LEVELS, SNAPSHOT_SCHEMA, type Snapshot, TTL_MAX_S, applyLedgerAndTtl, fingerprint, foldLedger, isUsable,
-  iso, levelRank, maxLevel, parseKey, parseTs,
+  isClaimKey, iso, levelRank, maxLevel, parseTs,
 } from "../contract/claims.ts";
 import {
   ADAPTERS, type Answer, type AnswerItem, type ContinuityImpl, type CorrectionRequest, DEFAULT_SENSITIVITY,
@@ -67,8 +67,9 @@ function historyTime(f: string): number | null {
 
 function saveHistory(dir: string, snap: Snapshot): void {
   const h = ensureDir(join(dir, HISTORY));
-  writeJson(join(h, `${snap.issued_at.replace(/[:.]/g, "-")}.json`), snap);
   const now = parseTs(snap.issued_at) ?? Date.now();
+  // Nombre siempre en UTC con milisegundos: un instante con offset o sin segundos no casaría con historyTime.
+  writeJson(join(h, `${iso(now).replace(/[:.]/g, "-")}.json`), snap);
   const hours = new Set<number>();
   for (const f of readdirSync(h).filter((x) => x.endsWith(".json")).sort()) {
     const t = historyTime(f);
@@ -153,7 +154,8 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
     },
 
     async correct(req: CorrectionRequest): Promise<void> {
-      if (!parseKey(req.key)) throw new Error("clave inválida");
+      // Misma regla que foldLedger: una clave que el libro ignoraría no se escribe.
+      if (!isClaimKey(req.key)) throw new Error("clave inválida");
       if (parseTs(req.now) === null) throw new Error("instante inválido");
       if (req.action === "supersede" && !req.superseded_by) throw new Error("supersede necesita superseded_by");
       const dir = operatorDir(req.stateDir, req.install.operator.ref);
