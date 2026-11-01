@@ -106,19 +106,23 @@ export function validarGrabacion(r: Receta, har: unknown): InformeGrabacion {
     if (p.metodo.toUpperCase() !== "POST" || d.motivo === "renovacion") continue;
     const decl = r.post_lectura.filter((o) => casa(p.url, r.origen, [o.url]));
     if (decl.length === 0) continue;
-    if (d.motivo === "operacion_desconocida" && !d.op) {
+    // Todo POST a un endpoint declarado tiene que salir como lectura o como
+    // escritura conocida: cualquier otro motivo es un corte en ejecución que la
+    // receta no prevé (revisión #1443 P1-2), y la validación no puede darlo por bueno.
+    if (d.motivo === "post_lectura" || d.motivo === "escritura_conocida") {
+      anotarOp(sitio, d.op ?? "", d.motivo === "escritura_conocida" ? "escritura_conocida" : "lectura");
+    } else if (d.motivo === "operacion_desconocida" && !d.op) {
       inf.fallos.push(`no se distingue la operación de un POST a ${sitio}: con esas señales no se separa lectura de escritura y la receta no se puede publicar`);
-      continue;
-    }
-    if (!d.op) continue;
-    if (d.motivo === "graphql_no_consulta") {
+    } else if (d.motivo === "graphql_no_consulta") {
       inf.fallos.push(`${d.op} en ${sitio} se declara lectura pero su documento no es solo consulta (mutation/subscription)`);
-      anotarOp(sitio, d.op, "lectura");
+      anotarOp(sitio, d.op ?? "", "lectura");
     } else if (d.motivo === "operacion_desconocida") {
       inf.fallos.push(`operación desconocida ${d.op} en ${sitio}: clasifícala como lectura o escritura_conocida`);
-      anotarOp(sitio, d.op, "desconocida");
+      anotarOp(sitio, d.op ?? "", "desconocida");
+    } else if (d.motivo === "operacion_url_distinta") {
+      inf.fallos.push(`un POST a ${sitio} declara ${d.op} pero la consulta repite la operación con otro valor: el cortafuegos lo cortaría y desactivaría la receta`);
     } else {
-      anotarOp(sitio, d.op, d.motivo === "escritura_conocida" ? "escritura_conocida" : "lectura");
+      inf.fallos.push(`un POST a ${sitio}${d.op ? ` (${d.op})` : ""} se cortaría en ejecución por ${d.motivo}: la receta no reproduce este cliente`);
     }
   }
   for (const o of r.post_lectura) {

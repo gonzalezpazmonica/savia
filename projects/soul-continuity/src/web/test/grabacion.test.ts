@@ -90,3 +90,22 @@ test("pareceEscritura: verbos en mitad de un camelCase; sin confundir palabras q
     assert.equal(pareceEscritura(op), false, op);
   }
 });
+
+test("POST con la operación de la URL distinta de la declarada: no pasa, como en el cortafuegos (revisión #1443 P1-2)", () => {
+  const i = validarGrabacion(correo(), har(...buena(),
+    ent("POST", "/correo/api/servicio?x-accion=MarcarLeido", "fetch", { "x-accion": "BuscarElementos" }, {})));
+  assert.equal(i.pasa, false);
+  assert.ok(i.fallos.some((f) => /BuscarElementos/.test(f) && /otro valor/.test(f)), i.fallos.join("; "));
+  assert.ok(!i.operaciones.some((o) => o.url.includes("x-accion") && o.clase === "lectura"), "no se anota como lectura");
+  // Caso negativo: la misma URL con la operación coincidente sí pasa.
+  const j = validarGrabacion(correo(), har(...buena(),
+    ent("POST", "/correo/api/servicio?x-accion=BuscarElementos", "fetch", { "x-accion": "BuscarElementos" }, {})));
+  assert.equal(j.pasa, true, j.fallos.join("; "));
+});
+
+test("cualquier otro corte de un POST a un endpoint declarado es un fallo, no un silencio (revisión #1443 P1-2)", () => {
+  const i = validarGrabacion(correo(), har(...buena(),
+    ent("POST", "/correo/api/servicio?x-accion=delete", "fetch", { "x-accion": "delete" }, {})));
+  assert.equal(i.pasa, false);
+  assert.ok(i.fallos.some((f) => /accion_en_url/.test(f)), i.fallos.join("; "));
+});
