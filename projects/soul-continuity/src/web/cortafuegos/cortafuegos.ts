@@ -29,6 +29,8 @@ export interface Registro {
   url: string;
   metodo?: string;
   op?: string | null;
+  /** Solo en las decisiones HTTP: navegación del documento o subrecurso. */
+  navegacion?: boolean;
   permitida: boolean;
   motivo: Motivo | "redireccion_fuera" | "descarga" | "no_autorizado" | "ws_fuera" | "ws_mantenimiento"
     | "ws_envio" | "bloqueo_total" | "worker_bloqueado";
@@ -131,7 +133,7 @@ export class Cortafuegos {
         (e.request.postDataEntries?.map((x) => Buffer.from(x.bytes ?? "", "base64").toString("utf8")).join("") || null);
       const d = decidirHttp(this.receta, { accion: this.accion }, { url, metodo, cabeceras, cuerpo, navegacion }, this.mutante);
       const salto = e.redirectedRequestId !== undefined;
-      this.anotar({ tipo: salto ? "redireccion" : "guardia", url, metodo, op: d.op, permitida: d.permitir,
+      this.anotar({ tipo: salto ? "redireccion" : "guardia", url, metodo, op: d.op, navegacion, permitida: d.permitir,
         motivo: !d.permitir && salto && !d.sesion ? "redireccion_fuera" : d.motivo });
       if (d.sesion) this.sesionCaducada = true;
       if (d.desactivar) this.desactivar(`operación ${d.op ?? "sin declarar"} en ${new URL(url).pathname}`);
@@ -190,7 +192,7 @@ export class Cortafuegos {
     const d = decidirHttp(this.receta, { accion: this.accion }, {
       url, metodo, navegacion, cabeceras: await req.allHeaders(), cuerpo: req.postData(),
     }, this.mutante);
-    this.anotar({ tipo: "http", url, metodo, op: d.op, permitida: d.permitir, motivo: d.motivo });
+    this.anotar({ tipo: "http", url, metodo, op: d.op, navegacion, permitida: d.permitir, motivo: d.motivo });
     if (d.sesion) this.sesionCaducada = true;
     if (d.desactivar) this.desactivar(`operación ${d.op ?? "sin declarar"} en ${new URL(url).pathname}`);
     return d.permitir ? route.continue() : cortar();

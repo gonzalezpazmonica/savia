@@ -17,6 +17,7 @@ import { casa } from "../receta/patrones.ts";
 import type { Receta } from "../receta/tipos.ts";
 import { cargarReceta, validarReceta } from "../receta/validar.ts";
 import { Banco, type Escenario, type Sitio } from "../banco/servidor.ts";
+import { huellaCodigo } from "./mapa-mutantes.ts";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const VERDAD = JSON.parse(readFileSync(join(RAIZ, "verdad", "ac4e.json"), "utf8"));
@@ -25,7 +26,7 @@ const UMBRAL: number = VERDAD.umbral_precision;
 
 export interface Comprobacion { id: string; ok: boolean; detalle: string }
 export interface Informe {
-  mutante: Mutante; navegador: string; aviso_navegador: string | null;
+  mutante: Mutante; navegador: string; aviso_navegador: string | null; huella_codigo: string;
   comprobaciones: Comprobacion[]; aprobadas: number; fallidas: number;
   metricas: Record<string, Record<string, number>>;
   precision: Record<string, Record<string, { precision: number | null; recall: number | null }>>;
@@ -116,6 +117,9 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
     ok(`${nombre}:peticiones_sin_pasar_por_cortafuegos`, m.peticiones_sin_pasar_por_cortafuegos === 0, `${m.peticiones_sin_pasar_por_cortafuegos}`);
     ok(`${nombre}:peticiones_fuera_de_accion`, m.peticiones_fuera_de_accion === 0, `${m.peticiones_fuera_de_accion}`);
   };
+  /** ¿El cortafuegos registró algún corte que cumpla `f`? Base de las comprobaciones
+   *  propias de cada defensa: el mapa de mutantes no comparte ids (revisión #1443 P1-1). */
+  const corte = (res: Resultado, f: (g: Resultado["registro"][number]) => boolean) => res.registro.some((g) => !g.permitida && f(g));
   const precisionDe = (nombre: string, s: Sitio, res: Resultado, qs: string[]) => {
     precision[nombre] = {};
     for (const q of qs) {
@@ -159,6 +163,9 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
       ok("base:correo:estado", a.res.estado === "OK", `${a.res.estado} ${a.res.aviso ?? ""}`);
       invariantes("base:correo", a.m);
       precisionDe("base:correo", "correo", a.res, ["q1", "q2"]);
+      ok("base:correo:escritura_cortada", corte(a.res, (g) => g.motivo === "escritura_conocida"), "");
+      ok("base:correo:subrecurso_cortado", corte(a.res, (g) => (g.tipo === "guardia" || g.tipo === "http") &&
+        g.navegacion === false && g.motivo !== "esquema"), "");
       ok("base:correo:websocket_abierto_y_mantenimiento", b.peticiones.some((p) => p.metodo === "WS-ENVIO"),
         "el banco necesita ver el ping para que «0 envíos» signifique algo");
     }
@@ -180,6 +187,7 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
       ok(`sesion_caducada:${s}:aviso`, (x.res.aviso ?? "").toLowerCase().includes(esperado.sesion_caducada.aviso_contiene), `${x.res.aviso}`);
       ok(`sesion_caducada:${s}:sin_elementos`, x.res.elementos.length === 0, `${x.res.elementos.length}`);
       ok(`sesion_caducada:${s}:sin_intentos_login`, x.m.intentos_login === 0, `${x.m.intentos_login}`);
+      ok(`sesion_caducada:${s}:corte_login`, corte(x.res, (g) => g.motivo === "login"), "");
     }
     // 4) Operación nueva del cliente: se aborta y desactiva la receta, con aviso que persiste.
     {
@@ -205,9 +213,13 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
       const x = await escenario("aprobaciones", "redireccion");
       ok("redireccion:aprobaciones:salto_cortado", x.res.registro.some((g) => !g.permitida && g.url.includes("/approve")),
         "el registro debe mostrar el corte del segundo salto");
+      ok("redireccion:aprobaciones:corte_en_salto", corte(x.res, (g) => g.tipo === "redireccion"), "la guardia decide cada salto");
     }
     // 7) GraphQL con operationName de lectura y documento mutation.
-    await escenario("correo", "graphql_disfrazada");
+    {
+      const x = await escenario("correo", "graphql_disfrazada");
+      ok("graphql_disfrazada:correo:graphql_cortado", corte(x.res, (g) => g.motivo === "graphql_no_consulta"), "");
+    }
     // 8) Acción secuestrada por JavaScript (receta forzada con JS para probar el ligado).
     {
       const x = await escenario("tareas", "accion_secuestrada", { javascript: true });
@@ -229,10 +241,19 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
         "el script hostil debe haber intentado salir (si no, la prueba no prueba nada)");
       // Una comprobación por defensa, para que el mapa de mutantes no comparta ids.
       ok("contenido_hostil:noticias:ws_cortado", x.res.registro.some((g) => g.tipo === "ws" && !g.permitida && g.motivo === "ws_fuera"), "");
+      ok("contenido_hostil:noticias:metodo_cortado", corte(x.res, (g) => g.motivo === "metodo" && g.metodo === "POST"), "");
+      ok("contenido_hostil:noticias:extension_cortada", corte(x.res, (g) => g.motivo === "fuera_de_lista" && g.url.includes("seccion=portada&")),
+        "un patrón exacto no admite la misma URL con más parámetros");
+      const reales = new Map(b.datos.noticias.map((n) => [n.id, JSON.stringify(n.menciona)]));
+      ok("contenido_hostil:noticias:extraccion_aislada", x.res.elementos.length > 0 &&
+        x.res.elementos.every((e) => JSON.stringify(e.campos.menciona) === reales.get(e.id)), "los prototipos falseados no llegan a la extracción");
       ok("contenido_hostil:noticias:navegacion_externa_cortada", x.res.registro.some((g) => !g.permitida && g.motivo === "otro_origen"), "");
     }
     // 11) WebSocket desde workers y 12) descarga por atributo `download` hacia un GET que muta.
-    await escenario("correo", "ws_worker");
+    {
+      const x = await escenario("correo", "ws_worker");
+      ok("ws_worker:correo:worker_bloqueado", x.res.registro.some((g) => g.tipo === "worker" && g.motivo === "worker_bloqueado"), "");
+    }
     await escenario("correo", "descarga_atributo");
     // 17) Operación en la URL: GET al endpoint de operaciones y POST con la consulta
     // distinta de la cabecera (el servidor del banco ejecuta la de la consulta).
@@ -248,6 +269,7 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
       const x = await escenario("tareas", "sesion_sso", { sesion: { login: ["/login", "/login?vuelta=*", b.origen("externo")] } });
       ok("sesion_sso:tareas:estado", x.res.estado === esperado.sesion_caducada.estado, `${x.res.estado}`);
       ok("sesion_sso:tareas:aviso", (x.res.aviso ?? "").toLowerCase().includes(esperado.sesion_caducada.aviso_contiene), `${x.res.aviso}`);
+      ok("sesion_sso:tareas:corte_login_externo", corte(x.res, (g) => g.motivo === "login" && g.url.startsWith(b.origen("externo"))), "");
       ok("sesion_sso:tareas:sin_elementos", x.res.elementos.length === 0, `${x.res.elementos.length}`);
     }
     // 15) Receta experimental: sin recibo no abre el navegador; con recibo de ESA receta, sí.
@@ -311,7 +333,7 @@ export async function ejecutarBateria(mutante: Mutante = "ninguno"): Promise<Inf
   }
   const fallidas = comprobaciones.filter((c) => !c.ok).length;
   return {
-    mutante, navegador: nav.nombre, aviso_navegador: nav.aviso ?? null, comprobaciones,
+    mutante, navegador: nav.nombre, aviso_navegador: nav.aviso ?? null, huella_codigo: huellaCodigo(), comprobaciones,
     aprobadas: comprobaciones.length - fallidas, fallidas, metricas, precision,
   };
 }

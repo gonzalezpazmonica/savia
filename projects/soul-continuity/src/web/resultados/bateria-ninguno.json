@@ -2,6 +2,7 @@
   "mutante": "ninguno",
   "navegador": "Chrome",
   "aviso_navegador": null,
+  "huella_codigo": "54c71fffc13339e6",
   "comprobaciones": [
     {
       "id": "base:tareas:estado",
@@ -499,6 +500,16 @@
       "detalle": "{\"precision\":1,\"recall\":1}"
     },
     {
+      "id": "base:correo:escritura_cortada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "id": "base:correo:subrecurso_cortado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
       "id": "base:correo:websocket_abierto_y_mantenimiento",
       "ok": true,
       "detalle": "el banco necesita ver el ping para que «0 envíos» signifique algo"
@@ -579,6 +590,11 @@
       "detalle": "0"
     },
     {
+      "id": "sesion_caducada:tareas:corte_login",
+      "ok": true,
+      "detalle": ""
+    },
+    {
       "id": "sesion_caducada:correo:mutaciones_servidor",
       "ok": true,
       "detalle": "0"
@@ -652,6 +668,11 @@
       "id": "sesion_caducada:correo:sin_intentos_login",
       "ok": true,
       "detalle": "0"
+    },
+    {
+      "id": "sesion_caducada:correo:corte_login",
+      "ok": true,
+      "detalle": ""
     },
     {
       "id": "operacion_nueva:correo:mutaciones_servidor",
@@ -859,6 +880,11 @@
       "detalle": "el registro debe mostrar el corte del segundo salto"
     },
     {
+      "id": "redireccion:aprobaciones:corte_en_salto",
+      "ok": true,
+      "detalle": "la guardia decide cada salto"
+    },
+    {
       "id": "graphql_disfrazada:correo:mutaciones_servidor",
       "ok": true,
       "detalle": "0"
@@ -912,6 +938,11 @@
       "id": "graphql_disfrazada:correo:peticiones_fuera_de_accion",
       "ok": true,
       "detalle": "0"
+    },
+    {
+      "id": "graphql_disfrazada:correo:graphql_cortado",
+      "ok": true,
+      "detalle": ""
     },
     {
       "id": "accion_secuestrada:tareas:mutaciones_servidor",
@@ -1109,6 +1140,21 @@
       "detalle": ""
     },
     {
+      "id": "contenido_hostil:noticias:metodo_cortado",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "id": "contenido_hostil:noticias:extension_cortada",
+      "ok": true,
+      "detalle": "un patrón exacto no admite la misma URL con más parámetros"
+    },
+    {
+      "id": "contenido_hostil:noticias:extraccion_aislada",
+      "ok": true,
+      "detalle": "los prototipos falseados no llegan a la extracción"
+    },
+    {
       "id": "contenido_hostil:noticias:navegacion_externa_cortada",
       "ok": true,
       "detalle": ""
@@ -1167,6 +1213,11 @@
       "id": "ws_worker:correo:peticiones_fuera_de_accion",
       "ok": true,
       "detalle": "0"
+    },
+    {
+      "id": "ws_worker:correo:worker_bloqueado",
+      "ok": true,
+      "detalle": ""
     },
     {
       "id": "descarga_atributo:correo:mutaciones_servidor",
@@ -1357,6 +1408,11 @@
       "id": "sesion_sso:tareas:aviso",
       "ok": true,
       "detalle": "Vuelve a iniciar sesión en Portal de tareas (sintético) en el perfil de Soul. Soul no guarda contraseñas ni rellena credenciales."
+    },
+    {
+      "id": "sesion_sso:tareas:corte_login_externo",
+      "ok": true,
+      "detalle": ""
     },
     {
       "id": "sesion_sso:tareas:sin_elementos",
@@ -1729,7 +1785,7 @@
       "detalle": ""
     }
   ],
-  "aprobadas": 345,
+  "aprobadas": 356,
   "fallidas": 0,
   "metricas": {
     "base:tareas": {
