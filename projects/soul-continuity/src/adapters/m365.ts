@@ -191,10 +191,23 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
   });
 
   const teams = adapter("m365-teams", async (ctx) => {
-    const tok = await token(ctx, "graph", ["Chat.Read"]);
+    const tok = await token(ctx, "graph", ["Chat.Read", "User.Read"]);
     const now = nowMs(ctx);
+    // Graph identifica a las personas en Teams por su id de Entra, no por el correo.
+    // Sin `m365_user_id` se resuelve con `/me`; si tampoco se puede, se falla cerrado:
+    // comparar solo correos daría «ok» con cero menciones contra Graph real.
     const me = emailsOf(ctx);
-    if (typeof ctx.params.m365_user_id === "string") me.add(ctx.params.m365_user_id.toLowerCase());
+    let uid = typeof ctx.params.m365_user_id === "string" && ctx.params.m365_user_id ? ctx.params.m365_user_id : null;
+    if (!uid) {
+      const r = await ctx.transport.request({ service: "graph", method: "GET", url: "/v1.0/me?$select=id", headers: { Authorization: `Bearer ${tok}` } });
+      const id = r.status === 200 ? (r.body as J)?.id : undefined;
+      if (typeof id !== "string" || !id) {
+        if (r.status === 401) check(r, "Graph (Teams)", G);
+        throw new Stop("error", "Graph (Teams): no se pudo obtener el id de Entra con /me (hace falta User.Read) y no hay params.m365_user_id; sin él no se detectan menciones.");
+      }
+      uid = id;
+    }
+    me.add(uid.toLowerCase());
     const isMe = (v: unknown) => typeof v === "string" && me.has(v.toLowerCase());
     const out: Claim[] = [];
     for (const c of await odataAll(ctx, "graph", tok, `/v1.0/me/chats?$top=50`, "Graph (Teams)", { ...G, maxPages })) {

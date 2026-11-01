@@ -57,7 +57,7 @@ export const DESCRIPTORS: Record<ApiAdapterName, AdapterDescriptor> = {
     name: "m365-teams",
     purpose: "Menciones en mis chats de Teams sin respuesta mía posterior",
     sensitivity: "N4", ttl_s: 1800, routes: ["graph"], service: "graph",
-    scopes: [["Chat.Read"]],
+    scopes: [["Chat.Read", "User.Read"]],
     revocation: REVOKE, never_persists: NO_BODIES,
   },
   "m365-files": {

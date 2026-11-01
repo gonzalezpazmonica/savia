@@ -58,7 +58,7 @@ Cada adaptador declara en `descriptors.ts`:
 
 ## Límites conocidos
 
-- **Teams.** Graph identifica a las personas por su id de Entra. Para casar las menciones hace falta `params.m365_user_id`; el núcleo puede obtenerlo con `/me` y `User.Read`. Sin ese dato, solo casan las direcciones de correo y, contra Graph real, no se detecta ninguna mención. Los dobles de prueba usan direcciones como id, así que los tests no lo muestran. El contrato no tiene ese campo en `identities`. Los mensajes se piden en orden de creación (`$orderby=createdDateTime desc`).
+- **Teams.** Graph identifica a las personas por su id de Entra, no por el correo. Si no llega `params.m365_user_id`, el adaptador lo pide con `GET /me` (por eso el permiso es `Chat.Read` + `User.Read`). Si tampoco puede leer `/me`, devuelve `error`: dar «ok» con cero menciones sería un falso verde. Los mensajes se piden en orden de creación (`$orderby=createdDateTime desc`).
 - **Correo M365 sin ventana temporal.** El contrato no limita «esperando mi respuesta» en el tiempo, así que el delta inicial recorre todo el buzón por rondas. Sin `FileDeltaCache`, una carpeta con más de `maxPages × pageSize` mensajes queda `unavailable` en cada lectura. En producción hay que usar la caché.
 - **Claves de GitHub.** La referencia es `repo#n`, como en el banco de Labs. Dos organizaciones con un repositorio del mismo nombre y el mismo número colisionarían. Cambiarlo a `owner/repo#n` exige cambiar también la verdad del banco.
 - **Tamaño de la credencial.** En macOS y Windows se guarda el JSON con access y refresh token. Credential Manager limita el valor; si el almacén lo trunca, `set` lo detecta al releer y falla. Guardar solo el refresh token queda pendiente.

@@ -18,7 +18,7 @@ function filesUnder(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => (statSync(join(dir, f)).isDirectory() ? filesUnder(join(dir, f)) : [join(dir, f)]));
 }
 
-async function setup(fill: (d: MockData) => void, scopes = ["Mail.Read", "Calendars.ReadBasic", "Chat.Read", "Files.Read.All"]) {
+async function setup(fill: (d: MockData) => void, scopes = ["Mail.Read", "Calendars.ReadBasic", "Chat.Read", "User.Read", "Files.Read.All"]) {
   const d = emptyData();
   d.tokens["tok-1"] = scopes;
   fill(d);
@@ -281,13 +281,32 @@ test("Teams: mención reciente sin respuesta mía; la inyección en el texto no 
   }
 });
 
-test("Teams: identidad por m365_user_id cuando la API da ids de Entra", async () => {
-  const { mock, ctx } = await setup((d) => {
+test("Teams: con ids de Entra, el id se resuelve con /me o llega por m365_user_id", async () => {
+  const { d, mock, ctx } = await setup((d) => {
+    d.meId = "uid-yo";
     d.chats.push({ id: "19:a", topic: "T", messages: [{ id: "t1", from: "uid-ana", at: "2026-11-01T10:00:00Z", mentions: ["uid-yo"] }] });
   });
   try {
-    assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx())), []);
+    assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx())), ["m365-teams:mention:t1"]);
+    assert.ok(mock.log.some((l) => l.url.startsWith("/v1.0/me?")));
+    d.meId = null;
+    mock.log.length = 0;
     assert.deepEqual(keys(await makeM365Adapters()["m365-teams"].read(ctx({ params: { m365_user_id: "uid-yo" } }))), ["m365-teams:mention:t1"]);
+    assert.ok(!mock.log.some((l) => l.url.startsWith("/v1.0/me?")), "con m365_user_id no se pide /me");
+  } finally {
+    await mock.close();
+  }
+});
+
+test("Teams: sin m365_user_id y sin poder leer /me falla cerrado, no da «ok» vacío", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.meId = null;
+    d.chats.push({ id: "19:a", topic: "T", messages: [{ id: "t1", from: "uid-ana", at: "2026-11-01T10:00:00Z", mentions: ["uid-yo"] }] });
+  });
+  try {
+    const r = await makeM365Adapters()["m365-teams"].read(ctx());
+    assert.equal(r.status, "error");
+    assert.match(r.status === "ok" ? "" : r.message, /m365_user_id/);
   } finally {
     await mock.close();
   }
@@ -299,6 +318,7 @@ function teamsFake(pages: (orderByCreated: boolean) => J[][]) {
   const urls: string[] = [];
   return { urls, transport: { async request(req: { url: string }) {
     urls.push(req.url);
+    if (req.url.startsWith("/v1.0/me?")) return { status: 200, headers: {}, body: { id: ME } };
     if (req.url.startsWith("/v1.0/me/chats?")) return { status: 200, headers: {}, body: { value: [{ id: "19:z", topic: "Z" }] } };
     const u = new URL(req.url, "https://graph.example");
     const ps = pages(u.searchParams.get("$orderby") === "createdDateTime desc");
