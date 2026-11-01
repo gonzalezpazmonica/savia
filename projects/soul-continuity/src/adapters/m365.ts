@@ -43,7 +43,7 @@ function addrs(list: unknown): string[] {
 }
 
 /** Metadatos mínimos de un mensaje: lo único que se guarda en caché. */
-function mailMeta(x: J, myDomain: string, headers: boolean): Meta | null {
+function mailMeta(x: J, myDomain: string, headers: boolean, authserv?: string[]): Meta | null {
   const id = safeRef(x?.id);
   const conv = typeof x?.conversationId === "string" ? x.conversationId : null;
   if (!id || !conv) return null;
@@ -55,7 +55,7 @@ function mailMeta(x: J, myDomain: string, headers: boolean): Meta | null {
     cc: addrs(x?.ccRecipients),
     at: toIso(x?.receivedDateTime) ?? "",
     subject: typeof x?.subject === "string" ? x.subject : "",
-    auth: headers ? senderAuth(from, x?.internetMessageHeaders, myDomain) : "unknown",
+    auth: headers ? senderAuth(from, x?.internetMessageHeaders, myDomain, authserv) : "unknown",
     flag_due: flagged,
   };
 }
@@ -67,8 +67,9 @@ function isResync(status: number, body: J): boolean {
 }
 
 async function deltaFolder(ctx: AdapterContext, tok: string, folder: string, select: string, toMeta: (x: J) => Meta | null,
-  cache: DeltaCache, maxPages: number, pageSize: number): Promise<Record<string, Meta>> {
-  const key = `${folder}|${select}`;
+  cache: DeltaCache, maxPages: number, pageSize: number, variant: string): Promise<Record<string, Meta>> {
+  // La identidad del remitente se calcula al guardar: cambiar su configuración es otra caché.
+  const key = `${folder}|${select}|${variant}`;
   const initial = `/v1.0/me/mailFolders/${folder}/messages/delta?$select=${select}`;
   const saved = await cache.load(ctx.operator.ref, "m365-mail", key);
   let state: DeltaState = saved ?? { link: null, complete: false, items: {} };
@@ -129,13 +130,23 @@ export function makeM365Adapters(o: M365Options = {}): Record<"m365-mail" | "m36
     const headers = ctx.params.sender_identity !== false;
     const tok = await token(ctx, "graph", [headers ? "Mail.Read" : "Mail.ReadBasic"]);
     const select = headers ? `${MAIL_FIELDS},internetMessageHeaders` : MAIL_FIELDS;
-    const dom = domainOf(ctx.operator.identities.emails[0] ?? "");
-    const toMeta = (x: J) => mailMeta(x, dom, headers);
+    // Dominio del inquilino: explícito si se configura; si no, el de la primera identidad.
+    const td = ctx.params.tenant_domain;
+    if (td !== undefined && (typeof td !== "string" || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(td))) throw new Stop("error", "params.tenant_domain inválido.");
+    const dom = typeof td === "string" ? td.toLowerCase() : domainOf(ctx.operator.identities.emails[0] ?? "");
+    // `authserv-id` aceptados (pasarela de terceros o híbrido delante de Exchange Online).
+    const as = ctx.params.authserv_ids;
+    if (as !== undefined && (!Array.isArray(as) || !as.length || !as.every((v) => typeof v === "string" && /^[a-z0-9.-]+$/i.test(v)))) {
+      throw new Stop("error", "params.authserv_ids inválido.");
+    }
+    const authserv = as as string[] | undefined;
+    const toMeta = (x: J) => mailMeta(x, dom, headers, authserv);
+    const variant = `${dom}|${(authserv ?? []).map((v) => v.toLowerCase()).sort().join(",")}`;
     const msgs: Msg[] = [];
     const out: Claim[] = [];
     for (const folder of FOLDERS) {
       let metas: Meta[];
-      if (o.cache) metas = Object.values(await deltaFolder(ctx, tok, folder, select, toMeta, o.cache, maxPages, pageSize));
+      if (o.cache) metas = Object.values(await deltaFolder(ctx, tok, folder, select, toMeta, o.cache, maxPages, pageSize, variant));
       else {
         const items = await odataAll(ctx, "graph", tok, `/v1.0/me/mailFolders/${folder}/messages?$top=${pageSize}&$select=${select}`, "Graph (correo)", { ...G, maxPages });
         metas = items.map(toMeta).filter((m): m is Meta => m !== null);

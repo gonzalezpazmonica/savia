@@ -72,6 +72,47 @@ test("correo por delta: esperando y marcados correctos, sin cuerpos en claims ni
   }
 });
 
+test("correo: tenant_domain explícito concede «tenant» aunque la primera identidad sea de otro dominio", async () => {
+  const { mock, ctx } = await setup((d) => addMessage(d, msg({ id: "m1", conv: "c1", internal: true })));
+  try {
+    const op = { ref: "op-t", identities: { emails: ["alias@otro.example", ME] } };
+    const auth = async (params: Record<string, unknown>) => ok(await makeM365Adapters()["m365-mail"].read(ctx({ operator: op, params })))[0].attrs.sender_auth;
+    assert.equal(await auth({}), "unauthenticated", "sin dominio del inquilino no se concede");
+    assert.equal(await auth({ tenant_domain: "alfa.example" }), "tenant");
+    assert.equal((await makeM365Adapters()["m365-mail"].read(ctx({ operator: op, params: { tenant_domain: "../x" } }))).status, "error");
+  } finally {
+    await mock.close();
+  }
+});
+
+test("correo: con authserv_ids, una Authentication-Results de otro servidor no autentica", async () => {
+  const { mock, ctx } = await setup((d) => {
+    addMessage(d, msg({ id: "m1", conv: "c1", from: "cfo@ext.example", dkim: "pass", dmarc: "pass", authserv: "spoof.example" }));
+    addMessage(d, msg({ id: "m2", conv: "c2", from: "ana@ext.example", dkim: "pass", dmarc: "pass", authserv: "gw.alfa.example" }));
+  });
+  try {
+    const read = async (params: Record<string, unknown>) => Object.fromEntries(ok(await makeM365Adapters()["m365-mail"].read(ctx({ params }))).map((c) => [c.key, c.attrs.sender_auth]));
+    assert.deepEqual(await read({}), { "m365-mail:awaiting_reply:c1@m1": "dkim_dmarc", "m365-mail:awaiting_reply:c2@m2": "dkim_dmarc" }, "sin configurar, se fía de la primera cabecera");
+    assert.deepEqual(await read({ authserv_ids: ["gw.alfa.example"] }), { "m365-mail:awaiting_reply:c1@m1": "unauthenticated", "m365-mail:awaiting_reply:c2@m2": "dkim_dmarc" });
+    for (const bad of [[], "gw.alfa.example", [""], [1]]) {
+      assert.equal((await makeM365Adapters()["m365-mail"].read(ctx({ params: { authserv_ids: bad } }))).status, "error", JSON.stringify(bad));
+    }
+  } finally {
+    await mock.close();
+  }
+});
+
+test("correo por delta: cambiar authserv_ids no reutiliza la identidad calculada con la configuración anterior", async () => {
+  const { mock, ctx } = await setup((d) => addMessage(d, msg({ id: "m1", conv: "c1", from: "cfo@ext.example", dkim: "pass", dmarc: "pass", authserv: "spoof.example" })));
+  try {
+    const a = makeM365Adapters({ cache: new FileDeltaCache(mkdtempSync(join(tmpdir(), "s490-m365-"))) })["m365-mail"];
+    assert.equal(ok(await a.read(ctx()))[0].attrs.sender_auth, "dkim_dmarc");
+    assert.equal(ok(await a.read(ctx({ params: { authserv_ids: ["gw.alfa.example"] } })))[0].attrs.sender_auth, "unauthenticated");
+  } finally {
+    await mock.close();
+  }
+});
+
 test("correo por delta: la segunda lectura solo trae cambios (respuesta desde otro cliente y borrado)", async () => {
   const { d, mock, ctx } = await setup(mailbox);
   try {

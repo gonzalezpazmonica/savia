@@ -17,6 +17,8 @@ export const BODY = "CANARIO-CUERPO";
 export interface GMsg {
   id: string; conv: string; from: string; to: string[]; cc?: string[]; at: string; subject: string;
   folder: "inbox" | "sentitems"; flagDue?: string; internal?: boolean; dkim?: "pass" | "fail"; dmarc?: "pass" | "fail"; d?: string;
+  /** `authserv-id` de la cabecera Authentication-Results (Exchange Online no pone ninguno). */
+  authserv?: string;
   seq?: number;
 }
 
@@ -92,7 +94,7 @@ function graphMsg(m: GMsg, scopes: string[], select: string[] | null) {
     if (m.internal) h.push({ name: "X-MS-Exchange-Organization-AuthAs", value: "Internal" });
     if (m.dkim || m.dmarc) {
       const dom = m.d ?? m.from.split("@")[1];
-      h.push({ name: "Authentication-Results", value: `dkim=${m.dkim ?? "none"} header.d=${dom}; dmarc=${m.dmarc ?? "none"} header.from=${dom}` });
+      h.push({ name: "Authentication-Results", value: `${m.authserv ? `${m.authserv}; ` : ""}dkim=${m.dkim ?? "none"} header.d=${dom}; dmarc=${m.dmarc ?? "none"} header.from=${dom}` });
     }
     out.internetMessageHeaders = h;
   }
