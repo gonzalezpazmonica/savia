@@ -114,8 +114,11 @@ export interface Mundo {
   refrescar?(ctx: CtxMundo, o: Op, t: number): void;
   /** Frescura real de lo servido: instante de la última lectura y si es lo último conocido. */
   frescura?(o: Op, t: number): { ultimaLectura: number | null; obsoleto: boolean };
-  /** Ids que entran en q1/q2/q4 según el núcleo (misma respuesta que la CLI). null = selección propia. */
-  seleccion?(o: Op, pregunta: string, t: number): Set<string> | null;
+  /**
+   * Ids que entran en q1–q4 según el núcleo (misma respuesta que la CLI). null = selección propia.
+   * Q3 recibe `desde` (y `hasta`, si viene): diferencia entre las instantáneas de esos instantes.
+   */
+  seleccion?(o: Op, pregunta: string, t: number, rango?: { desde: number | null; hasta: number | null }): Set<string> | null;
 }
 
 export interface OpcionesServidor {
@@ -277,7 +280,7 @@ export function crearServidor(opts: OpcionesServidor) {
   function consulta(o: Op, pregunta: string, f: Filtro) {
     const todos = [...o.elementos.values()].filter((e) => vivo(o, e.id));
     let sel: Elemento[];
-    const delNucleo = pregunta === "q3" ? null : opts.mundo.seleccion?.(o, pregunta, ahora()) ?? null;
+    const delNucleo = opts.mundo.seleccion?.(o, pregunta, ahora(), { desde: f.desde, hasta: f.hasta }) ?? null;
     if (delNucleo) sel = todos.filter((e) => delNucleo.has(e.id) && !e.noMio
       && (pregunta !== "q4" || ((f.desde == null || (e.fecha ?? 0) >= f.desde) && (f.hasta == null || (e.fecha ?? 0) <= f.hasta))));
     else if (pregunta === "q1") sel = todos.filter((e) => ["reunion", "tarea", "revision", "hilo_espera", "documento"].includes(e.tipo) && !e.noMio);

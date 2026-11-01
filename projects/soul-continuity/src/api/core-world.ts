@@ -13,7 +13,7 @@ import { type Claim, isUsable, parseTs } from "../contract/claims.ts";
 import type { AdapterStatusEntry, Snapshot } from "../contract/claims.ts";
 import { type SoulConfig, elementId } from "../core/config.ts";
 import type { Engine } from "../core/engine.ts";
-import type { CtxMundo, Elemento, Mundo, Op, SemillaOperador, VistaAdaptadorSemilla } from "./server.ts";
+import { type CtxMundo, type Elemento, ErrorApi, type Mundo, type Op, type SemillaOperador, type VistaAdaptadorSemilla } from "./server.ts";
 
 const TIPO: Partial<Record<string, string>> = {
   meeting: "reunion", task_assigned: "tarea", review_request: "revision", awaiting_reply: "hilo_espera",
@@ -122,14 +122,28 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       aplicar(ctx, o, snap, t);
     },
 
-    seleccion(o: Op, pregunta: string, t: number) {
+    seleccion(o: Op, pregunta: string, t: number, rango) {
       // TTL de cada afirmación evaluado en el instante de la petición, no en el de la lectura.
       const snap = engine.cachedSnapshot(stateDir, o.ref, new Date(t).toISOString());
       if (!snap || (parseTs(snap.expires_at) ?? 0) <= t) return new Set<string>();
       const install = { id: cfg.installation_id, operator: { ref: o.ref, identities: { emails: [] } }, sources: [] };
-      const q = pregunta.toUpperCase() as "Q1" | "Q2" | "Q4";
-      const a = engine.answer(snap, { q, detail: "titulos" }, { install, now: new Date(t).toISOString() });
-      return new Set(a.items.map((it) => elementId(o.ref, it.key)));
+      const q = pregunta.toUpperCase() as "Q1" | "Q2" | "Q3" | "Q4";
+      let previous: Snapshot | undefined;
+      let actual = snap;
+      if (q === "Q3") {
+        // Como `soul q3 --since`: diferencia entre la lectura vigente en `desde` y la actual (o la
+        // vigente en `hasta`). Sin lectura anterior no hay con qué comparar: error, no «nada cambió».
+        if (rango?.desde == null) throw new ErrorApi(400, "INVALID_INPUT");
+        previous = engine.snapshotAt(stateDir, o.ref, new Date(rango.desde).toISOString()) ?? undefined;
+        if (!previous) throw new ErrorApi(400, "INVALID_INPUT");
+        if (rango.hasta != null && rango.hasta < t) {
+          const h = engine.snapshotAt(stateDir, o.ref, new Date(rango.hasta).toISOString());
+          if (h) actual = h;
+        }
+      }
+      const a = engine.answer(actual, { q, detail: "titulos", previous }, { install, now: new Date(t).toISOString() });
+      // `removed` no tiene elemento vivo que servir (el contrato de la app no lo representa todavía).
+      return new Set(a.items.filter((it) => it.change !== "removed").map((it) => elementId(o.ref, it.key)));
     },
 
     frescura(o: Op, t: number) {

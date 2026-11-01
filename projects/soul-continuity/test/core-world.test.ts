@@ -216,3 +216,45 @@ test("soul revoke (purga sin lectura nueva) saca de la API lo del adaptador revo
     assert.equal(by["m365-mail"].estado, "revocado");
   } finally { await s.cerrar(); }
 });
+
+test("Q3 de la API es la diferencia del núcleo (como `soul q3 --since`), no la fecha del evento", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-cw-"));
+  const cfg = emptyConfig("i");
+  cfg.active_profile = "yo";
+  cfg.profiles.yo = { operator: { ref: "op-yo", identities: { emails: [] } }, sources: [{ adapter: "jira", purpose: "t", consent: { granted_at: "2026-10-01T00:00:00Z" } }] };
+  const VIEJO = "2026-10-24T08:00:00Z"; // event_at de hace una semana
+  let lectura = 1;
+  const tarea = (ref: string, over: any, now: string) => ({ key: `jira:task_assigned:${ref}`, claim_type: "task_assigned", state: "OBSERVED",
+    source_refs: [{ adapter: "jira", route: "api", ref }], sensitivity: "N4", observed_at: now, valid_until: "2026-10-31T12:00:00Z",
+    event_at: VIEJO, open: true, awaiting_operator: true, attrs: {}, title: ref, untrusted_text: true, ...over });
+  const jira: SourceAdapter = { name: "jira", routes: ["api"], purpose: "t", async read(ctx) {
+    const c = lectura === 1 ? [tarea("FIJA-1", {}, ctx.now), tarea("CAMBIA-2", { due_at: "2026-11-02T10:00:00Z" }, ctx.now)]
+      : [tarea("FIJA-1", {}, ctx.now), tarea("CAMBIA-2", { due_at: "2026-11-05T10:00:00Z" }, ctx.now), tarea("NUEVA-ANTIGUA-3", {}, ctx.now)];
+    return { status: "ok", route: "api", claims: c as any };
+  } };
+  const engine = makeEngine({ jira });
+  const install = { id: "i", operator: cfg.profiles.yo.operator, sources: cfg.profiles.yo.sources };
+  const env = { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "t" } };
+  await engine.snapshot({ install, now: "2026-10-31T08:00:00Z", stateDir: dir, env });
+  lectura = 2;
+  await engine.snapshot({ install, now: NOW, stateDir: dir, env });
+  const world = coreWorld({ cfg, engine, stateDir: dir });
+  const s = crearServidor({ tls: TLS, mundo: world, reloj: () => T, autenticar: () => ({ ref: "op-yo", revocado: false }) });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  const get = (path: string) => new Promise<{ status: number; json: any }>((res, rej) => {
+    const q = request({ host: "127.0.0.1", port: l.port, path: "/api/v1/soul" + path, ca: TLS.cert, headers: { Authorization: "DPoP x", DPoP: "p" } }, (r) => {
+      let t = ""; r.on("data", (d) => { t += d; }); r.on("end", () => res({ status: r.statusCode ?? 0, json: JSON.parse(t) }));
+    });
+    q.on("error", rej); q.end();
+  });
+  try {
+    const titles = (j: any) => j.elementos.map((e: any) => e.titulo.texto).sort();
+    // Ni FIJA-1 (sin cambios) ni la ausencia de NUEVA-ANTIGUA-3/CAMBIA-2 por tener event_at viejo.
+    assert.deepEqual(titles((await get("/q/q3?desde=2026-10-31T08:30:00Z")).json), ["CAMBIA-2", "NUEVA-ANTIGUA-3"]);
+    assert.equal((await get("/q/q3?desde=2026-10-31T07:00:00Z")).status, 400, "sin lectura anterior a desde no se responde «nada cambió»");
+    // Mismo resultado que el núcleo con la CLI.
+    const prev = engine.snapshotAt(dir, "op-yo", "2026-10-31T08:30:00Z");
+    const cli = engine.answer(engine.cachedSnapshot(dir, "op-yo", NOW) as any, { q: "Q3", detail: "titulos", previous: prev as any }, { install, now: NOW });
+    assert.deepEqual(cli.items.map((i) => i.key.split(":")[2]).sort(), ["CAMBIA-2", "NUEVA-ANTIGUA-3"]);
+  } finally { await s.cerrar(); }
+});
