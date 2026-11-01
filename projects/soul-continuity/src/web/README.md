@@ -53,7 +53,7 @@ El canal de control va por tubería (`--remote-debugging-pipe`), nunca por puert
 | **Vigilancia sin receta, siempre sin JavaScript.** | Leer una página desconocida no debe ejecutar su código. | `vigilancia_con_js` |
 | **Recetas experimentales tras un recibo.** No abren el navegador sin un recibo local, ligado a la huella exacta de la receta. | Las plantillas de clientes reales no están validadas contra tráfico real. | `experimental_sin_recibo` |
 | **Endpoint de operaciones solo por `POST`.** Un `GET` o `HEAD` a una URL de `post_lectura` se corta (`metodo`), también como navegación. | Por `GET` la operación iría en la URL y no se clasificaría: `GET /owa/service.svc?action=MarkAllItemsAsRead` pasaba como «lista». | `post_lectura_por_get` |
-| **`estable` solo en el banco.** Sin recibo, solo se ejecuta una receta `estable` de origen local (bucle `127.0.0.0/8`, `localhost`, `[::1]`). Una receta de un sitio real necesita recibo aunque se declare `estable`. | El campo `estado` lo escribe la propia receta: cambiarlo en una plantilla copiada saltaba la puerta. | `experimental_sin_recibo` |
+| **`estable` solo en el banco.** Sin recibo, solo se ejecuta una receta `estable` de origen local (bucle `127.0.0.0/8`, `localhost`, `[::1]`) y solo si el código del banco lo indica (`banco` en `Dependencias`/`Opciones`, nunca en la receta ni en `params`). En producto toda receta necesita recibo, también las de servicios que corren en local. | El campo `estado` lo escribe la propia receta: cambiarlo en una plantilla copiada saltaba la puerta. Y un panel o túnel local es un servicio real. | `experimental_sin_recibo` |
 | **Operación de la consulta cotejada.** Si la consulta lleva un parámetro con el nombre de la cabecera (o de la última clave de `cuerpo_json`), su valor tiene que ser la operación declarada; si no, se corta y la receta se desactiva (`operacion_url_distinta`). | Un servidor puede ejecutar la operación de la URL y no la de la cabecera: `?action=UpdateItem` con `action: FindItem`. | `operacion_url_sin_cotejar` |
 
 ## Perfil dedicado y credenciales
@@ -84,7 +84,8 @@ Una URL con aspecto de acción (`approve`, `logout`, `confirm…`) se rechaza al
 Las plantillas de `recetas/producto/` **no** se han validado contra tráfico real. URLs, operaciones y selectores son de partida. Por eso:
 
 - llevan `"estado": "experimental"` y no se ejecutan sin un recibo de validación en `<datos>/web/validaciones/`;
-- el recibo queda ligado a la huella de la receta ya completada: cualquier cambio lo invalida;
+- el recibo queda ligado a la huella de la receta ya completada (JSON canónico, sin depender del orden de claves): cualquier cambio lo invalida;
+- el recibo no va firmado: la frontera de confianza es la cuenta local del operador. Quien pueda escribir en `<datos>/web/validaciones/` puede activar una receta con un recibo escrito a mano, igual que podría editar el perfil o la configuración. El recibo protege de un error (activar una plantilla sin validarla), no de un atacante con acceso a tu cuenta;
 - si el cliente cambia, la prueba de humo desactiva la receta y avisa: «La receta de X dejó de ser fiable». Una operación `POST` desconocida hace lo mismo, sin devolver datos.
 - un fallo de carga (red caída, DNS, estado HTTP no 2xx sin corte del cortafuegos) es `ERROR` transitorio y **no** desactiva la receta. La desactivación persiste en el fichero `desactivadas`; tras revisar la receta, se reactiva con `AlmacenRecetas.reactivar(id)` o quitando su entrada. Si ese fichero es ilegible, no se ejecuta ninguna receta hasta revisarlo.
 
@@ -124,7 +125,7 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 
 - **Parámetros** (`params` de la fuente): `ejecutable` (navegador instalado) y `perfil` (perfil dedicado de Soul) son obligatorios; sin ellos, `not_configured`. Además `recetas`, `vigiladas`, `validaciones`, `desactivadas` y `huellas` (obligatorio si hay páginas vigiladas). El adaptador no supone directorios: para usar los recibos que emite `validar-grabacion`, `validaciones` tiene que apuntar a `<datos>/web/validaciones` (`dirValidacionesPorDefecto`).
 - **Afirmaciones.** Un elemento en Q1 o Q2 de la receta es `web:task_assigned:<receta>~<id>`, con `awaiting_operator` si está en Q2. Uno que solo está en Q4 es `web:dated_commitment:<receta>~<id>`. Una página vigilada que cambió es `web:web_page_change:<sitio>~<id>`, cerrada y con `event_at`. Las partes de la referencia van codificadas en URL, sin `:`, espacios ni `~`. `due_at` sale del primer campo `vence`, `limite` o `fecha` con forma `AAAA-MM-DD`. El título, del primer campo `titulo`, `asunto`, `nombre`, `concepto` o `resumen`, limpio y marcado `untrusted_text`. `sender_auth` es siempre `unknown`.
-- **Estados.** Sesión caducada (o página vigilada redirigida) → `session_expired`; una página vigilada que no carga por la red es `error`, no sesión caducada. Prueba de humo u operación nueva → `recipe_disabled`. Fallo de lectura → `error`. Una receta configurada sin recibo válido no abre el navegador y da `recipe_disabled` con su aviso, aunque haya otras fuentes que sí funcionen: no se omite en silencio. Una página vigilada mal escrita (sin `id`, `sitio` o `url`, o con URL de acción, comodín o credenciales) → `not_configured`.
+- **Estados.** Sesión caducada (o página vigilada redirigida) → `session_expired`; una página vigilada que no carga por la red o responde con un estado HTTP de error (404, 5xx) es `error`, no sesión caducada ni «página cambiada». Un fichero de huellas ilegible también es `error`: no se trata como primera visita ni se sobrescribe. Prueba de humo u operación nueva → `recipe_disabled`. Fallo de lectura → `error`. Una receta configurada sin recibo válido no abre el navegador y da `recipe_disabled` con su aviso, aunque haya otras fuentes que sí funcionen: no se omite en silencio. Una página vigilada mal escrita (sin `id`, `sitio` o `url`, o con URL de acción, comodín o credenciales) → `not_configured`.
 - **Fail-closed.** Si falla cualquier receta o página, el adaptador entero no aporta afirmaciones. Manda `session_expired` sobre `error` y sobre `recipe_disabled`, porque el operador puede arreglarlo. Las huellas de las páginas vigiladas solo se guardan si el adaptador entrega, para que un cambio descartado vuelva a verse en la siguiente lectura.
 - Las recetas de `params.recetas` pasan siempre por `validarReceta`; una inválida da `not_configured` sin abrir el navegador.
 - No usa `ctx.transport` ni `ctx.credentials`. Navega con el navegador sobre el perfil dedicado; la sesión es la que inició el operador ahí.
@@ -133,9 +134,9 @@ La validación reproduce cada petición grabada por la misma decisión del corta
 
 Los números exactos de la última ejecución están en `resultados/`.
 
-- **Batería: 343 de 343 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 100 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL.
-- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, en serie y con informe de cada uno. Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte.
-- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 123 tests en verde, 19 de ellos del adaptador del contrato.
+- **Batería: 345 de 345 comprobaciones bien** con el cortafuegos real. Son las 243 de Labs más 102 de los escenarios nuevos: SSO, receta experimental, vigilancia, extracción falseada, navegación a otro origen y operación en la URL.
+- **Mutantes: 22 de 22 muertos**: los 15 de Labs y los 7 nuevos, en serie y con informe de cada uno. Un mutante solo cuenta como muerto si falla una comprobación de **su** defensa (`bench/mapa-mutantes.ts`); los fallos ajenos se cuentan aparte, y dos mutantes no comparten comprobación.
+- `tsc --strict` limpio (el `tsconfig` del adaptador y el del proyecto) y 136 tests en verde, 20 de ellos del adaptador del contrato.
 
 ## Lo que queda abierto
 
