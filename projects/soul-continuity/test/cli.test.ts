@@ -57,7 +57,7 @@ function setup(opts: { profile?: boolean; level?: "completo" | "titulos" | "recu
     dataDir: dir, env: { ...(opts.env ?? {}) }, now: () => NOW, out: (s) => out.push(s), err: (s) => err.push(s),
     adapters: { "m365-mail": adapter() },
     sourceEnv: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => CLI_TOKEN } },
-    credentials: { forget: async (s: string) => { forgotten.push(s); return [s]; }, forgetAll: async () => { forgotten.push("*"); return []; } },
+    credentials: { revoke: async (a: string, ref: string) => { forgotten.push(`${a}@${ref}`); return { tokens_removed: 1, cache_removed: false }; }, forgetAll: async () => { forgotten.push("*"); return []; } },
     platform: "linux", home, run, node: "/n/node", entry: "/e/main.ts",
   };
   return { dir, home, deps, out, err, forgotten, runs };
@@ -178,7 +178,7 @@ test("AC-5: revoke borra la caché del adaptador y su credencial, y deja de leer
   assert.ok(filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes("c1@m1")));
   assert.equal(await runCli(["revoke", "m365-mail"], s.deps), 0);
   assert.ok(!filesUnder(s.dir).some((f) => readFileSync(f, "utf8").includes("c1@m1")), "caché del adaptador borrada");
-  assert.deepEqual(s.forgotten, ["m365-mail"]);
+  assert.deepEqual(s.forgotten, ["m365-mail@op-yo"], "revoca los tokens del adaptador para el operador del perfil");
   s.out.length = 0;
   await runCli(["adapters", "--json"], s.deps);
   assert.equal(JSON.parse(text(s)).adapters["m365-mail"].status, "consent_revoked");

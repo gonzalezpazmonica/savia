@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { fetchTransport, productionAdapters } from "../src/core/runtime.ts";
+import { fetchTransport } from "../src/core/runtime.ts";
+import { productionAdapters } from "../src/core/connectors.ts";
+import { ADAPTERS } from "../src/contract/adapter.ts";
 
 async function server() {
   let hits = 0;
@@ -82,7 +84,8 @@ test("fetchTransport: content-length declarado por encima del límite se rechaza
   await new Promise<void>((r) => s.close(() => r()));
 });
 
-test("productionAdapters: solo nombres del contrato", () => {
-  const ad = productionAdapters();
+test("productionAdapters: con todo activado, un adaptador por cada nombre del contrato y con ese nombre", () => {
+  const ad = productionAdapters({ dataDir: "/no/se/usa", connectors: { enabled: [...ADAPTERS] } });
+  assert.deepEqual(Object.keys(ad).sort(), [...ADAPTERS].sort());
   for (const [k, v] of Object.entries(ad)) assert.equal(v?.name, k);
 });

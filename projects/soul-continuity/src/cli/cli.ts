@@ -18,7 +18,7 @@ import { join } from "node:path";
 import type { Answer, Detail, QuestionId, SourceEnv } from "../contract/adapter.ts";
 import { type Snapshot, iso, parseTs } from "../contract/claims.ts";
 import {
-  type Caller, ConfigError, NoProfileError, RANK, activeProfileName, agentLevel, elementId, loadConfig, resolveInstall,
+  type Caller, ConfigError, NoProfileError, RANK, type SoulConfig, activeProfileName, agentLevel, elementId, loadConfig, resolveInstall,
   saveConfig,
 } from "../core/config.ts";
 import { type AdapterRegistry, makeEngine } from "../core/engine.ts";
@@ -37,8 +37,17 @@ export interface CliDeps {
   out: (s: string) => void;
   err: (s: string) => void;
   adapters: AdapterRegistry;
+  /** Registro según la configuración (producción: solo los adaptadores que activó el operador). */
+  adaptersFor?: (cfg: SoulConfig) => AdapterRegistry;
   sourceEnv: SourceEnv;
-  credentials: { forget(service: string): Promise<string[]>; forgetAll(): Promise<string[]> };
+  /** Entorno de lectura de un operador: sus credenciales y el transporte de la configuración. */
+  sourceEnvFor?: (operatorRef: string, cfg: SoulConfig) => SourceEnv;
+  credentials: {
+    /** AC-5: tokens y caché propia del adaptador (todas sus variantes de permisos). */
+    revoke(adapter: string, operatorRef: string): Promise<{ tokens_removed: number; cache_removed: boolean }>;
+    /** Todas las credenciales del índice del almacén único (desinstalar). */
+    forgetAll(): Promise<string[]>;
+  };
   platform: NodeJS.Platform;
   home: string;
   run: Run;
@@ -176,7 +185,6 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
 async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { done: boolean }): Promise<number> {
   const json = p.flags.json === true;
   const print = (human: string, data: unknown) => deps.out(json ? JSON.stringify(data, null, 1) : human);
-  const engine = makeEngine(deps.adapters);
   try {
     if (caller.frontend && !AGENT_ALLOWED.has(p.cmd)) {
       throw new Exit(4, `«${p.cmd}» no está disponible desde un frontend de agente (${caller.frontend}). Hazlo en tu terminal.`);
@@ -185,6 +193,8 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
     const early = await runWithoutConfig(p, deps, print);
     if (early !== null) return early;
     const cfg = loadConfig(deps.dataDir);
+    const engine = makeEngine(deps.adaptersFor?.(cfg) ?? deps.adapters);
+    const envFor = (ref: string) => deps.sourceEnvFor?.(ref, cfg) ?? deps.sourceEnv;
     const level = () => agentLevel(cfg, caller, cfg.detail.level);
     const audit = (cmd: string, lv: { level: Detail; forced: boolean; provider: string | null }, total: number) => {
       audited.done = true;
@@ -226,7 +236,7 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         // con el libro de correcciones de ahora. Una fuente que no responde no aporta nada y se dice.
         const cached = p.flags.cached === true ? engine.cachedSnapshot(deps.dataDir, install.operator.ref, now) : null;
         const fresh = cached !== null && (parseTs(cached.expires_at) ?? 0) > (parseTs(now) ?? 0);
-        const snap: Snapshot = cached && fresh ? cached : await engine.snapshot({ install, now, stateDir: deps.dataDir, env: deps.sourceEnv });
+        const snap: Snapshot = cached && fresh ? cached : await engine.snapshot({ install, now, stateDir: deps.dataDir, env: envFor(install.operator.ref) });
         const unread = Object.entries(snap.adapters).filter(([, v]) => v.status !== "ok" && v.status !== "not_configured");
         const unreadLine = unread.length ? [`  ${unread.length} fuente(s) sin leer: ${unread.map(([k, v]) => `${k} (${v.status})`).join(", ")} — lo de ahí no está contado`] : [];
         const lv = level();
@@ -327,9 +337,12 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         if (!adapter || !src.length) throw new Exit(1, `el adaptador ${adapter ?? ""} no está configurado en este perfil`);
         for (const s of src) s.consent = { ...s.consent, revoked_at: deps.now() };
         saveConfig(deps.dataDir, cfg);
-        const purged = engine.purgeAdapter(deps.dataDir, cfg.profiles[name].operator.ref, adapter);
-        const creds = await deps.credentials.forget(adapter);
-        print(`Revocado ${adapter}: consentimiento retirado, ${purged} fichero(s) de caché limpiados, credencial borrada.`, { adapter, purged, credentials: creds });
+        const ref = cfg.profiles[name].operator.ref;
+        const purged = engine.purgeAdapter(deps.dataDir, ref, adapter);
+        const r = await deps.credentials.revoke(adapter, ref);
+        print(`Revocado ${adapter}: consentimiento retirado, ${purged} fichero(s) de instantánea limpiados, `
+          + `${r.tokens_removed} credencial(es) borrada(s)${r.cache_removed ? ", caché propia del adaptador borrada" : ""}.`,
+        { adapter, purged, tokens_removed: r.tokens_removed, adapter_cache_removed: r.cache_removed });
         return 0;
       }
 

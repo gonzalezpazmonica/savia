@@ -15,7 +15,7 @@ function deps(dir: string, out: string[], err: string[]): CliDeps {
   return {
     dataDir: dir, env: {}, now: () => new Date().toISOString(), out: (s) => out.push(s), err: (s) => err.push(s), adapters: {},
     sourceEnv: { transport: { request: async () => ({ status: 500, headers: {}, body: null }) }, credentials: { acquire: async () => "t" } },
-    credentials: { forget: async () => [], forgetAll: async () => [] }, platform: "linux", home: dir,
+    credentials: { revoke: async () => ({ tokens_removed: 0, cache_removed: false }), forgetAll: async () => [] }, platform: "linux", home: dir,
     run: async () => ({ code: 0, stdout: "", stderr: "" }), node: "n", entry: "e",
   };
 }

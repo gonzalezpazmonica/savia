@@ -28,7 +28,7 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
     deps.err((e as Error).message);
     return 1;
   }
-  const engine = makeEngine(deps.adapters);
+  const engine = makeEngine(deps.adaptersFor?.(cfg) ?? deps.adapters);
   const tls = ensureInstallCert(deps.dataDir, listen);
   const world = coreWorld({ cfg, engine, stateDir: deps.dataDir });
 
@@ -40,7 +40,10 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
     for (const name of Object.keys(now.profiles)) {
       try {
         const install = resolveInstall(now, { SOUL_PROFILE: name });
-        await engine.snapshot({ install, now: deps.now(), stateDir: deps.dataDir, env: deps.sourceEnv });
+        // Registro y entorno de la configuración recién leída: activar o quitar un adaptador no exige reiniciar.
+        const reader = deps.adaptersFor ? makeEngine(deps.adaptersFor(now)) : engine;
+        const env = deps.sourceEnvFor?.(install.operator.ref, now) ?? deps.sourceEnv;
+        await reader.snapshot({ install, now: deps.now(), stateDir: deps.dataDir, env });
       } catch (e) {
         deps.err(`lectura fallida (${(e as Error).name})`); // sin datos de trabajo en el log
       }

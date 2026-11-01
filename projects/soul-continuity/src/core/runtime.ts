@@ -1,19 +1,12 @@
 /**
- * Piezas de ejecución real del núcleo (SE-490): transporte de solo lectura y registro de
- * adaptadores del producto.
+ * Piezas de ejecución real del núcleo (SE-490): transporte de solo lectura.
  *
  * - `fetchTransport`: solo GET/HEAD; un POST de lectura solo si su URL exacta está en una
  *   lista cerrada que declara el adaptador. Solo HTTPS, salvo loopback (dobles locales).
- * - `productionAdapters`: los adaptadores de fuente se integran desde la parte `adapters`
- *   de SE-490. Mientras no estén, una fuente configurada falla cerrada («no instalado»).
+ * - El registro de adaptadores del producto está en `connectors.ts` (`productionAdapters`).
  */
 
-import type { AdapterRegistry } from "./engine.ts";
 import type { Transport, TransportRequest, TransportResponse } from "../contract/adapter.ts";
-
-export function productionAdapters(): AdapterRegistry {
-  return {};
-}
 
 // Solo literales: un nombre como «localhost» se resuelve por DNS o por hosts y podría no ser loopback.
 const LOOPBACK = new Set(["127.0.0.1", "[::1]"]);
