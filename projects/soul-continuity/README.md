@@ -38,7 +38,7 @@ node bin/soul.mjs q3 --since 2026-10-30T09:00:00Z
 node bin/soul.mjs why <id>           # ¿por qué lo sé?
 node bin/soul.mjs correct <id> resuelto
 node bin/soul.mjs stop | resume      # fail-safe que sobrevive a reinicios
-node bin/soul.mjs pair               # emparejar la app: IP, puerto, código de 10 min y huella corta
+node bin/soul.mjs pair               # emparejar la app: QR, IP, puerto, clave de 10 min y huella corta
 node bin/soul.mjs serve              # API para la app
 ```
 
@@ -61,8 +61,9 @@ Sin perfil activo, Soul responde «no sé quién eres». Sin direcciones en `api
 | H-1: nada activo por defecto; solo los adaptadores que nombra el operador | `test/connectors.test.ts` |
 | Banco AC-3 del núcleo con los adaptadores reales de API contra los dobles | `test/bench-impl.test.ts` |
 | Canal: DPoP verificado y clave ligada al dispositivo, tokens con caducidad, límites de conexión | `test/dpop.test.ts`, `test/devices.test.ts`, `test/serve.test.ts` |
-| Emparejamiento directo por código (soul-pair-v1): vectores comunes con la app, intermediario, bloqueo, caducidad | `test/pairing.test.ts`, `src/contract/vectores-emparejamiento.json` |
-| Punta a punta: init, login, serve, pair por código, Q1–Q4 por cursor, corrección, revoke, unpair y uninstall | `test/e2e.test.ts`, `test/instalar.test.ts` |
+| Emparejamiento directo por clave (soul-pair-v2): vectores comunes con la app, rechazo de v1, intermediario, bloqueo, caducidad | `test/pairing.test.ts`, `src/contract/vectores-emparejamiento.json` |
+| QR de `soul pair`: vectores de la norma y decodificador independiente; terminal y PNG | `test/qr.test.ts` |
+| Punta a punta: init, login, serve, pair por clave, Q1–Q4 por cursor, corrección, revoke, unpair y uninstall | `test/e2e.test.ts`, `test/instalar.test.ts` |
 | 0 tokens en disco: el secreto solo por stdin al almacén del sistema; el núcleo descarta la lectura de un adaptador que devuelve el token | `test/credentials.test.ts`, `test/engine.test.ts`, `test/cli.test.ts` |
 | Solo escucha en las direcciones configuradas (test de puertos) | `test/listen.test.ts` |
 | Contrato de la app: 27 tests de Labs contra el servidor del producto | `test/api/contrato.test.mjs` |
@@ -76,8 +77,8 @@ npm run typecheck # tsc --strict (necesita npm install)
 
 ## Límites conocidos (v1)
 
-- **DPoP**: la API verifica la prueba (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`). Con el emparejamiento por código la clave queda ligada al emparejar. Los dispositivos emparejados antes, con token por CLI, la ligan en su primera conexión. La ventana de `jti` vive en memoria: tras reiniciar `serve`, una prueba capturada podría repetirse durante 60 s como mucho.
-- **Emparejamiento**: el código se guarda en `pairing.json` (0600) mientras la ventana está abierta, no solo su hash, porque es la clave del HMAC. Se borra al usarse, caducar o bloquearse. Una respuesta capturada del reto permite un ataque offline contra el código (50 bits) durante los 10 minutos de la ventana.
+- **DPoP**: la API verifica la prueba (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`). Con el emparejamiento directo la clave queda ligada al emparejar. Los dispositivos emparejados antes, con token por CLI, la ligan en su primera conexión. La ventana de `jti` vive en memoria: tras reiniciar `serve`, una prueba capturada podría repetirse durante 60 s como mucho.
+- **Emparejamiento**: la clave `soulpk_` se guarda en `pairing.json` (0600) mientras la ventana está abierta, no solo su hash, porque es la clave del HMAC. Se borra al usarse, caducar o bloquearse. Una respuesta del reto permite probar claves sin conexión, pero con 178,6 bits no es viable (≈ 2^-116 con un millón de GPU en la ventana; cálculo en `docs/canal-amenazas.md`). El QR de `soul pair` contiene la clave: no compartas capturas durante la ventana.
 - **AC-4d es de mejor esfuerzo frente a un agente adversario**: la detección del frontend usa variables de entorno y `--frontend`, y un agente podría borrarlas. Protege contra el uso normal desde Claude Code u OpenCode, no contra un agente que quiera saltárselo.
 - **Política de atención de la API**: decide `Politica` de `src/attention/` (H-11) y su estado se persiste con `estadoATexto` dentro de `attention-state.json`, junto con modo, avisos, alertas, pendientes, registro y mensajes del sondeo; `soul mode` se aplica en el siguiente tic. La API la configura con ventanas de presupuesto de `ventana_min` desde las 00:00 UTC, sin franjas de descanso declaradas (el contrato de la app no las tiene todavía). Los avisos de las fuentes entran por la ruta API; solo las reglas de remitente por la web entran por la ruta WEB (la política las baja a aviso). Si el estado de la política es ilegible, se avisa y se empieza de cero: la API no usa PARA (el STOP es aparte).
 - **Q3 en la app**: sale del núcleo, como `soul q3 --since` (claves nuevas y con otra huella). Lo retirado (`removed`) no se sirve todavía, porque el contrato de la app no tiene cómo marcar un elemento como desaparecido; la CLI sí lo da. Sin ninguna lectura anterior a `desde`, la base es la primera lectura guardada: responde «qué cambió desde que Soul empezó a leer» (D6).

@@ -90,11 +90,11 @@ Usa tokens de **solo lectura**: un PAT de grano fino en GitHub (Issues y Pull re
 
    ```bash
    soul serve                 # o: soul autostart install, para que arranque con tu sesión
-   soul pair                  # IP, puerto, código de un solo uso (XXXXX-XXXXX) y huella corta del certificado
+   soul pair                  # QR, IP, puerto, clave de un solo uso (soulpk_…) y huella corta del certificado
    ```
 
-3. En la app Savia Space, elige el **modo directo** e introduce IP, puerto y código (o lee el enlace `soul://pair?...` como QR). Comprueba que la huella corta que muestra la app es la misma que la de `soul pair`. El código vale 10 minutos, una sola vez y admite 3 intentos fallidos; después hay que volver a ejecutar `soul pair`.
-4. La app nunca envía el código: Soul y la app se demuestran que lo conocen (protocolo `soul-pair-v1`, en `src/contract/CONTRATO.md`). Al emparejar, el móvil queda **ligado a su clave**: el token que recibe no sirve desde otro dispositivo. Caduca a los 90 días (`soul pair --days N` para cambiarlo); entonces vuelve a emparejar. Si el certificado de la instalación se renueva, también.
+3. En la app Savia Space, elige el **modo directo** y pulsa **Escanear QR** sobre el QR de la terminal, o pega IP, puerto y clave. Si la terminal no muestra bien el QR: `soul pair --qr-png qr.png` (fichero 0600; bórralo al terminar). Comprueba que la huella corta que muestra la app es la misma que la de `soul pair`. La clave vale 10 minutos, una sola vez y admite 3 intentos fallidos; después hay que volver a ejecutar `soul pair`. Mientras dure la ventana, la clave y el QR son secretos: no compartas capturas.
+4. La app nunca envía la clave: Soul y la app se demuestran que la conocen (protocolo `soul-pair-v2`, en `src/contract/CONTRATO.md`). Una app que aún use el código de 10 caracteres (v1) recibe un error que pide actualizarla. Al emparejar, el móvil queda **ligado a su clave**: el token que recibe no sirve desde otro dispositivo. Caduca a los 90 días (`soul pair --days N` para cambiarlo); entonces vuelve a emparejar. Si el certificado de la instalación se renueva, también.
 5. No ejecutes `pair` desde un agente (se rechaza).
 
 Si pierdes el móvil: `soul unpair <id> --undo` revoca su token y deshace las correcciones que hizo. `soul corrections --device <id>` las lista antes.

@@ -71,11 +71,21 @@
 - No hay código de emparejamiento de un solo uso: lo que se teclea en la app es el token permanente del dispositivo. El README del proyecto dice «token de un solo uso», y eso no es exacto → **P2-6**.
 - La detección del frontend de agente es de mejor esfuerzo, por variables de entorno. Un agente que las borre podría ejecutar `pair` y leer el token (límite conocido del README) → **P2-7**.
 
-### 3 bis. Emparejamiento directo (integración)
+### 3 bis. Emparejamiento directo (integración, soul-pair-v2)
 
-Con la integración, la app puede emparejarse por la red con un código de un solo uso que muestra `soul pair` (ventana de 10 minutos, 3 fallos invalidan el código, como mucho 10 desafíos por ventana). La clave del móvil queda ligada al crear el dispositivo, así que no hay primer uso que ganar.
+Con la integración, la app puede emparejarse por la red con una **clave de emparejamiento** de un solo uso que muestra `soul pair`, en texto y en un QR (ventana de 10 minutos, 3 fallos invalidan la clave, como mucho 10 retos por ventana). La clave del móvil queda ligada al crear el dispositivo, así que no hay primer uso que ganar.
 
-**No cubierto.** El servidor entrega la prueba `HMAC(código, …)` en `/v1/pair/challenge` sin que el cliente demuestre antes conocer el código (`src/api/pairing.ts:134-143`). Quien esté dentro de la VPN durante la ventana puede pedir un desafío y adivinar el código de 50 bits sin conexión: el límite de 3 intentos solo cuenta los `complete` fallidos. En 10 minutos haría falta del orden de cientos de GPU, así que el riesgo está acotado, pero no es el que promete un código de un solo uso → **P2-12**.
+**soul-pair-v1 retirado.** En v1 la clave del HMAC era un código Crockford de 10 caracteres (32^10 = 2^50). El servidor entrega `HMAC(código, …)` en `/v1/pair/challenge` sin que el cliente demuestre antes conocerlo, así que quien estuviera en la VPN durante la ventana podía pedir un reto y adivinar el código sin conexión: con una GPU que calcule unos 10^10 HMAC-SHA256 por segundo (≈ 2^33), recorrer 2^50 lleva 2^17 s ≈ 36 h, es decir, unas 220 GPU en los 10 minutos. Era el antiguo **P2-12**, cerrado con v2.
+
+**Lo que hace el código ahora.** La clave tiene el formato `soulpk_<30 base62>_<6 base62>` y sale de un CSPRNG: 30 caracteres con `randomInt(62)` dan 30 × log2(62) ≈ **178,6 bits** (`src/api/pairing.ts:45,76`). El sufijo es el CRC32 de la parte aleatoria: solo detecta errores de copia y no aporta seguridad (`:60-74`). La clave es la del HMAC con las etiquetas `soul-pair-v2|server|…` y `soul-pair-v2|client|…` (`:101-102`). Un reto sin `version` o con otra recibe 426 `PAIR_VERSION` con un mensaje que pide actualizar la app (`:163`, `src/api/server.ts:66`); una ventana v1 que quede en disco se trata como caducada y se borra (`src/api/pairing.ts:130`).
+
+**Cálculo.** El ataque sigue siendo posible en su forma (un reto basta para tener una prueba contra la que comparar), pero deja de ser viable: con un millón de GPU (2^20) a 2^33 HMAC/s durante los 600 s de la ventana (≈ 2^9,2) se prueban unas 2^62,2 claves. La probabilidad de acertar es 2^62,2 / 2^178,6 ≈ 2^-116. Incluso con el mínimo de la decisión (128 bits) sería ≈ 2^-66. Además la clave caduca a los 10 minutos y sirve una sola vez.
+
+**Dónde vive la clave.** El protocolo necesita la clave en claro durante la ventana, porque es la clave del HMAC: guardar solo su hash no permitiría calcular la prueba del servidor. Por eso está en `pairing.json` (0600, junto a la clave TLS) y se borra al usarse, caducar o bloquearse (`:118-125`; `test/pairing.test.ts`).
+
+**QR.** `soul pair` pinta en la terminal un QR con `soul://pair?v=2&h=<ip>&p=<puerto>&k=<clave>&f=<huella corta>` (codificador propio, sin dependencias: `src/api/qr.ts:242,270`) y avisa de no compartir capturas. `--qr-png <fichero>` lo guarda en 0600 y no sobrescribe un fichero existente; si no puede escribirlo, cierra la ventana (`src/cli/cli.ts:446-448`). Una captura del QR vale lo que la clave: 10 minutos y un solo uso.
+
+**Sigue sin cubrir.** Desde la VPN se puede gastar la ventana sin conocer la clave: 10 retos (429) o 3 `complete` con pruebas inventadas (423) obligan a repetir `soul pair`. Es denegación de servicio acotada a quien ya está en la VPN → **P2-14**.
 
 Tampoco cubierto: quien pueda escribir `config.json` decide adónde van los tokens de los adaptadores (`connectors.bases`). El navegador del adaptador web, en cambio, ya no sale de la configuración → **P2-13**.
 
@@ -185,8 +195,9 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 | P2-9 | No hay límite de conexiones ni tiempos de espera propios | Fijar `maxConnections` (por ejemplo 32), `headersTimeout` 10 s, `requestTimeout` 15 s y `keepAliveTimeout` 5 s, con un test de conexiones lentas — **Cerrado en la integración:** `src/api/server.ts:152-162` fija `maxConnections` 32, `headersTimeout` 10 s, `requestTimeout` 15 s, `keepAliveTimeout` 5 s y saludo TLS de 10 s. El test comprueba la configuración, no una carga de conexiones lentas |
 | P2-10 | En Windows, la tarea de inicio de sesión no reintenta si la VPN no está lista | `RestartOnFailure` en el XML de la tarea (intervalo de 1 minuto, varios reintentos) o reintento interno de `serve` mientras la dirección no exista, con test |
 | P2-11 | No se ha verificado el comportamiento al volver la VPN, ni hay vigilancia de cambio de dirección | Reintento interno de la escucha: si la dirección desaparece, cerrar; si vuelve, abrir de nuevo. Test con una dirección que se añade y se quita (en Linux, `127.0.0.x` como sustituto) |
-| P2-12 | El desafío de emparejamiento da `HMAC(código, …)` sin compromiso previo del cliente: el código se puede adivinar sin conexión durante la ventana | Un PAKE (CPace o SPAKE2), o que el cliente se comprometa primero con el código, o un código más largo. Cambia el protocolo de la app: va con su propia spec |
+| P2-12 | El desafío de emparejamiento da `HMAC(código, …)` sin compromiso previo del cliente: el código se puede adivinar sin conexión durante la ventana | Un PAKE (CPace o SPAKE2), o que el cliente se comprometa primero con el código, o un código más largo — **Cerrado con soul-pair-v2:** clave `soulpk_` de 178,6 bits; el ataque sin conexión queda en ≈ 2^-116 con un millón de GPU en la ventana (punto 3 bis). v1 se rechaza con 426 `PAIR_VERSION` |
 | P2-13 | Quien pueda escribir `config.json` (por ejemplo un frontend de agente con acceso a ficheros) decide adónde van los tokens (`connectors.bases`, cualquier host https) | La frontera de confianza es la cuenta local. `connectors.bases` no se restringe porque GitHub Enterprise, Jira y Azure DevOps viven en hosts propios de cada empresa. El navegador del adaptador web ya no sale de la configuración: solo de `SOUL_NAVEGADOR` o de las rutas conocidas (`src/core/connectors.ts:131-133`) |
+| P2-14 | Desde la VPN se puede agotar la ventana de emparejamiento sin la clave (10 retos o 3 pruebas inventadas) | Límite de retos por dirección de origen o reintento automático de `soul pair`; es denegación de servicio, no acceso |
 
 ## Cómo se ha verificado
 
