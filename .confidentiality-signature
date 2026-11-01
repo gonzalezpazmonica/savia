@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=60d3d10bb8e345a5768f263a7ae325d5ad772e41ca463cd0dacd0872a42e462c
-timestamp=2026-11-01T00:16:14Z
+diff_hash=0e2c08cff517d5eecdc991a011167b703412571ee2ea2d105c8cef840ec60b96
+timestamp=2026-11-01T00:35:50Z
 branch=agent/s490-core-20261023
-head_commit=bccd51872
-signature=b43e68632a9ad95027047429ba1922d76ce1a2539cac8261a6fd9d417aacc041
+head_commit=294c9ec48
+signature=4f2e1a2789e560fafeae9a2b1d25c9a57093c4e63cae5ed9db1909b162b6f7e5
