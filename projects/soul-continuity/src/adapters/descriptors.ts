@@ -94,6 +94,7 @@ export const DESCRIPTORS: Record<ApiAdapterName, AdapterDescriptor> = {
     name: "github",
     purpose: "Revisiones pedidas, asignaciones y menciones abiertas",
     sensitivity: "N2", ttl_s: 3600, routes: ["api"], service: "github",
+    // GitHub no tiene un scope `repo:read`: es solo la clave de la entrada en el almacén.
     scopes: [["repo:read"]],
     revocation: REVOKE, never_persists: "Cuerpos de incidencias, PR y comentarios.",
   },

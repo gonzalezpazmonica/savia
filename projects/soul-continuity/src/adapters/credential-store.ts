@@ -50,6 +50,8 @@ export class SystemCredentialStore implements CredentialStore {
   private readonly backend: SecretBackend;
   private readonly operatorRef: string;
   private readonly refreshFn?: RefreshFn;
+  /** Renovaciones en curso por entrada: dos lecturas a la vez no rotan el refresh token dos veces. */
+  private readonly inflight = new Map<string, Promise<string>>();
   private readonly now: () => number;
 
   constructor(o: { backend: SecretBackend; operatorRef: string; refresh?: RefreshFn; now?: () => number }) {
@@ -72,9 +74,21 @@ export class SystemCredentialStore implements CredentialStore {
     if (s.admin_consent_required) throw new CredentialStoreError("admin_consent_required", "El inquilino exige consentimiento de administración.");
     if (typeof s.access_token === "string" && typeof s.expires_at === "number" && s.expires_at - 60_000 > this.now()) return s.access_token;
     if (!s.refresh_token || !this.refreshFn) throw new CredentialStoreError("no_credential", "La credencial caducó: vuelve a iniciar sesión.");
+    const running = this.inflight.get(key);
+    if (running) return running;
+    const p = this.renew(service, scopes, s.refresh_token, this.refreshFn);
+    this.inflight.set(key, p);
+    try {
+      return await p;
+    } finally {
+      this.inflight.delete(key);
+    }
+  }
+
+  private async renew(service: string, scopes: string[], refreshToken: string, refreshFn: RefreshFn): Promise<string> {
     let t: TokenSet;
     try {
-      t = await this.refreshFn(service, s.refresh_token, scopes);
+      t = await refreshFn(service, refreshToken, scopes);
     } catch (e) {
       const code = (e as { code?: unknown })?.code;
       if (code === "admin_consent_required") {
