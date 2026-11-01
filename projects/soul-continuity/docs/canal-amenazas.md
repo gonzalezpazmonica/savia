@@ -36,14 +36,14 @@
 
 **Lo que hace el código.**
 
-- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:139`). Versión mínima TLS 1.3 (`src/api/server.ts:605`).
+- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:142`). Versión mínima TLS 1.3 (`src/api/server.ts:612`).
 - El certificado X.509 v3 es propio de la instalación y autofirmado:
   - clave EC P-256;
   - `CA:false`, uso «firma digital», `serverAuth`;
   - SAN con las IP de escucha;
   - 397 días de validez (`src/api/cert.ts:63-86`).
 - La clave privada se guarda en `tls/key.pem` con permisos 0600 (`src/core/store.ts:46-57`).
-- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:64`, `src/cli/cli.ts:382`).
+- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:64`, `src/cli/cli.ts:400`).
 
 **Tests.** `test/cert.test.ts:11` (certificado válido para las IP), `:23` (TLS real: el cliente que fija el certificado conecta y uno sin él es rechazado) y `:38` (se reutiliza y se regenera si cambian las direcciones).
 
@@ -58,10 +58,10 @@
 
 **Lo que hace el código.**
 
-- Se empareja **en el terminal del portátil** (`soul pair <nombre>`), no por la red: la API no tiene ningún endpoint de emparejamiento (`src/api/server.ts:554-603`).
+- Se empareja **en el terminal del portátil** (`soul pair <nombre>`), no por la red: la API no tiene ningún endpoint de emparejamiento (`src/api/server.ts:561-610`).
 - El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:33-38`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
-- `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:52,181-183`). Así, el token no pasa por el modelo de un agente.
+- `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:52,188-190`). Así, el token no pasa por el modelo de un agente.
 
 **Tests.** `test/devices.test.ts:12` (el token se da una vez; en disco, solo el hash) y `:39`; `test/cli.test.ts:148` (órdenes vetadas al frontend de agente).
 
@@ -75,26 +75,26 @@
 
 **Lo que hace el código.**
 
-- `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:41-48`, `src/cli/cli.ts:388-393`).
+- `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:41-48`, `src/cli/cli.ts:406-411`).
 - `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:53-56`, `src/api/devices.ts:50-57`). La revocación vale en el acto, sin reiniciar.
-- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:527,616`).
-- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:614`).
+- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:534,623`).
+- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:621`).
 
 **Tests.** `test/devices.test.ts:21,30`; `test/serve.test.ts:55` (el dispositivo revocado recibe 401 con el servicio en marcha); `test/api/contrato.test.mjs:188`.
 
 **No cubierto.**
 
-- Los tokens no caducan ni rotan en producción. La caducidad que prueba `contrato.test.mjs:213` es una opción del servidor solo para tests (`caducidadToken`, `src/api/server.ts:533`). `serve` no la usa → **P2-8**.
+- Los tokens no caducan ni rotan en producción. La caducidad que prueba `test/api/contrato.test.mjs:213` es una opción del servidor solo para tests (`caducidadToken`, `src/api/server.ts:540`). `serve` no la usa → **P2-8**.
 - Solo se puede revocar desde el portátil. Ver el punto 5.
 
 ## 5. Móvil perdido o robado
 
-**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:519-535`; límite conocido del README). El token funciona, por tanto, como un token portador.
+**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:526-542`; límite conocido del README). El token funciona, por tanto, como un token portador.
 
 **Qué puede hacer quien tiene el móvil, mientras no se revoque:**
 
 - leer Q1–Q4 con el nivel de detalle vigente;
-- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:399-403`);
+- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:406-410`);
 - marcar elementos como resueltos, que desaparecen de la vista del operador;
 - cambiar el modo de atención y la configuración de avisos.
 
@@ -120,13 +120,13 @@ Mientras P1-1 no esté arreglado, conviene fijar `detail.max` en `titulos` o `re
 **Lo que hace el código.**
 
 - **Fuerza bruta del token:** el espacio es de 2^256. La comparación se hace sobre el SHA-256, en tiempo constante (`src/api/devices.ts:50-57`).
-- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:59`, `src/api/server.ts:504-518,555`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:509-512`).
-- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:536-552`).
+- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:59`, `src/api/server.ts:511-525,562`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:516-519`).
+- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:543-559`).
 - **Reenvío de solicitudes:**
   - TLS 1.3 impide capturarlas desde la red.
   - Las correcciones son idempotentes (`test/api/contrato.test.mjs:394`).
-  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:405-424`, `test/api/contrato.test.mjs:323`).
-- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:607`).
+  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:412-431`, `test/api/contrato.test.mjs:323`).
+- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:614`).
 
 **Tests.** `test/server.test.ts:64` (agotar el cupo desde una dirección no deja sin servicio a otra), `test/api/contrato.test.mjs:251` (429 con `Retry-After`) y `:213` (401 genérico ante token desconocido, cabecera ausente, esquema `Bearer` o falta de DPoP).
 

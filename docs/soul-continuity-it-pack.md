@@ -156,30 +156,30 @@ Rutas relativas a `projects/soul-continuity/`. Las de otras ramas llevan su nomb
 
 - **A1** `package.json` (`engines.node >=22.6`, sin `dependencies`); `bin/soul.mjs:1-9`.
 - **A2** `[web] src/web/package.json`; `[web] src/web/adaptador/navegador.ts:52-66` (`executablePath` del navegador instalado).
-- **A3** `src/startup/autostart.ts:1-10`; `src/cli/cli.ts:354-362`.
+- **A3** `src/startup/autostart.ts:1-10`; `src/cli/cli.ts:372-380`.
 - **A4** `src/core/engine.ts:47-56` (`consentProblem`: sin propósito o sin consentimiento vigente, no se lee).
 - **A5** `[adapters] src/adapters/descriptors.ts:42-98` (propósito, nivel, TTL, permisos, qué no guarda); `[adapters] src/adapters/m365.ts:72,140` (`$select`); `[adapters] src/adapters/google.ts:84` (`format=metadata`); `[adapters] src/adapters/oauth.ts:104-115` (identificador propio, ajenos rechazados), `:80-101` (listas de ajenos).
 - **A6** `src/core/runtime.ts:19-20,46-63` (núcleo); `[adapters] src/adapters/http-transport.ts:19,88-92,108` (`READ_POSTS`, `redirect: "manual"`).
 - **A7** `src/startup/autostart.ts:59-61` (`Restart=on-failure`, `NoNewPrivileges`), `:87`, `:105-106` (`LogonTrigger`, `LeastPrivilege`).
-- **A8** `src/core/failsafe.ts:33-41` (STOP ilegible = STOP); `src/api/serve.ts:36`; `src/api/server.ts:557`.
+- **A8** `src/core/failsafe.ts:33-41` (STOP ilegible = STOP); `src/api/serve.ts:36`; `src/api/server.ts:564`.
 - **A9** `src/core/store.ts:33-38` (rutas), `:40-43` (0700), `:46-57` (atómico, 0600).
 - **A10** `src/contract/claims.ts:53` (`TTL_MAX_S` = 24 h), `:64-87` (forma de la afirmación); `src/core/engine.ts:166`.
 - **A11** `src/core/engine.ts:58-81` (`HISTORY_DETAIL_MS`, `HISTORY_DAYS`, `saveHistory`).
 - **A12** `[adapters] src/adapters/delta-cache.ts:1-11,41-49`.
 - **A13** `src/api/devices.ts:33-38` (token de 256 bits, solo el hash en disco), `:41-48`.
-- **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:605` (TLS 1.3).
+- **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:612` (TLS 1.3).
 - **A15** `src/credentials/store.ts:30-39` (secreto por stdin), `:92` (`security -i`), `:105,137` (`-EncodedCommand` sin secretos), `:173-217` (índice sin secretos).
 - **A16** `src/core/engine.ts:106-116,148-151`.
-- **A17** `src/api/serve.ts:45,62-65`; `src/api/server.ts:614`.
-- **A18** `src/cli/cli.ts:52` (órdenes permitidas a un agente), `:336-352`.
-- **A19** `src/cli/cli.ts:118-137`; `src/core/store.ts:111-124` (lista de lo propio, lo ajeno se conserva); `test/cli.test.ts:283,351`.
+- **A17** `src/api/serve.ts:45,62-65`; `src/api/server.ts:621`.
+- **A18** `src/cli/cli.ts:52` (órdenes permitidas a un agente), `:354-370`.
+- **A19** `src/cli/cli.ts:118-144`; `src/core/store.ts:111-124` (lista de lo propio, lo ajeno se conserva); `test/cli.test.ts:283,351`.
 - **A20** `src/core/config.ts:63` (sin direcciones por defecto, puerto 8787); `src/api/listen.ts:24-39,57`; `src/api/serve.ts:26`; `test/listen.test.ts:34`.
 - **A21** `[adapters] src/adapters/oauth.ts:236-278` (`127.0.0.1`, puerto 0, `state`, 300 000 ms, `srv.close()`).
 - **A22** `[web] src/web/cortafuegos/perfil.ts:9-24` (perfiles personales conocidos), `:73-101` (perfil dedicado, marca, rechazo); `[web] src/web/adaptador/navegador.ts:44-66`; `[web] src/web/cortafuegos/perfil.ts:158-170` (comprobación de canal por tubería en el banco).
-- **A23** `src/core/config.ts:56-65` (por defecto `titulos`); `src/api/server.ts:296,399-403`; `test/api/contrato.test.mjs:103,142`.
+- **A23** `src/core/config.ts:56-65` (por defecto `titulos`); `src/api/server.ts:300,406-410`; `test/api/contrato.test.mjs:103,142`.
 - **A24** Búsqueda de `fetch`, `listen(`, `http.request`, `net.connect` y `dgram` en `src/` de las cuatro ramas: solo `src/core/runtime.ts`, `[adapters] src/adapters/http-transport.ts`, `[adapters] src/adapters/oauth.ts` (salida), y `src/api/listen.ts` y `[adapters] src/adapters/oauth.ts:248` (escucha). El navegador del adaptador web sale solo por su cortafuegos.
-- **A25** `src/core/config.ts:134-140` (`agentLevel`); `src/cli/cli.ts:91-97,156-174`.
-- **A26** `src/api/server.ts:500`; `test/api/contrato.test.mjs:607`.
+- **A25** `src/core/config.ts:141-147` (`agentLevel`); `src/cli/cli.ts:91-97,163-181`.
+- **A26** `src/api/server.ts:507`; `test/api/contrato.test.mjs:607`.
 - **A27** `[adapters] src/adapters/README.md`, sección «Revocación (AC-5)».
 - **A28** `[web] src/web/cortafuegos/cortafuegos.ts:1-20,37-41`; `[web] src/web/cortafuegos/decision.ts:181-186`.
 - **A29** `[web] src/web/adaptador/vigilancia.ts:1-6,58`.
@@ -187,7 +187,7 @@ Rutas relativas a `projects/soul-continuity/`. Las de otras ramas llevan su nomb
 - **A31** `[web] src/web/adaptador/activacion.ts:1-5,57-63`; `[web] src/web/README.md`, sección de grabación y recibos.
 - **A32** `src/core/runtime.ts:14-16` (`productionAdapters` vacío); `src/core/engine.ts:126`.
 - **A33** `src/credentials/store.ts:173-217`; `[adapters] src/adapters/credential-store.ts:1-12,38` (`entryKey`, sin índice).
-- **A34** `src/cli/cli.ts:330-331`; `src/core/engine.ts:302-322` (`purgeAdapter` no toca `adapters/`); `[adapters] src/adapters/revoke.ts:25-35`; `[adapters] src/adapters/descriptors.ts` (`service`).
+- **A34** `src/cli/cli.ts:348-349`; `src/core/engine.ts:302-322` (`purgeAdapter` no toca `adapters/`); `[adapters] src/adapters/revoke.ts:25-35`; `[adapters] src/adapters/descriptors.ts` (`service`).
 - **A35** `[web] src/web/cortafuegos/perfil.ts:25-30,76`; `src/core/store.ts:111`.
 - **A36** `[web] src/web/adaptador/navegador.ts:62`; `[web] src/web/README.md` («Riesgo conocido (Linux)»).
 - **A37** `src/contract/adapter.ts:64-69`; `src/core/engine.ts:47-56`.
