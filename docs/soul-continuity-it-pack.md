@@ -148,6 +148,8 @@ Lo que la spec SE-490 promete y el código revisado aún no cumple. No se descri
 | H-9 | P2 | Las «fuentes locales de la instantánea» (git, specs, traspaso) que lista la spec no son un adaptador del núcleo | Fuera de esta versión del núcleo |
 | H-10 | — | El modelo de amenazas del canal tiene sus propios P1 y P2 | Ver `projects/soul-continuity/docs/canal-amenazas.md` |
 
+Condición para el piloto (AC-7): los P1 de esta tabla y los del modelo de amenazas del canal, en particular el token sin DPoP (P1-1) y las cookies del perfil web fuera del llavero (H-5), deben estar arreglados antes de empezar. Si el piloto arranca sin ellos, lo hace con `detail.max` en `recuentos`.
+
 Este documento **no** está revisado todavía por la revisora de seguridad. AC-6 lo exige.
 
 ## Anexo: referencias al código
