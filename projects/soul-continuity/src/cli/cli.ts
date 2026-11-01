@@ -155,8 +155,26 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
 
 export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   const p = parse(argv);
-  const json = p.flags.json === true;
   const caller = detectCaller(deps.env, p.flags);
+  const audited = { done: false };
+  const code = await dispatch(p, caller, deps, audited);
+  // Toda llamada de un frontend de agente queda auditada, también status, stop, help, los rechazos
+  // y los errores. La orden solo se anota si es una de las permitidas: nunca texto libre del agente.
+  if (caller.frontend && !audited.done) {
+    try {
+      appendJsonl(join(deps.dataDir, "audit.jsonl"), {
+        at: deps.now(), frontend: caller.frontend, provider: null, level: null, forced: null,
+        cmd: AGENT_ALLOWED.has(p.cmd) ? p.cmd : "rechazada", total: null, exit: code,
+      });
+    } catch (e) {
+      deps.err(`aviso: no se pudo registrar la auditoría (${(e as Error).name})`);
+    }
+  }
+  return code;
+}
+
+async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { done: boolean }): Promise<number> {
+  const json = p.flags.json === true;
   const print = (human: string, data: unknown) => deps.out(json ? JSON.stringify(data, null, 1) : human);
   const engine = makeEngine(deps.adapters);
   try {
@@ -169,6 +187,7 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
     const cfg = loadConfig(deps.dataDir);
     const level = () => agentLevel(cfg, caller, cfg.detail.level);
     const audit = (cmd: string, lv: { level: Detail; forced: boolean; provider: string | null }, total: number) => {
+      audited.done = true;
       if (caller.frontend) appendJsonl(join(deps.dataDir, "audit.jsonl"), { at: deps.now(), frontend: caller.frontend, provider: lv.provider, level: lv.level, forced: lv.forced, cmd, total });
     };
 
@@ -177,17 +196,23 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
         const st = stopState(deps.dataDir);
         let profile: string | null = null;
         try { profile = activeProfileName(cfg, deps.env); } catch { profile = null; }
-        const last = profile ? engine.lastSnapshot(deps.dataDir, cfg.profiles[profile].operator.ref) : null;
+        // status responde siempre: una caché ilegible o un perfil sin operador se dicen, no tumban la orden.
+        let last: Snapshot | null = null;
+        let unreadable = false;
+        try { last = profile ? engine.lastSnapshot(deps.dataDir, cfg.profiles[profile].operator.ref) : null; } catch { unreadable = true; }
+        const lv = level().level;
         const data = {
-          installation: cfg.installation_id, profile, stopped: st.stopped, stop_reason: st.reason ?? null,
-          detail: level().level, last_read: last?.issued_at ?? null,
+          installation: cfg.installation_id, profile, stopped: st.stopped,
+          // El motivo del STOP es texto libre de la persona: no sale hacia un agente a nivel recuentos.
+          stop_reason: caller.frontend && lv === "recuentos" ? null : st.reason ?? null,
+          detail: lv, last_read: last?.issued_at ?? null, last_read_unreadable: unreadable,
           expired: last ? (parseTs(last.expires_at) ?? 0) <= (parseTs(deps.now()) ?? 0) : null,
-          sources: profile ? cfg.profiles[profile].sources.length : 0,
+          sources: profile ? cfg.profiles[profile].sources?.length ?? 0 : 0,
         };
         print([
           `Instalación ${data.installation} · perfil ${profile ?? "ninguno (no sé quién eres)"}`,
-          st.stopped ? `DETENIDO${st.reason ? `: ${st.reason}` : ""} — «soul resume» para reanudar` : "En marcha",
-          `Nivel ${data.detail} · fuentes ${data.sources} · última lectura ${data.last_read ?? "nunca"}${data.expired ? " (caducada)" : ""}`,
+          st.stopped ? `DETENIDO${data.stop_reason ? `: ${data.stop_reason}` : ""} — «soul resume» para reanudar` : "En marcha",
+          `Nivel ${data.detail} · fuentes ${data.sources} · última lectura ${unreadable ? "ilegible (se rehará en la próxima pregunta)" : data.last_read ?? "nunca"}${data.expired ? " (caducada)" : ""}`,
         ].join("\n"), data);
         return 0;
       }
