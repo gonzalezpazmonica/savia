@@ -101,23 +101,36 @@ if echo "$CONTENT" | grep -qE 'projects/[a-z][a-z0-9-]+/\.human-maps/'; then
   VIOLATIONS="${VIOLATIONS}\n  - Ruta .human-maps/ de proyecto (contenido interno)"
 fi
 
-# 9. Dynamic: load gitignore patterns and check for project-specific paths
-# Only for projects/ entries that are NOT whitelisted
+# 9. Referencias projects/<nombre>/: se permiten si <nombre> está en la whitelist de .gitignore o
+# autorizado por la operadora (scripts/protect-project-privacy.sh --authorize), como línea exacta de
+# .claude/.project-authorizations. Ambos se leen del repo del FICHERO EDITADO (no del cwd).
+# Fail-closed: sin repo, sin fichero de autorizaciones, ilegible o sin casar exacto → se bloquea.
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-if [[ -f "$PROJECT_DIR/.gitignore" ]]; then
-  # Extract whitelisted projects from .gitignore (lines starting with !projects/)
-  WHITELISTED=$(grep '^!projects/' "$PROJECT_DIR/.gitignore" 2>/dev/null | sed 's|^!projects/||;s|/$||' | tr '\n' '|')
-  WHITELISTED="${WHITELISTED%|}"  # Remove trailing pipe
+case "$FILE_PATH" in
+  /*) TARGET_DIR="$(dirname "$FILE_PATH")" ;;
+  *)  TARGET_DIR="$(dirname "$PROJECT_DIR/$FILE_PATH")" ;;
+esac
+# El fichero (o su carpeta) puede no existir aún: subir hasta el primer directorio existente.
+while [[ ! -d "$TARGET_DIR" && "$TARGET_DIR" != "/" && "$TARGET_DIR" != "." ]]; do
+  TARGET_DIR="$(dirname "$TARGET_DIR")"
+done
+REPO_ROOT="$(git -C "$TARGET_DIR" rev-parse --show-toplevel 2>/dev/null)" || REPO_ROOT=""
+GITIGNORE_ROOT="${REPO_ROOT:-$PROJECT_DIR}"
+AUTH_FILE=""
+[[ -n "$REPO_ROOT" ]] && AUTH_FILE="$REPO_ROOT/.claude/.project-authorizations"
 
-  # Check if content references non-whitelisted project paths
+project_allowed() {
+  grep -qxF -- "$1" <<<"$WHITELISTED" && return 0
+  [[ -n "$AUTH_FILE" && -f "$AUTH_FILE" && -r "$AUTH_FILE" ]] && grep -qxF -- "$1" "$AUTH_FILE" 2>/dev/null
+}
+
+if [[ -f "$GITIGNORE_ROOT/.gitignore" ]]; then
+  WHITELISTED=$(grep '^!projects/' "$GITIGNORE_ROOT/.gitignore" 2>/dev/null | sed 's|^!projects/||;s|/$||')
   if [[ -n "$WHITELISTED" ]]; then
-    # Find project references in content that are NOT in the whitelist
-    NON_WL=$(echo "$CONTENT" | grep -oE 'projects/[a-z][a-z0-9_-]+/' | sed 's|projects/||;s|/||' | sort -u | grep -vE "^($WHITELISTED)$" || true)
-    if [[ -n "$NON_WL" ]]; then
-      for proj in $NON_WL; do
-        VIOLATIONS="${VIOLATIONS}\n  - Referencia a projects/$proj/ (proyecto no whitelisteado)"
-      done
-    fi
+    for proj in $(echo "$CONTENT" | grep -oE 'projects/[a-z][a-z0-9_-]+/' | sed 's|projects/||;s|/||' | sort -u); do
+      project_allowed "$proj" \
+        || VIOLATIONS="${VIOLATIONS}\n  - Referencia a projects/$proj/ (proyecto no whitelisteado ni autorizado)"
+    done
   fi
 fi
 
