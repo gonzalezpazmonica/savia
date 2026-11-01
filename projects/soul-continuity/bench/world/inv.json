@@ -1,0 +1,44 @@
+{
+  "_doc": "Operador sintético de investigación. Google Workspace gamma.example (API de Google, solo lectura), GitHub y una página web sin receta (estado de un envío a revista).",
+  "operator": "inv",
+  "google": {
+    "domain": "gamma.example",
+    "messages": [
+      {"id": "inv-g01", "thread": "inv-t01", "labels": ["INBOX"], "subject": "Borrador de la sección 3", "from": "coautor@externa.example", "to": ["inv@gamma.example"], "cc": [], "at": "2026-11-01T10:00:00Z", "auth": {"dkim": "pass", "dmarc": "pass", "d": "externa.example"}},
+      {"id": "inv-g02", "thread": "inv-t02", "labels": ["INBOX"], "subject": "Datos del experimento", "from": "coautor@externa.example", "to": ["inv@gamma.example"], "cc": [], "at": "2026-10-31T09:00:00Z", "auth": {"dkim": "pass", "dmarc": "pass", "d": "externa.example"}},
+      {"id": "inv-g03", "thread": "inv-t02", "labels": ["SENT"], "subject": "Re: Datos del experimento", "from": "inv@gamma.example", "to": ["coautor@externa.example"], "cc": [], "at": "2026-10-31T12:00:00Z", "client": "movil"},
+      {"id": "inv-g04", "thread": "inv-t03", "labels": ["INBOX"], "subject": "Revisión por pares", "from": "rev@externa.example", "to": ["inv@gamma.example"], "cc": ["coautor@externa.example"], "at": "2026-10-30T09:00:00Z", "auth": {"dkim": "pass", "dmarc": "pass", "d": "externa.example"}},
+      {"id": "inv-g05", "thread": "inv-t03", "labels": ["SENT"], "subject": "Re: Revisión por pares", "from": "inv@gamma.example", "to": ["rev@externa.example"], "cc": ["coautor@externa.example"], "at": "2026-10-30T11:00:00Z", "client": "web"},
+      {"id": "inv-g06", "thread": "inv-t03", "labels": ["INBOX"], "subject": "Re: Revisión por pares", "from": "coautor@externa.example", "to": ["rev@externa.example"], "cc": ["inv@gamma.example"], "at": "2026-10-31T08:00:00Z", "auth": {"dkim": "pass", "dmarc": "pass", "d": "externa.example"}},
+      {"id": "inv-g07", "thread": "inv-t04", "labels": ["INBOX"], "subject": "Resultados preliminares", "from": "becario@gamma.example", "to": ["inv@gamma.example"], "cc": [], "at": "2026-11-02T11:00:00Z", "since": "t1", "auth": {"dkim": "pass", "dmarc": "pass", "d": "gamma.example"}},
+      {"id": "inv-g08", "thread": "inv-t05", "labels": ["INBOX"], "subject": "Firma urgente del convenio", "from": "director@gamma.example", "to": ["inv@gamma.example"], "cc": [], "at": "2026-11-01T13:00:00Z", "auth": {"dkim": "fail", "dmarc": "fail", "d": "gamma.example"}},
+      {"id": "inv-g09", "thread": "inv-t06", "labels": ["INBOX"], "subject": "Memoria del proyecto", "from": "director@gamma.example", "to": ["inv@gamma.example"], "cc": [], "at": "2026-11-01T14:00:00Z", "auth": {"dkim": "pass", "dmarc": "pass", "d": "gamma.example"}}
+    ],
+    "events": [
+      {"id": "inv-e01", "subject": "Seminario del grupo", "start": "2026-11-03T10:00:00Z", "minutes": 60, "response": "accepted", "organizer": "director@gamma.example"},
+      {"id": "inv-e02", "subject": "Reunión con coautores", "start": "2026-11-02T12:00:00Z", "minutes": 60, "response": "accepted", "organizer": "inv@gamma.example"},
+      {"id": "inv-e03", "subject": "Defensa de tesis", "start": "2026-11-15T10:00:00Z", "minutes": 120, "response": "accepted", "organizer": "director@gamma.example"},
+      {"id": "inv-e04", "subject": "Charla del departamento", "start": "2026-11-03T17:00:00Z", "minutes": 60, "response": "declined", "organizer": "secretaria@gamma.example"}
+    ],
+    "files": [
+      {"id": "inv-d01", "name": "Artículo principal", "comments": [{"id": "inv-dc1", "author": "coautor@externa.example", "at": "2026-11-01T08:00:00Z", "resolved": false, "text": "Cita que falta"}]},
+      {"id": "inv-d02", "name": "Plan de datos", "comments": [{"id": "inv-dc2", "author": "becario@gamma.example", "at": "2026-10-29T08:00:00Z", "resolved": true, "text": "Corregido"}]}
+    ]
+  },
+  "github": {
+    "me": "inv-gh",
+    "items": [
+      {"repo": "inv-lab", "number": 3, "title": "Script de análisis", "is_pr": true, "state": "open", "assignees": [], "requested_reviewers": ["inv-gh"], "mentions": []},
+      {"repo": "inv-lab", "number": 4, "title": "Reproducir figura 2", "is_pr": false, "state": "open", "assignees": ["inv-gh"], "requested_reviewers": [], "mentions": []},
+      {"repo": "inv-lab", "number": 5, "title": "Semilla aleatoria", "is_pr": false, "state": "open", "assignees": ["inv-gh"], "requested_reviewers": [], "mentions": ["inv-gh"]},
+      {"repo": "inv-lab", "number": 6, "title": "Duda sobre el preprocesado", "is_pr": false, "state": "open", "assignees": [], "requested_reviewers": [], "mentions": ["inv-gh"]}
+    ]
+  },
+  "web": {
+    "sites": [
+      {"id": "revista", "kind": "news", "pages": [
+        {"id": "estado-envio", "modified": "2026-10-25T10:00:00Z", "t1": {"modified": "2026-11-02T09:00:00Z"}}
+      ]}
+    ]
+  }
+}

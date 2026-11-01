@@ -1,0 +1,410 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Soul Continuidad: API local para la app Savia Space",
+    "version": "0.1.0",
+    "summary": "Contrato entre la app Android y el proceso Soul Continuidad del portátil del operador (SE-490).",
+    "description": "Solo lectura de fuentes; el operador pregunta, corrige y declara su atención. Sin push ni relay: la app sondea cada 5 min por la VPN del operador. Todo texto que viene de terceros viaja como `TextoInerte` y la app lo pinta como texto plano. Con nivel `recuentos` no sale ningún asunto ni nombre. El emparejamiento y la renovación del token son los de Space (SE-430): ver `x-emparejamiento`."
+  },
+  "servers": [{ "url": "https://{direccion}/api/v1/soul", "variables": { "direccion": { "default": "100.64.0.1:8443", "description": "Dirección de la VPN del operador; el proceso solo escucha ahí." } } }],
+  "security": [{ "dpop": [] }],
+  "x-emparejamiento": {
+    "origen": "Space SE-430 (apps/android/pairing, crates/space-server/src/mobile_api.rs)",
+    "modelo": "Token de acceso por dispositivo ligado a su clave (DPoP): cabeceras `Authorization: DPoP <token>` y `DPoP: <prueba>`. Alta por enlace/QR con POST /api/v1/pair/register y POST /api/v1/pair/{id}/claim; renovación sin QR con POST /api/v1/token (client_credentials con aserción JWT ES256). El token dura 300 s. TLS 1.3 con pin SPKI de la CA. Revocación: 401 con cuerpo `{\"error\":\"DEVICE_REVOKED\"}`; solo esa marca hace que la app borre credencial y clave, cualquier otro 401 se resuelve renovando una vez.",
+    "no_definido_aqui": "Los endpoints de emparejamiento y renovación no se redefinen: son los de Space. El servidor simulado no los implementa; trae dispositivos ya emparejados.",
+    "abierto": "Quién emite los tokens en el portátil (el mismo emisor de Space o un emisor Soul con el mismo protocolo) lo decide el worker de construcción; el contrato no cambia."
+  },
+  "paths": {
+    "/estado": {
+      "get": {
+        "operationId": "estado", "summary": "Estado general: modo, nivel y salud.",
+        "responses": { "200": { "description": "Estado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Estado" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/q/{pregunta}": {
+      "get": {
+        "operationId": "consulta", "summary": "Q1 abierto, Q2 depende de mí, Q3 cambió desde…, Q4 compromisos con fecha.",
+        "parameters": [
+          { "name": "pregunta", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Pregunta" } },
+          { "name": "proyecto", "in": "query", "schema": { "$ref": "#/components/schemas/IdOpaco" } },
+          { "name": "persona", "in": "query", "schema": { "$ref": "#/components/schemas/IdOpaco" } },
+          { "name": "desde", "in": "query", "description": "Obligatorio en Q3. En Q4 acota la fecha de vencimiento.", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "hasta", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "limite", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }
+        ],
+        "responses": { "200": { "description": "Respuesta al nivel de detalle vigente", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Respuesta" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/filtros": {
+      "get": {
+        "operationId": "filtros", "summary": "Proyectos y personas por los que se puede filtrar. Solo con `completo`: con los otros niveles las listas van vacías (los nombres no salen).",
+        "responses": { "200": { "description": "Filtros", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Filtros" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/elementos/{id}/porque": {
+      "get": {
+        "operationId": "porque", "summary": "¿Por qué lo sé? Fuente, antigüedad y referencias de un elemento.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/IdOpaco" } }],
+        "responses": { "200": { "description": "Procedencia", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Porque" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "404": { "$ref": "#/components/responses/NoEncontrado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/elementos/{id}/correccion": {
+      "post": {
+        "operationId": "correccion", "summary": "Corrige un elemento: resuelto, no aplica, esto es mío, esto no es mío. Se guarda en el libro de revocaciones y no vuelve.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/IdOpaco" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionCorreccion" } } } },
+        "responses": { "200": { "description": "Aplicada. Repetir la misma corrección es idempotente.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Correccion" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "404": { "$ref": "#/components/responses/NoEncontrado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/atencion": {
+      "get": {
+        "operationId": "atencionLeer", "summary": "Modo de atención vigente.",
+        "responses": { "200": { "description": "Modo", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Atencion" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      },
+      "put": {
+        "operationId": "atencionFijar", "summary": "Declara el modo de atención con ventana. Al acabar la ventana vuelve a DISPONIBLE.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionAtencion" } } } },
+        "responses": { "200": { "description": "Modo fijado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Atencion" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/avisos": {
+      "get": {
+        "operationId": "avisosLeer", "summary": "Configuración de avisos y alertas.",
+        "responses": { "200": { "description": "Configuración", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigAvisos" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      },
+      "put": {
+        "operationId": "avisosFijar", "summary": "Sustituye la configuración de avisos y alertas. Los campos `efectiva` y `nota` de las alertas los calcula Soul y no se envían (si llegan, 400).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionAvisos" } } } },
+        "responses": { "200": { "description": "Configuración guardada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigAvisos" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/sondeo": {
+      "get": {
+        "operationId": "sondeo", "summary": "Sondeo cada 5 min: mensajes nuevos (resúmenes, avisos, alertas, respuestas) desde un cursor.",
+        "description": "Sin `cursor` devuelve lo retenido (24 h como mínimo) desde lo más antiguo. Con `cursor` devuelve exactamente los mensajes posteriores: ni se pierde ni se repite ninguno. Mientras `hay_mas` sea verdadero, la app repite con el cursor recibido. El cursor es opaco y ligado al operador. Un cursor anterior a lo retenido da 410.",
+        "parameters": [
+          { "name": "cursor", "in": "query", "schema": { "type": "string", "minLength": 1, "maxLength": 128 } },
+          { "name": "limite", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } }
+        ],
+        "responses": { "200": { "description": "Mensajes nuevos", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Sondeo" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "410": { "description": "El cursor es anterior a lo retenido: la app vuelve a sondear sin cursor.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/adaptadores": {
+      "get": {
+        "operationId": "adaptadores", "summary": "Estado de cada adaptador de fuente.",
+        "responses": { "200": { "description": "Adaptadores", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ListaAdaptadores" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/detalle": {
+      "get": {
+        "operationId": "detalleLeer", "summary": "Nivel de detalle de la instalación.",
+        "responses": { "200": { "description": "Nivel", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Detalle" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      },
+      "put": {
+        "operationId": "detalleFijar", "summary": "Baja (o sube hasta el máximo) el nivel. Nunca por encima del máximo que fijó el operador en el equipo.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionDetalle" } } } },
+        "responses": { "200": { "description": "Nivel fijado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Detalle" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "422": { "description": "LEVEL_NOT_ALLOWED: el nivel pedido supera el máximo.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/registro": {
+      "get": {
+        "operationId": "registro", "summary": "Registro de demanda: «¿por qué me avisaste?» y «¿qué me ahorraste?».",
+        "parameters": [{ "name": "limite", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 } }],
+        "responses": { "200": { "description": "Registro", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Registro" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/ordenes": {
+      "post": {
+        "operationId": "orden", "summary": "Orden estructurada (gramática en GRAMATICA.md). Sin modelo. El texto libre recibe la respuesta honesta con `interpretada: false`.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionOrden" } } } },
+        "responses": { "200": { "description": "Orden ejecutada o respuesta honesta al texto libre", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RespuestaOrden" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "404": { "$ref": "#/components/responses/NoEncontrado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "dpop": { "type": "http", "scheme": "DPoP", "description": "Token de dispositivo de Space (SE-430) con prueba DPoP en la cabecera `DPoP`. Revocable. Solo TLS." }
+    },
+    "responses": {
+      "Invalida": { "description": "INVALID_INPUT", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NoAutenticado": { "description": "UNAUTHENTICATED. Con cuerpo `error: DEVICE_REVOKED` el dispositivo está revocado y la app borra credencial y clave; cualquier otro 401 no borra nada.", "headers": { "WWW-Authenticate": { "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NoEncontrado": { "description": "NOT_FOUND (también lo que no existe para este operador)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Limitado": { "description": "RATE_LIMITED", "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 1 } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NoDisponible": { "description": "UNAVAILABLE", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object", "additionalProperties": false, "required": ["code", "message", "requestId", "retryable"],
+        "description": "Mismo sobre que Space (ErrorEnvelope, camelCase). `error` solo aparece con `DEVICE_REVOKED`.",
+        "properties": {
+          "code": { "enum": ["INVALID_INPUT", "UNAUTHENTICATED", "ORIGIN_DENIED", "NOT_FOUND", "CONFLICT", "GONE", "LEVEL_NOT_ALLOWED", "RATE_LIMITED", "UNAVAILABLE"] },
+          "message": { "type": "string", "maxLength": 200 },
+          "requestId": { "type": "string", "format": "uuid" },
+          "retryable": { "type": "boolean" },
+          "error": { "const": "DEVICE_REVOKED" }
+        }
+      },
+      "IdOpaco": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+      "Modo": { "enum": ["DISPONIBLE", "FOCO", "DESCANSO", "FUERA"] },
+      "Nivel": { "enum": ["completo", "titulos", "recuentos"] },
+      "Pregunta": { "enum": ["q1", "q2", "q3", "q4"] },
+      "TextoInerte": {
+        "type": "object", "additionalProperties": false, "required": ["texto", "inerte", "origen"],
+        "description": "Texto de un tercero (asunto, nombre, comentario, enlace). La app lo pinta como texto plano: sin markdown, sin HTML, sin enlaces ni deep links que abra por sí misma y sin interpretarlo como orden.",
+        "properties": { "texto": { "type": "string", "maxLength": 2000 }, "inerte": { "const": true }, "origen": { "enum": ["tercero"] } }
+      },
+      "Fuente": {
+        "type": "object", "additionalProperties": false, "required": ["adaptador", "ruta"],
+        "properties": { "adaptador": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" }, "ruta": { "enum": ["graph", "api", "web", "local"] } }
+      },
+      "Elemento": {
+        "type": "object", "additionalProperties": false, "required": ["id", "pregunta", "tipo", "fuente", "antiguedad_s", "estado", "sensibilidad", "fecha", "titulo", "proyecto", "personas", "detalle", "correccion"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "pregunta": { "$ref": "#/components/schemas/Pregunta" },
+          "tipo": { "$ref": "#/components/schemas/TipoElemento" },
+          "fuente": { "$ref": "#/components/schemas/Fuente" },
+          "antiguedad_s": { "type": "integer", "minimum": 0 },
+          "estado": { "enum": ["DECLARED", "OBSERVED", "CONFIRMED", "DERIVED"] },
+          "sensibilidad": { "enum": ["N1", "N2", "N3", "N4"] },
+          "fecha": { "type": ["string", "null"], "format": "date-time" },
+          "titulo": { "oneOf": [{ "$ref": "#/components/schemas/TextoInerte" }, { "type": "null" }], "description": "Nulo con `recuentos`." },
+          "proyecto": { "oneOf": [{ "$ref": "#/components/schemas/TextoInerte" }, { "type": "null" }], "description": "Solo con `completo`; nulo en los demás." },
+          "personas": { "type": "array", "maxItems": 20, "items": { "$ref": "#/components/schemas/TextoInerte" }, "description": "Solo con `completo`; vacío en los demás." },
+          "detalle": { "oneOf": [{ "$ref": "#/components/schemas/TextoInerte" }, { "type": "null" }], "description": "Solo con `completo`. Se lee de la fuente en ese momento; no se persiste." },
+          "correccion": { "enum": ["es_mio", null] }
+        }
+      },
+      "TipoElemento": { "enum": ["reunion", "tarea", "revision", "hilo_espera", "documento", "mencion", "compromiso", "cambio"] },
+      "Recuentos": {
+        "type": "object", "additionalProperties": false, "required": ["total", "por_tipo", "por_fuente"],
+        "properties": {
+          "total": { "type": "integer", "minimum": 0 },
+          "por_tipo": { "type": "object", "propertyNames": { "$ref": "#/components/schemas/TipoElemento" }, "additionalProperties": { "type": "integer", "minimum": 1 } },
+          "por_fuente": { "type": "object", "propertyNames": { "pattern": "^[a-z0-9-]{1,40}$" }, "additionalProperties": { "type": "integer", "minimum": 1 } }
+        }
+      },
+      "Respuesta": {
+        "type": "object", "additionalProperties": false, "required": ["pregunta", "nivel", "generado_en", "obsoleto", "ultima_lectura", "recuentos", "elementos"],
+        "properties": {
+          "pregunta": { "$ref": "#/components/schemas/Pregunta" },
+          "nivel": { "$ref": "#/components/schemas/Nivel" },
+          "generado_en": { "type": "string", "format": "date-time" },
+          "obsoleto": { "type": "boolean", "description": "Verdadero si es lo último conocido porque alguna fuente no responde." },
+          "ultima_lectura": { "type": ["string", "null"], "format": "date-time" },
+          "recuentos": { "$ref": "#/components/schemas/Recuentos" },
+          "elementos": { "type": "array", "maxItems": 200, "items": { "$ref": "#/components/schemas/Elemento" }, "description": "Vacío con `recuentos`." }
+        }
+      },
+      "Filtros": {
+        "type": "object", "additionalProperties": false, "required": ["nivel", "proyectos", "personas"],
+        "properties": {
+          "nivel": { "$ref": "#/components/schemas/Nivel" },
+          "proyectos": { "type": "array", "items": { "$ref": "#/components/schemas/OpcionFiltro" } },
+          "personas": { "type": "array", "items": { "$ref": "#/components/schemas/OpcionFiltro" } }
+        }
+      },
+      "OpcionFiltro": {
+        "type": "object", "additionalProperties": false, "required": ["id", "nombre"],
+        "properties": { "id": { "$ref": "#/components/schemas/IdOpaco" }, "nombre": { "$ref": "#/components/schemas/TextoInerte" } }
+      },
+      "Porque": {
+        "type": "object", "additionalProperties": false, "required": ["id", "nivel", "fuente", "antiguedad_s", "observado_en", "valido_hasta", "estado", "tipo_afirmacion", "sensibilidad", "referencias"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "nivel": { "$ref": "#/components/schemas/Nivel" },
+          "fuente": { "$ref": "#/components/schemas/Fuente" },
+          "antiguedad_s": { "type": "integer", "minimum": 0 },
+          "observado_en": { "type": "string", "format": "date-time" },
+          "valido_hasta": { "type": "string", "format": "date-time" },
+          "estado": { "enum": ["DECLARED", "OBSERVED", "CONFIRMED", "DERIVED"] },
+          "tipo_afirmacion": { "type": "string", "pattern": "^[a-z_]{1,40}$" },
+          "sensibilidad": { "enum": ["N1", "N2", "N3", "N4"] },
+          "referencias": { "type": "array", "maxItems": 10, "items": { "$ref": "#/components/schemas/TextoInerte" }, "description": "Enlaces o referencias de la fuente, como texto inerte. Solo con `completo`." }
+        }
+      },
+      "PeticionCorreccion": {
+        "type": "object", "additionalProperties": false, "required": ["tipo"],
+        "properties": { "tipo": { "enum": ["resuelto", "no_aplica", "es_mio", "no_es_mio"] } }
+      },
+      "Correccion": {
+        "type": "object", "additionalProperties": false, "required": ["id", "tipo", "aplicada", "registrada_en"],
+        "properties": { "id": { "$ref": "#/components/schemas/IdOpaco" }, "tipo": { "enum": ["resuelto", "no_aplica", "es_mio", "no_es_mio"] }, "aplicada": { "const": true }, "registrada_en": { "type": "string", "format": "date-time" } }
+      },
+      "Atencion": {
+        "type": "object", "additionalProperties": false, "required": ["modo", "hasta", "vuelve_a"],
+        "properties": { "modo": { "$ref": "#/components/schemas/Modo" }, "hasta": { "type": ["string", "null"], "format": "date-time" }, "vuelve_a": { "const": "DISPONIBLE" } }
+      },
+      "PeticionAtencion": {
+        "type": "object", "additionalProperties": false, "required": ["modo"],
+        "properties": { "modo": { "$ref": "#/components/schemas/Modo" }, "hasta": { "type": ["string", "null"], "format": "date-time", "description": "Obligatorio salvo con DISPONIBLE; debe ser futuro y a menos de 7 días." } }
+      },
+      "TipoAviso": { "enum": ["reunion_proxima", "vencimiento", "documento_sin_leer", "espera_respuesta"] },
+      "ReglaAlerta": {
+        "type": "object", "additionalProperties": false, "required": ["id", "tipo", "objetivo", "palabra", "modos", "efectiva", "nota"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "tipo": { "enum": ["persona", "proyecto", "remitente_palabra"] },
+          "objetivo": { "$ref": "#/components/schemas/IdOpaco" },
+          "palabra": { "type": ["string", "null"], "maxLength": 60, "description": "Solo en `remitente_palabra`." },
+          "modos": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/components/schemas/Modo" }, "description": "Modos en los que esta alerta suena. Fuera de ellos se difiere como un aviso." },
+          "efectiva": { "enum": ["alerta", "aviso"], "description": "`aviso` si la regla de remitente solo puede resolverse por la ruta web (sin identidad autenticada del remitente)." },
+          "nota": { "enum": [null, "remitente_sin_identidad_autenticada"] }
+        }
+      },
+      "PeticionRegla": {
+        "type": "object", "additionalProperties": false, "required": ["id", "tipo", "objetivo", "modos"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "tipo": { "enum": ["persona", "proyecto", "remitente_palabra"] },
+          "objetivo": { "$ref": "#/components/schemas/IdOpaco" },
+          "palabra": { "type": ["string", "null"], "maxLength": 60 },
+          "modos": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/components/schemas/Modo" } }
+        }
+      },
+      "ConfigAvisos": {
+        "type": "object", "additionalProperties": false, "required": ["resumen_inicio", "resumen_cierre", "presupuesto", "tope_alertas", "avisos_activos", "alertas"],
+        "properties": {
+          "resumen_inicio": { "type": ["string", "null"], "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$", "description": "HH:MM en UTC." },
+          "resumen_cierre": { "type": ["string", "null"], "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+          "presupuesto": { "$ref": "#/components/schemas/Presupuesto" },
+          "tope_alertas": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Alertas por ventana antes de agruparlas. No consumen el presupuesto de avisos." },
+          "avisos_activos": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/components/schemas/TipoAviso" } },
+          "alertas": { "type": "array", "maxItems": 20, "items": { "$ref": "#/components/schemas/ReglaAlerta" } }
+        }
+      },
+      "Presupuesto": {
+        "type": "object", "additionalProperties": false, "required": ["max", "ventana_min"],
+        "properties": { "max": { "type": "integer", "minimum": 0, "maximum": 100 }, "ventana_min": { "type": "integer", "minimum": 5, "maximum": 1440 } }
+      },
+      "PeticionAvisos": {
+        "type": "object", "additionalProperties": false, "required": ["resumen_inicio", "resumen_cierre", "presupuesto", "tope_alertas", "avisos_activos", "alertas"],
+        "properties": {
+          "resumen_inicio": { "type": ["string", "null"], "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+          "resumen_cierre": { "type": ["string", "null"], "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+          "presupuesto": { "$ref": "#/components/schemas/Presupuesto" },
+          "tope_alertas": { "type": "integer", "minimum": 1, "maximum": 50 },
+          "avisos_activos": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/components/schemas/TipoAviso" } },
+          "alertas": { "type": "array", "maxItems": 20, "items": { "$ref": "#/components/schemas/PeticionRegla" } }
+        }
+      },
+      "Mensaje": {
+        "type": "object", "additionalProperties": false, "required": ["id", "seq", "tipo", "categoria", "creado_en", "programar_en", "caduca_en", "agrupa", "elemento_ids", "titulo", "detalle"],
+        "description": "`categoria` es un código cerrado; la app pone el texto genérico. Con `recuentos` solo hay categoría, `agrupa` e ids opacos: así sale la notificación «2 avisos, 1 alerta» en la pantalla de bloqueo.",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "seq": { "type": "integer", "minimum": 1, "description": "Orden estricto por operador. Solo informativo: el cursor es el único modo de avanzar." },
+          "tipo": { "enum": ["resumen_inicio", "resumen_cierre", "aviso", "alerta", "respuesta"] },
+          "categoria": { "enum": ["resumen", "reunion_proxima", "vencimiento", "documento_sin_leer", "espera_respuesta", "alerta_definida", "agrupado", "correccion_confirmada"] },
+          "creado_en": { "type": "string", "format": "date-time" },
+          "programar_en": { "type": ["string", "null"], "format": "date-time", "description": "Si existe, la app programa la notificación local para ese instante (p. ej. reunión en 15 min)." },
+          "caduca_en": { "type": ["string", "null"], "format": "date-time" },
+          "agrupa": { "type": "integer", "minimum": 1, "description": "Cuántos eventos resume; mayor que 1 en los mensajes agrupados («hay N alertas más»)." },
+          "elemento_ids": { "type": "array", "maxItems": 50, "items": { "$ref": "#/components/schemas/IdOpaco" } },
+          "titulo": { "oneOf": [{ "$ref": "#/components/schemas/TextoInerte" }, { "type": "null" }], "description": "Con `titulos` y `completo`. Nulo con `recuentos`." },
+          "detalle": { "oneOf": [{ "$ref": "#/components/schemas/TextoInerte" }, { "type": "null" }], "description": "Solo con `completo`." }
+        }
+      },
+      "Sondeo": {
+        "type": "object", "additionalProperties": false, "required": ["cursor", "hay_mas", "nivel", "modo", "generado_en", "siguiente_sondeo_s", "mensajes"],
+        "properties": {
+          "cursor": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "hay_mas": { "type": "boolean" },
+          "nivel": { "$ref": "#/components/schemas/Nivel" },
+          "modo": { "$ref": "#/components/schemas/Modo" },
+          "generado_en": { "type": "string", "format": "date-time" },
+          "siguiente_sondeo_s": { "const": 300 },
+          "mensajes": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/Mensaje" } }
+        }
+      },
+      "Adaptador": {
+        "type": "object", "additionalProperties": false, "required": ["id", "ruta", "estado", "motivo", "ruta_alternativa", "ultima_lectura", "ttl_s"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]{1,40}$" },
+          "ruta": { "enum": ["graph", "api", "web", "local"] },
+          "estado": { "enum": ["ok", "sin_consentimiento", "revocado", "detenido", "desactivado"] },
+          "motivo": { "enum": [null, "sesion_caducada", "requiere_consentimiento_admin", "receta_desactivada", "sin_conexion", "error"] },
+          "ruta_alternativa": { "enum": [null, "web", "manual"] },
+          "ultima_lectura": { "type": ["string", "null"], "format": "date-time" },
+          "ttl_s": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "ListaAdaptadores": {
+        "type": "object", "additionalProperties": false, "required": ["adaptadores"],
+        "properties": { "adaptadores": { "type": "array", "maxItems": 30, "items": { "$ref": "#/components/schemas/Adaptador" } } }
+      },
+      "Detalle": {
+        "type": "object", "additionalProperties": false, "required": ["nivel", "maximo"],
+        "properties": { "nivel": { "$ref": "#/components/schemas/Nivel" }, "maximo": { "$ref": "#/components/schemas/Nivel" } }
+      },
+      "PeticionDetalle": {
+        "type": "object", "additionalProperties": false, "required": ["nivel"],
+        "properties": { "nivel": { "$ref": "#/components/schemas/Nivel" } }
+      },
+      "Registro": {
+        "type": "object", "additionalProperties": false, "required": ["entradas", "ahorrados"],
+        "properties": {
+          "ahorrados": { "type": "integer", "minimum": 0, "description": "Eventos registrados, agrupados o diferidos sin interrumpir." },
+          "entradas": {
+            "type": "array", "maxItems": 200,
+            "items": {
+              "type": "object", "additionalProperties": false, "required": ["en", "decision", "motivo", "categoria"],
+              "properties": {
+                "en": { "type": "string", "format": "date-time" },
+                "decision": { "enum": ["registrar", "agrupar", "avisar", "diferir"] },
+                "motivo": { "enum": ["modo_activo", "presupuesto_agotado", "tope_alertas", "regla_activa", "alerta_marcada_para_el_modo", "resumen_programado"] },
+                "categoria": { "type": "string", "pattern": "^[a-z_]{1,40}$" }
+              }
+            }
+          }
+        }
+      },
+      "Estado": {
+        "type": "object", "additionalProperties": false, "required": ["version_contrato", "modo", "nivel", "texto_libre", "generado_en", "sondeo_s"],
+        "properties": {
+          "version_contrato": { "const": "0.1.0" },
+          "modo": { "$ref": "#/components/schemas/Modo" },
+          "nivel": { "$ref": "#/components/schemas/Nivel" },
+          "texto_libre": { "enum": ["desactivado", "modelo_local", "proveedor_aprobado"] },
+          "generado_en": { "type": "string", "format": "date-time" },
+          "sondeo_s": { "const": 300 }
+        }
+      },
+      "PeticionOrden": {
+        "type": "object", "additionalProperties": false, "required": ["orden"],
+        "properties": { "orden": { "type": "string", "minLength": 1, "maxLength": 200 } }
+      },
+      "FormaOrden": {
+        "type": "object", "additionalProperties": false, "required": ["forma", "ejemplo"],
+        "properties": { "forma": { "type": "string", "maxLength": 120 }, "ejemplo": { "type": "string", "maxLength": 120 } }
+      },
+      "Ayuda": {
+        "type": "object", "additionalProperties": false, "required": ["ordenes"],
+        "properties": { "ordenes": { "type": "array", "items": { "$ref": "#/components/schemas/FormaOrden" } } }
+      },
+      "OrdenEjecutada": {
+        "type": "object", "additionalProperties": false, "required": ["interpretada", "accion", "resultado"],
+        "properties": {
+          "interpretada": { "const": true },
+          "accion": { "enum": ["consulta", "porque", "correccion", "atencion", "avisos", "detalle", "adaptadores", "estado", "ayuda"] },
+          "resultado": { "oneOf": [
+            { "$ref": "#/components/schemas/Respuesta" }, { "$ref": "#/components/schemas/Porque" }, { "$ref": "#/components/schemas/Correccion" },
+            { "$ref": "#/components/schemas/Atencion" }, { "$ref": "#/components/schemas/ConfigAvisos" }, { "$ref": "#/components/schemas/Detalle" },
+            { "$ref": "#/components/schemas/ListaAdaptadores" }, { "$ref": "#/components/schemas/Estado" }, { "$ref": "#/components/schemas/Ayuda" }
+          ] }
+        }
+      },
+      "OrdenNoInterpretada": {
+        "type": "object", "additionalProperties": false, "required": ["interpretada", "motivo", "mensaje", "ordenes"],
+        "description": "Respuesta honesta: texto libre u orden mal formada. No es un error HTTP. El texto no se envía a ninguna parte ni se guarda.",
+        "properties": {
+          "interpretada": { "const": false },
+          "motivo": { "enum": ["texto_libre", "argumento_invalido"] },
+          "mensaje": { "type": "string", "maxLength": 200 },
+          "ordenes": { "type": "array", "items": { "$ref": "#/components/schemas/FormaOrden" } }
+        }
+      },
+      "RespuestaOrden": { "oneOf": [{ "$ref": "#/components/schemas/OrdenEjecutada" }, { "$ref": "#/components/schemas/OrdenNoInterpretada" }] }
+    }
+  }
+}

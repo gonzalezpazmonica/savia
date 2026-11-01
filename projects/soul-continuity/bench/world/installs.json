@@ -1,0 +1,724 @@
+{
+ "_doc": "Instalaciones del banco. config es lo que ve la implementación; env es estado del mundo que solo ven los dobles (tokens caducados, sesión web caducada).",
+ "installs": {
+  "pm": {
+   "world": "pm",
+   "config": {
+    "operator": {
+     "ref": "op-pm",
+     "identities": {
+      "emails": [
+       "pm@alfa.example"
+      ],
+      "github": "pm-gh",
+      "jira_account": "acc-pm"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "m365-mail",
+      "route": "graph",
+      "purpose": "Hilos que esperan mi respuesta y correos marcados",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-calendar",
+      "route": "graph",
+      "purpose": "Reuniones de hoy, mañana y próximas",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-teams",
+      "route": "graph",
+      "purpose": "Menciones en chats",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-files",
+      "route": "graph",
+      "purpose": "Documentos compartidos con comentarios",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "jira",
+      "route": "api",
+      "purpose": "Tareas asignadas",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "github",
+      "route": "api",
+      "purpose": "Revisiones, asignaciones y menciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     }
+    ],
+    "alert_rules": [
+     {
+      "id": "r-cfo",
+      "sender": "cfo@alfa.example"
+     },
+     {
+      "id": "r-socio",
+      "sender": "socio@externa.example"
+     }
+    ],
+    "id": "pm"
+   },
+   "env": {}
+  },
+  "pm-web": {
+   "world": "pm",
+   "config": {
+    "operator": {
+     "ref": "op-pm",
+     "identities": {
+      "emails": [
+       "pm@alfa.example"
+      ],
+      "github": "pm-gh",
+      "jira_account": "acc-pm"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "m365-mail",
+      "route": "web",
+      "purpose": "Hilos por Outlook en la web",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     }
+    ],
+    "alert_rules": [
+     {
+      "id": "r-cfo",
+      "sender": "cfo@alfa.example"
+     },
+     {
+      "id": "r-socio",
+      "sender": "socio@externa.example"
+     }
+    ],
+    "id": "pm-web"
+   },
+   "env": {}
+  },
+  "pm-teams-revoked": {
+   "world": "pm",
+   "config": {
+    "operator": {
+     "ref": "op-pm",
+     "identities": {
+      "emails": [
+       "pm@alfa.example"
+      ],
+      "github": "pm-gh",
+      "jira_account": "acc-pm"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "m365-mail",
+      "route": "graph",
+      "purpose": "Hilos que esperan mi respuesta y correos marcados",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-calendar",
+      "route": "graph",
+      "purpose": "Reuniones de hoy, mañana y próximas",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-teams",
+      "route": "graph",
+      "purpose": "Menciones en chats",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": "2026-11-01T00:00:00Z"
+      }
+     },
+     {
+      "adapter": "m365-files",
+      "route": "graph",
+      "purpose": "Documentos compartidos con comentarios",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "jira",
+      "route": "api",
+      "purpose": "Tareas asignadas",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "github",
+      "route": "api",
+      "purpose": "Revisiones, asignaciones y menciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     }
+    ],
+    "alert_rules": [
+     {
+      "id": "r-cfo",
+      "sender": "cfo@alfa.example"
+     },
+     {
+      "id": "r-socio",
+      "sender": "socio@externa.example"
+     }
+    ],
+    "id": "pm-teams-revoked"
+   },
+   "env": {}
+  },
+  "pm-dup": {
+   "world": "pm",
+   "config": {
+    "operator": {
+     "ref": "op-pm",
+     "identities": {
+      "emails": [
+       "pm@alfa.example"
+      ],
+      "github": "pm-gh",
+      "jira_account": "acc-pm"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "m365-mail",
+      "route": "graph",
+      "purpose": "Hilos que esperan mi respuesta y correos marcados",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-calendar",
+      "route": "graph",
+      "purpose": "Reuniones de hoy, mañana y próximas",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-teams",
+      "route": "graph",
+      "purpose": "Menciones en chats",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-files",
+      "route": "graph",
+      "purpose": "Documentos compartidos con comentarios",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "jira",
+      "route": "api",
+      "purpose": "Tareas asignadas",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "github",
+      "route": "api",
+      "purpose": "Revisiones, asignaciones y menciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "jira",
+      "route": "api",
+      "purpose": "Duplicado por error",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "slack",
+      "route": "api",
+      "purpose": "Adaptador inexistente",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     }
+    ],
+    "alert_rules": [],
+    "id": "pm-dup"
+   },
+   "env": {}
+  },
+  "dir": {
+   "world": "dir",
+   "config": {
+    "operator": {
+     "ref": "op-dir",
+     "identities": {
+      "emails": [
+       "dir@beta.example"
+      ],
+      "ado_id": "ado-dir"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "m365-calendar",
+      "route": "graph",
+      "purpose": "Reuniones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-mail",
+      "route": "web",
+      "purpose": "Hilos que esperan mi respuesta (Outlook en la web)",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "azure-devops",
+      "route": "api",
+      "purpose": "Elementos asignados y revisiones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "web",
+      "route": "web",
+      "purpose": "Panel de aprobaciones e intranet",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      },
+      "params": {
+       "sites": [
+        "aprobaciones",
+        "intranet"
+       ]
+      }
+     }
+    ],
+    "alert_rules": [
+     {
+      "id": "r-cfo",
+      "sender": "cfo@beta.example"
+     }
+    ],
+    "id": "dir"
+   },
+   "env": {}
+  },
+  "dir-graph": {
+   "world": "dir",
+   "config": {
+    "operator": {
+     "ref": "op-dir",
+     "identities": {
+      "emails": [
+       "dir@beta.example"
+      ],
+      "ado_id": "ado-dir"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "m365-calendar",
+      "route": "graph",
+      "purpose": "Reuniones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-mail",
+      "route": "graph",
+      "purpose": "Hilos que esperan mi respuesta",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "m365-teams",
+      "route": "graph",
+      "purpose": "Menciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "azure-devops",
+      "route": "api",
+      "purpose": "Elementos asignados y revisiones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "web",
+      "route": "web",
+      "purpose": "Panel de aprobaciones e intranet",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      },
+      "params": {
+       "sites": [
+        "aprobaciones",
+        "intranet"
+       ]
+      }
+     }
+    ],
+    "alert_rules": [
+     {
+      "id": "r-cfo",
+      "sender": "cfo@beta.example"
+     }
+    ],
+    "id": "dir-graph"
+   },
+   "env": {}
+  },
+  "inv": {
+   "world": "inv",
+   "config": {
+    "operator": {
+     "ref": "op-inv",
+     "identities": {
+      "emails": [
+       "inv@gamma.example"
+      ],
+      "github": "inv-gh"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "google-workspace",
+      "route": "api",
+      "purpose": "Correo, calendario y documentos",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "github",
+      "route": "api",
+      "purpose": "Revisiones, asignaciones y menciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "web",
+      "route": "web",
+      "purpose": "Estado de envíos a revista",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      },
+      "params": {
+       "sites": [
+        "revista"
+       ]
+      }
+     }
+    ],
+    "alert_rules": [
+     {
+      "id": "r-dir",
+      "sender": "director@gamma.example"
+     }
+    ],
+    "id": "inv"
+   },
+   "env": {}
+  },
+  "inv-expired": {
+   "world": "inv",
+   "config": {
+    "operator": {
+     "ref": "op-inv",
+     "identities": {
+      "emails": [
+       "inv@gamma.example"
+      ],
+      "github": "inv-gh"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "google-workspace",
+      "route": "api",
+      "purpose": "Correo, calendario y documentos",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "github",
+      "route": "api",
+      "purpose": "Revisiones, asignaciones y menciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "web",
+      "route": "web",
+      "purpose": "Estado de envíos a revista",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      },
+      "params": {
+       "sites": [
+        "revista"
+       ]
+      }
+     }
+    ],
+    "alert_rules": [],
+    "id": "inv-expired"
+   },
+   "env": {
+    "expired": {
+     "google": [
+      "t1"
+     ]
+    }
+   }
+  },
+  "doc": {
+   "world": "doc",
+   "config": {
+    "operator": {
+     "ref": "op-doc",
+     "identities": {
+      "emails": [
+       "doc@gamma.example"
+      ]
+     }
+    },
+    "sources": [
+     {
+      "adapter": "google-workspace",
+      "route": "api",
+      "purpose": "Correo, calendario y documentos",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "web",
+      "route": "web",
+      "purpose": "Campus virtual",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      },
+      "params": {
+       "sites": [
+        "campus"
+       ]
+      }
+     }
+    ],
+    "alert_rules": [],
+    "id": "doc"
+   },
+   "env": {}
+  },
+  "doc-session": {
+   "world": "doc",
+   "config": {
+    "operator": {
+     "ref": "op-doc",
+     "identities": {
+      "emails": [
+       "doc@gamma.example"
+      ]
+     }
+    },
+    "sources": [
+     {
+      "adapter": "google-workspace",
+      "route": "api",
+      "purpose": "Correo, calendario y documentos",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     },
+     {
+      "adapter": "web",
+      "route": "web",
+      "purpose": "Campus virtual",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      },
+      "params": {
+       "sites": [
+        "campus"
+       ]
+      }
+     }
+    ],
+    "alert_rules": [],
+    "id": "doc-session"
+   },
+   "env": {
+    "web_session_expired": [
+     "t0",
+     "t1"
+    ]
+   }
+  },
+  "min": {
+   "world": "min",
+   "config": {
+    "operator": {
+     "ref": "op-min",
+     "identities": {
+      "emails": [],
+      "github": "min-gh"
+     }
+    },
+    "sources": [
+     {
+      "adapter": "github",
+      "route": "api",
+      "purpose": "Revisiones y asignaciones",
+      "consent": {
+       "granted_at": "2026-10-01T09:00:00Z",
+       "revoked_at": null,
+       "statement": "Activo esta fuente bajo mi responsabilidad."
+      }
+     }
+    ],
+    "alert_rules": [],
+    "id": "min"
+   },
+   "env": {}
+  },
+  "min-vacia": {
+   "world": "min",
+   "config": {
+    "operator": {
+     "ref": "op-min",
+     "identities": {
+      "emails": [],
+      "github": "min-gh"
+     }
+    },
+    "sources": [],
+    "alert_rules": [],
+    "id": "min-vacia"
+   },
+   "env": {}
+  }
+ }
+}
