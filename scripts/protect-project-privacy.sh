@@ -44,7 +44,7 @@ die() {
 
 is_authorized() {
     local project="$1"
-    [ -f "$AUTHORIZED_FILE" ] && grep -qx "$project" "$AUTHORIZED_FILE" 2>/dev/null
+    [ -f "$AUTHORIZED_FILE" ] && grep -qxF -- "$project" "$AUTHORIZED_FILE" 2>/dev/null
 }
 
 get_whitelisted_projects() {
@@ -133,7 +133,8 @@ if git diff --cached --name-only 2>/dev/null | grep -q "^\.gitignore$"; then
 fi
 
 # Verificación 2: ¿Hay archivos staged en projects/ de un proyecto no whitelisteado?
-STAGED_PROJECTS=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
+# R incluido: un `git mv` hacia projects/<x>/ también publica (con ACM pasaba sin bloqueo).
+STAGED_PROJECTS=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null \
     | grep "^projects/" \
     | sed 's|^projects/||; s|/.*||' \
     | sort -u || true)
@@ -141,7 +142,7 @@ STAGED_PROJECTS=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
 if [[ -n "$STAGED_PROJECTS" ]]; then
     CURRENT_WHITELIST=$(get_whitelisted_projects)
     while IFS= read -r project; do
-        if ! echo "$CURRENT_WHITELIST" | grep -qx "$project"; then
+        if ! echo "$CURRENT_WHITELIST" | grep -qxF -- "$project"; then
             # Proyecto no está en whitelist pero hay archivos staged → alguien usó git add -f
             die "Intento de añadir archivos del proyecto '$project' que NO está en el whitelist.
 
