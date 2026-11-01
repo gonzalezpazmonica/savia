@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=172aec437197d59161a84f6d795a5366196930d87cb8190c24921c2b6ab2bc48
-timestamp=2026-11-01T09:46:43Z
+diff_hash=b60381830bcf195ef0f2f759573c3111945a113d684275b1bb3d8665f93fd2e7
+timestamp=2026-11-01T13:56:10Z
 branch=agent/s490-transparencia-20261023
-head_commit=f90b03bd
-signature=ce59a3e50b3aaace8d4346b3bc9beab5a1d858e0f557b9492184fe4f8bc3f53e
+head_commit=46750590
+signature=a8d7a41dc04e1ae9b4b812f570d3845c2808ce53f963983a9430c18dced9dc54
