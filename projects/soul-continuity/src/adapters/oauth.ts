@@ -118,9 +118,11 @@ function assertHttps(url: string): void {
   if (u.protocol !== "https:" && !(loopback && u.protocol === "http:")) throw new Error(`El endpoint de identidad debe ser HTTPS: ${u.origin}`);
 }
 
-// AADSTS65004 («la persona rechazó el consentimiento») no es de administración: va a
-// `no_credential`, sin ofrecer la ruta web con un motivo falso.
-const ADMIN_CODES = [65001, 90094, 90095, 900941, 90099];
+// AADSTS65004 («la persona rechazó el consentimiento») y AADSTS65001 («consentimiento no
+// concedido», que puede resolver la propia persona con un nuevo inicio de sesión) no son de
+// administración: van a `no_credential`, sin guardar una marca de administración ni ofrecer
+// la ruta web con un motivo falso.
+const ADMIN_CODES = [90094, 90095, 900941, 90099];
 const ADMIN = new RegExp(`AADSTS(${ADMIN_CODES.join("|")})\\b`);
 
 export function classifyOAuthError(b: unknown): "admin_consent_required" | "pending" | "slow_down" | "no_credential" {
