@@ -35,14 +35,13 @@ test("readJson con fichero corrupto lanza: no se adivina estado", () => {
   assert.deepEqual(readJson(join(d, "no.json"), { x: 1 }), { x: 1 });
 });
 
-test("readJsonl descarta la línea cortada y conserva las demás", () => {
+test("una línea cortada se descarta y no se traga la fila siguiente", () => {
   const d = tmp();
   const p = join(d, "l.jsonl");
-  appendJsonl(p, { n: 1 });
-  writeFileSync(p, '{"n":1}\n{"n":', { flag: "w" });
+  writeFileSync(p, '{"n":1}\n{"n":', { flag: "w" }); // escritura cortada a mitad
   appendJsonl(p, { n: 3 });
-  const rows = readJsonl(p);
-  assert.equal(rows.filter((r) => r !== null).length, 1);
+  const rows = readJsonl(p).filter((r) => r !== null);
+  assert.deepEqual(rows, [{ n: 1 }, { n: 3 }]);
 });
 
 test("cada operador tiene su directorio, distinto y estable", () => {

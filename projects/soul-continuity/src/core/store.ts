@@ -68,9 +68,11 @@ export function readJson<T>(path: string, fallback: T): T {
 
 export function appendJsonl(path: string, row: unknown): void {
   ensureDir(dirname(path));
+  // Si la última escritura quedó cortada (sin salto final), la fila nueva empieza en línea propia.
+  const torn = existsSync(path) && statSync(path).size > 0 && !readFileSync(path, "utf8").endsWith("\n");
   const fd = openSync(path, "a", 0o600);
   try {
-    writeSync(fd, JSON.stringify(row) + "\n");
+    writeSync(fd, (torn ? "\n" : "") + JSON.stringify(row) + "\n");
     fsyncSync(fd);
   } finally {
     closeSync(fd);

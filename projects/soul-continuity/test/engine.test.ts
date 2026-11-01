@@ -143,3 +143,12 @@ test("historial de Q3: con una lectura cada 5 min se conserva el día anterior (
   const files = readdirSync(join(stateDir, operatorDirName("op-a"), "history")).length;
   assert.ok(files <= 24 + 24 * 7 + 1, `historial acotado (${files})`);
 });
+
+test("resultado de adaptador mal formado: falla cerrado solo ese adaptador, el resto sigue", async () => {
+  const bad: SourceAdapter = { name: "jira", routes: ["api"], purpose: "t", async read() { return { status: "ok", route: "api", claims: [{ key: "jira:task_assigned:X", claim_type: "task_assigned" }] } as never; } };
+  const e = makeEngine({ github: fakeGithub({ n: 0 }), jira: bad });
+  const s = await e.snapshot({ install: install("op-a", [{ adapter: "github", purpose: "p", consent }, { adapter: "jira", purpose: "p", consent }]), now: NOW, stateDir: tmp(), env });
+  assert.equal(s.adapters.jira.status, "error");
+  assert.equal(s.adapters.github.status, "ok");
+  assert.deepEqual(s.claims.map((c) => c.key), ["github:review_request:r1#7"]);
+});

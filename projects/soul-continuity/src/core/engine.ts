@@ -21,7 +21,7 @@ import {
 } from "../contract/claims.ts";
 import {
   ADAPTERS, type Answer, type AnswerItem, type ContinuityImpl, type CorrectionRequest, DEFAULT_SENSITIVITY,
-  type InstallationConfig, type Question, type SnapshotRequest, type SourceAdapter, isLevel,
+  type InstallationConfig, type Question, type SnapshotRequest, type SourceAdapter, isLevel, validateAdapterResult,
 } from "../contract/adapter.ts";
 import { assertRunning } from "./failsafe.ts";
 import { appendJsonl, ensureDir, operatorDir, readJson, readJsonl, writeJson } from "./store.ts";
@@ -126,6 +126,11 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
         } catch {
           // Fail-closed: un adaptador que revienta no aporta nada y no tumba a los demás.
           status[an] = { status: "error", route, message: "el adaptador falló al leer" };
+          continue;
+        }
+        // Fail-closed: un resultado que no cumple el contrato no aporta nada y no tumba a los demás.
+        if (validateAdapterResult(r, an).length) {
+          status[an] = { status: "error", route, message: "el adaptador devolvió un resultado que no cumple el contrato" };
           continue;
         }
         if (r.status === "ok") {
