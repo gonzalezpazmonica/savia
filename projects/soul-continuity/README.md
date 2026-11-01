@@ -52,7 +52,7 @@ Sin perfil activo, Soul responde «no sé quién eres». Sin direcciones en `api
 | Lo revocado no vuelve; libro por operador | `test/engine.test.ts`, `test/cli.test.ts` |
 | AC-4d: por un frontend de agente solo salen recuentos | `test/cli.test.ts`, `test/config.test.ts` |
 | AC-5: revocar borra caché y credencial; desinstalar no deja estado | `test/cli.test.ts` |
-| 0 tokens en disco: el secreto solo por stdin al almacén del sistema | `test/credentials.test.ts` |
+| 0 tokens en disco: el secreto solo por stdin al almacén del sistema; el núcleo descarta la lectura de un adaptador que devuelve el token | `test/credentials.test.ts`, `test/engine.test.ts`, `test/cli.test.ts` |
 | Solo escucha en las direcciones configuradas (test de puertos) | `test/listen.test.ts` |
 | Contrato de la app: 27 tests de Labs contra el servidor del producto | `test/api/contrato.test.mjs` |
 | STOP durable | `test/failsafe.test.ts`, `test/serve.test.ts` |
@@ -65,8 +65,7 @@ npm run typecheck # tsc --strict (necesita npm install)
 
 ## Límites conocidos (v1)
 
-- **DPoP**: la API exige la cabecera `DPoP`, pero no verifica todavía la prueba firmada. En la práctica, el token del dispositivo funciona como portador. Lo protegen TLS con huella fijada, un token de 256 bits y la revocación.
+- **DPoP**: la API exige la cabecera `DPoP`, pero no verifica todavía la prueba firmada. En la práctica, el token del dispositivo funciona como portador. Lo protegen TLS con huella fijada, un token de 256 bits y la revocación. Verificar la prueba firmada queda pendiente antes del piloto (AC-7).
 - **AC-4d es de mejor esfuerzo frente a un agente adversario**: la detección del frontend usa variables de entorno y `--frontend`, y un agente podría borrarlas. Protege contra el uso normal desde Claude Code u OpenCode, no contra un agente que quiera saltárselo.
 - **Modo de atención y avisos de la API**: viven en memoria de `serve`. No se comparten con `soul mode`, que de momento solo deja constancia en `attention.json`, y no sobreviven a un reinicio. Tras reiniciar, la app tiene que volver a sondear sin cursor. La persistencia es de la parte `atencion`.
 - **Credenciales**: en Windows y macOS solo se han probado con un doble, no contra el almacén real. En Windows, `Add-Type` falla bajo Constrained Language Mode: entonces el almacén da error y el token no se guarda en ningún otro sitio.
-- **Lockfile**: `package-lock.json` está excluido por el `.gitignore` global. El CI instala las dependencias de desarrollo solo para `tsc`.
