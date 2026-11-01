@@ -89,6 +89,8 @@ export function makeGoogleAdapter(o: GoogleOptions = {}): SourceAdapter {
         const id = safeRef(x?.id);
         const at = Number(x?.internalDate);
         if (!id || !Number.isFinite(at)) continue;
+        // threads.get incluye borradores (From = yo): no son respuesta enviada y no cierran el hilo.
+        if (Array.isArray(x?.labelIds) && x.labelIds.includes("DRAFT")) continue;
         msgs.push({
           id, conv: tid, from, to: addrList(h("To")), cc: addrList(h("Cc")), at: iso(at),
           sent: Array.isArray(x?.labelIds) && x.labelIds.includes("SENT"), subject: h("Subject"),

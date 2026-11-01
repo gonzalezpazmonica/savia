@@ -25,6 +25,7 @@ export interface AzureDevOpsOptions {
 const WIQL = "SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] NOT IN ('Closed', 'Done', 'Removed') ORDER BY [System.ChangedDate] DESC";
 const FIELDS = "System.Title,System.State,Microsoft.VSTS.Scheduling.DueDate";
 const V = "api-version=7.1";
+const PR_TOP = 200;
 
 export function makeAzureDevOpsAdapter(o: AzureDevOpsOptions = {}): SourceAdapter {
   const maxItems = o.maxItems ?? 2000;
@@ -32,7 +33,7 @@ export function makeAzureDevOpsAdapter(o: AzureDevOpsOptions = {}): SourceAdapte
     const tok = await token(ctx, "ado", ["vso.work", "vso.code"]);
     const Authorization = ctx.params.auth === "pat" ? authHeader(Buffer.from(`:${tok}`).toString("base64"), "Basic") : authHeader(tok);
     const H = { Authorization };
-    const project = typeof ctx.params.project === "string" && /^[^/?#:]+$/.test(ctx.params.project) ? `/${encodeURIComponent(ctx.params.project)}` : "";
+    const project = typeof ctx.params.project === "string" && /^[^/?#:]+$/.test(ctx.params.project) && !/^\.{1,2}$/.test(ctx.params.project) ? `/${encodeURIComponent(ctx.params.project)}` : "";
     const get = async (url: string) => check(await ctx.transport.request({ service: "ado", method: "GET", url, headers: H }), "Azure DevOps");
 
     const w = check(await ctx.transport.request({ service: "ado", method: "POST", url: `${project}/_apis/wit/wiql?${V}`, headers: H, body: { query: WIQL } }), "Azure DevOps");
@@ -52,8 +53,11 @@ export function makeAzureDevOpsAdapter(o: AzureDevOpsOptions = {}): SourceAdapte
     let me = ctx.operator.identities.ado_id;
     if (!me) me = String((await get(`/_apis/connectionData`))?.authenticatedUser?.id ?? "");
     if (!me) throw new Stop("error", "Azure DevOps: no se pudo determinar tu identidad.");
-    const prs = await get(`${project}/_apis/git/pullrequests?searchCriteria.reviewerId=${encodeURIComponent(me)}&searchCriteria.status=active&$top=200&${V}`);
-    for (const p of Array.isArray(prs.value) ? prs.value : []) {
+    const prs = await get(`${project}/_apis/git/pullrequests?searchCriteria.reviewerId=${encodeURIComponent(me)}&searchCriteria.status=active&$top=${PR_TOP}&${V}`);
+    const prList: J[] = Array.isArray(prs.value) ? prs.value : [];
+    // Llegar al tope puede ocultar revisiones pendientes: fail-closed, como el resto de colecciones.
+    if (prList.length >= PR_TOP) throw new Stop("unavailable", `Azure DevOps: ${PR_TOP} o más pull requests activas como revisora; acota con params.project.`);
+    for (const p of prList) {
       const repo = safeRef(p?.repository?.name);
       const n = safeRef(p?.pullRequestId);
       if (!repo || !n) continue;

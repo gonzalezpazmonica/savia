@@ -59,6 +59,30 @@ test("Azure DevOps: sin ado_id lo obtiene de connectionData", async () => {
   }
 });
 
+test("Azure DevOps: llegar al tope de 200 pull requests falla cerrado; 199 se leen", async () => {
+  const mk = (n: number) => ({ async request(req: { url: string }) {
+    if (/wiql/.test(req.url)) return { status: 200, headers: {}, body: { workItems: [] } };
+    return { status: 200, headers: {}, body: { value: Array.from({ length: n }, (_, i) => ({ pullRequestId: i + 1, title: "t", repository: { name: "api" }, reviewers: [{ id: "ado-yo", vote: 0 }] })) } };
+  } });
+  const op = { ref: "op", identities: { emails: [], ado_id: "ado-yo" } };
+  assert.equal((await makeAzureDevOpsAdapter().read(ctxWith({ route: "api", transport: mk(200), operator: op }))).status, "unavailable");
+  const r = await makeAzureDevOpsAdapter().read(ctxWith({ route: "api", transport: mk(199), operator: op }));
+  assert.equal(keys(r).length, 199);
+});
+
+test("Azure DevOps: params.project «.» o «..» no se usa como segmento de ruta", async () => {
+  for (const project of [".", ".."]) {
+    const urls: string[] = [];
+    const fake = { async request(req: { url: string }) { urls.push(req.url); return { status: 200, headers: {}, body: { workItems: [], value: [] } }; } };
+    await makeAzureDevOpsAdapter().read(ctxWith({ route: "api", transport: fake, params: { project }, operator: { ref: "op", identities: { emails: [], ado_id: "ado-yo" } } }));
+    assert.ok(urls.every((u) => u.startsWith("/_apis/")), urls.join(" "));
+  }
+  const urls: string[] = [];
+  const fake = { async request(req: { url: string }) { urls.push(req.url); return { status: 200, headers: {}, body: { workItems: [], value: [] } }; } };
+  await makeAzureDevOpsAdapter().read(ctxWith({ route: "api", transport: fake, params: { project: "proj.v2" }, operator: { ref: "op", identities: { emails: [], ado_id: "ado-yo" } } }));
+  assert.ok(urls[0].startsWith("/proj.v2/_apis/"), "un nombre con punto sigue siendo válido");
+});
+
 test("Azure DevOps: 203 de la página de login es credencial caducada", async () => {
   const fake = { async request() { return { status: 203, headers: {}, body: "<html>login</html>" }; } };
   assert.equal((await makeAzureDevOpsAdapter().read(ctxWith({ route: "api", transport: fake }))).status, "token_expired");

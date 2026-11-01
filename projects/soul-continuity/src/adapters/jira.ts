@@ -47,8 +47,10 @@ export function makeJiraAdapter(o: JiraOptions = {}): SourceAdapter {
       const page = Array.isArray(b.issues) ? b.issues : [];
       issues.push(...page);
       if (legacy) {
+        // Sin `total` numérico no se sabe si quedan páginas: fail-closed, no truncado silencioso.
+        if (typeof b.total !== "number" || !Number.isFinite(b.total)) throw new Stop("unavailable", "Jira: la búsqueda clásica no devuelve total; no se dan datos incompletos.");
         startAt += page.length;
-        if (!page.length || startAt >= Number(b.total ?? 0)) break;
+        if (!page.length || startAt >= b.total) break;
       } else {
         next = typeof b.nextPageToken === "string" && b.nextPageToken ? b.nextPageToken : undefined;
         if (!next || b.isLast === true) break;

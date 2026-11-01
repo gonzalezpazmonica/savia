@@ -54,6 +54,18 @@ test("Jira: sin /search/jql cae a la búsqueda clásica con startAt", async () =
   }
 });
 
+test("Jira: búsqueda clásica sin total falla cerrado en vez de cortar tras la primera página", async () => {
+  const urls: string[] = [];
+  const fake = { async request(req: { url: string }) {
+    urls.push(req.url);
+    if (req.url.startsWith("/rest/api/3/search/jql")) return { status: 404, headers: {}, body: {} };
+    return { status: 200, headers: {}, body: { startAt: 0, issues: [{ key: "PRJ-1", fields: { summary: "x" } }] } };
+  } };
+  const r = await makeJiraAdapter().read(ctxWith({ route: "api", transport: fake }));
+  assert.equal(r.status, "unavailable");
+  assert.equal(urls.length, 2, "una lectura moderna (404) y una clásica");
+});
+
 test("Jira: el tope de páginas falla cerrado", async () => {
   const { mock, ctx } = await setup(issues);
   try {

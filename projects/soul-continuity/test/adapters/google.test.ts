@@ -82,6 +82,18 @@ test("Google: una respuesta enviada desde un alias (etiqueta SENT) cierra el hil
   }
 });
 
+test("Google: un borrador sin enviar (DRAFT) no cierra el hilo que espera mi respuesta", async () => {
+  const { mock, ctx } = await setup((d) => {
+    d.google.messages.push({ id: "b1", thread: "tb", from: "ana@ext.example", to: [ME], at: "2026-11-01T10:00:00Z", subject: "Pregunta", labels: ["INBOX"] });
+    d.google.messages.push({ id: "b2", thread: "tb", from: ME, to: ["ana@ext.example"], at: "2026-11-01T11:00:00Z", subject: "Re", labels: ["DRAFT"] });
+  });
+  try {
+    assert.deepEqual(keys(await makeGoogleAdapter().read(ctx())), ["google-workspace:awaiting_reply:tb@b1"]);
+  } finally {
+    await mock.close();
+  }
+});
+
 test("Google Tasks opcional: tareas con fecha y sin completar, sin notas", async () => {
   const { mock, ctx, asked } = await setup(world);
   try {
