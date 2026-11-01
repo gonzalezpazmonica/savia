@@ -216,7 +216,9 @@ export class Politica {
           sinAutenticar = ev.origen === 'NO_AUTENTICADO';
           tipo = { k: 'NOTIFICACION' };
         }
-      } else if (!sinAutenticar) {
+      } else if (!sinAutenticar && (tipo.k === 'AVISO' || tipo.k === 'NOTIFICACION')) {
+        // Como en la web, solo un aviso con regla es alerta. Un permiso, una decisión o un
+        // reintento siguen su camino: no saltan la comprobación de contrato ni la de duplicados.
         return this.decidirAlerta(ev, regla, ahora, d);
       }
     }
@@ -395,19 +397,29 @@ export class Politica {
 
   /**
    * Un único mensaje «hay N alertas más» con la lista de las que superaron el tope.
-   * Vacía la cola: lo que no se pueda emitir ahora se emite en la siguiente llamada.
+   * Vacía la cola: lo que no se pueda emitir ahora se emite en la siguiente llamada. Lo que
+   * sale aquí queda entregado y el resumen ya no lo repite.
    */
   drenarAlertasAgrupadas(): MensajeAlertasAgrupadas | null {
     const ids = this.estado.excedidas;
     if (ids.length === 0) return null;
     this.estado.excedidas = [];
-    const textos = ids.map((id) => this.bandeja.porEvento(id)?.texto ?? null);
+    const items = ids.map((id) => this.bandeja.porEvento(id));
+    for (const i of items) if (i) i.pendiente = false;
+    const textos = items.map((i) => i?.texto ?? null);
     return { n: ids.length, eventoIds: [...ids], textos, texto: `hay ${ids.length} alertas más` };
   }
 
-  /** Devuelve a la cola, delante y sin duplicar, las alertas de un mensaje que no se entregó. */
+  /**
+   * Devuelve a la cola, delante y sin duplicar, las alertas de un mensaje que no se entregó.
+   * Vuelven a estar pendientes.
+   */
   reencolarAlertasAgrupadas(msg: MensajeAlertasAgrupadas): void {
     const pendientes = this.estado.excedidas.filter((id) => !msg.eventoIds.includes(id));
     this.estado.excedidas = [...msg.eventoIds, ...pendientes];
+    for (const id of msg.eventoIds) {
+      const i = this.bandeja.porEvento(id);
+      if (i) i.pendiente = true;
+    }
   }
 }

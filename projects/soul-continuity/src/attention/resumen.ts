@@ -72,5 +72,8 @@ export function resumenesDebidos(pol: Politica, ahora: Minuto): MensajeResumen[]
   }
   // Al final, para que inicio y cierre debidos a la vez lleven lo mismo.
   for (const i of entregados) i.pendiente = false;
+  // Una alerta sobre el tope que ya salió en el resumen no vuelve en «hay N alertas más».
+  const dados = new Set([...entregados].map((i) => i.eventoId));
+  if (dados.size > 0) pol.estado.excedidas = pol.estado.excedidas.filter((id) => !dados.has(id));
   return salida;
 }

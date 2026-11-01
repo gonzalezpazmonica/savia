@@ -1,9 +1,10 @@
 // Comprobación de mutaciones: cada regla rota debe hacer fallar algún test o eval.
 //
 // Copia `src/attention` y `tests/attention` a un directorio temporal, aplica una mutación
-// cada vez, ejecuta los tests y las evals y anota MUERTA (algo falla) o VIVA (nada falla).
-// Sale con 1 si queda alguna viva o si una mutación no se puede aplicar (el texto original
-// debe aparecer exactamente una vez).
+// cada vez, ejecuta los tests y las evals y anota MUERTA (falla una aserción o una eval), ROTA
+// (el mutante no arranca o lanza fuera de toda aserción: no prueba la regla) o VIVA (nada
+// falla). Sale con 1 si queda alguna viva o rota, y con 2 si una mutación no se puede aplicar
+// (el texto original debe aparecer exactamente una vez).
 //
 // M01–M18: las 18 mutaciones de Labs (soul-atencion), reescritas contra el código TypeScript.
 // M19–M36: las de AC-4b (alertas con tope, modos, remitente, resúmenes, registro de demanda).
@@ -12,6 +13,8 @@
 // franjas y estado).
 // M51–M57: segunda revisión de la PR #1441 (lo entregado no queda pendiente, la web solo
 // degrada avisos, ruta desconocida fail-closed y estado sin líneas repetidas).
+// M58–M61: revisión independiente de la PR #1441 (una alerta sobre el tope sale una sola vez y
+// una regla de alerta no salta el tipo del evento).
 //
 // Uso: node --experimental-strip-types tests/attention/bench/mutaciones.ts
 import { spawnSync } from 'node:child_process';
@@ -32,7 +35,7 @@ const TODOS = "['DISPONIBLE', 'FOCO', 'DESCANSO', 'FUERA'] as const";
 const MUTACIONES: Array<[string, string, string, string]> = [
   ['M01 sin comprobar ventana', POL, 'const inst = instanciaEn(ventanas, ahora);', 'const inst = instanciaEn(ventanas, ahora) ?? 0;'],
   ['M02 sin presupuesto', POL, '>= this.presupuesto) {', '>= Number.MAX_SAFE_INTEGER) {'],
-  ['M03 alerta sin fuente autenticada', POL, '} else if (!sinAutenticar) {\n        return this.decidirAlerta', '} else {\n        return this.decidirAlerta'],
+  ['M03 alerta sin fuente autenticada', POL, "} else if (!sinAutenticar && (tipo.k === 'AVISO'", "} else if ((tipo.k === 'AVISO'"],
   ['M04 veto ignorado', POL, "} else if (ev.objetivo !== null && this.estado.vetos.has(ev.objetivo)) {\n      bloqueo = m('VETADO');", "} else if (false) {\n      bloqueo = m('VETADO');"],
   ['M05 silencio como permiso', POL, 'this.bandeja.anotar(ev.tipo.decisionId, {', 'this.bandeja.resolver(ev.tipo.decisionId);\n      this.bandeja.anotar(ev.tipo.decisionId, {'],
   ['M06 el LLM eleva urgencia', POL, 'return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? null;', "return this.config.alertas.find((r) => r.codigo === ev.codigoAlerta) ?? (ev.urgenciaSugeridaLlm === 'CRITICA' ? (this.config.alertas[0] ?? null) : null);"],
@@ -87,13 +90,21 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M55 una ruta desconocida es API', PUE, "return RUTAS_API.has(route as string) ? 'API' : 'WEB';", "return route === 'web' ? 'WEB' : 'API';"],
   ['M56 el estado acepta un PARA repetido', EST, 'if (vistas.has(unica)) return null;', ''],
   ['M57 contadores repetidos por ventana se aceptan', EST, "? `${k}=${entero(v.split(',')[0] ?? '')}`", "? l"],
+  ['M58 la alerta drenada sigue pendiente', POL, 'for (const i of items) if (i) i.pendiente = false;', ''],
+  ['M59 reencolar no la vuelve a dejar pendiente', POL, 'if (i) i.pendiente = true;', ''],
+  ['M60 el resumen no saca la alerta de la cola agrupada', RES, 'if (dados.size > 0) pol.estado.excedidas', 'if (false) pol.estado.excedidas'],
+  ['M61 una regla convierte cualquier tipo en alerta', POL, "} else if (!sinAutenticar && (tipo.k === 'AVISO' || tipo.k === 'NOTIFICACION')) {", '} else if (!sinAutenticar) {'],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const proyecto = join(aqui, '..', '..', '..');
 const NODE = ['--experimental-strip-types', '--no-warnings'];
 
-const TESTS = ['--test', 'tests/attention/politica.test.ts', 'tests/attention/ac4b.test.ts', 'tests/attention/contrato.test.ts'];
+const TESTS = [
+  '--test', '--test-reporter=tap',
+  'tests/attention/politica.test.ts', 'tests/attention/ac4b.test.ts', 'tests/attention/contrato.test.ts',
+  'tests/attention/resumen.test.ts',
+];
 
 /** Copia lo que necesitan los tests: la librería, el contrato del que tira el puente y los tests. */
 function copiar(dest: string): void {
@@ -101,20 +112,39 @@ function copiar(dest: string): void {
   cpSync(join(proyecto, 'tests', 'attention'), join(dest, 'tests', 'attention'), { recursive: true, filter: (s) => !s.includes('bench') });
 }
 
-function correr(args: string[], cwd: string): number {
-  return spawnSync(process.execPath, [...NODE, ...args], { cwd, stdio: 'ignore' }).status ?? 1;
+type Salida = 'pasa' | 'FALLA' | 'CRASH';
+
+function correr(args: string[], cwd: string): { status: number; out: string } {
+  const r = spawnSync(process.execPath, [...NODE, ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  return { status: r.status ?? 1, out: r.stdout ?? '' };
+}
+
+/** Los tests solo matan si falla una aserción; cualquier otro fallo es que no arrancó. */
+function tests(cwd: string): Salida {
+  const r = correr(TESTS, cwd);
+  if (r.status === 0) return 'pasa';
+  return r.out.includes("code: 'ERR_ASSERTION'") ? 'FALLA' : 'CRASH';
+}
+
+/** Las evals solo matan si terminan y alguna métrica falla; sin resumen final, no arrancaron. */
+function evals(cwd: string): Salida {
+  const r = correr(['tests/attention/evals.ts'], cwd);
+  const fin = /^PASS (\d+) · FAIL (\d+)$/m.exec(r.out);
+  if (r.status === 0 && fin !== null && fin[2] === '0') return 'pasa';
+  return fin !== null && fin[2] !== '0' ? 'FALLA' : 'CRASH';
 }
 
 function main(): number {
   const filas = ['mutacion\ttests\tevals\tveredicto'];
   let vivas = 0;
+  let rotas = 0;
   // La base debe estar verde: si no, todo parecería «muerto».
   const base = mkdtempSync(join(tmpdir(), 'mut-base-'));
   copiar(base);
-  const tb = correr(TESTS, base);
-  const eb = correr(['tests/attention/evals.ts'], base);
+  const tb = tests(base);
+  const eb = evals(base);
   rmSync(base, { recursive: true, force: true });
-  if (tb !== 0 || eb !== 0) {
+  if (tb !== 'pasa' || eb !== 'pasa') {
     console.error('La base no está en verde: no se puede medir.');
     return 2;
   }
@@ -129,11 +159,12 @@ function main(): number {
         return 2;
       }
       writeFileSync(ruta, texto.replace(antes, () => despues));
-      const t = correr(TESTS, tmp);
-      const e = correr(['tests/attention/evals.ts'], tmp);
-      const muerta = t !== 0 || e !== 0;
-      if (!muerta) vivas++;
-      const fila = `${nombre}\t${t ? 'FALLA' : 'pasa'}\t${e ? 'FALLA' : 'pasa'}\t${muerta ? 'MUERTA' : 'VIVA'}`;
+      const t = tests(tmp);
+      const e = evals(tmp);
+      const veredicto = t === 'FALLA' || e === 'FALLA' ? 'MUERTA' : t === 'CRASH' || e === 'CRASH' ? 'ROTA' : 'VIVA';
+      if (veredicto === 'VIVA') vivas++;
+      if (veredicto === 'ROTA') rotas++;
+      const fila = `${nombre}\t${t}\t${e}\t${veredicto}`;
       filas.push(fila);
       console.log(fila);
     } finally {
@@ -141,8 +172,8 @@ function main(): number {
     }
   }
   writeFileSync(join(aqui, 'mutaciones.tsv'), `${filas.join('\n')}\n`);
-  console.log(`vivas: ${vivas} de ${MUTACIONES.length}`);
-  return vivas > 0 ? 1 : 0;
+  console.log(`vivas: ${vivas} · rotas: ${rotas} de ${MUTACIONES.length}`);
+  return vivas > 0 || rotas > 0 ? 1 : 0;
 }
 
 process.exitCode = main();
