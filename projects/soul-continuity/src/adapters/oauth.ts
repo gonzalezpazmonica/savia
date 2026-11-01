@@ -118,7 +118,10 @@ function assertHttps(url: string): void {
   if (u.protocol !== "https:" && !(loopback && u.protocol === "http:")) throw new Error(`El endpoint de identidad debe ser HTTPS: ${u.origin}`);
 }
 
-const ADMIN = /AADSTS(65001|65004|90094|90095|900941|90099)\b/;
+// AADSTS65004 («la persona rechazó el consentimiento») no es de administración: va a
+// `no_credential`, sin ofrecer la ruta web con un motivo falso.
+const ADMIN_CODES = [65001, 90094, 90095, 900941, 90099];
+const ADMIN = new RegExp(`AADSTS(${ADMIN_CODES.join("|")})\\b`);
 
 export function classifyOAuthError(b: unknown): "admin_consent_required" | "pending" | "slow_down" | "no_credential" {
   const e = (typeof b === "object" && b !== null ? b : {}) as { error?: unknown; error_description?: unknown; error_codes?: unknown };
@@ -127,7 +130,7 @@ export function classifyOAuthError(b: unknown): "admin_consent_required" | "pend
   const codes = Array.isArray(e.error_codes) ? e.error_codes.map(Number) : [];
   if (err === "authorization_pending") return "pending";
   if (err === "slow_down") return "slow_down";
-  if (err === "consent_required" || err === "admin_policy_enforced" || ADMIN.test(desc) || codes.some((c) => [65001, 65004, 90094, 90095, 900941, 90099].includes(c))) {
+  if (err === "consent_required" || err === "admin_policy_enforced" || ADMIN.test(desc) || codes.some((c) => ADMIN_CODES.includes(c))) {
     return "admin_consent_required";
   }
   return "no_credential";

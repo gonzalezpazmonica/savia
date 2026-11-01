@@ -172,6 +172,9 @@ test("classifyOAuthError: códigos de Microsoft y de Google", () => {
   assert.equal(classifyOAuthError({ error: "invalid_grant", error_description: "AADSTS65001: not consented" }), "admin_consent_required");
   assert.equal(classifyOAuthError({ error: "admin_policy_enforced" }), "admin_consent_required");
   assert.equal(classifyOAuthError({ error: "access_denied", error_description: "AADSTS90094" }), "admin_consent_required");
+  assert.equal(classifyOAuthError({ error: "access_denied", error_codes: [90095] }), "admin_consent_required");
+  assert.equal(classifyOAuthError({ error: "access_denied", error_description: "AADSTS65004: User declined to consent" }), "no_credential");
+  assert.equal(classifyOAuthError({ error: "access_denied", error_codes: [65004] }), "no_credential");
   assert.equal(classifyOAuthError({ error: "authorization_pending" }), "pending");
   assert.equal(classifyOAuthError({ error: "slow_down" }), "slow_down");
   assert.equal(classifyOAuthError({ error: "expired_token" }), "no_credential");
