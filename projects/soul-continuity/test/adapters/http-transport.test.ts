@@ -100,6 +100,39 @@ test("solo lectura: rechaza POST salvo las lecturas por POST de la lista cerrada
   }
 });
 
+test("POST de lectura: una URL absoluta del mismo origen fuera de la ruta de la base se rechaza", async () => {
+  let hits = 0;
+  const s = await serve((_q, res) => { hits++; json(res, 200, { ok: true }); });
+  try {
+    const t = new HttpTransport({ bases: { ado: `${s.base}/org` } });
+    await assert.rejects(t.request({ service: "ado", method: "POST", url: `${s.base}/abc/proj/_apis/wit/wiql`, body: {} }), TransportRefused);
+    await assert.rejects(t.request({ service: "ado", method: "POST", url: `${s.base}/orgx/_apis/wit/wiql`, body: {} }), TransportRefused);
+    assert.equal(hits, 0);
+    assert.equal((await t.request({ service: "ado", method: "POST", url: `${s.base}/org/proj/_apis/wit/wiql`, body: {} })).status, 200);
+    assert.equal((await t.request({ service: "ado", method: "POST", url: "/proj/_apis/wit/wiql", body: {} })).status, 200);
+  } finally {
+    await s.close();
+  }
+});
+
+test("respuesta por encima de maxBytes: error, con o sin Content-Length; en el tope, se lee", async () => {
+  const big = "x".repeat(2000);
+  const s = await serve((req, res) => {
+    if (req.url === "/chunked") { res.writeHead(200, { "content-type": "text/plain" }); res.write(big); res.end(big); return; }
+    if (req.url === "/justo") { res.writeHead(200, { "content-type": "text/plain" }); res.end("y".repeat(1000)); return; }
+    res.writeHead(200, { "content-type": "text/plain", "content-length": String(big.length) });
+    res.end(big);
+  });
+  try {
+    const t = new HttpTransport({ bases: { graph: s.base }, maxBytes: 1000 });
+    await assert.rejects(t.request({ service: "graph", method: "GET", url: "/declarada" }), /supera 1000 bytes/);
+    await assert.rejects(t.request({ service: "graph", method: "GET", url: "/chunked" }), /supera 1000 bytes/);
+    assert.equal((await t.request({ service: "graph", method: "GET", url: "/justo" })).body, "y".repeat(1000));
+  } finally {
+    await s.close();
+  }
+});
+
 test("rechaza URL absoluta de otro origen y servicios sin base", async () => {
   const t = new HttpTransport({ bases: { graph: "https://graph.example" } });
   await assert.rejects(t.request({ service: "graph", method: "GET", url: "https://malo.example/v1.0/me" }), TransportRefused);
