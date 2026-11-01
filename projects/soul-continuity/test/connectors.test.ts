@@ -125,7 +125,7 @@ const WEB_INSTALADO = existsSync(new URL("../src/web/node_modules/playwright-cor
 test("el registro carga el adaptador web real de src/web (rutas de importación correctas)", { skip: !WEB_INSTALADO && "playwright-core no instalado en src/web" }, async () => {
   const d = tmp();
   const r = await productionAdapters({ dataDir: d, connectors: { enabled: ["web"] } }).web?.read(ctx({ params: { ejecutable: "/no/existe" } }));
-  // Sin recetas ni páginas vigiladas no abre el navegador: el módulo real responde, no «no instalado».
-  assert.equal(r?.status, "recipe_disabled");
+  // Sin recetas ni páginas vigiladas no abre el navegador: el módulo real responde «sin configurar» (#1443), no «no instalado».
+  assert.equal(r?.status, "not_configured");
   assert.ok(existsSync(join(webDir(d), "perfil", ".perfil-soul")), "perfil dedicado dentro del directorio de datos de Soul");
 });

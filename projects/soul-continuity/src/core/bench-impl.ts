@@ -31,6 +31,19 @@ export function benchRegistry(o: { reference?: boolean } = {}): AdapterRegistry 
   if (o.reference) return ref;
   // Los dobles firman Gmail como `mx.google.example` (dominio reservado de pruebas).
   const real: Record<string, SourceAdapter> = makeApiAdapters({ gmailAuthservIds: ["mx.google.example"] });
+  // Los dobles del banco no sirven `/me` y en ellos el id de Teams es el correo: se da como
+  // `m365_user_id`, igual que lo configuraría el operador (como el arnés de test/adapters).
+  const teams = real["m365-teams"];
+  if (teams) {
+    real["m365-teams"] = {
+      ...teams,
+      read: (ctx) => {
+        const email = ctx.operator.identities.emails[0];
+        if (ctx.params.m365_user_id !== undefined || !email) return teams.read(ctx);
+        return teams.read({ ...ctx, params: { ...ctx.params, m365_user_id: email } });
+      },
+    };
+  }
   const out: AdapterRegistry = {};
   for (const name of new Set([...Object.keys(ref), ...Object.keys(real)])) {
     const a = byRoute(real[name], ref[name]);
