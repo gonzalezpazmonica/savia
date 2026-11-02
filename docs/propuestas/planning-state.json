@@ -1668,6 +1668,15 @@
       "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-493",
+      "status": "PROPOSED",
+      "priority": "P0",
+      "title": "Effect Ledger y reconciliación de efectos ambiguos",
+      "note": "Ledger único de efectos con clave idempotente, huella de argumentos, write-ahead de DISPATCHED, sonda remota y estado NEEDS_REVIEW; ningún estado ambiguo devuelve «adelante». Recibo encadenado y verificable. Corrige que f5-state.sh y push-pr.sh permiten repetir un merge de resultado incierto y que effect-reservation.sh cuenta como cierre sin consumidores. Origen: análisis de repos externos (SAVIA-RESEARCH-01, V1); patrón de OpenRath sin adoptar el producto.",
+      "evidence": "docs/specs/SE-493-effect-ledger-ambiguous-reconciliation.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
