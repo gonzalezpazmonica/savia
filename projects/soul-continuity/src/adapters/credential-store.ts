@@ -15,7 +15,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { CredentialStore } from "../contract/adapter.ts";
-import { SOUL_CRED_CS } from "../credentials/store.ts";
+import { SOUL_CRED_CS, powershellPath } from "../credentials/store.ts";
 import type { TokenSet } from "./oauth.ts";
 
 export interface SecretBackend {
@@ -148,7 +148,8 @@ function run(cmd: string, args: string[], stdin: string): Promise<Run> {
 }
 
 function checkKey(k: string): string {
-  if (!KEY_RE.test(k)) throw new Error("clave del almacén inválida");
+  // `<clave>/part-i` es el nombre de los trozos en Windows: una clave así pisaría un trozo de otra.
+  if (!KEY_RE.test(k) || /\/part-\d+$/.test(k)) throw new Error("clave del almacén inválida");
   return k;
 }
 
@@ -192,32 +193,40 @@ export const macosCommands = {
  * Windows: Credential Manager (CredRead/CredWrite/CredDelete de advapi32) por PowerShell, sin
  * módulos nativos. Cada entrada admite 2560 bytes de valor y el JSON con los tokens de Entra
  * suele pasar de 5 KB, así que el valor se guarda en base64 repartido en varias entradas:
- * `<clave>` lleva «N:» y el primer trozo; `<clave>/part-i`, el resto. Tamaño máximo:
+ * `<clave>` lleva «N:hash:» y el primer trozo; `<clave>/part-i`, el resto. El hash (16 hex de
+ * SHA-256 del base64 completo) descarta una mezcla de dos valores si un `set` se corta a medias
+ * o compite con otro: se lee como sin credencial, nunca como un token corrupto. Tamaño máximo:
  * `WIN_MAX_PARTS × WIN_PART` caracteres de base64 (unos 28 KB de valor).
  */
 export const WIN_PART = 1200; // caracteres por entrada: el blob va en UTF-16, 2400 de 2560 bytes
 export const WIN_MAX_PARTS = 32;
 const partTarget = (k: string, i: number) => (i === 0 ? k : `${k}/part-${i}`);
+const PART_RE = /^[A-Za-z0-9+/=]+$/;
 
-/** Reparte el valor en trozos para Credential Manager. El primero lleva el número de trozos. */
+/** Reparte el valor en trozos para Credential Manager. El primero lleva el número de trozos y el hash. */
 export function splitParts(v: string): string[] {
   const b = Buffer.from(v, "utf8").toString("base64");
   const n = Math.max(1, Math.ceil(b.length / WIN_PART));
   if (n > WIN_MAX_PARTS) throw new Error("credencial demasiado grande para Credential Manager");
   const parts = Array.from({ length: n }, (_, i) => b.slice(i * WIN_PART, (i + 1) * WIN_PART));
-  parts[0] = `${n}:${parts[0]}`;
+  parts[0] = `${n}:${h16(b)}:${parts[0]}`;
   return parts;
 }
 
-/** Reconstruye el valor; null si falta la cabecera o algún trozo (entrada incompleta = sin credencial). */
+/**
+ * Reconstruye el valor; null si falta la cabecera o algún trozo, o si el hash no cuadra
+ * (entrada incompleta o mezclada = sin credencial).
+ */
 export function joinParts(found: (string | null)[]): string | null {
-  const m = /^(\d{1,2}):([A-Za-z0-9+/=]*)$/.exec(found[0] ?? "");
+  const m = /^(\d{1,2}):([0-9a-f]{16}):([A-Za-z0-9+/=]*)$/.exec(found[0] ?? "");
   if (!m) return null;
   const n = Number(m[1]);
   if (n < 1 || n > WIN_MAX_PARTS) return null;
   const rest = found.slice(1, n);
-  if (rest.length !== n - 1 || rest.some((x) => x === null || !/^[A-Za-z0-9+/=]+$/.test(x))) return null;
-  return Buffer.from(m[2] + rest.join(""), "base64").toString("utf8");
+  if (rest.length !== n - 1 || rest.some((x) => x === null || !PART_RE.test(x))) return null;
+  const b = m[3] + rest.join("");
+  if (h16(b) !== m[2]) return null;
+  return Buffer.from(b, "base64").toString("utf8");
 }
 
 /**
@@ -257,7 +266,7 @@ export class WindowsCredentialBackend implements SecretBackend {
     this.run = o.run ?? run;
   }
   private async call(ops: WinOp[]): Promise<string[]> {
-    const r = await this.run("powershell.exe", WIN_PS_ARGS, JSON.stringify({ ops }));
+    const r = await this.run(powershellPath(), WIN_PS_ARGS, JSON.stringify({ ops }));
     const lines = r.stdout.split(/\r?\n/);
     if (lines.at(-1) === "") lines.pop();
     // Un código distinto de 0 o una respuesta que no cuadra es un fallo, nunca «no hay credencial».
@@ -281,10 +290,18 @@ export class WindowsCredentialBackend implements SecretBackend {
     await this.call(ops);
     if ((await this.get(k)) !== v) throw new Error("el almacén del sistema no guardó la credencial íntegra");
   }
+  /**
+   * Borra la cabecera y todos los trozos. true si había una credencial legible; los trozos
+   * huérfanos (sin cabecera válida) se limpian igual, pero devuelven false.
+   * Dos arranques de PowerShell: lectura + borrado en uno, y la relectura de comprobación.
+   */
   async delete(k: string): Promise<boolean> {
-    const had = (await this.get(k)) !== null;
+    checkKey(k);
+    const reads = this.readAll(k);
     // La cabecera, la última: si se corta a medias, lo que queda no se lee como credencial.
-    await this.call(Array.from({ length: WIN_MAX_PARTS }, (_, i) => ({ op: "d" as const, t: partTarget(k, WIN_MAX_PARTS - 1 - i) })));
+    const dels = Array.from({ length: WIN_MAX_PARTS }, (_, i) => ({ op: "d" as const, t: partTarget(k, WIN_MAX_PARTS - 1 - i) }));
+    const lines = await this.call([...reads, ...dels]);
+    const had = joinParts(lines.slice(0, WIN_MAX_PARTS).map((l) => (l.startsWith("+") ? l.slice(1) : null))) !== null;
     if ((await this.get(k)) !== null) throw new Error("el almacén del sistema no borró la credencial");
     return had;
   }

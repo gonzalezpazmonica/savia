@@ -139,9 +139,19 @@ exit 2`;
 
 export const PS_ARGS = ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(PS_SCRIPT, "utf16le").toString("base64")];
 
+/**
+ * Ruta absoluta de Windows PowerShell. Por nombre, Windows busca antes en el directorio de
+ * trabajo que en PATH: un `powershell.exe` plantado ahí recibiría los secretos por stdin.
+ */
+export function powershellPath(env: Record<string, string | undefined> = process.env): string {
+  const root = env.SystemRoot ?? env.windir ?? "C:\\Windows";
+  if (!/^[A-Za-z]:\\[^"<>|?*]*$/.test(root)) throw new Error("SystemRoot no es una ruta absoluta de Windows");
+  return `${root.replace(/\\+$/, "")}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+}
+
 export function windowsBackend(run: Run): SecretBackend {
   const target = (s: string, a: string) => `${APP}/${s}/${a}`;
-  const call = (data: Record<string, string>) => run("powershell.exe", PS_ARGS, JSON.stringify(data) + "\n");
+  const call = (data: Record<string, string>) => run(powershellPath(), PS_ARGS, JSON.stringify(data) + "\n");
   return {
     name: "credential-manager",
     async get(s, a) {

@@ -7,6 +7,7 @@ import {
   CommandBackend, MemoryBackend, SecretToolBackend, SystemCredentialStore, WIN_MAX_PARTS, WIN_PS_ARGS, WindowsCredentialBackend,
   entryKey, joinParts, macosCommands, splitParts, systemBackend, type RunFn,
 } from "../../src/adapters/credential-store.ts";
+import { powershellPath } from "../../src/credentials/store.ts";
 
 const NOW = 1_000_000_000;
 const set = (over = {}) => JSON.stringify({ access_token: "at-ok", refresh_token: "rt-ok", expires_at: NOW + 3600_000, scopes: ["Mail.Read"], ...over });
@@ -216,7 +217,7 @@ test("Windows: un JSON de tokens de Graph de más de 5 KB se guarda, se lee y se
   for (const v of d.vault.values()) assert.ok(v.length * 2 <= 2560, "cada entrada cabe en CredWrite");
   // Ni en la línea de órdenes ni en claro por stdin: el script va sin datos y el valor en base64.
   for (const c of d.calls) {
-    assert.equal(c.cmd, "powershell.exe");
+    assert.equal(c.cmd, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
     assert.deepEqual(c.args, WIN_PS_ARGS);
     assert.ok(!c.args.join(" ").includes("SECRETO"));
     assert.ok(!c.stdin.includes("SECRETO"));
@@ -272,17 +273,93 @@ test("Windows: entrada incompleta o ajena se lee como sin credencial", async () 
 });
 
 test("Windows: reparto en trozos — límites", () => {
-  assert.deepEqual(splitParts(""), ["1:"]);
-  assert.equal(joinParts(["1:"]), "");
+  assert.match(splitParts("")[0], /^1:[0-9a-f]{16}:$/);
+  assert.equal(joinParts(splitParts("")), "");
+  assert.equal(joinParts(["1:"]), null, "cabecera sin hash");
   assert.equal(joinParts(splitParts("ñandú €")), "ñandú €");
   assert.equal(joinParts([null]), null);
   assert.equal(joinParts(["0:"]), null, "cero trozos");
   assert.equal(joinParts([`${WIN_MAX_PARTS + 1}:QQ==`]), null, "más trozos de los admitidos");
-  assert.equal(joinParts(["2:QQ==", "no base64!"]), null);
+  const two = splitParts("y".repeat(1000));
+  assert.equal(two.length, 2);
+  assert.equal(joinParts(two), "y".repeat(1000));
+  assert.equal(joinParts([two[0], "no base64!"]), null);
+  assert.equal(joinParts([two[0], two[1].replace(/^./, "A")]), null, "trozo cambiado: el hash no cuadra");
   // Justo en el máximo cabe; un byte más, error explícito.
   const max = (WIN_MAX_PARTS * 1200 / 4) * 3;
   assert.equal(splitParts("x".repeat(max)).length, WIN_MAX_PARTS);
   assert.throws(() => splitParts("x".repeat(max + 1)), /demasiado grande/);
+});
+
+test("Windows: un set cortado a medias no deja una mezcla legible de dos valores", async () => {
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, GRAPH_BLOB);
+  const n = d.vault.size;
+  assert.ok(n > 3);
+  // Otro valor del mismo tamaño, distinto en la cola (se escribe primero): falla tras dos trozos
+  // y la cabecera vieja sigue ahí.
+  const other = GRAPH_BLOB.replace(/r/g, "s");
+  assert.equal(splitParts(other).length, n);
+  assert.notEqual(splitParts(other).at(-1), splitParts(GRAPH_BLOB).at(-1));
+  let w = 0;
+  const flaky = new WindowsCredentialBackend({ run: async (cmd, args, stdin) => {
+    const { ops } = JSON.parse(stdin) as { ops: { op: string; t: string; v?: string }[] };
+    if (!ops.some((x) => x.op === "w")) return d.run(cmd, args, stdin);
+    // Aplica solo las dos primeras escrituras y muere, como un CredWrite que falla a mitad.
+    const applied = ops.filter((x) => x.op === "w").slice(0, 2);
+    for (const x of applied) d.vault.set(x.t, x.v ?? "");
+    w += applied.length;
+    return { code: 4, stdout: "" };
+  } });
+  await assert.rejects(flaky.set(K, other), /no disponible/);
+  assert.equal(w, 2);
+  assert.equal(await b.get(K), null, "cabecera vieja + trozos nuevos = sin credencial, no un token corrupto");
+});
+
+test("Windows: PowerShell por ruta absoluta, nunca por nombre", () => {
+  assert.equal(powershellPath({}), "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+  assert.equal(powershellPath({ SystemRoot: "D:\\WINNT\\" }), "D:\\WINNT\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+  assert.throws(() => powershellPath({ SystemRoot: "powershell" }), /absoluta/);
+  assert.throws(() => powershellPath({ SystemRoot: "\\\\srv\\share" }), /absoluta/);
+});
+
+test("Windows: una clave con sufijo de trozo se rechaza (no pisa trozos de otra)", async () => {
+  const b = new WindowsCredentialBackend({ run: credManagerDouble().run });
+  await assert.rejects(b.get(`${K}/part-3`), /clave/);
+  await assert.rejects(b.set(`${K}/part-1`, "v"), /clave/);
+  await assert.rejects(b.delete(`${K}/part-31`), /clave/);
+  assert.equal(await b.get(`${K}/parte`), null, "un sufijo parecido sí es clave válida");
+});
+
+test("Windows: delete en dos arranques; trozos huérfanos se limpian y devuelve false", async () => {
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, GRAPH_BLOB);
+  d.calls.length = 0;
+  assert.equal(await b.delete(K), true);
+  assert.equal(d.calls.length, 2);
+  d.vault.set(`${K}/part-4`, "QQ==");
+  assert.equal(await b.delete(K), false);
+  assert.equal(d.vault.size, 0);
+});
+
+test("Windows: el script y el protocolo usan los mismos campos (op, t, v; ops)", async () => {
+  const script = Buffer.from(WIN_PS_ARGS[3], "base64").toString("utf16le");
+  for (const s of ["$d.ops", "$o.op", "$o.t", "$o.v", "'r'", "'w'", "'d'", "[SoulCred]::Read", "[SoulCred]::Write", "[SoulCred]::Delete", "class SoulCred"]) {
+    assert.ok(script.includes(s), `el script contiene ${s}`);
+  }
+  assert.ok(!script.includes("SECRETO"));
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, "SECRETO-1");
+  await b.delete(K);
+  for (const c of d.calls) {
+    for (const op of (JSON.parse(c.stdin) as { ops: Record<string, unknown>[] }).ops) {
+      assert.ok(Object.keys(op).every((x) => ["op", "t", "v"].includes(x)), JSON.stringify(Object.keys(op)));
+      assert.ok(["r", "w", "d"].includes(op.op as string));
+    }
+  }
 });
 
 test("Windows real: Credential Manager guarda, lee y borra tokens de Graph", { skip: process.platform !== "win32" && "solo en Windows" }, async () => {
