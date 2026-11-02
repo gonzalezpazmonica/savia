@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=50ea2cdfa40e5455a9dd797f1fbdd2b2c424b0223683579e3facf43766eda1f9
-timestamp=2026-11-01T13:55:46Z
-branch=agent/fix-soul-tsc-web-20261101
-head_commit=3847d491
-signature=312eafc386852c156e0ef942e18648ba5d038904e49f1b50c8c9d48a930d98fa
+diff_hash=fdf5615225c83d46eca60402de07c0f64a486842cbed504535c365101119e8af
+timestamp=2026-11-02T20:07:28Z
+branch=agent/w-se497-deriva-aprendizaje-20261023
+head_commit=de2226e89
+signature=a9642c867b2f8a997d98a0843db5fbe089b12fbbfecbc15517a35b11042837f0
