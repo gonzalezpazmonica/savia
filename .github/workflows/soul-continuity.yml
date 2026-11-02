@@ -101,3 +101,7 @@ jobs:
 
       - name: Tipos del adaptador web
         run: npm run typecheck:web
+
+      - name: Tests unitarios del adaptador web (sin navegador)
+        working-directory: projects/soul-continuity/src/web
+        run: npm run test:unit
