@@ -2,6 +2,8 @@
 # test-se353-credential-egress.bats — BATS tests for SE-353 Sentinel Credential Substitution
 # Ref: SE-353 — credenciales fuera del contexto del modelo, resolución solo en egress
 
+bats_require_minimum_version 1.5.0
+
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
   EGRESS="$REPO_ROOT/scripts/credential-egress.sh"
@@ -62,7 +64,7 @@ teardown() {
 
 @test "run sustituye savia:cred:<key> en args y ejecuta" {
   printf "%s" "valor-run-42" | "$EGRESS" store "pat-test" >/dev/null
-  run "$EGRESS" run --dest github.com bash -c 'echo "recibido:$1"' _ savia:cred:pat-test
+  run "$EGRESS" run --dest github.com bash -c 'echo "recibido:$(cat "$1")"' _ savia:cred:pat-test
   [[ "$status" -eq 0 ]]
   [[ "$output" == "recibido:valor-run-42" ]]
 }
@@ -179,7 +181,7 @@ teardown() {
 
 @test "G2: run deduce el destino del host de la URL autorizada" {
   printf '%s' "valor-run-784" | "$EGRESS" store pat-test >/dev/null
-  run "$EGRESS" run bash -c 'echo "recibido:$2"' _ https://api.github.com/user savia:cred:pat-test
+  run "$EGRESS" run bash -c 'echo "recibido:$(cat "$2")"' _ https://api.github.com/user savia:cred:pat-test
   [[ "$status" -eq 0 ]]
   [[ "$output" == "recibido:valor-run-784" ]]
 }
@@ -247,7 +249,7 @@ teardown() {
   run "$EGRESS" resolve pat-test --dest GitHub.COM
   [[ "$status" -eq 0 ]]
   [[ "$output" == "valor-r-804" ]]
-  run "$EGRESS" run --dest GITHUB.com bash -c 'echo "r:$2"' _ https://github.com/x savia:cred:pat-test
+  run "$EGRESS" run --dest GITHUB.com bash -c 'echo "r:$(cat "$2")"' _ https://github.com/x savia:cred:pat-test
   [[ "$status" -eq 0 ]]
   [[ "$output" == "r:valor-r-804" ]]
 }
@@ -263,7 +265,126 @@ teardown() {
   # frente a un llamante hostil. Si este test empieza a fallar, la garantía ha
   # cambiado: actualizar secret-redaction-policy.md § Límites.
   printf '%s' "valor-r-807" | "$EGRESS" store pat-test >/dev/null
-  run "$EGRESS" run --dest github.com bash -c 'echo "$1"' _ savia:cred:pat-test
+  run "$EGRESS" run --dest github.com bash -c 'cat "$1"' _ savia:cred:pat-test
   [[ "$status" -eq 0 ]]
   [[ "$output" == "valor-r-807" ]]
+}
+
+# ── T8: G2 fd — ni el secreto ni la clave del store pasan por argv ────────────
+# Lo que va por argv queda en /proc/<pid>/cmdline y en ps, legible por
+# cualquier proceso del sistema mientras dura.
+
+_derived_key() {
+  printf '%s|%s' "$(cat /etc/machine-id 2>/dev/null || hostname)" "$HOME" | sha256sum | cut -d' ' -f1
+}
+
+# Envuelve openssl y python3 para registrar el argv real (/proc/$$/cmdline) de
+# cada invocación antes de delegar en el binario real.
+_install_argv_shims() {
+  SHIM_DIR="$SAVIA_CRED_STORE_DIR/shims"; ARGV_LOG="$SAVIA_CRED_STORE_DIR/argv.log"
+  mkdir -p "$SHIM_DIR"; : >"$ARGV_LOG"
+  local tool real
+  for tool in openssl python3; do
+    real=$(command -v "$tool")
+    printf '#!/bin/bash\n{ tr "\\0" " " </proc/$$/cmdline; echo; } >>"%s"\nexec "%s" "$@"\n' \
+      "$ARGV_LOG" "$real" >"$SHIM_DIR/$tool"
+    chmod +x "$SHIM_DIR/$tool"
+  done
+  export PATH="$SHIM_DIR:$PATH"
+}
+
+@test "G2fd: run entrega el valor por /dev/fd/N y no aparece en el cmdline del hijo" {
+  printf '%s' "valor-fd-901" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c \
+    'printf "argv=%s\n" "$(tr "\0" " " </proc/$$/cmdline)"; printf "arg=%s\n" "$1"; printf "val=%s\n" "$(cat "$1")"' \
+    _ savia:cred:pat-test
+  [[ "$status" -eq 0 ]]
+  [[ "${lines[0]}" == argv=* && "${lines[0]}" != *"valor-fd-901"* ]]
+  [[ "${lines[1]}" =~ ^arg=/dev/fd/[0-9]+$ ]]
+  [[ "${lines[2]}" == "val=valor-fd-901" ]]
+}
+
+@test "G2fd: /proc/<pid>/cmdline del hijo y del propio run, vistos desde fuera, no contienen el valor" {
+  printf '%s' "valor-fd-902" | "$EGRESS" store pat-test >/dev/null
+  local pidf="$SAVIA_CRED_STORE_DIR/child.pid" outf="$SAVIA_CRED_STORE_DIR/out"
+  "$EGRESS" run --dest github.com bash -c 'echo $$ >"$0"; sleep 2; cat "$1"' \
+    "$pidf" savia:cred:pat-test >"$outf" 2>&1 &
+  local runpid=$! i child=""
+  for i in $(seq 1 50); do [[ -s "$pidf" ]] && break; sleep 0.1; done
+  child=$(cat "$pidf")
+  [[ -n "$child" && -r "/proc/$child/cmdline" ]]
+  local c_child c_run
+  c_child=$(tr '\0' ' ' <"/proc/$child/cmdline")
+  c_run=$(tr '\0' ' ' <"/proc/$runpid/cmdline" 2>/dev/null || true)
+  wait "$runpid"
+  [[ "$c_child" == *"/dev/fd/"* ]]
+  [[ "$c_child" != *"valor-fd-902"* ]]
+  [[ "$c_run" != *"valor-fd-902"* ]]
+  [[ "$(cat "$outf")" == "valor-fd-902" ]]
+}
+
+@test "G2fd: varios marcadores → un descriptor distinto por valor" {
+  printf '%s' "valor-fd-a" | "$EGRESS" store k-a >/dev/null
+  printf '%s' "valor-fd-b" | "$EGRESS" store k-b >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'echo "$1 $2|$(cat "$1")|$(cat "$2")"' \
+    _ savia:cred:k-a savia:cred:k-b
+  [[ "$status" -eq 0 ]]
+  local a="${output%% *}" rest="${output#* }"
+  [[ "$a" != "${rest%%|*}" ]]
+  [[ "$output" == *"|valor-fd-a|valor-fd-b" ]]
+}
+
+@test "G2fd: store y resolve no pasan la clave derivada ni el valor por argv a openssl/python3" {
+  local key; key=$(_derived_key)
+  _install_argv_shims
+  printf '%s' "valor-fd-903" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" resolve pat-test --dest github.com
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "valor-fd-903" ]]
+  # Los shims se ejecutaron (si no, el test no prueba nada).
+  grep -q 'openssl enc' "$ARGV_LOG"
+  grep -q 'python3' "$ARGV_LOG"
+  [[ "$(grep -cF "$key" "$ARGV_LOG")" -eq 0 ]]
+  [[ "$(grep -cF "valor-fd-903" "$ARGV_LOG")" -eq 0 ]]
+}
+
+@test "G2fd: blob legado (iv:ciph:mac) se resuelve una vez y se migra a v2 sin clave en argv" {
+  local key iv ciph mac
+  key=$(_derived_key)
+  iv=$(openssl rand -hex 16)
+  ciph=$(printf '%s' "valor-fd-904" | openssl enc -aes-256-cbc -K "$key" -iv "$iv" -a -A)
+  mac=$(printf '%s|%s' "$iv" "$ciph" | openssl dgst -sha256 -hmac "$key" -hex | awk '{print $NF}')
+  printf '{"pat-test": "%s:%s:%s"}' "$iv" "$ciph" "$mac" >"$SAVIA_CRED_STORE_DIR/keys.json"
+  chmod 600 "$SAVIA_CRED_STORE_DIR/keys.json"
+  run "$EGRESS" resolve pat-test --dest github.com
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"migrada"* && "${lines[-1]}" == "valor-fd-904" ]]
+  python3 -c 'import json,sys; b=json.load(open(sys.argv[1]))["pat-test"]; sys.exit(0 if b.startswith("v2:") else 1)' \
+    "$SAVIA_CRED_STORE_DIR/keys.json"
+  [[ "$(stat -c %a "$SAVIA_CRED_STORE_DIR/keys.json")" == "600" ]]
+  _install_argv_shims
+  run "$EGRESS" resolve pat-test --dest github.com
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "valor-fd-904" ]]
+  grep -q 'openssl enc' "$ARGV_LOG"
+  [[ "$(grep -cF "$key" "$ARGV_LOG")" -eq 0 ]]
+}
+
+@test "G2fd: MAC manipulado (v2 y legado) → fallo y nada en stdout" {
+  printf '%s' "valor-fd-905" | "$EGRESS" store pat-test >/dev/null
+  python3 -c 'import json,sys
+p=sys.argv[1]; d=json.load(open(p)); b=d["pat-test"]
+d["pat-test"]=b[:-1]+("0" if b[-1]!="0" else "1"); json.dump(d,open(p,"w"))' \
+    "$SAVIA_CRED_STORE_DIR/keys.json"
+  run --separate-stderr "$EGRESS" resolve pat-test --dest github.com
+  [[ "$status" -ne 0 ]]
+  [[ -z "$output" ]]
+  local key iv ciph
+  key=$(_derived_key); iv=$(openssl rand -hex 16)
+  ciph=$(printf '%s' "valor-fd-906" | openssl enc -aes-256-cbc -K "$key" -iv "$iv" -a -A)
+  printf '{"pat-test": "%s:%s:%s"}' "$iv" "$ciph" "$(printf '0%.0s' $(seq 64))" \
+    >"$SAVIA_CRED_STORE_DIR/keys.json"
+  run --separate-stderr "$EGRESS" resolve pat-test --dest github.com
+  [[ "$status" -ne 0 ]]
+  [[ -z "$output" ]]
 }
