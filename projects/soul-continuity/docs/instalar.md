@@ -66,9 +66,9 @@ Nada está activo por defecto. Para leer una fuente hacen falta tres cosas en `c
 }
 ```
 
-- `bases`: solo HTTPS. Graph, Google y GitHub tienen la suya por defecto; Jira y Azure DevOps no, porque son de tu sitio u organización.
+- `bases`: solo HTTPS. Graph, Google y GitHub tienen la suya por defecto; Jira y Azure DevOps no, porque son de tu sitio u organización. La de Graph y Google solo admite sus hosts oficiales; GitHub Enterprise sí puede ir en el host de tu empresa.
 - `oauth`: la aplicación registrada por ti o por tu organización. Soul rechaza las de terceros conocidas. Si tu inquilino exige consentimiento de administración, el adaptador queda `admin_consent_required` y no lee.
-- `web`: solo si lo nombras en `enabled`. Su perfil de navegador vive en `<datos>/web/perfil`. Abre ese perfil con tu navegador y entra a mano en las webs que des a Soul, y solo en esas. En Linux, las cookies de ese perfil se cifran con una clave guardada en tu llavero: sin llavero, el perfil no se abre.
+- `web`: solo si lo nombras en `enabled`. Su perfil de navegador vive en `<datos>/web/perfil`. Si usaste el adaptador web suelto antes de esta versión, su perfil quedó en el directorio antiguo (`~/.local/share/soul-continuity`, `~/Library/Application Support/SoulContinuity` o `%LOCALAPPDATA%\SoulContinuity`): Soul ya no lo usa ni lo borra; bórralo a mano, porque guarda sesiones. Abre ese perfil con tu navegador y entra a mano en las webs que des a Soul, y solo en esas. En Linux, las cookies de ese perfil se cifran con una clave guardada en tu llavero: sin llavero, el perfil no se abre.
 - Para retirar una fuente: `soul revoke <adaptador>` (paso 6).
 
 ## 4. Iniciar sesión en cada fuente
@@ -118,6 +118,6 @@ soul autostart uninstall
 soul uninstall --yes
 ```
 
-Borra el directorio de datos de Soul (configuración, libro de correcciones, caché, historial, certificado, dispositivos, perfil web y sus sesiones) y **todas** las credenciales de Soul del almacén del sistema, de todos los adaptadores. Si alguna no se puede borrar, la orden falla y lo dice. Lo que no es de Soul en esa carpeta se conserva. Después, borra la carpeta de `~/soul-continuity` y el alias.
+Borra el directorio de datos de Soul (configuración, libro de correcciones, caché, historial, certificado, dispositivos, perfil web y sus sesiones) y **todas** las credenciales de Soul del almacén del sistema, de todos los adaptadores. Si alguna no se puede borrar, la orden falla y lo dice. Lo que no es de Soul en esa carpeta se conserva. Después, borra la carpeta de `~/soul-continuity` y el alias, y el perfil antiguo del adaptador web si lo usaste suelto (paso 3, `web`).
 
 Lo que Soul no puede borrar por ti: la concesión de la aplicación en cada proveedor (Microsoft: Mis aplicaciones; Google: Seguridad > Acceso de terceros; GitHub, Jira y Azure DevOps: sus tokens). Retírala allí.

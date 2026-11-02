@@ -48,6 +48,22 @@ test("validateConnectors: adaptador desconocido, base http remota o con credenci
   assert.deepEqual([...enabledAdapters({ enabled: ["jira", "otro" as never] })], ["jira"]);
 });
 
+test("bases de graph y google: solo sus hosts oficiales o loopback; GitHub, Jira y ADO admiten host propio", async () => {
+  assert.equal(validateConnectors({ enabled: [], bases: { graph: "https://graph.evil.example" } }).length, 1);
+  assert.equal(validateConnectors({ enabled: [], bases: { google: "https://www.googleapis.com.evil.example" } }).length, 1);
+  assert.equal(validateConnectors({ enabled: [], bases: { graph: "https://graph.microsoft.com:8443" } }).length, 1);
+  assert.deepEqual(validateConnectors({ enabled: [], bases: { graph: "https://graph.microsoft.us", google: "http://127.0.0.1:9" } }), []);
+  assert.deepEqual(validateConnectors({ enabled: [], bases: { github: "https://github.empresa.example/api/v3" } }), [], "GitHub Enterprise");
+  // Aunque config.json no se valide antes, el transporte no usa la base desviada: sigue la oficial.
+  const seen: string[] = [];
+  const t = apiTransport({ enabled: [], bases: { graph: "https://graph.evil.example", github: "https://github.empresa.example" } }, {
+    fetch: (async (u: URL | string) => { seen.push(String(u)); return new Response("{}", { status: 200, headers: { "content-type": "application/json" } }); }) as typeof fetch,
+  });
+  await t.request({ service: "graph", method: "GET", url: "/v1.0/me" });
+  await t.request({ service: "github", method: "GET", url: "/user" });
+  assert.deepEqual(seen, ["https://graph.microsoft.com/v1.0/me", "https://github.empresa.example/user"]);
+});
+
 test("apiTransport: solo lectura y solo hacia las bases; Jira sin base configurada se rechaza", async () => {
   const seen: string[] = [];
   const t = apiTransport({ enabled: [], bases: { jira: "https://sitio.example" } }, {

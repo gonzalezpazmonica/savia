@@ -17,7 +17,7 @@ const PROJECT = fileURLToPath(new URL("..", import.meta.url));
 const IT_PACK = join(PROJECT, "..", "..", "docs", "soul-continuity-it-pack.md");
 const CANAL = join(PROJECT, "docs", "canal-amenazas.md");
 
-interface Cita { file: string; lines: number[]; at: number }
+interface Cita { file: string; lines: number[]; at: number; nombre: string | null }
 
 /** Citas `ruta:N`, `ruta:N-M`, `ruta:N,M` y continuaciones `:N` sobre la última ruta de la misma línea. */
 export function citas(md: string): Cita[] {
@@ -34,7 +34,9 @@ export function citas(md: string): Cita[] {
       if (!file || !spec) continue;
       last = file;
       const lines = spec.split(",").flatMap((p) => p.split("-")).filter(Boolean).map(Number);
-      out.push({ file, lines, at: i + 1 });
+      // «`ruta:N-M` (`símbolo`…»: la cita nombra lo que hay en esas líneas.
+      const tras = /^ \(`([A-Za-z_$][\w$]*)`/.exec(line.slice((m.index ?? 0) + m[0].length));
+      out.push({ file, lines, at: i + 1, nombre: tras ? tras[1] : null });
     }
   });
   return out;
@@ -51,8 +53,33 @@ function comprobarCitas(md: string, nombre: string): number {
   return cs.length;
 }
 
+/** Una cita que nombra un símbolo tiene que contenerlo en sus líneas: detecta citas desplazadas. */
+function comprobarNombres(md: string, nombre: string): number {
+  const cs = citas(md).filter((c) => c.nombre);
+  for (const c of cs) {
+    const texto = readFileSync(join(PROJECT, c.file), "utf8").split("\n");
+    const tramo = texto.slice(Math.min(...c.lines) - 1, Math.max(...c.lines)).join("\n");
+    assert.ok(tramo.includes(c.nombre as string), `${nombre}:${c.at}: ${c.file}:${c.lines.join(",")} no contiene \`${c.nombre}\``);
+  }
+  return cs.length;
+}
+
 test("las citas al código del documento de transparencia existen", () => {
   assert.ok(comprobarCitas(readFileSync(IT_PACK, "utf8"), "it-pack") >= 40, "el anexo debe citar el código");
+});
+
+test("las citas que nombran un símbolo apuntan a las líneas donde está (no desplazadas)", () => {
+  const md = readFileSync(IT_PACK, "utf8") + "\n" + readFileSync(CANAL, "utf8");
+  assert.ok(comprobarNombres(md, "docs") >= 10, "el anexo nombra lo que cita");
+});
+
+test("negativo: una cita con nombre desplazada se detecta; la buena pasa", () => {
+  const src = readFileSync(join(PROJECT, "src/api/dpop.ts"), "utf8").split("\n");
+  const l = src.findIndex((x) => x.includes("export function makeDpopVerifier")) + 1;
+  assert.ok(l > 1);
+  assert.equal(comprobarNombres(`\`src/api/dpop.ts:${l}\` (\`makeDpopVerifier\`)`, "x"), 1);
+  assert.throws(() => comprobarNombres(`\`src/api/dpop.ts:${l - 1}\` (\`makeDpopVerifier\`)`, "x"), /no contiene `makeDpopVerifier`/);
+  assert.throws(() => comprobarNombres(`\`src/api/listen.ts:1\` y \`:2\` (\`makeDpopVerifier\`)`, "x"), /no contiene/);
 });
 
 test("el documento de transparencia describe el código integrado: ninguna cita a otra rama", () => {
