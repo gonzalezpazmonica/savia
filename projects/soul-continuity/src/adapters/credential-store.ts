@@ -3,7 +3,7 @@
  *
  * Los tokens van al almacén del sistema operativo y a ningún otro sitio:
  * Secret Service (`secret-tool`) en Linux, Llavero (`security`) en macOS y
- * Windows Credential Manager (`PasswordVault` vía PowerShell) en Windows. El
+ * Windows Credential Manager (advapi32 vía PowerShell) en Windows. El
  * secreto siempre viaja por stdin, nunca en la línea de órdenes, en variables
  * de entorno, en ficheros ni en logs. Sin dependencias nativas.
  *
@@ -15,6 +15,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import type { CredentialStore } from "../contract/adapter.ts";
+import { SOUL_CRED_CS, powershellPath } from "../credentials/store.ts";
 import type { TokenSet } from "./oauth.ts";
 
 export interface SecretBackend {
@@ -147,7 +148,8 @@ function run(cmd: string, args: string[], stdin: string): Promise<Run> {
 }
 
 function checkKey(k: string): string {
-  if (!KEY_RE.test(k)) throw new Error("clave del almacén inválida");
+  // `<clave>/part-i` es el nombre de los trozos en Windows: una clave así pisaría un trozo de otra.
+  if (!KEY_RE.test(k) || /\/part-\d+$/.test(k)) throw new Error("clave del almacén inválida");
   return k;
 }
 
@@ -187,25 +189,125 @@ export const macosCommands = {
   delete: (k: string) => ({ cmd: "/usr/bin/security", args: ["delete-generic-password", "-s", SERVICE, "-a", checkKey(k)], stdin: "" }),
 };
 
-const PS_VAULT = "[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime];$v=New-Object Windows.Security.Credentials.PasswordVault;";
+/**
+ * Windows: Credential Manager (CredRead/CredWrite/CredDelete de advapi32) por PowerShell, sin
+ * módulos nativos. Cada entrada admite 2560 bytes de valor y el JSON con los tokens de Entra
+ * suele pasar de 5 KB, así que el valor se guarda en base64 repartido en varias entradas:
+ * `<clave>` lleva «N:hash:» y el primer trozo; `<clave>/part-i`, el resto. El hash (16 hex de
+ * SHA-256 del base64 completo) descarta una mezcla de dos valores si un `set` se corta a medias
+ * o compite con otro: se lee como sin credencial, nunca como un token corrupto. Tamaño máximo:
+ * `WIN_MAX_PARTS × WIN_PART` caracteres de base64 (unos 28 KB de valor).
+ */
+export const WIN_PART = 1200; // caracteres por entrada: el blob va en UTF-16, 2400 de 2560 bytes
+export const WIN_MAX_PARTS = 32;
+const partTarget = (k: string, i: number) => (i === 0 ? k : `${k}/part-${i}`);
+const PART_RE = /^[A-Za-z0-9+/=]+$/;
 
-/** Órdenes de Windows Credential Manager (PasswordVault); el script entra por stdin, el valor en base64. */
-export const windowsCommands = {
-  get: (k: string) => ({
-    cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", "-"],
-    stdin: `${PS_VAULT}try{$c=$v.Retrieve('${SERVICE}','${checkKey(k)}');$c.RetrievePassword();[Console]::Out.Write([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.Password)))}catch{exit 1}\n`,
-  }),
-  set: (k: string, v: string) => ({
-    cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", "-"],
-    stdin: `${PS_VAULT}$v.Add((New-Object Windows.Security.Credentials.PasswordCredential('${SERVICE}','${checkKey(k)}','${Buffer.from(v).toString("base64")}')))\n`,
-  }),
-  delete: (k: string) => ({
-    cmd: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-Command", "-"],
-    stdin: `${PS_VAULT}try{$v.Remove($v.Retrieve('${SERVICE}','${checkKey(k)}'))}catch{exit 1}\n`,
-  }),
-};
+/** Reparte el valor en trozos para Credential Manager. El primero lleva el número de trozos y el hash. */
+export function splitParts(v: string): string[] {
+  const b = Buffer.from(v, "utf8").toString("base64");
+  const n = Math.max(1, Math.ceil(b.length / WIN_PART));
+  if (n > WIN_MAX_PARTS) throw new Error("credencial demasiado grande para Credential Manager");
+  const parts = Array.from({ length: n }, (_, i) => b.slice(i * WIN_PART, (i + 1) * WIN_PART));
+  parts[0] = `${n}:${h16(b)}:${parts[0]}`;
+  return parts;
+}
 
-/** Almacén por órdenes de sistema (Llavero de macOS, PasswordVault de Windows). */
+/**
+ * Reconstruye el valor; null si falta la cabecera o algún trozo, o si el hash no cuadra
+ * (entrada incompleta o mezclada = sin credencial).
+ */
+export function joinParts(found: (string | null)[]): string | null {
+  const m = /^(\d{1,2}):([0-9a-f]{16}):([A-Za-z0-9+/=]*)$/.exec(found[0] ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n < 1 || n > WIN_MAX_PARTS) return null;
+  const rest = found.slice(1, n);
+  if (rest.length !== n - 1 || rest.some((x) => x === null || !PART_RE.test(x))) return null;
+  const b = m[3] + rest.join("");
+  if (h16(b) !== m[2]) return null;
+  return Buffer.from(b, "base64").toString("utf8");
+}
+
+/**
+ * Script sin secretos: va como -EncodedCommand. Las operaciones (y los trozos del secreto) llegan
+ * por stdin en JSON; responde una línea por operación: «+valor» o «-» al leer, «+» o «-» al borrar.
+ */
+const WIN_SCRIPT = String.raw`$ErrorActionPreference='Stop'
+try {
+[Console]::InputEncoding = [Text.Encoding]::UTF8
+$d = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Add-Type -TypeDefinition @"
+${SOUL_CRED_CS}
+"@
+$out = New-Object System.Text.StringBuilder
+foreach ($o in $d.ops) {
+  switch ($o.op) {
+    'r' { $v = [SoulCred]::Read($o.t); if ($null -eq $v) { [void]$out.AppendLine('-') } else { [void]$out.AppendLine('+' + $v) } }
+    'w' { if (-not [SoulCred]::Write($o.t, $o.v)) { exit 4 }; [void]$out.AppendLine('+') }
+    'd' { if ([SoulCred]::Delete($o.t)) { [void]$out.AppendLine('+') } else { [void]$out.AppendLine('-') } }
+    default { exit 2 }
+  }
+}
+[Console]::Out.Write($out.ToString())
+exit 0
+} catch { exit 1 }`;
+
+export const WIN_PS_ARGS = ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(WIN_SCRIPT, "utf16le").toString("base64")];
+
+type WinOp = { op: "r"; t: string } | { op: "w"; t: string; v: string } | { op: "d"; t: string };
+export type RunFn = (cmd: string, args: string[], stdin: string) => Promise<Run>;
+
+/** Windows Credential Manager con el valor repartido en entradas (ver `splitParts`). */
+export class WindowsCredentialBackend implements SecretBackend {
+  private readonly run: RunFn;
+  /** `run` se sustituye en los tests por un doble del almacén. */
+  constructor(o: { run?: RunFn } = {}) {
+    this.run = o.run ?? run;
+  }
+  private async call(ops: WinOp[]): Promise<string[]> {
+    const r = await this.run(powershellPath(), WIN_PS_ARGS, JSON.stringify({ ops }));
+    const lines = r.stdout.split(/\r?\n/);
+    if (lines.at(-1) === "") lines.pop();
+    // Un código distinto de 0 o una respuesta que no cuadra es un fallo, nunca «no hay credencial».
+    if (r.code !== 0 || lines.length !== ops.length) throw new Error(`Credential Manager no disponible (código ${r.code})`);
+    return lines;
+  }
+  private readAll(k: string): WinOp[] {
+    return Array.from({ length: WIN_MAX_PARTS }, (_, i) => ({ op: "r" as const, t: partTarget(k, i) }));
+  }
+  async get(k: string): Promise<string | null> {
+    const lines = await this.call(this.readAll(checkKey(k)));
+    return joinParts(lines.map((l) => (l.startsWith("+") ? l.slice(1) : null)));
+  }
+  async set(k: string, v: string): Promise<void> {
+    checkKey(k);
+    const parts = splitParts(v);
+    // Los trozos antes que la cabecera; después se borran los sobrantes de un valor anterior más largo.
+    const ops: WinOp[] = [];
+    for (let i = parts.length - 1; i >= 0; i--) ops.push({ op: "w", t: partTarget(k, i), v: parts[i] });
+    for (let i = parts.length; i < WIN_MAX_PARTS; i++) ops.push({ op: "d", t: partTarget(k, i) });
+    await this.call(ops);
+    if ((await this.get(k)) !== v) throw new Error("el almacén del sistema no guardó la credencial íntegra");
+  }
+  /**
+   * Borra la cabecera y todos los trozos. true si había una credencial legible; los trozos
+   * huérfanos (sin cabecera válida) se limpian igual, pero devuelven false.
+   * Dos arranques de PowerShell: lectura + borrado en uno, y la relectura de comprobación.
+   */
+  async delete(k: string): Promise<boolean> {
+    checkKey(k);
+    const reads = this.readAll(k);
+    // La cabecera, la última: si se corta a medias, lo que queda no se lee como credencial.
+    const dels = Array.from({ length: WIN_MAX_PARTS }, (_, i) => ({ op: "d" as const, t: partTarget(k, WIN_MAX_PARTS - 1 - i) }));
+    const lines = await this.call([...reads, ...dels]);
+    const had = joinParts(lines.slice(0, WIN_MAX_PARTS).map((l) => (l.startsWith("+") ? l.slice(1) : null))) !== null;
+    if ((await this.get(k)) !== null) throw new Error("el almacén del sistema no borró la credencial");
+    return had;
+  }
+}
+
+/** Almacén por órdenes de sistema (Llavero de macOS). */
 export class CommandBackend implements SecretBackend {
   private readonly c: typeof macosCommands;
   private readonly decode: boolean;
@@ -224,7 +326,7 @@ export class CommandBackend implements SecretBackend {
     const x = this.c.set(k, v);
     const r = await run(x.cmd, x.args, x.stdin);
     if (r.code !== 0) throw new Error("el almacén del sistema no guardó la credencial");
-    // Llavero y Credential Manager tienen límites de tamaño: releer detecta un valor truncado
+    // El Llavero puede rechazar o truncar valores: releer detecta un valor truncado
     // o rechazado en silencio en vez de dar por guardado un token que no sirve.
     if ((await this.get(k)) !== v) throw new Error("el almacén del sistema no guardó la credencial íntegra (¿supera su tamaño máximo?)");
   }
@@ -241,6 +343,6 @@ export class CommandBackend implements SecretBackend {
 export function systemBackend(platform: NodeJS.Platform = process.platform): SecretBackend {
   if (platform === "linux") return new SecretToolBackend();
   if (platform === "darwin") return new CommandBackend(macosCommands, true);
-  if (platform === "win32") return new CommandBackend(windowsCommands, false);
+  if (platform === "win32") return new WindowsCredentialBackend();
   throw new Error(`Sin almacén de credenciales reconocido para ${platform}: los adaptadores de API no se activan.`);
 }
