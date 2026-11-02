@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=b057f329f76c1da864f7816ba44bd872313a3831dd396ab3e24c189d924ca0b6
-timestamp=2026-11-02T20:32:02Z
+diff_hash=8af07d795ba2d01488dbf28fb2ea962b798b93b05d8fff545dec95b1d85ecdfb
+timestamp=2026-11-02T21:21:43Z
 branch=agent/w-se494-trazas-evals-20261023
-head_commit=d21a9fd3
-signature=67b3af5376ee44b96d2a3e3526a50c30d392256d2a0eba48e80237d34530f571
+head_commit=be484b1ca
+signature=bf08fb544ff87ae10874e547c15532c4c8461457d5613b8c070645fa11d0f40e
