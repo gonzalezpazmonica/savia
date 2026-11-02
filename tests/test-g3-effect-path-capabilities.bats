@@ -109,7 +109,7 @@ json.dump({'hooks':{'PostToolUse':[{'matcher':'.*','hooks':[{'type':'command','c
   done
   [ "$(python3 -c "import json; print(json.load(open('$J'))['claude']['evidence'])")" = "AUSENTE" ]
   # el resumen Markdown no puede declarar el frontend NATIVE con huecos
-  run grep -A2 '^## claude' "$FAKE/output/frontend-capability-matrix.md"
+  run grep -A3 '^## claude' "$FAKE/output/frontend-capability-matrix.md"
   [[ "$output" == *"status: DECLARED_GAPS"* ]]
 }
 
