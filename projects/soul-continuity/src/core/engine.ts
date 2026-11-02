@@ -336,9 +336,12 @@ export function makeEngine(adapters: AdapterRegistry, name = "soul-core"): Engin
         const others = rows.filter((r) => (r as { key?: unknown }).key === c.key && (r as { device?: unknown }).device !== device);
         const prev = [...foldLedger(others, operatorRef).values()][0];
         const action = prev && prev.action !== "restore" ? prev.action : "restore";
+        // El estado que vuelve conserva quién lo puso: si fue otro dispositivo, sigue apareciendo en su lista.
+        const prevDevice = prev && prev.action !== "restore" ? (prev as { device?: unknown }).device : undefined;
         await engine.correct({
           install: { id: "", operator: { ref: operatorRef, identities: { emails: [] } }, sources: [] }, stateDir, now, key: c.key,
           action, reason: `deshecho:${device}`, superseded_by: prev?.superseded_by ?? undefined,
+          device: typeof prevDevice === "string" ? prevDevice : null,
         });
         n++;
       }

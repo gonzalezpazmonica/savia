@@ -50,6 +50,18 @@ test("P1-2: deshacer devuelve cada clave a su estado anterior y no toca las de o
   assert.deepEqual(e.deviceCorrections(dir, "op-a", "dmovil"), [], "ya no quedan correcciones vigentes del móvil");
 });
 
+test("deshacer un dispositivo conserva la atribución del estado previo puesto por otro dispositivo", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "soul-dc-"));
+  const e = makeEngine({});
+  await e.correct({ install, stateDir: dir, now: "2026-11-01T08:00:00Z", key: K1, action: "revoke", reason: "t", device: "dotro" });
+  await e.correct({ install, stateDir: dir, now: "2026-11-01T09:00:00Z", key: K1, action: "restore", reason: "t", device: "dmovil" });
+  assert.deepEqual(e.deviceCorrections(dir, "op-a", "dotro"), [], "mientras manda la del móvil, la de dotro no está vigente");
+  assert.equal(await e.undoDevice(dir, "op-a", "dmovil", "2026-11-01T10:00:00Z"), 1);
+  assert.equal(state(dir).get(K1)?.action, "revoke");
+  assert.deepEqual(e.deviceCorrections(dir, "op-a", "dotro").map((c) => c.key), [K1], "la revocación vuelve atribuida a dotro");
+  assert.deepEqual(e.deviceCorrections(dir, "op-a", "dmovil"), []);
+});
+
 test("un id de dispositivo con forma rara no se escribe en el libro", async () => {
   const dir = mkdtempSync(join(tmpdir(), "soul-dc-"));
   await makeEngine({}).correct({ install, stateDir: dir, now: "2026-11-01T08:00:00Z", key: K1, action: "revoke", device: "x\n{inyección}" });
