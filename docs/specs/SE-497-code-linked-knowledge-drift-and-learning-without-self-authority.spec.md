@@ -9,7 +9,7 @@ risk: L3
 depends_on: [SE-213, SCL-001, SE-364]
 related_specs: [SE-162, SE-213, SE-364, SE-486, SE-488, SCL-001, SCL-006, SE-489]
 origin: "Investigación externa de repositorios de IA difundidos públicamente (2026-11-01), líneas SAVIA-RESEARCH-04 y 05 (validaciones V5 y V6). Estudio solo de lectura de MEX, Graphify y Agentic Context Engine, contrastado con main 6b0658b28."
-resource: https://github.com/gonzalezpazmonica/pm-workspace/tree/main/scripts
+resource: https://github.com/mex-memory/mex
 timeline:
   - from: "2026-11-01"
     learned: "2026-11-01"
@@ -77,16 +77,22 @@ Sin resolutor para un lenguaje, o sin la herramienta opcional, el vínculo queda
 
 ### R3 — Estados de deriva
 
-`code-refs.py check [--json] [rutas…]` asigna a cada vínculo un estado:
+`code-refs.py check [--json] [rutas…]` asigna a cada vínculo un estado. Las filas se evalúan **en este orden** y gana la primera que se cumple:
 
-| Estado | Condición |
-|---|---|
-| `FRESH` | mismo `identity` y mismo `body_hash` |
-| `CHANGED` | mismo `identity`, distinto `body_hash` |
-| `MOVED` | el símbolo ya no está en la ruta, pero aparece **un único** símbolo con el mismo `identity` y `body_hash` en otra ruta |
-| `MISSING` | ni en la ruta ni en ninguna otra |
-| `AMBIGUOUS` | más de un candidato; se listan y no se elige |
-| `UNVERIFIED` | no hay resolutor, o no existe línea base revisada |
+| Orden | Estado | Condición |
+|---|---|---|
+| 1 | `UNVERIFIED` | no hay resolutor para el lenguaje, o el vínculo no tiene `baseline_reviewed_by`. Gana a cualquier comparación de hash: sin línea base revisada no hay nada contra lo que estar `FRESH` |
+| 2 | `FRESH` | el nombre cualificado existe en la ruta con el mismo `identity` y el mismo `body_hash` |
+| 3 | `CHANGED` | el nombre cualificado existe en la ruta, pero cambia el `identity` (por ejemplo, otros parámetros), el `body_hash`, o ambos |
+| 4 | `MOVED` | el nombre ya no está en la ruta y aparece **un único** símbolo con el mismo `identity` y `body_hash` en otra ruta |
+| 5 | `AMBIGUOUS` | el nombre ya no está en la ruta y aparecen **dos o más** candidatos con el mismo `identity` y `body_hash`; se listan y no se elige |
+| 6 | `MISSING` | el nombre no está en la ruta y no hay ningún candidato en otra |
+
+Consecuencias explícitas:
+
+- **Copiar** el símbolo a otro fichero dejando el original en su ruta da `FRESH`: el vínculo sigue apuntando a un símbolo intacto. «Duplicado» en el banco de R6 significa **mover el original a dos sitios** (desaparece de la ruta y aparece en dos), y eso da `AMBIGUOUS`.
+- Renombrar es `MISSING` para el vínculo viejo (el nombre cualificado es parte de la referencia), salvo que el cuerpo y la firma coincidan con un único símbolo de otra ruta.
+- `AMBIGUOUS` significa lo mismo en el estado de deriva y en `provenance` (R1): hay varios candidatos y no se elige ninguno. Se mantiene un solo nombre porque es un solo concepto; el campo (`drift` o `provenance`) dice a qué se aplica.
 
 El estado de la nota es el peor de sus vínculos, por este orden: `MISSING`, `AMBIGUOUS`, `CHANGED`, `MOVED`, `UNVERIFIED`, `FRESH`. El resultado es determinista: con el mismo árbol, la misma salida. Si el resolutor falla, el código de salida es distinto de 0 y nada pasa a `FRESH`.
 
@@ -108,7 +114,7 @@ El estado de la nota es el peor de sus vínculos, por este orden: `MISSING`, `AM
 ### R6 — Población inicial y medición antes/después
 
 - `code-refs.py suggest <nota>` propone vínculos desde la prosa (rutas y nombres citados). Lo que encuentra con un candidato único y cita literal de la ruta es `EXTRACTED`; lo resuelto solo por nombre es `INFERRED`; lo que tiene varios candidatos es `AMBIGUOUS`. **Solo propone**: escribe el bloque una persona o una PR revisada.
-- **Banco de deriva** (`tests/fixtures/code-refs/`): repositorio sintético con 4 lenguajes y mutaciones etiquetadas. Hay ≥ 20 casos de cada tipo: solo comentario o formato, cambio de cuerpo, renombrado, traslado, borrado y duplicado. Se mide la precisión y la exhaustividad de cada estado.
+- **Banco de deriva** (`tests/fixtures/code-refs/`): repositorio sintético con 4 lenguajes y mutaciones etiquetadas. Hay ≥ 20 casos de cada tipo: solo comentario o formato, cambio de cuerpo, cambio de firma, renombrado, traslado, borrado, copia (original intacto) y duplicado (original movido a dos sitios), con los estados esperados de R3. Se mide la precisión y la exhaustividad de cada estado.
 - **Banco de respuesta** (`projects/savia-vaults/eval/code-refs-bench/`): ≥ 30 preguntas técnicas sobre el propio repositorio, con respuesta de referencia y las notas que la sostienen. ≥ 10 se plantean tras una mutación real del símbolo. Se mide la exactitud de la respuesta **antes** (notas sin etiqueta de deriva) y **después** (con etiqueta), con el mismo modelo, prompt y semilla, y comparación pareada (`evals-paired-delta.py`). El informe incluye intervalos, no solo porcentajes.
 - Ningún umbral se fija en esta spec. Activar el aviso de R4 como bloqueo, o la etiqueta en `vault_rag` por defecto, es decisión de la operadora con estos datos, en una PR aparte.
 
@@ -121,7 +127,7 @@ El estado de la nota es el peor de sus vínculos, por este orden: `MISSING`, `AM
 ```yaml
 scope: { paths: [...], skills: [...], domains: [...] }   # dónde aplica; vacío = rechazo
 evidence: [ { source: "se364:<id>|trace:<hash>|commit:<sha>", hash: "sha256:…" } ]   # ≥ 1 fallo verificado
-regression_test: "tests/…bats::<nombre>"   # falla antes del cambio y pasa después
+regression_test: "tests/…bats::<nombre>" | "eval:<case_key>"   # falla antes del cambio y pasa después (tipo según target, ver abajo)
 expires_at: "2027-02-01"                   # por defecto +90 días; máximo 365
 confidence: low|medium|high                # declarada
 confidence_basis: "n_evidencias=3, independientes=2"   # cómo se llegó
@@ -129,37 +135,69 @@ confidence_basis: "n_evidencias=3, independientes=2"   # cómo se llegó
 
 - Las LP anteriores a esta spec siguen legibles. No pueden pasar a `canary` hasta completar los campos.
 - `learning-lifecycle.sh --to canary` **rechaza** (exit 6) si falta algún campo, si `scope` está vacío o si `regression_test` no existe.
+- **Tipo de `regression_test` según `target`** (R8):
+  - `skill` y `script`: un test BATS o pytest (`tests/…::<nombre>`) que ejercita el comportamiento.
+  - `criterio` y `lesson` (texto): un caso de evaluación fijado (`eval:<case_key>`, R9) que reproduce el fallo de la evidencia, ejecutado con modelo, prompt y semilla fijos, con y sin la LP inyectada. Un test que solo comprueba que el texto existe en el fichero **no vale**: `learning-validate.sh` lo marca `INVALID_TEST` (no ejercita el comportamiento).
+
+**Tabla de códigos de salida de `learning-lifecycle.sh`** (se documenta completa en la cabecera del script):
+
+| Código | Significado | Estado |
+|---|---|---|
+| 0 | transición aplicada | existe |
+| 1 | transición no válida | existe |
+| 2 | uso | existe |
+| 3 | fichero no encontrado | existe |
+| 4 | falta autoría humana (`--human-trailer` ausente o con formato inválido, R10) | existe; R10 endurece el formato |
+| 5 | regresión de métrica canary | hoy está documentado pero no se usa (la regresión revierte a `proposed` y sale 0). Pasa a ser real: regresión según el recibo → revierte a `proposed` y sale 5 |
+| 6 | LP incompleta para `canary` (R7) | nuevo |
+| 8 | recibo de validación ausente, inválido o que no corresponde (R9) | nuevo |
+
+El código 7 (ruta de autoridad, R8) lo devuelve `learning-proposal.sh` al capturar, no `learning-lifecycle.sh`; no se reutiliza ningún código para dos causas.
 
 ### R8 — Separación de conocimiento, capacidad y autoridad
 
 - `target` de una LP ∈ {`criterio`, `lesson`, `skill`, `script`}.
-- **Lista de rutas de autoridad** (`docs/rules/domain/learning-authority-paths.txt`): reglas de autonomía y merge, `.claude/settings.json`, registro de hooks, perfiles, grants y aprobaciones, niveles L0–L4, `learning-autonomy.sh` y esta propia lista.
+- **Lista de rutas de autoridad** (`docs/rules/domain/learning-authority-paths.txt`): reglas de autonomía y merge, `.claude/settings.json`, registro de hooks, perfiles, grants y aprobaciones, la definición de niveles L0–L3 (`loop-phasing.md`, SCL-006), `learning-autonomy.sh` y esta propia lista.
 - Una LP cuyo `scope.paths` o diff toque esas rutas se rechaza **al capturarse** (exit 7), con mensaje que remite a una spec. Cambiar autoridad es trabajo de spec, no de aprendizaje.
+- **Normalización antes de comparar**: cada ruta de `scope.paths` y del diff se resuelve con `realpath -m` relativo a la raíz del repo (elimina `../`, `./` y enlaces simbólicos) y se compara también en minúsculas contra la lista. Una ruta que sale de la raíz del repo, o que no se puede resolver, se rechaza (fail-closed).
 
 ### R9 — Validación independiente con recibo
 
 `scripts/learning-validate.sh <LP>`:
 
-- **Partición estable** del corpus SE-364 en `dev` y `holdout`, por hash del id del caso (80/20). Los casos citados en `evidence` de la LP se excluyen del `holdout` (no se valida con lo que generó la propuesta: patrón train/held-out de ACE).
+- **Clave estable de caso.** Los ids del corpus de SE-364 son posicionales (`ev-{i:03d}` en `evidence-capture.py`): regenerar el corpus o insertar un caso cambia ids. Por eso la partición **no** usa el id: usa `case_key = sha256(source + "\0" + input + "\0" + output_rejected)` normalizado (sin espacios sobrantes). Dos casos con el mismo contenido son el mismo caso.
+- **Partición estable** del corpus en `dev` y `holdout` (80/20) por `case_key`. Los casos citados en `evidence` de la LP se excluyen del `holdout` (no se valida con lo que generó la propuesta: patrón train/held-out de ACE). El recibo **congela** la lista de `case_key` del `holdout`; una validación posterior de la misma LP reutiliza esa lista, no la recalcula.
 - Ejecuta el `regression_test`:
-  - debe **fallar** en el commit base;
+  - debe **fallar** en el commit base, ejecutado **con el fichero del test del cambio superpuesto al árbol base** (un test nuevo no existe en la base; «no encontrado» no cuenta como fallo). Si con el test superpuesto el resultado es «no encontrado», error de entorno o pasa, el veredicto es `INVALID_TEST`;
   - debe **pasar** con el cambio;
   - más el `holdout` antes y después.
-- Escribe un **recibo** JSON en `output/learning-loop/receipts/`: `lp_id`, commit base, commit con el cambio, hash de la lista de casos `holdout`, métricas antes/después, resultado del test antes/después, sesión validadora distinta de la proponente y proveedor independiente si lo hay (opcional).
-- `learning-lifecycle.sh --to active` **exige** `--validation-receipt`. Las métricas se leen del recibo, no de flags. Sin recibo, con recibo de otra LP o de otro commit, o con `holdout` vacío: rechazo (exit 5). **El gate deja de poder saltarse omitiendo métricas.**
-- Si el corpus SE-364 no da casos (ver «Dependencias»), no hay promoción: exit 5 con el motivo.
+- Escribe un **recibo** JSON en `output/learning-loop/receipts/` con:
+  - `lp_id` y `lp_hash` (sha256 del fichero de la LP sin el campo de estado);
+  - commit base y **`target_blobs`**: lista ordenada de `(ruta, id de blob git)` de los ficheros destino **después** del cambio. El recibo se liga al **contenido** resultante, no al commit: así sobrevive a una fusión squash o rebase, que crean otro commit con el mismo contenido;
+  - lista congelada de `case_key` del `holdout`, métricas antes/después, resultado del test antes/después;
+  - identidad del perfil validador y sesión validadora distinta de la proponente, y proveedor independiente si lo hay (opcional);
+  - `receipt_hash`: sha256 del propio recibo canonicalizado (claves ordenadas), que la activación cita en un trailer (R11).
+- **Recálculo al promover.** `learning-lifecycle.sh --to active` **exige** `--validation-receipt` y no se fía de él: recalcula `lp_hash`, los `target_blobs` del árbol que se va a activar y el `receipt_hash`, y comprueba que la lista de `holdout` no está vacía y no contiene casos de `evidence`. Las métricas se leen del recibo, no de flags. Sin recibo, con recibo de otra LP, de otro contenido destino, con hash alterado o con `holdout` vacío: rechazo (exit 8). **El gate deja de poder saltarse omitiendo métricas.**
+- **Límite declarado.** El recibo es un fichero que puede escribir quien tenga shell; la «sesión validadora distinta» la declara quien llama. El recálculo impide reutilizar un recibo para otro contenido o editarlo a mano sin que cambie su hash, pero no prueba que la validación la hiciera otra entidad. La garantía de autoridad sigue siendo la revisión humana de R10, no el recibo.
+- Si el corpus SE-364 no da casos (ver «Dependencias»), no hay promoción: exit 8 con el motivo.
 
 ### R10 — Promoción solo con revisión humana verificable
 
-- `active` es un **estado derivado**, no un campo que se escribe: una LP está activa si su commit de activación es ancestro de `origin/main` (`git merge-base --is-ancestor`, sin red) **y** su recibo es válido. En una rama `agent/*` queda `pending_activation`.
-- Con SE-488 implementada, el recibo de aprobación por fusión sustituye a la comprobación de ancestro. `--human-trailer` deja de aceptar texto libre: debe referenciar ese recibo o el commit de merge.
-- `learning-recall.sh --mode effective` solo inyecta LP en estado derivado `active` y no caducadas.
+- **Lo que se escribe es la intención; `active` se deriva.** `learning-lifecycle.sh --to active` escribe en la LP `lifecycle: activation_requested` y `validation_receipt: <receipt_hash>`. Nunca escribe `active`.
+- **Estado derivado** (lo calcula `learning-lifecycle.sh status <LP>` y lo consume recall), por este orden:
+  1. `expired` si `expires_at` ya pasó (R12);
+  2. `active` si en el historial de `origin/main` hay un commit con los trailers `Learning-Proposal: <lp_id>` y `Validation-Receipt: <receipt_hash>` (`git log origin/main --format=… --grep`, sin red) **y** los blobs de los ficheros destino en ese commit coinciden con `target_blobs` del recibo **y** el recibo se recalcula válido (R9);
+  3. `pending_activation` en cualquier otro caso con `activation_requested` (por ejemplo, la activación solo existe en una rama `agent/*`, o el commit de main no tiene los trailers o tiene otro contenido).
+- **Por qué funciona tras squash o rebase**: no se exige que el commit validado sea ancestro de main, sino que main contenga un commit con el **mismo contenido destino** y los **trailers** de la LP. La fusión squash de GitHub conserva los trailers en el mensaje y el rebase conserva el commit entero. Si una fusión los pierde, la LP queda `pending_activation` (fail-closed) y se reactiva con un commit en main que los lleve; no hay revalidación implícita.
+- **Límite declarado** (como en R4): la comprobación usa la ref local `origin/main`, que alguien con shell puede mover (`git update-ref`, `fetch` desde otro remoto). La spec no lo presenta como control de autoridad. Con SE-488 implementada, el recibo de aprobación por fusión sustituye a la búsqueda en `origin/main` y cierra ese hueco.
+- **`--human-trailer` deja de aceptar texto libre**: debe casar con una regex cerrada (`^(sha:[0-9a-f]{40}|se488:[A-Za-z0-9._-]{1,64})$`, commit de merge o id de recibo de SE-488). Cualquier otro valor → exit 4. Además, ningún valor de usuario (`--human-trailer`, `--actor`, `--reason`) se interpola en una expresión de `sed` ni se concatena en JSON: el fichero se reescribe con un editor que trata el valor como dato y el ledger se serializa con un codificador JSON. Hoy `learning-lifecycle.sh` interpola `$HUMAN_TRAILER` en `sed -i "s/…/…/"`, lo que permite ejecutar órdenes con el comando `e` de GNU sed, y mete `$ACTOR` y `$REASON` sin escapar en el JSON del ledger.
+- `learning-recall.sh --mode effective` solo inyecta LP en estado derivado `active`.
 
 ### R11 — Reversible con un commit
 
-- La activación es **un único commit** que solo toca el destino de la LP y su fichero, con el trailer `Learning-Proposal: LP-…`.
+- La activación es **un único commit** que solo toca el destino de la LP y su fichero, con los trailers `Learning-Proposal: LP-…` y `Validation-Receipt: <receipt_hash>`.
 - `learning-lifecycle.sh` rechaza la activación si el diff toca otra cosa.
-- `learning-rollback.sh --lp <id>` localiza ese commit por el trailer y lo revierte con `git revert`. Registra el motivo en `rollback.jsonl`.
+- `learning-rollback.sh --lp <id>` localiza en la rama actual el commit con esos trailers (el de main tras squash o rebase, si ya está fusionado) y lo revierte con `git revert`. Registra el motivo en `rollback.jsonl`. Si encuentra cero o más de un commit candidato, no revierte nada y sale con error (no elige).
 - **Prueba de reversibilidad**: tras el revert, el árbol del destino queda idéntico, byte a byte, al del commit base. Se arregla así el NOOP actual con activaciones ya commiteadas.
 
 ### R12 — Caducidad
@@ -191,9 +229,9 @@ Un test guardián recorre estos cuatro sitios y falla si reaparece una concesió
 
 **Parte 1**
 
-- **AC-1** Fixture Python: cambiar solo comentarios o formato de una función anclada → `FRESH`; cambiar una sentencia → `CHANGED`. El mismo par para Bash y Markdown.
-- **AC-2** Renombrar el símbolo → `MISSING`; trasladarlo intacto a otro fichero → `MOVED`; duplicarlo en dos ficheros → `AMBIGUOUS` con ambos candidatos listados y ninguno elegido.
-- **AC-3** Lenguaje sin resolutor, o vínculo sin `baseline_reviewed_by` → `UNVERIFIED`. Resolutor que lanza excepción → exit ≠ 0 y ningún `FRESH` en la salida (fail-closed).
+- **AC-1** Fixture Python: cambiar solo comentarios o formato de una función anclada → `FRESH`; cambiar una sentencia → `CHANGED`; cambiar los parámetros con la misma ruta y nombre → `CHANGED`. El mismo par para Bash y Markdown. Los fixtures de `FRESH` llevan `baseline_reviewed_by`.
+- **AC-2** Renombrar el símbolo → `MISSING`; trasladarlo intacto a otro fichero → `MOVED`; moverlo a dos ficheros (desaparece de la ruta original) → `AMBIGUOUS` con ambos candidatos listados y ninguno elegido; copiarlo a otro fichero dejando el original → `FRESH`.
+- **AC-3** Lenguaje sin resolutor, o vínculo sin `baseline_reviewed_by` aunque los hashes coincidan → `UNVERIFIED` (nunca `FRESH`). Resolutor que lanza excepción → exit ≠ 0 y ningún `FRESH` en la salida (fail-closed).
 - **AC-4** `check` dos veces sobre el mismo árbol → salida JSON idéntica byte a byte.
 - **AC-5** `reground --apply` con `SAVIA_AUTONOMOUS_RUN=1`, o en una rama `agent/x` → exit 4 y fichero sin cambios. Sin `--apply` → solo previsualización, sin escritura.
 - **AC-6** Una nota con un vínculo `CHANGED` sigue apareciendo en `vault_rag` con `drift: CHANGED` en el hit. Una nota sin `code_refs` sale idéntica a antes (regresión).
@@ -204,17 +242,17 @@ Un test guardián recorre estos cuatro sitios y falla si reaparece una concesió
 **Parte 2**
 
 - **AC-10** `--to canary` de una LP sin `scope`, sin `expires_at` o con `regression_test` inexistente → exit 6. Una LP anterior a esta spec se sigue leyendo sin error.
-- **AC-11** LP con `scope.paths` sobre `.claude/settings.json` → rechazo en la captura (exit 7). Lo mismo para una ruta de `learning-authority-paths.txt` alcanzada por un enlace relativo (`../`).
-- **AC-12** `--to active` sin `--validation-receipt` → exit 5, **también** sin flags de métricas (hoy pasa). Recibo de otra LP, de otro commit base o con `holdout` vacío → exit 5.
-- **AC-13** `learning-validate.sh` con un `regression_test` que ya pasa en el commit base → recibo con veredicto `INVALID_TEST` y sin promoción posible. Los casos de `evidence` no aparecen en el `holdout` del recibo.
-- **AC-14** LP marcada `active` en una rama cuyo commit no es ancestro de `origin/main` → estado derivado `pending_activation`, y `learning-recall.sh --mode effective` no la inyecta. `--human-trailer "cualquier-cosa"` ya no basta.
+- **AC-11** LP con `scope.paths` sobre `.claude/settings.json` → rechazo en la captura (exit 7). Lo mismo para una ruta de `learning-authority-paths.txt` alcanzada por un enlace relativo (`../`), por un enlace simbólico dentro del repo o con otras mayúsculas. Una ruta que sale de la raíz del repo → rechazo.
+- **AC-12** `--to active` sin `--validation-receipt` → exit 8, **también** sin flags de métricas (hoy pasa). Recibo de otra LP, de otro contenido destino (`target_blobs`), con una métrica editada a mano (cambia `receipt_hash`) o con `holdout` vacío → exit 8. Regresión de métrica según el recibo → vuelve a `proposed` y exit 5 (hoy sale 0).
+- **AC-13** `learning-validate.sh` con un `regression_test` que ya pasa en el commit base (con el test superpuesto) → veredicto `INVALID_TEST` y sin promoción posible. Un test nuevo que falla de verdad en la base con el fichero superpuesto → válido; uno cuyo fallo en la base es «no encontrado» → `INVALID_TEST`. Para `target: lesson`, un test que solo busca el texto en el fichero → `INVALID_TEST`. Los casos de `evidence` no aparecen en el `holdout` del recibo. Regenerar el corpus con los casos en otro orden no cambia la partición.
+- **AC-14** LP con `activation_requested` cuyo commit de activación solo existe en una rama `agent/*` → estado derivado `pending_activation`, y `learning-recall.sh --mode effective` no la inyecta. La misma activación fusionada en un repo de prueba por squash (otro commit, mismo contenido y trailers) → `active`. Fusionada por squash sin los trailers → `pending_activation`. `--human-trailer "cualquier-cosa"` → exit 4. `--human-trailer 'x/;e id;#'`, `--actor` y `--reason` con comillas, barras y saltos de línea → exit 4 o valor escrito literal, sin ejecutar nada (fichero centinela no creado) y ledger que sigue siendo JSON válido.
 - **AC-15** Activación de una LP y luego `learning-rollback.sh --lp <id>` → el destino queda byte a byte igual que en el commit base. Hay una entrada en `rollback.jsonl`. Activación cuyo diff toca otro fichero → rechazo.
 - **AC-16** LP con `expires_at` vencido → estado `expired`, sin inyección en recall y listada en `learning-report.sh`.
 - **AC-17** `learning-autonomy.sh --p-consistent 0.9 --requested L2` sin otorgamiento humano → DENIED (hoy GRANTED). Con otorgamiento L1 y `p = 0,9` → concede L1, no más. Con `p = 0,4` y otorgamiento L3 → L0 (la cifra baja el techo).
 - **AC-18** Test guardián de R13 en verde. Mutar `learning-autonomy.sh` para que vuelva a conceder L2 solo por `p` lo pone en rojo.
 - **AC-19** Tests multioperador con dos perfiles sintéticos en verde, sin rutas absolutas ni identidades reales en fixtures.
 
-Cada AC tiene un test BATS o pytest que falla contra main y pasa con el cambio, con su caso negativo.
+Cada AC tiene un test BATS o pytest con su caso negativo. Los que prueban comportamiento nuevo fallan contra main y pasan con el cambio. Excepciones declaradas: la mitad de regresión de AC-6 (una nota sin `code_refs` sale idéntica) protege lo que ya existe y pasa también contra main; AC-9 se cumple con el informe publicado, no con un test; AC-19 se cumple cuando la suite multioperador está en verde.
 
 ## Plan por slices
 
@@ -230,11 +268,13 @@ Cada AC tiene un test BATS o pytest que falla contra main y pasa con el cambio, 
 
 S1 a S3 y S4 a S7 son independientes entre sí. S7 necesita la aprobación expresa del cambio sobre SCL-006.
 
+Prioridad: S5 y S7 van primero dentro de la parte 2. Esta spec documenta en un repo público debilidades activas de los gates de aprendizaje (gate saltable omitiendo métricas, trailer humano libre e interpolado en `sed`, L2 sin persona); son de autogobierno interno y no se explotan desde fuera, pero la ventana debe ser corta.
+
 ## Dependencias
 
-- **SE-364**: `to_evals()` en `scripts/evidence-capture.py` filtra `status == "open"`, aunque su docstring habla de casos cerrados. R9 consume el corpus. Si ese filtrado no se corrige o se justifica en SAVIA-RESEARCH-02, S5 queda bloqueada y falla cerrada (sin recibo, no hay promoción). No se corrige aquí.
+- **SE-364**: `to_evals()` en `scripts/evidence-capture.py` filtra `status == "open"`, aunque su docstring habla de casos cerrados. R9 consume el corpus. Si ese filtrado no se corrige o se justifica en SAVIA-RESEARCH-02, S5 queda bloqueada y falla cerrada (sin recibo, no hay promoción). No se corrige aquí. Los ids posicionales del corpus no bloquean: R9 usa su propia `case_key` de contenido.
 - **SE-486** (PROPOSED): S3 respeta su admisión si se aprueba. Si no, la etiqueta solo va en la traza de `vault_rag`.
-- **SE-488** (PROPOSED): R10 usa la comprobación de ancestro hasta que exista su recibo.
+- **SE-488** (PROPOSED): R10 busca la activación por trailers y contenido en `origin/main` hasta que exista su recibo de aprobación por fusión, que entonces la sustituye.
 
 ## Fuera de alcance
 
