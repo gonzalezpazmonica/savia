@@ -138,8 +138,7 @@ hostil:
 
 El aislamiento real requiere que quien invoca no controle el comando hijo (un
 wrapper fijo por herramienta) o que la comprobación ocurra en el propio cliente
-HTTP. Test que fija este límite: `G2r: LÍMITE conocido` en
-`tests/bats/test-se353-credential-egress.bats`.
+HTTP. Lo fija el test `G2r: LÍMITE conocido` (`test-se353-credential-egress.bats`).
 
 CRIT-001: tienda 100% local, sin proveedor cloud. La clave de cifrado deriva del
 host, así que el store no es portable a otra máquina (intencional).
