@@ -105,14 +105,18 @@ Complementa la redacción con resolución **solo en egress**: el valor real de u
 credencial se sustituye en el subproceso que habla con el destino autorizado, de
 modo que **jamás entra en el contexto del modelo**.
 
-- `scripts/credential-egress.sh store KEY VALUE` — cifra y almacena en
-  `~/.savia/credential-store/keys.json` (0600, AES-256-CBC + HMAC, clave derivada
-  de machine-id + HOME).
-- `resolve KEY [--dest D]` — valor real solo si `D` está en la allowlist
-  (`dev.azure.com`, `github.com`, `api.github.com`). Destino no autorizado o
-  marcador no registrado → **REFUSE**.
-- `run CMD ARG...` — sustituye `savia:cred:<key>` en args y ejecuta en subproceso
-  (el valor real no se imprime ni se persiste).
+- `printf '%s' "$SECRETO" | scripts/credential-egress.sh store KEY [-]` — lee el
+  valor por **stdin**, lo cifra y almacena en `~/.savia/credential-store/keys.json`
+  (0600, AES-256-CBC + HMAC, clave derivada de machine-id + HOME). El valor por
+  argv (`store KEY VALUE`) se rechaza: quedaría en `ps` y en el historial.
+- `resolve KEY --dest D` — valor real solo si `D` coincide exactamente con la
+  allowlist (`dev.azure.com`, `github.com`, `api.github.com`). Sin `--dest`,
+  destino no autorizado o marcador no registrado → **REFUSE** (fail-closed, nada
+  en stdout).
+- `run [--dest D] CMD ARG...` — sustituye `savia:cred:<key>` en args y ejecuta en
+  subproceso (el valor real no se imprime ni se persiste). El destino es `--dest`
+  o el host único de las URLs de los args; sin destino, varios hosts o `--dest`
+  distinto del host de la URL → **REFUSE**.
 - `status` / `audit` — diagnóstico sin exponer valores.
 
 CRIT-001: tienda 100% local, sin proveedor cloud. La clave de cifrado deriva del
