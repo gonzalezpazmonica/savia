@@ -206,3 +206,64 @@ teardown() {
   [[ "$status" -ne 0 ]]
   [[ "$output" != *"valor-run-787"* ]]
 }
+
+# ── T7: revisión PR #1457 — URLs en cualquier posición, autoridad ambigua, límites ─
+
+@test "G2r: run detecta la URL dentro de '--url=' y rechaza la discrepancia" {
+  printf '%s' "valor-r-801" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'echo "recibido:$2"' _ --url=https://evil.example/ savia:cred:pat-test
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"no coincide"* ]]
+  [[ "$output" != *"valor-r-801"* ]]
+}
+
+@test "G2r: run detecta la URL dentro de un script de 'bash -c'" {
+  printf '%s' "valor-r-802" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'echo "https://evil.example/?t=$1"' _ savia:cred:pat-test
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"REFUSE"* ]]
+  [[ "$output" != *"valor-r-802"* ]]
+}
+
+@test "G2r: run rechaza autoridad con '\\' o '%' (discrepancia de parsers)" {
+  printf '%s' "valor-r-803" | "$EGRESS" store pat-test >/dev/null
+  local u
+  for u in 'https://evil.example\@github.com/' 'https://evil.example%2f@github.com/'; do
+    run "$EGRESS" run bash -c 'echo "recibido:$2"' _ "$u" savia:cred:pat-test
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"ambigua"* ]]
+    [[ "$output" != *"valor-r-803"* ]]
+  done
+}
+
+@test "G2r: run sin marcadores no valida hosts (sin credencial, sin cambio)" {
+  run "$EGRESS" run bash -c 'echo "ok:$1:$2"' _ https://github.com/a https://example.org/b
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "ok:https://github.com/a:https://example.org/b" ]]
+}
+
+@test "G2r: --dest no distingue mayúsculas en resolve y run" {
+  printf '%s' "valor-r-804" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" resolve pat-test --dest GitHub.COM
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "valor-r-804" ]]
+  run "$EGRESS" run --dest GITHUB.com bash -c 'echo "r:$2"' _ https://github.com/x savia:cred:pat-test
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "r:valor-r-804" ]]
+}
+
+@test "G2r: store KEY - EXTRA → rechazado y no se almacena" {
+  run bash -c 'printf "%s" "valor-r-805" | "$EGRESS" store pat-test - extra'
+  [[ "$status" -ne 0 ]]
+  [[ ! -f "$SAVIA_CRED_STORE_DIR/keys.json" ]]
+}
+
+@test "G2r: LÍMITE conocido — con --dest autodeclarado el hijo recibe el valor y puede imprimirlo" {
+  # Documenta que la comprobación de host es salvaguarda de enrutado, no barrera
+  # frente a un llamante hostil. Si este test empieza a fallar, la garantía ha
+  # cambiado: actualizar secret-redaction-policy.md § Límites.
+  printf '%s' "valor-r-807" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'echo "$1"' _ savia:cred:pat-test
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "valor-r-807" ]]
+}

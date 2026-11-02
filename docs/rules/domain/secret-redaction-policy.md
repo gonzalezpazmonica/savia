@@ -114,10 +114,32 @@ modo que **jamás entra en el contexto del modelo**.
   destino no autorizado o marcador no registrado → **REFUSE** (fail-closed, nada
   en stdout).
 - `run [--dest D] CMD ARG...` — sustituye `savia:cred:<key>` en args y ejecuta en
-  subproceso (el valor real no se imprime ni se persiste). El destino es `--dest`
-  o el host único de las URLs de los args; sin destino, varios hosts o `--dest`
-  distinto del host de la URL → **REFUSE**.
+  subproceso (el script no imprime ni persiste el valor). El destino es `--dest`
+  o el host único de las URLs (`esquema://host`) que aparezcan en cualquier
+  posición de los args, también dentro de `--url=...` o de un script de
+  `bash -c`; sin destino, varios hosts, `--dest` distinto del host de la URL o
+  una autoridad ambigua (`\`, `%`) → **REFUSE**. Sin marcadores, `run` ejecuta
+  el comando sin validar hosts.
 - `status` / `audit` — diagnóstico sin exponer valores.
+
+### Límites (lo que SE-353 no garantiza)
+
+`--dest` lo declara quien llama. La comprobación de host de `run` es una
+**salvaguarda contra errores de enrutado**, no una barrera frente a un llamante
+hostil:
+
+- `resolve KEY --dest github.com` imprime el valor real por stdout a quien lo
+  pida con un destino autorizado.
+- `run` entrega el valor al proceso hijo, que puede imprimirlo (`bash -c 'echo
+  "$1"'`) o enviarlo a un host que no aparezca como `esquema://host` en los args
+  (variable de entorno, fichero, `curl host` sin esquema).
+- El hijo recibe el valor por argv, visible en `ps` mientras dura.
+- `store` descarta los saltos de línea finales del valor.
+
+El aislamiento real requiere que quien invoca no controle el comando hijo (un
+wrapper fijo por herramienta) o que la comprobación ocurra en el propio cliente
+HTTP. Test que fija este límite: `G2r: LÍMITE conocido` en
+`tests/bats/test-se353-credential-egress.bats`.
 
 CRIT-001: tienda 100% local, sin proveedor cloud. La clave de cifrado deriva del
 host, así que el store no es portable a otra máquina (intencional).

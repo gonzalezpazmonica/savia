@@ -12,6 +12,7 @@
 # Modos:
 #   store   KEY [-]             → lee el valor por stdin, cifra y almacena (0600).
 #                                 El valor por argv se rechaza (visible en ps/historial).
+#                                 Los saltos de línea finales se descartan.
 #   resolve KEY --dest DEST     → imprime valor real solo si DEST autorizado.
 #                                 Sin --dest → REFUSE (fail-closed).
 #   run     [--dest DEST] CMD ARG...
@@ -19,6 +20,8 @@
 #                                 en subproceso (valor real nunca se imprime).
 #                                 Destino: --dest o el host único de las URLs
 #                                 de los args; ambiguo o ausente → REFUSE.
+#                                 Salvaguarda de enrutado, no barrera: el hijo
+#                                 recibe el valor y puede imprimirlo.
 #   status                      → keys registradas (nunca valores)
 #   audit   [DIR]               → detecta credenciales en texto plano
 #
@@ -91,19 +94,31 @@ PY
 }
 
 # ── destino: coincidencia exacta con la allowlist (sin regex, sin subcadenas) ──
+# Los nombres de host no distinguen mayúsculas: se compara en minúsculas.
 _dest_authorized() {
-  local dest="$1" d
+  local dest="${1,,}" d
   [[ -n "$dest" ]] || return 1
   for d in $AUTH_DESTS; do [[ "$dest" == "$d" ]] && return 0; done
   return 1
 }
 
-# Host de un argumento con forma de URL (scheme://[user@]host[:port]/...).
-_url_host() {
-  local a="$1" h
-  [[ "$a" =~ ^[A-Za-z][A-Za-z0-9+.-]*://([^/?#]*) ]] || return 1
-  h="${BASH_REMATCH[1]##*@}"; h="${h%%:*}"
-  printf '%s' "${h,,}"
+# Hosts de todas las URLs (scheme://[user@]host[:port]) que aparezcan en un
+# argumento, en cualquier posición: '--url=https://x', scripts de 'bash -c', etc.
+# Imprime un host por línea. Devuelve 2 si alguna autoridad es ambigua
+# ('\', '%', vacía o con caracteres fuera de [a-z0-9.-]): los parsers difieren
+# en cómo la interpretan (p. ej. 'https://evil\@github.com').
+_URL_RE='[A-Za-z][A-Za-z0-9+.-]*://([^]/?#[:space:]"'"'"'`;|&<>()[]*)'
+_arg_hosts() {
+  local rest="$1" auth h bad=0
+  while [[ "$rest" =~ $_URL_RE ]]; do
+    auth="${BASH_REMATCH[1]}"
+    rest="${rest#*"${BASH_REMATCH[0]}"}"
+    if [[ "$auth" == *[\\%]* ]]; then bad=1; continue; fi
+    h="${auth##*@}"; h="${h%%:*}"; h="${h,,}"
+    if [[ -z "$h" || ! "$h" =~ ^[a-z0-9.-]+$ ]]; then bad=1; continue; fi
+    printf '%s\n' "$h"
+  done
+  return $(( bad ? 2 : 0 ))
 }
 
 # ── resolve: valor real solo para destino autorizado ─────────────────────────
@@ -154,13 +169,28 @@ cmd_run() {
     dest="$2"; shift 2
   fi
   [[ $# -eq 0 ]] && { echo "Uso: credential-egress.sh run [--dest DEST] CMD ARG..." >&2; exit 1; }
-  # Destino del egress: los hosts de las URLs de los args deben ser uno solo y
-  # coincidir con --dest si se indicó. Así un comando no puede declarar un
-  # destino autorizado y enviar la credencial a otro.
+  # Sin marcadores no hay credencial que proteger: se ejecuta tal cual.
+  local has_marker=0
+  for arg in "$@"; do [[ "$arg" == savia:cred:* ]] && has_marker=1; done
+  if [[ $has_marker -eq 0 ]]; then "$@"; return; fi
+  # Salvaguarda de ENRUTADO, no barrera frente a un llamante hostil: todas las
+  # URLs que aparezcan en los args (también dentro de '--url=...' o de un
+  # script de 'bash -c') deben ser de un único host y coincidir con --dest.
+  # Evita mandar la credencial por error a otro host escrito como URL. NO
+  # impide que el comando la imprima por stdout ni que la envíe a un host que
+  # no aparezca como 'esquema://host' (variables, ficheros, 'curl host').
+  # Ver «Límites» en docs/rules/domain/secret-redaction-policy.md.
   local -a hosts=()
+  local hs rc
   for arg in "$@"; do
-    h=$(_url_host "$arg") || continue
-    [[ " ${hosts[*]} " == *" $h "* ]] || hosts+=("$h")
+    hs=$(_arg_hosts "$arg"); rc=$?
+    if [[ $rc -ne 0 ]]; then
+      echo "ERROR: URL con autoridad ambigua en los args. REFUSE." >&2; exit 1
+    fi
+    while IFS= read -r h; do
+      [[ -n "$h" ]] || continue
+      [[ " ${hosts[*]} " == *" $h "* ]] || hosts+=("$h")
+    done <<<"$hs"
   done
   if [[ ${#hosts[@]} -gt 1 ]]; then
     echo "ERROR: varios destinos en los args (${hosts[*]}). REFUSE." >&2; exit 1
@@ -223,7 +253,9 @@ credential-egress.sh {store|resolve|run|status|audit}
                              (printf '%s' "$SECRETO" | credential-egress.sh store KEY)
   resolve KEY --dest D     → imprime valor real; sin --dest o D no autorizado → REFUSE
   run [--dest D] CMD ARG... → sustituye savia:cred:<key> en args y ejecuta en hijo;
-                             destino = --dest o host único de las URLs de los args
+                             destino = --dest o host único de las URLs de los args.
+                             Salvaguarda de enrutado: el hijo recibe el valor y
+                             puede imprimirlo (ver secret-redaction-policy.md)
   status                   → lista marcadores registrados (nunca valores)
   audit [DIR]              → detecta credenciales en texto plano / cat $PAT_FILE
 USAGE
