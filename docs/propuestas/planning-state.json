@@ -1670,6 +1670,15 @@
       "phase": "A"
     },
     {
+      "id": "SE-491",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Autorizaciones de publicación de proyectos que un agente no puede fabricar",
+      "note": "La autorización deja de ser una línea editable en .claude/.project-authorizations: pasa a una firma ed25519 de operador (namespace savia-project-publish) versionada en config/project-authorizations/ y verificada contra los firmantes de origin/main. La whitelist de origin/main, no la de la copia de trabajo, dice qué ya es público. Un verificador único para protect-project-privacy.sh, block-gitignored-references (bash y TS) y block-project-whitelist (bash y TS nuevo), aviso PostToolUse tras Bash sobre .gitignore y paso en CI.",
+      "evidence": "docs/specs/SE-491-project-publication-authorizations.spec.md",
+      "phase": "A"
+    },
+    {
       "id": "SE-494",
       "status": "PROPOSED",
       "priority": "P0",
