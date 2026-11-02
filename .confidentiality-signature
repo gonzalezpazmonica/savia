@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=b09a5428965cb9d9b8e808e2f56d080f89160930c1f4c8ae6c319d0e1580f4b9
-timestamp=2026-11-02T20:37:57Z
+diff_hash=a70eb61bb81abc8632711fc263e829f1be69a5a31ce2b96d5a3009ab9a80e068
+timestamp=2026-11-02T21:23:50Z
 branch=agent/w-se496-autoridad-ontologia-20261023
-head_commit=40e3edd71
-signature=53adaff6aa26bf9d52b0ca16535760431f22db27ab272d6b6e54a2dd347452a0
+head_commit=9ebb7943c
+signature=13a698b7a49306e4348bb4b16ae91381b9208818c9e4df81f5e5eef2c58668dc
