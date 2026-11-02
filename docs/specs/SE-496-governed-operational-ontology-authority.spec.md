@@ -90,16 +90,24 @@ Fichero JSON canónico (claves ordenadas, UTF-8 NFC, sin espacios) con firma `ss
 | `delegate` | Agente o harness concreto (`yema`, `codex`, `savia-worker:<id>`) |
 | `capability` | `id`, `version` y `sha256` del descriptor de SE-386; si el descriptor cambia, el contrato deja de valer |
 | `authority` | Techo: nivel L0–L4 y tier SE-362 máximos. La autoridad efectiva es el **mínimo** entre el contrato, el nivel del agente y el gate del tier |
-| `scope` | Lista cerrada de selectores de recurso exactos: `repo`, ramas por patrón anclado (`agent/*`), número de PR o proyecto. Sin comodines globales |
+| `scope` | Lista cerrada de selectores de recurso exactos: `repo`, ramas por patrón anclado (`agent/*`), número de PR o proyecto. Sin comodines globales. Semántica de selectores en «Comparación de selectores», abajo |
 | `preconditions` | Predicados adicionales del principal (por ejemplo, `ci_status != failure`) |
 | `declared_effects` | Efectos que el principal acepta. Un efecto no listado se deniega aunque la capacidad lo permita |
 | `not_before`, `expires_at` | Obligatorios. Vida máxima 7 días; la del grant de merge sigue siendo la de SE-343 |
-| `max_uses` | Opcional; `1` para efectos irreversibles (`reversibility: irreversible`) |
+| `max_uses` | Opcional; `1` para efectos irreversibles (`reversibility: irreversible`). Mecanismo de consumo en R4 «Ledger de usos» |
 | `installation` | Remoto `origin` normalizado a `host/propietario/repo`, para que el contrato no valga en otro repo |
 
 El contrato no lleva secretos ni datos personales más allá del identificador del firmante, que ya es público en el fichero de firmantes. Se versiona en `config/delegations/<id>.json` + `.sig` cuando el principal quiere que la CI lo vea, o en `~/.savia/delegations/` cuando es local.
 
-**Revocación**: el `nonce` en `config/delegations/REVOKED` (en `origin/main` o en la copia de trabajo) o en `~/.savia/delegations/REVOKED`. Basta con que aparezca en cualquiera de los tres. La revocación local es inmediata y no espera a ninguna fusión.
+**Comparación de selectores** (cierra el prefijo engañoso de D10 y D14):
+
+- Antes de comparar, selector y recurso se normalizan a NFC. Si el recurso cambia al normalizarlo, o contiene caracteres de control o de confusión (tabla de confusables de Unicode TR39), la decisión es `AMBIGUOUS`; no se «arregla» en silencio.
+- La comparación distingue mayúsculas. Dos recursos existentes que solo difieren en mayúsculas o normalización dan `AMBIGUOUS`.
+- Los patrones de rama son glob por segmentos: `*` casa con uno o más caracteres de **un solo** segmento y nunca cruza `/`; no hay `**`, `?` ni clases. `agent/*` cubre `agent/x` pero no `agent/x/y`.
+- Se rechazan con `OUT_OF_SCOPE` los recursos con segmentos `..`, `.` o vacíos, o con `/` inicial. Las rutas de proyecto se comparan por segmento completo: `projects/alpha` no cubre `projects/alpha-x`.
+- Cada regla tiene fixture propio dentro de D10 o D14 (`agent/../main`, `agent/x/y`, `projects/alpha-x`, homoglifo, NFD).
+
+**Revocación**: el `nonce` en `config/delegations/REVOKED` (en `origin/main` o en la copia de trabajo) o en `~/.savia/delegations/REVOKED`. Basta con que aparezca en cualquiera de los tres. La revocación local es inmediata y no espera a ninguna fusión, pero **no resiste a un agente comprometido**: los ficheros locales los puede escribir el mismo usuario que ejecuta al agente, así que un agente puede borrar una línea que aún no esté en `origin/main`. Contra un agente comprometido, la única revocación autoritativa es la de `origin/main`; la local protege frente a errores y carreras, no frente a sabotaje. La misma limitación aplica al ledger de usos (R4) y al audit (R3).
 
 ### R3 — Kernel de autoridad
 
@@ -117,13 +125,58 @@ Reglas:
 - El estado se lee en el momento de evaluar y solo de los lectores `source-backed`. **No hay caché de decisiones** entre evaluaciones.
 - Los hechos `inferred` que lleguen en la petición se descartan para decidir y se devuelven en `suggestions` con la acción que haría falta (por ejemplo, «pedir un contrato para `projects/alpha`»). Una sugerencia nunca cambia `decision`.
 - Fail-closed: herramienta ausente, `origin/main` ilegible, JSON malformado, lector que no responde o excepción → `DENY` con su código. Exit 0 solo con `ALLOW`; 1 con `DENY`; 4 con `REQUIRES_APPROVAL`; 2 si no se puede evaluar.
-- Cada evaluación, permitida o denegada, se añade a `~/.savia/authority/audit.jsonl` con los hashes, nunca con parámetros sensibles en claro.
+- `evaluate` es de solo lectura: **nunca consume** `max_uses` ni escribe estado salvo el audit. El consumo lo hace `recheck` (R4).
+- Cada evaluación, permitida o denegada, se añade a `~/.savia/authority/audit.jsonl` con los hashes, nunca con parámetros sensibles en claro. Cada línea lleva `prev_sha256` (hash de la línea anterior; la primera, 64 ceros), y `authority_kernel.py verify-audit` detecta una línea editada, borrada o reordenada. Como el agente puede reescribir el fichero entero con el mismo usuario, la cadena detecta ediciones parciales y errores, **no es prueba frente al agente**; el recibo con valor de prueba es la PR revisada.
+
+**Orden de evaluación y precedencia de códigos.** Todas las comprobaciones son `forbid`; el kernel las aplica en este orden fijo y devuelve el código de la **primera** que falla, sin evaluar las siguientes. Así, una entrada que cumple dos casos tiene un único código esperado, y dos implementaciones correctas no divergen:
+
+| Orden | Comprobación | Código |
+|---|---|---|
+| 0 | Petición JSON bien formada y con campos obligatorios | exit 2, sin decisión |
+| 1 | Hay contrato para `delegate` + `capability` | `NO_CONTRACT` |
+| 2 | Firma presente; `principal` no es `self` ni un agente | `SELF_ISSUED` |
+| 3 | Firma válida, namespace `savia-delegation`, firmante en el fichero de `origin/main` | `BAD_SIGNATURE` |
+| 4 | Firmante verificado = principal seleccionado por el perfil activo | `PRINCIPAL_MISMATCH` |
+| 5 | `nonce` en alguna lista `REVOKED` | `REVOKED` |
+| 6 | `not_before` ≤ now < `expires_at` | `NOT_YET_VALID` / `EXPIRED` |
+| 7 | `capability` (id, versión, `sha256`) coincide | `CAPABILITY_MISMATCH` |
+| 8 | El objetivo se normaliza a un único recurso | `AMBIGUOUS` |
+| 9 | La pertenencia del recurso al ámbito no descansa solo en hechos `inferred` | `INFERRED_NOT_AUTHORITY` |
+| 10 | El recurso está cubierto por `scope` e `installation` | `OUT_OF_SCOPE` |
+| 11 | Los usos registrados son < `max_uses` | `MAX_USES_EXHAUSTED` |
+| 12 | Los lectores `source-backed` responden | `UNKNOWN_STATE` |
+| 13 | Precondiciones del descriptor y del contrato | `PRECONDITION_FAILED:<id>` |
+| 14 | Efectos de la acción ⊆ `declared_effects` | `UNDECLARED_EFFECT` |
+| 15 | Techo: nivel del agente | `LEVEL_EXCEEDED` |
+| 16 | Techo: tier 3/4 sin revisión humana del PR | `REQUIRES_APPROVAL` con `REVIEW_REQUIRED` |
+
+Si una comprobación no puede leer su fuente (por ejemplo, el paso 3 sin `origin/main` o sin `ssh-keygen`), devuelve `UNKNOWN_STATE` **en su posición**, no la del paso 12. Ejemplos de precedencia que la batería fija con fixture propio: contrato sin firma → `SELF_ISSUED` (no `BAD_SIGNATURE`); homoglifo de un proyecto del ámbito → `AMBIGUOUS` (no `OUT_OF_SCOPE`).
+
+**`state_digest`.** SHA-256 del JSON canónico con exactamente estos campos, y ningún otro:
+
+- `contract_sha256` y `capability_sha256`;
+- `signers_blob`: id del blob de `config/operator-grant-signers` en `origin/main`;
+- `revoked`: booleano de presencia del `nonce` en cada una de las tres listas;
+- `uses`: número de usos registrados del contrato;
+- `target`: identidad resuelta del recurso (`host/propietario/repo`, rama, número de PR y `head_sha` si aplica);
+- `facts`: valor de cada atributo `source-backed` que **una precondición aplicable referencia**, por nombre.
+
+El estado que ninguna precondición referencia no entra, de modo que un cambio irrelevante entre las dos llamadas (otra PR, un check no exigido) no produce denegaciones espurias. Un cambio en algo que sí se referencia (la CI pasa a rojo, la PR deja de ser Draft) cambia el digest y bloquea la ejecución, que es lo que se quiere.
 
 ### R4 — Punto de ejecución (EEP)
 
-La prueba de autorización **no es un token al portador**: el kernel corre en el mismo equipo y con el mismo usuario que el agente, así que una firma local no distinguiría a la persona del agente (el mismo motivo por el que SE-491 descarta el HMAC local). La garantía contra la falsificación está en la firma del principal, cuya clave privada no está en el equipo. Por eso el punto de ejecución **vuelve a llamar al kernel** inmediatamente antes del efecto y compara `action_sha256` y `state_digest` con los de la evaluación previa. Si no coinciden, o si la nueva evaluación no es `ALLOW`, no ejecuta. La salida del kernel queda como recibo de auditoría, enlazado con la clave de `effect-reservation.sh`.
+La prueba de autorización **no es un token al portador**: el kernel corre en el mismo equipo y con el mismo usuario que el agente, así que una firma local no distinguiría a la persona del agente (el mismo motivo por el que SE-491 descarta el HMAC local). La garantía contra la falsificación está en la firma del principal, cuya clave privada no está en el equipo. Por eso el punto de ejecución **vuelve a llamar al kernel** inmediatamente antes del efecto, con `authority_kernel.py recheck --prior <recibo>`, que repite la evaluación completa y compara `action_sha256` y `state_digest` con los del recibo previo. Si no coinciden, o si la nueva evaluación no es `ALLOW`, no ejecuta. La salida del kernel queda como recibo de auditoría, enlazado con la clave de `effect-reservation.sh`.
 
-En F2 el primer EEP es un envoltorio (`scripts/authority-exec.sh <capability> -- <orden>`). Los hooks de Claude Code y un guard nuevo del plugin `savia-foundation` de OpenCode (`.opencode/plugins/guards/`) lo invocan para las capacidades con contrato; no reimplementan la lógica en TS (lección de la PR #1237: los ports TS divergen).
+**`recheck` es F0; el envoltorio es F2.** `recheck` forma parte del kernel desde F0. En F0 lo ejercita un arnés de pruebas (`tests/helpers/se496-eep-harness.sh`, solo en `tests/`, no lo invoca ningún hook) que hace `evaluate`, ejecuta un gancho entre medias (por ejemplo, revocar), llama a `recheck` y solo si sale `ALLOW` crea un fichero marcador en lugar de la orden real. Así D04 y AC-5 se prueban en F0 sin que el EEP decida nada sobre efectos reales.
+
+**Ledger de usos (`max_uses`).** El contador vive en `~/.savia/authority/uses/<contract_id>/<n>`, un fichero por uso, `n` de 1 a `max_uses`.
+
+- `evaluate` cuenta los ficheros y da `MAX_USES_EXHAUSTED` si hay `max_uses` o más; **no consume**. Por eso el caso feliz de un contrato `max_uses: 1` es `evaluate` → `ALLOW` y `recheck` → `ALLOW`.
+- `recheck`, si todo lo demás da `ALLOW`, consume un uso **antes** de devolver `ALLOW`: crea el primer `<n>` libre con creación exclusiva (`O_CREAT|O_EXCL`), que contiene la clave de reserva SE-387 de la orden. Si la creación exclusiva falla para todos los `n` ≤ `max_uses`, devuelve `DENY MAX_USES_EXHAUSTED`. Dos `recheck` concurrentes sobre un contrato `max_uses: 1` dan un `ALLOW` y un `DENY`, nunca dos `ALLOW`.
+- El uso se consume aunque la orden falle después: para efectos irreversibles es preferible pedir otro contrato que arriesgar una segunda ejecución. Un reintento de la **misma** orden tras una caída se resuelve con la reserva de SE-387 (misma clave, `resume`), no con otro uso.
+- `effect-reservation.sh` no sirve como contador: su `reserve` sobre una clave abierta devuelve `resume` con exit 0, que es la semántica correcta para reanudar, no para limitar usos. Por eso el ledger es propio y solo guarda la clave para enlazarlos.
+
+En F2 el primer EEP es un envoltorio (`scripts/authority-exec.sh <capability> -- <orden>`) que llama a `recheck`. Los hooks de Claude Code y un guard nuevo del plugin `savia-foundation` de OpenCode (`.opencode/plugins/guards/`) lo invocan para las capacidades con contrato; no reimplementan la lógica en TS (lección de la PR #1237: los ports TS divergen).
 
 ### R5 — Batería de 15 denegaciones obligatorias
 
@@ -134,11 +187,11 @@ Cada caso tiene un fixture en `tests/fixtures/se496/`, código de motivo estable
 | D01 | Sin contrato | Delegado sin contrato para la capacidad | `NO_CONTRACT` |
 | D02 | Revocado en main | `nonce` en `config/delegations/REVOKED` de `origin/main` | `REVOKED` |
 | D03 | Revocado solo en local | `nonce` solo en `~/.savia/delegations/REVOKED`, aún sin fusionar | `REVOKED` |
-| D04 | Revocado entre evaluar y ejecutar | `ALLOW` en la evaluación; revocación; el EEP reevalúa | `REVOKED` en el EEP; la orden no corre |
+| D04 | Revocado entre evaluar y ejecutar | `ALLOW` en `evaluate`; revocación; `recheck` (arnés de F0, R4) | `REVOKED` en `recheck`; el marcador no se crea |
 | D05 | Fuera de vigencia | `expires_at` pasado; caso límite `now == expires_at`; `now < not_before` | `EXPIRED` / `NOT_YET_VALID` |
 | D06 | Firma no válida | Firma alterada, firmante ausente del fichero de `origin/main` (aunque esté en la rama) o namespace de otro uso (`savia-operator-grant`, `savia-project-publish`) | `BAD_SIGNATURE` |
 | D07 | Autoemisión | Contrato sin firma, con `principal: self` o con un agente como principal | `SELF_ISSUED` |
-| D08 | Otro operador | Contrato firmado por el operador A mientras el perfil activo es el del operador B | `PRINCIPAL_MISMATCH` |
+| D08 | Otro operador | Contrato firmado por el operador A mientras el perfil activo es el del operador B; también un perfil activo editado para decir A cuando la firma es de B | `PRINCIPAL_MISMATCH` |
 | D09 | Capacidad distinta | Otra capacidad, otra versión o descriptor con `sha256` cambiado tras firmar | `CAPABILITY_MISMATCH` |
 | D10 | Fuera de ámbito | Recurso no cubierto, prefijo engañoso (`projects/alpha-x` frente a `projects/alpha`), `..`, otro repo | `OUT_OF_SCOPE` |
 | D11 | Efecto no declarado | La acción produciría un efecto que no figura en `declared_effects` (push además de commit) | `UNDECLARED_EFFECT` |
@@ -147,7 +200,17 @@ Cada caso tiene un fixture en `tests/fixtures/se496/`, código de motivo estable
 | D14 | Dato ambiguo | El selector resuelve a 2+ recursos, nombres que difieren solo en mayúsculas o normalización Unicode, homoglifos, alias sin dueño declarado | `AMBIGUOUS` |
 | D15 | Autoridad inferida | La única prueba de pertenencia o permiso viene del grafo, de las cúpulas o del modelo (`provenance: inferred`) | `INFERRED_NOT_AUTHORITY` + sugerencia |
 
-Casos técnicos además de la batería: entrada malformada, kernel ausente, `max_uses` consumido (repetición), contrato que supera el nivel del agente y tier 3/4 sin revisión humana del PR (`REQUIRES_APPROVAL`, nunca `ALLOW`).
+Las 15 denegaciones de la batería dan todas `DENY`; ninguna da `REQUIRES_APPROVAL`. Cuando un caso cumple dos filas, el código esperado es el que fija el orden de R3.
+
+Casos técnicos además de la batería, cada uno con su gemelo positivo:
+
+| Caso | Resultado |
+|---|---|
+| Entrada malformada | exit 2, sin decisión |
+| Kernel ausente | el EEP no ejecuta (exit ≠ 0) |
+| `max_uses` consumido (repetición) y dos `recheck` concurrentes con `max_uses: 1` | `DENY MAX_USES_EXHAUSTED`; exactamente un `ALLOW` en la carrera |
+| Contrato que supera el nivel del agente | `DENY LEVEL_EXCEEDED` |
+| Tier 3/4 sin revisión humana del PR | `REQUIRES_APPROVAL` con `REVIEW_REQUIRED`, nunca `ALLOW` |
 
 ### R6 — Validadores
 
@@ -162,30 +225,33 @@ Casos técnicos además de la batería: entrada malformada, kernel ausente, `max
 
 ### R8 — Multioperador
 
-Nada depende de una persona concreta: el principal sale del perfil activo y del fichero de firmantes de `origin/main`. Con el fichero vacío o sin clave registrada, todas las delegaciones dan `DENY` con un mensaje que enlaza el alta de la clave. El suelo es el de hoy: acción humana manual y PR revisada. Los tests usan dos operadores ficticios con claves generadas en el propio test.
+Nada depende de una persona concreta. El perfil activo solo **selecciona** qué principal se espera; no concede nada. El principal efectivo es **siempre** el firmante verificado contra el fichero de firmantes de `origin/main` (paso 3 de R3), y el paso 4 exige que coincida con el seleccionado. Editar el perfil puede, como mucho, provocar `PRINCIPAL_MISMATCH`; nunca convierte una firma de otra persona en autoridad propia. Con el fichero vacío o sin clave registrada, todas las delegaciones dan `DENY` con un mensaje que enlaza el alta de la clave. El suelo es el de hoy: acción humana manual y PR revisada. Los tests usan dos operadores ficticios con claves generadas en el propio test.
 
 ## Criterios de aceptación
 
 - **AC-1** `contracts/ontology/savia-operational.yaml` existe con los tipos y las cuatro acciones de R1, y `check-ontology` da PASS. Un fixture con un atributo `inferred` en una precondición da FAIL.
 - **AC-2** `check-contract` acepta un contrato válido y rechaza, cada uno con su código: falta un campo obligatorio, vida > 7 días, forma no canónica e irreversible sin `max_uses: 1`.
-- **AC-3** Las 15 denegaciones de R5 dan `DENY` (o `REQUIRES_APPROVAL` donde se indica) con su código exacto, y sus 15 gemelos positivos dan `ALLOW`. Lo comprueba `tests/test-se496-authority-kernel.bats`.
+- **AC-3** Las 15 denegaciones de R5 dan `DENY` con su código exacto, y sus 15 gemelos positivos dan `ALLOW`. Los casos técnicos de R5 dan el resultado de su tabla (`REQUIRES_APPROVAL REVIEW_REQUIRED` solo en el de tier 3/4). Los dos ejemplos de precedencia de R3 tienen fixture y dan el código del primer paso que falla. Lo comprueba `tests/test-se496-authority-kernel.bats`.
 - **AC-4** Mutación: con cada comprobación del kernel desactivada por turnos (parche de prueba), falla al menos su caso de R5. Lo informa `tests/test-se496-mutation.bats`.
-- **AC-5** D04: con la orden real sustituida por un marcador, revocar entre evaluación y ejecución deja el marcador sin crear.
+- **AC-5** D04 (F0, con el arnés de R4): con la orden real sustituida por un marcador, revocar entre `evaluate` y `recheck` deja el marcador sin crear; sin la revocación, el marcador se crea.
+- **AC-5b** Ledger de usos: con `max_uses: 1`, `evaluate` → `ALLOW`, `recheck` → `ALLOW` y un segundo `recheck` → `DENY MAX_USES_EXHAUSTED`; dos `recheck` concurrentes producen exactamente un `ALLOW`; `evaluate` repetido no consume usos.
+- **AC-5c** `state_digest`: un cambio en un atributo que ninguna precondición referencia no altera el digest; un cambio en uno referenciado sí, y `recheck` deniega.
 - **AC-6** Fail-closed: sin `ssh-keygen`, sin `git`, sin `origin/main` o con entrada malformada, el kernel nunca sale con 0.
 - **AC-7** Sin caché: dos evaluaciones seguidas con una revocación en medio dan `ALLOW` y luego `DENY`, sin esperas.
 - **AC-8** Las sugerencias del grafo aparecen en `suggestions` y no cambian `decision` (D15 y su gemelo con contrato firmado).
 - **AC-9** Multioperador: los tests pasan con dos operadores ficticios y con el fichero de firmantes vacío (todo `DENY`). Ningún test lee el perfil real ni `~/.savia` real (`HOME` temporal).
 - **AC-10** Sombra (F1): el adaptador de SE-343 evalúa todos los grants vigentes de un ledger de prueba y escribe las discrepancias en el audit; `operator-grant.sh` sigue dando los mismos códigos de salida que antes (sus tests en verde sin cambios).
 - **AC-11** Mismo resultado en Claude Code y OpenCode: el guard de OpenCode llama al mismo `authority-exec.sh` y un test lo ejecuta por las dos vías con la misma entrada.
-- **AC-12** El audit registra intentos permitidos y denegados con hashes; un test verifica que los parámetros marcados como sensibles no aparecen en claro.
+- **AC-12** El audit registra intentos permitidos y denegados con hashes; un test verifica que los parámetros marcados como sensibles no aparecen en claro, y que `verify-audit` falla si se edita, borra o reordena una línea intermedia.
+- **AC-13** Selectores: `agent/*` no cubre `agent/x/y` ni `agent/../main`; `projects/alpha` no cubre `projects/alpha-x`; un recurso en NFD o con homoglifo da `AMBIGUOUS`. Cada uno con gemelo positivo.
 
 ## Fases
 
 | Fase | Entrega | Decide algo |
 |---|---|---|
-| F0 | Ontología, contrato, validadores y kernel con la batería (AC-1..AC-9, AC-12) | No: solo tests |
+| F0 | Ontología, contrato, validadores, kernel (`evaluate`, `recheck`, ledger de usos, `verify-audit`) y arnés EEP de pruebas, con la batería (AC-1..AC-9, AC-5b, AC-5c, AC-12, AC-13) | No: solo tests |
 | F1 | Adaptadores SE-343/SE-491 en sombra durante 14 días; informe de discrepancias (AC-10) | No |
-| F2 | `authority-exec.sh` como EEP de `pr.create-draft` y `vault.note-write` (AC-11) | Sí, solo esas dos y solo si la operadora lo aprueba tras ver el informe de F1 |
+| F2 | `authority-exec.sh` (envoltorio sobre `recheck`) como EEP de `pr.create-draft` y `vault.note-write` (AC-11) | Sí, solo esas dos y solo si la operadora lo aprueba tras ver el informe de F1 |
 | F3 | Ensayo Cedar frente al evaluador propio con la misma batería | Decisión de motor |
 
 `pr.merge` y `project.publish` no pasan a decidir por el kernel en esta spec: siguen en SE-343 y SE-491.
@@ -203,6 +269,7 @@ Nada depende de una persona concreta: el principal sale del perfil activo y del 
 - **El evaluador propio tiene errores que Cedar no tendría.** Mitigación: batería con gemelos, mutación (AC-4) y F3.
 - **Coste de fricción.** Un contrato más que firmar desde el móvil. Mitigación: F2 solo cubre capacidades reversibles y contratos de hasta 7 días.
 - **Carrera entre la evaluación y el efecto.** La reevaluación del EEP la reduce a la ventana entre la llamada y la orden; no la elimina para efectos externos lentos.
+- **Estado local escribible por el agente.** Revocación local, ledger de usos y audit viven en `~/.savia` con el mismo usuario que el agente. Mitigación declarada, no resuelta: la autoridad contra un agente comprometido es `origin/main` más la PR revisada; lo local cubre errores y carreras.
 - **Frontera con AEK sin decidir.** Si AEK define otras primitivas, F0 se rehace como adaptador; la batería se conserva.
 
 ## OpenCode Implementation Plan
