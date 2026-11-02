@@ -1677,6 +1677,15 @@
       "note": "La autorización deja de ser una línea editable en .claude/.project-authorizations: pasa a una firma ed25519 de operador (namespace savia-project-publish) versionada en config/project-authorizations/ y verificada contra los firmantes de origin/main. La whitelist de origin/main, no la de la copia de trabajo, dice qué ya es público. Un verificador único para protect-project-privacy.sh, block-gitignored-references (bash y TS) y block-project-whitelist (bash y TS nuevo), aviso PostToolUse tras Bash sobre .gitignore y paso en CI.",
       "evidence": "docs/specs/SE-491-project-publication-authorizations.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-499",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Anclaje externo de cadenas de evidencia",
+      "note": "Las cadenas por hash (ledger, revisiones y juez de merge-sprint, recibos de SE-493 y evidencia de Yema) solo se verifican contra sí mismas: reescritura completa, truncado y borrado dan «íntegra», y los contadores de presupuesto salen del propio fichero. Punto de anclaje savia-anchor/1 y verificador común que exige que la cadena extienda cada ancla. Transportes: comentario en la PR, rama de anclas protegida en repo privado con token sin administración, y firma de la operadora con clave fuera del equipo (namespace savia-evidence-anchor) en hitos. Texto del límite en las salidas mientras no haya ancla.",
+      "evidence": "docs/specs/SE-499-external-anchoring-evidence-chains.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
