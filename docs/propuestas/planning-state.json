@@ -1668,6 +1668,15 @@
       "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-495",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Banco interno de tareas reales desde PRs de Savia",
+      "note": "20 tareas de PRs fusionadas del repo público con verificador oculto (F2P/P2P), controles no-op = 0 y oráculo = 1, separación dev/test sellada y bloqueo de contaminación por el parche oro. Compara Claude Code, OpenCode y Codex por pares de tareas con IC95: resolución, seguridad L3/L4, coste, latencia, contexto, reintentos y revisión humana. Patrón de Repo2RLEnv, sin instalarlo.",
+      "evidence": "docs/specs/SE-495-pr-task-bench.spec.md",
+      "phase": "C"
     }
   ],
   "route": {
