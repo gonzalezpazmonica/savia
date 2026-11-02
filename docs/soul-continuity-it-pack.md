@@ -20,6 +20,8 @@ No envía nada a terceros, no aprueba, no responde correos y no ejecuta acciones
 
 Cada fuente es opcional y necesita configuración explícita del operador: un **propósito** escrito y una **fecha de consentimiento**. Sin propósito o sin consentimiento vigente, la fuente no se lee. [A4]
 
+`soul init` crea la configuración sin ninguna fuente ni adaptador activo. Cada adaptador se activa después, y `soul login <adaptador>` obtiene su token (flujo de dispositivo o token por la entrada estándar) y lo guarda en el almacén de credenciales del sistema. [A43]
+
 | Adaptador | Fuente | Permisos delegados que pide | Qué lee | Qué no guarda nunca |
 |---|---|---|---|---|
 | `m365-mail` | Correo de Microsoft 365 (Graph) | `Mail.Read` (o `Mail.ReadBasic` si se renuncia a las alertas por remitente) | Metadatos de la bandeja de entrada y de enviados del propio buzón | Cuerpos de correo |
@@ -91,6 +93,7 @@ Los directorios que crea Soul llevan permisos 0700 y los ficheros 0600 en Linux 
 - **La API para la app móvil (`soul serve`)** escucha solo en las direcciones IP que el operador escribe en `api.listen`, que deben ser las de su VPN. No hay valor por defecto: sin direcciones, no arranca. Las escrituras que equivalen a «todas las interfaces» (`0.0.0.0`, `::` y sus variantes) y los nombres de host se rechazan. El puerto por defecto es 8787. [A20]
 - Solo HTTPS con TLS 1.3 y un certificado propio de la instalación (EC P-256), que la app fija por huella. [A14]
 - Solo responde a dispositivos emparejados. Para emparejar, el operador ejecuta `soul pair` en su terminal: abre una ventana de 10 minutos y muestra una **clave de emparejamiento** de un solo uso (`soulpk_…`, 178 bits aleatorios) en texto y en un QR. La app la usa contra `/v1/pair/challenge` y `/v1/pair/complete` (protocolo soul-pair-v2), sin enviarla nunca: cada lado demuestra que la conoce con un HMAC. 3 pruebas fallidas invalidan la clave. [A46]
+- Cada petición del móvil lleva, además del token, una prueba DPoP firmada con la clave del móvil que quedó ligada al emparejar. Un token copiado no sirve sin esa clave. No hay ligadura en el primer uso: un dispositivo emparejado antes de soul-pair-v2, sin clave ligada, recibe 401 con cualquier prueba y hay que **volver a emparejarlo** con `soul pair`. `soul serve` lo avisa una vez por dispositivo y `soul devices` marca los que hay que reemparejar (sin clave ligada o con el token caducado). [A40]
 - Por qué 178 bits: quien esté en la VPN durante la ventana puede pedir un reto y probar claves sin conexión. Con un millón de GPU durante los 10 minutos se prueban unas 2^62 claves de 2^178: probabilidad ≈ 2^-116. La versión anterior (código de 10 caracteres, 2^50) se retiró por eso y el servicio la rechaza con un error que pide actualizar la app. La clave está en claro en `pairing.json` (0600) solo mientras la ventana está abierta, porque es la clave del HMAC. El detalle está en el modelo de amenazas del canal (`projects/soul-continuity/docs/canal-amenazas.md`, punto 3 bis).
 - **Durante un inicio de sesión con navegador** (OAuth con PKCE), un servidor temporal escucha en `127.0.0.1`, en un puerto aleatorio. Solo acepta la respuesta con el `state` esperado y se cierra al terminar o a los 5 minutos. [A21]
 - El navegador del adaptador web se controla por una tubería local, no por un puerto. [A22]
@@ -150,6 +153,8 @@ Lo que la spec SE-490 promete y el código revisado aún no cumple. No se descri
 | H-10 | — | El modelo de amenazas del canal tiene sus propios P1 y P2. P1-1 (DPoP), P1-2 (correcciones por dispositivo), P2-8 (caducidad de tokens) y P2-9 (límites de conexión) están cerrados en la integración [A40] [A41] [A42] | Ver `projects/soul-continuity/docs/canal-amenazas.md` |
 | H-11 | Cerrado | La API decidía avisos y alertas con la aproximación de Labs del servidor, no con la librería de atención `src/attention/` | La API decide con `Politica` de `src/attention/` y su estado se persiste con `estadoATexto` dentro del estado de atención. Sin franjas de descanso declaradas: el contrato de la app no las tiene todavía [A44] [A45] |
 
+Condición para el piloto (AC-7): los P1 de esta tabla y los del modelo de amenazas del canal deben estar arreglados antes de empezar. En esta rama siguen abiertos P1-3 del canal (revisión de la app Android) y el riesgo residual de H-5 sin verificar contra un llavero real. Si el piloto arranca sin ellos, lo hace con `detail.max` en `recuentos`. Los dispositivos emparejados antes de soul-pair-v2 se reemparejan antes de empezar.
+
 Este documento **no** está revisado todavía por la revisora de seguridad. AC-6 lo exige.
 
 ## Anexo: referencias al código
@@ -195,7 +200,7 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A37** `src/contract/adapter.ts:64-69`; `src/core/engine.ts:55-62`.
 - **A38** `src/cli/cli.ts:111-117`; `README.md` del proyecto, «Límites conocidos».
 - **A39** `src/core/connectors.ts:66-99` (validación de `connectors`: adaptadores del contrato, bases solo HTTPS o loopback; Graph y Google solo sus hosts oficiales), `:106-110` (transporte de solo lectura con bases por servicio); `test/connectors.test.ts`.
-- **A40** `src/api/dpop.ts:56-87` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:78-94` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `test/dpop.test.ts`, `test/serve.test.ts`.
+- **A40** `src/api/dpop.ts:56-87` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:78-94` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `src/api/serve.ts:70-74` (`avisarReemparejar`: un aviso por dispositivo sin clave ligada o caducado); `src/cli/cli.ts:494-500` (`soul devices` marca los que hay que reemparejar); `test/dpop.test.ts`, `test/serve.test.ts:178` (sin primer uso), `test/cli.test.ts:301`.
 - **A41** `src/core/engine.ts:188,311-333` (dispositivo en el libro; listar y deshacer); `src/cli/cli.ts:426-454`; `test/device-corrections.test.ts`.
 - **A42** `src/api/server.ts:172-182` (`maxConnections` 32 y tiempos de espera), `:699`; `test/serve.test.ts`.
 - **A43** `src/cli/login.ts:21-29` (`init` sin fuentes ni adaptadores), `:83-107` (`login`: flujo de dispositivo o token por stdin al almacén); `test/login.test.ts`, `test/instalar.test.ts`.

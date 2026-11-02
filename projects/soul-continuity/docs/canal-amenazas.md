@@ -58,17 +58,17 @@
 
 **Lo que hace el código.**
 
-- Se empareja **en el terminal del portátil** (`soul pair <nombre>`), no por la red: la API no tiene ningún endpoint de emparejamiento (`src/api/server.ts:644-635`).
+- El emparejamiento lo abre el operador **en el terminal del portátil** (`soul pair`). Por la red solo existen `/v1/pair/challenge` y `/v1/pair/complete`, sin token y con la ventana abierta; sin ella responden 404 (`src/api/server.ts:166`, `:716-723`; punto 3 bis).
 - El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:35,51-54`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
-- `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:68,212-181`). Así, el token no pasa por el modelo de un agente.
+- `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:70,221-223`). Así, el token no pasa por el modelo de un agente.
 
 **Tests.** `test/devices.test.ts:12` (el token se da una vez; en disco, solo el hash) y `:39`; `test/cli.test.ts:148` (órdenes vetadas al frontend de agente).
 
 **No cubierto.**
 
-- El token se imprime en la salida estándar, y en JSON con `--json`. Puede quedar en el historial del terminal o en un fichero si se redirige → **P2-5**.
-- No hay código de emparejamiento de un solo uso: lo que se teclea en la app es el token permanente del dispositivo. El README del proyecto dice «token de un solo uso», y eso no es exacto → **P2-6**.
+- `soul pair` ya no imprime el token del dispositivo, sino la clave de emparejamiento (10 minutos, un solo uso), en la salida estándar y en JSON con `--json`. Puede quedar en el historial del terminal o en un fichero si se redirige mientras dure la ventana → **P2-5**.
+- Antes no había código de un solo uso: lo que se tecleaba en la app era el token permanente. Con soul-pair-v2 la app recibe el token al completar el emparejamiento y nunca pasa por la pantalla (`src/cli/cli.ts:430-431`) → **P2-6**, cerrado.
 - La detección del frontend de agente es de mejor esfuerzo, por variables de entorno. Un agente que las borre podría ejecutar `pair` y leer el token (límite conocido del README) → **P2-7**.
 
 ### 3 bis. Emparejamiento directo (integración, soul-pair-v2)
@@ -102,7 +102,7 @@ Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens d
 
 **No cubierto.**
 
-- Los tokens no caducan ni rotan en producción. La caducidad que prueba `contrato.test.mjs:213` es una opción del servidor solo para tests (`caducidadToken`, `src/api/server.ts:623`). `serve` no la usa → **P2-8**.
+- Los tokens caducan a los 90 días, configurable con `soul pair --days` (`src/api/devices.ts:32,46-54`), y `serve` rechaza el token caducado (`src/api/serve.ts:84`). No rotan: caducado, se vuelve a emparejar. La opción `caducidadToken` del servidor solo se usa en tests (`src/api/server.ts:153`, `test/api/contrato.test.mjs:213`) → **P2-8**.
 - Solo se puede revocar desde el portátil. Ver el punto 5.
 
 ## 5. Móvil perdido o robado
@@ -143,7 +143,7 @@ Con P1-1 cerrado, un token copiado ya no vale sin la clave del móvil; aun así,
 - **Reenvío de solicitudes:**
   - TLS 1.3 impide capturarlas desde la red.
   - Las correcciones son idempotentes (`test/api/contrato.test.mjs:394`).
-  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:492-440`, `test/api/contrato.test.mjs:323`).
+  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:560-573`, `test/api/contrato.test.mjs:323`).
 - Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:701`).
 
 **Tests.** `test/server.test.ts:64` (agotar el cupo desde una dirección no deja sin servicio a otra), `test/api/contrato.test.mjs:251` (429 con `Retry-After`) y `:213` (401 genérico ante token desconocido, cabecera ausente, esquema `Bearer` o falta de DPoP).
@@ -188,8 +188,8 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 | P2-2 | Cambiar las direcciones o renovar el certificado rota la clave, y la huella cambia sin aviso | Conservar la clave y emitir un certificado nuevo con la misma SPKI. Si hay que rotar, avisar en `soul status` y en la siguiente respuesta a la app antes del cambio |
 | P2-3 | El certificado solo se renueva al arrancar | Comprobar la caducidad en el tic de 5 minutos y recargar el contexto TLS (`server.setSecureContext`) |
 | P2-4 | El `CN` del certificado identifica el producto ante cualquier par de la VPN | `CN` neutro o vacío; la identidad ya la da la huella |
-| P2-5 | El token sale por la salida estándar y en `--json` | Mostrarlo solo en un terminal interactivo, sin `--json`, o como código QR. Avisar de que no se redirija |
-| P2-6 | El README dice «token de un solo uso» y no lo es | Corregir el README, o introducir un código de emparejamiento de un solo uso con caducidad corta que la app canjea por el token |
+| P2-5 | El token sale por la salida estándar y en `--json` | Mostrarlo solo en un terminal interactivo, sin `--json`, o como código QR. Avisar de que no se redirija — **Reducido con soul-pair-v2:** lo que se imprime es la clave de un solo uso con caducidad de 10 minutos, no el token |
+| P2-6 | El README dice «token de un solo uso» y no lo es | Corregir el README, o introducir un código de emparejamiento de un solo uso con caducidad corta que la app canjea por el token — **Cerrado con soul-pair-v2:** clave de un solo uso con caducidad corta; la app obtiene el token al completar |
 | P2-7 | Un agente que borre las variables de entorno puede ejecutar `pair` | `pair` y `unpair` solo con terminal interactivo (`process.stdin.isTTY`) y confirmación tecleada |
 | P2-8 | Los tokens de dispositivo no caducan ni rotan | Caducidad configurable (por ejemplo 90 días) con renovación desde la app mientras el dispositivo siga emparejado — **Cerrado en la integración:** caducidad de 90 días configurable con `soul pair --days` (`src/api/devices.ts:46-54`); renovar desde la app queda pendiente: caducado, se vuelve a emparejar |
 | P2-9 | No hay límite de conexiones ni tiempos de espera propios | Fijar `maxConnections` (por ejemplo 32), `headersTimeout` 10 s, `requestTimeout` 15 s y `keepAliveTimeout` 5 s, con un test de conexiones lentas — **Cerrado en la integración:** `src/api/server.ts:172-182` fija `maxConnections` 32, `headersTimeout` 10 s, `requestTimeout` 15 s, `keepAliveTimeout` 5 s y saludo TLS de 10 s. El test comprueba la configuración, no una carga de conexiones lentas |
