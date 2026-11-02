@@ -316,7 +316,7 @@ export function crearServidor(opts: OpcionesServidor) {
   function restaurables(e: EstadoAtencion): Partial<Op> {
     const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
     const out: Partial<Op> = {};
-    if (typeof e.modo === "string") out.modo = e.modo;
+    if (typeof e.modo === "string" && MODOS.includes(e.modo)) out.modo = e.modo;
     if (e.hasta === null || num(e.hasta)) out.hasta = e.hasta;
     const a = e.avisos as Partial<ConfAvisos> | undefined;
     if (a && Array.isArray(a.activos) && a.activos.every((x) => typeof x === "string") && num(a.max) && num(a.ventanaMin) && (a.ventanaMin as number) >= 1 && num(a.tope)
@@ -331,6 +331,8 @@ export function crearServidor(opts: OpcionesServidor) {
     if (num(e.ahorrados)) out.ahorrados = e.ahorrados;
     return out;
   }
+  // Lo último escrito por operador: una petición que no cambia nada (p. ej. un GET) no reescribe el fichero.
+  const guardado = new Map<string, string>();
   function guardarEstado(o: Op) {
     if (!opts.persistencia) return;
     const e: EstadoAtencion = {
@@ -338,7 +340,9 @@ export function crearServidor(opts: OpcionesServidor) {
       pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
       avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca, politica: estadoATexto(o.pol),
     };
-    try { opts.persistencia.guardar(o.ref, e); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
+    const texto = JSON.stringify(e);
+    if (guardado.get(o.ref) === texto) return;
+    try { opts.persistencia.guardar(o.ref, e); guardado.set(o.ref, texto); } catch (err) { process.stderr.write(`soul api: estado de atención no persistido (${(err as Error).name})\n`); }
   }
   const minuto0 = Math.floor(ahora() / MIN) * MIN;
   for (const d of opts.mundo.semillas()) {

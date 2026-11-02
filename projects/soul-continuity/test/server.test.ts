@@ -155,6 +155,39 @@ test("estado guardado con avisos, ventana o pendientes ausentes o mal tipados: a
   } finally { await a.s.cerrar(); }
 });
 
+test("estado guardado con un modo ajeno a los de la API: se arranca en el de la semilla, no se pasa a la política", async () => {
+  const disco = new Map<string, any>();
+  const persistencia = { cargar: (r: string) => disco.get(r) ?? null, guardar: (r: string, e: any) => { disco.set(r, structuredClone(e)); } };
+  const arrancar = () => crearServidor({ tls: CERT, mundo: { semillas: () => [semilla()] }, reloj: () => T0, persistencia, secretoCursor: "fijo" });
+  let s = arrancar();
+  s.declararModo("op", "FOCO", new Date(T0 + 3_600_000).toISOString(), "a1");
+  const e = disco.get("op");
+  assert.equal(e.modo, "FOCO", "control: el modo se guarda");
+  s = arrancar();
+  assert.equal(s.operador("op").modo, "FOCO", "control: un modo válido se restaura");
+  disco.set("op", { ...e, modo: "HACKEO" });
+  s = arrancar();
+  assert.equal(s.operador("op").modo, "DISPONIBLE");
+});
+
+test("una petición que no cambia el estado no lo reescribe; una que lo cambia, sí", async () => {
+  let escrituras = 0;
+  const disco = new Map<string, any>();
+  const persistencia = { cargar: (r: string) => disco.get(r) ?? null, guardar: (r: string, e: any) => { escrituras++; disco.set(r, structuredClone(e)); } };
+  const s = crearServidor({ tls: CERT, mundo: { semillas: () => [semilla()] }, reloj: () => T0, persistencia, secretoCursor: "fijo" });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  try {
+    assert.equal((await get(l.port, "/estado")).status, 200);
+    const tras1 = escrituras;
+    assert.ok(tras1 >= 1, "control: la primera vez se guarda");
+    for (let i = 0; i < 3; i++) assert.equal((await get(l.port, "/estado")).status, 200);
+    assert.equal(escrituras, tras1, "los GET sin cambios no escriben");
+    s.declararModo("op", "FOCO", new Date(T0 + 3_600_000).toISOString(), "a1");
+    assert.equal(escrituras, tras1 + 1, "un cambio sí se escribe");
+    assert.equal(disco.get("op").modo, "FOCO");
+  } finally { await s.cerrar(); }
+});
+
 test("H-11: decide la Politica de src/attention (alerta declarada pasa en DISPONIBLE) y su estado se persiste con estadoATexto", async () => {
   const regla = { id: "r-jefa", tipo: "persona", objetivo: "h1", palabra: null, modos: ["FOCO"] };
   const disco = new Map<string, any>();
