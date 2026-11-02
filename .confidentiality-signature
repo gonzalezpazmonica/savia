@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=fdde95770dcf800a0ae557acc1ed26d4e6c3d2ef54071f0af9d0f8ff00e94b7c
-timestamp=2026-11-02T21:42:06Z
-branch=agent/w-passwordvault-20261023
-head_commit=01603668
-signature=e364962a69578a78288ab1db9d5047a21a182ac246fb8410eef6a0c361f2baf8
+diff_hash=5c516c88d57f80d1caf2b93e50edd433d9b0320dc3a0857d19a0be956b6d2184
+timestamp=2026-11-02T22:03:57Z
+branch=agent/w-se496-autoridad-ontologia-20261023
+head_commit=80d89ed1
+signature=b9ee9721e506da887b0eb5d7765b9869767cde31ebec1034a213b6f7f60ca1d0
