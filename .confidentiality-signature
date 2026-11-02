@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=96e85b13bcb6211179a22a900bcd51902f90bcd296aff9c1f5de111f9f892594
-timestamp=2026-11-02T20:56:07Z
+diff_hash=5a47ce5406cd31971170eca5c5c9d48dd5b669195760acff5388005141fb6aca
+timestamp=2026-11-02T21:24:59Z
 branch=agent/w-fix-egress-20261023
-head_commit=01f18d73
-signature=76ccfeb629e2d9139f52952b691606a80aa778972cd8f45e561453a18b7128e8
+head_commit=f9aa39079
+signature=a604f5f3a8e41203d1e90d36dae5733c1c2102243754c0d94fbaad6242a375fd
