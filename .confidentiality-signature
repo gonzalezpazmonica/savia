@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=70c31d6e28878f53225eedf85d6396fbe611969b531763c17f3bd9167619cc19
-timestamp=2026-11-02T20:31:39Z
+diff_hash=4bb4941bbc5ebe02532825b5a786768bd478af4fd160d3436cdcc444ae9e1869
+timestamp=2026-11-02T21:23:02Z
 branch=agent/w-se497-deriva-aprendizaje-20261023
-head_commit=63382d96
-signature=eca29e8051d195a3a030b7229fc11aa051f347e6b0c5b23a73f450e81c98c17d
+head_commit=4ba783445
+signature=edebdc932d47a8aff4d8fa03c0683c063896e496e703c2a4442d2828e69eb860
