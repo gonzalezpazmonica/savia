@@ -1668,6 +1668,15 @@
       "note": "Herramienta personal por usuario y sin administrador, en TypeScript sobre Node.js LTS oficial y el navegador instalado, sin ejecutables propios. Lee correo, calendario, chat, documentos, gestores, repos y webs sin API en solo lectura: Graph si el inquilino lo permite y, si no, recetas web con URLs cerradas en un perfil dedicado. Responde Q1–Q4. La app de Space es bidireccional por la VPN del operador, con consulta cada 5 min y notificaciones locales, sin push ni relay; la política de atención la declara el operador. Datos de empresa sin salida a la nube.",
       "evidence": "docs/specs/SE-490-soul-continuity-work-laptop.spec.md",
       "phase": "A"
+    },
+    {
+      "id": "SE-496",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Ontología operativa gobernada: la autoridad vive fuera del modelo",
+      "note": "Contrato único de delegación (Principal/Capability/Authority/Effect) firmado ed25519 contra los firmantes de origin/main, con ámbito cerrado, precondiciones, efectos declarados y vencimiento. Kernel determinista en Python stdlib fuera del LLM, deny por defecto y sin caché; el grafo y las cúpulas solo sugieren. Ontología mínima sobre los descriptores de SE-386 con dueño declarado por atributo. 15 denegaciones con gemelo positivo (revocación local y en main, entre evaluar y ejecutar, datos ambiguos, autoridad inferida). F0 tests, F1 sombra sobre SE-343/SE-491; F2 solo con nueva decisión.",
+      "evidence": "docs/specs/SE-496-governed-operational-ontology-authority.spec.md",
+      "phase": "B"
     }
   ],
   "route": {

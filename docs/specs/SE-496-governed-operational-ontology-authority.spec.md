@@ -1,0 +1,230 @@
+---
+status: PROPOSED
+priority: P1
+developer_type: agent-single
+created: 2026-11-01
+author: Savia
+phase: B
+risk: L4
+related_specs: [SE-343, SE-362, SE-386, SE-387, SE-401, SE-488, SE-491]
+origin: "Iniciativa SAVIA-RESEARCH-03 / validación V4 del análisis de repositorios difundidos por André Lindenberg (2026-11-01): AWS context-ontology-accelerator y operational-ontology. Solo spec."
+timeline:
+  - from: "2026-11-01"
+    learned: "2026-11-01"
+    value: "PROPOSED"
+    source: "spec-lifecycle:auto"
+---
+# SE-496 — Ontología operativa gobernada: la autoridad vive fuera del modelo
+
+## Problema (verificado en origin/main 6b0658b28)
+
+Savia ya separa razonar de autorizar en el papel. SE-401 lo declara («una decisión no es un permiso», «la confianza no es autoridad») y define un `AuthorityEngine` abstracto, pero solo tiene aprobada la F0 de solo lectura y deja abierta la frontera con AEK (§21). En el código, la autoridad está repartida en piezas que no comparten contrato:
+
+1. **Niveles L0–L4** (`agent-permission-levels.md`): techo estático por herramientas. No dicen sobre qué recurso ni con qué efecto.
+2. **Tiers de riesgo** (SE-362): clasifican el PR, no la delegación.
+3. **Grants de la operadora** (SE-343, `scripts/operator-grant.sh`): ámbito `scope` + `resource`, TTL y consumo único. El grant de merge va firmado con ed25519 contra `config/operator-grant-signers` de `origin/main`; los `autonomy:*` no van firmados (`source express-request`). Ningún grant declara precondiciones sobre el estado ni los efectos que autoriza.
+4. **Autorizaciones de publicación** (SE-491, PR #1446 abierta): firma con namespace propio, solo para `project.publish`.
+5. **Descriptores de capacidad** (SE-386, `contracts/capabilities/*.yaml`): declaran `safety.effect`, `reversibility` y `human_gate`, pero solo los valida en estático `scripts/contract-check.sh`; nada los evalúa en el momento de ejecutar.
+6. **Reservas de efecto** (SE-387, `scripts/effect-reservation.sh`): idempotencia por clave, sin vínculo con quién autorizó.
+
+Consecuencias concretas:
+
+- No hay forma de expresar «la operadora delega en Yema abrir PRs Draft en el repo X, solo si la rama es `agent/*` y la CI no está roja, hasta el viernes». Hoy eso es prosa en un encargo, y lo que vigila su cumplimiento son hooks sueltos.
+- Cada pieza nueva inventa su formato de autorización (SE-343, SE-491). Es la «segunda verdad de autoridad» que SE-401 §20 manda parar.
+- El grafo de conocimiento (SE-162/213) y las cúpulas (SaviaVaults) ya infieren relaciones como «este recurso pertenece al proyecto Y». Hoy ningún gate las usa para autorizar. **No hay incidente**: el riesgo es que, al conectar el grafo a la ejecución, una inferencia acabe concediendo un permiso. Esta spec lo prohíbe antes de que ocurra.
+
+## Qué aporta lo estudiado (lectura sin ejecución, 2026-11-01)
+
+- **AWS context-ontology-accelerator** (Apache-2.0): separa la capa semántica (grafo, ontologías, MCP) de la autorización, que evalúa **Cedar** en el autorizador de API con *deny* por defecto (`denyAll` cuando nada aplica) y políticas `forbid` que ganan a cualquier `permit`. Tiene dos capas: acción (Cedar) y datos (cortafuegos SQL con listas de tablas y columnas en el propio grant). Su punto débil para nosotros: el autorizador **cachea la decisión ~60 s por token**, así que una revocación tarda en surtir efecto. Savia no cachea decisiones.
+- **operational-ontology** (MIT): las escrituras solo pasan por **acciones con nombre** que llevan sus **precondiciones de negocio**. Las violaciones devuelven rechazos legibles por máquina, y se auditan tanto los intentos aplicados como los rechazados. Cada dato declara su dueño (`source-backed`, `ontology-owned` o `derived`) y está prohibido el estado sin dueño. Separa expresamente «las precondiciones dicen si la acción es válida» de «las políticas de acceso dicen quién puede actuar».
+
+Se toman los patrones, no el código: sin dependencias nuevas (ni Cedar, ni Node, ni AWS).
+
+## Qué decide esta spec
+
+1. **Un único contrato de delegación** (*Principal / Capability / Authority / Effect*) para toda autoridad delegada. Los grants de SE-343 y las autorizaciones de SE-491 se proyectan a él mediante adaptadores; no se crea un tercer formato.
+2. **Un kernel de autoridad determinista**, fuera del LLM, que es el único que devuelve `ALLOW`. El grafo, las cúpulas y el modelo pueden **sugerir**; nunca autorizan.
+3. **Una ontología operativa mínima**: tipos de objeto con dueño declarado y acciones tipadas con precondiciones y efectos declarados, construida sobre los descriptores de SE-386.
+4. **Una batería de 15 denegaciones obligatorias** (§ R5), con revocación y datos ambiguos.
+
+Frontera con AEK (SE-401 §21): esta spec define el **delta del lado Savia** con el prefijo `AEK-` ya reservado. Si el repositorio canónico de AEK publica antes estas primitivas, mandan las suyas y este contrato se convierte en adaptador. Sin esa decisión de la operadora, la implementación no sale del modo sombra (F1).
+
+## Alternativas para evaluar la política
+
+Las tres son viables; la tabla las pone en paralelo.
+
+| | A. Evaluador propio en Python stdlib | B. Cedar (`cedarpy`/CLI) | C. OPA / Rego |
+|---|---|---|---|
+| Dependencias | Ninguna (`python3 -I`, PATH fijo, como `operator-grant.sh`) | Binario Rust o rueda nativa | Binario Go |
+| Semántica | La definimos: *deny* por defecto, `forbid` gana, sin comodines | Formal, verificada, la misma que usa AWS | Muy expresiva, Datalog |
+| Riesgo de error propio | Mayor: lo escribimos nosotras | Menor en el motor | Menor en el motor |
+| Portabilidad (Windows sin admin, portátil corporativo) | Total | Depende de instalar el binario | Depende de instalar el binario |
+| Auditabilidad por diff | Reglas en YAML legible | Políticas `.cedar` legibles | Rego, menos legible para no programadoras |
+| Coste de cambiar después | Medio: el contrato no depende del motor | Medio | Medio |
+
+**Recomendación: A en F1–F2**, con una regla de diseño que deja abierta B: el contrato y la batería de denegaciones no dependen del motor, y la política se escribe en un subconjunto que se traduce 1:1 a Cedar (`permit`/`forbid` sobre principal, acción y recurso, con `when` sobre atributos). Si el ensayo de F3 muestra que el evaluador propio falla casos que Cedar resuelve, se cambia el motor sin tocar contratos ni tests. La regla de no instalar dependencias del sistema pesa más que la madurez del motor mientras no haya medición.
+
+## Requisitos
+
+### R1 — Ontología operativa mínima
+
+`contracts/ontology/savia-operational.yaml` declara:
+
+- **Tipos de objeto**: `Principal` (persona que delega), `Delegate` (agente, harness o proveedor externo), `Repo`, `Branch`, `PullRequest`, `Project`, `VaultNote`, `ExternalSystem`. Cada atributo declara su **dueño**:
+  - `source-backed`: lo dice un sistema de registro mediante un lector determinista (`git`, `gh`, fichero de firmantes de `origin/main`);
+  - `contract-owned`: lo dice un contrato firmado;
+  - `derived`: se calcula al evaluar y nunca se escribe;
+  - `inferred`: viene del grafo, las cúpulas o un modelo. **Ningún atributo `inferred` puede aparecer en una condición de autorización** (lo comprueba el validador de la ontología, R6).
+- **Acciones**: cada una es un descriptor de SE-386 (`contracts/capabilities/<id>.yaml`) ampliado con `preconditions` (predicados tipados sobre atributos `source-backed` o `contract-owned`) y `declared_effects` (lista de `EffectDescriptor` de SE-401 §5.3). Primera tanda, solo para la batería: `pr.create-draft`, `pr.merge`, `project.publish`, `vault.note-write`.
+- Atributos con validez temporal: `valid_from` / `valid_to`, intervalo semiabierto `[from, to)`.
+
+### R2 — Contrato de delegación
+
+Fichero JSON canónico (claves ordenadas, UTF-8 NFC, sin espacios) con firma `ssh-keygen -Y` ed25519, namespace `savia-delegation`, verificada contra `config/operator-grant-signers` **de `origin/main`**, como SE-343. Campos:
+
+| Campo | Contenido |
+|---|---|
+| `schema` | `delegation-contract/1` |
+| `id`, `nonce` | Identificador y 16 hex aleatorios |
+| `principal` | Identidad del firmante en el fichero de firmantes. Nunca `self` ni un agente |
+| `delegate` | Agente o harness concreto (`yema`, `codex`, `savia-worker:<id>`) |
+| `capability` | `id`, `version` y `sha256` del descriptor de SE-386; si el descriptor cambia, el contrato deja de valer |
+| `authority` | Techo: nivel L0–L4 y tier SE-362 máximos. La autoridad efectiva es el **mínimo** entre el contrato, el nivel del agente y el gate del tier |
+| `scope` | Lista cerrada de selectores de recurso exactos: `repo`, ramas por patrón anclado (`agent/*`), número de PR o proyecto. Sin comodines globales |
+| `preconditions` | Predicados adicionales del principal (por ejemplo, `ci_status != failure`) |
+| `declared_effects` | Efectos que el principal acepta. Un efecto no listado se deniega aunque la capacidad lo permita |
+| `not_before`, `expires_at` | Obligatorios. Vida máxima 7 días; la del grant de merge sigue siendo la de SE-343 |
+| `max_uses` | Opcional; `1` para efectos irreversibles (`reversibility: irreversible`) |
+| `installation` | Remoto `origin` normalizado a `host/propietario/repo`, para que el contrato no valga en otro repo |
+
+El contrato no lleva secretos ni datos personales más allá del identificador del firmante, que ya es público en el fichero de firmantes. Se versiona en `config/delegations/<id>.json` + `.sig` cuando el principal quiere que la CI lo vea, o en `~/.savia/delegations/` cuando es local.
+
+**Revocación**: el `nonce` en `config/delegations/REVOKED` (en `origin/main` o en la copia de trabajo) o en `~/.savia/delegations/REVOKED`. Basta con que aparezca en cualquiera de los tres. La revocación local es inmediata y no espera a ninguna fusión.
+
+### R3 — Kernel de autoridad
+
+`scripts/lib/authority_kernel.py evaluate`, con `python3 -I` y PATH fijo de sistema. Lee por stdin una petición JSON (`delegate`, `capability`, `action` con parámetros, `target`) y devuelve por stdout:
+
+```json
+{"decision": "ALLOW|DENY|REQUIRES_APPROVAL", "reason": "<código>", "contract_id": "...",
+ "contract_sha256": "...", "capability_sha256": "...", "action_sha256": "...",
+ "state_digest": "...", "policy_sha256": "...", "evaluated_at": "...", "suggestions": []}
+```
+
+Reglas:
+
+- *Deny* por defecto. Las reglas `forbid` ganan a cualquier `permit`. Sin contrato aplicable, `DENY`.
+- El estado se lee en el momento de evaluar y solo de los lectores `source-backed`. **No hay caché de decisiones** entre evaluaciones.
+- Los hechos `inferred` que lleguen en la petición se descartan para decidir y se devuelven en `suggestions` con la acción que haría falta (por ejemplo, «pedir un contrato para `projects/alpha`»). Una sugerencia nunca cambia `decision`.
+- Fail-closed: herramienta ausente, `origin/main` ilegible, JSON malformado, lector que no responde o excepción → `DENY` con su código. Exit 0 solo con `ALLOW`; 1 con `DENY`; 4 con `REQUIRES_APPROVAL`; 2 si no se puede evaluar.
+- Cada evaluación, permitida o denegada, se añade a `~/.savia/authority/audit.jsonl` con los hashes, nunca con parámetros sensibles en claro.
+
+### R4 — Punto de ejecución (EEP)
+
+La prueba de autorización **no es un token al portador**: el kernel corre en el mismo equipo y con el mismo usuario que el agente, así que una firma local no distinguiría a la persona del agente (el mismo motivo por el que SE-491 descarta el HMAC local). La garantía contra la falsificación está en la firma del principal, cuya clave privada no está en el equipo. Por eso el punto de ejecución **vuelve a llamar al kernel** inmediatamente antes del efecto y compara `action_sha256` y `state_digest` con los de la evaluación previa. Si no coinciden, o si la nueva evaluación no es `ALLOW`, no ejecuta. La salida del kernel queda como recibo de auditoría, enlazado con la clave de `effect-reservation.sh`.
+
+En F2 el primer EEP es un envoltorio (`scripts/authority-exec.sh <capability> -- <orden>`). Los hooks de Claude Code y un guard nuevo del plugin `savia-foundation` de OpenCode (`.opencode/plugins/guards/`) lo invocan para las capacidades con contrato; no reimplementan la lógica en TS (lección de la PR #1237: los ports TS divergen).
+
+### R5 — Batería de 15 denegaciones obligatorias
+
+Cada caso tiene un fixture en `tests/fixtures/se496/`, código de motivo estable y **un caso positivo gemelo** que difiere en un solo dato y da `ALLOW`. Así, si el control se desactiva, el test falla.
+
+| # | Caso | Entrada | Motivo |
+|---|---|---|---|
+| D01 | Sin contrato | Delegado sin contrato para la capacidad | `NO_CONTRACT` |
+| D02 | Revocado en main | `nonce` en `config/delegations/REVOKED` de `origin/main` | `REVOKED` |
+| D03 | Revocado solo en local | `nonce` solo en `~/.savia/delegations/REVOKED`, aún sin fusionar | `REVOKED` |
+| D04 | Revocado entre evaluar y ejecutar | `ALLOW` en la evaluación; revocación; el EEP reevalúa | `REVOKED` en el EEP; la orden no corre |
+| D05 | Fuera de vigencia | `expires_at` pasado; caso límite `now == expires_at`; `now < not_before` | `EXPIRED` / `NOT_YET_VALID` |
+| D06 | Firma no válida | Firma alterada, firmante ausente del fichero de `origin/main` (aunque esté en la rama) o namespace de otro uso (`savia-operator-grant`, `savia-project-publish`) | `BAD_SIGNATURE` |
+| D07 | Autoemisión | Contrato sin firma, con `principal: self` o con un agente como principal | `SELF_ISSUED` |
+| D08 | Otro operador | Contrato firmado por el operador A mientras el perfil activo es el del operador B | `PRINCIPAL_MISMATCH` |
+| D09 | Capacidad distinta | Otra capacidad, otra versión o descriptor con `sha256` cambiado tras firmar | `CAPABILITY_MISMATCH` |
+| D10 | Fuera de ámbito | Recurso no cubierto, prefijo engañoso (`projects/alpha-x` frente a `projects/alpha`), `..`, otro repo | `OUT_OF_SCOPE` |
+| D11 | Efecto no declarado | La acción produciría un efecto que no figura en `declared_effects` (push además de commit) | `UNDECLARED_EFFECT` |
+| D12 | Precondición falsa | Estado conocido que la viola (PR no Draft, CI en rojo, rama humana) | `PRECONDITION_FAILED:<id>` |
+| D13 | Estado desconocido | El lector no responde, `gh` ausente o `origin/main` ilegible | `UNKNOWN_STATE` |
+| D14 | Dato ambiguo | El selector resuelve a 2+ recursos, nombres que difieren solo en mayúsculas o normalización Unicode, homoglifos, alias sin dueño declarado | `AMBIGUOUS` |
+| D15 | Autoridad inferida | La única prueba de pertenencia o permiso viene del grafo, de las cúpulas o del modelo (`provenance: inferred`) | `INFERRED_NOT_AUTHORITY` + sugerencia |
+
+Casos técnicos además de la batería: entrada malformada, kernel ausente, `max_uses` consumido (repetición), contrato que supera el nivel del agente y tier 3/4 sin revisión humana del PR (`REQUIRES_APPROVAL`, nunca `ALLOW`).
+
+### R6 — Validadores
+
+- `authority_kernel.py check-ontology`: falla si algún atributo `inferred` aparece en una precondición o regla, si hay estado sin dueño o si una acción no declara efectos.
+- `authority_kernel.py check-contract <fichero>`: forma canónica, campos obligatorios, vida ≤ 7 días, `max_uses: 1` en irreversibles.
+
+### R7 — Adaptadores sin segunda verdad
+
+- **SE-343**: `operator-grant.sh` no cambia en esta spec. En F1, un adaptador proyecta cada grant vigente a un contrato equivalente y el kernel evalúa en **sombra**: registra cuándo discrepa del grant, pero no decide nada.
+- **SE-491**: el verificador `project_authz.py` sigue siendo la fuente para `project.publish`; el kernel lo consulta como lector `contract-owned`. Si la PR #1446 cambia el formato antes de fusionarse, se ajusta el adaptador, no el contrato.
+- **L0–L4 y SE-362**: el kernel los lee como techo. No los sustituye.
+
+### R8 — Multioperador
+
+Nada depende de una persona concreta: el principal sale del perfil activo y del fichero de firmantes de `origin/main`. Con el fichero vacío o sin clave registrada, todas las delegaciones dan `DENY` con un mensaje que enlaza el alta de la clave. El suelo es el de hoy: acción humana manual y PR revisada. Los tests usan dos operadores ficticios con claves generadas en el propio test.
+
+## Criterios de aceptación
+
+- **AC-1** `contracts/ontology/savia-operational.yaml` existe con los tipos y las cuatro acciones de R1, y `check-ontology` da PASS. Un fixture con un atributo `inferred` en una precondición da FAIL.
+- **AC-2** `check-contract` acepta un contrato válido y rechaza, cada uno con su código: falta un campo obligatorio, vida > 7 días, forma no canónica e irreversible sin `max_uses: 1`.
+- **AC-3** Las 15 denegaciones de R5 dan `DENY` (o `REQUIRES_APPROVAL` donde se indica) con su código exacto, y sus 15 gemelos positivos dan `ALLOW`. Lo comprueba `tests/test-se496-authority-kernel.bats`.
+- **AC-4** Mutación: con cada comprobación del kernel desactivada por turnos (parche de prueba), falla al menos su caso de R5. Lo informa `tests/test-se496-mutation.bats`.
+- **AC-5** D04: con la orden real sustituida por un marcador, revocar entre evaluación y ejecución deja el marcador sin crear.
+- **AC-6** Fail-closed: sin `ssh-keygen`, sin `git`, sin `origin/main` o con entrada malformada, el kernel nunca sale con 0.
+- **AC-7** Sin caché: dos evaluaciones seguidas con una revocación en medio dan `ALLOW` y luego `DENY`, sin esperas.
+- **AC-8** Las sugerencias del grafo aparecen en `suggestions` y no cambian `decision` (D15 y su gemelo con contrato firmado).
+- **AC-9** Multioperador: los tests pasan con dos operadores ficticios y con el fichero de firmantes vacío (todo `DENY`). Ningún test lee el perfil real ni `~/.savia` real (`HOME` temporal).
+- **AC-10** Sombra (F1): el adaptador de SE-343 evalúa todos los grants vigentes de un ledger de prueba y escribe las discrepancias en el audit; `operator-grant.sh` sigue dando los mismos códigos de salida que antes (sus tests en verde sin cambios).
+- **AC-11** Mismo resultado en Claude Code y OpenCode: el guard de OpenCode llama al mismo `authority-exec.sh` y un test lo ejecuta por las dos vías con la misma entrada.
+- **AC-12** El audit registra intentos permitidos y denegados con hashes; un test verifica que los parámetros marcados como sensibles no aparecen en claro.
+
+## Fases
+
+| Fase | Entrega | Decide algo |
+|---|---|---|
+| F0 | Ontología, contrato, validadores y kernel con la batería (AC-1..AC-9, AC-12) | No: solo tests |
+| F1 | Adaptadores SE-343/SE-491 en sombra durante 14 días; informe de discrepancias (AC-10) | No |
+| F2 | `authority-exec.sh` como EEP de `pr.create-draft` y `vault.note-write` (AC-11) | Sí, solo esas dos y solo si la operadora lo aprueba tras ver el informe de F1 |
+| F3 | Ensayo Cedar frente al evaluador propio con la misma batería | Decisión de motor |
+
+`pr.merge` y `project.publish` no pasan a decidir por el kernel en esta spec: siguen en SE-343 y SE-491.
+
+## Fuera de alcance
+
+- Sustituir `operator-grant.sh`, el verificador de SE-491 o los hooks actuales.
+- Reconciliar efectos de resultado incierto (SAVIA-RESEARCH-01, OpenRath): aquí solo se enlaza la clave de reserva.
+- Instalar Cedar, OPA o cualquier dependencia del sistema.
+- Conectar el grafo de conocimiento a la ejecución más allá de las sugerencias.
+- Delegación en cadena (un delegado que subdelega). Queda prohibida en v1: `delegate` no puede firmar contratos.
+
+## Riesgos
+
+- **El evaluador propio tiene errores que Cedar no tendría.** Mitigación: batería con gemelos, mutación (AC-4) y F3.
+- **Coste de fricción.** Un contrato más que firmar desde el móvil. Mitigación: F2 solo cubre capacidades reversibles y contratos de hasta 7 días.
+- **Carrera entre la evaluación y el efecto.** La reevaluación del EEP la reduce a la ventana entre la llamada y la orden; no la elimina para efectos externos lentos.
+- **Frontera con AEK sin decidir.** Si AEK define otras primitivas, F0 se rehace como adaptador; la batería se conserva.
+
+## OpenCode Implementation Plan
+
+### Bindings touched
+
+| Componente | Claude Code | OpenCode v1.14 |
+|---|---|---|
+| Kernel `scripts/lib/authority_kernel.py` | Invocado por `authority-exec.sh` | Mismo binario vía `execFile` desde un guard de `.opencode/plugins/guards/` |
+| EEP `scripts/authority-exec.sh` | Hook PreToolUse (entrada JSON por stdin) para capacidades con contrato | Guard `authority-exec.ts` cargado por `savia-foundation.ts` (`tool.execute.before`) que llama al mismo script |
+| Ontología y contratos | Ficheros en `contracts/` y `config/delegations/` | Los mismos ficheros |
+
+### Verification protocol
+
+- [ ] Funciona en runtime OpenCode (AC-11)
+- [ ] Tests cubren ambos paths con la misma entrada
+- [ ] El guard nuevo queda cargado por `savia-foundation.ts` (el plugin de gates de OpenCode)
+
+### Portability classification
+
+- [x] **DUAL_BINDING**: la lógica está en Python stdlib y bash; los dos frontends solo la invocan, sin port TS de la lógica.
+
+## Aprobación
+
+Se aprueba al fusionar la PR de la spec (SE-488). La aprobación cubre F0 y F1. F2 necesita una decisión aparte de la operadora con el informe de sombra delante.
