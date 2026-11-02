@@ -10,6 +10,10 @@
 
 Deriva de conocimiento vinculado a código y aprendizaje sin autoautoridad (SAVIA-RESEARCH-04 y 05). Se aprueba al fusionar la PR.
 
+## 2026-11-01 SE-491 PROPOSED
+
+Autorizaciones de publicación firmadas por la operadora en lugar de una línea editable por agentes (hallazgo de la PR #1444). Se aprueba al fusionar la PR (SE-488).
+
 ## 2026-10-31 SE-490 PROPOSED
 
 Soul Continuidad v1, gemelo operativo prioritario para la operadora. Se aprueba al fusionar la PR (SE-488).
