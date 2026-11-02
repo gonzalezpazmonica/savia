@@ -71,44 +71,32 @@ Principio: **Savia no atribuye a la persona ningún estado que ella no haya decl
 
 `burnout-radar` se **renombra** a `work-conditions`, en el mismo fichero. No se deja alias: un alias mantiene la palabra y la superficie. Las referencias se actualizan en la misma PR (slice 3). Lista cerrada, obtenida con `git grep -l burnout-radar` sobre `main` el 2026-11-02 (excluidos `docs/propuestas/` y `CHANGELOG*`):
 
-- Comandos, skills y perfiles: `.claude/commands/wellbeing-guardian.md`, `.claude/commands/references/intent-catalog.md`, `.claude/skills/wellbeing-guardian/SKILL.md`, `.claude/skills/wellbeing-guardian/DOMAIN.md`, `.claude/profiles/context-map.md`.
-- Configuración: `.claude/settings.json` (entrada `"burnout-radar": "name-only"`, se renombra la clave).
-- Scripts: `scripts/truth-tribunal.sh` (patrón `burnout-radar*` → `work-conditions*`), `scripts/test-wellbeing-guardian.sh`, `scripts/test-team-wellbeing.sh`, `scripts/test-ai-labor-impact.sh`.
-- Docs: `docs/cognitive-debt-guide.md`, `docs/ai-labor-impact-es.md`, `docs/ai-labor-impact-en.md`, `docs/rules/domain/{wellbeing-config,cognitive-debt-protocol,ai-exposure-metrics,role-workflows,truth-tribunal-weights}.md`.
-- Índices y UI: `vault/00-Index/Commands.md`, `projects/savia-web/src/pages/CommandsPage.vue`.
+Comandos, skills y perfiles: `.claude/commands/wellbeing-guardian.md`, `.claude/commands/references/intent-catalog.md`, `.claude/skills/wellbeing-guardian/SKILL.md`, `.claude/skills/wellbeing-guardian/DOMAIN.md`, `.claude/profiles/context-map.md`. Configuración: `.claude/settings.json` (entrada `"burnout-radar": "name-only"`, se renombra la clave). Scripts: `scripts/truth-tribunal.sh` (patrón `burnout-radar*` → `work-conditions*`), `scripts/test-wellbeing-guardian.sh`, `scripts/test-team-wellbeing.sh`, `scripts/test-ai-labor-impact.sh`. Docs: `docs/cognitive-debt-guide.md`, `docs/ai-labor-impact-es.md`, `docs/ai-labor-impact-en.md`, `docs/rules/domain/{wellbeing-config,cognitive-debt-protocol,ai-exposure-metrics,role-workflows,truth-tribunal-weights}.md`. Índices y UI: `vault/00-Index/Commands.md`, `projects/savia-web/src/pages/CommandsPage.vue`.
 
 Si al abrir el slice 3 `main` tiene referencias nuevas, se añaden a esta lista en la PR del slice; el test de AC-10(e) es el que decide.
 
 ### Multioperador
 
-Cada instalación tiene una persona distinta. Ningún umbral horario, de duración o de ritmo es universal:
-
-- Sin declaración no hay señal de estado. El sistema sigue funcionando solo con señales del trabajo.
-- Las ventanas se interpretan en la zona horaria declarada en el perfil activo, no en la del sistema.
-- Una ventana que cruza la medianoche (p. ej. `22:00`–`06:00`, turno de noche) es válida y se trata igual que una diurna.
+Cada instalación tiene una persona distinta. Ningún umbral horario, de duración o de ritmo es universal. Sin declaración no hay señal de estado y el sistema sigue funcionando solo con señales del trabajo. Las ventanas se interpretan en la zona horaria declarada en el perfil activo, no en la del sistema. Una ventana que cruza la medianoche (p. ej. `22:00`–`06:00`, turno de noche) es válida y se trata igual que una diurna.
 
 ## Criterios de aceptación
 
 Todos los tests inyectan el reloj y el perfil: ninguno depende de la hora real de la máquina de CI.
 
 - **AC-1 (A1, simetría horaria).** Con el mismo contexto de trabajo y **sin ventana declarada**, `trigger-evaluator.py` devuelve la misma puntuación y los mismos motivos a las 03:00 y a las 11:00. Test pytest. Sobre el código actual falla (las 03:00 añaden `atypical_hour` y 9 puntos).
-- **AC-2 (A1, ventana declarada, multioperador).** Hay tres operadores sintéticos:
-  - P1 con ventana `09:00`–`18:00` en `Europe/Madrid`;
-  - P2 con turno de noche `22:00`–`06:00`;
-  - P3 sin ventana.
-
-  Resultados esperados:
+- **AC-2 (A1, ventana declarada, multioperador).** Tres operadores sintéticos, todos en `Europe/Madrid`: P1 con ventana `09:00`–`18:00`, P2 con turno de noche `22:00`–`06:00` y P3 sin ventana. Resultados esperados:
   - A las 23:00 locales, P1 da `outside` con motivo `outside_declared_window`, P2 da `inside` sin motivo horario y P3 da `undeclared` sin motivo horario.
   - Bordes: el inicio es inclusivo y el fin exclusivo, también en ventanas que cruzan la medianoche. P1: 09:00 da `inside` y 18:00 da `outside`. P2: 22:00 da `inside`, 05:59 da `inside` y 06:00 da `outside`.
   - Inicio igual a fin (`09:00-09:00`) es ambiguo (vacía o 24 h): da `undeclared` con aviso en stderr. No se interpreta.
   - DST: la hora local se obtiene convirtiendo un instante UTC inyectado a la zona declarada (`zoneinfo`), y se compara la hora de reloj local. Casos en `Europe/Madrid`: 2026-03-29T01:30Z (03:30 locales, tras el salto) da `inside` para P2 y 2026-10-25T00:30Z y 01:30Z (las dos 02:30 locales repetidas) dan `inside` para P2. Una zona inexistente (`Mars/Olympus`) da `undeclared` con aviso.
+  - Zona del perfil, no la del sistema. Estos casos discriminan: la hora UTC y la local quedan a distinto lado del borde, así que una implementación que use UTC o la hora del sistema falla. Todos se ejecutan con la zona del proceso forzada a otra (`TZ=UTC` y, en una segunda pasada, `TZ=America/New_York`) y dan el mismo resultado en ambas pasadas. P1: 2026-07-01T07:30Z (09:30 locales; en UTC 07:30, fuera) da `inside`. 2026-07-01T16:30Z (18:30 locales; en UTC 16:30, dentro) da `outside` con motivo `outside_declared_window`. P2: 2026-07-01T20:30Z (22:30 locales; en UTC 20:30, fuera) da `inside`. 2026-07-01T04:30Z (06:30 locales; en UTC 04:30, dentro) da `outside`.
+  - El instante se inyecta siempre como UTC con zona explícita. Los casos «23:00 locales» y los bordes de arriba se expresan también como instante UTC (p. ej. P1 a las 23:00 locales del 2026-07-01 es 2026-07-01T21:00Z), nunca como hora local suelta.
   - Caso negativo: una ventana mal formada (`25:00-06:00`) da `undeclared` y deja un aviso en stderr. No se inventa ninguna ventana por defecto.
 - **AC-3 (A1, A2, A4, A5 y A10: ausencia estructural, test final del slice 4).** Un test BATS recorre `scripts/`, `.claude/hooks/` (que cubre `.opencode/hooks/`, enlace simbólico al mismo directorio), `.claude/skills/`, `.claude/commands/` y `.opencode/agents/`. Falla si aparece alguno de estos términos: `fatigue_score`, `time_band`, `override_rate`, `SAVIA_CS_FATIGUE_HOUR_BAND`, `cognitive_load_score`, `fatigue amplifier`, `break_compliance_score` o `burnout_score`.
   - Lista de exclusión cerrada: `docs/propuestas/` (histórico), la propia spec y el fichero del propio test. `tests/` no está en el alcance; los tests que afirman la ausencia de un término lo citan legítimamente.
   - Antes de este test, cada slice retira sus términos y lo prueba en sus propios AC: slice 1 `fatigue_score`, `time_band`, `override_rate` y `SAVIA_CS_FATIGUE_HOUR_BAND` (AC-1, AC-2, AC-5); slice 2 `cognitive_load_score` y `fatigue amplifier` (AC-6); slice 3 `break_compliance_score` y `burnout_score`, incluido `scripts/test-wellbeing-guardian.sh` (AC-9). El slice 4 solo añade el barrido conjunto.
-  - El test se comprueba contra `main` actual, donde debe fallar.
-  - Además, un fixture con `fatigue_score` en un fichero temporal dentro del alcance demuestra que el test detecta el término.
-- **AC-4 (A2).** `objection_usefulness` se calcula solo a partir de marcas explícitas de la persona (`useful` o `not_useful`). Una objeción sin marca cuenta como `unmarked`, nunca como «no útil». Test con un registro sintético de 10 objeciones: 3 útiles, 2 no útiles y 5 sin marca. Resultado esperado: `{useful:3, not_useful:2, unmarked:5}`. El valor no aparece en la entrada del disparador; el test lo comprueba inspeccionando el dict que recibe `evaluate`.
+  - Cuando se abre el slice 4, `main` ya no contiene los términos, así que el test no puede probar su capacidad de fallar contra `main`. La prueba de que puede fallar es el fixture: un caso del mismo fichero crea, dentro de un directorio temporal que replica el alcance, un fichero con cada uno de los 8 términos (uno por fichero) y afirma que el barrido falla y nombra el término. Otro caso afirma que el mismo término dentro de un fichero de la lista de exclusión no lo hace fallar. El barrido recibe la raíz como argumento para que el fixture no escriba en el repo.
+- **AC-4 (A2).** `objection_usefulness` se calcula solo a partir de marcas explícitas de la persona (`useful` o `not_useful`). Una objeción sin marca cuenta como `unmarked`, nunca como «no útil». Test con un registro sintético de 10 objeciones: 3 útiles, 2 no útiles y 5 sin marca. Resultado esperado: `{useful:3, not_useful:2, unmarked:5}`. El valor no aparece en la entrada del disparador. La función es `should_activate` (`trigger-evaluator.py:84`), que llama internamente a `compute_operator_state` (`:131`) y devuelve ese mismo dict en `operator_state`; no hace falta refactorizar para inyectarlo. El test lo comprueba de dos formas: (1) el conjunto de claves de `compute_operator_state(...)` es exactamente `{declared_window, declared_deadline_proximity}`; (2) con un registro de demanda sintético que tiene 3 objeciones útiles, `should_activate` devuelve la misma `score` y los mismos `reasons` que con el registro vacío, y `operator_state` no contiene `objection_usefulness`.
 - **AC-5 (A4, juez y banner).** El prompt de `criterion-simulation-judge.md` no contiene ninguna de estas cadenas, sin distinguir mayúsculas: «fatiga», «fatigue», «hora atípica», «atypical», «criterio relajado», «relaxed criterion», «override rate» ni «operator state». Sí contiene literalmente la pregunta fijada en A4: «¿la persona ha declarado que no quiere decidir esto ahora, o estamos fuera de su ventana declarada?». El banner del hook ya no dice «operator-state signals are elevated». Con `outside_declared_window` dice que la acción ocurre fuera de la ventana declarada y cuál es esa ventana. Test BATS con entrada JSON por stdin, en ambos sentidos: dentro de la ventana no hay mención horaria; fuera, sí.
 - **AC-6 (A5, informe de demanda).** `cognitive-debt-monitor.py` (o su sustituto, con el mismo nombre de comando) produce `demand_report` con recuentos por tipo (`objection`, `banner`, `nudge`, `question`), `outside_declared_window` y utilidad marcada. No contiene `score`, `risk_level` ni ningún campo sobre la persona.
   - Con un límite de sesión declarado, incluye `session_hours` y `over_declared_limit`. Sin límite, ninguno de los dos.
@@ -117,7 +105,8 @@ Todos los tests inyectan el reloj y el perfil: ninguno depende de la hora real d
   - (a) `.claude/settings.json` versionado no contiene `cognitive-debt-telemetry`. Test BATS.
   - Semántica de rutas: `SAVIA_SETTINGS_OVERRIDE` sigue siendo la **ruta de un fichero** `settings.json` (hoy `scripts/cognitive-debt.sh:26`) y ya no se escribe nunca. Se añade `SAVIA_SETTINGS_LOCAL_OVERRIDE`, ruta del fichero local; por defecto `$ROOT_DIR/.claude/settings.local.json`. No se deriva una de la otra.
   - (b) Con ambas variables apuntando a ficheros dentro de un directorio temporal del test, `enable` escribe el hook en el fichero local y deja el `settings.json` temporal byte a byte igual (hash antes y después). El test comprueba además que el `settings.local.json` real del repo no se ha creado ni modificado.
-  - (c) `disable` lo retira del fichero local.
+  - (c) `disable` lo retira del fichero local. Sin fichero local, o con fichero local sin el hook, `disable` sale con 0 y el mensaje «Already disabled» sin crear el fichero (hoy el equivalente sobre `settings.json` está en `:244-250`). Si el hook sigue en el `settings.json` versionado (instalación con la versión anterior), `disable` no lo toca y avisa en stderr de que ese registro está en el fichero versionado y se retira actualizando el repo.
+  - (c2) Compatibilidad: quien exporte `SAVIA_SETTINGS_OVERRIDE` esperando la escritura antigua recibe un aviso en stderr en `enable` y `disable` («`SAVIA_SETTINGS_OVERRIDE` ya no se escribe; usar `SAVIA_SETTINGS_LOCAL_OVERRIDE`»). El comando sigue y escribe solo en el fichero local. Test: con solo `SAVIA_SETTINGS_OVERRIDE` apuntando a un fichero temporal y `SAVIA_SETTINGS_LOCAL_OVERRIDE` a otro, aparece el aviso y el primero no cambia.
   - (d) Sin fichero local previo, `enable` lo crea con JSON válido. `enable` ya no exige que exista `settings.json` (hoy aborta con código 5 en `:196-198`).
   - (e) Caso negativo: con un fichero local corrupto, `enable` sale con código distinto de 0 y no lo sobrescribe.
   - (f) `status` y la comprobación de «ya activado» de `enable` (hoy `grep` sobre `SETTINGS`, `:87` y `:201`) leen el fichero local. Con el hook presente solo en `settings.json`, `status` dice DISABLED.
@@ -128,11 +117,11 @@ Todos los tests inyectan el reloj y el perfil: ninguno depende de la hora real d
   - (b) `work-conditions` no acepta `--individual` y su salida definida no contiene columnas por persona, «burnout» ni «score».
   - (c) Define el mínimo de 3 personas por agregado y el mensaje de negativa por debajo.
   - (d) La capacidad declarada se lee de un campo que escribe la propia persona; ningún otro rol tiene una orden para escribirlo.
-  - (e) `git grep burnout-radar` no devuelve ninguna referencia fuera de esta lista de exclusión cerrada: `docs/propuestas/`, `CHANGELOG.md`, `CHANGELOG.d/`, la propia spec (`docs/specs/SE-492-*`), las specs históricas SPEC-107 y SPEC-194 (solo su nota de sustitución) y el fichero BATS de este AC. Los ficheros a actualizar son los de la lista de «Sustitución pieza por pieza».
+  - (e) `git grep burnout-radar` no devuelve ninguna referencia fuera de esta lista de exclusión cerrada, toda ella por **fichero o directorio completo** (no hay exclusiones por línea): `docs/propuestas/` (incluye las specs históricas `SPEC-107-*` y `SPEC-194-*`, que viven ahí), `CHANGELOG.md`, `CHANGELOG.d/`, la propia spec (`docs/specs/SE-492-*`) y el fichero BATS de este AC. Caso negativo en el mismo test: un fichero temporal con `burnout-radar` fuera de la lista hace fallar el barrido (el barrido recibe la raíz como argumento).
 
   `work-conditions` es un comando de prompt, sin script. Por eso estos AC son estructurales (test BATS sobre el fichero), y la PR lo declara así: no hay test de comportamiento del modelo.
 - **AC-11 (A12).** `sustainable-pace.md` no contiene «Wellbeing Factor» ni «burnout», y obtiene la capacidad del equipo de las declaraciones de AC-10(d). Test BATS.
-- **AC-12 (A15).** La Q3 de `meta-reflection/SKILL.md` coincide con el texto fijado en A4. `tests/test-meta-reflection.bats` se actualiza: deja de esperar «fatiga» y pasa a esperar «ventana declarada». Debe fallar sobre el texto actual.
+- **AC-12 (A15).** La Q3 de `meta-reflection/SKILL.md` coincide con el texto fijado en A4. Hoy ningún test comprueba el texto de la Q3 (`tests/test-meta-reflection.bats` solo la nombra en un comentario, `:333`), así que se **añade** un caso a ese fichero que extrae la Q3 y afirma que contiene «ventana declarada» y no contiene «fatiga», «hora atípica» ni «tasa de confirmación» (no basta «hora»: el texto fijado contiene «ahora»). Debe fallar sobre el texto actual.
 - **AC-13 (sin regresión del resto de la capa).** Siguen en verde los tests existentes de criterion-simulation y cognitive-debt que no tratan de las señales retiradas:
   - `tests/scripts/test_criterion_simulation_trigger.py`;
   - `tests/test-criterion-simulation-hook.bats`;
@@ -140,11 +129,20 @@ Todos los tests inyectan el reloj y el perfil: ninguno depende de la hora real d
   - `tests/bats/test-cognitive-debt.bats`;
   - `tests/structure/test-cognitive-debt-phase-1.bats`;
   - `scripts/test-wellbeing-guardian.sh`, que el slice 3 actualiza porque hoy cita `burnout-radar` y `break_compliance_score`.
+  - `tests/test-meta-reflection.bats`, que el slice 1 actualiza (lista cerrada abajo).
 
   Los casos que afirmaban la inferencia retirada se **sustituyen** por los de AC-1 a AC-12 y la PR los lista uno a uno. No se borra ninguna aserción sin sustituirla.
   - El renombrado `pressure_score` → `declared_deadline_proximity` (A3) cambia la clave que devuelve `compute_operator_state`. En el slice 1, `tests/scripts/test_criterion_simulation_trigger.py` (`:138`, `:249`, `test_pressure_score_range` en `:259-263`) pasa a usar la clave nueva con el mismo rango [0, 20], y un caso nuevo afirma que la clave `pressure_score` ya no aparece. Con los mismos datos de entrada, el valor es idéntico al anterior.
+  - `tests/test-meta-reflection.bats`, lista cerrada de casos que cambian en el slice 1 (líneas sobre `main` el 2026-11-02), con su sustitución:
+    - `setup` (`:30-31`) y el helper `band_at` (`:35-40`) exportan `SAVIA_CS_FATIGUE_HOUR_BAND`: se sustituyen por la inyección de instante UTC y perfil de AC-2.
+    - «trigger: should_activate integra operator state real (override_rate)» (`:183`), «trigger score: override_rate 100 por cien reaffirm suma 4» (`:248`) y los tres casos `_compute_override_rate`/`override_rate` (`:335`, `:344`, `:351`): sustituidos por AC-4 (la utilidad de objeciones no entra en el disparador).
+    - «trigger score: franja atypical suma 9 y cruza el umbral de 45 a 54» (`:234`), «_compute_fatigue_score transicion cruza medianoche» (`:357`) y «_parse_hour_band invalid cae a 22-06 y _is_in_hour_band envuelve» (`:367`): sustituidos por AC-1 y AC-2 (simetría horaria sin declaración; ventana que cruza la medianoche y ventana mal formada).
+    - «trigger score: prod+large con transition, presion y override suma 52 y activa» (`:270`): se reescribe con prod+large+plazo declarado+`outside_declared_window` y se recalcula la suma esperada con los pesos nuevos; sigue siendo un caso de borde sobre el umbral.
+    - Los cuatro casos de presión (`:374`, `:381`, `:394`, `:401`) leen `d["pressure_score"]` y llaman a `_compute_pressure_score`: pasan a `declared_deadline_proximity` (y a la función renombrada) con los mismos valores esperados.
+    - «compute_operator_state sin red ni preferencias» (`:406-408`) afirma las claves exactas `["fatigue_score", "override_rate", "pressure_score", "time_band"]`: pasa a afirmar `["declared_deadline_proximity", "declared_window"]`. Es la misma aserción que AC-4(1) y debe fallar sobre el código actual.
 - **AC-14 (paridad de frontends).** Test BATS en dos partes:
   - Precondición afirmada: ningún fichero de `.opencode/plugins/` enruta `criterion-simulation-challenge`. Si alguno lo enruta, el test **falla** con el mensaje «el plugin enruta el hook: activar la comparación de paridad». No hay SKIP.
+  - Es un cable trampa intencionado: quien añada un port legítimo del hook verá CI en rojo sin haber hecho nada incorrecto. El mensaje del fallo dice qué hacer (activar la comparación de la parte siguiente) y la spec lo documenta aquí para que no se confunda con una regresión.
   - Cuando la precondición deje de cumplirse, quien añada el port sustituye esa aserción por la comparación real: la misma entrada JSON por stdin produce la misma decisión desde la ruta de Claude Code y desde el plugin.
 - **AC-15 (documentación coherente).** `docs/cognitive-debt-guide.md`, `docs/rules/domain/cognitive-debt-protocol.md`, `docs/rules/domain/criterion-simulation-honesty.md` y `docs/rules/domain/wellbeing-config.md` describen el estado declarado y la demanda del sistema, y no prometen inferencias que ya no existen. Las specs históricas SPEC-107 y SPEC-194 no se reescriben; reciben una nota «sustituido en parte por SE-492».
 
@@ -167,9 +165,9 @@ Todos los tests inyectan el reloj y el perfil: ninguno depende de la hora real d
 
 | Slice | Contenido | AC |
 |---|---|---|
-| 1 | Señales: `declared_window`, retirada de fatiga y override, disparador, juez, banner, meta-reflection | AC-1, AC-2, AC-4, AC-5, AC-12, AC-14 |
+| 1 | Señales: `declared_window`, retirada de fatiga y override, disparador, juez, banner, meta-reflection | AC-1, AC-2, AC-4, AC-5, AC-12, AC-14 y la parte de AC-13 de su capa (`test_criterion_simulation_trigger.py`, `test-meta-reflection.bats`) |
 | 2 | Cognitive-debt: informe de demanda y registro solo local, sin atribución | AC-6 a AC-8 |
-| 3 | Comandos de equipo: `work-conditions`, `sustainable-pace`, `wellbeing-guardian` | AC-9 a AC-11 |
+| 3 | Comandos de equipo: `work-conditions`, `sustainable-pace`, `wellbeing-guardian` | AC-9 a AC-11 y la parte de AC-13 de `scripts/test-wellbeing-guardian.sh` |
 | 4 | Test de ausencia estructural, documentación y notas en SPEC-107 y SPEC-194 | AC-3, AC-13, AC-15 |
 
 Cada slice es una PR Draft independiente desde `main`, sin PRs apiladas. El slice 4 se abre cuando los tres anteriores estén fusionados, porque su test de ausencia los verifica a todos.
