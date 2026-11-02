@@ -26,7 +26,7 @@ import { StoppedError, resume, stop, stopState } from "../core/failsafe.ts";
 import { appendJsonl, filesUnder, operatorDir, readJson, readJsonl, removeSoulState, writeJson } from "../core/store.ts";
 import { autostartPlan, installAutostart, uninstallAutostart } from "../startup/autostart.ts";
 import { ensureInstallCert } from "../api/cert.ts";
-import { listDevices, revokeDevice } from "../api/devices.ts";
+import { deviceExpiry, listDevices, revokeDevice } from "../api/devices.ts";
 import { closePairingWindow, openPairingWindow, pairLink, shortFingerprint } from "../api/pairing.ts";
 import { encodeQr, qrToPng, qrToTerminal } from "../api/qr.ts";
 import { validateListen } from "../api/listen.ts";
@@ -493,7 +493,12 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
 
       case "devices": {
         const devices = listDevices(deps.dataDir).map(({ token_sha256: _h, ...d }) => d);
-        print(devices.map((d) => `${d.id} ${d.name}${d.revoked_at ? " (revocado)" : ""}`).join("\n") || "Sin dispositivos.", { devices });
+        // Revocado, caducado o sin clave ligada (anterior a soul-pair-v2): la app recibe 401 y hay que volver a emparejar.
+        const ahora = Date.parse(deps.now());
+        const estado = (d: (typeof devices)[number]) => d.revoked_at ? "revocado"
+          : !(deviceExpiry(d) > ahora) ? "caducado: vuelve a emparejar"
+          : !d.jkt ? "sin clave ligada: vuelve a emparejar" : null;
+        print(devices.map((d) => `${d.id} ${d.name}${estado(d) ? ` (${estado(d)})` : ""}`).join("\n") || "Sin dispositivos.", { devices });
         return 0;
       }
 

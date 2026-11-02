@@ -1,12 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DpopError, DPOP_SKEW_MS, makeDpopVerifier, thumbprint } from "../src/api/dpop.ts";
+import { DpopError, DPOP_SKEW_MS, makeDpopVerifier, thumbprint, type DpopRequest } from "../src/api/dpop.ts";
 
 import { HTU, NOW, TOKEN, newKey, proof } from "./dpop-helper.ts";
 
 
-const req = (p: string, over: Partial<Parameters<ReturnType<typeof makeDpopVerifier>>[0]> = {}) =>
-  ({ proof: p, method: "GET", path: "/api/v1/soul/q/q1", host: "100.64.0.7:8787", token: TOKEN, now: NOW, ...over });
+/** Huella de la clave que firma la prueba: la que el emparejamiento habría ligado. */
+const jktDe = (p: string) => {
+  try { const jwk = JSON.parse(Buffer.from(p.split(".")[0], "base64url").toString("utf8")).jwk; return thumbprint({ x: jwk.x, y: jwk.y }); } catch { return "x"; }
+};
+const req = (p: string, over: Partial<DpopRequest> = {}): DpopRequest =>
+  ({ proof: p, method: "GET", path: "/api/v1/soul/q/q1", host: "100.64.0.7:8787", token: TOKEN, now: NOW, expectedJkt: jktDe(p), ...over });
 
 const code = (f: () => unknown) => { try { f(); return "ok"; } catch (e) { assert.ok(e instanceof DpopError, String(e)); return e.code; } };
 
@@ -30,6 +34,15 @@ test("P1-1: prueba firmada con otra clave que la ligada al dispositivo => clave"
   const v = makeDpopVerifier();
   const ligada = v(req(proof(newKey()))).jkt;
   assert.equal(code(() => v(req(proof(newKey()), { expectedJkt: ligada }))), "clave");
+});
+
+test("sin huella ligada (o vacía) el verificador falla cerrado: no hay ligadura en el primer uso", () => {
+  const k = newKey();
+  const v = makeDpopVerifier();
+  assert.equal(code(() => v({ ...req(proof(k)), expectedJkt: undefined as unknown as string })), "clave");
+  assert.equal(code(() => v(req(proof(k), { expectedJkt: "" }))), "clave");
+  assert.equal(code(() => v(req(proof(k), { expectedJkt: null as unknown as string }))), "clave");
+  assert.equal(code(() => v(req(proof(k)))), "ok", "control: con la huella ligada sí pasa");
 });
 
 test("P1-1: jti repetido => reenvio; jti nuevo con la misma clave sí pasa", () => {

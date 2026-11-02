@@ -178,14 +178,22 @@ test("P1-1: solo entra la clave ligada al emparejar; un token copiado con otra c
 test("sin primer uso: un dispositivo sin clave ligada (anterior a v2) no entra con ninguna clave ni queda ligado", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
   const viejo = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
-  const s = await start(dir, []);
+  const out: string[] = [];
+  const err: string[] = [];
+  const s = await start(dir, out, deps(dir, out, err));
   try {
     const ladron = newKey();
     assert.equal(await get(s.port, s.ca, viejo.token, ladron), 401, "quien copió el token no liga su clave");
     assert.equal(await get(s.port, s.ca, viejo.token), 401, "tampoco el móvil legítimo: hay que volver a emparejar");
     assert.equal(listDevices(dir)[0].jkt ?? null, null, "no se liga ninguna clave");
+    // Quien opera el portátil ve por qué y qué hacer; una vez por dispositivo, no en cada sondeo.
+    const avisos = err.filter((m) => m.includes(viejo.id));
+    assert.equal(avisos.length, 1, avisos.join(" | "));
+    assert.match(avisos[0], /sin clave ligada.*soul pair/);
     const nuevo = pair(dir, "movil2", new Date().toISOString());
     assert.equal(await get(s.port, s.ca, nuevo.token), 200, "control: emparejado con clave entra");
+    assert.equal(await get(s.port, s.ca, "token-inventado"), 401);
+    assert.equal(err.filter((m) => /vuelve a emparejar/.test(m)).length, 1, "ni el bueno ni un token inventado generan aviso");
   } finally { await s.stop(); }
 });
 
@@ -228,9 +236,13 @@ test("un tic que falla no tumba serve: se registra el nombre del error y sigue s
 test("P2-8: un token caducado no entra aunque la prueba sea buena", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
   const out: string[] = [];
+  const err: string[] = [];
   const p = pair(dir, "movil", new Date(Date.now() - 2 * 86_400_000).toISOString(), 1);
-  const s = await start(dir, out);
-  try { assert.equal(await get(s.port, s.ca, p.token), 401); } finally { await s.stop(); }
+  const s = await start(dir, out, deps(dir, out, err));
+  try {
+    assert.equal(await get(s.port, s.ca, p.token), 401);
+    assert.ok(err.some((m) => m.includes(p.id) && /token caducado.*soul pair/.test(m)), err.join(" | "));
+  } finally { await s.stop(); }
 });
 
 test("atención persistente: el modo declarado por la app sobrevive a reiniciar serve y el cursor sigue valiendo", async () => {

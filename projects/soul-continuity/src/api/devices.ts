@@ -66,12 +66,17 @@ export function revokeDevice(dataDir: string, id: string, now: string): boolean 
 
 export interface VerifiedDevice { operator_ref: string; device: string; revoked: boolean; expired: boolean; jkt: string | null }
 
+/** Caducidad del token: `expires_at`, o la del alta + 90 días en un registro antiguo sin ella. */
+export function deviceExpiry(d: Pick<Device, "expires_at" | "created_at">): number {
+  return Date.parse(d.expires_at ?? "") || (Date.parse(d.created_at) || 0) + TOKEN_DAYS * DAY;
+}
+
 export function verifyToken(dataDir: string, token: string, now = Date.now()): VerifiedDevice | null {
   const h = Buffer.from(hash(token), "hex");
   for (const d of listDevices(dataDir)) {
     const k = Buffer.from(d.token_sha256, "hex");
     if (k.length === h.length && timingSafeEqual(k, h)) {
-      const exp = Date.parse(d.expires_at ?? "") || (Date.parse(d.created_at) || 0) + TOKEN_DAYS * DAY;
+      const exp = deviceExpiry(d);
       return { operator_ref: d.operator_ref, device: d.id, revoked: d.revoked_at !== null, expired: !(exp > now), jkt: d.jkt ?? null };
     }
   }

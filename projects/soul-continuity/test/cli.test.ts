@@ -298,6 +298,23 @@ test("orden desconocida o texto libre: ayuda y código 2, sin interpretar", asyn
   assert.match(s.err.join("\n"), /órdenes/);
 });
 
+test("devices: marca los que la API rechaza y hay que volver a emparejar (sin clave ligada, caducado, revocado)", async () => {
+  const s = setup();
+  const { pairDevice, revokeDevice } = await import("../src/api/devices.ts");
+  const antes = new Date(Date.parse(NOW) - 100 * 86_400_000).toISOString();
+  pairDevice(s.dir, "op-yo", "viejo", NOW);                    // dado de alta por CLI, sin jkt
+  pairDevice(s.dir, "op-yo", "bueno", NOW, 90, "J".repeat(43)); // emparejado con clave
+  pairDevice(s.dir, "op-yo", "pasado", antes, 90, "K".repeat(43)); // caducado
+  const r = pairDevice(s.dir, "op-yo", "quitado", NOW, 90, "L".repeat(43));
+  revokeDevice(s.dir, r.id, NOW);
+  assert.equal(await runCli(["devices"], s.deps), 0);
+  const l = s.out.join("\n").split("\n");
+  assert.match(l.find((x) => x.includes(" viejo")) ?? "", /\(sin clave ligada: vuelve a emparejar\)$/);
+  assert.match(l.find((x) => x.includes(" pasado")) ?? "", /\(caducado: vuelve a emparejar\)$/);
+  assert.match(l.find((x) => x.includes(" quitado")) ?? "", /\(revocado\)$/);
+  assert.match(l.find((x) => x.includes(" bueno")) ?? "", / bueno$/, "el que entra no lleva marca");
+});
+
 test("pair: abre una ventana con clave soulpk_, IP, puerto y huella corta; no muestra ni guarda ningún token de dispositivo", async () => {
   const s = setup();
   const cfg = JSON.parse(readFileSync(join(s.dir, "config.json"), "utf8"));

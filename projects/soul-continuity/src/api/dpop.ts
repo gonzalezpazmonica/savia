@@ -49,8 +49,8 @@ export interface DpopRequest {
   host: string;
   token: string;
   now: number;
-  /** Huella ligada al dispositivo; si falta, se acepta y se devuelve para ligarla. */
-  expectedJkt?: string | null;
+  /** Huella ligada al dispositivo. Obligatoria: sin ella no hay ligadura en el primer uso y se rechaza («clave»). */
+  expectedJkt: string;
 }
 
 export function makeDpopVerifier(o: { maxJti?: number } = {}) {
@@ -72,7 +72,7 @@ export function makeDpopVerifier(o: { maxJti?: number } = {}) {
     } catch { ok = false; }
     if (!ok) throw new DpopError("firma");
     const jkt = thumbprint({ x: jwk.x, y: jwk.y });
-    if (r.expectedJkt && r.expectedJkt !== jkt) throw new DpopError("clave");
+    if (typeof r.expectedJkt !== "string" || !r.expectedJkt || r.expectedJkt !== jkt) throw new DpopError("clave");
     if (p.htm !== r.method) throw new DpopError("htm");
     if (p.htu !== `https://${r.host}${r.path}`) throw new DpopError("htu");
     if (typeof p.iat !== "number" || !Number.isFinite(p.iat) || Math.abs(p.iat * 1000 - r.now) > DPOP_SKEW_MS) throw new DpopError("tiempo");

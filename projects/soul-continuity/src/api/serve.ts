@@ -65,12 +65,22 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   await refresh();
 
   const dpop = makeDpopVerifier();
+  // A la app solo le llega un 401 (no se revela a quien copió el token que es válido); quien opera el
+  // portátil ve en el log por qué y qué hacer, una vez por dispositivo.
+  const avisadoReemparejar = new Set<string>();
+  const avisarReemparejar = (device: string, motivo: string) => {
+    if (avisadoReemparejar.has(device) || avisadoReemparejar.size >= 1000) return;
+    avisadoReemparejar.add(device);
+    try { deps.err(`dispositivo ${device} rechazado (${motivo}): vuelve a emparejarlo con \`soul pair\``); } catch { /* el log no tumba la petición */ }
+  };
   const server = crearServidor({
     tls, mundo: world, reloj: () => Date.now(),
     autenticar: (token, prueba) => {
       const v = verifyToken(deps.dataDir, token);
       // Sin clave ligada (dispositivo anterior a soul-pair-v2) no entra: ligarla en el primer uso
       // dejaría ganar a quien copió el token. Hay que volver a emparejar con `soul pair`.
+      if (v && !v.revoked && !v.jkt) avisarReemparejar(v.device, "sin clave ligada, anterior a soul-pair-v2");
+      else if (v && !v.revoked && v.expired) avisarReemparejar(v.device, "token caducado");
       if (!v || !v.jkt || v.expired) return null;
       try {
         dpop({ proof: prueba.proof, method: prueba.method, path: prueba.path, host: prueba.host, token, now: Date.now(), expectedJkt: v.jkt });
