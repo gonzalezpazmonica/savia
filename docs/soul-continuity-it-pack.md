@@ -195,7 +195,7 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A37** `src/contract/adapter.ts:64-69`; `src/core/engine.ts:55-62`.
 - **A38** `src/cli/cli.ts:111-117`; `README.md` del proyecto, «Límites conocidos».
 - **A39** `src/core/connectors.ts:54-85` (validación de `connectors`: adaptadores del contrato, bases solo HTTPS o loopback), `:92-96` (transporte de solo lectura con bases por servicio); `test/connectors.test.ts`.
-- **A40** `src/api/dpop.ts:58-84` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:64-81` (clave ligada en el primer uso); `src/api/devices.ts:57-66`; `test/dpop.test.ts`, `test/serve.test.ts`.
+- **A40** `src/api/dpop.ts:58-84` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:70-83` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `test/dpop.test.ts`, `test/serve.test.ts`.
 - **A41** `src/core/engine.ts:188,311-333` (dispositivo en el libro; listar y deshacer); `src/cli/cli.ts:426-454`; `test/device-corrections.test.ts`.
 - **A42** `src/api/server.ts:152-162` (`maxConnections` 32 y tiempos de espera), `:695`; `test/serve.test.ts`.
 - **A43** `src/cli/login.ts:21-29` (`init` sin fuentes ni adaptadores), `:83-107` (`login`: flujo de dispositivo o token por stdin al almacén); `test/login.test.ts`, `test/instalar.test.ts`.

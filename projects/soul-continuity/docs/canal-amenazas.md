@@ -73,7 +73,7 @@
 
 ### 3 bis. Emparejamiento directo (integración, soul-pair-v2)
 
-Con la integración, la app puede emparejarse por la red con una **clave de emparejamiento** de un solo uso que muestra `soul pair`, en texto y en un QR (ventana de 10 minutos, 3 fallos invalidan la clave, como mucho 10 retos por ventana). La clave del móvil queda ligada al crear el dispositivo, así que no hay primer uso que ganar.
+Con la integración, la app puede emparejarse por la red con una **clave de emparejamiento** de un solo uso que muestra `soul pair`, en texto y en un QR (ventana de 10 minutos, 3 fallos invalidan la clave, como mucho 10 retos por ventana). La clave del móvil queda ligada al crear el dispositivo, así que no hay primer uso que ganar. Un dispositivo anterior, sin clave ligada, ya no entra: hay que volver a emparejarlo (`test/serve.test.ts`, «sin primer uso»).
 
 **soul-pair-v1 retirado.** En v1 la clave del HMAC era un código Crockford de 10 caracteres (32^10 = 2^50). El servidor entrega `HMAC(código, …)` en `/v1/pair/challenge` sin que el cliente demuestre antes conocerlo, así que quien estuviera en la VPN durante la ventana podía pedir un reto y adivinar el código sin conexión: con una GPU que calcule unos 10^10 HMAC-SHA256 por segundo (≈ 2^33), recorrer 2^50 lleva 2^17 s ≈ 36 h, es decir, unas 220 GPU en los 10 minutos. Era el antiguo **P2-12**, cerrado con v2.
 

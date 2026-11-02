@@ -22,7 +22,7 @@ import { coreWorld } from "./core-world.ts";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { operatorDir, readJson, writeJson } from "../core/store.ts";
-import { bindKey, verifyToken } from "./devices.ts";
+import { verifyToken } from "./devices.ts";
 import { DpopError, makeDpopVerifier } from "./dpop.ts";
 import { makePairing } from "./pairing.ts";
 import { validateListen } from "./listen.ts";
@@ -69,17 +69,17 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
     tls, mundo: world, reloj: () => Date.now(),
     autenticar: (token, prueba) => {
       const v = verifyToken(deps.dataDir, token);
-      if (!v) return null;
-      if (v.revoked) return { ref: v.operator_ref, revocado: true };
-      if (v.expired) return null;
-      let jkt: string;
+      // Sin clave ligada (dispositivo anterior a soul-pair-v2) no entra: ligarla en el primer uso
+      // dejaría ganar a quien copió el token. Hay que volver a emparejar con `soul pair`.
+      if (!v || !v.jkt || v.expired) return null;
       try {
-        jkt = dpop({ proof: prueba.proof, method: prueba.method, path: prueba.path, host: prueba.host, token, now: Date.now(), expectedJkt: v.jkt }).jkt;
+        dpop({ proof: prueba.proof, method: prueba.method, path: prueba.path, host: prueba.host, token, now: Date.now(), expectedJkt: v.jkt });
       } catch (e) {
         if (e instanceof DpopError) return null;
         throw e;
       }
-      if (!v.jkt && bindKey(deps.dataDir, v.device, jkt) !== jkt) return null;
+      // «Revocado» solo se dice a quien prueba tener la clave: el token solo no distingue revocado de inválido.
+      if (v.revoked) return { ref: v.operator_ref, revocado: true };
       return { ref: v.operator_ref, revocado: false, dispositivo: v.device };
     },
     secretoCursor: createHash("sha256").update(`soul-cursor|${tls.key}`).digest("hex"),
@@ -131,7 +131,8 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   const timer = setInterval(() => {
     if (leyendo) return;
     leyendo = true;
-    void refresh().then(modoDeCli).finally(() => { leyendo = false; });
+    // Un fallo del tic no tumba serve (rechazo sin capturar): se registra solo el nombre del error.
+    void refresh().then(modoDeCli).catch((e) => deps.err(`tic fallido (${(e as Error)?.name ?? "error"})`)).finally(() => { leyendo = false; });
   }, opts.refreshMs ?? REFRESH_MS);
   await new Promise<void>((resolve) => {
     const end = () => resolve();

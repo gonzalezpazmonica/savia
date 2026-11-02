@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TOKEN_DAYS, bindKey, listDevices, pairDevice, revokeDevice, verifyToken } from "../src/api/devices.ts";
+import { TOKEN_DAYS, listDevices, pairDevice, revokeDevice, verifyToken } from "../src/api/devices.ts";
 import { filesUnder } from "../src/core/store.ts";
 
 const T = "2026-10-31T10:00:00Z";
@@ -52,11 +52,3 @@ test("P2-8: el token caduca a los 90 días (borde incluido) y un emparejamiento 
   assert.throws(() => pairDevice(d, "op-a", "x", T, 398));
 });
 
-test("P1-1: la primera clave DPoP queda ligada y no se sustituye", () => {
-  const d = tmp();
-  const p = pairDevice(d, "op-a", "movil", T);
-  assert.equal(bindKey(d, p.id, "huella-1"), "huella-1");
-  assert.equal(bindKey(d, p.id, "huella-2"), "huella-1", "otra clave no reemplaza a la ligada");
-  assert.equal(verifyToken(d, p.token, Date.parse(T))?.jkt, "huella-1");
-  assert.equal(bindKey(d, "no-existe", "h"), null);
-});

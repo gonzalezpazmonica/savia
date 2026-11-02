@@ -4,8 +4,9 @@
  * el token se muestra una vez al emparejar. Un dispositivo revocado recibe
  * 401 DEVICE_REVOKED y no vuelve a autenticar.
  *
- * - P1-1: la primera prueba DPoP válida liga la huella de la clave del móvil (`jkt`); después solo
- *   vale esa clave. Un token copiado no sirve sin la clave privada del dispositivo.
+ * - P1-1: el emparejamiento (soul-pair-v2) liga la huella de la clave del móvil (`jkt`) y solo vale
+ *   esa clave. No hay ligadura en el primer uso: un dispositivo sin `jkt` no entra y se vuelve a
+ *   emparejar. Un token copiado no sirve sin la clave privada del dispositivo.
  * - P2-8: el token caduca (90 días por defecto); caducado, hay que volver a emparejar.
  */
 
@@ -24,7 +25,7 @@ export interface Device {
   revoked_at: string | null;
   /** Caducidad del token (ISO). Ausente en emparejamientos anteriores: se trata como caducado a los 90 días de `created_at`. */
   expires_at?: string;
-  /** Huella RFC 7638 de la clave DPoP del dispositivo, ligada en el primer uso. */
+  /** Huella RFC 7638 de la clave DPoP del dispositivo, ligada al emparejar (soul-pair-v2). Sin ella no entra. */
   jkt?: string | null;
 }
 
@@ -52,18 +53,6 @@ export function pairDevice(dataDir: string, operatorRef: string, name: string, n
   const expires_at = new Date(t + days * DAY).toISOString();
   save(dataDir, [...listDevices(dataDir), { id, name, operator_ref: operatorRef, token_sha256: hash(token), created_at: now, revoked_at: null, expires_at, jkt }]);
   return { id, token, expires_at };
-}
-
-/** Liga la clave DPoP al dispositivo si aún no tiene ninguna. Devuelve la huella vigente. */
-export function bindKey(dataDir: string, id: string, jkt: string): string | null {
-  const all = listDevices(dataDir);
-  const d = all.find((x) => x.id === id);
-  if (!d) return null;
-  if (!d.jkt) {
-    d.jkt = jkt;
-    save(dataDir, all);
-  }
-  return d.jkt;
 }
 
 export function revokeDevice(dataDir: string, id: string, now: string): boolean {

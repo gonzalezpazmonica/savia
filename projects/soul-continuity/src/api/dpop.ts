@@ -7,8 +7,7 @@
  * - `htu` = `https://<Host de la petición><ruta>`: una prueba para otra dirección o ruta no vale.
  * - `iat` dentro de ±60 s; `jti` de un solo uso en una ventana en memoria acotada (llena => rechazo).
  * - `ath` = SHA-256 del token: la prueba va ligada al token que acompaña.
- * - Devuelve la huella RFC 7638 de la clave: quien llama la liga al dispositivo en el primer uso y
- *   después exige la misma (`expectedJkt`).
+ * - Devuelve la huella RFC 7638 de la clave; quien llama exige la ligada al emparejar (`expectedJkt`).
  */
 
 import { createHash, createPublicKey, verify } from "node:crypto";

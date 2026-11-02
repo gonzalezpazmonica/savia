@@ -10,6 +10,7 @@ import { serveFromCli } from "../src/api/serve.ts";
 import { pairDevice, revokeDevice } from "../src/api/devices.ts";
 import { stop } from "../src/core/failsafe.ts";
 import { newKey, proof } from "./dpop-helper.ts";
+import { thumbprint } from "../src/api/dpop.ts";
 import { listDevices } from "../src/api/devices.ts";
 import { ATTENTION_STATE } from "../src/api/serve.ts";
 import { operatorDir } from "../src/core/store.ts";
@@ -44,6 +45,9 @@ function setup(listen: string[], port = 8787) {
 }
 
 const KEY = newKey();
+const JKT = thumbprint(KEY.publicKey.export({ format: "jwk" }) as { x: string; y: string });
+/** Dispositivo como lo crea soul-pair-v2: con la clave del móvil ya ligada. */
+const pair = (dir: string, name: string, at: string, days?: number) => pairDevice(dir, "op-yo", name, at, days, JKT);
 /** Petición como la de la app: `Authorization: DPoP <token>` y una prueba nueva firmada con la clave del móvil. */
 const call = (port: number, ca: string, token: string, o: { key?: ReturnType<typeof newKey>; path?: string; method?: string; body?: unknown; proofOverride?: string } = {}) =>
   new Promise<{ status: number; json: any }>((res, rej) => {
@@ -81,7 +85,7 @@ test("serve: TLS propio, dispositivo emparejado entra, revocado recibe 401, STOP
   const dir = setup(["127.0.0.1"], await freePort());
   const out: string[] = [];
   const err: string[] = [];
-  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const p = pair(dir, "movil", new Date().toISOString());
   const ac = new AbortController();
   const done = serveFromCli(deps(dir, out, err), { signal: ac.signal, onListening: () => undefined });
   for (let i = 0; i < 50 && !out.some((l) => l.includes("Escuchando")); i++) await new Promise((r) => setTimeout(r, 50));
@@ -92,7 +96,7 @@ test("serve: TLS propio, dispositivo emparejado entra, revocado recibe 401, STOP
     assert.equal(await get(port, ca, "otro-token"), 401);
     revokeDevice(dir, p.id, new Date().toISOString());
     assert.equal(await get(port, ca, p.token), 401);
-    const q = pairDevice(dir, "op-yo", "tableta", new Date().toISOString());
+    const q = pair(dir, "tableta", new Date().toISOString());
     stop(dir, "prueba", new Date().toISOString());
     assert.equal(await get(port, ca, q.token), 503);
   } finally {
@@ -153,14 +157,14 @@ test("serve no solapa lecturas: una lectura lenta no acumula otras en paralelo",
   }
 });
 
-test("P1-1: la primera clave queda ligada; un token copiado con otra clave, sin prueba o con prueba repetida => 401", async () => {
+test("P1-1: solo entra la clave ligada al emparejar; un token copiado con otra clave, sin prueba o con prueba repetida => 401", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
   const out: string[] = [];
-  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const p = pair(dir, "movil", new Date().toISOString());
   const s = await start(dir, out);
   try {
     assert.equal(await get(s.port, s.ca, p.token), 200, "control: la app con su clave entra");
-    assert.ok(listDevices(dir)[0].jkt, "huella de la clave ligada al dispositivo");
+    assert.equal(listDevices(dir)[0].jkt, JKT, "la huella ligada no cambia");
     assert.equal(await get(s.port, s.ca, p.token, newKey()), 401, "mismo token desde otra clave");
     assert.equal((await call(s.port, s.ca, p.token, { proofOverride: "p" })).status, 401, "sin prueba válida");
     const una = proof(KEY, { htu: `https://127.0.0.1:${s.port}/api/v1/soul/estado`, iat: Date.now(), token: p.token });
@@ -171,17 +175,67 @@ test("P1-1: la primera clave queda ligada; un token copiado con otra clave, sin 
   } finally { assert.equal(await s.stop(), 0); }
 });
 
+test("sin primer uso: un dispositivo sin clave ligada (anterior a v2) no entra con ninguna clave ni queda ligado", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const viejo = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const s = await start(dir, []);
+  try {
+    const ladron = newKey();
+    assert.equal(await get(s.port, s.ca, viejo.token, ladron), 401, "quien copió el token no liga su clave");
+    assert.equal(await get(s.port, s.ca, viejo.token), 401, "tampoco el móvil legítimo: hay que volver a emparejar");
+    assert.equal(listDevices(dir)[0].jkt ?? null, null, "no se liga ninguna clave");
+    const nuevo = pair(dir, "movil2", new Date().toISOString());
+    assert.equal(await get(s.port, s.ca, nuevo.token), 200, "control: emparejado con clave entra");
+  } finally { await s.stop(); }
+});
+
+test("revocado: solo se dice a quien prueba la clave; con el token solo es un 401 sin distinguir", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const p = pair(dir, "movil", new Date().toISOString());
+  revokeDevice(dir, p.id, new Date().toISOString());
+  const s = await start(dir, []);
+  try {
+    const conClave = await call(s.port, s.ca, p.token);
+    assert.equal(conClave.status, 401);
+    assert.equal(conClave.json.error, "DEVICE_REVOKED", "la app legítima sabe que la revocaron");
+    const sinClave = await call(s.port, s.ca, p.token, { key: newKey() });
+    assert.equal(sinClave.status, 401);
+    assert.equal(sinClave.json.error, undefined, "con otra clave no se revela que el dispositivo existe y está revocado");
+    assert.equal((await call(s.port, s.ca, "otro-token")).json.error, sinClave.json.error, "igual que un token inválido");
+  } finally { await s.stop(); }
+});
+
+test("un tic que falla no tumba serve: se registra el nombre del error y sigue sirviendo", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const p = pair(dir, "movil", new Date().toISOString());
+  const out: string[] = [];
+  const err: string[] = [];
+  const d = deps(dir, out, err);
+  let romper = false;
+  let fallos = 0;
+  // stderr cerrado (EPIPE) al registrar un fallo de lectura: el propio registro lanza dentro del tic.
+  d.adaptersFor = () => { if (romper) throw new Error("lectura"); return {}; };
+  d.err = (m) => { if (/lectura fallida/.test(m) && fallos++ === 0) throw Object.assign(new Error("EPIPE"), { name: "EpipeError" }); err.push(m); };
+  const s = await start(dir, out, d);
+  try {
+    romper = true;
+    for (let i = 0; i < 40 && !err.some((l) => /tic fallido/.test(l)); i++) await new Promise((r) => setTimeout(r, 25));
+    assert.ok(err.some((l) => l === "tic fallido (EpipeError)"), err.join("\n"));
+    assert.equal(await get(s.port, s.ca, p.token), 200, "serve sigue en marcha");
+  } finally { assert.equal(await s.stop(), 0); }
+});
+
 test("P2-8: un token caducado no entra aunque la prueba sea buena", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
   const out: string[] = [];
-  const p = pairDevice(dir, "op-yo", "movil", new Date(Date.now() - 2 * 86_400_000).toISOString(), 1);
+  const p = pair(dir, "movil", new Date(Date.now() - 2 * 86_400_000).toISOString(), 1);
   const s = await start(dir, out);
   try { assert.equal(await get(s.port, s.ca, p.token), 401); } finally { await s.stop(); }
 });
 
 test("atención persistente: el modo declarado por la app sobrevive a reiniciar serve y el cursor sigue valiendo", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
-  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const p = pair(dir, "movil", new Date().toISOString());
   const hasta = new Date(Date.now() + 2 * 3_600_000).toISOString();
   let s = await start(dir, []);
   let cursor = "";
@@ -204,7 +258,7 @@ test("atención persistente: el modo declarado por la app sobrevive a reiniciar 
 
 test("atención compartida: soul mode (attention.json) se aplica en serve sin reiniciar", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
-  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const p = pair(dir, "movil", new Date().toISOString());
   const s = await start(dir, []);
   try {
     assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "DISPONIBLE", "control");
@@ -238,7 +292,7 @@ test("P2-9: límites de conexión y tiempos de espera propios en el servidor TLS
 
 test("contrato soul mode → serve: la orden real de la CLI escribe lo que serve aplica (attention.json con at)", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
-  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const p = pair(dir, "movil", new Date().toISOString());
   const s = await start(dir, []);
   try {
     assert.equal((await call(s.port, s.ca, p.token, { path: "/api/v1/soul/atencion" })).json.modo, "DISPONIBLE", "control");
@@ -277,7 +331,7 @@ test("attention.json sin «at» no se aplica y se avisa", async () => {
 
 test("P1-A: tras reiniciar serve, una declaración de soul mode ya aplicada no pisa el modo que fijó después la app", async () => {
   const dir = setup(["127.0.0.1"], await freePort());
-  const p = pairDevice(dir, "op-yo", "movil", new Date().toISOString());
+  const p = pair(dir, "movil", new Date().toISOString());
   writeFileSync(join(operatorDir(dir, "op-yo"), "attention.json"), JSON.stringify({ modo: "FOCO", hasta: new Date(Date.now() + 3_600_000).toISOString(), at: new Date().toISOString() }));
   let s = await start(dir, []);
   try {
