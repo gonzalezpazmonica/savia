@@ -168,7 +168,7 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A10** `src/contract/claims.ts:53` (`TTL_MAX_S` = 24 h), `:64-87` (forma de la afirmación); `src/core/engine.ts:174`.
 - **A11** `src/core/engine.ts:66-74` (`HISTORY_DETAIL_MS`, `HISTORY_DAYS`, `saveHistory`).
 - **A12** `src/adapters/delta-cache.ts:1-11,45-53`.
-- **A13** `src/api/devices.ts:46-54` (token de 256 bits, solo el hash en disco, caducidad), `:79-87` (verificación en tiempo constante).
+- **A13** `src/api/devices.ts:46-56` (token de 256 bits, solo el hash en disco, caducidad), `:69-79` (verificación en tiempo constante).
 - **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:695` (TLS 1.3).
 - **A15** `src/credentials/store.ts:30-42` (secreto por stdin), `:95` (`security -i`), `:108,140` (`-EncodedCommand` sin secretos), `:176-304` (índice sin secretos).
 - **A16** `src/core/engine.ts:114-124,156-159`.
@@ -195,7 +195,7 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A37** `src/contract/adapter.ts:64-69`; `src/core/engine.ts:55-62`.
 - **A38** `src/cli/cli.ts:111-117`; `README.md` del proyecto, «Límites conocidos».
 - **A39** `src/core/connectors.ts:54-85` (validación de `connectors`: adaptadores del contrato, bases solo HTTPS o loopback), `:92-96` (transporte de solo lectura con bases por servicio); `test/connectors.test.ts`.
-- **A40** `src/api/dpop.ts:58-84` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:70-83` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `test/dpop.test.ts`, `test/serve.test.ts`.
+- **A40** `src/api/dpop.ts:56-87` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:70-84` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `test/dpop.test.ts`, `test/serve.test.ts`.
 - **A41** `src/core/engine.ts:188,311-333` (dispositivo en el libro; listar y deshacer); `src/cli/cli.ts:426-454`; `test/device-corrections.test.ts`.
 - **A42** `src/api/server.ts:152-162` (`maxConnections` 32 y tiempos de espera), `:695`; `test/serve.test.ts`.
 - **A43** `src/cli/login.ts:21-29` (`init` sin fuentes ni adaptadores), `:83-107` (`login`: flujo de dispositivo o token por stdin al almacén); `test/login.test.ts`, `test/instalar.test.ts`.

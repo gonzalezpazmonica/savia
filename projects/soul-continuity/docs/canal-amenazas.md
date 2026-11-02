@@ -43,7 +43,7 @@
   - SAN con las IP de escucha;
   - 397 días de validez (`src/api/cert.ts:63-86`).
 - La clave privada se guarda en `tls/key.pem` con permisos 0600 (`src/core/store.ts:46-57`).
-- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:118`, `src/cli/cli.ts:419`).
+- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:126`, `src/cli/cli.ts:419`).
 
 **Tests.** `test/cert.test.ts:11` (certificado válido para las IP), `:23` (TLS real: el cliente que fija el certificado conecta y uno sin él es rechazado) y `:38` (se reutiliza y se regenera si cambian las direcciones).
 
@@ -59,7 +59,7 @@
 **Lo que hace el código.**
 
 - Se empareja **en el terminal del portátil** (`soul pair <nombre>`), no por la red: la API no tiene ningún endpoint de emparejamiento (`src/api/server.ts:640-631`).
-- El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:33-38`).
+- El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:35,51-54`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
 - `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:68,212-181`). Así, el token no pasa por el modelo de un agente.
 
@@ -93,8 +93,8 @@ Tampoco cubierto: quien pueda escribir `config.json` decide adónde van los toke
 
 **Lo que hace el código.**
 
-- `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:68-42`, `src/cli/cli.ts:426-388`).
-- `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:53-81`, `src/api/devices.ts:50-54`). La revocación vale en el acto, sin reiniciar.
+- `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:58-65`, `src/cli/cli.ts:465-468`).
+- `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:70-84`, `src/api/devices.ts:69-79`). La revocación vale en el acto, sin reiniciar.
 - Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:613,706`).
 - Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:704`).
 
@@ -137,8 +137,8 @@ Con P1-1 cerrado, un token copiado ya no vale sin la clave del móvil; aun así,
 
 **Lo que hace el código.**
 
-- **Fuerza bruta del token:** el espacio es de 2^256. La comparación se hace sobre el SHA-256, en tiempo constante (`src/api/devices.ts:50-54`).
-- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:89`, `src/api/server.ts:589-541,641`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:594-597`).
+- **Fuerza bruta del token:** el espacio es de 2^256. La comparación se hace sobre el SHA-256, en tiempo constante (`src/api/devices.ts:69-79`).
+- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:94`, `src/api/server.ts:661-675,725`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:666-669`).
 - **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:622-638`).
 - **Reenvío de solicitudes:**
   - TLS 1.3 impide capturarlas desde la red.
@@ -176,7 +176,7 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 
 | Id | Hueco | Arreglo propuesto |
 |---|---|---|
-| P1-1 | La prueba DPoP no se verifica. El token del dispositivo funciona como portador y se puede reutilizar desde cualquier equipo de la VPN | Verificar la prueba DPoP (RFC 9449): firma con la clave pública registrada al emparejar, `htm`/`htu`/`iat`, `jti` con ventana anti-reenvío en memoria y `ath` del token. Al emparejar, guardar la clave pública del dispositivo junto al hash del token. Tests: prueba de otra clave → 401; `jti` repetido → 401; prueba caducada → 401 — **Cerrado en la integración:** `src/api/dpop.ts:58-84` verifica la prueba con la forma del cliente Android (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`); `src/api/serve.ts:64-81` liga la clave en la primera conexión. Tests: otra clave, `jti` repetido y prueba caducada dan 401 (`test/dpop.test.ts`, `test/serve.test.ts`). Residual: quien use el token antes que el móvil legítimo liga su clave |
+| P1-1 | La prueba DPoP no se verifica. El token del dispositivo funciona como portador y se puede reutilizar desde cualquier equipo de la VPN | Verificar la prueba DPoP (RFC 9449): firma con la clave pública registrada al emparejar, `htm`/`htu`/`iat`, `jti` con ventana anti-reenvío en memoria y `ath` del token. Al emparejar, guardar la clave pública del dispositivo junto al hash del token. Tests: prueba de otra clave → 401; `jti` repetido → 401; prueba caducada → 401 — **Cerrado en la integración:** `src/api/dpop.ts:56-87` verifica la prueba con la forma del cliente Android (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`); `src/api/serve.ts:70-84` solo acepta la clave ligada al emparejar (soul-pair-v2, `src/api/pairing.ts`): un dispositivo sin clave ligada no entra y «revocado» solo se responde tras la prueba. Tests: otra clave, `jti` repetido, prueba caducada y dispositivo sin clave ligada dan 401 (`test/dpop.test.ts`, `test/serve.test.ts`). Sin residual de primer uso: ya no hay ligadura en la primera conexión |
 | P1-2 | Las correcciones y cambios hechos desde un dispositivo no registran cuál fue. Tras perder el móvil no se puede saber qué deshacer | Anotar el `device` en cada corrección del libro y en el registro de atención y detalle. Añadir una orden que liste y deshaga las correcciones de un dispositivo — **Cerrado en la integración:** el libro anota el dispositivo (`src/core/engine.ts:188`); `soul corrections --device`, `soul undo-device` y `soul unpair --undo` (`src/cli/cli.ts:426-454`). La revocación remota desde otro dispositivo sigue sin existir |
 | P1-3 | No se ha revisado la app: almacenamiento del token (Android Keystore), fijación real de la huella SPKI y bloqueo del dispositivo | Revisión de la parte Android con los mismos criterios: test que conecta contra un certificado distinto y falla, y token no exportable |
 
