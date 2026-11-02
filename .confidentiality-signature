@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=a1832d2efa32de8022f2950f25691a674742ad9e1bdf950c44f412dd1dab718b
-timestamp=2026-11-01T21:34:56Z
+diff_hash=d875738c080606b88a220669fb7391adfde2d79020f6e11cb91ad13397152686
+timestamp=2026-11-02T20:32:29Z
 branch=agent/w-spec-inferencias-20261023
-head_commit=7027b52d
-signature=8dedababc7baa94ae7ac6f379454c68a3b15987dec4ec1f71355bffa63ca4305
+head_commit=22ecc388
+signature=91e01f4e037f5eec2aaf50c22ed361ccd3f761acf3d319c6f68ab84b9a722658
