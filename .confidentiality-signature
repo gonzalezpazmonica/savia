@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=00d0e1a020a52ad6c5d0c4fa7340123a5aff21d6bda235aeecc04122d61a121d
-timestamp=2026-11-02T22:03:22Z
-branch=agent/w-g3-capacidades-20261023
-head_commit=3198cbd5
-signature=c3cc855324fbd457c63d39d93c826a37fde46f216a765a7eaf88f79e77a9a843
+diff_hash=3c816808674597f9a6ee5104ae036e242acba563029c19adfdebecf5f8b7998a
+timestamp=2026-11-02T22:30:26Z
+branch=HEAD
+head_commit=3c3a77aad
+signature=809a00ab4135c35363d8a14d9fe8bc1f52906b94a72eb9f9b5995021a1dc6cbb
