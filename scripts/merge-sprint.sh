@@ -592,7 +592,7 @@ record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → 
     || anomaly merge_commit_ilegible "$1"
   # Registros recalculados (registry_merge, o judge_safe con registros): blob del resolutor congelado y hashes.
   local rx=()
-  [[ "$4" == registry_merge || -n "$REG_HASHES" ]] && rx=(resolver_blob="$(git hash-object "$RESOLVER")" registry_hashes="$REG_HASHES")
+  [[ "$4" == registry_merge || -n "${REG_HASHES:-}" ]] && rx=(resolver_blob="$(git hash-object "$RESOLVER")" registry_hashes="${REG_HASHES:-}")
   ledger_merged "$1" || ledger event=MERGED pr="$1" digest="$DIGEST" grant="$GRANT_ID" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"} "${rx[@]}"
   MERGED=$(merged_count); grant_set_merged "$MERGED"
   f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
