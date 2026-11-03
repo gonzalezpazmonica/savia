@@ -1686,6 +1686,15 @@
       "note": "Contrato único de delegación (Principal/Capability/Authority/Effect) firmado ed25519 contra los firmantes de origin/main, con ámbito cerrado, precondiciones, efectos declarados y vencimiento. Kernel determinista en Python stdlib fuera del LLM, deny por defecto y sin caché; el grafo y las cúpulas solo sugieren. Ontología mínima sobre los descriptores de SE-386 con dueño declarado por atributo. 15 denegaciones con gemelo positivo (revocación local y en main, entre evaluar y ejecutar, datos ambiguos, autoridad inferida). F0 tests, F1 sombra sobre SE-343/SE-491; F2 solo con nueva decisión.",
       "evidence": "docs/specs/SE-496-governed-operational-ontology-authority.spec.md",
       "phase": "B"
+    },
+    {
+      "id": "SE-500",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado",
+      "note": "S1: altas y transiciones en docs/propuestas/planning.d/ y LOG.d/ con vista consolidada determinista e idempotente (roadmap.sh); validate sobre la vista, G13 por spec referenciada. S2: run resuelve registros y derivados con un resolutor congelado en el manifiesto y amplía la equivalencia (registry_merge) recalculando cada registro y derivado; conflicto de código real se aparca, sin LLM. S3: plan ordena por grafo de conflictos previstos y avisa de choques; modifica el orden ascendente de SE-433 §2.5. Línea base 2026-10-20→11-03: 62 merges y 32 aparcamientos (17 por conflicto); el 2026-11-02, 2 de 5 candidatas. Tier 4: aprueba la operadora.",
+      "evidence": "docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
