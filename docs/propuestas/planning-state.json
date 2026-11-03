@@ -1686,6 +1686,15 @@
       "note": "Contrato único de delegación (Principal/Capability/Authority/Effect) firmado ed25519 contra los firmantes de origin/main, con ámbito cerrado, precondiciones, efectos declarados y vencimiento. Kernel determinista en Python stdlib fuera del LLM, deny por defecto y sin caché; el grafo y las cúpulas solo sugieren. Ontología mínima sobre los descriptores de SE-386 con dueño declarado por atributo. 15 denegaciones con gemelo positivo (revocación local y en main, entre evaluar y ejecutar, datos ambiguos, autoridad inferida). F0 tests, F1 sombra sobre SE-343/SE-491; F2 solo con nueva decisión.",
       "evidence": "docs/specs/SE-496-governed-operational-ontology-authority.spec.md",
       "phase": "B"
+    },
+    {
+      "id": "SE-492",
+      "status": "PROPOSED",
+      "priority": "P1",
+      "title": "Estado declarado, no inferido: sustituir las 9 inferencias de estado de la persona por declaraciones y demanda del sistema",
+      "note": "Retira fatigue_score por la hora, override_rate, cognitive_load_score, fast-accept atribuido a la persona, break_compliance exportado y el score de burnout por miembro. Los sustituye por la ventana declarada (multioperador, sin umbral universal), un registro de demanda del sistema y /work-conditions de equipo sin identificar personas (mínimo 3). Telemetría solo en settings.local.json.",
+      "evidence": "docs/specs/SE-492-declared-state-not-inferred.spec.md",
+      "phase": "A"
     }
   ],
   "route": {
