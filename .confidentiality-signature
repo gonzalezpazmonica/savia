@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=fbe1773177f96590de7108eb66d964b4d81bbd966e0a9f4c82a2fe6bd95009d4
-timestamp=2026-11-03T17:18:51Z
+diff_hash=feae1f668e71a707ee0af1d8aad84d45c7c13c37b6088a50c733738c7b72cb20
+timestamp=2026-11-03T17:29:20Z
 branch=agent/w-spec-producto-20261023
-head_commit=f075bd13b
-signature=93126225c2269ffbab496710f8c7f5cdded3f31073c50e463875f4ecc56952dd
+head_commit=098b9ed0b
+signature=eca5b1f605260d68ffad9fe4b176c125a97388afe219f2aca7ef6e47de2e6b41
