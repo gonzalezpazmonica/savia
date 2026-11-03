@@ -193,11 +193,12 @@ check_secrets() {
 }
 
 # ── SE-407 S1: artefactos generados al día ───────────────────────────────
-# Usa los --check de cada generador (no los reimplementa). Cada línea:
+# Usa los --check de cada generador (no los reimplementa). SE-501: los derivados D (reglas y .scm) no se
+# versionan; sus filas comprueban que la generación funciona, es válida y es determinista. Cada línea:
 # artefacto|comprobación|cómo regenerarlo. SAVIA_FRESH_CHECKS_FOR_TESTS solo para tests.
-FRESH_CHECKS_DEFAULT='rule-manifest.json|bash scripts/rule-manifest-generate.sh --check|bash scripts/rule-manifest-generate.sh
+FRESH_CHECKS_DEFAULT='derivados de reglas (SE-501)|bash scripts/derived.sh verify --only rules|bash scripts/derived.sh ensure (rule-manifest.json e INDEX.md no se versionan)
 settings-hooks pin|bash scripts/contract-pin.sh check settings-hooks|revisar el cambio de .claude/settings.json y, si es intencionado, bash scripts/contract-pin.sh pin settings-hooks --path .claude/settings.json
-.scm/sam.json|python3 scripts/sam.py check|python3 scripts/generate-capability-map.py, commit y python3 scripts/sam.py generate
+.scm generado (SE-501)|bash scripts/derived.sh verify --only scm|bash scripts/derived.sh ensure (.scm generado no se versiona; revisar el generador si falla)
 docs/propuestas/INDEX.md|bash scripts/propuestas-index-gen.sh --check|bash scripts/propuestas-index-gen.sh
 planning-state.json|bash scripts/roadmap.sh validate --diff origin/main|registrar o corregir la spec con bash scripts/roadmap.sh register SE-NNN --status ... (escribe docs/propuestas/planning.d/SE-NNN.json y LOG.d/SE-NNN-ESTADO.md; la base solo cambia con roadmap.sh consolidate) y bash scripts/roadmap.sh render
 docs/critical-facts.md|bash scripts/generate-critical-facts.sh --check|bash scripts/generate-critical-facts.sh
@@ -213,7 +214,8 @@ check_generated_fresh() {
   while IFS='|' read -r name check regen; do
     [[ -z "${name// /}" ]] && continue
     # --quick puede omitir sam.py check (el más lento), nunca los otros.
-    if $QUICK_MODE && [[ "$check" == *"sam.py check"* ]]; then continue; fi
+    # SE-501: la fila del SAM es ahora «derived.sh verify --only scm» (generación y determinismo).
+    if $QUICK_MODE && [[ "$check" == *"sam.py check"* || "$check" == *"verify --only scm"* ]]; then continue; fi
     i=$((i+1))
     ( if (cd "$REPO_ROOT_CI" && bash -c "$check") >/dev/null 2>&1; then
         echo "PASS Generado al día: $name"

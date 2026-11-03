@@ -220,3 +220,20 @@ test_warn2.db
 
 # Savia School: datos de menores (SCHOOL_BASE por defecto = cwd); nunca versionar
 school-savia/
+
+# ── SE-501: derivados (D) — se generan con `bash scripts/derived.sh ensure`, nunca se versionan ──
+# Lista cerrada: scripts/derived-paths.txt (fuente única). Las declaraciones de .scm/ editadas a mano
+# (sam-declarations.json, sam-runtime-declarations.json, sam-verification-declarations.json,
+# sam.schema.json, runtime-surface/) sí se versionan.
+/.confidentiality-signature
+/.scm/sam.json
+/.scm/registry.json
+/.scm/resources.json
+/.scm/INDEX.scm
+/.scm/views/
+/.scm/reports/
+/.scm/categories/
+/.scm/.derived-stamp
+/docs/rules/INDEX.md
+/docs/rules/domain/rule-manifest.json
+/docs/rules/.derived-stamp

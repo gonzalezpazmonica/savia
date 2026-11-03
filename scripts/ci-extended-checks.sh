@@ -115,6 +115,8 @@ fi
 echo "--- 7. SCM Freshness ---"
 scm_gen="$ROOT/scripts/generate-capability-map.py"
 scm_index="$ROOT/.scm/INDEX.scm"
+# SE-501: .scm generado no se versiona; se genera (ensure) y se comprueba que su salida coincide con las fuentes.
+if [[ -f "$ROOT/scripts/derived.sh" ]]; then bash "$ROOT/scripts/derived.sh" ensure --only scm >/dev/null 2>&1 || :; fi
 if [[ -x "$scm_gen" && -f "$scm_index" ]]; then
   # Read-only: the generator's --check regenerates into a temp dir and compares
   # byte for byte. Never regenerate in place nor restore .scm/ from git here:
@@ -122,10 +124,10 @@ if [[ -x "$scm_gen" && -f "$scm_index" ]]; then
   if scm_out=$(python3 "$scm_gen" --check 2>&1); then
     pass ".scm/INDEX.scm fresh vs tracked sources"
   else
-    fail ".scm/INDEX.scm stale — run 'python3 scripts/generate-capability-map.py' and commit (${scm_out})"
+    fail ".scm/INDEX.scm stale — run 'bash scripts/derived.sh ensure' (${scm_out})"
   fi
 else
-  fail "SCM generator or INDEX missing"
+  fail "SCM generator or INDEX missing (bash scripts/derived.sh ensure)"
 fi
 
 # 8. Agent Size Ratchet (SE-038 Slice 3)
@@ -237,7 +239,7 @@ if [[ -f "$ROOT/scripts/sam.py" ]]; then
   if sam_out=$(cd "$ROOT" && python3 scripts/sam.py check 2>&1); then
     pass ".scm/sam.json fresh (${sam_out})"
   else
-    fail ".scm/sam.json stale — run 'python3 scripts/sam.py generate' and commit (${sam_out})"
+    fail ".scm/sam.json stale — run 'bash scripts/derived.sh ensure' (${sam_out})"
   fi
 else
   fail "SAM generator missing (scripts/sam.py)"
