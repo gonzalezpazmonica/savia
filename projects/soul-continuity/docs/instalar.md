@@ -2,18 +2,31 @@
 
 Guía para cualquier operador. Soul se instala en tu cuenta de usuario, sin permisos de administración, y no envía datos de trabajo fuera del equipo. Lo que hagas aquí se deshace entero con `soul uninstall --yes` (paso 7).
 
-Los pasos de esta guía están probados en `test/instalar.test.ts` con un `HOME` falso y dobles del llavero y del arranque: el test no toca nada real de la máquina que lo ejecuta.
+Los pasos de esta guía están probados en `test/instalar.test.ts` con un `HOME` falso y dobles del llavero y del arranque: el test no toca nada real de la máquina que lo ejecuta. `install.sh` se prueba en `test/install-sh.test.ts` con un espejo falso de nodejs.org, y `soul setup`, `doctor` y `listen` en `test/setup.test.ts` con dobles de la red y de las preguntas.
+
+## Camino corto: dos órdenes
+
+En Linux o macOS, desde la carpeta de Soul (paso 1):
+
+```bash
+bash install.sh      # Node.js oficial si hace falta (sin sudo) y la orden «soul» en ~/.local/bin
+soul setup           # perfil, VPN, comprobaciones, servicio de tu usuario y emparejar el móvil
+```
+
+`soul setup` hace preguntas sencillas y en cada una Intro acepta la respuesta propuesta. Si algo falla, dice qué es y te da la orden exacta para arreglarlo. Después, vuelve a ejecutar `soul setup`: no pisa lo que ya está hecho. La tienes que ejecutar tú en tu terminal. Desde un agente (Claude Code, OpenCode) se rechaza, y sin terminal interactiva no hace nada.
+
+`soul doctor` repite las comprobaciones cuando quieras. Los pasos siguientes explican qué hace cada parte, por si prefieres hacerlo a mano o algo no encaja.
 
 ## 0. Requisitos
 
-- **Node.js LTS oficial**, versión 22.6 o posterior (`node --version`). Sin compilar nada: Soul es TypeScript que Node ejecuta directamente.
+- **Node.js LTS oficial**, versión 22.6 o posterior. Sin compilar nada: Soul es TypeScript que Node ejecuta directamente. **El Node de Ubuntu y Debian no sirve**, porque viene sin soporte de TypeScript y da `ERR_NO_TYPESCRIPT`. El lanzador lo detecta y busca un Node oficial en `~/.savia/node`, nvm o fnm. Si no hay ninguno, `install.sh` instala el Node.js LTS oficial en `~/.savia/node`, sin sudo y comprobando su SHA-256. En Windows, instálalo desde https://nodejs.org.
 - **Almacén de credenciales del sistema**:
-  - Linux: Secret Service (GNOME Keyring o KWallet) y la orden `secret-tool` (paquete `libsecret-tools` o equivalente);
+  - Linux: Secret Service (GNOME Keyring o KWallet) y la orden `secret-tool`. Si falta, `soul init` y `soul doctor` lo dicen y dan la orden: `sudo apt install libsecret-tools` (Fedora: `sudo dnf install libsecret`; Arch: `sudo pacman -S libsecret`);
   - macOS: el Llavero (viene con el sistema);
   - Windows: Credential Manager (viene con el sistema).
 
   Sin almacén, Soul no guarda tokens en ningún otro sitio: los adaptadores de API no se activan.
-- **La VPN de tu organización** (o una VPN propia entre el portátil y el móvil). La app consulta por ella; no hay servidor intermedio.
+- **Una VPN entre el portátil y el móvil**: la de tu organización o una propia, por ejemplo Tailscale con la misma cuenta en los dos. La app consulta por ella; no hay servidor intermedio.
 - Solo para el adaptador `web`: Chrome o Edge ya instalados.
 
 ## 1. Obtener Soul
@@ -21,11 +34,13 @@ Los pasos de esta guía están probados en `test/instalar.test.ts` con un `HOME`
 Copia la carpeta `projects/soul-continuity/` del repositorio en tu equipo, por ejemplo en `~/soul-continuity`. Desde ahí:
 
 ```bash
-alias soul="node $HOME/soul-continuity/bin/soul.mjs"   # en Windows: doskey o un .cmd con la misma orden
+bash install.sh
 soul help
 ```
 
-No hace falta `npm install` para usar la CLI ni la API: no tienen dependencias de ejecución. Solo el adaptador `web` necesita `playwright-core`, sin descargar navegadores:
+`install.sh` crea `~/.local/bin/soul` y te avisa si esa carpeta no está en tu `PATH`. No pisa una orden `soul` que no sea suya. Con `--download` baja el Node oficial aunque el tuyo ya sirva; `SOUL_NODE_MIRROR` apunta a un espejo de nodejs.org de tu organización. En Windows, crea un `.cmd` con `node %USERPROFILE%\soul-continuity\bin\soul.mjs %*`.
+
+No hace falta `npm install` para usar la CLI ni la API, porque no tienen dependencias de ejecución. Solo el adaptador `web` necesita `playwright-core`, sin descargar navegadores:
 
 ```bash
 cd ~/soul-continuity/src/web && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --ignore-scripts
@@ -33,12 +48,14 @@ cd ~/soul-continuity/src/web && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -
 
 ## 2. Crear tu perfil
 
+`soul setup` lo hace por ti. A mano:
+
 ```bash
 soul init trabajo --email tu.correo@tu-organizacion.example
 soul status
 ```
 
-`init` crea `config.json` en tu directorio de datos (Linux `~/.local/share/savia/soul-continuity`, macOS `~/Library/Application Support/Savia/soul-continuity`, Windows `%LOCALAPPDATA%\Savia\soul-continuity`). El perfil lleva una referencia opaca, **ninguna fuente, ningún adaptador activo y ninguna dirección de escucha**. Sin perfil, Soul responde «no sé quién eres».
+`init` crea `config.json` en tu directorio de datos (Linux `~/.local/share/savia/soul-continuity`, macOS `~/Library/Application Support/Savia/soul-continuity`, Windows `%LOCALAPPDATA%\Savia\soul-continuity`). El perfil lleva una referencia opaca y **ninguna fuente ni adaptador activo**. Si detecta tu VPN, porque `tailscale ip -4` responde o hay una interfaz con una IP de `100.64.0.0/10`, fija ahí la escucha y lo dice. Si no la detecta, explica qué hacer. Nunca escucha en `0.0.0.0`. Con `--listen <ip>` eliges tú la dirección. Sin perfil, Soul responde «no sé quién eres».
 
 ## 3. Activar adaptadores
 
@@ -85,17 +102,37 @@ Usa tokens de **solo lectura**: un PAT de grano fino en GitHub (Issues y Pull re
 
 ## 5. Emparejar el móvil por la VPN
 
-1. Pon en `api.listen` la dirección de tu equipo **en la VPN** (por ejemplo la `100.x.y.z` de tu cliente VPN). Nunca `0.0.0.0` ni `::`: Soul se niega.
-2. Arranca la API y abre una ventana de emparejamiento:
+`soul setup` lo hace por ti. A mano:
+
+1. La escucha va en la dirección de tu equipo **en la VPN**. `soul listen --detect` la busca y la guarda, y `soul listen 100.x.y.z` la fija. Nunca `0.0.0.0` ni `::`: Soul se niega. Sin argumentos, `soul listen` muestra la configurada y la detectada.
+2. Arranca la API. Lo mejor es como servicio de tu usuario, para que arranque solo con tu sesión:
 
    ```bash
-   soul serve                 # o: soul autostart install, para que arranque con tu sesión
+   soul autostart install     # o, en una terminal que dejas abierta: soul serve
+   ```
+
+   `soul serve` muestra la **huella del certificado (no es la clave)** y te dice cómo seguir: «Para emparejar el móvil, abre otra terminal y ejecuta: soul pair».
+3. Abre la ventana de emparejamiento **en otra terminal**:
+
+   ```bash
    soul pair                  # QR, IP, puerto, clave de un solo uso (soulpk_…) y huella corta del certificado
    ```
 
-3. En la app Savia Space, elige el **modo directo** y pulsa **Escanear QR** sobre el QR de la terminal, o pega IP, puerto y clave. Si la terminal no muestra bien el QR: `soul pair --qr-png qr.png` (fichero 0600; bórralo al terminar). Comprueba que la huella corta que muestra la app es la misma que la de `soul pair`. La clave vale 10 minutos, una sola vez y admite 3 intentos fallidos; después hay que volver a ejecutar `soul pair`. Mientras dure la ventana, la clave y el QR son secretos: no compartas capturas.
-4. La app nunca envía la clave: Soul y la app se demuestran que la conocen (protocolo `soul-pair-v2`, en `src/contract/CONTRATO.md`). Una app que aún use el código de 10 caracteres (v1) recibe un error que pide actualizarla. Al emparejar, el móvil queda **ligado a su clave**: el token que recibe no sirve desde otro dispositivo. Caduca a los 90 días (`soul pair --days N` para cambiarlo); entonces vuelve a emparejar. Si el certificado de la instalación se renueva, también.
-5. No ejecutes `pair` desde un agente (se rechaza).
+4. En la app Savia Space, elige el **modo directo** y pulsa **Escanear QR** sobre el QR de la terminal, o pega IP, puerto y clave. La clave empieza por `soulpk_` y sale de `soul pair`; la huella no es la clave. Si la terminal no muestra bien el QR: `soul pair --qr-png qr.png` (fichero 0600; bórralo al terminar). Comprueba que la huella corta que muestra la app es la misma que la de `soul pair`. La clave vale 10 minutos y una sola vez, y admite 3 intentos fallidos. Después hay que volver a ejecutar `soul pair`. Mientras dure la ventana, la clave y el QR son secretos: no compartas capturas.
+5. La app nunca envía la clave: Soul y la app se demuestran que la conocen (protocolo `soul-pair-v2`, en `src/contract/CONTRATO.md`). Una app que aún use el código de 10 caracteres (v1) recibe un error que pide actualizarla. Al emparejar, el móvil queda **ligado a su clave**: el token que recibe no sirve desde otro dispositivo. Caduca a los 90 días (`soul pair --days N` para cambiarlo); entonces vuelve a emparejar. Si el certificado de la instalación se renueva, también.
+6. No ejecutes `pair` ni `setup` desde un agente (se rechazan).
+
+### Si `serve` no arranca: «la IP configurada no está en ninguna interfaz»
+
+`soul serve` y `soul doctor` comprueban, antes de escuchar, que la IP de la escucha está en tu equipo. Si no está, en vez de un `EADDRNOTAVAIL` verás la causa y la orden del arreglo:
+
+- **NetworkManager gestiona `tailscale0`** y le quita la IPv4 (pasa en Ubuntu). Ejecuta una vez la orden que muestra `soul doctor`, que pide tu contraseña:
+
+  ```bash
+  printf '[keyfile]\nunmanaged-devices=interface-name:tailscale0\n' | sudo tee /etc/NetworkManager/conf.d/unmanaged-devices.conf && sudo systemctl reload NetworkManager && sudo systemctl restart tailscaled
+  ```
+
+- **La VPN está caída o cambió de IP**: conéctala (`tailscale up`) o guarda la nueva con `soul listen --detect`, y reinicia `serve`.
 
 Si pierdes el móvil: `soul unpair <id> --undo` revoca su token y deshace las correcciones que hizo. `soul corrections --device <id>` las lista antes.
 
@@ -118,6 +155,6 @@ soul autostart uninstall
 soul uninstall --yes
 ```
 
-Borra el directorio de datos de Soul (configuración, libro de correcciones, caché, historial, certificado, dispositivos, perfil web y sus sesiones) y **todas** las credenciales de Soul del almacén del sistema, de todos los adaptadores. Si alguna no se puede borrar, la orden falla y lo dice. Lo que no es de Soul en esa carpeta se conserva. Después, borra la carpeta de `~/soul-continuity` y el alias, y el perfil antiguo del adaptador web si lo usaste suelto (paso 3, `web`).
+Borra el directorio de datos de Soul (configuración, libro de correcciones, caché, historial, certificado, dispositivos, perfil web y sus sesiones) y **todas** las credenciales de Soul del almacén del sistema, de todos los adaptadores. Si alguna no se puede borrar, la orden falla y lo dice. Lo que no es de Soul en esa carpeta se conserva. Después, borra la carpeta de `~/soul-continuity` y la orden `~/.local/bin/soul` (y `~/.savia/node` si lo instaló `install.sh` y no lo usas para otra cosa), y el perfil antiguo del adaptador web si lo usaste suelto (paso 3, `web`).
 
 Lo que Soul no puede borrar por ti: la concesión de la aplicación en cada proveedor (Microsoft: Mis aplicaciones; Google: Seguridad > Acceso de terceros; GitHub, Jira y Azure DevOps: sus tokens). Retírala allí.
