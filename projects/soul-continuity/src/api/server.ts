@@ -542,10 +542,9 @@ export function crearServidor(opts: OpcionesServidor) {
     if (contactar) emitir(o, t, { tipo: "gemelo", categoria: m.tipo, ids: m.asuntos.map((a) => a.elementoId) });
   }
   function latidoGemelo(o: Op) {
-    const g = o.gemelo;
-    const t = ahora();
+    const g = o.gemelo, t = ahora();
     if (!g.config.activo) return;
-    const diaResumen = diaResumenDebido(g, o.avisos.resumenInicio, t);
+    const diaResumen = diaResumenDebido(g, o.avisos.resumenInicio, t); // el de ayer si la tolerancia cruza medianoche
     if (diaResumen != null) {
       marcarResumen(g, diaResumen);
       const asuntos = seleccionarResumen(elementosGemelo(o), t);
