@@ -343,16 +343,57 @@ main_moves() {  # main_moves <fichero> <contenido>
   grep -q '"reason":"merge_rechazado"' "$MERGE_SPRINT_HOME/ledger.jsonl"
 }
 
-@test "v3 positivo: conflicto solo en el índice de reglas se trata como derivado y se mergea" {
+# SE-501 AC-13 (sustituye a «v3 positivo: conflicto solo en el índice de reglas se trata como derivado»):
+# D ya no es un derivado regenerable. Una PR que lo cambió antes del corte choca modify/delete con main;
+# resync lo saca del índice (como derived-drop.sh), sin generadores, y la PR se mergea sin D.
+@test "SE-501 AC-13 positivo: PR que cambió el índice de reglas antes del corte; resync lo saca del diff y se mergea" {
   v2_repo; mkdir -p "$MERGE_SPRINT_GIT_ROOT/docs/rules"
   main_moves docs/rules/INDEX.md base-index
   v2_pr 53 docs/rules/INDEX.md index-pr53
-  main_moves docs/rules/INDEX.md index-main
+  G rm -q docs/rules/INDEX.md; G commit -qm "corte SE-501"; G push -q origin main
   plan_and_grant
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
   grep -qx 53 "$FAKE/merged"
   ! grep -q '"reason":"conflicto_real"' "$MERGE_SPRINT_HOME/ledger.jsonl" || false
+  run git --git-dir="$BARE" cat-file -e refs/heads/pr-53:docs/rules/INDEX.md
+  [ "$status" -ne 0 ]
+}
+
+# AC-13 sobre la equivalencia de heads (plan): H0 revisado, H1 = H0 + un commit posterior.
+d_pr() {  # d_pr <n> : PR revisada que añade x<n>.txt y una ruta de D (.scm/registry.json); deja la rama activa
+  G switch -q -c "pr-$1" main; mkdir -p "$MERGE_SPRINT_GIT_ROOT/.scm"
+  echo "pr$1" > "$MERGE_SPRINT_GIT_ROOT/x$1.txt"; echo reg > "$MERGE_SPRINT_GIT_ROOT/.scm/registry.json"
+  G add -A; G commit -qm "pr $1 con D"; G push -q origin "pr-$1"
+  echo "pr-$1" > "$FAKE/$1.branch"; echo x > "$FAKE/$1.head"; echo "scripts/x$1.sh" > "$FAKE/$1.files"
+  local s; s=$(git --git-dir="$BARE" rev-parse "refs/heads/pr-$1")
+  echo "VERDICT: APPROVE pr=$1 sha=$s role=correctness tier=2 reviewer=rev-agent author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0" > "$TMPDIR_T/r$1.md"
+  bash "$SCRIPT" review-register "$1" "$TMPDIR_T/r$1.md"
+}
+d_push() { G commit -qm "$1"; G push -q origin "HEAD:$(G branch --show-current)"; G switch -q main; }
+
+@test "SE-501 AC-13 positivo: H1 = T + commit de derived-drop que solo borra D es equivalente" {
+  v2_repo; d_pr 55
+  G rm -q --cached .scm/registry.json; d_push "chore(derived): drop"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"#55(t2)"* ]]
+}
+
+@test "SE-501 AC-13 block: el commit de drop que además borra otra ruta no es equivalente" {
+  v2_repo; d_pr 56
+  G rm -q --cached .scm/registry.json x56.txt; d_push "drop de más"
+  run bash "$SCRIPT" plan
+  [[ "$output" != *"#56(t2)"* ]]
+  [[ "$output" == *"excluida PR 56: la cabeza actual no es equivalente"* ]]
+}
+
+@test "SE-501 AC-13 block: H1 que modifica una ruta de D respecto a T no es equivalente" {
+  v2_repo; d_pr 57
+  echo reg-otro > "$MERGE_SPRINT_GIT_ROOT/.scm/registry.json"; G add -A; d_push "D cambiado"
+  run bash "$SCRIPT" plan
+  [[ "$output" != *"#57(t2)"* ]]
+  [[ "$output" == *"excluida PR 57: la cabeza actual no es equivalente"* ]]
 }
 
 pr_absorbs_main() {  # pr_absorbs_main <n> : el workflow remoto integra main en la rama del PR (merge, sin código propio)
@@ -424,16 +465,20 @@ PY
   G add scripts; G commit -qm "SAM falso"; G push -q origin main
 }
 
-@test "v3 positivo: el resync deja el SAM FRESH sobre el árbol commiteado (registry regenerado en el mismo paso)" {
-  v2_repo; fake_sam
+# SE-501 AC-13 (sustituye a «v3 positivo: el resync deja el SAM FRESH»): resync no ejecuta generadores de D
+# ni firma. Con mapa, SAM y firmador espía en main, la rama re-sincronizada queda sin .scm/ ni firma.
+@test "SE-501 AC-13: resync no ejecuta generadores de D ni firma (mapa, SAM y firmador espía sin rastro)" {
+  v2_repo; fake_sam; fake_scanner "CLEAN" 0
   v2_pr 80 q.txt pr80
   main_moves r.txt main80
   plan_and_grant
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
   grep -qx 80 "$FAKE/merged"
+  grep -q '"event":"RESYNC"' "$MERGE_SPRINT_HOME/ledger.jsonl"
   local t="$TMPDIR_T/chk"; git clone -q -b pr-80 "$BARE" "$t"
-  [ "$(cd "$t" && python3 scripts/sam.py check)" = "SAM: FRESH" ]
+  [ ! -e "$t/.scm" ]
+  [ ! -e "$t/.confidentiality-signature" ]
 }
 
 # ── v4: anomalías del run, vuelta a Draft, etiqueta de auto-rebase y reservas F5 ──
@@ -869,12 +914,22 @@ safe_line() { echo "JUDGE: SAFE pr=$1 from=$H0 to=$H1 judge=${2:-judge-agent} fi
 @test "§2.7 boundary: un derivado grande en el delta no rompe la solicitud al juez ni viaja en su diff" {
   export MERGE_SPRINT_JUDGE_POLLS=1
   jpr 146 scripts/d.sh l1; plan_and_grant
-  fix_commit 146 'mkdir -p .scm && python3 -c "print(\"x\"*300000)" > .scm/big.json && echo l2 >> scripts/d.sh'
+  # SE-501: .scm/ ya no es derivado; el derivado grande que queda es la hoja de ruta de propuestas.
+  fix_commit 146 'mkdir -p docs/propuestas && python3 -c "print(\"x\"*300000)" > docs/propuestas/ROADMAP-CURRENT.md && echo l2 >> scripts/d.sh'
   run bash "$SCRIPT" run
   [ "$status" -eq 6 ]
   [[ "$output" == *"espera al juez"* ]]
   local f; f=$(find "$MERGE_SPRINT_HOME/judge" -name '146-*.request.json')
-  python3 -c 'import json,sys; d=json.load(open(sys.argv[1]))["diff"]; assert "scripts/d.sh" in d and ".scm/" not in d' "$f"
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1]))["diff"]; assert "scripts/d.sh" in d and "ROADMAP-CURRENT" not in d' "$f"
+}
+
+@test "SE-501 §2.7 block: una ruta de D añadida tras el grant no se oculta al juez: el prefiltro para el sprint" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  jpr 147 scripts/d.sh l1; plan_and_grant
+  fix_commit 147 'mkdir -p .scm && echo x > .scm/registry.json && echo l2 >> scripts/d.sh'
+  run bash "$SCRIPT" run
+  [ ! -e "$FAKE/merged" ]
+  [[ "$output" == *"judge_prefiltro_alta_baja #147"* ]]
 }
 
 @test "AC-11 block: borrar una línea cuyo contenido empieza por «--assert» cuenta como aserción eliminada" {

@@ -28,7 +28,6 @@ DERIVED = (
     (r"docs/propuestas/INDEX\.md", "index_md", ("scripts/propuestas-index-gen.sh",)),
 )
 INDEX_DATE = re.compile(r"<!-- Last regenerated: [0-9TZ:-]+ -->")
-MANIFEST_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z")
 SPEC_ID = re.compile(r"SE-[0-9]+")
 
 
@@ -188,12 +187,6 @@ def canon(kind, raw):
         if len(dates) != 1 or len(stamps) != 1:
             raise Reject("INDEX.md sin exactamente una línea de fecha válida")
         return "\n".join(l for i, l in enumerate(lines) if i != dates[0])
-    if kind == "rule_manifest":
-        d = json.loads(raw.decode("utf-8"))
-        g = d.pop("generated", None) if isinstance(d, dict) else None
-        if not isinstance(g, str) or not MANIFEST_DATE.fullmatch(g):
-            raise Reject("rule-manifest.json sin generated válido")
-        return d
     raise Reject(f"forma {kind} no comparable")
 
 

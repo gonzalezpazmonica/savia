@@ -367,10 +367,10 @@ derived_tamper() {  # derived_tamper <n> <ruta> : PR con un fichero; main avanza
   v2_pr "$1" "x$1.txt" "pr$1"
   main_moves "y$1.txt" main
   G switch -q --detach "$(branch_sha "$1")"; G merge -q --no-edit origin/main >/dev/null
-  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  # SE-501: D no se regenera ni se versiona; solo la hoja de ruta (derivado restante) cuando es la ruta bajo prueba.
   # Solo el derivado bajo prueba difiere de main: así el test aísla su comparación (el resto coincide o no existe).
   [[ "$2" != docs/propuestas/ROADMAP-CURRENT.md ]] || (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/roadmap.sh render)
-  G add -A; G commit -qm "derivados regenerados" >/dev/null
+  G add -A; G commit -q --allow-empty -m "integra main" >/dev/null
   mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"; echo manipulado >> "$MERGE_SPRINT_GIT_ROOT/$2"
   G add -A; G commit -qm "derivado tocado" >/dev/null; G push -q origin "HEAD:pr-$1"; G switch -q main
 }
@@ -384,18 +384,20 @@ derived_tamper() {  # derived_tamper <n> <ruta> : PR con un fichero; main avanza
   [ "$status" -eq 0 ]
   grep -qx 140 "$FAKE/merged"
   merged_line 140 | grep -q '"equivalence":"main_merge"'
-  git --git-dir="$BARE" show refs/heads/pr-140:.scm/registry.json | grep -q 'x140.txt y140.txt'
   git --git-dir="$BARE" cat-file -e refs/heads/pr-140:docs/propuestas/ROADMAP-CURRENT.md
+  # SE-501 AC-13: resync ya no regenera .scm/ (D); la rama re-sincronizada no lo lleva.
+  run git --git-dir="$BARE" cat-file -e refs/heads/pr-140:.scm/registry.json
+  [ "$status" -ne 0 ]
 }
 
-@test "AC-12 block: .scm/ manipulado en H1 difiere de su regeneración congelada → no equivalente, sin merge" {
+@test "AC-12/SE-501 AC-13 block: ruta de D (.scm/) añadida en H1 antes del plan → no equivalente, sin merge" {
   derived_tamper 141 .scm/registry.json
   plan_and_grant
   run bash "$SCRIPT" run
   ! grep -qx 141 "$FAKE/merged" 2>/dev/null || false
 }
 
-@test "AC-12 block: docs/rules/INDEX.md manipulado → no equivalente, sin merge" {
+@test "AC-12/SE-501 AC-13 block: docs/rules/INDEX.md (D) modificado en H1 → no equivalente, sin merge" {
   derived_tamper 142 docs/rules/INDEX.md
   plan_and_grant
   run bash "$SCRIPT" run
@@ -424,16 +426,25 @@ derived_tamper() {  # derived_tamper <n> <ruta> : PR con un fichero; main avanza
 
 canon_same() { python3 "$RESOLVER_PY" same "$1" "$TMPDIR_T/a" "$TMPDIR_T/b"; }
 
-@test "AC-12b positivo: INDEX.md de propuestas y rule-manifest.json con otra hora son equivalentes" {
+@test "AC-12b positivo: INDEX.md de propuestas con otra hora es equivalente" {
   printf '# Índice\n<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/a"
   printf '# Índice\n<!-- Last regenerated: 2026-11-04T23:59:59Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
   run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 0 ]
-  echo '{"generated":"2026-11-03T10:00:00Z","rules":["a","b"]}' > "$TMPDIR_T/a"
-  echo '{"rules":["a","b"],"generated":"2027-01-01T00:00:01Z"}' > "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 0 ]
 }
 
-@test "AC-12b block: fila cambiada, regla quitada, texto extra en la fecha, dos fechas o generated ausente → no equivalente" {
+# SE-501 AC-13 (sustituye a las aserciones de rule-manifest.json en AC-12b y a «AC-5b block: generated de
+# rule-manifest.json terminado en \n»): D no tiene fila en la tabla canónica; ni siquiera dos copias
+# idénticas son comparables (fail-closed, código 2).
+@test "SE-501 AC-13 block: rutas de D sin fila en la tabla canónica; dos copias idénticas dan 2" {
+  local p
+  echo '{"generated":"2026-11-03T10:00:00Z","rules":[]}' > "$TMPDIR_T/a"; cp "$TMPDIR_T/a" "$TMPDIR_T/b"
+  for p in docs/rules/domain/rule-manifest.json docs/rules/INDEX.md .scm/registry.json .scm/views/x.json .confidentiality-signature; do
+    run canon_same "$p"; [ "$status" -eq 2 ]
+    run python3 "$RESOLVER_PY" kind "$p"; [ "$status" -eq 2 ]
+  done
+}
+
+@test "AC-12b block: fila cambiada, texto extra en la fecha o dos fechas → no equivalente" {
   printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/a"
   printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | REJECTED |\n' > "$TMPDIR_T/b"
   run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 1 ]
@@ -441,19 +452,6 @@ canon_same() { python3 "$RESOLVER_PY" same "$1" "$TMPDIR_T/a" "$TMPDIR_T/b"; }
   run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 2 ]; [[ "$output" == *"línea de fecha"* ]]
   printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n<!-- Last regenerated: 2026-11-03T10:00:01Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
   run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 2 ]; [[ "$output" == *"línea de fecha"* ]]
-  echo '{"generated":"2026-11-03T10:00:00Z","rules":["a","b"]}' > "$TMPDIR_T/a"
-  echo '{"generated":"2026-11-03T10:00:00Z","rules":["a"]}' > "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 1 ]
-  echo '{"rules":["a","b"]}' > "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 2 ]; [[ "$output" == *"generated válido"* ]]
-}
-
-@test "AC-5b block: generated de rule-manifest.json terminado en \\n no es equivalente" {
-  echo '{"generated":"2026-11-03T10:00:00Z","rules":[]}' > "$TMPDIR_T/a"
-  cp "$TMPDIR_T/a" "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 0 ]   # control: el mismo manifiesto sí es equivalente
-  printf '{"generated":"2026-11-03T10:00:00Z\\n","rules":[]}\n' > "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 2 ]; [[ "$output" == *"generated válido"* ]]
 }
 
 fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; firmador que deja una marca congelada
@@ -474,7 +472,9 @@ fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; fir
   ! grep -qx 150 "$FAKE/merged" 2>/dev/null || false
 }
 
-@test "AC-12c positivo: auditoría PASSED, el ejecutor re-firma con el firmador congelado (no el de la rama) y la PR es equivalente" {
+# SE-501 AC-12/AC-13 (sustituye a «AC-12c positivo: … el ejecutor re-firma con el firmador congelado»): la
+# auditoría se repite con el escáner congelado, pero nadie firma: ni el firmador de main ni el trampa de la rama.
+@test "SE-501 AC-13 positivo: auditoría PASSED, el ejecutor no firma (ni el firmador congelado ni el de la rama) y la PR se fusiona" {
   reg_main; fake_audit
   G switch -q -c pr-151 main
   printf '#!/usr/bin/env bash\necho trampa > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
@@ -485,7 +485,9 @@ fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; fir
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
   grep -qx 151 "$FAKE/merged"
-  git --git-dir="$BARE" show refs/heads/pr-151:.confidentiality-signature | grep -q '^firma-congelada '
+  grep -q '"event":"RESYNC"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  run git --git-dir="$BARE" cat-file -e refs/heads/pr-151:.confidentiality-signature
+  [ "$status" -ne 0 ]
 }
 
 @test "AC-12d block: un derivado sin fila en la tabla canónica no es equivalente; toda alternativa de DERIVED_RE tiene fila" {
@@ -497,10 +499,14 @@ fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; fir
   run python3 "$RESOLVER_PY" kind $'.confidentiality-signature\n'
   [ "$status" -eq 2 ]
   local re p; re=$(sed -n "s/^DERIVED_RE='\(.*\)'$/\1/p" "$SCRIPT")
-  for p in .scm/INDEX.scm .scm/a/b.json .confidentiality-signature docs/rules/INDEX.md docs/rules/domain/rule-manifest.json \
-           docs/propuestas/ROADMAP-CURRENT.md docs/propuestas/INDEX.md; do
+  [[ -n "$re" ]]
+  for p in docs/propuestas/ROADMAP-CURRENT.md docs/propuestas/INDEX.md; do
     grep -qE "$re" <<<"$p"
     python3 "$RESOLVER_PY" kind "$p" >/dev/null
+  done
+  # SE-501 AC-13: D ya no es derivado regenerable; ninguna de sus rutas casa con DERIVED_RE.
+  for p in .scm/INDEX.scm .scm/registry.json .confidentiality-signature docs/rules/INDEX.md docs/rules/domain/rule-manifest.json; do
+    ! grep -qE "$re" <<<"$p" || false
   done
 }
 
@@ -620,8 +626,7 @@ plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equ
   v2_pr 172 x172.txt pr172
   main_moves y172.txt main
   G switch -q --detach "$(branch_sha 172)"; G merge -q --no-edit origin/main >/dev/null
-  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
-  G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-172; G switch -q main
+  G add -A; G commit -q --allow-empty -m "integra main (SE-501: sin regenerar D)" >/dev/null; G push -q origin HEAD:pr-172; G switch -q main
   run bash "$SCRIPT" plan
   [ "$status" -eq 0 ]
   [[ "$output" != *"excluida PR 172"* ]]
@@ -682,8 +687,9 @@ SH
 }
 
 @test "rev-1469 P2-2 block: un generador que escribe en la raíz congelada en vez de en el árbol → resync_fallo, sin merge" {
-  reg_main; fake_generators
-  printf 'echo fuera > "$P/fuera.txt"\n' >> "$MERGE_SPRINT_GIT_ROOT/scripts/rules-index-generate.sh"
+  # SE-501: resync ya no ejecuta los generadores de D; el generador que queda es el de la hoja de ruta.
+  reg_main
+  printf '[[ "$1" != render ]] || echo fuera > "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fuera.txt"\n' >> "$MERGE_SPRINT_GIT_ROOT/scripts/roadmap.sh"
   G commit -qam "generador que escribe fuera"; G push -q origin main
   v2_pr 177 x177.txt pr177
   main_moves y177.txt main
@@ -808,20 +814,37 @@ link_head() {  # link_head <n> <ruta> : sobre el head de pr-<n>, <ruta> pasa a s
   grep -q 'SE-930 PROPOSED' "$TMPDIR_T/out-normal"
 }
 
-@test "rev2-1469 P2-1 (corrección) block en run: fichero nuevo en .scm/ añadido tras el plan → aparcada como derivados_no_equivalentes, sin juez" {
-  reg_main; fake_generators
+# SE-501: .scm/ deja de ser derivado; el caso pasa al derivado restante sin generador en el código congelado
+# (docs/propuestas/INDEX.md: reg_main no trae propuestas-index-gen.sh).
+@test "rev2-1469 P2-1 (corrección) block en run: derivado de propuestas colado tras el plan → aparcada como derivados_no_equivalentes, sin juez" {
+  reg_main
   v2_pr 194 x194.txt pr194
   main_moves y194.txt main
-  G switch -q --detach "$(branch_sha 194)"; G merge -q --no-edit origin/main >/dev/null
-  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
-  G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
+  G switch -q --detach "$(branch_sha 194)"; G merge -q --no-edit origin/main >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
   plan_and_grant   # la cabeza honesta entra al manifiesto
-  G switch -q --detach "$(branch_sha 194)"; echo colado > "$MERGE_SPRINT_GIT_ROOT/.scm/notes.md"
-  G add -A; G commit -qm "nota colada" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
+  G switch -q --detach "$(branch_sha 194)"; echo colado > "$MERGE_SPRINT_GIT_ROOT/docs/propuestas/INDEX.md"
+  G add -A; G commit -qm "índice colado" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
   run bash "$SCRIPT" run
   ! grep -qx 194 "$FAKE/merged" 2>/dev/null || false
   grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"194"' | grep -q '"reason":"derivados_no_equivalentes"'
   ! ledger_has '"event":"JUDGE_REQUEST"' || false
+}
+
+# SE-501 AC-13: una ruta de D colada tras el plan no llega a main. resync la saca (drop_d, como derived-drop.sh);
+# la cabeza resultante es T más ese borrado y es equivalente. Nada de D en la rama fusionada.
+@test "SE-501 AC-13 run: ruta de D colada tras el plan → resync la saca del diff y la PR se fusiona sin D" {
+  reg_main
+  v2_pr 195 x195.txt pr195
+  main_moves y195.txt main
+  plan_and_grant
+  G switch -q --detach "$(branch_sha 195)"; mkdir -p "$MERGE_SPRINT_GIT_ROOT/.scm"; echo colado > "$MERGE_SPRINT_GIT_ROOT/.scm/registry.json"
+  G add -A; G commit -qm "D colado" >/dev/null; G push -q origin HEAD:pr-195; G switch -q main
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 195 "$FAKE/merged"
+  run git --git-dir="$BARE" cat-file -e refs/heads/pr-195:.scm/registry.json
+  [ "$status" -ne 0 ]
+  git --git-dir="$BARE" log --format=%s refs/heads/main..refs/heads/pr-195 | grep -q 'saca los derivados del diff de la PR (SE-501, merge-sprint)'
 }
 
 @test "rev2-1469 P2-1 (seguridad) block: un escaneo de confidencialidad incompleto (unknown) bloquea la integración" {
