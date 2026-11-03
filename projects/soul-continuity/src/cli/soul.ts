@@ -5,7 +5,8 @@
  * Lo lanza `bin/soul.mjs` sobre el runtime oficial de Node.js; no hay ejecutables propios.
  */
 
-import { homedir } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
+import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { dataDir } from "../core/store.ts";
 import { apiTransport, productionAdapters, revokeSource } from "../core/connectors.ts";
@@ -41,6 +42,12 @@ async function readSecret(): Promise<string> {
   return s;
 }
 
+/** Pregunta en la terminal (solo `setup`). Una interfaz por pregunta: no deja stdin abierto. */
+async function ask(q: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try { return await rl.question(q); } finally { rl.close(); }
+}
+
 const deps: CliDeps = {
   dataDir: dir,
   env: process.env,
@@ -63,6 +70,9 @@ const deps: CliDeps = {
   node: process.execPath,
   entry: fileURLToPath(import.meta.url),
   serve: async (d) => (await import("../api/serve.ts")).serveFromCli(d),
+  ifaces: () => networkInterfaces(),
+  // Sin terminal interactiva no hay preguntas: `setup` se niega en vez de aceptar nada por su cuenta.
+  ...(process.stdin.isTTY ? { ask } : {}),
 };
 
 process.exitCode = await runCli(process.argv.slice(2), deps);
