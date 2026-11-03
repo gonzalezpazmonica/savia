@@ -327,3 +327,38 @@ EOF
   [[ "$output" == *"FAIL"* ]]
   [[ "$output" == *"totally-orphan.sh"* ]]
 }
+
+# ── SE-500 S1 (AC-7): fragmentos de planificación ──────────────────────────
+# La spec menciona los globs de fragmentos: sin la regla SE-500, cualquier
+# fragmento (también el de otra spec) quedaba trazado por el glob.
+
+@test "g13 SE-500 AC-7: PASS for planning.d and LOG.d fragments of the referenced spec" {
+  make_spec "SE-200" "AC-01 register with docs/propuestas/planning.d/*.json and docs/propuestas/LOG.d/*.md"
+  make_pr_summary "SE-200"
+  mkdir -p docs/propuestas/planning.d docs/propuestas/LOG.d
+  echo '{}' > docs/propuestas/planning.d/SE-200.json
+  echo '## 2026-11-03 SE-200 PROPOSED' > docs/propuestas/LOG.d/SE-200-PROPOSED.md
+  output=$(branch_commit_and_run_g13)
+  [[ "$output" == *"B8 attention-anchor present"* ]]
+  [[ "$output" != *"FAIL"* ]]
+}
+
+@test "g13 SE-500 AC-7: FAIL for a planning.d fragment of another spec, even under a glob hint" {
+  make_spec "SE-200" "AC-01 register with docs/propuestas/planning.d/*.json and docs/propuestas/LOG.d/*.md"
+  make_pr_summary "SE-200"
+  mkdir -p docs/propuestas/planning.d
+  echo '{}' > docs/propuestas/planning.d/SE-300.json
+  output=$(branch_commit_and_run_g13)
+  [[ "$output" == *"FAIL"* ]]
+  [[ "$output" == *"docs/propuestas/planning.d/SE-300.json"* ]]
+}
+
+@test "g13 SE-500 AC-7: FAIL for a LOG.d fragment of another spec" {
+  make_spec "SE-200" "AC-01 register with docs/propuestas/planning.d/*.json and docs/propuestas/LOG.d/*.md"
+  make_pr_summary "SE-200"
+  mkdir -p docs/propuestas/LOG.d
+  echo '## 2026-11-03 SE-301 PROPOSED' > docs/propuestas/LOG.d/SE-301-PROPOSED.md
+  output=$(branch_commit_and_run_g13)
+  [[ "$output" == *"FAIL"* ]]
+  [[ "$output" == *"docs/propuestas/LOG.d/SE-301-PROPOSED.md"* ]]
+}

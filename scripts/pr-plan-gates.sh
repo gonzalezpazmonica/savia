@@ -553,6 +553,14 @@ g13_scope_trace() {
     case "$f" in
       CHANGELOG.md|CHANGELOG.d/*|.scm/*|.confidentiality-signature|.pr-summary.md) continue ;;
     esac
+    # SE-500 S1: fragmentos de planificación. Trazados solo si su SE-NNN está entre las
+    # specs referenciadas; un fragmento de otra spec falla (no es una lista blanca).
+    if [[ "$f" =~ ^docs/propuestas/planning\.d/(SE-[0-9]+)\.json$ || "$f" =~ ^docs/propuestas/LOG\.d/(SE-[0-9]+)-[A-Z]+\.md$ ]]; then
+      if grep -Fxq -- "${BASH_REMATCH[1]}" <<< "$spec_ids"; then continue; fi
+      unmatched_count=$((unmatched_count + 1))
+      [[ "${#unmatched[@]}" -lt 10 ]] && unmatched+=("$f")
+      continue
+    fi
     # Self-spec match — touching a referenced spec's own .md file is in-scope
     local self_match=0
     while IFS= read -r prefix; do

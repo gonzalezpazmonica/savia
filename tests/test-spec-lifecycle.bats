@@ -14,7 +14,7 @@ setup() {
 
   cat > "$TMPDIR_SL/SE-TEST.md" <<'EOF'
 ---
-spec_id: SE-TEST
+spec_id: SE-9001
 title: "Test spec"
 status: PROPOSED
 priority: P2
@@ -135,7 +135,7 @@ teardown() {
 }
 
 @test "--dry-run shows note in log entry" {
-  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-TEST.md" --status DISCARDED --note "Test rationale" --dry-run
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-TEST.md" --status REJECTED --note "Test rationale" --dry-run
   [ "$status" -eq 0 ]
   [[ "$output" == *"Test rationale"* ]]
 }
@@ -157,9 +157,25 @@ teardown() {
   [ "$status" -eq 0 ]
 }
 
-@test "DISCARDED is canonical (dry-run)" {
-  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-TEST.md" --status DISCARDED --dry-run
+@test "REJECTED is canonical (dry-run)" {
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-TEST.md" --status REJECTED --dry-run
   [ "$status" -eq 0 ]
+}
+
+@test "SE-500: DISCARDED is no longer canonical (not a planning state, no LOG.d name for it)" {
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-TEST.md" --status DISCARDED
+  [ "$status" -eq 1 ]
+  [ ! -d "$TMPDIR_SL/LOG.d" ]
+  grep -q '^status: PROPOSED' "$TMPDIR_SL/SE-TEST.md"
+}
+
+@test "SE-500: non SE-NNN spec id is rejected before touching the spec" {
+  printf -- '---\nspec_id: SE-WORD\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SE-WORD.md"
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-WORD.md" --status APPROVED
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-NNN"* ]]
+  grep -q '^status: PROPOSED' "$TMPDIR_SL/SE-WORD.md"
+  [ ! -d "$TMPDIR_SL/LOG.d" ]
 }
 
 @test "lowercase status is not canonical" {
@@ -197,7 +213,7 @@ teardown() {
 @test "real transition updates status: in spec frontmatter" {
   cat > "$TMPDIR_SL/SE-FULL.md" <<'EOF'
 ---
-spec_id: SE-FULL
+spec_id: SE-9002
 title: "Full test"
 status: PROPOSED
 priority: P3
@@ -209,44 +225,28 @@ EOF
   [ "$status" -eq 0 ]
 }
 
-@test "real transition appends entry to LOG.md (isolated)" {
-  cat > "$TMPDIR_SL/SE-LOG.md" <<'EOF'
----
-spec_id: SE-LOG
-title: "Log test"
-status: PROPOSED
----
-EOF
-  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-LOG.md" --status IMPLEMENTED --note "LOG smoke"
+@test "SE-500: real transition writes a LOG.d fragment and leaves LOG.md untouched" {
+  printf -- '---\nspec_id: SE-9003\ntitle: "Log test"\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SE-LOG.md"
+  printf '# Specs Lifecycle Log\n\n## 2026-01-01 SE-1 PROPOSED\n' > "$LOG_FILE_OVERRIDE"
+  before=$(sha256sum "$LOG_FILE_OVERRIDE")
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-LOG.md" --status IMPLEMENTED --note "LOG smoke" --no-timeline
   [ "$status" -eq 0 ]
-  [ -f "$LOG_FILE_OVERRIDE" ]
-  run grep -E 'SE-LOG IMPLEMENTED' "$LOG_FILE_OVERRIDE"
-  [ "$status" -eq 0 ]
+  frag="$TMPDIR_SL/LOG.d/SE-9003-IMPLEMENTED.md"
+  [ -f "$frag" ]
+  head -1 "$frag" | grep -Eq '^## [0-9]{4}-[0-9]{2}-[0-9]{2} SE-9003 IMPLEMENTED$'
+  grep -q 'LOG smoke' "$frag"
+  [ "$(grep -c '^#' "$frag")" -eq 1 ]
+  [ "$(sha256sum "$LOG_FILE_OVERRIDE")" = "$before" ]
 }
 
-@test "LOG.md inserts new entries at top (after header)" {
-  cat > "$TMPDIR_SL/SE-FIRST.md" <<'EOF'
----
-spec_id: SE-FIRST
-status: PROPOSED
----
-EOF
-  cat > "$TMPDIR_SL/SE-SECOND.md" <<'EOF'
----
-spec_id: SE-SECOND
-status: PROPOSED
----
-EOF
-  bash "$SCRIPT" --spec "$TMPDIR_SL/SE-FIRST.md" --status IMPLEMENTED --note "First"
-  bash "$SCRIPT" --spec "$TMPDIR_SL/SE-SECOND.md" --status IMPLEMENTED --note "Second"
-
-  # SE-SECOND should appear earlier in the file (newer at top)
-  local first_line second_line
-  first_line=$(grep -n 'SE-FIRST IMPLEMENTED' "$LOG_FILE_OVERRIDE" | head -1 | cut -d: -f1)
-  second_line=$(grep -n 'SE-SECOND IMPLEMENTED' "$LOG_FILE_OVERRIDE" | head -1 | cut -d: -f1)
-  [ -n "$first_line" ]
-  [ -n "$second_line" ]
-  [ "$second_line" -lt "$first_line" ]
+@test "SE-500: two transitions produce two independent fragments" {
+  printf -- '---\nspec_id: SE-9004\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SE-FIRST.md"
+  printf -- '---\nspec_id: SE-9005\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SE-SECOND.md"
+  bash "$SCRIPT" --spec "$TMPDIR_SL/SE-FIRST.md" --status IMPLEMENTED --note "First" --no-timeline
+  bash "$SCRIPT" --spec "$TMPDIR_SL/SE-SECOND.md" --status IMPLEMENTED --note "Second" --no-timeline
+  [ -f "$TMPDIR_SL/LOG.d/SE-9004-IMPLEMENTED.md" ]
+  [ -f "$TMPDIR_SL/LOG.d/SE-9005-IMPLEMENTED.md" ]
+  [ ! -f "$LOG_FILE_OVERRIDE" ]
 }
 
 @test "--bootstrap creates LOG.md when absent (isolated)" {
