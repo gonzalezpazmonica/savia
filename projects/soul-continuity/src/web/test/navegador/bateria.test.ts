@@ -2,7 +2,7 @@
 // navegador instalado. Sin navegador falla (no se descarga ninguno).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ejecutarBateria } from "../bench/bateria.ts";
+import { ejecutarBateria } from "../../bench/bateria.ts";
 
 test("batería AC-4e: 0 fallos con el cortafuegos real", { timeout: 600_000 }, async () => {
   const inf = await ejecutarBateria("ninguno");

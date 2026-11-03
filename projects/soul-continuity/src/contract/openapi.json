@@ -9,10 +9,23 @@
   "servers": [{ "url": "https://{direccion}/api/v1/soul", "variables": { "direccion": { "default": "100.64.0.1:8443", "description": "Dirección de la VPN del operador; el proceso solo escucha ahí." } } }],
   "security": [{ "dpop": [] }],
   "x-emparejamiento": {
-    "origen": "Space SE-430 (apps/android/pairing, crates/space-server/src/mobile_api.rs)",
-    "modelo": "Token de acceso por dispositivo ligado a su clave (DPoP): cabeceras `Authorization: DPoP <token>` y `DPoP: <prueba>`. Alta por enlace/QR con POST /api/v1/pair/register y POST /api/v1/pair/{id}/claim; renovación sin QR con POST /api/v1/token (client_credentials con aserción JWT ES256). El token dura 300 s. TLS 1.3 con pin SPKI de la CA. Revocación: 401 con cuerpo `{\"error\":\"DEVICE_REVOKED\"}`; solo esa marca hace que la app borre credencial y clave, cualquier otro 401 se resuelve renovando una vez.",
-    "no_definido_aqui": "Los endpoints de emparejamiento y renovación no se redefinen: son los de Space. El servidor simulado no los implementa; trae dispositivos ya emparejados.",
-    "abierto": "Quién emite los tokens en el portátil (el mismo emisor de Space o un emisor Soul con el mismo protocolo) lo decide el worker de construcción; el contrato no cambia."
+    "modos": "La app se conecta a Soul en modo Space (a través del servidor de escritorio de Space, SE-430) o en modo directo (al núcleo de Soul en el portátil por la VPN). Se elige en la configuración de la app.",
+    "modelo": "Token de acceso por dispositivo ligado a su clave (DPoP): cabeceras `Authorization: DPoP <token>` y `DPoP: <prueba>` (ES256, `htm`, `htu` sin consulta, `iat` ±60 s, `jti` de un solo uso, `ath`). Revocación: 401 con cuerpo `{\"error\":\"DEVICE_REVOKED\"}`; solo esa marca hace que la app borre credencial y clave.",
+    "modo_space": "Alta y renovación de Space (SE-430): POST /api/v1/pair/register, POST /api/v1/pair/{id}/claim y POST /api/v1/token. No se redefinen aquí.",
+    "modo_directo": "Ver `x-emparejamiento-directo`: `soul pair` abre la ventana y el núcleo sirve el alta en la raíz (no bajo /api/v1/soul)."
+  },
+  "x-emparejamiento-directo": {
+    "version": "soul-pair-v2",
+    "vectores": "src/contract/vectores-emparejamiento.json (los comprueban el núcleo y la app; la app copia el fichero tal cual)",
+    "ventana": "`soul pair` abre 10 minutos con una clave de emparejamiento de un solo uso al estilo de las API key: `soulpk_<30 base62>_<6 base62>` (178 bits de un CSPRNG; el sufijo es el CRC32 de la parte aleatoria y solo detecta errores de copia). Sensible a mayúsculas: solo se quitan los espacios en blanco de los extremos; la app valida formato y checksum antes de enviar nada. Muestra IP, puerto, la clave, la huella corta (16 primeros hex de SHA-256(SPKI) en grupos de 4) y un QR con `soul://pair?v=2&h=<ip>&p=<puerto>&k=<clave>&f=<huella corta sin espacios>`. 3 pruebas fallidas bloquean la ventana; más de 10 retos por ventana dan PAIR_RATE. soul-pair-v1 (código XXXXX-XXXXX) está retirado: PAIR_VERSION 426.",
+    "tls": "Certificado hoja autofirmado (CA:false), sin cadena. Durante el alta la app no confía aún en él (TOFU provisional) y lo comprueba con `spki_sha256` y la prueba del servidor. Después fija `sha256/<base64 SPKI>`; si el certificado se renueva, hay que volver a emparejar.",
+    "hmac": "HMAC-SHA256 con clave = la clave de emparejamiento completa (UTF-8); salida en base64url sin relleno. Servidor: \"soul-pair-v2|server|\" + client_nonce + \"|\" + server_nonce + \"|\" + spki_sha256. Cliente: \"soul-pair-v2|client|\" + client_nonce + \"|\" + server_nonce + \"|\" + jwk_thumbprint (RFC 7638).",
+    "operaciones": {
+      "POST /v1/pair/challenge": { "peticion": { "$ref": "#/components/schemas/PeticionRetoPar" }, "200": { "$ref": "#/components/schemas/RetoPar" }, "errores": [400, 410, 423, 426, 429, 503] },
+      "POST /v1/pair/complete": { "peticion": { "$ref": "#/components/schemas/PeticionCompletarPar" }, "200": { "$ref": "#/components/schemas/ParCompletado" }, "errores": [400, 401, 410, 423, 503] }
+    },
+    "errores": { "PAIR_EXPIRED": 410, "PAIR_BAD_PROOF": 401, "PAIR_LOCKED": 423, "PAIR_RATE": 429, "PAIR_VERSION": 426 },
+    "sin_dpop": "Estas dos operaciones no llevan token ni DPoP. Las siguientes peticiones llevan el token devuelto y la prueba DPoP con la clave registrada."
   },
   "paths": {
     "/estado": {
@@ -133,11 +146,40 @@
       "NoDisponible": { "description": "UNAVAILABLE", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
     },
     "schemas": {
+      "PeticionRetoPar": {
+        "type": "object", "additionalProperties": false, "required": ["version", "client_nonce"],
+        "properties": { "version": { "const": "soul-pair-v2", "description": "Sin este campo (cliente soul-pair-v1) o con otro valor: 426 PAIR_VERSION." }, "client_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "32 bytes aleatorios en base64url sin relleno." } }
+      },
+      "RetoPar": {
+        "type": "object", "additionalProperties": false, "required": ["server_nonce", "spki_sha256", "proof"],
+        "properties": {
+          "server_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "spki_sha256": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "SHA-256 del SPKI del certificado del servidor, base64url." },
+          "proof": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+        }
+      },
+      "JwkP256": {
+        "type": "object", "additionalProperties": false, "required": ["kty", "crv", "x", "y"],
+        "properties": { "kty": { "enum": ["EC"] }, "crv": { "enum": ["P-256"] }, "x": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }, "y": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" } }
+      },
+      "PeticionCompletarPar": {
+        "type": "object", "additionalProperties": false, "required": ["server_nonce", "device_name", "device_jwk", "proof"],
+        "properties": {
+          "server_nonce": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+          "device_name": { "type": "string", "maxLength": 40 },
+          "device_jwk": { "$ref": "#/components/schemas/JwkP256" },
+          "proof": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+        }
+      },
+      "ParCompletado": {
+        "type": "object", "additionalProperties": false, "required": ["device_id", "token", "expires_at"],
+        "properties": { "device_id": { "type": "string" }, "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }, "expires_at": { "type": "string", "format": "date-time" } }
+      },
       "Error": {
         "type": "object", "additionalProperties": false, "required": ["code", "message", "requestId", "retryable"],
         "description": "Mismo sobre que Space (ErrorEnvelope, camelCase). `error` solo aparece con `DEVICE_REVOKED`.",
         "properties": {
-          "code": { "enum": ["INVALID_INPUT", "UNAUTHENTICATED", "ORIGIN_DENIED", "NOT_FOUND", "CONFLICT", "GONE", "LEVEL_NOT_ALLOWED", "RATE_LIMITED", "UNAVAILABLE"] },
+          "code": { "enum": ["INVALID_INPUT", "UNAUTHENTICATED", "ORIGIN_DENIED", "NOT_FOUND", "CONFLICT", "GONE", "LEVEL_NOT_ALLOWED", "RATE_LIMITED", "UNAVAILABLE", "PAIR_EXPIRED", "PAIR_BAD_PROOF", "PAIR_LOCKED", "PAIR_RATE", "PAIR_VERSION"] },
           "message": { "type": "string", "maxLength": 200 },
           "requestId": { "type": "string", "format": "uuid" },
           "retryable": { "type": "boolean" },
