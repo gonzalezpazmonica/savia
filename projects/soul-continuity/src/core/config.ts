@@ -13,6 +13,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { type AlertRule, DETAILS, type Detail, type InstallationConfig, type OperatorProfile, type SourceConfig } from "../contract/adapter.ts";
 import { parseTs } from "../contract/claims.ts";
+import { type ConnectorsConfig, validateConnectors } from "./connectors.ts";
 import { readJson, writeJson } from "./store.ts";
 
 export const CONFIG_FILE = "config.json";
@@ -41,6 +42,8 @@ export interface SoulConfig {
   detail: { level: Detail; max: Detail };
   agent_frontend: { approved_providers: ApprovedProvider[] };
   api: { listen: string[]; port: number };
+  /** Adaptadores reales activados por el operador (H-1). Sin este campo, ninguno. */
+  connectors?: ConnectorsConfig;
 }
 
 export class NoProfileError extends Error {
@@ -87,6 +90,7 @@ export function validateConfig(c: unknown): string[] {
   if (!Array.isArray(v.agent_frontend?.approved_providers)) p.push("agent_frontend.approved_providers debe ser una lista");
   if (!Array.isArray(v.api?.listen) || v.api.listen.some((a: unknown) => typeof a !== "string")) p.push("api.listen debe ser una lista de direcciones");
   if (!Number.isInteger(v.api?.port) || v.api.port < 1 || v.api.port > 65535) p.push("api.port inválido");
+  p.push(...validateConnectors(v.connectors));
   return p;
 }
 

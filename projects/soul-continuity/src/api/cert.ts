@@ -3,13 +3,16 @@
  * X.509 v3 autofirmado con clave EC P-256, construido en DER con `node:crypto`.
  *
  * - SAN con las IP de escucha (las de la VPN del operador); `CA:false`; uso: firma digital, serverAuth.
- * - La app lo fija por huella SPKI (`spkiPin`), como el emparejamiento de Space.
+ * - La app lo fija por huella SPKI (`spkiPin`), como el emparejamiento de Space, y además comprueba
+ *   que la IP a la que conecta está en los SAN (`identidadServidor`). Nunca se desactiva la validación.
  * - Clave privada en el directorio de datos del usuario con permisos 0600.
  */
 
 import { X509Certificate, createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { join } from "node:path";
+import { type PeerCertificate, checkServerIdentity } from "node:tls";
 import { readJson, writeAtomic, writeJson } from "../core/store.ts";
 import { ipBytes } from "./listen.ts";
 
@@ -83,6 +86,23 @@ export function makeSelfSigned(addresses: string[], now: Date, days = 397): Inst
   const cert = `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`;
   const key = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   return { cert, key };
+}
+
+/**
+ * Identidad del servidor para un cliente con el certificado de la instalación como CA (`ca` +
+ * `checkServerIdentity`). La API solo escucha en IP literales, así que el nombre a comprobar es una IP:
+ * se compara con los SAN IP mediante `X509Certificate.checkIP` (OpenSSL). Sin CN de respaldo.
+ * No se delega en `tls.checkServerIdentity` para las IP porque Node 22.23.2 y 22.23.3 pasan el host
+ * por `domainToASCII`, que convierte `::1` en "" y rechaza cualquier IPv6 aunque figure en los SAN
+ * (corregido en 22.23.4, nodejs/node beb4cd4cd3). Nombres DNS: comprobación estándar de Node.
+ */
+export function identidadServidor(host: string, cert: PeerCertificate): Error | undefined {
+  const h = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  if (!isIP(h)) return checkServerIdentity(host, cert);
+  let ok = false;
+  try { ok = Buffer.isBuffer(cert?.raw) && new X509Certificate(cert.raw).checkIP(h) !== undefined; } catch { ok = false; }
+  if (ok) return undefined;
+  return Object.assign(new Error(`la IP ${h} no figura entre los SAN IP del certificado`), { code: "ERR_TLS_CERT_ALTNAME_INVALID", host: h });
 }
 
 /** Huella SPKI que fija la app (`sha256/<base64>`). */
