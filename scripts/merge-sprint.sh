@@ -231,9 +231,55 @@ required_ok() {  # checks obligatorios del PR: pass | fail | pending
   echo pass
 }
 
-# Derivados regenerables: conflictos admisibles y diferencias ignoradas al comparar heads.
-DERIVED_RE='^(\.scm/|\.confidentiality-signature$|docs/rules/INDEX\.md$|docs/rules/domain/rule-manifest\.json$)'
+# Derivados regenerables (SE-500 S2): conflictos admisibles; al comparar heads se regeneran con el código
+# congelado y se comparan en su forma canónica (tabla de merge-registry-resolve.py), nunca se ignoran.
+DERIVED_RE='^(\.scm/|\.confidentiality-signature$|docs/rules/INDEX\.md$|docs/rules/domain/rule-manifest\.json$|docs/propuestas/ROADMAP-CURRENT\.md$|docs/propuestas/INDEX\.md$)'
 is_derived() { grep -qE "$DERIVED_RE" <<<"$1"; }
+# Registros (lista cerrada): se integran con el resolutor determinista y se recalculan al comparar heads.
+REGISTRY_RE='^docs/propuestas/(planning-state\.json|LOG\.md)$'
+is_registry() { grep -qE "$REGISTRY_RE" <<<"$1"; }
+
+# ── Código congelado (SE-500 S2): generadores del commit de main del manifiesto y resolutor con blob propio ──
+RESOLVER="$ROOT/scripts/merge-registry-resolve.py"   # en run, copia verificada contra resolver_blob
+FROZEN_SRC=""   # worktree del commit de main congelado: solo se leen sus scripts, nunca los de la rama de la PR
+# Rutas fijas en el directorio de estado, reutilizadas: los worktrees los crea y retira git, nada se borra a mano.
+wt_reset() { git -C "$GITROOT" worktree remove --force "$1" >/dev/null 2>&1; git -C "$GITROOT" worktree prune >/dev/null 2>&1; [[ ! -e "$1" ]]; }
+frozen_extract() {  # frozen_extract <commit> <nombre> → FROZEN_SRC = worktree desacoplado en ese commit
+  git -C "$GITROOT" cat-file -e "${1:-x}^{commit}" 2>/dev/null || return 1
+  FROZEN_SRC="$HOME_MS/frozen-$2"
+  if [[ -e "$FROZEN_SRC/.git" ]]; then git -C "$FROZEN_SRC" checkout -q --detach --force "$1" >/dev/null 2>&1 || return 1
+  else wt_reset "$FROZEN_SRC" && git -C "$GITROOT" worktree add -q --detach "$FROZEN_SRC" "$1" >/dev/null 2>&1 || return 1; fi
+  [[ "$(git -C "$FROZEN_SRC" rev-parse HEAD)" == "$(git -C "$GITROOT" rev-parse "$1^{commit}")" ]] && git -C "$FROZEN_SRC" diff --quiet HEAD
+}
+frozen_root() {  # frozen_root <árbol> <nombre> → raíz con scripts/ → código congelado y el resto enlazado a <árbol>:
+  # los generadores calculan su raíz desde su ruta (lógica), así que leen y escriben en <árbol> con el código de main.
+  local t="$1" f="$HOME_MS/froot-$2" e
+  mkdir -p "$f" || return 1
+  for e in "$f"/* "$f"/.[!.]* "$f"/..?*; do [[ -L "$e" ]] && { rm -f "$e" || return 1; }; done
+  [[ -z "$(ls -A "$f")" ]] || return 1   # solo enlaces: cualquier otra cosa es estado ajeno, fail-closed
+  ln -s "$FROZEN_SRC/scripts" "$f/scripts" || return 1
+  for e in "$t"/* "$t"/.[!.]* "$t"/..?*; do
+    [[ -e "$e" || -L "$e" ]] || continue
+    [[ "${e##*/}" == scripts ]] || ln -s "$e" "$f/${e##*/}" || return 1
+  done
+  echo "$f"
+}
+gen_rules() {  # gen_rules <árbol> <raíz congelada>
+  [[ -f "$2/scripts/rules-index-generate.sh" ]] || return 0
+  (cd "$1" && { [[ ! -f "$2/scripts/rule-manifest-generate.sh" ]] || bash "$2/scripts/rule-manifest-generate.sh" >/dev/null 2>&1; } && bash "$2/scripts/rules-index-generate.sh" >/dev/null 2>&1)
+}
+gen_propuestas() {  # INDEX.md de propuestas (solo si su forma canónica cambió) y ROADMAP-CURRENT.md
+  [[ -d "$1/docs/propuestas" ]] || return 0
+  if [[ -f "$2/scripts/propuestas-index-gen.sh" ]]; then
+    (cd "$1" && { bash "$2/scripts/propuestas-index-gen.sh" --check >/dev/null 2>&1 || bash "$2/scripts/propuestas-index-gen.sh" >/dev/null 2>&1; }) || return 1
+  fi
+  if [[ -f "$2/scripts/roadmap.sh" && -f "$1/docs/propuestas/planning-state.json" ]]; then
+    (cd "$1" && REPO_ROOT="$1" bash "$2/scripts/roadmap.sh" render >/dev/null 2>&1) || return 1
+  fi
+}
+gen_capmap() { [[ ! -f "$2/scripts/generate-capability-map.py" ]] || (cd "$1" && python3 "$2/scripts/generate-capability-map.py" "$1" >/dev/null 2>&1); }
+gen_sam() { (cd "$1" && python3 "$2/scripts/sam.py" "$3" --root "$1" 2>/dev/null); }
+audit() { (cd "$1" && bash "$2/scripts/confidentiality-scan.sh" --pr >/dev/null 2>&1); }   # 0 = CLEAN o PASSED
 
 equiv_tree() {  # equiv_tree <sha_revisado> <sha_actual> → árbol T = merge(revisado, main integrado en el actual)
   git -C "$GITROOT" cat-file -e "$1^{commit}" 2>/dev/null && git -C "$GITROOT" cat-file -e "$2^{commit}" 2>/dev/null || return 1
@@ -244,15 +290,64 @@ equiv_tree() {  # equiv_tree <sha_revisado> <sha_actual> → árbol T = merge(re
   [[ -n "$tree" ]] && echo "$tree"
 }
 
-head_equivalent() {  # head_equivalent <sha_revisado> <sha_actual> → 0 si el actual == merge(revisado, main) salvo derivados
+head_equivalent() {  # head_equivalent <H0> <H1> [refs] → 0 si H1 == merge(H0, main) salvo registros recalculados y
+  # derivados regenerados (SE-500 S2). Deja EQK = identical | main_merge | registry_merge y REG_HASHES.
+  EQK=identical; REG_HASHES=""
   [[ "$1" == "$2" ]] && return 0
-  local tree changed f
+  EQK=main_merge
+  local tree changed m f reg=() der=()
   tree=$(equiv_tree "$1" "$2") || return 1
   changed=$(git -C "$GITROOT" diff --name-only "$tree" "$2" 2>/dev/null) || return 1
   while IFS= read -r f; do
-    { [[ -z "$f" ]] || is_derived "$f"; } && continue
-    return 1
+    [[ -z "$f" ]] && continue
+    if is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else return 1; fi
   done <<<"$changed"
+  (( ${#reg[@]} + ${#der[@]} )) || return 0
+  m=$(git -C "$GITROOT" merge-base "$2" "origin/$BASE" 2>/dev/null) || return 1
+  for f in "${reg[@]}"; do registry_equivalent "$1" "$2" "$m" "$f" "${3:-[]}" || return 1; EQK=registry_merge; done
+  (( ${#der[@]} == 0 )) || derived_equivalent "$1" "$2" "$m" "${der[@]}"
+}
+
+registry_equivalent() {  # registry_equivalent <H0> <H1> <M> <ruta> <refs> → 0 si H1 == resolver(merge-base, H0, M) byte a byte
+  local mb out="$HOME_MS/registry.resolved" rc=1
+  mb=$(git -C "$GITROOT" merge-base "$1" "$3" 2>/dev/null) || return 1
+  rm -f "$out"
+  if python3 "$RESOLVER" resolve --repo "$GITROOT" --base "$mb" --head "$1" --main "$3" --refs "$5" --path "$4" --out "$out" >/dev/null 2>&1 \
+     && git -C "$GITROOT" show "$2:$4" 2>/dev/null | cmp -s - "$out"; then
+    rc=0; REG_HASHES="${REG_HASHES:+$REG_HASHES,}$4:$(sha < "$out")"
+  fi
+  rm -f "$out"; return $rc
+}
+
+derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <rutas…> → 0 si cada derivado de H1 coincide con su regeneración
+  # con el código congelado en la forma canónica de su fila; la firma de confidencialidad exige repetir la auditoría.
+  local h0="$1" h1="$2" m="$3"; shift 3
+  local tw="$HOME_MS/eqwt" fr p k gens g have rc=0 b="$HOME_MS/derived.blob"
+  wt_reset "$tw" && git -C "$GITROOT" worktree add -q --detach "$tw" "$h1" >/dev/null 2>&1 || return 1
+  fr=$(frozen_root "$tw" eq) || rc=1
+  if (( rc == 0 )); then
+    { gen_rules "$tw" "$fr" && gen_propuestas "$tw" "$fr" && gen_capmap "$tw" "$fr" \
+      && { [[ ! -f "$fr/scripts/sam.py" ]] || gen_sam "$tw" "$fr" generate >/dev/null; }; } || rc=1
+  fi
+  for p in "$@"; do
+    (( rc == 0 )) || break
+    k=""; read -r k gens <<<"$(python3 "$RESOLVER" kind "$p" 2>/dev/null)"
+    [[ -n "$k" ]] || { rc=1; break; }   # derivado sin fila en la tabla canónica: no equivalente (fail-closed)
+    have=1; for g in $gens; do [[ -f "$fr/$g" ]] || have=0; done
+    if [[ "$k" == audit ]]; then
+      (( have )) && audit "$tw" "$fr" || rc=1
+    elif (( have )); then
+      rm -f "$b"; git -C "$GITROOT" show "$h1:$p" > "$b" 2>/dev/null || rm -f "$b"
+      python3 "$RESOLVER" same "$p" "$b" "$tw/$p" >/dev/null 2>&1 || rc=1
+    else
+      # Sin generador congelado no hay regeneración posible: solo vale un contenido ya revisado (H0) o ya en main.
+      g=$(git -C "$GITROOT" rev-parse -q --verify "$h1:$p" 2>/dev/null)
+      [[ "$g" == "$(git -C "$GITROOT" rev-parse -q --verify "$m:$p" 2>/dev/null)" \
+         || "$g" == "$(git -C "$GITROOT" rev-parse -q --verify "$h0:$p" 2>/dev/null)" ]] || rc=1
+    fi
+  done
+  rm -f "$b"; wt_reset "$tw" || rc=1
+  return $rc
 }
 
 resync() {  # resync <pr> → 0 al día (sincronizado y empujado) · 2 conflicto real · 3 confidencialidad · 5 fallo
