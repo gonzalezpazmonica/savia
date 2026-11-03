@@ -5,6 +5,7 @@
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { RerankDepsError, loadRerankDeps, type ModuleImporter, type OrtSession, type OrtTensor, type TokenizerLike } from './optional-deps.js';
 
 /** Puntúa pares (consulta, documento): más alto = más relevante. */
 export interface RerankScorer {
@@ -64,11 +65,11 @@ export function resolveRerankConfig(env: NodeJS.ProcessEnv = process.env): Reran
 
 const sha256 = (b: Buffer): string => crypto.createHash('sha256').update(b).digest('hex');
 
-interface Encoded { ids: number[] }
-interface TokenizerLike { encode(text: string, opts: { text_pair: string }): Encoded }
-
-/** Carga el modelo verificando los digests. Lanza con un motivo corto si algo no cuadra. */
-export async function loadOnnxCrossEncoder(cfg: RerankConfig): Promise<RerankScorer> {
+/**
+ * Carga el modelo verificando los digests. Lanza con un motivo corto si algo no cuadra.
+ * `importer` solo se inyecta en tests (ausencia de las dependencias opcionales).
+ */
+export async function loadOnnxCrossEncoder(cfg: RerankConfig, importer?: ModuleImporter): Promise<RerankScorer> {
   const modelFile = path.join(cfg.modelDir, 'model.onnx');
   const tokFile = path.join(cfg.modelDir, 'tokenizer.json');
   if (!fs.existsSync(modelFile) || !fs.existsSync(tokFile)) throw new RerankError('modelo o tokenizador ausentes');
@@ -78,13 +79,17 @@ export async function loadOnnxCrossEncoder(cfg: RerankConfig): Promise<RerankSco
   const tokBytes = fs.readFileSync(tokFile);
   if (sha256(tokBytes) !== cfg.tokenizerSha256) throw new RerankError('digest del tokenizador distinto del fijado');
   // Dependencias opcionales: si no están instaladas, el reranker no existe (fail-open).
-  let ort: typeof import('onnxruntime-node');
-  let tok: TokenizerLike;
-  let session: Awaited<ReturnType<typeof import('onnxruntime-node').InferenceSession.create>>;
+  let deps;
   try {
-    ort = await import('onnxruntime-node');
-    const { Tokenizer } = await import('@huggingface/tokenizers');
-    tok = new Tokenizer(JSON.parse(tokBytes.toString('utf-8')), {}) as unknown as TokenizerLike;
+    deps = await loadRerankDeps(importer);
+  } catch (e) {
+    throw new RerankError(e instanceof RerankDepsError ? e.message : 'dependencia opcional del reranker no cargable');
+  }
+  const ort = deps.ort;
+  let tok: TokenizerLike;
+  let session: OrtSession;
+  try {
+    tok = new deps.tokenizers.Tokenizer(JSON.parse(tokBytes.toString('utf-8')), {});
     session = await ort.InferenceSession.create(modelBytes, { graphOptimizationLevel: 'all' });
   } catch {
     throw new RerankError('dependencia o modelo no cargables');
@@ -104,7 +109,7 @@ export async function loadOnnxCrossEncoder(cfg: RerankConfig): Promise<RerankSco
     const mask = new BigInt64Array(enc.length * len);
     enc.forEach((e, i) => e.forEach((v, j) => { ids[i * len + j] = BigInt(v); mask[i * len + j] = 1n; }));
     const shape = [enc.length, len];
-    const feeds: Record<string, InstanceType<typeof ort.Tensor>> = {
+    const feeds: Record<string, OrtTensor> = {
       input_ids: new ort.Tensor('int64', ids, shape), attention_mask: new ort.Tensor('int64', mask, shape),
     };
     if (withTypes) feeds.token_type_ids = new ort.Tensor('int64', new BigInt64Array(enc.length * len), shape);

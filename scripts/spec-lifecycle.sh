@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only LOG.md
+# spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only log (LOG.d/ fragments, SE-500 S1)
 set -uo pipefail
 #
 # Helper to change the `status:` field of a spec and record the lifecycle
-# transition in docs/propuestas/LOG.md (append-only, most recent first).
+# transition as a fragment docs/propuestas/LOG.d/SE-NNN-STATUS.md (SE-500 S1);
 #
-# The LOG.md file captures the conceptual history of specs:
+# LOG.md (consolidated base + LOG.d/ fragments) captures the conceptual history:
 # - When a spec was proposed
 # - When it was implemented (or discarded)
 # - Why (one-line rationale)
@@ -35,10 +35,14 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROPUESTAS_DIR="${PROPUESTAS_DIR_OVERRIDE:-$PROJECT_ROOT/docs/propuestas}"
-LOG_FILE="${LOG_FILE_OVERRIDE:-$PROPUESTAS_DIR/LOG.md}"
+LOG_FILE="${LOG_FILE_OVERRIDE:-$PROPUESTAS_DIR/LOG.md}"   # base consolidada (solo --bootstrap)
+# Fragmentos (SE-500 S1): LOG.d/ vive junto a LOG.md, así que quien aísla LOG.md
+# con LOG_FILE_OVERRIDE aísla también los fragmentos.
+LOG_DIR="${LOG_DIR_OVERRIDE:-$(dirname "$LOG_FILE")/LOG.d}"
 
-# Canonical statuses (uppercase)
-CANONICAL_STATUSES="PROPOSED DRAFT APPROVED ACCEPTED IN_PROGRESS IMPLEMENTED REJECTED DEPRECATED SUPERSEDED DONE DISCARDED"
+# Canonical statuses (uppercase): los mismos que acepta roadmap.sh validate (comprobación 2)
+# y el nombre de los fragmentos de LOG.d (SE-500 S1).
+CANONICAL_STATUSES="IDEA PROPOSED APPROVED IMPLEMENTING IMPLEMENTED REJECTED SUPERSEDED DEFERRED RETIRED"
 
 SPEC=""
 NEW_STATUS=""
@@ -53,13 +57,14 @@ Usage:
   $0 --spec <path> --status <STATUS> [--note "rationale"] [--dry-run] [--no-timeline]
   $0 --bootstrap [--dry-run]
 
-Changes the status: field of a spec and appends an entry to
-docs/propuestas/LOG.md describing the lifecycle transition.
+Changes the status: field of a spec and records the lifecycle transition as a
+fragment docs/propuestas/LOG.d/SE-NNN-STATUS.md (SE-500 S1; LOG.md is the
+consolidated base and is only rewritten by roadmap.sh consolidate).
 
 Options:
   --spec PATH       Path to spec file (e.g. docs/propuestas/SE-222.md)
   --status STATUS   New status (one of: $CANONICAL_STATUSES)
-  --note TEXT       One-line rationale appended to LOG.md (optional)
+  --note TEXT       One-line rationale for the LOG.d entry (optional)
   --bootstrap       Generate LOG.md from last 10 specs + git history (seed)
   --dry-run         Show what would happen, don't modify files
   --no-timeline     Skip automatic timeline entry (spec-timeline-append.py)
@@ -111,67 +116,15 @@ get_field() {
   ' "$file"
 }
 
-# Append entry to LOG.md (append at top, after header)
-# Preserves append-only semantics: never edits past entries.
+# SE-500 S1: la transición se escribe como fragmento docs/propuestas/LOG.d/SE-NNN-ESTADO.md
+# (una entrada, sin editar LOG.md). La vista consolidada la calcula scripts/planning-view.py.
 append_log_entry() {
-  local date_str="$1"
-  local spec_id="$2"
-  local new_status="$3"
-  local title="$4"
-  local note="$5"
-
-  local entry="## ${date_str} ${spec_id} ${new_status}"
-  entry+=$'\n'"${title}"
-  if [[ -n "$note" ]]; then
-    entry+=$'\n'"${note}"
-  fi
-  entry+=$'\n'
-
-  if [[ ! -f "$LOG_FILE" ]]; then
-    # Create LOG.md with header
-    cat > "$LOG_FILE" <<HEADER
-<!-- @generated/managed by scripts/spec-lifecycle.sh — append-only -->
-<!-- Most recent entries at the top. Format: ## YYYY-MM-DD SPEC-ID STATUS -->
-# Specs Lifecycle Log
-
-> Conceptual history of specs in docs/propuestas/. Append-only.
-> Each entry: date, spec ID, status transition, optional rationale.
-> Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
-
-HEADER
-    printf '%s\n' "$entry" >> "$LOG_FILE"
-    return 0
-  fi
-
-  # Insert after the header section (after the first blank line following "# Specs Lifecycle Log")
-  # to maintain reverse-chronological order.
-  local tmp
-  tmp="$(mktemp)"
-  awk -v new_entry="$entry" '
-    BEGIN { inserted = 0 }
-    {
-      print
-      if (!inserted && /^# Specs Lifecycle Log/) {
-        in_header = 1
-      }
-      if (in_header && /^>.*log\.md convention/) {
-        # Wait for blank line after header
-        in_header = 2
-        next
-      }
-      if (in_header == 2 && /^$/) {
-        print new_entry
-        inserted = 1
-        in_header = 0
-      }
-    }
-    END {
-      if (!inserted) {
-        print new_entry
-      }
-    }
-  ' "$LOG_FILE" > "$tmp"
-  mv "$tmp" "$LOG_FILE"
+  local date_str="$1" spec_id="$2" new_status="$3" title="$4" note="$5"
+  local text="$title"
+  [[ -n "$note" ]] && text="${text:+$text
+}$note"
+  python3 "$SCRIPT_DIR/planning-view.py" --root "$PROJECT_ROOT" log-entry "$spec_id" "$new_status" \
+    --date "$date_str" --text "$text" --log-dir "$LOG_DIR"
 }
 
 # Update status: field in spec frontmatter
@@ -273,6 +226,21 @@ TITLE="${TITLE#\"}"; TITLE="${TITLE%\"}"  # strip surrounding quotes
 OLD_STATUS="$(get_field "$SPEC" "status")"
 DATE_STR="$(date +%Y-%m-%d)"
 
+# SE-500 §Fragmentos: LOG.d solo admite nombres SE-NNN. Un id del espacio SE- mal
+# formado es un error (fail-closed). Las specs heredadas fuera de ese espacio
+# (SPEC-NNN, 168 en docs/propuestas) no están en el registro de planificación:
+# cambian de estado y timeline, pero no generan entrada de LOG (ni en LOG.d ni
+# en LOG.md, que solo cambia por consolidación, AC-5/AC-6).
+WRITE_LOG=1
+if [[ -z "$SPEC_ID" || "$SPEC_ID" == SE-* ]]; then
+  if [[ ! "$SPEC_ID" =~ ^SE-[0-9]+$ ]]; then
+    echo "ERROR: spec id '$SPEC_ID' no es SE-NNN: los fragmentos de LOG.d solo admiten SE-NNN" >&2
+    exit 1
+  fi
+else
+  WRITE_LOG=0
+fi
+
 if [[ -z "$OLD_STATUS" ]]; then
   echo "WARN: spec $SPEC has no current status: field" >&2
 fi
@@ -280,18 +248,31 @@ fi
 # Apply changes
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[DRY-RUN] Would change status: $OLD_STATUS → $NEW_STATUS in $SPEC"
-  echo "[DRY-RUN] Would append to $LOG_FILE:"
-  echo "  ## $DATE_STR $SPEC_ID $NEW_STATUS"
-  [[ -n "$TITLE" ]] && echo "  $TITLE"
-  [[ -n "$NOTE" ]] && echo "  $NOTE"
+  if [[ "$WRITE_LOG" -eq 1 ]]; then
+    echo "[DRY-RUN] Would write $LOG_DIR/$SPEC_ID-$NEW_STATUS.md:"
+    echo "  ## $DATE_STR $SPEC_ID $NEW_STATUS"
+    [[ -n "$TITLE" ]] && echo "  $TITLE"
+    [[ -n "$NOTE" ]] && echo "  $NOTE"
+  else
+    echo "[DRY-RUN] No LOG entry: '$SPEC_ID' is a legacy id outside the SE-NNN registry"
+  fi
   exit 0
 fi
 
+if [[ "$WRITE_LOG" -eq 1 ]]; then
+  LOGGED=$(append_log_entry "$DATE_STR" "$SPEC_ID" "$NEW_STATUS" "$TITLE" "$NOTE") || {
+    echo "ERROR: no se pudo escribir la entrada en $LOG_DIR; spec sin cambios" >&2
+    exit 1
+  }
+fi
 update_status "$SPEC" "$NEW_STATUS"
-append_log_entry "$DATE_STR" "$SPEC_ID" "$NEW_STATUS" "$TITLE" "$NOTE"
 
 echo "Updated: $SPEC ($OLD_STATUS → $NEW_STATUS)"
-echo "Logged:  $LOG_FILE"
+if [[ "$WRITE_LOG" -eq 1 ]]; then
+  echo "Logged:  $LOGGED"
+else
+  echo "WARN: '$SPEC_ID' es un id heredado fuera del registro SE-NNN: sin entrada de LOG (SE-500)" >&2
+fi
 
 # ── SPEC-182: auto-append bitemporal timeline entry ──────────────────────────
 if [[ "$NO_TIMELINE" -eq 0 ]]; then

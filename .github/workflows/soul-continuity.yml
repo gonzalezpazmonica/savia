@@ -43,8 +43,26 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      # El adaptador web es el único con dependencia de ejecución (playwright-core, JavaScript puro).
+      # Sin descargar navegadores ni ejecutar scripts. Con él, test/connectors.test.ts carga el
+      # adaptador web real por las rutas de producción en lugar de saltarse ese caso.
+      - name: Dependencias del adaptador web (sin navegadores)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: projects/soul-continuity/src/web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Tests (sin dependencias de ejecución)
         run: npm test
+
+      # Solo test/*.test.ts. Los tests que lanzan un navegador (test/navegador/) corren en
+      # soul-continuity-web.yml, en serie y con el Chromium de Playwright fijado por SOUL_NAVEGADOR;
+      # aquí caerían en el Chrome preinstalado del runner (test/frontera-navegador.test.ts lo vigila).
+      - name: Tests unitarios del adaptador web (sin navegador)
+        if: matrix.os == 'ubuntu-latest'
+        working-directory: projects/soul-continuity/src/web
+        run: npm run test:unit
 
       - name: Banco de continuidad contra el núcleo (gate AC-3)
         run: npm run bench
@@ -78,16 +96,14 @@ jobs:
       - name: Tipos
         run: npm run typecheck
 
-      # El adaptador web es un paquete propio con sus dependencias (playwright-core).
-      - name: Dependencias del adaptador web (sin descarga de navegador)
+      - name: Dependencias del adaptador web (sin navegadores ni scripts)
         working-directory: projects/soul-continuity/src/web
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Tipos del adaptador web
-        working-directory: projects/soul-continuity/src/web
-        run: npm run typecheck
+        run: npm run typecheck:web
 
       - name: Tests unitarios del adaptador web (sin navegador)
         working-directory: projects/soul-continuity/src/web

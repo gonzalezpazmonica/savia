@@ -633,7 +633,12 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+      # SE-489 M2: en Linux x64 el postinstall de onnxruntime-node descarga de NuGet los binarios CUDA;
+      # si esa descarga falla, npm retira el paquete opcional sin error y la instalación cambia de una
+      # ejecución a otra. El reranker usa la CPU (binarios incluidos en el paquete): se omite la descarga.
       - name: Install (lock versionado)
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
         run: npm ci --no-audit --no-fund
       - name: Typecheck
         run: npx tsc --noEmit -p .
@@ -641,6 +646,13 @@ jobs:
         run: npx eslint src/ tests/
       - name: Tests
         run: npx vitest run
+      # Las dependencias del reranker son opcionales: el código compila sin ellas. vitest no se ejecuta
+      # aquí porque rollup también necesita su binario nativo opcional.
+      - name: Typecheck sin dependencias opcionales
+        run: |
+          npm ci --no-audit --no-fund --omit=optional
+          test ! -e node_modules/onnxruntime-node
+          npx tsc --noEmit -p .
 
   dependency-audit:
     runs-on: ubuntu-latest
