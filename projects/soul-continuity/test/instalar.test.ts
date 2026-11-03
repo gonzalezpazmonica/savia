@@ -66,14 +66,18 @@ function sandbox() {
   mkdirSync(bin);
   const dobles: Record<string, string> = OS === "darwin" ? { security: SECURITY, launchctl: LOG } : { "secret-tool": SECRET_TOOL, systemctl: LOG };
   for (const [n, c] of Object.entries(dobles)) { writeFileSync(join(bin, n), c); chmodSync(join(bin, n), 0o755); }
-  // Entorno mínimo de una persona en su terminal: sin variables de frontends de agente.
-  const env: Record<string, string> = { PATH: `${bin}${delimiter}${process.env.PATH}`, HOME: home, LANG: "C.UTF-8" };
   const local = join(home, "AppData", "Local");
+  let env: Record<string, string>;
   if (OS === "win32") {
-    // En Windows el perfil es USERPROFILE (os.homedir) y los datos van a LOCALAPPDATA.
-    Object.assign(env, { USERPROFILE: home, LOCALAPPDATA: local, APPDATA: join(home, "AppData", "Roaming") });
-    // Lo que Node, PowerShell y Add-Type necesitan para arrancar; ninguna apunta al perfil del usuario.
-    for (const k of ["SystemRoot", "windir", "SystemDrive", "ComSpec", "PATHEXT", "TEMP", "TMP"]) if (process.env[k]) env[k] = process.env[k]!;
+    // PowerShell no arranca con un entorno mínimo: se hereda el del sistema, sin señales de frontend
+    // de agente, y se sustituye todo lo que apunta al perfil. En Windows el perfil es USERPROFILE
+    // (os.homedir; HOME no cuenta) y los datos van a LOCALAPPDATA.
+    env = Object.fromEntries(Object.entries(process.env).filter(([k, v]) =>
+      v !== undefined && !/^(PATH|HOME|HOMEDRIVE|HOMEPATH|USERPROFILE|LOCALAPPDATA|APPDATA|CLAUDE.*|OPENCODE.*|SOUL_.*)$/i.test(k))) as Record<string, string>;
+    Object.assign(env, { PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, LOCALAPPDATA: local, APPDATA: join(home, "AppData", "Roaming") });
+  } else {
+    // Entorno mínimo de una persona en su terminal: sin variables de frontends de agente.
+    env = { PATH: `${bin}${delimiter}${process.env.PATH}`, HOME: home, LANG: "C.UTF-8" };
   }
   const data = OS === "win32" ? join(local, "Savia", "soul-continuity")
     : OS === "darwin" ? join(home, "Library", "Application Support", "Savia", "soul-continuity")
@@ -109,15 +113,15 @@ const plain = (vs: string[]) => vs.map((v) => `${v}\n${Buffer.from(v, "base64").
 test("instalar.md: init, status, login, pair, autostart y uninstall con HOME falso, sin dejar estado", { skip: SKIP }, async () => {
   const s = sandbox();
   let r = s.soul(["init", "trabajo", "--email", "yo@example.test"]);
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, `${r.stderr}${r.error ?? ""}`);
   assert.ok(existsSync(join(s.data, "config.json")), `la configuración va al directorio de datos del usuario (${s.data})`);
 
   r = s.soul(["status", "--json"]);
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, `${r.stderr}${r.error ?? ""}`);
   assert.equal(JSON.parse(r.stdout).profile, "trabajo");
 
   r = s.soul(["login", "github", "--token-stdin"], `${TOKEN}\n`);
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, `${r.stderr}${r.error ?? ""}`);
   const entries = indexOf(s.data);
   assert.equal(entries.length, 1, "una entrada en el índice, sin secreto");
   const stored = await secrets(s.home, entries);
@@ -129,20 +133,22 @@ test("instalar.md: init, status, login, pair, autostart y uninstall con HOME fal
   cfg.api.listen = ["127.0.0.1"];
   writeFileSync(join(s.data, "config.json"), JSON.stringify(cfg));
   r = s.soul(["pair", "--json"]);
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, `${r.stderr}${r.error ?? ""}`);
   assert.match(JSON.parse(r.stdout).pin, /^sha256\//);
   assert.match(JSON.parse(r.stdout).clave, /^soulpk_[0-9A-Za-z]{30}_[0-9A-Za-z]{6}$/);
 
   r = s.soul(["autostart", "install", "--dry-run"]);
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, `${r.stderr}${r.error ?? ""}`);
   assert.ok(r.stdout.includes(s.autostart), `el arranque es del usuario, dentro de su perfil (${s.autostart})`);
   assert.equal(existsSync(s.autostart), false, "--dry-run no escribe nada");
 
   r = s.soul(["uninstall", "--yes"]);
-  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.status, 0, `${r.stderr}${r.error ?? ""}`);
   assert.equal(existsSync(s.data), false, "no queda el directorio de datos");
   assert.deepEqual(await secrets(s.home, entries), [], "no queda ningún token");
-  const left = files(s.home).filter((f) => !f.includes(".dobles") && !f.endsWith(".arranque-falso.log"));
+  // En Windows, PowerShell guarda sus cachés en LOCALAPPDATA\Microsoft: son del sistema, no de Soul.
+  const left = files(s.home).filter((f) => !f.includes(".dobles") && !f.endsWith(".arranque-falso.log")
+    && !(OS === "win32" && f.startsWith(join(s.home, "AppData", "Local", "Microsoft"))));
   assert.deepEqual(left, [], "nada de Soul en el HOME");
   assert.ok(![r.stdout, r.stderr].join("").includes(TOKEN));
 });
