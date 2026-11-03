@@ -7,7 +7,7 @@ author: Savia
 phase: A
 risk: L2
 human_surface: true
-related_specs: [SE-343, SE-386, SE-434, SE-436, SE-493, SE-496]
+related_specs: [SE-343, SE-386, SE-434, SE-436, SE-493, SE-496, SE-505, SE-507]
 origin: "Informe de Savia Labs labs/research/20261102-inventario-rutas-efecto.md (hueco G8 de labs/research/20261102-arquitectura-control-efectos.md): rutas E01 (unknown), E02 (declarative) y E04 (unknown), las tres sin guard. Solo spec."
 timeline:
   - from: "2026-11-03"
@@ -47,16 +47,20 @@ Conclusión: el hueco es real. Se reutiliza el patrón de `dome-guard.sh` con su
 
 ## Qué decide esta spec
 
-1. **Hook `PreToolUse` `.claude/hooks/mcp-effect-guard.sh`** con matcher `mcp__.*|WebFetch`. Lee el JSON de stdin y delega en un núcleo `lib/mcp_effect_guard.py`, el mismo que usa el binding de OpenCode.
-2. **Clasificación por catálogo, no por adivinanza.** `config/mcp-effect-catalog.yaml` asigna a cada tool una clase: `read_only`, `write` o `merge`. Es el catálogo de clases de efecto que pide el inventario.
+1. **Hook `PreToolUse` `.claude/hooks/mcp-effect-guard.sh`** con matcher `mcp__.*|WebFetch|WebSearch`. Lee el JSON de stdin y delega en un núcleo `lib/mcp_effect_guard.py`, el mismo que usa el binding de OpenCode.
+2. **Clasificación por catálogo, no por adivinanza.** `config/mcp-effect-catalog.yaml` asigna a cada tool una clase: `read_only`, `write` o `merge`. Es el catálogo de clases de efecto que pide el inventario. Cubre los dos prefijos reales: los conectores de la cuenta (`mcp__claude_ai_<Servicio>__*`, p. ej. `mcp__claude_ai_Gmail__send_message`) y los servidores configurados en el repo (`mcp__github__*`, `mcp__savia-vaults__*`). Nombres exactos, sin comodines.
+   - **El catálogo no se puede aflojar desde el árbol de trabajo.** Un agente puede editar `config/`. Por eso el núcleo lee el catálogo del árbol y el de `origin/main` (`git show origin/main:config/...`) y aplica **el más estricto** tool a tool (orden `merge` > `write` > `read_only`; una tool que falta en cualquiera de los dos cuenta como no catalogada). Editar el catálogo local solo puede endurecerlo; aflojarlo exige una PR fusionada. Si `origin/main` no es legible, se usa solo el árbol y cualquier `read_only` que no figure también en el último catálogo de `main` conocido pasa a `ask`. Lo mismo vale para `config/webfetch-allow-hosts` (intersección de ambas listas).
 3. **Decisión:**
    - `read_only` del catálogo → no decide nada (pasa).
    - `write` → `ask`, con un motivo en llano que dice qué tool, qué destino y qué efecto («Enviar un correo a 2 personas»).
    - `merge` → `deny`, con el motivo «los merges van por `push-pr.sh --merge` o `merge-sprint.sh` con grant (SE-343)».
    - **Tool que no está en el catálogo → `ask`** (falla cerrado). Nunca pasa en silencio.
-4. **WebFetch:** pasa si el host está en `config/webfetch-allow-hosts` y la URL no lleva query; en otro caso, `ask` con el host y la longitud de la query. S1 registra las decisiones sin preguntar (modo `observe`) para medir cuántas preguntas generaría; el paso a `enforce` lo decide la operadora con esa medida.
-5. **Delegación:** con `SAVIA_GATES_PIN=1` (modo mediado de Space) o `SAVIA_MCP_GUARD=space`, el hook no decide; manda el guard de Space.
-6. **No hay interruptor para apagarlo.** Solo existe la delegación del punto 5.
+4. **WebFetch:** pasa si el host está en `config/webfetch-allow-hosts`, la URL no lleva query ni fragmento y el path mide como máximo 200 caracteres sin ningún segmento de más de 64; en otro caso, `ask` con el host y la longitud de lo que sobra. El host se normaliza antes de comparar con `urllib.parse`: minúsculas, sin punto final, IDN a punycode; una URL con userinfo (`usuario@host`) o con un puerto distinto del de su esquema → `ask` siempre; esquemas distintos de `https` → `ask`. Las redirecciones: WebFetch no sigue una redirección a otro host sino que devuelve la URL nueva, que vuelve a pasar por el guard como llamada aparte; S1 lo comprueba con un test y, si no se cumple, la URL permitida con redirección cuenta como no permitida. S1 registra las decisiones sin preguntar (modo `observe`) para medir cuántas preguntas generaría; el modo `observe` caduca a los 14 días de fusionar S1: si para entonces la operadora no ha decidido, el núcleo pasa solo a `enforce` (falla cerrado por calendario, no por olvido).
+   - **WebSearch:** su `query` también sale a un tercero. En S1 solo se registra (modo `observe`, misma medida); su paso a `enforce` se decide junto con WebFetch en S2.
+5. **Delegación a Space, acotada.** Con `SAVIA_GATES_PIN=1` (modo mediado de Space) o `SAVIA_MCP_GUARD=space`, el hook no decide las clases `write`, no catalogada ni WebFetch/WebSearch: manda el guard de Space. **La clase `merge` no se delega nunca**: el `deny` se aplica también con la variable puesta, porque la variable no prueba que Space esté delante y un merge sin grant (E02) es el único efecto que esta spec rechaza siempre. Cada decisión delegada deja una línea `delegated` en el registro de decisiones, para que un lanzador mal configurado se vea en el resumen.
+6. **Orden de evaluación, fijo:** (1) leer y validar stdin — vacío o malformado → `ask`, también en modo delegado; (2) leer catálogos — ausentes o ilegibles → `ask`; (3) clasificar; (4) `merge` → `deny`; (5) ejecución sin persona (punto 8) → `deny` para `write` y no catalogada, también en modo delegado; (6) delegación del punto 5; (7) reglas de los puntos 3 y 4.
+7. **No hay interruptor para apagarlo.** La delegación del punto 5 no lo apaga: el `deny` de merge y el fallo cerrado ante entrada inválida siguen activos.
+8. **`ask` sin nadie delante.** En una ejecución sin persona (`SAVIA_RUN_ID` o `SAVIA_AUTONOMOUS_RUN=1` en el entorno; ver SE-507 y `autonomous-safety.md`), el núcleo convierte `ask` en `deny` con el mismo motivo y una línea para el resumen de la mañana. Así el resultado no depende de cómo resuelva `claude -p` un `ask` según sus flags de permisos.
 
 ## Lo que he entendido
 
@@ -92,13 +96,16 @@ No hay palabras literales de la operadora sobre este guard. La necesidad sale de
 | AC | Criterio | Tipo | Test |
 |---|---|---|---|
 | AC-1 | Tool `read_only` del catálogo → sin decisión (exit 0, sin `permissionDecision`) | estática | `tests/hooks/test-se508-mcp-effect-guard.bats` |
-| AC-2 | **Negativo:** tool `write` del catálogo (fixture `mcp__gmail__send_message`) → `ask` con destino y efecto en el motivo | estática | ídem |
+| AC-2 | **Negativo:** tool `write` del catálogo (fixture `mcp__claude_ai_Gmail__send_message`, el nombre real del conector) → `ask` con destino y efecto en el motivo | estática | ídem |
+| AC-2b | **Negativo (catálogo aflojado):** catálogo del árbol marca `mcp__claude_ai_Gmail__send_message` como `read_only` y el de `origin/main` como `write` → `ask`; el caso inverso (endurecer en el árbol) → aplica lo del árbol | estática | ídem |
 | AC-3 | **Negativo:** `mcp__github__merge_pull_request` → `deny` citando SE-343 | estática | ídem |
 | AC-4 | **Negativo:** tool que no está en el catálogo → `ask`, nunca pasa | estática | ídem |
-| AC-5 | **Fail-closed:** stdin vacío, JSON malformado, catálogo ausente o ilegible → `ask` para cualquier tool MCP; nunca exit 0 sin decisión | estática | ídem |
-| AC-6 | WebFetch a host permitido sin query → pasa; **negativo:** host permitido con query, o host no permitido → `ask` en `enforce` y una línea de registro en `observe` | estática | ídem |
-| AC-7 | **Límite:** host `docs.ejemplo.org` permitido no autoriza `docs.ejemplo.org.atacante.net` ni `atacante.net/docs.ejemplo.org` | estática | ídem |
-| AC-8 | `SAVIA_GATES_PIN=1` → el hook no decide (delegación a Space) | estática | ídem |
+| AC-5 | **Fail-closed:** stdin vacío, JSON malformado, `tool_input` sin URL en WebFetch, catálogo ausente o ilegible → `ask` para cualquier tool MCP, WebFetch o WebSearch, con o sin delegación; fuera del caso de delegación del punto 5, nunca exit 0 sin decisión para una tool que no sea `read_only` | estática | ídem |
+| AC-6 | WebFetch a host permitido sin query → pasa; **negativo:** host permitido con query, con fragmento, con path de 201 caracteres o con un segmento de 65, o host no permitido → `ask` en `enforce` y una línea de registro en `observe`; **límite:** path de 200 caracteres → pasa | estática | ídem |
+| AC-7 | **Límite:** host `docs.ejemplo.org` permitido no autoriza `docs.ejemplo.org.atacante.net`, `atacante.net/docs.ejemplo.org`, `docs.ejemplo.org@atacante.net`, `docs.ejemplo.org:8443` ni `http://docs.ejemplo.org`; sí autoriza `DOCS.Ejemplo.org.` (mayúsculas y punto final) | estática | ídem |
+| AC-8 | `SAVIA_GATES_PIN=1` → el hook no decide para `write` y deja línea `delegated`; **negativo:** `SAVIA_GATES_PIN=1` o `SAVIA_MCP_GUARD=space` con `mcp__github__merge_pull_request` → `deny` igual que sin la variable | estática | ídem |
+| AC-8b | **Negativo (headless):** `SAVIA_AUTONOMOUS_RUN=1` con una tool `write` o no catalogada → `deny`, nunca `ask`; ídem con `SAVIA_GATES_PIN=1` puesto a la vez | estática | ídem |
+| AC-8c | `observe` con fecha de fusión de S1 hace 15 días (reloj inyectado) → el núcleo actúa en `enforce` | estática | ídem |
 | AC-9 | Paridad: el binding de OpenCode toma la misma decisión que el hook ante las mismas entradas de AC-1..8 | estática | `tests/hooks/test-se508-mcp-guard-parity.bats` |
 | AC-10 | Cada test se ejecuta contra el árbol sin el hook y falla (el guard no existe), y pasa con él | revisión | evidencia en el PR de S1 |
 | AC-11 | Medida de S1: decisiones `ask` por día en modo `observe` sobre una semana de uso, publicada antes de pasar WebFetch a `enforce` | experimento | informe en `output/` |
@@ -109,8 +116,8 @@ No hay palabras literales de la operadora sobre este guard. La necesidad sale de
 | Slice | Entrega |
 |---|---|
 | S0 | Textos y tabla de decisiones en modo `observe`, confirmados por la operadora |
-| S1 | Núcleo Python, hook, catálogo inicial (conectores observados, GitHub MCP, Vaults MCP) y binding OpenCode; MCP en `enforce`, WebFetch en `observe`; AC-1..10 |
-| S2 | WebFetch en `enforce` si la operadora lo decide con la medida de AC-11 |
+| S1 | Núcleo Python, hook, catálogo inicial (conectores observados, GitHub MCP, Vaults MCP) y binding OpenCode; MCP en `enforce`, WebFetch y WebSearch en `observe` con caducidad de 14 días; AC-1..10 |
+| S2 | WebFetch y WebSearch en `enforce` si la operadora lo decide con la medida de AC-11 (o automáticamente al caducar `observe`) |
 
 ## Fuera de alcance
 
@@ -123,6 +130,9 @@ No hay palabras literales de la operadora sobre este guard. La necesidad sale de
 - **Fatiga de preguntas:** por eso WebFetch empieza en `observe` y la decisión de `enforce` se toma con datos.
 - **Catálogo incompleto:** una tool nueva pregunta hasta que alguien la clasifica; es el coste aceptado de fallar cerrado.
 - **Límite del guard:** ve la llamada a la tool, no lo que el servidor MCP hace por dentro.
+- **Exfiltración residual por WebFetch a un host permitido:** el límite de path la acota, no la elimina; una lista de hosts corta es la defensa principal.
+- **Delegación mal configurada:** con la variable puesta y sin Space, los `write` pasan sin pregunta. Se acepta solo porque `merge` no se delega, porque cada caso deja línea `delegated` y porque en runs autónomos el punto 8 se aplica antes que la delegación.
+- **Dependencia no resuelta:** el requisito de confirmación de escenas viene de SE-505, que aún no está en `docs/specs/`.
 
 ## OpenCode Implementation Plan
 
@@ -131,7 +141,7 @@ No hay palabras literales de la operadora sobre este guard. La necesidad sale de
 | Componente | Claude Code | OpenCode v1.14 |
 |---|---|---|
 | `lib/mcp_effect_guard.py` | Núcleo compartido | Núcleo compartido |
-| `.claude/hooks/mcp-effect-guard.sh` | Hook `PreToolUse`, matcher `mcp__.*\|WebFetch` | — |
+| `.claude/hooks/mcp-effect-guard.sh` | Hook `PreToolUse`, matcher `mcp__.*\|WebFetch\|WebSearch` | — |
 | `scripts/opencode-plugin/savia-gates/lib/mcp-effect-guard.ts` | — | Regla en `tool.execute.before`, como `dome-guard.ts` |
 | `config/mcp-effect-catalog.yaml`, `config/webfetch-allow-hosts` | Ficheros | Los mismos |
 

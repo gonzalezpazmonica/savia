@@ -37,10 +37,13 @@ Conclusión: el hueco es real y es pequeño. Falta un formato de ficha y un veri
 ## Qué decide esta spec
 
 1. **Dos fichas separadas.** `StudyRecord` (una fuente: id estable, tipo, DOI o URL, revisión o hash del texto guardado, licencia, `stored: metadata_only|abstract|full_text`) y `EvidenceClaim` (una afirmación: texto, `epistemic` de SE-449, `supports[]` y `contradicts[]` con `study_id`, `locator` y `quote` literal).
-2. **Verificador determinista.** `scripts/evidence-claim-check.py` comprueba, sin LLM, que cada `quote` aparece literal en el texto guardado de su estudio en esa revisión y que el localizador existe. El juez LLM queda como segunda opinión opcional, nunca como sustituto.
+2. **Verificador determinista.** `scripts/evidence-claim-check.py` comprueba, sin LLM, que cada `quote` aparece literal en el texto guardado de su estudio en esa revisión **y dentro del tramo que delimita su `locator`** (sección o rango de líneas), no en cualquier parte del texto.
+   - **Normalización antes de comparar, la misma en cita y texto:** Unicode NFC, comillas y guiones tipográficos a su forma ASCII, guion de corte de línea seguido de salto (`-\n`) eliminado, cualquier secuencia de espacios en blanco a un espacio. Sin cambio de mayúsculas ni de puntuación restante.
+   - **Longitud mínima de la cita:** 8 palabras tras normalizar. Una cita más corta → `QUOTE_TOO_SHORT`, exit 1 (una palabra suelta aparece en casi cualquier texto).
+   - **Códigos de salida:** 0 todo `SUPPORTED_LITERAL`; 1 al menos un hallazgo de contenido (`QUOTE_NOT_FOUND`, `QUOTE_OUTSIDE_LOCATOR`, `QUOTE_TOO_SHORT`, `REVISION_MISMATCH`, `EPISTEMIC_UNSOURCED`); 2 entrada inválida o ausente (fail-closed); 3 consulta externa denegada por nivel (`LEVEL_NOT_ALLOWED`, `LEVEL_MISSING`). El juez LLM queda como segunda opinión opcional, nunca como sustituto.
 3. **Deduplicación de estudios** por DOI normalizado y, sin DOI, por hash del título normalizado más el año.
 4. **Por defecto se guarda `metadata_only` o `abstract`.** El texto completo solo si su licencia lo permite y queda anotada.
-5. **Solo preguntas N1** pueden consultar APIs académicas externas. El nivel de la pregunta se declara en la ficha y una pregunta sin nivel no consulta nada.
+5. **Solo preguntas N1** pueden consultar APIs académicas externas. El nivel no lo pone quien redacta la ficha: la ficha solo guarda la referencia a la pregunta y el nivel se toma de la clasificación de confidencialidad de esa pregunta (`docs/rules/domain/context-placement-confirmation.md`, N1–N4b), que confirma la operadora al prerregistrarla. Si la ficha declara un nivel distinto del de la pregunta, manda el más restrictivo. Una pregunta sin clasificación no consulta nada.
 
 ## Lo que esta spec NO hace
 
@@ -53,15 +56,16 @@ Conclusión: el hueco es real y es pequeño. Falta un formato de ficha y un veri
 | AC | Criterio | Tipo | Test |
 |---|---|---|---|
 | AC-1 | Una `EvidenceClaim` cuya `quote` aparece literal en el texto guardado del estudio en la revisión declarada → `SUPPORTED_LITERAL` | estática | `tests/test-se506-evidence-claim.bats` |
-| AC-2 | **Negativo:** la misma `quote` con una palabra cambiada → `QUOTE_NOT_FOUND`, exit 1 | estática | ídem |
+| AC-2 | **Negativo:** la misma `quote` con una palabra cambiada → `QUOTE_NOT_FOUND`, exit 1; la misma `quote` con comillas tipográficas, doble espacio o partida por `-\n` → `SUPPORTED_LITERAL` | estática | ídem |
+| AC-2b | **Negativo:** cita literal que existe en el estudio pero fuera de la sección de su `locator` → `QUOTE_OUTSIDE_LOCATOR`, exit 1; **límite:** cita de 7 palabras → `QUOTE_TOO_SHORT`, exit 1; de 8 → se verifica | estática | ídem |
 | AC-3 | **Negativo:** revisión declarada distinta del hash del texto guardado → `REVISION_MISMATCH`, exit 1 (la cita podría existir en otra versión) | estática | ídem |
-| AC-4 | **Negativo:** `epistemic: observed` sin ningún `supports[]` → `EPISTEMIC_UNSOURCED` (mismo código que SE-449 AC2) | estática | ídem |
-| AC-5 | **Negativo:** ficha sin `level` o con `level` distinto de N1 → la consulta externa no se hace y el comando sale con `LEVEL_REQUIRED` | estática | ídem |
+| AC-4 | **Negativo:** `epistemic: observed` sin ningún `supports[]` → `EPISTEMIC_UNSOURCED` (mismo código que SE-449 AC2), exit 1 | estática | ídem |
+| AC-5 | **Negativo:** pregunta sin clasificación → `LEVEL_MISSING`, exit 3; pregunta N2 o superior → `LEVEL_NOT_ALLOWED`, exit 3; ficha que declara N1 sobre una pregunta clasificada N2 → `LEVEL_NOT_ALLOWED`; en los tres casos no se hace ninguna consulta externa (se comprueba con un stub de red que falla si se le llama) | estática | ídem |
 | AC-6 | Dos estudios con el mismo DOI escrito de forma distinta (mayúsculas, prefijo `https://doi.org/`) → un solo `StudyRecord` | estática | ídem |
 | AC-7 | **Fail-closed:** JSON malformado, estudio citado inexistente o texto guardado ausente → exit 2, nunca `SUPPORTED_LITERAL` | estática | ídem |
 | AC-8 | Una afirmación con `contradicts[]` válido se lista en el informe en una sección «Contraevidencia», no se descarta | estática | ídem |
 | AC-9 | S0 (piloto PA) prerregistrado antes de medir: 3 preguntas N1, ≥30 afirmaciones, baseline `/tech-research` actual, métrica `claim_supported_precision` y tiempo de revisión humana | experimento | prerregistro en Savia Labs |
-| AC-10 | S1 solo arranca si el piloto mejora `claim_supported_precision` con un IC que excluye 0 y el tiempo de revisión humana no sube más de un 50 %. Si no, la spec pasa a `REJECTED` con el resultado publicado | gate | informe del piloto |
+| AC-10 | S1 solo arranca si el piloto mejora `claim_supported_precision` con un IC al 95 % que excluye 0 y el tiempo de revisión humana no sube más de un 50 %. El método del IC (bootstrap pareado por afirmación, 10 000 remuestreos) y el tamaño se fijan en el prerregistro; si con ≥30 afirmaciones el IC no puede excluir 0 por potencia, el prerregistro amplía la muestra antes de medir, no después. Si no se cumple, la spec pasa a `REJECTED` con el resultado publicado | gate | informe del piloto |
 | AC-11 | `capability-entropy.py --check` PASS | CI | — |
 
 ## Plan por slices
