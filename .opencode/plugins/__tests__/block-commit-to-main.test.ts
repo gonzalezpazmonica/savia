@@ -140,7 +140,8 @@ describe("destino real del commit", () => {
                      "printf 'git commit' | sh -s"]) {
       await expect(run(c)).rejects.toThrow(BLOCK);
     }
-    await expect(run(`bash <<'EOF'\ncd ${wt} && git commit -m x\nEOF`)).resolves.toBeUndefined();
+    // fail-closed: el cd al worktree dentro del heredoc no se reconoce con certeza
+    await expect(run(`bash <<'EOF'\ncd ${wt} && git commit -m x\nEOF`, wt)).rejects.toThrow(BLOCK);
   });
   test("GIT_DIR=<main>/.git y commit-tree bloquean", async () => {
     await expect(run(`GIT_DIR=${mainRepo}/.git git commit -m x`, wt)).rejects.toThrow(BLOCK);
@@ -173,7 +174,7 @@ describe("destino real del commit", () => {
     await expect(run("cat <<EOF\n$(git commit -m x)\nEOF")).rejects.toThrow(BLOCK);
     await expect(run("cat <<'EOF'\n$(git commit -m x)\nEOF")).resolves.toBeUndefined();
   });
-  test("sin python3: git -C también se evalúa, pero por el cwd de la orden", async () => {
+  test("sin python3: fail-closed, bloquea git commit en cualquier rama", async () => {
     const OLD_PATH = process.env.PATH;
     const bin = join(root, "nopy-bin");
     mkdirSync(bin, { recursive: true });
@@ -181,11 +182,35 @@ describe("destino real del commit", () => {
     spawnSync("ln", ["-sf", gitPath, join(bin, "git")]);
     process.env.PATH = bin;
     try {
-      await expect(run(`git -C ${wt} commit -m x`)).rejects.toThrow(BLOCK);
-      await expect(run(`git -C ${wt} commit -m x`, wt)).resolves.toBeUndefined();
+      await expect(run(`git -C ${wt} commit -m x`)).rejects.toThrow(/resolvedor de destino no disponible/);
+      await expect(run(`git -C ${wt} commit -m x`, wt)).rejects.toThrow(BLOCK);
+      await expect(run(`git -C ${wt} commit-tree x`, wt)).rejects.toThrow(BLOCK);
+      await expect(run("echo commit", wt)).resolves.toBeUndefined();
     } finally {
       process.env.PATH = OLD_PATH;
     }
+  });
+  // fail-closed por defecto (decisión 2026-11-03): un caso por P1 de las tres
+  // revisiones de seguridad; bloquean aunque el cwd sea el worktree agent/*.
+  test("P1 de las revisiones: forma no reconocida bloquea desde el worktree", async () => {
+    for (const c of ["git $(echo commit) -m x", 'g(){ git "$@"; }; g commit -m x',
+                     'env -S "git commit -m x"', "bash -c -- 'git commit -m x'",
+                     "$SUDO git commit -m x", 'bash --norc -c "git commit -m x"',
+                     "awk 'BEGIN{system(\"git commit -m x\")}'", 'su -c "git commit -m x"',
+                     "cat <<EOF\n$(git commit -m x)\nEOF", "echo 'git commit -m x' | bash",
+                     "bash <<< 'git commit -m x'", `CDPATH=${home}; cd repo-main && git commit -m x`,
+                     `eval 'git -C ${wt} commit -m x'`, `echo . | xargs git -C ${wt} commit`,
+                     `GIT_DIR=${mainRepo}/.git git commit -m x`, "bash -c 'gi''t com''mit'"]) {
+      await expect(run(c, wt)).rejects.toThrow(/fail-closed[\s\S]*git -C <ruta> commit/);
+    }
+  });
+  test("texto que solo menciona git commit no bloquea; forma admitida pasa", async () => {
+    for (const c of ['echo "luego git commit"', "git log --grep commit",
+                     "cat > n.md <<'EOF'\ngit commit -m x\nEOF"]) {
+      await expect(run(c)).resolves.toBeUndefined();
+    }
+    const msg = `git -C ${wt} commit -m "$(cat <<'EOF'\nfix: uno) dos, git add\nEOF\n)"`;
+    await expect(run(msg)).resolves.toBeUndefined();
   });
   test("TEST_BRANCH fuera de NODE_ENV=test no anula la rama real", async () => {
     const OLD_ENV = process.env.NODE_ENV;

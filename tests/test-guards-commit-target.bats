@@ -1,6 +1,9 @@
 #!/usr/bin/env bats
 # Guards de rama: miran la rama del repo DESTINO de cada git commit/add real
 # (git -C, cd encadenado, variables literales), no la del checkout de la sesión.
+# El resolvedor es fail-closed: ante una forma que no entiende con certeza emite
+# la op con destino vacío (veredicto BLOQUEAR). Los hooks bash, sin cambiar,
+# aplican a ese destino vacío la rama del cwd: con la sesión en main bloquean.
 # Hooks: .claude/hooks/block-commit-to-main.sh y validate-bash-global.sh.
 # Resolvedor compartido: scripts/lib/git_op_targets.py (también lo usa el port
 # TS .opencode/plugins/guards/block-commit-to-main.ts, con los mismos casos).
@@ -37,6 +40,11 @@ bcm() {  # $1 = orden, $2 = cwd de la orden (por defecto: main)
 vbg() {
   jq -n --arg c "$1" '{tool_input:{command:$c}}' | (cd "${2:-$MAIN}" && bash "$VBG")
 }
+# Veredicto del resolvedor (sin hook): `commit\t` con destino vacío = BLOQUEAR.
+verdict() {  # $1 = orden, $2 = cwd
+  printf '%s' "$1" | python3 "$BATS_TEST_DIRNAME/../scripts/lib/git_op_targets.py" "${2:-$MAIN}"
+}
+blocked_verdict() { grep -qxP "${1:-commit}\t" <<< "$output"; }
 blocked_bcm() { [ "$(echo "$output" | jq -r .decision 2>/dev/null)" = "block" ]; }
 # exit 2 por ESTE guard (no por entrada malformada ni por otro guard).
 blocked_vbg() { [ "$status" -eq 2 ] && [[ "$output" == *"BLOQUEADO: rama 'main'"* ]]; }
@@ -160,10 +168,12 @@ no_python_path() {
   blocked_vbg
 }
 
-@test "bcm y vbg: bash -c con cd a main desde el worktree bloquea" {
-  run bcm "bash -c 'cd $MAIN && git commit -m x'" "$WT"
+@test "bash -c con git commit: veredicto BLOQUEAR también desde el worktree" {
+  run verdict "bash -c 'cd $MAIN && git commit -m x'" "$WT"
+  blocked_verdict
+  run bcm "bash -c 'cd $WT && git commit -m x'"
   blocked_bcm
-  run vbg "bash -c 'cd $MAIN && git commit -m x'" "$WT"
+  run vbg "bash -c 'cd $WT && git commit -m x'"
   blocked_vbg
 }
 
@@ -176,12 +186,10 @@ no_python_path() {
     run vbg "$c"
     blocked_vbg
   done
-  # desde el worktree, con destino explícito en main
+  # desde el worktree: el resolvedor no da destino, veredicto BLOQUEAR
   for c in "\$(which git) -C $MAIN commit -m x" "\$SUDO git -C $MAIN commit -m x"; do
-    run bcm "$c" "$WT"
-    blocked_bcm
-    run vbg "$c" "$WT"
-    blocked_vbg
+    run verdict "$c" "$WT"
+    blocked_verdict
   done
 }
 
@@ -216,11 +224,10 @@ no_python_path() {
   [ "$status" -eq 0 ]
 }
 
-@test "bcm y vbg: las mismas formas en el worktree agent/* pasan" {
-  run bcm 'bash --norc -c "git commit -m x"' "$WT"
-  [ -z "$output" ]
-  run vbg 'bash --norc -c "git commit -m x"' "$WT"
-  [ "$status" -eq 0 ]
+@test "veredicto BLOQUEAR no depende de la rama del cwd (worktree agent/*)" {
+  run verdict 'bash --norc -c "git commit -m x"' "$WT"
+  blocked_verdict
+  [ "$(echo "$output" | grep -c .)" -eq 1 ]
 }
 
 @test "vbg sin python3: fallback conservador por el cwd, también con git -C" {
@@ -245,12 +252,13 @@ no_python_path() {
   done
 }
 
-@test "bcm y vbg: heredoc a bash con cd al worktree pasa; a main desde el worktree bloquea" {
+@test "bcm y vbg: heredoc a bash con git commit bloquea aunque haga cd al worktree" {
   run bcm $'bash <<\'EOF\'\ncd '"$WT"$' && git commit -m x\nEOF'
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-  run vbg $'bash <<\'EOF\'\ncd '"$MAIN"$' && git commit -m x\nEOF' "$WT"
+  blocked_bcm
+  run vbg $'bash <<\'EOF\'\ncd '"$WT"$' && git commit -m x\nEOF'
   blocked_vbg
+  run verdict $'bash <<\'EOF\'\ncd '"$MAIN"$' && git commit -m x\nEOF' "$WT"
+  blocked_verdict
 }
 
 @test "bcm y vbg: cd a un directorio inexistente no apaga el guard en main" {
@@ -267,11 +275,13 @@ no_python_path() {
   blocked_vbg
 }
 
-@test "bcm y vbg: GIT_DIR=<main>/.git desde el worktree bloquea; al worktree pasa" {
-  run bcm "GIT_DIR=$MAIN/.git git commit -m x" "$WT"
+@test "GIT_DIR y --git-dir: veredicto BLOQUEAR; git -C al worktree pasa" {
+  run verdict "GIT_DIR=$MAIN/.git git commit -m x" "$WT"
+  blocked_verdict
+  run verdict "git --git-dir=$MAIN/.git commit -m x" "$WT"
+  blocked_verdict
+  run bcm "GIT_DIR=$WT/.git git commit -m x"
   blocked_bcm
-  run vbg "git --git-dir=$MAIN/.git commit -m x" "$WT"
-  blocked_vbg
   run bcm "git -C $WT commit -m x" "$WT"
   [ -z "$output" ]
 }
@@ -281,4 +291,52 @@ no_python_path() {
   blocked_bcm
   run vbg "git commit-tree HEAD^{tree} -m x"
   blocked_vbg
+}
+
+# ── Fail-closed por defecto (decisión 2026-11-03): un test por P1 ───────────
+
+@test "bcm y vbg: P1 de las revisiones de seguridad bloquean con la sesión en main" {
+  for c in 'git $(echo commit) -m x' 'g(){ git "$@"; }; g commit -m x' \
+           'env -S "git commit -m x"' "bash -c -- 'git commit -m x'" \
+           "sed -n '1e git commit -m x' f" 'su -c "git commit -m x"' \
+           "flock f -c \"git -C $WT commit -m x\"" "eval 'git -C $WT commit -m x'" \
+           "echo . | xargs git -C $WT commit -m x" "sudo git -C $WT commit -m x"; do
+    run bcm "$c"
+    blocked_bcm
+    run vbg "$c"
+    blocked_vbg
+  done
+}
+
+@test "veredicto BLOQUEAR desde el worktree para cada P1 (sin destino cierto)" {
+  for c in 'git $(echo commit) -m x' 'g(){ git "$@"; }; g commit -m x' \
+           'env -S "git commit -m x"' "bash -c -- 'git commit -m x'" \
+           '$SUDO git commit -m x' 'bash --norc -c "git commit -m x"' \
+           "awk 'BEGIN{system(\"git commit -m x\")}'" $'cat <<EOF\n$(git commit -m x)\nEOF' \
+           "echo 'git commit -m x' | bash" "bash <<< 'git commit -m x'" \
+           "CDPATH=$HOME; cd savia && git commit -m x"; do
+    run verdict "$c" "$WT"
+    blocked_verdict
+  done
+}
+
+@test "texto que solo menciona git commit sigue sin bloquear en main" {
+  for c in 'echo "luego git commit"' 'grep -r "git commit" docs' "git log --grep commit" \
+           $'cat > n.md <<\'EOF\'\ngit commit -m x\nEOF'; do
+    run bcm "$c"
+    [ -z "$output" ]
+    run vbg "$c"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "forma admitida: git -C <worktree> commit con mensaje por heredoc pasa en main" {
+  c="git -C $WT add -A && git -C $WT commit -m \"\$(cat <<'EOF'
+fix(x): uno) dos, git add mencionado
+EOF
+)\""
+  run bcm "$c"
+  [ -z "$output" ]
+  run vbg "$c"
+  [ "$status" -eq 0 ]
 }

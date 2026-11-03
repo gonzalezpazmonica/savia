@@ -5,11 +5,12 @@
 // Contraparte TS del hook shell `.opencode/hooks/block-commit-to-main.sh`.
 //
 // El destino de cada `git commit` real lo resuelve `scripts/lib/git_op_targets.py`
-// (el mismo resolvedor que usan los hooks bash, para que no diverjan):
-// `git -C <ruta>`, `cd <ruta>` encadenado, variables literales de la misma
-// orden y el cwd de la orden. El texto de heredocs y cadenas no es una orden.
-// Destino no resoluble, fuera de un repo o sin Python → criterio conservador:
-// se mira la rama del cwd de la orden (comportamiento anterior).
+// (el mismo resolvedor que usan los hooks bash, para que no diverjan), con
+// criterio fail-closed: solo reconoce `git -C <ruta literal>`, `cd <ruta
+// literal>` encadenado y el cwd de la orden. Destino vacío = forma no
+// reconocida con certeza → BLOQUEAR, sea cual sea la rama del cwd. Sin
+// resolvedor (sin Python, timeout, fallo) y con `git` y `commit` en el texto →
+// BLOQUEAR. Destino reconocido que no es un repo → rama del cwd de la orden.
 //
 // Bypass consciente de la operadora: SAVIA_ALLOW_MAIN_COMMIT=1 (queda
 // registrado en el log, no es silencioso).
@@ -18,12 +19,14 @@
 
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
-// Fallback sin resolvedor (sin Python, timeout, fallo): `git` y `commit` como
-// palabras en la orden, igual que el prefiltro del hook bash (fail-closed;
-// cubre `git -C <ruta> commit`).
-const FALLBACK_GIT_RX = /(^|[^\w-])git([^\w-]|$)/;
-const FALLBACK_COMMIT_RX = /(^|[^\w-])commit([^\w-]|$)/;
-const RESOLVER = new URL("../../../scripts/lib/git_op_targets.py", import.meta.url).pathname;
+import { fileURLToPath } from "node:url";
+
+// Sin resolvedor: `git` y `commit`/`commit-tree` como palabras en la orden
+// (sin comillas ni barras) → bloquear (fail-closed).
+const FALLBACK_GIT_RX = /(^|[^\w])git([^\w]|$)/i;
+const FALLBACK_COMMIT_RX = /(^|[^\w-])commit(-tree)?([^\w-]|$)/i;
+const RESOLVER = fileURLToPath(new URL("../../../scripts/lib/git_op_targets.py", import.meta.url));
+const ADMITTED = "Forma admitida: git -C <ruta> commit … (o cd <ruta> && git commit …).";
 
 async function spawn(cmd: string, args: string[], input?: string): Promise<{ ok: boolean; out: string }> {
   try {
@@ -46,7 +49,7 @@ async function branchOf(dir: string): Promise<string | null> {
   return res.out.trim();
 }
 
-/** Directorios destino de cada `git commit` real; "" = no resoluble. null = resolvedor no disponible. */
+/** Directorios destino de cada `git commit` real; "" = BLOQUEAR. null = resolvedor no disponible. */
 async function commitTargets(command: string, base: string): Promise<string[] | null> {
   const res = await spawn("python3", [RESOLVER, base], command);
   if (!res.ok) return null;
@@ -61,22 +64,28 @@ const isHuman = (b: string | null) => b === "main" || b === "master";
 export async function blockCommitToMain(input: ToolInput, output: ToolOutput): Promise<void> {
   if (extractToolName(input) !== "bash") return;
   const command = extractCommand(input, output);
-  if (!command || !/\bcommit\b/.test(command)) return;
+  if (!command) return;
+  const plain = command.replace(/["'\\]/g, ""); // `com''mit` también cuenta
+  if (!/commit/i.test(plain)) return;
 
   const args = (output?.args ?? input?.args ?? {}) as Record<string, unknown>;
   const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
 
-  let targets = await commitTargets(command, base);
+  const targets = await commitTargets(command, base);
   if (targets === null) {
-    // Sin resolvedor: conservador (texto + cwd de la orden).
-    targets = FALLBACK_GIT_RX.test(command) && FALLBACK_COMMIT_RX.test(command) ? [""] : [];
+    if (FALLBACK_GIT_RX.test(plain) && FALLBACK_COMMIT_RX.test(plain)) {
+      throw new Error(`BLOCKED [commit-to-main]: resolvedor de destino no disponible; no se puede verificar la rama del commit. ${ADMITTED}`);
+    }
+    return;
   }
-  if (targets.length === 0) return;
+  if (targets.includes("")) {
+    throw new Error(`BLOCKED [commit-to-main]: destino del git commit no reconocido con certeza (fail-closed). ${ADMITTED}`);
+  }
 
   let branch = "";
   for (const dir of targets) {
-    let b = dir ? await branchOf(dir) : null;
-    if (b === null) b = await branchOf(base); // conservador: cwd de la orden
+    let b = await branchOf(dir);
+    if (b === null) b = await branchOf(base); // destino fuera de un repo: cwd de la orden
     if (isHuman(b)) {
       branch = b as string;
       break;
