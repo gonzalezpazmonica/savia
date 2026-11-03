@@ -1,0 +1,9 @@
+{
+  "id": "SE-503",
+  "status": "PROPOSED",
+  "priority": "P1",
+  "phase": "A",
+  "title": "Verificador real por proyecto: Launch, Doctor, Drive, Evidence y Cleanup",
+  "evidence": "docs/specs/SE-503-real-verifier-per-project.spec.md",
+  "note": "Propuesta 2 del informe The Code. Contrato por proyecto, feature-map con negativos, el generador ejecuta antes de READY, evidencia ligada a commit con autoridad SE-444 e independencia SE-476. Casos: app Android de Space en dispositivo o emulador y CLI Soul."
+}
