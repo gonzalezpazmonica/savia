@@ -129,3 +129,14 @@ test("H-5: perfil persistente en Linux sin bus de sesión no se abre (no cae a l
   try { assert.throws(() => almacenClaves({ persistente: true, plataforma: "linux", env: { XDG_RUNTIME_DIR: rt } }), /llavero/); }
   finally { rmSync(rt, { recursive: true, force: true }); }
 });
+
+test("SOUL_NAVEGADOR con una ruta que no existe falla; no cae en otro navegador", async () => {
+  const { buscarNavegador } = await import("../cortafuegos/perfil.ts");
+  const d = mkdtempSync(join(tmpdir(), "nav-"));
+  try {
+    assert.throws(() => buscarNavegador({ SOUL_NAVEGADOR: join(d, "no-existe") }), /SOUL_NAVEGADOR/);
+    const ruta = join(d, "chrome");
+    writeFileSync(ruta, "");
+    assert.deepEqual(buscarNavegador({ SOUL_NAVEGADOR: ruta }), { ruta, nombre: "configurado" });
+  } finally { rmSync(d, { recursive: true }); }
+});
