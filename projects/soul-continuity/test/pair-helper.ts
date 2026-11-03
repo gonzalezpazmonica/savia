@@ -7,7 +7,8 @@
  */
 import { X509Certificate, randomBytes } from "node:crypto";
 import { request } from "node:https";
-import { type ConnectionOptions, type PeerCertificate, checkServerIdentity, connect as tlsConnect } from "node:tls";
+import { type ConnectionOptions, type PeerCertificate, connect as tlsConnect } from "node:tls";
+import { identidadServidor } from "../src/api/cert.ts";
 import type { KeyObject } from "node:crypto";
 import { thumbprint } from "../src/api/dpop.ts";
 import { PAIR_VERSION, clientProof, parseToken, serverProof, shortFingerprint, shortFingerprintDer, spkiSha256Der } from "../src/api/pairing.ts";
@@ -20,7 +21,7 @@ export function tlsApp(ca: string, huella = shortFingerprint(ca)): Pick<Connecti
   return {
     ca,
     checkServerIdentity: (host, cert) => {
-      const e = checkServerIdentity(host, cert);
+      const e = identidadServidor(host, cert);
       if (e) return e;
       const vista = shortFingerprintDer(spkiDe(cert)).replace(/ /g, "");
       return vista === fijada ? undefined : new Error(`huella del certificado ${vista} distinta de la fijada ${fijada}`);

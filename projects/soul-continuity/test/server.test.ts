@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { request } from "node:https";
-import { makeSelfSigned } from "../src/api/cert.ts";
+import { identidadServidor, makeSelfSigned } from "../src/api/cert.ts";
 import { crearServidor, type SemillaOperador } from "../src/api/server.ts";
 import { estadoDesdeTexto } from "../src/attention/index.ts";
 
@@ -104,7 +104,7 @@ test("límite de peticiones por origen: agotarlo desde una dirección no deja si
   const l = await s.escuchar(["127.0.0.1", "::1"], 0);
   const desde = (host: string, headers: Record<string, string> = { Authorization: "DPoP tok-1", DPoP: "p" }) =>
     new Promise<number>((res, rej) => {
-      const q = request({ host, port: l.port, path: "/api/v1/soul/estado", ca: cert.cert, headers }, (r) => { r.resume(); r.on("end", () => res(r.statusCode ?? 0)); });
+      const q = request({ host, port: l.port, path: "/api/v1/soul/estado", ca: cert.cert, checkServerIdentity: identidadServidor, headers }, (r) => { r.resume(); r.on("end", () => res(r.statusCode ?? 0)); });
       q.on("error", rej);
       q.end();
     });
