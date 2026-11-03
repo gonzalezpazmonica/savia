@@ -20,6 +20,8 @@
 **Lo que hace el código.**
 
 - `api.listen` está vacío por defecto. Sin direcciones, `serve` no arranca y lo dice (`src/core/config.ts:66`, `src/api/serve.ts:40-46`).
+- `soul init` (y `soul setup`, que lo llama) lo rellena solo con una **VPN reconocida**: la IPv4 que da `tailscale ip -4` o la de una interfaz con nombre de VPN de malla (`tailscale0`, `wt0`, `wg*`, `utun*`, `zt*`) en 100.64.0.0/10 (`src/cli/host.ts:39` (`VPN_IF`), `src/cli/host.ts:49` (`detectVpn`), `src/cli/cli.ts:195` (`recognizedVpn`)). 100.64/10 es también el CGNAT de operadoras móviles e ISP (RFC 6598): una 100.64/10 en `eth0`, `wwan0` o `enx…` no se fija; `init` la propone, `listen --detect` se niega y `setup` pregunta sin aceptar Intro. Residual: una interfaz de la operadora que se llame como una VPN (`wg0`, `utun3`) se tomaría por VPN; `setup` y `init` muestran siempre la IP y la interfaz elegidas, y `soul listen <ip>` lo cambia.
+- `soul setup` solo abre la ventana de `pair` cuando en `ip:puerto` responde un TLS cuya huella SPKI es la de `tls/cert.pem` de la instalación; otro proceso en ese puerto no cuenta (`src/cli/setup.ts:62` (`servePinned`)).
 - Solo se aceptan IP literales. Se rechazan:
   - los nombres de host;
   - cualquier escritura de la dirección no especificada (`0.0.0.0`, `::`, `0::`…);
@@ -43,7 +45,7 @@
   - SAN con las IP de escucha;
   - 397 días de validez (`src/api/cert.ts:63-86`).
 - La clave privada se guarda en `tls/key.pem` con permisos 0600 (`src/core/store.ts:46-57`).
-- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:161`, `src/cli/cli.ts:452`).
+- La app fija la **huella SPKI** (`sha256/<base64>`) que se muestra al emparejar y al arrancar `serve` (`src/api/cert.ts:88-92`, `src/api/serve.ts:161`, `src/cli/cli.ts:501`).
 
 **Tests.** `test/cert.test.ts:11` (certificado válido para las IP), `:23` (TLS real: el cliente que fija el certificado conecta y uno sin él es rechazado) y `:38` (se reutiliza y se regenera si cambian las direcciones).
 
@@ -61,14 +63,14 @@
 - El emparejamiento lo abre el operador **en el terminal del portátil** (`soul pair`). Por la red solo existen `/v1/pair/challenge` y `/v1/pair/complete`, sin token y con la ventana abierta; sin ella responden 404 (`src/api/server.ts:166`, `:719-726`; punto 3 bis).
 - El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:35,51-54`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
-- `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:70,221-223`). Así, el token no pasa por el modelo de un agente.
+- `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:79,261-263`). Así, el token no pasa por el modelo de un agente.
 
 **Tests.** `test/devices.test.ts:12` (el token se da una vez; en disco, solo el hash) y `:39`; `test/cli.test.ts:148` (órdenes vetadas al frontend de agente).
 
 **No cubierto.**
 
 - `soul pair` ya no imprime el token del dispositivo, sino la clave de emparejamiento (10 minutos, un solo uso), en la salida estándar y en JSON con `--json`. Puede quedar en el historial del terminal o en un fichero si se redirige mientras dure la ventana → **P2-5**.
-- Antes no había código de un solo uso: lo que se tecleaba en la app era el token permanente. Con soul-pair-v2 la app recibe el token al completar el emparejamiento y nunca pasa por la pantalla (`src/cli/cli.ts:463-464`) → **P2-6**, cerrado.
+- Antes no había código de un solo uso: lo que se tecleaba en la app era el token permanente. Con soul-pair-v2 la app recibe el token al completar el emparejamiento y nunca pasa por la pantalla (`src/cli/cli.ts:470-471`) → **P2-6**, cerrado.
 - La detección del frontend de agente es de mejor esfuerzo, por variables de entorno. Un agente que las borre podría ejecutar `pair` y leer el token (límite conocido del README) → **P2-7**.
 
 ### 3 bis. Emparejamiento directo (integración, soul-pair-v2)
@@ -83,7 +85,7 @@ Con la integración, la app puede emparejarse por la red con una **clave de empa
 
 **Dónde vive la clave.** El protocolo necesita la clave en claro durante la ventana, porque es la clave del HMAC: guardar solo su hash no permitiría calcular la prueba del servidor. Por eso está en `pairing.json` (0600, junto a la clave TLS) y se borra al usarse, caducar o bloquearse (`:118-125`; `test/pairing.test.ts`).
 
-**QR.** `soul pair` pinta en la terminal un QR con `soul://pair?v=2&h=<ip>&p=<puerto>&k=<clave>&f=<huella corta>` (codificador propio, sin dependencias: `src/api/qr.ts:242,270`) y avisa de no compartir capturas. `--qr-png <fichero>` lo guarda en 0600 y no sobrescribe un fichero existente; si no puede escribirlo, cierra la ventana (`src/cli/cli.ts:479-481`). Una captura del QR vale lo que la clave: 10 minutos y un solo uso.
+**QR.** `soul pair` pinta en la terminal un QR con `soul://pair?v=2&h=<ip>&p=<puerto>&k=<clave>&f=<huella corta>` (codificador propio, sin dependencias: `src/api/qr.ts:242,270`) y avisa de no compartir capturas. `--qr-png <fichero>` lo guarda en 0600 y no sobrescribe un fichero existente; si no puede escribirlo, cierra la ventana (`src/cli/cli.ts:486-488`). Una captura del QR vale lo que la clave: 10 minutos y un solo uso.
 
 **Sigue sin cubrir.** Desde la VPN se puede gastar la ventana sin conocer la clave: 10 retos (429) o 3 `complete` con pruebas inventadas (423) obligan a repetir `soul pair`. Es denegación de servicio acotada a quien ya está en la VPN → **P2-14**.
 
@@ -93,7 +95,7 @@ Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens d
 
 **Lo que hace el código.**
 
-- `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:58-65`, `src/cli/cli.ts:498-501`).
+- `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:58-65`, `src/cli/cli.ts:505-509`).
 - `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:94-110`, `src/api/devices.ts:74-84`). La revocación vale en el acto, sin reiniciar.
 - Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:620,713`).
 - Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:711`).
@@ -177,7 +179,7 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 | Id | Hueco | Arreglo propuesto |
 |---|---|---|
 | P1-1 | La prueba DPoP no se verifica. El token del dispositivo funciona como portador y se puede reutilizar desde cualquier equipo de la VPN | Verificar la prueba DPoP (RFC 9449): firma con la clave pública registrada al emparejar, `htm`/`htu`/`iat`, `jti` con ventana anti-reenvío en memoria y `ath` del token. Al emparejar, guardar la clave pública del dispositivo junto al hash del token. Tests: prueba de otra clave → 401; `jti` repetido → 401; prueba caducada → 401 — **Cerrado en la integración:** `src/api/dpop.ts:56-87` verifica la prueba con la forma del cliente Android (ES256, `htm`, `htu`, `iat` ±60 s, `jti` de un solo uso, `ath`); `src/api/serve.ts:94-110` solo acepta la clave ligada al emparejar (soul-pair-v2, `src/api/pairing.ts`): un dispositivo sin clave ligada no entra y «revocado» solo se responde tras la prueba. Tests: otra clave, `jti` repetido, prueba caducada y dispositivo sin clave ligada dan 401 (`test/dpop.test.ts`, `test/serve.test.ts`). Sin residual de primer uso: ya no hay ligadura en la primera conexión |
-| P1-2 | Las correcciones y cambios hechos desde un dispositivo no registran cuál fue. Tras perder el móvil no se puede saber qué deshacer | Anotar el `device` en cada corrección del libro y en el registro de atención y detalle. Añadir una orden que liste y deshaga las correcciones de un dispositivo — **Cerrado en la integración:** el libro anota el dispositivo (`src/core/engine.ts:188`); `soul corrections --device`, `soul undo-device` y `soul unpair --undo` (`src/cli/cli.ts:459-487`). La revocación remota desde otro dispositivo sigue sin existir |
+| P1-2 | Las correcciones y cambios hechos desde un dispositivo no registran cuál fue. Tras perder el móvil no se puede saber qué deshacer | Anotar el `device` en cada corrección del libro y en el registro de atención y detalle. Añadir una orden que liste y deshaga las correcciones de un dispositivo — **Cerrado en la integración:** el libro anota el dispositivo (`src/core/engine.ts:188`); `soul corrections --device`, `soul undo-device` y `soul unpair --undo` (`src/cli/cli.ts:505-532`). La revocación remota desde otro dispositivo sigue sin existir |
 | P1-3 | No se ha revisado la app: almacenamiento del token (Android Keystore), fijación real de la huella SPKI y bloqueo del dispositivo | Revisión de la parte Android con los mismos criterios: test que conecta contra un certificado distinto y falla, y token no exportable |
 
 ### P2

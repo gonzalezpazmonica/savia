@@ -104,7 +104,7 @@ Usa tokens de **solo lectura**: un PAT de grano fino en GitHub (Issues y Pull re
 
 `soul setup` lo hace por ti. A mano:
 
-1. La escucha va en la dirección de tu equipo **en la VPN**. `soul listen --detect` la busca y la guarda, y `soul listen 100.x.y.z` la fija. Nunca `0.0.0.0` ni `::`: Soul se niega. Sin argumentos, `soul listen` muestra la configurada y la detectada.
+1. La escucha va en la dirección de tu equipo **en la VPN**. `soul listen --detect` la busca y la guarda si es una VPN reconocida (Tailscale, NetBird, WireGuard, ZeroTier), y `soul listen 100.x.y.z` la fija. Una 100.x en la conexión del móvil o del router es la red de la operadora, no tu VPN: Soul no la fija sola. Nunca `0.0.0.0` ni `::`: Soul se niega. Sin argumentos, `soul listen` muestra la configurada y la detectada.
 2. Arranca la API. Lo mejor es como servicio de tu usuario, para que arranque solo con tu sesión:
 
    ```bash
