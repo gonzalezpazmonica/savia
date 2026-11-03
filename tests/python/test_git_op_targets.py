@@ -197,8 +197,10 @@ class Targets(unittest.TestCase):
         for cmd in (f"GIT_DIR={b}/.git git commit", f"git --git-dir={b}/.git commit",
                     f"export GIT_DIR={b}/.git; git commit", "git --work-tree=/x commit",
                     "GIT_WORK_TREE=/x git commit", "git -c alias.ci=commit ci -m x",
-                    "git -c core.editor=vi commit", "git ci -m 'commit'"):
+                    "git -c core.editor=vi commit"):
             self.assertBlocks(cmd, base=self.wt)
+        # alias sin resolver: commit en el destino conocido (revisión 4, P1-2)
+        self.assertEqual(self.run_("git ci -m 'commit'", base=self.wt), [("commit", self.wt)])
 
     def test_blocks_from_agent_worktree_too(self):
         # el veredicto no depende de la rama del cwd: el llamante bloquea
@@ -213,6 +215,54 @@ class Targets(unittest.TestCase):
         self.assertBlocks("rg --pre 'git commit -m x' y")
         self.assertBlocks("python3 <<'EOF'\nimport os; os.system('git commit -m x')\nEOF")
         self.assertBlocks("bash -c 'gi''t com''mit'")  # comillas partidas
+
+    # ── revisión 4 (seguridad P1-2, P2-1; corrección P2-2) ──
+    def _alias_repo(self):
+        repo = os.path.join(self.home, "repo-alias")
+        if not os.path.isdir(repo):
+            os.makedirs(repo)
+            env = dict(os.environ, HOME=self.home, GIT_CONFIG_NOSYSTEM="1")
+            env.pop("GIT_CONFIG_GLOBAL", None)
+            for args in (["init", "-q"], ["config", "alias.ci", "commit"],
+                         ["config", "alias.st", "status -sb"],
+                         ["config", "alias.sh", "!git commit"],
+                         ["config", "alias.ci2", "ci"]):
+                subprocess.run(["git", "-C", repo] + args, check=True, env=env)
+            with open(os.path.join(self.home, ".gitconfig"), "w") as f:
+                f.write("[alias]\n\tgci = commit\n")
+        return repo
+
+    def run_git(self, cmd):
+        return self.run_(cmd, GIT_CONFIG_NOSYSTEM="1")
+
+    def test_rev4_p1_2_git_alias_counts_as_commit(self):
+        repo = self._alias_repo()
+        self.assertEqual(self.run_git(f"git -C {repo} ci -m x"), [("commit", repo)])
+        self.assertEqual(self.run_git(f"git -C {repo} sh"), [("commit", repo)])
+        self.assertEqual(self.run_git(f"git -C {repo} ci2 -m x"), [("commit", repo)])
+        self.assertEqual(self.run_git(f"git -C {repo} gci -m x"), [("commit", repo)])  # global
+        self.assertEqual(self.run_git(f"git -C {repo} flow finish"), [("commit", repo)])  # externa
+        self.assertEqual(self.run_git("git -C $X ci -m x"), [("commit", "")])  # destino incierto
+
+    def test_rev4_p1_2_safe_alias_and_builtin_do_not_emit(self):
+        repo = self._alias_repo()
+        self.assertEqual(self.run_git(f"git -C {repo} st"), [])
+        self.assertEqual(self.run_git(f"git -C {repo} status"), [])
+        self.assertEqual(self.run_git(f"git -C {repo} log --oneline"), [])
+
+    def test_rev4_p2_1_unresolvable_program_with_commit_word(self):
+        self.assertBlocks("x=$(printf '\\x67it'); $x commit -m x")
+        self.assertBlocks("$(echo Z2l0|base64 -d) commit -m x")
+        self.assertEqual(self.run_("$EDITOR notas.txt"), [])
+
+    def test_rev4_c_p2_2_gh_text_is_inert(self):
+        self.assertEqual(self.run_('gh pr create --title t --body "usa git commit -m x"'), [])
+        self.assertEqual(self.run_("gh pr comment 1 --body 'git add y git commit'"), [])
+        # una extensión o alias de gh puede ejecutar el texto: sigue bloqueando
+        self.assertBlocks('gh ci "git commit -m x"')
+        # la sustitución dentro del cuerpo sí se ejecuta
+        out = self.run_(f'gh pr create --body "$(git -C {self.wt} commit -m x)"')
+        self.assertIn(("commit", self.wt), out)
 
     def test_analysis_exception_blocks(self):
         import importlib.util

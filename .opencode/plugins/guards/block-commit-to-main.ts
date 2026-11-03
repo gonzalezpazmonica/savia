@@ -13,9 +13,9 @@
 // BLOQUEAR. Destino reconocido que no es un repo → rama del cwd de la orden.
 //
 // Bypass consciente de la operadora: SAVIA_ALLOW_MAIN_COMMIT=1 (queda
-// registrado en el log, no es silencioso).
+// registrado en el log, no es silencioso), también ante destino incierto.
 //
-// Sin red (CRIT-001). Coste ~30-60ms solo cuando la orden menciona git commit.
+// Sin red (CRIT-001). Coste ~30-60ms solo cuando la orden dice git o commit.
 
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
@@ -66,44 +66,50 @@ export async function blockCommitToMain(input: ToolInput, output: ToolOutput): P
   const command = extractCommand(input, output);
   if (!command) return;
   const plain = command.replace(/["'\\]/g, ""); // `com''mit` también cuenta
-  if (!/commit/i.test(plain)) return;
+  // `git` solo basta (un alias puede hacer commit) y `commit` solo también
+  // (`$x commit` con x=git): decide el resolvedor.
+  if (!FALLBACK_GIT_RX.test(plain) && !FALLBACK_COMMIT_RX.test(plain)) return;
 
   const args = (output?.args ?? input?.args ?? {}) as Record<string, unknown>;
   const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
 
   const targets = await commitTargets(command, base);
-  if (targets === null) {
-    if (FALLBACK_GIT_RX.test(plain) && FALLBACK_COMMIT_RX.test(plain)) {
-      throw new Error(`BLOCKED [commit-to-main]: resolvedor de destino no disponible; no se puede verificar la rama del commit. ${ADMITTED}`);
-    }
-    return;
-  }
-  if (targets.includes("")) {
-    throw new Error(`BLOCKED [commit-to-main]: destino del git commit no reconocido con certeza (fail-closed). ${ADMITTED}`);
-  }
-
+  let unsure = "";
   let branch = "";
-  for (const dir of targets) {
-    let b = await branchOf(dir);
-    if (b === null) b = await branchOf(base); // destino fuera de un repo: cwd de la orden
-    if (isHuman(b)) {
-      branch = b as string;
-      break;
+  if (targets === null) {
+    // Sin resolvedor solo cuenta lo que menciona git Y commit.
+    if (!(FALLBACK_GIT_RX.test(plain) && FALLBACK_COMMIT_RX.test(plain))) return;
+    unsure = "resolvedor de destino no disponible; no se puede verificar la rama del commit";
+  } else if (targets.includes("")) {
+    unsure = "destino del git commit no reconocido con certeza (fail-closed)";
+  } else {
+    for (const dir of targets) {
+      let b = await branchOf(dir);
+      if (b === null) b = await branchOf(base); // destino fuera de un repo: cwd de la orden
+      if (isHuman(b)) {
+        branch = b as string;
+        break;
+      }
     }
+    if (!branch) return; // rama segura (agent/*, feature/*) o fuera de repo
   }
-  if (!branch) return; // rama segura (agent/*, feature/*) o fuera de repo
 
-  // Bypass consciente de la operadora: se registra, no es silencioso.
-  const verdict = process.env.SAVIA_ALLOW_MAIN_COMMIT === "1" ? "bypass" : "block";
+  // Bypass consciente de la operadora: se registra, no es silencioso. Vale
+  // también ante destino incierto (forma no reconocida en un commit intencional).
+  const bypass = process.env.SAVIA_ALLOW_MAIN_COMMIT === "1";
+  const verdict = bypass ? "bypass" : unsure ? "block-unsure" : "block";
   try {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const log = path.join(process.cwd(), "output", "turn-sdlc", "commit-guard.jsonl");
-    const entry: Record<string, string> = { ts: new Date().toISOString(), branch, action: "commit", verdict };
-    if (verdict === "bypass") entry.env = "SAVIA_ALLOW_MAIN_COMMIT=1";
+    const entry: Record<string, string> = { ts: new Date().toISOString(), branch: branch || "?", action: "commit", verdict };
+    if (bypass) entry.env = "SAVIA_ALLOW_MAIN_COMMIT=1";
     fs.appendFileSync(log, JSON.stringify(entry) + "\n");
   } catch { /* best-effort */ }
-  if (verdict === "bypass") return;
+  if (bypass) return;
+  if (unsure) {
+    throw new Error(`BLOCKED [commit-to-main]: ${unsure}. ${ADMITTED} Si es intencional de la operadora, repítelo con SAVIA_ALLOW_MAIN_COMMIT=1 (queda registrado).`);
+  }
 
   const reason = `Commit en rama humana (${branch}) bloqueado por autonomous-safety (NUNCA commit en main/master). Crea una rama agent/* y commitea ahí: git checkout -b agent/<tarea>. Si es intencional de la operadora, repítelo con SAVIA_ALLOW_MAIN_COMMIT=1 (queda registrado).`;
   throw new Error(`BLOCKED [commit-to-main]: ${reason}`);

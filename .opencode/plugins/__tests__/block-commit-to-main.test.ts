@@ -212,6 +212,31 @@ describe("destino real del commit", () => {
     const msg = `git -C ${wt} commit -m "$(cat <<'EOF'\nfix: uno) dos, git add\nEOF\n)"`;
     await expect(run(msg)).resolves.toBeUndefined();
   });
+  // revisión 4 (#1467): alias de git, programa ofuscado, bypass ante destino
+  // incierto y texto de gh.
+  test("alias de git que hace commit bloquea en main; en el worktree pasa", async () => {
+    sh(mainRepo, "config", "alias.ci", "commit");
+    sh(mainRepo, "config", "alias.st", "status -sb");
+    await expect(run("git ci -m x")).rejects.toThrow(/rama humana \(main\)/);
+    await expect(run("git ci -m x", wt)).resolves.toBeUndefined();
+    await expect(run("git st")).resolves.toBeUndefined();
+  });
+  test("programa no resoluble con la palabra commit bloquea sin decir git", async () => {
+    await expect(run("x=$(printf '\\x67it'); $x commit -m x", wt)).rejects.toThrow(/fail-closed/);
+  });
+  test("bypass de la operadora vale también ante destino incierto", async () => {
+    await expect(run('env -S "git commit -m x"', wt)).rejects.toThrow(/fail-closed/);
+    process.env.SAVIA_ALLOW_MAIN_COMMIT = "1";
+    try {
+      await expect(run('env -S "git commit -m x"', wt)).resolves.toBeUndefined();
+    } finally {
+      delete process.env.SAVIA_ALLOW_MAIN_COMMIT;
+    }
+  });
+  test("gh pr create con git commit en el cuerpo no bloquea", async () => {
+    await expect(run('gh pr create --title t --body "usa git commit -m x"')).resolves.toBeUndefined();
+    await expect(run('gh ci "git commit -m x"', wt)).rejects.toThrow(/fail-closed/);
+  });
   test("TEST_BRANCH fuera de NODE_ENV=test no anula la rama real", async () => {
     const OLD_ENV = process.env.NODE_ENV;
     process.env.TEST_BRANCH = "agent/x";

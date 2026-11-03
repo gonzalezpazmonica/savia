@@ -23,7 +23,13 @@ Solo se reconoce con certeza (lista blanca, no lista negra de rodeos):
     reglas (forma habitual `git commit -m "$(cat <<'EOF' … EOF)"`).
   - Elementos de una tubería o en segundo plano: su `cd` no persiste.
 
-Todo lo demás es incierto: subshells, funciones, alias, bucles, `eval`,
+Alias de git y órdenes externas `git-<x>`: se resuelve el alias en el destino
+(`git config --get alias.<x>`); si no es un subcomando integrado que no hace
+commit, se emite `commit` en el destino (vacío si no se conoce) aunque el
+texto no diga `commit`. Orden con `argv0` no resoluble y la palabra `commit`
+en el texto → `commit` con destino vacío. `gh pr|issue|…` es texto inerte.
+
+Todo lo demás es incierto: subshells, funciones, alias de shell, bucles, `eval`,
 `source`, `bash|sh -c`, `env -S`, `xargs`, envoltorios (`sudo`, `env`,
 `timeout`…), git o subcomando no literal, opciones globales de git no
 reconocidas, `GIT_DIR`/`GIT_WORK_TREE`/`CDPATH`, `cd` no resoluble o a un
@@ -38,6 +44,7 @@ Sin dependencias externas; sin red.
 """
 import os
 import re
+import subprocess
 import sys
 
 UNKNOWN = None
@@ -54,6 +61,8 @@ UNSAFE_VARS = {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CONFIG_PARAMET
 INERT = {"echo", "printf", "cat", "grep", "egrep", "fgrep", "rg", "wc", "head", "tail",
          "cut", "tr", "jq", "tee", "test", "[", "true", "false", ":", "ls", "pwd",
          "mkdir", "touch", "sleep", "date", "basename", "dirname", "realpath"}
+# Subcomandos de gh que solo hablan con GitHub (no ejecutan texto local).
+GH_INERT = {"pr", "issue", "release", "label", "search", "gist", "run", "workflow", "api"}
 DECLARE = {"export", "declare", "typeset", "readonly", "local"}
 CD = {"cd"}
 # Cambian el cwd o ejecutan texto de forma no visible: lo que venga es incierto.
@@ -549,6 +558,10 @@ def simple(toks, ctx, depth, piped):
     argv = [expand(w, ctx) for w in words]
     if argv[0] is UNKNOWN:
         ctx.uncertain = True  # `$SUDO git commit`, `$(which git) …`
+        # `$x commit` con x=git ofuscado: el texto no dice `git`, pero la orden
+        # puede serlo. Con `commit` en el texto → BLOQUEAR sin exigir la mención.
+        if COMMIT_WORD.search(re.sub(r"[\"'\\]", "", text)):
+            ctx.out.append(("commit", ""))
         return text
     base = os.path.basename(argv[0])
     if base in KEYWORDS or base in OPAQUE_BUILTINS:
@@ -564,6 +577,8 @@ def simple(toks, ctx, depth, piped):
     elif base in INERT and not (base == "rg" and any(
             a is UNKNOWN or a.startswith("--pre") for a in argv[1:])):
         pass
+    elif base == "gh" and len(argv) > 1 and argv[1] in GH_INERT:
+        pass  # `gh pr create --body "… git commit …"`: texto hacia GitHub
     elif UNKNOWN in argv or not stdin_known or mentions(text):
         # orden no inerte: puede ejecutar sus argumentos o su stdin
         ctx.uncertain = True
@@ -623,9 +638,29 @@ def do_git(argv, ctx):
                 ctx.uncertain = True
             else:
                 ctx.out.append((OPS[a], target))
-        elif a not in GIT_BUILTINS:
-            ctx.uncertain = True  # alias de git: puede ser commit
+        elif a not in GIT_BUILTINS and not alias_is_safe(a, target):
+            # alias (`git ci` con alias.ci=commit, también global) u orden
+            # externa git-<a>: puede hacer commit → se trata como commit en el
+            # destino, sin exigir que el texto diga `commit`.
+            ctx.out.append(("commit", "" if target is UNKNOWN else target))
         return
+
+
+def alias_is_safe(name, target):
+    """True si `name` es un alias de git cuyo subcomando es integrado y no hace
+    commit (p. ej. alias.st=status). Alias de shell (`!…`), alias de alias,
+    órdenes externas, destino desconocido o cualquier error → False."""
+    if target is UNKNOWN or not os.path.isdir(target):
+        return False
+    try:
+        res = subprocess.run(["git", "-C", target, "config", "--get", "alias." + name],
+                             capture_output=True, text=True, timeout=2)
+    except Exception:
+        return False
+    if res.returncode != 0:
+        return False
+    words = res.stdout.split()
+    return bool(words) and words[0] in GIT_BUILTINS and words[0] not in OPS
 
 
 def main():
