@@ -113,16 +113,21 @@ test("AC-G3: el presupuesto de avisos se respeta; el que lo agota es el último 
   } finally { await cerrar(); }
 });
 
+// El descanso dura hasta T0+30h, así que sigue activo en el latido de T0+23h en el que h-2 cruza
+// el umbral: lo que decide si notifica es la regla `modos: ["DESCANSO"]`, no el fin del descanso.
+const semillaDescanso = (alertas: SemillaOperador["alertas"]) => semilla({
+  avisos: { activos: [], resumenInicio: "08:30", resumenCierre: null, max: 5, ventanaMin: 60, tope: 3 },
+  // h-1 cruza el umbral a las 07:20: la primera petición (07:00) aún no tiene nada que decir.
+  elementos: [el("h-1", "hilo_espera", { nace: T0 - 24 * H + 20 * MIN }), el("h-2", "hilo_espera", { nace: T0 - 2 * H, personas: ["per-1"] })],
+  alertas,
+});
+const HASTA_DESCANSO = new Date(T0 + 30 * H).toISOString();
+
 test("AC-G3: en descanso no notifica nada no marcado (queda en el chat); lo marcado para descanso sí", async () => {
-  const s = semilla({
-    avisos: { activos: [], resumenInicio: "08:30", resumenCierre: null, max: 5, ventanaMin: 60, tope: 3 },
-    // h-1 cruza el umbral a las 07:20: la primera petición (07:00) aún no tiene nada que decir.
-    elementos: [el("h-1", "hilo_espera", { nace: T0 - 24 * H + 20 * MIN }), el("h-2", "hilo_espera", { nace: T0 - 2 * H, personas: ["per-1"] })],
-    alertas: [{ id: "r-1", tipo: "persona", objetivo: "per-1", palabra: null, modos: ["DESCANSO"] }],
-  });
+  const s = semillaDescanso([{ id: "r-1", tipo: "persona", objetivo: "per-1", palabra: null, modos: ["DESCANSO"] }]);
   const { reloj, api, cerrar } = await arrancar(s);
   try {
-    assert.equal((await api("PUT", "/atencion", { modo: "DESCANSO", hasta: new Date(T0 + 6 * H).toISOString() })).status, 200);
+    assert.equal((await api("PUT", "/atencion", { modo: "DESCANSO", hasta: HASTA_DESCANSO })).status, 200);
     reloj.t = T0 + 31 * MIN;
     let c = (await api("GET", "/gemelo")).json;
     const sinMarcar = c.mensajes.find((m: any) => m.asuntos.some((a: any) => a.elemento_id === "h-1"));
@@ -138,11 +143,27 @@ test("AC-G3: en descanso no notifica nada no marcado (queda en el chat); lo marc
     assert.equal(resumen.silencio, "modo_activo");
     // Lo marcado para descanso (persona per-1) sí notifica: h-2 cruza el umbral de 24 h.
     reloj.t = T0 + 23 * H;
-    await api("PUT", "/atencion", { modo: "DESCANSO", hasta: new Date(T0 + 30 * H).toISOString() });
     c = (await api("GET", "/gemelo")).json;
+    assert.equal((await api("GET", "/atencion")).json.modo, "DESCANSO", "el latido ocurrió en descanso");
     const marcado = c.mensajes.find((m: any) => m.tipo === "seguimiento" && m.asuntos.some((a: any) => a.elemento_id === "h-2"));
     assert.equal(marcado.notificado, true);
+    assert.equal(marcado.silencio, null);
     assert.equal((await sondeoGemelo(api)).length, 1);
+  } finally { await cerrar(); }
+});
+
+test("AC-G3 control: la misma situación sin regla para descanso no notifica h-2", async () => {
+  const { reloj, api, cerrar } = await arrancar(semillaDescanso([]));
+  try {
+    assert.equal((await api("PUT", "/atencion", { modo: "DESCANSO", hasta: HASTA_DESCANSO })).status, 200);
+    reloj.t = T0 + 23 * H;
+    const c = (await api("GET", "/gemelo")).json;
+    assert.equal((await api("GET", "/atencion")).json.modo, "DESCANSO");
+    const h2 = c.mensajes.find((m: any) => m.tipo === "seguimiento" && m.asuntos.some((a: any) => a.elemento_id === "h-2"));
+    assert.ok(h2, "el seguimiento queda en el chat");
+    assert.equal(h2.notificado, false);
+    assert.equal(h2.silencio, "modo_activo");
+    assert.equal((await sondeoGemelo(api)).length, 0);
   } finally { await cerrar(); }
 });
 
