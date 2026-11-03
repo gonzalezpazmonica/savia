@@ -1,9 +1,9 @@
 ---
-version_bump: minor
+version_bump: patch
 section: Added
 ---
 
 ### Added
 
-- SE-504 PROPOSED: spec «Savia usable» — conversación natural con Savia en Space (streaming, adjuntos, voz, fuentes, tarjetas de acción con confirmación), visores de md/pdf/imagen/tabla, contexto visible, Continuidad en la conversación, primera experiencia sin terminal y AC de usabilidad con personas no técnicas (SUS ≥ 80, UEQ-S, 2 referentes).
+- SE-504 APPROVED (spec): Savia usable como la app de Claude o ChatGPT — barra superior, cajón con chats y Tareas/Proyectos, chat con compositor, tarjeta de permiso antes de cualquier efecto, visor de documentos, paleta neutra y tema del sistema; Savia escribe primero; dos carriles de inferencia (D1); prototipo aprobado en docs/specs/assets/SE-504-prototipo.html; slices S1-S4.
 
