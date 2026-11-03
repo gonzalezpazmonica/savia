@@ -195,3 +195,4 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-483 [APPROVED] Identidad: Savia, metaorquestadora agéntica de I+D+i — evidencia: docs/specs/SE-483-savia-identity-rd-metaorchestrator.spec.md
 - SE-484 [APPROVED] Onboarding adaptativo: Savia se configura para cualquier persona — evidencia: docs/specs/SE-484-adaptive-onboarding.spec.md
 - SE-489 [APPROVED] Vaults: recuperación adaptativa construida y medida (estructura, grafo, reranker, router y cuantización) — evidencia: docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md
+- SE-500 [APPROVED] Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado — evidencia: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md
