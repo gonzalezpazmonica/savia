@@ -25,7 +25,7 @@ import { Franja, Politica, estadoATexto, estadoDesdeTexto, estadoVacio, instanci
 import { type Listening, listenOnly } from "./listen.ts";
 import {
   type AccionPropuesta, type EstadoGemelo, ErrorDecision, type Grant, type MensajeGemelo, decidirAccion, detectarSeguimientos, emitirMensaje,
-  estadoGemeloVacio, latidoDebido, marcarResumen, podar, restaurarGemelo, resumenDebido, seleccionarResumen, validarConfigGemelo,
+  diaResumenDebido, estadoGemeloVacio, latidoDebido, marcarResumen, podar, restaurarGemelo, seleccionarResumen, validarConfigGemelo,
 } from "../core/gemelo.ts";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- cuerpos JSON del contrato */
@@ -545,8 +545,9 @@ export function crearServidor(opts: OpcionesServidor) {
     const g = o.gemelo;
     const t = ahora();
     if (!g.config.activo) return;
-    if (resumenDebido(g, o.avisos.resumenInicio, t)) {
-      marcarResumen(g, t);
+    const diaResumen = diaResumenDebido(g, o.avisos.resumenInicio, t);
+    if (diaResumen != null) {
+      marcarResumen(g, diaResumen);
       const asuntos = seleccionarResumen(elementosGemelo(o), t);
       // AC-G2: sin nada que decir, no hay mensaje ni notificación.
       if (asuntos.length) avisoGemelo(o, emitirMensaje(g, "resumen_manana", asuntos, t, `${o.ref}-${o.epoca}`.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 40)), t);

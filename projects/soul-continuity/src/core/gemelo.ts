@@ -124,16 +124,49 @@ export function validarConfigGemelo(c: unknown): c is ConfigGemelo {
     && Number.isInteger(x.latidoMin) && (x.latidoMin as number) >= 5 && (x.latidoMin as number) <= 240;
 }
 
-/** Estado guardado → estado usable; lo mal formado da `null` (fail-closed: nada se aprueba solo). */
+const MOTIVOS: readonly MotivoAsunto[] = ["espera_respuesta", "vence_hoy", "vence_manana", "depende_de_otros", "abierto", "cambio_importante"];
+const esNumONull = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
+
+/**
+ * Estado guardado → estado usable; lo mal formado da `null` y se empieza de cero (fail-closed:
+ * nada se aprueba solo y un estado corrupto no deja al operador en error en cada petición).
+ * Todo lo que es de Savia sale de plantillas deterministas, así que se recalcula y se compara:
+ * un texto o un contenido editado en disco no se sirve con `autor: "savia"`.
+ */
 export function restaurarGemelo(e: unknown): EstadoGemelo | null {
   const x = e as Partial<EstadoGemelo> | null;
   if (!x || x.v !== 1 || !Number.isInteger(x.seq) || !Array.isArray(x.mensajes) || !Array.isArray(x.acciones) || !Array.isArray(x.tratados)) return null;
   if (!validarConfigGemelo(x.config)) return null;
-  if (!x.acciones.every((a) => a && typeof a.id === "string" && ["propuesta", "aprobada", "descartada"].includes(a.estado as string))) return null;
-  // Una acción «aprobada» sin grant no es válida: se rechaza el estado entero.
-  if (x.acciones.some((a) => a.estado === "aprobada" && (!a.grant || typeof a.grant.hash !== "string" || a.grant.hash !== hashAccion(a)))) return null;
+  const asuntoOk = (a: unknown) => {
+    const y = a as Partial<Asunto> | null;
+    return !!y && typeof y.elementoId === "string" && MOTIVOS.includes(y.motivo as MotivoAsunto)
+      && esNumONull(y.esperaDesde) && esNumONull(y.vence) && (y.accionId === null || typeof y.accionId === "string");
+  };
+  const mensajeOk = (m: unknown) => {
+    const y = m as Partial<MensajeGemelo> | null;
+    return !!y && typeof y.id === "string" && Number.isInteger(y.seq) && (y.tipo === "resumen_manana" || y.tipo === "seguimiento")
+      && typeof y.creado === "number" && Number.isFinite(y.creado) && typeof y.notificado === "boolean" && (y.silencio === null || typeof y.silencio === "string")
+      && Array.isArray(y.asuntos) && y.asuntos.length <= MAX_ASUNTOS && y.asuntos.every(asuntoOk)
+      && y.texto === redactar(y.tipo, y.asuntos, y.creado);
+  };
+  if (!x.mensajes.every(mensajeOk)) return null;
+  const mensajes = x.mensajes as MensajeGemelo[];
+  const asuntoDe = new Map<string, Asunto>();
+  for (const m of mensajes) for (const a of m.asuntos) if (a.accionId != null) asuntoDe.set(a.accionId, a);
+  const accionOk = (a: unknown) => {
+    const y = a as Partial<AccionPropuesta> | null;
+    if (!y || typeof y.id !== "string" || !["propuesta", "aprobada", "descartada"].includes(y.estado as string)) return false;
+    const as = asuntoDe.get(y.id);
+    // Cada acción pertenece a un asunto de un mensaje y su contenido es la plantilla de ese asunto.
+    if (!as || y.elementoId !== as.elementoId || y.tipo !== TIPO_ACCION[as.motivo] || y.contenido !== plantilla(y.tipo, as) || y.generadoPor !== "plantilla") return false;
+    if (typeof y.creada !== "number" || !esNumONull(y.decididaEn) || ![null, "entregada", "sin_ejecutor"].includes(y.ejecucion as string | null)) return false;
+    // Una acción «aprobada» sin grant válido no es válida: se rechaza el estado entero.
+    if (y.estado === "aprobada") return !!y.grant && typeof y.grant.hash === "string" && y.grant.hash === hashAccion(y as AccionPropuesta) && y.ejecucion != null;
+    return y.estado === "descartada" ? y.grant === null && y.ejecucion === null : y.grant === null && y.decididaEn === null && y.ejecucion === null;
+  };
+  if (!x.acciones.every(accionOk)) return null;
   return {
-    v: 1, config: x.config as ConfigGemelo, seq: x.seq as number, mensajes: x.mensajes as MensajeGemelo[], acciones: x.acciones as AccionPropuesta[],
+    v: 1, config: x.config as ConfigGemelo, seq: x.seq as number, mensajes, acciones: x.acciones as AccionPropuesta[],
     tratados: (x.tratados as unknown[]).filter((k): k is string => typeof k === "string"),
     ultimoLatido: typeof x.ultimoLatido === "number" ? x.ultimoLatido : null,
     ultimoResumenDia: typeof x.ultimoResumenDia === "number" ? x.ultimoResumenDia : null,
@@ -273,17 +306,26 @@ export function emitirMensaje(est: EstadoGemelo, tipo: TipoMensaje, asuntos: Asu
   return m;
 }
 
-/** ¿Toca el resumen de la mañana? `hhmm` en UTC, como los resúmenes de SE-490 en la API. */
-export function resumenDebido(est: EstadoGemelo, hhmm: string | null, ahora: number): boolean {
-  if (!est.config.activo || hhmm == null || !/^\d{2}:\d{2}$/.test(hhmm)) return false;
+/**
+ * Día (00:00 UTC) del resumen de la mañana que toca ahora, o `null`. `hhmm` en UTC, como los
+ * resúmenes de SE-490 en la API. Se mira también el de ayer: con la hora cerca de medianoche,
+ * la tolerancia cruza al día siguiente y ese resumen sigue debido.
+ */
+export function diaResumenDebido(est: EstadoGemelo, hhmm: string | null, ahora: number): number | null {
+  if (!est.config.activo || hhmm == null || !/^\d{2}:\d{2}$/.test(hhmm)) return null;
   const [h, m] = hhmm.split(":").map(Number);
-  if (h > 23 || m > 59) return false;
-  const programado = diaDe(ahora) + h * HORA + m * MIN;
-  if (ahora < programado || ahora - programado > TOLERANCIA_RESUMEN_MS) return false;
-  return est.ultimoResumenDia !== diaDe(ahora);
+  if (h > 23 || m > 59) return null;
+  for (const dia of [diaDe(ahora), diaDe(ahora) - DIA]) {
+    const programado = dia + h * HORA + m * MIN;
+    if (ahora >= programado && ahora - programado <= TOLERANCIA_RESUMEN_MS) return est.ultimoResumenDia === dia ? null : dia;
+  }
+  return null;
 }
 
-export function marcarResumen(est: EstadoGemelo, ahora: number): void { est.ultimoResumenDia = diaDe(ahora); }
+export function resumenDebido(est: EstadoGemelo, hhmm: string | null, ahora: number): boolean { return diaResumenDebido(est, hhmm, ahora) != null; }
+
+/** Marca emitido el resumen del día de `t` (pásale el día que devuelve `diaResumenDebido`). */
+export function marcarResumen(est: EstadoGemelo, t: number): void { est.ultimoResumenDia = diaDe(t); }
 
 export function latidoDebido(est: EstadoGemelo, ahora: number): boolean {
   return est.config.activo && (est.ultimoLatido == null || ahora - est.ultimoLatido >= est.config.latidoMin * MIN);
@@ -315,7 +357,14 @@ export function decidirAccion(
   const g: Grant = { en: ahora, dispositivo: quien.dispositivo, hash: hashAccion(a) };
   a.grant = g;
   a.estado = "aprobada";
-  if (ejecutor) { ejecutor(a, g); a.ejecucion = "entregada"; } else a.ejecucion = "sin_ejecutor";
+  if (!ejecutor) { a.ejecucion = "sin_ejecutor"; return a; }
+  try { ejecutor(a, g); } catch (err) {
+    // Si el ejecutor falla, la acción vuelve a propuesta: no queda «aprobada» sin entregar y
+    // la persona puede volver a aprobarla.
+    a.grant = null; a.estado = "propuesta"; a.decididaEn = null;
+    throw err;
+  }
+  a.ejecucion = "entregada";
   return a;
 }
 

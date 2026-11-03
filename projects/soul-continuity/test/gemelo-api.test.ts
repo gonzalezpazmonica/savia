@@ -243,3 +243,19 @@ test("latido sin petición de la app (tic de serve) y estado persistido; una apr
     assert.ok(acc.every((a) => a.estado !== "aprobada"), "nada queda aprobado sin la persona");
   } finally { await x.cerrar(); }
 });
+
+test("un estado del gemelo corrupto en disco no deja al operador en error: se empieza de cero", async () => {
+  const disco = new Map<string, EstadoAtencion>();
+  const persistencia = { cargar: (r: string) => structuredClone(disco.get(r) ?? null), guardar: (r: string, e: EstadoAtencion) => { disco.set(r, structuredClone(e)); } };
+  const s = semilla({ elementos: [el("h-1", "hilo_espera", { nace: T0 - 30 * H })] });
+  let x = await arrancar(s, { persistencia });
+  try { assert.equal((await x.api("GET", "/gemelo")).json.mensajes.length, 1); } finally { await x.cerrar(); }
+  (disco.get("op") as any).gemelo.mensajes[0].asuntos = { roto: true };
+  x = await arrancar(s, { persistencia });
+  try {
+    x.reloj.t = T0 + 5 * MIN;
+    const r = await x.api("GET", "/gemelo");
+    assert.equal(r.status, 200);
+    assert.ok(r.json.mensajes.every((m: any) => Array.isArray(m.asuntos)));
+  } finally { await x.cerrar(); }
+});

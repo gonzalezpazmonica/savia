@@ -509,11 +509,12 @@
           "ejecucion": { "enum": ["entregada", "sin_ejecutor", null], "description": "Tras aprobar: `entregada` al ejecutor o `sin_ejecutor` (Soul v1 no escribe en las fuentes; la persona usa el contenido)." },
           "grant": {
             "oneOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["en", "hash"], "properties": { "en": { "type": "string", "format": "date-time" }, "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } }],
-            "description": "Registro de la aprobación de esta acción concreta (sha256 de tipo, elemento y contenido)."
+            "description": "Registro de la aprobación de esta acción concreta (sha256 de tipo, elemento y contenido). Es un control de coherencia, no una firma: el hash no lleva clave y quien pueda escribir el estado local podría fabricarlo; al restaurar, una acción aprobada nunca se ejecuta."
           }
         }
       },
       "AsuntoGemelo": {
+        "description": "Con `recuentos` viajan el id opaco, el motivo, las fechas y la acción (plantilla de Savia), como los ids del sondeo; nunca títulos, detalles ni nombres de terceros.",
         "type": "object", "additionalProperties": false, "required": ["elemento_id", "motivo", "enlace", "espera_desde", "vence_en", "titulo", "accion"],
         "properties": {
           "elemento_id": { "$ref": "#/components/schemas/IdOpaco" },

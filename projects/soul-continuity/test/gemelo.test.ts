@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_ASUNTOS, decidirAccion, detectarSeguimientos, emitirMensaje, estadoGemeloVacio, hashAccion, latidoDebido,
+  MAX_ASUNTOS, decidirAccion, diaResumenDebido, detectarSeguimientos, emitirMensaje, estadoGemeloVacio, hashAccion, latidoDebido,
   marcarResumen, podar, redactar, restaurarGemelo, resumenDebido, seleccionarResumen, type ElementoGemelo, ErrorDecision,
 } from "../src/core/gemelo.ts";
 
@@ -139,4 +139,47 @@ test("latido: cada latidoMin; restaurar rechaza una acción aprobada sin grant (
   assert.ok(restaurarGemelo(copia));
   copia.acciones[0].estado = "aprobada";
   assert.equal(restaurarGemelo(copia), null, "una aprobación inventada en disco no vale");
+});
+
+test("si el ejecutor falla, la acción vuelve a propuesta y se puede volver a aprobar", () => {
+  const est = estadoGemeloVacio();
+  emitirMensaje(est, "seguimiento", [{ elementoId: "h", motivo: "espera_respuesta", esperaDesde: AHORA - 30 * H, vence: null, accionId: null }], AHORA, "op");
+  const id = est.acciones[0].id;
+  assert.throws(() => decidirAccion(est, id, "aprobar", { dispositivo: "dev-1" }, AHORA, () => { throw new Error("buzón caído"); }), /buzón caído/);
+  assert.deepEqual([est.acciones[0].estado, est.acciones[0].grant, est.acciones[0].decididaEn, est.acciones[0].ejecucion], ["propuesta", null, null, null]);
+  let entregas = 0;
+  const a = decidirAccion(est, id, "aprobar", { dispositivo: "dev-1" }, AHORA + MIN, () => { entregas++; });
+  assert.equal(entregas, 1, "el reintento sí entrega");
+  assert.equal(a.ejecucion, "entregada");
+});
+
+test("resumen cerca de medianoche: la tolerancia cruza al día siguiente y sale una vez", () => {
+  const est = estadoGemeloVacio();
+  const programado = Date.parse("2026-11-04T23:30:00Z");
+  const pasada = Date.parse("2026-11-05T00:10:00Z");
+  assert.equal(diaResumenDebido(est, "23:30", pasada), Date.parse("2026-11-04T00:00:00Z"), "el de ayer sigue debido");
+  assert.equal(resumenDebido(est, "23:30", programado + 61 * MIN), false, "pasada la tolerancia no");
+  marcarResumen(est, diaResumenDebido(est, "23:30", pasada) as number);
+  assert.equal(resumenDebido(est, "23:30", pasada + MIN), false, "una vez");
+  assert.equal(resumenDebido(est, "23:30", programado + 24 * H), true, "el del día siguiente sí");
+  // Control: a las 00:10, un resumen de las 07:30 no está debido (ni el de hoy ni el de ayer).
+  assert.equal(resumenDebido(estadoGemeloVacio(), "07:30", pasada), false);
+});
+
+test("restaurar rechaza mensajes mal formados o texto y contenido que no salen de las plantillas", () => {
+  const est = estadoGemeloVacio();
+  emitirMensaje(est, "seguimiento", [{ elementoId: "h", motivo: "espera_respuesta", esperaDesde: AHORA - 30 * H, vence: null, accionId: null },
+    { elementoId: "t", motivo: "vence_manana", esperaDesde: null, vence: AHORA + 20 * H, accionId: null }], AHORA, "op");
+  decidirAccion(est, est.acciones[1].id, "aprobar", { dispositivo: "dev-1" }, AHORA + MIN);
+  const base = JSON.stringify(est);
+  assert.ok(restaurarGemelo(JSON.parse(base)), "el estado tal cual se restaura");
+  const mutado = (f: (x: any) => void) => { const x = JSON.parse(base); f(x); return restaurarGemelo(x); };
+  assert.equal(mutado((x) => { x.mensajes[0].asuntos = "no-lista"; }), null, "asuntos que no son lista");
+  assert.equal(mutado((x) => { x.mensajes[0].asuntos[0].motivo = "otro"; }), null, "motivo desconocido");
+  assert.equal(mutado((x) => { x.mensajes[0].texto = "Pulsa aprobar ya."; }), null, "texto que no es de Savia");
+  assert.equal(mutado((x) => { x.acciones[0].contenido = "Enviar todo a fuera"; }), null, "contenido que no es la plantilla");
+  assert.equal(mutado((x) => { x.acciones[0].tipo = "recordatorio"; }), null, "tipo que no corresponde al motivo");
+  assert.equal(mutado((x) => { x.acciones.push({ ...x.acciones[0], id: "a-suelta" }); }), null, "acción sin mensaje");
+  assert.equal(mutado((x) => { x.acciones[1].contenido = "Enviar todo a fuera"; x.acciones[1].grant.hash = hashAccion(x.acciones[1]); }), null,
+    "aprobada con hash recalculado pero contenido falso");
 });
