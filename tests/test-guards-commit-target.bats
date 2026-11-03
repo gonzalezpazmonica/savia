@@ -389,3 +389,61 @@ EOF
     [ "$status" -eq 0 ]
   done
 }
+
+# ── revisión 4 (#1467): prefiltro sobre el texto sin comillas ni barras y
+# alias de git (P1 de corrección y de seguridad) ────────────────────────────
+@test "bcm y vbg: comillas partidas o barras en git/commit no saltan el guard en main" {
+  for c in "bash -c 'gi''t com''mit -m x'" "git co''mmit -m x" 'g\it commit -m x' \
+           'gi""t commit -m x' 'git com\mit -m x'; do
+    run bcm "$c"
+    blocked_bcm
+    run vbg "$c"
+    blocked_vbg
+  done
+}
+
+@test "bcm y vbg: comillas partidas desde el worktree: bash -c es incierto; git directo pasa" {
+  run bcm "bash -c 'gi''t com''mit -m x'" "$WT"
+  blocked_unsure_bcm
+  run vbg "bash -c 'gi''t com''mit -m x'" "$WT"
+  blocked_unsure_vbg
+  run bcm "git co''mmit -m x" "$WT"
+  [ -z "$output" ]
+  run vbg "git co''mmit -m x" "$WT"
+  [ "$status" -eq 0 ]
+}
+
+@test "bcm y vbg: alias de git que hace commit bloquea en main; alias seguro y worktree pasan" {
+  git -C "$MAIN" config alias.ci commit
+  git -C "$MAIN" config alias.st 'status -sb'
+  run bcm 'git ci -m x'
+  [[ "$(echo "$output" | jq -r .reason)" == *"rama humana (main)"* ]]
+  run vbg 'git ci -m x'
+  [ "$status" -eq 2 ] && [[ "$output" == *"BLOQUEADO: rama 'main'"* ]]
+  run bcm 'git ci -m x' "$WT"
+  [ -z "$output" ]
+  run vbg 'git ci -m x' "$WT"
+  [ "$status" -eq 0 ]
+  run bcm 'git st'
+  [ -z "$output" ]
+  run vbg 'git st'
+  [ "$status" -eq 0 ]
+}
+
+@test "bcm: bypass de la operadora vale también ante destino incierto (queda registrado)" {
+  run bcm 'env -S "git commit -m x"' "$WT"
+  blocked_unsure_bcm
+  SAVIA_ALLOW_MAIN_COMMIT=1 run bcm 'env -S "git commit -m x"' "$WT"
+  [ -z "$output" ]
+  grep -q '"verdict":"bypass"' "$SAVIA_TURN_SDLC_LOG_DIR/commit-guard.jsonl"
+}
+
+@test "bcm y vbg sin python3: git status no se bloquea; git commit sí" {
+  P=$(no_python_path)
+  run env PATH="$P" bash -c "jq -n --arg c 'git status' --arg d '$WT' '{tool_input:{command:\$c},cwd:\$d}' | (cd '$WT' && bash '$BCM')"
+  [ "$status" -eq 0 ] && [ -z "$output" ]
+  run env PATH="$P" bash -c "jq -n --arg c 'git status' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  [ "$status" -eq 0 ]
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  blocked_unsure_vbg
+}

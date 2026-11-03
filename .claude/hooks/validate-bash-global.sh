@@ -37,11 +37,14 @@ fi
 
 if [[ "$STRING_COMMAND" -eq 1 && -n "$COMMAND" ]]; then
   COMMAND_LOWER="${COMMAND,,}"
-  RELEVANCE_ERE='(^|[^a-z0-9_])(git|rm|chmod|curl|gh|sudo)([^a-z0-9_]|$)'
+  # Sin comillas ni barras: `gi''t co\mmit` es git commit para bash.
+  COMMAND_LOWER_PLAIN=$(printf '%s' "$COMMAND_LOWER" | tr -d "\"'\\\\")
+  RELEVANCE_ERE='(^|[^a-z0-9_])(git|rm|chmod|curl|gh|sudo|commit)([^a-z0-9_]|$)'
   # The legacy grep rules are intentionally not rewritten in F5A. Keep their
   # historical embedded-word matches on the full path as a conservative guard.
   LEGACY_RULE_ERE='git[[:space:]]+(commit|add)|rm[[:space:]]+-rf[[:space:]]+/|chmod[[:space:]]+777|curl[[:space:]]+.*\|[[:space:]]*(ba)?sh|gh[[:space:]]+pr[[:space:]]+review.*--approve|gh[[:space:]]+pr[[:space:]]+merge.*--admin|^[[:space:]]*sudo[[:space:]]'
   if ! [[ "$COMMAND_LOWER" =~ $RELEVANCE_ERE ]] \
+    && ! [[ "$COMMAND_LOWER_PLAIN" =~ $RELEVANCE_ERE ]] \
     && ! [[ "$COMMAND_LOWER" =~ $LEGACY_RULE_ERE ]]; then
     exit 0
   fi
@@ -82,11 +85,15 @@ guard_main_target() {
     exit 2
   fi
 }
-# Prefiltro amplio: `git -C <ruta> commit` no casa con `git +commit`; commit-tree
-# también crea commits. Qué es
+# Prefiltro amplio sobre el texto sin comillas ni barras (como el resolvedor y
+# el guard TS: `gi''t co\mmit` también cuenta). `git` solo basta (un alias
+# puede hacer commit) y `commit` solo también (`$x commit` con x=git). Qué es
 # una orden real lo decide el resolvedor.
-if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/null \
-   && echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_-])(commit(-tree)?|add)([^[:alnum:]_-]|$)' > /dev/null; then
+_PLAIN=$(printf '%s' "$COMMAND" | tr -d "\"'\\\\")
+_HAS_GIT=""; _HAS_OP=""
+echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' && _HAS_GIT=1
+echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])(commit(-tree)?|add)([^[:alnum:]_-]|$)' && _HAS_OP=1
+if [[ -n "$_HAS_GIT" ]] || echo "$_PLAIN" | grep -iqE '(^|[^[:alnum:]_-])commit(-tree)?([^[:alnum:]_-]|$)'; then
   GIT_DIR_TARGET="${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-$PWD}}"
   if git -C "$ENTRY_PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # SE-383 P8 (worktree-aware): el cwd de entrada manda sobre el proyecto.
@@ -95,11 +102,12 @@ if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/nul
   # El repo que importa es el DESTINO de cada `git commit|add` real (git -C,
   # cd encadenado con o sin comillas y con ~, variables literales); heredocs
   # y cadenas son texto. Destino no resoluble → GIT_DIR_TARGET (conservador).
-  # Sin Python o si el resolvedor falla: cwd de la orden (conservador solo si
-  # ese cwd está en main; el destino de `git -C` no se mira).
+  # Sin Python, sin resolvedor o si falla: BLOQUEAR lo que dice git y commit|add.
   RESOLVER="$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/git_op_targets.py"
+  # `timeout` no viene de serie en macOS: sin él, el resolvedor corre sin límite.
+  _TIMEOUT=(); command -v timeout >/dev/null 2>&1 && _TIMEOUT=(timeout 5)
   if command -v python3 >/dev/null 2>&1 \
-     && OP_TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$GIT_DIR_TARGET" 2>/dev/null); then
+     && OP_TARGETS=$(printf '%s' "$COMMAND" | "${_TIMEOUT[@]}" python3 "$RESOLVER" "$GIT_DIR_TARGET" 2>/dev/null); then
     while IFS=$'\t' read -r _op _dir; do
       [[ -n "$_op" ]] || continue
       if [[ -z "$_dir" ]]; then
@@ -112,8 +120,9 @@ if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/nul
         guard_main_target "$GIT_DIR_TARGET"
       fi
     done <<< "$OP_TARGETS"
-  else
-    # Sin Python, timeout o fallo del resolvedor: fail-closed.
+  elif [[ -n "$_HAS_GIT" && -n "$_HAS_OP" ]]; then
+    # Sin Python, timeout o fallo del resolvedor: fail-closed (solo lo que dice
+    # git y commit|add; el prefiltro amplio dejaría sin servicio `git status`).
     echo "BLOQUEADO: resolvedor de destino no disponible para git commit/add (fail-closed). Forma admitida: git -C <ruta> commit …" >&2
     exit 2
   fi
