@@ -1705,15 +1705,6 @@
       "evidence": "docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md",
       "approval": "Operadora 2026-11-03: AskUserQuestion (Aprobada, lanza S1 y S2); se formaliza al fusionar la PR (SE-488)",
       "phase": "A"
-    },
-    {
-      "id": "SE-493",
-      "status": "PROPOSED",
-      "priority": "P0",
-      "title": "Effect Ledger y reconciliación de efectos ambiguos",
-      "note": "Ledger único de efectos con clave idempotente, huella de argumentos, write-ahead de DISPATCHED, sonda remota y estado NEEDS_REVIEW; ningún estado ambiguo devuelve «adelante». Recibo encadenado y verificable. Corrige que f5-state.sh y push-pr.sh permiten repetir un merge de resultado incierto y que effect-reservation.sh cuenta como cierre sin consumidores. Origen: análisis de repos externos (SAVIA-RESEARCH-01, V1); patrón de OpenRath sin adoptar el producto.",
-      "evidence": "docs/specs/SE-493-effect-ledger-ambiguous-reconciliation.spec.md",
-      "phase": "A"
     }
   ],
   "route": {

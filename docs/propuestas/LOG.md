@@ -6,10 +6,6 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
-## 2026-11-02 SE-493 PROPOSED
-
-Effect Ledger y reconciliación de efectos ambiguos, desde el análisis de repos externos (SAVIA-RESEARCH-01, V1), contrastado con main.
-
 ## 2026-11-03 SE-500 APPROVED
 
 Aprobada por la operadora por pregunta interactiva el 2026-11-03 («Aprobada, lanza S1 y S2»); se formaliza al fusionar la PR (SE-488).
