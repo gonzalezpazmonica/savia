@@ -3,10 +3,17 @@
 # Usage: planning-transition.sh check <ID>
 set -uo pipefail
 ROOT="${REPO_ROOT:-$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)}"
-STATE="$ROOT/docs/propuestas/planning-state.json"
 MAIN_REF="${PLANNING_MAIN_REF:-origin/main}"
 [[ "${1:-}" == "check" && -n "${2:-}" ]] || {
   echo "uso: planning-transition.sh check SE-NNN" >&2
+  exit 1
+}
+# SE-500 S1: lee la vista (base + docs/propuestas/planning.d/), no solo la base.
+VIEW_DIR=$(mktemp -d) || exit 1
+trap 'rm -rf "$VIEW_DIR"' EXIT
+STATE="$VIEW_DIR/planning-state.json"
+python3 "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/planning-view.py" --root "$ROOT" state > "$STATE" || {
+  echo "FAIL: vista de planificación no construible (bash scripts/roadmap.sh validate)"
   exit 1
 }
 ID="${2:-}"

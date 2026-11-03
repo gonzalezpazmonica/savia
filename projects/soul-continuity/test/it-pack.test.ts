@@ -3,8 +3,11 @@
  * citan el código que respaldan sus afirmaciones. Este test comprueba que cada cita
  * a este proyecto apunta a un fichero que existe y a líneas que existen, que están
  * los apartados que pide la spec y que cada hueco y cada referencia del anexo citados
- * están definidos (y al revés).
- * Las citas a otras ramas (`[adapters] …`, `[web] …`, `[atencion] …`) no se comprueban aquí.
+ * están definidos (y al revés). Una cita seguida de «(`símbolo`» tiene que contener ese
+ * símbolo en sus líneas: así se detectan las citas desplazadas.
+ * Con las partes ya integradas, el documento de transparencia no cita otras ramas; en el
+ * modelo de amenazas, una cita a otra rama (`[web] …`) no se comprobaría y por eso se prohíbe
+ * también en el documento de transparencia.
  * Límites: solo se reconocen citas con línea (`ruta:N`) a ficheros con extensión; una cita
  * sin línea (`package.json`) no se comprueba. El mínimo de 40 citas por documento detecta
  * un colapso del formato, no la pérdida de unas pocas citas.
@@ -20,7 +23,7 @@ const PROJECT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const IT_PACK = join(PROJECT, "..", "..", "docs", "soul-continuity-it-pack.md");
 const CANAL = join(PROJECT, "docs", "canal-amenazas.md");
 
-interface Cita { file: string; ranges: [number, number][]; at: number }
+interface Cita { file: string; ranges: [number, number][]; at: number; nombre: string | null }
 
 /** Citas `ruta:N`, `ruta:N-M`, `ruta:N,M` y continuaciones `:N` sobre la última ruta de la misma línea. */
 export function citas(md: string): Cita[] {
@@ -40,7 +43,9 @@ export function citas(md: string): Cita[] {
         const [a, b = a] = p.split("-").map((x) => (x === "" ? NaN : Number(x)));
         return [a, b];
       });
-      out.push({ file, ranges, at: i + 1 });
+      // «`ruta:N-M` (`símbolo`…»: la cita nombra lo que hay en esas líneas.
+      const tras = /^ \(`([A-Za-z_$][\w$]*)`/.exec(line.slice((m.index ?? 0) + m[0].length));
+      out.push({ file, ranges, at: i + 1, nombre: tras ? tras[1] : null });
     }
   });
   return out;
@@ -67,8 +72,46 @@ function comprobarCitas(md: string, nombre: string): number {
   return cs.length;
 }
 
+/** Una cita que nombra un símbolo tiene que contenerlo en sus líneas: detecta citas desplazadas. */
+function comprobarNombres(md: string, nombre: string): number {
+  const cs = citas(md).filter((c) => c.nombre);
+  for (const c of cs) {
+    const texto = readFileSync(resolve(PROJECT, c.file), "utf8").split("\n");
+    const extremos = c.ranges.flat();
+    const tramo = texto.slice(Math.min(...extremos) - 1, Math.max(...extremos)).join("\n");
+    const donde = c.ranges.map(([a, b]) => (a === b ? `${a}` : `${a}-${b}`)).join(",");
+    assert.ok(tramo.includes(c.nombre as string), `${nombre}:${c.at}: ${c.file}:${donde} no contiene \`${c.nombre}\``);
+  }
+  return cs.length;
+}
+
 test("las citas al código del documento de transparencia existen", () => {
   assert.ok(comprobarCitas(readFileSync(IT_PACK, "utf8"), "it-pack") >= 40, "el anexo debe citar el código");
+});
+
+test("las citas que nombran un símbolo apuntan a las líneas donde está (no desplazadas)", () => {
+  const md = readFileSync(IT_PACK, "utf8") + "\n" + readFileSync(CANAL, "utf8");
+  assert.ok(comprobarNombres(md, "docs") >= 10, "el anexo nombra lo que cita");
+});
+
+test("negativo: una cita con nombre desplazada se detecta; la buena pasa", () => {
+  const src = readFileSync(join(PROJECT, "src/api/dpop.ts"), "utf8").split("\n");
+  const l = src.findIndex((x) => x.includes("export function makeDpopVerifier")) + 1;
+  assert.ok(l > 1);
+  assert.equal(comprobarNombres(`\`src/api/dpop.ts:${l}\` (\`makeDpopVerifier\`)`, "x"), 1);
+  assert.throws(() => comprobarNombres(`\`src/api/dpop.ts:${l - 1}\` (\`makeDpopVerifier\`)`, "x"), /no contiene `makeDpopVerifier`/);
+  assert.throws(() => comprobarNombres(`\`src/api/listen.ts:1\` y \`:2\` (\`makeDpopVerifier\`)`, "x"), /no contiene/);
+});
+
+test("el documento de transparencia describe el código integrado: ninguna cita a otra rama", () => {
+  const md = readFileSync(IT_PACK, "utf8");
+  assert.doesNotMatch(md, /`\[(adapters|web|atencion)\] /, "una cita a otra rama no se comprueba contra el código");
+});
+
+test("los huecos H-1…H-5 y H-11 constan como cerrados y cada cierre cita su prueba en el anexo", () => {
+  const md = readFileSync(IT_PACK, "utf8");
+  for (const h of ["H-1", "H-2", "H-3", "H-4", "H-5", "H-11"]) assert.match(md, new RegExp(`^\\| ${h} \\| Cerrado`, "m"), h);
+  for (const a of ["A32", "A33", "A34", "A35", "A36", "A39", "A40", "A41", "A42", "A43", "A44", "A45"]) assert.match(md, new RegExp(`^- \\*\\*${a}\\*\\* `, "m"), a);
 });
 
 test("las citas al código del modelo de amenazas del canal existen", () => {
@@ -151,7 +194,7 @@ test("cada referencia [An] del documento de transparencia está en el anexo, y c
 
 test("negativo: hueco sin definir, numeración con saltos y referencia del anexo huérfana se detectan", () => {
   const md = readFileSync(IT_PACK, "utf8");
-  assert.ok(problemasHuecosItPack(md.replace("Ver H-3 y H-4", "Ver H-3 y H-42")).some((p) => p.includes("H-42 se cita")));
+  assert.ok(problemasHuecosItPack(md.replace("Ver H-7 sobre", "Ver H-42 sobre")).some((p) => p.includes("H-42 se cita")));
   assert.ok(problemasHuecosItPack(md.replace("| H-2 |", "| H-20 |")).some((p) => p.includes("no contigua")));
   assert.ok(problemasAnexo(md.replace("[A25]", "[A99]")).some((p) => p.includes("[A99] se cita")));
   assert.ok(problemasAnexo(md.replace("[A25]", "")).some((p) => p.includes("A25 está en el anexo pero no se cita")));

@@ -1,0 +1,866 @@
+#!/usr/bin/env bats
+# Ref: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md (S2, AC-9 a AC-16)
+# Integración en línea dentro de run: resolutor congelado, equivalencia ampliada y métricas. gh falso, nunca GitHub.
+# El arnés (gh falso, repo con remoto bare) es el de tests/test-merge-sprint.bats; el temporal lo limpia bats.
+
+SCRIPT="scripts/merge-sprint.sh"
+
+setup() {
+  TMPDIR_T="$BATS_TEST_TMPDIR"
+  export MERGE_SPRINT_HOME="$TMPDIR_T/state"
+  export MERGE_SPRINT_POLICY="$TMPDIR_T/policy.conf"
+  export MERGE_SPRINT_POLL_S=0 MERGE_SPRINT_MAIN_POLLS=2 MERGE_SPRINT_CI_POLLS=1 MERGE_SPRINT_CI_SETTLE_S=0
+  export MERGE_SPRINT_RESYNC=0   # los tests v1 no re-sincronizan; los v2 lo activan con v2_repo
+  printf 'allowed_tiers=1,2,3\nttl_hours=12\nmax_merges=40\nmax_prs=50\n' > "$MERGE_SPRINT_POLICY"
+  export FAKE="$TMPDIR_T/fake"; mkdir -p "$FAKE" "$TMPDIR_T/bin"
+  # gh falso: estado en $FAKE/<pr>.{head,files,checks,state,base,repo,reopens,on_merge}, $FAKE/main_ci,
+  # $FAKE/required (checks obligatorios de main), log de merges en $FAKE/merged y de llamadas en $FAKE/calls
+  cat > "$TMPDIR_T/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+F="$FAKE"; a="$*"; echo "$a" >> "$F/calls"
+case "$1 $2" in
+  "pr list") ls "$F" | sed -n 's/^\([0-9]*\)\.head$/\1/p' | while read -r n; do [[ "$(cat "$F/$n.state" 2>/dev/null || echo OPEN)" == OPEN ]] && echo "$n"; done | sort -n ;;
+  "pr view")
+    n=$3
+    case "$a" in
+      *headRefOid*) if [[ -f "$F/$n.branch" ]]; then git --git-dir="$BARE" rev-parse "refs/heads/$(cat "$F/$n.branch")"; else cat "$F/$n.head"; fi ;;
+      *headRefName*) cat "$F/$n.branch" ;;
+      *baseRefName*) cat "$F/$n.base" 2>/dev/null || echo main ;;
+      *headRepository*) cat "$F/$n.repo" 2>/dev/null || echo owner/repo ;;
+      *mergeStateStatus*) cat "$F/$n.mss" 2>/dev/null || echo CLEAN ;;
+      *isDraft*) cat "$F/$n.draft" 2>/dev/null || echo true ;;
+      *mergedBy*) cat "$F/$n.merged_by" 2>/dev/null || echo executor ;;
+      *mergeCommit*) [[ -f "$F/$n.on_mc" ]] && bash "$F/$n.on_mc"; [[ -f "$F/$n.mc_fail" ]] && exit 1; printf 'c%039d\n' "$n" ;;
+      *state*) [[ -f "$F/$n.state_fail" ]] && exit 1
+               [[ "$a" == *"-q .state"* && -f "$F/$n.on_f5state" ]] && bash "$F/$n.on_f5state"   # consulta de f5-state.sh
+               cat "$F/$n.state" 2>/dev/null || echo OPEN ;;
+    esac ;;
+  "pr diff") cat "$F/$3.files" ;;
+  "pr checks") printf 'CI\t%s\n' "$(cat "$F/$3.checks" 2>/dev/null || echo pass)" ;;
+  "pr ready"|"label create"|"label delete") exit 0 ;;
+  "pr edit") exit 1 ;;   # como en GitHub desde la deprecación de Projects (classic)
+  "label list") cat "$F/labels" 2>/dev/null ;;
+  "pr merge") # rama protegida «al día»: rechaza el merge si main no está integrada en la rama del PR
+              if [[ -f "$F/$3.require_uptodate" ]] && ! git --git-dir="$BARE" merge-base --is-ancestor refs/heads/main "refs/heads/$(cat "$F/$3.branch")"; then
+                echo BEHIND > "$F/$3.mss"; exit 1; fi
+              if [[ -f "$F/$3.reject" ]]; then n=$(cat "$F/$3.reject"); (( n > 0 )) && { echo $((n-1)) > "$F/$3.reject"; exit 1; }; fi
+              echo "$3" >> "$F/merged"; echo MERGED > "$F/$3.state"
+              [[ -f "$F/$3.on_merge" ]] && GHPPID=$PPID bash "$F/$3.on_merge"; exit 0 ;;
+  *)
+    case "$a" in
+      api*protection/required_status_checks*) cat "$F/required" 2>/dev/null ;;
+      api*/issues/*/events*) n=$(sed -E 's|.*/issues/([0-9]+)/events.*|\1|' <<<"$a"); cat "$F/$n.reopens" 2>/dev/null || echo 0 ;;
+      api*check-runs*) cat "$F/main_ci" 2>/dev/null || echo pass ;;
+      "api user"*) echo executor ;;
+      "api -X POST repos/"*"/issues/"*"/labels"*|"api -X DELETE repos/"*"/issues/"*"/labels/"*) exit 0 ;;
+      *) exit 1 ;;
+    esac ;;
+esac
+EOF
+  chmod +x "$TMPDIR_T/bin/gh"; export GH="$TMPDIR_T/bin/gh"; export PATH="$TMPDIR_T/bin:$PATH"
+  echo CI > "$FAKE/required"
+  # Repo git temporal con remoto bare: origin/main lleva el ejecutor y el clasificador de este árbol
+  export BARE="$TMPDIR_T/origin.git"; git init -q --bare "$BARE"
+  export MERGE_SPRINT_GIT_ROOT="$TMPDIR_T/clone"
+  git clone -q "$BARE" "$MERGE_SPRINT_GIT_ROOT" 2>/dev/null
+  git -C "$MERGE_SPRINT_GIT_ROOT" config user.email t@t; git -C "$MERGE_SPRINT_GIT_ROOT" config user.name t
+  git -C "$MERGE_SPRINT_GIT_ROOT" config commit.gpgsign false
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"
+  cp scripts/merge-sprint.sh scripts/risk-tier.py scripts/f5-state.sh scripts/merge-registry-resolve.py "$MERGE_SPRINT_GIT_ROOT/scripts/"
+  echo base > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G add a.txt scripts; G commit -qm base; G branch -M main; G push -q origin main
+}
+
+G() { git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "$@"; }
+
+
+sha_of() { printf '%040d' "$1" | tr 0 a; }
+
+mkpr() {  # mkpr <n> <ficheros>
+  sha_of "$1" > "$FAKE/$1.head"; echo "$2" > "$FAKE/$1.files"
+}
+
+review() {  # review <n> <verdict> <role> [reviewer] [p1]
+  local f="$TMPDIR_T/rev-$1-$3.md"
+  echo "VERDICT: $2 pr=$1 sha=$(sha_of "$1") role=$3 tier=2 reviewer=${4:-rev-agent} author=impl-agent p0=0 p1=${5:-0} p2=0 p2_blocking=0" > "$f"
+  bash "$SCRIPT" review-register "$1" "$f"
+}
+
+regrant() {  # grant nuevo sobre el mismo manifiesto: un sprint parado solo se reanuda así
+  bash "$SCRIPT" grant "$(sha256sum < "$MERGE_SPRINT_HOME/manifest.json" | cut -d' ' -f1)" >/dev/null
+}
+
+plan_and_grant() {
+  run bash "$SCRIPT" plan; [ "$status" -eq 0 ]
+  local d; d=$(echo "$output" | sed -n 's/^digest: //p')
+  run bash "$SCRIPT" grant "$d"; [ "$status" -eq 0 ]
+}
+
+v2_pr() {  # v2_pr <n> <fichero> <contenido> : rama pr-<n> con un commit; registra la revisión sobre su head
+  G switch -q -c "pr-$1" main; mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"; echo "$3" > "$MERGE_SPRINT_GIT_ROOT/$2"; G add "$2"; G commit -qm "pr $1"; G push -q origin "pr-$1"; G switch -q main
+  echo "pr-$1" > "$FAKE/$1.branch"; echo x > "$FAKE/$1.head"; echo "scripts/x$1.sh" > "$FAKE/$1.files"
+  local s; s=$(git --git-dir="$BARE" rev-parse "refs/heads/pr-$1")
+  echo "VERDICT: APPROVE pr=$1 sha=$s role=correctness tier=2 reviewer=rev-agent author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0" > "$TMPDIR_T/r$1.md"
+  bash "$SCRIPT" review-register "$1" "$TMPDIR_T/r$1.md"
+}
+main_moves() {  # main_moves <fichero> <contenido>
+  echo "$2" > "$MERGE_SPRINT_GIT_ROOT/$1"; G add "$1"; G commit -qm "main $1"; G push -q origin main
+}
+
+
+# ── SE-500 S2: fixtures del registro de planificación (formato antiguo) en el main del repo temporal ──
+RESOLVER_PY="scripts/merge-registry-resolve.py"
+
+reg_main() {  # registro base, roadmap.sh falso (validate/render) y generadores falsos opcionales en main
+  export MERGE_SPRINT_RESYNC=1
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/docs/propuestas"
+  python3 - "$MERGE_SPRINT_GIT_ROOT/docs/propuestas" <<'PY'
+import json, sys
+d = {"version": 2, "initiatives": [{"id": "SE-900", "status": "APPROVED", "title": "base ñ"}], "route": {"wip": 1}}
+open(sys.argv[1] + "/planning-state.json", "w").write(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+open(sys.argv[1] + "/LOG.md", "w").write("<!-- append-only -->\n# Log\n\n## 2026-11-01 SE-900 APPROVED\n\nbase\n")
+PY
+  cat > "$MERGE_SPRINT_GIT_ROOT/scripts/roadmap.sh" <<'EOF'
+#!/usr/bin/env bash
+R="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+case "$1" in
+  validate) [[ -n "${MS_VALIDATE_HOOK:-}" ]] && bash "$MS_VALIDATE_HOOK"
+            [[ -z "${MS_VALIDATE_FAIL:-}" ]] || exit 1
+            python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); i=[x["id"] for x in d["initiatives"]]; sys.exit(len(i)!=len(set(i)))' "$R/docs/propuestas/planning-state.json" ;;
+  current) python3 -c 'import json,sys; print("\n".join(x["id"]+" "+x["status"] for x in json.load(open(sys.argv[1]))["initiatives"]))' "$R/docs/propuestas/planning-state.json" ;;
+  render) bash "${BASH_SOURCE[0]}" current > "$R/docs/propuestas/ROADMAP-CURRENT.md" ;;
+esac
+EOF
+  G add docs scripts; G commit -qm "registro base"; G push -q origin main
+}
+
+spec_pr() {  # spec_pr <n> <SE-id> [modo] [mensaje] : rama pr-<n> que registra la spec; modo altera el registro
+  local n="$1" id="$2" mode="${3:-add}" msg="${4:-docs(spec): $2 alta}"
+  G switch -q -c "pr-$n" main
+  python3 - "$MERGE_SPRINT_GIT_ROOT/docs/propuestas" "$id" "$mode" <<'PY'
+import json, sys
+root, sid, mode = sys.argv[1:4]
+p = root + "/planning-state.json"; d = json.load(open(p))
+ini = d["initiatives"]
+if mode.startswith("set900="):
+    ini[0]["status"] = mode.split("=", 1)[1]
+else:
+    ini.append({"id": sid, "status": "PROPOSED", "title": "alta " + sid})
+if mode == "route": d["route"] = {"wip": 9}
+if mode == "newkey": d["colada"] = True
+if mode == "other": ini[0]["status"] = "IMPLEMENTED"
+if mode == "delete": del ini[0]
+open(p, "w").write(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+lp = root + "/LOG.md"; log = open(lp).read()
+head, sep, rest = log.partition("## ")
+if mode == "logmod": rest = rest.replace("base\n", "base reescrita\n")
+open(lp, "w").write(head + "## 2026-11-03 %s PROPOSED\n\nalta\n\n" % sid + sep + rest)
+PY
+  G add docs; G commit -qm "$msg"; G push -q origin "pr-$n"; G switch -q main
+  echo "pr-$n" > "$FAKE/$n.branch"; echo x > "$FAKE/$n.head"
+  printf 'docs/propuestas/planning-state.json\ndocs/propuestas/LOG.md\n' > "$FAKE/$n.files"
+  register_head "$n"
+}
+
+register_head() {  # revisión APPROVE sobre el head actual de pr-<n>
+  local s; s=$(git --git-dir="$BARE" rev-parse "refs/heads/pr-$1")
+  echo "VERDICT: APPROVE pr=$1 sha=$s role=correctness tier=2 reviewer=rev-agent author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0" > "$TMPDIR_T/r$1.md"
+  bash "$SCRIPT" review-register "$1" "$TMPDIR_T/r$1.md" >/dev/null
+}
+
+squash_on_merge() {  # squash_on_merge <n> : el merge falso de GitHub integra de verdad pr-<n> en main (squash)
+  cat > "$FAKE/$1.on_merge" <<EOF
+d="$TMPDIR_T/sq$1"; git clone -q -b main "\$BARE" "\$d" && cd "\$d" && git merge --squash -q origin/pr-$1 >/dev/null \
+  && git -c user.email=t@t -c user.name=t -c commit.gpgsign=false commit -qm "squash #$1" && git push -q origin main
+EOF
+}
+
+ledger_has() { grep -q "$1" "$MERGE_SPRINT_HOME/ledger.jsonl"; }
+merged_line() { grep '"event":"MERGED"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep "\"pr\":\"$1\""; }
+branch_sha() { git --git-dir="$BARE" rev-parse "refs/heads/pr-$1"; }
+
+assert_parked_registry() {  # assert_parked_registry <n> <fichero> : aparcada por conflicto_real con el fichero, sin juez ni push
+  run grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl"
+  [[ "$output" == *"\"pr\":\"$1\""*"conflicto_real"* || "$output" == *"conflicto_real"*"\"pr\":\"$1\""* ]]
+  [[ "$output" == *"$2"* ]]
+  ! grep -qx "$1" "$FAKE/merged" 2>/dev/null || false
+  ! ledger_has '"event":"JUDGE_REQUEST"' || false
+}
+
+two_spec_prs() {  # two_spec_prs <modo-121> [mensaje-121] : #120 registra SE-901 y se fusiona de verdad; #121 choca
+  reg_main
+  spec_pr 120 SE-901
+  spec_pr 121 SE-902 "${1:-add}" "${2:-docs(spec): SE-902 alta}"
+  squash_on_merge 120
+}
+
+@test "AC-9 positivo: dos PR de spec con registro en conflicto; run integra la segunda, la resuelve y la fusiona como registry_merge" {
+  two_spec_prs
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "120,121" ]
+  merged_line 121 | grep -q '"equivalence":"registry_merge"'
+  merged_line 121 | grep -q "\"resolver_blob\":\"$(git hash-object "$RESOLVER_PY")\""
+  merged_line 121 | grep -q '"registry_hashes":"docs/propuestas/LOG.md:[0-9a-f]\{64\},docs/propuestas/planning-state.json:[0-9a-f]\{64\}"'
+  ! ledger_has '"event":"JUDGE_REQUEST"' || false
+  # El registro resuelto conserva las dos altas y las dos entradas, la nueva arriba.
+  git --git-dir="$BARE" show refs/heads/pr-121:docs/propuestas/planning-state.json | jq -e '[.initiatives[].id] == ["SE-900","SE-901","SE-902"]'
+  git --git-dir="$BARE" show refs/heads/pr-121:docs/propuestas/LOG.md | grep '^## ' | paste -sd'|' | grep -qx '## 2026-11-03 SE-902 PROPOSED|## 2026-11-03 SE-901 PROPOSED|## 2026-11-01 SE-900 APPROVED'
+  # refs congeladas en el manifiesto desde los commits de H0
+  jq -e '.prs[] | select(.pr==121) | .refs == ["SE-902"]' "$MERGE_SPRINT_HOME/manifest.json"
+}
+
+@test "AC-10 block: la PR cambia route junto a su alta → rechazo, conflicto_real con el fichero y sin juez" {
+  two_spec_prs route; plan_and_grant
+  local before; before=$(branch_sha 121)
+  run bash "$SCRIPT" run
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+  [ "$(branch_sha 121)" = "$before" ]
+}
+
+@test "AC-10 block: la PR añade una clave nueva al registro → rechazo" {
+  two_spec_prs newkey; plan_and_grant
+  run bash "$SCRIPT" run
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+}
+
+@test "AC-10 block: la PR cambia el estado de una iniciativa de una spec que no referencia → rechazo" {
+  two_spec_prs other; plan_and_grant
+  run bash "$SCRIPT" run
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+}
+
+@test "AC-10 block: la PR borra una iniciativa → rechazo" {
+  two_spec_prs delete; plan_and_grant
+  run bash "$SCRIPT" run
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+}
+
+@test "AC-10 block: main cambió desde el merge-base la misma iniciativa con otro valor → rechazo" {
+  reg_main
+  spec_pr 120 SE-900 set900=IMPLEMENTED "docs: SE-900 cierre"
+  spec_pr 121 SE-900 set900=REJECTED "docs: SE-900 rechazo"
+  squash_on_merge 120
+  plan_and_grant
+  run bash "$SCRIPT" run
+  grep -qx 120 "$FAKE/merged"
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+}
+
+@test "AC-10 block: la PR modifica una entrada existente de LOG.md → rechazo de LOG.md" {
+  two_spec_prs logmod; plan_and_grant
+  run bash "$SCRIPT" run
+  assert_parked_registry 121 docs/propuestas/LOG.md
+}
+
+@test "AC-10 block: cuerpo editado tras el grant para añadir SE-900; la rama cambia SE-900 y refs no la incluye → rechazo" {
+  two_spec_prs other "docs(spec): SE-902 alta"; plan_and_grant
+  echo "Registra SE-902 y cierra SE-900" > "$FAKE/121.body"   # el cuerpo editable nunca se consulta
+  run bash "$SCRIPT" run
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+  jq -e '.prs[] | select(.pr==121) | .refs == ["SE-902"]' "$MERGE_SPRINT_HOME/manifest.json"
+  ! grep -q -- '--json body' "$FAKE/calls" || false
+}
+
+@test "AC-10 positivo: refs incluye las specs citadas en .pr-summary.md de H0 y en el nombre de la rama, no las del cuerpo" {
+  reg_main
+  G switch -q -c pr-130-SE-931 main; echo "Toca SE-932" > "$MERGE_SPRINT_GIT_ROOT/.pr-summary.md"
+  G add .pr-summary.md; G commit -qm "docs: SE-930"; G push -q origin pr-130-SE-931; G switch -q main
+  echo pr-130-SE-931 > "$FAKE/130.branch"; echo x > "$FAKE/130.head"; echo docs/x.md > "$FAKE/130.files"
+  local s; s=$(git --git-dir="$BARE" rev-parse refs/heads/pr-130-SE-931)
+  echo "VERDICT: APPROVE pr=130 sha=$s role=correctness tier=2 reviewer=rev-agent author=impl-agent p0=0 p1=0 p2=0 p2_blocking=0" > "$TMPDIR_T/r130.md"
+  bash "$SCRIPT" review-register 130 "$TMPDIR_T/r130.md"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  jq -e '.prs[] | select(.pr==130) | .refs == ["SE-930","SE-931","SE-932"]' "$MERGE_SPRINT_HOME/manifest.json"
+}
+
+@test "AC-10 block: el resultado que no pasa roadmap.sh validate de main se rechaza" {
+  two_spec_prs; plan_and_grant
+  export MS_VALIDATE_FAIL=1
+  run bash "$SCRIPT" run
+  grep -qx 120 "$FAKE/merged"
+  assert_parked_registry 121 docs/propuestas/planning-state.json
+}
+
+integrate_by_hand() {  # integrate_by_hand <n> [byte] : integra main en pr-<n> con el resolutor; con byte, manipula un byte
+  local h0 m mb
+  h0=$(branch_sha "$1"); G fetch -q origin
+  m=$(G rev-parse origin/main); mb=$(G merge-base "$h0" "$m")
+  G switch -q --detach "$h0"
+  G merge -q --no-edit origin/main >/dev/null 2>&1 || [ -n "$(G diff --name-only --diff-filter=U)" ]   # conflicto esperado
+  for f in docs/propuestas/planning-state.json docs/propuestas/LOG.md; do
+    python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$mb" --head "$h0" --main "$m" \
+      --refs '["SE-902"]' --path "$f" --out "$MERGE_SPRINT_GIT_ROOT/$f" >/dev/null
+  done
+  [[ -z "${2:-}" ]] || sed -i 's/alta SE-902/alta SE-903/' "$MERGE_SPRINT_GIT_ROOT/docs/propuestas/planning-state.json"
+  G add docs; G commit -qm "integración a mano" >/dev/null; G push -q origin "HEAD:pr-$1"; G switch -q main
+}
+
+@test "AC-11 positivo: integración hecha fuera con el resolutor coincide byte a byte con el recálculo → registry_merge" {
+  two_spec_prs; rm -f "$FAKE/120.on_merge"
+  G merge -q --squash origin/pr-120 >/dev/null; G commit -qm "squash 120"; G push -q origin main
+  integrate_by_hand 121
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  merged_line 121 | grep -q '"equivalence":"registry_merge"'
+}
+
+@test "AC-11 block: registro manipulado tras resolver (un carácter) → no equivalente y sin merge" {
+  two_spec_prs; rm -f "$FAKE/120.on_merge"
+  G merge -q --squash origin/pr-120 >/dev/null; G commit -qm "squash 120"; G push -q origin main
+  integrate_by_hand 121 manipula
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 121 "$FAKE/merged" 2>/dev/null || false
+  ! ledger_has '"equivalence":"registry_merge"' || false
+}
+
+@test "AC-11b determinismo: el resolutor da la misma salida con relojes y locales distintos" {
+  two_spec_prs; G merge -q --squash origin/pr-120 >/dev/null; G commit -qm "squash 120"
+  local h0 m mb f
+  h0=$(branch_sha 121); m=$(G rev-parse HEAD); mb=$(G merge-base "$h0" "$m")
+  for f in docs/propuestas/planning-state.json docs/propuestas/LOG.md; do
+    SOURCE_DATE_EPOCH=1 TZ=UTC LC_ALL=C python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$mb" --head "$h0" --main "$m" --refs '["SE-902"]' --path "$f" --out "$TMPDIR_T/a"
+    SOURCE_DATE_EPOCH=2000000000 TZ=Asia/Tokyo LC_ALL=es_ES.UTF-8 python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$mb" --head "$h0" --main "$m" --refs '["SE-902"]' --path "$f" --out "$TMPDIR_T/b"
+    cmp "$TMPDIR_T/a" "$TMPDIR_T/b"
+    [ -s "$TMPDIR_T/a" ]
+  done
+  ! grep -qE 'time|datetime|random' "$RESOLVER_PY" || false
+}
+
+@test "AC-11b block: el resolutor rechaza refs inválidas, una ruta fuera de la lista cerrada y una ruta sin argumentos" {
+  run python3 "$RESOLVER_PY" resolve --repo . --base HEAD --head HEAD --main HEAD --refs '["SE-1\n"]' --path docs/propuestas/LOG.md --out "$TMPDIR_T/x"
+  [ "$status" -eq 2 ]; [[ "$output" == *"refs con ids inválidos"* ]]
+  run python3 "$RESOLVER_PY" resolve --repo . --base HEAD --head HEAD --main HEAD --refs '[]' --path scripts/merge-sprint.sh --out "$TMPDIR_T/x"
+  [ "$status" -eq 2 ]; [[ "$output" == *"scripts/merge-sprint.sh"* ]]
+  run python3 "$RESOLVER_PY" resolve --repo .
+  [ "$status" -eq 2 ]; [[ "$output" == *"merge-registry-resolve: "* ]]
+}
+
+# ── derivados: generadores falsos deterministas en main ──
+fake_generators() {
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/docs/rules/domain"
+  cat > "$MERGE_SPRINT_GIT_ROOT/scripts/rules-index-generate.sh" <<'EOF'
+#!/usr/bin/env bash
+P="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ls "$P/docs/rules/domain" | sort > "$P/docs/rules/INDEX.md"
+EOF
+  cat > "$MERGE_SPRINT_GIT_ROOT/scripts/generate-capability-map.py" <<'PY'
+import os, sys
+os.makedirs(".scm", exist_ok=True)
+open(".scm/registry.json", "w").write(" ".join(sorted(f for f in os.listdir(".") if not f.startswith("."))))
+PY
+  cat > "$MERGE_SPRINT_GIT_ROOT/scripts/sam.py" <<'PY'
+import os, sys
+if sys.argv[1] == "generate": open(".scm/sam.json", "w").write("sam:" + open(".scm/registry.json").read())
+else: print("SAM: FRESH" if open(".scm/sam.json").read() == "sam:" + open(".scm/registry.json").read() else "SAM: STALE")
+PY
+  echo r1 > "$MERGE_SPRINT_GIT_ROOT/docs/rules/domain/r1.md"
+  bash "$MERGE_SPRINT_GIT_ROOT/scripts/rules-index-generate.sh"
+  G add docs scripts; G commit -qm "generadores falsos"; G push -q origin main
+}
+
+derived_tamper() {  # derived_tamper <n> <ruta> : PR con un fichero; main avanza; se integra main y se manipula el derivado
+  reg_main; fake_generators
+  v2_pr "$1" "x$1.txt" "pr$1"
+  main_moves "y$1.txt" main
+  G switch -q --detach "$(branch_sha "$1")"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  # Solo el derivado bajo prueba difiere de main: así el test aísla su comparación (el resto coincide o no existe).
+  [[ "$2" != docs/propuestas/ROADMAP-CURRENT.md ]] || (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/roadmap.sh render)
+  G add -A; G commit -qm "derivados regenerados" >/dev/null
+  mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"; echo manipulado >> "$MERGE_SPRINT_GIT_ROOT/$2"
+  G add -A; G commit -qm "derivado tocado" >/dev/null; G push -q origin "HEAD:pr-$1"; G switch -q main
+}
+
+@test "AC-12 control: derivados regenerados correctamente tras integrar main son equivalentes (main_merge) y se fusionan" {
+  reg_main; fake_generators
+  v2_pr 140 x140.txt pr140
+  main_moves y140.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 140 "$FAKE/merged"
+  merged_line 140 | grep -q '"equivalence":"main_merge"'
+  git --git-dir="$BARE" show refs/heads/pr-140:.scm/registry.json | grep -q 'x140.txt y140.txt'
+  git --git-dir="$BARE" cat-file -e refs/heads/pr-140:docs/propuestas/ROADMAP-CURRENT.md
+}
+
+@test "AC-12 block: .scm/ manipulado en H1 difiere de su regeneración congelada → no equivalente, sin merge" {
+  derived_tamper 141 .scm/registry.json
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 141 "$FAKE/merged" 2>/dev/null || false
+}
+
+@test "AC-12 block: docs/rules/INDEX.md manipulado → no equivalente, sin merge" {
+  derived_tamper 142 docs/rules/INDEX.md
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 142 "$FAKE/merged" 2>/dev/null || false
+}
+
+@test "AC-12 block: ROADMAP-CURRENT.md manipulado → no equivalente, sin merge" {
+  derived_tamper 143 docs/propuestas/ROADMAP-CURRENT.md
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 143 "$FAKE/merged" 2>/dev/null || false
+}
+
+@test "AC-12 block: derivado sin generador en el código congelado solo vale si coincide con main o con H0" {
+  reg_main; mkdir -p "$MERGE_SPRINT_GIT_ROOT/docs/rules"
+  main_moves docs/rules/INDEX.md base-index
+  v2_pr 144 x144.txt pr144
+  main_moves y144.txt main
+  G switch -q --detach "$(branch_sha 144)"; G merge -q --no-edit origin/main >/dev/null
+  echo inventado > "$MERGE_SPRINT_GIT_ROOT/docs/rules/INDEX.md"; G commit -qam "índice inventado" >/dev/null
+  G push -q origin HEAD:pr-144; G switch -q main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 144 "$FAKE/merged" 2>/dev/null || false
+}
+
+canon_same() { python3 "$RESOLVER_PY" same "$1" "$TMPDIR_T/a" "$TMPDIR_T/b"; }
+
+@test "AC-12b positivo: INDEX.md de propuestas y rule-manifest.json con otra hora son equivalentes" {
+  printf '# Índice\n<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/a"
+  printf '# Índice\n<!-- Last regenerated: 2026-11-04T23:59:59Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
+  run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 0 ]
+  echo '{"generated":"2026-11-03T10:00:00Z","rules":["a","b"]}' > "$TMPDIR_T/a"
+  echo '{"rules":["a","b"],"generated":"2027-01-01T00:00:01Z"}' > "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 0 ]
+}
+
+@test "AC-12b block: fila cambiada, regla quitada, texto extra en la fecha, dos fechas o generated ausente → no equivalente" {
+  printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/a"
+  printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | REJECTED |\n' > "$TMPDIR_T/b"
+  run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 1 ]
+  printf '<!-- Last regenerated: 2026-11-03T10:00:00Z --> colado\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
+  run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 2 ]; [[ "$output" == *"línea de fecha"* ]]
+  printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n<!-- Last regenerated: 2026-11-03T10:00:01Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
+  run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 2 ]; [[ "$output" == *"línea de fecha"* ]]
+  echo '{"generated":"2026-11-03T10:00:00Z","rules":["a","b"]}' > "$TMPDIR_T/a"
+  echo '{"generated":"2026-11-03T10:00:00Z","rules":["a"]}' > "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 1 ]
+  echo '{"rules":["a","b"]}' > "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 2 ]; [[ "$output" == *"generated válido"* ]]
+}
+
+@test "AC-5b block: generated de rule-manifest.json terminado en \\n no es equivalente" {
+  echo '{"generated":"2026-11-03T10:00:00Z","rules":[]}' > "$TMPDIR_T/a"
+  cp "$TMPDIR_T/a" "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 0 ]   # control: el mismo manifiesto sí es equivalente
+  printf '{"generated":"2026-11-03T10:00:00Z\\n","rules":[]}\n' > "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 2 ]; [[ "$output" == *"generated válido"* ]]
+}
+
+fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; firmador que deja una marca congelada
+  printf '#!/usr/bin/env bash\n! git diff origin/main...HEAD | grep -q SECRETO\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-scan.sh"
+  printf '#!/usr/bin/env bash\necho "firma-congelada $(git rev-parse HEAD^{tree})" > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
+  G add scripts; G commit -qm "auditoría falsa"; G push -q origin main
+}
+
+@test "AC-12c block: diff que la auditoría bloquea con una firma válida de otro diff → no equivalente" {
+  reg_main; fake_audit
+  v2_pr 150 x150.txt "SECRETO"
+  main_moves y150.txt main
+  G switch -q --detach "$(branch_sha 150)"; G merge -q --no-edit origin/main >/dev/null
+  echo "firma-congelada de-otro-diff" > "$MERGE_SPRINT_GIT_ROOT/.confidentiality-signature"
+  G add -A; G commit -qm "firma de otro diff" >/dev/null; G push -q origin HEAD:pr-150; G switch -q main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 150 "$FAKE/merged" 2>/dev/null || false
+}
+
+@test "AC-12c positivo: auditoría PASSED, el ejecutor re-firma con el firmador congelado (no el de la rama) y la PR es equivalente" {
+  reg_main; fake_audit
+  G switch -q -c pr-151 main
+  printf '#!/usr/bin/env bash\necho trampa > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
+  G commit -qam "firmador trampa"; G push -q origin pr-151; G switch -q main
+  echo pr-151 > "$FAKE/151.branch"; echo x > "$FAKE/151.head"; echo scripts/x151.sh > "$FAKE/151.files"; register_head 151
+  main_moves y151.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 151 "$FAKE/merged"
+  git --git-dir="$BARE" show refs/heads/pr-151:.confidentiality-signature | grep -q '^firma-congelada '
+}
+
+@test "AC-12d block: un derivado sin fila en la tabla canónica no es equivalente; toda alternativa de DERIVED_RE tiene fila" {
+  run python3 "$RESOLVER_PY" kind docs/rules/domain/otro.json
+  [ "$status" -eq 2 ]
+  : > "$TMPDIR_T/a"; : > "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/otro.json
+  [ "$status" -eq 2 ]
+  run python3 "$RESOLVER_PY" kind $'.confidentiality-signature\n'
+  [ "$status" -eq 2 ]
+  local re p; re=$(sed -n "s/^DERIVED_RE='\(.*\)'$/\1/p" "$SCRIPT")
+  for p in .scm/INDEX.scm .scm/a/b.json .confidentiality-signature docs/rules/INDEX.md docs/rules/domain/rule-manifest.json \
+           docs/propuestas/ROADMAP-CURRENT.md docs/propuestas/INDEX.md; do
+    grep -qE "$re" <<<"$p"
+    python3 "$RESOLVER_PY" kind "$p" >/dev/null
+  done
+}
+
+@test "AC-13 block: conflicto de código real se aparca con conflicto_real y el fichero, sin juez, y el sprint sigue" {
+  export MERGE_SPRINT_RESYNC=1
+  v2_pr 160 scripts/foo.sh "uno"
+  v2_pr 161 scripts/foo.sh "dos"
+  v2_pr 162 z162.txt "tres"
+  squash_on_merge 160
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "160,162" ]
+  grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"161"' | grep '"reason":"conflicto_real"' | grep -q '"files":"scripts/foo.sh"'
+  ! ledger_has '"event":"JUDGE_REQUEST"' || false
+}
+
+@test "AC-14 block: resolver_blob distinto del manifiesto para el sprint con anomalía y sin merge" {
+  echo "# otra versión" >> "$MERGE_SPRINT_GIT_ROOT/scripts/merge-registry-resolve.py"; G commit -qam "resolutor cambiado"; G push -q origin main
+  mkpr 170 "scripts/u.sh"; review 170 APPROVE correctness
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 5 ]
+  [ ! -e "$FAKE/merged" ]
+  ledger_has '"reason":"blob_resolutor"'
+}
+
+@test "AC-14 boundary: un resolutor trampa en la rama de la PR nunca se ejecuta; resuelve el congelado" {
+  two_spec_prs
+  G switch -q pr-121
+  printf 'import pathlib\npathlib.Path("%s").write_text("x")\n' "$TMPDIR_T/trampa" > "$MERGE_SPRINT_GIT_ROOT/scripts/merge-registry-resolve.py"
+  G commit -qam "docs(spec): SE-902 resolutor trampa"; G push -q origin pr-121; G switch -q main
+  register_head 121
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ ! -e "$TMPDIR_T/trampa" ]
+  merged_line 121 | grep -q '"equivalence":"registry_merge"'
+}
+
+@test "AC-15 block: la rama se mueve durante la integración; el push sin forzar falla y la PR se aparca sin pisarla" {
+  two_spec_prs; plan_and_grant
+  cat > "$TMPDIR_T/mover.sh" <<EOF
+[[ -e "$TMPDIR_T/movida" ]] && exit 0; touch "$TMPDIR_T/movida"
+git clone -q -b main "\$BARE" "$TMPDIR_T/mv" && cd "$TMPDIR_T/mv" && git switch -q pr-121 && echo otro > movido.txt && git add movido.txt \
+  && git -c user.email=o@o -c user.name=o -c commit.gpgsign=false commit -qm movida && git push -q origin pr-121
+EOF
+  export MS_VALIDATE_HOOK="$TMPDIR_T/mover.sh"
+  run bash "$SCRIPT" run
+  grep -qx 120 "$FAKE/merged"
+  ! grep -qx 121 "$FAKE/merged" || false
+  ledger_has '"reason":"resync_fallo"'
+  [ "$(git --git-dir="$BARE" log -1 --format=%s refs/heads/pr-121)" = "movida" ]
+}
+
+@test "AC-15 block: tier 4 entre los ficheros de la PR al integrar se aparca sin resolver ni empujar" {
+  two_spec_prs; plan_and_grant
+  local before; before=$(branch_sha 121)
+  printf 'docs/propuestas/planning-state.json\ndocs/propuestas/LOG.md\nconfig/merge-sprint-policy.conf\n' > "$FAKE/121.files"
+  run bash "$SCRIPT" run
+  grep -qx 120 "$FAKE/merged"
+  ledger_has '"reason":"tier_4"'
+  [ "$(branch_sha 121)" = "$before" ]
+}
+
+@test "AC-15 block: STOP durante la integración impide el merge de la PR integrada" {
+  two_spec_prs; plan_and_grant
+  echo "touch '$MERGE_SPRINT_HOME/STOP'" > "$TMPDIR_T/stop.sh"; export MS_VALIDATE_HOOK="$TMPDIR_T/stop.sh"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "120" ]
+  ledger_has '"reason":"stop_antes_de_merge"'
+}
+
+@test "AC-16 positivo: report imprime M1, M2 y M3 desde el ledger" {
+  two_spec_prs
+  v2_pr 122 scripts/bar.sh uno; echo fail > "$FAKE/122.checks"
+  plan_and_grant
+  bash "$SCRIPT" run >/dev/null
+  run bash "$SCRIPT" report
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"M1 total: 2/2 (1.00) sin contar CI roja"* ]]
+  [[ "$output" == *"M2 total: 1 integraciones registry_merge"* ]]
+  [[ "$output" == *"M3 total: 1 grant(s) para 2 merge(s)"* ]]
+  [[ "$output" =~ M3\ 1\ grant\(s\),\ [0-9]+\ min ]]
+}
+
+@test "AC-16 boundary: un aparcamiento por conflicto_real cuenta en M1 y nada cuenta como registry_merge" {
+  export MERGE_SPRINT_RESYNC=1
+  v2_pr 163 scripts/foo.sh uno; v2_pr 164 scripts/foo.sh dos
+  squash_on_merge 163
+  plan_and_grant
+  bash "$SCRIPT" run >/dev/null
+  run bash "$SCRIPT" report
+  [[ "$output" == *"M1 total: 1/2 (0.50)"* ]]
+  [[ "$output" == *"M2 total: 0 integraciones"* ]]
+  [[ "$output" == *"aparcado #164: conflicto_real (scripts/foo.sh)"* ]]
+}
+
+# ── Revisión independiente de la PR #1469: arreglos con test que falla sin ellos ──
+plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equivalente y lo dice
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"excluida PR $1: la cabeza actual no es equivalente a ninguna revisión válida"* ]]
+}
+
+@test "rev-1469 P1-1 block: fichero nuevo en .scm/ que ningún generador produce, añadido tras la revisión → no equivalente" {
+  derived_tamper 171 .scm/notes.md
+  plan_excludes 171
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 171 "$FAKE/merged" 2>/dev/null || false
+}
+
+@test "rev-1469 P1-1 control: la misma integración sin el fichero añadido sí es equivalente (el plan no la excluye)" {
+  reg_main; fake_generators
+  v2_pr 172 x172.txt pr172
+  main_moves y172.txt main
+  G switch -q --detach "$(branch_sha 172)"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-172; G switch -q main
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"excluida PR 172"* ]]
+  [[ "$output" == *"#172(t2)"* ]]
+}
+
+@test "rev-1469 AC-12 block con motivo: .scm/ y ROADMAP-CURRENT.md manipulados se excluyen en plan por no equivalentes" {
+  derived_tamper 173 .scm/registry.json
+  plan_excludes 173
+  G switch -q main
+  v2_pr 174 x174.txt pr174
+  G switch -q --detach "$(branch_sha 174)"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate && bash scripts/roadmap.sh render)
+  echo manipulado >> "$MERGE_SPRINT_GIT_ROOT/docs/propuestas/ROADMAP-CURRENT.md"
+  G add -A; G commit -qm "hoja de ruta tocada" >/dev/null; G push -q origin HEAD:pr-174; G switch -q main
+  plan_excludes 174
+}
+
+gate_lib_audit() {  # escáner congelado que carga .claude/hooks/lib/gate-result.sh desde ROOT_DIR = cd lógico de scripts/..
+  # (la forma de los generadores reales). `source "$SCRIPT_DIR/../x"` lo resuelve el núcleo tras el enlace y ya
+  # caía en main; ROOT_DIR lógico apunta a la raíz congelada, cuyo .claude antes era el de la rama.
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib"
+  echo 'gate_ok() { return 0; }' > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib/gate-result.sh"
+  cat > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-scan.sh" <<'SH'
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT_DIR/.claude/hooks/lib/gate-result.sh" || exit 2
+gate_ok && ! git diff origin/main...HEAD | grep -q SECRETO
+SH
+  printf '#!/usr/bin/env bash\necho "firma-congelada $(git rev-parse HEAD^{tree})" > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
+  G add .claude scripts; G commit -qm "auditoría con librería"; G push -q origin main
+}
+
+@test "rev-1469 P1-2 block: la librería .claude/hooks/lib de la rama nunca se ejecuta; el escáner carga la de main" {
+  reg_main; gate_lib_audit
+  G switch -q -c pr-175 main
+  printf 'touch "%s"\ngate_ok() { return 0; }\n' "$TMPDIR_T/trampa-lib" > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib/gate-result.sh"
+  G commit -qam "lib trampa"; G push -q origin pr-175; G switch -q main
+  echo pr-175 > "$FAKE/175.branch"; echo x > "$FAKE/175.head"; echo .claude/hooks/lib/gate-result.sh > "$FAKE/175.files"; register_head 175
+  main_moves y175.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ ! -e "$TMPDIR_T/trampa-lib" ]
+  [ "$status" -eq 0 ]
+  grep -qx 175 "$FAKE/merged"
+}
+
+@test "rev-1469 P2-2 boundary: restos de raíces congeladas de un run anterior no bloquean la integración" {
+  reg_main; fake_generators
+  local d; for d in froot-resync froot-eq-plan froot-eq-run; do mkdir -p "$MERGE_SPRINT_HOME/$d"; echo resto > "$MERGE_SPRINT_HOME/$d/basura"; done
+  v2_pr 176 x176.txt pr176
+  main_moves y176.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 176 "$FAKE/merged"
+}
+
+@test "rev-1469 P2-2 block: un generador que escribe en la raíz congelada en vez de en el árbol → resync_fallo, sin merge" {
+  reg_main; fake_generators
+  printf 'echo fuera > "$P/fuera.txt"\n' >> "$MERGE_SPRINT_GIT_ROOT/scripts/rules-index-generate.sh"
+  G commit -qam "generador que escribe fuera"; G push -q origin main
+  v2_pr 177 x177.txt pr177
+  main_moves y177.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 177 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"reason":"resync_fallo"'
+}
+
+@test "rev-1469 P2-3: plan ejecuta el resolutor del commit de main congelado, no la copia local" {
+  reg_main
+  python3 - "$MERGE_SPRINT_GIT_ROOT/scripts/merge-registry-resolve.py" "$TMPDIR_T/marca-main" <<'PY'
+import sys
+p, mark = sys.argv[1:3]; s = open(p).read()
+s = s.replace("import sys\n", "import sys\nopen(%r, 'a').write('main\\n')\n" % mark, 1)
+open(p, "w").write(s)
+PY
+  G commit -qam "resolutor de main distinto de la copia local"; G push -q origin main
+  v2_pr 178 x178.txt pr178
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [ -s "$TMPDIR_T/marca-main" ]
+}
+
+@test "rev-1469 P2-3 (seguridad): report no se rompe con un GRANT sin digest" {
+  mkdir -p "$MERGE_SPRINT_HOME"
+  printf '%s\n' '{"event":"GRANT","ts":"2026-11-03T10:00:00Z"}' \
+    '{"event":"GRANT","ts":"2026-11-03T10:00:00Z","digest":"d1"}' \
+    '{"event":"RUN","ts":"2026-11-03T10:01:00Z","digest":"d1"}' \
+    '{"event":"MERGED","ts":"2026-11-03T10:05:00Z","digest":"d1","pr":"9","tier":"2","merge_commit":"cccccccc","equivalence":"identical"}' \
+    > "$MERGE_SPRINT_HOME/ledger.jsonl"
+  run bash "$SCRIPT" report
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"M1 total: 1/1"* ]]
+  [[ "$output" == *"M3 total: 2 grant(s) para 1 merge(s)"* ]]
+}
+
+@test "rev-1469 P2-1: en la cola del juez los registros se integran desde <to> (SAFE) y el arreglo juzgado no se pierde" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  reg_main
+  spec_pr 180 SE-910
+  plan_and_grant
+  local h0 to f v
+  h0=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prs"][0]["head"])' "$MERGE_SPRINT_HOME/manifest.json")
+  # Arreglo tras el grant (otra autora): cambia el título de SE-910 en el registro
+  G switch -q pr-180
+  sed -i 's/"alta SE-910"/"alta SE-910 corregida"/' "$MERGE_SPRINT_GIT_ROOT/docs/propuestas/planning-state.json"
+  G add -A; git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=f@f -c user.name=fixer -c commit.gpgsign=false commit -qm "fix: SE-910 título"
+  G push -q origin pr-180; G switch -q main
+  run bash "$SCRIPT" run
+  [ "$status" -eq 6 ]
+  f=$(ls "$MERGE_SPRINT_HOME"/judge/*/180-*.request.json); to=${f##*/180-}; to=${to%.request.json}
+  # main avanza con otra alta en el registro: la cola del juez tiene que integrar registros en conflicto
+  spec_pr 181 SE-911; G merge -q --no-edit origin/pr-181 >/dev/null; G push -q origin main; echo MERGED > "$FAKE/181.state"
+  squash_on_merge 180
+  v=$(mktemp "$TMPDIR_T/v.XXXX")
+  echo "JUDGE: SAFE pr=180 from=$h0 to=$to judge=judge-agent fix_author=f@f scope=unchanged security=unchanged reason=titulo" > "$v"
+  bash "$SCRIPT" review-register 180 "$v"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 180 "$FAKE/merged"
+  merged_line 180 | grep -q '"equivalence":"judge_safe"'
+  merged_line 180 | grep -q '"registry_hashes":"docs/propuestas/'
+  git --git-dir="$BARE" show main:docs/propuestas/planning-state.json | grep -q '"alta SE-910 corregida"'
+  git --git-dir="$BARE" show main:docs/propuestas/planning-state.json | grep -q '"SE-911"'
+}
+
+# ── Revisión independiente de la PR #1469 (segunda ronda, sha c36bed5) ──
+link_head() {  # link_head <n> <ruta> : sobre el head de pr-<n>, <ruta> pasa a ser un enlace a $TMPDIR_T/victima
+  echo intacta > "$TMPDIR_T/victima"
+  G switch -q --detach "$(branch_sha "$1")"
+  rm -f "$MERGE_SPRINT_GIT_ROOT/$2"; mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"
+  ln -s "$TMPDIR_T/victima" "$MERGE_SPRINT_GIT_ROOT/$2"
+  G add -A; G commit -qm "enlace en $2" >/dev/null; G push -q origin "HEAD:pr-$1"; G switch -q main
+}
+
+@test "rev2-1469 P1-1 block (plan): derivado convertido en enlace tras la revisión → no equivalente y no escribe fuera del worktree" {
+  reg_main; fake_generators
+  v2_pr 190 x190.txt pr190
+  main_moves y190.txt main
+  G switch -q --detach "$(branch_sha 190)"; G merge -q --no-edit origin/main >/dev/null
+  G push -q origin HEAD:pr-190; G switch -q main
+  link_head 190 docs/rules/INDEX.md   # existe en main: sin el guard, la siembra desde T y el generador lo siguen
+  run bash "$SCRIPT" plan
+  [ "$(cat "$TMPDIR_T/victima")" = intacta ]
+  [[ "$output" == *"excluida PR 190: la cabeza actual no es equivalente"* ]]
+}
+
+@test "rev2-1469 P1-1 block (run): derivado enlazado en la rama tras el grant → resync_fallo sin escribir fuera ni merge" {
+  reg_main
+  v2_pr 191 x191.txt pr191
+  plan_and_grant
+  link_head 191 docs/propuestas/ROADMAP-CURRENT.md   # roadmap.sh render escribiría a través del enlace
+  main_moves y191.txt main
+  run bash "$SCRIPT" run
+  [ "$(cat "$TMPDIR_T/victima")" = intacta ]
+  ! grep -qx 191 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"event":"ENLACE_RECHAZADO"'
+  ledger_has '"reason":"resync_fallo"'
+}
+
+@test "rev2-1469 P1-1 control (run): sin el enlace la misma PR se integra y se fusiona" {
+  reg_main
+  v2_pr 192 x192.txt pr192
+  plan_and_grant
+  main_moves y192.txt main
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 192 "$FAKE/merged"
+  ! ledger_has '"event":"ENLACE_RECHAZADO"' || false
+}
+
+@test "rev2-1469 P1-1 block: el resolutor no escribe a través de un --out que es un enlace; con fichero normal sí" {
+  reg_main; spec_pr 193 SE-930
+  local m h; m=$(git -C "$MERGE_SPRINT_GIT_ROOT" rev-parse origin/main); h=$(branch_sha 193)
+  echo intacta > "$TMPDIR_T/victima"; ln -s "$TMPDIR_T/victima" "$TMPDIR_T/out-enlace"
+  run python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$m" --head "$h" --main "$m" --refs '["SE-930"]' --path docs/propuestas/LOG.md --out "$TMPDIR_T/out-enlace"
+  [ "$status" -eq 2 ]
+  [ "$(cat "$TMPDIR_T/victima")" = intacta ]
+  run python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$m" --head "$h" --main "$m" --refs '["SE-930"]' --path docs/propuestas/LOG.md --out "$TMPDIR_T/out-normal"
+  [ "$status" -eq 0 ]
+  grep -q 'SE-930 PROPOSED' "$TMPDIR_T/out-normal"
+}
+
+@test "rev2-1469 P2-1 (corrección) block en run: fichero nuevo en .scm/ añadido tras el plan → aparcada como derivados_no_equivalentes, sin juez" {
+  reg_main; fake_generators
+  v2_pr 194 x194.txt pr194
+  main_moves y194.txt main
+  G switch -q --detach "$(branch_sha 194)"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
+  plan_and_grant   # la cabeza honesta entra al manifiesto
+  G switch -q --detach "$(branch_sha 194)"; echo colado > "$MERGE_SPRINT_GIT_ROOT/.scm/notes.md"
+  G add -A; G commit -qm "nota colada" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
+  run bash "$SCRIPT" run
+  ! grep -qx 194 "$FAKE/merged" 2>/dev/null || false
+  grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"194"' | grep -q '"reason":"derivados_no_equivalentes"'
+  ! ledger_has '"event":"JUDGE_REQUEST"' || false
+}
+
+@test "rev2-1469 P2-1 (seguridad) block: un escaneo de confidencialidad incompleto (unknown) bloquea la integración" {
+  reg_main
+  printf '#!/usr/bin/env bash\n[ "${SAVIA_GATE_UNKNOWN:-warn}" = block ] && exit 2\nexit 0\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-scan.sh"
+  printf '#!/usr/bin/env bash\necho firma > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
+  G add scripts; G commit -qm "escáner que no puede escanear"; G push -q origin main
+  v2_pr 195 x195.txt pr195
+  main_moves y195.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 195 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"reason":"confidencialidad"'
+}
+
+@test "rev2-1469 P2-4: plan distingue la PR sin revisión de la PR con cabeza no equivalente" {
+  mkpr 196 "scripts/u.sh"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  grep -qx "excluida PR 196: sin revisión válida" <<<"$output"
+}
+
+@test "rev2-1469 P2-3 (seguridad): plan muestra los refs de cada PR antes del grant" {
+  reg_main; spec_pr 197 SE-931
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"refs #197: SE-931"* ]]
+}
+
+@test "rev2-1469 P2-3 (corrección): un fallo al montar la raíz congelada no deja raíces froot-* atrás" {
+  reg_main; fake_generators
+  # .claude/hooks es prefijo del código congelado: en la rama como fichero, el montaje falla (fail-closed).
+  G switch -q -c pr-198 main; mkdir -p "$MERGE_SPRINT_GIT_ROOT/.claude"; echo x > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks"
+  G add -A; G commit -qm "hooks como fichero"; G push -q origin pr-198; G switch -q main
+  echo pr-198 > "$FAKE/198.branch"; echo x > "$FAKE/198.head"; echo scripts/x198.sh > "$FAKE/198.files"; register_head 198
+  main_moves y198.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 198 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"reason":"resync_fallo"'
+  [ -z "$(ls -d "$MERGE_SPRINT_HOME"/froot-* 2>/dev/null)" ]
+}
