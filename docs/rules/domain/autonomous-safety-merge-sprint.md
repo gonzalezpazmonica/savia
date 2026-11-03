@@ -139,8 +139,8 @@ veredictos antes de `plan`, pero no la impide.
   espacios de nombres distintos: un agente que firma con email y juzga con su id no se detecta.
 - Las reservas F5 van por manifiesto (digest), no por grant: un merge reservado bajo un grant
   anterior del mismo manifiesto cuenta como propio.
-- La re-sincronización ejecuta generadores de la rama del PR (`sam.py`, escáner y firma) antes de
-  que el prefiltro y el juez vean el delta.
+- Desde SE-500 S2, generadores y resolutor de registros salen del commit de `main` congelado en el
+  manifiesto, no de la rama; lo que no cubre la tabla canónica de `merge-registry-resolve.py` no es equivalente.
 
 ## Referencias
 
