@@ -127,6 +127,7 @@ test("listen y doctor no se ejecutan desde un frontend de agente", async () => {
   withConfig(s);
   assert.equal(await runCli(["listen", "--detect"], s.deps), 4);
   assert.equal(await runCli(["setup"], s.deps), 4);
+  assert.equal(await runCli(["doctor"], s.deps), 4);
   assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, []);
 });
 
@@ -181,6 +182,8 @@ test("serve (negativo): IP configurada ausente => no intenta escuchar y da el ar
   assert.match(e, /no está en ninguna interfaz/);
   assert.ok(e.includes(NM_UNMANAGED_FIX));
   assert.doesNotMatch(e, /EADDRNOTAVAIL/);
+  assert.equal(existsSync(join(s.deps.dataDir, "tls")), false, "se para antes de crear el certificado y de leer fuentes");
+  assert.ok(run.calls.every((x) => /^(tailscale|nmcli) /.test(x)), "solo diagnostica");
 });
 
 test("serve (negativo): sin sonda de interfaces, un EADDRNOTAVAIL se traduce al mismo diagnóstico", async () => {

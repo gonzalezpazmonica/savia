@@ -92,6 +92,16 @@ test("IP ausente (negativo): con tailscale0 no gestionada no culpa a NetworkMana
   assert.match(c.fix ?? "", /soul listen 100\.101\.9\.9/);
 });
 
+test("IP ausente (negativo): una IP de VPN corporativa fuera de 100.64/10 no culpa a tailscale0", async () => {
+  const c = await missingAddress("10.8.0.5", {
+    platform: "linux", path: "", ifaces: { tailscale0: [] },
+    run: fakeRun({ nmcli: { code: 0, stdout: "tailscale0:connected\n" } }),
+  });
+  assert.equal(c.level, "fallo");
+  assert.notEqual(c.fix, NM_UNMANAGED_FIX);
+  assert.doesNotMatch(c.message, /NetworkManager/);
+});
+
 test("IP ausente fuera de Linux: no ejecuta nmcli", async () => {
   const run = fakeRun({ nmcli: { code: 0, stdout: "tailscale0:connected\n" } });
   const c = await missingAddress("100.101.7.3", { platform: "darwin", path: "", ifaces: {}, run });
