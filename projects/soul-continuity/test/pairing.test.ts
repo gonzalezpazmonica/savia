@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createServer as createTls, connect as tlsConnect } from "node:tls";
+import { createServer as createTls } from "node:tls";
 import { request } from "node:https";
 import { createServer as createNet } from "node:net";
 import { emptyConfig, saveConfig } from "../src/core/config.ts";
@@ -13,11 +13,12 @@ import { listDevices } from "../src/api/devices.ts";
 import { thumbprint } from "../src/api/dpop.ts";
 import {
   PAIR_FILE, PairError, TOKEN_RANDOM_LEN, clientProof, makePairing, newToken, openPairingWindow, pairLink, parseToken, serverProof,
-  shortFingerprintDer, spkiSha256Der, tokenChecksum,
+  shortFingerprint, shortFingerprintDer, spkiSha256, spkiSha256Der, tokenChecksum,
 } from "../src/api/pairing.ts";
 import { serveFromCli } from "../src/api/serve.ts";
 import { type CliDeps, runCli } from "../src/cli/cli.ts";
 import { newKey, proof } from "./dpop-helper.ts";
+import { postPair, spkiVisto, tlsApp } from "./pair-helper.ts";
 import { validar } from "../src/api/schema.ts";
 
 const OPENAPI = JSON.parse(readFileSync(new URL("../src/contract/openapi.json", import.meta.url), "utf8"));
@@ -200,29 +201,6 @@ function deps(dir: string, out: string[], err: string[]): CliDeps {
   };
 }
 
-/** SPKI (SHA-256, base64url) del certificado que la app ve en la conexión. */
-function spkiVisto(port: number): Promise<string> {
-  return new Promise((res, rej) => {
-    const s = tlsConnect({ host: "127.0.0.1", port, rejectUnauthorized: false }, () => {
-      const der = s.getPeerX509Certificate()!.publicKey.export({ type: "spki", format: "der" });
-      s.end();
-      res(spkiSha256Der(der));
-    });
-    s.on("error", rej);
-  });
-}
-
-const post = (port: number, path: string, body: unknown, headers: Record<string, string> = {}) => new Promise<{ status: number; json: any }>((res, rej) => {
-  // TOFU provisional: la app aún no confía en el certificado; lo comprueba con la prueba del servidor.
-  const q = request({ host: "127.0.0.1", port, path, method: "POST", rejectUnauthorized: false, headers: { "Content-Type": "application/json", ...headers } }, (r) => {
-    let b = "";
-    r.on("data", (c) => (b += c));
-    r.on("end", () => res({ status: r.statusCode ?? 0, json: b ? JSON.parse(b) : null }));
-  });
-  q.on("error", rej);
-  q.end(JSON.stringify(body));
-});
-
 test("punta a punta: soul pair muestra IP, puerto, clave y huella; la app empareja por TLS y usa DPoP; reusar el jti se rechaza", async () => {
   const dir = mkdtempSync(join(tmpdir(), "soul-pair-e2e-"));
   const cfg = emptyConfig("i");
@@ -240,6 +218,9 @@ test("punta a punta: soul pair muestra IP, puerto, clave y huella; la app empare
   for (let i = 0; i < 80 && !out.some((l) => l.includes("Escuchando")); i++) await new Promise((r) => setTimeout(r, 25));
   const port = Number(/:(\d+)/.exec(out.find((l) => l.includes("Escuchando")) ?? "")?.[1]);
   try {
+    // La app confía solo en el certificado de la instalación y en su huella: nada de TLS sin validar.
+    const app = tlsApp(readFileSync(join(dir, "tls", "cert.pem"), "utf8"));
+    const post = (port: number, path: string, body: unknown) => postPair(port, app, path, body);
     // Un cliente v1 (sin `version`) recibe 426 con un mensaje que dice qué hacer.
     const v1 = await post(port, "/v1/pair/challenge", { client_nonce: nonce() });
     assert.equal(v1.status, 426);
@@ -268,7 +249,7 @@ test("punta a punta: soul pair muestra IP, puerto, clave y huella; la app empare
     assert.equal(ch.status, 200);
     assert.deepEqual(validar(OPENAPI, esquema("RetoPar"), ch.json), [], "el reto cumple el contrato");
     assert.ok(validar(OPENAPI, esquema("RetoPar"), { ...ch.json, extra: 1 }).length, "control: el esquema rechaza campos de más");
-    assert.equal(ch.json.spki_sha256, await spkiVisto(port), "la huella del reto es la del certificado que se ve");
+    assert.equal(ch.json.spki_sha256, await spkiVisto(port, app), "la huella del reto es la del certificado que se ve");
     assert.equal(ch.json.proof, serverProof(code, cn, ch.json.server_nonce, ch.json.spki_sha256));
     assert.equal(j.huella_corta.replace(/ /g, ""), Buffer.from(ch.json.spki_sha256, "base64url").toString("hex").slice(0, 16));
 
@@ -280,7 +261,7 @@ test("punta a punta: soul pair muestra IP, puerto, clave y huella; la app empare
     const token = fin.json.token as string;
 
     const llamar = (prueba: string) => new Promise<number>((res, rej) => {
-      const q = request({ host: "127.0.0.1", port, path: "/api/v1/soul/estado", rejectUnauthorized: false, headers: { Authorization: `DPoP ${token}`, DPoP: prueba } }, (r) => { r.resume(); r.on("end", () => res(r.statusCode ?? 0)); });
+      const q = request({ host: "127.0.0.1", port, path: "/api/v1/soul/estado", ...app, headers: { Authorization: `DPoP ${token}`, DPoP: prueba } }, (r) => { r.resume(); r.on("end", () => res(r.statusCode ?? 0)); });
       q.on("error", rej);
       q.end();
     });
@@ -304,7 +285,13 @@ test("intermediario con otro certificado: la app lo detecta (huella distinta, y 
   await new Promise<void>((r) => mitm.listen(0, "127.0.0.1", () => r()));
   const port = (mitm.address() as { port: number }).port;
   try {
-    const visto = await spkiVisto(port);
+    // La app fija el certificado real y su huella: el intermediario no pasa del saludo TLS.
+    await assert.rejects(spkiVisto(port, tlsApp(TLS.cert)), "con el certificado real fijado, el del intermediario se rechaza");
+    // Aunque la CA aceptara el certificado del intermediario, la huella fijada (la del QR) no casa.
+    await assert.rejects(spkiVisto(port, tlsApp(OTRO.cert, shortFingerprint(TLS.cert))), /huella del certificado/);
+    // Control: con su certificado y su huella, la conexión valida (los rechazos de arriba no son de otra causa).
+    const visto = await spkiVisto(port, tlsApp(OTRO.cert));
+    assert.equal(visto, spkiSha256(OTRO.cert));
     const cn = nonce();
     const ch = real.challenge(reto(cn));
     // a) Reenvía la respuesta tal cual: la huella no casa con la que ve la app.

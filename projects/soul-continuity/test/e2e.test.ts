@@ -21,7 +21,7 @@ import { SystemCredentialStore as ApiTokenStore } from "../src/adapters/credenti
 import { serveFromCli } from "../src/api/serve.ts";
 import { emptyData, startMock } from "./adapters/mock-apis.ts";
 import { newKey, proof } from "./dpop-helper.ts";
-import { emparejarComoApp } from "./pair-helper.ts";
+import { emparejarComoApp, tlsApp } from "./pair-helper.ts";
 
 const MOCK_TOKEN = "tok-e2e-canario-55aa";
 
@@ -94,7 +94,7 @@ test("e2e: instalar, emparejar, consultar Q1–Q4 por cursor, corregir, revocar 
     assert.equal(pair.c, 0, err.join("\n"));
     assert.equal(pair.j.token, undefined, "la CLI ya no muestra ningún token");
     const key = newKey();
-    const { token, device_id: device } = await emparejarComoApp(port, `  ${pair.j.clave}\n`, key);
+    const { token, device_id: device } = await emparejarComoApp(port, tlsApp(ca, pair.j.huella_corta), `  ${pair.j.clave}\n`, key);
     const api = (path: string, method = "GET", body?: unknown) => new Promise<{ status: number; json: any }>((res, rej) => {
       const p = proof(key, { htm: method, htu: `https://127.0.0.1:${port}${path.split("?")[0]}`, iat: Date.now(), token });
       const q = request({ host: "127.0.0.1", port, path, method, ca, headers: { Authorization: `DPoP ${token}`, DPoP: p, ...(body ? { "Content-Type": "application/json" } : {}) } }, (r) => {
