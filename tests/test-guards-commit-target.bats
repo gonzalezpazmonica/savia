@@ -44,10 +44,16 @@ blocked_vbg() { [ "$status" -eq 2 ] && [[ "$output" == *"BLOQUEADO: rama 'main'"
 no_python_path() {
   local d="$TMPDIR/nopy-bin" f
   mkdir -p "$d"
-  for f in /usr/bin/* /bin/*; do
-    case "$(basename "$f")" in python3*|python) continue ;; esac
-    [ -e "$d/$(basename "$f")" ] || ln -s "$f" "$d/$(basename "$f")" 2>/dev/null || true
+  local IFS=: dir
+  # todo el PATH (no solo /usr/bin): jq, git o timeout pueden vivir en otro sitio
+  for dir in $PATH; do
+    for f in "$dir"/*; do
+      [ -x "$f" ] || continue
+      case "$(basename "$f")" in python3*|python) continue ;; esac
+      [ -e "$d/$(basename "$f")" ] || ln -s "$f" "$d/$(basename "$f")" 2>/dev/null || true
+    done
   done
+  [ ! -e "$d/python3" ] || return 1
   echo "$d"
 }
 
@@ -223,5 +229,56 @@ no_python_path() {
   # sin resolvedor, conservador: cwd de la orden ($WT, agent/x) → pasa; en main → bloquea
   [ "$status" -eq 0 ]
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$MAIN' && bash '$VBG')"
+  blocked_vbg
+}
+
+# ── Shell que lee la orden de stdin y cd que el hook no ve (revisión 2) ─────
+
+@test "bcm y vbg: bash/sh que leen git commit de heredoc, here-string o tubería bloquean en main" {
+  for c in $'bash <<\'EOF\'\ngit commit -m x\nEOF' $'sh <<EOF\ngit commit -m x\nEOF' \
+           "bash <<< 'git commit -m x'" "echo 'git commit -m x' | bash" \
+           "printf 'git add .' | sh -s"; do
+    run bcm "$c"
+    if [[ "$c" == *"git add"* ]]; then [ -z "$output" ]; else blocked_bcm; fi
+    run vbg "$c"
+    blocked_vbg
+  done
+}
+
+@test "bcm y vbg: heredoc a bash con cd al worktree pasa; a main desde el worktree bloquea" {
+  run bcm $'bash <<\'EOF\'\ncd '"$WT"$' && git commit -m x\nEOF'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run vbg $'bash <<\'EOF\'\ncd '"$MAIN"$' && git commit -m x\nEOF' "$WT"
+  blocked_vbg
+}
+
+@test "bcm y vbg: cd a un directorio inexistente no apaga el guard en main" {
+  run bcm "cd \"$HOME/no-existe\" && git commit -m x"
+  blocked_bcm
+  run vbg "cd \"$HOME/no-existe\" && git commit -m x"
+  blocked_vbg
+}
+
+@test "bcm y vbg: CDPATH no apaga el guard en main" {
+  run bcm "CDPATH=$HOME; cd savia-otro && git commit -m x"
+  blocked_bcm
+  run vbg "CDPATH=$HOME; cd savia-otro && git commit -m x"
+  blocked_vbg
+}
+
+@test "bcm y vbg: GIT_DIR=<main>/.git desde el worktree bloquea; al worktree pasa" {
+  run bcm "GIT_DIR=$MAIN/.git git commit -m x" "$WT"
+  blocked_bcm
+  run vbg "git --git-dir=$MAIN/.git commit -m x" "$WT"
+  blocked_vbg
+  run bcm "git -C $WT commit -m x" "$WT"
+  [ -z "$output" ]
+}
+
+@test "bcm y vbg: git commit-tree en main bloquea" {
+  run bcm "git commit-tree HEAD^{tree} -m x"
+  blocked_bcm
+  run vbg "git commit-tree HEAD^{tree} -m x"
   blocked_vbg
 }

@@ -4,8 +4,12 @@ import { blockCommitToMain } from "../guards/block-commit-to-main.ts";
 // TEST_BRANCH simula la rama actual sin depender del repo real.
 const OLD = process.env.TEST_BRANCH;
 const OLD_ALLOW = process.env.SAVIA_ALLOW_MAIN_COMMIT;
-beforeEach(() => { delete process.env.SAVIA_ALLOW_MAIN_COMMIT; });
+const OLD_NODE_ENV = process.env.NODE_ENV;
+// TEST_BRANCH solo vale bajo NODE_ENV=test: fijarlo aquí para que un CI con
+// NODE_ENV=production o ci no rompa los tests que simulan la rama.
+beforeEach(() => { delete process.env.SAVIA_ALLOW_MAIN_COMMIT; process.env.NODE_ENV = "test"; });
 afterEach(() => {
+  if (OLD_NODE_ENV === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = OLD_NODE_ENV;
   if (OLD === undefined) delete process.env.TEST_BRANCH; else process.env.TEST_BRANCH = OLD;
   if (OLD_ALLOW === undefined) delete process.env.SAVIA_ALLOW_MAIN_COMMIT; else process.env.SAVIA_ALLOW_MAIN_COMMIT = OLD_ALLOW;
 });
@@ -125,9 +129,22 @@ describe("destino real del commit", () => {
   test("cd condicional al worktree no salva el commit en main", async () => {
     await expect(run(`false && cd ${wt}; git commit -m x`)).rejects.toThrow(BLOCK);
   });
-  test("cd a directorio inexistente: el && no llega al commit; el ; sí", async () => {
-    await expect(run(`cd "${home}/no-existe" && git commit -m x`)).resolves.toBeUndefined();
+  test("cd a directorio inexistente no apaga el guard (revisión #1467 P1-2)", async () => {
+    await expect(run(`cd "${home}/no-existe" && git commit -m x`)).rejects.toThrow(BLOCK);
     await expect(run(`cd ${home}/no-existe && true; git commit -m x`)).rejects.toThrow(BLOCK);
+    await expect(run(`CDPATH=${home}; cd otro && git commit -m x`)).rejects.toThrow(BLOCK);
+  });
+  test("shell que lee git commit de stdin bloquea en main (revisión #1467 P1-1)", async () => {
+    for (const c of ["bash <<'EOF'\ngit commit -m x\nEOF", "sh <<EOF\ngit commit -m x\nEOF",
+                     "bash <<< 'git commit -m x'", "echo 'git commit -m x' | bash",
+                     "printf 'git commit' | sh -s"]) {
+      await expect(run(c)).rejects.toThrow(BLOCK);
+    }
+    await expect(run(`bash <<'EOF'\ncd ${wt} && git commit -m x\nEOF`)).resolves.toBeUndefined();
+  });
+  test("GIT_DIR=<main>/.git y commit-tree bloquean", async () => {
+    await expect(run(`GIT_DIR=${mainRepo}/.git git commit -m x`, wt)).rejects.toThrow(BLOCK);
+    await expect(run("git commit-tree HEAD^{tree} -m x")).rejects.toThrow(BLOCK);
   });
   test("mkdir + cd en la misma orden: conservador con el cwd en main", async () => {
     await expect(run("mkdir -p d && cd d && git commit -m x")).rejects.toThrow(BLOCK);
@@ -156,7 +173,7 @@ describe("destino real del commit", () => {
     await expect(run("cat <<EOF\n$(git commit -m x)\nEOF")).rejects.toThrow(BLOCK);
     await expect(run("cat <<'EOF'\n$(git commit -m x)\nEOF")).resolves.toBeUndefined();
   });
-  test("sin python3: fallback conservador también con git -C", async () => {
+  test("sin python3: git -C también se evalúa, pero por el cwd de la orden", async () => {
     const OLD_PATH = process.env.PATH;
     const bin = join(root, "nopy-bin");
     mkdirSync(bin, { recursive: true });
@@ -177,7 +194,7 @@ describe("destino real del commit", () => {
     try {
       await expect(run("git commit -m x")).rejects.toThrow(BLOCK);
     } finally {
-      process.env.NODE_ENV = OLD_ENV;
+      if (OLD_ENV === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = OLD_ENV;
       delete process.env.TEST_BRANCH;
     }
   });

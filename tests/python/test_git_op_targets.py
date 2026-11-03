@@ -65,9 +65,10 @@ class Targets(unittest.TestCase):
         self.assertEqual(self.run_(f"cd {self.wt} | true; git commit -m x"), [("commit", self.base)])
         self.assertEqual(self.run_(f"cd {self.wt} & git commit -m x"), [("commit", self.base)])
 
-    def test_cd_to_missing_dir_keeps_cwd(self):
+    def test_cd_to_missing_dir_is_unresolved(self):
+        # revisión PR #1467 P1-2: un cd que el hook no ve no se da por fallido
         out = self.run_(f"cd {self.home}/no-existe; git commit -m x")
-        self.assertEqual(out, [("commit", self.base)])
+        self.assertEqual(out, [("commit", "")])
 
     # ── cd condicional: puede no ejecutarse ──
     def test_conditional_cd_keeps_previous_cwd_possible(self):
@@ -86,12 +87,23 @@ class Targets(unittest.TestCase):
         out = self.run_(f"cd {self.wt} || exit 1; git commit -m x")
         self.assertEqual(out, [("commit", self.wt)])
 
-    def test_failed_cd_makes_and_chain_unreachable(self):
-        self.assertEqual(self.run_(f'cd "{self.home}/no-existe" && git commit -m x'), [])
-        out = self.run_(f"cd {self.home}/no-existe && git commit; git commit -m y")
-        self.assertEqual(out, [("commit", self.base)])
+    def test_missing_cd_never_makes_and_chain_unreachable(self):
+        # antes: `cd <inexistente> && git commit` → [] (fail-open, P1-2)
+        self.assertEqual(self.run_(f'cd "{self.home}/no-existe" && git commit -m x'),
+                         [("commit", "")])
         out = self.run_(f"cd {self.home}/no-existe || git commit -m y")
-        self.assertEqual(out, [("commit", self.base)])
+        self.assertIn(("commit", self.base), out)
+
+    def test_cdpath_makes_relative_cd_unresolved(self):
+        # `CDPATH=/x; cd savia` puede ir a /x/savia aunque ./savia no exista
+        self.assertEqual(self.run_(f"CDPATH={self.home}; cd repo-main && git commit -m x",
+                                   base=self.wt), [("commit", "")])
+        env_out = subprocess.run([sys.executable, SCRIPT, self.base], input="cd wt-x && git commit",
+                                 text=True, capture_output=True,
+                                 env=dict(os.environ, HOME=self.home, CDPATH=self.home)).stdout
+        self.assertEqual(env_out, "commit\t\n")
+        # ruta explícitamente relativa (./, ../) no usa CDPATH
+        self.assertEqual(self.run_(f"CDPATH=/x; cd ../wt-x && git commit"), [("commit", self.wt)])
 
     def test_cd_to_dir_created_in_same_command_is_unresolved(self):
         # mkdir puede crearlo: no se da por fallido (sería un rodeo)
@@ -125,10 +137,20 @@ class Targets(unittest.TestCase):
     def test_unknown_var_is_unresolved(self):
         self.assertEqual(self.run_("git -C $NOPE commit -m x"), [("commit", "")])
 
-    def test_git_dir_env_is_unresolved(self):
-        self.assertEqual(self.run_(f"GIT_DIR={self.base}/.git git commit"), [("commit", "")])
-        self.assertEqual(self.run_("git --git-dir=/x/.git commit"), [("commit", "")])
-        self.assertEqual(self.run_("export GIT_DIR=/x/.git; git commit"), [("commit", "")])
+    def test_git_dir_literal_resolves_to_its_worktree(self):
+        # revisión PR #1467 P2-2: desde el worktree, GIT_DIR=<main>/.git apunta a main
+        b = self.base
+        self.assertEqual(self.run_(f"GIT_DIR={b}/.git git commit", self.wt), [("commit", b)])
+        self.assertEqual(self.run_(f"git --git-dir={b}/.git commit", self.wt), [("commit", b)])
+        self.assertEqual(self.run_(f"git --git-dir {b}/.git -C /tmp commit", self.wt), [("commit", b)])
+        self.assertEqual(self.run_(f"export GIT_DIR={b}/.git; git commit", self.wt), [("commit", b)])
+        self.assertEqual(self.run_(f"env GIT_DIR={b}/.git git commit", self.wt), [("commit", b)])
+
+    def test_git_dir_other_forms_are_unresolved(self):
+        self.assertEqual(self.run_("GIT_DIR=.git git commit"), [("commit", "")])
+        self.assertEqual(self.run_("git --git-dir=$X commit"), [("commit", "")])
+        self.assertEqual(self.run_("GIT_DIR=/x/repo.git git commit"), [("commit", "")])
+        self.assertEqual(self.run_("git --work-tree=/x commit"), [("commit", "")])
 
     def test_cd_command_substitution_is_unresolved(self):
         self.assertEqual(self.run_("cd $(pwd) && git commit"), [("commit", "")])
@@ -150,7 +172,13 @@ class Targets(unittest.TestCase):
         self.assertEqual(self.run_("ls # git commit -m x"), [])
 
     def test_other_git_subcommands_ignored(self):
-        self.assertEqual(self.run_("git log --grep commit; git commit-tree x; git status"), [])
+        self.assertEqual(self.run_("git log --grep commit; git status; git commit-graph write"), [])
+
+    def test_commit_tree_counts_as_commit(self):
+        # revisión PR #1467 P2-1: commit-tree + update-ref mueve main
+        self.assertEqual(self.run_("git commit-tree x -m y"), [("commit", self.base)])
+        self.assertEqual(self.run_("bash -c 'git commit-tree x'"), [("commit", self.base)])
+        self.assertEqual(self.run_('su -c "git commit-tree x"'), [("commit", "")])
 
     def test_command_after_heredoc_is_detected(self):
         out = self.run_("cat > f <<EOF\ntexto\nEOF\ngit commit -m x")
@@ -184,6 +212,38 @@ class Targets(unittest.TestCase):
                     'flock f -c "git -C /x commit -m x"',
                     "python3 -c \"import os; os.system('git commit -m x')\""):
             self.assertIn(("commit", ""), self.run_(cmd), cmd)
+
+    # ── shell que lee la orden de stdin (revisión PR #1467 P1-1) ──
+    def test_shell_reading_heredoc_runs_body(self):
+        for d in ("'EOF'", "EOF", '"EOF"'):
+            for sh in ("bash", "sh", "bash -s", "bash -", "bash -s --", "zsh"):
+                out = self.run_(f"{sh} <<{d}\ngit commit -m x\nEOF")
+                self.assertEqual(out, [("commit", self.base)], (sh, d))
+        out = self.run_(f"bash <<'EOF'\ncd {self.wt} && git commit -m x\nEOF")
+        self.assertEqual(out, [("commit", self.wt)])
+
+    def test_shell_reading_here_string_runs_it(self):
+        self.assertEqual(self.run_("bash <<< 'git commit -m x'"), [("commit", self.base)])
+        self.assertEqual(self.run_("bash <<< \"$CMD\""), [])
+        self.assertEqual(self.run_("bash <<< \"$CMD git commit\""), [("commit", "")])
+
+    def test_shell_reading_pipe_counts_command_text(self):
+        for cmd in ("echo 'git commit -m x' | bash", "printf 'git add .' | sh -s",
+                    "echo 'git commit' | $SH", "bash < f.sh; echo git commit",
+                    "echo 'import os; os.system(\"git commit\")' | python3"):
+            self.assertIn(self.run_(cmd)[0][0], ("commit", "add"), cmd)
+
+    def test_non_shell_heredoc_counts_body_text(self):
+        out = self.run_("python3 <<'EOF'\nimport os; os.system('git commit -m x')\nEOF")
+        self.assertEqual(out, [("commit", "")])
+
+    def test_inert_reader_of_pipe_or_heredoc_stays_inert(self):
+        self.assertEqual(self.run_("echo 'git commit' | grep commit | wc -l"), [])
+        self.assertEqual(self.run_("cat <<'EOF' | tee f\ngit commit -m x\nEOF"), [])
+
+    def test_rg_pre_executes(self):
+        self.assertEqual(self.run_('rg "git commit" docs'), [])
+        self.assertEqual(self.run_("rg --pre 'git commit -m x' y"), [("commit", "")])
 
     def test_inert_commands_stay_inert(self):
         self.assertEqual(self.run_('grep -r "git commit" docs'), [])

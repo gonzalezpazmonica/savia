@@ -19,7 +19,8 @@ if COMMAND=$(printf '%s' "${INPUT:-}" | jq -er '
 ' 2>/dev/null); then
   GIT_TOKEN='(^|[^[:alnum:]_])git([^[:alnum:]_]|$)'
   # A subcommand is a shell word; --no-commit and commit-msg are not commits.
-  COMMIT_TOKEN="(^|[[:space:];|&()\"'])commit([[:space:];|&()\"']|$)"
+  # commit-tree also creates commits (and with update-ref moves main).
+  COMMIT_TOKEN="(^|[[:space:];|&()\"'])commit(-tree)?([[:space:];|&()\"']|$)"
   if ! [[ "$COMMAND" =~ $GIT_TOKEN ]] || ! [[ "$COMMAND" =~ $COMMIT_TOKEN ]]; then
     exit 0
   fi

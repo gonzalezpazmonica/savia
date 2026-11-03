@@ -16,8 +16,9 @@ Qué entiende:
   - `git -C <ruta>` con o sin comillas, varios -C acumulados, relativos.
   - `cd`/`pushd <ruta>` con o sin comillas y con `~`, encadenados con `&&`,
     `||`, `;` o salto de línea. `( … )` no filtra el cd al exterior; un cd en
-    una tubería o en segundo plano no cambia el cwd siguiente; un cd a un
-    directorio inexistente falla y no cambia el cwd (lo mismo que el shell).
+    una tubería o en segundo plano no cambia el cwd siguiente. Un cd a un
+    directorio que el hook no ve, o relativo con `CDPATH` definido, deja el
+    cwd sin resolver: nunca se deduce que la orden no se ejecuta.
   - Variables asignadas con literal en la misma orden (`W=/x; git -C $W …`),
     `$HOME` y `$PWD`. Cualquier otra variable deja el destino sin resolver.
   - Comentarios, cadenas de órdenes inertes (echo, printf, cat, grep…) y
@@ -32,7 +33,14 @@ Qué entiende:
     setsid, stdbuf); `bash|sh|zsh -c '…'`, `eval …`, `$( … )` y backticks se
     analizan recursivamente. `xargs … git` y `git` como argumento de otra
     orden (find -exec, watch…) → sin resolver.
-  - `--git-dir`, `--work-tree`, `GIT_DIR=`, `GIT_WORK_TREE=` → sin resolver.
+  - Un shell que lee la orden de stdin (`bash <<EOF`, `bash <<< '…'`,
+    `… | sh`, `sh -s`) analiza el heredoc o la here-string como script; si
+    stdin viene de una tubería o de un fichero, el texto de toda la orden
+    cuenta. Igual para cualquier orden no inerte que lea de una tubería.
+  - `--git-dir=<ruta>/.git` y `GIT_DIR=<ruta>/.git` literales y absolutos →
+    destino `<ruta>`. Otras formas de `--git-dir`, `--work-tree`, `GIT_DIR=`,
+    `GIT_WORK_TREE=` → sin resolver.
+  - `git commit-tree` cuenta como commit.
 
 Sin dependencias externas; sin red.
 """
@@ -41,11 +49,13 @@ import re
 import sys
 
 OPS = ("commit", "add")
+# Subcomandos que también crean commits: se emiten como `commit`.
+OP_ALIASES = {"commit-tree": "commit"}
 # Texto opaco (argumento de una orden que puede ejecutarlo, script no
 # analizable, fallo del análisis): `git … commit|add` dentro del mismo tramo
 # cuenta como operación sin destino. Más amplio que `git\s+commit` para cubrir
 # `git -C <ruta> commit` dentro de una cadena.
-LEGACY_RE = re.compile(r"(?<![\w-])git(?![\w-])[^;&|\n]*?(?<![\w-])(commit|add)(?![\w-])", re.I)
+LEGACY_RE = re.compile(r"(?<![\w-])git(?![\w-])[^;&|\n]*?(?<![\w-])(commit-tree|commit|add)(?![\w-])", re.I)
 SEPARATORS = {";", "&&", "||", "|", "|&", "&", "\n"}
 GIT_ENV = ("GIT_DIR", "GIT_WORK_TREE")
 UNKNOWN = None  # valor o cwd no resoluble
@@ -188,9 +198,10 @@ def lex(s):
             segs = merged
             if want_delim is not None:
                 delim = "".join(v for k, v in segs if k == "lit")
-                heredocs.append((delim, want_delim, quoted))
+                holder = {"body": None}  # se rellena al leer el cuerpo
+                heredocs.append((delim, want_delim, quoted, holder))
                 want_delim = None
-                tokens.append(("heredoc_delim", segs))
+                tokens.append(("heredoc_delim", holder))
             else:
                 tokens.append(("word", segs))
         segs = []
@@ -279,7 +290,7 @@ def lex(s):
         if c == "\n":
             flush()
             i += 1
-            for delim, strip, dq in heredocs:
+            for delim, strip, dq, holder in heredocs:
                 body = []
                 while i < n:
                     j = s.find("\n", i)
@@ -288,6 +299,7 @@ def lex(s):
                     if (line.lstrip("\t") if strip else line) == delim:
                         break
                     body.append(line)
+                holder["body"] = "\n".join(body)
                 if not dq:  # sin comillas, bash expande $( … ) y `…` del cuerpo
                     subs = _body_subs("\n".join(body))
                     if subs:
@@ -368,8 +380,10 @@ class Ctx:
         self.vars = {}
         self.git_env = False
         self.out = []
-        self.ran_any = False    # ya se ejecutó alguna orden (pudo crear dirs)
-        self.last_fail = False  # la última orden falla seguro (cd inexistente)
+        # stdin de la orden simple en curso: None (terminal), ("text", s)
+        # (heredoc/here-string conocido) u ("opaque",) (tubería, fichero).
+        self.stdin = None
+        self.stdin_opaque = False  # alguna orden ejecuta stdin desconocido
 
     @property
     def cwd(self):
@@ -441,16 +455,30 @@ def assignment(segs, ctx):
 def set_var(ctx, name, val):
     ctx.vars[name] = val
     if name in GIT_ENV:
-        ctx.git_env = True
+        ctx.git_env = merge_git_env(ctx.git_env, name, val)
 
 
 def emit(ctx, op, d):
+    op = OP_ALIASES.get(op, op)
     ctx.out.append((op, "" if d is UNKNOWN else d))
 
 
 def emit_text(ctx, text):
     for m in LEGACY_RE.finditer(text):
         emit(ctx, m.group(1).lower(), UNKNOWN)
+
+
+def is_op(a):
+    return a in OPS or a in OP_ALIASES
+
+
+def gitdir_worktree(val, cwd=UNKNOWN):
+    """Directorio de trabajo de un GIT_DIR / --git-dir literal: `<ruta>/.git`
+    absoluto → `<ruta>`. Cualquier otra forma → UNKNOWN."""
+    if not isinstance(val, str) or not os.path.isabs(val):
+        return UNKNOWN
+    p = os.path.normpath(val)
+    return os.path.dirname(p) if os.path.basename(p) == ".git" else UNKNOWN
 
 
 def words_text(words):
@@ -466,13 +494,14 @@ def emit_opaque(ctx, argv, words, depth=0, unresolved=False):
         execute(rest, rwords, ctx, depth, unresolved)  # `$SUDO git -C <ruta> commit`
         return
     emit_text(ctx, words_text(words))
-    if any(a in OPS for a in rest):
+    read_stdin(ctx, depth, as_script=False)
+    if any(is_op(a) for a in rest):
         # `$G -C <ruta> commit`: se lee como git; si no cuadra, sin destino.
         n = len(ctx.out)
         for cwd in ctx.cwds:
             _git_one(["git"] + rest, ctx, unresolved, cwd)
         if len(ctx.out) == n:
-            emit(ctx, next(a for a in rest if a in OPS), UNKNOWN)
+            emit(ctx, next(a for a in rest if is_op(a)), UNKNOWN)
 
 
 def _build_items(tokens):
@@ -532,12 +561,11 @@ def _build_items(tokens):
 
 
 def _run_pipe(pipe, ctx, depth):
-    ctx.last_fail = False
     if len(pipe) > 1:  # cada elemento de una tubería es una subshell
-        for toks in pipe:
+        for k, toks in enumerate(pipe):
             snap = ctx.snapshot()
             if toks:
-                simple(toks, ctx, depth)
+                simple(toks, ctx, depth, piped=k > 0)
             ctx.restore(snap)
     elif pipe and pipe[0]:
         simple(pipe[0], ctx, depth)
@@ -552,10 +580,7 @@ def _run_list(lst, ctx, depth):
     start = ctx.cwds
     seen = ()
     and_only = True
-    failed = False
     for k, (op, pipe) in enumerate(lst):
-        if k > 0 and op == "&&" and failed:
-            continue  # tras un fallo seguro, `&&` no se ejecuta
         if k > 0:
             if op == "||":
                 and_only = False
@@ -563,7 +588,6 @@ def _run_list(lst, ctx, depth):
                 ctx.cwds = _union(seen, start)
         before = ctx.cwds
         _run_pipe(pipe, ctx, depth)
-        failed = ctx.last_fail
         if and_only:
             seen = _union(seen, ctx.cwds)
         else:
@@ -596,6 +620,11 @@ def run(command, ctx, depth=0):
             ctx.restore(snap)
         else:
             _run_list(it[1], ctx, depth)
+    if ctx.stdin_opaque:
+        # una orden ejecuta lo que le llega por una tubería o un fichero
+        # (`echo 'git commit' | bash`): cuenta el texto de toda la orden.
+        ctx.stdin_opaque = False
+        emit_text(ctx, command)
 
 
 def run_subs(segs, ctx, depth):
@@ -606,17 +635,24 @@ def run_subs(segs, ctx, depth):
             ctx.restore(snap)
 
 
-def simple(toks, ctx, depth):
-    words, skip = [], False
+def simple(toks, ctx, depth, piped=False):
+    words, skip = [], None
+    stdin = ("opaque",) if piped else None
     for kind, val in toks:
         if kind == "redir":
-            skip = True
+            skip = val
         elif kind == "heredoc_delim":
-            pass
+            body = val["body"]
+            stdin = ("opaque",) if body is None else ("text", body)
         elif kind == "heredoc_body":
             run_subs(val, ctx, depth)
-        elif skip:
-            skip = False
+        elif skip is not None:
+            if skip == "<<<":
+                text = expand(val, ctx)
+                stdin = ("opaque",) if text is UNKNOWN else ("text", text)
+            elif skip in ("<", "<>"):
+                stdin = ("opaque",)
+            skip = None
             run_subs(val, ctx, depth)
         else:
             words.append(val)
@@ -630,10 +666,48 @@ def simple(toks, ctx, depth):
         for name, val in assigns:
             set_var(ctx, name, val)
         return
-    git_env = any(name in GIT_ENV for name, _ in assigns)
+    git_env = False
+    for name, val in assigns:
+        git_env = merge_git_env(git_env, name, val)
     argv = [expand(w, ctx) for w in words]
-    execute(argv, words, ctx, depth, git_env)
-    ctx.ran_any = True
+    old = ctx.stdin
+    ctx.stdin = stdin
+    try:
+        execute(argv, words, ctx, depth, git_env)
+    finally:
+        ctx.stdin = old
+
+
+def merge_git_env(cur, name, val):
+    """Estado GIT_DIR/GIT_WORK_TREE: False (sin tocar), True (no resoluble) o
+    la ruta de trabajo de un GIT_DIR literal."""
+    if name == "GIT_DIR":
+        wt = gitdir_worktree(val)
+        return True if wt is UNKNOWN else wt
+    if name == "GIT_WORK_TREE":
+        return cur if isinstance(cur, str) else True
+    return cur
+
+
+def read_stdin(ctx, depth, as_script, git_env=None):
+    """La orden en curso ejecuta su stdin (shell sin -c) o puede hacerlo
+    (orden no inerte). Heredoc/here-string conocido: se analiza (como script si
+    es un shell; si no, su texto). Desconocido: cuenta el texto de la orden."""
+    if ctx.stdin is None:
+        if as_script:
+            ctx.stdin_opaque = True
+        return
+    if ctx.stdin[0] == "opaque":
+        ctx.stdin_opaque = True
+        return
+    text = ctx.stdin[1]
+    if not as_script:
+        emit_text(ctx, text)
+        return
+    inner = Ctx(ctx.cwds, ctx.home)
+    inner.git_env = ctx.git_env if git_env is None else git_env
+    run(text, inner, depth + 1)
+    ctx.out.extend(inner.out)
 
 
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
@@ -646,13 +720,17 @@ WRAPPER_ARGS = {
 }
 # Órdenes que demostradamente no ejecutan sus argumentos. sed (`e`) y awk
 # (`system()`) sí pueden: no están aquí.
-NON_EXEC = {"echo", "printf", "cat", "grep", "rg", "tee", "jq", "test", "["}
+NON_EXEC = {"echo", "printf", "cat", "grep", "rg", "tee", "jq", "test", "[",
+            "true", "false", ":", "wc", "head", "tail", "cut", "tr"}
+# Opciones con las que una orden de NON_EXEC sí ejecuta otra (rg --pre <cmd>).
+NON_EXEC_ESCAPES = ("--pre", "--pre=")
 # Opciones de shell que toman un argumento aparte.
 SHELL_ARG_OPTS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
 
 
 def execute(argv, words, ctx, depth, git_env):
-    unresolved = git_env or ctx.git_env
+    # GIT_DIR de la propia orden manda sobre el de la sesión.
+    unresolved = git_env if git_env is not False else ctx.git_env
     while argv:
         if argv[0] is UNKNOWN:
             emit_opaque(ctx, argv, words, depth, unresolved)
@@ -671,8 +749,9 @@ def execute(argv, words, ctx, depth, git_env):
                 elif a.startswith("-"):
                     argv, words = argv[1:], words[1:]
                 elif ASSIGN_RE.match(a):
-                    if ASSIGN_RE.match(a).group(1) in GIT_ENV:
-                        unresolved = True
+                    m = ASSIGN_RE.match(a)
+                    if m.group(1) in GIT_ENV:
+                        unresolved = merge_git_env(unresolved, m.group(1), a[m.end():])
                     argv, words = argv[1:], words[1:]
                 else:
                     break
@@ -706,7 +785,7 @@ def execute(argv, words, ctx, depth, git_env):
 
     if base in ("cd", "pushd"):
         args = [a for a in argv[1:] if a is UNKNOWN or a == "-" or not a.startswith("-")]
-        new, fails = [], 0
+        new = []
         for cwd in ctx.cwds:
             if not args:
                 target = ctx.home if base == "cd" else UNKNOWN
@@ -718,15 +797,16 @@ def execute(argv, words, ctx, depth, git_env):
                 target = UNKNOWN
             else:
                 target = os.path.normpath(os.path.join(cwd, args[0]))
-            if target is UNKNOWN or os.path.isdir(target):
-                new.append(target)
-            elif not ctx.ran_any:
-                new.append(cwd)  # inexistente y nada pudo crearlo: el cd falla
-                fails += 1
-            else:
-                new.append(UNKNOWN)  # `mkdir d && cd d`: no resoluble
+            if (target is not UNKNOWN and args and args[0] is not UNKNOWN
+                    and not os.path.isabs(args[0]) and cdpath_set(ctx)
+                    and not args[0].startswith(("./", "../")) and args[0] not in (".", "..")):
+                target = UNKNOWN  # CDPATH puede llevar el cd a otro sitio
+            if target is not UNKNOWN and not os.path.isdir(target):
+                # inexistente para el hook: `mkdir d && cd d`, otra vista del
+                # disco… Nunca se deduce que el cd falla (eso permitiría).
+                target = UNKNOWN
+            new.append(target)
         ctx.cwds = _union(new)
-        ctx.last_fail = fails == len(new)
         return
     if base == "popd":
         ctx.cwds = (UNKNOWN,)
@@ -757,7 +837,10 @@ def execute(argv, words, ctx, depth, git_env):
             if a.startswith("--") or (a.startswith("+") and len(a) > 1):
                 k += 1
                 continue
-            if not a.startswith("-") or a == "-":
+            if a in ("-", "--") or (a.startswith("-") and "s" in a[1:] and "c" not in a[1:]):
+                read_stdin(ctx, depth, True, unresolved)  # `bash -`, `sh -s`: script por stdin
+                return
+            if not a.startswith("-"):
                 emit_opaque(ctx, argv, words, depth, unresolved)  # `bash script.sh`: script opaco
                 return
             if "c" not in a[1:]:
@@ -770,27 +853,35 @@ def execute(argv, words, ctx, depth, git_env):
                     return
                 snap = ctx.snapshot()
                 inner = Ctx(ctx.cwds, ctx.home)
-                inner.git_env = ctx.git_env or unresolved
+                inner.git_env = unresolved
                 run(script, inner, depth + 1)
                 ctx.out.extend(inner.out)
                 ctx.restore(snap)
             return
+        read_stdin(ctx, depth, True, unresolved)  # sin -c ni script: lee stdin
         return
     if base == "git":
         git(argv, ctx, unresolved)
         return
-    if base in NON_EXEC:
+    if base in NON_EXEC and not any(
+            a is not UNKNOWN and a.startswith(NON_EXEC_ESCAPES) for a in argv[1:]):
         return
     # Cualquier otra orden puede ejecutar sus argumentos (awk system(),
     # script -c, su -c, python3 -c…): su texto cuenta (fail-closed).
     emit_text(ctx, words_text(words[1:]))
+    read_stdin(ctx, depth, as_script=False)
     # `git` como argumento de otra orden (find -exec, watch, parallel…)
     for k, a in enumerate(argv[1:], start=1):
         if a is not UNKNOWN and os.path.basename(a) == "git":
             for b in argv[k + 1:]:
-                if b in OPS:
+                if is_op(b):
                     emit(ctx, b, UNKNOWN)
                     return
+
+
+def cdpath_set(ctx):
+    v = ctx.vars.get("CDPATH", os.environ.get("CDPATH"))
+    return v is UNKNOWN or bool(v)
 
 
 def git(argv, ctx, unresolved):
@@ -799,16 +890,22 @@ def git(argv, ctx, unresolved):
 
 
 def _git_one(argv, ctx, unresolved, gdir):
+    fixed = False  # destino fijado por un GIT_DIR / --git-dir literal
+    if isinstance(unresolved, str):
+        gdir, unresolved, fixed = unresolved, False, True
     k = 1
     while k < len(argv):
         a = argv[k]
         if a is UNKNOWN:
             # subcomando no resoluble: decide el texto restante
             for b in argv[k + 1:]:
-                if b in OPS:
+                if is_op(b):
                     emit(ctx, b, UNKNOWN)
                     return
             return
+        if a == "-C" and fixed:
+            k += 2
+            continue
         if a == "-C":
             nxt = argv[k + 1] if k + 1 < len(argv) else ""
             if nxt is UNKNOWN or gdir is UNKNOWN and not (nxt or "").startswith("/"):
@@ -821,18 +918,27 @@ def _git_one(argv, ctx, unresolved, gdir):
         if a in ("-c", "--namespace", "--config-env", "--super-prefix", "--exec-path"):
             k += 2
             continue
-        if a in ("--git-dir", "--work-tree"):
-            unresolved = True
+        if a == "--git-dir" or a.startswith("--git-dir="):
+            val = argv[k + 1] if a == "--git-dir" and k + 1 < len(argv) else a[len("--git-dir="):]
+            wt = gitdir_worktree(val)
+            if wt is UNKNOWN:
+                unresolved = True
+            else:
+                gdir, unresolved, fixed = wt, False, True
+            k += 2 if a == "--git-dir" else 1
+            continue
+        if a == "--work-tree":
+            unresolved = unresolved or not fixed
             k += 2
             continue
-        if a.startswith(("--git-dir=", "--work-tree=")):
-            unresolved = True
+        if a.startswith("--work-tree="):
+            unresolved = unresolved or not fixed
             k += 1
             continue
         if a.startswith("-"):
             k += 1
             continue
-        if a in OPS:
+        if is_op(a):
             emit(ctx, a, UNKNOWN if unresolved else gdir)
         return
 

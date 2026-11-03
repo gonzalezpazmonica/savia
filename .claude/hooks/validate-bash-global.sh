@@ -82,10 +82,11 @@ guard_main_target() {
     exit 2
   fi
 }
-# Prefiltro amplio: `git -C <ruta> commit` no casa con `git +commit`. Qué es
+# Prefiltro amplio: `git -C <ruta> commit` no casa con `git +commit`; commit-tree
+# también crea commits. Qué es
 # una orden real lo decide el resolvedor.
 if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/null \
-   && echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_-])(commit|add)([^[:alnum:]_-]|$)' > /dev/null; then
+   && echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_-])(commit(-tree)?|add)([^[:alnum:]_-]|$)' > /dev/null; then
   GIT_DIR_TARGET="${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-$PWD}}"
   if git -C "$ENTRY_PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     # SE-383 P8 (worktree-aware): el cwd de entrada manda sobre el proyecto.
@@ -94,7 +95,8 @@ if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/nul
   # El repo que importa es el DESTINO de cada `git commit|add` real (git -C,
   # cd encadenado con o sin comillas y con ~, variables literales); heredocs
   # y cadenas son texto. Destino no resoluble → GIT_DIR_TARGET (conservador).
-  # Sin Python o si el resolvedor falla: cwd de la orden (fail-closed).
+  # Sin Python o si el resolvedor falla: cwd de la orden (conservador solo si
+  # ese cwd está en main; el destino de `git -C` no se mira).
   RESOLVER="$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/git_op_targets.py"
   if command -v python3 >/dev/null 2>&1 \
      && OP_TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$GIT_DIR_TARGET" 2>/dev/null); then
