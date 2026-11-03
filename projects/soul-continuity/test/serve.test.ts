@@ -386,3 +386,46 @@ test("avisos: un elemento que desaparece y vuelve se avisa de nuevo; uno que sig
   assert.equal(avisos(), 2, "reaparece: se avisa otra vez");
   assert.ok(fase >= 4);
 });
+
+test("avisos (revisión #1447, P2-1): un elemento registrado con su tipo apagado se avisa al encender el tipo, y una sola vez", () => {
+  const e = { id: "e1", tipo: "tarea", titulo: "t", proyecto: null, personas: [], detalle: null, adaptador: "github", ruta: "api", dep: true, fecha: null, nace: Date.now(), observado: Date.now(), estado: "OBSERVED", sens: "N2", refs: [], mio: false, noMio: false, fijo: true, validoHasta: Date.now() + 86_400_000 } as any;
+  const srv = crearServidor({
+    tls: { cert: "x", key: "y" },
+    mundo: {
+      semillas: () => [{ ref: "op", tokens: ["t"], nivel: "titulos", nivelMax: "titulos", proyectos: [], personas: [], elementos: [], adaptadores: [],
+        avisos: { activos: [], resumenInicio: null, resumenCierre: null, max: 50, ventanaMin: 60, tope: 3 }, alertas: [] }],
+      refrescar: (ctx, o, t) => {
+        if (!o.elementos.has("e1")) o.elementos.set("e1", { ...e });
+        ctx.evento(o, { tipo: "aviso", categoria: "vencimiento", ids: ["e1"] }, t);
+      },
+    },
+  });
+  const op = srv.operador("op");
+  const avisos = () => op.mensajes.filter((m: { ids: string[]; tipo: string }) => m.tipo === "aviso" && m.ids.includes("e1")).length;
+  const registrados = () => op.registro.filter((r: { decision: string }) => r.decision === "registrar").length;
+  srv.estadisticas("op");
+  const reg = registrados();
+  srv.estadisticas("op");
+  assert.equal(avisos(), 0, "apagado: no se avisa");
+  assert.equal(registrados(), reg, "apagado: no se registra en cada tic");
+  op.avisos.activos = ["vencimiento"];
+  srv.estadisticas("op");
+  assert.equal(avisos(), 1, "encendido con el elemento vivo: se avisa");
+  srv.estadisticas("op");
+  assert.equal(avisos(), 1, "y no se repite");
+});
+
+test("htu sin consulta (revisión #1447, P2-3): una petición real con ?limite=5 entra con la prueba firmada sobre la ruta sin consulta, y no con la consulta dentro", async () => {
+  const dir = setup(["127.0.0.1"], await freePort());
+  const out: string[] = [];
+  const p = pair(dir, "movil", new Date().toISOString());
+  const s = await start(dir, out);
+  try {
+    const ruta = "/api/v1/soul/sondeo";
+    const sin = proof(KEY, { htu: `https://127.0.0.1:${s.port}${ruta}`, iat: Date.now(), token: p.token });
+    const r = await call(s.port, s.ca, p.token, { path: `${ruta}?limite=5`, proofOverride: sin });
+    assert.equal(r.status, 200, "htu sin consulta: entra");
+    const con = proof(KEY, { htu: `https://127.0.0.1:${s.port}${ruta}?limite=5`, iat: Date.now(), token: p.token });
+    assert.equal((await call(s.port, s.ca, p.token, { path: `${ruta}?limite=5`, proofOverride: con })).status, 401, "htu con la consulta: no casa");
+  } finally { assert.equal(await s.stop(), 0); }
+});

@@ -245,16 +245,19 @@ export function crearServidor(opts: OpcionesServidor) {
   }
   function evento(o: Op, ev: Evento, t: number) {
     // Un elemento ya avisado no se vuelve a avisar (también tras reiniciar `serve`).
+    const categoria = ev.tipo === "alerta" ? "alerta_definida" : ev.categoria ?? "";
+    const regla = ev.tipo === "alerta" ? ev.regla ?? null : null;
+    const tipoAviso = regla ? "espera_respuesta" : ev.avisoDe ?? AVISO_DE[categoria];
+    const apagado = !regla && !o.avisos.activos.includes(tipoAviso);
     if (ev.ids.length === 1 && ev.tipo === "aviso") {
-      const k = `${ev.categoria ?? ""}|${ev.ids[0]}`;
+      // Lo registrado con el tipo apagado se recuerda aparte (`off:`): no se registra en cada tic,
+      // pero si la persona enciende el tipo con el elemento vivo, se avisa (revisión #1447, P2-1).
+      const k = `${apagado ? "off:" : ""}${ev.categoria ?? ""}|${ev.ids[0]}`;
       if (avisados(o).has(k)) return;
       avisados(o).add(k);
     }
-    const categoria = ev.tipo === "alerta" ? "alerta_definida" : ev.categoria ?? "";
-    const regla = ev.tipo === "alerta" ? ev.regla ?? null : null;
     // Los tipos de aviso apagados por la persona no entran en la política: solo se registran.
-    const tipoAviso = regla ? "espera_respuesta" : ev.avisoDe ?? AVISO_DE[categoria];
-    if (!regla && !o.avisos.activos.includes(tipoAviso)) { registrar(o, t, "registrar", "regla_activa", categoria); return; }
+    if (apagado) { registrar(o, t, "registrar", "regla_activa", categoria); return; }
     // Una regla por la web (sin identidad del remitente) entra por la ruta WEB: la política la baja a aviso.
     const pe: EventoPolitica = {
       id: `${o.epoca}|${o.seq}|${categoria}|${ev.ids.join(",")}|${t}`, origen: "AGENTE_AUTENTICADO", tipo: { k: "NOTIFICACION" },
