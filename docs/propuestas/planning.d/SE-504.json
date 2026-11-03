@@ -1,0 +1,9 @@
+{
+  "id": "SE-504",
+  "status": "PROPOSED",
+  "priority": "P0",
+  "phase": "A",
+  "title": "Savia usable: conversación natural, documentos y contexto en Savia Space",
+  "evidence": "docs/specs/SE-504-savia-usable-conversacion-documentos-contexto.spec.md",
+  "note": "Mandato de la operadora 2026-11-03: la app actual no es usable por humanos (32 fricciones, 10 bloqueantes). Conversación con streaming, adjuntos, voz y fuentes; tarjetas de acción con confirmación; visores md/pdf/imagen/tabla; contexto visible; Continuidad en la conversación; primera experiencia sin terminal; capturas permitidas por defecto; AC de usabilidad (3 personas no técnicas, SUS >= 80, UEQ-S, 2 referentes). S1 en una semana: conversación básica y visor md/pdf. Tier 4: decide la operadora D1-D3."
+}
