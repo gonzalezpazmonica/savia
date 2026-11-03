@@ -9,13 +9,16 @@
  *   de órdenes permitidas), y sin terminal interactiva no hace nada.
  */
 
-import { existsSync } from "node:fs";
-import { connect } from "node:net";
+import { X509Certificate } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { isIP } from "node:net";
+import { connect as tlsConnect } from "node:tls";
 import { join } from "node:path";
 import type { CliDeps } from "./cli.ts";
-import { type Check, type HostProbe, NO_VPN_HELP, checkListen, checkSecretTool, detectVpn } from "./host.ts";
+import { type Check, type HostProbe, NO_VPN_HELP, checkListen, checkSecretTool, describeVpn, detectVpn } from "./host.ts";
 import { ConfigError, NoProfileError, loadConfig, resolveInstall } from "../core/config.ts";
 import { validateListen } from "../api/listen.ts";
+import { spkiPin } from "../api/cert.ts";
 
 export function hostProbe(deps: CliDeps): HostProbe {
   return { platform: deps.platform, path: deps.env.PATH ?? deps.env.Path, ifaces: deps.ifaces?.() ?? {}, run: deps.run };
@@ -51,19 +54,30 @@ export function formatChecks(checks: Check[]): string {
 
 const yes = (a: string) => /^(|s|si|sí|y|yes)$/i.test(a.trim());
 
-/** ¿Responde algo en esa dirección y puerto? (TCP; `serve` habla TLS encima). */
-export function tcpReachable(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
+/**
+ * ¿Responde `serve` de esta instalación en esa dirección y puerto? Hace el handshake TLS y exige que
+ * la huella SPKI del certificado presentado sea la de `tls/cert.pem` de la instalación: cualquier otro
+ * proceso escuchando en ese puerto (o un TCP sin TLS) no cuenta. Sin certificado aún, `false`.
+ */
+export function servePinned(dataDir: string, host: string, port: number, timeoutMs = 1500): Promise<boolean> {
+  let want: string;
+  try { want = spkiPin(readFileSync(join(dataDir, "tls", "cert.pem"), "utf8")); } catch { return Promise.resolve(false); }
   return new Promise((resolve) => {
-    const s = connect({ host, port });
+    // Sin validación de CA a propósito: el certificado es autofirmado y la confianza es la huella.
+    const s = tlsConnect({ host, port, rejectUnauthorized: false, servername: isIP(host) ? undefined : host });
     const done = (ok: boolean) => { s.destroy(); resolve(ok); };
     s.setTimeout(timeoutMs, () => done(false));
-    s.once("connect", () => done(true));
+    s.once("secureConnect", () => {
+      let got = "";
+      try { const raw = s.getPeerCertificate().raw; got = raw ? spkiPin(new X509Certificate(raw).toString()) : ""; } catch { got = ""; }
+      done(got !== "" && got === want);
+    });
     s.once("error", () => done(false));
   });
 }
 
 async function waitReachable(deps: CliDeps, host: string, port: number): Promise<boolean> {
-  const probe = deps.reachable ?? ((h: string, p: number) => tcpReachable(h, p));
+  const probe = deps.reachable ?? ((h: string, p: number) => servePinned(deps.dataDir, h, p));
   for (let i = 0; i < 10; i++) {
     if (await probe(host, port)) return true;
     if (!deps.reachable) await new Promise((r) => setTimeout(r, 1000));
@@ -94,13 +108,25 @@ export async function runSetup(deps: CliDeps, sub: (argv: string[]) => Promise<n
 
   // 2. Escucha en la VPN
   say("2/5 Por dónde te encuentra el móvil (solo por tu VPN)");
-  let cfg = loadConfig(deps.dataDir);
+  let cfg;
+  try { cfg = loadConfig(deps.dataDir); } catch (e) {
+    deps.err(`No puedo leer la instalación (${e instanceof ConfigError || e instanceof NoProfileError ? e.message : (e as Error).name}). Mira qué dice: soul doctor`);
+    return 1;
+  }
   if (cfg.api.listen.length) {
     say(`Escucha configurada: ${cfg.api.listen.join(", ")}`);
   } else {
     const vpn = await detectVpn(hostProbe(deps).ifaces, deps.run);
     let ips: string[] = [];
-    if (vpn.length && yes(await ask(`He encontrado tu VPN: ${vpn.map((v) => v.address).join(", ")}. ¿Escucho solo ahí? [S/n]: `))) ips = vpn.map((v) => v.address);
+    // Una 100.64/10 que no es de una VPN reconocida (CGNAT de la operadora) no se acepta con Intro.
+    const known = vpn.every((v) => v.vpn);
+    const q = known
+      ? `He encontrado tu VPN: ${describeVpn(vpn)}. ¿Escucho solo ahí? [S/n]: `
+      : `He encontrado ${describeVpn(vpn)}. ¿Es tu VPN? Escribe «si» para escuchar ahí [s/N]: `;
+    if (vpn.length) {
+      const a = await ask(q);
+      if (known ? yes(a) : yes(a) && a.trim() !== "") ips = vpn.map((v) => v.address);
+    }
     if (!ips.length) {
       if (!vpn.length) say(NO_VPN_HELP);
       const typed = (await ask("Escribe la IP de tu VPN en este equipo (Intro para salir y hacerlo luego): ")).trim();

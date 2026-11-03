@@ -35,7 +35,7 @@ import type { Run } from "../credentials/store.ts";
 import type { TokenSet } from "../adapters/oauth.ts";
 import { randomBytes } from "node:crypto";
 import { LoginUsage, PROFILE_NAME, initConfig, runLogin } from "./login.ts";
-import { type Interfaces, NO_VPN_HELP, checkSecretTool, detectVpn, missingAddress, onInterface } from "./host.ts";
+import { type Interfaces, NO_VPN_HELP, type VpnAddress, checkSecretTool, describeVpn, detectVpn, missingAddress, onInterface, recognizedVpn } from "./host.ts";
 import { doctorChecks, formatChecks, hostProbe, runSetup } from "./setup.ts";
 
 export interface CliDeps {
@@ -70,7 +70,7 @@ export interface CliDeps {
   ifaces?: () => Interfaces;
   /** Pregunta a la persona en su terminal (solo `setup`). Sin terminal interactiva, ausente. */
   ask?: (question: string) => Promise<string>;
-  /** ¿Responde `serve` en esa dirección? (solo `setup`; por defecto, conexión TCP). */
+  /** ¿Responde `serve` de esta instalación en esa dirección? (solo `setup`; por defecto, TLS con la huella de `tls/cert.pem`). */
   reachable?: (host: string, port: number) => Promise<boolean>;
 }
 
@@ -182,13 +182,18 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       if (!PROFILE_NAME.test(name)) { deps.err("init <perfil> [--email a@b]: perfil en minúsculas, cifras, - y _"); return 2; }
       if (existsSync(join(deps.dataDir, "config.json"))) { deps.err(`ya hay una instalación en ${deps.dataDir}; no se pisa`); return 1; }
       const emails = typeof p.flags.email === "string" ? p.flags.email.split(",").map((e) => e.trim()).filter(Boolean) : [];
-      // Escucha: la que da la persona (validada) o la IP de la VPN detectada. Nunca un comodín.
+      // Escucha: la que da la persona (validada) o la IP de una VPN reconocida. Nunca un comodín, y
+      // nunca una 100.64/10 que puede ser el CGNAT de la operadora (eso solo se propone).
       let listen: string[];
+      let candidates: VpnAddress[] = [];
       if (p.flags.listen !== undefined) {
         try { listen = validateListen(typeof p.flags.listen === "string" ? p.flags.listen.split(",").map((x) => x.trim()).filter(Boolean) : []); } catch (e) {
           deps.err(`--listen: ${(e as Error).message}`); return 2;
         }
-      } else listen = (await detectVpn(hostProbe(deps).ifaces, deps.run)).map((v) => v.address);
+      } else {
+        candidates = await detectVpn(hostProbe(deps).ifaces, deps.run);
+        listen = recognizedVpn(candidates);
+      }
       const cfg = initConfig(name, emails, `inst-${randomBytes(6).toString("hex")}`);
       cfg.api.listen = listen;
       saveConfig(deps.dataDir, cfg);
@@ -196,7 +201,9 @@ async function runWithoutConfig(p: Parsed, deps: CliDeps, print: (human: string,
       if (almacen.level !== "ok") deps.err(`aviso: ${almacen.message}. Instálalo: ${almacen.fix}`);
       print([
         `Instalación creada en ${deps.dataDir} con el perfil «${name}». Ninguna fuente ni adaptador está activo: actívalos en config.json (ver docs/instalar.md).`,
-        listen.length ? `Escucharé solo en tu VPN: ${listen.join(", ")} (cámbialo con soul listen).` : NO_VPN_HELP,
+        listen.length ? `Escucharé solo en tu VPN: ${listen.join(", ")} (cámbialo con soul listen).`
+          : candidates.length ? `No fijo la escucha: ${describeVpn(candidates)}. Si es tu VPN: soul listen ${candidates.map((v) => v.address).join(" ")}`
+          : NO_VPN_HELP,
       ].join("\n"), { data_dir: deps.dataDir, profile: name, operator_ref: cfg.profiles[name].operator.ref, listen });
       return 0;
     }
@@ -558,14 +565,15 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         if (!existsSync(join(deps.dataDir, "config.json"))) throw new Exit(1, "Soul no está instalado en esta cuenta: soul setup");
         let ips: string[];
         if (p.flags.detect === true) {
-          ips = (await detectVpn(hostProbe(deps).ifaces, deps.run)).map((v) => v.address);
-          if (!ips.length) throw new Exit(1, NO_VPN_HELP);
+          const found = await detectVpn(hostProbe(deps).ifaces, deps.run);
+          ips = recognizedVpn(found);
+          if (!ips.length) throw new Exit(1, found.length ? `no reconozco ninguna VPN: ${describeVpn(found)}. Si es tu VPN, fíjala a mano: soul listen ${found.map((v) => v.address).join(" ")}` : NO_VPN_HELP);
         } else if (p.args.length) {
           try { ips = validateListen(p.args); } catch (e) { throw new Exit(2, (e as Error).message); }
         } else {
-          const vpn = (await detectVpn(hostProbe(deps).ifaces, deps.run)).map((v) => v.address);
-          print(`Escucha: ${cfg.api.listen.join(", ") || "ninguna"} · VPN detectada: ${vpn.join(", ") || "ninguna"}. Para cambiarla: soul listen <ip> o soul listen --detect`,
-            { listen: cfg.api.listen, vpn });
+          const found = await detectVpn(hostProbe(deps).ifaces, deps.run);
+          print(`Escucha: ${cfg.api.listen.join(", ") || "ninguna"} · detectada: ${describeVpn(found) || "ninguna"}. Para cambiarla: soul listen <ip> o soul listen --detect`,
+            { listen: cfg.api.listen, vpn: recognizedVpn(found), candidates: found.map((v) => v.address) });
           return 0;
         }
         cfg.api.listen = ips;

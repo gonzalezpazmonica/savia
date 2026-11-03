@@ -7,6 +7,9 @@
  *
  * - VPN: `tailscale ip -4` y las interfaces con una IPv4 de 100.64.0.0/10 (rango de Tailscale,
  *   Headscale, NetBird y otras VPN de malla). Nunca se propone 0.0.0.0 ni una dirección de bucle.
+ *   100.64/10 es también el CGNAT de operadoras móviles e ISP (RFC 6598): solo cuenta como VPN
+ *   reconocida (`vpn: true`, se puede fijar sin preguntar) lo que da `tailscale ip -4` o una interfaz
+ *   con nombre de VPN (`VPN_IF`). Una 100.64/10 en `eth0`, `wwan0`… solo se propone, y se pregunta.
  * - IP configurada ausente: si `api.listen` tiene una IP que no está en ninguna interfaz, `serve`
  *   fallaría con EADDRNOTAVAIL. Si NetworkManager gestiona `tailscale0`, le quita la IPv4: se da la
  *   orden del fichero `unmanaged-devices`.
@@ -14,7 +17,7 @@
  */
 
 import { existsSync, statSync } from "node:fs";
-import { isIPv4 } from "node:net";
+import { isIPv4, isIPv6 } from "node:net";
 import type { NetworkInterfaceInfo } from "node:os";
 import { delimiter, join } from "node:path";
 import type { Run } from "../credentials/store.ts";
@@ -28,26 +31,48 @@ export function isCgnat(ip: string): boolean {
   return a === 100 && b >= 64 && b <= 127;
 }
 
-export interface VpnAddress { address: string; via: string }
+/**
+ * Nombres de interfaz de VPN de malla: Tailscale (`tailscale0`; «Tailscale» en Windows), NetBird
+ * (`wt0`), WireGuard (`wg0`…), macOS (`utun3`…), ZeroTier (`zt…`). Una WAN o un módem (`eth0`,
+ * `wwan0`, `enx…`) no entra aunque tenga una 100.64/10.
+ */
+export const VPN_IF = /^(tailscale\d*|wt\d+|wg\d*|utun\d+|zt[0-9a-z]+)$/i;
+
+/** `vpn`: reconocida como VPN (de `tailscale ip -4` o de una interfaz `VPN_IF`). */
+export interface VpnAddress { address: string; via: string; vpn: boolean }
 
 /**
- * Direcciones IPv4 de la VPN de este equipo, sin repetir: primero las que da `tailscale ip -4`,
- * después las de cualquier interfaz en 100.64.0.0/10. Sin VPN, lista vacía.
+ * Direcciones IPv4 candidatas a VPN, sin repetir: primero las que da `tailscale ip -4`, después
+ * las de cualquier interfaz en 100.64.0.0/10. Sin ninguna, lista vacía. Solo las `vpn: true` se
+ * pueden fijar sin preguntar (`recognizedVpn`).
  */
 export async function detectVpn(ifaces: Interfaces, run: Run): Promise<VpnAddress[]> {
   const out: VpnAddress[] = [];
-  const add = (address: string, via: string) => { if (!out.some((x) => x.address === address)) out.push({ address, via }); };
+  const add = (address: string, via: string, vpn: boolean) => { if (!out.some((x) => x.address === address)) out.push({ address, via, vpn }); };
   const r = await run("tailscale", ["ip", "-4"]);
-  if (r.code === 0) for (const l of r.stdout.split(/\s+/)) if (isCgnat(l)) add(l, "tailscale");
+  if (r.code === 0) for (const l of r.stdout.split(/\s+/)) if (isCgnat(l)) add(l, "tailscale", true);
   for (const [name, list] of Object.entries(ifaces)) {
-    for (const i of list ?? []) if (!i.internal && i.family === "IPv4" && isCgnat(i.address)) add(i.address, name);
+    for (const i of list ?? []) if (!i.internal && i.family === "IPv4" && isCgnat(i.address)) add(i.address, name, VPN_IF.test(name));
   }
   return out;
 }
 
-/** ¿Está esta IP asignada a alguna interfaz del equipo? */
+/** Solo las direcciones reconocidas como VPN: lo único que `init` y `listen --detect` fijan solos. */
+export const recognizedVpn = (v: VpnAddress[]) => v.filter((x) => x.vpn).map((x) => x.address);
+
+/** «100.70.1.2 en wwan0» para proponer, sin fijar, una 100.64/10 que no es de una VPN reconocida. */
+export const describeVpn = (v: VpnAddress[]) => v.map((x) => `${x.address} en ${x.via}${x.vpn ? "" : " (no parece una VPN: puede ser la red de tu operadora)"}`).join(", ");
+
+/** Forma canónica de una IP para comparar (IPv6 en minúsculas y comprimida); lo que no es IP, tal cual. */
+export function canonicalIp(ip: string): string {
+  if (!isIPv6(ip)) return ip;
+  try { return new URL(`http://[${ip}]/`).hostname.slice(1, -1); } catch { return ip.toLowerCase(); }
+}
+
+/** ¿Está esta IP asignada a alguna interfaz del equipo? IPv6 en cualquier escritura. */
 export function onInterface(ip: string, ifaces: Interfaces): boolean {
-  return Object.values(ifaces).some((list) => (list ?? []).some((i) => i.address === ip));
+  const want = canonicalIp(ip);
+  return Object.values(ifaces).some((list) => (list ?? []).some((i) => canonicalIp(i.address) === want));
 }
 
 export const TAILSCALE_IF = "tailscale0";
@@ -113,7 +138,7 @@ export async function checkListen(listen: string[], h: HostProbe): Promise<Check
     const vpn = await detectVpn(h.ifaces, h.run);
     return [{
       id: "escucha", level: "fallo", message: "sin dirección de escucha (api.listen vacío)",
-      fix: vpn.length ? `soul listen ${vpn.map((v) => v.address).join(" ")}   (VPN detectada: ${vpn.map((v) => `${v.address} en ${v.via}`).join(", ")})` : NO_VPN_HELP,
+      fix: vpn.length ? `soul listen ${vpn.map((v) => v.address).join(" ")}   (detectada: ${describeVpn(vpn)})` : NO_VPN_HELP,
     }];
   }
   const out: Check[] = [];

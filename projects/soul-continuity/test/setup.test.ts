@@ -4,7 +4,9 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { type AddressInfo, type Server, createServer as netServer } from "node:net";
+import { createServer as tlsServer } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Run } from "../src/credentials/store.ts";
@@ -13,6 +15,8 @@ import type { Interfaces } from "../src/cli/host.ts";
 import { NM_UNMANAGED_FIX } from "../src/cli/host.ts";
 import { emptyConfig, loadConfig, saveConfig } from "../src/core/config.ts";
 import { serveFromCli } from "../src/api/serve.ts";
+import { ensureInstallCert } from "../src/api/cert.ts";
+import { servePinned } from "../src/cli/setup.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.192.0.0", mac: "00:00:00:00:00:00", cidr: null });
 const VPN = "100.101.7.3";
@@ -79,6 +83,21 @@ test("init avisa si falta secret-tool, con la orden de instalación", async () =
   const t = mk({ ...conVpn() });
   await runCli(["init", "trabajo"], t.deps);
   assert.doesNotMatch(t.err.join("\n"), /secret-tool/, "con secret-tool no avisa");
+});
+
+test("init (negativo): una 100.64/10 en la WAN o el módem no se fija sola; la propone con su interfaz", async () => {
+  const s = mk({ ifaces: { wwan0: [v4("100.70.1.2")] } });
+  assert.equal(await runCli(["init", "trabajo"], s.deps), 0, s.err.join("\n"));
+  assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, [], "CGNAT de la operadora: no se escucha ahí sin preguntar");
+  assert.match(s.out.join("\n"), /No fijo la escucha: 100\.70\.1\.2 en wwan0 \(no parece una VPN[\s\S]*soul listen 100\.70\.1\.2/);
+});
+
+test("listen --detect (negativo): una 100.64/10 que no es de VPN no se fija; dice cómo fijarla a mano", async () => {
+  const s = mk({ ifaces: { eth0: [v4("100.72.0.9")] } });
+  withConfig(s);
+  assert.equal(await runCli(["listen", "--detect"], s.deps), 1);
+  assert.match(s.err.join("\n"), /no reconozco ninguna VPN: 100\.72\.0\.9 en eth0[\s\S]*soul listen 100\.72\.0\.9/);
+  assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, []);
 });
 
 test("init --listen: valida la IP; 0.0.0.0 se rechaza y no crea nada", async () => {
@@ -219,6 +238,45 @@ test("setup con VPN detectada pero sin escucha la propone y la escribe si la per
   assert.equal(await runCli(["setup"], s.deps), 0, s.err.join("\n"));
   assert.match(s.asked[0], /He encontrado tu VPN: 100\.101\.7\.3/);
   assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, [VPN]);
+});
+
+test("setup (negativo): una 100.64/10 en wwan0 se pregunta y Intro no la acepta", async () => {
+  const s = mk({ ifaces: { wwan0: [v4("100.70.1.2")] }, run: fakeRun({ systemctl: { code: 0 } }), answers: ["trabajo", "", "", ""] });
+  assert.equal(await runCli(["setup"], s.deps), 1);
+  assert.match(s.asked.join("\n"), /100\.70\.1\.2 en wwan0 \(no parece una VPN[\s\S]*¿Es tu VPN\? Escribe «si» para escuchar ahí \[s\/N\]/);
+  assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, []);
+  assert.equal(existsSync(join(s.dir, ".config/systemd/user/soul-continuity.service")), false);
+});
+
+test("setup: una 100.64/10 en wwan0 se fija solo si la persona escribe «si»", async () => {
+  const s = mk({ ifaces: { wwan0: [v4("100.70.1.2")] }, run: fakeRun({ systemctl: { code: 0 } }), answers: ["si", "n"] });
+  withConfig(s, []);
+  assert.equal(await runCli(["setup"], s.deps), 0, s.err.join("\n") + s.out.join("\n"));
+  assert.deepEqual(loadConfig(s.deps.dataDir).api.listen, ["100.70.1.2"]);
+});
+
+test("setup (negativo): con config.json roto no lanza una excepción; remite a soul doctor", async () => {
+  const s = mk(conVpn());
+  mkdirSync(s.deps.dataDir, { recursive: true });
+  writeFileSync(join(s.deps.dataDir, "config.json"), "{ esto no es json");
+  assert.equal(await runCli(["setup"], s.deps), 1);
+  assert.match(s.err.join("\n"), /No puedo leer la instalación[\s\S]*soul doctor/);
+});
+
+test("servePinned: solo cuenta el TLS con la huella del certificado de la instalación", async () => {
+  const s = mk();
+  const mine = ensureInstallCert(s.deps.dataDir, ["127.0.0.1"]);
+  const other = ensureInstallCert(join(s.dir, "otra"), ["127.0.0.1"]);
+  const listenOn = (srv: Server) => new Promise<number>((r) => srv.listen(0, "127.0.0.1", () => r((srv.address() as AddressInfo).port)));
+  const good = tlsServer({ cert: mine.cert, key: mine.key });
+  const bad = tlsServer({ cert: other.cert, key: other.key });
+  const plain = netServer((c) => c.end());
+  try {
+    assert.equal(await servePinned(s.deps.dataDir, "127.0.0.1", await listenOn(good)), true);
+    assert.equal(await servePinned(s.deps.dataDir, "127.0.0.1", await listenOn(bad)), false, "otro certificado: impostor");
+    assert.equal(await servePinned(s.deps.dataDir, "127.0.0.1", await listenOn(plain)), false, "TCP sin TLS no es serve");
+    assert.equal(await servePinned(join(s.dir, "sin-cert"), "127.0.0.1", (good.address() as AddressInfo).port), false, "sin certificado de la instalación");
+  } finally { good.close(); bad.close(); plain.close(); }
 });
 
 test("setup sobre una instalación existente no la pisa y no pregunta el perfil", async () => {

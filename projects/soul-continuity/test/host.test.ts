@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Run } from "../src/credentials/store.ts";
 import {
-  type Interfaces, NM_UNMANAGED_FIX, checkListen, checkSecretTool, detectVpn, isCgnat, missingAddress, nmManaged, onInterface, onPath,
+  type Interfaces, NM_UNMANAGED_FIX, VPN_IF, canonicalIp, checkListen, recognizedVpn, checkSecretTool, detectVpn, isCgnat, missingAddress, nmManaged, onInterface, onPath,
 } from "../src/cli/host.ts";
 
 const v4 = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null });
@@ -41,18 +41,42 @@ test("isCgnat: solo 100.64.0.0/10, con sus bordes", () => {
 test("detectVpn: la IP de «tailscale ip -4» primero y sin repetir la de la interfaz", async () => {
   const ifaces: Interfaces = { lo: [v4("127.0.0.1", true)], eth0: [v4("192.168.1.20")], tailscale0: [v4("100.101.7.3")] };
   const run = fakeRun({ "tailscale ip -4": { code: 0, stdout: "100.101.7.3\n" } });
-  assert.deepEqual(await detectVpn(ifaces, run), [{ address: "100.101.7.3", via: "tailscale" }]);
+  assert.deepEqual(await detectVpn(ifaces, run), [{ address: "100.101.7.3", via: "tailscale", vpn: true }]);
 });
 
 test("detectVpn: sin tailscale, encuentra otra VPN de malla por su interfaz 100.64/10", async () => {
   const ifaces: Interfaces = { eth0: [v4("10.0.0.5")], wt0: [v4("100.90.1.2")] };
-  assert.deepEqual(await detectVpn(ifaces, fakeRun({})), [{ address: "100.90.1.2", via: "wt0" }]);
+  assert.deepEqual(await detectVpn(ifaces, fakeRun({})), [{ address: "100.90.1.2", via: "wt0", vpn: true }]);
 });
 
 test("detectVpn (negativo): sin VPN no propone nada, ni la LAN ni el bucle ni 0.0.0.0", async () => {
   const ifaces: Interfaces = { lo: [v4("127.0.0.1", true)], eth0: [v4("192.168.1.20")], docker0: [v4("172.17.0.1")] };
   const run = fakeRun({ "tailscale ip -4": { code: 0, stdout: "0.0.0.0\n192.168.1.20\n" } });
   assert.deepEqual(await detectVpn(ifaces, run), []);
+});
+
+test("detectVpn (negativo): una 100.64/10 en la WAN o el módem (CGNAT de la operadora) no se reconoce como VPN", async () => {
+  const ifaces: Interfaces = { wwan0: [v4("100.70.1.2")], eth0: [v4("100.72.0.9")], enx001122: [v4("100.99.0.1")] };
+  const found = await detectVpn(ifaces, fakeRun({}));
+  assert.deepEqual(found.map((v) => [v.address, v.vpn]), [["100.70.1.2", false], ["100.72.0.9", false], ["100.99.0.1", false]]);
+  assert.deepEqual(recognizedVpn(found), [], "nada se fija solo");
+  // Con tailscale además, solo la de tailscale es reconocida.
+  const mix = await detectVpn({ ...ifaces, tailscale0: [v4("100.101.7.3")] }, fakeRun({ "tailscale ip -4": { code: 0, stdout: "100.101.7.3\n" } }));
+  assert.deepEqual(recognizedVpn(mix), ["100.101.7.3"]);
+});
+
+test("VPN_IF: nombres de VPN de malla sí; WAN, módem, Wi-Fi y Docker no", () => {
+  for (const n of ["tailscale0", "Tailscale", "wt0", "wg0", "wg", "utun3", "ztabcdef12"]) assert.ok(VPN_IF.test(n), n);
+  for (const n of ["eth0", "wwan0", "wlan0", "enp3s0", "enx001122334455", "docker0", "usb0", "rmnet0", "wt", "utun"]) assert.ok(!VPN_IF.test(n), n);
+});
+
+test("onInterface: una IPv6 escrita de otra forma (mayúsculas, ceros) cuenta como la misma", () => {
+  const v6 = { address: "fd7a:115c:a1e0::1", family: "IPv6" as const, internal: false, netmask: "ffff:ffff:ffff::", mac: "00:00:00:00:00:00", cidr: null, scopeid: 0 };
+  const ifaces: Interfaces = { tailscale0: [v6] };
+  assert.equal(onInterface("fd7a:115c:a1e0:0:0:0:0:1", ifaces), true);
+  assert.equal(onInterface("FD7A:115C:A1E0::0001", ifaces), true);
+  assert.equal(onInterface("fd7a:115c:a1e0::2", ifaces), false, "otra IP sigue sin estar");
+  assert.equal(canonicalIp("100.101.7.3"), "100.101.7.3");
 });
 
 test("onInterface: presente y ausente", () => {
