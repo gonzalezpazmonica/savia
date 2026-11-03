@@ -38,6 +38,41 @@ test("el servidor solo sirve por TLS y en las direcciones dadas", async () => {
   } finally { await s.cerrar(); }
 });
 
+// SE-490 enmienda AC-6b (G7): con un token válido, una prueba DPoP ausente, vacía o duplicada da 401,
+// y el esquema tiene que ser DPoP. La verificación criptográfica de la prueba (firma, htm, htu,
+// iat, jti) NO está implementada todavía: la enmienda la deja pendiente de aprobación.
+function cabeceras(port: number, headers: Record<string, string | string[]>) {
+  return new Promise<{ status: number; www: string | undefined; body: string }>((res, rej) => {
+    const q = request({ host: "127.0.0.1", port, path: "/api/v1/soul/estado", ca: CERT.cert, headers }, (r) => {
+      let b = "";
+      r.on("data", (d) => { b += d; });
+      r.on("end", () => res({ status: r.statusCode ?? 0, www: r.headers["www-authenticate"] as string | undefined, body: b }));
+    });
+    q.on("error", rej);
+    q.end();
+  });
+}
+
+test("token válido sin prueba DPoP, con prueba vacía, duplicada o esquema Bearer: 401 con WWW-Authenticate: DPoP", async () => {
+  const s = crearServidor({ tls: CERT, mundo: { semillas: () => [semilla()] }, reloj: () => T0 });
+  const l = await s.escuchar(["127.0.0.1"], 0);
+  try {
+    // control: token y prueba presentes entran
+    assert.equal((await cabeceras(l.port, { Authorization: "DPoP tok-1", DPoP: "p" })).status, 200);
+    for (const [caso, h] of [
+      ["prueba ausente", { Authorization: "DPoP tok-1" }],
+      ["prueba vacía", { Authorization: "DPoP tok-1", DPoP: "" }],
+      ["prueba duplicada", { Authorization: "DPoP tok-1", DPoP: ["p", "q"] }],
+      ["esquema Bearer", { Authorization: "Bearer tok-1", DPoP: "p" }],
+    ] as const) {
+      const r = await cabeceras(l.port, h as Record<string, string | string[]>);
+      assert.equal(r.status, 401, caso);
+      assert.equal(r.www, "DPoP", caso);
+      assert.equal(JSON.parse(r.body).code, "UNAUTHENTICATED", caso);
+    }
+  } finally { await s.cerrar(); }
+});
+
 test("sin direcciones configuradas no arranca (fail-closed)", async () => {
   const s = crearServidor({ tls: CERT, mundo: { semillas: () => [semilla()] }, reloj: () => T0 });
   await assert.rejects(s.escuchar([], 0), /ninguna dirección/);
