@@ -266,6 +266,28 @@ Todo ello va en specs posteriores, con evidencia de uso de v1.
   - revocación del token al desemparejar;
   - móvil perdido;
   - qué ve el proveedor de la VPN.
+- **AC-6b (prueba DPoP) — enmienda pendiente de aprobación de la operadora (G7, 2026-11-02):** cada petición a la API de Soul lleva `Authorization: DPoP <token>` y una única cabecera `DPoP` con una prueba que el servidor **verifica** antes de servir nada:
+  - **firma:** JWS compacto con `typ: dpop+jwt`, algoritmo `ES256` y `jwk` pública en la cabecera; la firma valida con esa clave y la huella de la clave (RFC 7638) coincide con la registrada para el dispositivo al emparejar. Sin clave registrada, el dispositivo no autentica;
+  - **`htm`** igual al método HTTP de la petición y **`htu`** igual a la URL pedida sin query ni fragmento (esquema, dirección y puerto de la escucha, y ruta);
+  - **`iat`** dentro de una ventana acotada respecto al reloj del servidor (por defecto ±60 s);
+  - **`jti`** presente y **sin repetir** para ese dispositivo mientras la prueba siga en ventana; la caché de `jti` vistos tiene memoria acotada y, si se llena, la petición nueva se rechaza (fail-closed);
+  - **`ath`** igual al hash SHA-256 del token, para que la prueba no sirva con otro token.
+
+  Una prueba **ausente, vacía, duplicada, mal formada, con firma inválida, con `htm`/`htu`/`iat` fuera de lo exigido o con un `jti` ya visto** da **401** con `WWW-Authenticate: DPoP` y código `UNAUTHENTICATED`, sin la marca `DEVICE_REVOKED` (la app renueva una vez y no borra su credencial). Tests: uno por cada condición, con caso válido de control, y uno de repetición que envía dos veces la misma prueba válida (200 y luego 401).
+
+  Estado al redactar la enmienda (verificado en `projects/soul-continuity/src`):
+
+  | Condición | Implementado | Dónde | Test |
+  |---|---|---|---|
+  | esquema `DPoP` en `Authorization` | sí | `src/api/server.ts:529` | `test/server.test.ts`: «token válido sin prueba DPoP, con prueba vacía, duplicada o esquema Bearer: 401 con WWW-Authenticate: DPoP» (añadido con esta enmienda) |
+  | prueba ausente, vacía o duplicada → 401 | sí | `src/api/server.ts:530` | el mismo test (añadido con esta enmienda; antes solo había un caso sin ninguna cabecera, «el servidor solo sirve por TLS y en las direcciones dadas») |
+  | 401 con `WWW-Authenticate: DPoP` | sí | `src/api/server.ts:624` | el mismo test |
+  | token desconocido o revocado → 401 | sí | `src/api/server.ts:531-542`, `src/api/devices.ts:50` | `test/serve.test.ts`: «serve: TLS propio, dispositivo emparejado entra, revocado recibe 401, STOP da 503» |
+  | firma de la prueba y clave ligada al dispositivo | **no** | el dispositivo no guarda clave pública (`src/api/devices.ts:14`, solo `token_sha256`) | — |
+  | `htm`, `htu`, `iat`, `ath` | **no** | la prueba no se decodifica | — |
+  | `jti` sin repetir | **no** | no hay caché de `jti` | — |
+
+  Hoy cualquier cadena no vacía en `DPoP` pasa: el token funciona como bearer. Cerrar el hueco exige registrar la clave pública del dispositivo al emparejar (`soul pair`) y la verificación de arriba; se implementa en una PR propia **después** de aprobar esta enmienda. Es condición de la revisión de seguridad del canal (AC-6) y del piloto (AC-7).
 - **AC-7:** piloto real en una instalación, con el consentimiento de su operador y fuera de cualquier repo. Durante una semana laborable se miden:
   - precisión percibida por elemento (correcto / incorrecto / no aplica);
   - minutos de reconstrucción por la mañana frente a una línea base de dos días sin el producto;
