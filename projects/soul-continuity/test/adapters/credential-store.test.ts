@@ -4,8 +4,10 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  CommandBackend, MemoryBackend, SecretToolBackend, SystemCredentialStore, entryKey, macosCommands, windowsCommands,
+  CommandBackend, MemoryBackend, SecretToolBackend, SystemCredentialStore, WIN_MAX_PARTS, WIN_PS_ARGS, WindowsCredentialBackend,
+  entryKey, joinParts, macosCommands, splitParts, systemBackend, type RunFn,
 } from "../../src/adapters/credential-store.ts";
+import { powershellPath } from "../../src/credentials/store.ts";
 
 const NOW = 1_000_000_000;
 const set = (over = {}) => JSON.stringify({ access_token: "at-ok", refresh_token: "rt-ok", expires_at: NOW + 3600_000, scopes: ["Mail.Read"], ...over });
@@ -130,7 +132,7 @@ if(cmd==="lookup")process.stdout.write("SECRETO");else if(cmd==="clear")process.
   assert.equal(await toolDouble(dir, "secret-tool-vacio", "process.exit(1);\n").delete("soul-continuity/x/graph/y"), false);
 });
 
-test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", async () => {
+test("macOS: delete que no borra lanza; sin entrada devuelve false", async () => {
   const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
   const sh = (name: string, body: string) => double(dir, name, body);
   const found = sh("found", 'process.stdout.write("U0VDUkVUTw==\\n");');
@@ -144,7 +146,7 @@ test("macOS y Windows: delete que no borra lanza; sin entrada devuelve false", a
   assert.equal(await new CommandBackend(cmds(fail, fail), true).delete("k"), false);
 });
 
-test("macOS y Windows: set relee y falla si el almacén truncó o no guardó el valor", async () => {
+test("macOS: set relee y falla si el almacén truncó o no guardó el valor", async () => {
   const dir = mkdtempSync(join(tmpdir(), "s490-cb-"));
   const sh = (name: string, body: string) => double(dir, name, body);
   const okCmd = sh("ok", "process.exit(0);");
@@ -160,14 +162,218 @@ test("secret-tool ausente: falla cerrado con error, no devuelve vacío", async (
   await assert.rejects(b.get("k"));
 });
 
-test("macOS y Windows: órdenes con el secreto solo en stdin", () => {
+test("macOS: órdenes con el secreto solo en stdin", () => {
   const m = macosCommands.set("soul-continuity/x/graph/y", "SECRETO-123");
   assert.ok(!m.args.join(" ").includes("SECRETO"));
   assert.ok(m.stdin.includes(Buffer.from("SECRETO-123").toString("base64")));
   assert.ok(!m.stdin.includes("SECRETO-123"));
-  const w = windowsCommands.set("soul-continuity/x/graph/y", "SECRETO-123");
-  assert.ok(!w.args.join(" ").includes("SECRETO"));
-  assert.ok(w.stdin.includes(Buffer.from("SECRETO-123").toString("base64")));
-  assert.ok(!w.stdin.includes("SECRETO-123"));
   assert.throws(() => macosCommands.set('k"; rm', "v"), /clave/);
+});
+
+// ---------------------------------------------------------------------------
+// Windows Credential Manager
+
+/** Tokens de Entra con forma real: un JSON de más de 5 KB, el doble de lo que cabe en una entrada. */
+const GRAPH_BLOB = JSON.stringify({
+  access_token: `eyJ0eXAiOiJKV1QiLCJub25jZSI6${"A".repeat(3000)}.SECRETO-AT`,
+  refresh_token: `0.AXoA${"r".repeat(1900)}SECRETO-RT`,
+  expires_at: NOW + 3600_000, scopes: ["Mail.Read", "Calendars.Read", "Chat.Read", "User.Read", "Files.Read"],
+});
+
+/**
+ * Doble de PowerShell + Credential Manager: interpreta las operaciones que llegan por stdin y
+ * aplica el límite real de CredWrite (2560 bytes de blob, que va en UTF-16).
+ */
+function credManagerDouble(o: { truncate?: number; failCode?: number } = {}) {
+  const vault = new Map<string, string>();
+  const calls: { cmd: string; args: string[]; stdin: string }[] = [];
+  const run: RunFn = async (cmd, args, stdin) => {
+    calls.push({ cmd, args, stdin });
+    if (o.failCode) return { code: o.failCode, stdout: "" };
+    const { ops } = JSON.parse(stdin) as { ops: { op: string; t: string; v?: string }[] };
+    let out = "";
+    for (const op of ops) {
+      if (op.op === "r") out += vault.has(op.t) ? `+${vault.get(op.t)}\r\n` : "-\r\n";
+      else if (op.op === "w") {
+        if ((op.v ?? "").length * 2 > 2560) return { code: 4, stdout: "" }; // CredWrite: ERROR_INVALID_PARAMETER
+        vault.set(op.t, o.truncate ? (op.v ?? "").slice(0, o.truncate) : (op.v ?? ""));
+        out += "+\r\n";
+      } else if (op.op === "d") out += vault.delete(op.t) ? "+\r\n" : "-\r\n";
+      else return { code: 2, stdout: "" };
+    }
+    return { code: 0, stdout: out };
+  };
+  return { run, vault, calls };
+}
+const K = "soul-continuity/0123456789abcdef/graph/fedcba9876543210";
+
+test("Windows: un JSON de tokens de Graph de más de 5 KB se guarda, se lee y se borra", async () => {
+  assert.ok(GRAPH_BLOB.length > 5000);
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, GRAPH_BLOB);
+  assert.equal(await b.get(K), GRAPH_BLOB);
+  assert.ok(d.vault.size > 1, "repartido en varias entradas");
+  for (const v of d.vault.values()) assert.ok(v.length * 2 <= 2560, "cada entrada cabe en CredWrite");
+  // Ni en la línea de órdenes ni en claro por stdin: el script va sin datos y el valor en base64.
+  for (const c of d.calls) {
+    assert.equal(c.cmd, "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+    assert.deepEqual(c.args, WIN_PS_ARGS);
+    assert.ok(!c.args.join(" ").includes("SECRETO"));
+    assert.ok(!c.stdin.includes("SECRETO"));
+  }
+  // Un valor más corto encima no deja trozos del anterior.
+  await b.set(K, "corto");
+  assert.equal(await b.get(K), "corto");
+  assert.deepEqual([...d.vault.keys()], [K]);
+  assert.equal(await b.delete(K), true);
+  assert.equal(d.vault.size, 0);
+  assert.equal(await b.get(K), null);
+  assert.equal(await b.delete(K), false);
+});
+
+test("Windows: el almacén de credenciales del adaptador funciona en win32 con tokens de Graph", async () => {
+  const d = credManagerDouble();
+  const s = new SystemCredentialStore({ backend: new WindowsCredentialBackend({ run: d.run }), operatorRef: "op-pm", now: () => NOW });
+  const t = JSON.parse(GRAPH_BLOB) as { access_token: string; refresh_token: string; expires_at: number; scopes: string[] };
+  await s.put("graph", ["Mail.Read"], t);
+  assert.equal(await s.acquire("graph", ["Mail.Read"]), t.access_token);
+  assert.equal(await s.revoke("graph", ["Mail.Read"]), true);
+  await assert.rejects(s.acquire("graph", ["Mail.Read"]), (e: { code?: string }) => e.code === "no_credential");
+});
+
+test("Windows: fallo de PowerShell o del almacén es error, nunca «sin credencial»", async () => {
+  const down = new WindowsCredentialBackend({ run: credManagerDouble({ failCode: 1 }).run });
+  await assert.rejects(down.get(K), /no disponible/);
+  await assert.rejects(down.set(K, "v"), /no disponible/);
+  await assert.rejects(down.delete(K), /no disponible/);
+  // Respuesta con menos líneas que operaciones: tampoco se toma por vacía.
+  const short = new WindowsCredentialBackend({ run: async () => ({ code: 0, stdout: "-\r\n" }) });
+  await assert.rejects(short.get(K), /no disponible/);
+  // PowerShell ausente: el spawn falla y se propaga.
+  const absent = new WindowsCredentialBackend({ run: async () => { throw new Error("almacén del sistema no disponible (ENOENT)"); } });
+  await assert.rejects(absent.get(K), /ENOENT/);
+});
+
+test("Windows: si el almacén trunca, set lo detecta al releer y falla", async () => {
+  const b = new WindowsCredentialBackend({ run: credManagerDouble({ truncate: 500 }).run });
+  await assert.rejects(b.set(K, GRAPH_BLOB), /íntegra/);
+});
+
+test("Windows: entrada incompleta o ajena se lee como sin credencial", async () => {
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, GRAPH_BLOB);
+  d.vault.delete(`${K}/part-2`);
+  assert.equal(await b.get(K), null, "falta un trozo");
+  d.vault.clear();
+  d.vault.set(K, "texto sin cabecera");
+  assert.equal(await b.get(K), null);
+  await assert.rejects(b.get('k"; rm'), /clave/);
+});
+
+test("Windows: reparto en trozos — límites", () => {
+  assert.match(splitParts("")[0], /^1:[0-9a-f]{16}:$/);
+  assert.equal(joinParts(splitParts("")), "");
+  assert.equal(joinParts(["1:"]), null, "cabecera sin hash");
+  assert.equal(joinParts(splitParts("ñandú €")), "ñandú €");
+  assert.equal(joinParts([null]), null);
+  assert.equal(joinParts(["0:"]), null, "cero trozos");
+  assert.equal(joinParts([`${WIN_MAX_PARTS + 1}:QQ==`]), null, "más trozos de los admitidos");
+  const two = splitParts("y".repeat(1000));
+  assert.equal(two.length, 2);
+  assert.equal(joinParts(two), "y".repeat(1000));
+  assert.equal(joinParts([two[0], "no base64!"]), null);
+  assert.equal(joinParts([two[0], two[1].replace(/^./, "A")]), null, "trozo cambiado: el hash no cuadra");
+  // Justo en el máximo cabe; un byte más, error explícito.
+  const max = (WIN_MAX_PARTS * 1200 / 4) * 3;
+  assert.equal(splitParts("x".repeat(max)).length, WIN_MAX_PARTS);
+  assert.throws(() => splitParts("x".repeat(max + 1)), /demasiado grande/);
+});
+
+test("Windows: un set cortado a medias no deja una mezcla legible de dos valores", async () => {
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, GRAPH_BLOB);
+  const n = d.vault.size;
+  assert.ok(n > 3);
+  // Otro valor del mismo tamaño, distinto en la cola (se escribe primero): falla tras dos trozos
+  // y la cabecera vieja sigue ahí.
+  const other = GRAPH_BLOB.replace(/r/g, "s");
+  assert.equal(splitParts(other).length, n);
+  assert.notEqual(splitParts(other).at(-1), splitParts(GRAPH_BLOB).at(-1));
+  let w = 0;
+  const flaky = new WindowsCredentialBackend({ run: async (cmd, args, stdin) => {
+    const { ops } = JSON.parse(stdin) as { ops: { op: string; t: string; v?: string }[] };
+    if (!ops.some((x) => x.op === "w")) return d.run(cmd, args, stdin);
+    // Aplica solo las dos primeras escrituras y muere, como un CredWrite que falla a mitad.
+    const applied = ops.filter((x) => x.op === "w").slice(0, 2);
+    for (const x of applied) d.vault.set(x.t, x.v ?? "");
+    w += applied.length;
+    return { code: 4, stdout: "" };
+  } });
+  await assert.rejects(flaky.set(K, other), /no disponible/);
+  assert.equal(w, 2);
+  assert.equal(await b.get(K), null, "cabecera vieja + trozos nuevos = sin credencial, no un token corrupto");
+});
+
+test("Windows: PowerShell por ruta absoluta, nunca por nombre", () => {
+  assert.equal(powershellPath({}), "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+  assert.equal(powershellPath({ SystemRoot: "D:\\WINNT\\" }), "D:\\WINNT\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+  assert.throws(() => powershellPath({ SystemRoot: "powershell" }), /absoluta/);
+  assert.throws(() => powershellPath({ SystemRoot: "\\\\srv\\share" }), /absoluta/);
+});
+
+test("Windows: una clave con sufijo de trozo se rechaza (no pisa trozos de otra)", async () => {
+  const b = new WindowsCredentialBackend({ run: credManagerDouble().run });
+  await assert.rejects(b.get(`${K}/part-3`), /clave/);
+  await assert.rejects(b.set(`${K}/part-1`, "v"), /clave/);
+  await assert.rejects(b.delete(`${K}/part-31`), /clave/);
+  assert.equal(await b.get(`${K}/parte`), null, "un sufijo parecido sí es clave válida");
+});
+
+test("Windows: delete en dos arranques; trozos huérfanos se limpian y devuelve false", async () => {
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, GRAPH_BLOB);
+  d.calls.length = 0;
+  assert.equal(await b.delete(K), true);
+  assert.equal(d.calls.length, 2);
+  d.vault.set(`${K}/part-4`, "QQ==");
+  assert.equal(await b.delete(K), false);
+  assert.equal(d.vault.size, 0);
+});
+
+test("Windows: el script y el protocolo usan los mismos campos (op, t, v; ops)", async () => {
+  const script = Buffer.from(WIN_PS_ARGS[3], "base64").toString("utf16le");
+  for (const s of ["$d.ops", "$o.op", "$o.t", "$o.v", "'r'", "'w'", "'d'", "[SoulCred]::Read", "[SoulCred]::Write", "[SoulCred]::Delete", "class SoulCred"]) {
+    assert.ok(script.includes(s), `el script contiene ${s}`);
+  }
+  assert.ok(!script.includes("SECRETO"));
+  const d = credManagerDouble();
+  const b = new WindowsCredentialBackend({ run: d.run });
+  await b.set(K, "SECRETO-1");
+  await b.delete(K);
+  for (const c of d.calls) {
+    for (const op of (JSON.parse(c.stdin) as { ops: Record<string, unknown>[] }).ops) {
+      assert.ok(Object.keys(op).every((x) => ["op", "t", "v"].includes(x)), JSON.stringify(Object.keys(op)));
+      assert.ok(["r", "w", "d"].includes(op.op as string));
+    }
+  }
+});
+
+test("Windows real: Credential Manager guarda, lee y borra tokens de Graph", { skip: process.platform !== "win32" && "solo en Windows" }, async () => {
+  const b = systemBackend("win32");
+  const k = `soul-continuity/ci${Date.now().toString(16)}/graph/test`;
+  try {
+    await b.set(k, GRAPH_BLOB);
+    assert.equal(await b.get(k), GRAPH_BLOB);
+    await b.set(k, "corto");
+    assert.equal(await b.get(k), "corto");
+    assert.equal(await b.delete(k), true);
+    assert.equal(await b.get(k), null);
+    assert.equal(await b.delete(k), false);
+  } finally {
+    await b.delete(k).catch(() => undefined);
+  }
 });
