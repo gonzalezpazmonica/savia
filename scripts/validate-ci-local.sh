@@ -199,7 +199,7 @@ FRESH_CHECKS_DEFAULT='rule-manifest.json|bash scripts/rule-manifest-generate.sh 
 settings-hooks pin|bash scripts/contract-pin.sh check settings-hooks|revisar el cambio de .claude/settings.json y, si es intencionado, bash scripts/contract-pin.sh pin settings-hooks --path .claude/settings.json
 .scm/sam.json|python3 scripts/sam.py check|python3 scripts/generate-capability-map.py, commit y python3 scripts/sam.py generate
 docs/propuestas/INDEX.md|bash scripts/propuestas-index-gen.sh --check|bash scripts/propuestas-index-gen.sh
-planning-state.json|bash scripts/roadmap.sh validate|corregir planning-state.json/LOG.md según el error y bash scripts/roadmap.sh render
+planning-state.json|bash scripts/roadmap.sh validate --diff origin/main|registrar o corregir la spec con bash scripts/roadmap.sh register SE-NNN --status ... (escribe docs/propuestas/planning.d/SE-NNN.json y LOG.d/SE-NNN-ESTADO.md; la base solo cambia con roadmap.sh consolidate) y bash scripts/roadmap.sh render
 docs/critical-facts.md|bash scripts/generate-critical-facts.sh --check|bash scripts/generate-critical-facts.sh
 arranque sin datos personales (SE-487)|bash scripts/validate-critical-facts-cap.sh --clean-clone|mover el dato personal a un fichero local gitignored (CLAUDE.local.md, perfil activo)'
 REPO_ROOT_CI="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -263,10 +263,15 @@ check_gate_unknown() {
 }
 
 # ── SE-444: cobertura no verificada (solo informa; nunca altera el código de salida) ──
-# Lista los AC de planning-state.json cuya autoridad de verificación falta o es inferior a la requerida.
+# Lista los AC de la vista de planificación (SE-500 S1: base + fragmentos) cuya autoridad de
+# verificación falta o es inferior a la requerida.
 report_unverified_coverage() {
   [[ "${SAVIA_AUTHORITY_REPORT:-on}" == "off" ]] && return 0
-  local state="${SAVIA_PLANNING_STATE_FOR_TESTS:-$REPO_ROOT_CI/docs/propuestas/planning-state.json}"
+  local state="${SAVIA_PLANNING_STATE_FOR_TESTS:-}"
+  if [[ -z "$state" ]]; then
+    state="$TMPDIR_CI/planning-view.json"
+    python3 "$REPO_ROOT_CI/scripts/planning-view.py" --root "$REPO_ROOT_CI" state > "$state" 2>/dev/null || return 0
+  fi
   [[ -f "$state" ]] && command -v jq >/dev/null 2>&1 || return 0
   . "$REPO_ROOT_CI/scripts/lib/planning-completion.sh" || return 0
   local id completion line total=0 weak=0 missing=0 shown=0 out=""
