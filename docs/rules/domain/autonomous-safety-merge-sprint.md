@@ -147,3 +147,4 @@ veredictos antes de `plan`, pero no la impide.
 - Spec: `docs/specs/SE-433-merge-sprint.spec.md` · reglas: `autonomous-safety.md`,
   `autonomous-safety-merge-grant.md` (SE-343), `maker-checker-protocol.md`
 - Scripts: `scripts/risk-tier.py` (SE-362) · reservas F5 (SE-387)
+- Registro de specs: `bash scripts/roadmap.sh register SE-NNN …` (fragmentos de SE-500 S1); nunca editar a mano `planning-state.json` ni `LOG.md`
