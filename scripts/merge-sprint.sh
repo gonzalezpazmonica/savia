@@ -156,12 +156,26 @@ clean_labels() {  # borra etiquetas merge-sprint:* de sprints muertos (kill -9 n
     done < <($GH label list -R "$REPO" --search merge-sprint: --limit 200 --json name --jq '.[].name' 2>/dev/null) ) 9>"$HOME_MS/run.lock"
 }
 
+pr_refs() {  # pr_refs <pr> <H0> → ids SE-NNN referenciados (JSON) desde H0: commits, .pr-summary.md y rama; [] si falla
+  local br; br=$($GH pr view "$1" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null)
+  python3 "$RESOLVER" refs --repo "$GITROOT" --head "$2" --base-ref "origin/$BASE" --branch "$br" 2>/dev/null || echo '[]'
+}
+
 cmd_plan() {
   verify_chain "$REG" || die "registro de revisiones manipulado" 4
   git -C "$GITROOT" fetch -q origin 2>/dev/null
   clean_labels
   local max_prs allowed; max_prs=$(policy max_prs) || exit 2; allowed=$(policy allowed_tiers) || exit 2
-  local out="[]" n head tier
+  # Código congelado (SE-500 S2): el commit de main y el blob del resolutor entran en el manifiesto y en el digest;
+  # la equivalencia de este plan ya regenera derivados con ese mismo commit.
+  local mc rsb
+  mc=$(git -C "$GITROOT" rev-parse -q --verify "origin/$BASE^{commit}") || die "sin origin/$BASE" 4
+  rsb=$(blob_on_main scripts/merge-registry-resolve.py) || die "sin scripts/merge-registry-resolve.py en origin/$BASE" 4
+  frozen_extract "$mc" plan || die "código congelado ilegible ($mc)" 4
+  # La equivalencia del plan usa el mismo resolutor que verificará run: el de main congelado, no la copia local.
+  RESOLVER="$FROZEN_SRC/scripts/merge-registry-resolve.py"
+  [[ "$(git hash-object "$RESOLVER" 2>/dev/null)" == "$rsb" ]] || die "resolutor congelado ilegible ($mc)" 4
+  local out="[]" n head tier refs
   for n in $($GH pr list -R "$REPO" --state open --limit 200 --json number --jq '[.[].number]|sort|.[]'); do
     head=$($GH pr view "$n" -R "$REPO" --json headRefOid --jq .headRefOid)
     tier=$(pr_tier "$n")
@@ -170,18 +184,25 @@ cmd_plan() {
     # propia, vale la revisión más reciente cuyo sha sea equivalente al head (§2.6). El manifiesto lleva
     # el sha revisado; run vuelve a exigir la equivalencia con el head de ese momento.
     if ! reviews_ok "$n" "$head" "$tier"; then
-      local cand found=""
+      local cand found="" rev=0
       for cand in $(reviewed_shas "$n"); do
-        reviews_ok "$n" "$cand" "$tier" && head_equivalent "$cand" "$head" && { found="$cand"; break; }
+        reviews_ok "$n" "$cand" "$tier" || continue
+        rev=1
+        head_equivalent "$cand" "$head" "$(pr_refs "$n" "$cand")" && { found="$cand"; break; }
       done
-      [[ -n "$found" ]] || continue
+      if [[ -z "$found" ]]; then
+        if (( rev )); then echo "excluida PR $n: la cabeza actual no es equivalente a ninguna revisión válida" >&2
+        else echo "excluida PR $n: sin revisión válida" >&2; fi
+        continue
+      fi
       head="$found"
     fi
     local meta files; meta=$(pr_meta "$n") || continue
     # Los checks congelados son los de $BASE: un PR hacia otra rama no los tiene, no entra al manifiesto.
     [[ "${meta%% *}" == "$BASE" ]] || continue
     files=$($GH pr diff "$n" -R "$REPO" --name-only 2>/dev/null) && [[ -n "$files" ]] || continue
-    out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o),"files":sorted(sys.argv[6].split())}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta" "$files")
+    refs=$(pr_refs "$n" "$head")
+    out=$(python3 -c 'import json,sys; a=json.loads(sys.argv[1]); b,r,o=sys.argv[5].split(); a.append({"pr":int(sys.argv[2]),"head":sys.argv[3],"tier":int(sys.argv[4]),"base_ref":b,"head_repo":r,"reopens":int(o),"files":sorted(sys.argv[6].split()),"refs":json.loads(sys.argv[7])}); print(json.dumps(a))' "$out" "$n" "$head" "$tier" "$meta" "$files" "$refs")
   done
   # Blobs del ejecutor y del clasificador en origin/<base> y checks obligatorios de la protección (§2.2).
   local rb cb fb req
@@ -192,10 +213,14 @@ cmd_plan() {
   [[ -n "$req" ]] || die "la protección de $BASE no declara checks obligatorios" 4
   python3 -c 'import json,sys; a=json.loads(sys.argv[1])[:int(sys.argv[2])]
 print(json.dumps({"repo":sys.argv[3],"base":sys.argv[4],"runner_blob":sys.argv[5],"classifier_blob":sys.argv[6],
- "f5_blob":sys.argv[8],"required_checks":sys.argv[7].splitlines(),"prs":a},sort_keys=True,separators=(",",":")))' \
-    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" "$fb" > "$MANIFEST"
+ "f5_blob":sys.argv[8],"resolver_blob":sys.argv[9],"main_commit":sys.argv[10],"required_checks":sys.argv[7].splitlines(),"prs":a},sort_keys=True,separators=(",",":")))' \
+    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" "$fb" "$rsb" "$mc" > "$MANIFEST"
   chmod 600 "$MANIFEST"
   echo "manifiesto: $(python3 -c 'import json,sys; print(" ".join("#%d(t%d)"%(p["pr"],p["tier"]) for p in json.load(open(sys.argv[1]))["prs"]))' "$MANIFEST")"
+  # refs sale de la rama (commits, .pr-summary.md, nombre): quien concede el grant ve qué iniciativas habilita.
+  python3 -c 'import json,sys
+for p in json.load(open(sys.argv[1]))["prs"]:
+    if p.get("refs"): print("refs #%d: %s" % (p["pr"], " ".join(p["refs"])))' "$MANIFEST"
   echo "digest: $(sha < "$MANIFEST")"
 }
 
@@ -231,9 +256,112 @@ required_ok() {  # checks obligatorios del PR: pass | fail | pending
   echo pass
 }
 
-# Derivados regenerables: conflictos admisibles y diferencias ignoradas al comparar heads.
-DERIVED_RE='^(\.scm/|\.confidentiality-signature$|docs/rules/INDEX\.md$|docs/rules/domain/rule-manifest\.json$)'
+# Derivados regenerables (SE-500 S2): conflictos admisibles; al comparar heads se regeneran con el código
+# congelado y se comparan en su forma canónica (tabla de merge-registry-resolve.py), nunca se ignoran.
+DERIVED_RE='^(\.scm/|\.confidentiality-signature$|docs/rules/INDEX\.md$|docs/rules/domain/rule-manifest\.json$|docs/propuestas/ROADMAP-CURRENT\.md$|docs/propuestas/INDEX\.md$)'
 is_derived() { grep -qE "$DERIVED_RE" <<<"$1"; }
+# Registros (lista cerrada): se integran con el resolutor determinista y se recalculan al comparar heads.
+REGISTRY_RE='^docs/propuestas/(planning-state\.json|LOG\.md)$'
+is_registry() { grep -qE "$REGISTRY_RE" <<<"$1"; }
+# Directorios que contienen derivados o registros: el ejecutor y los generadores escriben bajo ellos.
+WRITE_DIRS_RE='^(\.scm|docs|docs/rules|docs/rules/domain|docs/propuestas)$'
+no_write_links() {  # no_write_links <commit> → 0 si ningún derivado, registro ni directorio que los contiene es un
+  # enlace simbólico en el árbol del commit; 1 si lo es o si git falla (fail-closed). Un enlace de la rama en esas
+  # rutas haría que una escritura del ejecutor, del resolutor o de un generador acabase fuera del worktree.
+  python3 - "$GITROOT" "$1" "$DERIVED_RE" "$REGISTRY_RE" "$WRITE_DIRS_RE" <<'PY'
+import re, subprocess, sys
+root, commit, *rx = sys.argv[1:]
+out = subprocess.run(["git", "-C", root, "ls-tree", "-r", "-z", commit], capture_output=True, check=True).stdout
+bad = []
+for e in out.split(b"\0"):
+    if not e:
+        continue
+    meta, path = e.split(b"\t", 1)
+    p = path.decode("utf-8", "surrogateescape")
+    if meta.startswith(b"120000 ") and any(re.search(r, p) for r in rx):
+        bad.append(p)
+if bad:
+    print("enlaces en rutas de escritura: " + ",".join(bad), file=sys.stderr)
+    sys.exit(1)
+PY
+}
+safe_target() {  # safe_target <raíz> <ruta> → 0 si ningún directorio entre <raíz> y la hoja es un enlace (retira la
+  # hoja si es un enlace, para que la escritura cree un fichero nuevo en vez de seguirlo); 1 si hay un enlace intermedio.
+  local d="$1" c parts=()
+  IFS=/ read -ra parts <<<"$2"
+  for c in "${parts[@]:0:${#parts[@]}-1}"; do d="$d/$c"; [[ ! -L "$d" ]] || return 1; done
+  [[ ! -L "$1/$2" ]] || rm -f -- "$1/$2"
+}
+
+# ── Código congelado (SE-500 S2): generadores del commit de main del manifiesto y resolutor con blob propio ──
+RESOLVER="$ROOT/scripts/merge-registry-resolve.py"   # en run, copia verificada contra resolver_blob
+FROZEN_SRC=""   # worktree del commit de main congelado: solo se leen sus scripts, nunca los de la rama de la PR
+# Rutas fijas en el directorio de estado, reutilizadas: los worktrees los crea y retira git, nada se borra a mano.
+wt_reset() { git -C "$GITROOT" worktree remove --force "$1" >/dev/null 2>&1; git -C "$GITROOT" worktree prune >/dev/null 2>&1; [[ ! -e "$1" ]]; }
+frozen_extract() {  # frozen_extract <commit> <nombre> → FROZEN_SRC = worktree desacoplado en ese commit
+  git -C "$GITROOT" cat-file -e "${1:-x}^{commit}" 2>/dev/null || return 1
+  FROZEN_SRC="$HOME_MS/frozen-$2"
+  if [[ -e "$FROZEN_SRC/.git" ]]; then git -C "$FROZEN_SRC" checkout -q --detach --force "$1" >/dev/null 2>&1 || return 1
+  else wt_reset "$FROZEN_SRC" && git -C "$GITROOT" worktree add -q --detach "$FROZEN_SRC" "$1" >/dev/null 2>&1 || return 1; fi
+  [[ "$(git -C "$FROZEN_SRC" rev-parse HEAD)" == "$(git -C "$GITROOT" rev-parse "$1^{commit}")" ]] && git -C "$FROZEN_SRC" diff --quiet HEAD
+}
+# Código que ejecutan los generadores (lo que ellos mismos cargan desde su ruta): siempre del commit de main
+# congelado, nunca de la rama. confidentiality-scan.sh carga .claude/hooks/lib/gate-result.sh por ruta relativa.
+FROZEN_CODE=(scripts .claude/hooks/lib)
+frozen_overlay() {  # frozen_overlay <destino> <dir del árbol> <ruta relativa> → enlaces al árbol salvo el código congelado
+  local e n p fc pre
+  for e in "$2"/* "$2"/.[!.]* "$2"/..?*; do
+    [[ -e "$e" || -L "$e" ]] || continue
+    n="${e##*/}"; p="${3:+$3/}$n"; pre=0
+    for fc in "${FROZEN_CODE[@]}"; do
+      [[ "$p" == "$fc" ]] && continue 2
+      [[ "$fc" == "$p/"* ]] && pre=1
+    done
+    if (( pre )); then
+      # Un prefijo del código congelado que en la rama es enlace o no es directorio: estado inesperado, fail-closed.
+      [[ -d "$e" && ! -L "$e" ]] || return 1
+      mkdir "$1/$n" && frozen_overlay "$1/$n" "$e" "$p" || return 1
+    else
+      ln -s "$e" "$1/$n" || return 1
+    fi
+  done
+}
+frozen_root() {  # frozen_root <árbol> <nombre> → raíz nueva con el código congelado y el resto enlazado a <árbol>:
+  # los generadores calculan su raíz desde su ruta (lógica), así que leen y escriben en <árbol> con el código de main.
+  # Cada llamada crea su raíz: un resto de una llamada anterior no bloquea las siguientes. Liberar con froot_release.
+  local f fc
+  f=$(mktemp -d "$HOME_MS/froot-$2.XXXXXX") || return 1
+  # Un fallo a medio montar deja solo enlaces y directorios propios: se retiran para no acumular raíces.
+  frozen_overlay "$f" "$1" "" || { froot_release "$f" >/dev/null 2>&1; return 1; }
+  for fc in "${FROZEN_CODE[@]}"; do
+    [[ -e "$FROZEN_SRC/$fc" ]] || continue
+    mkdir -p "$f/$(dirname "$fc")" && ln -s "$FROZEN_SRC/$fc" "$f/$fc" || { froot_release "$f" >/dev/null 2>&1; return 1; }
+  done
+  echo "$f"
+}
+froot_release() {  # froot_release <raíz> → 0 si solo quedaban enlaces y directorios propios (los retira); 1 si un
+  # generador escribió en la raíz en vez de en el árbol (p. ej. tmp+mv sobre un enlace): resultado no fiable.
+  [[ -n "$1" && -d "$1" ]] || return 1
+  [[ -z "$(find "$1" -mindepth 1 ! -type l ! -type d -print -quit)" ]] || return 1
+  find "$1" -type l -delete && find "$1" -depth -type d -empty -delete && [[ ! -e "$1" ]]
+}
+gen_rules() {  # gen_rules <árbol> <raíz congelada>
+  [[ -f "$2/scripts/rules-index-generate.sh" ]] || return 0
+  (cd "$1" && { [[ ! -f "$2/scripts/rule-manifest-generate.sh" ]] || bash "$2/scripts/rule-manifest-generate.sh" >/dev/null 2>&1; } && bash "$2/scripts/rules-index-generate.sh" >/dev/null 2>&1)
+}
+gen_propuestas() {  # INDEX.md de propuestas (solo si su forma canónica cambió) y ROADMAP-CURRENT.md
+  [[ -d "$1/docs/propuestas" ]] || return 0
+  if [[ -f "$2/scripts/propuestas-index-gen.sh" ]]; then
+    (cd "$1" && { bash "$2/scripts/propuestas-index-gen.sh" --check >/dev/null 2>&1 || bash "$2/scripts/propuestas-index-gen.sh" >/dev/null 2>&1; }) || return 1
+  fi
+  if [[ -f "$2/scripts/roadmap.sh" && -f "$1/docs/propuestas/planning-state.json" ]]; then
+    (cd "$1" && REPO_ROOT="$1" bash "$2/scripts/roadmap.sh" render >/dev/null 2>&1) || return 1
+  fi
+}
+gen_capmap() { [[ ! -f "$2/scripts/generate-capability-map.py" ]] || (cd "$1" && python3 "$2/scripts/generate-capability-map.py" "$1" >/dev/null 2>&1); }
+gen_sam() { (cd "$1" && python3 "$2/scripts/sam.py" "$3" --root "$1" 2>/dev/null); }
+# 0 = CLEAN o PASSED. Un escaneo incompleto (unknown) bloquea: sin él, el escáner sale con 0 sin haber escaneado.
+audit() { (cd "$1" && SAVIA_GATE_UNKNOWN=block bash "$2/scripts/confidentiality-scan.sh" --pr >/dev/null 2>&1); }
 
 equiv_tree() {  # equiv_tree <sha_revisado> <sha_actual> → árbol T = merge(revisado, main integrado en el actual)
   git -C "$GITROOT" cat-file -e "$1^{commit}" 2>/dev/null && git -C "$GITROOT" cat-file -e "$2^{commit}" 2>/dev/null || return 1
@@ -244,21 +372,88 @@ equiv_tree() {  # equiv_tree <sha_revisado> <sha_actual> → árbol T = merge(re
   [[ -n "$tree" ]] && echo "$tree"
 }
 
-head_equivalent() {  # head_equivalent <sha_revisado> <sha_actual> → 0 si el actual == merge(revisado, main) salvo derivados
+head_equivalent() {  # head_equivalent <H0> <H1> [refs] → 0 si H1 == merge(H0, main) salvo registros recalculados y
+  # derivados regenerados (SE-500 S2). Deja EQK = identical | main_merge | registry_merge y REG_HASHES.
+  EQK=identical; REG_HASHES=""
   [[ "$1" == "$2" ]] && return 0
-  local tree changed f
+  EQK=main_merge
+  local tree changed m f reg=() der=()
   tree=$(equiv_tree "$1" "$2") || return 1
   changed=$(git -C "$GITROOT" diff --name-only "$tree" "$2" 2>/dev/null) || return 1
   while IFS= read -r f; do
-    { [[ -z "$f" ]] || is_derived "$f"; } && continue
-    return 1
+    [[ -z "$f" ]] && continue
+    if is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else return 1; fi
   done <<<"$changed"
+  (( ${#reg[@]} + ${#der[@]} )) || return 0
+  m=$(git -C "$GITROOT" merge-base "$2" "origin/$BASE" 2>/dev/null) || return 1
+  for f in "${reg[@]}"; do registry_equivalent "$1" "$2" "$m" "$f" "${3:-[]}" || return 1; EQK=registry_merge; done
+  (( ${#der[@]} == 0 )) || derived_equivalent "$1" "$2" "$m" "$tree" "${der[@]}"
 }
 
-resync() {  # resync <pr> → 0 al día (sincronizado y empujado) · 2 conflicto real · 3 confidencialidad · 5 fallo
-  local pr="$1" br wt c
+registry_equivalent() {  # registry_equivalent <H0> <H1> <M> <ruta> <refs> → 0 si H1 == resolver(merge-base, H0, M) byte a byte
+  local mb out="$HOME_MS/registry.resolved-${FROZEN_SRC##*-}" rc=1
+  mb=$(git -C "$GITROOT" merge-base "$1" "$3" 2>/dev/null) || return 1
+  rm -f "$out"
+  if python3 "$RESOLVER" resolve --repo "$GITROOT" --base "$mb" --head "$1" --main "$3" --refs "$5" --path "$4" --out "$out" >/dev/null 2>&1 \
+     && git -C "$GITROOT" show "$2:$4" 2>/dev/null | cmp -s - "$out"; then
+    rc=0; REG_HASHES="${REG_HASHES:+$REG_HASHES,}$4:$(sha < "$out")"
+  fi
+  rm -f "$out"; return $rc
+}
+
+derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <T> <rutas…> → 0 si cada derivado de H1 coincide con su
+  # regeneración con el código congelado, en la forma canónica de su fila; la firma exige repetir la auditoría.
+  # Antes de regenerar, cada derivado del worktree toma su contenido de T = merge(H0, main): lo que ningún generador
+  # reescribe tiene que coincidir con T, no consigo mismo (un fichero añadido tras la revisión no es equivalente).
+  local h0="$1" h1="$2" m="$3" t="$4"; shift 4
+  # Rutas por modo (plan | run): un plan concurrente con un run no comparte worktree ni temporales.
+  local mode="${FROZEN_SRC##*-}"; local tw="$HOME_MS/eqwt-$mode" fr="" p k gens g have rc=0 b="$HOME_MS/derived.blob-$mode"
+  # H1 no está revisado: un derivado (o su directorio) convertido en enlace no es equivalente y no se toca nada.
+  no_write_links "$h1" 2>/dev/null || return 1
+  wt_reset "$tw" && git -C "$GITROOT" worktree add -q --detach "$tw" "$h1" >/dev/null 2>&1 || return 1
+  for p in "$@"; do
+    safe_target "$tw" "$p" || { rc=1; break; }
+    if git -C "$GITROOT" cat-file -e "$t:$p" 2>/dev/null; then
+      mkdir -p "$(dirname "$tw/$p")" && git -C "$GITROOT" show "$t:$p" > "$tw/$p" 2>/dev/null || { rc=1; break; }
+    else
+      rm -f "$tw/$p" || { rc=1; break; }
+    fi
+  done
+  (( rc == 0 )) && { fr=$(frozen_root "$tw" "eq-$mode") || rc=1; }
+  if (( rc == 0 )); then
+    { gen_rules "$tw" "$fr" && gen_propuestas "$tw" "$fr" && gen_capmap "$tw" "$fr" \
+      && { [[ ! -f "$fr/scripts/sam.py" ]] || gen_sam "$tw" "$fr" generate >/dev/null; }; } || rc=1
+  fi
+  for p in "$@"; do
+    (( rc == 0 )) || break
+    k=""; read -r k gens <<<"$(python3 "$RESOLVER" kind "$p" 2>/dev/null)"
+    [[ -n "$k" ]] || { rc=1; break; }   # derivado sin fila en la tabla canónica: no equivalente (fail-closed)
+    have=1; for g in $gens; do [[ -f "$fr/$g" ]] || have=0; done
+    if [[ "$k" == audit ]]; then
+      (( have )) && audit "$tw" "$fr" || rc=1
+    elif (( have )); then
+      rm -f "$b"; git -C "$GITROOT" show "$h1:$p" > "$b" 2>/dev/null || rm -f "$b"
+      python3 "$RESOLVER" same "$p" "$b" "$tw/$p" >/dev/null 2>&1 || rc=1
+    else
+      # Sin generador congelado no hay regeneración posible: solo vale un contenido ya revisado (H0) o ya en main.
+      g=$(git -C "$GITROOT" rev-parse -q --verify "$h1:$p" 2>/dev/null)
+      [[ "$g" == "$(git -C "$GITROOT" rev-parse -q --verify "$m:$p" 2>/dev/null)" \
+         || "$g" == "$(git -C "$GITROOT" rev-parse -q --verify "$h0:$p" 2>/dev/null)" ]] || rc=1
+    fi
+  done
+  [[ -z "$fr" ]] || froot_release "$fr" || rc=1
+  rm -f "$b"; wt_reset "$tw" || rc=1
+  return $rc
+}
+
+resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) · 2 conflicto real (CONFLICT_FILES) ·
+  # 3 confidencialidad · 5 fallo. Registros con el resolutor y derivados con los generadores congelados (SE-500 S2).
+  local pr="$1" h0="$2" refs="${3:-[]}" br wt c f fr rc reg=() der=() other=()
+  CONFLICT_FILES=""; RESOLVED=""
   br=$($GH pr view "$pr" -R "$REPO" --json headRefName --jq .headRefName) || return 5
   git -C "$GITROOT" fetch -q origin "$br" main || return 5
+  # Antes de tocar el worktree: el head actual no está revisado y el resolutor y los generadores escriben en él.
+  if ! no_write_links "origin/$br" 2>/dev/null; then ledger event=ENLACE_RECHAZADO pr="$pr"; return 5; fi
   wt="$HOME_MS/wt/$pr"
   if [[ -d "$wt" ]]; then git -C "$wt" switch -q --detach "origin/$br" || return 5
   else mkdir -p "$HOME_MS/wt"; git -C "$GITROOT" worktree add -q --detach "$wt" "origin/$br" || return 5; fi
@@ -266,33 +461,72 @@ resync() {  # resync <pr> → 0 al día (sincronizado y empujado) · 2 conflicto
   if ! git -C "$wt" merge -q --no-edit origin/main >/dev/null 2>&1; then
     c=$(git -C "$wt" diff --name-only --diff-filter=U)
     [[ -n "$c" ]] || { git -C "$wt" merge --abort 2>/dev/null; return 5; }   # fallo sin conflicto (identidad, hooks…)
-    if grep -qvE "$DERIVED_RE" <<<"$c"; then git -C "$wt" merge --abort; return 2; fi
-    git -C "$wt" restore -q --theirs -- $c && git -C "$wt" add -- $c && git -C "$wt" commit -q --no-edit || return 5
+    while IFS= read -r f; do
+      if is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else other+=("$f"); fi
+    done <<<"$c"
+    if (( ${#other[@]} )); then
+      CONFLICT_FILES=$(IFS=,; echo "${other[*]}"); git -C "$wt" merge --abort; return 2
+    fi
+    if (( ${#der[@]} )); then git -C "$wt" restore -q --theirs -- "${der[@]}" && git -C "$wt" add -- "${der[@]}" || return 5; fi
+    if (( ${#reg[@]} )); then resolve_registries "$wt" "$h0" "$refs" "${reg[@]}" || { git -C "$wt" merge --abort; return 2; }; fi
+    git -C "$wt" commit -q --no-edit || return 5
   fi
-  if [[ -f "$wt/scripts/rules-index-generate.sh" ]]; then
-    (cd "$wt" && { [[ ! -f scripts/rule-manifest-generate.sh ]] || bash scripts/rule-manifest-generate.sh >/dev/null 2>&1; } && bash scripts/rules-index-generate.sh >/dev/null 2>&1) || return 5
-    git -C "$wt" add docs/rules && { git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore(rules): índice y manifiesto regenerados (merge-sprint)"; }
-  fi
-  if [[ -f "$wt/scripts/sam.py" ]]; then
-    (cd "$wt" && { [[ ! -f scripts/generate-capability-map.py ]] || python3 scripts/generate-capability-map.py >/dev/null 2>&1; }) || return 5
+  fr=$(frozen_root "$wt" resync) || return 5
+  regen_derived "$wt" "$fr"; rc=$?
+  froot_release "$fr" || { (( rc )) || rc=5; }   # un generador que escribió fuera del árbol: resultado no fiable
+  (( rc == 0 )) || return $rc
+  # Sin forzar: si la rama se movió desde el fetch, el push falla y la PR se aparca.
+  git -C "$wt" push -q origin "HEAD:$br" 2>/dev/null || return 5
+  ledger event=RESYNC pr="$pr" head="$(git -C "$wt" rev-parse HEAD)" ${RESOLVED:+resolved="$RESOLVED"}
+}
+
+regen_derived() {  # regen_derived <wt> <raíz congelada> → 0 derivados regenerados y commiteados · 3 confidencialidad · 5 fallo
+  local f
+  gen_rules "$1" "$2" || return 5
+  git -C "$1" add docs/rules 2>/dev/null && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(rules): índice y manifiesto regenerados (merge-sprint)"; }
+  gen_propuestas "$1" "$2" || return 5
+  for f in docs/propuestas/INDEX.md docs/propuestas/ROADMAP-CURRENT.md; do [[ ! -e "$1/$f" ]] || git -C "$1" add -- "$f"; done
+  git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(propuestas): índice y hoja de ruta regenerados (merge-sprint)"
+  if [[ -f "$2/scripts/sam.py" ]]; then
+    gen_capmap "$1" "$2" || return 5
     # El SAM registra el último commit de cada fuente, .scm/registry.json incluido: si el mapa cambió en
     # este mismo commit, el SAM nace STALE. Se regenera y commitea hasta que check dé FRESH.
     local _i fresh=0
     for _i in 1 2 3; do
-      (cd "$wt" && python3 scripts/sam.py generate >/dev/null 2>&1) || return 5
-      git -C "$wt" add .scm && { git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore(scm): SAM regenerado (merge-sprint)"; }
-      (cd "$wt" && python3 scripts/sam.py check 2>/dev/null | grep -q FRESH) && { fresh=1; break; }
+      gen_sam "$1" "$2" generate >/dev/null || return 5
+      git -C "$1" add .scm && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(scm): SAM regenerado (merge-sprint)"; }
+      gen_sam "$1" "$2" check | grep -q FRESH && { fresh=1; break; }
     done
     (( fresh )) || return 5
   fi
-  if [[ -f "$wt/scripts/confidentiality-scan.sh" ]]; then
+  if [[ -f "$2/scripts/confidentiality-scan.sh" ]]; then
     # Veredicto por código de salida: 0 = CLEAN o PASSED con avisos; ≠0 = BLOCKED. Nunca por el texto.
-    (cd "$wt" && bash scripts/confidentiality-scan.sh --pr >/dev/null 2>&1) || return 3
-    (cd "$wt" && bash scripts/confidentiality-sign.sh sign >/dev/null 2>&1) || return 3
-    git -C "$wt" add .confidentiality-signature && { git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore: sign confidentiality audit (merge-sprint)"; }
+    audit "$1" "$2" || return 3
+    (cd "$1" && CONFIDENTIALITY_SIG_FILE="$1/.confidentiality-signature" bash "$2/scripts/confidentiality-sign.sh" sign >/dev/null 2>&1) || return 3
+    git -C "$1" add .confidentiality-signature && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore: sign confidentiality audit (merge-sprint)"; }
   fi
-  git -C "$wt" push -q origin "HEAD:$br" 2>/dev/null || return 5
-  ledger event=RESYNC pr="$pr" head="$(git -C "$wt" rev-parse HEAD)"
+  return 0
+}
+
+resolve_registries() {  # resolve_registries <wt> <H0> <refs> <registros…> → 0 resueltos, validados y añadidos
+  # El delta sale siempre de H0 (revisado) frente al merge-base, nunca del head actual; refs, del manifiesto.
+  local wt="$1" h0="$2" refs="$3" m mb f fr rej=() rc
+  shift 3
+  CONFLICT_FILES=$(IFS=,; echo "$*")
+  m=$(git -C "$wt" rev-parse -q --verify MERGE_HEAD) && mb=$(git -C "$GITROOT" merge-base "$h0" "$m" 2>/dev/null) || return 1
+  for f in "$@"; do
+    safe_target "$wt" "$f" || { rej+=("$f"); continue; }
+    python3 "$RESOLVER" resolve --repo "$GITROOT" --base "$mb" --head "$h0" --main "$m" --refs "$refs" --path "$f" --out "$wt/$f" >/dev/null 2>&1 || rej+=("$f")
+  done
+  if (( ${#rej[@]} )); then CONFLICT_FILES=$(IFS=,; echo "${rej[*]}"); return 1; fi
+  git -C "$wt" add -- "$@" || return 1
+  # El resultado debe pasar roadmap.sh validate con el código congelado de main; sin validador, rechazo.
+  fr=$(frozen_root "$wt" resync) || return 1
+  rc=1
+  [[ ! -f "$fr/scripts/roadmap.sh" ]] || { (cd "$wt" && REPO_ROOT="$wt" bash "$fr/scripts/roadmap.sh" validate >/dev/null 2>&1); rc=$?; }
+  froot_release "$fr" || rc=1
+  (( rc == 0 )) || return 1
+  RESOLVED=$(IFS=,; echo "$*"); CONFLICT_FILES=""
 }
 
 wait_ci() {  # wait_ci <pr> → pass | fail | pending (agotado el plazo)
@@ -306,7 +540,7 @@ park() {
   if [[ " $READIED " == *" $1 "* ]]; then
     $GH pr ready "$1" -R "$REPO" --undo >/dev/null 2>&1 || ledger event=DRAFT_FALLO pr="$1"
   fi
-  ledger event=PARK pr="$1" reason="$2"; echo "  aparcado #$1: $2"
+  ledger event=PARK pr="$1" reason="$2" ${3:+files="$3"}; echo "  aparcado #$1: $2${3:+ ($3)}"
 }
 
 halt() {  # halt <motivo> → el sprint queda parado: el fichero STOP con el motivo solo lo borra un grant nuevo
@@ -403,7 +637,10 @@ record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → 
   # la deja reconciliable, y al reconciliar no se repite un MERGED ya escrito (idempotente por PR y manifiesto).
   local mc; mc=$($GH pr view "$1" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid) && [[ "$mc" =~ ^[0-9a-f]{40}$ ]] \
     || anomaly merge_commit_ilegible "$1"
-  ledger_merged "$1" || ledger event=MERGED pr="$1" digest="$DIGEST" grant="$GRANT_ID" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"}
+  # Registros recalculados (registry_merge, o judge_safe con registros): blob del resolutor congelado y hashes.
+  local rx=()
+  [[ "$4" == registry_merge || -n "${REG_HASHES:-}" ]] && rx=(resolver_blob="$(git hash-object "$RESOLVER")" registry_hashes="${REG_HASHES:-}")
+  ledger_merged "$1" || ledger event=MERGED pr="$1" digest="$DIGEST" grant="$GRANT_ID" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"} "${rx[@]}"
   MERGED=$(merged_count); grant_set_merged "$MERGED"
   f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
   echo "  MERGED #$1 → ${mc:0:8}"
@@ -420,7 +657,8 @@ keep = lambda p: not re.search(derived, p)
 raw = [l.split("\t") for l in g("diff", "--raw", "--no-renames", t, h1).splitlines() if l]
 raw = [(m.lstrip(":").split(), p) for m, p in raw if keep(p)]
 paths = [p for _, p in raw]
-if not paths: sys.exit(0)
+# Solo difieren derivados o registros y no son equivalentes: el juez no vería diff alguno, no se le pregunta.
+if not paths: print("prefiltro_solo_derivados"); sys.exit(0)
 out = subprocess.run(["python3", classifier, "--diff", " ".join(paths), "--json"], capture_output=True, text=True).stdout
 dt = json.loads(out).get("tier", 4) if out else 4
 if dt >= 3 or dt > int(tier): print("prefiltro_tier"); sys.exit(0)
@@ -531,23 +769,28 @@ try_merge() {  # try_merge <pr> <head> <tier> [to] → RESULT=merged|awaiting_ju
   # <head>: sha revisado del manifiesto. <to>: head con veredicto SAFE (§2.7); tras él solo cabe un merge de main (§2.6).
   # Si main avanza durante la espera de CI (otro merge), GitHub rechaza el merge por desfase:
   # se re-sincroniza y se vuelve a esperar, hasta MERGE_SPRINT_TRIES intentos.
-  local pr="$1" head="$2" tier="$3" to="${4:-}" try rs cur tt pf
-  RESULT=""
+  local pr="$1" head="$2" tier="$3" to="${4:-}" try rs cur tt pf refs
+  RESULT=""; CONFLICT_FILES=""; REG_HASHES=""
+  # refs: lista congelada en el manifiesto (cubierta por el digest); nunca el título ni el cuerpo de la PR.
+  refs=$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1]).get("refs",[]),separators=(",",":")))' "$(mf_entry "$pr")") || anomaly manifiesto_ilegible "$pr"
   for try in $(seq 1 "${MERGE_SPRINT_TRIES:-3}"); do
     if [[ "$RESYNC" == 1 ]]; then
-      resync "$pr"; rs=$?
+      # En la cola del juez la rama ya está en <to> (SAFE): el delta de registros sale de <to>, no de H0.
+      resync "$pr" "${to:-$head}" "$refs"; rs=$?
       case $rs in 0) ;; 2) RESULT=conflicto_real; return ;; 3) RESULT=confidencialidad; return ;; *) RESULT=resync_fallo; return ;; esac
       sleep "${MERGE_SPRINT_CI_SETTLE_S:-60}"
     fi
     cur=$($GH pr view "$pr" -R "$REPO" --json headRefOid --jq .headRefOid)
     git -C "$GITROOT" fetch -q origin 2>/dev/null
-    if head_equivalent "$head" "$cur"; then
-      [[ "$head" == "$cur" ]] && EQ=identical || EQ=main_merge
-    elif [[ -n "$to" ]] && head_equivalent "$to" "$cur"; then
+    if head_equivalent "$head" "$cur" "$refs"; then
+      EQ=$EQK
+    elif [[ -n "$to" ]] && head_equivalent "$to" "$cur" "$refs"; then
       EQ=judge_safe
     else
       tt=$(equiv_tree "$head" "$cur") || { RESULT=equivalencia_ilegible; return; }
       pf=$(judge_prefilter "$tt" "$cur" "$tier" "$(mf_entry "$pr")") || anomaly judge_prefiltro_fallo "$pr"
+      # Derivados o registros manipulados tras la revisión: la PR se aparca; el resto del sprint sigue.
+      [[ "$pf" != prefiltro_solo_derivados ]] || { RESULT=derivados_no_equivalentes; return; }
       [[ -z "$pf" ]] || anomaly "judge_$pf" "$pr"    # el prefiltro para sin consultar al juez (AC-11)
       judge_request "$pr" "$head" "$cur" "$tt" "$tier" || anomaly judge_solicitud_fallo "$pr"
       AWAIT_TO="$cur"; RESULT=awaiting_judge; return
@@ -575,13 +818,19 @@ cmd_run() {
   local allowed; allowed=$(policy allowed_tiers) || exit 2
   stop_gate   # un sprint parado (anomalía o main no verde) no se reanuda con el mismo grant
   MERGED=$(merged_count)
-  ledger event=RUN digest="$DIGEST"
+  ledger event=RUN digest="$DIGEST" candidates="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["prs"]))' "$MANIFEST")"
   # La base de la equivalencia y del juez es la congelada en el manifiesto, no la del entorno.
   [[ "$(mf base)" == "$BASE" ]] || anomaly base_distinta
   # El ejecutor, el clasificador y las reservas F5 que corren deben ser los blobs congelados en el manifiesto (AC-17).
   [[ "$(git hash-object "$ROOT/scripts/merge-sprint.sh")" == "$(mf runner_blob)" ]] || anomaly blob_ejecutor
   [[ "$(git hash-object "$ROOT/scripts/risk-tier.py")" == "$(mf classifier_blob)" ]] || anomaly blob_clasificador
   [[ "$(git hash-object "$ROOT/scripts/f5-state.sh")" == "$(mf f5_blob 2>/dev/null)" ]] || anomaly blob_f5
+  # SE-500 S2: el resolutor que corre es una copia del del ejecutor con el blob del manifiesto; el de la rama de
+  # la PR nunca se ejecuta. Los generadores salen del commit de main congelado, en un worktree propio.
+  mkdir -p "$HOME_MS/frozen-bin" && cp "$ROOT/scripts/merge-registry-resolve.py" "$HOME_MS/frozen-bin/resolver.py" || anomaly blob_resolutor
+  RESOLVER="$HOME_MS/frozen-bin/resolver.py"
+  [[ "$(git hash-object "$RESOLVER")" == "$(mf resolver_blob 2>/dev/null)" ]] || anomaly blob_resolutor
+  frozen_extract "$(mf main_commit 2>/dev/null)" run || anomaly codigo_congelado_ilegible
   check_required
   local entries; entries=$(python3 -c 'import json,sys
 for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_repo"],p["reopens"])' "$MANIFEST") \
@@ -631,7 +880,7 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     case "$RESULT" in
       awaiting_judge) awaiting="$awaiting $pr:$tier:$AWAIT_TO" ;;
       merged) record_merge "$pr" "$t" "$CUR" "$EQ" ;;
-      *) park "$pr" "${RESULT%%:*}" ;;
+      *) park "$pr" "${RESULT%%:*}" "$CONFLICT_FILES" ;;
     esac
   done <<<"$entries"
   # Cola del juez: SAFE → re-sync con main si hace falta (sin código nuevo sobre `to`), CI nueva y merge;
@@ -668,7 +917,7 @@ for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print
     case "$RESULT" in
       merged) record_merge "$pr" "$tier" "$CUR" "$EQ" "${v#SAFE:}" ;;
       awaiting_judge) again="$again $pr" ;;   # código nuevo tras el SAFE: solicitud nueva, se evalúa de cero
-      *) park "$pr" "${RESULT%%:*}" ;;
+      *) park "$pr" "${RESULT%%:*}" "$CONFLICT_FILES" ;;
     esac
   done
   if [[ -n "$again" ]]; then
@@ -682,13 +931,38 @@ cmd_report() {
   [[ -s "$LEDGER" ]] || { echo "sin actividad"; return 0; }
   python3 - "$LEDGER" <<'PY'
 import json, sys
+from datetime import datetime
 ev = [json.loads(l) for l in open(sys.argv[1])]
 m = [e for e in ev if e.get("event") == "MERGED"]; p = [e for e in ev if e.get("event") == "PARK"]
 s = [e for e in ev if e.get("event") in ("STOP", "END")]
 print(f"merges: {len(m)} · aparcados: {len(p)}")
 for e in m: print(f"  MERGED #{e['pr']} tier {e['tier']} → {e['merge_commit'][:8]}")
-for e in p: print(f"  aparcado #{e['pr']}: {e['reason']}")
+for e in p: print(f"  aparcado #{e['pr']}: {e['reason']}" + (f" ({e['files']})" if e.get("files") else ""))
 if s: print(f"fin: {s[-1].get('reason', 'completo')}")
+# SE-500: métricas por tanda (manifiesto = digest). M1 merges frente a candidatas que llegaron a decidirse,
+# sin contar CI roja; M2 integraciones administrativas sin revisión nueva (registry_merge); M3 grants y minutos
+# desde el primer grant hasta el último merge.
+t = lambda e: datetime.strptime(e["ts"], "%Y-%m-%dT%H:%M:%SZ")
+digests = []
+for e in ev:
+    if e.get("event") == "GRANT" and e.get("digest") and e["digest"] not in digests: digests.append(e["digest"])
+tm = tc = 0
+for d in digests:
+    md = [e for e in m if e.get("digest") == d]
+    first_run = next((i for i, e in enumerate(ev) if e.get("event") == "RUN" and e.get("digest") == d), None)
+    merged_prs = {e["pr"] for e in md}
+    parked = {e["pr"] for i, e in enumerate(ev) if first_run is not None and i > first_run and e.get("event") == "PARK"
+              and e.get("reason") != "ci_roja" and e["pr"] not in merged_prs
+              and all(x.get("digest") in (None, d) for x in ev[first_run:i] if x.get("event") == "RUN")}
+    cand = len(merged_prs | parked)
+    tm += len(md); tc += cand
+    g = [e for e in ev if e.get("event") == "GRANT" and e.get("digest") == d]
+    mins = f"{(t(md[-1]) - t(g[0])).total_seconds() / 60:.0f} min" if md else "sin merges"
+    print(f"tanda {d[:12]}: M1 {len(md)}/{cand} · M2 {sum(e.get('equivalence') == 'registry_merge' for e in md)} "
+          f"registry_merge · M3 {len(g)} grant(s), {mins}")
+print(f"M1 total: {tm}/{tc}" + (f" ({tm / tc:.2f})" if tc else "") + " sin contar CI roja")
+print(f"M2 total: {sum(e.get('equivalence') == 'registry_merge' for e in m)} integraciones registry_merge sin revisión nueva")
+print(f"M3 total: {sum(1 for e in ev if e.get('event') == 'GRANT')} grant(s) para {len(m)} merge(s)")
 PY
 }
 

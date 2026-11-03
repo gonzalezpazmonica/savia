@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-11-03
+approved_by: "operadora, AskUserQuestion 2026-11-03; la aprobación se formaliza al fusionar esta PR (SE-488); incluye la enmienda AC-6b (#1458)"
 priority: P0
 developer_type: agent-team
 created: 2026-10-31

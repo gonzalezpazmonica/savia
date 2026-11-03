@@ -1,5 +1,5 @@
 # Savia Capability Map — INDEX
-> hash: 14a70ff278dc | resources: 1450
+> hash: 9f4c2ef85ccf | resources: 1450
 > 295 commands · 139 skills · 90 agents · 926 scripts
 
 [analysis] Trace Optimize — across,distributed,optimize,rates,sampling — cmd:.claude/commands/trace-optimize.md
@@ -381,7 +381,7 @@
 [development] spec-id-duplicates-check — check,duplicates,gate,slice,spec — script:scripts/spec-id-duplicates-check.sh
 [development] spec-implement — agente,asigna,developer,humano,implementa — cmd:.claude/commands/spec-implement.md
 [development] spec-judge — acceptance,approved,code,court,criteria — agent:.opencode/agents/spec-judge.md
-[development] spec-lifecycle — append,lifecycle,only,spec,status — script:scripts/spec-lifecycle.sh
+[development] spec-lifecycle — append,fragments,lifecycle,only,spec — script:scripts/spec-lifecycle.sh
 [development] spec-opencode-plan-audit — approved,audit,every,implemented,include — script:scripts/spec-opencode-plan-audit.sh
 [development] spec-quality-auditor — auditor,deterministic,quality,scorer,spec — script:scripts/spec-quality-auditor.sh
 [development] spec-resolve — deterministic,gates,governance,resolver,shared — script:scripts/spec-resolve.sh

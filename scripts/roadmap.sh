@@ -1,15 +1,38 @@
 #!/usr/bin/env bash
 # roadmap.sh — SE-378: CLI del planning state machine.
-# Uso: roadmap.sh current | next | history <ID> | validate | render
-# Fuente de estado: docs/propuestas/planning-state.json (única representación actual).
-# Transiciones: docs/propuestas/LOG.md (append-only, SE-222).
+# Uso: roadmap.sh current | next | history <ID> | validate [--diff REF] | render
+#      roadmap.sh register SE-NNN --status S [--priority P --phase F --title T --note N --evidence E --approval A]
+#      roadmap.sh consolidate
+# Fuente de estado (SE-500 S1): la VISTA = base consolidada (docs/propuestas/planning-state.json
+# y LOG.md) + fragmentos (docs/propuestas/planning.d/SE-NNN.json y LOG.d/SE-NNN-ESTADO.md),
+# calculada por scripts/planning-view.py. Las specs se registran con `register`, nunca editando la base.
 set -uo pipefail
 ROOT="${REPO_ROOT:-$(cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")" && pwd)}"
-STATE="$ROOT/docs/propuestas/planning-state.json"
+BASE_STATE="$ROOT/docs/propuestas/planning-state.json"
 MAIN_REF="${PLANNING_MAIN_REF:-origin/main}"
-[[ -f "$STATE" ]] || { echo "ERROR: falta $STATE" >&2; exit 1; }
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/planning-completion.sh"
+[[ -f "$BASE_STATE" ]] || { echo "ERROR: falta $BASE_STATE" >&2; exit 1; }
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPTS_DIR/lib/planning-completion.sh"
+VIEW_PY="$SCRIPTS_DIR/planning-view.py"
 CMD="${1:-current}"
+
+case "$CMD" in
+  register) shift; exec python3 "$VIEW_PY" --root "$ROOT" register "$@" ;;
+  consolidate) exec python3 "$VIEW_PY" --root "$ROOT" consolidate ;;
+esac
+
+# La vista se materializa en un directorio temporal; los lectores usan $STATE y $LOG.
+VIEW_DIR=$(mktemp -d) || { echo "ERROR: mktemp" >&2; exit 1; }
+trap 'rm -rf "$VIEW_DIR"' EXIT
+STATE="$VIEW_DIR/planning-state.json"
+LOG="$VIEW_DIR/LOG.md"
+build_view() { # [--lenient]
+  python3 "$VIEW_PY" --root "$ROOT" state "$@" > "$STATE" \
+    && python3 "$VIEW_PY" --root "$ROOT" log "$@" > "$LOG"
+}
+if [[ "$CMD" != "validate" ]]; then
+  build_view || { echo "ERROR: vista de planificación no construible (bash scripts/roadmap.sh validate)" >&2; exit 1; }
+fi
 
 render_sessions() {
   jq -e '.route.session_plan | type == "array" and length > 0' "$STATE" >/dev/null 2>&1 || return 0
@@ -71,12 +94,30 @@ case "$CMD" in
     ID="${2:-}"
     [[ -z "$ID" ]] && { echo "uso: roadmap.sh history SE-XXX" >&2; exit 1; }
     jq -r --arg id "$ID" '.initiatives[] | select(.id==$id) | "id: \(.id)\nestado: \(.status)\nevidencia: \(.evidence // "n/a")\naprobación: \(.approval // "n/a")\ntítulo: \(.title // "")"' "$STATE"
-    grep -h "$ID" "$ROOT/docs/propuestas/LOG.md" 2>/dev/null | tail -5 || true
+    grep -hF -- "$ID" "$LOG" 2>/dev/null | tail -5 || true
     ;;
   validate)
     ERR=0
-    # 1. IDs únicos
-    DUP=$(jq -r '.initiatives[].id' "$STATE" | sort | uniq -d)
+    DIFF_REF=""
+    if [[ "${2:-}" == "--diff" ]]; then
+      DIFF_REF="${3:-}"
+      [[ -z "$DIFF_REF" ]] && { echo "uso: roadmap.sh validate --diff REF" >&2; exit 2; }
+    elif [[ -n "${2:-}" ]]; then
+      echo "uso: roadmap.sh validate [--diff REF]" >&2; exit 2
+    fi
+    # 0. Fragmentos (SE-500 S1): nombres, JSON, campos, duplicados y cabeceras de LOG.d.
+    python3 "$VIEW_PY" --root "$ROOT" check || ERR=1
+    # 0b. En una PR, la base solo cambia por consolidación pura (SE-500 S1).
+    if [[ -n "$DIFF_REF" ]]; then
+      python3 "$VIEW_PY" --root "$ROOT" diff "$DIFF_REF" || ERR=1
+    fi
+    # Las 10 comprobaciones se evalúan sobre la vista; los fragmentos ilegibles ya fallaron en 0.
+    if ! build_view --lenient; then
+      echo "FAIL: vista de planificación no construible"
+      exit 1
+    fi
+    # 1. IDs únicos (SE-NNN normalizado: SE-0375 y SE-375 son la misma iniciativa)
+    DUP=$(jq -r '.initiatives[].id | if test("^SE-[0-9]+$") then "SE-" + (ltrimstr("SE-") | tonumber | tostring) else . end' "$STATE" | sort | uniq -d)
     [[ -n "$DUP" ]] && { echo "FAIL: IDs duplicados: $DUP"; ERR=1; }
     # 2. Estados válidos
     BAD=$(jq -r '.initiatives[].status' "$STATE" | grep -vE '^(IDEA|PROPOSED|APPROVED|IMPLEMENTING|IMPLEMENTED|REJECTED|SUPERSEDED|DEFERRED|RETIRED)$' | sort -u)
@@ -146,8 +187,7 @@ case "$CMD" in
         fi
       fi
     done < <(find "$ROOT/docs/specs" -name 'SE-*.spec.md' | sort)
-    # 7. Estado vigente de cada iniciativa trazada registrado en LOG.md (SE-378, append-only).
-    LOG="$ROOT/docs/propuestas/LOG.md"
+    # 7. Estado vigente de cada iniciativa trazada registrado en LOG.md (SE-378, append-only; vista SE-500).
     if [[ "$FLOOR" =~ ^[0-9]+$ ]]; then
       NOLOG=""
       while IFS=$'\t' read -r ID ST; do
@@ -224,7 +264,7 @@ case "$CMD" in
     echo "rendered: docs/propuestas/ROADMAP-CURRENT.md"
     ;;
   *)
-    echo "uso: roadmap.sh current | next | history <ID> | validate | render" >&2
+    echo "uso: roadmap.sh current | next | history <ID> | validate [--diff REF] | render | register SE-NNN --status S ... | consolidate" >&2
     exit 1
     ;;
 esac

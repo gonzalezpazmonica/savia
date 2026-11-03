@@ -172,15 +172,15 @@ teardown() {
   [[ "$(jq -r .decision <<< "$output")" == block ]]
 }
 
-@test "edge: guarded cd to a nonexistent directory cannot reach the commit" {
+@test "edge: cd to a directory the hook cannot see stays conservative (cwd in main)" {
   local h="$PWD/$HOOK" payload
   cd "$FIXDIR" || return 1
-  # cd falla antes de git commit, así que no hay commit que bloquear.
+  # Que el hook no vea el directorio no prueba que el cd falle (CDPATH, otra
+  # vista del disco): deducirlo dejaba pasar el commit (revisión PR #1467 P1-2).
   payload=$(jq -nc '{tool_input:{command:"cd \"/nonexistent-se337\" && git commit -m test"}}')
   run bash "$h" <<< "$payload"
-  [[ "$status" -eq 0 && -z "$output" ]]
-  run bash -c 'cd "/nonexistent-se337" 2>/dev/null && echo reached'
-  [[ "$output" != *reached* ]]
+  [[ "$status" -eq 0 ]]
+  [[ "$(echo "$output" | jq -r .decision)" == "block" ]]
 }
 
 @test "RN-01: detached HEAD / no repo → pass (sin rama humana)" {

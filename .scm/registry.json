@@ -7746,10 +7746,10 @@
       "id": "script:scripts/spec-lifecycle",
       "intents": [
         "append",
+        "fragments",
         "lifecycle",
         "only",
-        "spec",
-        "status"
+        "spec"
       ],
       "kind": "script",
       "owner_domain": "development",
@@ -29614,7 +29614,7 @@
       "tests": []
     }
   ],
-  "content_hash": "c397ceb06a6f",
+  "content_hash": "ebd3a4238e90",
   "deferred_kinds": [
     "rule",
     "hook"
