@@ -96,6 +96,9 @@ export async function runLogin(adapter: string, o: { tokenStdin: boolean; days?:
     await d.store.put(plan.service, plan.scopes, { access_token: tok, expires_at: d.now() + days * 86_400_000, scopes: plan.scopes });
     return `Token de ${adapter} guardado en el almacén del sistema (caduca para Soul en ${days} días).`;
   }
+  // La caducidad del flujo OAuth la fija el proveedor: aceptar --days en silencio haría creer
+  // que se acortó (revisión #1447, P2-2).
+  if (o.days !== undefined) throw new LoginUsage(`${adapter}: --days solo vale con --token-stdin; la caducidad OAuth la fija el proveedor`);
   const cl = client(d.connectors, plan.provider);
   if (!cl) throw new Error(`falta la aplicación propia en connectors.oauth.${plan.provider} (client_id${plan.provider === "microsoft" ? " y tenant" : ""})`);
   const t = await deviceFlow({

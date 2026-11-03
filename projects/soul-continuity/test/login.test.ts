@@ -94,6 +94,14 @@ test("login OAuth sin aplicación propia configurada => error claro, sin red", a
   assert.match(s.err.join("\n"), /connectors\.oauth\.microsoft/);
 });
 
+test("login OAuth con --days => uso (código 2): la caducidad la fija el proveedor (revisión #1447, P2-2)", async () => {
+  const s = setup();
+  assert.equal(await runCli(["login", "m365-mail", "--days", "7"], s.deps), 2);
+  assert.match(s.err.join("\n"), /--days solo vale con --token-stdin/);
+  const t = setup();
+  assert.equal(await runCli(["login", "github", "--token-stdin", "--days", "7"], t.deps), 0, "con token pegado --days sigue valiendo");
+});
+
 test("oauthRefresher: sin aplicación configurada no renueva (fail-closed)", async () => {
   const r = oauthRefresher({ enabled: [] });
   await assert.rejects(r("graph", "rt", ["Mail.Read"]), /aplicación/);
