@@ -1,9 +1,9 @@
 {
-  "generated": "2026-11-03T14:05:04Z",
-  "total": 319,
+  "generated": "2026-11-03T17:36:38Z",
+  "total": 320,
   "tier1_count": 4,
   "tier2_count": 308,
-  "dormant_count": 7,
+  "dormant_count": 8,
   "rules": {
     "ac-verifier-authority.md": {
       "tier": "dormant",
@@ -279,6 +279,10 @@
     },
     "component-marketplace.md": {
       "tier": "tier2",
+      "consumers": ""
+    },
+    "comprehension-gate.md": {
+      "tier": "dormant",
       "consumers": ""
     },
     "confidence-protocol.md": {
