@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=50f37baa25fd70736ba5e5c0bfada3e617dc8a8cc74fb6bd64b6867d616d953e
-timestamp=2026-11-03T14:05:31Z
-branch=agent/w-fix-hooks-rama-20261023
-head_commit=fbab1469
-signature=c35945efc725e8d2586f1916a77f824319ced0ae34a5953dc4b147d8e4968517
+diff_hash=b21c721334b2ea706fc75fcd3e2331a3e9ed814fdf575d3cbd71d80e1a5620d8
+timestamp=2026-11-03T17:08:21Z
+branch=agent/w-soul-instalador-20261023
+head_commit=5a11819bd
+signature=89bd1e09ac5f07ba1843b66d6a61a69a99e913a7dfe3c237e0ce3d6fbb57e381
