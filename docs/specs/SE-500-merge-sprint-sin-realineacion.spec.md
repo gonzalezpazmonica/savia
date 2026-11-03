@@ -1,8 +1,9 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-single
 created: 2026-11-03
+approved_at: 2026-11-03
 author: Savia
 phase: A
 risk: L4
@@ -13,6 +14,10 @@ timeline:
     learned: "2026-11-03"
     value: "PROPOSED"
     source: "spec-lifecycle:auto"
+  - from: "2026-11-03"
+    learned: "2026-11-03"
+    value: "APPROVED"
+    source: "operadora: pregunta interactiva 2026-11-03, «Aprobada, lanza S1 y S2»; se formaliza al fusionar la PR (SE-488)"
 ---
 # SE-500 — Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado
 
