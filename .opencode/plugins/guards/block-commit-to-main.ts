@@ -1,68 +1,95 @@
 // block-commit-to-main.ts — SE-337 (guarda TS del runtime OpenCode)
 //
-// Bloquea `git commit` cuando la rama actual es main/master, mecanizando la
-// regla autonomous-safety "NUNCA commit en ramas de humanos". Contraparte TS
-// del hook shell `.opencode/hooks/block-commit-to-main.sh`, con la diferencia
-// clave: este guard está conectado al runtime OpenCode (tool.execute.before),
-// mientras el hook shell solo existía como script sin registro — por eso los
-// commits en main pasaron sin oposición.
+// Bloquea `git commit` cuando la rama del repo DESTINO es main/master,
+// mecanizando la regla autonomous-safety "NUNCA commit en ramas de humanos".
+// Contraparte TS del hook shell `.opencode/hooks/block-commit-to-main.sh`.
+//
+// El destino de cada `git commit` real lo resuelve `scripts/lib/git_op_targets.py`
+// (el mismo resolvedor que usan los hooks bash, para que no diverjan):
+// `git -C <ruta>`, `cd <ruta>` encadenado, variables literales de la misma
+// orden y el cwd de la orden. El texto de heredocs y cadenas no es una orden.
+// Destino no resoluble, fuera de un repo o sin Python → criterio conservador:
+// se mira la rama del cwd de la orden (comportamiento anterior).
 //
 // Bypass consciente de la operadora: SAVIA_ALLOW_MAIN_COMMIT=1 (queda
 // registrado en el log, no es silencioso).
 //
-// PURE_BASH/TS, sin red (CRIT-001). Coste ~5-10ms (subprocess read-only).
+// Sin red (CRIT-001). Coste ~30-60ms solo cuando la orden menciona git commit.
 
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
-async function currentBranch(): Promise<string> {
-  // read-only: git branch --show-current, no modifica nada.
-  // TEST_BRANCH permite a los tests simular la rama sin depender del repo real.
-  if (process.env.TEST_BRANCH) return process.env.TEST_BRANCH;
+const LEGACY_RX = /\bgit\s+commit\b/;
+const RESOLVER = new URL("../../../scripts/lib/git_op_targets.py", import.meta.url).pathname;
+
+async function spawn(cmd: string, args: string[], input?: string): Promise<{ ok: boolean; out: string }> {
   try {
     const { spawnSync } = await import("node:child_process");
-    const res = spawnSync("git", ["branch", "--show-current"], { encoding: "utf8", timeout: 3000 });
-    return (res.stdout || "").trim();
+    const res = spawnSync(cmd, args, { encoding: "utf8", timeout: 3000, input });
+    // Sin trim(): la línea `commit\t` (destino vacío = no resoluble) termina en tabulador.
+    return { ok: res.status === 0 && !res.error, out: res.stdout || "" };
   } catch {
-    return "";
+    return { ok: false, out: "" };
   }
 }
+
+async function branchOf(dir: string): Promise<string | null> {
+  // TEST_BRANCH permite a los tests simular la rama sin depender del repo real.
+  if (process.env.TEST_BRANCH) return process.env.TEST_BRANCH;
+  const inside = await spawn("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"]);
+  if (!inside.ok || inside.out.trim() !== "true") return null; // no es un repo
+  const res = await spawn("git", ["-C", dir, "branch", "--show-current"]);
+  return res.out.trim();
+}
+
+/** Directorios destino de cada `git commit` real; "" = no resoluble. null = resolvedor no disponible. */
+async function commitTargets(command: string, base: string): Promise<string[] | null> {
+  const res = await spawn("python3", [RESOLVER, base], command);
+  if (!res.ok) return null;
+  return res.out
+    .split("\n")
+    .filter((l) => l.startsWith("commit\t"))
+    .map((l) => l.slice("commit\t".length));
+}
+
+const isHuman = (b: string | null) => b === "main" || b === "master";
 
 export async function blockCommitToMain(input: ToolInput, output: ToolOutput): Promise<void> {
   if (extractToolName(input) !== "bash") return;
   const command = extractCommand(input, output);
-  if (!command || !/\bgit\s+commit\b/.test(command)) return;
+  if (!command || !/\bcommit\b/.test(command)) return;
+
+  const args = (output?.args ?? input?.args ?? {}) as Record<string, unknown>;
+  const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
+
+  let targets = await commitTargets(command, base);
+  if (targets === null) {
+    // Sin resolvedor: comportamiento anterior (texto + cwd de la orden).
+    targets = LEGACY_RX.test(command) ? [""] : [];
+  }
+  if (targets.length === 0) return;
+
+  let branch = "";
+  for (const dir of targets) {
+    let b = dir ? await branchOf(dir) : null;
+    if (b === null) b = await branchOf(base); // conservador: cwd de la orden
+    if (isHuman(b)) {
+      branch = b as string;
+      break;
+    }
+  }
+  if (!branch) return; // rama segura (agent/*, feature/*) o fuera de repo
 
   // Bypass consciente de la operadora: se registra, no es silencioso.
-  if (process.env.SAVIA_ALLOW_MAIN_COMMIT === "1") {
-    try {
-      const fs = await import("node:fs");
-      const path = await import("node:path");
-      const log = path.join(process.cwd(), "output", "turn-sdlc", "commit-guard.jsonl");
-      fs.appendFileSync(
-        log,
-        JSON.stringify({
-          ts: new Date().toISOString(),
-          action: "commit",
-          verdict: "bypass",
-          env: "SAVIA_ALLOW_MAIN_COMMIT=1",
-        }) + "\n",
-      );
-    } catch { /* best-effort */ }
-    return;
-  }
-
-  const branch = await currentBranch();
-  if (branch !== "main" && branch !== "master") return; // rama segura (agent/*, feature/*)
-
+  const verdict = process.env.SAVIA_ALLOW_MAIN_COMMIT === "1" ? "bypass" : "block";
   try {
     const fs = await import("node:fs");
     const path = await import("node:path");
     const log = path.join(process.cwd(), "output", "turn-sdlc", "commit-guard.jsonl");
-    fs.appendFileSync(
-      log,
-      JSON.stringify({ ts: new Date().toISOString(), branch, action: "commit", verdict: "block" }) + "\n",
-    );
+    const entry: Record<string, string> = { ts: new Date().toISOString(), branch, action: "commit", verdict };
+    if (verdict === "bypass") entry.env = "SAVIA_ALLOW_MAIN_COMMIT=1";
+    fs.appendFileSync(log, JSON.stringify(entry) + "\n");
   } catch { /* best-effort */ }
+  if (verdict === "bypass") return;
 
   const reason = `Commit en rama humana (${branch}) bloqueado por autonomous-safety (NUNCA commit en main/master). Crea una rama agent/* y commitea ahí: git checkout -b agent/<tarea>. Si es intencional de la operadora, repítelo con SAVIA_ALLOW_MAIN_COMMIT=1 (queda registrado).`;
   throw new Error(`BLOCKED [commit-to-main]: ${reason}`);

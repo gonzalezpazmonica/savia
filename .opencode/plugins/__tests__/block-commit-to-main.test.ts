@@ -60,3 +60,75 @@ test("no interviene en comandos que no son git commit", async () => {
     await expect(blockCommitToMain(input as any, {} as any)).resolves.toBeUndefined();
   }
 });
+// ── Destino real de la orden (repos git reales, sin TEST_BRANCH) ───────────
+// Casos que fallaron con la sesión en main: el guard miraba la rama del
+// checkout de la sesión y no la del repo sobre el que actúa la orden.
+import { mkdtempSync, mkdirSync, rmSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { afterAll, beforeAll, describe } from "bun:test";
+
+describe("destino real del commit", () => {
+  let root = "", home = "", mainRepo = "", wt = "";
+  const OLD_HOME = process.env.HOME;
+  const sh = (cwd: string, ...a: string[]) => spawnSync("git", a, { cwd, encoding: "utf8" });
+  const run = (command: string, workdir = mainRepo) =>
+    blockCommitToMain({ tool: "bash", args: { command, workdir } } as any, {} as any);
+  const BLOCK = /BLOCKED \[commit-to-main\]/;
+
+  beforeAll(() => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "bcm-")));
+    home = join(root, "home");
+    mainRepo = join(home, "repo-main");
+    wt = join(home, "wt-x");
+    mkdirSync(mainRepo, { recursive: true });
+    sh(mainRepo, "init", "-q", "-b", "main");
+    sh(mainRepo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init");
+    sh(mainRepo, "worktree", "add", "-q", "-b", "agent/x", wt);
+    process.env.HOME = home;
+  });
+  afterAll(() => {
+    if (OLD_HOME === undefined) delete process.env.HOME; else process.env.HOME = OLD_HOME;
+    rmSync(root, { recursive: true, force: true });
+  });
+  beforeEach(() => { delete process.env.TEST_BRANCH; });
+
+  // permitidos: el destino es el worktree agent/*
+  test("caso 1: W=<worktree>; git -C $W add && git -C $W commit", async () => {
+    await expect(run(`W=${wt}; git -C $W add f && git -C $W commit -q --no-edit`)).resolves.toBeUndefined();
+  });
+  test("caso 2: cd ~/wt sin comillas; git merge; git commit", async () => {
+    await expect(run("cd ~/wt-x && git merge origin/main ; git commit -m y")).resolves.toBeUndefined();
+  });
+  test("caso 3: heredoc cuyo texto dice git commit / commitear no es un commit", async () => {
+    await expect(run("cat > notas.md <<'EOF'\nhay que commitear; git commit -m x\nEOF")).resolves.toBeUndefined();
+  });
+  test("cd con comillas raras al worktree", async () => {
+    await expect(run(`cd "${home}"/'wt-x' && git commit -m x`)).resolves.toBeUndefined();
+  });
+
+  // bloqueados: el destino es main, por cualquier forma
+  test("git -C hacia main desde un worktree", async () => {
+    await expect(run(`git -C ${mainRepo} commit -m x`, wt)).rejects.toThrow(BLOCK);
+    await expect(run(`git -C "${mainRepo}" commit -m x`, wt)).rejects.toThrow(BLOCK);
+  });
+  test("cd a main tras un cd al worktree", async () => {
+    await expect(run(`cd ${wt} && git add . ; cd ${mainRepo} && git commit -m z`, wt)).rejects.toThrow(BLOCK);
+  });
+  test("cd al worktree en subshell no salva el commit en main", async () => {
+    await expect(run(`(cd ${wt}); git commit -m x`)).rejects.toThrow(BLOCK);
+  });
+  test("cd al worktree en tubería no salva el commit en main", async () => {
+    await expect(run(`cd ${wt} | true; git commit -m x`)).rejects.toThrow(BLOCK);
+  });
+  test("variable no resoluble: conservador con el cwd en main", async () => {
+    await expect(run("git -C $DESCONOCIDA commit -m x")).rejects.toThrow(BLOCK);
+  });
+  test("commit tras heredoc sí cuenta", async () => {
+    await expect(run("cat > f <<EOF\ntexto\nEOF\ngit commit -m x")).rejects.toThrow(BLOCK);
+  });
+  test("bash -c con cd a main desde el worktree", async () => {
+    await expect(run(`bash -c 'cd ${mainRepo} && git commit -m x'`, wt)).rejects.toThrow(BLOCK);
+  });
+});
