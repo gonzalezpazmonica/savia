@@ -8,7 +8,7 @@ phase: A
 risk: L3
 depends_on: [SE-387]
 related_specs: [SE-387, SE-433, SE-343, SE-362, SE-488, SE-364]
-origin: "Análisis de repositorios externos difundidos públicamente (2026-11-01), iniciativa SAVIA-RESEARCH-01 y validación V1 «efectos exactamente una vez». Patrón extraído de OpenRath (BSD-3-Clause, commit f39331700fb4), sin adoptar el producto. Afirmaciones del análisis contrastadas con main en fa3f486a0 (los scripts afectados no cambian desde cd55e23e8)."
+origin: "Análisis de repositorios externos difundidos públicamente (2026-11-01), iniciativa SAVIA-RESEARCH-01 y validación V1 «efectos exactamente una vez». Patrón extraído de OpenRath (BSD-3-Clause, commit f39331700fb4), sin adoptar el producto. Afirmaciones del análisis contrastadas con main en fa3f486a0; citas fichero:línea re-ancladas en main 3e094038d (2026-11-03) y acompañadas del símbolo, porque merge-sprint.sh cambió entre ambos."
 timeline:
   - from: "2026-11-01"
     learned: "2026-11-01"
@@ -29,20 +29,20 @@ El análisis de origen señala `scripts/effect-reservation.sh` y advierte que su
 2. **La advertencia es correcta y aplica al script que sí se usa.** El camino real es `scripts/f5-state.sh`, invocado por `scripts/push-pr.sh` y `scripts/merge-sprint.sh`.
 3. **Respuesta a la pregunta clave: sí, hoy un efecto con resultado incierto puede repetirse sin que nada lo impida.** No hay doble ejecución observada; el riesgo está en el contrato.
 
-Hallazgos con fichero:línea:
+Hallazgos con fichero:línea (main 3e094038d; entre paréntesis, el símbolo o la orden, que sobrevive a cambios de numeración):
 
 | # | Dónde | Qué pasa | Consecuencia |
 |---|---|---|---|
 | H1 | `scripts/effect-reservation.sh:9-16` | Cualquier estado distinto de `closed` devuelve exit 0 y el texto «effect exactly-once». | Quien lo use reejecuta el efecto tras un crash. El test `f5-exactly-once.bats:29-33` fija ese comportamiento como correcto. |
 | H2 | `scripts/f5-state.sh:24-28` | Con `submitted` y PR sin `MERGED` imprime «NO se solicita otro efecto», pero sale con **exit 0**, el mismo código que «adelante». | El texto dice «no»; el código dice «sí». `tests/bats/f5-cases.bats:32-46` fija ambos casos como «permite reanudar». |
 | H3 | `scripts/push-pr.sh:274` y `:281` | Solo comprueba `reserve ... \|\| exit 3` y continúa a `gh pr merge`. | Al relanzar `push-pr.sh --merge` tras un crash o un error ambiguo, se vuelve a pedir el merge. |
-| H4 | `scripts/push-pr.sh:281-288` | `mark_submitted` se escribe **después** de pedir el merge. | Una caída entre ambos deja `reserved`, indistinguible de «nunca se pidió» (caso b de V1 confundido con caso a). `merge-sprint.sh:382` sí marca `submitted` antes de pedirlo; el defecto es solo de `push-pr`. |
+| H4 | `scripts/push-pr.sh:281-288` | `mark_submitted` se escribe **después** de pedir el merge. | Una caída entre ambos deja `reserved`, indistinguible de «nunca se pidió» (caso b de V1 confundido con caso a). `merge-sprint.sh:616` (`f5 reserve … && f5 mark_submitted`) sí marca `submitted` antes de pedirlo; el defecto es solo de `push-pr`. |
 | H5 | `scripts/push-pr.sh:281-284` | Cualquier fallo de `gh pr merge`, incluido un timeout tras aceptar el servidor, termina con «vuelve a ejecutar push-pr.sh --merge». | La herramienta invita a repetir en estado ambiguo. |
-| H6 | `scripts/f5-state.sh:11` y `:49` | `pr_state` traga errores y devuelve `""`; `release` borra la reserva si el estado no es literalmente `MERGED`. `merge-sprint.sh:386` llama a `release` ante cualquier salida ≠ 0 de `gh pr merge`. | Un error de red tras un merge aceptado borra la reserva. El siguiente paso ve el PR mergeado sin reserva y para con `merge_externo` (`merge-sprint.sh:616`). Falla cerrado, pero pierde la procedencia: un merge propio pasa por ajeno y no queda recibo. |
+| H6 | `scripts/f5-state.sh:11` y `:49` | `pr_state` traga errores y devuelve `""`; `release` borra la reserva si el estado no es literalmente `MERGED`. `merge-sprint.sh:620` (`f5 release`) llama a `release` ante cualquier salida ≠ 0 de `gh pr merge`. | Un error de red tras un merge aceptado borra la reserva. El siguiente paso ve el PR mergeado sin reserva y para con `merge_externo` (`merge-sprint.sh:860-866`, `case "$(f5 status …)"`). Falla cerrado, pero pierde la procedencia: un merge propio pasa por ajeno y no queda recibo. |
 | H7 | `scripts/f5-state.sh:15-30` | Comprueba la existencia del fichero y lo escribe sin cerrojo. | Dos workers con la misma clave pueden reservar los dos (caso f). |
-| H8 | `scripts/push-pr.sh:273` y `scripts/merge-sprint.sh:329` | `push-pr` usa `~/.savia/reservations`; `merge-sprint` usa `$HOME_MS/reservations/<digest>`. | Dos libros para el mismo efecto `pr.merge/N`: ninguno ve la reserva del otro. El cerrojo `run.lock` (`merge-sprint.sh:566`) solo serializa merge-sprint consigo mismo. |
-| H9 | `scripts/f5-state.sh:8` | La clave es solo el número de PR; no hay huella de argumentos. El SHA pedido vive en un fichero aparte solo en merge-sprint (`:330`, `:382`) y no se comprueba al reservar. | Misma clave con otros argumentos (otro head) no se rechaza (caso d). |
-| H10 | `scripts/f5-state.sh:42` | El «recibo» es `state=closed` y `closed_at`. | No contiene la evidencia remota (commit de merge, autor, head), no está encadenado y no se puede verificar después. El ledger de merge-sprint sí guarda `merge_commit` (`:406`), pero no es el recibo F5. |
+| H8 | `scripts/push-pr.sh:273` y `scripts/merge-sprint.sh:563` (`f5()`) | `push-pr` usa `~/.savia/reservations`; `merge-sprint` usa `$HOME_MS/reservations/<digest>`. | Dos libros para el mismo efecto `pr.merge/N`: ninguno ve la reserva del otro. El cerrojo `run.lock` (`merge-sprint.sh:809`) solo serializa merge-sprint consigo mismo. |
+| H9 | `scripts/f5-state.sh:8` | La clave es solo el número de PR; no hay huella de argumentos. El SHA pedido vive en un fichero aparte solo en merge-sprint (`:564` `resv_head`, escrito en `:616`) y no se comprueba al reservar. | Misma clave con otros argumentos (otro head) no se rechaza (caso d). |
+| H10 | `scripts/f5-state.sh:42` | El «recibo» es `state=closed` y `closed_at`. | No contiene la evidencia remota (commit de merge, autor, head), no está encadenado y no se puede verificar después. El ledger de merge-sprint sí guarda `merge_commit` (`:643`, `record_merge`), pero no es el recibo F5. |
 
 Matiz de impacto: hoy el único efecto bajo F5 es `pr.merge`, y GitHub lo limita por su cuenta: `--match-head-commit` y un PR ya mergeado no se mergea dos veces. Por eso H3-H5 no han causado daño. El problema es que SE-387 F5 declara el alcance «merge/deploy/publicación/delete/escritura externa», y cualquier efecto **no idempotente** que reutilice este contrato heredaría la reejecución.
 
@@ -83,7 +83,7 @@ Registro por efecto:
 | `install_id` | UUID creado al inicializar el ledger y guardado en su tabla `meta`. Distingue dos instalaciones del mismo operador. |
 | `claim_token`, `lease_until`, `holder_pid`, `holder_start` | quién tiene reclamada la clave y hasta cuándo (Regla 2b). `holder_pid` es el proceso **llamador** de larga vida, nunca el del CLI `effect-ledger.py`; `holder_start` es su hora de arranque (campo 22 de `/proc/<pid>/stat`) contra la reutilización de PID |
 | `actor_remote` | identidad del actor en el remoto, obtenida al reclamar (Regla 6b). Para `pr.merge`, el login de `gh api user` |
-| `review_origin` | de dónde llegó a `NEEDS_REVIEW`: `dispatched` (desde `DISPATCHED` de este ledger), `pre_probe` (sonda previa, 3c) o `migration` (importado). Decide si se puede cerrar sin grant (Regla 5) |
+| `review_origin` | de dónde llegó a `NEEDS_REVIEW`: `dispatched` (desde `DISPATCHED` de este ledger), `rejected` (`DISPATCHED` con rechazo anotado y luego `PRESENT`, 3e), `pre_probe` (sonda previa, 3c) o `migration` (importado). Decide si se puede cerrar sin grant (Regla 5) |
 | `effect_class` | `read_only \| idempotent_remote \| non_idempotent`. Por defecto `non_idempotent`; `idempotent_remote` solo si el registro de operaciones lo declara con evidencia de que el remoto respeta la clave. |
 | `actor` | identificador del perfil activo (como `operator-grant.sh`), nunca un nombre literal en código |
 | `run_id`, `attempt`, `state`, marcas de tiempo | — |
@@ -104,6 +104,8 @@ PREPARED ──dispatch (CAS + sonda previa ABSENT)──▶ DISPATCHED ──ok
 NEEDS_REVIEW ──resolve (por sonda o manual con grant, Regla 5)──▶ SUCCEEDED | FAILED
 ```
 
+`reject` (3e) no es una transición: anota el `DISPATCHED` y solo cambia a dónde lleva un `PRESENT` posterior (`NEEDS_REVIEW` con origen `rejected` en lugar de `SUCCEEDED`).
+
 Ninguna entrada se borra nunca: el ledger solo añade estados.
 
 Órdenes que cambian estado y desde dónde:
@@ -111,9 +113,10 @@ Ninguna entrada se borra nunca: el ledger solo añade estados.
 | Orden | Admite | Efecto | Fuera de eso |
 |---|---|---|---|
 | `dispatch <id> --claim <t>` | `PREPARED` con ese token | sonda previa (3c) y CAS a `DISPATCHED` | 6 si el token no es el vigente; 2 en otro estado |
-| `complete <id> --claim <t> --response <json>` | `DISPATCHED` con ese token | `SUCCEEDED` con `attribution: response`, tras comprobar que la respuesta trae la evidencia que declara la `op` (para `pr.merge`, `mergeCommit`); sin ella, la entrada sigue `DISPATCHED` y la cierra la sonda | 2 |
+| `complete <id> --claim <t> --response <json>` | `DISPATCHED` con ese token | `SUCCEEDED` con `attribution: response`, tras comprobar que la respuesta trae la evidencia que declara la `op` (para `pr.merge`, `mergeCommit`) y sale con 0; sin ella, la entrada sigue `DISPATCHED`, sale con 6 (`IN_FLIGHT`) y la cierra la sonda | 2 |
+| `reject <id> --claim <t> --response <txt>` | `DISPATCHED` con ese token, cuando la petición terminó con error **no** debido al `timeout` (3e) | anota `dispatch_rejected` y la respuesta; el estado sigue `DISPATCHED` y sale con 6 | 2 |
 | `fail <id> --claim <t> --reason <txt>` | solo `PREPARED` con ese token: quien llama aborta **antes** de enviar (validación local, grant caducado) | `FAILED` y suelta la reclamación; sin llamada remota | 2. Desde `DISPATCHED` nunca: ahí solo la sonda llega a `FAILED` (3b) |
-| `reconcile <key>` | `DISPATCHED` | tabla de la Regla 3 | sin cambios y exit 0 con el estado impreso |
+| `reconcile <key>` | cualquier estado, y clave ausente | tabla de la Regla 3d; solo sondea desde `DISPATCHED` | — (todo estado tiene exit propio; 2 solo por error) |
 | `resolve <id> …` | `NEEDS_REVIEW` | Regla 5 | 2 |
 
 Reglas:
@@ -151,14 +154,15 @@ Reglas:
 
    | Sonda | Estado nuevo | Exit |
    |---|---|---|
-   | `PRESENT`, con los campos observables iguales a `args` y `mergedBy` igual a `actor_remote` (6b) | `SUCCEEDED` | 3 |
+   | `PRESENT`, con los campos observables iguales a `args` y `mergedBy` igual a `actor_remote` (6b), sin rechazo anotado | `SUCCEEDED` | 3 |
    | `PRESENT` con algún campo observable o `mergedBy` distinto | `NEEDS_REVIEW` (`review_origin: dispatched`) | 4 |
+   | `PRESENT` coincidente sobre un `DISPATCHED` con rechazo anotado (3e) | `NEEDS_REVIEW` (`review_origin: rejected`) | 4 |
    | `ABSENT` definitivo (3b), **pasada la gracia** | `FAILED` y, en la misma llamada, `attempt+1` en `PREPARED` con reclamación nueva | 0 (`PROCEED`) |
    | `ABSENT` dentro de la gracia | sigue `DISPATCHED` | 6 |
    | `UNKNOWN` o error de la sonda, dentro de la gracia | sigue `DISPATCHED` | 6 |
    | `UNKNOWN` o error de la sonda, pasada la gracia | `NEEDS_REVIEW` (`review_origin: dispatched`) | 4 |
 
-   Las dos conclusiones que no dependen del tiempo son `PRESENT` coincidente y `PRESENT` discrepante: lo observado ya existe y no va a cambiar esperando. Todo lo demás espera a la gracia. Con `reconcile <key>` rige la misma tabla, salvo que `ABSENT` pasada la gracia deja `FAILED` sin reclamar un intento nuevo y sale con 0.
+   Las dos conclusiones que no dependen del tiempo son `PRESENT` coincidente y `PRESENT` discrepante: lo observado ya existe y no va a cambiar esperando. Todo lo demás espera a la gracia. `reconcile <key>` aplica la misma tabla desde `DISPATCHED`, salvo que `ABSENT` pasada la gracia deja `FAILED` sin reclamar un intento nuevo; sus exits los fija 3d.
 
    La sonda se ejecuta **fuera** de la transacción (es una llamada de red). Después, en `BEGIN IMMEDIATE`, se comprueba que la entrada sigue en el mismo `state` y `attempt` que antes de sondear; si cambió, no se escribe nada y se sale con 6.
 
@@ -185,6 +189,21 @@ Reglas:
    - si da `ABSENT`, se hace el CAS y se envía.
 
    Queda una ventana entre la sonda previa y el envío. Para `pr.merge` la cierra GitHub (`--match-head-commit` y no se mergea dos veces). Una `op` sin protección remota equivalente debe declararlo en el registro.
+
+   **3d. Exits de `reconcile`, por estado.** `reconcile` nunca autoriza un envío (eso solo lo hace `PROCEED` de `prepare`), así que su exit describe lo que hay, sin ambigüedad entre «cerrado ahora» y «ya estaba cerrado». Imprime siempre `<RESULTADO> <effect_id|-> <run_id|->` en una línea.
+
+   | Estado al entrar | Resultado | Exit |
+   |---|---|---|
+   | `DISPATCHED` sin rechazo anotado (3e) y sonda `PRESENT` coincidente | `RECONCILED`: pasa a `SUCCEEDED` en esta llamada (`attribution: probe`) | 3 |
+   | `SUCCEEDED` | `ALREADY_SUCCEEDED`: sin cambios, imprime el recibo | 7 |
+   | `DISPATCHED` y `PRESENT` discrepante, `PRESENT` con rechazo anotado (3e), o `UNKNOWN` pasada la gracia → `NEEDS_REVIEW`; o ya `NEEDS_REVIEW` | `NEEDS_REVIEW` (imprime además `review_origin`) | 4 |
+   | `DISPATCHED` dentro de la gracia (sonda `ABSENT` o `UNKNOWN`), o `PREPARED` con reclamación vigente (2b) | `IN_FLIGHT` | 6 |
+   | `DISPATCHED` y `ABSENT` definitivo pasada la gracia → `FAILED`; ya `FAILED`; `PREPARED` huérfano; clave ausente | `NOT_SENT`: este ledger no tiene un envío pendiente ni consumado para la clave | 0 |
+   | ledger ilegible, clave inválida (Regla 8) | error | 2 |
+
+   El exit 0 es «este ledger no hizo el efecto», nunca «adelante»: un consumidor que encuentre el PR mergeado y reciba 0 sabe que el merge es ajeno. La Regla 2 rige para `prepare`; 3d no la contradice.
+
+   **3e. Un rechazo anotado solo resta atribución.** Si la petición termina con error y no por el `timeout` de 2c (exit ≠ 0 y ≠ 124 de `timeout`), el consumidor llama a `reject` con la respuesta. La anotación **nunca** lleva a `FAILED` ni autoriza un reenvío (eso sigue siendo cosa de la sonda pasada la gracia, 3b); solo impide que un `PRESENT` posterior se cierre como propio: con rechazo anotado, `PRESENT` coincidente da `NEEDS_REVIEW` con `review_origin: rejected`. Así se conserva la garantía actual de SE-433 AC-26 (un merge rechazado y luego hecho fuera del sprint no pasa por propio, `test-merge-sprint.bats` «merge rechazado y luego mergeado fuera del sprint»), que hoy da `release` borrando la reserva. Un `timeout` (124) no anota nada: es el caso ambiguo de verdad y lo cierra la sonda.
 4. **Nada se libera tras `dispatch`.** El `release` actual (borrar la reserva) desaparece: antes de `dispatch` se usa `fail --claim`, y después solo la sonda lleva a `FAILED`, con `ABSENT` definitivo pasada la gracia. Un error de lectura del remoto no equivale a «no ocurrió» (corrige H6).
 5. **Resolución de `NEEDS_REVIEW`.** Hay dos rutas, excluyentes y elegidas por la orden, no por el entorno:
 
@@ -193,8 +212,8 @@ Reglas:
    | **Por sonda** | `resolve <effect_id> --by-probe [--outcome succeeded\|failed]` | cualquiera, también un agente con `SAVIA_AUTONOMOUS_RUN=1` | solo `review_origin == dispatched` |
    | **Manual** | `resolve <effect_id> --manual --outcome succeeded\|failed --evidence <ref>` | solo una persona con grant | cualquier `review_origin` |
 
-   - **Ruta por sonda (sin grant).** El CLI vuelve a ejecutar la sonda y el resultado sale **de la sonda**, nunca de quien llama: `PRESENT` coincidente → `SUCCEEDED` (`attribution: probe`); `ABSENT` definitivo con `now ≥ dispatched_at + dispatch_grace_s` → `FAILED`. Cualquier otra conclusión (incluido `PRESENT` discrepante) deja `NEEDS_REVIEW` y sale con 4. `--evidence` no se admite en esta ruta (exit 2). Si se pasa `--outcome` y no coincide con la conclusión de la sonda, sale con 2 sin escribir: un agente no puede obtener `attempt+1` declarando `failed` sobre un efecto aplicado. Con `review_origin` `pre_probe` o `migration`, sale con 2 sin sondear: este ledger no pidió ese efecto, y cerrarlo por sonda convertiría en propio un efecto de otra instalación del mismo operador, que es justo lo que 3c impide.
-   - **Ruta manual (con grant).** Exige un grant vigente de la operadora con firma asimétrica, `operator-grant.sh check --scope effect-resolve --resource effect:<effect_id>`, con el mismo mecanismo que el scope `merge` (SE-343, LAW-HUMAN-002). Un agente no puede emitirlo solo. El grant es de un solo uso (`consume`). Es la única ruta para `pre_probe` y `migration`, y para `dispatched` cuando la sonda no concluye.
+   - **Ruta por sonda (sin grant).** El CLI vuelve a ejecutar la sonda y el resultado sale **de la sonda**, nunca de quien llama: `PRESENT` coincidente → `SUCCEEDED` (`attribution: probe`); `ABSENT` definitivo con `now ≥ dispatched_at + dispatch_grace_s` → `FAILED`. Cualquier otra conclusión (incluido `PRESENT` discrepante) deja `NEEDS_REVIEW` y sale con 4. `--evidence` no se admite en esta ruta (exit 2). Si se pasa `--outcome` y no coincide con la conclusión de la sonda, sale con 2 sin escribir: un agente no puede obtener `attempt+1` declarando `failed` sobre un efecto aplicado. Con `review_origin` `pre_probe`, `rejected` o `migration`, sale con 2 sin sondear: este ledger no pidió ese efecto, y cerrarlo por sonda convertiría en propio un efecto de otra instalación del mismo operador, que es justo lo que 3c impide.
+   - **Ruta manual (con grant).** Exige un grant vigente de la operadora con firma asimétrica, `operator-grant.sh check --scope effect-resolve --resource effect:<effect_id>`, con el mismo mecanismo que el scope `merge` (SE-343, LAW-HUMAN-002). Un agente no puede emitirlo solo. El grant es de un solo uso (`consume`). Es la única ruta para `pre_probe`, `rejected` y `migration`, y para `dispatched` cuando la sonda no concluye.
    - `SAVIA_AUTONOMOUS_RUN=1` y la rama `agent/*` rechazan **solo la ruta manual** (exit 2 temprano, aunque haya grant: la resolución manual es de una persona). No afectan a la ruta por sonda, que no concede nada que la sonda no pruebe. Son una barrera **débil**, porque las controla el propio proceso: su ausencia no sustituye al grant.
    - Sin `--by-probe` ni `--manual`, o con los dos, exit 2.
    - Queda en el ledger la ruta, quién resolvió, con qué grant (si lo hubo) y con qué evidencia.
@@ -236,39 +255,64 @@ Reglas:
 - `scripts/effect-ledger.py` (Python stdlib, `sqlite3` con `BEGIN IMMEDIATE`). Expone `prepare`, `dispatch`, `complete`, `fail`, `resolve`, `status`, `verify-receipt`, `reconcile` y `migrate`. El ledger vive en `$HOME/.savia/effects/ledger.db`, por instalación y fuera del repo; `SAVIA_EFFECT_LEDGER` solo lo cambia en tests (Regla 7b).
 - **Registro de operaciones** por `op`: clase, sonda, campos de la sonda, campos observables, `request_timeout_s`, `dispatch_grace_s`, `lease_s`, si hay protección remota contra la doble ejecución (3c) y limitaciones (`merge_queue`). La primera es `pr.merge`. Su sonda usa `PR_MERGE_PROBE_FIELDS` (3b) con `-R` explícito, aplica el criterio cerrado de 3b y devuelve `UNKNOWN` ante cualquier error. Un registro con una `op` `non_idempotent` sin sonda previa no carga (7b).
 - `operator-grant.sh` gana el scope `effect-resolve`, con firma asimétrica obligatoria como `merge` (Regla 5). Toca el sistema de grants, así que entra en S2, el primer slice que produce entradas `pre_probe` y `migration`, con revisión humana.
-- `scripts/f5-state.sh` pasa a ser un envoltorio de compatibilidad sobre el ledger para `pr.merge`. Mantiene el exit 3 de `ALREADY_EXECUTED` y deja de devolver 0 en `submitted`.
+- `push-pr.sh` (S2) llama **directamente** a `effect-ledger.py`, sin pasar por `f5-state.sh`:
+  - `out=$(python3 effect-ledger.py prepare pr.merge … --holder-pid $$); rc=$?` y lee `PROCEED <effect_id> <claim_token>` de `out` solo con `rc == 0`;
+  - `dispatch` antes de `gh pr merge` (corrige H4), y `gh pr merge` acotado por `timeout request_timeout_s`;
+  - trata los exits 4, 5 y 6 como parada con mensaje que remite a `resolve`;
+  - si `gh pr merge` falla sin `timeout`, llama a `reject` (3e); ante cualquier fallo deja de decir «vuelve a ejecutar» y dice «resultado incierto: reconciliar» (corrige H3 y H5).
+
+  Entre S2 y S3, `merge-sprint.sh` sigue con el `f5-state.sh` de hoy y su directorio `$HOME_MS/reservations/<digest>`, sin cambio de comportamiento: H8 (dos libros) sigue igual que en main, no peor, y los tests `test-merge-sprint.bats` no se tocan en S2.
+- `scripts/f5-state.sh` (S3) pasa a ser un envoltorio de compatibilidad sobre el ledger para `pr.merge`, **en la misma PR** que adapta `merge-sprint.sh`, su único consumidor tras S2. Nunca hay un main en el que el envoltorio exija flags que el consumidor no pasa. Mantiene el exit 3 de `ALREADY_EXECUTED` y deja de devolver 0 en `submitted`.
   - **Interfaz del envoltorio.** La interfaz `f5 <cmd> <op> <key>` no lleva lo que el ledger necesita, así que se amplía con flags obligatorias para `reserve`:
     ```
-    f5-state.sh reserve pr.merge <N> --repo <owner/name> --head <sha40> --method squash --holder-pid <pid>
+    f5-state.sh reserve pr.merge <N> --repo <owner/name> --head <sha40> --method squash --holder-pid <pid> [--run-id <digest>]
       → stdout: "PROCEED <effect_id> <claim_token>"   (exit 0)  |  exits 2/3/4/5/6 del ledger tal cual
     f5-state.sh mark_submitted pr.merge <N> --effect <effect_id> --claim <claim_token>   → dispatch (sonda previa + CAS)
     f5-state.sh close          pr.merge <N> --effect <effect_id> --claim <claim_token> --response <json>   → complete
+    f5-state.sh reject         pr.merge <N> --effect <effect_id> --claim <claim_token> --response <txt>   → reject (3e)
     f5-state.sh release        pr.merge <N> --effect <effect_id> --claim <claim_token>   → fail (solo PREPARED)
-    f5-state.sh reconcile      pr.merge <N>                                              → reconcile
-    f5-state.sh status         pr.merge <N>                                              → status (solo lectura)
+    f5-state.sh reconcile      pr.merge <N> --repo <owner/name>                          → reconcile (exits de 3d)
+    f5-state.sh status         pr.merge <N> --repo <owner/name>                          → status (solo lectura)
     ```
     Falta de cualquier flag obligatoria → exit 2 sin tocar el ledger. El token **no** se guarda en disco: viaja por stdout al consumidor, que lo guarda en una variable de su propio shell durante el efecto. Así no queda un fichero de token huérfano tras una caída, y un proceso distinto del que reclamó no tiene el token. Los consumidores pasan `--holder-pid $$` (Regla 2b). `release` ya no borra nada: solo existe antes de `dispatch`; después, el consumidor llama a `reconcile`.
-  - `f5 status` es **solo informativo** e imprime el estado, no el resultado de `prepare`: `PREPARED` → `reserved`, `DISPATCHED` → `submitted`, `SUCCEEDED` → `closed`, `NEEDS_REVIEW` → `needs_review`, `FAILED` → `failed`, ausencia → cadena vacía. `IN_FLIGHT` no es un estado (es un resultado de `prepare` o `dispatch`), así que `status` nunca lo imprime. Ningún consumidor decide con `status`: S3 sustituye el `case "$(f5 status …)"` de `merge-sprint.sh:611-616` por el exit de `f5 reconcile` (3 → `record_merge … reconciled`; 4 → parada `needs_review`; 6 → parada `in_flight`; 0 o 2 → parada `merge_externo` o `f5_error`). Así la gracia y la sonda las aplica siempre el ledger y la rama `reconcilable` deja de poder saltárselas. Mientras S3 no llega, el `*)` de `:616` ya para con `anomaly merge_externo` ante cualquier literal nuevo, y con el PR abierto `f5 reserve` sale ≠ 0 y para con `f5_reserva` (`:382`): falla cerrado.
-  - Reescribir `f5-state.sh` cambia su blob, que el manifiesto de merge-sprint fija (`merge-sprint.sh:195` escribe `f5_blob`, `:584` lo comprueba con `anomaly blob_f5`). Los manifiestos firmados antes de S2 dejan de valer: S2 lo declara en el body y la operadora regenera el plan tras el merge.
-- `push-pr.sh`:
-  - `dispatch` antes de `gh pr merge` (corrige H4);
-  - trata los exits 4, 5 y 6 como parada con mensaje que remite a `resolve`;
-  - ante un error ambiguo de `gh` deja de decir «vuelve a ejecutar» y dice «resultado incierto: reconciliar» (corrige H3 y H5).
-- `merge-sprint.sh`:
-  - usa el mismo ledger (corrige H8). El `digest` del manifiesto no entra en la ruta ni en la huella: se guarda como `run_id` del intento, para que el ledger de merge-sprint siga sabiendo bajo qué manifiesto se pidió;
-  - cambia `release` incondicional por `reconcile` (corrige H6);
-  - un `NEEDS_REVIEW` para el sprint con un motivo propio, distinto de `merge_externo`.
-- **Migración** de las reservas JSON (`effect-ledger.py migrate --from <dir>`). Las reservas antiguas no tienen head ni método (H9), así que nada importado se da por propio sin persona:
-  - `closed` con sonda `PRESENT` → `SUCCEEDED` con recibo `attribution: migration` y la evidencia observada, marcando `headRefOid` y `method` como no verificados; con cualquier otra sonda → `NEEDS_REVIEW` (`review_origin: migration`).
-  - `reserved` o `submitted` (un `reserved` de `push-pr` puede haber enviado el merge, H4) → sonda: `PRESENT` → `NEEDS_REVIEW` (`migration`); `ABSENT` definitivo con el `ts` del fichero anterior a `now - dispatch_grace_s` → `FAILED`; `ABSENT` más reciente o `UNKNOWN` → `NEEDS_REVIEW` (`migration`). Nunca `PROCEED`.
+  - En `merge-sprint.sh`, la línea de reserva deja de descartar la salida: `out=$(f5 reserve …) && read -r verdict eid tok <<<"$out" && [[ $verdict == PROCEED ]] && f5 mark_submitted … --effect "$eid" --claim "$tok" || anomaly f5_reserva`. `eid` y `tok` viven en variables del shell del sprint, no en disco, desde `merge_at` (`merge-sprint.sh:597`) hasta `f5 close` en `record_merge` (`:645`) o `f5 reject`. Si el proceso cae entre medias, el token se pierde a propósito: la entrada queda `DISPATCHED` y la cierra `reconcile` en la reanudación.
+  - `f5 status` es **solo informativo** e imprime el estado: `PREPARED` → `reserved`, `DISPATCHED` → `submitted`, `SUCCEEDED` → `closed`, `NEEDS_REVIEW` → `needs_review`, `FAILED` → `failed`, ausencia → `none` (el literal que imprime hoy `f5-state.sh:52`). `IN_FLIGHT` no es un estado, así que `status` nunca lo imprime. Ningún consumidor decide con `status`.
+  - S3 sustituye el `case "$(f5 status …)"` de la reanudación (`merge-sprint.sh:860-866`, rama «PR ya `MERGED`») por el exit de `f5 reconcile` (3d), comparando además el `run_id` impreso con el `digest` del manifiesto en curso:
+
+    | Exit de `reconcile` | `run_id` = digest actual | Acción del sprint |
+    |---|---|---|
+    | 7 `ALREADY_SUCCEEDED` | sí | `continue` (ya registrado: `record_merge` va antes de `close`) |
+    | 3 `RECONCILED` | sí | `record_merge … reconciled`, una sola vez, y `continue` |
+    | 7 o 3 | no (lo mergeó `push-pr` u otro manifiesto) | parada `merge_externo`: el ledger queda correcto, pero el merge no es de este sprint |
+    | 4 con `review_origin: rejected` | — | parada `merge_externo` (conserva SE-433 AC-26, 3e) |
+    | 4, otro origen | — | parada `needs_review` |
+    | 6 | — | parada `in_flight` |
+    | 0 `NOT_SENT` | — | parada `merge_externo` (sin reserva, `FAILED` o `PREPARED` huérfano: este ledger no hizo el merge) |
+    | 2 u otro | — | parada `f5_error` |
+
+    Así la gracia, la sonda y la comparación de head y cuenta (hoy en `reconcilable`, `merge-sprint.sh:565`) las aplica siempre el ledger, y `reconcilable` desaparece.
+  - Reescribir `f5-state.sh` cambia su blob, que el manifiesto de merge-sprint fija (`merge-sprint.sh:211-216` escribe `f5_blob`, `:827` lo comprueba con `anomaly blob_f5`). Los manifiestos firmados antes de S3 dejan de valer: S3 lo declara en el body y la operadora regenera el plan tras el merge.
+- `merge-sprint.sh` (S3):
+  - usa el mismo ledger (corrige H8). El `digest` del manifiesto no entra en la ruta ni en la huella: se guarda como `run_id` del intento (`--run-id`), para que el sprint sepa bajo qué manifiesto se pidió;
+  - cambia `release` incondicional por `reject` si `gh pr merge` falla sin `timeout` (3e) y no hace nada más si fue `timeout`: la entrada queda `DISPATCHED` y la cierra `reconcile` en el siguiente paso (corrige H6);
+  - motivos de parada propios `needs_review` e `in_flight`, distintos de `merge_externo`.
+- **Migración** de las reservas JSON: `effect-ledger.py migrate --from <dir> --repo <owner/name>`. `--repo` es obligatorio y se valida con la Regla 8; sin él, exit 2 sin importar nada (en `push-pr` el repo salía del directorio de `gh` y en merge-sprint de `SAVIA_GH_REPO`; ninguno queda en el JSON). `migrate` obtiene `actor_remote` igual que `prepare` (6b); si no puede, exit 2 sin importar nada.
+  - **Clave y `args` parciales.** La clave es `owner/repo#N`, como la de `prepare`. `args` lleva `repo` y `number`, `head` si existe el fichero hermano `pr.merge__N.head` de merge-sprint con un SHA válido (`resv_head`, `merge-sprint.sh:564`) y nulo si no, y `method` nulo. `args_digest` queda nulo y la entrada lleva `args_partial: true`. Un `prepare` posterior sobre esa clave compara **solo los campos no nulos**: si alguno difiere, `CONFLICT` (5); si coinciden, rige el estado (`SUCCEEDED` → 3 con el recibo de migración; `NEEDS_REVIEW` → 4; `FAILED` → `PROCEED` con `attempt+1`, que escribe los `args` completos y su huella y deja de ser parcial). Así una entrada migrada nunca produce un `CONFLICT` permanente contra el primer `prepare` legítimo.
+  - **Sonda de migración.** Con `head` conocido se aplica 3b tal cual. Sin `head`, `ABSENT` es 3b **sin** la comparación de `headRefOid` (el resto de condiciones, incluido `autoMergeRequest` nulo, se mantienen): para `pr.merge` el efecto es «el PR está mergeado», y un PR `OPEN` sin merge ni auto-merge no lo está, sea cual sea su head. Sin esta regla la rama `ABSENT → FAILED` sería inalcanzable y todo acabaría en `NEEDS_REVIEW`.
+  - Nada importado pasa a propio con **menos** evidencia de la que ya exigía el sistema anterior (el `close` antiguo exigía `MERGED`, `f5-state.sh:38-41`; `reconcilable` exigía head y cuenta):
+    - `closed` con sonda `PRESENT`, `mergedBy` igual a `actor_remote` y, si hay `head`, `headRefOid` igual → `SUCCEEDED` con recibo `attribution: migration` y la evidencia observada, marcando como no verificados `method` y, si faltaba, `head`. Cualquier otra sonda o `mergedBy` distinto → `NEEDS_REVIEW` (`review_origin: migration`).
+    - `reserved` o `submitted` (un `reserved` de `push-pr` puede haber enviado el merge, H4) → sonda: `PRESENT` → `NEEDS_REVIEW` (`migration`); `ABSENT` definitivo con la hora de referencia anterior a `now - dispatch_grace_s` → `FAILED`; `ABSENT` más reciente o `UNKNOWN` → `NEEDS_REVIEW` (`migration`). La hora de referencia es la mayor entre `ts` y el `mtime` del fichero, porque `mark_submitted` reescribe el fichero sin cambiar `ts`. Nunca `PROCEED`; un `FAILED` solo lleva a un nuevo envío pasando por `prepare` y la sonda previa (3c).
+  - **Duplicados.** Varios ficheros que dan la misma `(op, key)` en una importación (p. ej. dos `<digest>` de merge-sprint) se funden en una entrada con el estado **más restrictivo**: `NEEDS_REVIEW` antes que `SUCCEEDED` antes que `FAILED`. Todas las rutas de origen quedan en `observation.migrated_from` y el informe cuenta `fundidas: K`. Si la clave ya existe en el ledger, la entrada no se modifica; si el estado que daría la fuente es distinto del guardado, se informa como `discrepancia` con ambas rutas.
   - Idempotente: una segunda importación no crea entradas ni cambia estados (la unicidad `(op, idempotency_key)` lo garantiza) e informa `0 importadas`. Un JSON ilegible se cuenta y se reporta, sin abortar el resto ni crear entrada.
-  - Los ficheros originales no se borran ni se modifican. S2 importa `~/.savia/reservations` (los de `push-pr`) y S3 los de `$HOME_MS/reservations/<digest>` (merge-sprint).
+  - Exit de `migrate`: 0 si todo se importó o ya estaba sin discrepancias; 4 si hubo ilegibles o discrepancias (requieren persona); 2 por error de entrada o de ledger.
+  - Los ficheros originales no se borran ni se modifican. S2 importa `~/.savia/reservations` (los de `push-pr`; si mezcla repos, la operadora lo separa antes: un repo equivocado produce bloqueos 3/4/5, nunca un envío). S3 importa los de `$HOME_MS/reservations/<digest>` con `--repo` del manifiesto, con `run.lock` tomado para que ningún sprint esté en curso.
 - `effect-reservation.sh` queda **deprecado sin consumidores**: se elimina, o se deja como envoltorio que imprime el aviso y delega. Su test se sustituye.
 - `coherence-gates.sh` deja de contar «ejecutable» como cierre: ejecuta la suite de fallos inyectados de esta spec y bloquea si falla.
 - Tests que cambian de expectativa, porque la semántica pasa de permisiva a bloqueante (no se debilita ninguna aserción; se invierte la que fijaba el defecto):
   - `f5-exactly-once.bats:29-33`;
   - `f5-cases.bats:40-46`;
-  - `f5-cases.bats:32-38` se mantiene: `PREPARED` huérfano sigue siendo `PROCEED`.
+  - `f5-cases.bats:32-38` se mantiene: `PREPARED` huérfano sigue siendo `PROCEED`;
+  - `test-merge-sprint.bats` «AC-26 block: reserva submitted con merge real de otro head o de otra cuenta» (S3): sigue exigiendo parada y ningún merge más, pero el motivo pasa de `merge_externo` a `needs_review`, porque el ledger sí hizo un `DISPATCHED` y lo observado discrepa (Regla 3). Es un cambio de etiqueta declarado, no una aserción quitada.
 
 ## Criterios de aceptación
 
@@ -280,7 +324,7 @@ Matriz V1:
   - relanzar otra vez da `ALREADY_EXECUTED` y el contador sigue en 1;
   - con el llamador vivo (un `sleep` cuyo PID se pasa con `--holder-pid`) y el lease vigente, un segundo `prepare` da `IN_FLIGHT` (6); con el llamador vivo y el lease **vencido**, también 6 (Regla 2b, paso 2);
   - `prepare` de `pr.merge` sin `--holder-pid` sale con 2 sin escribir en el ledger;
-  - vía envoltorio: un consumidor de prueba que llama a `f5-state.sh reserve … --holder-pid $$` desde dentro de un subshell `( cd … && … )` registra el PID del shell principal; tras salir el subshell, un segundo `reserve` desde otro proceso da 6. `f5-state.sh reserve` sin `--head`, `--repo`, `--method` o `--holder-pid` sale con 2 sin tocar el ledger;
+  - vía envoltorio (S3): un consumidor de prueba que llama a `f5-state.sh reserve … --holder-pid $$` desde dentro de un subshell `( cd … && … )` registra el PID del shell principal; tras salir el subshell, un segundo `reserve` desde otro proceso da 6. `f5-state.sh reserve` sin `--head`, `--repo`, `--method` o `--holder-pid` sale con 2 sin tocar el ledger;
   - PID reutilizado: con `holder_pid` vivo pero `holder_start` distinto, el `PREPARED` es huérfano;
   - `dispatch` con el token antiguo sale con 6 sin llamada remota.
 - **AC-b — caída tras pedir el efecto y antes del recibo.** Punto: tras enviar la petición, antes de `complete`. En ningún caso se vuelve a llamar al efecto:
@@ -326,8 +370,13 @@ Contrato:
   - Ruta por sonda con `--outcome` distinto de la sonda: con sonda `PRESENT` coincidente y `--outcome failed`, exit 2, la entrada sigue `NEEDS_REVIEW`, no hay `attempt+1` y el contador remoto no cambia. Igual con sonda `ABSENT` y `--outcome succeeded`. Con `--evidence`, exit 2.
   - Ruta por sonda con `review_origin: pre_probe` (AC-f, mismo operador) y una sonda `PRESENT` con el mismo `mergedBy` y el mismo head: exit 2 sin sondear y la entrada sigue `NEEDS_REVIEW`; por la ruta manual con grant vigente, cierra. Lo mismo con `review_origin: migration`.
   - `resolve` sin `--by-probe` ni `--manual`, o con los dos: exit 2.
+- **AC-p — `reconcile` por estado y reanudación de merge-sprint (Regla 3d, 3e).**
+  - CLI (S1): para cada estado de entrada de la tabla de 3d (`DISPATCHED` con cada resultado de sonda dentro y fuera de la gracia, `SUCCEEDED`, `NEEDS_REVIEW`, `FAILED`, `PREPARED` vivo, `PREPARED` huérfano, clave ausente) `reconcile` sale con el exit de la tabla y el estado final es el indicado. Dos `reconcile` seguidos sobre un `DISPATCHED` con sonda `PRESENT` coincidente dan 3 y luego 7, con exactamente un recibo. Ningún `reconcile` llama al efecto (contador = 0).
+  - `reject` (S1): `DISPATCHED` con rechazo anotado y sonda `PRESENT` coincidente → 4 con `review_origin: rejected`; `resolve --by-probe` sobre esa entrada sale con 2 sin sondear. Negativo: sin anotación, la misma sonda da 3. `reject` sobre `PREPARED`, o con token ajeno, sale con 2. Con rechazo anotado y `ABSENT` pasada la gracia → `FAILED` como sin anotación.
+  - merge-sprint (S3), con el PR ya `MERGED` al reanudar: `SUCCEEDED` del mismo manifiesto → `continue` y una sola línea `"event":"MERGED"` para el PR en el ledger del sprint; `DISPATCHED` con sonda coincidente → `record_merge … reconciled` una vez; `SUCCEEDED` o `RECONCILED` con otro `run_id` → `merge_externo`; sin entrada, `FAILED` o `PREPARED` huérfano → `merge_externo`; rechazo anotado → `merge_externo`; `NEEDS_REVIEW` de otro origen → `needs_review`; `DISPATCHED` en gracia → `in_flight`. Los tests `test-merge-sprint.bats` AC-25 y «merge rechazado y luego mergeado fuera del sprint» (AC-26) siguen en verde sin tocarse.
 - **AC-n — validación de entradas (Regla 8).** `prepare` con número `12; DROP`, repo `-R--foo/x`, `x/-y`, `../..`, `./x`, `x/..` o `a/b/c`, head de 39 caracteres o en mayúsculas, o método `fast-forward` sale con 2, sin escribir en el ledger y sin llamada remota. Límite: el mismo `prepare` con valores válidos da 0. Sin identidad remota (`gh api user` falla o devuelve vacío), `prepare` sale con 2 sin reclamar (Regla 6b); con `mergedBy` que solo difiere en mayúsculas, la sonda es coincidente.
 - **AC-j — multioperador.**
+  - Se ejecuta desde S1 sobre los ficheros que toca cada slice (S1: `effect-ledger.py` y el registro; S2 y S3 añaden sus consumidores), no solo al final.
   - Ninguna ruta absoluta ni identidad literal en el código. El ledger se resuelve por `$HOME` (o la variable de test) y el actor sale del perfil activo. Se comprueba con `grep -nE '(/home/|/Users/|/root/)'` sobre `effect-ledger.py`, el registro de operaciones y los consumidores tocados: 0 coincidencias; el test se valida mutando un fichero temporal con una ruta literal y viendo que falla.
   - Los tests corren con dos operadores sintéticos y dos `HOME` temporales; ninguno escribe en el `HOME` real.
   - Sin perfil activo, `prepare` de un efecto `non_idempotent` falla cerrado (exit 2).
@@ -339,8 +388,11 @@ Contrato:
   - un registro de operaciones con una `op` `non_idempotent` sin sonda previa hace que cualquier orden salga con 2 (Regla 7b);
   - sin `SAVIA_EFFECT_TEST=1`, `SAVIA_EFFECT_LEDGER` se ignora con aviso en stderr y se usa el ledger de `$HOME` (un `HOME` temporal en el test).
 - **AC-o — migración de reservas JSON.** Con un directorio de reservas sintético y la sonda simulada:
-  - `closed` con sonda `PRESENT` → `SUCCEEDED` con `attribution: migration`; `closed` con sonda `UNKNOWN` → `NEEDS_REVIEW` (`migration`);
-  - `submitted` y `reserved` con sonda `PRESENT` → `NEEDS_REVIEW` (`migration`); con `UNKNOWN` → `NEEDS_REVIEW`; con `ABSENT` y `ts` anterior a la gracia → `FAILED`; con `ABSENT` y `ts` reciente → `NEEDS_REVIEW`. Ninguno queda en un estado que dé `PROCEED` sin pasar por `FAILED` confirmado;
+  - sin `--repo`, o con un repo inválido (Regla 8), o sin identidad remota: exit 2 y ledger sin filas;
+  - `closed` con sonda `PRESENT` y `mergedBy` = `actor_remote` → `SUCCEEDED` con `attribution: migration`; `closed` con `mergedBy` distinto, o con `head` conocido distinto de `headRefOid` → `NEEDS_REVIEW` (`migration`); `closed` con sonda `UNKNOWN` → `NEEDS_REVIEW` (`migration`);
+  - `submitted` y `reserved` con sonda `PRESENT` → `NEEDS_REVIEW` (`migration`); con `UNKNOWN` → `NEEDS_REVIEW`; con `ABSENT` y hora de referencia anterior a la gracia → `FAILED`, **sin** fichero `.head` (se comprueba que la rama es alcanzable) y con él; con `ABSENT` y hora reciente → `NEEDS_REVIEW`. Límite: `ts` antiguo pero `mtime` reciente → `NEEDS_REVIEW`. Ninguno queda en un estado que dé `PROCEED` sin pasar por `FAILED` confirmado;
+  - `args` parciales: tras migrar `closed` → `SUCCEEDED` sin head, un `prepare` con el mismo repo y número y un head cualquiera da 3, no 5; tras migrar con `.head`, un `prepare` con otro head da 5; tras migrar a `FAILED`, `prepare` da 0 y la entrada queda con `args` completos y huella;
+  - el mismo PR en dos directorios `<digest>` con estados `submitted` (sonda `PRESENT`) y `closed` → una entrada `NEEDS_REVIEW` con las dos rutas en `migrated_from` e informe `fundidas: 1`;
   - importar dos veces: la segunda informa `0 importadas` y el ledger es idéntico byte a byte en sus filas;
   - un JSON ilegible se reporta y no crea entrada, sin abortar el resto;
   - los ficheros de origen no cambian (hash antes y después).
@@ -362,10 +414,12 @@ Contrato:
 
 ## Plan por slices
 
-1. **S1** — `effect-ledger.py` (reclamación, CAS, gracia, `complete`/`fail`, `resolve --by-probe`, durabilidad, ganchos de prueba, validación de entradas) y el registro de operaciones con stub; tests AC-a (CLI), AC-d, AC-f (mismo ledger), AC-h, AC-l, AC-m, AC-n y la parte por sonda de AC-i. Sin consumidores: no produce entradas `pre_probe` ni `migration`.
-2. **S2** — Sonda `pr.merge` con el criterio de 3b y sonda previa (3c); envoltorio `f5-state.sh` con la interfaz ampliada; `push-pr.sh` con write-ahead, `timeout` y nuevos mensajes; scope `effect-resolve` en `operator-grant.sh` y `resolve --manual`; `migrate` de `~/.savia/reservations`. AC-a (envoltorio), AC-b, AC-c, AC-e, AC-g para `push-pr`, AC-i completo y AC-o. Va junto con el grant porque S2 es el primer slice que produce `pre_probe` y `migration`, que solo se resuelven con grant: sin él, esas entradas quedarían sin salida.
-3. **S3** — `merge-sprint.sh`: ledger único, `reconcile` en lugar de `release` y en lugar del `case` sobre `status`, motivos `needs_review` e `in_flight`, y `migrate` de `$HOME_MS/reservations`; AC-f (dos rutas, dos instalaciones, mismo operador), AC-g para `merge-sprint` y AC-o para ese directorio. Tests de `test-merge-sprint.bats` AC-25/26 en verde sin debilitar.
-4. **S4** — `coherence-gates.sh` y deprecación de `effect-reservation.sh`; AC-k y AC-j.
+1. **S1** — `effect-ledger.py` (reclamación, CAS, gracia, `complete`/`fail`/`reject`, `reconcile` con los exits de 3d, `resolve --by-probe`, durabilidad, ganchos de prueba, validación de entradas) y el registro de operaciones con stub; tests AC-a (CLI), AC-d, AC-f (mismo ledger), AC-h, AC-j (sobre sus ficheros), AC-l, AC-m, AC-n, la parte CLI de AC-p y la parte por sonda de AC-i. Sin consumidores: no produce entradas `pre_probe` ni `migration`.
+2. **S2** — Sonda `pr.merge` con el criterio de 3b y sonda previa (3c); `push-pr.sh` llamando directamente al ledger, con write-ahead, `timeout`, `reject` y nuevos mensajes; scope `effect-resolve` en `operator-grant.sh` y `resolve --manual`; `migrate` de `~/.savia/reservations`. AC-b, AC-c, AC-e, AC-g para `push-pr`, AC-i completo, AC-j sobre `push-pr.sh` y AC-o. **No toca `f5-state.sh` ni `merge-sprint.sh`**: merge-sprint sigue exactamente como en main y `test-merge-sprint.bats` no cambia. Va junto con el grant porque S2 es el primer slice que produce `pre_probe`, `rejected` y `migration`, que solo se resuelven con grant.
+3. **S3** — `f5-state.sh` como envoltorio y `merge-sprint.sh` en la **misma PR**: ledger único, token capturado, `reject` en lugar de `release`, `reconcile` en lugar del `case` sobre `status` y de `reconcilable`, motivos `needs_review` e `in_flight`, y `migrate` de `$HOME_MS/reservations`; AC-a (envoltorio), AC-f (dos rutas, dos instalaciones, mismo operador), AC-g para `merge-sprint`, AC-j sobre ambos, la parte merge-sprint de AC-p y AC-o para ese directorio. Tests de `test-merge-sprint.bats` AC-25/26 en verde sin debilitar (con el único cambio de etiqueta declarado en «Tests que cambian de expectativa»). Juntar envoltorio y consumidor evita un main intermedio en el que `f5 reserve` exija flags que merge-sprint no pasa y todo merge del sprint pare con `f5_reserva`.
+4. **S4** — `coherence-gates.sh` y deprecación de `effect-reservation.sh`; AC-k.
+
+Orden: S2 va inmediatamente después de S1 en el camino de merge, sin otras PR de ese camino entre medias. Hasta S2, ninguna `op` no idempotente puede reutilizar `f5-state.sh` ni `effect-reservation.sh`: la tabla H1-H10 describe en público cómo repetir un efecto incierto, y hoy solo lo frena la protección propia de GitHub para `pr.merge`.
 
 Cada slice es una PR Draft. S2 y S3 tocan el camino de merge y S2 además el sistema de grants, así que los dos son tier 3 y exigen revisión humana explícita (SE-362). S4 toca un gate, también tier 3.
 
@@ -377,8 +431,8 @@ Cada slice es una PR Draft. S2 y S3 tocan el camino de merge y S2 además el sis
 - **Migración de reservas existentes:** los JSON de `~/.savia/reservations` y de merge-sprint se importan con `migrate` (AC-o). Un `submitted` sin sonda concluyente entra como `NEEDS_REVIEW`, nunca como `PROCEED`.
 - **Cola de merge:** los repos con cola de merge obligatoria no están soportados por `pr.merge` v1 (3b).
 - **Llamador colgado:** un llamador vivo conserva su reclamación aunque venza el lease (Regla 2b, paso 2). Si se cuelga sin morir, la clave queda en `IN_FLIGHT` hasta que alguien lo mate. Falla cerrado: bloquea, no repite.
-- **Manifiestos de merge-sprint:** S2 cambia el blob de `f5-state.sh` fijado en el manifiesto (`merge-sprint.sh:195`, `:584`). Los planes firmados antes quedan inválidos con `anomaly blob_f5`, que es el comportamiento correcto.
-- **Más grants manuales:** las entradas `pre_probe` y `migration` exigen siempre grant (Regla 5). La migración inicial puede producir varias; se cuentan en el ledger.
+- **Manifiestos de merge-sprint:** S3 cambia el blob de `f5-state.sh` fijado en el manifiesto (`merge-sprint.sh:211-216`, `:827`). Los planes firmados antes quedan inválidos con `anomaly blob_f5`, que es el comportamiento correcto.
+- **Más grants manuales:** las entradas `pre_probe`, `rejected` y `migration` exigen siempre grant (Regla 5). La migración inicial puede producir varias; se cuentan en el ledger.
 - **Divergencia de envoltorios:** `f5-state.sh` queda como capa fina. Un test compara sus exits con los del ledger para cada estado.
 
 ## Rollback
