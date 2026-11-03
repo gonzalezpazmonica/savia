@@ -15,6 +15,7 @@ import argparse
 import hashlib
 import json
 import os
+import sys
 
 REQUIRED = {
     "L0": ["smoke"],
@@ -63,8 +64,11 @@ def main() -> int:
     root = os.path.abspath(args.root)
 
     reg_path = os.path.join(root, ".scm", "registry.json")
-    if not os.path.exists(reg_path):
-        print("registry ausente; ejecutar generate-capability-map.py", file=__import__("sys").stderr)
+    # SE-501 AC-11: el registry es D (no versionado); derived.sh ensure lo genera si falta.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import derived_canon
+    if derived_canon.ensure(root, [".scm/registry.json"]):
+        print(f"registry ausente; {derived_canon.ENSURE_HINT}", file=sys.stderr)
         return 1
     reg = json.load(open(reg_path, encoding="utf-8"))
 

@@ -29,6 +29,7 @@ from collections import Counter, deque
 from pathlib import Path
 
 import ablation_graphs as graphs
+import derived_canon
 from ablation_inventory import (CONTRACT_PATH, DEFAULT_OUT, MODEL_KEYS, InventoryError, _git,
                                 _walk_keys, canonical, sha256, tracked_files, validate_contract)
 
@@ -298,6 +299,9 @@ def _vector(snap: Path, results: list[dict]) -> dict:
 
 
 def _optional(root: Path, rel: str, key: str) -> str:
+    # SE-501 AC-11: dato de procedencia en D (no versionado); derived.sh ensure lo genera si falta.
+    # Sigue siendo opcional: si ensure no puede, el recibo dice UNKNOWN (no inventa la revisión).
+    derived_canon.ensure(root, [rel])
     path = root / rel
     return str(load_json(path).get(key, "UNKNOWN")) if path.exists() else "UNKNOWN"
 

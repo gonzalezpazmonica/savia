@@ -27,6 +27,13 @@ def main() -> int:
     args = ap.parse_args()
     root = os.path.abspath(args.root)
 
+    # SE-501 AC-11: el registry es D (no versionado); derived.sh ensure lo genera si falta.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import derived_canon
+    gone = derived_canon.ensure(root, [".scm/registry.json", ".scm/INDEX.scm"])
+    if gone:
+        print(f"FAIL: falta {', '.join(gone)} — {derived_canon.ENSURE_HINT}", file=sys.stderr)
+        return 2
     reg = json.load(open(os.path.join(root, ".scm", "registry.json"), encoding="utf-8"))
     caps = reg["capabilities"]
 

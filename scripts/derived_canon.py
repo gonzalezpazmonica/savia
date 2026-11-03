@@ -9,6 +9,8 @@ Forma canónica (sin marca de tiempo, como fija SE-500 S2):
   docs/rules/domain/rule-manifest.json  JSON sin la clave «generated».
   docs/rules/INDEX.md                   sin la fecha de la línea 1.
   resto de D (.scm/…)                   bytes.
+
+Importable: ensure(root, rels, group) y ENSURE_HINT para los lectores de D en Python (SE-501 AC-11).
 """
 import json
 import re
@@ -65,6 +67,32 @@ def canon(path, raw):
             lines[0] = INDEX_HEAD.sub(lambda m: f"# Rules Index — auto-generated · {m.group(2)} rules", lines[0])
         return "\n".join(lines)
     return raw
+
+
+# ── SE-501 AC-11: lectores de D en Python ───────────────────────────────────
+# D no se versiona. Un lector llama a ensure() antes de leer; si D sigue faltando, el lector termina con
+# ≠ 0 y su mensaje incluye ENSURE_HINT (la orden que lo arregla).
+ENSURE_HINT = "ejecutar: bash scripts/derived.sh ensure"
+
+
+def ensure(root, rels, group="scm"):
+    """Si falta alguna ruta de `rels` bajo `root`, ejecuta «bash scripts/derived.sh ensure --only <group>».
+    Devuelve las rutas que siguen faltando (lista vacía = todas presentes).
+    Solo ejecuta el derived.sh que acompaña a este módulo y solo si `root` es su propio repo: nunca
+    ejecuta código de una raíz ajena (--root a otro árbol, fixture). Ahí devuelve lo que falta."""
+    import os
+    import subprocess
+    root = os.path.realpath(os.fspath(root))
+    here = os.path.dirname(os.path.realpath(__file__))
+    def missing():
+        return [r for r in rels if not os.path.isfile(os.path.join(root, r))]
+    gone = missing()
+    script = os.path.join(here, "derived.sh")
+    if gone and root == os.path.dirname(here) and os.path.isfile(script):
+        subprocess.run(["bash", script, "ensure", "--only", group], cwd=root,
+                       stdout=sys.stderr, stdin=subprocess.DEVNULL, check=False)
+        gone = missing()
+    return gone
 
 
 def main(argv):

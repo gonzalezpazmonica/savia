@@ -93,7 +93,18 @@ fi
 
 # ── 6. GENERATED_VIEW_DRIFT: regenera el capability map en sandbox y compara ──
 idx="$ROOT/.scm/INDEX.scm"
-if [[ -f "$idx" && -x "$ROOT/scripts/generate-capability-map.py" ]]; then
+# SE-501 AC-11: .scm es D (no versionado). En el propio repo se genera con derived.sh ensure; si no se
+# puede, falla nombrando la orden (sin D no hay vista que comparar y un SKIP ocultaría la deriva).
+# Con --root a un árbol ajeno (fixture) no se ejecuta su código: sin .scm, SKIP como antes.
+SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+D_MISSING=0
+if [[ ! -f "$idx" && "$(cd "$ROOT" 2>/dev/null && pwd -P)" == "$SELF_ROOT" && -f "$SELF_ROOT/scripts/derived.sh" ]]; then
+  bash "$SELF_ROOT/scripts/derived.sh" ensure --only scm >&2 || true
+  [[ -f "$idx" ]] || D_MISSING=1
+fi
+if (( D_MISSING )); then
+  fail "GENERATED_VIEW_DRIFT: falta .scm/INDEX.scm — ejecutar: bash scripts/derived.sh ensure"
+elif [[ -f "$idx" && -x "$ROOT/scripts/generate-capability-map.py" ]]; then
   SB_VIEW=$(mktemp -d)
   # Enlaces duros si es posible (mismo dispositivo); por directorio, con
   # copia real como respaldo si falla (tmpfs, bind mounts, otro mount).

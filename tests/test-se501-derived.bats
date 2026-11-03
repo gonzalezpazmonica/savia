@@ -564,7 +564,8 @@ PY
 #   ref      solo nombra la ruta (filtros, exclusiones, texto); no lee el contenido de D
 #   ensure   llama a «derived.sh ensure» antes de leer D (el test lo comprueba)
 #   session  arranque: regenera en segundo plano y no espera (arranque blindado)
-#   pend     lee D y aún NO llama a ensure: AC-11 no cumplido para ellos (rev-1472, PR de seguimiento)
+#   ensure   (Python) derived_canon.ensure; (solo lectura) error DERIVED_MISSING que nombra la orden
+#   via      lee D solo a través de otro lector de clase ensure (ablation_kernel._optional)
 AC11_DECLARED='
 gen scripts/derived.sh
 gen scripts/derived-paths.txt
@@ -602,15 +603,15 @@ ensure scripts/rule-manifest-integrity.sh
 ensure scripts/validate-ci-local.sh
 session .claude/hooks/session-init.sh
 session scripts/session-init-bootstrap.sh
-pend scripts/ablation_inventory.py
-pend scripts/ablation_kernel.py
-pend scripts/ablation_units.py
-pend scripts/capability-entropy.py
-pend scripts/dual-cli/audit.py
-pend scripts/dual-cli/config.py
-pend scripts/eval-coverage-matrix.py
-pend scripts/release-invariants.sh
-pend scripts/se397-f4-corpus.sh
+ensure scripts/ablation_inventory.py
+ensure scripts/ablation_kernel.py
+via scripts/ablation_units.py
+ensure scripts/capability-entropy.py
+ensure scripts/dual-cli/audit.py
+ensure scripts/dual-cli/config.py
+ensure scripts/eval-coverage-matrix.py
+ensure scripts/release-invariants.sh
+ensure scripts/se397-f4-corpus.sh
 '
 AC11_SCOPE=(scripts .claude/hooks config .github/workflows)
 
@@ -626,8 +627,13 @@ ac11_diff() {
   [ -z "$output" ]
   local c f
   while read -r c f; do
-    [[ "$c" == ensure ]] || continue
-    grep -q 'derived.sh.\{0,2\} ensure' "$REPO/$f" || { echo "sin ensure: $f"; return 1; }
+    case "$c" in
+      ensure) grep -qE 'derived\.sh.{0,2} ensure|derived_canon\.ensure\(' "$REPO/$f" || { echo "sin ensure: $f"; return 1; } ;;
+      via)    # cada línea que nombra D pasa por _optional (que llama a ensure)
+              if grep -E '\.scm/|rule-manifest\.json|rules/INDEX\.md' "$REPO/$f" | grep -qv '_optional('; then
+                echo "lee D sin _optional: $f"; return 1
+              fi ;;
+    esac
   done <<<"$AC11_DECLARED"
 }
 
@@ -659,3 +665,168 @@ ac11_diff() {
   [[ "$output" == *"derived.sh ensure"* ]]
 }
 
+
+# ── AC-11: los lectores que estaban pendientes (rev-1472, tercera pasada) ──────
+# fake_derived <modo>: derived.sh espía en $R/scripts. ok escribe el .scm mínimo; fail no escribe y sale 1.
+fake_derived() {
+  cat > "$R/scripts/derived.sh" <<EOF2
+#!/usr/bin/env bash
+echo "\$*" >> "$T/derived.spy"
+[[ "$1" == ok ]] || exit 1
+cd "\$(dirname "\$0")/.."
+mkdir -p .scm/categories
+printf '{"capabilities": []}\n' > .scm/registry.json
+printf 'index\n' > .scm/INDEX.scm
+printf '{"model_revision": "rev-x", "edges": []}\n' > .scm/sam.json
+printf '{"hash": "h", "resources": []}\n' > .scm/resources.json
+EOF2
+}
+
+# set_aside_scm: aparta el .scm generado (sin borrar) para volver a empezar sin D.
+set_aside_scm() { mv "$R/.scm" "$(mktemp -d "$T/scm.XXXX")/"; }
+
+@test "AC-11: derived_canon.ensure genera solo si falta, en su propio repo; nunca ejecuta una raíz ajena" {
+  mkrepo; fake_derived ok
+  run python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; print(d.ensure(sys.argv[1], [".scm/registry.json"]))' "$R"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"[]"* ]]
+  [ -f "$R/.scm/registry.json" ]
+  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  grep -qx 'ensure --only scm' "$T/derived.spy"
+  # Ya presente: no vuelve a llamar.
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; assert d.ensure(sys.argv[1], [".scm/registry.json"]) == []' "$R"
+  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  # Negativo: raíz ajena (otro árbol) sin D → devuelve lo que falta y no ejecuta nada.
+  mkdir -p "$T/ajena/scripts"; cp "$R/scripts/derived.sh" "$T/ajena/scripts/"
+  run python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; print(d.ensure(sys.argv[2], [".scm/registry.json"]))' "$R" "$T/ajena"
+  [[ "$output" == *"['.scm/registry.json']"* ]]
+  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  [ ! -e "$T/ajena/.scm" ]
+}
+
+@test "AC-11 negativo: si derived.sh ensure falla, ensure devuelve lo que sigue faltando" {
+  mkrepo; fake_derived fail
+  run python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; print(d.ensure(sys.argv[1], [".scm/sam.json"]))' "$R"
+  [[ "$output" == *"['.scm/sam.json']"* ]]
+  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+}
+
+@test "AC-11: capability-entropy y eval-coverage-matrix sin D generan con ensure; si falla, nombran la orden" {
+  mkrepo
+  cp "$REPO/scripts/capability-entropy.py" "$REPO/scripts/eval-coverage-matrix.py" "$R/scripts/"
+  mkdir -p "$R/tests/baselines"; echo '{"entropy": 100}' > "$R/tests/baselines/capability-entropy.json"
+  fake_derived ok
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: entropía 1 <= baseline 100"* ]]
+  [ -f "$R/.scm/registry.json" ]
+  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  set_aside_scm
+  run python3 "$R/scripts/eval-coverage-matrix.py" --root "$R"
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$T/derived.spy")" -eq 2 ]
+  # Negativo: ensure falla.
+  set_aside_scm; fake_derived fail
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"derived.sh ensure"* ]]
+  run python3 "$R/scripts/eval-coverage-matrix.py" --root "$R"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"derived.sh ensure"* ]]
+}
+
+@test "AC-11: ablation sin D en raíz ajena: el inventario falla nombrando ensure; la procedencia opcional queda UNKNOWN" {
+  mkdir -p "$T/fx"
+  run python3 -c '
+import sys; sys.path.insert(0, sys.argv[1] + "/scripts")
+from pathlib import Path
+import ablation_inventory as inv, ablation_kernel as k
+try:
+    inv._sam_index(Path(sys.argv[2])); print("SIN ERROR")
+except inv.InventoryError as e:
+    print("ERR", e)
+print("OPT", k._optional(Path(sys.argv[2]), ".scm/sam.json", "model_revision"))
+' "$REPO" "$T/fx"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ERR SAM_MISSING: .scm/sam.json (ejecutar: bash scripts/derived.sh ensure)"* ]]
+  [[ "$output" == *"OPT UNKNOWN"* ]]
+  [ ! -e "$T/fx/.scm" ]
+}
+
+# dc_build <config.py> <raíz>: imprime «ERR <código>» o «SIN ERROR» de build_manifest.
+dc_build() {
+  python3 -c '
+import importlib.util, sys
+s = importlib.util.spec_from_file_location("c", sys.argv[1]); c = importlib.util.module_from_spec(s); s.loader.exec_module(c)
+try:
+    c.build_manifest(sys.argv[2]); print("SIN ERROR")
+except c.ConfigError as e:
+    print("ERR", e)
+' "$1" "$2"
+}
+
+@test "AC-11: dual-cli audit y config sin .scm fallan con DERIVED_MISSING; un enlace roto sigue siendo UNTRUSTED_SOURCE" {
+  mkdir -p "$T/dc/.claude"; echo '{"hooks": {}}' > "$T/dc/.claude/settings.json"
+  run python3 "$REPO/scripts/dual-cli/audit.py" --root "$T/dc"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"DERIVED_MISSING: bash scripts/derived.sh ensure"* ]]
+  run dc_build "$REPO/scripts/dual-cli/config.py" "$T/dc"
+  [[ "$output" == *"ERR DERIVED_MISSING: bash scripts/derived.sh ensure"* ]]
+  # Negativo: un enlace que apunta fuera (roto) no se confunde con D ausente.
+  mkdir -p "$T/dc/.scm/categories"; ln -s /nonexistent/x "$T/dc/.scm/resources.json"
+  : > "$T/dc/.scm/INDEX.scm"; : > "$T/dc/.scm/categories/quality.scm"
+  run dc_build "$REPO/scripts/dual-cli/config.py" "$T/dc"
+  [[ "$output" == *"ERR UNTRUSTED_SOURCE"* ]]
+}
+
+@test "AC-11: release-invariants en su repo sin D: ensure; si falla, FAIL que nombra la orden; raíz ajena sin D sigue en SKIP" {
+  mkrepo
+  cp "$REPO/scripts/release-invariants.sh" "$R/scripts/"
+  printf 'import os\nos.makedirs(".scm", exist_ok=True)\nopen(".scm/INDEX.scm","w").write("index\\n")\nopen(".scm/registry.json","w").write("{\\"capabilities\\": []}\\n")\n' > "$R/scripts/generate-capability-map.py"
+  chmod +x "$R/scripts/generate-capability-map.py"
+  fake_derived ok
+  run bash "$R/scripts/release-invariants.sh" --root "$R"
+  [[ "$output" == *"PASS: GENERATED_VIEW_DRIFT"* ]]
+  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  set_aside_scm; fake_derived fail
+  run bash "$R/scripts/release-invariants.sh" --root "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: GENERATED_VIEW_DRIFT: falta .scm/INDEX.scm — ejecutar: bash scripts/derived.sh ensure"* ]]
+  [[ "$output" != *"SKIP: GENERATED_VIEW_DRIFT"* ]]
+  mkdir -p "$T/ajena"
+  run bash "$R/scripts/release-invariants.sh" --root "$T/ajena"
+  [[ "$output" == *"SKIP: GENERATED_VIEW_DRIFT"* ]]
+  [ "$(wc -l < "$T/derived.spy")" -eq 2 ]
+}
+
+@test "AC-11: se397-f4-corpus sin .scm/sam.json llama a ensure y, si falla, termina 1 nombrando la orden" {
+  mkrepo
+  cp "$REPO/scripts/se397-f4-corpus.sh" "$R/scripts/"
+  fake_derived fail
+  run bash -c 'cd "$1" && bash scripts/se397-f4-corpus.sh --events "$2"' _ "$R" "$T/events.jsonl"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta .scm/sam.json — ejecutar: bash scripts/derived.sh ensure"* ]]
+  grep -qx 'ensure --only scm' "$T/derived.spy"
+}
+
+@test "AC-11: session-init con D ausente no espera a la generación (la lanza en segundo plano)" {
+  mkdir -p "$T/ws/scripts" "$T/ws/docs/learning-proposals" "$T/home"
+  # El hook sale por su trap ERR si no hay ninguna LP activa (grep sin coincidencias): fixture con una.
+  echo 'lifecycle: active' > "$T/ws/docs/learning-proposals/lp.md"
+  # Generador lento: si el arranque lo esperase, tardaría ≥ 6 s.
+  printf 'import os, time\ntime.sleep(6)\nos.makedirs(".scm", exist_ok=True)\nopen(".scm/INDEX.scm", "w").write("x")\n' > "$T/ws/scripts/generate-capability-map.py"
+  local port s e ms i rc
+  port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')
+  s=$(date +%s%N)
+  (cd "$T/ws" && HOME="$T/home" TMPDIR="$T" CLAUDE_PROJECT_DIR="$T/ws" SAVIA_PROBE_STATE="$T/probes.state" \
+     OLLAMA_URL="http://127.0.0.1:$port" SAVIA_SHIELD_PORT="$port" SAVIA_SHIELD_PROXY_PORT="$port" \
+     bash "$REPO/.claude/hooks/session-init.sh" </dev/null >/dev/null 2>&1) && rc=0 || rc=$?
+  e=$(date +%s%N); ms=$(( (e - s) / 1000000 ))
+  [ "$rc" -eq 0 ]
+  echo "session-init: ${ms} ms"
+  [ ! -e "$T/ws/.scm/INDEX.scm" ]
+  [ "$ms" -lt 6000 ]
+  # La generación sí se lanzó: aparece después, sin el arranque.
+  for i in $(seq 1 100); do [ -f "$T/ws/.scm/INDEX.scm" ] && break; sleep 0.1; done
+  [ -f "$T/ws/.scm/INDEX.scm" ]
+}
