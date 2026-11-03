@@ -319,10 +319,14 @@ export function decidirAccion(
   return a;
 }
 
-/** Retención: mensajes y acciones decididas más antiguos que `ms` se olvidan; las pendientes se quedan. */
+/**
+ * Retención: los mensajes de más de `ms` se olvidan y, con ellos, sus acciones (una acción solo
+ * se alcanza desde su mensaje). Una acción olvidada sin decidir no se ejecuta nunca.
+ */
 export function podar(est: EstadoGemelo, ahora: number, ms = 7 * DIA): void {
   const lim = ahora - ms;
   est.mensajes = est.mensajes.filter((m) => m.creado >= lim);
-  est.acciones = est.acciones.filter((a) => a.estado === "propuesta" || a.creada >= lim);
+  const vivas = new Set(est.mensajes.flatMap((m) => m.asuntos.map((a) => a.accionId)));
+  est.acciones = est.acciones.filter((a) => vivas.has(a.id));
   if (est.tratados.length > 2000) est.tratados = est.tratados.slice(-2000);
 }

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   MAX_ASUNTOS, decidirAccion, detectarSeguimientos, emitirMensaje, estadoGemeloVacio, hashAccion, latidoDebido,
-  marcarResumen, redactar, restaurarGemelo, resumenDebido, seleccionarResumen, type ElementoGemelo, ErrorDecision,
+  marcarResumen, podar, redactar, restaurarGemelo, resumenDebido, seleccionarResumen, type ElementoGemelo, ErrorDecision,
 } from "../src/core/gemelo.ts";
 
 const MIN = 60_000;
@@ -114,6 +114,18 @@ test("resumen debido: a su hora, una vez al día, dentro de la tolerancia; desac
   assert.equal(resumenDebido(est, "07:30", a7 + 24 * H), true, "al día siguiente sí");
   assert.equal(resumenDebido(est, null, a7), false);
   assert.equal(resumenDebido({ ...est, ultimoResumenDia: null, config: { ...est.config, activo: false } }, "07:30", a7), false);
+});
+
+test("podar: tras 7 días el mensaje y su acción pendiente se olvidan; lo reciente se queda", () => {
+  const est = estadoGemeloVacio();
+  const asunto = { elementoId: "h", motivo: "espera_respuesta" as const, esperaDesde: AHORA - 30 * H, vence: null, accionId: null };
+  emitirMensaje(est, "seguimiento", [asunto], AHORA, "op");
+  emitirMensaje(est, "seguimiento", [{ ...asunto, elementoId: "k" }], AHORA + 6 * 24 * H, "op");
+  podar(est, AHORA + 7 * 24 * H);
+  assert.equal(est.mensajes.length, 2, "justo en el límite se conserva");
+  podar(est, AHORA + 7 * 24 * H + MIN);
+  assert.deepEqual(est.mensajes.map((m) => m.asuntos[0].elementoId), ["k"]);
+  assert.deepEqual(est.acciones.map((a) => a.elementoId), ["k"], "la acción pendiente del mensaje olvidado no queda huérfana");
 });
 
 test("latido: cada latidoMin; restaurar rechaza una acción aprobada sin grant (fail-closed)", () => {
