@@ -173,15 +173,19 @@ if [ -n "$DYN_BLOCKLIST" ] && [ -f "$DYN_BLOCKLIST" ]; then
   ALL_PATTERNS=$(grep -v "^#" "$DYN_BLOCKLIST" | grep -v "^$" | tr '\n' '|' | sed 's/|$//')
 fi
 if [ -n "$ALL_PATTERNS" ]; then
-  MATCHES=$(echo "$ADDED_LINES" | grep -iE "$ALL_PATTERNS" || true)
-  if [ -n "$MATCHES" ]; then
+  # grep -E sale con 2 si un patrón es un regex inválido: es un gap, no un «OK».
+  MATCHES=$(echo "$ADDED_LINES" | grep -iE "$ALL_PATTERNS"); grc=$?
+  if [ "$grc" -ge 2 ]; then
+    echo "  ERROR: la blocklist contiene un regex inválido (grep salió con $grc)" >&2
+    add_gap "blocklist:unreadable"
+  elif [ -n "$MATCHES" ]; then
     MATCH_COUNT=$(echo "$MATCHES" | wc -l)
     echo "::error::BLOCKED: Blocklist terms found ($MATCH_COUNT lines)"
     echo "$MATCHES" | head -15 | while read -r l; do echo "  FAIL $l"; done
     [ "$MATCH_COUNT" -gt 15 ] && echo "  ... and $((MATCH_COUNT - 15)) more"
     FAILS=$((FAILS + 1))
   else echo "  OK"; fi
-else echo "  WARN: No blocklist patterns (generate-blocklist.sh missing?)"; fi
+else echo "  WARN: No blocklist patterns (generate-blocklist.sh missing?)"; add_gap "blocklist:not_executed"; fi
 
 # ── Check 2: Credentials ──────────────────────────────────────────────────
 echo "-- Check 2: Credentials"

@@ -169,12 +169,13 @@ EOF
 
 # ── AC-3 y AC-4: escaneo de la PR con el escáner de la base ─────────────────
 
-scan_repo() {  # repo cuya base tiene el escáner real y un generador de blocklist con el término vetado
+scan_repo() {  # base con el escáner y el generador reales; el término vetado está en la lista estática, como en el repo
   mkrepo
   mkdir -p "$R/.claude/hooks/lib" "$R/docs"
-  cp "$REPO/scripts/confidentiality-scan.sh" "$REPO/scripts/confidentiality-pr-scan.sh" "$R/scripts/"
+  cp "$REPO/scripts/confidentiality-scan.sh" "$REPO/scripts/confidentiality-pr-scan.sh" \
+     "$REPO/scripts/generate-blocklist.sh" "$R/scripts/"
   cp "$REPO/.claude/hooks/lib/gate-result.sh" "$R/.claude/hooks/lib/"
-  printf '#!/usr/bin/env bash\necho zorblaxcorp\n' > "$R/scripts/generate-blocklist.sh"
+  printf '# términos vetados\n%s\n' "${STATIC_TERM-zorblaxcorp}" > "$R/scripts/confidentiality-blocklist.txt"
   G add -A; G commit -qm escaner
   BASE=$(G rev-parse HEAD); G update-ref refs/remotes/origin/main HEAD
   G checkout -q -b pr
@@ -195,6 +196,49 @@ scan_repo() {  # repo cuya base tiene el escáner real y un generador de blockli
   [[ "$output" == *'"result":"clean"'* ]]
 }
 
+@test "rev-1472 S-P1-1: el término de la lista estática de la base bloquea aunque la PR vacíe esa lista" {
+  scan_repo
+  echo "cliente zorblaxcorp" > "$R/docs/nota.md"
+  printf '# vaciada\n' > "$R/scripts/confidentiality-blocklist.txt"
+  G add -A; G commit -qm "dato y lista vaciada"
+  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL  docs/nota.md"* || "$output" == *"Blocklist terms found"* ]]
+}
+
+@test "rev-1472 S-P1-1: base con la lista estática vacía → FAIL (el check 1 no evaluaría nada)" {
+  STATIC_TERM="" scan_repo
+  echo "texto neutro" > "$R/docs/nota.md"; G add -A; G commit -qm limpio
+  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"blocklist vacía"* ]]
+}
+
+@test "rev-1472 S-P1-2: un projects/ versionado por la PR con un nombre que rompe el regex no anula el check 1" {
+  scan_repo
+  mkdir -p "$R/projects/x(" ; echo n > "$R/projects/x(/f.md"
+  echo "cliente zorblaxcorp" > "$R/docs/nota.md"
+  G add -f -A; G commit -qm "proyecto inyectado y dato"
+  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Blocklist terms found"* ]]
+}
+
+@test "rev-1472 S-P1-2: el escáner trata un regex inválido en la blocklist como gap (unknown), no como OK" {
+  scan_repo
+  echo "texto neutro" > "$R/docs/nota.md"; G add -A; G commit -qm limpio
+  printf 'zorblaxcorp\nx(\n' > "$T/bl.txt"
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr --blocklist '$T/bl.txt'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"result":"unknown"'* ]]
+  [[ "$output" == *"regex inválido"* ]]
+  # Control: la misma lista sin el patrón roto da clean.
+  printf 'zorblaxcorp\n' > "$T/bl.txt"
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr --blocklist '$T/bl.txt'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"result":"clean"'* ]]
+}
+
 @test "AC-3 positivo: una PR limpia pasa con el escáner de la base" {
   scan_repo
   echo "texto neutro" > "$R/docs/nota.md"; G add -A; G commit -qm limpio
@@ -206,7 +250,8 @@ scan_repo() {  # repo cuya base tiene el escáner real y un generador de blockli
 fake_base_scanner() {  # fake_base_scanner <cuerpo> : la base trae un escáner falso; la PR, uno que siempre da clean
   mkrepo
   mkdir -p "$R/.claude/hooks/lib"; echo ':' > "$R/.claude/hooks/lib/gate-result.sh"
-  cp "$REPO/scripts/confidentiality-pr-scan.sh" "$R/scripts/"
+  cp "$REPO/scripts/confidentiality-pr-scan.sh" "$REPO/scripts/generate-blocklist.sh" "$R/scripts/"
+  echo zorblaxcorp > "$R/scripts/confidentiality-blocklist.txt"
   printf '#!/usr/bin/env bash\n%s\n' "$1" > "$R/scripts/confidentiality-scan.sh"
   G add -A; G commit -qm base; BASE=$(G rev-parse HEAD); G update-ref refs/remotes/origin/main HEAD
   G checkout -q -b pr; echo z > "$R/z.txt"; G add -A; G commit -qm pr

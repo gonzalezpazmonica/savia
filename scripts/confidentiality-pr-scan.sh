@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # confidentiality-pr-scan.sh — SE-501: escaneo de confidencialidad del diff de la PR con el escáner de la BASE.
 #
-# El escáner, el generador de la blocklist, la allowlist, la librería gate-result y el .gitignore (fuente de
-# la blocklist) se extraen del commit base a un directorio aparte. El diff (origin/main...HEAD) sale del
+# El escáner, el generador de la blocklist, la lista estática de términos vetados, la allowlist, la librería
+# gate-result y el .gitignore (fuente de la blocklist) se extraen del commit base a un directorio aparte.
+# Nada del checkout de la PR entra en la blocklist: ni projects/ ni CLAUDE.local.md (una PR puede versionarlos
+# con add -f y meter un patrón que rompa el regex). La blocklist se genera en la base y, si sale vacía, FAIL. El diff (origin/main...HEAD) sale del
 # repositorio de la PR vía GIT_DIR. Una PR que modifica el escáner no se audita con su versión modificada.
 #
 # Uso: confidentiality-pr-scan.sh --base <commit> [--repo <dir>] [--blocklist <fichero>]
@@ -28,8 +30,9 @@ git -C "$ROOT" cat-file -e "$BASE^{commit}" 2>/dev/null || { echo "FAIL: commit 
 GITDIR=$(git -C "$ROOT" rev-parse --absolute-git-dir) || exit 2
 
 # Código del escáner que se toma de la base. Sin cualquiera de los obligatorios: FAIL (no se escanea con nada).
-REQUIRED=(scripts/confidentiality-scan.sh .claude/hooks/lib/gate-result.sh)
-OPTIONAL=(scripts/generate-blocklist.sh scripts/confidentiality-allowlist.txt .gitignore)
+REQUIRED=(scripts/confidentiality-scan.sh .claude/hooks/lib/gate-result.sh scripts/generate-blocklist.sh
+  scripts/confidentiality-blocklist.txt)
+OPTIONAL=(scripts/confidentiality-allowlist.txt .gitignore)
 X=$(mktemp -d) || exit 2
 trap 'rm -rf "$X"' EXIT
 for f in "${REQUIRED[@]}" "${OPTIONAL[@]}"; do
@@ -39,12 +42,20 @@ for f in "${REQUIRED[@]}" "${OPTIONAL[@]}"; do
     echo "FAIL: la base no tiene $f; no hay escáner de confianza" >&2; exit 1
   fi
 done
-# Datos locales no versionados que la blocklist lee (proyectos privados, CLAUDE.local.md): no los controla
-# la PR. Se enlazan si existen; en la CI no existen.
-for f in projects CLAUDE.local.md; do [[ -e "$ROOT/$f" ]] && ln -s "$ROOT/$f" "$X/$f"; done
+# Blocklist: la indicada con --blocklist o la que genera la base dentro de $X. Vacía o ilegible: FAIL.
+if [[ -z "$BLOCKLIST" ]]; then
+  BLOCKLIST="$X/blocklist.txt"
+  bash "$X/scripts/generate-blocklist.sh" > "$BLOCKLIST" 2>/dev/null \
+    || { echo "FAIL: el generador de la blocklist de la base falló" >&2; exit 1; }
+  # La lista estática de la base entra siempre, también si el generador de la base no la emite
+  # (hasta la rev-1472 la perdía en un subshell y la blocklist de la CI salía vacía).
+  grep -vE '^(#|[[:space:]]*$)' "$X/scripts/confidentiality-blocklist.txt" >> "$BLOCKLIST"
+fi
+if [[ ! -r "$BLOCKLIST" ]] || ! grep -qvE '^(#|[[:space:]]*$)' "$BLOCKLIST"; then
+  echo "FAIL: blocklist vacía o ilegible; el check 1 no evaluaría nada" >&2; exit 1
+fi
 
-args=(--pr)
-[[ -n "$BLOCKLIST" ]] && args+=(--blocklist "$BLOCKLIST")
+args=(--pr --blocklist "$BLOCKLIST")
 out=$(GIT_DIR="$GITDIR" GIT_WORK_TREE="$ROOT" SAVIA_GATE_UNKNOWN=block bash "$X/scripts/confidentiality-scan.sh" "${args[@]}" 2>&1)
 rc=$?
 printf '%s\n' "$out"
