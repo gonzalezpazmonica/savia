@@ -174,6 +174,18 @@ Las dos variantes piden a la operadora una autorización permanente de escritura
 - [ ] AC-A3: un push que solo cambia D no dispara el workflow (`paths-ignore`), y el push del bot es sin forzar: con `main` movido, falla sin reintentar con fuerza.
 - [ ] AC-A4: la credencial de escritura está en un environment con política de rama `main`. Negativo: un workflow de PR de prueba que la pide no la recibe.
 
+## Esfuerzo estimado (opción B)
+
+| Pieza | Esfuerzo | Quién |
+|---|---|---|
+| S1: scripts nuevos, escaneo con el escáner de la base, `confidentiality-main.yml`, tests AC-1 a AC-9 y AC-15 | 8-10 h | Un worker, PR tier 4 |
+| S1: migración de los unos 41 lectores a `ensure` y AC-10 y AC-11 | 6-8 h | Un worker, misma PR o una segunda en serie |
+| Acción en GitHub (check requerido) | 10 min | Operadora |
+| S2: corte, retirada de la firma en 7 scripts y workflows, `merge-sprint.sh`, AC-12 a AC-14 | 4-6 h | Un worker, PR tier 4 |
+| AC-16 | 7 días de observación | Orquestadora |
+
+Con la opción A1 el esfuerzo de los lectores desaparece y aparecen la App, el ruleset y el environment (operadora) y el workflow de escritura con AC-A1 a AC-A4 (unas 6-8 h).
+
 ## Fuera de alcance
 
 - `docs/propuestas/ROADMAP-CURRENT.md` y `docs/propuestas/INDEX.md` (ver Alcance).
