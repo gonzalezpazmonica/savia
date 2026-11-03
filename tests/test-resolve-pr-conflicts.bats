@@ -99,14 +99,38 @@ teardown() {
   [[ "$output" -ge 3 ]]
 }
 
-@test "script handles .confidentiality-signature with 'take theirs'" {
-  run grep -cE 'confidentiality-signature.*theirs|checkout --theirs .confidentiality-signature' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 1 ]]
+# SE-501 (sustituye a «take theirs» en la firma y en .scm/, a la re-firma y a la regeneración del SCM):
+# D ya no se versiona; un conflicto en D se resuelve sacándolo del índice, sin firmar ni regenerar.
+rpc_repo() {  # rpc_repo <fichero en conflicto>: main y la rama editan el mismo fichero
+  local o="$BATS_TEST_TMPDIR/origin.git" r="$BATS_TEST_TMPDIR/r" S="$BATS_TEST_DIRNAME/../scripts"
+  git init -q --bare "$o"; git init -q -b main "$r"
+  git -C "$r" config user.email t@t; git -C "$r" config user.name t
+  mkdir -p "$r/.scm"; echo base > "$r/a.txt"; echo '{"v":0}' > "$r/.scm/sam.json"
+  git -C "$r" add -f -A; git -C "$r" commit -qm base
+  git -C "$r" remote add origin "$o"; git -C "$r" push -q origin main
+  git -C "$r" checkout -q -b feature
+  echo rama > "$r/$1"; git -C "$r" add -f -A; git -C "$r" commit -qm rama
+  git -C "$r" checkout -q main
+  echo main > "$r/$1"; git -C "$r" add -f -A; git -C "$r" commit -qm main; git -C "$r" push -q origin main
+  git -C "$r" checkout -q feature
+  echo "$r"
 }
 
-@test "script handles .scm/ conflicts by taking theirs" {
-  run grep -cE '\.scm/.*theirs|scm_conflicts' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 2 ]]
+@test "SE-501: conflicto en una ruta de D → se saca del índice, merge commiteado, sin firma ni regeneración" {
+  r=$(rpc_repo .scm/sam.json)
+  run env RESOLVE_REPO_ROOT="$r" bash "$BATS_TEST_DIRNAME/../scripts/resolve-pr-conflicts.sh" --no-push
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$r" rev-list --parents -n1 HEAD | wc -w)" -eq 3 ]
+  run git -C "$r" ls-files --error-unmatch .scm/sam.json
+  [ "$status" -ne 0 ]
+  [ ! -e "$r/.confidentiality-signature" ]
+}
+
+@test "SE-501: conflicto fuera de D y de CHANGELOG.md → no lo resuelve (≠ 0) y lo nombra" {
+  r=$(rpc_repo a.txt)
+  run env RESOLVE_REPO_ROOT="$r" bash "$BATS_TEST_DIRNAME/../scripts/resolve-pr-conflicts.sh" --no-push
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"a.txt"* ]]
 }
 
 @test "script aborts on UNEXPECTED conflict files" {
@@ -114,15 +138,6 @@ teardown() {
   [[ "$output" -ge 1 ]]
 }
 
-@test "script re-signs confidentiality after merge" {
-  run grep -c 'confidentiality-sign.sh sign' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 1 ]]
-}
-
-@test "script regenerates SCM after merge" {
-  run grep -c 'generate-capability-map.py' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 1 ]]
-}
 
 # ── CHANGELOG parsing invariants ───────────────────────────────────────────
 
