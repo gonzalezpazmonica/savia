@@ -59,38 +59,61 @@ YAML
   fi
 }
 
+# Solo nombres de host o IPv4 literales; cualquier otra cosa se deniega antes de
+# tocar el allowlist (hueco G3: el dominio llegaba interpolado en código Python).
+valid_domain() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,252})$ && "$1" != *..* ]]; }
+valid_protocol() { [[ "$1" =~ ^[a-z][a-z0-9+.-]{0,15}$ ]]; }
+
+# Fail-closed (hueco G3): YAML malformado, estructura inesperada o PyYAML
+# ausente → denegado. Nada de lista de reserva permisiva.
 do_check() {
   local domain="$1"
   local protocol="${2:-https}"
-  ensure_allowlist
-  if python3 -c "
-import yaml, sys
-try:
-    with open('$ALLOWLIST') as f:
-        config = yaml.safe_load(f)
-    for entry in config.get('domains', []):
-        if entry.get('domain', '') in ('$domain', '*.$domain'):
-            if '$protocol' in entry.get('protocols', []) or '*' in entry.get('protocols', []):
-                sys.exit(0)
-    sys.exit(1)
-except Exception:
-    sys.exit(2)
-" 2>/dev/null; then
-    return 0
-  elif [[ $? -eq 2 ]]; then
-    # yaml not available, fallback: allow known-safe domains
-    case "$domain" in
-      github.com|api.github.com|raw.githubusercontent.com|localhost|127.0.0.1|dev.azure.com|registry.npmjs.org|pypi.org)
-        return 0 ;;
-      *) return 1 ;;
-    esac
+  if ! valid_domain "$domain" || ! valid_protocol "$protocol"; then
+    echo "DENIED: dominio o protocolo con formato no válido" >&2
+    return 1
   fi
-  return 1
+  ensure_allowlist
+  local rc=0
+  python3 - "$ALLOWLIST" "$domain" "$protocol" <<'PYEOF' 2>/dev/null || rc=$?
+import sys
+try:
+    import yaml
+except Exception:
+    sys.exit(3)
+path, domain, protocol = sys.argv[1:4]
+try:
+    with open(path, encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+except Exception:
+    sys.exit(3)
+if not isinstance(config, dict) or not isinstance(config.get("domains"), list):
+    sys.exit(3)
+for entry in config["domains"]:
+    if not isinstance(entry, dict):
+        sys.exit(3)
+    protos = entry.get("protocols") or []
+    if not isinstance(protos, list):
+        sys.exit(3)
+    if entry.get("domain", "") in (domain, "*." + domain):
+        if protocol in protos or "*" in protos:
+            sys.exit(0)
+sys.exit(1)
+PYEOF
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) echo "DENIED: allowlist ilegible o PyYAML ausente ($ALLOWLIST); fail-closed" >&2
+       return 1 ;;
+  esac
 }
 
 log_denial() {
-  local ts; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  echo "{\"ts\":\"$ts\",\"domain\":\"$1\",\"protocol\":\"$2\",\"agent\":\"${SAVIA_ACTIVE_AGENT:-unknown}\",\"verdict\":\"denied\"}" >> "$EGRESS_LOG"
+  local ts d p; ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  # Solo se registran valores validados; lo demás queda como <invalid>.
+  if valid_domain "$1"; then d="$1"; else d="<invalid>"; fi
+  if valid_protocol "$2"; then p="$2"; else p="<invalid>"; fi
+  echo "{\"ts\":\"$ts\",\"domain\":\"$d\",\"protocol\":\"$p\",\"agent\":\"${SAVIA_ACTIVE_AGENT:-unknown}\",\"verdict\":\"denied\"}" >> "$EGRESS_LOG"
 }
 
 do_propose() {
@@ -108,7 +131,7 @@ do_status() {
   echo "=== Egress Gate (SE-273 S3) ==="
   echo "Allowlist: $ALLOWLIST"
   local count
-  count=$(python3 -c "import yaml; d=yaml.safe_load(open('$ALLOWLIST')); print(len(d.get('domains',[])))" 2>/dev/null || grep -c "domain:" "$ALLOWLIST" 2>/dev/null || echo "?")
+  count=$(python3 -c "import sys, yaml; d=yaml.safe_load(open(sys.argv[1])); print(len(d.get('domains',[])))" "$ALLOWLIST" 2>/dev/null || grep -c "domain:" "$ALLOWLIST" 2>/dev/null || echo "?")
   echo "Domains: $count"
   [[ -f "$EGRESS_LOG" ]] && echo "Denials: $(wc -l < "$EGRESS_LOG")" || echo "Denials: 0"
   [[ -f "$PROPOSALS" ]] && echo "Proposals: $PROPOSALS" || true

@@ -10,6 +10,10 @@
 
 Extiende SE-364: trazas savia.trace/v1, 10 fallos congelados como regresiones herméticas y gate en CI (SAVIA-RESEARCH-02, V2)
 
+## 2026-11-01 SE-496 PROPOSED
+
+Ontología operativa gobernada: contrato de delegación firmado y kernel de autoridad fuera del modelo; el grafo sugiere, solo el kernel autoriza (SAVIA-RESEARCH-03, V4). Se aprueba al fusionar la PR (SE-488).
+
 ## 2026-11-01 SE-491 PROPOSED
 
 Autorizaciones de publicación firmadas por la operadora en lugar de una línea editable por agentes (hallazgo de la PR #1444). Se aprueba al fusionar la PR (SE-488).
