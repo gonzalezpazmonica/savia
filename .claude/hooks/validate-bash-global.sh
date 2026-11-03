@@ -70,25 +70,48 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 # Bloquear git commit/add en main SOLO para savia/pm-workspace
-if echo "$COMMAND" | grep -iE 'git[[:space:]]+(commit|add)' > /dev/null; then
+# Sale con 2 si el repo savia/pm-workspace de $1 está en main/master.
+guard_main_target() {
+  local dir="$1" top name branch
+  top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || return 0
+  name=$(basename "$top")
+  [[ "$name" == "savia" || "$name" == "pm-workspace" ]] || return 0
+  branch=$(git -C "$dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+    echo "BLOQUEADO: rama '$branch' en $dir. Cambia a feature branch." >&2
+    exit 2
+  fi
+}
+# Prefiltro amplio: `git -C <ruta> commit` no casa con `git +commit`. Qué es
+# una orden real lo decide el resolvedor.
+if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/null \
+   && echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_-])(commit|add)([^[:alnum:]_-]|$)' > /dev/null; then
   GIT_DIR_TARGET="${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-$PWD}}"
-  CD_PATH=$(echo "$COMMAND" | sed -n 's/^[[:space:]]*cd[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null)
-  if [[ -n "$CD_PATH" ]] && [[ -e "$CD_PATH/.git" ]]; then  # -e: in a worktree .git is a file
-    GIT_DIR_TARGET="$CD_PATH"
-  elif git -C "$ENTRY_PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    # SE-383 P8 (worktree-aware): si el cwd del comando pertenece a otro
-    # worktree/repositorio, la rama relevante es la del cwd de entrada.
-    # Comportamiento original preservado cuando cwd == CLAUDE_PROJECT_DIR.
+  if git -C "$ENTRY_PWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    # SE-383 P8 (worktree-aware): el cwd de entrada manda sobre el proyecto.
     GIT_DIR_TARGET="$ENTRY_PWD"
   fi
-  REPO_TOP=$(cd "$GIT_DIR_TARGET" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)
-  REPO_NAME=$(basename "$REPO_TOP" 2>/dev/null)
-  if [[ "$REPO_NAME" == "savia" || "$REPO_NAME" == "pm-workspace" ]]; then
-    CURRENT_BRANCH=$(cd "$GIT_DIR_TARGET" 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null)
-    if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-      echo "BLOQUEADO: rama '$CURRENT_BRANCH' en $GIT_DIR_TARGET. Cambia a feature branch." >&2
-      exit 2
+  # El repo que importa es el DESTINO de cada `git commit|add` real (git -C,
+  # cd encadenado con o sin comillas y con ~, variables literales); heredocs
+  # y cadenas son texto. Destino no resoluble → GIT_DIR_TARGET (conservador).
+  # Sin Python: comportamiento anterior.
+  RESOLVER="$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/git_op_targets.py"
+  if command -v python3 >/dev/null 2>&1 \
+     && OP_TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$GIT_DIR_TARGET" 2>/dev/null); then
+    while IFS=$'\t' read -r _op _dir; do
+      [[ -n "$_op" ]] || continue
+      if [[ -n "$_dir" ]] && git -C "$_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        guard_main_target "$_dir"
+      else
+        guard_main_target "$GIT_DIR_TARGET"
+      fi
+    done <<< "$OP_TARGETS"
+  elif echo "$COMMAND" | grep -iE 'git[[:space:]]+(commit|add)' > /dev/null; then
+    CD_PATH=$(echo "$COMMAND" | sed -n 's/^[[:space:]]*cd[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null)
+    if [[ -n "$CD_PATH" ]] && [[ -e "$CD_PATH/.git" ]]; then  # -e: en un worktree .git es fichero
+      GIT_DIR_TARGET="$CD_PATH"
     fi
+    guard_main_target "$GIT_DIR_TARGET"
   fi
 fi
 

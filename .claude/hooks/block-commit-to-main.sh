@@ -28,27 +28,51 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG_DIR="${SAVIA_TURN_SDLC_LOG_DIR:-$ROOT/output/turn-sdlc}"
 
-# Ignorar si no estamos en un repo git
-BRANCH=""
-TARGET_DIR=$(printf '%s' "${INPUT:-}" | jq -r '
+# Rama de un directorio ("" si no es un repo o HEAD está separado).
+branch_of() {
+  git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  git -C "$1" branch --show-current 2>/dev/null || true
+}
+is_human() { [[ "$1" == "main" || "$1" == "master" ]]; }
+
+BASE_DIR=$(printf '%s' "${INPUT:-}" | jq -r '
   (.tool_input.workdir // .cwd // empty) | select(type == "string")
-' 2>/dev/null) || TARGET_DIR=""
-TARGET_DIR="${TARGET_DIR:-$PWD}"
-# Codex's Bash adapter may omit workdir. Honor the explicit, guarded cd form
-# used for isolated worktrees (a failed cd cannot execute the following git).
-CD_PREFIX='^[[:space:]]*cd[[:space:]]+"([^"]+)"[[:space:]]*&&[[:space:]]*git[[:space:]]+commit([[:space:]]|$)'
-if [[ "${COMMAND:-}" =~ $CD_PREFIX ]]; then
-  COMMAND_DIR="${BASH_REMATCH[1]}"
-  if [[ "$COMMAND_DIR" == /* ]]; then
-    TARGET_DIR="$COMMAND_DIR"
-  else
-    TARGET_DIR="$TARGET_DIR/$COMMAND_DIR"
+' 2>/dev/null) || BASE_DIR=""
+BASE_DIR="${BASE_DIR:-$PWD}"
+
+# El repo que importa es el DESTINO de cada `git commit` real, no el checkout
+# de la sesión: lo resuelve scripts/lib/git_op_targets.py (git -C, cd
+# encadenado, variables literales; heredocs y cadenas son texto). Destino no
+# resoluble o fuera de un repo → cwd de la orden (conservador). Sin Python o
+# sin orden legible → comportamiento anterior.
+BRANCH=""
+RESOLVER="$ROOT/scripts/lib/git_op_targets.py"
+if [[ -n "${COMMAND:-}" ]] && command -v python3 >/dev/null 2>&1 \
+   && TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$BASE_DIR" 2>/dev/null); then
+  while IFS=$'\t' read -r op dir; do
+    [[ "$op" == "commit" ]] || continue
+    if [[ -n "$dir" ]] && git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      b=$(branch_of "$dir")
+    else
+      b=$(branch_of "$BASE_DIR")
+    fi
+    if is_human "$b"; then BRANCH="$b"; break; fi
+  done <<< "$TARGETS"
+else
+  TARGET_DIR="$BASE_DIR"
+  # Forma explícita `cd "<ruta>" && git commit` (un cd fallido no ejecuta el git).
+  CD_PREFIX='^[[:space:]]*cd[[:space:]]+"([^"]+)"[[:space:]]*&&[[:space:]]*git[[:space:]]+commit([[:space:]]|$)'
+  if [[ "${COMMAND:-}" =~ $CD_PREFIX ]]; then
+    COMMAND_DIR="${BASH_REMATCH[1]}"
+    if [[ "$COMMAND_DIR" == /* ]]; then
+      TARGET_DIR="$COMMAND_DIR"
+    else
+      TARGET_DIR="$TARGET_DIR/$COMMAND_DIR"
+    fi
   fi
+  BRANCH=$(branch_of "$TARGET_DIR")
 fi
-if git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BRANCH=$(git -C "$TARGET_DIR" branch --show-current 2>/dev/null || echo "")
-fi
-# vacío (detached/recién init) → no proteger (sin rama de humano en juego)
+# vacío (detached/recién init/rama segura) → no proteger
 [[ -z "$BRANCH" ]] && exit 0
 
 # Solo proteger ramas de humano: main y master
