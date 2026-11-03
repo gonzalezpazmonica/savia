@@ -59,7 +59,7 @@ Mismo patrón que `CHANGELOG.d/` (SE-053): cada PR añade ficheros nuevos y no e
 ### Formato
 
 - `docs/propuestas/planning.d/SE-NNN.json`: un objeto JSON con el registro completo de la iniciativa, con el mismo esquema que un elemento de `initiatives`. El nombre debe ser `^SE-[0-9]+\.json$` y coincidir con `id`.
-- `docs/propuestas/LOG.d/SE-NNN-<ESTADO>.md`: exactamente una entrada, `## YYYY-MM-DD SE-NNN ESTADO` seguida de un párrafo opcional. Nombre y cabecera deben coincidir. Sin otras cabeceras.
+- `docs/propuestas/LOG.d/SE-NNN-<ESTADO>.md`: exactamente una entrada, `## YYYY-MM-DD SE-NNN ESTADO` seguida de un párrafo opcional. Nombre y cabecera deben coincidir. Sin otras cabeceras. El nombre debe cumplir `^SE-[0-9]+-(<estados>)\.md$`, donde `<estados>` es la lista cerrada de estados válidos que ya usa la comprobación 2 de `validate`; cualquier otro nombre (espacios, `..`, estado desconocido) falla y no se usa nunca como ruta ni en shell.
 - `planning-state.json` y `LOG.md` siguen existiendo como **base consolidada**. Las iniciativas de la base solo cambian por consolidación. Las claves que no son `initiatives` (`route`, `session_plan`, suelos) se siguen editando en la base: cambian poco y su conflicto es real.
 
 ### Vista consolidada
@@ -67,7 +67,7 @@ Mismo patrón que `CHANGELOG.d/` (SE-053): cada PR añade ficheros nuevos y no e
 `scripts/planning-view.py` (Python stdlib, sin red):
 
 - `state`: base con los fragmentos aplicados en orden numérico de id. Si el id existe en la base, el fragmento la sustituye (transición pendiente de consolidar); si no, se añade.
-- `log`: cabecera de `LOG.md`, luego las entradas de `LOG.d/` ordenadas por fecha descendente, id numérico descendente y rango de estado descendente, y luego el cuerpo de la base.
+- `log`: cabecera de `LOG.md`, luego las entradas de `LOG.d/` ordenadas por fecha descendente, id numérico descendente y rango de estado descendente, y luego el cuerpo de la base. Los fragmentos van encima de la base sin comparar fechas: si un fragmento tiene fecha anterior a la entrada más reciente de la base, la vista lo muestra encima igualmente. Es aceptable porque el LOG es append-only y la base solo crece por consolidación, pero `validate` avisa (no falla) de esos casos para que no pasen inadvertidos.
 - `consolidate`: escribe la vista en la base y borra los fragmentos aplicados.
 
 Propiedades exigidas: determinista (misma salida byte a byte con independencia del orden del sistema de ficheros y del locale), idempotente (`consolidate` dos veces no cambia nada) y conservadora (`vista(base consolidada, sin fragmentos) == vista(base, fragmentos)`).
@@ -83,7 +83,7 @@ La consolidación no es un workflow: la ejecuta `bash scripts/roadmap.sh consoli
 
 ### Validación (`roadmap.sh validate` sobre la vista)
 
-Todas las comprobaciones actuales (ids únicos, estados, evidencia, aprobación, suelo trazado, estado de la spec, registro en LOG, ruta y WIP, cola de sesiones) se evalúan sobre la vista. Se añaden:
+Las 10 comprobaciones actuales (`scripts/roadmap.sh`, numeradas en el código: 1 ids únicos, 2 estados válidos, 3 IMPLEMENTED con evidencia, 4 APPROVED con aprobación, 5 cobertura del registro en la era canónica, 6 estado de la spec frente al registro, 7 estado vigente registrado en LOG, 8 ruta con WIP y fase válida, 9 cola editorial con estados y fases existentes, 10 entrada que pide aprobar una spec ya aprobada) se evalúan sobre la vista con la misma severidad que hoy sobre la base. En particular, un fragmento que sube el `status` de su spec a APPROVED sin aprobación registrada falla la comprobación 4. Se añaden:
 
 - nombre de fragmento y `id` coinciden; JSON válido con los campos obligatorios; un id no aparece en dos fragmentos;
 - cada entrada de `LOG.d/` tiene una sola cabecera que coincide con su nombre;
@@ -108,7 +108,7 @@ Una PR: crea los directorios con un `README.md`, `planning-view.py`, los cambios
 `scripts/merge-registry-resolve.py` (Python stdlib), versión en el repo y endurecida del resolutor local que hoy usa la orquestadora:
 
 - **Registros** (lista cerrada, rutas exactas): `docs/propuestas/planning-state.json` y `docs/propuestas/LOG.md`.
-  - `planning-state.json`: parte de la versión de `main`; aplica el delta de la PR respecto al merge-base, **restringido a iniciativas** (altas y cambios de las iniciativas que la PR toca). Rechaza si la PR cambia cualquier otra clave, borra una iniciativa, o cambia una iniciativa que `main` también cambió desde el merge-base con otro valor.
+  - `planning-state.json`: parte de la versión de `main`; aplica el delta de la PR respecto al merge-base, **restringido a iniciativas** (altas y cambios de las iniciativas que la PR toca). «Que la PR toca» se define como en G13: los ids de las specs referenciadas por la PR. El delta se calcula siempre desde `H0` revisado frente al merge-base, nunca desde `H1`. Rechaza si el delta cambia una iniciativa cuyo id no está entre las referenciadas, si la PR cambia cualquier otra clave, borra una iniciativa, o cambia una iniciativa que `main` también cambió desde el merge-base con otro valor.
   - `LOG.md`: inserta arriba, en orden determinista, las entradas que la PR añade respecto al merge-base. Rechaza si la PR modifica o borra entradas existentes (el LOG es append-only).
   - El resultado debe pasar `roadmap.sh validate` ejecutado con el código de `main`. Si no, rechaza.
 - **Derivados regenerables**: `DERIVED_RE` actual más `docs/propuestas/ROADMAP-CURRENT.md` y `docs/propuestas/INDEX.md`. Se regeneran con los generadores de `main`.
@@ -122,9 +122,22 @@ El resolutor y los generadores que usa `run` se toman del commit de `main` conge
 
 Sean `H0` el head revisado, `H1` el head tras integrar, `M` el `main` integrado y `T = merge-tree(H0, M)`. Para cada ruta en la que `H1` difiere de `T`:
 
-- si es un derivado, el ejecutor lo regenera con el código congelado sobre `H1` y debe coincidir byte a byte (corrige el hueco de §2.6 descrito arriba);
-- si es un registro, el ejecutor recalcula `resolver(merge-base, H0, M)` y debe coincidir byte a byte con `H1`;
+- si es un derivado, el ejecutor lo regenera con el código congelado sobre `H1` y compara con la **forma canónica** de ese derivado (tabla siguiente). Corrige el hueco de §2.6 descrito arriba;
+- si es un registro, el ejecutor recalcula `resolver(merge-base, H0, M)` y debe coincidir byte a byte con `H1` (el resolutor no escribe marcas de tiempo; AC-11b lo prueba);
 - cualquier otra ruta no es equivalente: sigue el camino actual (prefiltro y juez, o aparcar).
+
+#### Comparación canónica de derivados
+
+Varios generadores escriben una marca de tiempo, así que una regeneración nunca coincide byte a byte con `H1` (verificado: `scripts/propuestas-index-gen.sh:120-123` escribe `<!-- Last regenerated: … -->` y su propio `--check` filtra esa línea; `scripts/rule-manifest-generate.sh:76` escribe `"generated"` y su comparación lo descarta en la línea 93). La comparación se define por derivado, en una tabla cerrada dentro de `merge-registry-resolve.py` y congelada con `resolver_blob`:
+
+| Derivado | Forma canónica comparada |
+|---|---|
+| `docs/propuestas/INDEX.md` | Todas las líneas salvo exactamente una que cumpla `^<!-- Last regenerated: [0-9TZ:-]+ -->$`; si hay cero o más de una, no equivalente |
+| `docs/rules/domain/rule-manifest.json` | JSON parseado sin la clave de primer nivel `generated`, que debe existir y cumplir `^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$`; el resto, igualdad de objetos |
+| `.confidentiality-signature` | No se regenera ni se compara: el ejecutor repite la auditoría con el código congelado sobre el diff de `H1` y vuelve a firmar, como fija SE-433 §2.6. Si la auditoría no da PASSED, no equivalente |
+| `.scm/`, `docs/rules/INDEX.md`, `docs/propuestas/ROADMAP-CURRENT.md` | Byte a byte: hoy no escriben marca de tiempo |
+
+Cualquier derivado nuevo entra en la tabla con su forma canónica en la misma PR; un derivado sin fila no es equivalente (fail-closed). La normalización solo quita el campo de fecha con formato exacto: texto añadido en esa línea o una segunda línea de fecha hacen que no coincida.
 
 El ledger registra la equivalencia `registry_merge`, el blob del resolutor y los hashes de los registros recalculados.
 
@@ -135,7 +148,9 @@ Tras cada merge con CI de `main` en verde, la siguiente PR del manifiesto se int
 ## S3 — Plan ordenado
 
 - `plan` calcula, para cada par de candidatas, el conflicto previsto con `git merge-tree --write-tree --name-only` entre sus heads, descontando registros y derivados. También el solapamiento de ficheros sin conflicto, solo como aviso.
-- Orden: primero un conjunto de PR sin conflictos entre sí, elegido con un voraz determinista (grado ascendente en el grafo de conflictos y luego número de PR); después las que chocan.
+- La predicción es **heurística**: compara pares, no la secuencia real contra `main` con las anteriores ya fusionadas, así que admite falsos positivos y falsos negativos. No sustituye a `resync` ni a la equivalencia de S2, que siguen decidiendo en `run`; solo ordena y avisa.
+- Orden: primero un conjunto de PR sin conflictos entre sí, elegido con un voraz determinista (grado ascendente en el grafo de conflictos y luego número de PR, ambos ascendentes); después las que chocan, por número de PR ascendente.
+- Efecto esperado del orden: una PR que choca con otra se aparca con cualquier orden. El orden solo gana cuando hay cadenas de choques (A–B–C: fusionar A y C antes que B evita dos aparcamientos) o un límite de merges por tanda. La mejora de M1 viene sobre todo de S1 y S2; S3 se mide aparte (AC-17b).
 - El manifiesto añade `order` (lista de PR) y `collisions` (`{pr, with, files}`), cubiertos por el digest. `run` sigue `order`.
 - `plan` imprime el orden y, por cada colisión prevista, «#A chocará con #B en f1, f2». Ese aviso va en la pregunta del grant: la operadora puede excluir PR o pedir antes un trabajador.
 - **Esto modifica SE-433 §2.5**, que fija el orden ascendente. Aprobar SE-500 es aceptar ese cambio; el orden sigue congelado bajo el grant.
@@ -156,7 +171,7 @@ Tras cada merge con CI de `main` en verde, la siguiente PR del manifiesto se int
 
 - [ ] AC-1: `planning-view.py state` y `log` dan la misma salida byte a byte con los fragmentos creados en orden distinto y con `LC_ALL` distinto.
 - [ ] AC-2: `consolidate` es idempotente, y la vista antes y después de consolidar es idéntica.
-- [ ] AC-3: `roadmap.sh validate` sobre la vista detecta lo mismo que hoy sobre la base: cada una de las 10 comprobaciones tiene un caso negativo con el fallo puesto en un fragmento.
+- [ ] AC-3: `roadmap.sh validate` sobre la vista detecta lo mismo que hoy sobre la base: cada una de las 10 comprobaciones tiene un caso negativo con el fallo puesto en un fragmento; entre ellos, un fragmento que cambia el `status` de su spec a APPROVED sin aprobación registrada → FAIL. Un `LOG.d/` con nombre fuera de la regex (estado desconocido, espacios o `..`) → FAIL.
 - [ ] AC-4: negativo, fragmento con nombre e `id` distintos, JSON inválido o id duplicado en dos fragmentos → FAIL.
 - [ ] AC-5: negativo, una PR que edita una iniciativa de la base sin ser consolidación pura → `validate --diff origin/main` FAIL; positivo, la PR de consolidación pasa.
 - [ ] AC-6: `roadmap.sh register` y `spec-lifecycle.sh` escriben solo fragmentos; dos PR que registran specs distintas se fusionan en cualquier orden sin conflicto (test con dos ramas y `git merge`).
@@ -166,9 +181,13 @@ Tras cada merge con CI de `main` en verde, la siguiente PR del manifiesto se int
 ### S2
 
 - [ ] AC-9: dos PR de spec con registro en conflicto en el formato antiguo: tras fusionar la primera, `run` integra la segunda, la resuelve y la fusiona con equivalencia `registry_merge`, sin revisión nueva.
-- [ ] AC-10: negativo, colar código en un registro. Una PR que, junto a su alta, cambia `route`, añade una clave nueva, cambia el estado de otra iniciativa o borra una → el resolutor rechaza y la PR se aparca con `conflicto_real` y la lista de ficheros.
+- [ ] AC-10: negativo, colar código en un registro. Una PR que, junto a su alta, cambia `route`, añade una clave nueva, cambia el estado o cualquier campo de una iniciativa de una spec no referenciada por la PR, o borra una → el resolutor rechaza y la PR se aparca con `conflicto_real` y la lista de ficheros.
 - [ ] AC-11: negativo, registro manipulado tras resolver: `H1` difiere del resultado recalculado por el ejecutor en un byte → no equivalente, sin merge.
+- [ ] AC-11b: el resolutor es determinista: ejecutado dos veces con relojes distintos (`faketime` o `SOURCE_DATE_EPOCH` distintos) y `LC_ALL` distinto da la misma salida byte a byte.
 - [ ] AC-12: negativo, derivado manipulado: `.scm/`, `docs/rules/INDEX.md` o `ROADMAP-CURRENT.md` en `H1` difiere de su regeneración con el código congelado → no equivalente, sin merge. Hoy pasa (test que falla antes del cambio).
+- [ ] AC-12b: positivo, `docs/propuestas/INDEX.md` y `rule-manifest.json` regenerados en `H1` con otra hora que la del ejecutor → equivalentes. Negativos: una fila de spec cambiada en `INDEX.md`, una regla quitada de `rule-manifest.json`, texto extra en la línea de fecha, dos líneas de fecha o la clave `generated` ausente → no equivalente.
+- [ ] AC-12c: `.confidentiality-signature`: con un diff que la auditoría bloquea, `H1` con firma válida de otro diff → no equivalente; con auditoría PASSED, el ejecutor re-firma y la PR es equivalente.
+- [ ] AC-12d: negativo, un fichero que coincide con `DERIVED_RE` sin fila en la tabla canónica → no equivalente.
 - [ ] AC-13: negativo, conflicto de código real (dos PR que cambian las mismas líneas de un script) → aparcada con `conflicto_real` y ficheros; ningún LLM invocado; el sprint sigue con la siguiente.
 - [ ] AC-14: `resolver_blob` distinto del manifiesto → anomalía y STOP; el resolutor de la rama de la PR nunca se ejecuta (test con un resolutor trampa en la rama).
 - [ ] AC-15: los invariantes de SE-433 siguen cubiertos: la suite actual de `tests/test-merge-sprint.bats` pasa sin tocar sus aserciones, y hay casos nuevos para push no forzado sobre rama movida, tier 4 entre los ficheros resueltos y STOP durante la integración.
@@ -176,7 +195,8 @@ Tras cada merge con CI de `main` en verde, la siguiente PR del manifiesto se int
 
 ### S3
 
-- [ ] AC-17: con tres PR donde A y B cambian el mismo fichero y C es independiente, `plan` da un orden con C antes que la segunda de A/B y avisa «chocará» nombrando el fichero.
+- [ ] AC-17: con tres PR #10 (A), #11 (B) y #12 (C), donde A y B cambian el mismo fichero y C es independiente, `plan` da exactamente `order = [12, 10, 11]` (C tiene grado 0; A y B empatan a grado 1 y desempata el número) y avisa «#10 chocará con #11 en f» nombrando el fichero.
+- [ ] AC-17b: con una cadena A–B–C (A choca con B, B con C, A y C independientes), `plan` ordena A y C antes que B; en el test de integración, `run` fusiona 2 y aparca 1, frente a 1 fusionada y 2 aparcadas con el orden ascendente A, B, C.
 - [ ] AC-18: el orden es determinista: mismas entradas, mismo `order` y mismo digest.
 - [ ] AC-19: negativo, colisiones solo en registros o derivados no generan aviso.
 - [ ] AC-20: negativo, `order` editado tras el grant → el digest no coincide y `run` no arranca; `run` sigue `order` y no reordena.
@@ -207,7 +227,7 @@ Tras cada merge con CI de `main` en verde, la siguiente PR del manifiesto se int
 |---|---|---|
 | `scripts/planning-view.py`, `scripts/merge-registry-resolve.py` | Invocados por `roadmap.sh` y `merge-sprint.sh` | Los mismos scripts |
 | `scripts/merge-sprint.sh`, `scripts/roadmap.sh`, `scripts/pr-plan-gates.sh` | Bash desde la sesión o CI | Bash desde la sesión o CI |
-| Skill `merge-plan` | `.claude/skills/merge-plan/SKILL.md` | La misma vía el enlace `.opencode/skills` |
+| Skill `merge-plan` (se crea en la PR de S3; no existe todavía) | `.claude/skills/merge-plan/SKILL.md` | La misma vía el enlace `.opencode/skills` |
 
 ### Verification protocol
 
@@ -221,4 +241,4 @@ Tras cada merge con CI de `main` en verde, la siguiente PR del manifiesto se int
 
 ## Aprobación
 
-Tier 4: toca `scripts/merge-sprint.sh`. La aprueba la operadora; no entra en un merge-sprint. La aprobación cubre S1, S2 y S3 y la modificación del orden de SE-433 §2.5 descrita en S3. Cada slice se implementa en su propia PR.
+Las PR de implementación son tier 4 (tocan `scripts/merge-sprint.sh`). La PR de esta spec solo toca `docs/` y `risk-tier.py` la clasifica en tier 1: nada mecánico la excluye de un grant. Lo que impide que la fusione un agente es que todo merge exige un grant firmado por la operadora (SE-343, SE-433 D7; firma desde el móvil por SE-488) y esta línea: la operadora no la incluye en ningún manifiesto de merge-sprint y la fusiona ella a mano tras aprobarla. Ningún agente la fusiona. La aprobación cubre S1, S2 y S3 y la modificación del orden de SE-433 §2.5 descrita en S3. Cada slice se implementa en su propia PR.
