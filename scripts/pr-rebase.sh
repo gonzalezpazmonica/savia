@@ -28,8 +28,8 @@ DO_PUSH=true
 SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 only_derived() {  # only_derived <rutas> → 0 si todas son D (SE-501)
   local f
-  # shellcheck source=lib/derived-paths.sh
-  source "$SELF_ROOT/scripts/lib/derived-paths.sh" 2>/dev/null && derived_paths_load "$SELF_ROOT" || return 1
+  # shellcheck source=derived.sh
+  source "$SELF_ROOT/scripts/derived.sh" 2>/dev/null && derived_paths_load "$SELF_ROOT" || return 1
   while IFS= read -r f; do [[ -z "$f" ]] || is_derived_path "$f" || return 1; done <<<"$1"
 }
 

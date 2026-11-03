@@ -1,4 +1,4 @@
-# SE-501 — Lista cerrada de derivados (D). Fuente única: la leen derived-gate.sh, derived.sh,
+# SE-501 — Lista cerrada de derivados (D). Fuente única: la leen derived.sh (gate, ensure, verify),
 # derived-drop.sh, merge-sprint.sh y risk-tier.py.
 # Una ruta por línea, relativa a la raíz del repo. Una ruta acabada en «/» es un prefijo de directorio;
 # el resto se compara de forma exacta. Nunca regex.

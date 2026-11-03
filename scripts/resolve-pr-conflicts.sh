@@ -33,9 +33,9 @@ cd "$REPO_ROOT"
 # una copia temporal (auto-rebase-open-prs.yml), la del repo. Sin lista, nada es D (fail-closed: exit 3).
 D_LOADED=0
 for _r in "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" "$REPO_ROOT"; do
-  if [[ -f "$_r/scripts/lib/derived-paths.sh" ]]; then
-    # shellcheck source=lib/derived-paths.sh
-    source "$_r/scripts/lib/derived-paths.sh" && derived_paths_load "$_r" && { D_LOADED=1; break; }
+  if [[ -f "$_r/scripts/derived.sh" ]]; then
+    # shellcheck source=derived.sh
+    source "$_r/scripts/derived.sh" && derived_paths_load "$_r" && { D_LOADED=1; break; }
   fi
 done
 is_d() { (( D_LOADED )) && is_derived_path "$1"; }

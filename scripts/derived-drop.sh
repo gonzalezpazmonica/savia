@@ -9,8 +9,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/derived-paths.sh
-source "$ROOT/scripts/lib/derived-paths.sh"
+# shellcheck source=derived.sh
+source "$ROOT/scripts/derived.sh"
 BASE="origin/main"
 while [[ $# -gt 0 ]]; do
   case "$1" in

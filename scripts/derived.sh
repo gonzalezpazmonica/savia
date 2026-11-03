@@ -7,6 +7,11 @@
 #                                          validación interna y dos ejecuciones dan la misma salida
 #                                          en forma canónica (derived_canon.py). No versiona nada.
 #   derived.sh key [--only scm|rules]      imprime la clave de frescura (diagnóstico).
+#   derived.sh gate [--base <ref>|--range <a>..<b>] [--repo <dir>]
+#                                          G20 y paso de CI «Derived paths absent»: FAIL (1) si el diff de la
+#                                          PR añade o modifica una ruta de D, y la nombra. Borrar D pasa.
+#                                          La lista D sale de este script; --repo es el repo que se audita
+#                                          (la CI ejecuta el derived.sh de la base). Error: 2 (fail-closed).
 #
 # Grupos (orden fijo: rules antes que scm):
 #   rules  rule-manifest-generate.sh + rules-index-generate.sh → docs/rules/INDEX.md, rule-manifest.json
@@ -17,11 +22,48 @@
 #          listado + blobs de los generadores [+ salidas de rules, para scm]).
 #   Misma clave y salidas presentes ⇒ no se ejecuta ningún generador.
 # Salida: 0 bien · 1 fallo de generación o de verificación · 2 uso o entorno (fail-closed).
-set -uo pipefail
+# Importable: «source scripts/derived.sh» solo define la lista cerrada D (derived_paths_load,
+# is_derived_path, derived_pathspecs) y vuelve; no fija opciones ni variables del llamante.
 
+# ── Lista cerrada D (scripts/derived-paths.txt) ─────────────────────────────
+# Comparación exacta o por prefijo de directorio (entradas acabadas en «/»). Nunca regex.
+
+DERIVED_PATHS=()
+
+# derived_paths_load <raíz> → 0 si la lista existe y no está vacía; 1 si no (fail-closed: quien la usa
+# para decidir si algo es derivado no puede seguir sin ella).
+derived_paths_load() {
+  local f="${1:-.}/scripts/derived-paths.txt" l
+  DERIVED_PATHS=()
+  [[ -r "$f" ]] || return 1
+  while IFS= read -r l || [[ -n "$l" ]]; do
+    l="${l%$'\r'}"
+    [[ -z "$l" || "$l" == \#* ]] && continue
+    DERIVED_PATHS+=("$l")
+  done < "$f"
+  (( ${#DERIVED_PATHS[@]} > 0 ))
+}
+
+# is_derived_path <ruta> → 0 si la ruta es D.
+is_derived_path() {
+  local p="$1" d
+  for d in "${DERIVED_PATHS[@]}"; do
+    if [[ "$d" == */ ]]; then [[ "$p" == "$d"* ]] && return 0
+    else [[ "$p" == "$d" ]] && return 0; fi
+  done
+  return 1
+}
+
+# derived_pathspecs → las entradas de D como pathspecs literales de git (un prefijo de directorio sin «/»).
+derived_pathspecs() {
+  local d
+  for d in "${DERIVED_PATHS[@]}"; do printf ':(literal)%s\n' "${d%/}"; done
+}
+
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/derived-paths.sh
-source "$ROOT/scripts/lib/derived-paths.sh"
 
 die() { echo "derived: $1" >&2; exit "${2:-2}"; }
 
@@ -118,7 +160,8 @@ ensure_group() {  # ensure_group <grupo>
 
 # Salidas que el propio generador relee en la siguiente ejecución: sam_model._input_records conserva el
 # source_commit de un sam.json previo cuyo contenido coincide. Para medir determinismo, cada ejecución de
-# verify parte sin él (se aparta al temporal, no se borra): así es como genera un clon nuevo.
+# verify parte sin él (se aparta al temporal): así es como genera un clon nuevo. Si una ejecución falla y
+# no deja el fichero, al salir se restaura el apartado (restore_prior): verify nunca lo pierde.
 group_prior() { case "$1" in scm) echo ".scm/sam.json" ;; esac; }
 set_aside_prior() {  # set_aside_prior <grupo> <dir>
   local f
@@ -126,6 +169,15 @@ set_aside_prior() {  # set_aside_prior <grupo> <dir>
     [[ -f "$ROOT/$f" ]] || continue
     mkdir -p "$2/prior/$(dirname "$f")" && mv "$ROOT/$f" "$2/prior/$f" || return 1
   done
+}
+
+restore_prior() {  # restore_prior <grupo> <dir> → devuelve al árbol lo apartado que el árbol ya no tiene
+  local f
+  for f in $(group_prior "$1"); do
+    [[ -f "$2/prior/$f" && ! -e "$ROOT/$f" ]] || continue
+    mkdir -p "$ROOT/$(dirname "$f")" && cp "$2/prior/$f" "$ROOT/$f"
+  done
+  return 0
 }
 
 snapshot() {  # snapshot <grupo> <dir>
@@ -139,7 +191,7 @@ verify_group() {  # verify_group <grupo> → 0 generación correcta, válida y d
   preflight "$1" || return 1
   t=$(mktemp -d) || return 2
   # shellcheck disable=SC2064
-  trap "rm -rf '$t'" RETURN
+  trap "restore_prior '$1' '$t/a'; rm -rf '$t'; trap - RETURN" RETURN
   mkdir -p "$t/a" "$t/b"
   set_aside_prior "$1" "$t/a" || return 1
   run_gens "$1" || { echo "FAIL $1: un generador terminó con ≠ 0"; return 1; }
@@ -164,7 +216,39 @@ verify_group() {  # verify_group <grupo> → 0 generación correcta, válida y d
   return $rc
 }
 
+gate_cmd() {  # gate_cmd [--base <ref>] [--range <a>..<b>] [--repo <dir>]
+  local base="origin/main" range="" repo="$ROOT" mb names f bad=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base) base="${2:-}"; shift 2 ;;
+      --range) range="${2:-}"; shift 2 ;;
+      --repo) repo="$(cd "${2:-}" 2>/dev/null && pwd)" || die "G20 ERROR: --repo ilegible"; shift 2 ;;
+      *) die "argumento desconocido: $1" ;;
+    esac
+  done
+  derived_paths_load "$ROOT" || die "G20 ERROR: falta o está vacía scripts/derived-paths.txt"
+  if [[ -z "$range" ]]; then
+    mb=$(git -C "$repo" merge-base "$base" HEAD 2>/dev/null) || die "G20 ERROR: sin merge-base con $base"
+    range="$mb..HEAD"
+  fi
+  # --diff-filter=d: excluye borrados. -z: rutas sin escapar.
+  names=$(git -C "$repo" diff --name-only --no-renames --diff-filter=d -z "$range" 2>/dev/null | tr '\0' '\n') \
+    || die "G20 ERROR: git no pudo calcular el diff $range"
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    is_derived_path "$f" && bad+=("$f")
+  done <<<"$names"
+  if (( ${#bad[@]} )); then
+    echo "G20 FAIL: la PR versiona derivados que se generan en local (SE-501):"
+    printf '  %s\n' "${bad[@]}"
+    echo "Arreglo: bash scripts/derived-drop.sh"
+    return 1
+  fi
+  echo "G20 PASS: ninguna ruta derivada en el diff ($range)"
+}
+
 CMD="${1:-}"; shift || true
+[[ "$CMD" == gate ]] && { gate_cmd "$@"; exit $?; }
 ONLY=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -195,6 +279,6 @@ case "$CMD" in
     for g in $GROUPS_SEL; do verify_group "$g" || rc=1; done ;;
   key)
     for g in $GROUPS_SEL; do echo "$g $(key "$g")"; done ;;
-  *) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 exit $rc

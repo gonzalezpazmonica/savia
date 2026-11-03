@@ -816,8 +816,8 @@ g19_edit_attribution() {
 # la ruta; borrarlo (migración, derived-drop.sh) pasa. Sin la lista o sin diff calculable: FAIL (fail-closed).
 g20_derived_absent() {
   local out rc
-  [[ -f scripts/derived-gate.sh ]] || { echo "FAIL: falta scripts/derived-gate.sh (SE-501)"; return; }
-  out=$(bash scripts/derived-gate.sh --base origin/main 2>&1); rc=$?
+  [[ -f scripts/derived.sh ]] || { echo "FAIL: falta scripts/derived.sh (SE-501)"; return; }
+  out=$(bash scripts/derived.sh gate --base origin/main 2>&1); rc=$?
   if (( rc == 0 )); then echo "PASS"; return; fi
   FAILED_FILE="scripts/derived-paths.txt"
   echo "FAIL: $(echo "$out" | grep -v '^G20 FAIL' | tr '\n' ' ' | sed 's/  */ /g')"

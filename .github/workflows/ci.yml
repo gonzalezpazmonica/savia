@@ -116,11 +116,21 @@ jobs:
       # SE-501: la PR no versiona derivados (scripts/derived-paths.txt). Sustituye al antiguo indicio «la PR
       # trae firma»: lo reemplazan este paso, la generación verificada y «Confidentiality scan (PR)».
       # HEAD es el commit de fusión base+PR: base..HEAD son exactamente los cambios de la PR.
+      # El gate y la lista D salen de la BASE (una PR no puede vaciar la lista ni cambiar el gate).
       - name: Derived paths absent
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash scripts/derived-gate.sh --range "$BASE_SHA..HEAD"
+        run: |
+          X=$(mktemp -d); mkdir -p "$X/scripts"
+          if git show "$BASE_SHA:scripts/derived.sh" > "$X/scripts/derived.sh" 2>/dev/null \
+             && git show "$BASE_SHA:scripts/derived-paths.txt" > "$X/scripts/derived-paths.txt" 2>/dev/null \
+             && grep -q '^  gate)' "$X/scripts/derived.sh"; then
+            bash "$X/scripts/derived.sh" gate --repo "$PWD" --range "$BASE_SHA..HEAD"
+          else
+            echo "::warning::la base aún no tiene derived.sh gate (PR de arranque): se usa el de la PR"
+            bash scripts/derived.sh gate --range "$BASE_SHA..HEAD"
+          fi
 
       # SE-501 (opción B): D no se versiona; se genera aquí para los pasos que lo leen.
       - name: Generate derived artifacts (SE-501)

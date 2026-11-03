@@ -263,8 +263,8 @@ required_ok() {  # checks obligatorios del PR: pass | fail | pending
 DERIVED_RE='^(docs/propuestas/ROADMAP-CURRENT\.md$|docs/propuestas/INDEX\.md$)'
 is_derived() { grep -qE "$DERIVED_RE" <<<"$1"; }
 # D (SE-501): lista cerrada de scripts/derived-paths.txt, comparación exacta o por prefijo. Sin ella, fail-closed.
-# shellcheck source=lib/derived-paths.sh
-source "$ROOT/scripts/lib/derived-paths.sh"
+# shellcheck source=derived.sh
+source "$ROOT/scripts/derived.sh"
 derived_paths_load "$ROOT" || die "falta scripts/derived-paths.txt (SE-501)" 2
 is_d() { is_derived_path "$1"; }
 # Registros (lista cerrada): se integran con el resolutor determinista y se recalculan al comparar heads.

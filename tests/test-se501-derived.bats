@@ -14,11 +14,10 @@ G() { git -C "$R" -c commit.gpgsign=false "$@"; }
 
 # mkrepo: repo temporal con el código SE-501 copiado y un commit base en main (origin/main apunta a él).
 mkrepo() {
-  R="$T/r"; mkdir -p "$R/scripts/lib"
+  R="$T/r"; mkdir -p "$R/scripts"
   git init -q -b main "$R"
-  cp "$REPO/scripts/derived-paths.txt" "$REPO/scripts/derived-gate.sh" "$REPO/scripts/derived-drop.sh" \
+  cp "$REPO/scripts/derived-paths.txt" "$REPO/scripts/derived-drop.sh" \
      "$REPO/scripts/derived.sh" "$REPO/scripts/derived_canon.py" "$R/scripts/"
-  cp "$REPO/scripts/lib/derived-paths.sh" "$R/scripts/lib/"
   echo base > "$R/a.txt"
   G add -A; G commit -qm base
   G update-ref refs/remotes/origin/main HEAD
@@ -70,7 +69,7 @@ EOF
     G checkout -q -B "pr" main
     mkdir -p "$R/$(dirname "$p")"; echo x > "$R/$p"
     G add -f -- "$p"; G commit -qm "añade $p"
-    run bash "$R/scripts/derived-gate.sh" --base origin/main
+    run bash "$R/scripts/derived.sh" gate --base origin/main
     [ "$status" -eq 1 ]
     [[ "$output" == *"$p"* ]]
     [[ "$output" == *"derived-drop.sh"* ]]
@@ -84,7 +83,7 @@ EOF
   echo y > "$R/b.txt"; echo '{}' > "$R/.scm/sam-declarations.json"; echo '{}' > "$R/.scm/runtime-surface/x.json"
   echo bak > "$R/docs/rules/INDEX.md.bak"
   G add -A; G commit -qm cambios
-  run bash "$R/scripts/derived-gate.sh" --base origin/main
+  run bash "$R/scripts/derived.sh" gate --base origin/main
   [ "$status" -eq 0 ]
   [[ "$output" == *"G20 PASS"* ]]
 }
@@ -94,11 +93,34 @@ EOF
   mkdir -p "$R/.scm"; echo old > "$R/.scm/sam.json"; G add -f .scm/sam.json; G commit -qm "D versionado (antes del corte)"
   G update-ref refs/remotes/origin/main HEAD
   G checkout -q -b pr; G rm -q --cached .scm/sam.json; G commit -qm corte
-  run bash "$R/scripts/derived-gate.sh" --base origin/main
+  run bash "$R/scripts/derived.sh" gate --base origin/main
   [ "$status" -eq 0 ]
   mv "$R/scripts/derived-paths.txt" "$T/"
-  run bash "$R/scripts/derived-gate.sh" --base origin/main
+  run bash "$R/scripts/derived.sh" gate --base origin/main
   [ "$status" -eq 2 ]
+}
+
+@test "rev-1472 S-P2-1: el gate con la lista de la base ignora una PR que vacía derived-paths.txt (--repo)" {
+  mkrepo
+  mkdir -p "$T/base/scripts"; cp "$R/scripts/derived.sh" "$R/scripts/derived-paths.txt" "$T/base/scripts/"
+  G checkout -q -b pr
+  printf '# vaciada\n' > "$R/scripts/derived-paths.txt"
+  mkdir -p "$R/.scm"; echo x > "$R/.scm/sam.json"; G add -f -A; G commit -qm "lista vaciada y D añadido"
+  # El de la PR, con su lista vaciada, no puede decidir (2); el de la base lo bloquea y lo nombra (1).
+  run bash "$R/scripts/derived.sh" gate --base origin/main
+  [ "$status" -eq 2 ]
+  run bash "$T/base/scripts/derived.sh" gate --repo "$R" --base origin/main
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".scm/sam.json"* ]]
+}
+
+@test "rev-1472: source scripts/derived.sh solo define la lista D y no toca ROOT ni las opciones del llamante" {
+  run bash -c 'ROOT=/llamante; set +u; source "'"$REPO"'/scripts/derived.sh"; echo "ROOT=$ROOT"; [[ $- == *u* ]] && echo U
+    derived_paths_load "'"$REPO"'" && is_derived_path .scm/sam.json && ! is_derived_path .scm/sam-declarations.json && echo LISTA'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"ROOT=/llamante"* ]]
+  [[ "$output" != *U* ]]
+  [[ "$output" == *LISTA* ]]
 }
 
 @test "AC-1 G20 en pr-plan: registrado en pr-plan.sh y su FAIL nombra la ruta" {
@@ -114,7 +136,8 @@ EOF
 
 @test "AC-1 CI: ci.yml ejecuta «Derived paths absent» con el gate y ya no exige la firma en la PR (AC-12)" {
   grep -q 'name: Derived paths absent' "$REPO/.github/workflows/ci.yml"
-  grep -q 'bash scripts/derived-gate.sh --range "$BASE_SHA..HEAD"' "$REPO/.github/workflows/ci.yml"
+  grep -q 'bash "$X/scripts/derived.sh" gate --repo "$PWD" --range "$BASE_SHA..HEAD"' "$REPO/.github/workflows/ci.yml"
+  grep -q 'git show "$BASE_SHA:scripts/derived-paths.txt"' "$REPO/.github/workflows/ci.yml"
   run grep -c 'confidentiality-signature' "$REPO/.github/workflows/ci.yml"
   [ "$output" = 0 ]
 }
@@ -134,6 +157,16 @@ EOF
   run bash "$R/scripts/derived.sh" verify --only rules
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL rules"* ]]
+}
+
+@test "rev-1472 P2-2: verify que falla en la 1.ª generación no pierde el .scm/sam.json local" {
+  mkrepo; fake_gens
+  mkdir -p "$R/.scm"; echo '{"previo": 1}' > "$R/.scm/sam.json"
+  echo 'raise SystemExit(4)' >> "$R/scripts/generate-capability-map.py"
+  run bash "$R/scripts/derived.sh" verify --only scm
+  [ "$status" -eq 1 ]
+  [ -f "$R/.scm/sam.json" ]
+  [ "$(cat "$R/.scm/sam.json")" = '{"previo": 1}' ]
 }
 
 @test "AC-2 negativo: dos ejecuciones con salida canónica distinta dan FAIL" {
@@ -350,7 +383,7 @@ EOF
   [ "$output" = $'D\t.scm/sam.json' ]
   run G merge -q --no-edit main
   [ "$status" -eq 0 ]
-  run bash "$R/scripts/derived-gate.sh" --base main
+  run bash "$R/scripts/derived.sh" gate --base main
   [ "$status" -eq 0 ]
 }
 
