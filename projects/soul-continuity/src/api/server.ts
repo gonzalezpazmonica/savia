@@ -23,6 +23,10 @@ import { readFileSync } from "node:fs";
 import { validar } from "./schema.ts";
 import { Franja, Politica, estadoATexto, estadoDesdeTexto, estadoVacio, instanciaEn, type Estado as EstadoPolitica, type Evento as EventoPolitica, type Modo, type Motivo } from "../attention/index.ts";
 import { type Listening, listenOnly } from "./listen.ts";
+import {
+  type AccionPropuesta, type EstadoGemelo, ErrorDecision, type Grant, type MensajeGemelo, decidirAccion, detectarSeguimientos, emitirMensaje,
+  estadoGemeloVacio, latidoDebido, marcarResumen, podar, restaurarGemelo, resumenDebido, seleccionarResumen, validarConfigGemelo,
+} from "../core/gemelo.ts";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- cuerpos JSON del contrato */
 const OPENAPI: any = JSON.parse(readFileSync(new URL("../contract/openapi.json", import.meta.url), "utf8"));
@@ -99,6 +103,8 @@ export interface Op {
   corr: Map<string, { tipo: string; en: number }>; mensajes: Msg[]; seq: number; base: number;
   /** H-11: estado de la política de atención (presupuesto por ventana, tope de alertas, ya tratados). */
   pol: EstadoPolitica;
+  /** SE-504 §3: «Tu día con Savia» (mensajes del gemelo y acciones propuestas). */
+  gemelo: EstadoGemelo;
   /** D4/D5: identifica esta secuencia de mensajes. Cambia si el estado se pierde: ids y cursores no se reutilizan. */
   epoca: string;
   pendAvisos: Evento[]; pendAlertas: Evento[]; ventana: { idx: number; avisos: number; alertas: number };
@@ -116,6 +122,8 @@ export interface EstadoAtencion {
   epoca?: string;
   /** H-11: estado de `Politica` como texto (`estadoATexto`). */
   politica?: string;
+  /** SE-504 §3: estado del gemelo (`restaurarGemelo` lo valida al cargar). */
+  gemelo?: unknown;
 }
 export interface Evento { tipo: string; categoria?: string; ids: string[]; programar?: number | null; regla?: Regla; efectiva?: string; avisoDe?: string }
 
@@ -167,6 +175,12 @@ export interface OpcionesServidor {
   emparejamiento?: { challenge(c: unknown): unknown; complete(c: unknown): unknown };
   /** P2-9: límites de conexión (por defecto `LIMITES`). */
   limites?: Partial<typeof LIMITES>;
+  /**
+   * SE-504: quien ejecuta una acción propuesta tras la aprobación de la persona. Solo se llama
+   * desde POST /gemelo/acciones/{id}/decision con «aprobar». Sin él, la acción queda aprobada
+   * con `ejecucion: sin_ejecutor` (Soul v1 no escribe en las fuentes).
+   */
+  ejecutorAcciones?: (ref: string, accion: AccionPropuesta, grant: Grant) => void;
 }
 
 /** P2-9: conexiones simultáneas y tiempos de espera propios (no los de Node.js por defecto). */
@@ -341,7 +355,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const e: EstadoAtencion = {
       v: 1, modo: o.modo, hasta: o.hasta, avisos: o.avisos, alertas: o.alertas, mensajes: o.mensajes, seq: o.seq, base: o.base,
       pendAvisos: o.pendAvisos, pendAlertas: o.pendAlertas, ventana: o.ventana, registro: o.registro, ahorrados: o.ahorrados,
-      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca, politica: estadoATexto(o.pol),
+      avisados: [...avisados(o)].slice(-2000), cli_at: cliAt.get(o.ref) ?? null, epoca: o.epoca, politica: estadoATexto(o.pol), gemelo: o.gemelo,
     };
     const texto = JSON.stringify(e);
     if (guardado.get(o.ref) === texto) return;
@@ -352,7 +366,7 @@ export function crearServidor(opts: OpcionesServidor) {
     const o: Op = ops[d.ref] = {
       ref: d.ref, d, ultimo: minuto0, nivel: RANGO[d.nivel] > RANGO[d.nivelMax] ? d.nivelMax : d.nivel, modo: "DISPONIBLE", hasta: null,
       avisos: structuredClone(d.avisos), alertas: structuredClone(d.alertas), elementos: new Map(), ledger: new Map(), corr: new Map(),
-      mensajes: [], seq: 0, base: 0, epoca: randomBytes(4).toString("hex"), pol: estadoVacio(), pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
+      mensajes: [], seq: 0, base: 0, epoca: randomBytes(4).toString("hex"), pol: estadoVacio(), gemelo: estadoGemeloVacio(), pendAvisos: [], pendAlertas: [], ventana: { idx: -1, avisos: 0, alertas: 0 }, registro: [], ahorrados: 0,
       st: { avisosGenerados: 0, alertasGeneradas: 0, reobservaciones: 0, rebotadas: 0 },
     };
     // Se conserva la observación real si el mundo la trae; el simulado la deriva de su nacimiento.
@@ -371,6 +385,10 @@ export function crearServidor(opts: OpcionesServidor) {
       const pol = typeof previo.politica === "string" ? estadoDesdeTexto(previo.politica) : null;
       if (pol) o.pol = pol;
       else if (previo.politica != null) process.stderr.write("soul api: estado de la política de atención ilegible; se empieza de cero\n");
+      // Estado del gemelo ilegible o con una aprobación sin grant válido: se empieza de cero (nada queda aprobado).
+      const g = restaurarGemelo(previo.gemelo);
+      if (g) o.gemelo = g;
+      else if (previo.gemelo != null) process.stderr.write("soul api: estado del gemelo ilegible; se empieza de cero\n");
       continue;
     }
     for (const e of d.elementos) { // los avisos que ya correspondían al arrancar
@@ -400,6 +418,8 @@ export function crearServidor(opts: OpcionesServidor) {
     // Solo se recuerda lo avisado de elementos vivos: uno que desaparece y vuelve se avisa de nuevo,
     // y el conjunto no crece sin tope.
     if (!caidas) for (const k of avisados(o)) if (!o.elementos.has(k.slice(k.indexOf("|") + 1))) avisados(o).delete(k);
+    // Con las fuentes caídas el gemelo calla: no habla sobre datos que no puede comprobar.
+    if (!caidas) latidoGemelo(o);
     const lim = ahora() - retencionMs;
     while (o.mensajes.length && o.mensajes[0].creado < lim) o.base = (o.mensajes.shift() as Msg).seq;
     for (const [id, e] of o.elementos) if (!e.fijo && o.elementos.size > 400 && e.nace < lim) o.elementos.delete(id);
@@ -476,6 +496,103 @@ export function crearServidor(opts: OpcionesServidor) {
       };
     }),
   });
+
+  // -------------------------------------------------------------- gemelo (SE-504 §3: Savia escribe primero)
+  // Qué decir lo decide `core/gemelo.ts` sin modelo; aquí se decide si además se notifica, con la
+  // misma política de atención que los avisos (SE-490 AC-4b). Lo que no se notifica queda en el chat.
+  const elementosGemelo = (o: Op) => [...o.elementos.values()].filter((e) => vivo(o, e.id) && !e.noMio)
+    .map((e) => ({ id: e.id, tipo: e.tipo, fecha: e.fecha, nace: e.nace, dep: e.dep }));
+  /** Regla de alerta que la persona declaró para algún asunto (proyecto o persona). Sin regla, no hay alerta. */
+  function reglaGemelo(o: Op, m: MensajeGemelo): Regla | null {
+    for (const a of m.asuntos) {
+      const e = o.elementos.get(a.elementoId);
+      if (!e) continue;
+      const r = o.alertas.find((x) => (x.tipo === "proyecto" && x.objetivo === e.proyecto) || (x.tipo === "persona" && e.personas.includes(x.objetivo)));
+      if (r) return r;
+    }
+    return null;
+  }
+  function avisoGemelo(o: Op, m: MensajeGemelo, t: number) {
+    const min = Math.floor(t / MIN);
+    const p = politica(o);
+    let contactar: boolean;
+    let silencio: string | null = null;
+    if (m.tipo === "resumen_manana") {
+      // Programado, como los resúmenes de SE-490: no gasta presupuesto, pero en concentración,
+      // descanso o fuera no notifica.
+      contactar = p.modoEfectivo(min) === "DISPONIBLE";
+      if (!contactar) silencio = "modo_activo";
+      registrar(o, t, contactar ? "avisar" : "diferir", contactar ? "resumen_programado" : "modo_activo", "resumen_manana");
+    } else {
+      const regla = reglaGemelo(o, m);
+      const pe: EventoPolitica = {
+        id: `${o.epoca}|gemelo|${m.id}`, origen: "AGENTE_AUTENTICADO", tipo: { k: "NOTIFICACION" },
+        ruta: regla && efectiva(o, regla).efectiva === "aviso" ? "WEB" : "API", objetivo: null, plazo: null, costeRetraso: "MEDIO", nivel: 1, caduca: null,
+        codigoAlerta: regla?.id ?? null, urgenciaEnContenido: "NORMAL", urgenciaSugeridaLlm: null, texto: "",
+      };
+      const d = p.decidir(pe, min);
+      o.pol = p.estado;
+      o.pol.preguntadas.delete(pe.id);
+      contactar = d.contactarAhora;
+      if (contactar) { if (d.motivo.k === "ALERTA") o.ventana.alertas++; else o.ventana.avisos++; } else silencio = motivoApi(d.motivo);
+      registrar(o, t, contactar ? "avisar" : d.motivo.k === "MODO_NO_DISPONIBLE" ? "diferir" : "registrar", motivoApi(d.motivo), "seguimiento");
+    }
+    m.notificado = contactar;
+    m.silencio = silencio;
+    if (contactar) emitir(o, t, { tipo: "gemelo", categoria: m.tipo, ids: m.asuntos.map((a) => a.elementoId) });
+  }
+  function latidoGemelo(o: Op) {
+    const g = o.gemelo;
+    const t = ahora();
+    if (!g.config.activo) return;
+    if (resumenDebido(g, o.avisos.resumenInicio, t)) {
+      marcarResumen(g, t);
+      const asuntos = seleccionarResumen(elementosGemelo(o), t);
+      // AC-G2: sin nada que decir, no hay mensaje ni notificación.
+      if (asuntos.length) avisoGemelo(o, emitirMensaje(g, "resumen_manana", asuntos, t, `${o.ref}-${o.epoca}`.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 40)), t);
+    }
+    if (latidoDebido(g, t)) {
+      const previo = g.ultimoLatido;
+      g.ultimoLatido = t;
+      const asuntos = detectarSeguimientos(elementosGemelo(o), t, g.config, new Set(g.tratados), previo);
+      if (asuntos.length) avisoGemelo(o, emitirMensaje(g, "seguimiento", asuntos, t, `${o.ref}-${o.epoca}`.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 40)), t);
+    }
+    podar(g, t);
+  }
+  const isoN = (x: number | null) => (x == null ? null : iso(x));
+  const vistaAccion = (a: AccionPropuesta) => ({
+    id: a.id, tipo: a.tipo, elemento_id: a.elementoId, estado: a.estado, contenido: a.contenido, generado_por: a.generadoPor,
+    creada_en: iso(a.creada), decidida_en: isoN(a.decididaEn), ejecucion: a.ejecucion, grant: a.grant ? { en: iso(a.grant.en), hash: a.grant.hash } : null,
+  });
+  function vistaGemelo(o: Op) {
+    const g = o.gemelo;
+    return {
+      titulo: "Tu día con Savia", nivel: o.nivel, generado_en: iso(ahora()), leido_hasta: g.leidoHasta,
+      no_leidos: g.mensajes.filter((m) => m.seq > g.leidoHasta).length,
+      mensajes: g.mensajes.slice(-500).map((m) => ({
+        id: m.id, seq: m.seq, tipo: m.tipo, autor: "savia", creado_en: iso(m.creado), texto: m.texto, notificado: m.notificado, silencio: m.silencio,
+        asuntos: m.asuntos.map((a) => {
+          const e = rango(o, "titulos") ? vivo(o, a.elementoId) : null;
+          const acc = g.acciones.find((x) => x.id === a.accionId);
+          return {
+            elemento_id: a.elementoId, motivo: a.motivo, enlace: `${PREFIJO}/elementos/${a.elementoId}/porque`, espera_desde: isoN(a.esperaDesde), vence_en: isoN(a.vence),
+            titulo: e ? inerte(e.titulo) : null, accion: acc ? vistaAccion(acc) : null,
+          };
+        }),
+      })),
+    };
+  }
+  const vistaConfigGemelo = (o: Op) => ({ activo: o.gemelo.config.activo, espera_horas: o.gemelo.config.esperaHoras, latido_min: o.gemelo.config.latidoMin });
+  function opDecisionGemelo(o: Op, id: string, decision: unknown, dispositivo: string | null) {
+    if (!ID.test(id)) throw invalida();
+    try {
+      const ej = opts.ejecutorAcciones;
+      return vistaAccion(decidirAccion(o.gemelo, id, decision, { dispositivo }, ahora(), ej ? (a, gr) => ej(o.ref, a, gr) : undefined));
+    } catch (e) {
+      if (e instanceof ErrorDecision) throw e.code === "NOT_FOUND" ? noEncontrado() : e.code === "CONFLICT" ? new ErrorApi(409, "CONFLICT") : invalida();
+      throw e;
+    }
+  }
 
   // -------------------------------------------------------------- operaciones (las usan REST y órdenes)
   const FECHA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
@@ -782,6 +899,27 @@ export function crearServidor(opts: OpcionesServidor) {
       if (validar(OPENAPI, OPENAPI.components.schemas.PeticionOrden, c).length) throw invalida();
       return opOrden(o, c.orden, dispositivo);
     }
+    if (m === "GET" && r === "/gemelo") { sinParametros(u, []); return vistaGemelo(o); }
+    if (m === "PUT" && r === "/gemelo/leido") {
+      const c = await cuerpo(req);
+      if (validar(OPENAPI, OPENAPI.components.schemas.PeticionLeido, c).length || c.seq > o.gemelo.seq) throw invalida();
+      o.gemelo.leidoHasta = Math.max(o.gemelo.leidoHasta, c.seq);
+      return { leido_hasta: o.gemelo.leidoHasta, no_leidos: o.gemelo.mensajes.filter((x) => x.seq > o.gemelo.leidoHasta).length };
+    }
+    if (m === "POST" && (x = /^\/gemelo\/acciones\/([^/]+)\/decision$/.exec(r))) {
+      const c = await cuerpo(req);
+      if (validar(OPENAPI, OPENAPI.components.schemas.PeticionDecisionAccion, c).length) throw invalida();
+      return opDecisionGemelo(o, x[1], c.decision, dispositivo);
+    }
+    if (m === "GET" && r === "/gemelo/config") { sinParametros(u, []); return vistaConfigGemelo(o); }
+    if (m === "PUT" && r === "/gemelo/config") {
+      const c = await cuerpo(req);
+      if (validar(OPENAPI, OPENAPI.components.schemas.ConfigGemelo, c).length) throw invalida();
+      const nueva = { activo: c.activo, esperaHoras: c.espera_horas, latidoMin: c.latido_min };
+      if (!validarConfigGemelo(nueva)) throw invalida();
+      o.gemelo.config = nueva;
+      return vistaConfigGemelo(o);
+    }
     throw noEncontrado();
   }
 
@@ -834,6 +972,11 @@ export function crearServidor(opts: OpcionesServidor) {
       cliAt.set(ref, at);
       guardarEstado(o);
       return r;
+    },
+    /** SE-504: latido del gemelo sin petición de la app (lo llama el tic de `serve`). */
+    latido: () => {
+      if (opts.detenido?.()) return;
+      for (const o of Object.values(ops)) { sincronizar(o); guardarEstado(o); }
     },
     /** `at` de la última declaración de `soul mode` aplicada (persistida con el estado). */
     declaracionCli: (ref: string) => cliAt.get(ref) ?? null,

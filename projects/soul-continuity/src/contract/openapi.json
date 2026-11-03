@@ -132,6 +132,38 @@
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionOrden" } } } },
         "responses": { "200": { "description": "Orden ejecutada o respuesta honesta al texto libre", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/RespuestaOrden" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "404": { "$ref": "#/components/responses/NoEncontrado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
       }
+    },
+    "/gemelo": {
+      "get": {
+        "operationId": "gemeloConversacion", "summary": "«Tu día con Savia» (SE-504 §3): lo que Savia escribe sin que se lo pidan. Resumen de la mañana y seguimientos, con una acción propuesta por asunto. El texto es de Savia y nunca lleva texto de terceros; los títulos viajan aparte como `TextoInerte` y solo con `titulos` o `completo`.",
+        "responses": { "200": { "description": "Conversación del gemelo", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversacionGemelo" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/gemelo/leido": {
+      "put": {
+        "operationId": "gemeloLeido", "summary": "Marca leída la conversación hasta `seq` (quita el punto de no leído). Nunca retrocede.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionLeido" } } } },
+        "responses": { "200": { "description": "Lectura registrada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Leido" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/gemelo/acciones/{id}/decision": {
+      "post": {
+        "operationId": "gemeloDecision", "summary": "Aprueba o descarta una acción propuesta. Es la única vía por la que una acción se ejecuta: aprobar registra el grant de esa acción concreta (hora, dispositivo y hash del contenido). Repetir la misma decisión es idempotente; cambiarla después da 409.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/IdOpaco" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PeticionDecisionAccion" } } } },
+        "responses": { "200": { "description": "Decisión aplicada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccionPropuesta" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "404": { "$ref": "#/components/responses/NoEncontrado" }, "409": { "$ref": "#/components/responses/Conflicto" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
+    },
+    "/gemelo/config": {
+      "get": {
+        "operationId": "gemeloConfigLeer", "summary": "Configuración del gemelo. La hora del resumen de la mañana es `resumen_inicio` de /avisos.",
+        "responses": { "200": { "description": "Configuración", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigGemelo" } } } }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      },
+      "put": {
+        "operationId": "gemeloConfigFijar", "summary": "Activa o pausa la iniciativa y fija el umbral de espera y el latido.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigGemelo" } } } },
+        "responses": { "200": { "description": "Configuración fijada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConfigGemelo" } } } }, "400": { "$ref": "#/components/responses/Invalida" }, "401": { "$ref": "#/components/responses/NoAutenticado" }, "429": { "$ref": "#/components/responses/Limitado" }, "503": { "$ref": "#/components/responses/NoDisponible" } }
+      }
     }
   },
   "components": {
@@ -143,7 +175,8 @@
       "NoAutenticado": { "description": "UNAUTHENTICATED. Con cuerpo `error: DEVICE_REVOKED` el dispositivo está revocado y la app borra credencial y clave; cualquier otro 401 no borra nada.", "headers": { "WWW-Authenticate": { "schema": { "type": "string" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "NoEncontrado": { "description": "NOT_FOUND (también lo que no existe para este operador)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Limitado": { "description": "RATE_LIMITED", "headers": { "Retry-After": { "schema": { "type": "integer", "minimum": 1 } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-      "NoDisponible": { "description": "UNAVAILABLE", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      "NoDisponible": { "description": "UNAVAILABLE", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Conflicto": { "description": "CONFLICT (p. ej. aprobar una acción ya descartada)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
     },
     "schemas": {
       "PeticionRetoPar": {
@@ -336,8 +369,8 @@
         "properties": {
           "id": { "$ref": "#/components/schemas/IdOpaco" },
           "seq": { "type": "integer", "minimum": 1, "description": "Orden estricto por operador. Solo informativo: el cursor es el único modo de avanzar." },
-          "tipo": { "enum": ["resumen_inicio", "resumen_cierre", "aviso", "alerta", "respuesta"] },
-          "categoria": { "enum": ["resumen", "reunion_proxima", "vencimiento", "documento_sin_leer", "espera_respuesta", "alerta_definida", "agrupado", "correccion_confirmada"] },
+          "tipo": { "enum": ["resumen_inicio", "resumen_cierre", "aviso", "alerta", "respuesta", "gemelo"], "description": "`gemelo`: Savia ha escrito en «Tu día con Savia» y la política de atención permite notificar; el contenido se lee en GET /gemelo." },
+          "categoria": { "enum": ["resumen", "reunion_proxima", "vencimiento", "documento_sin_leer", "espera_respuesta", "alerta_definida", "agrupado", "correccion_confirmada", "resumen_manana", "seguimiento"] },
           "creado_en": { "type": "string", "format": "date-time" },
           "programar_en": { "type": ["string", "null"], "format": "date-time", "description": "Si existe, la app programa la notificación local para ese instante (p. ej. reunión en 15 min)." },
           "caduca_en": { "type": ["string", "null"], "format": "date-time" },
@@ -446,7 +479,77 @@
           "ordenes": { "type": "array", "items": { "$ref": "#/components/schemas/FormaOrden" } }
         }
       },
-      "RespuestaOrden": { "oneOf": [{ "$ref": "#/components/schemas/OrdenEjecutada" }, { "$ref": "#/components/schemas/OrdenNoInterpretada" }] }
+      "RespuestaOrden": { "oneOf": [{ "$ref": "#/components/schemas/OrdenEjecutada" }, { "$ref": "#/components/schemas/OrdenNoInterpretada" }] },
+      "ConfigGemelo": {
+        "type": "object", "additionalProperties": false, "required": ["activo", "espera_horas", "latido_min"],
+        "properties": {
+          "activo": { "type": "boolean", "description": "Con `false` Savia no escribe primero." },
+          "espera_horas": { "type": "integer", "minimum": 1, "maximum": 168, "description": "Algo que espera respuesta desde hace más de estas horas merece seguimiento." },
+          "latido_min": { "type": "integer", "minimum": 5, "maximum": 240, "description": "Minutos entre revisiones." }
+        }
+      },
+      "PeticionLeido": { "type": "object", "additionalProperties": false, "required": ["seq"], "properties": { "seq": { "type": "integer", "minimum": 0 } } },
+      "Leido": {
+        "type": "object", "additionalProperties": false, "required": ["leido_hasta", "no_leidos"],
+        "properties": { "leido_hasta": { "type": "integer", "minimum": 0 }, "no_leidos": { "type": "integer", "minimum": 0 } }
+      },
+      "PeticionDecisionAccion": { "type": "object", "additionalProperties": false, "required": ["decision"], "properties": { "decision": { "enum": ["aprobar", "descartar"] } } },
+      "AccionPropuesta": {
+        "type": "object", "additionalProperties": false, "required": ["id", "tipo", "elemento_id", "estado", "contenido", "generado_por", "creada_en", "decidida_en", "ejecucion", "grant"],
+        "description": "Lo que Savia propone hacer. Nunca se ejecuta sin la aprobación de la persona. Sin proveedor de inferencia de la organización, `contenido` es una plantilla que lo dice en su primera línea.",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "tipo": { "enum": ["borrador_respuesta", "recordatorio", "revisar"] },
+          "elemento_id": { "$ref": "#/components/schemas/IdOpaco" },
+          "estado": { "enum": ["propuesta", "aprobada", "descartada"] },
+          "contenido": { "type": "string", "maxLength": 4000, "description": "Texto de Savia (plantilla), nunca texto de terceros." },
+          "generado_por": { "enum": ["plantilla"] },
+          "creada_en": { "type": "string", "format": "date-time" },
+          "decidida_en": { "type": ["string", "null"], "format": "date-time" },
+          "ejecucion": { "enum": ["entregada", "sin_ejecutor", null], "description": "Tras aprobar: `entregada` al ejecutor o `sin_ejecutor` (Soul v1 no escribe en las fuentes; la persona usa el contenido)." },
+          "grant": {
+            "oneOf": [{ "type": "null" }, { "type": "object", "additionalProperties": false, "required": ["en", "hash"], "properties": { "en": { "type": "string", "format": "date-time" }, "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } }],
+            "description": "Registro de la aprobación de esta acción concreta (sha256 de tipo, elemento y contenido)."
+          }
+        }
+      },
+      "AsuntoGemelo": {
+        "type": "object", "additionalProperties": false, "required": ["elemento_id", "motivo", "enlace", "espera_desde", "vence_en", "titulo", "accion"],
+        "properties": {
+          "elemento_id": { "$ref": "#/components/schemas/IdOpaco" },
+          "motivo": { "enum": ["espera_respuesta", "vence_hoy", "vence_manana", "depende_de_otros", "abierto", "cambio_importante"] },
+          "enlace": { "type": "string", "pattern": "^/api/v1/soul/elementos/[A-Za-z0-9_.-]{1,64}/porque$", "description": "Ruta de la API con la procedencia del asunto («¿por qué lo sé?»)." },
+          "espera_desde": { "type": ["string", "null"], "format": "date-time" },
+          "vence_en": { "type": ["string", "null"], "format": "date-time" },
+          "titulo": { "oneOf": [{ "$ref": "#/components/schemas/TextoInerte" }, { "type": "null" }], "description": "Con `titulos` y `completo`, y si el elemento sigue vivo. Nulo con `recuentos`." },
+          "accion": { "oneOf": [{ "$ref": "#/components/schemas/AccionPropuesta" }, { "type": "null" }] }
+        }
+      },
+      "MensajeGemelo": {
+        "type": "object", "additionalProperties": false, "required": ["id", "seq", "tipo", "autor", "creado_en", "texto", "notificado", "silencio", "asuntos"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/IdOpaco" },
+          "seq": { "type": "integer", "minimum": 1 },
+          "tipo": { "enum": ["resumen_manana", "seguimiento"] },
+          "autor": { "const": "savia" },
+          "creado_en": { "type": "string", "format": "date-time" },
+          "texto": { "type": "string", "maxLength": 600, "description": "Lenguaje natural de Savia, construido con plantillas en el portátil. Nunca contiene texto de terceros." },
+          "notificado": { "type": "boolean", "description": "Si la política de atención permitió notificar. Si no, el mensaje queda en el chat sin aviso." },
+          "silencio": { "enum": ["modo_activo", "presupuesto_agotado", "tope_alertas", "regla_activa", null] },
+          "asuntos": { "type": "array", "maxItems": 3, "items": { "$ref": "#/components/schemas/AsuntoGemelo" } }
+        }
+      },
+      "ConversacionGemelo": {
+        "type": "object", "additionalProperties": false, "required": ["titulo", "nivel", "generado_en", "leido_hasta", "no_leidos", "mensajes"],
+        "properties": {
+          "titulo": { "const": "Tu día con Savia" },
+          "nivel": { "$ref": "#/components/schemas/Nivel" },
+          "generado_en": { "type": "string", "format": "date-time" },
+          "leido_hasta": { "type": "integer", "minimum": 0 },
+          "no_leidos": { "type": "integer", "minimum": 0 },
+          "mensajes": { "type": "array", "maxItems": 500, "items": { "$ref": "#/components/schemas/MensajeGemelo" } }
+        }
+      }
     }
   }
 }

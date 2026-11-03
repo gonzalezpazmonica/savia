@@ -61,6 +61,16 @@ test("emitir: una acción propuesta por asunto, en estado propuesta y sin grant;
   assert.deepEqual(est.tratados, ["espera_respuesta|h-1"]);
 });
 
+test("resumen: lo que ya merece seguimiento no se repite; una espera bajo el umbral sí tendrá seguimiento", () => {
+  const est = estadoGemeloVacio();
+  const els = [el("h-viejo", "hilo_espera", { nace: AHORA - 30 * H }), el("h-nuevo", "hilo_espera", { nace: AHORA - 2 * H }), el("t-man", "tarea", { fecha: AHORA + 20 * H })];
+  emitirMensaje(est, "resumen_manana", seleccionarResumen(els, AHORA), AHORA, "op");
+  assert.deepEqual(est.tratados.sort(), ["espera_respuesta|h-viejo", "vence_manana|t-man"]);
+  const despues = AHORA + 23 * H;
+  const s = detectarSeguimientos(els, despues, est.config, new Set(est.tratados), AHORA);
+  assert.deepEqual(s.map((a) => a.elementoId), ["h-nuevo"], "h-nuevo cruza las 24 h y recibe seguimiento");
+});
+
 test("acción: nunca se ejecuta sin aprobar; aprobar registra el grant y entrega una sola vez", () => {
   const est = estadoGemeloVacio();
   emitirMensaje(est, "seguimiento", [{ elementoId: "h-1", motivo: "espera_respuesta", esperaDesde: AHORA - 30 * H, vence: null, accionId: null }], AHORA, "op");

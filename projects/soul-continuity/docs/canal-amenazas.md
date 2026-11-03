@@ -36,7 +36,7 @@
 
 **Lo que hace el código.**
 
-- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:165`). Versión mínima TLS 1.3 (`src/api/server.ts:638`).
+- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:173`). Versión mínima TLS 1.3 (`src/api/server.ts:755`).
 - El certificado X.509 v3 es propio de la instalación y autofirmado:
   - clave EC P-256;
   - `CA:false`, uso «firma digital», `serverAuth`;
@@ -58,7 +58,7 @@
 
 **Lo que hace el código.**
 
-- El emparejamiento lo abre el operador **en el terminal del portátil** (`soul pair`). Por la red solo existen `/v1/pair/challenge` y `/v1/pair/complete`, sin token y con la ventana abierta; sin ella responden 404 (`src/api/server.ts:166`, `:719-726`; punto 3 bis).
+- El emparejamiento lo abre el operador **en el terminal del portátil** (`soul pair`). Por la red solo existen `/v1/pair/challenge` y `/v1/pair/complete`, sin token y con la ventana abierta; sin ella responden 404 (`src/api/server.ts:174`, `:836-843`; punto 3 bis).
 - El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:35,51-54`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
 - `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:70,221-223`). Así, el token no pasa por el modelo de un agente.
@@ -77,7 +77,7 @@ Con la integración, la app puede emparejarse por la red con una **clave de empa
 
 **soul-pair-v1 retirado.** En v1 la clave del HMAC era un código Crockford de 10 caracteres (32^10 = 2^50). El servidor entrega `HMAC(código, …)` en `/v1/pair/challenge` sin que el cliente demuestre antes conocerlo, así que quien estuviera en la VPN durante la ventana podía pedir un reto y adivinar el código sin conexión: con una GPU que calcule unos 10^10 HMAC-SHA256 por segundo (≈ 2^33), recorrer 2^50 lleva 2^17 s ≈ 36 h, es decir, unas 220 GPU en los 10 minutos. Era el antiguo **P2-12**, cerrado con v2.
 
-**Lo que hace el código ahora.** La clave tiene el formato `soulpk_<30 base62>_<6 base62>` y sale de un CSPRNG: 30 caracteres con `randomInt(62)` dan 30 × log2(62) ≈ **178,6 bits** (`src/api/pairing.ts:45,76`). El sufijo es el CRC32 de la parte aleatoria: solo detecta errores de copia y no aporta seguridad (`:60-74`). La clave es la del HMAC con las etiquetas `soul-pair-v2|server|…` y `soul-pair-v2|client|…` (`:101-102`). Un reto sin `version` o con otra recibe 426 `PAIR_VERSION` con un mensaje que pide actualizar la app (`:163`, `src/api/server.ts:66`); una ventana v1 que quede en disco se trata como caducada y se borra (`src/api/pairing.ts:130`).
+**Lo que hace el código ahora.** La clave tiene el formato `soulpk_<30 base62>_<6 base62>` y sale de un CSPRNG: 30 caracteres con `randomInt(62)` dan 30 × log2(62) ≈ **178,6 bits** (`src/api/pairing.ts:45,76`). El sufijo es el CRC32 de la parte aleatoria: solo detecta errores de copia y no aporta seguridad (`:60-74`). La clave es la del HMAC con las etiquetas `soul-pair-v2|server|…` y `soul-pair-v2|client|…` (`:101-102`). Un reto sin `version` o con otra recibe 426 `PAIR_VERSION` con un mensaje que pide actualizar la app (`:163`, `src/api/server.ts:70`); una ventana v1 que quede en disco se trata como caducada y se borra (`src/api/pairing.ts:130`).
 
 **Cálculo.** El ataque sigue siendo posible en su forma (un reto basta para tener una prueba contra la que comparar), pero deja de ser viable: con un millón de GPU (2^20) a 2^33 HMAC/s durante los 600 s de la ventana (≈ 2^9,2) se prueban unas 2^62,2 claves. La probabilidad de acertar es 2^62,2 / 2^178,6 ≈ 2^-116. Incluso con el mínimo de la decisión (128 bits) sería ≈ 2^-66. Además la clave caduca a los 10 minutos y sirve una sola vez.
 
@@ -95,24 +95,24 @@ Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens d
 
 - `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:58-65`, `src/cli/cli.ts:465-468`).
 - `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:78-94`, `src/api/devices.ts:74-84`). La revocación vale en el acto, sin reiniciar.
-- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:620,713`).
-- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:711`).
+- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:737,830`).
+- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:828`).
 
 **Tests.** `test/devices.test.ts:21,30`; `test/serve.test.ts:80` (el dispositivo revocado recibe 401 con el servicio en marcha); `test/api/contrato.test.mjs:188`.
 
 **No cubierto.**
 
-- Los tokens caducan a los 90 días, configurable con `soul pair --days` (`src/api/devices.ts:32,46-54`), y `serve` rechaza el token caducado (`src/api/serve.ts:84`). No rotan: caducado, se vuelve a emparejar. La opción `caducidadToken` del servidor solo se usa en tests (`src/api/server.ts:153`, `test/api/contrato.test.mjs:213`) → **P2-8**.
+- Los tokens caducan a los 90 días, configurable con `soul pair --days` (`src/api/devices.ts:32,46-54`), y `serve` rechaza el token caducado (`src/api/serve.ts:84`). No rotan: caducado, se vuelve a emparejar. La opción `caducidadToken` del servidor solo se usa en tests (`src/api/server.ts:161`, `test/api/contrato.test.mjs:213`) → **P2-8**.
 - Solo se puede revocar desde el portátil. Ver el punto 5.
 
 ## 5. Móvil perdido o robado
 
-**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:551-561`; límite conocido del README). El token funciona, por tanto, como un token portador.
+**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:668-678`; límite conocido del README). El token funciona, por tanto, como un token portador.
 
 **Qué puede hacer quien tiene el móvil, mientras no se revoque:**
 
 - leer Q1–Q4 con el nivel de detalle vigente;
-- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:489-493`);
+- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:606-610`);
 - marcar elementos como resueltos, que desaparecen de la vista del operador;
 - cambiar el modo de atención y la configuración de avisos.
 
@@ -138,13 +138,13 @@ Con P1-1 cerrado, un token copiado ya no vale sin la clave del móvil; aun así,
 **Lo que hace el código.**
 
 - **Fuerza bruta del token:** el espacio es de 2^256. La comparación se hace sobre el SHA-256, en tiempo constante (`src/api/devices.ts:74-84`).
-- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:104`, `src/api/server.ts:668-682,732`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:673-676`).
-- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:629-645`).
+- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:104`, `src/api/server.ts:785-799,849`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:790-793`).
+- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:746-762`).
 - **Reenvío de solicitudes:**
   - TLS 1.3 impide capturarlas desde la red.
   - Las correcciones son idempotentes (`test/api/contrato.test.mjs:394`).
-  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:563-576`, `test/api/contrato.test.mjs:323`).
-- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:704`).
+  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:680-693`, `test/api/contrato.test.mjs:323`).
+- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:821`).
 
 **Tests.** `test/server.test.ts:64` (agotar el cupo desde una dirección no deja sin servicio a otra), `test/api/contrato.test.mjs:251` (429 con `Retry-After`) y `:213` (401 genérico ante token desconocido, cabecera ausente, esquema `Bearer` o falta de DPoP).
 
@@ -192,7 +192,7 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 | P2-6 | El README dice «token de un solo uso» y no lo es | Corregir el README, o introducir un código de emparejamiento de un solo uso con caducidad corta que la app canjea por el token — **Cerrado con soul-pair-v2:** clave de un solo uso con caducidad corta; la app obtiene el token al completar |
 | P2-7 | Un agente que borre las variables de entorno puede ejecutar `pair` | `pair` y `unpair` solo con terminal interactivo (`process.stdin.isTTY`) y confirmación tecleada |
 | P2-8 | Los tokens de dispositivo no caducan ni rotan | Caducidad configurable (por ejemplo 90 días) con renovación desde la app mientras el dispositivo siga emparejado — **Cerrado en la integración:** caducidad de 90 días configurable con `soul pair --days` (`src/api/devices.ts:46-54`); renovar desde la app queda pendiente: caducado, se vuelve a emparejar |
-| P2-9 | No hay límite de conexiones ni tiempos de espera propios | Fijar `maxConnections` (por ejemplo 32), `headersTimeout` 10 s, `requestTimeout` 15 s y `keepAliveTimeout` 5 s, con un test de conexiones lentas — **Cerrado en la integración:** `src/api/server.ts:172-182` fija `maxConnections` 32, `headersTimeout` 10 s, `requestTimeout` 15 s, `keepAliveTimeout` 5 s y saludo TLS de 10 s. El test comprueba la configuración, no una carga de conexiones lentas |
+| P2-9 | No hay límite de conexiones ni tiempos de espera propios | Fijar `maxConnections` (por ejemplo 32), `headersTimeout` 10 s, `requestTimeout` 15 s y `keepAliveTimeout` 5 s, con un test de conexiones lentas — **Cerrado en la integración:** `src/api/server.ts:186-196` fija `maxConnections` 32, `headersTimeout` 10 s, `requestTimeout` 15 s, `keepAliveTimeout` 5 s y saludo TLS de 10 s. El test comprueba la configuración, no una carga de conexiones lentas |
 | P2-10 | En Windows, la tarea de inicio de sesión no reintenta si la VPN no está lista | `RestartOnFailure` en el XML de la tarea (intervalo de 1 minuto, varios reintentos) o reintento interno de `serve` mientras la dirección no exista, con test |
 | P2-11 | No se ha verificado el comportamiento al volver la VPN, ni hay vigilancia de cambio de dirección | Reintento interno de la escucha: si la dirección desaparece, cerrar; si vuelve, abrir de nuevo. Test con una dirección que se añade y se quita (en Linux, `127.0.0.x` como sustituto) |
 | P2-12 | El desafío de emparejamiento da `HMAC(código, …)` sin compromiso previo del cliente: el código se puede adivinar sin conexión durante la ventana | Un PAKE (CPace o SPAKE2), o que el cliente se comprometa primero con el código, o un código más largo — **Cerrado con soul-pair-v2:** clave `soulpk_` de 178,6 bits; el ataque sin conexión queda en ≈ 2^-116 con un millón de GPU en la ventana (punto 3 bis). v1 se rechaza con 426 `PAIR_VERSION` |

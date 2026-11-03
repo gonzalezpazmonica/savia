@@ -265,7 +265,11 @@ export function emitirMensaje(est: EstadoGemelo, tipo: TipoMensaje, asuntos: Asu
   });
   const m: MensajeGemelo = { id: `g-${prefijoId}-${seq}`, seq, tipo, creado: ahora, texto: redactar(tipo, conAccion, ahora), asuntos: conAccion, notificado: false, silencio: null };
   est.mensajes.push(m);
-  if (tipo === "seguimiento") for (const a of conAccion) est.tratados.push(`${a.motivo}|${a.elementoId}`);
+  // Lo dicho no se repite como seguimiento por el mismo motivo. Del resumen solo cuenta lo que ya
+  // cumplía el criterio del seguimiento: una espera que aún no pasa del umbral sí tendrá seguimiento.
+  const yaCumple = (a: Asunto) => a.motivo === "vence_manana"
+    || (a.motivo === "espera_respuesta" && a.esperaDesde != null && ahora - a.esperaDesde > est.config.esperaHoras * HORA);
+  for (const a of conAccion) if (tipo === "seguimiento" || yaCumple(a)) est.tratados.push(`${a.motivo}|${a.elementoId}`);
   return m;
 }
 
