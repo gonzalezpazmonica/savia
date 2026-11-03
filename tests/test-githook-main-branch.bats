@@ -115,3 +115,34 @@ commits() { git -C "$R" rev-list --count HEAD; }
   run git -C "$R" commit -m en-main
   [ "$status" -ne 0 ]
 }
+
+# Instalación en repos sin core.hooksPath: scripts/install-git-hooks.sh --hooks-path
+inst() { bash "$ROOT/scripts/install-git-hooks.sh" --hooks-path --repo "$@"; }
+
+@test "instalador --hooks-path: activa el pre-commit en un repo sin core.hooksPath y bloquea main" {
+  git -C "$R" config --unset core.hooksPath
+  cambio a
+  run git -C "$R" commit -m sin-hook
+  [ "$status" -eq 0 ]
+  run inst "$R"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$R" config --get core.hooksPath)" = ".githooks" ]
+  cambio b
+  run git -C "$R" commit -m con-hook
+  [ "$status" -ne 0 ]
+  run inst "$R"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"sin cambios"* ]]
+}
+
+@test "instalador --hooks-path: no pisa otro core.hooksPath ni acepta un no-repo" {
+  git -C "$R" config core.hooksPath /otra/ruta
+  run inst "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pisa"* ]]
+  [ "$(git -C "$R" config --get core.hooksPath)" = "/otra/ruta" ]
+  mkdir -p "$BATS_TEST_TMPDIR/norepo"
+  run inst "$BATS_TEST_TMPDIR/norepo"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es un repositorio git"* ]]
+}
