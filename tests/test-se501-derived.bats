@@ -303,6 +303,13 @@ EOF
   echo '{"strict":true,"contexts":["Validate workspace","Confidentiality scan (PR)"]}' > "$T/prot.json"
   run bash "$REPO/scripts/derived-migration-check.sh"
   [ "$status" -eq 0 ]
+  # rev-1472 P2: un check retirado que sigue requerido bloquearía todas las PR → FAIL y lo nombra.
+  for old in "Verify Audit Signature" "PII & Confidentiality Scan (PR)"; do
+    printf '{"strict":true,"checks":[{"context":"Confidentiality scan (PR)"},{"context":"%s"}]}\n' "$old" > "$T/prot.json"
+    run bash "$REPO/scripts/derived-migration-check.sh"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"«$old» sigue entre los contextos requeridos"* ]]
+  done
   fake_gh FAIL
   run bash "$REPO/scripts/derived-migration-check.sh"
   [ "$status" -eq 2 ]
@@ -349,7 +356,7 @@ EOF
 
 # ── AC-6 y AC-15: workflows ─────────────────────────────────────────────────
 
-W="$BATS_TEST_DIRNAME/../scripts/workflow-secrets-check.py"
+W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
 
 @test "AC-6 positivo: confidentiality-main.yml solo push a main, contents: read, sin secretos, acciones por SHA" {
   run python3 "$W" main-audit "$REPO/.github/workflows/confidentiality-main.yml"
@@ -506,3 +513,15 @@ assert ".scm/sam-declarations.json" not in m.SCM_GENERATED_FILES
 PY
   [ "$status" -eq 0 ]
 }
+
+@test "rev-1472 P1-1: todo script que citan la migración y esta suite está versionado (ningún .gitignore lo oculta)" {
+  local f missing=0 n=0
+  while read -r f; do
+    n=$((n+1))
+    if ! git -C "$REPO" ls-files --error-unmatch "$f" >/dev/null 2>&1; then echo "sin versionar: $f"; missing=1; fi
+  done < <(grep -ohE 'scripts/[A-Za-z0-9_./-]+\.(sh|py)' "$REPO/scripts/derived-migration-check.sh" \
+             "$BATS_TEST_FILENAME" | sort -u)
+  [ "$n" -ge 5 ]
+  [ "$missing" -eq 0 ]
+}
+
