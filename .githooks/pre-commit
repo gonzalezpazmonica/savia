@@ -15,6 +15,36 @@ set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 rc=0
 
+# 0. Nunca commit en main/master (autonomous-safety). Complementa block-commit-to-main.sh, que analiza el
+# texto de la orden y no ve un script escrito y ejecutado en la misma orden ni git invocado con otro nombre.
+# Aquí decide git: la rama del repo del commit. HEAD separado (rebase, bisect) se permite. Si la rama no se
+# puede leer por otro motivo, se bloquea (fail-closed). Bypass consciente y registrado: SAVIA_ALLOW_MAIN_COMMIT=1.
+BRANCH="$(git symbolic-ref --short -q HEAD)"; ref_rc=$?
+if [ "$ref_rc" -ne 0 ] && [ "$ref_rc" -ne 1 ]; then
+    echo "🛑 RAMA: no se pudo leer la rama actual en $ROOT (git symbolic-ref salió con $ref_rc). Commit bloqueado." >&2
+    exit 1
+fi
+if [ "$ref_rc" -eq 0 ] && { [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; }; then
+    LOG_DIR="${SAVIA_TURN_SDLC_LOG_DIR:-$ROOT/output/turn-sdlc}"
+    if [ "${SAVIA_ALLOW_MAIN_COMMIT:-0}" = "1" ]; then
+        verdict=bypass
+    else
+        verdict=block
+    fi
+    mkdir -p "$LOG_DIR" 2>/dev/null
+    printf '{"ts":"%s","branch":"%s","action":"commit","verdict":"%s","source":"githook"%s}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$BRANCH" "$verdict" \
+        "$([ "$verdict" = bypass ] && printf ',"env":"SAVIA_ALLOW_MAIN_COMMIT=1"')" \
+        >> "$LOG_DIR/commit-guard.jsonl" 2>/dev/null \
+        || echo "⚠️  RAMA: no se pudo registrar en $LOG_DIR/commit-guard.jsonl" >&2
+    if [ "$verdict" = block ]; then
+        echo "🛑 RAMA: commit en $BRANCH bloqueado (autonomous-safety: nunca commit en main/master)." >&2
+        echo "   Crea una rama propia y commitea ahí: git switch -c agent/<tarea>" >&2
+        echo "   Si eres la operadora y el commit en $BRANCH es intencional: SAVIA_ALLOW_MAIN_COMMIT=1 git commit ... (queda registrado)." >&2
+        exit 1
+    fi
+fi
+
 # 1. Privacidad de proyectos
 if [ -f "$ROOT/scripts/protect-project-privacy.sh" ]; then
     bash "$ROOT/scripts/protect-project-privacy.sh" --hook || rc=1
