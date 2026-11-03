@@ -42,24 +42,50 @@ run_gate debt-budget bash "$ROOT/scripts/debt-budget-check.sh" "$ROOT"
 run_gate constitutional-contracts bash "$ROOT/scripts/contract-check.sh"
 run_gate constitutional-contracts bash "$ROOT/scripts/law-check.sh"
 run_gate constitutional-coverage python3 "$ROOT/scripts/constitutional-coverage.py" --root "$ROOT"
+# Cierre del harness (C F2-F5 + E + F + H). Hueco G3: estar presente y ser
+# ejecutable no es estar aplicado. PASS solo si el script está en el camino del
+# efecto (hook de .claude/settings.json, fichero de hook registrado o workflow de
+# CI; evaluador único: frontend-probe.sh --wired). Si no, DECLARED (WARN).
+CLOSURE_DECLARED=0
 for t in grounding-verify.sh validate-handoff.sh validate-handoff-integrity.sh checkpoint.sh effect-reservation.sh debt-burn-down.sh planning-transition.sh report-benchmark.sh; do
-  [[ -x "$ROOT/scripts/$t" || -x "$ROOT/tests/self-evolution/$t" ]] || { echo "WARN coherence/closure-$t"; FAILED=1; }
+  if [[ ! -x "$ROOT/scripts/$t" && ! -x "$ROOT/tests/self-evolution/$t" ]]; then
+    echo "WARN coherence/closure-$t: ausente o no ejecutable"; FAILED=1; CLOSURE_DECLARED=1; continue
+  fi
+  bash "$ROOT/scripts/frontend-probe.sh" --wired "$t" >/dev/null 2>&1; rc=$?
+  if [[ $rc -eq 0 ]]; then
+    echo "PASS coherence/closure-$t: en el camino del efecto"
+  elif [[ $rc -eq 1 ]]; then
+    echo "WARN coherence/closure-$t: DECLARED (presente, sin hook ni CI que lo aplique)"; FAILED=1; CLOSURE_DECLARED=1
+  else
+    echo "WARN coherence/closure-$t: DECLARED (no se pudo evaluar el cableado, exit $rc)"; FAILED=1; CLOSURE_DECLARED=1
+  fi
 done
-echo "PASS coherence/harness-closure: C F2-F5 + E + F + H tooling presente"
-# C F4/F5 y E/F/H: checks presentes y ejecutables (invocación sin argumentos = usage OK)
-for t in checkpoint.sh effect-reservation.sh debt-burn-down.sh planning-transition.sh; do
-  [[ -x "$ROOT/scripts/$t" ]] && echo "PASS coherence/closure-$t" || { echo "WARN coherence/closure-$t"; FAILED=1; }
-done
-python3 "$ROOT/scripts/eval-coverage-matrix.py" --root "$ROOT" >/dev/null 2>&1
-if python3 -c "
-import json
-d=json.load(open('$ROOT/output/eval-coverage-matrix.json'))
-bad=[r for r in d['rows'] if r['risk']=='L4' and not r['covered']]
-print('FAIL' if bad else 'OK', len(bad))" | grep -q FAIL; then
-  echo "BLOCK coherence/eval-coverage-L4: capability L4 perdió cobertura (SE-387 D)"
+if [[ $CLOSURE_DECLARED -eq 0 ]]; then
+  echo "PASS coherence/harness-closure: C F2-F5 + E + F + H aplicados por hook o CI"
+else
+  echo "WARN coherence/harness-closure: DECLARED (tooling presente, no todo en el camino del efecto)"
+fi
+# Eval coverage L4 (SE-387 D): sin matriz legible no hay PASS (fail-closed).
+EVAL_OUT=""
+if python3 "$ROOT/scripts/eval-coverage-matrix.py" --root "$ROOT" >/dev/null 2>&1; then
+  EVAL_OUT=$(python3 - "$ROOT/output/eval-coverage-matrix.json" <<'PYEOF' 2>/dev/null
+import json, sys
+d = json.load(open(sys.argv[1]))
+l4 = [r for r in d["rows"] if r["risk"] == "L4"]
+bad = [r for r in l4 if not r["covered"]]
+print(("FAIL" if bad or not l4 else "OK"), len(l4) - len(bad), len(l4))
+PYEOF
+)
+fi
+read -r EVAL_V EVAL_C EVAL_T <<< "${EVAL_OUT:-ERROR 0 0}"
+if [[ "$EVAL_V" == "OK" ]]; then
+  echo "PASS coherence/eval-coverage-L4: $EVAL_C/$EVAL_T cubiertas"
+elif [[ "$EVAL_V" == "FAIL" ]]; then
+  echo "BLOCK coherence/eval-coverage-L4: capability L4 perdió cobertura ($EVAL_C/$EVAL_T) (SE-387 D)"
   BLOCKED_FATAL=1
 else
-  echo "PASS coherence/eval-coverage-L4: 8/8 cubiertas (9 piezas)"
+  echo "BLOCK coherence/eval-coverage-L4: matriz de cobertura no evaluable (fail-closed, SE-387 D)"
+  BLOCKED_FATAL=1
 fi
 if [[ $BLOCKED_FATAL -eq 1 ]]; then
   echo "-- coherence gates: BLOCK (L4 graduado, SE-387 A1)"
