@@ -1,0 +1,10 @@
+{
+  "id": "SE-501",
+  "status": "APPROVED",
+  "priority": "P1",
+  "phase": "A",
+  "title": "Derivados fuera de las PR: firma de confidencialidad, SAM y manifiesto de reglas generados en main",
+  "evidence": "docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md",
+  "note": "Las PR dejan de versionar .confidentiality-signature, .scm/ generado, docs/rules/INDEX.md y rule-manifest.json (63/27/8/19 commits de main en 7 días a 2026-11-03; 12 PR abiertas chocando). En la PR: G20 rechaza D, la CI regenera y verifica sin versionar, escaneo de confidencialidad obligatorio con el escáner de la base. Tras el merge: opción B recomendada (no versionar, derived.sh ensure, prueba de main por ejecución de confidentiality-main.yml en push) frente a A (commit de bot en main, exige autoridad nueva). Tier 4: decide la operadora.",
+  "approval": "operadora, pregunta interactiva 2026-11-03 (Aprobada, implementa); se formaliza al fusionar (SE-488)"
+}
