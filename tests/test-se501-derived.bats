@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Ref: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md (opción B)
 # AC-1..AC-10, AC-12, AC-14, AC-15 con repos temporales, generadores espía y gh simulado. Nunca GitHub.
-# AC-13 vive en tests/test-merge-sprint-se501.bats; AC-11 (inventario de lectores) al final de este fichero.
+# AC-13 vive en tests/test-merge-sprint.bats y tests/test-merge-sprint-se500.bats (casos «SE-501 AC-13»); AC-11 (inventario de lectores) al final de este fichero.
 
 REPO="$BATS_TEST_DIRNAME/.."
 
@@ -556,5 +556,106 @@ PY
              "$BATS_TEST_FILENAME" | sort -u)
   [ "$n" -ge 5 ]
   [ "$missing" -eq 0 ]
+}
+
+# ── AC-11: inventario de lectores de D ──────────────────────────────────────
+# Lista declarada: cada fichero que nombra una ruta de D, con su clase.
+#   gen      genera D o es la herramienta de D (lista, canon, SAM)
+#   ref      solo nombra la ruta (filtros, exclusiones, texto); no lee el contenido de D
+#   ensure   llama a «derived.sh ensure» antes de leer D (el test lo comprueba)
+#   session  arranque: regenera en segundo plano y no espera (arranque blindado)
+#   pend     lee D y aún NO llama a ensure: AC-11 no cumplido para ellos (rev-1472, PR de seguimiento)
+AC11_DECLARED='
+gen scripts/derived.sh
+gen scripts/derived-paths.txt
+gen scripts/derived_canon.py
+gen scripts/generate-capability-map.py
+gen scripts/generate-capability-map.sh
+gen scripts/rule-manifest-generate.sh
+gen scripts/rules-index-generate.sh
+gen scripts/sam.py
+gen scripts/sam_model.py
+gen scripts/sam_surface.py
+gen scripts/sam_trace.py
+ref .claude/hooks/scope-guard.sh
+ref .claude/hooks/stop-dod-gate.sh
+ref config/ablation-contract.json
+ref config/edit-ledger-exclusions.txt
+ref config/kernel-candidate.json
+ref scripts/ablation_consumers.py
+ref scripts/llms-txt-generate.sh
+ref scripts/merge-registry-resolve.py
+ref scripts/merge-sprint.sh
+ref scripts/plan-diff-check.sh
+ref scripts/pr-plan-gates.sh
+ref scripts/push-pr.sh
+ref scripts/receipt-v2.sh
+ref scripts/resolve-pr-conflicts.sh
+ref scripts/risk-tier.py
+ref scripts/scope-creep-check.sh
+ref scripts/scope-trace-gate.sh
+ref scripts/setup-merge-drivers.sh
+ensure .github/workflows/ci.yml
+ensure scripts/ci-extended-checks.sh
+ensure scripts/readiness-check.sh
+ensure scripts/rule-manifest-integrity.sh
+ensure scripts/validate-ci-local.sh
+session .claude/hooks/session-init.sh
+session scripts/session-init-bootstrap.sh
+pend scripts/ablation_inventory.py
+pend scripts/ablation_kernel.py
+pend scripts/ablation_units.py
+pend scripts/capability-entropy.py
+pend scripts/dual-cli/audit.py
+pend scripts/dual-cli/config.py
+pend scripts/eval-coverage-matrix.py
+pend scripts/release-invariants.sh
+pend scripts/se397-f4-corpus.sh
+'
+AC11_SCOPE=(scripts .claude/hooks config .github/workflows)
+
+# ac11_diff <repo>: diferencias entre el inventario real (grep de la spec) y la lista declarada.
+ac11_diff() {
+  diff <(cd "$1" && grep -rlE --exclude-dir=__pycache__ '\.scm/|rule-manifest\.json|rules/INDEX\.md' -- "${AC11_SCOPE[@]}" 2>/dev/null | sort) \
+       <(awk 'NF==2{print $2}' <<<"$AC11_DECLARED" | sort)
+}
+
+@test "AC-11: el inventario de lectores de D coincide con la lista declarada; los de clase ensure llaman a ensure" {
+  run ac11_diff "$REPO"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  local c f
+  while read -r c f; do
+    [[ "$c" == ensure ]] || continue
+    grep -q 'derived.sh.\{0,2\} ensure' "$REPO/$f" || { echo "sin ensure: $f"; return 1; }
+  done <<<"$AC11_DECLARED"
+}
+
+@test "AC-11 negativo: un script nuevo que lee .scm/registry.json sin estar en la lista hace fallar el inventario" {
+  mkdir -p "$T/inv"
+  (cd "$REPO" && git ls-files -z -- "${AC11_SCOPE[@]}" | xargs -0 tar cf -) | tar xf - -C "$T/inv"
+  run ac11_diff "$T/inv"
+  [ "$status" -eq 0 ]
+  local n=nuevo-lector   # variable: el test rev-1472 P1-1 no debe tomarlo por un script del repo
+  echo 'json.load(open(".scm/registry.json"))' > "$T/inv/scripts/$n.py"
+  run ac11_diff "$T/inv"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"scripts/$n.py"* ]]
+}
+
+@test "AC-11: rule-manifest-integrity sin D genera con ensure; si ensure falla, el hallazgo nombra derived.sh ensure" {
+  mkrepo; fake_gens
+  cp "$REPO/scripts/rule-manifest-integrity.sh" "$R/scripts/"
+  G add -A; G commit -qm gens
+  [ ! -e "$R/docs/rules/domain/rule-manifest.json" ]
+  run bash "$R/scripts/rule-manifest-integrity.sh"
+  [ -f "$R/docs/rules/domain/rule-manifest.json" ]
+  [[ "$output" != *"rule-manifest.json not found"* ]]
+  # Negativo: sin generadores ensure falla; el script termina con ≠ 0 y nombra la orden.
+  mkdir -p "$T/apartado"
+  mv "$R/docs/rules/domain/rule-manifest.json" "$R/scripts/rule-manifest-generate.sh" "$R/scripts/rules-index-generate.sh" "$T/apartado/"
+  run bash "$R/scripts/rule-manifest-integrity.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"derived.sh ensure"* ]]
 }
 
