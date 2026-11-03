@@ -148,7 +148,7 @@ confidence_basis: "n_evidencias=3, independientes=2"   # cómo se llegó
 | 2 | uso | existe |
 | 3 | fichero no encontrado | existe |
 | 4 | falta autoría humana (`--human-trailer` ausente o con formato inválido, R10) | existe; R10 endurece el formato |
-| 5 | regresión de métrica canary | hoy está documentado pero no se usa (la regresión revierte a `proposed` y sale 0). Pasa a ser real: regresión según el recibo → revierte a `proposed` y sale 5 |
+| 5 | regresión de métrica canary | hoy está documentado pero no se usa (la regresión revierte a `proposed` y sale 0). Pasa a ser real: regresión según un recibo **ya validado** → revierte a `proposed` y sale 5 (el recibo se valida antes, R9) |
 | 6 | LP incompleta para `canary` (R7) | nuevo |
 | 8 | recibo de validación ausente, inválido o que no corresponde (R9) | nuevo |
 
@@ -157,9 +157,10 @@ El código 7 (ruta de autoridad, R8) lo devuelve `learning-proposal.sh` al captu
 ### R8 — Separación de conocimiento, capacidad y autoridad
 
 - `target` de una LP ∈ {`criterio`, `lesson`, `skill`, `script`}.
-- **Lista de rutas de autoridad** (`docs/rules/domain/learning-authority-paths.txt`): reglas de autonomía y merge, `.claude/settings.json`, registro de hooks, perfiles, grants y aprobaciones, la definición de niveles L0–L3 (`loop-phasing.md`, SCL-006), `learning-autonomy.sh` y esta propia lista.
+- **Lista de rutas de autoridad** (`docs/rules/domain/learning-authority-paths.txt`): reglas de autonomía y merge, `.claude/settings.json`, registro de hooks, perfiles, grants y aprobaciones, la definición de niveles L0–L3 (`loop-phasing.md`, SCL-006), esta propia lista y **los gates del propio aprendizaje**: `learning-autonomy.sh`, `learning-lifecycle.sh`, `learning-validate.sh`, `learning-rollback.sh`, `learning-proposal.sh`, `learning-recall.sh`, `learning-recall-hook.sh`, `code-refs.py` y el directorio de recibos `output/learning-loop/receipts/`. Una LP no puede proponer debilitar el gate que la valida.
 - Una LP cuyo `scope.paths` o diff toque esas rutas se rechaza **al capturarse** (exit 7), con mensaje que remite a una spec. Cambiar autoridad es trabajo de spec, no de aprendizaje.
-- **Normalización antes de comparar**: cada ruta de `scope.paths` y del diff se resuelve con `realpath -m` relativo a la raíz del repo (elimina `../`, `./` y enlaces simbólicos) y se compara también en minúsculas contra la lista. Una ruta que sale de la raíz del repo, o que no se puede resolver, se rechaza (fail-closed).
+- **Normalización antes de comparar**: cada ruta de `scope.paths` y del diff se resuelve con `realpath -m` relativo a la raíz del repo (elimina `../`, `./` y enlaces simbólicos que ya existen en el árbol) y se compara también en minúsculas contra la lista. Una ruta que sale de la raíz del repo, o que no se puede resolver, se rechaza (fail-closed).
+- **Symlinks en el diff**: `realpath` no resuelve un enlace que el propio diff crea, porque aún no está en el árbol base. Por eso se rechaza (exit 7) cualquier LP cuyo diff añada, modifique o cambie de tipo un enlace simbólico (modo git `120000`), apunte a donde apunte.
 
 ### R9 — Validación independiente con recibo
 
@@ -172,12 +173,13 @@ El código 7 (ruta de autoridad, R8) lo devuelve `learning-proposal.sh` al captu
   - debe **pasar** con el cambio;
   - más el `holdout` antes y después.
 - Escribe un **recibo** JSON en `output/learning-loop/receipts/` con:
-  - `lp_id` y `lp_hash` (sha256 del fichero de la LP sin el campo de estado);
+  - `lp_id` y `lp_hash`: sha256 del fichero de la LP **sin los campos que escribe el ciclo de vida** (`lifecycle`, `validation_receipt`, `human_trailer` y cualquier otro que escriba `learning-lifecycle.sh`; la lista exacta se fija como constante en el script y en este recibo, `lp_hash_excluded_fields`). Así activar la LP no cambia su `lp_hash`;
   - commit base y **`target_blobs`**: lista ordenada de `(ruta, id de blob git)` de los ficheros destino **después** del cambio. El recibo se liga al **contenido** resultante, no al commit: así sobrevive a una fusión squash o rebase, que crean otro commit con el mismo contenido;
   - lista congelada de `case_key` del `holdout`, métricas antes/después, resultado del test antes/después;
   - identidad del perfil validador y sesión validadora distinta de la proponente, y proveedor independiente si lo hay (opcional);
-  - `receipt_hash`: sha256 del propio recibo canonicalizado (claves ordenadas), que la activación cita en un trailer (R11).
+  - `receipt_hash`: sha256 del recibo canonicalizado (claves ordenadas) **sin el propio campo `receipt_hash`**, que la activación cita en un trailer (R11).
 - **Recálculo al promover.** `learning-lifecycle.sh --to active` **exige** `--validation-receipt` y no se fía de él: recalcula `lp_hash`, los `target_blobs` del árbol que se va a activar y el `receipt_hash`, y comprueba que la lista de `holdout` no está vacía y no contiene casos de `evidence`. Las métricas se leen del recibo, no de flags. Sin recibo, con recibo de otra LP, de otro contenido destino, con hash alterado o con `holdout` vacío: rechazo (exit 8). **El gate deja de poder saltarse omitiendo métricas.**
+- **Orden de comprobación**: primero se valida el recibo entero (exit 8 ante cualquier fallo); solo con un recibo válido se evalúan sus métricas, y una regresión da exit 5. Un recibo con una métrica editada a mano es exit 8, nunca 5, porque su hash ya no cuadra.
 - **Límite declarado.** El recibo es un fichero que puede escribir quien tenga shell; la «sesión validadora distinta» la declara quien llama. El recálculo impide reutilizar un recibo para otro contenido o editarlo a mano sin que cambie su hash, pero no prueba que la validación la hiciera otra entidad. La garantía de autoridad sigue siendo la revisión humana de R10, no el recibo.
 - Si el corpus SE-364 no da casos (ver «Dependencias»), no hay promoción: exit 8 con el motivo.
 
@@ -186,19 +188,22 @@ El código 7 (ruta de autoridad, R8) lo devuelve `learning-proposal.sh` al captu
 - **Lo que se escribe es la intención; `active` se deriva.** `learning-lifecycle.sh --to active` escribe en la LP `lifecycle: activation_requested` y `validation_receipt: <receipt_hash>`. Nunca escribe `active`.
 - **Estado derivado** (lo calcula `learning-lifecycle.sh status <LP>` y lo consume recall), por este orden:
   1. `expired` si `expires_at` ya pasó (R12);
-  2. `active` si en el historial de `origin/main` hay un commit con los trailers `Learning-Proposal: <lp_id>` y `Validation-Receipt: <receipt_hash>` (`git log origin/main --format=… --grep`, sin red) **y** los blobs de los ficheros destino en ese commit coinciden con `target_blobs` del recibo **y** el recibo se recalcula válido (R9);
-  3. `pending_activation` en cualquier otro caso con `activation_requested` (por ejemplo, la activación solo existe en una rama `agent/*`, o el commit de main no tiene los trailers o tiene otro contenido).
+  2. `rolled_back` si en `origin/main` hay un commit con el trailer `Learning-Rollback: <lp_id>` (R11) **posterior** al último commit de activación de esa LP;
+  3. `active` si se cumplen **las cuatro**: (a) en el historial de `origin/main` hay un commit con los trailers `Learning-Proposal: <lp_id>` y `Validation-Receipt: <receipt_hash>` (`git log origin/main --format=… --grep`, sin red); (b) los blobs de los ficheros destino en ese commit coinciden con `target_blobs` del recibo; (c) los blobs de esos ficheros **en la punta actual** de `origin/main` siguen coincidiendo con `target_blobs`; (d) el recibo se recalcula válido (R9). La condición (c) cierra el hueco del revert: un `git revert` (o cualquier cambio posterior del destino) deja el commit de activación en el historial con sus trailers, pero cambia los blobs de la punta, así que la LP deja de ser `active` aunque falte el trailer de rollback;
+  4. `pending_activation` en cualquier otro caso con `activation_requested` (por ejemplo, la activación solo existe en una rama `agent/*`, el commit de main no tiene los trailers o tiene otro contenido, o el destino cambió después en main).
 - **Por qué funciona tras squash o rebase**: no se exige que el commit validado sea ancestro de main, sino que main contenga un commit con el **mismo contenido destino** y los **trailers** de la LP. La fusión squash de GitHub conserva los trailers en el mensaje y el rebase conserva el commit entero. Si una fusión los pierde, la LP queda `pending_activation` (fail-closed) y se reactiva con un commit en main que los lleve; no hay revalidación implícita.
 - **Límite declarado** (como en R4): la comprobación usa la ref local `origin/main`, que alguien con shell puede mover (`git update-ref`, `fetch` desde otro remoto). La spec no lo presenta como control de autoridad. Con SE-488 implementada, el recibo de aprobación por fusión sustituye a la búsqueda en `origin/main` y cierra ese hueco.
-- **`--human-trailer` deja de aceptar texto libre**: debe casar con una regex cerrada (`^(sha:[0-9a-f]{40}|se488:[A-Za-z0-9._-]{1,64})$`, commit de merge o id de recibo de SE-488). Cualquier otro valor → exit 4. Además, ningún valor de usuario (`--human-trailer`, `--actor`, `--reason`) se interpola en una expresión de `sed` ni se concatena en JSON: el fichero se reescribe con un editor que trata el valor como dato y el ledger se serializa con un codificador JSON. Hoy `learning-lifecycle.sh` interpola `$HUMAN_TRAILER` en `sed -i "s/…/…/"`, lo que permite ejecutar órdenes con el comando `e` de GNU sed, y mete `$ACTOR` y `$REASON` sin escapar en el JSON del ledger.
+- **Límite declarado (contenido concurrente)**: si otra PR cambia un fichero destino entre la validación y la fusión, o después, los blobs no coinciden con `target_blobs` y la LP queda `pending_activation`. Es fail-closed a propósito: el contenido activo ya no es el validado. Se reactiva con un recibo nuevo sobre el contenido actual.
+- **`--human-trailer` deja de aceptar texto libre**: la cadena **completa** debe casar con una regex cerrada (`^(sha:[0-9a-f]{40}|se488:[A-Za-z0-9._-]{1,64})$`, commit de merge o id de recibo de SE-488), evaluada sobre el valor entero con `[[ "$v" =~ … ]]` y no línea a línea con `grep`; cualquier valor con salto de línea (`\n`) o retorno de carro (`\r`) se rechaza antes de la regex. Cualquier otro valor → exit 4. Además, ningún valor de usuario (`--human-trailer`, `--actor`, `--reason`) se interpola en una expresión de `sed` ni se concatena en JSON: el fichero se reescribe con un editor que trata el valor como dato y el ledger se serializa con un codificador JSON. Hoy `learning-lifecycle.sh` interpola `$HUMAN_TRAILER` en una expresión de sustitución de `sed`, lo que permite ejecutar órdenes, y mete `$ACTOR` y `$REASON` sin escapar en el JSON del ledger. Esta parte es el slice S0 (ver «Plan por slices»).
 - `learning-recall.sh --mode effective` solo inyecta LP en estado derivado `active`.
 
 ### R11 — Reversible con un commit
 
 - La activación es **un único commit** que solo toca el destino de la LP y su fichero, con los trailers `Learning-Proposal: LP-…` y `Validation-Receipt: <receipt_hash>`.
 - `learning-lifecycle.sh` rechaza la activación si el diff toca otra cosa.
-- `learning-rollback.sh --lp <id>` localiza en la rama actual el commit con esos trailers (el de main tras squash o rebase, si ya está fusionado) y lo revierte con `git revert`. Registra el motivo en `rollback.jsonl`. Si encuentra cero o más de un commit candidato, no revierte nada y sale con error (no elige).
-- **Prueba de reversibilidad**: tras el revert, el árbol del destino queda idéntico, byte a byte, al del commit base. Se arregla así el NOOP actual con activaciones ya commiteadas.
+- `learning-rollback.sh --lp <id>` localiza en la rama actual el commit de activación vigente (el de main tras squash o rebase, si ya está fusionado) y lo revierte con `git revert`. El commit de revert lleva el trailer `Learning-Rollback: <lp_id>`, que R10 usa para derivar `rolled_back`. Registra el motivo en `rollback.jsonl`.
+- **Commit candidato**: es un commit con los trailers de activación de la LP **posterior** al último commit con `Learning-Rollback: <lp_id>` (o cualquiera, si nunca hubo rollback). Así, una LP reactivada tras un rollback tiene un único candidato: la reactivación. Si hay cero candidatos, o más de uno (por ejemplo, un squash que repite trailers ya presentes en otro commit sin rollback entre medias), no revierte nada y sale con error: no elige.
+- **Prueba de reversibilidad**: con un revert inmediato (sin commits posteriores sobre el destino), el árbol del destino queda idéntico, byte a byte, al del commit base. Si hubo commits posteriores sobre el destino y el revert da conflicto, el script aborta el revert (`git revert --abort`), no deja el árbol a medias y sale con error. Se arregla así el NOOP actual con activaciones ya commiteadas.
 
 ### R12 — Caducidad
 
@@ -242,11 +247,11 @@ Un test guardián recorre estos cuatro sitios y falla si reaparece una concesió
 **Parte 2**
 
 - **AC-10** `--to canary` de una LP sin `scope`, sin `expires_at` o con `regression_test` inexistente → exit 6. Una LP anterior a esta spec se sigue leyendo sin error.
-- **AC-11** LP con `scope.paths` sobre `.claude/settings.json` → rechazo en la captura (exit 7). Lo mismo para una ruta de `learning-authority-paths.txt` alcanzada por un enlace relativo (`../`), por un enlace simbólico dentro del repo o con otras mayúsculas. Una ruta que sale de la raíz del repo → rechazo.
-- **AC-12** `--to active` sin `--validation-receipt` → exit 8, **también** sin flags de métricas (hoy pasa). Recibo de otra LP, de otro contenido destino (`target_blobs`), con una métrica editada a mano (cambia `receipt_hash`) o con `holdout` vacío → exit 8. Regresión de métrica según el recibo → vuelve a `proposed` y exit 5 (hoy sale 0).
+- **AC-11** LP con `scope.paths` sobre `.claude/settings.json` → rechazo en la captura (exit 7). Lo mismo para una ruta de `learning-authority-paths.txt` alcanzada por un enlace relativo (`../`), por un enlace simbólico dentro del repo o con otras mayúsculas. Una ruta que sale de la raíz del repo → rechazo. LP con `target: script` cuyo diff toca `scripts/learning-lifecycle.sh` (gate del aprendizaje) → exit 7. LP cuyo diff crea un symlink nuevo, aunque apunte a una ruta inocua → exit 7. Caso negativo: LP sobre una skill normal sin symlinks → aceptada.
+- **AC-12** `--to active` sin `--validation-receipt` → exit 8, **también** sin flags de métricas (hoy pasa). Recibo de otra LP, de otro contenido destino (`target_blobs`), con una métrica editada a mano (cambia `receipt_hash`) o con `holdout` vacío → exit 8. Regresión de métrica según un recibo válido → vuelve a `proposed` y exit 5 (hoy sale 0). Recibo con una métrica de regresión editada a mano → exit 8, no 5. Ciclo completo validar → `--to active` (escribe `lifecycle` y `validation_receipt`) → recálculo: el `lp_hash` coincide con el del recibo y el `receipt_hash` se recalcula igual.
 - **AC-13** `learning-validate.sh` con un `regression_test` que ya pasa en el commit base (con el test superpuesto) → veredicto `INVALID_TEST` y sin promoción posible. Un test nuevo que falla de verdad en la base con el fichero superpuesto → válido; uno cuyo fallo en la base es «no encontrado» → `INVALID_TEST`. Para `target: lesson`, un test que solo busca el texto en el fichero → `INVALID_TEST`. Los casos de `evidence` no aparecen en el `holdout` del recibo. Regenerar el corpus con los casos en otro orden no cambia la partición.
-- **AC-14** LP con `activation_requested` cuyo commit de activación solo existe en una rama `agent/*` → estado derivado `pending_activation`, y `learning-recall.sh --mode effective` no la inyecta. La misma activación fusionada en un repo de prueba por squash (otro commit, mismo contenido y trailers) → `active`. Fusionada por squash sin los trailers → `pending_activation`. `--human-trailer "cualquier-cosa"` → exit 4. `--human-trailer 'x/;e id;#'`, `--actor` y `--reason` con comillas, barras y saltos de línea → exit 4 o valor escrito literal, sin ejecutar nada (fichero centinela no creado) y ledger que sigue siendo JSON válido.
-- **AC-15** Activación de una LP y luego `learning-rollback.sh --lp <id>` → el destino queda byte a byte igual que en el commit base. Hay una entrada en `rollback.jsonl`. Activación cuyo diff toca otro fichero → rechazo.
+- **AC-14** LP con `activation_requested` cuyo commit de activación solo existe en una rama `agent/*` → estado derivado `pending_activation`, y `learning-recall.sh --mode effective` no la inyecta. La misma activación fusionada en un repo de prueba por squash (otro commit, mismo contenido y trailers) → `active`. Fusionada por squash sin los trailers → `pending_activation`. `--human-trailer "cualquier-cosa"` → exit 4. `--human-trailer` con dos líneas, la primera válida (`sha:<40 hex>`) y la segunda no → exit 4. `--human-trailer` con una carga que use el comando de ejecución de GNU sed, y `--actor` y `--reason` con comillas, barras y saltos de línea → exit 4 o valor escrito literal, sin ejecutar nada (fichero centinela no creado) y ledger que sigue siendo JSON válido. Caso negativo: `sha:<40 hex>` en una sola línea → aceptado.
+- **AC-15** Activación de una LP y luego `learning-rollback.sh --lp <id>` (revert inmediato) → el destino queda byte a byte igual que en el commit base. Hay una entrada en `rollback.jsonl`. Activación cuyo diff toca otro fichero → rechazo. En un repo de prueba: activar, fusionar en `origin/main` (`status` = `active`), revertir y fusionar el revert → `status` = `rolled_back` y `learning-recall.sh --mode effective` no la inyecta. Revert manual sin trailer `Learning-Rollback` → `status` ≠ `active` (por la condición (c) de R10). Reactivar tras el rollback → un único candidato y `status` = `active`. Rollback con un conflicto por commits posteriores sobre el destino → error, árbol sin cambios.
 - **AC-16** LP con `expires_at` vencido → estado `expired`, sin inyección en recall y listada en `learning-report.sh`.
 - **AC-17** `learning-autonomy.sh --p-consistent 0.9 --requested L2` sin otorgamiento humano → DENIED (hoy GRANTED). Con otorgamiento L1 y `p = 0,9` → concede L1, no más. Con `p = 0,4` y otorgamiento L3 → L0 (la cifra baja el techo).
 - **AC-18** Test guardián de R13 en verde. Mutar `learning-autonomy.sh` para que vuelva a conceder L2 solo por `p` lo pone en rojo.
@@ -258,6 +263,7 @@ Cada AC tiene un test BATS o pytest con su caso negativo. Los que prueban compor
 
 | Slice | Contenido | AC | Riesgo |
 |---|---|---|---|
+| S0 | `learning-lifecycle.sh`: `--human-trailer` con regex cerrada sobre la cadena completa, sin interpolación en `sed` y ledger con codificador JSON (parte de R10) | parte de 14 | L2 |
 | S1 | `code-refs.py`: resolutores Python, Bash y Markdown, hash normalizado, estados, `check` | 1–4 | L1 |
 | S2 | `reground` con negativa autónoma, `suggest`, aviso en `pr-plan`, grafo (R5) | 5, 7, 8 | L2 |
 | S3 | Etiqueta de deriva en `vault_rag`, bancos y medición | 6, 9 | L2 |
@@ -266,9 +272,9 @@ Cada AC tiene un test BATS o pytest con su caso negativo. Los que prueban compor
 | S6 | Activación de un commit y rollback por trailer | 15 | L2 |
 | S7 | R13: autonomía como techo, playbook-evolve, instintos, skill-lifecycle, test guardián | 17–19 | L3 |
 
-S1 a S3 y S4 a S7 son independientes entre sí. S7 necesita la aprobación expresa del cambio sobre SCL-006.
+S0, S1 a S3 y S4 a S7 son independientes entre sí. S7 necesita la aprobación expresa del cambio sobre SCL-006.
 
-Prioridad: S5 y S7 van primero dentro de la parte 2. Esta spec documenta en un repo público debilidades activas de los gates de aprendizaje (gate saltable omitiendo métricas, trailer humano libre e interpolado en `sed`, L2 sin persona); son de autogobierno interno y no se explotan desde fuera, pero la ventana debe ser corta.
+Prioridad: S0 va antes que cualquier otro slice: es la corrección más barata y cierra una inyección de órdenes. Después, S5 y S7 dentro de la parte 2. Esta spec documenta en un repo público debilidades activas de los gates de aprendizaje (gate saltable omitiendo métricas, trailer humano libre e interpolado en `sed`, L2 sin persona); son de autogobierno interno y no se explotan desde fuera, pero la ventana debe ser corta.
 
 ## Dependencias
 
