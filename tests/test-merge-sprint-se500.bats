@@ -332,11 +332,11 @@ integrate_by_hand() {  # integrate_by_hand <n> [byte] : integra main en pr-<n> c
 
 @test "AC-11b block: el resolutor rechaza refs inválidas, una ruta fuera de la lista cerrada y una ruta sin argumentos" {
   run python3 "$RESOLVER_PY" resolve --repo . --base HEAD --head HEAD --main HEAD --refs '["SE-1\n"]' --path docs/propuestas/LOG.md --out "$TMPDIR_T/x"
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 2 ]; [[ "$output" == *"refs con ids inválidos"* ]]
   run python3 "$RESOLVER_PY" resolve --repo . --base HEAD --head HEAD --main HEAD --refs '[]' --path scripts/merge-sprint.sh --out "$TMPDIR_T/x"
   [ "$status" -eq 2 ]; [[ "$output" == *"scripts/merge-sprint.sh"* ]]
   run python3 "$RESOLVER_PY" resolve --repo .
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 2 ]; [[ "$output" == *"merge-registry-resolve: "* ]]
 }
 
 # ── derivados: generadores falsos deterministas en main ──
@@ -367,7 +367,9 @@ derived_tamper() {  # derived_tamper <n> <ruta> : PR con un fichero; main avanza
   v2_pr "$1" "x$1.txt" "pr$1"
   main_moves "y$1.txt" main
   G switch -q --detach "$(branch_sha "$1")"; G merge -q --no-edit origin/main >/dev/null
-  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate && bash scripts/roadmap.sh render)
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  # Solo el derivado bajo prueba difiere de main: así el test aísla su comparación (el resto coincide o no existe).
+  [[ "$2" != docs/propuestas/ROADMAP-CURRENT.md ]] || (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/roadmap.sh render)
   G add -A; G commit -qm "derivados regenerados" >/dev/null
   mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"; echo manipulado >> "$MERGE_SPRINT_GIT_ROOT/$2"
   G add -A; G commit -qm "derivado tocado" >/dev/null; G push -q origin "HEAD:pr-$1"; G switch -q main
@@ -436,20 +438,22 @@ canon_same() { python3 "$RESOLVER_PY" same "$1" "$TMPDIR_T/a" "$TMPDIR_T/b"; }
   printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n| SE-1 | REJECTED |\n' > "$TMPDIR_T/b"
   run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 1 ]
   printf '<!-- Last regenerated: 2026-11-03T10:00:00Z --> colado\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
-  run canon_same docs/propuestas/INDEX.md; [ "$status" -ne 0 ]
+  run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 2 ]; [[ "$output" == *"línea de fecha"* ]]
   printf '<!-- Last regenerated: 2026-11-03T10:00:00Z -->\n<!-- Last regenerated: 2026-11-03T10:00:01Z -->\n| SE-1 | APPROVED |\n' > "$TMPDIR_T/b"
-  run canon_same docs/propuestas/INDEX.md; [ "$status" -ne 0 ]
+  run canon_same docs/propuestas/INDEX.md; [ "$status" -eq 2 ]; [[ "$output" == *"línea de fecha"* ]]
   echo '{"generated":"2026-11-03T10:00:00Z","rules":["a","b"]}' > "$TMPDIR_T/a"
   echo '{"generated":"2026-11-03T10:00:00Z","rules":["a"]}' > "$TMPDIR_T/b"
   run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 1 ]
   echo '{"rules":["a","b"]}' > "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -ne 0 ]
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 2 ]; [[ "$output" == *"generated válido"* ]]
 }
 
 @test "AC-5b block: generated de rule-manifest.json terminado en \\n no es equivalente" {
   echo '{"generated":"2026-11-03T10:00:00Z","rules":[]}' > "$TMPDIR_T/a"
+  cp "$TMPDIR_T/a" "$TMPDIR_T/b"
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 0 ]   # control: el mismo manifiesto sí es equivalente
   printf '{"generated":"2026-11-03T10:00:00Z\\n","rules":[]}\n' > "$TMPDIR_T/b"
-  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -ne 0 ]
+  run canon_same docs/rules/domain/rule-manifest.json; [ "$status" -eq 2 ]; [[ "$output" == *"generated válido"* ]]
 }
 
 fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; firmador que deja una marca congelada
