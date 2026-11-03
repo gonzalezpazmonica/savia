@@ -61,14 +61,15 @@ El token de `gh` de esta máquina tiene permiso de administración sobre el repo
 
 Todas publican el mismo punto de anclaje (Requisito 1). Difieren en quién puede borrarlo o falsificarlo.
 
-### A1 — Comentario en la PR
+### A1 — Comentario en un issue de anclas
 
-Tras cada `MERGED`, merge-sprint publica en la PR fusionada un comentario con el punto de anclaje del ledger y del registro de revisiones.
+Tras cada `MERGED`, merge-sprint publica un comentario con el punto de anclaje de sus tres cadenas (ledger, revisiones y juez) en un issue fijo de anclas de la instalación. Su número figura en el registro de altas de `origin/main` (R6), no en la configuración local, para que `verify` sepa dónde leer aunque el ledger se haya truncado: si el ancla viviera en la PR fusionada, la PR solo se conocería por la entrada `MERGED` que el truncado acaba de borrar. Opcionalmente se repite en la PR fusionada, solo para quien la lea.
 
-- **Coste:** una llamada a la API por merge (`gh pr comment`), sin preparación ni intervención humana. Cero ficheros nuevos.
+- **Coste:** una llamada a la API por merge (`gh issue comment`), sin intervención humana. Preparación única: abrir el issue y darlo de alta (R6).
 - **Garantía:** débil. El comentario lo escribe la misma cuenta que usa el agente, que puede editarlo o borrarlo. GitHub guarda el historial de ediciones de un comentario, pero el borrado no deja rastro visible en un repo de usuario. Detecta una reescritura solo si alguien compara, y deja un registro público con fecha que otra persona puede haber visto o archivado.
 - **Exposición:** el repo es público. El punto de anclaje solo contiene longitud y hash; las entradas del ledger son poco entrópicas (número de PR, fecha, tier), así que el hash no oculta mucho, pero tampoco revela nada que la PR no muestre ya. Solo sirve para cadenas cuyo contenido sea ya público, es decir, merge-sprint.
-- **Encaje:** solo merge-sprint, porque cada entrada importante tiene su PR. Yema y SE-493 no tienen dónde comentar.
+- **Encaje:** solo merge-sprint. Yema y SE-493 tienen identificadores privados y no pueden usar transportes públicos (R1).
+- **Depende de R6.** Sin estado pegajoso, borrar los comentarios devuelve la cadena a `UNANCHORED` y A1 no detecta nada frente al actor modelado. Con R6, borrarlos todos da `FAIL`. Borrar solo los k últimos y truncar k entradas sigue sin detectarse por A1: ese hueco lo cierran A2b y la copia local como prueba en negativo (R2.5).
 
 ### A2 — Commit en un historial que el agente no reescribe sin dejar rastro
 
@@ -88,9 +89,9 @@ Dos variantes:
 La operadora firma el punto de anclaje con su clave ed25519, la misma que firma los grants de merge, desde el móvil o desde Savia Space. Namespace propio `savia-evidence-anchor`, distinto de `savia-operator-grant`, para que una firma de ancla no pueda reutilizarse como grant ni al revés. La firma se verifica contra `config/operator-grant-signers` de `origin/main`, con la misma función que `operator-grant.sh`.
 
 - **Coste:** una acción humana por punto de anclaje (abrir la petición en el móvil y firmar, en torno a un minuto). Inviable por merge o por efecto. Viable en hitos: cierre de un merge-sprint, cierre o revocación de un contrato de Yema, resolución manual de un efecto de SE-493.
-- **Garantía:** alta. Ningún agente en esta máquina puede fabricar la firma, tenga el token que tenga. Es la única opción cuya garantía no depende de GitHub.
+- **Garantía:** alta contra la **fabricación**: ningún agente en esta máquina puede crear una firma válida, tenga el token que tenga. No protege contra la **ocultación**: si la firma solo estuviera junto a la cadena, el mismo agente podría borrarla y la cadena volvería a `UNANCHORED`. Por eso cada ancla firmada se publica también en el transporte continuo de la cadena (A1 en merge-sprint, A2b en todas si está configurada) y el registro de altas (R6) convierte su ausencia en `FAIL`. Es la única opción cuya garantía contra la fabricación no depende de GitHub.
 - **Límite:** protege hasta el último punto firmado. Lo escrito después del último hito sigue expuesto a truncado hasta el siguiente.
-- **Exposición:** ninguna. La firma se guarda junto a la cadena, fuera del repo.
+- **Exposición:** ninguna para el contenido. La firma se guarda junto a la cadena, fuera del repo, y su copia viaja por el transporte de la cadena (privado para Yema y SE-493).
 
 ### Descartadas
 
@@ -105,7 +106,7 @@ La operadora firma el punto de anclaje con su clave ed25519, la misma que firma 
 | Effect Ledger (SE-493) | A2b | en cada `resolve` manual, que ya exige grant firmado: el punto de anclaje viaja dentro de la misma petición firmada |
 | Evidencia de Yema | A2b | al pasar un contrato a un estado terminal o a `suspendido` |
 
-Sin A2b configurada, la cadena queda con A1 (solo merge-sprint) y A3 en hitos, y el verificador lo dice (Requisito 4).
+Sin A2b configurada, la cadena queda con A1 (solo merge-sprint) y A3 en hitos, y el verificador lo dice (Requisito 4). En los tres casos, la garantía frente a la ocultación depende del alta de R6.
 
 ## Requisitos
 
@@ -113,31 +114,45 @@ Sin A2b configurada, la cadena queda con A1 (solo merge-sprint) y A3 en hitos, y
 
 Esquema `savia-anchor/1`, JSON canónico (`sort_keys`, separadores compactos, UTF-8):
 
-- `chain`: identificador opaco de la cadena. Para merge-sprint, `merge-sprint/ledger`, `merge-sprint/reviews` y `merge-sprint/judge`. Para Yema y SE-493, `yema/<h>` y `effects/<h>`, con `<h>` = los 16 primeros hex del sha256 del identificador local, para no publicar identificadores de contrato.
+- `chain`: identificador opaco de la cadena. Para merge-sprint, `merge-sprint/ledger`, `merge-sprint/reviews` y `merge-sprint/judge`. Para Yema y SE-493, `yema/<h>` y `effects/<h>`, con `<h>` = los 16 primeros hex del sha256 del identificador local. Ese seudónimo no tiene sal y un identificador de contrato tiene poca entropía, así que se revierte por fuerza bruta: **no oculta nada ante quien lea el ancla**. Por eso `yema/*` y `effects/*` solo pueden viajar por transportes privados (A2b y A3). `checkpoint` rechaza `pr-comment` para ellas y `verify` da `FAIL` si encuentra uno de sus puntos en un transporte público.
 - `install_id`: el de la instalación (el mismo de SE-493), para que dos máquinas no se pisen las anclas.
 - `length`: número de entradas.
-- `head`: el hash de la última entrada con la regla de esa cadena (sha256 de la línea para merge-sprint, campo `hash` para Yema, `prev_hash` siguiente para SE-493). Cadena vacía: `length: 0`, `head: "genesis"`.
+- `head`: hash de la entrada en la posición `length` (1-indexada), según esta tabla. Cadena vacía: `length: 0`, `head: "genesis"`.
+
+| Cadena | `head` de la entrada i | Dónde está | Qué hace el verificador |
+|---|---|---|---|
+| merge-sprint (ledger, revisiones, juez) | sha256 de la línea i tal como está en el fichero, sin el `\n` final | no es un campo: es el `prev` que llevaría la línea i+1 | lo recalcula sobre los bytes de la línea i |
+| Yema | campo `hash` de la línea i | en la propia entrada | lo lee y comprueba que casa con sha256(`prev` + cuerpo canónico) |
+| SE-493 | hash canónico del recibo i, el mismo valor que el recibo i+1 llevaría en `prev_hash` | no es un campo del recibo i | lo recalcula con la regla de canonicalización de SE-493; para el último recibo no hace falta un recibo siguiente |
+
 - `ts`: instante UTC.
 - `transport`: `pr-comment`, `anchor-branch` o `operator-signed`.
 
 ### R2 — Verificador común
 
-`scripts/evidence-anchor.py verify --chain <id> --file <ruta> --anchors <ruta>`, con `python3 -I` y solo stdlib:
+`scripts/evidence-anchor.py verify --chain <id> --file <ruta> [--local-anchors <ruta>] [--offline]`, con `python3 -I` y solo stdlib. Las anclas salen de los transportes (R3). `--local-anchors` es la copia local, que solo cuenta en negativo (punto 5). `--offline` no lee transportes: solo vale para pruebas y, si la cadena está dada de alta (R6), da `FAIL`.
 
 1. Verifica el encadenado interno con la regla de la cadena.
 2. Para cada punto de anclaje de esa cadena e `install_id`: la cadena tiene al menos `length` entradas y el hash en la posición `length` es `head`. Si no, `FAIL` con el ancla que no se cumple.
-3. Salidas: `ANCHORED` (exit 0) si cumple todos los puntos y hay al menos uno; `UNANCHORED` (exit 3) si el encadenado es correcto pero no hay ningún punto; `FAIL` (exit 1) si algo no casa. Un fichero de anclas ilegible, un punto con esquema desconocido o una firma A3 que no verifica dan `FAIL`, nunca `UNANCHORED`: fail-closed.
+3. Salidas: `ANCHORED` (exit 0) si cumple todos los puntos y hay al menos uno; `UNANCHORED` (exit 3) si el encadenado es correcto, no hay ningún punto **y la cadena no está dada de alta** (R6); `FAIL` (exit 1) si algo no casa; exit 2 para errores de uso (argumentos). Un fichero de anclas ilegible, un punto con esquema desconocido o una firma A3 que no verifica dan `FAIL`, nunca `UNANCHORED`: fail-closed.
 4. Una cadena ausente o vacía con un punto de anclaje de `length > 0` es `FAIL`. Hoy es «íntegra».
+5. La copia local cuenta como prueba en negativo: un punto que está en la copia local, no está `pending` y no aparece en el transporte da `FAIL` (`anchor_lost`). Nunca cuenta en positivo: la copia local sola no produce `ANCHORED`.
 
 ### R3 — Publicación
 
 `scripts/evidence-anchor.py checkpoint --chain <id> --file <ruta> --transport <t>` calcula el punto y lo publica:
 
-- `pr-comment`: necesita `--pr`; publica con `gh pr comment` y guarda el punto también en la copia local de anclas.
+- `pr-comment`: publica con `gh issue comment` en el issue de anclas de R6 (y, con `--pr`, una copia en la PR fusionada, que `verify` no lee). Si la llamada falla, el punto queda en la copia local marcado `pending`, igual que en `anchor-branch`. El siguiente `checkpoint` lo reintenta, y el evento `END` o `STOP` de merge-sprint lista los puntos que siguen `pending`. Si el punto se publica, se guarda también en la copia local.
 - `anchor-branch`: añade la línea a `anchors/<install_id>/<chain>.jsonl` en el clon del repo de anclas y empuja. El remoto y el token salen de la configuración local (`~/.savia/anchors.conf`, fuera del repo). Si el push falla, el punto queda en la copia local marcado `pending` y el siguiente `checkpoint` lo reintenta; `verify` no cuenta un punto `pending` como ancla.
 - `operator-signed`: deja la petición canónica sin firmar en `~/.savia/anchors/requests/` y la incorpora con `--signature FICHERO|-`, igual que `operator-grant.sh grant --scope merge`.
 
-La copia local de anclas no es autoridad: `verify` usa la del transporte (comentarios de la PR, rama remota recién traída, firmas válidas). La copia local sirve para trabajar sin red y para detectar que el remoto ha perdido un punto.
+La copia local de anclas no es autoridad: `verify` usa la del transporte. Cómo lee cada uno:
+
+- `pr-comment`: `gh api repos/<repo>/issues/<n>/comments --paginate`, con `<n>` sacado del registro de altas de `origin/main`. Solo cuenta los comentarios del autor dado de alta en R6 que contengan un bloque `savia-anchor/1` válido.
+- `anchor-branch`: `git fetch` del remoto de anclas y lectura de `anchors/<install_id>/<chain>.jsonl` en la rama remota recién traída.
+- `operator-signed`: firmas cuya copia está en el transporte continuo de la cadena. Cada una se verifica con `ssh-keygen -Y verify` contra la lista de firmantes de `origin/main`, como en SE-343.
+
+Si un transporte no responde (sin red, `gh` ausente o sin sesión, error de API), `verify` lo dice con el motivo. Si la cadena está dada de alta, eso es `FAIL` (R6); si no lo está, es `UNANCHORED`. Coste: cada `verify` usa la red, con una llamada paginada por cadena con A1 y un `fetch` con A2b. `run` lo paga una vez al arrancar.
 
 ### R4 — Texto del límite mientras no haya ancla
 
@@ -153,16 +168,29 @@ Una cadena ausente se informa como ausente, no como «íntegra, 0 entradas».
 
 ### R5 — Consumo por los contadores
 
-- `merge-sprint.sh run` llama a `verify` en lugar de solo `verify_chain` para las tres cadenas. `FAIL` para con exit 4, como hoy. `UNANCHORED` no para (sería romper todas las instalaciones que no configuren anclas), pero el evento `RUN` registra `anchored=false` y el informe lo muestra.
+- `merge-sprint.sh run` llama a `verify` en lugar de solo `verify_chain` para las tres cadenas. Traducción de códigos: la llamada se hace capturando el código (`rc=0; evidence-anchor.py verify … || rc=$?`), nunca suelta bajo `set -e` ni dentro de `die`. Exit 0 sigue. Exit 1 (`FAIL`) para con exit 4, como la manipulación de hoy. Exit 2 (uso) para con exit 2. Exit 3 (`UNANCHORED`) sigue, porque solo puede salir en una instalación sin alta (R6); el evento `RUN` registra `anchored=false` y el informe lo muestra. Cualquier otro código para con exit 4: fail-closed.
 - Si existe un punto de anclaje para la cadena, `merged_count` no puede devolver menos `MERGED` de los que hay hasta ese punto: lo garantiza R2.2, porque una cadena más corta ya es `FAIL`.
 - Yema (PR propia en Yema, S0 y S2): `efectos_usados` verifica la cadena antes de contar. Con `FAIL`, la puerta niega todo efecto material del contrato hasta resolución humana.
+
+### R6 — Registro de altas: una cadena anclada no vuelve a `UNANCHORED`
+
+Sin este requisito, `UNANCHORED` sería una salida de escape: con un ancla de `length=N`, el agente trunca la cadena y además borra los comentarios A1, quita `~/.savia/anchors.conf`, borra la firma A3 local, cambia el `install_id` local o corta la red. `verify` no ve ningún punto, da `UNANCHORED`, `run` sigue y el contador vuelve a salir del fichero truncado. Que `anchored=false` quede en el evento `RUN` no detecta nada, porque se escribe en el mismo ledger manipulado.
+
+1. **El alta vive en `origin/main`, no en local.** Fichero `config/evidence-anchor-registry`, una línea JSON por alta: `install_id`, `chain` (o prefijo, `yema/*`), transportes, número del issue de anclas y autor de sus comentarios (A1), URL del remoto de anclas (A2b). Entra por PR que fusiona la operadora, como `config/operator-grant-signers`. Ningún dato del alta sale de `~/.savia/`: borrar la configuración local no la deshace.
+2. **El `install_id` que cuenta no es el local.** Para los contadores, el `install_id` sale de la autorización firmada que los habilita: el grant de merge de SE-343 para merge-sprint (campo `anchor_install`, que S3 añade a la petición canónica), la aprobación del contrato en Yema y el grant de `resolve` en SE-493. `anchor_install: none` firmado por la operadora declara una instalación sin anclas. Con el registro no vacío en `origin/main`, una autorización sin ese campo da `FAIL`. Cambiar el `install_id` local no cambia nada, porque `verify` no lo lee para decidir.
+3. **Estado pegajoso.** Con un alta para la cadena e `install_id`, todo lo que antes daba `UNANCHORED` da `FAIL` (exit 1): ningún punto en el transporte, transporte inaccesible (sin red, sin `gh`, sin token, remoto borrado), `--offline`, copia A3 ausente cuando el registro de anclas la cita. `UNANCHORED` solo existe en instalaciones sin alta.
+4. **Lectura del registro.** `verify` hace `git fetch` de `origin` y lee el registro en `origin/main` recién traído. Si el fetch falla, usa la ref local `origin/main` y lo dice; si esa ref tiene un alta, o existe copia local de anclas para la cadena, el resultado es `FAIL`, no `UNANCHORED`. El residuo (rebobinar la ref local, borrar la copia local y quedarse sin red) no habilita merges, que necesitan GitHub, y el siguiente `verify` con red da `FAIL` porque las anclas siguen en el transporte. Para Yema queda declarado en «Amenazas».
+5. **Baja.** Dar de baja una cadena es quitar su línea por PR. El borrado del registro aparece en el historial de `main` y lo fusiona la operadora.
 
 ## Amenazas y riesgos residuales
 
 - **Token con administración disponible para el agente.** Anula A1 y A2 (puede borrar comentarios, cambiar rulesets y forzar pushes). Solo A3 queda en pie, y solo hasta el último hito. Mitigación fuera de esta spec: que los agentes no usen ese token. La spec lo declara en vez de suponerlo.
 - **Ventana entre anclas.** Lo escrito después del último punto se puede truncar. A1 la reduce a cero en merge-sprint (un punto por merge) mientras el comentario siga ahí; A3 la deja en un sprint o un contrato.
-- **Borrado de la copia local de anclas.** No basta: `verify` lee el transporte. Con A2b y sin red, `verify` no puede leer el remoto y devuelve `UNANCHORED` con el motivo, no `ANCHORED` con la copia local.
-- **Anclas de otra instalación.** Cada punto lleva `install_id` y solo se compara con la cadena de esa instalación. Un agente que cambie el `install_id` local deja la cadena `UNANCHORED`, y eso se ve.
+- **Ocultar el ancla para bajar de `FAIL` a `UNANCHORED`.** Borrar comentarios A1, la copia local de anclas, la firma A3 local o `~/.savia/anchors.conf`, o cortar la red: con alta en R6, todo da `FAIL`. Sin alta, la instalación nunca tuvo garantía y el texto de R4 lo dice.
+- **Borrado de la copia local de anclas.** No basta: `verify` lee el transporte. Con A2b y sin red, una cadena con alta da `FAIL`; sin alta, `UNANCHORED` con el motivo. Nunca `ANCHORED` con la copia local.
+- **Anclas de otra instalación.** Cada punto lleva `install_id` y solo se compara con la cadena de esa instalación. El `install_id` que cuenta sale de la autorización firmada (R6.2): cambiar el local no deja la cadena `UNANCHORED`.
+- **Rebobinar la ref local `origin/main` sin red.** Residuo de R6.4: sin red no hay merges; en Yema, un efecto material local podría pasar hasta el siguiente `verify` con red. Mitigación en la PR de Yema: con alta, la puerta niega efectos materiales si el último fetch del registro tiene más de un plazo configurable.
+- **Borrar solo los k últimos comentarios A1 y truncar k entradas.** A1 no lo detecta. Lo detectan A2b, la copia local en negativo (R2.5) y el siguiente hito A3.
 - **Reutilización de firmas.** Namespace propio y petición canónica con `chain`, `install_id`, `length` y `head`: una firma de ancla no vale como grant ni para otra cadena.
 
 ## Criterios de aceptación
@@ -173,7 +201,11 @@ Una cadena ausente se informa como ausente, no como «íntegra, 0 entradas».
 - **AC-4 — contador.** Un `run` de merge-sprint tras truncar los `MERGED` anclados del grant vigente para con exit 4 antes de cualquier merge; con el ledger intacto, continúa. Equivalente en Yema: truncar la evidencia anclada niega el siguiente efecto material.
 - **AC-5 — fail-closed.** Fichero de anclas con JSON roto, esquema `savia-anchor/2` o firma A3 inválida (clave ajena, namespace `savia-operator-grant`, contenido alterado en un byte): `FAIL`. `ssh-keygen` ausente con un ancla A3: `FAIL`, no `UNANCHORED`.
 - **AC-6 — A3.** Una firma válida de la operadora sobre la petición canónica se acepta solo para su `chain`, `install_id`, `length` y `head`. Una firma de grant de merge sobre los mismos bytes no se acepta (namespace).
-- **AC-7 — A2b sin red.** Con el remoto inaccesible, `verify` da `UNANCHORED` con el motivo y nunca `ANCHORED` usando solo la copia local.
+- **AC-7 — A2b sin red.** Con el remoto inaccesible: cadena con alta (R6), `FAIL` con el motivo; cadena sin alta, `UNANCHORED` con el motivo. Nunca `ANCHORED` usando solo la copia local.
+- **AC-10 — estado pegajoso.** Con un ancla previa de `length=N`, un alta en el registro de `origin/main` y la cadena truncada a menos de N, cada una de estas variantes da `FAIL` (exit 1) y `run` para con exit 4 antes de cualquier merge: (a) comentarios A1 borrados, (b) `~/.savia/anchors.conf` ausente, (c) `install_id` local cambiado, (d) firma A3 local borrada, (e) transporte inaccesible. Negativo: una instalación sin alta y sin anclas da `UNANCHORED` (exit 3) y `run` continúa bajo `set -euo pipefail`. Caso límite: con alta y cadena de exactamente N entradas, `ANCHORED`.
+- **AC-11 — códigos.** `run` traduce 0 → sigue, 1 → exit 4, 2 → exit 2, 3 → sigue con `anchored=false`, cualquier otro → exit 4. Test con un `verify` simulado que devuelve cada código.
+- **AC-12 — A1 `pending`.** Con `gh` fallando, `checkpoint --transport pr-comment` deja el punto `pending` en la copia local; el siguiente `checkpoint` con `gh` operativo lo publica y lo quita de `pending`; el evento `END` lista los que siguen `pending`. `verify` no cuenta un `pending` como ancla.
+- **AC-13 — privacidad.** `checkpoint --transport pr-comment` con `--chain yema/…` o `effects/…` se rechaza (exit 2) sin llamar a `gh`. Un punto `yema/*` encontrado en el issue de anclas da `FAIL`.
 - **AC-8 — texto del límite.** Las tres salidas de R4 contienen el texto exacto. Test que falla si se quita una frase.
 - **AC-9 — Yema concurrente.** Dos `anotar` concurrentes sobre el mismo registro dejan una cadena íntegra. Hoy el test falla.
 
@@ -183,7 +215,7 @@ Cada AC con test BATS o pytest que falla contra el código actual y pasa despué
 
 - Las cadenas de SE-258, SE-263 y SE-271. Pueden adoptar `evidence-anchor.py` en PRs propias.
 - Retirar el token con administración de los agentes, que es lo que daría garantía real a A1 y A2. Es una decisión de la operadora; esta spec solo la deja escrita como condición.
-- Crear el repo de anclas, su ruleset y el token *fine-grained*: lo hace la operadora.
+- Crear el repo de anclas, su ruleset y el token *fine-grained*, abrir el issue de anclas y fusionar las altas de R6: lo hace la operadora.
 - Sellado de tiempo de terceros.
 - Cambiar la semántica de SE-488, que ya está anclada por su diseño.
 
@@ -191,13 +223,13 @@ Cada AC con test BATS o pytest que falla contra el código actual y pasa despué
 
 - **S0 — Texto del límite (bajo riesgo).** R4 en `merge-sprint.sh verify-ledger` y en el informe de `run`; en Yema, por PR propia, R4, «ausente» distinto de «íntegra, 0» y cerrojo en `anotar` (AC-3 parcial, AC-8, AC-9). Puede ir antes que el resto.
 - **S1 — Formato y verificador.** `scripts/evidence-anchor.py` con R1, R2 y `checkpoint` local; adaptadores de merge-sprint y Yema; AC-1, AC-2, AC-3, AC-5.
-- **S2 — Transportes A1 y A2b; consumo en merge-sprint.** R3 y R5. Toca `merge-sprint.sh`, cuyo blob fija el manifiesto (`scripts/merge-sprint.sh:582`): los planes firmados antes quedan inválidos con `anomaly blob_ejecutor`, que es lo correcto, y la PR lo declara. Tier 4, revisión humana explícita. AC-4, AC-7.
-- **S3 — A3.** Namespace `savia-evidence-anchor` en `config/operator-grant-signers` y alta en `autonomous-safety-merge-grant-reference.md`; petición y firma; hito al terminar `run`. Toca el sistema de firmas: tier 4. AC-6.
+- **S2 — Transportes A1 y A2b; registro de altas; consumo en merge-sprint.** R3, R5 y R6.1, R6.3–R6.5. Toca `merge-sprint.sh`, cuyo blob fija el manifiesto (`scripts/merge-sprint.sh:582`): los planes firmados antes quedan inválidos con `anomaly blob_ejecutor`, que es lo correcto, y la PR lo declara. Tier 4, revisión humana explícita. AC-4, AC-7, AC-10 (a, b, d, e), AC-11, AC-12, AC-13.
+- **S3 — A3 y `anchor_install`.** Namespace `savia-evidence-anchor` en `config/operator-grant-signers` y alta en `autonomous-safety-merge-grant-reference.md`; petición y firma; hito al terminar `run`; campo `anchor_install` en el grant de merge (R6.2). Toca el sistema de firmas: tier 4. AC-6, AC-10 (c).
 - **S4 — SE-493.** Cuando SE-493 se implemente, su `verify-receipt` usa el verificador y su `resolve` manual incluye el punto de anclaje en la petición firmada.
 
 ## Rollback
 
-Revertir S1–S3 devuelve `verify_chain` y la salida actual. Los ficheros de anclas quedan inertes. S0 no tiene nada que revertir salvo el texto.
+Revertir S1–S3 devuelve `verify_chain` y la salida actual. Los ficheros de anclas y `config/evidence-anchor-registry` quedan inertes; si solo se revierte S2 con altas en el registro, hay que dar de baja las cadenas (R6.5) o `run` daría `FAIL` por transporte ausente. S0 no tiene nada que revertir salvo el texto.
 
 ## OpenCode Implementation Plan
 
