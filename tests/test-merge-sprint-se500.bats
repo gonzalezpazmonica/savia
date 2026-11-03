@@ -599,3 +599,121 @@ EOF
   [[ "$output" == *"M2 total: 0 integraciones"* ]]
   [[ "$output" == *"aparcado #164: conflicto_real (scripts/foo.sh)"* ]]
 }
+
+# ── Revisión independiente de la PR #1469: arreglos con test que falla sin ellos ──
+plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equivalente y lo dice
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"excluida #$1: la cabeza actual no es equivalente a ninguna revisada"* ]]
+}
+
+@test "rev-1469 P1-1 block: fichero nuevo en .scm/ que ningún generador produce, añadido tras la revisión → no equivalente" {
+  derived_tamper 171 .scm/notes.md
+  plan_excludes 171
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 171 "$FAKE/merged" 2>/dev/null || false
+}
+
+@test "rev-1469 P1-1 control: la misma integración sin el fichero añadido sí es equivalente (el plan no la excluye)" {
+  reg_main; fake_generators
+  v2_pr 172 x172.txt pr172
+  main_moves y172.txt main
+  G switch -q --detach "$(branch_sha 172)"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-172; G switch -q main
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"excluida #172"* ]]
+  [[ "$output" == *"#172(t2)"* ]]
+}
+
+@test "rev-1469 AC-12 block con motivo: .scm/ y ROADMAP-CURRENT.md manipulados se excluyen en plan por no equivalentes" {
+  derived_tamper 173 .scm/registry.json
+  plan_excludes 173
+  G switch -q main
+  v2_pr 174 x174.txt pr174
+  G switch -q --detach "$(branch_sha 174)"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate && bash scripts/roadmap.sh render)
+  echo manipulado >> "$MERGE_SPRINT_GIT_ROOT/docs/propuestas/ROADMAP-CURRENT.md"
+  G add -A; G commit -qm "hoja de ruta tocada" >/dev/null; G push -q origin HEAD:pr-174; G switch -q main
+  plan_excludes 174
+}
+
+gate_lib_audit() {  # escáner congelado que carga .claude/hooks/lib/gate-result.sh por ruta relativa, como el real
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib"
+  echo 'gate_ok() { return 0; }' > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib/gate-result.sh"
+  cat > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-scan.sh" <<'SH'
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh" || exit 2
+gate_ok && ! git diff origin/main...HEAD | grep -q SECRETO
+SH
+  printf '#!/usr/bin/env bash\necho "firma-congelada $(git rev-parse HEAD^{tree})" > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
+  G add .claude scripts; G commit -qm "auditoría con librería"; G push -q origin main
+}
+
+@test "rev-1469 P1-2 block: la librería .claude/hooks/lib de la rama nunca se ejecuta; el escáner carga la de main" {
+  reg_main; gate_lib_audit
+  G switch -q -c pr-175 main
+  printf 'touch "%s"\ngate_ok() { return 0; }\n' "$TMPDIR_T/trampa-lib" > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib/gate-result.sh"
+  G commit -qam "lib trampa"; G push -q origin pr-175; G switch -q main
+  echo pr-175 > "$FAKE/175.branch"; echo x > "$FAKE/175.head"; echo .claude/hooks/lib/gate-result.sh > "$FAKE/175.files"; register_head 175
+  main_moves y175.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ ! -e "$TMPDIR_T/trampa-lib" ]
+  [ "$status" -eq 0 ]
+  grep -qx 175 "$FAKE/merged"
+}
+
+@test "rev-1469 P2-2 boundary: restos de raíces congeladas de un run anterior no bloquean la integración" {
+  reg_main; fake_generators
+  local d; for d in froot-resync froot-eq-plan froot-eq-run; do mkdir -p "$MERGE_SPRINT_HOME/$d"; echo resto > "$MERGE_SPRINT_HOME/$d/basura"; done
+  v2_pr 176 x176.txt pr176
+  main_moves y176.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 176 "$FAKE/merged"
+}
+
+@test "rev-1469 P2-2 block: un generador que escribe en la raíz congelada en vez de en el árbol → resync_fallo, sin merge" {
+  reg_main; fake_generators
+  printf 'echo fuera > "$P/fuera.txt"\n' >> "$MERGE_SPRINT_GIT_ROOT/scripts/rules-index-generate.sh"
+  G commit -qam "generador que escribe fuera"; G push -q origin main
+  v2_pr 177 x177.txt pr177
+  main_moves y177.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 177 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"reason":"resync_fallo"'
+}
+
+@test "rev-1469 P2-3: plan ejecuta el resolutor del commit de main congelado, no la copia local" {
+  reg_main
+  python3 - "$MERGE_SPRINT_GIT_ROOT/scripts/merge-registry-resolve.py" "$TMPDIR_T/marca-main" <<'PY'
+import sys
+p, mark = sys.argv[1:3]; s = open(p).read()
+s = s.replace("import sys\n", "import sys\nopen(%r, 'a').write('main\\n')\n" % mark, 1)
+open(p, "w").write(s)
+PY
+  G commit -qam "resolutor de main distinto de la copia local"; G push -q origin main
+  v2_pr 178 x178.txt pr178
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [ -s "$TMPDIR_T/marca-main" ]
+}
+
+@test "rev-1469 P2-3 (seguridad): report no se rompe con un GRANT sin digest" {
+  mkdir -p "$MERGE_SPRINT_HOME"
+  printf '%s\n' '{"event":"GRANT","ts":"2026-11-03T10:00:00Z"}' \
+    '{"event":"GRANT","ts":"2026-11-03T10:00:00Z","digest":"d1"}' \
+    '{"event":"RUN","ts":"2026-11-03T10:01:00Z","digest":"d1"}' \
+    '{"event":"MERGED","ts":"2026-11-03T10:05:00Z","digest":"d1","pr":"9","tier":"2","merge_commit":"cccccccc","equivalence":"identical"}' \
+    > "$MERGE_SPRINT_HOME/ledger.jsonl"
+  run bash "$SCRIPT" report
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"M1 total: 1/1"* ]]
+  [[ "$output" == *"M3 total: 2 grant(s) para 1 merge(s)"* ]]
+}

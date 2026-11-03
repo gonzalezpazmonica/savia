@@ -172,6 +172,9 @@ cmd_plan() {
   mc=$(git -C "$GITROOT" rev-parse -q --verify "origin/$BASE^{commit}") || die "sin origin/$BASE" 4
   rsb=$(blob_on_main scripts/merge-registry-resolve.py) || die "sin scripts/merge-registry-resolve.py en origin/$BASE" 4
   frozen_extract "$mc" plan || die "código congelado ilegible ($mc)" 4
+  # La equivalencia del plan usa el mismo resolutor que verificará run: el de main congelado, no la copia local.
+  RESOLVER="$FROZEN_SRC/scripts/merge-registry-resolve.py"
+  [[ "$(git hash-object "$RESOLVER" 2>/dev/null)" == "$rsb" ]] || die "resolutor congelado ilegible ($mc)" 4
   local out="[]" n head tier refs
   for n in $($GH pr list -R "$REPO" --state open --limit 200 --json number --jq '[.[].number]|sort|.[]'); do
     head=$($GH pr view "$n" -R "$REPO" --json headRefOid --jq .headRefOid)
@@ -185,7 +188,7 @@ cmd_plan() {
       for cand in $(reviewed_shas "$n"); do
         reviews_ok "$n" "$cand" "$tier" && head_equivalent "$cand" "$head" "$(pr_refs "$n" "$cand")" && { found="$cand"; break; }
       done
-      [[ -n "$found" ]] || continue
+      [[ -n "$found" ]] || { echo "excluida #$n: la cabeza actual no es equivalente a ninguna revisada" >&2; continue; }
       head="$found"
     fi
     local meta files; meta=$(pr_meta "$n") || continue
@@ -263,18 +266,44 @@ frozen_extract() {  # frozen_extract <commit> <nombre> → FROZEN_SRC = worktree
   else wt_reset "$FROZEN_SRC" && git -C "$GITROOT" worktree add -q --detach "$FROZEN_SRC" "$1" >/dev/null 2>&1 || return 1; fi
   [[ "$(git -C "$FROZEN_SRC" rev-parse HEAD)" == "$(git -C "$GITROOT" rev-parse "$1^{commit}")" ]] && git -C "$FROZEN_SRC" diff --quiet HEAD
 }
-frozen_root() {  # frozen_root <árbol> <nombre> → raíz con scripts/ → código congelado y el resto enlazado a <árbol>:
-  # los generadores calculan su raíz desde su ruta (lógica), así que leen y escriben en <árbol> con el código de main.
-  local t="$1" f="$HOME_MS/froot-$2" e
-  mkdir -p "$f" || return 1
-  for e in "$f"/* "$f"/.[!.]* "$f"/..?*; do [[ -L "$e" ]] && { rm -f "$e" || return 1; }; done
-  [[ -z "$(ls -A "$f")" ]] || return 1   # solo enlaces: cualquier otra cosa es estado ajeno, fail-closed
-  ln -s "$FROZEN_SRC/scripts" "$f/scripts" || return 1
-  for e in "$t"/* "$t"/.[!.]* "$t"/..?*; do
+# Código que ejecutan los generadores (lo que ellos mismos cargan desde su ruta): siempre del commit de main
+# congelado, nunca de la rama. confidentiality-scan.sh carga .claude/hooks/lib/gate-result.sh por ruta relativa.
+FROZEN_CODE=(scripts .claude/hooks/lib)
+frozen_overlay() {  # frozen_overlay <destino> <dir del árbol> <ruta relativa> → enlaces al árbol salvo el código congelado
+  local e n p fc pre
+  for e in "$2"/* "$2"/.[!.]* "$2"/..?*; do
     [[ -e "$e" || -L "$e" ]] || continue
-    [[ "${e##*/}" == scripts ]] || ln -s "$e" "$f/${e##*/}" || return 1
+    n="${e##*/}"; p="${3:+$3/}$n"; pre=0
+    for fc in "${FROZEN_CODE[@]}"; do
+      [[ "$p" == "$fc" ]] && continue 2
+      [[ "$fc" == "$p/"* ]] && pre=1
+    done
+    if (( pre )); then
+      # Un prefijo del código congelado que en la rama es enlace o no es directorio: estado inesperado, fail-closed.
+      [[ -d "$e" && ! -L "$e" ]] || return 1
+      mkdir "$1/$n" && frozen_overlay "$1/$n" "$e" "$p" || return 1
+    else
+      ln -s "$e" "$1/$n" || return 1
+    fi
+  done
+}
+frozen_root() {  # frozen_root <árbol> <nombre> → raíz nueva con el código congelado y el resto enlazado a <árbol>:
+  # los generadores calculan su raíz desde su ruta (lógica), así que leen y escriben en <árbol> con el código de main.
+  # Cada llamada crea su raíz: un resto de una llamada anterior no bloquea las siguientes. Liberar con froot_release.
+  local f fc
+  f=$(mktemp -d "$HOME_MS/froot-$2.XXXXXX") || return 1
+  frozen_overlay "$f" "$1" "" || return 1
+  for fc in "${FROZEN_CODE[@]}"; do
+    [[ -e "$FROZEN_SRC/$fc" ]] || continue
+    mkdir -p "$f/$(dirname "$fc")" && ln -s "$FROZEN_SRC/$fc" "$f/$fc" || return 1
   done
   echo "$f"
+}
+froot_release() {  # froot_release <raíz> → 0 si solo quedaban enlaces y directorios propios (los retira); 1 si un
+  # generador escribió en la raíz en vez de en el árbol (p. ej. tmp+mv sobre un enlace): resultado no fiable.
+  [[ -n "$1" && -d "$1" ]] || return 1
+  [[ -z "$(find "$1" -mindepth 1 ! -type l ! -type d -print -quit)" ]] || return 1
+  find "$1" -type l -delete && find "$1" -depth -type d -empty -delete && [[ ! -e "$1" ]]
 }
 gen_rules() {  # gen_rules <árbol> <raíz congelada>
   [[ -f "$2/scripts/rules-index-generate.sh" ]] || return 0
@@ -317,7 +346,7 @@ head_equivalent() {  # head_equivalent <H0> <H1> [refs] → 0 si H1 == merge(H0,
   (( ${#reg[@]} + ${#der[@]} )) || return 0
   m=$(git -C "$GITROOT" merge-base "$2" "origin/$BASE" 2>/dev/null) || return 1
   for f in "${reg[@]}"; do registry_equivalent "$1" "$2" "$m" "$f" "${3:-[]}" || return 1; EQK=registry_merge; done
-  (( ${#der[@]} == 0 )) || derived_equivalent "$1" "$2" "$m" "${der[@]}"
+  (( ${#der[@]} == 0 )) || derived_equivalent "$1" "$2" "$m" "$tree" "${der[@]}"
 }
 
 registry_equivalent() {  # registry_equivalent <H0> <H1> <M> <ruta> <refs> → 0 si H1 == resolver(merge-base, H0, M) byte a byte
@@ -331,13 +360,22 @@ registry_equivalent() {  # registry_equivalent <H0> <H1> <M> <ruta> <refs> → 0
   rm -f "$out"; return $rc
 }
 
-derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <rutas…> → 0 si cada derivado de H1 coincide con su regeneración
-  # con el código congelado en la forma canónica de su fila; la firma de confidencialidad exige repetir la auditoría.
-  local h0="$1" h1="$2" m="$3"; shift 3
+derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <T> <rutas…> → 0 si cada derivado de H1 coincide con su
+  # regeneración con el código congelado, en la forma canónica de su fila; la firma exige repetir la auditoría.
+  # Antes de regenerar, cada derivado del worktree toma su contenido de T = merge(H0, main): lo que ningún generador
+  # reescribe tiene que coincidir con T, no consigo mismo (un fichero añadido tras la revisión no es equivalente).
+  local h0="$1" h1="$2" m="$3" t="$4"; shift 4
   # Rutas por modo (plan | run): un plan concurrente con un run no comparte worktree ni temporales.
-  local mode="${FROZEN_SRC##*-}"; local tw="$HOME_MS/eqwt-$mode" fr p k gens g have rc=0 b="$HOME_MS/derived.blob-$mode"
+  local mode="${FROZEN_SRC##*-}"; local tw="$HOME_MS/eqwt-$mode" fr="" p k gens g have rc=0 b="$HOME_MS/derived.blob-$mode"
   wt_reset "$tw" && git -C "$GITROOT" worktree add -q --detach "$tw" "$h1" >/dev/null 2>&1 || return 1
-  fr=$(frozen_root "$tw" "eq-$mode") || rc=1
+  for p in "$@"; do
+    if git -C "$GITROOT" cat-file -e "$t:$p" 2>/dev/null; then
+      mkdir -p "$(dirname "$tw/$p")" && git -C "$GITROOT" show "$t:$p" > "$tw/$p" 2>/dev/null || { rc=1; break; }
+    else
+      rm -f "$tw/$p" || { rc=1; break; }
+    fi
+  done
+  (( rc == 0 )) && { fr=$(frozen_root "$tw" "eq-$mode") || rc=1; }
   if (( rc == 0 )); then
     { gen_rules "$tw" "$fr" && gen_propuestas "$tw" "$fr" && gen_capmap "$tw" "$fr" \
       && { [[ ! -f "$fr/scripts/sam.py" ]] || gen_sam "$tw" "$fr" generate >/dev/null; }; } || rc=1
@@ -359,13 +397,14 @@ derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <rutas…> → 0 si c
          || "$g" == "$(git -C "$GITROOT" rev-parse -q --verify "$h0:$p" 2>/dev/null)" ]] || rc=1
     fi
   done
+  [[ -z "$fr" ]] || froot_release "$fr" || rc=1
   rm -f "$b"; wt_reset "$tw" || rc=1
   return $rc
 }
 
 resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) · 2 conflicto real (CONFLICT_FILES) ·
   # 3 confidencialidad · 5 fallo. Registros con el resolutor y derivados con los generadores congelados (SE-500 S2).
-  local pr="$1" h0="$2" refs="${3:-[]}" br wt c f fr reg=() der=() other=()
+  local pr="$1" h0="$2" refs="${3:-[]}" br wt c f fr rc reg=() der=() other=()
   CONFLICT_FILES=""; RESOLVED=""
   br=$($GH pr view "$pr" -R "$REPO" --json headRefName --jq .headRefName) || return 5
   git -C "$GITROOT" fetch -q origin "$br" main || return 5
@@ -387,32 +426,40 @@ resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) ·
     git -C "$wt" commit -q --no-edit || return 5
   fi
   fr=$(frozen_root "$wt" resync) || return 5
-  gen_rules "$wt" "$fr" || return 5
-  git -C "$wt" add docs/rules 2>/dev/null && { git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore(rules): índice y manifiesto regenerados (merge-sprint)"; }
-  gen_propuestas "$wt" "$fr" || return 5
-  for f in docs/propuestas/INDEX.md docs/propuestas/ROADMAP-CURRENT.md; do [[ ! -e "$wt/$f" ]] || git -C "$wt" add -- "$f"; done
-  git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore(propuestas): índice y hoja de ruta regenerados (merge-sprint)"
-  if [[ -f "$fr/scripts/sam.py" ]]; then
-    gen_capmap "$wt" "$fr" || return 5
+  regen_derived "$wt" "$fr"; rc=$?
+  froot_release "$fr" || { (( rc )) || rc=5; }   # un generador que escribió fuera del árbol: resultado no fiable
+  (( rc == 0 )) || return $rc
+  # Sin forzar: si la rama se movió desde el fetch, el push falla y la PR se aparca.
+  git -C "$wt" push -q origin "HEAD:$br" 2>/dev/null || return 5
+  ledger event=RESYNC pr="$pr" head="$(git -C "$wt" rev-parse HEAD)" ${RESOLVED:+resolved="$RESOLVED"}
+}
+
+regen_derived() {  # regen_derived <wt> <raíz congelada> → 0 derivados regenerados y commiteados · 3 confidencialidad · 5 fallo
+  local f
+  gen_rules "$1" "$2" || return 5
+  git -C "$1" add docs/rules 2>/dev/null && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(rules): índice y manifiesto regenerados (merge-sprint)"; }
+  gen_propuestas "$1" "$2" || return 5
+  for f in docs/propuestas/INDEX.md docs/propuestas/ROADMAP-CURRENT.md; do [[ ! -e "$1/$f" ]] || git -C "$1" add -- "$f"; done
+  git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(propuestas): índice y hoja de ruta regenerados (merge-sprint)"
+  if [[ -f "$2/scripts/sam.py" ]]; then
+    gen_capmap "$1" "$2" || return 5
     # El SAM registra el último commit de cada fuente, .scm/registry.json incluido: si el mapa cambió en
     # este mismo commit, el SAM nace STALE. Se regenera y commitea hasta que check dé FRESH.
     local _i fresh=0
     for _i in 1 2 3; do
-      gen_sam "$wt" "$fr" generate >/dev/null || return 5
-      git -C "$wt" add .scm && { git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore(scm): SAM regenerado (merge-sprint)"; }
-      gen_sam "$wt" "$fr" check | grep -q FRESH && { fresh=1; break; }
+      gen_sam "$1" "$2" generate >/dev/null || return 5
+      git -C "$1" add .scm && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(scm): SAM regenerado (merge-sprint)"; }
+      gen_sam "$1" "$2" check | grep -q FRESH && { fresh=1; break; }
     done
     (( fresh )) || return 5
   fi
-  if [[ -f "$fr/scripts/confidentiality-scan.sh" ]]; then
+  if [[ -f "$2/scripts/confidentiality-scan.sh" ]]; then
     # Veredicto por código de salida: 0 = CLEAN o PASSED con avisos; ≠0 = BLOCKED. Nunca por el texto.
-    audit "$wt" "$fr" || return 3
-    (cd "$wt" && CONFIDENTIALITY_SIG_FILE="$wt/.confidentiality-signature" bash "$fr/scripts/confidentiality-sign.sh" sign >/dev/null 2>&1) || return 3
-    git -C "$wt" add .confidentiality-signature && { git -C "$wt" diff --cached --quiet || git -C "$wt" commit -q -m "chore: sign confidentiality audit (merge-sprint)"; }
+    audit "$1" "$2" || return 3
+    (cd "$1" && CONFIDENTIALITY_SIG_FILE="$1/.confidentiality-signature" bash "$2/scripts/confidentiality-sign.sh" sign >/dev/null 2>&1) || return 3
+    git -C "$1" add .confidentiality-signature && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore: sign confidentiality audit (merge-sprint)"; }
   fi
-  # Sin forzar: si la rama se movió desde el fetch, el push falla y la PR se aparca.
-  git -C "$wt" push -q origin "HEAD:$br" 2>/dev/null || return 5
-  ledger event=RESYNC pr="$pr" head="$(git -C "$wt" rev-parse HEAD)" ${RESOLVED:+resolved="$RESOLVED"}
+  return 0
 }
 
 resolve_registries() {  # resolve_registries <wt> <H0> <refs> <registros…> → 0 resueltos, validados y añadidos
@@ -428,8 +475,9 @@ resolve_registries() {  # resolve_registries <wt> <H0> <refs> <registros…> →
   git -C "$wt" add -- "$@" || return 1
   # El resultado debe pasar roadmap.sh validate con el código congelado de main; sin validador, rechazo.
   fr=$(frozen_root "$wt" resync) || return 1
-  [[ -f "$fr/scripts/roadmap.sh" ]] || return 1
-  (cd "$wt" && REPO_ROOT="$wt" bash "$fr/scripts/roadmap.sh" validate >/dev/null 2>&1); rc=$?
+  rc=1
+  [[ ! -f "$fr/scripts/roadmap.sh" ]] || { (cd "$wt" && REPO_ROOT="$wt" bash "$fr/scripts/roadmap.sh" validate >/dev/null 2>&1); rc=$?; }
+  froot_release "$fr" || rc=1
   (( rc == 0 )) || return 1
   RESOLVED=$(IFS=,; echo "$*"); CONFLICT_FILES=""
 }
@@ -542,9 +590,9 @@ record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → 
   # la deja reconciliable, y al reconciliar no se repite un MERGED ya escrito (idempotente por PR y manifiesto).
   local mc; mc=$($GH pr view "$1" -R "$REPO" --json mergeCommit --jq .mergeCommit.oid) && [[ "$mc" =~ ^[0-9a-f]{40}$ ]] \
     || anomaly merge_commit_ilegible "$1"
-  # registry_merge: el ledger guarda el blob del resolutor congelado y los hashes de los registros recalculados.
+  # Registros recalculados (registry_merge, o judge_safe con registros): blob del resolutor congelado y hashes.
   local rx=()
-  [[ "$4" == registry_merge ]] && rx=(resolver_blob="$(git hash-object "$RESOLVER")" registry_hashes="$REG_HASHES")
+  [[ "$4" == registry_merge || -n "$REG_HASHES" ]] && rx=(resolver_blob="$(git hash-object "$RESOLVER")" registry_hashes="$REG_HASHES")
   ledger_merged "$1" || ledger event=MERGED pr="$1" digest="$DIGEST" grant="$GRANT_ID" tier="$2" head="$3" merge_commit="$mc" equivalence="$4" ${5:+judge_ref="$5"} "${rx[@]}"
   MERGED=$(merged_count); grant_set_merged "$MERGED"
   f5 close pr.merge "$1" >/dev/null || anomaly f5_close "$1"
@@ -679,7 +727,8 @@ try_merge() {  # try_merge <pr> <head> <tier> [to] → RESULT=merged|awaiting_ju
   refs=$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1]).get("refs",[]),separators=(",",":")))' "$(mf_entry "$pr")") || anomaly manifiesto_ilegible "$pr"
   for try in $(seq 1 "${MERGE_SPRINT_TRIES:-3}"); do
     if [[ "$RESYNC" == 1 ]]; then
-      resync "$pr" "$head" "$refs"; rs=$?
+      # En la cola del juez la rama ya está en <to> (SAFE): el delta de registros sale de <to>, no de H0.
+      resync "$pr" "${to:-$head}" "$refs"; rs=$?
       case $rs in 0) ;; 2) RESULT=conflicto_real; return ;; 3) RESULT=confidencialidad; return ;; *) RESULT=resync_fallo; return ;; esac
       sleep "${MERGE_SPRINT_CI_SETTLE_S:-60}"
     fi
@@ -846,7 +895,7 @@ if s: print(f"fin: {s[-1].get('reason', 'completo')}")
 t = lambda e: datetime.strptime(e["ts"], "%Y-%m-%dT%H:%M:%SZ")
 digests = []
 for e in ev:
-    if e.get("event") == "GRANT" and e["digest"] not in digests: digests.append(e["digest"])
+    if e.get("event") == "GRANT" and e.get("digest") and e["digest"] not in digests: digests.append(e["digest"])
 tm = tc = 0
 for d in digests:
     md = [e for e in m if e.get("digest") == d]
