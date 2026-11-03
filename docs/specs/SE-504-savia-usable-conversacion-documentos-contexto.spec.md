@@ -166,7 +166,7 @@ Material 3 (componentes y navegación de Android), Apple Human Interface Guideli
 - Confirmar emite la orden estructurada al ejecutor que corresponda: gramática de Soul (`POST /ordenes`), comando rápido de Space o tarea mediada (SE-428). El ejecutor aplica sus propias reglas; la tarjeta no las sustituye.
 - **Riesgo determinista.** El riesgo de la acción lo calcula Space con la función de SE-429, nunca el modelo. Riesgo medio o alto exige biometría al confirmar, igual que hoy en Aprobaciones.
 - **Ningún efecto sin grant.** Confirmar una tarjeta es el grant de esa acción concreta: queda registrado con la persona, la hora, el hash de la orden y el dispositivo, y no vale para ninguna otra. Las acciones que hoy exigen grant (merge, aprobación de spec, cambios de ajustes de seguridad, publicación) no se confirman desde una tarjeta: la tarjeta lleva a la aprobación existente con los bytes exactos y la biometría, y si la acción exige un grant expreso de la operadora, lo dice y no ofrece atajo.
-- Las aprobaciones pendientes de Space aparecen en la conversación como tarjetas, además de en su destino propio.
+- Las aprobaciones pendientes de Space aparecen en la conversación como tarjetas, además de en Tareas («Espera tu respuesta»).
 
 **Texto de terceros inerte.** El texto que no escribió la persona ni Savia (asuntos de correo, comentarios de PR, notas importadas) entra al prompt marcado como dato no fiable y se pinta en la respuesta con una barra lateral «de un tercero», sin enlaces activos ni HTML. Nunca genera una tarjeta de acción por sí mismo: una tarjeta nace siempre de una petición de la persona en ese mismo turno.
 
