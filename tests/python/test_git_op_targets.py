@@ -157,5 +157,68 @@ class Targets(unittest.TestCase):
         self.assertEqual(out, [("commit", self.base)])
 
 
+    # ── fail-closed (revisión PR #1467) ──
+    def test_unresolvable_argv0_emits_op(self):
+        for cmd in ("$SUDO git commit -m x", "${X:-} git add .",
+                    f"$(which git) -C {self.base} commit -m x", "$G commit -m x"):
+            out = self.run_(cmd)
+            self.assertTrue(any(op in ("commit", "add") for op, _ in out), (cmd, out))
+        # con destino explícito, se resuelve aunque el programa no se conozca
+        self.assertIn(("commit", self.base), self.run_(f"$(which git) -C {self.base} commit", self.wt))
+        self.assertIn(("commit", self.base), self.run_(f"$SUDO git -C {self.base} commit", self.wt))
+
+    def test_shell_with_options_is_analyzed(self):
+        for cmd in ('bash --norc -c "git commit -m x"', 'bash -o pipefail -c "git commit -m x"',
+                    'sh +x -c "git commit -m x"'):
+            self.assertEqual(self.run_(cmd), [("commit", self.base)], cmd)
+
+    def test_shell_script_file_is_opaque(self):
+        self.assertEqual(self.run_("bash run.sh"), [])
+        self.assertIn(("commit", ""), self.run_("bash run.sh git commit"))
+
+    def test_exec_capable_commands_text_counts(self):
+        for cmd in ("awk 'BEGIN{system(\"git commit -m x\")}'",
+                    "sed -n '1e git commit -m x' f",
+                    'script -qc "git commit -m x" /dev/null',
+                    'su -c "git commit -m x"',
+                    'flock f -c "git -C /x commit -m x"',
+                    "python3 -c \"import os; os.system('git commit -m x')\""):
+            self.assertIn(("commit", ""), self.run_(cmd), cmd)
+
+    def test_inert_commands_stay_inert(self):
+        self.assertEqual(self.run_('grep -r "git commit" docs'), [])
+        self.assertEqual(self.run_('cat "git add ." | jq .'), [])
+
+    def test_unquoted_heredoc_substitution_runs(self):
+        out = self.run_("cat <<EOF\n$(git commit -m x)\nEOF")
+        self.assertEqual(out, [("commit", self.base)])
+        out = self.run_("cat <<EOF\nx `git add .` y\nEOF")
+        self.assertEqual(out, [("add", self.base)])
+
+    def test_quoted_heredoc_substitution_is_text(self):
+        for d in ("'EOF'", '"EOF"', "\\EOF"):
+            self.assertEqual(self.run_(f"cat <<{d}\n$(git commit -m x)\nEOF"), [], d)
+
+    def test_analysis_exception_falls_back_to_text(self):
+        import importlib.util, io
+        spec = importlib.util.spec_from_file_location("got", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        def boom(*_a, **_k):
+            raise RecursionError("simulado")
+        mod.run = boom
+        old = sys.stdin, sys.stdout, sys.argv
+        sys.stdin, sys.stdout = io.StringIO("git -C /x commit -m y"), io.StringIO()
+        sys.argv = ["got", self.base]
+        try:
+            rc = mod.main()
+            out = sys.stdout.getvalue()
+        finally:
+            sys.stdin, sys.stdout, sys.argv = old
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, "commit\t\n")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,7 +18,11 @@
 
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
-const LEGACY_RX = /\bgit\s+commit\b/;
+// Fallback sin resolvedor (sin Python, timeout, fallo): `git` y `commit` como
+// palabras en la orden, igual que el prefiltro del hook bash (fail-closed;
+// cubre `git -C <ruta> commit`).
+const FALLBACK_GIT_RX = /(^|[^\w-])git([^\w-]|$)/;
+const FALLBACK_COMMIT_RX = /(^|[^\w-])commit([^\w-]|$)/;
 const RESOLVER = new URL("../../../scripts/lib/git_op_targets.py", import.meta.url).pathname;
 
 async function spawn(cmd: string, args: string[], input?: string): Promise<{ ok: boolean; out: string }> {
@@ -33,8 +37,9 @@ async function spawn(cmd: string, args: string[], input?: string): Promise<{ ok:
 }
 
 async function branchOf(dir: string): Promise<string | null> {
-  // TEST_BRANCH permite a los tests simular la rama sin depender del repo real.
-  if (process.env.TEST_BRANCH) return process.env.TEST_BRANCH;
+  // TEST_BRANCH simula la rama en los tests; fuera de `bun test` (NODE_ENV=test)
+  // se ignora para que una variable de entorno no desactive el guard.
+  if (process.env.NODE_ENV === "test" && process.env.TEST_BRANCH) return process.env.TEST_BRANCH;
   const inside = await spawn("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"]);
   if (!inside.ok || inside.out.trim() !== "true") return null; // no es un repo
   const res = await spawn("git", ["-C", dir, "branch", "--show-current"]);
@@ -63,8 +68,8 @@ export async function blockCommitToMain(input: ToolInput, output: ToolOutput): P
 
   let targets = await commitTargets(command, base);
   if (targets === null) {
-    // Sin resolvedor: comportamiento anterior (texto + cwd de la orden).
-    targets = LEGACY_RX.test(command) ? [""] : [];
+    // Sin resolvedor: conservador (texto + cwd de la orden).
+    targets = FALLBACK_GIT_RX.test(command) && FALLBACK_COMMIT_RX.test(command) ? [""] : [];
   }
   if (targets.length === 0) return;
 

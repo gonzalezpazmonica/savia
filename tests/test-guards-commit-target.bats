@@ -38,6 +38,18 @@ vbg() {
   jq -n --arg c "$1" '{tool_input:{command:$c}}' | (cd "${2:-$MAIN}" && bash "$VBG")
 }
 blocked_bcm() { [ "$(echo "$output" | jq -r .decision 2>/dev/null)" = "block" ]; }
+# exit 2 por ESTE guard (no por entrada malformada ni por otro guard).
+blocked_vbg() { [ "$status" -eq 2 ] && [[ "$output" == *"BLOQUEADO: rama 'main'"* ]]; }
+# PATH sin python3: el resolvedor no está disponible.
+no_python_path() {
+  local d="$TMPDIR/nopy-bin" f
+  mkdir -p "$d"
+  for f in /usr/bin/* /bin/*; do
+    case "$(basename "$f")" in python3*|python) continue ;; esac
+    [ -e "$d/$(basename "$f")" ] || ln -s "$f" "$d/$(basename "$f")" 2>/dev/null || true
+  done
+  echo "$d"
+}
 
 # ── Casos reales que fallaron (sesión en main) ──────────────────────────────
 
@@ -90,7 +102,7 @@ blocked_bcm() { [ "$(echo "$output" | jq -r .decision 2>/dev/null)" = "block" ];
 
 @test "vbg: git commit en main sigue bloqueado" {
   run vbg 'git commit -m x'
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm: git -C hacia main desde el worktree bloquea (con y sin comillas)" {
@@ -102,49 +114,114 @@ blocked_bcm() { [ "$(echo "$output" | jq -r .decision 2>/dev/null)" = "block" ];
 
 @test "vbg: git -C hacia main desde el worktree bloquea" {
   run vbg "git -C $MAIN commit -m x" "$WT"
-  [ "$status" -eq 2 ]
+  blocked_vbg
   run vbg "git -C '$MAIN' add f" "$WT"
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm y vbg: cd a main tras un cd al worktree bloquea" {
   run bcm "cd $WT && git add . ; cd $MAIN && git commit -m z" "$WT"
   blocked_bcm
   run vbg "cd $WT && git add . ; cd $MAIN && git commit -m z" "$WT"
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm y vbg: cd condicional al worktree no salva el commit en main" {
   run bcm "false && cd $WT; git commit -m x"
   blocked_bcm
   run vbg "false && cd $WT; git commit -m x"
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm y vbg: cd en subshell o tubería no salva el commit en main" {
   run bcm "(cd $WT); git commit -m x"
   blocked_bcm
   run vbg "cd $WT | true; git commit -m x"
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm y vbg: variable no resoluble es conservadora (cwd en main)" {
   run bcm 'git -C $DESCONOCIDA commit -m x'
   blocked_bcm
   run vbg 'git -C $DESCONOCIDA commit -m x'
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm y vbg: git commit tras un heredoc sí cuenta" {
   run bcm $'cat > f <<EOF\ntexto\nEOF\ngit commit -m x'
   blocked_bcm
   run vbg $'cat > f <<EOF\ntexto\nEOF\ngit commit -m x'
-  [ "$status" -eq 2 ]
+  blocked_vbg
 }
 
 @test "bcm y vbg: bash -c con cd a main desde el worktree bloquea" {
   run bcm "bash -c 'cd $MAIN && git commit -m x'" "$WT"
   blocked_bcm
   run vbg "bash -c 'cd $MAIN && git commit -m x'" "$WT"
-  [ "$status" -eq 2 ]
+  blocked_vbg
+}
+
+# ── Fail-closed: formas que el resolvedor no reconoce (revisión PR #1467) ───
+
+@test "bcm y vbg: orden no resoluble delante de git commit bloquea en main" {
+  for c in '$SUDO git commit -m x' '${X:-} git add . && ${X:-} git commit -m x'; do
+    run bcm "$c"
+    blocked_bcm
+    run vbg "$c"
+    blocked_vbg
+  done
+  # desde el worktree, con destino explícito en main
+  for c in "\$(which git) -C $MAIN commit -m x" "\$SUDO git -C $MAIN commit -m x"; do
+    run bcm "$c" "$WT"
+    blocked_bcm
+    run vbg "$c" "$WT"
+    blocked_vbg
+  done
+}
+
+@test "bcm y vbg: bash con opciones -c git commit bloquea en main" {
+  for c in 'bash --norc -c "git commit -m x"' 'bash -o pipefail -c "git commit -m x"'; do
+    run bcm "$c"
+    blocked_bcm
+    run vbg "$c"
+    blocked_vbg
+  done
+}
+
+@test "bcm y vbg: awk/script/python que ejecutan git commit bloquean en main" {
+  for c in "awk 'BEGIN{system(\"git commit -m x\")}'" 'script -qc "git commit -m x" /dev/null' \
+           "python3 -c \"import os; os.system('git commit -m x')\""; do
+    run bcm "$c"
+    blocked_bcm
+    run vbg "$c"
+    blocked_vbg
+  done
+}
+
+@test "bcm y vbg: heredoc sin comillas con \$(git commit) bloquea; con comillas no" {
+  run bcm $'cat <<EOF\n$(git commit -m x)\nEOF'
+  blocked_bcm
+  run vbg $'cat <<EOF\n$(git commit -m x)\nEOF'
+  blocked_vbg
+  run bcm $'cat <<\'EOF\'\n$(git commit -m x)\nEOF'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run vbg $'cat <<\'EOF\'\n$(git add .)\nEOF'
+  [ "$status" -eq 0 ]
+}
+
+@test "bcm y vbg: las mismas formas en el worktree agent/* pasan" {
+  run bcm 'bash --norc -c "git commit -m x"' "$WT"
+  [ -z "$output" ]
+  run vbg 'bash --norc -c "git commit -m x"' "$WT"
+  [ "$status" -eq 0 ]
+}
+
+@test "vbg sin python3: fallback conservador por el cwd, también con git -C" {
+  P=$(no_python_path)
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $MAIN commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
+  # sin resolvedor, conservador: cwd de la orden ($WT, agent/x) → pasa; en main → bloquea
+  [ "$status" -eq 0 ]
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$MAIN' && bash '$VBG')"
+  blocked_vbg
 }

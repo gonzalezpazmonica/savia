@@ -20,7 +20,14 @@ Qué entiende:
     directorio inexistente falla y no cambia el cwd (lo mismo que el shell).
   - Variables asignadas con literal en la misma orden (`W=/x; git -C $W …`),
     `$HOME` y `$PWD`. Cualquier otra variable deja el destino sin resolver.
-  - Heredocs, comentarios y cadenas son texto, no órdenes.
+  - Comentarios, cadenas de órdenes inertes (echo, printf, cat, grep…) y
+    heredocs con delimitador entrecomillado son texto, no órdenes. En un
+    heredoc sin comillas se analizan `$( … )` y los backticks del cuerpo.
+  - Fail-closed: lo que no se reconoce como inerte se trata como posible
+    ejecución. Orden no resoluble (`$X git commit`), shell con opciones no
+    reconocidas, argumentos de órdenes no inertes (awk, sed, script -c,
+    su -c, python3 -c…) y cualquier excepción del análisis → el texto que
+    contenga `git … commit|add` emite la op sin destino.
   - Envoltorios (env, command, nohup, exec, time, nice, timeout, sudo,
     setsid, stdbuf); `bash|sh|zsh -c '…'`, `eval …`, `$( … )` y backticks se
     analizan recursivamente. `xargs … git` y `git` como argumento de otra
@@ -34,7 +41,11 @@ import re
 import sys
 
 OPS = ("commit", "add")
-LEGACY_RE = re.compile(r"git\s+(commit|add)\b", re.I)
+# Texto opaco (argumento de una orden que puede ejecutarlo, script no
+# analizable, fallo del análisis): `git … commit|add` dentro del mismo tramo
+# cuenta como operación sin destino. Más amplio que `git\s+commit` para cubrir
+# `git -C <ruta> commit` dentro de una cadena.
+LEGACY_RE = re.compile(r"(?<![\w-])git(?![\w-])[^;&|\n]*?(?<![\w-])(commit|add)(?![\w-])", re.I)
 SEPARATORS = {";", "&&", "||", "|", "|&", "&", "\n"}
 GIT_ENV = ("GIT_DIR", "GIT_WORK_TREE")
 UNKNOWN = None  # valor o cwd no resoluble
@@ -131,16 +142,42 @@ def _read_dollar(s, i, segs):
     return i + 1
 
 
+def _body_subs(text):
+    """Sustituciones de orden del cuerpo de un heredoc sin comillas."""
+    segs, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "$" and i + 1 < n and text[i + 1] == "(":
+            j = _close_paren(text, i + 2)
+            if not text.startswith("((", i + 1):
+                segs.append(("sub", text[i + 2:j]))
+            i = j + 1
+            continue
+        if c == "`":
+            j = text.find("`", i + 1)
+            if j < 0:
+                raise ParseError("backtick sin cerrar")
+            segs.append(("sub", text[i + 1:j]))
+            i = j + 1
+            continue
+        i += 1
+    return segs
+
+
 def lex(s):
     tokens = []
     segs = []
     has_word = False
-    heredocs = []          # [(delimitador, quitar_tabs)]
+    heredocs = []          # [(delimitador, quitar_tabs, entrecomillado)]
+    quoted = False         # la palabra en curso lleva comillas o escapes
     want_delim = None      # quitar_tabs si la próxima palabra es delimitador
     i, n = 0, len(s)
 
     def flush():
-        nonlocal segs, has_word, want_delim
+        nonlocal segs, has_word, want_delim, quoted
         if has_word:
             merged = []  # fundir literales contiguos: `W=/x` es un solo literal
             for seg in segs:
@@ -151,13 +188,14 @@ def lex(s):
             segs = merged
             if want_delim is not None:
                 delim = "".join(v for k, v in segs if k == "lit")
-                heredocs.append((delim, want_delim))
+                heredocs.append((delim, want_delim, quoted))
                 want_delim = None
                 tokens.append(("heredoc_delim", segs))
             else:
                 tokens.append(("word", segs))
         segs = []
         has_word = False
+        quoted = False
 
     while i < n:
         c = s[i]
@@ -165,6 +203,7 @@ def lex(s):
             if i + 1 < n and s[i + 1] == "\n":
                 i += 2
                 continue
+            quoted = True
             if i + 1 < n:
                 segs.append(("lit", s[i + 1]))
                 has_word = True
@@ -174,10 +213,12 @@ def lex(s):
             j = _skip_squote(s, i + 1)
             segs.append(("lit", s[i + 1:j - 1]))
             has_word = True
+            quoted = True
             i = j
             continue
         if c == '"':
             has_word = True
+            quoted = True
             i += 1
             buf = []
             while True:
@@ -237,16 +278,22 @@ def lex(s):
             continue
         if c == "\n":
             flush()
-            tokens.append(("op", "\n"))
             i += 1
-            for delim, strip in heredocs:  # cuerpo del heredoc: texto
+            for delim, strip, dq in heredocs:
+                body = []
                 while i < n:
                     j = s.find("\n", i)
                     line = s[i:] if j < 0 else s[i:j]
                     i = n if j < 0 else j + 1
                     if (line.lstrip("\t") if strip else line) == delim:
                         break
+                    body.append(line)
+                if not dq:  # sin comillas, bash expande $( … ) y `…` del cuerpo
+                    subs = _body_subs("\n".join(body))
+                    if subs:
+                        tokens.append(("heredoc_body", subs))
             heredocs = []
+            tokens.append(("op", "\n"))
             continue
         if c in "<>":
             if has_word and all(k == "lit" and v.isdigit() for k, v in segs):
@@ -406,6 +453,28 @@ def emit_text(ctx, text):
         emit(ctx, m.group(1).lower(), UNKNOWN)
 
 
+def words_text(words):
+    """Texto literal aproximado de una lista de palabras (para emit_text)."""
+    return " ".join("".join(v for k, v in w if k in ("lit", "sub")) for w in words)
+
+
+def emit_opaque(ctx, argv, words, depth=0, unresolved=False):
+    """Orden cuyo programa no se conoce (`$SUDO git …`, `$(which git) -C …`):
+    puede ejecutar lo que venga detrás."""
+    rest, rwords = argv[1:], words[1:]
+    if rest and rest[0] is not UNKNOWN and os.path.basename(rest[0]) == "git":
+        execute(rest, rwords, ctx, depth, unresolved)  # `$SUDO git -C <ruta> commit`
+        return
+    emit_text(ctx, words_text(words))
+    if any(a in OPS for a in rest):
+        # `$G -C <ruta> commit`: se lee como git; si no cuadra, sin destino.
+        n = len(ctx.out)
+        for cwd in ctx.cwds:
+            _git_one(["git"] + rest, ctx, unresolved, cwd)
+        if len(ctx.out) == n:
+            emit(ctx, next(a for a in rest if a in OPS), UNKNOWN)
+
+
 def _build_items(tokens):
     """Agrupa en listas and-or: [("list", [(op_previo, [tubería…]), …])] con
     marcas ("push",)/("pop",) para subshells `( … )`."""
@@ -544,6 +613,8 @@ def simple(toks, ctx, depth):
             skip = True
         elif kind == "heredoc_delim":
             pass
+        elif kind == "heredoc_body":
+            run_subs(val, ctx, depth)
         elif skip:
             skip = False
             run_subs(val, ctx, depth)
@@ -573,13 +644,18 @@ WRAPPER_ARGS = {
     "sudo": {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"},
     "time": set(), "nohup": set(), "command": set(), "builtin": set(), "setsid": set(),
 }
-NON_EXEC = {"echo", "printf", "cat", "grep", "rg", "sed", "awk", "tee", "jq", "test", "["}
+# Órdenes que demostradamente no ejecutan sus argumentos. sed (`e`) y awk
+# (`system()`) sí pueden: no están aquí.
+NON_EXEC = {"echo", "printf", "cat", "grep", "rg", "tee", "jq", "test", "["}
+# Opciones de shell que toman un argumento aparte.
+SHELL_ARG_OPTS = {"-o", "+o", "-O", "+O", "--rcfile", "--init-file"}
 
 
 def execute(argv, words, ctx, depth, git_env):
     unresolved = git_env or ctx.git_env
     while argv:
         if argv[0] is UNKNOWN:
+            emit_opaque(ctx, argv, words, depth, unresolved)
             return
         base = os.path.basename(argv[0])
         if base in KEYWORDS:
@@ -621,7 +697,10 @@ def execute(argv, words, ctx, depth, git_env):
                 argv, words = argv[step:], words[step:]
         else:
             break
-    if not argv or argv[0] is UNKNOWN:
+    if not argv:
+        return
+    if argv[0] is UNKNOWN:
+        emit_opaque(ctx, argv, words, depth, unresolved)
         return
     base = os.path.basename(argv[0])
 
@@ -666,28 +745,45 @@ def execute(argv, words, ctx, depth, git_env):
         return
     if base in SHELLS:
         rest = argv[1:]
-        for k, a in enumerate(rest):
-            if a is UNKNOWN or not a.startswith("-") or a.startswith("--"):
-                return  # `bash script.sh`: no analizable aquí
-            if "c" in a[1:]:
-                if k + 1 < len(rest):
-                    script = rest[k + 1]
-                    if script is UNKNOWN:
-                        emit_text(ctx, " ".join(x for x in rest if x is not UNKNOWN))
-                        return
-                    snap = ctx.snapshot()
-                    inner = Ctx(ctx.cwds, ctx.home)
-                    inner.git_env = ctx.git_env or unresolved
-                    run(script, inner, depth + 1)
-                    ctx.out.extend(inner.out)
-                    ctx.restore(snap)
+        k = 0
+        while k < len(rest):
+            a = rest[k]
+            if a is UNKNOWN:
+                emit_opaque(ctx, argv, words, depth, unresolved)
                 return
+            if a in SHELL_ARG_OPTS:
+                k += 2
+                continue
+            if a.startswith("--") or (a.startswith("+") and len(a) > 1):
+                k += 1
+                continue
+            if not a.startswith("-") or a == "-":
+                emit_opaque(ctx, argv, words, depth, unresolved)  # `bash script.sh`: script opaco
+                return
+            if "c" not in a[1:]:
+                k += 1
+                continue
+            if k + 1 < len(rest):
+                script = rest[k + 1]
+                if script is UNKNOWN:
+                    emit_opaque(ctx, argv, words, depth, unresolved)
+                    return
+                snap = ctx.snapshot()
+                inner = Ctx(ctx.cwds, ctx.home)
+                inner.git_env = ctx.git_env or unresolved
+                run(script, inner, depth + 1)
+                ctx.out.extend(inner.out)
+                ctx.restore(snap)
+            return
         return
     if base == "git":
         git(argv, ctx, unresolved)
         return
     if base in NON_EXEC:
         return
+    # Cualquier otra orden puede ejecutar sus argumentos (awk system(),
+    # script -c, su -c, python3 -c…): su texto cuenta (fail-closed).
+    emit_text(ctx, words_text(words[1:]))
     # `git` como argumento de otra orden (find -exec, watch, parallel…)
     for k, a in enumerate(argv[1:], start=1):
         if a is not UNKNOWN and os.path.basename(a) == "git":
@@ -743,8 +839,13 @@ def _git_one(argv, ctx, unresolved, gdir):
 
 def main():
     base = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else os.getcwd()
+    command = sys.stdin.read()
     ctx = Ctx([os.path.normpath(base)], os.environ.get("HOME") or UNKNOWN)
-    run(sys.stdin.read(), ctx)
+    try:
+        run(command, ctx)
+    except Exception:  # RecursionError incluido: fail-closed sobre el texto
+        ctx.out = []
+        emit_text(ctx, command)
     for op, d in ctx.out:
         sys.stdout.write("%s\t%s\n" % (op, d))
     return 0

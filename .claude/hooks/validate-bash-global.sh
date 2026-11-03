@@ -94,7 +94,7 @@ if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/nul
   # El repo que importa es el DESTINO de cada `git commit|add` real (git -C,
   # cd encadenado con o sin comillas y con ~, variables literales); heredocs
   # y cadenas son texto. Destino no resoluble → GIT_DIR_TARGET (conservador).
-  # Sin Python: comportamiento anterior.
+  # Sin Python o si el resolvedor falla: cwd de la orden (fail-closed).
   RESOLVER="$(dirname "${BASH_SOURCE[0]}")/../../scripts/lib/git_op_targets.py"
   if command -v python3 >/dev/null 2>&1 \
      && OP_TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$GIT_DIR_TARGET" 2>/dev/null); then
@@ -106,7 +106,9 @@ if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/nul
         guard_main_target "$GIT_DIR_TARGET"
       fi
     done <<< "$OP_TARGETS"
-  elif echo "$COMMAND" | grep -iE 'git[[:space:]]+(commit|add)' > /dev/null; then
+  else
+    # Sin Python, timeout o fallo del resolvedor: conservador. La orden ya pasó
+    # el prefiltro amplio (`git -C <ruta> commit` incluido).
     CD_PATH=$(echo "$COMMAND" | sed -n 's/^[[:space:]]*cd[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null)
     if [[ -n "$CD_PATH" ]] && [[ -e "$CD_PATH/.git" ]]; then  # -e: en un worktree .git es fichero
       GIT_DIR_TARGET="$CD_PATH"

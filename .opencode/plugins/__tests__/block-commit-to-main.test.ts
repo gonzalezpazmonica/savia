@@ -141,4 +141,44 @@ describe("destino real del commit", () => {
   test("bash -c con cd a main desde el worktree", async () => {
     await expect(run(`bash -c 'cd ${mainRepo} && git commit -m x'`, wt)).rejects.toThrow(BLOCK);
   });
+
+  // fail-closed: formas que el resolvedor no reconoce (revisión PR #1467)
+  test("orden no resoluble delante de git commit bloquea en main", async () => {
+    await expect(run("$SUDO git commit -m x")).rejects.toThrow(BLOCK);
+    await expect(run(`$(which git) -C ${mainRepo} commit -m x`, wt)).rejects.toThrow(BLOCK);
+  });
+  test("bash con opciones, awk y script -c que ejecutan git commit bloquean en main", async () => {
+    await expect(run('bash --norc -c "git commit -m x"')).rejects.toThrow(BLOCK);
+    await expect(run("awk 'BEGIN{system(\"git commit -m x\")}'")).rejects.toThrow(BLOCK);
+    await expect(run('script -qc "git commit -m x" /dev/null')).rejects.toThrow(BLOCK);
+  });
+  test("heredoc sin comillas con $(git commit) bloquea; con comillas es texto", async () => {
+    await expect(run("cat <<EOF\n$(git commit -m x)\nEOF")).rejects.toThrow(BLOCK);
+    await expect(run("cat <<'EOF'\n$(git commit -m x)\nEOF")).resolves.toBeUndefined();
+  });
+  test("sin python3: fallback conservador también con git -C", async () => {
+    const OLD_PATH = process.env.PATH;
+    const bin = join(root, "nopy-bin");
+    mkdirSync(bin, { recursive: true });
+    const gitPath = spawnSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).stdout.trim();
+    spawnSync("ln", ["-sf", gitPath, join(bin, "git")]);
+    process.env.PATH = bin;
+    try {
+      await expect(run(`git -C ${wt} commit -m x`)).rejects.toThrow(BLOCK);
+      await expect(run(`git -C ${wt} commit -m x`, wt)).resolves.toBeUndefined();
+    } finally {
+      process.env.PATH = OLD_PATH;
+    }
+  });
+  test("TEST_BRANCH fuera de NODE_ENV=test no anula la rama real", async () => {
+    const OLD_ENV = process.env.NODE_ENV;
+    process.env.TEST_BRANCH = "agent/x";
+    process.env.NODE_ENV = "production";
+    try {
+      await expect(run("git commit -m x")).rejects.toThrow(BLOCK);
+    } finally {
+      process.env.NODE_ENV = OLD_ENV;
+      delete process.env.TEST_BRANCH;
+    }
+  });
 });
