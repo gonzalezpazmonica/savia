@@ -46,6 +46,15 @@ export function probeNode(node) {
   return { ok: false, version: v.status === 0 ? String(v.stdout).trim() : null, noTs: /ERR_NO_TYPESCRIPT/.test(r.stderr ?? "") };
 }
 
+/**
+ * Sonda que se ahorra el arranque extra con el Node actual cuando este ya declara que elimina tipos
+ * (`process.features.typescript`, Node ≥ 22.18 / 23.6 con el soporte compilado). Si no lo declara
+ * (Node 22.6–22.17 sin la bandera, o un Node de distribución sin TypeScript), se prueba de verdad.
+ */
+export function makeProbe(self, probe = probeNode) {
+  return (node) => (node === self.execPath && self.typescript ? { ok: true, version: self.version } : probe(node));
+}
+
 /** El primer candidato que sirve; los que no, con su motivo. */
 export function chooseNode(candidates, probe = probeNode) {
   const failures = [];
@@ -71,4 +80,19 @@ export function noNodeMessage(failures, pkgDir, platform) {
     ...lines,
     ...fix,
   ].join("\n");
+}
+
+/**
+ * Lo que hace `bin/soul.mjs`: elige el Node y lanza Soul con él (no con el actual si no sirve).
+ * Devuelve el código de salida; sin Node que sirva, 1 y la explicación por `stderr`.
+ */
+export function launch(o) {
+  const probe = makeProbe({ execPath: o.execPath, typescript: o.typescript, version: o.version }, o.probe);
+  const chosen = chooseNode(nodeCandidates({ env: o.env, home: o.home, platform: o.platform, execPath: o.execPath }), probe);
+  if (!chosen.node) {
+    o.stderr(noNodeMessage(chosen.failures, o.pkg, o.platform) + "\n");
+    return 1;
+  }
+  const r = (o.spawn ?? spawnSync)(chosen.node, [...NODE_FLAGS, o.entry, ...o.argv], { stdio: "inherit" });
+  return r.status ?? 1;
 }
