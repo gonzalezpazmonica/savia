@@ -1705,15 +1705,6 @@
       "evidence": "docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md",
       "approval": "Operadora 2026-11-03: AskUserQuestion (Aprobada, lanza S1 y S2); se formaliza al fusionar la PR (SE-488)",
       "phase": "A"
-    },
-    {
-      "id": "SE-494",
-      "status": "PROPOSED",
-      "priority": "P0",
-      "title": "Trazas a regresiones herméticas: extensión de SE-364",
-      "note": "Corrige SE-364 (to_evals emite casos open en contra de su spec, nivel ausente tratado como N1, IDs por posición, wrapper que traga argumentos, paired-delta en verde con cero pares). Añade el esquema savia.trace/v1 (plan, llamada, decisión de política, decisión de autoridad, efecto, observación, recibo) sin texto libre ni secretos, 10 fallos verificados congelados como casos offline con invariantes y fail-to-pass, un gate en CI donde FAIL, INCOMPLETE y NO_COVERAGE bloquean, y OTLP opcional. Patrón tomado de Tracely-ai, leído y no ejecutado.",
-      "evidence": "docs/specs/SE-494-trace-hermetic-regressions.spec.md",
-      "phase": "A"
     }
   ],
   "route": {
