@@ -6,6 +6,14 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
+## 2026-11-03 SE-500 APPROVED
+
+Aprobada por la operadora por pregunta interactiva el 2026-11-03 («Aprobada, lanza S1 y S2»); se formaliza al fusionar la PR (SE-488).
+
+## 2026-11-03 SE-500 PROPOSED
+
+Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea con resolutor determinista y plan ordenado. Tier 4: la aprueba la operadora al fusionar la PR (SE-488).
+
 ## 2026-11-01 SE-492 PROPOSED
 
 Sustituye las 9 inferencias de estado CONTRARIAS de la auditoría de 2026-10-30 por estado declarado y demanda del sistema. Se aprueba al fusionar la PR (SE-488).
