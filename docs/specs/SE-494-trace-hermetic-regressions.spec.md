@@ -31,7 +31,7 @@ la congelación de fallos verificados como casos offline que bloquean regresione
 | # | Hallazgo | Evidencia | Efecto |
 |---|---|---|---|
 | H1 | **`to_evals()` selecciona `open`, pero su docstring y SE-364 §3 dicen «casos cerrados».** No es una errata: `capture()` siempre escribe `status: "open"` y ningún código del repo escribe `closed`. Cambiar solo el filtro daría 0 evals. | `scripts/evidence-capture.py:73` (docstring), `:76` (filtro `!= "open"`), `:63` (siempre `open`); SE-364 §3; el test `tests/scripts/test_evidence_capture.py::test_genera_evals` exige `len(evals) == len(cases)` con casos abiertos y fija la semántica contraria a la spec | Todo fallo capturado se vuelve eval sin que nadie lo haya verificado. Un falso positivo del ledger acaba como discriminante. |
-| H2 | **El filtro de nivel no se aplica nunca a los datos reales.** El ledger SE-355 no escribe `level`, `target` ni `detail`. | `scripts/audit-receipts.sh:68` (campos `seq, ts, session_id, actor, action, outcome, enforced, gate_id`); `scripts/evidence-capture.py:53` (`level` ausente → `"N1"`), `:59` y `:61` | El filtro N3+ falla en abierto: un registro sin nivel pasa como N1. Además, los casos reales salen con `input: ""` y `human_correction: ""`. |
+| H2 | **El filtro de nivel no se aplica nunca a los datos reales.** El ledger SE-355 no escribe `level`, `target` ni `detail`. | `scripts/audit-receipts.sh:68` (campos `seq, ts, session_id, actor, action, outcome, enforced, gate_id`); `scripts/evidence-capture.py:53` (`level` ausente → `"N1"`), `:54` (lista de denegados `N3`, `N3b`, `N4b`, sin `N4`), `:59` y `:61` | El filtro N3+ falla en abierto: un registro sin nivel pasa como N1, y un registro `N4` entra al corpus porque el filtro es una lista de denegados incompleta. Además, los casos reales salen con `input: ""` y `human_correction: ""`. |
 | H3 | **`output_rejected` guarda la etiqueta del resultado (`"failure"`), no la salida rechazada.** | `scripts/evidence-capture.py:60` | El discriminante de SE-364 AC-2 («si vuelve a producir lo rechazado, falla») compara una etiqueta, no un comportamiento. |
 | H4 | **Los IDs dependen de la posición en el ledger leído.** | `scripts/evidence-capture.py:57` (`ev-{i:03d}`) | Dos capturas sobre ledgers distintos sobrescriben `ev-000.json`, … sin aviso. |
 | H5 | **Partes de SE-364 que no existen.** No hay `scripts/evidence-to-evals.py`: la conversión vive en `evidence-capture.py`. `scripts/evals-runner.sh` no acepta `--corpus`. No se leen `focal-decisions` ni las trazas de decisión. | `ls scripts/`; `grep -n corpus scripts/evals-runner.sh` → sin resultados; `scripts/evidence-capture.py:41-69` (solo audit) | El corpus no llega al runner. SE-364 AC-1 y AC-5 están validados solo con fixtures sintéticas. |
@@ -115,12 +115,17 @@ calculado **después** de sanear el objeto completo, de forma recursiva (objetos
   `Authorization`/`Cookie`.
 
 El digest no protege un secreto de baja entropía frente a fuerza bruta, así que los secretos no
-se resumen: se eliminan antes de resumir.
+se resumen: se eliminan antes de resumir. Por la misma razón, un `sha256` sin sal de un valor N2
+(una ruta bajo `HOME`, un nombre de proyecto) se puede recuperar por diccionario. Por eso los
+ficheros destinados al repo (`trace.jsonl` de un caso congelado) **solo admiten eventos N1**. Las
+trazas N2 se quedan en local y, si se resumen, usan HMAC-SHA256 con una clave local que no viaja
+al repo.
 
 **Validación con fallo cerrado.** `scripts/trace-validate.py` rechaza con código ≠ 0 en estos casos:
 
 - tipo desconocido, campo desconocido o campo de texto libre;
-- falta `level`, o el nivel es N3, N3b, N4 o N4b en un fichero destinado al repo;
+- falta `level`, o el nivel no es N1 en un fichero destinado al repo (lista de permitidos, no de
+  denegados: N2, N3, N3b, N4 y N4b se rechazan);
 - cualquier valor que case con un patrón de secreto;
 - `seq` con huecos o repetido.
 
@@ -135,7 +140,7 @@ El caso del corpus de SE-364 conserva su formato y gana campos:
 
 ```json
 {
-  "id": "ev-<sha256(canon(registro_fuente_completo))[:16]>",
+  "id": "ev-<sha256(source + \x1f + canon(registro_fuente_completo))[:16]>",
   "source": "audit|effect|decision-trace|focal-decisions",
   "status": "open|verified|closed|discarded",
   "level": "N1|N2|null",
@@ -150,8 +155,8 @@ El caso del corpus de SE-364 conserva su formato y gana campos:
 - `closed`: caso congelado con traza, fixtures, invariantes y prueba fail-to-pass. **Solo los casos `closed` producen evals** (`to_evals`) y regresiones herméticas.
 - `discarded`: falso positivo. Se conserva con motivo para medir la precisión de la captura.
 - Un estado desconocido hace que `to_evals` termine con código 2. No se ignora en silencio.
-- **Cierre exigible, no solo declarado.** `to_evals` y el gate rechazan (código 2) un caso `closed` sin `verification` completo (`verified_by_role`, `evidence_ref`, `ts`) o sin `f2p` con `failing: FAIL` y `fixed: PASS`. El `f2p` de `case.json` no se cree: el job de CI recalcula `--verify-f2p` de cada caso que la PR añade o modifica y bloquea si no coincide. Mientras SE-491 (autorizaciones firmadas por la operadora) no esté implementada, el paso a `verified` solo entra por una PR con revisión humana (Rule 8); cuando lo esté, `verification` llevará esa firma y el gate la comprobará.
-- IDs estables por contenido (H4): el ID es el hash del **JSON canónico del registro fuente completo** (claves ordenadas, sin espacios), con el prefijo `source` y un separador `\x1f` entre ambos. Incluye `seq` y todos los campos, así que dos registros distintos con el mismo `ts`, `action` y `session_id` (reintentos del mismo hook, o `ts`/`session_id` vacíos en ledgers SE-355 antiguos) no colisionan. Capturar dos veces el mismo ledger no duplica casos, y dos ledgers distintos no se pisan. Si aun así un ID nuevo coincide con uno existente de contenido distinto, la captura sale con 2 en vez de sobrescribir.
+- **Cierre exigible, no solo declarado.** `to_evals` y el gate rechazan (código 2) un caso `closed` sin `verification` completo (`verified_by_role`, `evidence_ref`, `ts`) o, si tiene `trace_ref`, sin `f2p` con `failing: FAIL` y `fixed: PASS`. El `f2p` solo se exige a los casos con `trace_ref` (regresión hermética); un caso del ledger sin componente reproducible puede cerrarse con la verificación humana y produce eval de SE-364, pero no regresión hermética. Así no cambia la semántica de SE-364 §3 para el corpus existente. `evidence_ref` debe ser un commit ancestro de `origin/main` o una PR fusionada; si no, el informe marca el caso como «verificación no firmada». El `f2p` de `case.json` no se cree: el job de CI recalcula `--verify-f2p` de cada caso que la PR añade o modifica y bloquea si no coincide. Mientras SE-491 (autorizaciones firmadas por la operadora) no esté implementada, el paso a `verified` solo entra por una PR con revisión humana (Rule 8); cuando lo esté, `verification` llevará esa firma y el gate la comprobará.
+- IDs estables por contenido (H4): el ID es el hash del **JSON canónico del registro fuente completo** (claves ordenadas, sin espacios), con el prefijo `source` y un separador `\x1f` entre ambos. Incluye `seq` y todos los campos, así que dos registros distintos con el mismo `ts`, `action` y `session_id` (reintentos del mismo hook, o `ts`/`session_id` vacíos en ledgers SE-355 antiguos) no colisionan. Capturar dos veces el mismo ledger no duplica casos, y dos ledgers distintos no se pisan. Si aun así un ID nuevo coincide con uno existente de contenido distinto, la captura sale con 2 en vez de sobrescribir. Límite conocido: el ID depende de `seq`, que `audit-receipts.sh` numera de forma monotónica en `.seq` sin rotar el ledger; si alguien reinicia `.seq` o compacta el ledger, el mismo hecho obtiene un ID nuevo y aparece un caso `open` duplicado, que la persona que verifica descarta. Validación: el ID de un caso debe casar con `^ev-[0-9a-f]{16}$` y `trace_ref` debe resolverse dentro de `tests/evals/trace-regressions/cases/<id>/`; si no, el caso se rechaza (código 2), porque ambos son dato de la PR.
 - `rejected_behaviour` sustituye a la etiqueta de `output_rejected` (H3). `output_rejected` se mantiene como alias de lectura para no romper consumidores de SPEC-151.
 
 ### 3. Casos congelados herméticos
@@ -176,7 +181,7 @@ del gate offline.
 |---|---|
 | `requires_event` / `forbids_event` | Existe o no existe un evento que case con un patrón de campos tipados |
 | `precedes` | El evento A aparece antes que el B; por ejemplo, `authority_decision granted` antes de `effect executed` |
-| `no_effect_after_deny` | Tras un `policy_decision deny` no hay `effect executed` con `seq` mayor en el **mismo `trace_id`** (cualquier span, también los hermanos) cuyo `op` case con el patrón del invariante; sin patrón, ningún efecto |
+| `no_effect_after_deny` | Tras un `policy_decision deny` no hay `effect executed` con `seq` mayor en el **mismo `trace_id`** (cualquier span, también los hermanos) cuyo `op` sea igual a uno de los valores que lista el invariante (igualdad exacta, nunca regex); sin lista, ningún efecto |
 | `effect_at_most_once` | Una `idempotency_key` no llega a `executed` dos veces |
 | `ambiguous_blocks_retry` | Tras un `effect ambiguous` no hay reintento automático sin `authority_decision granted` |
 | `receipt_for_effect` | Cada `effect closed` tiene un `receipt` con `receipt_kind: effect` y la misma `idempotency_key` |
@@ -192,7 +197,9 @@ dejar pasar.
 en un worktree temporal: contra `failing_ref` debe dar `FAIL` y contra `fixed_ref` debe dar
 `PASS`. El resultado se guarda en `case.json` (`f2p: {failing: "FAIL", fixed: "PASS", verified_at}`).
 Un caso sin `f2p` verificado no puede estar `closed`. Así cada regresión demuestra que puede
-fallar (SE-456). Antes de crear los worktrees, `trace-freeze.py` comprueba con
+fallar (SE-456). Antes de llamar a git, `trace-freeze.py` exige que cada ref case con `^[0-9a-f]{40}$` (un SHA
+completo, nunca un nombre ni algo que git pueda leer como opción) y pasa los refs tras
+`--end-of-options`. Después, antes de crear los worktrees, comprueba con
 `git merge-base --is-ancestor <ref> origin/main` que `failing_ref` y `fixed_ref` son ancestros de
 `origin/main`; si no, rechaza el caso (código 2) sin ejecutar nada. Las dos ejecuciones usan el
 mismo entorno hermético que el runner.
@@ -204,7 +211,8 @@ ni `/dev/tcp`. El runner `scripts/trace-replay.py`:
 
 - ejecuta cada caso dentro de un **espacio de nombres de red vacío** (solo `lo`), heredado por
   todos los subprocesos: `unshare --user --map-root-user --net` (`unshare -rn`) si el núcleo lo
-  permite, o `unshare --net` con privilegios en el runner de CI. Antes de ejecutar el caso
+  permite, o `sudo unshare --net -- setpriv --reuid=<uid> --regid=<gid> --init-groups …` en el runner de
+  CI, para que el código de la PR no corra como root dentro del espacio de nombres. Antes de ejecutar el caso
   comprueba que el aislamiento funciona: una conexión de sondeo desde un subproceso bash a una
   dirección no local debe fallar;
 - si no puede establecer ese aislamiento o el sondeo conecta, **no ejecuta el caso: el veredicto
@@ -247,7 +255,8 @@ el slice S2:
 - #1444: port TS de `block-gitignored-references` con proyectos autorizados.
 
 Un candidato que no supere el fail-to-pass se descarta con motivo. No se rebaja el criterio para
-llegar a 10: si quedan menos, la PR de S2 lo dice y la spec sigue abierta.
+llegar a 10: si quedan menos, la PR de S2 lo dice, AC-10 queda sin cumplir y la spec no pasa a
+IMPLEMENTED. No hay «mínimo aceptable» por debajo de 10.
 
 ### 4. Gate en CI
 
@@ -259,7 +268,9 @@ su job actual tiene `pull-requests: write` (`evals-ci.yaml:43-45`). El nuevo wor
 
 - se dispara con `pull_request` hacia `main` **sin filtro de `paths`**, y nunca con
   `pull_request_target`, porque ejecuta código de la PR y de `failing_ref`;
-- declara `permissions: contents: read` y nada más;
+- declara `permissions: contents: read` y nada más, y usa `actions/checkout` con
+  `persist-credentials: false` y `fetch-depth: 0` (el código de la PR no debe poder leer el token
+  de `.git/config`, y `git merge-base` y `git show origin/main:…` necesitan la historia);
 - ejecuta `python3 scripts/trace-replay.py --suite tests/evals/trace-regressions --report <json>` y después `--check-report`.
 
 Hacerlo check requerido en la protección de `main` es un cambio de configuración del repositorio.
@@ -268,7 +279,8 @@ Lo hace la operadora; la PR de S3 lo pide en el body.
 - Veredicto por caso, derivado de las comprobaciones requeridas (patrón de Tracely): `FAIL` si una falla; `INCOMPLETE` si una no se pudo evaluar, la ejecución no terminó o no hubo aislamiento de red; `PASS` si todas se ejecutaron y pasaron.
 - Estado del gate, de peor a mejor: `FAIL` > `INCOMPLETE` > `NO_COVERAGE` > `PASS`. **Solo `PASS` deja pasar**; los otros tres salen con código ≠ 0.
 - **Manifiesto.** `tests/evals/trace-regressions/manifest.json` lista cada caso con `{id, status, case_digest}`, donde `case_digest` es el sha256 del JSON canónico de `case.json`, `invariants.json` y `fixtures.json`. Lo genera `trace-freeze.py`; no se edita a mano, y el validador rechaza un manifiesto que no coincida con los casos.
-- **`NO_COVERAGE`** se da cuando hay 0 casos ejecutados, o cuando un caso `closed` en el manifiesto de la **rama base** (`git show origin/main:tests/evals/trace-regressions/manifest.json`) falta en la PR o no se ejecutó. La referencia es la base y no la copia de trabajo, para que una PR no pueda borrar un caso y su entrada del manifiesto a la vez y dar `PASS`. Un caso solo deja de contar si la PR lo pasa a `discarded` con motivo, que es un cambio visible en la revisión humana.
+- **`NO_COVERAGE`** se da cuando hay 0 casos ejecutados, o cuando un caso `closed` en el manifiesto de la **rama base** (`git show origin/main:tests/evals/trace-regressions/manifest.json`) falta en la PR o no se ejecutó. La referencia es la base y no la copia de trabajo, para que una PR no pueda borrar un caso y su entrada del manifiesto a la vez y dar `PASS`. Un caso `closed` en la base que en la PR tenga cualquier estado distinto de `closed` o `discarded` cuenta como falta. Un caso solo deja de contar si la PR lo pasa a `discarded` con motivo. Si el manifiesto no existe en la base (la PR que crea la suite), el conjunto de la base es vacío y solo aplica la regla de 0 casos; cualquier otro error de `git show` da `INCOMPLETE`.
+- **Cambios de cobertura visibles.** El informe y el resumen del job listan, frente a la base, cada caso pasado a `discarded` y cada caso cuyo `case_digest` cambia (por ejemplo, un `invariants.json` debilitado), para que la revisión humana no dependa de leer JSON. La PR de S3 pide a la operadora un `CODEOWNERS` sobre `tests/evals/trace-regressions/`, que es configuración del repositorio.
 - El informe nombra la **primera divergencia** de cada caso fallido: invariante, evento esperado y evento observado.
 - El gate es offline y sin secretos.
 
@@ -284,17 +296,17 @@ ingesta OTLP de entrada (recibir trazas de harnesses externos) queda fuera de al
 Cada AC se cumple con un test que falla contra el código anterior y pasa con el nuevo; los ACs
 de comportamiento incluyen caso negativo.
 
-- **AC-1 (H1)** `to_evals()` solo emite casos `closed`. Test: un corpus con `open`, `verified`, `closed` y `discarded` produce exactamente el `closed`. Negativo: un estado `foo` hace que `--to-evals` salga con 2, y un caso `closed` sin `verification` o sin `f2p` (`failing: FAIL`, `fixed: PASS`) también sale con 2. El test actual `test_genera_evals`, que fija la semántica contraria a SE-364, se reescribe para exigir que un caso `open` **no** produzca eval. El cambio y su motivo (contradicción con SE-364 §3) constan en el body de la PR.
-- **AC-2 (H2)** Un registro de ledger sin `level` no entra al corpus como N1: el caso queda `open` con `level: null` y `to_evals` no lo emite aunque se fuerce `closed` sin nivel (código 2). Negativo: un registro N2 verificado sí produce eval.
+- **AC-1 (H1)** `to_evals()` solo emite casos `closed`. Test: un corpus con `open`, `verified`, `closed` y `discarded` produce exactamente el `closed`. Negativo: un estado `foo` hace que `--to-evals` salga con 2, y un caso `closed` sin `verification` o sin `f2p` (`failing: FAIL`, `fixed: PASS`) teniendo `trace_ref` también sale con 2. El test actual `test_genera_evals`, que fija la semántica contraria a SE-364, se reescribe para exigir que un caso `open` **no** produzca eval. El cambio y su motivo (contradicción con SE-364 §3) constan en el body de la PR.
+- **AC-2 (H2)** Un registro de ledger sin `level` no entra al corpus como N1: el caso queda `open` con `level: null` y `to_evals` no lo emite aunque se fuerce `closed` sin nivel (código 2). Un registro `N4` tampoco entra (hoy entra: `evidence-capture.py:54`); el filtro pasa a lista de permitidos `N1`/`N2`. Negativo: un registro N2 verificado sí produce eval.
 - **AC-3 (H3, H4)** IDs estables: capturar dos veces el mismo ledger deja el mismo número de ficheros, y dos ledgers distintos con la misma posición no se pisan. Caso límite: dos registros con el mismo `ts`, `action` y `session_id` (o ambos vacíos) y distinto `seq` dan dos casos distintos. `rejected_behaviour` está presente y `output_rejected` sigue legible.
 - **AC-4 (H6)** `evidence-capture.sh` con un argumento desconocido sale con 2 y lo nombra en stderr.
 - **AC-5 (H7)** `evals-paired-delta.py --baseline A --current B` con 0 IDs comunes sale con 2 (`unknown`), no con 0. Antes de cambiarlo, un `grep` de los llamadores en `scripts/` y `.github/` confirma que ninguno depende del 0. Caso límite: con un par común se mantiene el comportamiento actual.
-- **AC-6** `trace-validate.py` acepta una traza válida de los 7 tipos y rechaza (≠ 0), con un test por motivo: tipo desconocido, campo de texto libre, `level` ausente, nivel N3 destinado al repo, valor con forma de token (patrón del escáner) y `seq` con hueco. Saneado: `access_token`, `GITHUB_TOKEN`, `X-Api-Key` y una clave denegada anidada en un objeto interior se eliminan antes del digest; una cadena `-H 'Authorization: Bearer …'` dentro de `args` queda `[REDACTED]`; la clave `path` se conserva.
+- **AC-6** `trace-validate.py` acepta una traza válida de los 7 tipos y rechaza (≠ 0), con un test por motivo: tipo desconocido, campo de texto libre, `level` ausente, nivel N3 destinado al repo, valor con forma de token (patrón del escáner) `seq` con hueco, evento N2 en un fichero destinado al repo, ID que no casa con `^ev-[0-9a-f]{16}$` y `trace_ref` fuera del directorio del caso. Saneado: `access_token`, `GITHUB_TOKEN`, `X-Api-Key` y una clave denegada anidada en un objeto interior se eliminan antes del digest; una cadena `-H 'Authorization: Bearer …'` dentro de `args` queda `[REDACTED]`; la clave `path` se conserva.
 - **AC-7** `trace-normalize.py` convierte un ledger SE-355, una reserva SE-387 y una traza SPEC-188 de fixture en eventos válidos, y no asigna nivel a lo que no lo trae.
 - **AC-8** Cada invariante de la lista cerrada tiene un test que pasa y otro que falla. Un `invariants.json` con una aserción de texto (`text_equals`, `regex`) se rechaza. Casos límite: `no_effect_after_deny` falla con un `effect executed` en un span hermano posterior al `deny`; `receipt_for_effect` falla si el recibo tiene otra `idempotency_key`.
 - **AC-9** Hermeticidad: (a) un componente **bash** que intenta `curl` y `/dev/tcp` hacia una dirección no local y solo deja una marca si conecta no la deja bajo el runner, y el caso no da `PASS`; (b) con el aislamiento de red no disponible (simulado forzando el fallo de `unshare`) todo caso da `INCOMPLETE`, nunca `PASS`; (c) un componente Python que abre un socket da `INCOMPLETE`; (d) una fixture vacía da `INCOMPLETE`; (e) un `PATH` de `case.json` fuera de la lista blanca rechaza el caso; (f) el runner no escribe fuera de su directorio temporal (comprobado con un `HOME` de solo lectura).
-- **AC-10** Hay **10 casos `closed`** en `tests/evals/trace-regressions/cases/`. Cada uno tiene `f2p` verificado (`FAIL` en `failing_ref` y `PASS` en `fixed_ref`, ambos ancestros de `origin/main`; un ref que no lo es se rechaza sin ejecutar, con test), pertenece a uno de al menos 3 componentes distintos y no contiene datos N3+ ni secretos (`confidentiality-scan.sh --pr` limpio). Al menos 2 casos usan `no_effect_after_deny`, `effect_at_most_once`, `ambiguous_blocks_retry` o `precedes` sobre autoridad.
-- **AC-11** El workflow `trace-regressions` bloquea en estos casos: un invariante roto adrede (`FAIL`), un caso con fixture borrada (`INCOMPLETE`), una suite vacía (`NO_COVERAGE`) y una PR que borra un caso `closed` **y** su entrada del manifiesto a la vez (`NO_COVERAGE`, comparado con el manifiesto de la base). Con la suite íntegra pasa. Un `case.json` con `f2p` escrito a mano que no coincide con el recálculo bloquea. Se demuestra con ejecuciones de `--check-report` sobre informes y manifiestos de fixture. El workflow no tiene filtro de `paths`, declara solo `contents: read` y no usa `pull_request_target` (test sobre el YAML).
+- **AC-10** Hay **10 casos `closed`** en `tests/evals/trace-regressions/cases/`. Cada uno tiene `f2p` verificado (`FAIL` en `failing_ref` y `PASS` en `fixed_ref`, ambos ancestros de `origin/main`; un ref que no lo es, o que no es un SHA de 40 hex (por ejemplo, `--output=x`), se rechaza sin ejecutar git, con test), pertenece a uno de al menos 3 componentes distintos y no contiene datos N3+ ni secretos (`confidentiality-scan.sh --pr` limpio). Al menos 2 casos usan `no_effect_after_deny`, `effect_at_most_once`, `ambiguous_blocks_retry` o `precedes` sobre autoridad.
+- **AC-11** El workflow `trace-regressions` bloquea en estos casos: un invariante roto adrede (`FAIL`), un caso con fixture borrada (`INCOMPLETE`), una suite vacía (`NO_COVERAGE`) y una PR que borra un caso `closed` **y** su entrada del manifiesto a la vez (`NO_COVERAGE`, comparado con el manifiesto de la base). Con la suite íntegra pasa. Un `case.json` con `f2p` escrito a mano que no coincide con el recálculo bloquea. Se demuestra con ejecuciones de `--check-report` sobre informes y manifiestos de fixture. El manifiesto ausente en la base no bloquea por sí solo; un caso `closed` de la base que pasa a `open` en la PR da `NO_COVERAGE`; el informe lista los casos descartados o modificados frente a la base. El workflow no tiene filtro de `paths`, declara solo `contents: read`, usa `persist-credentials: false` y no usa `pull_request_target` (test sobre el YAML).
 - **AC-12** Multioperador: los casos y el runner no contienen rutas absolutas personales, nombres de persona ni dependencias del perfil activo. La suite pasa con `HOME` vacío y con `SAVIA_PROFILE` sin definir en Linux con aislamiento de red. En macOS, sin espacios de nombres de red, el resultado esperado es `INCOMPLETE` por caso (AC-9 b), no `PASS`; el body de la PR lo documenta.
 - **AC-13** OTLP: sin `SAVIA_OTLP_ENDPOINT`, `--emit-telemetry` no abre conexiones; con endpoint, un evento N3 no se emite (test con endpoint simulado local).
 - **AC-14** Sin regresión: la suite SE-364 (`tests/bats/test-se364-evidence-loop.bats`, `tests/scripts/test_evidence_capture.py`, salvo el test reescrito de AC-1) y el gate SPEC-151 de `evals-ci.yaml` siguen en verde.
