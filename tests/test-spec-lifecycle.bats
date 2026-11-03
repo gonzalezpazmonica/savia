@@ -257,3 +257,35 @@ EOF
   run grep -E '# Specs Lifecycle Log' "$LOG_FILE_OVERRIDE"
   [ "$status" -eq 0 ]
 }
+
+# ── SE-500 S1: specs heredadas fuera del espacio SE- ───────────────────────
+
+@test "SE-500: legacy SPEC-NNN id changes status without any LOG entry" {
+  printf -- '---\nspec_id: SPEC-9100\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SPEC-9100.md"
+  printf '# Specs Lifecycle Log\n\n## 2026-01-01 SE-1 PROPOSED\n' > "$LOG_FILE_OVERRIDE"
+  before=$(sha256sum "$LOG_FILE_OVERRIDE")
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SPEC-9100.md" --status APPROVED --no-timeline
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"SPEC-9100"*"SE-500"* ]]
+  grep -q '^status: APPROVED' "$TMPDIR_SL/SPEC-9100.md"
+  [ ! -d "$TMPDIR_SL/LOG.d" ]
+  [ "$(sha256sum "$LOG_FILE_OVERRIDE")" = "$before" ]
+}
+
+@test "SE-500: malformed SE- id with lowercase suffix is still rejected" {
+  printf -- '---\nspec_id: SE-12a\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SE-12a.md"
+  run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-12a.md" --status APPROVED --no-timeline
+  [ "$status" -eq 1 ]
+  grep -q '^status: PROPOSED' "$TMPDIR_SL/SE-12a.md"
+}
+
+@test "SE-500: LOG_FILE_OVERRIDE alone also isolates LOG.d fragments" {
+  unset PROPUESTAS_DIR_OVERRIDE
+  iso="$TMPDIR_SL/iso"; mkdir -p "$iso"
+  printf -- '---\nspec_id: SE-9101\nstatus: PROPOSED\n---\n' > "$TMPDIR_SL/SE-9101.md"
+  real_before=$(ls -A "$REPO_ROOT/docs/propuestas/LOG.d" | sha256sum)
+  LOG_FILE_OVERRIDE="$iso/LOG.md" run bash "$SCRIPT" --spec "$TMPDIR_SL/SE-9101.md" --status APPROVED --no-timeline
+  [ "$status" -eq 0 ]
+  [ -f "$iso/LOG.d/SE-9101-APPROVED.md" ]
+  [ "$(ls -A "$REPO_ROOT/docs/propuestas/LOG.d" | sha256sum)" = "$real_before" ]
+}

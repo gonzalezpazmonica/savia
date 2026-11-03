@@ -36,7 +36,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROPUESTAS_DIR="${PROPUESTAS_DIR_OVERRIDE:-$PROJECT_ROOT/docs/propuestas}"
 LOG_FILE="${LOG_FILE_OVERRIDE:-$PROPUESTAS_DIR/LOG.md}"   # base consolidada (solo --bootstrap)
-LOG_DIR="${LOG_DIR_OVERRIDE:-$PROPUESTAS_DIR/LOG.d}"       # fragmentos (SE-500 S1)
+# Fragmentos (SE-500 S1): LOG.d/ vive junto a LOG.md, así que quien aísla LOG.md
+# con LOG_FILE_OVERRIDE aísla también los fragmentos.
+LOG_DIR="${LOG_DIR_OVERRIDE:-$(dirname "$LOG_FILE")/LOG.d}"
 
 # Canonical statuses (uppercase): los mismos que acepta roadmap.sh validate (comprobación 2)
 # y el nombre de los fragmentos de LOG.d (SE-500 S1).
@@ -224,9 +226,19 @@ TITLE="${TITLE#\"}"; TITLE="${TITLE%\"}"  # strip surrounding quotes
 OLD_STATUS="$(get_field "$SPEC" "status")"
 DATE_STR="$(date +%Y-%m-%d)"
 
-if [[ ! "$SPEC_ID" =~ ^SE-[0-9]+$ ]]; then
-  echo "ERROR: spec id '$SPEC_ID' no es SE-NNN: los fragmentos de LOG.d solo admiten SE-NNN" >&2
-  exit 1
+# SE-500 §Fragmentos: LOG.d solo admite nombres SE-NNN. Un id del espacio SE- mal
+# formado es un error (fail-closed). Las specs heredadas fuera de ese espacio
+# (SPEC-NNN, 168 en docs/propuestas) no están en el registro de planificación:
+# cambian de estado y timeline, pero no generan entrada de LOG (ni en LOG.d ni
+# en LOG.md, que solo cambia por consolidación, AC-5/AC-6).
+WRITE_LOG=1
+if [[ -z "$SPEC_ID" || "$SPEC_ID" == SE-* ]]; then
+  if [[ ! "$SPEC_ID" =~ ^SE-[0-9]+$ ]]; then
+    echo "ERROR: spec id '$SPEC_ID' no es SE-NNN: los fragmentos de LOG.d solo admiten SE-NNN" >&2
+    exit 1
+  fi
+else
+  WRITE_LOG=0
 fi
 
 if [[ -z "$OLD_STATUS" ]]; then
@@ -236,21 +248,31 @@ fi
 # Apply changes
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[DRY-RUN] Would change status: $OLD_STATUS → $NEW_STATUS in $SPEC"
-  echo "[DRY-RUN] Would write $LOG_DIR/$SPEC_ID-$NEW_STATUS.md:"
-  echo "  ## $DATE_STR $SPEC_ID $NEW_STATUS"
-  [[ -n "$TITLE" ]] && echo "  $TITLE"
-  [[ -n "$NOTE" ]] && echo "  $NOTE"
+  if [[ "$WRITE_LOG" -eq 1 ]]; then
+    echo "[DRY-RUN] Would write $LOG_DIR/$SPEC_ID-$NEW_STATUS.md:"
+    echo "  ## $DATE_STR $SPEC_ID $NEW_STATUS"
+    [[ -n "$TITLE" ]] && echo "  $TITLE"
+    [[ -n "$NOTE" ]] && echo "  $NOTE"
+  else
+    echo "[DRY-RUN] No LOG entry: '$SPEC_ID' is a legacy id outside the SE-NNN registry"
+  fi
   exit 0
 fi
 
-LOGGED=$(append_log_entry "$DATE_STR" "$SPEC_ID" "$NEW_STATUS" "$TITLE" "$NOTE") || {
-  echo "ERROR: no se pudo escribir la entrada en $LOG_DIR; spec sin cambios" >&2
-  exit 1
-}
+if [[ "$WRITE_LOG" -eq 1 ]]; then
+  LOGGED=$(append_log_entry "$DATE_STR" "$SPEC_ID" "$NEW_STATUS" "$TITLE" "$NOTE") || {
+    echo "ERROR: no se pudo escribir la entrada en $LOG_DIR; spec sin cambios" >&2
+    exit 1
+  }
+fi
 update_status "$SPEC" "$NEW_STATUS"
 
 echo "Updated: $SPEC ($OLD_STATUS → $NEW_STATUS)"
-echo "Logged:  $LOGGED"
+if [[ "$WRITE_LOG" -eq 1 ]]; then
+  echo "Logged:  $LOGGED"
+else
+  echo "WARN: '$SPEC_ID' es un id heredado fuera del registro SE-NNN: sin entrada de LOG (SE-500)" >&2
+fi
 
 # ── SPEC-182: auto-append bitemporal timeline entry ──────────────────────────
 if [[ "$NO_TIMELINE" -eq 0 ]]; then
