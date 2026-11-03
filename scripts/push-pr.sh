@@ -199,8 +199,9 @@ if $MERGE; then
   REMOTE_HEAD=$(git ls-remote origin "refs/heads/$BRANCH" 2>/dev/null | cut -f1 | head -1 || true)
   [[ "$REMOTE_HEAD" == "$LOCAL_HEAD" ]] \
     || merge_prep_fail "la cabeza local $LOCAL_HEAD no es la publicada en origin/$BRANCH (${REMOTE_HEAD:-ninguna})."
-  bash scripts/confidentiality-sign.sh verify >/dev/null 2>&1 \
-    || merge_prep_fail "la firma de confidencialidad no cubre la cabeza $LOCAL_HEAD."
+  # SE-501: la firma ya no se versiona. Antes de mergear se re-escanea el diff de la cabeza publicada.
+  SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr >/dev/null 2>&1 \
+    || merge_prep_fail "el escaneo de confidencialidad de la cabeza $LOCAL_HEAD no dio CLEAN."
   PR_NUM=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
   [[ "$PR_NUM" =~ ^[0-9]+$ ]] || merge_prep_fail "no hay un PR abierto para $BRANCH."
   echo "  PR #$PR_NUM, cabeza $LOCAL_HEAD."
