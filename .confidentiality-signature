@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=d53b6b481cdb91c0ee08183c5a4cd4f59aec2293629615ecb7e132f73baee8e1
-timestamp=2026-11-03T05:39:55Z
-branch=agent/w-spec-inferencias-20261023
-head_commit=71061e2d0
-signature=c4b6da1a16a69161ccd157420f1a458608ef9f06f7b75ab4c9424c175d821f91
+diff_hash=6deb29f7c7679a208cda834317c27575858d56bfb9c8a3f286350f73fe95f0c6
+timestamp=2026-11-03T06:02:42Z
+branch=agent/w-guia-movil-20261023
+head_commit=8e0dc2070
+signature=193ef0e9160080f6771f2011eb61077d03ad91c770b316c74b32c3471f9622af
