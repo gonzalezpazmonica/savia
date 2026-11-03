@@ -2,12 +2,12 @@ name: Auto-rebase open PRs after main merge
 
 # Root cause: GitHub server-side merge does NOT execute custom merge drivers
 # (merge.ours.driver) from .gitattributes. So every time main advances, open
-# PRs that touch .confidentiality-signature show conflicts in the GitHub UI
-# even though .gitattributes declares `merge=ours`.
+# PRs show conflicts in the GitHub UI on files every branch rewrites.
 #
 # Fix: run the local resolver automatically on main push. Each open PR is
-# rebased, predictable conflicts (.confidentiality-signature, .scm/*,
-# CHANGELOG.md) are resolved via the resolver script, re-signed, and pushed.
+# rebased, predictable conflicts (CHANGELOG.md and, for branches from before
+# SE-501, the derived paths now removed from the index) are resolved via the
+# resolver script and pushed. No re-sign: the signature is no longer versioned.
 # Same logic as `scripts/resolve-all-open-prs.sh`, automated server-side.
 #
 # Ref: scripts/resolve-pr-conflicts.sh, scripts/resolve-all-open-prs.sh,
@@ -33,10 +33,7 @@ jobs:
       contents: write
       pull-requests: read
     if: ${{ !contains(github.event.head_commit.message, '[skip auto-rebase]') }}
-    env:
-      # SE-426: firma y verificación con la clave real (secreto de CI); sin clave, falla cerrado.
-      CONFIDENTIALITY_HMAC_KEY: ${{ secrets.CONFIDENTIALITY_HMAC_KEY }}
-      CONFIDENTIALITY_REQUIRE_HMAC: '1'
+    # SE-501: sin secreto de firma; el resolutor ya no firma ni regenera derivados.
     steps:
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

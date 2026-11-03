@@ -123,4 +123,12 @@ do_status() {
   grep -v '^#' "$SIG_FILE" | grep -v '^$'
 }
 
-case "$ACTION" in sign) do_sign ;; resign) do_resign ;; verify) do_verify ;; status) do_status ;; *) echo "Usage: $0 {sign|resign|verify|status}"; exit 2 ;; esac
+# SE-501: firma retirada del flujo. La prueba de que main pasó la auditoría es una ejecución de
+# confidentiality-main.yml (scripts/confidentiality-main-verify.sh); la PR pasa «Confidentiality scan (PR)».
+# Este script solo verifica firmas históricas (verify/status); sign y resign ya no escriben nada.
+retired() {
+  echo "confidentiality-sign.sh $ACTION: retirado (SE-501). La firma ya no se versiona: usa" >&2
+  echo "  bash scripts/confidentiality-scan.sh --pr (PR) · bash scripts/confidentiality-main-verify.sh <sha> (main)" >&2
+  exit 2
+}
+case "$ACTION" in sign|resign) retired ;; verify) do_verify ;; status) do_status ;; *) echo "Usage: $0 {verify|status} (histórico; sign/resign retirados por SE-501)"; exit 2 ;; esac

@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# pr-rebase.sh — Rebase current PR branch onto origin/main and re-sign.
-# Handles the common conflict on .confidentiality-signature automatically.
+# pr-rebase.sh — Rebase current PR branch onto origin/main.
 #
 # Use case: PR B is queued behind PR A. When A merges, B needs to rebase onto
-# new main. The only conflict is typically .confidentiality-signature (each
-# branch has its own). This script resolves it by keeping ours, then re-signs
-# with the new (stable) merge-base.
+# new main. SE-501: the confidentiality signature and the other derived files
+# (scripts/derived-paths.txt) are no longer versioned, so there is no re-sign.
+# A conflict limited to derived paths (a branch from before the cut) is
+# resolved by removing them from the index, like scripts/derived-drop.sh.
 #
 # Usage:
 #   bash scripts/pr-rebase.sh              # rebase onto origin/main
 #   bash scripts/pr-rebase.sh --no-push    # local only, don't push
 #
 # Exit codes:
-#   0 — rebase + resign + push successful
+#   0 — rebase + push successful
 #   1 — working tree dirty (commit or stash first)
-#   2 — rebase had non-signature conflicts (manual intervention needed)
-#   3 — signing or push failed
+#   2 — rebase had conflicts outside derived paths (manual intervention needed)
+#   3 — fetch or push failed
 set -uo pipefail
 
 # Opera sobre el repo del directorio actual, nunca sobre el repo donde vive el
@@ -23,8 +23,15 @@ set -uo pipefail
 # commit y push --force-with-lease de la rama activa del repo real.
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
 SCRIPT_DIR="${ROOT:+$ROOT/scripts}"
-SIG_FILE="$ROOT/.confidentiality-signature"
 DO_PUSH=true
+# La lista D sale del código de este script (no de la rama que se rebasa).
+SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+only_derived() {  # only_derived <rutas> → 0 si todas son D (SE-501)
+  local f
+  # shellcheck source=lib/derived-paths.sh
+  source "$SELF_ROOT/scripts/lib/derived-paths.sh" 2>/dev/null && derived_paths_load "$SELF_ROOT" || return 1
+  while IFS= read -r f; do [[ -z "$f" ]] || is_derived_path "$f" || return 1; done <<<"$1"
+}
 
 for arg in "$@"; do
   case "$arg" in
@@ -37,7 +44,6 @@ done
 
 [[ -n "$ROOT" ]] || { echo "ERROR: not inside a git repository" >&2; exit 2; }
 cd "$ROOT" || exit 2
-[[ -f "$SCRIPT_DIR/confidentiality-sign.sh" ]] || { echo "ERROR: $SCRIPT_DIR/confidentiality-sign.sh missing in target repo" >&2; exit 2; }
 
 # ── Pre-flight checks ──────────────────────────────────────────────────────
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -84,15 +90,15 @@ else
     fi
 
     CONFLICTS=$(git diff --name-only --diff-filter=U)
-    if [[ "$CONFLICTS" == ".confidentiality-signature" ]]; then
-      git checkout --ours .confidentiality-signature 2>/dev/null
-      git add .confidentiality-signature
+    if [[ -n "$CONFLICTS" ]] && only_derived "$CONFLICTS"; then
+      # SE-501: un conflicto solo en derivados (D) se resuelve sacándolos del índice, como derived-drop.sh.
+      while IFS= read -r f; do git rm -q --cached -- "$f" >/dev/null 2>&1; done <<<"$CONFLICTS"
       git -c core.editor=true rebase --continue >>/tmp/pr-rebase-output.log 2>&1 || true
     elif [[ -z "$CONFLICTS" ]]; then
       # Empty commit case (changes became no-op after rebase)
       git -c core.editor=true rebase --skip >>/tmp/pr-rebase-output.log 2>&1 || true
     else
-      echo "ERROR: rebase conflicts not limited to signature file:" >&2
+      echo "ERROR: rebase conflicts not limited to derived paths (SE-501):" >&2
       echo "$CONFLICTS" | sed 's/^/  /' >&2
       echo "Run 'git rebase --abort' and resolve manually." >&2
       exit 2
@@ -101,17 +107,7 @@ else
   echo "  Rebase complete after $ITER auto-resolution(s)."
 fi
 
-# ── Re-sign with the new merge-base ────────────────────────────────────────
-echo "  Re-signing with updated merge-base..."
-bash "$SCRIPT_DIR/confidentiality-sign.sh" sign | tail -1
-
-if ! git diff --quiet "$SIG_FILE" 2>/dev/null; then
-  git add "$SIG_FILE"
-  git commit --no-verify -m "chore: sign confidentiality audit after rebase
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>" \
-    2>&1 | tail -2
-fi
+# SE-501: la firma ya no se versiona; no hay re-firma tras el rebase.
 
 # ── Push (with lease) ──────────────────────────────────────────────────────
 if $DO_PUSH; then

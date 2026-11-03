@@ -258,8 +258,15 @@ required_ok() {  # checks obligatorios del PR: pass | fail | pending
 
 # Derivados regenerables (SE-500 S2): conflictos admisibles; al comparar heads se regeneran con el código
 # congelado y se comparan en su forma canónica (tabla de merge-registry-resolve.py), nunca se ignoran.
-DERIVED_RE='^(\.scm/|\.confidentiality-signature$|docs/rules/INDEX\.md$|docs/rules/domain/rule-manifest\.json$|docs/propuestas/ROADMAP-CURRENT\.md$|docs/propuestas/INDEX\.md$)'
+# SE-501: la firma, el .scm generado, rules/INDEX.md y rule-manifest.json (D) ya no son derivados admitidos:
+# no se versionan. Quedan ROADMAP-CURRENT.md e INDEX.md de propuestas.
+DERIVED_RE='^(docs/propuestas/ROADMAP-CURRENT\.md$|docs/propuestas/INDEX\.md$)'
 is_derived() { grep -qE "$DERIVED_RE" <<<"$1"; }
+# D (SE-501): lista cerrada de scripts/derived-paths.txt, comparación exacta o por prefijo. Sin ella, fail-closed.
+# shellcheck source=lib/derived-paths.sh
+source "$ROOT/scripts/lib/derived-paths.sh"
+derived_paths_load "$ROOT" || die "falta scripts/derived-paths.txt (SE-501)" 2
+is_d() { is_derived_path "$1"; }
 # Registros (lista cerrada): se integran con el resolutor determinista y se recalculan al comparar heads.
 REGISTRY_RE='^docs/propuestas/(planning-state\.json|LOG\.md)$'
 is_registry() { grep -qE "$REGISTRY_RE" <<<"$1"; }
@@ -345,10 +352,6 @@ froot_release() {  # froot_release <raíz> → 0 si solo quedaban enlaces y dire
   [[ -z "$(find "$1" -mindepth 1 ! -type l ! -type d -print -quit)" ]] || return 1
   find "$1" -type l -delete && find "$1" -depth -type d -empty -delete && [[ ! -e "$1" ]]
 }
-gen_rules() {  # gen_rules <árbol> <raíz congelada>
-  [[ -f "$2/scripts/rules-index-generate.sh" ]] || return 0
-  (cd "$1" && { [[ ! -f "$2/scripts/rule-manifest-generate.sh" ]] || bash "$2/scripts/rule-manifest-generate.sh" >/dev/null 2>&1; } && bash "$2/scripts/rules-index-generate.sh" >/dev/null 2>&1)
-}
 gen_propuestas() {  # INDEX.md de propuestas (solo si su forma canónica cambió) y ROADMAP-CURRENT.md
   [[ -d "$1/docs/propuestas" ]] || return 0
   if [[ -f "$2/scripts/propuestas-index-gen.sh" ]]; then
@@ -358,8 +361,6 @@ gen_propuestas() {  # INDEX.md de propuestas (solo si su forma canónica cambió
     (cd "$1" && REPO_ROOT="$1" bash "$2/scripts/roadmap.sh" render >/dev/null 2>&1) || return 1
   fi
 }
-gen_capmap() { [[ ! -f "$2/scripts/generate-capability-map.py" ]] || (cd "$1" && python3 "$2/scripts/generate-capability-map.py" "$1" >/dev/null 2>&1); }
-gen_sam() { (cd "$1" && python3 "$2/scripts/sam.py" "$3" --root "$1" 2>/dev/null); }
 # 0 = CLEAN o PASSED. Un escaneo incompleto (unknown) bloquea: sin él, el escáner sale con 0 sin haber escaneado.
 audit() { (cd "$1" && SAVIA_GATE_UNKNOWN=block bash "$2/scripts/confidentiality-scan.sh" --pr >/dev/null 2>&1); }
 
@@ -377,11 +378,14 @@ head_equivalent() {  # head_equivalent <H0> <H1> [refs] → 0 si H1 == merge(H0,
   EQK=identical; REG_HASHES=""
   [[ "$1" == "$2" ]] && return 0
   EQK=main_merge
-  local tree changed m f reg=() der=()
+  local tree changed m f st reg=() der=()
   tree=$(equiv_tree "$1" "$2") || return 1
-  changed=$(git -C "$GITROOT" diff --name-only "$tree" "$2" 2>/dev/null) || return 1
-  while IFS= read -r f; do
+  changed=$(git -C "$GITROOT" diff --name-status --no-renames "$tree" "$2" 2>/dev/null) || return 1
+  while IFS=$'\t' read -r st f; do
     [[ -z "$f" ]] && continue
+    # SE-501 AC-13: una ruta de D solo es admisible si H1 la borra (commit de derived-drop.sh o resync);
+    # añadirla o modificarla hace el head no equivalente (fail-closed). Borrar cualquier otra ruta, también.
+    if is_d "$f"; then [[ "$st" == D ]] || return 1; continue; fi
     if is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else return 1; fi
   done <<<"$changed"
   (( ${#reg[@]} + ${#der[@]} )) || return 0
@@ -421,8 +425,8 @@ derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <T> <rutas…> → 0 
   done
   (( rc == 0 )) && { fr=$(frozen_root "$tw" "eq-$mode") || rc=1; }
   if (( rc == 0 )); then
-    { gen_rules "$tw" "$fr" && gen_propuestas "$tw" "$fr" && gen_capmap "$tw" "$fr" \
-      && { [[ ! -f "$fr/scripts/sam.py" ]] || gen_sam "$tw" "$fr" generate >/dev/null; }; } || rc=1
+    # SE-501: solo quedan derivados de propuestas; reglas y .scm no se versionan ni se regeneran aquí.
+    gen_propuestas "$tw" "$fr" || rc=1
   fi
   for p in "$@"; do
     (( rc == 0 )) || break
@@ -448,7 +452,7 @@ derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <T> <rutas…> → 0 
 
 resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) · 2 conflicto real (CONFLICT_FILES) ·
   # 3 confidencialidad · 5 fallo. Registros con el resolutor y derivados con los generadores congelados (SE-500 S2).
-  local pr="$1" h0="$2" refs="${3:-[]}" br wt c f fr rc reg=() der=() other=()
+  local pr="$1" h0="$2" refs="${3:-[]}" br wt c f fr rc reg=() der=() other=() dd=()
   CONFLICT_FILES=""; RESOLVED=""
   br=$($GH pr view "$pr" -R "$REPO" --json headRefName --jq .headRefName) || return 5
   git -C "$GITROOT" fetch -q origin "$br" main || return 5
@@ -462,15 +466,20 @@ resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) ·
     c=$(git -C "$wt" diff --name-only --diff-filter=U)
     [[ -n "$c" ]] || { git -C "$wt" merge --abort 2>/dev/null; return 5; }   # fallo sin conflicto (identidad, hooks…)
     while IFS= read -r f; do
-      if is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else other+=("$f"); fi
+      if is_d "$f"; then dd+=("$f")
+      elif is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else other+=("$f"); fi
     done <<<"$c"
     if (( ${#other[@]} )); then
       CONFLICT_FILES=$(IFS=,; echo "${other[*]}"); git -C "$wt" merge --abort; return 2
     fi
+    # SE-501: un conflicto en D (la rama lo cambió antes del corte; main ya no lo versiona) se resuelve
+    # sacándolo del índice, igual que derived-drop.sh. Mecánico: no ejecuta generadores ni firma.
+    if (( ${#dd[@]} )); then git -C "$wt" rm -q --cached -- "${dd[@]}" >/dev/null || return 5; fi
     if (( ${#der[@]} )); then git -C "$wt" restore -q --theirs -- "${der[@]}" && git -C "$wt" add -- "${der[@]}" || return 5; fi
     if (( ${#reg[@]} )); then resolve_registries "$wt" "$h0" "$refs" "${reg[@]}" || { git -C "$wt" merge --abort; return 2; }; fi
     git -C "$wt" commit -q --no-edit || return 5
   fi
+  drop_d "$wt" || return 5
   fr=$(frozen_root "$wt" resync) || return 5
   regen_derived "$wt" "$fr"; rc=$?
   froot_release "$fr" || { (( rc )) || rc=5; }   # un generador que escribió fuera del árbol: resultado no fiable
@@ -480,30 +489,30 @@ resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) ·
   ledger event=RESYNC pr="$pr" head="$(git -C "$wt" rev-parse HEAD)" ${RESOLVED:+resolved="$RESOLVED"}
 }
 
+drop_d() {  # drop_d <wt> → 0 si la rama ya no difiere de origin/main en D (commit de derived-drop si hacía falta)
+  # SE-501 migración §4: equivalente mecánico de derived-drop.sh. Cada ruta de D distinta de main vuelve a su
+  # estado en main: restaurada si main la tiene, fuera del índice si no. Nada fuera de D.
+  local p todo=()
+  while IFS= read -r p; do [[ -n "$p" ]] && is_d "$p" && todo+=("$p"); done \
+    < <(git -C "$1" diff --name-only --no-renames origin/main HEAD 2>/dev/null)
+  (( ${#todo[@]} )) || return 0
+  for p in "${todo[@]}"; do
+    if git -C "$1" cat-file -e "origin/main:$p" 2>/dev/null; then git -C "$1" checkout -q origin/main -- "$p" || return 1
+    else git -C "$1" rm -q --cached -- "$p" >/dev/null || return 1; fi
+  done
+  git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(derived): saca los derivados del diff de la PR (SE-501, merge-sprint)"
+}
+
 regen_derived() {  # regen_derived <wt> <raíz congelada> → 0 derivados regenerados y commiteados · 3 confidencialidad · 5 fallo
+  # SE-501: D (reglas, .scm, firma) no se versiona: ni se regenera ni se firma. Quedan los derivados de propuestas
+  # y el escaneo --pr, que solo lee.
   local f
-  gen_rules "$1" "$2" || return 5
-  git -C "$1" add docs/rules 2>/dev/null && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(rules): índice y manifiesto regenerados (merge-sprint)"; }
   gen_propuestas "$1" "$2" || return 5
   for f in docs/propuestas/INDEX.md docs/propuestas/ROADMAP-CURRENT.md; do [[ ! -e "$1/$f" ]] || git -C "$1" add -- "$f"; done
   git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(propuestas): índice y hoja de ruta regenerados (merge-sprint)"
-  if [[ -f "$2/scripts/sam.py" ]]; then
-    gen_capmap "$1" "$2" || return 5
-    # El SAM registra el último commit de cada fuente, .scm/registry.json incluido: si el mapa cambió en
-    # este mismo commit, el SAM nace STALE. Se regenera y commitea hasta que check dé FRESH.
-    local _i fresh=0
-    for _i in 1 2 3; do
-      gen_sam "$1" "$2" generate >/dev/null || return 5
-      git -C "$1" add .scm && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore(scm): SAM regenerado (merge-sprint)"; }
-      gen_sam "$1" "$2" check | grep -q FRESH && { fresh=1; break; }
-    done
-    (( fresh )) || return 5
-  fi
   if [[ -f "$2/scripts/confidentiality-scan.sh" ]]; then
     # Veredicto por código de salida: 0 = CLEAN o PASSED con avisos; ≠0 = BLOCKED. Nunca por el texto.
     audit "$1" "$2" || return 3
-    (cd "$1" && CONFIDENTIALITY_SIG_FILE="$1/.confidentiality-signature" bash "$2/scripts/confidentiality-sign.sh" sign >/dev/null 2>&1) || return 3
-    git -C "$1" add .confidentiality-signature && { git -C "$1" diff --cached --quiet || git -C "$1" commit -q -m "chore: sign confidentiality audit (merge-sprint)"; }
   fi
   return 0
 }

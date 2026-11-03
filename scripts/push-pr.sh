@@ -73,11 +73,11 @@ if ! $SKIP_CL; then
   PREV_V=$(git show origin/main:CHANGELOG.md 2>/dev/null | grep -oP '## \[\K[0-9.]+' | head -1)
   [[ "$CL_V" == "$PREV_V" ]] && { echo "ERROR: CHANGELOG not updated." >&2; exit 1; }; echo "  $CL_V."
 else echo "  Skipped."; fi
-echo -e "\n=== Step 4: Sign ==="
-bash scripts/confidentiality-sign.sh sign 2>&1 | tail -1; git add .confidentiality-signature
-if ! git diff --cached --quiet; then
-  git commit -m "chore: sign confidentiality audit"
-else echo "  Unchanged."; fi
+echo -e "\n=== Step 4: Confidentiality scan (SE-501: sin firma) ==="
+# La firma ya no se versiona. El escaneo del diff es bloqueante aquí y en la CI («Confidentiality scan (PR)»).
+SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr >/dev/null 2>&1 \
+  || { _supervisor "Confidentiality scan blocked"; echo "ERROR: confidentiality-scan.sh --pr no dio CLEAN." >&2; exit 1; }
+echo "  Clean."
 echo -e "\n=== Step 5: Push ==="; export SAVIA_PUSH_PR=1
 git push origin "$BRANCH" 2>&1 | tail -3 || { echo "  Retrying..."; git push --force-with-lease origin "$BRANCH" 2>&1 | tail -3; }
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 # Paths que elevan el tier
@@ -58,8 +59,20 @@ def is_governance(path: str) -> bool:
 # Artefactos regenerados por generate-capability-map.py y sam.py: reflejan cambios ya
 # clasificados en sus fuentes. Las declaraciones del SAM (*-declarations.json, esquema)
 # se editan a mano y siguen clasificándose.
-SCM_GENERATED_FILES = (".scm/sam.json", ".scm/registry.json", ".scm/resources.json", ".scm/index.scm")
-SCM_GENERATED_DIRS = (".scm/views/", ".scm/reports/", ".scm/categories/")
+# SE-501: se leen de scripts/derived-paths.txt (fuente única de D). Sin la lista no se exime nada
+# (fail-closed: el riesgo solo puede subir).
+def _load_scm_generated():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "derived-paths.txt")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            entries = [l.strip() for l in fh if l.strip() and not l.lstrip().startswith("#")]
+    except OSError:
+        return (), ()
+    scm = [e.lower() for e in entries if e.startswith(".scm/")]
+    return tuple(e for e in scm if not e.endswith("/")), tuple(e for e in scm if e.endswith("/"))
+
+
+SCM_GENERATED_FILES, SCM_GENERATED_DIRS = _load_scm_generated()
 # Excluir paths que NO elevan (evitar falsos positivos como "docs/")
 LOW_RISK_EXT = (".md", ".txt", ".json", ".yaml", ".yml", ".scm")
 
