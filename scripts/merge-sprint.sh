@@ -321,7 +321,7 @@ head_equivalent() {  # head_equivalent <H0> <H1> [refs] → 0 si H1 == merge(H0,
 }
 
 registry_equivalent() {  # registry_equivalent <H0> <H1> <M> <ruta> <refs> → 0 si H1 == resolver(merge-base, H0, M) byte a byte
-  local mb out="$HOME_MS/registry.resolved" rc=1
+  local mb out="$HOME_MS/registry.resolved-${FROZEN_SRC##*-}" rc=1
   mb=$(git -C "$GITROOT" merge-base "$1" "$3" 2>/dev/null) || return 1
   rm -f "$out"
   if python3 "$RESOLVER" resolve --repo "$GITROOT" --base "$mb" --head "$1" --main "$3" --refs "$5" --path "$4" --out "$out" >/dev/null 2>&1 \
@@ -334,9 +334,10 @@ registry_equivalent() {  # registry_equivalent <H0> <H1> <M> <ruta> <refs> → 0
 derived_equivalent() {  # derived_equivalent <H0> <H1> <M> <rutas…> → 0 si cada derivado de H1 coincide con su regeneración
   # con el código congelado en la forma canónica de su fila; la firma de confidencialidad exige repetir la auditoría.
   local h0="$1" h1="$2" m="$3"; shift 3
-  local tw="$HOME_MS/eqwt" fr p k gens g have rc=0 b="$HOME_MS/derived.blob"
+  # Rutas por modo (plan | run): un plan concurrente con un run no comparte worktree ni temporales.
+  local mode="${FROZEN_SRC##*-}"; local tw="$HOME_MS/eqwt-$mode" fr p k gens g have rc=0 b="$HOME_MS/derived.blob-$mode"
   wt_reset "$tw" && git -C "$GITROOT" worktree add -q --detach "$tw" "$h1" >/dev/null 2>&1 || return 1
-  fr=$(frozen_root "$tw" eq) || rc=1
+  fr=$(frozen_root "$tw" "eq-$mode") || rc=1
   if (( rc == 0 )); then
     { gen_rules "$tw" "$fr" && gen_propuestas "$tw" "$fr" && gen_capmap "$tw" "$fr" \
       && { [[ ! -f "$fr/scripts/sam.py" ]] || gen_sam "$tw" "$fr" generate >/dev/null; }; } || rc=1
