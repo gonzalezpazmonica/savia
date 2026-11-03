@@ -135,16 +135,16 @@ permisos del frontend, no esta regla. Revisor, revisor de seguridad y juez son d
 comparten sesgos. Las identidades son autodeclaradas: el registro encadenado detecta la compra de
 veredictos antes de `plan`, pero no la impide.
 
-- La independencia del juez compara su id declarado con emails git y trailers `Fix-Author:`, que son
-  espacios de nombres distintos: un agente que firma con email y juzga con su id no se detecta.
-- Las reservas F5 van por manifiesto (digest), no por grant: un merge reservado bajo un grant
-  anterior del mismo manifiesto cuenta como propio.
-- La re-sincronización ejecuta generadores de la rama del PR (`sam.py`, escáner y firma) antes de
-  que el prefiltro y el juez vean el delta.
+- La independencia del juez compara su id con emails git y trailers `Fix-Author:` (espacios de nombres distintos): un agente que firma con email y juzga con su id no se detecta.
+- Las reservas F5 van por manifiesto (digest), no por grant: un merge reservado bajo un grant anterior del mismo manifiesto cuenta como propio.
+- SE-500 S2: generadores (`scripts/`, `.claude/hooks/lib/`) y resolutor salen de `main` congelado; de la rama salen sus datos
+  y el código que un generador cargue de otra ruta (añadirla a `FROZEN_CODE`). `refs` (commits, `.pr-summary.md`, rama) lo
+  controla la autora: acota el delta revisado, no es un control frente a ella; `plan` lo imprime. Un enlace simbólico de la
+  rama en un derivado, un registro o `.scm`/`docs/rules`/`docs/propuestas` da «no equivalente» o `resync_fallo` sin escribir
+  (otras rutas no se vigilan); derivados no equivalentes sin otro cambio se aparcan (`derivados_no_equivalentes`), sin juez.
 
 ## Referencias
 
-- Spec: `docs/specs/SE-433-merge-sprint.spec.md` · reglas: `autonomous-safety.md`,
-  `autonomous-safety-merge-grant.md` (SE-343), `maker-checker-protocol.md`
-- Scripts: `scripts/risk-tier.py` (SE-362) · reservas F5 (SE-387)
+- Spec: `docs/specs/SE-433-merge-sprint.spec.md` · reglas: `autonomous-safety.md`, `autonomous-safety-merge-grant.md` (SE-343),
+  `maker-checker-protocol.md` · scripts: `scripts/risk-tier.py` (SE-362) · reservas F5 (SE-387)
 - Registro de specs: `bash scripts/roadmap.sh register SE-NNN …` (fragmentos de SE-500 S1); nunca editar a mano `planning-state.json` ni `LOG.md`
