@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=b52c0bbae6fc3bdc55b0ad66d7ca2dbac63618215a9b0ec47dffaa8631e496e8
-timestamp=2026-11-03T05:32:21Z
+diff_hash=f47f69f69ae2c39ce31fdc671d54635160b6de1673a3ee5fa1e42f367774463b
+timestamp=2026-11-03T05:51:20Z
 branch=agent/w-fix-vaults-onnx-20261023
-head_commit=13ea9ca0
-signature=44ce2dd96f25c4fc2878ac9a0e02604726a9760993ca55e066707377b8b0ffa8
+head_commit=ae921f2f
+signature=18c11dfb10d4cec2afc3a0f7cfbd52b6154a505176724e0c173a10115ab1ba9e
