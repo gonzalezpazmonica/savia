@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=fce4fa6dc957b369f3b9a266a8e3a72603dc58990b973ea87bf7d74c924c1ca2
-timestamp=2026-11-03T08:54:59Z
+diff_hash=1616a1fc241649d7261462f70d83fb8289394b51befe3241eb2a00f8c69d0e7e
+timestamp=2026-11-03T10:40:51Z
 branch=agent/s490-integracion-20261023
-head_commit=547930a3a
-signature=eccf8a2e36a7451fd32a3fad1c3a7ea4249f08eda70dbee1849d575d5967980f
+head_commit=0926a8a97
+signature=a5808deeb9e8b2cf85ae8e07db73d4376799f1868460da71660998ea3eac2d11
