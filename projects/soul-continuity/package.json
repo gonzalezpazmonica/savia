@@ -15,7 +15,8 @@
     "bench": "node --experimental-strip-types --no-warnings bench/src/cli.ts bench --impl src/core/bench-impl.ts",
     "bench:reference": "node --experimental-strip-types --no-warnings bench/src/cli.ts bench",
     "mutants": "node --experimental-strip-types --no-warnings bench/src/cli.ts mutants",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/attention/tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/attention/tsconfig.json",
+    "typecheck:web": "tsc --noEmit -p src/web/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

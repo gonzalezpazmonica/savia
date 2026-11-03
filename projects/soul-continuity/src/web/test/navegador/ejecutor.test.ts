@@ -3,12 +3,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { AlmacenRecetas, cerrarLectura, ejecutarReceta } from "../adaptador/ejecutor.ts";
-import { buscarNavegador } from "../cortafuegos/perfil.ts";
-import { cargarReceta } from "../receta/validar.ts";
-import { Banco } from "../banco/servidor.ts";
+import { AlmacenRecetas, cerrarLectura, ejecutarReceta } from "../../adaptador/ejecutor.ts";
+import { buscarNavegador } from "../../cortafuegos/perfil.ts";
+import { cargarReceta } from "../../receta/validar.ts";
+import { Banco } from "../../banco/servidor.ts";
 
-const receta = (b: Banco) => cargarReceta(join(import.meta.dirname, "..", "recetas", "sinteticas", "tareas.json"), { puerto: b.puerto });
+const receta = (b: Banco) => cargarReceta(join(import.meta.dirname, "..", "..", "recetas", "sinteticas", "tareas.json"), { puerto: b.puerto });
 
 test("error en la página → ERROR sin elementos, sin excepción", { timeout: 60_000 }, async () => {
   const b = await new Banco().arrancar();
@@ -35,7 +35,7 @@ test("receta sana → OK con elementos", { timeout: 60_000 }, async () => {
 test("perfil persistente del directorio de datos: se usa y NO se borra al terminar", { timeout: 60_000 }, async () => {
   const { existsSync, mkdtempSync, rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
-  const { prepararPerfilSoul, MARCA } = await import("../cortafuegos/perfil.ts");
+  const { prepararPerfilSoul, MARCA } = await import("../../cortafuegos/perfil.ts");
   const datos = mkdtempSync(join(tmpdir(), "soul-datos-"));
   const b = await new Banco().arrancar();
   try {
@@ -98,7 +98,7 @@ test("desactivada y luego una excepción: manda DESACTIVADA y se persiste (revis
   const { tmpdir } = await import("node:os");
   const dir = mkdtempSync(join(tmpdir(), "soul-cierre-"));
   try {
-    const r = cargarReceta(join(import.meta.dirname, "..", "recetas", "sinteticas", "tareas.json"), { puerto: 8490 });
+    const r = cargarReceta(join(import.meta.dirname, "..", "..", "recetas", "sinteticas", "tareas.json"), { puerto: 8490 });
     const almacen = new AlmacenRecetas(join(dir, "desactivadas.json"));
     const base = { registro: [], ventanasAccion: [], descargas: 0, canal: null };
     const fw = { sesionCaducada: false, desactivada: "operación Nueva en /api" };
