@@ -56,6 +56,9 @@ jobs:
       - name: Tests (sin dependencias de ejecución)
         run: npm test
 
+      # Solo test/*.test.ts. Los tests que lanzan un navegador (test/navegador/) corren en
+      # soul-continuity-web.yml, en serie y con el Chromium de Playwright fijado por SOUL_NAVEGADOR;
+      # aquí caerían en el Chrome preinstalado del runner (test/frontera-navegador.test.ts lo vigila).
       - name: Tests unitarios del adaptador web (sin navegador)
         if: matrix.os == 'ubuntu-latest'
         working-directory: projects/soul-continuity/src/web

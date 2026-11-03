@@ -11,8 +11,9 @@ Viene de la preparación de Labs (`se490-prep/web`): formato de receta, validado
 
 ```bash
 npm run typecheck   # tsc --strict, sin emitir
-npm run test:unit   # tests sin navegador
-npm test            # todo: unitarios, ejecutor y batería completa (~4 min, Chrome sin interfaz)
+npm run test:unit       # test/*.test.ts: sin navegador
+npm run test:navegador  # test/navegador/: ejecutor, vigilancia y batería completa, en serie (~4 min, Chrome sin interfaz)
+npm test                # los dos, uno tras otro
 npm run bateria     # solo la batería; --salida <dir> escribe el JSON
 npm run mutantes    # la batería contra cada mutante, en serie (~1 h)
 ```
