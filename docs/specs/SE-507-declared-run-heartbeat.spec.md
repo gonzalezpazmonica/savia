@@ -38,11 +38,11 @@ Conclusión: no hace falta una ontología nueva ni un multiplexor. Falta que `ac
 
 1. **Subcomando `savia-runs.sh beat <run_id> --seq N --phase TEXTO --ttl SEGUNDOS --source hook|launcher|manual`.** Guarda `last_beat = {source, seq, phase, at, valid_until}` en el registro del run.
 2. **`seq` estrictamente creciente por run.** Un latido con `seq` menor o igual que el último se rechaza (exit 1) y no cambia nada.
-3. **Sin latido vigente no hay `working`.** La derivación devuelve `unknown` cuando `activity_state=active` y `last_beat.valid_until` ya pasó, con `trace` «heartbeat expired at <hora> (source=<origen>, seq=<n>)». Si el run nunca latió, sigue la regla actual: la caducidad solo se aplica a runs que han declarado latido.
+3. **Sin latido vigente no hay `working`.** La derivación devuelve `unknown` cuando `activity_state=active` y `last_beat.valid_until` ya pasó, con `trace` «heartbeat expired at <hora> (source=<origen>, seq=<n>)». Un run arrancado con `start --heartbeat-ttl SEGUNDOS` declara que va a latir: si no llega ningún latido antes de `started_at + ttl`, también es `unknown` («no heartbeat since start»). Solo los runs que no declaran latido siguen la regla actual, para no romper los usos existentes.
 4. **El fin solo lo acredita la marca de fin.** `savia-runs.sh finish <run_id> --rc N [--done-file RUTA]`: si `rc≠0` o la marca falta, el run termina con `outcome: FALLO`; un latido nunca termina un run.
 5. **Un latido tras `exited` o tras `finish` se rechaza** y no reabre el run.
 6. **Hook opcional de latido** `.claude/hooks/run-heartbeat.sh` (`PostToolUse`): lee el JSON de stdin y solo actúa si el entorno trae `SAVIA_RUN_ID`. Sin esa variable sale con 0 sin escribir. Nunca bloquea una tool.
-7. **El lanzador de workers** registra cada worker con `start`, exporta `SAVIA_RUN_ID` y lo cierra con `finish --rc --done-file`. Su log propio queda como traza, no como fuente de verdad. El lanzador vive fuera del repo; esta spec define el contrato y un ejemplo en `docs/`.
+7. **El lanzador de workers** registra cada worker con `start --heartbeat-ttl`, exporta `SAVIA_RUN_ID` y lo cierra con `finish --rc --done-file`. Su log propio queda como traza, no como fuente de verdad. El lanzador vive fuera del repo; esta spec define el contrato y un ejemplo en `docs/`.
 8. **`status` y `list` enseñan el motivo** (`trace`) con `--explain`, igual que `show`.
 9. **Gemelo (SE-504).** El gemelo lee el estado derivado, no el log, y solo avisa a la persona de runs en `unknown` o `needs_input`, dentro del presupuesto de avisos de SE-490. No relanza nada: relanzar un run interrumpido es una decisión de la persona.
 
@@ -88,9 +88,9 @@ Esa frase es sobre el gemelo, no sobre el latido. La operadora no ha pedido el l
 | AC-4 | **Negativo:** `beat` con `seq` igual o menor que el último → exit 1 y el registro no cambia (se compara el ledger byte a byte) | estática | ídem |
 | AC-5 | **Negativo:** `beat` tras `finish` o tras `state exited` → exit 1 y `is_terminated` sigue `true` | estática | ídem |
 | AC-6 | `finish --rc 1` → `outcome: FALLO`; `finish --rc 0` sin `--done-file` existente → `outcome: FALLO`; `--rc 0` con marca → `outcome: OK` | estática | ídem |
-| AC-7 | Run que nunca latió y está `active` → misma derivación que hoy (`working`); regresión de `tests/test-se-349-agent-runs-ledger.bats` y `tests/test-agent-runs-board.bats` sin cambios | estática | ídem + suites existentes |
+| AC-7 | Run **sin** `--heartbeat-ttl` que nunca latió y está `active` → misma derivación que hoy (`working`); **negativo:** run con `--heartbeat-ttl 60`, sin latidos y arrancado hace 61 s → `unknown`; regresión de `tests/test-se-349-agent-runs-ledger.bats` y `tests/test-agent-runs-board.bats` sin cambios | estática | ídem + suites existentes |
 | AC-8 | Hook `run-heartbeat.sh` sin `SAVIA_RUN_ID` → exit 0 sin escribir; con `SAVIA_RUN_ID` y JSON válido por stdin → un latido con `seq` creciente | estática | `tests/test-se507-heartbeat-hook.bats` |
-| AC-9 | **Fail-closed:** hook con stdin vacío o JSON malformado → exit 0 (no bloquea la tool) y sin latido escrito, de modo que el run acaba en `unknown`, no en `working` | estática | ídem |
+| AC-9 | **Fail-closed:** hook con stdin vacío o JSON malformado → exit 0 (no bloquea la tool) y sin latido escrito; como el lanzador arranca el run con `--heartbeat-ttl`, el run acaba en `unknown` y no en `working` | estática | ídem |
 | AC-10 | `list --explain` y `status --explain` imprimen el `trace` de cada run | estática | `tests/test-se507-run-heartbeat.bats` |
 | AC-11 | Métrica: tiempo hasta detectar un worker atascado, medido con un worker de prueba que deja de latir. Antes: hasta el time-box. Objetivo: ≤ TTL + 1 min | experimento | informe en `output/agent-runs/` |
 | AC-12 | `capability-entropy.py --check` PASS (el subcomando amplía `savia-runs.sh`; no se crea script nuevo salvo el hook) | CI | — |
@@ -100,7 +100,7 @@ Esa frase es sobre el gemelo, no sobre el latido. La operadora no ha pedido el l
 | Slice | Entrega |
 |---|---|
 | S0 | Prototipo de la salida y del aviso, confirmado por la operadora |
-| S1 | `beat`, `finish --rc --done-file`, derivación con caducidad y `--explain` en `savia-runs.sh`; AC-1..7, AC-10 |
+| S1 | `start --heartbeat-ttl`, `beat`, `finish --rc --done-file`, derivación con caducidad y `--explain` en `savia-runs.sh`; AC-1..7, AC-10 |
 | S2 | Hook `run-heartbeat.sh` y contrato del lanzador en `docs/`; AC-8, AC-9, AC-11 |
 | S3 | Lectura del estado derivado por el gemelo (SE-504), con el presupuesto de avisos de SE-490 |
 
