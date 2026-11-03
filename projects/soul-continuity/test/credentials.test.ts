@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CredentialError } from "../src/contract/adapter.ts";
 import {
-  type Run, type RunResult, SystemCredentialStore, backendFor, linuxBackend, macBackend, windowsBackend,
+  type Run, type RunResult, SystemCredentialStore, WIN_MAX_PARTS, WIN_PS_ARGS, backendFor, hostRun, joinParts, linuxBackend,
+  macBackend, powershellPath, splitParts, windowsBackend,
 } from "../src/credentials/store.ts";
 import { filesUnder } from "../src/core/store.ts";
 
@@ -36,12 +37,20 @@ function fakeRunner(kind: "linux" | "mac" | "win") {
       if (args[0] === "delete-generic-password") { const had = vault.delete(k); return { code: had ? 0 : 44, stdout: "", stderr: "" }; }
       return { code: 2, stdout: "", stderr: "orden inesperada" };
     }
-    // Windows: el script de PowerShell llega por stdin con una línea de datos JSON al final.
-    const data = JSON.parse(input.trim().split("\n").at(-1) as string) as { op: string; target: string; secret?: string };
-    if (data.op === "set") { vault.set(data.target, data.secret ?? ""); return { code: 0, stdout: "", stderr: "" }; }
-    if (data.op === "get") return vault.has(data.target) ? { code: 0, stdout: vault.get(data.target) as string, stderr: "" } : { code: 3, stdout: "", stderr: "" };
-    vault.delete(data.target);
-    return { code: 0, stdout: "", stderr: "" };
+    // Windows: el script va como -EncodedCommand y las operaciones llegan por stdin en JSON; se aplica
+    // el límite real de CredWrite (2560 bytes de blob, en UTF-16).
+    const { ops } = JSON.parse(input) as { ops: { op: string; t: string; v?: string }[] };
+    let out = "";
+    for (const op of ops) {
+      if (op.op === "r") out += vault.has(op.t) ? `+${vault.get(op.t)}\r\n` : "-\r\n";
+      else if (op.op === "w") {
+        if ((op.v ?? "").length * 2 > 2560) return { code: 4, stdout: "", stderr: "" };
+        vault.set(op.t, op.v ?? "");
+        out += "+\r\n";
+      } else if (op.op === "d") out += vault.delete(op.t) ? "+\r\n" : "-\r\n";
+      else return { code: 2, stdout: "", stderr: "" };
+    }
+    return { code: 0, stdout: out, stderr: "" };
   };
   return { run, calls, vault };
 }
@@ -56,7 +65,9 @@ for (const [kind, make] of [["linux", linuxBackend], ["mac", macBackend], ["win"
     await b.delete("graph", "default");
     assert.equal(await b.get("graph", "default"), null);
     for (const c of f.calls) assert.ok(!c.args.join(" ").includes(SECRET), `${c.cmd} ${c.args.join(" ")}`);
-    assert.ok(f.calls.some((c) => c.input.includes(SECRET)), "el secreto viaja por stdin");
+    // En Windows viaja en base64 dentro de los trozos.
+    const wire = kind === "win" ? Buffer.from(SECRET).toString("base64") : SECRET;
+    assert.ok(f.calls.some((c) => c.input.includes(wire)), "el secreto viaja por stdin");
   });
 }
 
@@ -191,7 +202,12 @@ test("hostRun: una herramienta que sale sin leer stdin no tumba el proceso (EPIP
 for (const [kind, make] of [["linux", linuxBackend], ["mac", macBackend], ["win", windowsBackend]] as const) {
   test(`${kind}: un almacén que trunca al guardar hace fallar put; uno íntegro, no (control)`, async () => {
     const f = fakeRunner(kind);
-    const trunc: Run = async (cmd, args, input = "") => f.run(cmd, args, input.replace(SECRET, SECRET.slice(0, 8)));
+    const trunc: Run = async (cmd, args, input = "") => {
+      if (kind !== "win") return f.run(cmd, args, input.replace(SECRET, SECRET.slice(0, 8)));
+      const d = JSON.parse(input) as { ops: { op: string; v?: string }[] };
+      for (const o of d.ops) if (o.op === "w" && o.v) o.v = o.v.slice(0, o.v.length - 4);
+      return f.run(cmd, args, JSON.stringify(d));
+    };
     await assert.rejects(new SystemCredentialStore(make(trunc), mkdtempSync(join(tmpdir(), "soul-cr-"))).put("graph", SECRET), /no guardó/);
     await new SystemCredentialStore(make(f.run), mkdtempSync(join(tmpdir(), "soul-cr-"))).put("graph", SECRET);
   });
@@ -199,7 +215,12 @@ for (const [kind, make] of [["linux", linuxBackend], ["mac", macBackend], ["win"
   test(`${kind}: un borrado que sale con 0 sin borrar hace fallar forget y forgetAll, y la entrada sigue en el índice`, async () => {
     const f = fakeRunner(kind);
     const sordo: Run = async (cmd, args, input = "") => {
-      const borra = args[0] === "clear" || args[0] === "delete-generic-password" || /"op":"delete"/.test(input);
+      if (kind === "win") {
+        // Contesta «borrado» a cada operación sin borrar nada.
+        const { ops } = JSON.parse(input) as { ops: { op: string }[] };
+        return ops.every((o) => o.op === "d") ? { code: 0, stdout: ops.map(() => "+\r\n").join(""), stderr: "" } : f.run(cmd, args, input);
+      }
+      const borra = args[0] === "clear" || args[0] === "delete-generic-password";
       return borra ? { code: 0, stdout: "", stderr: "" } : f.run(cmd, args, input);
     };
     const core = new SystemCredentialStore(make(sordo), mkdtempSync(join(tmpdir(), "soul-cr-")));
@@ -209,3 +230,153 @@ for (const [kind, make] of [["linux", linuxBackend], ["mac", macBackend], ["win"
     assert.deepEqual(core.index(), [{ service: "graph", account: "default" }]);
   });
 }
+
+// ---------------------------------------------------------------- Windows: valor repartido (#1450)
+
+/** Tokens de Entra con forma real: un JSON de más de 5 KB, el doble de lo que cabe en una entrada. */
+const GRAPH = {
+  access_token: `eyJ0eXAiOiJKV1QiLCJub25jZSI6${"A".repeat(3000)}.SECRETO-AT`,
+  refresh_token: `0.AXoA${"r".repeat(1900)}SECRETO-RT`,
+  expires_at: 9e15, scopes: ["Mail.Read", "Calendars.Read", "Chat.Read", "User.Read", "Files.Read"],
+};
+const GRAPH_BLOB = JSON.stringify(GRAPH);
+const PS = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+
+test("win: un JSON de tokens de Graph de más de 5 KB se guarda, se lee y se borra; cada trozo cabe en CredWrite", async () => {
+  assert.ok(GRAPH_BLOB.length > 5000);
+  const f = fakeRunner("win");
+  const b = windowsBackend(f.run);
+  await b.set("api-graph", "a.b", GRAPH_BLOB);
+  assert.equal(await b.get("api-graph", "a.b"), GRAPH_BLOB);
+  assert.ok(f.vault.size > 1, "repartido en varias entradas");
+  for (const v of f.vault.values()) assert.ok(v.length * 2 <= 2560);
+  for (const c of f.calls) {
+    assert.equal(c.cmd, PS, "PowerShell por ruta absoluta");
+    assert.deepEqual(c.args, WIN_PS_ARGS);
+    assert.ok(!c.input.includes("SECRETO"), "ni en claro por stdin");
+  }
+  // Un valor más corto encima no deja trozos del anterior.
+  await b.set("api-graph", "a.b", "corto");
+  assert.equal(await b.get("api-graph", "a.b"), "corto");
+  assert.deepEqual([...f.vault.keys()], ["soul-continuity/api-graph/a.b"]);
+  await b.delete("api-graph", "a.b");
+  assert.equal(f.vault.size, 0);
+  assert.equal(await b.get("api-graph", "a.b"), null);
+});
+
+test("win: los tokens de Graph de un adaptador pasan por el almacén único (keyed) y desinstalar borra todos los trozos", async () => {
+  const d = mkdtempSync(join(tmpdir(), "soul-cr-"));
+  const f = fakeRunner("win");
+  const core = new SystemCredentialStore(windowsBackend(f.run), d);
+  const api = new ApiTokenStore({ backend: core.keyed(), operatorRef: "op-pm", now: () => 0 });
+  await api.put("graph", ["Mail.Read"], GRAPH);
+  assert.equal(await api.acquire("graph", ["Mail.Read"]), GRAPH.access_token);
+  assert.ok(f.vault.size > 1);
+  assert.equal(core.index().length, 1, "un registro por credencial, no por trozo");
+  await core.put("legado", "x");
+  assert.equal((await core.forgetAll()).length, 2);
+  assert.equal(f.vault.size, 0, "no queda ningún trozo en Credential Manager");
+});
+
+test("win: fallo de PowerShell o respuesta que no cuadra es error, nunca «sin credencial»", async () => {
+  const down = windowsBackend(async () => ({ code: 1, stdout: "", stderr: "" }));
+  await assert.rejects(down.get("graph", "default"), /no disponible/);
+  await assert.rejects(down.set("graph", "default", "v"), /no disponible/);
+  await assert.rejects(down.delete("graph", "default"), /no disponible/);
+  const short = windowsBackend(async () => ({ code: 0, stdout: "-\r\n", stderr: "" }));
+  await assert.rejects(short.get("graph", "default"), /no disponible/);
+  const absent = windowsBackend(async () => ({ code: 127, stdout: "", stderr: "ENOENT" }));
+  await assert.rejects(absent.get("graph", "default"), /código 127/);
+});
+
+test("win: entrada incompleta, ajena o del formato anterior se lee como sin credencial", async () => {
+  const f = fakeRunner("win");
+  const b = windowsBackend(f.run);
+  await b.set("api-graph", "a.b", GRAPH_BLOB);
+  f.vault.delete("soul-continuity/api-graph/a.b/part-2");
+  assert.equal(await b.get("api-graph", "a.b"), null, "falta un trozo");
+  f.vault.clear();
+  f.vault.set("soul-continuity/graph/default", "tok-sin-cabecera");
+  assert.equal(await b.get("graph", "default"), null);
+  // El borrado limpia también la entrada antigua.
+  await b.delete("graph", "default");
+  assert.equal(f.vault.size, 0);
+  await assert.rejects(b.get("graph/part-1", "default"), /no admitido/);
+});
+
+test("win: un set cortado a medias no deja una mezcla legible de dos valores", async () => {
+  const f = fakeRunner("win");
+  const b = windowsBackend(f.run);
+  await b.set("api-graph", "a.b", GRAPH_BLOB);
+  const other = GRAPH_BLOB.replace(/r/g, "s");
+  assert.equal(splitParts(other).length, splitParts(GRAPH_BLOB).length);
+  let w = 0;
+  const flaky = windowsBackend(async (cmd, args, input = "") => {
+    const { ops } = JSON.parse(input) as { ops: { op: string; t: string; v?: string }[] };
+    if (!ops.some((x) => x.op === "w")) return f.run(cmd, args, input);
+    const applied = ops.filter((x) => x.op === "w").slice(0, 2);
+    for (const x of applied) f.vault.set(x.t, x.v ?? "");
+    w += applied.length;
+    return { code: 4, stdout: "", stderr: "" };
+  });
+  await assert.rejects(flaky.set("api-graph", "a.b", other), /no disponible/);
+  assert.equal(w, 2);
+  assert.equal(await b.get("api-graph", "a.b"), null, "cabecera vieja + trozos nuevos = sin credencial");
+});
+
+test("win: reparto en trozos — límites", () => {
+  assert.match(splitParts("")[0], /^1:[0-9a-f]{16}:$/);
+  assert.equal(joinParts(splitParts("")), "");
+  assert.equal(joinParts(["1:"]), null, "cabecera sin hash");
+  assert.equal(joinParts(splitParts("ñandú €")), "ñandú €");
+  assert.equal(joinParts([null]), null);
+  assert.equal(joinParts(["0:"]), null);
+  assert.equal(joinParts([`${WIN_MAX_PARTS + 1}:QQ==`]), null);
+  const two = splitParts("y".repeat(1000));
+  assert.equal(two.length, 2);
+  assert.equal(joinParts(two), "y".repeat(1000));
+  assert.equal(joinParts([two[0], "no base64!"]), null);
+  assert.equal(joinParts([two[0], two[1].replace(/^./, "A")]), null, "trozo cambiado: el hash no cuadra");
+  const max = (WIN_MAX_PARTS * 1200 / 4) * 3;
+  assert.equal(splitParts("x".repeat(max)).length, WIN_MAX_PARTS);
+  assert.throws(() => splitParts("x".repeat(max + 1)), /demasiado grande/);
+});
+
+test("win: PowerShell por ruta absoluta, nunca por nombre", () => {
+  assert.equal(powershellPath({}), PS);
+  assert.equal(powershellPath({ SystemRoot: "D:\\WINNT\\" }), "D:\\WINNT\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+  assert.throws(() => powershellPath({ SystemRoot: "powershell" }), /absoluta/);
+  assert.throws(() => powershellPath({ SystemRoot: "\\\\srv\\share" }), /absoluta/);
+});
+
+test("win: el script y el protocolo usan los mismos campos (op, t, v; ops)", async () => {
+  const script = Buffer.from(WIN_PS_ARGS[3], "base64").toString("utf16le");
+  for (const s of ["$d.ops", "$o.op", "$o.t", "$o.v", "'r'", "'w'", "'d'", "[SoulCred]::Read", "[SoulCred]::Write", "[SoulCred]::Delete", "class SoulCred"]) {
+    assert.ok(script.includes(s), `el script contiene ${s}`);
+  }
+  const f = fakeRunner("win");
+  const b = windowsBackend(f.run);
+  await b.set("graph", "default", "SECRETO-1");
+  await b.delete("graph", "default");
+  for (const c of f.calls) {
+    for (const op of (JSON.parse(c.input) as { ops: Record<string, unknown>[] }).ops) {
+      assert.ok(Object.keys(op).every((x) => ["op", "t", "v"].includes(x)));
+      assert.ok(["r", "w", "d"].includes(op.op as string));
+    }
+  }
+});
+
+test("win real: Credential Manager guarda, lee y borra tokens de Graph", { skip: process.platform !== "win32" && "solo en Windows" }, async () => {
+  const b = windowsBackend(hostRun);
+  const a = `ci${Date.now().toString(16)}`;
+  try {
+    await b.set("api-graph", a, GRAPH_BLOB);
+    assert.equal(await b.get("api-graph", a), GRAPH_BLOB);
+    await b.set("api-graph", a, "corto");
+    assert.equal(await b.get("api-graph", a), "corto");
+    await b.delete("api-graph", a);
+    assert.equal(await b.get("api-graph", a), null);
+  } finally {
+    await b.delete("api-graph", a).catch(() => undefined);
+  }
+});

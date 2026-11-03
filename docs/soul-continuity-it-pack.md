@@ -74,7 +74,7 @@ Los directorios que crea Soul llevan permisos 0700 y los ficheros 0600 en Linux 
 | `failsafe.jsonl` | Cada STOP y cada reanudación | Hasta desinstalar |
 | `credentials-index.json` | Nombres de servicio con credencial guardada, para poder borrarlas. Sin secretos | Hasta desinstalar |
 
-**Tokens de las fuentes.** Van solo al almacén de credenciales del sistema: Credential Manager en Windows, Llavero en macOS y Secret Service en Linux. El secreto viaja por la entrada estándar de la herramienta del sistema, nunca en la línea de órdenes, en variables de entorno, en ficheros ni en logs. Si no hay almacén disponible, el token no se guarda en ningún otro sitio. [A15] El núcleo descarta entera la lectura de un adaptador que devuelva el token en su resultado, antes de escribir nada en disco. [A16]
+**Tokens de las fuentes.** Van solo al almacén de credenciales del sistema: Credential Manager en Windows, Llavero en macOS y Secret Service en Linux. El secreto viaja por la entrada estándar de la herramienta del sistema, nunca en la línea de órdenes, en variables de entorno, en ficheros ni en logs. En Windows, cada entrada de Credential Manager admite 2560 bytes, así que el valor va repartido en varias entradas con una cabecera que lleva un hash: si falta un trozo o no cuadra, se lee como «sin credencial» y hay que volver a iniciar sesión. Si no hay almacén disponible, el token no se guarda en ningún otro sitio. [A15] El núcleo descarta entera la lectura de un adaptador que devuelva el token en su resultado, antes de escribir nada en disco. [A16]
 
 **Logs.** El servicio solo escribe en la salida estándar las direcciones de escucha y la huella del certificado. Los errores se registran por su tipo, sin datos de trabajo. [A17]
 
@@ -175,7 +175,7 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A12** `src/adapters/delta-cache.ts:1-11,45-53`.
 - **A13** `src/api/devices.ts:46-56` (token de 256 bits, solo el hash en disco, caducidad), `:74-84` (verificación en tiempo constante).
 - **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:699` (TLS 1.3).
-- **A15** `src/credentials/store.ts:30-42` (secreto por stdin), `:95` (`security -i`), `:108,140` (`-EncodedCommand` sin secretos), `:176-304` (índice sin secretos).
+- **A15** `src/credentials/store.ts:32-44` (secreto por stdin), `:97` (`security -i`), `:130-164` (valor repartido en Credential Manager, `splitParts`/`joinParts`), `:166-190` (`-EncodedCommand` sin secretos), `:252-380` (índice sin secretos).
 - **A16** `src/core/engine.ts:114-124,156-159`.
 - **A17** `src/api/serve.ts:135-136`; `src/api/server.ts:790`.
 - **A18** `src/cli/cli.ts:68` (órdenes permitidas a un agente), `:372-388`.
@@ -193,7 +193,7 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A30** `src/web/adaptador/ejecutor.ts:1-6,27-28,251`; `src/attention/README.md` (en la ruta web ninguna regla produce alerta).
 - **A31** `src/web/adaptador/activacion.ts:1-5,57-63`; `src/web/README.md`, sección de grabación y recibos.
 - **A32** `src/core/connectors.ts:162-171` (`productionAdapters`: solo lo que nombra `connectors.enabled`); `src/core/engine.ts:132-136` (sin adaptador registrado: «no instalado»).
-- **A33** `src/credentials/store.ts:176-304` (almacén único: índice de servicio y cuenta, `keyed()` para los adaptadores, `forgetAll`); `src/adapters/credential-store.ts:1-14,37-40` (`entryKey`, sobre `keyed()` en producción).
+- **A33** `src/credentials/store.ts:252-380` (almacén único: índice de servicio y cuenta, `keyed()` para los adaptadores, `forgetAll`); `src/adapters/credential-store.ts:1-14,37-40` (`entryKey`, sobre `keyed()` en producción).
 - **A34** `src/cli/cli.ts:356-370`; `src/core/connectors.ts:180-190` (`revokeSource`); `src/adapters/revoke.ts:25-36`; `test/ac5-integracion.test.ts`.
 - **A35** `src/web/cortafuegos/perfil.ts:26-29` (directorio de datos del núcleo); `src/core/connectors.ts:135-157` (perfil y ficheros del web dentro de `<datos>/web`); `src/core/store.ts:111`.
 - **A36** `src/web/cortafuegos/perfil.ts:31-48` (`almacenClaves`); `src/web/adaptador/navegador.ts:51,64`; `src/web/README.md` («Claves de las cookies (Linux)»).

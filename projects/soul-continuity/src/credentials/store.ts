@@ -1,6 +1,7 @@
 /**
  * Almacén de credenciales del sistema (SE-490), sin módulos nativos:
- *   - Windows: Credential Manager por PowerShell (CredRead/CredWrite/CredDelete de advapi32);
+ *   - Windows: Credential Manager por PowerShell (CredRead/CredWrite/CredDelete de advapi32),
+ *     con el valor repartido en entradas de 2560 bytes como máximo;
  *   - macOS: llavero con `security`;
  *   - Linux: Secret Service con `secret-tool`.
  *
@@ -11,6 +12,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { CredentialError, type CredentialStore } from "../contract/adapter.ts";
 import { readJson, writeJson } from "../core/store.ts";
@@ -105,13 +107,8 @@ export function macBackend(run: Run): SecretBackend {
 
 // ---------------------------------------------------------------------------- Windows
 
-/** Script sin secretos: va como -EncodedCommand; los datos (y el secreto) llegan por stdin. */
-const PS_SCRIPT = String.raw`$ErrorActionPreference='Stop'
-[Console]::InputEncoding = [Text.Encoding]::UTF8
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
-$d = [Console]::In.ReadToEnd() | ConvertFrom-Json
-Add-Type -TypeDefinition @"
-using System; using System.Runtime.InteropServices; using System.Text;
+/** Tipo C# sobre advapi32 (CredRead/CredWrite/CredDelete). */
+export const SOUL_CRED_CS = String.raw`using System; using System.Runtime.InteropServices; using System.Text;
 public static class SoulCred {
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
   public struct CREDENTIAL { public int Flags; public int Type; public string TargetName; public string Comment;
@@ -128,38 +125,117 @@ public static class SoulCred {
     c.UserName = "soul-continuity"; c.Persist = 2; c.CredentialBlobSize = b.Length; c.CredentialBlob = Marshal.AllocHGlobal(b.Length);
     try { Marshal.Copy(b, 0, c.CredentialBlob, b.Length); return CredWriteW(ref c, 0); } finally { Marshal.FreeHGlobal(c.CredentialBlob); } }
   public static bool Delete(string t) { return CredDeleteW(t, 1, 0); }
+}`;
+
+/**
+ * Cada entrada de Credential Manager admite 2560 bytes de blob (en UTF-16) y el JSON con los
+ * tokens de Entra pasa de 5 KB, así que el valor se guarda en base64 repartido en varias
+ * entradas: `<destino>` lleva «N:hash:» y el primer trozo; `<destino>/part-i`, el resto. El hash
+ * (16 hex de SHA-256 del base64 completo) descarta una mezcla de dos valores si un `set` se corta
+ * a medias o compite con otro: se lee como sin credencial, nunca como un token corrupto.
+ * Tamaño máximo: `WIN_MAX_PARTS × WIN_PART` caracteres de base64 (unos 28 KB de valor).
+ */
+export const WIN_PART = 1200; // caracteres por entrada: 2400 de 2560 bytes
+export const WIN_MAX_PARTS = 32;
+const PART_RE = /^[A-Za-z0-9+/=]+$/;
+const h16 = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+
+/** Reparte el valor en trozos para Credential Manager. El primero lleva el número de trozos y el hash. */
+export function splitParts(v: string): string[] {
+  const b = Buffer.from(v, "utf8").toString("base64");
+  const n = Math.max(1, Math.ceil(b.length / WIN_PART));
+  if (n > WIN_MAX_PARTS) throw new Error("credencial demasiado grande para Credential Manager");
+  const parts = Array.from({ length: n }, (_, i) => b.slice(i * WIN_PART, (i + 1) * WIN_PART));
+  parts[0] = `${n}:${h16(b)}:${parts[0]}`;
+  return parts;
 }
+
+/** Reconstruye el valor; null si falta la cabecera o algún trozo, o si el hash no cuadra. */
+export function joinParts(found: (string | null)[]): string | null {
+  const m = /^(\d{1,2}):([0-9a-f]{16}):([A-Za-z0-9+/=]*)$/.exec(found[0] ?? "");
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n < 1 || n > WIN_MAX_PARTS) return null;
+  const rest = found.slice(1, n);
+  if (rest.length !== n - 1 || rest.some((x) => x === null || !PART_RE.test(x))) return null;
+  const b = m[3] + rest.join("");
+  if (h16(b) !== m[2]) return null;
+  return Buffer.from(b, "base64").toString("utf8");
+}
+
+/**
+ * Script sin secretos: va como -EncodedCommand. Las operaciones (y los trozos del secreto) llegan
+ * por stdin en JSON; responde una línea por operación: «+valor» o «-» al leer, «+» o «-» al borrar.
+ */
+const WIN_SCRIPT = String.raw`$ErrorActionPreference='Stop'
+try {
+[Console]::InputEncoding = [Text.Encoding]::UTF8
+$d = [Console]::In.ReadToEnd() | ConvertFrom-Json
+Add-Type -TypeDefinition @"
+${SOUL_CRED_CS}
 "@
-switch ($d.op) {
-  'get' { $v = [SoulCred]::Read($d.target); if ($null -eq $v) { exit 3 }; [Console]::Out.Write($v); exit 0 }
-  'set' { if ([SoulCred]::Write($d.target, $d.secret)) { exit 0 } else { exit 4 } }
-  'delete' { [void][SoulCred]::Delete($d.target); exit 0 }
+$out = New-Object System.Text.StringBuilder
+foreach ($o in $d.ops) {
+  switch ($o.op) {
+    'r' { $v = [SoulCred]::Read($o.t); if ($null -eq $v) { [void]$out.AppendLine('-') } else { [void]$out.AppendLine('+' + $v) } }
+    'w' { if (-not [SoulCred]::Write($o.t, $o.v)) { exit 4 }; [void]$out.AppendLine('+') }
+    'd' { if ([SoulCred]::Delete($o.t)) { [void]$out.AppendLine('+') } else { [void]$out.AppendLine('-') } }
+    default { exit 2 }
+  }
 }
-exit 2`;
+[Console]::Out.Write($out.ToString())
+exit 0
+} catch { exit 1 }`;
 
-export const PS_ARGS = ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(PS_SCRIPT, "utf16le").toString("base64")];
+export const WIN_PS_ARGS = ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(WIN_SCRIPT, "utf16le").toString("base64")];
 
+/**
+ * Ruta absoluta de Windows PowerShell. Por nombre, Windows busca antes en el directorio de
+ * trabajo que en PATH: un `powershell.exe` plantado ahí recibiría los secretos por stdin.
+ */
+export function powershellPath(env: Record<string, string | undefined> = process.env): string {
+  const root = env.SystemRoot ?? env.windir ?? "C:\\Windows";
+  if (!/^[A-Za-z]:\\[^"<>|?*]*$/.test(root)) throw new Error("SystemRoot no es una ruta absoluta de Windows");
+  return `${root.replace(/\\+$/, "")}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+}
+
+type WinOp = { op: "r"; t: string } | { op: "w"; t: string; v: string } | { op: "d"; t: string };
+
+/**
+ * Windows Credential Manager con el valor repartido en entradas (ver `splitParts`). Los nombres
+ * pasan `checkName` (sin «/»), así que un servicio o cuenta no puede pisar el trozo de otro.
+ */
 export function windowsBackend(run: Run): SecretBackend {
-  const target = (s: string, a: string) => `${APP}/${s}/${a}`;
-  const call = (data: Record<string, string>) => run("powershell.exe", PS_ARGS, JSON.stringify(data) + "\n");
+  const part = (s: string, a: string, i: number) => (i === 0 ? `${APP}/${s}/${a}` : `${APP}/${s}/${a}/part-${i}`);
+  const call = async (ops: WinOp[]): Promise<string[]> => {
+    const r = await run(powershellPath(), WIN_PS_ARGS, JSON.stringify({ ops }));
+    const lines = r.stdout.split(/\r?\n/);
+    if (lines.at(-1) === "") lines.pop();
+    // Un código distinto de 0 o una respuesta que no cuadra es un fallo, nunca «no hay credencial».
+    if (r.code !== 0 || lines.length !== ops.length) throw unavailable("powershell", r);
+    return lines;
+  };
+  const range = <T>(f: (i: number) => T) => Array.from({ length: WIN_MAX_PARTS }, (_, i) => f(i));
   return {
     name: "credential-manager",
     async get(s, a) {
       checkName(s, a);
-      const r = await call({ op: "get", target: target(s, a) });
-      if (r.code === 0) return r.stdout;
-      if (r.code === 3) return null;
-      throw unavailable("powershell", r);
+      const lines = await call(range((i) => ({ op: "r" as const, t: part(s, a, i) })));
+      return joinParts(lines.map((l) => (l.startsWith("+") ? l.slice(1) : null)));
     },
     async set(s, a, secret) {
       checkName(s, a);
-      const r = await call({ op: "set", target: target(s, a), secret });
-      if (r.code !== 0) throw unavailable("powershell", r);
+      const parts = splitParts(secret);
+      // Los trozos antes que la cabecera; después se borran los sobrantes de un valor anterior más largo.
+      const ops: WinOp[] = [];
+      for (let i = parts.length - 1; i >= 0; i--) ops.push({ op: "w", t: part(s, a, i), v: parts[i] });
+      for (let i = parts.length; i < WIN_MAX_PARTS; i++) ops.push({ op: "d", t: part(s, a, i) });
+      await call(ops);
     },
     async delete(s, a) {
       checkName(s, a);
-      const r = await call({ op: "delete", target: target(s, a) });
-      if (r.code !== 0) throw unavailable("powershell", r);
+      // La cabecera, la última: si se corta a medias, lo que queda no se lee como credencial.
+      await call(range((i) => ({ op: "d" as const, t: part(s, a, WIN_MAX_PARTS - 1 - i) })));
     },
   };
 }
