@@ -830,3 +830,62 @@ except c.ConfigError as e:
   for i in $(seq 1 100); do [ -f "$T/ws/.scm/INDEX.scm" ] && break; sleep 0.1; done
   [ -f "$T/ws/.scm/INDEX.scm" ]
 }
+
+# ── rev-1472 P2-4: clave con rutas raras y salidas parciales ───────────────────
+@test "rev-1472 P2-4: ensure regenera si falta una salida de views/ aunque las requeridas estén; sin cambios no" {
+  mkrepo; fake_gens
+  export SPY="$T/spy"
+  bash "$R/scripts/derived.sh" ensure
+  [ -f "$R/.scm/views/v.json" ]
+  mv "$R/.scm/views/v.json" "$T/v.apartado"
+  run bash "$R/scripts/derived.sh" ensure --only scm
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"derived: scm generado"* ]]
+  [ -f "$R/.scm/views/v.json" ]
+  # Control: con todo presente y sin cambios, no genera.
+  run bash "$R/scripts/derived.sh" ensure --only scm
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"generado"* ]]
+  # Una salida editada a mano también invalida el sello.
+  echo '{"v": 2}' > "$R/.scm/views/v.json"
+  run bash "$R/scripts/derived.sh" ensure --only scm
+  [[ "$output" == *"derived: scm generado"* ]]
+  grep -q '"v": 1' "$R/.scm/views/v.json"
+}
+
+@test "rev-1472 P2-4: la clave cambia con el contenido de una ruta con salto de línea y de un renombrado" {
+  mkrepo; fake_gens
+  local nl=$'n\nl.txt' k1 k2 k3 k4
+  echo uno > "$R/$nl"
+  k1=$(bash "$R/scripts/derived.sh" key --only scm)
+  echo dos > "$R/$nl"
+  k2=$(bash "$R/scripts/derived.sh" key --only scm)
+  [ "$k1" != "$k2" ]
+  G add -A; G commit -qm nl
+  G mv a.txt "ren ombrado.txt"
+  k3=$(bash "$R/scripts/derived.sh" key --only scm)
+  echo cambiado > "$R/ren ombrado.txt"
+  k4=$(bash "$R/scripts/derived.sh" key --only scm)
+  [ "$k3" != "$k4" ]
+}
+
+@test "rev-1472 S-P2-2: una derived-paths.txt de la PR que cubra .scm/ no rebaja el tier de ficheros de .scm editados a mano" {
+  mkdir -p "$T/rt/scripts" "$T/rt0/scripts"
+  cp "$REPO/scripts/risk-tier.py" "$T/rt/scripts/"; cp "$REPO/scripts/risk-tier.py" "$T/rt0/scripts/"
+  printf '.scm/\n.scm/views/\n.scm/sam-declarations.json\n.scm/runtime-surface/\n' > "$T/rt/scripts/derived-paths.txt"
+  run python3 - "$T/rt/scripts/risk-tier.py" "$T/rt0/scripts/risk-tier.py" <<'PY'
+import importlib.util, sys
+def load(p):
+    s = importlib.util.spec_from_file_location("rt", p); m = importlib.util.module_from_spec(s); s.loader.exec_module(m); return m
+m, m0 = load(sys.argv[1]), load(sys.argv[2])   # m0: sin lista (no exime nada)
+assert m.SCM_GENERATED_DIRS == (".scm/views/",), m.SCM_GENERATED_DIRS
+assert m.SCM_GENERATED_FILES == (), m.SCM_GENERATED_FILES
+for f in (".scm/sam-declarations.json", ".scm/runtime-surface/effects/auth-secret.json", ".scm/sam.schema.json"):
+    assert m.classify([f]) == m0.classify([f]), (f, m.classify([f]), m0.classify([f]))
+# Control: lo que sí es D sigue exento (views/authority.json no eleva por «auth»).
+assert m.classify([".scm/views/authority.json"]) != m0.classify([".scm/views/authority.json"])
+print("ok")
+PY
+  [ "$status" -eq 0 ]
+  [[ "$output" == *ok* ]]
+}

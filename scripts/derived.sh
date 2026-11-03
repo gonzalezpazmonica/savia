@@ -20,7 +20,9 @@
 # Clave de frescura (en <grupo>/.derived-stamp, ignorado por git):
 #   sha256(HEAD + HEAD^{tree} + git status --porcelain=v1 -z sin D + hash del contenido de cada fichero
 #          listado + blobs de los generadores [+ salidas de rules, para scm]).
-#   Misma clave y salidas presentes ⇒ no se ejecuta ningún generador.
+#   El sello guarda además un resumen de las salidas del grupo (stamp_body): una salida borrada o editada
+#   a mano, también dentro de views/, reports/ o categories/, invalida el sello.
+#   Mismo sello y salidas requeridas presentes ⇒ no se ejecuta ningún generador.
 # Salida: 0 bien · 1 fallo de generación o de verificación · 2 uso o entorno (fail-closed).
 # Importable: «source scripts/derived.sh» solo define la lista cerrada D (derived_paths_load,
 # is_derived_path, derived_pathspecs) y vuelve; no fija opciones ni variables del llamante.
@@ -122,7 +124,7 @@ preflight() {  # preflight <grupo> → falla cerrado si falta git, python3 o un 
 }
 
 key() {  # key <grupo> → clave de frescura
-  local g specs=() f
+  local g specs=() f xy
   mapfile -t specs < <(derived_pathspecs | sed 's/^:(literal)/:(exclude,literal)/')
   {
     echo "group $1"
@@ -130,8 +132,12 @@ key() {  # key <grupo> → clave de frescura
     echo "tree $(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     git -C "$ROOT" status --porcelain=v1 -z --untracked-files=all -- . "${specs[@]}" 2>/dev/null
     echo
+    # Entradas -z: «XY ruta\0»; en renombrados y copias (X o Y = R/C) sigue la ruta de origen sin prefijo,
+    # que se consume aparte. Rutas con espacios o saltos de línea llegan intactas.
     git -C "$ROOT" status --porcelain=v1 -z --untracked-files=all -- . "${specs[@]}" 2>/dev/null \
-      | tr '\0' '\n' | sed -n 's/^.. //p' | while IFS= read -r f; do
+      | while IFS= read -r -d '' f; do
+          xy=${f:0:2}; f=${f:3}
+          [[ "$xy" == *[RC]* ]] && IFS= read -r -d '' _
           [[ -f "$ROOT/$f" && ! -L "$ROOT/$f" ]] && printf '%s %s\n' "$(git -C "$ROOT" hash-object -- "$f")" "$f"
         done
     for g in $(group_code "$1"); do
@@ -145,16 +151,26 @@ key() {  # key <grupo> → clave de frescura
 
 outputs_present() { local f; for f in $(group_required "$1"); do [[ -f "$ROOT/$f" ]] || return 1; done; }
 
+# stamp_body <grupo> → clave de entradas + resumen de las salidas presentes. Si alguien borra o edita a mano
+# una salida (también en views/, reports/ o categories/), el sello deja de coincidir y ensure regenera.
+stamp_body() {
+  local f
+  key "$1"
+  printf 'out '
+  group_outputs "$1" | while IFS= read -r f; do printf '%s %s\n' "$(sha256sum < "$ROOT/$f" | cut -d' ' -f1)" "$f"; done \
+    | sha256sum | cut -d' ' -f1
+}
+
 ensure_group() {  # ensure_group <grupo>
   local st k
   preflight "$1" || return 1
   st="$ROOT/$(group_stamp "$1")"
-  k=$(key "$1")
+  k=$(stamp_body "$1")
   if outputs_present "$1" && [[ -f "$st" && "$(cat "$st")" == "$k" ]]; then return 0; fi
   run_gens "$1" || { echo "derived: falló la generación de $1" >&2; rm -f "$st"; return 1; }
   outputs_present "$1" || { echo "derived: $1 no produjo todas sus salidas" >&2; rm -f "$st"; return 1; }
   mkdir -p "$(dirname "$st")"
-  key "$1" > "$st"
+  stamp_body "$1" > "$st"
   echo "derived: $1 generado"
 }
 

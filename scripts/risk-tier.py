@@ -68,8 +68,17 @@ def _load_scm_generated():
             entries = [l.strip() for l in fh if l.strip() and not l.lstrip().startswith("#")]
     except OSError:
         return (), ()
-    scm = [e.lower() for e in entries if e.startswith(".scm/")]
+    # rev-1472 S-P2-2: la lista viaja en la PR. Una entrada que cubra todo .scm/ (o un fichero editado a
+    # mano) rebajaría el tier de las declaraciones del SAM; esas entradas se ignoran (fail-closed).
+    scm = [e.lower() for e in entries if e.startswith(".scm/") and e != ".scm/" and not _scm_hand_edited(e)]
     return tuple(e for e in scm if not e.endswith("/")), tuple(e for e in scm if e.endswith("/"))
+
+
+# Ficheros de .scm que se editan a mano: nunca son D, digan lo que digan la lista o un prefijo de ella.
+def _scm_hand_edited(path):
+    p = path.lower()
+    return (p.startswith(".scm/runtime-surface/") or p.endswith("-declarations.json")
+            or p.endswith(".schema.json") or ".scm/runtime-surface/".startswith(p))
 
 
 SCM_GENERATED_FILES, SCM_GENERATED_DIRS = _load_scm_generated()
@@ -95,7 +104,7 @@ def classify(files: list[str]) -> dict:
             rationale.append(f"path de gobernanza: {f}")
             continue
         # SAM/SCM regenerado: no eleva (p. ej. views/authority.json contiene "auth")
-        if fl in SCM_GENERATED_FILES or fl.startswith(SCM_GENERATED_DIRS):
+        if (fl in SCM_GENERATED_FILES or fl.startswith(SCM_GENERATED_DIRS)) and not _scm_hand_edited(fl):
             continue
         # docs puros → tier 1 (si todos son docs)
         if any(fl.startswith(d.lower()) for d in DOCS_PATHS) and fl.endswith((".md", ".txt")):
