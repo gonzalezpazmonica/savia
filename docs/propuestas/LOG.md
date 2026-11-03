@@ -10,6 +10,10 @@
 
 STOP global y revocación entre ejecutores: plano de control con pause, revoke, quarantine, reconcile y resume sobre los cuatro STOP actuales, y una época de revocación que consultan SE-496 y SE-493 (hueco G4). Se aprueba al fusionar la PR (SE-488).
 
+## 2026-11-01 SE-496 PROPOSED
+
+Ontología operativa gobernada: contrato de delegación firmado y kernel de autoridad fuera del modelo; el grafo sugiere, solo el kernel autoriza (SAVIA-RESEARCH-03, V4). Se aprueba al fusionar la PR (SE-488).
+
 ## 2026-11-01 SE-491 PROPOSED
 
 Autorizaciones de publicación firmadas por la operadora en lugar de una línea editable por agentes (hallazgo de la PR #1444). Se aprueba al fusionar la PR (SE-488).
