@@ -1,5 +1,5 @@
 {
-  "hash": "c397ceb06a6f",
+  "hash": "ebd3a4238e90",
   "total": 1450,
   "resources": [
     {
@@ -5012,14 +5012,14 @@
       "name": "spec-lifecycle",
       "intents": [
         "append",
+        "fragments",
         "lifecycle",
         "only",
-        "spec",
-        "status"
+        "spec"
       ],
       "kind": "script",
       "path": "scripts/spec-lifecycle.sh",
-      "description": "spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only LOG.md"
+      "description": "spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only log (LOG.d/ fragments, SE-500 S1)"
     },
     {
       "category": "development",
