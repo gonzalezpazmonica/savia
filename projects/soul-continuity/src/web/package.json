@@ -7,8 +7,9 @@
   "engines": { "node": ">=22.6" },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
-    "test:unit": "node --experimental-strip-types --no-warnings --test test/[!be]*.test.ts",
+    "test": "npm run test:unit && npm run test:navegador",
+    "test:unit": "node --experimental-strip-types --no-warnings --test test/*.test.ts",
+    "test:navegador": "node --experimental-strip-types --no-warnings --test --test-concurrency=1 test/navegador/*.test.ts",
     "bateria": "node --experimental-strip-types --no-warnings bench/bateria.ts",
     "mutantes": "node --experimental-strip-types --no-warnings bench/mutantes.ts",
     "sitios": "node --experimental-strip-types --no-warnings banco/servidor.ts",

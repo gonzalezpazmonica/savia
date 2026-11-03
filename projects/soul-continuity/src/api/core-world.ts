@@ -22,6 +22,24 @@ const TIPO: Partial<Record<string, string>> = {
 const CATEGORIA: Record<string, string> = { reunion: "reunion_proxima", tarea: "vencimiento", documento: "documento_sin_leer", hilo_espera: "espera_respuesta" };
 const MIN = 60_000;
 
+/** D8: proyecto de una afirmación, por su referencia nativa (clave de Jira, repositorio de GitHub o Azure DevOps). */
+export function proyectoDe(c: Claim): string | null {
+  const r = c.source_refs[0];
+  if (!r) return null;
+  if (r.adapter === "jira") return /^([A-Z][A-Z0-9_]{0,19})-\d+$/.exec(r.ref)?.[1] ?? null;
+  if (r.adapter === "github") return /^([^#]{1,100})#\d+$/.exec(r.ref)?.[1] ?? null;
+  if (r.adapter === "azure-devops") return /^([^!]{1,100})!\d+$/.exec(r.ref)?.[1] ?? null;
+  return null;
+}
+/** D8: personas de una afirmación (hoy, el remitente del último mensaje), con el correo en minúsculas. */
+export function personasDe(c: Claim): string[] {
+  const f = c.attrs?.last_from;
+  return typeof f === "string" && f.includes("@") && f.length <= 254 ? [f.trim().toLowerCase()] : [];
+}
+const idDe = (pre: string, ref: string, v: string) => pre + createHash("sha256").update(`${ref}\u0000${v}`).digest("hex").slice(0, 16);
+/** Solo el remitente con identidad autenticada (tenant o DKIM/DMARC, fuera de la web) dispara una alerta de persona. */
+const autenticado = (c: Claim) => c.source_refs[0]?.route !== "web" && (c.attrs?.sender_auth === "tenant" || c.attrs?.sender_auth === "dkim_dmarc");
+
 export function adapterView(id: string, s: AdapterStatusEntry): VistaAdaptadorSemilla {
   const ruta = s.route ?? (id.startsWith("m365-") ? "graph" : id === "web" ? "web" : "api");
   const v = (estado: string, motivo: string | null, alt: string | null = null) => ({ id, ruta, estado, motivo, alt });
@@ -39,7 +57,7 @@ export function adapterView(id: string, s: AdapterStatusEntry): VistaAdaptadorSe
 
 export interface CoreWorld extends Mundo {
   /** Conecta el servidor: las correcciones de la app pasan al libro del núcleo. */
-  conectar(s: { alCorregir(f: (o: Op, id: string, tipo: string, t: number) => void | Promise<void>): void }): void;
+  conectar(s: { alCorregir(f: (o: Op, id: string, tipo: string, t: number, dispositivo: string | null) => void | Promise<void>): void }): void;
 }
 
 export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: string }): CoreWorld {
@@ -63,8 +81,9 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
     const id = elementId(ref, c.key);
     keys.get(ref)?.set(id, c.key);
     const observado = parseTs(c.observed_at) ?? 0;
+    const proyecto = proyectoDe(c);
     return {
-      id, tipo, titulo: c.title ?? tipo, proyecto: null, personas: [], detalle: null,
+      id, tipo, titulo: c.title ?? tipo, proyecto: proyecto ? idDe("p", ref, proyecto) : null, personas: personasDe(c).map((x) => idDe("h", ref, x)), detalle: null,
       adaptador: c.source_refs[0].adapter, ruta: c.source_refs[0].route, dep: c.open && c.awaiting_operator,
       fecha: parseTs(c.due_at), nace: parseTs(c.event_at) ?? observado, observado, estado: c.state, sens: c.sensitivity,
       refs: c.source_refs.map((r) => r.ref), mio: false, noMio: false, fijo: true, validoHasta: parseTs(c.valid_until),
@@ -77,18 +96,31 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
     // «es mío» vive en el libro (restore con motivo es_mio): sobrevive a reiniciar el servicio.
     const mioLibro = new Set((engine.ledger(stateDir, o.ref) as { action?: string; reason?: string; key?: string }[])
       .filter((r) => r.action === "restore" && r.reason === "es_mio").map((r) => r.key));
+    const autenticados = new Set<string>();
+    const proyectos = new Map(o.d.proyectos.map((p) => [p.id, p.nombre]));
+    const personas = new Map(o.d.personas.map((p) => [p.id, p.nombre]));
     for (const c of snap.claims) {
       const e = elemento(o.ref, c);
       if (!e) continue;
       vivos.add(e.id);
+      const pr = proyectoDe(c);
+      if (pr && e.proyecto) proyectos.set(e.proyecto, pr);
+      personasDe(c).forEach((x, i) => personas.set(e.personas[i], x));
+      if (autenticado(c)) autenticados.add(e.id);
       const prev = o.elementos.get(e.id);
       if (!prev) nuevos.push(e);
       o.elementos.set(e.id, { ...e, mio: prev?.mio ?? mioLibro.has(c.key), noMio: prev?.noMio ?? false });
     }
     for (const id of [...o.elementos.keys()]) if (!vivos.has(id)) o.elementos.delete(id);
+    // Las listas de filtros solo crecen con lo leído (acotadas): un id que ya vio la app sigue resolviendo.
+    o.d.proyectos = [...proyectos].slice(-200).map(([id, nombre]) => ({ id, nombre }));
+    o.d.personas = [...personas].slice(-500).map(([id, nombre]) => ({ id, nombre }));
     o.d.adaptadores = Object.entries(snap.adapters).filter(([, s]) => s.status !== "not_configured").map(([k, s]) => adapterView(k, s));
     if (ctx) {
       for (const e of nuevos) {
+        // Regla del perfil por remitente: alerta si el remitente está autenticado; si no, aviso (nunca alerta por `From`).
+        const regla = o.alertas.find((r) => (r.tipo === "persona" && e.personas.includes(r.objetivo)) || (r.tipo === "proyecto" && e.proyecto === r.objetivo));
+        if (regla) { ctx.evento(o, { tipo: "alerta", regla, efectiva: autenticados.has(e.id) || regla.tipo === "proyecto" ? "alerta" : "aviso", ids: [e.id] }, t); continue; }
         const cat = CATEGORIA[e.tipo];
         if (cat) ctx.evento(o, { tipo: "aviso", categoria: cat, ids: [e.id], programar: cat === "reunion_proxima" && e.fecha && e.fecha - 15 * MIN > t ? e.fecha - 15 * MIN : null }, t);
       }
@@ -103,7 +135,11 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
         const semilla: SemillaOperador = {
           ref, nivel: cfg.detail.level, nivelMax: cfg.detail.max, proyectos: [], personas: [], elementos: [], adaptadores: [],
           avisos: { activos: ["reunion_proxima", "vencimiento", "documento_sin_leer", "espera_respuesta"], resumenInicio: null, resumenCierre: null, max: 5, ventanaMin: 60, tope: 3 },
-          alertas: [],
+          // D8: las reglas del perfil (`alert_rules`, por remitente) llegan a la API como reglas de persona.
+          alertas: (p.alert_rules ?? []).filter((r) => typeof r.sender === "string" && r.sender.includes("@")).map((r) => ({
+            id: /^[A-Za-z0-9_.-]{1,64}$/.test(r.id) ? r.id : idDe("r", ref, r.id), tipo: "persona", objetivo: idDe("h", ref, r.sender.trim().toLowerCase()),
+            palabra: null, modos: ["DISPONIBLE", "FOCO", "DESCANSO", "FUERA"],
+          })),
         };
         const snap = engine.lastSnapshot(stateDir, ref);
         if (snap) {
@@ -135,10 +171,11 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
       let actual = snap;
       if (q === "Q3") {
         // Como `soul q3 --since`: diferencia entre la lectura vigente en `desde` y la actual (o la
-        // vigente en `hasta`). Sin lectura anterior no hay con qué comparar: error, no «nada cambió».
+        // vigente en `hasta`). D6: sin ninguna lectura anterior a `desde`, la base es la primera
+        // guardada («qué cambió desde que Soul empezó a leer»), no un 400 indistinguible de un error.
         if (rango?.desde == null) throw new ErrorApi(400, "INVALID_INPUT");
-        previous = engine.snapshotAt(stateDir, o.ref, new Date(rango.desde).toISOString()) ?? undefined;
-        if (!previous) throw new ErrorApi(400, "INVALID_INPUT");
+        previous = engine.snapshotAt(stateDir, o.ref, new Date(rango.desde).toISOString())
+          ?? engine.firstSnapshot(stateDir, o.ref) ?? snap;
         if (rango.hasta != null && rango.hasta < t) {
           const h = engine.snapshotAt(stateDir, o.ref, new Date(rango.hasta).toISOString());
           if (h) actual = h;
@@ -158,13 +195,13 @@ export function coreWorld(opts: { cfg: SoulConfig; engine: Engine; stateDir: str
     },
 
     conectar(s) {
-      s.alCorregir(async (o, id, tipo, t) => {
+      s.alCorregir(async (o, id, tipo, t, dispositivo) => {
         const key = keys.get(o.ref)?.get(id);
         // Sin clave no hay a qué apuntar en el libro: no se confirma una corrección que no se guardaría.
         if (!key) throw new ErrorApi(503, "UNAVAILABLE");
         const install = { id: cfg.installation_id, operator: { ref: o.ref, identities: { emails: [] } }, sources: [] };
         // Fallo al escribir el libro: 503 a la app y aviso sin datos de trabajo; el servicio sigue.
-        await engine.correct({ install, stateDir, now: new Date(t).toISOString(), key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo })
+        await engine.correct({ install, stateDir, now: new Date(t).toISOString(), key, action: tipo === "es_mio" ? "restore" : "revoke", reason: tipo, device: dispositivo })
           .catch((e: Error) => { process.stderr.write(`soul api: corrección no persistida (${e.name})\n`); throw new ErrorApi(503, "UNAVAILABLE"); });
       });
     },

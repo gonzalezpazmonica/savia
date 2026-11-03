@@ -2,7 +2,7 @@
 
 > Producto: Soul Continuidad v1 (spec SE-490). Este documento lo puede compartir el operador con el equipo de TI de su organización si quiere o si se lo piden.
 > Describe lo que hace el código publicado en `projects/soul-continuity/`, no lo que se planea. Cada afirmación lleva su referencia al código en el [anexo](#anexo-referencias-al-código). Lo que la spec promete y el código aún no cumple está en [Huecos conocidos](#huecos-conocidos), no en el texto principal.
-> Estado del código revisado: rama del núcleo (`agent/s490-core-20261023`) y las ramas de adaptadores de API, adaptador web y política de atención (`agent/s490-{adapters,web,atencion}-20261023`). Esas tres ramas **todavía no están integradas** en el núcleo (ver H-1).
+> Estado del código revisado: rama de integración (`agent/s490-integracion-20261023`), que reúne el núcleo, los adaptadores de API, el adaptador web, la política de atención y este documento. Los huecos H-1 a H-5 de la revisión anterior están cerrados en ella (ver [Huecos conocidos](#huecos-conocidos)).
 
 ## En una frase
 
@@ -19,6 +19,8 @@ No envía nada a terceros, no aprueba, no responde correos y no ejecuta acciones
 ## 2. Qué lee y de qué fuentes
 
 Cada fuente es opcional y necesita configuración explícita del operador: un **propósito** escrito y una **fecha de consentimiento**. Sin propósito o sin consentimiento vigente, la fuente no se lee. [A4]
+
+`soul init` crea la configuración sin ninguna fuente ni adaptador activo. Cada adaptador se activa después, y `soul login <adaptador>` obtiene su token (flujo de dispositivo o token por la entrada estándar) y lo guarda en el almacén de credenciales del sistema. [A43]
 
 | Adaptador | Fuente | Permisos delegados que pide | Qué lee | Qué no guarda nunca |
 |---|---|---|---|---|
@@ -72,7 +74,7 @@ Los directorios que crea Soul llevan permisos 0700 y los ficheros 0600 en Linux 
 | `failsafe.jsonl` | Cada STOP y cada reanudación | Hasta desinstalar |
 | `credentials-index.json` | Nombres de servicio con credencial guardada, para poder borrarlas. Sin secretos | Hasta desinstalar |
 
-**Tokens de las fuentes.** Van solo al almacén de credenciales del sistema: Credential Manager en Windows, Llavero en macOS y Secret Service en Linux. El secreto viaja por la entrada estándar de la herramienta del sistema, nunca en la línea de órdenes, en variables de entorno, en ficheros ni en logs. Si no hay almacén disponible, el token no se guarda en ningún otro sitio. [A15] El núcleo descarta entera la lectura de un adaptador que devuelva el token en su resultado, antes de escribir nada en disco. [A16]
+**Tokens de las fuentes.** Van solo al almacén de credenciales del sistema: Credential Manager en Windows, Llavero en macOS y Secret Service en Linux. El secreto viaja por la entrada estándar de la herramienta del sistema, nunca en la línea de órdenes, en variables de entorno, en ficheros ni en logs. En Windows, cada entrada de Credential Manager admite 2560 bytes, así que el valor va repartido en varias entradas con una cabecera que lleva un hash: si falta un trozo o no cuadra, se lee como «sin credencial» y hay que volver a iniciar sesión. Si no hay almacén disponible, el token no se guarda en ningún otro sitio. [A15] El núcleo descarta entera la lectura de un adaptador que devuelva el token en su resultado, antes de escribir nada en disco. [A16]
 
 **Logs.** El servicio solo escribe en la salida estándar las direcciones de escucha y la huella del certificado. Los errores se registran por su tipo, sin datos de trabajo. [A17]
 
@@ -80,7 +82,7 @@ Los directorios que crea Soul llevan permisos 0700 y los ficheros 0600 en Linux 
 
 **Borrar.**
 
-- `soul revoke <adaptador>` retira el consentimiento, borra de la caché y del historial las afirmaciones de ese adaptador y borra su credencial. Ver H-3 y H-4 sobre lo que todavía no borra.
+- `soul revoke <adaptador>` retira el consentimiento, borra de la caché y del historial las afirmaciones de ese adaptador, su caché de sincronización y sus tokens en todas las variantes de permisos. Para `web`, borra todo `<datos>/web` (perfil del navegador con sus sesiones, huellas y recibos). [A34]
 - `soul uninstall --yes` borra las credenciales del índice, retira el arranque automático y borra todo el estado de Soul del directorio de datos. Lo que no es de Soul en ese directorio se conserva y se dice. Sin `--yes` solo enseña lo que borraría. [A19]
 - El código del programa (la carpeta del paquete) y el runtime de Node.js no los borra `uninstall`: se borran como cualquier carpeta del usuario.
 
@@ -90,7 +92,9 @@ Los directorios que crea Soul llevan permisos 0700 y los ficheros 0600 en Linux 
 
 - **La API para la app móvil (`soul serve`)** escucha solo en las direcciones IP que el operador escribe en `api.listen`, que deben ser las de su VPN. No hay valor por defecto: sin direcciones, no arranca. Las escrituras que equivalen a «todas las interfaces» (`0.0.0.0`, `::` y sus variantes) y los nombres de host se rechazan. El puerto por defecto es 8787. [A20]
 - Solo HTTPS con TLS 1.3 y un certificado propio de la instalación (EC P-256), que la app fija por huella. [A14]
-- Solo responde a dispositivos emparejados. El emparejamiento se hace en el terminal del portátil, no por la red. El detalle está en el modelo de amenazas del canal (`projects/soul-continuity/docs/canal-amenazas.md`).
+- Solo responde a dispositivos emparejados. Para emparejar, el operador ejecuta `soul pair` en su terminal: abre una ventana de 10 minutos y muestra una **clave de emparejamiento** de un solo uso (`soulpk_…`, 178 bits aleatorios) en texto y en un QR. La app la usa contra `/v1/pair/challenge` y `/v1/pair/complete` (protocolo soul-pair-v2), sin enviarla nunca: cada lado demuestra que la conoce con un HMAC. 3 pruebas fallidas invalidan la clave. [A46]
+- Cada petición del móvil lleva, además del token, una prueba DPoP firmada con la clave del móvil que quedó ligada al emparejar. Un token copiado no sirve sin esa clave. No hay ligadura en el primer uso: un dispositivo emparejado antes de soul-pair-v2, sin clave ligada, recibe 401 con cualquier prueba y hay que **volver a emparejarlo** con `soul pair`. `soul serve` lo avisa una vez por dispositivo y `soul devices` marca los que hay que reemparejar (sin clave ligada o con el token caducado). [A40]
+- Por qué 178 bits: quien esté en la VPN durante la ventana puede pedir un reto y probar claves sin conexión. Con un millón de GPU durante los 10 minutos se prueban unas 2^62 claves de 2^178: probabilidad ≈ 2^-116. La versión anterior (código de 10 caracteres, 2^50) se retiró por eso y el servicio la rechaza con un error que pide actualizar la app. La clave está en claro en `pairing.json` (0600) solo mientras la ventana está abierta, porque es la clave del HMAC. El detalle está en el modelo de amenazas del canal (`projects/soul-continuity/docs/canal-amenazas.md`, punto 3 bis).
 - **Durante un inicio de sesión con navegador** (OAuth con PKCE), un servidor temporal escucha en `127.0.0.1`, en un puerto aleatorio. Solo acepta la respuesta con el `state` esperado y se cierra al terminar o a los 5 minutos. [A21]
 - El navegador del adaptador web se controla por una tubería local, no por un puerto. [A22]
 
@@ -109,7 +113,7 @@ Los directorios que crea Soul llevan permisos 0700 y los ficheros 0600 en Linux 
 
 1. `soul autostart uninstall` (si se activó) y después `soul uninstall --yes`. La segunda orden ya incluye la primera. [A19]
 2. Borrar la carpeta del paquete.
-3. Si se usó el adaptador web: borrar el perfil dedicado del navegador y las grabaciones de tráfico (ver H-4).
+3. Si se usó el adaptador web: `soul uninstall` ya borra el perfil dedicado (`<datos>/web`). Las grabaciones de tráfico que el operador haya guardado fuera de esa carpeta las borra él. [A35]
 4. Retirar en el proveedor (Microsoft, Google, Atlassian, GitHub) el acceso concedido a la aplicación. Borrar el token en local **no** invalida la concesión en el proveedor. [A27]
 5. Retirar el portátil de la VPN, si solo estaba ahí para Soul.
 
@@ -135,62 +139,71 @@ Soul Continuidad es una herramienta personal para trabajar con datos a los que e
 
 Lo que la spec SE-490 promete y el código revisado aún no cumple. No se describe arriba como hecho.
 
-| Id | Prioridad | Hueco | Qué falta |
+| Id | Prioridad | Hueco | Qué falta o cómo se cerró |
 |---|---|---|---|
-| H-1 | P1 | En la rama del núcleo no hay ningún adaptador registrado: una fuente configurada responde «adaptador no instalado» [A32]. Los adaptadores de API y web existen en sus ramas, sin integrar | Registrar los adaptadores en `productionAdapters` y repetir esta revisión sobre el código integrado |
-| H-2 | P1 | Hay dos almacenes de credenciales con esquemas de nombres distintos: el del núcleo (por adaptador, con índice) y el de los adaptadores (por operador, servicio y permisos, **sin índice**). `soul uninstall` borra solo lo que está en el índice del núcleo, así que dejaría los tokens que guarden los adaptadores [A33] | Un solo almacén, o que el de los adaptadores registre sus entradas en el índice; test de AC-5 con tokens reales de un adaptador |
-| H-3 | P1 | `soul revoke` borra la credencial por el nombre del adaptador (`m365-mail`), pero los adaptadores guardan por servicio (`graph`, `google`…) y variante de permisos. Además, no borra la caché delta `op-<hash>/adapters/<adaptador>/`. Los adaptadores tienen su propia `revokeAdapter`, que sí lo hace, pero la CLI no la llama [A34] | Que `soul revoke` llame a `revokeAdapter` |
-| H-4 | P1 | El adaptador web usa otro directorio de datos (`SoulContinuity` / `soul-continuity`, sin `Savia/`) y su subcarpeta `web/` no está en la lista de lo que `uninstall` borra. El perfil del navegador, las huellas, los recibos y las grabaciones sobrevivirían a la desinstalación [A35] | Mismo directorio de datos que el núcleo y `web` en la lista de borrado, con test |
-| H-5 | P1 | En Linux, el navegador arranca con `--password-store=basic`: las cookies de sesión del perfil dedicado se cifran con la clave fija de Chromium, no con el llavero del sistema. Quien lea el perfil puede reutilizar las sesiones. Eso choca con la regla de «tokens solo en el almacén del sistema» [A36] | Usar el llavero del sistema para el perfil, o documentarlo como excepción aceptada por la operadora |
+| H-1 | Cerrado | Ningún adaptador estaba registrado en el núcleo | `productionAdapters` registra solo los que el operador nombra en `connectors.enabled`; nada por defecto; `web` solo si se nombra [A32] [A39] |
+| H-2 | Cerrado | Dos almacenes de credenciales; `uninstall` no veía los tokens de los adaptadores | Un único almacén con índice de servicio y cuenta; los adaptadores guardan a través de él y `uninstall` borra todo lo indexado. Test de AC-5 con tokens de dos adaptadores [A33] |
+| H-3 | Cerrado | `soul revoke` no borraba los tokens por servicio y permisos ni la caché delta | `soul revoke` llama a `revokeSource`: caché delta y tokens de todas las variantes [A34] |
+| H-4 | Cerrado | El adaptador web usaba otro directorio de datos y `uninstall` no borraba `web/` | Mismo directorio que el núcleo, `web` en la lista de lo propio y perfil fijado por el núcleo dentro de `<datos>/web` [A35] |
+| H-5 | Cerrado, con riesgo residual | En Linux el perfil cifraba sus cookies con la clave fija de Chromium | El perfil persistente usa `--password-store=gnome-libsecret` y no se abre sin bus de sesión. Residual: si el llavero no responde, Chromium puede caer a la clave fija sin avisar; no verificado contra un llavero real [A36] |
 | H-6 | P2 | La declaración «activo esta fuente bajo mi responsabilidad» existe en el contrato, pero es opcional: una fuente con propósito y fecha de consentimiento se lee aunque no la lleve [A37] | Exigir `consent.statement` al activar una fuente de organización |
 | H-7 | P2 | La rebaja a `recuentos` para frontends de agente se basa en variables de entorno y en `--frontend`. Protege del uso normal, no de un agente que borre esas variables [A38] | Lo dice el README del núcleo; sin arreglo previsto en v1 |
 | H-8 | P2 | Las credenciales en Windows y macOS solo se han probado con un doble, no contra el almacén real. En Windows, bajo Constrained Language Mode, `Add-Type` falla y el almacén da error (sin guardar el token en otro sitio) | CI multiplataforma de AC-1 |
 | H-9 | P2 | Las «fuentes locales de la instantánea» (git, specs, traspaso) que lista la spec no son un adaptador del núcleo | Fuera de esta versión del núcleo |
-| H-10 | — | El modelo de amenazas del canal tiene sus propios P1 y P2 | Ver `projects/soul-continuity/docs/canal-amenazas.md` |
+| H-10 | — | El modelo de amenazas del canal tiene sus propios P1 y P2. P1-1 (DPoP), P1-2 (correcciones por dispositivo), P2-8 (caducidad de tokens) y P2-9 (límites de conexión) están cerrados en la integración [A40] [A41] [A42] | Ver `projects/soul-continuity/docs/canal-amenazas.md` |
+| H-11 | Cerrado | La API decidía avisos y alertas con la aproximación de Labs del servidor, no con la librería de atención `src/attention/` | La API decide con `Politica` de `src/attention/` y su estado se persiste con `estadoATexto` dentro del estado de atención. Sin franjas de descanso declaradas: el contrato de la app no las tiene todavía [A44] [A45] |
 
-Condición para el piloto (AC-7): los P1 de esta tabla y los del modelo de amenazas del canal, en particular el token sin DPoP (P1-1) y las cookies del perfil web fuera del llavero (H-5), deben estar arreglados antes de empezar. Si el piloto arranca sin ellos, lo hace con `detail.max` en `recuentos`.
+Condición para el piloto (AC-7): los P1 de esta tabla y los del modelo de amenazas del canal deben estar arreglados antes de empezar. En esta rama siguen abiertos P1-3 del canal (revisión de la app Android) y el riesgo residual de H-5 sin verificar contra un llavero real. Si el piloto arranca sin ellos, lo hace con `detail.max` en `recuentos`. Los dispositivos emparejados antes de soul-pair-v2 se reemparejan antes de empezar.
 
 Este documento **no** está revisado todavía por la revisora de seguridad. AC-6 lo exige.
 
 ## Anexo: referencias al código
 
-Rutas relativas a `projects/soul-continuity/`. Las de otras ramas llevan su nombre delante: `[adapters]` es `agent/s490-adapters-20261023`, `[web]` es `agent/s490-web-20261023` y `[atencion]` es `agent/s490-atencion-20261023`.
+Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcleo, adaptadores de API, adaptador web y política de atención en la misma rama).
 
 - **A1** `package.json` (`engines.node >=22.6`, sin `dependencies`); `bin/soul.mjs:1-9`.
-- **A2** `[web] src/web/package.json`; `[web] src/web/adaptador/navegador.ts:52-66` (`executablePath` del navegador instalado).
-- **A3** `src/startup/autostart.ts:1-10`; `src/cli/cli.ts:372-380`.
-- **A4** `src/core/engine.ts:47-56` (`consentProblem`: sin propósito o sin consentimiento vigente, no se lee).
-- **A5** `[adapters] src/adapters/descriptors.ts:42-98` (propósito, nivel, TTL, permisos, qué no guarda); `[adapters] src/adapters/m365.ts:72,140` (`$select`); `[adapters] src/adapters/google.ts:84` (`format=metadata`); `[adapters] src/adapters/oauth.ts:104-115` (identificador propio, ajenos rechazados), `:80-101` (listas de ajenos).
-- **A6** `src/core/runtime.ts:19-20,46-63` (núcleo); `[adapters] src/adapters/http-transport.ts:19,88-92,108` (`READ_POSTS`, `redirect: "manual"`).
+- **A2** `src/web/package.json`; `src/web/adaptador/navegador.ts:54-68` (`executablePath` del navegador instalado).
+- **A3** `src/startup/autostart.ts:1-10`; `src/cli/cli.ts:390-398`.
+- **A4** `src/core/engine.ts:55-62` (`consentProblem`: sin propósito o sin consentimiento vigente, no se lee).
+- **A5** `src/adapters/descriptors.ts:42-99` (propósito, nivel, TTL, permisos, qué no guarda); `src/adapters/m365.ts:85,155` (`$select`); `src/adapters/google.ts:111` (`format=metadata`); `src/adapters/oauth.ts:104-115` (identificador propio, ajenos rechazados), `:80-101` (listas de ajenos).
+- **A6** `src/core/runtime.ts:12-13,39-56` (núcleo); `src/adapters/http-transport.ts:21,100-104,120` (`READ_POSTS`, `redirect: "manual"`).
 - **A7** `src/startup/autostart.ts:59-61` (`Restart=on-failure`, `NoNewPrivileges`), `:87`, `:105-106` (`LogonTrigger`, `LeastPrivilege`).
-- **A8** `src/core/failsafe.ts:33-41` (STOP ilegible = STOP); `src/api/serve.ts:36`; `src/api/server.ts:564`.
+- **A8** `src/core/failsafe.ts:33-41` (STOP ilegible = STOP); `src/api/serve.ts:46`; `src/api/server.ts:650`.
 - **A9** `src/core/store.ts:33-38` (rutas), `:40-43` (0700), `:46-57` (atómico, 0600).
-- **A10** `src/contract/claims.ts:53` (`TTL_MAX_S` = 24 h), `:64-87` (forma de la afirmación); `src/core/engine.ts:166`.
-- **A11** `src/core/engine.ts:58-81` (`HISTORY_DETAIL_MS`, `HISTORY_DAYS`, `saveHistory`).
-- **A12** `[adapters] src/adapters/delta-cache.ts:1-11,41-49`.
-- **A13** `src/api/devices.ts:33-38` (token de 256 bits, solo el hash en disco), `:41-48`.
-- **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:612` (TLS 1.3).
-- **A15** `src/credentials/store.ts:30-39` (secreto por stdin), `:92` (`security -i`), `:105,137` (`-EncodedCommand` sin secretos), `:173-217` (índice sin secretos).
-- **A16** `src/core/engine.ts:106-116,148-151`.
-- **A17** `src/api/serve.ts:45,62-65`; `src/api/server.ts:621`.
-- **A18** `src/cli/cli.ts:52` (órdenes permitidas a un agente), `:354-370`.
-- **A19** `src/cli/cli.ts:118-144`; `src/core/store.ts:111-124` (lista de lo propio, lo ajeno se conserva); `test/cli.test.ts:283,351`.
-- **A20** `src/core/config.ts:63` (sin direcciones por defecto, puerto 8787); `src/api/listen.ts:24-39,57`; `src/api/serve.ts:26`; `test/listen.test.ts:34`.
-- **A21** `[adapters] src/adapters/oauth.ts:236-278` (`127.0.0.1`, puerto 0, `state`, 300 000 ms, `srv.close()`).
-- **A22** `[web] src/web/cortafuegos/perfil.ts:9-24` (perfiles personales conocidos), `:73-101` (perfil dedicado, marca, rechazo); `[web] src/web/adaptador/navegador.ts:44-66`; `[web] src/web/cortafuegos/perfil.ts:158-170` (comprobación de canal por tubería en el banco).
-- **A23** `src/core/config.ts:56-65` (por defecto `titulos`); `src/api/server.ts:300,406-410`; `test/api/contrato.test.mjs:103,142`.
-- **A24** Búsqueda de `fetch`, `listen(`, `http.request`, `net.connect` y `dgram` en `src/` de las cuatro ramas: solo `src/core/runtime.ts`, `[adapters] src/adapters/http-transport.ts`, `[adapters] src/adapters/oauth.ts` (salida), y `src/api/listen.ts` y `[adapters] src/adapters/oauth.ts:248` (escucha). El navegador del adaptador web sale solo por su cortafuegos.
-- **A25** `src/core/config.ts:141-147` (`agentLevel`); `src/cli/cli.ts:91-97,163-181`.
-- **A26** `src/api/server.ts:507`; `test/api/contrato.test.mjs:607`.
-- **A27** `[adapters] src/adapters/README.md`, sección «Revocación (AC-5)».
-- **A28** `[web] src/web/cortafuegos/cortafuegos.ts:1-20,37-41`; `[web] src/web/cortafuegos/decision.ts:181-186`.
-- **A29** `[web] src/web/adaptador/vigilancia.ts:1-6,58`.
-- **A30** `[web] src/web/adaptador/ejecutor.ts:1-6,27-28,242`; `[atencion] src/attention/README.md` (en la ruta web ninguna regla produce alerta).
-- **A31** `[web] src/web/adaptador/activacion.ts:1-5,57-63`; `[web] src/web/README.md`, sección de grabación y recibos.
-- **A32** `src/core/runtime.ts:14-16` (`productionAdapters` vacío); `src/core/engine.ts:126`.
-- **A33** `src/credentials/store.ts:173-217`; `[adapters] src/adapters/credential-store.ts:1-12,38` (`entryKey`, sin índice).
-- **A34** `src/cli/cli.ts:348-349`; `src/core/engine.ts:302-322` (`purgeAdapter` no toca `adapters/`); `[adapters] src/adapters/revoke.ts:25-35`; `[adapters] src/adapters/descriptors.ts` (`service`).
-- **A35** `[web] src/web/cortafuegos/perfil.ts:25-30,76`; `src/core/store.ts:111`.
-- **A36** `[web] src/web/adaptador/navegador.ts:62`; `[web] src/web/README.md` («Riesgo conocido (Linux)»).
-- **A37** `src/contract/adapter.ts:64-69`; `src/core/engine.ts:47-56`.
-- **A38** `src/cli/cli.ts:91-97`; `README.md` del proyecto, «Límites conocidos».
+- **A10** `src/contract/claims.ts:53` (`TTL_MAX_S` = 24 h), `:64-87` (forma de la afirmación); `src/core/engine.ts:174`.
+- **A11** `src/core/engine.ts:66-74` (`HISTORY_DETAIL_MS`, `HISTORY_DAYS`, `saveHistory`).
+- **A12** `src/adapters/delta-cache.ts:1-11,45-53`.
+- **A13** `src/api/devices.ts:46-56` (token de 256 bits, solo el hash en disco, caducidad), `:74-84` (verificación en tiempo constante).
+- **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:702` (TLS 1.3).
+- **A15** `src/credentials/store.ts:32-44` (secreto por stdin), `:97` (`security -i`), `:130-164` (valor repartido en Credential Manager, `splitParts`/`joinParts`), `:166-190` (`-EncodedCommand` sin secretos), `:252-380` (índice sin secretos).
+- **A16** `src/core/engine.ts:114-124,156-159`.
+- **A17** `src/api/serve.ts:135-136`; `src/api/server.ts:793`.
+- **A18** `src/cli/cli.ts:68` (órdenes permitidas a un agente), `:372-388`.
+- **A19** `src/cli/cli.ts:138-157`; `src/core/store.ts:111-124` (lista de lo propio, `web` incluido; lo ajeno se conserva); `test/cli.test.ts:283,351`.
+- **A20** `src/core/config.ts:66` (sin direcciones por defecto, puerto 8787); `src/api/listen.ts:24-39,57`; `src/api/serve.ts:36`; `test/listen.test.ts:34`.
+- **A21** `src/adapters/oauth.ts:241-283` (`127.0.0.1`, puerto 0, `state`, 300 000 ms, `srv.close()`).
+- **A22** `src/web/cortafuegos/perfil.ts:10-24` (perfiles personales conocidos), `:91-102` (perfil dedicado, marca, rechazo); `src/web/adaptador/navegador.ts:45-68`.
+- **A23** `src/core/config.ts:59-68` (por defecto `titulos`); `src/api/server.ts:386,489-493`; `test/api/contrato.test.mjs:103,142`.
+- **A24** Búsqueda de `fetch`, `listen(`, `http.request`, `net.connect` y `dgram` en `src/` integrado: solo `src/core/runtime.ts`, `src/adapters/http-transport.ts` (por `fetchFn`), `src/adapters/oauth.ts` (salida), y `src/api/listen.ts` y `src/adapters/oauth.ts:253` (escucha). Además `src/web/banco/servidor.ts`, que sirve los sitios sintéticos del banco y solo se usa en pruebas. El navegador del adaptador web sale solo por su cortafuegos.
+- **A25** `src/core/config.ts:145-151` (`agentLevel`); `src/cli/cli.ts:111-117,188-205`.
+- **A26** `src/api/server.ts:592`; `test/api/contrato.test.mjs:607`.
+- **A27** `src/adapters/README.md`, sección «Revocación (AC-5)».
+- **A28** `src/web/cortafuegos/cortafuegos.ts:1-20,39-43`; `src/web/cortafuegos/decision.ts:215-220`.
+- **A29** `src/web/adaptador/vigilancia.ts:1-6,59`.
+- **A30** `src/web/adaptador/ejecutor.ts:1-6,27-28,251`; `src/attention/README.md` (en la ruta web ninguna regla produce alerta).
+- **A31** `src/web/adaptador/activacion.ts:1-5,57-63`; `src/web/README.md`, sección de grabación y recibos.
+- **A32** `src/core/connectors.ts:163-172` (`productionAdapters`: solo lo que nombra `connectors.enabled`); `src/core/engine.ts:132-136` (sin adaptador registrado: «no instalado»).
+- **A33** `src/credentials/store.ts:252-380` (almacén único: índice de servicio y cuenta, `keyed()` para los adaptadores, `forgetAll`); `src/adapters/credential-store.ts:1-14,37-40` (`entryKey`, sobre `keyed()` en producción).
+- **A34** `src/cli/cli.ts:356-370`; `src/core/connectors.ts:181-191` (`revokeSource`); `src/adapters/revoke.ts:25-36`; `test/ac5-integracion.test.ts`.
+- **A35** `src/web/cortafuegos/perfil.ts:26-29` (directorio de datos del núcleo); `src/core/connectors.ts:136-158` (perfil y ficheros del web dentro de `<datos>/web`); `src/core/store.ts:111`.
+- **A36** `src/web/cortafuegos/perfil.ts:31-48` (`almacenClaves`); `src/web/adaptador/navegador.ts:51,64`; `src/web/README.md` («Claves de las cookies (Linux)»).
+- **A37** `src/contract/adapter.ts:64-69`; `src/core/engine.ts:55-62`.
+- **A38** `src/cli/cli.ts:111-117`; `README.md` del proyecto, «Límites conocidos».
+- **A39** `src/core/connectors.ts:67-100` (validación de `connectors`: adaptadores del contrato, bases solo HTTPS o loopback; Graph y Google solo sus hosts oficiales por HTTPS, sin loopback), `:107-111` (transporte de solo lectura con bases por servicio); `test/connectors.test.ts`.
+- **A40** `src/api/dpop.ts:56-87` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:78-94` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `src/api/serve.ts:70-74` (`avisarReemparejar`: un aviso por dispositivo sin clave ligada o caducado); `src/cli/cli.ts:494-500` (`soul devices` marca los que hay que reemparejar); `test/dpop.test.ts`, `test/serve.test.ts:178` (sin primer uso), `test/cli.test.ts:301`.
+- **A41** `src/core/engine.ts:188,311-333` (dispositivo en el libro; listar y deshacer); `src/cli/cli.ts:426-454`; `test/device-corrections.test.ts`.
+- **A42** `src/api/server.ts:172-182` (`maxConnections` 32 y tiempos de espera), `:702`; `test/serve.test.ts`.
+- **A43** `src/cli/login.ts:21-29` (`init` sin fuentes ni adaptadores), `:83-110` (`login`: flujo de dispositivo o token por stdin al almacén); `test/login.test.ts`, `test/instalar.test.ts`.
+- **A44** `src/api/serve.ts:96-99` (estado de atención en disco), `:107-132` (`soul mode` en caliente); `src/api/server.ts:251-271,283-291`; `test/serve.test.ts`.
+- **A45** `src/api/server.ts:218-229` (`Politica` configurada por operador), `:263-265` (cada evento lo decide la política); `test/server.test.ts` (H-11).
+- **A46** `src/api/pairing.ts:45,76` (clave de 30 base62 de un CSPRNG), `:60-74` (checksum CRC32 y validación), `:101-102` (HMAC soul-pair-v2), `:118-125` (ventana en `pairing.json`, borrado), `:163` (rechazo de v1 con 426); `src/api/qr.ts:242` (QR propio); `src/cli/cli.ts:429` (`soul pair`); `test/pairing.test.ts`, `test/qr.test.ts`.
