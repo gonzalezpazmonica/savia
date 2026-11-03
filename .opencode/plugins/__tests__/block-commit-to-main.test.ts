@@ -122,6 +122,16 @@ describe("destino real del commit", () => {
   test("cd al worktree en tubería no salva el commit en main", async () => {
     await expect(run(`cd ${wt} | true; git commit -m x`)).rejects.toThrow(BLOCK);
   });
+  test("cd condicional al worktree no salva el commit en main", async () => {
+    await expect(run(`false && cd ${wt}; git commit -m x`)).rejects.toThrow(BLOCK);
+  });
+  test("cd a directorio inexistente: el && no llega al commit; el ; sí", async () => {
+    await expect(run(`cd "${home}/no-existe" && git commit -m x`)).resolves.toBeUndefined();
+    await expect(run(`cd ${home}/no-existe && true; git commit -m x`)).rejects.toThrow(BLOCK);
+  });
+  test("mkdir + cd en la misma orden: conservador con el cwd en main", async () => {
+    await expect(run("mkdir -p d && cd d && git commit -m x")).rejects.toThrow(BLOCK);
+  });
   test("variable no resoluble: conservador con el cwd en main", async () => {
     await expect(run("git -C $DESCONOCIDA commit -m x")).rejects.toThrow(BLOCK);
   });

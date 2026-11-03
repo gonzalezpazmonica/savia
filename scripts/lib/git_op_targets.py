@@ -321,6 +321,8 @@ class Ctx:
         self.vars = {}
         self.git_env = False
         self.out = []
+        self.ran_any = False    # ya se ejecutó alguna orden (pudo crear dirs)
+        self.last_fail = False  # la última orden falla seguro (cd inexistente)
 
     @property
     def cwd(self):
@@ -461,6 +463,7 @@ def _build_items(tokens):
 
 
 def _run_pipe(pipe, ctx, depth):
+    ctx.last_fail = False
     if len(pipe) > 1:  # cada elemento de una tubería es una subshell
         for toks in pipe:
             snap = ctx.snapshot()
@@ -480,7 +483,10 @@ def _run_list(lst, ctx, depth):
     start = ctx.cwds
     seen = ()
     and_only = True
+    failed = False
     for k, (op, pipe) in enumerate(lst):
+        if k > 0 and op == "&&" and failed:
+            continue  # tras un fallo seguro, `&&` no se ejecuta
         if k > 0:
             if op == "||":
                 and_only = False
@@ -488,6 +494,7 @@ def _run_list(lst, ctx, depth):
                 ctx.cwds = _union(seen, start)
         before = ctx.cwds
         _run_pipe(pipe, ctx, depth)
+        failed = ctx.last_fail
         if and_only:
             seen = _union(seen, ctx.cwds)
         else:
@@ -555,6 +562,7 @@ def simple(toks, ctx, depth):
     git_env = any(name in GIT_ENV for name, _ in assigns)
     argv = [expand(w, ctx) for w in words]
     execute(argv, words, ctx, depth, git_env)
+    ctx.ran_any = True
 
 
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh"}
@@ -619,7 +627,7 @@ def execute(argv, words, ctx, depth, git_env):
 
     if base in ("cd", "pushd"):
         args = [a for a in argv[1:] if a is UNKNOWN or a == "-" or not a.startswith("-")]
-        new = []
+        new, fails = [], 0
         for cwd in ctx.cwds:
             if not args:
                 target = ctx.home if base == "cd" else UNKNOWN
@@ -633,9 +641,13 @@ def execute(argv, words, ctx, depth, git_env):
                 target = os.path.normpath(os.path.join(cwd, args[0]))
             if target is UNKNOWN or os.path.isdir(target):
                 new.append(target)
+            elif not ctx.ran_any:
+                new.append(cwd)  # inexistente y nada pudo crearlo: el cd falla
+                fails += 1
             else:
-                new.append(cwd)  # inexistente: el cd falla y el cwd no cambia
+                new.append(UNKNOWN)  # `mkdir d && cd d`: no resoluble
         ctx.cwds = _union(new)
+        ctx.last_fail = fails == len(new)
         return
     if base == "popd":
         ctx.cwds = (UNKNOWN,)

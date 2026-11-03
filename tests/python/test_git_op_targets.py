@@ -86,6 +86,17 @@ class Targets(unittest.TestCase):
         out = self.run_(f"cd {self.wt} || exit 1; git commit -m x")
         self.assertEqual(out, [("commit", self.wt)])
 
+    def test_failed_cd_makes_and_chain_unreachable(self):
+        self.assertEqual(self.run_(f'cd "{self.home}/no-existe" && git commit -m x'), [])
+        out = self.run_(f"cd {self.home}/no-existe && git commit; git commit -m y")
+        self.assertEqual(out, [("commit", self.base)])
+        out = self.run_(f"cd {self.home}/no-existe || git commit -m y")
+        self.assertEqual(out, [("commit", self.base)])
+
+    def test_cd_to_dir_created_in_same_command_is_unresolved(self):
+        # mkdir puede crearlo: no se da por fallido (sería un rodeo)
+        self.assertEqual(self.run_("mkdir -p d && cd d && git commit -m x"), [("commit", "")])
+
     def test_reassigned_var_uses_latest_value(self):
         out = self.run_(f"W={self.wt}; W={self.base}; git -C $W commit", base=self.wt)
         self.assertEqual(out, [("commit", self.base)])
