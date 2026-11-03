@@ -1705,15 +1705,6 @@
       "evidence": "docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md",
       "approval": "Operadora 2026-11-03: AskUserQuestion (Aprobada, lanza S1 y S2); se formaliza al fusionar la PR (SE-488)",
       "phase": "A"
-    },
-    {
-      "id": "SE-495",
-      "status": "PROPOSED",
-      "priority": "P1",
-      "title": "Banco interno de tareas reales desde PRs de Savia",
-      "note": "20 tareas de PRs fusionadas del repo público con verificador oculto (F2P/P2P), controles no-op = 0 y oráculo = 1, separación dev/test sellada y bloqueo de contaminación por el parche oro. Compara Claude Code, OpenCode y Codex por pares de tareas con IC95: resolución, seguridad L3/L4, coste, latencia, contexto, reintentos y revisión humana. Patrón de Repo2RLEnv, sin instalarlo.",
-      "evidence": "docs/specs/SE-495-pr-task-bench.spec.md",
-      "phase": "C"
     }
   ],
   "route": {

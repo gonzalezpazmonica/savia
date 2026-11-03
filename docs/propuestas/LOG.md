@@ -6,10 +6,6 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
-## 2026-11-01 SE-495 PROPOSED
-
-Banco de tareas desde PRs (V3 del análisis de repos externos); patrón de Repo2RLEnv. Se aprueba al fusionar la PR (SE-488).
-
 ## 2026-11-03 SE-500 APPROVED
 
 Aprobada por la operadora por pregunta interactiva el 2026-11-03 («Aprobada, lanza S1 y S2»); se formaliza al fusionar la PR (SE-488).
