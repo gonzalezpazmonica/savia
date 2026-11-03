@@ -604,7 +604,7 @@ EOF
 plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equivalente y lo dice
   run bash "$SCRIPT" plan
   [ "$status" -eq 0 ]
-  [[ "$output" == *"excluida PR $1: sin revisión válida sobre la cabeza actual ni sobre una equivalente"* ]]
+  [[ "$output" == *"excluida PR $1: la cabeza actual no es equivalente a ninguna revisión válida"* ]]
 }
 
 @test "rev-1469 P1-1 block: fichero nuevo en .scm/ que ningún generador produce, añadido tras la revisión → no equivalente" {
@@ -749,4 +749,118 @@ PY
   merged_line 180 | grep -q '"registry_hashes":"docs/propuestas/'
   git --git-dir="$BARE" show main:docs/propuestas/planning-state.json | grep -q '"alta SE-910 corregida"'
   git --git-dir="$BARE" show main:docs/propuestas/planning-state.json | grep -q '"SE-911"'
+}
+
+# ── Revisión independiente de la PR #1469 (segunda ronda, sha c36bed5) ──
+link_head() {  # link_head <n> <ruta> : sobre el head de pr-<n>, <ruta> pasa a ser un enlace a $TMPDIR_T/victima
+  echo intacta > "$TMPDIR_T/victima"
+  G switch -q --detach "$(branch_sha "$1")"
+  rm -f "$MERGE_SPRINT_GIT_ROOT/$2"; mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$2")"
+  ln -s "$TMPDIR_T/victima" "$MERGE_SPRINT_GIT_ROOT/$2"
+  G add -A; G commit -qm "enlace en $2" >/dev/null; G push -q origin "HEAD:pr-$1"; G switch -q main
+}
+
+@test "rev2-1469 P1-1 block (plan): derivado convertido en enlace tras la revisión → no equivalente y no escribe fuera del worktree" {
+  reg_main; fake_generators
+  v2_pr 190 x190.txt pr190
+  main_moves y190.txt main
+  G switch -q --detach "$(branch_sha 190)"; G merge -q --no-edit origin/main >/dev/null
+  G push -q origin HEAD:pr-190; G switch -q main
+  link_head 190 docs/rules/INDEX.md   # existe en main: sin el guard, la siembra desde T y el generador lo siguen
+  run bash "$SCRIPT" plan
+  [ "$(cat "$TMPDIR_T/victima")" = intacta ]
+  [[ "$output" == *"excluida PR 190: la cabeza actual no es equivalente"* ]]
+}
+
+@test "rev2-1469 P1-1 block (run): derivado enlazado en la rama tras el grant → resync_fallo sin escribir fuera ni merge" {
+  reg_main
+  v2_pr 191 x191.txt pr191
+  plan_and_grant
+  link_head 191 docs/propuestas/ROADMAP-CURRENT.md   # roadmap.sh render escribiría a través del enlace
+  main_moves y191.txt main
+  run bash "$SCRIPT" run
+  [ "$(cat "$TMPDIR_T/victima")" = intacta ]
+  ! grep -qx 191 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"event":"ENLACE_RECHAZADO"'
+  ledger_has '"reason":"resync_fallo"'
+}
+
+@test "rev2-1469 P1-1 control (run): sin el enlace la misma PR se integra y se fusiona" {
+  reg_main
+  v2_pr 192 x192.txt pr192
+  plan_and_grant
+  main_moves y192.txt main
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 192 "$FAKE/merged"
+  ! ledger_has '"event":"ENLACE_RECHAZADO"' || false
+}
+
+@test "rev2-1469 P1-1 block: el resolutor no escribe a través de un --out que es un enlace; con fichero normal sí" {
+  reg_main; spec_pr 193 SE-930
+  local m h; m=$(git -C "$MERGE_SPRINT_GIT_ROOT" rev-parse origin/main); h=$(branch_sha 193)
+  echo intacta > "$TMPDIR_T/victima"; ln -s "$TMPDIR_T/victima" "$TMPDIR_T/out-enlace"
+  run python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$m" --head "$h" --main "$m" --refs '["SE-930"]' --path docs/propuestas/LOG.md --out "$TMPDIR_T/out-enlace"
+  [ "$status" -eq 2 ]
+  [ "$(cat "$TMPDIR_T/victima")" = intacta ]
+  run python3 "$RESOLVER_PY" resolve --repo "$MERGE_SPRINT_GIT_ROOT" --base "$m" --head "$h" --main "$m" --refs '["SE-930"]' --path docs/propuestas/LOG.md --out "$TMPDIR_T/out-normal"
+  [ "$status" -eq 0 ]
+  grep -q 'SE-930 PROPOSED' "$TMPDIR_T/out-normal"
+}
+
+@test "rev2-1469 P2-1 (corrección) block en run: fichero nuevo en .scm/ añadido tras el plan → aparcada como derivados_no_equivalentes, sin juez" {
+  reg_main; fake_generators
+  v2_pr 194 x194.txt pr194
+  main_moves y194.txt main
+  G switch -q --detach "$(branch_sha 194)"; G merge -q --no-edit origin/main >/dev/null
+  (cd "$MERGE_SPRINT_GIT_ROOT" && bash scripts/rules-index-generate.sh && python3 scripts/generate-capability-map.py && python3 scripts/sam.py generate)
+  G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
+  plan_and_grant   # la cabeza honesta entra al manifiesto
+  G switch -q --detach "$(branch_sha 194)"; echo colado > "$MERGE_SPRINT_GIT_ROOT/.scm/notes.md"
+  G add -A; G commit -qm "nota colada" >/dev/null; G push -q origin HEAD:pr-194; G switch -q main
+  run bash "$SCRIPT" run
+  ! grep -qx 194 "$FAKE/merged" 2>/dev/null || false
+  grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"194"' | grep -q '"reason":"derivados_no_equivalentes"'
+  ! ledger_has '"event":"JUDGE_REQUEST"' || false
+}
+
+@test "rev2-1469 P2-1 (seguridad) block: un escaneo de confidencialidad incompleto (unknown) bloquea la integración" {
+  reg_main
+  printf '#!/usr/bin/env bash\n[ "${SAVIA_GATE_UNKNOWN:-warn}" = block ] && exit 2\nexit 0\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-scan.sh"
+  printf '#!/usr/bin/env bash\necho firma > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
+  G add scripts; G commit -qm "escáner que no puede escanear"; G push -q origin main
+  v2_pr 195 x195.txt pr195
+  main_moves y195.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 195 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"reason":"confidencialidad"'
+}
+
+@test "rev2-1469 P2-4: plan distingue la PR sin revisión de la PR con cabeza no equivalente" {
+  mkpr 196 "scripts/u.sh"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  grep -qx "excluida PR 196: sin revisión válida" <<<"$output"
+}
+
+@test "rev2-1469 P2-3 (seguridad): plan muestra los refs de cada PR antes del grant" {
+  reg_main; spec_pr 197 SE-931
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"refs #197: SE-931"* ]]
+}
+
+@test "rev2-1469 P2-3 (corrección): un fallo al montar la raíz congelada no deja raíces froot-* atrás" {
+  reg_main; fake_generators
+  # .claude/hooks es prefijo del código congelado: en la rama como fichero, el montaje falla (fail-closed).
+  G switch -q -c pr-198 main; mkdir -p "$MERGE_SPRINT_GIT_ROOT/.claude"; echo x > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks"
+  G add -A; G commit -qm "hooks como fichero"; G push -q origin pr-198; G switch -q main
+  echo pr-198 > "$FAKE/198.branch"; echo x > "$FAKE/198.head"; echo scripts/x198.sh > "$FAKE/198.files"; register_head 198
+  main_moves y198.txt main
+  plan_and_grant
+  run bash "$SCRIPT" run
+  ! grep -qx 198 "$FAKE/merged" 2>/dev/null || false
+  ledger_has '"reason":"resync_fallo"'
+  [ -z "$(ls -d "$MERGE_SPRINT_HOME"/froot-* 2>/dev/null)" ]
 }

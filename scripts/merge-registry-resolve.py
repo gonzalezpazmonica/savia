@@ -13,6 +13,7 @@ de la PR. Python stdlib, sin red, sin reloj: misma entrada, misma salida byte a 
 Rechazar es salir con 2: merge-sprint.sh aparca la PR con conflicto_real. Nunca consulta un LLM.
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -161,7 +162,12 @@ def cmd_resolve(a):
         raise Reject("refs con ids inválidos")
     raws = [blob(a["repo"], a[k], path) for k in ("base", "head", "main")]
     out = resolve_state(*raws, refs) if path.endswith(".json") else resolve_log(*raws)
-    with open(a["out"], "wb") as f:
+    # O_NOFOLLOW: si --out es un enlace simbólico, error en vez de escribir en su destino.
+    try:
+        fd = os.open(a["out"], os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
+    except OSError as e:
+        raise Reject(f"{a['out']}: no se escribe ({e.strerror})")
+    with os.fdopen(fd, "wb") as f:
         f.write(out)
 
 
