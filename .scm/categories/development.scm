@@ -197,7 +197,7 @@
 - **spec-id-duplicates-check** (script): spec-id-duplicates-check.sh — SE-044 Slice 1 spec ID uniqueness gate.
 - **spec-implement** (cmd): Implementa una Spec según su developer_type — lanza agente o asigna a humano.
 - **spec-judge** (agent): Code Review Court judge — implementation vs approved spec, acceptance criteria
-- **spec-lifecycle** (script): spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only LOG.md
+- **spec-lifecycle** (script): spec-lifecycle.sh — SE-222 S1: spec status transitions + append-only log (LOG.d/ fragments, SE-500 S1)
 - **spec-opencode-plan-audit** (script): Audit: every APPROVED/IMPLEMENTED spec post-2026-04-26 must include
 - **spec-quality-auditor** (script): spec-quality-auditor.sh — Deterministic quality scorer for SDD specs
 - **spec-resolve** (script): Deterministic spec resolver shared by governance gates.
