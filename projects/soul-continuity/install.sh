@@ -10,6 +10,8 @@
 # Uso: bash install.sh [--download]
 #   --download   baja el Node oficial aunque el del PATH ya sirva.
 # Variables (para espejos corporativos): SOUL_NODE_MIRROR (https://nodejs.org/dist), SOUL_NODE_LINE (latest-v24.x).
+#   El espejo tiene que ser https:// (la suma SHA-256 sale del mismo origen: por HTTP un intermediario
+#   cambiaría a la vez suma y binario). file:// solo con SOUL_NODE_MIRROR_ALLOW_FILE=1 (tests).
 set -euo pipefail
 
 PKG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +25,7 @@ FORCE=0
 for a in "$@"; do
   case "$a" in
     --download) FORCE=1 ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "install.sh: opción desconocida: $a (usa --help)" >&2; exit 2 ;;
   esac
 done
@@ -31,12 +33,23 @@ done
 say() { printf '%s\n' "$*"; }
 die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
 
+PROTO=https
+case "$MIRROR" in
+  https://*) ;;
+  file://*) [ "${SOUL_NODE_MIRROR_ALLOW_FILE:-}" = 1 ] || die "SOUL_NODE_MIRROR=file://… solo se admite en pruebas (SOUL_NODE_MIRROR_ALLOW_FILE=1)."; PROTO=file ;;
+  *) die "SOUL_NODE_MIRROR tiene que empezar por https:// (es: $MIRROR). Por HTTP se podrían cambiar a la vez Node.js y su suma." ;;
+esac
+
+# Comillas simples para /bin/sh: ' se escribe '\''. Así una ruta con ", $ o ` no ejecuta nada.
+shq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
 # ¿Este Node ejecuta el TypeScript de Soul? Se prueba de verdad con la sonda del lanzador.
 works() { [ -x "$1" ] && "$1" --experimental-strip-types --no-warnings "$PKG/bin/sonda.ts" 2>/dev/null | grep -q '^soul-ts-ok '; }
 
 fetch() { # url destino
-  if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"
-  elif command -v wget >/dev/null 2>&1; then wget -q "$1" -O "$2"
+  # Solo HTTPS, también en las redirecciones (curl no baja a HTTP; wget no sigue redirecciones).
+  if command -v curl >/dev/null 2>&1; then curl -fsSL --proto "=$PROTO" --proto-redir =https "$1" -o "$2"
+  elif [ "$PROTO" = https ] && command -v wget >/dev/null 2>&1; then wget -q --https-only --max-redirect=0 "$1" -O "$2"
   else die "necesito curl o wget para descargar Node.js. Instala uno de los dos, o Node.js LTS oficial con nvm o fnm, y repite."
   fi
 }
@@ -65,8 +78,12 @@ download_node() {
   tar -xzf "$tmp/$name" -C "$tmp/x"
   works "$tmp/x/${name%.tar.gz}/bin/node" || die "el Node descargado no ejecuta TypeScript; no se instala."
   mkdir -p "$(dirname "$DEST")"
-  # Un ~/.savia/node anterior que no sirve se aparta, no se borra.
-  if [ -e "$DEST" ]; then mv "$DEST" "$DEST.anterior-$(date +%Y%m%d%H%M%S)"; fi
+  # El ~/.savia/node anterior se aparta a ~/.savia/node.anterior (una sola copia: la de la vez
+  # anterior se sustituye, para no acumular ~100 MB en cada --download). El nuevo ya está probado.
+  if [ -e "$DEST" ]; then
+    if [ -e "$DEST.anterior" ]; then rm -rf -- "$DEST.anterior"; fi
+    mv "$DEST" "$DEST.anterior"
+  fi
   mv "$tmp/x/${name%.tar.gz}" "$DEST"
   say "Node.js $("$DEST/bin/node" --version) instalado en $DEST"
 }
@@ -89,7 +106,7 @@ W="$BIN_DIR/soul"
 if [ -e "$W" ] && ! grep -qF "$MARK" "$W"; then
   printf 'install.sh: ya hay una orden «soul» en %s que no creé yo; no la toco. Usa: "%s" "%s/bin/soul.mjs"\n' "$W" "$NODE" "$PKG" >&2
 else
-  printf '#!/bin/sh\n%s\nexec "%s" "%s/bin/soul.mjs" "$@"\n' "$MARK" "$NODE" "$PKG" > "$W"
+  printf '#!/bin/sh\n%s\nexec %s %s "$@"\n' "$MARK" "$(shq "$NODE")" "$(shq "$PKG/bin/soul.mjs")" > "$W"
   chmod 755 "$W"
   say "Orden creada: $W"
 fi

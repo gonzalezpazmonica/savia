@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -38,9 +38,9 @@ function mirror(nodeScript: string, opts: { badSum?: boolean } = {}): string {
 const realNode = `#!/bin/sh\nexec "${process.execPath}" "$@"\n`;
 const noTsNode = "#!/bin/sh\n[ \"$1\" = --version ] && { echo v22.22.1; exit 0; }\necho 'Error [ERR_NO_TYPESCRIPT]' >&2\nexit 1\n";
 
-function run(args: string[], env: Record<string, string>) {
+function run(args: string[], env: Record<string, string>, script = SCRIPT) {
   const home = env.HOME;
-  return spawnSync("bash", [SCRIPT, ...args], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: home, ...env } });
+  return spawnSync("bash", [script, ...args], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: home, SOUL_NODE_MIRROR_ALLOW_FILE: "1", ...env } });
 }
 
 test("install.sh --download: baja el Node oficial, comprueba su SHA-256, lo deja en ~/.savia/node y crea ~/.local/bin/soul", { skip: SKIP }, () => {
@@ -95,4 +95,52 @@ test("install.sh (negativo): no pisa una orden «soul» ajena en ~/.local/bin", 
 
 test("install.sh nunca usa sudo", { skip: SKIP }, () => {
   assert.doesNotMatch(readFileSync(SCRIPT, "utf8").split("\n").filter((l) => !l.trim().startsWith("#")).join("\n"), /\bsudo\b/);
+});
+
+test("install.sh (negativo): un espejo que no es https:// se rechaza antes de descargar nada", { skip: SKIP }, () => {
+  for (const m of ["http://nodejs.example.test/dist", "ftp://nodejs.example.test/dist"]) {
+    const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+    const r = run(["--download"], { HOME: home, SOUL_NODE_MIRROR: m });
+    assert.equal(r.status, 1, m);
+    assert.match(r.stderr, /tiene que empezar por https:\/\//, m);
+    assert.doesNotMatch(r.stdout, /Descargando/, m);
+    assert.ok(!existsSync(join(home, ".savia/node")), m);
+  }
+});
+
+test("install.sh (negativo): file:// sin la variable de pruebas se rechaza", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const r = run(["--download"], { HOME: home, SOUL_NODE_MIRROR: `file://${mirror(realNode)}`, SOUL_NODE_MIRROR_ALLOW_FILE: "" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /solo se admite en pruebas/);
+  assert.ok(!existsSync(join(home, ".savia/node")));
+});
+
+test("install.sh: curl nunca sigue una redirección a HTTP", { skip: SKIP }, () => {
+  assert.match(readFileSync(SCRIPT, "utf8"), /curl -fsSL --proto "=\$PROTO" --proto-redir =https /);
+});
+
+test("install.sh --download dos veces: deja una sola copia anterior, no una por ejecución", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const m = mirror(realNode);
+  for (let i = 0; i < 3; i++) {
+    const r = run(["--download"], { HOME: home, SOUL_NODE_MIRROR: `file://${m}` });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+  }
+  assert.deepEqual(readdirSync(join(home, ".savia")).sort(), ["node", "node.anterior"]);
+});
+
+test("install.sh: una ruta con comillas, $ y $(…) queda escapada en la orden soul y no ejecuta nada", { skip: SKIP }, () => {
+  const home = mkdtempSync(join(tmpdir(), "soul-ish-"));
+  const base = mkdtempSync(join(tmpdir(), "soul-raro-"));
+  const raro = join(base, `a'b "c" $(touch PWNED) \`touch PWNED2\``);
+  mkdirSync(raro);
+  symlinkSync(dirname(SCRIPT), join(raro, "pkg"));
+  const r = run([], { HOME: home, PATH: `${dirname(process.execPath)}:${process.env.PATH}` }, join(raro, "pkg", "install.sh"));
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const wrapper = join(home, ".local/bin/soul");
+  const h = spawnSync(wrapper, ["help"], { encoding: "utf8", cwd: base, env: { PATH: process.env.PATH ?? "", HOME: home } });
+  assert.equal(h.status, 0, h.stderr);
+  assert.match(h.stdout, /Órdenes de soul/);
+  assert.ok(!existsSync(join(base, "PWNED")) && !existsSync(join(base, "PWNED2")), "la ruta no se ejecutó como código");
 });
