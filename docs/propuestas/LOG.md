@@ -10,6 +10,14 @@
 
 Sustituye las 9 inferencias de estado CONTRARIAS de la auditoría de 2026-10-30 por estado declarado y demanda del sistema. Se aprueba al fusionar la PR (SE-488).
 
+## 2026-11-01 SE-496 PROPOSED
+
+Ontología operativa gobernada: contrato de delegación firmado y kernel de autoridad fuera del modelo; el grafo sugiere, solo el kernel autoriza (SAVIA-RESEARCH-03, V4). Se aprueba al fusionar la PR (SE-488).
+
+## 2026-11-01 SE-491 PROPOSED
+
+Autorizaciones de publicación firmadas por la operadora en lugar de una línea editable por agentes (hallazgo de la PR #1444). Se aprueba al fusionar la PR (SE-488).
+
 ## 2026-10-31 SE-490 PROPOSED
 
 Soul Continuidad v1, gemelo operativo prioritario para la operadora. Se aprueba al fusionar la PR (SE-488).
