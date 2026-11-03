@@ -45,8 +45,9 @@ const LOOPBACK = new Set(["127.0.0.1", "[::1]"]);
 
 /**
  * Graph y Google no tienen variante en un host de la empresa: solo sus hosts oficiales (nubes
- * nacionales de Graph incluidas) o loopback para pruebas. Así quien pueda escribir `config.json` no
- * desvía sus tokens a otro host. GitHub (Enterprise), Jira y Azure DevOps sí viven en hosts propios.
+ * nacionales de Graph incluidas), por HTTPS y sin loopback: cualquier proceso local que escuche en
+ * 127.0.0.1 recibiría sus tokens (revisión #1447, P2-1 de seguridad). Así quien pueda escribir
+ * `config.json` no desvía sus tokens a otro host. GitHub (Enterprise), Jira y Azure DevOps sí viven en hosts propios.
  */
 const FIXED_HOSTS: Readonly<Record<string, ReadonlySet<string>>> = {
   graph: new Set(["graph.microsoft.com", "graph.microsoft.us", "dod-graph.microsoft.us", "microsoftgraph.chinacloudapi.cn"]),
@@ -58,7 +59,7 @@ function isSafeBase(b: string, service?: string): boolean {
   try { u = new URL(b); } catch { return false; }
   if (u.username || u.password || u.search || u.hash) return false;
   const fixed = service ? FIXED_HOSTS[service] : undefined;
-  if (fixed && !LOOPBACK.has(u.hostname) && !(fixed.has(u.hostname) && u.port === "")) return false;
+  if (fixed) return u.protocol === "https:" && fixed.has(u.hostname) && u.port === "";
   return u.protocol === "https:" || (u.protocol === "http:" && LOOPBACK.has(u.hostname));
 }
 
@@ -78,7 +79,7 @@ export function validateConnectors(c: unknown): string[] {
       for (const [k, b] of Object.entries(v.bases)) {
         if (!SERVICES.has(k)) { p.push(`connectors.bases: servicio desconocido ${k.slice(0, 20)}`); continue; }
         if (typeof b !== "string" || !isSafeBase(b, k)) p.push(FIXED_HOSTS[k]
-          ? `connectors.bases.${k}: solo ${[...FIXED_HOSTS[k]].join(", ")} o 127.0.0.1/[::1]`
+          ? `connectors.bases.${k}: solo https://${[...FIXED_HOSTS[k]].join(", https://")}`
           : `connectors.bases.${k}: solo https (o http a 127.0.0.1/[::1]), sin usuario, consulta ni fragmento`);
       }
     }

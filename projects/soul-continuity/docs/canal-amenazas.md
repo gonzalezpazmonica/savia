@@ -36,7 +36,7 @@
 
 **Lo que hace el código.**
 
-- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:165`). Versión mínima TLS 1.3 (`src/api/server.ts:635`).
+- Solo HTTPS: sin certificado no se crea el servidor (`src/api/server.ts:165`). Versión mínima TLS 1.3 (`src/api/server.ts:638`).
 - El certificado X.509 v3 es propio de la instalación y autofirmado:
   - clave EC P-256;
   - `CA:false`, uso «firma digital», `serverAuth`;
@@ -58,7 +58,7 @@
 
 **Lo que hace el código.**
 
-- El emparejamiento lo abre el operador **en el terminal del portátil** (`soul pair`). Por la red solo existen `/v1/pair/challenge` y `/v1/pair/complete`, sin token y con la ventana abierta; sin ella responden 404 (`src/api/server.ts:166`, `:716-723`; punto 3 bis).
+- El emparejamiento lo abre el operador **en el terminal del portátil** (`soul pair`). Por la red solo existen `/v1/pair/challenge` y `/v1/pair/complete`, sin token y con la ventana abierta; sin ella responden 404 (`src/api/server.ts:166`, `:719-726`; punto 3 bis).
 - El token tiene 256 bits aleatorios y se muestra una sola vez. En disco solo queda su SHA-256 (`src/api/devices.ts:35,51-54`).
 - Cada token va ligado a un operador: un dispositivo no ve los datos de otro perfil (`test/api/contrato.test.mjs:234`).
 - `pair`, `unpair` y `devices` no se pueden ejecutar desde un frontend de agente (`src/cli/cli.ts:70,221-223`). Así, el token no pasa por el modelo de un agente.
@@ -87,7 +87,7 @@ Con la integración, la app puede emparejarse por la red con una **clave de empa
 
 **Sigue sin cubrir.** Desde la VPN se puede gastar la ventana sin conocer la clave: 10 retos (429) o 3 `complete` con pruebas inventadas (423) obligan a repetir `soul pair`. Es denegación de servicio acotada a quien ya está en la VPN → **P2-14**.
 
-Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens de Microsoft Graph ni de Google, cuya base solo admite sus hosts oficiales o loopback; sí decide adónde van los de GitHub, Jira y Azure DevOps (`connectors.bases`), que viven en hosts de cada empresa. El navegador del adaptador web ya no sale de la configuración → **P2-13**.
+Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens de Microsoft Graph ni de Google, cuya base solo admite sus hosts oficiales por HTTPS, sin loopback (un proceso local recibiría sus tokens); sí decide adónde van los de GitHub, Jira y Azure DevOps (`connectors.bases`), que viven en hosts de cada empresa. El navegador del adaptador web ya no sale de la configuración → **P2-13**.
 
 ## 4. Revocación del token por dispositivo
 
@@ -95,8 +95,8 @@ Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens d
 
 - `soul unpair <id>` marca `revoked_at` en `devices.json` (`src/api/devices.ts:58-65`, `src/cli/cli.ts:465-468`).
 - `serve` relee `devices.json` en **cada petición** (`src/api/serve.ts:78-94`, `src/api/devices.ts:74-84`). La revocación vale en el acto, sin reiniciar.
-- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:617,710`).
-- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:708`).
+- Un dispositivo revocado recibe `401` con `DEVICE_REVOKED` en todas las operaciones. Los demás siguen funcionando (`src/api/server.ts:620,713`).
+- Si `devices.json` está corrupto, la lectura lanza un error y la API responde 503: falla cerrada (`src/core/store.ts:64-67`, `src/api/server.ts:711`).
 
 **Tests.** `test/devices.test.ts:21,30`; `test/serve.test.ts:80` (el dispositivo revocado recibe 401 con el servicio en marcha); `test/api/contrato.test.mjs:188`.
 
@@ -107,12 +107,12 @@ Cubierto en parte: quien pueda escribir `config.json` ya no desvía los tokens d
 
 ## 5. Móvil perdido o robado
 
-**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:548-558`; límite conocido del README). El token funciona, por tanto, como un token portador.
+**Situación.** El móvil lleva el token y, casi siempre, también la VPN configurada. La API **no verifica la prueba DPoP**: exige la cabecera, pero no comprueba la firma (`src/api/server.ts:551-561`; límite conocido del README). El token funciona, por tanto, como un token portador.
 
 **Qué puede hacer quien tiene el móvil, mientras no se revoque:**
 
 - leer Q1–Q4 con el nivel de detalle vigente;
-- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:486-490`);
+- **subir el nivel de detalle hasta el máximo de la instalación** (`PUT /detalle`, `src/api/server.ts:489-493`);
 - marcar elementos como resueltos, que desaparecen de la vista del operador;
 - cambiar el modo de atención y la configuración de avisos.
 
@@ -138,13 +138,13 @@ Con P1-1 cerrado, un token copiado ya no vale sin la clave del móvil; aun así,
 **Lo que hace el código.**
 
 - **Fuerza bruta del token:** el espacio es de 2^256. La comparación se hace sobre el SHA-256, en tiempo constante (`src/api/devices.ts:74-84`).
-- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:104`, `src/api/server.ts:665-679,729`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:670-673`).
-- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:626-642`).
+- **Límite de peticiones:** 120 peticiones cada 10 s por dirección de origen, aplicado **antes** de autenticar, así que también cuentan las peticiones sin token (`src/api/serve.ts:104`, `src/api/server.ts:668-682,732`). Hay un tope de 1024 orígenes en memoria y, por encima, el servidor responde 429: falla cerrado (`src/api/server.ts:673-676`).
+- **Cuerpos:** como máximo 16 KiB. Se validan contra el OpenAPI y se rechazan parámetros desconocidos o repetidos (`src/api/server.ts:629-645`).
 - **Reenvío de solicitudes:**
   - TLS 1.3 impide capturarlas desde la red.
   - Las correcciones son idempotentes (`test/api/contrato.test.mjs:394`).
-  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:560-573`, `test/api/contrato.test.mjs:323`).
-- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:701`).
+  - El cursor del sondeo lleva una etiqueta derivada de un secreto que se genera en cada arranque y del operador (SHA-256 truncado). Un cursor ajeno o manipulado recibe 400 o 410, nunca datos (`src/api/server.ts:563-576`, `test/api/contrato.test.mjs:323`).
+- Las respuestas llevan `Cache-Control: no-store` (`src/api/server.ts:704`).
 
 **Tests.** `test/server.test.ts:64` (agotar el cupo desde una dirección no deja sin servicio a otra), `test/api/contrato.test.mjs:251` (429 con `Retry-After`) y `:213` (401 genérico ante token desconocido, cabecera ausente, esquema `Bearer` o falta de DPoP).
 
@@ -196,7 +196,7 @@ El contenido viaja dentro de TLS 1.3 de extremo a extremo entre la app y Soul, p
 | P2-10 | En Windows, la tarea de inicio de sesión no reintenta si la VPN no está lista | `RestartOnFailure` en el XML de la tarea (intervalo de 1 minuto, varios reintentos) o reintento interno de `serve` mientras la dirección no exista, con test |
 | P2-11 | No se ha verificado el comportamiento al volver la VPN, ni hay vigilancia de cambio de dirección | Reintento interno de la escucha: si la dirección desaparece, cerrar; si vuelve, abrir de nuevo. Test con una dirección que se añade y se quita (en Linux, `127.0.0.x` como sustituto) |
 | P2-12 | El desafío de emparejamiento da `HMAC(código, …)` sin compromiso previo del cliente: el código se puede adivinar sin conexión durante la ventana | Un PAKE (CPace o SPAKE2), o que el cliente se comprometa primero con el código, o un código más largo — **Cerrado con soul-pair-v2:** clave `soulpk_` de 178,6 bits; el ataque sin conexión queda en ≈ 2^-116 con un millón de GPU en la ventana (punto 3 bis). v1 se rechaza con 426 `PAIR_VERSION` |
-| P2-13 | Quien pueda escribir `config.json` (por ejemplo un frontend de agente con acceso a ficheros) decide adónde van los tokens (`connectors.bases`, cualquier host https) | La frontera de confianza es la cuenta local. Graph y Google no tienen variante en un host de la empresa: su base solo admite sus hosts oficiales (nubes nacionales de Graph incluidas) o loopback, y el transporte ignora otra (`src/core/connectors.ts:46-63`). GitHub Enterprise, Jira y Azure DevOps viven en hosts propios de cada empresa: su base sigue siendo cualquier https. El navegador del adaptador web ya no sale de la configuración: solo de `SOUL_NAVEGADOR` o de las rutas conocidas (`src/core/connectors.ts:145-147`) |
+| P2-13 | Quien pueda escribir `config.json` (por ejemplo un frontend de agente con acceso a ficheros) decide adónde van los tokens (`connectors.bases`, cualquier host https) | La frontera de confianza es la cuenta local. Graph y Google no tienen variante en un host de la empresa: su base solo admite sus hosts oficiales (nubes nacionales de Graph incluidas) por HTTPS y sin loopback, y el transporte ignora otra (`src/core/connectors.ts:46-64`). GitHub Enterprise, Jira y Azure DevOps viven en hosts propios de cada empresa: su base sigue siendo cualquier https. El navegador del adaptador web ya no sale de la configuración: solo de `SOUL_NAVEGADOR` o de las rutas conocidas (`src/core/connectors.ts:146-148`) |
 | P2-14 | Desde la VPN se puede agotar la ventana de emparejamiento sin la clave (10 retos o 3 pruebas inventadas) | Límite de retos por dirección de origen o reintento automático de `soul pair`; es denegación de servicio, no acceso |
 
 ## Cómo se ha verificado

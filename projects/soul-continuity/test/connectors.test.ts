@@ -52,7 +52,13 @@ test("bases de graph y google: solo sus hosts oficiales o loopback; GitHub, Jira
   assert.equal(validateConnectors({ enabled: [], bases: { graph: "https://graph.evil.example" } }).length, 1);
   assert.equal(validateConnectors({ enabled: [], bases: { google: "https://www.googleapis.com.evil.example" } }).length, 1);
   assert.equal(validateConnectors({ enabled: [], bases: { graph: "https://graph.microsoft.com:8443" } }).length, 1);
-  assert.deepEqual(validateConnectors({ enabled: [], bases: { graph: "https://graph.microsoft.us", google: "http://127.0.0.1:9" } }), []);
+  assert.deepEqual(validateConnectors({ enabled: [], bases: { graph: "https://graph.microsoft.us", google: "https://www.googleapis.com" } }), []);
+  // Sin loopback para Graph y Google: un proceso local recibiría sus tokens (revisión #1447, P2-1 de seguridad).
+  for (const b of ["http://127.0.0.1:9", "https://127.0.0.1:9", "http://[::1]:9", "http://graph.microsoft.com"]) {
+    assert.equal(validateConnectors({ enabled: [], bases: { graph: b } }).length, 1, `graph ${b}`);
+    assert.equal(validateConnectors({ enabled: [], bases: { google: b } }).length, 1, `google ${b}`);
+  }
+  assert.deepEqual(validateConnectors({ enabled: [], bases: { github: "http://127.0.0.1:9" } }), [], "GitHub, Jira y ADO conservan loopback para dobles");
   assert.deepEqual(validateConnectors({ enabled: [], bases: { github: "https://github.empresa.example/api/v3" } }), [], "GitHub Enterprise");
   // Aunque config.json no se valide antes, el transporte no usa la base desviada: sigue la oficial.
   const seen: string[] = [];
