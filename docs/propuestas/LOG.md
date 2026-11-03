@@ -6,10 +6,6 @@
 > Each entry: date, spec ID, status transition, optional rationale.
 > Ref: SE-222 S1 OKF Adoptable Patterns (log.md convention).
 
-## 2026-11-01 SE-497 PROPOSED
-
-Deriva de conocimiento vinculado a código y aprendizaje sin autoautoridad (SAVIA-RESEARCH-04 y 05). Se aprueba al fusionar la PR.
-
 ## 2026-11-03 SE-500 APPROVED
 
 Aprobada por la operadora por pregunta interactiva el 2026-11-03 («Aprobada, lanza S1 y S2»); se formaliza al fusionar la PR (SE-488).

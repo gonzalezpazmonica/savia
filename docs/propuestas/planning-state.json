@@ -1705,15 +1705,6 @@
       "evidence": "docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md",
       "approval": "Operadora 2026-11-03: AskUserQuestion (Aprobada, lanza S1 y S2); se formaliza al fusionar la PR (SE-488)",
       "phase": "A"
-    },
-    {
-      "id": "SE-497",
-      "status": "PROPOSED",
-      "priority": "P1",
-      "title": "Conocimiento vinculado a código con deriva, y aprendizaje sin autoautoridad",
-      "note": "Parte 1: code_refs con symbol_ref, hash normalizado y EXTRACTED/INFERRED/AMBIGUOUS en notas técnicas; estados de deriva que marcan sin ocultar; re-anclaje solo con revisión humana; medición antes/después. Parte 2: las LP ganan ámbito, evidencia, test de no regresión, caducidad y confianza; promoción solo con recibo de validación sobre holdout independiente y commit fusionado en main; activación de un commit reversible; las cifras solo bajan techos, nunca conceden autoridad (cambia SCL-006).",
-      "evidence": "docs/specs/SE-497-code-linked-knowledge-drift-and-learning-without-self-authority.spec.md",
-      "phase": "D"
     }
   ],
   "route": {
