@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=ead0cce3c50cef56499ceb5cad6f0bc11a844368eab95466f254e0137edb55d8
-timestamp=2026-11-03T17:11:11Z
+diff_hash=e53ef30c15e6e30c08a756d95f39178a57c2f0be25600d4dc967a387d349d93f
+timestamp=2026-11-03T17:30:51Z
 branch=agent/w-soul-instalador-20261023
-head_commit=feeda8ab
-signature=a98b529236ed72b99c3fd75492b457695c7ea2a2456553bfb9d07b7c3e23d51c
+head_commit=bad6c24dc
+signature=fae7ef705994ee0801ac4ede1a3f52b83003ca2a37368bfef4b8a2797c162f1c
