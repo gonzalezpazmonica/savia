@@ -65,7 +65,7 @@ EOF
   git -C "$MERGE_SPRINT_GIT_ROOT" config user.email t@t; git -C "$MERGE_SPRINT_GIT_ROOT" config user.name t
   git -C "$MERGE_SPRINT_GIT_ROOT" config commit.gpgsign false
   mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"
-  cp scripts/merge-sprint.sh scripts/risk-tier.py scripts/f5-state.sh "$MERGE_SPRINT_GIT_ROOT/scripts/"
+  cp scripts/merge-sprint.sh scripts/risk-tier.py scripts/f5-state.sh scripts/merge-registry-resolve.py "$MERGE_SPRINT_GIT_ROOT/scripts/"
   echo base > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G add a.txt scripts; G commit -qm base; G branch -M main; G push -q origin main
 }
 
@@ -408,9 +408,10 @@ fake_scanner() {  # fake_scanner <salida> <exit> : escáner y firmador falsos en
 fake_sam() {  # SAM falso que, como el real, registra el último commit de .scm/registry.json
   mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"
   cat > "$MERGE_SPRINT_GIT_ROOT/scripts/generate-capability-map.py" <<'PY'
-import os, time
+import os
+# Determinista, como el real (SE-500: .scm/ se compara byte a byte con su regeneración); cambia con el árbol.
 os.makedirs(".scm", exist_ok=True)
-open(".scm/registry.json", "w").write(str(time.time_ns()))
+open(".scm/registry.json", "w").write(" ".join(sorted(f for f in os.listdir(".") if not f.startswith("."))))
 PY
   cat > "$MERGE_SPRINT_GIT_ROOT/scripts/sam.py" <<'PY'
 import os, subprocess, sys
