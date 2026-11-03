@@ -188,7 +188,7 @@ cmd_plan() {
       for cand in $(reviewed_shas "$n"); do
         reviews_ok "$n" "$cand" "$tier" && head_equivalent "$cand" "$head" "$(pr_refs "$n" "$cand")" && { found="$cand"; break; }
       done
-      [[ -n "$found" ]] || { echo "excluida #$n: la cabeza actual no es equivalente a ninguna revisada" >&2; continue; }
+      [[ -n "$found" ]] || { echo "excluida PR $n: sin revisión válida sobre la cabeza actual ni sobre una equivalente" >&2; continue; }
       head="$found"
     fi
     local meta files; meta=$(pr_meta "$n") || continue

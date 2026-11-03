@@ -139,8 +139,9 @@ veredictos antes de `plan`, pero no la impide.
   espacios de nombres distintos: un agente que firma con email y juzga con su id no se detecta.
 - Las reservas F5 van por manifiesto (digest), no por grant: un merge reservado bajo un grant
   anterior del mismo manifiesto cuenta como propio.
-- Desde SE-500 S2, generadores y resolutor de registros salen del commit de `main` congelado en el
-  manifiesto, no de la rama; lo que no cubre la tabla canónica de `merge-registry-resolve.py` no es equivalente.
+- SE-500 S2: generadores (`scripts/`, `.claude/hooks/lib/`) y resolutor salen de `main` congelado; de la rama salen sus
+  datos y el código que un generador cargue de otra ruta (añadirla a `FROZEN_CODE`). `refs` lo controla la autora
+  (commits, `.pr-summary.md`, rama): acota el delta revisado, no es un control frente a ella.
 
 ## Referencias
 

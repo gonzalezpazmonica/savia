@@ -604,7 +604,7 @@ EOF
 plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equivalente y lo dice
   run bash "$SCRIPT" plan
   [ "$status" -eq 0 ]
-  [[ "$output" == *"excluida #$1: la cabeza actual no es equivalente a ninguna revisada"* ]]
+  [[ "$output" == *"excluida PR $1: sin revisión válida sobre la cabeza actual ni sobre una equivalente"* ]]
 }
 
 @test "rev-1469 P1-1 block: fichero nuevo en .scm/ que ningún generador produce, añadido tras la revisión → no equivalente" {
@@ -624,7 +624,7 @@ plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equ
   G add -A; G commit -qm "derivados regenerados" >/dev/null; G push -q origin HEAD:pr-172; G switch -q main
   run bash "$SCRIPT" plan
   [ "$status" -eq 0 ]
-  [[ "$output" != *"excluida #172"* ]]
+  [[ "$output" != *"excluida PR 172"* ]]
   [[ "$output" == *"#172(t2)"* ]]
 }
 
@@ -640,13 +640,16 @@ plan_excludes() {  # plan_excludes <n> : plan deja fuera la PR por cabeza no equ
   plan_excludes 174
 }
 
-gate_lib_audit() {  # escáner congelado que carga .claude/hooks/lib/gate-result.sh por ruta relativa, como el real
+gate_lib_audit() {  # escáner congelado que carga .claude/hooks/lib/gate-result.sh desde ROOT_DIR = cd lógico de scripts/..
+  # (la forma de los generadores reales). `source "$SCRIPT_DIR/../x"` lo resuelve el núcleo tras el enlace y ya
+  # caía en main; ROOT_DIR lógico apunta a la raíz congelada, cuyo .claude antes era el de la rama.
   mkdir -p "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib"
   echo 'gate_ok() { return 0; }' > "$MERGE_SPRINT_GIT_ROOT/.claude/hooks/lib/gate-result.sh"
   cat > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-scan.sh" <<'SH'
 #!/usr/bin/env bash
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../.claude/hooks/lib/gate-result.sh" || exit 2
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$ROOT_DIR/.claude/hooks/lib/gate-result.sh" || exit 2
 gate_ok && ! git diff origin/main...HEAD | grep -q SECRETO
 SH
   printf '#!/usr/bin/env bash\necho "firma-congelada $(git rev-parse HEAD^{tree})" > .confidentiality-signature\n' > "$MERGE_SPRINT_GIT_ROOT/scripts/confidentiality-sign.sh"
@@ -716,4 +719,34 @@ PY
   [ "$status" -eq 0 ]
   [[ "$output" == *"M1 total: 1/1"* ]]
   [[ "$output" == *"M3 total: 2 grant(s) para 1 merge(s)"* ]]
+}
+
+@test "rev-1469 P2-1: en la cola del juez los registros se integran desde <to> (SAFE) y el arreglo juzgado no se pierde" {
+  export MERGE_SPRINT_JUDGE_POLLS=1
+  reg_main
+  spec_pr 180 SE-910
+  plan_and_grant
+  local h0 to f v
+  h0=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["prs"][0]["head"])' "$MERGE_SPRINT_HOME/manifest.json")
+  # Arreglo tras el grant (otra autora): cambia el título de SE-910 en el registro
+  G switch -q pr-180
+  sed -i 's/"alta SE-910"/"alta SE-910 corregida"/' "$MERGE_SPRINT_GIT_ROOT/docs/propuestas/planning-state.json"
+  G add -A; git -C "$MERGE_SPRINT_GIT_ROOT" -c user.email=f@f -c user.name=fixer -c commit.gpgsign=false commit -qm "fix: SE-910 título"
+  G push -q origin pr-180; G switch -q main
+  run bash "$SCRIPT" run
+  [ "$status" -eq 6 ]
+  f=$(ls "$MERGE_SPRINT_HOME"/judge/*/180-*.request.json); to=${f##*/180-}; to=${to%.request.json}
+  # main avanza con otra alta en el registro: la cola del juez tiene que integrar registros en conflicto
+  spec_pr 181 SE-911; G merge -q --no-edit origin/pr-181 >/dev/null; G push -q origin main; echo MERGED > "$FAKE/181.state"
+  squash_on_merge 180
+  v=$(mktemp "$TMPDIR_T/v.XXXX")
+  echo "JUDGE: SAFE pr=180 from=$h0 to=$to judge=judge-agent fix_author=f@f scope=unchanged security=unchanged reason=titulo" > "$v"
+  bash "$SCRIPT" review-register 180 "$v"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  grep -qx 180 "$FAKE/merged"
+  merged_line 180 | grep -q '"equivalence":"judge_safe"'
+  merged_line 180 | grep -q '"registry_hashes":"docs/propuestas/'
+  git --git-dir="$BARE" show main:docs/propuestas/planning-state.json | grep -q '"alta SE-910 corregida"'
+  git --git-dir="$BARE" show main:docs/propuestas/planning-state.json | grep -q '"SE-911"'
 }
