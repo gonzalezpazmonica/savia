@@ -2,8 +2,8 @@
 # Guards de rama: miran la rama del repo DESTINO de cada git commit/add real
 # (git -C, cd encadenado, variables literales), no la del checkout de la sesión.
 # El resolvedor es fail-closed: ante una forma que no entiende con certeza emite
-# la op con destino vacío (veredicto BLOQUEAR). Los hooks bash, sin cambiar,
-# aplican a ese destino vacío la rama del cwd: con la sesión en main bloquean.
+# la op con destino vacío (veredicto BLOQUEAR). Los hooks bash bloquean ese
+# destino vacío sin mirar la rama del cwd, y también si falta el resolvedor.
 # Hooks: .claude/hooks/block-commit-to-main.sh y validate-bash-global.sh.
 # Resolvedor compartido: scripts/lib/git_op_targets.py (también lo usa el port
 # TS .opencode/plugins/guards/block-commit-to-main.ts, con los mismos casos).
@@ -47,7 +47,9 @@ verdict() {  # $1 = orden, $2 = cwd
 blocked_verdict() { grep -qxP "${1:-commit}\t" <<< "$output"; }
 blocked_bcm() { [ "$(echo "$output" | jq -r .decision 2>/dev/null)" = "block" ]; }
 # exit 2 por ESTE guard (no por entrada malformada ni por otro guard).
-blocked_vbg() { [ "$status" -eq 2 ] && [[ "$output" == *"BLOQUEADO: rama 'main'"* ]]; }
+blocked_vbg() { [ "$status" -eq 2 ] && [[ "$output" == *"BLOQUEADO: rama 'main'"* || "$output" == *"fail-closed"* ]]; }
+blocked_unsure_bcm() { [[ "$(echo "$output" | jq -r .reason 2>/dev/null)" == *"git -C <ruta> commit"* ]]; }
+blocked_unsure_vbg() { [ "$status" -eq 2 ] && [[ "$output" == *"fail-closed"*"git -C <ruta>"* ]]; }
 # PATH sin python3: el resolvedor no está disponible.
 no_python_path() {
   local d="$TMPDIR/nopy-bin" f
@@ -230,11 +232,12 @@ no_python_path() {
   [ "$(echo "$output" | grep -c .)" -eq 1 ]
 }
 
-@test "vbg sin python3: fallback conservador por el cwd, también con git -C" {
+@test "vbg y bcm sin python3: fail-closed, bloquean git commit desde cualquier rama" {
   P=$(no_python_path)
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $MAIN commit -m x' '{tool_input:{command:\$c}}' | (cd '$WT' && bash '$VBG')"
-  # sin resolvedor, conservador: cwd de la orden ($WT, agent/x) → pasa; en main → bloquea
-  [ "$status" -eq 0 ]
+  blocked_unsure_vbg
+  run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' --arg d '$WT' '{tool_input:{command:\$c},cwd:\$d}' | (cd '$WT' && bash '$BCM')"
+  blocked_unsure_bcm
   run env PATH="$P" bash -c "jq -n --arg c 'git -C $WT commit -m x' '{tool_input:{command:\$c}}' | (cd '$MAIN' && bash '$VBG')"
   blocked_vbg
 }
@@ -339,4 +342,50 @@ EOF
   [ -z "$output" ]
   run vbg "$c"
   [ "$status" -eq 0 ]
+}
+
+# ── Hooks fail-closed: destino vacío bloquea también desde el worktree ──────
+
+@test "bcm y vbg: forma no reconocida bloquea desde el worktree agent/*" {
+  for c in 'git $(echo commit) -m x' 'g(){ git "$@"; }; g commit -m x' \
+           'env -S "git commit -m x"' "bash -c -- 'git commit -m x'" \
+           '$SUDO git commit -m x' "bash -c 'cd $MAIN && git commit -m x'" \
+           "echo 'git commit -m x' | bash" "GIT_DIR=$MAIN/.git git commit -m x" \
+           "CDPATH=$HOME; cd savia && git commit -m x"; do
+    run bcm "$c" "$WT"
+    blocked_unsure_bcm
+    run vbg "$c" "$WT"
+    blocked_unsure_vbg
+  done
+}
+
+# Resto de P1 de las tres revisiones de seguridad, también desde el worktree
+# (con los hooks anteriores pasaban: el destino vacío se evaluaba por agent/x).
+@test "bcm y vbg: el resto de P1 de las revisiones bloquea desde el worktree agent/*" {
+  for c in "\${X:-} git commit -m x" 'bash --norc -c "git commit -m x"' \
+           'bash -o pipefail -c "git commit -m x"' "awk 'BEGIN{system(\"git commit -m x\")}'" \
+           "sed 'e git commit -m x' /dev/null" 'script -qc "git commit -m x" /dev/null' \
+           'su -c "git commit -m x"' 'flock f -c "git commit -m x"' \
+           "python3 -c \"import os; os.system('git commit -m x')\"" \
+           $'cat <<EOF\n$(git commit -m x)\nEOF' $'bash <<\'EOF\'\ngit commit -m x\nEOF' \
+           $'sh <<EOF\ngit commit -m x\nEOF' "bash <<< 'git commit -m x'" \
+           "printf 'git commit -m x' | sh -s" 'cd /no/existe && git commit -m x'; do
+    run bcm "$c" "$WT"
+    blocked_unsure_bcm
+    run vbg "$c" "$WT"
+    blocked_unsure_vbg
+  done
+  # git add: solo lo guarda vbg (bcm protege commits)
+  run vbg '${X:-} git add .' "$WT"
+  blocked_unsure_vbg
+}
+
+@test "bcm y vbg: formas admitidas al worktree siguen pasando desde el worktree" {
+  for c in "git -C $WT commit -m x" "cd $WT && git commit -m x" 'git commit -m x' \
+           'echo "git commit"'; do
+    run bcm "$c" "$WT"
+    [ -z "$output" ]
+    run vbg "$c" "$WT"
+    [ "$status" -eq 0 ]
+  done
 }

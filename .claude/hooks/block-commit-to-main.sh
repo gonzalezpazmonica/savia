@@ -43,35 +43,40 @@ BASE_DIR="${BASE_DIR:-$PWD}"
 
 # El repo que importa es el DESTINO de cada `git commit` real, no el checkout
 # de la sesión: lo resuelve scripts/lib/git_op_targets.py (git -C, cd
-# encadenado, variables literales; heredocs y cadenas son texto). Destino no
-# resoluble o fuera de un repo → cwd de la orden (conservador). Sin Python o
-# sin orden legible → comportamiento anterior.
+# encadenado, variables literales; heredocs y cadenas son texto). Destino vacío
+# = forma no reconocida con certeza → BLOQUEAR (fail-closed). Destino fuera de
+# un repo → cwd de la orden. Sin Python o fallo del resolvedor → BLOQUEAR.
 BRANCH=""
+UNSURE=""
 RESOLVER="$ROOT/scripts/lib/git_op_targets.py"
 if [[ -n "${COMMAND:-}" ]] && command -v python3 >/dev/null 2>&1 \
    && TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$BASE_DIR" 2>/dev/null); then
   while IFS=$'\t' read -r op dir; do
     [[ "$op" == "commit" ]] || continue
-    if [[ -n "$dir" ]] && git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [[ -z "$dir" ]]; then UNSURE="destino no reconocido con certeza"; break; fi
+    if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       b=$(branch_of "$dir")
     else
       b=$(branch_of "$BASE_DIR")
     fi
     if is_human "$b"; then BRANCH="$b"; break; fi
   done <<< "$TARGETS"
+elif [[ -n "${COMMAND:-}" ]]; then
+  UNSURE="resolvedor de destino no disponible"
 else
-  TARGET_DIR="$BASE_DIR"
-  # Forma explícita `cd "<ruta>" && git commit` (un cd fallido no ejecuta el git).
-  CD_PREFIX='^[[:space:]]*cd[[:space:]]+"([^"]+)"[[:space:]]*&&[[:space:]]*git[[:space:]]+commit([[:space:]]|$)'
-  if [[ "${COMMAND:-}" =~ $CD_PREFIX ]]; then
-    COMMAND_DIR="${BASH_REMATCH[1]}"
-    if [[ "$COMMAND_DIR" == /* ]]; then
-      TARGET_DIR="$COMMAND_DIR"
-    else
-      TARGET_DIR="$TARGET_DIR/$COMMAND_DIR"
-    fi
+  BRANCH=$(branch_of "$BASE_DIR")  # payload sin orden legible: conservador
+fi
+if [[ -n "$UNSURE" ]]; then
+  mkdir -p "$LOG_DIR"
+  printf '{"ts":"%s","branch":"?","action":"commit","verdict":"block-unsure"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$LOG_DIR/commit-guard.jsonl" 2>/dev/null || true
+  REASON="git commit bloqueado (fail-closed): $UNSURE. Forma admitida: git -C <ruta> commit … (o cd <ruta> && git commit …)."
+  if command -v jq >/dev/null 2>&1; then
+    jq -n --arg r "$REASON" '{decision: "block", reason: $r}'
+  else
+    printf '{"decision":"block","reason":"%s"}\n' "$REASON"
   fi
-  BRANCH=$(branch_of "$TARGET_DIR")
+  exit 0
 fi
 # vacío (detached/recién init/rama segura) → no proteger
 [[ -z "$BRANCH" ]] && exit 0

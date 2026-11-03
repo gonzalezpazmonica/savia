@@ -102,20 +102,20 @@ if echo "$COMMAND" | grep -iE '(^|[^[:alnum:]_])git([^[:alnum:]_]|$)' > /dev/nul
      && OP_TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3 "$RESOLVER" "$GIT_DIR_TARGET" 2>/dev/null); then
     while IFS=$'\t' read -r _op _dir; do
       [[ -n "$_op" ]] || continue
-      if [[ -n "$_dir" ]] && git -C "$_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      if [[ -z "$_dir" ]]; then
+        echo "BLOQUEADO: destino de git $_op no reconocido con certeza (fail-closed). Forma admitida: git -C <ruta> $_op …" >&2
+        exit 2
+      fi
+      if git -C "$_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         guard_main_target "$_dir"
       else
         guard_main_target "$GIT_DIR_TARGET"
       fi
     done <<< "$OP_TARGETS"
   else
-    # Sin Python, timeout o fallo del resolvedor: conservador. La orden ya pasó
-    # el prefiltro amplio (`git -C <ruta> commit` incluido).
-    CD_PATH=$(echo "$COMMAND" | sed -n 's/^[[:space:]]*cd[[:space:]]*"\([^"]*\)".*/\1/p' 2>/dev/null)
-    if [[ -n "$CD_PATH" ]] && [[ -e "$CD_PATH/.git" ]]; then  # -e: en un worktree .git es fichero
-      GIT_DIR_TARGET="$CD_PATH"
-    fi
-    guard_main_target "$GIT_DIR_TARGET"
+    # Sin Python, timeout o fallo del resolvedor: fail-closed.
+    echo "BLOQUEADO: resolvedor de destino no disponible para git commit/add (fail-closed). Forma admitida: git -C <ruta> commit …" >&2
+    exit 2
   fi
 fi
 
