@@ -69,7 +69,7 @@ Que ninguna PR contenga estos cuatro derivados. Dos PR sin código común deben 
 
 Para escribir en `main` necesita una autoridad que hoy no existe (hallazgo 5):
 
-- **A1, bypass:** un ruleset con una GitHub App como actor de bypass. GitHub concede el bypass por actor y no por ruta, así que la App podría empujar cualquier contenido. La credencial tendría que vivir en un *environment* limitado a la rama `main`, para que ningún workflow de PR pueda leerla. La garantía de «solo rutas de D» la daría el propio código del workflow, revisado como tier 4, y no GitHub.
+- **A1, bypass:** un ruleset con una GitHub App como actor de bypass. El bypass de un ruleset es por actor: la App salta todas las reglas de ese ruleset, sin restricción por ruta, así que podría empujar cualquier contenido. La credencial tendría que vivir en un *environment* limitado a la rama `main`, para que ningún workflow de PR pueda leerla. La garantía de «solo rutas de D» la daría el propio código del workflow, revisado como tier 4, y no GitHub.
 - **A2, PR del bot:** el bot abre una PR (con token de App, porque las PR creadas con `GITHUB_TOKEN` no disparan workflows) y la fusiona sola. Eso es un merge sin grant: choca con la Regla 8 y con SE-343.
 
 Las dos variantes piden a la operadora una autorización permanente de escritura en `main` para un actor no humano. Mientras el commit del bot no llega, `main` tiene derivados atrasados. Y cada commit del bot desactualiza, por `strict`, todas las PR abiertas: sin conflicto, pero con una CI más por PR.
