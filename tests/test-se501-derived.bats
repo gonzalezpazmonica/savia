@@ -812,7 +812,7 @@ EOF2
   run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
   [ "$status" -eq 0 ]
   [[ "$output" == *"PASS: entropía 1"* ]]
-  printf '{"capabilities":[{"id":"script:a","source":"scripts/a.py","kind":"script"},{"id":"script:b","source":"scripts/b.py","kind":"script"}]}\n' > "$R/source-registry.json"
+  printf '{"capabilities":[{"id":"script:a","source":"scripts/%s.py","kind":"script"},{"id":"script:b","source":"scripts/%s.py","kind":"script"}]}\n' a b > "$R/source-registry.json"
   run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL: entropía 3"* ]]
