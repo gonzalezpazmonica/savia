@@ -75,6 +75,13 @@ def canon(path, raw):
 ENSURE_HINT = "ejecutar: bash scripts/derived.sh ensure"
 
 
+def is_own_repo(root):
+    """¿Es `root` el repo que acompaña a este módulo? Solo ahí puede ensure() generar D."""
+    import os
+    here = os.path.dirname(os.path.realpath(__file__))
+    return os.path.realpath(os.fspath(root)) == os.path.dirname(here)
+
+
 def ensure(root, rels, group="scm"):
     """Si falta alguna ruta de `rels` bajo `root`, ejecuta «bash scripts/derived.sh ensure --only <group>».
     Devuelve las rutas que siguen faltando (lista vacía = todas presentes).
@@ -88,11 +95,28 @@ def ensure(root, rels, group="scm"):
         return [r for r in rels if not os.path.isfile(os.path.join(root, r))]
     gone = missing()
     script = os.path.join(here, "derived.sh")
-    if gone and root == os.path.dirname(here) and os.path.isfile(script):
+    if gone and is_own_repo(root) and os.path.isfile(script):
         subprocess.run(["bash", script, "ensure", "--only", group], cwd=root,
                        stdout=sys.stderr, stdin=subprocess.DEVNULL, check=False)
         gone = missing()
     return gone
+
+
+DERIVED_LIST = "scripts/derived-paths.txt"
+
+
+def derived_entries(root):
+    """Entradas de la lista cerrada D de `root` (exactas, o prefijos si acaban en «/»). Sin lista: ()."""
+    import os
+    try:
+        with open(os.path.join(os.fspath(root), DERIVED_LIST), encoding="utf-8") as fh:
+            return tuple(l.strip() for l in fh if l.strip() and not l.lstrip().startswith("#"))
+    except OSError:
+        return ()
+
+
+def is_derived(path, entries):
+    return any(path == e or (e.endswith("/") and path.startswith(e)) for e in entries)
 
 
 def main(argv):

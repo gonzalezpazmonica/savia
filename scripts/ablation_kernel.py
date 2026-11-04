@@ -101,6 +101,13 @@ def plan_kernel(root: Path, files: dict, candidate: dict) -> dict:
     """Cierre de dependencias de las semillas y dependencias de packs no permitidos."""
     validate_candidate(candidate)
     seeds = sorted({p for paths in candidate["areas"].values() for p in paths})
+    # SE-501: D no se versiona, así que nunca está en el snapshot. Una semilla de D es un error propio
+    # (sembrar su generador), no un «falta» que haga pensar en un fichero borrado.
+    entries = derived_canon.derived_entries(root)
+    derived = [p for p in seeds if derived_canon.is_derived(p, entries)]
+    if derived:
+        raise InventoryError("KERNEL_SEED_DERIVED",
+                             ",".join(derived) + " (D no se versiona: sembrar su generador)")
     missing = [p for p in seeds if p not in files]
     if missing:
         raise InventoryError("KERNEL_SEED_MISSING", ",".join(missing))

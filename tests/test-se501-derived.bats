@@ -733,6 +733,29 @@ set_aside_scm() { mv "$R/.scm" "$(mktemp -d "$T/scm.XXXX")/"; }
   run python3 "$R/scripts/eval-coverage-matrix.py" --root "$R"
   [ "$status" -ne 0 ]
   [[ "$output" == *"derived.sh ensure"* ]]
+  # Solo falta INDEX.scm en el propio repo y ensure falla: FAIL (sin él la entropía baja 1 y el ratchet
+  # daría PASS en falso).
+  fake_derived ok
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -eq 0 ]
+  mv "$R/.scm/INDEX.scm" "$T/index.apartado"; fake_derived fail
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *".scm/INDEX.scm"*"derived.sh ensure"* ]]
+}
+
+@test "rev-1472 r4: capability-entropy con --root ajeno sin INDEX.scm sigue midiendo (INDEX opcional fuera del repo)" {
+  mkdir -p "$T/fx/.scm" "$T/fx/tests/baselines"
+  echo '{"capabilities": [{"id": "script:fx/a", "kind": "script", "source": "fx/a.sh"}]}' > "$T/fx/.scm/registry.json"
+  echo '{"entropy": 1}' > "$T/fx/tests/baselines/capability-entropy.json"
+  run python3 "$REPO/scripts/capability-entropy.py" --root "$T/fx" --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: entropía 1 <= baseline 1"* ]]
+  # Negativo: sin registry, falla nombrando la orden.
+  mv "$T/fx/.scm/registry.json" "$T/registry.apartado"
+  run python3 "$REPO/scripts/capability-entropy.py" --root "$T/fx" --check
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"derived.sh ensure"* ]]
 }
 
 @test "AC-11: ablation sin D en raíz ajena: el inventario falla nombrando ensure; la procedencia opcional queda UNKNOWN" {
