@@ -74,11 +74,11 @@ La confirmación de S0 puede estar vacía mientras la spec está APPROVED y el p
 
 - Frontmatter `human_surface: true | false`. En ámbito es **obligatorio**: sin el campo, FAIL. La detección por rutas no basta (el caso origen, SE-490, citaba rutas web como `/continuidad` y carpetas `src/` que ningún patrón razonable distingue de un servicio).
 - Detección por rutas citadas entre comillas invertidas: `apps/`, `ui/`, `projects/<p>/src/web`, `projects/<p>/{web,ui,app,android,ios,mobile,frontend}/`, proyectos cuyo nombre contiene `web`, `mobile` o `space`, y ficheros `.tsx`, `.jsx`, `.vue`, `.svelte`, `.html`, `.css`.
-- `human_surface: false` con rutas detectadas exige `human_surface_exempt: <motivo>`. El gate lo imprime como EXEMPT para que la revisora lo vea.
+- `human_surface: false` con rutas detectadas exige `human_surface_exempt: <motivo>`. El gate lo imprime como EXEMPT para que la revisora lo vea, también en CI (`--quiet` no lo oculta). `human_surface: false` sin rutas detectadas sale como DECLARED-FALSE por la misma razón.
 
 ### 4. Gate
 
-`scripts/comprehension-gate.py`, invocado como comprobación 11 de `bash scripts/roadmap.sh validate` (que ya corre en `validate-ci-local.sh` y en CI). Recorre `docs/specs/SE-*.spec.md` y `docs/propuestas/SE-*.md`.
+`scripts/comprehension-gate.py`, invocado como comprobación 11 de `bash scripts/roadmap.sh validate` (que ya corre en `validate-ci-local.sh` y en CI). Recorre `docs/specs/**/SE-*.md`, `docs/propuestas/SE-*.md` y la `evidence` de cada iniciativa de la vista de planificación. Una iniciativa en ámbito de la vista sin spec localizable es FAIL: el gate no se esquiva con un nombre de fichero que no case.
 
 - **Ámbito**: estado APPROVED, IMPLEMENTING o IMPLEMENTED (en el frontmatter o en la vista de planificación) y, además, número SE-504 o superior, o `approved_at` desde 2026-11-04.
 - **FAIL** si: falta `human_surface`; superficie humana sin la sección completa (escenas fuera de 3–5, sin cita literal con fecha, listas SÍ/NO vacías); confirmación sin fecha o con respuesta vacía o de relleno (`{…}`, `pendiente`, `TBD`); falta el slice S0 o su `prototipo:`; S1 en curso sin confirmación de S0.

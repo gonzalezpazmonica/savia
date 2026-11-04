@@ -162,8 +162,9 @@ confirm_s0() {
 
 @test "AC-4: human_surface false sin rutas pasa; con rutas exige motivo; con motivo es EXEMPT" {
   printf -- '---\nstatus: APPROVED\napproved_at: 2026-11-05\nhuman_surface: false\n---\n# backend\n' > "$SPEC"
-  run python3 "$GATE" --root "$ROOT"
+  run python3 "$GATE" --root "$ROOT" --quiet
   [ "$status" -eq 0 ]
+  [[ "$output" == *"DECLARED-FALSE: comprehension-gate SE-900-demo.spec.md"* ]]
   for path in 'apps/x/main.ts' 'ui/panel' 'projects/demo/src/web/index.ts' 'projects/savia-web/src/a.ts' 'projects/demo/android/' 'src/view/Home.tsx:12'; do
     printf -- '---\nstatus: APPROVED\napproved_at: 2026-11-05\nhuman_surface: false\n---\nToca `%s`.\n' "$path" > "$SPEC"
     run python3 "$GATE" --root "$ROOT"
@@ -279,4 +280,112 @@ JSON
   run python3 "$GATE" --root . --state "$BATS_TEST_TMPDIR/state.json"
   [ "$status" -eq 0 ]
   [[ "$output" == *"EXEMPT: comprehension-gate SE-505-puerta-de-comprension.spec.md"* ]]
+}
+
+@test "revisión: iniciativa en ámbito de la vista con spec de nombre no estándar se evalúa por evidence" {
+  printf -- '---\nstatus: APPROVED\nhuman_surface: true\n---\n# app\n' > "$ROOT/docs/specs/SE-906-app.md"
+  printf '{"initiatives":[{"id":"SE-906","status":"APPROVED","evidence":"docs/specs/SE-906-app.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: comprehension-gate SE-906-app.md: falta la sección «## Lo que he entendido»"* ]]
+}
+
+@test "revisión: evidence fuera de los globs (prefijo SPEC-, otra carpeta) también se evalúa" {
+  mkdir -p "$ROOT/docs/otras"
+  printf -- '---\nstatus: APPROVED\nhuman_surface: true\n---\n# app\n' > "$ROOT/docs/otras/SPEC-app.md"
+  printf '{"initiatives":[{"id":"SE-906","status":"IMPLEMENTING","evidence":"docs/otras/SPEC-app.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: comprehension-gate SPEC-app.md"* ]]
+}
+
+@test "revisión: iniciativa en ámbito sin spec localizable falla; fuera de ámbito o PROPOSED no" {
+  printf '{"initiatives":[{"id":"SE-907","status":"APPROVED","evidence":"docs/specs/no-existe.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-907 está APPROVED en la vista de planificación pero no hay spec localizable"* ]]
+  printf '{"initiatives":[{"id":"SE-907","status":"PROPOSED"},{"id":"SE-400","status":"APPROVED"},{"id":"SE-900","status":"APPROVED"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: comprehension-gate"* ]]
+}
+
+@test "revisión: spec en un subdirectorio de docs/specs se evalúa" {
+  mkdir -p "$ROOT/docs/specs/space"
+  printf -- '---\nstatus: APPROVED\nhuman_surface: true\n---\n# sub\n' > "$ROOT/docs/specs/space/SE-908-sub.spec.md"
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-908-sub.spec.md"* ]]
+}
+
+@test "revisión: ID con ceros a la izquierda casa con la vista normalizada" {
+  mv "$SPEC" "$ROOT/docs/specs/SE-0900-demo.spec.md"
+  printf '{"initiatives":[{"id":"SE-900","status":"IMPLEMENTING"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requerida para poner en curso S1"* ]]
+}
+
+@test "revisión: roadmap.sh validate muestra EXEMPT en su salida (CI con --quiet)" {
+  printf -- '---\nstatus: APPROVED\napproved_at: 2026-11-05\nhuman_surface: false\nhuman_surface_exempt: "informe HTML interno"\n---\nToca `apps/x`.\n' > "$SPEC"
+  cat > "$ROOT/docs/propuestas/planning-state.json" <<'JSON'
+{"version":2,"tracked_spec_floor":900,"completion_contract_floor":900,"initiatives":[
+  {"id":"SE-900","status":"APPROVED","approval":"operadora"}
+]}
+JSON
+  printf '## 2026-11-05 SE-900 APPROVED\n\nfixture\n' > "$ROOT/docs/propuestas/LOG.md"
+  run env REPO_ROOT="$ROOT" bash scripts/roadmap.sh validate
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"EXEMPT: comprehension-gate SE-900-demo.spec.md: informe HTML interno"* ]]
+}
+
+@test "revisión: secciones dentro de un bloque de código cercado no cuentan" {
+  edit "$SPEC" 's.replace("## Lo que he entendido", "```markdown\n## Lo que he entendido").replace("## Slice S0", "```\n\n## Slice S0")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta la sección «## Lo que he entendido»"* ]]
+}
+
+@test "revisión: current_slice S01, S1a, S1.2 o S2-api cuentan como en curso; S0 no" {
+  for sl in S01 S1a S1.2 S2-api s1; do
+    write_good "$SPEC"
+    edit "$SPEC" "s.replace('human_surface: true', 'human_surface: true\ncurrent_slice: $sl')"
+    run python3 "$GATE" --root "$ROOT"
+    [ "$status" -eq 1 ] || { echo "no detectado: $sl"; false; }
+    [[ "$output" == *"requerida para poner en curso S1"* ]]
+  done
+  write_good "$SPEC"
+  edit "$SPEC" 's.replace("human_surface: true", "human_surface: true\ncurrent_slice: S0-maqueta")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 0 ]
+}
+
+@test "revisión: frontmatter sin cerrar en ámbito falla; comentario YAML tras el estado no lo oculta" {
+  edit "$SPEC" 's.replace("human_surface: true\n---\n", "human_surface: true\n", 1)'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"frontmatter sin cerrar"* ]]
+  write_good "$SPEC"
+  edit "$SPEC" 's.replace("status: APPROVED", "status: APPROVED  # nota").replace("## Lo que he entendido", "## Otra")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta la sección «## Lo que he entendido»"* ]]
+}
+
+@test "revisión: con claves repetidas manda la primera (como grep -m1 de roadmap.sh)" {
+  edit "$SPEC" 's.replace("human_surface: true\n", "human_surface: true\nhuman_surface: false\n").replace("## Lo que he entendido", "## Otra")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta la sección «## Lo que he entendido»"* ]]
+}
+
+@test "revisión: confirmación fechada antes de las palabras de la persona falla; el mismo día pasa" {
+  edit "$SPEC" 's.replace("- fecha: 2026-11-04", "- fecha: 2026-11-02")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"anterior a las palabras de la persona (2026-11-03)"* ]]
+  write_good "$SPEC"
+  edit "$SPEC" 's.replace("- fecha: 2026-11-04", "- fecha: 2026-11-03")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 0 ]
 }

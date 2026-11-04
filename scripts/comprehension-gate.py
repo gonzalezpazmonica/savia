@@ -11,7 +11,9 @@ Regla: docs/rules/domain/comprehension-gate.md.
 Uso:
   comprehension-gate.py [--root DIR] [--state planning-state.json] [--spec FICHERO ...]
 
-Sin --spec revisa docs/specs/SE-*.spec.md y docs/propuestas/SE-*.md de --root.
+Sin --spec revisa docs/specs/**/SE-*.md, docs/propuestas/SE-*.md y la evidencia de cada
+iniciativa de --state; una iniciativa en ámbito del estado sin spec localizable es FAIL.
+EXEMPT y DECLARED-FALSE se imprimen siempre (también con --quiet) para que la revisora los vea.
 Salida: 0 PASS · 1 FAIL (incluye ficheros ilegibles: fail-closed) · 2 uso.
 """
 from __future__ import annotations
@@ -45,7 +47,12 @@ QUOTE_RE = re.compile(r"«([^»]*)»")
 PLACEHOLDER_RE = re.compile(r"^\s*(?:\{.*\}|pendiente|tbd|todo|\.\.\.|…|-)?\s*$", re.I)
 
 
-def frontmatter(text: str) -> dict[str, str]:
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
+
+
+def frontmatter(text: str) -> dict[str, str] | None:
+    """Claves del frontmatter. {} si no hay; None si se abre y no se cierra (malformado).
+    Con claves repetidas manda la primera, igual que el `grep -m1` de roadmap.sh."""
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
@@ -54,15 +61,29 @@ def frontmatter(text: str) -> dict[str, str]:
         if line.strip() == "---":
             return fm
         m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$", line)
-        if m:
-            fm[m.group(1)] = m.group(2).strip().strip('"').strip("'")
-    return {}  # frontmatter sin cerrar: se trata como ausente
+        if m and m.group(1) not in fm:
+            value = re.sub(r"\s+#.*$", "", m.group(2))  # comentario YAML al final
+            fm[m.group(1)] = value.strip().strip('"').strip("'")
+    return None
+
+
+def unfenced(text: str) -> list[str]:
+    """Líneas fuera de bloques de código cercados (los de dentro quedan en blanco)."""
+    out, fence = [], None
+    for line in text.splitlines():
+        m = FENCE_RE.match(line)
+        if m and (fence is None or m.group(1) == fence):
+            fence = None if fence else m.group(1)
+            out.append("")
+            continue
+        out.append("" if fence else line)
+    return out
 
 
 def section(text: str, heading_re: str, level: int) -> str | None:
     """Cuerpo de la primera sección cuyo título casa con heading_re, hasta el siguiente
     título de nivel <= level. None si no existe."""
-    lines = text.splitlines()
+    lines = unfenced(text)
     pat = re.compile(r"^(#{%d})\s+(?:%s)\s*$" % (level, heading_re), re.I)
     for i, line in enumerate(lines):
         if pat.match(line):
@@ -86,12 +107,16 @@ def field(body: str, name: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-def confirmation_errors(body: str | None, label: str) -> list[str]:
+def confirmation_errors(body: str | None, label: str, not_before: str = "") -> list[str]:
     if body is None:
         return [f"falta el bloque de confirmación {label}"]
     errs = []
-    if not DATE_RE.search(field(body, "fecha")):
+    date = DATE_RE.search(field(body, "fecha"))
+    if not date:
         errs.append(f"confirmación {label} sin «fecha: AAAA-MM-DD»")
+    elif not_before and date.group(0) < not_before:
+        errs.append(f"confirmación {label} con fecha {date.group(0)} anterior a las palabras de la "
+                    f"persona ({not_before}): no puede confirmar lo que aún no había dicho")
     resp = field(body, "respuesta")
     quoted = QUOTE_RE.search(resp)
     text = quoted.group(1) if quoted else ""
@@ -110,17 +135,20 @@ def understanding_errors(text: str) -> list[str]:
     if not SCENES_MIN <= n <= SCENES_MAX:
         errs.append(f"«### Escenas» debe tener de {SCENES_MIN} a {SCENES_MAX} escenas (tiene {n})")
     words = section(sec, r"Palabras de la persona", 3)
+    words_date = ""
     if words is None:
         errs.append("falta «### Palabras de la persona»")
     else:
         quotes = [q for q in QUOTE_RE.findall(words) if not PLACEHOLDER_RE.match(q)]
         if not quotes or not DATE_RE.search(words):
             errs.append("«### Palabras de la persona» necesita una cita literal «…» con fecha AAAA-MM-DD")
+        else:
+            words_date = max(DATE_RE.findall(words))
     for title, rx in (("Qué SÍ será", r"Qu[eé] S[IÍií] ser[aá]"), ("Qué NO será", r"Qu[eé] NO ser[aá]")):
         body = section(sec, rx, 3)
         if body is None or items(body) == 0:
             errs.append(f"«### {title}» vacía o ausente")
-    errs += confirmation_errors(section(sec, r"Confirmaci[oó]n", 3), "de las escenas")
+    errs += confirmation_errors(section(sec, r"Confirmaci[oó]n", 3), "de las escenas", words_date)
     return errs
 
 
@@ -137,23 +165,37 @@ def s0_errors(text: str, started: bool) -> list[str]:
     return errs
 
 
-def in_scope(spec_id: str, fm: dict[str, str]) -> bool:
+def norm_id(raw: str) -> str:
+    """SE-0504 → SE-504, igual que la normalización de roadmap.sh."""
+    m = re.match(r"^SE-0*(\d+)", raw)
+    return f"SE-{int(m.group(1))}" if m else raw
+
+
+def id_in_scope(spec_id: str) -> bool:
     m = re.match(r"^SE-(\d+)$", spec_id)
-    if m and int(m.group(1)) >= SPEC_FLOOR:
+    return bool(m) and int(m.group(1)) >= SPEC_FLOOR
+
+
+def in_scope(spec_id: str, fm: dict[str, str]) -> bool:
+    if id_in_scope(spec_id):
         return True
     approved = fm.get("approved_at", "")
     return bool(DATE_RE.fullmatch(approved)) and approved >= CUTOFF
 
 
-def check_spec(path: Path, state_status: dict[str, str]) -> tuple[str, list[str]]:
+def check_spec(path: Path, state_status: dict[str, str], forced_id: str = "") -> tuple[str, list[str]]:
     """Devuelve (veredicto, mensajes). Veredictos: SKIP, EXEMPT, PASS, FAIL."""
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         return "FAIL", [f"ilegible: {exc}"]
     m = re.match(r"^(SE-\d+)", path.name)
-    spec_id = m.group(1) if m else path.stem
+    spec_id = forced_id or (norm_id(m.group(1)) if m else path.stem)
     fm = frontmatter(text)
+    if fm is None:
+        if id_in_scope(spec_id) or state_status.get(spec_id, "") in GATED_STATUSES:
+            return "FAIL", ["frontmatter sin cerrar («---»): no se puede leer el estado ni human_surface"]
+        return "SKIP", []
     spec_status = fm.get("status", "").upper()
     st = state_status.get(spec_id, "")
     statuses = {spec_status, st} - {""}
@@ -163,7 +205,8 @@ def check_spec(path: Path, state_status: dict[str, str]) -> tuple[str, list[str]
     detected = bool(SURFACE_RE.search(text))
     if declared == "false":
         if not detected:
-            return "PASS", []
+            return "DECLARED-FALSE", ["human_surface: false sin rutas de superficie detectadas; "
+                                      "lo comprueba la revisión humana"]
         reason = fm.get("human_surface_exempt", "")
         if PLACEHOLDER_RE.match(reason):
             return "FAIL", ["cita rutas de superficie humana y dice human_surface: false: "
@@ -174,18 +217,60 @@ def check_spec(path: Path, state_status: dict[str, str]) -> tuple[str, list[str]
         return "FAIL", [f"falta «human_surface: true|false» en el frontmatter{hint}"]
     if declared != "true":
         return "FAIL", [f"human_surface inválido: {declared!r} (true o false)"]
+    # S1, S01, S1a, S1.2, S2-api…: cualquier slice posterior a S0 cuenta como en curso.
     started = bool(statuses & STARTED_STATUSES) or (
-        bool(re.fullmatch(r"S([1-9]\d*)", fm.get("current_slice", "").upper()))
+        bool(re.match(r"S0*[1-9]", fm.get("current_slice", "").strip().upper()))
     )
     errs = understanding_errors(text) + s0_errors(text, started)
     return ("FAIL", errs) if errs else ("PASS", [])
 
 
-def load_state(path: str | None) -> dict[str, str]:
+def load_state(path: str | None) -> tuple[dict[str, str], dict[str, str]]:
+    """(id → status, id → evidence) de la vista de planificación, con IDs normalizados."""
     if not path:
-        return {}
+        return {}, {}
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    return {i["id"]: str(i.get("status", "")).upper() for i in data.get("initiatives", []) if "id" in i}
+    status, evidence = {}, {}
+    for i in data.get("initiatives", []):
+        if "id" not in i:
+            continue
+        sid = norm_id(str(i["id"]))
+        status[sid] = str(i.get("status", "")).upper()
+        if isinstance(i.get("evidence"), str):
+            evidence[sid] = i["evidence"]
+    return status, evidence
+
+
+def file_id(path: Path) -> str:
+    m = re.match(r"^(SE-\d+)", path.name)
+    return norm_id(m.group(1)) if m else ""
+
+
+def discover(root: Path, status: dict[str, str],
+             evidence: dict[str, str]) -> tuple[list[tuple[Path, str]], list[str]]:
+    """Ficheros a revisar y mensajes FAIL de iniciativas en ámbito sin spec localizable.
+    Se recorre el estado, no solo los globs: una spec con un nombre que no casa no escapa."""
+    globbed = sorted(root.glob("docs/specs/**/SE-*.md")) + sorted(root.glob("docs/propuestas/SE-*.md"))
+    found: list[tuple[Path, str]] = [(p, "") for p in globbed]
+    ids = {file_id(p) for p in globbed}
+    seen = {p.resolve() for p in globbed}
+    missing = []
+    root_r = root.resolve()
+    for sid, st in sorted(status.items()):
+        if st not in GATED_STATUSES or not id_in_scope(sid):
+            continue
+        ev = evidence.get(sid, "")
+        ev_path = (root / ev).resolve() if ev else None
+        if ev_path and ev_path.is_file() and root_r in ev_path.parents:
+            if ev_path not in seen:
+                found.append((ev_path, sid))  # la ID la da la vista, no el nombre del fichero
+                seen.add(ev_path)
+            continue
+        if sid in ids:
+            continue
+        missing.append(f"{sid} está {st} en la vista de planificación pero no hay spec localizable "
+                       f"(evidence: {ev or 'vacía'}); la puerta no puede evaluarla")
+    return found, missing
 
 
 def main(argv: list[str]) -> int:
@@ -196,24 +281,27 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args(argv)
     try:
-        state = load_state(args.state)
+        state, evidence = load_state(args.state)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         print(f"FAIL: comprehension-gate: estado ilegible ({exc})")
         return 1
     root = Path(args.root)
+    missing: list[str] = []
     if args.spec:
-        specs = [Path(s) for s in args.spec]
+        specs = [(Path(s), "") for s in args.spec]
     else:
-        specs = sorted(root.glob("docs/specs/SE-*.spec.md")) + sorted(root.glob("docs/propuestas/SE-*.md"))
-    fails = 0
-    for spec in specs:
-        verdict, msgs = check_spec(spec, state)
+        specs, missing = discover(root, state, evidence)
+    fails = len(missing)
+    for msg in missing:
+        print(f"FAIL: comprehension-gate: {msg}")
+    for spec, forced_id in specs:
+        verdict, msgs = check_spec(spec, state, forced_id)
         if verdict == "FAIL":
             fails += 1
             for msg in msgs:
                 print(f"FAIL: comprehension-gate {spec.name}: {msg}")
-        elif verdict == "EXEMPT" and not args.quiet:
-            print(f"EXEMPT: comprehension-gate {spec.name}: {msgs[0]}")
+        elif verdict in ("EXEMPT", "DECLARED-FALSE"):
+            print(f"{verdict}: comprehension-gate {spec.name}: {msgs[0]}")
     if fails:
         print(f"FAIL: comprehension-gate: {fails} spec(s) con superficie humana sin comprensión confirmada "
               "(docs/rules/domain/comprehension-gate.md)")

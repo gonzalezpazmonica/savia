@@ -19,6 +19,6 @@ Las revisoras comprueban código contra spec; nadie comprueba spec contra intenc
 
 ## Ámbito
 
-Specs SE-504 o posteriores, o aprobadas desde 2026-11-04, en estado APPROVED, IMPLEMENTING o IMPLEMENTED. Lo aprobado antes no se reabre. Fail-closed: fichero o vista ilegible cuenta como FAIL.
+Specs SE-504 o posteriores, o aprobadas desde 2026-11-04, en estado APPROVED, IMPLEMENTING o IMPLEMENTED. Lo aprobado antes no se reabre. Fail-closed: fichero o vista ilegible, frontmatter sin cerrar o iniciativa en ámbito de la vista sin spec localizable cuentan como FAIL. EXEMPT y DECLARED-FALSE (`human_surface: false`) se imprimen siempre, también en CI, para que la revisora vea cada autoexención.
 
 Plantilla: `.claude/skills/spec-driven-development/references/spec-template.md`.
