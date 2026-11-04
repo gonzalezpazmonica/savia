@@ -19,6 +19,9 @@ timeline:
   - from: "2026-11-04"
     learned: "2026-11-04"
     value: "PROPOSED — enmienda: puerta de aprobación por el experimento EXP-509 (sustituye a la Fase 0 informativa)"
+  - from: "2026-11-04"
+    learned: "2026-11-04"
+    value: "PROPOSED — correcciones de la revisión independiente de la PR #1481 (gate G20→G21, WIP 1 para todo el programa, procedencia de decision)"
 ---
 
 # SE-509 — Programa de deuda técnica de revisión del inventario de prompts y artefactos
@@ -43,7 +46,7 @@ timeline:
 
 **Cambio respecto a la versión anterior (2026-11-04)**: la decisión 1 de SE-509e («Fase 0 informativa, no bloqueante») queda **sustituida**. La medición ya no es una fase de la implementación que corre en paralelo a la Fase 1, sino un requisito previo de la aprobación. La Fase 0, CA-1 a CA-3 y el slice S1 se reinterpretan en consecuencia (ver SE-509e). El umbral de parada por lote de la Fase 2 se mantiene como protección adicional durante la migración.
 
-**Alcance de la puerta (a decidir por la operadora)**: la puerta cubre SE-509 entero, como pidió la operadora. SE-509a..d (inventario, deuda, registro, gate G20) no dependen técnicamente del resultado del experimento; si la operadora quiere desacoplarlas, basta una enmienda que limite la puerta a SE-509e.
+**Alcance de la puerta (a decidir por la operadora)**: la puerta cubre SE-509 entero, como pidió la operadora. SE-509a..d (inventario, deuda, registro, gate G21) no dependen técnicamente del resultado del experimento; si la operadora quiere desacoplarlas, basta una enmienda que limite la puerta a SE-509e.
 
 ## Partición en sub-specs
 
@@ -51,13 +54,13 @@ El alcance supera una spec razonable: cinco entregables con dependencias distint
 
 | Sub-spec | Qué entrega | Depende de | Tamaño |
 |---|---|---|---|
-| **SE-509a** Indexar | Inventario único y regenerable, como capa sobre SE-400 F1 | — | 1 PR |
-| **SE-509b** Analizar | Criterios de deuda D1-D11, puntuación riesgo × uso | a (y el linter de e para D3, con sustituto provisional) | 1 PR |
+| **SE-509a** Indexar | Inventario único y regenerable, como capa sobre SE-400 F1 | — (los campos `last_human_review`, `debt` y `annotation` salen vacíos, `UNKNOWN` o `null`, hasta que se fusionen c y b) | 1 PR |
+| **SE-509b** Analizar | Criterios de deuda D1-D11, puntuación riesgo × uso | a (y el linter de e para D4, con sustituto provisional) | 1 PR |
 | **SE-509c** Organizar | Dueño, dominio, criticidad, destino; registro de decisiones; gate de borrado | a | 1 PR |
 | **SE-509d** Planificar y cerrar el grifo | Lotes, cadencia, revisión por tier, medición, gate de PR para artefactos nuevos o tocados | a, b, c | 1 PR + lotes |
 | **SE-509e** Estructura de prompts | Fases 0-2 originales (regla, linter, migración por lotes) | — (su Lote B en adelante usa la cola de d) | 4 slices |
 
-Tras la aprobación (puerta EXP-509), SE-509e puede arrancar en paralelo con SE-509a: su Fase 1 no necesita el inventario.
+Tras la aprobación (puerta EXP-509), SE-509e no espera a SE-509a: su Fase 1 no necesita el inventario, así que puede ir en la cola antes, después o intercalada con las PR de a..d. Lo que no hace es abrir una PR simultánea: todo el programa, e incluida, ocupa **1** PR activa (§ «WIP» de SE-509d). Dos PR del programa a la vez solo si la operadora sube el cupo a 2.
 
 ## Inventario de base (medido en `df4c11782`, 2026-11-04)
 
@@ -152,17 +155,19 @@ Conclusión: no falta un escáner nuevo, falta **una capa** que una lo que ya ha
 ## SE-509c — Organizar
 
 - **Registro humano versionado**: `docs/review-debt/ledger.d/<YYYYMMDD>-<rama>.jsonl`, fragmentos por PR como `CHANGELOG.d` (sin conflictos entre PR paralelas). Cada línea: `{key, sha256, event, by, date, pr, note}` con `event` ∈ `review`, `annotate`, `destination`, `decision`. `by` es un rol (`operadora`, `revisora-independiente`, `orquestadora`), nunca un nombre.
-- **Anotación por artefacto** (`event: annotate`), reutilizando los nombres de SE-380: `owner` (dominio dueño: `pm`, `sdd`, `seguridad`, `memoria`, `labs`, `vaults`, `space`, `core`…), `domain`, `criticality` (3 = seguridad, autoridad, secretos, git o merge: hooks bloqueantes, guards TS, agentes con `Bash`+`Write`/`Edit`, reglas de `critical-facts`/`autonomous-safety`; 2 = invocado por otros artefactos o por CI; 1 = resto), `retirement_criterion`, `replaced_by`. La criticidad inicial la propone el generador con esas señales; una persona puede subirla, nunca bajarla sin `note`.
+- **Anotación por artefacto** (`event: annotate`), reutilizando los nombres de SE-380: `owner` (dominio dueño: `pm`, `sdd`, `seguridad`, `memoria`, `labs`, `vaults`, `space`, `core`…), `domain`, `criticality` (3 = seguridad, autoridad, secretos, git o merge: hooks bloqueantes, guards TS, agentes con `Bash`+`Write`/`Edit`, reglas de `critical-facts`/`autonomous-safety`; 2 = invocado por otros artefactos o por CI; 1 = resto), `retirement_criterion`, `replaced_by`. La criticidad inicial la propone el generador con esas señales; una persona puede subirla. Bajarla exige `note`; bajarla **desde 3** exige además una `decision` de la operadora con procedencia verificable (abajo), porque la criticidad decide quién revisa (SE-509d) y bajarla sería una vía para esquivar la revisión fuerte.
 - **Destino** (`event: destination`): `mantener`, `migrar` (reescritura en sitio, p. ej. SE-509e), `fusionar` (con `replaced_by`), `archivar` (mover a `docs/archive/` o equivalente, con stub de redirección si tiene consumidores) o `borrar`.
-- **Borrado**: solo con `event: decision`, `by: operadora`, `destination: borrar` y la referencia a su decisión (pregunta interactiva o PR). Además, en coherencia con SE-400 (`ablation_inventory.py:10`), un artefacto con `consumers.active > 0` o con clase `UNKNOWN` no puede tener destino `borrar` hasta que se archive primero y pase un ciclo sin consumidores.
+- **Borrado**: solo con `event: decision`, `by: operadora`, `destination: borrar` y la referencia a su decisión (pregunta interactiva o PR).
+- **Procedencia de `decision`**: `by: operadora` es un texto que cualquier autor puede escribir. Por eso una línea `decision` solo cuenta si ya está en `origin/main`, es decir, si entró en una PR anterior fusionada por la operadora o bajo su grant (SE-433). Una `decision` añadida en la misma PR que la usa no cuenta. El borrado lleva así dos PR: la de la decisión y la del borrado. Además, en coherencia con SE-400 (`ablation_inventory.py:10`), un artefacto con `consumers.active > 0` o con clase `UNKNOWN` no puede tener destino `borrar` hasta que se archive primero y pase un ciclo sin consumidores.
 - Las revisoras independientes pueden registrar `review` y `annotate`; no `decision`.
+- **Autor ≠ revisor**: en una PR que modifica un artefacto, una línea `review` de ese artefacto solo es válida con `by: revisora-independiente` u `operadora`, nunca con el rol que firma los commits de la PR (`orquestadora` en las PR de agente). El validador lo comprueba con el diff de la PR, no con la buena fe del autor.
 
 ## SE-509d — Planificar y cerrar el grifo
 
 ### Lotes
 
-- Cola = registros ordenados por `prioridad` (SE-509b). Un lote = hasta **10 artefactos** del mismo `kind` y `owner`, o hasta 400 líneas de diff, lo que llegue antes. Un agente cuenta una vez aunque toque dos árboles.
-- **WIP**: el programa ocupa como máximo **1** de las 3 PR activas que fija la operadora (decisión del 2026-11-03); 2 solo si ella lo pide. SE-509e comparte ese cupo.
+- Cola = registros ordenados por `prioridad` (SE-509b). Un lote = hasta **10 artefactos** del mismo `kind` y `owner`, o hasta 400 líneas de diff, lo que llegue antes. Un agente cuenta una vez aunque toque dos árboles, y sus líneas se cuentan solo en la fuente (`.opencode/agents`, SE-220): la copia de `.claude/agents` la genera `agents-opencode-convert.sh` y no cuenta. El mismo límite rige los lotes de migración de SE-509e: si un lote supera 400 líneas de fuente se parte en sub-lotes (A1, A2…), cada uno con su medición y su umbral de parada.
+- **WIP**: el programa entero (PR de sub-spec, lotes de d y lotes de migración de e) ocupa como máximo **1** de las 3 PR activas que fija la operadora (decisión del 2026-11-03); 2 solo si ella lo pide. No hay excepción para SE-509e: «no depende de a» significa que no espera a a, no que corra en una segunda PR.
 - **Cadencia**: un lote por semana como objetivo; el lote siguiente se abre cuando el anterior está fusionado o cerrado. Los grants de merge van por lotes de PR con `scripts/merge-sprint.sh` (SE-433), no uno por PR.
 - **Qué hace un lote**: para cada artefacto, (1) revisión con la lista de comprobación (D1-D11), (2) arreglos que no cambian comportamiento o que lo cambian con test que falla antes y pasa después (SE-456), (3) registro en `ledger.d` (`review` con el `sha256` final, `annotate`, `destination`), (4) medición antes/después en el body de la PR.
 - **Quién revisa, por criticidad** (alineado con SE-362): criticidad 3 → revisora independiente (proveedor distinto si lo hay) **y** revisión explícita de la operadora del PR concreto (tier 3/4); criticidad 2 → revisora independiente + grant de merge por lotes; criticidad 1 → revisora independiente + grant por lotes. Ningún agente registra `review` de un artefacto que él mismo modificó en el lote.
@@ -172,24 +177,27 @@ Conclusión: no falta un escáner nuevo, falta **una capa** que una lo que ya ha
 - `python3 scripts/review-debt-inventory.py --summary` da: deuda inicial (congelada en `tests/baselines/review-debt.json` al fusionar SE-509b), deuda restante (Σ `prioridad`), artefactos con D1 = 0, tasa de cierre (Σ `prioridad` cerrada por semana, media de 4 semanas) y semanas restantes al ritmo actual.
 - Cada lote registra en `docs/propuestas/LOG.d/` las cifras antes/después. El baseline es un trinquete: solo puede bajar, como `capability-entropy.py --check` (`:10`).
 
-### Gate contra la reacumulación (G20 en `pr-plan` y en CI)
+### Gate contra la reacumulación (G21 en `pr-plan` y en CI)
+
+> Id: **G21**. G20 ya es de SE-501 (APPROVED, «Derivados fuera de la PR» / `Derived paths absent`). G21 está libre en `origin/main` y en las ramas abiertas a 2026-11-04; si al implementar SE-509d ya estuviera ocupado, se toma el primero libre y se enmienda esta spec. `tests/test-se509-spec-coherence.bats` falla si otra spec usa el id de este gate.
 
 Sobre los artefactos añadidos o modificados en la PR (`git diff origin/main..HEAD --name-only --diff-filter=AMDR`, rutas del inventario; misma técnica que `g14_skill_catalog` en `scripts/pr-plan-gates.sh:623-640`, que ya resuelve el enlace `.opencode/skills`):
 
 1. **Nuevo sin anotación**: un artefacto añadido sin línea `annotate` en algún `ledger.d` de la PR → FALLO.
-2. **Tocado sin bajar o mantener deuda**: si la `prioridad` del artefacto sube respecto a `origin/main` → FALLO (trinquete por artefacto).
+2. **Tocado sin bajar o mantener deuda**: si la `prioridad` del artefacto sube respecto a `origin/main` → FALLO (trinquete por artefacto). Las dos `prioridad` se calculan con el `uso` de `origin/main`, para que una PR ajena que cambie `consumers` no haga fallar esta. Consecuencia buscada, no accidental: cualquier edición cambia el `sha256` y reactiva D1 (+3 × criticidad) en un artefacto ya revisado, así que tocarlo exige registrar en la misma PR una `review` con el `sha256` final, hecha por otro rol (SE-509c, «Autor ≠ revisor»), y para criticidad 3 por la operadora. En artefactos nunca revisados (hoy, todos) D1 ya vale 1 y la edición no lo sube.
 3. **Prompt tocado** (> 60 líneas de cuerpo, cuando SE-509e S2 exista): debe pasar `prompt-structure-lint.sh` → si no, FALLO.
-4. **Borrado sin decisión**: un artefacto inventariado eliminado (`D`) o renombrado fuera del árbol sin `decision` de la operadora con `destination: borrar` o `archivar` → FALLO.
-5. **Fail-closed**: si falta el generador, `python3`, `origin/main` o un `ledger.d` no parsea, el gate sale con error, nunca PASS.
+4. **Borrado y movimientos**: un artefacto inventariado eliminado (`D`) o renombrado fuera del árbol del inventario sin `decision` de la operadora con `destination: borrar` y procedencia verificable (ya en `origin/main`, SE-509c) → FALLO. Archivar no es borrar: un movimiento a `docs/archive/` necesita una línea `destination: archivar` (sin `decision`, como dice SE-509c) y, si tiene consumidores, el stub de redirección. Un renombrado dentro del árbol (por ejemplo, en una migración) cambia la clave: la clave nueva necesita `annotate` (regla 1) y la antigua una línea `destination: fusionar` con `replaced_by` apuntando a la nueva; sin ella → FALLO.
+5. **Criticidad bajada**: una `annotate` que baja la criticidad desde 3 sin `decision` de la operadora con procedencia verificable → FALLO.
+6. **Fail-closed**: si falta el generador, `python3`, `origin/main` o un `ledger.d` no parsea, el gate sale con error, nunca PASS.
 
-Arranque gradual sin rebajar el criterio: durante las 2 primeras semanas tras fusionar SE-509d el gate corre en informe en `pr-plan` y bloquea en CI solo las reglas 4 y 5; después bloquea todas. La fecha de paso queda en la spec al aprobarla.
+Arranque gradual sin rebajar el criterio: durante las 2 primeras semanas tras fusionar SE-509d el gate corre en informe en `pr-plan` y bloquea en CI solo las reglas 4, 5 y 6; después bloquea todas. La fecha de paso (fusión de SE-509d + 14 días) se escribe en la configuración del gate en la misma PR, no en prosa; sin fecha, o con una fecha ya pasada, el gate bloquea todas las reglas (CA-d8).
 
 ## SE-509e — Línea de estructura de prompts
 
 Contenido original de SE-509 (Fases 0-2). Única decisión cambiada: la 1, sustituida el 2026-11-04 por la puerta EXP-509. Integración con el programa:
 
 - Usa el inventario de SE-509a para listar candidatos y el criterio D4 de SE-509b como medida de su avance.
-- Su linter (`scripts/prompt-structure-lint.sh`) es la fuente de D4 y la regla 3 del gate G20.
+- Su linter (`scripts/prompt-structure-lint.sh`) es la fuente de D4 y la regla 3 del gate G21.
 - Lote A (los 10 heavy ya elegidos) se mantiene. Desde el Lote B, el orden sale de la cola de SE-509d filtrada por agentes `heavy`; los artefactos que ya están en un lote de SE-509d con destino `migrar` se migran en ese mismo lote, sin PR aparte.
 - Cada agente migrado registra `review` en `ledger.d` con el `sha256` resultante.
 
@@ -236,7 +244,7 @@ El handoff cita además un informe `output/research/xml-tags-rfc2119-20261104.md
 
 | Ámbito | Ficheros | Con etiquetas canónicas a inicio de línea | BCP 14 (apariciones / ficheros) | Mayúsculas enfáticas (apariciones / ficheros) | Ficheros con emoji de alarma |
 |---|---|---|---|---|---|
-| `.claude/agents` | 87 | 5 | 1 / 1 | 145 / 45 | 7 |
+| `.claude/agents` | 87 (75 agentes + 12 de `decision-trees/`) | 5 | 1 / 1 | 145 / 45 | 7 |
 | `.opencode/agents` | 95 | 6 | 1 / 1 | 147 / 40 | 7 |
 | `.claude/skills` | 465 | 0 | 2 / 1 | 329 / 135 | 71 |
 | `docs/rules/domain` | 325 | 1 (la propia SE-068) | 30 / 21 | 343 / 111 | 1 |
@@ -290,7 +298,8 @@ Desde el 2026-11-04 esta fase no forma parte de la implementación: se ejecuta c
 - Antes de tocar ningún agente: reescribir las 4 aserciones de prompt listadas arriba (salvo SE-032) para que comprueben la restricción con el vocabulario nuevo o con su hook, y ejecutar las suites BATS de cada agente del lote.
 - Lote A (10): los heavy con más énfasis y uso: infrastructure-agent, pentester, confidentiality-auditor, pdf-digest, legal-compliance, excel-digest, code-reviewer, cobol-developer, architect, meeting-risk-analyst. Lote B: los 13 heavy restantes. Los pilotos `mid` se migran con la variante que gane EXP-509. El resto, cuando se toque por otro motivo.
 - Cada agente se migra en `.claude/agents/` y en `.opencode/agents/` en el mismo commit.
-- **Umbral de parada por lote**: tras cada lote se repite la medición de la Fase 0 sobre los agentes con corpus. Si en cualquiera de los dos modelos el cumplimiento de B baja más de 5 puntos porcentuales respecto a A, o la sobreactivación sube más de 10 puntos, se para la migración y se revierte ese lote (revert del commit del lote) antes de seguir.
+- **Corpus antes de migrar**: ningún agente entra en un lote sin corpus propio en `tests/evals/<agente>/` con el esquema de SE-309 (≥ 10 casos, ≥ 3 trampa, como CA-1). Hoy, del Lote A solo `infrastructure-agent` lo tiene; `code-reviewer` tiene un corpus de otro formato (`input-*.diff` + `expected-*.yaml`) que no sirve tal cual. El corpus que falta se crea en el primer commit del lote, antes de tocar el prompt; sin él, el agente sale del lote.
+- **Umbral de parada por lote**: tras cada lote se repite la medición de la Fase 0 sobre **todos** los agentes del lote. La comparación es la variante adoptada tras EXP-509 (V: B, C o D, la que haya ganado) frente a A, el texto anterior al lote. Si en cualquiera de los dos modelos el cumplimiento de V baja más de 5 puntos porcentuales respecto a A, o la sobreactivación sube más de 10 puntos, se para la migración y se revierte ese lote (revert del commit del lote) antes de seguir.
 - `.claude/commands/` queda fuera.
 
 ### Criterios de aceptación de SE-509e
@@ -343,7 +352,7 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 
 | AC | Sub-spec | Criterio | Tipo |
 |---|---|---|---|
-| CA-a1 | a | `review-debt-inventory.py` genera un registro por artefacto lógico: los totales por `kind` coinciden con el Anexo A en el mismo commit (± los artefactos añadidos o borrados desde `df4c11782`, listados). | positivo |
+| CA-a1 | a | `review-debt-inventory.py` genera un registro por artefacto lógico y, aparte, el recuento por fichero del Anexo A. El recuento por fichero coincide con el Anexo A en el mismo commit (± los artefactos añadidos o borrados desde `df4c11782`, listados); el de registros lógicos difiere solo donde el Anexo A cuenta ficheros y no artefactos (guards TS: 72 ficheros frente a 27 registros `guard:`), y esa diferencia figura en el resumen. | positivo |
 | CA-a2 | a | Un agente presente en `.claude/agents` y `.opencode/agents` produce un único registro con `frontend: ambos` y dos rutas; uno solo de OpenCode, `frontend: opencode`. | positivo |
 | CA-a3 | a | Fixture con un hook y un guard TS homónimo sin test de paridad: `pair.parity_test` es `false`. Con test de paridad: `true`. | negativo / positivo |
 | CA-a4 | a | `--check` sale ≠ 0 con un fichero de agente añadido al árbol de fixture que no aparece en la salida, y con un registro cuyo fichero no existe. | negativo |
@@ -357,13 +366,15 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 | CA-c2 | c | `destination: borrar` sin `event: decision` de `operadora` no valida; con `consumers.active > 0` o clase `UNKNOWN` tampoco, aunque haya decisión. | negativo |
 | CA-c3 | c | Una revisión registrada con un `sha256` que ya no es el del fichero hace que `last_human_review` vuelva a `UNKNOWN` (D1 = 1). | negativo |
 | CA-c4 | c | Una revisora independiente que intenta registrar `decision` es rechazada por el validador. | negativo |
-| CA-d1 | d | G20: PR de fixture que añade `.opencode/agents/nuevo.md` sin `annotate` → FALLO; con `annotate` → PASS. | negativo / positivo |
-| CA-d2 | d | G20: PR que borra un artefacto inventariado sin `decision` registrada → FALLO; con `decision` de la operadora y destino `borrar` → PASS. | negativo / positivo |
-| CA-d3 | d | G20: PR que sube la `prioridad` de un artefacto tocado (p. ej. añade un emoji de alarma) → FALLO. | negativo |
-| CA-d4 | d | G20 sin `origin/main`, sin generador o con `ledger.d` malformado → error, nunca PASS. | negativo |
+| CA-c5 | c | Una `annotate` que baja la criticidad de 3 a 2 sin `decision` de la operadora ya en `origin/main` no valida; con ella, valida; bajar de 2 a 1 con `note` valida. | negativo / positivo |
+| CA-d1 | d | G21: PR de fixture que añade `.opencode/agents/nuevo.md` sin `annotate` → FALLO; con `annotate` → PASS. | negativo / positivo |
+| CA-d2 | d | G21: PR que borra un artefacto inventariado sin `decision` registrada → FALLO; con la `decision` añadida en la misma PR → FALLO; con `decision` de la operadora y destino `borrar` ya en `origin/main` → PASS; movimiento a `docs/archive/` con `destination: archivar` → PASS; renombrado dentro del árbol sin `replaced_by` → FALLO. | negativo / positivo |
+| CA-d3 | d | G21: PR que sube la `prioridad` de un artefacto tocado (p. ej. añade un emoji de alarma) → FALLO. | negativo |
+| CA-d4 | d | G21 sin `origin/main`, sin generador o con `ledger.d` malformado → error, nunca PASS. | negativo |
 | CA-d5 | d | Un lote con más de 10 artefactos o más de 400 líneas de diff es rechazado por el planificador. | negativo |
 | CA-d6 | d | El resumen muestra deuda inicial, restante, tasa de cierre y semanas restantes; tras un lote, la deuda restante baja y el baseline se actualiza solo a la baja (subirlo falla). | positivo / negativo |
-| CA-d7 | d | Un agente que modificó un artefacto en el lote no puede registrar su `review` (validador). | negativo |
+| CA-d7 | d | En una PR que modifica un artefacto, una `review` de ese artefacto con `by: orquestadora` (el rol autor) no valida; con `by: revisora-independiente`, valida. | negativo / positivo |
+| CA-d8 | d | Con la fecha de paso ausente o ya vencida, G21 bloquea las reglas 1-3; con una fecha futura, solo informa de ellas y sigue bloqueando 4-6. | negativo / positivo |
 
 ## Fuera de alcance
 
@@ -378,8 +389,8 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 
 - **El inventario mide lo fácil, no lo importante.** D2 (sin test) y D7 (sin uso) son estáticos; un artefacto puede estar probado de verdad por un test que no lo nombra, o usarse sin referencias. Mitigación: `UNKNOWN` antes que falso negativo, nunca borrar por D7 (SE-509c), y D2 exige ejecución, no mención.
 - **D1 vale 1 para todo al principio.** 0 revisiones registradas: la deuda inicial es máxima y la tasa de cierre al principio será lenta. Es el dato real, no se maquilla con revisiones retroactivas sin `sha256`.
-- **Volumen frente a capacidad.** 1.360 artefactos a 10 por lote y un lote por semana son unos 136 lotes (más de dos años). La cola por `prioridad` y la regla «el resto, cuando se toque por otro motivo» (G20 regla 2) son las que hacen el programa viable; el objetivo medible es cerrar los artefactos de criticidad 3 y los 100 primeros de la cola, no el inventario entero.
-- **Fricción en las PR.** G20 añade trabajo a cada PR que toca un artefacto. Mitigación: la anotación es una línea en un fragmento; el arranque en informe durante 2 semanas; sin derivados versionados (SE-501).
+- **Volumen frente a capacidad.** 1.360 artefactos a 10 por lote y un lote por semana son unos 136 lotes (más de dos años). La cola por `prioridad` y la regla «el resto, cuando se toque por otro motivo» (G21 regla 2) son las que hacen el programa viable; el objetivo medible es cerrar los artefactos de criticidad 3 y los 100 primeros de la cola, no el inventario entero.
+- **Fricción en las PR.** G21 añade trabajo a cada PR que toca un artefacto. Mitigación: la anotación es una línea en un fragmento; el arranque en informe durante 2 semanas; sin derivados versionados (SE-501). El coste mayor viene después: una vez revisado, cualquier edición de un artefacto (también un cambio trivial) exige una revisión independiente en la misma PR, y en criticidad 3 la de la operadora (regla 2). Es el precio de que «revisado» signifique algo; se mide en las primeras 4 semanas (PR que tocaron artefactos revisados y revisiones extra que pidieron) y, si bloquea el trabajo, se enmienda con esa cifra.
 - **Doble fuente con SE-400.** Si F1 cambia de esquema, SE-509a se rompe. Mitigación: SE-509a importa F1 como librería y tiene un test de contrato sobre los campos que usa.
 - **Revisoras sin proveedor independiente.** Si no hay proveedor distinto, la «revisora independiente» es otro agente del mismo modelo. Se dice en cada PR; la criticidad 3 exige siempre a la operadora.
 - Compliance: no aplica (sin datos personales; `by` es un rol).
@@ -388,10 +399,10 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 
 1. **a-S1** — `review-debt-inventory.py` sobre F1, clave lógica, nuevos `kind`, `--check` (CA-a1 a CA-a6).
 2. **b-S1** — criterios D1-D11, fórmula, baseline congelado y cifras de deuda inicial (CA-b1 a CA-b4).
-3. **c-S1** — esquema y validador de `ledger.d`, criticidad propuesta por señales (CA-c1 a CA-c4).
-4. **d-S1** — G20 en `pr-plan-gates.sh` y CI, planificador de lotes, resumen de avance (CA-d1 a CA-d7).
+3. **c-S1** — esquema y validador de `ledger.d`, criticidad propuesta por señales (CA-c1 a CA-c5).
+4. **d-S1** — G21 en `pr-plan-gates.sh` y CI, planificador de lotes, resumen de avance (CA-d1 a CA-d8).
 5. **d-S2…** — lotes de revisión por la cola, uno por semana, con WIP 1.
-6. **e-S1…S4** — línea de estructura de prompts (abajo), en paralelo desde el principio.
+6. **e-S1…S4** — línea de estructura de prompts (arriba). No depende de a..d y puede intercalarse en la cola desde el principio, pero dentro del mismo cupo de 1 PR activa.
 
 ## OpenCode Implementation Plan
 
@@ -401,7 +412,7 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 |---|---|---|
 | `scripts/review-debt-inventory.py` (a, b) | Python desde la sesión y CI | El mismo; indexa `.opencode/agents` como fuente (SE-220) y `.opencode/plugins` |
 | `docs/review-debt/ledger.d/` (c) | Ficheros versionados | Los mismos |
-| Gate G20 (d) | `scripts/pr-plan-gates.sh` y CI | El mismo (bash, independiente del frontend) |
+| Gate G21 (d) | `scripts/pr-plan-gates.sh` y CI | El mismo (bash, independiente del frontend) |
 | Agentes migrados (e) | `.claude/agents/<a>.md` | `.opencode/agents/<a>.md` (mismo commit) |
 | `scripts/prompt-structure-lint.sh` (e) | Bash desde la sesión y CI | El mismo |
 | Regla SE-068 (e) | `docs/rules/domain/agent-prompt-xml-structure.md` | La misma (vía `.opencode/docs`) |
@@ -411,7 +422,7 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 
 - [ ] El inventario trata ambos árboles y los guards TS (CA-a2, CA-a3)
 - [ ] Funciona en runtime OpenCode: EXP-509 (antes de aprobar) y el umbral de parada de la Fase 2 de SE-509e se miden en ambos frontends
-- [ ] Tests BATS del generador, del validador de `ledger.d`, de G20 y del linter, con fixtures positivos y negativos; corren igual en cualquier motor
+- [ ] Tests BATS del generador, del validador de `ledger.d`, de G21 y del linter, con fixtures positivos y negativos; corren igual en cualquier motor
 - [ ] No añade hooks
 
 ### Portability classification

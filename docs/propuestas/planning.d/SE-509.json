@@ -5,5 +5,5 @@
   "phase": "B",
   "title": "Programa de deuda técnica de revisión del inventario de prompts y artefactos (SE-509a..e)",
   "evidence": "docs/specs/SE-509-review-debt-program.spec.md",
-  "note": "Enmienda 2026-11-04 (operadora): programa de deuda de revisión de 1.360 artefactos de .claude/.opencode en 5 sub-specs: a indexar (capa sobre SE-400 F1), b analizar (D1-D11, riesgo x uso), c organizar (ledger.d, borrado solo con decisión de la operadora), d planificar (lotes de 10, WIP 1, gate G20), e estructura de prompts (Fases 0-2 originales, decisiones intactas)."
+  "note": "Enmienda 2026-11-04 (operadora): programa de deuda de revisión de 1.360 artefactos de .claude/.opencode en 5 sub-specs: a indexar (capa sobre SE-400 F1), b analizar (D1-D11, riesgo x uso), c organizar (ledger.d, borrado solo con decisión de la operadora), d planificar (lotes de 10, WIP 1, gate G21), e estructura de prompts (Fases 0-2 originales, decisiones intactas)."
 }
