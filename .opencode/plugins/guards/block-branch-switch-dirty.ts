@@ -10,10 +10,26 @@
 import { execSync } from "node:child_process";
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
-// Match `git checkout <ref>` and `git switch <ref>` but NOT file restores
-// (`git checkout -- file`) which are safe with a dirty tree.
-const BRANCH_CHANGE_RX = /\bgit\s+(checkout|switch)\s+(?!--\s)/i;
-const FILE_RESTORE_RX = /\bgit\s+checkout\s+--\s/i;
+// Every `git [-C <dir>] checkout|switch` invocation, with its own arguments
+// (up to the next ; & | or newline).
+const INVOCATION_RX = /(?:^|[^\w./-])git\s+(?:-C\s+[^\s;&|]+\s+)?(checkout|switch)(?![\w-])([^;&|\n]*)/gi;
+
+/**
+ * True if the command contains an invocation that can move HEAD. A file
+ * restore is `git checkout [<opciones>] [<tree-ish>] -- <rutas>`: a standalone
+ * `--` followed by at least one path among that invocation's own arguments
+ * (`--merge`, `--ours` or a tree-ish before it included) never changes
+ * branch; `git checkout main --` without paths does. `git switch` has no
+ * pathspec mode. A restore earlier in the command does not excuse a later
+ * `git checkout <rama>`.
+ */
+export function hasBranchChange(command: string): boolean {
+  for (const m of command.matchAll(INVOCATION_RX)) {
+    if (m[1].toLowerCase() === "checkout" && /(^|\s)--\s+\S/.test(m[2])) continue;
+    return true;
+  }
+  return false;
+}
 
 export async function blockBranchSwitchDirty(
   input: ToolInput, output: ToolOutput,
@@ -22,8 +38,7 @@ export async function blockBranchSwitchDirty(
   const command = extractCommand(input, output);
   if (!command) return;
 
-  if (!BRANCH_CHANGE_RX.test(command)) return;
-  if (FILE_RESTORE_RX.test(command)) return;
+  if (!hasBranchChange(command)) return;
 
   let dirty = "";
   try {
