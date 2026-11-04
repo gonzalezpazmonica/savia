@@ -102,8 +102,10 @@ def main(argv):
     for p in argv[1:]:
         try:
             bad += check_pr_secrets(p) if argv[0] == "pr-secrets" else check_main_audit(p)
-        except (OSError, ValueError, yaml.YAMLError) as e:
-            print(f"FAIL: {p}: ilegible ({e})", file=sys.stderr)
+        except (OSError, ValueError, yaml.YAMLError):
+            # Los errores de PyYAML pueden incluir el contenido de la línea.
+            # El workflow inspeccionado no debe acabar volcado en el log.
+            print(f"FAIL: {p}: YAML inválido o fichero ilegible", file=sys.stderr)
             return 2
     for b in bad:
         print(f"FAIL: {b}")

@@ -493,6 +493,15 @@ W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
   run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 0 ]
 }
 
+@test "AC-15 negativo: un YAML inválido falla cerrado sin volcar su contenido en el diagnóstico" {
+  printf 'on: [pull_request]\njobs: [\n  private_fixture_marker: [\n' > "$T/invalid.yml"
+  run python3 "$W" pr-secrets "$T/invalid.yml"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"$T/invalid.yml"* ]]
+  [[ "$output" == *"YAML inválido o fichero ilegible"* ]]
+  [[ "$output" != *"private_fixture_marker"* ]]
+}
+
 # ── AC-7: prueba de main por ejecución ──────────────────────────────────────
 
 S=0123456789abcdef0123456789abcdef01234567
