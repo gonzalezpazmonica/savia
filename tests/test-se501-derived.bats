@@ -533,6 +533,16 @@ W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
   run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 0 ]
 }
 
+@test "rev-1472 C-P2-2: secrets: inherit se mira en la estructura: con comentario o en mayúsculas FAIL; dentro de un run: PASS" {
+  printf 'on:\n  pull_request:\njobs:\n  a:\n    uses: ./x.yml\n    secrets: inherit # nota\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 1 ]
+  printf 'on:\n  pull_request:\njobs:\n  a:\n    uses: ./x.yml\n    secrets: Inherit\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 1 ]
+  # Falso positivo de antes: el texto de un script no hereda nada.
+  printf 'on:\n  pull_request:\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: |\n          echo hola\n          secrets: inherit\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 0 ]
+}
+
 # ── AC-7: prueba de main por ejecución ──────────────────────────────────────
 
 S=0123456789abcdef0123456789abcdef01234567

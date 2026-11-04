@@ -25,7 +25,9 @@ PR_EVENTS = ("pull_request", "pull_request_target")
 # workflow_run hereda los secretos y suele procesar artefactos de una PR: mismo trato que un evento de PR.
 SECRET_EVENTS = PR_EVENTS + ("workflow_run",)
 # Formas que exponen la clave sin nombrarla (expresiones de Actions: sin distinguir mayúsculas).
-SECRET_BULK = re.compile(r"tojson\(\s*secrets\s*\)|^\s*secrets:\s*inherit\s*$", re.I | re.M)
+# «secrets: inherit» se mira en la clave secrets de cada job, no en el texto: así un script de un
+# run: que contenga esa línea no es un falso positivo (rev-1472 C-P2-2).
+SECRET_BULK = re.compile(r"tojson\(\s*secrets\s*\)", re.I)
 PR_HEAD_REF = re.compile(r"github\.event\.pull_request\.head\.(sha|ref)|github\.head_ref")
 PINNED = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 
@@ -52,6 +54,14 @@ def events(on):
     return {}
 
 
+def inherits_secrets(doc):
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict):
+        return False
+    return any(isinstance(j, dict) and str(j.get("secrets", "")).strip().lower() == "inherit"
+               for j in jobs.values())
+
+
 def check_pr_secrets(path):
     text, doc, on = load(path)
     ev = events(on)
@@ -59,7 +69,7 @@ def check_pr_secrets(path):
     if any(e in ev for e in SECRET_EVENTS):
         if SECRET in text:
             bad.append(f"{path}: un workflow disparado por PR o workflow_run referencia {SECRET}")
-        if SECRET_BULK.search(text):
+        if SECRET_BULK.search(text) or inherits_secrets(doc):
             bad.append(f"{path}: un workflow disparado por PR o workflow_run expone todos los secretos "
                        "(toJSON(secrets) o secrets: inherit)")
     if "pull_request_target" in ev and PR_HEAD_REF.search(text):
