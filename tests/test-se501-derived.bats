@@ -502,6 +502,15 @@ W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
   [[ "$output" != *"private_fixture_marker"* ]]
 }
 
+@test "AC-15 negativo: las referencias HMAC en minúsculas, mixtas y por índice también se rechazan" {
+  for expression in 'secrets.confidentiality_hmac_key' 'secrets.Confidentiality_Hmac_Key' "secrets['confidentiality_hmac_key']"; do
+    printf 'on: [pull_request]\njobs:\n  a:\n    env:\n      K: ${{ %s }}\n' "$expression" > "$T/case.yml"
+    run python3 "$W" pr-secrets "$T/case.yml"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"referencia CONFIDENTIALITY_HMAC_KEY"* ]]
+  done
+}
+
 # ── AC-7: prueba de main por ejecución ──────────────────────────────────────
 
 S=0123456789abcdef0123456789abcdef01234567

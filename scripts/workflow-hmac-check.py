@@ -57,7 +57,7 @@ def check_pr_secrets(path):
     ev = events(on)
     bad = []
     if any(e in ev for e in SECRET_EVENTS):
-        if SECRET in text:
+        if SECRET.lower() in text.lower():
             bad.append(f"{path}: un workflow disparado por PR o workflow_run referencia {SECRET}")
         if SECRET_BULK.search(text):
             bad.append(f"{path}: un workflow disparado por PR o workflow_run expone todos los secretos "
