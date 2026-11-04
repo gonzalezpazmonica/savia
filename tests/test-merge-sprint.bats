@@ -345,7 +345,7 @@ main_moves() {  # main_moves <fichero> <contenido>
 
 # SE-501 AC-13 (sustituye a «v3 positivo: conflicto solo en el índice de reglas se trata como derivado»):
 # D ya no es un derivado regenerable. Una PR que lo cambió antes del corte choca modify/delete con main;
-# resync lo saca del índice (como derived-drop.sh), sin generadores, y la PR se mergea sin D.
+# resync lo saca del índice (como derived.sh drop), sin generadores, y la PR se mergea sin D.
 @test "SE-501 AC-13 positivo: PR que cambió el índice de reglas antes del corte; resync lo saca del diff y se mergea" {
   v2_repo; mkdir -p "$MERGE_SPRINT_GIT_ROOT/docs/rules"
   main_moves docs/rules/INDEX.md base-index
@@ -372,7 +372,7 @@ d_pr() {  # d_pr <n> : PR revisada que añade x<n>.txt y una ruta de D (.scm/reg
 }
 d_push() { G commit -qm "$1"; G push -q origin "HEAD:$(G branch --show-current)"; G switch -q main; }
 
-@test "SE-501 AC-13 positivo: H1 = T + commit de derived-drop que solo borra D es equivalente" {
+@test "SE-501 AC-13 positivo: H1 = T + commit de derived.sh drop que solo borra D es equivalente" {
   v2_repo; d_pr 55
   G rm -q --cached .scm/registry.json; d_push "chore(derived): drop"
   run bash "$SCRIPT" plan

@@ -16,7 +16,7 @@ G() { git -C "$R" -c commit.gpgsign=false "$@"; }
 mkrepo() {
   R="$T/r"; mkdir -p "$R/scripts"
   git init -q -b main "$R"
-  cp "$REPO/scripts/derived-paths.txt" "$REPO/scripts/derived-drop.sh" \
+  cp "$REPO/scripts/derived-paths.txt" \
      "$REPO/scripts/derived.sh" "$REPO/scripts/derived_canon.py" "$R/scripts/"
   echo base > "$R/a.txt"
   G add -A; G commit -qm base
@@ -72,7 +72,7 @@ EOF
     run bash "$R/scripts/derived.sh" gate --base origin/main
     [ "$status" -eq 1 ]
     [[ "$output" == *"$p"* ]]
-    [[ "$output" == *"derived-drop.sh"* ]]
+    [[ "$output" == *"derived.sh drop"* ]]
   done
 }
 
@@ -88,7 +88,7 @@ EOF
   [[ "$output" == *"G20 PASS"* ]]
 }
 
-@test "AC-1 límite: borrar D (corte o derived-drop) pasa; sin la lista D falla cerrado" {
+@test "AC-1 límite: borrar D (corte o derived.sh drop) pasa; sin la lista D falla cerrado" {
   mkrepo
   mkdir -p "$R/.scm"; echo old > "$R/.scm/sam.json"; G add -f .scm/sam.json; G commit -qm "D versionado (antes del corte)"
   G update-ref refs/remotes/origin/main HEAD
@@ -202,11 +202,14 @@ EOF
 
 # ── AC-3 y AC-4: escaneo de la PR con el escáner de la base ─────────────────
 
+# pr_scan: el envoltorio de confianza (el del código bajo prueba, fuera del checkout, como la copia de la base
+# en la CI) audita el repo de la PR. Nunca el confidentiality-scan.sh del checkout de la PR.
+pr_scan() { bash "$REPO/scripts/confidentiality-scan.sh" --pr-base "$BASE" --repo "$R"; }
+
 scan_repo() {  # base con el escáner y el generador reales; el término vetado está en la lista estática, como en el repo
   mkrepo
   mkdir -p "$R/.claude/hooks/lib" "$R/docs"
-  cp "$REPO/scripts/confidentiality-scan.sh" "$REPO/scripts/confidentiality-pr-scan.sh" \
-     "$REPO/scripts/generate-blocklist.sh" "$R/scripts/"
+  cp "$REPO/scripts/confidentiality-scan.sh" "$REPO/scripts/generate-blocklist.sh" "$R/scripts/"
   cp "$REPO/.claude/hooks/lib/gate-result.sh" "$R/.claude/hooks/lib/"
   printf '# términos vetados\n%s\n' "${STATIC_TERM-zorblaxcorp}" > "$R/scripts/confidentiality-blocklist.txt"
   G add -A; G commit -qm escaner
@@ -220,7 +223,7 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
   printf '#!/usr/bin/env bash\necho "gate-result: {\\"result\\":\\"clean\\",\\"gaps\\":[]}"\n' > "$R/scripts/confidentiality-scan.sh"
   printf '#!/usr/bin/env bash\n:\n' > "$R/scripts/generate-blocklist.sh"
   G add -A; G commit -qm "dato y escáner vaciado"
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  run pr_scan
   [ "$status" -eq 1 ]
   [[ "$output" == *"Confidentiality scan (PR): FAIL"* ]]
   # Control: con el escáner de la PR pasa; el test puede fallar si el envoltorio usara el de la PR.
@@ -234,7 +237,7 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
   echo "cliente zorblaxcorp" > "$R/docs/nota.md"
   printf '# vaciada\n' > "$R/scripts/confidentiality-blocklist.txt"
   G add -A; G commit -qm "dato y lista vaciada"
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  run pr_scan
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL  docs/nota.md"* || "$output" == *"Blocklist terms found"* ]]
 }
@@ -242,7 +245,7 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
 @test "rev-1472 S-P1-1: base con la lista estática vacía → FAIL (el check 1 no evaluaría nada)" {
   STATIC_TERM="" scan_repo
   echo "texto neutro" > "$R/docs/nota.md"; G add -A; G commit -qm limpio
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  run pr_scan
   [ "$status" -eq 1 ]
   [[ "$output" == *"blocklist vacía"* ]]
 }
@@ -252,7 +255,7 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
   mkdir -p "$R/projects/x(" ; echo n > "$R/projects/x(/f.md"
   echo "cliente zorblaxcorp" > "$R/docs/nota.md"
   G add -f -A; G commit -qm "proyecto inyectado y dato"
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  run pr_scan
   [ "$status" -eq 1 ]
   [[ "$output" == *"Blocklist terms found"* ]]
 }
@@ -275,7 +278,7 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
 @test "AC-3 positivo: una PR limpia pasa con el escáner de la base" {
   scan_repo
   echo "texto neutro" > "$R/docs/nota.md"; G add -A; G commit -qm limpio
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  run pr_scan
   [ "$status" -eq 0 ]
   [[ "$output" == *"Confidentiality scan (PR): PASS"* ]]
 }
@@ -283,7 +286,7 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
 fake_base_scanner() {  # fake_base_scanner <cuerpo> : la base trae un escáner falso; la PR, uno que siempre da clean
   mkrepo
   mkdir -p "$R/.claude/hooks/lib"; echo ':' > "$R/.claude/hooks/lib/gate-result.sh"
-  cp "$REPO/scripts/confidentiality-pr-scan.sh" "$REPO/scripts/generate-blocklist.sh" "$R/scripts/"
+  cp "$REPO/scripts/generate-blocklist.sh" "$R/scripts/"
   echo zorblaxcorp > "$R/scripts/confidentiality-blocklist.txt"
   printf '#!/usr/bin/env bash\n%s\n' "$1" > "$R/scripts/confidentiality-scan.sh"
   G add -A; G commit -qm base; BASE=$(G rev-parse HEAD); G update-ref refs/remotes/origin/main HEAD
@@ -299,22 +302,50 @@ fake_base_scanner() {  # fake_base_scanner <cuerpo> : la base trae un escáner f
               'echo "gate-result: no-json"; exit 0'; do
     rm -rf "$T/r"
     fake_base_scanner "$body"
-    run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+    run pr_scan
     [ "$status" -eq 1 ]
   done
   rm -rf "$T/r"
   fake_base_scanner 'echo "gate-result: {\"result\":\"clean\",\"gaps\":[]}"; exit 0'
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  run pr_scan
   [ "$status" -eq 0 ]
 }
 
 @test "AC-4 negativo: base sin escáner → FAIL (no se escanea con el de la PR)" {
   mkrepo; BASE=$(G rev-parse HEAD)
-  cp "$REPO/scripts/confidentiality-pr-scan.sh" "$R/scripts/"
-  G checkout -q -b pr; G add -A; G commit -qm pr
-  run bash "$R/scripts/confidentiality-pr-scan.sh" --repo "$R" --base "$BASE"
+  G checkout -q -b pr; echo z > "$R/z.txt"; G add -A; G commit -qm pr
+  run pr_scan
   [ "$status" -ne 0 ]
   [[ "$output" == *"no hay escáner de confianza"* ]]
+}
+
+@test "consolidación: la CI toma el envoltorio --pr-base de la base cuando la base lo tiene; si no, solo en el arranque" {
+  local wf="$REPO/.github/workflows/confidentiality-gate.yml" sel
+  # El selector del workflow, tal cual: lo que decide si se ejecuta la copia de la base o la de la PR.
+  sel=$(grep -oE "grep -q -- '[^']+'" "$wf" | head -1 | sed "s/^grep -q -- '//; s/'\$//")
+  [ -n "$sel" ]
+  grep -q "bash \"\$RUNNER_TEMP/pr-scan.sh\" --pr-base \"\$BASE_SHA\" --repo \"\$GITHUB_WORKSPACE\"" "$wf"
+  # Positivo: el escáner actual (la base tras el merge) cumple el selector → la CI usa siempre el de la base.
+  grep -qF -- "$sel" "$REPO/scripts/confidentiality-scan.sh"
+  # Negativo: un escáner sin el modo (main antes de SE-501) no lo cumple → solo entonces cae al de la PR.
+  printf '#!/usr/bin/env bash\ncase "$1" in --pr) : ;; esac\n' > "$T/old.sh"
+  run grep -qF -- "$sel" "$T/old.sh"
+  [ "$status" -eq 1 ]
+}
+
+@test "consolidación: las subórdenes fallan cerrado ante uso incorrecto (drop, migration-check, --pr-base, verify-main)" {
+  mkrepo
+  run bash "$R/scripts/derived.sh" drop --nada; [ "$status" -eq 2 ]
+  run bash "$R/scripts/derived.sh" drop --base no-existe; [ "$status" -eq 2 ]
+  echo y > "$R/b.txt"; G add b.txt
+  run bash "$R/scripts/derived.sh" drop
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"el índice tiene cambios"* ]]
+  run bash "$REPO/scripts/derived.sh" migration-check --nada; [ "$status" -eq 2 ]
+  run bash "$REPO/scripts/confidentiality-scan.sh" --pr-base; [ "$status" -eq 2 ]
+  run bash "$REPO/scripts/confidentiality-scan.sh" --pr-base HEAD --nada; [ "$status" -eq 2 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main; [ "$status" -eq 2 ]
+  [[ "$output" == *"uso: confidentiality-sign.sh verify-main"* ]]
 }
 
 fake_gh() {  # fake_gh <fichero de respuesta | FAIL> : gh simulado para api y repo view
@@ -328,23 +359,23 @@ EOF
   chmod +x "$T/bin/gh"; export SAVIA_GH="$T/bin/gh" SAVIA_GH_REPO=o/r
 }
 
-@test "AC-4 migración: derived-migration-check da FAIL si el contexto no es requerido, PASS si lo es, 2 si la API cae" {
+@test "AC-4 migración: derived.sh migration-check da FAIL si el contexto no es requerido, PASS si lo es, 2 si la API cae" {
   echo '{"strict":true,"contexts":["Validate workspace","PR Guardian"]}' > "$T/prot.json"; fake_gh "$T/prot.json"
-  run bash "$REPO/scripts/derived-migration-check.sh"
+  run bash "$REPO/scripts/derived.sh" migration-check
   [ "$status" -eq 1 ]
   [[ "$output" == *"no está entre los contextos requeridos"* ]]
   echo '{"strict":true,"contexts":["Validate workspace","Confidentiality scan (PR)"]}' > "$T/prot.json"
-  run bash "$REPO/scripts/derived-migration-check.sh"
+  run bash "$REPO/scripts/derived.sh" migration-check
   [ "$status" -eq 0 ]
   # rev-1472 P2: un check retirado que sigue requerido bloquearía todas las PR → FAIL y lo nombra.
   for old in "Verify Audit Signature" "PII & Confidentiality Scan (PR)"; do
     printf '{"strict":true,"checks":[{"context":"Confidentiality scan (PR)"},{"context":"%s"}]}\n' "$old" > "$T/prot.json"
-    run bash "$REPO/scripts/derived-migration-check.sh"
+    run bash "$REPO/scripts/derived.sh" migration-check
     [ "$status" -eq 1 ]
     [[ "$output" == *"«$old» sigue entre los contextos requeridos"* ]]
   done
   fake_gh FAIL
-  run bash "$REPO/scripts/derived-migration-check.sh"
+  run bash "$REPO/scripts/derived.sh" migration-check
   [ "$status" -eq 2 ]
 }
 
@@ -366,7 +397,7 @@ EOF
   [ "$status" -ne 0 ]
 }
 
-@test "AC-14: PR con D en su diff, tras derived-drop.sh, se fusiona con el main posterior al corte sin conflictos" {
+@test "AC-14: PR con D en su diff, tras derived.sh drop, se fusiona con el main posterior al corte sin conflictos" {
   mkrepo
   mkdir -p "$R/.scm"; echo v1 > "$R/.scm/sam.json"; G add -f .scm/sam.json; G commit -qm "D versionado"
   G update-ref refs/remotes/origin/main HEAD
@@ -376,7 +407,7 @@ EOF
   G update-ref refs/remotes/origin/main HEAD
   # Sin drop: choque modify/delete (el problema).
   G checkout -q pr; run G merge -q --no-edit main; [ "$status" -ne 0 ]; G merge --abort
-  run bash "$R/scripts/derived-drop.sh"
+  run bash "$R/scripts/derived.sh" drop
   [ "$status" -eq 0 ]
   # El commit de drop solo borra rutas de D.
   run G diff --name-status HEAD~1 HEAD
@@ -435,27 +466,27 @@ run_json() {  # run_json <path> <event> <branch> <sha> <conclusion>
 
 @test "AC-7 positivo: ejecución push en main con éxito para el sha → 0" {
   run_json .github/workflows/confidentiality-main.yml push main "$S" success; fake_gh "$T/runs.json"
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"
   [ "$status" -eq 0 ]
 }
 
 @test "AC-7 negativo: pull_request, otro sha, failure, otra ruta, solo status, API caída o no JSON → ≠ 0" {
   run_json .github/workflows/confidentiality-main.yml pull_request main "$S" success; fake_gh "$T/runs.json"
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -ne 0 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -ne 0 ]
   run_json .github/workflows/confidentiality-main.yml push main "${S%1234567}7654321" success
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -ne 0 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -ne 0 ]
   run_json .github/workflows/confidentiality-main.yml push main "$S" failure
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -ne 0 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -ne 0 ]
   run_json .github/workflows/otro.yml push main "$S" success
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -ne 0 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -ne 0 ]
   run_json .github/workflows/confidentiality-main.yml push feature "$S" success
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -ne 0 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -ne 0 ]
   printf '{"workflow_runs":[],"statuses":[{"state":"success","sha":"%s"}]}\n' "$S" > "$T/runs.json"
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -ne 0 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -ne 0 ]
   echo '<html>' > "$T/runs.json"
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -eq 2 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -eq 2 ]
   fake_gh FAIL
-  run bash "$REPO/scripts/confidentiality-main-verify.sh" "$S"; [ "$status" -eq 2 ]
+  run bash "$REPO/scripts/confidentiality-sign.sh" verify-main "$S"; [ "$status" -eq 2 ]
 }
 
 # ── AC-8: escaneo completo ──────────────────────────────────────────────────
@@ -552,7 +583,7 @@ PY
   while read -r f; do
     n=$((n+1))
     if ! git -C "$REPO" ls-files --error-unmatch "$f" >/dev/null 2>&1; then echo "sin versionar: $f"; missing=1; fi
-  done < <(grep -ohE 'scripts/[A-Za-z0-9_./-]+\.(sh|py)' "$REPO/scripts/derived-migration-check.sh" \
+  done < <(grep -ohE 'scripts/[A-Za-z0-9_./-]+\.(sh|py)' "$REPO/scripts/derived.sh" \
              "$BATS_TEST_FILENAME" | sort -u)
   [ "$n" -ge 5 ]
   [ "$missing" -eq 0 ]
@@ -571,7 +602,6 @@ gen scripts/derived.sh
 gen scripts/derived-paths.txt
 gen scripts/derived_canon.py
 gen scripts/generate-capability-map.py
-gen scripts/generate-capability-map.sh
 gen scripts/rule-manifest-generate.sh
 gen scripts/rules-index-generate.sh
 gen scripts/sam.py

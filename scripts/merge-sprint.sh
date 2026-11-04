@@ -383,7 +383,7 @@ head_equivalent() {  # head_equivalent <H0> <H1> [refs] → 0 si H1 == merge(H0,
   changed=$(git -C "$GITROOT" diff --name-status --no-renames "$tree" "$2" 2>/dev/null) || return 1
   while IFS=$'\t' read -r st f; do
     [[ -z "$f" ]] && continue
-    # SE-501 AC-13: una ruta de D solo es admisible si H1 la borra (commit de derived-drop.sh o resync);
+    # SE-501 AC-13: una ruta de D solo es admisible si H1 la borra (commit de derived.sh drop o resync);
     # añadirla o modificarla hace el head no equivalente (fail-closed). Borrar cualquier otra ruta, también.
     if is_d "$f"; then [[ "$st" == D ]] || return 1; continue; fi
     if is_registry "$f"; then reg+=("$f"); elif is_derived "$f"; then der+=("$f"); else return 1; fi
@@ -473,7 +473,7 @@ resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) ·
       CONFLICT_FILES=$(IFS=,; echo "${other[*]}"); git -C "$wt" merge --abort; return 2
     fi
     # SE-501: un conflicto en D (la rama lo cambió antes del corte; main ya no lo versiona) se resuelve
-    # sacándolo del índice, igual que derived-drop.sh. Mecánico: no ejecuta generadores ni firma.
+    # sacándolo del índice, igual que derived.sh drop. Mecánico: no ejecuta generadores ni firma.
     if (( ${#dd[@]} )); then git -C "$wt" rm -q --cached -- "${dd[@]}" >/dev/null || return 5; fi
     if (( ${#der[@]} )); then git -C "$wt" restore -q --theirs -- "${der[@]}" && git -C "$wt" add -- "${der[@]}" || return 5; fi
     if (( ${#reg[@]} )); then resolve_registries "$wt" "$h0" "$refs" "${reg[@]}" || { git -C "$wt" merge --abort; return 2; }; fi
@@ -489,8 +489,8 @@ resync() {  # resync <pr> <H0> <refs> → 0 al día (sincronizado y empujado) ·
   ledger event=RESYNC pr="$pr" head="$(git -C "$wt" rev-parse HEAD)" ${RESOLVED:+resolved="$RESOLVED"}
 }
 
-drop_d() {  # drop_d <wt> → 0 si la rama ya no difiere de origin/main en D (commit de derived-drop si hacía falta)
-  # SE-501 migración §4: equivalente mecánico de derived-drop.sh. Cada ruta de D distinta de main vuelve a su
+drop_d() {  # drop_d <wt> → 0 si la rama ya no difiere de origin/main en D (commit de derived.sh drop si hacía falta)
+  # SE-501 migración §4: equivalente mecánico de derived.sh drop. Cada ruta de D distinta de main vuelve a su
   # estado en main: restaurada si main la tiene, fuera del índice si no. Nada fuera de D.
   local p todo=()
   while IFS= read -r p; do [[ -n "$p" ]] && is_d "$p" && todo+=("$p"); done \

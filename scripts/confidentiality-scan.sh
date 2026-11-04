@@ -11,6 +11,74 @@ set -uo pipefail
 # no pudo calcular (p. ej. sin origin/main) o una blocklist pedida que no se pudo leer es un hueco,
 # nunca «No content to scan»/CLEAN. Códigos sin renumerar: con hueco y sin violaciones sale 0
 # (D3: ciclo de aviso, registrado en output/unmeasured-gates.jsonl); SAVIA_GATE_UNKNOWN=block ⇒ 2.
+#
+# --pr-base <commit> [--repo <dir>] [--blocklist <fichero>] — SE-501 (antes confidentiality-pr-scan.sh):
+#   escanea el diff de la PR con el escáner de la BASE. El escáner, el generador de la blocklist, la lista
+#   estática de términos vetados, la allowlist, gate-result y el .gitignore se extraen del commit base a un
+#   directorio aparte. Nada del checkout de la PR entra en la blocklist: ni projects/ ni CLAUDE.local.md (una
+#   PR puede versionarlos con add -f y meter un patrón que rompa el regex). La blocklist se genera en la base
+#   y, si sale vacía, FAIL. El diff sale del repositorio de la PR vía GIT_DIR. Una PR que modifica el escáner
+#   no se audita con su versión modificada. --repo: checkout de la PR (por defecto, la raíz de este script);
+#   la CI ejecuta una copia de este script tomada de la base, fuera del checkout, y pasa --repo.
+#   Veredicto: solo «gate-result: {"result":"clean"…}» con código 0 da PASS (exit 0). findings, unknown,
+#   salida sin gate-result o código ≠ 0: FAIL (exit 1). Error de entorno: exit 2. Fail-closed.
+
+# pr_base_scan — se resuelve antes de cargar nada junto al script: la copia de la CI vive fuera del checkout.
+pr_base_scan() {
+  local root base="" blocklist="" gitdir f x out rc res
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --pr-base) base="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      --repo) root="$(cd "${2:-}" && pwd)" || exit 2; shift $(( $# > 1 ? 2 : 1 )) ;;
+      --blocklist) blocklist="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      *) echo "confidentiality-scan --pr-base: argumento desconocido: $1" >&2; exit 2 ;;
+    esac
+  done
+  [[ -n "$base" ]] || { echo "confidentiality-scan: falta el commit de --pr-base" >&2; exit 2; }
+  git -C "$root" cat-file -e "$base^{commit}" 2>/dev/null || { echo "FAIL: commit base desconocido: $base" >&2; exit 2; }
+  gitdir=$(git -C "$root" rev-parse --absolute-git-dir) || exit 2
+  # Código del escáner que se toma de la base. Sin cualquiera de los obligatorios: FAIL (no se escanea con nada).
+  local required=(scripts/confidentiality-scan.sh .claude/hooks/lib/gate-result.sh scripts/generate-blocklist.sh
+    scripts/confidentiality-blocklist.txt)
+  local optional=(scripts/confidentiality-allowlist.txt .gitignore)
+  x=$(mktemp -d) || exit 2
+  # shellcheck disable=SC2064  # $x se fija ahora, a propósito
+  trap "rm -rf '$x'" EXIT
+  for f in "${required[@]}" "${optional[@]}"; do
+    if git -C "$root" cat-file -e "$base:$f" 2>/dev/null; then
+      mkdir -p "$x/$(dirname "$f")" && git -C "$root" show "$base:$f" > "$x/$f" || exit 2
+    elif [[ " ${required[*]} " == *" $f "* ]]; then
+      echo "FAIL: la base no tiene $f; no hay escáner de confianza" >&2; exit 1
+    fi
+  done
+  # Blocklist: la indicada con --blocklist o la que genera la base dentro de $x. Vacía o ilegible: FAIL.
+  if [[ -z "$blocklist" ]]; then
+    blocklist="$x/blocklist.txt"
+    bash "$x/scripts/generate-blocklist.sh" > "$blocklist" 2>/dev/null \
+      || { echo "FAIL: el generador de la blocklist de la base falló" >&2; exit 1; }
+    # La lista estática de la base entra siempre, también si el generador de la base no la emite
+    # (hasta la rev-1472 la perdía en un subshell y la blocklist de la CI salía vacía).
+    grep -vE '^(#|[[:space:]]*$)' "$x/scripts/confidentiality-blocklist.txt" >> "$blocklist"
+  fi
+  if [[ ! -r "$blocklist" ]] || ! grep -qvE '^(#|[[:space:]]*$)' "$blocklist"; then
+    echo "FAIL: blocklist vacía o ilegible; el check 1 no evaluaría nada" >&2; exit 1
+  fi
+  out=$(GIT_DIR="$gitdir" GIT_WORK_TREE="$root" SAVIA_GATE_UNKNOWN=block \
+    bash "$x/scripts/confidentiality-scan.sh" --pr --blocklist "$blocklist" 2>&1)
+  rc=$?
+  printf '%s\n' "$out"
+  res=$(printf '%s\n' "$out" | grep -E '^gate-result: ' | tail -1 | sed 's/^gate-result: //' \
+    | python3 -c 'import json,sys
+try: print(json.loads(sys.stdin.read()).get("result",""))
+except Exception: print("")' 2>/dev/null)
+  echo "escáner: base ${base:0:12} · resultado: ${res:-sin gate-result} · código: $rc"
+  if [[ "$res" == clean && $rc -eq 0 ]]; then echo "Confidentiality scan (PR): PASS"; exit 0; fi
+  echo "Confidentiality scan (PR): FAIL"
+  exit 1
+}
+for _a in "$@"; do [[ "$_a" == --pr-base ]] && pr_base_scan "$@"; done
+unset _a
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

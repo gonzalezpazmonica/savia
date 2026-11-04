@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   # SE-501: escaneo obligatorio y bloqueante del diff de la PR con el escáner de la BASE (extraído a un
-  # directorio aparte por confidentiality-pr-scan.sh). Solo gate-result «clean» da PASS. Sin secretos:
+  # directorio aparte por confidentiality-scan.sh --pr-base). Solo gate-result «clean» da PASS. Sin secretos:
   # ningún job de PR recibe CONFIDENTIALITY_HMAC_KEY (I3). Este nombre es el contexto requerido de main.
   confidentiality-scan-pr:
     if: github.event_name == 'pull_request'
@@ -42,16 +42,16 @@ jobs:
       - name: Scan PR diff with the base scanner
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        # El envoltorio también sale de la base. Solo la PR que lo introduce (SE-501) se escanea con el
-        # suyo, porque la base aún no lo tiene; desde su merge, nunca.
+        # El envoltorio (confidentiality-scan.sh --pr-base) también sale de la base. Solo la PR que lo
+        # introduce (SE-501) se escanea con el suyo, porque la base aún no tiene ese modo; desde su merge, nunca.
         run: |
-          if git cat-file -e "$BASE_SHA:scripts/confidentiality-pr-scan.sh" 2>/dev/null; then
-            git show "$BASE_SHA:scripts/confidentiality-pr-scan.sh" > "$RUNNER_TEMP/pr-scan.sh"
+          if git show "$BASE_SHA:scripts/confidentiality-scan.sh" 2>/dev/null | grep -q -- '--pr-base)'; then
+            git show "$BASE_SHA:scripts/confidentiality-scan.sh" > "$RUNNER_TEMP/pr-scan.sh"
           else
-            echo "::warning::la base no tiene confidentiality-pr-scan.sh (PR de arranque SE-501); se usa el de la PR"
-            cp scripts/confidentiality-pr-scan.sh "$RUNNER_TEMP/pr-scan.sh"
+            echo "::warning::la base no tiene confidentiality-scan.sh --pr-base (PR de arranque SE-501); se usa el de la PR"
+            cp scripts/confidentiality-scan.sh "$RUNNER_TEMP/pr-scan.sh"
           fi
-          bash "$RUNNER_TEMP/pr-scan.sh" --repo "$GITHUB_WORKSPACE" --base "$BASE_SHA"
+          bash "$RUNNER_TEMP/pr-scan.sh" --pr-base "$BASE_SHA" --repo "$GITHUB_WORKSPACE"
 
   confidentiality-scan-full:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

@@ -196,7 +196,7 @@ fi
 
 # ── Derivados (SE-501) ─────────────────────────────────────────────────────
 # D no se versiona en main: un conflicto en D (rama anterior al corte) se resuelve sacándolo del
-# índice, como scripts/derived-drop.sh. Sin regeneración ni re-firma.
+# índice, como scripts/derived.sh drop. Sin regeneración ni re-firma.
 
 d_conflicts=""
 while IFS= read -r f; do [[ -n "$f" ]] && is_d "$f" && d_conflicts+="$f"$'\n'; done <<< "$conflicted"

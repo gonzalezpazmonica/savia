@@ -12,6 +12,17 @@
 #                                          PR añade o modifica una ruta de D, y la nombra. Borrar D pasa.
 #                                          La lista D sale de este script; --repo es el repo que se audita
 #                                          (la CI ejecuta el derived.sh de la base). Error: 2 (fail-closed).
+#   derived.sh drop [--base <ref>]         saca D del diff de la PR con un único commit (por defecto contra
+#                                          origin/main). Cada ruta de D que difiere de la base vuelve a su
+#                                          estado: si la base la tiene, se restaura; si no, sale del índice y
+#                                          el fichero local se conserva (está en .gitignore). Nada fuera de D.
+#                                          0 commit creado o nada que hacer · 1 índice con cambios ajenos · 2 error.
+#   derived.sh migration-check [--repo owner/name]
+#                                          migración, paso 2 (solo lectura, gh api): «Confidentiality scan (PR)»
+#                                          es contexto requerido de main, los checks retirados ya no lo son y
+#                                          ningún workflow de pull_request(_target) recibe CONFIDENTIALITY_HMAC_KEY.
+#                                          0 PASS · 1 FAIL · 2 API caída o respuesta ilegible (fail-closed).
+#                                          Entorno: SAVIA_GH (binario gh, para tests) · SAVIA_GH_REPO.
 #
 # Grupos (orden fijo: rules antes que scm):
 #   rules  rule-manifest-generate.sh + rules-index-generate.sh → docs/rules/INDEX.md, rule-manifest.json
@@ -236,9 +247,9 @@ gate_cmd() {  # gate_cmd [--base <ref>] [--range <a>..<b>] [--repo <dir>]
   local base="origin/main" range="" repo="$ROOT" mb names f bad=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --base) base="${2:-}"; shift 2 ;;
-      --range) range="${2:-}"; shift 2 ;;
-      --repo) repo="$(cd "${2:-}" 2>/dev/null && pwd)" || die "G20 ERROR: --repo ilegible"; shift 2 ;;
+      --base) base="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      --range) range="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      --repo) repo="$(cd "${2:-}" 2>/dev/null && pwd)" || die "G20 ERROR: --repo ilegible"; shift $(( $# > 1 ? 2 : 1 )) ;;
       *) die "argumento desconocido: $1" ;;
     esac
   done
@@ -257,18 +268,95 @@ gate_cmd() {  # gate_cmd [--base <ref>] [--range <a>..<b>] [--repo <dir>]
   if (( ${#bad[@]} )); then
     echo "G20 FAIL: la PR versiona derivados que se generan en local (SE-501):"
     printf '  %s\n' "${bad[@]}"
-    echo "Arreglo: bash scripts/derived-drop.sh"
+    echo "Arreglo: bash scripts/derived.sh drop"
     return 1
   fi
   echo "G20 PASS: ninguna ruta derivada en el diff ($range)"
 }
 
+drop_cmd() {  # drop_cmd [--base <ref>] — antes derived-drop.sh
+  local base="origin/main" specs paths todo=() p
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --base) base="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      *) die "drop: argumento desconocido: $1" ;;
+    esac
+  done
+  derived_paths_load "$ROOT" || die "drop: falta scripts/derived-paths.txt"
+  G() { git -C "$ROOT" "$@"; }
+  G rev-parse -q --verify "$base^{commit}" >/dev/null || die "drop: base desconocida: $base"
+  G diff --cached --quiet || die "drop: el índice tiene cambios; haz commit o retíralos antes" 1
+  mapfile -t specs < <(derived_pathspecs)
+  # Rutas de D que difieren entre la base y HEAD (incluye las que la base ya no versiona).
+  mapfile -t paths < <(G diff --name-only --no-renames "$base" HEAD -- "${specs[@]}" 2>/dev/null)
+  for p in "${paths[@]}"; do [[ -n "$p" ]] && is_derived_path "$p" && todo+=("$p"); done
+  (( ${#todo[@]} )) || { echo "derived drop: la rama no difiere de $base en ninguna ruta derivada"; return 0; }
+  for p in "${todo[@]}"; do
+    if G cat-file -e "$base:$p" 2>/dev/null; then
+      G checkout -q "$base" -- "$p" || return 2
+    elif G cat-file -e "HEAD:$p" 2>/dev/null; then
+      G rm -q --cached -- "$p" || return 2
+    fi
+  done
+  G diff --cached --quiet && { echo "derived drop: nada que commitear"; return 0; }
+  G commit -q -m "chore(derived): saca los derivados del diff de la PR (SE-501)" \
+    -m "Generado por scripts/derived.sh drop: solo toca rutas de scripts/derived-paths.txt." || return 2
+  echo "derived drop: commit $(G rev-parse --short HEAD) con ${#todo[@]} ruta(s) derivada(s)"
+}
+
+migration_check_cmd() {  # migration_check_cmd [--repo owner/name] — antes derived-migration-check.sh
+  local gh="${SAVIA_GH:-gh}" repo="${SAVIA_GH_REPO:-}" ctx="Confidentiality scan (PR)" raw r rc=0 wfs
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      *) die "migration-check: argumento desconocido: $1" ;;
+    esac
+  done
+  if [[ -z "$repo" ]]; then
+    repo=$($gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null) \
+      || { echo "FAIL: no se pudo resolver el repo" >&2; return 2; }
+  fi
+  raw=$($gh api "repos/$repo/branches/main/protection/required_status_checks" 2>/dev/null) \
+    || { echo "FAIL: la API no devolvió los checks requeridos de main" >&2; return 2; }
+  SAVIA_RAW="$raw" python3 - "$ctx" <<'PY'
+import json, os, sys
+ctx = sys.argv[1]
+try:
+    d = json.loads(os.environ["SAVIA_RAW"])
+    names = set(d.get("contexts") or []) | {c.get("context") for c in (d.get("checks") or []) if isinstance(c, dict)}
+except Exception:
+    print("FAIL: respuesta de la API no válida", file=sys.stderr); sys.exit(2)
+RETIRED = ("Verify Audit Signature", "PII & Confidentiality Scan (PR)")
+rc = 0
+if ctx in names:
+    print(f"PASS: «{ctx}» es contexto requerido de main")
+else:
+    print(f"FAIL: «{ctx}» no está entre los contextos requeridos de main ({', '.join(sorted(n for n in names if n))})")
+    rc = 1
+for old in RETIRED:
+    if old in names:
+        print(f"FAIL: «{old}» sigue entre los contextos requeridos y SE-501 lo retira; quitarlo de la protección de main")
+        rc = 1
+sys.exit(rc)
+PY
+  r=$?; (( r > rc )) && rc=$r
+  shopt -s nullglob
+  wfs=("$ROOT"/.github/workflows/*.yml "$ROOT"/.github/workflows/*.yaml)
+  python3 "$ROOT/scripts/workflow-hmac-check.py" pr-secrets "${wfs[@]}"
+  r=$?; (( r > rc )) && rc=$r
+  return $rc
+}
+
 CMD="${1:-}"; shift || true
-[[ "$CMD" == gate ]] && { gate_cmd "$@"; exit $?; }
+case "$CMD" in
+  gate) gate_cmd "$@"; exit $? ;;
+  drop) drop_cmd "$@"; exit $? ;;
+  migration-check) migration_check_cmd "$@"; exit $? ;;
+esac
 ONLY=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --only) ONLY="${2:-}"; shift 2 ;;
+    --only) ONLY="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
     *) die "argumento desconocido: $1" ;;
   esac
 done
@@ -295,6 +383,6 @@ case "$CMD" in
     for g in $GROUPS_SEL; do verify_group "$g" || rc=1; done ;;
   key)
     for g in $GROUPS_SEL; do echo "$g $(key "$g")"; done ;;
-  *) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+  *) sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac
 exit $rc

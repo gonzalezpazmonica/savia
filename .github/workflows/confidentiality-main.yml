@@ -2,7 +2,7 @@ name: Confidentiality audit (main)
 
 # SE-501 I2: cada commit de main tiene una ejecución identificable de este workflow sobre su árbol completo.
 # Es la prueba de que el contenido de main pasó la auditoría: la comprueba
-# scripts/confidentiality-main-verify.sh <sha> (event=push, head_branch=main, head_sha, conclusion=success).
+# scripts/confidentiality-sign.sh verify-main <sha> (event=push, head_branch=main, head_sha, conclusion=success).
 # Solo lee: sin secretos, sin escritura, sin commit de bot. Una PR no puede crear una ejecución push en main.
 
 on:

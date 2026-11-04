@@ -830,7 +830,7 @@ link_head() {  # link_head <n> <ruta> : sobre el head de pr-<n>, <ruta> pasa a s
   ! ledger_has '"event":"JUDGE_REQUEST"' || false
 }
 
-# SE-501 AC-13: una ruta de D colada tras el plan no llega a main. resync la saca (drop_d, como derived-drop.sh);
+# SE-501 AC-13: una ruta de D colada tras el plan no llega a main. resync la saca (drop_d, como derived.sh drop);
 # la cabeza resultante es T más ese borrado y es equivalente. Nada de D en la rama fusionada.
 @test "SE-501 AC-13 run: ruta de D colada tras el plan → resync la saca del diff y la PR se fusiona sin D" {
   reg_main

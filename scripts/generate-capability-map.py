@@ -3,10 +3,10 @@
 generate-capability-map.py — Generate `.scm/` (Savia Capability Map) from
 workspace resources (commands, skills, agents, scripts).
 
-Drop-in replacement for the Bash version (`generate-capability-map.sh`) that
-was O(resources × process_spawn) slow on Windows — often >1 hour for 1000
-resources. This Python version runs the same logic in-process and completes
-in seconds.
+Replaced the original Bash version, which was O(resources × process_spawn)
+slow on Windows — often >1 hour for 1000 resources. This Python version runs
+the same logic in-process and completes in seconds. The thin `.sh` wrapper was
+retired by SE-501: the entry point is `bash scripts/derived.sh ensure --only scm`.
 
 Outputs:
   .scm/INDEX.scm                      — flat index, one line per resource

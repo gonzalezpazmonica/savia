@@ -5,7 +5,7 @@
 # new main. SE-501: the confidentiality signature and the other derived files
 # (scripts/derived-paths.txt) are no longer versioned, so there is no re-sign.
 # A conflict limited to derived paths (a branch from before the cut) is
-# resolved by removing them from the index, like scripts/derived-drop.sh.
+# resolved by removing them from the index, like scripts/derived.sh drop.
 #
 # Usage:
 #   bash scripts/pr-rebase.sh              # rebase onto origin/main
@@ -91,7 +91,7 @@ else
 
     CONFLICTS=$(git diff --name-only --diff-filter=U)
     if [[ -n "$CONFLICTS" ]] && only_derived "$CONFLICTS"; then
-      # SE-501: un conflicto solo en derivados (D) se resuelve sacándolos del índice, como derived-drop.sh.
+      # SE-501: un conflicto solo en derivados (D) se resuelve sacándolos del índice, como derived.sh drop.
       while IFS= read -r f; do git rm -q --cached -- "$f" >/dev/null 2>&1; done <<<"$CONFLICTS"
       git -c core.editor=true rebase --continue >>/tmp/pr-rebase-output.log 2>&1 || true
     elif [[ -z "$CONFLICTS" ]]; then

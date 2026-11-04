@@ -101,7 +101,7 @@ Both are plain text, auto-generated, with progressive loading (L0/L1/L2).
 Status: in proposal (SPEC-053, SPEC-054). When available, generate with:
 
 ```bash
-bash scripts/generate-capability-map.sh    # .scm
+bash scripts/derived.sh ensure --only scm  # .scm
 bash scripts/generate-context-index.sh     # .ctx
 ```
 

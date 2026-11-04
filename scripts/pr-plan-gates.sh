@@ -813,7 +813,7 @@ g19_edit_attribution() {
 }
 
 # G20 — SE-501: la PR no versiona derivados (scripts/derived-paths.txt). Añadir o modificar D falla y nombra
-# la ruta; borrarlo (migración, derived-drop.sh) pasa. Sin la lista o sin diff calculable: FAIL (fail-closed).
+# la ruta; borrarlo (migración, derived.sh drop) pasa. Sin la lista o sin diff calculable: FAIL (fail-closed).
 g20_derived_absent() {
   local out rc
   [[ -f scripts/derived.sh ]] || { echo "FAIL: falta scripts/derived.sh (SE-501)"; return; }
