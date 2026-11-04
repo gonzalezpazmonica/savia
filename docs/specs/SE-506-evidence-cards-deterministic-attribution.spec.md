@@ -38,9 +38,13 @@ Conclusión: el hueco es real y es pequeño. Falta un formato de ficha y un veri
 
 1. **Dos fichas separadas.** `StudyRecord` (una fuente: id estable, tipo, DOI o URL, revisión o hash del texto guardado, licencia, `stored: metadata_only|abstract|full_text`) y `EvidenceClaim` (una afirmación: texto, `epistemic` de SE-449, `supports[]` y `contradicts[]` con `study_id`, `locator` y `quote` literal).
 2. **Verificador determinista.** `scripts/evidence-claim-check.py` comprueba, sin LLM, que cada `quote` aparece literal en el texto guardado de su estudio en esa revisión **y dentro del tramo que delimita su `locator`** (sección o rango de líneas), no en cualquier parte del texto.
-   - **Normalización antes de comparar, la misma en cita y texto:** Unicode NFC, comillas y guiones tipográficos a su forma ASCII, guion de corte de línea seguido de salto (`-\n`) eliminado, cualquier secuencia de espacios en blanco a un espacio. Sin cambio de mayúsculas ni de puntuación restante.
+   - **Normalización antes de comparar, la misma en cita y texto:** Unicode NFC, comillas y guiones tipográficos a su forma ASCII, cualquier secuencia de espacios en blanco a un espacio. Sin cambio de mayúsculas ni de puntuación restante.
+   - **Guion de corte de línea (`-\n`):** no se puede saber si es un corte («infor-\nmación») o un guion real partido por el salto («well-\nknown»). El texto se normaliza de las dos formas, quitando el guion y conservándolo, y la cita vale si aparece literal en cualquiera de las dos. Así ninguna de las dos lecturas produce un rechazo espurio.
    - **Longitud mínima de la cita:** 8 palabras tras normalizar. Una cita más corta → `QUOTE_TOO_SHORT`, exit 1 (una palabra suelta aparece en casi cualquier texto).
-   - **Códigos de salida:** 0 todo `SUPPORTED_LITERAL`; 1 al menos un hallazgo de contenido (`QUOTE_NOT_FOUND`, `QUOTE_OUTSIDE_LOCATOR`, `QUOTE_TOO_SHORT`, `REVISION_MISMATCH`, `EPISTEMIC_UNSOURCED`); 2 entrada inválida o ausente (fail-closed); 3 consulta externa denegada por nivel (`LEVEL_NOT_ALLOWED`, `LEVEL_MISSING`). El juez LLM queda como segunda opinión opcional, nunca como sustituto.
+   - **Códigos de salida de `check`:** 0 todo `SUPPORTED_LITERAL`; 1 al menos un hallazgo de contenido (`QUOTE_NOT_FOUND`, `QUOTE_OUTSIDE_LOCATOR`, `QUOTE_TOO_SHORT`, `REVISION_MISMATCH`, `EPISTEMIC_UNSOURCED`); 2 entrada inválida o ausente (fail-closed). **Precedencia:** si hay entrada inválida en cualquier ficha, la salida es 2 aunque otras fichas tengan hallazgos de contenido (no se puede afirmar nada sobre una entrada que no se pudo leer); si no, 1 si hay algún hallazgo; si no, 0. Todos los hallazgos se listan en la salida, no solo el primero. `check` no hace red nunca.
+   - **Informe:** `check --report RUTA` escribe además el informe Markdown de las fichas verificadas, con una sección «Apoyos» y otra «Contraevidencia» (las `contradicts[]` válidas). El verificador es quien genera esa sección; `/tech-research` (S2) la incluye tal cual.
+   - El juez LLM queda como segunda opinión opcional, nunca como sustituto.
+2b. **Puerta de nivel, separada del verificador.** `scripts/evidence-claim-check.py level <ruta-pregunta>` decide, sin red, si una pregunta puede consultar APIs externas: exit 0 si es N1; exit 3 con `LEVEL_MISSING` (sin clasificación) o `LEVEL_NOT_ALLOWED` (N2 o superior, o ficha que declara un nivel menos restrictivo que el de su pregunta). Quien hace la consulta externa es el paso de búsqueda (S0 a mano; S2, `/tech-research` y `scripts/web-research/search.py`), y está obligado a llamar a `level` antes y a no consultar nada si sale distinto de 0. Los dos subcomandos tienen códigos disjuntos (`check`: 0/1/2; `level`: 0/2/3), así que no hay precedencia que resolver entre 1 y 3.
 3. **Deduplicación de estudios** por DOI normalizado y, sin DOI, por hash del título normalizado más el año.
 4. **Por defecto se guarda `metadata_only` o `abstract`.** El texto completo solo si su licencia lo permite y queda anotada.
 5. **Solo preguntas N1** pueden consultar APIs académicas externas. El nivel no lo pone quien redacta la ficha: la ficha solo guarda la referencia a la pregunta y el nivel se toma de la clasificación de confidencialidad de esa pregunta (`docs/rules/domain/context-placement-confirmation.md`, N1–N4b), que confirma la operadora al prerregistrarla. Si la ficha declara un nivel distinto del de la pregunta, manda el más restrictivo. Una pregunta sin clasificación no consulta nada.
@@ -56,14 +60,16 @@ Conclusión: el hueco es real y es pequeño. Falta un formato de ficha y un veri
 | AC | Criterio | Tipo | Test |
 |---|---|---|---|
 | AC-1 | Una `EvidenceClaim` cuya `quote` aparece literal en el texto guardado del estudio en la revisión declarada → `SUPPORTED_LITERAL` | estática | `tests/test-se506-evidence-claim.bats` |
-| AC-2 | **Negativo:** la misma `quote` con una palabra cambiada → `QUOTE_NOT_FOUND`, exit 1; la misma `quote` con comillas tipográficas, doble espacio o partida por `-\n` → `SUPPORTED_LITERAL` | estática | ídem |
+| AC-2 | **Negativo:** la misma `quote` con una palabra cambiada → `QUOTE_NOT_FOUND`, exit 1; la misma `quote` con comillas tipográficas, doble espacio o partida por `-\n` → `SUPPORTED_LITERAL`; texto con «well-\nknown»: la cita «well-known …» y la cita «wellknown …» → ambas `SUPPORTED_LITERAL` | estática | ídem |
+| AC-2c | **Precedencia:** dos fichas, una con `QUOTE_NOT_FOUND` y otra con JSON malformado → exit 2 y la salida lista los dos hallazgos | estática | ídem |
 | AC-2b | **Negativo:** cita literal que existe en el estudio pero fuera de la sección de su `locator` → `QUOTE_OUTSIDE_LOCATOR`, exit 1; **límite:** cita de 7 palabras → `QUOTE_TOO_SHORT`, exit 1; de 8 → se verifica | estática | ídem |
 | AC-3 | **Negativo:** revisión declarada distinta del hash del texto guardado → `REVISION_MISMATCH`, exit 1 (la cita podría existir en otra versión) | estática | ídem |
 | AC-4 | **Negativo:** `epistemic: observed` sin ningún `supports[]` → `EPISTEMIC_UNSOURCED` (mismo código que SE-449 AC2), exit 1 | estática | ídem |
-| AC-5 | **Negativo:** pregunta sin clasificación → `LEVEL_MISSING`, exit 3; pregunta N2 o superior → `LEVEL_NOT_ALLOWED`, exit 3; ficha que declara N1 sobre una pregunta clasificada N2 → `LEVEL_NOT_ALLOWED`; en los tres casos no se hace ninguna consulta externa (se comprueba con un stub de red que falla si se le llama) | estática | ídem |
-| AC-6 | Dos estudios con el mismo DOI escrito de forma distinta (mayúsculas, prefijo `https://doi.org/`) → un solo `StudyRecord` | estática | ídem |
+| AC-5 | `level`: pregunta N1 → exit 0; **negativo:** pregunta sin clasificación → `LEVEL_MISSING`, exit 3; pregunta N2 o superior → `LEVEL_NOT_ALLOWED`, exit 3; ficha que declara N1 sobre una pregunta clasificada N2 → `LEVEL_NOT_ALLOWED`, exit 3; fichero de pregunta ausente → exit 2 | estática | ídem |
+| AC-5b | **Negativo (quien consulta):** el paso de búsqueda de S2 lanzado con una pregunta N2 y un stub de red que anota cada llamada en un fichero → el fichero queda vacío y la búsqueda sale con 3; con una pregunta N1 → el stub recibe la llamada (el test comprueba también el positivo, para que no pase con un paso de búsqueda que nunca llama a la red) | estática | `tests/test-se506-level-gate.bats` (S2) |
+| AC-6 | Dos estudios con el mismo DOI escrito de forma distinta (mayúsculas, prefijo `https://doi.org/`) → un solo `StudyRecord`; sin DOI, mismo título con distinta capitalización y espacios y mismo año → uno solo; **negativo:** mismo título y año distinto → dos | estática | ídem |
 | AC-7 | **Fail-closed:** JSON malformado, estudio citado inexistente o texto guardado ausente → exit 2, nunca `SUPPORTED_LITERAL` | estática | ídem |
-| AC-8 | Una afirmación con `contradicts[]` válido se lista en el informe en una sección «Contraevidencia», no se descarta | estática | ídem |
+| AC-8 | `check --report`: una afirmación con `contradicts[]` válido se lista en la sección «Contraevidencia» del informe generado, no se descarta; **negativo:** una `contradicts[]` con `QUOTE_NOT_FOUND` no aparece en esa sección y sí como hallazgo | estática | ídem |
 | AC-9 | S0 (piloto PA) prerregistrado antes de medir: 3 preguntas N1, ≥30 afirmaciones, baseline `/tech-research` actual, métrica `claim_supported_precision` y tiempo de revisión humana | experimento | prerregistro en Savia Labs |
 | AC-10 | S1 solo arranca si el piloto mejora `claim_supported_precision` con un IC al 95 % que excluye 0 y el tiempo de revisión humana no sube más de un 50 %. El método del IC (bootstrap pareado por afirmación, 10 000 remuestreos) y el tamaño se fijan en el prerregistro; si con ≥30 afirmaciones el IC no puede excluir 0 por potencia, el prerregistro amplía la muestra antes de medir, no después. Si no se cumple, la spec pasa a `REJECTED` con el resultado publicado | gate | informe del piloto |
 | AC-11 | `capability-entropy.py --check` PASS | CI | — |
@@ -73,8 +79,8 @@ Conclusión: el hueco es real y es pequeño. Falta un formato de ficha y un veri
 | Slice | Entrega | Condición |
 |---|---|---|
 | S0 | Piloto PA en Savia Labs con fichas escritas a mano y verificador mínimo | SE-449 S1 en main; operadora autoriza consultas a APIs académicas con preguntas N1 |
-| S1 | `scripts/evidence-claim-check.py` (stdlib), esquema `docs/schemas/evidence-claim.schema.json`, tests AC-1..8 | AC-10 en verde |
-| S2 | `/tech-research` emite fichas además del informe en prosa; el Truth Tribunal lee el resultado del verificador como hallazgo de trazabilidad | S1 fusionado |
+| S1 | `scripts/evidence-claim-check.py` (stdlib, subcomandos `check` y `level`), esquema `docs/schemas/evidence-claim.schema.json`, tests AC-1..8 (con 2b, 2c y AC-5) | AC-10 en verde |
+| S2 | `/tech-research` emite fichas además del informe en prosa y su paso de búsqueda llama a `level` antes de cualquier consulta externa (AC-5b); el Truth Tribunal lee el resultado del verificador como hallazgo de trazabilidad | S1 fusionado |
 
 ## Riesgos
 
@@ -100,7 +106,7 @@ Conclusión: el hueco es real y es pequeño. Falta un formato de ficha y un veri
 
 ### Portability classification
 
-- [x] **PURE_BASH**: Python stdlib y BATS; sin red en el verificador.
+- [x] **PURE_BASH**: Python stdlib y BATS; ni `check` ni `level` abren conexiones. La red solo está en el paso de búsqueda que ya existe (`scripts/web-research/search.py`), detrás de `level`.
 
 ## Aprobación
 
