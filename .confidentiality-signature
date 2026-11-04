@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=82313ca42284869520e2c1518323c8d18d27856d3ebf20fa459bfdb646b2ff00
-timestamp=2026-11-04T21:11:40Z
-branch=agent/codex-integrate-1481-20261104
-head_commit=7ddd6b179
-signature=9d1a4968857ec6a260d3139e318c5f63552b76d3909f565e61dcbf617fb48e62
+diff_hash=376062ff935b95ae547f49415ae09a87ff0d7d9f228bf5067342f85f8864420e
+timestamp=2026-11-04T21:20:02Z
+branch=agent/w-se509-prompt-structure-20261023
+head_commit=8a78a6b0
+signature=e55e3cca7b4d98f5a8e3bb276043312bd86bef8e76f34fc1aaf4d545f6d8cda2
