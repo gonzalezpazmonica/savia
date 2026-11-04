@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=2304e219204c6dbc97704fcbcd59ed362ef743ffb897e2a1e46821c05ecda4cf
-timestamp=2026-11-04T18:31:18Z
+diff_hash=b9b2947b3aa7bfe7c84de80467db9c8ed85dfb6556456185221ef709b2d800fa
+timestamp=2026-11-04T21:20:52Z
 branch=agent/w-g5-anclaje-20261023
-head_commit=bb8b3e41b
-signature=dbef7cd30ddde225ead33ccdf59609897679c16d3ea9c46ded96d15fa2dab722
+head_commit=daed0ba0
+signature=582b59ef76a04bdf38e7d879ffa5b82adc3738dbe5a4e028554e125a657141cd
