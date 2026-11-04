@@ -26,6 +26,9 @@ PR_EVENTS = ("pull_request", "pull_request_target")
 SECRET_EVENTS = PR_EVENTS + ("workflow_run",)
 # Formas que exponen la clave sin nombrarla (expresiones de Actions: sin distinguir mayúsculas).
 SECRET_BULK = re.compile(r"tojson\(\s*secrets\s*\)|^\s*secrets:\s*inherit\s*$", re.I | re.M)
+EXPR_TOKEN = re.compile(r"'(?:[^']|'')*'|\bsecrets\b", re.I)
+STATIC_SECRET = re.compile(r"secrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|"
+                           r"\[\s*'([A-Za-z_][A-Za-z0-9_]*)'\s*\])", re.I)
 PR_HEAD_REF = re.compile(r"github\.event\.pull_request\.head\.(sha|ref)|github\.head_ref")
 PINNED = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
 
@@ -52,6 +55,46 @@ def events(on):
     return {}
 
 
+def expressions(value):
+    """Yield expression bodies from YAML values; quoted '}}' never closes an expression."""
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from expressions(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from expressions(child)
+    elif isinstance(value, str):
+        pos = 0
+        while (start := value.find("${{", pos)) != -1:
+            pos, quoted = start + 3, False
+            while pos < len(value):
+                if value[pos] == "'":
+                    if quoted and value[pos:pos + 2] == "''":
+                        pos += 2
+                        continue
+                    quoted = not quoted
+                elif not quoted and value[pos:pos + 2] == "}}":
+                    break
+                pos += 1
+            yield value[start + 3:pos]
+            pos += 2
+
+
+def dynamic_secret_access(doc):
+    # Access by a computed key or the whole context can expose HMAC without naming it.
+    # Quoted text is a literal, not a context reference; only static named accesses are allowed.
+    for expression in expressions(doc):
+        for token in EXPR_TOKEN.finditer(expression):
+            if token.group().startswith("'"):
+                continue
+            named = STATIC_SECRET.match(expression, token.start())
+            if named is None:
+                return True
+            if (named.group(1) or named.group(2)).upper() == SECRET:
+                return True
+    return False
+
+
 def check_pr_secrets(path):
     text, doc, on = load(path)
     ev = events(on)
@@ -62,6 +105,9 @@ def check_pr_secrets(path):
         if SECRET_BULK.search(text):
             bad.append(f"{path}: un workflow disparado por PR o workflow_run expone todos los secretos "
                        "(toJSON(secrets) o secrets: inherit)")
+        if dynamic_secret_access(doc):
+            bad.append(f"{path}: un workflow disparado por PR o workflow_run usa un acceso no estático "
+                       "al contexto de secretos o a la clave de auditoría")
     if "pull_request_target" in ev and PR_HEAD_REF.search(text):
         bad.append(f"{path}: pull_request_target con checkout de la ref de la PR")
     return bad

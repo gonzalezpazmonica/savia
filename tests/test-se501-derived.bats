@@ -511,6 +511,24 @@ W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
   done
 }
 
+@test "AC-15 negativo: accesos calculados y agregados a secrets fallan; nombres estáticos inocuos pasan" {
+  for expression in "secrets[format('CONFIDENTIALITY_{0}_KEY', 'HMAC')]" \
+      'secrets[env.KEY]' 'toJSON(secrets.*)' 'toJSON (secrets)' \
+      "format('}} {0}', secrets[env.KEY])"; do
+    printf 'on: [pull_request]\njobs:\n  a:\n    env:\n      K: ${{ %s }}\n' "$expression" > "$T/dynamic.yml"
+    run python3 "$W" pr-secrets "$T/dynamic.yml"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"acceso no estático"* ]]
+  done
+  for expression in 'secrets.GITHUB_TOKEN' "secrets['OTHER_TOKEN']" \
+      "format('secrets[env.KEY] {0}', secrets.GITHUB_TOKEN)"; do
+    printf 'on: [pull_request]\njobs:\n  a:\n    env:\n      K: ${{ %s }}\n' "$expression" > "$T/static.yml"
+    run python3 "$W" pr-secrets "$T/static.yml"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"PASS: pr-secrets"* ]]
+  done
+}
+
 # ── AC-7: prueba de main por ejecución ──────────────────────────────────────
 
 S=0123456789abcdef0123456789abcdef01234567

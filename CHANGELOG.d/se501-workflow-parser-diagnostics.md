@@ -11,6 +11,8 @@ el contenido de la entrada no se filtre al diagnóstico.
 
 El detector rechaza también referencias a la clave HMAC con diferencias de
 mayúsculas y mediante índice, igual que las referencias válidas de Actions.
+También rechaza índices calculados y accesos agregados al contexto de secretos;
+permite referencias estáticas a otros secretos sin tratar el texto literal como acceso.
 
 Los lectores Python comprueban la frescura aun cuando los derivados ya
 existen. Si esa comprobación falla, no usan datos viejos para dar un verde;
