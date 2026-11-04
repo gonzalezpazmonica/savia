@@ -81,20 +81,26 @@ jobs:
       - name: Rebase each conflicting PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Via env, never interpolated into the script: headRefName comes from
+          # PR authors (forks included) and may contain quotes or `;`.
+          PRS: ${{ steps.list_prs.outputs.prs }}
         run: |
           set -uo pipefail
-          prs='${{ steps.list_prs.outputs.prs }}'
+          prs="$PRS"
           if [[ -z "$prs" || "$prs" == "[]" ]]; then
             echo "No open PRs — nothing to rebase."
             exit 0
           fi
 
-          # Snapshot resolver to tempfile — after we checkout a PR branch
-          # the script may not exist there (older branches predate it).
-          RESOLVER_TMP=$(mktemp --suffix=.sh)
-          cp scripts/resolve-pr-conflicts.sh "$RESOLVER_TMP"
+          # Snapshot resolver + derived.sh + D list from main BEFORE checking
+          # out any PR branch: the resolver must never source code or read the
+          # D list from an unreviewed branch (this job has contents: write).
+          RESOLVER_DIR=$(mktemp -d)
+          mkdir -p "$RESOLVER_DIR/scripts"
+          cp scripts/resolve-pr-conflicts.sh scripts/derived.sh scripts/derived-paths.txt "$RESOLVER_DIR/scripts/"
+          RESOLVER_TMP="$RESOLVER_DIR/scripts/resolve-pr-conflicts.sh"
           chmod +x "$RESOLVER_TMP"
-          trap 'rm -f "$RESOLVER_TMP"' EXIT
+          trap 'rm -rf "$RESOLVER_DIR"' EXIT
 
           echo "$prs" | jq -r '.[] | "\(.number) \(.headRefName) \(.mergeable) \(.mergeStateStatus)"' | \
           while read -r num branch mergeable state; do

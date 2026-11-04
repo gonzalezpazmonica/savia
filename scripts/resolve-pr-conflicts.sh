@@ -29,15 +29,16 @@ set -uo pipefail
 REPO_ROOT="${RESOLVE_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 cd "$REPO_ROOT"
 
-# SE-501: lista D (scripts/derived-paths.txt). Primero la del código de este script; si se ejecuta desde
-# una copia temporal (auto-rebase-open-prs.yml), la del repo. Sin lista, nada es D (fail-closed: exit 3).
+# SE-501: lista D (scripts/derived-paths.txt) y derived.sh SOLO junto al código de este script, nunca
+# del checkout de la rama que se resuelve: esa rama no está revisada y el job tiene escritura. Quien lo
+# ejecute desde una copia (auto-rebase-open-prs.yml, resolve-all-open-prs.sh) copia los tres ficheros en
+# <dir>/scripts/. Sin lista, nada es D: cualquier conflicto ahí es «inesperado» (fail-closed: exit 3).
 D_LOADED=0
-for _r in "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" "$REPO_ROOT"; do
-  if [[ -f "$_r/scripts/derived.sh" ]]; then
-    # shellcheck source=derived.sh
-    source "$_r/scripts/derived.sh" && derived_paths_load "$_r" && { D_LOADED=1; break; }
-  fi
-done
+_self_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [[ -f "$_self_root/scripts/derived.sh" ]]; then
+  # shellcheck source=derived.sh
+  source "$_self_root/scripts/derived.sh" && derived_paths_load "$_self_root" && D_LOADED=1
+fi
 is_d() { (( D_LOADED )) && is_derived_path "$1"; }
 
 BRANCH=""

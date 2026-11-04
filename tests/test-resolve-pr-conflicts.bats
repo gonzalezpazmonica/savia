@@ -126,6 +126,59 @@ rpc_repo() {  # rpc_repo <fichero en conflicto>: main y la rama editan el mismo 
   [ ! -e "$r/.confidentiality-signature" ]
 }
 
+# Rama hostil: su scripts/derived.sh deja una marca al cargarse y su derived-paths.txt declara a.txt como D.
+rpc_hostile_branch() {  # rpc_hostile_branch <repo>
+  local r="$1"
+  mkdir -p "$r/scripts"
+  printf 'touch "%s/PWNED"\nderived_paths_load(){ DERIVED_PATHS=(a.txt); }\nis_derived_path(){ return 0; }\n' \
+    "$BATS_TEST_TMPDIR" > "$r/scripts/derived.sh"
+  printf 'a.txt\n' > "$r/scripts/derived-paths.txt"
+  git -C "$r" add -f scripts; git -C "$r" commit -qm hostil
+}
+rpc_copy() {  # rpc_copy [con-D]: copia del resolutor como la hace el workflow; con «con-D», con derived.sh y la lista
+  local d="$BATS_TEST_TMPDIR/copy" S="$BATS_TEST_DIRNAME/../scripts"
+  mkdir -p "$d/scripts"; cp "$S/resolve-pr-conflicts.sh" "$d/scripts/"
+  [[ "${1:-}" == con-D ]] && cp "$S/derived.sh" "$S/derived-paths.txt" "$d/scripts/"
+  echo "$d/scripts/resolve-pr-conflicts.sh"
+}
+
+@test "SE-501 P1: desde una copia, el resolutor no carga derived.sh ni la lista D de la rama (sin marca, a.txt no es D)" {
+  r=$(rpc_repo a.txt); rpc_hostile_branch "$r"
+  run env RESOLVE_REPO_ROOT="$r" bash "$(rpc_copy con-D)" --no-push
+  [ ! -e "$BATS_TEST_TMPDIR/PWNED" ]
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"a.txt"* ]]
+}
+
+@test "SE-501 P1: copia sin derived.sh junto al resolutor → tampoco usa la de la rama; conflicto en D = inesperado (exit 3)" {
+  r=$(rpc_repo .scm/sam.json); rpc_hostile_branch "$r"
+  run env RESOLVE_REPO_ROOT="$r" bash "$(rpc_copy)" --no-push
+  [ ! -e "$BATS_TEST_TMPDIR/PWNED" ]
+  [ "$status" -eq 3 ]
+}
+
+@test "SE-501 P1 control: copia con derived.sh y la lista → resuelve el conflicto en D" {
+  r=$(rpc_repo .scm/sam.json)
+  run env RESOLVE_REPO_ROOT="$r" bash "$(rpc_copy con-D)" --no-push
+  [ "$status" -eq 0 ]
+  run git -C "$r" ls-files --error-unmatch .scm/sam.json
+  [ "$status" -ne 0 ]
+}
+
+@test "SE-501 P1: los lanzadores copian derived.sh y derived-paths.txt junto al resolutor" {
+  for f in .github/workflows/auto-rebase-open-prs.yml scripts/resolve-all-open-prs.sh; do
+    grep -qE 'cp .*resolve-pr-conflicts\.sh.*derived\.sh' "$f" || { echo "sin copia de derived.sh: $f"; false; }
+    grep -qE 'derived-paths\.txt.*RESOLVER_DIR/scripts/' "$f" || { echo "sin copia de la lista: $f"; false; }
+  done
+}
+
+@test "auto-rebase: la lista de PR llega por env, no interpolada en el script (inyección por nombre de rama)" {
+  f=.github/workflows/auto-rebase-open-prs.yml
+  run grep -nE "^[^#]*'\\$\\{\\{ *steps\\." "$f"
+  [ "$status" -eq 1 ]
+  grep -qE 'PRS: \$\{\{ steps\.list_prs\.outputs\.prs \}\}' "$f"
+}
+
 @test "SE-501: conflicto fuera de D y de CHANGELOG.md → no lo resuelve (≠ 0) y lo nombra" {
   r=$(rpc_repo a.txt)
   run env RESOLVE_REPO_ROOT="$r" bash "$BATS_TEST_DIRNAME/../scripts/resolve-pr-conflicts.sh" --no-push

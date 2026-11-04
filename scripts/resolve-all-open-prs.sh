@@ -52,10 +52,14 @@ git fetch origin --quiet
 # Snapshot the resolver script BEFORE any branch switching — otherwise
 # `scripts/resolve-pr-conflicts.sh` disappears when we checkout a peer
 # branch that doesn't contain it.
-RESOLVER_TMP=$(mktemp --suffix=.sh)
-cp "$REPO_ROOT/scripts/resolve-pr-conflicts.sh" "$RESOLVER_TMP"
+# SE-501: derived.sh and the D list travel with it (never read from the peer branch).
+RESOLVER_DIR=$(mktemp -d)
+mkdir -p "$RESOLVER_DIR/scripts"
+cp "$REPO_ROOT/scripts/resolve-pr-conflicts.sh" "$REPO_ROOT/scripts/derived.sh" \
+   "$REPO_ROOT/scripts/derived-paths.txt" "$RESOLVER_DIR/scripts/"
+RESOLVER_TMP="$RESOLVER_DIR/scripts/resolve-pr-conflicts.sh"
 chmod +x "$RESOLVER_TMP"
-trap 'rm -f "$RESOLVER_TMP"' EXIT
+trap 'rm -rf "$RESOLVER_DIR"' EXIT
 
 # Get every open PR's head branch + mergeable state.
 prs=$(gh pr list --state open --json number,headRefName,mergeable,mergeStateStatus 2>/dev/null)
