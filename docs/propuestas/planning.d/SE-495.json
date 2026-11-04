@@ -1,0 +1,9 @@
+{
+  "id": "SE-495",
+  "status": "PROPOSED",
+  "priority": "P1",
+  "phase": "C",
+  "title": "Banco interno de tareas reales desde PRs de Savia",
+  "evidence": "docs/specs/SE-495-pr-task-bench.spec.md",
+  "note": "20 tareas de PRs fusionadas del repo público con verificador oculto (F2P/P2P), controles no-op = 0 y oráculo = 1, separación dev/test sellada y bloqueo de contaminación por el parche oro. Compara Claude Code, OpenCode y Codex por pares de tareas con IC95: resolución, seguridad L3/L4, coste, latencia, contexto, reintentos y revisión humana. Patrón de Repo2RLEnv, sin instalarlo."
+}
