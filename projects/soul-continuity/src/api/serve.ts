@@ -2,7 +2,11 @@
  * `soul serve`: la API local para la app, sobre el núcleo (SE-490).
  *
  * - Escucha solo en `api.listen` (las IP de la VPN del operador); sin direcciones no arranca.
- * - TLS con el certificado propio de la instalación; muestra la huella SPKI para fijarlo.
+ * - Antes de escuchar comprueba que cada IP está en una interfaz; si no (NetworkManager le quitó la
+ *   IPv4 a tailscale0, la VPN caída…), no arranca y da la causa y la orden del arreglo, en vez de un
+ *   EADDRNOTAVAIL. Sin sonda de interfaces, el mismo diagnóstico sale del error al escuchar.
+ * - TLS con el certificado propio de la instalación; muestra su huella SPKI, etiquetada como lo que
+ *   es (no es la clave de emparejamiento) y cómo emparejar el móvil.
  * - Emparejamiento directo por código (`soul pair` abre la ventana; `/v1/pair/*`, ver pairing.ts):
  *   el dispositivo queda ligado a su clave al emparejar.
  * - Autentica dispositivos emparejados; revocado => 401 DEVICE_REVOKED. Exige una prueba DPoP
@@ -27,6 +31,8 @@ import { DpopError, makeDpopVerifier } from "./dpop.ts";
 import { makePairing } from "./pairing.ts";
 import { validateListen } from "./listen.ts";
 import { type EstadoAtencion, crearServidor } from "./server.ts";
+import { missingAddress, onInterface } from "../cli/host.ts";
+import { hostProbe } from "../cli/setup.ts";
 
 export const ATTENTION_STATE = "attention-state.json";
 
@@ -40,6 +46,16 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
   } catch (e) {
     deps.err((e as Error).message);
     return 1;
+  }
+  // Una IP que no está en ninguna interfaz daría EADDRNOTAVAIL: se diagnostica antes de leer nada.
+  const host = hostProbe(deps);
+  const diagnose = async (ip: string) => {
+    const c = await missingAddress(ip, host);
+    deps.err(`${c.message}.${c.fix ? `\n  arreglo: ${c.fix}` : ""}\n  Después: soul doctor`);
+  };
+  if (deps.ifaces) {
+    const missing = listen.filter((ip) => !onInterface(ip, host.ifaces));
+    if (missing.length) { for (const ip of missing) await diagnose(ip); return 1; }
   }
   const engine = makeEngine(deps.adaptersFor?.(cfg) ?? deps.adapters);
   const tls = ensureInstallCert(deps.dataDir, listen);
@@ -131,9 +147,20 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
     }
   };
   modoDeCli();
-  const l = await server.escuchar(listen, cfg.api.port);
+  let l;
+  try {
+    l = await server.escuchar(listen, cfg.api.port);
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException & { address?: string };
+    if (err.code !== "EADDRNOTAVAIL") throw e;
+    await diagnose(err.address && listen.includes(err.address) ? err.address : listen[0]);
+    await server.cerrar().catch(() => {});
+    return 1;
+  }
   deps.out(`Escuchando en ${l.addresses.map((a) => `${a.address.includes(":") ? `[${a.address}]` : a.address}:${a.port}`).join(", ")} (TLS)`);
-  deps.out(`Huella del certificado para emparejar: ${tls.pin}`);
+  deps.out(`  huella del certificado (no es la clave): ${tls.pin}`);
+  deps.out("Para emparejar el móvil, abre otra terminal y ejecuta: soul pair");
+  deps.out("  (la clave de emparejamiento la da soul pair; esta ventana déjala abierta, o usa soul autostart install)");
   opts.onListening?.();
 
   // Sin solapes: si una lectura tarda más que el intervalo, el siguiente tic se salta.
