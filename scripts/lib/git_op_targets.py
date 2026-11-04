@@ -415,9 +415,22 @@ def words_text(words):
     return " ".join("".join(v for k, v in w if k in ("lit", "sub")) for w in words)
 
 
+# `add` como acción de otro subcomando, no como `git add`: `git worktree add`
+# crea otro checkout y `git remote add` escribe config; ninguno toca el índice
+# ni la rama del repo. (`submodule add` sí indexa y `notes add` sí hace commit:
+# siguen contando.) Solo se neutraliza la pareja literal; un `add` suelto en
+# otra parte de la orden sigue contando.
+SUBCMD_ADD = re.compile(r"(?<![\w-])(worktree|remote)(\s+)(add)(?![\w-])", re.I)
+
+
+def plain(text):
+    """Texto sin comillas ni barras y sin el `add` de `worktree|remote add`."""
+    return SUBCMD_ADD.sub(r"\1\2-", re.sub(r"[\"'\\]", "", text))
+
+
 def mentions(text):
     """El texto (sin comillas ni barras) contiene `git` y `commit|add`."""
-    t = re.sub(r"[\"'\\]", "", text)
+    t = plain(text)
     return bool(GIT_WORD.search(t)) and bool(COMMIT_WORD.search(t) or ADD_WORD.search(t))
 
 
@@ -673,7 +686,7 @@ def main():
         ctx.uncertain = True
     out = list(dict.fromkeys(ctx.out))
     if ctx.uncertain and mentions(command):
-        t = re.sub(r"[\"'\\]", "", command)
+        t = plain(command)
         if COMMIT_WORD.search(t):
             out.append(("commit", ""))
         if ADD_WORD.search(t):

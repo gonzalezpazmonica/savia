@@ -118,6 +118,24 @@ class Targets(unittest.TestCase):
                     "(cd /tmp && ls)", "eval \"$CMD\""):
             self.assertEqual(self.run_(cmd), [], cmd)
 
+    def test_worktree_and_remote_add_are_not_git_add(self):
+        # 2026-11-04: `worktree add` en una forma incierta (envoltorio, bucle,
+        # subshell) se leía como `git add` sin destino → bloqueo falso.
+        for cmd in (f"timeout 60 git -C {self.base} worktree add -q -b agent/x {self.wt}-n origin/main",
+                    f"for w in a b; do git -C {self.base} worktree add -q -b agent/$w {self.wt}-$w origin/main; done",
+                    f"(git worktree add -q -b agent/x {self.wt}-n origin/main)",
+                    "timeout 9 git remote add up https://example.invalid/r.git"):
+            self.assertEqual(self.run_(cmd), [], cmd)
+
+    def test_real_add_next_to_worktree_add_still_blocks(self):
+        # Solo se neutraliza la pareja `worktree|remote add`; un `git add` real,
+        # `submodule add` (indexa) o `notes add` (hace commit) siguen contando.
+        for cmd in (f"timeout 60 git worktree add {self.wt}-n && timeout 60 git add .",
+                    "for f in a; do git worktree add x; git add $f; done",
+                    "timeout 9 git submodule add https://example.invalid/r.git",
+                    "timeout 9 git notes add -m x"):
+            self.assertBlocks(cmd, "add")
+
     def test_command_after_heredoc_is_detected(self):
         out = self.run_("cat > f <<EOF\ntexto\nEOF\ngit commit -m x")
         self.assertEqual(out, [("commit", self.base)])
