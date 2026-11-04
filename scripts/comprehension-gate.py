@@ -19,6 +19,7 @@ Salida: 0 PASS · 1 FAIL (incluye ficheros ilegibles: fail-closed) · 2 uso.
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import re
 import sys
@@ -62,9 +63,18 @@ def frontmatter(text: str) -> dict[str, str] | None:
             return fm
         m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$", line)
         if m and m.group(1) not in fm:
-            value = re.sub(r"\s+#.*$", "", m.group(2))  # comentario YAML al final
-            fm[m.group(1)] = value.strip().strip('"').strip("'")
+            fm[m.group(1)] = fm_value(m.group(2))
     return None
+
+
+def fm_value(raw: str) -> str:
+    """Valor escalar: si va entre comillas, lo de dentro (un «#» ahí es texto); si no, sin el
+    comentario YAML final («  # …»)."""
+    raw = raw.strip()
+    q = re.match(r"^([\"'])(.*?)\1", raw)
+    if q:
+        return q.group(2)
+    return re.sub(r"\s+#.*$", "", raw).strip()
 
 
 def unfenced(text: str) -> list[str]:
@@ -112,8 +122,19 @@ def confirmation_errors(body: str | None, label: str, not_before: str = "") -> l
         return [f"falta el bloque de confirmación {label}"]
     errs = []
     date = DATE_RE.search(field(body, "fecha"))
+    real = None
+    if date:
+        try:
+            real = datetime.date.fromisoformat(date.group(0))
+        except ValueError:
+            pass
     if not date:
         errs.append(f"confirmación {label} sin «fecha: AAAA-MM-DD»")
+    elif real is None:
+        errs.append(f"confirmación {label} con fecha {date.group(0)} que no existe en el calendario")
+    elif real > datetime.date.today():
+        errs.append(f"confirmación {label} con fecha {date.group(0)} posterior a hoy: "
+                    "no se confirma lo que aún no ha pasado")
     elif not_before and date.group(0) < not_before:
         errs.append(f"confirmación {label} con fecha {date.group(0)} anterior a las palabras de la "
                     f"persona ({not_before}): no puede confirmar lo que aún no había dicho")
@@ -230,8 +251,12 @@ def load_state(path: str | None) -> tuple[dict[str, str], dict[str, str]]:
     if not path:
         return {}, {}
     data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or not isinstance(data.get("initiatives", []), list):
+        raise ValueError("se esperaba un objeto con «initiatives» como lista")
     status, evidence = {}, {}
     for i in data.get("initiatives", []):
+        if not isinstance(i, dict):
+            raise ValueError(f"iniciativa que no es un objeto: {i!r}")
         if "id" not in i:
             continue
         sid = norm_id(str(i["id"]))
@@ -246,6 +271,25 @@ def file_id(path: Path) -> str:
     return norm_id(m.group(1)) if m else ""
 
 
+def evidence_spec(root_r: Path, ev: str) -> Path | None:
+    """La evidence como spec: fichero .md dentro de root con frontmatter de spec («status:»)
+    o con frontmatter sin cerrar (check_spec lo da por FAIL). Ilegible también vale: FAIL allí.
+    Cualquier otra cosa (un script, un informe, «PR #1080», una ruta imposible) no es spec."""
+    if not ev:
+        return None
+    try:
+        p = (root_r / ev).resolve()
+        if p.suffix.lower() != ".md" or not p.is_file() or root_r not in p.parents:
+            return None
+    except (OSError, ValueError):
+        return None
+    try:
+        fm = frontmatter(p.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return p
+    return p if fm is None or "status" in fm else None
+
+
 def discover(root: Path, status: dict[str, str],
              evidence: dict[str, str]) -> tuple[list[tuple[Path, str]], list[str]]:
     """Ficheros a revisar y mensajes FAIL de iniciativas en ámbito sin spec localizable.
@@ -257,16 +301,18 @@ def discover(root: Path, status: dict[str, str],
     missing = []
     root_r = root.resolve()
     for sid, st in sorted(status.items()):
-        if st not in GATED_STATUSES or not id_in_scope(sid):
-            continue
+        if st not in GATED_STATUSES or not id_in_scope(sid) or sid in ids:
+            continue  # con spec en los globs, la evidence es texto libre y no se evalúa
         ev = evidence.get(sid, "")
-        ev_path = (root / ev).resolve() if ev else None
-        if ev_path and ev_path.is_file() and root_r in ev_path.parents:
-            if ev_path not in seen:
+        ev_path = evidence_spec(root_r, ev)
+        if ev_path is not None:
+            other = file_id(ev_path)
+            if other and other != sid:
+                missing.append(f"{sid} está {st} en la vista y su evidence ({ev}) es la spec de "
+                               f"{other}, no la suya; la puerta no puede evaluarla")
+            elif ev_path not in seen:
                 found.append((ev_path, sid))  # la ID la da la vista, no el nombre del fichero
                 seen.add(ev_path)
-            continue
-        if sid in ids:
             continue
         missing.append(f"{sid} está {st} en la vista de planificación pero no hay spec localizable "
                        f"(evidence: {ev or 'vacía'}); la puerta no puede evaluarla")

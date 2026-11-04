@@ -64,7 +64,7 @@ PY
 }
 
 confirm_s0() {
-  edit "$SPEC" 's.replace("- fecha:\n- respuesta:\n", "- fecha: 2026-11-06\n- respuesta: «Navegado, sigue»\n")'
+  edit "$SPEC" 's.replace("- fecha:\n- respuesta:\n", "- fecha: 2026-11-05\n- respuesta: «Navegado, sigue»\n")'
 }
 
 @test "spec completa y aprobada (S0 sin confirmar) pasa" {
@@ -386,6 +386,81 @@ JSON
   [[ "$output" == *"anterior a las palabras de la persona (2026-11-03)"* ]]
   write_good "$SPEC"
   edit "$SPEC" 's.replace("- fecha: 2026-11-04", "- fecha: 2026-11-03")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 0 ]
+}
+
+@test "revisión 2: evidence que no es spec no se evalúa si la spec real está en los globs" {
+  mkdir -p "$ROOT/scripts"
+  printf 'print(1)\n' > "$ROOT/scripts/foo.py"
+  printf '# registro\n' > "$ROOT/docs/propuestas/LOG.md"
+  for ev in scripts/foo.py docs/propuestas/LOG.md; do
+    printf '{"initiatives":[{"id":"SE-900","status":"IMPLEMENTED","evidence":"%s"}]}' "$ev" > "$ROOT/state.json"
+    confirm_s0
+    run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+    [ "$status" -eq 0 ] || { echo "evidence=$ev: $output"; false; }
+    [[ "$output" == *"PASS: comprehension-gate"* ]]
+  done
+}
+
+@test "revisión 2: evidence que no es spec y sin spec en los globs falla como no localizable" {
+  mkdir -p "$ROOT/scripts"
+  printf 'print(1)\n' > "$ROOT/scripts/foo.py"
+  printf '{"initiatives":[{"id":"SE-910","status":"APPROVED","evidence":"scripts/foo.py"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-910 está APPROVED en la vista de planificación pero no hay spec localizable"* ]]
+}
+
+@test "revisión 2: evidence apuntando a la spec de otra iniciativa falla" {
+  printf -- '---\nstatus: IMPLEMENTED\n---\n# vieja\n' > "$ROOT/docs/specs/SE-100-viejo.spec.md"
+  printf '{"initiatives":[{"id":"SE-911","status":"APPROVED","evidence":"docs/specs/SE-100-viejo.spec.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-911 está APPROVED en la vista y su evidence (docs/specs/SE-100-viejo.spec.md) es la spec de SE-100"* ]]
+}
+
+@test "revisión 2: evidence imposible como ruta (byte nulo, nombre larguísimo) no rompe la puerta" {
+  long=$(printf 'x%.0s' $(seq 1 300))
+  for ev in 'a\u0000b' "$long"; do
+    printf '{"initiatives":[{"id":"SE-912","status":"APPROVED","evidence":"%s"}]}' "$ev" > "$ROOT/state.json"
+    run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+    [ "$status" -eq 1 ] || { echo "ev=$ev: $output"; false; }
+    [[ "$output" == *"SE-912 está APPROVED en la vista de planificación pero no hay spec localizable"* ]]
+    [[ "$output" != *"Traceback"* ]]
+  done
+}
+
+@test "revisión 2: vista con forma inesperada falla cerrado sin traceback" {
+  for js in '[1,2]' '{"initiatives":[1]}' '{"initiatives":{"id":"SE-900"}}'; do
+    printf '%s' "$js" > "$ROOT/state.json"
+    run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+    [ "$status" -eq 1 ] || { echo "js=$js: $output"; false; }
+    [[ "$output" == *"FAIL: comprehension-gate: estado ilegible"* ]]
+    [[ "$output" != *"Traceback"* ]]
+  done
+}
+
+@test "revisión 2: un «#» dentro de un valor entrecomillado se conserva" {
+  edit "$SPEC" 's.replace("human_surface: true", "human_surface: false\nhuman_surface_exempt: \"informe #3\"  # nota").replace("## Lo que he entendido", "## Otra\n`apps/x/`")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"EXEMPT: comprehension-gate SE-900-demo.spec.md: informe #3"* ]]
+}
+
+@test "revisión 2: fecha de confirmación inexistente o futura falla; hoy pasa" {
+  edit "$SPEC" 's.replace("- fecha: 2026-11-04", "- fecha: 2026-99-99")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fecha 2026-99-99 que no existe en el calendario"* ]]
+  write_good "$SPEC"
+  edit "$SPEC" 's.replace("- fecha: 2026-11-04", "- fecha: 2099-01-01")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fecha 2099-01-01 posterior a hoy"* ]]
+  write_good "$SPEC"
+  today=$(date +%F)
+  edit "$SPEC" "s.replace('- fecha: 2026-11-04', '- fecha: $today')"
   run python3 "$GATE" --root "$ROOT"
   [ "$status" -eq 0 ]
 }
