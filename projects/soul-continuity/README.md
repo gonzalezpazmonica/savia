@@ -29,8 +29,19 @@ Es TypeScript sobre el runtime oficial de Node.js (≥ 22.6). No tiene dependenc
 
 ## Uso
 
+Instalación en un paso (Linux y macOS; detalle en `docs/instalar.md`):
+
 ```
-node bin/soul.mjs init trabajo --email yo@example.test   # perfil sin fuentes ni adaptadores
+bash install.sh                      # Node.js LTS oficial si hace falta (sin sudo) y la orden «soul»
+soul setup                           # perfil, VPN, comprobaciones, servicio de usuario y emparejar el móvil
+soul doctor                          # comprobaciones con la orden exacta de cada arreglo
+```
+
+Órdenes sueltas:
+
+```
+node bin/soul.mjs init trabajo --email yo@example.test   # perfil sin fuentes ni adaptadores; escucha en la VPN detectada
+node bin/soul.mjs listen --detect                         # escucha en la IP de la VPN, sin editar config.json
 node bin/soul.mjs login github --token-stdin              # token al almacén del sistema
 node bin/soul.mjs status             # sin red, en frío
 node bin/soul.mjs q1 | q2 | q4       # preguntas
