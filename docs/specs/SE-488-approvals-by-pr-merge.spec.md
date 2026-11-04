@@ -1,6 +1,8 @@
 ---
-status: PROPOSED
-priority: P1
+status: APPROVED
+approved_at: 2026-11-03
+approved_by: "operadora, pregunta interactiva 2026-11-03 (Aprobada, a P0); la aprobación se formaliza al fusionar esta PR (SE-488)"
+priority: P0
 developer_type: agent-single
 created: 2026-10-30
 author: Savia
