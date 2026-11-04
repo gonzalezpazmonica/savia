@@ -56,7 +56,7 @@ gate_id_unique() {
   [[ "$output" != "G20" ]]
 }
 
-@test "negativo: otra spec con el mismo id de gate hace fallar la comprobación" {
+@test "negativo (fail): otra spec con el mismo id de gate hace fallar la comprobación" {
   local d="$BATS_TEST_TMPDIR/specs"
   mkdir -p "$d"
   printf '### Gate contra la reacumulación (G7 en pr-plan)\n' > "$d/SE-A.md"
@@ -66,7 +66,7 @@ gate_id_unique() {
   [[ "$output" == *"colisión G7"* ]]
 }
 
-@test "negativo: sin encabezado de gate la comprobación falla (fail-closed)" {
+@test "negativo (missing): sin encabezado de gate la comprobación falla (fail-closed)" {
   local d="$BATS_TEST_TMPDIR/specs2"
   mkdir -p "$d"
   printf '# Spec sin gate\n' > "$d/SE-A.md"
@@ -75,7 +75,7 @@ gate_id_unique() {
   [[ "$output" == *"sin id de gate"* ]]
 }
 
-@test "límite: un id que solo aparece como prefijo de otro no es colisión" {
+@test "límite (boundary): un id que solo aparece dentro de otro (G70, G17) no es colisión" {
   local d="$BATS_TEST_TMPDIR/specs3"
   mkdir -p "$d"
   printf '### Gate contra la reacumulación (G7 en pr-plan)\n' > "$d/SE-A.md"
@@ -84,3 +84,30 @@ gate_id_unique() {
   [[ "$status" -eq 0 ]]
 }
 
+
+@test "negativo (nonexistent): una spec inexistente hace fallar la comprobación" {
+  local d="$BATS_TEST_TMPDIR/specs4"
+  mkdir -p "$d"
+  run gate_id_unique "$d/no-existe.md" "$d"
+  [[ "$status" -eq 1 ]]
+  [[ "$output" == *"sin id de gate"* ]]
+}
+
+@test "límite (empty): un directorio sin otras specs no es colisión" {
+  local d="$BATS_TEST_TMPDIR/specs5"
+  mkdir -p "$d"
+  printf '### Gate contra la reacumulación (G7 en pr-plan)\nG7 se cita aquí también.\n' > "$d/SE-A.md"
+  run gate_id_unique "$d/SE-A.md" "$d"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "ok G7" ]]
+}
+
+@test "negativo (bad): la misma colisión se detecta en mitad de una línea larga" {
+  local d="$BATS_TEST_TMPDIR/specs6"
+  mkdir -p "$d"
+  printf '### Gate contra la reacumulación (G7 en pr-plan)\n' > "$d/SE-A.md"
+  printf 'pr-plan: G4 deja de resolver la firma; G7 es nuevo; G10 sigue.\n' > "$d/SE-B.md"
+  run gate_id_unique "$d/SE-A.md" "$d"
+  [[ "$status" -eq 1 ]]
+  [[ "$output" == *"SE-B.md"* ]]
+}
