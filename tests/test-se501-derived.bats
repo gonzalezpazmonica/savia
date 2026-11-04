@@ -274,6 +274,46 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
   [ "$status" -eq 1 ]
 }
 
+@test "rev-1472 C-P1-1: un binario con NUL que va antes en el diff no oculta las líneas añadidas" {
+  scan_repo
+  mkdir -p "$R/assets"; printf '\x89PNG\r\n\x1a\n\x00\x00+zz\x00b\n' > "$R/assets/a.png"
+  echo "cliente zorblaxcorp" > "$R/docs/nota.md"
+  G add -A; G commit -qm "binario y dato"
+  # Precondición: con --text el diff del binario lleva NUL y ordena antes que el .md.
+  run bash -c "cd '$R' && git diff --text origin/main...HEAD -U0 | tr -d -c '\000' | wc -c"
+  [ "$output" -gt 0 ]
+  run bash -c "cd '$R' && git diff --name-only origin/main...HEAD | head -1"
+  [ "$output" = "assets/a.png" ]
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr --blocklist scripts/confidentiality-blocklist.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Blocklist terms found"* ]]
+  run pr_scan
+  [ "$status" -eq 1 ]
+  # --staged: mismo caso en el índice.
+  printf '\x00otro\x00\n' >> "$R/assets/a.png"; echo "otra zorblaxcorp" >> "$R/docs/nota.md"; G add -A
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --staged --blocklist scripts/confidentiality-blocklist.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Blocklist terms found"* ]]
+}
+
+@test "rev-1472 C-P1-1: un byte inválido en la misma línea no oculta el término vetado" {
+  scan_repo
+  printf 'cliente \xff zorblaxcorp\n' > "$R/docs/nota.md"
+  G add -A; G commit -qm "byte inválido y dato"
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr --blocklist scripts/confidentiality-blocklist.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Blocklist terms found"* ]]
+}
+
+@test "rev-1472 C-P1-1 control: un binario sin datos vetados no bloquea" {
+  scan_repo
+  mkdir -p "$R/assets"; printf '\x89PNG\r\n\x1a\n\x00\x00b\n' > "$R/assets/a.png"
+  echo "texto neutro" > "$R/docs/nota.md"
+  G add -A; G commit -qm "binario limpio"
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr --blocklist scripts/confidentiality-blocklist.txt"
+  [ "$status" -eq 0 ]
+}
+
 @test "rev-1472 S-P1-2: un projects/ versionado por la PR con un nombre que rompe el regex no anula el check 1" {
   scan_repo
   mkdir -p "$R/projects/x(" ; echo n > "$R/projects/x(/f.md"
