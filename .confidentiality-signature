@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=0366db2c510bea312762bd6db10c3e22b01584b33ade4af948870d329a82cfcb
-timestamp=2026-11-04T12:47:29Z
+diff_hash=ccdc1994a968f216b2267fe626e6614a6b47405a3afda9dcd1e883ea583b7ae1
+timestamp=2026-11-04T18:33:06Z
 branch=agent/w-specs-pendientes-20261023
-head_commit=332af5e30
-signature=9de1ced1e2b9a155c172b6ef9dcdfdade62752a89041187641a4eec0ad6a0c60
+head_commit=ce9097e7b
+signature=d7802b07a67d89c1e8074e84c6bdbebc47da279a029878371caba47ca4f5a8a3
