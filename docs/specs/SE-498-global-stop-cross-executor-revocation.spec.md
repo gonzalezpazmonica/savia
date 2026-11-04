@@ -299,7 +299,7 @@ Se miden en el banco de AC-1 a AC-3, por entorno, sin fijar SLA hasta tener dato
 
 ## Dependencias
 
-SE-493 (Effect Ledger) y SE-496 (kernel de autoridad) están PROPOSED en PR abiertas (#1455 y #1452). F0 y F1 no dependen de ellas; F3 sí. SE-488 (APPROVED, sin implementar) aportará la aprobación de `resume` desde el móvil; hasta que esté implementada, PR o terminal interactiva.
+Las specs de SE-493 (Effect Ledger) y SE-496 (kernel de autoridad) están en main (#1455 y #1452), sin implementar; las enmiendas de R8 van en PR propias contra ellas. F0 y F1 no dependen de ellas; F3 sí. SE-488 (APPROVED, sin implementar) aportará la aprobación de `resume` desde el móvil; hasta que esté implementada, PR o terminal interactiva.
 
 ## Plan por slices
 
