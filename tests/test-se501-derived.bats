@@ -250,6 +250,30 @@ scan_repo() {  # base con el escáner y el generador reales; el término vetado 
   [[ "$output" == *"blocklist vacía"* ]]
 }
 
+@test "rev-1472 S-P2-1: un .gitattributes de la PR que marca *.md como binario no oculta las líneas añadidas" {
+  scan_repo
+  printf '*.md -diff\n' > "$R/.gitattributes"
+  echo "cliente zorblaxcorp" > "$R/docs/nota.md"
+  G add -A; G commit -qm "atributos y dato"
+  # Precondición: dentro del repo, sin --text, git no muestra la línea.
+  run bash -c "cd '$R' && git diff origin/main...HEAD -U0 -- docs/nota.md"
+  [[ "$output" == *"Binary files"* ]]
+  # --pr con el escáner bajo prueba (copiado en la base por scan_repo), ejecutado dentro del repo:
+  # aquí sí rige el .gitattributes de la PR; falla si get_lines no usa --text.
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr --blocklist scripts/confidentiality-blocklist.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Blocklist terms found"* ]]
+  # --staged: mismo caso en el índice.
+  echo "otra zorblaxcorp" >> "$R/docs/nota.md"; G add docs/nota.md
+  run bash -c "cd '$R' && SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --staged --blocklist scripts/confidentiality-blocklist.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Blocklist terms found"* ]]
+  # El envoltorio --pr-base también bloquea.
+  G reset -q --hard
+  run pr_scan
+  [ "$status" -eq 1 ]
+}
+
 @test "rev-1472 S-P1-2: un projects/ versionado por la PR con un nombre que rompe el regex no anula el check 1" {
   scan_repo
   mkdir -p "$R/projects/x(" ; echo n > "$R/projects/x(/f.md"
@@ -455,6 +479,18 @@ W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
   printf '# CONFIDENTIALITY_HMAC_KEY\non:\n  pull_request:\njobs:\n  a:\n    runs-on: x\n    steps:\n      - run: echo\n' > "$T/w.yml"
   run python3 "$W" pr-secrets "$T/w.yml"
   [ "$status" -eq 0 ]
+}
+
+@test "AC-15 (#1472 P2-3): toJSON(secrets), secrets: inherit o workflow_run con la clave dan FAIL; sin ellos, PASS" {
+  printf 'on:\n  pull_request:\njobs:\n  a:\n    runs-on: x\n    env:\n      S: ${{ toJSON(secrets) }}\n    steps:\n      - run: echo\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 1 ]
+  printf 'on:\n  pull_request:\njobs:\n  a:\n    uses: ./.github/workflows/x.yml\n    secrets: inherit\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 1 ]
+  printf 'on:\n  workflow_run:\n    workflows: [CI]\njobs:\n  a:\n    runs-on: x\n    env:\n      K: ${{ secrets.CONFIDENTIALITY_HMAC_KEY }}\n    steps:\n      - run: echo\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 1 ]
+  # Control: el mismo job reutilizable sin heredar secretos, PASS.
+  printf 'on:\n  pull_request:\njobs:\n  a:\n    uses: ./.github/workflows/x.yml\n' > "$T/w.yml"
+  run python3 "$W" pr-secrets "$T/w.yml"; [ "$status" -eq 0 ]
 }
 
 # ── AC-7: prueba de main por ejecución ──────────────────────────────────────

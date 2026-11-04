@@ -11,7 +11,10 @@ name: CHANGELOG Consolidate
 # para merge manual. Esto respeta la branch protection y la regla
 # autonomous-safety (la IA propone, el humano dispone).
 #
-# SE-501: sin firma versionada; la PR resultante la audita «Confidentiality scan (PR)».
+# SE-501: sin firma versionada. La PR se abre con GITHUB_TOKEN y GitHub no
+# dispara workflows pull_request para ella: «Confidentiality scan (PR)» NO
+# corre solo. Con ese contexto requerido la PR queda pendiente (fail-closed)
+# hasta que una persona la reabra o empuje a la rama, y entonces se escanea.
 #
 # Safe: idempotente (bajo threshold = no-op). Solo escribe en la rama agent/*.
 
@@ -36,7 +39,7 @@ jobs:
       contents: write
       pull-requests: write
     if: ${{ !contains(github.event.head_commit.message, '[skip consolidate]') }}
-    # SE-501: sin firma ni secreto de firma; la PR la audita «Confidentiality scan (PR)».
+    # SE-501: sin firma ni secreto de firma (escaneo de la PR: ver cabecera).
 
     steps:
       - name: Checkout

@@ -146,12 +146,12 @@ get_lines() {
   cd "$ROOT_DIR" || exit 2
   case "$MODE" in
     --staged)
-      git diff --cached --diff-filter=ACMR -U0 \
+      git diff --text --cached --diff-filter=ACMR -U0 \
         | awk -v exc="$EXCLUDE_FILES" '/^diff --git/{skip=0; if(match($0,exc)) skip=1} !skip{print}' \
         | grep "^+" | grep -v "^+++"
       ;;
     --pr)
-      git diff origin/main...HEAD --diff-filter=ACMR -U0 \
+      git diff --text origin/main...HEAD --diff-filter=ACMR -U0 \
         | awk -v exc="$EXCLUDE_FILES" '/^diff --git/{skip=0; if(match($0,exc)) skip=1} !skip{print}' \
         | grep "^+" | grep -v "^+++"
       ;;
