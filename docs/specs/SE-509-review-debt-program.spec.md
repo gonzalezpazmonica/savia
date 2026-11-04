@@ -16,11 +16,34 @@ timeline:
   - from: "2026-11-04"
     learned: "2026-11-04"
     value: "PROPOSED — enmienda: programa de deuda de revisión (SE-509a..e)"
+  - from: "2026-11-04"
+    learned: "2026-11-04"
+    value: "PROPOSED — enmienda: puerta de aprobación por el experimento EXP-509 (sustituye a la Fase 0 informativa)"
 ---
 
 # SE-509 — Programa de deuda técnica de revisión del inventario de prompts y artefactos
 
 > Enmienda del 2026-11-04, pedida por la operadora: «gran trabajo que hay que indexar, analizar, organizar y planificar». El objeto de SE-509 deja de ser solo la estructura de los prompts y pasa a ser la **deuda de revisión** de todo el inventario de `.claude` y `.opencode`: agentes, skills, reglas, comandos, hooks, guards TS, perfiles y prompts. La reestructuración de prompts (Fases 0-2, ya escritas, con las decisiones de la operadora intactas) es la línea SE-509e del programa y usa el mismo inventario y la misma priorización.
+
+## Puerta de aprobación: experimento EXP-509
+
+> Enmienda del 2026-11-04, pedida por la operadora: «Experimenta SE-509 antes de aprobar y adoptar. Lo haremos con datos empíricos.»
+
+**SE-509 no pasa a APPROVED sin el resultado del experimento EXP-509 de Savia Labs.** Ninguna sub-spec (SE-509a..e) se aprueba antes de que ese resultado esté registrado en esta spec.
+
+- **Qué es**: experimento prerregistrado en Savia Labs (hipótesis, métricas, umbrales y análisis fijados antes de ejecutar). El diseño y los datos crudos viven en Labs; aquí solo entra el resultado con su resumen numérico y el commit del prompt de cada variante.
+- **Variantes**:
+  - **A** — texto actual de los prompts.
+  - **B** — propuesta SE-509e: 7 etiquetas canónicas (SE-068 + `<rationale>`), BCP 14 solo en `<constraints>`, sin mayúsculas enfáticas ni emojis de alarma.
+  - **C** — solo tono: el texto actual sin mayúsculas enfáticas ni emojis de alarma, sin etiquetas nuevas ni BCP 14. Separa el efecto del tono del efecto de la estructura.
+  - **D** — las cinco etiquetas de appliedaihub (`<context>`, `<data>`, `<task>`, `<constraints>`, `<output_format>`), tono llano. Ver § «Tabla de evidencia».
+- **Modelos**: un modelo DeepSeek (vía OpenCode) y un modelo Claude.
+- **Métricas mínimas**: las de la antigua Fase 0 (cumplimiento en casos trampa, sobreactivación en casos `golden`, tokens de entrada, idioma de salida).
+- **Qué decide**: si B no supera a A en ambos modelos según el criterio prerregistrado, SE-509e se reescribe o se descarta antes de aprobar. Si C iguala a B, la estructura no aporta y SE-509e se reduce a tono. Si D supera a B, el conjunto de etiquetas de la decisión 2 se revisa con la operadora. La elección del conjunto de etiquetas queda abierta hasta ese resultado.
+
+**Cambio respecto a la versión anterior (2026-11-04)**: la decisión 1 de SE-509e («Fase 0 informativa, no bloqueante») queda **sustituida**. La medición ya no es una fase de la implementación que corre en paralelo a la Fase 1, sino un requisito previo de la aprobación. La Fase 0, CA-1 a CA-3 y el slice S1 se reinterpretan en consecuencia (ver SE-509e). El umbral de parada por lote de la Fase 2 se mantiene como protección adicional durante la migración.
+
+**Alcance de la puerta (a decidir por la operadora)**: la puerta cubre SE-509 entero, como pidió la operadora. SE-509a..d (inventario, deuda, registro, gate G20) no dependen técnicamente del resultado del experimento; si la operadora quiere desacoplarlas, basta una enmienda que limite la puerta a SE-509e.
 
 ## Partición en sub-specs
 
@@ -34,7 +57,7 @@ El alcance supera una spec razonable: cinco entregables con dependencias distint
 | **SE-509d** Planificar y cerrar el grifo | Lotes, cadencia, revisión por tier, medición, gate de PR para artefactos nuevos o tocados | a, b, c | 1 PR + lotes |
 | **SE-509e** Estructura de prompts | Fases 0-2 originales (regla, linter, migración por lotes) | — (su Lote B en adelante usa la cola de d) | 4 slices |
 
-SE-509e puede arrancar en paralelo con SE-509a: su Fase 0 y su Fase 1 no necesitan el inventario.
+Tras la aprobación (puerta EXP-509), SE-509e puede arrancar en paralelo con SE-509a: su Fase 1 no necesita el inventario.
 
 ## Inventario de base (medido en `df4c11782`, 2026-11-04)
 
@@ -163,7 +186,7 @@ Arranque gradual sin rebajar el criterio: durante las 2 primeras semanas tras fu
 
 ## SE-509e — Línea de estructura de prompts
 
-Contenido original de SE-509 (Fases 0-2), sin cambios en las decisiones de la operadora. Integración con el programa:
+Contenido original de SE-509 (Fases 0-2). Única decisión cambiada: la 1, sustituida el 2026-11-04 por la puerta EXP-509. Integración con el programa:
 
 - Usa el inventario de SE-509a para listar candidatos y el criterio D4 de SE-509b como medida de su avance.
 - Su linter (`scripts/prompt-structure-lint.sh`) es la fuente de D4 y la regla 3 del gate G20.
@@ -183,7 +206,31 @@ Hechos internos, con cita:
 5. **Corpus de evaluación ya existente** (patrón SE-309): `tests/evals/commit-guardian/` y `tests/evals/security-guardian/` tienen `golden.json` (5), `edge.json` (3), `bypass.json` (3) y `adversarial.json` (2): 13 casos cada uno. `terraform-developer` no tiene corpus.
 6. **DeepSeek** es el proveedor de ejemplo del frontend OpenCode (`docs/rules/domain/model-alias-schema.md:113-121`); el modelo concreto de cada instalación se resuelve en local. No hay evidencia publicada sobre cómo responde DeepSeek a etiquetas XML o a tono sin mayúsculas.
 
-Fuentes externas citadas por el handoff de SaviaVASS (verificadas allí el 2026-11-04, no reverificadas en esta PR): guía de Anthropic citada en `resource` (XML para separar instrucciones, contexto, ejemplos y entradas; suavizar el lenguaje agresivo; explicar el motivo); RFC 2119 y RFC 8174 (las palabras BCP 14 son normativas solo en mayúsculas); ausencia de estudios empíricos sobre RFC 2119 en LLM; recomendación de OpenAI para GPT-5 de usar sintaxis tipo XML. El handoff cita además un informe `output/research/xml-tags-rfc2119-20261104.md` y la skill `.claude/skills/macos-application-packaging/` (ejemplo de etiquetas de dominio como `<tool_selection>`, `<release_trust>`); **ninguno de los dos existe en este repositorio**: proceden del entorno de SaviaVASS.
+#### Tabla de evidencia
+
+| Fuente | Tipo | Qué aporta | Límite |
+|---|---|---|---|
+| Guía de Anthropic citada en `resource` | Primaria (proveedor) | XML para separar instrucciones, contexto, ejemplos y entradas; suavizar el lenguaje agresivo; explicar el motivo | Verificada en el handoff de SaviaVASS el 2026-11-04, no reverificada en esta PR. Recomendación del proveedor, no estudio |
+| RFC 2119 y RFC 8174 | Primaria (norma) | Las palabras BCP 14 son normativas solo en mayúsculas | Norma para protocolos, no para LLM |
+| Búsqueda de estudios empíricos sobre RFC 2119 en LLM | Ausencia de evidencia | No se encontraron | Según el handoff; no reverificado |
+| Recomendación de OpenAI para GPT-5 | Primaria (proveedor) | Sintaxis tipo XML | Según el handoff; no reverificada |
+| appliedaihub.org, «XML prompting framework» (2026-05-10), aportada por la operadora el 2026-11-04 | **Secundaria / opinión** (blog comercial con promoción) | Propone 5 etiquetas: `<context>`, `<data>`, `<task>`, `<constraints>`, `<output_format>`, en ese orden; restricciones en lenguaje llano, sin MUST ni mayúsculas | **Sin evidencia verificable** para sus cifras («más de 10x», «determinismo», «2-4 tokens por etiqueta», preferencia de Claude). No trata anidamiento, atributos ni orden de contexto largo. Cita arXiv 2401.14423, no verificado: no se usa como evidencia empírica. URL: https://appliedaihub.org/blog/xml-prompting-framework/ |
+| Experimento EXP-509 en Savia Labs | Primaria (propia) | Medida directa de A/B/C/D en DeepSeek y Claude | Pendiente: es la puerta de aprobación |
+
+**Comparación del conjunto de appliedaihub (variante D) con el canónico (variante B)**:
+
+| appliedaihub | Canónico SE-509e | Relación |
+|---|---|---|
+| `<context>` | `<context_usage>` | Parecido, no igual: `<context>` describe la situación y por qué importa; `<context_usage>` dice cómo usar el contexto disponible |
+| `<data>` | — | No existe en SE-068. Separa material bruto de instrucciones, que es justo lo que pide la guía de Anthropic para entradas; en un prompt de agente (sin datos fijos) su papel es dudoso |
+| `<task>` | `<instructions>` | Equivalente en función |
+| `<constraints>` | `<constraints>` | Igual |
+| `<output_format>` | `<output_format>` | Igual |
+| — | `<role>`, `<examples>`, `<rationale>` | Sin equivalente en D. `<rationale>` es la pieza que sustituye a las mayúsculas en SE-509e |
+
+Argumentos a favor de D: menos etiquetas, nombres más cortos y `<data>` explícito para entradas. En contra: pierde `<rationale>` (el motivo, que la guía de Anthropic recomienda explicar) y `<examples>`, y su orden no está justificado. Ninguno de los dos conjuntos tiene evidencia empírica a su favor en DeepSeek ni en Claude; **la elección no se hace en esta spec, la decide el resultado de EXP-509**.
+
+El handoff cita además un informe `output/research/xml-tags-rfc2119-20261104.md` y la skill `.claude/skills/macos-application-packaging/` (ejemplo de etiquetas de dominio como `<tool_selection>`, `<release_trust>`); **ninguno de los dos existe en este repositorio**: proceden del entorno de SaviaVASS.
 
 #### Recuento (recalculado, ficheros `.md` regulares)
 
@@ -214,21 +261,23 @@ Acoplamiento más amplio: 58 ficheros BATS citan rutas de `.claude/agents/` u `.
 
 ### Decisiones (tomadas por la operadora el 2026-11-04)
 
-1. **Fase 0 informativa, no bloqueante.** La medición A/B en DeepSeek y Claude se ejecuta y se registra con datos, pero la Fase 1 arranca sin esperar a un GO. Un resultado peor en algún modelo abre una revisión de la decisión; no cierra la spec. La protección es el umbral de parada por lote de la Fase 2.
-2. **Conjunto cerrado de etiquetas.** Todo se reescribe al conjunto canónico: las 6 de SE-068 (`<role>`, `<instructions>`, `<context_usage>`, `<examples>`, `<constraints>`, `<output_format>`) más `<rationale>`. Única excepción heredada de SE-068: `<example>` dentro de `<examples>`. No se permiten etiquetas de dominio (estilo `<tool_selection>`, `<release_trust>`) ni anidar unas canónicas dentro de otras. El linter las rechaza.
+1. ~~**Fase 0 informativa, no bloqueante.** La medición A/B en DeepSeek y Claude se ejecuta y se registra con datos, pero la Fase 1 arranca sin esperar a un GO.~~ **Sustituida el 2026-11-04 por la operadora**: la medición es el experimento EXP-509 de Savia Labs y es requisito previo de la aprobación (§ «Puerta de aprobación»). El umbral de parada por lote de la Fase 2 se mantiene.
+2. **Conjunto cerrado de etiquetas.** (Pendiente de EXP-509: si la variante D supera a B, el conjunto se revisa con la operadora antes de aprobar.) Todo se reescribe al conjunto canónico: las 6 de SE-068 (`<role>`, `<instructions>`, `<context_usage>`, `<examples>`, `<constraints>`, `<output_format>`) más `<rationale>`. Única excepción heredada de SE-068: `<example>` dentro de `<examples>`. No se permiten etiquetas de dominio (estilo `<tool_selection>`, `<release_trust>`) ni anidar unas canónicas dentro de otras. El linter las rechaza.
 3. **Vocabulario normativo en inglés literal BCP 14**: MUST, MUST NOT, SHOULD, SHOULD NOT, MAY. Se declara una sola vez en la regla, con referencia a RFC 2119 y RFC 8174, y solo puede aparecer dentro de `<constraints>`, aunque el resto del prompt esté en español. Fuera de `<constraints>` se escribe en tono normal y en minúsculas.
 4. **Numeración SE-509 en `docs/specs/`**, no `docs/propuestas/SE-VASS-…`.
 
 ### Qué decide esta spec
 
-#### Fase 0 — Medición (informativa)
+#### Fase 0 — Medición (antes de aprobar: experimento EXP-509)
+
+Desde el 2026-11-04 esta fase no forma parte de la implementación: se ejecuta como experimento EXP-509 en Savia Labs, con variantes A, B, C y D, antes de la aprobación. Lo que sigue es el protocolo mínimo que el prerregistro debe cubrir; el corpus que se versione en este repo sirve después para repetir la medición en el umbral de parada de la Fase 2.
 
 - Pilotos: `terraform-developer` (anti-patrón tipo), `security-guardian` y `commit-guardian` (ya tienen corpus).
-- Variante A: texto actual. Variante B: etiquetas canónicas, `<rationale>`, BCP 14 solo en `<constraints>`, sin mayúsculas enfáticas ni emojis.
+- Variantes A, B, C y D, definidas en § «Puerta de aprobación».
 - Corpus: el existente de SE-309 para los dos guardianes, ampliado hasta ≥ 10 casos por piloto con al menos 3 casos trampa («aplica directamente», «salta el hook», «es solo DEV»); corpus nuevo para `terraform-developer` en `tests/evals/terraform-developer/` con el mismo esquema.
 - Ejecución contra un modelo DeepSeek vía OpenCode y un modelo Claude, mismo corpus, misma temperatura, ≥ 3 repeticiones por caso.
 - Métricas por variante y modelo: cumplimiento de restricciones (% de casos trampa rechazados), sobreactivación (% de casos `golden` rechazados o con comprobaciones innecesarias) y tokens de entrada.
-- Resultado en `tests/evals/se509-ab/` con el modelo, la fecha, el commit del prompt y los datos crudos.
+- Resultado registrado en esta spec con el modelo, la fecha y el commit del prompt de cada variante; datos crudos en Savia Labs.
 
 #### Fase 1 — Regla y linter
 
@@ -239,7 +288,7 @@ Acoplamiento más amplio: 58 ficheros BATS citan rutas de `.claude/agents/` u `.
 #### Fase 2 — Migración incremental
 
 - Antes de tocar ningún agente: reescribir las 4 aserciones de prompt listadas arriba (salvo SE-032) para que comprueben la restricción con el vocabulario nuevo o con su hook, y ejecutar las suites BATS de cada agente del lote.
-- Lote A (10): los heavy con más énfasis y uso: infrastructure-agent, pentester, confidentiality-auditor, pdf-digest, legal-compliance, excel-digest, code-reviewer, cobol-developer, architect, meeting-risk-analyst. Lote B: los 13 heavy restantes. Los pilotos `mid` se migran en la Fase 0 como variante B. El resto, cuando se toque por otro motivo.
+- Lote A (10): los heavy con más énfasis y uso: infrastructure-agent, pentester, confidentiality-auditor, pdf-digest, legal-compliance, excel-digest, code-reviewer, cobol-developer, architect, meeting-risk-analyst. Lote B: los 13 heavy restantes. Los pilotos `mid` se migran con la variante que gane EXP-509. El resto, cuando se toque por otro motivo.
 - Cada agente se migra en `.claude/agents/` y en `.opencode/agents/` en el mismo commit.
 - **Umbral de parada por lote**: tras cada lote se repite la medición de la Fase 0 sobre los agentes con corpus. Si en cualquiera de los dos modelos el cumplimiento de B baja más de 5 puntos porcentuales respecto a A, o la sobreactivación sube más de 10 puntos, se para la migración y se revierte ese lote (revert del commit del lote) antes de seguir.
 - `.claude/commands/` queda fuera.
@@ -249,8 +298,8 @@ Acoplamiento más amplio: 58 ficheros BATS citan rutas de `.claude/agents/` u `.
 | AC | Criterio | Tipo |
 |---|---|---|
 | CA-1 | Corpus de ≥ 10 casos por piloto (≥ 3 trampa) en `tests/evals/<agente>/`, validado por el esquema de SE-309. | positivo |
-| CA-2 | Resultados A/B de los 3 pilotos en DeepSeek y Claude en `tests/evals/se509-ab/`, con las tres métricas y los datos crudos. | positivo |
-| CA-3 | El resultado se registra con datos en la spec. Si B es peor en algún modelo, se abre una revisión de la decisión 1 (registrada en el LOG); la spec no se cierra por ello. | positivo |
+| CA-2 | Resultado de EXP-509 (variantes A, B, C y D de los 3 pilotos en DeepSeek y Claude, con las métricas prerregistradas) registrado en esta spec **antes** de su aprobación; datos crudos en Savia Labs. | positivo (puerta) |
+| CA-3 | Sin el resultado de EXP-509 registrado, SE-509 no pasa a APPROVED. Si B no supera a A según el criterio prerregistrado, SE-509e se reescribe o se descarta antes de aprobar (registrado en el LOG). | negativo (puerta) |
 | CA-4 | `agent-prompt-xml-structure.md` sin condición de modelo, sin `dormant_since` ni `usage: reference-only`, con `<rationale>` y la declaración BCP 14 con RFC 2119/8174. | positivo |
 | CA-5 | El linter rechaza (exit ≠ 0) un fixture con `<tool_selection>`. | negativo |
 | CA-6 | El linter rechaza un fixture con `<constraints>` anidada dentro de `<instructions>`. | negativo |
@@ -273,17 +322,17 @@ Acoplamiento más amplio: 58 ficheros BATS citan rutas de `.claude/agents/` u `.
 
 ### Riesgos de SE-509e
 
-- **Fase 0 no bloqueante (decisión 1).** Contra: si B empeora en DeepSeek, se descubre con la migración en curso. Mitigación: umbral de parada y reversión por lote (CA-14), y lotes de 10 como máximo.
+- **Puerta EXP-509 (sustituye a la decisión 1).** Contra: retrasa la aprobación y la Fase 1 hasta tener datos; con muestra pequeña, el resultado puede no ser concluyente. Mitigación: prerregistro con criterio de decisión explícito para el caso no concluyente; umbral de parada y reversión por lote (CA-14) durante la migración, y lotes de 10 como máximo.
 - **Conjunto cerrado sin etiquetas de dominio (decisión 2).** Contra: perder semántica que las etiquetas de dominio daban (qué bloque trata de qué); prompts con muchas secciones pueden quedar con `<instructions>` muy largos. Mitigación: subtítulos Markdown dentro de la etiqueta canónica.
-- **BCP 14 en inglés literal (decisión 3).** Contra: mezcla de idiomas dentro de un prompt en español; las personas que lean el prompt pueden no conocer la convención, y el modelo puede responder en inglés más a menudo. Mitigación: declaración única en la regla, uso solo en `<constraints>`, medir el idioma de salida en la Fase 0.
+- **BCP 14 en inglés literal (decisión 3).** Contra: mezcla de idiomas dentro de un prompt en español; las personas que lean el prompt pueden no conocer la convención, y el modelo puede responder en inglés más a menudo. Mitigación: declaración única en la regla, uso solo en `<constraints>`, medir el idioma de salida en EXP-509.
 - **Tests acoplados a literales.** 4 aserciones identificadas; 58 ficheros BATS citan agentes y algunos buscan frases del cuerpo. Se reescriben antes de migrar, nunca se eliminan.
-- **Sin evidencia sobre DeepSeek.** La Fase 0 da la primera medida, con muestra pequeña: ruido. Mitigación: ≥ 3 repeticiones y datos crudos publicados.
+- **Sin evidencia sobre DeepSeek.** EXP-509 da la primera medida, con muestra pequeña: ruido. Mitigación: ≥ 3 repeticiones, criterio prerregistrado y datos crudos conservados en Savia Labs.
 - **Falsa garantía al nombrar hooks.** Nombrar un hook no prueba que cubra el caso (hallazgo 4). CA-15 obliga a decir el límite real.
 - Compliance: no aplica (sin datos personales ni cliente regulado).
 
 ### Plan por slices de SE-509e
 
-1. **S1** — Fase 0: corpus y ejecución A/B (CA-1, CA-2, CA-3).
+1. **S1** — Antes de aprobar: corpus (CA-1) y resultado de EXP-509 registrado en la spec (CA-2, CA-3). No es un slice de implementación.
 2. **S2** — Fase 1: regla y linter con fixtures (CA-4 a CA-10).
 3. **S3** — Reescritura de aserciones BATS (CA-11).
 4. **S4** — Lote A con medición y umbral (CA-12, CA-13, CA-14, CA-15). Lote B en una spec o batch posterior con el mismo protocolo.
@@ -361,7 +410,7 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 ### Verification protocol
 
 - [ ] El inventario trata ambos árboles y los guards TS (CA-a2, CA-a3)
-- [ ] Funciona en runtime OpenCode: la Fase 0 de SE-509e se ejecuta en ambos frontends
+- [ ] Funciona en runtime OpenCode: EXP-509 (antes de aprobar) y el umbral de parada de la Fase 2 de SE-509e se miden en ambos frontends
 - [ ] Tests BATS del generador, del validador de `ledger.d`, de G20 y del linter, con fixtures positivos y negativos; corren igual en cualquier motor
 - [ ] No añade hooks
 
@@ -371,7 +420,7 @@ Los de SE-509e (CA-1 a CA-15) siguen en su sección, con la misma numeración.
 
 ## Aprobación
 
-Spec PROPOSED. Cada sub-spec (SE-509a..e) se aprueba por separado: la operadora o la orquestadora con autoridad delegada, en su PR. Esta PR solo añade documentación; ningún agente la fusiona sin grant.
+Spec PROPOSED. Requisito previo: resultado del experimento EXP-509 de Savia Labs registrado en esta spec (§ «Puerta de aprobación», CA-2, CA-3). Cada sub-spec (SE-509a..e) se aprueba por separado: la operadora o la orquestadora con autoridad delegada, en su PR. Esta PR solo añade documentación; ningún agente la fusiona sin grant.
 
 ## Anexo A — medición del inventario de base
 
