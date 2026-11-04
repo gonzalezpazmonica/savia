@@ -70,8 +70,8 @@ def canon(path, raw):
 
 
 # ── SE-501 AC-11: lectores de D en Python ───────────────────────────────────
-# D no se versiona. Un lector llama a ensure() antes de leer; si D sigue faltando, el lector termina con
-# ≠ 0 y su mensaje incluye ENSURE_HINT (la orden que lo arregla).
+# D no se versiona. Un lector llama a ensure() antes de leer; si D falta o no se ha podido verificar
+# su frescura, el lector termina con ≠ 0 y su mensaje incluye ENSURE_HINT.
 ENSURE_HINT = "ejecutar: bash scripts/derived.sh ensure"
 
 
@@ -83,8 +83,8 @@ def is_own_repo(root):
 
 
 def ensure(root, rels, group="scm"):
-    """Si falta alguna ruta de `rels` bajo `root`, ejecuta «bash scripts/derived.sh ensure --only <group>».
-    Devuelve las rutas que siguen faltando (lista vacía = todas presentes).
+    """Verifica la frescura con «bash scripts/derived.sh ensure --only <group>» en el repo propio.
+    Devuelve rutas ausentes o cuya frescura no se pudo comprobar (lista vacía = disponibles).
     Solo ejecuta el derived.sh que acompaña a este módulo y solo si `root` es su propio repo: nunca
     ejecuta código de una raíz ajena (--root a otro árbol, fixture). Ahí devuelve lo que falta."""
     import os
@@ -95,9 +95,16 @@ def ensure(root, rels, group="scm"):
         return [r for r in rels if not os.path.isfile(os.path.join(root, r))]
     gone = missing()
     script = os.path.join(here, "derived.sh")
-    if gone and is_own_repo(root) and os.path.isfile(script):
-        subprocess.run(["bash", script, "ensure", "--only", group], cwd=root,
-                       stdout=sys.stderr, stdin=subprocess.DEVNULL, check=False)
+    if is_own_repo(root):
+        if not os.path.isfile(script):
+            return list(rels)
+        try:
+            result = subprocess.run(["bash", script, "ensure", "--only", group], cwd=root,
+                                    stdout=sys.stderr, stdin=subprocess.DEVNULL, check=False)
+        except OSError:
+            return list(rels)
+        if result.returncode != 0:
+            return list(rels)
         gone = missing()
     return gone
 

@@ -308,7 +308,8 @@ def _vector(snap: Path, results: list[dict]) -> dict:
 def _optional(root: Path, rel: str, key: str) -> str:
     # SE-501 AC-11: dato de procedencia en D (no versionado); derived.sh ensure lo genera si falta.
     # Sigue siendo opcional: si ensure no puede, el recibo dice UNKNOWN (no inventa la revisión).
-    derived_canon.ensure(root, [rel])
+    if derived_canon.ensure(root, [rel]):
+        return "UNKNOWN"
     path = root / rel
     return str(load_json(path).get(key, "UNKNOWN")) if path.exists() else "UNKNOWN"
 

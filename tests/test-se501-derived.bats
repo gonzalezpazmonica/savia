@@ -769,7 +769,7 @@ EOF2
 # set_aside_scm: aparta el .scm generado (sin borrar) para volver a empezar sin D.
 set_aside_scm() { mv "$R/.scm" "$(mktemp -d "$T/scm.XXXX")/"; }
 
-@test "AC-11: derived_canon.ensure genera solo si falta, en su propio repo; nunca ejecuta una raíz ajena" {
+@test "AC-11: derived_canon.ensure verifica frescura en su propio repo; nunca ejecuta una raíz ajena" {
   mkrepo; fake_derived ok
   run python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; print(d.ensure(sys.argv[1], [".scm/registry.json"]))' "$R"
   [ "$status" -eq 0 ]
@@ -777,14 +777,14 @@ set_aside_scm() { mv "$R/.scm" "$(mktemp -d "$T/scm.XXXX")/"; }
   [ -f "$R/.scm/registry.json" ]
   [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
   grep -qx 'ensure --only scm' "$T/derived.spy"
-  # Ya presente: no vuelve a llamar.
+  # Ya presente: delega de nuevo la frescura en derived.sh (que conserva su caché).
   python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; assert d.ensure(sys.argv[1], [".scm/registry.json"]) == []' "$R"
-  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  [ "$(wc -l < "$T/derived.spy")" -eq 2 ]
   # Negativo: raíz ajena (otro árbol) sin D → devuelve lo que falta y no ejecuta nada.
   mkdir -p "$T/ajena/scripts"; cp "$R/scripts/derived.sh" "$T/ajena/scripts/"
   run python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; print(d.ensure(sys.argv[2], [".scm/registry.json"]))' "$R" "$T/ajena"
   [[ "$output" == *"['.scm/registry.json']"* ]]
-  [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+  [ "$(wc -l < "$T/derived.spy")" -eq 2 ]
   [ ! -e "$T/ajena/.scm" ]
 }
 
@@ -793,6 +793,34 @@ set_aside_scm() { mv "$R/.scm" "$(mktemp -d "$T/scm.XXXX")/"; }
   run python3 -c 'import sys; sys.path.insert(0, sys.argv[1] + "/scripts"); import derived_canon as d; print(d.ensure(sys.argv[1], [".scm/sam.json"]))' "$R"
   [[ "$output" == *"['.scm/sam.json']"* ]]
   [ "$(wc -l < "$T/derived.spy")" -eq 1 ]
+}
+
+@test "AC-11 negativo: el lector rechaza una entropía nueva sobre el límite aunque D ya exista" {
+  mkrepo
+  cp "$REPO/scripts/capability-entropy.py" "$R/scripts/"
+  mkdir -p "$R/tests/baselines"
+  printf '{"entropy":1}\n' > "$R/tests/baselines/capability-entropy.json"
+  printf '{"capabilities":[]}\n' > "$R/source-registry.json"
+  cat > "$R/scripts/derived.sh" <<'EOF2'
+#!/usr/bin/env bash
+set -eu
+cd "$(dirname "$0")/.."
+mkdir -p .scm
+cp source-registry.json .scm/registry.json
+printf 'index\n' > .scm/INDEX.scm
+EOF2
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: entropía 1"* ]]
+  printf '{"capabilities":[{"id":"script:a","source":"scripts/a.py","kind":"script"},{"id":"script:b","source":"scripts/b.py","kind":"script"}]}\n' > "$R/source-registry.json"
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: entropía 3"* ]]
+  # Si la comprobación de frescura falla, los derivados viejos presentes no bastan.
+  fake_derived fail
+  run python3 "$R/scripts/capability-entropy.py" --root "$R" --check
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"derived.sh ensure"* ]]
 }
 
 @test "AC-11: capability-entropy y eval-coverage-matrix sin D generan con ensure; si falla, nombran la orden" {
