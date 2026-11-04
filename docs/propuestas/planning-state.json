@@ -1705,15 +1705,6 @@
       "evidence": "docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md",
       "approval": "Operadora 2026-11-03: AskUserQuestion (Aprobada, lanza S1 y S2); se formaliza al fusionar la PR (SE-488)",
       "phase": "A"
-    },
-    {
-      "id": "SE-499",
-      "status": "PROPOSED",
-      "priority": "P1",
-      "title": "Anclaje externo de cadenas de evidencia",
-      "note": "Las cadenas por hash (ledger, revisiones y juez de merge-sprint, recibos de SE-493 y evidencia de Yema) solo se verifican contra sí mismas: reescritura completa, truncado y borrado dan «íntegra», y los contadores de presupuesto salen del propio fichero. Punto de anclaje savia-anchor/1 y verificador común que exige que la cadena extienda cada ancla. Transportes: comentario en la PR, rama de anclas protegida en repo privado con token sin administración, y firma de la operadora con clave fuera del equipo (namespace savia-evidence-anchor) en hitos. Texto del límite en las salidas mientras no haya ancla.",
-      "evidence": "docs/specs/SE-499-external-anchoring-evidence-chains.spec.md",
-      "phase": "A"
     }
   ],
   "route": {
