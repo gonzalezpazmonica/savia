@@ -95,6 +95,11 @@ def dynamic_secret_access(doc):
     return False
 
 
+def secret_context_used(doc):
+    return any(not token.group().startswith("'")
+               for expression in expressions(doc) for token in EXPR_TOKEN.finditer(expression))
+
+
 def check_pr_secrets(path):
     text, doc, on = load(path)
     ev = events(on)
@@ -133,8 +138,8 @@ def check_main_audit(path):
             uses = step.get("uses") if isinstance(step, dict) else None
             if uses and not uses.startswith("./") and not PINNED.match(uses):
                 bad.append(f"{path}: acción no fijada por SHA: {uses}")
-    if "secrets." in text:
-        bad.append(f"{path}: referencia secrets.")
+    if secret_context_used(doc) or SECRET_BULK.search(text):
+        bad.append(f"{path}: referencia al contexto secrets o herencia de secretos")
     if not doc.get("jobs"):
         bad.append(f"{path}: sin jobs")
     return bad

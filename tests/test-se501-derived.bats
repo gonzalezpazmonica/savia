@@ -469,6 +469,27 @@ W="$BATS_TEST_DIRNAME/../scripts/workflow-hmac-check.py"
   run python3 "$W" pr-secrets "$f"; [ "$status" -eq 1 ]
 }
 
+@test "AC-6 negativo: main-audit rechaza índice, casing, contexto completo e inherit de secretos" {
+  for expression in "secrets['FIXTURE_TOKEN']" 'SeCrEtS.FIXTURE_TOKEN' 'toJSON(secrets)' \
+      'secrets[env.KEY]'; do
+    cp "$REPO/.github/workflows/confidentiality-main.yml" "$T/main.yml"
+    python3 - "$T/main.yml" "$expression" <<'PY'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1]); p.write_text(p.read_text().replace('SAVIA_GATE_UNKNOWN: block',
+    'SAVIA_GATE_UNKNOWN: ${{ ' + sys.argv[2] + ' }}'))
+PY
+    run python3 "$W" main-audit "$T/main.yml"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"contexto secrets"* ]]
+  done
+  cp "$REPO/.github/workflows/confidentiality-main.yml" "$T/main.yml"
+  printf '\n    secrets: inherit\n' >> "$T/main.yml"
+  run python3 "$W" main-audit "$T/main.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"herencia de secretos"* ]]
+}
+
 @test "AC-15: ningún workflow de PR referencia la clave HMAC; un YAML de prueba que lo hace da FAIL" {
   run python3 "$W" pr-secrets "$REPO"/.github/workflows/*.yml
   [ "$status" -eq 0 ]
