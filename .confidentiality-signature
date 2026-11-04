@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=03ef668f76c2c3a2d2720a1d5c49c323f25110028ae5ad5b8dd125034b8195d1
-timestamp=2026-11-04T09:27:34Z
+diff_hash=538809795a54f019ee5a058ff899e998fbbd3db438b97a7521ac7a74735e48f7
+timestamp=2026-11-04T09:40:00Z
 branch=agent/w-g4-stop-global-20261023
-head_commit=e9b4d8ae
-signature=cca552f1646a273942627518f9bfbb60d1fe8ec0c6d35b456dab981f71275062
+head_commit=47e579463
+signature=d8b7d00e65d5b67ae2fc71f0a3f709cfc8df3ba68710a029bbb62bec0bd8653d
