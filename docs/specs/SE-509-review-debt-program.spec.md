@@ -22,6 +22,9 @@ timeline:
   - from: "2026-11-04"
     learned: "2026-11-04"
     value: "PROPOSED — correcciones de la revisión independiente de la PR #1481 (gate G20→G21, WIP 1 para todo el programa, procedencia de decision)"
+  - from: "2026-11-04"
+    learned: "2026-11-04"
+    value: "PROPOSED — enmienda: fuente Ramavat (dev.to); ámbito de la estructura por longitud y secciones con umbral medido en EXP-509, coste en tokens obligatorio, análisis por longitud del prompt"
 ---
 
 # SE-509 — Programa de deuda técnica de revisión del inventario de prompts y artefactos
@@ -41,8 +44,9 @@ timeline:
   - **C** — solo tono: el texto actual sin mayúsculas enfáticas ni emojis de alarma, sin etiquetas nuevas ni BCP 14. Separa el efecto del tono del efecto de la estructura.
   - **D** — las cinco etiquetas de appliedaihub (`<context>`, `<data>`, `<task>`, `<constraints>`, `<output_format>`), tono llano. Ver § «Tabla de evidencia».
 - **Modelos**: un modelo DeepSeek (vía OpenCode) y un modelo Claude.
-- **Métricas mínimas**: las de la antigua Fase 0 (cumplimiento en casos trampa, sobreactivación en casos `golden`, tokens de entrada, idioma de salida).
-- **Qué decide**: si B no supera a A en ambos modelos según el criterio prerregistrado, SE-509e se reescribe o se descarta antes de aprobar. Si C iguala a B, la estructura no aporta y SE-509e se reduce a tono. Si D supera a B, el conjunto de etiquetas de la decisión 2 se revisa con la operadora. La elección del conjunto de etiquetas queda abierta hasta ese resultado.
+- **Métricas mínimas**: las de la antigua Fase 0 (cumplimiento en casos trampa, sobreactivación en casos `golden`, tokens de entrada, idioma de salida). **El coste en tokens es obligatorio, no opcional**: tokens de entrada por variante y caso, y su diferencia relativa frente a A (Δ %). Una variante que mejora el cumplimiento se juzga junto con lo que cuesta en tokens en cada invocación; un resultado sin esa cifra no cierra la puerta.
+- **Análisis por longitud del prompt**: el resultado se desglosa por longitud del prompt del agente (tokens de cuerpo) y por número de secciones o roles distintos (instrucciones, contexto, ejemplos, datos de entrada). Los pilotos cubren al menos un prompt corto (≈ 43 líneas, `security-guardian`) y uno largo; si no hay suficiente rango, el prerregistro añade agentes hasta cubrirlo. Si el prerregistro de EXP-509 ya está cerrado cuando se incorpore esto, el desglose entra como **análisis exploratorio declarado** (etiquetado como tal en el resultado, sin valor confirmatorio) o como fase posterior prerregistrada aparte; nunca se presenta como hipótesis previa.
+- **Qué decide**: si B no supera a A en ambos modelos según el criterio prerregistrado, SE-509e se reescribe o se descarta antes de aprobar. Si C iguala a B, la estructura no aporta y SE-509e se reduce a tono. Si D supera a B, el conjunto de etiquetas de la decisión 2 se revisa con la operadora. La elección del conjunto de etiquetas queda abierta hasta ese resultado. El desglose por longitud fija el **ámbito de aplicación** de la regla (§ «Ámbito de aplicación por longitud»): si B solo supera a A por encima de cierta longitud o número de secciones, la regla se limita a esos prompts.
 
 **Cambio respecto a la versión anterior (2026-11-04)**: la decisión 1 de SE-509e («Fase 0 informativa, no bloqueante») queda **sustituida**. La medición ya no es una fase de la implementación que corre en paralelo a la Fase 1, sino un requisito previo de la aprobación. La Fase 0, CA-1 a CA-3 y el slice S1 se reinterpretan en consecuencia (ver SE-509e). El umbral de parada por lote de la Fase 2 se mantiene como protección adicional durante la migración.
 
@@ -185,7 +189,7 @@ Sobre los artefactos añadidos o modificados en la PR (`git diff origin/main..HE
 
 1. **Nuevo sin anotación**: un artefacto añadido sin línea `annotate` en algún `ledger.d` de la PR → FALLO.
 2. **Tocado sin bajar o mantener deuda**: si la `prioridad` del artefacto sube respecto a `origin/main` → FALLO (trinquete por artefacto). Las dos `prioridad` se calculan con el `uso` de `origin/main`, para que una PR ajena que cambie `consumers` no haga fallar esta. Consecuencia buscada, no accidental: cualquier edición cambia el `sha256` y reactiva D1 (+3 × criticidad) en un artefacto ya revisado, así que tocarlo exige registrar en la misma PR una `review` con el `sha256` final, hecha por otro rol (SE-509c, «Autor ≠ revisor»), y para criticidad 3 por la operadora. En artefactos nunca revisados (hoy, todos) D1 ya vale 1 y la edición no lo sube.
-3. **Prompt tocado** (> 60 líneas de cuerpo, cuando SE-509e S2 exista): debe pasar `prompt-structure-lint.sh` → si no, FALLO.
+3. **Prompt tocado** (dentro del ámbito por longitud que fije SE-509e con EXP-509, cuando SE-509e S2 exista): debe pasar `prompt-structure-lint.sh` → si no, FALLO.
 4. **Borrado y movimientos**: un artefacto inventariado eliminado (`D`) o renombrado fuera del árbol del inventario sin `decision` de la operadora con `destination: borrar` y procedencia verificable (ya en `origin/main`, SE-509c) → FALLO. Archivar no es borrar: un movimiento a `docs/archive/` necesita una línea `destination: archivar` (sin `decision`, como dice SE-509c) y, si tiene consumidores, el stub de redirección. Un renombrado dentro del árbol (por ejemplo, en una migración) cambia la clave: la clave nueva necesita `annotate` (regla 1) y la antigua una línea `destination: fusionar` con `replaced_by` apuntando a la nueva; sin ella → FALLO.
 5. **Criticidad bajada**: una `annotate` que baja la criticidad desde 3 sin `decision` de la operadora con procedencia verificable → FALLO.
 6. **Fail-closed**: si falta el generador, `python3`, `origin/main` o un `ledger.d` no parsea, el gate sale con error, nunca PASS.
@@ -223,6 +227,7 @@ Hechos internos, con cita:
 | Búsqueda de estudios empíricos sobre RFC 2119 en LLM | Ausencia de evidencia | No se encontraron | Según el handoff; no reverificado |
 | Recomendación de OpenAI para GPT-5 | Primaria (proveedor) | Sintaxis tipo XML | Según el handoff; no reverificada |
 | appliedaihub.org, «XML prompting framework» (2026-05-10), aportada por la operadora el 2026-11-04 | **Secundaria / opinión** (blog comercial con promoción) | Propone 5 etiquetas: `<context>`, `<data>`, `<task>`, `<constraints>`, `<output_format>`, en ese orden; restricciones en lenguaje llano, sin MUST ni mayúsculas | **Sin evidencia verificable** para sus cifras («más de 10x», «determinismo», «2-4 tokens por etiqueta», preferencia de Claude). No trata anidamiento, atributos ni orden de contexto largo. Cita arXiv 2401.14423, no verificado: no se usa como evidencia empírica. URL: https://appliedaihub.org/blog/xml-prompting-framework/ |
+| Manish Ramavat, «XML tags don't help short prompts — here's when they actually matter» (dev.to, 2026-05-10, serie «LLM Engineering Experiments», parte 3), aportada por la operadora el 2026-11-04 | **Empírica débil + opinión** | Experimento: Claude Sonnet 4.5, extracción de 7 campos en 12 descripciones (4 niveles de dificultad), prosa (~150 tokens) frente a XML (~200 tokens). Precisión 97,6 % frente a 96,4 % (Δ −1,2 pp, no significativo), 0 % de alucinaciones en ambas, **+31 % de tokens de entrada con XML**. Tesis: el beneficio de las etiquetas escala con la complejidad del prompt (desambiguar instrucciones, datos y ejemplos), no con su calidad; «benchmark on your own data at your own prompt length» | N=12, una ejecución por condición (24 llamadas), un solo modelo, prompts cortos, tarea de extracción (no de agente con restricciones). Los umbrales del autor (ayudan con > ~500 tokens y 3+ secciones, con entrada no confiable que parece instrucción o con contexto acumulado en bucles agénticos; no ayudan con < ~300 tokens y tarea única) **no se prueban** en el experimento. Notebook en Kaggle no verificado. No trata anidamiento, orden, mayúsculas ni redacción MUST. URL: https://dev.to/manishramavat/xml-tags-dont-help-short-prompts-heres-when-they-actually-matter-2026-25gf |
 | Experimento EXP-509 en Savia Labs | Primaria (propia) | Medida directa de A/B/C/D en DeepSeek y Claude | Pendiente: es la puerta de aprobación |
 
 **Comparación del conjunto de appliedaihub (variante D) con el canónico (variante B)**:
@@ -237,6 +242,8 @@ Hechos internos, con cita:
 | — | `<role>`, `<examples>`, `<rationale>` | Sin equivalente en D. `<rationale>` es la pieza que sustituye a las mayúsculas en SE-509e |
 
 Argumentos a favor de D: menos etiquetas, nombres más cortos y `<data>` explícito para entradas. En contra: pierde `<rationale>` (el motivo, que la guía de Anthropic recomienda explicar) y `<examples>`, y su orden no está justificado. Ninguno de los dos conjuntos tiene evidencia empírica a su favor en DeepSeek ni en Claude; **la elección no se hace en esta spec, la decide el resultado de EXP-509**.
+
+**Qué cambia la fuente de Ramavat**: no prueba nada sobre prompts de agente, pero señala dos huecos de la versión anterior de esta spec. Primero, la regla aplicaba a todo prompt de más de 60 líneas sin que ese corte estuviera medido; si el beneficio de las etiquetas depende de la longitud y del número de roles que hay que separar, un umbral fijo por opinión puede imponer estructura (y su coste) donde no aporta. Segundo, el coste en tokens figuraba entre las métricas sin pesar en la decisión; con +31 % de entrada en un prompt corto, y los agentes invocándose miles de veces, es una métrica de decisión. Ambos se corrigen abajo (§ «Ámbito de aplicación por longitud», métricas de la Fase 0, CA-2 y CA-4). Sus umbrales (~300 / ~500 tokens, 3+ secciones) se usan solo como hipótesis a contrastar, no como valor de la regla.
 
 El handoff cita además un informe `output/research/xml-tags-rfc2119-20261104.md` y la skill `.claude/skills/macos-application-packaging/` (ejemplo de etiquetas de dominio como `<tool_selection>`, `<release_trust>`); **ninguno de los dos existe en este repositorio**: proceden del entorno de SaviaVASS.
 
@@ -254,7 +261,7 @@ El handoff cita además un informe `output/research/xml-tags-rfc2119-20261104.md
 
 #### Agentes `heavy` reales
 
-`grep -lE '^model_tier:\s*heavy' .claude/agents/*.md` da **23** (no 10 como suponía el handoff): architect, business-analyst, cobol-developer, code-reviewer, compliance-judge, confidentiality-auditor, context-dome-manager, court-orchestrator, drift-auditor, excel-digest, factuality-judge, hallucination-judge, infrastructure-agent, legal-compliance, meeting-confidentiality-judge, meeting-risk-analyst, model-upgrade-auditor, pdf-digest, pentester, reflection-validator, sdd-spec-writer, security-guardian, truth-tribunal-orchestrator. Reparto actual: 23 heavy, 47 mid, 5 fast. De los pilotos, solo `security-guardian` es heavy (y tiene 43 líneas, por debajo del umbral de 60); `terraform-developer` y `commit-guardian` son `mid`.
+`grep -lE '^model_tier:\s*heavy' .claude/agents/*.md` da **23** (no 10 como suponía el handoff): architect, business-analyst, cobol-developer, code-reviewer, compliance-judge, confidentiality-auditor, context-dome-manager, court-orchestrator, drift-auditor, excel-digest, factuality-judge, hallucination-judge, infrastructure-agent, legal-compliance, meeting-confidentiality-judge, meeting-risk-analyst, model-upgrade-auditor, pdf-digest, pentester, reflection-validator, sdd-spec-writer, security-guardian, truth-tribunal-orchestrator. Reparto actual: 23 heavy, 47 mid, 5 fast. De los pilotos, solo `security-guardian` es heavy (y tiene 43 líneas, por debajo del umbral provisional de 60: es el prompt corto que el desglose por longitud de EXP-509 necesita); `terraform-developer` y `commit-guardian` son `mid`.
 
 #### Tests BATS acoplados a cadenas literales (base del riesgo de rotura)
 
@@ -284,14 +291,23 @@ Desde el 2026-11-04 esta fase no forma parte de la implementación: se ejecuta c
 - Variantes A, B, C y D, definidas en § «Puerta de aprobación».
 - Corpus: el existente de SE-309 para los dos guardianes, ampliado hasta ≥ 10 casos por piloto con al menos 3 casos trampa («aplica directamente», «salta el hook», «es solo DEV»); corpus nuevo para `terraform-developer` en `tests/evals/terraform-developer/` con el mismo esquema.
 - Ejecución contra un modelo DeepSeek vía OpenCode y un modelo Claude, mismo corpus, misma temperatura, ≥ 3 repeticiones por caso.
-- Métricas por variante y modelo: cumplimiento de restricciones (% de casos trampa rechazados), sobreactivación (% de casos `golden` rechazados o con comprobaciones innecesarias) y tokens de entrada.
+- Métricas por variante y modelo: cumplimiento de restricciones (% de casos trampa rechazados), sobreactivación (% de casos `golden` rechazados o con comprobaciones innecesarias) y tokens de entrada con su Δ % frente a A (obligatoria).
+- Desglose de todas las métricas por longitud del prompt (tokens de cuerpo) y número de secciones; confirmatorio si entra en el prerregistro, exploratorio declarado si no (§ «Puerta de aprobación»).
 - Resultado registrado en esta spec con el modelo, la fecha y el commit del prompt de cada variante; datos crudos en Savia Labs.
 
 #### Fase 1 — Regla y linter
 
-- SE-068 se reescribe (mismo fichero): sin condición de modelo ni `dormant_since`; aplica a todo agente, regla o skill de más de 60 líneas de cuerpo. Añade `<rationale>`, el conjunto cerrado, la declaración BCP 14 con RFC 2119/8174 y estas normas: cada MUST NOT de seguridad nombra el hook o script que lo hace cumplir (ruta existente); si no hay hook, se dice «sin hook» y se abre deuda, en vez de fingir garantía; sin emojis de alarma ni bloques «RESTRICCIÓN CRÍTICA»; la razón va en `<rationale>`, no en mayúsculas.
+- SE-068 se reescribe (mismo fichero): sin condición de modelo ni `dormant_since`; aplica a los agentes, reglas y skills dentro del ámbito medido (siguiente apartado). Añade `<rationale>`, el conjunto cerrado, la declaración BCP 14 con RFC 2119/8174 y estas normas: cada MUST NOT de seguridad nombra el hook o script que lo hace cumplir (ruta existente); si no hay hook, se dice «sin hook» y se abre deuda, en vez de fingir garantía; sin emojis de alarma ni bloques «RESTRICCIÓN CRÍTICA»; la razón va en `<rationale>`, no en mayúsculas.
 - El linter se separa de `opus47-compliance-check.sh` en un script neutral respecto al modelo, `scripts/prompt-structure-lint.sh`, que recibe rutas y comprueba: etiquetas dentro del conjunto, sin anidamiento, BCP 14 solo dentro de `<constraints>`, MUST NOT de seguridad con hook existente, cero emojis de alarma, mayúsculas enfáticas fuera de nombres propios, y contenido no vacío (rechaza el relleno de una línea del hallazgo 2). `--xml-tags` de `opus47-compliance-check.sh` delega en él.
 - Para clasificar «de seguridad», el MUST NOT lleva la marca `[security]` al inicio; el linter no adivina por palabras.
+
+#### Ámbito de aplicación por longitud
+
+- La estructura de etiquetas no es universal: aplica solo a prompts por encima de un umbral de **longitud** (tokens de cuerpo) y/o de **número de secciones** distintas. El umbral lo fija el resultado de EXP-509 (desglose por longitud), no la opinión: es el corte por debajo del cual B no supera a A o su coste en tokens no compensa, según el criterio que fije el prerregistro (o el análisis exploratorio declarado, que entonces se confirma en el umbral de parada del primer lote).
+- Hasta tener ese dato, las «60 líneas de cuerpo» de la versión anterior quedan como **valor provisional sin validar**, solo para la planificación; la regla no se aprueba con él. Si EXP-509 no da un corte claro, la operadora decide entre aplicar a todos los prompts del Lote A o ampliar la medición, con las cifras delante.
+- Por debajo del umbral, la regla solo exige lo independiente de la longitud: tono sin mayúsculas enfáticas ni emojis de alarma y, si hay vocabulario normativo, BCP 14 solo en `<constraints>` (si C iguala a B, esto es todo SE-509e).
+- El umbral se escribe una sola vez, en la regla, con el commit del resultado de EXP-509 que lo justifica; el linter y la regla 3 de G21 lo leen de allí. Cambiarlo exige nueva medición y enmienda.
+- `.claude/commands/` sigue fuera (son, en su mayoría, prompts cortos de tarea única).
 
 #### Fase 2 — Migración incremental
 
@@ -307,9 +323,9 @@ Desde el 2026-11-04 esta fase no forma parte de la implementación: se ejecuta c
 | AC | Criterio | Tipo |
 |---|---|---|
 | CA-1 | Corpus de ≥ 10 casos por piloto (≥ 3 trampa) en `tests/evals/<agente>/`, validado por el esquema de SE-309. | positivo |
-| CA-2 | Resultado de EXP-509 (variantes A, B, C y D de los 3 pilotos en DeepSeek y Claude, con las métricas prerregistradas) registrado en esta spec **antes** de su aprobación; datos crudos en Savia Labs. | positivo (puerta) |
+| CA-2 | Resultado de EXP-509 (variantes A, B, C y D de los 3 pilotos en DeepSeek y Claude, con las métricas prerregistradas) registrado en esta spec **antes** de su aprobación, con los tokens de entrada y su Δ % frente a A por variante y modelo, y el desglose por longitud y número de secciones (marcado exploratorio si no estaba prerregistrado); datos crudos en Savia Labs. Sin la cifra de tokens o sin el desglose, CA-2 no se cumple. | positivo (puerta) |
 | CA-3 | Sin el resultado de EXP-509 registrado, SE-509 no pasa a APPROVED. Si B no supera a A según el criterio prerregistrado, SE-509e se reescribe o se descarta antes de aprobar (registrado en el LOG). | negativo (puerta) |
-| CA-4 | `agent-prompt-xml-structure.md` sin condición de modelo, sin `dormant_since` ni `usage: reference-only`, con `<rationale>` y la declaración BCP 14 con RFC 2119/8174. | positivo |
+| CA-4 | `agent-prompt-xml-structure.md` sin condición de modelo, sin `dormant_since` ni `usage: reference-only`, con `<rationale>`, la declaración BCP 14 con RFC 2119/8174 y el umbral de ámbito por longitud/secciones con el commit del resultado de EXP-509 que lo justifica; un umbral sin esa referencia no cumple. | positivo |
 | CA-5 | El linter rechaza (exit ≠ 0) un fixture con `<tool_selection>`. | negativo |
 | CA-6 | El linter rechaza un fixture con `<constraints>` anidada dentro de `<instructions>`. | negativo |
 | CA-7 | El linter rechaza un fixture con `MUST` dentro de `<instructions>` y acepta el mismo texto con `MUST` dentro de `<constraints>`. | negativo / positivo |
@@ -336,6 +352,8 @@ Desde el 2026-11-04 esta fase no forma parte de la implementación: se ejecuta c
 - **BCP 14 en inglés literal (decisión 3).** Contra: mezcla de idiomas dentro de un prompt en español; las personas que lean el prompt pueden no conocer la convención, y el modelo puede responder en inglés más a menudo. Mitigación: declaración única en la regla, uso solo en `<constraints>`, medir el idioma de salida en EXP-509.
 - **Tests acoplados a literales.** 4 aserciones identificadas; 58 ficheros BATS citan agentes y algunos buscan frases del cuerpo. Se reescriben antes de migrar, nunca se eliminan.
 - **Sin evidencia sobre DeepSeek.** EXP-509 da la primera medida, con muestra pequeña: ruido. Mitigación: ≥ 3 repeticiones, criterio prerregistrado y datos crudos conservados en Savia Labs.
+- **Umbral de longitud con pocos datos.** Con 3 pilotos el desglose por longitud tiene pocos puntos y puede no dar un corte. Mitigación: ampliar pilotos para cubrir el rango, declarar exploratorio lo no prerregistrado, y no fijar el umbral sin cifra (decide la operadora con los datos). La única fuente externa sobre el corte (Ramavat) no lo prueba.
+- **Coste en tokens acumulado.** Las etiquetas añaden tokens en cada invocación (+31 % en el prompt corto de Ramavat). Mitigación: métrica obligatoria en EXP-509 y ámbito limitado a los prompts donde compensa.
 - **Falsa garantía al nombrar hooks.** Nombrar un hook no prueba que cubra el caso (hallazgo 4). CA-15 obliga a decir el límite real.
 - Compliance: no aplica (sin datos personales ni cliente regulado).
 
