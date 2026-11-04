@@ -78,7 +78,7 @@ La confirmación de S0 puede estar vacía mientras la spec está APPROVED y el p
 
 ### 4. Gate
 
-`scripts/comprehension-gate.py`, invocado como comprobación 11 de `bash scripts/roadmap.sh validate` (que ya corre en `validate-ci-local.sh` y en CI). Recorre `docs/specs/**/SE-*.md`, `docs/propuestas/SE-*.md` y la `evidence` de cada iniciativa de la vista de planificación. Una iniciativa en ámbito de la vista sin spec localizable es FAIL: el gate no se esquiva con un nombre de fichero que no case.
+`scripts/comprehension-gate.py`, invocado como comprobación 11 de `bash scripts/roadmap.sh validate` (que ya corre en `validate-ci-local.sh` y en CI). Recorre `docs/specs/**/SE-*.md`, `docs/propuestas/SE-*.md` y la `evidence` de cada iniciativa de la vista de planificación. Una iniciativa en ámbito de la vista sin spec localizable es FAIL: el gate no se esquiva con un nombre de fichero que no case. La `evidence` solo cuenta como spec si la iniciativa no tiene ya una en esos globs y es un `.md` con `status:` en el frontmatter; si apunta a la spec de otra iniciativa, FAIL. Las fechas de confirmación deben existir en el calendario y no ser posteriores a hoy.
 
 - **Ámbito**: estado APPROVED, IMPLEMENTING o IMPLEMENTED (en el frontmatter o en la vista de planificación) y, además, número SE-504 o superior, o `approved_at` desde 2026-11-04.
 - **FAIL** si: falta `human_surface`; superficie humana sin la sección completa (escenas fuera de 3–5, sin cita literal con fecha, listas SÍ/NO vacías); confirmación sin fecha o con respuesta vacía o de relleno (`{…}`, `pendiente`, `TBD`); falta el slice S0 o su `prototipo:`; S1 en curso sin confirmación de S0.

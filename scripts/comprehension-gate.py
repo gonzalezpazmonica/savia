@@ -13,6 +13,7 @@ Uso:
 
 Sin --spec revisa docs/specs/**/SE-*.md, docs/propuestas/SE-*.md y la evidencia de cada
 iniciativa de --state; una iniciativa en ámbito del estado sin spec localizable es FAIL.
+La evidence solo se usa si la iniciativa no tiene spec en los globs y es un .md con «status:».
 EXEMPT y DECLARED-FALSE se imprimen siempre (también con --quiet) para que la revisora los vea.
 Salida: 0 PASS · 1 FAIL (incluye ficheros ilegibles: fail-closed) · 2 uso.
 """
