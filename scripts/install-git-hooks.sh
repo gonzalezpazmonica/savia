@@ -2,6 +2,33 @@
 set -uo pipefail
 # install-git-hooks.sh — Instala hooks de Git para PM‑Workspace en OpenCode
 # Ejecutar desde el directorio raíz del repositorio (donde está .git/)
+#
+# --hooks-path [--repo <dir>]: activa los hooks versionados del repo (.githooks/, entre ellos el
+# pre-commit que rechaza commits en main/master) con `git config core.hooksPath .githooks`.
+# Relativo: cada worktree ejecuta su propia copia de .githooks/. Idempotente. Si ya hay otro
+# core.hooksPath, no lo pisa (exit 1). Con core.hooksPath activo, git deja de leer .git/hooks.
+
+if [ "${1:-}" = "--hooks-path" ]; then
+    repo="$PWD"
+    [ "${2:-}" = "--repo" ] && repo="${3:?--repo necesita un directorio}"
+    top="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" \
+        || { echo "Error: $repo no es un repositorio git." >&2; exit 1; }
+    [ -f "$top/.githooks/pre-commit" ] \
+        || { echo "Error: $top/.githooks/pre-commit no existe." >&2; exit 1; }
+    current="$(git -C "$top" config --get core.hooksPath)"
+    if [ "$current" = ".githooks" ]; then
+        echo "core.hooksPath ya es .githooks en $top — sin cambios."
+        exit 0
+    fi
+    if [ -n "$current" ]; then
+        echo "Error: core.hooksPath ya vale '$current' en $top; no se pisa." >&2
+        echo "  Para cambiarlo a mano: git -C \"$top\" config core.hooksPath .githooks" >&2
+        exit 1
+    fi
+    git -C "$top" config core.hooksPath .githooks || exit 1
+    echo "✅ core.hooksPath = .githooks en $top (pre-commit: nunca commit en main/master)."
+    exit 0
+fi
 
 CLAUDE_PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOKS_DIR="$CLAUDE_PROJECT_DIR/.claude/hooks"
