@@ -98,62 +98,53 @@ third-party plugin also mutates `args.command` it MUST run AFTER
 - Implementation: `.opencode/plugins/guards/auto-redact-credentials.ts`
 - Tests: `.opencode/plugins/__tests__/auto-redact-credentials.test.ts`
 - Composition: `.opencode/plugins/savia-foundation.ts` (BEFORE_GUARDS)
+- SE-353 spec: `docs/specs/SE-353-sentinel-secrets.spec.md`
+- SE-353 tests: `tests/bats/test-se353-credential-egress.bats`
+- SE-353 inspiración: OpenClaw SecretRefs + egress sentinels
 
 ## Sentinel credential substitution (SE-353)
 
-Complementa la redacción con resolución **solo en egress**: el valor real de una
-credencial se sustituye en el subproceso que habla con el destino autorizado, de
-modo que **jamás entra en el contexto del modelo**.
+Complementa la redacción con resolución **solo en egress**: el valor real de una credencial se
+sustituye en el subproceso que habla con el destino autorizado, de modo que **jamás entra en el
+contexto del modelo**.
 
-- `printf '%s' "$SECRETO" | scripts/credential-egress.sh store KEY [-]` — lee el
-  valor por **stdin**, lo cifra y almacena en `~/.savia/credential-store/keys.json`
-  (0600, AES-256-CBC + HMAC, clave derivada de machine-id + HOME). El valor por
-  argv (`store KEY VALUE`) se rechaza: quedaría en `ps` y en el historial. La
-  clave del store tampoco pasa por argv: `openssl` la lee por descriptor
-  (`-pass fd:3`, PBKDF2) y el HMAC lo calcula `python3` leyendo la clave por fd
-  (formato `v2:`). Los blobs del formato anterior (`iv:ciph:mac`, `-K` raw) se
-  leen una última vez con la clave en argv y se reescriben en `v2:`.
-- `resolve KEY --dest D` — valor real solo si `D` coincide exactamente con la
-  allowlist (`dev.azure.com`, `github.com`, `api.github.com`). Sin `--dest`,
-  destino no autorizado o marcador no registrado → **REFUSE** (fail-closed, nada
-  en stdout).
-- `run [--dest D] CMD ARG...` — sustituye cada argumento `savia:cred:<key>` por
-  la ruta `/dev/fd/N` de una tubería que contiene solo el valor (sin salto de
-  línea final) y ejecuta en subproceso; el valor no aparece en el argv del hijo
-  (`/proc/<pid>/cmdline`, `ps`). El hijo lo lee del fichero (`curl -H
-  @/dev/fd/N`, `cat "$1"`); la tubería se lee una sola vez. El script no
-  imprime ni persiste el valor. El destino es `--dest`
-  o el host único de las URLs (`esquema://host`) que aparezcan en cualquier
-  posición de los args, también dentro de `--url=...` o de un script de
-  `bash -c`; sin destino, varios hosts, `--dest` distinto del host de la URL o
-  una autoridad ambigua (`\`, `%`) → **REFUSE**. Sin marcadores, `run` ejecuta
-  el comando sin validar hosts.
+- `printf '%s' "$SECRETO" | scripts/credential-egress.sh store KEY [-]` — lee el valor por
+  **stdin**, lo cifra y almacena en `~/.savia/credential-store/keys.json` (0600, AES-256-CBC + HMAC,
+  clave derivada de machine-id + HOME). El valor por argv (`store KEY VALUE`) se rechaza: quedaría
+  en `ps` y en el historial. La clave del store tampoco pasa por argv: `openssl` la lee por
+  descriptor (`-pass fd:3`, PBKDF2) y el HMAC lo calcula `python3` leyendo la clave por fd (formato
+  `v2:`). Los blobs del formato anterior (`iv:ciph:mac`, `-K` raw) se leen una última vez con la
+  clave en argv y se reescriben en `v2:`.
+- `resolve KEY --dest D` — valor real solo si `D` coincide exactamente con la allowlist
+  (`dev.azure.com`, `github.com`, `api.github.com`). Sin `--dest`, destino no autorizado o marcador
+  no registrado → **REFUSE** (fail-closed, nada en stdout).
+- `run [--dest D] CMD ARG...` — sustituye cada argumento `savia:cred:<key>` por la ruta `/dev/fd/N`
+  de una tubería que contiene solo el valor (sin salto de línea final) y ejecuta en subproceso; el
+  valor no aparece en el argv del hijo (`/proc/<pid>/cmdline`, `ps`). El hijo lo lee del fichero
+  (`curl -H @/dev/fd/N`, `cat "$1"`); la tubería se lee una sola vez. El script no imprime ni
+  persiste el valor. El destino es `--dest` o el host único de las URLs (`esquema://host`) que
+  aparezcan en cualquier posición de los args, también dentro de `--url=...` o de un script de `bash
+  -c`; sin destino, varios hosts, `--dest` distinto del host de la URL o una autoridad ambigua (`\`,
+  `%`) → **REFUSE**. Sin marcadores, `run` ejecuta el comando sin validar hosts.
 - `status` / `audit` — diagnóstico sin exponer valores.
 
 ### Límites (lo que SE-353 no garantiza)
 
-`--dest` lo declara quien llama. La comprobación de host de `run` es una
-**salvaguarda contra errores de enrutado**, no una barrera frente a un llamante
-hostil:
+`--dest` lo declara quien llama. La comprobación de host de `run` es una **salvaguarda contra
+errores de enrutado**, no una barrera frente a un llamante hostil:
 
-- `resolve KEY --dest github.com` imprime el valor real por stdout a quien lo
-  pida con un destino autorizado.
-- `run` entrega el valor al proceso hijo, que puede imprimirlo (`bash -c 'echo
-  "$1"'`) o enviarlo a un host que no aparezca como `esquema://host` en los args
-  (variable de entorno, fichero, `curl host` sin esquema).
-- El descriptor lo heredan el hijo y sus descendientes, y otro proceso del mismo
-  usuario puede abrirlo vía `/proc/<pid>/fd/N` mientras no se haya leído.
+- `resolve KEY --dest github.com` imprime el valor real por stdout a quien lo pida con un destino
+  autorizado.
+- `run` entrega el valor al proceso hijo, que puede imprimirlo (`bash -c 'echo "$1"'`) o enviarlo a
+  un host que no aparezca como `esquema://host` en los args (variable de entorno, fichero, `curl
+  host` sin esquema).
+- El descriptor lo heredan el hijo y sus descendientes, y otro proceso del mismo usuario puede
+  abrirlo vía `/proc/<pid>/fd/N` mientras no se haya leído.
 - `store` descarta los saltos de línea finales del valor.
 
-El aislamiento real requiere que quien invoca no controle el comando hijo (un
-wrapper fijo por herramienta) o que la comprobación ocurra en el propio cliente
-HTTP. Lo fija el test `G2r: LÍMITE conocido` (`test-se353-credential-egress.bats`).
+El aislamiento real requiere que quien invoca no controle el comando hijo (un wrapper fijo por
+herramienta) o que la comprobación ocurra en el propio cliente HTTP. Lo fija el test `G2r: LÍMITE
+conocido` (`test-se353-credential-egress.bats`).
 
-CRIT-001: tienda 100% local, sin proveedor cloud. La clave de cifrado deriva del
-host, así que el store no es portable a otra máquina (intencional).
-
-## References (SE-353)
-
-- Spec: `docs/specs/SE-353-sentinel-secrets.spec.md`
-- Tests: `tests/bats/test-se353-credential-egress.bats`
-- Inspiración: OpenClaw SecretRefs + egress sentinels
+CRIT-001: tienda 100% local, sin proveedor cloud. La clave de cifrado deriva del host, así que el
+store no es portable a otra máquina (intencional).
