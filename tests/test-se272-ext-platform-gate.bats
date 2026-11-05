@@ -273,14 +273,35 @@ _gate() {
 }
 
 @test "S03n seguridad: una comilla en --skill no amplía la allowlist global" {
-  run _gate --card-id "ext-platform-client-alpha-9901" --skill "x' or True or '" --payload-level 0
+  # La tarjeta permite literalmente la skill con comilla, así que la petición
+  # pasa el paso 2 y llega a _check_allowlist. Con la interpolación antigua,
+  # "situacion.query'+'" se leía en Python como 'situacion.query'+'' y heredaba
+  # la entrada permitida de situacion.query (ALLOW). Con argv es una skill no
+  # listada y la allowlist `default: deny` la rechaza.
+  local skill="situacion.query'+'"
+  cat > "$PLATFORM_CARDS_FILE" <<'YAMLEOF'
+version: "1.0"
+cards:
+  quote-platform:
+    id: "ext-platform-quote-9904"
+    exposed_skills: ["situacion.query'+'"]
+    allowed_skills: ["situacion.query'+'"]
+    max_payload_level: 2
+    status: active
+default: deny
+YAMLEOF
+  run _gate --card-id "ext-platform-quote-9904" --skill "$skill" --payload-level 1
   [ "$status" -eq 1 ]
-  [[ "$output" == *"not in card allowed_skills"* ]]
+  [[ "$output" == *"denied by global allowlist — deny_by_default"* ]]
+  [[ "$output" != *"ALLOW"* ]]
+  run grep -c '"reason": "global_allowlist:deny_by_default"' "$DATA_DIR/ext-platform-gate-decisions.jsonl"
+  [ "$output" = "1" ]
 }
 
 @test "S03n seguridad: --payload-level no numérico es error de uso, no nivel 0" {
   run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level "abc"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"--payload-level must be a non-negative integer"* ]]
   [[ "$output" != *"ALLOW"* ]]
 }
 
@@ -289,6 +310,7 @@ _gate() {
   run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" \
     --payload-level "a[\$(touch $marker)]"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"--payload-level must be a non-negative integer"* ]]
   [ ! -e "$marker" ]
 }
 
@@ -352,6 +374,12 @@ import json,sys
 recs=[json.loads(l) for l in open(sys.argv[1])]
 assert len(recs)==1 and recs[0]["card_id"]=="o'brien" and recs[0]["decision"]=="DENY", recs
 PY
+}
+
+@test "S03n: --payload-level vacío es error de uso, no nivel 0" {
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level ""
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--payload-level must be a non-negative integer"* ]]
 }
 
 @test "S03n: faltan --card-id o --skill → exit 2" {
@@ -428,4 +456,21 @@ PY
   [ "$status" -eq 0 ]
   [[ "$output" == *"Default: deny"* ]]
   [[ "$output" == *"exposed_but_not_allowed(denied): ['handoff.request']"* ]]
+}
+
+@test "S03n auditoría: si no se puede escribir el log, avisa por stderr y la decisión no cambia" {
+  export GATE_LOG="$TEST_DIR/no-existe/decisions.jsonl"
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: audit log write failed"*"decision ALLOW not recorded"* ]]
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"WARN: audit log write failed"*"decision DENY not recorded"* ]]
+}
+
+@test "S03n auditoría: con log escribible no hay aviso" {
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 1
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"WARN"* ]]
+  [[ "$output" == "ALLOW: card_id=ext-platform-limited-9902 skill=situacion.query payload_level=1" ]]
 }

@@ -124,7 +124,8 @@ ts, card_id, skill, decision, reason, log = sys.argv[1:7]
 rec = {'ts': ts, 'card_id': card_id, 'skill': skill, 'decision': decision, 'reason': reason}
 with open(log, 'a') as fh:
     fh.write(json.dumps(rec) + '\n')
-" "$ts" "$card_id" "$skill" "$decision" "$reason" "$GATE_LOG" 2>/dev/null || true
+" "$ts" "$card_id" "$skill" "$decision" "$reason" "$GATE_LOG" 2>/dev/null \
+    || echo "WARN: audit log write failed (${GATE_LOG}); decision ${decision} not recorded" >&2
 }
 
 # ── Subcommand: gate ────────────────────────────────────────────────────────
