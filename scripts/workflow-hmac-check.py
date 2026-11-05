@@ -33,6 +33,19 @@ STATIC_SECRET = re.compile(r"secrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|"
                            r"\[\s*'([A-Za-z_][A-Za-z0-9_]*)'\s*\])", re.I)
 PR_HEAD_REF = re.compile(r"github\.event\.pull_request\.head\.(sha|ref)|github\.head_ref")
 PINNED = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+DIAGNOSTICS = {
+    "pr-hmac": "un workflow disparado por PR o workflow_run referencia CONFIDENTIALITY_HMAC_KEY",
+    "pr-bulk": "un workflow disparado por PR o workflow_run expone todos los secretos (toJSON(secrets) o secrets: inherit)",
+    "pr-dynamic": "un workflow disparado por PR o workflow_run usa un acceso no estático al contexto de secretos o a la clave de auditoría",
+    "pr-head": "pull_request_target con checkout de la ref de la PR",
+    "main-event": "debe dispararse solo con push a main",
+    "main-permissions": "permisos de workflow distintos de contents: read",
+    "job-shape": "job ilegible",
+    "job-permissions": "job con permisos distintos de contents: read",
+    "action-pin": "acción no fijada por SHA",
+    "main-secrets": "referencia al contexto secrets o herencia de secretos",
+    "jobs-missing": "sin jobs",
+}
 
 
 def load(path):
@@ -116,15 +129,13 @@ def check_pr_secrets(path):
     bad = []
     if any(e in ev for e in SECRET_EVENTS):
         if SECRET.lower() in text.lower():
-            bad.append(f"{path}: un workflow disparado por PR o workflow_run referencia {SECRET}")
+            bad.append("pr-hmac")
         if SECRET_BULK.search(text) or inherits_secrets(doc):
-            bad.append(f"{path}: un workflow disparado por PR o workflow_run expone todos los secretos "
-                       "(toJSON(secrets) o secrets: inherit)")
+            bad.append("pr-bulk")
         if dynamic_secret_access(doc):
-            bad.append(f"{path}: un workflow disparado por PR o workflow_run usa un acceso no estático "
-                       "al contexto de secretos o a la clave de auditoría")
+            bad.append("pr-dynamic")
     if "pull_request_target" in ev and PR_HEAD_REF.search(text):
-        bad.append(f"{path}: pull_request_target con checkout de la ref de la PR")
+        bad.append("pr-head")
     return bad
 
 
@@ -135,23 +146,23 @@ def check_main_audit(path):
     push = ev.get("push") if isinstance(ev, dict) else None
     if set(ev) != {"push"} or not isinstance(push, dict) or push.get("branches") != ["main"] or \
             set(push) - {"branches"}:
-        bad.append(f"{path}: debe dispararse solo con push a main")
+        bad.append("main-event")
     if doc.get("permissions") != {"contents": "read"}:
-        bad.append(f"{path}: permisos de workflow distintos de contents: read")
-    for name, job in (doc.get("jobs") or {}).items():
+        bad.append("main-permissions")
+    for job in (doc.get("jobs") or {}).values():
         if not isinstance(job, dict):
-            bad.append(f"{path}: job {name} ilegible")
+            bad.append("job-shape")
             continue
         if "permissions" in job and job["permissions"] != {"contents": "read"}:
-            bad.append(f"{path}: job {name} con permisos distintos de contents: read")
+            bad.append("job-permissions")
         for step in job.get("steps") or []:
             uses = step.get("uses") if isinstance(step, dict) else None
             if uses and not uses.startswith("./") and not PINNED.match(uses):
-                bad.append(f"{path}: acción no fijada por SHA: {uses}")
+                bad.append("action-pin")
     if secret_context_used(doc) or SECRET_BULK.search(text) or inherits_secrets(doc):
-        bad.append(f"{path}: referencia al contexto secrets o herencia de secretos")
+        bad.append("main-secrets")
     if not doc.get("jobs"):
-        bad.append(f"{path}: sin jobs")
+        bad.append("jobs-missing")
     return bad
 
 
@@ -159,18 +170,22 @@ def main(argv):
     if len(argv) < 2 or argv[0] not in ("pr-secrets", "main-audit") or (argv[0] == "main-audit" and len(argv) != 2):
         print(__doc__, file=sys.stderr)
         return 2
-    bad = []
+    failed = False
     for p in argv[1:]:
         try:
-            bad += check_pr_secrets(p) if argv[0] == "pr-secrets" else check_main_audit(p)
+            findings = check_pr_secrets(p) if argv[0] == "pr-secrets" else check_main_audit(p)
         except (OSError, ValueError, yaml.YAMLError):
             # Los errores de PyYAML pueden incluir el contenido de la línea.
             # El workflow inspeccionado no debe acabar volcado en el log.
             print(f"FAIL: {p}: YAML inválido o fichero ilegible", file=sys.stderr)
             return 2
-    for b in bad:
-        print(f"FAIL: {b}")
-    if bad:
+        # Only constant diagnostic messages reach the log. Workflow values and returned findings
+        # select a reason but are never interpolated, even for job names or invalid action refs.
+        failed = failed or bool(findings)
+        for code, message in DIAGNOSTICS.items():
+            if code in findings:
+                print(f"FAIL: {p}: {message}")
+    if failed:
         return 1
     print(f"PASS: {argv[0]} ({len(argv) - 1} workflow(s))")
     return 0

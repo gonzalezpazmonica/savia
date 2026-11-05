@@ -563,6 +563,25 @@ PY
   [[ "$output" != *"private_fixture_marker"* ]]
 }
 
+@test "AC-6 negativo: los diagnósticos no imprimen nombres de jobs ni valores de uses del workflow" {
+  cp "$REPO/.github/workflows/confidentiality-main.yml" "$T/diagnostic.yml"
+  python3 - "$T/diagnostic.yml" <<'PY'
+from pathlib import Path
+import sys, yaml
+p = Path(sys.argv[1]); doc = yaml.safe_load(p.read_text())
+job = next(iter(doc['jobs'].values()))
+job['permissions'] = {'contents': 'write'}
+job['steps'][0]['uses'] = 'private_fixture_marker/action@v1'
+doc['jobs'] = {'private_fixture_marker': job}
+p.write_text(yaml.safe_dump(doc))
+PY
+  run python3 "$W" main-audit "$T/diagnostic.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"acción no fijada por SHA"* ]]
+  [[ "$output" == *"permisos distintos de contents: read"* ]]
+  [[ "$output" != *"private_fixture_marker"* ]]
+}
+
 @test "AC-15 negativo: las referencias HMAC en minúsculas, mixtas y por índice también se rechazan" {
   for expression in 'secrets.confidentiality_hmac_key' 'secrets.Confidentiality_Hmac_Key' "secrets['confidentiality_hmac_key']"; do
     printf 'on: [pull_request]\njobs:\n  a:\n    env:\n      K: ${{ %s }}\n' "$expression" > "$T/case.yml"
