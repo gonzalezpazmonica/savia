@@ -50,8 +50,9 @@ const STRIPPER = fileURLToPath(new URL("../../../scripts/lib/strip_inert_heredoc
 /**
  * La orden sin el TEXTO de los heredocs que solo escriben un fichero
  * (`cat > f <<'EOF' … EOF`): ese texto no se ejecuta. Lo decide
- * `scripts/lib/strip_inert_heredocs.py`, el mismo filtro que usa el hook bash
- * agent-git-discipline. Sin Python o ante un fallo: la orden intacta (fail-closed).
+ * `scripts/lib/strip_inert_heredocs.py` (lista cerrada; ante la duda no quita
+ * nada). El hook bash validate-bash-global.sh aún no lo usa: allí el texto del
+ * heredoc sigue bloqueando. Sin Python o ante un fallo: la orden intacta (fail-closed).
  */
 export function withoutInertHeredocs(command: string): string {
   if (!command.includes("<<")) return command;

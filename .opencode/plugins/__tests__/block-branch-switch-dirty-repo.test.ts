@@ -30,6 +30,22 @@ test("dirty tree: checkout <rama> and a restore followed by a switch stay blocke
     await expect(run("git checkout -- a.txt; git checkout feature")).rejects.toThrow(/branch-switch-dirty/);
   }));
 
+// Revisión #1483 (P1-1/P1-2), misma entrada que tests/test-block-branch-switch-dirty.bats:
+// una redirección o un comentario tras `--` no son rutas, y el `--` de otra línea
+// (restauración u otra orden) no excusa el cambio de rama.
+test("dirty tree: redirections, comments and other lines never hide a branch change", () =>
+  withDirtyRepo(async () => {
+    for (const cmd of [
+      "git checkout feature -- >/dev/null",
+      "git checkout feature -- 2>&1",
+      "git checkout feature -- # comentario",
+      "git checkout -- a.txt\ngit checkout feature",
+      "git checkout feature\ngrep -- x f",
+    ]) {
+      await expect(run(cmd)).rejects.toThrow(/branch-switch-dirty/);
+    }
+  }));
+
 // 2026-11-05: `git -C <clon temporal limpio> checkout <sha>` se bloqueaba porque
 // el guard miraba el repo de la sesión (sucio) y no el repo destino. Misma
 // entrada que tests/test-block-branch-switch-dirty.bats.

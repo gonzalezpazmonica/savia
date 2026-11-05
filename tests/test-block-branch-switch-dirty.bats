@@ -471,6 +471,30 @@ setup_second_repo() {
 
 # ── Edge cases ─────────────────────────────────────────
 
+@test "regresión: redirecciones y comentarios tras -- no son rutas de checkout" {
+  setup_clean_repo
+  echo dirty > a.txt
+  for cmd in 'git checkout feature -- >/dev/null' 'git checkout feature -- 2>&1' 'git checkout feature -- # comentario'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "regresión: restaurar en una línea no oculta el cambio de rama de la siguiente" {
+  setup_clean_repo
+  echo dirty > a.txt
+  for cmd in $'git checkout -- a.txt\ngit checkout feature' $'git checkout feature\ngrep -- x f'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
 @test "edge: very large dirty tree (>20 files) listed truncated" {
   setup_clean_repo
   for i in $(seq 1 30); do echo "new" > "file-$i.txt"; done

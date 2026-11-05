@@ -16,87 +16,48 @@ if [[ ! -t 0 ]]; then
 fi
 [[ -z "$INPUT" ]] && exit 0
 
-# Extract command + session cwd from hook JSON (two lines: command, cwd)
-PARSED=$(echo "$INPUT" | python3 -c "
-import sys, json
+# Preserve newlines: each invocation has its own arguments and destination.
+# The shared lexer distinguishes git checkout -- paths from branch changes,
+# including redirections, comments and quoted -C paths.
+COMMAND=$(printf '%s' "$INPUT" | python3 -c '
+import json, sys
 d = json.load(sys.stdin)
-cmd = d.get('tool_input', {}).get('command', '') or ''
-print(cmd.replace(chr(10), ' '))
-print(d.get('cwd', '') or '')
-" 2>/dev/null)
-COMMAND=$(echo "$PARSED" | sed -n '1p')
-SESSION_CWD=$(echo "$PARSED" | sed -n '2p')
+cmd = d.get("tool_input", {}).get("command", "") or ""
+if not isinstance(cmd, str): raise ValueError("command")
+sys.stdout.write(cmd)
+' 2>/dev/null) || { echo "BLOQUEADO: entrada de hook inválida." >&2; exit 2; }
 [[ -z "$COMMAND" ]] && exit 0
-
-# Locate the branch-changing invocation itself: `git [-C <dir>] (checkout|switch) <args>`,
-# each one with its OWN arguments (up to the next ; & |). Only THAT invocation's -C
-# counts — a foreign `git -C X status` elsewhere in the command must not decide the
-# target repo. A file restore is `git checkout [<opciones>] [<tree-ish>] -- <rutas>`:
-# a standalone `--` followed by at least one path (`--merge`, `--ours` or a tree-ish
-# before it included). It never moves HEAD, so it is skipped — but a restore earlier
-# in the command does not excuse a later `git checkout <rama>`.
-INVOCATION_RX='(^|[^[:alnum:]_./-])git[[:space:]]+(-C[[:space:]]+([^[:space:];&|]+)[[:space:]]+)?(checkout|switch)[[:space:]]+([^;&|]*)'
-SCAN="$COMMAND"
-CONSUMED=""
-FOUND=0
-while [[ "$SCAN" =~ $INVOCATION_RX ]]; do
-  WHOLE="${BASH_REMATCH[0]}"
-  GIT_C_DIR="${BASH_REMATCH[3]}"
-  GIT_SUBCMD="${BASH_REMATCH[4]}"
-  GIT_ARGS="${BASH_REMATCH[5]}"
-  BEFORE="${SCAN%%"$WHOLE"*}"
-  if [[ "$GIT_SUBCMD" == "checkout" && " $GIT_ARGS" =~ [[:space:]]--[[:space:]]+[^[:space:]] ]]; then
-    CONSUMED+="$BEFORE$WHOLE"
-    SCAN="${SCAN#*"$WHOLE"}"
-    continue
+SESSION_CWD=$(printf '%s' "$INPUT" | python3 -c '
+import json, sys
+cwd = json.load(sys.stdin).get("cwd", "") or ""
+if not isinstance(cwd, str): raise ValueError("cwd")
+sys.stdout.write(cwd)
+' 2>/dev/null) || { echo "BLOQUEADO: cwd de hook inválido." >&2; exit 2; }
+WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+TARGETS=$(printf '%s' "$COMMAND" | timeout 5 python3   "$WORKSPACE_ROOT/scripts/lib/git_op_targets.py" --switch "${SESSION_CWD:-$PWD}" 2>/dev/null) || {
+  echo "BLOQUEADO: no se pudo resolver el destino del cambio de rama." >&2; exit 2;
+}
+[[ -z "$TARGETS" ]] && exit 0
+CLEAR_SUMMARY=0
+DIRTY=""
+while IFS= read -r TARGET; do
+  [[ "$TARGET" == $'switch\t'* ]] || {
+    echo "BLOQUEADO: destino de cambio de rama inválido." >&2; exit 2;
+  }
+  TARGET_DIR="${TARGET#*$'\t'}"
+  [[ -n "$TARGET_DIR" ]] || {
+    echo "BLOQUEADO: destino de cambio de rama desconocido." >&2; exit 2;
+  }
+  [[ -d "$TARGET_DIR" ]] || continue
+  TARGET_ROOT=$(git -C "$TARGET_DIR" rev-parse --show-toplevel 2>/dev/null) || continue
+  DIRTY=$(git -C "$TARGET_DIR" status --porcelain 2>/dev/null) || {
+    echo "BLOQUEADO: no se pudo comprobar el estado del repo." >&2; exit 2;
+  }
+  [[ -n "$DIRTY" ]] && break
+  if [[ "$(cd "$TARGET_ROOT" && pwd -P)" == "$WORKSPACE_ROOT" ]]; then
+    CLEAR_SUMMARY=1
   fi
-  FOUND=1
-  break
-done
-[[ $FOUND -eq 1 ]] || exit 0
-PREFIX="$CONSUMED$BEFORE"   # text before the branch-changing git invocation
-
-# Last `cd <dir> &&|;` BEFORE the git invocation (cd A && cd B && git switch → B)
-CD_DIR=""
-REST="$PREFIX"
-while [[ "$REST" =~ (^|[[:space:]]|\&\&|\;)cd[[:space:]]+([^[:space:]\;\&\|]+)[[:space:]]*(\&\&|\;)(.*)$ ]]; do
-  CD_DIR="${BASH_REMATCH[2]}"
-  REST="${BASH_REMATCH[4]}"
-done
-
-# Resolve the repo the command actually targets. The hook's own cwd is the
-# workspace, NOT necessarily the repo the command runs in (cd X && git switch).
-# Priority: -C of the invocation > last cd before it > session cwd (hook JSON) > hook cwd.
-FALLBACK_DIR="${SESSION_CWD:-$PWD}"
-TARGET_DIR=""
-if [[ -n "$GIT_C_DIR" ]]; then
-  TARGET_DIR="$GIT_C_DIR"
-elif [[ -n "$CD_DIR" ]]; then
-  TARGET_DIR="$CD_DIR"
-fi
-# Strip surrounding quotes, expand ~ / $HOME, resolve relative to session cwd
-TARGET_DIR="${TARGET_DIR%\"}"; TARGET_DIR="${TARGET_DIR#\"}"
-TARGET_DIR="${TARGET_DIR%\'}"; TARGET_DIR="${TARGET_DIR#\'}"
-TARGET_DIR="${TARGET_DIR/#\~/$HOME}"
-TARGET_DIR="${TARGET_DIR/#\$HOME/$HOME}"
-# Anything we cannot expand statically ($VAR, $(...), backticks) → conservative fallback
-if [[ "$TARGET_DIR" == *'$'* || "$TARGET_DIR" == *'`'* ]]; then
-  TARGET_DIR=""
-fi
-if [[ -n "$TARGET_DIR" && "$TARGET_DIR" != /* ]]; then
-  TARGET_DIR="$FALLBACK_DIR/$TARGET_DIR"
-fi
-# Unresolvable or non-existent target → fall back to the session cwd, never pass through
-if [[ -z "$TARGET_DIR" || ! -d "$TARGET_DIR" ]]; then
-  TARGET_DIR="$FALLBACK_DIR"
-fi
-[[ -d "$TARGET_DIR" ]] || exit 0
-
-# Not a git repo → nothing to protect
-TARGET_ROOT=$(git -C "$TARGET_DIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
-
-# Check for uncommitted changes (tracked + untracked) IN THE TARGET REPO
-DIRTY=$(git -C "$TARGET_DIR" status --porcelain 2>/dev/null | head -20)
+done <<< "$TARGETS"
 if [[ -n "$DIRTY" ]]; then
   # grep -c prints the count even when it is 0 (and exits 1) — never append a second "0"
   TRACKED=$(echo "$DIRTY" | grep -cE '^ M| ^M|^MM|^A |^D ' || true)
@@ -119,8 +80,7 @@ fi
 # SE-300: clear stale per-branch PR summary on legitimate branch switch so a
 # previous PR's natural-language paragraph does not leak into the next PR body.
 # Only when the switch happens in THIS workspace — never touch another repo's state.
-WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-if [[ "$(cd "$TARGET_ROOT" && pwd -P)" == "$WORKSPACE_ROOT" && -f "$WORKSPACE_ROOT/.pr-summary.md" ]]; then
+if [[ "$CLEAR_SUMMARY" -eq 1 && -f "$WORKSPACE_ROOT/.pr-summary.md" ]]; then
   rm -f "$WORKSPACE_ROOT/.pr-summary.md"
 fi
 

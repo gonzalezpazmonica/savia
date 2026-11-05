@@ -79,6 +79,32 @@ class Strip(unittest.TestCase):
         out = strip(f"cat > n.md <<'EOF'\n{RM} /\nEOF\necho listo")
         self.assertNotIn(RM, out)
 
+    def test_indirect_execution_keeps_body(self):
+        # Revisión #1483 P1-3: bash ejecuta el fichero sin nombrarlo literalmente.
+        for cmd in (f"export BASH_ENV=/tmp/env\ncat > \"$BASH_ENV\" <<'EOF'\n{RM} /\nEOF\nbash -c true",
+                    f"export BASH_ENV=/tmp/env\ncat > /tmp/env <<'EOF'\n{RM} /\nEOF\nbash -c true",
+                    f"cat > /tmp/guard-payload <<'EOF'\n{RM} /\nEOF\nbash /tmp/guard-*",
+                    f"cat > package.json <<'EOF'\n{RM} /\nEOF\nnpm test",
+                    f"cat > Makefile <<'EOF'\n{RM} /\nEOF\nmake",
+                    f"cat > ~/notas.md <<'EOF'\n{RM} /\nEOF"):
+            self.assertIn(RM, strip(cmd), cmd)
+
+    def test_quoted_string_wrapping_the_heredoc_line_keeps_body(self):
+        # bash: echo "…"; <orden>; echo "…" — el «cuerpo» es una orden
+        cmd = f"echo \"\ncat > n.md <<'EOF'\n\"; {RM} /; echo \"\nEOF\n\""
+        self.assertIn(RM, strip(cmd))
+
+    def test_one_doubtful_heredoc_keeps_all(self):
+        cmd = f"cat > a.md <<'EOF'\n{RM} /a\nEOF\nbash <<'EOF'\n{RM} /b\nEOF"
+        self.assertEqual(strip(cmd), cmd)
+
+    def test_known_data_commands_around_literal_output_drop_body(self):
+        cmd = (f"mkdir -p docs\ncat > docs/n.md <<'EOF'\n{RM} /\nEOF\n"
+               "printf '%s' 'texto bash'\ncat docs/n.md | grep -c rm && echo ok")
+        out = strip(cmd)
+        self.assertNotIn(RM, out)
+        self.assertIn("cat docs/n.md", out)
+
     def test_no_heredoc_is_identity(self):
         cmd = f"{RM} /tmp/x; echo ok"
         self.assertEqual(strip(cmd), cmd)
