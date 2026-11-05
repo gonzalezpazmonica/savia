@@ -16,7 +16,7 @@
 | **Gateway** | ¿Único camino propuesta→efecto? | `.claude/hooks/mind-virus-write-gate.sh` + puente savia-gates (hooks bash) + `scripts/agent-gate.sh` | propuesta → efecto | — |
 | **Verifier** | ¿La propuesta se valida contra el recorder? | `scripts/court-review.sh` + `scripts/coherence-court.sh` + jueces (`.opencode/agents/*-judge.md`) | veredicto → aceptación | NO grounding sistemático contra trace (F2 lo cierra) |
 | **Cache** | ¿Solo entra lo verificado? | `scripts/content-fingerprint.sh` (keys SE-151) + memoria verificada (`scripts/memory-store.sh`) | verificación → reúso | Sin cache de veredictos de gates; riesgo de envenenado si el borde se corta |
-| **Orchestrator** | ¿Loop + presupuesto + resume? | `scripts/savia-runs.sh` (ledger SE-349) + `scripts/meta-monitor.sh` + `scripts/overnight-sprint-loop.sh` | plan → iteración | Sin checkpoint durable SQLite/resume (F4 lo cierra) |
+| **Orchestrator** | ¿Loop + presupuesto + resume? | `scripts/savia-runs.sh` (ledger SE-349) + `scripts/meta-monitor.sh` + `scripts/overnight-sprint-loop.sh` + `scripts/overnight-handoff-digest.sh` (relevo de la mañana SE-471: declarado / validado / aceptado, solo lectura) | plan → iteración | Sin checkpoint durable SQLite/resume (F4 lo cierra) |
 
 ## Prueba de ablación (F1, preregistrada)
 
