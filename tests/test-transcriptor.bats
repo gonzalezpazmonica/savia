@@ -1,5 +1,8 @@
 #!/usr/bin/env bats
 # test-transcriptor.bats — SE-308 Savia Transcriptor: integracion de scripts
+# Ref: scripts/transcriptor-scan.sh — reuniones transcritas y pendientes SE-308
+
+SCRIPT="scripts/transcriptor-scan.sh"
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
@@ -16,10 +19,41 @@ teardown() {
 }
 
 @test "SE-308: scan lista solo reuniones sin digerir" {
-  run bash "$REPO_ROOT/scripts/transcriptor-scan.sh"
+  run bash "$REPO_ROOT/$SCRIPT"
   [ "$status" -eq 0 ]
   [[ "$output" == *"2026-08-04-09-15"* ]]
   [[ "$output" != *"2026-08-04-11-00"* ]]
+}
+
+@test "S03n null: meta.json no se lista y conserva el fichero" {
+  mk_meeting "2026-08-13" 'null'
+  run --separate-stderr bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-08-04-09-15" ]
+  [ "$stderr" = "" ]
+  python3 -c 'import json,sys; assert json.load(open(sys.argv[1])) is None' "$SAVIA_TRANSCRIPTOR_DIR/$R/2026-08-13/meta.json"
+  run bash "$REPO_ROOT/$SCRIPT" --all
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"2026-08-13 digested=? transcribed=? meta=ilegible"* ]]
+}
+
+@test "S03n error empty: meta.json vacío no se toma por reunión transcrita" {
+  mk_meeting "2026-08-14" "" transcript.md
+  : > "$SAVIA_TRANSCRIPTOR_DIR/$R/2026-08-14/meta.json"
+  run --separate-stderr bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-08-04-09-15" ]
+  [[ "$stderr" == *"ERROR: meta.json ilegible en 2026-08-14"* ]]
+}
+
+@test "S03n error nonexistent: reuniones es un fichero y no se intenta leerlo como directorio" {
+  local invalid="$SAVIA_TRANSCRIPTOR_DIR/invalido"
+  mkdir -p "$invalid"
+  : > "$invalid/reuniones"
+  SAVIA_TRANSCRIPTOR_DIR="$invalid" run --separate-stderr bash "$REPO_ROOT/$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+  [[ "$stderr" == "No hay reuniones todavia en "* ]]
 }
 
 @test "SE-308: scan --all lista todas con estado" {

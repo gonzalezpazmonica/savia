@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # tests/test-se-270-s1-skills-lint.bats
 # SE-270 Slice 1 — BATS tests for scripts/skills-lint.sh
+# Ref: scripts/skills-lint.sh — contrato de entrada y salida SE-270
 #
 # Verifies: description length checks, trigger phrases, IO declaration,
 # frontmatter validation, JSON/table output modes.
@@ -410,4 +411,12 @@ assert d["j-warn"]["status"]=="WARN" and "too short (5 chars" in d["j-warn"]["re
   SAVIA_SKILLS_DIR="$TMPDIR/skills" run bash "$ROOT/$SCRIPT" --nope
   [ "$status" -eq 1 ]
   [[ "$output" == *"Unknown flag: --nope"* ]]
+}
+
+@test "S03n: consumes y produces null no declaran entradas ni salidas" {
+  write_skill_md "null-io" "$(desc_of_len 200)" 'consumes: null\nproduces: null\n'
+  SAVIA_SKILLS_DIR="$TMPDIR/skills" run --separate-stderr bash "$ROOT/$SCRIPT" --json
+  [ "$status" -eq 1 ]
+  [ "$stderr" = "PASS: 0 | WARN: 1 | FAIL: 0 | TOTAL: 1" ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert len(d)==1; assert d[0]["status"]=="WARN"; assert "no consumes/produces declared" in d[0]["reasons"]' "$output"
 }

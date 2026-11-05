@@ -11,6 +11,31 @@ setup() {
   TMP_DIR="$(mktemp -d -p "$BATS_TEST_TMPDIR")"
 }
 
+teardown() { rm -rf "$TMP_DIR"; }
+
+# SE-501: la lista de derivados se lee del commit base, nunca del disco de la PR.
+base_fixture() {
+  FIXTURE="$TMP_DIR/base"
+  mkdir -p "$FIXTURE/scripts"
+  cp "$TIER" "$FIXTURE/scripts/risk-tier.py"
+  git -C "$FIXTURE" init -q -b main
+  fixture_base
+}
+
+fixture_git() {
+  git -C "$FIXTURE" -c core.hooksPath=/dev/null -c commit.gpgsign=false \
+    -c user.name=test -c user.email=test@example.invalid "$@"
+}
+
+fixture_base() {
+  fixture_git add scripts/risk-tier.py
+  if [[ -f "$FIXTURE/scripts/derived-paths.txt" ]]; then
+    fixture_git add scripts/derived-paths.txt
+  fi
+  fixture_git commit -qm base
+  fixture_git update-ref refs/remotes/origin/main HEAD
+}
+
 @test "docs-only → tier 1, no requiere humano" {
   run python3 "$TIER" --diff "README.md docs/guide.md" --json
   [[ "$status" -eq 0 ]]
@@ -249,31 +274,37 @@ tier_of() {
 }
 
 @test "S03n fail-closed: sin derived-paths.txt nada de .scm se exime" {
-  cp "$TIER" "$TMP_DIR/risk-tier.py"
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  base_fixture
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
   [ "$output" = "3 True" ]
-  cp "$REPO_ROOT/scripts/derived-paths.txt" "$TMP_DIR/"
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  cp "$REPO_ROOT/scripts/derived-paths.txt" "$FIXTURE/scripts/"
+  # Una lista presente solo en el árbol de la propuesta no autoriza la exención.
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  [ "$output" = "3 True" ]
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
   [ "$output" = "2 False" ]
 }
 
 @test "S03n fail-closed: una entrada .scm/ global o de fichero a mano en la lista se ignora" {
-  cp "$TIER" "$TMP_DIR/risk-tier.py"
-  printf '.scm/\n.scm/runtime-surface/\n.scm/sam-authority-declarations.json\n' > "$TMP_DIR/derived-paths.txt"
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/views/authority.json"
+  base_fixture
+  printf '.scm/\n.scm/runtime-surface/\n.scm/sam-authority-declarations.json\n' > "$FIXTURE/scripts/derived-paths.txt"
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json"
   [ "$output" = "3 True" ]
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/sam-authority-declarations.json"
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/sam-authority-declarations.json"
   [ "$output" = "3 True" ]
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/runtime-surface/auth.json"
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/runtime-surface/auth.json"
   [ "$output" = "3 True" ]
 }
 
 @test "S03n: prefijo de directorio de la lista exime lo que cuelga de él y nada más" {
-  cp "$TIER" "$TMP_DIR/risk-tier.py"
-  printf '# comentario\n.scm/views/\n' > "$TMP_DIR/derived-paths.txt"
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  base_fixture
+  printf '# comentario\n.scm/views/\n' > "$FIXTURE/scripts/derived-paths.txt"
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
   [ "$output" = "2 False" ]
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/viewsx/authority.json scripts/tool.sh"
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/viewsx/authority.json scripts/tool.sh"
   [ "$output" = "3 True" ]
 }
 
@@ -285,10 +316,11 @@ tier_of() {
 }
 
 @test "S03n fail-closed: runtime-surface y *.schema.json nunca son derivados aunque la lista los nombre" {
-  cp "$TIER" "$TMP_DIR/risk-tier.py"
-  printf '.scm/runtime-surface/sub/\n.scm/auth.schema.json\n' > "$TMP_DIR/derived-paths.txt"
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/runtime-surface/sub/auth.json"
+  base_fixture
+  printf '.scm/runtime-surface/sub/\n.scm/auth.schema.json\n' > "$FIXTURE/scripts/derived-paths.txt"
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/runtime-surface/sub/auth.json"
   [ "$output" = "3 True" ]
-  run tier_of "$TMP_DIR/risk-tier.py" ".scm/auth.schema.json"
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/auth.schema.json"
   [ "$output" = "3 True" ]
 }

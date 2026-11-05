@@ -1,9 +1,30 @@
 #!/usr/bin/env bats
-# test-se230-s3-checkin.bats — 10 tests para focal-checkin.sh
+# SE-230 S3: persistencia, errores de escritura y límites de carga.
+# Pruebas aisladas; los casos de reloj fijan la ventana sin esperas.
+# Ref: docs/rules/domain/focal-parallelization-protocol.md
 
 NIDO_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
-FOCAL_CHECKIN="$NIDO_DIR/scripts/focal-checkin.sh"
+SCRIPT="scripts/focal-checkin.sh"
+FOCAL_CHECKIN="$NIDO_DIR/$SCRIPT"
 TEST_FOCAL_DIR=""
+
+@test "latido con session_pid null rechaza el estado sin modificarlo" {
+  local file="$HOME/.savia/focal-state/parcial.json"
+  printf '{"nido":"parcial","updated_at":"2000-01-01T00:00:00Z","session_pid":null}\n' > "$file"
+  local before; before=$(cat "$file")
+  run bash "$FOCAL_CHECKIN" --nido parcial
+  [ "$status" -ne 0 ]
+  [ "$(cat "$file")" = "$before" ]
+}
+
+@test "intervalo con updated_at null rechaza el estado sin modificarlo" {
+  local file="$HOME/.savia/focal-state/parcial.json"
+  printf '{"nido":"parcial","updated_at":null,"check_in_interval_min":10}\n' > "$file"
+  local before; before=$(cat "$file")
+  run bash "$FOCAL_CHECKIN" --nido parcial --set-interval 20
+  [ "$status" -ne 0 ]
+  [ "$(cat "$file")" = "$before" ]
+}
 
 setup() {
   TEST_FOCAL_DIR="$(mktemp -d /tmp/focal-checkin-test-XXXXXX)"
@@ -77,13 +98,13 @@ EOF
 # ── Test 1: --nido actualiza updated_at ───────────────────────────────────────
 @test "1. focal-checkin --nido actualiza updated_at" {
   _write_focal "checkin-nido"
-  local old_ts; old_ts=$(grep -oP '"updated_at"\s*:\s*"\K[^"]*' "$HOME/.savia/focal-state/checkin-nido.json")
-  sleep 1
+  local old_ts="2000-01-01T00:00:00Z"
+  sed -i 's/"updated_at": "[^"]*"/"updated_at": "2000-01-01T00:00:00Z"/' "$HOME/.savia/focal-state/checkin-nido.json"
   run bash "$FOCAL_CHECKIN" --nido "checkin-nido"
   [ "$status" -eq 0 ]
   local new_ts; new_ts=$(grep -oP '"updated_at"\s*:\s*"\K[^"]*' "$HOME/.savia/focal-state/checkin-nido.json")
   # El timestamp debe ser diferente
-  [ "$old_ts" != "$new_ts" ] || skip "timestamps iguales en el mismo segundo"
+  [ "$old_ts" != "$new_ts" ]
 }
 
 # ── Test 2: --set-interval actualiza check_in_interval_min ───────────────────
@@ -349,4 +370,204 @@ P
   # Liberado el lock, el heartbeat vuelve a funcionar (el bloqueo era el lock).
   run bash "$FOCAL_CHECKIN" --nido lk
   [ "$status" -eq 0 ]
+}
+
+_read_state() {
+  python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])),sort_keys=True))' \
+    "$HOME/.savia/focal-state/$1.json"
+}
+
+_fail_command() {
+  mkdir -p "$TEST_FOCAL_DIR/bin"
+  printf '#!/bin/sh\nexit 1\n' > "$TEST_FOCAL_DIR/bin/$1"
+  chmod +x "$TEST_FOCAL_DIR/bin/$1"
+  export PATH="$TEST_FOCAL_DIR/bin:$PATH"
+}
+
+_fixed_clock() {
+  mkdir -p "$TEST_FOCAL_DIR/bin"
+  # Las fechas del log siguen usando GNU date; solo se fija el presente.
+  cat > "$TEST_FOCAL_DIR/bin/date" <<'SH'
+#!/bin/sh
+if [ "$*" = '+%s' ]; then
+  echo 1793880000
+else
+  exec /usr/bin/date "$@"
+fi
+SH
+  chmod +x "$TEST_FOCAL_DIR/bin/date"
+  export PATH="$TEST_FOCAL_DIR/bin:$PATH"
+}
+
+@test "intervalo en nido nuevo crea un objeto JSON válido con identidad" {
+  run bash "$FOCAL_CHECKIN" --set-interval 25 --nido nuevo
+  [ "$status" -eq 0 ]
+  run _read_state nuevo
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"check_in_interval_min": 25'* ]]
+  [[ "$output" == *'"nido": "nuevo"'* ]]
+}
+
+@test "latido añade pid ausente aunque el estado ya tenga updated_at" {
+  printf '{"nido":"parcial","updated_at":"2000-01-01T00:00:00Z","task":"conservar"}\n' \
+    > "$HOME/.savia/focal-state/parcial.json"
+  run bash "$FOCAL_CHECKIN" --nido parcial
+  [ "$status" -eq 0 ]
+  run python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["session_pid"]>0; assert d["task"]=="conservar"; assert d["updated_at"]!="2000-01-01T00:00:00Z"' \
+    "$HOME/.savia/focal-state/parcial.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "intervalo añade updated_at ausente y conserva la decisión anidada" {
+  printf '{"nido":"parcial","check_in_interval_min":10,"next_human_decision":{"description":"revisar","blocking":true}}\n' \
+    > "$HOME/.savia/focal-state/parcial.json"
+  run bash "$FOCAL_CHECKIN" --set-interval 30 --nido parcial
+  [ "$status" -eq 0 ]
+  run python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["updated_at"]; assert d["check_in_interval_min"]==30; assert d["next_human_decision"]=={"description":"revisar","blocking":True}' \
+    "$HOME/.savia/focal-state/parcial.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "error de flock impide anunciar éxito y deja intacto el estado" {
+  _write_focal bloqueado
+  local before; before=$(cat "$HOME/.savia/focal-state/bloqueado.json")
+  _fail_command flock
+  for mode in heartbeat interval; do
+    if [[ "$mode" == heartbeat ]]; then
+      run bash "$FOCAL_CHECKIN" --nido bloqueado
+    else
+      run bash "$FOCAL_CHECKIN" --nido bloqueado --set-interval 25
+    fi
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"registrado"* && "$output" != *"actualizado"* ]]
+    [ "$(cat "$HOME/.savia/focal-state/bloqueado.json")" = "$before" ]
+  done
+}
+
+@test "error de escritura no anuncia éxito" {
+  mkdir "$HOME/.savia/focal-state/directorio.json"
+  run bash "$FOCAL_CHECKIN" --nido directorio
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"registrado"* ]]
+}
+
+@test "error al crear el directorio de estado aborta incluso en lectura de carga" {
+  _fail_command mkdir
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$status" -ne 0 ]
+  [[ "$output" != "OK" ]]
+}
+
+@test "argumento sin valor produce diagnóstico controlado" {
+  for flag in --nido --set-interval; do
+    run bash "$FOCAL_CHECKIN" "$flag"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"ERROR:"* ]]
+    [[ "$output" != *"unbound variable"* ]]
+  done
+}
+
+@test "intervalo inválido no modifica el estado existente" {
+  _write_focal valido
+  local before; before=$(cat "$HOME/.savia/focal-state/valido.json")
+  for value in '' 0 -1 1.5 texto 01 '5,"inject":true'; do
+    run bash "$FOCAL_CHECKIN" --nido valido --set-interval "$value"
+    [ "$status" -ne 0 ]
+    [ "$(cat "$HOME/.savia/focal-state/valido.json")" = "$before" ]
+  done
+}
+
+@test "nombre inválido no permite salir del directorio focal" {
+  for name in '../fuera' '/absoluto' '' 'linea
+rota'; do
+    run bash "$FOCAL_CHECKIN" --nido "$name"
+    [ "$status" -ne 0 ]
+  done
+  [ ! -e "$HOME/.savia/fuera.json" ]
+}
+
+@test "opción desconocida se rechaza sin crear estado" {
+  run bash "$FOCAL_CHECKIN" --nido nuevo --desconocido
+  [ "$status" -ne 0 ]
+  [ ! -e "$HOME/.savia/focal-state/nuevo.json" ]
+}
+
+@test "límites de carga con dos tres cinco y seis cambios" {
+  _fixed_clock
+  local n expected i
+  for n in 2 3 5 6; do
+    : > "$HOME/.savia/.switch-log"
+    for ((i=0; i<n; i++)); do
+      printf '2026-11-05T11:30:00Z a→b\n' >> "$HOME/.savia/.switch-log"
+    done
+    case "$n" in 2) expected=OK ;; 3|5) expected=HIGH ;; 6) expected=OVERLOAD ;; esac
+    run bash "$FOCAL_CHECKIN" --load
+    [ "$status" -eq 0 ]
+    [ "$output" = "$expected" ]
+  done
+}
+
+@test "límite de ventana incluye una hora exacta y excluye futuro y anterior" {
+  _fixed_clock
+  # Dos cambios dentro y uno justo en el límite: HIGH.
+  printf '2026-11-05T11:30:00Z a→b\n2026-11-05T11:30:00Z a→b\n2026-11-05T11:00:00Z a→b\n' \
+    > "$HOME/.savia/.switch-log"
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$status" -eq 0 ]
+  [ "$output" = HIGH ]
+  printf '2026-11-05T11:30:00Z a→b\n2026-11-05T11:30:00Z a→b\n2026-11-05T10:59:59Z a→b\n2026-11-05T12:00:01Z a→b\nincorrecto a→b\n' \
+    > "$HOME/.savia/.switch-log"
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$status" -eq 0 ]
+  [ "$output" = OK ]
+}
+
+@test "límites de decisiones con dos tres cinco y seis pendientes" {
+  local n expected i
+  for n in 2 3 5 6; do
+    for ((i=1; i<=n; i++)); do _write_decision_nido "decision-$i"; done
+    case "$n" in 2) expected=OK ;; 3|5) expected=HIGH ;; 6) expected=OVERLOAD ;; esac
+    run bash "$FOCAL_CHECKIN" --load
+    [ "$status" -eq 0 ]
+    [ "$output" = "$expected" ]
+  done
+}
+
+@test "estado ausente permite latido válido con nombre habitual" {
+  run bash "$FOCAL_CHECKIN" --nido nido_1-prueba.2
+  [ "$status" -eq 0 ]
+  run _read_state nido_1-prueba.2
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"nido": "nido_1-prueba.2"'* ]]
+  [[ "$output" == *'"session_pid":'* ]]
+}
+
+@test "estado con campo escalar inválido falla sin reescribir el fichero" {
+  local state before
+  state="$HOME/.savia/focal-state/invalido.json"
+  for before in '{"nido":"invalido","session_pid":null}' \
+    '{"nido":"invalido","session_pid":1.5}' \
+    '{"nido":"invalido","updated_at":null}' 'no es un objeto'; do
+    printf '%s\n' "$before" > "$state"
+    run bash "$FOCAL_CHECKIN" --nido invalido
+    [ "$status" -ne 0 ]
+    [ "$(cat "$state")" = "$before" ]
+  done
+}
+
+@test "lectura tras el bloqueo conserva un cambio anterior a obtener el lock" {
+  _write_focal actualizado
+  mkdir -p "$TEST_FOCAL_DIR/bin"
+  # Intercalar una escritura justo donde se adquiere el lock, sin carreras
+  # temporales: leer antes de flock perdería este valor.
+  cat > "$TEST_FOCAL_DIR/bin/flock" <<'SH'
+#!/bin/sh
+sed -i 's/"task": "test"/"task": "cambio reciente"/' "$HOME/.savia/focal-state/actualizado.json"
+SH
+  chmod +x "$TEST_FOCAL_DIR/bin/flock"
+  run env PATH="$TEST_FOCAL_DIR/bin:$PATH" bash "$FOCAL_CHECKIN" --nido actualizado
+  [ "$status" -eq 0 ]
+  run _read_state actualizado
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"task": "cambio reciente"'* ]]
 }

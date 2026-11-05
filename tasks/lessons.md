@@ -1,5 +1,10 @@
 # Lessons Learned
 
+- Una prueba de una política leída de la base debe crear un commit base real; un fichero local no prueba esa autoridad. Mantener un control negativo que añada la lista solo en el árbol de la propuesta.
+- Un escritor con `set -uo pipefail` no propaga por sí solo el fallo de un
+  subshell: comprobar explícitamente bloqueo y persistencia antes del mensaje
+  de éxito. Leer el estado bajo el mismo lock que lo escribe evita perder una
+  actualización intercalada. Probar estados incompletos, no sólo el esquema pleno.
 - Un hook registrado para todo Bash debe filtrar el comando dentro del script;
   no puede depender de un matcher específico de otro frontend. Probar lecturas
   permitidas y operaciones protegidas con payloads reales en un repo temporal.
