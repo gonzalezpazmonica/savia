@@ -9,11 +9,18 @@ Se quita el cuerpo SOLO si todo esto se cumple (lista blanca, fail-closed):
   - la línea del heredoc es `cat … > fichero <<DELIM` o `tee [-a] fichero <<DELIM`
     (redirección `>`/`>>` en cat; en ambos, un único heredoc en la línea);
   - esa línea no tiene `|`, `;`, `&`, `(`, `)`, `$(` ni comillas invertidas:
-    nada encadenado que pueda leer o ejecutar lo escrito;
+    nada encadenado que pueda leer o ejecutar lo escrito; ni ella ni la
+    anterior acaban en `\` (bash uniría la línea siguiente a la orden);
+  - el delimitador es una palabra entera (`<<EOF'X'` o `<<EOF\X` delimitan
+    con `EOFX`: no se reconoce y no se quita nada);
   - el heredoc termina (línea DELIM; con `<<-`, tabuladores iniciales);
   - si el delimitador no va entre comillas, el cuerpo no tiene `$(` ni
     comillas invertidas (bash las ejecutaría al expandir el cuerpo);
-  - el nombre del fichero escrito no aparece después en la orden (`bash f`).
+  - el nombre del fichero escrito no aparece después en la orden (`bash f`),
+    y lo que sigue no tiene glob ni variable (`bash ./*.sh`, `. "$F"`) que
+    pueda nombrarlo sin escribirlo;
+  - el fichero no se ejecuta fuera de la orden: nada bajo `.git/` (hooks,
+    config) ni ficheros de arranque del shell (`.bashrc`, `.profile`…).
 Todo lo demás se devuelve intacto: `bash <<EOF`, `sh -c`, `cat <<EOF | bash`,
 `python3 - <<EOF`, `cat <<EOF` a stdout, heredocs sin cerrar. La línea del
 heredoc y el delimitador se conservan; las órdenes posteriores, también.
@@ -23,8 +30,13 @@ Sin dependencias externas; sin red.
 import re
 import sys
 
-HEREDOC = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*(['\"]?)([A-Za-z_][\w.-]*)\2")
-UNSAFE_LINE = re.compile(r"[|;&()`]|\$\(")
+HEREDOC = re.compile(r"(?<!<)<<(?!<)(-?)[ \t]*(['\"]?)([A-Za-z_][\w.-]*)\2(?=[ \t<>]|$)")
+UNSAFE_LINE = re.compile(r"[|;&()`]|\$\(|\\$")
+# Lo que sigue al heredoc puede nombrar el fichero sin escribirlo.
+INDIRECT = re.compile(r"[*?\[{$`]")
+# Ficheros que se ejecutan solos, fuera de la orden.
+AUTORUN = re.compile(r"(^|/)\.git(/|$)|(^|/)\.(bashrc|bash_profile|bash_login|bash_logout|"
+                     r"profile|zshrc|zprofile|zshenv|zlogin|envrc)$")
 LEAD = re.compile(r"^[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=\S*[ \t]+)*(cat|tee)(?=[ \t])")
 
 
@@ -46,7 +58,8 @@ def strip(command):
         line = lines[i]
         found = HEREDOC.findall(line)
         lead = LEAD.match(line)
-        if len(found) != 1 or not lead or UNSAFE_LINE.search(line):
+        if len(found) != 1 or not lead or UNSAFE_LINE.search(line) \
+                or (i > 0 and lines[i - 1].endswith("\\")):
             out.append(line)
             i += 1
             continue
@@ -54,14 +67,14 @@ def strip(command):
         target = _target(line, lead.group(1))
         end = next((j for j in range(i + 1, len(lines))
                     if (lines[j].lstrip("\t") if dash else lines[j]) == delim), None)
-        if not target or end is None:
+        if not target or end is None or AUTORUN.search(target):
             out.append(line)
             i += 1
             continue
         body = "\n".join(lines[i + 1:end])
         later = "\n".join(lines[end + 1:])
         if (not quote and ("$(" in body or "`" in body)) or target in later \
-                or target.rsplit("/", 1)[-1] in later:
+                or target.rsplit("/", 1)[-1] in later or INDIRECT.search(later):
             out.append(line)
             i += 1
             continue

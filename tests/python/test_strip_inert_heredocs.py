@@ -52,6 +52,33 @@ class Strip(unittest.TestCase):
     def test_unterminated_heredoc_is_kept(self):
         self.assertIn(RM, strip(f"cat > n.md <<'EOF'\n{RM} /\n"))
 
+    def test_line_continuation_on_heredoc_line_is_kept(self):
+        # bash une la línea siguiente a la del heredoc: no es cuerpo, se ejecuta
+        for cmd in (f"cat > n.md <<'EOF' \\\n&& {RM} /\nhola\nEOF",
+                    f"bash \\\ncat > n.md <<'EOF'\n{RM} /\nEOF"):
+            self.assertIn(RM, strip(cmd), cmd)
+
+    def test_partially_quoted_delimiter_is_kept(self):
+        # bash usa EOFX como delimitador; el EOF de en medio no cierra nada
+        for cmd in (f"cat > n.md <<EOF'X'\nhola\nEOFX\n{RM} /\nEOF",
+                    f"cat > n.md <<EOF\\X\nhola\nEOFX\n{RM} /\nEOF",
+                    f"cat > n.md <<'EOF'X\nhola\nEOFX\n{RM} /\nEOF"):
+            self.assertIn(RM, strip(cmd), cmd)
+
+    def test_file_run_later_by_glob_or_variable_is_kept(self):
+        for later in ("bash ./*.sh", "F=n.s; bash ${F}h", '. "$F"', "bash n.s?"):
+            cmd = f"cat > n.sh <<'EOF'\n{RM} /\nEOF\n{later}"
+            self.assertIn(RM, strip(cmd), cmd)
+
+    def test_file_run_outside_the_command_is_kept(self):
+        for target in (".git/hooks/post-checkout", "~/.bashrc", "/x/.profile", ".zshrc"):
+            cmd = f"cat > {target} <<'EOF'\n{RM} /\nEOF"
+            self.assertIn(RM, strip(cmd), cmd)
+
+    def test_plain_later_command_still_drops_body(self):
+        out = strip(f"cat > n.md <<'EOF'\n{RM} /\nEOF\necho listo")
+        self.assertNotIn(RM, out)
+
     def test_no_heredoc_is_identity(self):
         cmd = f"{RM} /tmp/x; echo ok"
         self.assertEqual(strip(cmd), cmd)
