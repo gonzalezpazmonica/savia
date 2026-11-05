@@ -1,15 +1,21 @@
 #!/usr/bin/env bats
 # Ref: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md — seguimientos declarados en la PR #1472.
+# Estado y autoridad de la spec: docs/propuestas/planning.d/SE-501.json.
 # 1. El gate de derivados de la CI no usa nunca el de la propia PR (sin respaldo de arranque).
 # 2. EXCLUDE_PATHS del escáner de confidencialidad: rutas exactas, no subcadenas.
 # 3. risk-tier.py lee scripts/derived-paths.txt de la base, no del checkout de la PR.
 # (4. push-pr.sh --merge con --pr-base: tests/test-push-pr.bats.)
 
 REPO="$BATS_TEST_DIRNAME/.."
+SCRIPT="scripts/confidentiality-scan.sh"
 
 setup() {
   T="$BATS_TEST_TMPDIR"
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+}
+
+teardown() {
+  rm -rf "$T/g" "$T/s" "$T/rt"
 }
 
 G() { git -C "$R" -c commit.gpgsign=false "$@"; }
@@ -145,7 +151,7 @@ PY
 
 scan_repo() {
   R="$T/s"; rm -rf "$R"; mkdir -p "$R/scripts" "$R/.claude/hooks/lib"
-  cp "$REPO/scripts/confidentiality-scan.sh" "$R/scripts/"
+  cp "$REPO/$SCRIPT" "$R/scripts/"
   cp "$REPO/.claude/hooks/lib/gate-result.sh" "$R/.claude/hooks/lib/"
   printf '#!/usr/bin/env bash\necho termino-vetado-xyz\n' > "$R/scripts/generate-blocklist.sh"
   git init -q -b main "$R"; G add -A; G commit -qm base
@@ -237,4 +243,26 @@ tier() { python3 "$R/scripts/risk-tier.py" --diff "$1" --json "${@:2}" | python3
   [ "$(tier .scm/views/authority.json --base=--output=/tmp/x)" = 3 ]
   G update-ref -d refs/remotes/origin/main
   [ "$(tier .scm/views/authority.json)" = 3 ]
+}
+
+@test "EXCLUDE_PATHS empty: un diff staged vacío da clean sin inventar hallazgos" {
+  scan_repo
+  run bash "$R/scripts/confidentiality-scan.sh" --staged
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"result":"clean"'* ]]
+  [[ "$output" != *'"result":"findings"'* ]]
+}
+
+@test "EXCLUDE_PATHS nonexistent: una blocklist explícita ausente da unknown y bloquea" {
+  scan_repo
+  printf 'contenido\n' > "$R/nota.md"; G add nota.md
+  run env SAVIA_GATE_UNKNOWN=block bash "$R/scripts/confidentiality-scan.sh" --staged --blocklist "$T/no-existe.txt"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"result":"unknown"'* ]]
+}
+
+@test "risk-tier empty: una base vacía no confía en la lista de la PR" {
+  rt_repo
+  [ "$(tier .scm/views/authority.json --base '')" = 3 ]
+  [ "$(tier .scm/views/authority.json)" = 2 ]
 }
