@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=7a0b4c374bfb64cdfb4f5f84c7bfa4ac37e2d17f0083e117f4110d40a00cecbc
-timestamp=2026-11-05T02:25:56Z
+diff_hash=262af451e5ec6f0185acd1117c69ef0568cc5c39697b0a0bd203d85f4653b4a7
+timestamp=2026-11-05T02:42:40Z
 branch=agent/w-fix-guards-fp-20261023
-head_commit=676919960
-signature=d2713e475ea00eb74d85b71c876c76e079f6d305db9c9dd1134d07f9469ec37a
+head_commit=bfce7263
+signature=42a5667ffc9eb26fe452fbf1b2ce85a64df8a81864fbcde5c3c1c202825ebffa
