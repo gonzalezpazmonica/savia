@@ -36,6 +36,18 @@ Reglas (cada una cierra un hallazgo de la tercera ronda de revisión):
               R2.5 no dice «sin cambios»; límite del orquestador comprometido.
   R-GUARD     (security P2-3) el guard se activa con OR y el rollback lo respeta.
   R-HOLDEQ    (nota) la equivalencia por re-sync hereda también los HOLD.
+  R-LATENT    (security P2-1 sobre 81ef1ddc) `not_before` explícito acotado a
+              emisión + 1 h, con caso límite en AC-1.
+  R-FORK      (security P2-1 sobre 39016eda) solo PR del mismo repo, fail-closed
+              si falta el dato, con negativo en AC-16.
+  R-SEEDROOT  (correctness P2-1 sobre 39016eda) `$VAR/ruta` conserva la ruta y la
+              raíz no es semilla; AC-11 lo prueba.
+  R-TESTSDEP  (security P2-2 sobre 39016eda/81ef1ddc) (b) incluye los tests que
+              prueban un gate por contenido, no solo por nombre.
+  R-PREWIN    (correctness P2-2/P2-3 sobre 39016eda) APPROVE de antes de la
+              ventana y alcance real de la identidad de la autora, declarados.
+  R-GUARDVIAS2 (correctness P2-4 sobre 39016eda) el guard niega graphql
+              mergePullRequest, refs/heads/main y push con destino implícito.
 
 Límite: es un comprobador **léxico**. Verifica que frases concretas del
 contrato siguen en su sección y que el texto no retrocede; no demuestra que
@@ -227,6 +239,53 @@ def check(text):
     # R-HOLDEQ
     if not re.search(r"hereda \*\*todas\*\* las revisiones.*también los HOLD", r2, re.S):
         errs.append("R-HOLDEQ: la equivalencia por re-sync no dice que hereda los HOLD")
+
+    # R-LATENT (security P2-1 sobre 81ef1ddc)
+    if "**Sin políticas latentes**" not in r1 or "más de 1 h se rechaza" not in r1:
+        errs.append("R-LATENT: R1 no acota not_before a la emisión + 1 h")
+    if "`not_before` explícito más de 1 h después de la emisión" not in ac_bullet(text, "AC-1"):
+        errs.append("R-LATENT: AC-1 no prueba un not_before latente")
+
+    # R-FORK (security P2-1 sobre 39016eda)
+    if "**Solo PR del" not in r2 or "`isCrossRepository` falso" not in r2:
+        errs.append("R-FORK: R2.3 admite PR desde un fork")
+    if "Un valor ausente o ilegible deja la PR fuera" not in r2:
+        errs.append("R-FORK: R2.3 no es fail-closed si falta el origen de la PR")
+    ac16 = ac_bullet(text, "AC-16")
+    if "`isCrossRepository: true`" not in ac16 or "si `isCrossRepository` falta" not in ac16:
+        errs.append("R-FORK: AC-16 no prueba la PR desde un fork ni el dato ausente")
+
+    # R-SEEDROOT (correctness P2-1 sobre 39016eda)
+    if "lo que sigue a la variable se evalúa como un token más" not in r2:
+        errs.append("R-SEEDROOT: un token `$VAR/ruta` pierde la ruta tras la variable")
+    if "nombra la raíz y no es semilla" not in r2:
+        errs.append("R-SEEDROOT: no se define qué pasa con `.` o el prefijo vacío")
+    if "`$GITHUB_WORKSPACE/scripts/y.sh`" not in ac11 or "`working-directory: .`" not in ac11:
+        errs.append("R-SEEDROOT: AC-11 no prueba `$VAR/ruta` ni la raíz")
+
+    # R-TESTSDEP (security P2-2)
+    if "**los tests que prueban un gate por contenido**" not in r1:
+        errs.append("R-TESTSDEP: (b) protege los tests de los gates solo por nombre")
+    if "`tests/bats/hooks-x.bats`" not in ac11:
+        errs.append("R-TESTSDEP: AC-11 no prueba un test de gate sin semilla en el nombre")
+
+    # R-PREWIN (correctness P2-2/P2-3 sobre 39016eda)
+    if "**APPROVE de antes de la ventana.**" not in r2:
+        errs.append("R-PREWIN: R2.5 no dice si cuentan las APPROVE de antes de la ventana")
+    if "registradas antes de `not_before`" not in ac_bullet(text, "AC-4e"):
+        errs.append("R-PREWIN: AC-4e no prueba APPROVE de antes de la ventana")
+    if "(ii) casi nunca coincide" not in r2:
+        errs.append("R-PREWIN: R2.5 promete más identidad de la que da la comparación (ii)")
+
+    # R-GUARDVIAS2 (correctness P2-4 sobre 39016eda)
+    for needle in ("`mergePullRequest`", "`git/refs/heads/main`", "`git push origin HEAD`"):
+        if needle not in r6:
+            errs.append(f"R-GUARDVIAS2: R6 no niega {needle}")
+    for needle in ("mergePullRequest", "git/refs/heads/main", "`git push origin HEAD`"):
+        if needle not in ac13:
+            errs.append(f"R-GUARDVIAS2: AC-13 no prueba {needle}")
+    if "el `ask` no la despierta" not in r6:
+        errs.append("R-GUARDVIAS2: R6 promete que el ask despierta a la operadora de noche")
 
     return errs
 

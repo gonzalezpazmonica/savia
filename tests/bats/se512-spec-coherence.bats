@@ -352,3 +352,124 @@ guard nocturno se activa con cualquiera' 'El guard nocturno se desactiva quitand
   [ "$status" -eq 1 ]
   [[ "$output" == *"orquestador"* ]]
 }
+
+# --- Sexta ronda (revisiones sobre 39016eda y 81ef1ddc) ---
+
+@test "R-LATENT (seg. P2-1): sin acotar not_before falla" {
+  mutate '**Sin políticas latentes**' 'Además'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-LATENT: R1 no acota not_before"* ]]
+}
+
+@test "R-LATENT (seg. P2-1): AC-1 sin el caso de not_before latente falla" {
+  mutate '`not_before` explícito más de 1 h después de la emisión' '`not_before` raro'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-LATENT: AC-1 no prueba"* ]]
+}
+
+@test "R-FORK (seg. P2-1): R2.3 que admite forks falla" {
+  mutate '`isCrossRepository` falso' 'cualquier origen'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-FORK: R2.3 admite PR desde un fork"* ]]
+}
+
+@test "R-FORK (seg. P2-1): dato de origen ausente sin fail-closed falla" {
+  mutate 'Un valor ausente o ilegible deja la PR fuera' 'Un valor ausente se trata como del mismo repo'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-FORK: R2.3 no es fail-closed"* ]]
+}
+
+@test "R-FORK (seg. P2-1): AC-16 sin el caso de fork falla" {
+  mutate '`isCrossRepository: true`' 'otra rama'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-FORK: AC-16 no prueba"* ]]
+}
+
+@test "R-SEEDROOT (corr. P2-1): \$VAR/ruta que pierde la ruta falla" {
+  mutate 'lo que sigue a la variable se evalúa como un token más' 'lo que sigue a la variable se descarta'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-SEEDROOT: un token"* ]]
+}
+
+@test "R-SEEDROOT (corr. P2-1): raíz sin definir falla" {
+  mutate 'nombra la raíz y no es semilla' 'excluye la raíz'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-SEEDROOT: no se define"* ]]
+}
+
+@test "R-SEEDROOT (corr. P2-1): AC-11 sin el fixture working-directory falla" {
+  mutate 'un `working-directory: .` no excluye la raíz' 'la raíz se excluye'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-SEEDROOT: AC-11 no prueba"* ]]
+}
+
+@test "R-TESTSDEP (seg. P2-2): tests de gates solo por nombre falla" {
+  mutate '**los tests que prueban un gate por contenido**' 'nada más'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-TESTSDEP: (b) protege"* ]]
+}
+
+@test "R-TESTSDEP (seg. P2-2): AC-11 sin test de gate sin semilla falla" {
+  mutate '`tests/bats/hooks-x.bats`' '`tests/bats/merge-sprint-x.bats`'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-TESTSDEP: AC-11 no prueba"* ]]
+}
+
+@test "R-PREWIN (corr. P2-2): sin decidir las APPROVE previas a la ventana falla" {
+  mutate '**APPROVE de antes de la ventana.**' 'Nota.'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-PREWIN: R2.5 no dice"* ]]
+}
+
+@test "R-PREWIN (corr. P2-2): AC-4e sin APPROVE previas falla" {
+  mutate 'registradas antes de `not_before`, sin' 'registradas en la ventana, sin'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-PREWIN: AC-4e no prueba"* ]]
+}
+
+@test "R-PREWIN (corr. P2-3): sin declarar el alcance de la comparación (ii) falla" {
+  mutate '(ii) casi nunca coincide' '(ii) cubre los casos'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-PREWIN: R2.5 promete más"* ]]
+}
+
+@test "R-GUARDVIAS2 (corr. P2-4): R6 sin graphql mergePullRequest falla" {
+  mutate 'que contenga `mergePullRequest`, ' 'que contenga '
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'R-GUARDVIAS2: R6 no niega `mergePullRequest`'* ]]
+}
+
+@test "R-GUARDVIAS2 (corr. P2-4): R6 sin destino implícito falla" {
+  mutate '(`git push origin HEAD`)' '(otro)'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'R-GUARDVIAS2: R6 no niega `git push origin HEAD`'* ]]
+}
+
+@test "R-GUARDVIAS2 (corr. P2-4): AC-13 sin refs/heads/main falla" {
+  mutate 'repos/o/r/git/refs/heads/main' 'repos/o/r/git/refs/heads/dev'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-GUARDVIAS2: AC-13 no prueba git/refs/heads/main"* ]]
+}
+
+@test "R-GUARDVIAS2 (seg. P2-3): prometer que el ask despierta de noche falla" {
+  mutate 'el `ask` no la despierta' 'el `ask` la despierta'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-GUARDVIAS2: R6 promete"* ]]
+}

@@ -87,8 +87,8 @@ La política es un JSON canónico (claves ordenadas, sin espacios) que genera
 |---|---|---|
 | `kind` | `"policy"` | fijo |
 | `id` | aleatorio, 16 hex | único |
-| `not_before`, `not_after` | instantes en UTC (`…Z`); la hora local de la operadora se muestra en la pregunta y en el informe, pero no entra en el digest | límite único: `not_after − not_before ≤ 12 h` (12 h exactas se aceptan; 12 h y 1 s no). No hay ampliación a 24 h: la política es más débil que el manifiesto de SE-433 y su ventana es más corta. Por defecto, `not_before` es la hora de emisión y `not_after` es el primero de estos dos instantes: las 08:00 locales del día siguiente o `not_before + 12 h`. Así, firmar antes de las 20:00 recorta la ventana a 12 h, no la rechaza. Un `not_after` explícito que exceda 12 h se rechaza |
-| `repos[]` | `{repo, base, include[], exclude[]}` | `include` son globs de rutas; una PR con un solo fichero fuera de `include` o dentro de `exclude` no entra (semántica exacta en R2.3). Exclusión forzosa, aunque la política diga otra cosa: (a) todo lo que `scripts/risk-tier.py` clasifica como gobernanza (`is_governance`, `:36-55`: `GOVERNANCE_EXACT`, `GOVERNANCE_PREFIXES` —incluye `.opencode/`, donde vive el plugin `savia-gates`, y `.github/workflows/`—, `.claude/settings*.json` y `docs/rules/domain/autonomous-safety*.md`); (b) el código de los gates que no es gobernanza hoy: `.claude/hooks/**`, `.claude/agents/**` (definiciones de las revisoras), `scripts/confidentiality-*`, `scripts/validate-ci*`, `scripts/f5-state.sh`, `scripts/merge-registry-resolve.py` y `scripts/sam.py`, los manifiestos de dependencias en cualquier directorio (`requirements*.txt`, `*.lock*`, `package.json`, `package-lock.json`, `pyproject.toml`, `Makefile`), que ejecutan código al instalar, y los tests de los gates (`tests/**` cuyo nombre contenga `merge-sprint`, `risk-tier`, `confidentiality`, `operator-grant` o `night-mode`), cuyo debilitamiento daría verdes falsos las noches siguientes; (c) lo que crea esta spec: `.claude/hooks/night-mode-guard.sh` y cualquier fichero del guard nocturno; (d) **el código que ejecutan los workflows** (`WORKFLOW_EXEC_PATHS`, R2.3): modificar un script que un workflow ejecuta equivale a modificar el workflow, que ya está en (a). Ejemplos en `main` hoy: `scripts/changelog-consolidate.sh` (`changelog-consolidate.yml`, en `push` a `main`, con `contents: write` y el secreto HMAC de confidencialidad) y `scripts/setup-merge-drivers.sh` (`auto-rebase-open-prs.yml`, `contents: write`), que `risk-tier.py` clasifica como tier 1 o 2. **El ejecutor aplica (a), (b), (c) y (d) por sí mismo desde S2**: lleva la lista (b)+(c) como constante propia (`POLICY_FORCED_EXCLUDE`) dentro de `merge-sprint.sh`, que ya es gobernanza y queda congelado por `runner_blob`, deriva (d) de los workflows de `origin/main` y además consulta `is_governance` para (a). No depende de que `risk-tier.py` las clasifique. S3 añade también (b) y (c) a `GOVERNANCE_EXACT`/`GOVERNANCE_PREFIXES` para que den tier 4 fuera de la política (grant de manifiesto, clasificador); eso es defensa adicional, no la condición de seguridad de S2. Sin S3 en `main`, `run --policy` ya excluye esas rutas |
+| `not_before`, `not_after` | instantes en UTC (`…Z`); la hora local de la operadora se muestra en la pregunta y en el informe, pero no entra en el digest | límite único: `not_after − not_before ≤ 12 h` (12 h exactas se aceptan; 12 h y 1 s no). No hay ampliación a 24 h: la política es más débil que el manifiesto de SE-433 y su ventana es más corta. Por defecto, `not_before` es la hora de emisión y `not_after` es el primero de estos dos instantes: las 08:00 locales del día siguiente o `not_before + 12 h`. Así, firmar antes de las 20:00 recorta la ventana a 12 h, no la rechaza. Un `not_after` explícito que exceda 12 h se rechaza. **Sin políticas latentes**: un `not_before` explícito posterior a la emisión en más de 1 h se rechaza; una política firmada hoy para dentro de días se activaría sola cuando la operadora ya no la recuerda |
+| `repos[]` | `{repo, base, include[], exclude[]}` | `include` son globs de rutas; una PR con un solo fichero fuera de `include` o dentro de `exclude` no entra (semántica exacta en R2.3). Exclusión forzosa, aunque la política diga otra cosa: (a) todo lo que `scripts/risk-tier.py` clasifica como gobernanza (`is_governance`, `:36-55`: `GOVERNANCE_EXACT`, `GOVERNANCE_PREFIXES` —incluye `.opencode/`, donde vive el plugin `savia-gates`, y `.github/workflows/`—, `.claude/settings*.json` y `docs/rules/domain/autonomous-safety*.md`); (b) el código de los gates que no es gobernanza hoy: `.claude/hooks/**`, `.claude/agents/**` (definiciones de las revisoras), `scripts/confidentiality-*`, `scripts/validate-ci*`, `scripts/f5-state.sh`, `scripts/merge-registry-resolve.py` y `scripts/sam.py`, los manifiestos de dependencias en cualquier directorio (`requirements*.txt`, `*.lock*`, `package.json`, `package-lock.json`, `pyproject.toml`, `Makefile`), que ejecutan código al instalar, y los tests de los gates (`tests/**` cuyo nombre contenga `merge-sprint`, `risk-tier`, `confidentiality`, `operator-grant` o `night-mode`), cuyo debilitamiento daría verdes falsos las noches siguientes. El nombre es solo la semilla mínima: además, **los tests que prueban un gate por contenido**, es decir, todo fichero de `tests/**` que cite, cargue (`source`, `.`, import) o ejecute una ruta de (a)–(d), derivado desde los blobs de `origin/main` con la misma normalización y el mismo STOP `forced_exclude_error` que (d); (c) lo que crea esta spec: `.claude/hooks/night-mode-guard.sh` y cualquier fichero del guard nocturno; (d) **el código que ejecutan los workflows** (`WORKFLOW_EXEC_PATHS`, R2.3): modificar un script que un workflow ejecuta equivale a modificar el workflow, que ya está en (a). Ejemplos en `main` hoy: `scripts/changelog-consolidate.sh` (`changelog-consolidate.yml`, en `push` a `main`, con `contents: write` y el secreto HMAC de confidencialidad) y `scripts/setup-merge-drivers.sh` (`auto-rebase-open-prs.yml`, `contents: write`), que `risk-tier.py` clasifica como tier 1 o 2. **El ejecutor aplica (a), (b), (c) y (d) por sí mismo desde S2**: lleva la lista (b)+(c) como constante propia (`POLICY_FORCED_EXCLUDE`) dentro de `merge-sprint.sh`, que ya es gobernanza y queda congelado por `runner_blob`, deriva (d) de los workflows de `origin/main` y además consulta `is_governance` para (a). No depende de que `risk-tier.py` las clasifique. S3 añade también (b) y (c) a `GOVERNANCE_EXACT`/`GOVERNANCE_PREFIXES` para que den tier 4 fuera de la política (grant de manifiesto, clasificador); eso es defensa adicional, no la condición de seguridad de S2. Sin S3 en `main`, `run --policy` ya excluye esas rutas |
 | `tiers` | subconjunto no vacío de `{1,2}` | `3` o `4`, o la lista vacía, hacen inválida la política: no se emite |
 | `max_merges` | entero ≥ 1 | techo duro 40 (`config/merge-sprint-policy.conf:5`): un valor mayor se rechaza, no se recorta |
 | `max_parks_in_row` | entero ≥ 1 | techo duro 3, como SE-433 |
@@ -160,7 +160,11 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
 
    El grant de manifiesto de SE-433 sigue usando `main_ci` sin cambios: que trate `action_required`
    como `pass` es un hueco de SE-433 que esta spec no corrige (fuera de alcance).
-3. **Alcance.** Repo y base de la política; `universe: frozen` → número en la lista. Ficheros: la
+3. **Alcance.** Repo y base de la política; `universe: frozen` → número en la lista. **Solo PR del
+   mismo repo**: `isCrossRepository` falso y `headRepository` igual al repo de la política, leídos de
+   GitHub en cada comprobación. Una PR desde un fork queda fuera, sea quien sea su autor: con
+   `universe: open` y un repo público, su única barrera serían dos APPROVE de identidades
+   autodeclaradas. Un valor ausente o ilegible deja la PR fuera (fail-closed). Ficheros: la
    lista sale de `git diff --name-status -M` entre la base de fusión y la cabeza, no del texto de la PR.
    - Un renombrado o una copia cuenta con **las dos** rutas, origen y destino; las dos han de pasar.
    - Un cambio cuyo modo, antes o después, sea `120000` (enlace simbólico) o `160000` (submódulo) deja
@@ -183,8 +187,14 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
      `config/` (por ejemplo, `mcp.json`, que valida `ci.yml`). Normalización de cada token: se recortan comillas y la
      puntuación final (`;`, `,`, `)`, `:`); un token con comodín (`*`, `**`) es un glob por segmentos
      sobre el árbol congelado y excluye todo lo que case; un token con `$` o `${{` se corta en el primer
-     `$` y lo que queda es un prefijo de directorio que se excluye entero. Un directorio citado se
-     excluye entero.
+     `$`: si lo anterior no queda vacío, es un prefijo de directorio que se excluye entero; además,
+     lo que sigue a la variable se evalúa como un token más (`$GITHUB_WORKSPACE/scripts/x.sh` →
+     `scripts/x.sh`; `${{ github.workspace }}/scripts` → `scripts`). **Raíz**: un token que tras
+     normalizar queda vacío, o es `.` o `./`, nombra la raíz y no es semilla. Excluir la raíz vaciaría
+     cualquier política, y lo que se ejecuta desde ella aparece como token propio (`./x.sh` → `x.sh`).
+     Un directorio citado se excluye entero, aunque sea amplio (`docs`, `scripts`): la sobre-exclusión
+     es deliberada, y `policy-question` muestra al firmar la lista (d) derivada para que la operadora
+     vea qué queda fuera.
    - Después, el **cierre transitivo** sobre cada fichero alcanzado, hasta que no aparece ninguno nuevo:
      - rutas del repo citadas literalmente dentro de él, con la misma normalización;
      - rutas relativas al propio script (`./y.sh`, `$(dirname "$0")/y.sh`, `$SCRIPT_DIR/y.sh`,
@@ -219,7 +229,16 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
    que el registro ya guarda en cada fila (`merge-sprint.sh:92`, el id de agente que declara el
    veredicto); si las filas de la PR no coinciden en `author`, la PR no entra; y (ii) con el login de
    GitHub del autor de la PR, leído en ese momento. Un `reviewer` igual a cualquiera de los dos no
-   cuenta. `reviewers` y el id del orquestador se comparan como cadenas exactas.
+   cuenta. `reviewers` y el id del orquestador se comparan como cadenas exactas. Alcance real: los
+   `reviewer` son ids de agente, así que (ii) casi nunca coincide y es solo defensa ante un registro
+   que use logins; en la práctica `author` es el id del orquestador y (i) se solapa con «distinto del
+   orquestador». La independencia que esto da es la de los ids declarados, no la de las personas o
+   procesos detrás (Contrapesos, límite del orquestador comprometido).
+
+   **APPROVE de antes de la ventana.** Una APPROVE sobre Hc registrada antes de `not_before` cuenta
+   para la doble APPROVE. C3 solo acota lo registrado dentro de la ventana; las rondas previas no
+   tienen tope en esta spec. Es un límite declarado, no un descuido: esas rondas ocurren cuando la
+   operadora puede ver el registro, y su HOLD sigue pesando (regla de HOLD).
 
    **Regla de HOLD (C2).** Los HOLD se leen de **todo** `reviews.jsonl` para esa PR, en cualquier
    momento, también antes de `not_before`. La ventana no filtra los HOLD; solo acota el tope de C3.
@@ -360,13 +379,20 @@ o en alias puede no casar. Para reducirlo, en modo nocturno el guard normaliza l
 comillas y une los argumentos de `bash|sh|zsh -c` y `eval`. Después **niega por defecto** cualquier
 Bash cuyo texto normalizado contenga `gh pr merge`, `gh pr create`, `merge-sprint.sh grant`,
 `operator-grant.sh grant`, `policy-grant`, una llamada `gh api` a `/pulls/<n>/merge` (con cualquier
-método) o un `git push` cuyo destino sea la rama `main` (por nombre, con refspec `HEAD:` o con
-`refs/heads/`). Las órdenes internas del ejecutor no pasan por el hook:
+método), una llamada `gh api graphql` que contenga `mergePullRequest`, `enablePullRequestAutoMerge`
+o `updateRef`, una llamada `gh api` a `git/refs/heads/main` (con cualquier método)
+o un `git push` cuyo destino sea la rama `main` (por nombre, con refspec `HEAD:` o con `refs/heads/`). El destino
+implícito también se niega: en modo nocturno, un `git push` sin rama de destino escrita (`git push`,
+`git push origin`) o con `HEAD` como destino (`git push origin HEAD`) se niega siempre, sin resolver
+la rama actual; los workers empujan con `git push -u origin <rama>`, que nombra el destino. Las
+órdenes internas del ejecutor no pasan por el hook:
 `merge-sprint.sh run --policy` no contiene esos textos y no se niega.
 Aun así, no promete «ningún aviso» frente a una orden ofuscada a propósito. Lo que impide un merge
 o un grant no autorizado siguen siendo los permisos `ask` del frontend, que el guard no sustituye.
-Si una orden ofuscada se le escapa al guard, el coste es un aviso que despierta a la operadora, no un
-merge sin grant.
+Si una orden ofuscada se le escapa al guard, el coste no es un merge sin grant, pero tampoco es un
+aviso útil: con la operadora dormida, el `ask` no la despierta, deja la sesión parada hasta la
+mañana y el resto de la noche se pierde. La red de seguridad impide el merge; no garantiza que
+alguien se entere antes de las 08:00.
 
 ## Contrapesos (lo que compensa que nadie mire la lista)
 
@@ -414,6 +440,8 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   - con `tiers` vacío o que contenga 3 o 4;
   - con `not_after` explícito que dé una ventana > 12 h (caso límite: 12 h exactas se aceptan, 12 h y
     1 s se rechazan, 18 h se rechazan);
+  - con `not_before` explícito más de 1 h después de la emisión (caso límite: 1 h exacta se acepta,
+    1 h y 1 s se rechaza; una política para dentro de una semana se rechaza);
   - sin `max_merges`, con `max_merges` > 40 o < 1;
   - con `max_parks_in_row` > 3;
   - con `max_reviews_per_pr` > 4;
@@ -446,6 +474,8 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   - HOLD de R1 y R2 sobre H0, APPROVE de R1 y R3 sobre H1 → no (falta R2).
   - HOLD de R2 y APPROVE de R1 sobre H0, después APPROVE de R1 y R2 sobre H1 → se fusiona.
   - El caso anterior más una quinta revisión sobre H1 en la ventana → no (C3).
+  - Fuera de ese registro común: APPROVE de R1 y R2 sobre Hc registradas antes de `not_before`, sin
+    HOLD, y ninguna revisión en la ventana → se fusiona (cuentan para la doble APPROVE y no para C3).
 
   El tercer caso falla con una implementación que exija todas las revisoras de H0, no solo las que
   dieron HOLD.
@@ -497,12 +527,18 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   workflow), `scripts/generate-capability-map.py` (solo por cierre transitivo), `scripts/sam_model.py`
   (solo por import de Python: falla con un cierre que siga únicamente rutas citadas) y
   `mcp.json` (raíz, citado por `ci.yml`: falla con una lista de prefijos); de los manifiestos de (b),
-  `requirements.txt` y `scripts/requirements.txt`. Los
+  `requirements.txt` y `scripts/requirements.txt`; de los tests de (b) por contenido,
+  `tests/bats/hooks-x.bats` (su nombre no contiene ninguna semilla y hace `source` de
+  `.claude/hooks/x.sh`: falla con una exclusión solo por nombre), mientras que un
+  `tests/bats/docs-y.bats` que no cita ninguna ruta de (a)–(d) no se excluye. Los
   casos de (b), (c) y (d) fallan con un ejecutor que solo consulte `is_governance`, porque el
   `risk-tier.py` actual les da tier 1 o 2: la exclusión ha de salir de `POLICY_FORCED_EXCLUDE` y de
   `WORKFLOW_EXEC_PATHS`. Fixtures de normalización: un workflow con `on.push.paths: ['scripts/**']` y
   sin ejecución de `scripts/foo.sh` no excluye `scripts/foo.sh`; una cita `scripts/x.sh;` excluye
-  `scripts/x.sh`; un script alcanzado con `source "$VAR"` excluye su directorio entero. Con un blob de
+  `scripts/x.sh`; un script alcanzado con `source "$VAR"` excluye su directorio entero; una cita
+  `$GITHUB_WORKSPACE/scripts/y.sh` excluye `scripts/y.sh` (falla con un corte que solo guarde el
+  prefijo vacío); un `working-directory: .` no excluye la raíz y una PR que solo toca `docs/a.md`,
+  en `include` y sin otra cita, se fusiona. Con un blob de
   workflow ilegible (fixture), STOP `forced_exclude_error` sin fusión.
 - **AC-11b (S3, rutas nuevas)** `risk-tier.py` da tier 4 para `.claude/hooks/night-mode-guard.sh`, para
   `.claude/hooks/<otro>.sh`, `.claude/agents/<revisora>.md`, `scripts/confidentiality-scan.sh` y
@@ -531,7 +567,9 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   stdin (JSON), igual en Claude Code y en OpenCode. Negativo de evasión: `bash -c "gh pr merge 12"` y
   `eval 'gh pr create --base dev'` también se niegan en modo nocturno, igual que una llamada
   `gh api -X PUT` a `repos/o/r/pulls/12/merge` y un `git push` con refspec `HEAD:` hacia `main`; un
-  `git push` a una rama `agent/x` no se niega.
+  `git push` a una rama `agent/x` no se niega. También se niegan `gh api graphql -f
+  query='mutation{mergePullRequest(...)}'`, `gh api -X PATCH repos/o/r/git/refs/heads/main`, un
+  `git push` sin destino y `git push origin HEAD`; `git push -u origin agent/x` no se niega.
 - **AC-3b (S3)** La PR de AC-3 aparece en la lista de pendientes de la mañana con motivo `tier_3`.
 - **AC-14** `report --policy` lista fusiones, no fusionadas con motivo, STOP y pendientes, y falla si
   `verify-ledger` falla.
@@ -540,7 +578,10 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   `run` sale con código 0 y STOP `max_merges`; la tercera queda intacta. Con `max_parks_in_row: 2`,
   dos PR seguidas aparcadas por `head_movido` dan STOP `max_parks_in_row`; una aparcada seguida de
   una fusionada pone el contador a cero y no para. Con `universe: frozen` y lista `[10, 11]`, una PR
-  #12 abierta después de firmar y elegible en todo lo demás no se fusiona; #10 sí.
+  #12 abierta después de firmar y elegible en todo lo demás no se fusiona; #10 sí. Con
+  `universe: open`, una PR desde un fork (`isCrossRepository: true`) elegible en todo lo demás no se
+  fusiona, tampoco si `isCrossRepository` falta en la respuesta; la misma PR desde una rama del repo,
+  sí.
 - **AC-17 (S2, revocación)** Tras `merge-sprint.sh revoke` entre dos pasadas, la pasada siguiente no
   fusiona nada y sale con código 3 (sin grant de política). Tras `merge-sprint.sh stop`, sale con
   código 5 (política parada). Una política nueva emitida para el mismo repo invalida la anterior: un
