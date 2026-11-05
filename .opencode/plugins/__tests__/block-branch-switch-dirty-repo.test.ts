@@ -29,3 +29,45 @@ test("dirty tree: checkout <rama> and a restore followed by a switch stay blocke
     await expect(run("git checkout feature")).rejects.toThrow(/branch-switch-dirty/);
     await expect(run("git checkout -- a.txt; git checkout feature")).rejects.toThrow(/branch-switch-dirty/);
   }));
+
+// 2026-11-05: `git -C <clon temporal limpio> checkout <sha>` se bloqueaba porque
+// el guard miraba el repo de la sesión (sucio) y no el repo destino. Misma
+// entrada que tests/test-block-branch-switch-dirty.bats.
+function cleanClone(): { dir: string; sha: string; done: () => void } {
+  const root = mkdtempSync(join(tmpdir(), "bbsd-clone-"));
+  const dir = join(root, "clon");
+  const sh = (a: string, cwd: string) => execSync(a, { cwd, stdio: "pipe", encoding: "utf8" });
+  sh(`git init -q -b main ${dir}`, root);
+  sh("git config user.email t@t && git config user.name t", dir);
+  writeFileSync(join(dir, "b.txt"), "b\n"); sh("git add b.txt && git commit -qm init", dir);
+  return { dir, sha: sh("git rev-parse HEAD", dir).trim(), done: () => rmSync(root, { recursive: true, force: true }) };
+}
+
+test("dirty session repo: checkout in a clean clone via -C, cd or a literal variable passes", () =>
+  withDirtyRepo(async () => {
+    const c = cleanClone();
+    try {
+      for (const cmd of [
+        `git -C ${c.dir} checkout ${c.sha}`,
+        `git -C "${c.dir}" checkout -q ${c.sha}`,
+        `git -C ${c.dir} -c advice.detachedHead=false checkout ${c.sha}`,
+        `cd ${c.dir} && git checkout ${c.sha}`,
+        `D=${c.dir}; git -C $D checkout ${c.sha}`,
+        `git -C ${c.dir} switch --detach ${c.sha}`,
+        `git clone -q ${c.dir} ${c.dir}-2 && git -C ${c.dir}-2 checkout ${c.sha}`,
+      ]) {
+        await expect(run(cmd)).resolves.toBeUndefined();
+      }
+    } finally { c.done(); }
+  }));
+
+test("negative: a dirty target repo still blocks, and an uncertain target fails closed", () =>
+  withDirtyRepo(async () => {
+    const c = cleanClone();
+    try {
+      writeFileSync(join(c.dir, "b.txt"), "sucio\n");
+      await expect(run(`git -C ${c.dir} checkout ${c.sha}`)).rejects.toThrow(/Repo: /);
+      await expect(run(`git -C $NOPE checkout ${c.sha}`)).rejects.toThrow(/no reconocido con certeza/);
+      await expect(run(`git -C ${c.dir} checkout -- b.txt`)).resolves.toBeUndefined();
+    } finally { c.done(); }
+  }));

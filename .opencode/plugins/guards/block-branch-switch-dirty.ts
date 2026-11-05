@@ -7,7 +7,9 @@
 //
 // Reference: docs/rules/domain/critical-rules-extended.md (Rule 13)
 
-import { execSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
 // Every `git [-C <dir>] checkout|switch` invocation, with its own arguments
@@ -41,27 +43,59 @@ export function hasBranchChange(command: string): boolean {
   return false;
 }
 
+const RESOLVER = fileURLToPath(new URL("../../../scripts/lib/git_op_targets.py", import.meta.url));
+const ADMITTED = "Forma admitida: git -C <ruta> checkout|switch … (o cd <ruta> && git checkout …).";
+// Prefiltro: `git` y `checkout|switch` como palabras (sin comillas ni barras).
+const GIT_RX = /(^|[^\w])git([^\w]|$)/i;
+const SWITCH_RX = /(^|[^\w-])(checkout|switch)([^\w-]|$)/i;
+
+/**
+ * Directorio destino de cada `git checkout|switch` que puede mover HEAD,
+ * resuelto por `scripts/lib/git_op_targets.py --switch`: el mismo resolvedor
+ * que el hook bash y que los guards de commit en main (#1467). "" = forma
+ * incierta → BLOQUEAR. null = resolvedor no disponible.
+ */
+export function switchTargets(command: string, base: string): string[] | null {
+  const res = spawnSync("python3", [RESOLVER, "--switch", base], { encoding: "utf8", timeout: 5000, input: command });
+  if (res.status !== 0 || res.error) return null;
+  return (res.stdout || "").split("\n").filter((l) => l.startsWith("switch\t")).map((l) => l.slice(7));
+}
+
+function dirtyOf(dir: string): string {
+  try {
+    return execFileSync("git", ["-C", dir, "status", "--porcelain"], {
+      encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return ""; // no es un repo o git falló: la orden fallará por sí sola
+  }
+}
+
 export async function blockBranchSwitchDirty(
   input: ToolInput, output: ToolOutput,
 ): Promise<void> {
   if (extractToolName(input) !== "bash") return;
   const command = extractCommand(input, output);
   if (!command) return;
+  const plain = command.replace(/["'\\]/g, "");
+  if (!GIT_RX.test(plain) || !SWITCH_RX.test(plain)) return;
+  const args = (output?.args ?? input?.args ?? {}) as Record<string, unknown>;
+  const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
 
-  if (!hasBranchChange(command)) return;
-
-  let dirty = "";
-  try {
-    dirty = execSync("git status --porcelain", {
-      encoding: "utf8",
-      timeout: 3000,
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    // Not a git repo or git failed — let the original command run and fail naturally.
-    return;
+  // El repo que importa es el DESTINO de la orden (`git -C <clon> checkout <sha>`),
+  // no el checkout de la sesión. Sin resolvedor: detector por regex y cwd de la orden.
+  let targets = switchTargets(command, base);
+  if (targets === null) targets = hasBranchChange(command) ? [base] : [];
+  if (targets.includes("")) {
+    throw new Error(`BLOCKED [branch-switch-dirty]: destino del cambio de rama no reconocido con certeza (fail-closed). ${ADMITTED}`);
   }
-
+  let dirty = "";
+  let repo = "";
+  for (const dir of targets) {
+    if (!existsSync(dir)) continue; // aún no existe (clon creado en la misma orden): nada que perder
+    dirty = dirtyOf(dir);
+    if (dirty) { repo = dir; break; }
+  }
   if (!dirty) return;
 
   const lines = dirty.split("\n");
@@ -71,6 +105,7 @@ export async function blockBranchSwitchDirty(
   throw new Error(
     [
       "BLOCKED [branch-switch-dirty]: cannot switch branch with uncommitted changes.",
+      `  Repo: ${repo}`,
       `  Modified files:  ${tracked}`,
       `  Untracked files: ${untracked}`,
       "  Options: 1) git add + git commit  2) git stash -u (temporary)",
