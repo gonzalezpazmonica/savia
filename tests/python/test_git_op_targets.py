@@ -136,6 +136,20 @@ class Targets(unittest.TestCase):
                     "timeout 9 git notes add -m x"):
             self.assertBlocks(cmd, "add")
 
+    def test_dir_named_remote_or_worktree_does_not_hide_real_add(self):
+        # Revisión #1483: el valor de -C/--git-dir/--work-tree que termina en
+        # `remote` o `worktree` no es el subcomando; el `git add` es real.
+        for cmd in ("timeout 60 git -C ~/src/remote add .",
+                    "timeout 60 git -C ../worktree add -A",
+                    "timeout 60 git -C remote add .",
+                    "timeout 60 git --git-dir remote add .",
+                    "timeout 60 git --work-tree=/x/worktree add ."):
+            self.assertBlocks(cmd, "add")
+        # Con opciones globales delante, `worktree add` sigue sin contar.
+        for cmd in (f"timeout 60 git -c a.b=1 -C {self.base} --no-pager worktree add {self.wt}-n",
+                    "timeout 9 git --git-dir=/x/.git remote add up https://example.invalid/r.git"):
+            self.assertEqual(self.run_(cmd), [], cmd)
+
     def test_command_after_heredoc_is_detected(self):
         out = self.run_("cat > f <<EOF\ntexto\nEOF\ngit commit -m x")
         self.assertEqual(out, [("commit", self.base)])

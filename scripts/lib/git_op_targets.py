@@ -419,13 +419,22 @@ def words_text(words):
 # crea otro checkout y `git remote add` escribe config; ninguno toca el índice
 # ni la rama del repo. (`submodule add` sí indexa y `notes add` sí hace commit:
 # siguen contando.) Solo se neutraliza la pareja literal; un `add` suelto en
-# otra parte de la orden sigue contando.
-SUBCMD_ADD = re.compile(r"(?<![\w-])(worktree|remote)(\s+)(add)(?![\w-])", re.I)
+# otra parte de la orden sigue contando. `worktree|remote` tiene que ser el
+# subcomando de `git` (tras sus opciones globales, con el valor de `-C`,
+# `--git-dir`, etc. consumido aparte): `git -C ../remote add .` es un
+# `git add` real y sigue contando.
+_GIT_GLOBAL_OPT = (r"(?:-[Cc]\s+\S+"
+                   r"|--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:=\S+|\s+\S+)"
+                   r"|--[\w-]+=\S+"
+                   r"|--(?!git-dir\b|work-tree\b|namespace\b|super-prefix\b|config-env\b)[\w-]+"
+                   r"|-(?![Cc]\b)\w+)")
+SUBCMD_ADD = re.compile(r"((?<![\w./-])git(?:\s+%s)*\s+(?:worktree|remote)\s+)add(?![\w-])"
+                        % _GIT_GLOBAL_OPT, re.I)
 
 
 def plain(text):
-    """Texto sin comillas ni barras y sin el `add` de `worktree|remote add`."""
-    return SUBCMD_ADD.sub(r"\1\2-", re.sub(r"[\"'\\]", "", text))
+    """Texto sin comillas ni barras y sin el `add` de `git worktree|remote add`."""
+    return SUBCMD_ADD.sub(r"\1-", re.sub(r"[\"'\\]", "", text))
 
 
 def mentions(text):
