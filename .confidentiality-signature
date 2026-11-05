@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
 diff_hash=27c92310ce46e3f7439588bb3b51f8e62f90d95f690f4ccd6e69c419d64fef2e
-timestamp=2026-11-05T02:14:11Z
+timestamp=2026-11-05T02:17:16Z
 branch=agent/fix-ci-historia-20261105
-head_commit=fd5d3225c
+head_commit=965486dcb
 signature=0ce08a0079dbacc3785546278488b4d699f60dd2e79d8b59ca86f026a113dbd5
