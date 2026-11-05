@@ -259,3 +259,18 @@ test("un estado del gemelo corrupto en disco no deja al operador en error: se em
     assert.ok(r.json.mensajes.every((m: any) => Array.isArray(m.asuntos)));
   } finally { await x.cerrar(); }
 });
+
+test("una fecha corrupta en disco no tumba el arranque del servidor", async () => {
+  const disco = new Map<string, EstadoAtencion>();
+  const persistencia = { cargar: (r: string) => structuredClone(disco.get(r) ?? null), guardar: (r: string, e: EstadoAtencion) => { disco.set(r, structuredClone(e)); } };
+  const s = semilla({ elementos: [el("t-1", "tarea", { fecha: T0 + 26 * H })] });
+  let x = await arrancar(s, { persistencia });
+  try { assert.equal((await x.api("GET", "/gemelo")).json.mensajes.length, 1); } finally { await x.cerrar(); }
+  (disco.get("op") as any).gemelo.mensajes[0].asuntos[0].vence = 1e20;
+  x = await arrancar(s, { persistencia });
+  try {
+    const r = await x.api("GET", "/gemelo");
+    assert.equal(r.status, 200);
+    assert.ok(r.json.mensajes.every((m: any) => m.asuntos.every((a: any) => a.vence === null || Math.abs(a.vence) <= 8.64e15)));
+  } finally { await x.cerrar(); }
+});

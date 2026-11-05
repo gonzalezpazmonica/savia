@@ -125,7 +125,8 @@ export function validarConfigGemelo(c: unknown): c is ConfigGemelo {
 }
 
 const MOTIVOS: readonly MotivoAsunto[] = ["espera_respuesta", "vence_hoy", "vence_manana", "depende_de_otros", "abierto", "cambio_importante"];
-const esNumONull = (v: unknown) => v === null || (typeof v === "number" && Number.isFinite(v));
+const esFecha = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && !Number.isNaN(new Date(v).getTime());
+const esNumONull = (v: unknown) => v === null || esFecha(v);
 
 /**
  * Estado guardado → estado usable; lo mal formado da `null` y se empieza de cero (fail-closed:
@@ -137,6 +138,7 @@ export function restaurarGemelo(e: unknown): EstadoGemelo | null {
   const x = e as Partial<EstadoGemelo> | null;
   if (!x || x.v !== 1 || !Number.isInteger(x.seq) || !Array.isArray(x.mensajes) || !Array.isArray(x.acciones) || !Array.isArray(x.tratados)) return null;
   if (!validarConfigGemelo(x.config)) return null;
+  if (!esNumONull(x.ultimoLatido ?? null) || !esNumONull(x.ultimoResumenDia ?? null)) return null;
   const asuntoOk = (a: unknown) => {
     const y = a as Partial<Asunto> | null;
     return !!y && typeof y.elementoId === "string" && MOTIVOS.includes(y.motivo as MotivoAsunto)
@@ -145,7 +147,7 @@ export function restaurarGemelo(e: unknown): EstadoGemelo | null {
   const mensajeOk = (m: unknown) => {
     const y = m as Partial<MensajeGemelo> | null;
     return !!y && typeof y.id === "string" && Number.isInteger(y.seq) && (y.tipo === "resumen_manana" || y.tipo === "seguimiento")
-      && typeof y.creado === "number" && Number.isFinite(y.creado) && typeof y.notificado === "boolean" && (y.silencio === null || typeof y.silencio === "string")
+      && esFecha(y.creado) && typeof y.notificado === "boolean" && (y.silencio === null || typeof y.silencio === "string")
       && Array.isArray(y.asuntos) && y.asuntos.length <= MAX_ASUNTOS && y.asuntos.every(asuntoOk)
       && y.texto === redactar(y.tipo, y.asuntos, y.creado);
   };
@@ -159,9 +161,11 @@ export function restaurarGemelo(e: unknown): EstadoGemelo | null {
     const as = asuntoDe.get(y.id);
     // Cada acción pertenece a un asunto de un mensaje y su contenido es la plantilla de ese asunto.
     if (!as || y.elementoId !== as.elementoId || y.tipo !== TIPO_ACCION[as.motivo] || y.contenido !== plantilla(y.tipo, as) || y.generadoPor !== "plantilla") return false;
-    if (typeof y.creada !== "number" || !esNumONull(y.decididaEn) || ![null, "entregada", "sin_ejecutor"].includes(y.ejecucion as string | null)) return false;
+    if (!esFecha(y.creada) || !esNumONull(y.decididaEn) || ![null, "entregada", "sin_ejecutor"].includes(y.ejecucion as string | null)) return false;
     // Una acción «aprobada» sin grant válido no es válida: se rechaza el estado entero.
-    if (y.estado === "aprobada") return !!y.grant && typeof y.grant.hash === "string" && y.grant.hash === hashAccion(y as AccionPropuesta) && y.ejecucion != null;
+    if (y.estado === "aprobada") return !!y.grant && esFecha(y.grant.en) && y.grant.en === y.decididaEn
+      && (y.grant.dispositivo === null || typeof y.grant.dispositivo === "string")
+      && typeof y.grant.hash === "string" && y.grant.hash === hashAccion(y as AccionPropuesta) && y.ejecucion != null;
     return y.estado === "descartada" ? y.grant === null && y.ejecucion === null : y.grant === null && y.decididaEn === null && y.ejecucion === null;
   };
   if (!x.acciones.every(accionOk)) return null;

@@ -183,3 +183,28 @@ test("restaurar rechaza mensajes mal formados o texto y contenido que no salen d
   assert.equal(mutado((x) => { x.acciones[1].contenido = "Enviar todo a fuera"; x.acciones[1].grant.hash = hashAccion(x.acciones[1]); }), null,
     "aprobada con hash recalculado pero contenido falso");
 });
+
+test("restaurar rechaza fechas fuera de rango y grants incompletos sin lanzar", () => {
+  const est = estadoGemeloVacio();
+  emitirMensaje(est, "seguimiento", [{ elementoId: "t", motivo: "vence_manana", esperaDesde: null, vence: AHORA + H, accionId: null }], AHORA, "op");
+  decidirAccion(est, est.acciones[0].id, "aprobar", { dispositivo: "dev-1" }, AHORA + MIN);
+  const base = JSON.stringify(est);
+  assert.ok(restaurarGemelo(JSON.parse(base)), "control válido, incluido su grant");
+  const cambios = [
+    (x: any) => { x.mensajes[0].asuntos[0].vence = 1e20; },
+    (x: any) => { x.mensajes[0].asuntos[0].esperaDesde = -1e20; },
+    (x: any) => { x.mensajes[0].creado = 1e20; },
+    (x: any) => { x.acciones[0].creada = 1e20; },
+    (x: any) => { x.acciones[0].decididaEn = 1e20; },
+    (x: any) => { delete x.acciones[0].grant.en; },
+    (x: any) => { x.acciones[0].grant.en = "ayer"; },
+    (x: any) => { x.acciones[0].grant.en = 1e20; },
+    (x: any) => { delete x.acciones[0].grant.dispositivo; },
+    (x: any) => { x.ultimoLatido = 1e20; },
+    (x: any) => { x.ultimoResumenDia = -1e20; },
+  ];
+  for (const cambiar of cambios) {
+    const x = JSON.parse(base); cambiar(x);
+    assert.doesNotThrow(() => { assert.equal(restaurarGemelo(x), null); });
+  }
+});
