@@ -18,7 +18,10 @@ Se quita el cuerpo SOLO si todo esto se cumple (lista blanca, fail-closed):
     comillas invertidas (bash las ejecutaría al expandir el cuerpo);
   - el destino es una ruta literal (`[A-Za-z0-9_./-]`): sin `$`, `~`, comillas
     ni glob; y no se ejecuta solo fuera de la orden: nada bajo `.git/` (hooks,
-    config) ni ficheros de arranque del shell (`.bashrc`, `.profile`…);
+    config), `.claude/`, `.opencode/` o `.github/`, ni ficheros de arranque
+    del shell (`.bashrc`, `.profile`, `profile.d/`…). El resto de la orden
+    tampoco nombra uno de esos ficheros ni una ruta con `~` (no copia allí
+    el fichero escrito);
   - TODO lo que queda de la orden fuera de esos cuerpos son órdenes de una
     lista cerrada que solo leen o escriben datos (cat, tee, echo, grep…), sin
     `$`, comillas invertidas ni `#`. Nunca se infiere que algo es inerte por
@@ -42,9 +45,12 @@ LITERAL_TARGET = re.compile(r"[A-Za-z0-9_./-]+")
 INERT = {"cat", "tee", "echo", "printf", "grep", "wc", "head", "tail", "cut", "tr",
          "ls", "mkdir", "true", "false", ":"}
 SEPARATORS = set(";&|\n()")
-# Ficheros que se ejecutan solos, fuera de la orden.
+# Ficheros que se ejecutan solos, fuera de la orden: config de git, arranque de
+# shells, hooks y plugins de los frontends, workflows de CI.
 AUTORUN = re.compile(r"(^|/)\.git(/|$)|(^|/)\.(bashrc|bash_profile|bash_login|bash_logout|"
-                     r"profile|zshrc|zprofile|zshenv|zlogin|envrc)$")
+                     r"bash_aliases|profile|zshrc|zprofile|zshenv|zlogin|zlogout|envrc)$"
+                     r"|(^|/)profile\.d(/|$)|(^|/)\.config/fish(/|$)"
+                     r"|(^|/)\.(claude|opencode|github)(/|$)")
 LEAD = re.compile(r"^[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=\S*[ \t]+)*(cat|tee)(?=[ \t])")
 
 
@@ -76,6 +82,10 @@ def rest_is_inert(text):
         for token in lex:
             if token and all(c in SEPARATORS for c in token):
                 start = True
+            elif token.startswith("~") or AUTORUN.search(token):
+                # `cat n.md >> ~/.bashrc`, `tee -a .git/hooks/x`: copia el texto
+                # «inerte» a un fichero que se ejecuta solo (revisión #1483 P2-1).
+                return False
             elif start:
                 if token not in INERT:
                     return False

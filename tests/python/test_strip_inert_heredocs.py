@@ -75,6 +75,23 @@ class Strip(unittest.TestCase):
             cmd = f"cat > {target} <<'EOF'\n{RM} /\nEOF"
             self.assertIn(RM, strip(cmd), cmd)
 
+    def test_more_autorun_targets_are_kept(self):
+        for target in (".bash_aliases", "/etc/profile.d/x.sh", ".config/fish/config.fish",
+                       ".opencode/plugins/x.ts", ".claude/hooks/x.sh", ".github/workflows/ci.yml"):
+            cmd = f"cat > {target} <<'EOF'\n{RM} /\nEOF"
+            self.assertIn(RM, strip(cmd), cmd)
+
+    def test_copy_to_autorun_file_keeps_body(self):
+        # Revisión de seguridad #1483 P2-1: el resto copia el fichero «inerte»
+        # a un destino que se ejecuta solo.
+        for later in ("cat n.md >> ~/.bashrc", "cat n.md >> /home/u/.bashrc",
+                      "cat n.md | tee -a .profile", "tee .git/hooks/pre-commit < n.md",
+                      "cat n.md > .claude/hooks/x.sh"):
+            cmd = f"cat > n.md <<'EOF'\n{RM} /\nEOF\n{later}"
+            self.assertIn(RM, strip(cmd), cmd)
+        # negativo: copiar a un fichero de datos sigue quitando el cuerpo
+        self.assertNotIn(RM, strip(f"cat > n.md <<'EOF'\n{RM} /\nEOF\ncat n.md >> otro.md"))
+
     def test_plain_later_command_still_drops_body(self):
         out = strip(f"cat > n.md <<'EOF'\n{RM} /\nEOF\necho listo")
         self.assertNotIn(RM, out)
