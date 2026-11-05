@@ -89,19 +89,47 @@ run_step() { run bash -c 'cd "$1" && BASE_SHA="$2" bash --noprofile --norc -eo p
   [ "$(cat "$SPY")" = pr-gate ]
 }
 
-@test "fail-closed ci.yml: ningún paso del YAML parseado ejecuta scripts/derived.sh del checkout" {
-  run python3 - "$REPO/.github/workflows/ci.yml" <<'PY'
-import re, sys, yaml
+# gate_from_checkout <yaml> — exit 1 si algún paso invoca «gate» con un derived.sh que no sea la copia de la
+# base ("$X/scripts/derived.sh"): cualquier forma de ruta (bash/sh/./, $PWD) o una variable intermedia.
+# ensure/verify no son el gate. Revisión de #1488 (P2-2): antes solo detectaba «bash scripts/derived.sh gate».
+gate_from_checkout() {
+  python3 - "$1" <<'PY'
+import sys, yaml
 doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 for job in doc["jobs"].values():
     for st in job.get("steps") or []:
         for line in str(st.get("run", "")).splitlines():
-            # «bash scripts/derived.sh gate» (copia de la PR) prohibido; ensure/verify no son el gate.
-            if re.search(r"(^|\s)bash\s+scripts/derived\.sh\s+gate\b", line):
-                print("respaldo:", st.get("name")); sys.exit(1)
+            toks = line.replace(";", " ; ").split()
+            for i, tok in enumerate(toks[1:], 1):
+                prev = toks[i - 1]
+                if tok == "gate" and ("derived" in prev or "$" in prev) and prev != '"$X/scripts/derived.sh"':
+                    print("gate fuera de la base:", st.get("name"), "→", line.strip()); sys.exit(1)
 print("ok")
 PY
+}
+
+@test "fail-closed ci.yml: ningún paso del YAML parseado ejecuta scripts/derived.sh del checkout" {
+  run gate_from_checkout "$REPO/.github/workflows/ci.yml"
   [ "$status" -eq 0 ]
+  [ "$output" = ok ]
+}
+
+@test "fail-closed ci.yml negativo: otras formas de ejecutar el gate del checkout se detectan" {
+  local v
+  for v in 'bash scripts/derived.sh gate --range "$BASE_SHA..HEAD"' \
+           './scripts/derived.sh gate' 'sh scripts/derived.sh gate' \
+           'bash "$PWD/scripts/derived.sh" gate' 'D=scripts/derived.sh; bash "$D" gate'; do
+    V="$v" python3 - "$REPO/.github/workflows/ci.yml" > "$T/ci-variante.yml" <<'PY'
+import os, sys, yaml
+doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+job = next(iter(doc["jobs"].values()))
+job["steps"].append({"name": "variante", "run": os.environ["V"] + "\n"})
+print(yaml.safe_dump(doc, allow_unicode=True))
+PY
+    run gate_from_checkout "$T/ci-variante.yml"
+    [ "$status" -eq 1 ] || { echo "no detectada: $v"; return 1; }
+    [[ "$output" == *"gate fuera de la base: variante"* ]]
+  done
 }
 
 # ── 2. EXCLUDE_PATHS: rutas exactas ─────────────────────────────────────────────────────────────
