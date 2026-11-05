@@ -40,3 +40,30 @@ test("validateBashGlobal: skips non-bash tools", async () => {
   const input = { tool: "edit", args: { command: "rm -rf /" } };
   await expect(validateBashGlobal(input as any, {} as any)).resolves.toBeUndefined();
 });
+
+// 2026-11-05: un borrado recursivo escrito como TEXTO dentro de un heredoc que
+// solo escribe un fichero de instrucciones no se ejecuta. Misma entrada que
+// tests/test-agent-git-discipline-heredoc.bats y tests/python/test_strip_inert_heredocs.py.
+const RMRF = "rm -" + "rf /";
+const vbg = (command: string) => validateBashGlobal({ tool: "bash", args: { command } } as any, {} as any);
+
+test("validateBashGlobal: heredoc text written to a file is not a command", async () => {
+  for (const cmd of [
+    `cat > notas.md <<'EOF'\n${RMRF}\nEOF`,
+    `tee notas.md >/dev/null <<'EOF'\n${RMRF}\nEOF`,
+  ]) {
+    await expect(vbg(cmd)).resolves.toBeUndefined();
+  }
+});
+
+test("validateBashGlobal: heredocs to an interpreter or executed later still block", async () => {
+  for (const cmd of [
+    `bash <<'EOF'\n${RMRF}\nEOF`,
+    `cat <<'EOF' | sh\n${RMRF}\nEOF`,
+    `cat > n.sh <<'EOF'\n${RMRF}\nEOF\nbash n.sh`,
+    `cat > n.md <<EOF\n$(${RMRF})\nEOF`,
+    `cat > n.md <<'EOF'\nok\nEOF\n${RMRF}`,
+  ]) {
+    await expect(vbg(cmd)).rejects.toThrow(/rm -rf/);
+  }
+});

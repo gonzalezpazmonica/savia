@@ -14,6 +14,8 @@
 // Reference: SPEC-127 Slice 2b-ii AC-2.2
 
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const RULES: Array<{ rx: RegExp; msg: string }> = [
   {
@@ -43,10 +45,25 @@ const RULES: Array<{ rx: RegExp; msg: string }> = [
   },
 ];
 
+const STRIPPER = fileURLToPath(new URL("../../../scripts/lib/strip_inert_heredocs.py", import.meta.url));
+
+/**
+ * La orden sin el TEXTO de los heredocs que solo escriben un fichero
+ * (`cat > f <<'EOF' … EOF`): ese texto no se ejecuta. Lo decide
+ * `scripts/lib/strip_inert_heredocs.py`, el mismo filtro que usa el hook bash
+ * agent-git-discipline. Sin Python o ante un fallo: la orden intacta (fail-closed).
+ */
+export function withoutInertHeredocs(command: string): string {
+  if (!command.includes("<<")) return command;
+  const res = spawnSync("python3", [STRIPPER], { encoding: "utf8", timeout: 3000, input: command });
+  return res.status === 0 && !res.error && typeof res.stdout === "string" ? res.stdout : command;
+}
+
 export async function validateBashGlobal(input: ToolInput, output: ToolOutput): Promise<void> {
   if (extractToolName(input) !== "bash") return;
-  const command = extractCommand(input, output);
-  if (!command) return;
+  const raw = extractCommand(input, output);
+  if (!raw) return;
+  const command = withoutInertHeredocs(raw);
   for (const r of RULES) {
     if (r.rx.test(command)) {
       throw new Error(`BLOCKED [validate-bash-global]: ${r.msg}`);
