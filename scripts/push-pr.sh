@@ -177,6 +177,38 @@ fi  # fin de los pasos 0-6 (sin --merge)
 
 # ── Merge (--merge): solo verifica y mergea; nunca firma ni empuja ───────
 MERGED=false
+# local_blocklist <base> <raíz> <salida> — blocklist del merge local (revisión de #1488, P1-1): generador y lista
+# estática de la BASE, ejecutados en un directorio aparte que solo recibe las fuentes LOCALES no versionadas del
+# checkout. Lo que la cabeza versiona (un projects/x forzado al índice, por ejemplo) no entra: no aporta patrones.
+# Código 1 si la base no trae el generador o la lista estática, o si el generador falla.
+local_blocklist() {
+  local base=$1 root=$2 out=$3 t d n f rel rc=0
+  t=$(mktemp -d) || return 1
+  mkdir -p "$t/scripts"
+  if ! git -C "$root" show "$base:scripts/generate-blocklist.sh" > "$t/scripts/generate-blocklist.sh" 2>/dev/null \
+     || ! git -C "$root" show "$base:scripts/confidentiality-blocklist.txt" > "$t/scripts/confidentiality-blocklist.txt" 2>/dev/null; then
+    rm -rf "$t"; return 1
+  fi
+  git -C "$root" show "$base:.gitignore" > "$t/.gitignore" 2>/dev/null || rm -f "$t/.gitignore"
+  _local_only() { [[ -e "$root/$1" && -z "$(git -C "$root" ls-files -- "$1" 2>/dev/null)" ]]; }
+  if _local_only CLAUDE.local.md; then cp "$root/CLAUDE.local.md" "$t/"; fi
+  for d in "$root"/projects/*/; do
+    [[ -d "$d" ]] || continue
+    n=$(basename "$d"); _local_only "projects/$n" || continue
+    mkdir -p "$t/projects/$n"
+    if [[ -f "$d/team/TEAM.md" ]]; then mkdir -p "$t/projects/$n/team"; cp "$d/team/TEAM.md" "$t/projects/$n/team/"; fi
+  done
+  for f in "$root"/.claude/profiles/users/*/identity.md; do
+    [[ -f "$f" ]] || continue
+    rel=${f#"$root/"}; _local_only "$rel" || continue
+    mkdir -p "$t/$(dirname "$rel")"; cp "$f" "$t/$rel"
+  done
+  bash "$t/scripts/generate-blocklist.sh" > "$out" 2>/dev/null || rc=1
+  grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" >> "$out"
+  rm -rf "$t"
+  return "$rc"
+}
+
 if $MERGE; then
   echo "=== Merge (SE-343): rama publicada, firmada y con grant ==="
   merge_prep_fail() {
@@ -206,14 +238,23 @@ if $MERGE; then
     || merge_prep_fail "sin origin/main no hay escáner de confianza para la cabeza $LOCAL_HEAD."
   SCAN_TMP=$(mktemp)
   if ! git show "$SCAN_BASE:scripts/confidentiality-scan.sh" > "$SCAN_TMP" 2>/dev/null \
-     || ! grep -q -- '--pr-base)' "$SCAN_TMP"; then
+     || ! grep -qE -- '^[[:space:]]*--pr-base\)' "$SCAN_TMP"; then
     rm -f "$SCAN_TMP"
     merge_prep_fail "origin/main (${SCAN_BASE:0:12}) no trae scripts/confidentiality-scan.sh con --pr-base."
   fi
+  # Revisión de #1488 (P1-1): --pr-base solo conoce la lista estática de la base. Los nombres privados viven
+  # en fuentes locales no versionadas (projects/, CLAUDE.local.md, TEAM.md, identity.md) y este merge local es
+  # el único sitio donde se comprueban. La blocklist sale del generador de la BASE sobre esas fuentes.
+  SCAN_BL=$(mktemp)
+  if ! local_blocklist "$SCAN_BASE" "$ROOT" "$SCAN_BL"; then
+    rm -f "$SCAN_TMP" "$SCAN_BL"
+    merge_prep_fail "no se pudo generar la blocklist local con el generador de origin/main (${SCAN_BASE:0:12})."
+  fi
   scan_rc=0
-  bash "$SCAN_TMP" --pr-base "$SCAN_BASE" --repo "$ROOT" >/dev/null 2>&1 || scan_rc=$?
-  rm -f "$SCAN_TMP"
-  (( scan_rc == 0 )) \
+  scan_out=$(bash "$SCAN_TMP" --pr-base "$SCAN_BASE" --repo "$ROOT" --blocklist "$SCAN_BL" 2>&1) || scan_rc=$?
+  rm -f "$SCAN_TMP" "$SCAN_BL"
+  # PASS solo con código 0 Y el veredicto explícito del modo --pr-base (un escáner sin ese modo no lo emite).
+  { (( scan_rc == 0 )) && grep -qxF "Confidentiality scan (PR): PASS" <<<"$scan_out"; } \
     || merge_prep_fail "el escaneo de confidencialidad (escáner de origin/main) de la cabeza $LOCAL_HEAD no dio CLEAN."
   PR_NUM=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
   [[ "$PR_NUM" =~ ^[0-9]+$ ]] || merge_prep_fail "no hay un PR abierto para $BRANCH."

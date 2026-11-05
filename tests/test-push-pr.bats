@@ -145,16 +145,34 @@ make_repo() {
   cp "$BATS_TEST_DIRNAME/../scripts/push-pr.sh" "$r/scripts/"
   # Escáner simulado (SE-501, sin firma): CLEAN salvo que el diff de la cabeza
   # añada la marca VETADO o SCAN_RC lo fuerce. Registra cada llamada en SCAN_LOG.
+  # Con --blocklist <f>, también da findings si el diff añade un término de <f> (literal). En modo
+  # --pr-base emite el veredicto «Confidentiality scan (PR): PASS|FAIL» como el escáner real.
   cat > "$r/scripts/confidentiality-scan.sh" <<'SCAN'
 #!/usr/bin/env bash
 echo "scan $*" >> "${SCAN_LOG:-/dev/null}"
-case "${1:-}" in --pr-base) : ;; esac   # modo de la base (push-pr --merge lo exige)
+mode="" bl=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --pr-base) mode=base; shift 2 ;;
+    --blocklist) bl="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$bl" ]] && cp "$bl" "${SCAN_BL_COPY:-/dev/null}"
 if [[ -n "${SCAN_RC:-}" ]]; then exit "$SCAN_RC"; fi
-if git diff origin/main...HEAD 2>/dev/null | grep -q '^+.*VETADO'; then
-  echo 'gate-result: {"result":"findings","gaps":[]}'; exit 1
+added=$(git diff origin/main...HEAD 2>/dev/null | grep '^+[^+]')
+if grep -q 'VETADO' <<<"$added" || { [[ -n "$bl" ]] && grep -qiF -f "$bl" <<<"$added"; }; then
+  echo 'gate-result: {"result":"findings","gaps":[]}'
+  [[ "$mode" == base ]] && echo "Confidentiality scan (PR): FAIL"
+  exit 1
 fi
 echo 'gate-result: {"result":"clean","gaps":[]}'
+[[ "$mode" == base ]] && echo "Confidentiality scan (PR): PASS"
+exit 0
 SCAN
+  # Generador real y lista estática sintética: push-pr --merge los toma de origin/main.
+  cp "$BATS_TEST_DIRNAME/../scripts/generate-blocklist.sh" "$r/scripts/"
+  printf '# estática\ntermino-vetado-xyz\n' > "$r/scripts/confidentiality-blocklist.txt"
   echo base > "$r/f.txt"; git -C "$r" add -A; git -C "$r" commit -qm "init"
   git -C "$r" remote add origin "$o"; git -C "$r" push -q origin main
   git -C "$r" checkout -q -b agent/x
@@ -411,6 +429,79 @@ SCAN
   git -C "$r" update-ref refs/remotes/origin/main "$good"
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
+}
+
+# alt_base <repo> <base> <ruta> [<fichero>] — commit hijo de <base> fuera de toda rama, con <ruta>
+# sustituida por <fichero> o, sin él, eliminada. Imprime el SHA.
+alt_base() {
+  local r=$1 base=$2 path=$3 src=${4:-} idx tree
+  idx="$TESTDIR/alt.index"; rm -f "$idx"
+  GIT_INDEX_FILE="$idx" git -C "$r" read-tree "$base"
+  if [[ -n "$src" ]]; then
+    GIT_INDEX_FILE="$idx" git -C "$r" update-index --cacheinfo "100644,$(git -C "$r" hash-object -w "$src"),$path"
+  else
+    GIT_INDEX_FILE="$idx" git -C "$r" update-index --force-remove "$path"
+  fi
+  tree=$(GIT_INDEX_FILE="$idx" git -C "$r" write-tree)
+  git -C "$r" commit-tree "$tree" -p "$base" -m "base alternativa"
+}
+
+@test "rev-1488 P1-1 --merge: la blocklist incluye las fuentes locales no versionadas (projects/, CLAUDE.local.md)" {
+  r=$(make_merge_repo)
+  # Fuentes locales, sin versionar: el nombre privado solo se conoce aquí.
+  mkdir -p "$r/projects/cliente-oculto-xyz"
+  printf 'PROJECT_A_NAME = "NombreLocalOculto"\n' > "$r/CLAUDE.local.md"
+  echo "nota de cliente-oculto-xyz" >> "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): nombre privado"; git -C "$r" push -q origin agent/x
+  export SCAN_BL_COPY="$TESTDIR/bl.txt"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  grep -qx "cliente-oculto-xyz" "$SCAN_BL_COPY"
+  grep -qx "NombreLocalOculto" "$SCAN_BL_COPY"
+  grep -qx "termino-vetado-xyz" "$SCAN_BL_COPY"     # la estática de la base sigue entrando
+  # Lo que la cabeza versiona en projects/ no aporta patrones a la blocklist.
+  sed -i '/cliente-oculto-xyz/d' "$r/f.txt"
+  mkdir -p "$r/projects/versionado-por-pr"; echo x > "$r/projects/versionado-por-pr/README.md"
+  git -C "$r" add "projects/versionado-por-pr/README.md" f.txt
+  git -C "$r" commit -qm "agent(x): sin nombre privado"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  run grep -c "versionado-por-pr" "$SCAN_BL_COPY"
+  [ "$output" = "0" ]
+  grep -qx "cliente-oculto-xyz" "$SCAN_BL_COPY"
+}
+
+@test "rev-1488 P1-1 --merge: si origin/main no trae el generador de la blocklist, no hay merge" {
+  r=$(make_merge_repo)
+  good=$(git -C "$r" rev-parse origin/main)
+  git -C "$r" update-ref refs/remotes/origin/main "$(alt_base "$r" "$good" scripts/generate-blocklist.sh)"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se pudo generar la blocklist local"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+}
+
+@test "rev-1488 P2-1 --merge: código 0 sin el veredicto «Confidentiality scan (PR): PASS» no mergea" {
+  r=$(make_merge_repo)
+  good=$(git -C "$r" rev-parse origin/main)
+  # Escáner de la base con el brazo --pr-base pero que nunca emite el veredicto (sale 0).
+  git -C "$r" show "$good:scripts/confidentiality-scan.sh" | sed '/Confidentiality scan (PR): PASS/d' > "$TESTDIR/scan-mudo.sh"
+  git -C "$r" update-ref refs/remotes/origin/main "$(alt_base "$r" "$good" scripts/confidentiality-scan.sh "$TESTDIR/scan-mudo.sh")"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Un brazo «--pr-base)» que solo aparece en un comentario no cuenta como modo --pr-base.
+  git -C "$r" show "$good:scripts/confidentiality-scan.sh" | sed 's/^    --pr-base) mode=base; shift 2 ;;/    # --pr-base) no soportado/' > "$TESTDIR/scan-coment.sh"
+  git -C "$r" update-ref refs/remotes/origin/main "$(alt_base "$r" "$good" scripts/confidentiality-scan.sh "$TESTDIR/scan-coment.sh")"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no trae scripts/confidentiality-scan.sh con --pr-base"* ]]
 }
 
 @test "SE-343 --merge: con cambios sin commitear o sin gh autenticado no se mergea" {
