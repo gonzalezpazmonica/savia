@@ -79,6 +79,21 @@ test('el servidor simulado cumple el OpenAPI en todas las operaciones y solo sir
     await caso('POST', '/ordenes', '/ordenes', 200, { cuerpo: { orden: 'hola, ¿qué tengo hoy?' } });
     await caso('POST', '/ordenes', '/ordenes', 400, { cuerpo: { orden: '' } });
     await caso('POST', '/ordenes', '/ordenes', 404, { cuerpo: { orden: 'porque no-existe' } });
+    // SE-504: el gemelo («Tu día con Savia»). Con los datos simulados, e-9 vence mañana: hay una propuesta.
+    const conv = (await caso('GET', '/gemelo', '/gemelo', 200)).json;
+    await caso('GET', '/gemelo', '/gemelo?x=1', 400);
+    const acc = conv.mensajes.flatMap((m) => m.asuntos).map((a) => a.accion).find(Boolean);
+    assert.ok(acc, 'el gemelo ha propuesto algo con los datos simulados');
+    const dec = `/gemelo/acciones/${acc.id}/decision`;
+    await caso('POST', '/gemelo/acciones/{id}/decision', dec, 200, { cuerpo: { decision: 'descartar' } });
+    await caso('POST', '/gemelo/acciones/{id}/decision', dec, 409, { cuerpo: { decision: 'aprobar' } });
+    await caso('POST', '/gemelo/acciones/{id}/decision', dec, 400, { cuerpo: { decision: 'ejecuta' } });
+    await caso('POST', '/gemelo/acciones/{id}/decision', '/gemelo/acciones/no-existe/decision', 404, { cuerpo: { decision: 'aprobar' } });
+    await caso('PUT', '/gemelo/leido', '/gemelo/leido', 200, { cuerpo: { seq: 0 } });
+    await caso('PUT', '/gemelo/leido', '/gemelo/leido', 400, { cuerpo: { seq: -1 } });
+    await caso('GET', '/gemelo/config', '/gemelo/config', 200);
+    await caso('PUT', '/gemelo/config', '/gemelo/config', 200, { cuerpo: { activo: true, espera_horas: 12, latido_min: 30 } });
+    await caso('PUT', '/gemelo/config', '/gemelo/config', 400, { cuerpo: { activo: true, espera_horas: 0, latido_min: 30 } });
     await caso('GET', '/estado', '/estado', 401, { sinAuth: true });
 
     const todas = Object.values(OPENAPI.paths).flatMap((o) => Object.values(o).map((op) => op.operationId));
@@ -193,7 +208,9 @@ test('un token revocado recibe 401 DEVICE_REVOKED en todas las operaciones; el o
     const casos = [['GET', '/estado', '/estado'], ['GET', '/q/{pregunta}', '/q/q1'], ['GET', '/filtros', '/filtros'], ['GET', '/elementos/{id}/porque', '/elementos/e-2/porque'],
       ['POST', '/elementos/{id}/correccion', '/elementos/e-2/correccion', { tipo: 'resuelto' }], ['GET', '/atencion', '/atencion'], ['PUT', '/atencion', '/atencion', { modo: 'DISPONIBLE' }],
       ['GET', '/avisos', '/avisos'], ['PUT', '/avisos', '/avisos', {}], ['GET', '/sondeo', '/sondeo'], ['GET', '/adaptadores', '/adaptadores'], ['GET', '/detalle', '/detalle'],
-      ['PUT', '/detalle', '/detalle', { nivel: 'recuentos' }], ['GET', '/registro', '/registro'], ['POST', '/ordenes', '/ordenes', { orden: 'q1' }]];
+      ['PUT', '/detalle', '/detalle', { nivel: 'recuentos' }], ['GET', '/registro', '/registro'], ['POST', '/ordenes', '/ordenes', { orden: 'q1' }],
+      ['GET', '/gemelo', '/gemelo'], ['PUT', '/gemelo/leido', '/gemelo/leido', { seq: 0 }], ['POST', '/gemelo/acciones/{id}/decision', '/gemelo/acciones/a-1/decision', { decision: 'aprobar' }],
+      ['GET', '/gemelo/config', '/gemelo/config'], ['PUT', '/gemelo/config', '/gemelo/config', { activo: true, espera_horas: 24, latido_min: 30 }]];
     const documentadas = Object.entries(OPENAPI.paths).flatMap(([r, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${r}`)).sort();
     assert.deepEqual(casos.map(([m, p]) => `${m} ${p}`).sort(), documentadas, 'la revocación se prueba en todas las operaciones');
     for (const [m, plantilla, ruta, cuerpo] of casos) {
