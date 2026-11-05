@@ -449,13 +449,16 @@ def argv_text(words):
 # `--git-dir`, etc. consumido aparte): `git -C ../remote add .` es un
 # `git add` real y sigue contando. El valor se lee como palabra de shell, con
 # las comillas y barras aún puestas: `-C "/tmp/mi remote"` o `-C /x/a\ worktree`
-# son UN argumento y no dejan `remote`/`worktree` como subcomando.
+# son UN argumento y no dejan `remote`/`worktree` como subcomando. Sin `=`,
+# solo se saltan los flags sin valor conocidos (`GIT_SAFE_FLAGS`): una opción
+# desconocida puede tomar el argumento siguiente (`git --attr-source remote
+# add .` es un `git add` real), así que entonces no se neutraliza nada.
 _OPT_VAL = r"""(?:"[^"]*"|'[^']*'|\\.|[^\s"'\\])+"""
 _GIT_GLOBAL_OPT = (r"(?:-[Cc]\s+{v}"
                    r"|--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:={v}|\s+{v})"
                    r"|--[\w-]+={v}"
-                   r"|--(?!git-dir\b|work-tree\b|namespace\b|super-prefix\b|config-env\b)[\w-]+"
-                   r"|-(?![Cc]\b)\w+)").replace("{v}", _OPT_VAL)
+                   r"|" + "|".join(re.escape(f) + r"(?![\w=-])" for f in sorted(GIT_SAFE_FLAGS))
+                   + r")").replace("{v}", _OPT_VAL)
 SUBCMD_ADD = re.compile(r"((?<![\w./-])git(?:\s+%s)*\s+(?:worktree|remote)\s+)add(?![\w-])"
                         % _GIT_GLOBAL_OPT, re.I)
 

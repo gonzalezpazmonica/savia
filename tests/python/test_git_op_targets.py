@@ -154,6 +154,12 @@ class Targets(unittest.TestCase):
                     'timeout 60 git --work-tree "/x/y remote" add .',
                     "sh -c \"git -C '/x/mi remote' add .\""):
             self.assertBlocks(cmd, "add")
+        # Revisión de seguridad #1483 (3.ª, P2-3): una opción global desconocida
+        # puede tomar `remote` como valor; el `add` que sigue es un add real.
+        for cmd in ("timeout 60 git --attr-source remote add .",
+                    "timeout 60 git --frobnicate worktree add -A",
+                    "timeout 60 git -X remote add ."):
+            self.assertBlocks(cmd, "add")
         # Con opciones globales delante, `worktree add` sigue sin contar.
         for cmd in (f"timeout 60 git -c a.b=1 -C {self.base} --no-pager worktree add {self.wt}-n",
                     "timeout 9 git --git-dir=/x/.git remote add up https://example.invalid/r.git"):
