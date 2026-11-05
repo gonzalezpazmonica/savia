@@ -271,6 +271,7 @@ test("una fecha corrupta en disco no tumba el arranque del servidor", async () =
   try {
     const r = await x.api("GET", "/gemelo");
     assert.equal(r.status, 200);
-    assert.ok(r.json.mensajes.every((m: any) => m.asuntos.every((a: any) => a.vence === null || Math.abs(a.vence) <= 8.64e15)));
+    assert.equal(r.json.mensajes.length, 1, "el servidor vuelve a generar el seguimiento válido");
+    assert.equal(r.json.mensajes[0].asuntos[0].vence_en, new Date(T0 + 26 * H).toISOString());
   } finally { await x.cerrar(); }
 });
