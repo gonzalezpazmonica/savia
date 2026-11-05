@@ -1,6 +1,6 @@
 # Confidentiality audit signature — DO NOT EDIT
-diff_hash=45e2c71bd92703ffe165ba5565bbab8408cbeb838d7ad2e52465afe9326029a9
-timestamp=2026-11-05T07:07:27Z
+diff_hash=1fc534dbfba937db2ae7fbf13ad6448ae5b671811f67cfb381573a849e062ff9
+timestamp=2026-11-05T07:55:48Z
 branch=agent/w-spec-grant-nocturno-20261023
-head_commit=5b62f350
-signature=fdb8f50d7cad93f2656c54840c110859f46a5308a3f591a0a034b10005411152
+head_commit=cf31fa55
+signature=d25a58c60ea00326586b9dab8fb841261d730b6421980afaa852fd5f25965795
