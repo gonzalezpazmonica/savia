@@ -129,6 +129,47 @@ setup_clean_repo() {
   cd "$BATS_TEST_DIRNAME/.."
 }
 
+@test "exempt: git checkout --merge -- <ficheros> is a restore, allowed with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout --merge -- a.txt"}}'
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "exempt: git checkout <tree-ish> -- <ruta> restores, allowed with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout HEAD -- a.txt"}}'
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "block: git checkout --merge <rama> (no paths) still blocks with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout --merge feature"}}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOQUEADO"* ]]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "block: git checkout <rama> -- without paths still blocks with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout feature --"}}'
+  [ "$status" -eq 2 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "block: a restore earlier in the command does not excuse a later branch switch" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout -- b.txt; git checkout feature"}}'
+  [ "$status" -eq 2 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
 # ── Dirty tree → block ──────────────────────────────────
 
 @test "block: git checkout with modified file exits 2" {
@@ -206,9 +247,16 @@ setup_clean_repo() {
 
 # ── Negative cases ─────────────────────────────────────
 
-@test "negative: malformed JSON exits 0" {
+# Revisión #1483: entrada inesperada → fail-closed (antes salía 0 sin mirar).
+@test "negative: malformed JSON blocks (fail-closed)" {
   run bash "$HOOK" <<< "not valid JSON"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"entrada de hook inválida"* ]]
+}
+
+@test "negative: a non-string command is unexpected input and blocks" {
+  run bash "$HOOK" <<< '{"tool_input":{"command":["git","checkout","feature"]}}'
+  [ "$status" -eq 2 ]
 }
 
 @test "negative: command 'git-checkout' with dash not matched" {
@@ -241,10 +289,13 @@ setup_clean_repo() {
   cd "$BATS_TEST_DIRNAME/.."
 }
 
-@test "resolution: cd \$UNSET && git switch — session cwd clean → exits 0" {
+# Revisión #1483: un destino que no se puede resolver bloquea aunque el cwd de
+# la sesión esté limpio (fail-closed, misma decisión que el guard TS).
+@test "resolution: cd \$UNSET && git switch — session cwd clean → exits 2 (uncertain target)" {
   setup_clean_repo
   run bash "$HOOK_ABS" <<< "{\"cwd\":\"$TEST_REPO\",\"tool_input\":{\"command\":\"cd \$B && git switch feature\"}}"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"destino de cambio de rama desconocido"* ]]
   cd "$BATS_TEST_DIRNAME/.."
 }
 
@@ -429,6 +480,66 @@ setup_second_repo() {
 }
 
 # ── Edge cases ─────────────────────────────────────────
+
+@test "regresión: redirecciones y comentarios tras -- no son rutas de checkout" {
+  setup_clean_repo
+  echo dirty > a.txt
+  for cmd in 'git checkout feature -- >/dev/null' 'git checkout feature -- 2>&1' 'git checkout feature -- # comentario'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "regresión: restaurar en una línea no oculta el cambio de rama de la siguiente" {
+  setup_clean_repo
+  echo dirty > a.txt
+  for cmd in $'git checkout -- a.txt\ngit checkout feature' $'git checkout feature\ngrep -- x f'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "regresión: -- seguido solo de expansiones (\$X, \$(…)) no es restauración" {
+  # Revisión de seguridad #1483 P1-1: si se expanden a nada, bash ejecuta
+  # `git checkout feature --`, que cambia de rama con el árbol sucio.
+  setup_clean_repo
+  echo dirty > a.txt
+  for cmd in 'git checkout feature -- $FILES' 'git checkout feature -- $(true)'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  # con una ruta conocida junto a la expansión sigue siendo restauración
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' 'git checkout feature -- a.txt $FILES' "$TEST_REPO")
+  run bash "$HOOK_ABS" <<< "$payload"
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "regresión: -- seguido solo de expansiones bloquea también con el árbol limpio" {
+  # Revisión de corrección #1483 (3.ª, P2-3): el destino incierto falla cerrado
+  # antes de mirar git status; se fija para que no cambie sin que nadie lo vea.
+  setup_clean_repo
+  [ -z "$(git -C "$TEST_REPO" status --porcelain)" ]
+  for cmd in 'git checkout feature -- $FILES' 'git checkout HEAD -- $(git ls-files -m)'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  # negativo: con el árbol limpio, un cambio de rama literal pasa
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' 'git checkout feature' "$TEST_REPO")
+  run bash "$HOOK_ABS" <<< "$payload"
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
 
 @test "edge: very large dirty tree (>20 files) listed truncated" {
   setup_clean_repo

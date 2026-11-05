@@ -6,7 +6,11 @@ Lo usan los guards de rama (block-commit-to-main en bash y su port TS, y
 validate-bash-global) para mirar la rama del repo sobre el que actúa la orden
 y no la del checkout de la sesión.
 
-Uso:    git_op_targets.py <cwd-base>      (la orden llega por stdin)
+Uso:    git_op_targets.py [--switch] <cwd-base>   (la orden llega por stdin)
+        --switch: mismo criterio para block-branch-switch-dirty; op `switch`
+        por cada `git checkout|switch` que puede mover HEAD. Una restauración
+        `git checkout [<opc>] [<tree-ish>] -- <rutas>` no se emite. Un destino
+        que aún no existe (clon creado en la misma orden) se emite: decide el hook.
 Salida: una línea por operación, `<op>\\t<dir>`, op ∈ {commit, add}.
         `<dir>` = destino reconocido con certeza.
         `<dir>` vacío = veredicto BLOQUEAR: la orden contiene `git` y
@@ -50,9 +54,17 @@ import sys
 UNKNOWN = None
 MAX_DEPTH = 6
 OPS = {"commit": "commit", "commit-tree": "commit", "add": "add", "stage": "add"}
+COMMIT_OPS = OPS  # integrados aunque no figuren en GIT_BUILTINS (también en --switch)
 GIT_WORD = re.compile(r"(?<![\w])git(?![\w])", re.I)
 COMMIT_WORD = re.compile(r"(?<![\w-])commit(-tree)?(?![\w-])", re.I)
 ADD_WORD = re.compile(r"(?<![\w-])(add|stage)(?![\w-])", re.I)
+SWITCH_WORD = re.compile(r"(?<![\w-])(checkout|switch)(?![\w-])", re.I)
+# Modo activo: palabras que, junto a `git`, obligan a emitir la op con destino
+# vacío ante una orden incierta. PRIMARY = op de un alias o de un argv0 no
+# resoluble. `--switch` las cambia por checkout|switch (ver main()).
+WORDS = [(COMMIT_WORD, "commit"), (ADD_WORD, "add")]
+PRIMARY = (COMMIT_WORD, "commit")
+SWITCH_OPS = {"checkout": "switch", "switch": "switch"}
 ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\+?=")
 # Variables que cambian el repo o el cd sin que se vea en la orden.
 UNSAFE_VARS = {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_CONFIG_PARAMETERS",
@@ -415,10 +427,51 @@ def words_text(words):
     return " ".join("".join(v for k, v in w if k in ("lit", "sub")) for w in words)
 
 
+def argv_text(words):
+    """Como `words_text`, pero cada palabra con espacios, comillas o barras vuelve
+    entre comillas simples: `-C "/tmp/mi remote"` sigue siendo UN argumento para
+    `SUBCMD_ADD` y no deja `remote add` como si fuera el subcomando."""
+    out = []
+    for w in words:
+        s = "".join(v for k, v in w if k in ("lit", "sub"))
+        if re.search(r"[\s\"'\\]", s):
+            s = "'" + s.replace("'", "'\\''") + "'"
+        out.append(s)
+    return " ".join(out)
+
+
+# `add` como acción de otro subcomando, no como `git add`: `git worktree add`
+# crea otro checkout y `git remote add` escribe config; ninguno toca el índice
+# ni la rama del repo. (`submodule add` sí indexa y `notes add` sí hace commit:
+# siguen contando.) Solo se neutraliza la pareja literal; un `add` suelto en
+# otra parte de la orden sigue contando. `worktree|remote` tiene que ser el
+# subcomando de `git` (tras sus opciones globales, con el valor de `-C`,
+# `--git-dir`, etc. consumido aparte): `git -C ../remote add .` es un
+# `git add` real y sigue contando. El valor se lee como palabra de shell, con
+# las comillas y barras aún puestas: `-C "/tmp/mi remote"` o `-C /x/a\ worktree`
+# son UN argumento y no dejan `remote`/`worktree` como subcomando. Sin `=`,
+# solo se saltan los flags sin valor conocidos (`GIT_SAFE_FLAGS`): una opción
+# desconocida puede tomar el argumento siguiente (`git --attr-source remote
+# add .` es un `git add` real), así que entonces no se neutraliza nada.
+_OPT_VAL = r"""(?:"[^"]*"|'[^']*'|\\.|[^\s"'\\])+"""
+_GIT_GLOBAL_OPT = (r"(?:-[Cc]\s+{v}"
+                   r"|--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:={v}|\s+{v})"
+                   r"|--[\w-]+={v}"
+                   r"|" + "|".join(re.escape(f) + r"(?![\w=-])" for f in sorted(GIT_SAFE_FLAGS))
+                   + r")").replace("{v}", _OPT_VAL)
+SUBCMD_ADD = re.compile(r"((?<![\w./-])git(?:\s+%s)*\s+(?:worktree|remote)\s+)add(?![\w-])"
+                        % _GIT_GLOBAL_OPT, re.I)
+
+
+def plain(text):
+    """Texto sin el `add` de `git worktree|remote add` y después sin comillas ni barras."""
+    return re.sub(r"[\"'\\]", "", SUBCMD_ADD.sub(r"\1-", text))
+
+
 def mentions(text):
     """El texto (sin comillas ni barras) contiene `git` y `commit|add`."""
-    t = re.sub(r"[\"'\\]", "", text)
-    return bool(GIT_WORD.search(t)) and bool(COMMIT_WORD.search(t) or ADD_WORD.search(t))
+    t = plain(text)
+    return bool(GIT_WORD.search(t)) and any(rx.search(t) for rx, _ in WORDS)
 
 
 def assign(segs, ctx):
@@ -544,7 +597,7 @@ def simple(toks, ctx, depth, piped):
             words.append(val[0])
     for w in words:
         run_subs(w, ctx, depth)
-    text = words_text(words) + ("\n" + stdin if stdin else "")
+    text = argv_text(words) + ("\n" + stdin if stdin else "")
     assigns = []
     while words and is_assign(words[0]):
         assigns.append(assign(words[0], ctx))
@@ -560,8 +613,8 @@ def simple(toks, ctx, depth, piped):
         ctx.uncertain = True  # `$SUDO git commit`, `$(which git) …`
         # `$x commit` con x=git ofuscado: el texto no dice `git`, pero la orden
         # puede serlo. Con `commit` en el texto → BLOQUEAR sin exigir la mención.
-        if COMMIT_WORD.search(re.sub(r"[\"'\\]", "", text)):
-            ctx.out.append(("commit", ""))
+        if PRIMARY[0].search(re.sub(r"[\"'\\]", "", text)):
+            ctx.out.append((PRIMARY[1], ""))
         return text
     base = os.path.basename(argv[0])
     if base in KEYWORDS or base in OPAQUE_BUILTINS:
@@ -634,16 +687,38 @@ def do_git(argv, ctx):
             ctx.uncertain = True  # --git-dir, --work-tree, --exec-path…
             return
         if a in OPS:
+            restore = a == "checkout" and OPS is SWITCH_OPS and is_restore(argv[k + 1:])
+            if restore is UNKNOWN:
+                ctx.uncertain = True  # `-- $X`, `-- $(…)`: puede quedar en `--` solo
+                return
+            if restore:
+                return  # restaura ficheros: no mueve HEAD
             if target is UNKNOWN:
                 ctx.uncertain = True
             else:
                 ctx.out.append((OPS[a], target))
-        elif a not in GIT_BUILTINS and not alias_is_safe(a, target):
+        elif a not in GIT_BUILTINS and a not in COMMIT_OPS and not alias_is_safe(a, target):
             # alias (`git ci` con alias.ci=commit, también global) u orden
             # externa git-<a>: puede hacer commit → se trata como commit en el
             # destino, sin exigir que el texto diga `commit`.
-            ctx.out.append(("commit", "" if target is UNKNOWN else target))
+            ctx.out.append((PRIMARY[1], "" if target is UNKNOWN else target))
         return
+
+
+def is_restore(args):
+    """`git checkout [<opciones>] [<tree-ish>] -- <rutas>`: un `--` literal
+    aislado seguido de al menos una ruta conocida y no vacía. Las redirecciones
+    y los comentarios no llegan como palabras, así que no cuentan como rutas.
+    Devuelve UNKNOWN si tras `--` solo hay palabras de valor desconocido
+    (`$FILES`, `$(git diff --name-only)`): si se expanden a nada, bash ejecuta
+    `git checkout <rama> --`, que es un cambio de rama."""
+    for i, a in enumerate(args):
+        if a == "--":
+            rest = args[i + 1:]
+            if any(p is not UNKNOWN and p for p in rest):
+                return True
+            return UNKNOWN if UNKNOWN in rest else False
+    return False
 
 
 def alias_is_safe(name, target):
@@ -660,11 +735,17 @@ def alias_is_safe(name, target):
     if res.returncode != 0:
         return False
     words = res.stdout.split()
-    return bool(words) and words[0] in GIT_BUILTINS and words[0] not in OPS
+    return bool(words) and (words[0] in GIT_BUILTINS or words[0] in COMMIT_OPS) \
+        and words[0] not in OPS
 
 
 def main():
-    base = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else os.getcwd()
+    global OPS, WORDS, PRIMARY
+    args = sys.argv[1:]
+    if args and args[0] == "--switch":
+        args = args[1:]
+        OPS, WORDS, PRIMARY = SWITCH_OPS, [(SWITCH_WORD, "switch")], (SWITCH_WORD, "switch")
+    base = args[0] if args and args[0] else os.getcwd()
     command = sys.stdin.read()
     ctx = Ctx(os.path.normpath(base), os.environ.get("HOME") or UNKNOWN)
     try:
@@ -673,11 +754,10 @@ def main():
         ctx.uncertain = True
     out = list(dict.fromkeys(ctx.out))
     if ctx.uncertain and mentions(command):
-        t = re.sub(r"[\"'\\]", "", command)
-        if COMMIT_WORD.search(t):
-            out.append(("commit", ""))
-        if ADD_WORD.search(t):
-            out.append(("add", ""))
+        t = plain(command)
+        for rx, op in WORDS:
+            if rx.search(t):
+                out.append((op, ""))
     for op, d in out:
         sys.stdout.write("%s\t%s\n" % (op, d))
     return 0
