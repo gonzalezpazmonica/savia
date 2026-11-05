@@ -80,6 +80,10 @@ except Exception: print("")' 2>/dev/null)
 for _a in "$@"; do [[ "$_a" == --pr-base ]] && pr_base_scan "$@"; done
 unset _a
 
+# Con --text el diff trae el contenido crudo de los binarios. tr quita los NUL (mawk corta la línea
+# en el NUL) y todo grep va con -a: sin él, GNU grep calla lo que sigue a un NUL o la línea con un
+# byte inválido, y un binario o un \xff junto al dato vetado daban CLEAN (rev-1472 C-P1-1).
+grep() { command grep -a "$@"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 ALLOWLIST="$ROOT_DIR/scripts/confidentiality-allowlist.txt"
@@ -146,12 +150,12 @@ get_lines() {
   cd "$ROOT_DIR" || exit 2
   case "$MODE" in
     --staged)
-      git diff --text --cached --diff-filter=ACMR -U0 \
+      git diff --text --cached --diff-filter=ACMR -U0 | tr -d '\000' \
         | awk -v exc="$EXCLUDE_FILES" '/^diff --git/{skip=0; if(match($0,exc)) skip=1} !skip{print}' \
         | grep "^+" | grep -v "^+++"
       ;;
     --pr)
-      git diff --text origin/main...HEAD --diff-filter=ACMR -U0 \
+      git diff --text origin/main...HEAD --diff-filter=ACMR -U0 | tr -d '\000' \
         | awk -v exc="$EXCLUDE_FILES" '/^diff --git/{skip=0; if(match($0,exc)) skip=1} !skip{print}' \
         | grep "^+" | grep -v "^+++"
       ;;

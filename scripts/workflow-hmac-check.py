@@ -25,7 +25,9 @@ PR_EVENTS = ("pull_request", "pull_request_target")
 # workflow_run hereda los secretos y suele procesar artefactos de una PR: mismo trato que un evento de PR.
 SECRET_EVENTS = PR_EVENTS + ("workflow_run",)
 # Formas que exponen la clave sin nombrarla (expresiones de Actions: sin distinguir mayúsculas).
-SECRET_BULK = re.compile(r"tojson\(\s*secrets\s*\)|^\s*secrets:\s*inherit\s*$", re.I | re.M)
+# «secrets: inherit» se mira en la clave secrets de cada job, no en el texto: así un script de un
+# run: que contenga esa línea no es un falso positivo (rev-1472 C-P2-2).
+SECRET_BULK = re.compile(r"tojson\(\s*secrets\s*\)", re.I)
 EXPR_TOKEN = re.compile(r"'(?:[^']|'')*'|\bsecrets\b", re.I)
 STATIC_SECRET = re.compile(r"secrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|"
                            r"\[\s*'([A-Za-z_][A-Za-z0-9_]*)'\s*\])", re.I)
@@ -100,6 +102,14 @@ def secret_context_used(doc):
                for expression in expressions(doc) for token in EXPR_TOKEN.finditer(expression))
 
 
+def inherits_secrets(doc):
+    jobs = doc.get("jobs")
+    if not isinstance(jobs, dict):
+        return False
+    return any(isinstance(j, dict) and str(j.get("secrets", "")).strip().lower() == "inherit"
+               for j in jobs.values())
+
+
 def check_pr_secrets(path):
     text, doc, on = load(path)
     ev = events(on)
@@ -107,7 +117,7 @@ def check_pr_secrets(path):
     if any(e in ev for e in SECRET_EVENTS):
         if SECRET.lower() in text.lower():
             bad.append(f"{path}: un workflow disparado por PR o workflow_run referencia {SECRET}")
-        if SECRET_BULK.search(text):
+        if SECRET_BULK.search(text) or inherits_secrets(doc):
             bad.append(f"{path}: un workflow disparado por PR o workflow_run expone todos los secretos "
                        "(toJSON(secrets) o secrets: inherit)")
         if dynamic_secret_access(doc):
@@ -138,7 +148,7 @@ def check_main_audit(path):
             uses = step.get("uses") if isinstance(step, dict) else None
             if uses and not uses.startswith("./") and not PINNED.match(uses):
                 bad.append(f"{path}: acción no fijada por SHA: {uses}")
-    if secret_context_used(doc) or SECRET_BULK.search(text):
+    if secret_context_used(doc) or SECRET_BULK.search(text) or inherits_secrets(doc):
         bad.append(f"{path}: referencia al contexto secrets o herencia de secretos")
     if not doc.get("jobs"):
         bad.append(f"{path}: sin jobs")
