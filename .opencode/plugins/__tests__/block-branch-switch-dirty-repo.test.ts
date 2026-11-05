@@ -91,6 +91,17 @@ test("negative: a dirty target repo still blocks, and an uncertain target fails 
     } finally { c.done(); }
   }));
 
+// Revisión de corrección #1483 (P2-3): el prefiltro exigía la palabra `checkout`
+// y dejaba pasar un alias (`git co feature` con alias.co=checkout) que el
+// resolvedor sí trata como posible cambio de rama.
+test("dirty tree: a git alias that may switch branch is blocked; git status passes", () =>
+  withDirtyRepo(async () => {
+    execSync("git config alias.co checkout", { stdio: "ignore" });
+    await expect(run("git co feature")).rejects.toThrow(/branch-switch-dirty/);
+    await expect(run("git status")).resolves.toBeUndefined();
+    await expect(run("ls -la")).resolves.toBeUndefined();
+  }));
+
 // Revisión #1483: un `git status` que falla por otra causa que «no es un repo»
 // (índice corrupto, timeout, dubious ownership) no cuenta como árbol limpio.
 test("fail-closed: a target repo whose git status fails blocks; a plain directory does not", () =>

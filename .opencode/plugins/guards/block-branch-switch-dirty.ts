@@ -57,7 +57,7 @@ export function hasBranchChange(command: string): boolean {
 
 const RESOLVER = fileURLToPath(new URL("../../../scripts/lib/git_op_targets.py", import.meta.url));
 const ADMITTED = "Forma admitida: git -C <ruta> checkout|switch … (o cd <ruta> && git checkout …).";
-// Prefiltro: `git` y `checkout|switch` como palabras (sin comillas ni barras).
+// Prefiltro: `git` o `checkout|switch` como palabras (sin comillas ni barras).
 const GIT_RX = /(^|[^\w])git([^\w]|$)/i;
 const SWITCH_RX = /(^|[^\w-])(checkout|switch)([^\w-]|$)/i;
 
@@ -95,7 +95,9 @@ export async function blockBranchSwitchDirty(
   const command = extractCommand(input, output);
   if (!command) return;
   const plain = command.replace(/["'\\]/g, "");
-  if (!GIT_RX.test(plain) || !SWITCH_RX.test(plain)) return;
+  // `git` O `checkout|switch`: `git co feature` (alias) no dice `checkout` y
+  // `$g checkout` no dice `git`; el resolvedor decide en los dos casos.
+  if (!GIT_RX.test(plain) && !SWITCH_RX.test(plain)) return;
   const args = (output?.args ?? input?.args ?? {}) as Record<string, unknown>;
   const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
 
