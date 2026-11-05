@@ -412,6 +412,21 @@ JSON
   [[ "$output" == *"SE-910 está APPROVED en la vista de planificación pero no hay spec localizable"* ]]
 }
 
+@test "revisión 3: compartir evidence genérica no oculta una iniciativa que ya inicia S1" {
+  mkdir -p "$ROOT/docs/other"
+  cp "$SPEC" "$ROOT/docs/other/generic.md"
+  rm "$SPEC"
+  printf '{"initiatives":[{"id":"SE-900","status":"APPROVED","evidence":"docs/other/generic.md"},{"id":"SE-901","status":"IMPLEMENTING","evidence":"docs/other/generic.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"confirmación del prototipo"* ]]
+  SPEC="$ROOT/docs/other/generic.md"
+  confirm_s0
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: comprehension-gate"* ]]
+}
+
 @test "revisión 2: evidence apuntando a la spec de otra iniciativa falla" {
   printf -- '---\nstatus: IMPLEMENTED\n---\n# vieja\n' > "$ROOT/docs/specs/SE-100-viejo.spec.md"
   printf '{"initiatives":[{"id":"SE-911","status":"APPROVED","evidence":"docs/specs/SE-100-viejo.spec.md"}]}' > "$ROOT/state.json"

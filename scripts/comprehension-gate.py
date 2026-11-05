@@ -298,7 +298,6 @@ def discover(root: Path, status: dict[str, str],
     globbed = sorted(root.glob("docs/specs/**/SE-*.md")) + sorted(root.glob("docs/propuestas/SE-*.md"))
     found: list[tuple[Path, str]] = [(p, "") for p in globbed]
     ids = {file_id(p) for p in globbed}
-    seen = {p.resolve() for p in globbed}
     missing = []
     root_r = root.resolve()
     for sid, st in sorted(status.items()):
@@ -311,9 +310,8 @@ def discover(root: Path, status: dict[str, str],
             if other and other != sid:
                 missing.append(f"{sid} está {st} en la vista y su evidence ({ev}) es la spec de "
                                f"{other}, no la suya; la puerta no puede evaluarla")
-            elif ev_path not in seen:
+            else:
                 found.append((ev_path, sid))  # la ID la da la vista, no el nombre del fichero
-                seen.add(ev_path)
             continue
         missing.append(f"{sid} está {st} en la vista de planificación pero no hay spec localizable "
                        f"(evidence: {ev or 'vacía'}); la puerta no puede evaluarla")
