@@ -398,6 +398,10 @@ jobs:
       - name: Installer contracts, planner and detection (SE-399 F1+F2)
         run: python3 -m unittest tests/python/test_installer_plan.py tests/python/test_installer_f2.py
 
+      # SE-470 S2: detector determinista de manipulación en trazas; su suite vive en tests/python/.
+      - name: Trace tamper scan (SE-470 S2)
+        run: python3 -m unittest tests/python/test_trace_tamper_scan.py
+
       # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
       # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
       - name: Gate guards parity (SE-453 S2)
