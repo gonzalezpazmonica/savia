@@ -258,3 +258,122 @@ teardown() {
   run grep -ci 'deny.by.default\|deny_by_default\|DENY' "$SCRIPT"
   [[ "$output" -ge 2 ]]
 }
+
+# ── S03n: comportamiento discriminante ───────────────
+
+_gate() {
+  bash "$SCRIPT" gate --cards-file "$PLATFORM_CARDS_FILE" --allowlist "$ALLOWLIST_FILE" "$@"
+}
+
+@test "S03n seguridad: una comilla en --card-id no suplanta otra tarjeta activa" {
+  run _gate --card-id "nadie' or 'a'=='a" --skill "situacion.query" --payload-level 1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found or inactive"* ]]
+  [[ "$output" != *"ALLOW"* ]]
+}
+
+@test "S03n seguridad: una comilla en --skill no amplía la allowlist global" {
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "x' or True or '" --payload-level 0
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not in card allowed_skills"* ]]
+}
+
+@test "S03n seguridad: --payload-level no numérico es error de uso, no nivel 0" {
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level "abc"
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"ALLOW"* ]]
+}
+
+@test "S03n seguridad: --payload-level no se evalúa como expresión aritmética" {
+  local marker="$TEST_DIR/pwned"
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" \
+    --payload-level "a[\$(touch $marker)]"
+  [ "$status" -eq 2 ]
+  [ ! -e "$marker" ]
+}
+
+@test "S03n frontera: payload igual al máximo de la tarjeta pasa y uno más se deniega" {
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 1
+  [ "$status" -eq 0 ]
+  [[ "$output" == "ALLOW: card_id=ext-platform-limited-9902 skill=situacion.query payload_level=1" ]]
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"payload_level=2 exceeds card max=1"* ]]
+}
+
+@test "S03n frontera: el máximo de la allowlist global también limita" {
+  # La tarjeta permite hasta 2; la allowlist baja situacion.query a 1.
+  sed -i '/situacion.query:/,/readOnly/ s/maxLevel: 2/maxLevel: 1/' "$ALLOWLIST_FILE"
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level 1
+  [ "$status" -eq 0 ]
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level 2
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"exceeds allowlist max=1"* ]]
+}
+
+@test "S03n: skill permitida por la tarjeta pero con allow:false en la allowlist se deniega" {
+  sed -i '/dependency.notify:/,/readOnly/ s/allow: true/allow: false/' "$ALLOWLIST_FILE"
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "dependency.notify"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"denied by global allowlist — deny_by_default"* ]]
+}
+
+@test "S03n: allowlist ausente deniega (fail-closed)" {
+  run bash "$SCRIPT" gate --cards-file "$PLATFORM_CARDS_FILE" --allowlist "$TEST_DIR/no-hay.yaml" \
+    --card-id "ext-platform-client-alpha-9901" --skill "situacion.query"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"denied by global allowlist — allowlist_unavailable"* ]]
+}
+
+@test "S03n: allowlist con default allow deja pasar una skill no listada si la tarjeta la permite" {
+  printf 'version: 1\nskills: {}\ndefault: allow\n' > "$ALLOWLIST_FILE"
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "dependency.notify" --payload-level 2
+  [ "$status" -eq 0 ]
+}
+
+@test "S03n: cada decisión queda en el log JSONL con su motivo" {
+  _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level 1 || true
+  _gate --card-id "ext-platform-inactive-9903" --skill "situacion.query" || true
+  python3 - "$DATA_DIR/ext-platform-gate-decisions.jsonl" <<'PY'
+import json,sys
+recs=[json.loads(l) for l in open(sys.argv[1])]
+assert [(r["decision"],r["reason"]) for r in recs]==[("ALLOW","all_checks_passed"),("DENY","card_not_found_or_inactive")], recs
+assert recs[0]["card_id"]=="ext-platform-client-alpha-9901" and recs[0]["skill"]=="situacion.query"
+PY
+}
+
+@test "S03n: el log registra también entradas con comillas sin perder la decisión" {
+  _gate --card-id "o'brien" --skill "situacion.query" || true
+  python3 - "$DATA_DIR/ext-platform-gate-decisions.jsonl" <<'PY'
+import json,sys
+recs=[json.loads(l) for l in open(sys.argv[1])]
+assert len(recs)==1 and recs[0]["card_id"]=="o'brien" and recs[0]["decision"]=="DENY", recs
+PY
+}
+
+@test "S03n: faltan --card-id o --skill → exit 2" {
+  run _gate --skill "situacion.query"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--card-id is required"* ]]
+  run _gate --card-id "ext-platform-client-alpha-9901"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--skill is required"* ]]
+}
+
+@test "S03n: list-deny muestra las expuestas no permitidas y omite tarjetas suspendidas" {
+  run bash "$SCRIPT" list-deny --cards-file "$PLATFORM_CARDS_FILE" --allowlist "$ALLOWLIST_FILE"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"exposed_but_not_allowed(denied): ['handoff.request']"* ]]
+  [[ "$output" == *"exposed_but_not_allowed(denied): ['commitment.propose']"* ]]
+  [[ "$output" != *"inactive-platform"* ]]
+  [[ "$output" == *"Default: deny"* ]]
+}
+
+@test "S03n: tarjeta sin max_payload_level entero se deniega y lo registra (fail-closed)" {
+  sed -i '/ext-platform-limited-9902/,/status/ s/max_payload_level: 1/max_payload_level: "alto"/' "$PLATFORM_CARDS_FILE"
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 0
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"has no valid max_payload_level"* ]]
+  run grep -c '"reason": "card_max_payload_level_invalid"' "$DATA_DIR/ext-platform-gate-decisions.jsonl"
+  [ "$output" = "1" ]
+}
