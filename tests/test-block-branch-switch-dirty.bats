@@ -505,6 +505,24 @@ setup_second_repo() {
   cd "$BATS_TEST_DIRNAME/.."
 }
 
+@test "regresión: -- seguido solo de expansiones (\$X, \$(…)) no es restauración" {
+  # Revisión de seguridad #1483 P1-1: si se expanden a nada, bash ejecuta
+  # `git checkout feature --`, que cambia de rama con el árbol sucio.
+  setup_clean_repo
+  echo dirty > a.txt
+  for cmd in 'git checkout feature -- $FILES' 'git checkout feature -- $(true)'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  # con una ruta conocida junto a la expansión sigue siendo restauración
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' 'git checkout feature -- a.txt $FILES' "$TEST_REPO")
+  run bash "$HOOK_ABS" <<< "$payload"
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
 @test "edge: very large dirty tree (>20 files) listed truncated" {
   setup_clean_repo
   for i in $(seq 1 30); do echo "new" > "file-$i.txt"; done

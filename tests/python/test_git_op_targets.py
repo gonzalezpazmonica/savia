@@ -370,6 +370,18 @@ class SwitchTargets(unittest.TestCase):
         self.assertEqual(self.run_(f"git checkout -- a; git -C {self.wt} checkout b"),
                          [("switch", self.wt)])
 
+    def test_switch_restore_with_unknown_paths_blocks(self):
+        # `-- $FILES` o `-- $(…)` vacíos dejan `git checkout feature --`: cambio de rama
+        self.assertBlocks("git checkout feature -- $FILES", op="switch")
+        self.assertBlocks("git checkout origin/main -- $(git diff --name-only x)", op="switch")
+        self.assertBlocks("git checkout feature -- `true`", op="switch")
+        # con una ruta conocida junto a la desconocida sigue siendo restauración
+        self.assertEqual(self.run_("git checkout feature -- a.txt $FILES"), [])
+        # variable conocida no vacía: restauración
+        self.assertEqual(self.run_("F=a.txt; git checkout feature -- $F"), [])
+        # variable conocida vacía: `--` solo, cambio de rama en el cwd
+        self.assertEqual(self.run_("F=; git checkout feature -- $F"), [("switch", self.base)])
+
     def test_switch_uncertain_blocks(self):
         self.assertBlocks("git -C $NOPE checkout abc", op="switch")
         self.assertBlocks("sudo git checkout abc", op="switch")

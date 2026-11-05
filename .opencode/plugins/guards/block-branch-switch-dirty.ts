@@ -26,6 +26,18 @@ function pathArgs(args: string): string {
 }
 
 /**
+ * True if, after a standalone `--`, there is at least one path that is not a
+ * `$VAR`, `$(…)` or backtick expansion: those can expand to nothing and leave
+ * `git checkout <rama> --`, which changes branch.
+ */
+function knownPathAfterDashDash(args: string): boolean {
+  const m = args.match(/(?:^|\s)--\s+(.*)$/);
+  if (!m) return false;
+  const rest = m[1].replace(/\$\([^)]*\)?|`[^`]*`?/g, " ");
+  return rest.split(/\s+/).some((t) => t !== "" && !/^["']?\$/.test(t));
+}
+
+/**
  * True if the command contains an invocation that can move HEAD. A file
  * restore is `git checkout [<opciones>] [<tree-ish>] -- <rutas>`: a standalone
  * `--` followed by at least one path among that invocation's own arguments
@@ -37,7 +49,7 @@ function pathArgs(args: string): string {
 export function hasBranchChange(command: string): boolean {
   // Line continuations join words (same normalisation as the bash hook).
   for (const m of command.replace(/\\\n/g, " ").matchAll(INVOCATION_RX)) {
-    if (m[1].toLowerCase() === "checkout" && /(^|\s)--\s+\S/.test(pathArgs(m[2]))) continue;
+    if (m[1].toLowerCase() === "checkout" && knownPathAfterDashDash(pathArgs(m[2]))) continue;
     return true;
   }
   return false;

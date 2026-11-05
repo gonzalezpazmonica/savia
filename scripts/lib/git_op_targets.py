@@ -684,7 +684,11 @@ def do_git(argv, ctx):
             ctx.uncertain = True  # --git-dir, --work-tree, --exec-path…
             return
         if a in OPS:
-            if a == "checkout" and OPS is SWITCH_OPS and is_restore(argv[k + 1:]):
+            restore = a == "checkout" and OPS is SWITCH_OPS and is_restore(argv[k + 1:])
+            if restore is UNKNOWN:
+                ctx.uncertain = True  # `-- $X`, `-- $(…)`: puede quedar en `--` solo
+                return
+            if restore:
                 return  # restaura ficheros: no mueve HEAD
             if target is UNKNOWN:
                 ctx.uncertain = True
@@ -700,11 +704,17 @@ def do_git(argv, ctx):
 
 def is_restore(args):
     """`git checkout [<opciones>] [<tree-ish>] -- <rutas>`: un `--` literal
-    aislado seguido de al menos un argumento. Las redirecciones y los
-    comentarios no llegan como palabras, así que no cuentan como rutas."""
+    aislado seguido de al menos una ruta conocida y no vacía. Las redirecciones
+    y los comentarios no llegan como palabras, así que no cuentan como rutas.
+    Devuelve UNKNOWN si tras `--` solo hay palabras de valor desconocido
+    (`$FILES`, `$(git diff --name-only)`): si se expanden a nada, bash ejecuta
+    `git checkout <rama> --`, que es un cambio de rama."""
     for i, a in enumerate(args):
         if a == "--":
-            return i + 1 < len(args)
+            rest = args[i + 1:]
+            if any(p is not UNKNOWN and p for p in rest):
+                return True
+            return UNKNOWN if UNKNOWN in rest else False
     return False
 
 

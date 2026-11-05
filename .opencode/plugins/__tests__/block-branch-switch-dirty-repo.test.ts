@@ -41,6 +41,9 @@ test("dirty tree: redirections, comments and other lines never hide a branch cha
       "git checkout feature -- # comentario",
       "git checkout -- a.txt\ngit checkout feature",
       "git checkout feature\ngrep -- x f",
+      // revisión de seguridad #1483 P1-1: expansiones que pueden quedar en nada
+      "git checkout feature -- $FILES",
+      "git checkout feature -- $(true)",
     ]) {
       await expect(run(cmd)).rejects.toThrow(/branch-switch-dirty/);
     }

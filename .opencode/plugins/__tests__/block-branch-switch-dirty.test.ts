@@ -68,6 +68,22 @@ test("redirections or comments after `--` are not paths", () => {
   expect(hasBranchChange("git checkout -- a.txt 2>&1")).toBe(false);
 });
 
+// Revisión de seguridad #1483 (P1-1): `-- $X` o `-- $(…)` pueden expandirse a nada
+// y dejar `git checkout feature --`, que cambia de rama.
+test("expansions after `--` are not known paths", () => {
+  for (const cmd of [
+    "git checkout feature -- $FILES",
+    'git checkout feature -- "$FILES"',
+    "git checkout origin/main -- $(git diff --name-only x)",
+    "git checkout origin/main -- $(git diff --name-only x | grep y)",
+    "git checkout feature -- `true`",
+  ]) {
+    expect(hasBranchChange(cmd)).toBe(true);
+  }
+  // Con una ruta conocida junto a la expansión sigue siendo restauración.
+  expect(hasBranchChange("git checkout feature -- a.txt $FILES")).toBe(false);
+});
+
 test("line continuation inside a restore keeps it a restore; newline separates", () => {
   expect(hasBranchChange("git checkout HEAD \\\n -- a.txt")).toBe(false);
   expect(hasBranchChange("git checkout feature --\necho x")).toBe(true);
