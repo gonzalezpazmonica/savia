@@ -523,6 +523,24 @@ setup_second_repo() {
   cd "$BATS_TEST_DIRNAME/.."
 }
 
+@test "regresión: -- seguido solo de expansiones bloquea también con el árbol limpio" {
+  # Revisión de corrección #1483 (3.ª, P2-3): el destino incierto falla cerrado
+  # antes de mirar git status; se fija para que no cambie sin que nadie lo vea.
+  setup_clean_repo
+  [ -z "$(git -C "$TEST_REPO" status --porcelain)" ]
+  for cmd in 'git checkout feature -- $FILES' 'git checkout HEAD -- $(git ls-files -m)'; do
+    payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' "$cmd" "$TEST_REPO")
+    run bash "$HOOK_ABS" <<< "$payload"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"BLOQUEADO"* ]]
+  done
+  # negativo: con el árbol limpio, un cambio de rama literal pasa
+  payload=$(python3 -c 'import json,sys; print(json.dumps({"tool_input":{"command":sys.argv[1]},"cwd":sys.argv[2]}))' 'git checkout feature' "$TEST_REPO")
+  run bash "$HOOK_ABS" <<< "$payload"
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
 @test "edge: very large dirty tree (>20 files) listed truncated" {
   setup_clean_repo
   for i in $(seq 1 30); do echo "new" > "file-$i.txt"; done
