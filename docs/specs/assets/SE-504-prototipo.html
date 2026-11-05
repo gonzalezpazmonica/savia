@@ -1,0 +1,176 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Savia móvil</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Estructura copiada de las apps de Claude y ChatGPT: barra superior, cajón lateral, chat y compositor abajo */
+:root{
+  --bg:#ffffff; --fg:#1a1a1a; --muted:#6b6b6b; --line:#e8e8e6; --bubble:#f1f1ef; --panel:#f9f9f8;
+  --btn:#1a1a1a; --btn-fg:#ffffff; --ok:#1f7a4d; --warn:#9a6700;
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#212121; --fg:#ececec; --muted:#a3a3a3; --line:#363636; --bubble:#303030; --panel:#181818;
+  --btn:#ececec; --btn-fg:#1a1a1a; --ok:#4cc38a; --warn:#e3b341; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#212121; --fg:#ececec; --muted:#a3a3a3; --line:#363636; --bubble:#303030; --panel:#181818;
+  --btn:#ececec; --btn-fg:#1a1a1a; --ok:#4cc38a; --warn:#e3b341; color-scheme:dark}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--font);margin:0;overflow:hidden}
+.app{position:relative;height:100%;max-width:480px;margin:0 auto;display:flex;flex-direction:column;background:var(--bg)}
+.top{display:flex;align-items:center;gap:8px;padding:8px max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px));min-height:52px}
+.top .title{flex:1;text-align:center;font-weight:600;font-size:16px;display:flex;justify-content:center;align-items:center;gap:4px}
+.icon{width:40px;height:40px;border:0;background:none;color:var(--fg);border-radius:10px;display:grid;place-items:center;cursor:pointer}
+.icon:hover{background:var(--bubble)}
+.icon svg{width:22px;height:22px}
+.main{flex:1;overflow-y:auto;padding:8px max(16px,env(safe-area-inset-left,0px)) 16px max(16px,env(safe-area-inset-right,0px))}
+.empty{height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:20px;text-align:center}
+.empty h1{font-size:26px;font-weight:500;margin:0;text-wrap:balance}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:8px 14px;font:inherit;font-size:14px;cursor:pointer}
+.msg{margin:18px 0}
+.user{display:flex;justify-content:flex-end}
+.user p{background:var(--bubble);border-radius:20px;padding:10px 16px;margin:0;max-width:80%}
+.bot p{margin:0 0 10px}
+.actions{display:flex;gap:2px;color:var(--muted)}
+.actions .icon{width:32px;height:32px}
+.actions svg{width:18px;height:18px}
+.file{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;cursor:pointer;background:var(--bg);color:var(--fg);font:inherit;text-align:left;width:100%;margin:8px 0}
+.file .ext{width:36px;height:40px;border-radius:8px;background:var(--bubble);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--muted)}
+.file small{display:block;color:var(--muted);font-size:13px}
+.ask{border:1px solid var(--line);border-radius:16px;padding:14px;margin:8px 0}
+.ask .what{font-size:14px;color:var(--muted);margin-bottom:6px}
+.ask .row{display:flex;gap:8px;margin-top:12px}
+.b{border-radius:999px;padding:9px 16px;font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.b.primary{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
+.done{color:var(--ok);font-size:14px}
+.composer{padding:8px max(12px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.box{border:1px solid var(--line);border-radius:26px;padding:6px 6px 6px 8px;display:flex;align-items:flex-end;gap:4px;background:var(--bg);box-shadow:0 1px 6px rgba(0,0,0,.06)}
+.box textarea{flex:1;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:inherit;padding:8px 4px;max-height:120px}
+.send{width:36px;height:36px;border-radius:50%;border:0;background:var(--btn);color:var(--btn-fg);display:grid;place-items:center;cursor:pointer}
+.send svg{width:18px;height:18px}
+/* cajón */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.drawer{position:absolute;top:0;bottom:0;left:0;width:82%;background:var(--panel);display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top,0px)) 10px calc(10px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
+.search{display:flex;align-items:center;gap:8px;background:var(--bubble);border-radius:12px;padding:8px 12px;color:var(--muted);font-size:15px}
+.search svg{width:18px;height:18px}
+.nav{margin-top:10px;display:flex;flex-direction:column}
+.nav button,.list button{display:flex;align-items:center;gap:12px;border:0;background:none;color:var(--fg);font:inherit;font-size:15px;padding:10px;border-radius:10px;text-align:left;cursor:pointer;width:100%}
+.nav button:hover,.list button:hover{background:var(--bubble)}
+.nav svg{width:20px;height:20px}
+.sec{font-size:13px;color:var(--muted);padding:14px 10px 4px}
+.list{flex:1;overflow-y:auto}
+.dot{width:8px;height:8px;border-radius:50%;background:#2f6feb;margin-left:auto;flex:none}
+.me{display:flex;align-items:center;gap:10px;padding:10px;border-top:1px solid var(--line)}
+.avatar{width:32px;height:32px;border-radius:50%;background:#c96442;color:#fff;display:grid;place-items:center;font-weight:600;font-size:14px}
+.me small{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.me small i{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block}
+/* visor */
+.viewer{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column}
+.doc{flex:1;overflow-y:auto;padding:4px 20px 24px}
+.doc h2{font-size:20px;margin:8px 0 12px}
+.doc h3{font-size:16px;margin:18px 0 6px}
+.doc li{margin:4px 0}
+@media (prefers-reduced-motion:no-preference){.drawer{animation:in .18s ease-out}@keyframes in{from{transform:translateX(-12px)}}}
+button:focus-visible,textarea:focus-visible{outline:2px solid #2f6feb;outline-offset:2px}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <button class="icon" id="menu" aria-label="Abrir menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h10M4 17h16"/></svg></button>
+    <div class="title" id="title">Savia</div>
+    <button class="icon" id="newchat" aria-label="Nuevo chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+  </header>
+
+  <main class="main" id="main"></main>
+
+  <div class="composer">
+    <div class="box">
+      <button class="icon" aria-label="Adjuntar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <textarea id="input" rows="1" placeholder="Escribe a Savia"></textarea>
+      <button class="icon" aria-label="Dictar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="send" id="send" aria-label="Enviar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    </div>
+  </div>
+
+  <div id="drawerWrap" hidden>
+    <div class="scrim" id="scrim"></div>
+    <nav class="drawer" aria-label="Menú">
+      <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Buscar</div>
+      <div class="nav">
+        <button data-go="new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Nuevo chat</button>
+        <button data-go="tareas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Tareas</button>
+        <button data-go="proyectos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>Proyectos</button>
+      </div>
+      <div class="list">
+        <div class="sec">Hoy</div>
+        <button data-go="soul">Tu día con Savia <span class="dot" aria-label="sin leer"></span></button>
+        <button data-go="soul">Respuesta al proveedor</button>
+        <div class="sec">Ayer</div>
+        <button>Informe de la semana</button>
+        <button>Preparar la reunión del jueves</button>
+        <button>Dudas sobre el presupuesto</button>
+      </div>
+      <div class="me"><div class="avatar">A</div><div>Ana<small><i></i>Portátil conectado</small></div></div>
+    </nav>
+  </div>
+
+  <section class="viewer" id="viewer" hidden>
+    <header class="top">
+      <button class="icon" id="closeDoc" aria-label="Cerrar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <div class="title">Resumen semanal.md</div>
+      <button class="icon" aria-label="Compartir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></button>
+    </header>
+    <article class="doc">
+      <h2>Resumen de la semana</h2>
+      <h3>Lo que se cerró</h3>
+      <ul><li>Propuesta enviada al cliente.</li><li>Revisión del contrato terminada.</li></ul>
+      <h3>Lo que queda</h3>
+      <ul><li>Responder al proveedor (borrador listo).</li><li>Preparar la reunión del jueves.</li></ul>
+      <h3>Próxima semana</h3>
+      <p>Dos entregas con fecha. Te aviso el día antes de cada una.</p>
+    </article>
+  </section>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const main=$('#main');
+const views={
+  new:()=>`<div class="empty"><h1>Buenos días, Ana</h1>
+    <div class="chips"><button class="chip" data-go="soul">¿Qué tengo hoy?</button><button class="chip" data-go="soul">¿Qué espera respuesta?</button><button class="chip">Resume mi semana</button></div></div>`,
+  soul:()=>`
+    <div class="msg bot"><p>Buenos días. Tres cosas para hoy:</p>
+      <p>1. El proveedor espera respuesta desde ayer.<br>2. Reunión con el equipo a las 11:00.<br>3. El informe semanal vence mañana.</p>
+      <p>He preparado una respuesta al proveedor. ¿La envío?</p>
+      <div class="ask" id="ask"><div class="what">Enviar correo a Proveedor · Asunto: Plazos de entrega</div>
+        <div>«Hola, confirmamos la entrega para el día 12. Un saludo.»</div>
+        <div class="row"><button class="b primary" id="approve">Enviar</button><button class="b">Editar</button><button class="b" id="discard">Descartar</button></div></div>
+      ${actions()}</div>
+    <div class="msg user"><p>Vale. ¿Y el informe semanal?</p></div>
+    <div class="msg bot"><p>Aquí tienes el borrador. Lo he hecho con tus notas y las tareas cerradas.</p>
+      <button class="file" id="openDoc"><span class="ext">MD</span><span>Resumen semanal<small>Documento · 1 página</small></span></button>
+      ${actions()}</div>`,
+  tareas:()=>`<div class="msg bot"><p><b>En curso</b></p>
+      <p>Informe semanal · borrador listo<br>Seguimiento del contrato · esperando firma</p>
+      <p><b>Esperan algo de ti</b></p><p>Respuesta al proveedor · aprobar envío</p></div>`,
+  proyectos:()=>`<div class="msg bot"><p>Proyecto Alfa<br>Proyecto Beta</p></div>`
+};
+function actions(){return `<div class="actions"><button class="icon" aria-label="Copiar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><button class="icon" aria-label="Me gusta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M7 10v11M7 10l4-7a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2l-2 7a2 2 0 0 1-2 1H7"/></svg></button><button class="icon" aria-label="Repetir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></svg></button></div>`}
+const titles={new:'Savia',soul:'Tu día con Savia',tareas:'Tareas',proyectos:'Proyectos'};
+function go(v){main.innerHTML=views[v]();$('#title').textContent=titles[v];$('#drawerWrap').hidden=true;bind()}
+function bind(){
+  document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
+  const a=$('#approve'); if(a) a.onclick=()=>{$('#ask').innerHTML='<span class="done">Enviado a las 9:02</span>'};
+  const d=$('#discard'); if(d) d.onclick=()=>{$('#ask').innerHTML='<span class="what">Descartado</span>'};
+  const o=$('#openDoc'); if(o) o.onclick=()=>{$('#viewer').hidden=false};
+}
+$('#menu').onclick=()=>{$('#drawerWrap').hidden=false;bind()};
+$('#scrim').onclick=()=>{$('#drawerWrap').hidden=true};
+$('#newchat').onclick=()=>go('new');
+$('#closeDoc').onclick=()=>{$('#viewer').hidden=true};
+const q=new URLSearchParams(location.search).get('s');
+go(q==='chat'||q==='doc'?'soul':'new');
+if(q==='drawer'){$('#drawerWrap').hidden=false;bind()}
+if(q==='doc'){$('#viewer').hidden=false}
+</script>
+</html>
