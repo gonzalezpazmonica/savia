@@ -138,7 +138,7 @@ EOF
 }
 
 @test "R-WFEXEC (seg. P1-1): derivar (d) sin cierre transitivo falla" {
-  mutate 'y el cierre transitivo de las rutas' 'sin seguir las rutas'
+  mutate 'Después, el **cierre transitivo** sobre' 'Después, el recorrido sobre'
   run check "$MUT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"R-WFEXEC: R2.3 no deriva (d)"* ]]
@@ -220,4 +220,135 @@ guard nocturno se activa con cualquiera' 'El guard nocturno se desactiva quitand
   run check "$MUT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"R-HOLDEQ"* ]]
+}
+
+# --- Quinta ronda (revisiones sobre 66ee1659) ---
+
+@test "R-WFEXEC (corr. P2-3): R2.3 sin forced_exclude_error falla" {
+  mutate 'derivación da error, STOP `forced_exclude_error` sin' 'derivación da error, se sigue sin'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es STOP en R2.3"* ]]
+}
+
+@test "R-WFEXEC (corr. P2-3): AC-11 sin forced_exclude_error falla" {
+  mutate 'workflow ilegible (fixture), STOP `forced_exclude_error` sin fusión.' 'workflow ilegible (fixture), se sigue.'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-WFEXEC: AC-11 no prueba forced_exclude_error"* ]]
+}
+
+@test "R-ACTIVATION (corr. P2-3): la frase fuera de Dependencias no basta" {
+  mutate '- **Activación bloqueada hasta la enmienda humana de S4.**' '- **Activación libre.**'
+  printf '\nNota: Activación bloqueada hasta la enmienda humana de S4.\n' >> "$MUT"
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-ACTIVATION"* ]]
+}
+
+@test "R-WFIMPORT (seg. P1-1): cierre sin imports de Python falla" {
+  mutate 'en Python, cada `import x` y `from x import ...`' 'en Python, nada'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no sigue los imports de Python"* ]]
+}
+
+@test "R-WFIMPORT (seg. P1-1): cierre sin source de bash falla" {
+  mutate 'en bash, `source` y `.` de un fichero' 'en bash, nada'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no sigue source/. de bash"* ]]
+}
+
+@test "R-WFIMPORT (seg. P1-1): lo no resoluble sin excluir el directorio falla" {
+  mutate 'se excluye **todo el' 'se ignora **el'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no excluye el directorio entero"* ]]
+}
+
+@test "R-WFIMPORT (seg. P1-1): AC-11 sin el caso solo por import falla" {
+  mutate '`scripts/sam_model.py`
+  (solo por import de Python' '`scripts/x_model.py`
+  (solo por import de Python'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AC-11 no prueba scripts/sam_model.py"* ]]
+}
+
+@test "R-WFIMPORT (seg. P2-1): semillas con lista de prefijos falla" {
+  mutate '**sin lista de prefijos**' 'con la lista de prefijos de siempre'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"lista de prefijos"* ]]
+}
+
+@test "R-WFIMPORT (seg. P2-1): AC-11 sin la ruta raíz mcp.json falla" {
+  mutate '`mcp.json` (raíz, citado por `ci.yml`' '`scripts/y.json` (citado por `ci.yml`'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AC-11 no prueba \`mcp.json\`"* ]]
+}
+
+@test "R-WFIMPORT (seg. P2-1): (b) sin manifiestos de dependencias falla" {
+  mutate 'los manifiestos de dependencias en cualquier directorio' 'los ficheros de siempre'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"manifiestos de dependencias"* ]]
+}
+
+@test "R-WFIMPORT (corr. P2-2): sin definir los filtros on.paths falla" {
+  mutate 'filtros `paths`/`paths-ignore` disparan, no ejecutan' 'filtros cuentan igual'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"filtros on.paths"* ]]
+}
+
+@test "R-WFIMPORT (corr. P2-2): AC-11 sin fixture on.push.paths falla" {
+  mutate 'un workflow con `on.push.paths:' 'un workflow con `jobs:'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AC-11 no prueba on.push.paths"* ]]
+}
+
+@test "R-GUARDVIAS (seg. P2-2): R6 sin la vía gh api merge falla" {
+  mutate 'una llamada `gh api` a `/pulls/<n>/merge`' 'una llamada `gh api` cualquiera'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-GUARDVIAS: R6"* ]]
+}
+
+@test "R-GUARDVIAS (seg. P2-2): AC-13 sin el caso de push a main falla" {
+  mutate 'un `git push` con refspec `HEAD:` hacia `main`' 'otra orden'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-GUARDVIAS: AC-13"* ]]
+}
+
+@test "R-AUTHOR (corr. P2-5): sin identidad de la autora falla" {
+  mutate '**Identidad de la autora.**' 'Autora:'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-AUTHOR: R2.5"* ]]
+}
+
+@test "R-C3WIN (corr. P2-2): C3 sin acotar a la ventana falla" {
+  mutate 'registrada dentro de `[not_before, not_after)`' 'registrada'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"C3 no dice qué filas cuenta"* ]]
+}
+
+@test "R-C3WIN (corr. P2-3): R2.5 «reutiliza sin cambios» falla" {
+  mutate 'La política lo reutiliza y le' 'La política lo reutiliza sin cambios y le'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin cambios"* ]]
+}
+
+@test "R-C3WIN (seg. P2-1): sin declarar el límite del orquestador comprometido falla" {
+  mutate '**C1-C3 no protegen frente a un orquestador comprometido**' '**C1-C3 bastan**'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"orquestador"* ]]
 }

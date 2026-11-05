@@ -26,8 +26,20 @@ Reglas (cada una cierra un hallazgo de la tercera ronda de revisión):
               el código que ejecutan los workflows, derivado de `origin/main` con
               cierre transitivo, con STOP fail-closed si la derivación falla, y
               AC-11 lo prueba con un caso directo y uno solo transitivo.
+  R-WFIMPORT  (security P1-1 sobre 66ee1659) el cierre de (d) sigue imports de
+              Python, source/. de bash y rutas relativas; lo no resoluble excluye
+              el directorio; semillas sin lista de prefijos y con normalización.
+  R-GUARDVIAS (security P2-2 sobre 66ee1659) el guard niega gh api .../merge y
+              git push a main.
+  R-AUTHOR    (correctness P2-5 sobre 9f88dd10) identidad de la autora definida.
+  R-C3WIN     (correctness P2-2/P2-3 sobre 9f88dd10) C3 cuenta solo la ventana;
+              R2.5 no dice «sin cambios»; límite del orquestador comprometido.
   R-GUARD     (security P2-3) el guard se activa con OR y el rollback lo respeta.
   R-HOLDEQ    (nota) la equivalencia por re-sync hereda también los HOLD.
+
+Límite: es un comprobador **léxico**. Verifica que frases concretas del
+contrato siguen en su sección y que el texto no retrocede; no demuestra que
+la spec sea segura ni completa. Su verde no es una prueba de seguridad.
 """
 import re
 import sys
@@ -88,14 +100,37 @@ def check(text):
         errs.append("R-WFEXEC: R1 no aplica (d), el código que ejecutan los workflows")
     if "WORKFLOW_EXEC_PATHS" not in r2 or "cierre transitivo" not in r2 or "origin/main" not in r2:
         errs.append("R-WFEXEC: R2.3 no deriva (d) de origin/main con cierre transitivo")
-    if "forced_exclude_error" not in r2 or "forced_exclude_error" not in r3:
-        errs.append("R-WFEXEC: un error al derivar (d) no es STOP en R2.3 y R3")
+    if "forced_exclude_error" not in r2:
+        errs.append("R-WFEXEC: un error al derivar (d) no es STOP en R2.3")
+    if "forced_exclude_error" not in r3:
+        errs.append("R-WFEXEC: un error al derivar (d) no es STOP en R3")
     for path in ("scripts/changelog-consolidate.sh", "scripts/generate-capability-map.py",
                  "forced_exclude_error"):
         if path not in ac11:
             errs.append(f"R-WFEXEC: AC-11 no prueba {path}")
     if "WORKFLOW_EXEC_PATHS" not in s2:
         errs.append("R-WFEXEC: el slice S2 no incluye (d)")
+
+    # R-WFIMPORT (security P1-1 sobre 66ee1659 y correctness P2-1/P2-2)
+    if "`from x import ...`" not in r2:
+        errs.append("R-WFIMPORT: el cierre de (d) no sigue los imports de Python")
+    if "`source` y `.`" not in r2:
+        errs.append("R-WFIMPORT: el cierre de (d) no sigue source/. de bash")
+    if not re.search(r"\*\*Fail-closed ante lo que no se resuelve\*\*.*?todo el\s+directorio\*\*", r2, re.S):
+        errs.append("R-WFIMPORT: lo que no se resuelve no excluye el directorio entero")
+    if "**sin lista de prefijos**" not in r2:
+        errs.append("R-WFIMPORT: las semillas de (d) dependen de una lista de prefijos")
+    if "filtros `paths`/`paths-ignore` disparan, no ejecutan" not in r2:
+        errs.append("R-WFIMPORT: no se define qué pasa con los filtros on.paths")
+    if "un token con comodín" not in r2 or "se corta en el primer" not in r2:
+        errs.append("R-WFIMPORT: falta la normalización de comodines y variables")
+    for path in ("scripts/sam_model.py", "`mcp.json`", "on.push.paths", 'source "$VAR"'):
+        if path not in ac11:
+            errs.append(f"R-WFIMPORT: AC-11 no prueba {path}")
+    if "manifiestos de dependencias" not in r1:
+        errs.append("R-WFIMPORT: (b) no excluye los manifiestos de dependencias")
+    if "los tests de los gates" not in r1:
+        errs.append("R-WFIMPORT: (b) no excluye los tests de los gates")
 
     # R-ACDEF
     defined = set(re.findall(rf"^- \*\*({AC_ID})\b", text, re.M))
@@ -151,8 +186,34 @@ def check(text):
         errs.append("R-KEY: la clave privada debe quedar fuera del equipo de los agentes")
     if "Esta spec no enmienda LAW-HUMAN-002" not in r1:
         errs.append("R-KEY: R1 no declara que la spec no enmienda LAW-HUMAN-002")
-    if "Activación bloqueada hasta la enmienda humana de S4" not in text:
+    deps = section(text, r"Dependencias", "##")
+    if "Activación bloqueada hasta la enmienda humana de S4" not in deps:
         errs.append("R-ACTIVATION: falta bloquear la activación hasta la enmienda humana de S4")
+
+    # R-GUARDVIAS (security P2-2 sobre 66ee1659)
+    r6 = section(text, r"R6\b")
+    if "`/pulls/<n>/merge`" not in r6 or "un `git push` cuyo destino sea la rama `main`" not in r6:
+        errs.append("R-GUARDVIAS: R6 no niega gh api .../merge ni git push a main")
+    ac13 = ac_bullet(text, "AC-13")
+    if "pulls/12/merge" not in ac13 or "refspec `HEAD:`" not in ac13:
+        errs.append("R-GUARDVIAS: AC-13 no prueba gh api .../merge ni git push a main")
+
+    # R-AUTHOR (correctness P2-5 sobre 9f88dd10)
+    if "**Identidad de la autora.**" not in r2:
+        errs.append("R-AUTHOR: R2.5 no define con qué se compara la autora")
+    if "el `author` del registro" not in ac_bullet(text, "AC-9"):
+        errs.append("R-AUTHOR: AC-9 no prueba el campo author del registro")
+
+    # R-C3WIN (correctness P2-2 sobre 9f88dd10)
+    contra = section(text, r"Contrapesos", "##")
+    if "dentro de `[not_before, not_after)`" not in contra:
+        errs.append("R-C3WIN: C3 no dice qué filas cuenta")
+    if "dentro de la ventana" not in ac_bullet(text, "AC-4e"):
+        errs.append("R-C3WIN: AC-4e no fija que sus revisiones están en la ventana")
+    if "reutiliza sin cambios" in r2:
+        errs.append("R-C3WIN: R2.5 dice «sin cambios» y a la vez cambia head_equivalent")
+    if "no protegen frente a un orquestador comprometido" not in contra:
+        errs.append("R-C3WIN: no se declara que C1-C3 no protegen frente al orquestador")
 
     # R-GUARD
     rollback = section(text, r"Rollback", "##")
