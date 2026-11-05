@@ -1,11 +1,11 @@
 ---
 context_tier: L3
-token_budget: 9145
+token_budget: 9490
 ---
 
 # INDEX
 
-Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`. CI check: `--check`. SPEC-115.
+Auto-generated. 320 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`. CI check: `--check`. SPEC-115.
 
 | Cat | File | Description |
 |---|---|---|
@@ -36,6 +36,7 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Agent Operation | [`workflow-vs-agent-decision-gate.md`](./workflow-vs-agent-decision-gate.md) | Ref SPEC-158. Applied 2026-06-04. |
 | Audit | [`audit-non-claims.md`](./audit-non-claims.md) | Audit Non-Claims — SE-355 |
 | Audit | [`audit-trail-schema.md`](./audit-trail-schema.md) | Regla: Esquema Audit Trail |
+| Autonomous Safety | [`autonomous-safety-merge-grant-reference.md`](./autonomous-safety-merge-grant-reference.md) | Merge bajo permiso expreso — referencia de la firma de la operadora |
 | Autonomous Safety | [`autonomous-safety-merge-grant.md`](./autonomous-safety-merge-grant.md) | Merge bajo permiso expreso — SE-343 (apéndice de autonomous-safety.md) |
 | Autonomous Safety | [`autonomous-safety-reference.md`](./autonomous-safety-reference.md) | Seguridad en modos autónomos — referencia |
 | Autonomous Safety | [`autonomous-safety.md`](./autonomous-safety.md) | Regla: Seguridad en Modos Autónomos — Supervisión humana obligatoria |
@@ -80,6 +81,7 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Hooks | [`hook-event-equivalence.md`](./hook-event-equivalence.md) | Claude Code ↔ OpenCode — Hook Event Equivalence |
 | Hooks | [`hook-multihandler-migration.md`](./hook-multihandler-migration.md) | Hook Multi-Handler Migration — Diseño |
 | Hooks | [`hook-profiles.md`](./hook-profiles.md) | Hook Profiles — SAVIA_HOOK_PROFILE |
+| Hooks | [`hooks-blocking-guards.md`](./hooks-blocking-guards.md) | Regla: guards de seguridad con `blocking: true` (D23-5) |
 | Hooks | [`intelligent-hooks.md`](./intelligent-hooks.md) | Intelligent Hooks — Prompt & Agent Hooks |
 | Infrastructure | [`infrastructure-as-code.md`](./infrastructure-as-code.md) | Regla: Infrastructure as Code — Soporte Multi-Cloud |
 | Languages | [`language-boundaries.md`](./language-boundaries.md) | Language Boundaries — bash vs Python |
@@ -99,6 +101,8 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Meta Rules | [`dormant-rules-review-2026-Q2.md`](./dormant-rules-review-2026-Q2.md) | Dormant Rules Review — Q2 2026 |
 | Meta Rules | [`pre-output-rules.md`](./pre-output-rules.md) | Pre-Output Rules — TTSR-inspired validator (SE-150) |
 | Orchestration | [`orchestration-protocol.md`](./orchestration-protocol.md) | Orchestration Protocol — SE-205 |
+| Other | [`ac-verifier-authority.md`](./ac-verifier-authority.md) | Autoridad del verificador en los criterios de aceptación |
+| Other | [`action-review-policy.md`](./action-review-policy.md) | Politica del revisor de acciones (SE-445 S3) |
 | Other | [`adaptive-output.md`](./adaptive-output.md) | Adaptive Output — Context-Aware Communication Styles |
 | Other | [`application-code-twin.md`](./application-code-twin.md) | Application Code Twin (ACT) |
 | Other | [`architectural-vocabulary.md`](./architectural-vocabulary.md) | Architectural Vocabulary — Module / Interface / Seam / Adapter / Depth / Locality |
@@ -131,6 +135,7 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`commit-checks-reference.md`](./commit-checks-reference.md) | Commit Guardian: Checks de Referencia Detallados |
 | Other | [`community-protocol.md`](./community-protocol.md) | Protocolo de Comunidad — Guardrails de Privacidad |
 | Other | [`component-marketplace.md`](./component-marketplace.md) | Integración pm-workspace con claude-code-templates Marketplace |
+| Other | [`comprehension-gate.md`](./comprehension-gate.md) | Puerta de comprensión — escenas confirmadas antes de la spec, prototipo antes del código |
 | Other | [`confidence-protocol.md`](./confidence-protocol.md) | Regla: Confidence Calibration Protocol |
 | Other | [`connectors-config.md`](./connectors-config.md) | Regla: Configuración de Conectores Claude |
 | Other | [`consensus-protocol.md`](./consensus-protocol.md) | Consensus Protocol — Multi-Judge Validation |
@@ -162,6 +167,7 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`focal-parallelization-protocol.md`](./focal-parallelization-protocol.md) | Focal Parallelization Protocol (SE-230) |
 | Other | [`fronesis-destilacion.md`](./fronesis-destilacion.md) | Regla: Destilación de fronemas (SE-344 · CRIT-001) |
 | Other | [`frontend-components.md`](./frontend-components.md) | Frontend Component Rules |
+| Other | [`gate-result-contract.md`](./gate-result-contract.md) | Contrato de resultado de los gates: limpio, hallazgos y desconocido |
 | Other | [`github-flow.md`](./github-flow.md) | GitHub Flow — Reglas de Branching |
 | Other | [`guided-work-protocol.md`](./guided-work-protocol.md) | Protocolo de Trabajo Guiado |
 | Other | [`hashline-edit-protocol.md`](./hashline-edit-protocol.md) | Hashline Edit Protocol — Stale-File Protection for L3 Agents (SE-149) |
@@ -218,10 +224,12 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`provider-agnostic-env.md`](./provider-agnostic-env.md) | Provider-agnostic environment layer (SPEC-127 Slice 1) |
 | Other | [`provider-agnostic-tech-debt.md`](./provider-agnostic-tech-debt.md) | Provider-Agnostic Tech Debt — Skills & Scripts |
 | Other | [`query-library-protocol.md`](./query-library-protocol.md) | Query Library Protocol — SE-031 |
+| Other | [`rag-embedding-policy.md`](./rag-embedding-policy.md) | Política dinámica de embeddings — Savia RAG |
 | Other | [`rbac-model.md`](./rbac-model.md) | DEPRECATED — SE-271: Engagement Capacity Model replaces RBAC |
 | Other | [`readme-update.md`](./readme-update.md) | Regla: Mantener README.md actualizado |
 | Other | [`reconciliation-decision-tree.md`](./reconciliation-decision-tree.md) | Reconciliation 3-bucket Decision Tree — SPEC-183 |
 | Other | [`recursion-guard-protocol.md`](./recursion-guard-protocol.md) | Qué es |
+| Other | [`remedy-ladder.md`](./remedy-ladder.md) | Escalera de remedios |
 | Other | [`research-stack.md`](./research-stack.md) | Research Stack — Backend Chain |
 | Other | [`resolver-protocol.md`](./resolver-protocol.md) | Resolver Protocol — SE-160 |
 | Other | [`resource-resolution.md`](./resource-resolution.md) | resource-resolution — Rule for @ Reference Resolution |
@@ -264,8 +272,8 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Other | [`zero-project-leakage.md`](./zero-project-leakage.md) | Zero Project Leakage — Regla de Aislamiento Absoluto |
 | Other | [`zeroclaw-meeting-protocol.md`](./zeroclaw-meeting-protocol.md) | ZeroClaw Meeting Protocol — Live Diarization + Voice Memory |
 | Other | [`zeroclaw-sensory-protocol.md`](./zeroclaw-sensory-protocol.md) | ZeroClaw Sensory Protocol — Ingesta, digestión y persistencia |
-| PM Config | [`pm-config.md`](./pm-config.md) | Regla: Configuración PM-Workspace |
-| PM Config | [`pm-workflow.md`](./pm-workflow.md) | Regla: Workflow PM — Convenciones, Cadencia y Comandos |
+| PM Config | [`pm-config.md`](./pm-config.md) | Regla: Configuración del dominio de gestión de proyectos |
+| PM Config | [`pm-workflow.md`](./pm-workflow.md) | Regla: Workflow del dominio de gestión de proyectos — Convenciones, Cadencia y Comandos |
 | PR Process | [`pr-natural-language-summary.md`](./pr-natural-language-summary.md) | PR Natural-Language Summary — Rule |
 | PR Process | [`pr-plan-gates.md`](./pr-plan-gates.md) | pr-plan Gates Reference |
 | PR Process | [`pr-plan-scope-trace.md`](./pr-plan-scope-trace.md) | G13 Scope-trace audit — pr-plan gate |
@@ -309,10 +317,12 @@ Auto-generated. 310 files / 38 cats. Regen: `bash scripts/rules-domain-index.sh`
 | Spec Process | [`parallel-spec-merge-queue.md`](./parallel-spec-merge-queue.md) | Regla: Parallel Spec Merge Queue |
 | Spec Process | [`spec-opencode-implementation-plan.md`](./spec-opencode-implementation-plan.md) | Spec OpenCode Implementation Plan — Rule |
 | Spec Process | [`spec-resource-uri.md`](./spec-resource-uri.md) | Regla: `resource:` URI Convention para specs y reglas |
+| Sprint Process | [`autonomous-safety-merge-sprint.md`](./autonomous-safety-merge-sprint.md) | merge-sprint — merges autónomos bajo autorización humana previa (SE-433) |
 | Testing | [`external-contract-testing.md`](./external-contract-testing.md) | Trabajo derivado de SPEC-155 (silent security regression detectada 2026-05-30 tras migración OpenCod |
 | Testing | [`frontend-testing.md`](./frontend-testing.md) | Frontend Testing — Convenciones y Configuración |
 | Testing | [`layer-baseline-test.md`](./layer-baseline-test.md) | Regla: Layer Baseline Test y Señal de Error Ponderada |
 | Testing | [`sealed-contract-tests.md`](./sealed-contract-tests.md) | SPEC-188 Fase 2. Tests en tests/contracts/ son invariantes del sistema: |
+| Testing | [`test-evidence-criteria.md`](./test-evidence-criteria.md) | Criterio de evidencia en los tests (SE-456) |
 | Testing | [`test-quality-gate.md`](./test-quality-gate.md) | Test Quality Gate — SLA |
 | Validation | [`command-validation.md`](./command-validation.md) | Regla: Validación de Comandos — Pre-commit obligatorio |
 | Validation | [`e2e-screenshot-validation.md`](./e2e-screenshot-validation.md) | Regla: Capturas de Pantalla Obligatorias en Tests E2E Web |

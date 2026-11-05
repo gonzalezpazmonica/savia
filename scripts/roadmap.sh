@@ -256,6 +256,9 @@ case "$CMD" in
         fi
       fi
     fi
+    # 11. Puerta de comprensión (SE-505): superficie humana aprobada exige escenas confirmadas
+    # y prototipo S0 confirmado antes de S1. Fail-closed: cualquier error del validador cuenta.
+    python3 "$SCRIPTS_DIR/comprehension-gate.py" --root "$ROOT" --state "$STATE" --quiet || ERR=1
     [[ $ERR -eq 0 ]] && echo "PASS: planning state consistente"
     exit $ERR
     ;;

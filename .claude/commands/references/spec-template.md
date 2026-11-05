@@ -8,6 +8,7 @@ Plantilla estándar para Specs ejecutables (.spec.md) que sirven como fuente de 
 ## Contenido
 - **Encabezado**: Título, versión, fecha, autor, estado
 - **Contexto**: Por qué se necesita esta funcionalidad
+- **Lo que he entendido + Slice S0** (si toca una interfaz humana): escenas confirmadas y prototipo navegable antes de S1 (`docs/rules/domain/comprehension-gate.md`, SE-505)
 - **Requisitos**: Funcionales y no-funcionales con criterios de aceptación
 - **Interfaces**: DTOs, request/response con ejemplos
 - **Algoritmos**: Lógica de negocio clave paso a paso
