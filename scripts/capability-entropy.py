@@ -27,6 +27,17 @@ def main() -> int:
     args = ap.parse_args()
     root = os.path.abspath(args.root)
 
+    # SE-501 AC-11: el registry es D (no versionado); derived.sh ensure lo genera si falta.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import derived_canon
+    # INDEX.scm cuenta como superficie: en el propio repo es obligatorio (si falta, la entropía bajaría 1 y
+    # el ratchet podría dar PASS en falso). En un --root ajeno (fixture) es opcional, como antes de SE-501.
+    gone = derived_canon.ensure(root, [".scm/registry.json", ".scm/INDEX.scm"])
+    if not derived_canon.is_own_repo(root):
+        gone = [g for g in gone if g != ".scm/INDEX.scm"]
+    if gone:
+        print(f"FAIL: falta {', '.join(gone)} — {derived_canon.ENSURE_HINT}", file=sys.stderr)
+        return 2
     reg = json.load(open(os.path.join(root, ".scm", "registry.json"), encoding="utf-8"))
     caps = reg["capabilities"]
 

@@ -143,18 +143,17 @@ make_repo() {
   git -C "$r" config user.email t@t; git -C "$r" config user.name t
   mkdir -p "$r/scripts"
   cp "$BATS_TEST_DIRNAME/../scripts/push-pr.sh" "$r/scripts/"
-  # Firmador simulado NO idempotente, como el real: cada firma cambia el
-  # fichero (el real escribe timestamp y head_commit). verify compara el hash
-  # del árbol de HEAD (sin la firma) con el firmado.
-  cat > "$r/scripts/confidentiality-sign.sh" <<'SIGN'
+  # Escáner simulado (SE-501, sin firma): CLEAN salvo que el diff de la cabeza
+  # añada la marca VETADO o SCAN_RC lo fuerce. Registra cada llamada en SCAN_LOG.
+  cat > "$r/scripts/confidentiality-scan.sh" <<'SCAN'
 #!/usr/bin/env bash
-tree_hash() { git ls-tree -r HEAD | awk -F'\t' '$2 != ".confidentiality-signature"' | sha256sum | cut -d' ' -f1; }
-case "${1:-}" in
-  sign) printf 'diff_hash=%s\nnonce=%s-%s\n' "$(tree_hash)" "$(date +%s%N)" "$RANDOM" > .confidentiality-signature; echo SIGNED ;;
-  verify) [[ -n "$(tree_hash)" && "$(sed -n 's/^diff_hash=//p' .confidentiality-signature 2>/dev/null)" == "$(tree_hash)" ]] ;;
-  *) exit 2 ;;
-esac
-SIGN
+echo "scan $*" >> "${SCAN_LOG:-/dev/null}"
+if [[ -n "${SCAN_RC:-}" ]]; then exit "$SCAN_RC"; fi
+if git diff origin/main...HEAD 2>/dev/null | grep -q '^+.*VETADO'; then
+  echo 'gate-result: {"result":"findings","gaps":[]}'; exit 1
+fi
+echo 'gate-result: {"result":"clean","gaps":[]}'
+SCAN
   echo base > "$r/f.txt"; git -C "$r" add -A; git -C "$r" commit -qm "init"
   git -C "$r" remote add origin "$o"; git -C "$r" push -q origin main
   git -C "$r" checkout -q -b agent/x
@@ -239,7 +238,7 @@ esac
 exit 0
 GH
   git -C "$r" add -A; git -C "$r" commit -qm "chore: stubs"
-  # Paso 1 del flujo documentado: push-pr.sh SIN --merge firma, empuja y crea
+  # Paso 1 del flujo documentado: push-pr.sh SIN --merge escanea, empuja y crea
   # el PR #42. La cabeza que queda publicada es la que firmará el grant.
   ( cd "$r" && env -u GH_LIST_OUT GH_LOG="$TESTDIR/gh.log" PATH="$TESTDIR/bin:$PATH" \
       bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog >/dev/null 2>&1 )
@@ -256,22 +255,21 @@ run_merge() {
 
 remote_head() { git -C "$1" ls-remote origin refs/heads/agent/x | cut -f1; }
 
-@test "SE-343 flujo documentado con firmador NO idempotente: push → grant de esa cabeza → --merge mergea" {
+@test "SE-343 flujo documentado (SE-501, sin firma): push → grant de esa cabeza → --merge mergea" {
   r=$(make_merge_repo)
-  # Control: el firmador simulado cambia la firma en cada ejecución (como el real).
-  ( cd "$r" && bash scripts/confidentiality-sign.sh sign >/dev/null && cp .confidentiality-signature "$TESTDIR/s1" \
-      && bash scripts/confidentiality-sign.sh sign >/dev/null && ! cmp -s .confidentiality-signature "$TESTDIR/s1" ) \
-    || { echo "el firmador simulado es idempotente: este test no puede fallar"; return 1; }
-  git -C "$r" restore .confidentiality-signature
   published=$(remote_head "$r")
   [ "$published" = "$(git -C "$r" rev-parse HEAD)" ]
-  [ "$(git -C "$r" log -1 --format=%s)" = "chore: sign confidentiality audit" ]
+  # SE-501: push-pr ya no firma: ni commit de firma ni fichero de firma.
+  [ "$(git -C "$r" log -1 --format=%s)" = "chore: stubs" ]
+  [ ! -e "$r/.confidentiality-signature" ]
   # La operadora firma el grant para la cabeza publicada.
+  export SCAN_LOG="$TESTDIR/scan.log"; : > "$SCAN_LOG"
   OG_SIGNED_HEAD="$published" GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
   grep -q -- "^pr merge 42 -R .* --squash --match-head-commit $published$" "$GH_LOG"
   grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
-  # --merge no firma ni empuja: ni commit nuevo ni cabeza remota movida.
+  # rev-1472 P1-2: --merge re-escanea la cabeza; no firma ni empuja.
+  grep -qx "scan --pr" "$SCAN_LOG"
   [ "$(git -C "$r" rev-parse HEAD)" = "$published" ]
   [ "$(remote_head "$r")" = "$published" ]
   run grep -c "^pr create\|^api " "$GH_LOG"
@@ -340,20 +338,24 @@ remote_head() { git -C "$1" ls-remote origin refs/heads/agent/x | cut -f1; }
   [ "$status" -eq 0 ]
 }
 
-@test "SE-343 --merge: una cabeza publicada sin firma de confidencialidad válida no se mergea" {
+@test "rev-1472 P1-2 --merge: una cabeza cuyo escaneo de confidencialidad no da CLEAN no se mergea" {
   r=$(make_merge_repo)
-  echo otro >> "$r/f.txt"; git -C "$r" commit -qam "agent(x): cambio sin re-firmar"
+  echo "dato VETADO" >> "$r/f.txt"; git -C "$r" commit -qam "agent(x): cambio con dato vetado"
   git -C "$r" push -q origin agent/x
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"firma de confidencialidad"* ]]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
   run grep -c "^pr merge" "$GH_LOG"
   [ "$output" = "0" ]
-  # Control: firmada y publicada (paso 1 otra vez), mergea.
-  ( cd "$r" && env GH_LIST_OUT=42 GH_LOG="$GH_LOG" PATH="$TESTDIR/bin:$PATH" \
-      bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog >/dev/null 2>&1 )
+  # Un escáner que no puede medir (unknown, exit 2) tampoco deja mergear.
+  git -C "$r" revert --no-edit HEAD >/dev/null; git -C "$r" push -q origin agent/x
+  SCAN_RC=2 GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
+  # Control: la misma cabeza, limpia, mergea sin ninguna firma versionada.
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
+  [ ! -e "$r/.confidentiality-signature" ]
 }
 
 @test "SE-343 --merge: con cambios sin commitear o sin gh autenticado no se mergea" {

@@ -48,12 +48,7 @@ while read -r old_sha new_sha ref; do
     echo ""
     echo -e "  pr-plan: ${GREEN}PASS${NC}"
 
-    if [[ -f scripts/confidentiality-sign.sh ]]; then
-      echo "  Signing ..."
-      SAVIA_CONFIDENTIALITY_AUDITED=1 bash scripts/confidentiality-sign.sh sign 2>&1 | tail -1
-      git add .confidentiality-signature 2>/dev/null || true
-      git diff --cached --quiet 2>/dev/null || git commit -m "chore: gate-signed" 2>/dev/null || true
-    fi
+    # SE-501: sin firma versionada; pr-plan --gate-mode ya ejecutó el escaneo (G7) y G20.
 
     echo "  Forwarding to $GATE_REMOTE/$branch ..."
     git fetch "$GATE_REMOTE" "$branch" 2>/dev/null || true

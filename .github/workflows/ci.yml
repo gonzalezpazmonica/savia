@@ -115,23 +115,28 @@ jobs:
           bash scripts/validate-critical-facts-cap.sh --clean-clone
           bash scripts/generate-critical-facts.sh --check
 
-      - name: "Gate: PR created via /pr-plan (Rule #25)"
+      # SE-501: la PR no versiona derivados (scripts/derived-paths.txt). Sustituye al antiguo indicio «la PR
+      # trae firma»: lo reemplazan este paso, la generación verificada y «Confidentiality scan (PR)».
+      # HEAD es el commit de fusión base+PR: base..HEAD son exactamente los cambios de la PR.
+      # El gate y la lista D salen de la BASE (una PR no puede vaciar la lista ni cambiar el gate).
+      - name: Derived paths absent
         if: github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          echo "Checking that PR was created via /pr-plan..."
-          PR_NUM="${{ github.event.pull_request.number }}"
-          REPO="${{ github.repository }}"
-          # Use REST API with pagination (gh pr diff fails with HTTP 406 on PRs >300 files)
-          FILES=$(gh api "repos/$REPO/pulls/$PR_NUM/files?per_page=100" --paginate --jq '.[].filename' 2>/dev/null || echo "")
-          if echo "$FILES" | grep -qx '.confidentiality-signature'; then
-            echo "PASS: PR includes confidentiality signature (pr-plan was run)."
+          X=$(mktemp -d); mkdir -p "$X/scripts"
+          if git show "$BASE_SHA:scripts/derived.sh" > "$X/scripts/derived.sh" 2>/dev/null \
+             && git show "$BASE_SHA:scripts/derived-paths.txt" > "$X/scripts/derived-paths.txt" 2>/dev/null \
+             && grep -q '^  gate)' "$X/scripts/derived.sh"; then
+            bash "$X/scripts/derived.sh" gate --repo "$PWD" --range "$BASE_SHA..HEAD"
           else
-            echo "FAIL: .confidentiality-signature not in PR files."
-            echo "Run /pr-plan before creating the PR."
-            exit 1
+            echo "::warning::la base aún no tiene derived.sh gate (PR de arranque): se usa el de la PR"
+            bash scripts/derived.sh gate --range "$BASE_SHA..HEAD"
           fi
+
+      # SE-501 (opción B): D no se versiona; se genera aquí para los pasos que lo leen.
+      - name: Generate derived artifacts (SE-501)
+        run: bash scripts/derived.sh ensure
 
       - name: "SE-253: Changelog spec-field check (warn -- promoted to block after Sprint 30)"
         run: bash scripts/changelog-spec-field-check.sh --warn
@@ -322,6 +327,27 @@ jobs:
           npm ci --prefix scripts
           git config --global user.email "ci@example.com"
           git config --global user.name "CI Runner"
+
+      # SE-501 (opción B): D no se versiona; los tests y ci-extended-checks lo leen generado.
+      - name: Generate derived artifacts (SE-501)
+        run: bash scripts/derived.sh ensure
+
+      # SE-501 diseño §2: los generadores terminan con 0, su salida es válida y es determinista. No versiona
+      # nada. El SAM regenerado se publica como artefacto del run (la PR ya no muestra su diff).
+      - name: Derived generation verified (SE-501)
+        run: |
+          bash scripts/derived.sh verify
+          {
+            echo "### SAM regenerado (SE-501)"
+            python3 -c 'import json; d=json.load(open(".scm/sam.json")); print("- model_revision: `%s`" % d.get("model_revision")); print("- nodos: %d" % len(d.get("nodes", [])))'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload regenerated SAM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sam-regenerated
+          path: .scm/sam.json
+          retention-days: 14
 
       # SE-392: the OpenCode half of the dual-cli parity runs on Bun; strict mode turns a missing bun into a failure.
       - name: Set up Bun (dual-cli parity)

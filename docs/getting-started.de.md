@@ -78,7 +78,7 @@ Beide sind Klartext, automatisch generiert, mit progressivem Laden (L0/L1/L2).
 Status: in Vorschlag (SPEC-053, SPEC-054). Wenn verfuegbar, werden sie generiert mit:
 
 ```bash
-bash scripts/generate-capability-map.sh    # .scm
+bash scripts/derived.sh ensure --only scm  # .scm
 bash scripts/generate-context-index.sh     # .ctx
 ```
 
