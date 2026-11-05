@@ -51,6 +51,28 @@ test("a `--` belonging to another command does not count", () => {
   expect(hasBranchChange("git checkout feature | cat -- f")).toBe(true);
 });
 
+// 2026-11-05 (revisión #1483): redirecciones y comentarios no son pathspecs;
+// `git checkout feature -- >/dev/null` ejecuta `checkout feature --` y cambia de rama.
+test("redirections or comments after `--` are not paths", () => {
+  for (const cmd of [
+    "git checkout feature -- >/dev/null",
+    "git checkout feature -- > /dev/null",
+    "git checkout feature -- 2>&1",
+    "git checkout feature # -- x",
+    "git checkout feature -- # comentario",
+  ]) {
+    expect(hasBranchChange(cmd)).toBe(true);
+  }
+  // Una ruta real con redirección detrás sigue siendo restauración.
+  expect(hasBranchChange("git checkout -- a.txt >/dev/null")).toBe(false);
+  expect(hasBranchChange("git checkout -- a.txt 2>&1")).toBe(false);
+});
+
+test("line continuation inside a restore keeps it a restore; newline separates", () => {
+  expect(hasBranchChange("git checkout HEAD \\\n -- a.txt")).toBe(false);
+  expect(hasBranchChange("git checkout feature --\necho x")).toBe(true);
+});
+
 test("commands without checkout/switch are ignored", () => {
   expect(hasBranchChange("git status")).toBe(false);
   expect(hasBranchChange("echo checkout feature")).toBe(false);

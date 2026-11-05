@@ -15,6 +15,15 @@ import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from
 const INVOCATION_RX = /(?:^|[^\w./-])git\s+(?:-C\s+[^\s;&|]+\s+)?(checkout|switch)(?![\w-])([^;&|\n]*)/gi;
 
 /**
+ * Arguments without redirections (`>/dev/null`, `2> f`) or a trailing comment
+ * (`# -- x`): neither is a pathspec, so `git checkout feature -- >/dev/null`
+ * still changes branch.
+ */
+function pathArgs(args: string): string {
+  return (" " + args).replace(/\s#.*$/, "").replace(/(^|\s)\d*[<>]+\s*\S*/g, " ");
+}
+
+/**
  * True if the command contains an invocation that can move HEAD. A file
  * restore is `git checkout [<opciones>] [<tree-ish>] -- <rutas>`: a standalone
  * `--` followed by at least one path among that invocation's own arguments
@@ -24,8 +33,9 @@ const INVOCATION_RX = /(?:^|[^\w./-])git\s+(?:-C\s+[^\s;&|]+\s+)?(checkout|switc
  * `git checkout <rama>`.
  */
 export function hasBranchChange(command: string): boolean {
-  for (const m of command.matchAll(INVOCATION_RX)) {
-    if (m[1].toLowerCase() === "checkout" && /(^|\s)--\s+\S/.test(m[2])) continue;
+  // Line continuations join words (same normalisation as the bash hook).
+  for (const m of command.replace(/\\\n/g, " ").matchAll(INVOCATION_RX)) {
+    if (m[1].toLowerCase() === "checkout" && /(^|\s)--\s+\S/.test(pathArgs(m[2]))) continue;
     return true;
   }
   return false;
