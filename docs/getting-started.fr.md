@@ -78,7 +78,7 @@ Les deux sont en texte brut, auto-generes, avec chargement progressif (L0/L1/L2)
 Statut : en proposition (SPEC-053, SPEC-054). Lorsqu'ils seront disponibles, ils se generent avec :
 
 ```bash
-bash scripts/generate-capability-map.sh    # .scm
+bash scripts/derived.sh ensure --only scm  # .scm
 bash scripts/generate-context-index.sh     # .ctx
 ```
 

@@ -105,11 +105,6 @@ _resolve_changelog_conflict() {
   rm -f /tmp/_cl_base.md /tmp/_cl_new.md
 }
 
-_resolve_signature_conflict() {
-  rm -f .confidentiality-signature
-  git rm .confidentiality-signature 2>/dev/null || true
-}
-
 g4() {
   git fetch origin main --quiet 2>/dev/null || true
   if git merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
@@ -119,7 +114,7 @@ g4() {
   git merge origin/main --no-ff --no-edit 2>&1 >/dev/null || true
   local hard_conflicts
   hard_conflicts=$(git diff --name-only --diff-filter=U 2>/dev/null \
-    | grep -vE '^CHANGELOG\.md$|\.confidentiality-signature$' | head -5) || true
+    | grep -vE '^CHANGELOG\.md$' | head -5) || true
   if [[ -n "$hard_conflicts" ]]; then
     git merge --abort 2>/dev/null || true
     echo "FAIL: Merge conflicts in: $hard_conflicts"; return
@@ -128,9 +123,7 @@ g4() {
     _resolve_changelog_conflict
     git add CHANGELOG.md
   fi
-  if git diff --name-only --diff-filter=U 2>/dev/null | grep -q '\.confidentiality-signature'; then
-    _resolve_signature_conflict
-  fi
+  # SE-501: la firma ya no se versiona; G4 no la resuelve. Un conflicto en D es un fallo (G20 lo explica).
   local remaining; remaining=$(git diff --name-only --diff-filter=U 2>/dev/null) || true
   if [[ -n "$remaining" ]]; then
     git merge --abort 2>/dev/null || true
@@ -817,4 +810,15 @@ g19_edit_attribution() {
     local list; list=$(echo "$out" | python3 -c "import sys,json;print(', '.join(json.load(sys.stdin)['unattributed'][:5]))" 2>/dev/null)
     echo "WARN: ${count} unattributed change(s): ${list}"
   fi
+}
+
+# G20 — SE-501: la PR no versiona derivados (scripts/derived-paths.txt). Añadir o modificar D falla y nombra
+# la ruta; borrarlo (migración, derived.sh drop) pasa. Sin la lista o sin diff calculable: FAIL (fail-closed).
+g20_derived_absent() {
+  local out rc
+  [[ -f scripts/derived.sh ]] || { echo "FAIL: falta scripts/derived.sh (SE-501)"; return; }
+  out=$(bash scripts/derived.sh gate --base origin/main 2>&1); rc=$?
+  if (( rc == 0 )); then echo "PASS"; return; fi
+  FAILED_FILE="scripts/derived-paths.txt"
+  echo "FAIL: $(echo "$out" | grep -v '^G20 FAIL' | tr '\n' ' ' | sed 's/  */ /g')"
 }

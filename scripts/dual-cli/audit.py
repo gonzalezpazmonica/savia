@@ -6,9 +6,20 @@ import json
 from pathlib import Path
 
 
+DERIVED_MISSING = "DERIVED_MISSING: bash scripts/derived.sh ensure"
+
+
+class DerivedMissing(ValueError):
+    pass
+
+
 def inventory(root):
     root = Path(root)
     sources = {}
+    # SE-501 AC-11: .scm es D (no versionado). Este inventario es de solo lectura: no lo genera, falla
+    # con un error que nombra la orden.
+    if not (root / ".scm/resources.json").exists():
+        raise DerivedMissing(DERIVED_MISSING)
     for name in (".claude/settings.json", ".scm/resources.json"):
         sources[name] = (root / name).read_bytes()
     digest = hashlib.sha256()
@@ -55,6 +66,9 @@ def main():
     args = parser.parse_args()
     try:
         result = inventory(args.root)
+    except DerivedMissing:
+        print(json.dumps({"certified": False, "error": DERIVED_MISSING}))
+        return 2
     except (OSError, ValueError, TypeError):
         # Do not echo source content, credentials, or private paths in errors.
         print(json.dumps({"certified": False, "error": "INVALID_INVENTORY_SOURCE"}))

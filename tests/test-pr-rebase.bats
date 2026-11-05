@@ -43,9 +43,42 @@ teardown() {
   grep -qE "git fetch origin main|git fetch.*main" "$REBASE_SCRIPT"
 }
 
-@test "pr-rebase.sh auto-resolves signature conflict with --ours" {
-  grep -q "checkout --ours" "$REBASE_SCRIPT"
-  grep -q ".confidentiality-signature" "$REBASE_SCRIPT"
+# SE-501 (sustituye a «auto-resolves signature conflict with --ours»): la firma ya no se versiona;
+# un conflicto limitado a rutas de D (rama anterior al corte) se resuelve sacándolas del índice.
+d_conflict_repo() {  # d_conflict_repo <fichero en conflicto>: main y la rama editan el mismo fichero
+  local o="$TMP_DIR/origin.git" r="$TMP_DIR/r"
+  git init -q --bare "$o"; git init -q -b main "$r"
+  git -C "$r" config user.email t@t; git -C "$r" config user.name t
+  mkdir -p "$r/.scm"; echo base > "$r/a.txt"; echo '{"v":0}' > "$r/.scm/sam.json"
+  git -C "$r" add -f -A; git -C "$r" commit -qm base
+  git -C "$r" remote add origin "$o"; git -C "$r" push -q origin main
+  git -C "$r" checkout -q -b feature
+  echo rama > "$r/$1"; echo cambio > "$r/b.txt"; git -C "$r" add -f -A; git -C "$r" commit -qm rama
+  git -C "$r" checkout -q main
+  echo main > "$r/$1"; git -C "$r" add -f -A; git -C "$r" commit -qm main; git -C "$r" push -q origin main
+  git -C "$r" checkout -q feature
+  echo "$r"
+}
+
+@test "SE-501: conflicto solo en una ruta de D → se saca del índice, el rebase termina y D no queda en la rama" {
+  r=$(d_conflict_repo .scm/sam.json)
+  cd "$r"
+  run bash "$REBASE_SCRIPT" --no-push
+  [ "$status" -eq 0 ]
+  [ ! -d .git/rebase-merge ] && [ ! -d .git/rebase-apply ]
+  [ "$(git cat-file -p HEAD:b.txt)" = "cambio" ]
+  run git ls-files --error-unmatch .scm/sam.json
+  [ "$status" -ne 0 ]
+}
+
+@test "SE-501: conflicto fuera de D → exit 2 y nombra el fichero (no lo resuelve solo)" {
+  r=$(d_conflict_repo a.txt)
+  cd "$r"
+  run bash "$REBASE_SCRIPT" --no-push
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"not limited to derived paths"* ]]
+  [[ "$output" == *"a.txt"* ]]
+  git rebase --abort
 }
 
 @test "pr-rebase.sh defines 4 distinct exit codes" {
@@ -172,11 +205,15 @@ fixture_repo() {
   [[ "$output" == *"not inside a git repository"* ]]
 }
 
-@test "missing: target repo without confidentiality-sign.sh fails before rebasing" {
-  fixture_repo
+@test "SE-501: sin confidentiality-sign.sh en el repo destino rebasa igual y no crea firma ni commit de firma" {
+  r=$(d_conflict_repo .scm/sam.json)
+  cd "$r"
+  [ ! -e scripts/confidentiality-sign.sh ]
   run bash "$REBASE_SCRIPT" --no-push
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"confidentiality-sign.sh missing in target repo"* ]]
+  [ "$status" -eq 0 ]
+  [ ! -e .confidentiality-signature ]
+  run git log --format=%s origin/main..HEAD
+  [[ "$output" != *"sign confidentiality"* ]]
 }
 
 @test "isolation: running from a fixture repo never touches the real repo" {

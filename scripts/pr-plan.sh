@@ -59,6 +59,7 @@ gate "G16" "Eval-lint golden sets" g16_eval_lint
 gate "G17" "Scope creep (report-only)" g17_scope_creep
 gate "G18" "Incident RCA eval (report-only)" g18_incident_rca_eval
 gate "G19" "Edit attribution (advisory)" g19_edit_attribution
+gate "G20" "Derived paths absent"  g20_derived_absent
 echo ""
 echo "------------------------------------------------------------"
 if [[ -n "$STOPPED" ]]; then

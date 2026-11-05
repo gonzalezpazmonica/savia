@@ -81,11 +81,16 @@ else
 fi
 
 # Check 2: Manifest exists + valid JSON
+# SE-501 AC-11: rule-manifest.json es derivado (D) y no se versiona. Si falta, se genera con
+# derived.sh ensure; si eso falla, el hallazgo nombra la orden.
+if [[ ! -f "$MANIFEST_FILE" && -f "$PROJECT_ROOT/scripts/derived.sh" ]]; then
+  bash "$PROJECT_ROOT/scripts/derived.sh" ensure --only rules >/dev/null 2>&1 || true
+fi
 MANIFEST_OK=true
 MANIFEST_ENTRIES=0
 if [[ ! -f "$MANIFEST_FILE" ]]; then
   MANIFEST_OK=false
-  FINDINGS+=("rule-manifest.json not found at $MANIFEST_FILE")
+  FINDINGS+=("rule-manifest.json not found at $MANIFEST_FILE — run: bash scripts/derived.sh ensure")
   EXIT_CODE=1
 else
   if ! python3 -c "import json; json.load(open('$MANIFEST_FILE'))" 2>/dev/null; then

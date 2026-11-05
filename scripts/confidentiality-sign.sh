@@ -123,4 +123,59 @@ do_status() {
   grep -v '^#' "$SIG_FILE" | grep -v '^$'
 }
 
-case "$ACTION" in sign) do_sign ;; resign) do_resign ;; verify) do_verify ;; status) do_status ;; *) echo "Usage: $0 {sign|resign|verify|status}"; exit 2 ;; esac
+# verify-main <sha|ref> [--repo owner/name] — SE-501 I2 (antes confidentiality-main-verify.sh):
+# prueba de que un commit de main pasó la auditoría completa. La prueba es una ejecución de
+# .github/workflows/confidentiality-main.yml con event=push, head_branch=main, head_sha=<X> y
+# conclusion=success. Un commit status o un check publicado por una PR no cuentan: una PR con
+# statuses: write podría falsificarlos; una ejecución push en main no.
+# Salida: 0 hay prueba · 1 no la hay · 2 error (API caída, respuesta no JSON, sha ilegible). Fail-closed.
+# Entorno: SAVIA_GH (binario gh, para tests) · SAVIA_GH_REPO (repo por defecto).
+do_verify_main() {
+  local gh="${SAVIA_GH:-gh}" wf=".github/workflows/confidentiality-main.yml" ref="" repo="${SAVIA_GH_REPO:-}" sha raw
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo) repo="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+      *) ref="$1"; shift ;;
+    esac
+  done
+  [ -n "$ref" ] || { echo "uso: confidentiality-sign.sh verify-main <sha|ref>" >&2; exit 2; }
+  if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then sha="$ref"
+  else sha=$(git rev-parse -q --verify "$ref^{commit}" 2>/dev/null) || { echo "FAIL: ref ilegible: $ref" >&2; exit 2; }; fi
+  if [ -z "$repo" ]; then
+    repo=$($gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null) \
+      || { echo "FAIL: no se pudo resolver el repo" >&2; exit 2; }
+  fi
+  raw=$($gh api "repos/$repo/actions/runs?head_sha=$sha&per_page=100" 2>/dev/null) \
+    || { echo "FAIL: la API de GitHub no respondió; sin prueba para ${sha:0:12}" >&2; exit 2; }
+  SAVIA_RAW="$raw" python3 - "$sha" "$wf" <<'PY'
+import json, os, sys
+sha, wf = sys.argv[1], sys.argv[2]
+try:
+    runs = json.loads(os.environ["SAVIA_RAW"])["workflow_runs"]
+    assert isinstance(runs, list)
+except Exception:
+    print("FAIL: respuesta de la API no válida", file=sys.stderr); sys.exit(2)
+ok = [r for r in runs if isinstance(r, dict) and r.get("path") == wf and r.get("event") == "push"
+      and r.get("head_branch") == "main" and r.get("head_sha") == sha and r.get("conclusion") == "success"]
+if ok:
+    print(f"PASS: {sha[:12]} auditado en main (run {ok[0].get('id')})"); sys.exit(0)
+print(f"FAIL: ninguna ejecución push de {wf} en main con éxito para {sha[:12]}"); sys.exit(1)
+PY
+  exit $?
+}
+
+# SE-501: firma retirada del flujo. La prueba de que main pasó la auditoría es una ejecución de
+# confidentiality-main.yml (verify-main); la PR pasa «Confidentiality scan (PR)».
+# Este script verifica firmas históricas (verify/status) y la prueba de main; sign y resign ya no escriben nada.
+retired() {
+  echo "confidentiality-sign.sh $ACTION: retirado (SE-501). La firma ya no se versiona: usa" >&2
+  echo "  bash scripts/confidentiality-scan.sh --pr (PR) · bash scripts/confidentiality-sign.sh verify-main <sha> (main)" >&2
+  exit 2
+}
+case "$ACTION" in
+  sign|resign) retired ;;
+  verify) do_verify ;;
+  verify-main) shift; do_verify_main "$@" ;;
+  status) do_status ;;
+  *) echo "Usage: $0 {verify|verify-main <sha>|status} (sign/resign retirados por SE-501)"; exit 2 ;;
+esac
