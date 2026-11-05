@@ -10,3 +10,4 @@ section: Security
 - SE-501: risk-tier.py lee scripts/derived-paths.txt de la base (--base, por defecto origin/main); una PR que se añade a la lista no rebaja su tier.
 - SE-501: push-pr.sh --merge escanea con el escáner de origin/main (--pr-base); sin origin/main o sin ese modo, no hay merge.
 
+- SE-501 (revisión de #1488): push-pr.sh --merge pasa al escáner de la base una blocklist generada por el generador de origin/main sobre las fuentes locales no versionadas (projects/, CLAUDE.local.md, TEAM.md, identity.md); antes solo veía la lista estática. Sin generador en la base, o sin el veredicto «Confidentiality scan (PR): PASS», no hay merge.
