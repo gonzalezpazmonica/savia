@@ -47,6 +47,7 @@ MODIFY_CMDS = {"rm", "mv", "cp", "tee", "truncate", "unlink", "shred"}
 INPLACE_CMDS = {"sed", "perl"}
 SEPARATORS = {";", "&&", "||", "|", "&", ";;", "(", ")", "|&"}
 REDIRECTS = {">", ">>", "&>", "&>>", ">|"}
+HEREDOC_RE = re.compile(r"(?<!<)<<(?!<)(-?)\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 FALLBACK_RE = re.compile(r"&&|\|\||&>>|&>|>>|>&|<<<|<<|[;|&<>()]|[^\s;|&<>()]+")
 EXIT = {"clean": 0, "findings": 1, "unknown": 2}
 
@@ -152,8 +153,21 @@ def _tokens(line: str) -> list[str]:
         return FALLBACK_RE.findall(line)
 
 
-def _segments(command: str) -> Iterable[list[str]]:
+def _shell_lines(command: str) -> Iterable[str]:
+    """Líneas de shell sin el cuerpo de los heredocs (es texto o código de otro intérprete)."""
+    pending: list[tuple[str, bool]] = []
     for line in command.splitlines():
+        if pending:
+            delim, strip_tabs = pending[0]
+            if (line.lstrip("\t") if strip_tabs else line) == delim:
+                pending.pop(0)
+            continue
+        yield line
+        pending.extend((m.group(3), bool(m.group(1))) for m in HEREDOC_RE.finditer(line))
+
+
+def _segments(command: str) -> Iterable[list[str]]:
+    for line in _shell_lines(command):
         seg: list[str] = []
         for tok in _tokens(line):
             if tok in SEPARATORS:
@@ -164,6 +178,21 @@ def _segments(command: str) -> Iterable[list[str]]:
                 seg.append(tok)
         if seg:
             yield seg
+
+
+def _inplace_files(args: list[str]) -> list[str]:
+    """Ficheros de sed/perl -i: sin el script (tras -e/-f, o el primer operando si no hay -e/-f)."""
+    files, script_given, skip = [], False, False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in ("-e", "--expression", "-f", "--file"):
+            script_given = skip = True
+        elif a.startswith(("--expression=", "--file=")) or re.match(r"^-[a-zA-Z]*e.", a):
+            script_given = True  # -e'expr' pegado: el script va en el mismo token
+        elif not a.startswith("-"):
+            files.append(a)
+    return files if script_given else files[1:]
 
 
 def _resolve(cwd: str | None, path: str) -> str:
@@ -201,6 +230,7 @@ def scan_bash(command: str, cwd: str | None, prot: Patterns, hold: Patterns) -> 
         if cmd in INPLACE_CMDS and any(re.match(r"^-[a-zA-Z]*i", a) or a.startswith("--in-place")
                                        for a in args[1:]):
             op = f"{cmd} -i"
+            operands = _inplace_files(args[1:])
         elif cmd in MODIFY_CMDS:
             op = cmd
             if cmd == "cp":
@@ -307,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--holdout", action="append", default=[])
     ap.add_argument("--protected-file", action="append", default=[])
     ap.add_argument("--holdout-file", action="append", default=[])
+    ap.add_argument("--list", action="append", default=[], help="fichero con una ruta de recibo por línea")
     ap.add_argument("--summary", action="store_true", help="sin el detalle por recibo")
     a = ap.parse_args(argv)
 
@@ -315,6 +346,12 @@ def main(argv: list[str] | None = None) -> int:
     hold = load_patterns(a.holdout, a.holdout_file, gaps)
     if not prot and not hold:
         gaps.append({"check": "patterns", "reason": "unreadable"})  # sin lista explícita no hay veredicto
+    for f in a.list:
+        try:
+            with open(f, encoding="utf-8") as fh:
+                a.receipts.extend(line.strip() for line in fh if line.strip())
+        except OSError:
+            gaps.append({"check": f"list:{posixpath.basename(f)}", "reason": "unreadable"})
     if not a.receipts:
         gaps.append({"check": "receipts", "reason": "unreadable"})
 

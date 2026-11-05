@@ -104,6 +104,24 @@ class Negatives(Base):
         ])
         self.assert_result(self.run_scan(r), 0, "clean", 0)
 
+    def test_heredoc_body_is_not_parsed_as_shell(self):
+        body = "p = 'x'\nopen(p, 'w').write(a > 'tests/test-validate-agent-permissions.bats')\nEOF"
+        r = self.receipt([bash("python3 - <<'EOF'\n" + body + "\nls")])
+        self.assert_result(self.run_scan(r), 0, "clean", 0)
+
+    def test_heredoc_header_redirect_still_fires(self):
+        r = self.receipt([bash("cat >> tests/test-validate-agent-permissions.bats <<'EOF'\n@test x {\n}\nEOF")])
+        self.assert_result(self.run_scan(r), 1, "findings", 1)
+
+    def test_sed_script_mentioning_protected_path_is_not_a_target(self):
+        r = self.receipt([bash("sed -i '1i diff --git b/tests/test-validate-agent-permissions.bats' /tmp/x.patch"),
+                          bash("sed -i -e 's|tests/test-validate-agent-permissions.bats|y|' notes.md")])
+        self.assert_result(self.run_scan(r), 0, "clean", 0)
+
+    def test_sed_with_expression_flag_still_fires_on_protected_file(self):
+        r = self.receipt([bash("sed -i -e 's/a/b/' tests/test-validate-agent-permissions.bats")])
+        self.assert_result(self.run_scan(r), 1, "findings", 1)
+
     def test_sed_without_inplace_is_not_a_modification(self):
         r = self.receipt([bash("sed -n '1,5p' tests/test-validate-agent-permissions.bats")])
         self.assert_result(self.run_scan(r), 0, "clean", 0)
@@ -195,6 +213,20 @@ class Detection(Base):
         dirty = self.receipt([tool_use("Read", {"file_path": "tests/evals/holdout/z"})], name="b.jsonl")
         rc, data = self.run_scan(clean, dirty)
         self.assertEqual((rc, data["receipts_by_result"]), (1, {"clean": 1, "findings": 1, "unknown": 0}))
+
+    def test_receipt_list_file(self):
+        dirty = self.receipt([tool_use("Read", {"file_path": "tests/evals/holdout/z"})], name="b.jsonl")
+        lst = os.path.join(self.tmp.name, "list.txt")
+        with open(lst, "w", encoding="utf-8") as fh:
+            fh.write(dirty + "\n")
+        proc = subprocess.run([sys.executable, SCRIPT, "--holdout", HOLDOUT[0], "--list", lst],
+                              capture_output=True, text=True, timeout=30)
+        self.assertEqual((proc.returncode, json.loads(proc.stdout)["findings_count"]), (1, 1))
+
+    def test_unreadable_receipt_list_is_unknown(self):
+        proc = subprocess.run([sys.executable, SCRIPT, "--holdout", HOLDOUT[0], "--list",
+                               os.path.join(self.tmp.name, "missing.txt")], capture_output=True, text=True, timeout=30)
+        self.assertEqual((proc.returncode, json.loads(proc.stdout)["result"]), (2, "unknown"))
 
 
 if __name__ == "__main__":
