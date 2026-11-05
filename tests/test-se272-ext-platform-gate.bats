@@ -325,6 +325,9 @@ _gate() {
   [[ "$output" == *"denied by global allowlist — allowlist_unavailable"* ]]
 }
 
+# Fija el comportamiento existente de `default: allow` (max_level 99 para skills
+# no listadas). NO es la configuración recomendada: la allowlist real usa
+# `default: deny`; este test solo documenta qué ocurre si alguien la cambia.
 @test "S03n: allowlist con default allow deja pasar una skill no listada si la tarjeta la permite" {
   printf 'version: 1\nskills: {}\ndefault: allow\n' > "$ALLOWLIST_FILE"
   run _gate --card-id "ext-platform-client-alpha-9901" --skill "dependency.notify" --payload-level 2
@@ -376,4 +379,53 @@ PY
   [[ "$output" == *"has no valid max_payload_level"* ]]
   run grep -c '"reason": "card_max_payload_level_invalid"' "$DATA_DIR/ext-platform-gate-decisions.jsonl"
   [ "$output" = "1" ]
+}
+
+@test "S03n seguridad: --payload-level de 2^64 no desborda a 0 y no da ALLOW" {
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 18446744073709551616
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"max 6 digits"* ]]
+  [[ "$output" != *"ALLOW"* ]]
+  # 2^63 se volvería negativo en la aritmética de bash
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 9223372036854775808
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"ALLOW"* ]]
+}
+
+@test "S03n frontera: 6 dígitos se comparan como nivel y 7 son error de uso" {
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 999999
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"payload_level=999999 exceeds card max=1"* ]]
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 1000000
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"ALLOW"* ]]
+}
+
+@test "S03n seguridad: max_payload_level enorme en la tarjeta se deniega en vez de desbordar" {
+  # 2^64 en bash vale 0; antes, payload 0 pasaba con ALLOW.
+  sed -i '/ext-platform-limited-9902/,/status/ s/max_payload_level: 1/max_payload_level: 18446744073709551616/' "$PLATFORM_CARDS_FILE"
+  grep -q 'max_payload_level: 18446744073709551616' "$PLATFORM_CARDS_FILE"
+  run _gate --card-id "ext-platform-limited-9902" --skill "situacion.query" --payload-level 0
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"has no valid max_payload_level"* ]]
+}
+
+@test "S03n seguridad: maxLevel enorme en la allowlist se deniega en vez de desbordar" {
+  # 2^64 + 1 en bash vale 1: antes, payload 1 pasaba con ALLOW.
+  sed -i '/situacion.query:/,/readOnly/ s/maxLevel: 2/maxLevel: 18446744073709551617/' "$ALLOWLIST_FILE"
+  grep -q 'maxLevel: 18446744073709551617' "$ALLOWLIST_FILE"
+  run _gate --card-id "ext-platform-client-alpha-9901" --skill "situacion.query" --payload-level 1
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"exceeds allowlist max=18446744073709551617"* ]]
+}
+
+@test "S03n seguridad: list-deny lee rutas con comilla sin interpolarlas en Python" {
+  local d="$TEST_DIR/o'quote"
+  mkdir -p "$d"
+  cp "$PLATFORM_CARDS_FILE" "$d/cards.yaml"
+  cp "$ALLOWLIST_FILE" "$d/allow.yaml"
+  run bash "$SCRIPT" list-deny --cards-file "$d/cards.yaml" --allowlist "$d/allow.yaml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Default: deny"* ]]
+  [[ "$output" == *"exposed_but_not_allowed(denied): ['handoff.request']"* ]]
 }
