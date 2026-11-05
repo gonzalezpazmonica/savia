@@ -1,0 +1,10 @@
+{
+  "id": "SE-504",
+  "status": "APPROVED",
+  "priority": "P0",
+  "phase": "A",
+  "title": "Savia usable: una app como la de Claude o ChatGPT, conectada a Soul y Space",
+  "evidence": "docs/specs/SE-504-savia-usable-conversacion-documentos-contexto.spec.md",
+  "note": "Aprobada por la operadora 2026-11-03 (pregunta interactiva, «Aprobada, empieza ya») con el prototipo docs/specs/assets/SE-504-prototipo.html como contrato visual; se formaliza al fusionar (SE-488). Arquitectura copiada de Claude y ChatGPT: barra superior, cajón, chat, compositor, tarjeta de permiso y visor; paleta neutra; Savia escribe primero. S1 estructura y chat real con Savia y Soul; S2 tareas, proyectos y carril de la organización; S3 dictado y adjuntos; S4 pruebas con personas.",
+  "approval": "operadora, pregunta interactiva 2026-11-03 («Aprobada, empieza ya»), con el prototipo como contrato visual; se formaliza al fusionar (SE-488)"
+}
