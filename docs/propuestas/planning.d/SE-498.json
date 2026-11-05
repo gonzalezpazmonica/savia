@@ -1,0 +1,9 @@
+{
+  "id": "SE-498",
+  "status": "PROPOSED",
+  "priority": "P0",
+  "phase": "B",
+  "title": "STOP global y revocación entre ejecutores",
+  "evidence": "docs/specs/SE-498-global-stop-cross-executor-revocation.spec.md",
+  "note": "Plano de control local con pause, revoke, quarantine, reconcile y resume sobre los cuatro STOP actuales (merge-sprint, Soul, Yema, time-box), que pasan a adaptadores con acuse. Época de revocación monótona (máximo de local, diario, marca de instalación y origin/main) que consultan el kernel de SE-496 (HALTED, EPOCH_REVOKED, en state_digest) y el Effect Ledger de SE-493 (exit HALTED, época y stop_seq en el write-ahead). Lo que estaba en vuelo se clasifica en CONFIRMED, REJECTED, COMPENSATED o INDETERMINATE; nada incierto se informa como ausente y REJECTED es terminal en el ledger. Reanudar solo la operadora, con aprobación ligada a la parada concreta y de un solo uso, y con revalidación del grant. AC: ADV-09, ADV-10, ADV-18."
+}
