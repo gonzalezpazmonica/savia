@@ -71,3 +71,16 @@ test("negative: a dirty target repo still blocks, and an uncertain target fails 
       await expect(run(`git -C ${c.dir} checkout -- b.txt`)).resolves.toBeUndefined();
     } finally { c.done(); }
   }));
+
+// Revisión #1483: un `git status` que falla por otra causa que «no es un repo»
+// (índice corrupto, timeout, dubious ownership) no cuenta como árbol limpio.
+test("fail-closed: a target repo whose git status fails blocks; a plain directory does not", () =>
+  withDirtyRepo(async () => {
+    const c = cleanClone();
+    const plainDir = mkdtempSync(join(tmpdir(), "bbsd-plain-"));
+    try {
+      writeFileSync(join(c.dir, ".git", "index"), "basura");
+      await expect(run(`git -C ${c.dir} checkout ${c.sha}`)).rejects.toThrow(/no se pudo leer/);
+      await expect(run(`git -C ${plainDir} checkout main`)).resolves.toBeUndefined();
+    } finally { c.done(); rmSync(plainDir, { recursive: true, force: true }); }
+  }));

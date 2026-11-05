@@ -7,7 +7,7 @@
 //
 // Reference: docs/rules/domain/critical-rules-extended.md (Rule 13)
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
@@ -61,14 +61,19 @@ export function switchTargets(command: string, base: string): string[] | null {
   return (res.stdout || "").split("\n").filter((l) => l.startsWith("switch\t")).map((l) => l.slice(7));
 }
 
-function dirtyOf(dir: string): string {
-  try {
-    return execFileSync("git", ["-C", dir, "status", "--porcelain"], {
-      encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-  } catch {
-    return ""; // no es un repo o git falló: la orden fallará por sí sola
-  }
+/**
+ * Cambios sin guardar en `dir`. "" = limpio o no es un repo (nada que perder).
+ * null = git falló por otra causa (timeout, `dubious ownership`…): no se sabe,
+ * así que el llamador bloquea (fail-closed).
+ */
+export function dirtyOf(dir: string): string | null {
+  const res = spawnSync("git", ["-C", dir, "status", "--porcelain"], {
+    encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, LC_ALL: "C" }, // el mensaje de «no es un repo» se compara en inglés
+  });
+  if (!res.error && res.status === 0) return (res.stdout || "").trim();
+  if (!res.error && /not a git repository/i.test(res.stderr || "")) return "";
+  return null;
 }
 
 export async function blockBranchSwitchDirty(
@@ -93,7 +98,11 @@ export async function blockBranchSwitchDirty(
   let repo = "";
   for (const dir of targets) {
     if (!existsSync(dir)) continue; // aún no existe (clon creado en la misma orden): nada que perder
-    dirty = dirtyOf(dir);
+    const state = dirtyOf(dir);
+    if (state === null) {
+      throw new Error(`BLOCKED [branch-switch-dirty]: no se pudo leer el estado de ${dir} con git status (fail-closed).`);
+    }
+    dirty = state;
     if (dirty) { repo = dir; break; }
   }
   if (!dirty) return;
