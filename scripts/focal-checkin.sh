@@ -32,17 +32,19 @@ done
 _now_iso() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 _now_epoch() { date +%s; }
 
-_json_field() {
-  local json="$1" key="$2"
-  local val
-  val=$(printf '%s' "$json" | grep -oP "\"${key}\"\\s*:\\s*\"\\K[^\"]*" 2>/dev/null || true)
-  if [[ -z "$val" ]]; then
-    val=$(printf '%s' "$json" | grep -oP "\"${key}\"\\s*:\\s*\\K(true|false|null|[0-9]+)" 2>/dev/null || true)
-  fi
-  printf '%s' "$val"
-}
-
 _esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+# S03n: el nombre del nido es un nombre de fichero dentro de focal-state (sin «/» ni «..»: antes
+# `--nido ../../x` escribía fuera) y el intervalo un entero positivo (antes `x/` rompía el sed,
+# dejaba el estado vacío y salía 0).
+if [[ -n "$NIDO" && ! "$NIDO" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]]; then
+  echo "ERROR: nombre de nido no válido: ${NIDO}" >&2
+  exit 1
+fi
+if [[ -n "$SET_INTERVAL" && ! "$SET_INTERVAL" =~ ^[1-9][0-9]{0,3}$ ]]; then
+  echo "ERROR: --set-interval requiere un entero entre 1 y 9999: ${SET_INTERVAL}" >&2
+  exit 1
+fi
 
 # ── --load ────────────────────────────────────────────────────────────────────
 if [[ $SHOW_LOAD -eq 1 ]]; then
@@ -132,7 +134,7 @@ if [[ -n "$SET_INTERVAL" ]]; then
   (
     flock -w 5 200 || { echo "ERROR: flock timeout" >&2; exit 1; }
     printf '%s\n' "$new_json" > "$STATE_FILE"
-  ) 200>"$LOCK_FILE"
+  ) 200>"$LOCK_FILE" || exit 1  # el exit del subshell no sale del script: sin esto se informaba éxito
 
   echo "check_in_interval_min actualizado a ${SET_INTERVAL} para ${NIDO}"
   exit 0
@@ -163,7 +165,7 @@ if [[ -n "$NIDO" ]]; then
   (
     flock -w 5 200 || { echo "ERROR: flock timeout" >&2; exit 1; }
     printf '%s\n' "$new_json" > "$STATE_FILE"
-  ) 200>"$LOCK_FILE"
+  ) 200>"$LOCK_FILE" || exit 1
 
   echo "Check-in registrado para ${NIDO} — ${now}"
   exit 0

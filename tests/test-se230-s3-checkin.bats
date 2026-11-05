@@ -188,3 +188,160 @@ EOF
   # 0 switches en la última hora → OK
   [ "$output" = "OK" ]
 }
+
+# ── S03n: comportamiento discriminante (fronteras, conservación, errores) ─────
+# Ref: docs/propuestas/SE-230-focal-attention.md (Slice 3) — umbrales OK ≤2, HIGH 3–5, OVERLOAD >5.
+
+_switches() {  # _switches N: N cambios en los últimos minutos
+  local i ts
+  for ((i = 1; i <= $1; i++)); do
+    ts=$(_past_iso "$i")
+    printf '%s nidoA→nidoB\n' "$ts" >> "$HOME/.savia/.switch-log"
+  done
+}
+
+_null_decision_nido() { _write_focal "$1"; }
+
+@test "11. frontera switches: 2 → OK, 3 → HIGH" {
+  _switches 2
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+  _switches 1
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$output" = "HIGH" ]
+}
+
+@test "12. frontera switches: 5 → HIGH (no OVERLOAD)" {
+  _switches 5
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$status" -eq 0 ]
+  [ "$output" = "HIGH" ]
+}
+
+@test "13. frontera decisiones: 2 → OK, 3 → HIGH, 5 → HIGH, 6 → OVERLOAD" {
+  _write_decision_nido d1; _write_decision_nido d2
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$output" = "OK" ]
+  _write_decision_nido d3
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$output" = "HIGH" ]
+  _write_decision_nido d4; _write_decision_nido d5
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$output" = "HIGH" ]
+  _write_decision_nido d6
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$output" = "OVERLOAD" ]
+}
+
+@test "14. negativo: nidos con next_human_decision null no cuentan como decisión" {
+  for i in 1 2 3 4 5 6 7; do _null_decision_nido "n$i"; done
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "15. negativo: líneas vacías o con fecha ilegible en .switch-log no cuentan" {
+  printf '\nbasura nidoA→nidoB\nno-es-fecha x\n\n' > "$HOME/.savia/.switch-log"
+  _switches 2
+  run bash "$FOCAL_CHECKIN" --load
+  [ "$output" = "OK" ]
+}
+
+@test "16. heartbeat: fija updated_at a ahora y session_pid nuevo, conserva el resto" {
+  _write_focal "hb"
+  local f="$HOME/.savia/focal-state/hb.json"
+  sed -i 's/"updated_at": "[^"]*"/"updated_at": "2000-01-01T00:00:00Z"/' "$f"
+  run bash "$FOCAL_CHECKIN" --nido hb
+  [ "$status" -eq 0 ]
+  [[ "$output" == "Check-in registrado para hb"* ]]
+  python3 - "$f" <<'P'
+import json, sys, datetime
+d = json.load(open(sys.argv[1]))
+ts = datetime.datetime.strptime(d["updated_at"], "%Y-%m-%dT%H:%M:%SZ")
+assert abs((datetime.datetime.utcnow() - ts).total_seconds()) < 120, d["updated_at"]
+assert d["session_pid"] != 9999
+assert d["task"] == "test" and d["check_in_interval_min"] == 10 and d["created_at"] != "2000-01-01T00:00:00Z"
+P
+}
+
+@test "17. heartbeat sobre nido inexistente crea un estado JSON mínimo válido" {
+  run bash "$FOCAL_CHECKIN" --nido nuevo
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["nido"]=="nuevo" and d["updated_at"] and isinstance(d["session_pid"], int)' \
+    "$HOME/.savia/focal-state/nuevo.json"
+}
+
+@test "18. heartbeat sobre JSON con nido pero sin updated_at lo añade" {
+  printf '{"nido":"parcial","task":"t"}\n' > "$HOME/.savia/focal-state/parcial.json"
+  run bash "$FOCAL_CHECKIN" --nido parcial
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["task"]=="t" and "updated_at" in d and "session_pid" in d' \
+    "$HOME/.savia/focal-state/parcial.json"
+}
+
+@test "19. --set-interval inserta el campo si no existía y conserva el resto" {
+  printf '{"nido":"sinint","task":"t"}\n' > "$HOME/.savia/focal-state/sinint.json"
+  run bash "$FOCAL_CHECKIN" --set-interval 7 --nido sinint
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"actualizado a 7 para sinint"* ]]
+  python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d["check_in_interval_min"]==7 and d["task"]=="t"' \
+    "$HOME/.savia/focal-state/sinint.json"
+}
+
+@test "20. error: --set-interval sin --nido sale 1 y no escribe nada" {
+  run bash "$FOCAL_CHECKIN" --set-interval 5
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requiere --nido"* ]]
+  [ -z "$(ls -A "$HOME/.savia/focal-state")" ]
+}
+
+@test "21. error: sin argumentos sale 1 con uso" {
+  run bash "$FOCAL_CHECKIN"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"especifica --nido"* ]]
+}
+
+@test "22. negativo: --nido con ruta (../) se rechaza y no escribe fuera de focal-state" {
+  run bash "$FOCAL_CHECKIN" --nido ../../escapa
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no válido"* ]]
+  [ ! -e "$HOME/escapa.json" ]
+  [ ! -e "$HOME/.savia/escapa.json" ]
+}
+
+@test "23. negativo: --set-interval no numérico se rechaza y no toca el estado" {
+  _write_focal "intv"
+  local before; before=$(cat "$HOME/.savia/focal-state/intv.json")
+  for bad in 'x/' '0' '-3' '10000' '5;rm'; do
+    run bash "$FOCAL_CHECKIN" --set-interval "$bad" --nido intv
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"entero"* ]]
+  done
+  [ "$(cat "$HOME/.savia/focal-state/intv.json")" = "$before" ]
+}
+
+@test "24. límite: --set-interval 9999 se acepta" {
+  _write_focal "maxint"
+  run bash "$FOCAL_CHECKIN" --set-interval 9999 --nido maxint
+  [ "$status" -eq 0 ]
+  grep -q '"check_in_interval_min": 9999' "$HOME/.savia/focal-state/maxint.json"
+}
+
+@test "25. lock ocupado: heartbeat y set-interval salen 1 sin escribir" {
+  command -v flock >/dev/null || skip "sin flock"
+  _write_focal "lk"
+  local before; before=$(cat "$HOME/.savia/focal-state/lk.json")
+  flock "$HOME/.savia/focal-state.lock" sleep 13 &
+  local holder=$!
+  sleep 0.3
+  run bash "$FOCAL_CHECKIN" --nido lk
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"flock timeout"* ]]
+  [[ "$output" != *"registrado"* ]]
+  run bash "$FOCAL_CHECKIN" --set-interval 3 --nido lk
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"actualizado"* ]]
+  kill "$holder" 2>/dev/null || true
+  [ "$(cat "$HOME/.savia/focal-state/lk.json")" = "$before" ]
+}
