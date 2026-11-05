@@ -318,5 +318,64 @@ class Targets(unittest.TestCase):
         self.assertEqual(out, "commit\t\n")
 
 
+class SwitchTargets(unittest.TestCase):
+    """--switch: destino real de cada `git checkout|switch` que puede mover HEAD
+    (block-branch-switch-dirty). Mismo criterio fail-closed que commit/add."""
+
+    setUpClass = Targets.__dict__["setUpClass"]
+    tearDownClass = Targets.__dict__["tearDownClass"]
+    assertBlocks = Targets.assertBlocks
+
+    def run_(self, cmd, base=None, **env_extra):
+        env = {k: v for k, v in os.environ.items() if k != "CDPATH"}
+        env.update(HOME=self.home, **env_extra)
+        p = subprocess.run([sys.executable, SCRIPT, "--switch", base or self.base], input=cmd,
+                           text=True, capture_output=True, env=env)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return [tuple(line.split("\t")) for line in p.stdout.splitlines()]
+
+    def test_switch_git_C_targets_other_repo(self):
+        self.assertEqual(self.run_(f"git -C {self.wt} checkout abc123"), [("switch", self.wt)])
+        self.assertEqual(self.run_(f"git -C {self.wt} switch --detach abc123"), [("switch", self.wt)])
+        self.assertEqual(self.run_(f"git -C {self.wt} -c advice.detachedHead=false checkout -q x"),
+                         [("switch", self.wt)])
+
+    def test_switch_literal_var_and_cd(self):
+        self.assertEqual(self.run_(f"D={self.wt}; git -C $D checkout abc"), [("switch", self.wt)])
+        self.assertEqual(self.run_(f"cd {self.wt} && git checkout abc"), [("switch", self.wt)])
+        self.assertEqual(self.run_("git checkout feature"), [("switch", self.base)])
+
+    def test_switch_clone_created_in_same_command(self):
+        new = os.path.join(self.home, "clon-nuevo")
+        out = self.run_(f"git clone -q {self.base} {new} && git -C {new} checkout abc")
+        self.assertEqual(out, [("switch", new)])
+
+    def test_switch_restore_is_not_a_switch(self):
+        self.assertEqual(self.run_(f"git -C {self.wt} checkout -- a.txt"), [])
+        self.assertEqual(self.run_("git checkout HEAD -- a.txt >/dev/null"), [])
+        # negativos: `--` sin rutas, redirección o comentario tras `--` sí cambian de rama
+        self.assertEqual(self.run_("git checkout feature --"), [("switch", self.base)])
+        self.assertEqual(self.run_("git checkout feature -- >/dev/null"), [("switch", self.base)])
+        self.assertEqual(self.run_("git checkout feature # -- x"), [("switch", self.base)])
+        # una restauración previa no excusa un cambio de rama posterior
+        self.assertEqual(self.run_(f"git checkout -- a; git -C {self.wt} checkout b"),
+                         [("switch", self.wt)])
+
+    def test_switch_uncertain_blocks(self):
+        self.assertBlocks("git -C $NOPE checkout abc", op="switch")
+        self.assertBlocks("sudo git checkout abc", op="switch")
+        self.assertBlocks("bash -c 'git switch main'", op="switch")
+
+    def test_switch_text_is_inert_and_commit_ignored(self):
+        self.assertEqual(self.run_("echo 'git checkout main'"), [])
+        self.assertEqual(self.run_(f"git -C {self.wt} commit -m x"), [])
+        self.assertEqual(self.run_("git status"), [])
+
+    def test_commit_mode_ignores_checkout(self):
+        p = subprocess.run([sys.executable, SCRIPT, self.base], input="git checkout main",
+                           text=True, capture_output=True)
+        self.assertEqual(p.stdout, "")
+
+
 if __name__ == "__main__":
     unittest.main()
