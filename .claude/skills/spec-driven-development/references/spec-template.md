@@ -79,6 +79,39 @@ Objetivo de esta task:
 
 ---
 
+## Lo que he entendido (obligatoria con superficie humana — SE-505)
+
+> Regla: `docs/rules/domain/comprehension-gate.md`. Frontmatter: `human_surface: true | false`
+> (con `false` y rutas de interfaz citadas, `human_surface_exempt: <motivo>`). Sin superficie
+> humana, borra esta sección y el slice S0.
+
+### Escenas
+1. {Son las 8:30, abres el móvil y …}
+2. {…}
+3. {…} (de 3 a 5)
+
+### Palabras de la persona
+> «{texto literal de lo que pidió}» — {YYYY-MM-DD}
+
+### Qué SÍ será
+- {…}
+
+### Qué NO será
+- {…}
+
+### Confirmación
+- fecha: {YYYY-MM-DD}
+- respuesta: «{texto literal de su respuesta a la pregunta interactiva que validó las escenas}»
+
+## Slice S0 — Prototipo navegable
+- prototipo: {qué se enseña y dónde lo usa la persona}
+
+### Confirmación del prototipo
+- fecha: {YYYY-MM-DD, obligatoria antes de poner S1 en curso}
+- respuesta: «{texto literal tras usar el prototipo}»
+
+---
+
 ## 2. Contrato Técnico
 
 > *El contrato define exactamente qué se debe implementar. Debe ser inequívoco.*
