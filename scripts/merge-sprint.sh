@@ -117,7 +117,7 @@ PY
 pr_tier() {  # tier calculado por risk-tier.py sobre los ficheros del PR
   local files; files=$($GH pr diff "$1" -R "$REPO" --name-only 2>/dev/null | tr '\n' ' ')
   [[ -n "$files" ]] || { echo 4; return; }
-  python3 "$ROOT/scripts/risk-tier.py" --diff "$files" --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tier",4))' 2>/dev/null || echo 4
+  python3 "$ROOT/scripts/risk-tier.py" --diff "$files" --base "origin/$BASE" --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tier",4))' 2>/dev/null || echo 4
 }
 
 blob_on_main() { git -C "$GITROOT" rev-parse -q --verify "origin/$BASE:$1" 2>/dev/null; }
@@ -658,9 +658,9 @@ record_merge() {  # record_merge <pr> <tier> <S> <equivalencia> [judge_ref] → 
 
 # ── Juez de cambios posteriores al grant (§2.7): el ejecutor no usa LLM; solo pide, filtra y verifica ──
 judge_prefilter() {  # judge_prefilter <T> <H1> <tier> <entrada-json> → vacío si pasa; si no, el motivo
-  python3 - "$GITROOT" "$1" "$2" "$3" "$4" "$DERIVED_RE" "$ROOT/scripts/risk-tier.py" <<'PY'
+  python3 - "$GITROOT" "$1" "$2" "$3" "$4" "$DERIVED_RE" "$ROOT/scripts/risk-tier.py" "origin/$BASE" <<'PY'
 import json, re, subprocess, sys
-root, t, h1, tier, entry, derived, classifier = sys.argv[1:8]
+root, t, h1, tier, entry, derived, classifier, base = sys.argv[1:9]
 g = lambda *a: subprocess.run(["git", "-C", root, *a], capture_output=True, text=True, check=True).stdout
 keep = lambda p: not re.search(derived, p)
 raw = [l.split("\t") for l in g("diff", "--raw", "--no-renames", t, h1).splitlines() if l]
@@ -668,7 +668,7 @@ raw = [(m.lstrip(":").split(), p) for m, p in raw if keep(p)]
 paths = [p for _, p in raw]
 # Solo difieren derivados o registros y no son equivalentes: el juez no vería diff alguno, no se le pregunta.
 if not paths: print("prefiltro_solo_derivados"); sys.exit(0)
-out = subprocess.run(["python3", classifier, "--diff", " ".join(paths), "--json"], capture_output=True, text=True).stdout
+out = subprocess.run(["python3", classifier, "--diff", " ".join(paths), "--base", base, "--json"], capture_output=True, text=True).stdout
 dt = json.loads(out).get("tier", 4) if out else 4
 if dt >= 3 or dt > int(tier): print("prefiltro_tier"); sys.exit(0)
 if any(m[4] in ("A", "D") for m, _ in raw): print("prefiltro_alta_baja"); sys.exit(0)

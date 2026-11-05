@@ -1112,10 +1112,12 @@ except c.ConfigError as e:
   [ "$k3" != "$k4" ]
 }
 
-@test "rev-1472 S-P2-2: una derived-paths.txt de la PR que cubra .scm/ no rebaja el tier de ficheros de .scm editados a mano" {
+@test "rev-1472 S-P2-2: una derived-paths.txt que cubra .scm/ no rebaja el tier de ficheros de .scm editados a mano" {
   mkdir -p "$T/rt/scripts" "$T/rt0/scripts"
   cp "$REPO/scripts/risk-tier.py" "$T/rt/scripts/"; cp "$REPO/scripts/risk-tier.py" "$T/rt0/scripts/"
+  # Seguimiento de #1472: risk-tier lee la lista de la base (origin/main), no del checkout.
   printf '.scm/\n.scm/views/\n.scm/sam-declarations.json\n.scm/runtime-surface/\n' > "$T/rt/scripts/derived-paths.txt"
+  R="$T/rt"; git init -q -b main "$R"; G add -A; G commit -qm base; G update-ref refs/remotes/origin/main HEAD
   run python3 - "$T/rt/scripts/risk-tier.py" "$T/rt0/scripts/risk-tier.py" <<'PY'
 import importlib.util, sys
 def load(p):

@@ -119,50 +119,78 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "Confidentiality Scanner"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-EXCLUDE_FILES="confidentiality-scan.sh|confidentiality-check.sh|confidentiality-blocklist"
-EXCLUDE_FILES="$EXCLUDE_FILES|security-check-patterns.md|test-stress-hooks.sh|pentest-lab"
-EXCLUDE_FILES="$EXCLUDE_FILES|confidentiality-gate.yml|confidentiality-allowlist.txt"
-EXCLUDE_FILES="$EXCLUDE_FILES|generate-blocklist.sh|confidentiality-sign.sh"
-EXCLUDE_FILES="$EXCLUDE_FILES|confidentiality-auditor.md|pii-sanitization.md"
-EXCLUDE_FILES="$EXCLUDE_FILES|tests/|test-.*\.sh|community-protocol.md"
-EXCLUDE_FILES="$EXCLUDE_FILES|security-guardian.md|block-credential-leak.sh"
-EXCLUDE_FILES="$EXCLUDE_FILES|contribute.sh|validate-privacy"
-EXCLUDE_FILES="$EXCLUDE_FILES|credential-scan.md|agent-hook-premerge.sh"
-EXCLUDE_FILES="$EXCLUDE_FILES|messaging-subject-safety.md|confidentiality-strategies.md"
-EXCLUDE_FILES="$EXCLUDE_FILES|pentesting/|checklists.md"
-EXCLUDE_FILES="$EXCLUDE_FILES|credential-proxy.sh|managed-agents-patterns.md"
-EXCLUDE_FILES="$EXCLUDE_FILES|session-event-log.sh"
-# OpenCode TS hook ports (same self-referential exclusion as block-credential-leak.sh)
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/.*\.test\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/lib/credential-patterns\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/lib/injection-patterns\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/lib/leakage-patterns\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/lib/sovereignty-patterns\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|docs/propuestas/SPEC-OC-01-savia-shield-opencode-adaptation\.md$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/block-credential-leak\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/block-gitignored-references\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/prompt-injection-guard\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|\.opencode/plugins/validate-bash-global\.ts$"
-EXCLUDE_FILES="$EXCLUDE_FILES|docs/propuestas/SPEC-142-pretooluse-input-modification\.md$"
-EXCLUDE_FILES="$EXCLUDE_FILES|docs/rules/domain/savia-shield-opencode\.md|hook-multihandler-baseline\.sh"
+# Ficheros autorreferentes (contienen los patrones que el escáner busca). SE-501 (seguimiento de #1472):
+# rutas EXACTAS desde la raíz del repo; una entrada que acaba en «/» es un directorio anclado en la raíz.
+# Antes era un regex de subcadenas sobre la línea «diff --git»: «tests/» saltaba cualquier ruta que lo
+# contuviera (p. ej. docs/x-tests/…) y «confidentiality-scan.sh» saltaba también «…/confidentiality-scan.sh.md».
+# Un nombre que contiene una ruta excluida ya no se salta. Sin comodines: solo [A-Za-z0-9._/-]
+# (set -f: una entrada con «*» llega literal a exclude_re y se rechaza, no se expande contra el cwd).
+set -f
+EXCLUDE_PATHS=(
+  scripts/confidentiality-scan.sh scripts/confidentiality-check.sh scripts/confidentiality-sign.sh
+  scripts/confidentiality-blocklist.txt scripts/confidentiality-allowlist.txt scripts/generate-blocklist.sh
+  .github/workflows/confidentiality-gate.yml
+  docs/rules/domain/security-check-patterns.md docs/rules/domain/pii-sanitization.md
+  docs/rules/domain/community-protocol.md docs/rules/domain/messaging-subject-safety.md
+  docs/rules/domain/managed-agents-patterns.md docs/rules/domain/savia-shield-opencode.md
+  .claude/agents/confidentiality-auditor.md .opencode/agents/confidentiality-auditor.md
+  .claude/agents/security-guardian.md .opencode/agents/security-guardian.md
+  .claude/commands/credential-scan.md
+  .claude/hooks/block-credential-leak.sh .claude/hooks/agent-hook-premerge.sh
+  .claude/skills/company-messaging/references/confidentiality-strategies.md
+  .claude/skills/pentesting/
+  scripts/contribute.sh scripts/credential-proxy.sh scripts/session-event-log.sh
+  scripts/hook-multihandler-baseline.sh scripts/test-stress-hooks.sh
+  # OpenCode: catálogos de patrones de los guards TS y sus tests
+  .opencode/plugins/lib/credential-patterns.ts .opencode/plugins/lib/injection-patterns.ts
+  .opencode/plugins/lib/leakage-patterns.ts .opencode/plugins/lib/sovereignty-patterns.ts
+  .opencode/plugins/__tests__/
+  docs/propuestas/SPEC-OC-01-savia-shield-opencode-adaptation.md
+  docs/propuestas/SPEC-142-pretooluse-input-modification.md
+  tests/
+)
+set +f
+# exclude_re — regex ERE anclado ^(…)$ con las rutas de EXCLUDE_PATHS. Una entrada con otro carácter
+# es un error de configuración: exit 2 (no se escanea con una lista que no se entiende).
+exclude_re() {
+  local p out=""
+  for p in "${EXCLUDE_PATHS[@]}"; do
+    [[ "$p" =~ ^[A-Za-z0-9._/-]+$ && "$p" != /* && "$p" != *..* ]] \
+      || { echo "ERROR: entrada de EXCLUDE_PATHS no válida: $p" >&2; exit 2; }
+    p=${p//./[.]}
+    [[ "$p" == */ ]] && p="$p.*"
+    out+="${out:+|}$p"
+  done
+  printf '^(%s)$' "$out"
+}
+EXCLUDE_RE=$(exclude_re) || exit 2
+
+# drop_excluded — quita del diff los ficheros de EXCLUDE_PATHS. La ruta sale de la cabecera «+++ b/<ruta>»
+# (solo antes del primer @@: dentro de un hunk, «+++ x» es contenido) y se compara entera. Una ruta citada
+# por git ("…" con escapes) no coincide con ninguna entrada: se escanea (fail-closed).
+drop_excluded() {
+  EXC="$EXCLUDE_RE" awk '
+    /^diff --git /{skip=0; hdr=1; print; next}
+    hdr && /^\+\+\+ /{p=substr($0,5); sub(/\t$/,"",p); if (sub(/^b\//,"",p) && p ~ ENVIRON["EXC"]) skip=1}
+    hdr && /^@@/{hdr=0}
+    !skip{print}'
+}
 
 get_lines() {
   cd "$ROOT_DIR" || exit 2
   case "$MODE" in
     --staged)
-      git diff --text --cached --diff-filter=ACMR -U0 | tr -d '\000' \
-        | awk -v exc="$EXCLUDE_FILES" '/^diff --git/{skip=0; if(match($0,exc)) skip=1} !skip{print}' \
+      git diff --text --cached --diff-filter=ACMR -U0 | tr -d '\000' | drop_excluded \
         | grep "^+" | grep -v "^+++"
       ;;
     --pr)
-      git diff --text origin/main...HEAD --diff-filter=ACMR -U0 | tr -d '\000' \
-        | awk -v exc="$EXCLUDE_FILES" '/^diff --git/{skip=0; if(match($0,exc)) skip=1} !skip{print}' \
+      git diff --text origin/main...HEAD --diff-filter=ACMR -U0 | tr -d '\000' | drop_excluded \
         | grep "^+" | grep -v "^+++"
       ;;
     --full-repo)
       # Scan ALL content of ALL tracked files (excluding self-referencing ones)
       git ls-files \
-        | grep -vE "$EXCLUDE_FILES" \
+        | grep -vE "$EXCLUDE_RE" \
         | while IFS= read -r f; do
             [ -f "$f" ] && sed "s/^/+/" "$f"
           done
