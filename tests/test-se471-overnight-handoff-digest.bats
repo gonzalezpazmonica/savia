@@ -255,3 +255,19 @@ jget() {
   run bash "$SCRIPT" --runs-dir "$R" --format json
   [ "$(jget '",".join(r["nombre"] for r in d["runs"])')" = "nueva,vieja" ]
 }
+
+@test "AC8: enlace a comentario y puntuación final se recortan; a gh solo llega la URL limpia" {
+  make_fake_gh ok
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" comentario 'ESTADO: OK — revisión en https://github.com/a/b/pull/101#issuecomment-123).'
+  mark "$R" parentesis 'ESTADO: OK (https://github.com/a/b/pull/102);'
+  mark "$R" frag-inyeccion 'ESTADO: OK https://github.com/a/b/pull/103#;$(touch x)'
+  mark "$R" punto-coma-id 'ESTADO: OK https://github.com/a/b/pull/104;id'
+  PATH="$FAKEBIN:$PATH" run bash "$SCRIPT" --runs-dir "$R" --online --format json
+  [ "$status" -eq 0 ]
+  [ "$(jget '",".join(r["nombre"]+"="+str(r["pr_url"]) for r in d["runs"])')" = \
+    "comentario=https://github.com/a/b/pull/101,frag-inyeccion=https://github.com/a/b/pull/103,parentesis=https://github.com/a/b/pull/102,punto-coma-id=None" ]
+  [ "$(grep '^https://' "$GHLOG" | LC_ALL=C sort | tr '\n' ' ')" = \
+    "https://github.com/a/b/pull/101 https://github.com/a/b/pull/102 https://github.com/a/b/pull/103 " ]
+  [ "$(jget '[r["avisos"] for r in d["runs"] if r["nombre"]=="punto-coma-id"][0]')" = "['url_rechazada']" ]
+}

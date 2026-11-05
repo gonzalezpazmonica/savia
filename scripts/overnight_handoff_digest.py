@@ -58,9 +58,16 @@ def iso(ts: float) -> str:
 
 
 def clean_token(tok: str) -> str:
+    """Quita envoltorio y puntuación final, y el fragmento `#…` de una URL https.
+
+    Solo recorta: lo que queda debe casar la allowlist entera, así que `…/pull/1;id`
+    sigue rechazada y a `gh` nunca llega nada más que la URL limpia.
+    """
     tok = tok.strip()
     tok = tok.lstrip("(<[\"'`*")
-    while tok and tok[-1] in ".,)>]\"'`*":
+    if tok.startswith("https://") and "#" in tok:
+        tok = tok.split("#", 1)[0]
+    while tok and tok[-1] in ".,;:)>]\"'`*":
         tok = tok[:-1]
     return tok
 
@@ -96,7 +103,7 @@ def parse_mark(text: str) -> dict:
         if lm and lm.group(2).strip():
             val = lm.group(2).strip()
             first = clean_token(val.split()[0])
-            candidate = first if PR_URL_ALLOW.match(first) else val
+            candidate = first if PR_URL_ALLOW.fullmatch(first) else val
             break
         um = URLISH_RE.search(ln)
         if um:
@@ -104,7 +111,7 @@ def parse_mark(text: str) -> dict:
             break
     pr_url, url_rechazada = None, False
     if candidate is not None:
-        if PR_URL_ALLOW.match(candidate):
+        if PR_URL_ALLOW.fullmatch(candidate):
             pr_url = candidate
         else:
             url_rechazada = True
