@@ -462,16 +462,95 @@ alt_base() {
   grep -qx "cliente-oculto-xyz" "$SCAN_BL_COPY"
   grep -qx "NombreLocalOculto" "$SCAN_BL_COPY"
   grep -qx "termino-vetado-xyz" "$SCAN_BL_COPY"     # la estática de la base sigue entrando
-  # Lo que la cabeza versiona en projects/ no aporta patrones a la blocklist.
+  # Revisión de #1490 (P1-1): un projects/<n> que la cabeza versiona pero la BASE no sigue siendo local y su
+  # nombre sigue en la blocklist (la PR no decide qué sale de ella).
   sed -i '/cliente-oculto-xyz/d' "$r/f.txt"
   mkdir -p "$r/projects/versionado-por-pr"; echo x > "$r/projects/versionado-por-pr/README.md"
   git -C "$r" add "projects/versionado-por-pr/README.md" f.txt
   git -C "$r" commit -qm "agent(x): sin nombre privado"; git -C "$r" push -q origin agent/x
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
-  run grep -c "versionado-por-pr" "$SCAN_BL_COPY"
+  grep -qx "versionado-por-pr" "$SCAN_BL_COPY"
+  grep -qx "cliente-oculto-xyz" "$SCAN_BL_COPY"
+}
+
+@test "rev-1490 P1-1 --merge: forzar al índice una fuente local preexistente no la saca de la blocklist" {
+  r=$(make_merge_repo)
+  # Proyecto privado y CLAUDE.local.md en disco, sin versionar en la base.
+  mkdir -p "$r/projects/cliente-oculto-xyz/team"
+  printf '### Ana Secretisima\n' > "$r/projects/cliente-oculto-xyz/team/TEAM.md"
+  printf 'PROJECT_A_NAME = "NombreLocalOculto"\n' > "$r/CLAUDE.local.md"
+  export SCAN_BL_COPY="$TESTDIR/bl.txt"
+  # La cabeza fuerza al índice el TEAM.md (con el nombre de la persona) y CLAUDE.local.md.
+  git -C "$r" add --force projects/cliente-oculto-xyz/team/TEAM.md CLAUDE.local.md
+  git -C "$r" commit -qm "agent(x): fuga forzada"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
   [ "$output" = "0" ]
   grep -qx "cliente-oculto-xyz" "$SCAN_BL_COPY"
+  grep -qx "Ana Secretisima" "$SCAN_BL_COPY"
+  grep -qx "NombreLocalOculto" "$SCAN_BL_COPY"
+}
+
+@test "rev-1490 P1-1 --merge negativo: un proyecto que la base ya versiona (público) no entra en la blocklist" {
+  r=$(make_merge_repo)
+  export SCAN_BL_COPY="$TESTDIR/bl.txt"
+  # Proyecto versionado en main (la base) antes de la rama.
+  git -C "$r" checkout -q main
+  mkdir -p "$r/projects/publico-abc"; echo x > "$r/projects/publico-abc/README.md"
+  git -C "$r" add projects/publico-abc/README.md; git -C "$r" commit -qm "proyecto público"
+  git -C "$r" push -q origin main
+  git -C "$r" checkout -q agent/x; git -C "$r" merge -q --no-edit main; git -C "$r" push -q origin agent/x
+  git -C "$r" fetch -q origin
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  run grep -c "publico-abc" "$SCAN_BL_COPY"
+  [ "$output" = "0" ]
+  grep -qx "termino-vetado-xyz" "$SCAN_BL_COPY"
+  # Sin duplicados (P2-3): la estática la emite el generador y la añade push-pr; aparece una vez.
+  run grep -cx "termino-vetado-xyz" "$SCAN_BL_COPY"
+  [ "$output" = "1" ]
+}
+
+@test "rev-1490 P2-2 --merge: interrumpido (TERM) durante la blocklist, no deja copias de fuentes locales en TMPDIR" {
+  r=$(make_merge_repo)
+  printf 'PROJECT_A_NAME = "NombreLocalOculto"\n' > "$r/CLAUDE.local.md"
+  good=$(git -C "$r" rev-parse origin/main)
+  # Generador de la base que termina el proceso de push-pr (su padre) a mitad de la generación.
+  printf '#!/usr/bin/env bash\nkill -TERM "$PPID"\nsleep 1\n' > "$TESTDIR/gen-kill.sh"
+  git -C "$r" update-ref refs/remotes/origin/main "$(alt_base "$r" "$good" scripts/generate-blocklist.sh "$TESTDIR/gen-kill.sh")"
+  mkdir -p "$TESTDIR/tmp"
+  TMPDIR="$TESTDIR/tmp" GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 143 ]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  run grep -rl "NombreLocalOculto" "$TESTDIR/tmp"
+  [ "$status" -ne 0 ]
+  run find "$TESTDIR/tmp" -mindepth 1
+  [ -z "$output" ]
+}
+
+@test "rev-1490 P2-1 --merge con el escáner real: la blocklist local se aplica como regex (cliente_oculto_xyz)" {
+  r=$(make_merge_repo)
+  # El escáner, gate-result y el generador reales en la base (sustituyen al stub).
+  mkdir -p "$r/.claude/hooks/lib"
+  cp "$BATS_TEST_DIRNAME/../scripts/confidentiality-scan.sh" "$r/scripts/"
+  cp "$BATS_TEST_DIRNAME/../.claude/hooks/lib/gate-result.sh" "$r/.claude/hooks/lib/"
+  git -C "$r" checkout -q main; git -C "$r" add -A; git -C "$r" commit -qm "escáner real"; git -C "$r" push -q origin main
+  git -C "$r" checkout -q agent/x; git -C "$r" merge -q --no-edit main
+  git -C "$r" push -q origin agent/x; git -C "$r" fetch -q origin
+  mkdir -p "$r/projects/cliente-oculto-xyz"
+  # Control: sin el nombre en el diff, PASS y merge.
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  # El diff menciona el proyecto con otro separador: solo lo caza el patrón regex cliente.?oculto.?xyz.
+  echo "nota de cliente_oculto_xyz" >> "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): variante"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
 }
 
 @test "rev-1488 P1-1 --merge: si origin/main no trae el generador de la blocklist, no hay merge" {

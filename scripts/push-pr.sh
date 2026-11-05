@@ -178,39 +178,55 @@ fi  # fin de los pasos 0-6 (sin --merge)
 # ── Merge (--merge): solo verifica y mergea; nunca firma ni empuja ───────
 MERGED=false
 # local_blocklist <base> <raíz> <salida> — blocklist del merge local (revisión de #1488, P1-1): generador y lista
-# estática de la BASE, ejecutados en un directorio aparte que solo recibe las fuentes LOCALES no versionadas del
-# checkout. Lo que la cabeza versiona (un projects/x forzado al índice, por ejemplo) no entra: no aporta patrones.
+# estática de la BASE, ejecutados en un directorio aparte ($LB_DIR) que recibe las fuentes locales del checkout
+# (CLAUDE.local.md, projects/<n>/ con su team/TEAM.md, identity.md). «Local» se decide frente a la BASE, no
+# frente al índice de la cabeza (revisión de #1490, P1-1): una fuente que la base no versiona entra siempre,
+# aunque la cabeza la haya forzado al índice; la PR no puede sacar nombres de la blocklist. Solo se omite lo
+# que la base ya versiona (un proyecto público). La lista estática se añade aunque el generador de la base ya
+# la emita (si un generador futuro dejara de hacerlo, no se pierde); la salida va sin duplicados.
 # Código 1 si la base no trae el generador o la lista estática, o si el generador falla.
+LB_DIR=""
 local_blocklist() {
   local base=$1 root=$2 out=$3 t d n f rel rc=0
-  t=$(mktemp -d) || return 1
+  LB_DIR=$(mktemp -d) || return 1
+  t=$LB_DIR
   mkdir -p "$t/scripts"
   if ! git -C "$root" show "$base:scripts/generate-blocklist.sh" > "$t/scripts/generate-blocklist.sh" 2>/dev/null \
      || ! git -C "$root" show "$base:scripts/confidentiality-blocklist.txt" > "$t/scripts/confidentiality-blocklist.txt" 2>/dev/null; then
-    rm -rf "$t"; return 1
+    rm -rf "$t"; LB_DIR=""; return 1
   fi
   git -C "$root" show "$base:.gitignore" > "$t/.gitignore" 2>/dev/null || rm -f "$t/.gitignore"
-  _local_only() { [[ -e "$root/$1" && -z "$(git -C "$root" ls-files -- "$1" 2>/dev/null)" ]]; }
-  if _local_only CLAUDE.local.md; then cp "$root/CLAUDE.local.md" "$t/"; fi
+  # Local = existe en disco y la BASE no la versiona. Si ls-tree falla, cuenta como local (más patrones, no menos).
+  _lb_local() { [[ -e "$root/$1" && -z "$(git -C "$root" ls-tree -r --name-only "$base" -- "$1" 2>/dev/null)" ]]; }
+  if _lb_local CLAUDE.local.md; then cp "$root/CLAUDE.local.md" "$t/"; fi
   for d in "$root"/projects/*/; do
     [[ -d "$d" ]] || continue
-    n=$(basename "$d"); _local_only "projects/$n" || continue
+    n=$(basename "$d"); _lb_local "projects/$n" || continue
     mkdir -p "$t/projects/$n"
     if [[ -f "$d/team/TEAM.md" ]]; then mkdir -p "$t/projects/$n/team"; cp "$d/team/TEAM.md" "$t/projects/$n/team/"; fi
   done
   for f in "$root"/.claude/profiles/users/*/identity.md; do
     [[ -f "$f" ]] || continue
-    rel=${f#"$root/"}; _local_only "$rel" || continue
+    rel=${f#"$root/"}; _lb_local "$rel" || continue
     mkdir -p "$t/$(dirname "$rel")"; cp "$f" "$t/$rel"
   done
-  bash "$t/scripts/generate-blocklist.sh" > "$out" 2>/dev/null || rc=1
-  grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" >> "$out"
-  rm -rf "$t"
+  unset -f _lb_local
+  bash "$t/scripts/generate-blocklist.sh" > "$t/bl.raw" 2>/dev/null || rc=1
+  grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" >> "$t/bl.raw"
+  sort -u "$t/bl.raw" > "$out" || rc=1
+  rm -rf "$t"; LB_DIR=""
   return "$rc"
 }
 
 if $MERGE; then
   echo "=== Merge (SE-343): rama publicada, firmada y con grant ==="
+  # Revisión de #1490 (P2-2): las copias de las fuentes locales ($LB_DIR) y la blocklist ($SCAN_BL) llevan
+  # nombres privados; se borran también si el proceso se interrumpe (INT/TERM) o sale por un error.
+  SCAN_TMP="" SCAN_BL=""
+  _merge_cleanup() { rm -rf "${LB_DIR:-}"; rm -f "${SCAN_TMP:-}" "${SCAN_BL:-}"; }
+  trap _merge_cleanup EXIT
+  trap '_merge_cleanup; trap - EXIT; exit 130' INT
+  trap '_merge_cleanup; trap - EXIT; exit 143' TERM
   merge_prep_fail() {
     echo "ERROR: $1" >&2
     echo "  --merge no firma ni empuja: prepara antes la rama con push-pr.sh (sin --merge)," >&2
