@@ -118,6 +118,53 @@ class Targets(unittest.TestCase):
                     "(cd /tmp && ls)", "eval \"$CMD\""):
             self.assertEqual(self.run_(cmd), [], cmd)
 
+    def test_worktree_and_remote_add_are_not_git_add(self):
+        # 2026-11-04: `worktree add` en una forma incierta (envoltorio, bucle,
+        # subshell) se leía como `git add` sin destino → bloqueo falso.
+        for cmd in (f"timeout 60 git -C {self.base} worktree add -q -b agent/x {self.wt}-n origin/main",
+                    f"for w in a b; do git -C {self.base} worktree add -q -b agent/$w {self.wt}-$w origin/main; done",
+                    f"(git worktree add -q -b agent/x {self.wt}-n origin/main)",
+                    "timeout 9 git remote add up https://example.invalid/r.git"):
+            self.assertEqual(self.run_(cmd), [], cmd)
+
+    def test_real_add_next_to_worktree_add_still_blocks(self):
+        # Solo se neutraliza la pareja `worktree|remote add`; un `git add` real,
+        # `submodule add` (indexa) o `notes add` (hace commit) siguen contando.
+        for cmd in (f"timeout 60 git worktree add {self.wt}-n && timeout 60 git add .",
+                    "for f in a; do git worktree add x; git add $f; done",
+                    "timeout 9 git submodule add https://example.invalid/r.git",
+                    "timeout 9 git notes add -m x"):
+            self.assertBlocks(cmd, "add")
+
+    def test_dir_named_remote_or_worktree_does_not_hide_real_add(self):
+        # Revisión #1483: el valor de -C/--git-dir/--work-tree que termina en
+        # `remote` o `worktree` no es el subcomando; el `git add` es real.
+        for cmd in ("timeout 60 git -C ~/src/remote add .",
+                    "timeout 60 git -C ../worktree add -A",
+                    "timeout 60 git -C remote add .",
+                    "timeout 60 git --git-dir remote add .",
+                    "timeout 60 git --work-tree=/x/worktree add ."):
+            self.assertBlocks(cmd, "add")
+        # Revisión #1483 (2.ª): un valor entrecomillado o con espacio escapado
+        # que acaba en ` remote`/` worktree` es UN solo argumento de la opción.
+        for cmd in ('timeout 60 git -C "/tmp/mi remote" add .',
+                    "timeout 60 git -C '/tmp/mi worktree' add -A",
+                    "timeout 60 git -C /x/a\\ worktree add .",
+                    'timeout 60 git -c "k=v remote" add .',
+                    'timeout 60 git --work-tree "/x/y remote" add .',
+                    "sh -c \"git -C '/x/mi remote' add .\""):
+            self.assertBlocks(cmd, "add")
+        # Revisión de seguridad #1483 (3.ª, P2-3): una opción global desconocida
+        # puede tomar `remote` como valor; el `add` que sigue es un add real.
+        for cmd in ("timeout 60 git --attr-source remote add .",
+                    "timeout 60 git --frobnicate worktree add -A",
+                    "timeout 60 git -X remote add ."):
+            self.assertBlocks(cmd, "add")
+        # Con opciones globales delante, `worktree add` sigue sin contar.
+        for cmd in (f"timeout 60 git -c a.b=1 -C {self.base} --no-pager worktree add {self.wt}-n",
+                    "timeout 9 git --git-dir=/x/.git remote add up https://example.invalid/r.git"):
+            self.assertEqual(self.run_(cmd), [], cmd)
+
     def test_command_after_heredoc_is_detected(self):
         out = self.run_("cat > f <<EOF\ntexto\nEOF\ngit commit -m x")
         self.assertEqual(out, [("commit", self.base)])
@@ -284,6 +331,77 @@ class Targets(unittest.TestCase):
             sys.stdin, sys.stdout, sys.argv = old
         self.assertEqual(rc, 0)
         self.assertEqual(out, "commit\t\n")
+
+
+class SwitchTargets(unittest.TestCase):
+    """--switch: destino real de cada `git checkout|switch` que puede mover HEAD
+    (block-branch-switch-dirty). Mismo criterio fail-closed que commit/add."""
+
+    setUpClass = Targets.__dict__["setUpClass"]
+    tearDownClass = Targets.__dict__["tearDownClass"]
+    assertBlocks = Targets.assertBlocks
+
+    def run_(self, cmd, base=None, **env_extra):
+        env = {k: v for k, v in os.environ.items() if k != "CDPATH"}
+        env.update(HOME=self.home, **env_extra)
+        p = subprocess.run([sys.executable, SCRIPT, "--switch", base or self.base], input=cmd,
+                           text=True, capture_output=True, env=env)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        return [tuple(line.split("\t")) for line in p.stdout.splitlines()]
+
+    def test_switch_git_C_targets_other_repo(self):
+        self.assertEqual(self.run_(f"git -C {self.wt} checkout abc123"), [("switch", self.wt)])
+        self.assertEqual(self.run_(f"git -C {self.wt} switch --detach abc123"), [("switch", self.wt)])
+        self.assertEqual(self.run_(f"git -C {self.wt} -c advice.detachedHead=false checkout -q x"),
+                         [("switch", self.wt)])
+
+    def test_switch_literal_var_and_cd(self):
+        self.assertEqual(self.run_(f"D={self.wt}; git -C $D checkout abc"), [("switch", self.wt)])
+        self.assertEqual(self.run_(f"cd {self.wt} && git checkout abc"), [("switch", self.wt)])
+        self.assertEqual(self.run_("git checkout feature"), [("switch", self.base)])
+
+    def test_switch_clone_created_in_same_command(self):
+        new = os.path.join(self.home, "clon-nuevo")
+        out = self.run_(f"git clone -q {self.base} {new} && git -C {new} checkout abc")
+        self.assertEqual(out, [("switch", new)])
+
+    def test_switch_restore_is_not_a_switch(self):
+        self.assertEqual(self.run_(f"git -C {self.wt} checkout -- a.txt"), [])
+        self.assertEqual(self.run_("git checkout HEAD -- a.txt >/dev/null"), [])
+        # negativos: `--` sin rutas, redirección o comentario tras `--` sí cambian de rama
+        self.assertEqual(self.run_("git checkout feature --"), [("switch", self.base)])
+        self.assertEqual(self.run_("git checkout feature -- >/dev/null"), [("switch", self.base)])
+        self.assertEqual(self.run_("git checkout feature # -- x"), [("switch", self.base)])
+        # una restauración previa no excusa un cambio de rama posterior
+        self.assertEqual(self.run_(f"git checkout -- a; git -C {self.wt} checkout b"),
+                         [("switch", self.wt)])
+
+    def test_switch_restore_with_unknown_paths_blocks(self):
+        # `-- $FILES` o `-- $(…)` vacíos dejan `git checkout feature --`: cambio de rama
+        self.assertBlocks("git checkout feature -- $FILES", op="switch")
+        self.assertBlocks("git checkout origin/main -- $(git diff --name-only x)", op="switch")
+        self.assertBlocks("git checkout feature -- `true`", op="switch")
+        # con una ruta conocida junto a la desconocida sigue siendo restauración
+        self.assertEqual(self.run_("git checkout feature -- a.txt $FILES"), [])
+        # variable conocida no vacía: restauración
+        self.assertEqual(self.run_("F=a.txt; git checkout feature -- $F"), [])
+        # variable conocida vacía: `--` solo, cambio de rama en el cwd
+        self.assertEqual(self.run_("F=; git checkout feature -- $F"), [("switch", self.base)])
+
+    def test_switch_uncertain_blocks(self):
+        self.assertBlocks("git -C $NOPE checkout abc", op="switch")
+        self.assertBlocks("sudo git checkout abc", op="switch")
+        self.assertBlocks("bash -c 'git switch main'", op="switch")
+
+    def test_switch_text_is_inert_and_commit_ignored(self):
+        self.assertEqual(self.run_("echo 'git checkout main'"), [])
+        self.assertEqual(self.run_(f"git -C {self.wt} commit -m x"), [])
+        self.assertEqual(self.run_("git status"), [])
+
+    def test_commit_mode_ignores_checkout(self):
+        p = subprocess.run([sys.executable, SCRIPT, self.base], input="git checkout main",
+                           text=True, capture_output=True)
+        self.assertEqual(p.stdout, "")
 
 
 if __name__ == "__main__":

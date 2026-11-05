@@ -84,3 +84,23 @@ teardown() {
 @test "coverage: checks for chmod pattern" {
   grep -q "chmod.*777" "$SCRIPT"
 }
+
+# ── 2026-11-04: `worktree add` no es `git add` ──
+# En una forma incierta (envoltorio timeout, bucle) el resolvedor caía al
+# texto y leía el `add` de `worktree add` como `git add` sin destino.
+
+@test "positive: worktree add under timeout or in a loop is not read as git add" {
+  local cmd
+  for cmd in 'timeout 60 git -C /tmp worktree add -q -b agent/x /tmp/wt-x origin/main' \
+             'for w in a b; do git worktree add -q -b agent/$w /tmp/wt-$w origin/main; done'; do
+    run bash "$SCRIPT" <<< "$(jq -nc --arg c "$cmd" '{tool_input:{command:$c}}')"
+    [ "$status" -eq 0 ] || { echo "bloqueó: $cmd -> $output"; return 1; }
+  done
+}
+
+@test "negative: real git add in an uncertain form still blocks next to worktree add" {
+  local cmd='timeout 60 git worktree add /tmp/wt-x && timeout 60 git add .'
+  run bash "$SCRIPT" <<< "$(jq -nc --arg c "$cmd" '{tool_input:{command:$c}}')"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"destino de git add no reconocido"* ]]
+}
