@@ -199,3 +199,4 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-490 [APPROVED] Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional — evidencia: docs/specs/SE-490-soul-continuity-work-laptop.spec.md
 - SE-500 [APPROVED] Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado — evidencia: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md
 - SE-501 [APPROVED] Derivados fuera de las PR: firma de confidencialidad, SAM y manifiesto de reglas generados en main — evidencia: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md
+- SE-504 [APPROVED] Savia usable: una app como la de Claude o ChatGPT, conectada a Soul y Space — evidencia: docs/specs/SE-504-savia-usable-conversacion-documentos-contexto.spec.md
