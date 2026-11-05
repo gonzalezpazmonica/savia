@@ -29,6 +29,7 @@ from collections import Counter, deque
 from pathlib import Path
 
 import ablation_graphs as graphs
+import derived_canon
 from ablation_inventory import (CONTRACT_PATH, DEFAULT_OUT, MODEL_KEYS, InventoryError, _git,
                                 _walk_keys, canonical, sha256, tracked_files, validate_contract)
 
@@ -100,6 +101,13 @@ def plan_kernel(root: Path, files: dict, candidate: dict) -> dict:
     """Cierre de dependencias de las semillas y dependencias de packs no permitidos."""
     validate_candidate(candidate)
     seeds = sorted({p for paths in candidate["areas"].values() for p in paths})
+    # SE-501: D no se versiona, así que nunca está en el snapshot. Una semilla de D es un error propio
+    # (sembrar su generador), no un «falta» que haga pensar en un fichero borrado.
+    entries = derived_canon.derived_entries(root)
+    derived = [p for p in seeds if derived_canon.is_derived(p, entries)]
+    if derived:
+        raise InventoryError("KERNEL_SEED_DERIVED",
+                             ",".join(derived) + " (D no se versiona: sembrar su generador)")
     missing = [p for p in seeds if p not in files]
     if missing:
         raise InventoryError("KERNEL_SEED_MISSING", ",".join(missing))
@@ -298,6 +306,10 @@ def _vector(snap: Path, results: list[dict]) -> dict:
 
 
 def _optional(root: Path, rel: str, key: str) -> str:
+    # SE-501 AC-11: dato de procedencia en D (no versionado); derived.sh ensure lo genera si falta.
+    # Sigue siendo opcional: si ensure no puede, el recibo dice UNKNOWN (no inventa la revisión).
+    if derived_canon.ensure(root, [rel]):
+        return "UNKNOWN"
     path = root / rel
     return str(load_json(path).get(key, "UNKNOWN")) if path.exists() else "UNKNOWN"
 

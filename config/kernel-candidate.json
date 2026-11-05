@@ -2,9 +2,9 @@
   "schema": 1,
   "spec": "SE-400",
   "candidate_id": "savia-kernel-candidate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "status": "PROVISIONAL_HYPOTHESIS",
-  "description": "Semillas del kernel candidato (SE-400 §5). Hipótesis a medir, no clasificación: el cierre de dependencias se calcula con el grafo F2 y nada aquí autoriza retirar lo que queda fuera. 0.2.0 añade data-sovereignty-gate tras el FALSE_ALLOW de 0.1.0 (secreto por Write).",
+  "description": "Semillas del kernel candidato (SE-400 §5). Hipótesis a medir, no clasificación: el cierre de dependencias se calcula con el grafo F2 y nada aquí autoriza retirar lo que queda fuera. 0.2.0 añade data-sovereignty-gate tras el FALSE_ALLOW de 0.1.0 (secreto por Write). 0.3.0 (SE-501): .scm/sam.json, resources.json y registry.json dejan de versionarse; architecture_truth siembra sus generadores y derived.sh. Sin medir de nuevo.",
   "allowed_packs": ["core-local"],
   "areas": {
     "identity_principles": [
@@ -27,9 +27,9 @@
     ],
     "architecture_truth": [
       "scripts/sam.py",
-      ".scm/sam.json",
-      ".scm/resources.json",
-      ".scm/registry.json"
+      "scripts/generate-capability-map.py",
+      "scripts/derived.sh",
+      "scripts/derived-paths.txt"
     ],
     "evidence_provenance": [
       "scripts/ablation_inventory.py",

@@ -78,7 +78,7 @@ Biak testu arrunta dira, auto-sortuak, karga progresiboa dutenak (L0/L1/L2).
 Egoera: proposamenean (SPEC-053, SPEC-054). Erabilgarri daudenean, honela sortzen dira:
 
 ```bash
-bash scripts/generate-capability-map.sh    # .scm
+bash scripts/derived.sh ensure --only scm  # .scm
 bash scripts/generate-context-index.sh     # .ctx
 ```
 

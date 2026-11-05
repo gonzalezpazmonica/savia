@@ -21,40 +21,37 @@ permissions:
   contents: read
 
 jobs:
-  signature-check:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    name: Verify Audit Signature
-    env:
-      # SE-426: firma y verificación con la clave real (secreto de CI); sin clave, falla cerrado.
-      CONFIDENTIALITY_HMAC_KEY: ${{ secrets.CONFIDENTIALITY_HMAC_KEY }}
-      CONFIDENTIALITY_REQUIRE_HMAC: '1'
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Fetch base
-        run: git fetch origin ${{ github.base_ref }}
-
-      - name: Verify confidentiality signature
-        run: bash scripts/confidentiality-sign.sh verify
-
+  # SE-501: escaneo obligatorio y bloqueante del diff de la PR con el escáner de la BASE (extraído a un
+  # directorio aparte por confidentiality-scan.sh --pr-base). Solo gate-result «clean» da PASS. Sin secretos:
+  # ningún job de PR recibe CONFIDENTIALITY_HMAC_KEY (I3). Este nombre es el contexto requerido de main.
   confidentiality-scan-pr:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    name: PII & Confidentiality Scan (PR)
+    name: Confidentiality scan (PR)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Generate dynamic blocklist
-        run: bash scripts/generate-blocklist.sh > /tmp/dynamic-blocklist.txt
+      - name: Fetch base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: git fetch --no-tags origin "$BASE_SHA" +refs/heads/main:refs/remotes/origin/main
 
-      - name: Run confidentiality scanner on PR diff
-        run: bash scripts/confidentiality-scan.sh --pr --blocklist /tmp/dynamic-blocklist.txt
+      - name: Scan PR diff with the base scanner
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # El envoltorio (confidentiality-scan.sh --pr-base) también sale de la base. Solo la PR que lo
+        # introduce (SE-501) se escanea con el suyo, porque la base aún no tiene ese modo; desde su merge, nunca.
+        run: |
+          if git show "$BASE_SHA:scripts/confidentiality-scan.sh" 2>/dev/null | grep -q -- '--pr-base)'; then
+            git show "$BASE_SHA:scripts/confidentiality-scan.sh" > "$RUNNER_TEMP/pr-scan.sh"
+          else
+            echo "::warning::la base no tiene confidentiality-scan.sh --pr-base (PR de arranque SE-501); se usa el de la PR"
+            cp scripts/confidentiality-scan.sh "$RUNNER_TEMP/pr-scan.sh"
+          fi
+          bash "$RUNNER_TEMP/pr-scan.sh" --pr-base "$BASE_SHA" --repo "$GITHUB_WORKSPACE"
 
   confidentiality-scan-full:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

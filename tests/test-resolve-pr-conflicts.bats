@@ -99,14 +99,91 @@ teardown() {
   [[ "$output" -ge 3 ]]
 }
 
-@test "script handles .confidentiality-signature with 'take theirs'" {
-  run grep -cE 'confidentiality-signature.*theirs|checkout --theirs .confidentiality-signature' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 1 ]]
+# SE-501 (sustituye a «take theirs» en la firma y en .scm/, a la re-firma y a la regeneración del SCM):
+# D ya no se versiona; un conflicto en D se resuelve sacándolo del índice, sin firmar ni regenerar.
+rpc_repo() {  # rpc_repo <fichero en conflicto>: main y la rama editan el mismo fichero
+  local o="$BATS_TEST_TMPDIR/origin.git" r="$BATS_TEST_TMPDIR/r" S="$BATS_TEST_DIRNAME/../scripts"
+  git init -q --bare "$o"; git init -q -b main "$r"
+  git -C "$r" config user.email t@t; git -C "$r" config user.name t
+  mkdir -p "$r/.scm"; echo base > "$r/a.txt"; echo '{"v":0}' > "$r/.scm/sam.json"
+  git -C "$r" add -f -A; git -C "$r" commit -qm base
+  git -C "$r" remote add origin "$o"; git -C "$r" push -q origin main
+  git -C "$r" checkout -q -b feature
+  echo rama > "$r/$1"; git -C "$r" add -f -A; git -C "$r" commit -qm rama
+  git -C "$r" checkout -q main
+  echo main > "$r/$1"; git -C "$r" add -f -A; git -C "$r" commit -qm main; git -C "$r" push -q origin main
+  git -C "$r" checkout -q feature
+  echo "$r"
 }
 
-@test "script handles .scm/ conflicts by taking theirs" {
-  run grep -cE '\.scm/.*theirs|scm_conflicts' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 2 ]]
+@test "SE-501: conflicto en una ruta de D → se saca del índice, merge commiteado, sin firma ni regeneración" {
+  r=$(rpc_repo .scm/sam.json)
+  run env RESOLVE_REPO_ROOT="$r" bash "$BATS_TEST_DIRNAME/../scripts/resolve-pr-conflicts.sh" --no-push
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$r" rev-list --parents -n1 HEAD | wc -w)" -eq 3 ]
+  run git -C "$r" ls-files --error-unmatch .scm/sam.json
+  [ "$status" -ne 0 ]
+  [ ! -e "$r/.confidentiality-signature" ]
+}
+
+# Rama hostil: su scripts/derived.sh deja una marca al cargarse y su derived-paths.txt declara a.txt como D.
+rpc_hostile_branch() {  # rpc_hostile_branch <repo>
+  local r="$1"
+  mkdir -p "$r/scripts"
+  printf 'touch "%s/PWNED"\nderived_paths_load(){ DERIVED_PATHS=(a.txt); }\nis_derived_path(){ return 0; }\n' \
+    "$BATS_TEST_TMPDIR" > "$r/scripts/derived.sh"
+  printf 'a.txt\n' > "$r/scripts/derived-paths.txt"
+  git -C "$r" add -f scripts; git -C "$r" commit -qm hostil
+}
+rpc_copy() {  # rpc_copy [con-D]: copia del resolutor como la hace el workflow; con «con-D», con derived.sh y la lista
+  local d="$BATS_TEST_TMPDIR/copy" S="$BATS_TEST_DIRNAME/../scripts"
+  mkdir -p "$d/scripts"; cp "$S/resolve-pr-conflicts.sh" "$d/scripts/"
+  [[ "${1:-}" == con-D ]] && cp "$S/derived.sh" "$S/derived-paths.txt" "$d/scripts/"
+  echo "$d/scripts/resolve-pr-conflicts.sh"
+}
+
+@test "SE-501 P1: desde una copia, el resolutor no carga derived.sh ni la lista D de la rama (sin marca, a.txt no es D)" {
+  r=$(rpc_repo a.txt); rpc_hostile_branch "$r"
+  run env RESOLVE_REPO_ROOT="$r" bash "$(rpc_copy con-D)" --no-push
+  [ ! -e "$BATS_TEST_TMPDIR/PWNED" ]
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"a.txt"* ]]
+}
+
+@test "SE-501 P1: copia sin derived.sh junto al resolutor → tampoco usa la de la rama; conflicto en D = inesperado (exit 3)" {
+  r=$(rpc_repo .scm/sam.json); rpc_hostile_branch "$r"
+  run env RESOLVE_REPO_ROOT="$r" bash "$(rpc_copy)" --no-push
+  [ ! -e "$BATS_TEST_TMPDIR/PWNED" ]
+  [ "$status" -eq 3 ]
+}
+
+@test "SE-501 P1 control: copia con derived.sh y la lista → resuelve el conflicto en D" {
+  r=$(rpc_repo .scm/sam.json)
+  run env RESOLVE_REPO_ROOT="$r" bash "$(rpc_copy con-D)" --no-push
+  [ "$status" -eq 0 ]
+  run git -C "$r" ls-files --error-unmatch .scm/sam.json
+  [ "$status" -ne 0 ]
+}
+
+@test "SE-501 P1: los lanzadores copian derived.sh y derived-paths.txt junto al resolutor" {
+  for f in .github/workflows/auto-rebase-open-prs.yml scripts/resolve-all-open-prs.sh; do
+    grep -qE 'cp .*resolve-pr-conflicts\.sh.*derived\.sh' "$f" || { echo "sin copia de derived.sh: $f"; false; }
+    grep -qE 'derived-paths\.txt.*RESOLVER_DIR/scripts/' "$f" || { echo "sin copia de la lista: $f"; false; }
+  done
+}
+
+@test "auto-rebase: la lista de PR llega por env, no interpolada en el script (inyección por nombre de rama)" {
+  f=.github/workflows/auto-rebase-open-prs.yml
+  run grep -nE "^[^#]*'\\$\\{\\{ *steps\\." "$f"
+  [ "$status" -eq 1 ]
+  grep -qE 'PRS: \$\{\{ steps\.list_prs\.outputs\.prs \}\}' "$f"
+}
+
+@test "SE-501: conflicto fuera de D y de CHANGELOG.md → no lo resuelve (≠ 0) y lo nombra" {
+  r=$(rpc_repo a.txt)
+  run env RESOLVE_REPO_ROOT="$r" bash "$BATS_TEST_DIRNAME/../scripts/resolve-pr-conflicts.sh" --no-push
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"a.txt"* ]]
 }
 
 @test "script aborts on UNEXPECTED conflict files" {
@@ -114,15 +191,6 @@ teardown() {
   [[ "$output" -ge 1 ]]
 }
 
-@test "script re-signs confidentiality after merge" {
-  run grep -c 'confidentiality-sign.sh sign' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 1 ]]
-}
-
-@test "script regenerates SCM after merge" {
-  run grep -c 'generate-capability-map.py' "scripts/resolve-pr-conflicts.sh"
-  [[ "$output" -ge 1 ]]
-}
 
 # ── CHANGELOG parsing invariants ───────────────────────────────────────────
 

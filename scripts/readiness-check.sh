@@ -175,7 +175,8 @@ check recommended "not on main branch" "test \"\$(git -C '$ROOT_DIR' branch --sh
 check recommended ".gitignore exists" "test -f '$ROOT_DIR/.gitignore'"
 check recommended "GitHub remote configured" "git -C '$ROOT_DIR' remote get-url origin 2>/dev/null | grep -q 'github.com'"
 check critical "CLAUDE.md counts match reality (drift)" "bash '$ROOT_DIR/scripts/claude-md-drift-check.sh' >/dev/null 2>&1"
-check critical "rule-manifest.json up to date" "bash '$ROOT_DIR/scripts/rule-manifest-generate.sh' --check >/dev/null 2>&1"
+# SE-501 AC-11: rule-manifest.json no se versiona; se genera con derived.sh ensure antes de comprobarlo.
+check critical "rule-manifest.json up to date (bash scripts/derived.sh ensure)" "bash '$ROOT_DIR/scripts/derived.sh' ensure --only rules >/dev/null 2>&1 && bash '$ROOT_DIR/scripts/rule-manifest-generate.sh' --check >/dev/null 2>&1"
 
 # --- Summary ---
 echo ""

@@ -1,0 +1,36 @@
+name: Confidentiality audit (main)
+
+# SE-501 I2: cada commit de main tiene una ejecución identificable de este workflow sobre su árbol completo.
+# Es la prueba de que el contenido de main pasó la auditoría: la comprueba
+# scripts/confidentiality-sign.sh verify-main <sha> (event=push, head_branch=main, head_sha, conclusion=success).
+# Solo lee: sin secretos, sin escritura, sin commit de bot. Una PR no puede crear una ejecución push en main.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: confidentiality-main-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  full-scan:
+    name: Confidentiality audit (main, full repo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate dynamic blocklist
+        run: bash scripts/generate-blocklist.sh > "$RUNNER_TEMP/dynamic-blocklist.txt"
+
+      # Escáner del propio commit fusionado. SAVIA_GATE_UNKNOWN=block: un escaneo incompleto no da verde.
+      - name: Full repo confidentiality scan
+        env:
+          SAVIA_GATE_UNKNOWN: block
+        run: bash scripts/confidentiality-scan.sh --full-repo --blocklist "$RUNNER_TEMP/dynamic-blocklist.txt"

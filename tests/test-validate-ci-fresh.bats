@@ -55,10 +55,13 @@ fake_table() {
 }
 
 @test "la tabla por defecto ejecuta los cinco --check existentes, sin reimplementarlos" {
-  for c in "rule-manifest-generate.sh --check" "contract-pin.sh check settings-hooks" "sam.py check" \
+  # SE-501: las filas de reglas y del SAM verifican la generación de D (no versionado), no un fichero commiteado.
+  for c in "derived.sh verify --only rules" "contract-pin.sh check settings-hooks" "derived.sh verify --only scm" \
            "propuestas-index-gen.sh --check" "roadmap.sh validate"; do
     grep -qF "$c" "$REPO_ROOT/$SCRIPT"
   done
+  run grep -E "^(rule-manifest\.json|\.scm/sam\.json)\|" "$REPO_ROOT/$SCRIPT"
+  [ "$status" -ne 0 ]
 }
 
 @test "edge: empty override ⇒ cero comprobaciones de frescura, sin error del script" {
@@ -71,12 +74,14 @@ fake_table() {
   git clone -q --shared --depth 1 "file://$REPO_ROOT" "$TMP/repo"
   # Copia de trabajo: el script y sus dependencias son los del working tree (incluye cambios sin commit).
   cp "$REPO_ROOT/$SCRIPT" "$TMP/repo/$SCRIPT"
+  cp "$REPO_ROOT/scripts/derived.sh" "$REPO_ROOT/scripts/derived_canon.py" "$REPO_ROOT/scripts/derived-paths.txt" "$TMP/repo/scripts/"
   printf '\n<!-- desfase de prueba -->\n' >> "$TMP/repo/docs/propuestas/INDEX.md"
-  printf '# Regla de prueba\n\nTexto.\n' > "$TMP/repo/docs/rules/domain/zz-regla-de-prueba.md"
+  # SE-501: D no se versiona; lo que se detecta es un generador de reglas roto.
+  printf 'exit 3\n' >> "$TMP/repo/scripts/rules-index-generate.sh"
   run bash -c "cd '$TMP/repo' && bash $SCRIPT --quick"
   [ "$status" -ne 0 ]
   [[ "$output" == *"desfasado: docs/propuestas/INDEX.md → regenerar: bash scripts/propuestas-index-gen.sh"* ]]
-  [[ "$output" == *"desfasado: rule-manifest.json → regenerar: bash scripts/rule-manifest-generate.sh"* ]]
+  [[ "$output" == *"desfasado: derivados de reglas (SE-501) → regenerar: bash scripts/derived.sh ensure"* ]]
   [[ "$output" == *"OK Generado al día: settings-hooks pin"* ]]
 }
 
@@ -100,14 +105,15 @@ fake_table() {
   [ "$status" -eq 1 ]
 }
 
-@test "fresh-only: en un clon con rule-manifest desfasado falla con la comprobación real" {
+@test "fresh-only: en un clon con el generador del manifiesto roto falla con la comprobación real (SE-501)" {
   git clone -q --shared --depth 1 "file://$REPO_ROOT" "$TMP/repo"
   cp "$REPO_ROOT/$SCRIPT" "$TMP/repo/$SCRIPT"
-  printf '# Regla de prueba\n\nTexto.\n' > "$TMP/repo/docs/rules/domain/zz-regla-de-prueba.md"
+  cp "$REPO_ROOT/scripts/derived.sh" "$REPO_ROOT/scripts/derived_canon.py" "$REPO_ROOT/scripts/derived-paths.txt" "$TMP/repo/scripts/"
+  printf 'exit 3\n' >> "$TMP/repo/scripts/rule-manifest-generate.sh"
   run bash -c "cd '$TMP/repo' && bash $SCRIPT --fresh-only --quick"
   [ "$status" -eq 1 ]
   [[ "$output" != *"Results:"* ]]
-  [[ "$output" == *"desfasado: rule-manifest.json"* ]]
+  [[ "$output" == *"desfasado: derivados de reglas (SE-501)"* ]]
 }
 
 @test "la CI ejecuta --fresh-only (sin el paso, un artefacto desfasado llega a main)" {

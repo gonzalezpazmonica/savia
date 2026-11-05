@@ -171,6 +171,23 @@ class KernelTests(unittest.TestCase):
             kernel.plan_kernel(self.root, self.files, self.candidate)
         self.assertEqual(ctx.exception.code, "KERNEL_SEED_MISSING")
 
+    def test_derived_seed_is_its_own_error(self) -> None:
+        # SE-501: una semilla de la lista D no se versiona; el error nombra que hay que sembrar el generador.
+        _write(self.root, "scripts/derived-paths.txt", "# D\n.scm/sam.json\n.scm/views/\n")
+        for seed in (".scm/sam.json", ".scm/views/a.json"):
+            cand = json.loads(json.dumps(self.candidate))
+            cand["areas"]["authority"].append(seed)
+            with self.assertRaises(kernel.InventoryError) as ctx:
+                kernel.plan_kernel(self.root, self.files, cand)
+            self.assertEqual(ctx.exception.code, "KERNEL_SEED_DERIVED")
+            self.assertIn("generador", str(ctx.exception))
+        # Negativo: ruta no listada en D que falta sigue siendo KERNEL_SEED_MISSING; «.scm/samx.json»
+        # no casa con la entrada exacta «.scm/sam.json».
+        self.candidate["areas"]["authority"].append(".scm/samx.json")
+        with self.assertRaises(kernel.InventoryError) as ctx:
+            kernel.plan_kernel(self.root, self.files, self.candidate)
+        self.assertEqual(ctx.exception.code, "KERNEL_SEED_MISSING")
+
     def test_settings_projection_keeps_only_kernel_hooks(self) -> None:
         settings = json.loads((self.root / ".claude/settings.json").read_text())
         projected = kernel.project_settings(settings, {".claude/hooks/block-danger.sh"})

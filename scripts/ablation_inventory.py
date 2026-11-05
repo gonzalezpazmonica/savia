@@ -21,6 +21,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import derived_canon
 from ablation_consumers import static_consumers
 
 CONTRACT_PATH = "config/ablation-contract.json"
@@ -158,8 +159,15 @@ def _read_json(root: Path, rel: str, code: str) -> dict:
         raise InventoryError(code, rel) from exc
 
 
+def _read_derived(root: Path, rel: str, code: str) -> dict:
+    """SE-501 AC-11: D no se versiona; se genera con derived.sh ensure antes de leerlo."""
+    if derived_canon.ensure(root, [rel]):
+        raise InventoryError(code, f"{rel} ({derived_canon.ENSURE_HINT})")
+    return _read_json(root, rel, code)
+
+
 def _sam_index(root: Path) -> tuple[dict[str, str], str]:
-    sam = _read_json(root, ".scm/sam.json", "SAM_MISSING")
+    sam = _read_derived(root, ".scm/sam.json", "SAM_MISSING")
     caps = {e["source"][len("component/"):]: e["target"]
             for e in sam.get("edges", []) if e.get("relation") == "IMPLEMENTS"
             and str(e.get("source", "")).startswith("component/")}
@@ -263,7 +271,7 @@ def build_report(root: Path) -> dict:
             "contract_version": contract["contract_version"],
             "contract_sha256": sha256(canonical(contract)),
             "sam_model_revision": sam_rev,
-            "scm_hash": str(_read_json(root, ".scm/resources.json", "SCM_MISSING").get("hash")),
+            "scm_hash": str(_read_derived(root, ".scm/resources.json", "SCM_MISSING").get("hash")),
             "surface_sha256": surface,
         },
         "summary": summarize(records),

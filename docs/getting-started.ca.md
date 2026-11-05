@@ -78,7 +78,7 @@ Ambdos son text pla, auto-generats, amb carrega progressiva (L0/L1/L2).
 Estat: en proposta (SPEC-053, SPEC-054). Quan estiguin disponibles, es generen amb:
 
 ```bash
-bash scripts/generate-capability-map.sh    # .scm
+bash scripts/derived.sh ensure --only scm  # .scm
 bash scripts/generate-context-index.sh     # .ctx
 ```
 

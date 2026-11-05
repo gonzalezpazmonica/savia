@@ -1,6 +1,8 @@
 from pathlib import Path
 import hashlib,json
 GENERATED_NAME='manifest.json'
+DERIVED=('.scm/resources.json','.scm/INDEX.scm','.scm/categories/quality.scm')
+DERIVED_MISSING='DERIVED_MISSING: bash scripts/derived.sh ensure'
 class ConfigError(ValueError): pass
 def _safe(root,rel):
  p=root/rel
@@ -12,6 +14,9 @@ def _safe(root,rel):
  return p
 def build_manifest(root):
  root=Path(root).resolve()
+ # SE-501 AC-11: .scm es D (no versionado). Ausente (ni fichero ni enlace) es un error propio que nombra
+ # la orden; no se genera aquí (sin efectos) ni se confunde con una fuente no confiable.
+ if any(not (root/d).exists() and not (root/d).is_symlink() for d in DERIVED):raise ConfigError(DERIVED_MISSING)
  try: reg=json.loads(_safe(root,Path('.scm/resources.json')).read_text())
  except Exception: raise ConfigError('UNTRUSTED_SOURCE')
  paths={'.scm/resources.json','.scm/INDEX.scm','.scm/categories/quality.scm','.claude/settings.json'}

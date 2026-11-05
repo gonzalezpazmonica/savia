@@ -32,6 +32,11 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
 export NO_PROXY='*' SAVIA_NETWORK_DISABLED=1
 
+# SE-501 AC-11: .scm/sam.json es D (no versionado); derived.sh ensure lo genera si falta.
+if [[ ! -f "$ROOT/.scm/sam.json" ]]; then
+  bash "$ROOT/scripts/derived.sh" ensure --only scm >&2 || true
+  [[ -f "$ROOT/.scm/sam.json" ]] || { echo "se397-f4-corpus: falta .scm/sam.json — ejecutar: bash scripts/derived.sh ensure" >&2; exit 1; }
+fi
 MODEL_REVISION="$(python3 - "$ROOT/.scm/sam.json" <<'PY'
 import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["model_revision"])
