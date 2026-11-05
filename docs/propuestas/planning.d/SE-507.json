@@ -1,0 +1,9 @@
+{
+  "id": "SE-507",
+  "status": "PROPOSED",
+  "priority": "P2",
+  "phase": "A",
+  "title": "Latido declarado de los runs y un solo registro de ejecuciones",
+  "evidence": "docs/specs/SE-507-declared-run-heartbeat.spec.md",
+  "note": "Patrón de señal declarada (source, seq, ttl) y explicación de la derivación del informe Herdr (02-11). savia-runs.sh beat/finish, unknown sin latido vigente, hook opcional, lectura por el gemelo. Confirmación de escenas pendiente (SE-505)."
+}
