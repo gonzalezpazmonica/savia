@@ -64,25 +64,49 @@ gate() {  # gate <orden>: entrada JSON por stdin, como la entrega el runtime
 @test "ci: el fetch de historial de main va después del fetch superficial de la base" {
   local base hist
   base=$(grep -n 'fetch --no-tags --depth=1 origin "\$BASE_SHA"' .github/workflows/ci.yml | head -1 | cut -d: -f1)
-  hist=$(grep -n 'fetch --no-tags --depth=300 origin +refs/heads/main' .github/workflows/ci.yml | head -1 | cut -d: -f1)
-  [ -n "$base" ] && [ -n "$hist" ]
+  hist=$(grep -n 'git fetch .* origin +refs/heads/main:refs/remotes/origin/main' .github/workflows/ci.yml | head -1 | cut -d: -f1)
+  [ -n "$base" ]
+  [ -n "$hist" ]
   [ "$hist" -gt "$base" ]
 }
 
-@test "ci: secuencia real de fetch conserva el historial de main (y la inversa lo recorta)" {
-  local src="$BATS_TEST_TMPDIR/src" ok="$BATS_TEST_TMPDIR/ok" bad="$BATS_TEST_TMPDIR/bad" sha
+# SE-402 (2026-11-05): una ventana fija (--depth=300) dejó fuera el PR de una spec IMPLEMENTED antigua.
+@test "ci: el historial de main es completo, sin ventana fija de profundidad" {
+  local line
+  line=$(grep -E 'git fetch .* origin \+refs/heads/main:refs/remotes/origin/main' .github/workflows/ci.yml | head -1)
+  [ -n "$line" ]
+  [[ "$line" == *"--unshallow"* ]]
+  [[ "$line" != *"--depth="* ]]
+}
+
+# Ejecuta las opciones REALES del paso de historial de ci.yml (sin `origin` ni refspec) contra un remoto local.
+_ci_hist_opts() {
+  grep -E 'git fetch .* origin \+refs/heads/main:refs/remotes/origin/main' .github/workflows/ci.yml | head -1 \
+    | sed -E 's/.*git fetch (.*) origin \+refs\/heads\/main:refs\/remotes\/origin\/main.*/\1/'
+}
+
+@test "ci: secuencia real de fetch conserva más de 300 commits de main (y la inversa lo recorta)" {
+  local src="$BATS_TEST_TMPDIR/src" ok="$BATS_TEST_TMPDIR/ok" bad="$BATS_TEST_TMPDIR/bad" sha opts n=305
+  opts=$(_ci_hist_opts)
+  [ -n "$opts" ]
   git init -q "$src"
-  for i in 1 2 3 4 5; do git -C "$src" -c user.name=t -c user.email=t@t commit -q --allow-empty -m "c$i"; done
-  git -C "$src" branch -M main
-  sha=$(git -C "$src" rev-parse HEAD)
-  git clone -q --depth=1 --no-tags "file://$src" "$ok"
-  git clone -q --depth=1 --no-tags "file://$src" "$bad"
-  # orden de la CI actual: base por SHA, luego historial de main
+  # 305 commits vacíos con fast-import: más que la antigua ventana de 300.
+  {
+    for i in $(seq 1 "$n"); do
+      printf 'commit refs/heads/main\ncommitter t <t@t> %d +0000\ndata %d\nc%d\n' "$((1700000000 + i))" "$((${#i} + 1))" "$i"
+    done
+  } | git -C "$src" fast-import --quiet
+  sha=$(git -C "$src" rev-parse main)
+  git clone -q --depth=1 --no-tags --branch main "file://$src" "$ok"
+  git clone -q --depth=1 --no-tags --branch main "file://$src" "$bad"
+  # orden de la CI: base por SHA, luego historial de main con las opciones de ci.yml
   git -C "$ok" fetch -q --no-tags --depth=1 "file://$src" "$sha"
-  git -C "$ok" fetch -q --no-tags --depth=300 "file://$src" +refs/heads/main:refs/remotes/origin/main
-  # orden antiguo: historial de main, luego base por SHA
-  git -C "$bad" fetch -q --no-tags --depth=300 "file://$src" +refs/heads/main:refs/remotes/origin/main
+  # shellcheck disable=SC2086
+  git -C "$ok" fetch -q $opts "file://$src" +refs/heads/main:refs/remotes/origin/main
+  # orden inverso: historial de main, luego base por SHA
+  # shellcheck disable=SC2086
+  git -C "$bad" fetch -q $opts "file://$src" +refs/heads/main:refs/remotes/origin/main
   git -C "$bad" fetch -q --no-tags --depth=1 "file://$src" "$sha"
-  [ "$(git -C "$ok" rev-list --count origin/main)" -eq 5 ]
-  [ "$(git -C "$bad" rev-list --count origin/main)" -eq 1 ]
+  [ "$(git -C "$ok" rev-list --count origin/main)" -eq "$n" ]
+  [ "$(git -C "$bad" rev-list --count origin/main)" -lt "$n" ]
 }
