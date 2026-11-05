@@ -36,14 +36,14 @@ Las guardas de Savia protegen de verdad (fuerza, `main`, secretos, borrados), pe
 
 La cifra en serie mide **CPU y procesos**, no la espera de la persona: Claude Code lanza los hooks de un evento en paralelo. Ya lo dejó escrito SE-253 (`scripts/benchmark-hook-dispatch.sh:6-8`: «El dispatcher NO reduce latencia de pared… los haría SECUENCIALES. El valor del dispatcher es trazabilidad y orden garantizado»). Esta spec no repite el error de vender el despachador como ahorro de tiempo de pared: su valor es orden, fallo cerrado, registro y paridad, y el presupuesto de latencia se mide en pared **y** en CPU.
 
-### Los cuatro bloqueos falsos del 2026-11-04
+### Los cuatro bloqueos del 2026-11-04 (tres falsos y uno mal explicado)
 
 | # | Orden legítima | Guarda | Causa en el código | Reproducción (main be2fca5aa) |
 |---|---|---|---|---|
 | F1 | `git worktree add -q -b <rama> <ruta> origin/main` | `validate-bash-global.sh` → «destino de git add no reconocido» (`.claude/hooks/validate-bash-global.sh:114`) | El resolvedor `scripts/lib/git_op_targets.py` toma por `git add` real un texto que no lo es. La forma aislada pasa hoy (rc 0); **se reproduce** cuando el texto llega canalizado a un intérprete con fichero de script: `printf %s '<git worktree add …>' \| python3 x.py` → resolvedor devuelve `add` sin destino → exit 2. Pasó en vivo dos veces durante la redacción de esta spec. | Apéndice A, orden A4 |
 | F2 | `git checkout --merge -- <ficheros>` | `block-branch-switch-dirty.sh` → «Cambio de rama con cambios sin commitear» | Solo exime la restauración si los argumentos **empiezan** por `--` (`.claude/hooks/block-branch-switch-dirty.sh:42-44`); `--merge -- f` no empieza así y se trata como cambio de rama. | Árbol sucio de prueba: `checkout --merge -- a.txt` → exit 2; `checkout -- a.txt` → exit 0. Orden A5 |
 | F3 | `gh pr create` desde un worktree con su `.pr-summary.md` fresco | `pr-summary-gate.sh` → «.pr-summary.md tiene 97h de antigüedad» | Lee el resumen de `$CLAUDE_PROJECT_DIR/.pr-summary.md` (`.claude/hooks/pr-summary-gate.sh:20-21`) y su antigüedad (`:66-71`), no el del árbol donde se ejecuta `gh`. | Lectura del código; el corpus lo convierte en caso ejecutable |
-| F4 | `.pr-summary.md` sin el encabezado exigido | `pr-summary-gate.sh:51-62` | El encabezado `## Qué hace este PR (en lenguaje no técnico)` está documentado (`docs/rules/domain/pr-natural-language-summary.md:23`), pero solo se enseña **después** de bloquear. Nada lo anuncia al crear el fichero. | Lectura del código |
+| F4 | `.pr-summary.md` sin el encabezado exigido | `pr-summary-gate.sh:51-62` | El encabezado `## Qué hace este PR (en lenguaje no técnico)` está documentado (`docs/rules/domain/pr-natural-language-summary.md:23`), pero solo se enseña **después** de bloquear. Nada lo anuncia al crear el fichero. **El bloqueo en sí es correcto**: el fallo es de descubribilidad, no de la guarda. Por eso F4 no entra en el corpus ALLOW; lo cubre AC-10 (plantilla y aviso) y su entrada sigue en BLOCK (B4 de D1). | Lectura del código |
 
 ### Qué ya existe (no se duplica, se enlaza)
 
@@ -96,14 +96,29 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 ### D1 — Corpus de órdenes legítimas (`config/guard-allow-corpus.json`)
 
 - Mismo esquema que `config/kernel-corpus.json` (`id`, `category`, `event`, `tool`, `input`, `expect`), con `expect: ALLOW` obligatorio y campos `origin` (`real:<fecha>` o `sintético`), `guard` (la que falló, si es real) y `fixture` (árbol limpio, sucio, worktree con resumen fresco…).
-- Semilla obligatoria: F1 (las dos formas, la aislada y la canalizada a un intérprete con fichero), F2, F3 y F4. Cada uno tiene al lado su **par peligroso** en el corpus de bloqueos (`git add` sin destino resoluble, `git checkout <rama>` con árbol sucio, resumen ausente o viejo en el árbol de `gh`, resumen sin encabezado al abrir la PR), que debe seguir dando BLOCK.
+- Semilla obligatoria. Una entrada tiene **un solo** veredicto esperado: ninguna aparece a la vez como ALLOW y como BLOCK. Cada ALLOW apunta a su **par peligroso**, que es una variante mínima de la misma forma (mismo `event`, misma `tool`, misma orden base) con el destino o el estado peligroso, y debe seguir dando BLOCK.
+
+| id | expect | Entrada (forma) | par |
+|---|---|---|---|
+| F1a | ALLOW | `git worktree add -q -b <rama> <ruta> origin/main`, aislada | B1 |
+| F1b | ALLOW | el mismo texto canalizado a un intérprete con fichero de script (`printf %s '<…>' \| python3 x.py`) | B1b |
+| F2 | ALLOW | `git checkout --merge -- <fichero>` con árbol sucio | B2 |
+| F3 | ALLOW | `gh pr create` desde un worktree con `.pr-summary.md` fresco y con encabezado | B3 |
+| B1 | BLOCK | `git add <ruta>` con destino no resoluble | — |
+| B1b | BLOCK | `printf 'git add -A' \| bash` (un `git add` real canalizado a un intérprete) | — |
+| B2 | BLOCK | `git checkout <rama>` con árbol sucio | — |
+| B3 | BLOCK | `gh pr create` desde un worktree sin resumen, o con resumen viejo, en su propio árbol | — |
+| B4 | BLOCK | `gh pr create` con `.pr-summary.md` fresco pero sin el encabezado exigido (F4) | — |
+
+- F4 no es un falso positivo (ver la tabla del problema): su entrada es B4 y sigue en BLOCK; su arreglo es AC-10.
+- El arreglo de F1 no exime la forma «texto canalizado a un intérprete»: un `git add` real dentro de un script canalizado se sigue evaluando (B1b), y un destino que no se puede resolver sigue fallando cerrado.
 - Las órdenes se guardan **literales**, como llegaron. F1 ya enseña que la forma simplificada no reproduce el fallo.
-- Un bloqueo que la persona marca como falso (D2) entra en el corpus por PR, con su par peligroso. Sin par, no entra.
+- Un bloqueo que la persona marca como falso (D2) entra en el corpus por PR, con su par peligroso. Sin par, no entra. Todo cambio en `config/guard-allow-corpus.json` es **tier 3** (revisión humana explícita, SE-362): S1 lo añade a CODEOWNERS y a la clasificación de riesgo, para que el corpus no se convierta en una vía de exenciones incrementales.
 - Ejecutor: amplía `scripts/ablation_units.py` o el runner del corpus kernel. No se escribe un tercer runner.
 
 ### D2 — Registro de bloqueos y tasa de falsos positivos
 
-- Toda guarda que sale con exit 2 (o el despachador en su nombre) añade una línea a `output/guard-blocks.jsonl`: `ts`, `event`, `tool`, `guard`, `reason` (primera línea del mensaje), `cmd_sha256` y, solo si `SAVIA_GUARD_LOG_INPUT=1`, la orden. Por defecto la orden **no** se guarda: puede llevar un secreto, que es justo lo que algunas guardas bloquean. El patrón es el de `gate_unmeasured_record` (`.claude/hooks/lib/gate-result.sh:31-41`).
+- Toda guarda que sale con exit 2 (o el despachador en su nombre) añade una línea a `output/guard-blocks.jsonl`: `ts`, `event`, `tool`, `guard`, `reason` (primera línea del mensaje), `cmd_hmac` y, solo si `SAVIA_GUARD_LOG_INPUT=1`, la orden **tras pasar la redacción de secretos** (`docs/rules/domain/secret-redaction-policy.md`). Por defecto la orden **no** se guarda: puede llevar un secreto, que es justo lo que algunas guardas bloquean. `cmd_hmac` es HMAC-SHA256 con una clave local de la máquina (fuera del repo, `0600`, generada al primer uso), no un hash sin sal: un hash simple de una orden de baja entropía con un token corto se confirma por diccionario. Sin clave legible, el campo queda vacío y el registro lo dice; nunca se cae a un hash sin clave. El patrón es el de `gate_unmeasured_record` (`.claude/hooks/lib/gate-result.sh:31-41`).
 - `scripts/guard-blocks.sh mark <id> false-positive|true-positive` etiqueta. `report [--since]` da por guarda: bloqueos, etiquetados, FP, tasa FP = FP / etiquetados, y «sin etiquetar» aparte. Con 0 etiquetados la tasa es `UNKNOWN`, nunca 0 %.
 - La tasa del corpus (D1) se calcula en CI: falsos bloqueos / casos ALLOW. **Umbral: 0.** Cualquier caso ALLOW bloqueado rompe la CI.
 
@@ -116,29 +131,31 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
   4. **JSON una vez**: el despachador parsea stdin una vez y pasa la misma entrada a cada guarda por stdin; no se pasa por variables de entorno.
   5. **Paridad TS/bash**: el corpus D1 y el de bloqueos corren contra los hooks bash y contra `BEFORE_GUARDS` con la misma entrada. Un veredicto distinto falla. Amplía `scripts/opencode-parity-audit.sh` de «registro ausente» a «veredicto distinto».
 - Registro en `settings.json` en **sombra** primero (S3): corre al lado de los hooks sueltos y compara veredictos durante una semana de uso. Solo con 0 discrepancias se sustituyen los registros sueltos por el despachador (S4).
+- **Discrepancias esperadas por exit 1.** Claude Code trata el exit 1 de un hook suelto como no bloqueante; el despachador, por fallo cerrado, lo convierte en exit 2. Esa diferencia es buscada, no un error, pero no puede quedar sin resolver. S3 empieza con un inventario: cada hook PreToolUse que hoy sale 1 (por el registro de sombra y por una pasada del corpus) queda listado con su motivo. El registro de sombra clasifica cada discrepancia como `esperada-exit1` (el hook suelto salió 1 y el despachador bloqueó) o `inesperada` (cualquier otra). Antes de S4, cada hook del inventario se resuelve de una de dos formas: se corrige para que no salga 1 por error interno, o se declara no bloqueante en la tabla (corre después de los bloqueantes y su fallo se registra sin bloquear). AC-9 exige 0 `inesperada` y 0 `esperada-exit1` de hooks sin resolver.
 - Se documenta la decisión que faltaba: `docs/rules/domain/se-253-dispatcher-design.md`, ahora con el contrato de fallo cerrado.
 
 ### D4 — Presupuesto de latencia por llamada
 
 - Medido con `scripts/hook-dispatch-bench.sh` (evolución de `benchmark-hook-dispatch.sh`), entrada variada en cada vuelta (si no, `repeat-tool-guard` bloquea la tercera) y `HOME` aislado:
   - **Pared**, p95 por llamada a Bash y a Edit: ≤ **150 ms**, no peor que la línea base en paralelo (0,14–0,15 s en esta máquina) en más de un 10 %.
-  - **CPU** (suma de tiempo de usuario + sistema de los procesos del evento) por llamada a Bash: −50 % frente a la línea base en serie (0,73 s).
+  - **CPU** por llamada a Bash: −50 % frente a la línea base en serie (0,73 s). CPU es user + sys de los procesos hijos del evento (`getrusage(RUSAGE_CHILDREN)` o `os.wait4`), nunca tiempo de pared.
+- **Por qué los dos objetivos no son el mismo.** Los bloqueantes corren en serie dentro del despachador (orden fijo, el primer exit 2 corta), así que su pared es ≈ su CPU. Con solo −50 % de CPU (≈ 0,365 s) la pared quedaría muy por encima de 150 ms. El objetivo vinculante es el de pared, y para alcanzarlo hay que **recortar trabajo**, no solo juntar procesos: filtro por matcher una sola vez, salida temprana por relevancia (SE-397 F5A) y comprobaciones baratas sin lanzar procesos. Los hooks no bloqueantes (registro, telemetría) sí pueden lanzarse en paralelo al terminar los bloqueantes. Si la pared no baja de 150 ms, S4 no sustituye los registros (AC-8); el −50 % de CPU es una condición necesaria, no suficiente.
 - El presupuesto lo lee el bench de un fichero (`config/hook-call-budget.json`); cambiarlo exige otra medición y una enmienda.
 
 ## Criterios de aceptación
 
 | AC | Criterio | Tipo |
 |---|---|---|
-| AC-1 | `config/guard-allow-corpus.json` contiene F1 (dos formas), F2, F3 y F4 con `origin: real:2026-11-04`; con main be2fca5aa al menos F1-canalizada y F2 dan BLOCK (el test falla antes del arreglo). | positivo |
+| AC-1 | `config/guard-allow-corpus.json` contiene F1a, F1b, F2 y F3 con `origin: real:2026-11-04`, y ninguna entrada con F4; con main be2fca5aa al menos F1b y F2 dan BLOCK (el test falla antes del arreglo). | positivo |
 | AC-2 | Tras S2, los casos ALLOW del corpus dan 0 bloqueos en los hooks bash y en los guards TS. | positivo |
-| AC-3 | Cada caso ALLOW tiene su par peligroso, que sigue en BLOCK: `git push --force` a `main`, `git checkout <rama>` con árbol sucio, `git add` con destino no resoluble, `gh pr create` sin resumen en el árbol de `gh`, resumen sin encabezado. Un caso ALLOW sin par hace fallar la validación del corpus. | negativo |
+| AC-3 | Cada caso ALLOW tiene su par peligroso (B1, B1b, B2, B3), que sigue en BLOCK, y B4 (F4) sigue en BLOCK; además `git push --force` a `main` sigue en BLOCK. La validación del corpus falla si un caso ALLOW no tiene par, si el par no comparte `event`, `tool` y orden base con su ALLOW, o si la misma entrada aparece con dos veredictos. | negativo |
 | AC-4 | Un exit 2 de cualquier guarda deja una línea en `output/guard-blocks.jsonl` sin la orden en claro (salvo opt-in); `report` sin etiquetas da tasa `UNKNOWN`. | positivo / negativo |
 | AC-5 | Despachador PreToolUse con tabla ausente, hook ausente, hook que sale 1, hook que excede el tiempo o JSON malformado → exit 2 y motivo. Ninguno de esos casos deja pasar la orden. | negativo |
 | AC-6 | Una tabla de despacho que no coincide con `settings.json` falla su test. | negativo |
 | AC-7 | Paridad: para todo caso de los dos corpus, veredicto bash = veredicto TS. Un guard TS que se desvía (mutación en el test) hace fallar el auditor. | negativo |
 | AC-8 | El bench da p95 de pared ≤ 150 ms y CPU −50 % por llamada a Bash, con las cifras de antes y después en el body de la PR de S4. Si no se cumple, S4 no sustituye los registros. | positivo / negativo |
-| AC-9 | El modo sombra (S3) registra cada discrepancia de veredicto entre despachador y hooks sueltos; con alguna, S4 no arranca. | negativo |
-| AC-10 | `.pr-summary.md`: el encabezado exigido sale en la plantilla y en el aviso de `pr-plan` antes de `gh pr create`; el gate lee el resumen del árbol donde se ejecuta `gh` (`-C`, `cwd` de la entrada). | positivo |
+| AC-9 | El modo sombra (S3) registra cada discrepancia de veredicto entre despachador y hooks sueltos, clasificada `inesperada` o `esperada-exit1`, y el inventario de hooks que salen 1 existe; con alguna `inesperada` o alguna `esperada-exit1` de un hook sin resolver, S4 no arranca. | negativo |
+| AC-10 | `.pr-summary.md`: el encabezado exigido sale en la plantilla y en el aviso de `pr-plan` antes de `gh pr create` (test: `pr-plan` sin resumen imprime el encabezado literal); el gate lee el resumen del árbol donde se ejecuta `gh` (`-C`, `cwd` de la entrada), y B4 sigue en BLOCK. | positivo / negativo |
 
 ## Fuera de alcance
 
@@ -156,8 +173,8 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 
 ## Plan por slices
 
-1. **S1** — Corpus D1 con los cuatro casos y sus pares, runner sobre el existente, CI en rojo con main (AC-1, AC-3, AC-6 del corpus).
-2. **S2** — Arreglos de F1–F4 en bash y TS; registro de bloqueos y `guard-blocks.sh` (AC-2, AC-4, AC-7, AC-10).
+1. **S1** — Corpus D1 con la semilla F1a–F3, sus pares B1, B1b, B2 y B3, y B4, runner sobre el existente, CI en rojo con main (AC-1, AC-3).
+2. **S2** — Arreglos de F1–F3 en bash y TS, y plantilla y aviso de F4; registro de bloqueos y `guard-blocks.sh` (AC-2, AC-4, AC-7, AC-10).
 3. **S3** — Despachador con fallo cerrado, tabla generada, en sombra (AC-5, AC-6, AC-9).
 4. **S4** — Sustitución de registros sueltos si sombra y presupuesto pasan (AC-8).
 
@@ -168,7 +185,7 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 | Componente | Claude Code | OpenCode v1.14 |
 |---|---|---|
 | Corpus y runner | `config/guard-allow-corpus.json`, `scripts/ablation_units.py` | Los mismos, contra `BEFORE_GUARDS` |
-| Arreglos F1–F4 | `.claude/hooks/validate-bash-global.sh`, `scripts/lib/git_op_targets.py`, `block-branch-switch-dirty.sh`, `pr-summary-gate.sh` | `.opencode/plugins/guards/validate-bash-global.ts`, `block-branch-switch-dirty.ts`; el gate de resumen se expone como guard o se marca `NOT_EXPOSED` con motivo |
+| Arreglos F1–F3 y aviso F4 | `.claude/hooks/validate-bash-global.sh`, `scripts/lib/git_op_targets.py`, `block-branch-switch-dirty.sh`, `pr-summary-gate.sh` | `.opencode/plugins/guards/validate-bash-global.ts`, `block-branch-switch-dirty.ts`; el gate de resumen se expone como guard o se marca `NOT_EXPOSED` con motivo |
 | Despachador | `hooks/dispatchers/dispatch-*.sh` registrado en `.claude/settings.json` | Ya es un corredor por evento (`savia-foundation.ts:111`); se le añade el registro de bloqueos |
 | Registro | `output/guard-blocks.jsonl`, `scripts/guard-blocks.sh` | El mismo fichero, escrito desde el corredor TS |
 

@@ -37,7 +37,7 @@ Cada turno de Savia arranca cargando las mismas instrucciones, se usen o no: `CL
 | Índice de memoria del frontend (fuera del repo, en la máquina de la operadora) | 7.350 | | `wc -c` |
 | Perfil activo e índice de memoria externa (`.claude/profiles/active-user.md`, `.claude/external-memory/auto/MEMORY.md`) | no medible desde un worktree | | gitignored; existen solo en el checkout de cada operador |
 
-En tokens: la parte versionada sale a **≈ 6.800** con la regla del repo (caracteres / 4, `scripts/token-estimator.sh:5`) y a **≈ 7.700** con la proporción del análisis (39 KB ≈ 10.900 tokens, 3,58 B/token). Sumando el índice de memoria, el total medido es **≥ 35 KB ≈ 8.900–9.800 tokens**, sin contar perfil activo, memoria externa ni lo que inyectan los 7 hooks de SessionStart y los 8 de UserPromptSubmit (`.claude/settings.json`, ver SE-510). Las dos proporciones difieren en un 13 %; por eso el objetivo se fija con **un** método versionado (D2), no con una cifra suelta.
+En tokens: la parte versionada sale a **≈ 6.800** con la regla del repo (caracteres / 4, `scripts/token-estimator.sh:5`) y a **≈ 7.700** con la proporción del análisis (39 KB ≈ 10.900 tokens, 3,58 B/token). Sumando el índice de memoria, el total medido es **34.983 B ≈ 8.660–9.770 tokens** (límite inferior: (27.297 caracteres + 7.350) / 4, tomando los bytes del índice como cota de sus caracteres; superior: 34.983 B / 3,58), sin contar perfil activo, memoria externa ni lo que inyectan los 7 hooks de SessionStart y los 8 de UserPromptSubmit (`.claude/settings.json`, ver SE-510). Las dos proporciones difieren en un 13 %; por eso el objetivo se fija con **un** método versionado (D2), no con una cifra suelta.
 
 ### Qué ya existe (no se duplica, se enlaza)
 
@@ -88,22 +88,23 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 
 ### D1 — Bloque compacto
 
-- Un único fichero de arranque (`docs/rules/domain/savia-core.md`, nombre a confirmar en S1) con: identidad canónica corta (frase de SE-483 tal cual, la comprueba `test-se483-identity.bats`), género gramatical, tono (prohibiciones de Radical Honesty y de caveman en una lista sin ejemplos), idioma del perfil y los gates inmutables de `critical-facts.md`.
+- Un único fichero de arranque (`docs/rules/domain/savia-core.md`, nombre a confirmar en S1) con: identidad canónica corta (frase de SE-483 tal cual, la comprueba `test-se483-identity.bats`), género gramatical, tono (prohibiciones de Radical Honesty y de caveman en una lista sin ejemplos), la **regla** de responder en el idioma del perfil activo (texto versionado; el **valor** del idioma lo aporta en tiempo de ejecución el perfil activo, que es gitignored y no entra en el bloque generado) y los gates inmutables de `critical-facts.md`.
 - Los ficheros completos (`savia.md`, `radical-honesty.md`, `caveman-default.md`, `autonomous-safety.md`) **siguen existiendo** como fuente de verdad: el bloque compacto se **genera** de ellos (como `generate-critical-facts.sh`), no se redacta aparte. Así no hay dos textos que diverjan.
 - `CLAUDE.md` queda en entrada, cierre, reglas 1-8 y un puntero a `docs/RESOLVER.md` en lugar de la tabla «Lazy Reference» de 4,5 KB.
 - Se clasifica cada pieza que hoy se carga como **núcleo** (va en el bloque), **gate** (tiene enforcement por código y sale del texto fijo) o **bajo demanda** (se lee cuando el turno lo pide). La clasificación usa el inventario de SE-509a cuando exista; hasta entonces, una tabla en esta spec que S1 rellena.
 
 ### D2 — Medición reproducible
 
-- `scripts/context-fixed-measure.sh`: resuelve los `@imports` de `CLAUDE.md` de forma recursiva, cuenta bytes, caracteres y tokens por pieza y en total, y captura el `additionalContext` de los hooks de SessionStart y UserPromptSubmit con una sesión de prueba aislada.
+- `scripts/context-fixed-measure.sh`: resuelve los `@imports` de `CLAUDE.md` de forma recursiva, cuenta bytes, caracteres y tokens por pieza y en total, y en modo `--hooks` captura el `additionalContext` de los hooks de SessionStart y UserPromptSubmit.
+- `--hooks` es reproducible por construcción: ejecuta los hooks registrados con una entrada fija versionada (`tests/fixtures/context-fixed/turn.json`: un prompt normal y un `session_id` fijo), `HOME` temporal vacío, sin perfil activo, sin red y con el reloj fijado por variable. Corre dos veces y, si las dos cifras difieren, sale con error (no se toma ninguna): un hook no determinista bajo la fixture se corrige o se excluye con motivo en la tabla de D1, nunca se promedia.
 - Método de tokens versionado: por defecto, caracteres / 4 (el de `token-estimator.sh`); si hay credencial, también el recuento del endpoint de conteo de tokens del proveedor, y **el objetivo se juzga con el mayor** de los dos.
-- Dos modos: `--versioned` (solo lo del repo; idéntico en CI y en cualquier máquina) y `--local` (añade perfil activo y memorias del operador, solo en local, sin escribir rutas ni contenido en la salida).
+- Modos: `--versioned` (solo lo del repo; idéntico en CI y en cualquier máquina), `--hooks` (arriba; también idéntico en CI) y `--local` (añade perfil activo y memorias del operador, solo en local, sin escribir rutas ni contenido en la salida).
 - Sustituye como invariante a la suma declarada de SPEC-181: `audit-context-budget.sh` sigue para los tiers, y el gate nuevo mide lo cargado.
 
 ### D3 — Objetivo
 
-- **≤ 5.000 tokens** en `--versioned` más las inyecciones de hooks de un turno normal. En `--local`, informe sin gate (cada operador tiene un perfil distinto), con aviso si supera 6.000.
-- Trinquete: la cifra versionada se congela en `.ci-baseline/context-fixed-tokens.count` y solo puede bajar, como `capability-entropy.py`.
+- **≤ 5.000 tokens** en `--versioned` + `--hooks` (las dos cifras deterministas de D2). En `--local`, informe sin gate (cada operador tiene un perfil distinto), con aviso si supera 6.000.
+- Qué compara la CI: las dos cifras, cada una con su trinquete. `--versioned` se congela en `.ci-baseline/context-fixed-tokens.count` y `--hooks` en `.ci-baseline/context-fixed-hooks-tokens.count`; ninguna puede subir, como `capability-entropy.py`. La suma ≤ 5.000 se comprueba en el mismo paso.
 
 ### D4 — Validación con el método de EXP-509
 
@@ -116,7 +117,8 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 
 - Una regla clasificada **gate** sale del texto fijo solo si existe un hook o script que la hace cumplir y un test que lo prueba con una entrada real. Ejemplos ya cubiertos: commit a `main` (`block-commit-to-main.sh`), push forzado (`block-force-push.sh`), tercera acción idéntica (`repeat-tool-guard.sh`), merge solo con `merge-sprint.sh`.
 - Una regla sin enforcement por código **no sale**: o se queda en el bloque, o primero se le escribe el gate (spec aparte, escalera de remedios, `docs/rules/domain/remedy-ladder.md`).
-- `scripts/context-fixed-measure.sh --gates` lista las reglas que han salido del contexto y su hook; una sin hook o con hook ausente da FAIL.
+- El hook tiene que correr con **todos** los perfiles de `/hook-profile`: si se salta en `minimal` (`profile_gate` por encima de `security`, `.claude/hooks/lib/profile-gate.sh:23-42`), la regla se quedaría sin texto y sin hook. Hoy `block-force-push.sh` es tier `security` y `block-commit-to-main.sh` y `repeat-tool-guard.sh` no llaman a `profile_gate`, así que los tres corren en todos los perfiles.
+- `scripts/context-fixed-measure.sh --gates` lista las reglas que han salido del contexto y su hook; una sin hook, con hook ausente o con hook que algún perfil salta da FAIL.
 
 ## Criterios de aceptación
 
@@ -124,12 +126,12 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 |---|---|---|
 | AC-1 | `context-fixed-measure.sh --versioned` en main be2fca5aa da 27.633 B ± 0 y entre 6.800 y 7.800 tokens; dos ejecuciones dan la misma cifra. | positivo |
 | AC-2 | Un `@import` que apunta a un fichero inexistente o un ciclo de imports → exit ≠ 0, nunca un total parcial como PASS. | negativo |
-| AC-3 | Tras S2, `--versioned` + inyecciones de un turno normal ≤ 5.000 tokens con el mayor de los dos métodos. | positivo |
-| AC-4 | La CI falla si la cifra versionada sube sobre `.ci-baseline/context-fixed-tokens.count`. | negativo |
+| AC-3 | Tras S2, `--versioned` + `--hooks` (fixture fija de D2) ≤ 5.000 tokens con el mayor de los dos métodos; dos ejecuciones de `--hooks` dan la misma cifra, y si difieren el script sale ≠ 0. | positivo / negativo |
+| AC-4 | La CI falla si la cifra `--versioned` sube sobre `.ci-baseline/context-fixed-tokens.count` o la de `--hooks` sube sobre `.ci-baseline/context-fixed-hooks-tokens.count`. | negativo |
 | AC-5 | El bloque compacto se regenera desde sus fuentes; editarlo a mano o cambiar una fuente sin regenerarlo falla su test de drift. | negativo |
 | AC-6 | `test-se483-identity.bats` sigue en verde: la frase corta de identidad aparece literal en el bloque. | positivo |
-| AC-7 | Sin `autonomous-safety.md` en el contexto fijo, un commit a `main`, un push forzado y la tercera llamada idéntica en rama `agent/*` siguen bloqueados por hook (tests que lo prueban con entrada por stdin). | negativo |
-| AC-8 | Una regla marcada `gate` cuyo hook se borra o se desregistra hace fallar `--gates`. | negativo |
+| AC-7 | Sin `autonomous-safety.md` en el contexto fijo, un commit a `main`, un push forzado y la tercera llamada idéntica en rama `agent/*` siguen bloqueados por hook con **cada** perfil de `/hook-profile` (`minimal`, `standard`, `strict`, `ci`; tests que lo prueban con entrada por stdin y `SAVIA_HOOK_PROFILE` fijado). | negativo |
+| AC-8 | Una regla marcada `gate` cuyo hook se borra, se desregistra o se salta con algún perfil (`profile_gate` por encima de `security`) hace fallar `--gates`. | negativo |
 | AC-9 | El informe de validación (D4) tiene cumplimiento, sobreactuación y tokens por variante y modelo, con el commit medido. Sin él, la spec no pasa a APPROVED ni S2 se fusiona. | negativo |
 | AC-10 | Si el cumplimiento de B cae por debajo del margen del prerregistro, el cambio se revierte en la misma PR o en la siguiente, y el informe lo registra. | negativo |
 | AC-11 | `--local` no imprime rutas personales ni contenido del perfil, solo cifras por pieza (comprobado con `confidentiality-scan.sh`). | negativo |
