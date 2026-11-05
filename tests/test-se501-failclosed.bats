@@ -92,17 +92,24 @@ run_step() { run bash -c 'cd "$1" && BASE_SHA="$2" bash --noprofile --norc -eo p
 # gate_from_checkout <yaml> — exit 1 si algún paso invoca «gate» con un derived.sh que no sea la copia de la
 # base ("$X/scripts/derived.sh"): cualquier forma de ruta (bash/sh/./, $PWD) o una variable intermedia.
 # ensure/verify no son el gate. Revisión de #1488 (P2-2): antes solo detectaba «bash scripts/derived.sh gate».
+# Revisión de #1490 (P2): une las continuaciones «\» antes de partir en líneas, quita comillas a los tokens
+# (bash -c "… gate", "gate") y solo acepta "$X/scripts/derived.sh" si el mismo paso asigna X una única vez con
+# X=$(mktemp -d) y copia en él el derived.sh de la base. Es un detector de mejor esfuerzo, sesgado a fallar:
+# cualquier «"$VAR" gate» que no sea esa forma se marca (falso positivo aceptado), y no interpreta shell.
 gate_from_checkout() {
   python3 - "$1" <<'PY'
-import sys, yaml
+import re, sys, yaml
 doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 for job in doc["jobs"].values():
     for st in job.get("steps") or []:
-        for line in str(st.get("run", "")).splitlines():
-            toks = line.replace(";", " ; ").split()
+        run = re.sub(r"\\\r?\n", " ", str(st.get("run", "")))
+        x_ok = (len(re.findall(r"(?:^|[\s;&|(])X=", run)) == 1 and re.search(r"(?m)^\s*X=\$\(mktemp -d\)", run)
+                and 'git show "$BASE_SHA:scripts/derived.sh" > "$X/scripts/derived.sh"' in run)
+        for line in run.splitlines():
+            toks = [t.strip("\"'") for t in line.replace(";", " ; ").split()]
             for i, tok in enumerate(toks[1:], 1):
                 prev = toks[i - 1]
-                if tok == "gate" and ("derived" in prev or "$" in prev) and prev != '"$X/scripts/derived.sh"':
+                if tok == "gate" and ("derived" in prev or "$" in prev) and not (x_ok and prev == "$X/scripts/derived.sh"):
                     print("gate fuera de la base:", st.get("name"), "→", line.strip()); sys.exit(1)
 print("ok")
 PY
@@ -118,7 +125,9 @@ PY
   local v
   for v in 'bash scripts/derived.sh gate --range "$BASE_SHA..HEAD"' \
            './scripts/derived.sh gate' 'sh scripts/derived.sh gate' \
-           'bash "$PWD/scripts/derived.sh" gate' 'D=scripts/derived.sh; bash "$D" gate'; do
+           'bash "$PWD/scripts/derived.sh" gate' 'D=scripts/derived.sh; bash "$D" gate' \
+           $'bash scripts/derived.sh \\\n  gate' 'bash -c "scripts/derived.sh gate"' 'bash scripts/derived.sh "gate"' \
+           'X=.; bash "$X/scripts/derived.sh" gate'; do
     V="$v" python3 - "$REPO/.github/workflows/ci.yml" > "$T/ci-variante.yml" <<'PY'
 import os, sys, yaml
 doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
