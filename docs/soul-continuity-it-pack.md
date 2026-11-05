@@ -168,25 +168,25 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A5** `src/adapters/descriptors.ts:42-99` (propósito, nivel, TTL, permisos, qué no guarda); `src/adapters/m365.ts:85,155` (`$select`); `src/adapters/google.ts:111` (`format=metadata`); `src/adapters/oauth.ts:104-115` (identificador propio, ajenos rechazados), `:80-101` (listas de ajenos).
 - **A6** `src/core/runtime.ts:12-13,39-56` (núcleo); `src/adapters/http-transport.ts:21,100-104,120` (`READ_POSTS`, `redirect: "manual"`).
 - **A7** `src/startup/autostart.ts:59-61` (`Restart=on-failure`, `NoNewPrivileges`), `:87`, `:105-106` (`LogonTrigger`, `LeastPrivilege`).
-- **A8** `src/core/failsafe.ts:33-41` (STOP ilegible = STOP); `src/api/serve.ts:62`; `src/api/server.ts:650`.
+- **A8** `src/core/failsafe.ts:33-41` (STOP ilegible = STOP); `src/api/serve.ts:62`; `src/api/server.ts:767`.
 - **A9** `src/core/store.ts:33-38` (rutas), `:40-43` (0700), `:46-57` (atómico, 0600).
 - **A10** `src/contract/claims.ts:53` (`TTL_MAX_S` = 24 h), `:64-87` (forma de la afirmación); `src/core/engine.ts:174`.
 - **A11** `src/core/engine.ts:66-74` (`HISTORY_DETAIL_MS`, `HISTORY_DAYS`, `saveHistory`).
 - **A12** `src/adapters/delta-cache.ts:1-11,45-53`.
 - **A13** `src/api/devices.ts:46-56` (token de 256 bits, solo el hash en disco, caducidad), `:74-84` (verificación en tiempo constante).
-- **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:702` (TLS 1.3).
+- **A14** `src/api/cert.ts:63-86` (EC P-256, SAN con las IP), `:95-113` (renovación); `src/api/server.ts:819` (TLS 1.3).
 - **A15** `src/credentials/store.ts:32-44` (secreto por stdin), `:97` (`security -i`), `:130-164` (valor repartido en Credential Manager, `splitParts`/`joinParts`), `:166-190` (`-EncodedCommand` sin secretos), `:252-380` (índice sin secretos).
 - **A16** `src/core/engine.ts:114-124,156-159`.
-- **A17** `src/api/serve.ts:160-161`; `src/api/server.ts:793`.
+- **A17** `src/api/serve.ts:160-161`; `src/api/server.ts:931`.
 - **A18** `src/cli/cli.ts:79` (`AGENT_ALLOWED`: órdenes permitidas a un agente), `:432-448`.
 - **A19** `src/cli/cli.ts:152-178`; `src/core/store.ts:111-124` (lista de lo propio, `web` incluido; lo ajeno se conserva); `test/cli.test.ts:283,351`.
 - **A20** `src/core/config.ts:66` (sin direcciones por defecto, puerto 8787); `src/api/listen.ts:24-39,57`; `src/api/serve.ts:42`; `test/listen.test.ts:34`.
 - **A21** `src/adapters/oauth.ts:241-283` (`127.0.0.1`, puerto 0, `state`, 300 000 ms, `srv.close()`).
 - **A22** `src/web/cortafuegos/perfil.ts:10-24` (perfiles personales conocidos), `:91-102` (perfil dedicado, marca, rechazo); `src/web/adaptador/navegador.ts:45-68`.
-- **A23** `src/core/config.ts:59-68` (por defecto `titulos`); `src/api/server.ts:386,489-493`; `test/api/contrato.test.mjs:103,142`.
+- **A23** `src/core/config.ts:59-68` (por defecto `titulos`); `src/api/server.ts:404,606-610`; `test/api/contrato.test.mjs:103,142`.
 - **A24** Búsqueda de `fetch`, `listen(`, `http.request`, `net.connect` y `dgram` en `src/` integrado: solo `src/core/runtime.ts`, `src/adapters/http-transport.ts` (por `fetchFn`), `src/adapters/oauth.ts` (salida), y `src/api/listen.ts` y `src/adapters/oauth.ts:253` (escucha). Además `src/web/banco/servidor.ts`, que sirve los sitios sintéticos del banco y solo se usa en pruebas. El navegador del adaptador web sale solo por su cortafuegos.
 - **A25** `src/core/config.ts:145-151` (`agentLevel`); `src/cli/cli.ts:121-131,280`.
-- **A26** `src/api/server.ts:592`; `test/api/contrato.test.mjs:607`.
+- **A26** `src/api/server.ts:709`; `test/api/contrato.test.mjs:624`.
 - **A27** `src/adapters/README.md`, sección «Revocación (AC-5)».
 - **A28** `src/web/cortafuegos/cortafuegos.ts:1-20,39-43`; `src/web/cortafuegos/decision.ts:215-220`.
 - **A29** `src/web/adaptador/vigilancia.ts:1-6,59`.
@@ -202,8 +202,8 @@ Rutas relativas a `projects/soul-continuity/`, sobre el código integrado (núcl
 - **A39** `src/core/connectors.ts:67-100` (validación de `connectors`: adaptadores del contrato, bases solo HTTPS o loopback; Graph y Google solo sus hosts oficiales por HTTPS, sin loopback), `:107-111` (transporte de solo lectura con bases por servicio); `test/connectors.test.ts`.
 - **A40** `src/api/dpop.ts:56-87` (prueba DPoP: ES256, `htm`, `htu`, `iat`, `jti`, `ath`); `src/api/serve.ts:94-110` (solo la clave ligada al emparejar; sin `jkt` no entra y «revocado» solo tras la prueba); `src/api/devices.ts:46-56`; `src/api/serve.ts:86-90` (`avisarReemparejar`: un aviso por dispositivo sin clave ligada o caducado); `src/cli/cli.ts:527-533` (`soul devices` marca los que hay que reemparejar); `test/dpop.test.ts`, `test/serve.test.ts:178` (sin primer uso), `test/cli.test.ts:301`.
 - **A41** `src/core/engine.ts:188,311-333` (dispositivo en el libro; listar y deshacer); `src/cli/cli.ts:505-532`; `test/device-corrections.test.ts`.
-- **A42** `src/api/server.ts:172-182` (`maxConnections` 32 y tiempos de espera), `:702`; `test/serve.test.ts`.
+- **A42** `src/api/server.ts:186-196` (`maxConnections` 32 y tiempos de espera), `:819`; `test/serve.test.ts`.
 - **A43** `src/cli/login.ts:21-29` (`init` sin fuentes ni adaptadores), `:83-110` (`login`: flujo de dispositivo o token por stdin al almacén); `test/login.test.ts`, `test/instalar.test.ts`.
-- **A44** `src/api/serve.ts:112-115` (estado de atención en disco), `:123-148` (`soul mode` en caliente); `src/api/server.ts:251-271,283-291`; `test/serve.test.ts`.
-- **A45** `src/api/server.ts:218-229` (`Politica` configurada por operador), `:263-265` (cada evento lo decide la política); `test/server.test.ts` (H-11).
+- **A44** `src/api/serve.ts:112-115` (estado de atención en disco), `:123-148` (`soul mode` en caliente); `src/api/server.ts:265-285,297-305`; `test/serve.test.ts`.
+- **A45** `src/api/server.ts:232-243` (`Politica` configurada por operador), `:277-279` (cada evento lo decide la política); `test/server.test.ts` (H-11).
 - **A46** `src/api/pairing.ts:45,76` (clave de 30 base62 de un CSPRNG), `:60-74` (checksum CRC32 y validación), `:101-102` (HMAC soul-pair-v2), `:118-125` (ventana en `pairing.json`, borrado), `:163` (rechazo de v1 con 426); `src/api/qr.ts:242` (QR propio); `src/cli/cli.ts:462` (`soul pair`); `test/pairing.test.ts`, `test/qr.test.ts`.

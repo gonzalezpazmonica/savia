@@ -169,7 +169,7 @@ export async function serveFromCli(deps: CliDeps, opts: { signal?: AbortSignal; 
     if (leyendo) return;
     leyendo = true;
     // Un fallo del tic no tumba serve (rechazo sin capturar): se registra solo el nombre del error.
-    void refresh().then(modoDeCli).catch((e) => deps.err(`tic fallido (${(e as Error)?.name ?? "error"})`)).finally(() => { leyendo = false; });
+    void refresh().then(modoDeCli).then(() => server.latido()).catch((e) => deps.err(`tic fallido (${(e as Error)?.name ?? "error"})`)).finally(() => { leyendo = false; });
   }, opts.refreshMs ?? REFRESH_MS);
   await new Promise<void>((resolve) => {
     const end = () => resolve();

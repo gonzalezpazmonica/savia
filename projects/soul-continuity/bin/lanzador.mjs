@@ -4,7 +4,7 @@
 // (~/.savia/node, nvm, fnm) y, si no hay ninguno, se explica cómo instalarlo sin sudo.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SONDA = fileURLToPath(new URL("./sonda.ts", import.meta.url));
@@ -71,7 +71,7 @@ export function noNodeMessage(failures, pkgDir, platform) {
   const fix = platform === "win32"
     ? ["Solución: instala Node.js LTS oficial desde https://nodejs.org (o con fnm) y abre una terminal nueva."]
     : [
-      `Solución, sin sudo: bash ${join(pkgDir, "install.sh")}`,
+      `Solución, sin sudo: bash ${posix.join(pkgDir, "install.sh")}`,
       "  instala el Node.js LTS oficial en ~/.savia/node y deja la orden «soul» en ~/.local/bin.",
       "O instala Node.js LTS oficial con nvm o fnm, o desde https://nodejs.org, y vuelve a probar.",
     ];
