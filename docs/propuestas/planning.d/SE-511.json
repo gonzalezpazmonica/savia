@@ -1,0 +1,9 @@
+{
+  "id": "SE-511",
+  "status": "PROPOSED",
+  "priority": "P1",
+  "phase": "A",
+  "title": "Contexto fijo por turno a la mitad o menos",
+  "evidence": "docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md",
+  "note": "Análisis Gentleman frente a Savia (2026-11-04). Bloque compacto generado de las fuentes, medición reproducible y objetivo de 5.000 tokens, validación con el método de EXP-509 (SE-509) y solo sale del texto lo que tiene gate por código."
+}
