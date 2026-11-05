@@ -198,12 +198,12 @@ mk_agent() {
 }
 
 @test "S03n: mapa de tools con valor no booleano es ERROR y con false no cuenta" {
-  mk_agent "m1.md" 'name: m1\npermission_level: L0\ntools:\n  Read: true\n  Write: false'
+  mk_agent "agente-mapa-ok.md" 'name: agente-mapa-ok\npermission_level: L0\ntools:\n  Read: true\n  Write: false'
   mk_agent "m2.md" 'name: m2\npermission_level: L0\ntools:\n  Read: "si"'
   run bash "$SCRIPT" "$TMPDIR_AP/agents"
   [ "$status" -eq 1 ]
   [[ "$output" == *"m2 — unparseable frontmatter: tools map value for 'Read' is not true/false"* ]]
-  [[ "$output" != *"m1"* ]]
+  [[ "$output" != *"agente-mapa-ok"* ]]
   [[ "$output" == *"Errors:  1"* ]]
 }
 

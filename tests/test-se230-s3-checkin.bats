@@ -332,9 +332,11 @@ P
   command -v flock >/dev/null || skip "sin flock"
   _write_focal "lk"
   local before; before=$(cat "$HOME/.savia/focal-state/lk.json")
-  flock "$HOME/.savia/focal-state.lock" sleep 13 &
-  local holder=$!
-  sleep 0.3
+  # El propio proceso del test retiene el lock en el fd 9: sin proceso en
+  # segundo plano que pueda quedar huérfano. El script abre su propio fd sobre
+  # el fichero (otra descripción de fichero), así que choca con este lock.
+  exec 9>"$HOME/.savia/focal-state.lock"
+  flock -n 9
   run bash "$FOCAL_CHECKIN" --nido lk
   [ "$status" -eq 1 ]
   [[ "$output" == *"flock timeout"* ]]
@@ -342,6 +344,9 @@ P
   run bash "$FOCAL_CHECKIN" --set-interval 3 --nido lk
   [ "$status" -eq 1 ]
   [[ "$output" != *"actualizado"* ]]
-  kill "$holder" 2>/dev/null || true
+  exec 9>&-
   [ "$(cat "$HOME/.savia/focal-state/lk.json")" = "$before" ]
+  # Liberado el lock, el heartbeat vuelve a funcionar (el bloqueo era el lock).
+  run bash "$FOCAL_CHECKIN" --nido lk
+  [ "$status" -eq 0 ]
 }

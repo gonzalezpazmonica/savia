@@ -187,7 +187,11 @@ tier_of() {
 
 @test "S03n gobernanza: settings en subcarpeta de .claude no es gobernanza" {
   run python3 "$TIER" --diff ".claude/settings/extra.json" --json
+  [ "$status" -eq 0 ]
   [[ "$output" != *"path de gobernanza"* ]]
+  # Aserción positiva: sin ella, una salida vacía también pasaría.
+  run tier_of "$TIER" ".claude/settings/extra.json"
+  [ "$output" = "2 False" ]
 }
 
 @test "S03n gobernanza: autonomous-safety*.md en docs/rules/domain gana a la exención de docs" {
