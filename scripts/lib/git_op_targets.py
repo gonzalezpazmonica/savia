@@ -415,6 +415,19 @@ def words_text(words):
     return " ".join("".join(v for k, v in w if k in ("lit", "sub")) for w in words)
 
 
+def argv_text(words):
+    """Como `words_text`, pero cada palabra con espacios, comillas o barras vuelve
+    entre comillas simples: `-C "/tmp/mi remote"` sigue siendo UN argumento para
+    `SUBCMD_ADD` y no deja `remote add` como si fuera el subcomando."""
+    out = []
+    for w in words:
+        s = "".join(v for k, v in w if k in ("lit", "sub"))
+        if re.search(r"[\s\"'\\]", s):
+            s = "'" + s.replace("'", "'\\''") + "'"
+        out.append(s)
+    return " ".join(out)
+
+
 # `add` como acción de otro subcomando, no como `git add`: `git worktree add`
 # crea otro checkout y `git remote add` escribe config; ninguno toca el índice
 # ni la rama del repo. (`submodule add` sí indexa y `notes add` sí hace commit:
@@ -422,19 +435,22 @@ def words_text(words):
 # otra parte de la orden sigue contando. `worktree|remote` tiene que ser el
 # subcomando de `git` (tras sus opciones globales, con el valor de `-C`,
 # `--git-dir`, etc. consumido aparte): `git -C ../remote add .` es un
-# `git add` real y sigue contando.
-_GIT_GLOBAL_OPT = (r"(?:-[Cc]\s+\S+"
-                   r"|--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:=\S+|\s+\S+)"
-                   r"|--[\w-]+=\S+"
+# `git add` real y sigue contando. El valor se lee como palabra de shell, con
+# las comillas y barras aún puestas: `-C "/tmp/mi remote"` o `-C /x/a\ worktree`
+# son UN argumento y no dejan `remote`/`worktree` como subcomando.
+_OPT_VAL = r"""(?:"[^"]*"|'[^']*'|\\.|[^\s"'\\])+"""
+_GIT_GLOBAL_OPT = (r"(?:-[Cc]\s+{v}"
+                   r"|--(?:git-dir|work-tree|namespace|super-prefix|config-env)(?:={v}|\s+{v})"
+                   r"|--[\w-]+={v}"
                    r"|--(?!git-dir\b|work-tree\b|namespace\b|super-prefix\b|config-env\b)[\w-]+"
-                   r"|-(?![Cc]\b)\w+)")
+                   r"|-(?![Cc]\b)\w+)").replace("{v}", _OPT_VAL)
 SUBCMD_ADD = re.compile(r"((?<![\w./-])git(?:\s+%s)*\s+(?:worktree|remote)\s+)add(?![\w-])"
                         % _GIT_GLOBAL_OPT, re.I)
 
 
 def plain(text):
-    """Texto sin comillas ni barras y sin el `add` de `git worktree|remote add`."""
-    return SUBCMD_ADD.sub(r"\1-", re.sub(r"[\"'\\]", "", text))
+    """Texto sin el `add` de `git worktree|remote add` y después sin comillas ni barras."""
+    return re.sub(r"[\"'\\]", "", SUBCMD_ADD.sub(r"\1-", text))
 
 
 def mentions(text):
@@ -566,7 +582,7 @@ def simple(toks, ctx, depth, piped):
             words.append(val[0])
     for w in words:
         run_subs(w, ctx, depth)
-    text = words_text(words) + ("\n" + stdin if stdin else "")
+    text = argv_text(words) + ("\n" + stdin if stdin else "")
     assigns = []
     while words and is_assign(words[0]):
         assigns.append(assign(words[0], ctx))
