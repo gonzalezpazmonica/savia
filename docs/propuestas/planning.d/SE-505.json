@@ -1,0 +1,10 @@
+{
+  "id": "SE-505",
+  "status": "APPROVED",
+  "priority": "P0",
+  "phase": "A",
+  "title": "Puerta de comprensión: escenas confirmadas antes de la spec, prototipo antes del código",
+  "evidence": "docs/specs/SE-505-puerta-de-comprension.spec.md",
+  "note": "Origen: SE-490 construido y fusionado en verde sin ser lo pedido. Sección «Lo que he entendido» con escenas confirmadas, S0 de prototipo navegable y gate fail-closed en roadmap.sh validate.",
+  "approval": "operadora, pregunta interactiva 2026-11-03 (Puerta de comprensión obligatoria); se formaliza al fusionar (SE-488)"
+}
