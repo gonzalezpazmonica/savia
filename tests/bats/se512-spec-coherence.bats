@@ -46,7 +46,7 @@ EOF
 }
 
 @test "R-FORCED (P1-1): sin lista propia del ejecutor en R1 falla" {
-  mutate '**El ejecutor aplica (a), (b) y (c) por sí mismo desde S2**' 'S3 las añade'
+  mutate '**El ejecutor aplica (a), (b), (c) y (d) por sí mismo desde S2**' 'S3 las añade'
   run check "$MUT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"R-FORCED: R1 no dice"* ]]
@@ -107,6 +107,69 @@ EOF
   run check "$MUT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"AC-6 no prueba action_required"* ]]
+}
+
+@test "R-PENDING: sin convertir minutos a segundos el contrato falla" {
+  mutate 'ceil(main_pending_timeout * 60 / MERGE_SPRINT_POLL_S)' 'ceil(main_pending_timeout / MERGE_SPRINT_POLL_S)'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no convierte minutos a segundos"* ]]
+}
+
+@test "R-KEY: quitar la prohibición de clave local rompe el contrato" {
+  mutate 'La clave privada nunca reside en el equipo de los agentes' 'La clave puede residir en el equipo'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-KEY: la clave privada debe quedar fuera"* ]]
+}
+
+@test "R-KEY: sin declarar que no enmienda LAW-HUMAN-002 falla" {
+  mutate 'Esta spec no enmienda LAW-HUMAN-002.' 'La spec relaja LAW-HUMAN-002.'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-KEY: R1 no declara que la spec no enmienda LAW-HUMAN-002"* ]]
+}
+
+@test "R-WFEXEC (seg. P1-1): R1 sin (d) falla" {
+  mutate '**El ejecutor aplica (a), (b), (c) y (d) por sí mismo desde S2**' '**El ejecutor aplica (a), (b) y (c) por sí mismo desde S2**'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-WFEXEC: R1 no aplica (d)"* ]]
+}
+
+@test "R-WFEXEC (seg. P1-1): derivar (d) sin cierre transitivo falla" {
+  mutate 'y el cierre transitivo de las rutas' 'sin seguir las rutas'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-WFEXEC: R2.3 no deriva (d)"* ]]
+}
+
+@test "R-WFEXEC (seg. P1-1): error al derivar (d) sin STOP en R3 falla" {
+  mutate '| Error al derivar `WORKFLOW_EXEC_PATHS` (R2.3) | STOP `forced_exclude_error`;' '| Error al derivar `WORKFLOW_EXEC_PATHS` (R2.3) | se sigue con la lista parcial;'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-WFEXEC: un error al derivar (d) no es STOP"* ]]
+}
+
+@test "R-WFEXEC (seg. P1-1): AC-11 sin el caso de scripts/changelog-consolidate.sh falla" {
+  mutate '`scripts/changelog-consolidate.sh` (citado por un' '`scripts/otro.sh` (citado por un'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-WFEXEC: AC-11 no prueba scripts/changelog-consolidate.sh"* ]]
+}
+
+@test "R-WFEXEC (seg. P1-1): AC-11 sin el caso solo transitivo falla" {
+  mutate '`scripts/generate-capability-map.py` (solo por cierre transitivo)' '`scripts/x.py` (solo por cierre transitivo)'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-WFEXEC: AC-11 no prueba scripts/generate-capability-map.py"* ]]
+}
+
+@test "R-ACTIVATION: sin enmienda humana previa no se puede activar" {
+  mutate 'Activación bloqueada hasta la enmienda humana de S4' 'Activación inmediata desde S2'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-ACTIVATION"* ]]
 }
 
 @test "R-NOCHECKS (P2-4): AC-6 sin el caso sin check-runs falla" {

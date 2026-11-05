@@ -88,7 +88,7 @@ La política es un JSON canónico (claves ordenadas, sin espacios) que genera
 | `kind` | `"policy"` | fijo |
 | `id` | aleatorio, 16 hex | único |
 | `not_before`, `not_after` | instantes en UTC (`…Z`); la hora local de la operadora se muestra en la pregunta y en el informe, pero no entra en el digest | límite único: `not_after − not_before ≤ 12 h` (12 h exactas se aceptan; 12 h y 1 s no). No hay ampliación a 24 h: la política es más débil que el manifiesto de SE-433 y su ventana es más corta. Por defecto, `not_before` es la hora de emisión y `not_after` es el primero de estos dos instantes: las 08:00 locales del día siguiente o `not_before + 12 h`. Así, firmar antes de las 20:00 recorta la ventana a 12 h, no la rechaza. Un `not_after` explícito que exceda 12 h se rechaza |
-| `repos[]` | `{repo, base, include[], exclude[]}` | `include` son globs de rutas; una PR con un solo fichero fuera de `include` o dentro de `exclude` no entra (semántica exacta en R2.3). Exclusión forzosa, aunque la política diga otra cosa: (a) todo lo que `scripts/risk-tier.py` clasifica como gobernanza (`is_governance`, `:36-55`: `GOVERNANCE_EXACT`, `GOVERNANCE_PREFIXES` —incluye `.opencode/`, donde vive el plugin `savia-gates`, y `.github/workflows/`—, `.claude/settings*.json` y `docs/rules/domain/autonomous-safety*.md`); (b) el código de los gates que no es gobernanza hoy: `.claude/hooks/**`, `.claude/agents/**` (definiciones de las revisoras), `scripts/confidentiality-*`, `scripts/validate-ci*`, `scripts/f5-state.sh`, `scripts/merge-registry-resolve.py` y `scripts/sam.py`; (c) lo que crea esta spec: `.claude/hooks/night-mode-guard.sh` y cualquier fichero del guard nocturno. **El ejecutor aplica (a), (b) y (c) por sí mismo desde S2**: lleva la lista (b)+(c) como constante propia (`POLICY_FORCED_EXCLUDE`) dentro de `merge-sprint.sh`, que ya es gobernanza y queda congelado por `runner_blob`, y además consulta `is_governance` para (a). No depende de que `risk-tier.py` las clasifique. S3 añade también (b) y (c) a `GOVERNANCE_EXACT`/`GOVERNANCE_PREFIXES` para que den tier 4 fuera de la política (grant de manifiesto, clasificador); eso es defensa adicional, no la condición de seguridad de S2. Sin S3 en `main`, `run --policy` ya excluye esas rutas |
+| `repos[]` | `{repo, base, include[], exclude[]}` | `include` son globs de rutas; una PR con un solo fichero fuera de `include` o dentro de `exclude` no entra (semántica exacta en R2.3). Exclusión forzosa, aunque la política diga otra cosa: (a) todo lo que `scripts/risk-tier.py` clasifica como gobernanza (`is_governance`, `:36-55`: `GOVERNANCE_EXACT`, `GOVERNANCE_PREFIXES` —incluye `.opencode/`, donde vive el plugin `savia-gates`, y `.github/workflows/`—, `.claude/settings*.json` y `docs/rules/domain/autonomous-safety*.md`); (b) el código de los gates que no es gobernanza hoy: `.claude/hooks/**`, `.claude/agents/**` (definiciones de las revisoras), `scripts/confidentiality-*`, `scripts/validate-ci*`, `scripts/f5-state.sh`, `scripts/merge-registry-resolve.py` y `scripts/sam.py`; (c) lo que crea esta spec: `.claude/hooks/night-mode-guard.sh` y cualquier fichero del guard nocturno; (d) **el código que ejecutan los workflows** (`WORKFLOW_EXEC_PATHS`, R2.3): modificar un script que un workflow ejecuta equivale a modificar el workflow, que ya está en (a). Ejemplos en `main` hoy: `scripts/changelog-consolidate.sh` (`changelog-consolidate.yml`, en `push` a `main`, con `contents: write` y el secreto HMAC de confidencialidad) y `scripts/setup-merge-drivers.sh` (`auto-rebase-open-prs.yml`, `contents: write`), que `risk-tier.py` clasifica como tier 1 o 2. **El ejecutor aplica (a), (b), (c) y (d) por sí mismo desde S2**: lleva la lista (b)+(c) como constante propia (`POLICY_FORCED_EXCLUDE`) dentro de `merge-sprint.sh`, que ya es gobernanza y queda congelado por `runner_blob`, deriva (d) de los workflows de `origin/main` y además consulta `is_governance` para (a). No depende de que `risk-tier.py` las clasifique. S3 añade también (b) y (c) a `GOVERNANCE_EXACT`/`GOVERNANCE_PREFIXES` para que den tier 4 fuera de la política (grant de manifiesto, clasificador); eso es defensa adicional, no la condición de seguridad de S2. Sin S3 en `main`, `run --policy` ya excluye esas rutas |
 | `tiers` | subconjunto no vacío de `{1,2}` | `3` o `4`, o la lista vacía, hacen inválida la política: no se emite |
 | `max_merges` | entero ≥ 1 | techo duro 40 (`config/merge-sprint-policy.conf:5`): un valor mayor se rechaza, no se recorta |
 | `max_parks_in_row` | entero ≥ 1 | techo duro 3, como SE-433 |
@@ -122,8 +122,9 @@ ventana, STOP por anomalía. Sin respuesta literal o sin firma válida, no hay g
 Si la clave privada de la operadora fuera usable por ese usuario sin intervención humana (por ejemplo,
 `~/.ssh/id_ed25519` sin passphrase, o una passphrase cacheada en un agente durante la ventana), un
 agente podría firmarse su propia política. Por eso la firma solo vale como factor si la clave está
-fuera del alcance del agente: protegida con passphrase sin caché, en una llave hardware que exige
-contacto físico, o usada desde otro dispositivo. Ningún subcomando del ejecutor firma: `policy-grant`
+en el móvil o en Savia Space, como exige LAW-HUMAN-002 (`autonomous-safety-merge-grant.md`).
+La clave privada nunca reside en el equipo de los agentes: tampoco protegida con passphrase sin caché
+ni en una llave hardware conectada a ese equipo. Esta spec no enmienda LAW-HUMAN-002. Ningún subcomando del ejecutor firma: `policy-grant`
 solo verifica una firma producida fuera. Esto no se puede comprobar desde el ejecutor; es un límite
 declarado, del mismo tipo que A4. Si la operadora no puede garantizarlo, el factor es la respuesta
 interactiva, no la firma.
@@ -173,7 +174,20 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
    - `include` distingue mayúsculas. `exclude` y la exclusión forzosa comparan en minúsculas, como
      `is_governance` (`risk-tier.py:48`): una variación de mayúsculas no saca una ruta de la exclusión.
    - La exclusión forzosa es (a) `is_governance` del clasificador congelado más (b)+(c) de
-     `POLICY_FORCED_EXCLUDE`, la lista propia del ejecutor (R1). Cualquier ruta en ella deja la PR fuera
+     `POLICY_FORCED_EXCLUDE`, la lista propia del ejecutor (R1), más (d) `WORKFLOW_EXEC_PATHS`.
+   - `WORKFLOW_EXEC_PATHS` se deriva en Python en cada comprobación, desde los blobs de `origin/main`
+     (`git show`), nunca desde el árbol de trabajo ni desde la cabeza de la PR: toda ruta del repo
+     citada literalmente en `.github/workflows/**` o `.github/actions/**` (lo que casa con
+     `(scripts|tests|\.github|\.claude|\.opencode)/[^\s'"]+`), y el cierre transitivo de las rutas
+     `scripts/...` citadas literalmente dentro de esas rutas hasta que no aparece ninguna nueva. Así entra
+     `scripts/generate-capability-map.py`: ningún workflow lo cita, pero lo ejecuta
+     `scripts/resolve-pr-conflicts.sh`, que corre en `auto-rebase-open-prs.yml` con `contents: write`. Cubre todos los workflows, no solo los que tienen permisos de escritura o
+     secretos: un script de un check obligatorio puede dar un verde falso igual que un gate. Una ruta
+     citada que no existe en `origin/main` también queda excluida (la PR podría crearla). Si un blob no
+     se puede leer o la derivación da error, STOP `forced_exclude_error` sin fusión (R3). Límite
+     declarado: una ruta construida en tiempo de ejecución (en una variable) no se detecta; lo compensa
+     un `include` estrecho, y la PR que la introdujera en un workflow ya cae en (a).
+     Cualquier ruta de (a)–(d) deja la PR fuera
      aunque `include` la cubra y aunque `risk-tier.py` le dé tier 1 o 2.
 4. **Tier.** `risk-tier.py` congelado (`classifier_blob`) sobre los ficheros de la cabeza actual; tier
    en `tiers`. Tier 3 o 4 → la PR va a pendientes de la mañana, nunca se fusiona con este grant.
@@ -229,7 +243,7 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
 7. **`main` en verde después de fusionar.** Se usa el sondeo existente `main_ci_gate` (`:591-595`)
    sobre el commit de fusión. Justo después de fusionar, `main` está en `pending`; eso no es un STOP.
    El gate sondea con `main_ci_strict` hasta `pass` o `fail`; el número de sondeos es
-   `ceil(main_pending_timeout / MERGE_SPRINT_POLL_S)` (40 con los valores por defecto, como hoy).
+   `ceil(main_pending_timeout * 60 / MERGE_SPRINT_POLL_S)` (40 con los valores por defecto: 20 minutos × 60 / 30 segundos).
    `fail`, o `pending`/`none` al agotar el plazo, → STOP `main_<estado>` (`main_fail`,
    `main_pending`, `main_sin_checks`).
 8. **Auditoría.** Entrada `MERGED` en el ledger encadenado con el id y el digest de la política (R5).
@@ -259,6 +273,7 @@ a dar HOLD sobre H1 o una cabeza posterior, la PR espera a la mañana.
 | `now < not_before` | Nada: salida 7, sin STOP; la política sigue vigente |
 | Merge externo, base cambiada, checks obligatorios reducidos | STOP (anomalía), como SE-433 (`autonomous-safety-merge-sprint.md:98`) |
 | Error al leer GitHub, el registro o el ledger | STOP; nunca «se asume verde» |
+| Error al derivar `WORKFLOW_EXEC_PATHS` (R2.3) | STOP `forced_exclude_error`; nunca se fusiona con la exclusión incompleta |
 
 Parar es seguro y no se revierte nada. Un STOP con motivo deja el fichero STOP con ese motivo
 (`halt`, `:546-548`) y el motivo va al informe de la mañana.
@@ -444,9 +459,11 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   incluya en `include`. Rutas del test, una por caso: de (a), `.claude/settings.json`,
   `.opencode/plugins/x.ts` y `.github/workflows/ci.yml`; de (b), `.claude/hooks/x.sh`,
   `.claude/agents/revisora.md` y `scripts/confidentiality-scan.sh`; de (c),
-  `.claude/hooks/night-mode-guard.sh`. Los casos de (b) y (c) fallan con un ejecutor que solo
-  consulte `is_governance`, porque el `risk-tier.py` actual les da tier 1 o 2: la exclusión ha de
-  salir de `POLICY_FORCED_EXCLUDE`.
+  `.claude/hooks/night-mode-guard.sh`; de (d), `scripts/changelog-consolidate.sh` (citado por un
+  workflow) y `scripts/generate-capability-map.py` (solo por cierre transitivo). Los casos de (b), (c) y
+  (d) fallan con un ejecutor que solo consulte `is_governance`, porque el `risk-tier.py` actual les da
+  tier 1 o 2: la exclusión ha de salir de `POLICY_FORCED_EXCLUDE` y de `WORKFLOW_EXEC_PATHS`. Con un
+  blob de workflow ilegible (fixture), STOP `forced_exclude_error` sin fusión.
 - **AC-11b (S3, rutas nuevas)** `risk-tier.py` da tier 4 para `.claude/hooks/night-mode-guard.sh`, para
   `.claude/hooks/<otro>.sh`, `.claude/agents/<revisora>.md`, `scripts/confidentiality-scan.sh` y
   `scripts/validate-ci-local.sh`. Falla con el `risk-tier.py` actual, que da tier 1 o 2 a varias de
@@ -509,6 +526,7 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 
 - SE-433 v2 y SE-500 S2 en `main` (ejecutor, re-sync, código congelado).
 - La enmienda de `docs/rules/domain/autonomous-safety-merge-sprint.md` y `autonomous-safety.md` es tier 4: la fusiona la operadora.
+- **Activación bloqueada hasta la enmienda humana de S4.** S2 puede implementarse y probarse en fixtures; `run --policy` no se activa en un repositorio real antes de que la operadora fusione esa enmienda. Mientras tanto sigue vigente SE-433, sin sustituir su autorización por esta propuesta.
 - SE-498 (opcional para R4).
 
 ## Plan por slices
@@ -516,7 +534,7 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 | Slice | Contenido | AC |
 |---|---|---|
 | S1 | `policy-plan`, `policy-question`, `policy-grant`, `policy-verify` (digest, ventana y firmantes de `origin/main`); sin `run` ni fusiones | AC-1, AC-8, AC-12b |
-| S2 | `run --policy`: bucle por pasadas, ventana y código 7, `main_ci_strict` y gate de `main` previo (con espera de `pending`/`none`), doble APPROVE por `reviewer` distinto (`reviews_ok` pasa a contar `reviewer`, no solo `role`; el esquema de `reviews.jsonl` no cambia porque ya guarda `reviewer`), regla de HOLD sobre todo el registro, equivalencia por contenido (hereda HOLD), tope de revisiones, alcance por rutas con glob por segmentos y exclusión forzosa (a)+(b)+(c) propia (`POLICY_FORCED_EXCLUDE`), topes, universo, revocación, STOP | AC-2, AC-3, AC-4, AC-4b, AC-4c, AC-4d, AC-4e, AC-5, AC-6, AC-7, AC-8b, AC-9, AC-10, AC-11, AC-11c, AC-15, AC-16, AC-17 |
+| S2 | `run --policy`: bucle por pasadas, ventana y código 7, `main_ci_strict` y gate de `main` previo (con espera de `pending`/`none`), doble APPROVE por `reviewer` distinto (`reviews_ok` pasa a contar `reviewer`, no solo `role`; el esquema de `reviews.jsonl` no cambia porque ya guarda `reviewer`), regla de HOLD sobre todo el registro, equivalencia por contenido (hereda HOLD), tope de revisiones, alcance por rutas con glob por segmentos y exclusión forzosa (a)+(b)+(c)+(d) propia (`POLICY_FORCED_EXCLUDE` y `WORKFLOW_EXEC_PATHS` derivada), topes, universo, revocación, STOP | AC-2, AC-3, AC-4, AC-4b, AC-4c, AC-4d, AC-4e, AC-5, AC-6, AC-7, AC-8b, AC-9, AC-10, AC-11, AC-11c, AC-15, AC-16, AC-17 |
 | S3 | Guard de modo nocturno (Claude Code + plugin `savia-gates`) con normalización de intérpretes, rutas (b) y (c) también en `risk-tier.py` (tier 4 fuera de la política), lista de pendientes; señal `savia-stop` solo por etiqueta | AC-3b, AC-11b, AC-12, AC-13 |
 | S4 | `report --policy` y enmienda de las reglas `autonomous-safety*` | AC-14 |
 | S5 | Savia Space y Savia Labs como repos de la política | AC-2 y AC-11 por repo |

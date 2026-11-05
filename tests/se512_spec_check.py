@@ -17,7 +17,15 @@ Reglas (cada una cierra un hallazgo de la tercera ronda de revisión):
   R-NOCHECKS  (correctness P2-4) «ningún check-run en main» tiene motivo y AC.
   R-GLOB      (security P2-1) los globs no se evalúan con fnmatch sobre la
               ruta entera y hay negativo `docs/*` frente a `docs/x/y`.
-  R-KEY       (security P2-2) la clave ed25519 ha de quedar fuera del agente.
+  R-KEY       (security P2-2 y revisión de a6ca4322) la clave privada vive en el
+              móvil o en Savia Space, nunca en el equipo de los agentes
+              (LAW-HUMAN-002), y la spec no enmienda esa ley.
+  R-ACTIVATION (revisión de a6ca4322) `run --policy` no se activa antes de la
+              enmienda humana de S4.
+  R-WFEXEC    (security P1-1 sobre 9f88dd10) la exclusión forzosa incluye (d),
+              el código que ejecutan los workflows, derivado de `origin/main` con
+              cierre transitivo, con STOP fail-closed si la derivación falla, y
+              AC-11 lo prueba con un caso directo y uno solo transitivo.
   R-GUARD     (security P2-3) el guard se activa con OR y el rollback lo respeta.
   R-HOLDEQ    (nota) la equivalencia por re-sync hereda también los HOLD.
 """
@@ -74,6 +82,21 @@ def check(text):
         if path not in ac11:
             errs.append(f"R-FORCED: AC-11 no prueba la ruta {path}")
 
+    # R-WFEXEC
+    r3 = section(text, r"R3\b")
+    if "WORKFLOW_EXEC_PATHS" not in r1 or "(a), (b), (c) y (d)" not in r1:
+        errs.append("R-WFEXEC: R1 no aplica (d), el código que ejecutan los workflows")
+    if "WORKFLOW_EXEC_PATHS" not in r2 or "cierre transitivo" not in r2 or "origin/main" not in r2:
+        errs.append("R-WFEXEC: R2.3 no deriva (d) de origin/main con cierre transitivo")
+    if "forced_exclude_error" not in r2 or "forced_exclude_error" not in r3:
+        errs.append("R-WFEXEC: un error al derivar (d) no es STOP en R2.3 y R3")
+    for path in ("scripts/changelog-consolidate.sh", "scripts/generate-capability-map.py",
+                 "forced_exclude_error"):
+        if path not in ac11:
+            errs.append(f"R-WFEXEC: AC-11 no prueba {path}")
+    if "WORKFLOW_EXEC_PATHS" not in s2:
+        errs.append("R-WFEXEC: el slice S2 no incluye (d)")
+
     # R-ACDEF
     defined = set(re.findall(rf"^- \*\*({AC_ID})\b", text, re.M))
     cited = set(re.findall(rf"\b({AC_ID})\b", text))
@@ -103,6 +126,8 @@ def check(text):
         errs.append("R-PENDING: R2.2 no excluye action_required/stale del pass")
     if "action_required" not in ac_bullet(text, "AC-6"):
         errs.append("R-PENDING: AC-6 no prueba action_required")
+    if "ceil(main_pending_timeout * 60 / MERGE_SPRINT_POLL_S)" not in r2:
+        errs.append("R-PENDING: el sondeo no convierte minutos a segundos (20 min / 30 s debe dar 40)")
 
     # R-NOCHECKS
     if "main_sin_checks" not in r2:
@@ -122,6 +147,12 @@ def check(text):
     # R-KEY
     if not re.search(r"\*\*Requisito de la clave ed25519\.\*\*", r1):
         errs.append("R-KEY: R1 no exige que la clave ed25519 quede fuera del alcance del agente")
+    if "La clave privada nunca reside en el equipo de los agentes" not in r1:
+        errs.append("R-KEY: la clave privada debe quedar fuera del equipo de los agentes")
+    if "Esta spec no enmienda LAW-HUMAN-002" not in r1:
+        errs.append("R-KEY: R1 no declara que la spec no enmienda LAW-HUMAN-002")
+    if "Activación bloqueada hasta la enmienda humana de S4" not in text:
+        errs.append("R-ACTIVATION: falta bloquear la activación hasta la enmienda humana de S4")
 
     # R-GUARD
     rollback = section(text, r"Rollback", "##")
