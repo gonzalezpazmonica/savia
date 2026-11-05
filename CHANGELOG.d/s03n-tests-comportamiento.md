@@ -10,3 +10,4 @@ section: Security
 - S03n: focal-checkin.sh valida nido e intervalo y no informa éxito con el lock ocupado; skills-lint.sh --json sin la orden suelta que ensuciaba stderr
 - S03n: pruebas de comportamiento discriminante para 8 ficheros de test (focal-checkin, prompt-security-scan, skills-lint, ext-platform-gate, validate-agent-permissions, risk-tier, transcriptor-scan, agents-catalog-sync)
 
+- S03n: ext-platform-gate.sh avisa por stderr cuando no puede escribir el log de auditoría (antes se perdía en silencio); el test de comilla en --skill ya llega a la allowlist global
