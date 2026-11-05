@@ -12,49 +12,8 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { extractToolName, extractCommand, type ToolInput, type ToolOutput } from "../lib/hook-input.ts";
 
-// Every `git [-C <dir>] checkout|switch` invocation, with its own arguments
-// (up to the next ; & | or newline).
-const INVOCATION_RX = /(?:^|[^\w./-])git\s+(?:-C\s+[^\s;&|]+\s+)?(checkout|switch)(?![\w-])([^;&|\n]*)/gi;
-
-/**
- * Arguments without redirections (`>/dev/null`, `2> f`) or a trailing comment
- * (`# -- x`): neither is a pathspec, so `git checkout feature -- >/dev/null`
- * still changes branch.
- */
-function pathArgs(args: string): string {
-  return (" " + args).replace(/\s#.*$/, "").replace(/(^|\s)\d*[<>]+\s*\S*/g, " ");
-}
-
-/**
- * True if, after a standalone `--`, there is at least one path that is not a
- * `$VAR`, `$(…)` or backtick expansion: those can expand to nothing and leave
- * `git checkout <rama> --`, which changes branch.
- */
-function knownPathAfterDashDash(args: string): boolean {
-  const m = args.match(/(?:^|\s)--\s+(.*)$/);
-  if (!m) return false;
-  const rest = m[1].replace(/\$\([^)]*\)?|`[^`]*`?/g, " ");
-  return rest.split(/\s+/).some((t) => t !== "" && !/^["']?\$/.test(t));
-}
-
-/**
- * True if the command contains an invocation that can move HEAD. A file
- * restore is `git checkout [<opciones>] [<tree-ish>] -- <rutas>`: a standalone
- * `--` followed by at least one path among that invocation's own arguments
- * (`--merge`, `--ours` or a tree-ish before it included) never changes
- * branch; `git checkout main --` without paths does. `git switch` has no
- * pathspec mode. A restore earlier in the command does not excuse a later
- * `git checkout <rama>`.
- */
-export function hasBranchChange(command: string): boolean {
-  // Line continuations join words (same normalisation as the bash hook).
-  for (const m of command.replace(/\\\n/g, " ").matchAll(INVOCATION_RX)) {
-    if (m[1].toLowerCase() === "checkout" && knownPathAfterDashDash(pathArgs(m[2]))) continue;
-    return true;
-  }
-  return false;
-}
-
+// Qué es restauración (`git checkout [<opciones>] [<tree-ish>] -- <rutas>`) y
+// qué cambia de rama lo decide solo el resolvedor; sin él, se bloquea.
 const RESOLVER = fileURLToPath(new URL("../../../scripts/lib/git_op_targets.py", import.meta.url));
 const ADMITTED = "Forma admitida: git -C <ruta> checkout|switch … (o cd <ruta> && git checkout …).";
 // Prefiltro: `git` o `checkout|switch` como palabras (sin comillas ni barras).
@@ -70,7 +29,17 @@ const SWITCH_RX = /(^|[^\w-])(checkout|switch)([^\w-]|$)/i;
 export function switchTargets(command: string, base: string): string[] | null {
   const res = spawnSync("python3", [RESOLVER, "--switch", base], { encoding: "utf8", timeout: 5000, input: command });
   if (res.status !== 0 || res.error) return null;
-  return (res.stdout || "").split("\n").filter((l) => l.startsWith("switch\t")).map((l) => l.slice(7));
+  return parseSwitchTargets(res.stdout || "");
+}
+
+/**
+ * Salida del resolvedor → destinos. Una línea que no sea `switch\t<dir>` (p. ej.
+ * un destino con salto de línea partido en dos) cuenta como "" → BLOQUEAR, igual
+ * que el hook bash (revisión de seguridad #1483, 3.ª, P2-4).
+ */
+export function parseSwitchTargets(stdout: string): string[] {
+  return stdout.split("\n").filter((l) => l !== "")
+    .map((l) => (l.startsWith("switch\t") ? l.slice(7) : ""));
 }
 
 /**
@@ -102,9 +71,13 @@ export async function blockBranchSwitchDirty(
   const base = typeof args.workdir === "string" && args.workdir ? args.workdir : process.cwd();
 
   // El repo que importa es el DESTINO de la orden (`git -C <clon> checkout <sha>`),
-  // no el checkout de la sesión. Sin resolvedor: detector por regex y cwd de la orden.
-  let targets = switchTargets(command, base);
-  if (targets === null) targets = hasBranchChange(command) ? [base] : [];
+  // no el checkout de la sesión. Sin resolvedor (python3 ausente, timeout) no se
+  // sabe si la orden cambia de rama ni dónde (`-c k=v`, `-C "/a b"`, alias,
+  // `$(…)` anidadas): BLOQUEAR, como el hook bash (revisión #1483, 3.ª, P2-5).
+  const targets = switchTargets(command, base);
+  if (targets === null) {
+    throw new Error("BLOCKED [branch-switch-dirty]: resolvedor de destinos no disponible (python3 scripts/lib/git_op_targets.py); no se puede comprobar el cambio de rama (fail-closed).");
+  }
   if (targets.includes("")) {
     throw new Error(`BLOCKED [branch-switch-dirty]: destino del cambio de rama no reconocido con certeza (fail-closed). ${ADMITTED}`);
   }
