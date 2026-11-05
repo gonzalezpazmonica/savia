@@ -199,9 +199,22 @@ if $MERGE; then
   REMOTE_HEAD=$(git ls-remote origin "refs/heads/$BRANCH" 2>/dev/null | cut -f1 | head -1 || true)
   [[ "$REMOTE_HEAD" == "$LOCAL_HEAD" ]] \
     || merge_prep_fail "la cabeza local $LOCAL_HEAD no es la publicada en origin/$BRANCH (${REMOTE_HEAD:-ninguna})."
-  # SE-501: la firma ya no se versiona. Antes de mergear se re-escanea el diff de la cabeza publicada.
-  SAVIA_GATE_UNKNOWN=block bash scripts/confidentiality-scan.sh --pr >/dev/null 2>&1 \
-    || merge_prep_fail "el escaneo de confidencialidad de la cabeza $LOCAL_HEAD no dio CLEAN."
+  # SE-501: la firma ya no se versiona. Antes de mergear se re-escanea el diff de la cabeza publicada
+  # con el escáner de la BASE (--pr-base, como «Confidentiality scan (PR)»): una cabeza que modifica el
+  # escáner no se audita con su versión. Sin origin/main o sin --pr-base en la base: no hay merge.
+  SCAN_BASE=$(git rev-parse -q --verify "origin/main^{commit}" 2>/dev/null) \
+    || merge_prep_fail "sin origin/main no hay escáner de confianza para la cabeza $LOCAL_HEAD."
+  SCAN_TMP=$(mktemp)
+  if ! git show "$SCAN_BASE:scripts/confidentiality-scan.sh" > "$SCAN_TMP" 2>/dev/null \
+     || ! grep -q -- '--pr-base)' "$SCAN_TMP"; then
+    rm -f "$SCAN_TMP"
+    merge_prep_fail "origin/main (${SCAN_BASE:0:12}) no trae scripts/confidentiality-scan.sh con --pr-base."
+  fi
+  scan_rc=0
+  bash "$SCAN_TMP" --pr-base "$SCAN_BASE" --repo "$ROOT" >/dev/null 2>&1 || scan_rc=$?
+  rm -f "$SCAN_TMP"
+  (( scan_rc == 0 )) \
+    || merge_prep_fail "el escaneo de confidencialidad (escáner de origin/main) de la cabeza $LOCAL_HEAD no dio CLEAN."
   PR_NUM=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
   [[ "$PR_NUM" =~ ^[0-9]+$ ]] || merge_prep_fail "no hay un PR abierto para $BRANCH."
   echo "  PR #$PR_NUM, cabeza $LOCAL_HEAD."
