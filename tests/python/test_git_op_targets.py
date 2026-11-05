@@ -145,6 +145,15 @@ class Targets(unittest.TestCase):
                     "timeout 60 git --git-dir remote add .",
                     "timeout 60 git --work-tree=/x/worktree add ."):
             self.assertBlocks(cmd, "add")
+        # Revisión #1483 (2.ª): un valor entrecomillado o con espacio escapado
+        # que acaba en ` remote`/` worktree` es UN solo argumento de la opción.
+        for cmd in ('timeout 60 git -C "/tmp/mi remote" add .',
+                    "timeout 60 git -C '/tmp/mi worktree' add -A",
+                    "timeout 60 git -C /x/a\\ worktree add .",
+                    'timeout 60 git -c "k=v remote" add .',
+                    'timeout 60 git --work-tree "/x/y remote" add .',
+                    "sh -c \"git -C '/x/mi remote' add .\""):
+            self.assertBlocks(cmd, "add")
         # Con opciones globales delante, `worktree add` sigue sin contar.
         for cmd in (f"timeout 60 git -c a.b=1 -C {self.base} --no-pager worktree add {self.wt}-n",
                     "timeout 9 git --git-dir=/x/.git remote add up https://example.invalid/r.git"):
