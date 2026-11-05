@@ -78,6 +78,7 @@ campos. Los hooks que no pueden medir (sin `jq`) lo registran con `gate_unmeasur
 | | `--ci`: 0 / 1 | `clean` / `findings` |
 | | `--ci`: 0 con aviso `WARN` | `unknown` (grep ilegible o sin hooks; registrado; con `SAVIA_GATE_UNKNOWN=block` sale 1) |
 | `evals-runner.sh` (SE-468) | 0 | `result` por dataset en el JSON (`--mock`: siempre `unknown`/`not_executed`; sin baseline: `no_baseline`) |
+| `trace-tamper-scan.py` (SE-470) | 0 / 1 / 2 | `clean` / `findings` / `unknown` (recibo ilegible, vacío, con líneas corruptas o en formato no reconocido; sin lista de rutas). JSON en stdout con `result` y `gaps` |
 | | 2 | modo vivo sin `SAVIA_EVAL_EXECUTOR` (fallo cerrado) |
 | `evals-paired-delta.py --check-report` | 0 / 1 / 2 | sin `findings` (lista los `unknown` como no evaluados) / `findings`, o `unknown` con `SAVIA_GATE_UNKNOWN=block` / informe ilegible, `unknown` sin `gaps` o umbral no numérico |
 | `mobile-security-scan.sh` | 0 con informe | según `gate-result` (también en el JSON: `result`, `gaps`); sin apktool, descompilación vacía, modo `dynamic` o informe MobSF sin triaje ⇒ `unknown` |
