@@ -81,6 +81,31 @@ class Strip(unittest.TestCase):
             cmd = f"cat > {target} <<'EOF'\n{RM} /\nEOF"
             self.assertIn(RM, strip(cmd), cmd)
 
+    def test_autorun_targets_ignore_case_and_cover_hook_dirs(self):
+        # Revisión de seguridad #1483 (3.ª, P2-2): APFS/NTFS no distinguen
+        # mayúsculas; `.husky/`, `.githooks/` (core.hooksPath) y `.ssh/rc` se
+        # ejecutan solos.
+        for target in (".Git/hooks/pre-commit", ".BashRC", ".husky/pre-commit",
+                       ".githooks/pre-push", "/home/u/.ssh/rc"):
+            cmd = f"cat > {target} <<'EOF'\n{RM} /\nEOF"
+            self.assertIn(RM, strip(cmd), cmd)
+            cmd = f"cat > n.md <<'EOF'\n{RM} /\nEOF\ncat n.md >> {target}"
+            self.assertIn(RM, strip(cmd), cmd)
+        # negativo: un fichero de datos con nombre parecido sigue quitando el cuerpo
+        self.assertNotIn(RM, strip(f"cat > docs/husky.md <<'EOF'\n{RM} /\nEOF"))
+
+    def test_printf_assigning_a_variable_keeps_body(self):
+        # Revisión de seguridad #1483 (3.ª, P2-1): `printf -v PATH …` cambia
+        # qué programa ejecuta bash después.
+        for pre in ("printf -v PATH %s /tmp/x", "printf -vPATH %s /tmp/x",
+                    "echo a; printf -v PATH %s /tmp/x"):
+            cmd = f"{pre}\ncat > n.md <<'EOF'\n{RM} /\nEOF"
+            self.assertIn(RM, strip(cmd), cmd)
+        # negativo: printf que solo escribe, o `-v` como dato de otra orden
+        for pre in ("printf %s -v", "grep -v x f.md"):
+            cmd = f"{pre}\ncat > n.md <<'EOF'\n{RM} /\nEOF"
+            self.assertNotIn(RM, strip(cmd), cmd)
+
     def test_copy_to_autorun_file_keeps_body(self):
         # Revisión de seguridad #1483 P2-1: el resto copia el fichero «inerte»
         # a un destino que se ejecuta solo.

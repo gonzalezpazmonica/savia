@@ -18,14 +18,15 @@ Se quita el cuerpo SOLO si todo esto se cumple (lista blanca, fail-closed):
     comillas invertidas (bash las ejecutaría al expandir el cuerpo);
   - el destino es una ruta literal (`[A-Za-z0-9_./-]`): sin `$`, `~`, comillas
     ni glob; y no se ejecuta solo fuera de la orden: nada bajo `.git/` (hooks,
-    config), `.claude/`, `.opencode/` o `.github/`, ni ficheros de arranque
-    del shell (`.bashrc`, `.profile`, `profile.d/`…). El resto de la orden
+    config), `.claude/`, `.opencode/`, `.github/`, `.husky/` o `.githooks/`,
+    ni ficheros de arranque del shell (`.bashrc`, `.profile`, `profile.d/`,
+    `.ssh/rc`…), sin distinguir mayúsculas. El resto de la orden
     tampoco nombra uno de esos ficheros ni una ruta con `~` (no copia allí
     el fichero escrito);
   - TODO lo que queda de la orden fuera de esos cuerpos son órdenes de una
     lista cerrada que solo leen o escriben datos (cat, tee, echo, grep…), sin
-    `$`, comillas invertidas ni `#`. Nunca se infiere que algo es inerte por
-    buscar el nombre del fichero: `export BASH_ENV=…` antes, `bash /tmp/x-*`
+    `$`, comillas invertidas ni `#`, y `printf` sin `-v` (asigna variables).
+    Nunca se infiere que algo es inerte por buscar el nombre del fichero: `export BASH_ENV=…` antes, `bash /tmp/x-*`
     o `npm test` después, o cualquier orden desconocida, conservan TODO.
   - si algún heredoc de la orden no cumple lo anterior, no se quita ninguno.
 Todo lo demás se devuelve intacto: `bash <<EOF`, `sh -c`, `cat <<EOF | bash`,
@@ -47,10 +48,12 @@ INERT = {"cat", "tee", "echo", "printf", "grep", "wc", "head", "tail", "cut", "t
 SEPARATORS = set(";&|\n()")
 # Ficheros que se ejecutan solos, fuera de la orden: config de git, arranque de
 # shells, hooks y plugins de los frontends, workflows de CI.
+# Sin distinguir mayúsculas: en APFS o NTFS `.Git/hooks` es `.git/hooks`.
 AUTORUN = re.compile(r"(^|/)\.git(/|$)|(^|/)\.(bashrc|bash_profile|bash_login|bash_logout|"
                      r"bash_aliases|profile|zshrc|zprofile|zshenv|zlogin|zlogout|envrc)$"
                      r"|(^|/)profile\.d(/|$)|(^|/)\.config/fish(/|$)"
-                     r"|(^|/)\.(claude|opencode|github)(/|$)")
+                     r"|(^|/)\.(claude|opencode|github|husky|githooks)(/|$)|(^|/)\.ssh/rc$",
+                     re.I)
 LEAD = re.compile(r"^[ \t]*(?:[A-Za-z_][A-Za-z0-9_]*=\S*[ \t]+)*(cat|tee)(?=[ \t])")
 
 
@@ -79,9 +82,15 @@ def rest_is_inert(text):
         lex.whitespace_split = True
         lex.commenters = ""
         start = True
+        printf_opt = False
         for token in lex:
             if token and all(c in SEPARATORS for c in token):
                 start = True
+                printf_opt = False
+            elif printf_opt and token.startswith("-v"):
+                # `printf -v PATH …` asigna una variable: deja de ser inerte
+                # (revisión de seguridad #1483, 3.ª, P2-1).
+                return False
             elif token.startswith("~") or AUTORUN.search(token):
                 # `cat n.md >> ~/.bashrc`, `tee -a .git/hooks/x`: copia el texto
                 # «inerte» a un fichero que se ejecuta solo (revisión #1483 P2-1).
@@ -90,6 +99,9 @@ def rest_is_inert(text):
                 if token not in INERT:
                     return False
                 start = False
+                printf_opt = token == "printf"
+            else:
+                printf_opt = False
     except ValueError:  # comillas sin cerrar: no se sabe dónde acaba nada
         return False
     return True
