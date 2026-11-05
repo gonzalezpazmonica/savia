@@ -130,8 +130,9 @@ jobs:
              && grep -q '^  gate)' "$X/scripts/derived.sh"; then
             bash "$X/scripts/derived.sh" gate --repo "$PWD" --range "$BASE_SHA..HEAD"
           else
-            echo "::warning::la base aún no tiene derived.sh gate (PR de arranque): se usa el de la PR"
-            bash scripts/derived.sh gate --range "$BASE_SHA..HEAD"
+            # Fail-closed (seguimiento de #1472): nunca se usa el gate ni la lista de la propia PR.
+            echo "::error::la base $BASE_SHA no trae scripts/derived.sh con «gate» o scripts/derived-paths.txt; no hay gate de confianza. Rebasa la PR sobre main."
+            exit 1
           fi
 
       # SE-501 (opción B): D no se versiona; se genera aquí para los pasos que lo leen.
@@ -397,6 +398,10 @@ jobs:
 
       - name: Installer contracts, planner and detection (SE-399 F1+F2)
         run: python3 -m unittest tests/python/test_installer_plan.py tests/python/test_installer_f2.py
+
+      # SE-470 S2: detector determinista de manipulación en trazas; su suite vive en tests/python/.
+      - name: Trace tamper scan (SE-470 S2)
+        run: python3 -m unittest tests/python/test_trace_tamper_scan.py
 
       # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
       # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.

@@ -11,7 +11,7 @@ Tiers:
 Fail-closed: un path no clasificable → tier 3 (humano, no asume bajo riesgo).
 
 Uso:
-  risk-tier.py --diff "path1 path2" [--json]
+  risk-tier.py --diff "path1 path2" [--json] [--base <ref>]
 
 Ref: SE-362 — gradación de riesgo para auto-merge (gobernanza ejecutable)
 """
@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 
 # Paths que elevan el tier
@@ -59,17 +60,33 @@ def is_governance(path: str) -> bool:
 # Artefactos regenerados por generate-capability-map.py y sam.py: reflejan cambios ya
 # clasificados en sus fuentes. Las declaraciones del SAM (*-declarations.json, esquema)
 # se editan a mano y siguen clasificándose.
-# SE-501: se leen de scripts/derived-paths.txt (fuente única de D). Sin la lista no se exime nada
-# (fail-closed: el riesgo solo puede subir).
-def _load_scm_generated():
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "derived-paths.txt")
+# SE-501: se leen de scripts/derived-paths.txt (fuente única de D) TAL COMO ESTÁ EN LA BASE (por defecto
+# origin/main; --base <ref>), nunca del checkout: la lista viaja en la PR y una PR que se añade a sí misma
+# rebajaría su propio tier (seguimiento de #1472). Sin la lista de la base no se exime nada (fail-closed:
+# el riesgo solo puede subir).
+DEFAULT_BASE = "origin/main"
+
+
+def _base_entries(base):
+    """Líneas de scripts/derived-paths.txt en <base>; None si no se puede leer (ref inválida, sin git…)."""
+    if not base or base.startswith("-"):
+        return None
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     try:
-        with open(path, encoding="utf-8") as fh:
-            entries = [l.strip() for l in fh if l.strip() and not l.lstrip().startswith("#")]
-    except OSError:
+        r = subprocess.run(["git", "-C", root, "show", f"{base}:scripts/derived-paths.txt"],
+                           capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.splitlines() if r.returncode == 0 else None
+
+
+def _load_scm_generated(base=DEFAULT_BASE):
+    lines = _base_entries(base)
+    if lines is None:
         return (), ()
-    # rev-1472 S-P2-2: la lista viaja en la PR. Una entrada que cubra todo .scm/ (o un fichero editado a
-    # mano) rebajaría el tier de las declaraciones del SAM; esas entradas se ignoran (fail-closed).
+    entries = [l.strip() for l in lines if l.strip() and not l.lstrip().startswith("#")]
+    # rev-1472 S-P2-2: una entrada que cubra todo .scm/ (o un fichero editado a mano) rebajaría el tier
+    # de las declaraciones del SAM; esas entradas se ignoran (fail-closed), también si vienen de la base.
     scm = [e.lower() for e in entries if e.startswith(".scm/") and e != ".scm/" and not _scm_hand_edited(e)]
     return tuple(e for e in scm if not e.endswith("/")), tuple(e for e in scm if e.endswith("/"))
 
@@ -153,7 +170,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Clasificador de riesgo (SE-362)")
     parser.add_argument("--diff", required=True, help="archivos del diff separados por espacio")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--base", default=DEFAULT_BASE,
+                        help="ref de la base de la que se lee scripts/derived-paths.txt (por defecto origin/main)")
     args = parser.parse_args()
+    global SCM_GENERATED_FILES, SCM_GENERATED_DIRS
+    SCM_GENERATED_FILES, SCM_GENERATED_DIRS = _load_scm_generated(args.base)
 
     files = [f for f in args.diff.split() if f]
     result = classify(files)

@@ -148,6 +148,7 @@ make_repo() {
   cat > "$r/scripts/confidentiality-scan.sh" <<'SCAN'
 #!/usr/bin/env bash
 echo "scan $*" >> "${SCAN_LOG:-/dev/null}"
+case "${1:-}" in --pr-base) : ;; esac   # modo de la base (push-pr --merge lo exige)
 if [[ -n "${SCAN_RC:-}" ]]; then exit "$SCAN_RC"; fi
 if git diff origin/main...HEAD 2>/dev/null | grep -q '^+.*VETADO'; then
   echo 'gate-result: {"result":"findings","gaps":[]}'; exit 1
@@ -268,8 +269,11 @@ remote_head() { git -C "$1" ls-remote origin refs/heads/agent/x | cut -f1; }
   [ "$status" -eq 0 ]
   grep -q -- "^pr merge 42 -R .* --squash --match-head-commit $published$" "$GH_LOG"
   grep -qx "consume --scope merge --resource pr:42" "$OG_LOG"
-  # rev-1472 P1-2: --merge re-escanea la cabeza; no firma ni empuja.
-  grep -qx "scan --pr" "$SCAN_LOG"
+  # rev-1472 P1-2: --merge re-escanea la cabeza; no firma ni empuja. SE-501 (seguimiento de #1472):
+  # con el escáner de origin/main en modo --pr-base, nunca con el de la cabeza.
+  grep -q "^scan --pr-base $(git -C "$r" rev-parse origin/main) --repo " "$SCAN_LOG"
+  run grep -cx "scan --pr" "$SCAN_LOG"
+  [ "$output" = "0" ]
   [ "$(git -C "$r" rev-parse HEAD)" = "$published" ]
   [ "$(remote_head "$r")" = "$published" ]
   run grep -c "^pr create\|^api " "$GH_LOG"
@@ -356,6 +360,57 @@ remote_head() { git -C "$1" ls-remote origin refs/heads/agent/x | cut -f1; }
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 0 ]
   [ ! -e "$r/.confidentiality-signature" ]
+}
+
+@test "SE-501 seguimiento #1472 --merge: una cabeza que neutraliza su propio escáner no se mergea (escáner de origin/main)" {
+  r=$(make_merge_repo)
+  # La cabeza cambia el escáner para que siempre dé clean y añade un dato vetado.
+  cat > "$r/scripts/confidentiality-scan.sh" <<'SCAN'
+#!/usr/bin/env bash
+echo "scan-pr $*" >> "${SCAN_LOG:-/dev/null}"
+echo 'gate-result: {"result":"clean","gaps":[]}'
+SCAN
+  echo "dato VETADO" >> "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): escáner propio y dato vetado"; git -C "$r" push -q origin agent/x
+  export SCAN_LOG="$TESTDIR/scan.log"; : > "$SCAN_LOG"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escáner de origin/main"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  run grep -c "^scan-pr" "$SCAN_LOG"     # el escáner de la cabeza no se ejecutó
+  [ "$output" = "0" ]
+  # Control: sin el dato vetado (mismo escáner modificado en la cabeza) sí mergea.
+  sed -i '/VETADO/d' "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): sin dato"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+}
+
+@test "SE-501 seguimiento #1472 --merge: si origin/main no trae --pr-base o no existe, no hay merge" {
+  r=$(make_merge_repo)
+  good=$(git -C "$r" rev-parse origin/main)
+  # Base cuyo escáner no tiene el modo --pr-base (commit fuera de la rama, con plumbing).
+  git -C "$r" show "$good:scripts/confidentiality-scan.sh" | sed '/--pr-base)/d' > "$TESTDIR/scan-viejo.sh"
+  blob=$(git -C "$r" hash-object -w "$TESTDIR/scan-viejo.sh")
+  sub=$(git -C "$r" ls-tree "$good:scripts" | awk -v b="$blob" -F'\t' '$2=="confidentiality-scan.sh"{sub(/[0-9a-f]{40}$/,b,$1)} {print $1"\t"$2}' | git -C "$r" mktree)
+  tree=$(git -C "$r" ls-tree "$good" | awk -v s="$sub" -F'\t' '$2=="scripts"{sub(/[0-9a-f]{40}$/,s,$1)} {print $1"\t"$2}' | git -C "$r" mktree)
+  vieja=$(git -C "$r" commit-tree "$tree" -p "$good" -m "base sin --pr-base")
+  git -C "$r" update-ref refs/remotes/origin/main "$vieja"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no trae scripts/confidentiality-scan.sh con --pr-base"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Sin origin/main: tampoco.
+  git -C "$r" update-ref -d refs/remotes/origin/main
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin origin/main"* ]]
+  # Control: con la base buena, mergea.
+  git -C "$r" update-ref refs/remotes/origin/main "$good"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
 }
 
 @test "SE-343 --merge: con cambios sin commitear o sin gh autenticado no se mergea" {
@@ -526,7 +581,9 @@ no_merge_done() {
   git -C "$r" update-ref -d refs/remotes/origin/main
   GH_STATE=MERGED run_merge "$r"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"no se pudo comparar"* ]]
+  # Desde el seguimiento de #1472 el escaneo con el escáner de origin/main corta antes que la
+  # comparación de firmantes: sin origin/main no hay escáner de confianza.
+  [[ "$output" == *"sin origin/main"* ]]
   no_merge_done
 }
 
