@@ -28,21 +28,33 @@ COMMAND=$(echo "$PARSED" | sed -n '1p')
 SESSION_CWD=$(echo "$PARSED" | sed -n '2p')
 [[ -z "$COMMAND" ]] && exit 0
 
-# Locate the branch-changing invocation itself: `git [-C <dir>] (checkout|switch) <args>`.
-# Only THAT invocation's -C counts — a foreign `git -C X status` elsewhere in the
-# command must not decide the target repo.
-if ! [[ "$COMMAND" =~ (^|[^[:alnum:]_./-])git[[:space:]]+(-C[[:space:]]+([^[:space:]\;\&\|]+)[[:space:]]+)?(checkout|switch)[[:space:]]+(.*) ]]; then
-  exit 0
-fi
-GIT_C_DIR="${BASH_REMATCH[3]}"
-GIT_SUBCMD="${BASH_REMATCH[4]}"
-GIT_ARGS="${BASH_REMATCH[5]}"
-PREFIX="${COMMAND%%"${BASH_REMATCH[0]}"*}"   # text before the git invocation
-
-# Skip file restores (git checkout -- file), also with -C
-if [[ "$GIT_SUBCMD" == "checkout" && "$GIT_ARGS" =~ ^--([[:space:]]|$) ]]; then
-  exit 0
-fi
+# Locate the branch-changing invocation itself: `git [-C <dir>] (checkout|switch) <args>`,
+# each one with its OWN arguments (up to the next ; & |). Only THAT invocation's -C
+# counts — a foreign `git -C X status` elsewhere in the command must not decide the
+# target repo. A file restore is `git checkout [<opciones>] [<tree-ish>] -- <rutas>`:
+# a standalone `--` followed by at least one path (`--merge`, `--ours` or a tree-ish
+# before it included). It never moves HEAD, so it is skipped — but a restore earlier
+# in the command does not excuse a later `git checkout <rama>`.
+INVOCATION_RX='(^|[^[:alnum:]_./-])git[[:space:]]+(-C[[:space:]]+([^[:space:];&|]+)[[:space:]]+)?(checkout|switch)[[:space:]]+([^;&|]*)'
+SCAN="$COMMAND"
+CONSUMED=""
+FOUND=0
+while [[ "$SCAN" =~ $INVOCATION_RX ]]; do
+  WHOLE="${BASH_REMATCH[0]}"
+  GIT_C_DIR="${BASH_REMATCH[3]}"
+  GIT_SUBCMD="${BASH_REMATCH[4]}"
+  GIT_ARGS="${BASH_REMATCH[5]}"
+  BEFORE="${SCAN%%"$WHOLE"*}"
+  if [[ "$GIT_SUBCMD" == "checkout" && " $GIT_ARGS" =~ [[:space:]]--[[:space:]]+[^[:space:]] ]]; then
+    CONSUMED+="$BEFORE$WHOLE"
+    SCAN="${SCAN#*"$WHOLE"}"
+    continue
+  fi
+  FOUND=1
+  break
+done
+[[ $FOUND -eq 1 ]] || exit 0
+PREFIX="$CONSUMED$BEFORE"   # text before the branch-changing git invocation
 
 # Last `cd <dir> &&|;` BEFORE the git invocation (cd A && cd B && git switch → B)
 CD_DIR=""

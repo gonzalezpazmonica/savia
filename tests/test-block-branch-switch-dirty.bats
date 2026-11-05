@@ -129,6 +129,47 @@ setup_clean_repo() {
   cd "$BATS_TEST_DIRNAME/.."
 }
 
+@test "exempt: git checkout --merge -- <ficheros> is a restore, allowed with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout --merge -- a.txt"}}'
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "exempt: git checkout <tree-ish> -- <ruta> restores, allowed with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout HEAD -- a.txt"}}'
+  [ "$status" -eq 0 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "block: git checkout --merge <rama> (no paths) still blocks with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout --merge feature"}}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOQUEADO"* ]]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "block: git checkout <rama> -- without paths still blocks with dirty tree" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout feature --"}}'
+  [ "$status" -eq 2 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
+@test "block: a restore earlier in the command does not excuse a later branch switch" {
+  setup_clean_repo
+  echo "modified" > a.txt
+  run bash "$HOOK_ABS" <<< '{"tool_input":{"command":"git checkout -- b.txt; git checkout feature"}}'
+  [ "$status" -eq 2 ]
+  cd "$BATS_TEST_DIRNAME/.."
+}
+
 # ── Dirty tree → block ──────────────────────────────────
 
 @test "block: git checkout with modified file exits 2" {
