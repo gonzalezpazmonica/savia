@@ -247,9 +247,16 @@ setup_clean_repo() {
 
 # ── Negative cases ─────────────────────────────────────
 
-@test "negative: malformed JSON exits 0" {
+# Revisión #1483: entrada inesperada → fail-closed (antes salía 0 sin mirar).
+@test "negative: malformed JSON blocks (fail-closed)" {
   run bash "$HOOK" <<< "not valid JSON"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"entrada de hook inválida"* ]]
+}
+
+@test "negative: a non-string command is unexpected input and blocks" {
+  run bash "$HOOK" <<< '{"tool_input":{"command":["git","checkout","feature"]}}'
+  [ "$status" -eq 2 ]
 }
 
 @test "negative: command 'git-checkout' with dash not matched" {
@@ -282,10 +289,13 @@ setup_clean_repo() {
   cd "$BATS_TEST_DIRNAME/.."
 }
 
-@test "resolution: cd \$UNSET && git switch — session cwd clean → exits 0" {
+# Revisión #1483: un destino que no se puede resolver bloquea aunque el cwd de
+# la sesión esté limpio (fail-closed, misma decisión que el guard TS).
+@test "resolution: cd \$UNSET && git switch — session cwd clean → exits 2 (uncertain target)" {
   setup_clean_repo
   run bash "$HOOK_ABS" <<< "{\"cwd\":\"$TEST_REPO\",\"tool_input\":{\"command\":\"cd \$B && git switch feature\"}}"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"destino de cambio de rama desconocido"* ]]
   cd "$BATS_TEST_DIRNAME/.."
 }
 
