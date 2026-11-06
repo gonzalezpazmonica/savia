@@ -11,31 +11,38 @@
 #   bash scripts/mind-virus/quarantine.sh --rescan            # re-verify quarantined
 set -uo pipefail
 
-ROOT="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# Raíz del repo del propio script (scripts/mind-virus/ → ../..), no el directorio actual: lanzado desde
+# fuera del repo no encontraba el detector.
+ROOT="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 DETECT="$ROOT/scripts/mind-virus/detect.py"
 QUARANTINE_DIR="${SAVIA_MVD_QUARANTINE:-$ROOT/output/mvd-quarantine}"
 MODE=""
 PATH_ARG=""
 REASON=""
+EXPECT_REASON=false
 
+# --reason toma el siguiente argumento sin cambiar el modo. Antes ponía MODE=() y la orden
+# documentada «--quarantine <path> --reason texto» acababa en el uso con exit 2.
 for a in "$@"; do
+  if [[ "$EXPECT_REASON" == "true" ]]; then
+    REASON="$a"; EXPECT_REASON=false; continue
+  fi
   case "$a" in
     --quarantine) MODE="quarantine" ;;
     --list) MODE="list" ;;
     --rescan) MODE="rescan" ;;
-    --reason) MODE="reason" ;;
+    --reason) EXPECT_REASON=true ;;
     --*) echo "Unknown flag: $a" >&2; exit 2 ;;
     *)
       if [[ "$MODE" == "quarantine" && -z "$PATH_ARG" ]]; then
         PATH_ARG="$a"
-      elif [[ "$MODE" == "reason" && -z "$REASON" ]]; then
-        REASON="$a"; MODE=()
       else
         echo "Unexpected arg: $a" >&2; exit 2
       fi
       ;;
   esac
 done
+[[ "$EXPECT_REASON" == "true" ]] && { echo "Error: --reason requiere un texto" >&2; exit 2; }
 
 mkdir -p "$QUARANTINE_DIR" 2>/dev/null || true
 
