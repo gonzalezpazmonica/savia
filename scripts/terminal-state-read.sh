@@ -11,11 +11,12 @@
 #
 # Exit codes: reflect the 'reason' of the last recorded state
 #   0  completed | user_abort
-#   1  unknown reason or no state file found
+#   1  unknown reason, no state file found, or usage error (bad --loop)
 #   2  token_budget
 #   3  stop_hook
 #   4  max_turns
 #   5  unrecoverable_error
+#   6  handback (SE-332)
 #
 # Orchestrator decision table:
 #   completed           → no reintentar, marcar done
@@ -25,6 +26,7 @@
 #                         si retry_count >= 3: escalar a humano
 #   unrecoverable_error → escalar a humano inmediatamente (no reintentar)
 #   stop_hook           → revisar qué hook bloqueó, escalar a humano (no reintentar)
+#   handback            → resolver el padre (handback-resolve.sh), no reintentar
 
 set -uo pipefail
 
@@ -50,6 +52,7 @@ reason_to_exit_code() {
     stop_hook)           echo 3 ;;
     max_turns)           echo 4 ;;
     unrecoverable_error) echo 5 ;;
+    handback)            echo 6 ;;
     *)                   echo 1 ;;
   esac
 }
@@ -80,10 +83,10 @@ done
 
 [[ -n "$LOOP" ]] || die "--loop is required"
 
-# Path traversal guard
-if [[ "$LOOP" == *"/"* ]]; then
-  echo "ERROR: --loop value must not contain '/': '$LOOP'" >&2
-  exit 2
+# Path traversal guard (same rule as emit). Exit 1, never 2: 2 means token_budget.
+if [[ "$LOOP" == *"/"* || "$LOOP" == *".."* || ! "$LOOP" =~ ^[A-Za-z0-9._-]+$ || "$LOOP" == "." ]]; then
+  echo "ERROR: --loop value must not contain '/' or '..' and must match [A-Za-z0-9._-]+: '$LOOP'" >&2
+  exit 1
 fi
 
 # ── Locate state file ─────────────────────────────────────────────────────────
@@ -114,7 +117,8 @@ echo "$LAST_LINE"
 
 REASON=$(grep -o '"reason":"[^"]*"' <<< "$LAST_LINE" | cut -d'"' -f4)
 
-if [[ -z "$REASON" || "$REASON" == "$LAST_LINE" ]]; then
+# Exactly one reason field: two (a forged line) is ambiguous, so it is an error.
+if [[ -z "$REASON" || "$REASON" == "$LAST_LINE" || "$REASON" == *$'\n'* ]]; then
   echo "ERROR: could not parse 'reason' from last state line" >&2
   exit 1
 fi

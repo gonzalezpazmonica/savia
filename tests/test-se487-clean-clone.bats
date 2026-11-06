@@ -249,3 +249,132 @@ run_hook() {
   python3 -c 'import json,sys; json.loads(sys.argv[1])' "$OUT"
   [[ "$OUT" == *"slug zz-fixture"* ]]
 }
+
+# ── S03r: guardia clean-clone, casos que la suite no discriminaba ────────────
+# Cada test se escribió contra un mutante concreto del guard que antes sobrevivía.
+
+@test "safety: guard script uses set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$GUARD"
+}
+
+@test "boundary: a 3-char slug is checked, a 2-char slug is skipped" {
+  fixture_tree "$TMP/t"
+  mkdir -p "$TMP/t/.claude/profiles/users/abc" "$TMP/t/.claude/profiles/users/ab"
+  echo "Equipo ab y nada más." >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"3 perfiles locales evaluados"* ]]
+  echo "Hola abc." >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/extra.md: contiene un dato de un perfil local"* ]]
+}
+
+@test "boundary: a 3-char profile name is checked" {
+  fixture_tree "$TMP/t"
+  printf 'name: Ana\n' > "$TMP/t/.claude/profiles/users/zz-fixture/identity.md"
+  echo "Pregunta a Ana." >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+}
+
+@test "AC-3 negative: slug match ignores case" {
+  fixture_tree "$TMP/t"
+  echo "Usuario: ZZ-FIXTURE" >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+}
+
+@test "edge: slug inside a longer word is not a match" {
+  fixture_tree "$TMP/t"
+  echo "Nombre zz-fixtures2 y prezz-fixture." >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 0 ]
+}
+
+@test "boundary: nested imports are followed to depth 5, not beyond" {
+  fixture_tree "$TMP/t"
+  echo '@l2.md' >> "$TMP/t/docs/extra.md"
+  echo '@l3.md' > "$TMP/t/docs/l2.md"
+  echo '@l4.md' > "$TMP/t/docs/l3.md"
+  echo '@l5.md' > "$TMP/t/docs/l4.md"
+  echo '@l6.md' > "$TMP/t/docs/l5.md"
+  echo 'ruta /home/someone/x' > "$TMP/t/docs/l6.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 0 ]
+  echo 'ruta /home/someone/x' >> "$TMP/t/docs/l5.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/l5.md: ruta personal"* ]]
+  [[ "$output" != *"docs/l6.md"* ]]
+}
+
+@test "edge: absolute and home imports are local by design and skipped" {
+  fixture_tree "$TMP/t"
+  echo 'ruta /home/someone/x' > "$TMP/abs.md"
+  printf '@%s\n@~/.savia/x.md\n' "$TMP/abs.md" >> "$TMP/t/CLAUDE.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 0 ]
+}
+
+@test "edge: gitignored import is skipped in a git tree, versioned one is scanned" {
+  fixture_tree "$TMP/t"
+  git -C "$TMP/t" init -q
+  printf 'docs/local.md\n' > "$TMP/t/.gitignore"
+  echo '@docs/local.md' >> "$TMP/t/CLAUDE.md"
+  echo 'ruta /home/someone/x' > "$TMP/t/docs/local.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 0 ]
+  : > "$TMP/t/.gitignore"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"docs/local.md: ruta personal"* ]]
+}
+
+@test "edge: a file imported twice is reported once" {
+  fixture_tree "$TMP/t"
+  echo '@docs/extra.md' >> "$TMP/t/CLAUDE.md"
+  echo 'ruta /home/someone/x' >> "$TMP/t/docs/extra.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"clean-clone: 1 hallazgo(s)"* ]]
+}
+
+@test "AC-3 negative: .opencode/CLAUDE.md is scanned" {
+  fixture_tree "$TMP/t"
+  mkdir -p "$TMP/t/.opencode"
+  echo 'zz-fixture' > "$TMP/t/.opencode/CLAUDE.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".opencode/CLAUDE.md"* ]]
+}
+
+@test "AC-3 negative: macOS /Users/<name>/ path fails" {
+  fixture_tree "$TMP/t"
+  echo 'export JAVA_HOME=/Users/someone/jdk' >> "$TMP/t/CLAUDE.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CLAUDE.md: ruta personal en la línea 4"* ]]
+}
+
+@test "AC-3 negative: old generator 'profile slug' format alone fails" {
+  fixture_tree "$TMP/t"
+  echo '- profile slug `nadie`' >> "$TMP/t/docs/critical-facts.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"formato del generador antiguo"* ]]
+}
+
+@test "fail-closed: --root that is not a directory is an error" {
+  run bash "$GUARD" --clean-clone --root "$TMP/nonexistent"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--root no es un directorio"* ]]
+}
+
+@test "fail-closed: missing docs/critical-facts.md is an error" {
+  fixture_tree "$TMP/t"
+  mv "$TMP/t/docs/critical-facts.md" "$TMP/moved-cf.md"
+  run bash "$GUARD" --clean-clone --root "$TMP/t"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"falta el fichero de arranque docs/critical-facts.md"* ]]
+}

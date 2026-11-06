@@ -46,3 +46,177 @@ SE096_ORPHANS=(
   # Script should not report these 9 in its orphan list
   :
 }
+
+# ── Comportamiento del detector sobre un árbol aislado (S03r) ────────────────
+# Ref: SE-048 (detector), SE-096 (archivado). El script calcula PROJECT_ROOT
+# desde su propio directorio, así que se copia a un árbol temporal con reglas
+# y referencias controladas: cada test sabe exactamente qué debe salir.
+# El árbol vive en $BATS_TEST_TMPDIR, que bats crea y limpia en cada test.
+
+setup() {
+  TMP="$BATS_TEST_TMPDIR/tree"
+  mkdir -p "$TMP/scripts" "$TMP/docs/rules/domain" "$TMP/tests"
+  cp "$REPO_ROOT/scripts/rule-orphan-detector.sh" "$TMP/scripts/"
+  DET="$TMP/scripts/rule-orphan-detector.sh"
+  D="$TMP/docs/rules/domain"
+}
+
+@test "detector: script declares set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$REPO_ROOT/scripts/rule-orphan-detector.sh"
+}
+
+@test "detector: referenced rule passes with exit 0 and VERDICT PASS" {
+  echo "# Used" > "$D/used.md"
+  echo "see docs/rules/domain/used.md" > "$TMP/tests/ref.sh"
+  run bash "$DET"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Total rules:    1"* ]]
+  [[ "$output" == *"VERDICT: PASS"* ]]
+}
+
+@test "detector: rule with zero references fails with exit 1 and is listed" {
+  echo "# Lonely" > "$D/lonely.md"
+  run bash "$DET"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"VERDICT: FAIL"* ]]
+  [[ "$output" == *"0 refs  docs/rules/domain/lonely.md"* ]]
+}
+
+@test "detector: self-reference inside the rule file does not count" {
+  echo "This rule is lonely.md and cites lonely.md" > "$D/lonely.md"
+  run bash "$DET" --json
+  [ "$status" -eq 1 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["orphans"]==1 and d["orphan_list"][0]=={"refs":0,"rule":"docs/rules/domain/lonely.md"}, d' "$output"
+}
+
+@test "detector: rule mentioned only as suffix of a longer name is still an orphan" {
+  # Antes: grep por subcadena contaba «data-privacy.md» como referencia a «privacy.md».
+  echo "# Privacy" > "$D/privacy.md"
+  echo "# Data privacy" > "$D/data-privacy.md"
+  echo "see data-privacy.md" > "$TMP/tests/a.sh"
+  run bash "$DET" --json
+  [ "$status" -eq 1 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert [o["rule"] for o in d["orphan_list"]]==["docs/rules/domain/privacy.md"], d' "$output"
+}
+
+@test "detector: dot in rule name is literal, not a regex wildcard" {
+  # Antes: «a.md» como regex casaba con «a-md» y la regla salía referenciada.
+  echo "# A" > "$D/a.md"
+  echo "token a-md and xamd" > "$TMP/tests/a.sh"
+  run bash "$DET"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"0 refs  docs/rules/domain/a.md"* ]]
+}
+
+@test "detector: longer extension like rule.mdx is not a reference to rule.md" {
+  echo "# R" > "$D/rule.md"
+  echo "see rule.mdx" > "$TMP/tests/a.md"
+  run bash "$DET"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"0 refs  docs/rules/domain/rule.md"* ]]
+}
+
+@test "detector: path-qualified and punctuated references count" {
+  echo "# R" > "$D/r1.md"
+  echo "# R" > "$D/r2.md"
+  echo "[x](domain/r1.md)" > "$TMP/tests/a.md"
+  echo "end of sentence r2.md." > "$TMP/tests/b.md"
+  run bash "$DET" --json
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["verdict"]=="PASS" and d["total_rules"]==2 and d["orphans"]==0, d' "$output"
+}
+
+@test "detector: references only count in scanned extensions" {
+  echo "# R" > "$D/r.md"
+  echo "r.md" > "$TMP/tests/notes.txt"
+  run bash "$DET"
+  [ "$status" -eq 1 ]
+  echo "r.md" > "$TMP/tests/notes.yml"
+  run bash "$DET"
+  [ "$status" -eq 0 ]
+}
+
+@test "detector: archived rule is skipped and INDEX.md only with --include-index" {
+  printf -- '---\narchived: true\n---\n# Old\n' > "$D/old.md"
+  echo "# Index" > "$D/INDEX.md"
+  echo "# Live" > "$D/live.md"
+  echo "live.md" > "$TMP/tests/a.md"
+  run bash "$DET" --json
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["total_rules"]==1, d' "$output"
+  # Con --include-index cuenta INDEX.md (el propio detector copiado en scripts/
+  # lo menciona, así que no queda huérfano); la regla archivada sigue fuera.
+  run bash "$DET" --json --include-index
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["total_rules"]==2, d' "$output"
+}
+
+@test "detector: --min-refs boundary counts refs below N, not at N" {
+  echo "# R" > "$D/r.md"
+  echo "r.md" > "$TMP/tests/a.md"
+  echo "r.md" > "$TMP/tests/b.md"
+  run bash "$DET" --min-refs 2
+  [ "$status" -eq 0 ]
+  run bash "$DET" --min-refs 3 --json
+  [ "$status" -eq 1 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["min_refs"]==3 and d["orphan_list"]==[{"refs":2,"rule":"docs/rules/domain/r.md"}], d' "$output"
+}
+
+@test "detector: --min-refs zero never reports orphans" {
+  echo "# R" > "$D/r.md"
+  run bash "$DET" --min-refs 0
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Orphans:        0 (refs < 0)"* ]]
+}
+
+@test "detector: invalid --min-refs is a usage error (exit 2)" {
+  echo "# R" > "$D/r.md"
+  run bash "$DET" --min-refs abc
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"non-negative integer"* ]]
+}
+
+@test "detector: empty --min-refs value is a usage error (exit 2)" {
+  echo "# R" > "$D/r.md"
+  run bash "$DET" --min-refs ""
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"non-negative integer"* ]]
+}
+
+@test "detector: --min-refs with no arg is a usage error, not an orphan verdict" {
+  # Antes: set -u abortaba con exit 1, el mismo código que «hay huérfanas».
+  echo "# R" > "$D/r.md"
+  echo "r.md" > "$TMP/tests/a.md"
+  run bash "$DET" --min-refs
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"needs a value"* ]]
+}
+
+@test "detector: unknown option is rejected with exit 2" {
+  echo "# R" > "$D/r.md"
+  run bash "$DET" --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown arg '--bogus'"* ]]
+}
+
+@test "detector: empty rules dir fails closed with exit 2, not PASS" {
+  # Antes: 0 reglas daba «VERDICT: PASS» y exit 0.
+  run bash "$DET"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"no rules found"* ]]
+}
+
+@test "detector: missing rules dir is an error with exit 2" {
+  mkdir -p "$BATS_TEST_TMPDIR/bare/scripts"
+  cp "$DET" "$BATS_TEST_TMPDIR/bare/scripts/"
+  run bash "$BATS_TEST_TMPDIR/bare/scripts/rule-orphan-detector.sh"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"rules dir not found"* ]]
+}
+
+@test "detector: --help exits 0 and documents options" {
+  run bash "$DET" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--min-refs N"* ]]
+  [[ "$output" == *"--include-index"* ]]
+}
