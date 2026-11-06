@@ -184,6 +184,9 @@ MERGED=false
 # aunque la cabeza la haya forzado al índice; la PR no puede sacar nombres de la blocklist. Solo se omite lo
 # que la base ya versiona (un proyecto público). La lista estática se añade aunque el generador de la base ya
 # la emita (si un generador futuro dejara de hacerlo, no se pierde); la salida va sin duplicados.
+# Límite del modelo (revisión de #1490, P2-1): las fuentes locales se leen del disco, que la persona que
+# ejecuta el merge controla; quien edite su CLAUDE.local.md o un TEAM.md sin commit cambia la blocklist. El
+# gate protege frente a la PR, no frente a quien opera el workspace.
 # Código 1 si la base no trae el generador o la lista estática, o si el generador falla.
 LB_DIR=""
 local_blocklist() {
@@ -199,11 +202,15 @@ local_blocklist() {
   # Local = existe en disco y la BASE no la versiona. Si ls-tree falla, cuenta como local (más patrones, no menos).
   _lb_local() { [[ -e "$root/$1" && -z "$(git -C "$root" ls-tree -r --name-only "$base" -- "$1" 2>/dev/null)" ]]; }
   if _lb_local CLAUDE.local.md; then cp "$root/CLAUDE.local.md" "$t/"; fi
+  # Por fichero (revisión de #1490, P2-2): un proyecto que la base versiona (público) no aporta su nombre,
+  # pero su team/TEAM.md no versionado sí aporta los nombres de las personas.
   for d in "$root"/projects/*/; do
     [[ -d "$d" ]] || continue
-    n=$(basename "$d"); _lb_local "projects/$n" || continue
-    mkdir -p "$t/projects/$n"
-    if [[ -f "$d/team/TEAM.md" ]]; then mkdir -p "$t/projects/$n/team"; cp "$d/team/TEAM.md" "$t/projects/$n/team/"; fi
+    n=$(basename "$d")
+    if _lb_local "projects/$n"; then mkdir -p "$t/projects/$n"; fi
+    if [[ -f "$d/team/TEAM.md" ]] && _lb_local "projects/$n/team/TEAM.md"; then
+      mkdir -p "$t/projects/$n/team"; cp "$d/team/TEAM.md" "$t/projects/$n/team/"
+    fi
   done
   for f in "$root"/.claude/profiles/users/*/identity.md; do
     [[ -f "$f" ]] || continue
@@ -214,6 +221,13 @@ local_blocklist() {
   bash "$t/scripts/generate-blocklist.sh" > "$t/bl.raw" 2>/dev/null || rc=1
   grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" >> "$t/bl.raw"
   sort -u "$t/bl.raw" > "$out" || rc=1
+  # Revisión de #1490 (seguridad, P1-1): el escáner une los patrones con «|» y los pasa a grep sin «-e»; una
+  # línea que empiece por «-» (p. ej. «-ave^» en un CLAUDE.local.md forzado por la PR) se leería como opciones
+  # (-a -v -e …) y daría un falso PASS. Una blocklist así no se usa: no hay merge.
+  if grep -q -- '^-' "$out"; then
+    echo "ERROR: la blocklist local tiene un patrón que empieza por «-» (se leería como opción de grep)." >&2
+    rc=1
+  fi
   rm -rf "$t"; LB_DIR=""
   return "$rc"
 }
