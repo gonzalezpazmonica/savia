@@ -41,41 +41,48 @@ def parse_policy(path: str | Path) -> dict:
 
     text = p.read_text(encoding="utf-8")
 
-    # Passes: secciones "## X" bajo un "## Passes" o secciones h2/h3 con verbo
+    # Passes: elementos de lista «- **Nombre**: ...» o «- Nombre: ...» bajo
+    # «## Passes». La prosa del bloque no es un pass.
     passes = []
-    m = re.search(r"(?is)## Passes\s*\n(.*?)(?=\n## |\Z)", text)
+    m = re.search(r"(?ism)^## Passes[ \t]*\n(.*?)(?=^## |\Z)", text)
     if m:
-        block = m.group(1)
-        for line in block.splitlines():
-            line = line.strip()
-            if re.match(r"^[-*]?\s*[A-Za-z]+:", line) or (
-                line and not line.startswith("#") and "passes" not in line.lower()
-            ):
-                name = re.sub(r"^[-*]\s*", "", line).split(":")[0].strip()
-                name = name.replace("**", "").strip()  # quitar markdown bold
+        for line in m.group(1).splitlines():
+            lm = re.match(r"^\s*[-*]\s+(?:\*\*)?([^:*]+?)(?:\*\*)?\s*:", line)
+            if lm:
+                name = lm.group(1).strip()
                 if name and name.lower() not in [x.lower() for x in passes]:
                     passes.append(name)
 
-    # Severidad: "## What Important means here"
+    # Severidad: primer párrafo de «## What Important means here» (unido).
     important = DEFAULTS["important"]
-    m = re.search(r"(?is)## What Important means here\s*\n(.*?)(?=\n## |\Z)", text)
+    m = re.search(r"(?ism)^## What Important means here[ \t]*\n(.*?)(?=^## |\Z)", text)
     if m:
-        important = m.group(1).strip().split("\n")[0].strip()
+        para = m.group(1).strip().split("\n\n")[0]
+        joined = " ".join(x.strip() for x in para.splitlines() if x.strip())
+        if joined:
+            important = joined
 
-    # Cap de nits: "Report at most N nits"
+    # Cap de nits: «at most N nits», con o sin negrita/cursiva alrededor de N.
     nit_cap = DEFAULTS["nit_cap"]
-    m = re.search(r"(?i)at most\s+(\d+)\s+nits", text)
+    m = re.search(r"(?i)at most\s+[*_]*(\d+)[*_]*\s+nits", text)
     if m:
         nit_cap = int(m.group(1))
 
-    # Exclusiones: sección "## Do not report"
-    exclusions = []
-    m = re.search(r"(?is)## Do not report\s*\n(.*?)(?=\n## |\Z)", text)
+    # Exclusiones: cada elemento de lista de «## Do not report»; las líneas de
+    # continuación (sangradas, sin viñeta) se unen a su elemento.
+    exclusions: list[str] = []
+    m = re.search(r"(?ism)^## Do not report[ \t]*\n(.*?)(?=^## |\Z)", text)
     if m:
         for line in m.group(1).splitlines():
-            line = line.strip().lstrip("-").strip()
-            if line and not line.startswith("#"):
-                exclusions.append(line)
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if re.match(r"^[-*]\s+", stripped):
+                exclusions.append(re.sub(r"^[-*]\s+", "", stripped))
+            elif exclusions and line[:1] in (" ", "\t"):
+                exclusions[-1] += " " + stripped
+            else:
+                exclusions.append(stripped)
 
     if not passes:
         passes = DEFAULTS["passes"]
