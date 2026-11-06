@@ -2,6 +2,9 @@
 
 setup() {
   ADVS="$BATS_TEST_DIRNAME/../scripts/adversarial-containment.sh"
+  # El stub solo conoce savia-contained:latest: una imagen exportada en el
+  # entorno cambiaría el resultado de los tests con docker simulado.
+  unset SAVIA_CONTAINER_IMAGE
 }
 
 @test "adversarial: script is executable" {
