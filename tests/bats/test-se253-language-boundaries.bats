@@ -239,6 +239,34 @@ lb_repo() {
     [[ "$output" == *"sub/nuevo.sh tiene 5 usos"* ]]
 }
 
+lb_viejo_sin_jq() {  # script versionado sin jq: al renombrarlo con poco cambio git ve R<100
+    lb_repo
+    printf 'echo uno\necho dos\necho tres\necho cuatro\necho cinco\necho seis\n' > "$R/viejo.sh"
+    git -C "$R" add viejo.sh
+    git -C "$R" -c user.email=t@t -c user.name=t commit -q -m viejo
+}
+
+@test "S03q: staged — renombrado con código nuevo de jq avisa (R<100)" {
+    lb_viejo_sin_jq
+    git -C "$R" mv viejo.sh renombrado.sh
+    printf 'jq a | jq b | jq c | jq d | jq e\n' >> "$R/renombrado.sh"
+    git -C "$R" add renombrado.sh
+    run bash -c 'cd "$1" && bash "$2" --check' _ "$R" "$LB_CHECK"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"renombrado.sh tiene 5 usos"* ]]
+}
+
+@test "S03q: staged — renombrado puro (R100) no avisa (negativo)" {
+    lb_repo
+    printf 'jq a | jq b | jq c | jq d | jq e\n' > "$R/viejo.sh"
+    git -C "$R" add viejo.sh
+    git -C "$R" -c user.email=t@t -c user.name=t commit -q -m viejo
+    git -C "$R" mv viejo.sh movido.sh
+    run bash -c 'cd "$1" && bash "$2" --check' _ "$R" "$LB_CHECK"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "" ]]
+}
+
 @test "S03q: staged — script existente modificado no avisa (la regla es para código nuevo)" {
     lb_repo
     printf 'echo viejo\n' > "$R/viejo.sh"

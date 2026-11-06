@@ -34,7 +34,11 @@ else
   # cualquier subdirectorio.
   top=$(git rev-parse --show-toplevel 2>/dev/null || true)
   if [[ -n "$top" ]]; then
-    mapfile -t FILES < <(git diff --cached --name-only --diff-filter=A 2>/dev/null \
+    # Nuevo = añadido (A) o renombrado con cambios (R<100): un script reescrito
+    # que git detecta como renombrado no escapa a la regla. Un renombrado puro
+    # (R100) no añade código y no cuenta.
+    mapfile -t FILES < <(git diff --cached --name-status --diff-filter=AR 2>/dev/null \
+      | awk -F'\t' '$1 == "A" { print $2 } $1 ~ /^R/ && $1 != "R100" { print $3 }' \
       | grep '\.sh$' || true)
     [[ ${#FILES[@]} -gt 0 ]] && FILES=("${FILES[@]/#/$top/}")
   else
