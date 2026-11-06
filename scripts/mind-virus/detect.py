@@ -10,12 +10,13 @@ Output (JSON, one object):
   {"score": int, "verdict": "clean"|"suspect"|"malicious", "signals": [...]}
 
 Deterministic, no network, no LLM (CRIT-001: everything local).
-Exit codes: 0 clean/suspect, 1 malicious (useful for hooks with --exit-verdict).
+Exit codes: 0 clean/suspect, 1 malicious (useful for hooks with --exit-verdict), 2 unreadable file.
 """
 
 import json
 import re
 import sys
+import unicodedata
 
 # ── Configuration ────────────────────────────────────────────────────────────
 VERDICT_THRESHOLD_CLEAN = 15    # below this → clean
@@ -24,7 +25,11 @@ VERDICT_THRESHOLD_MALICIOUS = 70  # at/above → malicious; in-between → suspe
 # ── Signal patterns (from the study's three payload classes) ────────────────
 # Normalize: lower-case, collapse whitespace, strip punctuation for matching.
 def _norm(text: str) -> str:
-    return re.sub(r"\s+", " ", text.lower()).strip(" .!¡¿?;:,")
+    # Sin caracteres de formato invisibles (U+200B, U+00AD...) y NFKD sin marcas combinantes (ancho
+    # completo → ASCII, sin tildes): "ig\u200bnora", "ｉｇｎｏｒａ" u "olvídate" no esquivan los patrones.
+    text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+    text = "".join(c for c in unicodedata.normalize("NFKD", text.lower()) if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", text).strip(" .!¡¿?;:,")
 
 PERSISTENCE_PATTERNS = [
     (r"(?:guarda|guardar|escribe|write|save|a[ñni]?ade|añade|add|inserta|insert|inyecta|inject).{0,60}(?:memoria|memory|historial|en (?:tu )?(?:memoria|memory|historial)|a (?:tu )?(?:memoria|memory))", 70, "persistencia"),
@@ -105,14 +110,21 @@ def main(argv: list[str]) -> int:
                 with open(path, encoding="utf-8", errors="replace") as fh:
                     content = fh.read()
             except OSError:
+                # Una superficie que no se puede leer no es «limpia»: se informa para que cuente.
+                print(f"{label}|error|0|unreadable")
                 continue
             r = detect(content)
             print(f"{label}|{r['verdict']}|{r['score']}|{','.join(r['signals'])}")
         return 0
 
     if args:
-        with open(args[0], encoding="utf-8", errors="replace") as fh:
-            text = fh.read()
+        try:
+            with open(args[0], encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError as exc:
+            # exit 2: no confundir un fichero ilegible con el exit 1 de «malicious».
+            print(f"ERROR: no se puede leer {args[0]}: {exc.strerror}", file=sys.stderr)
+            return 2
     else:
         text = sys.stdin.read()
 
