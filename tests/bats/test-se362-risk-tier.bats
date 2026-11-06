@@ -11,6 +11,31 @@ setup() {
   TMP_DIR="$(mktemp -d -p "$BATS_TEST_TMPDIR")"
 }
 
+teardown() { rm -rf "$TMP_DIR"; }
+
+# SE-501: la lista de derivados se lee del commit base, nunca del disco de la PR.
+base_fixture() {
+  FIXTURE="$TMP_DIR/base"
+  mkdir -p "$FIXTURE/scripts"
+  cp "$TIER" "$FIXTURE/scripts/risk-tier.py"
+  git -C "$FIXTURE" init -q -b main
+  fixture_base
+}
+
+fixture_git() {
+  git -C "$FIXTURE" -c core.hooksPath=/dev/null -c commit.gpgsign=false \
+    -c user.name=test -c user.email=test@example.invalid "$@"
+}
+
+fixture_base() {
+  fixture_git add scripts/risk-tier.py
+  if [[ -f "$FIXTURE/scripts/derived-paths.txt" ]]; then
+    fixture_git add scripts/derived-paths.txt
+  fi
+  fixture_git commit -qm base
+  fixture_git update-ref refs/remotes/origin/main HEAD
+}
+
 @test "docs-only → tier 1, no requiere humano" {
   run python3 "$TIER" --diff "README.md docs/guide.md" --json
   [[ "$status" -eq 0 ]]
@@ -167,4 +192,135 @@ import sys, json
 d = json.load(sys.stdin)
 assert d['tier'] >= 3, f'tier={d[\"tier\"]}'
 "
+}
+
+# ── S03n: comportamiento discriminante ──────────────────────────────────────
+
+# tier_of <script> "<ficheros>" → imprime "tier requires_human"
+tier_of() {
+  python3 "$1" --diff "$2" --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["tier"], d["requires_human"])'
+}
+
+@test "S03n gobernanza: .opencode/, workflows y settings de raíz son tier 4" {
+  run tier_of "$TIER" ".opencode/hooks/x.sh"
+  [ "$output" = "4 True" ]
+  run tier_of "$TIER" ".claude/settings.local.json"
+  [ "$output" = "4 True" ]
+  run tier_of "$TIER" "config/merge-sprint-policy.yaml"
+  [ "$output" = "4 True" ]
+}
+
+@test "S03n gobernanza: settings en subcarpeta de .claude no es gobernanza" {
+  run python3 "$TIER" --diff ".claude/settings/extra.json" --json
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"path de gobernanza"* ]]
+  # Aserción positiva: sin ella, una salida vacía también pasaría.
+  run tier_of "$TIER" ".claude/settings/extra.json"
+  [ "$output" = "2 False" ]
+}
+
+@test "S03n gobernanza: autonomous-safety*.md en docs/rules/domain gana a la exención de docs" {
+  run tier_of "$TIER" "docs/rules/domain/autonomous-safety-merge-grant.md"
+  [ "$output" = "4 True" ]
+  run tier_of "$TIER" "docs/rules/domain/radical-honesty.md"
+  [ "$output" = "4 True" ]
+  # La misma familia de nombre en una subcarpeta o en otra raíz es doc normal.
+  run tier_of "$TIER" "docs/rules/domain/sub/autonomous-safety.md"
+  [ "$output" = "1 False" ]
+  run tier_of "$TIER" "docs/rules/domain/otra-regla.md"
+  [ "$output" = "1 False" ]
+}
+
+@test "S03n gobernanza: la comparación no distingue mayúsculas" {
+  run tier_of "$TIER" "Scripts/Merge-Sprint.sh"
+  [ "$output" = "4 True" ]
+}
+
+@test "S03n precedencia: tier 4 gana a tier 3 y el orden no importa" {
+  run tier_of "$TIER" "scripts/auth-helper.py infra/main.tf"
+  [ "$output" = "4 True" ]
+  run tier_of "$TIER" "infra/main.tf scripts/auth-helper.py"
+  [ "$output" = "4 True" ]
+}
+
+@test "S03n frontera: requires_human empieza exactamente en tier 3" {
+  run tier_of "$TIER" "src/app.py"
+  [ "$output" = "2 False" ]
+  run tier_of "$TIER" "src/token_store.py"
+  [ "$output" = "3 True" ]
+}
+
+@test "S03n: .yml de raíz sin categoría es fail-closed 3; solo docs es 1; docs con código es 2" {
+  run tier_of "$TIER" "mkdocs.yml"
+  [ "$output" = "3 True" ]
+  run tier_of "$TIER" "CHANGELOG.md README.md"
+  [ "$output" = "1 False" ]
+  run tier_of "$TIER" "CHANGELOG.md src/app.py"
+  [ "$output" = "2 False" ]
+}
+
+@test "S03n: el doc en docs/ con extensión de código no se exime" {
+  run tier_of "$TIER" "docs/deploy-script.sh"
+  [ "$output" = "3 True" ]
+}
+
+@test "S03n: salida de texto con la etiqueta de humano o auto-merge" {
+  run python3 "$TIER" --diff "src/app.py"
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == "Risk tier: 2 (auto-merge posible)" ]]
+  run python3 "$TIER" --diff "infra/x.tf"
+  [[ "${lines[0]}" == "Risk tier: 4 (humano requerido)" ]]
+  [[ "${lines[1]}" == "  rationale: path crítico: infra/x.tf" ]]
+}
+
+@test "S03n fail-closed: sin derived-paths.txt nada de .scm se exime" {
+  base_fixture
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  [ "$output" = "3 True" ]
+  cp "$REPO_ROOT/scripts/derived-paths.txt" "$FIXTURE/scripts/"
+  # Una lista presente solo en el árbol de la propuesta no autoriza la exención.
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  [ "$output" = "3 True" ]
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  [ "$output" = "2 False" ]
+}
+
+@test "S03n fail-closed: una entrada .scm/ global o de fichero a mano en la lista se ignora" {
+  base_fixture
+  printf '.scm/\n.scm/runtime-surface/\n.scm/sam-authority-declarations.json\n' > "$FIXTURE/scripts/derived-paths.txt"
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json"
+  [ "$output" = "3 True" ]
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/sam-authority-declarations.json"
+  [ "$output" = "3 True" ]
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/runtime-surface/auth.json"
+  [ "$output" = "3 True" ]
+}
+
+@test "S03n: prefijo de directorio de la lista exime lo que cuelga de él y nada más" {
+  base_fixture
+  printf '# comentario\n.scm/views/\n' > "$FIXTURE/scripts/derived-paths.txt"
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/views/authority.json scripts/tool.sh"
+  [ "$output" = "2 False" ]
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/viewsx/authority.json scripts/tool.sh"
+  [ "$output" = "3 True" ]
+}
+
+@test "S03n: un .json de raíz sensible no baja a tier 1 por ser «artefacto de proceso»" {
+  run tier_of "$TIER" "token.json"
+  [ "$output" = "3 True" ]
+  run tier_of "$TIER" "README.md credentials.yaml"
+  [ "$output" = "3 True" ]
+}
+
+@test "S03n fail-closed: runtime-surface y *.schema.json nunca son derivados aunque la lista los nombre" {
+  base_fixture
+  printf '.scm/runtime-surface/sub/\n.scm/auth.schema.json\n' > "$FIXTURE/scripts/derived-paths.txt"
+  fixture_base
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/runtime-surface/sub/auth.json"
+  [ "$output" = "3 True" ]
+  run tier_of "$FIXTURE/scripts/risk-tier.py" ".scm/auth.schema.json"
+  [ "$output" = "3 True" ]
 }

@@ -40,6 +40,8 @@ _die() {
 }
 
 _py() { python3 -c "$@"; }
+# Niveles: enteros de 1-6 dígitos; más largos desbordarían la aritmética de bash.
+_LEVEL_RE='^[0-9]{1,6}$'
 _now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 
 # ── Lookup card ──────────────────────────────────────────────────────────────
@@ -52,21 +54,24 @@ _lookup_card() {
     return 1
   fi
 
+  # Valores por argv, nunca interpolados en el código Python (S03n: una
+  # comilla en --card-id suplantaba la primera tarjeta activa).
   _py "
 import yaml, json, sys
+cards_file, card_id = sys.argv[1], sys.argv[2]
 try:
-    with open('${cards_file}') as fh:
+    with open(cards_file) as fh:
         cfg = yaml.safe_load(fh)
     cards = cfg.get('cards', {})
     for _k, card in cards.items():
-        if card.get('id') == '${card_id}':
+        if card.get('id') == card_id:
             if card.get('status') == 'active':
                 print(json.dumps(card))
                 sys.exit(0)
     print('')
 except Exception:
     print('')
-" 2>/dev/null
+" "$cards_file" "$card_id" 2>/dev/null
 }
 
 # ── Check skill against global allowlist ────────────────────────────────────
@@ -75,19 +80,20 @@ _check_allowlist() {
   local allowlist_file="$2"
 
   if [[ ! -f "$allowlist_file" ]]; then
-    echo "allowlist_unavailable"
+    echo '{"allowed": false, "reason": "allowlist_unavailable"}'
     return 1
   fi
 
   _py "
 import yaml, json, sys
+allowlist_file, skill = sys.argv[1], sys.argv[2]
 try:
-    with open('${allowlist_file}') as fh:
+    with open(allowlist_file) as fh:
         cfg = yaml.safe_load(fh)
     skills = cfg.get('skills', {})
     default = cfg.get('default', 'deny')
-    if '${skill}' in skills:
-        entry = skills['${skill}']
+    if skill in skills:
+        entry = skills[skill]
         if entry.get('allow', False):
             print(json.dumps({'allowed': True, 'max_level': entry.get('maxLevel', 0), 'readOnly': entry.get('readOnly', True)}))
             sys.exit(0)
@@ -100,7 +106,7 @@ try:
 except Exception as e:
     print(json.dumps({'allowed': False, 'reason': f'error:{e}'}))
     sys.exit(1)
-" 2>/dev/null
+" "$allowlist_file" "$skill" 2>/dev/null
 }
 
 # ── Log gate decision ────────────────────────────────────────────────────────
@@ -113,11 +119,13 @@ _log_gate() {
   ts="$(_now)"
 
   _py "
-import json
-rec = {'ts': '${ts}', 'card_id': '${card_id}', 'skill': '${skill}', 'decision': '${decision}', 'reason': '${reason}'}
-with open('${GATE_LOG}', 'a') as fh:
+import json, sys
+ts, card_id, skill, decision, reason, log = sys.argv[1:7]
+rec = {'ts': ts, 'card_id': card_id, 'skill': skill, 'decision': decision, 'reason': reason}
+with open(log, 'a') as fh:
     fh.write(json.dumps(rec) + '\n')
-" 2>/dev/null || true
+" "$ts" "$card_id" "$skill" "$decision" "$reason" "$GATE_LOG" 2>/dev/null \
+    || echo "WARN: audit log write failed (${GATE_LOG}); decision ${decision} not recorded" >&2
 }
 
 # ── Subcommand: gate ────────────────────────────────────────────────────────
@@ -137,6 +145,10 @@ cmd_gate() {
 
   [[ -z "$card_id" ]] && _die "--card-id is required"
   [[ -z "$skill" ]]   && _die "--skill is required"
+  # Entero no negativo y acotado: [[ -gt ]] evalúa texto como expresión
+  # aritmética (texto → 0, y a[$(cmd)] ejecuta cmd), y la aritmética de bash
+  # da la vuelta en 64 bits (2^64 → 0), así que se limita a 6 dígitos.
+  [[ "$payload_level" =~ $_LEVEL_RE ]] || _die "--payload-level must be a non-negative integer (max 6 digits)"
 
   # 1. Lookup card
   local card_json
@@ -150,10 +162,10 @@ cmd_gate() {
   # 2. Check card's allowed_skills
   local allowed_skills
   allowed_skills="$(_py "
-import json
-c = json.loads('${card_json}')
+import json, sys
+c = json.loads(sys.argv[1])
 print(','.join(c.get('allowed_skills', [])))
-")"
+" "$card_json")"
 
   local found=0
   IFS=',' read -ra SKILLS <<< "$allowed_skills"
@@ -173,7 +185,10 @@ print(','.join(c.get('allowed_skills', [])))
   # 3. Check global allowlist
   local al_check
   al_check="$(_check_allowlist "$skill" "$allowlist_file")" || {
-    local reason="$(_py "import json,sys; print(json.loads(sys.argv[1]).get('reason','unknown'))" "${al_check:-{}}")"
+    # Ojo: "${al_check:-{}}" añadía una "}" sobrante y perdía el motivo.
+    local reason
+    reason="$(_py "import json,sys; print(json.loads(sys.argv[1]).get('reason','unknown'))" "${al_check:-"{}"}" 2>/dev/null)"
+    reason="${reason:-unknown}"
     _log_gate "$card_id" "$skill" "DENY" "global_allowlist:${reason}"
     echo "DENY: skill '${skill}' denied by global allowlist — ${reason}" >&2
     exit 1
@@ -181,8 +196,14 @@ print(','.join(c.get('allowed_skills', [])))
 
   # 4. Check payload level against card's max
   local max_pl
-  max_pl="$(_py "import json; print(json.loads('${card_json}')['max_payload_level'])")"
-  if [[ "${payload_level:-0}" -gt "${max_pl:-0}" ]]; then
+  max_pl="$(_py "import json,sys; print(json.loads(sys.argv[1])['max_payload_level'])" "$card_json" 2>/dev/null)"
+  # Máximo ausente o no entero en la tarjeta → deny (fail-closed).
+  if ! [[ "$max_pl" =~ $_LEVEL_RE ]]; then
+    _log_gate "$card_id" "$skill" "DENY" "card_max_payload_level_invalid"
+    echo "DENY: card_id=${card_id} has no valid max_payload_level" >&2
+    exit 1
+  fi
+  if (( 10#$payload_level > 10#$max_pl )); then
     _log_gate "$card_id" "$skill" "DENY" "payload_level_exceeds_card_max"
     echo "DENY: payload_level=${payload_level} exceeds card max=${max_pl}" >&2
     exit 1
@@ -190,8 +211,8 @@ print(','.join(c.get('allowed_skills', [])))
 
   # 5. Check payload level against allowlist max
   local al_max_level
-  al_max_level="$(_py "import json,sys; print(json.loads(sys.argv[1]).get('max_level',99))" "$al_check")"
-  if [[ "${payload_level:-0}" -gt "${al_max_level:-0}" ]]; then
+  al_max_level="$(_py "import json,sys; print(json.loads(sys.argv[1]).get('max_level',99))" "$al_check" 2>/dev/null)"
+  if ! [[ "$al_max_level" =~ $_LEVEL_RE ]] || (( 10#$payload_level > 10#$al_max_level )); then
     _log_gate "$card_id" "$skill" "DENY" "payload_level_exceeds_allowlist_max"
     echo "DENY: payload_level=${payload_level} exceeds allowlist max=${al_max_level}" >&2
     exit 1
@@ -222,23 +243,23 @@ cmd_list_deny() {
     echo ""
     echo "--- Global Allowlist ---"
     _py "
-import yaml
-with open('${allowlist_file}') as fh:
+import sys, yaml
+with open(sys.argv[1]) as fh:
     cfg = yaml.safe_load(fh)
 default = cfg.get('default', 'deny')
 print(f'Default: {default}')
 for k, v in cfg.get('skills', {}).items():
     status = 'ALLOW' if v.get('allow') else 'DENY'
     print(f'  {k}: {status} (maxLevel={v.get(\"maxLevel\",\"?\")}, readOnly={v.get(\"readOnly\",\"?\")})')
-" 2>/dev/null
+" "$allowlist_file" 2>/dev/null
   fi
 
   if [[ -f "$cards_file" ]]; then
     echo ""
     echo "--- Card Allowed Skills ---"
     _py "
-import yaml
-with open('${cards_file}') as fh:
+import sys, yaml
+with open(sys.argv[1]) as fh:
     cfg = yaml.safe_load(fh)
 for name, card in cfg.get('cards', {}).items():
     st = card.get('status', 'active')
@@ -249,7 +270,7 @@ for name, card in cfg.get('cards', {}).items():
         print(f'{name}: allowed={allowed}')
         if exposed_not_allowed:
             print(f'  exposed_but_not_allowed(denied): {exposed_not_allowed}')
-" 2>/dev/null
+" "$cards_file" 2>/dev/null
   fi
 }
 
