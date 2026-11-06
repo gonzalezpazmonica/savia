@@ -307,3 +307,83 @@ assert v['kind'] == 'V1', v
   [ -f docs/rules/domain/test-evidence-criteria.md ]
   grep -q "test-evidence-criteria.md" docs/rules/domain/test-quality-gate.md
 }
+
+# ── S03q (SE-376): parte de puntuación del gate con auditor simulado ─────────
+# Copia el gate a un árbol propio con test-auditor.sh y test-coverage-checker.sh
+# simulados; el motor de vacuidad y el umbral adaptativo son los reales.
+gate_fx() {  # gate_fx <json que devuelve el auditor simulado>
+  G="$BATS_TEST_TMPDIR/g"; mkdir -p "$G/scripts" "$G/tests"
+  cp "$GATE" "$ENGINE" scripts/quality-gate-adaptive.py "$G/scripts/"
+  printf '%s\n' "$1" > "$G/audit.out"
+  printf '#!/usr/bin/env bash\ncat "%s"\n' "$G/audit.out" > "$G/scripts/test-auditor.sh"
+  printf '#!/usr/bin/env bash\necho "{\\"coverage_percent\\": 91}"\n' > "$G/scripts/test-coverage-checker.sh"
+  printf '#!/usr/bin/env bats\n@test "x" {\n  [ 1 -eq 1 ]\n}\n' > "$G/tests/ok.bats"
+  echo 0 > "$G/base.count"; : > "$G/base.findings"
+}
+gate_run() {
+  run env SAVIA_VACUITY_ROOT="$G" SAVIA_VACUITY_BASELINE="$G/base.count" "$@" bash "$G/scripts/ci-test-quality-gate.sh"
+}
+
+@test "puntuación: auditor con salida ilegible no da RESULT: PASS (aviso fail-closed)" {
+  gate_fx 'Traceback: auditor caído'
+  gate_run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RESULT: WARN — calidad sin medir"* ]]
+  [[ "$output" != *"RESULT: PASS"* ]]
+}
+
+@test "puntuación: JSON sin lista results tampoco certifica (negativo)" {
+  gate_fx '{"total_files": 3}'
+  gate_run
+  [[ "$output" == *"RESULT: WARN — calidad sin medir"* ]]
+  gate_fx '{"total_files": 3, "results": "x"}'
+  gate_run
+  [[ "$output" == *"RESULT: WARN — calidad sin medir"* ]]
+}
+
+@test "puntuación: umbral no numérico no deja pasar (negativo)" {
+  gate_fx '{"total_files":1,"results":[{"file":"a.bats","total":10}]}'
+  gate_run SAVIA_QUALITY_GATE_FIXED_MIN=abc
+  [[ "$output" == *"Umbral no numérico: 'abc'"* ]]
+  [[ "$output" != *"RESULT: PASS"* ]]
+}
+
+@test "puntuación: boundary 79 queda por debajo de 80 y 80 no" {
+  gate_fx '{"total_files":2,"results":[{"file":"a.bats","total":79},{"file":"b.bats","total":80}]}'
+  gate_run
+  [[ "$output" == *"Audited: 2 files, 1 below threshold (80)"* ]]
+  [[ "$output" == *"a.bats: 79/100"* ]]
+  [[ "$output" != *"b.bats: 80/100"* ]]
+  [[ "$output" == *"RESULT: WARN — tests below quality threshold (80)"* ]]
+}
+
+@test "puntuación: todos en 80 o más da RESULT: PASS y exit 0" {
+  gate_fx '{"total_files":2,"results":[{"file":"a.bats","total":80},{"file":"b.bats","total":95}]}'
+  gate_run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Audited: 2 files, 0 below threshold (80)"* ]]
+  [[ "$output" == *"RESULT: PASS"* ]]
+}
+
+@test "puntuación: adaptive=on usa el umbral calculado (65), no el fijo" {
+  gate_fx '{"total_files":6,"results":[{"file":"a","total":50},{"file":"b","total":60},{"file":"c","total":70},{"file":"d","total":80},{"file":"e","total":90},{"file":"f","total":95}]}'
+  gate_run SAVIA_QUALITY_GATE_ADAPTIVE=on
+  [[ "$output" == *"Adaptive threshold: 65"* ]]
+  [[ "$output" == *"Audited: 6 files, 2 below threshold (65)"* ]]
+}
+
+@test "puntuación: adaptive=warn avisa pero filtra con el fijo 80" {
+  gate_fx '{"total_files":6,"results":[{"file":"a","total":50},{"file":"b","total":60},{"file":"c","total":70},{"file":"d","total":80},{"file":"e","total":90},{"file":"f","total":95}]}'
+  gate_run SAVIA_QUALITY_GATE_ADAPTIVE=warn
+  [[ "$output" == *"Adaptive would use 65; gating on fixed 80"* ]]
+  [[ "$output" == *"3 below threshold (80)"* ]]
+}
+
+@test "puntuación limpia pero vacuidad por encima de la base: exit 1" {
+  gate_fx '{"total_files":1,"results":[{"file":"a.bats","total":90}]}'
+  printf '#!/usr/bin/env bats\n@test "v" {\n  run false\n}\n' > "$G/tests/vac.bats"
+  gate_run
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"RESULT: PASS"* ]]
+  [[ "$output" == *"RESULT: FAIL — tests que no pueden fallar"* ]]
+}
