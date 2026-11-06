@@ -398,3 +398,9 @@ cl() { printf '%b' "$1" > "$BATS_TEST_TMPDIR/CH.md"; run bash "$ROOT/scripts/val
   [ "$status" -ne 0 ]
   [[ "$output" == *"Missing link for [9.9.9]"* ]]
 }
+
+@test "changelog: a version header only counts at the start of the line" {
+  cl 'texto ## [3.0.0] citado\n## [1.0.0]\n\n[1.0.0]: https://x\n'
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"3.0.0"* ]]
+}

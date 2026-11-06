@@ -234,3 +234,10 @@ facts_with_words() {  # facts_with_words N FILE — bloque con N palabras entre 
   [ "$status" -eq 0 ]
   [[ "$output" == *"(10 words)"* ]]
 }
+
+@test "fail-closed: START and END markers on the same line are an error" {
+  { echo "<!-- CRITICAL_FACTS_START --> x <!-- CRITICAL_FACTS_END -->"; for i in $(seq 1 300); do echo -n "w$i "; done; echo; } > "$TMPDIR_TEST/a.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"START before END"* ]]
+}

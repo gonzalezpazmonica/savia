@@ -37,6 +37,19 @@ parse_args() {
     esac
   done
   [[ -z "${TARGET}" ]] && { echo "ERROR: --target is required"; usage; }
+  # The target reaches nmap/httpx as an argument and names the authorization
+  # file: a leading "-" would be read as an nmap option, and spaces or shell
+  # metacharacters have no place in a host, IP or CIDR.
+  if [[ ! "${TARGET}" =~ ^[A-Za-z0-9][A-Za-z0-9.:/_-]*$ || "${TARGET}" == *".."* ]]; then
+    echo "ERROR: invalid --target '${TARGET}' (host, IP or CIDR; no leading '-', no '..')"
+    exit 1
+  fi
+  # --ports is expanded unquoted into nmap's argv: anything but a port list
+  # ("80 --script=exploit") would inject options and break the discovery-only promise.
+  if [[ "${PORTS}" != "--top-1000" && ! "${PORTS}" =~ ^[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$ ]]; then
+    echo "ERROR: invalid --ports '${PORTS}' (e.g. 80,443 or 1-1024)"
+    exit 1
+  fi
 }
 
 check_authorization() {
@@ -51,8 +64,12 @@ check_authorization() {
     exit 1
   fi
 
-  if ! grep -q "AUTHORIZED" "${auth_file}"; then
-    echo "ERROR: Authorization file does not contain 'AUTHORIZED': ${auth_file}"
+  # The first line must be exactly AUTHORIZED (what surface-map-authorize.sh
+  # writes). A substring match accepted "NOT AUTHORIZED" and "UNAUTHORIZED".
+  local first_line
+  first_line=$(head -n 1 "${auth_file}" | tr -d '\r')
+  if [[ "${first_line}" != "AUTHORIZED" ]]; then
+    echo "ERROR: Authorization file does not start with the line 'AUTHORIZED': ${auth_file}"
     exit 1
   fi
 
@@ -60,9 +77,18 @@ check_authorization() {
   file_epoch=$(stat -c %Y "${auth_file}" 2>/dev/null || stat -f %m "${auth_file}" 2>/dev/null)
   local now_epoch
   now_epoch=$(date +%s)
+  if [[ ! "${file_epoch}" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: cannot read the authorization file date: ${auth_file}"
+    exit 1
+  fi
   local age=$(( now_epoch - file_epoch ))
   local max_age=$((30 * 24 * 3600))
 
+  # A future date (beyond 5 min of clock skew) would make the authorization eternal.
+  if [[ ${age} -lt -300 ]]; then
+    echo "ERROR: Authorization file date is in the future. Re-authorize."
+    exit 1
+  fi
   if [[ ${age} -gt ${max_age} ]]; then
     echo "ERROR: Authorization file is older than 30 days. Re-authorize."
     exit 1

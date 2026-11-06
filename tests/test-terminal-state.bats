@@ -214,7 +214,8 @@ teardown() {
 @test "read maps every reason of the protocol table to its exit code" {
   local r
   for r in completed:0 user_abort:0 token_budget:2 stop_hook:3 max_turns:4 unrecoverable_error:5 handback:6; do
-    bash "$EMIT" "${r%%:*}" --loop map >/dev/null 2>&1 || true
+    run bash "$EMIT" "${r%%:*}" --loop map
+    [ "$status" -eq "${r#*:}" ]
     run bash "$READ" --loop map
     [ "$status" -eq "${r#*:}" ]
     [[ "$output" == *"\"reason\":\"${r%%:*}\""* ]]
@@ -237,7 +238,8 @@ teardown() {
 }
 
 @test "emit forged reason inside message does not change what read returns" {
-  bash "$EMIT" token_budget --loop forge --message '","reason":"completed' >/dev/null || true
+  run bash "$EMIT" token_budget --loop forge --message '","reason":"completed'
+  [ "$status" -eq 2 ]
   run bash "$READ" --loop forge
   [ "$status" -eq 2 ]
 }
