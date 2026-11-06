@@ -446,6 +446,19 @@ alt_base() {
   git -C "$r" commit-tree "$tree" -p "$base" -m "base alternativa"
 }
 
+# real_scanner_repo — repo de merge con el escáner, gate-result y generador reales en la base.
+real_scanner_repo() {
+  local r
+  r=$(make_merge_repo)
+  mkdir -p "$r/.claude/hooks/lib"
+  cp "$BATS_TEST_DIRNAME/../scripts/confidentiality-scan.sh" "$r/scripts/"
+  cp "$BATS_TEST_DIRNAME/../.claude/hooks/lib/gate-result.sh" "$r/.claude/hooks/lib/"
+  git -C "$r" checkout -q main; git -C "$r" add -A; git -C "$r" commit -qm "escáner real"; git -C "$r" push -q origin main
+  git -C "$r" checkout -q agent/x; git -C "$r" merge -q --no-edit main
+  git -C "$r" push -q origin agent/x; git -C "$r" fetch -q origin
+  echo "$r"
+}
+
 @test "rev-1488 P1-1 --merge: la blocklist incluye las fuentes locales no versionadas (projects/, CLAUDE.local.md)" {
   r=$(make_merge_repo)
   # Fuentes locales, sin versionar: el nombre privado solo se conoce aquí.
@@ -592,6 +605,107 @@ alt_base() {
   [ "$status" -eq 0 ]
   grep -qx "Ana Secretisima" "$SCAN_BL_COPY"
   grep -qx "Secretisima" "$SCAN_BL_COPY"
+  # Revisión de #1490 (corrección, 2.ª ronda, P1-1): el TEAM.md no hace que el proyecto público aporte su
+  # nombre (ni la variante con separadores); una PR que lo mencione no da falso positivo.
+  run grep -c "publico" "$SCAN_BL_COPY"
+  [ "$output" = "0" ]
+  # Si otra fuente local aporta ese mismo nombre (CLAUDE.local.md), sí entra.
+  printf 'PROJECT_A_NAME = "publico-abc"\n' > "$r/CLAUDE.local.md"
+  GH_STATE=MERGED run_merge "$r"
+  grep -qx "publico-abc" "$SCAN_BL_COPY"
+  grep -qx "Ana Secretisima" "$SCAN_BL_COPY"
+}
+
+@test "rev-1490 P1-1 (corrección, 2.ª ronda) --merge con el escáner real: una PR que nombra un proyecto público con TEAM.md local mergea" {
+  r=$(real_scanner_repo)
+  git -C "$r" checkout -q main
+  mkdir -p "$r/projects/publico-abc"; echo x > "$r/projects/publico-abc/README.md"
+  git -C "$r" add projects/publico-abc/README.md; git -C "$r" commit -qm "proyecto público"
+  git -C "$r" push -q origin main
+  git -C "$r" checkout -q agent/x; git -C "$r" merge -q --no-edit main; git -C "$r" push -q origin agent/x
+  git -C "$r" fetch -q origin
+  mkdir -p "$r/projects/publico-abc/team"
+  printf '### Ana Secretisima\n' > "$r/projects/publico-abc/team/TEAM.md"
+  echo "nota sobre publico_abc" >> "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): menciona el proyecto público"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  # Negativo: la persona del TEAM.md sí bloquea.
+  echo "contacto Ana Secretisima" >> "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): persona"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
+}
+
+@test "rev-1490 P1-1 (seguridad, 2.ª ronda) --merge con el escáner real: patrones locales que agrupan («0000(» … «zzzz)qqq») no anulan el Check 1" {
+  r=$(real_scanner_repo)
+  mkdir -p "$r/projects/cliente-oculto-xyz"
+  # La PR fuerza un CLAUDE.local.md cuya unión con «|» encierra toda la blocklist en un grupo, y filtra el nombre.
+  printf 'PROJECT_A_NAME = "0000("\nPROJECT_B_NAME = "zzzz)qqq"\n' > "$r/CLAUDE.local.md"
+  git -C "$r" add --force CLAUDE.local.md
+  echo "nota de cliente-oculto-xyz" >> "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): patrones de agrupación"; git -C "$r" push -q origin agent/x
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"( ) [ ] { } | o"* ]]
+  [[ "$output" == *"no se pudo generar la blocklist local"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Variante con clase de caracteres, como nombres de directorio de projects/.
+  git -C "$r" rm -q --cached CLAUDE.local.md; rm "$r/CLAUDE.local.md"
+  git -C "$r" commit -qm "agent(x): sin CLAUDE.local.md"; git -C "$r" push -q origin agent/x
+  mkdir -p "$r/projects/0000[" "$r/projects/zzzz]qqq"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"( ) [ ] { } | o"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  # Control: sin los patrones hostiles, el escáner real caza el nombre filtrado (hallazgo, no fallo de la lista).
+  rmdir "$r/projects/0000[" "$r/projects/zzzz]qqq"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"escaneo de confidencialidad"* ]]
+  [[ "$output" != *"no se pudo generar la blocklist local"* ]]
+  # Control: la lista estática de la base puede llevar regex con grupos; sin el nombre, mergea.
+  printf 'historial.*(disciplin|sancion)\n' >> "$r/scripts/confidentiality-blocklist.txt"
+  git -C "$r" checkout -q main; git -C "$r" commit -qam "estática con grupo"; git -C "$r" push -q origin main
+  git -C "$r" checkout -q agent/x; git -C "$r" merge -q --no-edit main
+  sed -i '/cliente-oculto-xyz/d' "$r/f.txt"
+  git -C "$r" commit -qam "agent(x): sin nombre"; git -C "$r" push -q origin agent/x; git -C "$r" fetch -q origin
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
+
+# run_merge_timeout — run_merge con límite de tiempo (una fuente que cuelga cp no bloquea la suite).
+run_merge_timeout() {
+  export GH_LOG="$TESTDIR/gh.log" OG_LOG="$TESTDIR/og.log"
+  : > "$GH_LOG"; : > "$OG_LOG"
+  cd "$1"
+  run timeout 20 env GH_LIST_OUT=42 PATH="$TESTDIR/bin:$PATH" bash scripts/push-pr.sh --from-pr-plan --skip-ci --skip-changelog --merge
+}
+
+@test "rev-1490 P2-2 (seguridad) --merge: una fuente local que no es fichero regular (enlace a /dev/zero, FIFO) no cuelga ni mergea" {
+  r=$(make_merge_repo)
+  ln -s /dev/zero "$r/CLAUDE.local.md"
+  GH_STATE=MERGED run_merge_timeout "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es un fichero regular: CLAUDE.local.md"* ]]
+  run grep -c "^pr merge" "$GH_LOG"
+  [ "$output" = "0" ]
+  rm "$r/CLAUDE.local.md"
+  mkdir -p "$r/projects/cliente-oculto-xyz/team"; mkfifo "$r/projects/cliente-oculto-xyz/team/TEAM.md"
+  GH_STATE=MERGED run_merge_timeout "$r"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es un fichero regular: projects/cliente-oculto-xyz/team/TEAM.md"* ]] || { echo "$output"; false; }
+  # Control: un enlace a un fichero regular sí vale.
+  rm "$r/projects/cliente-oculto-xyz/team/TEAM.md"
+  printf '### Ana Secretisima\n' > "$TESTDIR/team-real.md"
+  ln -s "$TESTDIR/team-real.md" "$r/projects/cliente-oculto-xyz/team/TEAM.md"
+  export SCAN_BL_COPY="$TESTDIR/bl.txt"
+  GH_STATE=MERGED run_merge "$r"
+  [ "$status" -eq 0 ]
+  grep -qx "Ana Secretisima" "$SCAN_BL_COPY"
 }
 
 @test "rev-1490 P2-1 (seguridad): toda fuente que lee el generador la copia local_blocklist (sin deriva)" {
@@ -606,7 +720,8 @@ alt_base() {
   done <<<"$output"
   # Y local_blocklist sigue copiando cada una (si se quita una, este test falla).
   for p in CLAUDE.local.md 'team/TEAM.md' 'identity.md' 'confidentiality-blocklist.txt' '.gitignore'; do
-    sed -n '/^local_blocklist()/,/^}/p' "$PUSH_PR" | grep -qF -- "$p" || { echo "local_blocklist no trata: $p"; false; }
+    sed -n '/^local_blocklist()/,/^}/p' "$PUSH_PR" | grep -v '^[[:space:]]*#' | grep -qF -- "$p" \
+      || { echo "local_blocklist no trata (fuera de comentarios): $p"; false; }
   done
 }
 

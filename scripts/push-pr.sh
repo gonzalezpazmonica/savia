@@ -190,7 +190,7 @@ MERGED=false
 # Código 1 si la base no trae el generador o la lista estática, o si el generador falla.
 LB_DIR=""
 local_blocklist() {
-  local base=$1 root=$2 out=$3 t d n f rel rc=0
+  local base=$1 root=$2 out=$3 t d n f rel pubdir rc=0 pubs=()
   LB_DIR=$(mktemp -d) || return 1
   t=$LB_DIR
   mkdir -p "$t/scripts"
@@ -199,33 +199,64 @@ local_blocklist() {
     rm -rf "$t"; LB_DIR=""; return 1
   fi
   git -C "$root" show "$base:.gitignore" > "$t/.gitignore" 2>/dev/null || rm -f "$t/.gitignore"
+  # Árbol aparte ($t/pub) para los team/TEAM.md no versionados de proyectos que la base versiona (públicos):
+  # aportan las personas, pero el directorio del proyecto no debe aportar su nombre (revisión de #1490, P1-1
+  # de corrección: el generador cuenta cualquier projects/<n>/ como proyecto).
+  mkdir -p "$t/pub/scripts"; cp "$t/scripts/"* "$t/pub/scripts/"
+  if [[ -f "$t/.gitignore" ]]; then cp "$t/.gitignore" "$t/pub/"; fi
   # Local = existe en disco y la BASE no la versiona. Si ls-tree falla, cuenta como local (más patrones, no menos).
-  _lb_local() { [[ -e "$root/$1" && -z "$(git -C "$root" ls-tree -r --name-only "$base" -- "$1" 2>/dev/null)" ]]; }
-  if _lb_local CLAUDE.local.md; then cp "$root/CLAUDE.local.md" "$t/"; fi
+  _lb_local() { [[ ( -e "$root/$1" || -L "$root/$1" ) && -z "$(git -C "$root" ls-tree -r --name-only "$base" -- "$1" 2>/dev/null)" ]]; }
+  # Solo ficheros regulares (revisión de #1490, P2-2 de seguridad): un enlace a /dev/zero o a un FIFO colgaría
+  # cp. Un enlace a un fichero regular vale; cualquier otra cosa hace fallar la blocklist (no hay merge).
+  _lb_copy() {
+    [[ -f "$1" ]] || { echo "ERROR: fuente local de la blocklist que no es un fichero regular: ${1#"$root/"}" >&2; return 1; }
+    mkdir -p "$(dirname "$2")" && cp -- "$1" "$2"
+  }
+  if _lb_local CLAUDE.local.md; then _lb_copy "$root/CLAUDE.local.md" "$t/CLAUDE.local.md" || rc=1; fi
   # Por fichero (revisión de #1490, P2-2): un proyecto que la base versiona (público) no aporta su nombre,
   # pero su team/TEAM.md no versionado sí aporta los nombres de las personas.
   for d in "$root"/projects/*/; do
     [[ -d "$d" ]] || continue
     n=$(basename "$d")
-    if _lb_local "projects/$n"; then mkdir -p "$t/projects/$n"; fi
-    if [[ -f "$d/team/TEAM.md" ]] && _lb_local "projects/$n/team/TEAM.md"; then
-      mkdir -p "$t/projects/$n/team"; cp "$d/team/TEAM.md" "$t/projects/$n/team/"
+    pubdir=""
+    if _lb_local "projects/$n"; then mkdir -p "$t/projects/$n"; else pubdir="pub/"; fi
+    if _lb_local "projects/$n/team/TEAM.md"; then
+      _lb_copy "$root/projects/$n/team/TEAM.md" "$t/${pubdir}projects/$n/team/TEAM.md" || rc=1
+      if [[ -n "$pubdir" ]]; then pubs+=("$n"); fi
     fi
   done
   for f in "$root"/.claude/profiles/users/*/identity.md; do
-    [[ -f "$f" ]] || continue
+    [[ -e "$f" || -L "$f" ]] || continue
     rel=${f#"$root/"}; _lb_local "$rel" || continue
-    mkdir -p "$t/$(dirname "$rel")"; cp "$f" "$t/$rel"
+    _lb_copy "$f" "$t/$rel" || rc=1
   done
-  unset -f _lb_local
+  unset -f _lb_local _lb_copy
   bash "$t/scripts/generate-blocklist.sh" > "$t/bl.raw" 2>/dev/null || rc=1
-  grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" >> "$t/bl.raw"
-  sort -u "$t/bl.raw" > "$out" || rc=1
+  if (( ${#pubs[@]} )); then
+    # Del árbol público solo valen las personas: fuera el nombre del proyecto y su variante con separadores
+    # (las mismas dos formas que emite la fuente 1 del generador). Si otra fuente aporta ese mismo patrón,
+    # sigue entrando por $t/bl.raw.
+    for n in "${pubs[@]}"; do printf '%s\n%s\n' "$n" "$(sed 's/[-_]/.?/g' <<<"$n")"; done > "$t/pub.names"
+    bash "$t/pub/scripts/generate-blocklist.sh" > "$t/pub.raw" 2>/dev/null || rc=1
+    grep -vxF -f "$t/pub.names" "$t/pub.raw" >> "$t/bl.raw"
+  fi
+  grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" > "$t/static.txt"
+  cat "$t/static.txt" >> "$t/bl.raw"
+  # Orden independiente del locale de quien opera (revisión de #1490, P2-1 de seguridad).
+  LC_ALL=C sort -u "$t/bl.raw" > "$out" || rc=1
   # Revisión de #1490 (seguridad, P1-1): el escáner une los patrones con «|» y los pasa a grep sin «-e»; una
   # línea que empiece por «-» (p. ej. «-ave^» en un CLAUDE.local.md forzado por la PR) se leería como opciones
   # (-a -v -e …) y daría un falso PASS. Una blocklist así no se usa: no hay merge.
   if grep -q -- '^-' "$out"; then
     echo "ERROR: la blocklist local tiene un patrón que empieza por «-» (se leería como opción de grep)." >&2
+    rc=1
+  fi
+  # Revisión de #1490 (seguridad, 2.ª ronda, P1-1): un patrón que sale de las fuentes locales (no de la lista
+  # estática de la base) no puede llevar «( ) [ ] { } | \». Son los únicos metacaracteres de ERE que agrupan,
+  # escapan o alternan; sin ellos, ningún patrón puede abrir un grupo o una clase que se trague la unión con
+  # «|» (p. ej. «0000(» … «zzzz)qqq» anularía el Check 1). Cerrado por construcción: no hay merge.
+  if grep -vxF -f "$t/static.txt" "$out" | LC_ALL=C grep -q '[][(){}|\]'; then
+    echo "ERROR: la blocklist local tiene un patrón con ( ) [ ] { } | o \\ (podría anular la unión de patrones del escáner)." >&2
     rc=1
   fi
   rm -rf "$t"; LB_DIR=""
