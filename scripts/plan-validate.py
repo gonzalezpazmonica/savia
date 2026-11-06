@@ -39,18 +39,22 @@ def parse_plan(path: str | Path) -> dict:
 
     # Extraer archivos listados bajo "Files that change"
     files: list[str] = []
-    m = re.search(r"(?is)#+\s*Files that change\s*\n(.*?)(?=\n#+\s|\Z)", text)
+    # Cabecera en su propia línea; el bloque acaba en la siguiente cabecera.
+    # [ \t] y no \s: una sección vacía no debe tragarse la siguiente.
+    m = re.search(r"(?ims)^#+[ \t]*Files that change[ \t]*\n(.*?)(?=^#+\s|\Z)", text)
     if m:
         block = m.group(1)
         for line in block.splitlines():
-            line = line.strip().lstrip("-").strip()
-            if not line or line.startswith("#"):
+            line = line.strip().lstrip("-*").strip()
+            if not line or line.startswith("#") or line.startswith("```"):
                 continue
-            # quitar anotaciones tipo (new)/(modified)
-            name = re.sub(r"\s*\((new|modified|deleted)\)\s*$", "", line)
-            name = name.strip()
-            if name and not name.startswith("```"):
-                files.append(name)
+            # La spec admite varias rutas por línea separadas por comas.
+            for item in line.split(","):
+                # quitar anotaciones tipo (new)/(modified) y comillas de código
+                name = re.sub(r"\s*\((new|modified|deleted)\)\s*$", "", item.strip())
+                name = name.strip().strip("`").strip()
+                if name and name not in files:
+                    files.append(name)
 
     errors = []
     if missing:
