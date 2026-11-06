@@ -14,12 +14,25 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHANGELOG_DIR="$REPO_ROOT/CHANGELOG.d"
-SPECS_DIR="$REPO_ROOT/docs/specs"
-ARCHIVE_DIR="$REPO_ROOT/specs-archive"
-
 if [[ ! -d "$CHANGELOG_DIR" ]]; then
   exit 0
 fi
+# Las specs viven en docs/specs, docs/propuestas (y subdirectorios) y en los
+# dos archivos históricos. Solo se buscan los directorios que existan.
+SPEC_ROOTS=()
+for d in "$REPO_ROOT/docs/specs" "$REPO_ROOT/docs/propuestas" \
+         "$REPO_ROOT/docs/specs-archive" "$REPO_ROOT/specs-archive"; do
+  [[ -d "$d" ]] && SPEC_ROOTS+=("$d")
+done
+
+# spec_exists ID — 0 si hay un fichero cuyo nombre es exactamente el ID
+# seguido de «-», «.md» o «.spec.md» (sin casar por prefijo: SE-25 ≠ SE-253).
+spec_exists() {
+  local id="$1"
+  [[ ${#SPEC_ROOTS[@]} -eq 0 ]] && return 1
+  find "${SPEC_ROOTS[@]}" -type f \( -iname "${id}-*.md" -o -iname "${id}.md" \
+    -o -iname "${id}.spec.md" -o -iname "SPEC-${id}-*.md" \) -print -quit 2>/dev/null | grep -q .
+}
 
 ISSUES=0
 for entry in "$CHANGELOG_DIR"/*.md; do
@@ -28,11 +41,11 @@ for entry in "$CHANGELOG_DIR"/*.md; do
 
   spec_id=""
   if grep -q '^spec:' "$entry"; then
-    spec_id=$(grep '^spec:' "$entry" | head -1 | sed 's/spec:[[:space:]]*//')
+    spec_id=$(grep '^spec:' "$entry" | head -1 | sed -e 's/^spec:[[:space:]]*//' -e 's/[[:space:]\r]*$//' -e "s/^[\"']//" -e "s/[\"']\$//")
   fi
 
   if [[ -z "$spec_id" ]]; then
-    spec_match=$(echo "$basename" | grep -oE 'se[0-9]+' || true)
+    spec_match=$(echo "$basename" | grep -ioE '(^|[^a-z])se-?[0-9]+' || true)
     if [[ -n "$spec_match" ]]; then
       echo "ISSUE: $basename missing 'spec:' field in frontmatter"
       ISSUES=$((ISSUES + 1))
@@ -41,20 +54,15 @@ for entry in "$CHANGELOG_DIR"/*.md; do
   fi
 
   found=0
-  for pattern in "$SPECS_DIR/${spec_id}" "$SPECS_DIR/${spec_id^^}"; do
-    if compgen -G "${pattern}*.md" > /dev/null 2>&1; then
-      found=1
-      break
-    fi
-  done
-  if [[ "$found" -eq 0 ]] && [[ -d "$ARCHIVE_DIR" ]]; then
-    if find "$ARCHIVE_DIR" -name "*${spec_id}*" -o -name "*${spec_id^^}*" 2>/dev/null | grep -q .; then
-      found=1
-    fi
+  if [[ ! "$spec_id" =~ ^[A-Za-z][A-Za-z0-9]*-[0-9][0-9A-Za-z.]*$ ]]; then
+    echo "ISSUE: invalid spec id '${spec_id}' in CHANGELOG.d/$basename"
+    ISSUES=$((ISSUES + 1))
+    continue
   fi
+  spec_exists "$spec_id" && found=1
 
   if [[ "$found" -eq 0 ]]; then
-    echo "ISSUE: ${spec_id} referenced in CHANGELOG.d/$basename but spec file not found in docs/specs/ or specs-archive/"
+    echo "ISSUE: ${spec_id} referenced in CHANGELOG.d/$basename but spec file not found in docs/specs/, docs/propuestas/ or an archive"
     ISSUES=$((ISSUES + 1))
   fi
 done
