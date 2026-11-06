@@ -408,3 +408,40 @@ teardown() {
   [[ "$output" == *"deep (L0) — excess tool: Bash"* ]]
   [[ "$output" == *"Checked: 1 agents"* ]]
 }
+
+# ── S03r: mutantes que la suite no mataba ────────────────────────────────────
+
+@test "boundary: L3 agent with Task is an excess (Task starts at L4)" {
+  printf -- '---\nname: l3\npermission_level: L3\ntools: [Read, Write, Edit, Bash, Glob, Grep, Task]\n---\nX.\n' \
+    > "$TMPDIR_AP/agents/l3.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"l3 (L3) — excess tool: Task (above level)"* ]]
+  [[ "$output" == *"Errors:  1"* ]]
+}
+
+@test "boundary: L4 agent with WebFetch is an excess (no level grants it)" {
+  printf -- '---\nname: l4\npermission_level: L4\ntools: [Read, Write, Edit, Bash, Glob, Grep, Task, WebFetch]\n---\nX.\n' \
+    > "$TMPDIR_AP/agents/l4.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"l4 (L4) — excess tool: WebFetch"* ]]
+}
+
+@test "boundary: L4 agent with exactly the L4 tools passes with no warnings" {
+  printf -- '---\nname: l4\npermission_level: L4\ntools: [Read, Write, Edit, Bash, Glob, Grep, Task]\n---\nX.\n' \
+    > "$TMPDIR_AP/agents/l4.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Errors:  0"* ]]
+  [[ "$output" == *"Warnings: 0"* ]]
+}
+
+@test "usage: --baseline followed by another option is a usage error (exit 2)" {
+  printf -- '---\nname: ok\npermission_level: L0\ntools: [Read]\n---\nX.\n' > "$TMPDIR_AP/agents/ok.md"
+  run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline --verbose
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--baseline needs a file"* ]]
+  run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline
+  [ "$status" -eq 2 ]
+}

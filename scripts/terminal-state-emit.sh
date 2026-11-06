@@ -8,7 +8,7 @@
 #
 # Arguments:
 #   <reason>           One of: completed user_abort token_budget stop_hook
-#                               max_turns unrecoverable_error
+#                               max_turns unrecoverable_error handback
 #   --message <text>   Optional human-readable detail string
 #   --loop    <name>   Loop/agent name (default: "default")
 #
@@ -18,11 +18,12 @@
 #
 # Exit codes:
 #   0  completed | user_abort
-#   1  unknown reason (script error)
+#   1  unknown reason or script/usage error (bad --loop, write failure)
 #   2  token_budget
 #   3  stop_hook
 #   4  max_turns
 #   5  unrecoverable_error
+#   6  handback (SE-332)
 
 set -uo pipefail
 
@@ -48,13 +49,14 @@ reason_to_exit_code() {
     stop_hook)           echo 3 ;;
     max_turns)           echo 4 ;;
     unrecoverable_error) echo 5 ;;
+    handback)            echo 6 ;;
     *)                   echo 1 ;;
   esac
 }
 
 valid_reason() {
   case "$1" in
-    completed|user_abort|token_budget|stop_hook|max_turns|unrecoverable_error)
+    completed|user_abort|token_budget|stop_hook|max_turns|unrecoverable_error|handback)
       return 0 ;;
     *)
       return 1 ;;
@@ -97,15 +99,21 @@ done
 
 # ── Validate reason ───────────────────────────────────────────────────────────
 
-# Guard against path traversal in --loop value
+# Guard against path traversal in --loop value. Usage errors exit 1: exit 2 is
+# token_budget, and an orchestrator would read it as "retry with a bigger model".
 if [[ "$LOOP" == *"/"* || "$LOOP" == *".."* ]]; then
   echo "ERROR: --loop value must not contain '/' or '..': '$LOOP'" >&2
-  exit 2
+  exit 1
+fi
+# The name is a directory and a JSON field: plain [A-Za-z0-9._-] only, not "."
+if [[ ! "$LOOP" =~ ^[A-Za-z0-9._-]+$ || "$LOOP" == "." ]]; then
+  echo "ERROR: --loop value must match [A-Za-z0-9._-]+: '$LOOP'" >&2
+  exit 1
 fi
 
 if ! valid_reason "$REASON"; then
   echo "ERROR: unknown termination reason: '$REASON'" >&2
-  echo "Valid reasons: completed user_abort token_budget stop_hook max_turns unrecoverable_error" >&2
+  echo "Valid reasons: completed user_abort token_budget stop_hook max_turns unrecoverable_error handback" >&2
   exit 1
 fi
 
@@ -114,12 +122,15 @@ fi
 EXIT_CODE=$(reason_to_exit_code "$REASON")
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Escape newlines in message (must happen before other JSON escaping)
-MSG_ESCAPED="${MESSAGE//$'\n'/\\n}"
+# Escape message for JSON. Backslash FIRST: escaping it after \n turned a real
+# newline into a literal "\\n". Then quote, \n, \r, \t; other control chars
+# (invalid raw inside a JSON string) are dropped.
+MSG_ESCAPED="${MESSAGE//\\/\\\\}"
+MSG_ESCAPED="${MSG_ESCAPED//\"/\\\"}"
+MSG_ESCAPED="${MSG_ESCAPED//$'\n'/\\n}"
 MSG_ESCAPED="${MSG_ESCAPED//$'\r'/\\r}"
-
-# Escape message for JSON (basic: backslash and double-quote)
-MESSAGE_ESCAPED=$(printf '%s' "$MSG_ESCAPED" | sed 's/\\/\\\\/g; s/"/\\"/g')
+MSG_ESCAPED="${MSG_ESCAPED//$'\t'/\\t}"
+MESSAGE_ESCAPED=$(printf '%s' "$MSG_ESCAPED" | tr -d '\000-\010\013\014\016-\037')
 
 JSON="{\"ts\":\"${TIMESTAMP}\",\"loop\":\"${LOOP}\",\"reason\":\"${REASON}\",\"message\":\"${MESSAGE_ESCAPED}\",\"exit_code\":${EXIT_CODE}}"
 
@@ -134,10 +145,13 @@ echo "$JSON"
 REPO_ROOT="${SAVIA_REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 STATE_DIR="${REPO_ROOT}/output/loop-state/${LOOP}"
-mkdir -p "$STATE_DIR"
-
 STATE_FILE="${STATE_DIR}/terminal-state.jsonl"
-echo "$JSON" >> "$STATE_FILE"
+# Fail-closed: a state that was not persisted cannot be read by the orchestrator,
+# so it must not exit with the reason's code (0 for completed) as if it had been.
+if ! mkdir -p "$STATE_DIR" 2>/dev/null || ! echo "$JSON" >> "$STATE_FILE" 2>/dev/null; then
+  echo "ERROR: could not persist terminal state to $STATE_FILE" >&2
+  exit 1
+fi
 
 # ── Exit with mapped code ─────────────────────────────────────────────────────
 

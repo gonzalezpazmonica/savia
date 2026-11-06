@@ -21,12 +21,13 @@ if [[ ! -f "$OC_CONFIG" ]]; then
   red "opencode.json no encontrado en $REPO_ROOT"
   ERRORS=$((ERRORS+1))
 else
-  DENY_COUNT=$(python3 << PYEOF
-import json
-with open("$OC_CONFIG") as f:
+  # La ruta va por argv, no interpolada en el código Python.
+  DENY_COUNT=$(python3 - "$OC_CONFIG" << 'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
     d = json.load(f)
 b = d.get("agent",{}).get("build",{}).get("permission",{}).get("bash",{})
-print(sum(1 for v in b.values() if v == "deny"))
+print(sum(1 for v in b.values() if v == "deny") if isinstance(b, dict) else 0)
 PYEOF
 )
   if [[ "${DENY_COUNT:-0}" -ge 3 ]]; then
@@ -40,11 +41,15 @@ fi
 # Capa B
 section "Capa B: kernel sandbox (bubblewrap / Seatbelt)"
 if [[ -f "$OC_CONFIG" ]]; then
-  PLUGIN_OK=$(python3 << PYEOF
-import json
-with open("$OC_CONFIG") as f:
+  # plugin[] debe ser una lista con «opencode-sandbox» (o «opencode-sandbox@versión»).
+  # Antes, si plugin era una cadena, «in» buscaba subcadena: «opencode-sandbox-off» daba OK.
+  PLUGIN_OK=$(python3 - "$OC_CONFIG" << 'PYEOF'
+import json, sys
+with open(sys.argv[1]) as f:
     d = json.load(f)
-print(1 if "opencode-sandbox" in d.get("plugin",[]) else 0)
+p = d.get("plugin", [])
+ok = isinstance(p, list) and any(isinstance(x, str) and (x == "opencode-sandbox" or x.startswith("opencode-sandbox@")) for x in p)
+print(1 if ok else 0)
 PYEOF
 )
   if [[ "${PLUGIN_OK:-0}" == "1" ]]; then
