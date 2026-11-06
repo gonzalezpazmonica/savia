@@ -102,6 +102,9 @@ run_step() { run bash -c 'cd "$1" && BASE_SHA="$2" bash --noprofile --norc -eo p
 # (bash -c "… gate", "gate") y solo acepta "$X/scripts/derived.sh" si el mismo paso asigna X una única vez con
 # X=$(mktemp -d) y copia en él el derived.sh de la base. Es un detector de mejor esfuerzo, sesgado a fallar:
 # cualquier «"$VAR" gate» que no sea esa forma se marca (falso positivo aceptado), y no interpreta shell.
+# Revisión de #1490 (P2): un derived.sh en la misma orden simple antes de «gate» la marca aunque haya opciones
+# entre medias (--range X gate). x_ok es textual: no prueba que la copia se ejecute antes ni en toda rama;
+# eval, source o alias que construyan «gate» no se detectan. No es una garantía, solo una red.
 gate_from_checkout() {
   python3 - "$1" <<'PY'
 import re, sys, yaml
@@ -114,8 +117,13 @@ for job in doc["jobs"].values():
         for line in run.splitlines():
             toks = [t.strip("\"'") for t in line.replace(";", " ; ").split()]
             for i, tok in enumerate(toks[1:], 1):
-                prev = toks[i - 1]
-                if tok == "gate" and ("derived" in prev or "$" in prev) and not (x_ok and prev == "$X/scripts/derived.sh"):
+                if tok != "gate":
+                    continue
+                prev, base_copy = toks[i - 1], "$X/scripts/derived.sh"
+                # Orden simple desde el último separador: un derived.sh antes de «gate», con opciones entre medias.
+                start = max((k for k, t in enumerate(toks[:i]) if t in (";", "&&", "||", "|")), default=-1) + 1
+                via_derived = any("derived" in t and not (x_ok and t == base_copy) for t in toks[start:i])
+                if via_derived or ("$" in prev and not (x_ok and prev == base_copy)):
                     print("gate fuera de la base:", st.get("name"), "→", line.strip()); sys.exit(1)
 print("ok")
 PY
@@ -133,7 +141,8 @@ PY
            './scripts/derived.sh gate' 'sh scripts/derived.sh gate' \
            'bash "$PWD/scripts/derived.sh" gate' 'D=scripts/derived.sh; bash "$D" gate' \
            $'bash scripts/derived.sh \\\n  gate' 'bash -c "scripts/derived.sh gate"' 'bash scripts/derived.sh "gate"' \
-           'X=.; bash "$X/scripts/derived.sh" gate'; do
+           'X=.; bash "$X/scripts/derived.sh" gate' 'bash scripts/derived.sh --range main..HEAD gate' \
+           'bash ./scripts/derived.sh --repo . gate'; do
     V="$v" python3 - "$REPO/.github/workflows/ci.yml" > "$T/ci-variante.yml" <<'PY'
 import os, sys, yaml
 doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
@@ -245,7 +254,7 @@ tier() { python3 "$R/scripts/risk-tier.py" --diff "$1" --json "${@:2}" | python3
   [ "$(tier .scm/views/authority.json)" = 3 ]
 }
 
-@test "EXCLUDE_PATHS empty: un diff staged vacío da clean sin inventar hallazgos" {
+@test "confidentiality-scan empty: un diff staged vacío da clean sin inventar hallazgos" {
   scan_repo
   run bash "$R/scripts/confidentiality-scan.sh" --staged
   [ "$status" -eq 0 ]
@@ -253,7 +262,7 @@ tier() { python3 "$R/scripts/risk-tier.py" --diff "$1" --json "${@:2}" | python3
   [[ "$output" != *'"result":"findings"'* ]]
 }
 
-@test "EXCLUDE_PATHS nonexistent: una blocklist explícita ausente da unknown y bloquea" {
+@test "confidentiality-scan nonexistent: una blocklist explícita ausente da unknown y bloquea" {
   scan_repo
   printf 'contenido\n' > "$R/nota.md"; G add nota.md
   run env SAVIA_GATE_UNKNOWN=block bash "$R/scripts/confidentiality-scan.sh" --staged --blocklist "$T/no-existe.txt"
