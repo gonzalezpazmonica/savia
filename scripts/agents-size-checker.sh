@@ -13,7 +13,7 @@ set -uo pipefail
 # Exit codes:
 #   0 — no FAIL violations
 #   1 — one or more FAIL violations (>400 lines)
-#   2 — usage error
+#   2 — usage error, or agents directory missing (fail-closed: no PASS without data)
 #
 # Ref: SE-098, Rule #22, docs/propuestas/SE-098-agents-oversized-top5.md
 
@@ -39,6 +39,13 @@ while [[ $# -gt 0 ]]; do
     *) echo "ERROR: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
+
+if [[ ! -d "$AGENTS_DIR" ]]; then
+  echo "ERROR: agents directory not found: $AGENTS_DIR" >&2
+  exit 2
+fi
+
+json_escape() { local s="${1//\\/\\\\}"; printf '%s' "${s//\"/\\\"}"; }
 
 # ── Collect agent data ──────────────────────────────────────────────────────
 
@@ -109,7 +116,7 @@ if [[ "$JSON_MODE" -eq 1 ]]; then
     comma=","
     [[ $((i+1)) -eq $n ]] && comma=""
     printf '    {"name": "%s", "lines": %d, "bytes": %d, "status": "%s"}%s\n' \
-      "${AGENTS[$i]}" "${LINES_ARR[$i]}" "${BYTES_ARR[$i]}" "${STATUS_ARR[$i]}" "$comma"
+      "$(json_escape "${AGENTS[$i]}")" "${LINES_ARR[$i]}" "${BYTES_ARR[$i]}" "${STATUS_ARR[$i]}" "$comma"
   done
   printf '  ]\n}\n'
 elif [[ "$QUIET" -eq 0 ]]; then
