@@ -35,7 +35,7 @@ metadata:
 1. **Tabla de gaps por regulación** — artículo / obligación / estado (cumple/gap/N/A) / evidencia requerida
 2. **Nivel de riesgo por gap** — ALTO (infracción muy grave) / MEDIO (grave) / BAJO (leve)
 3. **Plan de remediación** — acciones ordenadas por urgencia con responsable y plazo estimado
-4. **Alertas de AEPD** — gaps con mayor historial sancionador identificados explícitamente
+4. **Alertas de AEPD** — gaps con más precedentes sancionadores identificados explícitamente
 
 ## Outputs excluidos
 

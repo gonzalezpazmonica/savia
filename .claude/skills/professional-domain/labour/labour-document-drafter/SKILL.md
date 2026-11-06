@@ -36,7 +36,7 @@ metadata:
 | Campo | Descripción |
 |---|---|
 | `testigos` | Personas que pueden corroborar los hechos |
-| `sanciones_previas` | Historial disciplinario del trabajador |
+| `sanciones_previas` | Antecedentes disciplinarios del trabajador |
 | `es_representante` | Si el empleado tiene mandato sindical (activa garantía art. 68 ET) |
 
 ## Outputs producidos

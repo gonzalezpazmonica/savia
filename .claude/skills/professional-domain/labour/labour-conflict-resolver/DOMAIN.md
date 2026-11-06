@@ -112,7 +112,7 @@ de la falta. Los jueces valoran:
 
 | Factor | Atenúa | Agrava |
 |---|---|---|
-| Historial disciplinario | Sin antecedentes | Reiteración de faltas similares |
+| Antecedentes disciplinarios | Sin antecedentes | Reiteración de faltas similares |
 | Antigüedad en la empresa | No es factor de agravar | Puede agravar si supone mayor confianza |
 | Intencionalidad | Error no intencional | Fraude o mala fe deliberada |
 | Daño causado | Sin consecuencias reales | Daño económico o reputacional concreto |
