@@ -145,7 +145,7 @@ print(' '.join(scores))
     ADAPTIVE_RESULT=$(python3 "$DIR/quality-gate-adaptive.py" \
         --scores $SCORES \
         --fixed-min "$FIXED_MIN" --floor "$FLOOR" --ceil "$CEIL" --json 2>/dev/null || echo "{}")
-    NEW_THRESHOLD=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('threshold', $FIXED_MIN))" 2>/dev/null || echo "$FIXED_MIN")
+    NEW_THRESHOLD=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('threshold', sys.argv[1]))" "$FIXED_MIN" 2>/dev/null || echo "$FIXED_MIN")
     STRATEGY=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('strategy', 'unknown'))" 2>/dev/null || echo "unknown")
     MEAN=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('metrics', {}).get('mean', 0))" 2>/dev/null || echo "0")
     STDDEV=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('metrics', {}).get('stddev', 0))" 2>/dev/null || echo "0")
@@ -179,7 +179,9 @@ print(' '.join(scores))
   fi
 fi
 
-if ! [[ "$THRESHOLD" =~ ^[0-9]+$ ]]; then
+# Entero o decimal (el umbral adaptativo puede no ser entero). Solo un número
+# validado llega a interpolarse en el Python de abajo.
+if ! [[ "$THRESHOLD" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "  Umbral no numérico: '$THRESHOLD' (fallo cerrado del aviso)"
   AUDIT_OK=false
   THRESHOLD=0

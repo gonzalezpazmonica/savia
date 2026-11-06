@@ -348,6 +348,24 @@ gate_run() {
   [[ "$output" != *"RESULT: PASS"* ]]
 }
 
+@test "puntuación: umbral decimal (79.5) se acepta y filtra (79 debajo, 80 no)" {
+  gate_fx '{"total_files":2,"results":[{"file":"a.bats","total":79},{"file":"b.bats","total":80}]}'
+  gate_run SAVIA_QUALITY_GATE_FIXED_MIN=79.5
+  [[ "$output" != *"Umbral no numérico"* ]]
+  [[ "$output" == *"Audited: 2 files, 1 below threshold (79.5)"* ]]
+  [[ "$output" == *"a.bats: 79/100"* ]]
+  [[ "$output" != *"b.bats: 80/100"* ]]
+}
+
+@test "puntuación: FIXED_MIN no se interpreta como código en modo adaptativo (negativo)" {
+  gate_fx '{"total_files":6,"results":[{"file":"a","total":50},{"file":"b","total":60},{"file":"c","total":70},{"file":"d","total":80},{"file":"e","total":90},{"file":"f","total":95}]}'
+  local mark="$BATS_TEST_TMPDIR/inyectado"
+  gate_run SAVIA_QUALITY_GATE_ADAPTIVE=on \
+    "SAVIA_QUALITY_GATE_FIXED_MIN=0+len(open('$mark','w').name)"
+  [ ! -e "$mark" ]
+  [[ "$output" != *"RESULT: PASS"* ]]
+}
+
 @test "puntuación: boundary 79 queda por debajo de 80 y 80 no" {
   gate_fx '{"total_files":2,"results":[{"file":"a.bats","total":79},{"file":"b.bats","total":80}]}'
   gate_run
