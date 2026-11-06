@@ -30,10 +30,19 @@ if [ "${1:-}" = "--hooks-path" ]; then
     exit 0
 fi
 
-CLAUDE_PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-HOOKS_DIR="$CLAUDE_PROJECT_DIR/.claude/hooks"
-OPENCODE_HOOKS_DIR="$CLAUDE_PROJECT_DIR/.opencode/scripts/opencode-hooks"
-GIT_HOOKS_DIR="$CLAUDE_PROJECT_DIR/.git/hooks"
+# Raíz del repo que contiene este script (scripts/ cuelga de la raíz). Antes se calculaba con
+# scripts/../.. y apuntaba al directorio padre del repo; tampoco entendía worktrees (.git es un fichero).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLAUDE_PROJECT_DIR="$(git -C "$SCRIPT_DIR/.." rev-parse --show-toplevel 2>/dev/null)" \
+    || { echo "Error: $SCRIPT_DIR/.. no es un repositorio git." >&2; exit 1; }
+# Con core.hooksPath activo git no lee .git/hooks: instalar ahí daría una protección que no corre.
+current_hooks_path="$(git -C "$CLAUDE_PROJECT_DIR" config --get core.hooksPath)"
+if [ -n "$current_hooks_path" ]; then
+    echo "Error: core.hooksPath vale '$current_hooks_path' en $CLAUDE_PROJECT_DIR; git no ejecutaría .git/hooks." >&2
+    echo "  Los hooks versionados se activan con: bash scripts/install-git-hooks.sh --hooks-path" >&2
+    exit 1
+fi
+GIT_HOOKS_DIR="$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/hooks"
 
 if [ ! -d "$GIT_HOOKS_DIR" ]; then
     echo "Error: No se encuentra .git/hooks. Ejecuta desde la raíz del repositorio Git." >&2
