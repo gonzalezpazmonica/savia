@@ -24,7 +24,11 @@ set -uo pipefail
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WORKSPACE_DIR="$(cd "${SAVIA_WORKSPACE_DIR:-${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-"$SCRIPT_DIR/.."}}}" && pwd)"
+WS_CANDIDATE="${SAVIA_WORKSPACE_DIR:-${CLAUDE_PROJECT_DIR:-${OPENCODE_PROJECT_DIR:-"$SCRIPT_DIR/.."}}}"
+if ! WORKSPACE_DIR="$(cd "$WS_CANDIDATE" 2>/dev/null && pwd)" || [[ -z "$WORKSPACE_DIR" ]]; then
+  echo "ERROR: workspace directory not found: $WS_CANDIDATE" >&2
+  exit 2
+fi
 
 JSON_MODE=0
 [[ "${1:-}" == "--json" ]] && JSON_MODE=1
@@ -74,8 +78,14 @@ check_component \
   "true"
 
 # ── Check 6: savia-foundation.ts wires the guards ────────────────────────────
+# «Cableado» = el guard figura como elemento de una lista de guards (línea con
+# solo el identificador). Un import o un comentario no bastan: un guard
+# importado pero retirado de BEFORE_GUARDS no protege nada.
 FOUNDATION="$WORKSPACE_DIR/.opencode/plugins/savia-foundation.ts"
-if [[ -f "$FOUNDATION" ]] && grep -q "dataSovereigntyGate" "$FOUNDATION" 2>/dev/null; then
+guard_registered() {
+  [[ -f "$FOUNDATION" ]] && grep -qE "^[[:space:]]*$1,?[[:space:]]*(//.*)?$" "$FOUNDATION" 2>/dev/null
+}
+if guard_registered "dataSovereigntyGate"; then
   COMPONENTS+=("savia-foundation-wired")
 else
   MISSING+=("savia-foundation-wired")
@@ -83,7 +93,7 @@ fi
 
 # ── Check 7: block-credential-leak referenced in settings/plugin wiring ──────
 # The foundation plugin imports blockCredentialLeak — verify it's wired
-if [[ -f "$FOUNDATION" ]] && grep -q "blockCredentialLeak" "$FOUNDATION" 2>/dev/null; then
+if guard_registered "blockCredentialLeak"; then
   COMPONENTS+=("block-credential-leak-wired")
 else
   MISSING+=("block-credential-leak-wired")
@@ -104,12 +114,13 @@ CRITICAL_COMPONENTS=(
   "block-credential-leak"
   "context-sanitize-input"
   "savia-foundation-wired"
+  "block-credential-leak-wired"
 )
 
 CRITICAL_MISSING=0
 for c in "${CRITICAL_COMPONENTS[@]}"; do
   found=0
-  for comp in "${COMPONENTS[@]:-}"; do
+  for comp in ${COMPONENTS[@]+"${COMPONENTS[@]}"}; do
     [[ "$comp" == "$c" ]] && found=1 && break
   done
   (( found == 0 )) && CRITICAL_MISSING=$((CRITICAL_MISSING + 1))
@@ -132,7 +143,7 @@ if (( JSON_MODE == 1 )); then
   # Build JSON arrays
   comp_json="["
   first=1
-  for c in "${COMPONENTS[@]:-}"; do
+  for c in ${COMPONENTS[@]+"${COMPONENTS[@]}"}; do
     (( first )) || comp_json+=","
     comp_json+="\"$c\""
     first=0
@@ -141,7 +152,7 @@ if (( JSON_MODE == 1 )); then
 
   miss_json="["
   first=1
-  for m in "${MISSING[@]:-}"; do
+  for m in ${MISSING[@]+"${MISSING[@]}"}; do
     (( first )) || miss_json+=","
     miss_json+="\"$m\""
     first=0
@@ -153,7 +164,7 @@ if (( JSON_MODE == 1 )); then
 else
   printf 'Savia Shield Status: %s\n' "$STATUS"
   printf 'Components found (%d):\n' "${#COMPONENTS[@]}"
-  for c in "${COMPONENTS[@]:-}"; do
+  for c in ${COMPONENTS[@]+"${COMPONENTS[@]}"}; do
     printf '  + %s\n' "$c"
   done
   if (( ${#MISSING[@]} > 0 )); then
