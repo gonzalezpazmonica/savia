@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # tests/test-se271-s1-monotonicity.bats
 # SE-271 S1 — Monotonicity gate tests
+# Ref: docs/propuestas/SE-271-savia-corporate.md
 set -uo pipefail
 
 setup() {
@@ -283,4 +284,179 @@ JSON
   run bash "$SCRIPT" "$card"
   [[ "$status" -eq 0 ]]
   [[ "$output" == *"PASS"* ]]
+}
+
+# ── S03o: comportamiento discriminante (estructura, normalización, ledger) ──
+
+# card <fichero> <json de entries>: tarjeta mínima con las entradas dadas.
+card() {
+  printf '{"body_id":"corp-s03o","version":"1.0.0","entries":%s}\n' "$2" > "$1"
+}
+
+@test "se271-s1: entries que no son lista se rechazan con exit 2 (antes PASS)" {
+  local c="$TMPDIR/shape-obj.json"
+  card "$c" '{"a":{"id":"CRIT-026","dureza":"estilo"}}'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid structure (entries)"* ]]
+  [[ "$output" != *"PASS"* ]]
+}
+
+@test "se271-s1: entrada que no es objeto se rechaza con exit 2 (antes PASS con [\"CRIT-026\"])" {
+  local c="$TMPDIR/shape-str.json"
+  card "$c" '[{"id":"CRIT-C1","dureza":"estilo","principio":"x"},"CRIT-026"]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"entry:1"* ]]
+}
+
+@test "se271-s1: tarjeta que no es objeto JSON exit 2" {
+  local c="$TMPDIR/shape-list.json"
+  echo '[1,2]' > "$c"
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid structure (card)"* ]]
+}
+
+@test "se271-s1: id inmune en minúsculas y con espacios también se rechaza" {
+  local c="$TMPDIR/immune-case.json"
+  card "$c" '[{"id":" crit-027 ","dureza":"linea_roja","principio":"Formatos abiertos."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"immune ethical floor"* ]]
+}
+
+@test "se271-s1: CRIT-0260 no es inmune (límite del patrón exacto)" {
+  local c="$TMPDIR/immune-boundary.json"
+  card "$c" '[{"id":"CRIT-0260","dureza":"estilo","principio":"Formatos abiertos."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RESULT: PASS"* ]]
+}
+
+@test "se271-s1: señal con tilde («excepción») se detecta como relajación" {
+  local c="$TMPDIR/accent.json"
+  card "$c" '[{"id":"CRIT-C2","dureza":"preferencia","principio":"Cifrar los datos en reposo; excepción para el cliente principal."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"relaxation signal 'excepcion' (ambiguous)"* ]]
+}
+
+@test "se271-s1: «exceptúa» con tilde se clasifica como loophole" {
+  local c="$TMPDIR/loophole.json"
+  card "$c" '[{"id":"CRIT-C3","dureza":"preferencia","principio":"Revisión humana salvo urgencias: se exceptúa la dirección."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'salvo' (loophole)"* ]]
+}
+
+@test "se271-s1: señal en contexto prohibitivo («nunca») pasa" {
+  local c="$TMPDIR/safe.json"
+  card "$c" '[{"id":"CRIT-C4","dureza":"linea_roja","principio":"Nunca se debe permitir exportar datos personales."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RESULT: PASS"* ]]
+  [ ! -s "$LEDGER" ]
+}
+
+@test "se271-s1: señal en el contraejemplo también cuenta" {
+  local c="$TMPDIR/contra.json"
+  card "$c" '[{"id":"CRIT-C5","dureza":"estilo","principio":"Commits pequeños.","contraejemplo":"Commits enormes excepto los viernes."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'excepto'"* ]]
+}
+
+@test "se271-s1: misma dureza que la existente pasa (límite de la monotonicidad)" {
+  local c="$TMPDIR/equal.json"
+  card "$c" '[{"id":"CRIT-C6","dureza":"preferencia","existing_dureza":"preferencia","principio":"Formatos abiertos."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 0 ]
+}
+
+@test "se271-s1: linea_roja a estilo se rechaza y dureza desconocida cuenta como 0" {
+  local c="$TMPDIR/down.json"
+  card "$c" '[{"id":"CRIT-C7","dureza":"estilo","existing_dureza":"linea_roja","principio":"x"},{"id":"CRIT-C8","dureza":"inventada","existing_dureza":"estilo","principio":"y"}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dureza downgrade (linea_roja -> estilo)"* ]]
+  [[ "$output" == *"dureza downgrade (estilo -> inventada)"* ]]
+}
+
+@test "se271-s1: clave alternativa criterios se evalúa igual que entries" {
+  local c="$TMPDIR/criterios.json"
+  printf '%s\n' '{"body_id":"corp-crit","criterios":[{"id":"CRIT-026","dureza":"linea_roja"}]}' > "$c"
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Entries: 1"* ]]
+}
+
+@test "se271-s1: una entrada mala entre buenas rechaza y solo ella va al ledger" {
+  local c="$TMPDIR/mixed.json"
+  card "$c" '[{"id":"CRIT-C9","dureza":"estilo","principio":"ok"},{"id":"CRIT-026","dureza":"linea_roja"},{"id":"CRIT-C10","dureza":"estilo","principio":"ok"}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [ "$(wc -l < "$LEDGER")" -eq 1 ]
+  python3 -c "import json,sys; d=json.loads(open(sys.argv[1]).readline()); assert d['entry_id']=='CRIT-026', d" "$LEDGER"
+}
+
+@test "se271-s1: body_id con comillas y salto de línea queda en el ledger como JSON válido" {
+  local c="$TMPDIR/weird-id.json"
+  printf '%s\n' '{"body_id":"corp \"x\" o'"'"'y\nz\\w","entries":[{"id":"CRIT-026","dureza":"linea_roja"}]}' > "$c"
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [ "$(wc -l < "$LEDGER")" -eq 1 ]
+  python3 -c "
+import json,sys
+d=json.loads(open(sys.argv[1]).readline())
+assert d['body_id']=='corp \"x\" o\'y\nz\\\\w', repr(d['body_id'])
+assert d['prev_ledger_hash']=='genesis'
+assert len(d['body_hash'])==64
+" "$LEDGER"
+}
+
+@test "se271-s1: el ledger encadena: prev_ledger_hash = sha256 del ledger anterior" {
+  local c="$TMPDIR/chain.json"
+  card "$c" '[{"id":"CRIT-026","dureza":"linea_roja"}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  local h1; h1=$(sha256sum "$LEDGER" | awk '{print $1}')
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  python3 -c "
+import json,sys
+lines=open(sys.argv[1]).read().splitlines()
+assert len(lines)==2
+assert json.loads(lines[1])['prev_ledger_hash']==sys.argv[2]
+" "$LEDGER" "$h1"
+}
+
+@test "se271-s1: usage sin argumentos describe los códigos de salida" {
+  run bash "$SCRIPT"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Missing body.card.json"* ]]
+  [[ "$output" == *"Body rejected"* ]]
+}
+
+@test "se271-s1: subir de preferencia a linea_roja pasa" {
+  local c="$TMPDIR/up-roja.json"
+  card "$c" '[{"id":"CRIT-C11","dureza":"linea_roja","existing_dureza":"preferencia","principio":"Formatos abiertos."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"dureza=linea_roja"* ]]
+}
+
+@test "se271-s1: «no aplica» tras una señal se clasifica como loophole" {
+  local c="$TMPDIR/noaplica.json"
+  card "$c" '[{"id":"CRIT-C12","dureza":"preferencia","principio":"Auditoría trimestral salvo proyectos internos, donde no aplica."}]'
+  run bash "$SCRIPT" "$c"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'salvo' (loophole)"* ]]
+}
+
+@test "se271-s1: tarjeta inexistente explica el error por stderr y no toca el ledger" {
+  run bash "$SCRIPT" "$TMPDIR/no-existe.json"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Body card not found: $TMPDIR/no-existe.json"* ]]
+  [ ! -e "$LEDGER" ] || [ ! -s "$LEDGER" ]
 }
