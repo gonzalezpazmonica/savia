@@ -13,6 +13,11 @@ CRITERIO="${CRITERIO:-$REPO_ROOT/CRITERIO.md}"
 LEDGER_DIR="${LEDGER_DIR:-$REPO_ROOT/data/corporate}"
 LEDGER="${LEDGER:-$LEDGER_DIR/monotonicity-ledger.jsonl}"
 
+# Minúsculas y sin tildes: «excepción», «exceptúa» o «no aplicará» deben contar como «excepcion»,
+# «exceptua» y «no aplicara». Sin esto, el texto en español correcto esquivaba las señales.
+FOLD_PY='import unicodedata
+def fold(t): return "".join(c for c in unicodedata.normalize("NFKD", str(t).lower()) if not unicodedata.combining(c))'
+
 usage() {
   cat <<EOF
 Usage: $(basename "$0") <body.card.json>
@@ -53,18 +58,15 @@ log_rejection() {
     prev_hash=$(sha256sum "$LEDGER" | awk '{print $1}')
   fi
 
-  python3 -c "
-import json
-obj = {
-  'body_id': '$(echo "$body_id" | sed "s/'/\\\\'/g")',
-  'entry_id': '$(echo "$entry_id" | sed "s/'/\\\\'/g")',
-  'reason': '$(echo "$reason" | sed "s/'/\\\\'/g")',
-  'violated': '$(echo "$violated" | sed "s/'/\\\\'/g")',
-  'body_hash': '$body_hash',
-  'prev_ledger_hash': '$prev_hash',
-  'timestamp': '$ts'
-}
-print(json.dumps(obj, ensure_ascii=False))
+  # Valores por entorno, no interpolados en el código Python: comillas, barras o saltos de línea
+  # en body_id o en el motivo no deben impedir que quede constancia del rechazo.
+  B_ID="$body_id" E_ID="$entry_id" REASON="$reason" VIOLATED="$violated" \
+  B_HASH="$body_hash" PREV="$prev_hash" TS="$ts" python3 -c "
+import json, os
+e = os.environ
+print(json.dumps({'body_id': e['B_ID'], 'entry_id': e['E_ID'], 'reason': e['REASON'],
+                  'violated': e['VIOLATED'], 'body_hash': e['B_HASH'],
+                  'prev_ledger_hash': e['PREV'], 'timestamp': e['TS']}, ensure_ascii=False))
 " >> "$LEDGER" 2>/dev/null || touch "$LEDGER"
 }
 
@@ -77,10 +79,11 @@ check_entry() {
   local has_error=0
 
   local entry_id dureza principio contraejemplo
-  entry_id=$(echo "$entry_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('id','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
+  # id normalizado (espacios y mayúsculas): " crit-026" no debe esquivar el suelo ético inmune.
+  entry_id=$(echo "$entry_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(str(d.get('id','UNKNOWN')).strip().upper())" 2>/dev/null || echo "UNKNOWN")
   dureza=$(echo "$entry_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('dureza',''))" 2>/dev/null || echo "")
-  principio=$(echo "$entry_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('principio','').lower())" 2>/dev/null || echo "")
-  contraejemplo=$(echo "$entry_json" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('contraejemplo','').lower())" 2>/dev/null || echo "")
+  principio=$(echo "$entry_json" | python3 -c "$FOLD_PY"$'\n'"import json,sys; d=json.load(sys.stdin); print(fold(d.get('principio','')))" 2>/dev/null || echo "")
+  contraejemplo=$(echo "$entry_json" | python3 -c "$FOLD_PY"$'\n'"import json,sys; d=json.load(sys.stdin); print(fold(d.get('contraejemplo','')))" 2>/dev/null || echo "")
 
   echo "  [$idx] $entry_id (dureza=$dureza)"
 
@@ -177,6 +180,23 @@ main() {
 
   if ! python3 -c "import json; json.load(open('$CANDIDATE')); print('OK')" 2>/dev/null | grep -q OK; then
     echo "ERROR: Body card is not valid JSON: $CANDIDATE" >&2
+    exit 2
+  fi
+
+  # Estructura: las entradas deben ser una lista de objetos. Antes, un objeto o una lista de cadenas
+  # (p. ej. ["CRIT-026"]) se saltaba sin comprobar y el gate daba PASS.
+  local shape
+  shape=$(python3 -c "
+import json, sys
+card = json.load(open(sys.argv[1]))
+if not isinstance(card, dict): print('card'); sys.exit()
+entries = card.get('entries', card.get('criterios', []))
+if not isinstance(entries, list): print('entries'); sys.exit()
+bad = [i for i, e in enumerate(entries) if not isinstance(e, dict)]
+print('entry:%d' % bad[0] if bad else 'ok')
+" "$CANDIDATE" 2>/dev/null || echo "error")
+  if [[ "$shape" != "ok" ]]; then
+    echo "ERROR: Body card has invalid structure ($shape): entries must be a list of objects." >&2
     exit 2
   fi
 

@@ -115,3 +115,102 @@ setup() {
 @test "agent-jwt-mint.md references CLAUDE.md Rule #1" {
   grep -q "Rule #1" "$DOC"
 }
+
+# ── S03o: block-pat-file-write con entrada real por stdin, .gitignore y límites del token ──
+
+# pat_stdin <json>: payload PreToolUse por stdin (como lo entrega el runtime).
+pat_stdin() { printf '%s' "$1" | env SAVIA_PAT_BLOCK=on bash "$HOOK"; }
+
+@test "stdin JSON: tool_input.file_path sensible se bloquea con el motivo y la ruta" {
+  run pat_stdin '{"tool_name":"Write","tool_input":{"file_path":"/srv/app/devops-pat"}}'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"BLOCK [SPEC-SE-036 Slice 3]"* ]]
+  [[ "$output" == *"Path  : /srv/app/devops-pat"* ]]
+}
+
+@test "stdin JSON: filePath (OpenCode) y path también se leen" {
+  run pat_stdin '{"tool_input":{"filePath":"/srv/app/api-secret.txt"}}'
+  [ "$status" -eq 2 ]
+  run pat_stdin '{"tool_input":{"path":"/srv/app/azure_token"}}'
+  [ "$status" -eq 2 ]
+}
+
+@test "stdin JSON: ruta no sensible pasa; JSON vacío o inválido pasa (empty)" {
+  run pat_stdin '{"tool_input":{"file_path":"/srv/app/main.py"}}'
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run pat_stdin '{}'
+  [ "$status" -eq 0 ]
+  run pat_stdin 'no es json'
+  [ "$status" -eq 0 ]
+}
+
+@test "token pat: límites — pat.txt, my_pat y pat-file bloquean; compat, patched y parallel-dispatch no (boundary)" {
+  for p in /srv/pat.txt /srv/my_pat /srv/pat-file.cfg /srv/x.pat; do
+    run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path "$p"
+    [ "$status" -eq 2 ]
+  done
+  for p in /srv/compat.sh /srv/patched.sh /srv/parallel-dispatch.sh /srv/path.txt; do
+    run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path "$p"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "mayúsculas no esquivan: AZURE-TOKEN y Devops-PAT se bloquean" {
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path /srv/AZURE-TOKEN
+  [ "$status" -eq 2 ]
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path /srv/Devops-PAT
+  [ "$status" -eq 2 ]
+}
+
+@test "ruta ignorada por git en el repo destino: permitida; la misma ruta sin ignorar se bloquea" {
+  local r; r="$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/patrepo.XXXXXX")"
+  git init -q "$r"
+  printf 'local/\n' > "$r/.gitignore"
+  mkdir -p "$r/local" "$r/conf"
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path "$r/local/devops-pat"
+  [ "$status" -eq 0 ]
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path "$r/conf/devops-pat"
+  [ "$status" -eq 2 ]
+}
+
+@test "fuera de git: directorios de credenciales conocidos (.azure, .savia, secrets) se permiten" {
+  local d; d="$(mktemp -d "${BATS_TEST_TMPDIR:-/tmp}/nogit.XXXXXX")"
+  for p in "$d/.azure/devops-pat" "$d/.savia/token" "$d/secrets/api-secret"; do
+    run env GIT_CEILING_DIRECTORIES="$BATS_TEST_TMPDIR" SAVIA_PAT_BLOCK=on bash "$HOOK" --path "$p"
+    [ "$status" -eq 0 ]
+  done
+  run env GIT_CEILING_DIRECTORIES="$BATS_TEST_TMPDIR" SAVIA_PAT_BLOCK=on bash "$HOOK" --path "$d/conf/devops-pat"
+  [ "$status" -eq 2 ]
+}
+
+@test "interruptor: valor distinto de on (disabled, ON) desactiva; sin variable bloquea por defecto" {
+  run env SAVIA_PAT_BLOCK=ON bash "$HOOK" --path /srv/devops-pat
+  [ "$status" -eq 0 ]
+  run env -u SAVIA_PAT_BLOCK bash "$HOOK" --path /srv/devops-pat
+  [ "$status" -eq 2 ]
+}
+
+@test "el mensaje de bloqueo explica la regla, el arreglo y el bypass" {
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path /srv/devops-pat
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"CLAUDE.md Rule #1"* ]]
+  [[ "$output" == *"scripts/jwt-mint.sh --key-stdin"* ]]
+  [[ "$output" == *"Bypass: SAVIA_PAT_BLOCK=off"* ]]
+}
+
+@test "excepciones por diseño: un nombre sensible bajo docs/ o con extensión .bats se permite" {
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path /srv/proyecto/docs/devops-pat
+  [ "$status" -eq 0 ]
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path /srv/proyecto/conf/devops-pat.bats
+  [ "$status" -eq 0 ]
+  run env SAVIA_PAT_BLOCK=on bash "$HOOK" --path /srv/proyecto/conf/devops-pat
+  [ "$status" -eq 2 ]
+}
+
+@test "argumentos desconocidos se ignoran sin colgar el hook y --path sigue valiendo" {
+  run timeout 5 env SAVIA_PAT_BLOCK=on bash "$HOOK" --otra cosa --path /srv/devops-pat
+  [ "$status" -eq 2 ]
+  run timeout 5 env SAVIA_PAT_BLOCK=on bash "$HOOK" --otra --path /srv/main.py
+  [ "$status" -eq 0 ]
+}

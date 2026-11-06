@@ -139,202 +139,78 @@ if ! command -v python3 &>/dev/null; then
   exit 2
 fi
 
-# Usar Python para parsear YAML/JSON de forma segura
-DAG_STEPS=$(python3 - <<'PYTHON_EOF'
-import sys
-import json
-
-input_lines = sys.stdin.read() if not len(sys.argv) > 1 else open(sys.argv[1]).read()
-
-# Intentar parsear como JSON primero
-try:
-    data = json.loads(input_lines)
-except json.JSONDecodeError:
-    # Parseo básico de YAML (sin dependencias externas)
-    # Soporta formato: "  - name: foo\n    gate_type: CHEAP"
-    data = {}
-    current_section = None
-    current_item = {}
-    items = []
-    
-    for line in input_lines.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
-            continue
-        
-        # Detectar sección raíz
-        if line and not line.startswith(' ') and not line.startswith('\t'):
-            if stripped.endswith(':'):
-                if current_item:
-                    items.append(current_item)
-                    current_item = {}
-                key = stripped[:-1]
-                current_section = key
-                data[key] = []
-            continue
-        
-        # Detectar lista
-        if stripped.startswith('- '):
-            if current_item:
-                items.append(current_item)
-                current_item = {}
-            value = stripped[2:].strip()
-            if ':' in value:
-                # key: value
-                k, v = value.split(':', 1)
-                current_item = {k.strip(): v.strip()}
-            else:
-                # valor directo
-                current_item = {'name': value, '_direct': True}
-            if current_section and data.get(current_section) is not None:
-                data[current_section].append(current_item if not current_item.get('_direct') else value)
-                current_item = {}
-        elif ':' in stripped and current_item is not None:
-            k, v = stripped.split(':', 1)
-            current_item[k.strip()] = v.strip()
-
-# Extraer steps en orden
-stages = []
-
-# Formato: stages: [{name:..., gate_type:...}]
-for key in ['stages', 'steps', 'pipeline', 'gates']:
-    if key in data and data[key]:
-        for item in data[key]:
-            if isinstance(item, dict):
-                stages.append({'name': item.get('name', item.get('id', 'unknown')), 
-                               'gate_type': item.get('gate_type', item.get('type', ''))})
-            elif isinstance(item, str):
-                stages.append({'name': item, 'gate_type': ''})
-        break
-
-# Output: una línea por stage: "name|gate_type"
-for s in stages:
-    print(f"{s['name']}|{s['gate_type']}")
-
-PYTHON_EOF
-if [[ -n "$INPUT_FILE" ]]; then
-  echo "$INPUT_FILE"
-fi
-)
-
-# Leer input del stdin o fichero
-if [[ -n "$INPUT_FILE" ]]; then
-  DAG_STEPS=$(python3 - "$INPUT_FILE" <<'PYTHON_EOF'
-import sys
-import json
-
-input_lines = open(sys.argv[1]).read()
-
-try:
-    data = json.loads(input_lines)
-except json.JSONDecodeError:
-    data = {}
-    current_section = None
-    current_item = {}
-    items = []
-    
-    for line in input_lines.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
-            continue
-        
-        if line and not line.startswith(' ') and not line.startswith('\t'):
-            if stripped.endswith(':'):
-                if current_item:
-                    items.append(current_item)
-                    current_item = {}
-                key = stripped[:-1]
-                current_section = key
-                data[key] = []
-            continue
-        
-        if stripped.startswith('- '):
-            if current_item:
-                items.append(current_item)
-                current_item = {}
-            value = stripped[2:].strip()
-            if ':' in value and not value.startswith('"') and not value.startswith("'"):
-                k, v = value.split(':', 1)
-                current_item = {k.strip(): v.strip()}
-            else:
-                current_item = {'name': value.strip('"\''), '_direct': True}
-            if current_section and isinstance(data.get(current_section), list):
-                if current_item.get('_direct'):
-                    data[current_section].append(current_item['name'])
-                else:
-                    data[current_section].append(dict(current_item))
-                current_item = {}
-        elif ':' in stripped and current_item is not None:
-            k, v = stripped.split(':', 1)
-            current_item[k.strip()] = v.strip()
-
-stages = []
-for key in ['stages', 'steps', 'pipeline', 'gates']:
-    if key in data and data[key]:
-        for item in data[key]:
-            if isinstance(item, dict):
-                stages.append({'name': item.get('name', item.get('id', 'unknown')), 
-                               'gate_type': item.get('gate_type', item.get('type', ''))})
-            elif isinstance(item, str):
-                stages.append({'name': item, 'gate_type': ''})
-        break
-
-for s in stages:
-    print(f"{s['name']}|{s['gate_type']}")
-PYTHON_EOF
-)
-else
-  DAG_STEPS=$(python3 - <<'PYTHON_EOF'
-import sys
-import json
-
-input_lines = sys.stdin.read()
-if not input_lines.strip():
+# Un único parser para fichero y stdin. Antes había tres copias: la de stdin recibía el propio script
+# por stdin (python3 - <<EOF) y siempre leía vacío → «DAG vacío», exit 0; la de fichero perdía el
+# gate_type de las líneas de continuación (se añadía una copia del item); y un JSON roto daba exit 0.
+PARSER=$(cat <<'PYTHON_EOF'
+import sys, json
+src = open(sys.argv[1]).read() if len(sys.argv) > 1 else sys.stdin.read()
+if not src.strip():
     sys.exit(0)
 
-try:
-    data = json.loads(input_lines)
-except json.JSONDecodeError:
-    data = {}
-    current_section = None
-    
-    for line in input_lines.splitlines():
+def fail(msg):
+    print(f"ERROR: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+if src.lstrip()[:1] in "{[":
+    try:
+        data = json.loads(src)
+    except json.JSONDecodeError as exc:
+        fail(f"JSON inválido: {exc}")
+else:
+    # YAML mínimo sin dependencias: "clave:" en columna 0, "- valor" o "- k: v" con continuaciones "k: v".
+    data, section, item = {}, None, None
+    for line in src.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith('#'):
+        if not stripped or stripped.startswith("#"):
             continue
-        
-        if line and not line.startswith(' ') and not line.startswith('\t'):
-            if stripped.endswith(':'):
-                key = stripped[:-1]
-                current_section = key
-                data[key] = []
+        if not line[0].isspace():
+            section, item = None, None
+            if stripped.endswith(":"):
+                section = stripped[:-1].strip()
+                data[section] = []
             continue
-        
-        if stripped.startswith('- '):
+        if section is None:
+            continue
+        if stripped.startswith("- "):
             value = stripped[2:].strip()
-            if ':' in value and not value.startswith('"') and not value.startswith("'"):
-                k, v = value.split(':', 1)
-                item = {k.strip(): v.strip()}
+            if ":" in value and value[0] not in "\"'":
+                k, v = value.split(":", 1)
+                item = {k.strip(): v.strip().strip("\"'")}
+                data[section].append(item)
             else:
-                item = value.strip('"\'')
-            if current_section and isinstance(data.get(current_section), list):
-                data[current_section].append(item)
+                item = None
+                data[section].append(value.strip("\"'"))
+        elif ":" in stripped and item is not None:
+            k, v = stripped.split(":", 1)
+            item[k.strip()] = v.strip().strip("\"'")
 
-stages = []
-for key in ['stages', 'steps', 'pipeline', 'gates']:
-    if key in data and data[key]:
-        for item in data[key]:
-            if isinstance(item, dict):
-                stages.append({'name': item.get('name', item.get('id', 'unknown')), 
-                               'gate_type': item.get('gate_type', item.get('type', ''))})
-            elif isinstance(item, str):
-                stages.append({'name': item, 'gate_type': ''})
-        break
+if not isinstance(data, dict):
+    fail("el DAG debe ser un objeto con stages, steps, pipeline o gates")
 
-for s in stages:
-    print(f"{s['name']}|{s['gate_type']}")
+for key in ("stages", "steps", "pipeline", "gates"):
+    items = data.get(key)
+    if not items:
+        continue
+    if not isinstance(items, list):
+        fail(f"'{key}' debe ser una lista")
+    for it in items:
+        if isinstance(it, dict):
+            name = str(it.get("name", it.get("id", "unknown")))
+            gate = str(it.get("gate_type", it.get("type", "")) or "")
+        elif isinstance(it, str):
+            name, gate = it, ""
+        else:
+            fail(f"elemento no válido en '{key}': {it!r}")
+        print(f"{name.replace('|', '/')}|{gate}")
+    break
 PYTHON_EOF
 )
+
+if [[ -n "$INPUT_FILE" ]]; then
+  DAG_STEPS=$(python3 -c "$PARSER" "$INPUT_FILE") || exit 2
+else
+  DAG_STEPS=$(python3 -c "$PARSER") || exit 2
 fi
 
 # ── DAG vacío → PASS ─────────────────────────────────────────────────────────

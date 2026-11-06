@@ -34,7 +34,8 @@ usage() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --db)     DB_PATH="$2"; shift 2 ;;
+    --db)     [[ $# -ge 2 && -n "$2" ]] || { echo "Error: --db requires a path" >&2; exit 2; }
+              DB_PATH="$2"; shift 2 ;;
     --json)   JSON_OUT=true; shift ;;
     --quiet)  QUIET=true; shift ;;
     -h|--help) usage ;;
@@ -45,7 +46,7 @@ done
 # ── Check database exists ────────────────────────────────────────────────────
 if [[ ! -f "$DB_PATH" ]]; then
   if [[ "$JSON_OUT" == true ]]; then
-    echo '{"error":"database not found","db":"'"$DB_PATH"'","checks":[],"summary":{"passed":0,"warned":0,"failed":0}}'
+    python3 -c 'import json,sys; print(json.dumps({"error":"database not found","db":sys.argv[1],"checks":[],"summary":{"passed":0,"warned":0,"failed":0}}))' "$DB_PATH"
     exit 1
   else
     echo "WARN: Knowledge graph database not found: $DB_PATH" >&2
@@ -274,18 +275,22 @@ run_check("no-empty-required-props", "All required properties (name) are non-emp
 
 # ── Check 9: No future timestamps
 def check_no_future_timestamps():
-    now_ts = datetime.now(timezone.utc).isoformat()
-    # Check common timestamp columns — tolerate if column absent
-    for col in ("created_at", "updated_at", "timestamp"):
-        cur.execute(f"PRAGMA table_info(entities)")
-        cols = [row[1] for row in cur.fetchall()]
-        if col not in cols:
-            continue
-        cur.execute(f"SELECT COUNT(*) FROM entities WHERE {col} > ?", (now_ts,))
+    # El esquema real (knowledge-graph.py) usa first_seen/last_seen. SQLite datetime() normaliza
+    # 'YYYY-MM-DD HH:MM:SS' e ISO con 'T' o zona: comparar cadenas con un isoformat de Python
+    # ('T' > ' ') dejaba pasar fechas futuras del mismo día.
+    if not entities_ok:
+        return "WARN", "entities table missing"
+    cur.execute("PRAGMA table_info(entities)")
+    cols = [row[1] for row in cur.fetchall()]
+    present = [c for c in ("created_at", "updated_at", "timestamp", "first_seen", "last_seen") if c in cols]
+    if not present:
+        return "WARN", "no timestamp column present — skipping"
+    for col in present:
+        cur.execute(f"SELECT COUNT(*) FROM entities WHERE datetime({col}) > datetime('now')")
         count = cur.fetchone()[0]
         if count > 0:
             return "FAIL", f"{count} entities with future {col}"
-    return "PASS", "no future timestamps detected"
+    return "PASS", f"no future timestamps in {', '.join(present)}"
 
 run_check("no-future-timestamps", "No entity timestamps set in the future", check_no_future_timestamps)
 

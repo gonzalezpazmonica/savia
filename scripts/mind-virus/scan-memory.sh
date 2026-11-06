@@ -13,7 +13,9 @@
 # Exit codes: 0 ok | 1 any malicious (with --only-malicious) | 2 usage/scan error
 set -uo pipefail
 
-ROOT="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# Raíz del repo del propio script (scripts/mind-virus/ → ../..), no el directorio actual: lanzado desde
+# fuera del repo no encontraba el detector.
+ROOT="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 DETECT="$ROOT/scripts/mind-virus/detect.py"
 MODE="text"
 ONLY_MALICIOUS=false
@@ -40,11 +42,18 @@ surfaces=(
 )
 
 malicious=0
+errors=0
 declare -a rows=()
+
+# Sin detector no hay escaneo: exit 2 (error de escaneo), nunca un «0 malicious» que parezca limpio.
+if [[ ! -f "$DETECT" ]]; then
+  echo "ERROR: detector no disponible: $DETECT" >&2
+  exit 2
+fi
 
 # Batch scan: single python process, all surfaces at once (fast: ~60ms total
 # vs ~500ms for per-file subprocess). Honours CRIT-001 (all local).
-if [[ -x "$DETECT" ]]; then
+{
   SURFACE_LIST=""
   for entry in "${surfaces[@]:-}"; do
     [[ -z "$entry" ]] && continue
@@ -53,12 +62,27 @@ if [[ -x "$DETECT" ]]; then
     SURFACE_LIST+="${path}|${label}
 "
   done
-  MAS_OUT=$(printf '%s' "$SURFACE_LIST" | python3 "$DETECT" --batch 2>/dev/null) || MAS_OUT=""
+  if ! MAS_OUT=$(printf '%s' "$SURFACE_LIST" | python3 "$DETECT" --batch 2>/dev/null); then
+    echo "ERROR: el detector falló al escanear las superficies de memoria" >&2
+    exit 2
+  fi
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     rows+=("$line")
+    # Antes nadie contaba: malicious era siempre 0 y el load gate nunca avisaba ni bloqueaba.
+    case "$(cut -d'|' -f2 <<< "$line")" in
+      malicious) malicious=$((malicious + 1)) ;;
+      error) errors=$((errors + 1)) ;;
+    esac
   done < <(printf '%s\n' "$MAS_OUT")
-fi
+}
+
+# Código de salida: 1 si hay malicious y se pidió --only-malicious; 2 si alguna superficie no se pudo leer.
+finish() {
+  [[ "$ONLY_MALICIOUS" == "true" && "$malicious" -gt 0 ]] && exit 1
+  [[ "$errors" -gt 0 ]] && exit 2
+  exit 0
+}
 
 if [[ "$MODE" == "json" ]]; then
   python3 - "$malicious" "${rows[@]}" <<'PY'
@@ -70,8 +94,7 @@ for r in sys.argv[2:]:
     files.append({"path": label, "verdict": verdict, "score": int(score), "signals": signals})
 print(json.dumps({"malicious": malicious, "files": files}, ensure_ascii=False, indent=2))
 PY
-  [[ "$ONLY_MALICIOUS" == "true" && "$malicious" -gt 0 ]] && exit 1
-  exit 0
+  finish
 fi
 
 echo "=== Mind Virus Defense — scan-memory ==="
@@ -80,5 +103,5 @@ for r in "${rows[@]:-}"; do
   printf "  %-28s %-10s score=%-3s %s\n" "$label" "$verdict" "$score" "$signals"
 done
 echo "malicious total: ${malicious}"
-[[ "$ONLY_MALICIOUS" == "true" && "$malicious" -gt 0 ]] && exit 1
-exit 0
+[[ "$errors" -gt 0 ]] && echo "errores de lectura: ${errors}"
+finish
