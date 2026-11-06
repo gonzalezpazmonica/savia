@@ -226,3 +226,20 @@ assert any('no se listan archivos' in e for e in d['errors']), d['errors']"
   [[ "$status" -eq 0 ]]
   [[ "$output" == "src/x.py" ]]
 }
+
+@test "validator strips asterisk bullets like dash bullets" {
+  local p="$BATS_TEST_TMPDIR/star.md"
+  printf '## Files that change\n* `src/star.py`\n- src/dash.py\n## Order of work\n## Risks\n## Proof\n' > "$p"
+  run python3 "$VALIDATE" --plan "$p" --files
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "src/star.py"$'\n'"src/dash.py" ]]
+}
+
+@test "validator on a nonexistent plan exits 2 with an error, not a crash" {
+  run python3 "$VALIDATE" --plan "$BATS_TEST_TMPDIR/absent.md" --json
+  [[ "$status" -eq 2 ]]
+  echo "$output" | python3 -c "
+import json,sys; d=json.load(sys.stdin)
+assert d['valid'] is False and d['files']==[], d
+assert any('archivo no existe' in e for e in d['errors']), d['errors']"
+}
