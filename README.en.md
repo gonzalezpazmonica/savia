@@ -18,7 +18,7 @@ lang: en
 
 **567 commands · 90 agents · 139 skills · 134 hooks**
 
-Savia orchestrates AI-assisted R&D&I work: she distributes tasks among specialised harnesses (executors, independent reviewers, external providers), sustains research lines, governs knowledge in domes (Savia Vaults) and manages projects as one more capability. She integrates memory, security, executable policies (policy-as-code), traceability with receipts and evaluation on an architecture independent of model, provider and frontend. She runs locally with data and inference sovereignty, in 9 languages.
+Savia orchestrates AI-assisted R&D&I work: she distributes tasks among specialised harnesses (executors, independent reviewers, external providers), sustains research lines, governs knowledge in domes (Savia Vaults) and manages projects as one more capability. She integrates memory, security, executable policies (policy-as-code), traceability with receipts and evaluation on an architecture independent of model, provider and frontend. She runs locally with data and inference sovereignty, in 9 languages. Public labour and legal templates describe generic fields; real case data stays outside the repository.
 
 ## Why Savia exists
 

@@ -2,7 +2,7 @@
 
 ## Por qué existe esta skill
 
-Las obligaciones de compliance en España son heterogéneas y cambian con frecuencia. Esta skill centraliza los requerimientos de las normas más frecuentes (RGPD, LO 3/2018, ET) para auditar procesos y documentos con criterios uniformes y priorizados por el historial sancionador de la AEPD e Inspección de Trabajo.
+Las obligaciones de compliance en España son heterogéneas y cambian con frecuencia. Esta skill centraliza los requerimientos de las normas más frecuentes (RGPD, LO 3/2018, ET) para auditar procesos y documentos con criterios uniformes y priorizados por los precedentes sancionadores de la AEPD e Inspección de Trabajo.
 
 ## Obligaciones RGPD / LO 3/2018 (LOPD-GDD)
 
