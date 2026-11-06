@@ -123,14 +123,26 @@ fi
 FILE="${1:-docs/critical-facts.md}"
 CAP="${CRITICAL_FACTS_TOKEN_CAP:-150}"
 
+if [[ ! "$CAP" =~ ^[0-9]+$ ]]; then
+  # Antes un tope no numérico («150x») hacía fallar la comparación y daba OK.
+  echo "ERROR: CRITICAL_FACTS_TOKEN_CAP must be a non-negative integer: '$CAP'" >&2
+  exit 1
+fi
+
 if [[ ! -f "$FILE" ]]; then
   echo "ERROR: $FILE not found" >&2
   exit 1
 fi
 
-# Verify markers exist
-if ! grep -q "CRITICAL_FACTS_START" "$FILE" || ! grep -q "CRITICAL_FACTS_END" "$FILE"; then
-  echo "ERROR: markers <!-- CRITICAL_FACTS_START --> / <!-- CRITICAL_FACTS_END --> not found in $FILE" >&2
+# Verify markers: exactly one START line and one END line after it, in the exact
+# form awk extracts. A marker named in prose, or END before START, extracted zero
+# words and passed the cap.
+n_start=$(grep -c '<!-- CRITICAL_FACTS_START -->' "$FILE")
+n_end=$(grep -c '<!-- CRITICAL_FACTS_END -->' "$FILE")
+l_start=$(grep -n '<!-- CRITICAL_FACTS_START -->' "$FILE" | head -1 | cut -d: -f1)
+l_end=$(grep -n '<!-- CRITICAL_FACTS_END -->' "$FILE" | head -1 | cut -d: -f1)
+if [[ "$n_start" -ne 1 || "$n_end" -ne 1 || "${l_start:-0}" -ge "${l_end:-0}" ]]; then
+  echo "ERROR: markers <!-- CRITICAL_FACTS_START --> / <!-- CRITICAL_FACTS_END --> not found in $FILE (need one of each, START before END)" >&2
   exit 1
 fi
 

@@ -47,8 +47,13 @@ is_authorized() {
     [ -f "$AUTHORIZED_FILE" ] && grep -qxF -- "$project" "$AUTHORIZED_FILE" 2>/dev/null
 }
 
+# Proyecto de una línea de whitelist: `!projects/x/`, `!/projects/x`, `!projects/x/**`
+# → `x` (primer segmento). Una forma con barra inicial no esquiva la comprobación.
+WL_RE='^!/?projects/'
+wl_project() { sed -E 's|^!/?projects/||; s|/.*$||'; }
+
 get_whitelisted_projects() {
-    grep -E '^!projects/' "$ROOT/.gitignore" 2>/dev/null | sed 's|^!projects/||; s|/$||'
+    grep -E "$WL_RE" "$ROOT/.gitignore" 2>/dev/null | wl_project
 }
 
 # ─── Modo: Autorizar un proyecto ──────────────────────────────
@@ -114,8 +119,7 @@ fi
 if git diff --cached --name-only 2>/dev/null | grep -q "^\.gitignore$"; then
     NEW_WHITELISTS=$(git diff --cached -- .gitignore 2>/dev/null \
         | grep "^+" | grep -v "^+++" \
-        | grep -E '^\+!projects/' \
-        | sed 's|^\+!projects/||; s|/$||' || true)
+        | sed 's|^+||' | grep -E "$WL_RE" | wl_project || true)
 
     if [[ -n "$NEW_WHITELISTS" ]]; then
         while IFS= read -r project; do
@@ -134,7 +138,10 @@ fi
 
 # Verificación 2: ¿Hay archivos staged en projects/ de un proyecto no whitelisteado?
 # R incluido: un `git mv` hacia projects/<x>/ también publica (con ACM pasaba sin bloqueo).
-STAGED_PROJECTS=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null \
+# -z: sin él git entrecomilla las rutas no ASCII ("projects/cl\303\255ente/..."),
+# que no casaban con ^projects/ y dejaban pasar el proyecto.
+STAGED_PROJECTS=$(git diff --cached --name-only -z --diff-filter=ACMR 2>/dev/null \
+    | tr '\0' '\n' \
     | grep "^projects/" \
     | sed 's|^projects/||; s|/.*||' \
     | sort -u || true)

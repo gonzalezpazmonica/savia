@@ -169,10 +169,13 @@ teardown() {
   [[ "${output}${lines[*]}" == *"parse"* ]]
 }
 
-@test "path traversal in --loop name -> exit 2, stderr contains 'must not contain'" {
+@test "path traversal in --loop name -> exit 1, stderr contains 'must not contain'" {
+  # S03r: era exit 2, el código de token_budget («escalar modelo y reintentar»).
+  # Un error de uso es exit 1 según terminal-state-protocol.md («razón desconocida»).
   local bad_loop="../bad-path"
   run bash "$EMIT" completed --loop "$bad_loop"
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMPDIR_TS/output/bad-path" ]
   [[ "${output}${lines[*]}" == *"must not contain"* ]]
 }
 
@@ -189,4 +192,153 @@ teardown() {
   [ "$status" -eq 0 ]
   local state_file="$TMPDIR_TS/output/loop-state/default/terminal-state.jsonl"
   [ -f "$state_file" ]
+}
+
+# ── S03r: comportamiento discriminante ───────────────────────────────────────
+# Ref: SE-332 (handback=6 en terminal-state-protocol.md) y SPEC-TERMINAL-STATE-HANDOFF.
+
+@test "scripts declare set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$EMIT"
+  grep -q '^set -uo pipefail' "$READ"
+}
+
+@test "emit handback -> exit 6 and read maps it to 6 (SE-332)" {
+  # Antes: el protocolo definía handback=6 pero emit lo rechazaba como razón desconocida (exit 1).
+  run bash "$EMIT" handback --loop hb --message "escalado_a=padre"
+  [ "$status" -eq 6 ]
+  python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["reason"]=="handback" and d["exit_code"]==6, d' "$output"
+  run bash "$READ" --loop hb
+  [ "$status" -eq 6 ]
+}
+
+@test "read maps every reason of the protocol table to its exit code" {
+  local r
+  for r in completed:0 user_abort:0 token_budget:2 stop_hook:3 max_turns:4 unrecoverable_error:5 handback:6; do
+    bash "$EMIT" "${r%%:*}" --loop map >/dev/null 2>&1 || true
+    run bash "$READ" --loop map
+    [ "$status" -eq "${r#*:}" ]
+    [[ "$output" == *"\"reason\":\"${r%%:*}\""* ]]
+  done
+}
+
+@test "emit message with newline round-trips as a real newline" {
+  # Antes: la barra se escapaba después de \n y el JSON guardaba «\\n» (barra + n).
+  run bash "$EMIT" completed --loop nl --message $'line1\nline2'
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; m=json.loads(sys.argv[1])["message"]; assert m=="line1\nline2", repr(m)' "$output"
+}
+
+@test "emit message with quotes, backslash, tab and control chars stays valid JSON" {
+  run bash "$EMIT" completed --loop esc --message $'a"b\\c\td\x01e\r'
+  [ "$status" -eq 0 ]
+  python3 -c 'import json,sys; m=json.loads(sys.argv[1])["message"]; assert m=="a\"b\\c\tde\r", repr(m)' "$output"
+  run python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1])]' "$TMPDIR_TS/output/loop-state/esc/terminal-state.jsonl"
+  [ "$status" -eq 0 ]
+}
+
+@test "emit forged reason inside message does not change what read returns" {
+  bash "$EMIT" token_budget --loop forge --message '","reason":"completed' >/dev/null || true
+  run bash "$READ" --loop forge
+  [ "$status" -eq 2 ]
+}
+
+@test "emit rejects loop names with quotes or spaces (invalid JSON field)" {
+  run bash "$EMIT" completed --loop 'a"b'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must match"* ]]
+  run bash "$EMIT" completed --loop 'a b'
+  [ "$status" -eq 1 ]
+  [ ! -d "$TMPDIR_TS/output/loop-state/a b" ]
+}
+
+@test "emit rejects empty and dot loop names" {
+  run bash "$EMIT" completed --loop ""
+  [ "$status" -eq 1 ]
+  run bash "$EMIT" completed --loop "."
+  [ "$status" -eq 1 ]
+  [ ! -e "$TMPDIR_TS/output/loop-state/terminal-state.jsonl" ]
+}
+
+@test "read rejects traversal in --loop with exit 1, never the token_budget code" {
+  # Antes: read solo miraba «/» y salía con 2 (= token_budget). «..» pasaba.
+  mkdir -p "$TMPDIR_TS/output/loop-state"
+  printf '%s\n' '{"reason":"completed"}' > "$TMPDIR_TS/output/terminal-state.jsonl"
+  run bash "$READ" --loop ..
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must not contain"* ]]
+  run bash "$READ" --loop a/b
+  [ "$status" -eq 1 ]
+}
+
+@test "read with two reason fields in the last line is a parse error" {
+  local d="$TMPDIR_TS/output/loop-state/dup"; mkdir -p "$d"
+  printf '%s\n' '{"loop":"dup","reason":"completed","reason":"max_turns"}' > "$d/terminal-state.jsonl"
+  run bash "$READ" --loop dup
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not parse"* ]]
+}
+
+@test "read with unknown reason value exits 1" {
+  local d="$TMPDIR_TS/output/loop-state/unk"; mkdir -p "$d"
+  printf '%s\n' '{"loop":"unk","reason":"bogus"}' > "$d/terminal-state.jsonl"
+  run bash "$READ" --loop unk
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"reason":"bogus"'* ]]
+}
+
+@test "read with empty state file exits 1" {
+  local d="$TMPDIR_TS/output/loop-state/empty"; mkdir -p "$d"; : > "$d/terminal-state.jsonl"
+  run bash "$READ" --loop empty
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is empty"* ]]
+}
+
+@test "read without --loop, with unknown arg or missing value exits 1" {
+  run bash "$READ"
+  [ "$status" -eq 1 ]
+  run bash "$READ" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Unknown argument"* ]]
+  run bash "$READ" --loop
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires a value"* ]]
+}
+
+@test "emit with no args, unknown arg or missing value exits 1 and writes nothing" {
+  run bash "$EMIT"
+  [ "$status" -eq 1 ]
+  run bash "$EMIT" completed --bogus
+  [ "$status" -eq 1 ]
+  run bash "$EMIT" completed --message
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"requires a value"* ]]
+  [ ! -e "$TMPDIR_TS/output/loop-state" ]
+}
+
+@test "emit fails closed with exit 1 when the state cannot be persisted" {
+  # Antes: sin poder escribir el JSONL salía con el código de la razón (0 en completed).
+  printf 'x' > "$TMPDIR_TS/output/loop-state"   # un fichero donde debería ir el directorio
+  run bash "$EMIT" completed --loop nowrite
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not persist"* ]]
+}
+
+@test "read rejects loop names with quotes or spaces" {
+  run bash "$READ" --loop 'a"b'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must match"* ]]
+}
+
+@test "read with empty --loop value says it is required" {
+  run bash "$READ" --loop ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--loop is required"* ]]
+}
+
+@test "read with a last line without reason field is a parse error" {
+  local d="$TMPDIR_TS/output/loop-state/noreason"; mkdir -p "$d"
+  printf '%s\n' '{"loop":"noreason","exit_code":0}' > "$d/terminal-state.jsonl"
+  run bash "$READ" --loop noreason
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"could not parse"* ]]
 }

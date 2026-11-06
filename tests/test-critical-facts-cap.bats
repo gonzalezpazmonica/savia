@@ -169,3 +169,68 @@ teardown() {
 @test "safety: generator script uses set -uo pipefail" {
   grep -q "set -uo pipefail" "$GENERATOR"
 }
+
+# ── S03r: tope y marcadores por comportamiento ───────────────────────────────
+
+facts_with_words() {  # facts_with_words N FILE — bloque con N palabras entre marcadores
+  { echo "# T"; echo "<!-- CRITICAL_FACTS_START -->"; for i in $(seq 1 "$1"); do echo -n "w$i "; done; echo; echo "<!-- CRITICAL_FACTS_END -->"; } > "$2"
+}
+
+@test "boundary: 115 words (~150 tokens, rounded up) passes, 116 (~151) fails" {
+  facts_with_words 115 "$TMPDIR_TEST/a.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"~150 tokens (115 words), cap=150"* ]]
+  facts_with_words 116 "$TMPDIR_TEST/b.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/b.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"~151 tokens (116 words), cap=150"* ]]
+}
+
+@test "edge: CRITICAL_FACTS_TOKEN_CAP overrides the cap, zero cap fails any word" {
+  facts_with_words 10 "$TMPDIR_TEST/a.md"
+  CRITICAL_FACTS_TOKEN_CAP=13 run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 0 ]
+  CRITICAL_FACTS_TOKEN_CAP=12 run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+  CRITICAL_FACTS_TOKEN_CAP=0 run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+}
+
+@test "fail-closed: non-numeric cap is an error, not a pass" {
+  # Antes: «150x» rompía la comparación aritmética y el validador decía OK.
+  facts_with_words 300 "$TMPDIR_TEST/a.md"
+  CRITICAL_FACTS_TOKEN_CAP=150x run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must be a non-negative integer"* ]]
+}
+
+@test "fail-closed: marker names mentioned in prose are not markers" {
+  # Antes: grep por subcadena aceptaba la mención; awk extraía 0 palabras → OK.
+  { echo "Ver CRITICAL_FACTS_START y CRITICAL_FACTS_END."; for i in $(seq 1 300); do echo -n "w$i "; done; echo; } > "$TMPDIR_TEST/a.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"markers"*"not found"* ]]
+}
+
+@test "fail-closed: END marker before START is an error" {
+  { echo "<!-- CRITICAL_FACTS_END -->"; for i in $(seq 1 300); do echo -n "w$i "; done; echo; echo "<!-- CRITICAL_FACTS_START -->"; } > "$TMPDIR_TEST/a.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"START before END"* ]]
+}
+
+@test "fail-closed: duplicated START marker is an error" {
+  facts_with_words 10 "$TMPDIR_TEST/a.md"
+  echo "<!-- CRITICAL_FACTS_START -->" >> "$TMPDIR_TEST/a.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 1 ]
+}
+
+@test "edge: words outside the markers do not count" {
+  facts_with_words 10 "$TMPDIR_TEST/a.md"
+  for i in $(seq 1 300); do echo -n "out$i "; done >> "$TMPDIR_TEST/a.md"
+  run bash "$VALIDATOR" "$TMPDIR_TEST/a.md"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"(10 words)"* ]]
+}

@@ -170,3 +170,231 @@ EOF
   [ "$status" -eq 2 ]
   [[ "$output" == *"1 verificación(es) fallida(s)"* ]]
 }
+
+# ── S03r: privacidad de proyectos y enlaces del CHANGELOG, por comportamiento ──
+# Ref: docs/rules/domain/critical-rules-extended.md (privacidad de proyectos),
+# SE-491 (autorizaciones, PROPOSED) y changelog-enforcement.md. Se ejecutan los
+# scripts reales en el repo temporal de setup(); git es real, no hay simulación.
+
+ppp() { (cd "$R" && bash scripts/protect-project-privacy.sh "$@"); }
+
+whitelist_base() {  # .gitignore con projects/* ignorado y un proyecto público
+  printf 'projects/*\n!projects/public/\n' > "$R/.gitignore"
+  git -C "$R" add .gitignore && git -C "$R" -c core.hooksPath=/dev/null commit -q -m gi
+}
+
+@test "privacy: protect-project-privacy.sh declares set -uo pipefail" {
+  grep -q '^set -uo pipefail' "$ROOT/scripts/protect-project-privacy.sh"
+}
+
+@test "privacy: files of a whitelisted project pass the hook" {
+  whitelist_base
+  mkdir -p "$R/projects/public"; echo x > "$R/projects/public/a.md"
+  git -C "$R" add projects/public/a.md
+  run ppp --hook
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "privacy: force-added file of a non-whitelisted project is blocked" {
+  whitelist_base
+  mkdir -p "$R/projects/secret"; echo x > "$R/projects/secret/a.md"
+  git -C "$R" add -f projects/secret/a.md
+  run ppp --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BLOQUEADO"*"'secret'"*"NO está en el whitelist"* ]]
+}
+
+@test "privacy: non-ASCII project name is blocked too (quotePath bypass)" {
+  # Antes: git entrecomillaba la ruta ("projects/cl\303\257ente/a.md"), no casaba
+  # con ^projects/ y el hook dejaba pasar el proyecto con exit 0.
+  whitelist_base
+  mkdir -p "$R/projects/clïente"; echo x > "$R/projects/clïente/a.md"
+  git -C "$R" add -f "projects/clïente/a.md"
+  run ppp --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'clïente'"* ]]
+}
+
+@test "privacy: the real pre-commit rejects the non-ASCII project commit" {
+  whitelist_base
+  mkdir -p "$R/projects/clïente"; echo x > "$R/projects/clïente/a.md"
+  git -C "$R" add -f "projects/clïente/a.md"
+  run git -C "$R" commit -m leak
+  [ "$status" -ne 0 ]
+  run git -C "$R" log --oneline -1 --format=%s
+  [ "$output" = "gi" ]
+}
+
+@test "privacy: project whose name is a prefix of a whitelisted one is blocked" {
+  whitelist_base
+  mkdir -p "$R/projects/pub"; echo x > "$R/projects/pub/a.md"
+  git -C "$R" add -f projects/pub/a.md
+  run ppp --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'pub'"* ]]
+}
+
+@test "privacy: git mv into an ignored project dir is blocked (rename)" {
+  whitelist_base
+  echo x > "$R/doc.md"; git -C "$R" add doc.md; git -C "$R" -c core.hooksPath=/dev/null commit -q -m doc
+  mkdir -p "$R/projects/secret"
+  git -C "$R" mv doc.md projects/secret/doc.md
+  run ppp --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"'secret'"* ]]
+}
+
+@test "privacy: deleting files of an ignored project is not blocked" {
+  mkdir -p "$R/projects/old"; echo x > "$R/projects/old/a.md"
+  git -C "$R" add projects/old/a.md; git -C "$R" -c core.hooksPath=/dev/null commit -q -m old
+  whitelist_base
+  git -C "$R" rm -q projects/old/a.md
+  run ppp --hook
+  [ "$status" -eq 0 ]
+}
+
+@test "privacy: new unauthorized whitelist line in .gitignore is blocked" {
+  whitelist_base
+  printf '!projects/secret/\n' >> "$R/.gitignore"; git -C "$R" add .gitignore
+  run ppp --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"whitelist de .gitignore sin autorización"*"!projects/secret/"* ]]
+}
+
+@test "privacy: leading-slash whitelist line is blocked (anchored form bypass)" {
+  # Antes: «!/projects/secret/» no casaba con ^+!projects/ y pasaba con exit 0.
+  whitelist_base
+  printf '!/projects/secret/\n' >> "$R/.gitignore"; git -C "$R" add .gitignore
+  run ppp --hook
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"proyecto 'secret'"* ]]
+}
+
+@test "privacy: authorized project may be whitelisted, in any whitelist form" {
+  whitelist_base
+  mkdir -p "$R/.claude"; echo secret > "$R/.claude/.project-authorizations"
+  printf '!/projects/secret/**\n' >> "$R/.gitignore"; git -C "$R" add .gitignore
+  run ppp --hook
+  [ "$status" -eq 0 ]
+}
+
+@test "privacy: authorization is exact, not a prefix or substring match" {
+  whitelist_base
+  mkdir -p "$R/.claude"; echo secret-public > "$R/.claude/.project-authorizations"
+  printf '!projects/secret/\n' >> "$R/.gitignore"; git -C "$R" add .gitignore
+  run ppp --hook
+  [ "$status" -eq 1 ]
+}
+
+@test "privacy: leading-slash whitelisted project counts as whitelisted for its files" {
+  printf 'projects/*\n!/projects/pub2/\n' > "$R/.gitignore"
+  git -C "$R" add .gitignore && git -C "$R" -c core.hooksPath=/dev/null commit -q -m gi
+  mkdir -p "$R/projects/pub2"; echo x > "$R/projects/pub2/a.md"
+  git -C "$R" add projects/pub2/a.md
+  run ppp --hook
+  [ "$status" -eq 0 ]
+}
+
+@test "privacy: removed whitelist line in .gitignore is not a publication" {
+  whitelist_base
+  printf 'projects/*\n' > "$R/.gitignore"; git -C "$R" add .gitignore
+  run ppp --hook
+  [ "$status" -eq 0 ]
+}
+
+@test "privacy: --check lists whitelist with authorization state and exits 0" {
+  printf 'projects/*\n!projects/a/\n!projects/b/\n' > "$R/.gitignore"
+  mkdir -p "$R/.claude"; echo a > "$R/.claude/.project-authorizations"
+  run ppp --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"a (autorizado)"* ]]
+  [[ "$output" == *"b (en whitelist pero sin autorización explícita)"* ]]
+}
+
+@test "privacy: --check with no authorizations file says (ninguna)" {
+  printf 'projects/*\n' > "$R/.gitignore"
+  run ppp --check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"(ninguna)"* ]]
+}
+
+@test "privacy: --authorize without project name fails with usage" {
+  run ppp --authorize
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Uso:"* ]]
+  [ ! -e "$R/.claude/.project-authorizations" ]
+}
+
+@test "privacy: --authorize with a wrong confirmation is rejected and writes nothing" {
+  run bash -c 'cd "$1" && echo "si" | bash scripts/protect-project-privacy.sh --authorize demo' _ "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Autorización cancelada"* ]]
+  [ ! -e "$R/.claude/.project-authorizations" ]
+}
+
+@test "privacy: --authorize with SÍ PÚBLICO records the exact project name" {
+  run bash -c 'cd "$1" && printf "SÍ PÚBLICO\n" | bash scripts/protect-project-privacy.sh --authorize demo' _ "$R"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$R/.claude/.project-authorizations")" = "demo" ]
+}
+
+cl() { printf '%b' "$1" > "$BATS_TEST_TMPDIR/CH.md"; run bash "$ROOT/scripts/validate-changelog-links.sh" "$BATS_TEST_TMPDIR/CH.md"; }
+
+@test "changelog: every version with its link passes" {
+  cl '## [1.2.0] — b\n## [1.1.0] — a\n\n[1.2.0]: https://x/compare/v1.1.0...v1.2.0\n[1.1.0]: https://x/r/v1.1.0\n'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Todos los enlaces"* ]]
+}
+
+@test "changelog: missing link fails with exit 1 and names the version" {
+  cl '## [1.2.0] — b\n## [1.1.0] — a\n\n[1.1.0]: https://x/r/v1.1.0\n'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing link for [1.2.0]"* ]]
+  [[ "$output" == *"1 version(s)"* ]]
+  [[ "$output" != *"[1.1.0] in"* ]]
+}
+
+@test "changelog: dots are literal, [1x2x3] is not the link of [1.2.3]" {
+  # Antes: la versión iba como regex y «.» casaba con cualquier carácter.
+  cl '## [1.2.3] — a\n\n[1x2x3]: https://x\n'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Missing link for [1.2.3]"* ]]
+}
+
+@test "changelog: link must start the line and use https" {
+  cl '## [1.0.0] — a\n\nsee [1.0.0]: https://x\n[1.0.0]: http://x\n'
+  [ "$status" -eq 1 ]
+}
+
+@test "changelog: counts every missing version, boundary of two errors" {
+  cl '## [2.0.0]\n## [1.0.0]\n## [0.1.0]\n\n[0.1.0]: https://x\n'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 version(s)"* ]]
+}
+
+@test "changelog: empty changelog without versions passes" {
+  cl ''
+  [ "$status" -eq 0 ]
+}
+
+@test "changelog: explicit path that does not exist fails closed" {
+  # Antes: «No CHANGELOG found» y exit 0, aunque el runner pasa la ruta explícita.
+  run bash "$ROOT/scripts/validate-changelog-links.sh" "$BATS_TEST_TMPDIR/nonexistent.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CHANGELOG not found"* ]]
+}
+
+@test "changelog: no argument and no CHANGELOG.md in cwd passes with a notice" {
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$ROOT/scripts/validate-changelog-links.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No CHANGELOG found"* ]]
+}
+
+@test "changelog: the compliance runner blocks a staged CHANGELOG with a missing link" {
+  printf '## [9.9.9] — x\n' > "$R/CHANGELOG.md"; git -C "$R" add CHANGELOG.md
+  run git -C "$R" commit -m cl
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Missing link for [9.9.9]"* ]]
+}
