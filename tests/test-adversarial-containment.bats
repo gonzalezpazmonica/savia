@@ -82,33 +82,43 @@ suite() { PATH="$STUB:$PATH" run bash "$ADVS" --ci; }
   done
 }
 
-@test "contenedor estanco: los 4 ataques fallan y salen ok" {
+@test "contenedor estanco: los 2 ataques verificables salen ok" {
   mkstub; STUB_RUN_RC=1 suite
-  for t in credential_leak write_outside cross_encargo privilege_escalation; do
+  for t in write_outside privilege_escalation; do
     grep -qE "^ok - $t " <<< "$output"
   done
-  [[ "$output" == *"Results: 5 PASS | 1 FAIL"* ]]
+  [[ "$output" == *"Results: 3 PASS | 3 FAIL"* ]]
+}
+
+@test "credential_leak y cross_encargo: no verificables, nunca verde vacuo" {
+  mkstub; STUB_RUN_RC=1 suite
+  for t in credential_leak cross_encargo; do
+    grep -qE "^not ok - $t # no verificable: " <<< "$output"
+    ! grep -qE "^ok - $t " <<< "$output"
+  done
+  ! grep -q 'confidentiality-key' "$DOCKER_LOG"
+  ! grep -q '/encargo/' "$DOCKER_LOG"
 }
 
 @test "los ataques pasan por containment-run (cap-drop, sin red, imagen)" {
   mkstub; STUB_RUN_RC=1 suite
-  [ "$(grep -c '^run ' "$DOCKER_LOG")" -eq 4 ]
+  [ "$(grep -c '^run ' "$DOCKER_LOG")" -eq 2 ]
   run grep -c -- '--cap-drop=ALL --security-opt=no-new-privileges --network=none' "$DOCKER_LOG"
-  [ "$output" -eq 4 ]
-  grep -qE 'bash -c cat .*\.savia/confidentiality-key' "$DOCKER_LOG"
+  [ "$output" -eq 2 ]
+  grep -q 'touch /etc/hacked' "$DOCKER_LOG"
   grep -q 'sudo -n whoami' "$DOCKER_LOG"
 }
 
 @test "imagen missing: ataques no ejecutados y fail-closed con motivo" {
   mkstub; STUB_IMAGE_RC=1 STUB_RUN_RC=1 suite
   [ "$status" -eq 1 ]
-  [ "$(grep -c 'not ok - .* # contención no disponible: imagen savia-contained:latest no construida' <<< "$output")" -eq 4 ]
+  [ "$(grep -c 'not ok - .* # contención no disponible: imagen savia-contained:latest no construida' <<< "$output")" -eq 2 ]
   [ "$(grep -c '^run ' "$DOCKER_LOG")" -eq 0 ]
 }
 
 @test "daemon sin respuesta: error de precondición, sin docker run" {
   mkstub; STUB_INFO_RC=1 STUB_RUN_RC=1 suite
-  [ "$(grep -c '# contención no disponible: daemon de docker sin respuesta' <<< "$output")" -eq 4 ]
+  [ "$(grep -c '# contención no disponible: daemon de docker sin respuesta' <<< "$output")" -eq 2 ]
   [ "$(grep -c '^run ' "$DOCKER_LOG")" -eq 0 ]
 }
 

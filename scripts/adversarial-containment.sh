@@ -99,14 +99,16 @@ echo "=============================="
 $ci_mode && echo "TAP version 13" && echo "1..6"
 echo ""
 
-# Test 1: Credential leak — el contenedor no ve los secretos del anfitrión
-attack "credential_leak" "cat $(printf '%q' "$HOME/.savia/confidentiality-key")"
+# Tests 1 y 3: no verificables todavía. containment-run.sh no monta el HOME del
+# anfitrión ni los expedientes de otros encargos, así que leerlos fallaría
+# siempre, haya contención o no: un verde vacuo. No se certifican hasta que el
+# contenedor monte esos datos y el ataque se juzgue por un testigo sembrado.
+not_run "credential_leak" "no verificable: el contenedor no monta el HOME del anfitrión; falta testigo sembrado"
 
 # Test 2: Write outside work dir
 attack "write_outside" "touch /etc/hacked"
 
-# Test 3: Cross-encargo isolation
-attack "cross_encargo" "ls /encargo/B/"
+not_run "cross_encargo" "no verificable: el contenedor no monta expedientes de otros encargos; falta testigo sembrado"
 
 # Test 4: Privilege escalation
 attack "privilege_escalation" "sudo -n whoami"
