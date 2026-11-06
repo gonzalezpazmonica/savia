@@ -22,7 +22,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 CHECK_MODE=false
-[[ "${1:-}" == "--check" ]] && CHECK_MODE=true
+for arg in "$@"; do
+  case "$arg" in
+    --check) CHECK_MODE=true ;;
+    *) echo "ERROR: unknown arg '$arg' (usage: $0 [--check])" >&2; exit 2 ;;
+  esac
+done
 
 RULES_DIR="$PROJECT_ROOT/docs/rules/domain"
 INDEX_FILE="$PROJECT_ROOT/docs/rules/INDEX.md"
@@ -35,7 +40,7 @@ TODAY=$(TZ=UTC date +%Y-%m-%d)
 TMP_INDEX=$(mktemp)
 trap 'rm -f "$TMP_INDEX"' EXIT
 
-python3 - "$RULES_DIR" "$TODAY" > "$TMP_INDEX" <<'PY'
+if python3 - "$RULES_DIR" "$TODAY" > "$TMP_INDEX" <<'PY'
 import sys, re, os
 from collections import defaultdict
 
@@ -84,11 +89,13 @@ for fname in sorted(os.listdir(rules_dir)):
     if fname == "INDEX.md":
         continue
     path = os.path.join(rules_dir, fname)
+    # Fail-closed: an unreadable rule must not vanish silently from the index.
     try:
-        with open(path) as fh:
+        with open(path, encoding="utf-8") as fh:
             content = fh.read()
-    except Exception:
-        continue
+    except (OSError, UnicodeDecodeError) as e:
+        print(f"ERROR: cannot read rule {fname}: {e}", file=sys.stderr)
+        sys.exit(3)
 
     fm = parse_frontmatter(content)
 
@@ -118,6 +125,12 @@ print("|---|---|---|---|")
 for _, tier, fname, title, spec_disp in rows:
     print(f"| {tier} | [{fname}](domain/{fname}) | {title} | {spec_disp} |")
 PY
+then
+  :
+else
+  echo "ERROR: index generation failed; docs/rules/INDEX.md left untouched" >&2
+  exit 2
+fi
 
 if $CHECK_MODE; then
     # Compare ignoring the auto-generated date header (line 1).

@@ -51,7 +51,9 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --min-refs) MIN_REFS="$2"; shift 2 ;;
+    --min-refs)
+      [[ $# -ge 2 ]] || { echo "ERROR: --min-refs needs a value" >&2; exit 2; }
+      MIN_REFS="$2"; shift 2 ;;
     --include-index) INCLUDE_INDEX=1; shift ;;
     --json) JSON=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -90,6 +92,11 @@ for f in "$RULES_DIR"/*.md; do
   RULE_FILES+=("$f")
 done
 
+# Fail-closed: a scan over zero rules proves nothing, so it is not a PASS.
+if [[ ${#RULE_FILES[@]} -eq 0 ]]; then
+  echo "ERROR: no rules found in $RULES_DIR" >&2; exit 2
+fi
+
 # Count refs (searches for filename basename — the usual reference form)
 count_refs() {
   local rule_file="$1"
@@ -106,9 +113,13 @@ count_refs() {
     echo 0; return
   fi
 
+  # The basename must appear as a whole file name: "x.md" is not referenced by
+  # "prefix-x.md" or "x.mdx", and the dot is literal, not a regex wildcard.
+  local bn_re
+  bn_re=$(printf '%s' "$bn" | sed 's/[][\.*^$()+?{}|]/\\&/g')
   # grep recursive, excluding the rule file itself
   count=$(grep -rE --include='*.md' --include='*.sh' --include='*.ts' --include='*.py' --include='*.yaml' --include='*.yml' --include='*.json' \
-    -l "$bn" "${paths_args[@]}" 2>/dev/null | grep -v "^$rule_file$" | wc -l)
+    -l "(^|[^A-Za-z0-9_.-])${bn_re}([^A-Za-z0-9_-]|\$)" "${paths_args[@]}" 2>/dev/null | grep -vxF "$rule_file" | wc -l)
   echo "${count:-0}"
 }
 
