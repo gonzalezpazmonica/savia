@@ -59,6 +59,38 @@ timestamp_utc() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }
 
+# CLIENTE/ENGAGEMENT con caracteres seguros y sin "..": el engagement forma una ruta bajo engagements/.
+# Antes "../../x" escribía el ledger fuera del árbol de engagements.
+validate_engagement() {
+  local e="$1"
+  [[ "$e" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || die "--engagement must be CLIENT/ENGAGEMENT (letters, digits, . _ -): $e"
+  [[ "/$e/" == *"/../"* || "/$e/" == *"/./"* ]] && die "--engagement must not contain . or .. components: $e"
+  return 0
+}
+
+# Lee el ledger como JSON: "asset_id<TAB>ts<TAB>from<TAB>to<TAB>cap_before<TAB>cap_after" por cada
+# transición del activo. Antes se extraían campos con grep|head -1, así que un asset_name con
+# '","to_phase":"development' falseaba la fase leída por history y check.
+ledger_rows() {
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+path, asset = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as fh:
+    for n, line in enumerate(fh, 1):
+        if not line.strip():
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            print(f"ERROR: phase-gates ledger line {n} is not valid JSON", file=sys.stderr)
+            sys.exit(3)
+        if not isinstance(e, dict) or e.get("asset_id") != asset:
+            continue
+        print("\t".join(str(e.get(k, "")).replace("\t", " ") for k in
+                        ("ts", "from_phase", "to_phase", "capitalizable_before", "capitalizable_after")))
+PY
+}
+
 read_rules_phases() {
   if [[ ! -f "$RULES_FILE" ]]; then
     echo "investigation=false design_planning=false development=true deployment=true operation=false"
@@ -89,7 +121,9 @@ get_prev_hash() {
     return
   fi
   local h
-  h="$(grep -o '"hash":"[^"]*"' "$file" | tail -1 | cut -d'"' -f4)"
+  h="$(tail -n 1 "$file" | python3 -c 'import json,sys
+try: print(json.loads(sys.stdin.read()).get("hash",""))
+except Exception: print("")' 2>/dev/null)"
   echo "${h:-0000000000000000000000000000000000000000000000000000000000000000}"
 }
 
@@ -118,14 +152,18 @@ cmd_record() {
   [[ -z "$to_phase"   ]] && die "record: --to-phase is required"
   [[ -z "$engagement" ]] && die "record: --engagement is required"
 
+  # Comparación exacta: con grep, "develop.ent", "d.*" o "development deployment" pasaban por fases válidas.
   local valid_phases="investigation design_planning development deployment operation"
-  if ! echo " $valid_phases " | grep -q " ${from_phase} "; then
-    die "record: --from-phase must be one of: ${valid_phases}"
-  fi
-  if ! echo " $valid_phases " | grep -q " ${to_phase} "; then
-    die "record: --to-phase must be one of: ${valid_phases}"
-  fi
+  case "$from_phase" in
+    investigation|design_planning|development|deployment|operation) ;;
+    *) die "record: --from-phase must be one of: ${valid_phases}" ;;
+  esac
+  case "$to_phase" in
+    investigation|design_planning|development|deployment|operation) ;;
+    *) die "record: --to-phase must be one of: ${valid_phases}" ;;
+  esac
 
+  validate_engagement "$engagement"
   local client_eng="${engagement%/*}"
   local eng_slug="${engagement#*/}"
   local eng_dir="${REPO_ROOT}/engagements/${client_eng}/${eng_slug}"
@@ -146,30 +184,21 @@ cmd_record() {
   if is_capitalizable_phase "$from_phase"; then cap_from="capitalizable"; fi
   if is_capitalizable_phase "$to_phase";   then cap_to="capitalizable";   fi
 
-  local ev_dir_f=""
-  if [[ -n "$evidence_dir" ]]; then
-    ev_dir_f=",\"evidence_dir\":\"${evidence_dir}\""
-  fi
-
+  # JSON real (json.dumps), no interpolación: comillas en nombre o actor no pueden inyectar campos.
   local entry
-  entry="{\"ts\":\"${ts}\",\"asset_id\":\"${asset_id}\",\"asset_name\":\"${asset_name}\",\"from_phase\":\"${from_phase}\",\"to_phase\":\"${to_phase}\",\"capitalizable_before\":\"${cap_from}\",\"capitalizable_after\":\"${cap_to}\",\"actor\":\"${actor}\",\"prev_hash\":\"${prev_hash}\",\"hash\":\"${hash}\"${ev_dir_f}}"
-
+  entry="$(TS="$ts" AID="$asset_id" ANAME="$asset_name" FROM="$from_phase" TO="$to_phase" \
+    CAPF="$cap_from" CAPT="$cap_to" ACTOR="$actor" PREV="$prev_hash" HASH="$hash" EVD="$evidence_dir" \
+    python3 -c 'import json, os
+e = os.environ
+d = {"ts": e["TS"], "asset_id": e["AID"], "asset_name": e["ANAME"], "from_phase": e["FROM"],
+     "to_phase": e["TO"], "capitalizable_before": e["CAPF"], "capitalizable_after": e["CAPT"],
+     "actor": e["ACTOR"], "prev_hash": e["PREV"], "hash": e["HASH"]}
+if e["EVD"]:
+    d["evidence_dir"] = e["EVD"]
+print(json.dumps(d, ensure_ascii=False, separators=(",", ":")))')" || die "record: could not build ledger entry"
   echo "$entry" >> "$gate_file"
 
-  cat <<JSONREE
-{
-  "ts": "${ts}",
-  "asset_id": "${asset_id}",
-  "asset_name": "${asset_name}",
-  "from_phase": "${from_phase}",
-  "to_phase": "${to_phase}",
-  "capitalizable_before": "${cap_from}",
-  "capitalizable_after": "${cap_to}",
-  "actor": "${actor}",
-  "prev_hash": "${prev_hash}",
-  "hash": "${hash}"
-}
-JSONREE
+  printf '%s' "$entry" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.pop("evidence_dir", None); print(json.dumps(d, ensure_ascii=False, indent=2))'
 
   echo ""
   echo "Transition recorded: ${from_phase} → ${to_phase}"
@@ -201,6 +230,7 @@ cmd_history() {
   [[ -z "$asset_id"   ]] && die "history: --asset-id is required"
   [[ -z "$engagement" ]] && die "history: --engagement is required"
 
+  validate_engagement "$engagement"
   local client_eng="${engagement%/*}"
   local eng_slug="${engagement#*/}"
   local gate_file="${REPO_ROOT}/engagements/${client_eng}/${eng_slug}/phase-gates.jsonl"
@@ -215,21 +245,13 @@ cmd_history() {
   printf "%-22s %-18s %-18s %-16s %-16s\n" "Timestamp" "From Phase" "To Phase" "Cap Before" "Cap After"
   printf "%-22s %-18s %-18s %-16s %-16s\n" "---------" "----------" "--------" "---------" "--------"
 
-  local found=0
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    local aid from to cap_before cap_after ts_val
-    aid="$(echo "$line"       | grep -o '"asset_id":"[^"]*"'          | head -1 | cut -d'"' -f4)"
-    [[ "$aid" != "$asset_id" ]] && continue
-    ts_val="$(echo "$line"    | grep -o '"ts":"[^"]*"'               | head -1 | cut -d'"' -f4)"
-    from="$(echo "$line"      | grep -o '"from_phase":"[^"]*"'       | head -1 | cut -d'"' -f4)"
-    to="$(echo "$line"        | grep -o '"to_phase":"[^"]*"'         | head -1 | cut -d'"' -f4)"
-    cap_before="$(echo "$line" | grep -o '"capitalizable_before":"[^"]*"' | head -1 | cut -d'"' -f4)"
-    cap_after="$(echo "$line"  | grep -o '"capitalizable_after":"[^"]*"'  | head -1 | cut -d'"' -f4)"
+  local found=0 rows ts_val from to cap_before cap_after
+  rows="$(ledger_rows "$gate_file" "$asset_id")" || die "history: corrupt ledger $gate_file"
+  while IFS=$'\t' read -r ts_val from to cap_before cap_after; do
+    [[ -z "$ts_val" ]] && continue
     printf "%-22s %-18s %-18s %-16s %-16s\n" "${ts_val}" "${from}" "${to}" "${cap_before}" "${cap_after}"
     found=1
-  done < "$gate_file"
-
+  done <<< "$rows"
   if [[ "$found" -eq 0 ]]; then
     echo "(no phase transitions for asset ${asset_id})"
   fi
@@ -252,6 +274,10 @@ cmd_check() {
   [[ -z "$asset_id"   ]] && die "check: --asset-id is required"
   [[ -z "$engagement" ]] && die "check: --engagement is required"
   [[ -z "$date"       ]] && die "check: --date is required (YYYY-MM-DD)"
+  # Fecha real en formato YYYY-MM-DD: la comparación es de cadenas, «2026-7-1» u «hoy» daban otra fase.
+  [[ "$date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && date -u -d "$date" +%F >/dev/null 2>&1 \
+    || die "check: --date must be a valid YYYY-MM-DD date: $date"
+  validate_engagement "$engagement"
 
   local client_eng="${engagement%/*}"
   local eng_slug="${engagement#*/}"
@@ -263,19 +289,15 @@ cmd_check() {
     exit 1
   fi
 
-  local last_phase="investigation"
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    local aid ts_val to_phase_val
-    aid="$(echo "$line"       | grep -o '"asset_id":"[^"]*"'    | head -1 | cut -d'"' -f4)"
-    [[ "$aid" != "$asset_id" ]] && continue
-    ts_val="$(echo "$line"    | grep -o '"ts":"[^"]*"'         | head -1 | cut -d'"' -f4)"
-    to_phase_val="$(echo "$line" | grep -o '"to_phase":"[^"]*"' | head -1 | cut -d'"' -f4)"
+  local last_phase="investigation" rows ts_val from to cap_before cap_after
+  rows="$(ledger_rows "$gate_file" "$asset_id")" || die "check: corrupt ledger $gate_file"
+  while IFS=$'\t' read -r ts_val from to cap_before cap_after; do
+    [[ -z "$ts_val" ]] && continue
     local entry_date="${ts_val%%T*}"
     if [[ "$entry_date" == "$date" ]] || [[ "$entry_date" < "$date" ]]; then
-      last_phase="$to_phase_val"
+      last_phase="$to"
     fi
-  done < "$gate_file"
+  done <<< "$rows"
 
   echo "Asset:    ${asset_id}"
   echo "Date:     ${date}"
