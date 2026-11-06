@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # classify-execution-level.sh — Classify script by origin into execution tier
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 
 mode="${1:-help}"
@@ -30,14 +30,19 @@ classify_one() {
     return
   fi
 
-  # Absolute paths outside workspace
-  local abs
+  # Absolute paths outside workspace. The prefix test needs a "/" boundary:
+  # a sibling such as "$ROOT-evil/x.sh" shares the string prefix but is
+  # outside the workspace.
+  local abs inside=false
   abs=$(readlink -f "$script" 2>/dev/null || realpath "$script" 2>/dev/null || echo "$script")
-  if [[ "$abs" != "$ROOT"* && "$abs" == /tmp/* ]]; then
+  if [[ "$abs" == "$ROOT" || "$abs" == "$ROOT"/* ]]; then
+    inside=true
+  fi
+  if ! $inside && [[ "$abs" == /tmp/* || "$abs" == /var/tmp/* || "$abs" == /dev/shm/* ]]; then
     echo "N-hostil: $script (tmp path)"
     return
   fi
-  if [[ "$abs" != "$ROOT"* && "$abs" == /home/* && "$abs" != "$ROOT"* ]]; then
+  if ! $inside && [[ "$abs" == /home/* ]]; then
     echo "N-hostil: $script (outside workspace)"
     return
   fi
@@ -48,11 +53,18 @@ classify_one() {
     return
   fi
 
-  # Git-tracked check
+  # Any other path outside the workspace is unverified: fail closed.
+  if ! $inside; then
+    echo "N-hostil: $script (outside workspace)"
+    return
+  fi
+
+  # Git-tracked check (absolute path: a relative one would be re-resolved
+  # against $ROOT after the cd, not against the caller's directory).
   cd "$ROOT"
-  if git ls-files --error-unmatch "$script" >/dev/null 2>&1; then
+  if git ls-files --error-unmatch "$abs" >/dev/null 2>&1; then
     local last_author
-    last_author=$(git log -1 --format='%an' -- "$script" 2>/dev/null || echo "unknown")
+    last_author=$(git log -1 --format='%an' -- "$abs" 2>/dev/null || echo "unknown")
     if echo "$last_author" | grep -qiE '(claude|savia|bot|agent|github-actions)'; then
       echo "N-contenido: $script (agent-authored)"
     else
