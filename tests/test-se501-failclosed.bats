@@ -1,15 +1,21 @@
 #!/usr/bin/env bats
 # Ref: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md — seguimientos declarados en la PR #1472.
+# Estado y autoridad de la spec: docs/propuestas/planning.d/SE-501.json.
 # 1. El gate de derivados de la CI no usa nunca el de la propia PR (sin respaldo de arranque).
 # 2. EXCLUDE_PATHS del escáner de confidencialidad: rutas exactas, no subcadenas.
 # 3. risk-tier.py lee scripts/derived-paths.txt de la base, no del checkout de la PR.
 # (4. push-pr.sh --merge con --pr-base: tests/test-push-pr.bats.)
 
 REPO="$BATS_TEST_DIRNAME/.."
+SCRIPT="scripts/confidentiality-scan.sh"
 
 setup() {
   T="$BATS_TEST_TMPDIR"
   export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+}
+
+teardown() {
+  rm -rf "$T/g" "$T/s" "$T/rt"
 }
 
 G() { git -C "$R" -c commit.gpgsign=false "$@"; }
@@ -89,26 +95,72 @@ run_step() { run bash -c 'cd "$1" && BASE_SHA="$2" bash --noprofile --norc -eo p
   [ "$(cat "$SPY")" = pr-gate ]
 }
 
-@test "fail-closed ci.yml: ningún paso del YAML parseado ejecuta scripts/derived.sh del checkout" {
-  run python3 - "$REPO/.github/workflows/ci.yml" <<'PY'
+# gate_from_checkout <yaml> — exit 1 si algún paso invoca «gate» con un derived.sh que no sea la copia de la
+# base ("$X/scripts/derived.sh"): cualquier forma de ruta (bash/sh/./, $PWD) o una variable intermedia.
+# ensure/verify no son el gate. Revisión de #1488 (P2-2): antes solo detectaba «bash scripts/derived.sh gate».
+# Revisión de #1490 (P2): une las continuaciones «\» antes de partir en líneas, quita comillas a los tokens
+# (bash -c "… gate", "gate") y solo acepta "$X/scripts/derived.sh" si el mismo paso asigna X una única vez con
+# X=$(mktemp -d) y copia en él el derived.sh de la base. Es un detector de mejor esfuerzo, sesgado a fallar:
+# cualquier «"$VAR" gate» que no sea esa forma se marca (falso positivo aceptado), y no interpreta shell.
+# Revisión de #1490 (P2): un derived.sh en la misma orden simple antes de «gate» la marca aunque haya opciones
+# entre medias (--range X gate). x_ok es textual: no prueba que la copia se ejecute antes ni en toda rama;
+# eval, source o alias que construyan «gate» no se detectan. No es una garantía, solo una red.
+gate_from_checkout() {
+  python3 - "$1" <<'PY'
 import re, sys, yaml
 doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
 for job in doc["jobs"].values():
     for st in job.get("steps") or []:
-        for line in str(st.get("run", "")).splitlines():
-            # «bash scripts/derived.sh gate» (copia de la PR) prohibido; ensure/verify no son el gate.
-            if re.search(r"(^|\s)bash\s+scripts/derived\.sh\s+gate\b", line):
-                print("respaldo:", st.get("name")); sys.exit(1)
+        run = re.sub(r"\\\r?\n", " ", str(st.get("run", "")))
+        x_ok = (len(re.findall(r"(?:^|[\s;&|(])X=", run)) == 1 and re.search(r"(?m)^\s*X=\$\(mktemp -d\)", run)
+                and 'git show "$BASE_SHA:scripts/derived.sh" > "$X/scripts/derived.sh"' in run)
+        for line in run.splitlines():
+            toks = [t.strip("\"'") for t in line.replace(";", " ; ").split()]
+            for i, tok in enumerate(toks[1:], 1):
+                if tok != "gate":
+                    continue
+                prev, base_copy = toks[i - 1], "$X/scripts/derived.sh"
+                # Orden simple desde el último separador: un derived.sh antes de «gate», con opciones entre medias.
+                start = max((k for k, t in enumerate(toks[:i]) if t in (";", "&&", "||", "|")), default=-1) + 1
+                via_derived = any("derived" in t and not (x_ok and t == base_copy) for t in toks[start:i])
+                if via_derived or ("$" in prev and not (x_ok and prev == base_copy)):
+                    print("gate fuera de la base:", st.get("name"), "→", line.strip()); sys.exit(1)
 print("ok")
 PY
+}
+
+@test "fail-closed ci.yml: ningún paso del YAML parseado ejecuta scripts/derived.sh del checkout" {
+  run gate_from_checkout "$REPO/.github/workflows/ci.yml"
   [ "$status" -eq 0 ]
+  [ "$output" = ok ]
+}
+
+@test "fail-closed ci.yml negativo: otras formas de ejecutar el gate del checkout se detectan" {
+  local v
+  for v in 'bash scripts/derived.sh gate --range "$BASE_SHA..HEAD"' \
+           './scripts/derived.sh gate' 'sh scripts/derived.sh gate' \
+           'bash "$PWD/scripts/derived.sh" gate' 'D=scripts/derived.sh; bash "$D" gate' \
+           $'bash scripts/derived.sh \\\n  gate' 'bash -c "scripts/derived.sh gate"' 'bash scripts/derived.sh "gate"' \
+           'X=.; bash "$X/scripts/derived.sh" gate' 'bash scripts/derived.sh --range main..HEAD gate' \
+           'bash ./scripts/derived.sh --repo . gate'; do
+    V="$v" python3 - "$REPO/.github/workflows/ci.yml" > "$T/ci-variante.yml" <<'PY'
+import os, sys, yaml
+doc = yaml.safe_load(open(sys.argv[1], encoding="utf-8"))
+job = next(iter(doc["jobs"].values()))
+job["steps"].append({"name": "variante", "run": os.environ["V"] + "\n"})
+print(yaml.safe_dump(doc, allow_unicode=True))
+PY
+    run gate_from_checkout "$T/ci-variante.yml"
+    [ "$status" -eq 1 ] || { echo "no detectada: $v"; return 1; }
+    [[ "$output" == *"gate fuera de la base: variante"* ]]
+  done
 }
 
 # ── 2. EXCLUDE_PATHS: rutas exactas ─────────────────────────────────────────────────────────────
 
 scan_repo() {
   R="$T/s"; rm -rf "$R"; mkdir -p "$R/scripts" "$R/.claude/hooks/lib"
-  cp "$REPO/scripts/confidentiality-scan.sh" "$R/scripts/"
+  cp "$REPO/$SCRIPT" "$R/scripts/"
   cp "$REPO/.claude/hooks/lib/gate-result.sh" "$R/.claude/hooks/lib/"
   printf '#!/usr/bin/env bash\necho termino-vetado-xyz\n' > "$R/scripts/generate-blocklist.sh"
   git init -q -b main "$R"; G add -A; G commit -qm base
@@ -200,4 +252,26 @@ tier() { python3 "$R/scripts/risk-tier.py" --diff "$1" --json "${@:2}" | python3
   [ "$(tier .scm/views/authority.json --base=--output=/tmp/x)" = 3 ]
   G update-ref -d refs/remotes/origin/main
   [ "$(tier .scm/views/authority.json)" = 3 ]
+}
+
+@test "confidentiality-scan empty: un diff staged vacío da clean sin inventar hallazgos" {
+  scan_repo
+  run bash "$R/scripts/confidentiality-scan.sh" --staged
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"result":"clean"'* ]]
+  [[ "$output" != *'"result":"findings"'* ]]
+}
+
+@test "confidentiality-scan nonexistent: una blocklist explícita ausente da unknown y bloquea" {
+  scan_repo
+  printf 'contenido\n' > "$R/nota.md"; G add nota.md
+  run env SAVIA_GATE_UNKNOWN=block bash "$R/scripts/confidentiality-scan.sh" --staged --blocklist "$T/no-existe.txt"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *'"result":"unknown"'* ]]
+}
+
+@test "risk-tier empty: una base vacía no confía en la lista de la PR" {
+  rt_repo
+  [ "$(tier .scm/views/authority.json --base '')" = 3 ]
+  [ "$(tier .scm/views/authority.json)" = 2 ]
 }

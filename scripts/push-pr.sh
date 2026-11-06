@@ -177,8 +177,101 @@ fi  # fin de los pasos 0-6 (sin --merge)
 
 # ── Merge (--merge): solo verifica y mergea; nunca firma ni empuja ───────
 MERGED=false
+# local_blocklist <base> <raíz> <salida> — blocklist del merge local (revisión de #1488, P1-1): generador y lista
+# estática de la BASE, ejecutados en un directorio aparte ($LB_DIR) que recibe las fuentes locales del checkout
+# (CLAUDE.local.md, projects/<n>/ con su team/TEAM.md, identity.md). «Local» se decide frente a la BASE, no
+# frente al índice de la cabeza (revisión de #1490, P1-1): una fuente que la base no versiona entra siempre,
+# aunque la cabeza la haya forzado al índice; la PR no puede sacar nombres de la blocklist. Solo se omite lo
+# que la base ya versiona (un proyecto público). La lista estática se añade aunque el generador de la base ya
+# la emita (si un generador futuro dejara de hacerlo, no se pierde); la salida va sin duplicados.
+# Límite del modelo (revisión de #1490, P2-1): las fuentes locales se leen del disco, que la persona que
+# ejecuta el merge controla; quien edite su CLAUDE.local.md o un TEAM.md sin commit cambia la blocklist. El
+# gate protege frente a la PR, no frente a quien opera el workspace.
+# Código 1 si la base no trae el generador o la lista estática, o si el generador falla.
+LB_DIR=""
+local_blocklist() {
+  local base=$1 root=$2 out=$3 t d n f rel pubdir rc=0 pubs=()
+  LB_DIR=$(mktemp -d) || return 1
+  t=$LB_DIR
+  mkdir -p "$t/scripts"
+  if ! git -C "$root" show "$base:scripts/generate-blocklist.sh" > "$t/scripts/generate-blocklist.sh" 2>/dev/null \
+     || ! git -C "$root" show "$base:scripts/confidentiality-blocklist.txt" > "$t/scripts/confidentiality-blocklist.txt" 2>/dev/null; then
+    rm -rf "$t"; LB_DIR=""; return 1
+  fi
+  git -C "$root" show "$base:.gitignore" > "$t/.gitignore" 2>/dev/null || rm -f "$t/.gitignore"
+  # Árbol aparte ($t/pub) para los team/TEAM.md no versionados de proyectos que la base versiona (públicos):
+  # aportan las personas, pero el directorio del proyecto no debe aportar su nombre (revisión de #1490, P1-1
+  # de corrección: el generador cuenta cualquier projects/<n>/ como proyecto).
+  mkdir -p "$t/pub/scripts"; cp "$t/scripts/"* "$t/pub/scripts/"
+  if [[ -f "$t/.gitignore" ]]; then cp "$t/.gitignore" "$t/pub/"; fi
+  # Local = existe en disco y la BASE no la versiona. Si ls-tree falla, cuenta como local (más patrones, no menos).
+  _lb_local() { [[ ( -e "$root/$1" || -L "$root/$1" ) && -z "$(git -C "$root" ls-tree -r --name-only "$base" -- "$1" 2>/dev/null)" ]]; }
+  # Solo ficheros regulares (revisión de #1490, P2-2 de seguridad): un enlace a /dev/zero o a un FIFO colgaría
+  # cp. Un enlace a un fichero regular vale; cualquier otra cosa hace fallar la blocklist (no hay merge).
+  _lb_copy() {
+    [[ -f "$1" ]] || { echo "ERROR: fuente local de la blocklist que no es un fichero regular: ${1#"$root/"}" >&2; return 1; }
+    mkdir -p "$(dirname "$2")" && cp -- "$1" "$2"
+  }
+  if _lb_local CLAUDE.local.md; then _lb_copy "$root/CLAUDE.local.md" "$t/CLAUDE.local.md" || rc=1; fi
+  # Por fichero (revisión de #1490, P2-2): un proyecto que la base versiona (público) no aporta su nombre,
+  # pero su team/TEAM.md no versionado sí aporta los nombres de las personas.
+  for d in "$root"/projects/*/; do
+    [[ -d "$d" ]] || continue
+    n=$(basename "$d")
+    pubdir=""
+    if _lb_local "projects/$n"; then mkdir -p "$t/projects/$n"; else pubdir="pub/"; fi
+    if _lb_local "projects/$n/team/TEAM.md"; then
+      _lb_copy "$root/projects/$n/team/TEAM.md" "$t/${pubdir}projects/$n/team/TEAM.md" || rc=1
+      if [[ -n "$pubdir" ]]; then pubs+=("$n"); fi
+    fi
+  done
+  for f in "$root"/.claude/profiles/users/*/identity.md; do
+    [[ -e "$f" || -L "$f" ]] || continue
+    rel=${f#"$root/"}; _lb_local "$rel" || continue
+    _lb_copy "$f" "$t/$rel" || rc=1
+  done
+  unset -f _lb_local _lb_copy
+  bash "$t/scripts/generate-blocklist.sh" > "$t/bl.raw" 2>/dev/null || rc=1
+  if (( ${#pubs[@]} )); then
+    # Del árbol público solo valen las personas: fuera el nombre del proyecto y su variante con separadores
+    # (las mismas dos formas que emite la fuente 1 del generador). Si otra fuente aporta ese mismo patrón,
+    # sigue entrando por $t/bl.raw.
+    for n in "${pubs[@]}"; do printf '%s\n%s\n' "$n" "$(sed 's/[-_]/.?/g' <<<"$n")"; done > "$t/pub.names"
+    bash "$t/pub/scripts/generate-blocklist.sh" > "$t/pub.raw" 2>/dev/null || rc=1
+    grep -vxF -f "$t/pub.names" "$t/pub.raw" >> "$t/bl.raw"
+  fi
+  grep -vE '^(#|[[:space:]]*$)' "$t/scripts/confidentiality-blocklist.txt" > "$t/static.txt"
+  cat "$t/static.txt" >> "$t/bl.raw"
+  # Orden independiente del locale de quien opera (revisión de #1490, P2-1 de seguridad).
+  LC_ALL=C sort -u "$t/bl.raw" > "$out" || rc=1
+  # Revisión de #1490 (seguridad, P1-1): el escáner une los patrones con «|» y los pasa a grep sin «-e»; una
+  # línea que empiece por «-» (p. ej. «-ave^» en un CLAUDE.local.md forzado por la PR) se leería como opciones
+  # (-a -v -e …) y daría un falso PASS. Una blocklist así no se usa: no hay merge.
+  if grep -q -- '^-' "$out"; then
+    echo "ERROR: la blocklist local tiene un patrón que empieza por «-» (se leería como opción de grep)." >&2
+    rc=1
+  fi
+  # Revisión de #1490 (seguridad, 2.ª ronda, P1-1): un patrón que sale de las fuentes locales (no de la lista
+  # estática de la base) no puede llevar «( ) [ ] { } | \». Son los únicos metacaracteres de ERE que agrupan,
+  # escapan o alternan; sin ellos, ningún patrón puede abrir un grupo o una clase que se trague la unión con
+  # «|» (p. ej. «0000(» … «zzzz)qqq» anularía el Check 1). Cerrado por construcción: no hay merge.
+  if grep -vxF -f "$t/static.txt" "$out" | LC_ALL=C grep -q '[][(){}|\]'; then
+    echo "ERROR: la blocklist local tiene un patrón con ( ) [ ] { } | o \\ (podría anular la unión de patrones del escáner)." >&2
+    rc=1
+  fi
+  rm -rf "$t"; LB_DIR=""
+  return "$rc"
+}
+
 if $MERGE; then
   echo "=== Merge (SE-343): rama publicada, firmada y con grant ==="
+  # Revisión de #1490 (P2-2): las copias de las fuentes locales ($LB_DIR) y la blocklist ($SCAN_BL) llevan
+  # nombres privados; se borran también si el proceso se interrumpe (INT/TERM) o sale por un error.
+  SCAN_TMP="" SCAN_BL=""
+  _merge_cleanup() { rm -rf "${LB_DIR:-}"; rm -f "${SCAN_TMP:-}" "${SCAN_BL:-}"; }
+  trap _merge_cleanup EXIT
+  trap '_merge_cleanup; trap - EXIT; exit 130' INT
+  trap '_merge_cleanup; trap - EXIT; exit 143' TERM
   merge_prep_fail() {
     echo "ERROR: $1" >&2
     echo "  --merge no firma ni empuja: prepara antes la rama con push-pr.sh (sin --merge)," >&2
@@ -206,14 +299,23 @@ if $MERGE; then
     || merge_prep_fail "sin origin/main no hay escáner de confianza para la cabeza $LOCAL_HEAD."
   SCAN_TMP=$(mktemp)
   if ! git show "$SCAN_BASE:scripts/confidentiality-scan.sh" > "$SCAN_TMP" 2>/dev/null \
-     || ! grep -q -- '--pr-base)' "$SCAN_TMP"; then
+     || ! grep -qE -- '^[[:space:]]*--pr-base\)' "$SCAN_TMP"; then
     rm -f "$SCAN_TMP"
     merge_prep_fail "origin/main (${SCAN_BASE:0:12}) no trae scripts/confidentiality-scan.sh con --pr-base."
   fi
+  # Revisión de #1488 (P1-1): --pr-base solo conoce la lista estática de la base. Los nombres privados viven
+  # en fuentes locales no versionadas (projects/, CLAUDE.local.md, TEAM.md, identity.md) y este merge local es
+  # el único sitio donde se comprueban. La blocklist sale del generador de la BASE sobre esas fuentes.
+  SCAN_BL=$(mktemp)
+  if ! local_blocklist "$SCAN_BASE" "$ROOT" "$SCAN_BL"; then
+    rm -f "$SCAN_TMP" "$SCAN_BL"
+    merge_prep_fail "no se pudo generar la blocklist local con el generador de origin/main (${SCAN_BASE:0:12})."
+  fi
   scan_rc=0
-  bash "$SCAN_TMP" --pr-base "$SCAN_BASE" --repo "$ROOT" >/dev/null 2>&1 || scan_rc=$?
-  rm -f "$SCAN_TMP"
-  (( scan_rc == 0 )) \
+  scan_out=$(bash "$SCAN_TMP" --pr-base "$SCAN_BASE" --repo "$ROOT" --blocklist "$SCAN_BL" 2>&1) || scan_rc=$?
+  rm -f "$SCAN_TMP" "$SCAN_BL"
+  # PASS solo con código 0 Y el veredicto explícito del modo --pr-base (un escáner sin ese modo no lo emite).
+  { (( scan_rc == 0 )) && grep -qxF "Confidentiality scan (PR): PASS" <<<"$scan_out"; } \
     || merge_prep_fail "el escaneo de confidencialidad (escáner de origin/main) de la cabeza $LOCAL_HEAD no dio CLEAN."
   PR_NUM=$(gh pr list -R "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null || true)
   [[ "$PR_NUM" =~ ^[0-9]+$ ]] || merge_prep_fail "no hay un PR abierto para $BRANCH."
