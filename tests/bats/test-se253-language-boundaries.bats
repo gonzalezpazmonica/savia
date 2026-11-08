@@ -171,3 +171,110 @@ setup() {
     rm -f "$SETUP_FILE" "$TMPFILE"
     [ "$status" -eq 0 ]
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S03q (SE-376): comportamiento del checker (usos, no líneas; solo scripts nuevos)
+# ─────────────────────────────────────────────────────────────────────────────
+
+lb_file() {  # lb_file <nombre> <contenido> → ruta
+    local f="$BATS_TEST_TMPDIR/$1"
+    printf '%s\n' "$2" > "$f"
+    echo "$f"
+}
+
+@test "S03q: cuenta usos de jq en pipes, no líneas (6 usos en 2 líneas → WARN)" {
+    f="$(lb_file pipes.sh 'jq . a | jq .x | jq .y
+jq . b | jq .z | jq .w')"
+    run bash "$LB_CHECK" --check "$f"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"tiene 6 usos de jq"* ]]
+}
+
+@test "S03q: boundary — 5 usos en una línea avisa, 4 no" {
+    f="$(lb_file cinco.sh 'jq a | jq b | jq c | jq d | jq e')"
+    run bash "$LB_CHECK" --check "$f"
+    [ "$status" -eq 1 ]
+    f="$(lb_file cuatro.sh 'jq a | jq b | jq c | jq d')"
+    run bash "$LB_CHECK" --check "$f"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "" ]]
+}
+
+@test "S03q: palabras que contienen jq no cuentan (negativo)" {
+    f="$(lb_file palabras.sh 'myjq jqx jq_tool xjqx ajq')"
+    run bash "$LB_CHECK" --check "$f"
+    [ "$status" -eq 0 ]
+}
+
+@test "S03q: fichero sin jq no rompe con set -e/pipefail (empty)" {
+    f="$(lb_file vacio.sh 'echo hola')"
+    run bash "$LB_CHECK" --check "$f" "$(lb_file otro.sh 'jq a | jq b | jq c | jq d | jq e')"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"otro.sh tiene 5 usos"* ]]
+}
+
+@test "S03q: excepción install-*.sh (no avisa aunque tenga 5 usos)" {
+    f="$(lb_file install-x.sh 'jq a | jq b | jq c | jq d | jq e')"
+    run bash "$LB_CHECK" --check "$f"
+    [ "$status" -eq 0 ]
+}
+
+@test "S03q: opción desconocida → exit 2 (invalid)" {
+    run bash "$LB_CHECK" --nope
+    [ "$status" -eq 2 ]
+}
+
+lb_repo() {
+    R="$BATS_TEST_TMPDIR/repo"; mkdir -p "$R/sub"
+    git -C "$R" init -q
+    git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+}
+
+@test "S03q: staged — script nuevo con 5 usos avisa, también desde un subdirectorio" {
+    lb_repo
+    printf 'jq a | jq b | jq c | jq d | jq e\n' > "$R/sub/nuevo.sh"
+    git -C "$R" add sub/nuevo.sh
+    run bash -c 'cd "$1/sub" && bash "$2" --check' _ "$R" "$LB_CHECK"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"sub/nuevo.sh tiene 5 usos"* ]]
+}
+
+lb_viejo_sin_jq() {  # script versionado sin jq: al renombrarlo con poco cambio git ve R<100
+    lb_repo
+    printf 'echo uno\necho dos\necho tres\necho cuatro\necho cinco\necho seis\n' > "$R/viejo.sh"
+    git -C "$R" add viejo.sh
+    git -C "$R" -c user.email=t@t -c user.name=t commit -q -m viejo
+}
+
+@test "S03q: staged — renombrado con código nuevo de jq avisa (R<100)" {
+    lb_viejo_sin_jq
+    git -C "$R" mv viejo.sh renombrado.sh
+    printf 'jq a | jq b | jq c | jq d | jq e\n' >> "$R/renombrado.sh"
+    git -C "$R" add renombrado.sh
+    run bash -c 'cd "$1" && bash "$2" --check' _ "$R" "$LB_CHECK"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"renombrado.sh tiene 5 usos"* ]]
+}
+
+@test "S03q: staged — renombrado puro (R100) no avisa (negativo)" {
+    lb_repo
+    printf 'jq a | jq b | jq c | jq d | jq e\n' > "$R/viejo.sh"
+    git -C "$R" add viejo.sh
+    git -C "$R" -c user.email=t@t -c user.name=t commit -q -m viejo
+    git -C "$R" mv viejo.sh movido.sh
+    run bash -c 'cd "$1" && bash "$2" --check' _ "$R" "$LB_CHECK"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "" ]]
+}
+
+@test "S03q: staged — script existente modificado no avisa (la regla es para código nuevo)" {
+    lb_repo
+    printf 'echo viejo\n' > "$R/viejo.sh"
+    git -C "$R" add viejo.sh
+    git -C "$R" -c user.email=t@t -c user.name=t commit -q -m viejo
+    printf 'jq a\njq b\njq c\njq d\njq e\n' >> "$R/viejo.sh"
+    git -C "$R" add viejo.sh
+    run bash -c 'cd "$1" && bash "$2" --check' _ "$R" "$LB_CHECK"
+    [ "$status" -eq 0 ]
+    [[ "$output" == "" ]]
+}

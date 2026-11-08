@@ -388,3 +388,95 @@ d["pat-test"]=b[:-1]+("0" if b[-1]!="0" else "1"); json.dump(d,open(p,"w"))' \
   [[ "$status" -ne 0 ]]
   [[ -z "$output" ]]
 }
+
+# ── S03q (SE-376): casos que discriminan mutantes supervivientes ─────────────
+
+@test "S03q: allowlist sin sufijos — evilgithub.com y evil.github.com no autorizan" {
+  printf '%s' "valor-suf-901" | "$EGRESS" store pat-test >/dev/null
+  local d
+  for d in evilgithub.com evil.github.com xdev.azure.com; do
+    run "$EGRESS" resolve pat-test --dest "$d"
+    [[ "$status" -ne 0 ]]
+    [[ "$output" == *"no autorizado. REFUSE"* ]]
+    [[ "$output" != *"valor-suf-901"* ]]
+  done
+}
+
+@test "S03q: run toma el host tras el último @ y sin puerto" {
+  printf '%s' "valor-host-902" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run bash -c 'echo "ok:$(cat "$2")"' _ https://a@b@github.com:443/x savia:cred:pat-test
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "ok:valor-host-902" ]]
+}
+
+@test "S03q: run rechaza host con caracteres fuera de [a-z0-9.-] (invalid)" {
+  printf '%s' "valor-host-903" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'echo "$2"' _ https://git_hub.com/x savia:cred:pat-test
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"autoridad ambigua"* ]]
+  [[ "$output" != *"valor-host-903"* ]]
+}
+
+@test "S03q: run con tres hosts distintos → REFUSE (no solo con dos)" {
+  printf '%s' "valor-host-904" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run bash -c 'echo "$4"' _ https://github.com/a https://dev.azure.com/b https://api.github.com/c savia:cred:pat-test
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"varios destinos"* ]]
+}
+
+@test "S03q: la misma URL repetida cuenta como un único destino" {
+  printf '%s' "valor-host-905" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run bash -c 'echo "ok:$(cat "$3")"' _ https://github.com/a https://GitHub.com/b savia:cred:pat-test
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == "ok:valor-host-905" ]]
+}
+
+@test "S03q: run entrega el valor exacto por el descriptor, sin salto final (boundary)" {
+  printf '%s' "abc" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'wc -c < "$1"' _ savia:cred:pat-test
+  [[ "$status" -eq 0 ]]
+  [[ "$output" -eq 3 ]]
+}
+
+@test "S03q: resolve de marcador missing dice «no registrado», no fallo de descifrado" {
+  printf '%s' "valor-906" | "$EGRESS" store pat-otro >/dev/null
+  run "$EGRESS" resolve pat-test --dest github.com
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"marcador 'pat-test' no registrado. REFUSE"* ]]
+}
+
+@test "S03q: --dest como último argumento sin valor → mensaje propio, no unbound" {
+  printf '%s' "valor-907" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" resolve pat-test --dest
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"--dest sin valor. REFUSE"* ]]
+}
+
+@test "S03q: status no vuelca los blobs cifrados" {
+  printf '%s' "valor-908" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" status
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"  - pat-test"* ]]
+  [[ "$output" != *"v2:"* ]]
+}
+
+@test "S03q: audit encuentra ghp_ de 36 en scripts/ y no los cortos ni los de tests/" {
+  local root="$BATS_TEST_TMPDIR/aud"
+  mkdir -p "$root/scripts" "$root/.claude/tests" "$root/scripts/tests"
+  printf 'T=ghp_%s\n' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" > "$root/scripts/leak.sh"
+  printf 'T=ghp_short\n' > "$root/scripts/corto.sh"
+  printf 'T=ghp_%s\n' "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" > "$root/scripts/tests/fx.sh"
+  run "$EGRESS" audit "$root"
+  [[ "$status" -eq 0 ]]
+  [[ "$output" == *"scripts/leak.sh:1:"* ]]
+  [[ "$output" != *"corto.sh"* ]]
+  [[ "$output" != *"fx.sh"* ]]
+}
+
+@test "S03q: con --dest explícito, dos hosts en los args siguen siendo REFUSE" {
+  printf '%s' "valor-host-909" | "$EGRESS" store pat-test >/dev/null
+  run "$EGRESS" run --dest github.com bash -c 'echo "ok:$(cat "$3")"' _ https://github.com/a https://dev.azure.com/b savia:cred:pat-test
+  [[ "$status" -ne 0 ]]
+  [[ "$output" == *"varios destinos"* ]]
+  [[ "$output" != *"valor-host-909"* ]]
+}
