@@ -14,7 +14,10 @@ if command -v docker &>/dev/null; then
       base_image=true
       last_build=$(docker image inspect savia-contained:latest --format '{{.Created}}' 2>/dev/null | cut -d. -f1 || echo "unknown")
     fi
-    containers_running=$(docker ps -q 2>/dev/null | wc -l)
+    # A failing `docker ps` must not abort the report under set -e/pipefail.
+    if ps_out=$(docker ps -q 2>/dev/null); then
+      containers_running=$(printf '%s' "$ps_out" | grep -c . || true)
+    fi
   fi
 fi
 
