@@ -479,3 +479,51 @@ JSON
   run python3 "$GATE" --root "$ROOT"
   [ "$status" -eq 0 ]
 }
+
+# ── S03q (SE-376): casos que matan mutantes supervivientes ───────────────────
+
+@test "S03q: confirmación con fecha de mañana falla; con la de hoy pasa (boundary)" {
+  local manana hoy
+  manana=$(date -d tomorrow +%F); hoy=$(date +%F)
+  edit "$SPEC" "s.replace('- fecha: 2026-11-04', '- fecha: $manana')"
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"con fecha $manana posterior a hoy"* ]]
+  edit "$SPEC" "s.replace('- fecha: $manana', '- fecha: $hoy')"
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 0 ]
+}
+
+@test "S03q: con varias citas fechadas manda la más reciente (confirmar antes falla)" {
+  edit "$SPEC" 's.replace("— 2026-11-03\n", "— 2026-11-03\n> «Y que me avise» — 2026-11-05\n")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fecha 2026-11-04 anterior a las palabras de la persona (2026-11-05)"* ]]
+}
+
+@test "S03q: un triple acento grave dentro de un bloque ~~~ no cierra el bloque (sección cercada no cuenta)" {
+  edit "$SPEC" 's.replace("## Lo que he entendido", "~~~\n\x60\x60\x60\n## Lo que he entendido").replace("## Slice S0", "~~~\n## Slice S0")'
+  run python3 "$GATE" --root "$ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta la sección «## Lo que he entendido»"* ]]
+  [[ "$output" != *"falta «## Slice S0"* ]]
+}
+
+@test "S03q: evidence fuera de --root no se evalúa (falla como no localizable)" {
+  mkdir -p "$BATS_TEST_TMPDIR/fuera"
+  write_good "$BATS_TEST_TMPDIR/fuera/SE-913-app.md"
+  printf '{"initiatives":[{"id":"SE-913","status":"APPROVED","evidence":"../fuera/SE-913-app.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-913 está APPROVED en la vista de planificación pero no hay spec localizable"* ]]
+}
+
+@test "S03q: evidence .md sin «status:» en el frontmatter no es spec (falla como no localizable)" {
+  mkdir -p "$ROOT/docs/informes"
+  printf -- '---\ntitle: informe\n---\n# Informe\n' > "$ROOT/docs/informes/inf.md"
+  printf '{"initiatives":[{"id":"SE-914","status":"APPROVED","evidence":"docs/informes/inf.md"}]}' > "$ROOT/state.json"
+  run python3 "$GATE" --root "$ROOT" --state "$ROOT/state.json"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-914 está APPROVED en la vista de planificación pero no hay spec localizable"* ]]
+  [[ "$output" != *"human_surface"* ]]
+}

@@ -29,8 +29,21 @@ done
 if [[ ${#EXPLICIT_FILES[@]} -gt 0 ]]; then
   FILES=("${EXPLICIT_FILES[@]}")
 else
-  # Leer staged; si no hay staged leer del entorno (para uso en pre-commit)
-  mapfile -t FILES < <(git diff --cached --name-only 2>/dev/null | grep '\.sh$' || true)
+  # Solo scripts NUEVOS en staged (la regla aplica a código nuevo). git da las
+  # rutas relativas a la raíz del repo: se anteponen para que funcione desde
+  # cualquier subdirectorio.
+  top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  if [[ -n "$top" ]]; then
+    # Nuevo = añadido (A) o renombrado con cambios (R<100): un script reescrito
+    # que git detecta como renombrado no escapa a la regla. Un renombrado puro
+    # (R100) no añade código y no cuenta.
+    mapfile -t FILES < <(git diff --cached --name-status --diff-filter=AR 2>/dev/null \
+      | awk -F'\t' '$1 == "A" { print $2 } $1 ~ /^R/ && $1 != "R100" { print $3 }' \
+      | grep '\.sh$' || true)
+    [[ ${#FILES[@]} -gt 0 ]] && FILES=("${FILES[@]/#/$top/}")
+  else
+    FILES=()
+  fi
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
@@ -49,7 +62,8 @@ for file in "${FILES[@]}"; do
   [[ -f "$file" ]] || continue
   is_exception "$file" && continue
 
-  count=$(grep -c '\bjq\b' "$file" 2>/dev/null || true)
+  # Usos, no líneas: «jq . a | jq .r» son dos usos (la regla incluye pipes).
+  count=$({ grep -o '\bjq\b' "$file" 2>/dev/null || true; } | wc -l)
   if [[ "$count" -ge 5 ]]; then
     echo "WARN [language-boundary]: $file tiene $count usos de jq — considera Python (SE-253)"
     VIOLATIONS=$((VIOLATIONS + 1))

@@ -120,7 +120,14 @@ echo ""
 # Step 1: Audit test quality
 echo "Step 1: Auditing test quality..."
 AUDIT=$(bash "$DIR/test-auditor.sh" --all --json 2>&1) || true
-TOTAL=$(echo "$AUDIT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('total_files',0))" 2>/dev/null || echo "0")
+# Sin medida no hay veredicto: una salida ilegible del auditor no puede
+# acabar en «RESULT: PASS» con 0 ficheros (fallo cerrado del aviso).
+AUDIT_OK=true
+TOTAL=$(echo "$AUDIT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+assert isinstance(d.get('results'), list)
+print(d.get('total_files', len(d['results'])))" 2>/dev/null) || { AUDIT_OK=false; TOTAL=0; }
 
 # Compute the threshold to use this run
 THRESHOLD="$FIXED_MIN"
@@ -138,7 +145,7 @@ print(' '.join(scores))
     ADAPTIVE_RESULT=$(python3 "$DIR/quality-gate-adaptive.py" \
         --scores $SCORES \
         --fixed-min "$FIXED_MIN" --floor "$FLOOR" --ceil "$CEIL" --json 2>/dev/null || echo "{}")
-    NEW_THRESHOLD=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('threshold', $FIXED_MIN))" 2>/dev/null || echo "$FIXED_MIN")
+    NEW_THRESHOLD=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('threshold', sys.argv[1]))" "$FIXED_MIN" 2>/dev/null || echo "$FIXED_MIN")
     STRATEGY=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('strategy', 'unknown'))" 2>/dev/null || echo "unknown")
     MEAN=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('metrics', {}).get('mean', 0))" 2>/dev/null || echo "0")
     STDDEV=$(echo "$ADAPTIVE_RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('metrics', {}).get('stddev', 0))" 2>/dev/null || echo "0")
@@ -172,6 +179,14 @@ print(' '.join(scores))
   fi
 fi
 
+# Entero o decimal (el umbral adaptativo puede no ser entero). Solo un número
+# validado llega a interpolarse en el Python de abajo.
+if ! [[ "$THRESHOLD" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "  Umbral no numérico: '$THRESHOLD' (fallo cerrado del aviso)"
+  AUDIT_OK=false
+  THRESHOLD=0
+fi
+
 # Filter failed tests against the threshold
 FAILED=$(echo "$AUDIT" | python3 -c "
 import json, sys
@@ -182,6 +197,10 @@ print(len(failed))
 " 2>/dev/null || echo "0")
 
 echo "  Audited: $TOTAL files, $FAILED below threshold ($THRESHOLD)"
+if ! $AUDIT_OK; then
+  echo "  Auditor: no se pudo medir la calidad (salida ilegible o umbral inválido)"
+  PASS=false
+fi
 
 if [[ "$FAILED" -gt 0 ]]; then
   echo "$AUDIT" | python3 -c "
@@ -190,7 +209,7 @@ threshold = $THRESHOLD
 data = json.load(sys.stdin)
 for r in data.get('results', []):
     if r.get('total', 0) < threshold:
-        print(f'    {r["file"]}: {r["total"]}/100 (threshold {threshold})')
+        print('    %s: %s/100 (threshold %s)' % (r.get('file'), r.get('total', 0), threshold))
 " 2>/dev/null
   PASS=false
 fi
@@ -209,6 +228,8 @@ vacuity_ratchet || VACUITY_OK=false
 echo ""
 if $PASS; then
   echo "RESULT: PASS"
+elif ! $AUDIT_OK; then
+  echo "RESULT: WARN — calidad sin medir: el auditor no dio un resultado legible [advisory only]"
 else
   echo "RESULT: WARN — tests below quality threshold ($THRESHOLD) [advisory only]"
 fi
