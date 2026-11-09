@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""Servidor MCP falso por stdio para tests/test-mcp-tool-design.bats.
+
+FAKE_MCP_MODE: paginate (catálogo de catalog-ok.json en una herramienta por página),
+silent (lee y no contesta), exit (sale sin responder), error (tools/list devuelve error).
+"""
+import json, os, sys
+
+mode = os.environ.get("FAKE_MCP_MODE", "paginate")
+here = os.path.dirname(os.path.abspath(__file__))
+tools = json.load(open(os.path.join(here, "catalog-ok.json"), encoding="utf-8"))["tools"]
+if mode == "exit":
+    sys.exit(0)
+for line in sys.stdin:
+    msg = json.loads(line)
+    if mode == "silent":
+        continue
+    mid, method = msg.get("id"), msg.get("method")
+    if mid is None:
+        continue
+    if method == "initialize":
+        res = {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+               "serverInfo": {"name": "fake", "version": "0"}}
+    elif method == "tools/list" and mode == "error":
+        print(json.dumps({"jsonrpc": "2.0", "id": mid, "error": {"code": -32603, "message": "boom"}}), flush=True)
+        continue
+    elif method == "tools/list":
+        i = int((msg.get("params") or {}).get("cursor") or 0)
+        res = {"tools": tools[i:i + 1]}
+        if i + 1 < len(tools):
+            res["nextCursor"] = str(i + 1)
+    else:
+        res = {}
+    print(json.dumps({"jsonrpc": "2.0", "id": mid, "result": res}), flush=True)

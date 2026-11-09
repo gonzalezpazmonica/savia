@@ -1,0 +1,51 @@
+{
+ "tools": [
+  {
+   "name": "note_read",
+   "description": "Lee una nota por ruta.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": true
+   }
+  },
+  {
+   "name": "note_write",
+   "description": "Escribe una nota.",
+   "annotations": {
+    "readOnlyHint": false,
+    "destructiveHint": false
+   }
+  },
+  {
+   "name": "note_search",
+   "description": "Busca notas por texto.",
+   "inputSchema": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string"
+     },
+     "limit": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "query"
+    ]
+   },
+   "annotations": {
+    "readOnlyHint": true
+   }
+  }
+ ]
+}

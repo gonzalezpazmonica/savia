@@ -1,0 +1,4 @@
+# herramientas esperadas del catálogo de fixture
+note_read
+note_write
+note_search
