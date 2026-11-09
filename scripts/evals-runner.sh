@@ -49,9 +49,9 @@ THRESHOLD="${SAVIA_EVAL_DELTA_THRESHOLD:-0.05}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mock)       MOCK=true ;;
-    --dataset)    TARGET_DATASET="$2"; shift ;;
-    --output)     OUTPUT_FILE="$2"; shift ;;
-    --threshold)  THRESHOLD="$2"; shift ;;
+    --dataset)    [[ $# -ge 2 ]] || { echo "ERROR: --dataset needs a value" >&2; exit 1; }; TARGET_DATASET="$2"; shift ;;
+    --output)     [[ $# -ge 2 ]] || { echo "ERROR: --output needs a value" >&2; exit 1; }; OUTPUT_FILE="$2"; shift ;;
+    --threshold)  [[ $# -ge 2 ]] || { echo "ERROR: --threshold needs a value" >&2; exit 1; }; THRESHOLD="$2"; shift ;;
     -h|--help)
       grep '^#' "${BASH_SOURCE[0]}" | sed 's/^# //'
       exit 0
