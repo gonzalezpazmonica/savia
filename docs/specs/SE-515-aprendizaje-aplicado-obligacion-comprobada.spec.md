@@ -23,6 +23,8 @@ timeline:
 
 ## Problema (leído en main e59b795ee, 2026-11-09; lectura estática, nada ejecutado)
 
+Matriz completa, con lo observado, lo inferido y lo no verificado: `docs/evidence/planning-repriorization-20261109.md`.
+
 Savia guarda lecciones y las recupera. No puede demostrar que una lección validada se tuvo en cuenta antes de actuar, ni impedir un efecto que la incumple cuando el modelo la ignora.
 
 1. **El recall efectivo existe, pero entrega un solo principio.** El hook `learning-recall-hook.sh` (UserPromptSubmit) y su par `learning-recall-guard.ts` llaman a `learning-recall.sh --mode effective` e inyectan hasta tres criterios. El filtro exige `provenance: human_authored`, y `CRITERIO.md` solo tiene uno (CRIT-001). De 725 filas de `output/learning-loop/recall.jsonl`, 487 son hits efectivos: con una sola entrada elegible, son el mismo principio repetido (inferido: el log guarda el número de hits, no cuál).
