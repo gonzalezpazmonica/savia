@@ -230,7 +230,9 @@ minpath() {
 
 # ── El arranque no usa red ───────────────────────────────────────────────────
 @test "auditoría por defecto (sin --osv) no llama a curl" {
-  run bash "$SCRIPT" --config "$BATS_TEST_TMPDIR/none.json"
+  printf '{"mcpServers":{"x":{"command":"npx","args":["-y","pkg@1.0.0"],"description":"d"}}}' > "$BATS_TEST_TMPDIR/cfg.json"
+  run bash "$SCRIPT" --config "$BATS_TEST_TMPDIR/cfg.json"
+  [ "$status" -eq 0 ]
   [ ! -e "$CAPTURE/args" ]
 }
 
