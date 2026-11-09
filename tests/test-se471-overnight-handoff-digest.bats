@@ -271,3 +271,159 @@ jget() {
     "https://github.com/a/b/pull/101 https://github.com/a/b/pull/102 https://github.com/a/b/pull/103 " ]
   [ "$(jget '[r["avisos"] for r in d["runs"] if r["nombre"]=="punto-coma-id"][0]')" = "['url_rechazada']" ]
 }
+
+# ── Comportamiento no cubierto: CI y revisión, gh degradado, log, ventana, límites (S03s) ──
+# gh falso que responde el JSON dado a cualquier URL; con FAIL_ON=<n.º>, falla solo en esa PR.
+fake_gh_json() {
+  printf '%s\n' "$1" > "$TMP/gh-reply.json"
+  cat > "$FAKEBIN/gh" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do printf '%s\n' "\$a" >> "$GHLOG"; done
+url="\${@: -1}"
+[ -n "\${FAIL_ON:-}" ] && [ "\${url##*/}" = "\$FAIL_ON" ] && { echo "boom" >&2; exit 1; }
+cat "$TMP/gh-reply.json"
+EOF
+  chmod +x "$FAKEBIN/gh"
+}
+
+online_one() { # online_one <json gh>: un run OK con PR y --online; deja el JSON en $output
+  fake_gh_json "$1"
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" uno 'ESTADO: OK https://github.com/o/r/pull/7'
+  PATH="$FAKEBIN:$PATH" run bash "$SCRIPT" --runs-dir "$R" --online --format json
+  [ "$status" -eq 0 ]
+}
+
+@test "CI: rollup vacío es sin_ci y validado queda desconocido, no sí" {
+  online_one '{"state":"OPEN","reviewDecision":"","statusCheckRollup":[],"mergedAt":null}'
+  [ "$(jget 'd["runs"][0]["ci"]+"/"+d["runs"][0]["validado"]')" = "sin_ci/desconocido" ]
+}
+
+@test "CI: un elemento que no es objeto cuenta como pendiente (fail-closed)" {
+  online_one '{"state":"OPEN","reviewDecision":"","statusCheckRollup":[{"conclusion":"SUCCESS"},"raro"],"mergedAt":null}'
+  [ "$(jget 'd["runs"][0]["ci"]+"/"+d["runs"][0]["validado"]')" = "pendiente/desconocido" ]
+}
+
+@test "CI: NEUTRAL y SKIPPED son verdes; validado sí" {
+  online_one '{"state":"OPEN","reviewDecision":"","statusCheckRollup":[{"conclusion":"NEUTRAL"},{"conclusion":"SKIPPED"},{"state":"SUCCESS"}],"mergedAt":null}'
+  [ "$(jget 'd["runs"][0]["ci"]+"/"+d["runs"][0]["validado"]')" = "verde/sí" ]
+}
+
+@test "aceptado: PR CLOSED sin merge es no; MERGED sin mergedAt es sí" {
+  online_one '{"state":"CLOSED","reviewDecision":"","statusCheckRollup":[],"mergedAt":null}'
+  [ "$(jget 'd["runs"][0]["aceptado"]')" = "no" ]
+  online_one '{"state":"MERGED","reviewDecision":"","statusCheckRollup":[],"mergedAt":null}'
+  [ "$(jget 'd["runs"][0]["aceptado"]')" = "sí" ]
+}
+
+@test "gh devuelve JSON inválido o un array: degradado a offline, nada inferido" {
+  for reply in 'no es json' '[{"state":"MERGED"}]'; do
+    online_one "$reply"
+    [ "$(jget 'd["degradado"]')" = "True" ]
+    [[ "$(jget 'd["avisos"][0]')" == *"json inválido"* ]]
+    [ "$(jget 'd["runs"][0]["aceptado"]')" = "desconocido" ]
+  done
+}
+
+@test "gh falla en una PR: se para ahí y el resto queda desconocido aunque gh respondiera" {
+  fake_gh_json '{"state":"MERGED","reviewDecision":"","statusCheckRollup":[],"mergedAt":"2026-10-24T08:00:00Z"}'
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" a-falla 'ESTADO: OK https://github.com/o/r/pull/1'
+  mark "$R" b-sana 'ESTADO: OK https://github.com/o/r/pull/2'
+  FAIL_ON=1 PATH="$FAKEBIN:$PATH" run bash "$SCRIPT" --runs-dir "$R" --online --format json
+  [ "$status" -eq 0 ]
+  [[ "$(jget 'd["avisos"][0]')" == *"gh falló en a-falla (rc=1)"* ]]
+  [ "$(jget '[r["aceptado"] for r in d["runs"]]')" = "['desconocido', 'desconocido']" ]
+}
+
+@test "sin gh en el PATH: --online degrada con aviso y exit 0" {
+  NOGH="$TMP/nogh"; mkdir -p "$NOGH"
+  for t in bash python3 dirname; do ln -s "$(command -v $t)" "$NOGH/$t"; done
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" uno 'ESTADO: OK https://github.com/o/r/pull/7'
+  PATH="$NOGH" run "$NOGH/bash" "$SCRIPT" --runs-dir "$R" --online --format json
+  [ "$status" -eq 0 ]
+  [ "$(jget 'd["degradado"]')" = "True" ]
+  [ "$(jget 'd["avisos"][0]')" = "degradado a offline: gh no disponible" ]
+}
+
+@test "--log inexistente es error de uso (exit 2)" {
+  run bash "$SCRIPT" --runs-dir "$FIX/runs" --log "$TMP/no-hay-log"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--log no existe"* ]]
+}
+
+@test "log: líneas sin formato y fechas imposibles se ignoran, no crean runs" {
+  R="$TMP/runs"; mkdir -p "$R"
+  printf 'basura sin formato\n2026-13-45T00:00:00Z end fecha-mala rc=1\n2026-10-24T01:00:00Z end bueno rc=3\n' > "$TMP/log"
+  run bash "$SCRIPT" --runs-dir "$R" --log "$TMP/log" --format json
+  [ "$status" -eq 0 ]
+  [ "$(jget '",".join(r["nombre"]+":"+str(r["rc"]) for r in d["runs"])')" = "bueno:3" ]
+}
+
+@test "--since: un run sin marca cuenta por su end aunque empezara antes de la ventana" {
+  R="$TMP/runs"; mkdir -p "$R"
+  printf '2026-10-23T18:00:00Z start largo\n2026-10-24T02:00:00Z end largo rc=1\n' > "$TMP/log"
+  run bash "$SCRIPT" --runs-dir "$R" --log "$TMP/log" --since 2026-10-23T20:00:00Z --format json
+  [ "$status" -eq 0 ]
+  [ "$(jget '",".join(x["categoria"]+":"+x["run"] for x in d["decisiones"])')" = "sin_marca_rc:largo" ]
+}
+
+@test "ventana sin --since va de la marca más antigua a la más reciente" {
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" vieja 'ESTADO: OK'
+  mark "$R" nueva 'ESTADO: OK'
+  touch -d '2026-10-20T03:00:00Z' "$R/vieja/done"
+  touch -d '2026-10-24T03:00:00Z' "$R/nueva/done"
+  run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$(jget 'd["ventana"]["desde"]+" "+d["ventana"]["hasta"]')" = "2026-10-20T03:00:00Z 2026-10-24T03:00:00Z" ]
+}
+
+@test "--max-decisions 0 es válido: no lista ninguna y las cuenta todas (límite)" {
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" f1 'ESTADO: FALLO uno'
+  mark "$R" f2 'ESTADO: FALLO dos'
+  run bash "$SCRIPT" --runs-dir "$R" --max-decisions 0 --format json
+  [ "$status" -eq 0 ]
+  [ "$(jget 'str(len(d["decisiones"]))+"/"+str(d["sin_listar"])')" = "0/2" ]
+}
+
+@test "marca de más de 64 KiB: solo se leen los primeros 64 KiB (ESTADO tardío = malformada)" {
+  R="$TMP/runs"; mkdir -p "$R/grande"
+  { head -c 70000 /dev/zero | tr '\0' 'x'; printf '\nESTADO: OK\n'; } > "$R/grande/done"
+  bash "$SCRIPT" --runs-dir "$R" --format json > "$TMP/out.json"
+  [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runs"][0]["declarado"])' "$TMP/out.json")" = "malformada" ]
+}
+
+@test "motivo y Siguiente: el motivo sale de la línea ESTADO y, sin «Siguiente», vale la última línea" {
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" uno $'ESTADO: FALLO — baseline roto\nrelanzar con la caché limpia'
+  run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$(jget 'd["runs"][0]["motivo"]')" = "baseline roto" ]
+  [ "$(jget 'd["runs"][0]["siguiente"]')" = "relanzar con la caché limpia" ]
+}
+
+@test "campo PR: vacío no bloquea la URL de la línea siguiente" {
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" uno $'ESTADO: OK\nPR:\nhttps://github.com/o/r/pull/7'
+  run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$status" -eq 0 ]
+  [ "$(jget 'd["runs"][0]["pr_url"]')" = "https://github.com/o/r/pull/7" ]
+}
+
+@test "un enlace simbólico en runs-dir no cuenta como run" {
+  R="$TMP/runs"; mkdir -p "$R" "$TMP/fuera"
+  mark "$TMP/fuera" ajeno 'ESTADO: FALLO ajeno'
+  ln -s "$TMP/fuera/ajeno" "$R/enlace"
+  mark "$R" propio 'ESTADO: OK'
+  run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$(jget '",".join(r["nombre"] for r in d["runs"])')" = "propio" ]
+}
+
+@test "md: con todo OK dice «Sin decisiones pendientes.»" {
+  R="$TMP/runs"; mkdir -p "$R"
+  mark "$R" uno 'ESTADO: OK'
+  run bash "$SCRIPT" --runs-dir "$R"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Sin decisiones pendientes."* ]]
+}
