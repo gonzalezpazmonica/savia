@@ -1,10 +1,10 @@
 # Prototipo SE-493 — Efectos dudosos: qué verías
 
 > **Simulado: las órdenes no existen hasta S1.** Todo lo de abajo es texto de ejemplo.
-> Los datos (números de PR, horas, identificadores) están **inventados**; no son datos reales.
+> Los datos (horas, identificadores, commits) están **inventados**. «#1500» viene del texto literal de las escenas que confirmaste y aquí es solo una etiqueta de ejemplo; los demás PR usan números ficticios (#9001, #9002).
 > Sirve para que confirmes o rechaces qué te diría Savia, no cómo está hecho por dentro.
 
-Idea en una frase: si Savia pide algo con efecto fuera (por ejemplo fusionar un PR) y no sabe si salió bien, **no lo repite**. Primero comprueba; si no puede, te pregunta.
+Idea en una frase: si Savia pide algo con efecto fuera (por ejemplo fusionar un PR) y no sabe si salió bien, **no lo repite**. Primero comprueba; si no puede, espera un plazo; si sigue sin saberlo, te pregunta.
 
 ---
 
@@ -16,11 +16,17 @@ Savia pidió fusionar un PR y se cortó la conexión antes de saber si GitHub lo
 
 > El merge de #1500 quedó dudoso: la petición salió pero no sé si GitHub lo aceptó. Lo compruebo antes de repetir nada.
 
-**Si la comprobación confirma que GitHub sí lo aplicó**, Savia lo marca como hecho y guarda el recibo:
+Lo que pasa después depende de la comprobación y del **plazo de espera** (para un merge, 5 minutos desde que salió la petición):
+
+**Si la comprobación confirma que GitHub sí lo aplicó** (en cualquier momento), Savia lo marca como hecho y guarda el recibo:
 
 > El merge de #1500 sí se hizo. Quedó marcado como hecho, con su commit `abc1234` (ejemplo).
 
-**Si la comprobación no concluye** (sigue sin red): no repite nada. El efecto pasa a «en revisión» y lo verás como en la escena 2.
+**Si la comprobación no concluye o aún no ve el merge, y el plazo no ha pasado**: el efecto sigue **en vuelo**. No se repite ni se da por fallido; Savia vuelve a comprobar más tarde.
+
+> El merge de #1500 sigue en vuelo (salió hace 2 minutos). No lo repito; vuelvo a comprobarlo cuando pase el plazo.
+
+**Si pasado el plazo la comprobación sigue sin concluir** (por ejemplo, sigue sin red): no repite nada. El efecto pasa a «en revisión» y lo verás como en la escena 2.
 
 ---
 
@@ -32,10 +38,13 @@ Savia pidió fusionar un PR y se cortó la conexión antes de saber si GitHub lo
 
 Opciones que se te ofrecen:
 
-1. **Darlo por hecho** (tú has comprobado que el informe está publicado).
-2. **Darlo por fallido** (tú has comprobado que no está).
+1. **Volver a comprobarlo.** Savia mira otra vez en el servicio. Si ahora la comprobación concluye, el resultado lo pone la comprobación, no quien lo pide. Esta vía la puede usar también un agente, porque no concede nada que la comprobación no pruebe. Solo vale para efectos que pidió este mismo registro.
+2. **Darlo por hecho tú** (has comprobado que el informe está publicado).
+3. **Darlo por fallido tú** (has comprobado que no está).
 
-Mientras no elijas, **nada se repite**. Cuando eliges, tu decisión queda registrada con la fecha y quién la tomó.
+Las opciones 2 y 3 exigen **tu permiso firmado, de un solo uso**, del mismo tipo que el de fusionar. Un agente no puede emitirlo ni usar esta vía. Es la única vía cuando la comprobación no concluye, o cuando el efecto no lo pidió este registro (lo hizo otra instalación u otra persona).
+
+Mientras no se resuelva, **nada se repite**. La decisión queda registrada con la fecha, quién la tomó, por qué vía y con qué prueba.
 
 ---
 
@@ -55,40 +64,45 @@ No hace nada más. No reintenta ni espera a que el otro falle.
 
 ## Salida de ejemplo — reconciliar un registro con tres efectos
 
-Registro de ejemplo (inventado) con un efecto hecho, uno fallido y uno dudoso. La orden comprueba cada uno y dice qué hay. **No ejecuta ni repite ningún efecto.**
+Registro de ejemplo (inventado) con un efecto hecho, uno fallido y uno dudoso. `reconcile` mira **una clave por llamada**, así que son tres llamadas, cada una con su código de salida. **Ninguna ejecuta ni repite el efecto.**
+
+Cada llamada imprime una línea `RESULTADO id-del-efecto id-de-ejecución commit`; debajo va lo mismo en llano.
 
 ```
-$ effect-ledger.py reconcile --all      # SIMULADO — ejemplo, no datos reales
+$ effect-ledger.py reconcile ejemplo/repo-a#9001      # SIMULADO — ejemplo, no datos reales
+ALREADY_SUCCEEDED eff-0001 run-0001 abc1234…(ejemplo)                    [salida 7]
+  en llano:  ya estaba hecho. Recibo: commit abc1234, fusionado por "operadora-ejemplo".
 
-EFECTO 1   fusionar PR ejemplo/repo-a#1500
-  estado:      HECHO
-  resultado:   ALREADY_SUCCEEDED
-  recibo:      commit abc1234 (ejemplo), fusionado por "operadora-ejemplo"
-  qué pasa:    nada que hacer; ya está hecho.                       [salida 7]
+$ effect-ledger.py reconcile ejemplo/repo-a#9002      # SIMULADO
+NOT_SENT eff-0002 run-0001 -                                             [salida 0]
+  en llano:  este registro no tiene ningún envío pendiente ni hecho para ese PR.
+             Aquí, porque la comprobación vio pasado el plazo que el merge no ocurrió.
+             No significa «adelante»: pedirlo otra vez pasa de nuevo por la reserva,
+             que vuelve a comprobar antes de enviar nada.
 
-EFECTO 2   fusionar PR ejemplo/repo-a#1501
-  estado:      FALLIDO
-  resultado:   NOT_SENT
-  prueba:      el PR sigue abierto, sin fusión pendiente, y pasó el plazo de espera
-  qué pasa:    este registro no hizo el efecto. Se puede volver a pedir. [salida 0]
-
-EFECTO 3   publicar informe de ejemplo
-  estado:      DUDOSO
-  resultado:   NEEDS_REVIEW   (origen: dispatched)
-  dudoso desde: 03:12 (ejemplo)
-  prueba:      la comprobación no pudo concluir (sin respuesta del servicio)
-  qué pasa:    NO se repite. Necesita tu decisión: hecho o fallido.   [salida 4]
-
-RESUMEN: 1 hecho, 1 fallido, 1 en revisión. Nada se ha repetido.
+$ effect-ledger.py reconcile informe:ejemplo-semanal  # SIMULADO
+NEEDS_REVIEW eff-0003 run-0002 - review_origin=dispatched                [salida 4]
+  en llano:  dudoso desde las 03:12 (ejemplo). La comprobación no pudo concluir
+             y el plazo ya pasó. NO se repite. Necesita resolverse (escena 2).
 ```
 
-Qué significa cada línea, en llano:
+Lo que Savia te enseñaría juntando las tres (resumen informativo, no es una orden):
 
-| Resultado | Lo que quiere decir | ¿Se puede repetir? |
+```
+1 hecho, 1 no enviado por este registro, 1 en revisión. Nada se ha repetido.
+```
+
+En S1 la única operación registrada es el merge de PR. El informe de la tercera fila ilustra cómo se vería otra operación cuando exista.
+
+Qué significa cada resultado, en llano:
+
+| Resultado | Lo que quiere decir | ¿Se puede volver a pedir? |
 |---|---|---|
 | `ALREADY_SUCCEEDED` | Está hecho y hay recibo. | No hace falta. |
-| `NOT_SENT` | Se comprobó que no ocurrió. | Sí. |
-| `NEEDS_REVIEW` | No se sabe. | **No**, hasta que lo compruebes o decidas tú. |
+| `RECONCILED` | Estaba dudoso y la comprobación acaba de confirmar que se hizo. | No hace falta. |
+| `IN_FLIGHT` | Salió hace poco o lo está pidiendo otro; aún no se sabe. | **No**; se espera al plazo. |
+| `NOT_SENT` | Este registro no tiene envío pendiente ni hecho: nunca se pidió, se preparó y no salió, o se comprobó que no ocurrió. Si el PR aparece fusionado, lo hizo otro. | Solo pasando otra vez por la reserva, que comprueba antes. |
+| `NEEDS_REVIEW` | No se sabe, o lo hizo alguien ajeno a este registro. | **No**, hasta que se resuelva (escena 2). |
 
 Los números `[salida N]` son códigos que leen otros programas; tú no tienes que usarlos.
 
