@@ -203,13 +203,13 @@ L63=$(printf 'a%.0s' $(seq 63))
 }
 
 @test "authorize: missing --target value, no args and unknown option are usage errors" {
-    run bash "$AUTHORIZE" --target
+    run bash "$AUTHORIZE" --target < /dev/null
     [[ "$status" -eq 1 ]]
     [[ "$output" == *"ERROR: --target needs a value"* ]]
-    run bash "$AUTHORIZE"
+    run bash "$AUTHORIZE" < /dev/null
     [[ "$status" -eq 1 ]]
     [[ "$output" == *"ERROR: --target is required"* ]]
-    run bash "$AUTHORIZE" --bogus
+    run bash "$AUTHORIZE" --bogus < /dev/null
     [[ "$status" -eq 1 ]]
     [[ "$output" == *"Unknown option: --bogus"* ]]
 }
