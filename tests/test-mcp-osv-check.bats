@@ -26,6 +26,7 @@ case "${FAKE_OSV:-clean}" in
   empty)   printf '\n200' ;;
   e503)    printf '{"error":"unavailable"}\n503' ;;
   notobj)  printf '[1,2]\n200' ;;
+  malodd)  printf '{"vulns":[{"id":"MAL-2026 1","aliases":["MAL/../x"]}]}\n200' ;;
 esac
 SH
   chmod +x "$FAKEBIN/curl"
@@ -193,6 +194,7 @@ minpath() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"VERDICT: ASK"* ]]
   [ ! -e "$CAPTURE/body" ]
+  [ -s "$SAVIA_OSV_RECEIPT_FILE" ]
   run grep -cF "$HOME" "$SAVIA_OSV_RECEIPT_FILE"; [ "$output" = "0" ]
 }
 
@@ -237,6 +239,81 @@ minpath() {
 }
 
 @test "ningún hook ni settings invoca --osv" {
-  run grep -rlE 'mcp-security-audit\.sh[^|;]*--osv' .claude/hooks .claude/settings.json .opencode/plugins
+  # Cualquier fichero de arranque que mencione --osv cuenta, aunque la llamada vaya por
+  # variable o en otra línea. Solo se miran las rutas que existen, para que grep no dé 2.
+  local paths=() p
+  for p in .claude/hooks .claude/settings.json .opencode/plugins; do [[ -e "$p" ]] && paths+=("$p"); done
+  [ "${#paths[@]}" -gt 0 ]
+  run grep -rlF -- '--osv' "${paths[@]}"
   [ "$status" -eq 1 ]
+}
+
+# ── Opciones del ejecutor que cambian qué se instala → ASK (revisión PR #1500) ─
+@test "npx --package=evil left-pad → 2 y sin llamar a OSV" {
+  FAKE_OSV=clean osv npx --package=evil@1.0.0 left-pad@1.3.0
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"VERDICT: ASK"* ]]
+  [[ "$output" == *"--package=evil@1.0.0"* ]]
+  [ ! -e "$CAPTURE/body" ]
+}
+
+@test "npx -p evil left-pad → 2" {
+  FAKE_OSV=clean osv npx -p evil@1.0.0 left-pad@1.3.0
+  [ "$status" -eq 2 ]
+  [ ! -e "$CAPTURE/body" ]
+}
+
+@test "npx --registry URL pkg → 2" {
+  FAKE_OSV=clean osv npx --registry https://registry.example left-pad@1.3.0
+  [ "$status" -eq 2 ]
+  [ ! -e "$CAPTURE/body" ]
+}
+
+@test "uvx --from=evil tool → 2" {
+  FAKE_OSV=clean osv uvx --from=evil==1.0 tool==1.0
+  [ "$status" -eq 2 ]
+  [ ! -e "$CAPTURE/body" ]
+}
+
+@test "uvx --with evil good → 2" {
+  FAKE_OSV=clean osv uvx --with evil==1.0 good==1.0
+  [ "$status" -eq 2 ]
+  [ ! -e "$CAPTURE/body" ]
+}
+
+@test "opciones inofensivas (--yes, -q) antes del paquete siguen dando 0" {
+  FAKE_OSV=clean osv npx --yes -q left-pad@1.3.0 --port 3000
+  [ "$status" -eq 0 ]
+  run jq -r '.package.name' "$CAPTURE/body"
+  [ "$output" = "left-pad" ]
+}
+
+# ── Saneado de IDs no oculta malware ─────────────────────────────────────────
+@test "aviso MAL-* con IDs no imprimibles → 1 con marcador, no 0" {
+  FAKE_OSV=malodd osv npx evil-pkg@1.0.0
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"VERDICT: FAIL"* ]]
+  [[ "$output" == *"MAL-id-no-imprimible"* ]]
+  [[ "$output" != *"MAL/../x"* ]]
+}
+
+# ── Nombres ──────────────────────────────────────────────────────────────────
+@test "npm legacy con mayúsculas (JSONStream) se consulta, no ASK" {
+  FAKE_OSV=clean osv npx JSONStream@1.3.5
+  [ "$status" -eq 0 ]
+  run jq -r '.package.name' "$CAPTURE/body"
+  [ "$output" = "JSONStream" ]
+}
+
+@test "PyPI: el nombre se envía normalizado (PEP 503)" {
+  FAKE_OSV=clean osv uvx MCP_Server..Fetch==1.0
+  [ "$status" -eq 0 ]
+  run jq -r '.package.name' "$CAPTURE/body"
+  [ "$output" = "mcp-server-fetch" ]
+}
+
+@test "curl se llama con -q para ignorar ~/.curlrc" {
+  FAKE_OSV=clean osv npx left-pad@1.3.0
+  [ "$status" -eq 0 ]
+  [ "$(head -1 "$CAPTURE/args")" = "-q" ]
 }

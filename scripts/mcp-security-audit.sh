@@ -98,19 +98,30 @@ osv_main() {
   OSV_EXEC="" OSV_ECO="" OSV_NAME="" OSV_VER=""
   local exec="${1:-}" spec="" a
   [[ $# -gt 0 ]] && shift
-  for a in "$@"; do [[ "$a" == -* ]] && continue; spec="$a"; break; done
   case "$exec" in
     npx) OSV_EXEC=npx; OSV_ECO=npm ;;
     uvx) OSV_EXEC=uvx; OSV_ECO=PyPI ;;
     *) osv_finish unknown 2 "ejecutor no soportado (solo npx o uvx)" "osv-executor:not_executed" ;;
   esac
+  # Antes del paquete solo se admiten opciones que no cambian qué se instala. Cualquier otra
+  # (--package/-p, --from, --with, --registry, --index-url, --) podría hacer que el ejecutor
+  # instale un paquete distinto del comprobado: ASK. Lo que va después del paquete son
+  # argumentos del propio servidor MCP y no cambian lo instalado.
+  for a in "$@"; do
+    case "$a" in
+      -y|--yes|-q|--quiet) continue ;;
+      -*) osv_finish unknown 2 "opción del ejecutor no admitida ($a): podría instalar otro paquete" "osv-package:not_executed" ;;
+    esac
+    spec="$a"; break
+  done
   [[ -n "$spec" ]] || osv_finish unknown 2 "falta el paquete" "osv-package:not_executed"
   local name ver name_re ver_re
   if [[ "$OSV_ECO" == npm ]]; then
     if [[ "$spec" == @*/*@* ]]; then name="@${spec#@}"; name="${name%@*}"; ver="${spec##*@}"
     elif [[ "$spec" == @* || "$spec" != *@* ]]; then name="$spec"; ver=""
     else name="${spec%@*}"; ver="${spec##*@}"; fi
-    name_re='^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$'
+    # Mayúsculas admitidas: npm conserva nombres legacy como JSONStream.
+    name_re='^(@[A-Za-z0-9][A-Za-z0-9._~-]*/)?[A-Za-z0-9][A-Za-z0-9._~-]*$'
     ver_re='^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.+-]+)?$'
   else
     if [[ "$spec" == *==* ]]; then name="${spec%%==*}"; ver="${spec#*==}"
@@ -120,6 +131,8 @@ osv_main() {
     ver_re='^[0-9]+(\.[0-9]+)*([.+_-]?[A-Za-z0-9.!+_-]*)?$'
   fi
   [[ "$name" =~ $name_re ]] || osv_finish unknown 2 "nombre de paquete no válido o local; no se envía" "osv-package:not_executed"
+  # PyPI: nombre normalizado según PEP 503 (minúsculas; -, _ y . seguidos → -).
+  if [[ "$OSV_ECO" == PyPI ]]; then name="$(printf '%s' "$name" | tr 'A-Z' 'a-z' | sed -E 's/[-_.]+/-/g')"; fi
   OSV_NAME="$name"
   [[ -n "$ver" ]] || osv_finish unknown 2 "sin versión exacta fijada; OSV no puede responder por una versión desconocida" "osv-version:not_executed"
   [[ "$ver" =~ $ver_re ]] || osv_finish unknown 2 "versión no exacta o no válida" "osv-version:not_executed"
@@ -128,7 +141,7 @@ osv_main() {
   command -v jq >/dev/null 2>&1 || osv_finish unknown 2 "jq ausente" "jq:missing_tool"
   local body resp rc http payload
   body="$(jq -nc --arg e "$OSV_ECO" --arg n "$OSV_NAME" --arg v "$OSV_VER" '{package:{ecosystem:$e,name:$n},version:$v}')"
-  resp="$(printf '%s' "$body" | curl -sS --max-time "${SAVIA_OSV_TIMEOUT:-15}" -X POST \
+  resp="$(printf '%s' "$body" | curl -q -sS --max-time "${SAVIA_OSV_TIMEOUT:-15}" -X POST \
     -H 'Content-Type: application/json' --data-binary @- -w '\n%{http_code}' "$OSV_URL" 2>/dev/null)"
   rc=$?
   [[ $rc -eq 28 ]] && osv_finish unknown 2 "tiempo agotado consultando OSV" "osv:timeout"
@@ -137,10 +150,15 @@ osv_main() {
   [[ "$http" == 200 ]] || osv_finish unknown 2 "OSV respondió HTTP $http" "osv:unreadable"
   jq -e 'type == "object" and ((.vulns // []) | type == "array")' <<< "$payload" >/dev/null 2>&1 \
     || osv_finish unknown 2 "respuesta de OSV no es JSON válido" "osv:unreadable"
-  local mal
+  # Primero se decide si hay malware y después se sanean los IDs para imprimirlos: un aviso
+  # MAL-* cuyos IDs no pasan el saneado sigue siendo un hallazgo (con un marcador genérico).
+  local mal nmal
+  nmal="$(jq -r '[(.vulns // [])[] | select(([.id] + (.aliases // [])) | map(tostring) | any(startswith("MAL-")))] | length' <<< "$payload" 2>/dev/null)" \
+    || osv_finish unknown 2 "respuesta de OSV ilegible" "osv:unreadable"
   mal="$(jq -r '[(.vulns // [])[] | select(([.id] + (.aliases // [])) | map(tostring) | any(startswith("MAL-"))) | ([.id] + (.aliases // []))[] | tostring | select(test("^[A-Za-z0-9._:-]+$"))] | unique | join(" ")' <<< "$payload" 2>/dev/null)" \
     || osv_finish unknown 2 "respuesta de OSV ilegible" "osv:unreadable"
-  [[ -n "$mal" ]] && osv_finish findings 1 "aviso de malware" "-" "$mal"
+  [[ "$nmal" =~ ^[0-9]+$ ]] || osv_finish unknown 2 "respuesta de OSV ilegible" "osv:unreadable"
+  if [[ "$nmal" -gt 0 ]]; then osv_finish findings 1 "aviso de malware" "-" "${mal:-MAL-id-no-imprimible}"; fi
   [[ "$(jq -r '.next_page_token // empty' <<< "$payload")" ]] \
     && osv_finish unknown 2 "respuesta de OSV paginada e incompleta" "osv:limit"
   osv_finish clean 0 "sin avisos MAL-*" "-"
