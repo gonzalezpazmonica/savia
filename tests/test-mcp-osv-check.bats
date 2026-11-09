@@ -253,7 +253,7 @@ minpath() {
   FAKE_OSV=clean osv npx --package=evil@1.0.0 left-pad@1.3.0
   [ "$status" -eq 2 ]
   [[ "$output" == *"VERDICT: ASK"* ]]
-  [[ "$output" == *"--package=evil@1.0.0"* ]]
+  [[ "$output" == *"opción del ejecutor no admitida"* ]]
   [ ! -e "$CAPTURE/body" ]
 }
 
@@ -316,4 +316,72 @@ minpath() {
   FAKE_OSV=clean osv npx left-pad@1.3.0
   [ "$status" -eq 0 ]
   [ "$(head -1 "$CAPTURE/args")" = "-q" ]
+}
+
+# ── Recibo: nunca entrada cruda ni JSON roto (revisión PR #1500, 2.ª ronda) ────
+@test "opción con comillas: recibo JSON válido y sin la entrada cruda" {
+  osv npx '--x"y' p@1.0.0
+  [ "$status" -eq 2 ]
+  [[ "$output" != *'--x"y'* ]]
+  run jq -e -s 'length == 1 and .[0].result == "unknown" and .[0].exit == 2' "$SAVIA_OSV_RECEIPT_FILE"
+  [ "$status" -eq 0 ]
+  run grep -cF -- '--x"y' "$SAVIA_OSV_RECEIPT_FILE"
+  [ "$output" = "0" ]
+}
+
+@test "opción con credencial: ni stdout ni recibo la repiten" {
+  osv npx --registry=https://user:S3CRET@registry.example left-pad@1.3.0
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"S3CRET"* ]]
+  run grep -cF "S3CRET" "$SAVIA_OSV_RECEIPT_FILE"
+  [ "$output" = "0" ]
+}
+
+@test "sin jq: el recibo de respaldo sigue siendo JSON válido" {
+  local p; p="$(minpath with-curl)"
+  run env PATH="$p" bash "$SCRIPT" --osv npx left-pad@1.3.0
+  [ "$status" -eq 2 ]
+  run python3 -c 'import json,sys; r=[json.loads(l) for l in open(sys.argv[1])][0]; print(r["name"], r["version"], r["exit"], r["reason"])' "$SAVIA_OSV_RECEIPT_FILE"
+  [ "$output" = "left-pad 1.3.0 2 jq ausente" ]
+}
+
+@test "escapador de respaldo: comillas, barras y controles dan JSON válido" {
+  run bash -c 'source <(sed -n "/^osv_json_str()/p" "$1"); osv_json_str "$(printf "a\"b\\\\c\nd\te")"' _ "$SCRIPT"
+  [ "$status" -eq 0 ]
+  run python3 -c 'import json,sys; print(json.loads(sys.argv[1]))' "$output"
+  [ "$output" = 'a"b\cde' ]
+}
+
+# ── Versiones: solo formas que OSV recibe igual que las resuelve el ejecutor ────
+@test "npm con metadatos de build (+x) → 2 y sin llamar a OSV" {
+  FAKE_OSV=clean osv npx evil@1.0.0+x
+  [ "$status" -eq 2 ]
+  [ ! -e "$CAPTURE/body" ]
+}
+
+@test "npm con prerelease sigue consultándose" {
+  FAKE_OSV=clean osv npx pkg@1.0.0-beta.1
+  [ "$status" -eq 0 ]
+  run jq -r '.version' "$CAPTURE/body"
+  [ "$output" = "1.0.0-beta.1" ]
+}
+
+@test "PyPI con versión no canónica (1.0.0-RC1, 1.0+local, 1.x) → 2" {
+  local i=0 v
+  for v in 1.0.0-RC1 1.0+local 1.x 1.0.dev-foo; do
+    i=$((i + 1)); export CAPTURE="$BATS_TEST_TMPDIR/cap$i"; mkdir -p "$CAPTURE"
+    FAKE_OSV=clean osv uvx tool=="$v"
+    [ "$status" -eq 2 ]
+    [ ! -e "$CAPTURE/body" ]
+  done
+}
+
+@test "PyPI con versión canónica (1.0rc1, 2.1.post1, 1!2.0.dev3) se consulta" {
+  local v
+  for v in 1.0rc1 2.1.post1 '1!2.0.dev3'; do
+    FAKE_OSV=clean osv uvx tool=="$v"
+    [ "$status" -eq 0 ]
+    run jq -r '.version' "$CAPTURE/body"
+    [ "$output" = "$v" ]
+  done
 }
