@@ -1,5 +1,6 @@
 ---
-status: APPROVED
+status: IMPLEMENTING
+current_slice: S1
 priority: P1
 developer_type: agent-single
 created: 2026-11-04
@@ -16,6 +17,9 @@ timeline:
   - from: "2026-11-09"
     learned: "2026-11-09"
     value: "APPROVED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "IMPLEMENTING"
 ---
 
 # SE-511 — Contexto fijo por turno a la mitad o menos
@@ -89,8 +93,8 @@ En tokens: la parte versionada sale a **≈ 6.800** con la regla del repo (carac
 - prototipo: una sesión con el bloque compacto y otra con el contexto actual, para que la persona juzgue si «sigue siendo Savia» antes de medir (S0 del plan por slices).
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-09
+- respuesta: «Sí, pero recupera la voz (Recommended)». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09, tras leer la comparativa de seis preguntas emparejadas (contexto actual frente a compacto, Sonnet). Condición para S2: el bloque compacto recupera dos o tres frases modelo de tono para no perder mordiente; prototipo en la rama agent/se511-s0-prototipo-20261109 (8872cfbaa).
 
 ## Qué decide esta spec
 

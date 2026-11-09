@@ -1,6 +1,6 @@
 # Roadmap Current (GENERATED — no editar; fuente: planning-state.json)
 
-Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
+Fase A · WIP 5/5. Estado y cola canónicos; ADR-002.
 
 ## Cola de sesiones (orden por gates, sin fechas)
 
@@ -212,7 +212,7 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-505 [APPROVED] Puerta de comprensión: escenas confirmadas antes de la spec, prototipo antes del código — evidencia: docs/specs/SE-505-puerta-de-comprension.spec.md
 - SE-508 [APPROVED] Guard previo para tools MCP con escritura y para WebFetch — evidencia: docs/specs/SE-508-mcp-webfetch-pretooluse-guard.spec.md
 - SE-510 [APPROVED] Guardas sin bloqueos falsos y un despachador por evento — evidencia: docs/specs/SE-510-guardas-sin-bloqueos-falsos-despachador.spec.md
-- SE-511 [APPROVED] Contexto fijo por turno a la mitad o menos — evidencia: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
+- SE-511 [IMPLEMENTING] Contexto fijo por turno a la mitad o menos — evidencia: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
 - SE-513 [APPROVED] Admisión duradera de cambios de intención y comprobación previa — evidencia: docs/specs/SE-513-admision-duradera-y-comprobacion-previa.spec.md
 - SE-514 [APPROVED] Atención humana: una sola cola de preguntas, con su porqué — evidencia: docs/specs/SE-514-atencion-humana-cola-unica.spec.md
 - SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md
