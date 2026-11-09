@@ -245,3 +245,32 @@ L63=$(printf 'a%.0s' $(seq 63))
     done
     [[ ! -e "$TOOLLOG" ]]
 }
+
+@test "scan: theHarvester and httpx receive the target and the subdomain list" {
+    echo "AUTHORIZED" > "$AUTH_FILE"
+    run bash "$SCRIPT" --target "$TEST_TARGET" --tools subfinder,httpx,theharvester
+    [[ "$status" -eq 0 ]]
+    grep -qE "^theHarvester -d $TEST_TARGET -b bing,crtsh -f $OUTPUT_DIR/attack-surface-$TEST_TARGET-[0-9]{8}/raw/harvest$" "$TOOLLOG"
+    grep -qE "^httpx -l $OUTPUT_DIR/attack-surface-$TEST_TARGET-[0-9]{8}/subdomains.txt -silent -json -o " "$TOOLLOG"
+}
+
+@test "scan: without native tools it falls back to Docker images with the same target" {
+    # Only a fake docker on PATH (plus the system dirs, which have no scanner).
+    [ -z "$(PATH=/usr/bin:/bin command -v subfinder theHarvester dnstwist httpx)" ] || skip "a real scanner is installed in /usr/bin"
+    DOCKBIN="$BATS_TEST_TMPDIR/dockbin"; mkdir -p "$DOCKBIN"
+    cat > "$DOCKBIN/docker" <<FAKE
+#!/usr/bin/env bash
+echo "docker \$*" >> "$TOOLLOG"
+[ "\$1" = run ] && [[ "\$*" == *subfinder* ]] && printf 'a.x\n'
+exit 0
+FAKE
+    chmod +x "$DOCKBIN/docker"
+    echo "AUTHORIZED" > "$AUTH_FILE"
+    PATH="$DOCKBIN:/usr/bin:/bin" run bash "$SCRIPT" --target "$TEST_TARGET" --tools subfinder,httpx,theharvester,dnstwist
+    [[ "$status" -eq 0 ]]
+    grep -qx "docker run --rm projectdiscovery/subfinder -d $TEST_TARGET -silent" "$TOOLLOG"
+    grep -qx "docker run --rm -i projectdiscovery/httpx -silent -json" "$TOOLLOG"
+    grep -qx "docker run --rm secsi/theharvester -d $TEST_TARGET -b bing,crtsh" "$TOOLLOG"
+    grep -qx "docker run --rm elceef/dnstwist --registered --format json $TEST_TARGET" "$TOOLLOG"
+    [[ "$output" == *"[subfinder] Done (Docker fallback)"* ]]
+}
