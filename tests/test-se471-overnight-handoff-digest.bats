@@ -132,6 +132,7 @@ jget() {
   run bash "$SCRIPT" --runs-dir "$R" --max-decisions 2
   [[ "$output" == *"+3 sin listar"* ]]
   run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(jget 'len(d["decisiones"])')" = "5" ]
   [ "$(jget 'd["sin_listar"]')" = "0" ]
 }
@@ -253,6 +254,7 @@ jget() {
   [ "$(jget '",".join(r["nombre"] for r in d["runs"])')" = "nueva" ]
   [ "$(jget 'd["ventana"]["desde"]')" = "2026-10-23T20:00:00Z" ]
   run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(jget '",".join(r["nombre"] for r in d["runs"])')" = "nueva,vieja" ]
 }
 
@@ -376,6 +378,7 @@ online_one() { # online_one <json gh>: un run OK con PR y --online; deja el JSON
   touch -d '2026-10-20T03:00:00Z' "$R/vieja/done"
   touch -d '2026-10-24T03:00:00Z' "$R/nueva/done"
   run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(jget 'd["ventana"]["desde"]+" "+d["ventana"]["hasta"]')" = "2026-10-20T03:00:00Z 2026-10-24T03:00:00Z" ]
 }
 
@@ -399,6 +402,7 @@ online_one() { # online_one <json gh>: un run OK con PR y --online; deja el JSON
   R="$TMP/runs"; mkdir -p "$R"
   mark "$R" uno $'ESTADO: FALLO — baseline roto\nrelanzar con la caché limpia'
   run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(jget 'd["runs"][0]["motivo"]')" = "baseline roto" ]
   [ "$(jget 'd["runs"][0]["siguiente"]')" = "relanzar con la caché limpia" ]
 }
@@ -417,6 +421,7 @@ online_one() { # online_one <json gh>: un run OK con PR y --online; deja el JSON
   ln -s "$TMP/fuera/ajeno" "$R/enlace"
   mark "$R" propio 'ESTADO: OK'
   run bash "$SCRIPT" --runs-dir "$R" --format json
+  [ "$status" -eq 0 ]
   [ "$(jget '",".join(r["nombre"] for r in d["runs"])')" = "propio" ]
 }
 
