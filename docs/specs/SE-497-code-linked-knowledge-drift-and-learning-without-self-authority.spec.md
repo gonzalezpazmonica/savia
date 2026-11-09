@@ -319,3 +319,13 @@ Cada slice es una PR aparte; revertirla devuelve el comportamiento anterior. `co
 - Graphify (`Graphify-Labs/graphify`): aristas `EXTRACTED`/`INFERRED`, confianza de camino igual al salto más débil, nombres ambiguos rechazados con candidatos.
 - Agentic Context Engine (`kayba-ai/agentic-context-engine`): Reflector sobre trazas y separación train/held-out. Su SkillManager actualiza el Skillbook sin persona en medio: es el antipatrón que R9–R13 impiden.
 - `docs/rules/domain/knowledge-graph.md`, `docs/rules/domain/scl-001-learning-loop.md`, `docs/rules/domain/instincts-protocol.md`, `docs/rules/domain/skill-lifecycle.md`, `docs/specs/SCL-006-autonomia-graduada.spec.md`.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Parte 2, R7**: el esquema de la lección lo define SE-473. R7 se reduce a referenciarlo y añadir `regression_test` y `confidence`. Esta spec conserva el paso de una LP a `active`: recibo, `human_trailer` verificable, rollback y R13.
+- **Dependencias**: añadir SE-494 (corrige `to_evals()` de SE-364, que bloquea S5). SE-488 ya está APPROVED; el texto que la trata como PROPOSED queda obsoleto.
+- **Target `skill`**: la propuesta de skill de SE-409 S1 sale como LP por este camino, no por un canal aparte.
+- **Relación con SE-515**: una obligación `guarded` o `review_required` exige la aprobación auténtica que define esta Parte 2. Mientras no esté implementada, SE-515 no pasa de `advisory`.
+- **R13 y SCL-006**: confirmado en main que `learning-autonomy.sh` solo lo consume el orquestador como informe y nadie aplica el nivel. El riesgo es de etiqueta, no de permisos concedidos hoy.

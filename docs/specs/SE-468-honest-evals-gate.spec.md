@@ -109,3 +109,9 @@ riesgo, DEFERRED), SE-444 (autoridad del verificador), SE-469 (tribunales medido
 ### Portability classification
 
 - [x] **PURE_BASH**: scripts y workflow de CI; ningún binding de frontend.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Absorbe el gate de bloqueo pendiente de SE-381**, que pasa a SUPERSEDED: la matriz de solo informe está en main (#1084) y lo que faltaba es justo que el gate pueda fallar.

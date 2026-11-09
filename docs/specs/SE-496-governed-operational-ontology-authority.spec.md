@@ -1,11 +1,12 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-single
 created: 2026-11-01
 author: Savia
 phase: B
 risk: L4
+human_surface: true
 related_specs: [SE-343, SE-362, SE-386, SE-387, SE-401, SE-488, SE-491]
 origin: "Iniciativa SAVIA-RESEARCH-03 / validación V4 del análisis de repositorios difundidos por André Lindenberg (2026-11-01): AWS context-ontology-accelerator y operational-ontology. Solo spec."
 timeline:
@@ -13,6 +14,9 @@ timeline:
     learned: "2026-11-01"
     value: "PROPOSED"
     source: "spec-lifecycle:auto"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 # SE-496 — Ontología operativa gobernada: la autoridad vive fuera del modelo
 
@@ -308,6 +312,35 @@ Nada depende de una persona concreta. El perfil activo solo **selecciona** qué 
 
 - [x] **DUAL_BINDING**: la lógica está en Python stdlib y bash; los dos frontends solo la invocan, sin port TS de la lógica.
 
+## Lo que he entendido
+
+### Escenas
+1. Quieres que Yema abra PRs en borrador en un repo hasta el viernes, solo desde ramas agent/* y con la CI verde. Te llega al móvil una PR de autorización con eso en lenguaje llano; la fusionas y vale hasta el viernes.
+2. El jueves Yema intenta abrir un PR con la CI roja. Se rechaza con el motivo: «precondición: CI verde». No te despierta; lo ves en el resumen.
+3. El grafo de conocimiento cree que un repo es de tu proyecto. Eso no da permiso a nadie: solo vale lo que firmaste.
+
+### Palabras de la persona
+«Savia Viva + tokens y efectos» — 2026-11-09, respuesta de la operadora a la pregunta interactiva sobre qué specs aprobar.
+
+### Qué SÍ será
+- Un solo contrato para delegar, con ámbito, precondiciones y caducidad.
+- Rechazos con motivo legible.
+
+### Qué NO será
+- Permisos deducidos por el modelo o por el grafo.
+- Un tercer formato de firma: los permisos de merge y de publicación pasan a este contrato.
+
+### Confirmación
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
+
+## Slice S0 — Prototipo navegable
+- prototipo: la PR de autorización de la escena 1 tal como llega al móvil y el texto exacto del rechazo de la escena 2.
+
+### Confirmación del prototipo
+- fecha: pendiente (obligatoria antes de poner S1 en curso)
+- respuesta: pendiente
+
 ## Aprobación
 
-Se aprueba al fusionar la PR de la spec (SE-488). La aprobación cubre F0 y F1. F2 necesita una decisión aparte de la operadora con el informe de sombra delante.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 

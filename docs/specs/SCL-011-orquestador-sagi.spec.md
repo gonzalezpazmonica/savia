@@ -87,3 +87,9 @@ tarea no vista (2 iteraciones alineadas con CRITERIO.md). Cableado en
 - SCL-012 (pruebas P1-P5), `docs/sagi-roadmap.md` (H5 decide producción).
 - L11: cúpula SaviaLabs (protocolo v1.2).
 - CRITERIO.md (autoridad), CRIT-031 (no auto-activación).
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Límite conocido**: `read_sustrate` pide el recall en modo `shadow` y solo cuenta hits; `L` se calcula con `p_consistent=0.5`, `divergence=0.2` e `ignorance-resolved=0.1` cuando nadie pasa datos. Esa salida es una ruta reproducible, no una medida de aprendizaje. SE-515 S1 la marca `no medido` y conecta el recall efectivo.

@@ -1,9 +1,10 @@
 {
   "id": "SE-510",
-  "status": "PROPOSED",
+  "status": "APPROVED",
   "priority": "P1",
   "phase": "A",
   "title": "Guardas sin bloqueos falsos y un despachador por evento",
   "evidence": "docs/specs/SE-510-guardas-sin-bloqueos-falsos-despachador.spec.md",
-  "note": "Análisis Gentleman frente a Savia (2026-11-04). Corpus de órdenes legítimas con los 4 bloqueos falsos reales y su par peligroso, registro de bloqueos y tasa FP, despachador SE-253 con fallo cerrado y paridad TS/bash, presupuesto por llamada en pared y CPU."
+  "note": "Análisis Gentleman frente a Savia (2026-11-04). Corpus de órdenes legítimas con los 4 bloqueos falsos reales y su par peligroso, registro de bloqueos y tasa FP, despachador SE-253 con fallo cerrado y paridad TS/bash, presupuesto por llamada en pared y CPU.",
+  "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"
 }

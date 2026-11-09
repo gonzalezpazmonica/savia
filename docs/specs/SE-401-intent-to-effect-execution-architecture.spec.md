@@ -525,3 +525,9 @@ Intent/Effect/Evidence primitives are still not available in this checkout.
 Consequently no new I2E runtime implementation begins until the operadora
 approves this ownership table against AEK. Existing SE-396 authority work is a
 reused prerequisite, not an implicit approval of SE-401.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Sin fases nuevas del motor de autoridad aquí**: F0 de solo lectura es lo aprobado. El contrato y el kernel de autoridad van por SE-496 y su modelo por SE-502. Esta spec queda como arquitectura de referencia.

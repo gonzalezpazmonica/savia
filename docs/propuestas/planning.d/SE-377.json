@@ -1,0 +1,9 @@
+{
+  "id": "SE-377",
+  "status": "SUPERSEDED",
+  "evidence": "PR #1084 (negative tests + receipts visibility); gate de bloqueo CI pendiente",
+  "title": "Policy Enforcement Completeness",
+  "phase": "C",
+  "deferral": "Ruta 2026-09-26 (ADR-002): fuera del WIP; retoma en la Fase C. Lo mergeado permanece; el resto espera a su fase.",
+  "note": "Decisión de la operadora, pregunta interactiva 2026-11-09 (podas). El gate de bloqueo pendiente pasa a SE-453 y SE-454; lo entregado (#1084) permanece."
+}

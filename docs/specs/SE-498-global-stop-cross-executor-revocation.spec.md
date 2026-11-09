@@ -1,11 +1,12 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P0
 developer_type: agent-single
 created: 2026-11-02
 author: Savia
 phase: B
 risk: L4
+human_surface: true
 related_specs: [SE-343, SE-433, SE-445, SE-488, SE-490, SE-493, SE-496]
 origin: "Hueco G4 del análisis de arquitectura de control (2026-11-02): Savia tiene cuatro STOP locales que no se hablan; un STOP sin propagación de revocación no es una revocación."
 timeline:
@@ -13,6 +14,9 @@ timeline:
     learned: "2026-11-02"
     value: "PROPOSED"
     source: "spec-lifecycle:auto"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 # SE-498 — STOP global y revocación entre ejecutores
 
@@ -332,6 +336,35 @@ El adaptador de Yema se implementa en el repo de Yema con su flujo (rama `agent/
 
 Revertir la PR deja los cuatro STOP nativos como están hoy. El directorio `~/.savia/control` queda inerte.
 
+## Lo que he entendido
+
+### Escenas
+1. Dices «para todo». Con una orden se detienen el sprint de merges, los workers, Yema y Soul, y ves: «4 de 4 han parado. 1 efecto estaba en vuelo: merge de #1500, dudoso; queda en revisión.»
+2. Un agente con un permiso de ayer intenta seguir después de la parada. El permiso ya no vale: es anterior a la parada.
+3. Reanudas. Savia comprueba de nuevo cada permiso y te dice qué no puede reanudar sin una firma tuya nueva.
+
+### Palabras de la persona
+«Savia Viva + tokens y efectos» — 2026-11-09, respuesta de la operadora a la pregunta interactiva sobre qué specs aprobar.
+
+### Qué SÍ será
+- Una orden de parada con acuse de cada ejecutor.
+- Permisos anteriores a la parada invalidados; reanudar revalida.
+
+### Qué NO será
+- Deshacer lo irreversible.
+- Que un agente reanude: puede parar, pero no reanudar.
+
+### Confirmación
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
+
+## Slice S0 — Prototipo navegable
+- prototipo: la salida de `pause`, `reconcile` y `resume` sobre un fixture con cuatro ejecutores y un efecto en vuelo.
+
+### Confirmación del prototipo
+- fecha: pendiente (obligatoria antes de poner S1 en curso)
+- respuesta: pendiente
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched
@@ -352,3 +385,7 @@ Revertir la PR deja los cuatro STOP nativos como están hoy. El directorio `~/.s
 ### Portability classification
 
 - [x] **DUAL_BINDING**: la lógica vive en un script común; cada frontend solo registra el gate.
+
+## Aprobación
+
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 

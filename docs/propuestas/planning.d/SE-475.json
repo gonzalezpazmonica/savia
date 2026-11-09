@@ -1,0 +1,9 @@
+{
+  "id": "SE-475",
+  "status": "SUPERSEDED",
+  "priority": "P2",
+  "title": "Clase del bloqueo en los mensajes de hook: FORMA o POLÍTICA",
+  "note": "Absorbida por SE-510 D2: la clase FORMA o POLÍTICA es un campo del registro de bloqueos y un prefijo del mensaje, con la misma biblioteca bash y TS. Tocaban los mismos hooks y guards.",
+  "evidence": "docs/specs/SE-475-hook-block-class-contract.spec.md",
+  "phase": "D"
+}

@@ -664,3 +664,10 @@ una de ellas sigue actuando.
 ## Aprobación
 
 Pendiente de la operadora. Esta spec no cambia ningún `status` ni ninguna regla hasta su aprobación.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Un solo formato de autorización**: antes de implementar S1, el grant de política se aprueba por fusión de PR (SE-488) y, si SE-496 se aprueba, se proyecta a su contrato de delegación. Esta spec no introduce un tercer formato de firma.
+- Los pendientes de la mañana (R6) entran por la cola única de SE-514.

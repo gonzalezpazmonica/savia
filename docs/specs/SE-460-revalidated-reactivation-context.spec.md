@@ -109,3 +109,10 @@ alguien la cambió después de aprobarla. Medido sobre `main` (0dd2ea30b):
 ### Portability classification
 
 - [x] **Sin binding de frontend**: la lógica es Python (`scripts/automations/`, pytest) más un script bash de carga de memoria; ninguno depende del frontend. La etiqueta `PURE_BASH` no es exacta para la parte Python.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Límite a declarar**: el sello HMAC con clave local no separa a la persona del agente (argumento de SE-491 y SE-496). S1–S2 son higiene de vigencia y procedencia, no prueba de aprobación humana. Una aprobación con autoridad pasa por SE-488.
+- S2 (revalidar en cada disparo) es el antecedente de la revalidación antes del efecto de SE-515 S4.

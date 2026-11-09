@@ -1,0 +1,10 @@
+{
+  "id": "SE-406",
+  "status": "SUPERSEDED",
+  "priority": "P3",
+  "title": "Savia Relay: canal activo con la operadora por WhatsApp",
+  "note": "Sustituida por SE-431 D3 y SE-430: los avisos urgentes y el Relay de Soul van por la app móvil de Space, como ya dice la cabecera de la propia spec. Sin dependientes.",
+  "evidence": "docs/specs/SE-406-whatsapp-operator-channel.spec.md",
+  "phase": "B",
+  "deferral": "Aparcada: los avisos y el Relay de Soul van por la app móvil de Savia Space (SE-430, SE-431 D3). Hoy la app consulta cada 15 minutos o más; se revisa cuando se decida el push propio de SE-430 (D3), o si la app no basta para lo urgente."
+}

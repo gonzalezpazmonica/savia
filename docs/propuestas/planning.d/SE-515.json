@@ -1,0 +1,10 @@
+{
+  "id": "SE-515",
+  "status": "APPROVED",
+  "priority": "P1",
+  "phase": "C",
+  "title": "Aprendizaje aplicado: de la lección recuperada a la obligación comprobada",
+  "evidence": "docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md",
+  "note": "Savia Viva R6, candidata C3. Cinco grados de garantía declarados; aplicabilidad por metadatos y no por similitud; fuerzas advisory, review_required y guarded; verificador externo al modelo por ruta. Sin almacén nuevo: campos en LP (SE-473) y enforcement estructurado en CRITERIO. Cada slice se aprueba por separado; S0 es solo lectura.",
+  "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "SE-513",
+  "status": "APPROVED",
+  "priority": "P1",
+  "phase": "C",
+  "title": "Admisión duradera de cambios de intención y comprobación previa",
+  "evidence": "docs/specs/SE-513-admision-duradera-y-comprobacion-previa.spec.md",
+  "note": "Savia Viva R6, candidata C1. Cambios de prioridad de la persona persistidos y deduplicados en la cola de SE-075, con estados ADMITTED, APPLIED_TO_PLAN y UNKNOWN; promoción de señales por regla; llamada al resolvedor de SE-515 antes de admitir trabajo de riesgo. Escenas pendientes de confirmación (SE-505).",
+  "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"
+}

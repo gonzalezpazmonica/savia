@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: DEFERRED
 priority: P1
 developer_type: agent-single
 created: 2026-11-03

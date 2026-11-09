@@ -1,9 +1,10 @@
 {
   "id": "SE-508",
-  "status": "PROPOSED",
+  "status": "APPROVED",
   "priority": "P1",
   "phase": "A",
   "title": "Guard previo para tools MCP con escritura y para WebFetch",
   "evidence": "docs/specs/SE-508-mcp-webfetch-pretooluse-guard.spec.md",
-  "note": "Hueco G8, rutas E01, E02 y E04 del inventario de rutas de efecto (02-11). PreToolUse con catálogo de clases, desconocida = ask, merge MCP = deny, WebFetch en observe primero. DUAL_BINDING. Confirmación de escenas pendiente (SE-505)."
+  "note": "Hueco G8, rutas E01, E02 y E04 del inventario de rutas de efecto (02-11). PreToolUse con catálogo de clases, desconocida = ask, merge MCP = deny, WebFetch en observe primero. DUAL_BINDING. Confirmación de escenas pendiente (SE-505).",
+  "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"
 }

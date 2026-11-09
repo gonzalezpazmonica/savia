@@ -1,0 +1,11 @@
+{
+  "id": "SE-386",
+  "status": "SUPERSEDED",
+  "approval": "Mónica 2026-09-05: 'aprobada'",
+  "priority": "P1",
+  "title": "Constitutional Runtime Contracts (LAWS + Capability Contracts + Safety Metadata)",
+  "note": "Decisión de la operadora, pregunta interactiva 2026-11-09 (podas). F5 pasa a SE-496; F1 y F2 en main (#1090); F3 y F4 se abandonan.",
+  "evidence": "PR #1090: F1+F2 laws, registry, descriptors y checks mergeados; F3-F5 permanecen pendientes",
+  "phase": "B",
+  "deferral": "Ruta 2026-09-26 (ADR-002): fuera del WIP; retoma en la Fase B. Lo mergeado permanece; el resto espera a su fase."
+}

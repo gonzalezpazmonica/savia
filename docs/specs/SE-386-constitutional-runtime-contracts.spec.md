@@ -1,6 +1,6 @@
 # SE-386 — Savia Constitutional Runtime Contracts
 
-**Estado:** DEFERRED — Mónica (operadora), 2026-09-05: "aprobada"
+**Estado:** SUPERSEDED — decisión de la operadora del 2026-11-09 por pregunta interactiva; absorbida por SE-496 (F5); F1 y F2 en main (#1090), F3 y F4 se abandonan. Estado y aprobación anteriores: Mónica (operadora), 2026-09-05: "aprobada"
 **Fecha:** 2026-09-05 · **Prioridad:** P1 · **Developer Type:** agent-team · **Risk:** L3
 **Dominio:** Governance/Architecture · **Principios:** CRIT-001, humano decide, soberanía
 **Origen:** spec de la operadora (2026-09-05). Renumerada de SE-265 (ocupado: court-model-tiers) a **SE-386** (verificado libre).
@@ -71,3 +71,9 @@ Distinción formal capas · laws/README · registry · ≥5 leyes · specs decla
 
 ## Referencias
 CRITERIO (no duplicado) · SE-365 · SE-375 · SE-374/377/383 · spec operadora 2026-09-05
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **F5 pasa a SE-496**, que convierte los descriptores de esta spec en acciones con precondiciones y efectos. F1 y F2 están en main (#1090); F3 y F4 esperan decisión.

@@ -1,6 +1,6 @@
 ---
 id: SE-394
-status: DEFERRED
+status: SUPERSEDED
 priority: P0
 created: 2026-09-07
 developer_type: human

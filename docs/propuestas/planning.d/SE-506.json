@@ -1,9 +1,9 @@
 {
   "id": "SE-506",
-  "status": "PROPOSED",
+  "status": "DEFERRED",
   "priority": "P2",
   "phase": "A",
   "title": "Fichas de estudio y afirmación con atribución determinista",
   "evidence": "docs/specs/SE-506-evidence-cards-deterministic-attribution.spec.md",
-  "note": "Línea A del informe de conocimiento y evidencia (02-11). Depende de SE-449 implementada; S0 piloto PA prerregistrado; S1 solo si el IC excluye 0. Verificador sin LLM: cita literal + localizador + revisión."
+  "note": "Decisión de la operadora, pregunta interactiva 2026-11-09 (podas). Aplazada: sin dependientes y depende de SE-449, sin implementar."
 }

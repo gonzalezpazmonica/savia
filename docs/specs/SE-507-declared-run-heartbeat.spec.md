@@ -154,3 +154,11 @@ Esa frase es sobre el gemelo, no sobre el latido. La operadora no ha pedido el l
 ## Aprobación
 
 Spec PROPOSED. Requiere la confirmación de escenas de la operadora (SE-505) antes de pasar a APPROVED. Esta PR solo añade documentación; ningún agente la fusiona sin grant.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Dependencias corregidas**: SE-504 y SE-505 ya existen y están APPROVED. Los párrafos que las dan por inexistentes quedan obsoletos.
+- **Slice nuevo propuesto**: el digest de SE-471, ya en main, lee del ledger de runs en lugar de las marcas de fin, con la correspondencia `OK`→`ok`, `FALLO`→`failed` y `PARCIAL`→`ok` con nota. SE-471 dejó ese registro para otra spec: es esta.
+- Los avisos de runs del punto 9 entran por la cola única de SE-514.

@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-single
 created: 2026-11-04
@@ -13,6 +13,9 @@ timeline:
   - from: "2026-11-04"
     learned: "2026-11-04"
     value: "PROPOSED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 
 # SE-510 — Guardas sin bloqueos falsos y un despachador por evento
@@ -70,8 +73,7 @@ La cifra en serie mide **CPU y procesos**, no la espera de la persona: Claude Co
 5. El despachador de un evento casca. La herramienta no se ejecuta; el mensaje dice qué falló. Nunca pasa una orden porque la guarda no llegó a correr.
 
 ### Palabras de la persona
-
-Pendiente: esta spec la redactó una worker sin acceso a la conversación de la operadora del 2026-11-04. Hay que copiar aquí, literal y con fecha, la frase de la operadora que encargó el análisis o fijó la especialización.
+«Luego usaremos yema con codex y savia con sonnet para implementar y optimizar el uso de tokens.» — 2026-11-09, mensaje de la operadora que encarga la repriorización tras Savia Viva R6. Sobre tokens en general, no sobre guardas; el alcance de aprobación: «Savia Viva + tokens y efectos» — 2026-11-09, respuesta de la operadora a la pregunta interactiva sobre qué specs aprobar.
 
 ### Qué SÍ será
 
@@ -87,9 +89,15 @@ Pendiente: esta spec la redactó una worker sin acceso a la conversación de la 
 - No sube el registro a ningún sitio: se queda en `output/` de la máquina.
 
 ### Confirmación
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
-fecha: pendiente
-respuesta: pendiente. La redactó una worker headless sin canal con la persona; antes de aprobar hay que enseñar las escenas por pregunta interactiva y copiar la respuesta literal (SE-505, PR #1476).
+## Slice S0 — Prototipo navegable
+- prototipo: los mensajes que ve la persona en las escenas 1, 2, 3 y 5, antes y después del cambio, con su clase FORMA o POLÍTICA, y la salida de `scripts/guard-blocks.sh report` sobre un registro de ejemplo de una semana.
+
+### Confirmación del prototipo
+- fecha: pendiente (obligatoria antes de poner S1 en curso)
+- respuesta: pendiente
 
 ## Qué decide esta spec
 
@@ -173,6 +181,7 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 
 ## Plan por slices
 
+0. **S0** — Prototipo de los mensajes y del informe, confirmado por la persona (SE-505).
 1. **S1** — Corpus D1 con la semilla F1a–F3, sus pares B1, B1b, B2 y B3, y B4, runner sobre el existente, CI en rojo con main (AC-1, AC-3).
 2. **S2** — Arreglos de F1–F3 en bash y TS, y plantilla y aviso de F4; registro de bloqueos y `guard-blocks.sh` (AC-2, AC-4, AC-7, AC-10).
 3. **S3** — Despachador con fallo cerrado, tabla generada, en sombra (AC-5, AC-6, AC-9).
@@ -211,4 +220,10 @@ S1 versiona estas órdenes como `scripts/hook-dispatch-bench.sh` y casos del cor
 
 ## Aprobación
 
-Spec PROPOSED. La aprueba la operadora, o la orquestadora con autoridad delegada en su PR, después de la confirmación de escenas (SE-505). Esta PR solo añade documentación.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). Absorbe SE-475 (clase FORMA o POLÍTICA del bloqueo).
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Absorbe SE-475**: la clase del bloqueo (`FORMA` o `POLÍTICA`) es un campo de `output/guard-blocks.jsonl` (D2) y un prefijo del mensaje del hook, con la biblioteca común bash y TS. Las dos specs tocaban los mismos hooks y guards. SE-475 pasa a SUPERSEDED.

@@ -58,3 +58,9 @@ p ≥ 0.85            → L3 (unattended) — solo con historial + aprobación h
 - SE-292 S6: p_consistent
 - loop-phasing L0-L3: `docs/rules/domain/loop-phasing.md`
 - Script: `scripts/learning-autonomy.sh`
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Límite conocido**: el nivel que calcula `learning-autonomy.sh` no lo aplica nadie; es informativo. Ninguna cifra concede autonomía (SE-497 R13, SE-515).

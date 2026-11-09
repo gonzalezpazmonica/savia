@@ -183,3 +183,9 @@ El cambio no activa routing adaptativo ni eleva authority.
 Evidencia TDD: 14 fallos iniciales y un fallo adicional de selección autorizada;
 18 tests dirigidos y 349 tests SaviaVaults pasan. Typecheck, build y lint pasan.
 Evidencia local/de integración; V02 no acredita R01 ni canary de SE-395.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Lo pendiente pasa a SE-489**: el experimento adaptativo que faltaba lo construye y mide SE-489 (M0–M7). Esta spec queda para revisión de graduación por lo ya entregado (#1122, #1131, #1372, #1382).
