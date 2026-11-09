@@ -10,22 +10,18 @@
 # Usage:
 #   bash scripts/mcp-audit.sh [--budget N] [--json] [--quiet]
 #   bash scripts/mcp-audit.sh --schemas (--catalog F | -- CMD...) [--expected F]
-#        [--expected-from-source F] [--timeout S] [--json]
-#
+#        [--expected-from-source F] [--timeout S] [--json]   (ver bloque --schemas)
+# Exit codes: 0 under budget | 1 over budget (WARN/FAIL) | 2 input error
+#   --schemas: 0 clean | 1 findings | 2 unknown (sin jsonschema, servidor mudo)
+
+set -uo pipefail
+
 # --schemas (SE-443 S1, docs/rules/domain/mcp-tool-design.md): lint del catálogo
 # que sirve un MCP. Con `-- CMD` arranca el servidor por stdio y pide tools/list
 # (con paginación); con --catalog lee un tools/list guardado. Exige nombre,
 # descripción, inputSchema objeto y válido (jsonschema), required ⊆ properties
 # y catálogo completo frente a --expected (un nombre por línea) o a los
 # `case '<tool>'` de --expected-from-source. Sin efectos declarados: aviso.
-#
-# Exit codes:
-#   0 = under budget · --schemas: clean
-#   1 = over budget (WARN or FAIL) · --schemas: findings
-#   2 = input error · --schemas: unknown (sin jsonschema, servidor sin respuesta)
-
-set -uo pipefail
-
 if [[ "${1:-}" == "--schemas" ]]; then
   shift
   exec python3 - "$@" <<'PY'
@@ -223,7 +219,7 @@ while [[ $# -gt 0 ]]; do
     --json)   OUT_JSON=true; shift ;;
     --quiet)  QUIET=true; shift ;;
     --help|-h)
-      sed -n '2,27p' "$0" | sed 's/^# \?//'
+      sed -n '2,15p' "$0" | sed 's/^# \?//'
       exit 0 ;;
     *) echo "Error: unknown flag $1" >&2; exit 2 ;;
   esac
