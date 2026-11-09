@@ -95,7 +95,7 @@ Fichero JSON canónico (claves ordenadas, UTF-8 NFC, sin espacios) con firma `ss
 | `capability` | `id`, `version` y `sha256` del descriptor de SE-386; si el descriptor cambia, el contrato deja de valer |
 | `authority` | Techo: nivel L0–L4 y tier SE-362 máximos. La autoridad efectiva es el **mínimo** entre el contrato, el nivel del agente y el gate del tier |
 | `scope` | Lista cerrada de selectores de recurso exactos: `repo`, ramas por patrón anclado (`agent/*`), número de PR o proyecto. Sin comodines globales. Semántica de selectores en «Comparación de selectores», abajo |
-| `preconditions` | Predicados adicionales del principal (por ejemplo, `ci_status != failure`) |
+| `preconditions` | Predicados adicionales del principal (por ejemplo, `ci_status == success`; una CI pendiente o cancelada no cumple) |
 | `declared_effects` | Efectos que el principal acepta. Un efecto no listado se deniega aunque la capacidad lo permita |
 | `not_before`, `expires_at` | Obligatorios. Vida máxima 7 días; la del grant de merge sigue siendo la de SE-343 |
 | `max_uses` | Opcional; `1` para efectos irreversibles (`reversibility: irreversible`). Mecanismo de consumo en R4 «Ledger de usos» |

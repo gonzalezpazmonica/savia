@@ -26,7 +26,7 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <h2>Escena 2 — Un agente nocturno intenta fusionar por MCP</h2>
 <p>Un agente nocturno intenta fusionar una PR con la tool de GitHub en vez de con el permiso de merge. <strong>No te despierta.</strong> La llamada se rechaza. Texto exacto del rechazo:</p>
 <blockquote>
-<p><strong>Rechazado: fusionar una PR por una tool MCP no está permitido.</strong><br>Los merges van por <code>push-pr.sh --merge</code> o <code>merge-sprint.sh</code> con permiso expreso (SE-343).<br>No se ha fusionado nada.</p>
+<p><strong>Rechazado: fusionar una PR por una tool MCP no está permitido.</strong><br>Los merges van por <code>push-pr.sh --merge</code> o <code>merge-sprint.sh</code> con grant (SE-343).<br>No se ha fusionado nada.</p>
 </blockquote>
 <p>Y en el resumen de la mañana lees:</p>
 <blockquote>se bloqueó un merge por MCP; los merges van con grant.</blockquote>
@@ -50,7 +50,7 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <tr><td>lun</td><td>09:40</td><td>Buscar en cúpulas (<code>savia-vaults</code>, buscar)</td><td>solo lectura</td><td>pasa</td></tr>
 <tr><td>lun</td><td>11:15</td><td>Abrir <code>docs.ejemplo.org/guia/instalar</code></td><td>web, sitio permitido, sin datos</td><td>pasa</td></tr>
 <tr><td>lun</td><td>16:30</td><td>Enviar correo a 3 personas</td><td>escribe</td><td><strong>preguntaría</strong></td></tr>
-<tr><td>mar</td><td>10:05</td><td>Abrir <code>docs.ejemplo.org/api?token=abc123</code></td><td>web, sitio permitido, con datos en la dirección</td><td><strong>preguntaría</strong> (18 caracteres de más)</td></tr>
+<tr><td>mar</td><td>10:05</td><td>Abrir <code>docs.ejemplo.org/api?token=abc123</code></td><td>web, sitio permitido, con datos en la dirección</td><td><strong>preguntaría</strong> (12 caracteres de más)</td></tr>
 <tr><td>mar</td><td>14:20</td><td>Crear un evento de calendario</td><td>escribe</td><td><strong>preguntaría</strong></td></tr>
 <tr><td>mar</td><td>22:48</td><td>Fusionar PR por GitHub MCP (agente nocturno)</td><td>fusión</td><td><strong>rechazaría</strong> (sin preguntar)</td></tr>
 <tr><td>mié</td><td>08:55</td><td>Abrir <code>datos-ejemplo.test/x?q=...</code></td><td>web, sitio no permitido</td><td><strong>preguntaría</strong> (142 caracteres de más)</td></tr>

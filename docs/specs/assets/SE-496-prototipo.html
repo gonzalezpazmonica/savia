@@ -16,7 +16,7 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <h2>Escena 1 — La PR de autorización que te llega al móvil</h2>
 <p>Quieres que Yema abra PRs en borrador en un repo hasta el viernes. Lo que te llega es una PR normal de GitHub. Esto es lo que lees en ella:</p>
 <p><strong>Título de la PR</strong></p>
-<blockquote>Autorización: Yema puede abrir PRs en borrador en <code>ejemplo/repo-demo</code> hasta el viernes 14 de noviembre</blockquote>
+<blockquote>Autorización: Yema puede abrir PRs en borrador en <code>ejemplo/repo-demo</code> hasta el viernes 13 de noviembre</blockquote>
 <p><strong>Descripción de la PR</strong></p>
 <blockquote>
 <p><strong>Qué firmas si fusionas esto</strong></p>
@@ -24,9 +24,9 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <p><strong>Solo si:</strong></p>
 <ul>
 <li>la rama de origen empieza por <code>agent/</code> (por ejemplo <code>agent/arreglo-textos</code>);</li>
-<li>la integración continua (CI) no está en rojo en ese momento.</li>
+<li>la integración continua (CI) está en verde (terminada y sin fallos) en ese momento. Si está pendiente, cancelada o sin resultado, no vale.</li>
 </ul>
-<p><strong>Hasta cuándo:</strong> viernes 14 de noviembre de 2026, 23:59. A partir de ahí deja de valer sola, sin que tengas que hacer nada.</p>
+<p><strong>Hasta cuándo:</strong> viernes 13 de noviembre de 2026, 23:59. A partir de ahí deja de valer sola, sin que tengas que hacer nada.</p>
 <p><strong>Qué efectos aceptas:</strong> crear una PR en borrador. Nada más.</p>
 <p><strong>Qué NO autoriza:</strong></p>
 <ul>
@@ -45,9 +45,9 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <tr><td>Quién recibe</td><td><code>yema</code></td></tr>
 <tr><td>Capacidad</td><td><code>pr.create-draft</code>, versión 1</td></tr>
 <tr><td>Ramas</td><td><code>agent/*</code> (un solo nivel: <code>agent/x</code> sí, <code>agent/x/y</code> no)</td></tr>
-<tr><td>Condición</td><td><code>ci_status != failure</code></td></tr>
+<tr><td>Condición</td><td><code>ci_status == success</code></td></tr>
 <tr><td>Efecto aceptado</td><td>crear PR en borrador</td></tr>
-<tr><td>Vale desde / hasta</td><td>2026-11-10 08:00 / 2026-11-14 23:59</td></tr>
+<tr><td>Vale desde / hasta</td><td>2026-11-10 08:00 / 2026-11-13 23:59</td></tr>
 <tr><td>Usos máximos</td><td>sin límite (efecto reversible)</td></tr>
 </table></div>
 <hr>
@@ -57,7 +57,7 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <blockquote>
 <p><strong>Rechazado: Yema no puede abrir esta PR en borrador.</strong></p>
 <p><strong>Motivo:</strong> precondición no cumplida: CI verde. La CI de la rama <code>agent/arreglo-textos</code> está en rojo.</p>
-<p><strong>Qué tienes firmado:</strong> abrir PRs en borrador en <code>ejemplo/repo-demo</code> desde <code>agent/*</code> solo con la CI sin fallos, hasta el viernes 14 de noviembre.</p>
+<p><strong>Qué tienes firmado:</strong> abrir PRs en borrador en <code>ejemplo/repo-demo</code> desde <code>agent/*</code> solo con la CI en verde, hasta el viernes 13 de noviembre.</p>
 <p><strong>Qué hacer:</strong> arreglar la CI y volver a intentarlo. No hace falta firmar nada nuevo.</p>
 <p>No se ha creado nada.</p>
 </blockquote>
@@ -66,7 +66,7 @@ h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin
 <p>Otros dos rechazos que podrías ver, con el mismo formato (también de ejemplo):</p>
 <div class="t"><table>
 <tr><th>Situación</th><th>Motivo en llano</th></tr>
-<tr><td>Ya pasó el viernes</td><td>«La autorización caducó el viernes 14 de noviembre a las 23:59.»</td></tr>
+<tr><td>Ya pasó el viernes</td><td>«La autorización caducó el viernes 13 de noviembre a las 23:59.»</td></tr>
 <tr><td>La rama no es de agente</td><td>«La rama <code>feature/mia</code> no está cubierta: solo valen ramas <code>agent/*</code>.»</td></tr>
 </table></div>
 <hr>
