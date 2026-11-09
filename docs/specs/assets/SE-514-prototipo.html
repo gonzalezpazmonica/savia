@@ -1,0 +1,97 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Savia — cola de atención (prototipo)</title>
+<style>
+:root{--bg:#fff;--fg:#1a1a1a;--muted:#6b6b6b;--line:#e8e8e6;--bubble:#f1f1ef;--panel:#f9f9f8;--btn:#1a1a1a;--btn-fg:#fff;--ok:#1f7a4d;--warn:#9a6700;
+--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#212121;--fg:#ececec;--muted:#a3a3a3;--line:#363636;--bubble:#303030;--panel:#181818;--btn:#ececec;--btn-fg:#1a1a1a;--ok:#4cc38a;--warn:#e3b341;color-scheme:dark}}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--font);margin:0}
+.app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+.banner{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 16px;font-size:13px;color:var(--muted)}
+.banner b{color:var(--warn)}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg)}
+.tabs button{flex:none;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:999px;padding:7px 12px;font:inherit;font-size:14px;cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
+main{padding:12px 16px 40px;flex:1}
+h2{font-size:14px;font-weight:600;color:var(--muted);margin:4px 0 12px}
+.user{display:flex;justify-content:flex-end;margin:14px 0}
+.user p{background:var(--bubble);border-radius:20px;padding:10px 16px;margin:0;max-width:85%}
+.bot p{margin:0 0 10px}
+.card{border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.card h3{margin:0 0 8px;font-size:17px;line-height:1.3}
+.card dl{margin:0;font-size:14px}
+.card dt{color:var(--muted);margin-top:8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.card dd{margin:0}
+.row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.b{border-radius:999px;padding:10px 16px;font:inherit;font-size:14px;cursor:pointer;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.b.primary{background:var(--btn);color:var(--btn-fg);border-color:var(--btn)}
+.more{color:var(--muted);font-size:14px;margin:6px 4px}
+.tag{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;color:var(--muted);margin-right:4px}
+.tag.w{color:var(--warn);border-color:var(--warn)}
+.done{color:var(--ok);font-size:14px;margin-top:10px}
+.small{font-size:13px;color:var(--muted)}
+ul.l{padding-left:18px;margin:6px 0}
+</style></head><body>
+<div class="app">
+<div class="banner"><b>Prototipo.</b> Todos los datos son un ejemplo inventado. Nada está conectado a nada real. Los botones solo enseñan qué pasaría. Recarga para volver a empezar una escena.</div>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main id="main"></main>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const scenes=[
+{t:"1 · Una tarjeta",h:`
+<h2>10:05 · estás concentrada</h2>
+<div class="card" id="c1"><h3>Dos agentes van a editar el mismo fichero. ¿Quién va primero?</h3>
+<dl><dt>Qué se pide</dt><dd>Elegir el orden. El agente del informe y el de la migración quieren tocar <i>notas-de-ejemplo.md</i>.</dd>
+<dt>Por qué ahora</dt><dd>Los dos están a punto de guardar; si chocan, uno pierde su trabajo.</dd>
+<dt>Si no contestas</dt><dd>Los dos esperan con ese paso en pausa y siguen con otra cosa. No elijo yo.</dd>
+<dt>Si lo aplazas</dt><dd>Pierden unos 20 minutos de ese paso. Vale hasta las 12:00.</dd></dl>
+<div class="row"><button class="b primary" data-a="c1">Primero el informe</button><button class="b" data-a="c1">Primero la migración</button><button class="b" data-a="c1">Aplazar</button></div></div>
+<p class="more">1 pregunta más que puede esperar a las 12:00</p>
+<p class="small">Las dos preguntas sobre el mismo fichero se han unido en una tarjeta. La otra (confirmar un nombre) espera sin molestarte.</p>`,
+ ans:"c1",msg:"Anotado. Los demás pasos no cambian."},
+{t:"2 · ¿En qué estás?",h:`
+<h2>Abres la app</h2>
+<div class="user"><p>¿en qué estás?</p></div>
+<div class="bot"><p>Cuatro trabajos en marcha. Dos preguntas esperándote, una desde hace 40 minutos. He dejado de lado el aviso de dependencias porque no bloquea nada; lo reviso al cerrar la tarde.</p></div>
+<div class="card"><h3>Esperan algo de ti (2)</h3>
+<ul class="l"><li>Quién edita primero <i>notas-de-ejemplo.md</i> <span class="small">· hace 40 min</span></li><li>Confirmar un nombre <span class="small">· hace 12 min · puede esperar a las 12:00</span></li></ul>
+<dl><dt>Dejado de lado</dt><dd>Aviso de dependencias. No bloquea nada. Se revisa a las 18:00.</dd></dl></div>
+<p class="small">Puedes contestar y consultar esto aunque los agentes estén todos ocupados.</p>`},
+{t:"3 · De noche",h:`
+<h2>23:30 · duermes</h2>
+<p class="small">No suena nada. El agente del informe necesita un permiso para publicar, queda en espera y sigue con otra tarea.</p>
+<h2>08:00 · al despertar</h2>
+<div class="card" id="c3"><h3>Anoche quedó en espera la publicación del informe. Necesita tu permiso.</h3>
+<dl><dt>Qué se pide</dt><dd>Permiso para publicar el informe (ejemplo).</dd>
+<dt>Si dices que no</dt><dd>El informe se queda en borrador.</dd>
+<dt>Mientras tanto</dt><dd>El trabajo esperó. No se publicó nada ni se tomó ninguna opción por defecto.</dd></dl>
+<div class="row"><button class="b primary" data-a="c3">Dar permiso</button><button class="b" data-a="c3">No publicar</button></div></div>`,ans:"c3",msg:"Registrado contra esta pregunta. (En el prototipo no se publica nada.)"},
+{t:"4 · Por qué te lo pregunto",h:`
+<h2>Savia te pregunta algo</h2>
+<div class="card" id="c4"><h3>¿Publico la versión 2 del informe de ejemplo?</h3>
+<dl><dt>Te lo pregunto porque</dt><dd>La última vez que se publicó sin comprobar los consumidores se rompió uno. Falta la comprobación de compatibilidad.</dd>
+<dt>Qué puedo hacer yo</dt><dd>Ejecutarla y volver con el resultado.</dd></dl>
+<div class="row"><button class="b primary" data-a="c4">Ejecútala tú</button><button class="b" data-a="c4">Publica sin comprobar</button><button class="b" data-a="c4">Aplazar</button></div></div>
+<p class="small">Esta lección no te interrumpe por separado: solo aparece cuando obliga a revisar algo antes de actuar.</p>`,ans:"c4",msg:"Ejecuto la comprobación y vuelvo con el resultado. No publico hasta tenerlo."},
+{t:"5 · Tarjeta caducada",h:`
+<h2>Contestas a una tarjeta de ayer</h2>
+<div class="card" id="c5old"><h3 class="small">Ayer 17:10 · ¿Publico la versión 2 del informe?</h3>
+<div class="row"><button class="b primary" id="old">Sí, publica</button></div></div>
+<div id="r5"></div>`,custom:()=>{$("#old").onclick=()=>{$("#r5").innerHTML=`
+<div class="bot"><p>Esa pregunta caducó: el cambio ya no es el mismo. Te la vuelvo a enseñar con lo actual.</p></div>
+<div class="card"><h3>¿Publico la versión 3 del informe de ejemplo?</h3>
+<dl><dt>Qué cambió</dt><dd>Desde ayer se añadió una sección y se cambió un dato. Tu «sí» era para la versión 2.</dd><dt>Si no contestas</dt><dd>Queda en espera. No se publica.</dd></dl>
+<div class="row"><button class="b primary" data-a="n">Sí, publica esta</button><button class="b" data-a="n">No</button></div></div>`;$("#old").disabled=true;
+document.querySelectorAll("[data-a=n]").forEach(b=>b.onclick=()=>{b.closest(".card").insertAdjacentHTML("beforeend",`<div class="done">Registrado contra la versión 3.</div>`)})}}}
+];
+const tabs=$("#tabs"),main=$("#main");
+function show(i){
+ [...tabs.children].forEach((b,j)=>b.setAttribute("aria-selected",i===j));
+ const s=scenes[i];main.innerHTML=s.h;
+ if(s.ans){document.querySelectorAll("[data-a="+s.ans+"]").forEach(b=>b.onclick=()=>{const c=b.closest(".card");c.querySelector(".row").remove();c.insertAdjacentHTML("beforeend",`<div class="done">${s.msg}</div>`)})}
+ if(s.custom)s.custom();
+}
+scenes.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s.t;b.role="tab";b.onclick=()=>show(i);tabs.appendChild(b)});
+show(0);
+</script></body></html>
