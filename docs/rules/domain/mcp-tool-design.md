@@ -89,8 +89,8 @@ bash scripts/mcp-audit.sh --schemas --catalog tools.json --expected esperadas.tx
 | `inputSchema` presente, objeto, `type: "object"`, válido como JSON Schema | `findings` |
 | `required` ⊆ `properties` | `findings` |
 | Catálogo = conjunto esperado (faltan o sobran) | `findings` |
-| `annotations` con efectos | aviso (`WARN`), no falla todavía |
-| Sin `jsonschema`, servidor que no arranca o no responde, sin lista esperada | `unknown`, exit 2 |
+| `annotations` con `readOnlyHint`/`destructiveHint` booleanos | aviso (`WARN`), no falla todavía |
+| Sin `jsonschema`, servidor que no arranca, rechaza `initialize` o no responde, lista esperada ausente o vacía | `unknown`, exit 2 |
 
 Contrato de salida: `gate-result-contract.md` (SE-453). Un `unknown` nunca se lee como verde.
 Test: `tests/test-mcp-tool-design.bats`.
@@ -101,5 +101,5 @@ Test: `tests/test-mcp-tool-design.bats`.
   la persona en el PR que añade o cambia una herramienta, leyendo el manejador.
 - savia-vaults no declara todavía `annotations` en ninguna herramienta (19 avisos al introducir esta
   regla). Cuando las declare, el aviso pasa a fallo.
-- La lista esperada se extrae de los `case '<tool>'` del despachador; un despachador con otra forma
-  necesita `--expected`.
+- La lista esperada se extrae de los `case '<tool>'` (o `"<tool>"`) del despachador; un despachador
+  con otra forma (`if (name === …)`, tablas) necesita `--expected`. Si no sale ninguno: `unknown`.

@@ -24,7 +24,8 @@ set -uo pipefail
 # `case '<tool>'` de --expected-from-source. Sin efectos declarados: aviso.
 if [[ "${1:-}" == "--schemas" ]]; then
   shift
-  exec python3 - "$@" <<'PY'
+  # -P: el cwd no entra en sys.path (un jsonschema/ local no sombrea al validador).
+  exec python3 -P - "$@" <<'PY'
 import json, os, re, select, subprocess, sys, time
 
 def usage(msg):
@@ -59,11 +60,14 @@ while i < len(args):
     usage(f"opción desconocida {a}")
 if bool(catalog) == bool(cmd):
     usage("indica --catalog F o -- CMD (uno de los dos)")
+if expected and source:
+    usage("--expected y --expected-from-source son excluyentes (uno de los dos)")
 
 findings, warnings, gaps = [], [], []
 
 def finish(tools_seen):
     result = "unknown" if gaps and not findings else ("findings" if findings else "clean")
+    findings.sort(); warnings.sort()  # el orden del catálogo no cambia la salida
     if as_json:
         print(json.dumps({"result": result, "gaps": gaps, "tools": tools_seen,
                           "findings": findings, "warnings": warnings}, ensure_ascii=False, indent=2))
@@ -87,33 +91,41 @@ def serve(cmd):
     """Cliente MCP mínimo por stdio: initialize, initialized, tools/list paginado."""
     try:
         p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                             stderr=subprocess.DEVNULL, bufsize=0)
     except OSError:
         gaps.append({"check": "server", "reason": "not_executed"}); return None
     deadline = time.monotonic() + timeout
+    fd, buf = p.stdout.fileno(), bytearray()
     def send(obj):
-        p.stdin.write(json.dumps(obj) + "\n"); p.stdin.flush()
+        p.stdin.write((json.dumps(obj) + "\n").encode()); p.stdin.flush()
     def recv(want_id):
+        # Búfer propio sobre os.read: select solo ve el fd, así que una línea ya
+        # leída no se pierde y una línea parcial no bloquea más allá del timeout.
         while True:
+            while b"\n" in buf:
+                raw, _, rest = bytes(buf).partition(b"\n")
+                buf[:] = rest
+                try: msg = json.loads(raw)
+                except ValueError: continue
+                if isinstance(msg, dict) and msg.get("id") == want_id:
+                    return msg
             left = deadline - time.monotonic()
             if left <= 0:
                 raise TimeoutError
-            ready, _, _ = select.select([p.stdout], [], [], left)
+            ready, _, _ = select.select([fd], [], [], left)
             if not ready:
                 raise TimeoutError
-            line = p.stdout.readline()
-            if not line:
+            chunk = os.read(fd, 65536)
+            if not chunk:
                 raise EOFError
-            try: msg = json.loads(line)
-            except ValueError: continue
-            if isinstance(msg, dict) and msg.get("id") == want_id:
-                return msg
+            buf.extend(chunk)
     tools = []
     try:
         send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
             "protocolVersion": "2025-06-18", "capabilities": {},
             "clientInfo": {"name": "savia-mcp-tool-lint", "version": "1"}}})
-        recv(1)
+        if not isinstance(recv(1).get("result"), dict):
+            gaps.append({"check": "server", "reason": "initialize_failed"}); return None
         send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         cursor, n = None, 2
         while True:
@@ -184,8 +196,9 @@ for idx, t in enumerate(tools):
         if r not in props:
             findings.append(f"{label}: required '{r}' no está en properties")
     ann = t.get("annotations")
-    if not isinstance(ann, dict) or not any(k in ann for k in ("readOnlyHint", "destructiveHint")):
-        warnings.append(f"{label}: sin efectos declarados (annotations.readOnlyHint/destructiveHint)")
+    # Solo cuenta un booleano: "no", null o 0 no declaran nada.
+    if not isinstance(ann, dict) or not any(isinstance(ann.get(k), bool) for k in ("readOnlyHint", "destructiveHint")):
+        warnings.append(f"{label}: sin efectos declarados (annotations.readOnlyHint/destructiveHint booleanos)")
 
 want = None
 try:
@@ -194,11 +207,12 @@ try:
             want = {l.strip() for l in fh if l.strip() and not l.lstrip().startswith("#")}
     elif source:
         with open(source, encoding="utf-8") as fh:
-            want = set(re.findall(r"case\s+'([A-Za-z0-9_.-]+)'\s*:", fh.read()))
-        if not want:
-            gaps.append({"check": "expected", "reason": "unreadable"})
+            want = set(re.findall(r"""case\s+['"]([A-Za-z0-9_.-]+)['"]\s*:""", fh.read()))
 except OSError:
     gaps.append({"check": "expected", "reason": "unreadable"})
+# Una lista esperada vacía no mide nada: unknown, nunca clean (SE-453).
+if want is not None and not want:
+    gaps.append({"check": "expected", "reason": "empty"})
 if want is None and not gaps:
     gaps.append({"check": "expected", "reason": "no_baseline"})
 if want:
