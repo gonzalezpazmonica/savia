@@ -99,3 +99,9 @@ SE-332 (handback), SE-471 (relevo con evidencia).
 ### Portability classification
 
 - [x] **PURE_BASH**: lógica en el bucle bash; ningún binding de frontend.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Valor a confirmar antes de implementar**: la noche corre hoy sobre una cola y SE-512 comprueba el grant en cada fusión. Si `overnight-sprint-loop.sh` no se usa, esta spec se retira; si se usa, se reduce a consumir la época de revocación de SE-498.

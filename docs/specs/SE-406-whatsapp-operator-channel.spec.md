@@ -1,5 +1,5 @@
 ---
-status: DEFERRED
+status: SUPERSEDED
 deferred_by: "gonzalezpazmonica 2026-10-13, aparcada: los avisos van por la app móvil de Savia Space"
 priority: P1
 developer_type: agent-team

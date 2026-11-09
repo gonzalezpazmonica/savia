@@ -4,29 +4,29 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 ## Cola de sesiones (orden por gates, sin fechas)
 
-- **S01 · P0 · fase A** — Estado consistente y baseline reproducible
-  Acción: Hecho: SE-407 S1–S4 integrados (#1208–#1210, #1214) e IMPLEMENTED; SE-425 (#1220) cierra el hueco de lockfiles. Siguiente: mantener validate-ci-local como predicado.
-  Entrada: Disponible dentro del WIP actual; no ampliar superficie.
-  Salida: Predicado único reproducible, artefactos frescos, fallos desglosados con RCA y recibo de cierre; ninguna suite fallida ocultada.
-  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: desbloquea todo el cierre; esfuerzo: slice pequeño; baseline variable.
+- **S22 · P0 · fase A** — Gemelo operativo y Savia usable
+  Acción: Terminar Soul Continuidad v1 y la app de conversación sobre lo ya fusionado (SE-490: PRs #1440–#1447); cada entrega se prueba en el dispositivo de la persona antes de pedirle nada. La puerta de comprensión (SE-505) ya rige como regla y como comprobación de validate.
+  Entrada: Specs aprobadas; escenas y prototipo confirmados donde SE-505 lo exige. El código de Space vive en su repo; aquí se registra spec, evidencia y cierre.
+  Salida: Una persona no técnica usa el gemelo y la app sin órdenes crípticas; AC de usabilidad verificados en su dispositivo; evidencia enlazada por AC.
+  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: es el producto que se usa a diario; SE-514 y SE-507 se muestran aquí; esfuerzo: slices pequeños por pantalla o fuente; ocupa hueco WIP.
 
-- **S10 · P0 · fase A** — Cadena de suministro de la CI
-  Acción: Fijar a SHA las 20 referencias uses: sueltas, test BATS que falle ante nuevas, Dependabot de acciones, CodeQL y Scorecard sin silenciar alertas, y política de divulgación con plazo. Delta S5: lock con hashes y --require-hashes para lo que instala install-memory-deps.sh y para los pip install sin fijar de la CI.
-  Entrada: SE-442 ya APPROVED; falta la decisión D1-D3. Al implementarse ocupa hueco WIP o se ejecuta como mantenimiento acotado por decisión expresa; no depende de otras iniciativas. Delta S5: decisión D4 sobre torch.
-  Salida: Test BATS verde con caso negativo, todas las acciones por SHA, Dependabot semanal agrupado, primeros runs de CodeQL y Scorecard enlazados como evidencia; ninguna alerta silenciada sin causa raíz. Delta S5: lock con hashes verificado por test y CI sin pip install suelto salvo la excepción registrada.
-  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: protege cada PR de la cola; esfuerzo: slice pequeño (S).
+- **S26 · P0 · fase A** — Coste por turno: contexto fijo a la mitad y guardas sin bloqueos falsos
+  Acción: SE-511: medir y reducir el contexto fijo que se carga en cada turno. SE-510: un despachador por evento y registro de cada bloqueo, con la clase FORMA o POLÍTICA que traía SE-475.
+  Entrada: Aprobación de SE-510 y SE-511. Primero la medición de partida de cada una; sin hueco WIP nuevo hasta tenerla.
+  Salida: Tokens fijos por turno medidos antes y después en los dos frontends; bloqueos falsos contados antes y después; ningún guard de política debilitado.
+  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: la cuota semanal se agotó dos noches seguidas (2026-11-07 y 2026-11-08) y paró la cola; abarata todo lo demás; esfuerzo: medición pequeña; reducción media.
 
-- **S18 · P0 · fase A** — Evals que pueden fallar
-  Acción: SE-468: resultado unknown mientras el runner no ejecute el artefacto, sin placeholder 0,80 en modo vivo, sin PASS sin baseline y prueba de sabotaje que impide declarar evaluado un dataset (AC7 condicional; el findings con sabotaje es criterio de salida de SE-469).
-  Entrada: SE-468 ya APPROVED (operadora, 2026-10-26); falta la decisión D1 (motivos de hueco en SE-453); sin dependencias abiertas.
-  Salida: Con la skill saboteada el gate nunca da PASS ni declara el dataset evaluado: sin ejecutor real el resultado es unknown (AC7 condicional, decisión de la operadora 2026-10-26); modo vivo sin juez sale ≠0; el comentario de la PR distingue evaluado de no evaluado; tests con caso negativo.
-  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: quita una garantía falsa de cada PR de skills, agentes y hooks; desbloquea SE-381 y SE-469; esfuerzo: slice pequeño (S).
+- **S23 · P0 · fase A** — Fundamentos de efectos y autoridad: decidir y construir en orden
+  Acción: Decidir las ocho specs PROPOSED de este bloque y construir en este orden: SE-488 (aprobación por fusión, ya aprobada), SE-508 (guard previo de MCP y WebFetch: hoy no hay ninguno), SE-493 (ledger de efectos), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-502 después, cuando haya algo que modelar.
+  Entrada: Aprobación de SE-493, SE-498, SE-508 y SE-496 por la operadora; una en curso cada vez; riesgo alto: revisión humana del PR concreto.
+  Salida: Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate.
+  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: Savia Viva (SE-513 S3, SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque; esfuerzo: ocho decisiones; cinco specs medianas en serie.
 
-- **S02 · P0 · fase A** — Seguridad, evidencia y cierre de Vaults/Files
-  Acción: Hecho: Files/Vaults base IMPLEMENTED (SE-410–422, SE-412 con AC3 aceptado), SE-424, SE-423 (#1216, #1218) y SE-425 (#1220: lockfiles y CI de savia-vaults).
-  Entrada: Revisión/diseño ahora; ejecutar delta nuevo sólo con aprobación y hueco WIP. Streaming/HTTP (SE-421/422, ya integrados) exige autorización vigente y revocación: revisar en este lote. Pendientes privados de evaluación/operación se consultan sólo en Labs.
-  Salida: Matriz entrega vs evidencia vs pendiente; decisión humana de graduación por spec; delta de identidad acotado y revisable, sin activar SSO ni conceder authority de efectos.
-  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: protege contexto y serving; esfuerzo: revisión por lote; delta a estimar tras probe.
+- **S27 · P0 · fase A** — Revisión de graduación de lo ya entregado
+  Acción: 22 specs figuran APPROVED o DEFERRED con sus artefactos y PRs ya en main. Revisar AC por AC, ejecutar sus tests y registrar completion con revisión humana, o anotar el slice que falta. No se reimplementa nada.
+  Entrada: La evidencia de partida es existencia de artefactos y PRs fusionadas (lectura del 2026-11-09), no verificación de cada AC. La graduación la decide la operadora spec a spec.
+  Salida: Cada una IMPLEMENTED con completion y revisión humana, o con su resto anotado y devuelto a la cola. El número de APPROVED sin implementar baja de 63 según lo verificado.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: saca de la cola hasta 22 specs sin escribir código y deja ver el backlog real; esfuerzo: revisión por lotes de cinco; sin hueco WIP.
 
 - **S03 · P0 · fase A** — Deuda de calidad con pruebas de comportamiento
   Acción: Remedir deuda certificada y elegir el siguiente grupo por riesgo/uso; conservar umbral >=80 y ratchet; usar #1180 como evidencia de entrega, no como cierre de toda la wave.
@@ -34,75 +34,81 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Salida: Reducción de deuda demostrada por comportamiento discriminante, baseline publicado y excepciones explícitas; no certificar por presencia de ficheros.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: hace fiables los gates; esfuerzo: grupo pequeño; no prometer cierre de 128 skills por sesión.
 
-- **S11 · P0 · fase A** — Autoridad del verificador en el cierre
-  Acción: Regla y plantilla con autoridad requerida y obtenida por AC; informe de cobertura no verificada en validate-ci-local sin cambiar el predicado.
-  Entrada: SE-444 ya APPROVED; informe-only, compatible con lo ya integrado.
-  Salida: Informe de cobertura no verificada visible, predicado de cierre sin cambios (regresión a cero) y decisión explícita sobre pasar a bloqueo con datos de dos cierres reales.
-  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: hace honestos los cierres de S03 y S04; esfuerzo: slice pequeño (S).
-
 - **S04 · P0 · fase B** — Graduación operacional del harness
   Acción: Ejecutar H04 con autorización específica; revisión humana H09 y procedencia A01c; actualizar completion por AC y decidir cierre.
   Entrada: Baseline A demostrado; H04 real requiere autorización y coste; sin autograduación.
   Salida: H04/H09 y regresión operacional documentadas; completion y revisión humana; límites L3/L4 intactos.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: abre frontera TEE/AEK; esfuerzo: 4-8 h de análisis compartido históricamente estimadas; costes de canaries a acordar.
 
-- **S12 · P1 · fase A** — Salvaguardas de ejecución autónoma
-  Acción: Guard de repetición bloqueante en ramas agent/*, presupuesto de turnos visible, success_checks en automatizaciones; revisor de acciones opt-in como último slice.
-  Entrada: SE-445 ya APPROVED; doble opt-in (SPEC-186) para el revisor; probado en los dos frontends.
-  Salida: Las tres repeticiones bloquean en agent/*, el agente ve su presupuesto, las automatizaciones declaran éxito, y el revisor falla cerrado en tiers 3/4.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: hace cumplir autonomous-safety donde hoy es texto; esfuerzo: S1, S2 y S4 pequeños; S3 medio.
+- **S24 · P1 · fase A** — Savia Viva A0: auditoría del estado real y sondas, sin cambios de autoridad
+  Acción: Slice S0 de las tres specs de Savia Viva R6: matriz de cobertura de rutas de efecto por frontend, desglose del recall por criterio, tabla de soporte de cambio en caliente por harness, medición de peticiones a la persona y fixtures de las sondas P0–P15. Solo lectura y fixtures.
+  Entrada: Aprobación del slice S0 de SE-515; escenas de SE-513 y SE-514 confirmadas por la operadora (SE-505). No ocupa hueco WIP.
+  Salida: Informe con observado, inferido y no verificado, commits y hashes fijados, dominio piloto elegido con tres casos y tres contraejemplos, y condiciones de NO-GO escritas antes de medir.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: decide si el resto de Savia Viva se construye, se recorta o se descarta; esfuerzo: tres slices pequeños de lectura.
 
-- **S17 · P1 · fase A** — Contrato de resultado de los gates
-  Acción: S0 auditar escáneres y guards blocking (vocabulario, dependencia ausente, topes); contrato que extiende checker-fail-closed; guards sin jq degradan a grep o salen 2; topes que producen unknown.
-  Entrada: SE-453 ya APPROVED; falta la decisión D1-D3; S2 probado en los dos frontends.
-  Salida: Auditoría publicada, contrato con tabla de correspondencia, guards blocking que no salen 0 sin evaluar, test de dependencia ausente en no-verde y contador baseline de unknown congelado.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita falsos verdes en los gates de los que dependen merge-sprint y la CI; alimenta la cobertura no verificada de SE-444; esfuerzo: S0, S1 y S2 pequeños; S3 medio.
+- **S25 · P1 · fase A** — Savia Space 0.2 y la seguridad de su canal de aprobación
+  Acción: Cerrar Space 0.2 (SE-428) y seguir por modo mediado (SE-434), experiencia (SE-432), proyectos y cúpulas (SE-436) e interoperabilidad (SE-429). SE-446 S0: sonda de autoaprobación contra el servidor real; si encuentra una vía abierta, su mitigación pasa a P0. SE-443, SE-447, SE-430, SE-435 y SE-439 después.
+  Entrada: Specs aprobadas; hueco WIP temporal de SE-428 (addendum ADR-002). El código vive en el repo de Space.
+  Salida: Space 0.2 cerrado y el WIP vuelve a 3; informe de la sonda por vía y test permanente de que el agente no contesta su propio aviso.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: la política por herramienta presupone un canal de aprobación seguro; S22 se apoya en Space; esfuerzo: un slice cada vez dentro del hueco de Space.
+
+- **S32 · P1 · fase A** — Terminar lo empezado
+  Acción: Cerrar los restos de specs con entregas parciales en main: SE-426 (firma con secreto de CI), SE-500 (S3 en adelante), SE-501 (tras #1472, #1488 y #1490) y SE-470 (tras S2, #1487).
+  Entrada: Specs aprobadas; inventario del resto de cada una antes de abrir trabajo.
+  Salida: Cada una con su resto hecho o descartado por escrito y pasada a S27.
+  Necesidad: media; urgencia: media; valor: medio; desbloqueo: reduce trabajo abierto a medias; esfuerzo: restos pequeños.
 
 - **S19 · P1 · fase A** — Medir jueces y relevos antes de confiar en ellos
-  Acción: SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-471: digest de solo lectura del relevo nocturno en declarado/validado/aceptado con tope de decisiones.
-  Entrada: SE-469 y SE-471 ya APPROVED (operadora, 2026-10-27); SE-469 después de SE-468; sin hueco WIP nuevo (SE-471 es solo lectura).
-  Salida: Informe de concordancia con IC95 y decisión según kill criterion; digest con tests negativos y medición de OK no validados; retirada si no reduce el tiempo de relevo.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 medio (M); SE-471 pequeño (S); independientes.
+  Acción: SE-469: 30 casos de los golden sets en vivo con tope de gasto e IC95 por tribunal. SE-474: proveedor independiente opcional; la métrica de hallazgos que solo ve el segundo proveedor se mide una vez y la comparte con SE-476. SE-471 ya está en main (#1486) y pasa a S27.
+  Entrada: SE-469 ya APPROVED y después de SE-468; SE-474 sigue PROPOSED y necesita decisión de la operadora.
+  Salida: Informe de concordancia con IC95 y decisión según kill criterion; decisión registrada sobre SE-474.
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: da el primer dato de acierto de los tribunales que pesan en merges y separa el OK autodeclarado de lo validado; esfuerzo: SE-469 medio (M); SE-474 por decidir.
 
-- **S16 · P1 · fase A** — Decisión de gobernanza de contribuciones
-  Acción: Decidir DCO, CLA o ninguno; si DCO, texto en CONTRIBUTING y workflow sin checkout de código del PR; REUSE solo si hay demanda.
-  Entrada: Decisión D1-D4 de la operadora; un CLA de relicenciación contradiría LICENSE-ENTERPRISE.md y exige antes spec propia con revisión legal.
-  Salida: Decisión registrada; si DCO, check activo con exención documentada y mensaje claro para quien contribuye.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: cada contribución externa sin constancia no se puede recuperar después; esfuerzo: decisión + slice pequeño (S).
+- **S28 · P1 · fase C** — Lecciones con ámbito y aprobación auténtica
+  Acción: Un solo esquema de lección: SE-473 es la dueña (ámbito, evidencia, caducidad, refutación y, nuevo, tipo de acción y punto de control); SE-497 parte 2 conserva el paso a activa (recibo, firma humana verificable, rollback, ninguna cifra concede autoridad). SE-409 se reduce a retirada por desuso. SE-460 declara que su sello local es higiene, no aprobación.
+  Entrada: SE-473 S0 ya aprobado: medir primero. Aprobación de SE-497 por la operadora; S1–S2 de SE-473 necesitan nueva aprobación tras S0.
+  Salida: Medición de S0 publicada; esquema único decidido; una cadena de firma falsificada no activa una lección (test negativo).
+  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: sin esto SE-515 no pasa de orientativa; esfuerzo: S0 pequeño; SE-497 parte 2 media.
 
-- **S13 · P1 · fase B** — Seguridad del canal de aprobación y de los conectores de Space
-  Acción: SE-446 S0: sonda de autoaprobación contra el space-server real. SE-443 S1-S2: doctrina de diseño MCP y comprobación de malware al habilitar; S3-S5 cuando space-server lo permita.
-  Entrada: Specs SE-446 y SE-443 aprobadas (2026-10-27); usa el hueco temporal de SE-428 (no abre otra iniciativa en curso); si S0 encuentra una vía abierta, S1 de SE-446 pasa a P0 y adelanta a todo lo demás de Space.
-  Salida: Informe de sonda por vía, test permanente de que el agente no contesta su propio ask, comprobación OSV con recibo, secretos tipados rechazados en command/args/url.
-  Necesidad: alta; urgencia: media; valor: alto; desbloqueo: la política por herramienta presupone un canal de aprobación seguro; esfuerzo: S0 pequeño; S1-S2 pequeños; S3-S5 medianos.
+- **S29 · P1 · fase C** — Savia Viva: recall trazado, vinculación en sombra y admisión duradera
+  Acción: SE-515 S1–S2: prueba de entrega del recall, métrica marcada como no medida cuando usa valores fijos, resolvedor de aplicabilidad por metadatos en sombra y evaluación en casos reservados. SE-513 S1–S2: admisión y salida en una transacción y promoción por regla.
+  Entrada: S24 publicada con resultado que lo justifique; S28 con el esquema decidido; aprobación de cada slice por separado.
+  Salida: Ablación con y sin recall publicada (cero cambios es resultado válido); GO, NO-GO o retirada de la vinculación orientativa; cero entradas admitidas perdidas bajo cortes.
+  Necesidad: media; urgencia: baja; valor: por demostrar; desbloqueo: primera evidencia de si una lección cambia una decisión; esfuerzo: slices pequeños; el experimento manda.
 
 - **S05 · P1 · fase B** — TEE v1.1 y frontera AEK en solo lectura
-  Acción: Reescribir SE-401 a Sufficiency/Commitment/Outcome/Disposition/AuthorityLease; mapear issuer/EEP/evidence con L31 F0 y contrato común de tres frontends. Revisar entregas existentes de contratos/proceso.
+  Acción: Reescribir SE-401 a TEE v1.1 como arquitectura de referencia (F0 de solo lectura); el motor de autoridad va por SE-496 y su modelo por SE-502, no por fases nuevas de SE-401. F5 de SE-386 pasa a SE-496. Mapear issuer/EEP/evidence con L31 F0 y contrato común de tres frontends.
   Entrada: SE-396 graduada; contrato/frontera y spec aprobados; Labs máximo una línea activa.
   Salida: Mapa revisado, exclusiones y bypass explícitos, pruebas negativas READ_ONLY, contrato EEP común; namespace AEK- ya decidido.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita duplicar autoridad; esfuerzo: F0 L31 8-16 h estimadas; implementación aparte.
 
 - **S06 · P1 · fase C** — Un laboratorio de conformidad y benchmark
-  Acción: Unificar matriz negativa, bypass, caos, receipts y replay; graduar cierres parciales; baseline con trazas/selección fijadas. Último slice: piloto de suite de conformidad ejecutable sobre un solo contrato (SE-452).
+  Acción: Unificar matriz negativa, bypass, caos, receipts y replay; baseline con trazas y selección fijadas. SE-495 y SE-503 (PROPOSED) aportan el banco de tareas reales y el verificador por proyecto. Las sondas adversariales de Savia Viva (P12, P14) se alojan aquí, sin suite paralela. Último slice: piloto de suite de conformidad sobre un solo contrato (SE-452).
   Entrada: Gate B y corpus/contratos pinned; no ejecutar todos los experimentos Labs a la vez.
   Salida: Cero violaciones de invariantes bajo fallos en los tres frontends y cuatro niveles de replay; evidencia auditable.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evidencia para portabilidad y pilotos; esfuerzo: slices por frontend/invariante.
 
-- **S14 · P2 · fase D** — Higiene de contexto y operación
-  Acción: SE-448 S0 (superficies de render) y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores y locks con identidad. SE-448 S4 (defang) y categoría third-party-directive; SE-454 invariantes negativos como tests.
-  Entrada: Specs ya aprobadas (2026-10-27); se ejecutan por separado, uno por vez; sin hueco WIP nuevo.
-  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
-  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: cinco slices pequeños independientes.
+- **S30 · P1 · fase D** — Atención humana y aprobaciones contestables
+  Acción: SE-458 (tope y lotes de PRs en revisión), SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 a SE-463: composición de efectos, marca de sesión y cobertura de supervisión.
+  Entrada: Aprobación de SE-492, SE-507 y SE-514 por la operadora, con escenas confirmadas (SE-505); SE-514 S1 después de S22.
+  Salida: Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.
+  Necesidad: media; urgencia: media; valor: alto; desbloqueo: protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola; esfuerzo: slices pequeños independientes.
 
-- **S20 · P2 · fase D** — Integridad de evaluación, vigencia nocturna y lecciones revocables
-  Acción: SE-470: etiqueta eval-integrity en CI y detector determinista de trazas. SE-472: check de grant antes de cada tarea del bucle nocturno. SE-473 S0: medir lecciones sin ámbito, evidencia ni fecha.
-  Entrada: SE-470, SE-472 y SE-473 ya APPROVED (operadora, 2026-10-27); de SE-473 solo S0, S1-S2 necesitan nueva aprobación tras el resultado de S0; SE-470 condicionada a H3/H4; SE-472 a SE-343.
-  Salida: Cada slice publica su medición y sus tests con caso negativo; nada pasa a bloqueo sin datos.
-  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: cierra vectores documentados fuera pero no observados aún; cada slice decide si sube o se mata; esfuerzo: tres slices pequeños independientes; SE-473 S2 medio.
+- **S31 · P1 · fase D** — Vaults: de la recuperación medida al contexto gobernado
+  Acción: SE-489: decidir la promoción de las rutas ya construidas y medidas (M0–M7). SE-482 queda como paraguas sin F6 ni la parte de F4 que SE-489 ya cubre; SE-486 es su F1 (admisión del conocimiento).
+  Entrada: Aprobación de SE-482 y SE-486 por la operadora; evaluación privada en Labs.
+  Salida: Decisión de promoción con datos; F1 con cierre seguro y pruebas negativas.
+  Necesidad: media; urgencia: baja; valor: alto; desbloqueo: las lecciones y la evidencia de Savia Viva se sirven desde Vaults; esfuerzo: SE-489 decisión; SE-486 media.
+
+- **S14 · P2 · fase D** — Higiene de contexto, instalación y operación
+  Acción: SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-464 y SE-506 sin dependientes: se deciden al llegar.
+  Entrada: Specs aprobadas salvo SE-464 y SE-506, que siguen PROPOSED; se ejecutan por separado, una por vez; sin hueco WIP nuevo.
+  Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
+  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: slices pequeños independientes.
 
 - **S21 · P2 · fase D** — Verificación honesta tras la revisión de Anthropic Research
-  Acción: SE-475: prefijo FORMA/POLÍTICA en los bloqueos de hook con biblioteca bash+TS. SE-476: acuerdo de jueces del mismo proveedor como correlacionado y autorrevisión fuera de la verificación. SE-477: IC, diferencia pareada y censura en comparativas. SE-479: casos imposibles dentro del alcance con control posible.
-  Entrada: Aprobación de SE-475, SE-476, SE-477 y SE-479 por la operadora (las cuatro PROPOSED); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.
+  Acción: SE-476: acuerdo de jueces del mismo proveedor como correlacionado y autorrevisión fuera de la verificación. SE-477: IC, diferencia pareada y censura en comparativas. SE-479: casos imposibles dentro del alcance con control posible. SE-475 (clase del bloqueo) se hace dentro de SE-510.
+  Entrada: Aprobación de SE-476, SE-477 y SE-479 por la operadora (PROPOSED); SE-475 queda absorbida por SE-510 (S26); SE-479 S3 después de SE-468 y SE-477; sin hueco WIP nuevo.
   Salida: Cada spec aprobada o descartada; las aprobadas con sus AC verificados, tests que fallan antes y pasan después, y paridad bash/TS donde aplica.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: frena los rodeos ante bloqueos de política y evita contar como evidencia independiente lo que no lo es; SE-477 da la estadística que usan SE-469 y SE-479; esfuerzo: cuatro specs de slices pequeñas (S); SE-475 S2 y SE-479 S2 medianas.
 
@@ -118,11 +124,11 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Salida: Una persona ajena instala y usa un flujo seguro con citas y doctor verde; ampliar perfiles sólo tras conformance.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: uso externo verificable; esfuerzo: un flujo de adopción y un perfil de formato cada vez.
 
-- **S15 · P2 · fase E** — Contexto acotado de la sesión gráfica
-  Acción: Medir tokens con y sin retirada de capturas, tope absoluto de compactación por tier, y después la herramienta de captura y la clasificación de acciones.
-  Entrada: Spec SE-447 aprobada (2026-10-27); S2 y S4 esperan a que SE-439 salga de F0.
-  Salida: Medición publicada, tope configurable sin nombres de modelo en la fuente y test de una sola imagen viva.
-  Necesidad: media; urgencia: baja; valor: medio; desbloqueo: abarata sesiones largas de Space; esfuerzo: S1 y S3 pequeños; S2 y S4 tras SE-439 F0.
+- **S34 · P2 · fase D** — Savia Viva: un dominio con verificador externo y revalidación
+  Acción: SE-515 S3–S4: una obligación comprobada por un verificador determinista en un gate existente, con el modelo instruido para ignorarla, y revalidación si cambian política, recurso o época de STOP entre el plan y el efecto.
+  Entrada: S29 con GO; S23 con SE-493 y SE-498 implementadas en la ruta piloto; S28 con aprobación auténtica disponible.
+  Salida: El efecto inválido se bloquea en la ruta cubierta aunque el modelo ignore la lección; garantía declarada por ruta; canario con retirada.
+  Necesidad: condicionada; urgencia: baja; valor: por demostrar; desbloqueo: convierte una lección en garantía comprobable, o lo descarta con datos; esfuerzo: un dominio; medio.
 
 - **S09 · P3 · fase F** — Piloto acotado y evidencia de valor
   Acción: AEK/AEOS en shadow antes de efectos; medir calidad, coste y atención humana; reevaluaciones Labs y prospectiva con decisiones reales.

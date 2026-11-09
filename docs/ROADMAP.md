@@ -3,7 +3,7 @@
 > **Fuente única de estado:** `docs/propuestas/planning-state.json` (vista generada:
 > `docs/propuestas/ROADMAP-CURRENT.md`, `bash scripts/roadmap.sh current|next|validate`).
 > **Decisión vigente:** [ADR-002](decisions/adr-002-ruta-evolutiva-harness-conformance-lab.md) (2026-09-26).
-> **Consolidación:** 2026-09-30, sobre `main` `88aac851` (sin divergencia con `origin/main`).
+> **Consolidación:** 2026-09-30, sobre `main` `88aac851`. **Repriorización:** 2026-11-09, sobre `main` `e59b795ee`.
 > Este documento abre con la ruta y conserva debajo el historial de eras. La cola de
 > sesiones vive en `planning-state.json → route.session_plan` y se genera en
 > [ROADMAP-CURRENT](propuestas/ROADMAP-CURRENT.md). Los planes satélite aportan contexto;
@@ -46,11 +46,48 @@ Un riesgo confirmado de exposición o pérdida adelanta su mitigación acotada.
 Un delta nuevo necesita spec aprobada y hueco WIP; el diseño y la revisión de
 entregas existentes permiten avanzar sin activar otra iniciativa.
 
-**Primer foco:** SE-407 S1–S3 y baseline reproducible. La cola generada S01–S09
-detalla entrada, acción, esfuerzo y salida por sesión; una sesión termina con
-evidencia, siguiente paso y rollback, aunque el gate del siguiente trabajo siga cerrado.
-El WIP actual sigue siendo **SE-407, SE-376 y SE-396**. SE-378 fue sustituida
-por SE-407 en #1187; conserva su aportación canónica, sin volver a implementarla.
+**Cola vigente (repriorización del 2026-11-09).** La cola anterior cubría hasta SE-454:
+63 iniciativas activas no estaban en ninguna sesión, entre ellas el gemelo, la app y
+todo Savia Space. La cola se ha reconstruido entera y se genera en
+[ROADMAP-CURRENT](propuestas/ROADMAP-CURRENT.md). Orden de cabeza:
+
+1. **S22 — Gemelo operativo y Savia usable** (SE-490, SE-504, SE-505).
+2. **S26 — Coste por turno** (SE-511, SE-510): la cuota semanal se agotó dos noches
+   seguidas y paró la cola; reducir el contexto fijo abarata todo lo demás.
+3. **S23 — Fundamentos de efectos y autoridad** (SE-488, SE-508, SE-493, SE-498, SE-496):
+   ocho specs por decidir de las que dependen el sprint nocturno, el modo mediado y Savia Viva.
+4. **S27 — Revisión de graduación**: 22 specs con sus artefactos ya en main. Se revisan
+   AC por AC; no se reimplementa nada.
+
+El WIP en curso es **SE-376, SE-396, SE-426 y SE-428** (4 de 4, con el hueco temporal de Space).
+
+## Savia Viva R6: aprendizaje exigible por dominio
+
+Tesis de investigación recibida el 2026-11-09 (original e informe en Savia Labs). No es
+una spec aprobada ni autoriza implementar. Idea: recordar una lección no basta; cuando es
+relevante y está validada, el sistema debe poder demostrar que la evaluó antes de actuar, y
+cuando es una obligación autorizada y comprobable, un control externo al modelo debe
+impedir el efecto que la incumple. La experiencia no concede autoridad.
+
+Entra en la ruta como tres specs PROPOSED, el máximo que fija la propia tesis, y sin
+almacén, servicio ni grafo nuevos:
+
+| Spec | Qué es | Primer paso |
+|---|---|---|
+| SE-513 | Admisión duradera de cambios de intención y comprobación previa | Sondas de durabilidad y tabla de soporte por harness |
+| SE-514 | Atención humana: una sola cola de preguntas, con su porqué | Escenas confirmadas y medición de partida |
+| SE-515 | Aprendizaje aplicado: de la lección recuperada a la obligación comprobada | Auditoría de solo lectura y línea base |
+
+Secuencia: **S24** (auditoría y sondas, solo lectura) → **S28** (un solo esquema de lección,
+SE-473 y SE-497) → **S29** (recall trazado y vinculación en sombra) → **S34** (un dominio con
+verificador externo, solo si S29 da resultado y S23 está construido). Cada paso puede
+terminar en «no construir», y ese resultado se publica.
+
+Lo que la lectura del código ya dice (2026-11-09, estática): el recall efectivo está
+cableado en los dos frontends pero solo hay un criterio humano elegible, así que entrega
+siempre el mismo principio y no deja prueba de entrega; ninguna lección está enlazada a un
+gate; las llamadas MCP con escritura y WebFetch no tienen control previo (SE-508); el
+orquestador de SCL-011 mide con valores fijos.
 
 ## Entregas recientes y trabajo que falta
 

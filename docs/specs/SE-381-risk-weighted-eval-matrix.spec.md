@@ -1,6 +1,6 @@
 # SE-381 — Risk-Weighted Behavioral Eval Matrix
 
-**Estado:** DEFERRED — Mónica (operadora), 2026-09-05: "Apruebo todas, implementa, pr y merge"
+**Estado:** SUPERSEDED — propuesta de Savia del 2026-11-09: el gate de bloqueo pendiente pasa a SE-468; vale al fusionar la PR. Estado anterior, DEFERRED, y aprobación original: Mónica (operadora), 2026-09-05: "Apruebo todas, implementa, pr y merge"
 **Prioridad:** P1 · **Developer Type:** agent-team · **Context Risk:** medium
 **Origen:** auditoría externa §12 (PARTIALLY_ALREADY_SOLVED)
 

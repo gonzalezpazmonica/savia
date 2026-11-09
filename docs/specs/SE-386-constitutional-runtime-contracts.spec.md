@@ -71,3 +71,9 @@ Distinción formal capas · laws/README · registry · ≥5 leyes · specs decla
 
 ## Referencias
 CRITERIO (no duplicado) · SE-365 · SE-375 · SE-374/377/383 · spec operadora 2026-09-05
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **F5 pasa a SE-496**, que convierte los descriptores de esta spec en acciones con precondiciones y efectos. F1 y F2 están en main (#1090); F3 y F4 esperan decisión.

@@ -212,3 +212,9 @@ S1 versiona estas órdenes como `scripts/hook-dispatch-bench.sh` y casos del cor
 ## Aprobación
 
 Spec PROPOSED. La aprueba la operadora, o la orquestadora con autoridad delegada en su PR, después de la confirmación de escenas (SE-505). Esta PR solo añade documentación.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Absorbe SE-475**: la clase del bloqueo (`FORMA` o `POLÍTICA`) es un campo de `output/guard-blocks.jsonl` (D2) y un prefijo del mensaje del hook, con la biblioteca común bash y TS. Las dos specs tocaban los mismos hooks y guards. SE-475 pasa a SUPERSEDED.

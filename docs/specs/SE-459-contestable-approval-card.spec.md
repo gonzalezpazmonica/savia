@@ -105,3 +105,10 @@ Una aprobación que la persona no entiende es una garantía débil: deja rastro 
 ### Portability classification
 
 - [x] **DUAL_BINDING**: el motivo del guard de cúpulas existe en los dos frontends; el resto es PURE_BASH.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **S2 recortada**: el resumen en lenguaje llano del grant de merge ya lo define SE-488 R1. Aquí quedan S1 (esquema de tarjeta) y S3 (motivos de los avisos de los hooks).
+- La tarjeta es el formato de cada petición de la cola única de SE-514.

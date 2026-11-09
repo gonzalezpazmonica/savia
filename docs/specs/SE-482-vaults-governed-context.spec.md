@@ -78,3 +78,10 @@ Hay una auditoría detallada en curso (SVTC-00), con reproducción de cada caso 
 3. AEK: sigue sin respuesta. F1 no depende de AEK.
 
 Con las respuestas 1 y 2, F1 se concreta en **SE-486** (PROPOSED).
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **F6 y parte de F4 pasan a SE-489**, que ya construyó y midió reranker, vecino y banco con abstención y contradicción (M0–M7). Este paraguas deja de listarlas como fases pendientes.
+- Quedan aquí F1 (SE-486), F2, F3, F5 y F7.

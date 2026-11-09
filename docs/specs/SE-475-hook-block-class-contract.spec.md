@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: SUPERSEDED
 priority: P2
 developer_type: agent-single
 created: 2026-10-29

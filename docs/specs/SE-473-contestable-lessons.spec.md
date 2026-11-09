@@ -109,3 +109,12 @@ SE-449 (estado epistémico).
 ### Portability classification
 
 - [x] **PURE_BASH**: scripts y ficheros de lecciones; ningún binding de frontend.
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Esta spec es la dueña del esquema de la lección**: ámbito con sus dimensiones, evidencia, caducidad y refutación. SE-497 R7 pide casi los mismos campos con otros nombres (`evidence` y `expires_at` frente a `evidence_refs` y `review_by`); debe referenciar este esquema y añadir solo `regression_test` y `confidence`.
+- **Nueva dimensión que S1 debe incluir**: tipo de acción y punto de control al que aplica la lección. Sin ella SE-515 no puede decidir aplicabilidad por metadatos y recae en similitud.
+- **Contraejemplos**: `refuted_by` se conserva; una lección refutada no se borra y no bloquea.
+- S1 pasa a ser entrada de SE-515 S2.

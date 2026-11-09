@@ -85,3 +85,10 @@ Gateway multicanal: ya lo cubre SE-406. Automodificación sin revisión humana.
 ### Portability classification
 
 - [x] **DUAL_BINDING**
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Alcance reducido**: S1 (propuesta de skill) usa el camino de LP con target `skill` de SCL-001 y SE-497; no abre un segundo canal de propuestas. S2 (retirada por desuso) se apoya en `scripts/usage-report.py` (SE-380).
+- Si tras SE-497 el target `skill` cubre S1 entera, esta spec queda solo con la retirada por desuso.

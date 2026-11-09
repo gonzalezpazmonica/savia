@@ -97,3 +97,9 @@ hits:3. El bucle es operativo: la lección llegó al dev en el momento del traba
   `docs/specs/SCL-002-cupula-aprendizaje.spec.md`
 - Regla: `docs/rules/domain/scl-001-learning-loop.md`
 - Scripts: `scripts/learning-recall.sh`, `.claude/hooks/learning-recall-hook.sh`
+
+## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+
+> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Límite conocido**: el recall se dispara con el texto del prompt de la persona, por similitud léxica, y solo entrega criterios `human_authored` (hoy uno). No hay consulta en el punto de decisión ni prueba de entrega. Lo aborda SE-515.
