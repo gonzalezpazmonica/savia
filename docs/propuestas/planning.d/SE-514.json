@@ -1,9 +1,10 @@
 {
   "id": "SE-514",
-  "status": "PROPOSED",
+  "status": "APPROVED",
   "priority": "P1",
   "phase": "D",
   "title": "Atención humana: una sola cola de preguntas, con su porqué",
   "evidence": "docs/specs/SE-514-atencion-humana-cola-unica.spec.md",
-  "note": "Savia Viva R6, candidata C2. Vista única sobre las siete fuentes de peticiones a la persona más las preguntas de agentes; el silencio deja el trabajo en espera y no aprueba nada; cada petición dice qué, por qué, alternativa, coste de aplazar y caducidad. Escenas pendientes de confirmación (SE-505)."
+  "note": "Savia Viva R6, candidata C2. Vista única sobre las siete fuentes de peticiones a la persona más las preguntas de agentes; el silencio deja el trabajo en espera y no aprueba nada; cada petición dice qué, por qué, alternativa, coste de aplazar y caducidad. Escenas pendientes de confirmación (SE-505).",
+  "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488)"
 }

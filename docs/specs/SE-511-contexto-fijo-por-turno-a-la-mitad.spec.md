@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-single
 created: 2026-11-04
@@ -13,6 +13,9 @@ timeline:
   - from: "2026-11-04"
     learned: "2026-11-04"
     value: "PROPOSED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 
 # SE-511 — Contexto fijo por turno a la mitad o menos
@@ -64,8 +67,7 @@ En tokens: la parte versionada sale a **≈ 6.800** con la regla del repo (carac
 4. Ejecutas `bash scripts/context-fixed-measure.sh` y ves cuántos tokens viajan en cada turno, por pieza y en total, con el mismo número en tu máquina y en la CI para la parte versionada.
 
 ### Palabras de la persona
-
-Pendiente: esta spec la redactó una worker sin acceso a la conversación de la operadora del 2026-11-04. Hay que copiar aquí, literal y con fecha, la frase de la operadora sobre la especialización de Savia.
+«Luego usaremos yema con codex y savia con sonnet para implementar y optimizar el uso de tokens.» — 2026-11-09, mensaje de la operadora que encarga la repriorización tras Savia Viva R6.
 
 ### Qué SÍ será
 
@@ -80,9 +82,15 @@ Pendiente: esta spec la redactó una worker sin acceso a la conversación de la 
 - No se aprueba con la intuición de que «menos es mejor»: se aprueba con EXP-509.
 
 ### Confirmación
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
-fecha: pendiente
-respuesta: pendiente. La redactó una worker headless sin canal con la persona; antes de aprobar hay que enseñar las escenas por pregunta interactiva y copiar la respuesta literal (SE-505, PR #1476).
+## Slice S0 — Prototipo navegable
+- prototipo: una sesión con el bloque compacto y otra con el contexto actual, para que la persona juzgue si «sigue siendo Savia» antes de medir (S0 del plan por slices).
+
+### Confirmación del prototipo
+- fecha: pendiente (obligatoria antes de poner S1 en curso)
+- respuesta: pendiente
 
 ## Qué decide esta spec
 
@@ -186,4 +194,4 @@ respuesta: pendiente. La redactó una worker headless sin canal con la persona; 
 
 ## Aprobación
 
-Spec PROPOSED. Requiere el resultado de la validación D4 con el método de EXP-509 y la confirmación de escenas (SE-505). La aprueba la operadora o la orquestadora con autoridad delegada en su PR. Esta PR solo añade documentación.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). Aprobada con el recorte condicionado (respuesta «Aprobar con recorte condicionado (Recommended)», 2026-11-09): la medición (script y tope informativo en CI) puede empezar; el recorte del contexto fijo solo se activa si la validación D4 con el método de EXP-509 confirma que no baja el cumplimiento. EXP-509 se cortó por cuota sin resultados.

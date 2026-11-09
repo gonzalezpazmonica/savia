@@ -77,24 +77,35 @@ Artefactos y PRs presentes en main. Evidencia de existencia, no de cada AC: la g
 
 Parciales que siguen abiertas (sesión S32): SE-489 (M0–M7, #1432–#1439), SE-500 (S1–S2), SE-501, SE-470 (S2), SE-490 (#1440–#1447).
 
-## 6. Decisiones de poda que quedan para la operadora
+## 6. Decisiones de la operadora (2026-11-09, preguntas interactivas)
 
-No se aplican en esta PR porque la evidencia es parcial o la decisión es de producto.
+Todas por pregunta interactiva en la sesión de la orquestadora; las respuestas literales están en cada spec y en `LOG.d/`. Se formalizan al fusionar la PR (SE-488).
 
-| Spec | Propuesta | Evidencia |
+**Aprobadas**, alcance elegido «Savia Viva + tokens y efectos»:
+
+| Spec | Escenas | Nota |
 |---|---|---|
-| SE-377 | Cerrar; el gate pendiente a SE-453 y SE-454 | **I** |
-| SE-386 | Cerrar tras F1–F2; F5 a SE-496 | **O** en el texto de ambas |
-| SE-390 | Cerrar; la identidad la gobiernan SE-483 y SE-484 | **I** |
-| SE-394 | Fusionar en SE-393 o cerrar: sin entregables propios ni dependientes | **O** |
-| SE-389, SE-385 | Mantener aparcadas o pasar a Labs: nadie depende de ellas | **O** |
-| SE-397 | Graduar F1–F5A y abrir F6–F10 como spec nueva | **O** PRs #1123–#1128 |
-| SE-388 | Comprobar si su P3 ya lo cubre SE-392 S3 (#1383) | **NV** |
-| SE-472 | Retirar si `overnight-sprint-loop.sh` ya no se usa | **I** |
-| SE-506 | Aplazar: sin dependientes y depende de SE-449 sin implementar | **O** |
-| SE-502 | Aplazar hasta tener SE-493, SE-496 y SE-498; falta la herramienta en la máquina de referencia | **O** en su texto |
-| SPEC-165, SPEC-168 | Retirar o etiquetar como heurística `world-model-simulator.py` y `actor-pre-action-loop.py`: nadie los invoca | **O**; se decide en SE-515 S0 |
-| SE-512 | Aprobar por el camino de SE-488, sin tercer formato de firma | **O** en el texto de las tres |
+| SE-513, SE-514 | Confirmadas | Prototipo S0 pendiente antes de S1 |
+| SE-515 | No aplica (`human_surface: false`, sale como DECLARED-FALSE para la revisora) | Cada slice desde S1 se aprueba aparte, según la spec |
+| SE-508, SE-510 | Confirmadas | Prototipo S0 pendiente; SE-508 arranca en observación |
+| SE-511 | Confirmadas | Recorte condicionado: la medición empieza ya, el recorte espera a la validación con el método de EXP-509, que se cortó por cuota sin resultados |
+| SE-493, SE-496, SE-498 | Redactadas hoy y confirmadas | No declaraban `human_surface`; tienen momentos en que la persona actúa (resolver un efecto dudoso, firmar un contrato, parar y reanudar), así que se declaró `true` y se le enseñaron escenas en vez de autoexentarlas |
+
+En «Palabras de la persona» se citan frases del mensaje de la operadora del 2026-11-09 o su respuesta de alcance; en SE-510 se dice expresamente que la cita trata de tokens, no de guardas.
+
+**Podas aplicadas:**
+
+| Spec | Cambio | Motivo |
+|---|---|---|
+| SE-377 | SUPERSEDED | Gate pendiente a SE-453 y SE-454 (**I**) |
+| SE-386 | SUPERSEDED | F5 a SE-496; F1–F2 en main (#1090); F3–F4 se abandonan |
+| SE-390 | SUPERSEDED | Identidad y documentación en SE-483 y SE-484 (**I**) |
+| SE-394 | SUPERSEDED | Sin entregables propios ni dependientes |
+| SE-502 | DEFERRED | Hasta tener SE-493, SE-496 y SE-498 implementadas y la herramienta de modelado |
+| SE-506 | DEFERRED | Sin dependientes; depende de SE-449 sin implementar |
+| SE-472 | Condicionada en la cola | Se retira si `overnight-sprint-loop.sh` ya no se usa (**NV**) |
+
+**Siguen abiertas, sin decisión:** SE-389 y SE-385 (aparcadas, nadie depende de ellas), SE-397 (graduar F1–F5A y abrir F6–F10), SE-388 (comprobar si su P3 ya lo cubre SE-392 S3), retirar o etiquetar `world-model-simulator.py` y `actor-pre-action-loop.py` (se decide en SE-515 S0), SE-512 (aprobar por el camino de SE-488).
 
 ## 7. Límites de este informe
 

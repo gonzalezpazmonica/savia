@@ -1,9 +1,9 @@
 {
   "id": "SE-502",
-  "status": "PROPOSED",
+  "status": "DEFERRED",
   "priority": "P1",
   "phase": "A",
   "title": "Modelo formal de autorización y efectos: TLA+ mínimo de grant, efecto, STOP y reintento",
   "evidence": "docs/specs/SE-502-formal-authorization-effects-model.spec.md",
-  "note": "Propuesta 1 del informe The Code. Modelo acotado (2 ejecutores, 1 recurso) contra el código actual y contra SE-493/496/498; contraejemplos a tests BATS; sin herramienta BLOCKED, nunca PASS. Se prueba el modelo, no el software."
+  "note": "Decisión de la operadora, pregunta interactiva 2026-11-09 (podas). Aplazada hasta tener SE-493, SE-496 y SE-498 implementadas y la herramienta de modelado disponible."
 }

@@ -1,11 +1,12 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P0
 developer_type: agent-single
 created: 2026-11-01
 author: Savia
 phase: A
 risk: L3
+human_surface: true
 depends_on: [SE-387]
 related_specs: [SE-387, SE-433, SE-343, SE-362, SE-488, SE-364]
 origin: "Análisis de repositorios externos difundidos públicamente (2026-11-01), iniciativa SAVIA-RESEARCH-01 y validación V1 «efectos exactamente una vez». Patrón extraído de OpenRath (BSD-3-Clause, commit f39331700fb4), sin adoptar el producto. Afirmaciones del análisis contrastadas con main en fa3f486a0; citas fichero:línea re-ancladas en main 3e094038d (2026-11-03) y acompañadas del símbolo, porque merge-sprint.sh cambió entre ambos."
@@ -14,6 +15,9 @@ timeline:
     learned: "2026-11-01"
     value: "PROPOSED"
     source: "spec-lifecycle:auto"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 # SE-493 — Effect Ledger y reconciliación de efectos ambiguos
 
@@ -461,6 +465,35 @@ Revertir el PR del slice. El ledger es aditivo: los JSON antiguos no se borran n
 
 Revertir S2 o S3 tiene un coste: los consumidores vuelven a los JSON y no ven las entradas creadas en el ledger desde entonces. Antes de revertir, `effect-ledger.py status --open` lista las entradas `PREPARED`, `DISPATCHED` y `NEEDS_REVIEW`; se resuelven o se reconcilian primero. Con alguna `DISPATCHED` o `NEEDS_REVIEW` abierta, el revert no se hace.
 
+## Lo que he entendido
+
+### Escenas
+1. Savia pide un merge y la red cae antes de la respuesta. No lo vuelve a pedir: «El merge de #1500 quedó dudoso: la petición salió pero no sé si GitHub lo aceptó. Lo compruebo antes de repetir nada.» Si la comprobación lo confirma, lo marca hecho con su commit.
+2. Por la mañana lees: «1 efecto en revisión: publicación del informe, dudoso desde las 03:12. ¿Lo doy por hecho o por fallido?». Nada se repite hasta que eliges, y tu elección queda registrada.
+3. Dos agentes intentan fusionar el mismo PR a la vez. Solo uno lo pide; el otro recibe «ya en curso».
+
+### Palabras de la persona
+«Savia Viva + tokens y efectos» — 2026-11-09, respuesta de la operadora a la pregunta interactiva sobre qué specs aprobar.
+
+### Qué SÍ será
+- Ningún efecto con resultado dudoso se repite sin comprobarlo o sin tu decisión.
+- Un recibo de cada efecto que se puede verificar después.
+
+### Qué NO será
+- No deshace efectos.
+- No repite algo dudoso porque falló la red.
+
+### Confirmación
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
+
+## Slice S0 — Prototipo navegable
+- prototipo: los tres textos exactos de las escenas y la salida de la reconciliación sobre un ledger de ejemplo con un efecto hecho, uno fallido y uno dudoso.
+
+### Confirmación del prototipo
+- fecha: pendiente (obligatoria antes de poner S1 en curso)
+- respuesta: pendiente
+
 ## OpenCode Implementation Plan
 
 ### Bindings touched
@@ -479,3 +512,7 @@ Revertir S2 o S3 tiene un coste: los consumidores vuelven a los JSON y no ven la
 ### Portability classification
 
 - [x] **PURE_BASH**: bash más Python stdlib (`sqlite3`, `hashlib`, `json`), sin bindings de frontend.
+
+## Aprobación
+
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 

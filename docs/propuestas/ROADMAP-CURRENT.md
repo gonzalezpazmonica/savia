@@ -12,15 +12,15 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S26 · P0 · fase A** — Coste por turno: contexto fijo a la mitad y guardas sin bloqueos falsos
   Acción: SE-511: medir y reducir el contexto fijo que se carga en cada turno. SE-510: un despachador por evento y registro de cada bloqueo, con la clase FORMA o POLÍTICA que traía SE-475.
-  Entrada: Aprobación de SE-510 y SE-511. Primero la medición de partida de cada una; sin hueco WIP nuevo hasta tenerla.
+  Entrada: SE-510 y SE-511 aprobadas (2026-11-09, escenas confirmadas). SE-511: la medición empieza ya; el recorte del contexto solo tras la validación D4 con el método de EXP-509, que se cortó por cuota sin resultados. Cada una necesita su prototipo S0 confirmado antes de S1.
   Salida: Tokens fijos por turno medidos antes y después en los dos frontends; bloqueos falsos contados antes y después; ningún guard de política debilitado.
   Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: la cuota semanal se agotó dos noches seguidas (2026-11-07 y 2026-11-08) y paró la cola; abarata todo lo demás; esfuerzo: medición pequeña; reducción media.
 
-- **S23 · P0 · fase A** — Fundamentos de efectos y autoridad: decidir y construir en orden
-  Acción: Decidir las ocho specs PROPOSED de este bloque y construir en este orden: SE-488 (aprobación por fusión, ya aprobada), SE-508 (guard previo de MCP y WebFetch: hoy no hay ninguno), SE-493 (ledger de efectos), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-502 después, cuando haya algo que modelar.
-  Entrada: Aprobación de SE-493, SE-498, SE-508 y SE-496 por la operadora; una en curso cada vez; riesgo alto: revisión humana del PR concreto.
+- **S23 · P0 · fase A** — Fundamentos de efectos y autoridad: construir en orden
+  Acción: Construir en este orden: SE-488 (aprobación por fusión), SE-508 (control previo de MCP y WebFetch: hoy no hay ninguno, arranca en observación), SE-493 (ledger de efectos), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-491, SE-499 y SE-494 siguen por decidir; SE-502 queda aplazada hasta tener las tres primeras.
+  Entrada: SE-493, SE-496, SE-498 y SE-508 aprobadas (2026-11-09, escenas confirmadas); falta el prototipo S0 de cada una antes de S1. Una en curso cada vez; riesgo alto: revisión humana del PR concreto. SE-512, SE-491, SE-499 y SE-494 siguen PROPOSED.
   Salida: Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate.
-  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: Savia Viva (SE-513 S3, SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque; esfuerzo: ocho decisiones; cinco specs medianas en serie.
+  Necesidad: alta; urgencia: alta; valor: alto; desbloqueo: Savia Viva (SE-513 S3, SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque; esfuerzo: cinco specs medianas en serie; cuatro decisiones pendientes.
 
 - **S27 · P0 · fase A** — Revisión de graduación de lo ya entregado
   Acción: 22 specs figuran APPROVED o DEFERRED con sus artefactos y PRs ya en main. Revisar AC por AC, ejecutar sus tests y registrar completion con revisión humana, o anotar el slice que falta. No se reimplementa nada.
@@ -42,7 +42,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S24 · P1 · fase A** — Savia Viva A0: auditoría del estado real y sondas, sin cambios de autoridad
   Acción: Slice S0 de las tres specs de Savia Viva R6: matriz de cobertura de rutas de efecto por frontend, desglose del recall por criterio, tabla de soporte de cambio en caliente por harness, medición de peticiones a la persona y fixtures de las sondas P0–P15. Solo lectura y fixtures.
-  Entrada: Aprobación del slice S0 de SE-515; escenas de SE-513 y SE-514 confirmadas por la operadora (SE-505). No ocupa hueco WIP.
+  Entrada: SE-513, SE-514 y SE-515 aprobadas (2026-11-09) con escenas confirmadas; S0 es solo lectura y fixtures, más los prototipos de SE-513 y SE-514. No ocupa hueco WIP.
   Salida: Informe con observado, inferido y no verificado, commits y hashes fijados, dominio piloto elegido con tres casos y tres contraejemplos, y condiciones de NO-GO escritas antes de medir.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: decide si el resto de Savia Viva se construye, se recorta o se descarta; esfuerzo: tres slices pequeños de lectura.
 
@@ -72,12 +72,12 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S29 · P1 · fase C** — Savia Viva: recall trazado, vinculación en sombra y admisión duradera
   Acción: SE-515 S1–S2: prueba de entrega del recall, métrica marcada como no medida cuando usa valores fijos, resolvedor de aplicabilidad por metadatos en sombra y evaluación en casos reservados. SE-513 S1–S2: admisión y salida en una transacción y promoción por regla.
-  Entrada: S24 publicada con resultado que lo justifique; S28 con el esquema decidido; aprobación de cada slice por separado.
+  Entrada: S24 publicada con resultado que lo justifique; S28 con el esquema decidido; cada slice de SE-515 a partir de S1 necesita su propia aprobación, según la spec.
   Salida: Ablación con y sin recall publicada (cero cambios es resultado válido); GO, NO-GO o retirada de la vinculación orientativa; cero entradas admitidas perdidas bajo cortes.
   Necesidad: media; urgencia: baja; valor: por demostrar; desbloqueo: primera evidencia de si una lección cambia una decisión; esfuerzo: slices pequeños; el experimento manda.
 
 - **S05 · P1 · fase B** — TEE v1.1 y frontera AEK en solo lectura
-  Acción: Reescribir SE-401 a TEE v1.1 como arquitectura de referencia (F0 de solo lectura); el motor de autoridad va por SE-496 y su modelo por SE-502, no por fases nuevas de SE-401. F5 de SE-386 pasa a SE-496. Mapear issuer/EEP/evidence con L31 F0 y contrato común de tres frontends.
+  Acción: Reescribir SE-401 a TEE v1.1 como arquitectura de referencia (F0 de solo lectura); el motor de autoridad va por SE-496 y su modelo por SE-502, no por fases nuevas de SE-401. SE-386 y SE-394 quedan sustituidas (2026-11-09). Mapear issuer/EEP/evidence con L31 F0 y contrato común de tres frontends.
   Entrada: SE-396 graduada; contrato/frontera y spec aprobados; Labs máximo una línea activa.
   Salida: Mapa revisado, exclusiones y bypass explícitos, pruebas negativas READ_ONLY, contrato EEP común; namespace AEK- ya decidido.
   Necesidad: alta; urgencia: media; valor: alto; desbloqueo: evita duplicar autoridad; esfuerzo: F0 L31 8-16 h estimadas; implementación aparte.
@@ -90,7 +90,7 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
 
 - **S30 · P1 · fase D** — Atención humana y aprobaciones contestables
   Acción: SE-458 (tope y lotes de PRs en revisión), SE-459 S1 y S3 (tarjeta), SE-492 (estado declarado, no inferido), SE-507 (latido de runs, con el digest de SE-471 leyendo del ledger) y, encima, la cola única de SE-514. SE-461 a SE-463: composición de efectos, marca de sesión y cobertura de supervisión.
-  Entrada: Aprobación de SE-492, SE-507 y SE-514 por la operadora, con escenas confirmadas (SE-505); SE-514 S1 después de S22.
+  Entrada: Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.
   Salida: Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos.
   Necesidad: media; urgencia: media; valor: alto; desbloqueo: protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola; esfuerzo: slices pequeños independientes.
 
@@ -101,8 +101,8 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Necesidad: media; urgencia: baja; valor: alto; desbloqueo: las lecciones y la evidencia de Savia Viva se sirven desde Vaults; esfuerzo: SE-489 decisión; SE-486 media.
 
 - **S14 · P2 · fase D** — Higiene de contexto, instalación y operación
-  Acción: SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-464 y SE-506 sin dependientes: se deciden al llegar.
-  Entrada: Specs aprobadas salvo SE-464 y SE-506, que siguen PROPOSED; se ejecutan por separado, una por vez; sin hueco WIP nuevo.
+  Acción: SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada.
+  Entrada: Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.
   Salida: Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran.
   Necesidad: media; urgencia: baja; valor: medio; desbloqueo: reduce superficie sin bloquear otras fases; esfuerzo: slices pequeños independientes.
 
@@ -203,7 +203,16 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-488 [APPROVED] Aprobaciones por fusión de PR (operación solo móvil) — evidencia: docs/specs/SE-488-approvals-by-pr-merge.spec.md
 - SE-489 [APPROVED] Vaults: recuperación adaptativa construida y medida (estructura, grafo, reranker, router y cuantización) — evidencia: docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md
 - SE-490 [APPROVED] Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional — evidencia: docs/specs/SE-490-soul-continuity-work-laptop.spec.md
+- SE-496 [APPROVED] Ontología operativa gobernada: la autoridad vive fuera del modelo — evidencia: docs/specs/SE-496-governed-operational-ontology-authority.spec.md
 - SE-500 [APPROVED] Merge-sprint sin realineación manual: fragmentos de planificación, integración en línea y plan ordenado — evidencia: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md
+- SE-493 [APPROVED] Effect Ledger y reconciliación de efectos ambiguos — evidencia: docs/specs/SE-493-effect-ledger-ambiguous-reconciliation.spec.md
+- SE-498 [APPROVED] STOP global y revocación entre ejecutores — evidencia: docs/specs/SE-498-global-stop-cross-executor-revocation.spec.md
 - SE-501 [APPROVED] Derivados fuera de las PR: firma de confidencialidad, SAM y manifiesto de reglas generados en main — evidencia: docs/specs/SE-501-derivados-fuera-de-las-pr.spec.md
 - SE-504 [APPROVED] Savia usable: una app como la de Claude o ChatGPT, conectada a Soul y Space — evidencia: docs/specs/SE-504-savia-usable-conversacion-documentos-contexto.spec.md
 - SE-505 [APPROVED] Puerta de comprensión: escenas confirmadas antes de la spec, prototipo antes del código — evidencia: docs/specs/SE-505-puerta-de-comprension.spec.md
+- SE-508 [APPROVED] Guard previo para tools MCP con escritura y para WebFetch — evidencia: docs/specs/SE-508-mcp-webfetch-pretooluse-guard.spec.md
+- SE-510 [APPROVED] Guardas sin bloqueos falsos y un despachador por evento — evidencia: docs/specs/SE-510-guardas-sin-bloqueos-falsos-despachador.spec.md
+- SE-511 [APPROVED] Contexto fijo por turno a la mitad o menos — evidencia: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
+- SE-513 [APPROVED] Admisión duradera de cambios de intención y comprobación previa — evidencia: docs/specs/SE-513-admision-duradera-y-comprobacion-previa.spec.md
+- SE-514 [APPROVED] Atención humana: una sola cola de preguntas, con su porqué — evidencia: docs/specs/SE-514-atencion-humana-cola-unica.spec.md
+- SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md

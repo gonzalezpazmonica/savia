@@ -1,6 +1,6 @@
 # SE-377 — Policy Enforcement Completeness: TEST + RECEIPT
 
-**Estado:** DEFERRED — Mónica (operadora), 2026-09-05: "Apruebo todas, implementa, pr y merge"
+**Estado:** SUPERSEDED — decisión de la operadora del 2026-11-09 por pregunta interactiva; absorbida por SE-453 y SE-454 (gate de bloqueo pendiente). Estado y aprobación anteriores: Mónica (operadora), 2026-09-05: "Apruebo todas, implementa, pr y merge"
 **Prioridad:** P0 · **Developer Type:** agent-team · **Context Risk:** medium
 **Origen:** auditoría externa §8 (PARTIALLY_ALREADY_SOLVED — depende de SE-374, mergeada hoy)
 

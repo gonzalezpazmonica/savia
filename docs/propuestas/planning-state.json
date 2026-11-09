@@ -1752,7 +1752,7 @@
         {
           "on": "2026-11-09",
           "requested_by": "operadora, repriorización completa a partir de la tesis Savia Viva R6",
-          "change": "Cola reconstruida: 63 iniciativas activas no estaban en ninguna sesión. Alta de SE-513..SE-515 (PROPOSED) y de las sesiones S22..S34. Se retiran de la cola S01 y S02 (hechas) y S10, S11, S12, S13, S15, S16, S17, S18 y S20 (sus specs pasan a revisión de graduación S27 o a otras sesiones). SE-406, SE-381 y SE-475 pasan a SUPERSEDED (por SE-431, SE-468 y SE-510). Enmiendas propuestas sin cambio de estado en SE-386, SE-395, SE-401, SE-409, SE-459, SE-460, SE-468, SE-472, SE-473, SE-482, SE-497, SE-507, SE-510, SE-512 y SCL-003/006/011. Gates, fases y límites WIP sin cambios."
+          "change": "Cola reconstruida: 63 iniciativas activas no estaban en ninguna sesión. Alta de SE-513..SE-515 (PROPOSED) y de las sesiones S22..S34. Se retiran de la cola S01 y S02 (hechas) y S10, S11, S12, S13, S15, S16, S17, S18 y S20 (sus specs pasan a revisión de graduación S27 o a otras sesiones). SE-406, SE-381 y SE-475 pasan a SUPERSEDED (por SE-431, SE-468 y SE-510). Enmiendas propuestas sin cambio de estado en SE-386, SE-395, SE-401, SE-409, SE-459, SE-460, SE-468, SE-472, SE-473, SE-482, SE-497, SE-507, SE-510, SE-512 y SCL-003/006/011. Gates, fases y límites WIP sin cambios. Misma fecha, tras preguntas interactivas a la operadora: APPROVED SE-493, SE-496, SE-498, SE-508, SE-510, SE-511 (recorte condicionado a EXP-509), SE-513, SE-514 y SE-515, con escenas confirmadas; SUPERSEDED SE-377, SE-386, SE-390 y SE-394; DEFERRED SE-502 y SE-506; SE-472 condicionada a que su bucle siga en uso."
         }
       ]
     },
@@ -1791,7 +1791,7 @@
         "value": "alto",
         "dependency_value": "la cuota semanal se agotó dos noches seguidas (2026-11-07 y 2026-11-08) y paró la cola; abarata todo lo demás",
         "effort": "medición pequeña; reducción media",
-        "prerequisites": "Aprobación de SE-510 y SE-511. Primero la medición de partida de cada una; sin hueco WIP nuevo hasta tenerla.",
+        "prerequisites": "SE-510 y SE-511 aprobadas (2026-11-09, escenas confirmadas). SE-511: la medición empieza ya; el recorte del contexto solo tras la validación D4 con el método de EXP-509, que se cortó por cuota sin resultados. Cada una necesita su prototipo S0 confirmado antes de S1.",
         "done": "Tokens fijos por turno medidos antes y después en los dos frontends; bloqueos falsos contados antes y después; ningún guard de política debilitado."
       },
       {
@@ -1810,14 +1810,14 @@
           "SE-499",
           "SE-494"
         ],
-        "title": "Fundamentos de efectos y autoridad: decidir y construir en orden",
-        "action": "Decidir las ocho specs PROPOSED de este bloque y construir en este orden: SE-488 (aprobación por fusión, ya aprobada), SE-508 (guard previo de MCP y WebFetch: hoy no hay ninguno), SE-493 (ledger de efectos), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-502 después, cuando haya algo que modelar.",
+        "title": "Fundamentos de efectos y autoridad: construir en orden",
+        "action": "Construir en este orden: SE-488 (aprobación por fusión), SE-508 (control previo de MCP y WebFetch: hoy no hay ninguno, arranca en observación), SE-493 (ledger de efectos), SE-498 (STOP y revocación), SE-496 (contrato de delegación). SE-512 se aprueba por el camino de SE-488, sin tercer formato de firma. SE-491, SE-499 y SE-494 siguen por decidir; SE-502 queda aplazada hasta tener las tres primeras.",
         "necessity": "alta",
         "urgency": "alta",
         "value": "alto",
         "dependency_value": "Savia Viva (SE-513 S3, SE-515 S3–S4), el sprint nocturno y el modo mediado de Space dependen de este bloque",
-        "effort": "ocho decisiones; cinco specs medianas en serie",
-        "prerequisites": "Aprobación de SE-493, SE-498, SE-508 y SE-496 por la operadora; una en curso cada vez; riesgo alto: revisión humana del PR concreto.",
+        "effort": "cinco specs medianas en serie; cuatro decisiones pendientes",
+        "prerequisites": "SE-493, SE-496, SE-498 y SE-508 aprobadas (2026-11-09, escenas confirmadas); falta el prototipo S0 de cada una antes de S1. Una en curso cada vez; riesgo alto: revisión humana del PR concreto. SE-512, SE-491, SE-499 y SE-494 siguen PROPOSED.",
         "done": "Cada spec decidida; las aprobadas con sus AC y pruebas negativas en los dos frontends; ninguna ruta de efecto nueva sin su gate."
       },
       {
@@ -1909,7 +1909,7 @@
         "value": "alto",
         "dependency_value": "decide si el resto de Savia Viva se construye, se recorta o se descarta",
         "effort": "tres slices pequeños de lectura",
-        "prerequisites": "Aprobación del slice S0 de SE-515; escenas de SE-513 y SE-514 confirmadas por la operadora (SE-505). No ocupa hueco WIP.",
+        "prerequisites": "SE-513, SE-514 y SE-515 aprobadas (2026-11-09) con escenas confirmadas; S0 es solo lectura y fixtures, más los prototipos de SE-513 y SE-514. No ocupa hueco WIP.",
         "done": "Informe con observado, inferido y no verificado, commits y hashes fijados, dominio piloto elegido con tres casos y tres contraejemplos, y condiciones de NO-GO escritas antes de medir."
       },
       {
@@ -2013,7 +2013,7 @@
         "value": "por demostrar",
         "dependency_value": "primera evidencia de si una lección cambia una decisión",
         "effort": "slices pequeños; el experimento manda",
-        "prerequisites": "S24 publicada con resultado que lo justifique; S28 con el esquema decidido; aprobación de cada slice por separado.",
+        "prerequisites": "S24 publicada con resultado que lo justifique; S28 con el esquema decidido; cada slice de SE-515 a partir de S1 necesita su propia aprobación, según la spec.",
         "done": "Ablación con y sin recall publicada (cero cambios es resultado válido); GO, NO-GO o retirada de la vinculación orientativa; cero entradas admitidas perdidas bajo cortes."
       },
       {
@@ -2022,12 +2022,10 @@
         "priority": "P1",
         "initiatives": [
           "SE-401",
-          "SE-386",
-          "SE-393",
-          "SE-394"
+          "SE-393"
         ],
         "title": "TEE v1.1 y frontera AEK en solo lectura",
-        "action": "Reescribir SE-401 a TEE v1.1 como arquitectura de referencia (F0 de solo lectura); el motor de autoridad va por SE-496 y su modelo por SE-502, no por fases nuevas de SE-401. F5 de SE-386 pasa a SE-496. Mapear issuer/EEP/evidence con L31 F0 y contrato común de tres frontends.",
+        "action": "Reescribir SE-401 a TEE v1.1 como arquitectura de referencia (F0 de solo lectura); el motor de autoridad va por SE-496 y su modelo por SE-502, no por fases nuevas de SE-401. SE-386 y SE-394 quedan sustituidas (2026-11-09). Mapear issuer/EEP/evidence con L31 F0 y contrato común de tres frontends.",
         "necessity": "alta",
         "urgency": "media",
         "value": "alto",
@@ -2041,7 +2039,6 @@
         "phase": "C",
         "priority": "P1",
         "initiatives": [
-          "SE-377",
           "SE-383",
           "SE-384",
           "SE-452",
@@ -2079,7 +2076,7 @@
         "value": "alto",
         "dependency_value": "protege el recurso más escaso; SE-515 con revisión obligatoria necesita esta cola",
         "effort": "slices pequeños independientes",
-        "prerequisites": "Aprobación de SE-492, SE-507 y SE-514 por la operadora, con escenas confirmadas (SE-505); SE-514 S1 después de S22.",
+        "prerequisites": "Aprobación de SE-492 y SE-507 por la operadora, con escenas confirmadas (SE-505). SE-514 ya aprobada (2026-11-09): su S1 va después de S22.",
         "done": "Peticiones a la persona medidas antes y después; ningún permiso inferido del silencio; cada spec con sus negativos."
       },
       {
@@ -2117,13 +2114,13 @@
           "SE-466"
         ],
         "title": "Higiene de contexto, instalación y operación",
-        "action": "SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-464 y SE-506 sin dependientes: se deciden al llegar.",
+        "action": "SE-448 S0 y canario; SE-449 regla y lectura en el tribunal; SE-450 auditoría de instaladores; SE-454 invariantes negativos como tests; SE-465 y SE-466 dependencias sin fijar y avisos OSV. SE-472 solo si el bucle nocturno que gobierna sigue en uso. SE-472 se retira si ese bucle ya no se usa. SE-464 sin dependientes: se decide al llegar; SE-506 aplazada.",
         "necessity": "media",
         "urgency": "baja",
         "value": "medio",
         "dependency_value": "reduce superficie sin bloquear otras fases",
         "effort": "slices pequeños independientes",
-        "prerequisites": "Specs aprobadas salvo SE-464 y SE-506, que siguen PROPOSED; se ejecutan por separado, una por vez; sin hueco WIP nuevo.",
+        "prerequisites": "Specs aprobadas salvo SE-464 (PROPOSED) y SE-506 (aplazada); se ejecutan por separado, una por vez; sin hueco WIP nuevo.",
         "done": "Cada slice publica su evidencia (render, tribunal, auditoría) y no activa nada por defecto sin medición. Los invariantes de SE-454 llevan caso negativo y declaran lo que no demuestran."
       },
       {
@@ -2175,7 +2172,6 @@
         "initiatives": [
           "SE-398",
           "SE-399",
-          "SE-390",
           "SE-408"
         ],
         "title": "Adopción y contexto de ficheros completo",

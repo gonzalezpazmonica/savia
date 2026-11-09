@@ -52,10 +52,10 @@ todo Savia Space. La cola se ha reconstruido entera y se genera en
 [ROADMAP-CURRENT](propuestas/ROADMAP-CURRENT.md). Orden de cabeza:
 
 1. **S22 — Gemelo operativo y Savia usable** (SE-490, SE-504, SE-505).
-2. **S26 — Coste por turno** (SE-511, SE-510): la cuota semanal se agotó dos noches
-   seguidas y paró la cola; reducir el contexto fijo abarata todo lo demás.
+2. **S26 — Coste por turno** (SE-511, SE-510, aprobadas): la cuota semanal se agotó dos
+   noches seguidas y paró la cola. SE-511 mide ya; el recorte espera al experimento EXP-509.
 3. **S23 — Fundamentos de efectos y autoridad** (SE-488, SE-508, SE-493, SE-498, SE-496):
-   ocho specs por decidir de las que dependen el sprint nocturno, el modo mediado y Savia Viva.
+   aprobadas el 2026-11-09; de ellas dependen el sprint nocturno, el modo mediado y Savia Viva.
 4. **S27 — Revisión de graduación**: 22 specs con sus artefactos ya en main. Se revisan
    AC por AC; no se reimplementa nada.
 
@@ -69,8 +69,9 @@ relevante y está validada, el sistema debe poder demostrar que la evaluó antes
 cuando es una obligación autorizada y comprobable, un control externo al modelo debe
 impedir el efecto que la incumple. La experiencia no concede autoridad.
 
-Entra en la ruta como tres specs PROPOSED, el máximo que fija la propia tesis, y sin
-almacén, servicio ni grafo nuevos:
+Entra en la ruta como tres specs, el máximo que fija la propia tesis, sin almacén,
+servicio ni grafo nuevos. Las tres quedaron APPROVED el 2026-11-09 con escenas confirmadas;
+cada slice de SE-515 a partir de S1 necesita su propia aprobación:
 
 | Spec | Qué es | Primer paso |
 |---|---|---|

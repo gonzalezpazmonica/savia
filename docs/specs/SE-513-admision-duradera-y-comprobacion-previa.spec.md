@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-team
 created: 2026-11-09
@@ -14,6 +14,9 @@ timeline:
   - from: "2026-11-09"
     learned: "2026-11-09"
     value: "PROPOSED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 
 # SE-513 — Admisión duradera de cambios de intención y comprobación previa
@@ -47,7 +50,7 @@ Mientras hay trabajos en marcha, la persona cambia de prioridad. Hoy ese cambio 
 5. Un agente no puede demostrar que incorporó el cambio. Savia dice «no sé si lo ha aplicado; lo confirmo cuando termine su paso», no «hecho».
 
 ### Palabras de la persona
-Sin cita. La operadora no ha pedido esto con sus palabras: sale de la tesis.
+«Actualiza y mejora todo el roadmap y specs de Savia en base a esta tesis y posibles mejoras, optimizaciones o podas necesarias que puedas encontrar.» — 2026-11-09, mensaje de la operadora que encarga esta repriorización.
 
 ### Qué SÍ será
 - Cambios de prioridad que no se pierden ni se duplican, con un estado honesto.
@@ -59,8 +62,8 @@ Sin cita. La operadora no ha pedido esto con sus palabras: sale de la tesis.
 - No es un bus nuevo ni un gestor de tareas nuevo.
 
 ### Confirmación
-- fecha: pendiente
-- respuesta: pendiente. Las escenas no se han enseñado a la operadora.
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
 - prototipo: transcripción de las cinco escenas con los textos exactos de Savia y la salida de la cola con los tres estados, sobre un fixture.
@@ -127,4 +130,4 @@ Sin cita. La operadora no ha pedido esto con sus palabras: sale de la tesis.
 
 ## Aprobación
 
-Spec PROPOSED. Requiere la confirmación de escenas (SE-505) antes de pasar a APPROVED. Esta PR solo añade documentación.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 

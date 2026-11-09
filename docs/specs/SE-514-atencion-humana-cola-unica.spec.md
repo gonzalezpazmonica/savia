@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-team
 created: 2026-11-09
@@ -14,6 +14,9 @@ timeline:
   - from: "2026-11-09"
     learned: "2026-11-09"
     value: "PROPOSED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 
 # SE-514 — Atención humana: una sola cola de preguntas, con su porqué
@@ -60,7 +63,7 @@ Savia Viva R6 añade un cuarto caso: cuando una lección obliga a revisar algo a
 5. Contestas a una tarjeta de ayer. Savia responde: «Esa pregunta caducó: el cambio ya no es el mismo. Te la vuelvo a enseñar con lo actual.»
 
 ### Palabras de la persona
-Sin cita sobre la cola única. La operadora no la ha pedido con sus palabras: sale de la tesis. Preferencias ya expresadas por ella que esta spec respeta: decisiones siempre por pregunta interactiva, con contexto llano y sin siglas internas.
+«Actualiza y mejora todo el roadmap y specs de Savia en base a esta tesis y posibles mejoras, optimizaciones o podas necesarias que puedas encontrar.» — 2026-11-09, mensaje de la operadora que encarga esta repriorización.
 
 ### Qué SÍ será
 - Una lista única de lo que espera tu respuesta, con el motivo de cada cosa.
@@ -74,8 +77,8 @@ Sin cita sobre la cola única. La operadora no la ha pedido con sus palabras: sa
 - No escucha el ambiente ni infiere cómo estás (SE-492).
 
 ### Confirmación
-- fecha: pendiente
-- respuesta: pendiente. Las escenas no se han enseñado a la operadora.
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
 - prototipo: pantalla de la cola en la app de SE-504 con las cinco escenas sobre datos de ejemplo, usable en el móvil.
@@ -143,4 +146,4 @@ Sin cita sobre la cola única. La operadora no la ha pedido con sus palabras: sa
 
 ## Aprobación
 
-Spec PROPOSED. Requiere la confirmación de escenas (SE-505) antes de pasar a APPROVED. Esta PR solo añade documentación.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). 

@@ -1,0 +1,11 @@
+{
+  "id": "SE-394",
+  "status": "SUPERSEDED",
+  "approval": "Operadora 2026-09-09: aprobación global de trabajo pendiente",
+  "priority": "P0",
+  "title": "Harness agnóstico: integración y evidencia verificable",
+  "evidence": "Remediación incremental; claims de sustitución permanecen limitados por evidencia operacional.",
+  "phase": "B",
+  "deferral": "Ruta 2026-09-26 (ADR-002): fuera del WIP; retoma en la Fase B. Lo mergeado permanece; el resto espera a su fase.",
+  "note": "Decisión de la operadora, pregunta interactiva 2026-11-09 (podas). Sin entregables propios ni dependientes; lo que quede va a SE-393 y SE-396."
+}

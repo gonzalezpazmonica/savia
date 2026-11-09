@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-team
 created: 2026-11-09
@@ -14,6 +14,9 @@ timeline:
   - from: "2026-11-09"
     learned: "2026-11-09"
     value: "PROPOSED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 
 # SE-515 — Aprendizaje aplicado: de la lección recuperada a la obligación comprobada
@@ -124,4 +127,4 @@ Número de lecciones, veces recuperada, porcentaje de respuestas que citan una l
 
 ## Aprobación
 
-Spec PROPOSED. La tesis de origen no es una autorización de implementación. Cada slice se aprueba por separado; esta PR solo añade documentación.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). Cada slice sigue necesitando su propia aprobación según «Slices»; esta aprobación cubre la spec y S0.

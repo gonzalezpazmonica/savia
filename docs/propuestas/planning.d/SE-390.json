@@ -1,0 +1,11 @@
+{
+  "id": "SE-390",
+  "status": "SUPERSEDED",
+  "approval": "Operadora 2026-09-05: implementación autorizada",
+  "priority": "P1",
+  "title": "Savia Documentation & Identity Evolution",
+  "evidence": "Migración documental incremental; claims fuertes continúan ligados a evidencia.",
+  "phase": "E",
+  "deferral": "Ruta 2026-09-26 (ADR-002): fuera del WIP; retoma en la Fase E. Lo mergeado permanece; el resto espera a su fase.",
+  "note": "Decisión de la operadora, pregunta interactiva 2026-11-09 (podas). La identidad y su documentación las gobiernan SE-483 y SE-484."
+}

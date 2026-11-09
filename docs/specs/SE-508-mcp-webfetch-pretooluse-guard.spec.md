@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-single
 created: 2026-11-03
@@ -13,6 +13,9 @@ timeline:
   - from: "2026-11-03"
     learned: "2026-11-03"
     value: "PROPOSED"
+  - from: "2026-11-09"
+    learned: "2026-11-09"
+    value: "APPROVED"
 ---
 
 # SE-508 — Guard previo para tools MCP con escritura y para WebFetch
@@ -79,7 +82,7 @@ Conclusión: el hueco es real. Se reutiliza el patrón de `dome-guard.sh` con su
 3. Savia consulta la documentación oficial de una librería. No te pregunta nada, porque ese sitio está en tu lista. Si intenta abrir una web desconocida con datos en la dirección, te pregunta antes.
 
 ### Palabras de la persona
-No hay palabras literales de la operadora sobre este guard. La necesidad sale del inventario G8 (huecos 2 y 9 del informe) y de la regla vigente «La IA propone, el humano dispone» (`docs/rules/domain/autonomous-safety.md`).
+«Savia Viva + tokens y efectos» — 2026-11-09, respuesta de la operadora a la pregunta interactiva sobre qué specs aprobar.
 
 ### Qué SÍ será
 - Una pregunta clara antes de cualquier efecto por un conector o una tool MCP que escriba.
@@ -90,8 +93,8 @@ No hay palabras literales de la operadora sobre este guard. La necesidad sale de
 - No sustituye la frontera en GitHub (G1): un agente con shell sigue pudiendo llamar a la API por otra vía.
 
 ### Confirmación
-- fecha: pendiente
-- respuesta: pendiente. Falta enseñar las escenas y, sobre todo, cuántas preguntas generaría WebFetch (medida de S1) antes de aprobar.
+- fecha: 2026-11-09
+- respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
 - prototipo: los tres textos exactos de pregunta y rechazo de las escenas, y una tabla con las decisiones que habría tomado el guard sobre las llamadas MCP y WebFetch de una semana real (modo `observe`).
@@ -172,4 +175,4 @@ No hay palabras literales de la operadora sobre este guard. La necesidad sale de
 
 ## Aprobación
 
-Spec PROPOSED. Requiere la confirmación de escenas de la operadora (SE-505) antes de pasar a APPROVED. Esta PR solo añade documentación; ningún agente la fusiona sin grant.
+APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). Arranca en modo observación (S1) para medir cuántas preguntas generaría antes de preguntar.
