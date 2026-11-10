@@ -11,7 +11,7 @@ HOOK=".claude/hooks/learning-recall-hook.sh"
 RECALL="scripts/learning-recall.sh"
 METRIC="scripts/learning-metric.sh"
 ORCH="scripts/savia-orchestrator.sh"
-ABL="scripts/learning-recall-ablation.sh"
+ABL="scripts/learning-recall.sh"
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.." || exit 1
@@ -243,7 +243,7 @@ EOF
 
 @test "AC-5: la ablación cuenta en cuántos casos cambió la decisión" {
   mk_cases
-  run bash "$ABL" --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ" --out "$BATS_TEST_TMPDIR/p10.jsonl"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ" --out "$BATS_TEST_TMPDIR/p10.jsonl"
   [ "$status" -eq 0 ]
   [ "$(jq -r .changed <<<"$output")" = "1" ]
   [ "$(jq -r .cases <<<"$output")" = "3" ]
@@ -261,7 +261,7 @@ EOF
 @test "AC-5: cero cambios con criterios emitidos es un resultado válido ('sin efecto')" {
   mk_cases
   printf '#!/usr/bin/env bash\ncat >/dev/null; echo PROCEED\n' > "$DECIDER"
-  run bash "$ABL" --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
   [ "$status" -eq 0 ]
   [ "$(jq -r .changed <<<"$output")" = "0" ]
   [ "$(jq -r .verdict <<<"$output")" = "sin efecto" ]
@@ -270,7 +270,7 @@ EOF
 @test "AC-5 negativo: sin ningún criterio emitido el veredicto es 'sin muestra', no 'sin efecto'" {
   mk_cases
   fake_recall "exit 3"
-  run bash "$ABL" --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
   [ "$status" -eq 0 ]
   [ "$(jq -r .verdict <<<"$output")" = "sin muestra" ]
   [ "$(jq -r .emitting_cases <<<"$output")" = "0" ]
@@ -279,26 +279,26 @@ EOF
 @test "AC-5 negativo: decisor que falla → veredicto 'incompleto' y exit 1" {
   mk_cases
   printf '#!/usr/bin/env bash\nexit 7\n' > "$DECIDER"
-  run bash "$ABL" --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
   [ "$status" -eq 1 ]
   [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
 }
 
 @test "AC-5 negativo: casos ilegibles o decisor ausente → exit 2" {
   mk_cases
-  run bash "$ABL" --cases "$BATS_TEST_TMPDIR/no.jsonl" --injector "$INJECTOR" --decider /bin/true --root "$PROJ"
+  run bash "$ABL" ablation --cases "$BATS_TEST_TMPDIR/no.jsonl" --injector "$INJECTOR" --decider /bin/true --root "$PROJ"
   [ "$status" -eq 2 ]
   mk_cases
-  run bash "$ABL" --cases "$CASES" --injector "$INJECTOR" --decider "$BATS_TEST_TMPDIR/no-decider" --root "$PROJ"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$BATS_TEST_TMPDIR/no-decider" --root "$PROJ"
   [ "$status" -eq 2 ]
-  run bash "$ABL" --cases "$CASES" --injector "$BATS_TEST_TMPDIR/no-injector" --decider "$DECIDER" --root "$PROJ"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$BATS_TEST_TMPDIR/no-injector" --decider "$DECIDER" --root "$PROJ"
   [ "$status" -eq 2 ]
 }
 
 @test "AC-5: inyector y decisor con ruta relativa funcionan aunque el inyector corra en --root" {
   mk_cases
   cd "$BATS_TEST_TMPDIR"
-  run bash "$REPO/$ABL" --cases cases.jsonl --injector ./injector.sh --decider ./decider.sh --root "$PROJ"
+  run bash "$REPO/$ABL" ablation --cases cases.jsonl --injector ./injector.sh --decider ./decider.sh --root "$PROJ"
   [ "$status" -eq 0 ]
   [ "$(jq -r .changed <<<"$output")" = "1" ]
 }

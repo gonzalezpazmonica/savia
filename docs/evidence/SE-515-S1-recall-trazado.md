@@ -12,7 +12,7 @@ Marcas: **O** observado (test o ejecución), **I** inferido, **NV** no verificad
 | `.opencode/plugins/guards/learning-recall-guard.ts` | Fila `start` (`emitted:false`, `reason:"started"`) antes de llamar al recall y fila `end` con los ids emitidos y el motivo: `emitted`, `no_hits`, `timeout`, `unavailable`, `error`, `bad_output` o `write_failed`. Solo ids y `query_hash`; nunca el texto. Log: `output/learning-loop/recall-emission.jsonl` (`SCL_EMISSION_LOG`) | AC-3 |
 | `scripts/learning-metric.sh` | Sin `--measured`, la salida sale marcada `no medido` (`"measured":false,"status":"no medido"` en JSON y `estado=no medido` en texto) | AC-4 |
 | `scripts/savia-orchestrator.sh` | Pide el recall en `effective`. Si no está disponible, lo dice: `recall=shadow (declarado; efectivo no disponible: …)` o `recall=no disponible (…)`. La medida solo es `(medido)` si llegan los tres componentes (`--p-consistent`, `SAGI_L_DIVERGENCE`, `SAGI_L_IGNORANCE_RESOLVED`); si falta alguno, `(no medido: valores por defecto en …)`. No imprime «aprendió» | AC-4 |
-| `scripts/learning-recall-ablation.sh` | Arnés P10: recall apagado frente a encendido sobre los mismos casos, con un decisor externo. Filas por caso legibles por S09 (`case_id`, `decision_off`, `decision_on`, `changed`, `emitted_criteria`, `cost_ms_off`, `cost_ms_on`, `context_chars_on`), sin el texto del prompt. Veredicto: `cambio`, `sin efecto`, `sin muestra` o `incompleto` | AC-5 |
+| `scripts/learning-recall.sh ablation` | Arnés P10: recall apagado frente a encendido sobre los mismos casos, con un decisor externo. Filas por caso legibles por S09 (`case_id`, `decision_off`, `decision_on`, `changed`, `emitted_criteria`, `cost_ms_off`, `cost_ms_on`, `context_chars_on`), sin el texto del prompt. Veredicto: `cambio`, `sin efecto`, `sin muestra` o `incompleto` | AC-5 |
 | Interruptor `SAVIA_LEARNING_APPLIED=off` | Guard, script, métrica y orquestador vuelven a la salida anterior; sin filas nuevas | AC-16 |
 
 La fila `start` cubre lo que un tope no puede: si el proceso muere sin limpiar, queda `emitted:false`. Nunca hay ausencia de fila. Una consulta tiene el mismo `event_id` en `start` y `end`; `query_hash` cruza con `recall.jsonl`.
@@ -43,7 +43,9 @@ Motivo (**O**): en este árbol no existe `vaults/SaviaLearning`, así que `learn
 
 - `tests/test-se515-s1-recall-trazado.bats`: 24 casos (script, guard TS, métrica, orquestador, arnés e interruptor), con negativos para cada AC. Antes del cambio fallaban todos salvo los negativos de interruptor y filtros (**O**). Los negativos AC-4 se mutaron: con la métrica siempre en `medido` y con el orquestador siempre medido, fallan (**O**).
 - `tests/test-scl-003-recall.bats`: el contrato de la fila pasa a incluir `returned_criteria` y `outcome`. Se añade un caso que comprueba el formato anterior con el interruptor en off.
-- Suites previas sin regresiones: `test-learning-recall-hook`, `test-scl-011-orchestrator`, `test-scl-001-s3-metrica`, `test-scl-001-s4-agnosticismo` (el arnés no nombra ningún frontend: recibe el inyector por `--injector`), `test-scl-008`, `test-scl-005`, `test-scl-012`, `test-scl-013`, `test-scl-001-e2e-bucle`, `test-scl-004`, `test-l13-meta-control` y el `bun test` del guard (**O**).
+- Suites previas sin regresiones: `test-learning-recall-hook`, `test-scl-011-orchestrator`, `test-scl-001-s3-metrica`, `test-scl-001-s4-agnosticismo` (el arnés no nombra ningún frontend y recibe el inyector por `--injector`), `test-scl-008`, `test-scl-005`, `test-scl-012`, `test-scl-013`, `test-scl-001-e2e-bucle`, `test-scl-004`, `test-l13-meta-control` y el `bun test` del guard (**O**).
+
+El arnés es un subcomando de `learning-recall.sh` y no un script aparte: como script nuevo subía la entropía de capacidades en 1 (1624 frente a 1623 de base).
 
 ## 5. AC de S1
 
