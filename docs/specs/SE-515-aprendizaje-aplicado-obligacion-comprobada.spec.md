@@ -130,3 +130,11 @@ Número de lecciones, veces recuperada, porcentaje de respuestas que citan una l
 ## Aprobación
 
 APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). Cada slice sigue necesitando su propia aprobación según «Slices»; esta aprobación cubre la spec y S0.
+
+## Enmienda propuesta 2026-11-10 (solape SE-516)
+
+> Propuesta externa SE-516 del 2026-11-09, evaluada como solape. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Reutilizar P10.** El resultado de la ablación recall encendido/apagado (AC-5) es también la evidencia de «con/sin lección» que S09 necesita para valorar la supervisión. Se publica en un formato que S09 pueda leer (caso, decisión con y sin recall, coste observado); no hay S5 ni informe aparte.
+- **Sin comparación de modalidades de supervisión aquí.** Qué estrategia de revisión rinde más dentro de un techo de permisos no es aprendizaje exigible; lo estudia, si procede, S09. Ningún resultado de esa comparación cambia la fuerza `advisory`/`review_required`/`guarded` de una lección.
+- **Dónde se anota la hipótesis.** En la sesión S09 de `docs/propuestas/planning-state.json` (fuente canónica); `docs/propuestas/ROADMAP-CURRENT.md` se regenera con `scripts/roadmap.sh render`, sin edición manual.
