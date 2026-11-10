@@ -167,6 +167,82 @@ test("AC-G3 control: la misma situación sin regla para descanso no notifica h-2
   } finally { await cerrar(); }
 });
 
+// AC-G3, tercera causa: concentración (modo FOCO). Misma situación que en descanso: h-1 cruza el
+// umbral a las 07:20 (sin regla), h-2 a T0+22h (persona per-1). El foco dura hasta T0+30h.
+const HASTA_FOCO = new Date(T0 + 30 * H).toISOString();
+
+test("AC-G3: en concentración no notifica nada no marcado (queda en el chat); lo marcado para FOCO sí", async () => {
+  const s = semillaDescanso([{ id: "r-1", tipo: "persona", objetivo: "per-1", palabra: null, modos: ["FOCO"] }]);
+  const { reloj, api, cerrar } = await arrancar(s);
+  try {
+    assert.equal((await api("PUT", "/atencion", { modo: "FOCO", hasta: HASTA_FOCO })).status, 200);
+    reloj.t = T0 + 31 * MIN;
+    let c = (await api("GET", "/gemelo")).json;
+    const sinMarcar = c.mensajes.find((m: any) => m.tipo === "seguimiento" && m.asuntos.some((a: any) => a.elemento_id === "h-1"));
+    assert.ok(sinMarcar, "el seguimiento existe en el chat");
+    assert.equal(sinMarcar.notificado, false);
+    assert.equal(sinMarcar.silencio, "modo_activo");
+    assert.equal((await sondeoGemelo(api)).length, 0, "en concentración no sale ningún aviso no marcado");
+    // El resumen de la mañana (programado, sin presupuesto) tampoco notifica en concentración, pero queda en el chat.
+    reloj.t = T0 + 90 * MIN;
+    c = (await api("GET", "/gemelo")).json;
+    const resumen = c.mensajes.find((m: any) => m.tipo === "resumen_manana");
+    assert.ok(resumen, "el resumen existe en el chat");
+    assert.equal(resumen.notificado, false);
+    assert.equal(resumen.silencio, "modo_activo");
+    assert.equal((await sondeoGemelo(api)).length, 0);
+    // Lo marcado para FOCO (persona per-1) sí notifica: h-2 cruza el umbral de 24 h.
+    reloj.t = T0 + 23 * H;
+    c = (await api("GET", "/gemelo")).json;
+    assert.equal((await api("GET", "/atencion")).json.modo, "FOCO", "el latido ocurrió en concentración");
+    const marcado = c.mensajes.find((m: any) => m.tipo === "seguimiento" && m.asuntos.some((a: any) => a.elemento_id === "h-2"));
+    assert.equal(marcado.notificado, true);
+    assert.equal(marcado.silencio, null);
+    assert.deepEqual((await sondeoGemelo(api)).map((m: any) => m.elemento_ids), [["h-2"]]);
+  } finally { await cerrar(); }
+});
+
+test("AC-G3 control: en concentración, sin regla (o con regla solo para DESCANSO) h-2 no notifica", async () => {
+  for (const alertas of [[], [{ id: "r-1", tipo: "persona", objetivo: "per-1", palabra: null, modos: ["DESCANSO"] }]] as SemillaOperador["alertas"][]) {
+    const { reloj, api, cerrar } = await arrancar(semillaDescanso(alertas));
+    try {
+      assert.equal((await api("PUT", "/atencion", { modo: "FOCO", hasta: HASTA_FOCO })).status, 200);
+      reloj.t = T0 + 23 * H;
+      const c = (await api("GET", "/gemelo")).json;
+      assert.equal((await api("GET", "/atencion")).json.modo, "FOCO");
+      const h2 = c.mensajes.find((m: any) => m.tipo === "seguimiento" && m.asuntos.some((a: any) => a.elemento_id === "h-2"));
+      assert.ok(h2, `el seguimiento queda en el chat (alertas: ${alertas.length})`);
+      assert.equal(h2.notificado, false);
+      assert.equal(h2.silencio, "modo_activo");
+      assert.equal((await sondeoGemelo(api)).length, 0);
+    } finally { await cerrar(); }
+  }
+});
+
+// Caso límite del fin del foco. Semántica vigente: el modo declarado vale mientras `hasta > ahora`
+// (`politica.ts`, `declaracionVigente`) y `sincronizar` vuelve a DISPONIBLE en el minuto `t` con
+// `o.hasta <= t` (`server.ts`). Intervalo semiabierto: un minuto antes de `hasta` aún es foco; en
+// `hasta` ya no. h-1 cruza el umbral de 24 h a T0+3h-2min y el latido cae en `hasta` + desfase.
+test("AC-G3 límite: un minuto antes del fin del foco calla; en el minuto del fin y después, notifica", async () => {
+  const hasta = T0 + 3 * H;
+  for (const [desfase, modo, notificado, silencio] of [[-1, "FOCO", false, "modo_activo"], [0, "DISPONIBLE", true, null], [1, "DISPONIBLE", true, null]] as const) {
+    const s = semilla({
+      avisos: { activos: [], resumenInicio: null, resumenCierre: null, max: 5, ventanaMin: 60, tope: 3 },
+      elementos: [el("h-1", "hilo_espera", { nace: hasta - 24 * H - 2 * MIN })],
+    });
+    const { reloj, api, cerrar } = await arrancar(s);
+    try {
+      assert.equal((await api("PUT", "/atencion", { modo: "FOCO", hasta: new Date(hasta).toISOString() })).status, 200);
+      reloj.t = hasta + desfase * MIN;
+      const c = (await api("GET", "/gemelo")).json;
+      assert.equal((await api("GET", "/atencion")).json.modo, modo, `desfase ${desfase} min`);
+      const segs = c.mensajes.filter((m: any) => m.tipo === "seguimiento");
+      assert.deepEqual(segs.map((m: any) => [m.asuntos[0].elemento_id, m.notificado, m.silencio]), [["h-1", notificado, silencio]], `desfase ${desfase} min`);
+      assert.equal((await sondeoGemelo(api)).length, notificado ? 1 : 0, `desfase ${desfase} min`);
+    } finally { await cerrar(); }
+  }
+});
+
 test("AC-G4: una acción propuesta nunca se ejecuta sola; solo con la aprobación de la persona y una vez", async () => {
   const ejecutadas: Array<{ ref: string; id: string; hash: string }> = [];
   const s = semilla({ elementos: [el("h-1", "hilo_espera", { nace: T0 - 30 * H }), el("t-man", "tarea", { fecha: T0 + 20 * H })] });

@@ -1,0 +1,4 @@
+# SE-511 D5: regla<TAB>hook (.claude/hooks)<TAB>evento. Una regla solo puede salir del texto fijo si figura aquí y --gates da OK.
+commit-en-main	block-commit-to-main.sh	PreToolUse
+push-forzado	block-force-push.sh	PreToolUse
+accion-identica-3-veces	repeat-tool-guard.sh	PreToolUse

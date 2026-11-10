@@ -36,10 +36,10 @@ BASELINE_DIR="${CI_BASELINE_DIR:-$ROOT/.ci-baseline}"
 FIXTURE="${CONTEXT_FIXED_FIXTURE:-$ROOT/tests/fixtures/context-fixed/turn.json}"
 
 MODE=""; ENTRY="claude"; CHECK=0; JSON=0
-usage() { sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --versioned|--hooks|--local) [[ -n "$MODE" ]] && { echo "ERROR: un solo modo por ejecución" >&2; exit 2; }; MODE="${1#--}"; shift ;;
+    --versioned|--hooks|--local|--gates) [[ -n "$MODE" ]] && { echo "ERROR: un solo modo por ejecución" >&2; exit 2; }; MODE="${1#--}"; shift ;;
     --entry) ENTRY="${2:-}"; [[ "$ENTRY" == claude || "$ENTRY" == opencode ]] || { echo "ERROR: --entry claude|opencode" >&2; exit 2; }; shift 2 ;;
     --check) CHECK=1; shift ;;
     --json) JSON=1; shift ;;
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
     *) echo "ERROR: opción desconocida: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
-[[ -n "$MODE" ]] || { echo "ERROR: falta modo (--versioned|--hooks|--local)" >&2; usage >&2; exit 2; }
+[[ -n "$MODE" ]] || { echo "ERROR: falta modo (--versioned|--hooks|--local|--gates)" >&2; usage >&2; exit 2; }
 if [[ $CHECK -eq 1 ]] && ! [[ "$MODE" == hooks || ( "$MODE" == versioned && "$ENTRY" == claude ) ]]; then
   echo "ERROR: --check solo existe para --versioned (entry claude) y --hooks: no hay baseline para --$MODE --entry $ENTRY" >&2; exit 2
 fi
@@ -273,6 +273,42 @@ if MODE in ("versioned", "local"):
         print(result["warning"], file=MSG_OUT)
     if CHECK:   # la combinación ya se validó en bash (solo versioned + claude llega aquí)
         ok = ratchet("versionado", tok(tc), "context-fixed-tokens.count")
+elif MODE == "gates":
+    table = os.path.join(ROOT, "docs/rules/domain/savia-core-gates.tsv")
+    if not os.path.isfile(table): die("falta docs/rules/domain/savia-core-gates.tsv")
+    rows = [l.rstrip("\n").split("\t") for l in open(table, encoding="utf-8")
+            if l.strip() and not l.startswith("#")]
+    if not rows: die("tabla de gates vacía: ninguna regla puede salir del texto fijo sin gate")
+    try:
+        settings = json.load(open(os.path.join(ROOT, ".claude/settings.json"), encoding="utf-8"))
+    except Exception as e:
+        die("settings.json ilegible: %s" % type(e).__name__)
+    fails = []; out = []
+    for r in rows:
+        if len(r) != 3: die("fila mal formada en savia-core-gates.tsv: %r" % "\t".join(r))
+        rule, hook, event = r
+        path = os.path.join(ROOT, ".claude/hooks", hook)
+        why = []
+        if "/" in hook or not os.path.isfile(path): why.append("hook ausente")
+        elif not os.access(path, os.X_OK): why.append("hook no ejecutable")
+        cmds = [h.get("command", "") for m in settings.get("hooks", {}).get(event, []) for h in m.get("hooks", [])]
+        if not any(re.search(r"/hooks/%s\"?(\s|$)" % re.escape(hook), c) for c in cmds):
+            why.append("no registrado en %s" % event)
+        if os.path.isfile(path):
+            tiers = re.findall(r'profile_gate\s+"?(\w+)', open(path, encoding="utf-8", errors="replace").read())
+            bad = sorted(set(t for t in tiers if t != "security"))
+            if bad: why.append("profile_gate %s: lo salta algún perfil" % ",".join(bad))
+        out.append(dict(rule=rule, hook=hook, event=event, status="FAIL" if why else "OK", why=why))
+        if why: fails.append(rule)
+    result.update(gates=out)
+    if not AS_JSON:
+        print("# context-fixed (gates: reglas sostenidas por hook, SE-511 D5)")
+        for g in out:
+            print("%-4s %-28s %-28s %-12s %s" % (g["status"], g["rule"], g["hook"], g["event"], "; ".join(g["why"])))
+    if fails:
+        print("FAIL: %d regla(s) sin gate válido: %s" % (len(fails), ", ".join(fails)), file=sys.stderr); ok = False
+    else:
+        print("OK: %d gates con hook registrado que corre en todos los perfiles" % len(out), file=MSG_OUT)
 elif MODE == "hooks":
     tmp, wt = make_sandbox()
     try:
