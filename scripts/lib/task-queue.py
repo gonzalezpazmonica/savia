@@ -342,15 +342,20 @@ class TaskQueue:
         cutoff = now - STALE_HEARTBEAT_SEC
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            # Un cambio sobre un trabajo pendiente nace con dueño «cola»; lo hereda
+            # el agente que después reclama ese trabajo.
             rows = conn.execute(
-                "SELECT * FROM admissions WHERE queue=? AND owner=? AND kind='change' "
-                "AND state IN (?,?) AND (delivered_at IS NULL OR delivered_at < ?) ORDER BY seq",
-                (self.name, owner, ADMITTED, UNKNOWN, cutoff)).fetchall()
+                "SELECT a.* FROM admissions a LEFT JOIN jobs j ON j.id = a.job_id "
+                "WHERE a.queue=? AND a.kind='change' AND a.state IN (?,?) "
+                "AND (a.owner=? OR (a.owner='cola' AND j.worker=?)) "
+                "AND (a.delivered_at IS NULL OR a.delivered_at < ?) ORDER BY a.seq",
+                (self.name, ADMITTED, UNKNOWN, owner, owner, cutoff)).fetchall()
             out = []
             for r in rows:
                 again = 1 if r["delivered_at"] is not None else 0
-                conn.execute("UPDATE admissions SET delivered_at=?, recovered=MAX(recovered, ?) "
-                             "WHERE seq=?", (now, again, r["seq"]))
+                conn.execute("UPDATE admissions SET owner=?, delivered_at=?, "
+                             "recovered=MAX(recovered, ?) WHERE seq=?",
+                             (owner, now, again, r["seq"]))
                 out.append({"id": r["seq"], "text": r["text"], "job_id": r["job_id"],
                             "state": r["state"], "recovered": again})
             conn.execute("COMMIT")

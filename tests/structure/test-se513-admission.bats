@@ -71,6 +71,20 @@ seed() {
   [ "$output" = "[]" ]
 }
 
+@test "trabajo pendiente: el agente que lo coge después recibe el cambio y pasa a ser su dueño" {
+  seed
+  id=$(jget "$(tq admit q --text "CI con la rama nueva" --origin operator --job "$CI")" "['id']")
+  [ "$(sql q "SELECT owner FROM admissions WHERE seq=$id")" = "cola" ]
+  [ "$(jget "$(tq dequeue q --worker agente-ci)" "['id']")" = "$CI" ]
+  run tq pull q --owner otro-agente
+  [ "$output" = "[]" ]
+  run tq pull q --owner agente-ci
+  [ "$(jget "$output" "[0]['id']")" = "$id" ]
+  [ "$(sql q "SELECT owner FROM admissions WHERE seq=$id")" = "agente-ci" ]
+  run tq ack q "$id" --plan-proof "{\"owner\":\"agente-ci\",\"plan\":[\"usar rama nueva (#$id)\"]}"
+  [ "$(jget "$output" "['state']")" = "APPLIED_TO_PLAN" ]
+}
+
 @test "admit sobre trabajo pendiente: --bump adelanta el trabajo en la cola" {
   seed
   run tq admit q --text "primero el arreglo de la CI" --origin operator --job "$CI" --bump 10
