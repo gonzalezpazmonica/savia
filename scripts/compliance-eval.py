@@ -33,6 +33,20 @@ class PolicyUnreadable(Exception):
     """La política no se puede leer como mapeo: el evaluador no decide (fail-safe)."""
 
 
+class ContextUnreadable(Exception):
+    """El contexto no se puede leer como objeto JSON: el evaluador no decide (fail-safe)."""
+
+
+def load_context(path: str) -> dict:
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception as e:  # fichero ausente, ilegible o JSON malformado
+        raise ContextUnreadable(type(e).__name__)
+    if not isinstance(data, dict):
+        raise ContextUnreadable("el contexto no es un objeto")
+    return data
+
+
 def load_policy(path: str) -> dict:
     # Sin PyYAML no hay lectura fiable: el antiguo parser de reserva perdía la
     # estructura anidada y el evaluador reventaba sin veredicto.
@@ -50,14 +64,15 @@ def load_policy(path: str) -> dict:
     return data
 
 
-def unreadable_decision(path: str, why: str) -> dict:
+def unreadable_decision(path: str, why: str, field: str = "policy") -> dict:
+    label = "policy ilegible" if field == "policy" else "contexto ilegible"
     return {
         "policy": {"id": "unknown", "version": "?"},
         "source": {"regulation": "", "article": ""},
         "context_used": [],
         "result": "UNKNOWN",
-        "reason": f"policy ilegible ({why}): {path} — sin veredicto, revisión humana",
-        "unknowns": [{"type": "LEGAL_UNKNOWN", "field": "policy", "impact": "no_enforceable",
+        "reason": f"{label} ({why}): {path} — sin veredicto, revisión humana",
+        "unknowns": [{"type": "LEGAL_UNKNOWN", "field": field, "impact": "no_enforceable",
                       "action": "HUMAN_VALIDATION"}],
     }
 
@@ -128,15 +143,19 @@ def main() -> int:
     ap.add_argument("--receipt-out", default=None)
     args = ap.parse_args()
 
-    ctx = json.load(open(args.context, encoding="utf-8"))
+    ctx = None
     try:
+        ctx = load_context(args.context)
         policy = load_policy(args.policy)
+    except ContextUnreadable as e:
+        decision = unreadable_decision(args.context, str(e), field="context")
     except PolicyUnreadable as e:
         decision = unreadable_decision(args.policy, str(e))
     else:
         decision = evaluate(policy, ctx)
     decision["timestamp"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    decision["context_hash"] = hashlib.sha256(
+    # Sin contexto legible no hay nada que enlazar: hash vacío, nunca el de un objeto inventado.
+    decision["context_hash"] = "" if ctx is None else hashlib.sha256(
         json.dumps(ctx, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
     if args.json or args.receipt_out:

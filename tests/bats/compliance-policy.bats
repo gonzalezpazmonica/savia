@@ -1,8 +1,12 @@
 #!/usr/bin/env bats
 # SE-389 §28 — matriz core del evaluador determinista
+# Ref: docs/specs/SE-389-regulatory-policy-as-code.spec.md · SE-376 (S03u)
 E="python3 scripts/compliance-eval.py"
 P="regulatory/registry/eu-ai-act-art50.yaml"
 F="tests/fixtures/compliance/art50-executable-test.yaml"
+
+# Las rutas son relativas a la raíz del repo: no dependen del cwd de quien lanza bats.
+setup() { cd "$(dirname "$BATS_TEST_FILENAME")/../.."; }
 
 @test "SE-389: policy no-EXECUTABLE no enforza (UNKNOWN fail-safe §18)" {
   run python3 scripts/compliance-eval.py --policy $P --context tests/fixtures/compliance/ctx-block.json
@@ -31,8 +35,8 @@ F="tests/fixtures/compliance/art50-executable-test.yaml"
 }
 
 @test "SE-389: receipt enlaza policy+context_hash (§7/§16)" {
-  $E --policy $F --context tests/fixtures/compliance/ctx-allow.json --receipt-out /tmp/se389-receipt.json >/dev/null
-  jq -e '.receipt_type=="compliance_receipt" and .policy_versions[0].id=="EU-AIA-ART50-TEST-FIXTURE" and .context_hash' /tmp/se389-receipt.json >/dev/null
+  $E --policy $F --context tests/fixtures/compliance/ctx-allow.json --receipt-out "$BATS_TEST_TMPDIR/se389-receipt.json" >/dev/null
+  jq -e '.receipt_type=="compliance_receipt" and .policy_versions[0].id=="EU-AIA-ART50-TEST-FIXTURE" and .context_hash' "$BATS_TEST_TMPDIR/se389-receipt.json" >/dev/null
 }
 
 @test "SE-389: monotonía — UNKNOWN/BLOCK jamás degradan a ALLOW (§10/§31)" {
@@ -133,4 +137,34 @@ PY
 @test "SE-389: --policy is required (exit 2)" {
   run python3 scripts/compliance-eval.py --context tests/fixtures/compliance/ctx-allow.json
   [ "$status" -eq 2 ]
+}
+
+@test "SE-389: a nonexistent context file is UNKNOWN without a traceback, never ALLOW" {
+  run python3 scripts/compliance-eval.py --policy $F --context "$BATS_TEST_TMPDIR/nonexistent.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" == UNKNOWN:*"contexto ilegible"* ]]
+  [[ "$output" != *Traceback* ]]
+}
+
+@test "SE-389: a context that is a JSON array (not an object) is UNKNOWN, and the receipt records it" {
+  local c; c=$(ctx '[{"interaction":{"human_facing":false}}]')
+  run python3 scripts/compliance-eval.py --policy $F --context "$c" --receipt-out "$BATS_TEST_TMPDIR/r.json"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *Traceback* ]]
+  run python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["decision"]["result"]=="UNKNOWN", r; assert r["unknowns"][0]["field"]=="context", r' "$BATS_TEST_TMPDIR/r.json"
+  [ "$status" -eq 0 ]
+}
+
+@test "SE-389: an empty context object is UNKNOWN (human_facing unknown), never ALLOW" {
+  local c; c=$(ctx '{}')
+  run python3 scripts/compliance-eval.py --policy $F --context "$c"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "UNKNOWN: human_facing desconocido"* ]]
+}
+
+@test "SE-389: an empty policy file is UNKNOWN (not a mapping)" {
+  : > "$BATS_TEST_TMPDIR/empty.yaml"
+  run python3 scripts/compliance-eval.py --policy "$BATS_TEST_TMPDIR/empty.yaml" --context tests/fixtures/compliance/ctx-allow.json
+  [ "$status" -eq 0 ]
+  [[ "$output" == UNKNOWN:*"no es un mapeo"* ]]
 }
