@@ -16,14 +16,19 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # externo. Cuenta en cuántos casos cambió la decisión; cero cambios es un resultado válido.
 #   learning-recall.sh ablation --cases <casos.jsonl> --injector <ejec> --decider <ejec>
 #                               [--root <dir>] [--out <filas.jsonl>]
+#   Tope por llamada al inyector: SCL_ABLATION_INJECTOR_TIMEOUT_S (30 s).
 # Casos (JSONL): {"case_id","prompt","control"}; control=true es control negativo.
 # Inyector: recibe {"content": prompt} por stdin con SAVIA_WORKSPACE_DIR=<root> y cwd=<root>, y
-#   escribe JSON con hookSpecificOutput.additionalContext. No se nombra ningún frontend.
+#   escribe JSON con hookSpecificOutput.additionalContext (stdout vacío = no emitió). No se nombra
+#   ningún frontend. Fallo del inyector (cuenta en errors, nunca como «no emitió»): tope, exit != 0,
+#   stdout sin additionalContext, o evento de su log de emisión (SCL_EMISSION_LOG) sin fila `end` o
+#   terminado en error | timeout | bad_output | write_failed.
 # Decisor: recibe {"case_id","prompt","context"} por stdin; primera línea = decisión.
 # Salida: cases, emitting_cases, changed, changed_controls, errors, verdict
-#   (cambio | sin efecto | sin muestra | incompleto). --out: filas por caso legibles por S09
-#   (case_id, control, decision_off, decision_on, changed, emitted_criteria, cost_ms_off,
-#   cost_ms_on, context_chars_on), nunca el texto del prompt. Exit: 0 · 1 incompleto · 2 entrada.
+#   (cambio | sin efecto | sin muestra | ruido | incompleto); ruido = cambió un control negativo.
+#   --out: filas por caso legibles por S09 (case_id, control, decision_off, decision_on, changed,
+#   injector_failed, emitted_criteria, cost_ms_off, cost_ms_on, context_chars_on), nunca el texto
+#   del prompt. Exit: 0 · 1 incompleto o ruido · 2 entrada.
 ablation_usage() { echo "Usage: learning-recall.sh ablation --cases F --injector X --decider X [--root D] [--out F]" >&2; exit 2; }
 ablation() {
   local CASES="" DECIDER="" INJECTOR="" TARGET_ROOT="$ROOT" OUT=""
@@ -48,7 +53,7 @@ ablation() {
   INJECTOR="$(realpath "$INJECTOR")"; DECIDER="$(realpath "$DECIDER")"
 
   python3 - "$CASES" "$DECIDER" "$INJECTOR" "$TARGET_ROOT" "$OUT" <<'PY'
-import json, os, re, subprocess, sys, tempfile, time
+import atexit, json, os, re, shutil, subprocess, sys, tempfile, time
 
 cases_file, decider, injector, root, out = sys.argv[1:6]
 try:
@@ -61,18 +66,52 @@ except Exception:
     sys.exit(2)
 
 scratch = tempfile.mkdtemp(prefix='p10-')
+atexit.register(shutil.rmtree, scratch, True)  # también si algo aborta con excepción
 env_base = dict(os.environ, SAVIA_WORKSPACE_DIR=root,
-                SCL_EMISSION_LOG=os.path.join(scratch, 'emission.jsonl'),
                 SCL_RECALL_LOG=os.path.join(scratch, 'recall.jsonl'))
 
+# Fallos del inyector que el log de emisión de S1 declara (fila `end` con este motivo).
+INJECTOR_FAILURES = {'error', 'timeout', 'bad_output', 'write_failed'}
+calls = 0
+injector_timeout = float(os.environ.get('SCL_ABLATION_INJECTOR_TIMEOUT_S', '30'))
+
 def context_for(prompt, recall):
-    env = dict(env_base, SAVIA_LEARNING_RECALL=recall)
-    proc = subprocess.run([injector], input=json.dumps({'content': prompt}), env=env, cwd=root,
-                          capture_output=True, text=True, timeout=30)
+    """Contexto inyectado ('' si el inyector no emitió) o None si el inyector falló.
+    Fallo: excepción o tope, exit != 0, stdout no vacío sin hookSpecificOutput.additionalContext
+    de tipo texto, o un evento del log de emisión sin fila `end` o terminado con un motivo de fallo."""
+    global calls
+    calls += 1
+    log = os.path.join(scratch, f'emission-{calls}.jsonl')
+    env = dict(env_base, SAVIA_LEARNING_RECALL=recall, SCL_EMISSION_LOG=log)
     try:
-        return json.loads(proc.stdout)['hookSpecificOutput']['additionalContext']
+        proc = subprocess.run([injector], input=json.dumps({'content': prompt}), env=env, cwd=root,
+                              capture_output=True, text=True, timeout=injector_timeout)
     except Exception:
-        return ''
+        return None
+    if proc.returncode != 0:
+        return None
+    context = ''
+    if proc.stdout.strip():
+        try:
+            context = json.loads(proc.stdout)['hookSpecificOutput']['additionalContext']
+        except Exception:
+            return None
+        if not isinstance(context, str):
+            return None
+    if os.path.exists(log):
+        try:
+            events = {}
+            for line in open(log, encoding='utf-8'):
+                if line.strip():
+                    row = json.loads(line)
+                    events.setdefault(row['event_id'], []).append(row)
+        except Exception:
+            return None
+        for evt in events.values():
+            ends = [r for r in evt if r.get('phase') == 'end']
+            if not ends or ends[-1].get('reason') in INJECTOR_FAILURES:
+                return None
+    return context
 
 def decide(case, context):
     started = time.monotonic()
@@ -91,8 +130,14 @@ rows, errors = [], 0
 for case in cases:
     ctx_off = context_for(case['prompt'], 'off')
     ctx_on = context_for(case['prompt'], 'on')
-    d_off, ms_off = decide(case, ctx_off)
-    d_on, ms_on = decide(case, ctx_on)
+    injector_failed = ctx_off is None or ctx_on is None
+    if injector_failed:
+        d_off = d_on = None
+        ms_off = ms_on = 0
+        ctx_on = ctx_on or ''
+    else:
+        d_off, ms_off = decide(case, ctx_off)
+        d_on, ms_on = decide(case, ctx_on)
     if d_off is None or d_on is None:
         errors += 1
     rows.append({
@@ -101,6 +146,7 @@ for case in cases:
         'decision_off': d_off,
         'decision_on': d_on,
         'changed': d_off is not None and d_on is not None and d_off != d_on,
+        'injector_failed': injector_failed,
         'emitted_criteria': re.findall(r'^- \[([^\]]+)\]', ctx_on, re.M),
         'cost_ms_off': ms_off,
         'cost_ms_on': ms_on,
@@ -115,8 +161,11 @@ if out:
 emitting = sum(1 for r in rows if r['emitted_criteria'])
 changed = sum(1 for r in rows if r['changed'] and not r['control'])
 changed_controls = sum(1 for r in rows if r['changed'] and r['control'])
+# Un control negativo que cambia de decisión invalida la medida: el decisor no es estable.
 if errors:
     verdict = 'incompleto'
+elif changed_controls:
+    verdict = 'ruido'
 elif emitting == 0:
     verdict = 'sin muestra'
 elif changed == 0:
@@ -126,10 +175,7 @@ else:
 print(json.dumps({'cases': len(rows), 'emitting_cases': emitting, 'changed': changed,
                   'changed_controls': changed_controls, 'errors': errors, 'verdict': verdict},
                  ensure_ascii=False))
-for name in os.listdir(scratch):
-    os.unlink(os.path.join(scratch, name))
-os.rmdir(scratch)
-sys.exit(1 if errors else 0)
+sys.exit(1 if verdict in ('incompleto', 'ruido') else 0)
 PY
 }
 

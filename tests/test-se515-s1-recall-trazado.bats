@@ -3,8 +3,8 @@
 # devolvieron/emitieron y si la emisión terminó (AC-3); la métrica con valores por defecto sale
 # «no medido» y el orquestador usa el recall efectivo o declara shadow (AC-4); arnés de ablación
 # P10 (AC-5); interruptor SAVIA_LEARNING_APPLIED=off deja todo como antes (AC-16).
-# El registro en el hook de Claude Code (.claude/hooks/learning-recall-hook.sh) y su paridad con
-# el guard quedan pendientes: editar ese hook requiere permiso de la operadora (ver PR).
+# El registro en el hook de Claude Code y su paridad fila a fila con el guard viven en
+# tests/test-se515-s1-hook-trace.bats.
 # Ref: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md (S1)
 # Ref: docs/evidence/SE-515-S0-auditoria-linea-base.md §2 (cambio mínimo para S1)
 
@@ -152,9 +152,36 @@ EOF
   if echo "$output" | grep -q 'shadow hits de SaviaLearning'; then echo 'negación falló: echo "$output" | grep -q shadow hits de SaviaLearning'; return 1; fi
 }
 
-@test "S1: el orquestador pide recall en modo effective (no shadow fijo)" {
-  run grep -c -- '--mode effective' "$ORCH"
-  [ "$output" -ge 1 ]
+# vault_fixture: cúpula con LP-1 → CRIT-001, CRITERIO y CLI/node falsos; exporta las variables del recall.
+vault_fixture() {
+  local v="$BATS_TEST_TMPDIR/vault"
+  mkdir -p "$v/learning"
+  printf -- '---\nid: LP-1\nprovenance: human_authored\nlifecycle: active\ntarget: criterio\ncriterion_id: CRIT-001\n---\n' > "$v/learning/LP-1.md"
+  printf 'CRIT-001 Soberania\n  principio: Soberania del dato\n  provenance: human_authored\n' > "$BATS_TEST_TMPDIR/C.md"
+  printf '#!/usr/bin/env bash\necho %s\n' "'[{\"path\":\"learning/LP-1.md\",\"score\":20}]'" > "$BATS_TEST_TMPDIR/cli.js"
+  printf '#!/usr/bin/env bash\nexec bash "$@"\n' > "$BATS_TEST_TMPDIR/node"; chmod +x "$BATS_TEST_TMPDIR/node"
+  export SCL_VAULT_DIR="$v" SCL_CRITERIO_PATH="$BATS_TEST_TMPDIR/C.md" SCL_VAULT_CLI="$BATS_TEST_TMPDIR/cli.js"
+  export SCL_NODE_PATH="$BATS_TEST_TMPDIR/node" SCL_RECALL_LOG="$BATS_TEST_TMPDIR/recall.jsonl"
+}
+
+@test "S1: con cúpula, el orquestador usa el recall efectivo y nombra los criterios devueltos" {
+  export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
+  vault_fixture
+  run bash "$ORCH" --task "fixture se515 soberania" --iterations 1
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '\[leer\] recall=effective criterios=\[CRIT-001\]'
+  [ "$(jq -r .mode "$SCL_RECALL_LOG")" = "effective" ]
+  if echo "$output" | grep -q 'recall=shadow'; then echo 'negación falló: grep -q recall=shadow'; return 1; fi
+}
+
+@test "S1 missing vault: el orquestador consulta una sola vez (sin reintento shadow que duplique la fila)" {
+  export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
+  export SCL_RECALL_LOG="$BATS_TEST_TMPDIR/recall.jsonl"
+  SCL_VAULT_DIR="$BATS_TEST_TMPDIR/no-vault" run bash "$ORCH" --task "fixture se515 una fila" --iterations 1
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$SCL_RECALL_LOG")" -eq 1 ]
+  [ "$(jq -r .outcome "$SCL_RECALL_LOG")" = "no_vault" ]
+  echo "$output" | grep -q 'recall=no disponible (sin cúpula o sin CLI)'
 }
 
 @test "AC-16 disabled: orquestador con interruptor off conserva la línea antigua de lectura" {
@@ -164,12 +191,11 @@ EOF
   if echo "$output" | grep -q 'no medido'; then echo 'negación falló: echo "$output" | grep -q no medido'; return 1; fi
 }
 
-# ── Paridad Claude Code ↔ OpenCode ───────────────────────────────────────────
+# ── Guard de OpenCode (la paridad con el hook está en test-se515-s1-hook-trace.bats) ──
 
-ts_rows() {  # TEXT: ejecuta el guard TS con el mismo recall falso; filas normalizadas
+ts_rows() {  # TEXT: ejecuta el guard TS con el recall falso de $PROJ
   SAVIA_WORKSPACE_DIR="$PROJ" $TS_RUNTIME "$REPO/.opencode/plugins/__tests__/learning-recall-guard-cli.ts" "$1" >/dev/null
 }
-norm() { jq -c 'del(.ts, .event_id, .frontend)' "$SCL_EMISSION_LOG"; }
 
 need_ts() {
   if [[ -z "$TS_RUNTIME" && "${SAVIA_REQUIRE_TS:-}" == "1" ]]; then
@@ -295,6 +321,51 @@ EOF
   run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
   [ "$status" -eq 1 ]
   [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
+}
+
+@test "AC-5 fail: inyector que falla (exit 1, salida rota, sin additionalContext) → 'incompleto' y exit 1, nunca 'sin muestra'" {
+  mk_cases
+  local body
+  for body in 'exit 1' 'echo no-json' 'echo "{\"otro\":1}"'; do
+    printf '#!/usr/bin/env bash\ncat >/dev/null\n%s\n' "$body" > "$INJECTOR"
+    run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ" --out "$BATS_TEST_TMPDIR/p10.jsonl"
+    [ "$status" -eq 1 ] || { echo "body=$body status=$status"; return 1; }
+    [ "$(jq -r .verdict <<<"$output")" = "incompleto" ] || { echo "body=$body out=$output"; return 1; }
+    [ "$(jq -r .errors <<<"$output")" = "3" ]
+    [ "$(jq -s 'map(.injector_failed) | all' "$BATS_TEST_TMPDIR/p10.jsonl")" = "true" ]
+  done
+}
+
+@test "AC-5 fail: inyector cuyo recall falla por dentro (motivo error/bad_output en su traza) → 'incompleto'" {
+  mk_cases
+  local body
+  for body in 'exit 1' 'echo no-json'; do
+    fake_recall "$body"
+    run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+    [ "$status" -eq 1 ] || { echo "body=$body status=$status out=$output"; return 1; }
+    [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
+  done
+}
+
+@test "AC-5 timeout: inyector colgado → 'incompleto', JSON de veredicto y sin directorio temporal huérfano" {
+  mk_cases
+  printf '{"case_id":"c1","prompt":"publica la rama con datos del cliente"}\n' > "$CASES"
+  printf '#!/usr/bin/env bash\nexec sleep 40\n' > "$INJECTOR"
+  export TMPDIR="$BATS_TEST_TMPDIR/tmp" SCL_ABLATION_INJECTOR_TIMEOUT_S=2; mkdir -p "$TMPDIR"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 1 ]
+  [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
+  [ -z "$(ls -A "$TMPDIR")" ]
+}
+
+@test "AC-5 ruido: un control negativo que cambia de decisión → 'ruido' y exit 1, no 'cambio'" {
+  mk_cases
+  # decisor inestable: cambia de decisión en cada llamada, también en el control
+  printf '#!/usr/bin/env bash\ncat >/dev/null; f="%s/n"; n=$(cat "$f" 2>/dev/null || echo 0); echo $((n+1)) > "$f"; (( n %% 2 )) && echo A || echo B\n' "$BATS_TEST_TMPDIR" > "$DECIDER"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 1 ]
+  [ "$(jq -r .changed_controls <<<"$output")" = "1" ]
+  [ "$(jq -r .verdict <<<"$output")" = "ruido" ]
 }
 
 @test "AC-5 missing: casos ilegibles, decisor o inyector ausente → exit 2" {

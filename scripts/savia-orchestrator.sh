@@ -81,8 +81,13 @@ read_sustrate() {
     echo "  [leer] recall=effective criterios=[${ids}]"
     return
   fi
+  # Exit 3 (sin cúpula o sin CLI) no depende del modo: repetir en shadow solo añadiría otra fila
+  # al log de recall con el mismo fallo. Ante otro error sí se intenta shadow (una fila por intento).
+  if (( rc == 3 )); then
+    echo "  [leer] recall=no disponible (sin cúpula o sin CLI); la decisión no usa criterios"
+    return
+  fi
   local reason="error (exit $rc)"
-  (( rc == 3 )) && reason="sin cúpula o sin CLI"
   recall_out=$(bash "$ROOT/scripts/learning-recall.sh" --query "$TASK" --mode shadow --json 2>/dev/null)
   if [[ $? -eq 0 && -n "$recall_out" ]]; then
     local hits

@@ -1,15 +1,10 @@
 #!/usr/bin/env bats
-# SE-515 S1 — Recall trazado (parte del hook de Claude Code): el hook y el guard registran qué criterios emitieron y si la
-# emisión terminó (AC-3); la métrica con valores por defecto sale «no medido» y el orquestador
-# usa el recall efectivo o declara shadow (AC-4); arnés de ablación P10 (AC-5); interruptor
-# SAVIA_LEARNING_APPLIED=off deja todo como antes (AC-16).
+# SE-515 S1 — Recall trazado, parte del hook de Claude Code: el hook registra qué criterios emitió
+# y si la emisión terminó (AC-3), con interruptor SAVIA_LEARNING_APPLIED=off (AC-16), y el guard
+# de OpenCode deja las mismas filas ante la misma entrada (paridad).
 # Spec: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md (S1)
 
 HOOK=".claude/hooks/learning-recall-hook.sh"
-RECALL="scripts/learning-recall.sh"
-METRIC="scripts/learning-metric.sh"
-ORCH="scripts/savia-orchestrator.sh"
-ABL="scripts/learning-recall-ablation.sh"
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.." || exit 1
@@ -130,8 +125,15 @@ last_end() { jq -rc "select(.phase==\"end\") | .$1" "$SCL_EMISSION_LOG" | tail -
   [ "$output" = "$off_out" ]
 }
 
+need_ts() {  # SAVIA_REQUIRE_TS=1 (CI) convierte la falta de runtime en fallo, no en skip
+  if [[ -z "$TS_RUNTIME" && "${SAVIA_REQUIRE_TS:-}" == "1" ]]; then
+    echo "SAVIA_REQUIRE_TS=1 y no hay runtime TypeScript" >&2; return 1
+  fi
+  [[ -n "$TS_RUNTIME" ]] || skip "sin runtime TypeScript (bun o node >= 22.6)"
+}
+
 @test "paridad: el guard TS registra las mismas filas que el hook ante la misma entrada" {
-  [[ -n "$TS_RUNTIME" ]] || skip "sin runtime TypeScript"
+  need_ts
   for body in "printf '%s' '$HITS'" "printf '%s' '{\"effective_hits\":[]}'" "exit 1" "exit 3" "echo no-json"; do
     fake_recall "$body"
     rm -f "$SCL_EMISSION_LOG"; hook; local b; b=$(norm)
@@ -146,4 +148,20 @@ ts_rows() {  # TEXT: ejecuta el guard TS con el mismo recall falso; filas normal
   SAVIA_WORKSPACE_DIR="$PROJ" $TS_RUNTIME "$REPO/.opencode/plugins/__tests__/learning-recall-guard-cli.ts" "$1" >/dev/null
 }
 norm() { jq -c 'del(.ts, .event_id, .frontend)' "$SCL_EMISSION_LOG"; }
+
+@test "paridad: saltos de línea finales — el guard consulta y hashea el texto recortado, como el hook" {
+  need_ts
+  # recall falso que guarda el argumento de --query tal cual (con un punto final para ver los \n)
+  fake_recall 'while [[ $# -gt 0 ]]; do [[ "$1" == --query ]] && printf "%s." "$2" > "'"$BATS_TEST_TMPDIR"'/q"; shift; done; printf "%s" '"'$HITS'"
+  local text=$'como publico la rama del sprint\n\n'
+  local trimmed="como publico la rama del sprint"
+  ts_rows "$text"
+  [ "$(cat "$BATS_TEST_TMPDIR/q")" = "${trimmed}." ]
+  [ "$(last_end query_hash)" = "$(printf '%s' "$trimmed" | sha256sum | cut -d' ' -f1)" ]
+  local ts_hash; ts_hash=$(last_end query_hash)
+  rm -f "$SCL_EMISSION_LOG" "$BATS_TEST_TMPDIR/q"
+  hook "$(jq -cn --arg c "$text" '{content:$c}')"
+  [ "$(cat "$BATS_TEST_TMPDIR/q")" = "${trimmed}." ]
+  [ "$(last_end query_hash)" = "$ts_hash" ]
+}
 
