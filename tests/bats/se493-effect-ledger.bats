@@ -211,10 +211,25 @@ EOF
 @test "AC-p: SUCCEEDED, NEEDS_REVIEW y FAILED se informan sin sondear ni cambiar" {
   out=$(se493_prepare 47 "$SE493_HEAD_A" squash); read -r _ e t <<<"$out"
   led fail "$e" --claim "$t" --reason x >/dev/null
-  v0=$(views)
+  se493_to_dispatched 147
+  led complete "$EID" --claim "$TOK" --response '{"mergeCommit":"cccccccccccccccccccccccccccccccccccccccc","headRefOid":"'"$SE493_HEAD_A"'"}' >/dev/null
+  se493_to_dispatched 247
+  export SAVIA_EFFECT_NOW=$(( DISPATCHED_AT + G ))
+  se493_view_raw 'no json'
+  led reconcile "$SE493_REPO#247" >/dev/null || true
+  [ "$(field "$SE493_REPO#247" state)" = NEEDS_REVIEW ]
+  se493_view_open "$SE493_HEAD_A"
+  st=$(led status --open); v0=$(views)
   run led reconcile "$SE493_REPO#47"
   [ "$status" -eq 0 ]; [[ "$output" == "NOT_SENT $e - -" ]]
+  run led reconcile "$SE493_REPO#147"
+  [ "$status" -eq 7 ]; [[ "$output" == "ALREADY_SUCCEEDED "*" $SE493_HEAD_A" ]]
+  run led reconcile "$SE493_REPO#247"
+  [ "$status" -eq 4 ]; [[ "$output" == *"review_origin=dispatched" ]]
   [ "$(views)" -eq "$v0" ]
+  [ "$(led status --open)" = "$st" ]
+  [ "$(field "$SE493_REPO#147" state)" = SUCCEEDED ]
+  [ "$(field "$SE493_REPO#47" state)" = FAILED ]
 }
 
 @test "AC-p (3e): rechazo anotado + PRESENT coincidente → 4 rejected; resolve --by-probe sale con 2 sin sondear" {
@@ -434,7 +449,8 @@ close_ok() {  # PR -> SUCCEEDED por sonda; deja EID
   se493_view_raw 'oops' 1
   run led verify-receipt "$EID"
   [ "$status" -eq 4 ]
-  PATH="/usr/bin:/bin" run python3 -I "$LEDGER_PY" verify-receipt "$EID"
+  py=$(command -v python3); mkdir -p "$BATS_TEST_TMPDIR/sin-gh"
+  PATH="$BATS_TEST_TMPDIR/sin-gh" run "$py" -I "$LEDGER_PY" verify-receipt "$EID"
   [ "$status" -eq 4 ]
 }
 

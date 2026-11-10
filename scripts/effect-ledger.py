@@ -8,18 +8,19 @@ devuelve «adelante». Contrato completo: docs/specs/SE-493-effect-ledger-ambigu
   prepare <op> --repo R --number N --head SHA --method M --holder-pid PID [--run-id X]
       0 PROCEED <eid> <token> | 3 ALREADY_EXECUTED | 4 NEEDS_REVIEW | 5 CONFLICT | 6 IN_FLIGHT | 2 error
   dispatch <eid> --claim T              sonda previa (3c) + CAS PREPARED→DISPATCHED (0 | 4 | 6 | 2)
-  complete <eid> --claim T --response J SUCCEEDED con attribution response (0 | 6 sin evidencia | 2)
+  complete <eid> --claim T --response J SUCCEEDED con attribution response
+      (0 | 6 sin evidencia, con rechazo anotado o si la respuesta contradice head/actor | 2)
   reject   <eid> --claim T --response X anota el rechazo (6 | 2)
   fail     <eid> --claim T --reason X   solo desde PREPARED (0 | 2)
   reconcile <key> [--op OP]             exits de la Regla 3d (3 | 7 | 4 | 6 | 0 | 2)
   resolve <eid> --by-probe [--outcome succeeded|failed]   (0 | 4 | 2); --manual llega en S2
-  status <key> [--op OP] | status --open
+  status <key> [--op OP] | status --open   (sin claim_token; claim_held true|false)
   verify-receipt <eid>                  0 VERIFIED | 1 FAIL | 4 UNVERIFIED | 2 error
 
 Ledger: $HOME/.savia/effects/ledger.db. SAVIA_EFFECT_LEDGER solo con SAVIA_EFFECT_TEST=1 (7b).
 Ganchos de prueba (SAVIA_EFFECT_NOW, SAVIA_EFFECT_FAULT, SAVIA_EFFECT_REGISTRY, SAVIA_EFFECT_PROC,
-SAVIA_EFFECT_BUSY_MS) solo con SAVIA_EFFECT_TEST=1 y ledger bajo ${TMPDIR:-/tmp} distinto del
-de por defecto tras realpath (Regla 7).
+SAVIA_EFFECT_BUSY_MS) solo con SAVIA_EFFECT_TEST=1 y ledger bajo ${TMPDIR:-/tmp} (distinto de /)
+y distinto del de por defecto tras realpath y por inodo (Regla 7). Ledger, WAL y lock en 0600.
 """
 import fcntl
 import hashlib
@@ -86,6 +87,15 @@ def sha256(text):
 
 # ── Entorno: ledger, ganchos de prueba (Reglas 7 y 7b) ─────────────────────
 
+def same_inode(a, b):
+    """True si a y b son el mismo fichero (enlace duro incluido)."""
+    try:
+        sa, sb = os.stat(a), os.stat(b)
+    except OSError:
+        return False
+    return (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
+
+
 class Env:
     def __init__(self):
         home = os.environ.get("HOME", "")
@@ -101,9 +111,10 @@ class Env:
         tmp = os.path.realpath(os.environ.get("TMPDIR") or "/tmp")
         real = os.path.realpath(self.path)
         self.hooks = bool(
-            self.test and override
+            self.test and override and tmp != os.sep
             and os.path.commonpath([real, tmp]) == tmp
-            and real != os.path.realpath(self.default))
+            and real != os.path.realpath(self.default)
+            and not same_inode(real, self.default))
         hook_vars = [v for v in ("SAVIA_EFFECT_NOW", "SAVIA_EFFECT_FAULT", "SAVIA_EFFECT_REGISTRY",
                                  "SAVIA_EFFECT_PROC", "SAVIA_EFFECT_BUSY_MS") if os.environ.get(v)]
         if hook_vars and not self.hooks:
@@ -270,7 +281,9 @@ def holder_start(env, pid):
     try:
         with open(os.path.join(env.proc_root(), str(pid), "stat"), encoding="utf-8") as fh:
             stat = fh.read()
-        return stat[stat.rindex(")") + 2:].split()[19]
+        fields = stat[stat.rindex(")") + 2:].split()
+        # Un zombi (Z) o un proceso ya muerto (X) no sostiene la reclamación.
+        return None if fields[0] in ("Z", "X") else fields[19]
     except (OSError, ValueError, IndexError):
         return None
 
@@ -284,10 +297,12 @@ class Ledger:
         self.busy_s = (int(busy) / 1000.0) if busy.isdigit() else 10.0
         lock = None
         try:
+            # El ledger guarda logins, actor y tokens: solo la persona dueña lo lee (0600/0700).
+            os.umask(0o077)
             os.makedirs(os.path.dirname(env.path), mode=0o700, exist_ok=True)
             # Apertura serializada: cambiar a WAL un fichero nuevo devuelve BUSY sin esperar
-            # al busy_timeout si otro proceso lo inicializa a la vez.
-            lock = open(env.path + ".lock", "a", encoding="utf-8")
+            # al busy_timeout si otro proceso lo inicializa a la vez. Lock junto al fichero real.
+            lock = open(os.path.realpath(env.path) + ".lock", "a", encoding="utf-8")
             self._flock(lock)
             self.db = sqlite3.connect(env.path, timeout=self.busy_s, isolation_level=None)
             self.db.row_factory = sqlite3.Row
@@ -649,9 +664,18 @@ def cmd_complete(env, ops, a):
         if not (isinstance(commit, str) and commit.strip()):
             led.rollback()
             return EXIT_INFLIGHT, f"IN_FLIGHT {row['effect_id']} (respuesta sin {op['response_evidence']}: la cierra la sonda)"
+        if row["dispatch_rejected"]:
+            led.rollback()
+            return EXIT_INFLIGHT, f"IN_FLIGHT {row['effect_id']} (rechazo anotado: solo la sonda lo cierra, 3e)"
         by = resp.get("mergedBy")
-        res = {"commit": commit, "login": by.get("login") if isinstance(by, dict) else by,
-               "head": resp.get("headRefOid"), "obs": resp}
+        login = by.get("login") if isinstance(by, dict) else by
+        head = resp.get("headRefOid")
+        args = json.loads(row["args"])
+        if (head is not None and head != args.get("head")) or (
+                login is not None and str(login).lower() != str(row["actor_remote"] or "").lower()):
+            led.rollback()
+            return EXIT_INFLIGHT, f"IN_FLIGHT {row['effect_id']} (la respuesta contradice la entrada: la cierra la sonda)"
+        res = {"commit": commit, "login": login, "head": head, "obs": resp}
         env.fault("before_complete")
         succeed(led, op, row, res, "response")
         led.commit()
@@ -797,7 +821,10 @@ def cmd_resolve(env, ops, a):
 
 
 def row_json(row):
-    return canon({k: row[k] for k in row.keys()})
+    # El token es la capacidad de dispatch/complete (Regla 2b): nunca sale del proceso que reclamó.
+    view = {k: row[k] for k in row.keys() if k != "claim_token"}
+    view["claim_held"] = row["claim_token"] is not None
+    return canon(view)
 
 
 def cmd_status(env, ops, a):
@@ -899,6 +926,9 @@ def main(argv):
         return exc.code
     except sqlite3.Error as exc:
         print(f"ERROR ledger: {exc}", file=sys.stderr)
+        return EXIT_ERR
+    except Exception as exc:  # noqa: BLE001 — un fallo interno nunca debe leerse como veredicto (1)
+        print(f"ERROR interno: {type(exc).__name__}: {exc}", file=sys.stderr)
         return EXIT_ERR
 
 
