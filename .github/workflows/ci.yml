@@ -403,6 +403,10 @@ jobs:
       - name: Trace tamper scan (SE-470 S2)
         run: python3 -m unittest tests/python/test_trace_tamper_scan.py
 
+      # SE-488 S1: artefacto de aprobación y recibo de merge sin red; usa git y gpg del runner.
+      - name: Approval receipts by PR merge (SE-488 S1)
+        run: python3 -m unittest tests/python/test_approval_receipt.py
+
       # SE-453 S2: los guards blocking dan el mismo código en bash (con y sin jq) y en su puerto de OpenCode.
       # SAVIA_REQUIRE_TS=1 exige runtime TS (node/bun) y jq: si falta cualquiera, el paso falla en vez de saltar.
       - name: Gate guards parity (SE-453 S2)
