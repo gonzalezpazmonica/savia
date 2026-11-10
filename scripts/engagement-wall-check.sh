@@ -122,6 +122,14 @@ get_file_client_tag() {
   grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | head -1 | cut -d: -f2 || echo ""
 }
 
+# Primera etiqueta de cliente del fichero distinta de $2 (vacío si no hay).
+# Mirar solo la primera etiqueta dejaba pasar «client:propio … client:ajeno».
+get_foreign_tag() {
+  local file="$1" own="$2"
+  [[ ! -f "$file" ]] && { echo ""; return; }
+  grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | cut -d: -f2 | grep -vxF -- "$own" | head -1 || true
+}
+
 tag_artifact() {
   local file="$1"
   local client="$2"
@@ -192,7 +200,7 @@ check_layer_episodic() {
         [[ -f "$memf" ]] || continue
         if has_any_client_tag "$memf"; then
           local tagged
-          tagged=$(get_file_client_tag "$memf")
+          tagged=$(get_foreign_tag "$memf" "$cslug")
           if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
             record_violation "$l" "$memf" \
               "Memory file tagged client:$tagged but belongs to client:$cslug" \
@@ -258,7 +266,7 @@ check_layer_active_context() {
         [[ -f "$pf" ]] || continue
         if has_any_client_tag "$pf"; then
           local tagged
-          tagged=$(get_file_client_tag "$pf")
+          tagged=$(get_foreign_tag "$pf" "$cslug")
           if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
             record_violation "$l" "$pf" \
               "Profile artifact tagged client:$tagged but profile belongs to client:$cslug" \
@@ -386,7 +394,7 @@ check_layer_federation() {
       [[ -f "$ef" ]] || continue
       if has_any_client_tag "$ef"; then
         local tagged
-        tagged=$(get_file_client_tag "$ef")
+        tagged=$(get_foreign_tag "$ef" "$cslug")
         if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
           # In strict mode, this is a violation
           # In permeable-declared, check for operator declaration
@@ -488,7 +496,7 @@ check_layer_briefs_drafts() {
       [[ -f "$bf" ]] || continue
       if has_any_client_tag "$bf"; then
         local tagged
-        tagged=$(get_file_client_tag "$bf")
+        tagged=$(get_foreign_tag "$bf" "$cslug")
         if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
           record_violation "$l" "$bf" \
             "Engagement artifact tagged client:$tagged found in client:$cslug directory" \
