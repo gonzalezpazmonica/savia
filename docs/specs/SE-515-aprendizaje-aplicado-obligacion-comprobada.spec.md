@@ -137,3 +137,4 @@ APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva +
 
 - **Reutilizar P10.** El resultado de la ablación recall encendido/apagado (AC-5) es también la evidencia de «con/sin lección» que S09 necesita para valorar la supervisión. Se publica en un formato que S09 pueda leer (caso, decisión con y sin recall, coste observado); no hay S5 ni informe aparte.
 - **Sin comparación de modalidades de supervisión aquí.** Qué estrategia de revisión rinde más dentro de un techo de permisos no es aprendizaje exigible; lo estudia, si procede, S09. Ningún resultado de esa comparación cambia la fuerza `advisory`/`review_required`/`guarded` de una lección.
+- **Dónde se anota la hipótesis.** En la sesión S09 de `docs/propuestas/planning-state.json` (fuente canónica); `docs/propuestas/ROADMAP-CURRENT.md` se regenera con `scripts/roadmap.sh render`, sin edición manual.
