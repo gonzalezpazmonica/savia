@@ -362,8 +362,8 @@ Revertir la PR deja los cuatro STOP nativos como están hoy. El directorio `~/.s
 - prototipo: `docs/specs/assets/SE-498-prototipo.md` — la salida de `pause`, `reconcile` y `resume` sobre un fixture con cuatro ejecutores y un efecto en vuelo.
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante. Parar un solo ejecutor sigue fuera de alcance.
 
 ## OpenCode Implementation Plan
 

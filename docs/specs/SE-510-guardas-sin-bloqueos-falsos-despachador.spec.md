@@ -96,8 +96,8 @@ La cifra en serie mide **CPU y procesos**, no la espera de la persona: Claude Co
 - prototipo: `docs/specs/assets/prototipo-SE-510.md` — los mensajes que ve la persona en las escenas 1, 2, 3 y 5, antes y después del cambio, con su clase FORMA o POLÍTICA, y la salida de `scripts/guard-blocks.sh report` sobre un registro de ejemplo de una semana.
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo, la duda va a política (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante. Cuando no está claro, el bloqueo se trata como POLÍTICA.
 
 ## Qué decide esta spec
 
