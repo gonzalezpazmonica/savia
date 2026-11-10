@@ -135,13 +135,23 @@ if [[ " ${GAPS[*]} " != *" decompile:missing_tool "* ]] \
   GAPS+=("decompile:unreadable")
 fi
 
-# Analizar AndroidManifest si accesible en texto
-MANIFEST_PATH=""
-if [[ -f "$DECOMPILE_DIR/AndroidManifest.xml" ]]; then
-  MANIFEST_PATH="$DECOMPILE_DIR/AndroidManifest.xml"
-  # Usar android-manifest-audit.sh si disponible
-  if [[ -f "$SCRIPT_DIR/android-manifest-audit.sh" ]]; then
-    MANIFEST_FINDINGS=$(bash "$SCRIPT_DIR/android-manifest-audit.sh" "$MANIFEST_PATH" 2>/dev/null || echo "[]")
+# Analizar AndroidManifest en texto (solo apktool lo deja así; el de unzip es binario
+# y ya queda como hueco apktool:missing_tool). Sus hallazgos cuentan en el resultado.
+MANIFEST_PATH="$DECOMPILE_DIR/AndroidManifest.xml"
+MANIFEST_FINDINGS=0
+if [[ " ${GAPS[*]} " != *" apktool:missing_tool "* && " ${GAPS[*]} " != *" decompile:"* ]]; then
+  if [[ ! -f "$MANIFEST_PATH" ]] || ! grep -q '<manifest' "$MANIFEST_PATH" 2>/dev/null; then
+    GAPS+=("manifest:unreadable")
+  elif [[ ! -f "$SCRIPT_DIR/android-manifest-audit.sh" ]]; then
+    GAPS+=("manifest_audit:missing_tool")
+  else
+    MANIFEST_OUT=$(bash "$SCRIPT_DIR/android-manifest-audit.sh" "$MANIFEST_PATH" 2>/dev/null)
+    # El código de salida mezcla errores y número de hallazgos: se lee el total impreso.
+    if [[ "$MANIFEST_OUT" =~ "=== Total findings: "([0-9]+)" ===" ]]; then
+      MANIFEST_FINDINGS="${BASH_REMATCH[1]}"
+    else
+      GAPS+=("manifest_audit:unreadable")
+    fi
   fi
 fi
 
@@ -164,7 +174,7 @@ fi
 rm -rf "$DECOMPILE_DIR" 2>/dev/null || true
 
 # ── Resultado (SE-453) ────────────────────────────────────────────────────────
-if [[ "${HARDCODED_SECRETS:-0}" -gt 0 || "${DEBUG_CODE:-0}" -gt 0 ]]; then
+if [[ "${HARDCODED_SECRETS:-0}" -gt 0 || "${DEBUG_CODE:-0}" -gt 0 || "$MANIFEST_FINDINGS" -gt 0 ]]; then
   RESULT="findings"
 elif [[ ${#GAPS[@]} -gt 0 ]]; then
   RESULT="unknown"
@@ -187,6 +197,7 @@ cat > "$REPORT_FILE" <<EOF
   "findings": [
     $([ "${HARDCODED_SECRETS:-0}" -gt 0 ] && echo "{\"severity\":\"CRITICAL\",\"type\":\"hardcoded_secrets\",\"count\":${HARDCODED_SECRETS}}," || echo "")
     $([ "${DEBUG_CODE:-0}" -gt 0 ] && echo "{\"severity\":\"HIGH\",\"type\":\"debug_code_in_release\",\"count\":${DEBUG_CODE}}," || echo "")
+    $([ "$MANIFEST_FINDINGS" -gt 0 ] && echo "{\"severity\":\"HIGH\",\"type\":\"manifest_findings\",\"count\":${MANIFEST_FINDINGS}}," || echo "")
     {"severity":"INFO","type":"scan_complete","message":"Basic analysis done. Install MobSF for full analysis."}
   ],
   "mobsf_docker_command": "docker run --rm -p 8000:8000 opensecurity/mobile-security-framework-mobsf",
