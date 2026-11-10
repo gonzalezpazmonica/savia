@@ -67,3 +67,20 @@ Descartados con motivo:
   una suite que también los ejercita y no se re-midieron dentro del time-box. Son los primeros
   candidatos del siguiente grupo: re-medir con todas sus suites antes de tocarlos.
 - `mcp-audit.sh` (17/20) ya mata más del 80 %.
+
+## Resultado (después)
+
+Misma batería y mismas suites del script antes y después; el «después» muta el script corregido, por
+eso el total puede cambiar. Auditor sin renombrar ningún test.
+
+| Script | Mutantes muertos antes | después | Test (auditor antes → después) |
+|---|---|---|---|
+| `exit-purge-verify.sh` | 0/29 | 44/47 | nuevo `test-exit-purge-verify` (52); `test-se272-s5-exit-portability` 78 sin tocar |
+| `mobile-security-scan.sh` | 33/45 | 40/51 | `test-gate-result-ondemand` 63 → 73; `test-se240-mobile-security` 78 → 78 |
+| `compliance-eval.py` | 25/44 | 44/48 | `bats/compliance-policy` 41 → 54 |
+| `egress-gate.sh` | 20/29 | 27/29 | `test-g3-effect-path-capabilities` 74 → 74 |
+
+Supervivientes que quedan: equivalentes o ruido (`|| true`→`|| false` en órdenes cuyo estado no se
+usa, `shift 2 || shift` al final de los argumentos, la rama `except ImportError` con PyYAML instalado,
+docstrings, `ensure_ascii` en la salida, `ROOT` de reserva cuando `PROJECT_ROOT` viene fijado y la
+clave `isolated_by_default` del YAML por defecto, que nadie lee).
