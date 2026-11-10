@@ -17,15 +17,24 @@ usage() {
   exit 1
 }
 
+# --target is a DNS name: it ends up in a file path and in tool argv, so
+# anything else (path separators, leading '-', spaces, quotes) is rejected.
+valid_target() {
+  local t="$1"
+  [[ ${#t} -le 253 ]] || return 1
+  [[ "$t" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --target) TARGET="$2"; shift 2 ;;
+      --target) [[ $# -ge 2 ]] || { echo "ERROR: --target needs a value"; usage; }; TARGET="$2"; shift 2 ;;
       -h|--help) usage ;;
       *) echo "Unknown option: $1"; usage ;;
     esac
   done
   [[ -z "${TARGET}" ]] && { echo "ERROR: --target is required"; usage; }
+  valid_target "${TARGET}" || { echo "ERROR: --target must be a domain name: ${TARGET}"; usage; }
 }
 
 main() {

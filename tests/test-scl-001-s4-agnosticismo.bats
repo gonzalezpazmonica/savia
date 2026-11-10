@@ -91,3 +91,90 @@ EOF
     "$REPO_ROOT/scripts/learning-guard.sh" 2>/dev/null || true)
   [ -z "$hits" ]
 }
+
+# ── learning-guard.sh: comportamiento discriminante (S03s) ──
+loop_script() { # loop_script <nombre> <línea>: script del bucle en $TMPD
+  printf '#!/usr/bin/env bash\n%s\n' "$2" > "$TMPD/$1"
+}
+# El JSON es la última línea de $output (run mezcla stderr, donde van los destinos rechazados).
+verdict() { python3 -c 'import json,sys; d=json.loads(sys.argv[1].splitlines()[-1]); print(d[sys.argv[2]])' "$output" "$1"; }
+
+@test "guard: a loop script writing a binary target without 'learning-' in its name is a VIOLATION" {
+  loop_script learning-x.sh 'echo 1 > "output/weights.bin"'
+  run bash "$GUARD" --loop-dir "$TMPD" --json
+  [ "$status" -eq 1 ]
+  [ "$(verdict non_sustrato_targets)" = "1" ]
+  [ "$(verdict vendor_hits)" = "0" ]
+  [[ "$output" == *"non-sustrato target: output/weights.bin"* ]]
+  [ "$(verdict verdict)" = "VIOLATION" ]
+}
+
+@test "guard: sustrato targets (.md/.jsonl/.json) are clean" {
+  loop_script learning-ok.sh 'echo 1 > "output/proposals/x.md"; echo 2 >> "docs/graph.jsonl"; echo 3 > "docs/state.json"'
+  run bash "$GUARD" --loop-dir "$TMPD" --json
+  [ "$status" -eq 0 ]
+  [ "$(verdict verdict)" = "CLEAN" ]
+}
+
+@test "guard: only learning-*.sh files are scanned, other scripts are ignored" {
+  loop_script other.sh 'echo claude > "output/w.bin"'
+  run bash "$GUARD" --loop-dir "$TMPD" --json
+  [ "$status" -eq 0 ]
+  [ "$(verdict vendor_hits)/$(verdict non_sustrato_targets)" = "0/0" ]
+}
+
+@test "guard: a vendor hit in a line that mentions learning-guard.sh is still counted" {
+  loop_script learning-run.sh '# corre learning-guard.sh antes de llamar a openai'
+  run bash "$GUARD" --loop-dir "$TMPD" --json
+  [ "$status" -eq 1 ]
+  [ "$(verdict vendor_hits)" = "1" ]
+}
+
+@test "guard: --allow-vendor skips the vendor scan but not the write audit" {
+  loop_script learning-v.sh 'model=gpt-4'
+  run bash "$GUARD" --loop-dir "$TMPD" --allow-vendor --json
+  [ "$status" -eq 0 ]
+  [ "$(verdict vendor_hits)" = "0" ]
+  loop_script learning-w.sh 'echo 1 > "output/lora.safetensors"'
+  run bash "$GUARD" --loop-dir "$TMPD" --allow-vendor --json
+  [ "$status" -eq 1 ]
+}
+
+@test "guard: constitution unchanged against the expected hash is clean; changed or missing is a VIOLATION" {
+  printf 'art 1\n' > "$TMPD/C.md"
+  h=$(sha256sum "$TMPD/C.md" | cut -d' ' -f1)
+  mkdir "$TMPD/loop"
+  run bash "$GUARD" --loop-dir "$TMPD/loop" --constitution "$TMPD/C.md" --expect-constitution-sha256 "$h" --json
+  [ "$status" -eq 0 ]
+  [ "$(verdict constitution_unchanged)" = "True" ]
+  printf 'art 1 reescrito\n' > "$TMPD/C.md"
+  run bash "$GUARD" --loop-dir "$TMPD/loop" --constitution "$TMPD/C.md" --expect-constitution-sha256 "$h" --json
+  [ "$status" -eq 1 ]
+  [ "$(verdict constitution_unchanged)" = "False" ]
+  run bash "$GUARD" --loop-dir "$TMPD/loop" --constitution "$TMPD/no-hay.md" --expect-constitution-sha256 "$h"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CONSTITUCION sha256:          MISSING"* ]]
+  [[ "$output" == *"CONSTITUCION unchanged:       false"* ]]
+  [[ "$output" == *"Verdict: VIOLATION"* ]]
+}
+
+@test "guard: without --expect-constitution-sha256 the hash is reported, not judged" {
+  mkdir "$TMPD/loop"
+  run bash "$GUARD" --loop-dir "$TMPD/loop" --constitution "$TMPD/no-hay.md" --json
+  [ "$status" -eq 0 ]
+  [ "$(verdict constitution_unchanged)" = "None" ]
+}
+
+@test "guard: usage errors — missing loop dir value, unknown option, no --loop-dir — exit 2; missing dir exits 3" {
+  run bash "$GUARD" --loop-dir
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--loop-dir needs a value"* ]]
+  run bash "$GUARD" --loop-dir "$TMPD" --loopdir x
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown option: --loopdir"* ]]
+  run bash "$GUARD"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage:"* ]]
+  run bash "$GUARD" --loop-dir "$TMPD/no-existe"
+  [ "$status" -eq 3 ]
+}

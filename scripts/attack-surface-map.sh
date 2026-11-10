@@ -20,16 +20,25 @@ usage() {
   exit 1
 }
 
+# --target is a DNS name: it ends up in a file path and in tool argv, so
+# anything else (path separators, leading '-', spaces, quotes) is rejected.
+valid_target() {
+  local t="$1"
+  [[ ${#t} -le 253 ]] || return 1
+  [[ "$t" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --target) TARGET="$2"; shift 2 ;;
-      --tools)  TOOLS="$2";  shift 2 ;;
+      --target) [[ $# -ge 2 ]] || { echo "ERROR: --target needs a value"; usage; }; TARGET="$2"; shift 2 ;;
+      --tools)  [[ $# -ge 2 ]] || { echo "ERROR: --tools needs a value"; usage; }; TOOLS="$2";  shift 2 ;;
       -h|--help) usage ;;
       *) echo "Unknown option: $1"; usage ;;
     esac
   done
   [[ -z "${TARGET}" ]] && { echo "ERROR: --target is required"; usage; }
+  valid_target "${TARGET}" || { echo "ERROR: --target must be a domain name: ${TARGET}"; usage; }
 }
 
 check_authorization() {
@@ -46,8 +55,11 @@ check_authorization() {
     exit 1
   fi
 
-  # Verify content contains AUTHORIZED
-  if ! grep -q "AUTHORIZED" "${auth_file}"; then
+  # The first line must be exactly AUTHORIZED: "NOT AUTHORIZED" or
+  # "UNAUTHORIZED" contain the word but are not a grant.
+  local first_line=""
+  IFS= read -r first_line < "${auth_file}" || true
+  if [[ "${first_line%$'\r'}" != "AUTHORIZED" ]]; then
     echo "ERROR: Authorization file does not contain 'AUTHORIZED': ${auth_file}"
     exit 1
   fi

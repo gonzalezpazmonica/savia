@@ -134,7 +134,7 @@ bash scripts/learning-metric.sh --p-consistent 0.8 --divergence 0.2 --ignorance-
 bash scripts/learning-report.sh --window W34 --captured N --activated M \
   --p-consistent-before X --p-consistent-after Y
 # S4 — guard de agnosticismo
-bash scripts/learning-guard.sh --loop-dir scripts/
+bash scripts/learning-guard.sh --loop-dir scripts/ [--expect-constitution-sha256 <hash previo a los ciclos>]
 # SCL-004 — divergencia grafo-modelo (Labs L1)
 bash scripts/learning-divergence.sh --claim "<declaracion>" --graph-query "<tema>" \
   --threshold 0.6 [--propose]

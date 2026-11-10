@@ -65,3 +65,4 @@ token_budget: 1500
 - Regla #1: `CLAUDE.md` · `docs/rules/domain/critical-rules-extended.md`
 - Aprendizaje PMA: `output/research/prime-agent-eval/lecciones-prime-agent-20260827.md` §8
 - Spec: SE-347 · CRIT-001
+- Diseño de las herramientas que sirve un MCP (forma, efectos, catálogo, argumentos): `mcp-tool-design.md` (SE-443)

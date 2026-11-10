@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Shared completion-evidence validation for SE-396 P01.
+# Un .file con salto de línea se rechaza en la forma: la lectura línea a línea
+# lo partiría en dos rutas que podrían existir aunque el fichero declarado no.
 
 planning_completion_shape_valid() {
   local completion="$1"
@@ -10,7 +12,7 @@ planning_completion_shape_valid() {
     all(.acceptance_evidence[];
       type == "object" and
       (.criterion | type == "string" and length > 0) and
-      (.file | type == "string" and length > 0))
+      (.file | type == "string" and length > 0 and (test("[\\n\\r]") | not)))
   ' <<<"$completion" >/dev/null 2>&1
 }
 
