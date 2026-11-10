@@ -6,7 +6,8 @@ created: 2026-11-05
 author: Savia
 phase: B
 risk: L4
-related_specs: [SE-343, SE-362, SE-433, SE-445, SE-493, SE-498, SE-500, SE-501, SE-508]
+human_surface: true
+related_specs: [SE-343, SE-362, SE-433, SE-445, SE-488, SE-493, SE-496, SE-498, SE-500, SE-501, SE-508, SE-514]
 origin: "Petición literal de la operadora (2026-11-05, 03:xx): «Pide un grant general, estás constantemente pidiendo permisos cuando estás en auto y en sprint nocturno. No me estás dejando dormir. El sprint nocturno ha de ser 100% autónomo por necesidad.»"
 timeline:
   - from: "2026-11-05"
@@ -25,8 +26,8 @@ se corrigen, se vuelven a revisar y se registran, el plan cambia, y cada plan nu
 o sea, otra pregunta a la operadora. Cada pregunta la despierta.
 
 La operadora ha pedido un grant general y que el sprint nocturno sea 100 % autónomo. Esta spec propone
-un **grant de política**: la operadora firma una vez, antes de dormir, una regla con alcance, ventana y
-tope, y el ejecutor fusiona en serie cualquier PR que cumpla la regla **en el momento de fusionarla**.
+un **grant de política**: la operadora aprueba una vez, antes de dormir y desde el móvil, una regla con alcance, ventana y
+tope (fusionando una PR de aprobación, SE-488), y el ejecutor fusiona en serie cualquier PR que cumpla la regla **en el momento de fusionarla**.
 
 ### Dónde nace cada pregunta (verificado en origin/main afd6f49d1)
 
@@ -50,8 +51,9 @@ Datos que reporta la orquestadora de esa noche (el ledger es local y no se versi
 ## Qué decide esta spec
 
 1. Un tipo de autorización nuevo, el **grant de política**, que convive con el grant de manifiesto de SE-433 y no lo sustituye.
-2. Qué firma la operadora, cómo se verifica en cada fusión, cómo se revoca y cómo se audita por la mañana.
-3. Un **modo nocturno** en el que ninguna acción puede disparar un aviso de permiso: lo que lo dispararía va a la lista de pendientes de la mañana.
+2. Qué aprueba la operadora (una PR de aprobación, SE-488), cómo se verifica en cada fusión, cómo se revoca y cómo se audita por la mañana.
+3. Un **modo nocturno** en el que ninguna acción puede disparar un aviso de permiso: lo que lo dispararía va a la cola única de la mañana (SE-514).
+4. **Un solo formato de autorización.** El permiso de política no inventa firma propia: se aprueba como cualquier otra ampliación de autoridad (SE-488) y, si existe, se proyecta al contrato de delegación de SE-496. Ver «Un solo formato de autorización».
 
 No cambia nada de tier 3/4 (SE-362), del juez de cambios (SE-433 §2.7) ni del grant de un PR (SE-343).
 
@@ -72,31 +74,32 @@ para compensar justo lo que se pierde: que ningún humano ve la lista antes de f
 | Opción | Qué es | Por qué no |
 |---|---|---|
 | A. Grant de manifiesto con TTL largo | Igual que hoy, 12 h | No resuelve nada: lo que caduca es el digest, no el tiempo. |
-| B. Universo congelado al firmar | Solo las PR abiertas al firmar, con cabeza libre | Útil, pero deja fuera el trabajo que los workers abren de noche, que es la mayor parte. Se ofrece como opción de la política (`universe: frozen`), no como única. |
+| B. Universo congelado al aprobar | Solo las PR abiertas al aprobar, con cabeza libre | Útil, pero deja fuera el trabajo que los workers abren de noche, que es la mayor parte. Se ofrece como opción de la política (`universe: frozen`), no como única. |
 | C. Auto-merge de GitHub | `gh pr merge --auto` | Prohibido: GitHub fusiona aunque el grant se haya revocado (`autonomous-safety-merge-grant.md:51-56`). |
-| **D. Grant de política** | Regla firmada, comprobada en cada fusión | **Elegida.** |
+| **D. Grant de política** | Regla aprobada por fusión de PR, comprobada en cada fusión | **Elegida.** |
+| E. `savia-merge` de SE-488 por lote | Recibo por PR con su `head_sha` exacto, fusionado por la operadora | Es la vía correcta para una lista conocida y es lo que se usa en las noches sin política. No cubre las PR que nacen de noche ni las cabezas que cambian tras la aprobación, que es el problema de esta spec. |
 
 ## Requisitos
 
-### R1 — Qué se firma
+### R1 — Qué se aprueba
 
 La política es un JSON canónico (claves ordenadas, sin espacios) que genera
-`merge-sprint.sh policy-plan` y que la operadora autoriza con su respuesta. Campos:
+`merge-sprint.sh policy-plan` y que la operadora aprueba fusionando una PR (ver «Un solo formato de autorización»). Campos:
 
 | Campo | Contenido | Límites |
 |---|---|---|
 | `kind` | `"policy"` | fijo |
 | `id` | aleatorio, 16 hex | único |
-| `not_before`, `not_after` | instantes en UTC (`…Z`); la hora local de la operadora se muestra en la pregunta y en el informe, pero no entra en el digest | límite único: `not_after − not_before ≤ 12 h` (12 h exactas se aceptan; 12 h y 1 s no). No hay ampliación a 24 h: la política es más débil que el manifiesto de SE-433 y su ventana es más corta. Por defecto, `not_before` es la hora de emisión y `not_after` es el primero de estos dos instantes: las 08:00 locales del día siguiente o `not_before + 12 h`. Así, firmar antes de las 20:00 recorta la ventana a 12 h, no la rechaza. Un `not_after` explícito que exceda 12 h se rechaza. **Sin políticas latentes**: un `not_before` explícito posterior a la emisión en más de 1 h se rechaza; una política firmada hoy para dentro de días se activaría sola cuando la operadora ya no la recuerda |
+| `not_before`, `not_after` | instantes en UTC (`…Z`); la hora local de la operadora se muestra en la PR de aprobación y en el informe, pero no entra en el digest | límite único: `not_after − not_before ≤ 12 h` (12 h exactas se aceptan; 12 h y 1 s no). No hay ampliación a 24 h: la política es más débil que el manifiesto de SE-433 y su ventana es más corta. Por defecto, `not_before` es la hora de emisión y `not_after` es el primero de estos dos instantes: las 08:00 locales del día siguiente o `not_before + 12 h`. Así, emitir antes de las 20:00 recorta la ventana a 12 h, no la rechaza. Un `not_after` explícito que exceda 12 h se rechaza. **Sin políticas latentes**: un `not_before` explícito posterior a la emisión en más de 1 h se rechaza; una política aprobada hoy para dentro de días se activaría sola cuando la operadora ya no la recuerda |
 | `repos[]` | `{repo, base, include[], exclude[]}` | `include` son globs de rutas; una PR con un solo fichero fuera de `include` o dentro de `exclude` no entra (semántica exacta en R2.3). Exclusión forzosa, aunque la política diga otra cosa: (a) todo lo que `scripts/risk-tier.py` clasifica como gobernanza (`is_governance`, `:36-55`: `GOVERNANCE_EXACT`, `GOVERNANCE_PREFIXES` —incluye `.opencode/`, donde vive el plugin `savia-gates`, y `.github/workflows/`—, `.claude/settings*.json` y `docs/rules/domain/autonomous-safety*.md`); (b) el código de los gates que no es gobernanza hoy: `.claude/hooks/**`, `.claude/agents/**` (definiciones de las revisoras), `scripts/confidentiality-*`, `scripts/validate-ci*`, `scripts/f5-state.sh`, `scripts/merge-registry-resolve.py` y `scripts/sam.py`, los manifiestos de dependencias en cualquier directorio (`requirements*.txt`, `*.lock*`, `package.json`, `package-lock.json`, `pyproject.toml`, `Makefile`), que ejecutan código al instalar, y los tests de los gates (`tests/**` cuyo nombre contenga `merge-sprint`, `risk-tier`, `confidentiality`, `operator-grant` o `night-mode`), cuyo debilitamiento daría verdes falsos las noches siguientes. El nombre es solo la semilla mínima: además, **los tests que prueban un gate por contenido**, es decir, todo fichero de `tests/**` que cite, cargue (`source`, `.`, import) o ejecute una ruta de (a)–(d), derivado desde los blobs de `origin/main` con la misma normalización y el mismo STOP `forced_exclude_error` que (d); (c) lo que crea esta spec: `.claude/hooks/night-mode-guard.sh` y cualquier fichero del guard nocturno; (d) **el código que ejecutan los workflows** (`WORKFLOW_EXEC_PATHS`, R2.3): modificar un script que un workflow ejecuta equivale a modificar el workflow, que ya está en (a). Ejemplos en `main` hoy: `scripts/changelog-consolidate.sh` (`changelog-consolidate.yml`, en `push` a `main`, con `contents: write` y el secreto HMAC de confidencialidad) y `scripts/setup-merge-drivers.sh` (`auto-rebase-open-prs.yml`, `contents: write`), que `risk-tier.py` clasifica como tier 1 o 2. **El ejecutor aplica (a), (b), (c) y (d) por sí mismo desde S2**: lleva la lista (b)+(c) como constante propia (`POLICY_FORCED_EXCLUDE`) dentro de `merge-sprint.sh`, que ya es gobernanza y queda congelado por `runner_blob`, deriva (d) de los workflows de `origin/main` y además consulta `is_governance` para (a). No depende de que `risk-tier.py` las clasifique. S3 añade también (b) y (c) a `GOVERNANCE_EXACT`/`GOVERNANCE_PREFIXES` para que den tier 4 fuera de la política (grant de manifiesto, clasificador); eso es defensa adicional, no la condición de seguridad de S2. Sin S3 en `main`, `run --policy` ya excluye esas rutas |
 | `tiers` | subconjunto no vacío de `{1,2}` | `3` o `4`, o la lista vacía, hacen inválida la política: no se emite |
 | `max_merges` | entero ≥ 1 | techo duro 40 (`config/merge-sprint-policy.conf:5`): un valor mayor se rechaza, no se recorta |
 | `max_parks_in_row` | entero ≥ 1 | techo duro 3, como SE-433 |
-| `universe` | `"open"` o `"frozen"` | `frozen` lleva la lista no vacía de números de PR abiertas al firmar; `frozen` sin lista se rechaza |
+| `universe` | `"open"` o `"frozen"` | `frozen` lleva la lista no vacía de números de PR abiertas al emitir la política; `frozen` sin lista se rechaza |
 | `reviewers` | ids admitidos como revisoras | al menos dos distintos; ninguno puede ser el id del orquestador (se rechaza al emitir). Que ninguno sea autor de la PR solo se puede comprobar al fusionar (R2.5) |
 | `max_reviews_per_pr` | entero | 4 por defecto, máximo 4: dos rondas de dos revisoras (contrapeso C3) |
-| `runner_blob`, `classifier_blob`, `f5_blob`, `resolver_blob` | blobs de `origin/main` al firmar | como el manifiesto de SE-433 (`merge-sprint.sh:207-217`) |
-| `signers_blob` | blob de `config/operator-grant-signers` en `origin/main` al firmar, si existe | solo con firma ed25519 (AC-12b) |
+| `runner_blob`, `classifier_blob`, `f5_blob`, `resolver_blob` | blobs de `origin/main` al emitir la política | como el manifiesto de SE-433 (`merge-sprint.sh:207-217`) |
+| `approval` | `{tipo: "savia-politica", nonce, merge_commit}` del recibo de SE-488 que aprobó esta política | se rellena al activarla y no entra en el digest; sin recibo válido no hay política |
 | `required_checks` | por repo, de la protección viva | no vacío (`:212-213`) |
 | `main_pending_timeout` | minutos de espera de `main` en `pending` (R2.2, R2.7) | 20 por defecto, el mismo plazo que el sondeo actual (`MERGE_SPRINT_MAIN_POLLS` 40 × `MERGE_SPRINT_POLL_S` 30 s, `:593`); mínimo 5, máximo 60 |
 
@@ -108,26 +111,17 @@ en `main_sin_checks` (R2.2).
 El **digest de la política** sustituye al digest del manifiesto. El ejecutor lo recalcula en cada paso
 y para con anomalía si no coincide.
 
-**Factor de autorización.** El mismo de SE-433 (D1): una pregunta interactiva de la sesión
-orquestadora, generada por `policy-question` desde la política, con el texto completo de alcance,
-ventana, tope y repos, y una opción de aprobación literal. Se responde una vez, antes de dormir. Si
-existe `config/operator-grant-signers` en `origin/main`, la política puede ir además firmada con la
-clave ed25519 de la operadora (SE-343, `autonomous-safety-merge-grant.md:61-71`); con firma, el grant
-de política no necesita la sesión interactiva. La firma se verifica contra el fichero de firmantes leído
-de `origin/main` (`git show origin/main:config/operator-grant-signers`), nunca del árbol de trabajo, y
-su blob se congela en la política (`signers_blob`); si el blob de `origin/main` cambia durante la
-ventana, STOP por anomalía. Sin respuesta literal o sin firma válida, no hay grant.
+### Un solo formato de autorización (reconciliación con SE-488 y SE-496)
 
-**Requisito de la clave ed25519.** De noche la orquestadora corre sola con el mismo usuario de shell.
-Si la clave privada de la operadora fuera usable por ese usuario sin intervención humana (por ejemplo,
-`~/.ssh/id_ed25519` sin passphrase, o una passphrase cacheada en un agente durante la ventana), un
-agente podría firmarse su propia política. Por eso la firma solo vale como factor si la clave está
-en el móvil o en Savia Space, como exige LAW-HUMAN-002 (`autonomous-safety-merge-grant.md`).
-La clave privada nunca reside en el equipo de los agentes: tampoco protegida con passphrase sin caché
-ni en una llave hardware conectada a ese equipo. Esta spec no enmienda LAW-HUMAN-002. Ningún subcomando del ejecutor firma: `policy-grant`
-solo verifica una firma producida fuera. Esto no se puede comprobar desde el ejecutor; es un límite
-declarado, del mismo tipo que A4. Si la operadora no puede garantizarlo, el factor es la respuesta
-interactiva, no la firma.
+Hay tres sitios donde hoy se podría firmar un permiso de merge: la firma ed25519 de SE-343, el recibo por fusión de PR de SE-488 y el contrato de delegación de SE-496. Esta spec **no añade un cuarto**:
+
+1. **Se aprueba por fusión de PR (SE-488).** `merge-sprint.sh policy-request` genera el artefacto `aprobaciones/savia-politica/<fecha>-<id>-<nonce8>.json` (esquema `aprobacion/1`) y abre la PR en el repo de aprobaciones con la App de los agentes. Su `objeto` es la política canónica completa de R1; su sha256 es el digest de la política. El `resumen` se genera de forma determinista desde el `objeto` en lenguaje llano (alcance, ventana, tope, repos, revisoras, lo que queda fuera) y el verificador lo regenera y rechaza si no coincide byte a byte. El título y la descripción de la PR de aprobación también se generan solo desde el `objeto` y el `resumen`, sin texto libre, y el verificador los compara byte a byte: lo que la operadora lee en el móvil es lo que se verifica. El digest de la política es el sha256 del JSON canónico de R1, y es el mismo valor que la huella de SE-488 R2.6 para este tipo: un solo algoritmo de canonicalización, el de R1. La operadora la fusiona en la app de GitHub: ese merge es el acto humano. Nada de pregunta interactiva ni de firma local para este permiso.
+2. **Se verifica sin red con el verificador de SE-488** (`approval-receipt.py`, R2 de SE-488): merge commit firmado por web-flow, autor de la operadora, un solo fichero añadido, cadena hasta el génesis fijado. Cualquier fallo (falta `git` o `gpg`, clave sin fijar, espejo sin sincronizar) es «no aprobado», fail-closed. Con red, el ejecutor sincroniza el espejo antes de verificar. `policy-verify` solo verifica; ningún subcomando del ejecutor aprueba ni fusiona la PR de aprobación.
+3. **Vigencia efectiva.** `emitida` es la apertura de la PR y `caduca` es `not_after` (≤ 12 h, dentro del tope de 24 h de SE-488). El verificador exige `caduca == not_after` del `objeto` (un `caduca` más largo ampliaría el tiempo de aprobación aceptado) que `emitida` coincida con la fecha del commit que añade el artefacto y cumpla `emitida ≥ not_before − 1 h` (coherente con «sin políticas latentes»; `emitida` lo escribe el lado de los agentes y así no puede moverse). El recibo solo vale si la fecha de M cae en `[emitida, caduca]`. La ventana efectiva es `[max(not_before, fecha de M), not_after)`: fusionar tarde recorta la ventana, nunca la alarga, y fusionar después de `not_after` no vale.
+4. **Consumo.** La unidad es `politica@digest`. Se anota en el libro de consumidos en la primera pasada de `run --policy` (la activación), bajo cerrojo y antes de la primera fusión. Las pasadas siguientes comprueban que la anotación existe y es del mismo digest; no consumen otra vez. Un nonce anotado para otro digest no vale (solo ocurre con el libro manipulado). Un STOP o una revocación se anotan también en el libro como `stopped` sobre `politica@digest`, no solo en el fichero STOP: con esa anotación el mismo recibo no vuelve a activar la política aunque se borre el fichero STOP. Borrar además el libro queda dentro del límite que SE-488 ya declara para ese caso (A4). Es una lectura de R2.8 de SE-488 (uso único = activación): hay que confirmarla con ese verificador (ver Dependencias).
+5. **Proyección a SE-496, si existe.** Si el kernel de autoridad de SE-496 está disponible, `run --policy` proyecta la política verificada a un contrato equivalente **en memoria**, con el adaptador de solo lectura de su R7: principal = autor de M (la operadora), delegado = el ejecutor nocturno, capacidad `merge-sprint.policy-merge`, autoridad = tier máximo de `tiers`, ámbito = repos y rutas de `include`, `not_before` y `expires_at` = ventana efectiva, `max_uses` = `max_merges`, instalación = el repo. No se firma, no se versiona en `config/delegations/` y no amplía nada: el kernel evalúa en sombra y registra discrepancias. Que SE-496 acepte el recibo de SE-488 en lugar de la firma ed25519 es un cambio de SE-496 que esta spec no hace.
+
+**Qué sustituye al requisito de la clave privada fuera del equipo.** El factor ya no es una firma producida en el equipo de los agentes: es la fusión con la credencial de la operadora en un repo donde ni el token de la máquina ni la App pueden fusionar (R3 de SE-488: el token de la máquina no ve el repo de aprobaciones, la App abre PR y no tiene `administration`). Si el autor de M no es la operadora, o M no lleva la firma de web-flow, no hay política. Heredamos los límites que declara SE-488 (reloj local sin red, supuesto AC-7); esta spec no añade ninguno propio, y no puede comprobar desde el ejecutor que la separación de credenciales sea real. Es el mismo tipo de límite que A4. Esta spec no enmienda LAW-HUMAN-002: no introduce ninguna clave ni firma que pueda producirse en el equipo de los agentes.
 
 ### R2 — Qué se comprueba en cada fusión
 
@@ -174,7 +168,7 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
      se compara con un solo segmento de la ruta con `fnmatch.fnmatchcase`. Así `*` no cruza `/`:
      `docs/*` admite `docs/a.md` y no `docs/x/y.md`; `docs/**` admite los dos; `docs/**/*.md` admite
      `docs/a.md`. No se usa `fnmatch` sobre la ruta entera, porque ahí `*` sí cruza `/` y `**` no
-     tiene significado propio: el alcance quedaría más amplio que el firmado.
+     tiene significado propio: el alcance quedaría más amplio que el aprobado.
    - `include` distingue mayúsculas. `exclude` y la exclusión forzosa comparan en minúsculas, como
      `is_governance` (`risk-tier.py:48`): una variación de mayúsculas no saca una ruta de la exclusión.
    - La exclusión forzosa es (a) `is_governance` del clasificador congelado más (b)+(c) de
@@ -193,7 +187,7 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
      normalizar queda vacío, o es `.` o `./`, nombra la raíz y no es semilla. Excluir la raíz vaciaría
      cualquier política, y lo que se ejecuta desde ella aparece como token propio (`./x.sh` → `x.sh`).
      Un directorio citado se excluye entero, aunque sea amplio (`docs`, `scripts`): la sobre-exclusión
-     es deliberada, y `policy-question` muestra al firmar la lista (d) derivada para que la operadora
+     es deliberada, y `policy-request` muestra en la PR de aprobación la lista (d) derivada para que la operadora
      vea qué queda fuera.
    - Después, el **cierre transitivo** sobre cada fichero alcanzado, hasta que no aparece ninguno nuevo:
      - rutas del repo citadas literalmente dentro de él, con la misma normalización;
@@ -220,7 +214,7 @@ Por cada PR candidata, en este orden, y otra vez justo antes de `gh pr merge`:
    - Cualquier ruta de (a)–(d) deja la PR fuera
      aunque `include` la cubra y aunque `risk-tier.py` le dé tier 1 o 2.
 4. **Tier.** `risk-tier.py` congelado (`classifier_blob`) sobre los ficheros de la cabeza actual; tier
-   en `tiers`. Tier 3 o 4 → la PR va a pendientes de la mañana, nunca se fusiona con este grant.
+   en `tiers`. Tier 3 o 4 → la PR va a la cola de la mañana (SE-514), nunca se fusiona con este grant.
 5. **Doble APPROVE sobre la cabeza exacta.** Dos revisiones `APPROVE` registradas en `reviews.jsonl`
    con `sha` igual a la cabeza actual de la PR, con dos valores distintos del campo `reviewer` (ya se
    registra, `merge-sprint.sh:92`; hoy `reviews_ok`, `:97-113`, solo compara `role` y S2 cambia eso),
@@ -303,7 +297,7 @@ a dar HOLD sobre H1 o una cabeza posterior, la PR espera a la mañana.
 | Código | Cuándo |
 |---|---|
 | 0 | Terminado o parado con STOP normal (`fuera_de_ventana`, `max_merges`, `max_parks_in_row`, `main_*`, STOP manual, etiqueta `savia-stop`) |
-| 5 | Anomalía (digest, blobs, firmantes, merge externo, base cambiada, checks reducidos, error de lectura) o política ya parada (`anomaly`, `stop_gate`, `:551-558`) |
+| 5 | Anomalía (digest, blobs, configuración de aprobación, merge externo, base cambiada, checks reducidos, error de lectura) o política ya parada (`anomaly`, `stop_gate`, `:551-558`) |
 | 6 | En pausa: una PR espera al juez de cambios (§2.7), como hoy |
 | 7 | Antes de la ventana: no hace nada y no escribe STOP |
 | 3/4 | Sin grant de política, cerrojo o datos manipulados, como hoy |
@@ -312,8 +306,8 @@ a dar HOLD sobre H1 o una cabeza posterior, la PR espera a la mañana.
 
 | Evento | Acción |
 |---|---|
-| `main_ci_strict` en `fail` (cualquier conclusión fuera de `success`, `neutral`, `skipped`) antes o después de una fusión, por la causa que sea, o en `pending` o `none` (sin check-runs) más allá de `main_pending_timeout` | STOP de la política con motivo `main_<estado>`; no se reanuda sin firma nueva (ver Riesgos: una caída transitoria de la CI acaba la noche) |
-| Política alterada, digest distinto, blobs del ejecutor, del clasificador o de los firmantes distintos | STOP (anomalía) |
+| `main_ci_strict` en `fail` (cualquier conclusión fuera de `success`, `neutral`, `skipped`) antes o después de una fusión, por la causa que sea, o en `pending` o `none` (sin check-runs) más allá de `main_pending_timeout` | STOP de la política con motivo `main_<estado>`; no se reanuda sin una PR de aprobación nueva (ver Riesgos: una caída transitoria de la CI acaba la noche) |
+| Política alterada, digest distinto, blobs del ejecutor, del clasificador o la configuración de aprobación de SE-488 (clave fijada, autor esperado, génesis) distinta | STOP (anomalía) |
 | `now ≥ not_after`, `max_merges` alcanzado, `max_parks_in_row` seguidos | STOP normal |
 | `now < not_before` | Nada: salida 7, sin STOP; la política sigue vigente |
 | Merge externo, base cambiada, checks obligatorios reducidos | STOP (anomalía), como SE-433 (`autonomous-safety-merge-sprint.md:98`) |
@@ -327,12 +321,13 @@ Parar es seguro y no se revierte nada. Un STOP con motivo deja el fichero STOP c
 
 - `merge-sprint.sh stop` y `revoke` (`:975-976`) valen igual para la política.
 - El STOP global de SE-498, cuando exista, se consulta en el paso 1 de R2.
+- **Parar y revocar no piden aprobación** (SE-488: lo que reduce autoridad no cambia). **Reanudar** tras un STOP sí: una PR de aprobación nueva fusionada por la operadora.
 - **Señal remota sin terminal.** La operadora trabaja desde el móvil. Una etiqueta `savia-stop` en
   cualquier issue o PR del repo detiene la política en la siguiente comprobación. Solo cuenta la etiqueta:
   poner etiquetas exige permiso de triage o superior, así que un tercero anónimo no puede parar la
   noche (un issue con ese título, que cualquiera puede abrir en un repo público, no cuenta). Cualquiera
-  con ese permiso puede ponerla, también un agente: no importa, porque solo resta. Quitarla no reanuda nada; solo una firma nueva reanuda.
-- **Ampliar es firmar de nuevo.** No hay `extend`, `prorrogar` ni edición de la política. Un fichero de
+  con ese permiso puede ponerla, también un agente: no importa, porque solo resta. Quitarla no reanuda nada; solo una PR de aprobación nueva fusionada reanuda.
+- **Ampliar es aprobar de nuevo.** No hay `extend`, `prorrogar` ni edición de la política. Un fichero de
   política cambiado da digest distinto y STOP. Una política nueva invalida la anterior (un solo grant
   de política vigente por repo).
 
@@ -340,14 +335,14 @@ Parar es seguro y no se revierte nada. Un STOP con motivo deja el fichero STOP c
 
 `merge-sprint.sh report --policy <id>` genera un informe local, legible en el móvil, con:
 
-- política firmada (texto completo y digest), hora de firma, factor (respuesta o firma ed25519);
+- política aprobada (texto completo y digest), hora de aprobación y recibo (merge commit de la PR de aprobación y nonce);
 - por cada fusión: PR, título, tier, SHA revisado y fusionado, ids y hashes de las dos revisiones, ids
   de la CI de la PR y de `main`, commit de fusión, hora;
 - PR evaluadas y no fusionadas, con el motivo de la última pasada (fuera de alcance, tier 3, sin doble
   APPROVE, HOLD, cabeza nueva sin revisar, CI roja);
 - motivo del STOP final, si lo hubo;
 - `verify-ledger` íntegro o no;
-- la lista de pendientes de la mañana (R6).
+- la cola de la mañana (R6, SE-514).
 
 Nada de esto se versiona en el repo (`autonomous-safety-merge-sprint.md:115-118`).
 
@@ -359,26 +354,28 @@ pueda disparar un aviso de permiso o una pregunta. Lista cerrada en S3, como mí
 
 | Acción | Por qué dispara |
 |---|---|
-| Emitir cualquier grant (`merge-sprint.sh grant`, `operator-grant.sh grant`, `policy-grant`) | Regla «ask» (`autonomous-safety-merge-sprint.md:125`) |
+| Emitir cualquier grant (`merge-sprint.sh grant`, `operator-grant.sh grant`) | Regla «ask» (`autonomous-safety-merge-sprint.md:125`) |
 | Editar settings de Claude Code u OpenCode (`.claude/settings*.json`, configuración de `.opencode/`) | Lo bloquea el clasificador; además es tier 4 |
 | `AskUserQuestion` (en OpenCode, la herramienta de preguntas) | Bloquea al orquestador hasta que alguien conteste |
 | `gh pr create` con una base distinta de `main` o hacia un repo sin regla de rama | Repos o bases sin ruleset piden permiso |
 | `push-pr.sh --merge` y `gh pr merge` fuera del ejecutor | Merge one-shot con grant (SE-343) |
 
-En su lugar, la acción se escribe en la **lista de pendientes de la mañana**,
-`~/.savia/night/pendientes-<fecha>.md` (fuera del repo), con: hora, quién la pidió, qué, por qué y la
-orden exacta lista para ejecutar o la pregunta con sus opciones y recomendación. El guard responde
-`deny` (no `ask`, porque en una sesión sin nadie `ask` equivale a quedarse parada) con el mensaje «modo
-nocturno: anotado en pendientes de la mañana» y la ruta.
+En su lugar, la acción entra en la **cola única de la mañana** (SE-514), con las cinco cosas que esa
+cola exige de cada petición: qué se pide, por qué, la alternativa, el coste de aplazarla y su caducidad;
+más la hora, quién la pidió y la orden exacta lista para ejecutar o la pregunta con sus opciones y su
+recomendación. No hay otro fichero de pendientes ni otro buzón. El guard responde `deny` (no `ask`, porque
+en una sesión sin nadie `ask` equivale a quedarse parada) con el mensaje «modo nocturno: anotado en la cola
+de la mañana».
 
-Las tareas de tier 3 que R2.4 aparta van a la misma lista.
+Las tareas de tier 3 que R2.4 aparta van a la misma cola. Mientras SE-514 no tenga preguntas de agentes en
+la cola (su S2), S3 no se implementa: el guard no crea un depósito propio.
 
 **Límite declarado del guard.** Para Bash, el guard compara el texto de la orden con una lista de
 patrones. Una orden envuelta en un intérprete (`bash -c`, `sh -c`, `eval`, `python -c`), en variables
 o en alias puede no casar. Para reducirlo, en modo nocturno el guard normaliza la orden: quita
 comillas y une los argumentos de `bash|sh|zsh -c` y `eval`. Después **niega por defecto** cualquier
 Bash cuyo texto normalizado contenga `gh pr merge`, `gh pr create`, `merge-sprint.sh grant`,
-`operator-grant.sh grant`, `policy-grant`, una llamada `gh api` a `/pulls/<n>/merge` (con cualquier
+`operator-grant.sh grant`, una llamada `gh api` a `/pulls/<n>/merge` (con cualquier
 método), una llamada `gh api graphql` que contenga `mergePullRequest`, `enablePullRequestAutoMerge`
 o `updateRef`, una llamada `gh api` a `git/refs/heads/main` (con cualquier método)
 o un `git push` cuyo destino sea la rama `main` (por nombre, con refspec `HEAD:` o con `refs/heads/`). El destino
@@ -401,7 +398,7 @@ alguien se entere antes de las 08:00.
 - **C2. Un HOLD solo lo levanta quien lo dio, y solo una ronda.** Un HOLD se levanta con doble APPROVE
   sobre una cabeza posterior que incluya a todas las revisoras que dieron HOLD sobre la cabeza
   retenida (R2.5). Un HOLD sobre cualquier cabeza posterior saca la PR hasta la mañana. Los HOLD se leen
-  de todo el registro, no solo de la ventana: un HOLD de antes de firmar no se borra al firmar. Sin esto, el orquestador podría cambiar de revisora o arreglar
+  de todo el registro, no solo de la ventana: un HOLD de antes de aprobar no se borra al aprobar. Sin esto, el orquestador podría cambiar de revisora o arreglar
   y relanzar hasta obtener dos APPROVE sobre un cambio que alguien rechazó (amenaza A3, `SE-433:72`).
 - **C3. Tope de revisiones por PR.** Más de `max_reviews_per_pr` (4: dos rondas de dos) revisiones
   registradas en la ventana sacan la PR. Cuenta cada fila `(sha, reviewer)` distinta, sea APPROVE o
@@ -410,7 +407,7 @@ alguien se entere antes de las 08:00.
   H1 suman 4 y caben. Una tercera opinión sobre H1 suma 5 y saca la PR: es justo el relanzamiento que
   C3 limita, aunque nadie lo haga de mala fe. La PR no se pierde, va a la mañana.
 - **C4. Sin tier 3.** Tier 3 exige que la operadora vea la PR por número (`autonomous-safety-merge-sprint.md:106-108`). Eso no cabe en una regla.
-- **C5. Rutas, no repos enteros.** El alcance se firma por globs de rutas; las de gobernanza siempre fuera.
+- **C5. Rutas, no repos enteros.** El alcance se aprueba por globs de rutas; las de gobernanza siempre fuera.
 
 Límite declarado: las identidades de las revisoras siguen siendo autodeclaradas
 (`autonomous-safety-merge-sprint.md:133-136`). C1-C3 hacen más caro el fraude de veredictos, no lo
@@ -457,7 +454,7 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   se fusiona y deja `MERGED` en el ledger con `policy_id` y digest.
 - **AC-3 (negativo, tier 3)** Una PR que cumple todo salvo que `risk-tier.py` da tier 3 no se fusiona
   con el grant de política y queda con motivo `tier_3` en el estado de la pasada (S2). Que además
-  aparezca en la lista de pendientes de la mañana se prueba en S3 (AC-3b).
+  aparezca en la cola de la mañana se prueba en S3 (AC-3b).
 - **AC-4 (negativo, cabeza cambiada)** Una PR sin HOLD previo, con dos APPROVE sobre H0 y un commit de
   la autora que lleva la cabeza a H1, no se fusiona; con dos APPROVE nuevas sobre H1, se fusiona en la
   pasada siguiente sin grant nuevo.
@@ -506,7 +503,7 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   tocan. Positivo: `pending` en el primer sondeo y `pass` en el segundo no para nada.
 - **AC-8 (negativo, ampliar)** Cambiar cualquier campo del fichero de política (ventana, tope, repos,
   rutas, tiers) hace que `policy-verify` (S1) dé anomalía por digest. No existe subcomando que lo
-  amplíe. Sin respuesta o firma nueva no hay otro grant.
+  amplíe. Sin una PR de aprobación nueva fusionada no hay otro grant.
 - **AC-8b (S2, ampliar en `run`)** Con una política vigente cuyo fichero se edita a mano entre dos
   pasadas (por ejemplo, `max_merges` de 5 a 10 o un glob más en `include`), `run --policy` sale con
   código 5, escribe STOP con motivo de anomalía por digest y no fusiona ninguna PR. Con el fichero
@@ -557,12 +554,30 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 - **AC-12** La etiqueta `savia-stop` en cualquier issue o PR del repo detiene la política antes de la
   fusión siguiente (exit 0, STOP `savia_stop`); quitarla no la reanuda. Negativo: un issue abierto
   titulado `savia-stop` sin la etiqueta no para nada.
-- **AC-12b (firmantes congelados)** Una política firmada con una clave que solo está en el
-  `config/operator-grant-signers` del árbol de trabajo, y no en el de `origin/main`, no da grant; si el
-  blob de firmantes de `origin/main` cambia durante la ventana, STOP por anomalía.
+- **AC-12b (recibo de aprobación, S1)** `policy-verify` da grant solo con un recibo de SE-488 válido, de
+  tipo `savia-politica`, cuyo `objeto` es la política y cuyo `resumen` regenerado coincide. Sin grant,
+  un caso por fixture: sin firma de web-flow; autor bot; PR con dos ficheros; tipo no habilitado;
+  `objeto` distinto del fichero de política (digest distinto); fecha de M fuera de `[emitida, caduca]`;
+  M posterior a `not_after`; `caduca` distinto de `not_after` del `objeto` (por ejemplo, `caduca` más
+  largo); `emitida` distinta de la fecha del commit del artefacto o anterior a `not_before − 1 h`; nonce anotado en el
+  libro de consumidos para otro digest (libro manipulado; nunca ocurre con un libro íntegro y se
+  rechaza fail-closed); descripción o título de la PR que no coinciden byte a byte con los generados
+  desde el `resumen`; espejo sin sincronizar, o `git` o `gpg` ausentes. Si la configuración de aprobación de SE-488 (clave fijada, autor esperado, génesis) cambia
+  durante la ventana, STOP por anomalía. Falla con un `policy-verify` que acepte la política por el solo
+  hecho de existir el fichero.
+- **AC-12c (vigencia efectiva, S1)** Con `not_before` a las 22:00:
+  - PR de aprobación **aún sin fusionar** a las 22:30: no hay recibo, así que `run` sale con código 3
+    (sin grant de política), no con 7. El 7 exige una política vigente, y sin recibo no la hay.
+  - M a las 21:30 (antes de `not_before`, dentro de la hora de «sin políticas latentes»): `run` sale con
+    código 7, sin STOP, hasta las 22:00 y fusiona desde las 22:00. Es el único caso que ejercita el 7.
+  - M a las 23:30 (después de `not_before`): `run` fusiona desde las 23:30; antes de las 23:30 sale con 3
+    por el primer caso.
+  - M después de `not_after`: no hay grant (código 3).
+  La activación se anota una sola vez: dos pasadas no consumen dos veces, y un segundo proceso
+  concurrente sobre el mismo digest no activa otra política. Falla con un `run` que devuelva 7 sin recibo.
 - **AC-13 (modo nocturno)** Con `SAVIA_NIGHT_MODE=1`, el guard niega `AskUserQuestion`, `merge-sprint.sh
   grant`, la edición de `.claude/settings.json` y `gh pr create --base` distinta de `main`, y escribe
-  una entrada por cada una en la lista de pendientes. Lo mismo con un grant de política vigente y sin
+  una petición por cada una en la cola de la mañana (SE-514). Lo mismo con un grant de política vigente y sin
   `SAVIA_NIGHT_MODE` (condición OR de R6). Sin ninguna de las dos, no interviene. Entrada por
   stdin (JSON), igual en Claude Code y en OpenCode. Negativo de evasión: `bash -c "gh pr merge 12"` y
   `eval 'gh pr create --base dev'` también se niegan en modo nocturno, igual que una llamada
@@ -570,28 +585,34 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
   `git push` a una rama `agent/x` no se niega. También se niegan `gh api graphql -f
   query='mutation{mergePullRequest(...)}'`, `gh api -X PATCH repos/o/r/git/refs/heads/main`, un
   `git push` sin destino y `git push origin HEAD`; `git push -u origin agent/x` no se niega.
-- **AC-3b (S3)** La PR de AC-3 aparece en la lista de pendientes de la mañana con motivo `tier_3`.
-- **AC-14** `report --policy` lista fusiones, no fusionadas con motivo, STOP y pendientes, y falla si
+- **AC-3b (S3)** La PR de AC-3 aparece en la cola de la mañana (SE-514) con motivo `tier_3`.
+- **AC-14** `report --policy` lista fusiones, no fusionadas con motivo, STOP y cola de la mañana, y falla si
   `verify-ledger` falla.
 - **AC-15** Error de lectura de GitHub en cualquier paso de R2 → STOP, nunca fusión.
 - **AC-16 (S2, topes y universo en `run`)** Con `max_merges: 2` y tres PR elegibles, se fusionan dos y
   `run` sale con código 0 y STOP `max_merges`; la tercera queda intacta. Con `max_parks_in_row: 2`,
   dos PR seguidas aparcadas por `head_movido` dan STOP `max_parks_in_row`; una aparcada seguida de
   una fusionada pone el contador a cero y no para. Con `universe: frozen` y lista `[10, 11]`, una PR
-  #12 abierta después de firmar y elegible en todo lo demás no se fusiona; #10 sí. Con
+  #12 abierta después de emitir la política y elegible en todo lo demás no se fusiona; #10 sí. Con
   `universe: open`, una PR desde un fork (`isCrossRepository: true`) elegible en todo lo demás no se
   fusiona, tampoco si `isCrossRepository` falta en la respuesta; la misma PR desde una rama del repo,
   sí.
 - **AC-17 (S2, revocación)** Tras `merge-sprint.sh revoke` entre dos pasadas, la pasada siguiente no
   fusiona nada y sale con código 3 (sin grant de política). Tras `merge-sprint.sh stop`, sale con
-  código 5 (política parada). Una política nueva emitida para el mismo repo invalida la anterior: un
-  `run` con el id anterior no fusiona.
+  código 5 (política parada). Negativo: tras el STOP, borrar el fichero STOP y volver a lanzar
+  `run --policy` con el mismo recibo sigue saliendo con 5, porque el libro de consumidos guarda
+  `stopped` sobre `politica@digest`; falla con un ejecutor que solo mire el fichero STOP. Una política
+  nueva emitida para el mismo repo invalida la anterior: un `run` con el id anterior no fusiona.
+- **AC-18 (proyección a SE-496, S6, solo si el kernel existe)** La proyección de una política verificada
+  da un contrato en memoria cuya autoridad, ámbito y ventana no superan a los de la política; no escribe
+  en `config/delegations/` ni exige firma propia; si el kernel discrepa del ejecutor, lo registra y no
+  cambia la decisión del ejecutor. Negativo: una política con `tiers: [1]` no proyecta tier 2.
 
 ## Métricas
 
 | Métrica | Antes (noche 04-05) | Objetivo |
 |---|---|---|
-| Avisos de permiso y preguntas a la operadora entre la firma y el fin de la ventana | 4 (3 + 1) | 0 |
+| Avisos de permiso y preguntas a la operadora entre la aprobación y el fin de la ventana | 4 (3 + 1) | 0 |
 | PR aparcadas solo por cabeza nueva con revisión nueva disponible | ≥ 1 (#1478) | 0 |
 | Fusiones sobre `main` en rojo | posible (P5) | 0 |
 
@@ -599,7 +620,7 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 
 - Tier 3 y 4 en modo nocturno, en cualquier forma.
 - Cambiar SE-362, el juez de SE-433 o el grant de un PR de SE-343.
-- Autenticidad criptográfica obligatoria de la respuesta: sigue dependiendo del harness, como SE-433, salvo con firma ed25519.
+- Autenticidad de la aprobación: la da SE-488 (fusión verificada sin red); lo que SE-488 no cubre, esta spec tampoco.
 - Implementar el STOP global (SE-498); aquí solo se consulta si existe.
 - Cambiar los permisos del frontend: los cambia la operadora en sus settings.
 - Corregir `main_ci` del grant de manifiesto (SE-433), que da `pass` a `action_required` y `stale`.
@@ -608,6 +629,9 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 ## Dependencias
 
 - SE-433 v2 y SE-500 S2 en `main` (ejecutor, re-sync, código congelado).
+- SE-488 (aprobada): verificador de recibos (`approval-receipt.py`), repo de aprobaciones, App y espejo. Falta, y no lo hace esta spec: dar de alta el tipo `savia-politica` en su enum cerrado, habilitarlo en la política del consumidor (R2.9 de SE-488) y confirmar que el uso único de R2.8 puede ser la activación de la política (R1, «Un solo formato de autorización»).
+- SE-496 (aprobada, opcional): la proyección de S6 espera a su kernel; que acepte recibos de SE-488 como factor es un cambio suyo.
+- SE-514 S2: la cola única recibe las peticiones de agentes. Sin ella, S3 no arranca.
 - La enmienda de `docs/rules/domain/autonomous-safety-merge-sprint.md` y `autonomous-safety.md` es tier 4: la fusiona la operadora.
 - **Activación bloqueada hasta la enmienda humana de S4.** S2 puede implementarse y probarse en fixtures; `run --policy` no se activa en un repositorio real antes de que la operadora fusione esa enmienda. Mientras tanto sigue vigente SE-433, sin sustituir su autorización por esta propuesta.
 - SE-498 (opcional para R4).
@@ -616,11 +640,12 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 
 | Slice | Contenido | AC |
 |---|---|---|
-| S1 | `policy-plan`, `policy-question`, `policy-grant`, `policy-verify` (digest, ventana y firmantes de `origin/main`); sin `run` ni fusiones | AC-1, AC-8, AC-12b |
+| S1 | `policy-plan`, `policy-request` (artefacto y PR de aprobación), `policy-verify` (digest, ventana efectiva y recibo de SE-488); sin `run` ni fusiones | AC-1, AC-8, AC-12b, AC-12c |
 | S2 | `run --policy`: bucle por pasadas, ventana y código 7, `main_ci_strict` y gate de `main` previo (con espera de `pending`/`none`), doble APPROVE por `reviewer` distinto (`reviews_ok` pasa a contar `reviewer`, no solo `role`; el esquema de `reviews.jsonl` no cambia porque ya guarda `reviewer`), regla de HOLD sobre todo el registro, equivalencia por contenido (hereda HOLD), tope de revisiones, alcance por rutas con glob por segmentos y exclusión forzosa (a)+(b)+(c)+(d) propia (`POLICY_FORCED_EXCLUDE` y `WORKFLOW_EXEC_PATHS` derivada), topes, universo, revocación, STOP | AC-2, AC-3, AC-4, AC-4b, AC-4c, AC-4d, AC-4e, AC-5, AC-6, AC-7, AC-8b, AC-9, AC-10, AC-11, AC-11c, AC-15, AC-16, AC-17 |
-| S3 | Guard de modo nocturno (Claude Code + plugin `savia-gates`) con normalización de intérpretes, rutas (b) y (c) también en `risk-tier.py` (tier 4 fuera de la política), lista de pendientes; señal `savia-stop` solo por etiqueta | AC-3b, AC-11b, AC-12, AC-13 |
+| S3 | Guard de modo nocturno (Claude Code + plugin `savia-gates`) con normalización de intérpretes, rutas (b) y (c) también en `risk-tier.py` (tier 4 fuera de la política), cola de la mañana (SE-514); señal `savia-stop` solo por etiqueta | AC-3b, AC-11b, AC-12, AC-13 |
 | S4 | `report --policy` y enmienda de las reglas `autonomous-safety*` | AC-14 |
 | S5 | Savia Space y Savia Labs como repos de la política | AC-2 y AC-11 por repo |
+| S6 | Proyección de la política verificada al contrato de SE-496 (en memoria, sombra) | AC-18 |
 
 ## Riesgos
 
@@ -628,9 +653,9 @@ Cada AC tiene test BATS con `gh` simulado y un caso que falla con el código ant
 |---|---|
 | La regla deja pasar una PR que la operadora no habría aprobado | C1-C5; tope de fusiones; informe de la mañana; revert manual posible |
 | Bucle de revisión hasta obtener APPROVE | C2 y C3; el registro encadenado muestra cada intento |
-| `main` roto por causa externa para el sprint toda la noche | Es lo correcto: fusionar sobre `main` roto es peor. El motivo llega a pendientes con la causa |
+| `main` roto por causa externa para el sprint toda la noche | Es lo correcto: fusionar sobre `main` roto es peor. El motivo llega a la cola con la causa |
 | Una caída transitoria de la CI de `main` (infra de GitHub, runner caído) acaba la noche aunque no sea culpa de ninguna PR (la queja de P4) | Decisión de producto aceptada: `pending` se espera hasta `main_pending_timeout`; `failure` no se reintenta, porque desde el ejecutor no se distingue con fiabilidad un fallo de infra de uno real, y equivocarse fusiona sobre `main` roto. El coste es una noche sin fusiones, no una fusión mala |
-| El guard nocturno bloquea algo legítimo | Va a pendientes con la orden lista; nada se pierde |
+| El guard nocturno bloquea algo legítimo | Va a la cola con la orden lista; nada se pierde |
 | Divergencia entre el guard bash y el plugin TS | Mismos fixtures en ambos tests (AC-13) |
 
 ## Rollback
@@ -648,8 +673,8 @@ una de ellas sigue actuando.
 |---|---|---|
 | Ejecutor (`merge-sprint.sh policy-*`, `run --policy`, `report --policy`) | bash, sin binding | igual, bash |
 | Guard de modo nocturno | `.claude/hooks/night-mode-guard.sh` en PreToolUse (`AskUserQuestion`, `Bash`, `Edit`, `Write`) | función del plugin `savia-gates` en `tool.execute.before` (herramienta de preguntas, bash, edición) |
-| Lista de pendientes | `~/.savia/night/pendientes-<fecha>.md` | la misma ruta |
-| Permiso del frontend | `ask` sobre `policy-grant` en los settings de la operadora | permiso `ask` equivalente en su configuración local |
+| Cola de la mañana | petición en la cola única de SE-514 | la misma cola |
+| Aprobación | PR en el repo de aprobaciones, fusionada en la app de GitHub y verificada con SE-488 | la misma |
 
 ### Verification protocol
 
@@ -661,13 +686,73 @@ una de ellas sigue actuando.
 
 - [x] **DUAL_BINDING**: el ejecutor es PURE_BASH; el guard nocturno nace en Claude Code y en OpenCode en S3.
 
+## Lo que he entendido
+
+### Escenas
+
+1. Son las 22:40 y estás en el sofá con el móvil. Te llega una PR del repo de aprobaciones: «Permiso para el sprint nocturno: fusionar PR de documentación y changelog hasta las 08:00, máximo 12». Dice en llano qué repos, qué rutas, qué queda fuera y con qué dos revisoras. Pulsas «Merge pull request» y «Confirmar». Te vas a dormir; no hay más preguntas esta noche.
+2. A la 01:15 una PR de documentación con dos revisoras de acuerdo sobre su cabeza exacta se fusiona sola. Otra toca `.claude/hooks/` y se queda fuera, aunque pasara la CI. Una tercera es de tier 3 y va a la cola de la mañana. El móvil no suena.
+3. A las 03:05 una PR que tenía un HOLD de una revisora recibe un arreglo. Esa revisora y otra la aprueban sobre la cabeza nueva y entra en la pasada siguiente. Antes, ese arreglo la sacaba del sprint y pedía otro permiso.
+4. A las 04:31 `main` se pone en rojo justo después de una fusión. El sprint se para solo. No revierte nada, no toca las PR que quedaban y deja el aviso en la cola. No te despierta: con el sprint parado no se fusiona nada más, y esperar a la mañana no cuesta nada.
+5. A las 08:05 abres el móvil. El resumen dice cuántas PR se fusionaron, cuáles quedaron paradas y por qué, y que el sprint se paró por `main` en rojo. Cada cosa que te toca decidir trae su botón. Para reanudar, abres una PR de aprobación nueva.
+
+### Palabras de la persona
+
+«Introduce también merge sprint nocturno con grant a los prs del sprint nocturno» — 2026-11-09. La petición de origen del 2026-11-05 («El sprint nocturno ha de ser 100% autónomo por necesidad») está en el frontmatter.
+
+### Qué SÍ será
+
+- Un permiso que apruebas una vez, antes de dormir, fusionando una PR desde la app de GitHub.
+- Una regla visible en lenguaje llano: dónde, qué rutas, qué tope, qué ventana, quién revisa.
+- Fusiones solo de PR que cumplen la regla en el momento de fusionarlas, con dos revisoras y `main` en verde.
+- Un parón automático ante una regresión, sin revertir nada.
+- Un resumen por la mañana con lo fusionado, lo parado y por qué.
+
+### Qué NO será
+
+- Nada que te despierte: lo que pediría un permiso o una respuesta va a la cola de la mañana.
+- Tier 3 o 4, ni gobernanza, ni código de los gates, ni dependencias, aunque la regla los incluyera.
+- Un permiso que dure más de 12 horas, que se prorrogue o que se active en una fecha futura.
+- Un cuarto formato de firma: es una PR fusionada (SE-488) y, si existe, se proyecta al contrato de SE-496.
+- Esta noche: la del 2026-11-09 al 10 se fusiona por lote a las 9:00 con la vía actual.
+
+### Confirmación
+
+- fecha: pendiente
+- respuesta: pendiente
+
+## Slice S0 — Prototipo navegable
+
+- prototipo: `docs/specs/assets/SE-512-prototipo.md`. Un solo fichero de texto que se lee en el móvil: la PR de permiso tal como se ve en la app de GitHub, el resumen de la mañana con lo fusionado y lo parado, y el aviso de parón ante una regresión. Todos los datos son de ejemplo y están marcados como tales.
+
+### Confirmación del prototipo
+
+- fecha: pendiente (obligatoria antes de poner S1 en curso)
+- respuesta: pendiente
+
+
 ## Aprobación
 
 Pendiente de la operadora. Esta spec no cambia ningún `status` ni ninguna regla hasta su aprobación.
 
-## Enmienda propuesta 2026-11-09 (repriorización tras Savia Viva R6)
+## Reconciliación con SE-488 y SE-496 (2026-11-10)
 
-> Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+Aplica la enmienda propuesta el 2026-11-09 (repriorización tras Savia Viva R6). No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
 
-- **Un solo formato de autorización**: antes de implementar S1, el grant de política se aprueba por fusión de PR (SE-488) y, si SE-496 se aprueba, se proyecta a su contrato de delegación. Esta spec no introduce un tercer formato de firma.
-- Los pendientes de la mañana (R6) entran por la cola única de SE-514.
+**Qué se quitó del texto anterior, por contradecir un solo formato de autorización:**
+
+- La respuesta interactiva literal como factor del permiso, y el subcomando `policy-question` que la generaba (sustituidos por `policy-request`, que abre la PR de aprobación).
+- La firma ed25519 opcional de la política, incluidos su requisito de «clave fuera del equipo» y la excepción «con firma no hace falta sesión interactiva».
+- El subcomando `policy-grant` (y su mención en las listas del guard nocturno): la activación la hace `run --policy` al verificar el recibo, así el guard nocturno no puede dejar sin activar una política ya aprobada.
+- El campo `signers_blob` y su AC-12b original, que congelaban y comprobaban el fichero de firmantes. Lo sustituyen el campo `approval` y el AC-12b nuevo, que comprueban el recibo de SE-488 y su configuración.
+- El fichero propio de pendientes de la mañana: pasa por la cola única de SE-514.
+- La frase «sin respuesta o firma nueva no hay otro grant» y la excepción «salvo con firma ed25519» de «Fuera de alcance».
+
+**Qué se añadió:** la sección «Un solo formato de autorización», la vigencia efectiva (AC-12c, con el código 3 sin recibo y el 7 solo si M es anterior a `not_before`), `caduca == not_after` y `emitida` atada al commit del artefacto, título y descripción de la PR de aprobación generados desde el `resumen` y verificados, la anotación `stopped` en el libro de consumidos (AC-17), la proyección opcional a SE-496 (S6, AC-18), las dependencias de SE-488, SE-496 y SE-514, y las secciones de comprensión (escenas y S0).
+
+**Qué queda por decidir (no lo decide esta PR):**
+
+1. SE-488 tiene un enum cerrado de tipos: `savia-politica` hay que darlo de alta y habilitarlo en su propia PR.
+2. El uso único de R2.8 de SE-488 se lee aquí como «la activación»; hay que confirmarlo con su verificador.
+3. Si SE-496 acepta el recibo de SE-488 como factor, la proyección de S6 es posible; si no, S6 no se hace.
+4. Si el aviso de parón por regresión debe ser pasivo (cola de la mañana, lo que propone el prototipo) o sonar en el móvil.

@@ -17,9 +17,20 @@ Reglas (cada una cierra un hallazgo de la tercera ronda de revisión):
   R-NOCHECKS  (correctness P2-4) «ningún check-run en main» tiene motivo y AC.
   R-GLOB      (security P2-1) los globs no se evalúan con fnmatch sobre la
               ruta entera y hay negativo `docs/*` frente a `docs/x/y`.
-  R-KEY       (security P2-2 y revisión de a6ca4322) la clave privada vive en el
-              móvil o en Savia Space, nunca en el equipo de los agentes
-              (LAW-HUMAN-002), y la spec no enmienda esa ley.
+  R-KEY       (security P2-2 y revisión de a6ca4322; reconciliación de #1508) el
+              factor humano no se puede producir en el equipo de los agentes:
+              se aprueba fusionando una PR en un repo donde ni el token de la
+              máquina ni la App pueden fusionar, sin firma local ni pregunta
+              interactiva, y la spec no enmienda LAW-HUMAN-002.
+  R-VIGENCIA  (correctness P1-1 sobre 7554308) AC-12c: sin recibo el código es 3,
+              el 7 solo cuando M es anterior a `not_before`.
+  R-CADUCA    (correctness P2-2, security P2-3 sobre 7554308) `caduca` igual a
+              `not_after`, `emitida` atada al commit del artefacto y acotada por
+              «sin políticas latentes», con fixtures en AC-12b.
+  R-PRTEXT    (security P2-2 sobre 7554308) título y descripción de la PR de
+              aprobación generados desde el `resumen` y verificados byte a byte.
+  R-STOPLEDGER (security P2-1 sobre 7554308) el STOP se anota en el libro de
+              consumidos y AC-17 prueba que borrar el fichero STOP no reactiva.
   R-ACTIVATION (revisión de a6ca4322) `run --policy` no se activa antes de la
               enmienda humana de S4.
   R-WFEXEC    (security P1-1 sobre 9f88dd10) la exclusión forzosa incluye (d),
@@ -191,13 +202,51 @@ def check(text):
     if 'include: ["docs/*"]' not in ac11c or "toca `docs/x/y.md`" not in ac11c:
         errs.append("R-GLOB: AC-11c no tiene el negativo docs/* frente a docs/x/y")
 
-    # R-KEY
-    if not re.search(r"\*\*Requisito de la clave ed25519\.\*\*", r1):
-        errs.append("R-KEY: R1 no exige que la clave ed25519 quede fuera del alcance del agente")
-    if "La clave privada nunca reside en el equipo de los agentes" not in r1:
-        errs.append("R-KEY: la clave privada debe quedar fuera del equipo de los agentes")
-    if "Esta spec no enmienda LAW-HUMAN-002" not in r1:
-        errs.append("R-KEY: R1 no declara que la spec no enmienda LAW-HUMAN-002")
+    # R-KEY (factor humano fuera del equipo de los agentes, tras #1508)
+    auth = section(text, r"Un solo formato de autorización")
+    if "**Qué sustituye al requisito de la clave privada fuera del equipo.**" not in auth:
+        errs.append("R-KEY: falta qué sustituye al requisito de la clave fuera del equipo")
+    if "ni el token de la máquina ni la App pueden fusionar" not in auth:
+        errs.append("R-KEY: el factor humano debe ser una fusión que la máquina no pueda hacer")
+    if "Nada de pregunta interactiva ni de firma local para este permiso" not in auth:
+        errs.append("R-KEY: el permiso no debe admitir firma local ni pregunta interactiva")
+    if "Esta spec no enmienda LAW-HUMAN-002" not in auth:
+        errs.append("R-KEY: la spec no declara que no enmienda LAW-HUMAN-002")
+
+    # R-VIGENCIA (correctness P1-1 sobre 7554308)
+    ac12c = ac_bullet(text, "AC-12c")
+    if re.search(r"código 7 hasta las 23:30", ac12c):
+        errs.append("R-VIGENCIA: AC-12c devuelve 7 antes de que exista el recibo")
+    # Cada sub-caso es su propia viñeta anidada: el código tiene que estar en la misma.
+    subcases = re.split(r"\n\s+- ", ac12c)
+    if not any("aún sin fusionar" in c and "código 3" in c for c in subcases):
+        errs.append("R-VIGENCIA: AC-12c no exige código 3 sin recibo")
+    if not any("antes de `not_before`" in c and "código 7" in c for c in subcases):
+        errs.append("R-VIGENCIA: AC-12c no ejercita el 7 con M anterior a `not_before`")
+    if "Falla con un `run` que devuelva 7 sin recibo" not in ac12c:
+        errs.append("R-VIGENCIA: AC-12c sin condición de fallo para 7 sin recibo")
+
+    # R-CADUCA (correctness P2-2, security P2-3 sobre 7554308)
+    ac12b = ac_bullet(text, "AC-12b")
+    if "`caduca == not_after`" not in auth:
+        errs.append("R-CADUCA: la regla 3 no exige `caduca == not_after`")
+    if "`emitida ≥ not_before − 1 h`" not in auth or "fecha del commit que añade el artefacto" not in auth:
+        errs.append("R-CADUCA: `emitida` no queda atada al commit ni acotada")
+    if "`caduca` distinto de `not_after`" not in ac12b or "`emitida` distinta de la fecha del commit" not in ac12b:
+        errs.append("R-CADUCA: AC-12b sin fixtures de `caduca`/`emitida`")
+
+    # R-PRTEXT (security P2-2 sobre 7554308)
+    if not re.search(r"título y la descripción de la PR de aprobación también se generan solo desde", auth, re.I):
+        errs.append("R-PRTEXT: título y descripción de la PR no salen del `resumen`")
+    if "descripción o título de la PR que no coinciden byte a byte" not in ac12b:
+        errs.append("R-PRTEXT: AC-12b sin fixture de descripción alterada")
+
+    # R-STOPLEDGER (security P2-1 sobre 7554308)
+    ac17 = ac_bullet(text, "AC-17")
+    if "`stopped` sobre `politica@digest`" not in auth:
+        errs.append("R-STOPLEDGER: el STOP no se anota en el libro de consumidos")
+    if "borrar el fichero STOP" not in ac17 or "sigue saliendo con 5" not in ac17:
+        errs.append("R-STOPLEDGER: AC-17 sin negativo de STOP borrado")
     deps = section(text, r"Dependencias", "##")
     if "Activación bloqueada hasta la enmienda humana de S4" not in deps:
         errs.append("R-ACTIVATION: falta bloquear la activación hasta la enmienda humana de S4")

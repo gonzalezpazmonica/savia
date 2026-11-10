@@ -129,3 +129,10 @@ S1 S, S2 S, S3 S.
 ### Portability classification
 
 - [x] **PURE_BASH**: bash y Python stdlib, sin bindings de frontend.
+
+## Enmienda propuesta 2026-11-10 (solape SE-516)
+
+> Propuesta externa SE-516 del 2026-11-09, evaluada como solape. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
+
+- **Cliente previsto: S09.** Si S09 compara configuraciones de supervisión (misma tarea con más o menos revisión humana o verificación automática), usa `paired_diff`, `clustered_se` y `censoring` de esta librería, sin duplicarlas. Un brazo que no completa algo con los permisos vigentes cuenta como fallo en el denominador, no se descarta.
+- **Sin datos sintéticos como veredicto.** Con menos casos de los que el IC admite, el informe dice `MORE_EVIDENCE`; no declara ganador.

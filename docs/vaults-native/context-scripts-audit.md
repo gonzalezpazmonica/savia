@@ -22,3 +22,5 @@ context-capability-metadata, context-distortion-measure, context-tracker
 - Before: ~5,794 lines (33 scripts)
 - After substitution wrappers: ~4,600 lines
 - Reduction: ~1,200 lines
+
+> Actualización 2026-11-10 (SE-511 S1, PR #1509): `context-task-classifier` se retira. Implementaba el mismo contrato SE-029-C que `context-task-classify` con otra heurística y no tenía consumidores; queda `context-task-classify`.

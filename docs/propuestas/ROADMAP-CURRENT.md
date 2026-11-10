@@ -1,6 +1,6 @@
 # Roadmap Current (GENERATED — no editar; fuente: planning-state.json)
 
-Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
+Fase A · WIP 5/5. Estado y cola canónicos; ADR-002.
 
 ## Cola de sesiones (orden por gates, sin fechas)
 
@@ -131,9 +131,9 @@ Fase A · WIP 4/4. Estado y cola canónicos; ADR-002.
   Necesidad: condicionada; urgencia: baja; valor: por demostrar; desbloqueo: convierte una lección en garantía comprobable, o lo descarta con datos; esfuerzo: un dominio; medio.
 
 - **S09 · P3 · fase F** — Piloto acotado y evidencia de valor
-  Acción: AEK/AEOS en shadow antes de efectos; medir calidad, coste y atención humana; reevaluaciones Labs y prospectiva con decisiones reales.
-  Entrada: Gates A-E; un piloto y una línea Labs; consentimiento, target/verifier/recovery/stop y autoridad específica.
-  Salida: Resultado positivo o negativo trazable y decisión de mantener/simplificar; sin claim de ROI con datos sintéticos.
+  Acción: AEK/AEOS en shadow antes de efectos; medir calidad, coste y atención humana; reevaluaciones Labs y prospectiva con decisiones reales. Hipótesis opcional del piloto (propuesta externa SE-516 del 2026-11-09, evaluada como solape y sin ID): comparar, dentro del mismo techo de autoridad y sobre clases de trabajo de efecto equivalente, la supervisión actual con una variante de más verificación automática; vector calidad verificada/coste observado/tiempo/riesgo, y atención humana solo si hay observación consentida; salida KEEP_BASELINE, MORE_EVIDENCE, RECOMMEND_REVIEW o NO_GO. Una recomendación no concede ni cambia permisos.
+  Entrada: Gates A-E; un piloto y una línea Labs; consentimiento, target/verifier/recovery/stop y autoridad específica. Para la hipótesis de supervisión: SE-515 S1 publicada (ablación P10), SE-477 aprobada o su equivalente en el informe, y una fuente de atención con consentimiento; si faltan, la hipótesis se queda en NO_GO documental.
+  Salida: Resultado positivo o negativo trazable y decisión de mantener/simplificar; sin claim de ROI con datos sintéticos. Si la hipótesis se ensayó: informe con IC pareado y censura, dos clases de trabajo como máximo, o su cierre NO_GO por falta de fuentes; sin ROI con datos sintéticos ni elección de modalidad que exija un permiso inexistente.
   Necesidad: condicionada; urgencia: baja; valor: por demostrar; desbloqueo: justifica expansión futura; esfuerzo: presupuesto/corpus por piloto.
 
 ## Iniciativas aprobadas o en curso
@@ -212,7 +212,7 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-505 [APPROVED] Puerta de comprensión: escenas confirmadas antes de la spec, prototipo antes del código — evidencia: docs/specs/SE-505-puerta-de-comprension.spec.md
 - SE-508 [APPROVED] Guard previo para tools MCP con escritura y para WebFetch — evidencia: docs/specs/SE-508-mcp-webfetch-pretooluse-guard.spec.md
 - SE-510 [APPROVED] Guardas sin bloqueos falsos y un despachador por evento — evidencia: docs/specs/SE-510-guardas-sin-bloqueos-falsos-despachador.spec.md
-- SE-511 [APPROVED] Contexto fijo por turno a la mitad o menos — evidencia: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
+- SE-511 [IMPLEMENTING] Contexto fijo por turno a la mitad o menos — evidencia: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
 - SE-513 [APPROVED] Admisión duradera de cambios de intención y comprobación previa — evidencia: docs/specs/SE-513-admision-duradera-y-comprobacion-previa.spec.md
 - SE-514 [APPROVED] Atención humana: una sola cola de preguntas, con su porqué — evidencia: docs/specs/SE-514-atencion-humana-cola-unica.spec.md
 - SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md

@@ -1,10 +1,10 @@
 {
   "id": "SE-511",
-  "status": "APPROVED",
+  "status": "IMPLEMENTING",
   "priority": "P1",
   "phase": "A",
   "title": "Contexto fijo por turno a la mitad o menos",
   "evidence": "docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md",
-  "note": "Análisis Gentleman frente a Savia (2026-11-04). Bloque compacto generado de las fuentes, medición reproducible y objetivo de 5.000 tokens, validación con el método de EXP-509 (SE-509) y solo sale del texto lo que tiene gate por código.",
+  "note": "S1 en curso (medición del contexto fijo por turno). Prototipo S0 confirmado 2026-11-09 («Sí, pero recupera la voz»); el recorte (S2) sigue condicionado a la validación D4 con el método de EXP-509.",
   "approval": "Operadora, pregunta interactiva 2026-11-09 («Savia Viva + tokens y efectos»), con escenas confirmadas («Confirmo las escenas»); se formaliza al fusionar la PR (SE-488); con recorte condicionado («Aprobar con recorte condicionado (Recommended)»): la medición empieza ya, el recorte espera a la validación D4 con el método de EXP-509"
 }

@@ -51,13 +51,18 @@ check_authorization() {
     echo "To authorize testing of '${host}', create the file:"
     echo "  ${auth_file}"
     echo ""
-    echo "Contents must include the word 'AUTHORIZED'."
+    echo "Its first line must be exactly 'AUTHORIZED'."
     echo "Only test endpoints you own or have explicit permission to test."
     exit 1
   fi
 
-  if ! grep -q "AUTHORIZED" "${auth_file}"; then
-    echo "ERROR: Authorization file does not contain 'AUTHORIZED': ${auth_file}"
+  # Allowlist estricta, igual que network-recon (S03r): la primera línea debe ser
+  # exactamente AUTHORIZED. Una denylist de negaciones dejaba pasar
+  # "NOT  AUTHORIZED", "NOT YET AUTHORIZED" o "REVOKED (was AUTHORIZED)".
+  local first_line
+  first_line=$(head -n 1 "${auth_file}" | tr -d '\r')
+  if [[ "${first_line}" != "AUTHORIZED" ]]; then
+    echo "ERROR: Authorization file does not start with the line 'AUTHORIZED': ${auth_file}"
     exit 1
   fi
 
@@ -71,6 +76,11 @@ check_authorization() {
 
   if [[ ${age} -gt ${max_age} ]]; then
     echo "ERROR: Authorization file is older than 30 days. Re-authorize."
+    exit 1
+  fi
+  # Fecha futura (reloj o touch manipulado): la autorización no caduca nunca.
+  if [[ ${age} -lt -300 ]]; then
+    echo "ERROR: Authorization file has a future timestamp. Re-authorize."
     exit 1
   fi
 
