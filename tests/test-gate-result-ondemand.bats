@@ -120,6 +120,7 @@ STUB
   fake_apktool
   run env PATH="$WORK/bin:$NOAPK" APK_SMALI=".class public LA;" APK_MANIFEST='<manifest package="t"/>' \
     /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
+  [ "$status" -eq 0 ]
   [ "$(last_result)" = '{"result":"findings","gaps":[]}' ]
 }
 
@@ -134,6 +135,7 @@ STUB
 @test "mobile: hardcoded secret in decompiled code reports findings with its count" {
   fake_apktool
   run env PATH="$WORK/bin:$NOAPK" APK_SMALI='const-string v0, "api_key=abc"' /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
+  [ "$status" -eq 0 ]
   [ "$(last_result)" = '{"result":"findings","gaps":[]}' ]
   python3 -c 'import json,sys,glob; d=json.load(open(glob.glob(sys.argv[1]+"/output/security/mobile-scan-*.json")[0])); f=[x for x in d["findings"] if x["type"]=="hardcoded_secrets"]; assert f and f[0]["count"]==1 and f[0]["severity"]=="CRITICAL", d' "$PROJ"
 }
