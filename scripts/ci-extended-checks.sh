@@ -247,13 +247,33 @@ fi
 
 # 12. Fixed Context Ratchet (SE-511 S1): tokens versionados y de hooks no pueden subir
 echo "--- 12. Fixed Context Ratchet ---"
+cf_sum=0; cf_missing=0
 for cf_mode in versioned hooks; do
   if cf_out=$(CI_BASELINE_DIR="$CI_BASELINE_DIR" bash "$ROOT/scripts/context-fixed-measure.sh" "--$cf_mode" --check 2>&1); then
     pass "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^OK:' | head -1)"
   else
     fail "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^(FAIL|ERROR):' | head -1)"
   fi
+  cf_tok=$(echo "$cf_out" | grep -m1 -oE '^TOTAL.* ([0-9]+)$|tokens=[0-9]+' | grep -oE '[0-9]+$')
+  if [[ -n "$cf_tok" ]]; then cf_sum=$((cf_sum + cf_tok)); else cf_missing=1; fi
 done
+# SE-511 D3/AC-3: versionado + hooks <= 5000 tokens (sin cifra, fail-closed)
+if [[ $cf_missing -eq 0 && $cf_sum -le 5000 ]]; then
+  pass "Contexto fijo total: $cf_sum tokens <= 5000 (SE-511 D3)"
+else
+  fail "Contexto fijo total: ${cf_sum} tokens > 5000 o cifra ausente (SE-511 D3)"
+fi
+# SE-511 AC-5/AC-8: bloque savia-core al día y reglas que dependen de hook con gate válido
+if python3 "$ROOT/scripts/generate-savia-core.py" --check >/dev/null 2>&1; then
+  pass "savia-core.md al día con sus fuentes (SE-511 AC-5)"
+else
+  fail "savia-core.md con drift: python3 scripts/generate-savia-core.py (SE-511 AC-5)"
+fi
+if bash "$ROOT/scripts/context-fixed-measure.sh" --gates >/dev/null 2>&1; then
+  pass "Gates del contexto fijo con hook en todos los perfiles (SE-511 AC-8)"
+else
+  fail "Gates del contexto fijo: bash scripts/context-fixed-measure.sh --gates (SE-511 AC-8)"
+fi
 
 echo "" && echo "═════════════════════════════════════════════════════════════"
 echo "  Results: $PASS passed, $FAIL failed ($TOTAL total checks)"

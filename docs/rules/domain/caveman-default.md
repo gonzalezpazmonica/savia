@@ -1,5 +1,5 @@
 ---
-context_tier: L1
+context_tier: L2
 token_budget: 520
 ---
 

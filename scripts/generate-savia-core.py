@@ -8,7 +8,8 @@ las regiones marcadas en las fuentes de verdad:
     ...texto...
     <!-- /savia-core:<id> -->
 
-más la frase corta de identidad (<!-- identity:short -->, SE-483). El bloque
+más la frase corta de identidad (<!-- identity:short -->, SE-483). El tier es
+L1 si CLAUDE.md importa el bloque y L2 si no (se carga o no en cada turno). El bloque
 no se redacta a mano: se edita la fuente y se regenera (AC-5).
 
 Uso:
@@ -85,7 +86,17 @@ def extract(text, rid, src):
     return "\n".join(out)
 
 
+def tier(root):
+    """L1 solo si CLAUDE.md importa el bloque: el tier dice si se carga en cada turno (SPEC-181)."""
+    path = os.path.join(root, "CLAUDE.md")
+    if not os.path.isfile(path):
+        raise GenError("fuente ausente: CLAUDE.md (decide el tier del bloque)")
+    lines = open(path, encoding="utf-8").read().splitlines()
+    return "L1" if f"@{OUT}" in (l.strip() for l in lines) else "L2"
+
+
 def render(root):
+    level = tier(root)
     parts = []
     for title, src, ids in SECTIONS:
         path = os.path.join(root, src)
@@ -103,7 +114,7 @@ def render(root):
     )
 
     def front(budget):
-        return f"---\ncontext_tier: L1\ntoken_budget: {budget}\n---\n\n"
+        return f"---\ncontext_tier: {level}\ntoken_budget: {budget}\n---\n\n"
 
     # Presupuesto declarado honesto (>= bytes/4, test SPEC-181), redondeado a 50.
     budget = 0
