@@ -49,3 +49,7 @@ README.md                                   @gonzalezpazmonica
 # Ratchet de excesos de permisos de agentes: ampliar la lista o la fecha exige revision explicita
 docs/agent-permissions-excess-baseline.txt  @gonzalezpazmonica
 tests/test-validate-agent-permissions-excess.bats   @gonzalezpazmonica
+
+# Corpus de órdenes legítimas (SE-510 D1): cada entrada exime a una orden de todas las guardas.
+# Tier 3 (SE-362): cambiarlo exige revisión humana explícita.
+config/guard-allow-corpus.json              @gonzalezpazmonica

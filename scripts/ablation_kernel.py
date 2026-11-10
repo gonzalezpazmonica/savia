@@ -13,6 +13,11 @@ Nunca borra ni mueve nada en el repositorio. Cero invocaciones de modelo:
 los hooks ``type: prompt`` se registran como no evaluados. Un falso allow
 aborta (``ABORT_FALSE_ALLOW``); ningún resultado clasifica un recurso como
 CORE_* ni autoriza retiradas.
+
+SE-510 D1 (subcomando ``guard-corpus``): el mismo despachador ejecuta el corpus
+de órdenes legítimas (``config/guard-allow-corpus.json``) con sus fixtures; un
+caso ALLOW bloqueado es ``FALSE_BLOCK`` (umbral 0, exit 1) y un par peligroso
+que pasa es ``FALSE_ALLOW`` (exit 3). ``--hooks-rev`` reproduce hooks antiguos.
 """
 from __future__ import annotations
 
@@ -191,11 +196,19 @@ def _env(snap: Path, home: Path) -> dict:
             "SAVIA_HOOK_PROFILE": "standard"}
 
 
-def dispatch(snap: Path, home: Path, event: str, tool: str, tool_input: dict) -> dict:
-    """Simula un evento: corre en orden los hooks de settings cuyo matcher casa."""
+def dispatch(snap: Path, home: Path, event: str, tool: str, tool_input: dict,
+             cwd: Path | None = None, session: str = "se400-probe",
+             extra_env: dict | None = None) -> dict:
+    """Simula un evento: corre en orden los hooks de settings cuyo matcher casa.
+
+    ``cwd`` (SE-510): directorio donde se ejecuta la herramienta (por defecto el
+    snapshot); llega a los hooks como ``cwd`` de la entrada y como su directorio
+    de trabajo. ``CLAUDE_PROJECT_DIR`` sigue siendo el snapshot."""
     settings = load_json(snap / ".claude/settings.json")
+    where = cwd or snap
     payload = json.dumps({"hook_event_name": event, "tool_name": tool, "tool_input": tool_input,
-                          "cwd": str(snap), "session_id": "se400-probe"})
+                          "cwd": str(where), "session_id": session})
+    env = _env(snap, home) | (extra_env or {})
     command, runs, start = str(tool_input.get("command", "")), [], time.monotonic()
     for group in (settings.get("hooks") or {}).get(event, []):
         if not graphs.matcher_matches(group.get("matcher", "*") or "*", tool, command):
@@ -210,12 +223,15 @@ def dispatch(snap: Path, home: Path, event: str, tool: str, tool_input: dict) ->
             t0 = time.monotonic()
             try:
                 proc = subprocess.run(["bash", "-c", hook["command"]], input=payload, text=True,
-                                      capture_output=True, cwd=snap, env=_env(snap, home),
+                                      capture_output=True, cwd=where, env=env,
                                       timeout=hook.get("timeout") or DEFAULT_TIMEOUT)
                 entry["exit"] = 2 if DENY_RE.search(proc.stdout) else proc.returncode
             except subprocess.TimeoutExpired:
                 entry["exit"] = "TIMEOUT_FAIL_OPEN"
             entry["ms"] = round((time.monotonic() - t0) * 1000)
+            if entry["exit"] == 2:
+                lines = (proc.stderr or proc.stdout).strip().splitlines()
+                entry["reason"] = lines[0][:200] if lines else ""
             runs.append(entry)
     blocked = any(r["exit"] == 2 for r in runs)
     return {"decision": "BLOCK" if blocked else "ALLOW", "hooks": runs,
@@ -365,6 +381,202 @@ def run_experiment(root: Path, candidate: dict, corpus: dict, workdir: Path) -> 
     return receipt
 
 
+# ── SE-510 D1: corpus de órdenes legítimas (mismo despachador, sin runner nuevo) ──────────────
+GUARD_CORPUS_PATH = "config/guard-allow-corpus.json"
+GUARD_REPORT_NAME = "se510-guard-corpus-receipt"
+# Semilla obligatoria (spec SE-510 D1): id → veredicto esperado. F4 no es un falso positivo: su
+# entrada es B4 y no puede existir un caso «F4».
+GUARD_SEED = {"F1a": "ALLOW", "F1b": "ALLOW", "F2": "ALLOW", "F3": "ALLOW",
+              "B1": "BLOCK", "B1b": "BLOCK", "B2": "BLOCK", "B3": "BLOCK", "B4": "BLOCK"}
+GUARD_SEED_ORIGIN = "real:2026-11-04"
+ORIGIN_RE = re.compile(r"^(?:real:\d{4}-\d{2}-\d{2}|sintético)$")
+SUMMARY_HEADING = "## Qué hace este PR (en lenguaje no técnico)"
+STALE_SECONDS = 97 * 3600  # la antigüedad del caso real F3
+# worktree-summary-*: (resumen propio fresco, con encabezado exigido)
+WORKTREE_FIXTURES = {"worktree-summary-fresh": (True, True),
+                     "worktree-summary-stale": (False, True),
+                     "worktree-summary-no-heading": (True, False)}
+GUARD_FIXTURES = ("repo-clean", "repo-dirty", *WORKTREE_FIXTURES)
+# Ningún hook sale a la red: el gate de resumen llama a un proxy LLM que aquí no existe (fail-open).
+GUARD_ENV = {"ANTHROPIC_BASE_URL": "http://127.0.0.1:9", "ANTHROPIC_API_KEY": "probe"}
+
+
+def _base(case: dict) -> str:
+    """Orden base: primera palabra de la orden (``git``, ``gh``, ``printf``…)."""
+    words = str((case.get("input") or {}).get("command", "")).split()
+    return words[0] if words else ""
+
+
+def validate_guard_corpus(corpus: dict, seed: bool = True) -> dict:
+    """Esquema de D1, pares peligrosos y semilla. Falla cerrado con un código por motivo."""
+    if corpus.get("schema") != 1:
+        raise InventoryError("GUARD_CORPUS_SCHEMA", "schema")
+    _no_model(corpus, "MODEL_AS_BASELINE")
+    cases = corpus.get("cases") or []
+    ids = [c.get("id") for c in cases]
+    if not ids or None in ids or len(ids) != len(set(ids)):
+        raise InventoryError("GUARD_CORPUS_IDS", "ids vacíos o repetidos")
+    by_id, seen = {c["id"]: c for c in cases}, {}
+    for c in cases:
+        cid = c["id"]
+        if c.get("type") != "event" or c.get("expect") not in ("ALLOW", "BLOCK") \
+                or not c.get("category") or not c.get("event") or not c.get("tool") \
+                or not isinstance(c.get("input"), dict):
+            raise InventoryError("GUARD_CORPUS_CASE", cid)
+        if c.get("fixture") not in GUARD_FIXTURES:
+            raise InventoryError("GUARD_CORPUS_FIXTURE", cid)
+        origin = str(c.get("origin", ""))
+        if not ORIGIN_RE.match(origin) or (origin.startswith("real:") and not c.get("guard")):
+            raise InventoryError("GUARD_CORPUS_ORIGIN", cid)
+        key = canonical([c["event"], c["tool"], c["input"], c["fixture"]])
+        if key in seen:
+            code = "GUARD_CORPUS_TWO_VERDICTS" if seen[key][1] != c["expect"] \
+                else "GUARD_CORPUS_DUPLICATE"
+            raise InventoryError(code, f"{seen[key][0]},{cid}")
+        seen[key] = (cid, c["expect"])
+        if c["expect"] == "ALLOW":
+            pair = by_id.get(c.get("pair"))
+            if pair is None or pair.get("expect") != "BLOCK":
+                raise InventoryError("GUARD_CORPUS_PAIR_MISSING", cid)
+            if (pair.get("event"), pair.get("tool"), _base(pair)) != (c["event"], c["tool"], _base(c)):
+                raise InventoryError("GUARD_CORPUS_PAIR_SHAPE", f"{cid}->{pair['id']}")
+    if seed:
+        if "F4" in by_id:
+            raise InventoryError("GUARD_CORPUS_F4", "F4 no es un falso positivo: su entrada es B4")
+        for sid, want in GUARD_SEED.items():
+            if by_id.get(sid, {}).get("expect") != want:
+                raise InventoryError("GUARD_CORPUS_SEED", sid)
+            if want == "ALLOW" and by_id[sid].get("origin") != GUARD_SEED_ORIGIN:
+                raise InventoryError("GUARD_CORPUS_SEED_ORIGIN", sid)
+    return corpus
+
+
+def guard_verdict(expect: str, observed: str) -> str:
+    """Un solo motor por caso (no hay control): coincide, bloqueo falso o permiso falso."""
+    if observed == expect:
+        return "MATCH"
+    return "FALSE_BLOCK" if expect == "ALLOW" else "FALSE_ALLOW"
+
+
+def _write_summary(path: Path, heading: bool, fresh: bool) -> None:
+    title = SUMMARY_HEADING if heading else "## Resumen"
+    path.write_text(f"{title}\n\nPárrafo de prueba en lenguaje llano.\n", encoding="utf-8")
+    if not fresh:
+        old = time.time() - STALE_SECONDS
+        os.utime(path, (old, old))
+
+
+def guard_fixtures(snap: Path, workdir: Path) -> dict:
+    """Directorios de trabajo de cada fixture. Los worktree son worktrees reales del snapshot."""
+    dirty = workdir / "fx-repo-dirty"
+    dirty.mkdir(parents=True)
+    (dirty / "a.txt").write_text("a\n", encoding="utf-8")
+    for args in (["init", "-q", "-b", "main"], ["add", "a.txt"], ["commit", "-qm", "fx"]):
+        subprocess.run(GIT + ["-C", str(dirty), *args], check=True, capture_output=True)
+    (dirty / "a.txt").write_text("a\nb\n", encoding="utf-8")
+    out = {"repo-clean": snap, "repo-dirty": dirty}
+    for name, (fresh, heading) in WORKTREE_FIXTURES.items():
+        wt = workdir / f"fx-{name}"
+        subprocess.run(GIT + ["-C", str(snap), "worktree", "add", "-q", "-b", f"agent/se510-{name}",
+                              str(wt)], check=True, capture_output=True)
+        _write_summary(wt / ".pr-summary.md", heading, fresh)
+        out[name] = wt
+    return out
+
+
+def overlay_hooks(root: Path, snap: Path, rev: str) -> str:
+    """Sustituye hooks y su biblioteca por los de ``rev`` (reproducir un main antiguo, AC-1)."""
+    res = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "-q", f"{rev}^{{commit}}"],
+                         capture_output=True, text=True)
+    if res.returncode != 0:
+        raise InventoryError("HOOKS_REV", rev)
+    sha = res.stdout.strip()
+    for rel in (".claude/hooks", "scripts/lib"):
+        shutil.rmtree(snap / rel, ignore_errors=True)
+    arch = subprocess.run(["git", "-C", str(root), "archive", sha, ".claude/hooks", "scripts/lib"],
+                          check=True, capture_output=True)
+    subprocess.run(["tar", "-x", "-C", str(snap)], input=arch.stdout, check=True)
+    for args in (["add", "-A"], ["commit", "-qm", f"hooks@{sha[:12]}", "--allow-empty"]):
+        subprocess.run(GIT + ["-C", str(snap), *args], check=True, capture_output=True)
+    return sha
+
+
+def run_guard_corpus(root: Path, corpus: dict, workdir: Path, hooks_rev: str | None = None,
+                     seed: bool = True) -> dict:
+    root = root.resolve()
+    validate_guard_corpus(corpus, seed=seed)
+    files = tracked_files(root)
+    snap = materialize(root, files, sorted(files), workdir / "full", None)
+    hooks_sha = overlay_hooks(root, snap, hooks_rev) if hooks_rev else None
+    fixtures = guard_fixtures(snap, workdir)
+    cases = []
+    for case in corpus["cases"]:
+        # Estado de partida igual para todos: el resumen del proyecto tiene 97 h (caso real F3).
+        _write_summary(snap / ".pr-summary.md", heading=True, fresh=False)
+        run = dispatch(snap, workdir / f"home-{case['id']}", case["event"], case["tool"],
+                       case["input"], cwd=fixtures[case["fixture"]],
+                       session=f"se510-{case['id']}", extra_env=GUARD_ENV)
+        verdict = guard_verdict(case["expect"], run["decision"])
+        cases.append({"id": case["id"], "expected": case["expect"], "observed": run["decision"],
+                      "fixture": case["fixture"], "verdict": verdict,
+                      "blocked_by": [{"hook": h["hook"], "reason": h.get("reason", "")}
+                                     for h in run["hooks"] if h["exit"] == 2],
+                      "ms": run["ms"]})
+    allow = [c for c in cases if c["expected"] == "ALLOW"]
+    false_blocks = [c["id"] for c in cases if c["verdict"] == "FALSE_BLOCK"]
+    false_allows = [c["id"] for c in cases if c["verdict"] == "FALSE_ALLOW"]
+    matched = all(c["verdict"] == "MATCH" for c in cases) and len(cases) == len(corpus["cases"])
+    decision = "FALSE_ALLOW" if false_allows else "FALSE_BLOCK" if false_blocks \
+        else "PASS" if matched else "INCONCLUSIVE"
+    receipt = {"schema": 1, "spec": "SE-510", "unit": "guard-allow-corpus",
+               "model_invocations": 0, "corpus_sha256": sha256(canonical(corpus)),
+               "hooks_rev": hooks_sha, "threshold_false_blocks": 0,
+               "false_block_rate": f"{len(false_blocks)}/{len(allow)}",
+               "false_blocks": false_blocks, "false_allows": false_allows,
+               "decision": decision, "cases": cases,
+               "limitations": ["SIMULATED_DISPATCHER_NOT_A_LIVE_RUNTIME",
+                               "PROMPT_AND_ASYNC_HOOKS_NOT_EVALUATED",
+                               "TS_GUARDS_NOT_COMPARED_UNTIL_S2"]}
+    receipt["receipt_sha256"] = sha256(canonical(receipt))
+    return receipt
+
+
+def render_guard_md(r: dict) -> str:
+    lines = [f"# SE-510 — Corpus de órdenes legítimas", "",
+             f"Decisión: **{r['decision']}** · falsos bloqueos {r['false_block_rate']} "
+             f"(umbral 0) · hooks `{r['hooks_rev'] or 'árbol de trabajo'}`", "",
+             "| Caso | Fixture | Esperado | Observado | Veredicto | Bloquea |", "|---|---|---|---|---|---|"]
+    for c in r["cases"]:
+        who = ", ".join(b["hook"] for b in c["blocked_by"]) or "—"
+        lines.append(f"| {c['id']} | {c['fixture']} | {c['expected']} | {c['observed']} "
+                     f"| {c['verdict']} | {who} |")
+    return "\n".join(lines + ["", "Limitaciones: " + ", ".join(r["limitations"]) + ".", ""])
+
+
+def guard_main(args) -> int:
+    root = Path(args.root).resolve()
+    out = Path(args.out) if args.out else root / DEFAULT_OUT
+    corpus_path = Path(args.corpus) if args.corpus else root / GUARD_CORPUS_PATH
+    workdir = Path(tempfile.mkdtemp(prefix="se510-guard-"))
+    try:
+        receipt = run_guard_corpus(root, load_json(corpus_path), workdir, args.hooks_rev,
+                                   seed=args.corpus is None)
+    except (InventoryError, subprocess.CalledProcessError) as exc:
+        print(f"GUARD-CORPUS: INVALID {exc}", file=sys.stderr)
+        return 2
+    finally:
+        if not args.keep:
+            shutil.rmtree(workdir, ignore_errors=True)
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"{GUARD_REPORT_NAME}.json").write_text(
+        json.dumps(receipt, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    (out / f"{GUARD_REPORT_NAME}.md").write_text(render_guard_md(receipt), encoding="utf-8")
+    print(f"GUARD-CORPUS: {receipt['decision']} falsos bloqueos {receipt['false_block_rate']} "
+          f"{receipt['false_blocks']} falsos permisos {receipt['false_allows']} "
+          f"-> {out / GUARD_REPORT_NAME}.json")
+    return {"PASS": 0, "FALSE_ALLOW": 3}.get(receipt["decision"], 1)
+
+
 def render_md(r: dict) -> str:
     v, k = r["vector"]["full"], r["vector"]["kernel"]
     lines = [f"# SE-400 F3 — Kernel candidato `{r['configs']['variant']}`", "",
@@ -389,11 +601,17 @@ def render_md(r: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("command", choices=("plan", "run"))
+    ap.add_argument("command", choices=("plan", "run", "guard-corpus"))
     ap.add_argument("--root", default=str(Path(__file__).resolve().parents[1]))
     ap.add_argument("--out", default=None, help=f"directorio (por defecto {DEFAULT_OUT})")
     ap.add_argument("--keep", action="store_true", help="conservar los snapshots temporales")
+    ap.add_argument("--corpus", default=None,
+                    help=f"guard-corpus: otro corpus (sin exigir la semilla); por defecto {GUARD_CORPUS_PATH}")
+    ap.add_argument("--hooks-rev", default=None,
+                    help="guard-corpus: hooks y scripts/lib de esta revisión (p. ej. un main antiguo)")
     args = ap.parse_args(argv)
+    if args.command == "guard-corpus":
+        return guard_main(args)
     root = Path(args.root).resolve()
     out = Path(args.out) if args.out else root / DEFAULT_OUT
     try:
