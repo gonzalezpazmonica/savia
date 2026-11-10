@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
+set -uo pipefail
 # SCL-003/SCL-008 — inject only human-authorized criteria at prompt submit.
 # SE-515 S1 — recall trazado: cada consulta deja en SCL_EMISSION_LOG una fila
 # `start` (emitted=false) antes de llamar al recall y una fila `end` con los
 # criterios emitidos y el motivo. Si el hook muere sin terminar, queda la fila
 # `start`: nunca hay ausencia de fila. Solo ids y hashes, nunca el prompt.
 # SAVIA_LEARNING_APPLIED=off desactiva el registro (comportamiento anterior).
-set -uo pipefail
 
 [[ "${SAVIA_LEARNING_RECALL:-on}" == "on" ]] || exit 0
 REPO_ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
