@@ -254,6 +254,12 @@ for cf_mode in versioned hooks; do
     fail "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^(FAIL|ERROR):' | head -1)"
   fi
 done
+# SE-511 AC-8: reglas que descansan en un hook tienen gate válido en todos los perfiles
+if bash "$ROOT/scripts/context-fixed-measure.sh" --gates >/dev/null 2>&1; then
+  pass "Gates del contexto fijo con hook en todos los perfiles (SE-511 AC-8)"
+else
+  fail "Gates del contexto fijo: bash scripts/context-fixed-measure.sh --gates (SE-511 AC-8)"
+fi
 
 echo "" && echo "═════════════════════════════════════════════════════════════"
 echo "  Results: $PASS passed, $FAIL failed ($TOTAL total checks)"
