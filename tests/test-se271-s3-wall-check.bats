@@ -456,5 +456,5 @@ import json,sys; assert json.loads(sys.argv[1])['engagements']==1" "$output"
   printf 'client:acme\nlater client:beta\n' > "$W/coordinacion/exchange/f.jsonl"
   printf 'client:acme\nlater client:beta\n' > "$W/engagements/acme/artifacts/a.md"
   s03t_wall --json
-  [ "$(s03t_layers)" = "active_context:1 briefs_drafts_engrams:1 episodic_memory:1 federation_exchange:1" ]
+  [ "$(s03t_layers)" = "active_context:1 briefs_drafts_engrams:2 episodic_memory:1 federation_exchange:1" ]
 }
