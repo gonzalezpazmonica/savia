@@ -84,8 +84,8 @@ Savia Viva R6 añade un cuarto caso: cuando una lección obliga a revisar algo a
 - prototipo: `docs/specs/assets/SE-514-prototipo.html` — pantalla de la cola en la app de SE-504 con las cinco escenas sobre datos de ejemplo, usable en el móvil.
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante.
 
 ## Slices
 
