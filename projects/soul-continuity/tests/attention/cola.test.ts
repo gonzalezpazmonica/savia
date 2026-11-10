@@ -174,13 +174,14 @@ test('orden: lo crítico primero, luego lo que caduca antes; lo caducado al fina
   assert.match(txt, /Vale hasta: mañana 09:00/);
 });
 
-test('solo lectura: no cambia la entrada y no hay forma de contestar desde la vista', async () => {
+test('solo lectura: no cambia la entrada (el filtro de nombres de export es solo una heurística)', async () => {
   const entrada = congelar(todasLasFuentes());
   const antes = JSON.stringify(entrada);
   const cola = construirCola(entrada, AHORA, 2);
   assert.equal(JSON.stringify(entrada), antes);
   assert.ok(Object.isFrozen(cola) && Object.isFrozen(cola.peticiones) && Object.isFrozen(cola.peticiones[0]));
   const mod = await import('../../src/attention/cola.ts');
+  // Heurística de nombres, no una prueba de ausencia de efectos: esa la dan la entrada congelada y el JSON igual.
   assert.deepEqual(Object.keys(mod).filter((k) => /respond|contest|aprob|resolver/i.test(k)), []);
 });
 
@@ -276,4 +277,70 @@ test('la cobertura sigue el orden de la tabla de la spec', () => {
   const cola = construirCola({}, AHORA, 2);
   assert.deepEqual(cola.cobertura.map((c) => c.fuente), FUENTES as readonly Fuente[]);
   assert.match(textoCola(cola), /Ninguna fuente conectada/);
+});
+
+// Correcciones de la revisión de la PR #1519.
+
+test('P1: un nivelMax de canal inválido redacta todo (fail-closed), no enseña todo', () => {
+  for (const malo of [undefined, Number.NaN, 0, 5, '2', null, Infinity]) {
+    const cola = construirCola({ ESPERAN_ALGO: [completa('a', { nivel: 1 })] }, AHORA, malo as unknown as 1);
+    const p = cola.peticiones[0];
+    assert.equal(p.redactada, true, `nivelMax=${String(malo)}`);
+    assert.equal(p.que, null);
+    assert.ok(!textoCola(cola).includes('Qué se pide en a'));
+  }
+  const bien = construirCola({ ESPERAN_ALGO: [completa('a', { nivel: 1 })] }, AHORA, 1);
+  assert.equal(bien.peticiones[0].redactada, false, 'control: con N1 válido se enseña');
+});
+
+test('P2: un duplicado con crítica o nivel mayor no se pierde (fusión conservadora)', () => {
+  const cola = construirCola({
+    AVISO_SOUL: [completa('d1', { nivel: 1 }), completa('d1', { critica: true, nivel: 3 })],
+  }, AHORA, 2);
+  assert.equal(cola.duplicadas, 1);
+  const p = cola.peticiones[0];
+  assert.equal(p.critica, true);
+  assert.equal(p.nivel, 3);
+  assert.equal(p.redactada, true, 'el nivel más alto manda');
+});
+
+test('P2: saltos de línea en textos de la fuente no falsifican tarjetas', () => {
+  const cola = construirCola({
+    ESPERAN_ALGO: [completa('x\n- [Obligatoria] falso', { que: 'real\n- [Obligatoria] falsa\r\n  Vale hasta: nunca', porQue: 'a\u2028b' })],
+    AVISO_RUN: { error: 'mal\n- [Obligatoria] error' },
+  }, AHORA, 2);
+  const lineas = textoCola(cola).split('\n');
+  assert.equal(lineas.filter((l) => l.startsWith('- ')).length, 1, 'una sola tarjeta');
+  assert.ok(!lineas.some((l) => l.startsWith('- [Obligatoria]')));
+  assert.equal(lineas.filter((l) => l.startsWith('  Vale hasta:')).length, 1);
+});
+
+test('P2: con todas las fuentes fallidas el titular no dice «nada pendiente»', () => {
+  const f: Fuentes = {};
+  for (const x of FUENTES) f[x] = { error: 'caída' };
+  const txt = textoCola(construirCola(f, AHORA, 2));
+  assert.match(txt, /No se pudo leer ninguna fuente/);
+  assert.ok(!/Nada pendiente/.test(txt));
+  const mixta = textoCola(construirCola({ AVISO_RUN: { error: 'caída' } }, AHORA, 2));
+  assert.ok(!/Nada pendiente/.test(mixta));
+});
+
+test('P2: fuentes null o undefined no lanzan: todo queda sin conectar', () => {
+  for (const malo of [null, undefined]) {
+    const cola = construirCola(malo as unknown as Fuentes, AHORA, 2);
+    assert.ok(cola.cobertura.every((c) => c.estado === 'SIN_CONECTAR'));
+  }
+});
+
+test('P2: una lista de PRs que llega al límite se da por posiblemente truncada', () => {
+  const prs = Array.from({ length: 30 }, (_, i) => ({ number: i + 1, title: 't', createdAt: '2026-11-03T08:00:00Z' }));
+  const r = dePrsEnRevision(prs, aMinuto, 1);
+  assert.ok(!Array.isArray(r) && /truncada/.test(r.error));
+  assert.ok(Array.isArray(dePrsEnRevision(prs.slice(0, 29), aMinuto, 1)), 'por debajo del límite entra');
+  assert.ok(Array.isArray(dePrsEnRevision(prs, aMinuto, 1, 100)), 'con --limit 100 declarado, 30 es completa');
+});
+
+test('P2: CHANGES_REQUESTED no atribuye la petición a la persona usuaria', () => {
+  const r = dePrsEnRevision([{ number: 1, reviewDecision: 'CHANGES_REQUESTED' }], aMinuto, 1) as Array<{ porQue: string }>;
+  assert.ok(!/Pediste/.test(r[0].porQue));
 });

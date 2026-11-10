@@ -168,16 +168,19 @@ function comparar(a: Peticion, b: Peticion): number {
  * un objeto congelado. `nivelMax` es el nivel más alto que puede enseñar el canal de la vista.
  */
 export function construirCola(fuentes: Fuentes, ahora: Minuto, nivelMax: Nivel): Cola {
-  const peticiones: Peticion[] = [];
+  // Canal mal configurado (no es 1..4): no se enseña contenido de ningún nivel, solo referencias.
+  const max = nivelMax === 1 || nivelMax === 2 || nivelMax === 3 || nivelMax === 4 ? nivelMax : 0;
+  const origen: Fuentes = fuentes !== null && typeof fuentes === 'object' ? fuentes : {};
   const descartadas: Descartada[] = [];
-  const vistas = new Set<string>();
+  // Mismo id en la misma fuente: se fusiona de forma conservadora (crítica = OR, nivel = máximo).
+  const vistas = new Map<string, { fuente: Fuente; id: string; r: Record<string, unknown> }>();
   let duplicadas = 0;
 
   const cobertura: Cobertura[] = FUENTES.map((fuente) => {
-    if (!Object.hasOwn(fuentes, fuente) || fuentes[fuente] === undefined) {
+    if (!Object.hasOwn(origen, fuente) || origen[fuente] === undefined) {
       return { fuente, estado: 'SIN_CONECTAR', peticiones: 0, error: null };
     }
-    const lista = fuentes[fuente];
+    const lista = origen[fuente];
     if (!Array.isArray(lista)) {
       const error = esFallida(lista) ? lista.error : 'no entregó una lista';
       return { fuente, estado: 'FALLIDA', peticiones: 0, error };
@@ -195,23 +198,29 @@ export function construirCola(fuentes: Fuentes, ahora: Minuto, nivelMax: Nivel):
         return;
       }
       const clave = `${fuente}\u0000${id}`;
-      if (vistas.has(clave)) {
+      const previa = vistas.get(clave);
+      if (previa) {
         duplicadas++;
+        previa.r = {
+          ...previa.r,
+          critica: previa.r.critica === true || r.critica === true,
+          nivel: Math.max(nivelDe(previa.r.nivel), nivelDe(r.nivel)),
+        };
         return;
       }
-      vistas.add(clave);
-      peticiones.push(normalizar(fuente, r, id, ahora, nivelMax));
+      vistas.set(clave, { fuente, id, r: { ...r } });
       n++;
     });
     return { fuente, estado: 'CONECTADA', peticiones: n, error: null };
   });
 
-  for (const [clave, lista] of Object.entries(fuentes)) {
+  for (const [clave, lista] of Object.entries(origen)) {
     if (ES_FUENTE.has(clave)) continue;
     const n = Array.isArray(lista) ? lista.length : 1;
     for (let i = 0; i < n; i++) descartadas.push({ fuente: clave, indice: i, motivo: 'fuente desconocida' });
   }
 
+  const peticiones = [...vistas.values()].map((v) => normalizar(v.fuente, v.r, v.id, ahora, max as Nivel));
   peticiones.sort(comparar);
   return Object.freeze({
     ahora,
@@ -226,6 +235,11 @@ export function construirCola(fuentes: Fuentes, ahora: Minuto, nivelMax: Nivel):
 // Texto en lenguaje llano, como las tarjetas del prototipo de S0.
 
 const NO_LO_DICE = 'La fuente no lo dice.';
+
+/** Un texto de la fuente no puede abrir líneas ni tarjetas: saltos y caracteres de control a espacio. */
+function limpio(s: string): string {
+  return s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trim();
+}
 
 function hhmm(t: Minuto): string {
   const m = ((t % DIA) + DIA) % DIA;
@@ -255,10 +269,10 @@ function tarjeta(p: Peticion, ahora: Minuto): string[] {
     return [
       `- Contenido de nivel N${p.nivel}: no se enseña en este canal. Ábrelo donde se pueda ver.`,
       `  Vale hasta: ${p.caduca !== null ? cuando(p.caduca, ahora) : NO_LO_DICE}`,
-      `  Viene de: ${origen} (ref. ${p.id})`,
+      `  Viene de: ${origen} (ref. ${limpio(p.id)})`,
     ];
   }
-  const v = (s: string | null) => s ?? NO_LO_DICE;
+  const v = (s: string | null) => (s === null ? NO_LO_DICE : limpio(s));
   const vale = p.caduca === null ? NO_LO_DICE : p.caducada ? `caducó ${cuando(p.caduca, ahora)}` : cuando(p.caduca, ahora);
   return [
     `- ${p.critica ? '[Obligatoria] ' : ''}${v(p.que)}`,
@@ -276,8 +290,10 @@ export function textoCola(c: Cola): string {
   const caducadas = c.peticiones.filter((p) => p.caducada);
   const conectadas = c.cobertura.filter((x) => x.estado === 'CONECTADA');
   const out: string[] = [];
-  if (conectadas.length === 0 && c.cobertura.every((x) => x.estado === 'SIN_CONECTAR')) {
-    out.push('Ninguna fuente conectada: no puedo decir qué espera tu respuesta.');
+  if (conectadas.length === 0) {
+    out.push(c.cobertura.some((x) => x.estado === 'FALLIDA')
+      ? 'No se pudo leer ninguna fuente: no puedo decir qué espera tu respuesta.'
+      : 'Ninguna fuente conectada: no puedo decir qué espera tu respuesta.');
   } else if (vigentes.length === 0) {
     out.push('Nada pendiente en las fuentes conectadas.');
   } else {
@@ -290,7 +306,7 @@ export function textoCola(c: Cola): string {
   }
   const notas: string[] = [];
   for (const x of c.cobertura.filter((y) => y.estado === 'FALLIDA')) {
-    notas.push(`No se pudo leer ${FUENTE_INFO[x.fuente].nombre}: ${x.error}`);
+    notas.push(`No se pudo leer ${FUENTE_INFO[x.fuente].nombre}: ${limpio(x.error ?? '')}`);
   }
   const sin = c.cobertura.filter((x) => x.estado === 'SIN_CONECTAR');
   if (sin.length > 0 && sin.length < c.cobertura.length) {
@@ -335,7 +351,9 @@ const COSTE_SOUL: Record<CosteRetraso, string> = {
 /**
  * Soul (SE-490): las decisiones pendientes de la bandeja. Lo informativo (sin `decisionId`) no
  * pide respuesta y no entra. `nivelCanal` es el `canalNivelMax` de la política: el texto que la
- * bandeja guardó no lo supera; el que redactó (texto `null`) cuenta como N4.
+ * bandeja guardó no lo supera; el que redactó (texto `null`) cuenta como N4. `Item` no guarda el
+ * nivel: `nivelCanal` DEBE ser el mismo con el que la bandeja redactó; uno mayor deja pasar
+ * texto guardado para un canal superior (sin defensa en profundidad en S1).
  */
 export function deBandejaSoul(items: readonly Item[], nivelCanal: Nivel): unknown[] {
   return items
@@ -364,7 +382,11 @@ const POR_QUE_RELEVO: Record<string, string> = {
   malformada: 'Su marca de fin no se puede leer.',
 };
 
-/** Relevo nocturno (SE-471): las decisiones del digest JSON (`--format json`, versión 1). */
+/**
+ * Relevo nocturno (SE-471): las decisiones del digest JSON (`--format json`, versión 1). El `id`
+ * de la petición es el nombre del run y se enseña tal cual aunque el contenido se redacte: los
+ * runs deben tener nombres no sensibles.
+ */
 export function deRelevoNocturno(digest: unknown, aMinuto: AMinuto, nivel: Nivel): unknown[] | FuenteFallida {
   if (digest === null || typeof digest !== 'object') return { error: 'el relevo no es un objeto' };
   const d = digest as Record<string, unknown>;
@@ -393,10 +415,12 @@ export function deRelevoNocturno(digest: unknown, aMinuto: AMinuto, nivel: Nivel
 /**
  * PRs esperando revisión (SE-458): salida de `gh pr list --json number,title,createdAt,reviewDecision`.
  * Entran las abiertas sin aprobar; los borradores también, porque los agentes abren en borrador
- * para que los revise la persona.
+ * para que los revise la persona. `limite` es el `--limit` con el que se pidió la lista (gh usa 30
+ * por defecto): si la lista lo alcanza puede estar truncada y se da por fallida, no por completa.
  */
-export function dePrsEnRevision(prs: unknown, aMinuto: AMinuto, nivel: Nivel): unknown[] | FuenteFallida {
+export function dePrsEnRevision(prs: unknown, aMinuto: AMinuto, nivel: Nivel, limite = 30): unknown[] | FuenteFallida {
   if (!Array.isArray(prs)) return { error: 'la lista de PRs no es una lista' };
+  if (prs.length >= limite) return { error: `la lista llegó al límite de ${limite} y puede estar truncada` };
   return prs
     .filter((x: unknown) => !(x !== null && typeof x === 'object' && (x as Record<string, unknown>).reviewDecision === 'APPROVED'))
     .map((x: unknown) => {
@@ -406,7 +430,7 @@ export function dePrsEnRevision(prs: unknown, aMinuto: AMinuto, nivel: Nivel): u
       return {
         id: n,
         que: n ? `Revisar la PR #${n}${titulo ? `: ${titulo}` : ''}.` : null,
-        porQue: r.reviewDecision === 'CHANGES_REQUESTED' ? 'Pediste cambios: hay que ver si ya están.' : 'Espera tu revisión.',
+        porQue: r.reviewDecision === 'CHANGES_REQUESTED' ? 'Se pidieron cambios en esta PR: hay que ver si ya están.' : 'Espera tu revisión.',
         siNoContestas: 'La PR sigue abierta: nada se fusiona sin tu revisión.',
         siAplazas: null,
         caduca: null,
