@@ -35,6 +35,16 @@ token_budget: 1500
 4. **Enable por login / credenciales.** Un server cuya credencial no existe
    debe estar deshabilitado (no "fallback a anónimo").
 
+5. **Malware de paquetes antes de habilitar (SE-443 S2).** Un MCP `npx`/`uvx`
+   se comprueba con `scripts/mcp-security-audit.sh --osv <npx|uvx> <pkg@versión>`
+   antes del alta: avisos `MAL-*` de OSV → no se habilita (exit 1); OSV no
+   comprobable, sin versión exacta y canónica o con opciones del ejecutor que cambian lo
+   instalado (`--package`, `-p`, `--from`, `--with`, `--registry`…) → exit 2
+   (`ASK`), nunca limpio. Solo sale
+   `{ecosystem, name, version}` (N1); recibo en `output/mcp-osv-receipts.jsonl`
+   sin la entrada cruda (las opciones rechazadas no se repiten).
+   Nunca se ejecuta al arrancar. Typosquatting aún no marcado en OSV: límite.
+
 ## Check CRIT-001
 
 - Los servers MCP de Savia son locales (codebase-memory, codegraph,
