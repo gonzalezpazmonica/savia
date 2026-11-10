@@ -100,8 +100,8 @@ Conclusión: el hueco es real. Se reutiliza el patrón de `dome-guard.sh` con su
 - prototipo: [docs/specs/assets/SE-508-prototipo.html](assets/SE-508-prototipo.html) — los tres textos exactos de pregunta y rechazo de las escenas y una tabla de ejemplo (inventada) con las decisiones del modo `observe`.
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo, 7 de 13 vale (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante. Acepta 7 preguntas de 13 acciones; la lista de webs permitidas se afina en S1.
 
 ## Criterios de aceptación
 

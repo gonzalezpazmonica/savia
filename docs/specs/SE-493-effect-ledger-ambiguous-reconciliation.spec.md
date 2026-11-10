@@ -491,8 +491,8 @@ Revertir S2 o S3 tiene un coste: los consumidores vuelven a los JSON y no ven la
 - prototipo: `docs/specs/assets/SE-493-prototipo.md` — los tres textos exactos de las escenas y la salida de la reconciliación sobre un ledger de ejemplo con un efecto hecho, uno fallido y uno dudoso.
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante.
 
 ## OpenCode Implementation Plan
 

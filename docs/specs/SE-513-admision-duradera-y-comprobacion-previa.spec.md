@@ -69,8 +69,8 @@ Mientras hay trabajos en marcha, la persona cambia de prioridad. Hoy ese cambio 
 - prototipo: `docs/specs/assets/prototipo-SE-513.md` — transcripción de las cinco escenas con los textos exactos de Savia y la salida de la cola con los tres estados, sobre un fixture.
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo con esas frases (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante. Las frases marcadas «(propuesta)» pasan a confirmadas: repetido, reinicio y sin prueba.
 
 ## Slices
 

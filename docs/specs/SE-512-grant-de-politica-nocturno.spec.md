@@ -718,8 +718,8 @@ una de ellas sigue actuando.
 
 ### Confirmación
 
-- fecha: pendiente
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo, aviso en silencio (Recommended)». Confirma a la vez las escenas y el prototipo S0. Decisión: el aviso de parón tras un fallo llega en silencio a la cola de la mañana y no suena. Sigue PROPOSED: la aprobación es aparte.
 
 ## Slice S0 — Prototipo navegable
 
@@ -727,8 +727,8 @@ una de ellas sigue actuando.
 
 ### Confirmación del prototipo
 
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo, aviso en silencio (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante. Decisión: el aviso de parón tras un fallo llega en silencio a la cola de la mañana y no suena.
 
 
 ## Aprobación

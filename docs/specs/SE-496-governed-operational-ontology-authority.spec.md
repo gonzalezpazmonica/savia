@@ -338,8 +338,8 @@ Nada depende de una persona concreta. El perfil activo solo **selecciona** qué 
 - prototipo: [docs/specs/assets/SE-496-prototipo.html](assets/SE-496-prototipo.html) — la PR de autorización de la escena 1 tal como llega al móvil y el texto exacto del rechazo de la escena 2 (simulado, con datos de ejemplo).
 
 ### Confirmación del prototipo
-- fecha: pendiente (obligatoria antes de poner S1 en curso)
-- respuesta: pendiente
+- fecha: 2026-11-10
+- respuesta: «Confirmo (Recommended)». Opción elegida por la operadora en pregunta interactiva el 2026-11-10, con el prototipo delante.
 
 ## Aprobación
 
