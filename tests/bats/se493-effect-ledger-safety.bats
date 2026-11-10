@@ -101,13 +101,14 @@ EOF
   mkdir -p "$(dirname "$SAVIA_EFFECT_LEDGER")"; head -c 4096 /dev/urandom > "$SAVIA_EFFECT_LEDGER"
   run se493_prepare 301 "$SE493_HEAD_A" squash
   [ "$status" -eq 2 ]; [[ "$output" != *PROCEED* ]]
+  [[ "$output" == *"ledger ilegible"* ]]   # el motivo, no un exit 2 cualquiera
 }
 
 @test "AC-l: esquema desconocido → 2 sin tocarlo" {
   mkdir -p "$(dirname "$SAVIA_EFFECT_LEDGER")"
   python3 -I -c 'import sqlite3,sys; d=sqlite3.connect(sys.argv[1]); d.execute("create table effects(x)"); d.commit()' "$SAVIA_EFFECT_LEDGER"
   run se493_prepare 302 "$SE493_HEAD_A" squash
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 2 ]; [[ "$output" == *"esquema del ledger desconocido"* ]]
   t=$(python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute("select count(*) from sqlite_master where name=\"meta\"").fetchone()[0])' "$SAVIA_EFFECT_LEDGER")
   [ "$t" -eq 0 ]
 }
@@ -120,14 +121,14 @@ EOF
   for _ in $(seq 50); do [[ -f "$BATS_TEST_TMPDIR/locked" ]] && break; sleep 0.1; done
   SAVIA_EFFECT_BUSY_MS=200 run se493_prepare 304 "$SE493_HEAD_A" squash
   kill "$lp" 2>/dev/null || true
-  [ "$status" -eq 2 ]; [[ "$output" != *PROCEED* ]]
+  [ "$status" -eq 2 ]; [[ "$output" != *PROCEED* ]]; [[ "$output" == *"bloquead"* ]]
 }
 
 @test "AC-l: directorio sin escritura → 2" {
   d="$BATS_TEST_TMPDIR/ro"; mkdir -p "$d"; chmod 500 "$d"
   SAVIA_EFFECT_LEDGER="$d/sub/ledger.db" run se493_prepare 305 "$SE493_HEAD_A" squash
   chmod 700 "$d"
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 2 ]; [[ "$output" == *"sin escritura"* ]]
 }
 
 @test "AC-l: WAL + synchronous FULL; si se fuerza NORMAL → 2 sin escribir (Regla 1)" {
@@ -235,10 +236,10 @@ full_flow() {  # prepare → dispatch → complete; imprime el estado final
 @test "AC-n: sin identidad remota (falla o vacía) → 2 sin reclamar" {
   echo 1 > "$STUB/user.rc"
   run se493_prepare 502 "$SE493_HEAD_A" squash
-  [ "$status" -eq 2 ]
-  rm "$STUB/user.rc"; : > "$STUB/user"
+  [ "$status" -eq 2 ]; [[ "$output" == *"sin identidad remota"* ]]
+  echo 0 > "$STUB/user.rc"   # sale con 0 sin imprimir nada: identidad vacía
   run se493_prepare 502 "$SE493_HEAD_A" squash
-  [ "$status" -eq 2 ]
+  [ "$status" -eq 2 ]; [[ "$output" == *"sin identidad remota"* ]]
   [ "$(rows)" -eq 0 ]
 }
 
