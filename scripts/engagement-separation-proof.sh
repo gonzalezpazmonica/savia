@@ -162,13 +162,15 @@ check_sample() {
 
   [[ ! -f "$file" ]] && { echo "missing|$file||"; return; }
 
-  if grep -q "client:${expected_client}" "$file" 2>/dev/null; then
+  # Etiqueta completa: «client:acme» no puede dar por buena «client:acme-corp»
+  # (coincidencia por prefijo = contaminación entre clientes sin detectar).
+  if grep -qE "client:${expected_client}([^a-z0-9-]|$)" "$file" 2>/dev/null; then
     result="tagged-correct"
     tag="$expected_client"
   fi
 
   local other_tags
-  other_tags=$(grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | grep -v "client:${expected_client}" | sort -u | head -5 || true)
+  other_tags=$(grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | grep -vxF "client:${expected_client}" | sort -u | head -5 || true)
   if [[ -n "$other_tags" ]]; then
     result=$([[ "$result" == "tagged-correct" ]] && echo "cross-contaminated" || echo "contaminated")
     tag=$(echo "$other_tags" | tr '\n' ',' | sed 's/,$//')
@@ -297,7 +299,8 @@ cmd_verify() {
   local contaminated_now
   contaminated_now=$(echo "$fresh" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['summary']['contaminated'])" 2>/dev/null || echo "-1")
   if $JSON_OUT; then
-    echo '{"verified":true,"client":"'"$CLIENT"'","engagement":"'"${ENGAGEMENT:-}"'","current_contamination":'"$contaminated_now"',"verified_at":"'"$DATE_NOW"'"}'
+    local verified=false; [[ "$contaminated_now" -eq 0 ]] && verified=true
+    echo '{"verified":'"$verified"',"client":"'"$CLIENT"'","engagement":"'"${ENGAGEMENT:-}"'","current_contamination":'"$contaminated_now"',"verified_at":"'"$DATE_NOW"'"}'
   else
     echo "=== Verification for $CLIENT / ${ENGAGEMENT:-all} ==="
     echo "  Verified at: $DATE_NOW"
@@ -373,7 +376,7 @@ print(json.dumps({
 
 # ── Generate for all engagements ──────────────────────────────────────────
 cmd_all() {
-  local all_proof="[" first=true total_clean=0 total_contaminated=0 eng_count=0
+  local all_proof="[" first=true total_clean=0 total_contaminated=0 eng_count=0 parse_errors=0
   for eng in $(resolve_engagements); do
     IFS='|' read -r cslug ename yf <<< "$eng"
     eng_count=$((eng_count + 1))
@@ -381,22 +384,24 @@ cmd_all() {
     if ! $first; then all_proof+=","; fi; first=false
     local eng_json; eng_json=$(echo "$proof" | python3 -c "import json,sys;d=json.load(sys.stdin);s=d['summary'];print(json.dumps({'client':'$cslug','engagement':'$ename','clean':s['clean'],'contaminated':s['contaminated']}))" 2>/dev/null || echo '{"client":"'"$cslug"'","engagement":"'"$ename"'","error":"parse-failed"}')
     all_proof+="$eng_json"
-    local cont; cont=$(echo "$proof" | python3 -c "import json,sys;print(json.load(sys.stdin)['summary']['contaminated'])" 2>/dev/null || echo 0)
-    local cl; cl=$(echo "$proof" | python3 -c "import json,sys;print(json.load(sys.stdin)['summary']['clean'])" 2>/dev/null || echo 0)
+    # Fail-closed: una prueba que no se puede leer NO cuenta como «sin contaminación».
+    local cont; cont=$(echo "$proof" | python3 -c "import json,sys;print(json.load(sys.stdin)['summary']['contaminated'])" 2>/dev/null) || { cont=0; parse_errors=$((parse_errors + 1)); }
+    local cl; cl=$(echo "$proof" | python3 -c "import json,sys;print(json.load(sys.stdin)['summary']['clean'])" 2>/dev/null) || cl=0
     total_contaminated=$((total_contaminated + cont)); total_clean=$((total_clean + cl))
   done
   all_proof+="]"
   if $JSON_OUT; then
-    echo "{\"proof_id\":\"$PROOF_ID\",\"generated_at\":\"$DATE_NOW\",\"total_engagements\":$eng_count,\"total_clean\":$total_clean,\"total_contaminated\":$total_contaminated,\"separation_intact\":$([[ $total_contaminated -eq 0 ]] && echo 'true' || echo 'false'),\"engagements\":$all_proof}"
+    echo "{\"proof_id\":\"$PROOF_ID\",\"generated_at\":\"$DATE_NOW\",\"total_engagements\":$eng_count,\"total_clean\":$total_clean,\"total_contaminated\":$total_contaminated,\"parse_errors\":$parse_errors,\"separation_intact\":$([[ $total_contaminated -eq 0 && $parse_errors -eq 0 ]] && echo 'true' || echo 'false'),\"engagements\":$all_proof}"
   else
     echo "=== Separation Proof: All Engagements ==="
     echo "  Proof ID:     $PROOF_ID"
     echo "  Engagements:  $eng_count"
     echo "  Total clean:  $total_clean"
     echo "  Total viol:   $total_contaminated"
-    [[ $total_contaminated -eq 0 ]] && echo "  SEPARATION INTACT" || echo "  VIOLATIONS DETECTED"
+    echo "  Parse errors: $parse_errors"
+    [[ $total_contaminated -eq 0 && $parse_errors -eq 0 ]] && echo "  SEPARATION INTACT" || echo "  VIOLATIONS DETECTED"
   fi
-  return $([[ $total_contaminated -eq 0 ]] && echo 0 || echo 1)
+  return $([[ $total_contaminated -eq 0 && $parse_errors -eq 0 ]] && echo 0 || echo 1)
 }
 
 case "$CMD" in

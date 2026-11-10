@@ -237,3 +237,233 @@ print('OK')
   run bash "$PROOF_SCRIPT" --fake-flag
   [ "$status" -eq 2 ]
 }
+
+# ── S03t: comportamiento en un árbol aislado (BATS_TEST_TMPDIR) ──────────────
+# El script y wall-check derivan ROOT de su ruta: se copian a un árbol propio con
+# engagements/ sintéticos. Así los casos no dependen de lo que haya en el repo.
+
+s03t_tree() {
+  SB="$BATS_TEST_TMPDIR/tree"
+  mkdir -p "$SB/scripts" "$SB/engagements/acme/artifacts" "$SB/bin"
+  cp "$PROOF_SCRIPT" "$WALL_SCRIPT" "$SB/scripts/"
+  printf 'wall:\n  mode: strict\n  active: true\n' > "$SB/engagements/acme/prod.yaml"
+  P="$SB/scripts/engagement-separation-proof.sh"
+}
+
+s03t_art() { printf '%s\n' "$2" > "$SB/engagements/acme/artifacts/$1"; }
+
+@test "generate: artifact tagged with its own client counts as clean and the wall is intact (exit 0)" {
+  s03t_tree; s03t_art own.md "notes client:acme"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+d=json.loads(sys.argv[1]); s=d['summary']
+assert (s['total_samples'],s['clean'],s['contaminated'],s['untagged'])==(1,1,0,0), s
+assert s['separation_intact'] is True
+assert d['engagements'][0]['samples'][0]['status']=='tagged-correct'
+assert d['engagements'][0]['wall']=='strict'
+" "$output"
+}
+
+@test "generate: artifact carrying another client's tag is contaminated and the run exits 1" {
+  s03t_tree; s03t_art leak.md "draft for client:rival"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 1 ]
+  python3 -c "
+import json,sys
+d=json.loads(sys.argv[1]); s=d['summary']
+assert s['contaminated']==1 and s['separation_intact'] is False, s
+smp=d['engagements'][0]['samples'][0]
+assert smp['status']=='contaminated' and smp['tag']=='client:rival', smp
+" "$output"
+}
+
+@test "generate: own tag mixed with a foreign tag is cross-contaminated" {
+  s03t_tree; s03t_art mix.md "client:acme and also client:rival"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"status": "cross-contaminated"'* ]]
+}
+
+@test "generate: a client whose slug is a prefix of the owner's slug is still foreign (acme vs acme-corp)" {
+  s03t_tree; s03t_art prefix.md "belongs to client:acme-corp"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"status": "contaminated"'* ]]
+  [[ "$output" == *'client:acme-corp'* ]]
+}
+
+@test "generate: own tag followed by punctuation is not mistaken for a longer slug" {
+  s03t_tree; s03t_art ok.md "(client:acme), done"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"status": "tagged-correct"'* ]]
+}
+
+@test "generate: untagged artifact is reported untagged, not contaminated (exit 0)" {
+  s03t_tree; s03t_art plain.md "no tags here"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+s=json.loads(sys.argv[1])['summary']
+assert s['untagged']==1 and s['contaminated']==0 and s['clean']==0, s
+" "$output"
+}
+
+@test "generate: empty artifacts are never sampled" {
+  s03t_tree; : > "$SB/engagements/acme/artifacts/empty.md"
+  run bash "$P" generate --client acme --json
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+assert json.loads(sys.argv[1])['summary']['total_samples']==0
+" "$output"
+}
+
+@test "generate: --sample-count 1 limits the sample to one artifact" {
+  s03t_tree; s03t_art a.md "client:acme"; s03t_art b.md "client:acme"; s03t_art c.md "client:acme"
+  run bash "$P" generate --client acme --json --sample-count 1
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+assert json.loads(sys.argv[1])['summary']['total_samples']==1
+" "$output"
+}
+
+@test "generate: engagements without client filter skip inactive ones" {
+  s03t_tree; s03t_art leak.md "client:rival"
+  printf 'wall:\n  mode: strict\n  active: false\n' > "$SB/engagements/acme/prod.yaml"
+  run bash "$P" generate --json
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+d=json.loads(sys.argv[1]); assert d['engagements']==[] and d['summary']['total_samples']==0, d
+" "$output"
+}
+
+@test "verify: clean client reports intact, verified true and exit 0" {
+  s03t_tree; s03t_art own.md "client:acme"
+  run bash "$P" verify --client acme
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Current contamination: 0"* ]]
+  [[ "$output" == *"SEPARATION INTACT"* ]]
+  run bash "$P" verify --client acme --json
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"verified":true'* ]]
+}
+
+@test "verify: contaminated client reports the violation, verified false and exit 1" {
+  s03t_tree; s03t_art leak.md "client:rival"
+  run bash "$P" verify --client acme
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Current contamination: 1"* ]]
+  [[ "$output" == *"VIOLATION DETECTED"* ]]
+  run bash "$P" verify --client acme --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"verified":false'* ]]
+  [[ "$output" == *'"current_contamination":1'* ]]
+}
+
+@test "verify: unreadable fresh proof (python3 broken) is a violation, never intact" {
+  s03t_tree; s03t_art own.md "client:acme"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$SB/bin/python3"; chmod +x "$SB/bin/python3"
+  run env PATH="$SB/bin:$PATH" bash "$P" verify --client acme
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Current contamination: -1"* ]]
+  [[ "$output" == *"VIOLATION DETECTED"* ]]
+}
+
+@test "verify: without --client exits 1 with an error" {
+  s03t_tree
+  run bash "$P" verify
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--client required for verify"* ]]
+}
+
+@test "no command prints usage and exits 1" {
+  s03t_tree
+  run bash "$P"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage"* ]]
+}
+
+@test "test: planted contamination is detected, test passes and the planted file is removed" {
+  s03t_tree; s03t_art own.md "client:acme"
+  run bash "$P" test --client acme
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"TEST PASSED"* ]]
+  [[ "$output" == *"Separation proof contamin: 1"* ]]
+  [ -z "$(ls "$SB/engagements/acme/artifacts" | grep planted)" ]
+}
+
+@test "test: --json reports PASS with the proof detecting the planted tag" {
+  s03t_tree; s03t_art own.md "client:acme"
+  run bash "$P" test --client acme --json
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+txt=sys.argv[1]; d=json.loads(txt[txt.index('{'):])
+assert d['overall']=='PASS', d
+assert d['separation_proof']['result']=='DETECTED' and d['separation_proof']['contamination']>=1, d
+" "$output"
+}
+
+@test "test: a proof that cannot see the contamination fails the self-test (exit 1)" {
+  s03t_tree; s03t_art own.md "client:acme"
+  # wall-check inerte y python3 roto: nada detecta lo plantado
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/scripts/engagement-wall-check.sh"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$SB/bin/python3"; chmod +x "$SB/bin/python3"
+  run env PATH="$SB/bin:$PATH" bash "$P" test --client acme
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"TEST FAILED"* ]]
+  [[ "$output" == *"MISSED"* ]]
+}
+
+@test "test: without --client exits 1 and plants nothing" {
+  s03t_tree
+  run bash "$P" test
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--client required for adversarial test"* ]]
+  [ -z "$(ls "$SB/engagements/acme/artifacts")" ]
+}
+
+@test "all: clean engagements are intact with exit 0" {
+  s03t_tree; s03t_art own.md "client:acme"
+  run bash "$P" all --json
+  [ "$status" -eq 0 ]
+  python3 -c "
+import json,sys
+d=json.loads(sys.argv[1])
+assert d['total_engagements']==1 and d['total_clean']==1 and d['total_contaminated']==0, d
+assert d['separation_intact'] is True and d['parse_errors']==0
+" "$output"
+}
+
+@test "all: a contaminated engagement makes the whole proof fail (exit 1)" {
+  s03t_tree; s03t_art leak.md "client:rival"
+  run bash "$P" all --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"separation_intact":false'* ]]
+  [[ "$output" == *'"total_contaminated":1'* ]]
+  run bash "$P" all
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"VIOLATIONS DETECTED"* ]]
+}
+
+@test "all: a proof that cannot be parsed is never reported as intact" {
+  s03t_tree; s03t_art own.md "client:acme"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$SB/bin/python3"; chmod +x "$SB/bin/python3"
+  run env PATH="$SB/bin:$PATH" bash "$P" all --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"separation_intact":false'* ]]
+  [[ "$output" == *'"parse_errors":1'* ]]
+}
+
+@test "unknown flag exits 2 even with a valid command" {
+  s03t_tree
+  run bash "$P" generate --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown argument: --bogus"* ]]
+}
