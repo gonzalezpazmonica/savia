@@ -1059,3 +1059,12 @@ sprint_with() {  # sprint_with <escenario> <voraz|ascendente> → S3_RES=«fusio
     [ ! -s "$FAKE/merged" ]
   done
 }
+
+@test "seguridad: merge-sprint.sh arranca con set -uo pipefail (variable sin definir o fallo en tubería no pasan en silencio)" {
+  # Primera sentencia ejecutable tras la cabecera: si alguien la quita, este test falla.
+  run grep -n -m1 -E '^set -uo pipefail$' "$SCRIPT"
+  [ "$status" -eq 0 ]
+  # Negativo: una subcomanda inexistente no puede terminar en éxito.
+  run bash "$SCRIPT" subcomando-inexistente-se500
+  [ "$status" -ne 0 ]
+}
