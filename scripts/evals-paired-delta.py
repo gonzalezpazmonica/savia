@@ -296,8 +296,12 @@ def main() -> None:
 
     result = compute_paired_delta(baseline_scores, current_scores, threshold)
     print(json.dumps(result, indent=2))
+    if result["pairs_evaluated"] == 0:
+        # Nothing was compared: that is not a pass (gate-result contract, SE-453).
+        print("ERROR: sin IDs comunes entre baseline y current: sin veredicto.", file=sys.stderr)
+        sys.exit(2)
 
-    # Exit code: 0 = pass, 1 = degradation detected
+    # Exit code: 0 = pass, 1 = degradation detected, 2 = nothing to compare
     sys.exit(0 if result["threshold_pass"] else 1)
 
 

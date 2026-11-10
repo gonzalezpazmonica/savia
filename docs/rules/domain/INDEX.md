@@ -1,11 +1,11 @@
 ---
 context_tier: L3
-token_budget: 9490
+token_budget: 9513
 ---
 
 # INDEX
 
-Auto-generated. 320 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`. CI check: `--check`. SPEC-115.
+Auto-generated. 321 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`. CI check: `--check`. SPEC-115.
 
 | Cat | File | Description |
 |---|---|---|
@@ -91,6 +91,7 @@ Auto-generated. 320 files / 39 cats. Regen: `bash scripts/rules-domain-index.sh`
 | MCP | [`mcp-catalog-policy.md`](./mcp-catalog-policy.md) | MCP Catalog Policy — SPEC-141 |
 | MCP | [`mcp-migration.md`](./mcp-migration.md) | Migración REST/CLI → MCP — Guía de equivalencias |
 | MCP | [`mcp-overhead.md`](./mcp-overhead.md) | MCP Token Overhead — doctrina pm-workspace |
+| MCP | [`mcp-tool-design.md`](./mcp-tool-design.md) | Regla: Diseño de herramientas MCP |
 | Memory | [`failure-pattern-memory.md`](./failure-pattern-memory.md) | Failure Pattern Memory — SPEC-188 Fase 1 |
 | Memory | [`memory-type-schema.md`](./memory-type-schema.md) | Memory Type Schema — 13 Semantic Types |
 | Memory | [`savia-memory-architecture.md`](./savia-memory-architecture.md) | Canonical reference: unified view of all memory layers in pm-workspace. |

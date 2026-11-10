@@ -1,0 +1,98 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SE-496 — Prototipo: delegar con un solo contrato</title>
+<style>
+body{font:16px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:0 auto;padding:16px;background:#fff;color:#1a1a1a}
+@media(prefers-color-scheme:dark){body{background:#212121;color:#ececec}blockquote,.aviso{background:#303030!important}th{background:#303030!important}td,th{border-color:#444!important}}
+blockquote{margin:12px 0;padding:8px 16px;background:#f1f1ef;border-left:4px solid #9a6700;border-radius:6px}
+.aviso{background:#fff4d6;border-radius:6px;padding:8px 12px}
+code{background:rgba(127,127,127,.2);padding:1px 4px;border-radius:4px;font-size:.9em}
+.t{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top;font-size:14px}th{background:#f9f9f8}
+h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin:24px 0}
+</style></head><body>
+<h1>SE-496 — Prototipo: delegar con un solo contrato</h1>
+<p class="aviso"><strong>Simulado: la orden no existe hasta S1.</strong> Nada de esto lo produce hoy ningún programa. Los textos son los que vería la persona; los nombres, repos, números y fechas son <strong>inventados, solo de ejemplo</strong>.</p>
+<p>Sirve para que confirmes o rechaces cómo se ve la delegación antes de construir nada. Tres escenas, las mismas de la spec.</p>
+<hr>
+
+<h2>Escena 1 — La PR de autorización que te llega al móvil</h2>
+<p>Quieres que Yema abra PRs en borrador en un repo hasta el viernes. Lo que te llega es una PR normal de GitHub. Esto es lo que lees en ella:</p>
+<p><strong>Título de la PR</strong></p>
+<blockquote>Autorización: Yema puede abrir PRs en borrador en <code>ejemplo/repo-demo</code> hasta el viernes 13 de noviembre</blockquote>
+<p><strong>Descripción de la PR</strong></p>
+<blockquote>
+<p><strong>Qué firmas si fusionas esto</strong></p>
+<p>Autorizas a <strong>Yema</strong> a <strong>abrir PRs en borrador</strong> en el repositorio <code>ejemplo/repo-demo</code>.</p>
+<p><strong>Solo si:</strong></p>
+<ul>
+<li>la rama de origen empieza por <code>agent/</code> (por ejemplo <code>agent/arreglo-textos</code>);</li>
+<li>la integración continua (CI) está en verde (terminada y sin fallos) en ese momento. Si está pendiente, cancelada o sin resultado, no vale.</li>
+</ul>
+<p><strong>Hasta cuándo:</strong> viernes 13 de noviembre de 2026, 23:59. A partir de ahí deja de valer sola, sin que tengas que hacer nada.</p>
+<p><strong>Qué efectos aceptas:</strong> crear una PR en borrador. Nada más.</p>
+<p><strong>Qué NO autoriza:</strong></p>
+<ul>
+<li>fusionar nada (los merges siguen yendo con su permiso aparte);</li>
+<li>publicar fuera del repo;</li>
+<li>que Yema delegue esto en otro agente.</li>
+</ul>
+<p><strong>Cómo lo retiras antes de tiempo:</strong> abre una PR que añada el identificador <code>a1b2c3d4e5f60718</code> a la lista de revocados. Surte efecto en cuanto se fusiona.</p>
+<p>Si no fusionas, no hay autorización.</p>
+</blockquote>
+<p><strong>Qué ves en el móvil:</strong> el botón normal «Merge pull request» de GitHub. Fusionarla es la firma. No hay formulario aparte ni orden que teclear.</p>
+<p><strong>Ficha técnica (plegada, para quien quiera mirarla)</strong></p>
+<div class="t"><table>
+<tr><th>Campo</th><th>Valor de ejemplo</th></tr>
+<tr><td>Quién delega</td><td>la operadora (firmante registrado)</td></tr>
+<tr><td>Quién recibe</td><td><code>yema</code></td></tr>
+<tr><td>Capacidad</td><td><code>pr.create-draft</code>, versión 1</td></tr>
+<tr><td>Ramas</td><td><code>agent/*</code> (un solo nivel: <code>agent/x</code> sí, <code>agent/x/y</code> no)</td></tr>
+<tr><td>Condición</td><td><code>ci_status == success</code></td></tr>
+<tr><td>Efecto aceptado</td><td>crear PR en borrador</td></tr>
+<tr><td>Vale desde / hasta</td><td>2026-11-10 08:00 / 2026-11-13 23:59</td></tr>
+<tr><td>Usos máximos</td><td>sin límite (efecto reversible)</td></tr>
+</table></div>
+<hr>
+
+<h2>Escena 2 — El rechazo del jueves (CI roja)</h2>
+<p>El jueves Yema intenta abrir una PR con la CI en rojo. <strong>No te despierta.</strong> La llamada se rechaza al momento. El texto exacto del rechazo:</p>
+<blockquote>
+<p><strong>Rechazado: Yema no puede abrir esta PR en borrador.</strong></p>
+<p><strong>Motivo:</strong> precondición no cumplida: CI verde. La CI de la rama <code>agent/arreglo-textos</code> está en rojo.</p>
+<p><strong>Qué tienes firmado:</strong> abrir PRs en borrador en <code>ejemplo/repo-demo</code> desde <code>agent/*</code> solo con la CI en verde, hasta el viernes 13 de noviembre.</p>
+<p><strong>Qué hacer:</strong> arreglar la CI y volver a intentarlo. No hace falta firmar nada nuevo.</p>
+<p>No se ha creado nada.</p>
+</blockquote>
+<p><strong>Dónde lo lees tú:</strong> en el resumen de la mañana, una línea:</p>
+<blockquote>Jueves 12, 03:12 — Yema intentó abrir una PR en borrador en <code>ejemplo/repo-demo</code> y se rechazó: CI en rojo.</blockquote>
+<p>Otros dos rechazos que podrías ver, con el mismo formato (también de ejemplo):</p>
+<div class="t"><table>
+<tr><th>Situación</th><th>Motivo en llano</th></tr>
+<tr><td>Ya pasó el viernes</td><td>«La autorización caducó el viernes 13 de noviembre a las 23:59.»</td></tr>
+<tr><td>La rama no es de agente</td><td>«La rama <code>feature/mia</code> no está cubierta: solo valen ramas <code>agent/*</code>.»</td></tr>
+</table></div>
+<hr>
+
+<h2>Escena 3 — «El grafo cree que este repo es tuyo»</h2>
+<p>El grafo de conocimiento deduce que <code>ejemplo/otro-repo</code> pertenece a tu proyecto. Yema intenta abrir una PR ahí. Texto exacto:</p>
+<blockquote>
+<p><strong>Rechazado: no hay autorización firmada para <code>ejemplo/otro-repo</code>.</strong></p>
+<p><strong>Motivo:</strong> el único indicio de que ese repo es tuyo viene del grafo de conocimiento, que deduce cosas pero no autoriza.</p>
+<p><strong>Sugerencia (no cambia nada):</strong> si quieres que Yema trabaje ahí, pide una autorización para ese repo y fusiónala tú.</p>
+<p>No se ha creado nada.</p>
+</blockquote>
+<p><strong>Idea que fija la escena:</strong> solo vale lo que firmaste. Una deducción del grafo, de las cúpulas o del modelo puede aparecer como sugerencia, nunca como permiso.</p>
+<hr>
+
+<h2>Lo que este prototipo NO enseña</h2>
+<ul>
+<li>No hay pantalla ni orden: todo es texto de PR y de rechazo.</li>
+<li>Los nombres y las fechas son de ejemplo; no hay ningún contrato real.</li>
+<li>No muestra la fase de pruebas en sombra ni cómo se comparan con los permisos de merge actuales (eso es S1 en adelante).</li>
+</ul>
+
+<h2>Para confirmar o rechazar</h2>
+<ol>
+<li>¿La descripción de la PR se entiende sin conocer nada interno?</li>
+<li>¿Falta algo que querrías ver antes de fusionar?</li>
+<li>¿El rechazo dice lo que necesitas saber sin despertarte?</li>
+</ol>
+</body></html>

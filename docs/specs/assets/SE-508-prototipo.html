@@ -1,0 +1,88 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SE-508 — Prototipo: preguntar antes de un efecto por un conector o por la web</title>
+<style>
+body{font:16px/1.55 -apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:0 auto;padding:16px;background:#fff;color:#1a1a1a}
+@media(prefers-color-scheme:dark){body{background:#212121;color:#ececec}blockquote,.aviso{background:#303030!important}th{background:#303030!important}td,th{border-color:#444!important}}
+blockquote{margin:12px 0;padding:8px 16px;background:#f1f1ef;border-left:4px solid #9a6700;border-radius:6px}
+.aviso{background:#fff4d6;border-radius:6px;padding:8px 12px}
+code{background:rgba(127,127,127,.2);padding:1px 4px;border-radius:4px;font-size:.9em}
+.t{overflow-x:auto}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top;font-size:14px}th{background:#f9f9f8}
+h1{font-size:24px}h2{font-size:20px}hr{border:0;border-top:1px solid #ddd;margin:24px 0}
+.btn{display:inline-block;border:1px solid #888;border-radius:8px;padding:4px 12px;margin-right:8px;font-size:14px}
+</style></head><body>
+<h1>SE-508 — Prototipo: preguntar antes de un efecto por un conector o por la web</h1>
+<p class="aviso"><strong>Simulado: el guard no existe hasta S1.</strong> Los textos son los que vería la persona. La tabla de decisiones es <strong>un ejemplo inventado</strong> de cómo se vería el modo observación (solo registrar, sin preguntar): las llamadas, las horas, los destinatarios y los sitios son ficticios, no vienen de ningún uso real. Las cifras de la tabla no son una medida.</p>
+<p>Tres escenas, las mismas de la spec.</p>
+<hr>
+
+<h2>Escena 1 — Enviar un correo</h2>
+<p>Le pides a Savia que prepare un correo para tu equipo. Antes de enviarlo te aparece:</p>
+<blockquote>
+<p><strong>Savia quiere enviar un correo a 3 personas</strong> (asunto: "Plan de la semana").<br>¿Lo envío?</p>
+<p><span class="btn">Sí, enviar</span><span class="btn">No</span></p>
+</blockquote>
+<p>Si dices que no, el correo no sale. (En el motivo interno consta: tool <code>mcp__claude_ai_Gmail__send_message</code>, destino 3 personas, efecto: enviar un correo.)</p>
+<hr>
+
+<h2>Escena 2 — Un agente nocturno intenta fusionar por MCP</h2>
+<p>Un agente nocturno intenta fusionar una PR con la tool de GitHub en vez de con el permiso de merge. <strong>No te despierta.</strong> La llamada se rechaza. Texto exacto del rechazo:</p>
+<blockquote>
+<p><strong>Rechazado: fusionar una PR por una tool MCP no está permitido.</strong><br>Los merges van por <code>push-pr.sh --merge</code> o <code>merge-sprint.sh</code> con grant (SE-343).<br>No se ha fusionado nada.</p>
+</blockquote>
+<p>Y en el resumen de la mañana lees:</p>
+<blockquote>se bloqueó un merge por MCP; los merges van con grant.</blockquote>
+<hr>
+
+<h2>Escena 3 — Consultar la web</h2>
+<p>Savia consulta la documentación oficial de una librería. <strong>No te pregunta nada</strong>, porque ese sitio está en tu lista de sitios permitidos.</p>
+<p>Si intenta abrir una web desconocida con datos en la dirección, te pregunta antes. Texto exacto:</p>
+<blockquote>
+<p><strong>Savia quiere abrir una web que no está en tu lista.</strong><br>Sitio: <code>datos-ejemplo.test</code><br>La dirección lleva 142 caracteres de más (datos después del <code>?</code>).<br>¿La abro?</p>
+<p><span class="btn">Sí, abrir</span><span class="btn">No</span></p>
+</blockquote>
+<p>Si el sitio no estuviera en la lista pero la dirección fuera limpia, la pregunta diría igual el sitio y «0 caracteres de más».</p>
+<hr>
+
+<h2>Tabla de decisiones de ejemplo (modo observación)</h2>
+<p class="aviso"><strong>Ejemplo inventado.</strong> Así se vería lo que el guard habría decidido sobre las llamadas de una semana, sin haber preguntado nada. «Habría…» no significa que haya ocurrido.</p>
+<div class="t"><table>
+<tr><th>Día</th><th>Hora</th><th>Llamada (ficticia)</th><th>Clase</th><th>Decisión que habría tomado</th></tr>
+<tr><td>lun</td><td>09:02</td><td>Leer un correo (<code>Gmail</code>, leer mensaje)</td><td>solo lectura</td><td>pasa</td></tr>
+<tr><td>lun</td><td>09:40</td><td>Buscar en cúpulas (<code>savia-vaults</code>, buscar)</td><td>solo lectura</td><td>pasa</td></tr>
+<tr><td>lun</td><td>11:15</td><td>Abrir <code>docs.ejemplo.org/guia/instalar</code></td><td>web, sitio permitido, sin datos</td><td>pasa</td></tr>
+<tr><td>lun</td><td>16:30</td><td>Enviar correo a 3 personas</td><td>escribe</td><td><strong>preguntaría</strong></td></tr>
+<tr><td>mar</td><td>10:05</td><td>Abrir <code>docs.ejemplo.org/api?token=abc123</code></td><td>web, sitio permitido, con datos en la dirección</td><td><strong>preguntaría</strong> (12 caracteres de más)</td></tr>
+<tr><td>mar</td><td>14:20</td><td>Crear un evento de calendario</td><td>escribe</td><td><strong>preguntaría</strong></td></tr>
+<tr><td>mar</td><td>22:48</td><td>Fusionar PR por GitHub MCP (agente nocturno)</td><td>fusión</td><td><strong>rechazaría</strong> (sin preguntar)</td></tr>
+<tr><td>mié</td><td>08:55</td><td>Abrir <code>datos-ejemplo.test/x?q=...</code></td><td>web, sitio no permitido</td><td><strong>preguntaría</strong> (142 caracteres de más)</td></tr>
+<tr><td>mié</td><td>12:10</td><td>Tool de un conector nuevo, sin clasificar</td><td>desconocida</td><td><strong>preguntaría</strong></td></tr>
+<tr><td>jue</td><td>03:12</td><td>Búsqueda web nocturna</td><td>búsqueda</td><td>solo se registra</td></tr>
+<tr><td>jue</td><td>09:30</td><td>Compartir un fichero de Drive</td><td>escribe</td><td><strong>preguntaría</strong></td></tr>
+<tr><td>vie</td><td>10:00</td><td>Abrir <code>docs.ejemplo.org/guia/uso</code></td><td>web, sitio permitido, sin datos</td><td>pasa</td></tr>
+<tr><td>vie</td><td>17:45</td><td>Reenviar un correo</td><td>escribe</td><td><strong>preguntaría</strong></td></tr>
+</table></div>
+<p><strong>Resumen de la tabla de ejemplo (calculado sobre estas 13 filas inventadas):</strong></p>
+<div class="t"><table>
+<tr><th>Decisión</th><th>Filas</th></tr>
+<tr><td>pasa</td><td>4</td></tr>
+<tr><td>preguntaría (escribe, web con datos o sitio no permitido, herramienta sin clasificar)</td><td>7</td></tr>
+<tr><td>rechazaría</td><td>1</td></tr>
+<tr><td>solo se registra</td><td>1</td></tr>
+</table></div>
+<p>(4 + 7 + 1 + 1 = 13. De las 7 preguntas, 1 es por una herramienta sin clasificar.)</p>
+<p>En la versión real (S1), esta tabla saldría de lo registrado en una semana de uso en modo observación y sirve para decidir si el paso a «preguntar de verdad» genera demasiadas preguntas. La fecha de paso automático es 14 días después de fusionar S1.</p>
+<hr>
+
+<h2>Lo que este prototipo NO enseña</h2>
+<ul>
+<li>No existe ninguna orden: todo es texto de ejemplo.</li>
+<li>Ningún dato de la tabla es real.</li>
+<li>No decide qué sitios van en tu lista; eso se ajusta en S1 con lo observado.</li>
+</ul>
+
+<h2>Para confirmar o rechazar</h2>
+<ol>
+<li>¿Las tres preguntas y el rechazo se entienden sin conocer nada interno?</li>
+<li>¿Te parecerían demasiadas las preguntas de la tabla (7 de 13)?</li>
+<li>¿Falta algún tipo de llamada que esperabas ver?</li>
+</ol>
+</body></html>
