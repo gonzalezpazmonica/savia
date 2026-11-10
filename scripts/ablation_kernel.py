@@ -13,6 +13,11 @@ Nunca borra ni mueve nada en el repositorio. Cero invocaciones de modelo:
 los hooks ``type: prompt`` se registran como no evaluados. Un falso allow
 aborta (``ABORT_FALSE_ALLOW``); ningún resultado clasifica un recurso como
 CORE_* ni autoriza retiradas.
+
+SE-510 D1 (subcomando ``guard-corpus``): el mismo despachador ejecuta el corpus
+de órdenes legítimas (``config/guard-allow-corpus.json``) con sus fixtures; un
+caso ALLOW bloqueado es ``FALSE_BLOCK`` (umbral 0, exit 1) y un par peligroso
+que pasa es ``FALSE_ALLOW`` (exit 3). ``--hooks-rev`` reproduce hooks antiguos.
 """
 from __future__ import annotations
 
