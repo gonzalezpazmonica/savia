@@ -51,16 +51,18 @@ check_authorization() {
     echo "To authorize testing of '${host}', create the file:"
     echo "  ${auth_file}"
     echo ""
-    echo "Contents must include the word 'AUTHORIZED'."
+    echo "Its first line must be exactly 'AUTHORIZED'."
     echo "Only test endpoints you own or have explicit permission to test."
     exit 1
   fi
 
-  # La palabra debe aparecer entera y sin negar: "UNAUTHORIZED" o "NOT AUTHORIZED"
-  # contienen la subcadena pero significan lo contrario (fail-closed).
-  if ! grep -qE '(^|[^A-Za-z])AUTHORIZED([^A-Za-z]|$)' "${auth_file}" \
-     || grep -qiE '(^|[^A-Za-z])(NOT|NO|NEVER|UN)[ _-]?AUTHORIZED' "${auth_file}"; then
-    echo "ERROR: Authorization file does not contain 'AUTHORIZED': ${auth_file}"
+  # Allowlist estricta, igual que network-recon (S03r): la primera línea debe ser
+  # exactamente AUTHORIZED. Una denylist de negaciones dejaba pasar
+  # "NOT  AUTHORIZED", "NOT YET AUTHORIZED" o "REVOKED (was AUTHORIZED)".
+  local first_line
+  first_line=$(head -n 1 "${auth_file}" | tr -d '\r')
+  if [[ "${first_line}" != "AUTHORIZED" ]]; then
+    echo "ERROR: Authorization file does not start with the line 'AUTHORIZED': ${auth_file}"
     exit 1
   fi
 
