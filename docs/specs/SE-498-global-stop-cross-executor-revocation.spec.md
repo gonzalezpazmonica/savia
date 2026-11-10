@@ -359,7 +359,7 @@ Revertir la PR deja los cuatro STOP nativos como están hoy. El directorio `~/.s
 - respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
-- prototipo: la salida de `pause`, `reconcile` y `resume` sobre un fixture con cuatro ejecutores y un efecto en vuelo.
+- prototipo: `docs/specs/assets/SE-498-prototipo.md` — la salida de `pause`, `reconcile` y `resume` sobre un fixture con cuatro ejecutores y un efecto en vuelo.
 
 ### Confirmación del prototipo
 - fecha: pendiente (obligatoria antes de poner S1 en curso)
