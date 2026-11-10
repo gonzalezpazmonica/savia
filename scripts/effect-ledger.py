@@ -398,7 +398,10 @@ def grace_passed(op, row, now):
 
 def succeed(led, op, row, res, attribution):
     args = json.loads(row["args"])
-    body = led.add_receipt(row, args, evidence_from(res), attribution, op.get("unverified", []))
+    evidence = evidence_from(res)
+    # El recibo no afirma más de lo observado: lo que falta en la evidencia queda como no verificado.
+    unverified = list(op.get("unverified", [])) + sorted(k for k, v in evidence.items() if v is None)
+    body = led.add_receipt(row, args, evidence, attribution, unverified)
     led.update(row["effect_id"], state="SUCCEEDED", receipt=body, observation=canon(res.get("obs")),
                claim_token=None)
     led.event(row["effect_id"], "SUCCEEDED", {"attribution": attribution})
@@ -831,8 +834,9 @@ def cmd_verify(env, ops, a):
     note = "unverified: " + (",".join(body.get("unverified") or []) or "-")
     if res["kind"] == "UNKNOWN":
         return EXIT_REVIEW, f"UNVERIFIED {row['effect_id']} cadena íntegra, sonda no concluyente; {note}"
-    if res["kind"] == "MERGED" and res["commit"] == ev.get("merge_commit") and res["head"] == ev.get("headRefOid") \
-            and isinstance(ev.get("mergedBy"), str) and res["login"].lower() == ev["mergedBy"].lower():
+    if res["kind"] == "MERGED" and ev.get("merge_commit") and res["commit"] == ev["merge_commit"] \
+            and ev.get("headRefOid") in (None, res["head"]) \
+            and (ev.get("mergedBy") is None or res["login"].lower() == str(ev["mergedBy"]).lower()):
         return EXIT_OK, f"VERIFIED {row['effect_id']} {note}"
     return EXIT_FAIL, f"FAIL {row['effect_id']} el remoto contradice el recibo"
 

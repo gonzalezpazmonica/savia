@@ -273,6 +273,20 @@ EOF
   [ "$(field "$SE493_REPO#52" attempt)" = 1 ]
 }
 
+@test "2d: PREPARED huérfano con head A + prepare con head B → 0; el intento A queda FAILED sin envío" {
+  se493_prepare 53 "$SE493_HEAD_A" squash >/dev/null
+  kill "$HOLDER"; wait "$HOLDER" 2>/dev/null || true
+  run se493_prepare 53 "$SE493_HEAD_B" squash
+  [ "$status" -eq 0 ]
+  [ "$(field "$SE493_REPO#53" attempt)" = 2 ]
+  f=$(python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute("select state||\":\"||failure from effects where attempt=1 and idempotency_key=?",(sys.argv[2],)).fetchone()[0])' "$SAVIA_EFFECT_LEDGER" "$SE493_REPO#53")
+  [ "$f" = "FAILED:abandoned_unsent" ]
+  # con el llamador vivo, el mismo cambio de head da 6
+  se493_prepare 54 "$SE493_HEAD_A" squash >/dev/null
+  run se493_prepare 54 "$SE493_HEAD_B" squash
+  [ "$status" -eq 6 ]
+}
+
 # ── AC-q — reintento tras rechazo y resync (2d.3) ────────────────────────
 
 @test "AC-q: DISPATCHED A con rechazo, sonda OPEN con head B → prepare B da 0, A superseded" {
@@ -373,6 +387,9 @@ to_review() {  # PR -> NEEDS_REVIEW (dispatched) con UNKNOWN pasada la gracia
   se493_view_merged "$SE493_HEAD_A" "cuenta-sintetica-a"
   run led dispatch "$e" --claim "$t"
   [ "$status" -eq 4 ]; [[ "$output" == *"review_origin=pre_probe" ]]
+  [ "$(field "$SE493_REPO#76" state)" = NEEDS_REVIEW ]
+  [ "$(field "$SE493_REPO#76" review_origin)" = pre_probe ]
+  [ "$(field "$SE493_REPO#76" dispatched_at)" = "" ]
   run led resolve "$e" --by-probe
   [ "$status" -eq 2 ]
   se493_view_open "$SE493_HEAD_A"
@@ -396,6 +413,17 @@ close_ok() {  # PR -> SUCCEEDED por sonda; deja EID
   close_ok 81 1111111111111111111111111111111111111111
   run led verify-receipt "$EID"
   [ "$status" -eq 0 ]; [[ "$output" == VERIFIED*"unverified: method"* ]]
+}
+
+@test "AC-h: recibo de complete sin headRefOid ni mergedBy → VERIFIED sin afirmar esos campos; otro commit → FAIL" {
+  se493_to_dispatched 85
+  led complete "$EID" --claim "$TOK" --response '{"mergeCommit":{"oid":"4444444444444444444444444444444444444444"}}' >/dev/null
+  se493_view_merged "$SE493_HEAD_A" "cuenta-sintetica-a" 4444444444444444444444444444444444444444
+  run led verify-receipt "$EID"
+  [ "$status" -eq 0 ]; [[ "$output" == *"unverified: method,headRefOid,mergedBy"* ]]
+  se493_view_merged "$SE493_HEAD_A" "cuenta-sintetica-a" 5555555555555555555555555555555555555555
+  run led verify-receipt "$EID"
+  [ "$status" -eq 1 ]
 }
 
 @test "AC-h: FAIL (1) si cambia el merge_commit remoto; UNVERIFIED (4) con sonda UNKNOWN o sin gh" {
