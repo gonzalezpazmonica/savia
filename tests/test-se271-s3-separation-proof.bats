@@ -467,3 +467,59 @@ assert d['separation_intact'] is True and d['parse_errors']==0
   [ "$status" -eq 2 ]
   [[ "$output" == *"unknown argument: --bogus"* ]]
 }
+
+# ── Revisión de seguridad #1507 (P2-2, P2-3) ─────────────────────────────────
+
+s03t_inactive_prod() { printf 'wall:\n  mode: strict\n  active: false\n' > "$SB/engagements/acme/prod.yaml"; }
+
+@test "generate: client slug is matched literally, never as a regex (a.b does not accept client:axb)" {
+  s03t_tree
+  mkdir -p "$SB/engagements/a.b/artifacts"
+  printf 'wall:\n  mode: strict\n  active: true\n' > "$SB/engagements/a.b/prod.yaml"
+  printf 'notes client:axb\n' > "$SB/engagements/a.b/artifacts/x.md"
+  run bash "$P" generate --client a.b --json
+  [ "$status" -eq 1 ]
+  python3 -c "
+import json,sys
+smp=json.loads(sys.argv[1])['engagements'][0]['samples'][0]
+assert smp['status']=='contaminated', smp
+" "$output"
+}
+
+@test "all: an engagement name with a quote cannot inject Python code" {
+  s03t_tree; s03t_art own.md "client:acme"
+  # Sin «/» en el nombre: la marca se crearía en el cwd, que es el árbol aislado.
+  name="e'+str(__import__('os').system('touch PWNED'))+'"
+  printf 'wall:\n  mode: strict\n  active: true\n' > "$SB/engagements/acme/$name.yaml"
+  cd "$SB"
+  run bash "$P" all --json
+  [ ! -e "$SB/PWNED" ]
+  python3 -c "
+import json,sys
+d=json.loads(sys.argv[1])
+names=sorted(e['engagement'] for e in d['engagements'])
+assert names==sorted(['prod',sys.argv[2]]), names
+" "$output" "$name"
+}
+
+@test "all: zero active engagements is not a proof of separation (exit 1, intact false)" {
+  s03t_tree; s03t_inactive_prod
+  run bash "$P" all --json
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'"total_engagements":0'* ]]
+  [[ "$output" == *'"separation_intact":false'* ]]
+  run bash "$P" all
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO ENGAGEMENTS EVALUATED"* ]]
+  [[ "$output" != *"SEPARATION INTACT"* ]]
+}
+
+@test "all: when the proof cannot be parsed, names with quotes still yield valid JSON" {
+  s03t_tree; s03t_inactive_prod; s03t_art own.md "client:acme"
+  printf 'wall:\n  mode: strict\n  active: true\n' > "$SB/engagements/acme/q\"x.yaml"
+  real_py="$(command -v python3)"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$SB/bin/python3"; chmod +x "$SB/bin/python3"
+  run env PATH="$SB/bin:$PATH" bash "$P" all --json
+  [ "$status" -eq 1 ]
+  "$real_py" -c "import json,sys; d=json.loads(sys.argv[1]); assert d['parse_errors']==1 and d['engagements'][0]['error']=='parse-failed', d" "$output"
+}
