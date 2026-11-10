@@ -369,3 +369,12 @@ rep() { python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(eval(
   [ -f "$SB/output/security/mobile-scan-$(date +%Y%m%d).json" ]
   [[ "$output" == *"Report: $SB/output/security/mobile-scan-$(date +%Y%m%d).json"* ]]
 }
+
+@test "scan: an empty (zero-byte) APK is never clean, it is unknown with decompile unreadable" {
+  mk_sandbox; : > "$FAKE_TMPDIR/empty.apk"
+  run_scan --apk "$FAKE_TMPDIR/empty.apk"
+  [ "$status" -eq 0 ]
+  [[ "${lines[-1]}" == 'gate-result: {"result":"unknown",'* ]]
+  [[ "${lines[-1]}" == *'{"check":"decompile","reason":"unreadable"}'* ]]
+  [[ "$output" != *'"result":"clean"'* ]]
+}
