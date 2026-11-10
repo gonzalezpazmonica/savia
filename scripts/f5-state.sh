@@ -8,6 +8,10 @@ CMD="${1:-}"; OP="${2:-pr.merge}"; KEY="${3:-}"
 # SE-493 S1: hasta que el Effect Ledger lo sustituya (S3), este contrato solo vale para pr.merge.
 # Otra op heredaría la reejecución de efectos inciertos (H1-H10): se rechaza antes de tocar nada.
 if [[ "$OP" != "pr.merge" ]]; then echo "BLOCK: op '$OP' no admitida en f5-state.sh (solo pr.merge; SE-493)" >&2; exit 2; fi
+# La clave es un número de PR: forma ancha permitiría `../` en la ruta de la reserva.
+case "$CMD" in reserve|mark_submitted|close|release|status)
+  [[ "$KEY" =~ ^[1-9][0-9]{0,9}$ ]] || { echo "BLOCK: clave '$KEY' no es un número de PR (SE-493)" >&2; exit 2; } ;;
+esac
 DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"; mkdir -p "$DIR"
 F="$DIR/${OP}__${KEY}.json"
 

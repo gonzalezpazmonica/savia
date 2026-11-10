@@ -290,6 +290,20 @@ def holder_start(env, pid):
 
 # ── Ledger SQLite ──────────────────────────────────────────────────────────
 
+def tighten(path, mode):
+    """Cierra a `mode` un fichero o directorio existente con permisos más amplios."""
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return
+    if st.st_mode & 0o777 & ~mode == 0:
+        return
+    if st.st_uid != os.getuid():
+        warn(f"{path} tiene permisos {oct(st.st_mode & 0o777)} y no es tuyo: no se pueden cerrar a {oct(mode)}")
+        return
+    os.chmod(path, mode)
+
+
 class Ledger:
     def __init__(self, env):
         self.env = env
@@ -300,13 +314,20 @@ class Ledger:
             # El ledger guarda logins, actor y tokens: solo la persona dueña lo lee (0600/0700).
             os.umask(0o077)
             os.makedirs(os.path.dirname(env.path), mode=0o700, exist_ok=True)
+            real = os.path.realpath(env.path)
+            # La umask solo cubre lo nuevo: lo que ya existía con permisos más abiertos se cierra.
+            tighten(os.path.dirname(real), 0o700)
             # Apertura serializada: cambiar a WAL un fichero nuevo devuelve BUSY sin esperar
             # al busy_timeout si otro proceso lo inicializa a la vez. Lock junto al fichero real.
-            lock = open(os.path.realpath(env.path) + ".lock", "a", encoding="utf-8")
+            lock = open(real + ".lock", "a", encoding="utf-8")
             self._flock(lock)
+            for f in (real, real + ".lock"):
+                tighten(f, 0o600)
             self.db = sqlite3.connect(env.path, timeout=self.busy_s, isolation_level=None)
             self.db.row_factory = sqlite3.Row
             self.db.execute("PRAGMA journal_mode=WAL")
+            for f in (real + "-wal", real + "-shm"):
+                tighten(f, 0o600)
             self.db.execute("PRAGMA synchronous=FULL")
             if env.hook("SAVIA_EFFECT_FAULT") == "pragma_normal":
                 self.db.execute("PRAGMA synchronous=NORMAL")
@@ -664,6 +685,10 @@ def cmd_complete(env, ops, a):
         if not (isinstance(commit, str) and commit.strip()):
             led.rollback()
             return EXIT_INFLIGHT, f"IN_FLIGHT {row['effect_id']} (respuesta sin {op['response_evidence']}: la cierra la sonda)"
+        if not valid("sha40", commit):
+            # La evidencia del recibo es un commit; una cadena arbitraria no lo es.
+            led.rollback()
+            return EXIT_INFLIGHT, f"IN_FLIGHT {row['effect_id']} ({op['response_evidence']} no es un sha de 40 hex: la cierra la sonda)"
         if row["dispatch_rejected"]:
             led.rollback()
             return EXIT_INFLIGHT, f"IN_FLIGHT {row['effect_id']} (rechazo anotado: solo la sonda lo cierra, 3e)"
@@ -790,6 +815,11 @@ def cmd_resolve(env, ops, a):
     res = probe(op, args)
     now = env.now()
     if present_match(res, args, row["actor_remote"]):
+        if row["dispatch_rejected"]:
+            # 3e: un rechazo anotado nunca deja cerrar como propio un PRESENT posterior,
+            # aunque la fila llegara a revisión por la rama UNKNOWN (origen dispatched).
+            raise Fail(EXIT_ERR, "rechazo anotado y efecto presente: este ledger no lo pidió con éxito; "
+                                 "solo ruta manual con grant (Reglas 3e y 5)")
         verdict = "succeeded"
     elif absent(res, args) and grace_passed(op, row, now):
         verdict = "failed"

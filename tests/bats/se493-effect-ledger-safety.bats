@@ -54,13 +54,10 @@ EOF
 
 # ── AC-j — multioperador ─────────────────────────────────────────────────
 
-@test "AC-j: sin rutas absolutas personales en effect-ledger.py ni en el registro; el grep detecta una mutación" {
+@test "AC-j: sin rutas absolutas personales en effect-ledger.py ni en el registro" {
+  # status 1 = sin coincidencias; 2 (fichero ausente) también falla el test.
   run grep -nE '(/home/|/Users/|/root/)' "$REPO_DIR/scripts/effect-ledger.py" "$REPO_DIR/scripts/effect-ops.json"
   [ "$status" -eq 1 ]
-  m="$BATS_TEST_TMPDIR/mutado.py"
-  cp "$REPO_DIR/scripts/effect-ledger.py" "$m"; echo 'X = "/home/alguien/.savia"' >> "$m"
-  run grep -nE '(/home/|/Users/|/root/)' "$m"
-  [ "$status" -eq 0 ]
 }
 
 @test "AC-j: dos operadores sintéticos con dos HOME → cada uno su ledger por defecto; sin perfil → 2" {

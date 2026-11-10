@@ -5,7 +5,9 @@ set -uo pipefail
 CMD="${1:-}"; OP="${2:-}"; KEY="${3:-}"
 # SE-493 S1: contrato deprecado (H1). Ninguna op distinta de pr.merge puede reutilizarlo.
 case "$CMD" in reserve|close|status)
-  if [[ "$OP" != "pr.merge" ]]; then echo "BLOCK: op '$OP' no admitida en effect-reservation.sh (solo pr.merge; SE-493)" >&2; exit 2; fi ;;
+  if [[ "$OP" != "pr.merge" ]]; then echo "BLOCK: op '$OP' no admitida en effect-reservation.sh (solo pr.merge; SE-493)" >&2; exit 2; fi
+  # Sin `/` ni punto inicial: la clave no puede salir del directorio de reservas.
+  [[ "$KEY" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || { echo "BLOCK: clave '$KEY' no válida (SE-493)" >&2; exit 2; } ;;
 esac
 DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"; mkdir -p "$DIR"
 F="$DIR/${OP}__${KEY}.json"
