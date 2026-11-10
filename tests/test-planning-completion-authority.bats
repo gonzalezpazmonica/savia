@@ -118,3 +118,82 @@ gitc() { git -C "$R" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c
   [ "$status" -ne 0 ]
   [[ "$output" == *"superficial"* ]]
 }
+
+# ── Predicado de cierre: forma, rutas de evidencia y revisión humana (S03s) ──
+# Ref: docs/specs/SE-396 P01 y SE-444; consumidores: planning-transition.sh y roadmap.sh.
+ev_ok='[{"criterion":"AC1","file":"docs/ev.md"}]'
+
+@test "forma: merge_pr debe ser entero positivo (0, negativo, decimal o texto no valen)" {
+  for pr in 0 -1 1.5 '"12"' null; do
+    c=$(jq -nc --argjson pr "$pr" --argjson ev "$ev_ok" '{merge_pr: $pr, acceptance_evidence: $ev}')
+    run planning_completion_shape_valid "$c"
+    [ "$status" -ne 0 ]
+  done
+  run planning_completion_shape_valid "$(completion "$ev_ok")"
+  [ "$status" -eq 0 ]
+}
+
+@test "forma: evidencia vacía, criterio vacío, elemento que no es objeto o JSON roto no valen" {
+  for ev in '[]' '[{"criterion":"","file":"docs/ev.md"}]' '["docs/ev.md"]' '[{"criterion":"AC1","file":""}]'; do
+    run planning_completion_shape_valid "$(completion "$ev")"
+    [ "$status" -ne 0 ]
+  done
+  run planning_completion_shape_valid '{merge_pr: 12'
+  [ "$status" -ne 0 ]
+}
+
+@test "ruta: absoluta, con .. aunque caiga dentro, directorio o inexistente no son evidencia" {
+  mkdir -p "$FIX/docs/sub"
+  # "/docs/ev.md" existe también como $FIX//docs/ev.md: solo la regla de ruta absoluta lo rechaza.
+  for ref in /etc/hostname /docs/ev.md "docs/../docs/ev.md" docs/sub docs/missing.md ""; do
+    run planning_evidence_file_valid "$FIX" "$ref"
+    [ "$status" -ne 0 ]
+  done
+  run planning_evidence_file_valid "$FIX" "./docs/ev.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "ruta: un enlace simbólico dentro del repo que apunta fuera no es evidencia (seguridad)" {
+  echo secreto > "$BATS_TEST_TMPDIR/fuera.md"
+  ln -s "$BATS_TEST_TMPDIR/fuera.md" "$FIX/docs/enlace.md"
+  run planning_evidence_file_valid "$FIX" docs/enlace.md
+  [ "$status" -ne 0 ]
+  ln -s ev.md "$FIX/docs/interno.md"
+  run planning_evidence_file_valid "$FIX" docs/interno.md
+  [ "$status" -eq 0 ]
+}
+
+@test "ruta: un nombre con salto de línea no se parte en dos rutas existentes (seguridad)" {
+  echo ok > "$FIX/docs/otro.md"
+  c=$(jq -nc '{merge_pr: 12, acceptance_evidence: [{criterion: "AC1", file: "docs/ev.md\ndocs/otro.md"}]}')
+  [ ! -e "$FIX/docs/ev.md"$'\n'"docs/otro.md" ]
+  run planning_acceptance_evidence_valid "$FIX" "$c"
+  [ "$status" -ne 0 ]
+}
+
+@test "cierre: basta una evidencia inválida entre varias válidas para rechazar" {
+  c=$(completion '[{"criterion":"AC1","file":"docs/ev.md"},{"criterion":"AC2","file":"docs/missing.md"},{"criterion":"AC3","file":"docs/ev.md"}]')
+  run planning_acceptance_evidence_valid "$FIX" "$c"
+  [ "$status" -ne 0 ]
+}
+
+@test "revisión humana: solo APPROVED exacto con evidencia no vacía vale" {
+  base=$(completion "$ev_ok")
+  ok=$(jq -c '.human_review = {status: "APPROVED", evidence: "PR #12 review"}' <<<"$base")
+  run planning_human_review_approved "$ok"
+  [ "$status" -eq 0 ]
+  for hr in '{"status":"approved","evidence":"x"}' '{"status":"APPROVED"}' '{"status":"APPROVED","evidence":""}' '"APPROVED"' 'null'; do
+    c=$(jq -c --argjson hr "$hr" '.human_review = $hr' <<<"$base")
+    run planning_human_review_approved "$c"
+    [ "$status" -ne 0 ]
+  done
+  run planning_human_review_approved "$base"
+  [ "$status" -ne 0 ]
+}
+
+@test "autoridad: un valor desconocido cuenta como inferior a la requerida; elementos no objeto se ignoran" {
+  c=$(jq -nc '{merge_pr: 1, acceptance_evidence: ["suelto", {criterion: "AC7", file: "docs/ev.md", authority: "experta", authority_required: "estatica"}]}')
+  run planning_unverified_authority_list "$c"
+  [ "$status" -eq 0 ]
+  [[ "$output" == $'AC7\tinsuficiente\texperta\testatica' ]]
+}

@@ -25,8 +25,19 @@ fi
 TMP=$(mktemp /tmp/glm-digest.XXXXXX)
 trap 'rm -f "$TMP"' EXIT
 
-# Replace current digest value with placeholder before computing
-sed 's/"value": "[^"]*"/"value": "<computed>"/' "$MANIFEST" > "$TMP"
+# Only manifest_digest.value is replaced by the placeholder — the same
+# transformation glm-verify.sh applies. Replacing every "value" field (as this
+# script used to) hashed a different text than verify and left the other
+# fields' content outside the digest.
+STORED=$(python3 -c '
+import json, sys
+print(json.load(open(sys.argv[1])).get("manifest_digest", {}).get("value", ""))
+' "$MANIFEST" 2>/dev/null) || { echo "ERROR: $MANIFEST is not valid JSON" >&2; exit 1; }
+if [[ "$STORED" != "<computed>" && ! "$STORED" =~ ^[a-f0-9]{64}$ ]]; then
+  echo "ERROR: manifest_digest.value must be <computed> or a sha256 hex digest" >&2
+  exit 1
+fi
+sed "s/\"value\": \"${STORED}\"/\"value\": \"<computed>\"/" "$MANIFEST" > "$TMP"
 
 DIGEST=$(sha256sum "$TMP" | awk '{print $1}')
 
@@ -35,8 +46,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-# Replace in-place: sed works on the actual manifest
-sed -i "s/\"value\": \"<computed>\"/\"value\": \"${DIGEST}\"/" "$MANIFEST"
-sed -i "s/\"value\": \"[a-f0-9]\{64\}\"/\"value\": \"${DIGEST}\"/" "$MANIFEST"
+# Replace in-place only the digest field (never other 64-hex "value" fields).
+sed -i "s/\"value\": \"${STORED}\"/\"value\": \"${DIGEST}\"/" "$MANIFEST"
 
 echo "PASS: manifest_digest updated → sha256:${DIGEST}"
