@@ -3,6 +3,7 @@
 # Comportamiento de scripts/exit-purge-verify.sh: tras olvidar un engagement,
 # «CLEAN» solo si no queda ninguna referencia viva fuera de las rutas permitidas.
 # El script deriva ROOT de su propia ubicación: se copia a un árbol aislado.
+# Ref: docs/propuestas/SE-272-servicio-gestionado.md · docs/specs/SE-376-quality-debt-burn-down.spec.md
 
 SRC="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)/scripts/exit-purge-verify.sh"
 
@@ -189,4 +190,38 @@ verify() { run bash "$S" verify --engagement "$@"; }
   [[ "$output" == *"Tombstone already exists"* ]]
   [[ "$output" == *'"verification_status": "verified"'* ]]
   [ "$(sha256sum "$WS/.savia-tombstones/acme.json")" = "$before" ]
+}
+
+@test "safety: the script runs with set -uo pipefail" {
+  run grep -c '^set -uo pipefail$' "$SRC"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 1 ]
+}
+
+@test "empty engagement name is rejected with exit 2 and never reports CLEAN" {
+  verify ""
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--engagement required"* ]]
+  [[ "$output" != *"RESULT: CLEAN"* ]]
+}
+
+@test "boundary: a 64-character engagement name is accepted and 65 is rejected" {
+  local n64 n65
+  n64=$(printf 'a%.0s' $(seq 64)); n65="${n64}a"
+  verify "$n64"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RESULT: CLEAN"* ]]
+  verify "$n65"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"invalid engagement name"* ]]
+}
+
+@test "an empty --exclude-dir value excludes nothing (no false CLEAN)" {
+  echo "acme" > "$WS/docs/notes.md"
+  run bash "$S" verify --engagement acme --exclude-dir ""
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[VIOLATION] docs/notes.md:1"* ]]
+  run bash "$S" verify --engagement acme --exclude-dir "."
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[VIOLATION] docs/notes.md:1"* ]]
 }
