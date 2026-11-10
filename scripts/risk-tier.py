@@ -43,6 +43,9 @@ GOVERNANCE_EXACT = (
     "config/operator-grant-signers", "scripts/operator-grant.sh", "scripts/push-pr.sh",
 )
 GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/")
+# SE-510 D1: corpus de órdenes que ninguna guarda puede bloquear. Cada entrada es una exención:
+# cambiarlo exige revisión humana explícita (tier 3), para que no sea una vía de exenciones sueltas.
+TIER_3_EXACT = ("config/guard-allow-corpus.json",)
 
 
 def is_governance(path: str) -> bool:
@@ -119,6 +122,10 @@ def classify(files: list[str]) -> dict:
         if is_governance(f):
             tier = max(tier, 4)
             rationale.append(f"path de gobernanza: {f}")
+            continue
+        if fl in TIER_3_EXACT:
+            tier = max(tier, 3)
+            rationale.append(f"corpus de exenciones de guardas (SE-510): {f}")
             continue
         # SAM/SCM regenerado: no eleva (p. ej. views/authority.json contiene "auth")
         if (fl in SCM_GENERATED_FILES or fl.startswith(SCM_GENERATED_DIRS)) and not _scm_hand_edited(fl):
