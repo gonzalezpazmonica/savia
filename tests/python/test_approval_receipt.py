@@ -163,7 +163,8 @@ class R1Artefacto(Base):
                      f"aprobaciones/savia-merge/20261110-pr-7..-{n8}.json",
                      f"aprobaciones/savia-merge/20261110-pr-7ñ-{n8}.json",
                      f"aprobaciones/otro-tipo/20261110-pr-7-{n8}.json",
-                     f"aprobaciones/savia-merge/2026111-pr-7-{n8}.json"):
+                     f"aprobaciones/savia-merge/2026111-pr-7-{n8}.json",
+                     ruta + "\n"):
             with self.subTest(ruta=mala), self.assertRaises(ar.Rechazo) as cm:
                 ar.validar_artefacto(art, mala)
             self.assertEqual(cm.exception.condicion, "R2.5")
@@ -185,6 +186,8 @@ class R1Artefacto(Base):
         ruta, art = self.artefacto()
         casos = {"nonce corto": {**art, "nonce": art["nonce"][:15]},
                  "nonce mayúsculas": {**art, "nonce": art["nonce"].upper()},
+                 "nonce con salto": {**art, "nonce": art["nonce"] + "\n"},
+                 "fecha con salto": {**art, "emitida": art["emitida"] + "\n"},
                  "clave extra": {**art, "extra": 1},
                  "sin resumen": {k: v for k, v in art.items() if k != "resumen"},
                  "esquema": {**art, "esquema": "aprobacion/2"},
@@ -212,6 +215,9 @@ class R1Artefacto(Base):
     def test_objetos_mal_formados(self):
         malos = [("yema-contrato", {"id": "c1", "huella": "ab" * 16}),
                  ("yema-contrato", {"id": "C1", "huella": "a" * 64}),
+                 ("yema-contrato", {"id": "c1\n", "huella": "a" * 64}),
+                 ("yema-contrato", {"id": "c1", "huella": "a" * 64 + "\n"}),
+                 ("savia-merge", {"repo": REPO + "\n", "prs": [{"numero": 1, "head_sha": SHA_A}]}),
                  ("savia-merge", {"repo": "org/savia", "prs": []}),
                  ("savia-merge", {"repo": "org/..", "prs": [{"numero": 1, "head_sha": SHA_A}]}),
                  ("savia-merge", {"repo": REPO, "prs": [{"numero": 1, "head_sha": SHA_A[:12]}]}),
@@ -272,6 +278,101 @@ class R2Recibo(Base):
         self.git("config", "gpg.program", falso)
         self.git("config", "gpg.openpgp.program", falso)
         self.assertRechazo(self.verif(m), 2, "R2.3")
+
+    # ---- P1 de la revisión de seguridad: el espejo no puede alterar lo que se lee.
+    def _artefacto_falso(self, art):
+        """Mismo tipo, ruta, id y nonce; otra cabeza. Devuelve el oid del blob falso."""
+        obj = {"repo": REPO, "prs": [{"numero": 7, "head_sha": SHA_B}]}
+        falso = {**art, "objeto": obj, "resumen": ar.generar_resumen("savia-merge", obj)}
+        f = os.path.join(self.tmp, "falso.json")
+        with open(f, "w") as fh:
+            fh.write(json.dumps(falso))
+        return self.git("hash-object", "-w", f)
+
+    def _blob_de(self, m, ruta):
+        return self.git("rev-parse", f"{m}:{ruta}")
+
+    ESPERADO_B = {"repo": REPO, "numero": 7, "head_sha": SHA_B}
+
+    def test_refs_replace_no_cambia_el_artefacto(self):
+        m, ruta, art = self.aprobar()
+        self.git("replace", self._blob_de(m, ruta), self._artefacto_falso(art))
+        r = self.verif(m, self.ESPERADO_B)
+        self.assertRechazo(r, 2, "espejo")
+        self.assertIn("replace", r["motivo"])
+
+    def test_replace_ignorado_aunque_no_se_vea_la_ref(self):
+        # Defensa en profundidad: aunque la ref de reemplazo se esconda bajo otro
+        # namespace (GIT_REPLACE_REF_BASE del atacante no llega: el env se limpia),
+        # git no debe aplicar reemplazos al leer.
+        m, ruta, art = self.aprobar()
+        self.git("replace", self._blob_de(m, ruta), self._artefacto_falso(art))
+        esp = ar.Espejo(self.repo)
+        self.assertEqual(esp.out("rev-parse", f"{m}:{ruta}"), self._blob_de(m, ruta) + "\n")
+        contenido = esp.run("cat-file", "blob", self._blob_de(m, ruta)).stdout
+        self.assertEqual(json.loads(contenido)["objeto"]["prs"][0]["head_sha"], SHA_A)
+
+    def test_grafts_no_ocultan_un_commit_sin_firmar(self):
+        m1, _, _ = self.aprobar()
+        self.git("commit", "-q", "--allow-empty", "-m", "suelto", fecha=T0 + 90 * dt.timedelta(minutes=1))
+        x = self.git("rev-parse", "HEAD")
+        ruta, art = self.artefacto(objeto={"repo": REPO, "prs": [{"numero": 9, "head_sha": SHA_A}]})
+        m2 = self.fusionar([self.rama(lambda d: self.escribir(ruta, json.dumps(art), d))],
+                           fecha=T0 + 2 * H)
+        self.assertEqual(self.git("rev-parse", f"{m2}^1"), x)
+        os.makedirs(os.path.join(self.repo, ".git", "info"), exist_ok=True)
+        with open(os.path.join(self.repo, ".git", "info", "grafts"), "w") as f:
+            f.write(f"{m2} {m1} {self.git('rev-parse', f'{m2}^2')}\n")
+        r = self.verif(m1, ahora=T0 + 3 * H)
+        self.assertRechazo(r, 2, "espejo")
+        self.assertIn("grafts", r["motivo"])
+        # Sin el fichero de grafts, el commit suelto se ve y se rechaza por R2.2.
+        os.remove(os.path.join(self.repo, ".git", "info", "grafts"))
+        self.assertRechazo(self.verif(m1, ahora=T0 + 3 * H), 2, "R2.2")
+
+    def test_shallow_rechazado(self):
+        m, _, _ = self.aprobar()
+        with open(os.path.join(self.repo, ".git", "shallow"), "w") as f:
+            f.write(self.git("rev-parse", f"{m}^1") + "\n")
+        r = self.verif(m)
+        self.assertRechazo(r, 2, "espejo")
+        self.assertIn("shallow", r["motivo"])
+
+    def test_objeto_suelto_falsificado(self):
+        import zlib
+        m, ruta, art = self.aprobar()
+        blob = self._blob_de(m, ruta)
+        obj = {"repo": REPO, "prs": [{"numero": 7, "head_sha": SHA_B}]}
+        falso = json.dumps({**art, "objeto": obj,
+                            "resumen": ar.generar_resumen("savia-merge", obj)}).encode()
+        p = os.path.join(self.repo, ".git", "objects", blob[:2], blob[2:])
+        os.chmod(p, 0o644)
+        with open(p, "wb") as f:
+            f.write(zlib.compress(b"blob %d\0" % len(falso) + falso))
+        r = self.verif(m, self.ESPERADO_B)
+        self.assertEqual(r["codigo"], 2, r)
+        self.assertEqual(r["condicion"], "espejo", r)
+
+    def test_arbol_suelto_falsificado(self):
+        """El árbol de M apunta a un blob falso con su propio hash correcto: la
+        comprobación del hash del blob no basta; la detecta fsck."""
+        m, ruta, art = self.aprobar()
+        blob_falso = self._artefacto_falso(art)
+        env = {**_git_env(self.gh), "GIT_INDEX_FILE": os.path.join(self.tmp, "idx")}
+
+        def g(*a):
+            return subprocess.run(["git", "-C", self.repo, *a], env=env, check=True,
+                                  capture_output=True).stdout.decode().strip()
+        g("read-tree", m)
+        g("update-index", "--cacheinfo", f"100644,{blob_falso},{ruta}")
+        arbol_falso, arbol = g("write-tree"), g("rev-parse", f"{m}^{{tree}}")
+        obj = os.path.join(self.repo, ".git", "objects")
+        destino = os.path.join(obj, arbol[:2], arbol[2:])
+        os.chmod(destino, 0o644)
+        shutil.copyfile(os.path.join(obj, arbol_falso[:2], arbol_falso[2:]), destino)
+        r = self.verif(m, self.ESPERADO_B)
+        self.assertRechazo(r, 2, "espejo")
+        self.assertIn("fsck", r["motivo"])
 
     def test_autor_bot(self):
         m, _, _ = self.aprobar(autor=BOT)
@@ -506,8 +607,12 @@ class AC1bConsumo(Base):
                 self.assertEqual(len(f.read().splitlines()), 1)
 
     def test_consumir_espera_al_cerrojo_exclusivo(self):
+        """Determinista: espera a ver al hijo BLOQUEADO en flock (/proc/locks, marca '->')
+        en vez de dormir un tiempo fijo. Sin flock el hijo nunca aparece como esperando."""
         import fcntl
         import time
+        if not os.path.exists("/proc/locks"):
+            self.fail("/proc/locks no disponible: este test exige Linux")
         m, _, _ = self.aprobar()
         pol = os.path.join(self.tmp, "pol.json")
         with open(pol, "w") as f:
@@ -515,24 +620,32 @@ class AC1bConsumo(Base):
         os.makedirs(self.pol["libro"], exist_ok=True)
         cerrojo = open(os.path.join(self.pol["libro"], ".cerrojo"), "a")
         fcntl.flock(cerrojo, fcntl.LOCK_EX)
+        ino = os.fstat(cerrojo.fileno()).st_ino
         try:
             p = subprocess.Popen([sys.executable, SCRIPT, "consumir", "--politica", pol, "--espejo",
                                   self.repo, "--commit", m, "--tipo", "savia-merge", "--ahora",
                                   ar.fmt_fecha(T0 + 2 * H), "--esperado",
                                   json.dumps({"repo": REPO, "numero": 7, "head_sha": SHA_A})],
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            time.sleep(1.5)
-            self.assertIsNone(p.poll(), "consumir no esperó al cerrojo del libro")
+            limite = time.monotonic() + 60
+            bloqueado = False
+            while not bloqueado:
+                self.assertIsNone(p.poll(), "consumir terminó sin esperar al cerrojo del libro")
+                self.assertLess(time.monotonic(), limite, "el hijo no llegó a bloquearse")
+                with open("/proc/locks") as f:
+                    bloqueado = any("->" in l and f" {p.pid} " in l and f":{ino} " in l for l in f)
+                time.sleep(0.02)
+            self.assertFalse(os.path.exists(os.path.join(self.pol["libro"], "consumidos.jsonl")))
         finally:
             fcntl.flock(cerrojo, fcntl.LOCK_UN)
             cerrojo.close()
-        self.assertEqual(p.wait(timeout=30), 0)
+        self.assertEqual(p.wait(timeout=60), 0)
 
-    def test_accion_fallida_tras_consumir_no_devuelve_el_recibo(self):
+    def test_no_hay_devolucion_del_recibo_tras_consumir(self):
         m, _, _ = self.aprobar()
         self.assertEqual(self.verif(m, consumir=True)["codigo"], 0)
-        # La acción (p. ej. gh pr merge) iría aquí y falla: no hay forma de «devolver» el
-        # recibo; ni verificar ni un segundo consumir lo aceptan.
+        # No se ejecuta ninguna acción aquí: el test solo fija que, una vez anotado, no hay
+        # vía para «devolver» el recibo (ni verificar ni un segundo consumir lo aceptan).
         self.assertRechazo(self.verif(m), 1, "R2.8")
         self.assertRechazo(self.verif(m, consumir=True), 1, "R2.8")
 
@@ -585,6 +698,18 @@ class AC2FailClosed(Base):
         self.pol["rama"] = "no-existe"
         self.assertRechazo(self.verif(m), 2, "R2.1")
 
+    def test_commit_y_rama_fuera_de_lista_blanca(self):
+        m, _, _ = self.aprobar()
+        for sha in (m[:12], m.upper(), m + "\n", "--output=/tmp/x", "main"):
+            with self.subTest(sha=sha):
+                self.assertRechazo(self.verif(sha), 2, "R2.1")
+        for rama in ("-x", "main..x", "+main", "a:b", "main\n"):
+            with self.subTest(rama=rama):
+                self.pol["rama"] = rama
+                r = self.verif(m)
+                self.assertRechazo(r, 2, "R2.1")
+                self.assertIn("lista blanca", r["motivo"])
+
     def test_sin_libro_configurado(self):
         m, _, _ = self.aprobar()
         del self.pol["libro"]
@@ -605,6 +730,18 @@ class Sincronizar(Base):
             ar.sincronizar(espejo, self.repo)
         self.assertEqual(cm.exception.condicion, "R2.1")
         self.assertEqual(self.git("rev-parse", "main", repo=espejo), m1)
+
+    def test_remoto_y_rama_como_opciones_rechazados(self):
+        espejo = os.path.join(self.tmp, "espejo.git")
+        subprocess.run(["git", "clone", "-q", "--bare", self.repo, espejo], check=True,
+                       env=_git_env(self.gh))
+        marca = os.path.join(self.tmp, "ejecutado")
+        for remoto, rama in ((f"--upload-pack=touch {marca};git-upload-pack", "main"),
+                             (self.repo, "+main"), (self.repo, "main:otra"), (self.repo, "-main")):
+            with self.subTest(remoto=remoto, rama=rama), self.assertRaises(ar.Rechazo) as cm:
+                ar.sincronizar(espejo, remoto, rama)
+            self.assertEqual(cm.exception.condicion, "R2.1")
+        self.assertFalse(os.path.exists(marca))
 
 
 if __name__ == "__main__":

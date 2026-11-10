@@ -50,6 +50,7 @@ RE_HEX40 = re.compile(r"^[0-9a-f]{40}$")
 RE_NONCE = re.compile(r"^[0-9a-f]{16}$")
 RE_REPO = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_-][A-Za-z0-9_.-]{0,99}$")
 RE_FECHA = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+RE_RAMA = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}")
 MAX_PRS = 50
 
 APROBADO, NO_VIGENTE, INVALIDO = 0, 1, 2
@@ -72,7 +73,7 @@ def no_vigente(cond, motivo):
 # ---------------------------------------------------------------- R1: artefacto
 
 def parse_fecha(s, cond="R1"):
-    if not isinstance(s, str) or not RE_FECHA.match(s):
+    if not isinstance(s, str) or not RE_FECHA.fullmatch(s):
         raise invalido(cond, f"fecha no ISO-8601 UTC (AAAA-MM-DDTHH:MM:SSZ): {s!r}")
     try:
         return dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
@@ -94,13 +95,13 @@ def validar_objeto(tipo, obj):
     c = "R1"
     if tipo == "yema-contrato":
         _claves(obj, {"id", "huella"}, c, "objeto yema-contrato")
-        if not isinstance(obj["id"], str) or not RE_ID.match(obj["id"]):
+        if not isinstance(obj["id"], str) or not RE_ID.fullmatch(obj["id"]):
             raise invalido(c, "id de contrato fuera de la lista blanca")
-        if not isinstance(obj["huella"], str) or not RE_HEX64.match(obj["huella"]):
+        if not isinstance(obj["huella"], str) or not RE_HEX64.fullmatch(obj["huella"]):
             raise invalido(c, "huella sha256 incompleta o no hex")
     elif tipo == "savia-merge":
         _claves(obj, {"repo", "prs"}, c, "objeto savia-merge")
-        if not isinstance(obj["repo"], str) or not RE_REPO.match(obj["repo"]) or ".." in obj["repo"]:
+        if not isinstance(obj["repo"], str) or not RE_REPO.fullmatch(obj["repo"]) or ".." in obj["repo"]:
             raise invalido(c, "repo fuera de la lista blanca (propietario/nombre)")
         prs = obj["prs"]
         if not isinstance(prs, list) or not 1 <= len(prs) <= MAX_PRS:
@@ -112,17 +113,17 @@ def validar_objeto(tipo, obj):
             if type(n) is not int or n <= 0 or n in vistos:
                 raise invalido(c, "numero de PR no entero positivo o repetido")
             vistos.add(n)
-            if not isinstance(pr["head_sha"], str) or not RE_HEX40.match(pr["head_sha"]):
+            if not isinstance(pr["head_sha"], str) or not RE_HEX40.fullmatch(pr["head_sha"]):
                 raise invalido(c, "head_sha no es un sha1 completo")
     elif tipo == "savia-settings":
         _claves(obj, {"fichero", "sha256_antes", "sha256_despues", "diff"}, c, "objeto savia-settings")
         f = obj["fichero"]
         if (not isinstance(f, str) or not f or len(f) > 200 or not f.isascii()
                 or f.startswith("/") or ".." in f.split("/") or "\\" in f
-                or not re.match(r"^[A-Za-z0-9_./-]+$", f)):
+                or not re.fullmatch(r"[A-Za-z0-9_./-]+", f)):
             raise invalido(c, "fichero de settings fuera de la lista blanca (ruta relativa ASCII)")
         for k in ("sha256_antes", "sha256_despues"):
-            if not isinstance(obj[k], str) or not RE_HEX64.match(obj[k]):
+            if not isinstance(obj[k], str) or not RE_HEX64.fullmatch(obj[k]):
                 raise invalido(c, f"{k} no es un sha256 completo")
         if not isinstance(obj["diff"], str):
             raise invalido(c, "diff debe ser texto")
@@ -162,7 +163,7 @@ def diff_canonico(antes, despues, fichero):
 
 def validar_artefacto(art, ruta, max_horas=MAX_HORAS):
     """R1 + R2.5 (ruta ↔ campos) + R2.6 (esquema, nonce, ventana ≤ 24 h)."""
-    m = RE_RUTA.match(ruta) if isinstance(ruta, str) and ruta.isascii() else None
+    m = RE_RUTA.fullmatch(ruta) if isinstance(ruta, str) and ruta.isascii() else None
     if not m:
         raise invalido("R2.5", f"ruta fuera de la lista blanca: {ruta!r}")
     r_tipo, r_fecha, r_id, r_nonce8 = m.groups()
@@ -173,7 +174,7 @@ def validar_artefacto(art, ruta, max_horas=MAX_HORAS):
     tipo = art["tipo"]
     if tipo not in TIPOS:
         raise invalido("R2.6", f"tipo fuera del enum: {tipo!r}")
-    if not isinstance(art["nonce"], str) or not RE_NONCE.match(art["nonce"]):
+    if not isinstance(art["nonce"], str) or not RE_NONCE.fullmatch(art["nonce"]):
         raise invalido("R2.6", "nonce no son 16 hex")
     emitida = parse_fecha(art["emitida"], "R2.6")
     caduca = parse_fecha(art["caduca"], "R2.6")
@@ -217,15 +218,35 @@ class Espejo:
     def __init__(self, ruta, gnupghome=None, gpg=None):
         self.ruta, self.git = ruta, _which("git")
         self.env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        # Ni objetos de reemplazo (refs/replace) ni grafts: git leería otro contenido
+        # u otros padres que los firmados.
         self.env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull,
-                        LC_ALL="C", GIT_TERMINAL_PROMPT="0")
+                        LC_ALL="C", GIT_TERMINAL_PROMPT="0",
+                        GIT_NO_REPLACE_OBJECTS="1", GIT_GRAFT_FILE=os.devnull)
         if gnupghome:
             self.env["GNUPGHOME"] = gnupghome
         falso = shutil.which("false") or "/bin/false"
         # Precedencia de línea de órdenes: la config del espejo no puede redirigir gpg.
-        self.cfg = ["-c", "core.fsmonitor=false", "-c", f"gpg.program={gpg or falso}",
+        self.cfg = ["-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false",
+                    "-c", "protocol.ext.allow=never",
+                    "-c", f"gpg.program={gpg or falso}",
                     "-c", f"gpg.openpgp.program={gpg or falso}",
                     "-c", f"gpg.x509.program={falso}", "-c", f"gpg.ssh.program={falso}"]
+
+    def integridad(self):
+        """El espejo no es de fiar: sin reemplazos, grafts ni shallow, y cada objeto
+        con el hash que dice tener (fsck recalcula los hashes, también los sueltos)."""
+        if self.out("for-each-ref", "--format=%(refname)", "refs/replace/").strip():
+            raise invalido("espejo", "el espejo tiene refs/replace: rechazado")
+        comun = self.out("rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+        if os.path.lexists(os.path.join(comun, "info", "grafts")):
+            raise invalido("espejo", "el espejo tiene info/grafts: rechazado")
+        if self.out("rev-parse", "--is-shallow-repository").strip() != "false":
+            raise invalido("espejo", "el espejo es shallow: rechazado")
+        p = self.run("fsck", "--no-dangling", "--no-progress", "--no-reflogs", check=False)
+        if p.returncode != 0:
+            raise invalido("espejo", "git fsck falló (objetos alterados o ausentes): "
+                           + p.stderr.decode(errors="replace").strip()[:200])
 
     def run(self, *args, check=True):
         p = subprocess.run([self.git, *self.cfg, "-C", self.ruta, *args], env=self.env,
@@ -404,9 +425,9 @@ def validar_politica(pol):
     req = ("genesis", "autor", "clave_webflow", "huella_webflow", "tipos", "libro")
     if not isinstance(pol, dict) or any(k not in pol for k in req):
         raise invalido("política", f"política incompleta: se exigen {list(req)}")
-    if not isinstance(pol["genesis"], str) or not RE_HEX40.match(pol["genesis"]):
+    if not isinstance(pol["genesis"], str) or not RE_HEX40.fullmatch(pol["genesis"]):
         raise invalido("R2.1", "commit génesis no fijado")
-    if not isinstance(pol["huella_webflow"], str) or not re.match(r"^[0-9A-Fa-f]{40}$", pol["huella_webflow"]):
+    if not isinstance(pol["huella_webflow"], str) or not re.fullmatch(r"[0-9A-Fa-f]{40}", pol["huella_webflow"]):
         raise invalido("R2.3", "huella de la clave web-flow no fijada")
     if not isinstance(pol["clave_webflow"], str) or not os.path.isfile(pol["clave_webflow"]):
         raise invalido("R2.3", "clave web-flow fijada ausente")
@@ -414,12 +435,20 @@ def validar_politica(pol):
         raise invalido("R2.4", "identidad de la operadora no configurada")
     if not isinstance(pol["tipos"], list):
         raise invalido("R2.9", "tipos habilitados mal formados")
+    validar_rama(pol.get("rama", "main"))
+
+
+def validar_rama(rama):
+    if not isinstance(rama, str) or not RE_RAMA.fullmatch(rama) or ".." in rama:
+        raise invalido("R2.1", f"rama fuera de la lista blanca: {rama!r}")
 
 
 def _verificar(pol, espejo, commit, tipo, esperado, ahora, contenidos, libro, consumir):
     validar_politica(pol)
     if tipo not in TIPOS or tipo not in pol["tipos"]:
         raise invalido("R2.9", f"tipo no habilitado en la política: {tipo!r}")
+    if not isinstance(commit, str) or not RE_HEX40.fullmatch(commit):
+        raise invalido("R2.1", "el commit debe ser un sha1 completo (40 hex en minúscula)")
     gpg = _which("gpg")
     gh = tempfile.mkdtemp(prefix="se488-")
     try:
@@ -427,11 +456,14 @@ def _verificar(pol, espejo, commit, tipo, esperado, ahora, contenidos, libro, co
         _importar_clave(gh, gpg, pol["clave_webflow"])
         esp = Espejo(espejo, gh, gpg)
         rama = pol.get("rama", "main")
-        p = esp.run("rev-parse", "--verify", "--quiet", f"refs/heads/{rama}^{{commit}}", check=False)
+        esp.integridad()
+        p = esp.run("rev-parse", "--verify", "--quiet", "--end-of-options",
+                    f"refs/heads/{rama}^{{commit}}", check=False)
         if p.returncode != 0:
             raise invalido("R2.1", f"el espejo no tiene la rama {rama}")
         punta = p.stdout.decode().strip()
-        p = esp.run("rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}", check=False)
+        p = esp.run("rev-parse", "--verify", "--quiet", "--end-of-options",
+                    f"{commit}^{{commit}}", check=False)
         if p.returncode != 0:
             raise invalido("R2.1", "el commit no existe en el espejo")
         m = p.stdout.decode().strip()
@@ -456,8 +488,11 @@ def _verificar(pol, espejo, commit, tipo, esperado, ahora, contenidos, libro, co
             if sha == m:
                 ruta_m, blob_m = ruta, blob
 
+        crudo = esp.run("cat-file", "blob", blob_m).stdout
+        if hashlib.sha1(b"blob %d\0" % len(crudo) + crudo).hexdigest() != blob_m:
+            raise invalido("espejo", "el contenido leído no tiene el hash del blob firmado")
         try:
-            art = json.loads(esp.out("cat-file", "blob", blob_m))
+            art = json.loads(crudo.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             raise invalido("R2.6", "el fichero no es JSON UTF-8")
         emitida, caduca = validar_artefacto(art, ruta_m, pol.get("caducidad_max_horas", MAX_HORAS))
@@ -509,8 +544,12 @@ def verificar(pol, espejo, commit, tipo, esperado, ahora=None, contenidos=None, 
 
 def sincronizar(espejo, remoto, rama="main"):
     """Avanza refs/heads/<rama> del espejo SOLO por fast-forward (sin '+')."""
+    validar_rama(rama)
+    if not isinstance(remoto, str) or not remoto or remoto.startswith("-"):
+        raise invalido("R2.1", f"remoto no válido: {remoto!r}")
     esp = Espejo(espejo)
-    p = esp.run("fetch", "--no-tags", remoto, f"refs/heads/{rama}:refs/heads/{rama}", check=False)
+    p = esp.run("fetch", "--no-tags", "--end-of-options", remoto,
+                f"refs/heads/{rama}:refs/heads/{rama}", check=False)
     if p.returncode != 0:
         raise invalido("R2.1", "sincronización rechazada (¿main reescrito?): "
                        + p.stderr.decode(errors="replace").strip()[:200])
