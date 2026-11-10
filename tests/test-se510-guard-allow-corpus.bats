@@ -151,3 +151,20 @@ json.dump(c, open("'"$TMP"'/c.json","w"))'
 print(k.guard_verdict("ALLOW","ALLOW"), k.guard_verdict("ALLOW","BLOCK"), k.guard_verdict("BLOCK","ALLOW"), k.guard_verdict("BLOCK","BLOCK"))'
   [ "$output" = "MATCH FALSE_BLOCK FALSE_ALLOW MATCH" ]
 }
+
+@test "SE-510 edge: corpus empty de casos no valida (fallo cerrado)" {
+  run validate_mutated 'c["cases"] = []'
+  [ "$output" = "GUARD_CORPUS_IDS" ]
+}
+
+@test "SE-510 edge: caso con id null no valida" {
+  run validate_mutated 'by["B5"]["id"] = None'
+  [ "$output" = "GUARD_CORPUS_IDS" ]
+}
+
+@test "SE-510 edge: corpus nonexistent es INVALID (exit 2) y no deja recibo" {
+  run python3 scripts/ablation_kernel.py guard-corpus --corpus "$TMP/no-existe.json" --out "$TMP/y"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"INVALID JSON_MISSING"* ]]
+  [ ! -f "$TMP/y/se510-guard-corpus-receipt.json" ]
+}
