@@ -392,6 +392,11 @@ jobs:
       - name: Compliance pre-commit y runner (#1413)
         run: bats tests/test-compliance-precommit.bats tests/test-compliance-gate.bats tests/hooks/test-compliance-gate.bats
 
+      # SE-510 S1: corpus de órdenes legítimas y sus pares peligrosos (necesita fetch-depth 0 para be2fca5aa).
+      # La suite fija el estado actual: F3 es el único bloqueo falso hasta S2.
+      - name: Corpus de órdenes legítimas (SE-510)
+        run: bats tests/test-se510-guard-allow-corpus.bats
+
       # SE-487: guardia de clon limpio y arranque neutral; su suite vive fuera de tests/bats/.
       - name: Clon limpio neutral (SE-487)
         run: bats tests/test-se487-clean-clone.bats tests/test-critical-facts-cap.bats
