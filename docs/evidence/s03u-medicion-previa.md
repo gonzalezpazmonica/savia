@@ -103,5 +103,5 @@ El primer worker murió antes de abrir la PR. En la reanudación, sin rehacer lo
 Siguen bajo 80 sin trucos: `bats/compliance-policy` (76; sin `pipefail` aplicable a un script Python),
 `test-gate-result-ondemand` (73) y `test-g3-effect-path-capabilities` (74). Hallazgo del auditor, no
 corregido aquí: en `c8_spec` el patrón `\docs/rules/` empieza por `\d` (dígito), así que una
-referencia a `docs/rules/` o `docs/specs/` nunca puntúa; `test-gate-result-ondemand` cita su spec y
+referencia a `docs/rules/` nunca puntúa (y `docs/specs/` no figura entre sus patrones); `test-gate-result-ondemand` cita su spec y
 saca 0 en ese criterio.
