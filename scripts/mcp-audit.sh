@@ -9,13 +9,219 @@
 #
 # Usage:
 #   bash scripts/mcp-audit.sh [--budget N] [--json] [--quiet]
-#
-# Exit codes:
-#   0 = under budget
-#   1 = over budget (WARN or FAIL depending on severity)
-#   2 = input error
+#   bash scripts/mcp-audit.sh --schemas (--catalog F | -- CMD...) [--expected F]
+#        [--expected-from-source F] [--timeout S] [--json]   (ver bloque --schemas)
+# Exit codes: 0 under budget | 1 over budget (WARN/FAIL) | 2 input error
+#   --schemas: 0 clean | 1 findings | 2 unknown (sin jsonschema, servidor mudo)
 
 set -uo pipefail
+
+# --schemas (SE-443 S1, docs/rules/domain/mcp-tool-design.md): lint del catálogo
+# que sirve un MCP. Con `-- CMD` arranca el servidor por stdio y pide tools/list
+# (con paginación); con --catalog lee un tools/list guardado. Exige nombre,
+# descripción, inputSchema objeto y válido (jsonschema), required ⊆ properties
+# y catálogo completo frente a --expected (un nombre por línea) o a los
+# `case '<tool>'` de --expected-from-source. Sin efectos declarados: aviso.
+if [[ "${1:-}" == "--schemas" ]]; then
+  shift
+  # -P: el cwd no entra en sys.path (un jsonschema/ local no sombrea al validador).
+  exec python3 -P - "$@" <<'PY'
+import json, os, re, select, subprocess, sys, time
+
+def usage(msg):
+    print(f"Error: {msg}", file=sys.stderr)
+    sys.exit(2)
+
+args = sys.argv[1:]
+catalog = expected = source = None
+timeout = 30.0
+as_json = False
+cmd = []
+i = 0
+while i < len(args):
+    a = args[i]
+    if a == "--":
+        cmd = args[i + 1:]
+        break
+    if a in ("--catalog", "--expected", "--expected-from-source", "--timeout"):
+        if i + 1 >= len(args):
+            usage(f"{a} necesita valor")
+        v = args[i + 1]
+        if a == "--catalog": catalog = v
+        elif a == "--expected": expected = v
+        elif a == "--expected-from-source": source = v
+        else:
+            try: timeout = float(v)
+            except ValueError: usage("--timeout necesita segundos")
+        i += 2
+        continue
+    if a == "--json":
+        as_json = True; i += 1; continue
+    usage(f"opción desconocida {a}")
+if bool(catalog) == bool(cmd):
+    usage("indica --catalog F o -- CMD (uno de los dos)")
+if expected and source:
+    usage("--expected y --expected-from-source son excluyentes (uno de los dos)")
+
+findings, warnings, gaps = [], [], []
+
+def finish(tools_seen):
+    result = "unknown" if gaps and not findings else ("findings" if findings else "clean")
+    findings.sort(); warnings.sort()  # el orden del catálogo no cambia la salida
+    if as_json:
+        print(json.dumps({"result": result, "gaps": gaps, "tools": tools_seen,
+                          "findings": findings, "warnings": warnings}, ensure_ascii=False, indent=2))
+    else:
+        print(f"=== MCP tool schema lint === herramientas: {len(tools_seen)}")
+        for f in findings: print(f"  FAIL {f}")
+        for w in warnings: print(f"  WARN {w}")
+        for g in gaps: print(f"  UNKNOWN {g['check']}: {g['reason']}")
+        print("gate-result: " + json.dumps({"result": result, "gaps": gaps} if gaps else {"result": result}, separators=(",", ":")))
+    sys.exit(1 if findings else (2 if gaps else 0))
+
+try:
+    from jsonschema.validators import validator_for
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import SchemaError
+except Exception:
+    gaps.append({"check": "jsonschema", "reason": "missing_tool"})
+    finish([])
+
+def serve(cmd):
+    """Cliente MCP mínimo por stdio: initialize, initialized, tools/list paginado."""
+    try:
+        p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, bufsize=0)
+    except OSError:
+        gaps.append({"check": "server", "reason": "not_executed"}); return None
+    deadline = time.monotonic() + timeout
+    fd, buf = p.stdout.fileno(), bytearray()
+    def send(obj):
+        p.stdin.write((json.dumps(obj) + "\n").encode()); p.stdin.flush()
+    def recv(want_id):
+        # Búfer propio sobre os.read: select solo ve el fd, así que una línea ya
+        # leída no se pierde y una línea parcial no bloquea más allá del timeout.
+        while True:
+            while b"\n" in buf:
+                raw, _, rest = bytes(buf).partition(b"\n")
+                buf[:] = rest
+                try: msg = json.loads(raw)
+                except ValueError: continue
+                if isinstance(msg, dict) and msg.get("id") == want_id:
+                    return msg
+            left = deadline - time.monotonic()
+            if left <= 0:
+                raise TimeoutError
+            ready, _, _ = select.select([fd], [], [], left)
+            if not ready:
+                raise TimeoutError
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                raise EOFError
+            buf.extend(chunk)
+    tools = []
+    try:
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "savia-mcp-tool-lint", "version": "1"}}})
+        if not isinstance(recv(1).get("result"), dict):
+            gaps.append({"check": "server", "reason": "initialize_failed"}); return None
+        send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        cursor, n = None, 2
+        while True:
+            params = {"cursor": cursor} if cursor else {}
+            send({"jsonrpc": "2.0", "id": n, "method": "tools/list", "params": params})
+            msg = recv(n)
+            res = msg.get("result")
+            if not isinstance(res, dict) or not isinstance(res.get("tools"), list):
+                gaps.append({"check": "tools/list", "reason": "unreadable"}); return None
+            tools += res["tools"]
+            cursor = res.get("nextCursor")
+            if not cursor:
+                return tools
+            n += 1
+            if n > 1000:
+                gaps.append({"check": "tools/list", "reason": "limit"}); return None
+    except TimeoutError:
+        gaps.append({"check": "server", "reason": "timeout"}); return None
+    except (EOFError, BrokenPipeError, OSError):
+        gaps.append({"check": "server", "reason": "not_executed"}); return None
+    finally:
+        try: p.kill()
+        except OSError: pass
+
+if cmd:
+    tools = serve(cmd)
+else:
+    try:
+        with open(catalog, encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and isinstance(data.get("result"), dict):
+            data = data["result"]
+        tools = data.get("tools") if isinstance(data, dict) else None
+        if not isinstance(tools, list):
+            raise ValueError
+    except (OSError, ValueError):
+        gaps.append({"check": "catalog", "reason": "unreadable"}); tools = None
+if tools is None:
+    finish([])
+
+NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
+names = []
+for idx, t in enumerate(tools):
+    if not isinstance(t, dict):
+        findings.append(f"#{idx}: la entrada no es un objeto"); continue
+    name = t.get("name")
+    label = name if isinstance(name, str) and name else f"#{idx}"
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        findings.append(f"{label}: nombre ausente o inválido")
+    else:
+        if name in names: findings.append(f"{name}: nombre duplicado")
+        names.append(name)
+    if not isinstance(t.get("description"), str) or not t["description"].strip():
+        findings.append(f"{label}: sin descripción")
+    schema = t.get("inputSchema")
+    if schema is None:
+        findings.append(f"{label}: sin inputSchema"); continue
+    if not isinstance(schema, dict):
+        findings.append(f"{label}: inputSchema no es un objeto"); continue
+    if schema.get("type") != "object":
+        findings.append(f"{label}: inputSchema.type debe ser \"object\"")
+    try:
+        validator_for(schema, default=Draft202012Validator).check_schema(schema)
+    except SchemaError as e:
+        findings.append(f"{label}: esquema inválido ({e.message[:120]})"); continue
+    props = schema.get("properties") or {}
+    for r in schema.get("required") or []:
+        if r not in props:
+            findings.append(f"{label}: required '{r}' no está en properties")
+    ann = t.get("annotations")
+    # Solo cuenta un booleano: "no", null o 0 no declaran nada.
+    if not isinstance(ann, dict) or not any(isinstance(ann.get(k), bool) for k in ("readOnlyHint", "destructiveHint")):
+        warnings.append(f"{label}: sin efectos declarados (annotations.readOnlyHint/destructiveHint booleanos)")
+
+want = None
+try:
+    if expected:
+        with open(expected, encoding="utf-8") as fh:
+            want = {l.strip() for l in fh if l.strip() and not l.lstrip().startswith("#")}
+    elif source:
+        with open(source, encoding="utf-8") as fh:
+            want = set(re.findall(r"""case\s+['"]([A-Za-z0-9_.-]+)['"]\s*:""", fh.read()))
+except OSError:
+    gaps.append({"check": "expected", "reason": "unreadable"})
+# Una lista esperada vacía no mide nada: unknown, nunca clean (SE-453).
+if want is not None and not want:
+    gaps.append({"check": "expected", "reason": "empty"})
+if want is None and not gaps:
+    gaps.append({"check": "expected", "reason": "no_baseline"})
+if want:
+    have = set(names)
+    for m in sorted(want - have): findings.append(f"{m}: falta en el catálogo (catálogo incompleto)")
+    for x in sorted(have - want): findings.append(f"{x}: servida pero no esperada (sin manejador)")
+finish(sorted(names))
+PY
+fi
 
 BUDGET_TOKENS=3000
 OUT_JSON=false
@@ -27,7 +233,7 @@ while [[ $# -gt 0 ]]; do
     --json)   OUT_JSON=true; shift ;;
     --quiet)  QUIET=true; shift ;;
     --help|-h)
-      sed -n '2,16p' "$0" | sed 's/^# \?//'
+      sed -n '2,15p' "$0" | sed 's/^# \?//'
       exit 0 ;;
     *) echo "Error: unknown flag $1" >&2; exit 2 ;;
   esac
