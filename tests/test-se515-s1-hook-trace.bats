@@ -3,6 +3,7 @@
 # y si la emisión terminó (AC-3), con interruptor SAVIA_LEARNING_APPLIED=off (AC-16), y el guard
 # de OpenCode deja las mismas filas ante la misma entrada (paridad).
 # Spec: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md (S1)
+# Ref: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md (AC-3, AC-16)
 
 HOOK=".claude/hooks/learning-recall-hook.sh"
 
@@ -165,3 +166,14 @@ norm() { jq -c 'del(.ts, .event_id, .frontend)' "$SCL_EMISSION_LOG"; }
   [ "$(last_end query_hash)" = "$ts_hash" ]
 }
 
+@test "seguridad: el hook usa set -uo pipefail, pasa bash -n y define la función trace" {
+  head -5 "$HOOK" | grep -qE '^set -[eu]*o pipefail'
+  bash -n "$HOOK"
+  grep -qE '^trace\(\) \{' "$HOOK"
+}
+
+@test "negativo seguridad: sin pipefail en las primeras líneas la comprobación falla" {
+  printf '#!/usr/bin/env bash\necho x\n' > "$BATS_TEST_TMPDIR/sin.sh"
+  run bash -c 'head -5 "$1" | grep -qE "^set -[eu]*o pipefail"' _ "$BATS_TEST_TMPDIR/sin.sh"
+  [ "$status" -ne 0 ]
+}
