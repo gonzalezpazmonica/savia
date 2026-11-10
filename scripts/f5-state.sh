@@ -4,8 +4,12 @@
 # Reglas: closed => ALREADY_EXECUTED (exit 3). submitted/reserved => reanudable.
 # PR-state real via `gh pr view` (stub-able en tests con PATH).
 set -uo pipefail
+CMD="${1:-}"; OP="${2:-pr.merge}"; KEY="${3:-}"
+# SE-493 S1: hasta que el Effect Ledger lo sustituya (S3), este contrato solo vale para pr.merge.
+# Otra op heredaría la reejecución de efectos inciertos (H1-H10): se rechaza antes de tocar nada.
+if [[ "$OP" != "pr.merge" ]]; then echo "BLOCK: op '$OP' no admitida en f5-state.sh (solo pr.merge; SE-493)" >&2; exit 2; fi
 DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"; mkdir -p "$DIR"
-CMD="${1:-}"; OP="${2:-pr.merge}"; KEY="${3:-}"; F="$DIR/${OP}__${KEY}.json"
+F="$DIR/${OP}__${KEY}.json"
 
 # SAVIA_GH_REPO: repo explícito (merge-sprint lo pasa); sin él, gh resuelve el repo por el directorio actual.
 pr_state() { gh pr view "$KEY" ${SAVIA_GH_REPO:+-R "$SAVIA_GH_REPO"} --json state -q .state 2>/dev/null || echo ""; }

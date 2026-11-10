@@ -2,8 +2,13 @@
 # SE-387 C/F5 — Exactly-once effects: intent -> reservation -> gate -> execute -> receipt -> close.
 # Uso: effect-reservation.sh reserve <op> <idempotency_key> | close <op> <key> | status <op> <key>
 set -uo pipefail
+CMD="${1:-}"; OP="${2:-}"; KEY="${3:-}"
+# SE-493 S1: contrato deprecado (H1). Ninguna op distinta de pr.merge puede reutilizarlo.
+case "$CMD" in reserve|close|status)
+  if [[ "$OP" != "pr.merge" ]]; then echo "BLOCK: op '$OP' no admitida en effect-reservation.sh (solo pr.merge; SE-493)" >&2; exit 2; fi ;;
+esac
 DIR="${SAVIA_RESERVATIONS:-$HOME/.savia/reservations}"; mkdir -p "$DIR"
-CMD="${1:-}"; OP="${2:-}"; KEY="${3:-}"; F="$DIR/${OP}__${KEY}.json"
+F="$DIR/${OP}__${KEY}.json"
 case "$CMD" in
   reserve)
     if [[ -f "$F" ]]; then

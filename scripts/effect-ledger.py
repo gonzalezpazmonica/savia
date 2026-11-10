@@ -21,6 +21,7 @@ Ganchos de prueba (SAVIA_EFFECT_NOW, SAVIA_EFFECT_FAULT, SAVIA_EFFECT_REGISTRY, 
 SAVIA_EFFECT_BUSY_MS) solo con SAVIA_EFFECT_TEST=1 y ledger bajo ${TMPDIR:-/tmp} distinto del
 de por defecto tras realpath (Regla 7).
 """
+import fcntl
 import hashlib
 import json
 import os
@@ -279,11 +280,16 @@ def holder_start(env, pid):
 class Ledger:
     def __init__(self, env):
         self.env = env
+        busy = env.hook("SAVIA_EFFECT_BUSY_MS")
+        self.busy_s = (int(busy) / 1000.0) if busy.isdigit() else 10.0
+        lock = None
         try:
             os.makedirs(os.path.dirname(env.path), mode=0o700, exist_ok=True)
-            busy = env.hook("SAVIA_EFFECT_BUSY_MS")
-            self.db = sqlite3.connect(env.path, timeout=(int(busy) / 1000.0) if busy.isdigit() else 10.0,
-                                      isolation_level=None)
+            # Apertura serializada: cambiar a WAL un fichero nuevo devuelve BUSY sin esperar
+            # al busy_timeout si otro proceso lo inicializa a la vez.
+            lock = open(env.path + ".lock", "a", encoding="utf-8")
+            self._flock(lock)
+            self.db = sqlite3.connect(env.path, timeout=self.busy_s, isolation_level=None)
             self.db.row_factory = sqlite3.Row
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.execute("PRAGMA synchronous=FULL")
@@ -310,6 +316,20 @@ class Ledger:
             self.db.execute("COMMIT")
         except (sqlite3.Error, OSError) as exc:
             raise Fail(EXIT_ERR, f"ledger ilegible, bloqueado o sin escritura: {exc}")
+        finally:
+            if lock is not None:
+                lock.close()
+
+    def _flock(self, fh):
+        deadline = time.monotonic() + self.busy_s
+        while True:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise Fail(EXIT_ERR, "ledger bloqueado más allá del timeout")
+                time.sleep(0.02)
 
     def begin(self):
         self.db.execute("BEGIN IMMEDIATE")
