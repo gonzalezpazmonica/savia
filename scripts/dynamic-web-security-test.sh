@@ -56,7 +56,10 @@ check_authorization() {
     exit 1
   fi
 
-  if ! grep -q "AUTHORIZED" "${auth_file}"; then
+  # La palabra debe aparecer entera y sin negar: "UNAUTHORIZED" o "NOT AUTHORIZED"
+  # contienen la subcadena pero significan lo contrario (fail-closed).
+  if ! grep -qE '(^|[^A-Za-z])AUTHORIZED([^A-Za-z]|$)' "${auth_file}" \
+     || grep -qiE '(^|[^A-Za-z])(NOT|NO|NEVER|UN)[ _-]?AUTHORIZED' "${auth_file}"; then
     echo "ERROR: Authorization file does not contain 'AUTHORIZED': ${auth_file}"
     exit 1
   fi
