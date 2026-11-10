@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# SE-508 S1 — paridad (AC-9, DUAL_BINDING): el binding de OpenCode
+# SE-508 S1 (SPEC-508) — paridad (AC-9, DUAL_BINDING): el binding de OpenCode
 # (scripts/opencode-plugin/savia-gates/lib/mcp-effect-guard.ts) toma la misma decisión que el hook de
 # Claude Code (.claude/hooks/mcp-effect-guard.sh) ante las mismas entradas de AC-1..8. La delegación con
 # pin fijado solo existe en OpenCode: su test está en __tests__/mcp-effect-guard.test.ts y al final de este
@@ -112,4 +112,57 @@ check() {
   require_ts
   export SAVIA_GATES_PIN=1 SAVIA_AUTONOMOUS_RUN=1
   [ "$(ts_decision "$(se508_payload mcp__claude_ai_Gmail__send_message)" --pin-fixed)" = deny ]
+}
+
+@test "invalid: misma decisión con tool_name numérico, vacío y tool_input null" {
+  require_ts
+  check '{"hook_event_name":"PreToolUse","tool_name":42,"tool_input":{}}' ask
+  check '{"hook_event_name":"PreToolUse","tool_name":"","tool_input":{}}' ask
+  check '{"hook_event_name":"PreToolUse","tool_name":"mcp__claude_ai_Gmail__send_message","tool_input":null}' ask
+}
+
+@test "reject: merge con tool_input vacío es deny en ambos" {
+  require_ts
+  check "$(se508_payload mcp__github__merge_pull_request '{}')" deny
+}
+
+@test "safety: el binding TS no usa @ts-ignore ni any explícito para la decisión" {
+  ! grep -qE '@ts-ignore|: any\b' "$REPO_ROOT/scripts/opencode-plugin/savia-gates/lib/mcp-effect-guard.ts"
+}
+
+@test "empty: stdin vacío da ask en ambos y el hook sale con 0 (set -uo pipefail)" {
+  run grep -c '^set -uo pipefail' "$REPO_ROOT/.claude/hooks/mcp-effect-guard.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 1 ]
+  run bash "$HOOK" < /dev/null
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"permissionDecision":"ask"'* || "$output" == *'"permissionDecision": "ask"'* ]]
+}
+
+@test "error: JSON malformado y WebFetch sin URL → ask en ambos" {
+  require_ts
+  check '{"tool_name": "mcp__x' ask
+  check "$(se508_payload WebFetch '{}')" ask
+}
+
+@test "fail-closed: tool fuera del catálogo y userinfo en la URL → ask, nunca pass" {
+  require_ts
+  export SAVIA_MCP_GUARD_TEST_TODAY=2026-12-01
+  check "$(se508_payload mcp__claude_ai_Otro__hacer)" ask
+  check "$(se508_payload WebFetch '{"url":"https://u:p@docs.ejemplo.org/"}')" ask
+}
+
+@test "boundary: ruta de 200 caracteres pasa y 201 pregunta en ambos" {
+  require_ts
+  export SAVIA_MCP_GUARD_TEST_TODAY=2026-12-01
+  c=$(printf 'c%.0s' $(seq 49))
+  path="/$c/$c/$c/$c"
+  [ "${#path}" -eq 200 ]
+  check "$(se508_payload WebFetch "{\"url\":\"https://docs.ejemplo.org$path\"}")" pass
+  check "$(se508_payload WebFetch "{\"url\":\"https://docs.ejemplo.org${path}c\"}")" ask
+}
+
+@test "zero: tool_input sin campos en una tool read_only pasa en ambos" {
+  require_ts
+  check "$(se508_payload mcp__claude_ai_Gmail__get_message '{}')" pass
 }

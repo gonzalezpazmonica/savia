@@ -286,3 +286,34 @@ while time.time() < end:
 @test "una tool que no es MCP ni web no recibe decisión" {
   [ "$(hook_decision "$(se508_payload Bash '{"command":"ls"}')")" = pass ]
 }
+
+# --- Seguridad y entradas límite (SPEC-055: modo estricto, negativos y bordes)
+@test "safety: el hook arranca con set -uo pipefail y no usa set +e" {
+  grep -q '^set -uo pipefail' "$HOOK"
+  ! grep -q 'set +e' "$HOOK"
+}
+
+@test "invalid: tool_name numérico en lugar de cadena → ask, no pass" {
+  [ "$(hook_decision '{"hook_event_name":"PreToolUse","tool_name":42,"tool_input":{}}')" = ask ]
+}
+
+@test "empty tool_name → ask, no pass" {
+  [ "$(hook_decision '{"hook_event_name":"PreToolUse","tool_name":"","tool_input":{}}')" = ask ]
+}
+
+@test "null tool_input en una tool write → ask con efecto, no pass" {
+  p='{"hook_event_name":"PreToolUse","tool_name":"mcp__claude_ai_Gmail__send_message","tool_input":null}'
+  [ "$(hook_decision "$p")" = ask ]
+}
+
+@test "reject: merge con tool_input vacío sigue siendo deny" {
+  [ "$(hook_decision "$(se508_payload "$MERGE" '{}')")" = deny ]
+}
+
+@test "error: un núcleo que falla con excepción no deja pasar (ask)" {
+  mkdir -p "$TMPD/roto/lib"
+  cp "$HOOK" "$TMPD/roto/mcp-effect-guard.sh"
+  printf 'raise SystemExit(7)\n' > "$TMPD/roto/lib/mcp_effect_guard.py"
+  out=$(se508_payload "$GET" | bash "$TMPD/roto/mcp-effect-guard.sh")
+  [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$out")" = ask ]
+}
