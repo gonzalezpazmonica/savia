@@ -1,6 +1,6 @@
 # Roadmap Current (GENERATED — no editar; fuente: planning-state.json)
 
-Fase A · WIP 5/5. Estado y cola canónicos; ADR-002.
+Fase A · WIP 6/6. Estado y cola canónicos; ADR-002.
 
 ## Cola de sesiones (orden por gates, sin fechas)
 
@@ -200,7 +200,7 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-487 [APPROVED] Clon limpio neutral y arranque en Windows — evidencia: docs/specs/SE-487-clean-clone-neutral-and-windows.spec.md
 - SE-483 [APPROVED] Identidad: Savia, metaorquestadora agéntica de I+D+i — evidencia: docs/specs/SE-483-savia-identity-rd-metaorchestrator.spec.md
 - SE-484 [APPROVED] Onboarding adaptativo: Savia se configura para cualquier persona — evidencia: docs/specs/SE-484-adaptive-onboarding.spec.md
-- SE-488 [APPROVED] Aprobaciones por fusión de PR (operación solo móvil) — evidencia: docs/specs/SE-488-approvals-by-pr-merge.spec.md
+- SE-488 [IMPLEMENTING] Aprobaciones por fusión de PR (operación solo móvil) — evidencia: docs/specs/SE-488-approvals-by-pr-merge.spec.md
 - SE-489 [APPROVED] Vaults: recuperación adaptativa construida y medida (estructura, grafo, reranker, router y cuantización) — evidencia: docs/specs/SE-489-vaults-adaptive-retrieval-empirical.spec.md
 - SE-490 [APPROVED] Soul Continuidad v1: gemelo operativo en el portátil de trabajo, de solo lectura y con comunicación bidireccional — evidencia: docs/specs/SE-490-soul-continuity-work-laptop.spec.md
 - SE-496 [APPROVED] Ontología operativa gobernada: la autoridad vive fuera del modelo — evidencia: docs/specs/SE-496-governed-operational-ontology-authority.spec.md
