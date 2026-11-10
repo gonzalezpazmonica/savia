@@ -53,20 +53,46 @@ timeline:
 ### Confirmación
 
 - fecha: 2026-11-10
-- respuesta: «pendiente»
+- respuesta: «Confirmo las escenas»
 
-Las escenas aún no se han enseñado a la operadora. La spec no puede pasar a APPROVED hasta que las confirme con sus palabras (SE-505).
+La operadora vio las cinco escenas en una pregunta interactiva el 2026-11-10 y las confirmó con esas palabras. Eso no es la aprobación de la spec: sigue PROPOSED hasta que confirme el prototipo S0 y la apruebe expresamente (tier 4). La escena 1 se confirmó con el código de dispositivo; la sección «Método de login (S0)» explica por qué ese método es el que se mantiene y en qué caso habría que volver a enseñársela.
 
 ## Slice S0 — Prototipo del login y de doctor
 
 - prototipo: `docs/specs/assets/SE-517-prototipo.html`, un solo fichero HTML sin dependencias, con tema claro u oscuro según el sistema. Muestra seis estados: sin sesión (con el error que da Savia al pedirle algo), código de dispositivo, sesión activa, sesión caducada, cerrar sesión y la salida de terminal de `savia-space login`, `doctor` y `logout`. Con `?s=none|code|ok|expired|logout|doctor` se abre en cada estado. El código, las horas y el tipo de cuenta son ilustrativos.
 
-S0 incluye además una sonda real, sin tocar el Space de la operadora: el binario fijado arranca con HOME y XDG temporales, `opencode auth login --standalone --method <id> openai` con el método de código de dispositivo, la persona escribe el código, y se comprueba dónde queda la credencial, qué campos tiene, que una petición mínima al modelo de `tiers.space` responde y que `auth logout` la borra. El resultado se anota en esta spec antes de S1.
+S0 incluye además una sonda real, sin tocar el Space de la operadora: el binario fijado arranca con HOME y XDG temporales, `opencode auth login --standalone --method chatgpt-headless openai` (código de dispositivo, ver «Método de login (S0)»), la persona escribe el código, y se comprueba que la credencial queda en el `opencode.db` temporal, qué columnas tiene la tabla `credential` (solo el esquema, nunca las filas), que una petición mínima al modelo de `tiers.space` responde y que `auth logout` borra su fila. El resultado se anota en esta spec antes de S1.
 
 ### Confirmación del prototipo
 
 - fecha: pendiente
 - respuesta: «pendiente»
+
+### Método de login (S0)
+
+**Observado** (sonda de la orquestadora del 2026-11-10 con el binario fijado, OpenCode 2.0.32; la sonda vio cuatro métodos de entrada para OpenAI, y sus identificadores aparecen tal cual en el binario):
+
+| ID de `--method` | Qué hace | Estado en el motor |
+|---|---|---|
+| `chatgpt-token-sharing` | «Sign in with ChatGPT». Abre el navegador y espera el retorno en `127.0.0.1` con un puerto efímero | Actual |
+| `chatgpt-headless` | Código de dispositivo: pide un código, la persona lo escribe en `auth.openai.com/codex/device`; el modelo se usa por `chatgpt.com/backend-api/codex` | Legado |
+| `chatgpt-browser` | Navegador con retorno a `localhost:1455` | Legado |
+| `key` | Clave de API | Fuera de alcance (pago por uso) |
+
+La credencial no va a un `auth.json`: el motor la guarda en SQLite, en `$XDG_DATA_HOME/opencode/opencode.db`, tabla `credential`, y la renueva solo. Con el XDG del espacio del motor, ese fichero queda dentro del directorio de datos del motor. Esta spec no ha leído el contenido de esa tabla ni de ningún `auth.json`, y ningún slice lo imprime: los nombres de columna de la caducidad se fijan en la sonda de S0 mirando el esquema (`.schema credential`), nunca las filas.
+
+**Las dos opciones para la escena 1**
+
+- **(a) `chatgpt-headless`, código de dispositivo.** Coincide con la escena confirmada: la persona lee una dirección y un código en Space y los escribe en el móvil. No necesita que el navegador esté en el mismo ordenador que el motor, que es el caso real (Space escucha por VPN y la persona entra desde el móvil). Riesgo: el motor lo marca como legado. OpenAI u OpenCode pueden retirarlo, y entonces el login deja de funcionar. Mientras el motor siga fijado en 2.0.32 no desaparece de Space; el riesgo aparece al subir de versión o si OpenAI apaga el servidor de códigos.
+- **(b) `chatgpt-token-sharing`, el actual.** Es el que el motor mantiene. Riesgo: el retorno llega a `127.0.0.1` con un puerto efímero del ordenador donde corre el motor. Solo funciona si el navegador está en ese mismo ordenador. Desde el móvil, `127.0.0.1` es el propio móvil y el retorno no llega. Además, el retorno tiene que atravesar el espacio aislado del motor: hoy comparte la red del ordenador (D-MED-5 de SE-434), pero D7 la restringe y ese puerto local tendría que quedar abierto a propósito. Cambia lo que ve la persona: en vez de un código para el móvil, un navegador que se abre en el ordenador.
+
+**Recomendación: (a) `chatgpt-headless`.** Es la única de las dos que cumple la escena 1 tal como se confirmó y el uso real desde el móvil, y no abre un puerto de retorno en el espacio del motor. Para que «legado» no sea un fallo silencioso:
+
+1. S1 añade un test que falla si el binario fijado deja de ofrecer `chatgpt-headless` (comprobación de la versión fijada antes de cada subida de motor).
+2. Si el servidor de códigos de OpenAI deja de responder, `login` termina con «OpenAI ya no ofrece la entrada por código; hace falta otro método» y no prueba otro método por su cuenta (mismo principio que D6).
+3. Si algún día hay que pasar a (b), eso cambia lo que ve la persona y **requiere reconfirmar la escena 1** antes de implementarlo.
+
+Con la recomendación (a), lo que ve la persona no cambia: la escena 1 confirmada sigue valiendo y **no requiere reconfirmación**. La decisión de método es de la operadora al aprobar la spec.
 
 ## Problema (observado el 2026-11-10)
 
@@ -74,7 +100,7 @@ La operadora paga DeepSeek por uso para el motor de Space y ya tiene una suscrip
 
 Lo que trae el motor fijado (observado en el binario de OpenCode 2.0.32 que Space descarga y fija; lectura de cadenas y `--help`, sin red):
 
-- La integración de OpenAI tiene métodos OAuth «Sign in with ChatGPT»: uno con navegador y retorno a `localhost:1455` (`chatgpt-browser`) y otro sin navegador por código de dispositivo (`chatgpt-headless`), que pide un código a `https://auth.openai.com/api/accounts/deviceauth/usercode`, enseña `Enter code: …` con la dirección `https://auth.openai.com/codex/device` y sondea `…/deviceauth/token`. El identificador exacto que acepta `--method` se fija en S0.
+- La integración de OpenAI tiene métodos OAuth «Sign in with ChatGPT»: uno con navegador y retorno a `localhost:1455` (`chatgpt-browser`) y otro sin navegador por código de dispositivo (`chatgpt-headless`), que pide un código a `https://auth.openai.com/api/accounts/deviceauth/usercode`, enseña `Enter code: …` con la dirección `https://auth.openai.com/codex/device` y sondea `…/deviceauth/token`. Los identificadores de método están en «Método de login (S0)».
 - La renovación del acceso la hace el propio motor contra `https://auth.openai.com/oauth/token`. Las peticiones de modelo van a `https://chatgpt.com/backend-api/codex`.
 - Modelos de la familia Codex en el binario: `gpt-5-codex`, `gpt-5.2-codex`, `gpt-5.3-codex`, `gpt-5.3-codex-spark`.
 - CLI: `opencode auth login [--method ID] [--standalone | --server URL] [<target>]`, `auth list | logout | export | import`. El login habla con un servidor de OpenCode (el servicio de fondo, uno privado con `--standalone` o el de `--server`), así que puede apuntarse al servidor del motor de Space.
@@ -94,11 +120,11 @@ Que Space use la suscripción de ChatGPT de la persona como proveedor del motor,
 
 ## Qué decide esta spec
 
-- **D1. Login en el espacio del motor por código de dispositivo.** Space ejecuta `opencode auth login --method <código de dispositivo> openai` contra el servidor del motor (o con HOME y XDG del motor), nunca con el HOME de la persona. Se elige código de dispositivo y no el método con navegador porque Space puede estar en otro equipo (escucha por VPN) y la persona entra desde el móvil; el retorno a `localhost:1455` no llegaría. La app enseña la dirección y el código; la terminal ofrece `savia-space login chatgpt`.
-- **D2. La credencial vive en el `auth.json` del espacio del motor y la usa solo el proceso de OpenCode.** Permisos 0600, dentro del directorio de datos del motor. El bash del agente y las herramientas de lectura del motor no la alcanzan (misma máscara que las demás credenciales, FS-2b de SE-434). El modelo nunca la recibe: solo recibe el prompt. Alternativa descartada: que el proxy de secretos inyecte el token. Obligaría a reescribir la renovación OAuth y las peticiones a `chatgpt.com` fuera de OpenCode; se reconsidera solo si S0 demuestra que la máscara no puede separar al proceso del motor de sus herramientas.
-- **D3. Renovación delegada en el motor; Space solo observa.** OpenCode renueva contra `auth.openai.com/oauth/token`. Space lee de la credencial únicamente los metadatos de caducidad y si la última renovación falló. Si la renovación falla, el turno termina con un error que nombra la causa y la acción («vuelve a entrar con ChatGPT»), y la tarea queda en espera.
+- **D1. Login en el espacio del motor por código de dispositivo.** Space ejecuta `opencode auth login --method chatgpt-headless openai` contra el servidor del motor (o con HOME y XDG del motor), nunca con el HOME de la persona. Se elige código de dispositivo y no el método con navegador porque Space puede estar en otro equipo (escucha por VPN) y la persona entra desde el móvil; el retorno a `localhost:1455` no llegaría. La app enseña la dirección y el código; la terminal ofrece `savia-space login chatgpt`.
+- **D2. La credencial vive en el `opencode.db` del espacio del motor (tabla `credential`) y la usa solo el proceso de OpenCode.** Permisos 0600, dentro del directorio de datos del motor. El bash del agente y las herramientas de lectura del motor no la alcanzan (misma máscara que las demás credenciales, FS-2b de SE-434). La máscara se pensó para ficheros de credenciales con nombre conocido; S1 comprueba que cubre también `opencode.db`, que no se llama `auth.json` (AC-5). El modelo nunca la recibe: solo recibe el prompt. Alternativa descartada: que el proxy de secretos inyecte el token. Obligaría a reescribir la renovación OAuth y las peticiones a `chatgpt.com` fuera de OpenCode; se reconsidera solo si S0 demuestra que la máscara no puede separar al proceso del motor de sus herramientas.
+- **D3. Renovación delegada en el motor; Space solo observa.** OpenCode renueva contra `auth.openai.com/oauth/token`. Space lee de la tabla `credential` únicamente las columnas de caducidad y de fallo de renovación, nunca las del token. Si la renovación falla, el turno termina con un error que nombra la causa y la acción («vuelve a entrar con ChatGPT»), y la tarea queda en espera.
 - **D4. `doctor` informa sin revelar.** Línea `ChatGPT`: `sin sesión`, `sesión activa · acceso caduca <hora> · se renueva solo` o `caducada · <motivo>`. Si `tiers.space` apunta a `openai` y no hay sesión, `doctor` sale con estado de fallo. Nunca imprime el token ni un fragmento ni un hash parcial.
-- **D5. Logout borra.** `savia-space logout chatgpt` y el botón de la app ejecutan `opencode auth logout` en el espacio del motor y después comprueban que no queda entrada de `openai` en su `auth.json`; si queda, Space la elimina y lo dice.
+- **D5. Logout borra.** `savia-space logout chatgpt` y el botón de la app ejecutan `opencode auth logout` en el espacio del motor y después comprueban que no queda fila de `openai` en la tabla `credential` de su `opencode.db`; si queda, Space la elimina y lo dice.
 - **D6. Sin respaldo silencioso.** El proveedor y el modelo los decide `tiers.space` (configuración local, fuera del repo). Sin sesión o con sesión caducada, Space no cae a DeepSeek, a Ollama ni a otro proveedor. Cambiar de proveedor es una decisión de la persona en su configuración.
 - **D7. Salida a red mínima del motor con este proveedor.** Con el proveedor `openai` por suscripción, el motor solo puede abrir conexiones a `auth.openai.com` y `chatgpt.com`. Esto revisa D-MED-5 de SE-434 solo para este proveedor y se implementa en un slice propio; hasta que esté, `doctor` dice «salida de red sin restringir». Los hosts exactos se confirman en S0 observando el tráfico de la sonda.
 - **D8. Términos de OpenAI.** Savia no ha leído directamente los términos de uso de la suscripción de ChatGPT respecto a clientes de terceros. La operadora los confirma antes de que esta spec pase a IMPLEMENTED; si no lo permiten, la spec se cierra como REJECTED y no se usa.
@@ -120,11 +146,11 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 
 ### Login y almacenamiento (S1)
 
-- [ ] **AC-1** `savia-space login chatgpt` muestra la dirección y el código del dispositivo y, al completar la persona el paso en OpenAI, deja una entrada `openai` en el `auth.json` del directorio de datos del motor, con permisos 0600. Test con un servidor OAuth falso local que imita `usercode` y `token`.
-- [ ] **AC-2** (negativo) Tras el login, el `auth.json` del HOME real de la persona y su `~/.codex` no cambian (mismo hash antes y después).
+- [ ] **AC-1** `savia-space login chatgpt` muestra la dirección y el código del dispositivo y, al completar la persona el paso en OpenAI, deja una fila `openai` en la tabla `credential` del `opencode.db` del directorio de datos del motor, con el fichero en permisos 0600. Test con un servidor OAuth falso local que imita `usercode` y `token`.
+- [ ] **AC-2** (negativo) Tras el login, el `auth.json` y el `opencode.db` del HOME real de la persona y su `~/.codex` no cambian (mismo hash antes y después).
 - [ ] **AC-3** (negativo) El token no aparece en ningún log de Space ni del motor, ni en la salida de `login`, `doctor` o `logout`: test que siembra un token centinela en el servidor falso y busca la cadena y sus 12 primeros caracteres en todos los ficheros de log y en stdout/stderr.
 - [ ] **AC-4** (negativo) El token no está en el entorno del motor ni en el del bash del agente: `env` de ambos procesos sin el centinela ni variables `OPENAI_*`; `env_policy.rs` no gana entradas.
-- [ ] **AC-5** (negativo) Una herramienta de lectura o el bash del agente que intenta leer el `auth.json` del motor obtiene un fichero vacío o un error; el control sin máscara sí lo lee (la prueba mide algo).
+- [ ] **AC-5** (negativo) Una herramienta de lectura o el bash del agente que intenta leer el `opencode.db` del motor obtiene un fichero vacío o un error; el control sin máscara sí lo lee (la prueba mide algo).
 - [ ] **AC-6** Si la persona no completa el código antes de que caduque, `login` termina con «el código ha caducado, vuelve a intentarlo» y no deja entrada parcial.
 
 ### Estado, caducidad y sin respaldo (S2)
@@ -138,7 +164,7 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 ### App (S3)
 
 - [ ] **AC-12** La pantalla «Ajustes > Motor» reproduce los estados del prototipo confirmado (sin sesión, código, activa, caducada, cerrar sesión) con textos en lenguaje llano y sin siglas internas.
-- [ ] **AC-13** Logout: tras confirmar, no queda entrada `openai` en el `auth.json` del motor (test) y la pantalla vuelve a «sin sesión»; cancelar no borra nada (negativo).
+- [ ] **AC-13** Logout: tras confirmar, no queda fila `openai` en la tabla `credential` del motor (test) y la pantalla vuelve a «sin sesión»; cancelar no borra nada (negativo).
 
 ### Red (S4)
 
