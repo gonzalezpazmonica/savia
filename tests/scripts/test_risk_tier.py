@@ -115,3 +115,22 @@ def test_vecinos_del_grant_no_son_gobernanza(rt):
     assert not rt.is_governance("docs/operator-grant-" + "signers-notes.md")
     assert not rt.is_governance("scripts/operator-grant-helper.sh")
     assert rt.classify(["scripts/operator-grant-helper.sh"])["tier"] == 2
+
+
+# SE-510 D1: el corpus de órdenes legítimas es una lista de exenciones de guardas. Cambiarlo
+# exige revisión humana explícita (tier 3), solo o junto a cambios de bajo riesgo. Antes: tier 2
+# (".json" casaba con ".js" en la lista de conocidos y nada lo elevaba).
+GUARD_CORPUS = "config/guard-allow-corpus.json"
+
+
+def test_corpus_de_ordenes_legitimas_es_tier_3(rt):
+    assert rt.classify([GUARD_CORPUS])["tier"] == 3
+    res = rt.classify(["docs/guide.md", GUARD_CORPUS, "tests/test-x.bats"])
+    assert res["tier"] == 3
+    assert "SE-510" in res["rationale"]
+
+
+def test_vecinos_del_corpus_no_suben_a_tier_3(rt):
+    # Caso negativo: solo el nombre exacto; otro corpus de config sigue en tier 2.
+    assert rt.classify(["config/kernel-corpus.json"])["tier"] == 2
+    assert rt.classify(["config/guard-allow-corpus.json.bak"])["tier"] == 2
