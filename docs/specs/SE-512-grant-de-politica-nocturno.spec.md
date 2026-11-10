@@ -1,5 +1,7 @@
 ---
-status: PROPOSED
+status: APPROVED
+approved_at: 2026-11-10
+approved_by: "operadora, 2026-11-10: «SE-512, el permiso nocturno de fusión aprobado.»; escenas y prototipo S0 confirmados el mismo día (PR #1516)"
 priority: P0
 developer_type: agent-single
 created: 2026-11-05
@@ -13,6 +15,10 @@ timeline:
   - from: "2026-11-05"
     learned: "2026-11-05"
     value: "PROPOSED"
+    source: "spec-lifecycle:auto"
+  - from: "2026-11-10"
+    learned: "2026-11-10"
+    value: "APPROVED"
     source: "spec-lifecycle:auto"
 ---
 # SE-512 — Grant de política para el sprint nocturno
@@ -723,7 +729,7 @@ una de ellas sigue actuando.
 
 ## Slice S0 — Prototipo navegable
 
-- prototipo: `docs/specs/assets/SE-512-prototipo.md`. Un solo fichero de texto que se lee en el móvil: la PR de permiso tal como se ve en la app de GitHub, el resumen de la mañana con lo fusionado y lo parado, y el aviso de parón ante una regresión. Todos los datos son de ejemplo y están marcados como tales.
+- prototipo: `docs/specs/assets/prototipo-nocturno-SE-512.md`. Un solo fichero de texto que se lee en el móvil: la PR de permiso tal como se ve en la app de GitHub, el resumen de la mañana con lo fusionado y lo parado, y el aviso de parón ante una regresión. Todos los datos son de ejemplo y están marcados como tales.
 
 ### Confirmación del prototipo
 
