@@ -5,6 +5,8 @@
 # tiene su propia consecuencia, que `doctor` no da la red por restringida
 # (D7: hasta su slice, «sin restringir») y que la spec documenta el método
 # de login con su recomendación y el estado de la escena 1.
+# Ref: docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md (slice S0)
+# Ref: docs/rules/domain/comprehension-gate.md
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
@@ -112,70 +114,134 @@ run_check() { run python3 "$CHECK" "$BATS_TEST_TMPDIR/spec.md" "$BATS_TEST_TMPDI
   [[ "$output" == *"errores=0"* ]]
 }
 
-@test "negativo: falta un estado de los que promete la spec" {
+@test "fail: falta un estado de los que promete la spec" {
   sed -i 's/,"doctor"\]/]/' "$BATS_TEST_TMPDIR/proto.html"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"estados del prototipo"* ]]
 }
 
-@test "negativo: jerga interna visible (token, tiers)" {
+@test "fail: jerga interna visible (token, tiers)" {
   sed -i 's/tu clave de acceso/tu token/' "$BATS_TEST_TMPDIR/proto.html"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"jerga visible"* ]]
 }
 
-@test "negativo: código con cifras no son ocho letras (escena 1)" {
+@test "fail: código con cifras no son ocho letras (escena 1)" {
   sed -i 's/KQMW-TXRB/K7QF-29XM/g' "$BATS_TEST_TMPDIR/proto.html"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"no son ocho letras"* ]]
 }
 
-@test "negativo: código de la terminal distinto del de la app" {
+@test "fail: código de la terminal distinto del de la app" {
   sed -i 's/Escribe este código: KQMW-TXRB/Escribe este código: ABCD-EFGH/' "$BATS_TEST_TMPDIR/proto.html"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"distinto del de la app"* ]]
 }
 
-@test "negativo: cancelar y confirmar el cierre muestran lo mismo" {
+@test "fail: cancelar y confirmar el cierre muestran lo mismo" {
   sed -i 's/data-msg="No se ha borrado nada. La sesión sigue activa."/data-msg="Sesión cerrada y borrada de este ordenador. Ajustes › Motor vuelve a decir «ChatGPT · sin sesión»."/' "$BATS_TEST_TMPDIR/proto.html"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"mismo mensaje"* ]]
 }
 
-@test "negativo: doctor da la red por restringida (contradice D7)" {
+@test "fail: doctor da la red por restringida (contradice D7)" {
   sed -i 's/Salida a internet del motor: sin restringir todavía/salida red   auth.openai.com, chatgpt.com (solo estos)/' "$BATS_TEST_TMPDIR/proto.html"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"red por restringida"* ]]
 }
 
-@test "negativo: spec sin recomendación de método" {
+@test "fail: spec sin recomendación de método" {
   sed -i 's/\*\*Recomendación: (a)/**Opciones/' "$BATS_TEST_TMPDIR/spec.md"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"sin recomendación"* ]]
 }
 
-@test "negativo: confirmación de escenas pendiente" {
+@test "fail: confirmación de escenas pendiente" {
   sed -i 's/respuesta: «Confirmo las escenas»/respuesta: «pendiente»/' "$BATS_TEST_TMPDIR/spec.md"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"confirmación de escenas"* ]]
 }
 
-@test "negativo: la spec no puede figurar APPROVED en S0" {
+@test "fail: la spec no puede figurar APPROVED en S0" {
   sed -i 's/^status: PROPOSED/status: APPROVED/' "$BATS_TEST_TMPDIR/spec.md"
   run_check
   [ "$status" -eq 1 ]
   [[ "$output" == *"APPROVED"* ]]
 }
 
-@test "fail-closed: prototipo ilegible da error, no PASS" {
+@test "error fail-closed: prototipo nonexistent da error, no PASS" {
   run python3 "$CHECK" "$SPEC" "$BATS_TEST_TMPDIR/no-existe.html"
   [ "$status" -eq 2 ]
+}
+
+@test "error fail-closed: spec nonexistent da error, no PASS" {
+  run python3 "$CHECK" "$BATS_TEST_TMPDIR/no-existe.md" "$PROTO"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"ERROR ilegible"* ]]
+}
+
+@test "fail: prototipo empty (vacío) no pasa" {
+  : > "$BATS_TEST_TMPDIR/proto.html"
+  run_check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no hay botones de respuesta"* ]]
+}
+
+@test "boundary fail: código de siete letras no basta" {
+  sed -i 's/KQMW-TXRB/KQMW-TXR/g' "$BATS_TEST_TMPDIR/proto.html"
+  run_check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no son ocho letras"* ]]
+}
+
+@test "boundary fail: código de nueve letras sobra" {
+  sed -i 's/KQMW-TXRB/KQMW-TXRBA/g' "$BATS_TEST_TMPDIR/proto.html"
+  run_check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no son ocho letras"* ]]
+}
+
+@test "positivo boundary: otro código de ocho letras exactas pasa" {
+  sed -i 's/KQMW-TXRB/ABCD-EFGH/g' "$BATS_TEST_TMPDIR/proto.html"
+  run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"errores=0"* ]]
+}
+
+@test "positivo: recomendar (b) también vale si dice cuándo reconfirmar" {
+  sed -i 's/\*\*Recomendación: (a)/**Recomendación: (b)/' "$BATS_TEST_TMPDIR/spec.md"
+  run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"errores=0"* ]]
+}
+
+@test "fail: spec sin la condición de reconfirmar la escena 1" {
+  sed -i 's/requiere reconfirmar la escena 1/requiere revisar/' "$BATS_TEST_TMPDIR/spec.md"
+  run_check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"reconfirmar la escena 1"* ]]
+}
+
+@test "positivo: jerga dentro de <style> no cuenta como texto visible" {
+  sed -i 's|</style>|.tier-token{}</style>|' "$BATS_TEST_TMPDIR/proto.html"
+  run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"errores=0"* ]]
+}
+
+@test "positivo: los estados se leen de la spec, no están fijos en el test" {
+  sed -i 's/?s=none|code|ok|expired|logout|doctor/?s=none|code|ok|expired|logout|doctor|help/' "$BATS_TEST_TMPDIR/spec.md"
+  sed -i 's/,"doctor"\]/,"doctor","help"]/; s/^const order=/const extra=1;\nconst order=/' "$BATS_TEST_TMPDIR/proto.html"
+  sed -i 's/^doctor:{t:/help:{t:"7 · Ayuda",h:`<p>Ayuda de ejemplo.<\/p>`},\ndoctor:{t:/' "$BATS_TEST_TMPDIR/proto.html"
+  run_check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"errores=0"* ]]
 }
