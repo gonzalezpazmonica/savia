@@ -18,9 +18,11 @@ Savia pidió fusionar un PR y se cortó la conexión antes de saber si GitHub lo
 
 Lo que pasa después depende de la comprobación y del **plazo de espera** (para un merge, 5 minutos desde que salió la petición):
 
-**Si la comprobación confirma que GitHub sí lo aplicó** (en cualquier momento), Savia lo marca como hecho y guarda el recibo:
+**Si la comprobación confirma que GitHub sí lo aplicó y lo que ve coincide con lo pedido** (en cualquier momento), Savia lo marca como hecho y guarda el recibo:
 
 > El merge de #1500 sí se hizo. Quedó marcado como hecho, con su commit `abc1234` (ejemplo).
+
+**Si la comprobación ve el merge hecho pero no coincide con lo pedido** (otro commit, u otra persona lo fusionó): no lo da por hecho. Pasa a «en revisión» sin esperar al plazo y lo verás como en la escena 2.
 
 **Si la comprobación no concluye o aún no ve el merge, y el plazo no ha pasado**: el efecto sigue **en vuelo**. No se repite ni se da por fallido; Savia vuelve a comprobar más tarde.
 
