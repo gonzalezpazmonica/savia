@@ -35,4 +35,10 @@ Núcleo = va en el bloque compacto de S2. Gate = puede salir del texto fijo cuan
 | `windows-links.sh repair` | excluido | — | Escribe en el repo; no es medible sin efectos. |
 | Perfil activo e índice de memoria externa | solo `--local` | núcleo | Gitignored; cifras por operador, sin gate. |
 
+## Límites del método
+
+- Los `@imports` se resuelven relativos a la raíz en todos los niveles (convención del repo). Un import relativo al fichero importador se mediría como inexistente: error, no cifra falsa. Rutas absolutas o con `..` que salgan de la raíz son error.
+- `--versioned` no lee ficheros gitignored: la cifra no depende de qué haya en la máquina.
+- `--hooks` aborta si un hook sale con código distinto de 0 y borra al terminar los ficheros nuevos que crean los hooks (p. ej. el marker de `cache-hygiene-hook.sh`). Un fichero sin versionar que ya existía y que un hook modifica (un log al que añade una línea) no se restaura.
+
 Los tokens de las filas partidas de `CLAUDE.md` son estimaciones por sección (`re.split('^## ')`); las filas de ficheros enteros son las medidas del script.
