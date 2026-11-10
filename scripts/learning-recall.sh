@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # learning-recall.sh — SCL-003/SCL-008: authority-filtered SaviaLearning recall.
+# SE-515 S1: la fila del log lleva los criterios devueltos (`returned_criteria`)
+# y el resultado (`outcome`: ok | no_vault | no_cli), también cuando sale con 3.
+# SAVIA_LEARNING_APPLIED=off conserva el formato y las salidas anteriores.
 
 set -uo pipefail
 
@@ -43,7 +46,31 @@ done
 [[ "$TOP" =~ ^[0-9]+$ ]] && (( TOP >= 1 && TOP <= 20 )) || usage
 [[ "$MIN_SCORE" =~ ^[0-9]+([.][0-9]+)?$ ]] || usage
 [[ "$MODE" == "shadow" || "$MODE" == "effective" ]] || usage
-[[ -d "$VAULT" && -f "$CRITERIO" ]] || exit 3
+
+TRACE=true
+[[ "${SAVIA_LEARNING_APPLIED:-on}" == "off" ]] && TRACE=false
+QUERY_HASH=$(printf '%s' "$QUERY" | sha256sum | cut -d' ' -f1)
+
+# log_row OUTCOME RESULT_JSON — una fila por consulta; nunca el texto de la consulta.
+log_row() {
+  mkdir -p "$(dirname "$RECALL_LOG")" 2>/dev/null || return 0
+  SCL_OUTCOME="$1" SCL_RESULT="$2" SCL_QUERY_HASH="$QUERY_HASH" SCL_TRACE="$TRACE" python3 - "$RECALL_LOG" <<'PY' 2>/dev/null || true
+import datetime, json, os, sys
+d = json.loads(os.environ['SCL_RESULT'])
+entry = {'ts': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'query_hash': os.environ['SCL_QUERY_HASH'], 'mode': d['mode'], 'effective_hits': len(d['effective_hits']), 'shadow_hits': d['shadow_hits'], 'rejected_hits': d['rejected_hits'], 'proposal_ids': d['proposal_ids']}
+if os.environ['SCL_TRACE'] == 'true':
+    entry['returned_criteria'] = [hit['criterion_id'] for hit in d['effective_hits']]
+    entry['outcome'] = os.environ['SCL_OUTCOME']
+with open(sys.argv[1], 'a', encoding='utf-8') as handle:
+    handle.write(json.dumps(entry, separators=(',', ':')) + '\n')
+PY
+}
+empty_result() { printf '{"mode":"%s","effective_hits":[],"shadow_hits":0,"rejected_hits":0,"proposal_ids":[]}' "$MODE"; }
+
+if [[ ! -d "$VAULT" || ! -f "$CRITERIO" ]]; then
+  $TRACE && log_row no_vault "$(empty_result)"
+  exit 3
+fi
 
 if [[ -z "$NODE_BIN" ]]; then
   for cand in "$HOME/.nvm/versions/node"/*/bin/node /usr/local/bin/node /usr/bin/node; do
@@ -51,7 +78,10 @@ if [[ -z "$NODE_BIN" ]]; then
   done
 fi
 CLI="${SCL_VAULT_CLI:-$ROOT/projects/savia-vaults/dist/cli/index.js}"
-[[ -n "$NODE_BIN" && -f "$CLI" ]] || exit 3
+if [[ -z "$NODE_BIN" || ! -f "$CLI" ]]; then
+  $TRACE && log_row no_cli "$(empty_result)"
+  exit 3
+fi
 
 if $HYBRID; then
   SEARCH_OUT=$(python3 - "$VAULT/learning" <<'PY'
@@ -177,17 +207,11 @@ for row in results[:top]:
 effective.sort(key=lambda hit: (-hit['score'], hit['criterion_id']))
 print(json.dumps({'mode': mode, 'effective_hits': effective, 'shadow_hits': shadow, 'rejected_hits': rejected, 'proposal_ids': sorted(set(proposal_ids))}, ensure_ascii=False))
 PY
-) || RESULT='{"mode":"shadow","effective_hits":[],"shadow_hits":0,"rejected_hits":0,"proposal_ids":[]}'
+)
+OUTCOME=ok
+[[ -n "$RESULT" ]] || { RESULT='{"mode":"shadow","effective_hits":[],"shadow_hits":0,"rejected_hits":0,"proposal_ids":[]}'; OUTCOME=error; }
 
-QUERY_HASH=$(printf '%s' "$QUERY" | sha256sum | cut -d' ' -f1)
-mkdir -p "$(dirname "$RECALL_LOG")"
-SCL_RESULT="$RESULT" SCL_QUERY_HASH="$QUERY_HASH" python3 - "$RECALL_LOG" <<'PY' 2>/dev/null || true
-import datetime, json, os, sys
-d = json.loads(os.environ['SCL_RESULT'])
-entry = {'ts': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'query_hash': os.environ['SCL_QUERY_HASH'], 'mode': d['mode'], 'effective_hits': len(d['effective_hits']), 'shadow_hits': d['shadow_hits'], 'rejected_hits': d['rejected_hits'], 'proposal_ids': d['proposal_ids']}
-with open(sys.argv[1], 'a', encoding='utf-8') as handle:
-    handle.write(json.dumps(entry, separators=(',', ':')) + '\n')
-PY
+log_row "$OUTCOME" "$RESULT"
 
 if $JSON; then
   SCL_RESULT="$RESULT" SCL_QUERY="$QUERY" python3 - <<'PY'

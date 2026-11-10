@@ -173,6 +173,17 @@ a, b = (json.loads(l) for l in open(sys.argv[1]))
 assert (a['mode'], b['mode']) == ('shadow', 'effective'), (a, b)
 assert a['query_hash'] != b['query_hash'] and len(a['query_hash']) == 64
 assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', a['ts'])
+# SE-515 S1: la fila añade los criterios devueltos y el resultado de la consulta
+assert set(a) == {'ts','query_hash','mode','effective_hits','shadow_hits','rejected_hits','proposal_ids','returned_criteria','outcome'}, a
+assert a['outcome'] == 'ok' and a['returned_criteria'] == [], a
+PY
+}
+
+@test "log: con SAVIA_LEARNING_APPLIED=off la fila conserva el formato anterior (SE-515 AC-16)" {
+  SAVIA_LEARNING_APPLIED=off bash "$RECALL" --query "hook captura diagnostico" --mode shadow >/dev/null
+  python3 - "$TMPD/recall.jsonl" <<'PY'
+import json, sys
+(a,) = (json.loads(l) for l in open(sys.argv[1]))
 assert set(a) == {'ts','query_hash','mode','effective_hits','shadow_hits','rejected_hits','proposal_ids'}, a
 PY
 }
