@@ -262,6 +262,8 @@ class TaskQueue:
         """Admite un cambio y aplica su salida a la cola en UNA transacción."""
         if origin not in AUTH_ORIGINS | CONTEXT_ORIGINS:
             raise ValueError(f"origen desconocido: {origin!r}")
+        if not text.strip():
+            raise ValueError("el texto del cambio está vacío")
         if kind not in ("change", "new_work") or signal not in ("plan", "none"):
             raise ValueError("kind o signal no válidos")
         if origin in AUTH_ORIGINS and kind == "new_work":

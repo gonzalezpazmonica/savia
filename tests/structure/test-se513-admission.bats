@@ -7,10 +7,13 @@
 # AC cubiertos: AC-2 (durabilidad con cortes y reinicio), AC-3 (UNKNOWN sin
 # prueba), AC-4 (duplicado), AC-5 (origen no autenticado), AC-6 (efecto
 # pendiente de permiso), AC-10 (sin fichero de estado nuevo).
+# Funciones de task-queue.py ejercitadas: admit, pull, ack, changes, recover,
+# _proof_ok, _norm (deduplicación), _hhmm (mensajes), _crash_point (cortes), _cli.
 
 setup() {
   ROOT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
-  TQ="$ROOT_DIR/scripts/lib/task-queue.py"
+  SCRIPT="scripts/lib/task-queue.py"
+  TQ="$ROOT_DIR/$SCRIPT"
   TMPDIR_TQ=$(mktemp -d)
   export PROJECT_ROOT="$TMPDIR_TQ"
   unset SAVIA_TQ_CRASH_AT
@@ -102,7 +105,7 @@ seed() {
   [ "$(sql q "SELECT state FROM admissions WHERE seq=$id")" = "UNKNOWN" ]
 }
 
-@test "AC-3: prueba cuyo plan no recoge el cambio → UNKNOWN" {
+@test "AC-3 boundary: plan que cita #N0 no prueba #N → UNKNOWN" {
   seed
   id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
   run tq ack q "$id" --plan-proof '{"owner":"agente-informe","plan":["seguir con la suite","cambio #'"$id"'0"]}'
@@ -194,7 +197,7 @@ seed() {
   [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "0" ]
 }
 
-@test "origen desconocido se rechaza (fail-closed)" {
+@test "invalid origin: origen desconocido se rechaza (fail-closed)" {
   seed
   run tq admit q --text "x" --origin operador-falso --job "$CI"
   [ "$status" -ne 0 ]
@@ -221,11 +224,33 @@ seed() {
   [ "$(jget "$output" "['effect_permission']")" = "None" ]
 }
 
-@test "trabajo terminado o inexistente → rechazo, sin admisión" {
+@test "edge: trabajo nonexistent → reject (exit 3), sin admisión" {
   seed
   run tq admit q --text "x" --origin operator --job deadbeef
   [ "$status" -eq 3 ]
   [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "0" ]
+}
+
+@test "edge: empty text → error, sin admisión" {
+  seed
+  run tq admit q --text "   " --origin operator --job "$CI"
+  [ "$status" -eq 2 ]
+  [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "0" ]
+}
+
+@test "edge: ack de un cambio nonexistent → reject (exit 3)" {
+  seed
+  run tq ack q 999
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"No hay ningún cambio admitido #999"* ]]
+}
+
+@test "edge: zero bump admite el cambio y no mueve la cola" {
+  seed
+  run tq admit q --text "solo apuntar" --origin operator --job "$CI" --bump 0
+  [ "$status" -eq 0 ]
+  [ "$(jget "$output" "['state']")" = "ADMITTED" ]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$CI'")" = "0" ]
 }
 
 # ── Escena 3 y AC-2: reinicio y cortes en cada frontera ─────────────────────
