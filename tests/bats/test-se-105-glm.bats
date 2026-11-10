@@ -168,3 +168,85 @@ if len(types) < 5:
   [ "$status" -eq 0 ]
   [[ "$output" == *"sha256:"* ]]
 }
+
+# ── compute/verify del digest sobre manifiestos sintéticos (S03s) ──
+# Ref: docs/rules/domain/glm-governance-protocol.md (SE-105 AC-5)
+# Cada test trabaja en su propio directorio: los scripts leen .well-known/ desde el cwd.
+glm_fixture() { # glm_fixture <digest-inicial>: manifiesto con otros campos "value"
+  W="$BATS_TEST_TMPDIR/w"; mkdir -p "$W/.well-known"
+  M="$W/.well-known/governance-layer-manifest.json"
+  printf '{\n  "claims": [{"name": "x", "value": "keep-me"}],\n  "pin": {"value": "%s"},\n  "manifest_digest": {\n    "algorithm": "sha256",\n    "value": "%s"\n  }\n}\n' \
+    "$(printf 'a%.0s' $(seq 64))" "$1" > "$M"
+}
+in_w() { (cd "$W" && bash "$@"); }
+
+@test "digest: compute then verify passes even with other \"value\" fields in the manifest" {
+  glm_fixture "<computed>"
+  run in_w "$COMPUTE"
+  [ "$status" -eq 0 ]
+  run in_w "$VERIFY"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "PASS: manifest digest verified sha256:"* ]]
+}
+
+@test "digest: compute never rewrites other 64-hex \"value\" fields" {
+  glm_fixture "<computed>"
+  run in_w "$COMPUTE"
+  [ "$status" -eq 0 ]
+  grep -q "\"pin\": {\"value\": \"$(printf 'a%.0s' $(seq 64))\"}" "$M"
+  grep -q '"value": "keep-me"' "$M"
+}
+
+@test "digest: tampering any field after compute makes verify fail" {
+  glm_fixture "<computed>"
+  in_w "$COMPUTE" >/dev/null
+  sed -i 's/keep-me/tampered/' "$M"
+  run in_w "$VERIFY"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL: digest mismatch"* ]]
+}
+
+@test "digest: recompute is idempotent and --dry-run changes nothing" {
+  glm_fixture "<computed>"
+  in_w "$COMPUTE" >/dev/null
+  cp "$M" "$BATS_TEST_TMPDIR/first.json"
+  run in_w "$COMPUTE" --dry-run
+  [ "$status" -eq 0 ]
+  cmp "$M" "$BATS_TEST_TMPDIR/first.json"
+  d=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["manifest_digest"]["value"])' "$M")
+  [[ "$output" == "DRY-RUN: digest would be sha256:$d" ]]
+  in_w "$COMPUTE" >/dev/null
+  cmp "$M" "$BATS_TEST_TMPDIR/first.json"
+}
+
+@test "digest: placeholder or empty stored value fails verify" {
+  for v in "<computed>" ""; do
+    glm_fixture "$v"
+    run in_w "$VERIFY"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"missing or placeholder"* ]]
+  done
+}
+
+@test "digest: missing manifest fails both scripts with exit 1" {
+  W="$BATS_TEST_TMPDIR/vacio"; mkdir -p "$W"
+  run in_w "$VERIFY"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found"* ]]
+  run in_w "$COMPUTE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not found"* ]]
+}
+
+@test "digest: compute refuses invalid JSON or an unexpected digest value, without touching the file" {
+  glm_fixture "not-a-digest"
+  cp "$M" "$BATS_TEST_TMPDIR/before.json"
+  run in_w "$COMPUTE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"must be <computed> or a sha256 hex digest"* ]]
+  cmp "$M" "$BATS_TEST_TMPDIR/before.json"
+  printf '{"manifest_digest": {"value": "<computed>"' > "$M"
+  run in_w "$COMPUTE"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is not valid JSON"* ]]
+}
