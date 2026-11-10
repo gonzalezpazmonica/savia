@@ -52,5 +52,5 @@ El arnés es un subcomando de `learning-recall.sh` y no un script aparte: como s
 |---|---|
 | AC-3 | Cubierto en `learning-recall.sh`, el hook de Claude Code y el guard de OpenCode, con los negativos de tope, muerte del proceso (SIGKILL), fallo, sin aciertos y salida rota, y paridad hook ↔ guard |
 | AC-4 | Cubierto (métrica y orquestador, con negativos) |
-| AC-5 | **Arnés cubierto. Medida real pendiente**: resultado publicado `sin muestra` en este árbol |
+| AC-5 | **Arnés cubierto. Medida real de P10 pendiente de una cúpula**: resultado publicado `sin muestra` en este árbol |
 | AC-16 | Cubierto en hook, guard, script, métrica y orquestador |
