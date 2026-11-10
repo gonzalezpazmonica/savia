@@ -97,7 +97,7 @@ Conclusión: el hueco es real. Se reutiliza el patrón de `dome-guard.sh` con su
 - respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
-- prototipo: los tres textos exactos de pregunta y rechazo de las escenas, y una tabla con las decisiones que habría tomado el guard sobre las llamadas MCP y WebFetch de una semana real (modo `observe`).
+- prototipo: [docs/specs/assets/SE-508-prototipo.html](assets/SE-508-prototipo.html) — los tres textos exactos de pregunta y rechazo de las escenas y una tabla de ejemplo (inventada) con las decisiones del modo `observe`.
 
 ### Confirmación del prototipo
 - fecha: pendiente (obligatoria antes de poner S1 en curso)

@@ -488,7 +488,7 @@ Revertir S2 o S3 tiene un coste: los consumidores vuelven a los JSON y no ven la
 - respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
-- prototipo: los tres textos exactos de las escenas y la salida de la reconciliación sobre un ledger de ejemplo con un efecto hecho, uno fallido y uno dudoso.
+- prototipo: `docs/specs/assets/SE-493-prototipo.md` — los tres textos exactos de las escenas y la salida de la reconciliación sobre un ledger de ejemplo con un efecto hecho, uno fallido y uno dudoso.
 
 ### Confirmación del prototipo
 - fecha: pendiente (obligatoria antes de poner S1 en curso)
