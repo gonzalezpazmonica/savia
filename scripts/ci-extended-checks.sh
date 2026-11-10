@@ -245,6 +245,16 @@ else
   fail "SAM generator missing (scripts/sam.py)"
 fi
 
+# 12. Fixed Context Ratchet (SE-511 S1): tokens versionados y de hooks no pueden subir
+echo "--- 12. Fixed Context Ratchet ---"
+for cf_mode in versioned hooks; do
+  if cf_out=$(CI_BASELINE_DIR="$CI_BASELINE_DIR" bash "$ROOT/scripts/context-fixed-measure.sh" "--$cf_mode" --check 2>&1); then
+    pass "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^OK:' | head -1)"
+  else
+    fail "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^(FAIL|ERROR):' | head -1)"
+  fi
+done
+
 echo "" && echo "═════════════════════════════════════════════════════════════"
 echo "  Results: $PASS passed, $FAIL failed ($TOTAL total checks)"
 echo "═════════════════════════════════════════════════════════════"

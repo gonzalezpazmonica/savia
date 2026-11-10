@@ -1719,9 +1719,9 @@
       "F"
     ],
     "wip_limit": {
-      "savia_implementing": 4,
+      "savia_implementing": 5,
       "labs_active": 1,
-      "note": "Temporal (addendum ADR-002, 2026-10-03): 4.º hueco solo para Savia Space (SE-428); vuelve a 3 al cerrar Space 0.2"
+      "note": "Temporal (addendum ADR-002, 2026-10-03): 4.º hueco solo para Savia Space (SE-428); vuelve a 3 al cerrar Space 0.2 · Excepción 2026-11-09 (operadora, pregunta interactiva: «Excepción: 5 en curso»): 5.º hueco solo para SE-511 S1; vuelve a 4 al cerrar S1."
     },
     "deadlines": "none",
     "prioritization": {
@@ -1753,6 +1753,11 @@
           "on": "2026-11-09",
           "requested_by": "operadora, repriorización completa a partir de la tesis Savia Viva R6",
           "change": "Cola reconstruida: 63 iniciativas activas no estaban en ninguna sesión. Alta de SE-513..SE-515 (PROPOSED) y de las sesiones S22..S34. Se retiran de la cola S01 y S02 (hechas) y S10, S11, S12, S13, S15, S16, S17, S18 y S20 (sus specs pasan a revisión de graduación S27 o a otras sesiones). SE-406, SE-381 y SE-475 pasan a SUPERSEDED (por SE-431, SE-468 y SE-510). Enmiendas propuestas sin cambio de estado en SE-386, SE-395, SE-401, SE-409, SE-459, SE-460, SE-468, SE-472, SE-473, SE-482, SE-497, SE-507, SE-510, SE-512 y SCL-003/006/011. Gates, fases y límites WIP sin cambios. Misma fecha, tras preguntas interactivas a la operadora: APPROVED SE-493, SE-496, SE-498, SE-508, SE-510, SE-511 (recorte condicionado a EXP-509), SE-513, SE-514 y SE-515, con escenas confirmadas; SUPERSEDED SE-377, SE-386, SE-390 y SE-394; DEFERRED SE-502 y SE-506; SE-472 condicionada a que su bucle siga en uso."
+        },
+        {
+          "on": "2026-11-09",
+          "requested_by": "operadora, pregunta interactiva («Excepción: 5 en curso»)",
+          "change": "WIP temporal a 5 para poner SE-511 S1 en curso sin sacar ninguna iniciativa; vuelve a 4 al cerrar S1. SE-511 pasa a IMPLEMENTING tras confirmar el prototipo S0."
         }
       ]
     },
