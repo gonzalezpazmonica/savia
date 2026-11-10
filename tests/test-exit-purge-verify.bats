@@ -160,3 +160,33 @@ verify() { run bash "$S" verify --engagement "$@"; }
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
 }
+
+@test "each exit script that names the engagement counts as allowed, and Total matches counts every match" {
+  for s in exit-package-generate exit-dependencies-declare exit-drill-execute exit-independence-verify; do
+    echo "# ejemplo: acme" > "$WS/scripts/$s.sh"
+  done
+  echo "acme" > "$WS/docs/notes.md"
+  verify acme
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Total matches:    5"* ]]
+  [[ "$output" == *"Allowed references: 4"* ]]
+  [[ "$output" == *"Violations:       1"* ]]
+}
+
+@test "--exclude-dir before --engagement is honoured (option order does not matter)" {
+  echo "acme" > "$WS/vendor/lib.txt"
+  run bash "$S" verify --exclude-dir vendor --engagement acme
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"RESULT: CLEAN"* ]]
+}
+
+@test "an existing tombstone is shown and kept, and the command exits 0" {
+  mkdir -p "$WS/.savia-tombstones"
+  echo '{"engagement": "acme", "verification_status": "verified"}' > "$WS/.savia-tombstones/acme.json"
+  before=$(sha256sum "$WS/.savia-tombstones/acme.json")
+  run bash "$S" tombstone --engagement acme
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Tombstone already exists"* ]]
+  [[ "$output" == *'"verification_status": "verified"'* ]]
+  [ "$(sha256sum "$WS/.savia-tombstones/acme.json")" = "$before" ]
+}

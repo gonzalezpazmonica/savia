@@ -35,11 +35,11 @@
 | 7 | `mcp-security-audit.sh` | seguridad de servidores MCP | `test-mcp-osv-check` (57) | + `test-mcp-security-audit` (88), `test-scrapling-mcp-template` | 16/20 (muestra de 104) |
 | 8 | `git-history-secret-scan.sh` | secretos en el historial | `test-gate-result-contract` (63) | + `test-git-secret-scanner` (83), `test-gitignore-scanner-exceptions` (87) | 31/38 |
 | 9 | `ci-extended-checks.sh` | CI | `test-hook-latency-fork-free` (52) | + `test-ci-extended-ratchet` | sin medida: baseline rojo en la copia aislada (depende del repo completo) |
-| 10 | `pre-push-security-gate.sh` | secretos antes del push | `test-gate-result-contract` (63) | + `test-git-secret-scanner` | en curso al commit |
-| 11 | `dependency-scan.sh` | CVE en dependencias | `test-gate-result-contract` (63) | + `test-dependency-scanner` (88) | en curso al commit |
-| 12 | `vuln-scan.sh` | hooks con `eval` | `test-gate-result-ondemand` (63) | esa (filtrada) | en curso al commit |
-| 13 | `security-scan.sh` | secretos en el workspace | `test-gate-result-ondemand` (63) | + iac, scanners (filtradas) | en curso al commit |
-| 14 | `mcp-audit.sh` | diseño de herramientas MCP | `test-mcp-tool-design` (64) | + `test-mcp-audit` (94) | en curso al commit |
+| 10 | `pre-push-security-gate.sh` | secretos antes del push | `test-gate-result-contract` (63) | + `test-git-secret-scanner` | 6/20 (muestra de 31), **incompleta**: falta `test-se247-prepush-gate` (S03j) |
+| 11 | `dependency-scan.sh` | CVE en dependencias | `test-gate-result-contract` (63) | + `test-dependency-scanner` (88) | no terminó dentro del time-box |
+| 12 | `vuln-scan.sh` | hooks con `eval` | `test-gate-result-ondemand` (63) | esa (filtrada) | 5/20 (muestra de 45), **incompleta**: falta `test-se-261-health-v2` |
+| 13 | `security-scan.sh` | secretos en el workspace | `test-gate-result-ondemand` (63) | + iac, scanners (filtradas) | no terminó dentro del time-box |
+| 14 | `mcp-audit.sh` | diseño de herramientas MCP | `test-mcp-tool-design` (64) | + `test-mcp-audit` (94) | 17/20 (muestra de 34) |
 | — | `merge-sprint.sh` | autoridad (merge) | `test-merge-sprint-se500` (77) | — | no medido: 440 mutantes × 150 s por suite no caben en el time-box; su otra suite tiene 90 |
 
 ## Elección (hasta 6)
@@ -63,5 +63,7 @@ Descartados con motivo:
 - `prompt-security-scan.sh` (22/40): 9 de los 18 supervivientes son equivalentes (`|| true`→`|| false`
   al final de una sustitución de proceso); su suite propia ya da 82.
 - `git-history-secret-scan.sh` (31/38) y `mcp-security-audit.sh` (16/20): ya matan más del 80 %.
-- Los «en curso» se añaden a esta tabla cuando terminen; si alguno sale peor que los elegidos, se
-  dice en la PR y queda para el siguiente grupo.
+- `pre-push-security-gate.sh` y `vuln-scan.sh` salieron peor (30 % y 25 %), pero su medida omite
+  una suite que también los ejercita y no se re-midieron dentro del time-box. Son los primeros
+  candidatos del siguiente grupo: re-medir con todas sus suites antes de tocarlos.
+- `mcp-audit.sh` (17/20) ya mata más del 80 %.

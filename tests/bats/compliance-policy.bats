@@ -123,3 +123,14 @@ PY
   [ "${#lines[@]}" -eq 1 ]
   [[ "$output" == "BLOCK: "*"[EU-AIA-ART50-TEST-FIXTURE v1]" ]]
 }
+
+@test "SE-389: a context without human_oversight is BLOCK (disclosure is never assumed)" {
+  run python3 scripts/compliance-eval.py --policy $F --context "$(ctx '{"actor":{"role":"deployer"},"interaction":{"human_facing":true}}')"
+  [ "$status" -eq 0 ]
+  [[ "$output" == BLOCK:* ]]
+}
+
+@test "SE-389: --policy is required (exit 2)" {
+  run python3 scripts/compliance-eval.py --context tests/fixtures/compliance/ctx-allow.json
+  [ "$status" -eq 2 ]
+}
