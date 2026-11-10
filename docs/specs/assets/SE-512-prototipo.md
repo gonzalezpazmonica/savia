@@ -14,7 +14,7 @@ Llega como notificación a las 22:40 (EJEMPLO). Repo: el de aprobaciones. La abr
 
 > Permiso nocturno de Savia: fusionar PR de documentación y changelog hasta las 08:00
 
-**Descripción** (la escribe el lado de los agentes; no es la defensa, lo que vale es el fichero)
+**Descripción** (se genera solo desde el `resumen` del fichero, sin texto libre, y el verificador la compara byte a byte con él: lo que lees aquí es lo que se verifica)
 
 > **Qué apruebas.** Que esta noche Savia fusione sola, de una en una, las PR del repo `savia` que cumplan **todo** esto en el momento de fusionarlas:
 >
