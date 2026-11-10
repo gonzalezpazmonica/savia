@@ -88,5 +88,6 @@ output/security/
 
 ## Gate de autorización
 
-Sin `output/security/authorization-{host}.txt` con "AUTHORIZED" y < 30 días,
-el script aborta con exit 1.
+Sin `output/security/authorization-{host}.txt` cuya primera línea sea
+exactamente `AUTHORIZED`, con menos de 30 días y sin fecha futura, el script
+aborta con exit 1.

@@ -116,10 +116,28 @@ has_any_client_tag() {
   grep -qE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null
 }
 
-get_file_client_tag() {
+# Primera etiqueta de cliente del fichero distinta de $2 (vacío si no hay).
+# Mirar solo la primera etiqueta dejaba pasar «client:propio … client:ajeno».
+get_foreign_tag() {
+  local file="$1" own="$2"
+  [[ ! -f "$file" ]] && { echo ""; return; }
+  grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | cut -d: -f2 | grep -vxF -- "$own" | head -1 || true
+}
+
+# Etiqueta a evaluar en las capas que comparan con los engagements activos:
+# la primera que NO pertenece a ninguno; si todas pertenecen, la primera.
+# Mirar solo la primera dejaba pasar «client:conocido … client:desconocido».
+get_check_tag() {
   local file="$1"
   [[ ! -f "$file" ]] && { echo ""; return; }
-  grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | head -1 | cut -d: -f2 || echo ""
+  local known tags t
+  known=$(discover_engagements | cut -d'|' -f1)
+  tags=$(grep -oE 'client:[a-z0-9][a-z0-9-]*' "$file" 2>/dev/null | cut -d: -f2 || true)
+  while IFS= read -r t; do
+    [[ -n "$t" ]] || continue
+    grep -qxF -- "$t" <<< "$known" || { echo "$t"; return; }
+  done <<< "$tags"
+  head -1 <<< "$tags"
 }
 
 tag_artifact() {
@@ -192,7 +210,7 @@ check_layer_episodic() {
         [[ -f "$memf" ]] || continue
         if has_any_client_tag "$memf"; then
           local tagged
-          tagged=$(get_file_client_tag "$memf")
+          tagged=$(get_foreign_tag "$memf" "$cslug")
           if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
             record_violation "$l" "$memf" \
               "Memory file tagged client:$tagged but belongs to client:$cslug" \
@@ -219,7 +237,7 @@ check_layer_semantic() {
       [[ -f "$f" ]] || continue
       if has_any_client_tag "$f"; then
         local tagged
-        tagged=$(get_file_client_tag "$f")
+        tagged=$(get_check_tag "$f")
         # Check against all other engagement clients
         for eng in $(discover_engagements); do
           IFS='|' read -r cslug ename yf <<< "$eng"
@@ -258,7 +276,7 @@ check_layer_active_context() {
         [[ -f "$pf" ]] || continue
         if has_any_client_tag "$pf"; then
           local tagged
-          tagged=$(get_file_client_tag "$pf")
+          tagged=$(get_foreign_tag "$pf" "$cslug")
           if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
             record_violation "$l" "$pf" \
               "Profile artifact tagged client:$tagged but profile belongs to client:$cslug" \
@@ -318,10 +336,10 @@ check_layer_knowledge_graph() {
       [[ -f "$kgf" ]] || continue
       if has_any_client_tag "$kgf"; then
         local tagged
-        tagged=$(get_file_client_tag "$kgf")
         for eng in $(discover_engagements); do
           IFS='|' read -r cslug ename yf <<< "$eng"
-          if [[ "$tagged" != "$cslug" ]]; then
+          tagged=$(get_foreign_tag "$kgf" "$cslug")
+          if [[ -n "$tagged" ]]; then
             record_violation "$l" "$kgf" \
               "KG artifact tagged client:$tagged — potential cross-contamination" \
               "" "$tagged"
@@ -346,7 +364,7 @@ check_layer_domes() {
       [[ -f "$df" ]] || continue
       if has_any_client_tag "$df"; then
         local tagged
-        tagged=$(get_file_client_tag "$df")
+        tagged=$(get_check_tag "$df")
 
         # Check against all engagements
         local found_match=false
@@ -386,7 +404,7 @@ check_layer_federation() {
       [[ -f "$ef" ]] || continue
       if has_any_client_tag "$ef"; then
         local tagged
-        tagged=$(get_file_client_tag "$ef")
+        tagged=$(get_foreign_tag "$ef" "$cslug")
         if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
           # In strict mode, this is a violation
           # In permeable-declared, check for operator declaration
@@ -446,7 +464,7 @@ check_layer_briefs_drafts() {
       fi
 
       local tagged
-      tagged=$(get_file_client_tag "$bf")
+      tagged=$(get_check_tag "$bf")
 
       # In strict mode, check against all current engagements
       if [[ -n "$tagged" ]]; then
@@ -488,7 +506,7 @@ check_layer_briefs_drafts() {
       [[ -f "$bf" ]] || continue
       if has_any_client_tag "$bf"; then
         local tagged
-        tagged=$(get_file_client_tag "$bf")
+        tagged=$(get_foreign_tag "$bf" "$cslug")
         if [[ -n "$tagged" ]] && [[ "$tagged" != "$cslug" ]]; then
           record_violation "$l" "$bf" \
             "Engagement artifact tagged client:$tagged found in client:$cslug directory" \
