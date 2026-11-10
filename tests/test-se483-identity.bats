@@ -184,3 +184,152 @@ make_fixture_root() {
   agents=$(find "$ROOT/.opencode/agents" -maxdepth 1 -name '*.md' -exec basename {} .md \; | sort)
   [ "$listed" = "$agents" ]
 }
+
+# ── S03t: el gate completo (comprobaciones 1-9) en un árbol sintético ────────
+# docs-identity-check.sh deriva ROOT de su ruta: se copia a un árbol propio con
+# superficies mínimas y válidas, y cada caso rompe exactamente una comprobación.
+
+s03t_root() {
+  GR="$BATS_TEST_TMPDIR/gate"
+  mkdir -p "$GR/scripts" "$GR/.claude/profiles" "$GR/docs" "$GR/.claude-plugin"
+  cp "$LIB" "$GR/scripts/docs-identity-check.sh"
+  cp "$SRC" "$GR/.claude/profiles/savia.md"
+  GL="$(bash "$LIB" long)"; GS="$(bash "$LIB" short)"
+  printf '# Savia\n\nSistema agéntico soberano. 567 cosas.\n\n%s\n' "$GL" > "$GR/README.md"
+  for f in CLAUDE.md AGENTS.md llms.txt; do printf '# Savia\n%s\n' "$GL" > "$GR/$f"; done
+  for f in docs/critical-facts.md plugin.json .claude-plugin/plugin.json; do printf '%s\n' "$GS" > "$GR/$f"; done
+  G="$GR/scripts/docs-identity-check.sh"
+}
+
+@test "gate: árbol coherente pasa con exit 0 y mensaje PASS" {
+  s03t_root
+  run bash "$G"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PASS: identidad documental consistente (Savia)"* ]]
+}
+
+@test "gate negativo: README cuyo primer título no es '# Savia' falla con exit 1" {
+  s03t_root
+  printf '# PM-Workspace\n\nsoberano 567\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"título actual no es '# Savia' (es: # PM-Workspace)"* ]]
+  [[ "$output" == *"1 fallo(s)"* ]]
+}
+
+@test "gate negativo: traducción sin la palabra soberano falla y se nombra el fichero" {
+  s03t_root
+  printf '# Savia\n567 sin identidad\n' > "$GR/README.en.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"README.en.md sin identidad canónica"* ]]
+}
+
+@test "gate: traducción con 'sovereign' en inglés sí cuenta como identidad" {
+  s03t_root
+  printf '# Savia\nA sovereign system. 567\n' > "$GR/README.en.md"
+  run bash "$G"
+  [ "$status" -eq 0 ]
+}
+
+@test "gate negativo: contadores del README distintos de la realidad fallan" {
+  s03t_root
+  mkdir -p "$GR/.opencode/commands" "$GR/.opencode/agents" "$GR/.claude/skills/a"
+  : > "$GR/.opencode/commands/x.md"
+  printf '# Savia\n\nsoberano 567\n\n999 comandos · 1 agentes · 1 skills · 5 hooks\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"contadores README (999 comandos"* ]]
+  [[ "$output" == *"realidad (1 comandos · 0 agentes · 1 skills)"* ]]
+}
+
+@test "gate: contadores del README iguales a la realidad pasan" {
+  s03t_root
+  mkdir -p "$GR/.opencode/commands" "$GR/.opencode/agents" "$GR/.claude/skills/a"
+  : > "$GR/.opencode/commands/x.md"
+  printf '# Savia\n\nsoberano 567\n\n1 comandos · 0 agentes · 1 skills · 5 hooks\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 0 ]
+}
+
+@test "gate negativo: URL pm-workspace como identidad actual en README falla; con 'origin' se admite" {
+  s03t_root
+  printf '# Savia\n\nsoberano 567\nInstalar https://github.com/gonzalezpazmonica/pm-workspace\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"URLs legacy como identidad actual en README.md"* ]]
+  printf '# Savia\n\nsoberano 567\nRepositorio origin https://github.com/gonzalezpazmonica/pm-workspace\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 0 ]
+}
+
+@test "gate negativo: CLAUDE.md sin la palabra Savia falla" {
+  s03t_root
+  printf 'nada\n%s\n' "$GL" | sed 's/Savia/X/g' > "$GR/CLAUDE.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"CLAUDE.md sin identidad Savia"* ]]
+}
+
+@test "gate negativo: primera pantalla que dice 'pm-workspace es' falla; con 'origen' pasa" {
+  s03t_root
+  printf '# Savia\n\nsoberano 567\npm-workspace es un gestor\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"identidad legacy como actual"* ]]
+  printf '# Savia\n\nsoberano 567\npm-workspace es el origen del proyecto\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 0 ]
+}
+
+@test "gate negativo: traducción con contador obsoleto (532) falla" {
+  s03t_root
+  printf '# Savia\nsoberano 567 y 532\n' > "$GR/README.fr.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"contadores stale en README.fr.md"* ]]
+}
+
+@test "gate negativo: README sin el contador canónico 567 falla" {
+  s03t_root
+  printf '# Savia\n\nsoberano\n%s\n' "$GL" > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"README.md sin contador canonical 567"* ]]
+}
+
+@test "gate negativo: superficie sin la frase canónica hace fallar el gate completo y sugiere regenerar" {
+  s03t_root
+  printf '# Savia\notra frase\n' > "$GR/AGENTS.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AGENTS.md sin la frase larga canónica"* ]]
+  [[ "$output" == *"Regenerar:"* ]]
+}
+
+@test "gate límite: varios fallos se suman en el contador final" {
+  s03t_root
+  printf '# Otra cosa\nsin nada\n' > "$GR/README.md"
+  run bash "$G"
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ ([0-9]+)\ fallo\(s\) ]]
+  [ "${BASH_REMATCH[1]}" -ge 3 ]
+}
+
+@test "argumento desconocido sale con 2 y muestra el uso" {
+  s03t_root
+  run bash "$G" nope
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Uso: docs-identity-check.sh"* ]]
+}
+
+@test "canonical: árbol coherente pasa y cuenta 7 superficies; sin una superficie falla" {
+  s03t_root
+  run env SAVIA_IDENTITY_ROOT="$GR" bash "$G" canonical
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"presente en 7 superficies"* ]]
+  : > "$GR/llms.txt"
+  run env SAVIA_IDENTITY_ROOT="$GR" bash "$G" canonical
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"llms.txt sin la frase larga canónica"* ]]
+}
