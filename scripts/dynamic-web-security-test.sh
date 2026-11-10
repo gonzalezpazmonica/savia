@@ -76,6 +76,11 @@ check_authorization() {
     echo "ERROR: Authorization file is older than 30 days. Re-authorize."
     exit 1
   fi
+  # Fecha futura (reloj o touch manipulado): la autorización no caduca nunca.
+  if [[ ${age} -lt -300 ]]; then
+    echo "ERROR: Authorization file has a future timestamp. Re-authorize."
+    exit 1
+  fi
 
   echo "[auth] Authorization verified for host: ${host}"
 }

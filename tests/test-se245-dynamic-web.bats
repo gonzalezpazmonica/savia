@@ -230,3 +230,15 @@ assert d['nuclei_results'].endswith('nuclei-results.json')
     [[ "$output" == *"[nuclei] SKIP"* ]]
     [ ! -s "$CALLS" ]
 }
+
+@test "authorization file with a future timestamp is rejected, a fresh one is accepted" {
+    s03t_sandbox; s03t_authorize localhost
+    touch -d '10 days' "$SB/output/security/authorization-localhost.txt"
+    s03t_run --target http://localhost:19999 --tools nuclei
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"future timestamp"* ]]
+    [ ! -s "$CALLS" ]
+    touch "$SB/output/security/authorization-localhost.txt"
+    s03t_run --target http://localhost:19999 --tools nuclei
+    [ "$status" -eq 0 ]
+}
