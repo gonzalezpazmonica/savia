@@ -16,6 +16,8 @@
   está en verde, no hay medida (fail-closed). «Muerto» = la suite sale distinta de 0.
 - Con más de 40 mutantes o suites lentas se toma una muestra determinista equiespaciada (`n/total
   muestra`). En suites que prueban varios escáneres se filtran los tests por nombre del script.
+- Corrección posterior al primer commit: la primera pasada omitía las suites de PRs S03 previas que
+  también nombran el script (solo afectaba a mobile: `test-se240-mobile-security`, tratada en S03j).
 - Candidatos: tests por debajo de 80 que ejercitan scripts de gates en `scripts/`, excluidos los
   ficheros tocados por las PRs de S03 (#1489, #1491, #1492, #1494, #1495, #1498, #1507 y las que
   devuelve la búsqueda S03), los vetados de S03s y todo `.claude/hooks/`.
@@ -26,7 +28,7 @@
 |---|---|---|---|---|---|
 | 1 | `exit-purge-verify.sh` | confidencialidad: certifica que un engagement olvidado no deja rastro | `test-se272-s5-exit-portability` (78) | esa | **0/29** |
 | 2 | `opencode-gates-real.py` | arnés de prueba del motor real (no es gate en uso) | `structure/test-opencode-gates-v2` (61) | esa | 3/20 (muestra de 159) |
-| 3 | `mobile-security-scan.sh` | seguridad: veredicto clean/findings de un APK | `test-gate-result-ondemand` (63) | esa | **17/45** |
+| 3 | `mobile-security-scan.sh` | seguridad: veredicto clean/findings de un APK | `test-gate-result-ondemand` (63) | + `test-se240-mobile-security` (78, de S03j) | **33/45** (17/45 solo con la primera) |
 | 4 | `compliance-eval.py` | regulatorio: ALLOW/BLOCK/UNKNOWN de una política | `bats/compliance-policy` (41) | esa | 11/20 (muestra de 44) |
 | 5 | `prompt-security-scan.sh` | seguridad de prompts | `test-gate-result-scanners` (63) | + `scripts/test-prompt-security-scan` (82) | 22/40 (muestra de 71) |
 | 6 | `egress-gate.sh` | red: deny-by-default | `test-g3-effect-path-capabilities` (74) | + `test-se273-s3-s7` (88) | 20/29 |
@@ -47,7 +49,9 @@ confidencialidad o seguridad pesa más que en un arnés.
 
 1. **`exit-purge-verify.sh`** — 0/29: ningún test ejerce su comportamiento (solo existe, es
    ejecutable y pasa `bash -n`). Certifica la purga de un cliente: un «CLEAN» falso es una fuga.
-2. **`mobile-security-scan.sh`** — 17/45 (38 %). Veredicto de seguridad de un APK.
+2. **`mobile-security-scan.sh`** — 33/45 (73 %) con todas sus suites. Veredicto de seguridad de un APK.
+   Tres de sus 12 supervivientes están en el bloque del manifiesto (líneas 140-144): ese código no
+   influía en el resultado. Ahí estaba el fallo.
 3. **`compliance-eval.py`** — 11/20 (55 %). Decide ALLOW/BLOCK regulatorio; ningún test mira el
    código de salida ni los casos de rol y unknowns críticos.
 4. **`egress-gate.sh`** — 20/29 (69 %). Control de red deny-by-default; sobreviven el interruptor
