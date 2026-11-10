@@ -2,6 +2,8 @@
 # SE-511 S1 — medición del contexto fijo por turno (AC-1, AC-2, AC-4, AC-11).
 # Ref: docs/specs/SE-511-contexto-fijo-por-turno-a-la-mitad.spec.md
 
+bats_require_minimum_version 1.5.0   # run --separate-stderr
+
 setup() {
   ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   S="$ROOT/scripts/context-fixed-measure.sh"
@@ -110,6 +112,7 @@ jq_py() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
 
 mkhooks() {
   mkdir -p "$T/h/.claude" "$T/h/tests/fixtures/context-fixed"
+  git -C "$T/h" init -q   # --hooks exige git para limpiar los efectos de los hooks
   printf '# x\n' > "$T/h/CLAUDE.md"
   cp "$ROOT/tests/fixtures/context-fixed/turn.json" "$T/h/tests/fixtures/context-fixed/turn.json"
   python3 - "$T/h/.claude/settings.json" "$1" <<'PY'
@@ -134,15 +137,52 @@ PY
 }
 
 @test "hooks negativo: hook no determinista -> exit != 0 sin total" {
-  mkhooks 'head -c $((RANDOM % 200 + 1)) /dev/zero | tr "\\0" x'
-  fallo=0
-  for _ in 1 2 3 4 5 6; do
-    CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
-    if [ "$status" -ne 0 ]; then fallo=1; break; fi
-  done
-  [ "$fallo" -eq 1 ]
+  # Determinista para el test: la 1.ª ejecución deja una marca y la 2.ª imprime otra cosa.
+  mkhooks 'mkdir -p data; if [ -e data/n ]; then printf ab; else : > data/n; printf a; fi'
+  printf 'data/\n' > "$T/h/.gitignore"
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
+  [ "$status" -eq 1 ]
   [[ "$output" == *"no determinista"* ]]
   [[ "$output" != *"TOTAL"* ]]
+  [ ! -e "$T/h/data/n" ]   # la marca la creó la medición: se limpia también al fallar
+}
+
+@test "hooks negativo: hook que sale con código != 0 -> exit 1 sin total (no cuenta 0 en silencio)" {
+  mkhooks "printf 'abcd'; exit 1"
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"código 1"* ]]
+  [[ "$output" != *"TOTAL"* ]]
+}
+
+@test "hooks: la exclusión compara el script ejecutado, no una subcadena del comando" {
+  mkhooks "printf 'abcd' # scripts/windows-links.sh"
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'd["chars"]')" -eq 4 ]
+  mkdir -p "$T/h/scripts"; printf 'printf zzzz\n' > "$T/h/scripts/windows-links.sh"
+  mkhooks 'bash "$CLAUDE_PROJECT_DIR"/scripts/windows-links.sh repair'
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'd["hooks"][0]["status"]')" = "excluido" ]
+}
+
+@test "hooks: borra los ficheros que crean los hooks y conserva los que ya existían" {
+  mkhooks 'mkdir -p data; : > data/.marker; printf x >> data/previo; printf ok'
+  printf 'data/\n' > "$T/h/.gitignore"
+  mkdir -p "$T/h/data"; printf 'antes' > "$T/h/data/previo"
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/h/data/.marker" ]
+  [ -f "$T/h/data/previo" ]
+}
+
+@test "hooks negativo: raíz sin git -> exit 1 (no puede limpiar efectos)" {
+  mkhooks "printf ok"
+  rm -rf "$T/h/.git"
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"repositorio git"* ]]
 }
 
 @test "hooks negativo: fixture ausente -> exit != 0" {
@@ -153,12 +193,12 @@ PY
 }
 
 @test "hooks: el repo real da la misma cifra en dos ejecuciones y no escribe en el árbol" {
-  before="$(git -C "$ROOT" status --porcelain | md5sum)"
+  before="$(git -C "$ROOT" status --porcelain --ignored -uall | md5sum)"
   run bash "$S" --hooks; a="$(total_line)"
   run bash "$S" --hooks; b="$(total_line)"
   [ "$status" -eq 0 ]
   [ -n "$a" ] && [ "$a" = "$b" ]
-  [ "$before" = "$(git -C "$ROOT" status --porcelain | md5sum)" ]
+  [ "$before" = "$(git -C "$ROOT" status --porcelain --ignored -uall | md5sum)" ]
 }
 
 # ── AC-4 ──────────────────────────────────────────────────────────────────
@@ -214,7 +254,76 @@ cur_tokens() { bash "$S" "--$1" --json | jq_py 'd["tokens"]'; }
   mkdir -p "$T/b"; cp "$ROOT"/.ci-baseline/*.count "$ROOT"/.ci-baseline/*.pct "$T/b/"
   echo 1 > "$T/b/context-fixed-tokens.count"
   CI_BASELINE_DIR="$T/b" run bash "$ROOT/scripts/ci-extended-checks.sh"
-  [[ "$output" == *"❌ Contexto fijo (versioned)"* ]]
+  # La línea del gate debe llevar el FAIL del trinquete, no un ERROR de otra causa.
+  [[ "$output" == *"❌ Contexto fijo (versioned): FAIL: versionado"*"> baseline 1"* ]]
+}
+
+@test "--check sin baseline posible (--local, --entry opencode) sale con 2, no con 0" {
+  run bash "$S" --local --check; [ "$status" -eq 2 ]
+  run bash "$S" --versioned --entry opencode --check; [ "$status" -eq 2 ]
+  [[ "$output" == *"--check solo existe"* ]]
+}
+
+@test "--json --check deja stdout como JSON puro con el veredicto dentro" {
+  mkroot; mkdir -p "$T/b"; echo 1 > "$T/b/context-fixed-tokens.count"
+  CONTEXT_FIXED_ROOT="$T/r" CI_BASELINE_DIR="$T/b" run --separate-stderr bash "$S" --versioned --json --check
+  [ "$status" -eq 1 ]
+  [ "$(echo "$output" | jq_py 'd["check"]["ok"]')" = "False" ]
+  [[ "$stderr" == FAIL:* ]]
+}
+
+@test "--local --json con aviso deja stdout como JSON puro" {
+  mkroot
+  head -c 30000 /dev/zero | tr '\0' 'x' >> "$T/r/docs/a.md"
+  CONTEXT_FIXED_ROOT="$T/r" run --separate-stderr bash "$S" --local --json
+  [ "$status" -eq 0 ]
+  [[ "$(echo "$output" | jq_py 'd["warning"]')" == AVISO* ]]
+}
+
+@test "imports fuera de la raíz (.. o absolutos) -> exit 1 aunque el fichero exista" {
+  mkroot; printf 'fuera\n' > "$T/fuera.md"
+  printf '@../fuera.md\n' >> "$T/r/CLAUDE.md"
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --versioned
+  [ "$status" -eq 1 ]; [[ "$output" == *"fuera de la raíz"* ]]
+  rm -rf "$T/r"; mkroot; printf '@%s\n' "$T/fuera.md" >> "$T/r/CLAUDE.md"
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --versioned
+  [ "$status" -eq 1 ]; [[ "$output" == *"fuera de la raíz"* ]]
+}
+
+# Raíz con un fichero local (gitignored) que importa algo roto.
+mklocalbroken() {
+  mkroot; git -C "$T/r" init -q
+  printf '.claude/\n' > "$T/r/.gitignore"
+  mkdir -p "$T/r/.claude/profiles"
+  printf '@docs/privado-cliente-x.md\n' > "$T/r/.claude/profiles/active-user.md"
+  printf '@.claude/profiles/active-user.md\n' >> "$T/r/CLAUDE.md"
+}
+
+@test "--versioned no recorre ficheros locales: un import roto dentro de uno no rompe la medición" {
+  mklocalbroken
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --versioned --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'len(d["pieces"])')" -eq 2 ]
+  [[ "$output" != *"privado-cliente-x"* ]]
+}
+
+@test "AC-11 negativo: errores con ficheros locales no imprimen su ruta ni lo que importan" {
+  mklocalbroken
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --local
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"inexistente"* ]]
+  [[ "$output" != *"privado-cliente-x"* ]]
+  [[ "$output" != *"active-user"* ]]
+  printf '@CLAUDE.md\n' > "$T/r/.claude/profiles/active-user.md"     # ciclo vía fichero local
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --local
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ciclo"* ]]
+  [[ "$output" != *"active-user"* ]]
+  printf '\xff\xfe\n' > "$T/r/.claude/profiles/active-user.md"       # ilegible (no UTF-8)
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --local
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ilegible"* ]]
+  [[ "$output" != *"active-user"* ]]
 }
 
 # ── AC-11 ─────────────────────────────────────────────────────────────────

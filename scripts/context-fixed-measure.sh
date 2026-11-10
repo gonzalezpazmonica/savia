@@ -11,11 +11,17 @@
 # Opciones:
 #   --entry claude|opencode   punto de entrada (opencode suma .opencode/CLAUDE.md). Por defecto claude.
 #   --check       compara con .ci-baseline/context-fixed-*.count; falla (exit 1) si la cifra sube.
-#   --json        salida JSON.
+#                 Solo con --versioned (entry claude) o --hooks; en otra combinación sale con 2.
+#   --json        salida JSON pura en stdout (veredicto del trinquete y avisos en el JSON y en stderr).
+#
+# Imports: `@ruta` se resuelve relativo a la RAÍZ (no al fichero importador), igual en todos los
+# niveles; es la convención del repo. `~` no se expande. Una ruta absoluta o con `..` que salga de la
+# raíz es error. --versioned no lee ni recorre ficheros gitignored: la cifra no depende de la máquina.
 #
 # Método de tokens: caracteres / 4 (el de scripts/token-estimator.sh), entero hacia abajo, sobre el total.
-# Fail-closed: un @import inexistente (y no gitignored), un ciclo, un fichero ilegible o un hook no
-# determinista salen con exit 1; nunca se imprime un total parcial como válido.
+# Fail-closed: un @import inexistente (y no gitignored), un ciclo, un fichero ilegible, un hook que
+# sale con código != 0 o un hook no determinista salen con exit 1; nunca se imprime un total parcial.
+# --hooks borra al terminar los ficheros nuevos (sin versionar) que hayan creado los hooks en la raíz.
 #
 # Env: CONTEXT_FIXED_ROOT (raíz a medir), CI_BASELINE_DIR (baselines), CONTEXT_FIXED_FIXTURE.
 # Exit: 0 OK · 1 fallo de medición o regresión del trinquete · 2 uso.
@@ -26,7 +32,7 @@ BASELINE_DIR="${CI_BASELINE_DIR:-$ROOT/.ci-baseline}"
 FIXTURE="${CONTEXT_FIXED_FIXTURE:-$ROOT/tests/fixtures/context-fixed/turn.json}"
 
 MODE=""; ENTRY="claude"; CHECK=0; JSON=0
-usage() { sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --versioned|--hooks|--local) [[ -n "$MODE" ]] && { echo "ERROR: un solo modo por ejecución" >&2; exit 2; }; MODE="${1#--}"; shift ;;
@@ -38,6 +44,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ -n "$MODE" ]] || { echo "ERROR: falta modo (--versioned|--hooks|--local)" >&2; usage >&2; exit 2; }
+if [[ $CHECK -eq 1 ]] && ! [[ "$MODE" == hooks || ( "$MODE" == versioned && "$ENTRY" == claude ) ]]; then
+  echo "ERROR: --check solo existe para --versioned (entry claude) y --hooks: no hay baseline para --$MODE --entry $ENTRY" >&2; exit 2
+fi
 command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 no disponible" >&2; exit 1; }
 
 export ROOT BASELINE_DIR FIXTURE MODE ENTRY CHECK JSON
@@ -74,32 +83,49 @@ def imports_of(text):
             if "/" in p or re.search(r'\.\w{1,5}$', p): out.append(p)
     return out
 
-def read(path):
+def read(path, hidden=False):
     try:
         with open(path, "rb") as f: raw = f.read()
         return raw, raw.decode("utf-8")
     except (OSError, UnicodeDecodeError) as e:
-        die("fichero ilegible: %s (%s)" % (os.path.relpath(path, ROOT), type(e).__name__))
+        die("fichero ilegible: %s (%s)" % (LOCAL_LABEL if hidden else os.path.relpath(path, ROOT),
+                                          type(e).__name__))
 
+def inside_root(path):
+    root = os.path.normpath(ROOT)
+    return path == root or path.startswith(root + os.sep)
+
+LOCAL_LABEL = "<fichero local>"
 def resolve(entry_rel):
-    """Devuelve (versionadas, locales_presentes, locales_ausentes). Ciclo o import roto -> die()."""
+    """Devuelve (versionadas, locales_presentes, locales_ausentes). Ciclo o import roto -> die().
+    En --versioned los ficheros gitignored no se leen ni se recorren. Los mensajes de error nunca
+    nombran un fichero local ni lo que importa un fichero local."""
     versioned, local, absent, seen = [], [], 0, set()
-    def walk(rel, stack):
+    def name(rel, is_local): return LOCAL_LABEL if is_local else rel
+    def walk(rel, stack, from_local):
         nonlocal absent
         path = os.path.normpath(os.path.join(ROOT, rel))
+        if os.path.isabs(rel) or not inside_root(path):
+            die("@import fuera de la raíz: " + name(rel, from_local))
+        ignored = is_ignored(rel)
+        hidden = from_local or ignored
         real = os.path.realpath(path)
-        if real in stack:
-            die("ciclo de @imports: " + " -> ".join(os.path.relpath(s, ROOT) for s in stack + [real]))
+        if not ignored and os.path.exists(path) and not inside_root(real):
+            die("@import versionado que sale de la raíz (enlace): " + name(rel, from_local))
+        if real in [r for r, _ in stack]:
+            chain = [name(r, h) for _, (r, h) in stack] + [name(rel, hidden)]
+            die("ciclo de @imports: " + " -> ".join(chain))
         if not os.path.exists(path):
-            if is_ignored(rel): absent += 1; return
-            die("@import a fichero inexistente: " + rel)
+            if ignored: absent += 1; return
+            die("@import a fichero inexistente: " + name(rel, from_local))
+        if ignored and MODE == "versioned": return
         if real in seen: return
         seen.add(real)
-        raw, text = read(path)
-        (local if is_ignored(rel) else versioned).append((rel, len(raw), len(text)))
+        raw, text = read(path, hidden)
+        (local if ignored else versioned).append((rel, len(raw), len(text)))
         for imp in imports_of(text):
-            walk(os.path.normpath(imp), stack + [real])
-    walk(entry_rel, [])
+            walk(os.path.normpath(imp), stack + [(real, (rel, hidden))], hidden)
+    walk(entry_rel, [], False)
     return versioned, local, absent
 
 def entries():
@@ -120,8 +146,14 @@ def measure_files():
     return v, l, a
 
 # --- hooks -----------------------------------------------------------------
-# Excluidos con motivo: escriben en el repo (no medibles sin efectos).
-EXCLUDED = ("windows-links.sh",)
+# Excluidos con motivo: escriben en el repo (no medibles sin efectos). Se compara el script que
+# ejecuta el hook (primer `scripts/*.sh` o `.claude/hooks/*.sh` del comando), no una subcadena.
+EXCLUDED = ("scripts/windows-links.sh",)
+HOOK_SCRIPT = re.compile(r'(?:"\$CLAUDE_PROJECT_DIR"|\$CLAUDE_PROJECT_DIR|\.)?/?((?:scripts|\.claude/hooks)/[\w./-]+\.sh)')
+def hook_script(cmd):
+    m = HOOK_SCRIPT.search(cmd.split("#", 1)[0])
+    return m.group(1) if m else None
+
 def hook_commands():
     try:
         with open(os.path.join(ROOT, ".claude/settings.json"), encoding="utf-8") as f: s = json.load(f)
@@ -134,6 +166,20 @@ def hook_commands():
     except (OSError, KeyError, ValueError, TypeError) as e:
         die("no se pudo leer .claude/settings.json: " + type(e).__name__)
 
+def untracked_set():
+    """Ficheros sin versionar (ignorados incluidos) bajo ROOT. Sin git -> error (fail-closed)."""
+    r = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--others"], capture_output=True)
+    r2 = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
+                        capture_output=True)
+    if r.returncode or r2.returncode: die("--hooks necesita que la raíz sea un repositorio git")
+    return {x for x in (r.stdout + b"\0" + r2.stdout).decode("utf-8", "surrogateescape").split("\0") if x}
+
+def cleanup_new(before):
+    """Borra los ficheros que no existían antes de lanzar los hooks (efectos de la medición)."""
+    for rel in sorted(untracked_set() - before):
+        p = os.path.normpath(os.path.join(ROOT, rel))
+        if inside_root(p) and (os.path.isfile(p) or os.path.islink(p)): os.unlink(p)
+
 def run_hooks_once():
     try:
         with open(FIX, "rb") as f: stdin = f.read()
@@ -141,7 +187,7 @@ def run_hooks_once():
     except (OSError, ValueError): die("fixture ausente o inválida: " + os.path.relpath(FIX, ROOT))
     rows = []
     for i, (ev, cmd, to) in enumerate(hook_commands()):
-        if any(x in cmd for x in EXCLUDED):
+        if hook_script(cmd) in EXCLUDED:
             rows.append((i, ev, "excluido", 0, 0)); continue
         with tempfile.TemporaryDirectory() as home:
             env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": home, "TZ": "UTC",
@@ -152,6 +198,9 @@ def run_hooks_once():
                                    cwd=ROOT, timeout=min(30, max(5, (to or 10) if (to or 10) < 100 else 30)))
             except subprocess.TimeoutExpired:
                 die("hook sin respuesta a tiempo: #%d %s" % (i, ev))
+        if r.returncode != 0:
+            die("hook #%d %s salió con código %d: la medición no vale (corrige o excluye el hook con motivo)"
+                % (i, ev, r.returncode))
         out = r.stdout.decode("utf-8", "replace")
         ctx = out
         try:
@@ -168,12 +217,15 @@ def baseline(name):
         with open(p) as f: return int(f.read().strip())
     except (OSError, ValueError): die("baseline ausente o ilegible: " + name)
 
+MSG_OUT = sys.stderr if AS_JSON else sys.stdout   # --json: stdout solo lleva el JSON
 def ratchet(label, current, name):
     b = baseline(name)
-    if current > b:
-        print("FAIL: %s %d tokens > baseline %d (%s)" % (label, current, b, name)); return False
-    print("OK: %s %d tokens <= baseline %d%s" % (label, current, b, " (baseline holgado, bájalo)" if current < b else ""))
-    return True
+    ok = current <= b
+    msg = ("OK: %s %d tokens <= baseline %d%s" % (label, current, b, " (baseline holgado, bájalo)" if current < b else "")
+           if ok else "FAIL: %s %d tokens > baseline %d (%s)" % (label, current, b, name))
+    print(msg, file=MSG_OUT)
+    result["check"] = {"baseline": b, "ok": ok, "message": msg}
+    return ok
 
 result = {"mode": MODE, "entry": ENTRY}
 ok = True
@@ -192,11 +244,17 @@ if MODE in ("versioned", "local"):
         for p in pieces: print("%-52s %8d %8d %7d" % (p[0], p[1], p[2], tok(p[2])))
         print("%-52s %8d %8d %7d" % ("TOTAL", tb, tc, tok(tc)))
         if MODE == "local" and absent: print("locales ausentes (gitignored, no cuentan): %d" % absent)
-    if MODE == "local" and tok(tc) > LOCAL_WARN: print("AVISO: contexto local %d tokens > %d (sin gate)" % (tok(tc), LOCAL_WARN))
-    if CHECK and MODE == "versioned" and ENTRY == "claude":
+    if MODE == "local" and tok(tc) > LOCAL_WARN:
+        result["warning"] = "AVISO: contexto local %d tokens > %d (sin gate)" % (tok(tc), LOCAL_WARN)
+        print(result["warning"], file=MSG_OUT)
+    if CHECK:   # la combinación ya se validó en bash (solo versioned + claude llega aquí)
         ok = ratchet("versionado", tok(tc), "context-fixed-tokens.count")
 elif MODE == "hooks":
-    a = run_hooks_once(); b = run_hooks_once()
+    before = untracked_set()
+    try:
+        a = run_hooks_once(); b = run_hooks_once()
+    finally:
+        cleanup_new(before)
     if [(x[2], x[3], x[4]) for x in a] != [(x[2], x[3], x[4]) for x in b]:
         die("--hooks no determinista: dos ejecuciones difieren (%s vs %s caracteres); corrige o excluye el hook con motivo"
             % (sum(x[4] for x in a), sum(x[4] for x in b)))
