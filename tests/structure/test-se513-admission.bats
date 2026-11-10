@@ -145,15 +145,43 @@ seed() {
 }
 
 @test "AC-3: ningún camino del código escribe APPLIED_TO_PLAN fuera de _proof_ok" {
-  # Inspección estática complementaria a los casos de comportamiento:
-  # el literal solo aparece en la constante, y la única asignación pasa por _proof_ok.
-  run grep -n "APPLIED_TO_PLAN" "$TQ"
-  for l in "${lines[@]}"; do
-    [[ "$l" != *"SET state"* && "$l" != *"VALUES"* && "$l" != *"state='"* ]]
-  done
-  run grep -nE "state *= *APPLIED|APPLIED if|\(APPLIED,|, APPLIED\)" "$TQ"
-  [ "${#lines[@]}" -eq 1 ]
-  [[ "${lines[0]}" == *"_proof_ok"* ]]
+  # Inspección estática por AST (no por estilo de línea), complementaria a los
+  # casos de comportamiento: el texto «APPLIED» solo aparece en la definición de
+  # la constante, y el nombre APPLIED solo se lee para comparar, como clave de
+  # LABELS o como rama de un `APPLIED if _proof_ok(...) else ...`.
+  run python3 - "$TQ" <<'PY'
+import ast, re, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+parent = {}
+for node in ast.walk(tree):
+    for ch in ast.iter_child_nodes(node):
+        parent[ch] = node
+bad = []
+for n in ast.walk(tree):
+    # Las docstrings y los comentarios SQL («-- ...») no escriben estado.
+    if (isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and "APPLIED" in re.sub(r"--[^\n]*", "", n.value)
+            and not isinstance(parent.get(n), ast.Expr)):
+        p = parent.get(parent.get(n))  # Constant -> Tuple -> Assign
+        ok = (n.value == "APPLIED_TO_PLAN" and isinstance(p, ast.Assign)
+              and any(isinstance(e, ast.Name) and e.id == "APPLIED"
+                      for t in p.targets if isinstance(t, ast.Tuple) for e in t.elts))
+        if not ok:
+            bad.append(f"literal L{n.lineno}")
+    if isinstance(n, ast.Name) and n.id == "APPLIED" and isinstance(n.ctx, ast.Load):
+        p = parent[n]
+        if isinstance(p, ast.Compare):
+            continue
+        if isinstance(p, ast.Dict) and any(k is n for k in p.keys):
+            continue
+        if (isinstance(p, ast.IfExp) and p.body is n and isinstance(p.test, ast.Call)
+                and getattr(p.test.func, "id", "") == "_proof_ok"):
+            continue
+        bad.append(f"nombre L{n.lineno} en {type(p).__name__}")
+print("OK" if not bad else "FALLO: " + ", ".join(bad))
+PY
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
 }
 
 @test "AC-3: un cambio aplicado no se reaplica (ack repetido es idempotente)" {
@@ -541,4 +569,69 @@ PY
   [[ "$output" != *$'\e'* && "$output" != *$'\a'* && "$output" != *$'\xc2\x9b'* ]]
   run tq recover q
   [[ "$output" != *$'\e'* ]]
+}
+
+# ── Segunda revisión independiente (PR #1520, sha de838f6) ──────────────────
+
+@test "P1: cambio sobre pendiente, el agente lo coge y lo termina antes de pull → se le entrega" {
+  seed
+  id=$(jget "$(tq admit q --text "CI con la rama nueva" --origin operator --job "$CI")" "['id']")
+  [ "$(jget "$(tq dequeue q --worker agente-ci)" "['id']")" = "$CI" ]
+  tq complete q "$CI" --ok >/dev/null                    # paso corto: termina antes del pull
+  run tq pull q --owner agente-ci
+  [ "$status" -eq 0 ]
+  [ "$(jget "$output" "[0]['id']")" = "$id" ]
+  [ "$(jget "$output" "[0]['recovered']")" = "0" ]
+  run tq ack q "$id" --plan-proof "{\"owner\":\"agente-ci\",\"plan\":[\"usar rama nueva (#$id)\"]}"
+  [ "$(jget "$output" "['state']")" = "APPLIED_TO_PLAN" ]
+  # negativo: otro agente que no tuvo el trabajo no lo recibe
+  id2=$(jget "$(tq admit q --text "publicar el lunes" --origin operator --job "$PUB")" "['id']")
+  tq dequeue q --worker agente-pub >/dev/null
+  tq complete q "$PUB" --ok >/dev/null
+  run tq pull q --owner agente-ci
+  [ "$output" = "[]" ]
+  [ "$(sql q "SELECT state, owner FROM admissions WHERE seq=$id2")" = "ADMITTED|agente-pub" ]
+}
+
+@test "P2: entregado al dueño anterior antes de reasignar → el nuevo dueño lo recibe marcado como reentrega" {
+  seed
+  id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
+  tq pull q --owner agente-informe >/dev/null
+  TASK_QUEUE_STALE_SEC=0 tq recover q >/dev/null
+  tq dequeue q --worker agente-b >/dev/null
+  [ "$(sql q "SELECT owner, delivered_at IS NULL, recovered FROM admissions WHERE seq=$id")" = "agente-b|1|1" ]
+  # el mismo agente que vuelve a reclamar no pierde la entrega
+  run tq pull q --owner agente-b
+  [ "$(jget "$output" "[0]['id']")" = "$id" ]
+  run tq pull q --owner agente-b
+  [ "$output" = "[]" ]
+}
+
+@test "P2: pull --owner cola → error de uso, no entrega nada" {
+  seed
+  tq admit q --text "CI con la rama nueva" --origin operator --job "$CI" >/dev/null
+  run tq pull q --owner cola
+  [ "$status" -eq 2 ]
+  [ "$(sql q "SELECT COUNT(*) FROM admissions WHERE delivered_at IS NOT NULL")" = "0" ]
+}
+
+@test "P2: --set-text sobre trabajo cuyo payload no es un objeto → rechazo sin admisión" {
+  seed
+  J=$(tq enqueue q lista --payload '["a","b"]')
+  run tq admit q --text "renombrar" --origin operator --job "$J" --set-text "nuevo"
+  [ "$status" -eq 3 ]
+  [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "0" ]
+  [ "$(sql q "SELECT payload FROM jobs WHERE id='$J'")" = '["a", "b"]' ]
+  # control: sin --set-text el mismo trabajo sí admite el cambio
+  run tq admit q --text "adelanta la lista" --origin operator --job "$J" --bump 1
+  [ "$status" -eq 0 ]
+}
+
+@test "P2: changes no muestra caracteres de formato (RLO, ancho cero)" {
+  seed
+  tq admit q --text $'informe‮osla​ en pausa' --origin operator --job "$INFORME" >/dev/null
+  run tq changes q --all
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"informe"* ]]
+  [[ "$output" != *$'‮'* && "$output" != *$'​'* ]]
 }

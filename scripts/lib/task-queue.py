@@ -32,6 +32,9 @@ Usage (CLI):
   Límites de S1: `--origin` y la prueba de plan son DECLARACIONES de quien llama
   (proceso local); la cola no las autentica ni las firma. Solo exige que la
   prueba la declare el agente que recibió el cambio (entregado por `pull`).
+  `ack` tampoco autentica a quien llama. `effect_permission=PENDING` es una
+  etiqueta: el ejecutor que consuma `dequeue` DEBE comprobarla antes de
+  ejecutar el efecto; la cola no lo hace (identidad atada: SE-514).
 
 Programmatic (sourced from other Python):
   from task_queue import TaskQueue
@@ -141,8 +144,8 @@ def _crash_point(name: str) -> None:
 
 
 def _safe(text: Any) -> str:
-    """Quita caracteres de control (ANSI/OSC, C1) antes de mostrar un texto."""
-    return "".join("?" if unicodedata.category(c) == "Cc" else c for c in str(text))
+    """Quita caracteres de control (ANSI/OSC, C1) y de formato (RLO, ancho cero) al mostrar."""
+    return "".join("?" if unicodedata.category(c) in ("Cc", "Cf") else c for c in str(text))
 
 
 def _hhmm(ts: float) -> str:
@@ -226,6 +229,17 @@ class TaskQueue:
             conn.execute(
                 "UPDATE jobs SET status='running', worker=?, started_at=?, heartbeat=? WHERE id=?",
                 (worker, now, now, row["id"]),
+            )
+            # SE-513: quien reclama el trabajo pasa a ser dueño de sus cambios abiertos
+            # en la misma transacción. Así el cambio le llega aunque termine el trabajo
+            # antes de hacer `pull`, y un dueño anterior que cayó deja de recibirlo.
+            # Si ya se había entregado a otro, se marca como reentrega.
+            conn.execute(
+                "UPDATE admissions SET owner=?, delivered_at=NULL, "
+                "recovered=CASE WHEN delivered_at IS NULL THEN recovered ELSE 1 END "
+                "WHERE queue=? AND job_id=? AND kind='change' AND state IN (?,?) "
+                "AND acked_at IS NULL AND owner IS NOT ?",
+                (worker, self.name, row["id"], ADMITTED, UNKNOWN, worker),
             )
             conn.execute("COMMIT")
             return {"id": row["id"], "command": row["command"],
@@ -329,6 +343,9 @@ class TaskQueue:
                 except json.JSONDecodeError:
                     conn.execute("ROLLBACK")
                     raise ValueError("el payload del trabajo no es JSON legible")
+                if set_text is not None and not isinstance(payload, dict):
+                    conn.execute("ROLLBACK")
+                    raise AdmissionRefused("Ese trabajo no tiene un texto que se pueda cambiar.")
                 raw_effect = payload.get("effect") if isinstance(payload, dict) else None
                 # Cualquier efecto declarado, sea del tipo que sea, sigue pidiendo permiso.
                 effect = _safe(raw_effect) if raw_effect not in (None, "") else None
@@ -337,7 +354,7 @@ class TaskQueue:
                 if job["status"] == "pending":
                     if bump:
                         conn.execute("UPDATE jobs SET priority=priority+? WHERE id=?", (bump, job_id))
-                    if set_text is not None and isinstance(payload, dict):
+                    if set_text is not None:
                         payload["text"] = set_text
                         conn.execute("UPDATE jobs SET payload=? WHERE id=?",
                                      (json.dumps(payload), job_id))
@@ -387,27 +404,30 @@ class TaskQueue:
 
     def pull(self, owner: str) -> list[dict]:
         """Entrega al dueño sus cambios abiertos; reentrega lo entregado y no acusado tras un corte."""
+        if not owner or owner == "cola":
+            raise ValueError("pull necesita el nombre del agente; «cola» no es un agente")
         now = time.time()
         cutoff = now - STALE_HEARTBEAT_SEC
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            # El cambio lo recibe quien tiene hoy el trabajo. Un cambio sobre un
-            # trabajo pendiente nace con dueño «cola»; si el dueño cae y el trabajo
-            # se reasigna, lo hereda el agente que lo reclama después.
+            # El cambio lo recibe su dueño. Un cambio sobre un trabajo pendiente nace
+            # con dueño «cola» y `dequeue` lo pasa al agente que reclama el trabajo
+            # (también tras reasignarlo porque el dueño anterior cayó), así que el
+            # dueño es siempre quien tiene o tuvo el trabajo por última vez, y el
+            # cambio se le entrega aunque el trabajo ya esté terminado.
             # Lo ya acusado (ack) no se reentrega.
             rows = conn.execute(
-                "SELECT a.* FROM admissions a LEFT JOIN jobs j ON j.id = a.job_id "
-                "WHERE a.queue=? AND a.kind='change' AND a.state IN (?,?) AND a.acked_at IS NULL "
-                "AND (a.owner=? OR (j.status='running' AND j.worker=?)) "
-                "AND (a.delivered_at IS NULL OR a.delivered_at < ? OR a.owner IS NOT ?) "
-                "ORDER BY a.seq",
-                (self.name, ADMITTED, UNKNOWN, owner, owner, cutoff, owner)).fetchall()
+                "SELECT * FROM admissions "
+                "WHERE queue=? AND kind='change' AND state IN (?,?) AND acked_at IS NULL "
+                "AND owner=? AND (delivered_at IS NULL OR delivered_at < ?) "
+                "ORDER BY seq",
+                (self.name, ADMITTED, UNKNOWN, owner, cutoff)).fetchall()
             out = []
             for r in rows:
-                again = 1 if r["delivered_at"] is not None else 0
-                conn.execute("UPDATE admissions SET owner=?, delivered_at=?, "
+                again = 1 if (r["delivered_at"] is not None or r["recovered"]) else 0
+                conn.execute("UPDATE admissions SET delivered_at=?, "
                              "recovered=MAX(recovered, ?) WHERE seq=?",
-                             (owner, now, again, r["seq"]))
+                             (now, again, r["seq"]))
                 out.append({"id": r["seq"], "text": r["text"], "job_id": r["job_id"],
                             "state": r["state"], "recovered": again})
             conn.execute("COMMIT")
@@ -554,7 +574,10 @@ def _cli() -> int:
             print(f"ERROR: {ex}", file=sys.stderr); return 2
         print(json.dumps(res, ensure_ascii=False))
     elif args.cmd == "pull":
-        print(json.dumps(q.pull(args.owner), ensure_ascii=False))
+        try:
+            print(json.dumps(q.pull(args.owner), ensure_ascii=False))
+        except ValueError as ex:
+            print(f"ERROR: {ex}", file=sys.stderr); return 2
     elif args.cmd == "changes":
         rows = q.changes(args.all)
         if args.json:
