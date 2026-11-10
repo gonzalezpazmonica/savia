@@ -95,7 +95,7 @@ Fichero JSON canónico (claves ordenadas, UTF-8 NFC, sin espacios) con firma `ss
 | `capability` | `id`, `version` y `sha256` del descriptor de SE-386; si el descriptor cambia, el contrato deja de valer |
 | `authority` | Techo: nivel L0–L4 y tier SE-362 máximos. La autoridad efectiva es el **mínimo** entre el contrato, el nivel del agente y el gate del tier |
 | `scope` | Lista cerrada de selectores de recurso exactos: `repo`, ramas por patrón anclado (`agent/*`), número de PR o proyecto. Sin comodines globales. Semántica de selectores en «Comparación de selectores», abajo |
-| `preconditions` | Predicados adicionales del principal (por ejemplo, `ci_status != failure`) |
+| `preconditions` | Predicados adicionales del principal (por ejemplo, `ci_status == success`; una CI pendiente o cancelada no cumple) |
 | `declared_effects` | Efectos que el principal acepta. Un efecto no listado se deniega aunque la capacidad lo permita |
 | `not_before`, `expires_at` | Obligatorios. Vida máxima 7 días; la del grant de merge sigue siendo la de SE-343 |
 | `max_uses` | Opcional; `1` para efectos irreversibles (`reversibility: irreversible`). Mecanismo de consumo en R4 «Ledger de usos» |
@@ -335,7 +335,7 @@ Nada depende de una persona concreta. El perfil activo solo **selecciona** qué 
 - respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
-- prototipo: la PR de autorización de la escena 1 tal como llega al móvil y el texto exacto del rechazo de la escena 2.
+- prototipo: [docs/specs/assets/SE-496-prototipo.html](assets/SE-496-prototipo.html) — la PR de autorización de la escena 1 tal como llega al móvil y el texto exacto del rechazo de la escena 2 (simulado, con datos de ejemplo).
 
 ### Confirmación del prototipo
 - fecha: pendiente (obligatoria antes de poner S1 en curso)
