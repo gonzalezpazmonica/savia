@@ -519,7 +519,9 @@ fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; fir
   plan_and_grant
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
-  [ "$(paste -sd, "$FAKE/merged")" = "160,162" ]
+  # SE-500 S3: el orden congelado pone primero la independiente (#162) y luego el par que choca por número.
+  [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["order"])' "$MERGE_SPRINT_HOME/manifest.json")" = "[162, 160, 161]" ]
+  [ "$(paste -sd, "$FAKE/merged")" = "162,160" ]
   grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"161"' | grep '"reason":"conflicto_real"' | grep -q '"files":"scripts/foo.sh"'
   ! ledger_has '"event":"JUDGE_REQUEST"' || false
 }
