@@ -58,7 +58,7 @@ teardown() {
   echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['effective_hits'] == []; assert d['shadow_hits'] >= 1"
 }
 
-@test "AC-2: recall sin contexto relacionado no produce ruido (exit 0, 0 hits)" {
+@test "AC-2 zero hits: recall sin contexto relacionado no produce ruido (exit 0)" {
   run bash "$RECALL" --query "receta de paella valenciana" --top 3
   [ "$status" -eq 0 ]
   [[ "$output" != *"LP-"* ]]
@@ -127,7 +127,7 @@ activate_proposal() {
   echo "$output" | grep -q "Usage: learning-recall.sh"
 }
 
-@test "CLI: --top fuera de 1..20 → exit 2 (fronteras 0 y 21), 1 y 20 válidos" {
+@test "CLI boundary: --top fuera de 1..20 → exit 2 (0 y 21), 1 y 20 válidos" {
   run bash "$RECALL" --query x --top 0;  [ "$status" -eq 2 ]
   run bash "$RECALL" --query x --top 21; [ "$status" -eq 2 ]
   run bash "$RECALL" --query x --top abc; [ "$status" -eq 2 ]
@@ -207,7 +207,7 @@ d = json.load(sys.stdin)
 assert d['query'] == 'hook captura diagnostico' and 'proposal_ids' not in d, d"
 }
 
-@test "log directory inexistente se crea (recall-log en ruta nueva)" {
+@test "log directory nonexistent: se crea (recall-log en ruta nueva)" {
   run bash "$RECALL" --query "algo" --recall-log "$TMPD/nuevo/dir/r.jsonl"
   [ "$status" -eq 0 ]
   [ -s "$TMPD/nuevo/dir/r.jsonl" ]

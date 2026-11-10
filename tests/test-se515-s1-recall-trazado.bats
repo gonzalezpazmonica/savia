@@ -5,7 +5,8 @@
 # P10 (AC-5); interruptor SAVIA_LEARNING_APPLIED=off deja todo como antes (AC-16).
 # El registro en el hook de Claude Code (.claude/hooks/learning-recall-hook.sh) y su paridad con
 # el guard quedan pendientes: editar ese hook requiere permiso de la operadora (ver PR).
-# Spec: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md (S1)
+# Ref: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md (S1)
+# Ref: docs/evidence/SE-515-S0-auditoria-linea-base.md §2 (cambio mínimo para S1)
 
 HOOK=".claude/hooks/learning-recall-hook.sh"
 RECALL="scripts/learning-recall.sh"
@@ -29,6 +30,11 @@ setup() {
   fi
 }
 
+teardown() {
+  # Ningún recall falso de este test puede quedar vivo (los de tope y SIGKILL duermen).
+  pkill -KILL -f "$PROJ/scripts/learning-recall.sh" 2>/dev/null || true
+}
+
 # fake_recall BODY: learning-recall.sh falso con el cuerpo bash dado.
 fake_recall() {
   printf '#!/usr/bin/env bash\n%s\n' "$1" > "$PROJ/scripts/learning-recall.sh"
@@ -40,9 +46,16 @@ hook() { run bash -c 'printf "%s" "$1" | bash "$0"' "$HOOK" "${1:-$PROMPT}"; }
 # last_end FIELD: campo de la fila final (phase=end) más reciente.
 last_end() { jq -rc "select(.phase==\"end\") | .$1" "$SCL_EMISSION_LOG" | tail -1; }
 
+@test "seguridad: los scripts tocados usan set -uo pipefail y pasan bash -n" {
+  for f in "$RECALL" "$METRIC" "$ORCH"; do
+    grep -qE '^set -[eu]*o pipefail' "$f" || { echo "sin pipefail: $f"; return 1; }
+    bash -n "$f"
+  done
+}
+
 # ── AC-3: fila por cada inyección ────────────────────────────────────────────
 
-@test "AC-3: learning-recall.sh registra criterios devueltos y outcome; sin cúpula deja fila outcome=no_vault" {
+@test "AC-3 missing vault: learning-recall.sh sale 3 y deja fila outcome=no_vault con criterios vacíos" {
   local log="$BATS_TEST_TMPDIR/recall.jsonl"
   run bash "$RECALL" --query "consulta de prueba" --vault "$BATS_TEST_TMPDIR/no-existe" --recall-log "$log"
   [ "$status" -eq 3 ]
@@ -50,7 +63,7 @@ last_end() { jq -rc "select(.phase==\"end\") | .$1" "$SCL_EMISSION_LOG" | tail -
   [ "$(jq -rc .returned_criteria "$log")" = "[]" ]
 }
 
-@test "AC-3: learning-recall.sh sin CLI de vaults deja fila outcome=no_cli" {
+@test "AC-3 missing CLI: learning-recall.sh sale 3 y deja fila outcome=no_cli" {
   local log="$BATS_TEST_TMPDIR/recall.jsonl" v="$BATS_TEST_TMPDIR/vault"
   mkdir -p "$v"; printf 'CRIT-001 x\n' > "$BATS_TEST_TMPDIR/C.md"
   SCL_VAULT_CLI="$BATS_TEST_TMPDIR/no-cli.js" run bash "$RECALL" --query "consulta" --vault "$v" \
@@ -84,7 +97,7 @@ EOF
 
 # ── AC-16: interruptor ───────────────────────────────────────────────────────
 
-@test "AC-16: SAVIA_LEARNING_APPLIED=off → la fila de learning-recall.sh vuelve al formato anterior" {
+@test "AC-16 disabled: SAVIA_LEARNING_APPLIED=off → learning-recall.sh no escribe fila nueva al salir con 3" {
   local log="$BATS_TEST_TMPDIR/recall.jsonl"
   SAVIA_LEARNING_APPLIED=off run bash "$RECALL" --query "x consulta" --vault "$BATS_TEST_TMPDIR/no" --recall-log "$log"
   [ "$status" -eq 3 ]
@@ -93,7 +106,7 @@ EOF
 
 # ── AC-4: métrica no medida ──────────────────────────────────────────────────
 
-@test "AC-4 negativo: learning-metric sin --measured → status 'no medido'" {
+@test "AC-4 reject: learning-metric sin --measured → status 'no medido'" {
   run bash "$METRIC" --p-consistent 0.5 --divergence 0.2 --ignorance-resolved 0.1 --json
   [ "$status" -eq 0 ]
   [ "$(jq -r .status <<<"$output")" = "no medido" ]
@@ -108,12 +121,12 @@ EOF
   jq -e ".L == 0.68" <<<"$output" >/dev/null
 }
 
-@test "AC-16: learning-metric con el interruptor off no añade status" {
+@test "AC-16 disabled: learning-metric con el interruptor off no añade status" {
   SAVIA_LEARNING_APPLIED=off run bash "$METRIC" --p-consistent 0.5 --divergence 0.2 --ignorance-resolved 0.1 --json
   [ "$(jq -r 'has("status")' <<<"$output")" = "false" ]
 }
 
-@test "AC-4 negativo: el orquestador con valores por defecto marca 'no medido' y nunca dice 'aprendió'" {
+@test "AC-4 reject: el orquestador con valores por defecto marca 'no medido' y nunca dice 'aprendió'" {
   export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
   unset SAGI_P_CONSISTENT SAGI_L_DIVERGENCE SAGI_L_IGNORANCE_RESOLVED
   run bash "$ORCH" --task "fixture se515 metrica" --iterations 1
@@ -131,7 +144,7 @@ EOF
   echo "$output" | grep -q '\[medir\].*no medido'
 }
 
-@test "S1: el orquestador usa el recall efectivo o declara shadow con motivo" {
+@test "S1 missing vault: el orquestador declara shadow o no disponible con motivo" {
   export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
   # sin cúpula: el efectivo no está disponible y lo declara
   SCL_VAULT_DIR="$BATS_TEST_TMPDIR/no-vault" run bash "$ORCH" --task "fixture se515 recall" --iterations 1
@@ -144,7 +157,7 @@ EOF
   [ "$output" -ge 1 ]
 }
 
-@test "AC-16: orquestador con interruptor off conserva la línea antigua de lectura" {
+@test "AC-16 disabled: orquestador con interruptor off conserva la línea antigua de lectura" {
   export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
   SAVIA_LEARNING_APPLIED=off SCL_VAULT_DIR="$BATS_TEST_TMPDIR/no-vault" run bash "$ORCH" --task "fixture se515 off" --iterations 1
   echo "$output" | grep -q 'shadow hits de SaviaLearning'
@@ -180,7 +193,7 @@ need_ts() {
   if grep -q "Soberania" "$SCL_EMISSION_LOG"; then echo 'negación falló: grep -q "Soberania" "$SCL_EMISSION_LOG"'; return 1; fi
 }
 
-@test "AC-3 negativo (OpenCode): sin aciertos, exit 1, exit 3 y salida no JSON → emitted=false con motivo" {
+@test "AC-3 error (OpenCode): empty hits, exit 1, exit 3 y salida no JSON → emitted=false con motivo" {
   need_ts
   local body reason
   while IFS='|' read -r body reason; do
@@ -197,14 +210,14 @@ echo no-json|bad_output
 EOF
 }
 
-@test "AC-3 (OpenCode): filtros previos (slash, corto, trivial) no abren evento" {
+@test "AC-3 skip (OpenCode): filtros previos (slash, corto, trivial) no abren evento" {
   need_ts
   fake_recall "printf '%s' '$HITS'"
   ts_rows "/sprint-status x"; ts_rows "1234567"; ts_rows "vale"
   [ ! -e "$SCL_EMISSION_LOG" ]
 }
 
-@test "AC-16 (OpenCode): SAVIA_LEARNING_APPLIED=off → inyecta igual y no deja filas" {
+@test "AC-16 disabled (OpenCode): SAVIA_LEARNING_APPLIED=off → inyecta igual y no deja filas" {
   need_ts
   fake_recall "printf '%s' '$HITS'"
   run env SAVIA_LEARNING_APPLIED=off SAVIA_WORKSPACE_DIR="$PROJ" $TS_RUNTIME "$REPO/.opencode/plugins/__tests__/learning-recall-guard-cli.ts" "como publico la rama del sprint"
@@ -212,7 +225,7 @@ EOF
   [ ! -e "$SCL_EMISSION_LOG" ]
 }
 
-@test "paridad negativa: timeout en TS → emitted=false reason=timeout" {
+@test "AC-3 timeout (OpenCode): tope vencido → emitted=false reason=timeout" {
   need_ts
   fake_recall "sleep 5"
   SCL_RECALL_TIMEOUT_S=1 ts_rows "como publico la rama del sprint"
@@ -258,7 +271,7 @@ EOF
   if grep -q "datos del cliente" "$BATS_TEST_TMPDIR/p10.jsonl"; then echo 'negación falló: grep -q "datos del cliente" "$BATS_TEST_TMPDIR/p10.jsonl"'; return 1; fi
 }
 
-@test "AC-5: cero cambios con criterios emitidos es un resultado válido ('sin efecto')" {
+@test "AC-5 zero: cero cambios con criterios emitidos es un resultado válido ('sin efecto')" {
   mk_cases
   printf '#!/usr/bin/env bash\ncat >/dev/null; echo PROCEED\n' > "$DECIDER"
   run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
@@ -267,7 +280,7 @@ EOF
   [ "$(jq -r .verdict <<<"$output")" = "sin efecto" ]
 }
 
-@test "AC-5 negativo: sin ningún criterio emitido el veredicto es 'sin muestra', no 'sin efecto'" {
+@test "AC-5 empty sample: sin ningún criterio emitido el veredicto es 'sin muestra', no 'sin efecto'" {
   mk_cases
   fake_recall "exit 3"
   run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
@@ -276,7 +289,7 @@ EOF
   [ "$(jq -r .emitting_cases <<<"$output")" = "0" ]
 }
 
-@test "AC-5 negativo: decisor que falla → veredicto 'incompleto' y exit 1" {
+@test "AC-5 fail: decisor que falla → veredicto 'incompleto' y exit 1" {
   mk_cases
   printf '#!/usr/bin/env bash\nexit 7\n' > "$DECIDER"
   run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
@@ -284,7 +297,7 @@ EOF
   [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
 }
 
-@test "AC-5 negativo: casos ilegibles o decisor ausente → exit 2" {
+@test "AC-5 missing: casos ilegibles, decisor o inyector ausente → exit 2" {
   mk_cases
   run bash "$ABL" ablation --cases "$BATS_TEST_TMPDIR/no.jsonl" --injector "$INJECTOR" --decider /bin/true --root "$PROJ"
   [ "$status" -eq 2 ]
@@ -301,6 +314,20 @@ EOF
   run bash "$REPO/$ABL" ablation --cases cases.jsonl --injector ./injector.sh --decider ./decider.sh --root "$PROJ"
   [ "$status" -eq 0 ]
   [ "$(jq -r .changed <<<"$output")" = "1" ]
+}
+
+@test "AC-5 invalid: casos vacíos → sin muestra; sin case_id/prompt o no JSON → exit 2" {
+  mk_cases
+  : > "$BATS_TEST_TMPDIR/empty.jsonl"
+  run bash "$ABL" ablation --cases "$BATS_TEST_TMPDIR/empty.jsonl" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .verdict <<<"$output")" = "sin muestra" ]
+  printf '{"case_id":"x"}\n' > "$BATS_TEST_TMPDIR/bad.jsonl"
+  run bash "$ABL" ablation --cases "$BATS_TEST_TMPDIR/bad.jsonl" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 2 ]
+  printf 'no-json\n' > "$BATS_TEST_TMPDIR/bad.jsonl"
+  run bash "$ABL" ablation --cases "$BATS_TEST_TMPDIR/bad.jsonl" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 2 ]
 }
 
 @test "AC-5: el arnés no nombra ningún frontend (guard de agnosticismo SCL-001 S4)" {
