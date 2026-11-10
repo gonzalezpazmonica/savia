@@ -116,18 +116,25 @@ EOF
   [[ "$output" == *"no convierte minutos a segundos"* ]]
 }
 
-@test "R-KEY: quitar la prohibición de clave local rompe el contrato" {
-  mutate 'La clave privada nunca reside en el equipo de los agentes' 'La clave puede residir en el equipo'
+@test "R-KEY: un factor que la máquina pueda fusionar rompe el contrato" {
+  mutate 'ni el token de la máquina ni la App pueden fusionar' 'el token de la máquina también puede fusionar'
   run check "$MUT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"R-KEY: la clave privada debe quedar fuera"* ]]
+  [[ "$output" == *"R-KEY: el factor humano debe ser una fusión que la máquina no pueda hacer"* ]]
+}
+
+@test "R-KEY: admitir firma local para el permiso falla" {
+  mutate 'Nada de pregunta interactiva ni de firma local para este permiso' 'Se admite firma local para este permiso'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-KEY: el permiso no debe admitir firma local"* ]]
 }
 
 @test "R-KEY: sin declarar que no enmienda LAW-HUMAN-002 falla" {
-  mutate 'Esta spec no enmienda LAW-HUMAN-002.' 'La spec relaja LAW-HUMAN-002.'
+  mutate 'Esta spec no enmienda LAW-HUMAN-002' 'La spec relaja LAW-HUMAN-002'
   run check "$MUT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"R-KEY: R1 no declara que la spec no enmienda LAW-HUMAN-002"* ]]
+  [[ "$output" == *"R-KEY: la spec no declara que no enmienda LAW-HUMAN-002"* ]]
 }
 
 @test "R-WFEXEC (seg. P1-1): R1 sin (d) falla" {
@@ -193,11 +200,11 @@ EOF
   [[ "$output" == *"AC-11c no tiene el negativo"* ]]
 }
 
-@test "R-KEY (seg. P2-2): sin requisito de la clave ed25519 falla" {
-  mutate '**Requisito de la clave ed25519.**' 'Sobre la clave:'
+@test "R-KEY (seg. P2-2): sin decir qué sustituye a la clave fuera del equipo falla" {
+  mutate '**Qué sustituye al requisito de la clave privada fuera del equipo.**' 'Sobre la clave:'
   run check "$MUT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"R-KEY"* ]]
+  [[ "$output" == *"R-KEY: falta qué sustituye"* ]]
 }
 
 @test "R-GUARD (seg. P2-3): rollback con la condición antigua falla" {
@@ -472,4 +479,76 @@ guard nocturno se activa con cualquiera' 'El guard nocturno se desactiva quitand
   run check "$MUT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"R-GUARDVIAS2: R6 promete"* ]]
+}
+
+# --- Revisión de la PR #1508 (sha 7554308) ---
+
+@test "R-VIGENCIA (corr. P1-1): AC-12c con 7 antes de existir el recibo falla" {
+  mutate 'no con 7. El 7 exige' 'y `run` sale con código 7 hasta las 23:30. El 7 exige'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-VIGENCIA: AC-12c devuelve 7 antes de que exista el recibo"* ]]
+}
+
+@test "R-VIGENCIA (corr. P1-1): AC-12c sin código 3 sin recibo falla" {
+  mutate 'aún sin fusionar** a las 22:30: no hay recibo, así que `run` sale con código 3' 'aún sin fusionar** a las 22:30: `run` espera'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-VIGENCIA: AC-12c no exige código 3 sin recibo"* ]]
+}
+
+@test "R-VIGENCIA (corr. P1-1): AC-12c sin el caso M anterior a not_before falla" {
+  mutate '(antes de `not_before`, dentro' '(dentro'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-VIGENCIA: AC-12c no ejercita el 7"* ]]
+}
+
+@test "R-CADUCA (corr. P2-2): sin caduca == not_after falla" {
+  mutate '`caduca == not_after`' '`caduca ≤ emitida + 24 h`'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-CADUCA: la regla 3 no exige"* ]]
+}
+
+@test "R-CADUCA (seg. P2-3): emitida sin atar al commit falla" {
+  mutate 'fecha del commit que añade el artefacto' 'fecha que escriba el agente'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-CADUCA: \`emitida\` no queda atada"* ]]
+}
+
+@test "R-CADUCA (corr. P2-2): AC-12b sin fixture de caduca falla" {
+  mutate '`caduca` distinto de `not_after`' '`caduca` raro'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-CADUCA: AC-12b sin fixtures"* ]]
+}
+
+@test "R-PRTEXT (seg. P2-2): descripción de PR con texto libre falla" {
+  mutate 'El título y la descripción de la PR de aprobación también se generan solo desde' 'El título y la descripción de la PR de aprobación los redacta libremente'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-PRTEXT: título y descripción"* ]]
+}
+
+@test "R-PRTEXT (seg. P2-2): AC-12b sin fixture de descripción alterada falla" {
+  mutate 'descripción o título de la PR que no coinciden byte a byte' 'descripción cualquiera'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-PRTEXT: AC-12b sin fixture"* ]]
+}
+
+@test "R-STOPLEDGER (seg. P2-1): STOP solo en el fichero falla" {
+  mutate '`stopped` sobre `politica@digest`, no solo' 'algo, no solo'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-STOPLEDGER: el STOP no se anota"* ]]
+}
+
+@test "R-STOPLEDGER (seg. P2-1): AC-17 sin negativo de STOP borrado falla" {
+  mutate 'sigue saliendo con 5' 'vuelve a fusionar'
+  run check "$MUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R-STOPLEDGER: AC-17 sin negativo"* ]]
 }
