@@ -28,7 +28,7 @@ setup() {
   PROJ="$WORK/proj"
   mkdir -p "$PROJ/scripts" "$PROJ/.claude/hooks/lib" "$WORK/bin" "$WORK/apk"
   cp "$REPO_ROOT/scripts/mobile-security-scan.sh" "$REPO_ROOT/scripts/security-scan.sh" \
-     "$REPO_ROOT/scripts/vuln-scan.sh" "$PROJ/scripts/"
+     "$REPO_ROOT/scripts/vuln-scan.sh" "$REPO_ROOT/scripts/android-manifest-audit.sh" "$PROJ/scripts/"
   cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$PROJ/.claude/hooks/lib/"
   # APK de prueba: un zip con un manifiesto (no hace falta que sea un APK válido).
   printf '<manifest package="t"/>\n' > "$WORK/apk/AndroidManifest.xml"
@@ -48,7 +48,8 @@ fake_apktool() {
 out=""; while [[ $# -gt 0 ]]; do [[ "$1" == -o ]] && out="$2"; shift; done
 [[ -z "${APK_SMALI:-}" ]] && exit 1
 mkdir -p "$out/smali"; printf '%s\n' "$APK_SMALI" > "$out/smali/A.smali"
-printf '<manifest package="t"/>\n' > "$out/AndroidManifest.xml"
+# Manifiesto en texto (como lo deja apktool); por defecto, uno sin hallazgos.
+printf '%s\n' "${APK_MANIFEST:-<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\" package=\"t\"><application android:allowBackup=\"false\"/></manifest>}" > "$out/AndroidManifest.xml"
 STUB
   chmod +x "$WORK/bin/apktool"
 }
@@ -102,6 +103,47 @@ STUB
   [ "$status" -eq 1 ]
   run bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/no-existe.apk"
   [ "$status" -eq 1 ]
+}
+
+# S03u: el manifiesto auditado contaba en el informe de nadie; un debuggable salía «clean».
+@test "mobile: debuggable manifest with harmless code reports findings, never clean" {
+  fake_apktool
+  run env PATH="$WORK/bin:$NOAPK" APK_SMALI=".class public LA;" \
+    APK_MANIFEST='<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="t"><application android:allowBackup="false" android:debuggable="true"/></manifest>' \
+    /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
+  [ "$status" -eq 0 ]
+  [ "$(last_result)" = '{"result":"findings","gaps":[]}' ]
+  python3 -c 'import json,sys,glob; d=json.load(open(glob.glob(sys.argv[1]+"/output/security/mobile-scan-*.json")[0])); f=[x for x in d["findings"] if x["type"]=="manifest_findings"]; assert f and f[0]["count"]==1, d' "$PROJ"
+}
+
+@test "mobile: manifest without allowBackup=false counts as a finding (Android default is true)" {
+  fake_apktool
+  run env PATH="$WORK/bin:$NOAPK" APK_SMALI=".class public LA;" APK_MANIFEST='<manifest package="t"/>' \
+    /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
+  [ "$status" -eq 0 ]
+  [ "$(last_result)" = '{"result":"findings","gaps":[]}' ]
+}
+
+@test "mobile: missing manifest audit script is a gap, not a clean result" {
+  fake_apktool
+  mv "$PROJ/scripts/android-manifest-audit.sh" "$WORK/"
+  run env PATH="$WORK/bin:$NOAPK" APK_SMALI=".class public LA;" /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
+  [ "$status" -eq 0 ]
+  has_gap unknown manifest_audit missing_tool
+}
+
+@test "mobile: hardcoded secret in decompiled code reports findings with its count" {
+  fake_apktool
+  run env PATH="$WORK/bin:$NOAPK" APK_SMALI='const-string v0, "api_key=abc"' /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
+  [ "$status" -eq 0 ]
+  [ "$(last_result)" = '{"result":"findings","gaps":[]}' ]
+  python3 -c 'import json,sys,glob; d=json.load(open(glob.glob(sys.argv[1]+"/output/security/mobile-scan-*.json")[0])); f=[x for x in d["findings"] if x["type"]=="hardcoded_secrets"]; assert f and f[0]["count"]==1 and f[0]["severity"]=="CRITICAL", d' "$PROJ"
+}
+
+@test "mobile: unknown argument exits 1" {
+  run bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk" --bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"argumento desconocido"* ]]
 }
 
 # ── security-scan / vuln-scan ────────────────────────────────────────────────
