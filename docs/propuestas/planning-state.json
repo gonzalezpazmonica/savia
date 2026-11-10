@@ -2212,14 +2212,14 @@
         "priority": "P3",
         "initiatives": [],
         "title": "Piloto acotado y evidencia de valor",
-        "action": "AEK/AEOS en shadow antes de efectos; medir calidad, coste y atención humana; reevaluaciones Labs y prospectiva con decisiones reales.",
+        "action": "AEK/AEOS en shadow antes de efectos; medir calidad, coste y atención humana; reevaluaciones Labs y prospectiva con decisiones reales. Hipótesis opcional del piloto (propuesta externa SE-516 del 2026-11-09, evaluada como solape y sin ID): comparar, dentro del mismo techo de autoridad y sobre clases de trabajo de efecto equivalente, la supervisión actual con una variante de más verificación automática; vector calidad verificada/coste observado/tiempo/riesgo, y atención humana solo si hay observación consentida; salida KEEP_BASELINE, MORE_EVIDENCE, RECOMMEND_REVIEW o NO_GO. Una recomendación no concede ni cambia permisos.",
         "necessity": "condicionada",
         "urgency": "baja",
         "value": "por demostrar",
         "dependency_value": "justifica expansión futura",
         "effort": "presupuesto/corpus por piloto",
-        "prerequisites": "Gates A-E; un piloto y una línea Labs; consentimiento, target/verifier/recovery/stop y autoridad específica.",
-        "done": "Resultado positivo o negativo trazable y decisión de mantener/simplificar; sin claim de ROI con datos sintéticos."
+        "prerequisites": "Gates A-E; un piloto y una línea Labs; consentimiento, target/verifier/recovery/stop y autoridad específica. Para la hipótesis de supervisión: SE-515 S1 publicada (ablación P10), SE-477 aprobada o su equivalente en el informe, y una fuente de atención con consentimiento; si faltan, la hipótesis se queda en NO_GO documental.",
+        "done": "Resultado positivo o negativo trazable y decisión de mantener/simplificar; sin claim de ROI con datos sintéticos. Si la hipótesis se ensayó: informe con IC pareado y censura, dos clases de trabajo como máximo, o su cierre NO_GO por falta de fuentes; sin ROI con datos sintéticos ni elección de modalidad que exija un permiso inexistente."
       }
     ]
   }
