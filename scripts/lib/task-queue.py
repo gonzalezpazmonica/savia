@@ -29,6 +29,9 @@ Usage (CLI):
   python3 scripts/lib/task-queue.py changes <queue> [--all] [--json]
   Estados: ADMITTED (persistido y con dueño), APPLIED_TO_PLAN (solo con prueba
   del plan del agente), UNKNOWN (sin prueba). Sin prueba nunca hay APPLIED.
+  Límites de S1: `--origin` y la prueba de plan son DECLARACIONES de quien llama
+  (proceso local); la cola no las autentica ni las firma. Solo exige que la
+  prueba la declare el agente que recibió el cambio (entregado por `pull`).
 
 Programmatic (sourced from other Python):
   from task_queue import TaskQueue
@@ -45,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import unicodedata
 import json
 import os
 import re
@@ -107,6 +111,7 @@ CREATE TABLE IF NOT EXISTS admissions (
     created_at     REAL NOT NULL,
     last_repeat_at REAL,
     delivered_at   REAL,
+    acked_at       REAL,
     applied_at     REAL,
     UNIQUE (queue, dedup_key)
 );
@@ -118,6 +123,7 @@ ADMITTED, APPLIED, UNKNOWN, CONTEXT = "ADMITTED", "APPLIED_TO_PLAN", "UNKNOWN", 
 AUTH_ORIGINS = {"operator"}
 CONTEXT_ORIGINS = {"ci", "bot", "third-party", "agent"}
 LABELS = {ADMITTED: "ADMITIDO", APPLIED: "APLICADO", UNKNOWN: "NO SÉ", CONTEXT: "CONTEXTO"}
+MAX_BUMP = 1000
 
 
 class AdmissionRefused(Exception):
@@ -125,9 +131,18 @@ class AdmissionRefused(Exception):
 
 
 def _crash_point(name: str) -> None:
-    """Inyección de cortes para las pruebas de durabilidad (SE-513 AC-2)."""
-    if os.environ.get("SAVIA_TQ_CRASH_AT") == name:
+    """Inyección de cortes para las pruebas de durabilidad (SE-513 AC-2).
+
+    Solo actúa con SAVIA_TQ_TEST=1 además del punto de corte: una variable
+    suelta en el entorno de un agente no tumba la cola.
+    """
+    if os.environ.get("SAVIA_TQ_TEST") == "1" and os.environ.get("SAVIA_TQ_CRASH_AT") == name:
         os._exit(137)
+
+
+def _safe(text: Any) -> str:
+    """Quita caracteres de control (ANSI/OSC, C1) antes de mostrar un texto."""
+    return "".join("?" if unicodedata.category(c) == "Cc" else c for c in str(text))
 
 
 def _hhmm(ts: float) -> str:
@@ -139,7 +154,13 @@ def _norm(text: str) -> str:
 
 
 def _proof_ok(row: sqlite3.Row, proof: Any) -> bool:
-    """Prueba del harness: el plan del dueño cita el cambio (#seq) literalmente."""
+    """Prueba declarada por el harness: el plan del agente que RECIBIÓ el cambio lo cita (#seq).
+
+    No es una firma. Exige que el cambio se haya entregado (`pull`) a un agente
+    concreto (nunca al dueño provisional «cola») y que el harness tenga señal.
+    """
+    if row["delivered_at"] is None or row["owner"] in (None, "cola") or row["signal"] == "none":
+        return False
     if not isinstance(proof, dict) or proof.get("owner") != row["owner"]:
         return False
     plan = proof.get("plan")
@@ -154,7 +175,7 @@ class TaskQueue:
         self.name = name
         self.path = _queue_path(name, queue_dir)
         self._init_schema()
-        self.recover()
+        self.recovered_on_open = self.recover()
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
@@ -170,6 +191,9 @@ class TaskQueue:
         with self._conn() as conn:
             conn.executescript(_SCHEMA)
             # SE-513: prioridad para reordenar pendientes (migración en sitio).
+            # Solo se toma el cerrojo de escritura si falta la columna.
+            if "priority" in {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}:
+                return
             conn.execute("BEGIN IMMEDIATE")
             cols = {r["name"] for r in conn.execute("PRAGMA table_info(jobs)")}
             if "priority" not in cols:
@@ -266,14 +290,18 @@ class TaskQueue:
             raise ValueError("el texto del cambio está vacío")
         if kind not in ("change", "new_work") or signal not in ("plan", "none"):
             raise ValueError("kind o signal no válidos")
+        if not isinstance(bump, int) or abs(bump) > MAX_BUMP:
+            raise ValueError(f"--bump fuera de rango (±{MAX_BUMP})")
         if origin in AUTH_ORIGINS and kind == "new_work":
             raise AdmissionRefused("Abrir trabajo nuevo necesita un contrato; en esta fase "
                                    "solo se cambian el texto y el orden de trabajos pendientes.")
         eff_kind = "change" if origin in AUTH_ORIGINS else "context"
         if eff_kind == "change" and not job_id:
             raise AdmissionRefused("Falta el trabajo afectado (--job).")
-        dkey = key or hashlib.sha256(json.dumps(
-            [_norm(text), origin, kind, job_id, bump, set_text]).encode()).hexdigest()
+        # Una clave explícita se mezcla con origen, tipo y trabajo: un origen no
+        # autenticado no puede ocupar la clave de una orden del operador.
+        ident = ["key", key] if key else [_norm(text), bump, set_text]
+        dkey = hashlib.sha256(json.dumps(ident + [origin, kind, job_id]).encode()).hexdigest()
         now = time.time()
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -289,14 +317,21 @@ class TaskQueue:
                 return self._reply(prev, duplicate=True, message=msg)
             effect = None
             state = CONTEXT
+            ignored = False
             if eff_kind == "change":
                 job = conn.execute("SELECT status, worker, payload FROM jobs WHERE id=? AND queue=?",
                                    (job_id, self.name)).fetchone()
                 if job is None or job["status"] not in ("pending", "running"):
                     conn.execute("ROLLBACK")
                     raise AdmissionRefused("El trabajo no está pendiente ni en curso.")
-                payload = json.loads(job["payload"]) if job["payload"] else {}
-                effect = payload.get("effect") if isinstance(payload, dict) else None
+                try:
+                    payload = json.loads(job["payload"]) if job["payload"] else {}
+                except json.JSONDecodeError:
+                    conn.execute("ROLLBACK")
+                    raise ValueError("el payload del trabajo no es JSON legible")
+                raw_effect = payload.get("effect") if isinstance(payload, dict) else None
+                # Cualquier efecto declarado, sea del tipo que sea, sigue pidiendo permiso.
+                effect = _safe(raw_effect) if raw_effect not in (None, "") else None
                 owner = owner or job["worker"] or "cola"
                 state = UNKNOWN if signal == "none" else ADMITTED
                 if job["status"] == "pending":
@@ -306,6 +341,9 @@ class TaskQueue:
                         payload["text"] = set_text
                         conn.execute("UPDATE jobs SET payload=? WHERE id=?",
                                      (json.dumps(payload), job_id))
+                else:
+                    # En curso: ni se reordena ni se cambia su texto; solo se avisa al agente.
+                    ignored = bool(bump) or set_text is not None
             else:
                 owner = None
             reason = "el agente no da señal de haberlo incorporado" if state == UNKNOWN else None
@@ -321,13 +359,24 @@ class TaskQueue:
             row = conn.execute("SELECT * FROM admissions WHERE seq=?", (cur.lastrowid,)).fetchone()
         if eff_kind == "context":
             msg = f"Guardado como contexto. Un mensaje de {origin} no abre trabajo ni cambia la cola."
-        elif effect:
-            lead = "La adelanto en la cola." if bump > 0 else "Anotado."
-            msg = f"{lead} {effect.capitalize()} sigue necesitando tu permiso; no lo doy por concedido."
-        elif state == UNKNOWN:
-            msg = "Anotado. No sé si lo ha aplicado; lo confirmo cuando termine su paso."
         else:
-            msg = "Anotado. Lo verá al terminar su paso."
+            if ignored:
+                lead = ("Anotado. Ese trabajo ya está en curso: no lo muevo en la cola ni "
+                        "cambio su texto; se lo paso al agente al terminar su paso.")
+            elif bump > 0:
+                lead = "La adelanto en la cola."
+            elif bump < 0:
+                lead = "La retraso en la cola."
+            else:
+                lead = "Anotado."
+            if effect:
+                msg = f"{lead} {effect[:1].upper()}{effect[1:]} sigue necesitando tu permiso; no lo doy por concedido."
+            elif state == UNKNOWN:
+                msg = f"{lead} No sé si lo ha aplicado; lo confirmo cuando termine su paso."
+            elif ignored:
+                msg = lead
+            else:
+                msg = f"{lead} Lo verá al terminar su paso."
         return self._reply(row, duplicate=False, message=msg)
 
     @staticmethod
@@ -342,14 +391,17 @@ class TaskQueue:
         cutoff = now - STALE_HEARTBEAT_SEC
         with self._conn() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            # Un cambio sobre un trabajo pendiente nace con dueño «cola»; lo hereda
-            # el agente que después reclama ese trabajo.
+            # El cambio lo recibe quien tiene hoy el trabajo. Un cambio sobre un
+            # trabajo pendiente nace con dueño «cola»; si el dueño cae y el trabajo
+            # se reasigna, lo hereda el agente que lo reclama después.
+            # Lo ya acusado (ack) no se reentrega.
             rows = conn.execute(
                 "SELECT a.* FROM admissions a LEFT JOIN jobs j ON j.id = a.job_id "
-                "WHERE a.queue=? AND a.kind='change' AND a.state IN (?,?) "
-                "AND (a.owner=? OR (a.owner='cola' AND j.worker=?)) "
-                "AND (a.delivered_at IS NULL OR a.delivered_at < ?) ORDER BY a.seq",
-                (self.name, ADMITTED, UNKNOWN, owner, owner, cutoff)).fetchall()
+                "WHERE a.queue=? AND a.kind='change' AND a.state IN (?,?) AND a.acked_at IS NULL "
+                "AND (a.owner=? OR (j.status='running' AND j.worker=?)) "
+                "AND (a.delivered_at IS NULL OR a.delivered_at < ? OR a.owner IS NOT ?) "
+                "ORDER BY a.seq",
+                (self.name, ADMITTED, UNKNOWN, owner, owner, cutoff, owner)).fetchall()
             out = []
             for r in rows:
                 again = 1 if r["delivered_at"] is not None else 0
@@ -377,15 +429,17 @@ class TaskQueue:
             new_state = APPLIED if _proof_ok(row, proof) else UNKNOWN
             now = time.time()
             conn.execute(
-                "UPDATE admissions SET state=?, applied_at=?, proof=?, reason=? WHERE seq=?",
-                (new_state, now if new_state == APPLIED else None,
+                "UPDATE admissions SET state=?, acked_at=?, applied_at=?, proof=?, reason=? "
+                "WHERE seq=?",
+                (new_state, now if row["delivered_at"] is not None else None,
+                 now if new_state == APPLIED else None,
                  json.dumps(proof) if proof is not None else None,
                  None if new_state == APPLIED else "sin prueba de que el plan recoja el cambio",
                  seq))
             conn.execute("COMMIT")
             row = conn.execute("SELECT * FROM admissions WHERE seq=?", (seq,)).fetchone()
         if new_state == APPLIED:
-            msg = f"Aplicado: {row['text']}."
+            msg = f"Aplicado: {_safe(row['text'])}."
         else:
             msg = ("Ha terminado su paso. Sigue sin darme señal de su plan, así que no puedo "
                    "confirmarlo: el cambio sigue en NO SÉ.")
@@ -473,13 +527,15 @@ def _cli() -> int:
         else:
             for k, v in st.items(): print(f"  {k}: {v}")
     elif args.cmd == "recover":
-        print(f"recovered={q.recover()}")
+        n = q.recover()
+        print(f"recovered={n}")
         open_changes = q.changes()
-        if open_changes:
+        # Solo se habla de reinicio si de verdad había trabajos en curso abandonados.
+        if open_changes and (n + q.recovered_on_open) > 0:
             print("Hemos tenido un reinicio.")
         for c in open_changes:
             print(f"Tu cambio de las {_hhmm(c['created_at'])} sigue en la cola; no hace falta "
-                  f"repetirlo. (#{c['seq']} {c['text']}, {LABELS[c['state']]})")
+                  f"repetirlo. (#{c['seq']} {_safe(c['text'])}, {LABELS[c['state']]})")
     elif args.cmd in ("admit", "ack"):
         try:
             if args.cmd == "admit":
@@ -509,12 +565,12 @@ def _cli() -> int:
             if c["repeats"]:
                 notes.append(f"repetido {c['repeats']} vez, no cuenta como otro")
             if c["recovered"]:
-                notes.append("recuperado tras el reinicio")
+                notes.append("reentregado: no acusó la entrega anterior")
             if c["effect_permission"]:
-                notes.append(f"permiso para {c['effect']}: PENDIENTE")
+                notes.append(f"permiso para {_safe(c['effect'])}: PENDIENTE")
             if c["reason"]:
                 notes.append(c["reason"])
-            print(f"#{c['seq']:<6} {c['text'][:40]:<40} {LABELS[c['state']]:<10} "
+            print(f"#{c['seq']:<6} {_safe(c['text'])[:40]:<40} {LABELS[c['state']]:<10} "
                   f"{_hhmm(c['created_at']):<6} {'; '.join(notes)}")
     elif args.cmd == "drain":
         print(f"deleted={q.drain()}")

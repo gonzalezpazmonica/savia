@@ -16,12 +16,13 @@ setup() {
   TQ="$ROOT_DIR/$SCRIPT"
   TMPDIR_TQ=$(mktemp -d)
   export PROJECT_ROOT="$TMPDIR_TQ"
+  export SAVIA_TQ_TEST=1      # habilita los puntos de corte de las pruebas AC-2
   unset SAVIA_TQ_CRASH_AT
 }
 
 teardown() {
   rm -rf "$TMPDIR_TQ"
-  unset PROJECT_ROOT SAVIA_TQ_CRASH_AT
+  unset PROJECT_ROOT SAVIA_TQ_CRASH_AT SAVIA_TQ_TEST
 }
 
 tq() { python3 "$TQ" "$@"; }
@@ -122,6 +123,7 @@ seed() {
 @test "AC-3 boundary: plan que cita #N0 no prueba #N → UNKNOWN" {
   seed
   id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
+  tq pull q --owner agente-informe >/dev/null
   run tq ack q "$id" --plan-proof '{"owner":"agente-informe","plan":["seguir con la suite","cambio #'"$id"'0"]}'
   [ "$(jget "$output" "['state']")" = "UNKNOWN" ]
 }
@@ -129,6 +131,7 @@ seed() {
 @test "AC-3: prueba firmada por otro agente → UNKNOWN" {
   seed
   id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
+  tq pull q --owner agente-informe >/dev/null
   run tq ack q "$id" --plan-proof "{\"owner\":\"otro\",\"plan\":[\"pausar (#$id)\"]}"
   [ "$(jget "$output" "['state']")" = "UNKNOWN" ]
 }
@@ -142,19 +145,24 @@ seed() {
 }
 
 @test "AC-3: ningún camino del código escribe APPLIED_TO_PLAN fuera de _proof_ok" {
-  # Solo una asignación del estado y está tras la validación de la prueba.
-  n=$(grep -c "APPLIED_TO_PLAN" "$TQ")
-  run grep -n "state = APPLIED\|APPLIED if" "$TQ"
+  # Inspección estática complementaria a los casos de comportamiento:
+  # el literal solo aparece en la constante, y la única asignación pasa por _proof_ok.
+  run grep -n "APPLIED_TO_PLAN" "$TQ"
+  for l in "${lines[@]}"; do
+    [[ "$l" != *"SET state"* && "$l" != *"VALUES"* && "$l" != *"state='"* ]]
+  done
+  run grep -nE "state *= *APPLIED|APPLIED if|\(APPLIED,|, APPLIED\)" "$TQ"
   [ "${#lines[@]}" -eq 1 ]
   [[ "${lines[0]}" == *"_proof_ok"* ]]
-  [ "$n" -ge 1 ]
 }
 
 @test "AC-3: un cambio aplicado no se reaplica (ack repetido es idempotente)" {
   seed
   id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
   proof="{\"owner\":\"agente-informe\",\"plan\":[\"pausar (#$id)\"]}"
+  tq pull q --owner agente-informe >/dev/null
   tq ack q "$id" --plan-proof "$proof" >/dev/null
+  [ "$(sql q "SELECT state FROM admissions WHERE seq=$id")" = "APPLIED_TO_PLAN" ]
   t1=$(sql q "SELECT applied_at FROM admissions WHERE seq=$id")
   run tq ack q "$id"
   [ "$(jget "$output" "['state']")" = "APPLIED_TO_PLAN" ]
@@ -374,6 +382,7 @@ PY
   a=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
   tq admit q --text "adelantar publicar" --origin operator --job "$PUB" --bump 1 >/dev/null
   tq admit q --text "migración después" --origin operator --job "$CI" --signal none >/dev/null
+  tq pull q --owner agente-informe >/dev/null
   tq ack q "$a" --plan-proof "{\"owner\":\"agente-informe\",\"plan\":[\"#$a\"]}" >/dev/null
   run tq changes q --all
   [ "$status" -eq 0 ]
@@ -382,4 +391,154 @@ PY
   [[ "$output" == *"NO SÉ"* ]]
   run tq changes q
   [[ "$output" != *"APLICADO"* ]]
+}
+
+# ── Correcciones tras revisión independiente (PR #1520) ─────────────────────
+
+@test "P1: el dueño cae, el trabajo se reasigna y el nuevo agente hereda el cambio" {
+  seed
+  id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
+  tq pull q --owner agente-informe >/dev/null          # entregado a A, que cae sin acusar
+  TASK_QUEUE_STALE_SEC=0 tq recover q >/dev/null       # latido caducado → pendiente
+  [ "$(jget "$(tq dequeue q --worker agente-b)" "['id']")" = "$INFORME" ]
+  run tq pull q --owner agente-b
+  [ "$(jget "$output" "[0]['id']")" = "$id" ]
+  [ "$(jget "$output" "[0]['recovered']")" = "1" ]
+  [ "$(sql q "SELECT owner FROM admissions WHERE seq=$id")" = "agente-b" ]
+  run tq pull q --owner agente-informe                  # A ya no lo recibe
+  [ "$output" = "[]" ]
+  run tq ack q "$id" --plan-proof "{\"owner\":\"agente-b\",\"plan\":[\"pausar (#$id)\"]}"
+  [ "$(jget "$output" "['state']")" = "APPLIED_TO_PLAN" ]
+}
+
+@test "P1: ack con prueba del dueño provisional «cola» → UNKNOWN" {
+  seed
+  id=$(jget "$(tq admit q --text "CI con la rama nueva" --origin operator --job "$CI")" "['id']")
+  run tq ack q "$id" --plan-proof "{\"owner\":\"cola\",\"plan\":[\"#$id\"]}"
+  [ "$status" -eq 0 ]
+  [ "$(jget "$output" "['state']")" = "UNKNOWN" ]
+  [ "$(sql q "SELECT state FROM admissions WHERE seq=$id")" = "UNKNOWN" ]
+}
+
+@test "P1: ack con prueba válida pero sin entrega previa (pull) → UNKNOWN" {
+  seed
+  id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
+  run tq ack q "$id" --plan-proof "{\"owner\":\"agente-informe\",\"plan\":[\"#$id\"]}"
+  [ "$(jget "$output" "['state']")" = "UNKNOWN" ]
+  # y tras la entrega, la misma prueba sí vale (el caso negativo no es por la prueba)
+  tq pull q --owner agente-informe >/dev/null
+  run tq ack q "$id" --plan-proof "{\"owner\":\"agente-informe\",\"plan\":[\"#$id\"]}"
+  [ "$(jget "$output" "['state']")" = "APPLIED_TO_PLAN" ]
+}
+
+@test "P1: --bump y --set-text sobre un trabajo en curso no se aplican y la respuesta lo dice" {
+  seed
+  pay_before=$(sql q "SELECT payload FROM jobs WHERE id='$INFORME'")
+  run tq admit q --text "sube el informe" --origin operator --job "$INFORME" --bump 5 --set-text "Informe v2"
+  [ "$status" -eq 0 ]
+  msg=$(jget "$output" "['message']")
+  [[ "$msg" == *"ya está en curso: no lo muevo en la cola"* ]]
+  [[ "$msg" != *"adelanto"* ]]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$INFORME'")" = "0" ]
+  [ "$(sql q "SELECT payload FROM jobs WHERE id='$INFORME'")" = "$pay_before" ]
+}
+
+@test "P2: --bump negativo sobre pendiente se anuncia como retraso" {
+  seed
+  run tq admit q --text "la CI para después" --origin operator --job "$CI" --bump -3
+  [[ "$(jget "$output" "['message']")" == "La retraso en la cola."* ]]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$CI'")" = "-3" ]
+}
+
+@test "P2: --bump fuera de rango → error sin admisión; el límite exacto se admite" {
+  seed
+  run tq admit q --text "x" --origin operator --job "$CI" --bump 1001
+  [ "$status" -eq 2 ]
+  run tq admit q --text "x" --origin operator --job "$CI" --bump 99999999999999999999
+  [ "$status" -eq 2 ]
+  [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "0" ]
+  run tq admit q --text "x" --origin operator --job "$CI" --bump 1000
+  [ "$status" -eq 0 ]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$CI'")" = "1000" ]
+}
+
+@test "P2: recover no anuncia reinicio si no había trabajos abandonados" {
+  seed
+  tq admit q --text "informe en pausa" --origin operator --job "$INFORME" >/dev/null
+  run tq recover q
+  [[ "$output" == *"sigue en la cola"* ]]
+  [[ "$output" != *"Hemos tenido un reinicio"* ]]
+  TASK_QUEUE_STALE_SEC=0 run tq recover q
+  [[ "$output" == *"Hemos tenido un reinicio."* ]]
+}
+
+@test "P2: un cambio acusado sin prueba (NO SÉ) no se reentrega en cada paso" {
+  seed
+  id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME")" "['id']")
+  id2=$(jget "$(tq admit q --text "otra cosa" --origin operator --job "$INFORME")" "['id']")
+  tq pull q --owner agente-informe >/dev/null
+  tq ack q "$id" >/dev/null                          # acusado sin prueba → NO SÉ
+  [ "$(sql q "SELECT state FROM admissions WHERE seq=$id")" = "UNKNOWN" ]
+  TASK_QUEUE_STALE_SEC=0 run tq pull q --owner agente-informe
+  # solo vuelve el no acusado (control: el filtro es el acuse, no el umbral)
+  ids=$(python3 -c "import json,sys; print(' '.join(str(r['id']) for r in json.loads(sys.argv[1])))" "$output")
+  [ "$ids" = "$id2" ]
+}
+
+@test "P2: --signal none con prueba válida sigue en UNKNOWN" {
+  seed
+  id=$(jget "$(tq admit q --text "informe en pausa" --origin operator --job "$INFORME" --signal none)" "['id']")
+  tq pull q --owner agente-informe >/dev/null
+  run tq ack q "$id" --plan-proof "{\"owner\":\"agente-informe\",\"plan\":[\"#$id\"]}"
+  [ "$(jget "$output" "['state']")" = "UNKNOWN" ]
+}
+
+@test "P2: efecto que no es texto sigue pidiendo permiso y no rompe tras el commit" {
+  seed
+  J=$(tq enqueue q raro --payload '{"text":"Raro","effect":{"tipo":"publicar"}}')
+  run tq admit q --text "adelanta lo raro" --origin operator --job "$J" --bump 1
+  [ "$status" -eq 0 ]
+  [ "$(jget "$output" "['effect_permission']")" = "PENDING" ]
+}
+
+@test "P2: payload corrupto del trabajo → error limpio y sin admisión" {
+  seed
+  python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(\"UPDATE jobs SET payload='{roto' WHERE id=?\", (sys.argv[2],)); c.commit()" "$TMPDIR_TQ/output/task-queue/q.sqlite" "$CI"
+  [ "$(sql q "SELECT payload FROM jobs WHERE id='$CI'")" = "{roto" ]
+  run tq admit q --text "primero CI" --origin operator --job "$CI" --bump 2
+  [ "$status" -eq 2 ]
+  [[ "$output" != *"Traceback"* ]]
+  [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "0" ]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$CI'")" = "0" ]
+}
+
+@test "P2: --key de un origen no autenticado no ocupa la clave del operador" {
+  seed
+  tq admit q --text "ruido" --origin ci --job "$CI" --key K1 >/dev/null
+  run tq admit q --text "primero CI" --origin operator --job "$CI" --key K1 --bump 4
+  [ "$(jget "$output" "['duplicate']")" = "False" ]
+  [ "$(jget "$output" "['state']")" = "ADMITTED" ]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$CI'")" = "4" ]
+  # la misma clave y el mismo origen sí deduplican
+  run tq admit q --text "primero CI (reintento)" --origin operator --job "$CI" --key K1 --bump 4
+  [ "$(jget "$output" "['duplicate']")" = "True" ]
+  [ "$(sql q "SELECT priority FROM jobs WHERE id='$CI'")" = "4" ]
+}
+
+@test "P2: el punto de corte no actúa sin SAVIA_TQ_TEST=1" {
+  seed
+  SAVIA_TQ_TEST= SAVIA_TQ_CRASH_AT=admit_before_commit run tq admit q --text "primero CI" --origin operator --job "$CI"
+  [ "$status" -eq 0 ]
+  [ "$(sql q "SELECT COUNT(*) FROM admissions")" = "1" ]
+}
+
+@test "P2: changes y recover no muestran secuencias de control del texto" {
+  seed
+  tq admit q --text $'informe\e]0;falso\a\e[2J en pausa\xc2\x9b' --origin operator --job "$INFORME" >/dev/null
+  run tq changes q --all
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"informe"* ]]
+  [[ "$output" != *$'\e'* && "$output" != *$'\a'* && "$output" != *$'\xc2\x9b'* ]]
+  run tq recover q
+  [[ "$output" != *$'\e'* ]]
 }
