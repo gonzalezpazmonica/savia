@@ -66,7 +66,7 @@ Mientras hay trabajos en marcha, la persona cambia de prioridad. Hoy ese cambio 
 - respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
-- prototipo: transcripción de las cinco escenas con los textos exactos de Savia y la salida de la cola con los tres estados, sobre un fixture.
+- prototipo: `docs/specs/assets/prototipo-SE-513.md` — transcripción de las cinco escenas con los textos exactos de Savia y la salida de la cola con los tres estados, sobre un fixture.
 
 ### Confirmación del prototipo
 - fecha: pendiente (obligatoria antes de poner S1 en curso)
