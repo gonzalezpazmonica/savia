@@ -4,8 +4,11 @@
     "AGENTS.md",
     "SKILLS.md",
     "CLAUDE.md",
-    "docs/rules/domain/savia-core.md",
+    ".claude/profiles/savia.md",
     ".claude/profiles/active-user.md",
+    "docs/rules/domain/radical-honesty.md",
+    "docs/rules/domain/autonomous-safety.md",
+    "docs/rules/domain/caveman-default.md",
     "docs/rules/domain/knowledge-discovery-priority.md",
     ".claude/CONSTITUCION.md"
   ],

@@ -2,7 +2,8 @@
 """SE-511 D4 — A/B del contexto de arranque (método de EXP-509, casos de arranque).
 
   build   construye variants/A.md (CLAUDE.md de --base-ref con imports resueltos)
-          y variants/B.md (CLAUDE.md del árbol de trabajo), con el mismo perfil ficticio.
+          y variants/B.md (CLAUDE.md de --b-ref, o del árbol de trabajo), con el mismo
+          perfil ficticio. La ejecución registrada usó A=3a36128b7 y B=5ea2b1d39.
   run     llama a cada modelo con la variante como system prompt y el caso como único
           mensaje (claude -p, sin herramientas, sin settings, sin MCP, sin persistencia).
   analyze diferencias pareadas por caso B − A con IC 95 % bootstrap y veredicto.
@@ -65,10 +66,10 @@ def resolve(ref, path, seen=()):
     return "\n".join(out)
 
 
-def build(base_ref):
+def build(base_ref, b_ref=None):
     os.makedirs(os.path.join(HERE, "variants"), exist_ok=True)
     meta = {}
-    for v, ref in (("A", base_ref), ("B", None)):
+    for v, ref in (("A", base_ref), ("B", b_ref)):
         txt = resolve(ref, "CLAUDE.md") + "\n"
         open(os.path.join(HERE, "variants", f"{v}.md"), "w", encoding="utf-8").write(txt)
         meta[v] = {"ref": ref or "worktree", "chars": len(txt), "bytes": len(txt.encode()),
@@ -208,6 +209,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["build", "run", "analyze"])
     ap.add_argument("--base-ref", default="origin/main")
+    ap.add_argument("--b-ref", default=None, help="commit de la variante B (por defecto, árbol de trabajo)")
     ap.add_argument("--models", default="sonnet,haiku")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--workers", type=int, default=4)
@@ -216,7 +218,7 @@ def main():
     ap.add_argument("--out", default=os.path.join(HERE, "results", "summary.json"))
     a = ap.parse_args()
     if a.cmd == "build":
-        build(a.base_ref)
+        build(a.base_ref, a.b_ref)
     elif a.cmd == "run":
         run(a.models.split(","), a.reps, a.workers, a.raw, a.max_calls)
     else:

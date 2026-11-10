@@ -15,9 +15,9 @@ teardown() {
 
 # Copia las superficies de AC-2 y la fuente a un root aislado.
 make_fixture_root() {
-  mkdir -p "$TMP/root/.claude/profiles" "$TMP/root/docs/rules/domain" "$TMP/root/.claude-plugin"
+  mkdir -p "$TMP/root/.claude/profiles" "$TMP/root/docs" "$TMP/root/.claude-plugin"
   cp "$SRC" "$TMP/root/.claude/profiles/savia.md"
-  for f in CLAUDE.md AGENTS.md README.md llms.txt plugin.json docs/critical-facts.md docs/rules/domain/savia-core.md .claude-plugin/plugin.json; do
+  for f in CLAUDE.md AGENTS.md README.md llms.txt plugin.json docs/critical-facts.md .claude-plugin/plugin.json; do
     cp "$ROOT/$f" "$TMP/root/$f"
   done
 }
@@ -191,7 +191,7 @@ make_fixture_root() {
 
 s03t_root() {
   GR="$BATS_TEST_TMPDIR/gate"
-  mkdir -p "$GR/scripts" "$GR/.claude/profiles" "$GR/docs/rules/domain" "$GR/.claude-plugin"
+  mkdir -p "$GR/scripts" "$GR/.claude/profiles" "$GR/docs" "$GR/.claude-plugin"
   cp "$LIB" "$GR/scripts/docs-identity-check.sh"
   cp "$SRC" "$GR/.claude/profiles/savia.md"
   GL="$(bash "$LIB" long)"; GS="$(bash "$LIB" short)"
@@ -199,7 +199,7 @@ s03t_root() {
   CN="$(grep -m1 -oP 'sin contador canonical \K[0-9]+' "$LIB")"; [ -n "$CN" ]
   printf '# Savia\n\nSistema agéntico soberano. '"$CN"' cosas.\n\n%s\n' "$GL" > "$GR/README.md"
   for f in CLAUDE.md AGENTS.md llms.txt; do printf '# Savia\n%s\n' "$GL" > "$GR/$f"; done
-  for f in docs/critical-facts.md docs/rules/domain/savia-core.md plugin.json .claude-plugin/plugin.json; do printf '%s\n' "$GS" > "$GR/$f"; done
+  for f in docs/critical-facts.md plugin.json .claude-plugin/plugin.json; do printf '%s\n' "$GS" > "$GR/$f"; done
   G="$GR/scripts/docs-identity-check.sh"
 }
 
@@ -325,11 +325,11 @@ s03t_root() {
   [[ "$output" == *"Uso: docs-identity-check.sh"* ]]
 }
 
-@test "canonical: árbol coherente pasa y cuenta 8 superficies; sin una superficie falla" {
+@test "canonical: árbol coherente pasa y cuenta 7 superficies; sin una superficie falla" {
   s03t_root
   run env SAVIA_IDENTITY_ROOT="$GR" bash "$G" canonical
   [ "$status" -eq 0 ]
-  [[ "$output" == *"presente en 8 superficies"* ]]
+  [[ "$output" == *"presente en 7 superficies"* ]]
   : > "$GR/llms.txt"
   run env SAVIA_IDENTITY_ROOT="$GR" bash "$G" canonical
   [ "$status" -eq 1 ]
