@@ -93,7 +93,7 @@ La cifra en serie mide **CPU y procesos**, no la espera de la persona: Claude Co
 - respuesta: «Confirmo las escenas». Opción elegida por la operadora en la pregunta interactiva del 2026-11-09 en la que se le enseñaron estas escenas literalmente.
 
 ## Slice S0 — Prototipo navegable
-- prototipo: los mensajes que ve la persona en las escenas 1, 2, 3 y 5, antes y después del cambio, con su clase FORMA o POLÍTICA, y la salida de `scripts/guard-blocks.sh report` sobre un registro de ejemplo de una semana.
+- prototipo: `docs/specs/assets/prototipo-SE-510.md` — los mensajes que ve la persona en las escenas 1, 2, 3 y 5, antes y después del cambio, con su clase FORMA o POLÍTICA, y la salida de `scripts/guard-blocks.sh report` sobre un registro de ejemplo de una semana.
 
 ### Confirmación del prototipo
 - fecha: pendiente (obligatoria antes de poner S1 en curso)
