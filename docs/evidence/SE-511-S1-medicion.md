@@ -7,7 +7,7 @@ Medido con `bash scripts/context-fixed-measure.sh` (método: caracteres / 4, ent
 | Modo | Bytes | Caracteres | Tokens | Baseline |
 |---|---|---|---|---|
 | `--versioned` (CLAUDE.md + 6 imports) | 27.826 | 27.489 | **6.872** | `.ci-baseline/context-fixed-tokens.count` |
-| `--hooks` (fixture fija, HOME vacío, 2 ejecuciones idénticas) | 585 | 571 | **142** | `.ci-baseline/context-fixed-hooks-tokens.count` |
+| `--hooks` (fixture fija, HOME vacío, worktree desechable detached, 2 ejecuciones idénticas) | 585 | 571 | **142** | `.ci-baseline/context-fixed-hooks-tokens.count` |
 | `--local` (perfil activo y memoria externa) | solo local | | informe, aviso > 6.000, sin gate | — |
 | `--versioned --entry opencode` (suma `.opencode/CLAUDE.md`) | 31.669 | 31.142 | 7.785 | sin gate |
 
@@ -32,13 +32,16 @@ Núcleo = va en el bloque compacto de S2. Gate = puede salir del texto fijo cuan
 | Salida de hooks (`--hooks`): `session-init.sh` | ≈ 125 | núcleo | Mensaje de arranque. |
 | Salida de hooks: `check-daemon-auth.sh` | ≈ 20 | retirable | Con HOME vacío siempre avisa «auth expired»; en uso real depende del estado local. |
 | Hooks de UserPromptSubmit (8) | 0 con la fixture | bajo demanda | Inyectan solo con estado previo (memoria, sesión caliente); medir con `--local` si hace falta. |
-| `windows-links.sh repair` | excluido | — | Escribe en el repo; no es medible sin efectos. |
+| `windows-links.sh repair` | 0 | — | Se mide como los demás (en la copia desechable sus escrituras no tocan el repo). Si `repair` falla, su aviso cuenta. |
 | Perfil activo e índice de memoria externa | solo `--local` | núcleo | Gitignored; cifras por operador, sin gate. |
 
 ## Límites del método
 
-- Los `@imports` se resuelven relativos a la raíz en todos los niveles (convención del repo). Un import relativo al fichero importador se mediría como inexistente: error, no cifra falsa. Rutas absolutas o con `..` que salgan de la raíz son error.
+- Los `@imports` se resuelven relativos a la raíz en todos los niveles (convención del repo). Un import pensado como relativo al fichero importador se mide como inexistente (error) si no existe en la raíz; si existe en las dos rutas, se mide el de la raíz (test «import anidado se resuelve desde la raíz»). Rutas absolutas o con `..` que salgan de la raíz son error.
 - `--versioned` no lee ficheros gitignored: la cifra no depende de qué haya en la máquina.
-- `--hooks` aborta si un hook sale con código distinto de 0 y borra al terminar los ficheros nuevos que crean los hooks (p. ej. el marker de `cache-hygiene-hook.sh`). Un fichero sin versionar que ya existía y que un hook modifica (un log al que añade una línea) no se restaura.
+- `--hooks` corre los hooks en un worktree desechable de HEAD en modo detached, con los cambios versionables sin commit superpuestos y sin ficheros gitignored. Consecuencias: la cifra no depende de la rama (antes, `session-init.sh` imprimía «Rama: main» en un push a main y la cifra subía a 143 > 142), ni de ficheros locales; los efectos de los hooks (marker de `cache-hygiene-hook.sh`, logs, `.scm/` derivado) no tocan la raíz, y no se borra nada de la raíz. Cada hook corre en su grupo de procesos y se espera a sus procesos en segundo plano (máximo 10 s; después se matan).
+- `--hooks` aborta si un hook sale con código distinto de 0. No hay exclusiones.
+- El reloj **no** está fijado: ningún hook lee una variable de reloj. Un hook cuya salida dependa de la fecha cambiaría la cifra de un día a otro; la doble ejecución solo lo detecta dentro del mismo minuto. Hoy ninguna salida medida depende de la fecha (los trabajos semanales y mensuales de `session-init.sh` van en segundo plano y a `/dev/null`).
+- `session-init.sh` acota `focal-status.sh` a 0,5 s: con la máquina muy cargada la línea «Focal» puede salir como «timeout», más corta. La cifra bajaría (el trinquete pasa con aviso de baseline holgado), no subiría.
 
 Los tokens de las filas partidas de `CLAUDE.md` son estimaciones por sección (`re.split('^## ')`); las filas de ficheros enteros son las medidas del script.

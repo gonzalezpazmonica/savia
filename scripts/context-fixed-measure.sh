@@ -3,9 +3,13 @@
 #
 # Modos (uno por ejecución):
 #   --versioned   CLAUDE.md + @imports recursivos versionados. Idéntico en CI y en cualquier máquina.
-#   --hooks       additionalContext/stdout de los hooks de SessionStart y UserPromptSubmit,
-#                 ejecutados con la fixture tests/fixtures/context-fixed/turn.json, HOME vacío,
-#                 entorno mínimo y reloj fijo. Se corre dos veces; si difiere, sale con error.
+#   --hooks       additionalContext/stdout de TODOS los hooks de SessionStart y UserPromptSubmit,
+#                 ejecutados con la fixture tests/fixtures/context-fixed/turn.json, HOME vacío y
+#                 entorno mínimo, en un worktree desechable de HEAD (detached) más los cambios
+#                 versionables sin commit. Así la cifra no depende de la rama ni de ficheros locales
+#                 y los efectos de los hooks no tocan la raíz. Cada hook corre en su grupo de procesos
+#                 y se espera a sus procesos en segundo plano. Se corre dos veces; si difiere, error.
+#                 El reloj NO se fija: un hook que dependa de la fecha puede cambiar de un día a otro.
 #   --local       versionado + ficheros locales gitignored (perfil activo, memoria externa).
 #                 Solo cifras por pieza: ni rutas ni contenido. Aviso (sin gate) por encima de 6000.
 # Opciones:
@@ -21,7 +25,7 @@
 # Método de tokens: caracteres / 4 (el de scripts/token-estimator.sh), entero hacia abajo, sobre el total.
 # Fail-closed: un @import inexistente (y no gitignored), un ciclo, un fichero ilegible, un hook que
 # sale con código != 0 o un hook no determinista salen con exit 1; nunca se imprime un total parcial.
-# --hooks borra al terminar los ficheros nuevos (sin versionar) que hayan creado los hooks en la raíz.
+# --hooks exige git y un commit en la raíz; registra el worktree temporal y lo retira al terminar.
 #
 # Env: CONTEXT_FIXED_ROOT (raíz a medir), CI_BASELINE_DIR (baselines), CONTEXT_FIXED_FIXTURE.
 # Exit: 0 OK · 1 fallo de medición o regresión del trinquete · 2 uso.
@@ -32,7 +36,7 @@ BASELINE_DIR="${CI_BASELINE_DIR:-$ROOT/.ci-baseline}"
 FIXTURE="${CONTEXT_FIXED_FIXTURE:-$ROOT/tests/fixtures/context-fixed/turn.json}"
 
 MODE=""; ENTRY="claude"; CHECK=0; JSON=0
-usage() { sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --versioned|--hooks|--local) [[ -n "$MODE" ]] && { echo "ERROR: un solo modo por ejecución" >&2; exit 2; }; MODE="${1#--}"; shift ;;
@@ -51,7 +55,7 @@ command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 no disponible" >&2;
 
 export ROOT BASELINE_DIR FIXTURE MODE ENTRY CHECK JSON
 exec python3 -I - <<'PY'
-import json, os, re, subprocess, sys, tempfile
+import json, os, re, shutil, signal, subprocess, sys, tempfile, time
 
 ROOT = os.environ["ROOT"]; BASE = os.environ["BASELINE_DIR"]; FIX = os.environ["FIXTURE"]
 MODE = os.environ["MODE"]; ENTRY = os.environ["ENTRY"]; CHECK = os.environ["CHECK"] == "1"
@@ -146,14 +150,8 @@ def measure_files():
     return v, l, a
 
 # --- hooks -----------------------------------------------------------------
-# Excluidos con motivo: escriben en el repo (no medibles sin efectos). Se compara el script que
-# ejecuta el hook (primer `scripts/*.sh` o `.claude/hooks/*.sh` del comando), no una subcadena.
-EXCLUDED = ("scripts/windows-links.sh",)
-HOOK_SCRIPT = re.compile(r'(?:"\$CLAUDE_PROJECT_DIR"|\$CLAUDE_PROJECT_DIR|\.)?/?((?:scripts|\.claude/hooks)/[\w./-]+\.sh)')
-def hook_script(cmd):
-    m = HOOK_SCRIPT.search(cmd.split("#", 1)[0])
-    return m.group(1) if m else None
-
+# Todos los hooks registrados se miden (sin exclusiones): corren en una copia desechable, así que los
+# que escriben en el repo no tocan ROOT.
 def hook_commands():
     try:
         with open(os.path.join(ROOT, ".claude/settings.json"), encoding="utf-8") as f: s = json.load(f)
@@ -166,38 +164,64 @@ def hook_commands():
     except (OSError, KeyError, ValueError, TypeError) as e:
         die("no se pudo leer .claude/settings.json: " + type(e).__name__)
 
-def untracked_set():
-    """Ficheros sin versionar (ignorados incluidos) bajo ROOT. Sin git -> error (fail-closed)."""
-    r = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--others"], capture_output=True)
-    r2 = subprocess.run(["git", "-C", ROOT, "ls-files", "-z", "--others", "--ignored", "--exclude-standard"],
-                        capture_output=True)
-    if r.returncode or r2.returncode: die("--hooks necesita que la raíz sea un repositorio git")
-    return {x for x in (r.stdout + b"\0" + r2.stdout).decode("utf-8", "surrogateescape").split("\0") if x}
+def git_z(*args):
+    r = subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True)
+    if r.returncode: die("--hooks necesita que la raíz sea un repositorio git con al menos un commit")
+    return [x for x in r.stdout.decode("utf-8", "surrogateescape").split("\0") if x]
 
-def cleanup_new(before):
-    """Borra los ficheros que no existían antes de lanzar los hooks (efectos de la medición)."""
-    for rel in sorted(untracked_set() - before):
-        p = os.path.normpath(os.path.join(ROOT, rel))
-        if inside_root(p) and (os.path.isfile(p) or os.path.islink(p)): os.unlink(p)
+def make_sandbox():
+    """Copia desechable de la raíz: worktree de HEAD en modo detached más los cambios versionables
+    sin commit (modificados, borrados y nuevos no ignorados). Sin ficheros gitignored ni rama: la cifra
+    no depende de la máquina, de la rama ni del estado local, y los efectos de los hooks no tocan ROOT."""
+    git_z("rev-parse", "-z", "--verify", "HEAD^{commit}")
+    changed = git_z("diff", "-z", "--name-only", "HEAD") + git_z("ls-files", "-z", "--others", "--exclude-standard")
+    tmp = tempfile.mkdtemp(prefix="context-fixed-")
+    wt = os.path.join(tmp, "wt")   # el padre (tmp) está vacío: nada «hermano» del repo se cuela
+    r = subprocess.run(["git", "-C", ROOT, "worktree", "add", "-q", "--detach", wt, "HEAD"], capture_output=True)
+    if r.returncode:
+        shutil.rmtree(tmp, ignore_errors=True); die("no se pudo crear el worktree desechable para --hooks")
+    for rel in changed:
+        src, dst = os.path.join(ROOT, rel), os.path.join(wt, rel)
+        if os.path.islink(dst) or os.path.isfile(dst): os.unlink(dst)   # borrado o reemplazado
+        if os.path.islink(src): os.symlink(os.readlink(src), dst)
+        elif os.path.isfile(src):
+            os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copy2(src, dst)
+    return tmp, wt
 
-def run_hooks_once():
+def drop_sandbox(tmp, wt):
+    subprocess.run(["git", "-C", ROOT, "worktree", "remove", "--force", wt], capture_output=True)
+    shutil.rmtree(tmp, ignore_errors=True)
+    subprocess.run(["git", "-C", ROOT, "worktree", "prune"], capture_output=True)
+
+def wait_group(pgid, secs=10):
+    """Espera a los procesos en segundo plano que deja el hook (mismo grupo); los mata al agotar el plazo."""
+    end = time.time() + secs
+    while time.time() < end:
+        try: os.killpg(pgid, 0)
+        except ProcessLookupError: return
+        time.sleep(0.05)
+    try: os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError: pass
+
+def run_hooks_once(wt):
     try:
         with open(FIX, "rb") as f: stdin = f.read()
         json.loads(stdin)
     except (OSError, ValueError): die("fixture ausente o inválida: " + os.path.relpath(FIX, ROOT))
     rows = []
     for i, (ev, cmd, to) in enumerate(hook_commands()):
-        if hook_script(cmd) in EXCLUDED:
-            rows.append((i, ev, "excluido", 0, 0)); continue
         with tempfile.TemporaryDirectory() as home:
             env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": home, "TZ": "UTC",
-                   "LC_ALL": "C.UTF-8", "CLAUDE_PROJECT_DIR": ROOT, "SOURCE_DATE_EPOCH": "1760000000",
-                   "SAVIA_FIXED_CLOCK": "1760000000", "no_proxy": "*"}
+                   "LC_ALL": "C.UTF-8", "CLAUDE_PROJECT_DIR": wt, "no_proxy": "*"}
+            p = subprocess.Popen(["bash", "-c", cmd], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, env=env, cwd=wt, start_new_session=True)
             try:
-                r = subprocess.run(["bash", "-c", cmd], input=stdin, capture_output=True, env=env,
-                                   cwd=ROOT, timeout=min(30, max(5, (to or 10) if (to or 10) < 100 else 30)))
+                out_b, _ = p.communicate(stdin, timeout=min(30, max(5, (to or 10) if (to or 10) < 100 else 30)))
             except subprocess.TimeoutExpired:
+                wait_group(p.pid, 0); p.communicate()
                 die("hook sin respuesta a tiempo: #%d %s" % (i, ev))
+            wait_group(p.pid)
+        r = subprocess.CompletedProcess(p.args, p.returncode, out_b, b"")
         if r.returncode != 0:
             die("hook #%d %s salió con código %d: la medición no vale (corrige o excluye el hook con motivo)"
                 % (i, ev, r.returncode))
@@ -250,11 +274,11 @@ if MODE in ("versioned", "local"):
     if CHECK:   # la combinación ya se validó en bash (solo versioned + claude llega aquí)
         ok = ratchet("versionado", tok(tc), "context-fixed-tokens.count")
 elif MODE == "hooks":
-    before = untracked_set()
+    tmp, wt = make_sandbox()
     try:
-        a = run_hooks_once(); b = run_hooks_once()
+        a = run_hooks_once(wt); b = run_hooks_once(wt)
     finally:
-        cleanup_new(before)
+        drop_sandbox(tmp, wt)
     if [(x[2], x[3], x[4]) for x in a] != [(x[2], x[3], x[4]) for x in b]:
         die("--hooks no determinista: dos ejecuciones difieren (%s vs %s caracteres); corrige o excluye el hook con motivo"
             % (sum(x[4] for x in a), sum(x[4] for x in b)))

@@ -22,7 +22,11 @@ jq_py() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
 # ── AC-1 ──────────────────────────────────────────────────────────────────
 
 @test "AC-1: be2fca5aa da 27.633 B exactos y 6.800-7.800 tokens" {
-  git -C "$ROOT" cat-file -e be2fca5aa^{commit} 2>/dev/null || skip "be2fca5aa no está en este clon (clon superficial)"
+  if ! git -C "$ROOT" cat-file -e be2fca5aa^{commit} 2>/dev/null; then
+    # En CI el clon es completo (fetch-depth: 0): si falta el commit, AC-1 no puede quedar sin verificar.
+    if [ -n "${CI:-}${GITHUB_ACTIONS:-}" ]; then echo "be2fca5aa ausente en CI: AC-1 sin verificar" >&2; return 1; fi
+    skip "be2fca5aa no está en este clon (clon superficial)"
+  fi
   mkdir -p "$T/r"
   git -C "$ROOT" archive be2fca5aa CLAUDE.md docs/critical-facts.md .claude/profiles/savia.md \
     docs/rules/domain/radical-honesty.md docs/rules/domain/autonomous-safety.md \
@@ -49,7 +53,7 @@ jq_py() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
 }
 
 @test "AC-1: dos ejecuciones en el repo dan la misma cifra" {
-  run bash "$S" --versioned; a="$(total_line)"
+  run bash "$S" --versioned; [ "$status" -eq 0 ]; a="$(total_line)"
   run bash "$S" --versioned; b="$(total_line)"
   [ "$status" -eq 0 ]
   [ -n "$a" ] && [ "$a" = "$b" ]
@@ -108,16 +112,35 @@ jq_py() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
   [ "$(echo "$output" | jq_py 'len(d["pieces"])')" -eq 2 ]
 }
 
+@test "AC-2: import anidado se resuelve desde la raíz, no desde el fichero importador" {
+  mkroot
+  printf '@b.md\n' >> "$T/r/docs/a.md"
+  printf 'raiz\n' > "$T/r/b.md"; printf 'hermano-mas-largo\n' > "$T/r/docs/b.md"
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --versioned --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py '[p["name"] for p in d["pieces"]][-1]')" = "b.md" ]
+  rm "$T/r/b.md"   # solo existe junto al importador -> inexistente (error, no cifra falsa)
+  CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --versioned
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"inexistente"* ]]
+}
+
 # ── hooks (D2) ────────────────────────────────────────────────────────────
 
 mkhooks() {
   mkdir -p "$T/h/.claude" "$T/h/tests/fixtures/context-fixed"
-  git -C "$T/h" init -q   # --hooks exige git para limpiar los efectos de los hooks
+  git -C "$T/h" init -q   # --hooks exige git y un commit: mide en un worktree desechable de HEAD
   printf '# x\n' > "$T/h/CLAUDE.md"
   cp "$ROOT/tests/fixtures/context-fixed/turn.json" "$T/h/tests/fixtures/context-fixed/turn.json"
-  python3 - "$T/h/.claude/settings.json" "$1" <<'PY'
+  sethooks "$@"
+  gitc add -A; gitc commit -q --allow-empty -m fixture
+}
+gitc() { git -C "$T/h" -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+# Escribe settings.json con un hook de SessionStart por argumento (sin commit).
+sethooks() {
+  python3 - "$T/h/.claude/settings.json" "$@" <<'PY'
 import json, sys
-json.dump({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": sys.argv[2]}]}],
+json.dump({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": c} for c in sys.argv[2:]]}],
                      "UserPromptSubmit": []}}, open(sys.argv[1], "w"))
 PY
 }
@@ -155,34 +178,70 @@ PY
   [[ "$output" != *"TOTAL"* ]]
 }
 
-@test "hooks: la exclusión compara el script ejecutado, no una subcadena del comando" {
-  mkhooks "printf 'abcd' # scripts/windows-links.sh"
-  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
-  [ "$status" -eq 0 ]
-  [ "$(echo "$output" | jq_py 'd["chars"]')" -eq 4 ]
-  mkdir -p "$T/h/scripts"; printf 'printf zzzz\n' > "$T/h/scripts/windows-links.sh"
+@test "hooks: sin exclusiones; un hook que escribe en el repo se mide y no toca la raíz" {
+  mkdir -p "$T/h/scripts"
+  printf 'mkdir -p data; : > data/.marker; printf zzzz\n' > "$T/h/scripts/windows-links.sh"
   mkhooks 'bash "$CLAUDE_PROJECT_DIR"/scripts/windows-links.sh repair'
   CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
   [ "$status" -eq 0 ]
-  [ "$(echo "$output" | jq_py 'd["hooks"][0]["status"]')" = "excluido" ]
+  [ "$(echo "$output" | jq_py 'd["hooks"][0]["status"]')" = "medido" ]
+  [ "$(echo "$output" | jq_py 'd["chars"]')" -eq 4 ]
+  [ ! -e "$T/h/data/.marker" ]
+  [ "$(git -C "$T/h" worktree list --porcelain | grep -c '^worktree ')" -eq 1 ]   # temporal retirado
 }
 
-@test "hooks: borra los ficheros que crean los hooks y conserva los que ya existían" {
-  mkhooks 'mkdir -p data; : > data/.marker; printf x >> data/previo; printf ok'
+@test "hooks: no borra ficheros ajenos que aparecen en la raíz durante la medición" {
+  # Simula otra sesión que guarda un fichero en la raíz mientras corren los hooks.
+  mkhooks "mkdir -p '$T/h/data'; printf trabajo > '$T/h/data/ajeno.md'; printf ok"
   printf 'data/\n' > "$T/h/.gitignore"
-  mkdir -p "$T/h/data"; printf 'antes' > "$T/h/data/previo"
   CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
   [ "$status" -eq 0 ]
-  [ ! -e "$T/h/data/.marker" ]
-  [ -f "$T/h/data/previo" ]
+  [ "$(cat "$T/h/data/ajeno.md")" = "trabajo" ]
 }
 
-@test "hooks negativo: raíz sin git -> exit 1 (no puede limpiar efectos)" {
+@test "hooks: la cifra no depende de la rama del checkout" {
+  mkhooks 'git branch --show-current'
+  gitc checkout -q -b a
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
+  [ "$status" -eq 0 ]; a=$(echo "$output" | jq_py 'd["chars"]')
+  gitc checkout -q -b rama-con-un-nombre-largo
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
+  [ "$status" -eq 0 ]; b=$(echo "$output" | jq_py 'd["chars"]')
+  [ "$a" = "$b" ]
+}
+
+@test "hooks: mide los cambios sin commit (settings modificado y script nuevo sin versionar)" {
+  mkhooks "printf ab"
+  mkdir -p "$T/h/scripts"; printf 'printf abcdef\n' > "$T/h/scripts/nuevo.sh"
+  sethooks 'bash "$CLAUDE_PROJECT_DIR"/scripts/nuevo.sh'
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'd["chars"]')" -eq 6 ]
+}
+
+@test "hooks: espera a los procesos en segundo plano de un hook antes del siguiente" {
+  # Sin la espera, el 2.º hook ve «tarde» solo en la 2.ª ejecución -> no determinista.
+  mkhooks '(sleep 0.5; : > tarde) >/dev/null 2>&1 & printf a' 'if [ -e tarde ]; then printf bb; else printf c; fi'
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'd["chars"]')" -eq 3 ]
+}
+
+@test "hooks negativo: raíz sin git -> exit 1" {
   mkhooks "printf ok"
   rm -rf "$T/h/.git"
   CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
   [ "$status" -eq 1 ]
   [[ "$output" == *"repositorio git"* ]]
+}
+
+@test "hooks negativo: repositorio sin commits -> exit 1 sin total" {
+  mkhooks "printf ok"
+  rm -rf "$T/h/.git"; git -C "$T/h" init -q
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"commit"* ]]
+  [[ "$output" != *"TOTAL"* ]]
 }
 
 @test "hooks negativo: fixture ausente -> exit != 0" {
@@ -194,7 +253,7 @@ PY
 
 @test "hooks: el repo real da la misma cifra en dos ejecuciones y no escribe en el árbol" {
   before="$(git -C "$ROOT" status --porcelain --ignored -uall | md5sum)"
-  run bash "$S" --hooks; a="$(total_line)"
+  run bash "$S" --hooks; [ "$status" -eq 0 ]; a="$(total_line)"
   run bash "$S" --hooks; b="$(total_line)"
   [ "$status" -eq 0 ]
   [ -n "$a" ] && [ "$a" = "$b" ]
@@ -362,4 +421,33 @@ mklocalbroken() {
   CONTEXT_FIXED_ROOT="$T/r" run bash "$S" --local
   [ "$status" -eq 0 ]
   [[ "$output" != *"AVISO"* ]]
+}
+
+@test "AC-11 boundary: --local con 6.000 tokens exactos no avisa; con 6.001 sí" {
+  mkroot   # se completa hasta el límite exacto: 6.000 tokens = 24.000 caracteres
+  have=$(( $(wc -m < "$T/r/CLAUDE.md") + $(wc -m < "$T/r/docs/a.md") ))
+  head -c $(( 6000 * 4 - have )) /dev/zero | tr '\0' 'x' >> "$T/r/docs/a.md"
+  CONTEXT_FIXED_ROOT="$T/r" run --separate-stderr bash "$S" --local --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'd["tokens"]')" -eq 6000 ]
+  [[ "$output$stderr" != *"AVISO"* ]]
+  printf 'xxxx' >> "$T/r/docs/a.md"
+  CONTEXT_FIXED_ROOT="$T/r" run --separate-stderr bash "$S" --local --json
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq_py 'd["tokens"]')" -eq 6001 ]
+  [[ "$output" == *"AVISO"* ]]
+}
+
+@test "hooks timeout: un hook colgado -> exit 1 sin total y sin procesos huérfanos" {
+  mkhooks 'sleep 300 & printf a; sleep 300'
+  CONTEXT_FIXED_ROOT="$T/h" run bash "$S" --hooks
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin respuesta a tiempo"* ]]
+  [[ "$output" != *"TOTAL"* ]]
+  [ "$(git -C "$T/h" worktree list --porcelain | grep -c '^worktree ')" -eq 1 ]
+}
+
+@test "safety: el script usa set -uo pipefail y python3 -I" {
+  grep -q '^set -uo pipefail' "$S"
+  grep -q 'exec python3 -I' "$S"
 }
