@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# Ref: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md (S2, AC-9 a AC-16)
-# Integración en línea dentro de run: resolutor congelado, equivalencia ampliada y métricas. gh falso, nunca GitHub.
+# Ref: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md (S2, AC-9 a AC-16; S3, AC-17 a AC-20)
+# Integración en línea dentro de run: resolutor congelado, equivalencia ampliada, métricas y plan ordenado. gh falso, nunca GitHub.
 # El arnés (gh falso, repo con remoto bare) es el de tests/test-merge-sprint.bats; el temporal lo limpia bats.
 
 SCRIPT="scripts/merge-sprint.sh"
