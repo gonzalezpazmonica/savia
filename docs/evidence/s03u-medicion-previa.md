@@ -75,12 +75,33 @@ eso el total puede cambiar. Auditor sin renombrar ningún test.
 
 | Script | Mutantes muertos antes | después | Test (auditor antes → después) |
 |---|---|---|---|
-| `exit-purge-verify.sh` | 0/29 | 44/47 | nuevo `test-exit-purge-verify` (52); `test-se272-s5-exit-portability` 78 sin tocar |
-| `mobile-security-scan.sh` | 33/45 | 40/51 | `test-gate-result-ondemand` 63 → 73; `test-se240-mobile-security` 78 → 78 |
-| `compliance-eval.py` | 25/44 | 44/48 | `bats/compliance-policy` 41 → 54 |
+| `exit-purge-verify.sh` | 0/29 | 44/47 | nuevo `test-exit-purge-verify` (87); `test-se272-s5-exit-portability` 78 sin tocar |
+| `mobile-security-scan.sh` | 33/45 | 40/51 | `test-gate-result-ondemand` 63 → 73; `test-se240-mobile-security` 78 → 83 |
+| `compliance-eval.py` | 25/44 | 44/48 | `bats/compliance-policy` 41 → 76 |
 | `egress-gate.sh` | 20/29 | 27/29 | `test-g3-effect-path-capabilities` 74 → 74 |
 
 Supervivientes que quedan: equivalentes o ruido (`|| true`→`|| false` en órdenes cuyo estado no se
 usa, `shift 2 || shift` al final de los argumentos, la rama `except ImportError` con PyYAML instalado,
 docstrings, `ensure_ascii` en la salida, `ROOT` de reserva cuando `PROJECT_ROOT` viene fijado y la
 clave `isolated_by_default` del YAML por defecto, que nadie lee).
+
+### Reanudación (2026-11-10)
+
+El primer worker murió antes de abrir la PR. En la reanudación, sin rehacer lo anterior:
+
+- `test-exit-purge-verify` 52 → 87 con casos nuevos reales: `set -uo pipefail` del script, nombre vacío,
+  límite de 64/65 caracteres y `--exclude-dir` vacío o `.` (no excluye nada). Cada uno falla con su
+  mutante (límite `{0,64}`, `set -u`, prefijo sin `/`). Cabecera con la referencia a SE-272 y SE-376.
+- `compliance-eval.py`: un contexto ausente, ilegible o que no es objeto JSON reventaba con traceback y
+  sin veredicto. Ahora `UNKNOWN` con unknown `field: context` y `context_hash` vacío. Dos tests fallaban
+  antes del arreglo. Más casos límite (contexto `{}`, política vacía), `setup()` que fija la raíz del
+  repo (antes dependía del cwd) y recibo en `BATS_TEST_TMPDIR` (antes `/tmp` compartido). 54 → 76.
+- `test-se240-mobile-security`: APK de cero bytes nunca da `clean` (falla si se quita el hueco
+  `decompile:unreadable`). 78 → 83.
+- `test-gate-result-ondemand`: dos `run` de mobile no miraban `$status`; ahora sí (sigue en 73).
+
+Siguen bajo 80 sin trucos: `bats/compliance-policy` (76; sin `pipefail` aplicable a un script Python),
+`test-gate-result-ondemand` (73) y `test-g3-effect-path-capabilities` (74). Hallazgo del auditor, no
+corregido aquí: en `c8_spec` el patrón `\docs/rules/` empieza por `\d` (dígito), así que una
+referencia a `docs/rules/` o `docs/specs/` nunca puntúa; `test-gate-result-ondemand` cita su spec y
+saca 0 en ese criterio.
