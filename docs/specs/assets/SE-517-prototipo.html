@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>SE-517 · Prototipo S0 · Entrar con ChatGPT en Savia Space</title>
+<style>
+  :root { color-scheme: light dark; --bg: Canvas; --fg: CanvasText; --line: color-mix(in srgb, CanvasText 18%, Canvas); --muted: color-mix(in srgb, CanvasText 60%, Canvas); }
+  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 34rem; margin: 0 auto; padding: 1.25rem; }
+  h1 { font-size: 1.15rem; margin: 0 0 1rem; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; margin: 0 0 1rem; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .code { font: 600 1.6rem/1.2 ui-monospace, monospace; letter-spacing: .15em; margin: .5rem 0; }
+  button { font: inherit; padding: .55rem 1rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+  button.primary { background: CanvasText; color: Canvas; border-color: CanvasText; }
+  pre { font: 13px/1.45 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 8px; padding: .75rem; overflow-x: auto; }
+  nav { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  nav a { color: inherit; font-size: .85rem; }
+  section { display: none; } section.on { display: block; }
+</style>
+</head>
+<body>
+<main>
+<nav aria-label="Estados del prototipo">
+  <a href="?s=none">Sin sesión</a> · <a href="?s=code">Código</a> · <a href="?s=ok">Sesión activa</a> · <a href="?s=expired">Caducada</a> · <a href="?s=logout">Cerrar sesión</a> · <a href="?s=doctor">doctor</a>
+</nav>
+
+<section id="none">
+  <h1>Motor de Space</h1>
+  <div class="card">
+    <p><strong>ChatGPT</strong> · sin sesión</p>
+    <p class="muted">Space usará tu suscripción de ChatGPT para pensar. No hace falta clave ni pago por uso.</p>
+    <button class="primary" onclick="go('code')">Entrar con ChatGPT</button>
+  </div>
+  <div class="card">
+    <p>Escribes «Resume el informe de ayer».</p>
+    <p><strong>Savia:</strong> No puedo contestar: el motor no tiene sesión de ChatGPT. Entra con ChatGPT en Ajustes &gt; Motor. No he usado otro proveedor.</p>
+  </div>
+</section>
+
+<section id="code">
+  <h1>Entrar con ChatGPT</h1>
+  <div class="card">
+    <p>1. Abre esta dirección en cualquier dispositivo:</p>
+    <p><strong>auth.openai.com/codex/device</strong></p>
+    <p>2. Escribe este código:</p>
+    <p class="code">K7QF-29XM</p>
+    <p class="muted">Caduca en 15 minutos. Esta pantalla se actualiza sola cuando termines.</p>
+    <button onclick="go('none')">Cancelar</button>
+  </div>
+</section>
+
+<section id="ok">
+  <h1>Motor de Space</h1>
+  <div class="card">
+    <p><strong>ChatGPT</strong> · sesión activa</p>
+    <p class="muted">Cuenta: Plus · el acceso se renueva solo · próxima renovación hoy a las 17:40</p>
+    <p class="muted">Modelo para Space: el que diga tu configuración de tiers.</p>
+    <button onclick="go('logout')">Cerrar sesión</button>
+  </div>
+</section>
+
+<section id="expired">
+  <h1>Motor de Space</h1>
+  <div class="card">
+    <p><strong>ChatGPT</strong> · la sesión ha caducado</p>
+    <p class="muted">Space intentó renovarla a las 09:12 y OpenAI la rechazó. Las tareas en curso quedan en espera; no se ha usado otro proveedor.</p>
+    <button class="primary" onclick="go('code')">Volver a entrar</button>
+  </div>
+</section>
+
+<section id="logout">
+  <h1>Cerrar sesión de ChatGPT</h1>
+  <div class="card">
+    <p>Se borrará la sesión guardada en el espacio del motor. Space no podrá pensar hasta que vuelvas a entrar.</p>
+    <button class="primary" onclick="go('none')">Cerrar sesión</button> <button onclick="go('ok')">Cancelar</button>
+  </div>
+</section>
+
+<section id="doctor">
+  <h1>savia-space doctor (terminal)</h1>
+<pre>$ savia-space login chatgpt
+Abre auth.openai.com/codex/device y escribe el código K7QF-29XM
+(caduca en 15 min) … esperando
+Sesión de ChatGPT activa. Guardada en el espacio del motor.
+
+$ savia-space doctor
+motor        OpenCode 2.0.32 · fijado
+ChatGPT      sesión activa · acceso caduca 17:40 · se renueva solo
+salida red   auth.openai.com, chatgpt.com (solo estos)
+tier space   openai/gpt-5.3-codex
+
+$ savia-space doctor        # sin sesión
+ChatGPT      sin sesión · entra con: savia-space login chatgpt
+estado       FALLO: el tier space pide openai y no hay sesión
+
+$ savia-space logout chatgpt
+Sesión de ChatGPT borrada del espacio del motor.</pre>
+  <p class="muted">Ninguna línea muestra el token ni parte de él.</p>
+</section>
+</main>
+<script>
+  function go(s) { history.replaceState(null, "", "?s=" + s); show(); }
+  function show() {
+    var s = new URLSearchParams(location.search).get("s") || "none";
+    if (!document.getElementById(s)) s = "none";
+    document.querySelectorAll("section").forEach(function (e) { e.classList.toggle("on", e.id === s); });
+  }
+  show();
+</script>
+</body>
+</html>

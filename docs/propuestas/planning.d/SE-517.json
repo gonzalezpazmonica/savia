@@ -1,0 +1,9 @@
+{
+  "id": "SE-517",
+  "status": "PROPOSED",
+  "priority": "P1",
+  "phase": "A",
+  "title": "Motor de Space con suscripción ChatGPT (OAuth)",
+  "evidence": "docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md",
+  "note": "Pregunta interactiva 2026-11-10 («Spec y prueba ya»): sustituir DeepSeek (pago por uso) por la suscripción de ChatGPT/Codex. Login por código de dispositivo en el espacio del motor, credencial solo allí, doctor sin revelar, sin respaldo silencioso, salida de red a hosts de OpenAI. Escenas pendientes de confirmación (SE-505); términos de OpenAI los confirma la operadora."
+}
