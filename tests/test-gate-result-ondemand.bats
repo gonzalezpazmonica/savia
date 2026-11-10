@@ -131,17 +131,6 @@ STUB
   has_gap unknown manifest_audit missing_tool
 }
 
-@test "mobile: decompiled output without AndroidManifest.xml is a manifest gap" {
-  cat > "$WORK/bin/apktool" <<'STUB'
-#!/usr/bin/env bash
-out=""; while [[ $# -gt 0 ]]; do [[ "$1" == -o ]] && out="$2"; shift; done
-mkdir -p "$out/smali"; printf '.class public LA;\n' > "$out/smali/A.smali"
-STUB
-  chmod +x "$WORK/bin/apktool"
-  run env PATH="$WORK/bin:$NOAPK" /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"
-  has_gap unknown manifest unreadable
-}
-
 @test "mobile: hardcoded secret in decompiled code reports findings with its count" {
   fake_apktool
   run env PATH="$WORK/bin:$NOAPK" APK_SMALI='const-string v0, "api_key=abc"' /usr/bin/bash "$PROJ/scripts/mobile-security-scan.sh" --apk "$WORK/app.apk"

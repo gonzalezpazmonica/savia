@@ -131,7 +131,7 @@ EOF
 mk_sandbox() {
   SB="$FAKE_TMPDIR/repo"
   mkdir -p "$SB/scripts" "$SB/.claude/hooks/lib" "$FAKE_TMPDIR/bin" "$FAKE_TMPDIR/rbin"
-  cp "$MOBILE_SCRIPT" "$SB/scripts/"
+  cp "$MOBILE_SCRIPT" "$REPO_ROOT/scripts/android-manifest-audit.sh" "$SB/scripts/"
   cp "$REPO_ROOT/.claude/hooks/lib/gate-result.sh" "$SB/.claude/hooks/lib/"
   local t
   for t in bash env python3 find xargs grep wc cat date mkdir rm basename dirname tr head sed sort unzip; do
@@ -209,7 +209,7 @@ rep() { python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(eval(
 }
 
 @test "scan: APK limpio con apktool -> result clean, sin huecos, hallazgo solo INFO" {
-  mk_sandbox; fake_apktool "AndroidManifest.xml=<manifest/>"; mk_apk ok.apk "a.txt=hola"
+  mk_sandbox; fake_apktool "AndroidManifest.xml=<manifest xmlns:android=\"http://schemas.android.com/apk/res/android\"><application android:allowBackup=\"false\"/></manifest>"; mk_apk ok.apk "a.txt=hola"
   run_scan --apk "$APK"
   [ "$status" -eq 0 ]
   [ "${lines[-1]}" = 'gate-result: {"result":"clean","gaps":[]}' ]

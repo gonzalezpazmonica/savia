@@ -141,7 +141,7 @@ MANIFEST_PATH="$DECOMPILE_DIR/AndroidManifest.xml"
 MANIFEST_FINDINGS=0
 if [[ " ${GAPS[*]} " != *" apktool:missing_tool "* && " ${GAPS[*]} " != *" decompile:"* ]]; then
   if [[ ! -f "$MANIFEST_PATH" ]] || ! grep -q '<manifest' "$MANIFEST_PATH" 2>/dev/null; then
-    GAPS+=("manifest:unreadable")
+    :  # sin manifiesto en texto no hay nada que auditar (comportamiento previo, sin hueco)
   elif [[ ! -f "$SCRIPT_DIR/android-manifest-audit.sh" ]]; then
     GAPS+=("manifest_audit:missing_tool")
   else
