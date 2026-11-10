@@ -140,13 +140,13 @@ Semana 2026-W99 (EJEMPLO, datos inventados)
 guarda                      bloqueos  etiquetados  falsos  tasa falsos  sin etiquetar
 validate-bash-global              9            6       2        33 %              3
 block-branch-switch-dirty         5            5       1        20 %              0
-pr-summary-gate                   7            3       3       100 %              4
+pr-summary-gate                   7            3       2        67 %              4
 repeat-tool-guard                 2            0       0      UNKNOWN              2
 block-force-push                  1            1       0         0 %              0
-TOTAL                            24           15       6        40 %              9
+TOTAL                            24           15       5        33 %              9
 
 Una tasa UNKNOWN significa «sin etiquetas todavía», nunca 0 %.
-Falsos sin entrar en el corpus de órdenes legítimas: 6 (cada uno necesita su par peligroso).
+Falsos sin entrar en el corpus de órdenes legítimas: 5 (cada uno necesita su par peligroso).
 ```
 
 Ver cada uno:
@@ -157,6 +157,7 @@ $ bash scripts/guard-blocks.sh list --since 7d --guard pr-summary-gate
  18  lun 09:12    POLÍTICA  .pr-summary.md de esta carpeta tiene 97 h   falso
  19  lun 09:14    POLÍTICA  .pr-summary.md de esta carpeta tiene 97 h   falso
  27  mié 17:40    FORMA     falta el encabezado obligatorio             verdadero
+ (4 bloqueos más sin etiquetar; no salen en esta vista)
  (la orden no se guarda por defecto; solo una huella con clave local)
 ```
 

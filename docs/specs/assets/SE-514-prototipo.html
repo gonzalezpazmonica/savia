@@ -46,10 +46,10 @@ const scenes=[
 <dt>Por qué ahora</dt><dd>Los dos están a punto de guardar; si chocan, uno pierde su trabajo.</dd>
 <dt>Si no contestas</dt><dd>Los dos esperan con ese paso en pausa y siguen con otra cosa. No elijo yo.</dd>
 <dt>Si lo aplazas</dt><dd>Pierden unos 20 minutos de ese paso. Vale hasta las 12:00.</dd></dl>
-<div class="row"><button class="b primary" data-a="c1">Primero el informe</button><button class="b" data-a="c1">Primero la migración</button><button class="b" data-a="c1">Aplazar</button></div></div>
+<div class="row"><button class="b primary" data-a="c1" data-msg="Anotado: primero el informe. La migración espera a que guarde. Los demás pasos no cambian.">Primero el informe</button><button class="b" data-a="c1" data-msg="Anotado: primero la migración. El informe espera a que guarde. Los demás pasos no cambian.">Primero la migración</button><button class="b" data-a="c1" data-msg="Aplazado hasta las 12:00. Los dos agentes siguen con otra cosa; ese paso pierde unos 20 minutos.">Aplazar</button></div></div>
 <p class="more">1 pregunta más que puede esperar a las 12:00</p>
 <p class="small">Las dos preguntas sobre el mismo fichero se han unido en una tarjeta. La otra (confirmar un nombre) espera sin molestarte.</p>`,
- ans:"c1",msg:"Anotado. Los demás pasos no cambian."},
+ ans:"c1"},
 {t:"2 · ¿En qué estás?",h:`
 <h2>Abres la app</h2>
 <div class="user"><p>¿en qué estás?</p></div>
@@ -66,14 +66,14 @@ const scenes=[
 <dl><dt>Qué se pide</dt><dd>Permiso para publicar el informe (ejemplo).</dd>
 <dt>Si dices que no</dt><dd>El informe se queda en borrador.</dd>
 <dt>Mientras tanto</dt><dd>El trabajo esperó. No se publicó nada ni se tomó ninguna opción por defecto.</dd></dl>
-<div class="row"><button class="b primary" data-a="c3">Dar permiso</button><button class="b" data-a="c3">No publicar</button></div></div>`,ans:"c3",msg:"Registrado contra esta pregunta. (En el prototipo no se publica nada.)"},
+<div class="row"><button class="b primary" data-a="c3" data-msg="Permiso registrado contra esta pregunta. (En el prototipo no se publica nada.)">Dar permiso</button><button class="b" data-a="c3" data-msg="Registrado: el informe se queda en borrador.">No publicar</button></div></div>`,ans:"c3"},
 {t:"4 · Por qué te lo pregunto",h:`
 <h2>Savia te pregunta algo</h2>
 <div class="card" id="c4"><h3>¿Publico la versión 2 del informe de ejemplo?</h3>
 <dl><dt>Te lo pregunto porque</dt><dd>La última vez que se publicó sin comprobar los consumidores se rompió uno. Falta la comprobación de compatibilidad.</dd>
 <dt>Qué puedo hacer yo</dt><dd>Ejecutarla y volver con el resultado.</dd></dl>
-<div class="row"><button class="b primary" data-a="c4">Ejecútala tú</button><button class="b" data-a="c4">Publica sin comprobar</button><button class="b" data-a="c4">Aplazar</button></div></div>
-<p class="small">Esta lección no te interrumpe por separado: solo aparece cuando obliga a revisar algo antes de actuar.</p>`,ans:"c4",msg:"Ejecuto la comprobación y vuelvo con el resultado. No publico hasta tenerlo."},
+<div class="row"><button class="b primary" data-a="c4" data-msg="Ejecuto la comprobación y vuelvo con el resultado. No publico hasta tenerlo.">Ejecútala tú</button><button class="b" data-a="c4" data-msg="Publico la versión 2 sin la comprobación, porque lo has decidido tú. Queda registrado que se publicó sin comprobar.">Publica sin comprobar</button><button class="b" data-a="c4" data-msg="Aplazado. No publico ni ejecuto la comprobación; la pregunta sigue en tu cola.">Aplazar</button></div></div>
+<p class="small">Esta lección no te interrumpe por separado: solo aparece cuando obliga a revisar algo antes de actuar.</p>`,ans:"c4"},
 {t:"5 · Tarjeta caducada",h:`
 <h2>Contestas a una tarjeta de ayer</h2>
 <div class="card" id="c5old"><h3 class="small">Ayer 17:10 · ¿Publico la versión 2 del informe?</h3>
@@ -82,16 +82,21 @@ const scenes=[
 <div class="bot"><p>Esa pregunta caducó: el cambio ya no es el mismo. Te la vuelvo a enseñar con lo actual.</p></div>
 <div class="card"><h3>¿Publico la versión 3 del informe de ejemplo?</h3>
 <dl><dt>Qué cambió</dt><dd>Desde ayer se añadió una sección y se cambió un dato. Tu «sí» era para la versión 2.</dd><dt>Si no contestas</dt><dd>Queda en espera. No se publica.</dd></dl>
-<div class="row"><button class="b primary" data-a="n">Sí, publica esta</button><button class="b" data-a="n">No</button></div></div>`;$("#old").disabled=true;
-document.querySelectorAll("[data-a=n]").forEach(b=>b.onclick=()=>{b.closest(".card").insertAdjacentHTML("beforeend",`<div class="done">Registrado contra la versión 3.</div>`)})}}}
+<div class="row"><button class="b primary" data-a="n" data-msg="Registrado contra la versión 3: se publica.">Sí, publica esta</button><button class="b" data-a="n" data-msg="Registrado contra la versión 3: no se publica.">No</button></div></div>`;$("#old").disabled=true;
+document.querySelectorAll("[data-a=n]").forEach(b=>b.onclick=()=>answer(b))}}}
 ];
 const tabs=$("#tabs"),main=$("#main");
+function answer(b){
+ const c=b.closest(".card"),d=document.createElement("div");
+ d.className="done";d.textContent=b.dataset.msg;
+ c.querySelector(".row").remove();c.appendChild(d);
+}
 function show(i){
  [...tabs.children].forEach((b,j)=>b.setAttribute("aria-selected",i===j));
  const s=scenes[i];main.innerHTML=s.h;
- if(s.ans){document.querySelectorAll("[data-a="+s.ans+"]").forEach(b=>b.onclick=()=>{const c=b.closest(".card");c.querySelector(".row").remove();c.insertAdjacentHTML("beforeend",`<div class="done">${s.msg}</div>`)})}
+ if(s.ans){document.querySelectorAll("[data-a="+s.ans+"]").forEach(b=>b.onclick=()=>answer(b))}
  if(s.custom)s.custom();
 }
-scenes.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s.t;b.role="tab";b.onclick=()=>show(i);tabs.appendChild(b)});
+scenes.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s.t;b.setAttribute("role","tab");b.onclick=()=>show(i);tabs.appendChild(b)});
 show(0);
 </script></body></html>

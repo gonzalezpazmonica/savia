@@ -1,7 +1,7 @@
 # SE-513 — Prototipo: cambios de prioridad que no se pierden
 
 > **Esto es un prototipo para que lo confirmes o lo rechaces. Nada de esto está construido.**
-> - Los textos de Savia son los de las escenas que confirmaste, tal cual.
+> - Los textos de Savia que la spec fija (escenas 1, 4 y 5) van tal cual. Los que la spec no fija van marcados *(propuesta)*: son para que los confirmes o los cambies.
 > - La salida de la cola es **simulada: la orden no existe hasta S1**.
 > - Los trabajos, horas y números son un **ejemplo inventado**, no datos reales.
 
@@ -48,7 +48,7 @@ No viste respuesta y lo repites a las 11:22.
 
 **Tú:** deja lo del informe, primero el arreglo de la CI
 
-**Savia:** Ya lo tenía anotado (a las 11:20). Lo trato como uno solo; sigue pendiente de que el agente llegue al final de su suite.
+**Savia:** *(propuesta)* Ya lo tenía anotado (a las 11:20). Lo trato como uno solo; sigue pendiente de que el agente llegue al final de su suite.
 
 ```
 cambio  texto                                  estado      desde   repetido
@@ -64,7 +64,7 @@ cambio  texto                                  estado      desde   repetido
 
 Al volver (11:24):
 
-**Savia:** Hemos tenido un reinicio. Tu cambio de las 11:20 sigue en la cola; no hace falta repetirlo.
+**Savia:** *(propuesta)* Hemos tenido un reinicio. Tu cambio de las 11:20 sigue en la cola; no hace falta repetirlo.
 
 ```
 cambio  texto                                  estado      desde   notas
@@ -94,7 +94,7 @@ El agente de la migración no informa de su plan, así que Savia no tiene cómo 
 
 **Tú:** la migración, después de la CI
 
-**Savia:** Anotado. No sé si lo ha aplicado; lo confirmo cuando termine su paso.
+**Savia:** *(propuesta: la spec fija solo la frase que sigue a «Anotado.»)* Anotado. No sé si lo ha aplicado; lo confirmo cuando termine su paso.
 
 ```
 cambio  texto                          estado      motivo
@@ -103,9 +103,9 @@ cambio  texto                          estado      motivo
 
 Cuando termina su paso:
 
-**Savia:** Ha terminado su paso. Antes de empezar el siguiente ha seguido el orden nuevo: aplicado.
+**Savia:** *(propuesta)* Ha terminado su paso. Sigue sin darme señal de su plan, así que no puedo confirmarlo: el cambio sigue en NO SÉ. Si quieres certeza, puedo parar ese trabajo y relanzarlo con el orden nuevo.
 
-(Si en cambio no se pudiera comprobar, el estado seguiría siendo NO SÉ. Nunca pasa a APLICADO sin prueba.)
+(Ver que el siguiente paso «parece» seguir el orden nuevo no es prueba. Solo pasaría a APLICADO si el agente informara de su plan y el plan recogiera el cambio, como en la escena 1.)
 
 ---
 
