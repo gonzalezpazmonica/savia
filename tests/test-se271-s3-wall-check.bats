@@ -394,8 +394,12 @@ assert d['checked_layers']==[1,2,3,4,5,6,7]
   s03t_wall_tree
   mkdir -p "$W/output/briefs"
   head -c 64 /dev/urandom > "$W/output/briefs/bin.json"
+  # Control en la misma pasada: un texto sin etiqueta SÍ se etiqueta, así que
+  # la rama de etiquetado se ejecutó y el binario quedó fuera por su tipo.
+  echo "plain brief" > "$W/output/briefs/text.md"
   before="$(sha256sum "$W/output/briefs/bin.json")"
   s03t_wall --layer 7 --client acme --tag-artifacts --json
+  grep -q 'SE-271-WALL client:acme' "$W/output/briefs/text.md"
   [ "$before" = "$(sha256sum "$W/output/briefs/bin.json")" ]
 }
 
@@ -457,4 +461,35 @@ import json,sys; assert json.loads(sys.argv[1])['engagements']==1" "$output"
   printf 'client:acme\nlater client:beta\n' > "$W/engagements/acme/artifacts/a.md"
   s03t_wall --json
   [ "$(s03t_layers)" = "active_context:1 briefs_drafts_engrams:2 episodic_memory:1 federation_exchange:1" ]
+}
+
+# Revisión de seguridad #1507 P2-1: las capas que comparan con los engagements
+# activos tampoco pueden quedarse con la primera etiqueta.
+@test "a known client tag first and an unknown one later is still a violation (layers 2, 4, 5, 7)" {
+  s03t_wall_tree
+  mv "$W/engagements/beta/prod.yaml" "$W/home/beta.yaml"
+  mkdir -p "$W/output/domes" "$W/output/drafts"
+  printf 'client:acme\nlater client:ghost\n' > "$W/output/sem.md"
+  printf 'client:acme\nlater client:ghost\n' > "$W/output/domes/d.md"
+  printf 'client:acme\nlater client:ghost\n' > "$W/output/drafts/b.md"
+  printf 'client:acme then client:ghost\n' > "$W/x.kg.json"
+  for n in 2 4 5 7; do
+    s03t_wall --layer "$n" --json
+    [[ "$output" == *"client:ghost"* ]] || { echo "capa $n no ve ghost"; false; }
+  done
+  # La capa 2 recorre output/ con profundidad 3: ve también domes/ y drafts/.
+  s03t_wall --json
+  [ "$(s03t_layers)" = "briefs_drafts_engrams:1 domes:1 knowledge_graph:1 semantic_memory:3" ]
+}
+
+@test "files whose tags all belong to active engagements stay clean in layers 2, 4, 5, 7" {
+  s03t_wall_tree
+  mv "$W/engagements/beta/prod.yaml" "$W/home/beta.yaml"
+  mkdir -p "$W/output/domes" "$W/output/drafts"
+  printf 'client:acme\nagain client:acme\n' > "$W/output/sem.md"
+  printf 'client:acme\nagain client:acme\n' > "$W/output/domes/d.md"
+  printf 'client:acme\nagain client:acme\n' > "$W/output/drafts/b.md"
+  printf 'client:acme client:acme\n' > "$W/x.kg.json"
+  s03t_wall --json
+  [ "$(s03t_layers)" = "none" ]
 }
