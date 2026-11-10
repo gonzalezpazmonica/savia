@@ -7,6 +7,7 @@ token_budget: 640
 
 > **REGLA INMUTABLE** — overnight-sprint, code-improvement-loop, tech-research-agent y cualquier modo sin supervisión en tiempo real. Implementa Genesis **A9 SUPERVISED EXECUTION** (`attention-anchor.md`, SE-080). Detalle operativo: `autonomous-safety-reference.md`.
 
+<!-- savia-core:autonomia -->
 **La IA propone, el humano dispone** (§3, §9 de `savia-ethical-principles.md`). Ningún agente autónomo decide algo irreversible; todo output autónomo es propuesta pendiente de revisión humana.
 
 ## Git
@@ -40,6 +41,7 @@ NUNCA crear tareas en backlog sin aprobación, cambiar configuración por hallaz
 ## Fail-safe
 
 Time-box por tarea (`AGENT_TASK_TIMEOUT_MINUTES`, 15). Abortar tras `AGENT_MAX_CONSECUTIVE_FAILURES` (3) fallos consecutivos o misma acción 3+ veces. Registrar cada intento. Contexto > 80% → compactar y reevaluar. Audit log en `output/agent-runs/`.
+<!-- /savia-core:autonomia -->
 
 ## Enforcement por código (SE-445)
 
@@ -48,6 +50,7 @@ Time-box por tarea (`AGENT_TASK_TIMEOUT_MINUTES`, 15). Abortar tras `AGENT_MAX_C
 - **Revisor de acciones**: `action-review.sh`, opt-in con doble factor; política en `action-review-policy.md`. Fail-closed en tiers 3/4.
 - **Criterio de éxito**: `success_checks` y `max_retries` en `savia-automations.sh`.
 
+<!-- savia-core:obligaciones -->
 ## Obligaciones enlazadas
 
 - **Doble opt-in** (SPEC-186): variable persistente + `--confirm-autonomous`.
@@ -56,3 +59,4 @@ Time-box por tarea (`AGENT_TASK_TIMEOUT_MINUTES`, 15). Abortar tras `AGENT_MAX_C
 - **Maker-checker** (L2+): `maker-checker-protocol.md`.
 - **Dual Pool** (SE-235): proposal = rama `agent/*` no mergeada; result state = en main con PR aprobado por humano.
 - Emergency-mode (SPEC-122) no bypassa ningún gate.
+<!-- /savia-core:obligaciones -->
