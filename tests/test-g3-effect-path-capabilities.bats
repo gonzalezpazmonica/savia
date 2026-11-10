@@ -285,3 +285,74 @@ L4_OK='{"rows":[{"risk":"L4","covered":true},{"risk":"L4","covered":true},{"risk
   EGRESS_ALLOWLIST="$TMPDIR/ok.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check github.com http
   [ "$status" -eq 1 ]
 }
+
+# S03u — supervivientes de mutación en egress-gate.sh
+
+@test "egress: SAVIA_EGRESS_GATE=off is the documented master switch and exits 0 for any domain" {
+  printf 'domains:\n  - domain: github.com\n    protocols: [https]\n' > "$TMPDIR/ok.yaml"
+  SAVIA_EGRESS_GATE=off EGRESS_ALLOWLIST="$TMPDIR/ok.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check evil.example
+  [ "$status" -eq 0 ]
+  [ ! -e "$PROJECT_ROOT/output/egress-denials.jsonl" ]
+}
+
+@test "egress: an unknown action is a usage error with exit 2" {
+  run bash "$REPO_ROOT/scripts/egress-gate.sh" allow github.com
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "egress: an invalid protocol is denied even when the allowlist accepts any protocol" {
+  printf 'domains:\n  - domain: github.com\n    protocols: ["*"]\n' > "$TMPDIR/any.yaml"
+  EGRESS_ALLOWLIST="$TMPDIR/any.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check github.com "ht tp"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"formato no válido"* ]]
+  EGRESS_ALLOWLIST="$TMPDIR/any.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check github.com ftp
+  [ "$status" -eq 0 ]
+}
+
+@test "egress: an invalid domain is denied even if the allowlist lists it literally" {
+  printf 'domains:\n  - domain: "a..b"\n    protocols: [https]\n' > "$TMPDIR/odd.yaml"
+  EGRESS_ALLOWLIST="$TMPDIR/odd.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check "a..b"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"formato no válido"* ]]
+  run python3 -c 'import json,sys; d=json.loads(open(sys.argv[1]).read().splitlines()[-1]); assert d["domain"]=="<invalid>" and d["verdict"]=="denied", d' "$PROJECT_ROOT/output/egress-denials.jsonl"
+  [ "$status" -eq 0 ]
+}
+
+@test "egress: isolated mode denies an allowlisted domain and logs the denial" {
+  printf 'domains:\n  - domain: github.com\n    protocols: [https]\n' > "$TMPDIR/ok.yaml"
+  SAVIA_ISOLATED_MODE=1 EGRESS_ALLOWLIST="$TMPDIR/ok.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check github.com
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ISOLATED"* ]]
+  run grep -c '"domain":"github.com"' "$PROJECT_ROOT/output/egress-denials.jsonl"
+  [ "$output" = "1" ]
+}
+
+@test "egress: status reports the real domain count and denial count, one line each" {
+  printf 'domains:\n  - domain: github.com\n    protocols: [https]\n  - domain: pypi.org\n    protocols: [https]\n' > "$TMPDIR/two.yaml"
+  EGRESS_ALLOWLIST="$TMPDIR/two.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check evil.example
+  [ "$status" -eq 1 ]
+  EGRESS_ALLOWLIST="$TMPDIR/two.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" status
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'Domains: 2\nDenials: 1'* ]]
+  [[ "$output" != *"Denials: 0"* ]]
+}
+
+@test "egress: status with no denials yet reports zero" {
+  printf 'domains:\n  - domain: github.com\n    protocols: [https]\n' > "$TMPDIR/ok.yaml"
+  EGRESS_ALLOWLIST="$TMPDIR/ok.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" status
+  [[ "$output" == *$'Domains: 1\nDenials: 0'* ]]
+  [[ "$output" != *"Proposals:"* ]]
+}
+
+@test "egress: propose records a pending proposal and never edits the allowlist" {
+  printf 'domains:\n  - domain: github.com\n    protocols: [https]\n' > "$TMPDIR/ok.yaml"
+  before=$(sha256sum "$TMPDIR/ok.yaml")
+  EGRESS_ALLOWLIST="$TMPDIR/ok.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" propose docs.rs "crates docs"
+  [ "$status" -eq 0 ]
+  grep -q 'docs.rs' "$PROJECT_ROOT/output/egress-proposals.md"
+  grep -q 'PENDING HUMAN APPROVAL' "$PROJECT_ROOT/output/egress-proposals.md"
+  [ "$(sha256sum "$TMPDIR/ok.yaml")" = "$before" ]
+  EGRESS_ALLOWLIST="$TMPDIR/ok.yaml" run bash "$REPO_ROOT/scripts/egress-gate.sh" check docs.rs
+  [ "$status" -eq 1 ]
+}

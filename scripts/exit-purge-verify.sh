@@ -36,21 +36,34 @@ usage() {
   sed -n '/^# /{s/^# //;p;}' "$0" | head -22
 }
 
-# ── Allowed paths (references that are expected to survive purge) ──────────────
+# ── Engagement name (also used as file name and grep literal) ──────────────────
+# Solo letras, dígitos, punto, guion y guion bajo: nada de rutas ni comillas.
+valid_engagement() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ && "$1" != *..* ]]; }
 
-allowed_paths() {
-  local engagement="$1"
-  cat <<ALLOWED
-.savia-tombstones
-output/audit-trail.jsonl
-output/exit-packages/$engagement
-output/exit-drills
-scripts/exit-purge-verify.sh
-scripts/exit-package-generate.sh
-scripts/exit-dependencies-declare.sh
-scripts/exit-drill-execute.sh
-scripts/exit-independence-verify.sh
-ALLOWED
+# ── Allowed paths (references that are expected to survive purge) ──────────────
+# Rutas relativas a ROOT. Se comparan exactas o como prefijo de directorio; nunca
+# por subcadena (un docs/exit-notes.md o un docs/audit-trail-x.md NO son seguros).
+
+is_allowed_path() {
+  local rel="$1" engagement="$2"
+  case "$rel" in
+    .savia-tombstones/*|output/audit-trail.jsonl) return 0 ;;
+    "output/exit-packages/$engagement"/*|output/exit-drills/*) return 0 ;;
+    scripts/exit-purge-verify.sh|scripts/exit-package-generate.sh) return 0 ;;
+    scripts/exit-dependencies-declare.sh|scripts/exit-drill-execute.sh) return 0 ;;
+    scripts/exit-independence-verify.sh) return 0 ;;
+  esac
+  return 1
+}
+
+is_excluded_path() {
+  local rel="$1" d
+  shift
+  for d in "$@"; do
+    d="${d#./}"; d="${d%/}"
+    [[ -n "$d" && "$rel" == "$d"/* ]] && return 0
+  done
+  return 1
 }
 
 # ── Verify purge ───────────────────────────────────────────────────────────────
@@ -59,108 +72,64 @@ cmd_verify() {
   local engagement="" extra_excludes=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --engagement) engagement="$2"; shift 2 ;;
-      --exclude-dir) extra_excludes+=("$2"); shift 2 ;;
+      --engagement) engagement="${2:-}"; shift 2 || shift ;;
+      --exclude-dir) extra_excludes+=("${2:-}"); shift 2 || shift ;;
       *) shift ;;
     esac
   done
 
   [[ -z "$engagement" ]] && die "--engagement required"
+  valid_engagement "$engagement" || die "invalid engagement name: only [A-Za-z0-9._-]"
 
   echo "=== PURGE VERIFICATION ==="
   echo "Engagement: $engagement"
   echo "Workspace: $ROOT"
   echo ""
 
-  local violations=0
-  local total_matches=0
   local allowed_count=0
   local violation_count=0
 
-  # Build search pattern: engagement name variations
+  # Search patterns (literales, no regex): nombre, nombre con espacios y ruta.
   local patterns=("$engagement")
-
-  # Also search for common substrings if name contains hyphens
   if [[ "$engagement" == *-* ]]; then
     patterns+=("${engagement//-/ }")
   fi
-
-  # Add the project directory pattern
   patterns+=("projects/$engagement")
 
   echo "Search patterns: ${patterns[*]}"
   echo ""
 
-  # Build exclude patterns from allowed paths
-  local allowed
-  allowed=$(allowed_paths "$engagement")
-  local exclude_args=()
-  while IFS= read -r path; do
-    [[ -z "$path" ]] && continue
-    exclude_args+=("--exclude-dir" "$path")
-  done <<< "$allowed"
-  for ed in "${extra_excludes[@]}"; do
-    exclude_args+=("--exclude-dir" "$ed")
-  done
+  local results grep_rc=0 rc pat
+  local pat_args=()
+  for pat in "${patterns[@]}"; do pat_args+=(-e "$pat"); done
 
-  # Also exclude .git directory
-  exclude_args+=("--exclude-dir" ".git")
+  # Una sola pasada: cada línea aparece una vez aunque case con varios patrones.
+  # Rutas relativas a ROOT para clasificar sin depender de dónde vive el workspace.
+  info "Searching for: ${patterns[*]}"
+  results=$(cd "$ROOT" && grep -rnIF "${pat_args[@]}" --exclude-dir=".git" . 2>/dev/null)
+  rc=$?
+  # grep: 0 hay coincidencias, 1 ninguna, >1 error (p. ej. directorio ilegible).
+  [[ "$rc" -gt 1 ]] && grep_rc="$rc"
 
-  # Run grep for each pattern
-  local results_file
-  results_file=$(mktemp)
-
-  for pat in "${patterns[@]}"; do
-    info "Searching for: '$pat'"
-    grep -rnI "$pat" "$ROOT" \
-      --exclude-dir=".git" \
-      --exclude-dir=".savia-tombstones" \
-      --exclude-dir="output/exit-packages" \
-      --exclude-dir="output/exit-drills" \
-      --exclude="audit-trail.jsonl" \
-      --exclude="exit-purge-verify.sh" \
-      --exclude="exit-package-generate.sh" \
-      --exclude="exit-dependencies-declare.sh" \
-      --exclude="exit-drill-execute.sh" \
-      --exclude="exit-independence-verify.sh" \
-      --exclude="exit-*" \
-      2>/dev/null >> "$results_file" || true
-  done
-
-  local total
-  total=$(wc -l < "$results_file" 2>/dev/null || echo 0)
-  echo ""
-  echo "Total matches found: $total"
-  echo ""
-
-  # Classify each match
-  if [[ "$total" -gt 0 ]]; then
-    echo "=== Match Details ==="
-    local match_n=0
-    while IFS= read -r match; do
-      match_n=$((match_n + 1))
-      local file="${match%%:*}"
-      local rest="${match#*:}"
-      local line_num="${rest%%:*}"
-      local content="${rest#*:}"
-
-      # Determine if this is a safe reference
-      local safe=0
-      if echo "$file" | grep -qE "(\.savia-tombstones|audit-trail|exit-packages|exit-drills|scripts/exit-)"; then
-        safe=1
-      fi
-
-      if [[ "$safe" -eq 1 ]]; then
-        allowed_count=$((allowed_count + 1))
-        echo "  [ALLOWED] $file:$line_num — $content"
-      else
-        violation_count=$((violation_count + 1))
-        echo "  [VIOLATION] $file:$line_num — $content"
-      fi
-    done < "$results_file"
-  fi
-
-  rm -f "$results_file"
+  local total=0
+  echo "=== Match Details ==="
+  local match file rest line_num content
+  while IFS= read -r match; do
+    [[ -z "$match" ]] && continue
+    file="${match%%:*}"; file="${file#./}"
+    rest="${match#*:}"
+    line_num="${rest%%:*}"
+    content="${rest#*:}"
+    is_excluded_path "$file" "${extra_excludes[@]}" && continue
+    total=$((total + 1))
+    if is_allowed_path "$file" "$engagement"; then
+      allowed_count=$((allowed_count + 1))
+      echo "  [ALLOWED] $file:$line_num — $content"
+    else
+      violation_count=$((violation_count + 1))
+      echo "  [VIOLATION] $file:$line_num — $content"
+    fi
+  done <<< "$results"
 
   echo ""
   echo "=== VERIFICATION RESULT ==="
@@ -168,11 +137,7 @@ cmd_verify() {
   echo "Allowed references: $allowed_count"
   echo "Violations:       $violation_count"
 
-  if [[ "$violation_count" -eq 0 ]]; then
-    echo ""
-    echo "RESULT: CLEAN — zero living references outside tombstones and audit log"
-    return 0
-  else
+  if [[ "$violation_count" -gt 0 ]]; then
     echo ""
     echo "RESULT: DIRTY — $violation_count living reference(s) found"
     echo ""
@@ -182,6 +147,15 @@ cmd_verify() {
     echo "  3. Marked as excluded via --exclude-dir if legitimate"
     return 1
   fi
+  if [[ "$grep_rc" -ne 0 ]]; then
+    # Fail-closed: si parte del workspace no se pudo leer, no hay «limpio».
+    echo ""
+    echo "RESULT: UNKNOWN — search failed (grep exit $grep_rc); part of the workspace was not read"
+    return 2
+  fi
+  echo ""
+  echo "RESULT: CLEAN — zero living references outside tombstones and audit log"
+  return 0
 }
 
 # ── Create tombstone ───────────────────────────────────────────────────────────
@@ -190,12 +164,13 @@ cmd_tombstone() {
   local engagement=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --engagement) engagement="$2"; shift 2 ;;
+      --engagement) engagement="${2:-}"; shift 2 || shift ;;
       *) shift ;;
     esac
   done
 
   [[ -z "$engagement" ]] && die "--engagement required"
+  valid_engagement "$engagement" || die "invalid engagement name: only [A-Za-z0-9._-]"
 
   local tombstone_dir="$ROOT/.savia-tombstones"
   mkdir -p "$tombstone_dir"
@@ -205,59 +180,69 @@ cmd_tombstone() {
   if [[ -f "$tombstone" ]]; then
     warn "Tombstone already exists: $tombstone"
     info "Existing content:"
-    python3 -c "import json; d=json.load(open('$tombstone')); print(json.dumps(d, indent=2, ensure_ascii=False))" 2>/dev/null || cat "$tombstone"
+    python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), indent=2, ensure_ascii=False))' "$tombstone" 2>/dev/null || cat "$tombstone"
     return 0
   fi
 
   info "Creating tombstone for engagement: $engagement"
 
-  python3 -c "
-import json
+  # Valores por argv, nunca interpolados en el código Python.
+  if ! python3 - "$tombstone" "$engagement" "$(date -Iseconds)" <<'PYEOF' 2>/dev/null
+import json, sys
+path, eng, ts = sys.argv[1:4]
 tombstone = {
-    'engagement': '$engagement',
+    'engagement': eng,
     'action': 'scenario-forget',
-    'timestamp': '$(date -Iseconds)',
+    'timestamp': ts,
     'reason': 'Engagement completed — data purged per exit guarantee',
     'retained': {
-        'exit_package': 'output/exit-packages/$engagement/',
+        'exit_package': f'output/exit-packages/{eng}/',
         'audit_log': 'output/audit-trail.jsonl',
         'drill_reports': 'output/exit-drills/',
-        'tombstone': '.savia-tombstones/${engagement}.json'
+        'tombstone': f'.savia-tombstones/{eng}.json',
     },
     'purged': {
-        'project_directory': 'projects/$engagement',
-        'agent_memory': 'memory entries for $engagement',
-        'agent_notes': 'agent notes referencing $engagement',
-        'session_logs': 'session entries for $engagement'
+        'project_directory': f'projects/{eng}',
+        'agent_memory': f'memory entries for {eng}',
+        'agent_notes': f'agent notes referencing {eng}',
+        'session_logs': f'session entries for {eng}',
     },
-    'verified_at': '$(date -Iseconds)',
+    'verified_at': ts,
     'verification_status': 'pending',
-    'notes': 'This tombstone records the purge. All references outside this file and audit-trail.jsonl should have been removed.'
+    'notes': 'This tombstone records the purge. All references outside this file and audit-trail.jsonl should have been removed.',
 }
-with open('$tombstone', 'w') as f:
+with open(path, 'w') as f:
     json.dump(tombstone, f, indent=2, ensure_ascii=False)
-" 2>/dev/null
+PYEOF
+  then
+    die "could not write tombstone: $tombstone"
+  fi
 
   ok "Tombstone created: $tombstone"
 
-  # Verify immediately
+  # Verify immediately: el estado refleja el resultado real, no «verified» siempre.
   info "Running purge verification..."
-  cmd_verify --engagement "$engagement" || warn "Verification found references — purge may be incomplete"
+  local vrc=0 status="verified"
+  cmd_verify --engagement "$engagement" || vrc=$?
+  case "$vrc" in
+    0) status="verified" ;;
+    1) status="dirty"; warn "Verification found references — purge is incomplete" ;;
+    *) status="unknown"; warn "Verification could not complete — purge not verified" ;;
+  esac
 
-  # Update verification status
-  local verified_at
-  verified_at=$(date -Iseconds)
-  python3 -c "
-import json
-with open('$tombstone') as f:
+  python3 - "$tombstone" "$(date -Iseconds)" "$status" <<'PYEOF' 2>/dev/null || die "could not update tombstone: $tombstone"
+import json, sys
+path, ts, status = sys.argv[1:4]
+with open(path) as f:
     d = json.load(f)
-d['verified_at'] = '$verified_at'
-d['verification_status'] = 'verified'
-with open('$tombstone', 'w') as f:
+d['verified_at'] = ts
+d['verification_status'] = status
+with open(path, 'w') as f:
     json.dump(d, f, indent=2, ensure_ascii=False)
-" 2>/dev/null
+PYEOF
 
-  ok "Tombstone updated with verification timestamp"
+  ok "Tombstone updated: verification_status=$status"
+  return "$vrc"
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
