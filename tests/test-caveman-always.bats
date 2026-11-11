@@ -33,14 +33,44 @@ teardown() {
   [ "$count" -ge 6 ]
 }
 
-@test "AC-02: caveman-default.md loaded in opencode.json instructions" {
+# SE-511: las reglas pueden llegar directas o por el bloque generado savia-core.md,
+# que extrae literalmente las regiones savia-core:reglas/excepciones de caveman-default.md.
+caveman_loaded() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json, re, sys
+cfg, rule, core = sys.argv[1:4]
+instr = json.load(open(cfg)).get('instructions', [])
+if any('caveman-default' in i for i in instr):
+    sys.exit(0)
+if not any(i.endswith('savia-core.md') for i in instr):
+    sys.exit(1)
+src = open(rule, encoding='utf-8').read()
+m = re.search(r'<!-- savia-core:reglas -->\n(.*?)\n<!-- /savia-core:reglas -->', src, re.S)
+blk = open(core, encoding='utf-8').read()
+sys.exit(0 if m and m.group(1).strip() and m.group(1).strip() in blk else 1)
+PY
+}
+
+@test "AC-02: caveman rules reach opencode.json instructions (direct or via savia-core.md)" {
+  run caveman_loaded "$OC_CONFIG" "$CAVEMAN_RULE" docs/rules/domain/savia-core.md
+  [ "$status" -eq 0 ]
+}
+
+@test "AC-02 negativo: sin caveman-default ni savia-core en instructions no pasa" {
   python3 -c "
-import json, sys
+import json
 d = json.load(open('$OC_CONFIG'))
-instr = d.get('instructions', [])
-found = any('caveman-default' in i for i in instr)
-sys.exit(0 if found else 1)
+d['instructions'] = [i for i in d.get('instructions', []) if 'caveman-default' not in i and 'savia-core' not in i]
+json.dump(d, open('$TMPDIR_TEST/oc.json', 'w'))
 "
+  run caveman_loaded "$TMPDIR_TEST/oc.json" "$CAVEMAN_RULE" docs/rules/domain/savia-core.md
+  [ "$status" -eq 1 ]
+}
+
+@test "AC-02 negativo: savia-core.md sin las reglas de caveman no pasa" {
+  grep -v 'Self-strip before output' docs/rules/domain/savia-core.md > "$TMPDIR_TEST/core.md"
+  run caveman_loaded "$OC_CONFIG" "$CAVEMAN_RULE" "$TMPDIR_TEST/core.md"
+  [ "$status" -eq 1 ]
 }
 
 # ── Guard files (AC-03..AC-04) ───────────────────────────────────────────────
