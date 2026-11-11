@@ -29,6 +29,14 @@ fail_closed() {
   exit 0
 }
 
+# La inyección de remoto y reloj (SAVIA_MCP_GUARD_TEST*) es solo de tests: fuera de bats (que exporta BATS_VERSION)
+# se quita, igual que productionEnv en el binding de OpenCode. Un `env` en la configuración del frontend no puede
+# cambiar el remoto de referencia ni la fecha del guard.
+if [[ -z "${BATS_VERSION:-}" ]]; then
+  for _v in $(compgen -e); do [[ "$_v" == SAVIA_MCP_GUARD_TEST* ]] && unset "$_v"; done
+  unset BATS_TEST_FILENAME _v
+fi
+
 command -v python3 >/dev/null 2>&1 || fail_closed "python3 no disponible; no se puede comprobar qué hace la llamada"
 [[ -f "$LIB_DIR/mcp_effect_guard.py" ]] || fail_closed "falta el núcleo del guard; no se puede comprobar qué hace la llamada"
 # El núcleo lee el payload directamente de stdin. Su tiempo máximo (3 s ls-remote + 2×6 s fetch) cabe en el de

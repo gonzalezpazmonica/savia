@@ -317,3 +317,20 @@ while time.time() < end:
   out=$(se508_payload "$GET" | bash "$TMPD/roto/mcp-effect-guard.sh")
   [ "$(jq -r '.hookSpecificOutput.permissionDecision' <<< "$out")" = ask ]
 }
+
+# --- revisión #1525 (seguridad P2-1): la inyección de tests no vale fuera de bats
+@test "revisión #1525: remoto inyectado y aflojado → pass dentro de bats (control positivo)" {
+  loosen_tree
+  se508_publish "$TMPD/loose" "$(sed 's/send_message: write/send_message: read_only/' <<< "$SE508_CATALOG")" "$SE508_HOSTS" "$CORE_SRC"
+  export SAVIA_MCP_GUARD_TEST_REMOTE="file://$TMPD/loose.git"
+  [ "$(hook_decision "$(se508_payload "$SEND")")" = pass ]
+}
+
+@test "revisión #1525: fuera de bats (sin BATS_VERSION) el hook descarta el remoto inyectado → ask" {
+  loosen_tree
+  se508_publish "$TMPD/loose" "$(sed 's/send_message: write/send_message: read_only/' <<< "$SE508_CATALOG")" "$SE508_HOSTS" "$CORE_SRC"
+  export SAVIA_MCP_GUARD_TEST_REMOTE="file://$TMPD/loose.git"
+  # Sin BATS_VERSION manda la URL canónica: su main nunca marca send_message como read_only (o no responde) → ask.
+  out=$(se508_payload "$SEND" | env -u BATS_VERSION bash "$HOOK")
+  [ "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision')" = ask ]
+}
