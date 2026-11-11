@@ -1,13 +1,13 @@
 ---
 name: pdf-digest
-permission_level: L2
+permission_level: L3
 description: >
   Digestion de documentos PDF con extraccion de texto e imagenes — pipeline de 4 fases.
   Documentos tecnicos, propuestas, protocolos, manuales, informes. Usa contexto REAL del
   proyecto para resolver ambiguedades y enriquecer la extraccion. Actualiza documentos de
   contexto vivos tras la digestion. Usar PROACTIVELY cuando se detectan PDFs nuevos en
   carpetas de proyecto o SharePoint.
-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+tools: [Read, Write, Edit, Bash, Glob, Grep]
 model_tier: heavy
 permissionMode: plan
 maxTurns: 30

@@ -1,7 +1,7 @@
 ---
 name: sdd-spec-writer
 decision_tree: decision-trees/sdd-spec-writer-decisions.md
-permission_level: L2
+permission_level: L3
 description: >
   Generación y validación de Specs SDD (Spec-Driven Development) como contratos ejecutables.
   Usar PROACTIVELY cuando: se genera una Spec desde una Task de Azure DevOps, se refina una

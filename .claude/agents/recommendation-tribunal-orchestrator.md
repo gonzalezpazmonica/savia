@@ -2,7 +2,7 @@
 name: recommendation-tribunal-orchestrator
 description: Recommendation Tribunal orchestrator — 4 fast judges in parallel, aggregates scores, applies vetos, mutates output with banner. SYNC, <3s p95.
 model_tier: mid
-permission_level: L2
+permission_level: L4
 tools: [Read, Glob, Grep, Bash, Task]
 token_budget:
   per_invocation: 60000

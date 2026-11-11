@@ -6,7 +6,6 @@ tools:
   read: true
   write: true
   edit: true
-  bash: true
   glob: true
   grep: true
 model_tier: mid
