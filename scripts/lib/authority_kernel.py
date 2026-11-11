@@ -23,7 +23,9 @@ Limites conocidos de F0 (sin hook que lo invoque todavia; se cierran al cablearl
   puede dar un DENY donde otro contrato vigente daria ALLOW);
 - un fichero renombrado se clasifica por su ruta de destino (ni `gh pr view` ni `.filename` de la
   API REST dan la de origen);
-- Branch.* se lee primero de refs/heads locales; `ci_not_red` de pr.create-draft acepta `none`
+- el recibo --prior no esta autenticado: recheck repite los pasos 1-16 y solo lo usa para plazo,
+  action_sha256 y state_digest (recalculables); no prueba por si solo que evaluate se ejecutara;
+- Branch.* se lee primero de refs/heads locales (la rama que la accion publica); `ci_not_red` de pr.create-draft acepta `none`
   (sin ejecuciones): no es garantia de CI, solo de que no hay una ejecucion roja o pendiente;
 - las rutas de vault.note-write son identificadores de recurso: solo ASCII (como ramas y proyectos);
 - `ci_green` de pr.merge = al menos un SUCCESS y nada rojo ni pendiente; no comprueba que estén los
@@ -38,6 +40,10 @@ import hashlib
 import json
 import os
 import re
+try:
+    import pwd
+except ImportError:  # sin base de usuarios POSIX: home() falla cerrado fuera de test_mode
+    pwd = None
 import shutil
 import subprocess
 import sys
@@ -156,13 +162,20 @@ def tool(name):
 
 
 def run(argv, stdin=None, timeout=20):
-    env = dict(os.environ) if test_mode() else {"PATH": SAFE_PATH, "HOME": os.path.expanduser("~"), "LC_ALL": "C"}
+    env = dict(os.environ) if test_mode() else {"PATH": SAFE_PATH, "HOME": home(), "LC_ALL": "C"}
     env["GIT_TERMINAL_PROMPT"] = "0"
     return subprocess.run(argv, input=stdin, capture_output=True, timeout=timeout, env=env)
 
 
 def home():
-    return os.path.expanduser("~")
+    """Home del usuario efectivo segun la base de usuarios, nunca $HOME: un HOME del llamante vaciaria el
+    ledger de usos, ocultaria la revocacion local, desviaria el audit y daria a git/gh otra config.
+    Solo el mundo hermetico de los tests (test_mode) usa el HOME temporal que fija el arnes."""
+    if test_mode():
+        return os.path.expanduser("~")
+    if pwd is None:
+        raise RuntimeError("sin base de usuarios para resolver el home real")
+    return pwd.getpwuid(os.getuid()).pw_dir
 
 
 def root_dir():
@@ -907,6 +920,13 @@ def read_pr(ctx):
     if ctx.target.get("pr") is None:
         return
     j = gh_json(["pr", "view", str(ctx.target["pr"]), "--repo", ctx.repo, "--json", PR_FIELDS])
+    head_ref = j.get("headRefName")
+    if not isinstance(head_ref, str) or not head_ref:
+        raise Unknown("gh no informa headRefName del PR")
+    b = ctx.target.get("branch")
+    if b is not None and head_ref != b:
+        # el ambito se comprobo sobre target.branch, que declara quien pide: tiene que ser la rama real del PR
+        raise Deny("OUT_OF_SCOPE", "el PR %d es de la rama %s, no de %s" % (ctx.target["pr"], head_ref, b))
     ctx.pr = {"is_draft": j.get("isDraft"), "head_ref": j.get("headRefName"), "head_sha": j.get("headRefOid"),
               "review_decision": j.get("reviewDecision"), "state": j.get("state"),
               "ci_status": ci_state(j.get("statusCheckRollup")), "files": pr_files(ctx, j)}
@@ -928,6 +948,8 @@ def read_fact(ctx, fact):
             raise Unknown("la precondicion %s necesita un PR en el objetivo" % fact)
         if attr not in ctx.pr or attr == "files":
             raise Unknown("lector sin soporte para " + fact)
+        if ctx.pr[attr] is None:  # hecho ausente: nunca cumple una precondicion (tampoco una negativa)
+            raise Unknown("gh no informa " + fact)
         return ctx.pr[attr]
     if ent == "Branch":
         if ctx.repo != ctx.inst:
@@ -979,18 +1001,23 @@ def step12_readers(ctx):
             ctx.facts[fact] = read_fact(ctx, fact)
     if ctx.pr:
         ctx.target["head_sha"] = ctx.pr["head_sha"]
+        if "branch" in (ctx.req["action"].get("params") or {}):
+            # la accion opera sobre la rama local (p. ej. publicarla): su commit tambien entra en el digest,
+            # o avanzar la rama entre evaluate y recheck no se notaria
+            ctx.target["branch_sha"] = branch_sha(ctx)
     elif ctx.target.get("branch") is not None:
         ctx.target["head_sha"] = branch_sha(ctx)
 
 
 def holds(p, value):
+    """Comparacion con tipo exacto: 0 no es false ni 1.0 es 1. Tipos distintos no cumplen (fail-closed)."""
     op, want = p.get("op"), p.get("value")
     if op == "==":
-        return value == want
+        return type(value) is type(want) and value == want
     if op == "!=":
-        return value != want
+        return type(value) is type(want) and value != want
     if op == "in":
-        return isinstance(want, list) and value in want
+        return isinstance(want, list) and any(type(value) is type(w) and value == w for w in want)
     if op == "startswith":
         return isinstance(value, str) and isinstance(want, str) and value.startswith(want)
     return False  # operador desconocido: no cumple (fail-closed)
@@ -1200,6 +1227,15 @@ def evaluate(req, prior=None):
         decision, reason, detail = "DENY", d.code, d.detail
     except Approval as a:
         decision, reason, detail = "REQUIRES_APPROVAL", a.code, a.detail
+    except Exception as e:  # p. ej. contrato firmado mal formado: sin decision (exit 2), pero el intento queda en audit
+        try:
+            cid = ctx.contract.get("id") if isinstance(ctx.contract, dict) else None
+            audit_append(ctx, {"evaluated_at": iso(ctx.now), "decision": "ERROR", "reason": type(e).__name__,
+                               "contract_id": cid, "action_sha256": action_hash(req), "state_digest": None},
+                         "recheck" if prior is not None else "evaluate")
+        except Exception:
+            pass
+        raise
     result = {
         "decision": decision, "reason": reason, "detail": detail,
         "contract_id": (ctx.contract or {}).get("id"), "contract_sha256": ctx.contract_sha,

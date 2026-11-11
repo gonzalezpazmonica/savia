@@ -432,11 +432,157 @@ def fx_params_types_level():
     return bad
 
 
+# ---------------------------------------------------------------- ronda 4 (codex P1-1, P1-2, P2; seg. P1-1, P2-4)
+L4_DELEGATE = "commit-guardian"  # L4 en agent-permission-levels.md: pr.merge exige L4
+
+
+def _merge_world(pr, branches=True, extra_pre=None, drop=None):
+    """pr.merge del PR 7 con un delegado L4 y contrato tier 2 (el PR de docs es tier 1)."""
+    w = World(inproc=INPROC)
+    w.set_pr(7, **pr)
+    if drop:
+        p = os.path.join(w.fake, "pr-7.json")
+        d = json.load(open(p))
+        del d[drop]
+        json.dump(d, open(p, "w"))
+    scope = {"repo": [INSTALL], "prs": [7]}
+    target = {"pr": 7}
+    if branches:
+        scope["branches"] = ["agent/*"]
+        target["branch"] = "agent/work"
+    over = {"cap": "pr.merge", "delegate": L4_DELEGATE, "declared_effects": ["pr.merge"], "scope": scope,
+            "authority": {"level": "L4", "tier": 2}, "max_uses": 1}
+    if extra_pre:
+        over["preconditions"] = extra_pre
+    w.contract(**over)
+    rc, out = w.ev(w.request(delegate=L4_DELEGATE, capability="pr.merge",
+                             action={"name": "pr.merge", "params": {"pr_number": 7}}, target=target))
+    w.close()
+    return rc, reason(out)
+
+
+def fx_pr_branch():
+    """target.branch lo declara quien pide: tiene que ser la rama real del PR (headRefName)."""
+    bad = []
+    _case(bad, "PR de agent/work (control)", _merge_world({"isDraft": False}), (0, "OK"))
+    _case(bad, "PR de feature/unapproved con target.branch=agent/work",
+          _merge_world({"isDraft": False, "headRefName": "feature/unapproved"}), (1, "OUT_OF_SCOPE"))
+    _case(bad, "PR sin headRefName", _merge_world({"isDraft": False}, drop="headRefName"), (1, "UNKNOWN_STATE"))
+    _case(bad, "ambito sin ramas, objetivo sin rama (control)",
+          _merge_world({"isDraft": False, "headRefName": "feature/x"}, branches=False), (0, "OK"))
+    return bad
+
+
+def fx_pr_branch_sha():
+    """Con PR en el objetivo y una accion que publica la rama local, avanzar esa rama entre evaluate y
+    recheck tiene que dar STATE_CHANGED (antes solo contaba el head del PR)."""
+    bad = []
+    for move, want in ((False, (0, "OK")), (True, (1, "STATE_CHANGED"))):
+        w = World()
+        w.contract(scope={"repo": [INSTALL], "branches": ["agent/*"], "prs": [7]})
+        req = w.request(target={"branch": "agent/work", "pr": 7})
+        w.set_runs([])
+        rc, out = w.ev(req)
+        if rc != 0:
+            bad.append("evaluate: %s %s" % (rc, reason(out)))
+            w.close()
+            continue
+        if move:
+            sh_ = ["git", "-C", w.root]
+            tree = subprocess.run(sh_ + ["rev-parse", "agent/work^{tree}"], capture_output=True).stdout.decode().strip()
+            new = subprocess.run(sh_ + ["commit-tree", tree, "-p", "agent/work", "-m", "B"],
+                                 capture_output=True).stdout.decode().strip()
+            subprocess.run(sh_ + ["update-ref", "refs/heads/agent/work", new], check=True)
+        rc2, out2 = w.ev(req, "recheck", w.receipt(out))
+        _case(bad, "recheck con rama %s" % ("avanzada" if move else "quieta"), (rc2, reason(out2)), want)
+        w.close()
+    return bad
+
+
+def fx_absent_typed_facts():
+    """Un hecho ausente no cumple una precondicion negativa (UNKNOWN_STATE) y los tipos no se mezclan."""
+    bad = []
+    pre = [{"id": "review", "fact": "PullRequest.review_decision", "op": "!=", "value": "CHANGES_REQUESTED"}]
+    _case(bad, "reviewDecision vacio (control)", _merge_world({"isDraft": False}, extra_pre=pre), (0, "OK"))
+    _case(bad, "reviewDecision CHANGES_REQUESTED",
+          _merge_world({"isDraft": False, "reviewDecision": "CHANGES_REQUESTED"}, extra_pre=pre),
+          (1, "PRECONDITION_FAILED:review"))
+    _case(bad, "sin reviewDecision", _merge_world({"isDraft": False}, extra_pre=pre, drop="reviewDecision"),
+          (1, "UNKNOWN_STATE"))
+    _case(bad, "isDraft 0 no es false", _merge_world({"isDraft": 0}), (1, "PRECONDITION_FAILED:not_draft"))
+    _case(bad, "sin isDraft", _merge_world({"isDraft": False}, drop="isDraft"), (1, "UNKNOWN_STATE"))
+    return bad
+
+
+PROBE = r"""
+import json, os, pwd, sys
+sys.path.insert(0, sys.argv[1])
+import authority_kernel as k
+real = pwd.getpwuid(os.getuid()).pw_dir
+seen = {}
+k.subprocess.run = lambda argv, **kw: seen.setdefault("env", kw.get("env"))
+k.run(["true"])
+out = {"home": k.home(), "real": real, "run_home": seen["env"].get("HOME")}
+k.OVERRIDES["_"] = "1"
+out["test_home"] = k.home()
+print(json.dumps(out))
+"""
+
+
+def fx_home_real():
+    """Fuera de test_mode el home sale de la base de usuarios, no de $HOME (ledger, REVOKED, audit, git/gh)."""
+    bad = []
+    import tempfile
+    fake = tempfile.mkdtemp(prefix="se496-home-")
+    env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": fake}
+    r = subprocess.run([sys.executable, "-I", "-c", PROBE, os.path.dirname(REAL_KERNEL)],
+                       capture_output=True, env=env)
+    os.rmdir(fake)
+    try:
+        o = json.loads(r.stdout)
+    except ValueError:
+        return ["sonda sin salida: %s" % r.stderr.decode(errors="replace")[-300:]]
+    if o["real"] == fake:
+        return ["entorno de prueba invalido: el home real coincide con el temporal"]
+    if o["home"] != o["real"]:
+        bad.append("home() sigue $HOME: %s" % o["home"])
+    if o["run_home"] != o["real"]:
+        bad.append("run() pasa a git/gh el HOME del llamante: %s" % o["run_home"])
+    if o["test_home"] != fake:
+        bad.append("control: en test_mode home() no usa el HOME temporal del arnes (%s)" % o["test_home"])
+    src = open(REAL_KERNEL, encoding="utf-8").read().splitlines()
+    uses = [i for i, l in enumerate(src) if "expanduser" in l]
+    if len(uses) != 1 or "if test_mode()" not in src[uses[0] - 1]:
+        bad.append("expanduser fuera de la rama test_mode: lineas %s" % [i + 1 for i in uses])
+    return bad
+
+
+def fx_error_audited():
+    """Un contrato firmado mal formado que revienta la evaluacion sale sin decision (exit 2) pero deja
+    linea ERROR en el audit; un DENY normal sigue auditado como DENY (control)."""
+    bad = []
+    for label, over, want_rc, want_dec in (
+            ("precondicion con fact no textual", {"preconditions": [{"id": "x", "fact": ["Branch.name"]}]}, 2, "ERROR"),
+            ("control rama fuera", {"scope": {"repo": [INSTALL], "branches": ["feature/*"]}}, 1, "DENY")):
+        w = World()
+        w.contract(**over)
+        rc, _ = w.ev(w.request())
+        path = os.path.join(w.home, ".savia", "authority", "audit.jsonl")
+        lines = open(path).read().splitlines() if os.path.exists(path) else []
+        dec = json.loads(lines[-1]).get("decision") if lines else None
+        if (rc, dec) != (want_rc, want_dec):
+            bad.append("%s: rc=%s audit=%s (esperado %s %s)" % (label, rc, dec, want_rc, want_dec))
+        w.close()
+    return bad
+
+
 FIXES = {"env-bypass": fx_env_bypass, "tier-files": fx_tier_files, "level-main": fx_level_from_main,
          "ontology-main": fx_ontology_from_main, "ci-head": fx_ci_head, "branch-repo": fx_branch_other_repo,
          "prior-age": fx_prior_age, "merge-pre": fx_merge_preconditions, "mutation-crash": fx_mutation_crash,
          "params-scope": fx_params_scope, "ci-skipped": fx_ci_skipped, "runs-limit": fx_runs_limit,
-         "contract-invariants": fx_contract_invariants, "params-types-level": fx_params_types_level}
+         "contract-invariants": fx_contract_invariants, "params-types-level": fx_params_types_level,
+         "pr-branch": fx_pr_branch, "pr-branch-sha": fx_pr_branch_sha, "absent-typed-facts": fx_absent_typed_facts,
+         "home-real": fx_home_real, "error-audited": fx_error_audited}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in FIXES:

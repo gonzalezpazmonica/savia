@@ -114,3 +114,33 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }
+
+@test "ronda 4 codex P1-2: PR de otra rama con target.branch dentro del ámbito -> OUT_OF_SCOPE; sin headRefName -> UNKNOWN_STATE; controles ALLOW" {
+  run $F pr-branch
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 4 codex P1-1: con PR en el objetivo, avanzar la rama local entre evaluate y recheck -> STATE_CHANGED; quieta -> ALLOW" {
+  run $F pr-branch-sha
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 4 codex P2: hecho ausente no cumple '!=' (UNKNOWN_STATE) e isDraft 0 no es false; controles" {
+  run $F absent-typed-facts
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 4 seg. P1-1: fuera de test_mode el home sale de la base de usuarios, no de \$HOME (también el HOME de git/gh)" {
+  run $F home-real
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 4 seg. P2-4: un contrato firmado que revienta la evaluación sale con exit 2 y deja línea ERROR en el audit" {
+  run $F error-audited
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
