@@ -91,7 +91,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | court-orchestrator | heavy | L4 | — | Convenes the Code Review Court, manages fix cycles, produces .review.crc |
 | criterion-simulation-judge | heavy | L1 | — | Criterion Simulation Layer judge — SPEC-194. Executes 4 meta-questions (frame challenge, historical priors, operator ... |
 | dev-orchestrator | mid | L4 | — | Analiza specs y crea planes de implementación con slices, dependencias y presupuestos de contexto |
-| diagram-architect | mid | L1 | — | Architecture diagram specialist. Analyzes code and infrastructure to generate Mermaid diagrams, validates business ru... |
+| diagram-architect | mid | L1 | — | Architecture diagram analyst. Reviews an existing Mermaid diagram against the project's stack and business rules, det... |
 | dotnet-developer | mid | L3 | — | Implementación de código C#/.NET siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una feature en... |
 | drift-auditor | heavy | L1 | — | Auditoría de convergencia repo: detecta drift entre docs, config y código. Usar PROACTIVELY tras cambios grandes o al... |
 | excel-digest | heavy | L3 | — | Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae estructura, formulas, patrones de da... |

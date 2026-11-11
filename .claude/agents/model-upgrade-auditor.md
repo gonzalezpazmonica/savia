@@ -39,7 +39,7 @@ You audit pm-workspace components for prompt debt — workarounds, emphatic repe
 ### Phase 1 — Inventory (read-only)
 
 1. Glob all components in scope (agents, skills, rules)
-2. For each: count tokens, detect workaround patterns
+2. For each: estimate tokens with Bash (`wc -w` × 1.3, as in the `model-upgrade-audit` skill) and detect workaround patterns. Bash is used only for this read-only counting
 3. Rank by simplification potential
 
 ### Phase 2 — Propose (per component)
@@ -71,7 +71,7 @@ component:
 
 ## Rules
 
-- NEVER apply changes — only propose
+- NEVER apply changes — only propose. The only file written is the report under `output/model-audit/`
 - NEVER modify components without explicit human approval
 - Flag components where simplification risk > low
 - Include before/after token counts for every proposal
