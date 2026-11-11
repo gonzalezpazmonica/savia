@@ -1,6 +1,6 @@
 ---
 name: word-digest
-permission_level: L2
+permission_level: L3
 description: >
   Digestion de documentos Word (DOCX) con extraccion de texto, tablas e imagenes — pipeline
   de 4 fases. Actas, propuestas, manuales, informes, procedimientos. Usa contexto REAL del
@@ -13,7 +13,6 @@ tools:
   - Bash
   - Glob
   - Grep
-  - Task
 model_tier: mid
 permissionMode: plan
 maxTurns: 30
