@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P1
 developer_type: agent-team
 created: 2026-11-10
@@ -10,11 +10,16 @@ human_surface: true
 depends_on: [SE-428, SE-434]
 related_specs: [SE-428, SE-432, SE-434, SE-435, SE-504, SE-505]
 origin: "Pregunta interactiva de la operadora del 2026-11-10 («Spec y prueba ya»): usar su suscripción de ChatGPT/Codex como motor de Savia Space en lugar de DeepSeek, que es pago por uso. Encargo de la orquestadora, plan intensivo. Solo spec y prototipo S0."
+approval: "Operadora, pregunta interactiva 2026-11-11: «Si, pero no nos olvidemos que esta es mí configuración, cada operador tendrá su preferencia, tiene que ser opcional y preguntar qué tipo de inferencia y/o subscripción quiere usar. Space es para mucha gente, no solo para mi.» La condición se recoge en D9 y AC-18..AC-21."
 timeline:
   - from: "2026-11-10"
     learned: "2026-11-10"
     value: "PROPOSED"
     source: "spec-lifecycle:auto"
+  - from: "2026-11-11"
+    learned: "2026-11-11"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva 2026-11-11, con condición de alcance (D9)"
 ---
 
 # SE-517 — Motor de Space con suscripción ChatGPT (OAuth)
@@ -48,6 +53,7 @@ timeline:
 - Usar la sesión de ChatGPT o de Codex que la persona tenga fuera de Space (su `~/.codex` o el `auth.json` de su OpenCode).
 - Un cambio de modelo: el modelo lo sigue eligiendo `tiers.space` en la configuración local.
 - Un respaldo automático a DeepSeek, a Ollama o a otro proveedor.
+- Un motor por defecto: ni ChatGPT ni ningún otro viene preseleccionado, y la configuración de la operadora no se toma como la de las demás personas (D9).
 - Una decisión sobre los términos de uso de OpenAI: eso lo confirma la operadora.
 
 ### Confirmación
@@ -55,7 +61,20 @@ timeline:
 - fecha: 2026-11-10
 - respuesta: «Confirmo las escenas»
 
-La operadora vio las cinco escenas en una pregunta interactiva el 2026-11-10 y las confirmó con esas palabras. Eso no es la aprobación de la spec: sigue PROPOSED hasta que confirme el prototipo S0 y la apruebe expresamente (tier 4). La escena 1 se confirmó con el código de dispositivo; la sección «Método de login (S0)» explica por qué ese método es el que se mantiene y en qué caso habría que volver a enseñársela.
+La operadora vio las cinco escenas en una pregunta interactiva el 2026-11-10 y las confirmó con esas palabras. Eso no es la aprobación de la spec: quedó PROPOSED hasta que la operadora la aprobó expresamente el 2026-11-11 (tier 4; ver «Aprobación»). Las escenas 1 a 5 describen la opción de suscripción de ChatGPT una vez que la persona la ha elegido; no significan que sea la opción preseleccionada ni la de todo el mundo (D9). La escena 1 se confirmó con el código de dispositivo; la sección «Método de login (S0)» explica por qué ese método es el que se mantiene y en qué caso habría que volver a enseñársela.
+
+### Escena nueva: elegir el motor — PENDIENTE DE CONFIRMAR
+
+Añadida el 2026-11-11 a raíz de la condición de la operadora (D9). **No está confirmada**: no consta ninguna respuesta de la operadora a esta escena y no puede darse por válida hasta que la dé (`docs/rules/domain/comprehension-gate.md`). Las cinco escenas anteriores no cambian.
+
+6. Instalas Space en tu ordenador. Antes de que Savia conteste nada, una pantalla te pregunta «¿Con qué quieres que piense Savia?». Ves las opciones que Space admite: entrar con tu suscripción de ChatGPT, usar la clave de un proveedor en la nube, usar un modelo en tu propio equipo o decidirlo más tarde. Ninguna viene marcada. Eliges una; si es ChatGPT, sigues con la escena 1; si es otra, Space te pide solo lo que esa opción necesita. Si eliges «más tarde», Savia te dice «Todavía no hay motor; elige uno en Ajustes > Motor» y no contesta hasta que lo hagas. Otra persona que instale Space en su propio equipo (o en su propia cuenta de usuario del sistema) puede elegir una opción distinta, y a ninguna de las dos se le impone la de la otra. Más adelante entras en Ajustes > Motor, cambias de opción y la anterior queda como estaba hasta que la cierres tú (para ChatGPT, «Cerrar sesión» de la escena 5).
+
+#### Confirmación de la escena 6
+
+- fecha: pendiente
+- respuesta: «pendiente»
+
+Las opciones concretas que se enseñan, su orden y los textos los fija el prototipo S0b; la lista de arriba es una hipótesis para enseñar a la persona, no una decisión. Esta spec solo implementa la opción ChatGPT (S1..S5); las otras opciones son capacidades que Space ya tiene o tendrá por su cuenta, y la pantalla solo las ofrece.
 
 ## Slice S0 — Prototipo del login y de doctor
 
@@ -94,9 +113,23 @@ La credencial no va a un `auth.json`: el motor la guarda en SQLite, en `$XDG_DAT
 
 Con la recomendación (a), lo que ve la persona no cambia: la escena 1 confirmada sigue valiendo y **no requiere reconfirmación**. La decisión de método es de la operadora al aprobar la spec.
 
+## Slice S0b — Prototipo de la pantalla de elección de motor
+
+La pantalla de la escena 6 es una interfaz nueva, así que lleva su propio prototipo antes de cualquier código (comprehension-gate).
+
+- prototipo: `docs/specs/assets/SE-517-eleccion-motor-prototipo.html` (por crear en S0b): un solo fichero HTML sin dependencias, con tema claro u oscuro según el sistema (sin estética impuesta). Estados: primera instalación sin nada marcado, «decidirlo más tarde» con el aviso de que Savia no contesta, cambio posterior en Ajustes > Motor y las dos personas con elecciones distintas. Con `?s=` para abrir cada estado.
+- Reglas del prototipo: ninguna opción preseleccionada ni destacada por defecto; el orden no favorece a un proveedor; lenguaje llano y sin siglas internas.
+
+### Confirmación del prototipo S0b
+
+- fecha: pendiente
+- respuesta: «pendiente»
+
+La pantalla de elección (S3b) no empieza sin esta confirmación y sin la de la escena 6. S1 no depende de S0b.
+
 ## Problema (observado el 2026-11-10)
 
-La operadora paga DeepSeek por uso para el motor de Space y ya tiene una suscripción de ChatGPT que incluye Codex. Quiere que Space piense con esa suscripción.
+El caso que origina esta spec es el de la operadora, que paga DeepSeek por uso para el motor de su Space y ya tiene una suscripción de ChatGPT que incluye Codex; quiere que su Space piense con esa suscripción. Es su configuración y su preferencia: Space es para muchas personas, cada una con la suya (D9). La suscripción de ChatGPT entra como una opción de motor más, no como la forma de usar Space.
 
 Lo que trae el motor fijado (observado en el binario de OpenCode 2.0.32 que Space descarga y fija; lectura de cadenas y `--help`, sin red):
 
@@ -116,7 +149,7 @@ Lo que hoy lo impide en Space (observado en el repo de Space, main del 2026-11-1
 
 ## Objetivo
 
-Que Space use la suscripción de ChatGPT de la persona como proveedor del motor, con un login visible y sencillo, la credencial guardada solo en el espacio del motor, renovación automática, estado legible en `doctor`, cierre de sesión que borra, y ningún cambio silencioso de proveedor.
+Que una persona que elija la suscripción de ChatGPT como motor de su Space pueda usarla como proveedor del motor, con un login visible y sencillo, la credencial guardada solo en el espacio del motor, renovación automática, estado legible en `doctor`, cierre de sesión que borra, y ningún cambio silencioso de proveedor.
 
 ## Qué decide esta spec
 
@@ -129,18 +162,22 @@ Que Space use la suscripción de ChatGPT de la persona como proveedor del motor,
 - **D7. Salida a red mínima del motor con este proveedor.** Con el proveedor `openai` por suscripción, el motor solo puede abrir conexiones a `auth.openai.com` y `chatgpt.com`. Esto revisa D-MED-5 de SE-434 solo para este proveedor y se implementa en un slice propio; hasta que esté, `doctor` dice «salida de red sin restringir». Los hosts exactos se confirman en S0 observando el tráfico de la sonda.
 - **D8. Términos de OpenAI.** Savia no ha leído directamente los términos de uso de la suscripción de ChatGPT respecto a clientes de terceros. La operadora los confirma antes de que esta spec pase a IMPLEMENTED; si no lo permiten, la spec se cierra como REJECTED y no se usa.
 
+- **D9. El motor lo elige cada persona; la suscripción de ChatGPT es una opción, no el valor por defecto.** Condición de la operadora al aprobar (2026-11-11): «Si, pero no nos olvidemos que esta es mí configuración, cada operador tendrá su preferencia, tiene que ser opcional y preguntar qué tipo de inferencia y/o subscripción quiere usar. Space es para mucha gente, no solo para mi.» Consecuencias: (1) Space pregunta a cada persona qué motor de inferencia o suscripción quiere usar, en la instalación y de nuevo cuando lo cambie, sin preseleccionar la opción de la operadora; (2) sin elección, Space no asume ningún proveedor de nube: el turno termina con «elige un motor en Ajustes > Motor»; (3) el repo no fija proveedor ni modelo: ambos siguen en la configuración local de cada persona (`tiers.space`, coherente con D6); (4) lo que esta spec describe para ChatGPT (D1..D5, D7, D8) se aplica solo a quien lo elija. (5) «Cada persona» significa «cada instalación»: Space no tiene perfiles dentro de una misma instalación. La elección (`tiers.space`) y la credencial viven en la configuración y en el espacio del motor de esa instalación, y dos personas en un mismo ordenador son dos instalaciones (dos cuentas de usuario del sistema, cada una con su espacio de motor). Añadir perfiles dentro de una instalación sería otra decisión y otra spec. Las decisiones y ejemplos de la operadora (DeepSeek, su suscripción, su móvil) son su caso piloto, no el de las demás personas.
+
 ## Plan por slices
 
 | Slice | Contenido | Repo | Puerta de salida |
 |---|---|---|---|
 | S0 | Prototipo HTML (este PR) y sonda real con HOME temporal; anota método, campos de la credencial, hosts y caducidades observadas | Savia (spec) | Escenas y prototipo confirmados por la operadora |
-| S1 | `savia-space login chatgpt` y `logout chatgpt` en el espacio del motor; credencial 0600; máscara para el agente; sin variables nuevas | Space | AC-1..AC-6 |
-| S2 | `doctor` con estado de sesión y fallo cuando el tier pide `openai` sin sesión; error claro en el turno; sin respaldo | Space | AC-7..AC-11 |
-| S3 | Pantalla «Ajustes > Motor» en la app (estados del prototipo) | Space | AC-12, AC-13 |
+| S1 | `savia-space login chatgpt` y `logout chatgpt` en el espacio del motor; credencial 0600; máscara para el agente; sin variables nuevas; ningún proveedor ni modelo fijado en el repo; si hoy Space trae un proveedor o modelo por defecto, S1 lo retira (inventario previo en el PR de S1) | Space | AC-1..AC-6, AC-20 |
+| S2 | `doctor` con estado de sesión y fallo cuando el tier pide `openai` sin sesión; error claro en el turno; sin respaldo; sin motor elegido no se asume ninguno | Space | AC-7..AC-11, AC-19 |
+| S3 | Pantalla «Ajustes > Motor» en la app para quien eligió ChatGPT (estados del prototipo S0) | Space | AC-12, AC-13 |
+| S0b | Prototipo de la pantalla de elección de motor (escena 6, pendiente de confirmar) | Savia (spec) | Escena 6 y prototipo S0b confirmados por la operadora |
+| S3b | Pantalla de elección de motor en la instalación y en Ajustes > Motor, sin preselección; test multioperador | Space | AC-18, AC-21 |
 | S4 | Salida a red del motor limitada a los hosts de OpenAI con este proveedor | Space | AC-14, AC-15 |
-| S5 | Puesta en marcha en la máquina de la operadora: cambio de `tiers.space` (lo hace ella) y retirada de la clave de DeepSeek del motor | local | AC-16, AC-17 |
+| S5 | Puesta en marcha piloto en la máquina de la operadora (una instalación más, no la norma): su elección en la pantalla o en `tiers.space` (lo hace ella) y retirada de la clave de DeepSeek del motor | local | AC-16, AC-17 |
 
-S1 y siguientes no empiezan sin la confirmación de S0.
+S1 no depende de la pantalla de elección ni de S0b, pero sigue bloqueado por la confirmación del prototipo S0 del login: `scripts/comprehension-gate.py` no deja ponerlo en curso sin ella. Esta aprobación no la sustituye. S3b espera a S0b confirmado y a la escena 6 confirmada. S2 no necesita la pantalla: basta la configuración local. S3, S4 y S5 siguen como estaban.
 
 ## Criterios de aceptación
 
@@ -163,7 +200,7 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 
 ### App (S3)
 
-- [ ] **AC-12** La pantalla «Ajustes > Motor» reproduce los estados del prototipo confirmado (sin sesión, código, activa, caducada, cerrar sesión) con textos en lenguaje llano y sin siglas internas.
+- [ ] **AC-12** Para quien ha elegido ChatGPT, la pantalla «Ajustes > Motor» reproduce los estados del prototipo confirmado (sin sesión, código, activa, caducada, cerrar sesión) con textos en lenguaje llano y sin siglas internas.
 - [ ] **AC-13** Logout: tras confirmar, no queda fila `openai` en la tabla `credential` del motor (test) y la pantalla vuelve a «sin sesión»; cancelar no borra nada (negativo).
 
 ### Red (S4)
@@ -171,10 +208,17 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 - [ ] **AC-14** Con el proveedor `openai` por suscripción, el motor alcanza `auth.openai.com` y `chatgpt.com` y no alcanza otro host de prueba (por ejemplo `1.1.1.1:53`), medido desde dentro del espacio del motor.
 - [ ] **AC-15** (negativo) Si la restricción de red no puede aplicarse en la máquina, `doctor` lo dice («salida de red sin restringir») y no lo da por cumplido.
 
+### Motor a elegir por cada persona (D9)
+
+- [ ] **AC-18** (S3b) Space pregunta a cada persona qué motor de inferencia o suscripción quiere usar, en la instalación y de nuevo desde Ajustes > Motor, y la pantalla no trae ninguna opción marcada de antemano (test de UI: sin elección activa no hay ninguna opción seleccionada, y la opción de ChatGPT no aparece antes ni más destacada que las demás).
+- [ ] **AC-19** (S2, negativo) Sin elección ni `tiers.space`, Space no asume ningún proveedor de nube: el turno termina con «elige un motor en Ajustes > Motor», `doctor` sale con fallo y dice «sin motor elegido», y el servidor falso de cada proveedor de nube del test registra cero peticiones.
+- [ ] **AC-20** (S1) Nada en el repo fija proveedor ni modelo: test que falla si el código, la configuración por defecto o los ficheros de ejemplo de Space contienen un identificador de proveedor o de modelo como valor por defecto (las listas de opciones admitidas y los servidores falsos de tests quedan fuera, indicado en el test); la elección vive solo en la configuración local (`tiers.space`).
+- [ ] **AC-21** (S3b) Test multioperador: dos instalaciones independientes (cada una con su configuración local y su espacio de motor), la primera con ChatGPT y la segunda con otro motor (o «más tarde»), no se afectan: cerrar o cambiar el motor de una no modifica la credencial ni la elección de la otra (negativo: la sesión de ChatGPT de la primera no la usa la segunda; sin elección en la segunda, su turno termina con «elige un motor en Ajustes > Motor» aunque la primera tenga sesión).
+
 ### Puesta en marcha (S5)
 
-- [ ] **AC-16** La operadora confirma por escrito, con fecha, que ha leído los términos de uso de OpenAI para su suscripción y que permiten este uso. Sin esa confirmación la spec no pasa a IMPLEMENTED.
-- [ ] **AC-17** Usabilidad: la operadora entra con ChatGPT desde el móvil siguiendo solo lo que ve en pantalla, sin órdenes de terminal, y Space contesta una petición real con el modelo de `tiers.space`.
+- [ ] **AC-16** La operadora confirma por escrito, con fecha, que ha leído los términos de uso de OpenAI para su suscripción (confirmación suya, para su caso piloto; cada persona que elija esta opción responde de la suya, D9) y que permiten este uso. Sin esa confirmación la spec no pasa a IMPLEMENTED.
+- [ ] **AC-17** Usabilidad (piloto con la operadora, que ha elegido ChatGPT): entra con ChatGPT desde el móvil siguiendo solo lo que ve en pantalla, sin órdenes de terminal, y Space contesta una petición real con el modelo de `tiers.space`.
 
 ## Fuera de alcance
 
@@ -184,6 +228,7 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 - Implementar en Space la renovación OAuth o el cliente de `chatgpt.com` (lo hace el motor).
 - Cambiar la política de red del motor para otros proveedores.
 - Retirar DeepSeek del código de Space: solo deja de configurarse en la máquina de la operadora.
+- Implementar el resto de opciones de motor (claves de otros proveedores, modelos locales): esta spec solo añade la de suscripción de ChatGPT y la pregunta de elección.
 
 ## Riesgos
 
@@ -195,6 +240,7 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 | La máscara de credenciales no separa al proceso del motor de sus propias herramientas | AC-5 lo mide; si falla, se reabre D2 (token por el proxy) |
 | El código de dispositivo lo puede introducir otra persona si se comparte la pantalla | El código caduca (AC-6); la cuenta que acepta es la que queda en `doctor` |
 | Restringir red rompe la renovación si OpenAI usa otros hosts | S0 observa los hosts reales; AC-14 mide la renovación con la restricción puesta |
+| Space ya trae hoy un proveedor o modelo por defecto (no se ha comprobado en el repo de Space desde esta spec) y AC-20 lo hace fallar | S1 empieza con un inventario de esos valores y los retira; quien los usaba pasa por la pantalla de elección o por `tiers.space` |
 
 ## OpenCode Implementation Plan
 
@@ -220,3 +266,5 @@ S1 y siguientes no empiezan sin la confirmación de S0.
 ## Aprobación
 
 Tier 4: cambia dónde se guarda una credencial de la persona, por dónde sale tráfico del ordenador y qué proveedor procesa sus datos. Necesita la confirmación de las escenas y del prototipo, y la aprobación expresa de la operadora. Ningún agente la aprueba ni la fusiona.
+
+- Aprobada el 2026-11-11 por la operadora en una pregunta interactiva, con la condición literal recogida en D9. La aprobación cubre el alcance enmendado (opción de motor, nunca por defecto). No cubre la escena 6 ni el prototipo S0b (pendientes de confirmar) ni el prototipo S0 del login (su confirmación sigue pendiente).
