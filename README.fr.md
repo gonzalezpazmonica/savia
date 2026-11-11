@@ -16,7 +16,7 @@ lang: fr
 
 **Savia est une méta-orchestratrice agentique de R&D&I : elle coordonne des agents et des harnesses spécialisés, des axes de recherche, des dômes de connaissance gouvernée et des projets, l'autorité restant toujours à la personne. Open source et souveraine.**
 
-**567 commandes · 90 agents · 139 skills · 134 hooks**
+**567 commandes · 90 agents · 139 skills · 135 hooks**
 
 Savia orchestre le travail de R&D&I assisté par IA : elle répartit les tâches entre des harnesses spécialisés (exécutants, relectrices indépendantes, fournisseurs externes), soutient des axes de recherche, gouverne la connaissance dans des dômes (Savia Vaults) et gère les projets comme une capacité parmi d'autres. Elle intègre mémoire, sécurité, politiques exécutables (policy-as-code), traçabilité par receipts et évaluation sur une architecture indépendante du modèle, du fournisseur et du frontend. Elle fonctionne en local avec souveraineté des données et de l'inférence, en 9 langues.
 
