@@ -50,7 +50,7 @@ async function workspace(): Promise<{ root: string; env: Record<string, string> 
   const env = {
     PATH: process.env.PATH ?? "", SAVIA_MCP_GUARD_TEST: "1", BATS_TEST_FILENAME: "mcp-effect-guard.test.ts",
     SAVIA_MCP_GUARD_TEST_REMOTE: `file://${bare}`, SAVIA_MCP_GUARD_TEST_TODAY: "2026-11-10",
-    SAVIA_MCP_GUARD_LOG: join(root, "decisions.jsonl"),
+    SAVIA_MCP_GUARD_TEST_LOG: join(root, "decisions.jsonl"),
   }
   return { root, env }
 }
@@ -162,7 +162,7 @@ test("AC-8: con SAVIA_GATES_PIN=1 y pin fijado no decide para write y deja líne
   const { root, env } = await workspace()
   const v = await mcpEffectVerdict({ root, tool: "mcp__claude_ai_Gmail__send_message", args: {}, env: { ...env, SAVIA_GATES_PIN: "1" }, pinFixed: true, servers: [] })
   expect(v.decision).toBe("pass")
-  const log = (await readFile(env.SAVIA_MCP_GUARD_LOG, "utf-8")).trim().split("\n").map((l) => JSON.parse(l))
+  const log = (await readFile(env.SAVIA_MCP_GUARD_TEST_LOG, "utf-8")).trim().split("\n").map((l) => JSON.parse(l))
   expect(log.at(-1).decision).toBe("delegated")
 })
 
@@ -188,4 +188,89 @@ test("AC-8b: un run sin persona no delega aunque el pin esté fijado", async () 
 test("tool que no es MCP ni web: no decide (sin lanzar el núcleo)", async () => {
   const v = await mcpEffectVerdict({ root: "/nonexistent", tool: "bash", args: { command: "ls" }, env: {}, pinFixed: false, servers: [] })
   expect(v.decision).toBe("pass")
+})
+
+// Revisión #1525 de seguridad, P1-1: con SAVIA_GATES_PIN=1 el núcleo corría desde el workspace, fuera de bwrap y
+// leído de disco después de verificar el pin (el TOCTOU que T1b cierra). Para hacer la carrera determinista, el
+// registro no nombra hooks: el pin no fija `.claude/hooks/lib`, igual que el agente que gana la carrera. El núcleo
+// de la copia de confianza dice ask; el del workspace, reescrito tras cargar, diría pass.
+const STUB = (decision: string) =>
+  `import json, sys\nsys.stdin.read()\nprint(json.dumps({"decision": "${decision}", "reason": "núcleo ${decision}"}))\n`
+
+// bwrap de prueba: CI no tiene bwrap (los tests de trusted-guards usan el real). Emula `--ro-bind ORIG DEST`
+// sustituyendo DEST por ORIG en la orden; así se comprueba el cableado (orden envuelta + copia montada) sin depender
+// del runner. Si gates.ts no envuelve el núcleo, este bwrap no se llama y corre el núcleo del workspace.
+const FAKE_BWRAP = [
+  "#!/usr/bin/env bash",
+  "binds=()",
+  "while [ $# -gt 0 ]; do case \"$1\" in",
+  "  --dev-bind) shift 3;; --ro-bind) binds+=(\"$2\" \"$3\"); shift 3;; --chdir) shift 2;; --die-with-parent) shift;;",
+  "  --) shift; break;; *) exit 99;; esac; done",
+  "[ \"$1\" = true ] && exit 0",
+  "[ \"$1 $2\" = \"bash -c\" ] || exit 98",
+  "cmd=\"$3\"",
+  "for ((i=0; i<${#binds[@]}; i+=2)); do cmd=\"${cmd//${binds[i+1]}/${binds[i]}}\"; done",
+  "exec bash -c \"$cmd\"",
+  "",
+].join("\n")
+
+async function pinnedPlugin(): Promise<{ root: string; hooks: any }> {
+  const root = await mkdtemp(join(tmpdir(), "se508-pinned-"))
+  dirs.push(root)
+  await writeFile(join(root, "fake-bwrap"), FAKE_BWRAP, { mode: 0o755 })
+  process.env.SAVIA_GATES_BWRAP = join(root, "fake-bwrap")
+  await mkdir(join(root, ".claude/hooks/lib"), { recursive: true })
+  await mkdir(join(root, "scripts"), { recursive: true })
+  await writeFile(join(root, ".claude/settings.json"), JSON.stringify({ hooks: {} }))
+  await writeFile(join(root, ".claude/hooks/lib/mcp_effect_guard.py"), STUB("ask"))
+  process.env.SAVIA_AUDIT_DIR = join(root, ".audit-test")
+  process.env.SAVIA_PLUGIN_DIR = join(root, ".manifest-test")
+  process.env.SAVIA_GATES_PIN = "1"
+  const { SaviaGates } = await import("../index")
+  return { root, hooks: await SaviaGates({ $: Bun.$, directory: root } as any) }
+}
+
+async function webfetch(hooks: any): Promise<string> {
+  try {
+    await hooks["tool.execute.before"]({ tool: "webfetch", sessionID: "s", callID: "c" }, { args: { url: "https://x.test/" } })
+    return "PASS"
+  } catch (e) {
+    return String(e)
+  }
+}
+
+test("revisión #1525 P1-1: con el pin, el núcleo del workspace reescrito tras cargar no se ejecuta (corre la copia)", async () => {
+  const { root, hooks } = await pinnedPlugin()
+  // control: antes de tocar nada decide el núcleo (ask), no un fallo cerrado
+  expect(await webfetch(hooks)).toContain("MCP_ASK: núcleo ask")
+  await writeFile(join(root, ".claude/hooks/lib/mcp_effect_guard.py"), STUB("pass"))
+  // Sin el arreglo, el plugin lanzaba el núcleo del workspace y la llamada pasaba.
+  expect(await webfetch(hooks)).toContain("MCP_ASK: núcleo ask")
+})
+
+test("revisión #1525 P1-1 negativo: sin pin, el núcleo es el del workspace (no hay copia que usar)", async () => {
+  const { root, hooks } = await pinnedPlugin().then(async (p) => {
+    delete process.env.SAVIA_GATES_PIN
+    const { SaviaGates } = await import("../index")
+    return { root: p.root, hooks: await SaviaGates({ $: Bun.$, directory: p.root } as any) }
+  })
+  await writeFile(join(root, ".claude/hooks/lib/mcp_effect_guard.py"), STUB("pass"))
+  expect(await webfetch(hooks)).toBe("PASS")
+})
+
+test("runCore con wrap: lanza el núcleo de <root> a través del envoltorio, con python3 -I y rutas entrecomilladas", async () => {
+  const root = await mkdtemp(join(tmpdir(), "se508-wrap 'q-"))
+  dirs.push(root)
+  await mkdir(join(root, ".claude/hooks/lib"), { recursive: true })
+  await writeFile(join(root, ".claude/hooks/lib/mcp_effect_guard.py"), STUB("ask"))
+  const seen: string[] = []
+  const wrap = (c: string) => (seen.push(c), ["bash", "-c", c])
+  const v = await runCore("{}", { root, env: { PATH: process.env.PATH ?? "" }, pinFixed: false, wrap })
+  expect(v.reason).toBe("núcleo ask")
+  expect(seen).toHaveLength(1)
+  expect(seen[0].startsWith("exec python3 -I ")).toBe(true)
+})
+
+test("revisión #1525 P2-1: productionEnv quita también el desvío del registro (SAVIA_MCP_GUARD_TEST_LOG)", () => {
+  expect(productionEnv({ PATH: "/bin", SAVIA_MCP_GUARD_TEST_LOG: "/tmp/x" })).toEqual({ PATH: "/bin" })
 })

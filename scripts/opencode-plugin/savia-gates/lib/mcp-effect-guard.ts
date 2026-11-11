@@ -9,6 +9,10 @@
 // recibe `--pin-fixed` (el pin de guards está fijado en ESTE proceso del plugin, guard-pin.ts) y
 // SAVIA_GATES_PIN=1 está en el entorno. Nunca para merge ni en un run sin persona.
 //
+// Modo mediado (SAVIA_GATES_PIN=1): el núcleo corre como los demás guards, bajo bwrap con la copia de confianza
+// montada sobre `.claude/hooks` (trusted-guards.ts, T1b). Lanzarlo desde el workspace reabría el TOCTOU que T1b
+// cierra: el pin se verifica y el script se lee de disco después (revisión #1525 de seguridad, P1-1).
+//
 // Falla cerrado: sin python3, sin núcleo, tiempo agotado o salida ilegible → ask (deny sin persona).
 // OpenCode nombra las tools MCP `<servidor>_<tool>` (con el nombre del servidor saneado). Los servidores se
 // leen de opencode.json y opencode.jsonc (raíz, .opencode/, ~/.config/opencode/) y de OPENCODE_CONFIG. Una tool
@@ -146,12 +150,31 @@ function failClosed(env: Record<string, string | undefined>, why: string): McpVe
   return { decision: autonomous(env) ? "deny" : "ask", reason: `Guard de efectos: ${why}; no se puede comprobar qué hace la llamada` }
 }
 
+function shq(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`
+}
+
+export interface CoreOpts {
+  root: string
+  /** Dónde está el núcleo (por defecto, `root`). En modo mediado, la copia de confianza. */
+  coreRoot?: string
+  env: Record<string, string | undefined>
+  pinFixed: boolean
+  /**
+   * Envoltorio de aislamiento (wrapCommand de trusted-guards.ts): recibe una orden de shell y devuelve el argv. Con
+   * él, el núcleo se ejecuta en `<root>/.claude/hooks/lib`, que dentro del aislamiento es la copia de confianza.
+   */
+  wrap?: (command: string) => string[]
+}
+
 /** Lanza el núcleo con el payload tal cual (bytes ilegibles incluidos) y devuelve su decisión. */
-export function runCore(raw: string | Uint8Array, o: { root: string; coreRoot?: string; env: Record<string, string | undefined>; pinFixed: boolean }): Promise<McpVerdict> {
-  const core = join(o.coreRoot ?? o.root, CORE_REL)
-  if (!existsSync(core)) return Promise.resolve(failClosed(o.env, "falta el núcleo del guard"))
+export function runCore(raw: string | Uint8Array, o: CoreOpts): Promise<McpVerdict> {
+  if (!existsSync(join(o.coreRoot ?? o.root, CORE_REL))) return Promise.resolve(failClosed(o.env, "falta el núcleo del guard"))
+  const core = o.wrap ? join(o.root, CORE_REL) : join(o.coreRoot ?? o.root, CORE_REL)
   const args = [core, "--root", o.root, "--frontend", "opencode", "--json"]
   if (o.pinFixed) args.push("--pin-fixed")
+  // -I: ni PYTHONPATH ni el directorio del script delante de sys.path (un json.py plantado no se carga).
+  const argv = o.wrap ? o.wrap(`exec python3 -I ${args.map(shq).join(" ")}`) : ["python3", "-I", ...args]
   return new Promise((resolve) => {
     let out = ""
     let done = false
@@ -163,7 +186,7 @@ export function runCore(raw: string | Uint8Array, o: { root: string; coreRoot?: 
     }
     let child: ReturnType<typeof spawn>
     try {
-      child = spawn("python3", args, { env: o.env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "ignore"] })
+      child = spawn(argv[0], argv.slice(1), { env: o.env as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "ignore"] })
     } catch {
       return finish(failClosed(o.env, "python3 no disponible"))
     }
@@ -196,6 +219,7 @@ export function runCore(raw: string | Uint8Array, o: { root: string; coreRoot?: 
 export async function mcpEffectVerdict(a: {
   root: string
   coreRoot?: string
+  wrap?: (command: string) => string[]
   tool: string
   args: Record<string, unknown> | undefined
   env: Record<string, string | undefined>
@@ -205,5 +229,5 @@ export async function mcpEffectVerdict(a: {
   const name = catalogName(a.tool, a.servers ?? mcpServers(a.root, a.env))
   if (!name) return { decision: "pass", reason: "" }
   const raw = JSON.stringify({ hook_event_name: "PreToolUse", tool_name: name, tool_input: a.args ?? {} })
-  return runCore(raw, { root: a.root, coreRoot: a.coreRoot, env: a.env, pinFixed: a.pinFixed })
+  return runCore(raw, { root: a.root, coreRoot: a.coreRoot, wrap: a.wrap, env: a.env, pinFixed: a.pinFixed })
 }

@@ -141,7 +141,9 @@ export async function createGates(init: GatesInit, flavor: Flavor) {
       // SE-508 S1: guard previo de efectos MCP/WebFetch/WebSearch, gemelo del hook mcp-effect-guard.sh (mismo
       // núcleo Python). Como en cúpulas, `ask` se aplica como bloqueo con el motivo. La delegación en Space
       // solo vale con el pin de guards fijado en este proceso (pin !== null).
-      const effect = await mcpEffectVerdict({ root, tool, args, env: productionEnv(process.env), pinFixed: pin !== null })
+      // Con el pin, el núcleo corre bajo bwrap desde la copia de confianza, como los hooks (T1b; revisión #1525).
+      const effect = await mcpEffectVerdict({ root, tool, args, env: productionEnv(process.env), pinFixed: pin !== null,
+        coreRoot: trusted?.copy, wrap: trusted ? (c: string) => wrapCommand(trusted as TrustedGuards, c) : undefined })
       if (effect.decision !== "pass") {
         await auditLog({ event: "mcp-effect-guard", tool, decision: effect.decision })
         throw new Error(`savia-gates: MCP_${effect.decision.toUpperCase()}: ${effect.reason}`)
