@@ -9,7 +9,7 @@
 setup() {
   set -o pipefail
   cd "$BATS_TEST_DIRNAME/.."
-  X="python3 tests/fixtures/se496/extras.py"
+  X="python3 tests/fixtures/se496/ledger_digest_audit.py"
   TMP=$(mktemp -d -p "$BATS_TEST_TMPDIR")  # bats borra BATS_TEST_TMPDIR al terminar cada test
 }
 
@@ -53,9 +53,9 @@ teardown() {
 @test "AC-3/AC-8 D15: autoridad inferida -> INFERRED_NOT_AUTHORITY con sugerencia; con contrato firmado ALLOW y la misma sugerencia" {
   run $X check D15
   [ "$output" = "OK" ]
-  run python3 tests/fixtures/se496/battery.py run D15 neg
+  run python3 tests/fixtures/se496/denegaciones.py run D15 neg
   [[ "$output" == "RC=1 REASON=INFERRED_NOT_AUTHORITY SUGG=1" ]]
-  run python3 tests/fixtures/se496/battery.py run D15 twin
+  run python3 tests/fixtures/se496/denegaciones.py run D15 twin
   [[ "$output" == "RC=0 REASON=OK SUGG=1" ]]
 }
 @test "AC-3 técnico: contrato por encima del nivel del agente -> LEVEL_EXCEEDED" { run $X check T-level; [ "$output" = "OK" ]; }
@@ -98,7 +98,7 @@ teardown() {
 @test "AC-9: ningún caso lee ni escribe el HOME real" {
   export HOME="$TMP/home-real"
   mkdir -p "$HOME"
-  run python3 tests/fixtures/se496/battery.py run D01 twin
+  run python3 tests/fixtures/se496/denegaciones.py run D01 twin
   [ "$status" -eq 0 ]
   [ -z "$(ls -A "$HOME")" ]
 }

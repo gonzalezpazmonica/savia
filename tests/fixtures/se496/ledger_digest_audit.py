@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Casos de la batería SE-496 que no son un par neg/twin (AC-1, 2, 5b, 5c, 6b, 7, 9, 12).
 
-  extras.py check <caso...>     pares neg/twin de battery.py
-  extras.py extra <nombre>      ledger | digest | nocache | audit | exit | signers-empty | validators
+  ledger_digest_audit.py check <caso...>     pares neg/twin de denegaciones.py
+  ledger_digest_audit.py extra <nombre>      ledger | digest | nocache | audit | exit | signers-empty | validators
 Imprime OK o la lista de fallos; exit 1 si falla algo.
 """
 import json
@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from battery import (CASES, INSTALL, KERNEL, MALFORMED, RC_FOR_NEG, World, canon, reason_of,  # noqa: E402
+from denegaciones import (CASES, INSTALL, KERNEL, MALFORMED, RC_FOR_NEG, World, canon, reason_of,  # noqa: E402
                      run_case)
 
 

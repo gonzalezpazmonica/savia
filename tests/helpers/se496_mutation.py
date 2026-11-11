@@ -7,7 +7,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(REPO, "scripts", "lib"))
 sys.path.insert(0, os.path.join(REPO, "tests", "fixtures", "se496"))
 import authority_kernel as k  # noqa: E402
-import battery as b  # noqa: E402
+import denegaciones as b  # noqa: E402
 
 
 def rc_reason(case):

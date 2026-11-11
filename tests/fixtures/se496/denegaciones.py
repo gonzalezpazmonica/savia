@@ -5,8 +5,8 @@ Construye un mundo hermético en un directorio temporal (repo git con origin/mai
 operadores ficticios con claves ed25519 generadas aquí, `gh` falso, HOME temporal). No lee el
 perfil real ni ~/.savia real (AC-9).
 
-  battery.py list
-  battery.py run <caso> neg|twin        -> RC=<exit> REASON=<codigo> SUGG=<n>
+  denegaciones.py list
+  denegaciones.py run <caso> neg|twin        -> RC=<exit> REASON=<codigo> SUGG=<n>
 Como módulo lo usa tests/helpers/se496_mutation.py (modo en proceso, con pasos parcheados).
 """
 import hashlib
