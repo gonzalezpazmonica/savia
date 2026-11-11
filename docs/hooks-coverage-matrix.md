@@ -148,10 +148,10 @@ Ninguno — AC-2.2 satisfecho.
 | TaskCompleted | task-lifecycle.sh | no | NONE | telemetria | evento TaskCompleted no disponible en OpenCode — degradacion_documentada |
 | TaskCreated | task-lifecycle.sh | no | NONE | telemetria | evento TaskCreated no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | cache-hygiene-hook.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
+| UserPromptSubmit | learning-recall-hook.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | memory-prime-hook.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | re-anchor-redlines.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | recommendation-tribunal-followup.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | stress-awareness-nudge.sh | no | NONE | telemetria | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
-| UserPromptSubmit | learning-recall-hook.sh | no | NONE | warning | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | turn-budget-inject.sh | no | NONE | warning | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
 | UserPromptSubmit | user-prompt-intercept.sh | no | NONE | warning | evento UserPromptSubmit no disponible en OpenCode — degradacion_documentada |
