@@ -166,6 +166,9 @@ class World:
              "action": {"name": "pr.create-draft", "params": {"branch": "agent/work", "title": "x"}},
              "target": {"branch": "agent/work"}}
         r.update(over)
+        if "target" in over and "action" not in over and over["target"].get("branch") is not None:
+            # una peticion real nombra la misma rama en la orden y en el objetivo (el kernel lo exige)
+            r["action"] = {"name": "pr.create-draft", "params": {"branch": over["target"]["branch"], "title": "x"}}
         return r
 
     # ---- ejecución
@@ -344,10 +347,11 @@ def d09b(w, v):  # descriptor cambiado tras firmar
 
 def _vault(w, v, project, branch="agent/work", scope_projects=("projects/alpha",), req_extra=None):
     w.contract(cap="vault.note-write", declared_effects=["vault.write", "git.commit"],
-               scope={"repo": [INSTALL], "branches": ["agent/*"], "projects": list(scope_projects)})
+               scope={"repo": [INSTALL], "branches": ["agent/*"], "projects": list(scope_projects),
+                      "paths": ["notas"]})
     req = {"capability": "vault.note-write",
-           "action": {"name": "vault.note-write", "params": {"path": "n.md"}},
-           "target": {"branch": branch, "project": project}}
+           "action": {"name": "vault.note-write", "params": {"path": "notas/n.md"}},
+           "target": {"branch": branch, "project": project, "path": "notas/n.md"}}
     req.update(req_extra or {})
     return w.ev(w.request(**req))
 
@@ -385,7 +389,7 @@ def d11(w, v):
 
 def d11b(w, v):  # efecto extra que aporta la orden
     w.contract()
-    return w.ev(w.request(action={"name": "pr.create-draft", "params": {"title": "x"},
+    return w.ev(w.request(action={"name": "pr.create-draft", "params": {"branch": "agent/work", "title": "x"},
                                   "effects": ["pr.merge"] if v == "neg" else ["git.push"]}))
 
 
@@ -533,19 +537,19 @@ def t_action(w, v):  # orden distinta de la evaluada
 
 def _publish(w, **over):
     c = dict(cap="project.publish", declared_effects=["project.publish"], max_uses=1,
-             scope={"repo": [INSTALL], "prs": [7]})
+             scope={"repo": [INSTALL], "prs": [7], "projects": ["p"]})
     c.update(over)
     w.contract(**c)
     return w.ev(w.request(capability="project.publish", action={"name": "project.publish", "params": {"project": "p"}},
-                          target={"pr": 7}))
+                          target={"pr": 7, "project": "p"}))
 
 
 def t_state(w, v):  # head_sha nuevo: no viola precondición, cambia el digest
     w.set_pr(7)
     w.contract(cap="project.publish", declared_effects=["project.publish"], max_uses=1,
-               scope={"repo": [INSTALL], "prs": [7]})
+               scope={"repo": [INSTALL], "prs": [7], "projects": ["p"]})
     req = w.request(capability="project.publish", action={"name": "project.publish", "params": {"project": "p"}},
-                    target={"pr": 7})
+                    target={"pr": 7, "project": "p"})
     rc, out = w.ev(req)
     assert rc == 0, (rc, out)
     if v == "neg":

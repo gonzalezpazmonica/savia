@@ -21,9 +21,13 @@ teardown() {
   [ "$output" = "OK" ]
 }
 
-@test "P1-1: el kernel no lee os.environ para redirigirse (ninguna lectura de SAVIA_AUTHORITY_ en el binario)" {
-  run grep -c 'environ.get("SAVIA_AUTHORITY' scripts/lib/authority_kernel.py
-  [ "$output" = "0" ]
+@test "P1-1: el kernel no lee el entorno para redirigirse (environ/getenv solo dentro de test_mode)" {
+  # cualquier forma: os.environ[...], .get, getenv, environb; la unica excepcion es heredar el entorno en modo test
+  run bash -c "grep -nE 'environ|getenv' scripts/lib/authority_kernel.py | grep -v 'if test_mode()'"
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+  run grep -c 'environ' scripts/lib/authority_kernel.py
+  [ "$output" -ge 1 ]
   run grep -c 'SAVIA_AUTHORITY_TEST' tests/helpers/se496_kernel_entry.py
   [ "$output" -ge 1 ]
 }
@@ -72,6 +76,24 @@ teardown() {
 
 @test "P2-5: una mutación que revienta cuenta como CRASHED, no como KILLED" {
   run $F mutation-crash
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 2 P1-1: params atados al objetivo; params.branch=main, params.project=otro, ruta fuera de paths, parámetro no declarado o action.name ajeno -> DENY; controles ALLOW" {
+  run $F params-scope
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 2 P2-2: checks solo saltados o neutros no son CI verde para pr.merge; con un SUCCESS real sí" {
+  run $F ci-skipped
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 2 corr.: 200 ejecuciones del head (límite de gh run list) -> UNKNOWN_STATE; 199 -> ALLOW" {
+  run $F runs-limit
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }

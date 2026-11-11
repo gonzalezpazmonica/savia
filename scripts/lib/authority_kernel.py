@@ -17,9 +17,17 @@ niveles de agente y ontologia tambien se leen de origin/main. Sin overrides por 
 Limites conocidos de F0 (sin hook que lo invoque todavia; se cierran al cablearlo en F1/F2):
 - el ledger de usos y el audit viven en ~/.savia: quien pueda editar ese directorio puede
   borrar usos o reescribir la cadena entera (verify-audit no tiene ancla externa de la cabeza);
-- risk-tier.py, el perfil activo y el propio kernel se leen del arbol de trabajo;
+- risk-tier.py, el perfil activo y el propio kernel se leen del arbol de trabajo (misma clase de
+  amenaza: codigo que decide y que el agente puede editar; se cierra al cablear, no a trozos);
 - entre varios contratos del mismo delegado y capacidad se evalua el primero (fail-closed:
-  puede dar un DENY donde otro contrato vigente daria ALLOW).
+  puede dar un DENY donde otro contrato vigente daria ALLOW);
+- un fichero renombrado se clasifica por su ruta de destino (ni `gh pr view` ni `.filename` de la
+  API REST dan la de origen);
+- Branch.* se lee primero de refs/heads locales; `ci_not_red` de pr.create-draft acepta `none`
+  (sin ejecuciones): no es garantia de CI, solo de que no hay una ejecucion roja o pendiente;
+- las rutas de vault.note-write son identificadores de recurso: solo ASCII (como ramas y proyectos).
+Los parametros de la accion que nombran un recurso (PARAM_DIMS) tienen que coincidir con el
+objetivo, y el objetivo es lo que el ambito firmado cubre.
 """
 import datetime
 import hashlib
@@ -345,18 +353,21 @@ def gh_json(args):
 
 
 def ci_state(entries):
-    """Resumen de checks: success, failure, pending o none (vacio). Que valores cumplen lo dice cada descriptor."""
+    """Resumen de checks: success, failure, pending o none. Que valores cumplen lo dice cada descriptor.
+    none = sin ejecuciones o solo saltadas/neutras: success exige al menos un SUCCESS real."""
     if not entries:
         return "none"
-    pending = failed = False
+    pending = failed = succeeded = False
     for e in entries:
         status = str(e.get("status") or "COMPLETED").upper()
         concl = str(e.get("conclusion") or e.get("state") or "").upper()
         if status != "COMPLETED" or concl in ("", "PENDING", "EXPECTED", "IN_PROGRESS", "QUEUED"):
             pending = True
-        elif concl not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
+        elif concl == "SUCCESS":
+            succeeded = True
+        elif concl not in ("NEUTRAL", "SKIPPED"):
             failed = True
-    return "failure" if failed else "pending" if pending else "success"
+    return "failure" if failed else "pending" if pending else "success" if succeeded else "none"
 
 
 # --------------------------------------------------------------------------- selectores
@@ -397,10 +408,26 @@ def project_match(selector, value):
     return value == selector or value.startswith(selector.rstrip("/") + "/")
 
 
+# dimension del ambito -> clave del objetivo
+SCOPE_DIMS = {"branches": "branch", "prs": "pr", "projects": "project", "paths": "path"}
+# parametro de la accion -> clave del objetivo que lo autoriza (el ambito se comprueba sobre el objetivo,
+# asi que todo parametro que nombre un recurso tiene que coincidir con el objetivo)
+PARAM_DIMS = {"branch": "branch", "pr_number": "pr", "project": "project", "path": "path"}
+TARGET_KEYS = ("repo", "branch", "pr", "project", "path")
+
+
+def path_match(selector, value):
+    return glob_match(selector, value) if "*" in selector else project_match(selector, value)
+
+
 def covered(scope, target, repo):
-    """(ok, motivo). Cada dimension presente en el objetivo tiene que estar cubierta por una lista cerrada."""
+    """(ok, motivo). Cada dimension presente en el objetivo tiene que estar cubierta por una lista cerrada,
+    y cada dimension que el ambito restringe tiene que estar presente en el objetivo."""
     if repo not in (scope.get("repo") or []):
         return False, "repo fuera de ambito"
+    for dim, key in SCOPE_DIMS.items():
+        if dim in scope and target.get(key) is None:
+            return False, "el ambito restringe %s y el objetivo no lo indica" % dim
     if target.get("branch") is not None:
         if not any(glob_match(p, target["branch"]) for p in scope.get("branches") or []):
             return False, "rama fuera de ambito"
@@ -410,6 +437,9 @@ def covered(scope, target, repo):
     if target.get("project") is not None:
         if not any(project_match(p, target["project"]) for p in scope.get("projects") or []):
             return False, "proyecto fuera de ambito"
+    if target.get("path") is not None:
+        if not any(path_match(p, target["path"]) for p in scope.get("paths") or []):
+            return False, "ruta fuera de ambito"
     return True, ""
 
 
@@ -443,7 +473,7 @@ def contract_errors(c, root=None, raw=None):
             errs.append("BAD_SCOPE")
         else:
             for dim, items in scope.items():
-                if dim not in ("repo", "branches", "prs", "projects") or not isinstance(items, list) or not items:
+                if dim not in ("repo",) + tuple(SCOPE_DIMS) or not isinstance(items, list) or not items:
                     errs.append("BAD_SCOPE:" + str(dim))
                     continue
                 for it in items:
@@ -453,7 +483,7 @@ def contract_errors(c, root=None, raw=None):
                     elif not isinstance(it, str) or not it or "?" in it or "[" in it or "**" in it \
                             or it.strip("*/") == "" or bad_segments(it):
                         errs.append("BAD_SCOPE:%s" % dim)
-                    elif dim != "branches" and "*" in it:
+                    elif dim not in ("branches", "paths") and "*" in it:
                         errs.append("BAD_SCOPE:%s" % dim)
     if "declared_effects" in c and not (isinstance(c["declared_effects"], list)
                                         and all(isinstance(x, str) for x in c["declared_effects"])):
@@ -683,6 +713,8 @@ def step7_capability(ctx):
     except (OSError, ValueError):
         raise Unknown("descriptor ilegible")
     ctx.cap_sha, ctx.descriptor = sha(data), d
+    if ctx.req["action"]["name"] != cid:
+        raise Deny("CAPABILITY_MISMATCH", "action.name (%s) no es la capacidad pedida" % ctx.req["action"]["name"])
     if cap.get("id") != cid or d.get("id") != cid or cap.get("version") != d.get("version") or cap.get("sha256") != ctx.cap_sha:
         raise Deny("CAPABILITY_MISMATCH", "el descriptor cambio desde que se firmo el contrato")
 
@@ -693,7 +725,7 @@ def step8_ambiguous(ctx):
         raise Deny("AMBIGUOUS", "alias sin dueño declarado")
     if isinstance(t.get("candidates"), list) and len(t["candidates"]) > 1:
         raise Deny("AMBIGUOUS", "el selector resuelve a %d recursos" % len(t["candidates"]))
-    for k in ("repo", "branch", "project"):
+    for k in ("repo", "branch", "project", "path"):
         if t.get(k) is not None:
             if not isinstance(t[k], str):
                 raise BadRequest("target.%s debe ser texto" % k)
@@ -714,7 +746,7 @@ def step8_ambiguous(ctx):
         want = t["project"].split("/")[-1] if t["project"].count("/") <= 1 else t["project"].split("/")[1]
         if any(n != want and n.lower() == want.lower() for n in read_dir_files(pdir)):
             raise Deny("AMBIGUOUS", "existen proyectos que solo difieren en mayusculas")
-    ctx.target = {k: t[k] for k in ("repo", "branch", "pr", "project") if t.get(k) is not None}
+    ctx.target = {k: t[k] for k in TARGET_KEYS if t.get(k) is not None}
 
 
 def step9_inferred(ctx):
@@ -732,9 +764,34 @@ def step9_inferred(ctx):
                    "la pertenencia solo la sugiere el grafo o el modelo; hace falta un contrato firmado")
 
 
+def bind_params(ctx):
+    """Los parametros de la accion son lo que se ejecuta; el ambito se comprueba sobre el objetivo.
+    Todo parametro ha de estar declarado en el descriptor, los obligatorios presentes, y los que nombran
+    un recurso iguales (valor y tipo) a su dimension del objetivo. Si no, el ALLOW no cubriria el efecto."""
+    if ctx.descriptor is None:  # defensa en profundidad: sin descriptor verificado no hay decision
+        raise Unknown("ningun descriptor de capacidad cargado")
+    params = ctx.req["action"].get("params") or {}
+    inp = ctx.descriptor.get("input") or {}
+    declared = set((inp.get("properties") or {}).keys())
+    extra = sorted(k for k in params if k not in declared)
+    if extra:
+        raise Deny("OUT_OF_SCOPE", "parametros no declarados en el descriptor: " + ", ".join(extra))
+    missing = [k for k in inp.get("required") or [] if k not in params]
+    if missing:
+        raise Deny("OUT_OF_SCOPE", "faltan parametros obligatorios: " + ", ".join(missing))
+    for p, key in PARAM_DIMS.items():
+        if p not in params:
+            continue
+        v, t = params[p], ctx.req["target"].get(key)
+        if t is None:
+            raise Deny("OUT_OF_SCOPE", "action.params.%s sin target.%s: el ambito no lo cubriria" % (p, key))
+        if type(v) is not type(t) or v != t:
+            raise Deny("OUT_OF_SCOPE", "action.params.%s no coincide con target.%s" % (p, key))
+
+
 def step10_scope(ctx):
     t = ctx.target
-    for k in ("branch", "project"):
+    for k in ("branch", "project", "path"):
         if t.get(k) is not None and bad_segments(t[k]):
             raise Deny("OUT_OF_SCOPE", "segmentos no permitidos en " + k)
     inst = ctx.inst = local_installation(ctx.root)
@@ -742,6 +799,7 @@ def step10_scope(ctx):
     ctx.target["repo"] = ctx.repo
     if inst != ctx.contract["installation"]:
         raise Deny("OUT_OF_SCOPE", "el contrato es de otra instalacion (%s)" % ctx.contract["installation"])
+    bind_params(ctx)
     ok, why = covered(ctx.contract["scope"], ctx.target, ctx.repo)
     if not ok:
         raise Deny("OUT_OF_SCOPE", why)
@@ -762,6 +820,7 @@ def step11_uses(ctx):
         raise Deny("MAX_USES_EXHAUSTED", "contrato consumido (%d de %d usos)" % (n, mu))
 
 
+RUN_LIMIT = 200
 PR_FIELDS = "isDraft,headRefName,headRefOid,reviewDecision,state,statusCheckRollup,files,changedFiles"
 
 
@@ -845,10 +904,12 @@ def read_fact(ctx, fact):
             return sha_
         if attr == "ci_status":
             # todas las ejecuciones del head exacto, no la ultima de cualquier workflow ni de otro commit
-            j = gh_json(["run", "list", "--repo", ctx.repo, "--branch", b, "--commit", sha_, "--limit", "200",
-                         "--json", "status,conclusion"])
+            j = gh_json(["run", "list", "--repo", ctx.repo, "--branch", b, "--commit", sha_,
+                         "--limit", str(RUN_LIMIT), "--json", "status,conclusion"])
             if not isinstance(j, list):
                 raise Unknown("gh run list no devolvio una lista")
+            if len(j) >= RUN_LIMIT:  # lista posiblemente truncada: un fallo podria quedar fuera
+                raise Unknown("gh run list llego al limite de %d ejecuciones del head" % RUN_LIMIT)
             return ci_state(j)
     raise Unknown("lector sin soporte para " + fact)
 

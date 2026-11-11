@@ -24,13 +24,13 @@ def pub_world(max_uses=1):
     w = World()
     w.set_pr(7)
     w.contract(cap="project.publish", declared_effects=["project.publish"], max_uses=max_uses,
-               scope={"repo": [INSTALL], "prs": [7]})
+               scope={"repo": [INSTALL], "prs": [7], "projects": ["p", "uno", "dos"]})
     return w
 
 
 def pub_req(w, title="p"):
     return w.request(capability="project.publish", action={"name": "project.publish", "params": {"project": title}},
-                     target={"pr": 7})
+                     target={"pr": 7, "project": title})
 
 
 def ex_ledger():

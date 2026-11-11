@@ -36,9 +36,10 @@ def publish(w, files, changed=None, api=None, review="", tier=4):
         with open(os.path.join(w.fake, "pr-7-api.txt"), "w") as f:
             f.write("".join(json.dumps(x) + "\n" for x in api))
     w.contract(cap="project.publish", declared_effects=["project.publish"], max_uses=1,
-               scope={"repo": [INSTALL], "prs": [7]}, authority={"level": "L3", "tier": tier})
+               scope={"repo": [INSTALL], "prs": [7], "projects": ["p"]}, authority={"level": "L3", "tier": tier})
     return w.ev(w.request(capability="project.publish",
-                          action={"name": "project.publish", "params": {"project": "p"}}, target={"pr": 7}))
+                          action={"name": "project.publish", "params": {"project": "p"}},
+                          target={"pr": 7, "project": "p"}))
 
 
 # ---------------------------------------------------------------- P1-1: sin bypass por entorno
@@ -243,9 +244,119 @@ def fx_mutation_crash():
     return bad
 
 
+# ---------------------------------------------------------------- seg. ronda 2, P1-1: params atados al objetivo
+def _case(bad, label, got, want):
+    if got != want:
+        bad.append("%s: %s %s (esperado %s %s)" % (label, got[0], got[1], want[0], want[1]))
+
+
+def _ev(contract, req, pr=None):
+    w = World()
+    if pr is not None:
+        w.set_pr(7, **pr)
+    w.contract(**contract)
+    rc, out = w.ev(w.request(**req))
+    w.close()
+    return rc, reason(out)
+
+
+def _draft(params, target=None, name="pr.create-draft"):
+    return {"action": {"name": name, "params": params}, "target": target or {"branch": "agent/work"}}
+
+
+def _pub_req(proj, target):
+    return {"capability": "project.publish",
+            "action": {"name": "project.publish", "params": {"project": proj}}, "target": target}
+
+
+def _merge_req(n):
+    return {"capability": "pr.merge", "action": {"name": "pr.merge", "params": {"pr_number": n}}, "target": {"pr": 7}}
+
+
+def _vault_req(path, tpath):
+    return {"capability": "vault.note-write", "action": {"name": "vault.note-write", "params": {"path": path}},
+            "target": {"branch": "agent/work", "path": tpath}}
+
+
+def fx_params_scope():
+    """El ambito se firma sobre el objetivo y lo que se ejecuta son los parametros: tienen que coincidir.
+    Cada denegacion nueva tiene su control en el mismo mundo, que da ALLOW (o pasa el paso 10)."""
+    bad = []
+    ok = {"branch": "agent/work", "title": "x"}
+    _case(bad, "draft control", _ev({}, _draft(ok)), (0, "OK"))
+    _case(bad, "draft params.branch=main", _ev({}, _draft({"branch": "main", "title": "x"})), (1, "OUT_OF_SCOPE"))
+    _case(bad, "draft params.branch sin target.branch", _ev({}, _draft(ok, {"repo": INSTALL})), (1, "OUT_OF_SCOPE"))
+    _case(bad, "draft parametro no declarado", _ev({}, _draft(dict(ok, base="main"))), (1, "OUT_OF_SCOPE"))
+    _case(bad, "draft falta parametro obligatorio", _ev({}, _draft({"branch": "agent/work"})), (1, "OUT_OF_SCOPE"))
+    _case(bad, "action.name de otra capacidad", _ev({}, _draft(ok, name="pr.merge")), (1, "CAPABILITY_MISMATCH"))
+    _case(bad, "ambito con projects y objetivo sin project",
+          _ev({"scope": {"repo": [INSTALL], "branches": ["agent/*"], "projects": ["projects/alpha"]}}, _draft(ok)),
+          (1, "OUT_OF_SCOPE"))
+
+    pub = dict(cap="project.publish", declared_effects=["project.publish"], max_uses=1,
+               scope={"repo": [INSTALL], "prs": [7], "projects": ["p"]})
+    _case(bad, "publish control", _ev(pub, _pub_req("p", {"pr": 7, "project": "p"}), pr={}), (0, "OK"))
+    _case(bad, "publish params.project=otro", _ev(pub, _pub_req("otro", {"pr": 7, "project": "p"}), pr={}),
+          (1, "OUT_OF_SCOPE"))
+    _case(bad, "publish sin target.project", _ev(pub, _pub_req("p", {"pr": 7}), pr={}), (1, "OUT_OF_SCOPE"))
+
+    merge = dict(cap="pr.merge", declared_effects=["pr.merge"], scope={"repo": [INSTALL], "prs": [7]},
+                 authority={"level": "L4", "tier": 4})
+    # control: pasa el paso 10 y para en el nivel (yema es L3; merge exige L4)
+    _case(bad, "merge control", _ev(merge, _merge_req(7), pr={"isDraft": False}), (1, "LEVEL_EXCEEDED"))
+    _case(bad, "merge pr_number=8", _ev(merge, _merge_req(8), pr={"isDraft": False}), (1, "OUT_OF_SCOPE"))
+    _case(bad, "merge pr_number texto", _ev(merge, _merge_req("7"), pr={"isDraft": False}), (1, "OUT_OF_SCOPE"))
+
+    effects = ["vault.write", "git" + ".commit"]
+    vault = dict(cap="vault.note-write", declared_effects=effects,
+                 scope={"repo": [INSTALL], "branches": ["agent/*"], "paths": ["notas"]})
+    _case(bad, "vault control", _ev(vault, _vault_req("notas/n.md", "notas/n.md")), (0, "OK"))
+    _case(bad, "vault ruta fuera de paths", _ev(vault, _vault_req("otras/n.md", "otras/n.md")), (1, "OUT_OF_SCOPE"))
+    _case(bad, "vault prefijo enganoso", _ev(vault, _vault_req("notas-x/n.md", "notas-x/n.md")), (1, "OUT_OF_SCOPE"))
+    _case(bad, "vault segmento ..", _ev(vault, _vault_req("notas/../x.md", "notas/../x.md")), (1, "OUT_OF_SCOPE"))
+    _case(bad, "vault params.path distinto", _ev(vault, _vault_req("otras/n.md", "notas/n.md")), (1, "OUT_OF_SCOPE"))
+    no_paths = dict(vault, scope={"repo": [INSTALL], "branches": ["agent/*"]})
+    _case(bad, "vault contrato sin paths", _ev(no_paths, _vault_req("notas/n.md", "notas/n.md")), (1, "OUT_OF_SCOPE"))
+    return bad
+
+
+# ---------------------------------------------------------------- seg. ronda 2, P2-2: todo saltado no es verde
+def fx_ci_skipped():
+    bad = []
+    merge = dict(cap="pr.merge", declared_effects=["pr.merge"], scope={"repo": [INSTALL], "prs": [7]},
+                 authority={"level": "L4", "tier": 4})
+    skipped = {"status": "COMPLETED", "conclusion": "SKIPPED"}
+    neutral = {"status": "COMPLETED", "conclusion": "NEUTRAL"}
+    green = {"status": "COMPLETED", "conclusion": "SUCCESS"}
+    _case(bad, "merge solo saltados", _ev(merge, _merge_req(7), pr={"isDraft": False, "statusCheckRollup": [skipped]}),
+          (1, "PRECONDITION_FAILED:ci_green"))
+    _case(bad, "merge saltados y neutros",
+          _ev(merge, _merge_req(7), pr={"isDraft": False, "statusCheckRollup": [skipped, neutral]}),
+          (1, "PRECONDITION_FAILED:ci_green"))
+    # control: un SUCCESS real junto a un saltado cumple ci_green y para en el nivel
+    _case(bad, "merge success + saltado",
+          _ev(merge, _merge_req(7), pr={"isDraft": False, "statusCheckRollup": [green, skipped]}),
+          (1, "LEVEL_EXCEEDED"))
+    return bad
+
+
+# ---------------------------------------------------------------- corr. ronda 2: run list truncado
+def fx_runs_limit():
+    bad = []
+    for n, want in ((199, (0, "OK")), (200, (1, "UNKNOWN_STATE"))):
+        w = World()
+        w.set_runs([{"status": "COMPLETED", "conclusion": "SUCCESS"}] * n)
+        w.contract()
+        rc, out = w.ev(w.request())
+        _case(bad, "%d ejecuciones del head" % n, (rc, reason(out)), want)
+        w.close()
+    return bad
+
+
 FIXES = {"env-bypass": fx_env_bypass, "tier-files": fx_tier_files, "level-main": fx_level_from_main,
          "ontology-main": fx_ontology_from_main, "ci-head": fx_ci_head, "branch-repo": fx_branch_other_repo,
-         "prior-age": fx_prior_age, "merge-pre": fx_merge_preconditions, "mutation-crash": fx_mutation_crash}
+         "prior-age": fx_prior_age, "merge-pre": fx_merge_preconditions, "mutation-crash": fx_mutation_crash,
+         "params-scope": fx_params_scope, "ci-skipped": fx_ci_skipped, "runs-limit": fx_runs_limit}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in FIXES:
