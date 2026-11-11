@@ -24,6 +24,7 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$(grep -c '^KILLED' <<<"$output")" -eq 18 ]
   [[ "$output" != *SURVIVED* ]]
+  [[ "$output" != *CRASHED* ]]
 }
 
 @test "AC-4 boundary: el paso 0 no existe y se rechaza con exit 2" {

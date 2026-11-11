@@ -30,3 +30,13 @@ preconditions:
     op: "=="
     value: OPEN
     message: "precondición: el PR debe estar abierto"
+  - id: not_draft
+    fact: PullRequest.is_draft
+    op: "=="
+    value: false
+    message: "precondición: el PR no puede estar en borrador"
+  - id: ci_green
+    fact: PullRequest.ci_status
+    op: "=="
+    value: success
+    message: "precondición: CI en verde (pendiente, cancelada, roja o sin checks no cumplen)"

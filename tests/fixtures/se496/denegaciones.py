@@ -20,16 +20,20 @@ import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
-KERNEL = os.path.join(REPO, "scripts", "lib", "authority_kernel.py")
+REAL_KERNEL = os.path.join(REPO, "scripts", "lib", "authority_kernel.py")
+# El kernel no admite overrides por entorno: los tests lo invocan por un envoltorio que solo vive en tests/.
+KERNEL = os.path.join(REPO, "tests", "helpers", "se496_kernel_entry.py")
 INSTALL = "github.com/acme/widgets"
 NOW = "2026-11-12T10:00:00Z"
 CAPS = ("pr.create-draft", "pr.merge", "project.publish", "vault.note-write")
 
 FAKE_GH = """#!/usr/bin/env bash
 d="$SE496_FAKE_DIR"
+printf '%s\n' "$*" >>"$d/calls.log"
 case "$1 $2" in
   "run list") cat "$d/runs.json" ;;
   "pr view") cat "$d/pr-$3.json" ;;
+  "api --hostname") n="${5#*/pulls/}"; cat "$d/pr-${n%/files}-api.txt" ;;
   *) exit 1 ;;
 esac
 """
@@ -126,6 +130,7 @@ class World:
               "state": "OPEN", "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
               "files": [{"path": "docs/x.md"}]}
         pr.update(over)
+        pr.setdefault("changedFiles", len(pr["files"]))
         json.dump(pr, open(os.path.join(self.fake, "pr-%d.json" % n), "w"))
 
     # ---- contratos
@@ -168,7 +173,7 @@ class World:
         e = dict(os.environ)
         e.update({"SAVIA_AUTHORITY_TEST": "1", "SAVIA_AUTHORITY_ROOT": self.root, "HOME": self.home,
                   "SAVIA_AUTHORITY_NOW": NOW, "SAVIA_AUTHORITY_TOOL_GH": os.path.join(self.bin, "gh"),
-                  "SE496_FAKE_DIR": self.fake})
+                  "SE496_FAKE_DIR": self.fake, "SE496_KERNEL": KERNEL})
         e.update(self.env_extra)
         return e
 
@@ -179,13 +184,16 @@ class World:
         if self.inproc:
             sys.path.insert(0, os.path.join(REPO, "scripts", "lib"))
             import authority_kernel as k
+            sys.path.insert(0, os.path.join(REPO, "tests", "helpers"))
+            from se496_kernel_entry import overrides_from
             saved = dict(os.environ)
             os.environ.update(self.env())
+            k.OVERRIDES.clear()
+            k.OVERRIDES.update(overrides_from(os.environ))
             try:
                 rc, out = k.main(args, text)
-            except Exception:
-                rc, out = 2, ""
             finally:
+                k.OVERRIDES.clear()
                 os.environ.clear()
                 os.environ.update(saved)
             return rc, (json.loads(out) if out else None)

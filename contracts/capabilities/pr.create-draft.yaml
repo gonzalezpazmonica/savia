@@ -34,4 +34,4 @@ preconditions:
     fact: Branch.ci_status
     op: in
     value: [success, none]
-    message: "precondición: CI verde (sin ejecuciones fallidas ni pendientes)"
+    message: "precondición: ninguna ejecución de CI del head fallida ni pendiente (sin ejecuciones aún vale: el borrador es reversible y dispara la CI)"

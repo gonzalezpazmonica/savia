@@ -11,7 +11,15 @@ Uso (siempre `python3 -I`):
 Salida: JSON por stdout. Exit: 0 ALLOW, 1 DENY, 4 REQUIRES_APPROVAL, 2 sin decision
 (peticion mal formada o fallo interno). Deny por defecto; sin cache de decisiones;
 `evaluate` nunca consume usos; los hechos `inferred` solo se devuelven como sugerencias.
-La autoridad la fija el contrato firmado contra el fichero de firmantes de origin/main.
+La autoridad la fija el contrato firmado contra el fichero de firmantes de origin/main;
+niveles de agente y ontologia tambien se leen de origin/main. Sin overrides por entorno.
+
+Limites conocidos de F0 (sin hook que lo invoque todavia; se cierran al cablearlo en F1/F2):
+- el ledger de usos y el audit viven en ~/.savia: quien pueda editar ese directorio puede
+  borrar usos o reescribir la cadena entera (verify-audit no tiene ancla externa de la cabeza);
+- risk-tier.py, el perfil activo y el propio kernel se leen del arbol de trabajo;
+- entre varios contratos del mismo delegado y capacidad se evalua el primero (fail-closed:
+  puede dar un DENY donde otro contrato vigente daria ALLOW).
 """
 import datetime
 import hashlib
@@ -36,6 +44,9 @@ NAMESPACE = "savia-delegation"
 BASE_REF = "refs/remotes/origin/main"
 SIGNERS_REL = "config/" + "operator-grant-" + "signers"
 REVOKED_REL = "config/delegations/REVOKED"
+ONTOLOGY_REL = "contracts/ontology/savia-operational.yaml"
+LEVELS_REL = "docs/rules/domain/agent-permission-levels.md"
+PRIOR_MAX_AGE = datetime.timedelta(minutes=10)
 MAX_LIFE = datetime.timedelta(days=7)
 TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -69,13 +80,19 @@ class BadRequest(Exception):
 
 
 # --------------------------------------------------------------------------- util
+# Inyeccion de dependencias SOLO en proceso: la rellena tests/helpers/se496_kernel_entry.py (o la
+# bateria en modo inproc) antes de llamar a main(). El kernel no lee ninguna variable de entorno
+# para redirigirse: quien lo invoca como programa no puede cambiar raiz, reloj, perfil ni herramientas.
+OVERRIDES = {}
+
+
 def test_mode():
-    return os.environ.get("SAVIA_AUTHORITY_TEST") == "1"
+    return bool(OVERRIDES)
 
 
 def tenv(name, default=None):
-    """Overrides de entorno: solo con SAVIA_AUTHORITY_TEST=1 (un agente no redirige el kernel)."""
-    return os.environ.get(name, default) if test_mode() else default
+    """Valor inyectado en proceso (nunca del entorno del llamante)."""
+    return OVERRIDES.get(name, default)
 
 
 def sha(data):
@@ -328,7 +345,7 @@ def gh_json(args):
 
 
 def ci_state(entries):
-    """Resumen de checks: solo `success` cumple. Pendiente, cancelado o vacio no cumplen."""
+    """Resumen de checks: success, failure, pending o none (vacio). Que valores cumplen lo dice cada descriptor."""
     if not entries:
         return "none"
     pending = failed = False
@@ -521,7 +538,7 @@ class Ctx:
         self.contract_sha = None
         self.descriptor = self.cap_sha = None
         self.target = {}
-        self.repo = None
+        self.repo = self.inst = None
         self.facts = {}
         self.pr = None
         self.tier = 0
@@ -570,6 +587,8 @@ def step1_contract(ctx):
 
 def step2_self_issued(ctx):
     c = ctx.contract
+    if c is None or ctx.path is None:  # defensa en profundidad: sin contrato cargado no hay decision
+        raise Unknown("ningun contrato cargado")
     p = str(c.get("principal", ""))
     if not os.path.isfile(ctx.path + ".sig"):
         raise Deny("SELF_ISSUED", "contrato sin firma")
@@ -718,7 +737,7 @@ def step10_scope(ctx):
     for k in ("branch", "project"):
         if t.get(k) is not None and bad_segments(t[k]):
             raise Deny("OUT_OF_SCOPE", "segmentos no permitidos en " + k)
-    inst = local_installation(ctx.root)
+    inst = ctx.inst = local_installation(ctx.root)
     ctx.repo = t.get("repo") or inst
     ctx.target["repo"] = ctx.repo
     if inst != ctx.contract["installation"]:
@@ -743,7 +762,48 @@ def step11_uses(ctx):
         raise Deny("MAX_USES_EXHAUSTED", "contrato consumido (%d de %d usos)" % (n, mu))
 
 
-PR_FIELDS = "isDraft,headRefName,headRefOid,reviewDecision,state,statusCheckRollup,files"
+PR_FIELDS = "isDraft,headRefName,headRefOid,reviewDecision,state,statusCheckRollup,files,changedFiles"
+
+
+def gh_lines(args):
+    """Salida de `gh ... --jq '... | @json'`: una cadena JSON por linea."""
+    g = tool("gh")
+    if g is None:
+        raise Unknown("gh ausente")
+    try:
+        r = run([g, *args], timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise Unknown("gh no responde: %s" % e)
+    if r.returncode != 0:
+        raise Unknown("gh fallo: " + r.stderr.decode(errors="replace")[:120])
+    out = []
+    for line in r.stdout.decode().splitlines():
+        if not line.strip():
+            continue
+        try:
+            v = json.loads(line)
+        except ValueError:
+            raise Unknown("gh devolvio una linea no JSON")
+        if not isinstance(v, str):
+            raise Unknown("gh devolvio un nombre de fichero no textual")
+        out.append(v)
+    return out
+
+
+def pr_files(ctx, j):
+    """Lista COMPLETA de ficheros del PR. `gh pr view --json files` corta en 100: si no cuadra con
+    changedFiles se pide paginada a la API REST; si aun asi no cuadra, UNKNOWN_STATE (fail-closed)."""
+    files = [f.get("path") for f in j.get("files") or [] if isinstance(f, dict)]
+    want = j.get("changedFiles")
+    if not isinstance(want, int) or isinstance(want, bool):
+        raise Unknown("gh no informa changedFiles: no se puede comprobar que la lista de ficheros este completa")
+    if len(files) != want:
+        host, _, slug = ctx.repo.partition("/")
+        files = gh_lines(["api", "--hostname", host, "--paginate",
+                          "repos/%s/pulls/%d/files" % (slug, ctx.target["pr"]), "--jq", ".[].filename | @json"])
+    if len(files) != want or not all(isinstance(f, str) and f for f in files):
+        raise Unknown("lista de ficheros del PR incompleta (%d de %d)" % (len(files), want))
+    return files
 
 
 def read_pr(ctx):
@@ -752,8 +812,7 @@ def read_pr(ctx):
     j = gh_json(["pr", "view", str(ctx.target["pr"]), "--repo", ctx.repo, "--json", PR_FIELDS])
     ctx.pr = {"is_draft": j.get("isDraft"), "head_ref": j.get("headRefName"), "head_sha": j.get("headRefOid"),
               "review_decision": j.get("reviewDecision"), "state": j.get("state"),
-              "ci_status": ci_state(j.get("statusCheckRollup")),
-              "files": [f.get("path") for f in j.get("files") or [] if isinstance(f, dict)]}
+              "ci_status": ci_state(j.get("statusCheckRollup")), "files": pr_files(ctx, j)}
 
 
 def branch_sha(ctx):
@@ -774,6 +833,8 @@ def read_fact(ctx, fact):
             raise Unknown("lector sin soporte para " + fact)
         return ctx.pr[attr]
     if ent == "Branch":
+        if ctx.repo != ctx.inst:
+            raise Unknown("la rama se lee del git local y el objetivo es otro repo (%s)" % ctx.repo)
         b = ctx.target.get("branch")
         sha_ = branch_sha(ctx) if b else None
         if not b or sha_ is None:
@@ -783,8 +844,12 @@ def read_fact(ctx, fact):
         if attr == "head_sha":
             return sha_
         if attr == "ci_status":
-            j = gh_json(["run", "list", "--repo", ctx.repo, "--branch", b, "--limit", "1", "--json", "status,conclusion"])
-            return ci_state(j) if isinstance(j, list) and j else "none"
+            # todas las ejecuciones del head exacto, no la ultima de cualquier workflow ni de otro commit
+            j = gh_json(["run", "list", "--repo", ctx.repo, "--branch", b, "--commit", sha_, "--limit", "200",
+                         "--json", "status,conclusion"])
+            if not isinstance(j, list):
+                raise Unknown("gh run list no devolvio una lista")
+            return ci_state(j)
     raise Unknown("lector sin soporte para " + fact)
 
 
@@ -796,10 +861,13 @@ def step12_readers(ctx):
     read_pr(ctx)
     pre = all_preconditions(ctx)
     if pre:
-        opath = os.path.join(ctx.root, "contracts", "ontology", "savia-operational.yaml")
+        # la ontologia que decide la propiedad de los hechos es la de origin/main, no la del arbol de trabajo
+        _, blob = base_blob(ctx.root, ONTOLOGY_REL)
+        if blob is None:
+            raise Unknown("sin ontologia en origin/main")
         try:
-            onto = load_yaml_file(opath)
-        except (OSError, ValueError):
+            onto = yaml_load(blob.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
             raise Unknown("ontologia ilegible")
         owners = {}
         for tn, t in (onto.get("types") or {}).items():
@@ -831,11 +899,15 @@ def holds(p, value):
 
 def step13_preconditions(ctx):
     for p in all_preconditions(ctx):
+        if not isinstance(p, dict) or p.get("fact") not in ctx.facts:
+            raise Unknown("precondicion sin hecho leido: %s" % (p.get("fact") if isinstance(p, dict) else p))
         if not holds(p, ctx.facts[p["fact"]]):
             raise Deny("PRECONDITION_FAILED:%s" % p.get("id"), p.get("message") or "no se cumple %s" % p.get("id"))
 
 
 def step14_effects(ctx):
+    if ctx.descriptor is None:  # defensa en profundidad: sin descriptor verificado no hay decision
+        raise Unknown("ningun descriptor de capacidad cargado")
     eff = set(ctx.descriptor.get("declared_effects") or [])
     extra = ctx.req["action"].get("effects") or []
     ctx.action_effects = sorted(eff | set(extra))
@@ -845,11 +917,13 @@ def step14_effects(ctx):
 
 
 def agent_level(ctx):
-    p = os.path.join(ctx.root, "docs", "rules", "domain", "agent-permission-levels.md")
+    # de origin/main: el agente no puede subirse de nivel editando su arbol de trabajo
+    _, blob = base_blob(ctx.root, LEVELS_REL)
+    if blob is None:
+        raise Unknown("agent-permission-levels.md ausente en origin/main")
     try:
-        with open(p, encoding="utf-8") as f:
-            txt = f.read()
-    except OSError:
+        txt = blob.decode("utf-8")
+    except UnicodeDecodeError:
         raise Unknown("agent-permission-levels.md ilegible")
     name = ctx.req["delegate"]
     for cand in (name, name.split(":")[0]):
@@ -862,6 +936,9 @@ def agent_level(ctx):
 def tier_of(ctx):
     if ctx.pr is None:
         raise Unknown("la puerta de tier necesita un PR en el objetivo")
+    if any(re.search(r"\s", f) for f in ctx.pr["files"]):
+        # risk-tier.py trocea --diff por espacios: una ruta con espacios se clasificaria mal
+        raise Unknown("ruta con espacios en el PR: risk-tier.py no la clasifica de forma fiable")
     try:
         r = run([sys.executable, "-I", os.path.join(SELF_ROOT, "scripts", "risk-tier.py"),
                  "--diff", " ".join(ctx.pr["files"]), "--json"])
@@ -911,6 +988,12 @@ def step17_action(ctx):
 
 
 def step18_state(ctx):
+    try:
+        age = ctx.now - parse_ts(ctx.prior.get("evaluated_at"))
+    except ValueError:
+        raise Deny("STATE_CHANGED", "recibo previo sin evaluated_at valido")
+    if age < datetime.timedelta(0) or age > PRIOR_MAX_AGE:
+        raise Deny("STATE_CHANGED", "recibo previo fuera de plazo (%s)" % ctx.prior.get("evaluated_at"))
     if ctx.prior.get("state_digest") != state_digest(ctx):
         raise Deny("STATE_CHANGED", "el estado cambio entre evaluar y ejecutar")
 
@@ -1100,7 +1183,7 @@ def main(argv, stdin_text):
     return 2, ""
 
 
-if __name__ == "__main__":
+def cli():
     try:
         data = sys.stdin.read() if sys.argv[1:2] in (["evaluate"], ["recheck"]) else ""
         code, out = main(sys.argv[1:], data)
@@ -1112,3 +1195,7 @@ if __name__ == "__main__":
     if out:
         print(out)
     sys.exit(code)
+
+
+if __name__ == "__main__":
+    cli()
