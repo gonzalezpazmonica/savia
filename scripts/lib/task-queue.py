@@ -36,6 +36,12 @@ Usage (CLI):
   etiqueta: el ejecutor que consuma `dequeue` DEBE comprobarla antes de
   ejecutar el efecto; la cola no lo hace (identidad atada: SE-514).
 
+  SE-513 S2 — promoción por regla (solo lectura, sin almacén nuevo):
+  python3 scripts/lib/task-queue.py promote <queue> [--json]
+  Cada cambio admitido sube a LOCAL, COORDINACION o HUMANO leyendo SOLO campos
+  estructurados (origen, tipo, estado, efecto, dependencias y acl del trabajo);
+  el texto libre nunca cuenta. Ante entrada inesperada se queda en LOCAL.
+
 Programmatic (sourced from other Python):
   from task_queue import TaskQueue
   q = TaskQueue("se074-orchestrator")
@@ -129,6 +135,12 @@ LABELS = {ADMITTED: "ADMITIDO", APPLIED: "APLICADO", UNKNOWN: "NO SÉ", CONTEXT:
 MAX_BUMP = 1000
 
 
+# SE-513 S2 — niveles de promoción. Orden: LOCAL < COORDINACION < HUMANO.
+LOCAL, COORD, HUMAN = "LOCAL", "COORDINACION", "HUMANO"
+UNKNOWN_HUMAN_SEC = int(os.environ.get("TASK_QUEUE_UNKNOWN_HUMAN_SEC", "600"))
+HUMAN_PRINCIPAL = "operator"
+
+
 class AdmissionRefused(Exception):
     """La entrada no se admite y no deja rastro (exit 3 en la CLI)."""
 
@@ -171,6 +183,91 @@ def _proof_ok(row: sqlite3.Row, proof: Any) -> bool:
         return False
     pat = re.compile(rf"#{row['seq']}(?!\d)")
     return any(isinstance(step, str) and pat.search(step) for step in plan)
+
+
+def _job_info(job: Any) -> dict | None:
+    """Campos estructurados de un trabajo; None si la fila o su payload no son legibles."""
+    try:
+        status, worker, raw = job["status"], job["worker"], job["payload"]
+        payload = json.loads(raw) if raw else {}
+    except (KeyError, TypeError, IndexError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    deps, acl = payload.get("depends_on"), payload.get("acl")
+    if deps is not None and not (isinstance(deps, list) and all(isinstance(d, str) for d in deps)):
+        return None
+    if acl is not None and not (isinstance(acl, list) and all(isinstance(a, str) and a for a in acl)):
+        return None
+    principal = worker or payload.get("owner")
+    return {"status": status, "deps": deps or [], "acl": acl,
+            "principal": principal if isinstance(principal, str) and principal else None}
+
+
+def promote(event: Any, jobs: dict[str, Any], now: float | None = None) -> dict:
+    """Regla de promoción de un cambio admitido (SE-513 S2). Pura: no escribe nada.
+
+    LOCAL        detalle del propio trabajo; no sale de su dueño.
+    COORDINACION afecta a trabajos que dependen de él (depends_on) y cambia su orden/texto
+                 o no hay prueba de aplicación; solo se avisa a quien figura en el `acl`
+                 del trabajo afectado.
+    HUMANO       necesita a la persona: efecto con permiso pendiente, UNKNOWN sin resolver
+                 tras UNKNOWN_HUMAN_SEC, o coordinación necesaria sin nadie autorizado a recibirla.
+
+    Solo se leen campos estructurados; el texto libre (p. ej. «URGENTE» de un tercero)
+    no influye. Fail-closed: origen no autenticado, tipo no `change`, estado cerrado,
+    trabajo ilegible/ausente/cerrado o `acl` ausente o mal formado → LOCAL, sin audiencia
+    añadida.
+    """
+    def out(level: str, why: str, audience: list[str] | None = None, withheld: int = 0) -> dict:
+        return {"level": level, "reason": why, "audience": sorted(set(audience or [])),
+                "withheld": withheld}
+
+    try:
+        origin, kind, state = event["origin"], event["kind"], event["state"]
+        job_id, created = event["job_id"], event["created_at"]
+        bump, set_text = event["bump"], event["set_text"]
+        eff_perm, owner = event["effect_permission"], event["owner"]
+    except (KeyError, TypeError, IndexError):
+        return out(LOCAL, "evento ilegible")
+    if origin not in AUTH_ORIGINS or kind != "change":
+        return out(LOCAL, "contexto: no es una orden autenticada")
+    if state not in (ADMITTED, UNKNOWN):
+        return out(LOCAL, "ya resuelto")
+    if not isinstance(job_id, str) or not isinstance(jobs, dict) or job_id not in jobs:
+        return out(LOCAL, "trabajo desconocido")
+    info = _job_info(jobs[job_id])
+    if info is None or info["status"] not in ("pending", "running"):
+        return out(LOCAL, "trabajo ilegible o cerrado")
+    now = time.time() if now is None else now
+    if not isinstance(created, (int, float)) or isinstance(created, bool) or created > now:
+        age = None
+    else:
+        age = now - created
+    if eff_perm == "PENDING":
+        return out(HUMAN, "efecto pendiente de permiso", [HUMAN_PRINCIPAL])
+    if state == UNKNOWN and age is not None and age >= UNKNOWN_HUMAN_SEC:
+        return out(HUMAN, "sin prueba de aplicación pasado el plazo", [HUMAN_PRINCIPAL])
+    if not (bump or set_text is not None or state == UNKNOWN):
+        return out(LOCAL, "sin efecto sobre otros trabajos")
+    dependents = []
+    for jid, j in jobs.items():
+        ji = _job_info(j)
+        if ji is not None and ji["status"] in ("pending", "running") and job_id in ji["deps"]:
+            dependents.append(ji["principal"])
+    if not any(dependents):
+        return out(LOCAL, "nadie con dueño depende de este trabajo")
+    if info["acl"] is None:
+        return out(LOCAL, "sin acl: no se avisa a nadie más")
+    allowed = set(info["acl"])
+    targets = {p for p in dependents if p and p != owner}
+    audience = sorted(targets & allowed)
+    withheld = len(targets - allowed)
+    if audience:
+        return out(COORD, "otros trabajos dependen de este", audience, withheld)
+    if targets or withheld:
+        return out(HUMAN, "coordinación necesaria sin destinatario autorizado", [HUMAN_PRINCIPAL], withheld)
+    return out(LOCAL, "los dependientes son del mismo dueño")
 
 
 class TaskQueue:
@@ -475,6 +572,18 @@ class TaskQueue:
                                     "ORDER BY seq", (self.name, ADMITTED, UNKNOWN)).fetchall()
         return [dict(r) for r in rows]
 
+    def promotions(self, now: float | None = None) -> list[dict]:
+        """Nivel de promoción de cada cambio abierto. Solo lectura sobre la misma cola."""
+        with self._conn() as conn:
+            jobs = {r["id"]: dict(r) for r in conn.execute(
+                "SELECT id, status, worker, payload FROM jobs WHERE queue=?", (self.name,))}
+        out = []
+        for c in self.changes():
+            res = promote(c, jobs, now)
+            res["id"] = c["seq"]
+            out.append(res)
+        return out
+
     def list_jobs(self, status: str | None = None, limit: int = 50) -> list[dict]:
         with self._conn() as conn:
             if status:
@@ -518,6 +627,7 @@ def _cli() -> int:
     ad.add_argument("--set-text", default=None); ad.add_argument("--owner", default=None)
     ad.add_argument("--signal", default="plan", choices=["plan", "none"])
     ad.add_argument("--key", default=None)
+    pr = sp.add_parser("promote"); pr.add_argument("queue"); pr.add_argument("--json", action="store_true")
     pu = sp.add_parser("pull"); pu.add_argument("queue"); pu.add_argument("--owner", required=True)
     ak = sp.add_parser("ack"); ak.add_argument("queue"); ak.add_argument("id", type=int)
     ak.add_argument("--plan-proof", default=None)
@@ -578,6 +688,13 @@ def _cli() -> int:
             print(json.dumps(q.pull(args.owner), ensure_ascii=False))
         except ValueError as ex:
             print(f"ERROR: {ex}", file=sys.stderr); return 2
+    elif args.cmd == "promote":
+        rows = q.promotions()
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False)); return 0
+        for r in rows:
+            aud = ",".join(r["audience"]) or "-"
+            print(f"#{r['id']:<6} {r['level']:<13} audiencia={aud} ({r['reason']})")
     elif args.cmd == "changes":
         rows = q.changes(args.all)
         if args.json:
