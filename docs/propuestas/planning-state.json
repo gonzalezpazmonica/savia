@@ -1719,9 +1719,9 @@
       "F"
     ],
     "wip_limit": {
-      "savia_implementing": 5,
+      "savia_implementing": 6,
       "labs_active": 1,
-      "note": "Temporal (addendum ADR-002, 2026-10-03): 4.º hueco solo para Savia Space (SE-428); vuelve a 3 al cerrar Space 0.2 · Excepción 2026-11-09 (operadora, pregunta interactiva: «Excepción: 5 en curso»): 5.º hueco solo para SE-511 S1; vuelve a 4 al cerrar S1."
+      "note": "Temporal (addendum ADR-002, 2026-10-03): 4.º hueco solo para Savia Space (SE-428); vuelve a 3 al cerrar Space 0.2 · Excepción 2026-11-09 (operadora, pregunta interactiva: «Excepción: 5 en curso»): 5.º hueco solo para SE-511 S1; vuelve a 4 al cerrar S1 · Excepción 2026-11-10 (operadora, pregunta interactiva: «Excepción para SE-488 (Recommended)»): 6.º hueco solo para SE-488 S1; el límite general sigue en 5 y vuelve a él al cerrar S1."
     },
     "deadlines": "none",
     "prioritization": {
@@ -1758,6 +1758,11 @@
           "on": "2026-11-09",
           "requested_by": "operadora, pregunta interactiva («Excepción: 5 en curso»)",
           "change": "WIP temporal a 5 para poner SE-511 S1 en curso sin sacar ninguna iniciativa; vuelve a 4 al cerrar S1. SE-511 pasa a IMPLEMENTING tras confirmar el prototipo S0."
+        },
+        {
+          "on": "2026-11-10",
+          "requested_by": "operadora, pregunta interactiva («Excepción para SE-488 (Recommended)»)",
+          "change": "WIP temporal a 6 para poner SE-488 S1 en curso como sexta IMPLEMENTING por excepción expresa; el límite general sigue en 5. AC-7 (prueba real con la App) pendiente: ningún consumidor se conecta sin ella."
         }
       ]
     },
