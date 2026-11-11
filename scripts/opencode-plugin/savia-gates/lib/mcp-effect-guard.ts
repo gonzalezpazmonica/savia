@@ -30,11 +30,12 @@ export interface McpVerdict {
   reason: string
 }
 
-const WEB: Record<string, string> = { webfetch: "WebFetch", websearch: "WebSearch" }
+/** Tools del motor que sacan datos fuera: `codesearch` manda la consulta a un servicio externo, como WebSearch. */
+const WEB: Record<string, string> = { webfetch: "WebFetch", websearch: "WebSearch", codesearch: "WebSearch" }
 
 /** Tools propias del motor de OpenCode (vocabulario v1, en minúsculas). Fuera de esta lista, todo es candidato a MCP. */
 export const NATIVE_TOOLS = new Set(["bash", "edit", "write", "read", "glob", "grep", "list", "ls", "task", "multiedit",
-  "notebookedit", "todowrite", "todoread", "patch", "apply_patch", "skill", "question", "lsp", "codesearch", "invalid",
+  "notebookedit", "todowrite", "todoread", "patch", "apply_patch", "skill", "question", "lsp", "invalid",
   "batch", "plan_enter", "plan_exit"])
 /** Servidor ficticio para tools no nativas que no se pueden atribuir a ningún servidor declarado. */
 export const UNRESOLVED_SERVER = "opencode-unresolved"
@@ -52,16 +53,34 @@ export function catalogName(tool: string, servers: string[]): string | null {
   if (tool === "WebFetch" || tool === "WebSearch") return tool
   const lower = tool.toLowerCase()
   if (Object.hasOwn(WEB, lower)) return WEB[lower]
-  if (NATIVE_TOOLS.has(lower)) return null
-  // El servidor más largo primero: `savia-vaults_x` no debe leerse como servidor `savia`.
+  // Los servidores declarados van antes que la lista nativa: un servidor `apply` con tool `patch` da
+  // `apply_patch`, que no debe pasar como nativa. El servidor más largo primero: `savia-vaults_x` no es `savia`.
   for (const server of [...servers].sort((a, b) => b.length - a.length)) {
     const prefix = `${sanitize(server)}_`
     if (tool.startsWith(prefix) && tool.length > prefix.length) return `mcp__${server}__${tool.slice(prefix.length)}`
   }
+  if (NATIVE_TOOLS.has(lower)) return null
   return `mcp__${UNRESOLVED_SERVER}__${tool}`
 }
 
-/** JSONC → JSON: quita comentarios `//` y `/* *\/` fuera de cadenas y comas finales antes de `}` o `]`. */
+/** Índice del primer carácter significativo desde `i` (salta espacios y comentarios). */
+function skipBlank(text: string, i: number): number {
+  while (i < text.length) {
+    if (/\s/.test(text[i])) i++
+    else if (text.startsWith("//", i)) {
+      while (i < text.length && text[i] !== "\n") i++
+    } else if (text.startsWith("/*", i)) {
+      const end = text.indexOf("*/", i + 2)
+      i = end < 0 ? text.length : end + 2
+    } else break
+  }
+  return i
+}
+
+/**
+ * JSONC → JSON en un solo recorrido: quita comentarios `//` y `/* *\/` y comas finales antes de `}` o `]`, siempre
+ * fuera de cadenas (una cadena con `, ]` o `//` dentro queda intacta).
+ */
 export function stripJsonc(text: string): string {
   let out = ""
   let i = 0
@@ -72,17 +91,16 @@ export function stripJsonc(text: string): string {
       while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1
       out += text.slice(i, j + 1)
       i = j + 1
-    } else if (c === "/" && text[i + 1] === "/") {
-      while (i < text.length && text[i] !== "\n") i++
-    } else if (c === "/" && text[i + 1] === "*") {
-      const end = text.indexOf("*/", i + 2)
-      i = end < 0 ? text.length : end + 2
+    } else if (text.startsWith("//", i) || text.startsWith("/*", i)) {
+      i = skipBlank(text, i)
+    } else if (c === "," && (text[skipBlank(text, i + 1)] === "}" || text[skipBlank(text, i + 1)] === "]")) {
+      i++
     } else {
       out += c
       i++
     }
   }
-  return out.replace(/,(\s*[}\]])/g, "$1")
+  return out
 }
 
 function serversIn(file: string): string[] {
@@ -95,9 +113,13 @@ function serversIn(file: string): string[] {
   }
 }
 
-/** Servidores MCP declarados: opencode.json[c] del proyecto, de .opencode/, del usuario y el de OPENCODE_CONFIG. */
+/**
+ * Servidores MCP declarados: opencode.json[c] del proyecto, de .opencode/, del usuario, de OPENCODE_CONFIG_DIR y el
+ * de OPENCODE_CONFIG. Un servidor con `enabled: false` cuenta igual: sobra una pregunta, no falta ninguna.
+ */
 export function mcpServers(root: string, env: Record<string, string | undefined> = process.env): string[] {
   const dirs = [root, join(root, ".opencode"), join(env.HOME || homedir(), ".config/opencode")]
+  if (env.OPENCODE_CONFIG_DIR) dirs.push(env.OPENCODE_CONFIG_DIR)
   const files = dirs.flatMap((d) => [join(d, "opencode.json"), join(d, "opencode.jsonc")])
   if (env.OPENCODE_CONFIG) files.push(env.OPENCODE_CONFIG)
   return [...new Set(files.flatMap(serversIn))]

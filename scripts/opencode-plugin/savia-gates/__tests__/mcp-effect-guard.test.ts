@@ -102,6 +102,35 @@ test("stripJsonc respeta // dentro de cadenas", () => {
   expect(JSON.parse(stripJsonc('{"a": "https://x.test//y", // c\n"b": [1,],}'))).toEqual({ a: "https://x.test//y", b: [1] })
 })
 
+test("revisión #1525 P2: stripJsonc no toca comas seguidas de cierre dentro de cadenas", () => {
+  expect(JSON.parse(stripJsonc('{"a": "x, ]", "b": "y,}", "c": [1, /* c */ ], }'))).toEqual({ a: "x, ]", b: "y,}", c: [1] })
+  // negativo: una coma que no es final se conserva
+  expect(JSON.parse(stripJsonc('{"a": [1, 2]}'))).toEqual({ a: [1, 2] })
+})
+
+test("revisión #1525 P2: un servidor declarado gana a la lista nativa (apply + patch ≠ apply_patch nativa)", () => {
+  expect(catalogName("apply_patch", ["apply"])).toBe("mcp__apply__patch")
+  expect(catalogName("plan_enter", ["plan"])).toBe("mcp__plan__enter")
+  // negativo: sin ese servidor declarado, la tool nativa sigue sin decisión
+  expect(catalogName("apply_patch", ["github"])).toBeNull()
+})
+
+test("revisión #1525 P2: codesearch de OpenCode saca la consulta fuera → se trata como WebSearch", () => {
+  expect(catalogName("codesearch", [])).toBe("WebSearch")
+  expect(catalogName("codesearch", ["github"])).toBe("WebSearch")
+})
+
+test("revisión #1525 P2: mcpServers lee OPENCODE_CONFIG_DIR", async () => {
+  const root = await mkdtemp(join(tmpdir(), "se508-cfgdir-"))
+  dirs.push(root)
+  const cfg = join(root, "cfg")
+  await mkdir(cfg)
+  await writeFile(join(cfg, "opencode.json"), JSON.stringify({ mcp: { gitlab: {} } }))
+  expect(mcpServers(root, { HOME: root, OPENCODE_CONFIG_DIR: cfg })).toEqual(["gitlab"])
+  // negativo: sin la variable, el directorio no se lee
+  expect(mcpServers(root, { HOME: root })).toEqual([])
+})
+
 test("revisión #1525 P2: productionEnv quita la inyección de tests y conserva lo demás", () => {
   const e = productionEnv({ PATH: "/bin", SAVIA_MCP_GUARD_TEST: "1", SAVIA_MCP_GUARD_TEST_REMOTE: "file:///x",
     SAVIA_MCP_GUARD_TEST_TODAY: "2026-01-01", BATS_TEST_FILENAME: "x.bats", SAVIA_RUN_ID: "r" })
