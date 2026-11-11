@@ -144,3 +144,31 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }
+
+@test "ronda 5 codex P1-1: PR sin headRefOid, vacío, no hexadecimal o no textual -> UNKNOWN_STATE; con sha -> ALLOW" {
+  run $F pr-head-sha
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 5 codex P1-2: en pr.merge, Branch.head_sha es la cabeza real del PR; un pin al commit local con otra cabeza -> PRECONDITION_FAILED" {
+  run $F pr-branch-facts
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 5 codex P2-3: un JSON sin firma con authority.level no textual no tumba otro contrato válido; check-contract da FAIL" {
+  run $F broken-catalog
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
+
+@test "ronda 5 codex P2-4: ninguna batería ejecuta el kernel sin overrides fuera de la sonda hermética (home y raíz temporales)" {
+  # el kernel real o el envoltorio sin SAVIA_AUTHORITY_TEST resuelven el HOME real: solo vía run_without_overrides
+  run grep -nE '"-I", REAL_KERNEL|(del |pop\()env\[?\(?"SAVIA_AUTHORITY_TEST"' tests/fixtures/se496/review_fixes.py tests/fixtures/se496/ledger_digest_audit.py tests/fixtures/se496/denegaciones.py
+  [ "$status" -eq 1 ]
+  [ -z "$output" ]
+  run grep -c 'run_without_overrides(' tests/fixtures/se496/review_fixes.py tests/fixtures/se496/ledger_digest_audit.py
+  [[ "$output" == *"review_fixes.py:1"* ]]
+  [[ "$output" == *"ledger_digest_audit.py:1"* ]]
+}

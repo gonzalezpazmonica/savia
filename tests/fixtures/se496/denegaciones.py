@@ -52,6 +52,36 @@ def sh(*a, cwd=None, **kw):
     return subprocess.run(a, cwd=cwd, check=True, capture_output=True, **kw)
 
 
+# Fuera de test_mode el kernel resuelve su home por la base de usuarios y su raíz por la ubicación del
+# fichero: invocarlo tal cual escribiría en el audit real y leería las delegaciones reales. Esta sonda
+# ejecuta el programa indicado SIN overrides, pero con la base de usuarios y SELF_ROOT del kernel
+# apuntando a directorios temporales del mundo (no toca nada que el entorno del llamante controle).
+NO_OVERRIDE_PROBE = r"""
+import os, runpy, sys, types
+kdir, script, home, root = sys.argv[1:5]
+sys.argv = [script] + sys.argv[5:]
+sys.path.insert(0, kdir)
+import authority_kernel as k
+k.pwd = types.SimpleNamespace(getpwuid=lambda uid: types.SimpleNamespace(pw_dir=home))
+k.SELF_ROOT = root
+if os.path.realpath(script) == os.path.realpath(k.__file__):
+    k.cli()
+else:
+    runpy.run_path(script, run_name="__main__")
+"""
+
+
+def run_without_overrides(w, script, args, stdin, env):
+    """-> (CompletedProcess, home temporal, raiz temporal). Kernel sin inyeccion, aislado del HOME real."""
+    home = os.path.join(w.t, "no-override-home")
+    root = os.path.join(w.t, "no-override-root")
+    os.makedirs(home, exist_ok=True)
+    os.makedirs(root, exist_ok=True)
+    r = subprocess.run([sys.executable, "-I", "-c", NO_OVERRIDE_PROBE, os.path.dirname(REAL_KERNEL), script,
+                        home, root] + list(args), input=stdin.encode(), capture_output=True, env=env)
+    return r, home, root
+
+
 class World:
     def __init__(self, inproc=False):
         self.inproc = inproc

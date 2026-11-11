@@ -519,7 +519,8 @@ def contract_errors(c, root=None, raw=None):
     if "max_uses" in c and (not isinstance(mu, int) or isinstance(mu, bool) or mu < 1):
         errs.append("BAD_MAX_USES")
     auth = c.get("authority")
-    if "authority" in c and not (isinstance(auth, dict) and auth.get("level") in LEVELS
+    if "authority" in c and not (isinstance(auth, dict) and isinstance(auth.get("level"), str)
+                                 and auth["level"] in LEVELS
                                  and isinstance(auth.get("tier"), int) and 1 <= auth["tier"] <= 4):
         errs.append("BAD_AUTHORITY")
     if raw is not None:
@@ -872,6 +873,7 @@ def step11_uses(ctx):
 
 
 RUN_LIMIT = 200
+SHA_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 PR_FIELDS = "isDraft,headRefName,headRefOid,reviewDecision,state,statusCheckRollup,files,changedFiles"
 
 
@@ -927,7 +929,11 @@ def read_pr(ctx):
     if b is not None and head_ref != b:
         # el ambito se comprobo sobre target.branch, que declara quien pide: tiene que ser la rama real del PR
         raise Deny("OUT_OF_SCOPE", "el PR %d es de la rama %s, no de %s" % (ctx.target["pr"], head_ref, b))
-    ctx.pr = {"is_draft": j.get("isDraft"), "head_ref": j.get("headRefName"), "head_sha": j.get("headRefOid"),
+    head_sha = j.get("headRefOid")
+    if not isinstance(head_sha, str) or not SHA_RE.fullmatch(head_sha):
+        # sin el commit exacto el digest no ata la cabeza: sustituirla entre evaluate y recheck no se notaria
+        raise Unknown("gh no informa headRefOid del PR (sha del commit)")
+    ctx.pr = {"is_draft": j.get("isDraft"), "head_ref": head_ref, "head_sha": head_sha,
               "review_decision": j.get("reviewDecision"), "state": j.get("state"),
               "ci_status": ci_state(j.get("statusCheckRollup")), "files": pr_files(ctx, j)}
 
@@ -939,6 +945,15 @@ def branch_sha(ctx):
         if r.returncode == 0:
             return r.stdout.decode().strip()
     return None
+
+
+def fact_head(ctx):
+    """Commit sobre el que se leen los hechos Branch.*: el que recibe el efecto. Si la accion publica la rama
+    local (parametro branch), su commit local; si opera sobre un PR, la cabeza real del PR (headRefOid), o una
+    precondicion firmada sobre el commit podria comprobar uno y fusionarse otro."""
+    if ctx.pr is not None and "branch" not in (ctx.req["action"].get("params") or {}):
+        return ctx.pr["head_sha"]
+    return branch_sha(ctx)
 
 
 def read_fact(ctx, fact):
@@ -955,7 +970,7 @@ def read_fact(ctx, fact):
         if ctx.repo != ctx.inst:
             raise Unknown("la rama se lee del git local y el objetivo es otro repo (%s)" % ctx.repo)
         b = ctx.target.get("branch")
-        sha_ = branch_sha(ctx) if b else None
+        sha_ = fact_head(ctx) if b else None
         if not b or sha_ is None:
             raise Unknown("la rama del objetivo no existe: " + fact)
         if attr == "name":

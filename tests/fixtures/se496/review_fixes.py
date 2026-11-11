@@ -11,7 +11,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from denegaciones import INSTALL, NOW, REAL_KERNEL, World  # noqa: E402
+from denegaciones import INSTALL, KERNEL, NOW, REAL_KERNEL, World, run_without_overrides  # noqa: E402
 
 TESTS = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(TESTS, "helpers"))
@@ -55,13 +55,14 @@ def fx_env_bypass():
     env = w.env()
     env.update({"SAVIA_AUTHORITY_TEST": "1", "SAVIA_AUTHORITY_TOOL_SSH_KEYGEN": "/bin/true",
                 "SAVIA_AUTHORITY_PROFILE": os.path.join(w.root, ".claude", "profiles", "active-user.md")})
-    r = subprocess.run([sys.executable, "-I", REAL_KERNEL, "evaluate"], input=json.dumps(w.request()).encode(),
-                       capture_output=True, env=env)
+    r, home, _ = run_without_overrides(w, REAL_KERNEL, ["evaluate"], json.dumps(w.request()), env)
     o = json.loads(r.stdout) if r.stdout.strip() else {}
     if r.returncode == 0 or reason(o) != "NO_CONTRACT":
         bad.append("kernel real honra overrides del entorno: rc=%s %s" % (r.returncode, reason(o)))
     if o.get("evaluated_at") == NOW:
         bad.append("kernel real usa el reloj del entorno")
+    if not os.path.isfile(os.path.join(home, ".savia", "authority", "audit.jsonl")):
+        bad.append("el audit no quedo en el home temporal de la sonda (aislamiento roto)")
     w.close()
     return bad
 
@@ -439,7 +440,7 @@ L4_DELEGATE = "commit-guardian"  # L4 en agent-permission-levels.md: pr.merge ex
 def _merge_world(pr, branches=True, extra_pre=None, drop=None):
     """pr.merge del PR 7 con un delegado L4 y contrato tier 2 (el PR de docs es tier 1)."""
     w = World(inproc=INPROC)
-    w.set_pr(7, **pr)
+    w.set_pr(7, **(pr(w) if callable(pr) else pr))
     if drop:
         p = os.path.join(w.fake, "pr-7.json")
         d = json.load(open(p))
@@ -453,7 +454,7 @@ def _merge_world(pr, branches=True, extra_pre=None, drop=None):
     over = {"cap": "pr.merge", "delegate": L4_DELEGATE, "declared_effects": ["pr.merge"], "scope": scope,
             "authority": {"level": "L4", "tier": 2}, "max_uses": 1}
     if extra_pre:
-        over["preconditions"] = extra_pre
+        over["preconditions"] = extra_pre(w) if callable(extra_pre) else extra_pre
     w.contract(**over)
     rc, out = w.ev(w.request(delegate=L4_DELEGATE, capability="pr.merge",
                              action={"name": "pr.merge", "params": {"pr_number": 7}}, target=target))
@@ -576,13 +577,74 @@ def fx_error_audited():
     return bad
 
 
+# ---------------------------------------------------------------- ronda 5 (codex refutacion P1-1, P1-2, P2-3)
+def _local_sha(w):
+    return subprocess.run(["git", "-C", w.root, "rev-parse", "refs/heads/agent/work"],
+                          capture_output=True).stdout.decode().strip()
+
+
+def fx_pr_head_sha():
+    """Sin headRefOid (o con uno que no es un sha) el PR no tiene identidad de commit: UNKNOWN_STATE."""
+    bad = []
+    _case(bad, "PR con headRefOid (control)", _merge_world({"isDraft": False}), (0, "OK"))
+    _case(bad, "PR sin headRefOid", _merge_world({"isDraft": False}, drop="headRefOid"), (1, "UNKNOWN_STATE"))
+    _case(bad, "headRefOid vacio", _merge_world({"isDraft": False, "headRefOid": ""}), (1, "UNKNOWN_STATE"))
+    _case(bad, "headRefOid no hexadecimal", _merge_world({"isDraft": False, "headRefOid": "z" * 40}),
+          (1, "UNKNOWN_STATE"))
+    _case(bad, "headRefOid no textual", _merge_world({"isDraft": False, "headRefOid": 7}), (1, "UNKNOWN_STATE"))
+    return bad
+
+
+def fx_pr_branch_facts():
+    """En una accion sobre el PR (sin publicar la rama local) los hechos Branch.* se leen de la cabeza real
+    del PR: un pin firmado sobre el commit local no autoriza fusionar otra cabeza."""
+    bad = []
+    b = "b" * 40
+
+    def pin(value):
+        return lambda w: [{"id": "pin", "fact": "Branch.head_sha", "op": "==", "value": value(w)}]
+    _case(bad, "pin a la cabeza del PR (control)",
+          _merge_world({"isDraft": False, "headRefOid": b}, extra_pre=pin(lambda w: b)), (0, "OK"))
+    _case(bad, "pin al commit local con el PR en otra cabeza",
+          _merge_world({"isDraft": False, "headRefOid": b}, extra_pre=pin(_local_sha)), (1, "PRECONDITION_FAILED:pin"))
+    _case(bad, "pin al commit local y el PR en ese commit (control)",
+          _merge_world(lambda w: {"isDraft": False, "headRefOid": _local_sha(w)}, extra_pre=pin(_local_sha)),
+          (0, "OK"))
+    return bad
+
+
+def fx_broken_catalog():
+    """Un JSON sin firma con tipos rotos en el catalogo no tumba la evaluacion de otro contrato valido."""
+    bad = []
+    for label, junk in (("level lista", {"authority": {"level": [], "tier": 1}}),
+                        ("level objeto", {"authority": {"level": {}, "tier": 1}}),
+                        ("schema lista", {"schema": []}),
+                        ("control sin basura", None)):
+        w = World(inproc=INPROC)
+        if junk is not None:
+            with open(os.path.join(w.root, "config", "delegations", "000.json"), "w") as f:
+                json.dump(junk, f)
+        w.contract()
+        rc, out = w.ev(w.request())
+        _case(bad, label, (rc, reason(out)), (0, "OK"))
+        if junk is not None:
+            r = subprocess.run([sys.executable, "-I", KERNEL, "check-contract",
+                                os.path.join(w.root, "config", "delegations", "000.json")],
+                               capture_output=True, env=w.env())
+            if r.returncode != 1 or b"FAIL" not in r.stdout:
+                bad.append("%s: check-contract rc=%s %s" % (label, r.returncode, r.stdout[:120]))
+        w.close()
+    return bad
+
+
 FIXES = {"env-bypass": fx_env_bypass, "tier-files": fx_tier_files, "level-main": fx_level_from_main,
          "ontology-main": fx_ontology_from_main, "ci-head": fx_ci_head, "branch-repo": fx_branch_other_repo,
          "prior-age": fx_prior_age, "merge-pre": fx_merge_preconditions, "mutation-crash": fx_mutation_crash,
          "params-scope": fx_params_scope, "ci-skipped": fx_ci_skipped, "runs-limit": fx_runs_limit,
          "contract-invariants": fx_contract_invariants, "params-types-level": fx_params_types_level,
          "pr-branch": fx_pr_branch, "pr-branch-sha": fx_pr_branch_sha, "absent-typed-facts": fx_absent_typed_facts,
-         "home-real": fx_home_real, "error-audited": fx_error_audited}
+         "home-real": fx_home_real, "error-audited": fx_error_audited, "pr-head-sha": fx_pr_head_sha,
+         "pr-branch-facts": fx_pr_branch_facts, "broken-catalog": fx_broken_catalog}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in FIXES:

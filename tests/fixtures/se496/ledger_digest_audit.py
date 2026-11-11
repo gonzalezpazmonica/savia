@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from denegaciones import (CASES, INSTALL, KERNEL, MALFORMED, RC_FOR_NEG, World, canon, reason_of,  # noqa: E402
-                     run_case)
+                     run_case, run_without_overrides)
 
 
 def cli(w, args, stdin=""):
@@ -318,13 +318,13 @@ def ex_noenv():
     rc, _ = w.ev(w.request())
     if rc != 0:
         bad.append("el mundo de control no da ALLOW")
-    env = w.env()
-    del env["SAVIA_AUTHORITY_TEST"]
-    r = subprocess.run([sys.executable, "-I", KERNEL, "evaluate"], input=json.dumps(w.request()).encode(),
-                       capture_output=True, env=env)
+    env = {k: v for k, v in w.env().items() if k != "SAVIA_AUTHORITY_TEST"}
+    r, home, _ = run_without_overrides(w, KERNEL, ["evaluate"], json.dumps(w.request()), env)
     out = json.loads(r.stdout) if r.stdout.strip() else {}
     if (r.returncode, out.get("reason")) != (1, "NO_CONTRACT"):
         bad.append("override honrado fuera del modo de pruebas: rc=%s %s" % (r.returncode, out.get("reason")))
+    if not os.path.isfile(os.path.join(home, ".savia", "authority", "audit.jsonl")):
+        bad.append("el audit no quedo en el home temporal de la sonda (aislamiento roto)")
     w.close()
     return bad
 
