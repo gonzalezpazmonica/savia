@@ -12,7 +12,6 @@ tools:
   - Write
   - Edit
   - Glob
-  - Bash
 model_tier: fast
 color: white
 maxTurns: 20
