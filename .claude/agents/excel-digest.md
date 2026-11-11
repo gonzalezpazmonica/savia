@@ -1,12 +1,12 @@
 ---
 name: excel-digest
-permission_level: L2
+permission_level: L3
 description: >
   Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae
   estructura, formulas, patrones de datos y reglas de negocio de spreadsheets. Usa contexto
   REAL del proyecto. Actualiza documentos de contexto vivos. Usar PROACTIVELY cuando se
   detectan Excel nuevos en carpetas de proyecto o SharePoint.
-tools: [Read, Write, Edit, Bash, Glob, Grep, Task]
+tools: [Read, Write, Edit, Bash, Glob, Grep]
 model_tier: heavy
 permissionMode: plan
 maxTurns: 30

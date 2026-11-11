@@ -8,28 +8,3 @@
 # as stale, and tests/test-validate-agent-permissions-excess.bats caps the
 # number of entries. Never add a pair to make CI green.
 # Ordered by impact: Bash, Write, Edit, Task, Skill (effectful tools first).
-context-dome-manager Bash operadora 2026-11-10
-excel-digest Bash operadora 2026-11-10
-legal-compliance Bash operadora 2026-11-10
-memory-agent Bash operadora 2026-11-10
-pdf-digest Bash operadora 2026-11-10
-pptx-digest Bash operadora 2026-11-10
-recommendation-tribunal-orchestrator Bash operadora 2026-11-10
-sdd-spec-writer Bash operadora 2026-11-10
-tech-writer Bash operadora 2026-11-10
-truth-tribunal-orchestrator Bash operadora 2026-11-10
-visual-digest Bash operadora 2026-11-10
-word-digest Bash operadora 2026-11-10
-diagram-architect Write operadora 2026-11-10
-model-upgrade-auditor Write operadora 2026-11-10
-diagram-architect Edit operadora 2026-11-10
-context-dome-manager Task operadora 2026-11-10
-excel-digest Task operadora 2026-11-10
-meeting-digest Task operadora 2026-11-10
-model-upgrade-auditor Task operadora 2026-11-10
-pdf-digest Task operadora 2026-11-10
-pptx-digest Task operadora 2026-11-10
-recommendation-tribunal-orchestrator Task operadora 2026-11-10
-truth-tribunal-orchestrator Task operadora 2026-11-10
-word-digest Task operadora 2026-11-10
-context-dome-manager Skill operadora 2026-11-10
