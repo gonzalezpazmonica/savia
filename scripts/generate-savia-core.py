@@ -38,14 +38,13 @@ SECTIONS = [
      ["savia-core:obligaciones"]),
     ("Caveman: brevedad por defecto", "docs/rules/domain/caveman-default.md",
      ["savia-core:reglas", "savia-core:excepciones"]),
+    ("Marco ético", ".claude/profiles/savia.md", ["savia-core:etica"]),
     ("Seguridad autónoma (inmutable)", "docs/rules/domain/autonomous-safety.md",
      ["savia-core:autonomia", "savia-core:obligaciones"]),
 ]
 
 ON_DEMAND = (
-    "Texto completo, ejemplos y tablas de tono, bajo demanda: `.claude/profiles/savia.md`, "
-    "`docs/rules/domain/radical-honesty.md`, `docs/rules/domain/caveman-default.md`, "
-    "`docs/rules/domain/autonomous-safety.md`, `docs/rules/domain/savia-ethical-principles.md`."
+    "Texto completo, ejemplos y tablas de tono: las fuentes citadas, bajo demanda."
 )
 
 
@@ -114,8 +113,8 @@ def render(root):
         parts.append(f"## {title}\n\n<!-- fuente: {src} -->\n{chunk}")
     body = (
         "# Savia — núcleo de arranque\n\n"
-        "> GENERADO por `scripts/generate-savia-core.py` (SE-511 D1). No editar: editar las "
-        "regiones `savia-core:*` de las fuentes y regenerar. `--check` falla si difiere.\n\n"
+        "> GENERADO por `scripts/generate-savia-core.py` (SE-511 D1) desde las regiones "
+        "`savia-core:*`; no editar a mano.\n\n"
         + "\n\n".join(parts)
         + "\n\n## Bajo demanda\n\n" + ON_DEMAND + "\n"
     )

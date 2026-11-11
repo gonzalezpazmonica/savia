@@ -265,12 +265,14 @@ print(t, (d.get("check") or {}).get("message", ""))' 2>/dev/null) || cf_line=""
     fail "Contexto fijo ($cf_mode): ${cf_msg:-${cf_err:-ERROR: el medidor no devolvió JSON con tokens}} (rc=$cf_rc; bash scripts/context-fixed-measure.sh --$cf_mode --check)"
   fi
   if [[ -n "$cf_line" ]]; then cf_sum=$((cf_sum + cf_tok)); else cf_missing=1; fi
+  # Un modo con rc!=0 no da un total en verde aunque emita cifra (revisión de #1527, P2-3).
+  [[ $cf_rc -eq 0 ]] || cf_missing=1
 done
-# SE-511 D3/AC-3: versionado + hooks <= 5000 tokens (sin cifra, fail-closed)
+# SE-511 D3/AC-3: versionado + hooks <= 5000 tokens (sin cifra o con un modo fallido, fail-closed)
 if [[ $cf_missing -eq 0 && $cf_sum -le 5000 ]]; then
   pass "Contexto fijo total: $cf_sum tokens <= 5000 (SE-511 D3)"
 else
-  fail "Contexto fijo total: ${cf_sum} tokens > 5000 o cifra ausente (SE-511 D3)"
+  fail "Contexto fijo total: ${cf_sum} tokens > 5000, cifra ausente o modo fallido (SE-511 D3)"
 fi
 # SE-511 AC-5/AC-8: bloque savia-core al día y reglas que dependen de hook con gate válido
 if python3 "$ROOT/scripts/generate-savia-core.py" --check >/dev/null 2>&1; then

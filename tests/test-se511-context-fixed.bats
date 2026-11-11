@@ -315,6 +315,9 @@ cur_tokens() { bash "$S" "--$1" --json | jq_py 'd["tokens"]'; }
   CI_BASELINE_DIR="$T/b" run bash "$ROOT/scripts/ci-extended-checks.sh"
   # La línea del gate debe llevar el FAIL del trinquete, no un ERROR de otra causa.
   [[ "$output" == *"❌ Contexto fijo (versioned): FAIL: versionado"*"> baseline 1"* ]]
+  # Revisión de #1527 (P2-3): el modo emite cifra con rc=1; el total no puede salir en verde.
+  [[ "$output" == *"❌ Contexto fijo total:"*"modo fallido"* ]]
+  [[ "$output" != *"✅ Contexto fijo total:"* ]]
 }
 
 @test "negativo AC-4: sin baseline de hooks, el gate y el total fallan cerrados y nombran la causa" {

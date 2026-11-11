@@ -110,6 +110,10 @@ def call(model, sp_text, msg):
 def run(models, reps, workers, raw_path, max_calls, variant="B", only=None):
     cases = json.load(open(os.path.join(HERE, "corpus.json")))["cases"]
     if only:
+        # Un id inexistente (errata) no puede dejar la corrida en cero casos con exit 0 (revisión de #1527).
+        unknown = sorted(set(only) - {c["id"] for c in cases})
+        if unknown:
+            raise SystemExit(f"--cases con ids inexistentes en el corpus: {','.join(unknown)}")
         cases = [c for c in cases if c["id"] in only]
     sp = {v: open(os.path.join(HERE, "variants", f"{v}.md"), encoding="utf-8").read() for v in ("A", variant)}
     done = set()

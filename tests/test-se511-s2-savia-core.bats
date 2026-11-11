@@ -189,6 +189,29 @@ safety_section() {
   [[ "$output" == *"NUNCA crear tareas en backlog"* ]]
 }
 
+# Revisión de seguridad de #1527 (P1-1): el marco ético y sus líneas rojas se cargan en cada turno.
+@test "AC-6: el bloque lleva el marco ético (líneas rojas, rehúsa) generado desde savia.md" {
+  sec="$(sed -n '/^## Marco ético$/,/^## /p' "$CORE")"
+  [[ "$sec" == *"fuente: .claude/profiles/savia.md"* ]]
+  [[ "$sec" == *"5 líneas rojas inmutables"* ]]
+  [[ "$sec" == *"rehúsa y explica"* ]]
+  [[ "$sec" == *"savia-ethical-principles.md"* ]]
+}
+
+@test "negativo AC-6: sin la región savia-core:etica en savia.md el generador falla (fail-closed)" {
+  core_root
+  sed -i '/savia-core:etica/d' "$R/.claude/profiles/savia.md"
+  run env SAVIA_CORE_ROOT="$R" python3 "$GEN" --stdout
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"savia-core:etica"*"ausente"* ]]
+}
+
+# Revisión de seguridad de #1527 (P2-2): dónde guardar datos (N1-N4b) sigue con disparador.
+@test "AC-6: CLAUDE.md conserva el puntero a context-placement y el fichero existe" {
+  grep -qF 'Dónde guardar datos N1-N4b: `docs/rules/domain/context-placement-confirmation.md`' "$ROOT/CLAUDE.md"
+  [ -s "$ROOT/docs/rules/domain/context-placement-confirmation.md" ]
+}
+
 @test "safety: el medidor y el CI son fail-fast (set -uo pipefail)" {
   grep -q '^set -uo pipefail' "$MEASURE"
   grep -q 'set -[eu]*o pipefail' "$ROOT/scripts/ci-extended-checks.sh"
@@ -344,6 +367,21 @@ import test_checks as t; t.test_checks(); t.test_every_case_has_both_outcomes();
   python3 "$ROOT/tests/evals/se511-d4/run.py" analyze --raw "$raw" --out "$BATS_TEST_TMPDIR/b.json" >/dev/null
   cmp "$BATS_TEST_TMPDIR/a.json" "$BATS_TEST_TMPDIR/b.json"
   cmp "$BATS_TEST_TMPDIR/a.json" "$ROOT/tests/evals/se511-d4/results/summary.json"
+}
+
+# Revisión de corrección de #1527 (P2-2): --cases con errata no da una corrida vacía en verde.
+@test "negativo AC-9: run con un id de caso inexistente falla y lo nombra; un id real filtra" {
+  run python3 -c "
+import sys; sys.path.insert(0, '$ROOT/tests/evals/se511-d4'); import run
+run.run(['haiku'], 2, 1, '$BATS_TEST_TMPDIR/raw.jsonl', 0, variant='B2', only=['T01-idioma', 'T99-errata'])"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"inexistentes"*"T99-errata"* ]]
+  [[ "$output" != *"T01-idioma"* ]]
+  run python3 -c "
+import sys; sys.path.insert(0, '$ROOT/tests/evals/se511-d4'); import run
+run.run(['haiku'], 2, 1, '$BATS_TEST_TMPDIR/raw.jsonl', 0, variant='B2', only=['T01-idioma'])"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unidades 4,"* ]]
 }
 
 @test "AC-10: el veredicto prerregistrado REVERT sale cuando el cumplimiento cae más de 5 puntos" {
