@@ -7,8 +7,14 @@
 # D10 p10, T-uses p11, D13 p12, D12 p13, D11 p14, T-level p15, T-tier p16, T-action p17, T-state p18.
 
 setup() {
+  set -o pipefail
   cd "$BATS_TEST_DIRNAME/.."
   X="python3 tests/fixtures/se496/extras.py"
+  TMP=$(mktemp -d -p "$BATS_TEST_TMPDIR")  # bats borra BATS_TEST_TMPDIR al terminar cada test
+}
+
+teardown() {
+  unset TMP
 }
 
 @test "AC-1/AC-2: ontología válida; inferred en precondición, estado sin dueño y acción sin efectos fallan; contratos inválidos con su código" {
@@ -29,19 +35,19 @@ setup() {
   done
 }
 
-@test "AC-3 D01: sin contrato -> NO_CONTRACT" { run $X check D01; [ "$output" = "OK" ]; }
+@test "AC-3 D01: missing contract is rejected -> NO_CONTRACT" { run $X check D01; [ "$output" = "OK" ]; }
 @test "AC-3 D02: revocado en origin/main -> REVOKED" { run $X check D02; [ "$output" = "OK" ]; }
 @test "AC-3 D03: revocado solo en local -> REVOKED" { run $X check D03; [ "$output" = "OK" ]; }
 @test "AC-3 D04/AC-7: revocado entre evaluar y ejecutar -> REVOKED en recheck" { run $X check D04; [ "$output" = "OK" ]; }
-@test "AC-3 D05: fuera de vigencia, límite now==expires_at y antes de not_before" { run $X check D05 D05b D05c; [ "$output" = "OK" ]; }
+@test "AC-3 D05: expired, boundary now==expires_at and before not_before are rejected" { run $X check D05 D05b D05c; [ "$output" = "OK" ]; }
 @test "AC-3 D06: firma alterada, firmante solo en la rama y namespace ajeno -> BAD_SIGNATURE" { run $X check D06 D06b D06c; [ "$output" = "OK" ]; }
-@test "AC-3 D07: sin firma, principal self y principal agente -> SELF_ISSUED (precedencia sobre BAD_SIGNATURE)" { run $X check D07 D07b D07c; [ "$output" = "OK" ]; }
+@test "AC-3 D07: unsigned, invalid principal, principal self y principal agente -> SELF_ISSUED (precedencia sobre BAD_SIGNATURE)" { run $X check D07 D07b D07c; [ "$output" = "OK" ]; }
 @test "AC-3 D08: otro operador y perfil editado -> PRINCIPAL_MISMATCH" { run $X check D08 D08b; [ "$output" = "OK" ]; }
 @test "AC-3 D09: versión distinta y descriptor cambiado tras firmar -> CAPABILITY_MISMATCH" { run $X check D09 D09b; [ "$output" = "OK" ]; }
-@test "AC-3/AC-13 D10: prefijo engañoso, agent/x/y, .., otro repo y otra instalación -> OUT_OF_SCOPE" { run $X check D10 D10b D10c D10d D10e; [ "$output" = "OK" ]; }
+@test "AC-3/AC-13 D10: bad prefix, agent/x/y, .., nonexistent scope, other repo -> OUT_OF_SCOPE" { run $X check D10 D10b D10c D10d D10e; [ "$output" = "OK" ]; }
 @test "AC-3 D11: efecto no declarado en el contrato o aportado por la orden -> UNDECLARED_EFFECT" { run $X check D11 D11b; [ "$output" = "OK" ]; }
 @test "AC-3 D12: CI roja, pendiente, cancelada, rama humana y PR cerrado -> PRECONDITION_FAILED:<id>" { run $X check D12 D12b D12c D12d D12e; [ "$output" = "OK" ]; }
-@test "AC-3/AC-6 D13: gh, origin/main, ssh-keygen o git ausentes -> UNKNOWN_STATE (exit 1, nunca 0)" { run $X check D13 D13b D13c D13d; [ "$output" = "OK" ]; }
+@test "AC-3/AC-6 D13: fail-closed when gh, origin/main, ssh-keygen or git are missing -> UNKNOWN_STATE (exit 1, never 0)" { run $X check D13 D13b D13c D13d; [ "$output" = "OK" ]; }
 @test "AC-3/AC-13 D14: NFD, homoglifo, ramas por mayúsculas, alias y 2 candidatos -> AMBIGUOUS" { run $X check D14 D14b D14c D14d D14e; [ "$output" = "OK" ]; }
 @test "AC-3 precedencia: homoglifo de un proyecto del ámbito -> AMBIGUOUS, no OUT_OF_SCOPE" { run $X check P2; [ "$output" = "OK" ]; }
 @test "AC-3/AC-8 D15: autoridad inferida -> INFERRED_NOT_AUTHORITY con sugerencia; con contrato firmado ALLOW y la misma sugerencia" {
@@ -56,10 +62,10 @@ setup() {
 @test "AC-3 técnico: orden distinta de la evaluada -> ACTION_MISMATCH" { run $X check T-action; [ "$output" = "OK" ]; }
 @test "AC-3 técnico: head_sha nuevo sin romper precondición -> STATE_CHANGED" { run $X check T-state; [ "$output" = "OK" ]; }
 @test "AC-3 técnico: tier 3/4 sin revisión humana -> REQUIRES_APPROVAL REVIEW_REQUIRED (exit 4), con revisión ALLOW" { run $X check T-tier; [ "$output" = "OK" ]; }
-@test "AC-3/AC-6b técnico: entrada malformada -> exit 2 sin decisión" { run $X check T-malformed T-malformed-field; [ "$output" = "OK" ]; }
-@test "AC-3 técnico: max_uses consumido -> evaluate da MAX_USES_EXHAUSTED" { run $X check T-uses; [ "$output" = "OK" ]; }
+@test "AC-3/AC-6b técnico: bad input (malformed, null field) -> exit 2 without decision" { run $X check T-malformed T-malformed-field; [ "$output" = "OK" ]; }
+@test "AC-3 técnico: zero uses left (max_uses spent) -> evaluate is rejected with MAX_USES_EXHAUSTED" { run $X check T-uses; [ "$output" = "OK" ]; }
 
-@test "AC-5 (D04, arnés F0): revocar entre evaluate y recheck deja el marcador sin crear; sin revocar se crea; kernel ausente no ejecuta" {
+@test "AC-5 (D04, arnés F0, fail-closed): revocar entre evaluate y recheck deja el marcador sin crear; sin revocar se crea; kernel ausente no ejecuta" {
   run $X extra harness
   [ "$output" = "OK" ]
 }
@@ -84,13 +90,13 @@ setup() {
   [ "$output" = "OK" ]
 }
 
-@test "AC-9: con el fichero de firmantes vacío todo da DENY" {
+@test "AC-9: empty signers file blocks every delegation (DENY)" {
   run $X extra signers-empty
   [ "$output" = "OK" ]
 }
 
 @test "AC-9: ningún caso lee ni escribe el HOME real" {
-  export HOME="$BATS_TEST_TMPDIR/home-real"
+  export HOME="$TMP/home-real"
   mkdir -p "$HOME"
   run python3 tests/fixtures/se496/battery.py run D01 twin
   [ "$status" -eq 0 ]

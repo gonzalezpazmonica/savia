@@ -18,6 +18,44 @@ def rc_reason(case):
     return rc, b.reason_of(out)
 
 
+def by_step_map():
+    by_step = {}
+    for cid, (want, step, _fn) in b.CASES.items():
+        by_step.setdefault(step, cid)
+    return by_step
+
+
+def one_step(n):
+    """Desactiva solo el paso n: exit 0 si su caso de R5 falla (KILLED), 1 si sobrevive, 2 si n no existe."""
+    orig = list(k.STEPS)
+    idx = [i for i, st in enumerate(orig) if st[0] == n]
+    cid = by_step_map().get(n)
+    if not idx or cid is None:
+        print("paso %s inexistente" % n)
+        return 2
+    i = idx[0]
+    k.STEPS[i] = (n, orig[i][1], lambda ctx: None)
+    try:
+        got = rc_reason(cid)
+    finally:
+        k.STEPS[i] = orig[i]
+    if got[1] == b.CASES[cid][0]:
+        print("SURVIVED paso %d (%s): %s sigue dando %s" % (n, orig[i][1], cid, got[1]))
+        return 1
+    print("KILLED paso %d (%s) por %s -> %s" % (n, orig[i][1], cid, got))
+    return 0
+
+
+def baseline():
+    for cid in by_step_map().values():
+        got = rc_reason(cid)
+        if got[1] != b.CASES[cid][0]:
+            print("BASE-FAIL %s: %s" % (cid, got))
+            return 1
+    print("BASE-OK")
+    return 0
+
+
 def main():
     by_step = {}
     for cid, (want, step, _fn) in b.CASES.items():
@@ -50,4 +88,12 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--step":
+        try:
+            sys.exit(one_step(int(sys.argv[2])))
+        except ValueError:
+            print("paso no numerico")
+            sys.exit(2)
+    if sys.argv[1:] == ["--baseline"]:
+        sys.exit(baseline())
     sys.exit(main())
