@@ -407,11 +407,36 @@ def fx_contract_invariants():
     return bad
 
 
+# ---------------------------------------------------------------- ronda 3, P2: tipos de params y nivel por familia
+def _as(delegate):
+    w = World(inproc=INPROC)
+    w.contract(delegate=delegate)
+    rc, out = w.ev(w.request(delegate=delegate))
+    w.close()
+    return rc, reason(out)
+
+
+def fx_params_types_level():
+    bad = []
+    ok = {"branch": "agent/work", "title": "x"}
+    _case(bad, "title texto (control)", _ev({}, _draft(ok)), (0, "OK"))
+    _case(bad, "title entero", _ev({}, _draft(dict(ok, title=5))), (1, "OUT_OF_SCOPE"))
+    _case(bad, "title booleano", _ev({}, _draft(dict(ok, title=True))), (1, "OUT_OF_SCOPE"))
+    _case(bad, "title nulo", _ev({}, _draft(dict(ok, title=None))), (1, "OUT_OF_SCOPE"))
+    # nivel: solo savia-worker:<id> hereda el de su familia; yema:<x> o codex:<x> no
+    _case(bad, "savia-worker:fix-1 hereda L3", _as("savia-worker:fix-1"), (0, "OK"))
+    _case(bad, "yema exacto (control)", _as("yema"), (0, "OK"))
+    _case(bad, "yema:x no hereda", _as("yema:x"), (1, "UNKNOWN_STATE"))
+    _case(bad, "codex:x no hereda", _as("codex:x"), (1, "UNKNOWN_STATE"))
+    _case(bad, "savia-worker: sin id", _as("savia-worker:"), (1, "UNKNOWN_STATE"))
+    return bad
+
+
 FIXES = {"env-bypass": fx_env_bypass, "tier-files": fx_tier_files, "level-main": fx_level_from_main,
          "ontology-main": fx_ontology_from_main, "ci-head": fx_ci_head, "branch-repo": fx_branch_other_repo,
          "prior-age": fx_prior_age, "merge-pre": fx_merge_preconditions, "mutation-crash": fx_mutation_crash,
          "params-scope": fx_params_scope, "ci-skipped": fx_ci_skipped, "runs-limit": fx_runs_limit,
-         "contract-invariants": fx_contract_invariants}
+         "contract-invariants": fx_contract_invariants, "params-types-level": fx_params_types_level}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in FIXES:

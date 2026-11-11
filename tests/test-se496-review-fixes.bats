@@ -108,3 +108,9 @@ teardown() {
   [ "$status" -eq 0 ]
   [ "$output" = "OK" ]
 }
+
+@test "ronda 3 P2: params con tipo distinto del declarado -> OUT_OF_SCOPE; solo savia-worker:<id> hereda nivel, yema:x o codex:x -> UNKNOWN_STATE" {
+  run $F params-types-level
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}

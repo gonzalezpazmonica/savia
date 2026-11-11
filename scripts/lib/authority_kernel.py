@@ -25,7 +25,11 @@ Limites conocidos de F0 (sin hook que lo invoque todavia; se cierran al cablearl
   API REST dan la de origen);
 - Branch.* se lee primero de refs/heads locales; `ci_not_red` de pr.create-draft acepta `none`
   (sin ejecuciones): no es garantia de CI, solo de que no hay una ejecucion roja o pendiente;
-- las rutas de vault.note-write son identificadores de recurso: solo ASCII (como ramas y proyectos).
+- las rutas de vault.note-write son identificadores de recurso: solo ASCII (como ramas y proyectos);
+- `ci_green` de pr.merge = al menos un SUCCESS y nada rojo ni pendiente; no comprueba que estén los
+  checks requeridos por la protección de rama (para tier >= 3 sigue mandando REVIEW_REQUIRED).
+Invariantes del contrato que se aplican tambien al evaluar (no solo en check-contract): vida <= 7 dias
+(paso 6) y max_uses 1 si la capacidad no declara `reversibility: reversible` (paso 7).
 Los parametros de la accion que nombran un recurso (PARAM_DIMS) tienen que coincidir con el
 objetivo, y el objetivo es lo que el ambito firmado cubre.
 """
@@ -60,6 +64,9 @@ TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 LEVELS = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 AGENT_PRINCIPALS = {"", "self", "savia", "claude", "yema", "codex"}
+# delegados con instancias `<familia>:<id>` que heredan el nivel de la familia (spec SE-496, campo delegate);
+# cualquier otro `x:<algo>` necesita su propia fila en agent-permission-levels.md
+INSTANCE_FAMILIES = ("savia-worker",)
 OWNERS = ("source-backed", "contract-owned", "derived", "inferred")
 REQUIRED_FIELDS = ("schema", "id", "nonce", "principal", "delegate", "capability", "authority",
                    "scope", "preconditions", "declared_effects", "not_before", "expires_at",
@@ -414,6 +421,8 @@ SCOPE_DIMS = {"branches": "branch", "prs": "pr", "projects": "project", "paths":
 # asi que todo parametro que nombre un recurso tiene que coincidir con el objetivo)
 PARAM_DIMS = {"branch": "branch", "pr_number": "pr", "project": "project", "path": "path"}
 TARGET_KEYS = ("repo", "branch", "pr", "project", "path")
+# tipo JSON-schema del descriptor -> tipo Python exacto (bool no cuenta como integer)
+PARAM_TYPES = {"string": str, "integer": int, "boolean": bool}
 
 
 def path_match(selector, value):
@@ -800,6 +809,14 @@ def bind_params(ctx):
     missing = [k for k in inp.get("required") or [] if k not in params]
     if missing:
         raise Deny("OUT_OF_SCOPE", "faltan parametros obligatorios: " + ", ".join(missing))
+    props = inp.get("properties") or {}
+    for k, v in params.items():
+        decl = props.get(k)
+        want = PARAM_TYPES.get(decl.get("type")) if isinstance(decl, dict) else None
+        if want is None:  # tipo no declarado o desconocido: no hay forma de validar el parametro
+            raise Deny("OUT_OF_SCOPE", "action.params.%s sin tipo declarado reconocible en el descriptor" % k)
+        if type(v) is not want:
+            raise Deny("OUT_OF_SCOPE", "action.params.%s no es de tipo %s" % (k, props[k]["type"]))
     for p, key in PARAM_DIMS.items():
         if p not in params:
             continue
@@ -1008,7 +1025,11 @@ def agent_level(ctx):
     except UnicodeDecodeError:
         raise Unknown("agent-permission-levels.md ilegible")
     name = ctx.req["delegate"]
-    for cand in (name, name.split(":")[0]):
+    cands = [name]
+    fam, sep, inst = name.partition(":")
+    if sep and fam in INSTANCE_FAMILIES and ID_RE.match(inst):
+        cands.append(fam)  # solo las familias con instancias (spec: savia-worker:<id>) heredan el nivel
+    for cand in cands:
         m = re.search(r"^\|\s*%s\s*\|\s*(L[0-4])\s*\|" % re.escape(cand), txt, re.M)
         if m:
             return m.group(1)
