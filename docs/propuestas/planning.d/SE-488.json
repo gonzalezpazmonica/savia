@@ -1,9 +1,9 @@
 {
   "id": "SE-488",
-  "status": "APPROVED",
+  "status": "IMPLEMENTING",
   "priority": "P0",
   "title": "Aprobaciones por fusión de PR (operación solo móvil)",
-  "note": "Toda aprobación que amplía autoridad es una PR en un repo privado de aprobaciones que la operadora fusiona en la app; recibo de merge verificable sin red (firma web-flow, autor, un fichero, huella, caducidad, nonce). GitHub App de agentes separada; el token de la máquina excluye el repo.",
+  "note": "S1 en curso (R1 artefacto y R2 recibo de merge sin red). AC-7 (prueba real con la App) pendiente: ningún consumidor se conecta sin ella. Excepción de WIP 2026-11-10.",
   "evidence": "docs/specs/SE-488-approvals-by-pr-merge.spec.md",
   "phase": "D",
   "approval": "operadora, pregunta interactiva 2026-11-03 (Aprobada, a P0)"
