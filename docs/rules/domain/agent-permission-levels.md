@@ -123,15 +123,11 @@ Script `scripts/validate-agent-permissions.sh` verifica las tools del agente con
 - L2 y Bash: el validador no distingue un Bash de solo lectura; en L2 todo `Bash` es exceso. Si un agente L2 lo necesita, la decisión es subir a L3 o quitarlo.
 - La CI de cada PR ejecuta el validador y sus dos suites (paso «Agent permission levels gate» de `ci.yml`).
 
-## Integracion con agent-policies.yaml
+## Precedencia e integracion con agent-policies.yaml
 
-El nivel define el maximo. agent-policies.yaml puede restringir mas. autonomous-safety.md siempre prevalece.
-
-## Precedencia
-
-1. autonomous-safety.md (inmutable)
+1. autonomous-safety.md (inmutable, siempre prevalece)
 2. permission_level del agente (maximo)
-3. agent-policies.yaml del proyecto (restriccion)
+3. agent-policies.yaml del proyecto (solo puede restringir mas)
 4. Runtime overrides (solo con confirmacion humana)
 
 ## Enforcement por sesión (SE-354)
