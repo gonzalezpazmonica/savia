@@ -6,5 +6,5 @@
   "title": "Motor de Space con suscripción ChatGPT (OAuth)",
   "evidence": "docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md",
   "note": "Pregunta interactiva 2026-11-10 («Spec y prueba ya»): sustituir DeepSeek (pago por uso) por la suscripción de ChatGPT/Codex. Login por código de dispositivo en el espacio del motor, credencial solo allí, doctor sin revelar, sin respaldo silencioso, salida de red a hosts de OpenAI. Escenas pendientes de confirmación (SE-505); términos de OpenAI los confirma la operadora. Aprobada 2026-11-11 con condición: el motor es opcional y lo elige cada persona (D9, AC-18..AC-21); escena 6 y prototipo S0b pendientes de confirmar.",
-  "approval": "Operadora, pregunta interactiva 2026-11-11, con condición de alcance (motor opcional, elegido por cada persona); se formaliza al fusionar la PR (SE-488)"
+  "approval": "Operadora, pregunta interactiva 2026-11-11, con condición de alcance (motor opcional, elegido por cada persona); la spec lleva status APPROVED desde esta PR; la fusión la hace la operadora (tier 4) y queda registrada en el recibo de merge (SE-488)"
 }
