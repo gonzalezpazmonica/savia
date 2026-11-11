@@ -12,7 +12,6 @@ tools:
   write: true
   edit: true
   glob: true
-  bash: true
 model_tier: fast
 color: "#FFFFFF"
 maxTurns: 20

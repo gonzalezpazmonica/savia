@@ -9,8 +9,6 @@ tools:
   glob: true
   grep: true
   bash: true
-  write: true
-  edit: true
 model_tier: mid
 color: "#008080"
 maxTurns: 25

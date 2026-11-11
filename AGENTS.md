@@ -86,7 +86,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | concession-judge | mid | L1 | — | Recommendation Tribunal judge — detects position changes without new evidence (SPEC-192) |
 | confidentiality-auditor | heavy | L1 | — | Audita cumplimiento de confidencialidad en PRs de pm-workspace (repo publico). Descubre dinamicamente datos sensibles... |
 | configurator | fast | L1 | — | Centralizes workspace dispatch decisions: selects skills, agents, rules, and memory queries for each user intent. Emi... |
-| context-dome-manager | heavy | L2 | — | Arquitecto de conocimiento — disena, audita y evoluciona cupulas de contexto (SaviaVaults). Decide estructura, federa... |
+| context-dome-manager | heavy | L4 | — | Arquitecto de conocimiento — disena, audita y evoluciona cupulas de contexto (SaviaVaults). Decide estructura, federa... |
 | correctness-judge | mid | L1 | — | Code Review Court judge — logic, tests, edge cases, error paths |
 | court-orchestrator | heavy | L4 | — | Convenes the Code Review Court, manages fix cycles, produces .review.crc |
 | criterion-simulation-judge | heavy | L1 | — | Criterion Simulation Layer judge — SPEC-194. Executes 4 meta-questions (frame challenge, historical priors, operator ... |
@@ -94,7 +94,7 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | diagram-architect | mid | L1 | — | Architecture diagram specialist. Analyzes code and infrastructure to generate Mermaid diagrams, validates business ru... |
 | dotnet-developer | mid | L3 | — | Implementación de código C#/.NET siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una feature en... |
 | drift-auditor | heavy | L1 | — | Auditoría de convergencia repo: detecta drift entre docs, config y código. Usar PROACTIVELY tras cambios grandes o al... |
-| excel-digest | heavy | L2 | — | Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae estructura, formulas, patrones de da... |
+| excel-digest | heavy | L3 | — | Digestion de hojas de calculo Excel (XLSX/XLS/CSV) — pipeline de 4 fases. Extrae estructura, formulas, patrones de da... |
 | expertise-asymmetry-judge | mid | L1 | — | 'Recommendation Tribunal judge — when draft falls in a domain the active user marks as `audit_level: blind`, force a ... |
 | factuality-judge | heavy | L1 | — | Truth Tribunal judge — factual accuracy of claims against verifiable sources |
 | feasibility-probe | mid | L3 | — | Validates spec feasibility by attempting a time-boxed prototype. Produces viability report with score, blocking secti... |
@@ -108,28 +108,28 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | hallucination-judge | heavy | L1 | — | Truth Tribunal judge — detects invented facts via SelfCheck-style consistency |
 | infrastructure-agent | heavy | L4 | — | Agente de gestión de infraestructura cloud. Recibe solicitudes del architect, detecta infraestructura existente, crea... |
 | java-developer | mid | L3 | — | Implementación de código Java/Spring Boot siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una f... |
-| legal-compliance | heavy | L2 | — | Auditoría de compliance legal contra legislación española consolidada (legalize-es). Usar PROACTIVELY cuando: se crea... |
+| legal-compliance | heavy | L3 | — | Auditoría de compliance legal contra legislación española consolidada (legalize-es). Usar PROACTIVELY cuando: se crea... |
 | meeting-confidentiality-judge | heavy | L1 | — | Juez de confidencialidad post-extraccion de reuniones. Valida que datos marcados como confidenciales NO se filtren a ... |
-| meeting-digest | mid | L2 | — | Digestion de transcripciones de reuniones (VTT, DOCX, TXT). Extrae datos estructurados de personas, contexto de negoc... |
+| meeting-digest | mid | L4 | — | Digestion de transcripciones de reuniones (VTT, DOCX, TXT). Extrae datos estructurados de personas, contexto de negoc... |
 | meeting-risk-analyst | heavy | L1 | — | Analisis de riesgos post-digestion de reuniones. Cruza decisiones, compromisos y dinamicas extraidas de una transcrip... |
-| memory-agent | fast | L2 | — | Gestiona la memoria persistente de pm-workspace via lenguaje natural. Busca decisiones pasadas, lecciones aprendidas,... |
+| memory-agent | fast | L3 | — | Gestiona la memoria persistente de pm-workspace via lenguaje natural. Busca decisiones pasadas, lecciones aprendidas,... |
 | memory-conflict-judge | mid | L1 | — | Recommendation Tribunal judge — detects when a draft recommendation contradicts the active user's auto-memory (feedba... |
 | mobile-developer | mid | L3 | — | Implementación de código mobile (Swift/iOS + Kotlin/Android + Flutter) siguiendo specs SDD aprobadas. Usar PROACTIVEL... |
-| model-upgrade-auditor | heavy | L1 | — | Audits agents, skills, and prompts for workarounds that newer models may no longer need. Proposes simplifications wit... |
-| pdf-digest | heavy | L2 | — | Digestion de documentos PDF con extraccion de texto e imagenes — pipeline de 4 fases. Documentos tecnicos, propuestas... |
+| model-upgrade-auditor | heavy | L3 | — | Audits agents, skills, and prompts for workarounds that newer models may no longer need. Proposes simplifications wit... |
+| pdf-digest | heavy | L3 | — | Digestion de documentos PDF con extraccion de texto e imagenes — pipeline de 4 fases. Documentos tecnicos, propuestas... |
 | pentester | heavy | L3 | — | Hacker ético de máximo nivel con pipeline autónomo de 5 fases inspirado en Shannon. Ejecuta pentests dinámicos contra... |
 | php-developer | mid | L3 | — | Implementación de código PHP/Laravel siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una featur... |
-| pptx-digest | mid | L2 | — | Digestion de presentaciones PowerPoint (PPTX) — pipeline de 4 fases. Extrae texto, notas del presentador, imagenes, d... |
+| pptx-digest | mid | L3 | — | Digestion de presentaciones PowerPoint (PPTX) — pipeline de 4 fases. Extrae texto, notas del presentador, imagenes, d... |
 | pr-agent-judge | mid | L1 | — | External 5th judge of the Code Review Court — wraps qodo-ai/pr-agent OSS (SPEC-124). Opt-in via COURT_INCLUDE_PR_AGEN... |
 | python-developer | mid | L3 | — | Implementación de código Python (FastAPI/Django) siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implement... |
-| recommendation-tribunal-orchestrator | mid | L2 | — | Recommendation Tribunal orchestrator — 4 fast judges in parallel, aggregates scores, applies vetos, mutates output wi... |
+| recommendation-tribunal-orchestrator | mid | L4 | — | Recommendation Tribunal orchestrator — 4 fast judges in parallel, aggregates scores, applies vetos, mutates output wi... |
 | reconciler | mid | L1 | — | Classifies contradictions into 3 buckets: evolution, auto-resolve, conflict-doc. Invoked by drift-auditor. |
 | reflection-validator | heavy | L0 | — | Meta-cognitive validation of responses and decisions (System 2). Use PROACTIVELY when: evaluating a response to a com... |
 | repetition-truth-judge | fast | L1 | — | Recommendation Tribunal judge — detects user claims repeated and assumed true without verification (SPEC-192) |
 | ruby-developer | mid | L3 | — | Implementación de código Ruby on Rails siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una feat... |
 | rule-violation-judge | mid | L1 | — | Recommendation Tribunal judge — detects when a draft recommendation violates canonical rules (CLAUDE.md, autonomous-s... |
 | rust-developer | mid | L3 | — | Implementación de código Rust (Axum, Tokio) siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una... |
-| sdd-spec-writer | heavy | L2 | — | Generación y validación de Specs SDD (Spec-Driven Development) como contratos ejecutables. Usar PROACTIVELY cuando: s... |
+| sdd-spec-writer | heavy | L3 | — | Generación y validación de Specs SDD (Spec-Driven Development) como contratos ejecutables. Usar PROACTIVELY cuando: s... |
 | security-attacker | mid | L3 | — | Agente Red Team que simula ataques contra el código y la configuración del proyecto. Busca vulnerabilidades, misconfi... |
 | security-auditor | mid | L1 | — | Agente auditor independiente que evalúa la calidad del análisis Red/Blue Team, verifica que las correcciones son adec... |
 | security-defender | mid | L3 | — | Agente Blue Team que propone correcciones para las vulnerabilidades encontradas por el attacker. Genera patches, conf... |
@@ -146,9 +146,9 @@ the Stop hook `agents-md-auto-regenerate.sh` whenever an agent file changes.
 | test-architect | mid | L3 | — | Designs and generates the highest quality tests across all 16 language packs and 14 test types. Use PROACTIVELY when:... |
 | test-engineer | mid | L3 | — | Creación y ejecución de tests en proyectos .NET. Usar PROACTIVELY cuando: se escriben tests unitarios o de integració... |
 | test-runner | mid | L4 | — | Ejecución de tests y verificación de cobertura post-commit. Ejecuta suite completa de tests, valida que todos pasan, ... |
-| truth-tribunal-orchestrator | heavy | L2 | — | Truth Tribunal orchestrator — convenes 7 judges, aggregates scores, applies vetos, drives iteration |
+| truth-tribunal-orchestrator | heavy | L4 | — | Truth Tribunal orchestrator — convenes 7 judges, aggregates scores, applies vetos, drives iteration |
 | typescript-developer | mid | L3 | — | Implementación de código TypeScript/Node.js siguiendo specs SDD aprobadas. Usar PROACTIVELY cuando: se implementa una... |
 | visual-digest | mid | L2 | — | Digestión de imágenes con OCR contextual — 5 pasadas. Fotos de pizarras, notas manuscritas, diagramas en papel, captu... |
 | visual-qa-agent | mid | L1 | — | Visual QA: screenshot analysis, wireframe comparison, regression detection. Usar PROACTIVELY cuando se detectan cambi... |
 | web-e2e-tester | mid | L3 | — | Autonomous E2E testing of web apps against live instances. Use PROACTIVELY when: deploying savia-web, after UI change... |
-| word-digest | mid | L2 | — | Digestion de documentos Word (DOCX) con extraccion de texto, tablas e imagenes — pipeline de 4 fases. Actas, propuest... |
+| word-digest | mid | L3 | — | Digestion de documentos Word (DOCX) con extraccion de texto, tablas e imagenes — pipeline de 4 fases. Actas, propuest... |

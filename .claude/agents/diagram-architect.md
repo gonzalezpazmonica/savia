@@ -9,8 +9,6 @@ tools:
   - Glob
   - Grep
   - Bash
-  - Write
-  - Edit
 model_tier: mid
 color: teal
 maxTurns: 25

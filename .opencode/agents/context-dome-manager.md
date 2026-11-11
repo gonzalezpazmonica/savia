@@ -1,6 +1,6 @@
 ---
 name: context-dome-manager
-permission_level: L2
+permission_level: L4
 description: "Arquitecto de conocimiento — disena, audita y evoluciona cupulas de contexto (SaviaVaults). Decide estructura, federacion, confidencialidad, publicacion. Orquesta digestion y clasificacion de conocimiento. Usar PROACTIVELY cuando: se crea una nueva cupula, se rediseña la arquitectura de conocimiento, se auditan cupulas existentes, se evalua publicacion de conocimiento, se integran fuentes externas de documentacion."
 tools:
   read: true
@@ -10,7 +10,6 @@ tools:
   write: true
   edit: true
   task: true
-  skill: true
 model_tier: heavy
 permissionMode: plan
 maxSteps: 30

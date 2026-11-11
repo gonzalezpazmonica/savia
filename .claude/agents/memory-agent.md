@@ -1,6 +1,6 @@
 ---
 name: memory-agent
-permission_level: L2
+permission_level: L3
 description: >-
              Gestiona la memoria persistente de pm-workspace via lenguaje natural.
              Busca decisiones pasadas, lecciones aprendidas, patrones y preferencias.

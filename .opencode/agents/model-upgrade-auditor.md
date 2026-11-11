@@ -1,6 +1,6 @@
 ---
 name: model-upgrade-auditor
-permission_level: L1
+permission_level: L3
 description: "Audits agents, skills, and prompts for workarounds that newer models may no longer need. Proposes simplifications with eval-backed evidence."
 tools:
   read: true
@@ -8,7 +8,6 @@ tools:
   glob: true
   grep: true
   bash: true
-  task: true
 model_tier: heavy
 token_budget:
   per_invocation: 100000

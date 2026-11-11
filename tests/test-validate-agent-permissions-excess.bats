@@ -194,13 +194,9 @@ teardown() {
 @test "real repo: baseline is a subset of the 25 pairs authorised on 2026-10-27" {
   # The ONLY pairs ever allowed. Swapping one for another, or adding one, fails
   # here even if the count stays the same; the list may only shrink.
-  allowed=" context-dome-manager:Bash excel-digest:Bash legal-compliance:Bash memory-agent:Bash
-    pdf-digest:Bash pptx-digest:Bash recommendation-tribunal-orchestrator:Bash sdd-spec-writer:Bash
-    tech-writer:Bash truth-tribunal-orchestrator:Bash visual-digest:Bash word-digest:Bash
-    diagram-architect:Write model-upgrade-auditor:Write diagram-architect:Edit
-    context-dome-manager:Task excel-digest:Task meeting-digest:Task model-upgrade-auditor:Task
-    pdf-digest:Task pptx-digest:Task recommendation-tribunal-orchestrator:Task
-    truth-tribunal-orchestrator:Task word-digest:Task context-dome-manager:Skill "
+  # 2026-11-11: los 25 pares autorizados se resolvieron según uso real (subir nivel o quitar herramienta).
+  # La lista autorizada queda vacía: cualquier entrada nueva falla aquí.
+  allowed=""
   allowed=$(echo $allowed)
   n=0
   # "|| -n agent": the validator also reads a last line without a newline
@@ -211,11 +207,13 @@ teardown() {
     # expiry can never be pushed past the authorised date
     [[ ! "$expires" > "2026-11-10" ]] || { echo "expiry extended: $agent $tool $expires"; return 1; }
   done < "$BASELINE"
-  [ "$n" -le 25 ]
+  [ "$n" -le 0 ]
 }
 
 @test "ratchet: swapping a baseline pair for an unauthorised one is caught by the subset check" {
-  sed 's/^tech-writer Bash /code-reviewer Bash /' "$BASELINE" > "$TMPDIR_AP/swapped.txt"
+  # La baseline quedó vacía el 2026-11-11 (los 25 pares se resolvieron): no hay par que cambiar, se añade uno.
+  cp "$BASELINE" "$TMPDIR_AP/swapped.txt"
+  printf 'code-reviewer Bash operadora 2099-01-01\n' >> "$TMPDIR_AP/swapped.txt"
   AGENT_PERMS_TEST_BASELINE="$TMPDIR_AP/swapped.txt" run bats -f "baseline is a subset" "$BATS_TEST_FILENAME"
   [ "$status" -ne 0 ]
   [[ "$output" == *"not authorised: code-reviewer Bash"* ]]

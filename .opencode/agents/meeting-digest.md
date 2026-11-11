@@ -1,6 +1,6 @@
 ---
 name: meeting-digest
-permission_level: L2
+permission_level: L4
 description: >
   Digestion de transcripciones de reuniones (VTT, DOCX, TXT). Extrae datos estructurados
   de personas, contexto de negocio y action items. Analiza riesgos delegando a meeting-risk-analyst
