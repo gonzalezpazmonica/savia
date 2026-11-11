@@ -60,3 +60,40 @@ setup() {
   words=$(wc -w < "$RULE")
   [[ "$words" -le 160 ]]
 }
+
+# Ref: docs/specs/SE-335-prioridad-descubrimiento-arranque.spec.md (fail-safe del hook de arranque)
+
+@test "seguridad: el hook de arranque declara set -uo pipefail" {
+  head -5 "$HOOK" | grep -q "set -uo pipefail"
+}
+
+@test "limite: la regla de prioridad no queda vacia (al menos 4 niveles numerados)" {
+  local n
+  n=$(grep -cE '^[1-4]\. \*\*' "$RULE")
+  [[ "$n" -eq 4 ]]
+}
+
+@test "negativo: una regla vacia no contiene el orden y el grep de AC-01 falla" {
+  : > "$BATS_TEST_TMPDIR/empty.md"
+  run grep -q "Cúpulas de conocimiento" "$BATS_TEST_TMPDIR/empty.md"
+  [[ "$status" -ne 0 ]]
+}
+
+@test "edge: empty rule file has zero numbered levels (el conteo no da por buena una regla vacia)" {
+  : > "$BATS_TEST_TMPDIR/empty-rule.md"
+  run grep -cE '^[1-4]\. \*\*' "$BATS_TEST_TMPDIR/empty-rule.md"
+  [[ "$output" -eq 0 ]]
+  [[ "$output" -ne "$(grep -cE '^[1-4]\. \*\*' "$RULE")" ]]
+}
+
+@test "edge: hook output is valid JSON and additionalContext is not null ni vacio" {
+  run timeout 10 bash "$HOOK"
+  [[ "$status" -eq 0 ]]
+  echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); c=d['hookSpecificOutput']['additionalContext']; assert c and 'Prioridad: cupulas' in c"
+}
+
+@test "edge boundary: la directiva de prioridad aparece exactamente una vez en la salida" {
+  run timeout 10 bash "$HOOK"
+  [[ "$status" -eq 0 ]]
+  [[ "$(echo "$output" | grep -o 'Prioridad: cupulas' | wc -l)" -eq 1 ]]
+}

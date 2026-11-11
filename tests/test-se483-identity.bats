@@ -335,3 +335,27 @@ s03t_root() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"llms.txt sin la frase larga canónica"* ]]
 }
+
+@test "seguridad: el verificador de identidad declara set -uo pipefail" {
+  grep -q "^set -uo pipefail" "$LIB"
+}
+
+@test "edge empty: savia-core.md vacío en el árbol hace fallar el gate y se nombra" {
+  s03t_root
+  : > "$GR/docs/rules/domain/savia-core.md"
+  run env SAVIA_IDENTITY_ROOT="$GR" bash "$G" canonical
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"savia-core.md"* ]]
+}
+
+@test "edge boundary: la frase corta aparece literal en el savia-core.md real" {
+  run bash "$LIB" short
+  [ "$status" -eq 0 ]
+  [[ "$(grep -cF -- "$output" "$ROOT/docs/rules/domain/savia-core.md")" -ge 1 ]]
+}
+
+@test "negativo: argumento desconocido (nonexistent) en el verificador sale con 2" {
+  run bash "$LIB" nonexistent-mode
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Uso: docs-identity-check.sh"* ]]
+}
