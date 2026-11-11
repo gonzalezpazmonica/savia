@@ -1,0 +1,37 @@
+id: pr.create-draft
+version: 1
+description: Abre una PR en borrador desde una rama agent/* con la CI sin fallar (SE-496).
+input:
+  type: object
+  required: [branch, title]
+  properties:
+    branch: { type: string }
+    title: { type: string }
+safety:
+  effect: mutation
+  visibility: visible
+  reversibility: reversible
+  destructive: false
+  external_side_effect: true
+  human_gate: none
+  scope: [repo]
+execution:
+  handler: scripts/push-pr.sh --draft
+laws:
+  - LAW-HUMAN-001
+authority:
+  required_level: L3
+  tier_gate: false
+declared_effects: [git.commit, git.push, pr.open-draft]
+audit_plain: [branch]
+preconditions:
+  - id: branch_is_agent
+    fact: Branch.name
+    op: startswith
+    value: "agent/"
+    message: "precondición: la rama debe ser agent/*"
+  - id: ci_not_red
+    fact: Branch.ci_status
+    op: in
+    value: [success, none]
+    message: "precondición: CI verde (sin ejecuciones fallidas ni pendientes)"

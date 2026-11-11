@@ -73,6 +73,9 @@ review_note: "Quarterly review 2026-Q2"
 | memory-agent | L2 | Escribe memoria |
 | dotnet-developer | L3 | Implementa codigo |
 | typescript-developer | L3 | Implementa codigo |
+| yema | L3 | Ejecutora por contratos (SE-496) |
+| codex | L3 | Proveedor independiente: revisora y ejecutora acotada (SE-496) |
+| savia-worker | L3 | Worker headless del plan intensivo (SE-496) |
 | frontend-developer | L3 | Implementa codigo |
 | java-developer | L3 | Implementa codigo |
 | python-developer | L3 | Implementa codigo |
