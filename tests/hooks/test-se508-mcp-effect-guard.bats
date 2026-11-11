@@ -207,7 +207,7 @@ while time.time() < end:
 
 @test "AC-6: en observación una web fuera de la lista no pregunta y deja línea would_ask" {
   [ "$(hook_decision "$(se508_payload WebFetch '{"url":"https://otro.test/x?q=1"}')")" = pass ]
-  [ "$(jq -r 'select(.tool=="WebFetch") | .decision' "$SAVIA_MCP_GUARD_LOG")" = would_ask ]
+  [ "$(jq -r 'select(.tool=="WebFetch") | .decision' "$SAVIA_MCP_GUARD_TEST_LOG")" = would_ask ]
 }
 
 # --- AC-7
@@ -250,12 +250,12 @@ while time.time() < end:
 @test "AC-8b: WebSearch en un run sin persona antes de OBSERVE_UNTIL → pasa con línea de registro" {
   export SAVIA_AUTONOMOUS_RUN=1
   [ "$(hook_decision "$(se508_payload WebSearch '{"query":"algo"}')")" = pass ]
-  [ "$(jq -r 'select(.tool=="WebSearch") | .decision' "$SAVIA_MCP_GUARD_LOG")" = observed ]
+  [ "$(jq -r 'select(.tool=="WebSearch") | .decision' "$SAVIA_MCP_GUARD_TEST_LOG")" = observed ]
 }
 
 @test "AC-8b: merge sin persona deja la línea del resumen de la mañana" {
   SAVIA_AUTONOMOUS_RUN=1 hook_decision "$(se508_payload "$MERGE")" >/dev/null
-  [ "$(jq -r 'select(.tool=="mcp__github__merge_pull_request") | .summary' "$SAVIA_MCP_GUARD_LOG")" = "se bloqueó un merge por MCP; los merges van con grant" ]
+  [ "$(jq -r 'select(.tool=="mcp__github__merge_pull_request") | .summary' "$SAVIA_MCP_GUARD_TEST_LOG")" = "se bloqueó un merge por MCP; los merges van con grant" ]
 }
 
 # --- AC-8c

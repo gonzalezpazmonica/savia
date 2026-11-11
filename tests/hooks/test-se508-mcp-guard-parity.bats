@@ -104,7 +104,7 @@ check() {
   export SAVIA_GATES_PIN=1
   [ "$(hook_decision "$(se508_payload mcp__claude_ai_Gmail__send_message)")" = ask ]
   [ "$(ts_decision "$(se508_payload mcp__claude_ai_Gmail__send_message)" --pin-fixed)" = pass ]
-  [ "$(jq -r 'select(.frontend=="opencode") | .decision' "$SAVIA_MCP_GUARD_LOG" | tail -1)" = delegated ]
+  [ "$(jq -r 'select(.frontend=="opencode") | .decision' "$SAVIA_MCP_GUARD_TEST_LOG" | tail -1)" = delegated ]
   [ "$(ts_decision "$(se508_payload mcp__github__merge_pull_request)" --pin-fixed)" = deny ]
 }
 
@@ -177,7 +177,14 @@ need = ["tests/python/test_mcp_effect_guard.py", "tests/hooks/test-se508-mcp-eff
 for job in wf["jobs"].values():
     steps = job.get("steps", [])
     for i, st in enumerate(steps):
-        run = st.get("run", "")
+        # Solo cuentan las órdenes que se ejecutan: ni comentarios ni una línea que oculte su fallo (revisión #1525).
+        lines = [l.strip() for l in str(st.get("run", "")).splitlines()]
+        live = [l for l in lines if l and not l.startswith("#")]
+        if any(n in l for l in live for n in need):
+            hidden = [l for l in live if any(n in l for n in need) and any(x in l for x in ("|| true", "|| :", "|| exit 0"))]
+            assert not hidden, f"fallo oculto: {hidden}"
+            assert not any(l.startswith("set +e") for l in live), "set +e oculta fallos"
+        run = "\n".join(live)
         if all(n in run for n in need):
             assert str(st.get("env", {}).get("SAVIA_REQUIRE_TS")) == "1", "sin SAVIA_REQUIRE_TS=1"
             assert any("setup-bun" in str(s.get("uses", "")) for s in steps[:i]), "Bun no está preparado antes"

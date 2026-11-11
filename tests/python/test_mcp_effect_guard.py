@@ -264,6 +264,37 @@ class GuardTest(unittest.TestCase):
         e["BATS_TEST_FILENAME"] = "t.bats"
         self.assertEqual(g.remote_url(e), "/tmp/x")
 
+    # Revisión #1525 de seguridad, P2-1: el registro solo se desvía dentro de bats
+    def test_log_path_override_requires_bats(self):
+        default = str(self.tmp / "output" / "mcp-effect-guard" / "decisions.jsonl")
+        e = {"SAVIA_MCP_GUARD_TEST_LOG": "/tmp/otro.jsonl", "SAVIA_MCP_GUARD_LOG": "/tmp/viejo.jsonl"}
+        self.assertEqual(g.log_path(str(self.tmp), e), default)
+        e.update({"SAVIA_MCP_GUARD_TEST": "1", "BATS_TEST_FILENAME": "t.bats"})
+        self.assertEqual(g.log_path(str(self.tmp), e), "/tmp/otro.jsonl")
+
+    # Revisión #1525 de seguridad, P2-4: la lectura del remoto tiene un tope global, no solo uno por orden
+    def test_remote_read_respects_global_budget(self):
+        import os
+        import time
+        from unittest import mock
+        bindir = self.tmp / "bin"
+        bindir.mkdir()
+        fake = bindir / "git"
+        fake.write_text("#!/bin/sh\nsleep 2\nexit 0\n")  # cada orden cabe en su tope propio (≥3 s salvo init)
+        fake.chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": f"{bindir}:{os.environ.get('PATH', '')}"}), \
+                mock.patch.object(g, "REMOTE_BUDGET", 1.5, create=True):
+            t0 = time.monotonic()
+            self.assertIsNone(g.read_remote("https://x.test/r.git"))
+            elapsed = time.monotonic() - t0
+        # Sin tope global: init (2 s) + ls-remote cortado a los 3 s ≈ 5 s.
+        self.assertLess(elapsed, 2.5)
+
+    def test_run_with_spent_deadline_does_not_launch(self):
+        import time
+        with self.assertRaises(g.Unreadable):
+            g._run(["/nonexistent-git"], str(self.tmp), {}, 5, time.monotonic() - 1)
+
     def test_real_constant_is_a_date(self):
         text = (ROOT / ".claude/hooks/lib/mcp_effect_guard.py").read_text(encoding="utf-8")
         self.assertIsNotNone(g.parse_until(text))

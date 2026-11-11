@@ -45,7 +45,7 @@ se508_setup() {
   se508_publish "$TMPD/remote" "$SE508_CATALOG" "$SE508_HOSTS" "$CORE_SRC"
   BARE="$TMPD/remote.git"
   export SAVIA_MCP_GUARD_TEST=1 SAVIA_MCP_GUARD_TEST_REMOTE="file://$BARE" SAVIA_MCP_GUARD_TEST_TODAY=2026-11-10
-  export SAVIA_MCP_GUARD_LOG="$TMPD/decisions.jsonl" CLAUDE_PROJECT_DIR="$WS"
+  export SAVIA_MCP_GUARD_TEST_LOG="$TMPD/decisions.jsonl" CLAUDE_PROJECT_DIR="$WS"
 }
 
 se508_teardown() {

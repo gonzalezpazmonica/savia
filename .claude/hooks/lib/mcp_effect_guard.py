@@ -32,6 +32,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from urllib.parse import urlsplit
 
 # Fin del modo observación de WebFetch/WebSearch en sesiones con persona (fusión de S1 + 14 días).
@@ -47,6 +48,10 @@ CORE_PATH = ".claude/hooks/lib/mcp_effect_guard.py"
 
 LS_REMOTE_TIMEOUT = 3
 FETCH_TIMEOUT = 6
+# Tope global de la lectura del remoto. Cada orden git tiene el suyo, pero sumados (init, ls-remote, 2 fetch,
+# 3 ls-tree, 3 cat-file) llegaban a ~50 s: el `timeout 20` del hook mataba a python3 y los git, lanzados en su
+# propia sesión, quedaban huérfanos. Con este tope el núcleo termina antes y mata él mismo cada grupo.
+REMOTE_BUDGET = 15
 MAX_PATH = 200
 MAX_SEGMENT = 64
 
@@ -173,8 +178,14 @@ def _git_env(tmp: str) -> dict[str, str]:
     return env
 
 
-def _run(args: list[str], cwd: str, env: dict[str, str], timeout: float) -> bytes:
-    """git con tiempo máximo; al agotarse mata el grupo de procesos entero (git-remote-https incluido)."""
+def _run(args: list[str], cwd: str, env: dict[str, str], timeout: float, deadline: float | None = None) -> bytes:
+    """git con tiempo máximo; al agotarse mata el grupo de procesos entero (git-remote-https incluido).
+
+    `deadline` (reloj monotónico) recorta el tiempo de esta orden a lo que quede del presupuesto global."""
+    if deadline is not None:
+        timeout = min(timeout, deadline - time.monotonic())
+        if timeout <= 0:
+            raise Unreadable("tiempo agotado")
     p = subprocess.Popen(args, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, start_new_session=True)
     try:
@@ -196,30 +207,31 @@ def read_remote(url: str) -> dict[str, str | None] | None:
 
     None si el remoto no contesta a tiempo o algo no se puede leer (quien llama falla cerrado).
     """
+    deadline = time.monotonic() + REMOTE_BUDGET
     tmp = tempfile.mkdtemp(prefix="savia-mcp-guard-")
     try:
         env = _git_env(tmp)
         repo = os.path.join(tmp, "r.git")
         git = ["git", "-c", "core.hooksPath=/dev/null"]
-        _run(git + ["init", "-q", "--bare", repo], tmp, env, 5)
-        out = _run(git + ["-C", repo, "ls-remote", url, "refs/heads/main"], tmp, env, LS_REMOTE_TIMEOUT)
+        _run(git + ["init", "-q", "--bare", repo], tmp, env, 5, deadline)
+        out = _run(git + ["-C", repo, "ls-remote", url, "refs/heads/main"], tmp, env, LS_REMOTE_TIMEOUT, deadline)
         line = out.decode("ascii", "replace").strip().split("\n")[0]
         sha = line.split("\t")[0] if line.endswith("\trefs/heads/main") else ""
         if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", sha):
             return None
         _run(git + ["-C", repo, "fetch", "-q", "--no-tags", "--depth=1", "--filter=blob:none", url, sha],
-             tmp, env, FETCH_TIMEOUT)
+             tmp, env, FETCH_TIMEOUT, deadline)
         blobs: dict[str, str | None] = {}
         for rel in (CATALOG_PATH, HOSTS_PATH, CORE_PATH):
-            listed = _run(git + ["-C", repo, "ls-tree", sha, "--", rel], tmp, env, 5).decode("utf-8", "replace")
+            listed = _run(git + ["-C", repo, "ls-tree", sha, "--", rel], tmp, env, 5, deadline).decode("utf-8", "replace")
             m = re.match(r"^\d+ blob ([0-9a-f]+)\t", listed)
             blobs[rel] = m.group(1) if m else None
         wanted = sorted({b for b in blobs.values() if b})
         if wanted:  # una sola ida y vuelta para los tres ficheros
-            _run(git + ["-C", repo, "fetch", "-q", "--no-tags", "--depth=1", url, *wanted], tmp, env, FETCH_TIMEOUT)
+            _run(git + ["-C", repo, "fetch", "-q", "--no-tags", "--depth=1", url, *wanted], tmp, env, FETCH_TIMEOUT, deadline)
         result: dict[str, str | None] = {}
         for rel, blob in blobs.items():
-            result[rel] = None if blob is None else _run(git + ["-C", repo, "cat-file", "blob", blob], tmp, env, 5).decode("utf-8")
+            result[rel] = None if blob is None else _run(git + ["-C", repo, "cat-file", "blob", blob], tmp, env, 5, deadline).decode("utf-8")
         return result
     except (Unreadable, OSError, UnicodeDecodeError, ValueError):
         return None
@@ -492,7 +504,11 @@ def _decide(raw: bytes, root: str, env, frontend: str, pin_fixed: bool, auto: bo
 
 
 def log_path(root: str, env) -> str:
-    return env.get("SAVIA_MCP_GUARD_LOG") or os.path.join(root, "output", "mcp-effect-guard", "decisions.jsonl")
+    """Ruta del registro. Desviarla es solo de tests (SAVIA_MCP_GUARD_TEST_LOG dentro de bats): en producción una
+    variable heredada no puede mandar el registro a otra ruta ni esconderlo."""
+    if test_mode(env) and env.get("SAVIA_MCP_GUARD_TEST_LOG"):
+        return env["SAVIA_MCP_GUARD_TEST_LOG"]
+    return os.path.join(root, "output", "mcp-effect-guard", "decisions.jsonl")
 
 
 def write_log(v: Verdict, root: str, env, frontend: str) -> None:
