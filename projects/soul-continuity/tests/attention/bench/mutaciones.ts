@@ -16,6 +16,9 @@
 // M58–M61: revisión independiente de la PR #1441 (una alerta sobre el tope sale una sola vez y
 // una regla de alerta no salta el tipo del evento).
 //
+// M63–M83: SE-514 S2 (preguntas de agentes: vencimiento, repregunta por ventana, unión sin mezclar
+// permisos, respuesta ligada a la versión, modo descanso).
+//
 // Uso: node --experimental-strip-types tests/attention/bench/mutaciones.ts
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -29,6 +32,8 @@ const RES = 'src/attention/resumen.ts';
 const LED = 'src/attention/ledger.ts';
 const PUE = 'src/attention/contrato.ts';
 const TIE = 'src/attention/tiempo.ts';
+const PRE = 'src/attention/preguntas.ts';
+const COL = 'src/attention/cola.ts';
 
 const TODOS = "['DISPONIBLE', 'FOCO', 'DESCANSO', 'FUERA'] as const";
 
@@ -95,6 +100,27 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M60 el resumen no saca la alerta de la cola agrupada', RES, 'if (dados.size > 0) pol.estado.excedidas', 'if (false) pol.estado.excedidas'],
   ['M61 una regla convierte cualquier tipo en alerta', POL, "} else if (!sinAutenticar && (tipo.k === 'AVISO' || tipo.k === 'NOTIFICACION')) {", '} else if (!sinAutenticar) {'],
   ['M62 un bloqueo reenviado vuelve a entrar en la bandeja', POL, 'if (this.bandeja.porDecision(clave) !== undefined) {\n        this.bandeja.anotar(clave, ap);', 'if (false) {\n        this.bandeja.anotar(clave, ap);'],
+  ['M63 vence un minuto tarde', PRE, 'r.estado !== \'ABIERTA\' || r.caduca > ahora', 'r.estado !== \'ABIERTA\' || r.caduca >= ahora'],
+  ['M64 el silencio responde y concede', PRE, 'r.estado = \'DEFER\';', 'r.estado = \'RESPONDIDA\'; r.respuesta = \'CONCEDER\';'],
+  ['M65 repregunta sin límite por ventana', PRE, '(r.repreguntas.get(cubo) ?? 0) >= 1', '(r.repreguntas.get(cubo) ?? 0) >= 99'],
+  ['M66 la ventana de repregunta no distingue instancias', PRE, 'return instanciaEn(this.politica.config.ventanas, ahora) ?? -(Math.floor(ahora / DIA) + 1);', 'return 0;'],
+  ['M67 los permisos se unen por tema', PRE, 'if (e.clase === \'PERMISO\') return `p:${e.id}`;', 'if (false) return `p:${e.id}`;'],
+  ['M68 unir gasta un aviso más', PRE, 'const unida = e.clase === \'DECISION\' && e.tema !== undefined &&', 'const unida = false &&'],
+  ['M69 la versión vista no se comprueba', PRE, 'if (abierta.version !== version) {', 'if (false) {'],
+  ['M70 responder no vence antes de mirar', PRE, 'responder(respuesta: unknown, ahora: Minuto, origen: Origen): ResultadoRespuesta {\n    this.vencer(ahora);', 'responder(respuesta: unknown, ahora: Minuto, origen: Origen): ResultadoRespuesta {'],
+  ['M71 responde quien no es la persona', PRE, 'if (origen !== \'PERSONA\') return rechazo(', 'if (false) return rechazo('],
+  ['M72 un permiso acepta cualquier valor', PRE, 'if (abierta.clase === \'PERMISO\' && !VALORES_PERMISO.includes(valor)) {', 'if (false) {'],
+  ['M73 denegar autoriza el efecto', PRE, 'return r.e.clase === \'PERMISO\' ? r.respuesta === \'CONCEDER\' : true;', 'return true;'],
+  ['M74 cambiar la versión conserva la respuesta', PRE, 'previa.estado = \'ABIERTA\';\n      previa.caduca = e.caduca;\n      previa.respuesta = null;', 'previa.caduca = e.caduca;'],
+  ['M75 el descanso enseña las preguntas', PRE, 'return this.politica.modoEfectivo(ahora) === \'DISPONIBLE\' ? t : [];', 'return t;'],
+  ['M76 un identificador se reutiliza para otra cosa', PRE, 'if (previa && (previa.e.clase !== e.clase || previa.e.trabajo !== e.trabajo || previa.e.agente !== e.agente)) {', 'if (false) {'],
+  ['M77 una pregunta vencida al llegar se acepta', PRE, 'if (e.caduca <= ahora) {\n      return { ok: false, motivo: \'YA_CADUCADA\'', 'if (false) {\n      return { ok: false, motivo: \'YA_CADUCADA\''],
+  ['M78 el contenido por encima del canal se enseña', PRE, 'const redactada = this.redactada(nivel);', 'const redactada = false;'],
+  ['M79 una respuesta deja la bandeja pendiente', PRE, 'this.politica.control({ k: \'RESPONDER\', decisionId: this.decisionId(id) }, \'PERSONA\', ahora);', ''],
+  ['M80 la pregunta de agente sale también como aviso de Soul', COL, '&& !i.decisionId.startsWith(PREFIJO_AGENTE)', ''],
+  ['M81 el rechazo no vuelve a enseñar la tarjeta', PRE, 'const actual = clave === null ? null :', 'const actual = true ? null :'],
+  ['M82 las obligatorias no van primero', PRE, 'Number(b.obligatoria) - Number(a.obligatoria) || ', ''],
+  ['M83 un trabajo vencido figura solo en espera', PRE, 'return mias.some((r) => r.estado === \'DEFER\') ? \'DEFER\' : \'EN_ESPERA\';', 'return \'EN_ESPERA\';'],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));
@@ -104,7 +130,7 @@ const NODE = ['--experimental-strip-types', '--no-warnings'];
 const TESTS = [
   '--test', '--test-reporter=tap',
   'tests/attention/politica.test.ts', 'tests/attention/ac4b.test.ts', 'tests/attention/contrato.test.ts',
-  'tests/attention/resumen.test.ts',
+  'tests/attention/resumen.test.ts', 'tests/attention/preguntas.test.ts',
 ];
 
 /** Copia lo que necesitan los tests: la librería, el contrato del que tira el puente y los tests. */

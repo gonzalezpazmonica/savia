@@ -61,3 +61,24 @@ M59 reencolar no la vuelve a dejar pendiente	FALLA	pasa	MUERTA
 M60 el resumen no saca la alerta de la cola agrupada	FALLA	pasa	MUERTA
 M61 una regla convierte cualquier tipo en alerta	FALLA	pasa	MUERTA
 M62 un bloqueo reenviado vuelve a entrar en la bandeja	FALLA	pasa	MUERTA
+M63 vence un minuto tarde	FALLA	pasa	MUERTA
+M64 el silencio responde y concede	FALLA	pasa	MUERTA
+M65 repregunta sin límite por ventana	FALLA	pasa	MUERTA
+M66 la ventana de repregunta no distingue instancias	FALLA	pasa	MUERTA
+M67 los permisos se unen por tema	FALLA	pasa	MUERTA
+M68 unir gasta un aviso más	FALLA	pasa	MUERTA
+M69 la versión vista no se comprueba	FALLA	pasa	MUERTA
+M70 responder no vence antes de mirar	FALLA	pasa	MUERTA
+M71 responde quien no es la persona	FALLA	pasa	MUERTA
+M72 un permiso acepta cualquier valor	FALLA	pasa	MUERTA
+M73 denegar autoriza el efecto	FALLA	pasa	MUERTA
+M74 cambiar la versión conserva la respuesta	FALLA	pasa	MUERTA
+M75 el descanso enseña las preguntas	FALLA	pasa	MUERTA
+M76 un identificador se reutiliza para otra cosa	FALLA	pasa	MUERTA
+M77 una pregunta vencida al llegar se acepta	FALLA	pasa	MUERTA
+M78 el contenido por encima del canal se enseña	FALLA	pasa	MUERTA
+M79 una respuesta deja la bandeja pendiente	FALLA	pasa	MUERTA
+M80 la pregunta de agente sale también como aviso de Soul	FALLA	pasa	MUERTA
+M81 el rechazo no vuelve a enseñar la tarjeta	FALLA	pasa	MUERTA
+M82 las obligatorias no van primero	FALLA	pasa	MUERTA
+M83 un trabajo vencido figura solo en espera	FALLA	pasa	MUERTA
