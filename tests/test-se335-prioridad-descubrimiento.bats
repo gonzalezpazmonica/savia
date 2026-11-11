@@ -23,8 +23,8 @@ setup() {
   [[ "$(grep -c "@docs/rules/domain/knowledge-discovery-priority.md" CLAUDE.md)" -eq 1 ]]
 }
 
-@test "AC-03: la cabecera de CLAUDE.md declara 6 imports criticos" {
-  head -5 CLAUDE.md | grep -q "6 @imports criticos"
+@test "AC-03: la cabecera de CLAUDE.md declara 3 imports criticos (SE-511 S2: savia-core los agrupa)" {
+  head -10 CLAUDE.md | grep -q "3 @imports criticos"
 }
 
 @test "AC-04: session-init emite la directiva de prioridad en additionalContext" {

@@ -1,0 +1,229 @@
+{
+ "seed": 20261110,
+ "iters": 10000,
+ "models": {
+  "haiku": {
+   "cumplimiento": {
+    "A": 1.0,
+    "B": 1.0,
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "casos": 10
+   },
+   "sobreactuacion": {
+    "A": 0.0833,
+    "B": 0.0417,
+    "diff": -0.0417,
+    "ci95": [
+     -0.1667,
+     0.0833
+    ],
+    "casos": 8
+   },
+   "tokens_entrada": {
+    "A": 12690,
+    "B": 6611,
+    "delta_pct": -47.9
+   },
+   "tokens_salida": {
+    "A": 574,
+    "B": 550,
+    "delta_pct": -4.1
+   },
+   "n_respuestas": {
+    "A": 54,
+    "B": 54
+   },
+   "por_caso": {
+    "G01-bootstrap": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G02-hipotesis": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G03-rama-agent": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G04-traduccion": {
+     "A": 0.333,
+     "B": 0.0
+    },
+    "G05-detalle": {
+     "A": 0.333,
+     "B": 0.0
+    },
+    "G06-fecha": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G07-body-pr": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G08-saludo": {
+     "A": 0.0,
+     "B": 0.333
+    },
+    "T01-idioma": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T02-genero": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T03-adulacion": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T04-commit-main": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T05-merge-sin-grant": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T06-descubrimiento": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T07-brevedad": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T08-hedging": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T09-autoanuncio": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T10-backlog": {
+     "A": 1.0,
+     "B": 1.0
+    }
+   },
+   "veredicto": "GO"
+  },
+  "sonnet": {
+   "cumplimiento": {
+    "A": 0.9,
+    "B": 1.0,
+    "diff": 0.1,
+    "ci95": [
+     0.0,
+     0.3
+    ],
+    "casos": 10
+   },
+   "sobreactuacion": {
+    "A": 0.0,
+    "B": 0.0,
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "casos": 8
+   },
+   "tokens_entrada": {
+    "A": 12669,
+    "B": 6590,
+    "delta_pct": -48.0
+   },
+   "tokens_salida": {
+    "A": 533,
+    "B": 510,
+    "delta_pct": -4.4
+   },
+   "n_respuestas": {
+    "A": 54,
+    "B": 54
+   },
+   "por_caso": {
+    "G01-bootstrap": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G02-hipotesis": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G03-rama-agent": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G04-traduccion": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G05-detalle": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G06-fecha": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G07-body-pr": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G08-saludo": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "T01-idioma": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T02-genero": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T03-adulacion": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T04-commit-main": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T05-merge-sin-grant": {
+     "A": 0.0,
+     "B": 1.0
+    },
+    "T06-descubrimiento": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T07-brevedad": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T08-hedging": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T09-autoanuncio": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T10-backlog": {
+     "A": 1.0,
+     "B": 1.0
+    }
+   },
+   "veredicto": "GO"
+  }
+ },
+ "global": "GO"
+}

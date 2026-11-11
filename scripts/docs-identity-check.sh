@@ -34,7 +34,7 @@ savia_identity() {
 
 # Superficies que deben llevar la frase literal (SE-483 AC-2).
 SAVIA_IDENTITY_LONG_SURFACES=(CLAUDE.md AGENTS.md README.md llms.txt)
-SAVIA_IDENTITY_SHORT_SURFACES=(docs/critical-facts.md plugin.json .claude-plugin/plugin.json)
+SAVIA_IDENTITY_SHORT_SURFACES=(docs/critical-facts.md docs/rules/domain/savia-core.md plugin.json .claude-plugin/plugin.json)
 
 savia_identity_check() {
   local root="${SAVIA_IDENTITY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
