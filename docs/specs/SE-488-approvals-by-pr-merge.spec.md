@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: IMPLEMENTING
 approved_at: 2026-11-03
 approved_by: "operadora, pregunta interactiva 2026-11-03 (Aprobada, a P0); la aprobación se formaliza al fusionar esta PR (SE-488)"
 priority: P0
@@ -14,6 +14,10 @@ timeline:
   - from: "2026-10-30"
     learned: "2026-10-30"
     value: "PROPOSED"
+    source: "spec-lifecycle:auto"
+  - from: "2026-11-11"
+    learned: "2026-11-11"
+    value: "IMPLEMENTING"
     source: "spec-lifecycle:auto"
 ---
 # SE-488 — Aprobaciones por fusión de PR (operación solo móvil)
