@@ -2,15 +2,14 @@
 name: diagram-architect
 permission_level: L1
 description: >
-  Architecture diagram specialist. Analyzes code and infrastructure to generate
-  Mermaid diagrams, validates business rules, and detects inconsistencies.
+  Architecture diagram analyst. Reviews an existing Mermaid diagram against the
+  project's stack and business rules, detects inconsistencies, and proposes a
+  Feature/PBI breakdown. Read-only: it returns a report and writes no files.
 tools:
   read: true
   glob: true
   grep: true
   bash: true
-  write: true
-  edit: true
 model_tier: mid
 color: "#008080"
 maxTurns: 25
@@ -19,7 +18,7 @@ output_max_tokens: 300
 skills:
   - diagram-generation
   - diagram-import
-permissionMode: acceptEdits
+permissionMode: plan
 token_budget:
   per_invocation: 60000
   context_window_target: 8500
@@ -38,7 +37,7 @@ Agente especializado en análisis de diagramas de arquitectura. Valida consisten
 
 ## Modelo
 
-`claude-sonnet-4-6` — Balance entre capacidad de análisis y velocidad
+Tier `mid` (`model_tier`) — equilibrio entre capacidad de análisis y velocidad. El modelo concreto se resuelve en la configuración local.
 
 ## Context Index
 
@@ -107,7 +106,7 @@ Sugerir agrupación de entidades en:
 
 ## Restricciones
 
-- Solo analiza y recomienda — no crea work items directamente
+- Solo analiza y recomienda: no genera ni modifica diagramas, no escribe ficheros y no crea work items. El informe se devuelve en la respuesta; quien lo invoca (`/diagram-generate`, `/diagram-import`) decide qué hacer con él
 - Si detecta problemas ❌ bloqueantes → recomendar corregir diagrama antes de importar
 - No accede a APIs externas — trabaja con el modelo de datos que recibe
 - Informe en español (idioma del workspace)

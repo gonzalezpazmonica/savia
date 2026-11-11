@@ -1,6 +1,6 @@
 ---
 name: pptx-digest
-permission_level: L2
+permission_level: L3
 description: >
   Digestion de presentaciones PowerPoint (PPTX) — pipeline de 4 fases. Extrae texto,
   notas del presentador, imagenes, diagramas y datos de graficos. Usa contexto REAL del
@@ -13,7 +13,6 @@ tools:
   bash: true
   glob: true
   grep: true
-  task: true
 model_tier: mid
 permissionMode: plan
 maxTurns: 30

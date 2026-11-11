@@ -1,6 +1,6 @@
 ---
 name: legal-compliance
-permission_level: L2
+permission_level: L3
 description: >
   Auditoría de compliance legal contra legislación española consolidada (legalize-es).
   Usar PROACTIVELY cuando: se crean reglas de negocio, se revisan contratos,
