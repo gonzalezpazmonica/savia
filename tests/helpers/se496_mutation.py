@@ -34,6 +34,50 @@ def verdict(cid, got):
 MUTATION_CASE = {12: "D12"}
 
 
+# Controles que viven dentro de un paso junto a otros: desactivar el paso entero los mata a la vez y no
+# demuestra cuál importa. Se desactiva solo la función y se exige que falle su regresión de review_fixes.
+FN_MUTATIONS = {"bind_params": "params-scope", "check_lifetime": "contract-invariants",
+                "check_single_use": "contract-invariants"}
+
+
+def run_fix(name):
+    """-> lista de fallos de la regresión, o ("EXC", tipo) si revienta."""
+    import review_fixes as rf
+    rf.INPROC = True
+    try:
+        return rf.FIXES[name]()
+    except Exception as e:
+        return ("EXC", type(e).__name__)
+    finally:
+        rf.INPROC = False
+
+
+def one_fn(fn):
+    """Desactiva solo la función fn: exit 0 si su regresión falla sin excepción (KILLED), 1 si no, 2 si no existe."""
+    fix = FN_MUTATIONS.get(fn)
+    if fix is None or not callable(getattr(k, fn, None)):
+        print("funcion %s inexistente" % fn)
+        return 2
+    base = run_fix(fix)
+    if base != []:
+        print("BASE-FAIL %s: %s" % (fix, base))
+        return 1
+    orig = getattr(k, fn)
+    setattr(k, fn, lambda *a, **kw: None)
+    try:
+        got = run_fix(fix)
+    finally:
+        setattr(k, fn, orig)
+    if isinstance(got, tuple):
+        print("CRASHED funcion %s: %s -> %s" % (fn, fix, got))
+        return 1
+    if not got:
+        print("SURVIVED funcion %s: %s sigue en verde" % (fn, fix))
+        return 1
+    print("KILLED funcion %s por %s (%d fallos)" % (fn, fix, len(got)))
+    return 0
+
+
 def by_step_map():
     by_step = {}
     for cid, (want, step, _fn) in b.CASES.items():
@@ -111,6 +155,8 @@ if __name__ == "__main__":
         except ValueError:
             print("paso no numerico")
             sys.exit(2)
+    if len(sys.argv) == 3 and sys.argv[1] == "--fn":
+        sys.exit(one_fn(sys.argv[2]))
     if sys.argv[1:] == ["--baseline"]:
         sys.exit(baseline())
     sys.exit(main())

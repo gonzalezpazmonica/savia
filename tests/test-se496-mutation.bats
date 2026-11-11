@@ -151,3 +151,27 @@ teardown() {
   [[ "$output" == KILLED* ]]
 }
 
+
+@test "AC-4 por función: desactivar bind_params hace fallar params-scope" {
+  run python3 tests/helpers/se496_mutation.py --fn bind_params
+  [ "$status" -eq 0 ]
+  [[ "$output" == "KILLED funcion bind_params"* ]]
+}
+
+@test "AC-4 por función: desactivar check_lifetime hace fallar contract-invariants" {
+  run python3 tests/helpers/se496_mutation.py --fn check_lifetime
+  [ "$status" -eq 0 ]
+  [[ "$output" == "KILLED funcion check_lifetime"* ]]
+}
+
+@test "AC-4 por función: desactivar check_single_use hace fallar contract-invariants" {
+  run python3 tests/helpers/se496_mutation.py --fn check_single_use
+  [ "$status" -eq 0 ]
+  [[ "$output" == "KILLED funcion check_single_use"* ]]
+}
+
+@test "AC-4 por función: una función sin regresión asignada se rechaza con exit 2" {
+  run python3 tests/helpers/se496_mutation.py --fn step1_contract
+  [ "$status" -eq 2 ]
+  [[ "$output" == *inexistente* ]]
+}
