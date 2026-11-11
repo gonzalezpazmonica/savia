@@ -20,10 +20,10 @@ def cli(w, args, stdin=""):
     return r.returncode, r.stdout.decode().strip()
 
 
-def pub_world(max_uses=1):
+def pub_world():
     w = World()
     w.set_pr(7)
-    w.contract(cap="project.publish", declared_effects=["project.publish"], max_uses=max_uses,
+    w.contract(cap="project.publish", declared_effects=["project.publish"], max_uses=1,
                scope={"repo": [INSTALL], "prs": [7], "projects": ["p", "uno", "dos"]})
     return w
 
@@ -68,19 +68,32 @@ def ex_ledger():
     return bad
 
 
+def draft_world(max_uses=2):
+    """pr.create-draft es reversible: el único sitio donde un contrato con max_uses 2 es válido
+    (project.publish y pr.merge exigen max_uses 1)."""
+    w = World()
+    w.contract(max_uses=max_uses)
+    return w
+
+
+def draft_req(w, title="x"):
+    return w.request(action={"name": "pr.create-draft", "params": {"branch": "agent/work", "title": title}})
+
+
 def ex_digest():
     bad = []
-    w = pub_world(max_uses=2)
-    req = pub_req(w)
+    w = draft_world()
+    req = draft_req(w)
     rc, out = w.ev(req)
     w.set_pr(7, reviewDecision="REVIEW_REQUIRED")  # no referenciado por ninguna precondición
-    w.set_pr(8, headRefOid="c" * 40)               # otro PR
+    w._git("branch", "agent/otra")                 # otra rama
     rc2, out2 = w.ev(req)
     if out["state_digest"] != out2["state_digest"]:
         bad.append("un cambio no referenciado altero el digest")
     if w.ev(req, "recheck", w.receipt(out))[0] != 0:
         bad.append("recheck tras cambio irrelevante no dio ALLOW")
-    w.set_pr(7, headRefOid="d" * 40)
+    w._git("commit", "-q", "--allow-empty", "-m", "nuevo head")
+    w._git("branch", "-f", "agent/work", "HEAD")    # la rama del objetivo avanza: head_sha nuevo
     rc3, out3 = w.ev(req)
     if out["state_digest"] == out3["state_digest"]:
         bad.append("head_sha nuevo no altero el digest")
@@ -89,16 +102,16 @@ def ex_digest():
         bad.append("recheck con head_sha nuevo: %s" % out4)
     w.close()
     # max_uses 2: dos órdenes evaluadas a la vez -> dos ALLOW (los usos no entran en el digest)
-    w = pub_world(max_uses=2)
-    r1, r2 = pub_req(w, "uno"), pub_req(w, "dos")
+    w = draft_world()
+    r1, r2 = draft_req(w, "uno"), draft_req(w, "dos")
     _, o1 = w.ev(r1)
     _, o2 = w.ev(r2)
     a = w.ev(r1, "recheck", w.receipt(o1))[0]
     b = w.ev(r2, "recheck", w.receipt(o2))[0]
     if (a, b) != (0, 0):
         bad.append("dos ordenes con max_uses 2: %s %s" % (a, b))
-    c = w.ev(pub_req(w, "uno"), "recheck", w.receipt(o1))
-    if c[0] != 1:
+    c = w.ev(draft_req(w, "uno"), "recheck", w.receipt(o1))
+    if (c[0], (c[1] or {}).get("reason")) != (1, "MAX_USES_EXHAUSTED"):
         bad.append("tercer recheck no denegado: %s" % (c,))
     w.close()
     return bad

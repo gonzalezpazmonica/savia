@@ -222,7 +222,7 @@ def fx_merge_preconditions():
         w = World()
         w.set_pr(7, **pr)
         w.contract(cap="pr.merge", declared_effects=["pr.merge"], scope={"repo": [INSTALL], "prs": [7]},
-                   authority={"level": "L4", "tier": 4})
+                   authority={"level": "L4", "tier": 4}, max_uses=1)
         rc, out = w.ev(w.request(capability="pr.merge", action={"name": "pr.merge", "params": {"pr_number": 7}},
                                  target={"pr": 7}))
         if (rc, reason(out)) != (1, want):
@@ -250,8 +250,13 @@ def _case(bad, label, got, want):
         bad.append("%s: %s %s (esperado %s %s)" % (label, got[0], got[1], want[0], want[1]))
 
 
-def _ev(contract, req, pr=None):
-    w = World()
+INPROC = False  # se496_mutation.py lo activa para que un parche en proceso afecte al kernel
+
+
+def _ev(contract, req, pr=None, tweak=None):
+    w = World(inproc=INPROC)
+    if tweak:
+        tweak(w)
     if pr is not None:
         w.set_pr(7, **pr)
     w.contract(**contract)
@@ -301,7 +306,7 @@ def fx_params_scope():
     _case(bad, "publish sin target.project", _ev(pub, _pub_req("p", {"pr": 7}), pr={}), (1, "OUT_OF_SCOPE"))
 
     merge = dict(cap="pr.merge", declared_effects=["pr.merge"], scope={"repo": [INSTALL], "prs": [7]},
-                 authority={"level": "L4", "tier": 4})
+                 authority={"level": "L4", "tier": 4}, max_uses=1)
     # control: pasa el paso 10 y para en el nivel (yema es L3; merge exige L4)
     _case(bad, "merge control", _ev(merge, _merge_req(7), pr={"isDraft": False}), (1, "LEVEL_EXCEEDED"))
     _case(bad, "merge pr_number=8", _ev(merge, _merge_req(8), pr={"isDraft": False}), (1, "OUT_OF_SCOPE"))
@@ -324,7 +329,7 @@ def fx_params_scope():
 def fx_ci_skipped():
     bad = []
     merge = dict(cap="pr.merge", declared_effects=["pr.merge"], scope={"repo": [INSTALL], "prs": [7]},
-                 authority={"level": "L4", "tier": 4})
+                 authority={"level": "L4", "tier": 4}, max_uses=1)
     skipped = {"status": "COMPLETED", "conclusion": "SKIPPED"}
     neutral = {"status": "COMPLETED", "conclusion": "NEUTRAL"}
     green = {"status": "COMPLETED", "conclusion": "SUCCESS"}
@@ -353,10 +358,60 @@ def fx_runs_limit():
     return bad
 
 
+# ---------------------------------------------------------------- seg. ronda 3, P1-1: vida y un solo uso en evaluate
+def _drop_reversibility(w):
+    """Descriptor de vault.note-write sin `reversibility` (antes de firmar: el contrato fija su sha)."""
+    p = os.path.join(w.root, "contracts", "capabilities", "vault.note-write.yaml")
+    with open(p) as f:
+        lines = [x for x in f if "reversibility:" not in x]
+    with open(p, "w") as f:
+        f.write("".join(lines))
+
+
+def fx_contract_invariants():
+    """evaluate aplica las invariantes del contrato que antes solo miraba check-contract: vida maxima
+    de 7 dias y max_uses 1 para capacidades no reversibles. Cada denegacion con su control."""
+    bad = []
+    ok = {"branch": "agent/work", "title": "x"}
+    nb = "2026-11-10T00:00:00Z"
+    _case(bad, "vida 7 dias exactos", _ev({"not_before": nb, "expires_at": "2026-11-17T00:00:00Z"}, _draft(ok)),
+          (0, "OK"))
+    _case(bad, "vida 7 dias y 1 s", _ev({"not_before": nb, "expires_at": "2026-11-17T00:00:01Z"}, _draft(ok)),
+          (1, "LIFETIME_EXCEEDS_7D"))
+    _case(bad, "vida de un ano", _ev({"not_before": nb, "expires_at": "2027-11-10T00:00:00Z"}, _draft(ok)),
+          (1, "LIFETIME_EXCEEDS_7D"))
+
+    pub = dict(cap="project.publish", declared_effects=["project.publish"],
+               scope={"repo": [INSTALL], "prs": [7], "projects": ["p"]})
+    req = _pub_req("p", {"pr": 7, "project": "p"})
+    _case(bad, "publish max_uses 1", _ev(dict(pub, max_uses=1), req, pr={}), (0, "OK"))
+    _case(bad, "publish sin max_uses", _ev(pub, req, pr={}), (1, "IRREVERSIBLE_NEEDS_MAX_USES_1"))
+    _case(bad, "publish max_uses 2", _ev(dict(pub, max_uses=2), req, pr={}), (1, "IRREVERSIBLE_NEEDS_MAX_USES_1"))
+    merge = dict(cap="pr.merge", declared_effects=["pr.merge"], scope={"repo": [INSTALL], "prs": [7]},
+                 authority={"level": "L4", "tier": 4})
+    _case(bad, "merge sin max_uses", _ev(merge, _merge_req(7), pr={"isDraft": False}),
+          (1, "IRREVERSIBLE_NEEDS_MAX_USES_1"))
+    # control: con max_uses 1 pasa el paso 7 y para en el nivel (yema es L3; merge exige L4)
+    _case(bad, "merge max_uses 1", _ev(dict(merge, max_uses=1), _merge_req(7), pr={"isDraft": False}),
+          (1, "LEVEL_EXCEEDED"))
+
+    vault = dict(cap="vault.note-write", declared_effects=["vault.write", "git" + ".commit"],
+                 scope={"repo": [INSTALL], "branches": ["agent/*"], "paths": ["notas"]})
+    vreq = _vault_req("notas/n.md", "notas/n.md")
+    _case(bad, "vault reversible sin max_uses", _ev(vault, vreq), (0, "OK"))
+    # fail-closed: un descriptor sin reversibility declarada cuenta como irreversible
+    _case(bad, "vault sin reversibility", _ev(vault, vreq, tweak=_drop_reversibility),
+          (1, "IRREVERSIBLE_NEEDS_MAX_USES_1"))
+    _case(bad, "vault sin reversibility y max_uses 1",
+          _ev(dict(vault, max_uses=1), vreq, tweak=_drop_reversibility), (0, "OK"))
+    return bad
+
+
 FIXES = {"env-bypass": fx_env_bypass, "tier-files": fx_tier_files, "level-main": fx_level_from_main,
          "ontology-main": fx_ontology_from_main, "ci-head": fx_ci_head, "branch-repo": fx_branch_other_repo,
          "prior-age": fx_prior_age, "merge-pre": fx_merge_preconditions, "mutation-crash": fx_mutation_crash,
-         "params-scope": fx_params_scope, "ci-skipped": fx_ci_skipped, "runs-limit": fx_runs_limit}
+         "params-scope": fx_params_scope, "ci-skipped": fx_ci_skipped, "runs-limit": fx_runs_limit,
+         "contract-invariants": fx_contract_invariants}
 
 if __name__ == "__main__":
     if len(sys.argv) != 2 or sys.argv[1] not in FIXES:

@@ -444,6 +444,11 @@ def covered(scope, target, repo):
 
 
 # --------------------------------------------------------------------------- validadores
+def reversible(descriptor):
+    """Solo `reversibility: reversible` explicito es reversible; ausente o desconocido cuenta como irreversible."""
+    return isinstance(descriptor, dict) and (descriptor.get("safety") or {}).get("reversibility") == "reversible"
+
+
 def contract_errors(c, root=None, raw=None):
     errs = []
     if not isinstance(c, dict):
@@ -508,7 +513,7 @@ def contract_errors(c, root=None, raw=None):
         dpath = os.path.join(root, "contracts", "capabilities", cap["id"] + ".yaml")
         try:
             d = load_yaml_file(dpath)
-            if (d.get("safety") or {}).get("reversibility") == "irreversible" and c.get("max_uses") != 1:
+            if not reversible(d) and c.get("max_uses") != 1:
                 errs.append("IRREVERSIBLE_NEEDS_MAX_USES_1")
         except (OSError, ValueError, AttributeError):
             errs.append("CAPABILITY_UNKNOWN")
@@ -688,11 +693,26 @@ def step5_revoked(ctx):
         raise Deny("REVOKED", "contrato revocado (%s)" % ",".join(k for k, v in ctx.revoked.items() if v))
 
 
+def check_lifetime(ctx, nb, ex):
+    """La vida maxima de 7 dias la exige el camino de decision, no solo check-contract."""
+    if ex - nb > MAX_LIFE:
+        raise Deny("LIFETIME_EXCEEDS_7D", "el contrato vale mas de 7 dias (%s -> %s)"
+                   % (ctx.contract["not_before"], ctx.contract["expires_at"]))
+
+
+def check_single_use(ctx):
+    """Con el descriptor ya atado por sha: un efecto no reversible solo se concede con max_uses: 1."""
+    if not reversible(ctx.descriptor) and ctx.contract.get("max_uses") != 1:
+        raise Deny("IRREVERSIBLE_NEEDS_MAX_USES_1",
+                   "la capacidad no es reversible y el contrato no limita a un solo uso (max_uses: 1)")
+
+
 def step6_time(ctx):
     try:
         nb, ex = parse_ts(ctx.contract["not_before"]), parse_ts(ctx.contract["expires_at"])
     except ValueError:
         raise Deny("EXPIRED", "fechas del contrato no validas")
+    check_lifetime(ctx, nb, ex)
     if ctx.now < nb:
         raise Deny("NOT_YET_VALID", "el contrato empieza el " + ctx.contract["not_before"])
     if ctx.now >= ex:
@@ -717,6 +737,7 @@ def step7_capability(ctx):
         raise Deny("CAPABILITY_MISMATCH", "action.name (%s) no es la capacidad pedida" % ctx.req["action"]["name"])
     if cap.get("id") != cid or d.get("id") != cid or cap.get("version") != d.get("version") or cap.get("sha256") != ctx.cap_sha:
         raise Deny("CAPABILITY_MISMATCH", "el descriptor cambio desde que se firmo el contrato")
+    check_single_use(ctx)
 
 
 def step8_ambiguous(ctx):

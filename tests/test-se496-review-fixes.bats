@@ -102,3 +102,9 @@ teardown() {
   run $F no-existe
   [ "$status" -eq 2 ]
 }
+
+@test "ronda 3 P1-1: evaluate deniega vida > 7 días (7 d exactos vale) e irreversible o sin reversibility declarada sin max_uses 1; controles ALLOW" {
+  run $F contract-invariants
+  [ "$status" -eq 0 ]
+  [ "$output" = "OK" ]
+}
