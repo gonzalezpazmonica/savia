@@ -10,9 +10,10 @@
 // SAVIA_GATES_PIN=1 está en el entorno. Nunca para merge ni en un run sin persona.
 //
 // Falla cerrado: sin python3, sin núcleo, tiempo agotado o salida ilegible → ask (deny sin persona).
-// OpenCode nombra las tools MCP `<servidor>_<tool>` (con el nombre del servidor saneado). Solo se
-// reconocen los servidores declarados en opencode.json del proyecto o del usuario; una tool de un
-// servidor declarado en otro sitio no se ve (límite declarado en el PR de S1).
+// OpenCode nombra las tools MCP `<servidor>_<tool>` (con el nombre del servidor saneado). Los servidores se
+// leen de opencode.json y opencode.jsonc (raíz, .opencode/, ~/.config/opencode/) y de OPENCODE_CONFIG. Una tool
+// que no es nativa del motor (lista cerrada NATIVE_TOOLS) y no se puede traducir no pasa: llega al núcleo como
+// `mcp__opencode-unresolved__<tool>`, sin clasificar → ask (deny sin persona). Fallo cerrado, no fallo abierto.
 
 import { spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
@@ -31,39 +32,88 @@ export interface McpVerdict {
 
 const WEB: Record<string, string> = { webfetch: "WebFetch", websearch: "WebSearch" }
 
+/** Tools propias del motor de OpenCode (vocabulario v1, en minúsculas). Fuera de esta lista, todo es candidato a MCP. */
+export const NATIVE_TOOLS = new Set(["bash", "edit", "write", "read", "glob", "grep", "list", "ls", "task", "multiedit",
+  "notebookedit", "todowrite", "todoread", "patch", "apply_patch", "skill", "question", "lsp", "codesearch", "invalid",
+  "batch", "plan_enter", "plan_exit"])
+/** Servidor ficticio para tools no nativas que no se pueden atribuir a ningún servidor declarado. */
+export const UNRESOLVED_SERVER = "opencode-unresolved"
+
 function sanitize(server: string): string {
   return server.replace(/[^a-zA-Z0-9_-]/g, "_")
 }
 
-/** Nombre de la tool en el vocabulario del catálogo (`mcp__<servidor>__<tool>`, WebFetch, WebSearch) o null. */
+/**
+ * Nombre de la tool en el vocabulario del catálogo (`mcp__<servidor>__<tool>`, WebFetch, WebSearch), o null si es
+ * nativa del motor. Una tool no nativa sin servidor reconocible → `mcp__opencode-unresolved__<tool>` (sin clasificar).
+ */
 export function catalogName(tool: string, servers: string[]): string | null {
   if (tool.startsWith("mcp__")) return tool
   if (tool === "WebFetch" || tool === "WebSearch") return tool
-  const web = WEB[tool.toLowerCase()]
-  if (web) return web
+  const lower = tool.toLowerCase()
+  if (Object.hasOwn(WEB, lower)) return WEB[lower]
+  if (NATIVE_TOOLS.has(lower)) return null
   // El servidor más largo primero: `savia-vaults_x` no debe leerse como servidor `savia`.
   for (const server of [...servers].sort((a, b) => b.length - a.length)) {
     const prefix = `${sanitize(server)}_`
     if (tool.startsWith(prefix) && tool.length > prefix.length) return `mcp__${server}__${tool.slice(prefix.length)}`
   }
-  return null
+  return `mcp__${UNRESOLVED_SERVER}__${tool}`
+}
+
+/** JSONC → JSON: quita comentarios `//` y `/* *\/` fuera de cadenas y comas finales antes de `}` o `]`. */
+export function stripJsonc(text: string): string {
+  let out = ""
+  let i = 0
+  while (i < text.length) {
+    const c = text[i]
+    if (c === '"') {
+      let j = i + 1
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1
+      out += text.slice(i, j + 1)
+      i = j + 1
+    } else if (c === "/" && text[i + 1] === "/") {
+      while (i < text.length && text[i] !== "\n") i++
+    } else if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2)
+      i = end < 0 ? text.length : end + 2
+    } else {
+      out += c
+      i++
+    }
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1")
 }
 
 function serversIn(file: string): string[] {
   if (!existsSync(file)) return []
   try {
-    const mcp = JSON.parse(readFileSync(file, "utf-8"))?.mcp
+    const mcp = JSON.parse(stripJsonc(readFileSync(file, "utf-8")))?.mcp
     return mcp && typeof mcp === "object" && !Array.isArray(mcp) ? Object.keys(mcp) : []
   } catch {
     return []
   }
 }
 
-/** Servidores MCP declarados para este proyecto (opencode.json del proyecto, de .opencode/ y del usuario). */
-export function mcpServers(root: string): string[] {
-  const files = [join(root, "opencode.json"), join(root, ".opencode/opencode.json"),
-    join(homedir(), ".config/opencode/opencode.json")]
+/** Servidores MCP declarados: opencode.json[c] del proyecto, de .opencode/, del usuario y el de OPENCODE_CONFIG. */
+export function mcpServers(root: string, env: Record<string, string | undefined> = process.env): string[] {
+  const dirs = [root, join(root, ".opencode"), join(env.HOME || homedir(), ".config/opencode")]
+  const files = dirs.flatMap((d) => [join(d, "opencode.json"), join(d, "opencode.jsonc")])
+  if (env.OPENCODE_CONFIG) files.push(env.OPENCODE_CONFIG)
   return [...new Set(files.flatMap(serversIn))]
+}
+
+/**
+ * Entorno para el núcleo en producción: sin las variables de inyección de tests. El motor puede heredar un `.env`
+ * del workspace (Bun lo carga), y un agente que lo escriba no debe poder cambiar remoto ni reloj del guard.
+ */
+export function productionEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {}
+  for (const [k, v] of Object.entries(env)) {
+    if (k.startsWith("SAVIA_MCP_GUARD_TEST") || k === "BATS_TEST_FILENAME") continue
+    out[k] = v
+  }
+  return out
 }
 
 function autonomous(env: Record<string, string | undefined>): boolean {
@@ -130,7 +180,7 @@ export async function mcpEffectVerdict(a: {
   pinFixed: boolean
   servers?: string[]
 }): Promise<McpVerdict> {
-  const name = catalogName(a.tool, a.servers ?? mcpServers(a.root))
+  const name = catalogName(a.tool, a.servers ?? mcpServers(a.root, a.env))
   if (!name) return { decision: "pass", reason: "" }
   const raw = JSON.stringify({ hook_event_name: "PreToolUse", tool_name: name, tool_input: a.args ?? {} })
   return runCore(raw, { root: a.root, coreRoot: a.coreRoot, env: a.env, pinFixed: a.pinFixed })

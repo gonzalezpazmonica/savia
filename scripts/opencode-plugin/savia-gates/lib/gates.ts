@@ -18,7 +18,7 @@ import { REGISTRY, trustedFor, verifyTrusted, wrapCommand } from "./trusted-guar
 import type { TrustedGuards } from "./trusted-guards"
 import { resolveProjectRoot } from "./root"
 import { domeGuardVerdict, NATIVE_TWIN_HOOKS, strictest } from "./dome-guard"
-import { MCP_NATIVE_TWIN_HOOKS, mcpEffectVerdict } from "./mcp-effect-guard"
+import { MCP_NATIVE_TWIN_HOOKS, mcpEffectVerdict, productionEnv } from "./mcp-effect-guard"
 
 /** Providers the operator declared local (comma-separated). Anything else counts as cloud. */
 function localProviders(): Set<string> {
@@ -141,7 +141,7 @@ export async function createGates(init: GatesInit, flavor: Flavor) {
       // SE-508 S1: guard previo de efectos MCP/WebFetch/WebSearch, gemelo del hook mcp-effect-guard.sh (mismo
       // núcleo Python). Como en cúpulas, `ask` se aplica como bloqueo con el motivo. La delegación en Space
       // solo vale con el pin de guards fijado en este proceso (pin !== null).
-      const effect = await mcpEffectVerdict({ root, tool, args, env: process.env, pinFixed: pin !== null })
+      const effect = await mcpEffectVerdict({ root, tool, args, env: productionEnv(process.env), pinFixed: pin !== null })
       if (effect.decision !== "pass") {
         await auditLog({ event: "mcp-effect-guard", tool, decision: effect.decision })
         throw new Error(`savia-gates: MCP_${effect.decision.toUpperCase()}: ${effect.reason}`)

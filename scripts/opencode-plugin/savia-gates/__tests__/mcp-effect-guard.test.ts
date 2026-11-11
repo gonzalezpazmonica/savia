@@ -3,7 +3,7 @@ import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promi
 import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { MCP_NATIVE_TWIN_HOOKS, catalogName, mcpEffectVerdict, mcpServers, runCore } from "../lib/mcp-effect-guard"
+import { MCP_NATIVE_TWIN_HOOKS, catalogName, mcpEffectVerdict, mcpServers, productionEnv, runCore, stripJsonc } from "../lib/mcp-effect-guard"
 
 // SE-508 S1 DUAL_BINDING: la regla de savia-gates llama al mismo núcleo que el hook mcp-effect-guard.sh.
 // Aquí se prueba lo que solo existe en OpenCode: el nombre de las tools MCP de OpenCode (`<servidor>_<tool>`),
@@ -62,19 +62,59 @@ test("catalogName: nombres de OpenCode al vocabulario del catálogo", () => {
   expect(catalogName("savia-vaults_vault_read", servers)).toBe("mcp__savia-vaults__vault_read")
   expect(catalogName("webfetch", servers)).toBe("WebFetch")
   expect(catalogName("websearch", servers)).toBe("WebSearch")
-  // negativo: herramientas propias del motor y nombres sin servidor no son MCP
+  // negativo: herramientas propias del motor no son MCP
   expect(catalogName("bash", servers)).toBeNull()
   expect(catalogName("edit", servers)).toBeNull()
-  expect(catalogName("githubx_merge", servers)).toBeNull()
+  // revisión #1525 P1: una tool no nativa sin servidor reconocible no se ignora; queda sin clasificar
+  expect(catalogName("githubx_merge", servers)).toBe("mcp__opencode-unresolved__githubx_merge")
+  expect(catalogName("github_merge_pull_request", [])).toBe("mcp__opencode-unresolved__github_merge_pull_request")
+  // un nombre que coincide con una propiedad de Object no se toma por tool web
+  expect(catalogName("constructor", servers)).toBe("mcp__opencode-unresolved__constructor")
+})
+
+test("revisión #1525 P1: servidor no declarado en opencode.json → ask, y deny sin persona (antes pasaba)", async () => {
+  const { root, env } = await workspace()
+  const v = await mcpEffectVerdict({ root, tool: "github_merge_pull_request", args: {}, env, pinFixed: false, servers: [] })
+  expect(v.decision).toBe("ask")
+  expect(v.reason).toContain("sin clasificar")
+  const auto = await mcpEffectVerdict({ root, tool: "github_merge_pull_request", args: {}, env: { ...env, SAVIA_AUTONOMOUS_RUN: "1" }, pinFixed: false, servers: [] })
+  expect(auto.decision).toBe("deny")
+})
+
+test("revisión #1525 P1: mcpServers lee opencode.jsonc (comentarios, URLs, comas finales) y OPENCODE_CONFIG", async () => {
+  const root = await mkdtemp(join(tmpdir(), "se508-jsonc-"))
+  dirs.push(root)
+  await writeFile(join(root, "opencode.jsonc"), `{
+  // servidores activados desde .opencode/mcp-templates
+  "mcp": {
+    "github": { "url": "https://api.ejemplo.test/mcp", /* remoto */ "type": "remote", },
+  },
+}`)
+  const extra = join(root, "otro.json")
+  await writeFile(extra, JSON.stringify({ mcp: { "savia-vaults": {} } }))
+  expect(mcpServers(root, { HOME: root }).sort()).toEqual(["github"])
+  expect(mcpServers(root, { HOME: root, OPENCODE_CONFIG: extra }).sort()).toEqual(["github", "savia-vaults"])
+  // negativo: sin el fichero de OPENCODE_CONFIG no aparece el servidor
+  expect(mcpServers(root, { HOME: root, OPENCODE_CONFIG: join(root, "no-existe.json") })).toEqual(["github"])
+})
+
+test("stripJsonc respeta // dentro de cadenas", () => {
+  expect(JSON.parse(stripJsonc('{"a": "https://x.test//y", // c\n"b": [1,],}'))).toEqual({ a: "https://x.test//y", b: [1] })
+})
+
+test("revisión #1525 P2: productionEnv quita la inyección de tests y conserva lo demás", () => {
+  const e = productionEnv({ PATH: "/bin", SAVIA_MCP_GUARD_TEST: "1", SAVIA_MCP_GUARD_TEST_REMOTE: "file:///x",
+    SAVIA_MCP_GUARD_TEST_TODAY: "2026-01-01", BATS_TEST_FILENAME: "x.bats", SAVIA_RUN_ID: "r" })
+  expect(e).toEqual({ PATH: "/bin", SAVIA_RUN_ID: "r" })
 })
 
 test("mcpServers lee los servidores de opencode.json; ilegible → lista vacía", async () => {
   const root = await mkdtemp(join(tmpdir(), "se508-srv-"))
   dirs.push(root)
   await writeFile(join(root, "opencode.json"), JSON.stringify({ mcp: { github: {}, "savia-vaults": {} } }))
-  expect(mcpServers(root).sort()).toEqual(["github", "savia-vaults"])
+  expect(mcpServers(root, { HOME: root }).sort()).toEqual(["github", "savia-vaults"])
   await writeFile(join(root, "opencode.json"), "{roto")
-  expect(mcpServers(root)).toEqual([])
+  expect(mcpServers(root, { HOME: root })).toEqual([])
 })
 
 test("el gemelo bash no lo ejecuta el puente (misma decisión dos veces)", () => {
