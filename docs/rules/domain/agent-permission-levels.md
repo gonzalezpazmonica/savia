@@ -23,16 +23,13 @@ review_note: "Quarterly review 2026-Q2"
 ## Restricciones por nivel
 
 ### L0 — Observer
-- Solo lectura de ficheros y busqueda
-- No puede modificar nada ni ejecutar comandos bash
+- Solo lectura de ficheros y busqueda; no puede modificar nada ni ejecutar comandos bash
 
 ### L1 — Analyst
-- Lectura + bash readonly (git log, git diff, wc)
-- Bash bloqueado para escritura
+- Lectura + bash readonly (git log, git diff, wc); bash bloqueado para escritura
 
 ### L2 — Writer
-- Puede crear y editar ficheros
-- No puede ejecutar bash (excepto readonly)
+- Puede crear y editar ficheros; no puede ejecutar bash
 
 ### L3 — Developer
 - Acceso completo a Read, Write, Edit, Bash
@@ -64,7 +61,7 @@ review_note: "Quarterly review 2026-Q2"
 | model-upgrade-auditor | L3 | Audita |
 | tech-writer | L2 | Escribe docs |
 | sdd-spec-writer | L3 | Escribe specs |
-| meeting-digest | L4 | Escribe digests |
+| meeting-digest | L4 | Escribe digests; delega en sus dos jueces |
 | visual-digest | L2 | Escribe digests |
 | pdf-digest | L3 | Escribe digests |
 | word-digest | L3 | Escribe digests |
@@ -97,8 +94,7 @@ review_note: "Quarterly review 2026-Q2"
 | security-guardian | L4 | Orquesta security |
 | legal-compliance | L3 | Ejecuta scripts de consulta legal |
 | context-dome-manager | L4 | Orquesta cúpulas y delega |
-| recommendation-tribunal-orchestrator | L4 | Convoca jueces |
-| truth-tribunal-orchestrator | L4 | Convoca jueces |
+| recommendation-tribunal-orchestrator, truth-tribunal-orchestrator | L4 | Convocan jueces |
 
 ## Frontmatter del agente
 
@@ -118,8 +114,7 @@ Script `scripts/validate-agent-permissions.sh` verifica las tools del agente con
 
 - Tool **por encima** del nivel (exceso) = ERROR, exit 1, con agente y tool.
 - Tool del nivel no declarada = WARNING (tener menos es válido).
-- Excesos pendientes de decisión: línea base **transitoria** `docs/agent-permissions-excess-baseline.txt`, una entrada `agente tool responsable AAAA-MM-DD` por línea. Sin responsable o fecha válida = ERROR. Pasada la fecha la entrada deja de absorber el exceso y el validador falla. Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el conjunto autorizado (solo subconjuntos) y la fecha máxima; una entrada duplicada es ERROR. Un exceso nuevo nunca se absorbe. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea.
-- Estado a 2026-11-11: la línea base está **vacía**. Los 25 excesos se resolvieron según uso real (decisión de la operadora): nivel subido donde el procedimiento del agente usa la tool, tool retirada donde no. El test deja el conjunto autorizado vacío: no se admite ninguna entrada nueva.
+- Excesos pendientes de decisión: línea base **transitoria** `docs/agent-permissions-excess-baseline.txt`, una entrada `agente tool responsable AAAA-MM-DD` por línea. Sin responsable o fecha válida = ERROR. Pasada la fecha la entrada deja de absorber el exceso y el validador falla. Solo decrece: una entrada que ya no es exceso falla como *stale*; el test `tests/test-validate-agent-permissions-excess.bats` fija el conjunto autorizado (solo subconjuntos) y la fecha máxima; una entrada duplicada es ERROR. Un exceso nuevo nunca se absorbe. Resolver un caso = subir el nivel o quitar la tool, y borrar la línea. Estado a 2026-11-11: la línea base está **vacía**. Los 25 excesos se resolvieron según uso real (decisión de la operadora): nivel subido donde el procedimiento del agente usa la tool, tool retirada donde no. El test deja el conjunto autorizado vacío: no se admite ninguna entrada nueva.
 - El frontmatter se lee como YAML real (fail-closed): YAML inválido, claves duplicadas, `tools:` ausente (hereda todas) o valores de mapa que no son booleanos = ERROR; lista de tools vacía = ERROR (ambigua). Sin `permission_level` = WARNING y se evalúa como L0. Directorio inexistente = ERROR.
 - Permisos implícitos: `memory:` activa `Read`, `Write` y `Edit` en Claude Code, así que cuentan contra el nivel (un L0/L1 con memoria es exceso). `Agent` es el nombre actual de `Task` (mismo nivel, L4) y `Tool(args)` cuenta como `Tool`. También se validan los agentes de subdirectorios (`.md` que abren con frontmatter).
 - L2 y Bash: el validador no distingue un Bash de solo lectura; en L2 todo `Bash` es exceso. Si un agente L2 lo necesita, la decisión es subir a L3 o quitarlo.
