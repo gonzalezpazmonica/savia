@@ -2,7 +2,7 @@
 name: truth-tribunal-orchestrator
 description: Truth Tribunal orchestrator — convenes 7 judges, aggregates scores, applies vetos, drives iteration
 model_tier: heavy
-permission_level: L2
+permission_level: L4
 tools: [Read, Write, Edit, Glob, Grep, Bash, Task]
 token_budget: {per_invocation: 100000, context_window_target: 13000, escalation_policy: block}
 max_context_tokens: 12000
