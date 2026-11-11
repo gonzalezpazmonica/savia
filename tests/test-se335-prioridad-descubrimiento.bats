@@ -73,17 +73,33 @@ setup() {
   [[ "$n" -eq 4 ]]
 }
 
-@test "negativo: una regla vacia no contiene el orden y el grep de AC-01 falla" {
-  : > "$BATS_TEST_TMPDIR/empty.md"
-  run grep -q "Cúpulas de conocimiento" "$BATS_TEST_TMPDIR/empty.md"
+# Comprobador del orden imperativo (revisión de #1527, P1): los 4 niveles numerados 1-4,
+# en este orden y una sola vez cada uno. Lo usan el positivo y los casos negativo y límite.
+rule_order_ok() {
+  local got
+  got="$(grep -E '^[0-9]+\. \*\*' "$1" | sed -E 's/^([0-9]+)\. \*\*([^*(]+).*/\1 \2/' | sed 's/ *$//' | tr '\n' '|')"
+  [[ "$got" == "1 Cúpulas de conocimiento|2 Capas de memoria|3 Grafo de código|4 Grep/glob a ficheros|" ]]
+}
+
+@test "AC-01: la regla real declara los 4 niveles en el orden cupulas -> memoria -> grafo -> grep" {
+  rule_order_ok "$RULE"
+}
+
+@test "negativo: una regla con memoria antes que cupulas no pasa el comprobador de orden" {
+  sed -e 's/^1\. \*\*Cúpulas/2. **Cúpulas/' -e 's/^2\. \*\*Capas/1. **Capas/' "$RULE" > "$BATS_TEST_TMPDIR/swapped.md"
+  run cmp -s "$RULE" "$BATS_TEST_TMPDIR/swapped.md"
+  [[ "$status" -ne 0 ]]
+  run rule_order_ok "$BATS_TEST_TMPDIR/swapped.md"
   [[ "$status" -ne 0 ]]
 }
 
-@test "edge: empty rule file has zero numbered levels (el conteo no da por buena una regla vacia)" {
+@test "edge: una regla vacia o con un nivel de menos no pasa el comprobador de orden" {
   : > "$BATS_TEST_TMPDIR/empty-rule.md"
-  run grep -cE '^[1-4]\. \*\*' "$BATS_TEST_TMPDIR/empty-rule.md"
-  [[ "$output" -eq 0 ]]
-  [[ "$output" -ne "$(grep -cE '^[1-4]\. \*\*' "$RULE")" ]]
+  run rule_order_ok "$BATS_TEST_TMPDIR/empty-rule.md"
+  [[ "$status" -ne 0 ]]
+  grep -v '^4\. \*\*' "$RULE" > "$BATS_TEST_TMPDIR/three.md"
+  run rule_order_ok "$BATS_TEST_TMPDIR/three.md"
+  [[ "$status" -ne 0 ]]
 }
 
 @test "edge: hook output is valid JSON and additionalContext is not null ni vacio" {

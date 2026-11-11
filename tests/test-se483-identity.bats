@@ -354,8 +354,11 @@ s03t_root() {
   [[ "$(grep -cF -- "$output" "$ROOT/docs/rules/domain/savia-core.md")" -ge 1 ]]
 }
 
-@test "negativo: argumento desconocido (nonexistent) en el verificador sale con 2" {
-  run bash "$LIB" nonexistent-mode
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"Uso: docs-identity-check.sh"* ]]
+@test "negativo: savia-core.md con la frase corta alterada (no vacío) hace fallar el gate" {
+  s03t_root
+  printf '%s\n' "${GS/Savia/Sabia}" > "$GR/docs/rules/domain/savia-core.md"
+  [ -s "$GR/docs/rules/domain/savia-core.md" ]
+  run env SAVIA_IDENTITY_ROOT="$GR" bash "$G" canonical
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"savia-core.md"* ]]
 }

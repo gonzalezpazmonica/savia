@@ -134,3 +134,24 @@ def test_vecinos_del_corpus_no_suben_a_tier_3(rt):
     # Caso negativo: solo el nombre exacto; otro corpus de config sigue en tier 2.
     assert rt.classify(["config/kernel-corpus.json"])["tier"] == 2
     assert rt.classify(["config/guard-allow-corpus.json.bak"])["tier"] == 2
+
+
+# SE-511 S2 (revisión de seguridad de #1527, P1-1): savia-core.md es el texto de autonomía y
+# honestidad que se carga en cada turno y generate-savia-core.py decide qué regiones entran.
+# Antes: tier 1 (prefijo docs/) y tier 2; una PR podía quitar la región de autonomía sin humano.
+SAVIA_CORE_FILES = ["docs/rules/domain/savia-core.md", "scripts/generate-savia-core.py"]
+
+
+@pytest.mark.parametrize("path", SAVIA_CORE_FILES)
+def test_nucleo_por_turno_y_su_generador_son_tier_4(rt, path):
+    assert rt.is_governance(path)
+    res = rt.classify(["docs/guide.md", path, "tests/test-x.bats"])
+    assert res["tier"] == 4
+    assert "gobernanza" in res["rationale"]
+
+
+def test_vecinos_del_nucleo_no_son_gobernanza(rt):
+    # Caso negativo: solo el nombre exacto.
+    assert not rt.is_governance("docs/rules/domain/savia-core-notes.md")
+    assert not rt.is_governance("scripts/generate-savia-core-helper.py")
+    assert rt.classify(["docs/rules/domain/savia-core-notes.md"])["tier"] == 1

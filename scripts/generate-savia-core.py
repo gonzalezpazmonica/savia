@@ -66,19 +66,26 @@ def extract(text, rid, src):
     if not ends:
         raise GenError(f"región '{rid}' sin cierre en {src}")
     body = lines[s + 1:ends[0]]
-    if any(l.strip().startswith("<!-- savia-core:") for l in body):
+    # Cualquier marca savia-core (apertura o cierre de otra región) dentro del cuerpo es anidamiento.
+    if any(re.match(r"^<!-- /?savia-core:", l.strip()) for l in body):
         raise GenError(f"región '{rid}' anidada o sin cierre previo en {src}")
     if not "".join(body).strip():
         raise GenError(f"región '{rid}' vacía en {src}")
     out = []
+    in_code = False
     for l in body:
         if rid == "identity:short":
             l = re.sub(r"^> ?", "", l)
+        if l.lstrip().startswith("```"):
+            in_code = not in_code
         # Las cabeceras de la fuente bajan dos niveles: el bloque usa ## por sección.
-        m = re.match(r"^(#{1,4}) (.*)$", l)
+        # Dentro de un bloque de código, '#' es contenido literal y no se toca.
+        m = None if in_code else re.match(r"^(#{1,4}) (.*)$", l)
         if m:
             l = "#" * min(len(m.group(1)) + 2, 6) + " " + m.group(2)
         out.append(l.rstrip())
+    if in_code:
+        raise GenError(f"región '{rid}' con bloque de código sin cerrar en {src}")
     while out and not out[0]:
         out.pop(0)
     while out and not out[-1]:

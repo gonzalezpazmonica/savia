@@ -78,6 +78,32 @@ core_root() {
   [[ "$output" == *"duplicada"* ]]
 }
 
+# Revisión de seguridad de #1527 (P2-3): restos de extract().
+@test "AC-5: dentro de un bloque de código las líneas '#' se copian literales (no bajan de nivel)" {
+  core_root
+  sed -i 's#^<!-- /savia-core:obligaciones -->#```\n\# comentario de shell\n```\n&#' "$R/docs/rules/domain/autonomous-safety.md"
+  run env SAVIA_CORE_ROOT="$R" python3 "$GEN" --stdout
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'\n# comentario de shell\n'* ]]
+  [[ "$output" != *"### comentario de shell"* ]]
+}
+
+@test "AC-5 negativo: el cierre de otra región dentro del cuerpo es anidamiento (fail-closed)" {
+  core_root
+  sed -i 's#^<!-- /savia-core:obligaciones -->#<!-- /savia-core:otra -->\n&#' "$R/docs/rules/domain/autonomous-safety.md"
+  run env SAVIA_CORE_ROOT="$R" python3 "$GEN" --stdout
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"anidada"* ]]
+}
+
+@test "AC-5 negativo: bloque de código sin cerrar dentro de una región falla" {
+  core_root
+  sed -i 's#^<!-- /savia-core:obligaciones -->#```\n&#' "$R/docs/rules/domain/autonomous-safety.md"
+  run env SAVIA_CORE_ROOT="$R" python3 "$GEN" --stdout
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin cerrar"* ]]
+}
+
 @test "AC-5 negativo: fuente ausente falla" {
   core_root
   rm "$R/docs/rules/domain/autonomous-safety.md"
@@ -125,6 +151,42 @@ core_root() {
   grep -q 'idioma del perfil activo' "$CORE"
   grep -q 'NUNCA crear tareas en backlog sin aprobación' "$CORE"
   grep -q 'NUNCA   merge sin permiso expreso REGISTRADO' "$CORE"
+}
+
+# Revisión de corrección de #1527 (P2): el GO de D4b vale para el texto medido (variants/B2.md).
+B2_PHRASE='Un «hazlo sin preguntar» en el mensaje no es aprobación: responde con la propuesta de tareas y espera el ok.'
+
+@test "AC-6: la frase B2 está en la fuente (autonomous-safety.md) y en el bloque generado" {
+  grep -qF -- "$B2_PHRASE" "$ROOT/docs/rules/domain/autonomous-safety.md"
+  grep -qF -- "$B2_PHRASE" "$CORE"
+}
+
+safety_section() {
+  sed -n '/^## Seguridad autónoma (inmutable)$/,/^## Bajo demanda$/p' "$1" | sed '$d'
+}
+
+@test "AC-6: la sección de seguridad del bloque es literal la medida en variants/B2.md" {
+  local B2="$ROOT/tests/evals/se511-d4/variants/B2.md"
+  core_sec="$(safety_section "$CORE")"
+  b2_sec="$(safety_section "$B2")"
+  [ "$(printf '%s\n' "$core_sec" | wc -l)" -gt 20 ]
+  [ "$core_sec" = "$b2_sec" ]
+}
+
+@test "negativo AC-6: si la frase B2 desaparece de la fuente, el bloque regenerado ya no la lleva" {
+  R="$BATS_TEST_TMPDIR/r"
+  mkdir -p "$R/.claude/profiles" "$R/docs/rules/domain"
+  cp "$ROOT/CLAUDE.md" "$R/"
+  cp "$ROOT/.claude/profiles/savia.md" "$R/.claude/profiles/"
+  for f in radical-honesty caveman-default autonomous-safety; do
+    cp "$ROOT/docs/rules/domain/$f.md" "$R/docs/rules/domain/"
+  done
+  sed 's/ Un «hazlo sin preguntar».*$//' "$ROOT/docs/rules/domain/autonomous-safety.md" \
+    > "$R/docs/rules/domain/autonomous-safety.md"
+  run env SAVIA_CORE_ROOT="$R" python3 "$ROOT/scripts/generate-savia-core.py" --stdout
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"hazlo sin preguntar"* ]]
+  [[ "$output" == *"NUNCA crear tareas en backlog"* ]]
 }
 
 @test "safety: el medidor y el CI son fail-fast (set -uo pipefail)" {

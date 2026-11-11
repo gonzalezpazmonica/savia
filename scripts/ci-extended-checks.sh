@@ -249,13 +249,22 @@ fi
 echo "--- 12. Fixed Context Ratchet ---"
 cf_sum=0; cf_missing=0
 for cf_mode in versioned hooks; do
-  if cf_out=$(CI_BASELINE_DIR="$CI_BASELINE_DIR" bash "$ROOT/scripts/context-fixed-measure.sh" "--$cf_mode" --check 2>&1); then
-    pass "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^OK:' | head -1)"
+  # --json: la cifra sale del campo "tokens", no del formato de texto de cada modo (revisión de #1527)
+  cf_rc=0; cf_errf=$(mktemp)
+  cf_out=$(CI_BASELINE_DIR="$CI_BASELINE_DIR" bash "$ROOT/scripts/context-fixed-measure.sh" "--$cf_mode" --check --json 2>"$cf_errf") || cf_rc=$?
+  cf_err=$(grep -m1 -E '^(FAIL|ERROR):' "$cf_errf"); rm -f "$cf_errf"
+  cf_line=$(printf '%s' "$cf_out" | python3 -c '
+import json, sys
+d = json.load(sys.stdin); t = d["tokens"]
+if type(t) is not int or t < 0: raise SystemExit(1)
+print(t, (d.get("check") or {}).get("message", ""))' 2>/dev/null) || cf_line=""
+  cf_tok="${cf_line%% *}"; cf_msg="${cf_line#* }"
+  if [[ $cf_rc -eq 0 && -n "$cf_line" ]]; then
+    pass "Contexto fijo ($cf_mode): $cf_msg"
   else
-    fail "Contexto fijo ($cf_mode): $(echo "$cf_out" | grep -E '^(FAIL|ERROR):' | head -1)"
+    fail "Contexto fijo ($cf_mode): ${cf_msg:-${cf_err:-ERROR: el medidor no devolvió JSON con tokens}} (rc=$cf_rc; bash scripts/context-fixed-measure.sh --$cf_mode --check)"
   fi
-  cf_tok=$(echo "$cf_out" | grep -m1 -oE '^TOTAL.* ([0-9]+)$|tokens=[0-9]+' | grep -oE '[0-9]+$')
-  if [[ -n "$cf_tok" ]]; then cf_sum=$((cf_sum + cf_tok)); else cf_missing=1; fi
+  if [[ -n "$cf_line" ]]; then cf_sum=$((cf_sum + cf_tok)); else cf_missing=1; fi
 done
 # SE-511 D3/AC-3: versionado + hooks <= 5000 tokens (sin cifra, fail-closed)
 if [[ $cf_missing -eq 0 && $cf_sum -le 5000 ]]; then

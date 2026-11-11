@@ -317,6 +317,15 @@ cur_tokens() { bash "$S" "--$1" --json | jq_py 'd["tokens"]'; }
   [[ "$output" == *"❌ Contexto fijo (versioned): FAIL: versionado"*"> baseline 1"* ]]
 }
 
+@test "negativo AC-4: sin baseline de hooks, el gate y el total fallan cerrados y nombran la causa" {
+  mkdir -p "$T/b"; cp "$ROOT"/.ci-baseline/*.count "$ROOT"/.ci-baseline/*.pct "$T/b/"
+  mv "$T/b/context-fixed-hooks-tokens.count" "$T/hooks.bak"
+  CI_BASELINE_DIR="$T/b" run bash "$ROOT/scripts/ci-extended-checks.sh"
+  [[ "$output" == *"❌ Contexto fijo (hooks): ERROR: baseline ausente"* ]]
+  [[ "$output" == *"❌ Contexto fijo total:"*"cifra ausente"* ]]
+  [[ "$output" == *"✅ Contexto fijo (versioned): OK:"* ]]
+}
+
 @test "--check sin baseline posible (--local, --entry opencode) sale con 2, no con 0" {
   run bash "$S" --local --check; [ "$status" -eq 2 ]
   run bash "$S" --versioned --entry opencode --check; [ "$status" -eq 2 ]
