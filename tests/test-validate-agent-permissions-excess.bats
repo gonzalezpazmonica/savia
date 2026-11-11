@@ -443,3 +443,9 @@ teardown() {
   run bash "$SCRIPT" "$TMPDIR_AP/agents" --baseline
   [ "$status" -eq 2 ]
 }
+
+@test "safety: the validator runs with set -uo pipefail" {
+  run grep -cE '^set -[eu]*o pipefail' "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 1 ]
+}
