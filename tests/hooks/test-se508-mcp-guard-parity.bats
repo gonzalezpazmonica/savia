@@ -166,3 +166,25 @@ check() {
   require_ts
   check "$(se508_payload mcp__claude_ai_Gmail__get_message '{}')" pass
 }
+
+# --- revisión #1525 (seguridad P1): las suites del guard corren en CI con el runtime TS obligatorio
+@test "revisión #1525: ci.yml ejecuta las 4 suites del guard con SAVIA_REQUIRE_TS=1 y Bun preparado antes" {
+  run python3 - "$REPO_ROOT/.github/workflows/ci.yml" <<'PY'
+import sys, yaml
+wf = yaml.safe_load(open(sys.argv[1]))
+need = ["tests/python/test_mcp_effect_guard.py", "tests/hooks/test-se508-mcp-effect-guard.bats",
+        "tests/hooks/test-se508-mcp-guard-parity.bats", "bun test __tests__/mcp-effect-guard.test.ts"]
+for job in wf["jobs"].values():
+    steps = job.get("steps", [])
+    for i, st in enumerate(steps):
+        run = st.get("run", "")
+        if all(n in run for n in need):
+            assert str(st.get("env", {}).get("SAVIA_REQUIRE_TS")) == "1", "sin SAVIA_REQUIRE_TS=1"
+            assert any("setup-bun" in str(s.get("uses", "")) for s in steps[:i]), "Bun no está preparado antes"
+            print("OK")
+            sys.exit(0)
+sys.exit("ningún paso de CI ejecuta las suites de SE-508")
+PY
+  [ "$status" -eq 0 ]
+  [ "$output" = OK ]
+}
