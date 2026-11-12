@@ -8,3 +8,4 @@ export * from './resumen.ts';
 export { Politica, type MensajeAlertasAgrupadas } from './politica.ts';
 export * from './contrato.ts';
 export * from './cola.ts';
+export * from './preguntas.ts';
