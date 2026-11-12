@@ -94,8 +94,8 @@ when:
     pattern: 'git\s+push\b[^;&|\n]*\s(\+|HEAD:|refs/heads/)?main\b'
 unless:
   - field: tool_input.command
-    op: fullmatch                      # la orden entera, sin separadores: no admite encadenar
-    pattern: 'git\s+push\s+--dry-run\s[^;&|\n]*'
+    op: fullmatch                      # la orden entera; la clase excluye ; & | < > $ ` \n \r
+    pattern: 'git\s+push\s+--dry-run\s[^;&|<>$`\n\r]*'
 cases:
   block:
     - {tool: Bash, input: {command: "git push origin main"}}                 # par mínimo del unless
@@ -104,6 +104,7 @@ cases:
     - {tool: Bash, input: {command: "git push origin +main"}}
     - {tool: Bash, input: {command: "git push origin HEAD:main"}}
     - {tool: Bash, input: {command: "git push --dry-run origin main; git push origin main"}}   # encadenado
+    - {tool: Bash, input: {command: "git push --dry-run origin main $(git push origin main)"}}   # sustitución
   allow:
     - {tool: Bash, input: {command: "git push --dry-run origin main"}}       # casa con when Y con unless
     - {tool: Bash, input: {command: "git push origin agent/x-main-fix"}}
@@ -111,7 +112,7 @@ cases:
 Push a main bloqueado. Rama agent/* y PR en borrador.
 ```
 
-Esta regla ilustra el formato; la regla real se escribe con su corpus en F1. El lint exige, por cada `unless`, un caso `allow` que case con `when` **y** con ese `unless` (aquí el primero), y un caso `block` encadenado (`<allow>; <peligroso>`, aquí el sexto). Quitar el `unless` hace fallar el primer `allow`: el par es efectivo.
+Esta regla ilustra el formato; la regla real se escribe con su corpus en F1. El lint exige, por cada `unless`, un caso `allow` que case con `when` **y** con ese `unless` (aquí el primero), y un caso `block` por familia de encadenado (`<allow>; <peligroso>` y `<allow> $(<peligroso>)`, aquí el sexto y el séptimo). Quitar el `unless` hace fallar el primer `allow`: el par es efectivo.
 
 Si una worker edita su copia local y añade `unless: git push origin main`, la versión de `origin/main` se sigue evaluando:
 
@@ -162,8 +163,8 @@ git-push-main             block 2/2  allow 1/1  quitar-regla→cambia  OK
 ```
 Propuesta (borrador, no activa): ajustar token-slack-en-orden
 Motivo: 3 bloqueos marcados false-positive esta semana (guard-blocks.sh report).
-Cambio: añade un unless fullmatch `grep\s+-n\s+'xoxb-[^']*'\s+docs/[^;&|\n]*` (la orden entera, sin encadenar).
-Pares añadidos: curl con 'xoxb-…' real → sigue bloqueando; `grep -n 'xoxb-' docs/x; curl … xoxb-<real>` (encadenado) → sigue bloqueando.
+Cambio: añade un unless fullmatch `grep\s+-n\s+'xoxb-[^']*'\s+docs/[^;&|<>$`\n\r]*` (la orden entera, sin encadenar ni sustituir).
+Pares añadidos: curl con 'xoxb-…' real → sigue bloqueando; `grep -n 'xoxb-' docs/x; curl … xoxb-<real>` (encadenado) y `grep -n 'xoxb-' docs/x $(curl … xoxb-<real>)` (sustitución) → siguen bloqueando.
 Nota: en el worktree de la worker la regla de origin/main sigue aplicando; el cambio solo rige cuando la operadora fusiona (SE-520 D3).
 Rama agent/guard-rule-slack-20261201, PR en borrador. La activa tu fusión (tier 3).
 ```

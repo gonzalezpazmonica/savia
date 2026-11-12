@@ -54,7 +54,7 @@ WHEN_NEW="pattern: 'git\\s+push\\b[^;&|\\n]*\\s(\\+|HEAD:|refs/heads/)?main\\b'"
 }
 
 @test "P1-2: unless con op regex en la orden falla" {
-  mutate "$MP" "op: fullmatch                      # la orden entera, sin separadores: no admite encadenar" "op: regex"
+  mutate "$MP" "op: fullmatch                      # la orden entera; la clase excluye ; & | < > \$ \` \\n \\r" "op: regex"
   run python3 -I "$CHECK" "$MS" "$MP"
   [ "$status" -eq 1 ]
   [[ "$output" == *"sin op fullmatch"* ]]
@@ -112,4 +112,61 @@ PY
   run python3 -I "$CHECK" "$MS" "$MP"
   [ "$status" -eq 1 ]
   [[ "$output" == *"P2-5 motor"* ]]
+}
+
+OLD_SEP='[^;&|\n]*'
+
+@test "P1 sustitucion: el unless con la clase vieja (sin dolar ni backtick) falla" {
+  mutate "$MP" "--dry-run\\s[^;&|<>\$\`\\n\\r]*'" "--dry-run\\s${OLD_SEP}'"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"admite encadenar o sustituir"* ]]
+  [[ "$output" == *"no excluye"* ]]
+}
+
+@test "P1 sustitucion: con la clase vieja el caso de sustitucion deja de bloquear (semantica)" {
+  mutate "$MP" "--dry-run\\s[^;&|<>\$\`\\n\\r]*'" "--dry-run\\s${OLD_SEP}'"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [[ "$output" == *"el caso block no bloquea"* ]]
+}
+
+@test "P1 sustitucion: un unless con .* falla" {
+  mutate "$MP" "--dry-run\\s[^;&|<>\$\`\\n\\r]*'" "--dry-run\\s.*'"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"casan separadores"* ]]
+}
+
+@test "P1 sustitucion: sin el block con sustitucion falla" {
+  mutate "$MP" '    - {tool: Bash, input: {command: "git push --dry-run origin main $(git push origin main)"}}   # sustitución' ""
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin block con sustitución"* ]]
+}
+
+@test "P2 dolar dentro de una clase no es falso positivo" {
+  mutate "$MP" "pattern: 'terraform\\s+destroy'" "pattern: 'terraform\\s+destroy[\\w\$]*'"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 0 ]
+}
+
+@test "sec P2-1: sin base_ref fuera de la copia de trabajo falla" {
+  mutate "$MS" "ni de la copia de trabajo" "ni de otra cosa"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"base_ref no local"* ]]
+}
+
+@test "sec P2-2: sin realpath en la salida de recuperacion falla" {
+  mutate "$MS" "resuelta con \`realpath\`" "tal cual"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"realpath"* ]]
+}
+
+@test "sec P2-3: sin la restriccion de emit-corpus falla" {
+  mutate "$MS" "nunca al corpus versionado" "donde sea"
+  run python3 -I "$CHECK" "$MS" "$MP"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"emit-corpus"* ]]
 }

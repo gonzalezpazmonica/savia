@@ -7,6 +7,9 @@ Exit 0 si es coherente; 1 con un motivo por línea en stderr; 2 si no se puede l
 Parte ejecutable: extrae las reglas de ejemplo del prototipo y corre sus casos con la
 semántica de D2 (re.ASCII, search/fullmatch, when = Y, unless = O).
 Parte textual: cada hallazgo de las revisoras tiene una frase obligatoria en la spec.
+Límite declarado: la parte textual solo prueba que la frase está escrita (guardarraíl de
+regresión), no que el diseño sea coherente; las mutaciones del bats cubren las frases
+críticas, no todas. La parte ejecutable sí prueba semántica de las reglas de ejemplo.
 """
 import re
 import sys
@@ -72,6 +75,28 @@ def cond_match(c, cmd):
     return fn(c["pattern"], cmd, flags) is not None
 
 
+SEPARADORES = [";", "&", "|", "<", ">", "$", "`", "\n", "\r"]
+CLASE_NEGADA = re.compile(r"(?<!\\)\[\^((?:\\.|[^\]\\])*)\]")
+
+
+def sin_clases(pat):
+    return CLASE_NEGADA.sub("", re.sub(r"(?<!\\)\[(?:\\.|[^\]\\])*\]", "", pat))
+
+
+def unless_seguro(pat):
+    """Devuelve motivos por los que un unless sobre una orden admite encadenar o sustituir."""
+    motivos = []
+    for m in CLASE_NEGADA.finditer(pat):
+        cuerpo = m.group(1).replace("\\n", "\n").replace("\\r", "\r")
+        falta = [c for c in SEPARADORES if c not in cuerpo]
+        if falta:
+            motivos.append(f"clase negada {m.group(0)!r} no excluye {''.join(falta)!r}")
+    resto = sin_clases(pat)
+    if re.search(r"(?<!\\)\.|\\[SWD]", resto):
+        motivos.append("usa . o \\S/\\W/\\D, que casan separadores")
+    return motivos
+
+
 def blocks(rule, cmd, drop_unless=False):
     if not all(cond_match(c, cmd) for c in rule["when"]):
         return False
@@ -89,7 +114,7 @@ def check_prototype(text):
         if r["action"] == "block" and not (r["block"] and r["allow"]):
             err(f"{i}: regla block sin cases.block o sin cases.allow")
         for c in r["when"] + r["unless"]:
-            if re.search(r"(?<![\[\\])\^|(?<!\\)\$", c.get("pattern", "")):
+            if re.search(r"(?<!\\)\^|(?<!\\)\$", sin_clases(c.get("pattern", ""))):
                 err(f"{i}: ^ o $ en el patrón (prohibidos, D2)")
             if len(c.get("pattern", "")) > 256:
                 err(f"{i}: patrón de más de 256 caracteres")
@@ -110,6 +135,11 @@ def check_prototype(text):
                 err(f"{i}: unless[{k}] sin allow que case con when y con el unless y bloquee sin él")
             if not [b for b in r["block"] if ";" in b and blocks(r, b)]:
                 err(f"{i}: unless[{k}] sin block encadenado")
+            if u["field"] == "tool_input.command":
+                if not [b for b in r["block"] if "$(" in b and blocks(r, b)]:
+                    err(f"{i}: unless[{k}] sin block con sustitución $(...)")
+                for mot in unless_seguro(u.get("pattern", "")):
+                    err(f"{i}: unless[{k}] admite encadenar o sustituir: {mot}")
 
 
 REQUIRED = [
@@ -127,6 +157,10 @@ REQUIRED = [
     ("P2-4 test aislado", "la aísla (conjunto = solo esa regla"),
     ("P2-5 motor tier 3", "`scripts/guard_rules.py`, `config/guard-rules.yaml`"),
     ("P2-5 opencode tier 4", "tier 4"),
+    ("sec P1-1 clase de separadores", "la «clase de separadores»"),
+    ("sec P2-1 base_ref no local", "ni de la copia de trabajo"),
+    ("sec P2-2 realpath", "resuelta con `realpath`"),
+    ("sec P2-3 emit-corpus", "nunca al corpus versionado"),
     ("sec P2-1 unless fullmatch", "solo con `op: fullmatch`"),
     ("sec P2-3 modelo de amenaza", "**Modelo de amenaza, dicho con honestidad.**"),
     ("sec P2-4 perfil por entorno", "`SAVIA_HOOK_PROFILE`"),
