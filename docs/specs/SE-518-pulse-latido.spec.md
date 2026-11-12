@@ -184,9 +184,41 @@ La cuarentena tiene motivo, dueño y salida explícita (cabeza nueva, decisión 
 
 ## Telemetría
 
+La telemetría de la planta (la «factoría») va dentro de Pulse; no es un proyecto aparte. Es genérica y por operador: no presupone ni forge, ni proveedor, ni organización concretos.
+
 - **Ledger de eventos** de solo añadir como fuente; el log de depuración queda aparte. Un evento por cambio, no por pasada.
-- **Métricas de planta**, derivadas del ledger: rendimiento (propuestas fusionadas por día), retrabajo (propuestas con algún HOLD y motivo), coste (horas y, cuando el proveedor lo dé, tokens leídos de la salida del worker), tiempo de ciclo, **espera de la persona** por tier, y avisos e interrupciones por día.
-- Por trabajo: causa del código de salida, clase de error, motivo de cada HOLD y de cada cierre, momento en que la persona vio cada cosa (desde los acuses de Soul).
+- Por trabajo: causa del código de salida, clase de error, y momento en que la persona vio cada cosa (desde los acuses de Soul).
+
+### Datos nuevos que hoy no se registran
+
+Cada uno es un evento del ledger con campos mínimos obligatorios. Un evento sin su campo de motivo es inválido (fail-closed): se rechaza y se registra como `telemetria_incompleta`, nunca se rellena con un valor por defecto.
+
+| Dato | Evento | Campos mínimos | Motivo: valores cerrados |
+|---|---|---|---|
+| Motivo de cada rechazo de revisión (HOLD) | `review_hold` | propuesta, cabeza (SHA), revisora, ronda, `motivo`, `detalle` | `falta_caso_negativo`, `gate_no_fail_closed`, `contradice_spec`, `prueba_roja`, `confidencialidad`, `alcance`, `otro` (exige `detalle`) |
+| Motivo de cada cierre sin fusionar | `pr_closed_unmerged` | propuesta, quién cierra (persona o Pulse), `motivo`, `detalle` | `reemplazada`, `descartada_por_persona`, `obsoleta`, `cuarentena_vencida`, `duplicada`, `otro` (exige `detalle`) |
+| Error de cuota de cada trabajo | `quota_error` | trabajo, proveedor (id de adaptador), `senal_tipada`, vencimiento, ronda no consumida | Solo señal tipada del lanzador (código de salida o respuesta del proveedor); nunca texto libre |
+| Momento en que la persona abre una revisión que espera de ella | `review_opened_by_operator` | propuesta, cabeza, `solicitada_en`, `abierta_en`, canal | — |
+
+`review_opened_by_operator` viene de los acuses de Soul o de la lectura del forge; si ninguna fuente lo da, el evento no se inventa y la espera queda como «sin dato», nunca como 0.
+
+### Métricas de planta
+
+Derivadas solo del ledger, recalculables desde cero. Ninguna sale de la instalación.
+
+| Familia | Métrica | Definición |
+|---|---|---|
+| Rendimiento | Propuestas fusionadas por día | Eventos `pr_merged` agrupados por día local del operador |
+| Rendimiento | Tiempo de creación a fusión | `pr_merged.en` menos `pr_created.en`, con mediana y p90 |
+| Retrabajo | Rondas de revisión por propuesta | Número de `review_hold` + rondas de corrección por propuesta |
+| Retrabajo | Arreglos | Commits de corrección posteriores a un HOLD, por propuesta y por motivo |
+| Coste | Horas de trabajador por modelo | Suma de (`fin` − `inicio`) de los trabajos, por identificador de modelo del adaptador |
+| Coste | Horas de trabajador por propuesta | Idem, por propuesta; tokens solo cuando el proveedor los dé en la salida del worker |
+| Espera del operador | Espera por revisión | `abierta_en` − `solicitada_en`, por tier, con mediana y p90 |
+| Espera del operador | Peticiones sin abrir | Revisiones solicitadas sin `review_opened_by_operator` y su edad |
+
+Además: avisos e interrupciones por día.
+
 - `pulse status`: última pasada y su duración, fuentes vencidas, cola, trabajos con edad de su último latido (SE-507), bloqueos y por qué, estado del freno.
 - Todo local; nada se reporta fuera de la instalación.
 
@@ -234,6 +266,12 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | AC-19 | Todas | **Negativo:** ningún camino del núcleo fusiona, aprueba, concede grants, saca de borrador ni fuerza push (un test por acción) | S6 |
 | AC-20 | Todas | El planificador en sombra coincide con las decisiones del bucle actual durante el periodo de sombra; cada discrepancia queda explicada antes del corte | S6 |
 | AC-21 | Todas | Prueba con una persona no técnica: entiende cada tarjeta y la salida de `pulse status` sin ayuda | S0, S1 |
+| AC-22 | Todas | Un HOLD de revisora genera `review_hold` con motivo del conjunto cerrado y ronda. **Negativo:** un HOLD sin motivo, o con `otro` sin `detalle`, se rechaza y se registra `telemetria_incompleta`; no se escribe un motivo por defecto | S5 |
+| AC-23 | Todas | Cada propuesta cerrada sin fusionar genera `pr_closed_unmerged` con motivo y quién cierra. **Negativo:** una propuesta fusionada no genera ese evento; un cierre sin motivo se rechaza | S5 |
+| AC-24 | E5 | Un trabajo que falla por cuota genera `quota_error` con señal tipada y vencimiento, sin consumir ronda. **Negativo:** un texto libre que menciona «quota» en la salida del worker no genera el evento | S3, S5 |
+| AC-25 | E7 | Una revisión solicitada a la persona y abierta por ella genera `review_opened_by_operator` con ambos instantes y la espera calculada. **Negativo:** sin acuse ni lectura del forge no hay evento y la métrica muestra «sin dato», no 0 | S5 |
+| AC-26 | Todas | Desde un ledger de ejemplo con cifras conocidas, las métricas de rendimiento, retrabajo, coste y espera coinciden con el valor esperado, y se recalculan idénticas desde cero. **Negativo:** con el ledger vacío ninguna métrica devuelve cero inventado, sino «sin datos» | S5 |
+| AC-27 | Todas | **Negativo:** el ledger y las métricas no contienen identificadores de persona, organización ni rutas de la instalación en lo que exporta `pulse status`, y una prueba estática confirma que no hay destino de red para telemetría | S5, S7 |
 
 ## Slices
 
@@ -244,7 +282,7 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | S2 | Política de integración `solo_conflicto`, detección de cabeza sin pruebas y relanzamiento único; huella de contenido para relanzar revisoras; las dos PR de workflows | SE-500 + PR de workflows | 3 (Pulse), 4 (workflows) |
 | S3 | Señales tipadas y taxonomía de errores; cuarentena con motivo y dueño; intento ≠ intención | SE-493, SE-513 | 3 |
 | S4 | Pulse como ejecutor de SE-498; tic de control; volante que resta; reanudar solo la persona | SE-498, SE-488 | 4 |
-| S5 | Ledger de eventos y métricas de planta; coste real cuando el proveedor lo dé | SE-507 | 2 |
+| S5 | Ledger de eventos, los cuatro datos nuevos (HOLD, cierre sin fusionar, error de cuota, apertura de revisión por la persona), métricas de rendimiento, retrabajo, coste y espera; coste real cuando el proveedor lo dé | SE-507 | 2 |
 | S6 | Planificador puro en sombra frente al bucle actual; después corte por efectos con ledger, de uno en uno | SE-493 | 3–4 |
 | S7 | Configuración por operador, adaptadores (forge, proveedor, servicio del SO), lista de salidas, guarda local de términos; instalación en macOS en `observar` | SE-517 | 3 |
 
