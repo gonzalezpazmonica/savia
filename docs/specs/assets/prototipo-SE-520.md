@@ -91,20 +91,27 @@ enabled: true
 when:
   - field: tool_input.command
     op: regex
-    pattern: 'git\s+push\s+\S+\s+(HEAD:)?main\b'
+    pattern: 'git\s+push\b[^;&|\n]*\s(\+|HEAD:|refs/heads/)?main\b'
 unless:
   - field: tool_input.command
-    op: regex
-    pattern: 'git\s+push\s+--dry-run\s'
+    op: fullmatch                      # la orden entera, sin separadores: no admite encadenar
+    pattern: 'git\s+push\s+--dry-run\s[^;&|\n]*'
 cases:
   block:
-    - {tool: Bash, input: {command: "git push origin main"}}             # par del unless
+    - {tool: Bash, input: {command: "git push origin main"}}                 # par mínimo del unless
+    - {tool: Bash, input: {command: "git push -u origin main"}}
+    - {tool: Bash, input: {command: "git push -f origin main"}}
+    - {tool: Bash, input: {command: "git push origin +main"}}
     - {tool: Bash, input: {command: "git push origin HEAD:main"}}
+    - {tool: Bash, input: {command: "git push --dry-run origin main; git push origin main"}}   # encadenado
   allow:
-    - {tool: Bash, input: {command: "git push --dry-run origin main"}}       # ejerce el unless
+    - {tool: Bash, input: {command: "git push --dry-run origin main"}}       # casa con when Y con unless
+    - {tool: Bash, input: {command: "git push origin agent/x-main-fix"}}
 ---
 Push a main bloqueado. Rama agent/* y PR en borrador.
 ```
+
+Esta regla ilustra el formato; la regla real se escribe con su corpus en F1. El lint exige, por cada `unless`, un caso `allow` que case con `when` **y** con ese `unless` (aquí el primero), y un caso `block` encadenado (`<allow>; <peligroso>`, aquí el sexto). Quitar el `unless` hace fallar el primer `allow`: el par es efectivo.
 
 Si una worker edita su copia local y añade `unless: git push origin main`, la versión de `origin/main` se sigue evaluando:
 
@@ -120,7 +127,7 @@ En la CI (`python3 scripts/guard_rules.py lint`):
 
 ```
 FAIL .claude/guard-rules/token-slack-en-orden.md:13 pattern fuera del dialecto común: lookbehind '(?<=' no está permitido
-FAIL .claude/guard-rules/git-push-main.md: unless[0] sin caso block que sea su variante mínima
+FAIL .claude/guard-rules/git-push-main.md: unless[0] sin caso block encadenado o sin caso allow que case con when y con el unless
 2 reglas no cargan. Exit 1.
 ```
 
@@ -130,6 +137,13 @@ Si llegara a la máquina, en cualquier llamada que atienda el motor:
 BLOQUEADO [POLITICA] guard-rules: no se pueden cargar las reglas
 .claude/guard-rules/token-slack-en-orden.md:13 lookbehind no permitido.
 Ninguna llamada pasa hasta que la regla se corrija (fallo cerrado, SE-520 D5).
+Salida de recuperación: Edit/Write sobre .claude/guard-rules/ y `python3 scripts/guard_rules.py diagnose` siguen permitidos.
+```
+
+Aviso (`action: warn`), canal de Claude Code: JSON por stdout con exit 0, no stderr:
+
+```json
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"AVISO guard-rules:<id>: <primera línea del mensaje>"}}
 ```
 
 ## 5. Salida de las pruebas
@@ -148,7 +162,8 @@ git-push-main             block 2/2  allow 1/1  quitar-regla→cambia  OK
 ```
 Propuesta (borrador, no activa): ajustar token-slack-en-orden
 Motivo: 3 bloqueos marcados false-positive esta semana (guard-blocks.sh report).
-Cambio: añade unless para 'xoxb-' dentro de grep sobre docs/.
-Par peligroso añadido: curl con 'xoxb-…' real → sigue bloqueando.
+Cambio: añade un unless fullmatch `grep\s+-n\s+'xoxb-[^']*'\s+docs/[^;&|\n]*` (la orden entera, sin encadenar).
+Pares añadidos: curl con 'xoxb-…' real → sigue bloqueando; `grep -n 'xoxb-' docs/x; curl … xoxb-<real>` (encadenado) → sigue bloqueando.
+Nota: en el worktree de la worker la regla de origin/main sigue aplicando; el cambio solo rige cuando la operadora fusiona (SE-520 D3).
 Rama agent/guard-rule-slack-20261201, PR en borrador. La activa tu fusión (tier 3).
 ```
