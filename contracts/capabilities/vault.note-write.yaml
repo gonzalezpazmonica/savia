@@ -1,0 +1,31 @@
+id: vault.note-write
+version: 1
+description: Escribe una nota en una cúpula mediante rama y PR (SE-496).
+input:
+  type: object
+  required: [path]
+  properties:
+    path: { type: string }
+safety:
+  effect: mutation
+  visibility: visible
+  reversibility: reversible
+  destructive: false
+  external_side_effect: false
+  human_gate: none
+  scope: [project]
+execution:
+  handler: scripts/vault-note-write.sh
+laws:
+  - LAW-HUMAN-001
+authority:
+  required_level: L2
+  tier_gate: false
+declared_effects: [vault.write, git.commit]
+audit_plain: [path]
+preconditions:
+  - id: branch_is_agent
+    fact: Branch.name
+    op: startswith
+    value: "agent/"
+    message: "precondición: la nota se escribe en una rama agent/*"
