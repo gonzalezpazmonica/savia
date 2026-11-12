@@ -15,7 +15,8 @@
 //
 // Falla cerrado: sin python3, sin núcleo, tiempo agotado o salida ilegible → ask (deny sin persona).
 // OpenCode nombra las tools MCP `<servidor>_<tool>` (con el nombre del servidor saneado). Los servidores se
-// leen de opencode.json y opencode.jsonc (raíz, .opencode/, ~/.config/opencode/) y de OPENCODE_CONFIG. Una tool
+// leen de opencode.json y opencode.jsonc (raíz, .opencode/, ~/.config/opencode/, OPENCODE_CONFIG_DIR), de
+// OPENCODE_CONFIG y de OPENCODE_CONFIG_CONTENT. Si el nombre admite varios servidores, manda la lectura más estricta. Una tool
 // que no es nativa del motor (lista cerrada NATIVE_TOOLS) y no se puede traducir no pasa: llega al núcleo como
 // `mcp__opencode-unresolved__<tool>`, sin clasificar → ask (deny sin persona). Fallo cerrado, no fallo abierto.
 
@@ -49,22 +50,36 @@ function sanitize(server: string): string {
 }
 
 /**
- * Nombre de la tool en el vocabulario del catálogo (`mcp__<servidor>__<tool>`, WebFetch, WebSearch), o null si es
- * nativa del motor. Una tool no nativa sin servidor reconocible → `mcp__opencode-unresolved__<tool>` (sin clasificar).
+ * Todas las lecturas posibles de la tool en el vocabulario del catálogo (`mcp__<servidor>__<tool>`, WebFetch,
+ * WebSearch). Vacío si es nativa del motor. Una tool no nativa sin servidor reconocible → `mcp__opencode-unresolved__<tool>`.
+ *
+ * Con servidores que son prefijo uno de otro (`github` y `github_merge`), `github_merge_pull_request` admite dos
+ * lecturas y el nombre no dice cuál es la real: se devuelven las dos y manda la más estricta (revisión Codex #1525
+ * P1-1; elegir la más larga convertía un merge en una tool sin clasificar). El prefijo se compara sin mayúsculas: el
+ * adaptador V2 pasa el nombre en minúsculas (Codex P2); el servidor sale con su nombre declarado.
  */
-export function catalogName(tool: string, servers: string[]): string | null {
-  if (tool.startsWith("mcp__")) return tool
-  if (tool === "WebFetch" || tool === "WebSearch") return tool
+export function catalogNames(tool: string, servers: string[]): string[] {
+  if (tool.startsWith("mcp__")) return [tool]
+  if (tool === "WebFetch" || tool === "WebSearch") return [tool]
   const lower = tool.toLowerCase()
-  if (Object.hasOwn(WEB, lower)) return WEB[lower]
+  if (Object.hasOwn(WEB, lower)) return [WEB[lower]]
   // Los servidores declarados van antes que la lista nativa: un servidor `apply` con tool `patch` da
-  // `apply_patch`, que no debe pasar como nativa. El servidor más largo primero: `savia-vaults_x` no es `savia`.
-  for (const server of [...servers].sort((a, b) => b.length - a.length)) {
-    const prefix = `${sanitize(server)}_`
-    if (tool.startsWith(prefix) && tool.length > prefix.length) return `mcp__${server}__${tool.slice(prefix.length)}`
+  // `apply_patch`, que no debe pasar como nativa.
+  const names = new Set<string>()
+  for (const server of servers) {
+    const prefix = `${sanitize(server)}_`.toLowerCase()
+    if (lower.startsWith(prefix) && tool.length > prefix.length) names.add(`mcp__${server}__${tool.slice(prefix.length)}`)
   }
-  if (NATIVE_TOOLS.has(lower)) return null
-  return `mcp__${UNRESOLVED_SERVER}__${tool}`
+  if (names.size) return [...names]
+  if (NATIVE_TOOLS.has(lower)) return []
+  return [`mcp__${UNRESOLVED_SERVER}__${tool}`]
+}
+
+/** Una sola lectura (la del servidor más largo), o null si es nativa. Para diagnóstico; la decisión usa catalogNames. */
+export function catalogName(tool: string, servers: string[]): string | null {
+  const names = catalogNames(tool, servers)
+  if (!names.length) return null
+  return names.sort((a, b) => b.split("__")[1].length - a.split("__")[1].length)[0]
 }
 
 /** Índice del primer carácter significativo desde `i` (salta espacios y comentarios). */
@@ -107,26 +122,35 @@ export function stripJsonc(text: string): string {
   return out
 }
 
-function serversIn(file: string): string[] {
-  if (!existsSync(file)) return []
+function serversInText(text: string): string[] {
   try {
-    const mcp = JSON.parse(stripJsonc(readFileSync(file, "utf-8")))?.mcp
+    const mcp = JSON.parse(stripJsonc(text))?.mcp
     return mcp && typeof mcp === "object" && !Array.isArray(mcp) ? Object.keys(mcp) : []
   } catch {
     return []
   }
 }
 
+function serversIn(file: string): string[] {
+  if (!existsSync(file)) return []
+  try {
+    return serversInText(readFileSync(file, "utf-8"))
+  } catch {
+    return []
+  }
+}
+
 /**
- * Servidores MCP declarados: opencode.json[c] del proyecto, de .opencode/, del usuario, de OPENCODE_CONFIG_DIR y el
- * de OPENCODE_CONFIG. Un servidor con `enabled: false` cuenta igual: sobra una pregunta, no falta ninguna.
+ * Servidores MCP declarados: opencode.json[c] del proyecto, de .opencode/, del usuario, de OPENCODE_CONFIG_DIR, el
+ * de OPENCODE_CONFIG y la configuración inline de OPENCODE_CONFIG_CONTENT (revisión Codex #1525 P1-2). Un servidor con `enabled: false` cuenta igual: sobra una pregunta, no falta ninguna.
  */
 export function mcpServers(root: string, env: Record<string, string | undefined> = process.env): string[] {
   const dirs = [root, join(root, ".opencode"), join(env.HOME || homedir(), ".config/opencode")]
   if (env.OPENCODE_CONFIG_DIR) dirs.push(env.OPENCODE_CONFIG_DIR)
   const files = dirs.flatMap((d) => [join(d, "opencode.json"), join(d, "opencode.jsonc")])
   if (env.OPENCODE_CONFIG) files.push(env.OPENCODE_CONFIG)
-  return [...new Set(files.flatMap(serversIn))]
+  const inline = env.OPENCODE_CONFIG_CONTENT ? serversInText(env.OPENCODE_CONFIG_CONTENT) : []
+  return [...new Set([...files.flatMap(serversIn), ...inline])]
 }
 
 /**
@@ -226,8 +250,14 @@ export async function mcpEffectVerdict(a: {
   pinFixed: boolean
   servers?: string[]
 }): Promise<McpVerdict> {
-  const name = catalogName(a.tool, a.servers ?? mcpServers(a.root, a.env))
-  if (!name) return { decision: "pass", reason: "" }
-  const raw = JSON.stringify({ hook_event_name: "PreToolUse", tool_name: name, tool_input: a.args ?? {} })
-  return runCore(raw, { root: a.root, coreRoot: a.coreRoot, wrap: a.wrap, env: a.env, pinFixed: a.pinFixed })
+  const names = catalogNames(a.tool, a.servers ?? mcpServers(a.root, a.env))
+  if (!names.length) return { decision: "pass", reason: "" }
+  // Atribución ambigua: el núcleo decide cada lectura y manda la más estricta (deny > ask > pass).
+  const verdicts = await Promise.all(names.map((name) => {
+    const raw = JSON.stringify({ hook_event_name: "PreToolUse", tool_name: name, tool_input: a.args ?? {} })
+    return runCore(raw, { root: a.root, coreRoot: a.coreRoot, wrap: a.wrap, env: a.env, pinFixed: a.pinFixed })
+  }))
+  return verdicts.reduce((worst, v) => (STRICTNESS[v.decision] > STRICTNESS[worst.decision] ? v : worst))
 }
+
+const STRICTNESS: Record<McpVerdict["decision"], number> = { pass: 0, ask: 1, deny: 2 }

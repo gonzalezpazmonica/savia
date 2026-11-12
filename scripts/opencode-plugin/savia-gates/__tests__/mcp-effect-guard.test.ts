@@ -3,7 +3,8 @@ import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promi
 import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { MCP_NATIVE_TWIN_HOOKS, catalogName, mcpEffectVerdict, mcpServers, productionEnv, runCore, stripJsonc } from "../lib/mcp-effect-guard"
+import { normalizeToolName } from "../lib/v2-adapter"
+import { MCP_NATIVE_TWIN_HOOKS, catalogName, catalogNames, mcpEffectVerdict, mcpServers, productionEnv, runCore, stripJsonc } from "../lib/mcp-effect-guard"
 
 // SE-508 S1 DUAL_BINDING: la regla de savia-gates llama al mismo núcleo que el hook mcp-effect-guard.sh.
 // Aquí se prueba lo que solo existe en OpenCode: el nombre de las tools MCP de OpenCode (`<servidor>_<tool>`),
@@ -22,7 +23,7 @@ afterEach(async () => {
   await Promise.all(dirs.splice(0).map((d) => rm(d, { recursive: true, force: true })))
 })
 
-const CATALOG = "mcp__claude_ai_Gmail__send_message: write\nmcp__github__merge_pull_request: merge\nmcp__savia-vaults__vault_read: read_only\n"
+const CATALOG = "mcp__claude_ai_Gmail__send_message: write\nmcp__claude_ai_Gmail__get_message: read_only\nmcp__github__merge_pull_request: merge\nmcp__savia-vaults__vault_read: read_only\n"
 
 /** Árbol con el núcleo real copiado y un remoto bare de fixture con el mismo catálogo. */
 async function workspace(): Promise<{ root: string; env: Record<string, string> }> {
@@ -273,4 +274,64 @@ test("runCore con wrap: lanza el núcleo de <root> a través del envoltorio, con
 
 test("revisión #1525 P2-1: productionEnv quita también el desvío del registro (SAVIA_MCP_GUARD_TEST_LOG)", () => {
   expect(productionEnv({ PATH: "/bin", SAVIA_MCP_GUARD_TEST_LOG: "/tmp/x" })).toEqual({ PATH: "/bin" })
+})
+
+// Revisión Codex #1525 (refutación), P1-1: con dos servidores que son prefijo uno del otro (`github`, `github_merge`),
+// atribuir al más largo convertía un merge en una tool sin clasificar, delegable con el pin. Con atribución ambigua
+// se evalúan todas las lecturas posibles y manda la más estricta.
+test("Codex P1-1: prefijo de servidor ambiguo no rebaja un merge a delegado (pin fijado)", async () => {
+  const { root, env } = await workspace()
+  const v = await mcpEffectVerdict({ root, tool: "github_merge_pull_request", args: {}, env: { ...env, SAVIA_GATES_PIN: "1" },
+    pinFixed: true, servers: ["github", "github_merge"] })
+  expect(v.decision).toBe("deny")
+  expect(v.reason).toContain("SE-343")
+})
+
+test("Codex P1-1: catalogNames devuelve todas las atribuciones posibles; sin ambigüedad, una", () => {
+  expect(catalogNames("github_merge_pull_request", ["github", "github_merge"]).sort())
+    .toEqual(["mcp__github__merge_pull_request", "mcp__github_merge__pull_request"])
+  // negativo: un solo servidor que encaja → una sola lectura
+  expect(catalogNames("github_merge_pull_request", ["github"])).toEqual(["mcp__github__merge_pull_request"])
+  expect(catalogNames("bash", ["github"])).toEqual([])
+})
+
+test("Codex P1-1 negativo: atribución ambigua sin merge sigue delegándose con el pin", async () => {
+  const { root, env } = await workspace()
+  const v = await mcpEffectVerdict({ root, tool: "claude_ai_Gmail_send_message", args: {}, env: { ...env, SAVIA_GATES_PIN: "1" },
+    pinFixed: true, servers: ["claude_ai", "claude_ai_Gmail"] })
+  expect(v.decision).toBe("pass")
+})
+
+// Codex P1-2: OpenCode admite configuración inline en OPENCODE_CONFIG_CONTENT; un servidor declarado solo ahí no se veía
+// y `apply` + `patch` pasaba como la nativa `apply_patch` sin lanzar el núcleo.
+test("Codex P1-2: mcpServers lee OPENCODE_CONFIG_CONTENT (inline)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "se508-inline-"))
+  dirs.push(root)
+  const inline = JSON.stringify({ mcp: { apply: { type: "remote", url: "https://mcp.example.test" } } })
+  expect(mcpServers(root, { HOME: root, OPENCODE_CONFIG_CONTENT: inline })).toEqual(["apply"])
+  // negativo: contenido inline ilegible no aporta servidores ni rompe la lectura
+  expect(mcpServers(root, { HOME: root, OPENCODE_CONFIG_CONTENT: "{roto" })).toEqual([])
+})
+
+test("Codex P1-2: apply_patch de un servidor inline no pasa como nativa", async () => {
+  const { root, env } = await workspace()
+  const inline = JSON.stringify({ mcp: { apply: { type: "remote", url: "https://mcp.example.test" } } })
+  const v = await mcpEffectVerdict({ root, tool: "apply_patch", args: {}, env: { ...env, HOME: root, OPENCODE_CONFIG_CONTENT: inline }, pinFixed: false })
+  expect(v.decision).toBe("ask")
+  // negativo: sin esa configuración, apply_patch es la nativa y el guard no decide
+  const n = await mcpEffectVerdict({ root, tool: "apply_patch", args: {}, env: { ...env, HOME: root }, pinFixed: false })
+  expect(n.decision).toBe("pass")
+})
+
+// Codex P2: el adaptador V2 pasa el nombre en minúsculas; el prefijo del servidor se comparaba respetando mayúsculas.
+test("Codex P2: nombre V2 en minúsculas se atribuye al servidor declarado (lectura catalogada pasa)", async () => {
+  const { root, env } = await workspace()
+  expect(catalogName(normalizeToolName("claude_ai_Gmail_get_message"), ["claude_ai_Gmail"])).toBe("mcp__claude_ai_Gmail__get_message")
+  const v = await mcpEffectVerdict({ root, tool: normalizeToolName("claude_ai_Gmail_get_message"), args: {}, env, pinFixed: false,
+    servers: ["claude_ai_Gmail"] })
+  expect(v.decision).toBe("pass")
+  // negativo: una escritura en minúsculas sigue preguntando
+  const w = await mcpEffectVerdict({ root, tool: normalizeToolName("claude_ai_Gmail_send_message"), args: {}, env, pinFixed: false,
+    servers: ["claude_ai_Gmail"] })
+  expect(w.decision).toBe("ask")
 })
