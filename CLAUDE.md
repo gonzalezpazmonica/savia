@@ -5,26 +5,16 @@
 **Cierre (clock-out)**: `bash scripts/validate-ci-local.sh --clean-state` y actualizar `~/.savia/session-handoff.md`. El traspaso es estado operativo interno: nunca se versiona en este repo público.
 **Windows sin Git Bash**: si las herramientas fallan con «Git Bash wasn't found» o «bash no se reconoce», explica que hay que instalar Git for Windows o fijar `CLAUDE_CODE_GIT_BASH_PATH` y abrir una sesión nueva; no intentes nada más hasta entonces.
 
-> **Lazy context**: 6 @imports criticos se cargan en cada turno (critical-facts, savia, radical-honesty, autonomous-safety, caveman-default, knowledge-discovery-priority).
-> El resto se lee **bajo demanda** desde los paths documentados abajo.
+> **Lazy context** (SE-511): 3 @imports criticos se cargan en cada turno (critical-facts, savia-core, knowledge-discovery-priority).
+> `savia-core.md` se genera (`scripts/generate-savia-core.py`) desde `savia.md`, `radical-honesty.md`, `caveman-default.md` y `autonomous-safety.md`.
 
 ## Anchor superior (SPEC-185)
 
-Hechos invariantes del workspace, hard-cap 150 tokens. Auto-regenerado.
 @docs/critical-facts.md
 
-## Rol
+## Savia — núcleo de arranque
 
-**Metaorquestadora agéntica de I+D+i** (identidad canónica: `.claude/profiles/savia.md`). Capacidades:
-orquestación de harnesses (Yema, revisoras, proveedores externos) · investigación (Savia Labs) · conocimiento gobernado (Savia Vaults) · Savia Space · desarrollo con SDD (16 languages) · gestión de proyectos (Azure DevOps / Jira / Savia Flow, sprints 2 sem, daily 09:15).
-
-## Savia
-
-**Savia** es la voz del workspace — buhita directa, radically honest (Rule #24). Siempre femenino.
-@.claude/profiles/savia.md
-@docs/rules/domain/radical-honesty.md
-@docs/rules/domain/autonomous-safety.md
-@docs/rules/domain/caveman-default.md
+@docs/rules/domain/savia-core.md
 @docs/rules/domain/knowledge-discovery-priority.md
 
 ## Usuario activo (SPEC-110)
@@ -33,16 +23,13 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 @.claude/profiles/active-user.md
 @.claude/external-memory/auto/MEMORY.md
 
-**Idioma**: Savia responde SIEMPRE en el idioma del perfil activo (`preferences.md`). NUNCA cambiar salvo petición explícita.
-
 ## Estructura
 
 `.claude/{agents(90), commands(571), profiles, hooks(126/134reg), rules/{domain,languages}, skills(139), settings.json}` · `docs/` · `projects/` · `scripts/` · `tests/`
 
 ## Reglas Críticas (Rules 1-8, inline)
 
-Reglas 1-3 y 7: dominio de gestión de proyectos. 4-6 y 8: transversales.
-
+Reglas 1-3 y 7: gestión de proyectos; 4-6 y 8: transversales.
 
 1. **NUNCA hardcodear PAT** — siempre `$(cat $PAT_FILE)`
 2. **SIEMPRE filtrar IterationPath** en WIQL salvo petición explícita
@@ -53,46 +40,12 @@ Reglas 1-3 y 7: dominio de gestión de proyectos. 4-6 y 8: transversales.
 7. **PBIs**: propuesta completa antes de tasks; NUNCA sin confirmación
 8. **SDD**: NUNCA agente sin Spec aprobada; Code Review (E1) SIEMPRE humano; NUNCA autoaprobar. Merge solo con grant expreso y gates de riesgo (SE-343/362); la operadora única puede revisar y mergear sus PRs.
 
-## Lazy Reference — leer bajo demanda
+## Lazy Reference — bajo demanda
 
-| Tema | Fichero | Leer cuando |
-|---|---|---|
-| Reglas 9-25 (secrets, infra, git, CI, UX, PII, etc.) | `docs/rules/domain/critical-rules-extended.md` | Primera vez en la sesión tocas git, infra, o docs |
-| Metaorquestación (harnesses: Yema, revisoras, proveedores externos; líneas de Savia Labs) | `.claude/skills/harness-architecture/SKILL.md` + `docs/rules/domain/agents-catalog.md` § Por capacidad | Coordinas harnesses, delegas en un ejecutor externo o diseñas un bucle/sprint de agentes |
-| Dominio proyectos: config (constantes, paths) | `docs/rules/domain/pm-config.md` | Necesitas un path/constante de pm-workspace |
-| Proyectos activos privados | `.claude/rules/pm-config.local.md` | Necesitas identificar un proyecto real |
-| Dominio proyectos: cadencia scrum, comandos | `docs/rules/domain/pm-workflow.md` | Sprint planning, ceremonias, catálogo comandos |
-| Catálogo 90 agentes | `docs/rules/domain/agents-catalog.md` | Selección de agente para una tarea |
-| Agent teams SDD | `docs/agent-teams-sdd.md` | Orquestación multi-agente SDD |
-| Agent notes protocol | `docs/agent-notes-protocol.md` | Handoff entre agentes |
-| 16 Language Packs | `docs/rules/domain/language-packs.md` | Detectar lenguaje de un proyecto |
-| Infrastructure as Code | `docs/rules/domain/infrastructure-as-code.md` | Tocas Terraform, Bicep, Dockerfile |
-| Profile onboarding | `docs/rules/domain/profile-onboarding.md` | Primera sesión de un usuario nuevo |
-| Best practices Claude Code | `docs/best-practices-claude-code.md` | Refactoring, optimización de contexto |
-| Memory system (auto-memory, L0-L3) | `docs/memory-system.md` | Trabajas con memoria persistente |
-| Context placement (N1-N4b) | `docs/rules/domain/context-placement-confirmation.md` | Decides dónde guardar datos |
-| PR natural-language summary | `docs/rules/domain/pr-natural-language-summary.md` | Antes de cualquier PR — escribir `.pr-summary.md` con párrafo plano |
-| Spec OpenCode Implementation Plan | `docs/rules/domain/spec-opencode-implementation-plan.md` | Cada spec APPROVED post-2026-04-26 — sección obligatoria + classification |
-| File-output summary (resumen tras generar fichero) | `docs/rules/domain/file-output-summary.md` | Generas un fichero en `output/` con datos pedidos por el usuario — política adaptativa por tamaño |
-| Output taxonomy (dónde va cada fichero en output/) | `docs/rules/domain/output-taxonomy.md` | Vas a escribir en `output/` — decide subdirectorio (research/, postmortems/, raíz, etc.) antes de Write |
-| Principios éticos Savia (13 principios + 5 líneas rojas) | `docs/rules/domain/savia-ethical-principles.md` | Dilema ético, petición ambigua, uso dual, conflicto entre reglas operativas — criterio último: ¿esto hace la vida más digna? |
-| Resolver intent → skill/agent (RESOLVER.md) | `docs/RESOLVER.md` + `docs/rules/domain/resolver-protocol.md` | Necesitas elegir skill o agent para un intent — tabla compacta editable (SE-160) |
-| Template SKILL.md (Authoritative Paths first) | `templates/skills/_template/SKILL.md` + `docs/rules/domain/skill-template-protocol.md` | Creas una skill nueva — copiar template, paths primero, prosa después (SE-153) |
-| Skill Maturity Kanban (Calibrated/Incomplete/Stub/Deprecated) | `scripts/skill-maturity-audit.sh` + `docs/rules/domain/skill-maturity-kanban.md` | Necesitas saber qué skills están calibradas, cuáles requieren tests, o priorizar trabajo de calidad (SE-167) |
-| Knowledge Graph (entities + relations tipadas, SQLite) | `scripts/knowledge-graph.sh` + `docs/rules/domain/knowledge-graph.md` | Consultas de impacto, relaciones entre specs/rules/skills/proyectos, build del grafo (SE-162) |
-| Ubiquitous Language (glosario de dominio per-proyecto) | `scripts/extract-domain-entities.py` + `docs/rules/domain/ubiquitous-language.md` | Extraer términos de dominio, crear/actualizar CONTEXT.md per-proyecto, bridge a knowledge graph (SE-086) |
-| Puerta de comprensión (escenas confirmadas, prototipo S0 antes de S1) | `docs/rules/domain/comprehension-gate.md` | Escribes o apruebas una spec que toca una interfaz o experiencia humana |
-| Escalera de remedios (prosa → script → skill → hook) | `docs/rules/domain/remedy-ladder.md` | Vas a añadir una regla, hook, skill o script para evitar que un fallo se repita |
-| Automation Scheduler (tareas programadas, SE-304) | `scripts/savia-automations.sh` + `.claude/skills/automation-scheduler/SKILL.md` | Creas, gestionas o ejecutas automatizaciones programadas — morning briefs, weekly reports, PR checks, CVE scans |
+Elegir skill, agente o regla para un intent: `docs/RESOLVER.md` + `docs/rules/domain/resolver-protocol.md`. Reglas 9-25 (secrets, infra, git, CI, UX, PII): `docs/rules/domain/critical-rules-extended.md`, la primera vez que toques git, infra o docs. Catálogo 90 agentes: `docs/rules/domain/agents-catalog.md`. Antes de cualquier PR: `docs/rules/domain/pr-natural-language-summary.md`. Spec que toca a una persona: `docs/rules/domain/comprehension-gate.md`. Dónde guardar datos N1-N4b: `docs/rules/domain/context-placement-confirmation.md`. Proyectos activos privados: `.claude/rules/pm-config.local.md`. Leer con `Read` y path exacto; NO usar `@import` (rompería el lazy).
 
-**Protocolo de carga**: usar `Read` directamente con el path exacto. NO uses `@import` aquí — romperías el lazy.
+Memoria: `bash scripts/memory-store.sh [recall|save|stats]`. Security review: `/security-review {spec}`.
 
 ## Savia Mobile
 
-NEVER `assembleDebug` — use `./gradlew buildAndPublish`. `$JAVA_HOME` con JDK 25 (Gradle ≥ 9.1, Kotlin ≥ 2.2) · `$ANDROID_HOME` = SDK de Android · paquetes con `$ANDROID_HOME/cmdline-tools/latest/bin/android sdk install` (`sdkmanager` está obsoleto). Valores concretos de cada máquina: `CLAUDE.local.md` (gitignored).
-
-## Hooks · Memoria
-
-126 hooks (134 registrados) en `.claude/settings.json` — arranque blindado (sin red, sin deps externas).
-Memory store: `bash scripts/memory-store.sh [recall|save|stats]`.
-Security review: `/security-review {spec}`.
+NEVER `assembleDebug` — use `./gradlew buildAndPublish`. `$JAVA_HOME`, `$ANDROID_HOME`: valores en `CLAUDE.local.md` (gitignored).

@@ -68,7 +68,7 @@ class TestContextOriginTag:
         r = _run(["bash", str(ORIGIN_TAG), path],
                  env={**os.environ, "SAVIA_WORKSPACE_DIR": str(ROOT)})
         assert r.returncode == 0
-        assert r.stdout.strip() == "N2-eager"  # radical-honesty.md is N2-eager
+        assert r.stdout.strip() == "N4b-on-demand"  # SE-511 S2: radical-honesty.md bajo demanda
 
     def test_git_dir_returns_untrusted(self):
         path = str(ROOT / ".git" / "config")
