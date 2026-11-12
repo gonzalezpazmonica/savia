@@ -227,3 +227,9 @@ APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva +
 > Propuesta en la misma PR que SE-513, SE-514 y SE-515. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
 
 - **Absorbe SE-475**: la clase del bloqueo (`FORMA` o `POLÍTICA`) es un campo de `output/guard-blocks.jsonl` (D2) y un prefijo del mensaje del hook, con la biblioteca común bash y TS. Las dos specs tocaban los mismos hooks y guards. SE-475 pasa a SUPERSEDED.
+
+## Anexo propuesto 2026-11-12 — reglas de guarda en texto (SE-520)
+
+> No cambia el estado ni el alcance de esta spec. Vale como anexo cuando la operadora apruebe SE-520.
+
+- Formato de las guardas simples como reglas markdown evaluadas por un solo motor determinista, manejador del despachador de D3: `docs/specs/SE-520-reglas-de-guarda-en-texto.spec.md`. Inventario: de 43 guardas bloqueantes, 7 caben enteras como regla, 8 en parte y 28 no. Sus fases dependen de S1, S3 y S4 de esta spec.
