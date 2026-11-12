@@ -1,0 +1,54 @@
+# Ontología operativa mínima (SE-496 R1). La autoridad vive fuera del modelo:
+# solo `source-backed` y `contract-owned` pueden aparecer en una precondición.
+#   source-backed  lo dice un sistema de registro mediante un lector determinista (git, gh)
+#   contract-owned lo dice un contrato firmado
+#   derived        se calcula al evaluar y nunca se escribe
+#   inferred       viene del grafo, las cúpulas o un modelo: solo sugiere, nunca autoriza
+schema: savia-operational-ontology/1
+types:
+  Principal:
+    attributes:
+      slug: { owner: contract-owned, valid_from: contract.not_before, valid_to: contract.expires_at }
+  Delegate:
+    attributes:
+      level: { owner: source-backed, reader: agent-permission-levels }
+  Repo:
+    attributes:
+      installation: { owner: source-backed, reader: git-remote }
+  Branch:
+    attributes:
+      name: { owner: source-backed, reader: git }
+      head_sha: { owner: source-backed, reader: git }
+      ci_status: { owner: source-backed, reader: gh-run-list }
+  PullRequest:
+    attributes:
+      is_draft: { owner: source-backed, reader: gh-pr-view }
+      ci_status: { owner: source-backed, reader: gh-pr-view }
+      head_ref: { owner: source-backed, reader: gh-pr-view }
+      head_sha: { owner: source-backed, reader: gh-pr-view }
+      review_decision: { owner: source-backed, reader: gh-pr-view }
+      state: { owner: source-backed, reader: gh-pr-view }
+      tier: { owner: derived, reader: risk-tier }
+  Project:
+    attributes:
+      path: { owner: source-backed, reader: git }
+      repo_membership: { owner: inferred, reader: knowledge-graph }
+  VaultNote:
+    attributes:
+      path: { owner: source-backed, reader: git }
+      related_project: { owner: inferred, reader: vault-graph }
+  ExternalSystem:
+    attributes:
+      name: { owner: contract-owned }
+effects:
+  git.commit: { reversibility: reversible }
+  git.push: { reversibility: reversible }
+  pr.open-draft: { reversibility: reversible }
+  pr.merge: { reversibility: irreversible }
+  project.publish: { reversibility: irreversible }
+  vault.write: { reversibility: reversible }
+actions:
+  pr.create-draft: { descriptor: contracts/capabilities/pr.create-draft.yaml }
+  pr.merge: { descriptor: contracts/capabilities/pr.merge.yaml }
+  project.publish: { descriptor: contracts/capabilities/project.publish.yaml }
+  vault.note-write: { descriptor: contracts/capabilities/vault.note-write.yaml }
