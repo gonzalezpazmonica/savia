@@ -18,7 +18,7 @@ Librería TypeScript pura: sin red, sin LLM, sin dependencias y sin reloj propio
 cd projects/soul-continuity
 node --experimental-strip-types --test tests/attention/*.test.ts      # tests
 node --experimental-strip-types tests/attention/evals.ts              # 228 evals (120 de Labs + 108 de AC-4b)
-node --experimental-strip-types tests/attention/bench/mutaciones.ts   # 83 mutantes (18 de Labs + 18 de AC-4b + 5 del puente y la redacción + 21 de las revisiones + 21 de SE-514 S2); falla si alguno vive o no arranca
+node --experimental-strip-types tests/attention/bench/mutaciones.ts   # 90 mutantes (18 de Labs + 18 de AC-4b + 5 del puente y la redacción + 21 de las revisiones + 28 de SE-514 S2); falla si alguno vive o no arranca
 tsc -p src/attention/tsconfig.json                                    # strict, sin emitir
 ```
 
