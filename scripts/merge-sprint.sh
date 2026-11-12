@@ -893,10 +893,12 @@ cmd_run() {
   frozen_extract "$(mf main_commit 2>/dev/null)" run || anomaly codigo_congelado_ilegible
   check_required
   # SE-500 S3: run sigue el `order` congelado (en el digest) y no reordena. Debe ser una permutación exacta de
-  # las PR del manifiesto; si falta, sobra, se repite o no es una lista de enteros, anomalía (fail-closed).
+  # las PR del manifiesto; si falta, sobra, se repite (en order o en prs) o no es una lista de enteros, anomalía.
+  # Las PR que pasan a awaiting_judge salen de la primera pasada y van a la cola del juez (SE-433 §2.7).
   local entries; entries=$(python3 -c 'import json,sys
-d=json.load(open(sys.argv[1])); o=d["order"]; by={p["pr"]:p for p in d["prs"]}
-if not isinstance(o,list) or any(type(n) is not int for n in o) or len(o)!=len(set(o)) or sorted(o)!=sorted(by): sys.exit(1)
+d=json.load(open(sys.argv[1])); o=d["order"]; ns=[p["pr"] for p in d["prs"]]; by={p["pr"]:p for p in d["prs"]}
+# Se compara con la lista de PR, no con el dict: el dict perdería en silencio una entrada repetida.
+if not isinstance(o,list) or any(type(n) is not int for n in o) or len(o)!=len(set(o)) or sorted(o)!=sorted(ns): sys.exit(1)
 for n in o: p=by[n]; print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_repo"],p["reopens"])' "$MANIFEST") \
     || anomaly manifiesto_ilegible
   # D6: la etiqueta merge-sprint:<id> pausa el auto-rebase de los PRs del manifiesto mientras dura el run.

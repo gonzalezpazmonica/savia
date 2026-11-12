@@ -1060,10 +1060,29 @@ sprint_with() {  # sprint_with <escenario> <voraz|ascendente> → S3_RES=«fusio
   done
 }
 
+@test "AC-20 block: prs con un número repetido → anomalía, sin merge (order no es permutación de [10,10,…])" {
+  local mode
+  for mode in igual distinta; do
+    fresh_env "dup-$mode-$RANDOM"; s3_three
+    bash "$SCRIPT" plan >/dev/null 2>&1
+    # Repite la entrada de #10: idéntica, o con otro head (antes se conservaba en silencio la última).
+    python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); e=dict(next(x for x in d["prs"] if x["pr"]==10))
+if sys.argv[2]=="distinta": e["head"]="f"*40
+d["prs"].append(e); open(p,"w").write(json.dumps(d,sort_keys=True,separators=(",",":")))' "$MERGE_SPRINT_HOME/manifest.json" "$mode"
+    regrant
+    run bash "$SCRIPT" run
+    [ "$status" -eq 5 ]
+    [[ "$output" == *"manifiesto_ilegible"* ]]
+    [ ! -s "$FAKE/merged" ]
+  done
+}
+
 @test "seguridad: merge-sprint.sh arranca con set -uo pipefail (variable sin definir o fallo en tubería no pasan en silencio)" {
-  # Primera sentencia ejecutable tras la cabecera: si alguien la quita, este test falla.
-  run grep -n -m1 -E '^set -uo pipefail$' "$SCRIPT"
+  # Debe ser la primera sentencia ejecutable, a nivel superior: dentro de una función o tras otra orden
+  # no protege todo el script. Se comprueba la primera línea que no es comentario ni blanco.
+  run awk '!/^[[:space:]]*(#|$)/ { print; exit }' "$SCRIPT"
   [ "$status" -eq 0 ]
+  [ "$output" = "set -uo pipefail" ]
   # Negativo: una subcomanda inexistente no puede terminar en éxito.
   run bash "$SCRIPT" subcomando-inexistente-se500
   [ "$status" -ne 0 ]
