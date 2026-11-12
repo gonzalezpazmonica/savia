@@ -406,3 +406,94 @@ EOF
   [ "$status" -eq 0 ]
   [ "$(jq -r .vendor_hits <<<"$output")" = "0" ]
 }
+
+# ── Refutación Codex, ronda 2 (PR #1523): cada test reproduce un hallazgo ────
+
+@test "P1 codex: buscador que falla (exit != 0) o salida no JSON → outcome=error y exit 4, nunca ok" {
+  vault_fixture
+  local log="$BATS_TEST_TMPDIR/r.jsonl" body
+  for body in 'exit 1' 'echo no-json' 'echo "{\"no\":\"lista\"}"'; do
+    : > "$log"
+    printf '#!/usr/bin/env bash\n%s\n' "$body" > "$BATS_TEST_TMPDIR/cli.js"
+    run bash "$RECALL" --query "consulta concreta" --mode effective --json --recall-log "$log"
+    [ "$status" -eq 4 ] || { echo "body=$body status=$status"; return 1; }
+    [ "$(jq -r .outcome "$log")" = "error" ] || { echo "body=$body row=$(cat "$log")"; return 1; }
+    [ "$(jq -rc .effective_hits <<<"$output")" = "[]" ]
+  done
+}
+
+@test "P1 codex: buscador sano sin aciertos sigue siendo outcome=ok y exit 0 (no es error)" {
+  vault_fixture
+  local log="$BATS_TEST_TMPDIR/r.jsonl"
+  printf '#!/usr/bin/env bash\necho "[]"\n' > "$BATS_TEST_TMPDIR/cli.js"
+  run bash "$RECALL" --query "consulta concreta" --mode effective --json --recall-log "$log"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .outcome "$log")" = "ok" ]
+}
+
+@test "AC-16 P1 codex: con el interruptor off, el buscador roto conserva la salida anterior (exit 0, vacío)" {
+  vault_fixture
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$BATS_TEST_TMPDIR/cli.js"
+  SAVIA_LEARNING_APPLIED=off run bash "$RECALL" --query "consulta concreta" --mode effective --json --recall-log "$BATS_TEST_TMPDIR/r.jsonl"
+  [ "$status" -eq 0 ]
+  [ "$(jq -rc .effective_hits <<<"$output")" = "[]" ]
+}
+
+@test "P1 codex (OpenCode): log de emisión no escribible → no inyecta criterios sin traza" {
+  need_ts
+  [ -w /dev/full ] || skip "sin /dev/full"
+  fake_recall "printf '%s' '$HITS'"
+  run env SCL_EMISSION_LOG=/dev/full SAVIA_WORKSPACE_DIR="$PROJ" $TS_RUNTIME "$REPO/.opencode/plugins/__tests__/learning-recall-guard-cli.ts" "como publico la rama del sprint"
+  [ "$output" = '{"injected":false}' ]
+}
+
+@test "P1 codex (arnés): inyector que emite contexto sin fila end emitted=true → 'incompleto', nunca 'cambio'" {
+  mk_cases
+  # inyector que emite el criterio pero no deja traza en SCL_EMISSION_LOG
+  printf '#!/usr/bin/env bash\ncat >/dev/null\n[[ "$SAVIA_LEARNING_RECALL" == on ]] && echo %s\nexit 0\n' \
+    "'{\"hookSpecificOutput\":{\"additionalContext\":\"- [CRIT-001] Soberania\"}}'" > "$INJECTOR"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 1 ]
+  [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
+}
+
+@test "P1 codex (arnés): recall real con buscador roto bajo el hook → 'incompleto', no 'sin muestra'" {
+  mk_cases
+  vault_fixture
+  cp "$REPO/$RECALL" "$PROJ/scripts/learning-recall.sh"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$BATS_TEST_TMPDIR/cli.js"
+  run bash "$ABL" ablation --cases "$CASES" --injector "$INJECTOR" --decider "$DECIDER" --root "$PROJ"
+  [ "$status" -eq 1 ] || { echo "out=$output"; return 1; }
+  [ "$(jq -r .verdict <<<"$output")" = "incompleto" ]
+}
+
+@test "P2 codex (OpenCode): hits malformados ({} sin criterion_id/principle) → bad_output, sin inyectar" {
+  need_ts
+  fake_recall "printf '%s' '{\"effective_hits\":[{}]}'"
+  run env SAVIA_WORKSPACE_DIR="$PROJ" $TS_RUNTIME "$REPO/.opencode/plugins/__tests__/learning-recall-guard-cli.ts" "como publico la rama del sprint"
+  [ "$output" = '{"injected":false}' ]
+  [ "$(last_end reason)" = "bad_output" ]
+  [ "$(last_end emitted)" = "false" ]
+}
+
+@test "P2 codex: valores sin cero inicial (.7) → JSON válido y L numérico; el orquestador no dice 'L=? (medido)'" {
+  run bash "$METRIC" --p-consistent .7 --divergence .3 --ignorance-resolved .6 --measured --json
+  [ "$status" -eq 0 ]
+  jq -e '.L == 0.68 and .components.p_consistent == 0.7 and .components.divergence == 0.3' <<<"$output" >/dev/null
+  export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
+  SAGI_L_DIVERGENCE=.3 SAGI_L_IGNORANCE_RESOLVED=.6 run bash "$ORCH" --task "fixture se515 medida" --iterations 1 --p-consistent .7
+  echo "$output" | grep -q '\[medir\] L=0.68.*(medido)'
+  if echo "$output" | grep -q 'L=?'; then echo 'negación falló: L=?'; return 1; fi
+}
+
+@test "P2 codex: el orquestador con salida de métrica ilegible no declara '(medido)'" {
+  export SCL_PROPOSALS_DIR="$BATS_TEST_TMPDIR/lp"; mkdir -p "$SCL_PROPOSALS_DIR"
+  # copia del orquestador con una métrica falsa que devuelve JSON roto
+  mkdir -p "$PROJ/scripts"
+  cp "$REPO"/scripts/{savia-orchestrator.sh,learning-recall.sh,learning-proposal.sh,learning-autonomy.sh} "$PROJ/scripts/"
+  printf '#!/usr/bin/env bash\necho "{\\"L\\":.68}"\n' > "$PROJ/scripts/learning-metric.sh"
+  chmod +x "$PROJ/scripts/learning-metric.sh"
+  SAGI_L_DIVERGENCE=0.3 SAGI_L_IGNORANCE_RESOLVED=0.6 run bash "$PROJ/scripts/savia-orchestrator.sh" --task "fixture se515 rota" --iterations 1 --p-consistent 0.7
+  echo "$output" | grep -q '\[medir\] L no calculable'
+  if echo "$output" | grep -q '(medido)'; then echo 'negación falló: (medido)'; return 1; fi
+}

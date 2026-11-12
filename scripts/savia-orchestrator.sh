@@ -163,7 +163,9 @@ measure() {
   local args=(--p-consistent "$base_p" --divergence "$div" --ignorance-resolved "$ign" --json) out L
   (( ${#defaults[@]} == 0 )) && args+=(--measured)
   out=$(bash "$ROOT/scripts/learning-metric.sh" "${args[@]}" 2>/dev/null) || { echo "  [medir] L no calculable (entrada inválida)"; return; }
-  L=$(python3 -c "import sys,json;print(json.load(sys.stdin)['L'])" <<<"$out" 2>/dev/null || echo "?")
+  # Refutación Codex (PR #1523): si la salida no se puede leer, no hay medida que declarar.
+  L=$(python3 -c "import sys,json;v=json.load(sys.stdin)['L'];assert isinstance(v,(int,float)) and not isinstance(v,bool);print(v)" <<<"$out" 2>/dev/null) \
+    || { echo "  [medir] L no calculable (salida de la métrica ilegible)"; return; }
   if (( ${#defaults[@]} == 0 )); then
     echo "  [medir] L=$L (medido)"
   else

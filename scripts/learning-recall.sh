@@ -2,6 +2,8 @@
 # learning-recall.sh — SCL-003/SCL-008: authority-filtered SaviaLearning recall.
 # SE-515 S1: la fila del log lleva los criterios devueltos (`returned_criteria`)
 # y el resultado (`outcome`: ok | no_vault | no_cli | error), también cuando sale con 3.
+# Exit: 0 ok (con o sin aciertos) · 2 uso · 3 sin cúpula o sin CLI · 4 error del buscador o
+# salida ilegible (con SAVIA_LEARNING_APPLIED=off sale 0 y vacío, como antes).
 # SAVIA_LEARNING_APPLIED=off conserva el formato y las salidas anteriores.
 # Subcomando `ablation`: sonda P10 de SE-515 (ver abajo).
 
@@ -22,7 +24,8 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 #   escribe JSON con hookSpecificOutput.additionalContext (stdout vacío = no emitió). No se nombra
 #   ningún frontend. Fallo del inyector (cuenta en errors, nunca como «no emitió»): tope, exit != 0,
 #   stdout sin additionalContext, o evento de su log de emisión (SCL_EMISSION_LOG) sin fila `end` o
-#   terminado en error | timeout | bad_output | write_failed.
+#   terminado en error | timeout | bad_output | write_failed, o contexto emitido con el recall
+#   encendido sin ninguna fila `end` emitted=true (emisión sin evidencia, AC-3).
 # Decisor: recibe {"case_id","prompt","context"} por stdin; primera línea = decisión.
 # Salida: cases, emitting_cases, changed, changed_controls, errors, verdict
 #   (cambio | sin efecto | sin muestra | ruido | incompleto); ruido = cambió un control negativo.
@@ -111,6 +114,12 @@ def context_for(prompt, recall):
             ends = [r for r in evt if r.get('phase') == 'end']
             if not ends or ends[-1].get('reason') in INJECTOR_FAILURES:
                 return None
+    # Refutación Codex (PR #1523): con el recall encendido, un contexto emitido sin su fila `end`
+    # emitted=true es una emisión sin evidencia (AC-3); cuenta como fallo, no como emisión válida.
+    if context and recall == 'on':
+        ends = [r for evt in events.values() for r in evt if r.get('phase') == 'end'] if os.path.exists(log) else []
+        if not any(r.get('emitted') is True for r in ends):
+            return None
     return context
 
 def decide(case, context):
@@ -194,6 +203,7 @@ CRITERIO="${SCL_CRITERIO_PATH:-$ROOT/CRITERIO.md}"
 NODE_BIN="${SCL_NODE_PATH:-}"
 JSON=false
 HYBRID=false
+SEARCH_FAILED=false
 RECALL_LOG="${SCL_RECALL_LOG:-$ROOT/output/learning-loop/recall.jsonl}"
 
 usage() {
@@ -298,7 +308,12 @@ PY
     fi
   fi
 else
-  SEARCH_OUT=$("$NODE_BIN" "$CLI" search "$QUERY" --path "$VAULT" --json 2>/dev/null) || SEARCH_OUT="[]"
+  # Refutación Codex (PR #1523): un buscador que falla o devuelve algo que no es una lista JSON
+  # es un error, no «sin aciertos». Se registra outcome=error y sale con 4 (interruptor off: como antes).
+  SEARCH_OUT=$("$NODE_BIN" "$CLI" search "$QUERY" --path "$VAULT" --json 2>/dev/null) || { SEARCH_OUT="[]"; SEARCH_FAILED=true; }
+  if ! $SEARCH_FAILED && ! python3 -c 'import json,sys; sys.exit(0 if isinstance(json.loads(sys.argv[1]), list) else 1)' "$SEARCH_OUT" 2>/dev/null; then
+    SEARCH_OUT="[]"; SEARCH_FAILED=true
+  fi
 fi
 [[ -n "$SEARCH_OUT" ]] || SEARCH_OUT="[]"
 
@@ -385,7 +400,8 @@ print(json.dumps({'mode': mode, 'effective_hits': effective, 'shadow_hits': shad
 PY
 )
 OUTCOME=ok
-[[ -n "$RESULT" ]] || { RESULT='{"mode":"shadow","effective_hits":[],"shadow_hits":0,"rejected_hits":0,"proposal_ids":[]}'; OUTCOME=error; }
+[[ -n "$RESULT" ]] || { RESULT="$(empty_result)"; OUTCOME=error; }
+$SEARCH_FAILED && { RESULT="$(empty_result)"; OUTCOME=error; }
 
 log_row "$OUTCOME" "$RESULT"
 
@@ -404,4 +420,5 @@ for hit in json.loads(os.environ['SCL_RESULT'])['effective_hits']:
     print(f"- [{hit['criterion_id']}] {hit['principle']}")
 PY
 fi
+[[ "$OUTCOME" == "error" ]] && $TRACE && exit 4
 exit 0

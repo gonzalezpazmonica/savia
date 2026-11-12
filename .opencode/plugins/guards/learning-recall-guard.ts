@@ -77,6 +77,13 @@ async function runRecall(query: string): Promise<RecallResult> {
       try {
         const parsed = JSON.parse(buf.trim());
         if (!Array.isArray(parsed.effective_hits)) return done({ hits: [], reason: "bad_output" });
+        // Refutación Codex (PR #1523): cada acierto debe traer criterion_id y principle de texto;
+        // si no, es salida malformada (igual que el hook), nunca una emisión.
+        const valid = (h: unknown): h is Hit =>
+          typeof h === "object" && h !== null &&
+          typeof (h as Hit).criterion_id === "string" && (h as Hit).criterion_id !== "" &&
+          typeof (h as Hit).principle === "string";
+        if (!parsed.effective_hits.every(valid)) return done({ hits: [], reason: "bad_output" });
         const hits = parsed.effective_hits as Hit[];
         done({ hits, reason: hits.length === 0 ? "no_hits" : "emitted" });
       } catch {
@@ -95,8 +102,10 @@ function emissionLogPath(): string {
 }
 
 // trace — una fila con el mismo esquema que el hook bash. Nunca lanza.
-function trace(eventId: string, queryHash: string, phase: string, emitted: boolean, reason: string, criteria: string[]): void {
-  if (process.env.SAVIA_LEARNING_APPLIED === "off") return;
+// Devuelve false si la fila no se pudo escribir (true con el registro apagado): sin fila no se
+// emite (AC-3, refutación Codex PR #1523).
+function trace(eventId: string, queryHash: string, phase: string, emitted: boolean, reason: string, criteria: string[]): boolean {
+  if (process.env.SAVIA_LEARNING_APPLIED === "off") return true;
   try {
     const path = emissionLogPath();
     mkdirSync(dirname(path), { recursive: true });
@@ -111,8 +120,10 @@ function trace(eventId: string, queryHash: string, phase: string, emitted: boole
       reason,
     };
     appendFileSync(path, JSON.stringify(row) + "\n", "utf-8");
+    return true;
   } catch {
-    // El registro no debe romper el mensaje.
+    // El registro no rompe el mensaje, pero su fallo impide emitir.
+    return false;
   }
 }
 
@@ -144,7 +155,7 @@ export async function learningRecallGuard(
     const query = text.replace(/\n+$/, "");
     const queryHash = createHash("sha256").update(query, "utf8").digest("hex");
     const eventId = randomUUID();
-    trace(eventId, queryHash, "start", false, "started", []);
+    if (!trace(eventId, queryHash, "start", false, "started", [])) return;
 
     const { hits, reason } = await runRecall(query);
     if (hits.length === 0) {
@@ -168,13 +179,14 @@ export async function learningRecallGuard(
       synthetic: true,
     };
 
+    // Primero la evidencia, después la emisión: si la fila `end` no se escribe, no se inyecta.
+    if (!trace(eventId, queryHash, "end", true, "emitted", emittedHits.map((h) => h.criterion_id))) return;
     try {
       output.parts.unshift(synthetic);
     } catch {
       trace(eventId, queryHash, "end", false, "write_failed", []);
       return;
     }
-    trace(eventId, queryHash, "end", true, "emitted", emittedHits.map((h) => h.criterion_id));
   } catch {
     // Best-effort: never throw from a chat.message guard.
   }

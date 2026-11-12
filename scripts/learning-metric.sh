@@ -55,6 +55,18 @@ done
 
 [[ -z "$P" || -z "$D" || -z "$I" ]] && usage
 
+# Refutación Codex (PR #1523): la salida JSON interpola los valores tal cual; «.7» o «1.» no son
+# números JSON. Se normalizan a «0.7» y «1.0»; cualquier otra forma no decimal se rechaza (exit 3).
+norm() {
+  local x="$1"
+  [[ "$x" == .* ]] && x="0$x"
+  [[ "$x" == *. ]] && x="${x}0"
+  [[ "$x" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "ERROR: not a decimal number: $1" >&2; exit 3; }
+  printf '%s' "$x"
+}
+P=$(norm "$P") || exit 3; D=$(norm "$D") || exit 3; I=$(norm "$I") || exit 3
+W_P=$(norm "$W_P") || exit 3; W_D=$(norm "$W_D") || exit 3; W_I=$(norm "$W_I") || exit 3
+
 # Range validation: all in [0,1] (explicit verdict, locale-safe)
 for v in "$P" "$D" "$I" "$W_P" "$W_D" "$W_I"; do
   verdict=$(awk -v x="$v" 'BEGIN{ if (x<0 || x>1) print "INVALID"; else print "OK" }')
