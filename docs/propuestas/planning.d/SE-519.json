@@ -1,0 +1,9 @@
+{
+  "id": "SE-519",
+  "status": "PROPOSED",
+  "priority": "P2",
+  "phase": "C",
+  "title": "CVSS determinista, severidad por precondiciones y búsqueda de variantes",
+  "evidence": "docs/specs/SE-519-cvss-determinista-y-severidad-por-precondiciones.spec.md",
+  "note": "Idea aprobada por la operadora el 2026-11-12 tras la revisión de repos públicos de Anthropic. El agente pentester imprime puntuaciones CVSS calculadas por el modelo; hoy no hay calculadora y las skills llevan una tabla «simplificada» que no es CVSS. Propone cvss.py (3.1 y 4.0, verificado contra vectores de FIRST), severidad base/contexto por precondiciones con prueba y fase de variantes tras parche. Cinco slices, cada uno con su aprobación."
+}
