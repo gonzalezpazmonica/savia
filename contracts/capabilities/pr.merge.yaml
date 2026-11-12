@@ -19,3 +19,24 @@ execution:
 laws:
   - LAW-HUMAN-001
   - LAW-HUMAN-002
+authority:
+  required_level: L4
+  tier_gate: true
+declared_effects: [pr.merge]
+audit_plain: [pr_number]
+preconditions:
+  - id: pr_open
+    fact: PullRequest.state
+    op: "=="
+    value: OPEN
+    message: "precondición: el PR debe estar abierto"
+  - id: not_draft
+    fact: PullRequest.is_draft
+    op: "=="
+    value: false
+    message: "precondición: el PR no puede estar en borrador"
+  - id: ci_green
+    fact: PullRequest.ci_status
+    op: "=="
+    value: success
+    message: "precondición: CI en verde (pendiente, cancelada, roja o sin checks no cumplen)"

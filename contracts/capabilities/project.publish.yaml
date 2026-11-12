@@ -1,0 +1,32 @@
+id: project.publish
+version: 1
+description: Publica un proyecto; sigue decidiendo SE-491 (el kernel solo lo modela, SE-496 F0).
+input:
+  type: object
+  required: [project]
+  properties:
+    project: { type: string }
+safety:
+  effect: mutation
+  visibility: visible
+  reversibility: irreversible
+  destructive: false
+  external_side_effect: true
+  human_gate: required
+  scope: [project]
+execution:
+  handler: scripts/project-publish.sh
+laws:
+  - LAW-HUMAN-001
+  - LAW-HUMAN-002
+authority:
+  required_level: L3
+  tier_gate: true
+declared_effects: [project.publish]
+audit_plain: [project]
+preconditions:
+  - id: pr_open
+    fact: PullRequest.state
+    op: "=="
+    value: OPEN
+    message: "precondición: el PR de publicación debe estar abierto"
