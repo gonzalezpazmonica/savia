@@ -51,7 +51,7 @@ people = ["ana", "bea", "caro", "dani", "eva"]
 for i in range(200):
     cat = i % 8
     acl = ["ana", "bea", "operator"]
-    base = {"A": job("ana", acl=acl)}
+    base = {"A": job("ana", acl=acl, status="pending")}
     if cat == 0:   # permiso de efecto pendiente -> humano
         cases.append((ev(effect_permission="PENDING", bump=1), base, "HUMANO", ["operator"]))
     elif cat == 1: # UNKNOWN pasado el plazo -> humano
@@ -151,7 +151,7 @@ print(a["level"], b["level"], a["audience"], b["audience"])
 
 @test "fail-closed: missing or invalid acl never reaches another principal" {
   PY='
-l = lambda acl: promote(ev(bump=2), {"A": job("ana", acl=acl), "B": job("bea", deps=["A"])}, NOW)
+l = lambda acl: promote(ev(bump=2), {"A": job("ana", acl=acl, status="pending"), "B": job("bea", deps=["A"])}, NOW)
 r = [l("unset"), l("bea"), l([]), l([""])]
 print([x["level"] for x in r], [x["audience"] for x in r])
 '
@@ -195,7 +195,6 @@ print(r["level"])
   A=$(tq enqueue q informe --payload '{"text":"Informe","acl":["ana","bea","operator"]}')
   P=$(tq enqueue q publicar --payload '{"text":"Publicar","effect":"publicar"}')
   tq enqueue q dependiente --payload "{\"depends_on\":[\"$A\"],\"owner\":\"bea\"}" >/dev/null
-  tq dequeue q --worker ana >/dev/null
   tq admit q --text "adelanta informe" --origin operator --job "$A" --bump 3 >/dev/null
   tq admit q --text "adelanta publicar" --origin operator --job "$P" --bump 3 >/dev/null
   run tq promote q --json
@@ -213,8 +212,8 @@ print(r["level"])
   tq enqueue q dependiente --payload "{\"depends_on\":[\"$A\"],\"owner\":\"bea\"}" >/dev/null
   tq dequeue q --worker ana >/dev/null
   id=$(jget "$(tq admit q --text "pausa informe" --origin operator --job "$A" --bump 1)" "['id']")
-  run tq promote q --json
-  [ "$(jget "$output" "[0]['level']")" = "COORDINACION" ]
+  run tq promote q --json                      # en curso: admit no lo reordena, nada que coordinar
+  [ "$(jget "$output" "[0]['level']")" = "LOCAL" ]
   tq pull q --owner ana >/dev/null
   tq ack q "$id" --plan-proof "{\"owner\":\"ana\",\"plan\":[\"pausa (#$id)\"]}" >/dev/null
   run tq promote q --json                      # APPLIED_TO_PLAN: ya resuelto
@@ -241,4 +240,95 @@ print(r["level"])
   [ "$before" = "$after" ]
   [ "$rows_before" = "$rows_after" ]
   [ "$(echo "$after" | wc -l)" -eq 1 ]
+}
+
+@test "AC-10 (P1): promote no recupera trabajos con heartbeat caducado ni cambia ninguna fila" {
+  A=$(tq enqueue q informe --payload '{"acl":["ana","operator"]}')
+  tq dequeue q --worker ana >/dev/null
+  db="$TMPDIR_TQ/output/task-queue/q.sqlite"
+  python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update jobs set heartbeat=heartbeat-100000'); c.commit()" "$db"
+  dump() { python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(list(c.execute('select * from jobs')), list(c.execute('select * from admissions')))" "$db"; }
+  before=$(dump)
+  run tq promote q
+  [ "$status" -eq 0 ]
+  [ "$(dump)" = "$before" ]
+  [[ "$before" == *"running"* ]]
+  tq status q >/dev/null                       # control: una cola normal SÍ recupera (el test puede fallar)
+  [[ "$(dump)" == *"pending"* ]]
+}
+
+@test "promote sobre cola inexistente: error, exit 4 y no crea ni el fichero ni el directorio" {
+  run tq promote no-existe
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"no existe"* ]]
+  [ ! -e "$TMPDIR_TQ/output/task-queue" ]
+}
+
+@test "promote sobre base corrupta: exit 4, sin traza y sin tocar el fichero" {
+  mkdir -p "$TMPDIR_TQ/output/task-queue"
+  printf 'no soy sqlite, soy texto de relleno suficientemente largo para no ser una cabecera' > "$TMPDIR_TQ/output/task-queue/q.sqlite"
+  sum=$(sha256sum "$TMPDIR_TQ/output/task-queue/q.sqlite")
+  run tq promote q
+  [ "$status" -eq 4 ]
+  [[ "$output" != *"Traceback"* ]]
+  [ "$(sha256sum "$TMPDIR_TQ/output/task-queue/q.sqlite")" = "$sum" ]
+}
+
+@test "P2: TASK_QUEUE_UNKNOWN_HUMAN_SEC inválido no rompe la cola y usa 600" {
+  for bad in abc "" 0 -5; do
+    TASK_QUEUE_UNKNOWN_HUMAN_SEC="$bad" run tq enqueue q "x$RANDOM"
+    [ "$status" -eq 0 ]
+  done
+  PY='
+import os
+r = []
+for bad in ["abc", "", "0", "-5"]:
+    os.environ["TASK_QUEUE_UNKNOWN_HUMAN_SEC"] = bad
+    a = promote(ev(state="UNKNOWN", created_at=NOW-599), {"A": job("ana", acl=["ana","operator"])}, NOW)["level"]
+    b = promote(ev(state="UNKNOWN", created_at=NOW-600), {"A": job("ana", acl=["ana","operator"])}, NOW)["level"]
+    r.append((a, b))
+print(r)
+'
+  run py
+  [ "$output" = "$(printf "[('LOCAL', 'HUMANO'), ('LOCAL', 'HUMANO'), ('LOCAL', 'HUMANO'), ('LOCAL', 'HUMANO')]")" ]
+}
+
+@test "P2: bump sobre trabajo en curso no coordina; sobre pendiente sí" {
+  PY='
+dep = {"B": job("bea", deps=["A"])}
+acl = ["ana","bea","operator"]
+run_ = promote(ev(bump=3), dict(dep, A=job("ana", acl=acl, status="running")), NOW)["level"]
+txt = promote(ev(set_text="otro"), dict(dep, A=job("ana", acl=acl, status="running")), NOW)["level"]
+pen = promote(ev(bump=3), dict(dep, A=job("ana", acl=acl, status="pending")), NOW)["level"]
+unk = promote(ev(state="UNKNOWN"), dict(dep, A=job("ana", acl=acl, status="running")), NOW)["level"]
+print(run_, txt, pen, unk)
+'
+  run py
+  [ "$output" = "LOCAL LOCAL COORDINACION COORDINACION" ]
+}
+
+@test "P2: dependiente sin dueño no genera aviso (documentado) y con dueño sí" {
+  PY='
+acl = ["ana","bea","operator"]
+nobody = {"payload": json.dumps({"depends_on": ["A"]}), "status": "pending", "worker": None}
+a = promote(ev(bump=3), {"A": job("ana", acl=acl, status="pending"), "B": nobody}, NOW)
+b = promote(ev(bump=3), {"A": job("ana", acl=acl, status="pending"), "B": nobody, "C": job("bea", deps=["A"], status="pending")}, NOW)
+c = promote(ev(bump=3, owner="bea"), {"A": job("ana", acl=acl, status="pending"), "C": job("bea", deps=["A"], status="pending")}, NOW)
+print(a["level"], b["level"], b["audience"], c["level"])
+'
+  run py
+  [ "$output" = "LOCAL COORDINACION ['bea'] LOCAL" ]
+}
+
+@test "CLI: UNKNOWN con filas reales sube a HUMANO pasado el plazo y a coordinación antes" {
+  A=$(tq enqueue q informe --payload '{"acl":["ana","bea","operator"]}')
+  tq enqueue q dependiente --payload "{\"depends_on\":[\"$A\"],\"owner\":\"bea\"}" >/dev/null
+  tq dequeue q --worker ana >/dev/null
+  tq admit q --text "mira esto" --origin operator --job "$A" --signal none >/dev/null
+  run tq promote q --json
+  [ "$(jget "$output" "[0]['level']")" = "COORDINACION" ]
+  python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('update admissions set created_at=created_at-601'); c.commit()" "$TMPDIR_TQ/output/task-queue/q.sqlite"
+  run tq promote q --json
+  [ "$(jget "$output" "[0]['level']")" = "HUMANO" ]
+  [ "$(jget "$output" "[0]['audience']")" = "['operator']" ]
 }

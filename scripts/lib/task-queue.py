@@ -68,6 +68,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
+from urllib.parse import quote
 
 ROOT = Path(os.environ.get("PROJECT_ROOT", str(Path(__file__).resolve().parents[2])))
 DEFAULT_QUEUE_DIR = ROOT / "output" / "task-queue"
@@ -137,7 +138,18 @@ MAX_BUMP = 1000
 
 # SE-513 S2 — niveles de promoción. Orden: LOCAL < COORDINACION < HUMANO.
 LOCAL, COORD, HUMAN = "LOCAL", "COORDINACION", "HUMANO"
-UNKNOWN_HUMAN_SEC = int(os.environ.get("TASK_QUEUE_UNKNOWN_HUMAN_SEC", "600"))
+DEFAULT_UNKNOWN_HUMAN_SEC = 600
+
+
+def _unknown_human_sec() -> int:
+    """Plazo de UNKNOWN antes de subir a HUMANO. Valor inválido o <=0 → 600 (nunca rompe la importación)."""
+    try:
+        v = int(os.environ.get("TASK_QUEUE_UNKNOWN_HUMAN_SEC", ""))
+    except ValueError:
+        return DEFAULT_UNKNOWN_HUMAN_SEC
+    return v if v > 0 else DEFAULT_UNKNOWN_HUMAN_SEC
+
+
 HUMAN_PRINCIPAL = "operator"
 
 
@@ -246,9 +258,11 @@ def promote(event: Any, jobs: dict[str, Any], now: float | None = None) -> dict:
         age = now - created
     if eff_perm == "PENDING":
         return out(HUMAN, "efecto pendiente de permiso", [HUMAN_PRINCIPAL])
-    if state == UNKNOWN and age is not None and age >= UNKNOWN_HUMAN_SEC:
+    if state == UNKNOWN and age is not None and age >= _unknown_human_sec():
         return out(HUMAN, "sin prueba de aplicación pasado el plazo", [HUMAN_PRINCIPAL])
-    if not (bump or set_text is not None or state == UNKNOWN):
+    # En un trabajo en curso `admit` no reordena ni cambia el texto (ignored): no hay cambio que coordinar.
+    reorders = info["status"] == "pending" and bool(bump or set_text is not None)
+    if not (reorders or state == UNKNOWN):
         return out(LOCAL, "sin efecto sobre otros trabajos")
     dependents = []
     for jid, j in jobs.items():
@@ -273,15 +287,38 @@ def promote(event: Any, jobs: dict[str, Any], now: float | None = None) -> dict:
 class TaskQueue:
     def __init__(self, name: str, queue_dir: Path = DEFAULT_QUEUE_DIR):
         self.name = name
+        self.readonly = False
         self.path = _queue_path(name, queue_dir)
         self._init_schema()
         self.recovered_on_open = self.recover()
 
+    @classmethod
+    def open_readonly(cls, name: str, queue_dir: Path = DEFAULT_QUEUE_DIR) -> "TaskQueue":
+        """Abre una cola existente sin escribir: ni esquema, ni recover(), ni fichero nuevo.
+
+        FileNotFoundError si la cola no existe (no se crea nada, ni el directorio).
+        """
+        safe = "".join(c for c in name if c.isalnum() or c in "._-")
+        if not safe:
+            raise ValueError(f"invalid queue name: {name!r}")
+        path = queue_dir / f"{safe}.sqlite"
+        if not path.is_file():
+            raise FileNotFoundError(f"la cola {name!r} no existe")
+        self = cls.__new__(cls)
+        self.name, self.path, self.readonly, self.recovered_on_open = name, path, True, 0
+        return self
+
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
-        conn = sqlite3.connect(str(self.path), timeout=10, isolation_level=None)
+        if self.readonly:
+            conn = sqlite3.connect(f"file:{quote(str(self.path))}?mode=ro", uri=True,
+                                   timeout=10, isolation_level=None)
+            conn.execute("PRAGMA query_only=ON")
+        else:
+            conn = sqlite3.connect(str(self.path), timeout=10, isolation_level=None)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
+        if not self.readonly:
+            conn.execute("PRAGMA journal_mode=WAL")
         try:
             yield conn
         finally:
@@ -574,11 +611,16 @@ class TaskQueue:
 
     def promotions(self, now: float | None = None) -> list[dict]:
         """Nivel de promoción de cada cambio abierto. Solo lectura sobre la misma cola."""
-        with self._conn() as conn:
+        with self._conn() as conn:   # una sola conexión y transacción de lectura: foto coherente
+            conn.execute("BEGIN")
             jobs = {r["id"]: dict(r) for r in conn.execute(
                 "SELECT id, status, worker, payload FROM jobs WHERE queue=?", (self.name,))}
+            changes = [dict(r) for r in conn.execute(
+                "SELECT * FROM admissions WHERE queue=? AND state IN (?,?) ORDER BY seq",
+                (self.name, ADMITTED, UNKNOWN))]
+            conn.execute("COMMIT")
         out = []
-        for c in self.changes():
+        for c in changes:
             res = promote(c, jobs, now)
             res["id"] = c["seq"]
             out.append(res)
@@ -636,9 +678,13 @@ def _cli() -> int:
 
     args = p.parse_args()
     try:
-        q = TaskQueue(args.queue)
+        q = TaskQueue.open_readonly(args.queue) if args.cmd == "promote" else TaskQueue(args.queue)
     except ValueError as ex:
         print(f"ERROR: {ex}", file=sys.stderr); return 2
+    except FileNotFoundError as ex:
+        print(f"ERROR: {ex}", file=sys.stderr); return 4
+    except sqlite3.Error as ex:
+        print(f"ERROR: no se puede leer la cola: {ex}", file=sys.stderr); return 4
 
     if args.cmd == "enqueue":
         payload = json.loads(args.payload) if args.payload else None
@@ -689,7 +735,10 @@ def _cli() -> int:
         except ValueError as ex:
             print(f"ERROR: {ex}", file=sys.stderr); return 2
     elif args.cmd == "promote":
-        rows = q.promotions()
+        try:
+            rows = q.promotions()
+        except sqlite3.Error as ex:
+            print(f"ERROR: no se puede leer la cola: {ex}", file=sys.stderr); return 4
         if args.json:
             print(json.dumps(rows, ensure_ascii=False)); return 0
         for r in rows:
