@@ -4,8 +4,8 @@ name: Auto-rebase open PRs after main merge
 # (merge.ours.driver) from .gitattributes. So every time main advances, open
 # PRs show conflicts in the GitHub UI on files every branch rewrites.
 #
-# Fix: run the local resolver automatically on main push. Each open PR is
-# rebased, predictable conflicts (CHANGELOG.md and, for branches from before
+# Fix: run the local resolver automatically on main push. Each open PR with a
+# real conflict (scripts/auto-rebase-targets.sh) is rebased, predictable conflicts (CHANGELOG.md and, for branches from before
 # SE-501, the derived paths now removed from the index) are resolved via the
 # resolver script and pushed. No re-sign: the signature is no longer versioned.
 # Same logic as `scripts/resolve-all-open-prs.sh`, automated server-side.
@@ -102,27 +102,29 @@ jobs:
           chmod +x "$RESOLVER_TMP"
           trap 'rm -rf "$RESOLVER_DIR"' EXIT
 
-          echo "$prs" | jq -r '.[] | "\(.number) \(.headRefName) \(.mergeable) \(.mergeStateStatus)"' | \
-          while read -r num branch mergeable state; do
+          # Only PRs with a REAL conflict with main (CONFLICTING/DIRTY). Right
+          # after a main push GitHub reports UNKNOWN for every PR; treating
+          # UNKNOWN as rebasable merged main into ALL open PRs on every push
+          # (2026-11-11: 4 batches × 7-8 branches). The selector re-polls
+          # UNKNOWN and leaves untouched what is still unknown. Invalid input
+          # → exit 2 → step fails, nothing is pushed.
+          targets=$(bash scripts/auto-rebase-targets.sh <<<"$prs") || {
+            echo "::error::auto-rebase-targets failed — no PR touched"
+            exit 1
+          }
+          if [[ -z "$targets" ]]; then
+            echo "No PR with a real conflict — nothing to rebase."
+            exit 0
+          fi
+
+          while read -r num branch; do
             echo ""
-            echo "::group::PR #$num ($branch) — $mergeable/$state"
-
-            if [[ "$mergeable" == "MERGEABLE" && "$state" == "CLEAN" ]]; then
-              echo "Already clean — skipping"
-              echo "::endgroup::"
-              continue
-            fi
-
-            if [[ "$mergeable" != "CONFLICTING" ]] && [[ "$state" != "DIRTY" ]] && [[ "$state" != "UNKNOWN" ]]; then
-              echo "State not rebasable — skipping"
-              echo "::endgroup::"
-              continue
-            fi
+            echo "::group::PR #$num ($branch) — conflicting"
 
             git fetch origin "$branch" 2>&1 | tail -3 || { echo "fetch failed"; echo "::endgroup::"; continue; }
             git checkout "$branch" 2>&1 | tail -1 || { echo "checkout failed"; echo "::endgroup::"; continue; }
 
-            if bash "$RESOLVER_TMP" --branch "$branch"; then
+            if bash "$RESOLVER_TMP" --branch "$branch" </dev/null; then
               echo "✅ Rebased + pushed"
             else
               rc=$?
@@ -138,7 +140,7 @@ jobs:
             git checkout main 2>/dev/null || true
 
             echo "::endgroup::"
-          done
+          done <<<"$targets"
 
       - name: Summary
         if: always()
