@@ -8,7 +8,7 @@ phase: D
 risk: L4
 human_surface: true
 depends_on: [SE-493, SE-498, SE-507, SE-513, SE-514]
-related_specs: [SE-431, SE-433, SE-488, SE-490, SE-493, SE-498, SE-500, SE-507, SE-512, SE-513, SE-514, SE-517]
+related_specs: [SE-362, SE-431, SE-433, SE-488, SE-490, SE-493, SE-498, SE-500, SE-507, SE-512, SE-513, SE-514, SE-517]
 origin: "Análisis de arquitectura previo del antiguo «reconciliador» (TO-BE recomendado C y corte en slices). Escenas confirmadas por la operadora antes de escribir esta spec (SE-505)."
 timeline:
   - from: "2026-11-12"
@@ -200,10 +200,23 @@ Cada uno es un evento del ledger con campos mínimos obligatorios. Un evento sin
 
 | Dato | Evento | Campos mínimos | Motivo: valores cerrados |
 |---|---|---|---|
-| Motivo de cada rechazo de revisión (HOLD) | `review_hold` | propuesta, cabeza (SHA), revisora, ronda, `motivo`, `detalle` | `falta_caso_negativo`, `gate_no_fail_closed`, `contradice_spec`, `prueba_roja`, `confidencialidad`, `alcance`, `otro` (exige `detalle`) |
+| Motivo de cada rechazo de revisión (HOLD) | `review_hold` | propuesta, cabeza (SHA), revisora, ronda, `motivo`, `familia`, `nivel`, `verificado`, `origen`, `detalle` | `falta_caso_negativo`, `gate_no_fail_closed`, `contradice_spec`, `prueba_roja`, `confidencialidad`, `alcance`, `otro` (exige `detalle`) |
 | Motivo de cada cierre sin fusionar | `pr_closed_unmerged` | propuesta, quién cierra (persona o Pulse), `motivo`, `detalle` | `reemplazada`, `descartada_por_persona`, `obsoleta`, `cuarentena_vencida`, `duplicada`, `otro` (exige `detalle`) |
 | Error de cuota de cada trabajo | `quota_error` | trabajo, proveedor (id de adaptador), `senal_tipada`, vencimiento, ronda no consumida | Solo señal tipada del lanzador (código de salida o respuesta del proveedor); nunca texto libre |
 | Momento en que la persona abre una revisión que espera de ella | `review_opened_by_operator` | propuesta, cabeza, `solicitada_en`, `abierta_en`, canal | — |
+
+#### Estructura del HOLD y veredictos consultivos
+
+Un HOLD no se queda en «motivo»: lleva además un diagnóstico estructurado, y los hallazgos que no deben bloquear se registran aparte, con seguimiento. Las tres piezas salen del estudio de un motor externo de revisión de código (fuente privada; no se cita aquí).
+
+- **Familia del fallo** (`familia`, cerrada): `estado_aprobaciones`, `privacidad`, `prueba_no_falla` (test que no puede fallar), `logica`, `seguridad`, `alcance`, `otro` (exige `detalle`). Es la clase del defecto; `motivo` sigue siendo la causa concreta del conjunto de arriba.
+- **Nivel** (`nivel`, cerrado): `P0`, `P1`, `P2`, los mismos que la primera línea del veredicto de SE-433.
+- **Verificado** (`verificado`: `si` o `no`): `si` solo si la revisora reprodujo el defecto (ejecución, prueba roja o traza concreta que se cita en el cuerpo). `no` es una sospecha razonada. Un HOLD sin `verificado` es inválido.
+- **Origen** (`origen`: `introducido` o `preexistente`): si el defecto ya está en la base de la propuesta (SHA de base) o lo introduce la propuesta. El preexistente es **consultivo**: no bloquea. La revisora cita el SHA de base donde lo reprodujo; sin esa cita el hallazgo cuenta como `introducido`.
+- **Veredicto «real pero latente»**: un defecto cierto, reproducido, en código que hoy no usa nadie (sin llamador ni ruta que lo alcance en la propuesta) es consultivo: no bloquea y no consume ronda. Se registra como `review_advisory` con `clase` (`latente` o `preexistente`), propuesta, cabeza, revisora, `familia`, `nivel`, `verificado=si`, `detalle` y `seguimiento` (referencia a la tarea o spec que lo recoge). Un `review_advisory` sin `seguimiento` es inválido (fail-closed): se rechaza y se registra `telemetria_incompleta`, y el hallazgo vuelve a contar como bloqueante.
+- **Límites del consultivo** (para que no sea una salida fácil): nunca aplica si la propuesta añade un llamador o ruta que active el código latente o preexistente (entonces es `introducido` y activo); nunca degrada un hallazgo de `privacidad` o de `seguridad` con nivel `P0`; y en tier 3/4 la revisión humana del PR concreto (SE-362) ve los consultivos listados antes de decidir. Ningún consultivo cuenta como `p0`, `p1` ni `p2_blocking` en el veredicto.
+
+**Impacto en el contrato de las revisoras.** Esto cambia la primera línea `VERDICT:` y el cuerpo de la revisión que fija SE-433 (`autonomous-safety-merge-sprint.md`, sección Revisión): en un HOLD la primera línea añade `familia=`, `nivel=` y `verificado=`; cada hallazgo del cuerpo declara `origen=` y, si es consultivo, `clase=` y `seguimiento=`; y el cómputo de `p0`, `p1` y `p2_blocking` excluye los consultivos. Cualquier línea que no cumpla la forma sigue equivaliendo a HOLD. Como toca la puerta de revisión que decide qué llega al grant de fusión (SE-433, SE-362), **el slice que cambie ese contrato es de riesgo alto (tier 4)**: lo revisa explícitamente una persona y no entra por fusión en serie sin ese paso. Esta spec solo lo especifica; el cambio del contrato es el slice S5c.
 
 `review_opened_by_operator` viene de los acuses de Soul o de la lectura del forge; si ninguna fuente lo da, el evento no se inventa y la espera queda como «sin dato», nunca como 0.
 
@@ -218,6 +231,8 @@ Derivadas solo del ledger, recalculables desde cero. Ninguna sale de la instalac
 | Rendimiento | Propuestas fusionadas por día | Eventos `pr_merged` agrupados por día local del operador |
 | Rendimiento | Tiempo de creación a fusión | `pr_merged.at` menos `pr_created.at`, con mediana y p90 |
 | Retrabajo | Rondas de revisión por propuesta | Número de `review_hold` por propuesta (cada HOLD abre una ronda de corrección; no se suman aparte) |
+| Retrabajo | HOLD por familia, nivel y verificado | Eventos `review_hold` agrupados por `familia`, `nivel` y `verificado`; los `verificado=no` se muestran aparte |
+| Retrabajo | Consultivos abiertos | `review_advisory` sin cierre de su `seguimiento`, por `clase` y edad; los preexistentes y los latentes no se suman a las rondas |
 | Retrabajo | Arreglos | Commits de corrección posteriores a un HOLD, por propuesta y por motivo |
 | Coste | Horas de trabajador por modelo | Suma de (`job_finished.at` − `job_started.at`) de los trabajos, por identificador de modelo del adaptador |
 | Coste | Horas de trabajador por propuesta | Idem, por propuesta; tokens solo cuando el proveedor los dé en la salida del worker |
@@ -243,6 +258,7 @@ Además: avisos e interrupciones por día.
 | Lanzar workers, integrar, relanzar pruebas | 3 | Efectos en ramas `agent/*` y en el forge |
 | Registro de evidencia para la fusión en serie, control (freno, reanudar, techo) | 4 | Decide qué evidencia llega al grant y quién para la planta |
 | Cambios en workflows del repo | 4 | Afectan a todas las propuestas |
+| Cambio del contrato de las revisoras (S5c) | 4 | Toca la puerta de revisión de SE-433; revisión humana del PR concreto (SE-362) |
 
 **Techo de autonomía** por instalación: `observar` (no lanza; dice qué haría), `proponer` (lanza solo lo que la persona aprueba) o `actuar` (pleno). El modo inicial lo elige cada operador al instalar; por defecto es pleno (`actuar`) (D3). Subirlo después es un acto de la persona (SE-488); bajarlo, una orden que resta.
 
@@ -280,6 +296,11 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | AC-25 | E7 | Una revisión solicitada a la persona y abierta por ella genera `review_opened_by_operator` con ambos instantes y la espera calculada. **Negativo:** sin acuse ni lectura del forge no hay evento y la métrica muestra «sin dato», no 0 | S5 |
 | AC-26 | Todas | Desde un ledger de ejemplo con cifras conocidas, las métricas de rendimiento, retrabajo, coste y espera coinciden con el valor esperado, y se recalculan idénticas desde cero. **Negativo:** con el ledger vacío ninguna métrica devuelve cero inventado, sino «sin datos» | S5 |
 | AC-27 | Todas | **Negativo:** el ledger y las métricas no contienen identificadores de persona, organización ni rutas de la instalación en lo que exporta `pulse status`, y una prueba estática confirma que no hay destino de red para telemetría | S5, S7 |
+| AC-28 | Todas | Un HOLD genera `review_hold` con `familia` del conjunto cerrado, `nivel` (P0/P1/P2) y `verificado` (si/no). **Negativo:** un HOLD sin alguno de los tres, o con `familia=otro` sin `detalle`, se rechaza y se registra `telemetria_incompleta`; no se escribe un valor por defecto. **Límite:** `verificado=si` sin traza o prueba citada en el cuerpo se rechaza | S5 |
+| AC-29 | Todas | Un defecto reproducido en código sin llamador ni ruta que lo alcance genera `review_advisory` con `clase=latente` y `seguimiento`, no cuenta en `p0`, `p1` ni `p2_blocking` y no consume ronda. **Negativo:** el mismo defecto con un llamador añadido por la propuesta es `introducido` y bloquea. **Negativo:** un consultivo sin `seguimiento` se rechaza y el hallazgo vuelve a bloquear. **Negativo:** un hallazgo de `privacidad` o `seguridad` con nivel P0 nunca se degrada a consultivo | S5, S5c |
+| AC-30 | Todas | Un defecto presente en el SHA de base y no introducido por la propuesta genera `review_advisory` con `clase=preexistente`, con el SHA de base citado, y no bloquea. **Negativo:** sin SHA de base citado, o con la propuesta modificando la línea afectada o ampliando su alcance, el hallazgo cuenta como `introducido` y bloquea. **Negativo:** si no se puede calcular la base, cuenta como `introducido` (fail-closed) | S5, S5c |
+| AC-31 | Todas | La métrica de HOLD por familia, nivel y verificado y la de consultivos abiertos se recalculan idénticas desde el ledger. **Negativo:** con el ledger vacío dan «sin datos»; un consultivo cuyo `seguimiento` sigue abierto no desaparece de la métrica | S5 |
+| AC-32 | Todas | El contrato de revisora (primera línea `VERDICT:` y cuerpo) con `familia=`, `nivel=`, `verificado=`, `origen=`, `clase=` y `seguimiento=` tiene esquema y validador, y el cómputo de `p0/p1/p2_blocking` excluye los consultivos. **Negativo:** una primera línea sin la forma exigida, o con un campo fuera del conjunto cerrado, equivale a HOLD. **Negativo:** el cambio del contrato no se fusiona sin la revisión humana del PR concreto (tier 4, SE-362) | S5c |
 
 ## Slices
 
@@ -290,7 +311,8 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | S2 | Política de integración `solo_conflicto`, detección de cabeza sin pruebas y relanzamiento único; huella de contenido para relanzar revisoras; las dos PR de workflows | SE-500 + PR de workflows | 3 (Pulse), 4 (workflows) |
 | S3 | Señales tipadas y taxonomía de errores; cuarentena con motivo y dueño; intento ≠ intención | SE-493, SE-513 | 3 |
 | S4 | Pulse como ejecutor de SE-498; tic de control; volante que resta; reanudar solo la persona (CLI, aprobación formal o, tras enmendar SE-498, chat autenticado de Soul si el operador lo activa) | SE-498 (con enmienda para la vía de chat), SE-488 | 4 |
-| S5 | Ledger de eventos, los cuatro datos nuevos (HOLD, cierre sin fusionar, error de cuota, apertura de revisión por la persona), métricas de rendimiento, retrabajo, coste y espera; coste real cuando el proveedor lo dé | SE-507 | 2 |
+| S5 | Ledger de eventos, los cuatro datos nuevos (HOLD con familia, nivel y verificado; cierre sin fusionar; error de cuota; apertura de revisión por la persona), eventos consultivos (latente, preexistente) con seguimiento, métricas de rendimiento, retrabajo, coste y espera; coste real cuando el proveedor lo dé | SE-507 | 2 |
+| S5c | Cambio del contrato de las revisoras: `VERDICT:` y cuerpo con familia, nivel, verificado, origen y consultivos; esquema, validador y exclusión de consultivos del cómputo. Slice propio porque toca la puerta de revisión | SE-433, SE-362 | 4 |
 | S6 | Planificador puro en sombra frente al bucle actual; después corte por efectos con ledger, de uno en uno | SE-493 | 3–4 |
 | S7 | Configuración por operador, adaptadores (forge, proveedor, servicio del SO), lista de salidas, guarda local de términos; instalación en macOS con el modo inicial elegido por el operador (pleno por defecto) | SE-517 | 3 |
 
@@ -324,6 +346,8 @@ Las doce están decididas por el operador. Cada una indica lo que rige.
 - Elegir el proveedor de inferencia de nadie.
 
 ## Riesgos
+
+- **El consultivo como salida fácil.** Marcar «latente» o «preexistente» puede usarse para dejar pasar un defecto real. Mitigación: exige reproducción y cita del SHA de base, el seguimiento es obligatorio, nunca degrada privacidad ni seguridad P0, se desactiva si la propuesta añade un llamador, y la persona ve los consultivos en tier 3/4. La métrica de consultivos abiertos hace visible la acumulación.
 
 - **Dos implementaciones conviviendo** durante la sombra: más superficie. Mitigación: la sombra solo planifica; un único ejecutor actúa.
 - **Sombra sin comparación** se convierte en reescritura con otro nombre. AC-20 es el control.
