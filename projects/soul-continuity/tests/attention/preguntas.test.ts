@@ -165,8 +165,8 @@ test('AC-4: el mismo permiso pedido por dos agentes tampoco se une, ni con un te
 
 test('AC-4: dos decisiones sobre lo mismo se unen en una tarjeta y una respuesta cierra las dos', () => {
   const { pr } = nuevo();
-  pr.preguntar(dec('a', { tema: 'Mismo fichero' }), LUNES_9, AG);
-  pr.preguntar(dec('b', { tema: ' mismo FICHERO ' }), LUNES_9, AG);
+  pr.preguntar(dec('a', { tema: 'Mismo fichero', que: 'Qué hago con el fichero' }), LUNES_9, AG);
+  pr.preguntar(dec('b', { tema: ' mismo FICHERO ', que: 'qué  hago con el fichero' }), LUNES_9, AG);
   pr.preguntar(dec('c', { tema: 'otro nombre' }), LUNES_9, AG);
   const v = pr.visibles(LUNES_9);
   assert.equal(v.length, 2);
@@ -183,7 +183,7 @@ test('AC-4: dos decisiones sobre lo mismo se unen en una tarjeta y una respuesta
 
 test('AC-4: unir no gasta otro aviso; preguntas distintas sí', () => {
   const unidas = nuevo();
-  for (const id of ['a', 'b', 'c']) unidas.pr.preguntar(dec(id, { tema: 'igual' }), LUNES_9, AG);
+  for (const id of ['a', 'b', 'c']) unidas.pr.preguntar(dec(id, { tema: 'igual', que: 'misma' }), LUNES_9, AG);
   const gastadoUnidas = [...unidas.pol.estado.usados.values()].reduce((s, n) => s + n, 0);
   assert.equal(gastadoUnidas, 1);
   const sueltas = nuevo();
@@ -259,9 +259,9 @@ test('AC-5: cambiar la versión de una pregunta ya concedida anula la concesión
 
 test('AC-5: si se une otra pregunta a la tarjeta, la respuesta a la versión vista se rechaza', () => {
   const { pr } = nuevo();
-  pr.preguntar(dec('a', { tema: 'x' }), LUNES_9, AG);
+  pr.preguntar(dec('a', { tema: 'x', que: 'misma' }), LUNES_9, AG);
   const vista = pr.visibles(LUNES_9)[0]!;
-  pr.preguntar(dec('b', { tema: 'x' }), t(0, 9, 40), AG);
+  pr.preguntar(dec('b', { tema: 'x', que: 'misma' }), t(0, 9, 40), AG);
   const r = pr.responder({ tarjeta: vista.id, version: vista.version, valor: 'sí' }, t(0, 9, 45), PE);
   assert.equal(!r.ok && r.motivo, 'VERSION_CAMBIADA');
   assert.equal(pr.respuestaDe('a'), null);
@@ -370,8 +370,8 @@ test('AC-6: sin modo declarado no hay disponibilidad implícita: no se enseña, 
 test('AC-8: con tres agentes ocupados la persona consulta el estado y contesta sin esperar a ninguno', () => {
   const { pr } = nuevo();
   // Los agentes ya preguntaron y siguen ocupados: nada de lo que sigue les llama ni les espera.
-  pr.preguntar(dec('a', { tema: 'fichero' }), LUNES_9, AG);
-  pr.preguntar(dec('b', { tema: 'fichero' }), t(0, 9, 31), AG);
+  pr.preguntar(dec('a', { tema: 'fichero', que: 'misma' }), LUNES_9, AG);
+  pr.preguntar(dec('b', { tema: 'fichero', que: 'misma' }), t(0, 9, 31), AG);
   pr.preguntar(perm('c', { trabajo: 'informe' }), t(0, 9, 32), AG);
   const ahora = t(0, 10, 5);
   const est = pr.estado(ahora);
@@ -430,4 +430,133 @@ test('una respuesta registrada resuelve el elemento de la bandeja de la polític
   const ta = pr.visibles(LUNES_9)[0]!;
   pr.responder({ tarjeta: ta.id, version: ta.version, valor: 'adelante' }, LUNES_9, PE);
   assert.equal(pol.bandeja.porDecision('agente:a')?.pendiente, false);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Correcciones tras la revisión independiente de la PR #1534.
+
+test('revisión P1: con el sistema en PARA no entra ninguna pregunta, ni nueva ni unida', () => {
+  const { pol, pr } = nuevo();
+  pr.preguntar(dec('a', { tema: 'x', que: 'misma' }), LUNES_9, AG);
+  pol.control({ k: 'PARA' }, PE, LUNES_9);
+  for (const p of [perm('b'), dec('c'), dec('d', { tema: 'x', que: 'misma' })]) {
+    const r = pr.preguntar(p, t(0, 9, 31), AG);
+    assert.equal(!r.ok && r.motivo, 'BLOQUEADA', p.id);
+  }
+  assert.equal(pr.estadoTrabajo('trab-b', t(0, 9, 31)), 'LIBRE');
+  assert.equal(pol.bandeja.porDecision('agente:b'), undefined);
+});
+
+test('revisión P1: un trabajo vetado no puede preguntar; reanudar o levantar el veto lo permite', () => {
+  const { pol, pr } = nuevo();
+  pol.control({ k: 'VETAR', objetivo: 'trab-a' }, PE, LUNES_9);
+  const r = pr.preguntar(perm('a'), LUNES_9, AG);
+  assert.equal(!r.ok && r.motivo, 'BLOQUEADA');
+  assert.equal(pr.preguntar(perm('z', { trabajo: 'otro' }), LUNES_9, AG).ok, true);
+  pol.control({ k: 'LEVANTAR_VETO', objetivo: 'trab-a' }, PE, LUNES_9);
+  assert.equal(pr.preguntar(perm('a'), LUNES_9, AG).ok, true);
+});
+
+test('revisión P1: PARA o veto posterior a la concesión impiden ejecutar el efecto', () => {
+  const { pol, pr } = nuevo();
+  pr.preguntar(perm('a'), LUNES_9, AG);
+  const ta = pr.visibles(LUNES_9)[0]!;
+  pr.responder({ tarjeta: ta.id, version: ta.version, valor: 'CONCEDER' }, LUNES_9, PE);
+  assert.equal(pr.puedeEjecutar('a'), true);
+  pol.control({ k: 'PARA' }, PE, t(0, 9, 40));
+  assert.equal(pr.puedeEjecutar('a'), false);
+  pol.control({ k: 'REANUDAR' }, PE, t(0, 9, 41));
+  assert.equal(pr.puedeEjecutar('a'), true);
+  pol.control({ k: 'VETAR', objetivo: 'trab-a' }, PE, t(0, 9, 42));
+  assert.equal(pr.puedeEjecutar('a'), false);
+});
+
+test('revisión P1: repreguntar no salta PARA ni veto', () => {
+  const { pol, pr } = nuevo();
+  pr.preguntar(dec('a'), LUNES_9, AG);
+  pr.vencer(t(0, 12, 0));
+  pol.control({ k: 'PARA' }, PE, t(0, 12, 1));
+  const r = pr.repreguntar('a', t(0, 15, 0), t(0, 12, 2));
+  assert.equal(!r.ok && r.motivo, 'BLOQUEADA');
+  assert.equal(pr.estadoTrabajo('trab-a', t(0, 12, 2)), 'DEFER');
+});
+
+test('revisión P1: otro agente no se pega a una tarjeta con un texto distinto aunque el tema coincida', () => {
+  const { pol, pr } = nuevo();
+  pr.preguntar(dec('a', { tema: 'x', que: '¿Renombro el fichero?' }), LUNES_9, AG);
+  pr.preguntar(dec('b', { tema: 'x', que: '¿Borro la rama X?', obligatoria: true }), LUNES_9, AG);
+  pr.preguntar(dec('c', { tema: 'x', que: '¿Borro la rama Y?' }), LUNES_9, AG);
+  const v = pr.visibles(LUNES_9);
+  assert.equal(v.length, 3, 'cada texto distinto es su tarjeta');
+  assert.ok(v.every((x) => x.preguntas.length === 1));
+  const ta = v.find((x) => x.preguntas[0] === 'a')!;
+  pr.responder({ tarjeta: ta.id, version: ta.version, valor: 'sí' }, LUNES_9, PE);
+  assert.equal(pr.respuestaDe('b'), null, 'la respuesta a otra pregunta no resuelve la de b');
+  assert.equal(pr.respuestaDe('c'), null);
+  // Cada una pasó por la política y gastó su propio aviso.
+  assert.equal([...pol.estado.usados.values()].reduce((s, n) => s + n, 0), 3);
+});
+
+test('revisión P1: una decisión obligatoria no se une aunque el tema y el texto coincidan', () => {
+  const { pr } = nuevo();
+  pr.preguntar(dec('a', { tema: 'x', que: 'misma' }), LUNES_9, AG);
+  pr.preguntar(dec('b', { tema: 'x', que: 'misma', obligatoria: true }), LUNES_9, AG);
+  assert.deepEqual(pr.visibles(LUNES_9).map((x) => x.preguntas.length), [1, 1]);
+});
+
+test('revisión P1: subir la versión de una pregunta en DEFER cuenta como la repregunta de la ventana', () => {
+  const { pr } = nuevo();
+  pr.preguntar(dec('a'), LUNES_9, AG);
+  pr.vencer(t(0, 12, 0));
+  const v2 = pr.preguntar(dec('a', { version: 'v2', caduca: t(0, 13, 0) }), t(0, 12, 1), AG);
+  assert.equal(v2.ok, true);
+  pr.vencer(t(0, 13, 0));
+  const v3 = pr.preguntar(dec('a', { version: 'v3', caduca: t(0, 14, 0) }), t(0, 13, 1), AG);
+  assert.equal(!v3.ok && v3.motivo, 'YA_REPREGUNTADA_EN_VENTANA');
+  assert.equal(pr.estadoTrabajo('trab-a', t(0, 13, 1)), 'DEFER');
+  assert.equal(pr.repreguntar('a', t(0, 15, 0), t(0, 13, 2)).ok, false, 'la ventana ya está gastada');
+});
+
+test('revisión P1: subir la versión de una pregunta denegada no insiste sin límite', () => {
+  const { pr } = nuevo();
+  pr.preguntar(perm('a'), LUNES_9, AG);
+  const ta = pr.visibles(LUNES_9)[0]!;
+  pr.responder({ tarjeta: ta.id, version: ta.version, valor: 'DENEGAR' }, LUNES_9, PE);
+  assert.equal(pr.preguntar(perm('a', { version: 'v2' }), t(0, 9, 40), AG).ok, true);
+  const ta2 = pr.visibles(t(0, 9, 40))[0]!;
+  pr.responder({ tarjeta: ta2.id, version: ta2.version, valor: 'DENEGAR' }, t(0, 9, 41), PE);
+  const otra = pr.preguntar(perm('a', { version: 'v3' }), t(0, 9, 45), AG);
+  assert.equal(!otra.ok && otra.motivo, 'YA_REPREGUNTADA_EN_VENTANA');
+  assert.equal(pr.visibles(t(0, 9, 45)).length, 0);
+});
+
+test('revisión P2: el motivo del rechazo dice la causa real', () => {
+  const { pol, pr } = nuevo();
+  const vencida = pr.preguntar(perm('a', { caduca: LUNES_9 }), LUNES_9, AG);
+  assert.equal(!vencida.ok && vencida.motivo, 'YA_CADUCADA');
+  pol.control({ k: 'PARA' }, PE, LUNES_9);
+  const parada = pr.preguntar(perm('b'), LUNES_9, AG);
+  assert.equal(!parada.ok && parada.motivo, 'BLOQUEADA');
+  assert.match(!parada.ok ? parada.detalle : '', /PARADO/);
+});
+
+test('revisión P2: cambiar el tema al subir la versión es reutilizar el identificador', () => {
+  const { pr } = nuevo();
+  pr.preguntar(dec('a', { tema: 'x' }), LUNES_9, AG);
+  const r = pr.preguntar(dec('a', { tema: 'y', version: 'v2' }), t(0, 9, 40), AG);
+  assert.equal(!r.ok && r.motivo, 'ID_REUTILIZADO');
+});
+
+test('revisión P2: la persona no pregunta y un tema con # se rechaza', () => {
+  const { pr } = nuevo();
+  const p = pr.preguntar(dec('a'), LUNES_9, PE);
+  assert.equal(!p.ok && p.motivo, 'ORIGEN_NO_AUTENTICADO');
+  const h = pr.preguntar(dec('b', { tema: 'x#vencida' }), LUNES_9, AG);
+  assert.equal(!h.ok && h.motivo, 'ENTRADA_INVALIDA');
+});
+
+test('revisión: dos permisos no obligatorios con el mismo tema y el mismo texto tampoco se unen', () => {
+  const { pr } = nuevo();
+  for (const id of ['a', 'b']) pr.preguntar(perm(id, { obligatoria: false, tema: 'x', que: 'misma' }), LUNES_9, AG);
+  assert.deepEqual(pr.visibles(LUNES_9).map((x) => x.preguntas.length), [1, 1]);
 });

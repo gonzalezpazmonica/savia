@@ -16,7 +16,7 @@
 // M58–M61: revisión independiente de la PR #1441 (una alerta sobre el tope sale una sola vez y
 // una regla de alerta no salta el tipo del evento).
 //
-// M63–M83: SE-514 S2 (preguntas de agentes: vencimiento, repregunta por ventana, unión sin mezclar
+// M63–M90: SE-514 S2 (preguntas de agentes: vencimiento, repregunta por ventana, unión sin mezclar
 // permisos, respuesta ligada a la versión, modo descanso).
 //
 // Uso: node --experimental-strip-types tests/attention/bench/mutaciones.ts
@@ -113,7 +113,7 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M73 denegar autoriza el efecto', PRE, 'return r.e.clase === \'PERMISO\' ? r.respuesta === \'CONCEDER\' : true;', 'return true;'],
   ['M74 cambiar la versión conserva la respuesta', PRE, 'previa.estado = \'ABIERTA\';\n      previa.caduca = e.caduca;\n      previa.respuesta = null;', 'previa.caduca = e.caduca;'],
   ['M75 el descanso enseña las preguntas', PRE, 'return this.politica.modoEfectivo(ahora) === \'DISPONIBLE\' ? t : [];', 'return t;'],
-  ['M76 un identificador se reutiliza para otra cosa', PRE, 'if (previa && (previa.e.clase !== e.clase || previa.e.trabajo !== e.trabajo || previa.e.agente !== e.agente)) {', 'if (false) {'],
+  ['M76 un identificador se reutiliza para otra cosa', PRE, 'if (previa && (previa.e.clase !== e.clase || previa.e.trabajo !== e.trabajo || previa.e.agente !== e.agente || previa.e.tema !== e.tema)) {', 'if (false) {'],
   ['M77 una pregunta vencida al llegar se acepta', PRE, 'if (e.caduca <= ahora) {\n      return { ok: false, motivo: \'YA_CADUCADA\'', 'if (false) {\n      return { ok: false, motivo: \'YA_CADUCADA\''],
   ['M78 el contenido por encima del canal se enseña', PRE, 'const redactada = this.redactada(nivel);', 'const redactada = false;'],
   ['M79 una respuesta deja la bandeja pendiente', PRE, 'this.politica.control({ k: \'RESPONDER\', decisionId: this.decisionId(id) }, \'PERSONA\', ahora);', ''],
@@ -121,6 +121,13 @@ const MUTACIONES: Array<[string, string, string, string]> = [
   ['M81 el rechazo no vuelve a enseñar la tarjeta', PRE, 'const actual = clave === null ? null :', 'const actual = true ? null :'],
   ['M82 las obligatorias no van primero', PRE, 'Number(b.obligatoria) - Number(a.obligatoria) || ', ''],
   ['M83 un trabajo vencido figura solo en espera', PRE, 'return mias.some((r) => r.estado === \'DEFER\') ? \'DEFER\' : \'EN_ESPERA\';', 'return \'EN_ESPERA\';'],
+  ['M84 una pregunta nueva ignora PARA y veto', PRE, 'if (bq !== null) {', 'if (false) {'],
+  ['M85 puedeEjecutar ignora PARA y veto', PRE, 'if (this.bloqueo(r.e.trabajo) !== null) return false;\n    return r.e.clase', 'return r.e.clase'],
+  ['M86 repreguntar ignora PARA y veto', PRE, "if (this.bloqueo(r.e.trabajo) !== null) return { ok: false, motivo: 'BLOQUEADA' };", ''],
+  ['M87 se unen decisiones con otro texto', PRE, "return `g:${e.tema.trim().toLowerCase()}|${e.que.trim().replace(/\\s+/g, ' ').toLowerCase()}`;", 'return `g:${e.tema.trim().toLowerCase()}`;'],
+  ['M88 una obligatoria se une a otra tarjeta', PRE, 'if (e.obligatoria === true || e.tema === undefined)', 'if (e.tema === undefined)'],
+  ['M89 subir la versión reabre sin tope por ventana', PRE, "previa.estado !== 'ABIERTA' && !this.gastarVentana(previa, ahora)", 'false'],
+  ['M90 la persona puede preguntar', PRE, "if (origen !== 'AGENTE_AUTENTICADO') {", "if (origen !== 'AGENTE_AUTENTICADO' && origen !== 'PERSONA') {"],
 ];
 
 const aqui = dirname(fileURLToPath(import.meta.url));

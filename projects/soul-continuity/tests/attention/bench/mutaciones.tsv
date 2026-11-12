@@ -82,3 +82,10 @@ M80 la pregunta de agente sale también como aviso de Soul	FALLA	pasa	MUERTA
 M81 el rechazo no vuelve a enseñar la tarjeta	FALLA	pasa	MUERTA
 M82 las obligatorias no van primero	FALLA	pasa	MUERTA
 M83 un trabajo vencido figura solo en espera	FALLA	pasa	MUERTA
+M84 una pregunta nueva ignora PARA y veto	FALLA	pasa	MUERTA
+M85 puedeEjecutar ignora PARA y veto	FALLA	pasa	MUERTA
+M86 repreguntar ignora PARA y veto	FALLA	pasa	MUERTA
+M87 se unen decisiones con otro texto	FALLA	pasa	MUERTA
+M88 una obligatoria se une a otra tarjeta	FALLA	pasa	MUERTA
+M89 subir la versión reabre sin tope por ventana	FALLA	pasa	MUERTA
+M90 la persona puede preguntar	FALLA	pasa	MUERTA

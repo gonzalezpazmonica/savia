@@ -46,7 +46,8 @@ export interface PreguntaAgente {
 }
 
 export type MotivoRechazoPregunta =
-  | 'ENTRADA_INVALIDA' | 'ORIGEN_NO_AUTENTICADO' | 'YA_CADUCADA' | 'ID_REUTILIZADO' | 'YA_PREGUNTADA';
+  | 'ENTRADA_INVALIDA' | 'ORIGEN_NO_AUTENTICADO' | 'YA_CADUCADA' | 'ID_REUTILIZADO' | 'YA_PREGUNTADA'
+  | 'BLOQUEADA' | 'NO_ADMITIDA' | 'YA_REPREGUNTADA_EN_VENTANA';
 
 export type ResultadoPreguntar =
   | { ok: true; nueva: boolean; estado: EstadoPregunta; tarjeta: string; decision: Decision | null }
@@ -58,7 +59,7 @@ export type MotivoRechazoRespuesta =
 
 export type ResultadoRepregunta =
   | { ok: true; caduca: Minuto }
-  | { ok: false; motivo: 'DESCONOCIDA' | 'NO_ESTA_EN_DEFER' | 'CADUCA_INVALIDA' | 'YA_REPREGUNTADA_EN_VENTANA' };
+  | { ok: false; motivo: 'DESCONOCIDA' | 'NO_ESTA_EN_DEFER' | 'CADUCA_INVALIDA' | 'YA_REPREGUNTADA_EN_VENTANA' | 'BLOQUEADA' };
 
 /** Lo que ve la persona: una o varias preguntas unidas. */
 export interface Tarjeta {
@@ -151,7 +152,7 @@ function leer(x: unknown): Normalizada | string {
   }
   if (r.tema !== undefined && r.tema !== null) {
     const tm = cad(r.tema);
-    if (tm === null) falta.push('tema');
+    if (tm === null || tm.includes('#')) falta.push('tema');
     else tema = tm;
   }
   if (falta.length > 0) return `faltan o no se leen: ${falta.join(', ')}`;
@@ -165,10 +166,14 @@ function leer(x: unknown): Normalizada | string {
   };
 }
 
-/** Clave de unión: solo las decisiones con tema se unen; cada permiso va solo, siempre. */
+/**
+ * Clave de unión: solo se unen decisiones con el mismo tema Y el mismo texto de la pregunta (lo
+ * que se enseña es lo que se responde); un permiso o una decisión obligatoria van solos, siempre.
+ */
 function claveGrupo(e: PreguntaAgente): string {
   if (e.clase === 'PERMISO') return `p:${e.id}`;
-  return e.tema !== undefined ? `g:${e.tema.trim().toLowerCase()}` : `q:${e.id}`;
+  if (e.obligatoria === true || e.tema === undefined) return `q:${e.id}`;
+  return `g:${e.tema.trim().toLowerCase()}|${e.que.trim().replace(/\s+/g, ' ').toLowerCase()}`;
 }
 
 export class Preguntas {
@@ -181,6 +186,20 @@ export class Preguntas {
 
   private cubo(ahora: Minuto): Minuto {
     return instanciaEn(this.politica.config.ventanas, ahora) ?? -(Math.floor(ahora / DIA) + 1);
+  }
+
+  /** PARA y veto de la persona: ninguna pregunta nueva, reabierta o respondible los esquiva. */
+  private bloqueo(trabajo: string): 'PARADO' | 'VETADO' | null {
+    if (this.politica.estado.parado) return 'PARADO';
+    return this.politica.estado.vetos.has(trabajo) ? 'VETADO' : null;
+  }
+
+  /** Gasta la única repregunta de la ventana. `false` si ya estaba gastada (no cambia nada). */
+  private gastarVentana(r: Registro, ahora: Minuto): boolean {
+    const cubo = this.cubo(ahora);
+    if ((r.repreguntas.get(cubo) ?? 0) >= 1) return false;
+    r.repreguntas.set(cubo, 1);
+    return true;
   }
 
   private decisionId(id: string): string {
@@ -212,11 +231,11 @@ export class Preguntas {
     this.vencer(ahora);
     const e = leer(entrada);
     if (typeof e === 'string') return { ok: false, motivo: 'ENTRADA_INVALIDA', detalle: e };
-    if (origen !== 'AGENTE_AUTENTICADO' && origen !== 'PERSONA') {
+    if (origen !== 'AGENTE_AUTENTICADO') {
       return { ok: false, motivo: 'ORIGEN_NO_AUTENTICADO', detalle: 'solo un agente autenticado pregunta' };
     }
     const previa = this.reg.get(e.id);
-    if (previa && (previa.e.clase !== e.clase || previa.e.trabajo !== e.trabajo || previa.e.agente !== e.agente)) {
+    if (previa && (previa.e.clase !== e.clase || previa.e.trabajo !== e.trabajo || previa.e.agente !== e.agente || previa.e.tema !== e.tema)) {
       return { ok: false, motivo: 'ID_REUTILIZADO', detalle: 'ese identificador es de otra pregunta' };
     }
     if (previa && previa.e.version === e.version) {
@@ -224,6 +243,15 @@ export class Preguntas {
     }
     if (e.caduca <= ahora) {
       return { ok: false, motivo: 'YA_CADUCADA', detalle: 'llegó ya vencida: el trabajo queda en espera' };
+    }
+    const bq = this.bloqueo(e.trabajo);
+    if (bq !== null) {
+      return { ok: false, motivo: 'BLOQUEADA', detalle: `el sistema está en ${bq}: la pregunta no entra` };
+    }
+    // Reabrir una pregunta vencida o ya contestada con otra versión cuenta como la repregunta de
+    // la ventana, igual que `repreguntar`: sin tope, un agente insistiría con v2, v3… cada minuto.
+    if (previa && previa.estado !== 'ABIERTA' && !this.gastarVentana(previa, ahora)) {
+      return { ok: false, motivo: 'YA_REPREGUNTADA_EN_VENTANA', detalle: 'ya se volvió a preguntar en esta ventana' };
     }
     if (previa) {
       // El contenido cambió: la versión anterior y cualquier respuesta a ella ya no valen.
@@ -264,9 +292,10 @@ export class Preguntas {
       decision = this.politica.decidir(ev, ahora);
       if (decision.accion === 'REGISTRAR') {
         const k = decision.motivo.k;
-        return k === 'ORIGEN_NO_AUTENTICADO'
-          ? { ok: false, motivo: 'ORIGEN_NO_AUTENTICADO', detalle: 'solo un agente autenticado pregunta' }
-          : { ok: false, motivo: 'YA_PREGUNTADA', detalle: `la política no la admite (${k})` };
+        if (k === 'ORIGEN_NO_AUTENTICADO') {
+          return { ok: false, motivo: 'ORIGEN_NO_AUTENTICADO', detalle: 'solo un agente autenticado pregunta' };
+        }
+        return { ok: false, motivo: k === 'YA_PREGUNTADA' ? 'YA_PREGUNTADA' : 'NO_ADMITIDA', detalle: `la política no la admite (${k})` };
       }
     }
     this.reg.set(e.id, { e, estado: 'ABIERTA', caduca: e.caduca, desde: ahora, respuesta: null, repreguntas: new Map() });
@@ -285,9 +314,8 @@ export class Preguntas {
     if (typeof nuevaCaduca !== 'number' || !Number.isFinite(nuevaCaduca) || nuevaCaduca <= ahora) {
       return { ok: false, motivo: 'CADUCA_INVALIDA' };
     }
-    const cubo = this.cubo(ahora);
-    if ((r.repreguntas.get(cubo) ?? 0) >= 1) return { ok: false, motivo: 'YA_REPREGUNTADA_EN_VENTANA' };
-    r.repreguntas.set(cubo, 1);
+    if (this.bloqueo(r.e.trabajo) !== null) return { ok: false, motivo: 'BLOQUEADA' };
+    if (!this.gastarVentana(r, ahora)) return { ok: false, motivo: 'YA_REPREGUNTADA_EN_VENTANA' };
     r.estado = 'ABIERTA';
     r.caduca = nuevaCaduca;
     return { ok: true, caduca: nuevaCaduca };
@@ -403,11 +431,14 @@ export class Preguntas {
 
   /**
    * ¿Puede ejecutarse el efecto que esperaba esta pregunta? Solo con una respuesta humana
-   * registrada y, si es un permiso, concedida. Sin pregunta, vencida o sin respuesta: no.
+   * registrada y, si es un permiso, concedida. Sin pregunta, vencida o sin respuesta: no. Con el
+   * sistema en PARA o el trabajo vetado: no, aunque la respuesta exista. En una decisión solo
+   * dice que la persona contestó: el valor elegido se lee con `respuestaDe`.
    */
   puedeEjecutar(id: string): boolean {
     const r = this.reg.get(id);
     if (!r || r.estado !== 'RESPONDIDA' || r.respuesta === null) return false;
+    if (this.bloqueo(r.e.trabajo) !== null) return false;
     return r.e.clase === 'PERMISO' ? r.respuesta === 'CONCEDER' : true;
   }
 
