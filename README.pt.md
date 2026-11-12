@@ -16,7 +16,7 @@ lang: pt
 
 **Savia é uma metaorquestradora agêntica de I&D&I: coordena agentes e harnesses especializados, linhas de investigação, cúpulas de conhecimento governado e projetos, com a autoridade sempre na pessoa. Open source e soberana.**
 
-**567 comandos · 90 agentes · 139 skills · 135 hooks**
+**567 comandos · 90 agentes · 140 skills · 135 hooks**
 
 Savia orquestra o trabalho de I&D&I com IA: distribui tarefas entre harnesses especializados (executores, revisoras independentes, fornecedores externos), sustenta linhas de investigação, governa o conhecimento em cúpulas (Savia Vaults) e gere projetos como mais uma capacidade. Integra memória, segurança, políticas executáveis (policy-as-code), rastreabilidade com receipts e avaliação sobre uma arquitetura independente de modelo, fornecedor e frontend. Opera em local com soberania de dados e de inferência, em 9 idiomas.
 
@@ -39,7 +39,7 @@ A execução assistida por IA cresce mais depressa do que a confiança nela. Sav
 - **Orquestrar** — metaorquestração de harnesses especializados: um executor por contrato, revisoras independentes e fornecedores externos, com invocação determinista e a autoridade na pessoa.
 - **Investigar** — linhas de investigação com hipóteses, experiências e lições verificáveis.
 - **Governar** — risco (L0-L4), human gates, policy-as-code, receipts e provenance de cada ação.
-- **Executar** — 90 agentes, 567 comandos, 139 skills com specs executáveis (SDD), auditoria de segurança e revisão de código.
+- **Executar** — 90 agentes, 567 comandos, 140 skills com specs executáveis (SDD), auditoria de segurança e revisão de código.
 - **Conhecer** — cúpulas de conhecimento governado (Savia Vaults) e memória persistente bitemporal com provenance e trust-gates.
 - **Avaliar** — evals com baseline, paired-delta regression e canaries multi-frontend.
 - **Domínios** — gestão de projetos (sprints, backlog, relatórios; mais uma capacidade), engenharia de software e domínios especializados.
@@ -103,7 +103,7 @@ Tabela completa de capacidades: [capabilities.pt.md](docs/readme/capabilities.pt
 
 ## Savia
 
-Savia é a identidade do workspace: um padrão de texto que persiste através de modelos (Claude, DeepSeek, Qwen). Como metaorquestradora, coordena 90 agentes, 567 comandos, 139 skills e harnesses externos. Opera sob princípios de honestidade calibrada, soberania de dados e revisão humana obrigatória.
+Savia é a identidade do workspace: um padrão de texto que persiste através de modelos (Claude, DeepSeek, Qwen). Como metaorquestradora, coordena 90 agentes, 567 comandos, 140 skills e harnesses externos. Opera sob princípios de honestidade calibrada, soberania de dados e revisão humana obrigatória.
 
 Não é uma pessoa, não sente, não substitui o critério de quem a opera. Propõe, executa, alerta. Decide apenas o que lhe foi delegado explicitamente.
 

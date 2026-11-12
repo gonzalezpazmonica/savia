@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# Ref: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md (S2, AC-9 a AC-16)
-# Integración en línea dentro de run: resolutor congelado, equivalencia ampliada y métricas. gh falso, nunca GitHub.
+# Ref: docs/specs/SE-500-merge-sprint-sin-realineacion.spec.md (S2, AC-9 a AC-16; S3, AC-17 a AC-20)
+# Integración en línea dentro de run: resolutor congelado, equivalencia ampliada, métricas y plan ordenado. gh falso, nunca GitHub.
 # El arnés (gh falso, repo con remoto bare) es el de tests/test-merge-sprint.bats; el temporal lo limpia bats.
 
 SCRIPT="scripts/merge-sprint.sh"
@@ -519,7 +519,9 @@ fake_audit() {  # escáner que bloquea si el diff de la PR contiene SECRETO; fir
   plan_and_grant
   run bash "$SCRIPT" run
   [ "$status" -eq 0 ]
-  [ "$(paste -sd, "$FAKE/merged")" = "160,162" ]
+  # SE-500 S3: el orden congelado pone primero la independiente (#162) y luego el par que choca por número.
+  [ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["order"])' "$MERGE_SPRINT_HOME/manifest.json")" = "[162, 160, 161]" ]
+  [ "$(paste -sd, "$FAKE/merged")" = "162,160" ]
   grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"161"' | grep '"reason":"conflicto_real"' | grep -q '"files":"scripts/foo.sh"'
   ! ledger_has '"event":"JUDGE_REQUEST"' || false
 }
@@ -886,4 +888,202 @@ link_head() {  # link_head <n> <ruta> : sobre el head de pr-<n>, <ruta> pasa a s
   ! grep -qx 198 "$FAKE/merged" 2>/dev/null || false
   ledger_has '"reason":"resync_fallo"'
   [ -z "$(ls -d "$MERGE_SPRINT_HOME"/froot-* 2>/dev/null)" ]
+}
+
+# ── SE-500 S3: plan ordenado (AC-17 a AC-20) ──────────────────────────────────────────────────────────────
+# Cada PR es una rama real pr-<n> sobre main, con sus ficheros en $FAKE/<n>.files: plan predice los choques
+# con git merge-tree entre los heads revisados.
+
+s3_pr() {  # s3_pr <n> <fichero>=<contenido>… : rama pr-<n> con esos cambios, ficheros declarados y revisión
+  local n="$1" kv f; shift
+  G switch -q -c "pr-$n" main
+  : > "$FAKE/$n.files"
+  for kv in "$@"; do
+    f="${kv%%=*}"; mkdir -p "$(dirname "$MERGE_SPRINT_GIT_ROOT/$f")"
+    printf '%b\n' "${kv#*=}" > "$MERGE_SPRINT_GIT_ROOT/$f"; G add "$f"; echo "$f" >> "$FAKE/$n.files"
+  done
+  G commit -qm "pr $n"; G push -q origin "pr-$n"; G switch -q main
+  echo "pr-$n" > "$FAKE/$n.branch"; echo x > "$FAKE/$n.head"
+  register_head "$n"
+}
+
+mf_get() { python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))[sys.argv[2]],separators=(",",":")))' "$MERGE_SPRINT_HOME/manifest.json" "$1"; }
+
+s3_three() {  # AC-17: #10 (A) y #11 (B) cambian docs/f.md de forma distinta; #12 (C) es independiente
+  s3_pr 10 "docs/f.md=a"; s3_pr 11 "docs/f.md=b"; s3_pr 12 "docs/g.md=c"
+}
+s3_star() {   # AC-17b: #10 (B) choca con #11 (A) en docs/f.md y con #12 (C) en docs/g.md; A y C independientes
+  s3_pr 10 "docs/f.md=b" "docs/g.md=b"; s3_pr 11 "docs/f.md=a"; s3_pr 12 "docs/g.md=c"
+}
+s3_chain() {  # control de AC-17b: cadena #10–#11–#12 (choques 10–11 en docs/f.md y 11–12 en docs/g.md)
+  s3_pr 10 "docs/f.md=a"; s3_pr 11 "docs/f.md=b" "docs/g.md=b"; s3_pr 12 "docs/g.md=c"
+}
+
+fresh_env() {  # fresh_env <etiqueta> : repo, remoto, estado y gh falso nuevos (otro escenario en el mismo test)
+  local t="$TMPDIR_T/$1"
+  export MERGE_SPRINT_HOME="$t/state" FAKE="$t/fake" BARE="$t/origin.git" MERGE_SPRINT_GIT_ROOT="$t/clone"
+  mkdir -p "$FAKE"; echo CI > "$FAKE/required"
+  git init -q --bare "$BARE"; git clone -q "$BARE" "$MERGE_SPRINT_GIT_ROOT" 2>/dev/null
+  # Identidad en el clon: los worktrees de resync la heredan para su commit de merge.
+  G config user.email t@t; G config user.name t; G config commit.gpgsign false
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/scripts"
+  cp scripts/merge-sprint.sh scripts/risk-tier.py scripts/f5-state.sh scripts/merge-registry-resolve.py "$MERGE_SPRINT_GIT_ROOT/scripts/"
+  echo base > "$MERGE_SPRINT_GIT_ROOT/a.txt"; G add a.txt scripts; G commit -qm base; G branch -M main; G push -q origin main
+}
+
+sprint_with() {  # sprint_with <escenario> <voraz|ascendente> → S3_RES=«fusionadas aparcadas» de un run con re-sync; sin
+  # subshell: el entorno nuevo (FAKE, MERGE_SPRINT_HOME) queda para las aserciones del test
+  fresh_env "$1-$2"; export MERGE_SPRINT_RESYNC=1
+  "s3_$1"; squash_on_merge 10; squash_on_merge 11; squash_on_merge 12
+  bash "$SCRIPT" plan >/dev/null 2>&1 || return 1
+  if [[ "$2" == ascendente ]]; then
+    # El orden ascendente de SE-433 §2.5: la operadora concede un manifiesto con ese orden (digest nuevo).
+    python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["order"]=sorted(d["order"]); open(p,"w").write(json.dumps(d,sort_keys=True,separators=(",",":")))' "$MERGE_SPRINT_HOME/manifest.json"
+  fi
+  regrant
+  bash "$SCRIPT" run >"$TMPDIR_T/run-$1-$2.log" 2>&1
+  S3_RES="$(cat "$FAKE/merged" 2>/dev/null | grep -c .) $(grep -c '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl")"
+}
+
+@test "AC-17: A y B chocan en docs/f.md, C independiente → order [12,10,11] y aviso «#10 chocará con #11 en docs/f.md»" {
+  s3_three
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [ "$(mf_get order)" = "[12,10,11]" ]
+  [ "$(mf_get collisions)" = '[{"files":["docs/f.md"],"pr":10,"with":11}]' ]
+  [[ "$output" == *"#10 chocará con #11 en docs/f.md"* ]]
+  [[ "$output" == *"orden: #12 #10 #11"* ]]
+  [[ "$output" != *"#12 chocará"* ]]
+}
+
+@test "AC-17b plan: estrella con B=#10 → order exactamente [11,12,10]" {
+  s3_star
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [ "$(mf_get order)" = "[11,12,10]" ]
+  [[ "$output" == *"#10 chocará con #11 en docs/f.md"* ]]
+  [[ "$output" == *"#10 chocará con #12 en docs/g.md"* ]]
+}
+
+@test "AC-17b run: estrella; el orden voraz fusiona 2 y aparca 1, el ascendente fusiona 1 y aparca 2" {
+  sprint_with star voraz
+  [ "$S3_RES" = "2 1" ]
+  [ "$(paste -sd, "$FAKE/merged")" = "11,12" ]
+  grep '"event":"PARK"' "$MERGE_SPRINT_HOME/ledger.jsonl" | grep '"pr":"10"' | grep -q conflicto_real
+  sprint_with star ascendente
+  [ "$S3_RES" = "1 2" ]
+  [ "$(paste -sd, "$FAKE/merged")" = "10" ]
+}
+
+@test "AC-17b control negativo: en la cadena 10–11–12 voraz y ascendente dan ambos 2 fusionadas y 1 aparcada" {
+  sprint_with chain voraz
+  [ "$S3_RES" = "2 1" ]
+  [ "$(mf_get order)" = "[10,12,11]" ]
+  local voraz="$S3_RES"
+  sprint_with chain ascendente
+  [ "$S3_RES" = "2 1" ]
+  [ "$(mf_get order)" = "[10,11,12]" ]
+  [ "$S3_RES" = "$voraz" ]
+}
+
+@test "AC-18: mismas entradas, mismo order y mismo digest (también con otro locale)" {
+  s3_three
+  run bash "$SCRIPT" plan; [ "$status" -eq 0 ]
+  local d1 o1; d1=$(sed -n 's/^digest: //p' <<<"$output"); o1=$(mf_get order)
+  LC_ALL=C run bash "$SCRIPT" plan; [ "$status" -eq 0 ]
+  [ "$(sed -n 's/^digest: //p' <<<"$output")" = "$d1" ]
+  [ "$(mf_get order)" = "$o1" ]
+  [ "$o1" = "[12,10,11]" ]
+}
+
+@test "AC-19 block: choques solo en registros, derivados de propuestas o D no generan aviso ni alteran el orden" {
+  s3_pr 10 "docs/propuestas/LOG.md=uno" "docs/propuestas/ROADMAP-CURRENT.md=uno" ".scm/sam.json=uno" "docs/x10.md=a"
+  s3_pr 11 "docs/propuestas/LOG.md=dos" "docs/propuestas/ROADMAP-CURRENT.md=dos" ".scm/sam.json=dos" "docs/x11.md=b"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [ "$(mf_get collisions)" = "[]" ]
+  [ "$(mf_get order)" = "[10,11]" ]
+  [[ "$output" != *"chocará"* ]]
+  [[ "$output" != *"solapa"* ]]
+}
+
+@test "S3 aviso: solapamiento sin conflicto en el mismo fichero se avisa pero no es colisión ni cambia el orden" {
+  mkdir -p "$MERGE_SPRINT_GIT_ROOT/docs"; printf 'l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\n' > "$MERGE_SPRINT_GIT_ROOT/docs/h.md"; G add docs/h.md; G commit -qm h; G push -q origin main
+  s3_pr 10 "docs/h.md=L1\nl2\nl3\nl4\nl5\nl6\nl7\nl8"
+  s3_pr 11 "docs/h.md=l1\nl2\nl3\nl4\nl5\nl6\nl7\nL8"
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [ "$(mf_get collisions)" = "[]" ]
+  [ "$(mf_get order)" = "[10,11]" ]
+  [[ "$output" == *"#10 solapa con #11 en docs/h.md"* ]]
+  [[ "$output" != *"chocará"* ]]
+}
+
+@test "S3 boundary: un head que no está en el repo no se da por independiente en silencio: aviso de colisión no calculable" {
+  s3_pr 10 "docs/f.md=a"
+  mkpr 11 "scripts/z.sh"; review 11 APPROVE correctness
+  run bash "$SCRIPT" plan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"#10 y #11: colisión no calculable"* ]]
+  [ "$(mf_get order)" = "[10,11]" ]
+}
+
+@test "AC-20 block: order editado tras el grant → el digest no coincide y run no arranca" {
+  s3_three
+  plan_and_grant
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["order"]=[10,11,12]; open(p,"w").write(json.dumps(d,sort_keys=True,separators=(",",":")))' "$MERGE_SPRINT_HOME/manifest.json"
+  run bash "$SCRIPT" run
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"manifiesto alterado"* ]]
+  [ ! -s "$FAKE/merged" ]
+}
+
+@test "AC-20: run sigue order y no reordena (sin re-sync, las tres se fusionan en el orden congelado)" {
+  s3_three
+  plan_and_grant
+  run bash "$SCRIPT" run
+  [ "$status" -eq 0 ]
+  [ "$(paste -sd, "$FAKE/merged")" = "12,10,11" ]
+}
+
+@test "AC-20 block: order que no es permutación de las PR del manifiesto → anomalía, sin merge (fail-closed)" {
+  local bad
+  for bad in '[12,10]' '[12,10,10]' '[12,10,11,99]' '"12,10,11"'; do
+    fresh_env "perm-$RANDOM"; s3_three
+    bash "$SCRIPT" plan >/dev/null 2>&1
+    python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["order"]=json.loads(sys.argv[2]); open(p,"w").write(json.dumps(d,sort_keys=True,separators=(",",":")))' "$MERGE_SPRINT_HOME/manifest.json" "$bad"
+    regrant
+    run bash "$SCRIPT" run
+    [ "$status" -eq 5 ]
+    [[ "$output" == *"manifiesto_ilegible"* ]]
+    [ ! -s "$FAKE/merged" ]
+  done
+}
+
+@test "AC-20 block: prs con un número repetido → anomalía, sin merge (order no es permutación de [10,10,…])" {
+  local mode
+  for mode in igual distinta; do
+    fresh_env "dup-$mode-$RANDOM"; s3_three
+    bash "$SCRIPT" plan >/dev/null 2>&1
+    # Repite la entrada de #10: idéntica, o con otro head (antes se conservaba en silencio la última).
+    python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); e=dict(next(x for x in d["prs"] if x["pr"]==10))
+if sys.argv[2]=="distinta": e["head"]="f"*40
+d["prs"].append(e); open(p,"w").write(json.dumps(d,sort_keys=True,separators=(",",":")))' "$MERGE_SPRINT_HOME/manifest.json" "$mode"
+    regrant
+    run bash "$SCRIPT" run
+    [ "$status" -eq 5 ]
+    [[ "$output" == *"manifiesto_ilegible"* ]]
+    [ ! -s "$FAKE/merged" ]
+  done
+}
+
+@test "seguridad: merge-sprint.sh arranca con set -uo pipefail (variable sin definir o fallo en tubería no pasan en silencio)" {
+  # Debe ser la primera sentencia ejecutable, a nivel superior: dentro de una función o tras otra orden
+  # no protege todo el script. Se comprueba la primera línea que no es comentario ni blanco.
+  run awk '!/^[[:space:]]*(#|$)/ { print; exit }' "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "set -uo pipefail" ]
+  # Negativo: una subcomanda inexistente no puede terminar en éxito.
+  run bash "$SCRIPT" subcomando-inexistente-se500
+  [ "$status" -ne 0 ]
 }
