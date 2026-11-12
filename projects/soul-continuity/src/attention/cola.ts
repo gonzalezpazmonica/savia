@@ -342,6 +342,9 @@ const POR_QUE_SOUL: Partial<Record<MotivoK, string>> = {
   SILENCIO_NO_ES_PERMISO: 'Venció su plazo sin respuesta y sigue esperando.',
 };
 
+/** Las preguntas de agentes (SE-514 S2) viven en la misma bandeja pero se enseñan por su propio adaptador. */
+export const PREFIJO_AGENTE = 'agente:';
+
 const COSTE_SOUL: Record<CosteRetraso, string> = {
   BAJO: 'Retrasarlo cuesta poco.',
   MEDIO: 'Retrasarlo tiene un coste medio.',
@@ -357,7 +360,7 @@ const COSTE_SOUL: Record<CosteRetraso, string> = {
  */
 export function deBandejaSoul(items: readonly Item[], nivelCanal: Nivel): unknown[] {
   return items
-    .filter((i) => i.pendiente && i.decisionId !== null)
+    .filter((i) => i.pendiente && i.decisionId !== null && !i.decisionId.startsWith(PREFIJO_AGENTE))
     .map((i) => {
       const ultimo = i.historial.at(-1);
       return {
