@@ -1,0 +1,9 @@
+{
+  "id": "SE-518",
+  "status": "PROPOSED",
+  "priority": "P1",
+  "phase": "D",
+  "title": "Pulse: el latido de la planta de trabajo",
+  "evidence": "docs/specs/SE-518-pulse-latido.spec.md",
+  "note": "Antiguo «reconciliador» como componente público y determinista por operador: servicio de usuario (macOS launchd, Linux systemd --user), contratos con Soul (Pulse publica, Soul habla, respaldo mínimo sin Soul), clases de error, telemetría local desde ledger de eventos, freno como ejecutor de SE-498 y volante que solo resta, instalaciones soberanas sin canal entre ellas. TO-BE C (contratos primero, núcleo en sombra, corte por efectos). Escenas E1–E10 confirmadas; prototipo S0 pendiente; doce decisiones pendientes de confirmar."
+}
