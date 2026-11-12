@@ -37,7 +37,7 @@ const ENTERO_NO_NEGATIVO = (n: number): boolean => Number.isInteger(n) && n >= 0
 const NIVEL_VALIDO = (n: unknown): boolean => n === 1 || n === 2 || n === 3 || n === 4;
 
 /** Solo viaja en claro un nivel válido que no supera el del canal; lo demás se redacta. */
-const redactar = (nivel: unknown, canal: unknown): boolean =>
+export const redactar = (nivel: unknown, canal: unknown): boolean =>
   !(NIVEL_VALIDO(nivel) && NIVEL_VALIDO(canal) && (nivel as number) <= (canal as number));
 
 export class Politica {
