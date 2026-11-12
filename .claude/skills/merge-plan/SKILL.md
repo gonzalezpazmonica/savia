@@ -59,7 +59,8 @@ Si un path no existe, aborta y reporta.
 
 - Heurística por pares: no simula la secuencia real contra `main`; admite falsos positivos y negativos.
 - El orden solo mejora cuando una PR choca con varias (estrella); en par aislado o cadena no gana nada (AC-17b).
-- Modifica SE-433 §2.5 (orden ascendente); el orden sigue congelado bajo el grant y `run` no reordena.
+- Modifica SE-433 §2.5 (orden ascendente); el orden sigue congelado bajo el grant y `run` no reordena la primera pasada.
+- Excepción heredada de SE-433 §2.7: una PR que pasa a `awaiting_judge` sale de la primera pasada y se resuelve al final, después de las siguientes. Si el juez da STOP, las posteriores ya pueden estar fusionadas.
 
 ## Related
 
