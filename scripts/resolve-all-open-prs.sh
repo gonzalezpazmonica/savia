@@ -107,10 +107,16 @@ NO_PUSH=0
 usage() {
   cat <<EOF
 Usage: $0 [--dry-run] [--no-push]
+       $0 --select-targets < prs.json
 
 Rebases every open PR branch on origin/main and auto-resolves predictable
 CHANGELOG/signature/.scm conflicts. Skips PRs with conflicts in other
 files (human review required).
+
+--select-targets reads the JSON of
+  gh pr list --json number,headRefName,mergeable,mergeStateStatus
+from stdin and prints "<number> <branch>" only for PRs with a real conflict
+(CONFLICTING/DIRTY). UNKNOWN is re-polled; still UNKNOWN -> not selected.
 EOF
 }
 

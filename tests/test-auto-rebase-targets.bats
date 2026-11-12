@@ -6,6 +6,8 @@
 # todas las PR y el workflow las trataba como rebasables → integraba main en
 # todas las PR abiertas. Solo deben tocarse las PR con conflicto real.
 # Safety: el script usa `set -uo pipefail`; gh simulado, sin red.
+# Ref: .github/workflows/auto-rebase-open-prs.yml — runs 43082135464, 43086438753,
+# 43090813976 y 43095072062 (2026-11-11): todas las PR en UNKNOWN/UNKNOWN y empujadas.
 
 bats_require_minimum_version 1.5.0
 
@@ -44,7 +46,7 @@ targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
   grep -qE '^set -uo pipefail' "$SCRIPT"
 }
 
-@test "CONFLICTING o DIRTY → objetivo; CLEAN y BLOCKED → no se tocan" {
+@test "select_targets/classify: CONFLICTING o DIRTY → objetivo; CLEAN y BLOCKED → no se tocan" {
   run --separate-stderr targets '[
     {"number":1,"headRefName":"a","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"},
     {"number":2,"headRefName":"b","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN"},
@@ -74,7 +76,7 @@ targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
   [ "$(grep -c '^pr view 20 ' "$T/gh.calls")" -eq 2 ]
 }
 
-@test "límite: UNKNOWN persistente → no se toca y se sondea exactamente ROUNDS veces" {
+@test "boundary: UNKNOWN persistente → no se toca y se sondea exactamente ROUNDS veces" {
   printf 'UNKNOWN UNKNOWN\n' > "$T/state/30"
   run --separate-stderr targets '[{"number":30,"headRefName":"w","mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN"}]'
   [ "$status" -eq 0 ]
@@ -83,7 +85,7 @@ targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
   [[ "$stderr" == *"sin calcular tras 3 rondas"* ]]
 }
 
-@test "límite: ROUNDS=0 → UNKNOWN no se sondea y no se toca" {
+@test "boundary zero: ROUNDS=0 → UNKNOWN no se sondea y no se toca" {
   printf 'CONFLICTING DIRTY\n' > "$T/state/31"
   AUTO_REBASE_POLL_ROUNDS=0 run --separate-stderr targets '[{"number":31,"headRefName":"v","mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN"}]'
   [ "$status" -eq 0 ]
@@ -91,7 +93,7 @@ targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
   [ ! -s "$T/gh.calls" ]
 }
 
-@test "negativo: gh falla en todas las rondas → la PR no se toca" {
+@test "fail: gh falla en todas las rondas → la PR no se toca" {
   # sin $T/state/40 el gh simulado sale con 1
   run --separate-stderr targets '[{"number":40,"headRefName":"u","mergeable":"UNKNOWN","mergeStateStatus":"UNKNOWN"}]'
   [ "$status" -eq 0 ]
@@ -99,7 +101,7 @@ targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
   [ "$(grep -c '^pr view 40 ' "$T/gh.calls")" -eq 3 ]
 }
 
-@test "negativo: entrada no válida → exit 2 y ningún objetivo (fail-closed)" {
+@test "invalid: entrada no válida → exit 2 y ningún objetivo (fail-closed)" {
   for bad in 'no-json' '{"number":1}' '[{"number":"1;rm","headRefName":"a"}]'; do
     run --separate-stderr targets "$bad"
     [ "$status" -eq 2 ] || { echo "entrada aceptada: $bad"; false; }
@@ -107,15 +109,32 @@ targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
   done
 }
 
-@test "negativo: AUTO_REBASE_POLL_ROUNDS no numérico → exit 2" {
+@test "error: AUTO_REBASE_POLL_ROUNDS no numérico → exit 2" {
   AUTO_REBASE_POLL_ROUNDS=abc run --separate-stderr targets '[]'
   [ "$status" -eq 2 ]
 }
 
-@test "lista vacía → exit 0 sin objetivos" {
+@test "empty: lista vacía → exit 0 sin objetivos" {
   run --separate-stderr targets '[]'
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+@test "null: mergeable/mergeStateStatus null o ausentes se tratan como UNKNOWN y se sondean" {
+  printf 'CONFLICTING DIRTY\n' > "$T/state/60"
+  printf 'MERGEABLE CLEAN\n' > "$T/state/61"
+  run --separate-stderr targets '[
+    {"number":60,"headRefName":"n1","mergeable":null,"mergeStateStatus":null},
+    {"number":61,"headRefName":"n2"}]'
+  [ "$status" -eq 0 ]
+  [ "$output" = "60 n1" ]
+  [ "$(grep -c '^pr view' "$T/gh.calls")" -eq 2 ]
+}
+
+@test "help: usage documenta el modo --select-targets" {
+  run bash "$SCRIPT" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--select-targets"* ]]
 }
 
 # ── El paso real del workflow, con git/gh/resolutor simulados ───────────────
@@ -145,7 +164,7 @@ print(next(s["run"] for s in w["jobs"]["rebase"]["steps"] if s.get("name")=="Reb
   [ "$(cat "$T/resolved")" = "agent/b" ]
 }
 
-@test "workflow negativo: entrada no válida → el paso falla y no toca ninguna rama" {
+@test "workflow invalid: entrada no válida → el paso falla y no toca ninguna rama" {
   # número no entero: el YAML anterior lo procesaba y lanzaba el resolutor
   run wf_rebase_step '[{"number":"7;x","headRefName":"agent/a","mergeable":"CONFLICTING","mergeStateStatus":"DIRTY"}]'
   [ "$status" -ne 0 ]
