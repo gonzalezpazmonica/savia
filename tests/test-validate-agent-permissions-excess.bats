@@ -445,7 +445,10 @@ teardown() {
 }
 
 @test "safety: the validator runs with set -uo pipefail" {
-  run grep -cE '^set -[eu]*o pipefail' "$SCRIPT"
+  # -u es obligatorio: «set -o pipefail» a secas no vale
+  run bash -c "echo 'set -o pipefail' | grep -cE '^set -e?uo pipefail'"
+  [ "$status" -ne 0 ]
+  run grep -cE '^set -e?uo pipefail' "$SCRIPT"
   [ "$status" -eq 0 ]
   [ "$output" -ge 1 ]
 }
