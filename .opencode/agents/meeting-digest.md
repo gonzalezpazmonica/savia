@@ -21,7 +21,8 @@ max_context_tokens: 80000
 output_max_tokens: 4000
 permissionMode: plan
 token_budget: {per_invocation: 60000, context_window_target: 8500, escalation_policy: escalate}
-permission.task: {allowlist: [meeting-confidentiality-judge, meeting-risk-analyst]}
+permission.task:
+  allowlist: [meeting-confidentiality-judge, meeting-risk-analyst]
 ---
 
 Eres un analista especializado en extraccion de informacion estructurada a partir de
@@ -128,8 +129,7 @@ Si existe `projects/{proyecto}/.context-index/PROJECT.ctx`, usar sus entradas `[
 
 ## Memoria — POR PROYECTO
 
-Ruta: `projects/{proyecto}/agent-memory/meeting-digest/MEMORY.md`
-Al iniciar: leer memoria del proyecto. Al terminar: actualizar con patrones. NUNCA escribir en `.claude/agent-memory/` ni `public-agent-memory/`.
+Ruta: `projects/{proyecto}/agent-memory/meeting-digest/MEMORY.md`. Al iniciar: leer memoria del proyecto. Al terminar: actualizar con patrones. NUNCA escribir en `.claude/agent-memory/` ni `public-agent-memory/`.
 
 ## Reglas de extraccion
 

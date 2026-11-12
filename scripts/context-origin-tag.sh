@@ -101,14 +101,13 @@ resolve_tier() {
     docs/critical-facts.md) echo "N1-anchor"; return ;;
   esac
 
-  # N2-eager: imports criticos del CLAUDE.md (savia, radical-honesty,
-  # autonomous-safety, caveman-default, profiles/savia.md)
+  # N2-eager: imports criticos del CLAUDE.md. SE-511 S2: savia-core.md (bloque generado desde
+  # savia.md, radical-honesty, caveman-default y autonomous-safety, que pasan a bajo demanda)
+  # y knowledge-discovery-priority.md.
   case "$rel" in
-    .claude/profiles/savia.md) echo "N2-eager"; return ;;
+    docs/rules/domain/savia-core.md) echo "N2-eager"; return ;;
+    docs/rules/domain/knowledge-discovery-priority.md) echo "N2-eager"; return ;;
     .claude/profiles/savia-agent-mode.md) echo "N2-eager"; return ;;
-    docs/rules/domain/radical-honesty.md) echo "N2-eager"; return ;;
-    docs/rules/domain/autonomous-safety.md) echo "N2-eager"; return ;;
-    docs/rules/domain/caveman-default.md) echo "N2-eager"; return ;;
     CLAUDE.md|AGENTS.md|SKILLS.md) echo "N2-eager"; return ;;
   esac
 

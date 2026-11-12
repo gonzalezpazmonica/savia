@@ -10,5 +10,11 @@
   "chars": 13348,
   "bytes": 13523,
   "sha256": "de8f55fc9b18089f41043fde87137fae8a7d149756a949f7b008d22357b795bf"
+ },
+ "B2": {
+  "ref": "B + 1 frase en Investigaci\u00f3n",
+  "chars": 13457,
+  "bytes": 13635,
+  "sha256": "e44cbc8e062c8100505afb3896873ee665b8361c2d948227467bd2aba9109c8f"
  }
 }

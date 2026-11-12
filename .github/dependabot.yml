@@ -9,3 +9,7 @@ updates:
       github-actions:
         patterns:
           - "*"
+    # Título y commits con prefijo admitido por PR Guardian (Gate 2): «chore(deps): …».
+    commit-message:
+      prefix: "chore"
+      include: "scope"

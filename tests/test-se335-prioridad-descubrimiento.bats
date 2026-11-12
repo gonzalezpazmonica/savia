@@ -23,8 +23,8 @@ setup() {
   [[ "$(grep -c "@docs/rules/domain/knowledge-discovery-priority.md" CLAUDE.md)" -eq 1 ]]
 }
 
-@test "AC-03: la cabecera de CLAUDE.md declara 6 imports criticos" {
-  head -5 CLAUDE.md | grep -q "6 @imports criticos"
+@test "AC-03: la cabecera de CLAUDE.md declara 3 imports criticos (SE-511 S2: savia-core los agrupa)" {
+  head -10 CLAUDE.md | grep -q "3 @imports criticos"
 }
 
 @test "AC-04: session-init emite la directiva de prioridad en additionalContext" {
@@ -59,4 +59,57 @@ setup() {
   local words
   words=$(wc -w < "$RULE")
   [[ "$words" -le 160 ]]
+}
+
+# Ref: docs/specs/SE-335-prioridad-descubrimiento-arranque.spec.md (fail-safe del hook de arranque)
+
+@test "seguridad: el hook de arranque declara set -uo pipefail" {
+  head -5 "$HOOK" | grep -q "set -uo pipefail"
+}
+
+@test "limite: la regla de prioridad no queda vacia (al menos 4 niveles numerados)" {
+  local n
+  n=$(grep -cE '^[1-4]\. \*\*' "$RULE")
+  [[ "$n" -eq 4 ]]
+}
+
+# Comprobador del orden imperativo (revisión de #1527, P1): los 4 niveles numerados 1-4,
+# en este orden y una sola vez cada uno. Lo usan el positivo y los casos negativo y límite.
+rule_order_ok() {
+  local got
+  got="$(grep -E '^[0-9]+\. \*\*' "$1" | sed -E 's/^([0-9]+)\. \*\*([^*(]+).*/\1 \2/' | sed 's/ *$//' | tr '\n' '|')"
+  [[ "$got" == "1 Cúpulas de conocimiento|2 Capas de memoria|3 Grafo de código|4 Grep/glob a ficheros|" ]]
+}
+
+@test "AC-01: la regla real declara los 4 niveles en el orden cupulas -> memoria -> grafo -> grep" {
+  rule_order_ok "$RULE"
+}
+
+@test "negativo: una regla con memoria antes que cupulas no pasa el comprobador de orden" {
+  sed -e 's/^1\. \*\*Cúpulas/2. **Cúpulas/' -e 's/^2\. \*\*Capas/1. **Capas/' "$RULE" > "$BATS_TEST_TMPDIR/swapped.md"
+  run cmp -s "$RULE" "$BATS_TEST_TMPDIR/swapped.md"
+  [[ "$status" -ne 0 ]]
+  run rule_order_ok "$BATS_TEST_TMPDIR/swapped.md"
+  [[ "$status" -ne 0 ]]
+}
+
+@test "edge: una regla vacia o con un nivel de menos no pasa el comprobador de orden" {
+  : > "$BATS_TEST_TMPDIR/empty-rule.md"
+  run rule_order_ok "$BATS_TEST_TMPDIR/empty-rule.md"
+  [[ "$status" -ne 0 ]]
+  grep -v '^4\. \*\*' "$RULE" > "$BATS_TEST_TMPDIR/three.md"
+  run rule_order_ok "$BATS_TEST_TMPDIR/three.md"
+  [[ "$status" -ne 0 ]]
+}
+
+@test "edge: hook output is valid JSON and additionalContext is not null ni vacio" {
+  run timeout 10 bash "$HOOK"
+  [[ "$status" -eq 0 ]]
+  echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); c=d['hookSpecificOutput']['additionalContext']; assert c and 'Prioridad: cupulas' in c"
+}
+
+@test "edge boundary: la directiva de prioridad aparece exactamente una vez en la salida" {
+  run timeout 10 bash "$HOOK"
+  [[ "$status" -eq 0 ]]
+  [[ "$(echo "$output" | grep -o 'Prioridad: cupulas' | wc -l)" -eq 1 ]]
 }

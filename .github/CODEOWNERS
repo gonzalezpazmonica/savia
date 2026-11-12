@@ -53,3 +53,8 @@ tests/test-validate-agent-permissions-excess.bats   @gonzalezpazmonica
 # Corpus de órdenes legítimas (SE-510 D1): cada entrada exime a una orden de todas las guardas.
 # Tier 3 (SE-362): cambiarlo exige revisión humana explícita.
 config/guard-allow-corpus.json              @gonzalezpazmonica
+
+# Núcleo de arranque (SE-511 S2): reglas de autonomía y honestidad que se cargan en cada turno,
+# y el generador que decide qué regiones entran. Gobernanza tier 4 (risk-tier.py).
+docs/rules/domain/savia-core.md             @gonzalezpazmonica
+scripts/generate-savia-core.py              @gonzalezpazmonica

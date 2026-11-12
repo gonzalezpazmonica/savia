@@ -3,7 +3,8 @@ name: PR Guardian
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, edited]
+    # reopened: al reabrir una PR el check obligatorio debe volver a informarse.
+    types: [opened, synchronize, edited, reopened]
 
 permissions:
   contents: read
@@ -22,8 +23,33 @@ jobs:
         with:
           fetch-depth: 0
 
+      # ─── Exención de dependabot (Gate 1 y Gate 8) ───
+      # Solo autor dependabot[bot] y solo ficheros de dependencias o líneas
+      # `uses:` en workflows. Fail-closed: cualquier error → no exenta.
+      - name: "Dependabot exemption (Gate 1 + Gate 8)"
+        id: deps_exempt
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            let result = { exempt: false, reason: 'no evaluado' };
+            try {
+              const pr = context.payload.pull_request;
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: pr.number, per_page: 100
+              });
+              const mod = require(`${process.env.GITHUB_WORKSPACE}/scripts/lib/pr-guardian-dependabot-exempt.js`);
+              result = mod.evaluate(pr.user.login, files);
+            } catch (e) {
+              result = { exempt: false, reason: `error: ${e.message}` };
+            }
+            core.info(`Dependabot exemption: ${result.exempt} — ${result.reason}`);
+            core.setOutput('exempt', result.exempt ? 'true' : 'false');
+
       # ─── Gate 1: PR Description Quality ───
       - name: "Gate 1: PR Description Quality"
+        if: steps.deps_exempt.outputs.exempt != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -412,6 +438,7 @@ jobs:
 
       # ─── Gate 8: CHANGELOG Required for Code Changes ───
       - name: "Gate 8: CHANGELOG Required"
+        if: steps.deps_exempt.outputs.exempt != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
