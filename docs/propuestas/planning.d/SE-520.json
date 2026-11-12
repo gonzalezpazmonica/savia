@@ -1,0 +1,9 @@
+{
+  "id": "SE-520",
+  "status": "PROPOSED",
+  "priority": "P2",
+  "phase": "A",
+  "title": "Reglas de guarda en texto (anexo de SE-510)",
+  "evidence": "docs/specs/SE-520-reglas-de-guarda-en-texto.spec.md",
+  "note": "Idea aprobada por la operadora el 2026-11-12: reglas de guarda en markdown al estilo de hookify (Apache-2.0, sin copiar código) como anexo de SE-510, no como hooks nuevos. Inventario: 43 guardas bloqueantes, 7 expresables enteras como regla, 8 en parte, 28 no. Motor único determinista, fallo cerrado, sin acción allow, conjunto efectivo base ∪ local, tier 3 para toda regla. Fases F1-F3 dependen de SE-510 S1, S3 y S4. Escenas y prototipo pendientes de confirmar; preguntas abiertas Q1 (interruptores por entorno) y Q2 (reglas locales)."
+}
