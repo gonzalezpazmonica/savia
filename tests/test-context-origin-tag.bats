@@ -68,16 +68,25 @@ teardown() {
   [ "$output" = "N1-anchor" ]
 }
 
-@test "N2-eager: docs/rules/domain/radical-honesty.md" {
-  run "$SCRIPT" "$WS/docs/rules/domain/radical-honesty.md"
+@test "N2-eager: docs/rules/domain/savia-core.md (SE-511 S2, import critico)" {
+  run "$SCRIPT" "$WS/docs/rules/domain/savia-core.md"
   [ "$status" -eq 0 ]
   [ "$output" = "N2-eager" ]
 }
 
-@test "N2-eager: profiles/savia.md" {
-  run "$SCRIPT" "$WS/.claude/profiles/savia.md"
+@test "N2-eager: docs/rules/domain/knowledge-discovery-priority.md" {
+  run "$SCRIPT" "$WS/docs/rules/domain/knowledge-discovery-priority.md"
   [ "$status" -eq 0 ]
   [ "$output" = "N2-eager" ]
+}
+
+@test "N4b-on-demand: fuentes de savia-core ya no son eager (SE-511 S2)" {
+  for f in docs/rules/domain/radical-honesty.md docs/rules/domain/autonomous-safety.md \
+           docs/rules/domain/caveman-default.md .claude/profiles/savia.md; do
+    run "$SCRIPT" "$WS/$f"
+    [ "$status" -eq 0 ]
+    [ "$output" = "N4b-on-demand" ] || { echo "$f -> $output"; return 1; }
+  done
 }
 
 @test "N2-eager: CLAUDE.md raiz" {
