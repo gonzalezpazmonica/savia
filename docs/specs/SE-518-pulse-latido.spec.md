@@ -9,7 +9,7 @@ risk: L4
 human_surface: true
 depends_on: [SE-493, SE-498, SE-507, SE-513, SE-514]
 related_specs: [SE-431, SE-433, SE-488, SE-490, SE-493, SE-498, SE-500, SE-507, SE-512, SE-513, SE-514, SE-517]
-origin: "Análisis de arquitectura del antiguo «reconciliador» en Savia Labs (TO-BE recomendado C y corte en slices). Escenas confirmadas por la operadora antes de escribir esta spec (SE-505)."
+origin: "Análisis de arquitectura previo del antiguo «reconciliador» (TO-BE recomendado C y corte en slices). Escenas confirmadas por la operadora antes de escribir esta spec (SE-505)."
 timeline:
   - from: "2026-11-12"
     learned: "2026-11-12"
@@ -25,13 +25,13 @@ Pulse es el bucle que mantiene viva la planta de trabajo de una instalación de 
 
 ### Escenas
 
-Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumplir el formato de la puerta de comprensión; el contenido de cada escena no cambia. Están en tercera persona y sin detalles de ninguna instalación concreta. Las horas son de ejemplo. «(P+S)» marca las escenas en las que intervienen Pulse y Soul.
+Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumplir el formato de la puerta de comprensión; el contenido de cada escena no cambia, salvo E3 y E8, que se modificaron después de la confirmación para reflejar las decisiones D7 y D3 (ver «Confirmación»). Están en tercera persona y sin detalles de ninguna instalación concreta. Las horas son de ejemplo. «(P+S)» marca las escenas en las que intervienen Pulse y Soul.
 
 1. **Saber qué pasó y qué pasa.**
    - **E1 (P+S). La mañana.** El operador abre el móvil a primera hora. Ve una sola tarjeta, de Soul, con lo que Pulse hizo desde la noche anterior, con como mucho tres asuntos: «Anoche terminaron 4 trabajos y 2 quedaron parados. Hay 3 propuestas de cambio que solo puedes revisar tú y 2 que pueden fusionarse en lote. Parado: el trabajo X, porque la cuota del modelo pesado se agotó de madrugada; vuelve a las 9:00.» Cada asunto lleva su porqué; al tocarlo ve el detalle. No pasa: una lista de veinte líneas, avisos sueltos por separado, ni nada que obligue a abrir un fichero.
    - **E2 (P+S). Un trabajo termina.** Un trabajo acaba a media tarde. En menos de dos minutos le llega una frase: «El trabajo del recorte de contexto terminó bien y abrió la propuesta N. No necesitas hacer nada hasta la revisión.» Si falló: «Falló porque lo interrumpieron (el equipo se durmió). Lo relancé una vez; sin coste para el límite de intentos.» Si pregunta por voz o texto «¿Está funcionando?»: «Sí. Última comprobación hace 40 segundos. Tres trabajos en marcha; el más antiguo lleva 25 minutos y dio señales hace 1 minuto. Nada espera tu respuesta.» No pasa: enterarse de que algo terminó porque preguntó él, ni que lo rutinario le interrumpa en modo concentración.
 2. **Freno y volante.**
-   - **E3 (P+S). El freno.** Desde el móvil, un gesto: «Para todo». En segundos: «Todo parado. 4 trabajos detenidos, ninguno perdido: puedes ver dónde se quedó cada uno. Nada nuevo arranca. Solo tú puedes reanudar.» Reanudar se puede hacer desde el equipo, con la aprobación formal de siempre o, si el operador lo ha activado en su configuración, escribiendo «reanuda» por el chat de Soul; ese chat solo vale si es el canal autenticado de Soul, es decir, la identidad verificada de la persona. Un mensaje entrante sin esa verificación no reanuda nada. No pasa: que algo se dé por fallado al parar, que se borre trabajo, que un mensaje cualquiera por chat levante el freno, ni que otro programa o agente lo levante.
+   - **E3 (P+S). El freno.** Desde el móvil, un gesto: «Para todo». En segundos: «Todo parado. 4 trabajos detenidos, ninguno perdido: puedes ver dónde se quedó cada uno. Nada nuevo arranca. Solo tú puedes reanudar.» Reanudar se puede hacer desde el equipo, con la aprobación formal de siempre o, si el operador lo ha activado en su configuración, escribiendo «reanuda» por el chat de Soul; ese chat solo vale si es el canal autenticado de Soul, es decir, la identidad verificada de la persona. Un mensaje entrante sin esa verificación no reanuda nada. Si al parar quedó algún efecto dudoso (no se sabe si llegó a ocurrir), el chat no reanuda: Soul contesta que hace falta reanudar desde el equipo o con la aprobación formal, aceptando cada efecto dudoso por su identificador. No pasa: que algo se dé por fallado al parar, que se borre trabajo, que un mensaje cualquiera por chat levante el freno, ni que otro programa o agente lo levante.
    - **E4. El volante.** El operador dice: «Hoy solo el trabajo X; lo demás espera». Pulse contesta con lo que cambia antes de hacerlo: «Pasan a espera 3 trabajos; sigue 1. Las revisiones ya empezadas terminan. Mañana vuelve todo a su orden.» «No toques el repositorio Y hoy» se anota por repositorio. No pasa: que reordene sin decir qué cambia, ni que amplíe lo que puede hacer. Redirigir solo quita o aplaza, nunca da más permiso.
 3. **Fallos que no son del trabajo y fusiones sin cascada.**
    - **E5. Se cae la red (o falla una prueba ajena).** Se va la conexión con el forge. Pulse no marca nada como fallado ni cambia nada. Si pasa de media hora lo dice una vez: «Sin conexión con el forge desde las 15:10. No he tocado nada. Sigo intentándolo cada 5 minutos.» Al volver continúa sin repetir ningún trabajo. Si fallan las pruebas, dice de quién es: «falla en tu propuesta» (se corrige solo, hasta tres veces), «falla en la rama principal, no es tuyo» (lo dice una vez y no gasta intentos) o «las pruebas llevan 40 minutos en cola» (lo relanza una vez; si no avanza, lo cuenta). No pasa: que una caída de red cuente como error de un trabajo, ni un aviso por cada pasada.
@@ -51,7 +51,7 @@ Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumpli
 
 - Un núcleo público y determinista, sin modelo en el camino crítico, que corre como servicio **de usuario** de cada operador (macOS con launchd, Linux con systemd --user) y deriva el estado en cada pasada.
 - Una planta muda: Pulse publica peticiones, eventos y latido; Soul es la única voz. Sin Soul, un canal de respaldo mínimo.
-- Un freno que nada pierde y que solo la persona levanta (por CLI local, aprobación formal o, si el operador lo activa, el chat autenticado de Soul), y un volante que solo resta.
+- Un freno que nada pierde y que solo la persona levanta (por CLI local, aprobación formal o, si el operador lo activa y tras enmendar SE-498, el chat autenticado de Soul), y un volante que solo resta.
 - Errores con clase, dueño y política; telemetría desde un ledger de eventos, local a la instalación.
 - Instalaciones soberanas: configuración, colas, estado y credenciales por operador y por instalación, sin canal entre ellas.
 
@@ -67,6 +67,7 @@ Las diez escenas confirmadas (E1–E10) se agrupan en cinco momentos para cumpli
 
 - fecha: 2026-11-12
 - respuesta: «E1–E10 tal cual, sin cambios». Registro de la orquestadora de la respuesta de la operadora a las diez escenas, presentadas una a una para sí, no o cambiar. La redacción en tercera persona y sin datos de instalación es posterior a la confirmación y no cambia el contenido; la revisión humana de la PR comprueba que es así.
+- **Escenas modificadas tras la confirmación.** E3 (reanudar también por el chat autenticado de Soul, D7) y E8 (el operador elige el modo inicial; por defecto pleno, D3) cambiaron después de esa respuesta, a raíz de las decisiones del mismo día. Su redacción actual no está confirmada como escena: la operadora la reconfirma en la revisión de la PR, y la spec no pasa a APPROVED sin esa reconfirmación.
 
 ## Slice S0 — Prototipo navegable
 
@@ -119,14 +120,18 @@ Todos viven bajo la raíz de datos del usuario (`<datos de usuario>/savia/pulse`
 | Latido de Pulse | Pulse | Soul | `latido.json` con `at`, `valid_until`, pasada, fuentes vencidas |
 | Presencia de Soul | Soul | Pulse | `presencia.json` con `valid_until` |
 | Acuses de entrega | Soul | Pulse | `acuses.jsonl`: `id` entregado, por qué canal, cuándo |
-| Control | La persona (CLI local, dispositivo emparejado vía Soul o, si el operador lo activa, el chat autenticado de Soul) | Pulse | Plano de control de SE-498 (época, `stop_seq`, ámbitos); Pulse es un ejecutor registrado, no un STOP nuevo |
+| Control | La persona (CLI local, dispositivo emparejado vía Soul o, si el operador lo activa, el chat autenticado de Soul) | Pulse | Plano de control de SE-498 (época, `stop_seq`, ámbitos); Pulse es un ejecutor registrado, no un STOP nuevo. Cada orden lleva `origen.canal` ∈ {`cli_local`, `aprobacion_formal`, `soul_dispositivo`, `soul_chat`} y `origen.identidad_verificada` (booleano que pone Soul solo tras verificar la identidad de la persona); un canal fuera de la lista, o el campo ausente, es orden no autenticada |
 | Intenciones nuevas | La persona vía Soul | Pulse | Admisión duradera de SE-513 |
 
-Reglas comunes: `schema_version` en cada fichero; dentro de una versión mayor solo se añaden campos y el lector ignora lo desconocido. Fichero ausente = `SIN_CONECTAR`; corrupto = `FALLIDA`; **nunca vacío** (semántica de `EstadoFuente` de Soul). Pulse es el productor de tres fuentes de la cola única de SE-514: `PR_REVISION`, `AVISO_RUN` y `PENDIENTE_MANANA`.
+Reglas comunes: los ficheros que lee Pulse deben pertenecer al usuario del servicio y no ser escribibles por grupo ni por otros; si no, cuentan como `FALLIDA`. Un `valid_until` de `presencia.json` más allá de un máximo configurable (por defecto 10 minutos desde `at`) se trata como vencido, para que una presencia falsa con vencimiento lejano no silencie el respaldo. `schema_version` en cada fichero; dentro de una versión mayor solo se añaden campos y el lector ignora lo desconocido. Fichero ausente = `SIN_CONECTAR`; corrupto = `FALLIDA`; **nunca vacío** (semántica de `EstadoFuente` de Soul). Pulse es el productor de tres fuentes de la cola única de SE-514: `PR_REVISION`, `AVISO_RUN` y `PENDIENTE_MANANA`.
 
 **Una sola voz.** Cada `id` tiene un único propietario de entrega. Con Soul presente, Pulse no emite nada. Con la presencia de Soul vencida, Pulse entrega por respaldo (notificación del SO y `pulse inbox`), marca `entrega=respaldo` en el evento, y Soul, al volver, ve el `id` ya acusado y no lo repite. La fuente de verdad del acuse es Soul en modo normal y el evento de respaldo en modo degradado.
 
-**Órdenes de Soul a Pulse: solo restan.** Pausar todo, un repositorio o un proveedor; aplazar; bajar WIP o presupuesto; `steer` de un trabajo. Subir el techo de autonomía o el presupuesto, o dar un permiso de fusión **no** se aceptan desde Soul por chat: CLI local de la persona o aprobación formal (SE-488, SE-498). **Reanudar tras un freno** sí puede hacerse por el chat de Soul, pero solo si el operador lo ha activado en su configuración (`reanudar_por_chat`) y solo cuando el mensaje llega por el canal autenticado de Soul, es decir, con la identidad verificada de la persona y no cualquier mensaje entrante. Ningún agente ni proceso puede reanudar por esa vía. Una orden de origen no autenticado se descarta.
+**Órdenes de Soul a Pulse: solo restan, con una única excepción (reanudar por chat, abajo).** Pausar todo, un repositorio o un proveedor; aplazar; bajar WIP o presupuesto; `steer` de un trabajo. Subir el techo de autonomía o el presupuesto, o dar un permiso de fusión **no** se aceptan desde Soul por chat: CLI local de la persona o aprobación formal (SE-488, SE-498). **Reanudar tras un freno** sí puede hacerse por el chat de Soul, pero solo si el operador lo ha activado en su configuración (`reanudar_por_chat`) y solo cuando el mensaje llega por el canal autenticado de Soul, es decir, con la identidad verificada de la persona y no cualquier mensaje entrante. Ningún agente ni proceso puede reanudar por esa vía. Una orden de origen no autenticado se descarta. Es la única orden que llega desde Soul y amplía lo que la planta puede hacer; por eso tiene límites propios:
+
+- Solo vale con `origen.canal = soul_chat` y `origen.identidad_verificada = true`; cualquier otro valor, o el campo ausente, no reanuda (fail-closed).
+- Solo procede si el último `reconcile` de SE-498 cubrió el ámbito y **no queda ningún efecto `INDETERMINATE`**. Con alguno pendiente, el chat no reanuda ni acepta efectos: Soul remite a la CLI local o a la aprobación formal, donde se aceptan uno a uno por su identificador (SE-498 R6.2).
+- Es una tercera vía de `resume` que SE-498 R6.1 hoy no contempla (solo PR y terminal). Exige una **enmienda de SE-498** (tier 4) que defina cómo Soul verifica la identidad de la persona (por ejemplo, la aprobación firmada de SE-488 o el emparejamiento del dispositivo) antes de que S4 implemente esta vía. Mientras esa enmienda no esté aprobada, `reanudar_por_chat` no se puede activar: la validación de la configuración lo rechaza.
 
 **Lo que ninguno hace.** Soul no lanza, no mata ni reordena trabajos. Pulse no lee fuentes personales para decidir cuándo molestar. No hay base de datos compartida ni candado compartido. Los modos de foco y descanso no retrasan un freno ni silencian una petición marcada `critica` (campo estructurado, nunca deducido de texto).
 
@@ -136,10 +141,10 @@ Reglas comunes: `schema_version` en cada fichero; dentro de una versión mayor s
 |---|---|
 | Servicio | **Servicio de usuario**, no del sistema: `systemd --user` (con `enable-linger` si debe sobrevivir al cierre de sesión) en Linux, LaunchAgent en macOS, tarea de inicio de sesión en Windows. `pulse install` genera la unidad sin `sudo`. La intención de «siempre vivo y aislado» se cumple sin privilegios ni TI |
 | Una instancia por operador | Una por **usuario del SO**. Varios operadores en una máquina = varios usuarios, cada uno con su instancia y su llavero. Nunca varios operadores dentro de un proceso |
-| Configuración | Fichero del usuario validado por esquema, con valores por defecto seguros (el modo inicial es pleno por decisión D3; el resto, conservador): identidad de la instalación y nivel de clasificación, forges y repos (credencial por referencia al llavero o al CLI del forge, nunca el secreto), proveedores y tiers, presupuestos y reinicios de cuota, suelo reservado a uso interactivo, ventanas sin lanzar y sin preguntar, modo inicial (techo de autonomía; por defecto pleno), reanudar por chat autenticado (por defecto desactivado), WIP por repo, recursos (memoria, batería, corriente, red medida), política de integración, canal de avisos |
+| Configuración | Fichero del usuario validado por esquema, con valores por defecto conservadores salvo el modo inicial, que es pleno por decisión D3: identidad de la instalación y nivel de clasificación, forges y repos (credencial por referencia al llavero o al CLI del forge, nunca el secreto), proveedores y tiers, presupuestos y reinicios de cuota, suelo reservado a uso interactivo, ventanas sin lanzar y sin preguntar, modo inicial (techo de autonomía; por defecto pleno; en una instalación no interactiva, sin nadie a quien preguntar, se aplica ese defecto y `pulse install` lo dice en su salida), reanudar por chat autenticado (por defecto desactivado; no activable sin la enmienda de SE-498), WIP por repo, recursos (memoria, batería, corriente, red medida), política de integración, canal de avisos |
 | Colas y estado | Privados por operador en su directorio de datos; nada del código público los conoce |
 | Núcleo | Determinista, sin modelo en el camino crítico; los modelos solo dentro de los workers y revisoras que lanza |
-| Inferencia | La de cada operador: el motor que el operador o su organización permitan (SE-517: motor opcional por persona), como adaptador con su propia credencial; «ninguno» es válido y equivale a modo `observar`, aunque el operador haya elegido pleno |
+| Inferencia | La de cada operador: el motor que el operador o su organización permitan (SE-517: motor opcional por persona), como adaptador con su propia credencial; «ninguno» es válido y equivale a modo `observar`, aunque el operador haya elegido pleno; `pulse status` muestra el modo configurado y el modo efectivo, y su motivo, cuando difieren |
 | Credenciales | Pulse no guarda secretos: llavero del SO y la credencial del propio CLI del forge (Rule 1) |
 | Código | Público, como proyecto propio del repo junto a Soul (D1); estado y configuración siempre privados |
 
@@ -166,9 +171,9 @@ Cada fallo observado recibe una clase; la clase decide si cuenta intento, si se 
 | `transitoria` | Red caída, forge no responde | Reintento con espera creciente; **no cambia estado** | No | Una vez si dura > 30 min |
 | `cuota` | Límite del proveedor | Señal tipada por proveedor, con vencimiento, escrita por el lanzador desde el código de salida o la respuesta del proveedor, nunca leída de texto libre; sonda al vencer | No | En la tarjeta de la mañana o si bloquea algo crítico |
 | `ci_ajena` | Lo que falla también falla en la rama principal | Se registra y espera | No | Una vez por cabeza |
-| `ci_atascada` | Cabeza sin pruebas arrancadas en 15 min | Relanza una vez (efecto con ledger) | No | Si el relanzamiento no arranca |
+| `ci_atascada` | Cabeza sin pruebas arrancadas, o pruebas en cola (F8), durante 15 min (D12, configurable) | Relanza una vez (efecto con ledger) | No | Si el relanzamiento no arranca (los «40 minutos» de E5 son un ejemplo de ese aviso tras relanzar) |
 | `logica` | HOLD de revisora, prueba propia roja | Corrección, máximo 3 rondas, luego cuarentena | Sí | Al entrar en cuarentena |
-| `entorno` | Interrumpido por suspensión o señal (`143/137`) | «Interrumpido, relanzar gratis» una vez | No | Solo si se repite |
+| `entorno` | Interrumpido por suspensión o señal (`143/137`) | «Interrumpido, relanzar gratis» una vez | No | Sin aviso propio la primera vez: la frase de fin de trabajo de E2 lo menciona. Aviso propio solo si se repite |
 | `politica` | Guarda bloqueada, fichero fuera del alcance declarado | Cuarentena inmediata con motivo; nada se relanza | — | Siempre, `critica` |
 | `desconocida` | Salida no clasificable | Cuarentena con motivo «sin clasificar»; fail-closed | — | Siempre |
 
@@ -179,7 +184,7 @@ La cuarentena tiene motivo, dueño y salida explícita (cabeza nueva, decisión 
 ## Política de integración (F2, F3)
 
 - `solo_conflicto` por defecto: Pulse integra la rama principal en una propuesta solo si choca o si es la siguiente en fusionarse.
-- **Validez por huella de contenido** para decidir si relanzar revisoras: si la diferencia de la propuesta respecto a su base no cambió, no se relanzan. La regla de la puerta de fusión (atada al SHA) no cambia aquí; si se cambia, va por enmienda de SE-500.
+- **Validez por huella de contenido** para decidir si relanzar revisoras: si la diferencia de la propuesta respecto a su base no cambió, no se relanzan. El cálculo es fail-closed: ante cualquier error (base ilegible, diff que falla, huella anterior ausente) se relanzan. La regla de la puerta de fusión (atada al SHA) no cambia aquí; si se cambia, va por enmienda de SE-500.
 - Dos cambios públicos fuera del núcleo, cada uno en su PR de tier 4: el workflow de auto-rebase deja de integrar propuestas limpias (o se retira), y `pr-guardian.yml` añade `reopened`.
 
 ## Telemetría
@@ -202,6 +207,8 @@ Cada uno es un evento del ledger con campos mínimos obligatorios. Un evento sin
 
 `review_opened_by_operator` viene de los acuses de Soul o de la lectura del forge; si ninguna fuente lo da, el evento no se inventa y la espera queda como «sin dato», nunca como 0.
 
+Las métricas usan además eventos que el ledger ya emite desde S1, todos con `at`: `pr_created` y `pr_merged` (propuesta), `job_started` y `job_finished` (trabajo, propuesta, id de modelo del adaptador).
+
 ### Métricas de planta
 
 Derivadas solo del ledger, recalculables desde cero. Ninguna sale de la instalación.
@@ -209,10 +216,10 @@ Derivadas solo del ledger, recalculables desde cero. Ninguna sale de la instalac
 | Familia | Métrica | Definición |
 |---|---|---|
 | Rendimiento | Propuestas fusionadas por día | Eventos `pr_merged` agrupados por día local del operador |
-| Rendimiento | Tiempo de creación a fusión | `pr_merged.en` menos `pr_created.en`, con mediana y p90 |
-| Retrabajo | Rondas de revisión por propuesta | Número de `review_hold` + rondas de corrección por propuesta |
+| Rendimiento | Tiempo de creación a fusión | `pr_merged.at` menos `pr_created.at`, con mediana y p90 |
+| Retrabajo | Rondas de revisión por propuesta | Número de `review_hold` por propuesta (cada HOLD abre una ronda de corrección; no se suman aparte) |
 | Retrabajo | Arreglos | Commits de corrección posteriores a un HOLD, por propuesta y por motivo |
-| Coste | Horas de trabajador por modelo | Suma de (`fin` − `inicio`) de los trabajos, por identificador de modelo del adaptador |
+| Coste | Horas de trabajador por modelo | Suma de (`job_finished.at` − `job_started.at`) de los trabajos, por identificador de modelo del adaptador |
 | Coste | Horas de trabajador por propuesta | Idem, por propuesta; tokens solo cuando el proveedor los dé en la salida del worker |
 | Espera del operador | Espera por revisión | `abierta_en` − `solicitada_en`, por tier, con mediana y p90 |
 | Espera del operador | Peticiones sin abrir | Revisiones solicitadas sin `review_opened_by_operator` y su edad |
@@ -251,18 +258,18 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | AC-4 | E2, E5 | Un trabajo interrumpido (`143/137`) se relanza una vez y no suma ronda. **Negativo:** el segundo `143` del mismo intento no se relanza solo | S3 |
 | AC-5 | E3 | `pause` detiene en ≤ 60 s todo proceso lanzado por Pulse y deja cada trabajo `interrumpido` con su punto de parada. **Negativo:** ningún trabajo pasa a `failed` ni se borra nada | S4 |
 | AC-6 | E3 | **Negativo:** reanudar desde otro agente o desde un proceso que no es la persona se rechaza siempre; reanudar por chat se rechaza si `reanudar_por_chat` está desactivado o si el mensaje no llega por el canal autenticado de Soul (identidad verificada de la persona). Tras reanudar, Pulse revalida la época antes de lanzar | S4 |
-| AC-6b | E3 | Con `reanudar_por_chat` activado, un «reanuda» recibido por el canal autenticado de Soul levanta el freno y queda acusado en el diario de SE-498 con el canal. **Negativo:** el mismo texto por un canal sin verificar, o con el campo de identidad ausente o inválido, no reanuda (fail-closed) | S4 |
+| AC-6b | E3 | Con `reanudar_por_chat` activado, un «reanuda» recibido por el canal autenticado de Soul levanta el freno y queda acusado en el diario de SE-498 con el canal. **Negativo:** el mismo texto por un canal sin verificar, o con el campo de identidad ausente o inválido, no reanuda (fail-closed). **Negativo:** con un efecto `INDETERMINATE` pendiente en el ámbito, o sin `reconcile` que lo cubra, el chat no reanuda ni acepta efectos y Soul remite a CLI o aprobación formal. **Negativo:** con la enmienda de SE-498 sin aprobar, la configuración con `reanudar_por_chat` activado se rechaza | S4 |
 | AC-7 | E4 | Una orden de volante publica qué cambia antes de aplicarse y caduca a la hora indicada. **Negativo:** una orden que amplía permisos o presupuesto se rechaza | S4 |
 | AC-8 | E5 | Con el forge caído 45 min en la simulación: ningún cambio de estado, un único aviso pasados 30 min, cero trabajos repetidos al volver | S3 |
 | AC-9 | E5 | Las tres clases de prueba roja (propia, de la rama principal, en cola) producen las tres políticas de la tabla. **Negativo:** `ci_ajena` no gasta ronda | S3 |
-| AC-10 | E6 | Tras una fusión, solo se integra la propuesta siguiente o la que choca. **Negativo:** con la huella de contenido igual, no se relanza ninguna revisora | S2 |
+| AC-10 | E6 | Tras una fusión, solo se integra la propuesta siguiente o la que choca. **Negativo:** con la huella de contenido igual, no se relanza ninguna revisora. **Negativo:** si el cálculo de la huella falla, se relanzan (fail-closed) | S2 |
 | AC-11 | E6 | Cabeza sin pruebas en 15 min → un relanzamiento registrado en el ledger y, si no arranca, una petición. **Negativo:** no hay segundo relanzamiento automático | S2 |
 | AC-12 | E7 | Cada petición lleva las cinco cosas de SE-514; sin respuesta queda en espera y no se repregunta más de una vez por ventana. **Negativo:** un permiso de fusión contestado en la tarjeta no se registra como grant | S1, S4 |
-| AC-13 | E8 | `pulse install` en macOS y Linux sin `sudo` deja el servicio de usuario activo y permite elegir el modo inicial; sin elección, queda en pleno (`actuar`). **Negativo:** si el operador elige `observar`, no se produce ningún efecto del ejecutor | S7 |
+| AC-13 | E8 | `pulse install` en macOS y Linux sin `sudo` deja el servicio de usuario activo y permite elegir el modo inicial; sin elección (también en instalación no interactiva), queda en pleno (`actuar`) y la salida lo dice. **Negativo:** si el operador elige `observar`, no se produce ningún efecto del ejecutor. **Negativo:** con inferencia «ninguno» y pleno elegido, no hay efectos del ejecutor y `pulse status` muestra modo configurado `actuar` y efectivo `observar` con su motivo | S7 |
 | AC-14 | E8 | Con batería por debajo del umbral o sin corriente (si se configura), no se lanza nada y se publica la próxima ventana | S7 |
 | AC-15 | E8 | **Negativo:** un destino de red fuera de la lista de salidas de la instalación falla como error, no como aviso | S7 |
 | AC-16 | E9 | **Negativo:** el código no contiene cliente ni listener hacia otra instalación (prueba estática); `export-lessons` solo escribe un fichero local y nunca lo envía | S7 |
-| AC-17 | E10 | Con la presencia de Soul vencida, la petición sale por respaldo marcada «aviso por canal de respaldo»; al volver Soul no se repite. **Negativo:** con Soul presente, Pulse no emite ninguna notificación | S1 |
+| AC-17 | E10 | Con la presencia de Soul vencida, la petición sale por respaldo marcada «aviso por canal de respaldo»; al volver Soul no se repite. **Negativo:** con Soul presente, Pulse no emite ninguna notificación. **Negativo:** un `presencia.json` con `valid_until` más allá del máximo, o escribible por otros, cuenta como vencido y el respaldo avisa | S1 |
 | AC-18 | E10 | Con el latido de Pulse vencido, Soul publica «Pulse no da señales desde …». **Negativo:** Pulse funciona sin Soul y Soul sin Pulse en las pruebas de contrato | S1 |
 | AC-19 | Todas | **Negativo:** ningún camino del núcleo fusiona, aprueba, concede grants, saca de borrador ni fuerza push (un test por acción) | S6 |
 | AC-20 | Todas | El planificador en sombra coincide con las decisiones del bucle actual durante el periodo de sombra; cada discrepancia queda explicada antes del corte | S6 |
@@ -282,7 +289,7 @@ Otros: identidad propia para los pushes de Pulse cuando el forge lo permita, dis
 | S1 | Contratos (eventos, peticiones, latido, presencia, acuses) con esquema; el lanzador emite inicio y fin con código y clase; `pulse status`; canal de respaldo | SE-507 (latido y `finish --rc`) + SE-514 (Pulse productor) | 2 |
 | S2 | Política de integración `solo_conflicto`, detección de cabeza sin pruebas y relanzamiento único; huella de contenido para relanzar revisoras; las dos PR de workflows | SE-500 + PR de workflows | 3 (Pulse), 4 (workflows) |
 | S3 | Señales tipadas y taxonomía de errores; cuarentena con motivo y dueño; intento ≠ intención | SE-493, SE-513 | 3 |
-| S4 | Pulse como ejecutor de SE-498; tic de control; volante que resta; reanudar solo la persona (CLI, aprobación formal o chat autenticado de Soul si el operador lo activa) | SE-498, SE-488 | 4 |
+| S4 | Pulse como ejecutor de SE-498; tic de control; volante que resta; reanudar solo la persona (CLI, aprobación formal o, tras enmendar SE-498, chat autenticado de Soul si el operador lo activa) | SE-498 (con enmienda para la vía de chat), SE-488 | 4 |
 | S5 | Ledger de eventos, los cuatro datos nuevos (HOLD, cierre sin fusionar, error de cuota, apertura de revisión por la persona), métricas de rendimiento, retrabajo, coste y espera; coste real cuando el proveedor lo dé | SE-507 | 2 |
 | S6 | Planificador puro en sombra frente al bucle actual; después corte por efectos con ledger, de uno en uno | SE-493 | 3–4 |
 | S7 | Configuración por operador, adaptadores (forge, proveedor, servicio del SO), lista de salidas, guarda local de términos; instalación en macOS con el modo inicial elegido por el operador (pleno por defecto) | SE-517 | 3 |
@@ -293,13 +300,15 @@ S1 y S2 pueden empezar en el bucle actual como puente mientras la spec se revisa
 
 Las doce están decididas por el operador. Cada una indica lo que rige.
 
+- **Registro de la decisión.** fecha: 2026-11-12. Registro de la orquestadora de las respuestas de la operadora a las doce decisiones que esta spec presentaba como pendientes, cada una con opción recomendada; no es texto literal. D3 y D7 se apartan de la opción recomendada (`observar` por defecto y reanudar solo por CLI o aprobación formal) y relajan un control, por lo que la revisión humana de la PR las comprueba de forma expresa antes de aprobar.
+
 - **D1. Producto público.** Decidida por el operador: sí, producto público como proyecto del repo junto a Soul, con estado siempre privado.
 - **D2. Lenguaje del núcleo.** Decidida por el operador: Python estándar ≥ 3.9, sin dependencias.
 - **D3. Agentes en una instalación de organización.** Decidida por el operador: pleno desde el principio, no «observar». Es configurable por operador: el modo inicial lo elige cada operador en la instalación y, por defecto, es pleno.
 - **D4. Política de integración.** Decidida por el operador: `solo_conflicto`, incluido el cambio del workflow del repo (tier 4).
 - **D5. Huella de contenido.** Decidida por el operador: sí, para no relanzar revisoras; la puerta de fusión no cambia.
 - **D6. Avisos.** Decidida por el operador: solo Soul cuando está presente, con respaldo mínimo si no.
-- **D7. Reanudar tras el freno.** Decidida por el operador: la persona puede reanudar también por chat, además de la CLI local y la aprobación formal. Es configurable por operador (`reanudar_por_chat`, desactivado por defecto). Exige que el chat sea el canal autenticado de Soul, es decir, la identidad verificada de la persona y no cualquier mensaje entrante. Ningún agente ni proceso puede reanudar. El riesgo de suplantación y su mitigación están en «Riesgos».
+- **D7. Reanudar tras el freno.** Decidida por el operador: la persona puede reanudar también por chat, además de la CLI local y la aprobación formal. Es configurable por operador (`reanudar_por_chat`, desactivado por defecto). Exige que el chat sea el canal autenticado de Soul, es decir, la identidad verificada de la persona y no cualquier mensaje entrante. Ningún agente ni proceso puede reanudar. Con efectos dudosos pendientes no reanuda, y requiere enmendar SE-498 antes de implementarse (ver «Contratos Pulse ↔ Soul»). El riesgo de suplantación y su mitigación están en «Riesgos».
 - **D8. Lecciones entre instalaciones.** Decidida por el operador: no por defecto.
 - **D9. Periodo de sombra.** Decidida por el operador: 7 días.
 - **D10. Orden.** Decidida por el operador: S0–S2 primero.
