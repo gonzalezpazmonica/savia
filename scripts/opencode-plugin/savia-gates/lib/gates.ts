@@ -18,6 +18,7 @@ import { REGISTRY, trustedFor, verifyTrusted, wrapCommand } from "./trusted-guar
 import type { TrustedGuards } from "./trusted-guards"
 import { resolveProjectRoot } from "./root"
 import { domeGuardVerdict, NATIVE_TWIN_HOOKS, strictest } from "./dome-guard"
+import { MCP_NATIVE_TWIN_HOOKS, mcpEffectVerdict, productionEnv } from "./mcp-effect-guard"
 
 /** Providers the operator declared local (comma-separated). Anything else counts as cloud. */
 function localProviders(): Set<string> {
@@ -59,7 +60,7 @@ export async function createGates(init: GatesInit, flavor: Flavor) {
   // El gemelo bash de una regla nativa (lib/dome-guard.ts) daría la misma decisión otra vez y costaría un
   // proceso por llamada: el puente no lo ejecuta.
   hookMap.PreToolUse = (hookMap.PreToolUse ?? []).filter((h) =>
-    !(h.type === "command" && NATIVE_TWIN_HOOKS.some((n) => h.command.endsWith(`/${n}`))))
+    !(h.type === "command" && [...NATIVE_TWIN_HOOKS, ...MCP_NATIVE_TWIN_HOOKS].some((n) => h.command.endsWith(`/${n}`))))
   const runOpts = trusted ? { wrap: (command: string) => wrapCommand(trusted as TrustedGuards, command) } : {}
   let lastCwd: string | null = null
   // T1: además los guards se fijan por hash la primera vez que se carga este directorio y se
@@ -136,6 +137,16 @@ export async function createGates(init: GatesInit, flavor: Flavor) {
       if (dome.decision !== "pass") {
         await auditLog({ event: "dome-guard", tool, decision: dome.decision, reason: dome.reason })
         throw new Error(`savia-gates: DOME_${dome.decision.toUpperCase()}: ${dome.reason}`)
+      }
+      // SE-508 S1: guard previo de efectos MCP/WebFetch/WebSearch, gemelo del hook mcp-effect-guard.sh (mismo
+      // núcleo Python). Como en cúpulas, `ask` se aplica como bloqueo con el motivo. La delegación en Space
+      // solo vale con el pin de guards fijado en este proceso (pin !== null).
+      // Con el pin, el núcleo corre bajo bwrap desde la copia de confianza, como los hooks (T1b; revisión #1525).
+      const effect = await mcpEffectVerdict({ root, tool, args, env: productionEnv(process.env), pinFixed: pin !== null,
+        coreRoot: trusted?.copy, wrap: trusted ? (c: string) => wrapCommand(trusted as TrustedGuards, c) : undefined })
+      if (effect.decision !== "pass") {
+        await auditLog({ event: "mcp-effect-guard", tool, decision: effect.decision })
+        throw new Error(`savia-gates: MCP_${effect.decision.toUpperCase()}: ${effect.reason}`)
       }
       let mutated: Record<string, unknown> | undefined
       for (const [n, toolInput] of variants.entries()) {

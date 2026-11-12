@@ -1,0 +1,20 @@
+# Hosts que WebFetch abre sin preguntar (SE-508). Lo lee .claude/hooks/lib/mcp_effect_guard.py.
+# Un host por línea, nombre exacto: un subdominio no hereda el permiso. Se compara en minúsculas,
+# sin punto final y con IDN en punycode. Solo https, sin query ni fragmento, ruta <= 200 caracteres
+# y ningún tramo de más de 64. El guard usa la intersección con la copia del `main` remoto:
+# añadir un host aquí no vale hasta que se fusiona. Lista corta a propósito: es la defensa principal
+# contra la exfiltración por la dirección. Se afina con lo que registre el modo observación.
+docs.python.org
+developer.mozilla.org
+docs.github.com
+docs.anthropic.com
+docs.claude.com
+code.claude.com
+opencode.ai
+git-scm.com
+nodejs.org
+docs.rs
+doc.rust-lang.org
+pypi.org
+www.gnu.org
+bats-core.readthedocs.io

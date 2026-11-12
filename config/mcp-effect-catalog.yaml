@@ -1,0 +1,194 @@
+# Catálogo de clases de efecto de las tools MCP (SE-508). Lo lee .claude/hooks/lib/mcp_effect_guard.py.
+#
+# Formato: una línea `nombre_exacto: clase`, sin comodines. Clases:
+#   read_only  pasa sin preguntar
+#   write      pregunta antes (en un run sin persona se rechaza)
+#   merge      se rechaza siempre (los merges van con grant, SE-343)
+# Una tool que no está aquí pregunta (falla cerrado).
+#
+# Editar este fichero en el árbol solo puede endurecerlo: el guard aplica lo más estricto entre
+# esta copia y la del `main` remoto. Aflojar una tool exige una PR fusionada.
+# Formato estricto: una línea fuera de formato o una clave repetida deja el catálogo ilegible (todo pregunta).
+
+# --- Gmail (conector de la cuenta)
+mcp__claude_ai_Gmail__get_message: read_only
+mcp__claude_ai_Gmail__get_thread: read_only
+mcp__claude_ai_Gmail__search_threads: read_only
+mcp__claude_ai_Gmail__list_labels: read_only
+mcp__claude_ai_Gmail__list_drafts: read_only
+mcp__claude_ai_Gmail__get_draft: read_only
+mcp__claude_ai_Gmail__send_message: write
+mcp__claude_ai_Gmail__forward: write
+mcp__claude_ai_Gmail__reply: write
+mcp__claude_ai_Gmail__create_draft: write
+mcp__claude_ai_Gmail__update_draft: write
+mcp__claude_ai_Gmail__delete_draft: write
+mcp__claude_ai_Gmail__create_label: write
+mcp__claude_ai_Gmail__update_label: write
+mcp__claude_ai_Gmail__delete_label: write
+mcp__claude_ai_Gmail__label_message: write
+mcp__claude_ai_Gmail__label_thread: write
+mcp__claude_ai_Gmail__unlabel_message: write
+mcp__claude_ai_Gmail__unlabel_thread: write
+mcp__claude_ai_Gmail__update_message_labels: write
+mcp__claude_ai_Gmail__apply_sensitive_message_label: write
+mcp__claude_ai_Gmail__apply_sensitive_thread_label: write
+mcp__claude_ai_Gmail__mark_message_spam: write
+mcp__claude_ai_Gmail__mark_thread_spam: write
+mcp__claude_ai_Gmail__unmark_message_spam: write
+mcp__claude_ai_Gmail__unmark_thread_spam: write
+mcp__claude_ai_Gmail__trash_message: write
+mcp__claude_ai_Gmail__trash_thread: write
+mcp__claude_ai_Gmail__untrash_message: write
+mcp__claude_ai_Gmail__untrash_thread: write
+
+# --- Google Calendar
+mcp__claude_ai_Google_Calendar__get_event: read_only
+mcp__claude_ai_Google_Calendar__list_calendars: read_only
+mcp__claude_ai_Google_Calendar__list_events: read_only
+mcp__claude_ai_Google_Calendar__search_events: read_only
+mcp__claude_ai_Google_Calendar__suggest_time: read_only
+mcp__claude_ai_Google_Calendar__create_event: write
+mcp__claude_ai_Google_Calendar__update_event: write
+mcp__claude_ai_Google_Calendar__delete_event: write
+mcp__claude_ai_Google_Calendar__respond_to_event: write
+
+# --- Google Drive
+mcp__claude_ai_Google_Drive__get_file_metadata: read_only
+mcp__claude_ai_Google_Drive__get_file_permissions: read_only
+mcp__claude_ai_Google_Drive__get_shared_drive_metadata: read_only
+mcp__claude_ai_Google_Drive__list_recent_files: read_only
+mcp__claude_ai_Google_Drive__list_shared_drives: read_only
+mcp__claude_ai_Google_Drive__read_file_content: read_only
+mcp__claude_ai_Google_Drive__search_files: read_only
+mcp__claude_ai_Google_Drive__download_file_content: read_only
+mcp__claude_ai_Google_Drive__copy_file: write
+mcp__claude_ai_Google_Drive__create_file: write
+mcp__claude_ai_Google_Drive__share_file: write
+mcp__claude_ai_Google_Drive__trash_file: write
+mcp__claude_ai_Google_Drive__update_file: write
+
+# --- Miro
+mcp__claude_ai_Miro__board_get_space: read_only
+mcp__claude_ai_Miro__board_search_boards: read_only
+mcp__claude_ai_Miro__board_show: read_only
+mcp__claude_ai_Miro__canvas_get_canvas_composer_skill: read_only
+mcp__claude_ai_Miro__canvas_load_format_skill: read_only
+mcp__claude_ai_Miro__canvas_read_as_svg: read_only
+mcp__claude_ai_Miro__canvas_search: read_only
+mcp__claude_ai_Miro__comment_list_comments: read_only
+mcp__claude_ai_Miro__content_item_list_roles: read_only
+mcp__claude_ai_Miro__content_search: read_only
+mcp__claude_ai_Miro__get_brand_context: read_only
+mcp__claude_ai_Miro__image_get_data: read_only
+mcp__claude_ai_Miro__image_get_url: read_only
+mcp__claude_ai_Miro__space_list: read_only
+mcp__claude_ai_Miro__space_list_boards: read_only
+mcp__claude_ai_Miro__space_list_children: read_only
+mcp__claude_ai_Miro__table_get_latest_update_history: read_only
+mcp__claude_ai_Miro__user_search_organization_users: read_only
+mcp__claude_ai_Miro__user_who_am_i: read_only
+mcp__claude_ai_Miro__board_create: write
+mcp__claude_ai_Miro__board_create_format: write
+mcp__claude_ai_Miro__board_move: write
+mcp__claude_ai_Miro__board_move_to_team: write
+mcp__claude_ai_Miro__board_restore: write
+mcp__claude_ai_Miro__board_role_update: write
+mcp__claude_ai_Miro__board_share: write
+mcp__claude_ai_Miro__board_update_metadata: write
+mcp__claude_ai_Miro__canvas_create_from_svg: write
+mcp__claude_ai_Miro__canvas_get_html_upload_url: write
+mcp__claude_ai_Miro__canvas_update_from_svg: write
+mcp__claude_ai_Miro__comment_create: write
+mcp__claude_ai_Miro__comment_reply: write
+mcp__claude_ai_Miro__comment_resolve: write
+mcp__claude_ai_Miro__create_boardcast: write
+mcp__claude_ai_Miro__image_create: write
+mcp__claude_ai_Miro__image_get_upload_url: write
+mcp__claude_ai_Miro__import-claude-board-from-url: write
+mcp__claude_ai_Miro__import-claude-design-from-url: write
+mcp__claude_ai_Miro__record_ui_feedback: write
+mcp__claude_ai_Miro__section_create: write
+mcp__claude_ai_Miro__section_delete: write
+mcp__claude_ai_Miro__section_update_metadata: write
+mcp__claude_ai_Miro__space_create: write
+mcp__claude_ai_Miro__space_role_update: write
+mcp__claude_ai_Miro__space_share: write
+mcp__claude_ai_Miro__space_update_metadata: write
+
+# --- Claude Docs
+mcp__claude_ai_Claude_Docs__guide: read_only
+mcp__claude_ai_Claude_Docs__query: read_only
+mcp__claude_ai_Claude_Docs__read: read_only
+mcp__claude_ai_Claude_Docs__export: read_only
+mcp__claude_ai_Claude_Docs__batch: write
+mcp__claude_ai_Claude_Docs__create: write
+mcp__claude_ai_Claude_Docs__delete: write
+mcp__claude_ai_Claude_Docs__update: write
+
+# --- GitHub MCP (plantilla .opencode/mcp-templates/github.jsonc.example, ruta E02)
+mcp__github__get_file_contents: read_only
+mcp__github__get_issue: read_only
+mcp__github__get_pull_request: read_only
+mcp__github__get_pull_request_comments: read_only
+mcp__github__get_pull_request_files: read_only
+mcp__github__get_pull_request_reviews: read_only
+mcp__github__get_pull_request_status: read_only
+mcp__github__list_commits: read_only
+mcp__github__list_issues: read_only
+mcp__github__list_pull_requests: read_only
+mcp__github__search_code: read_only
+mcp__github__search_issues: read_only
+mcp__github__search_repositories: read_only
+mcp__github__search_users: read_only
+mcp__github__add_issue_comment: write
+mcp__github__create_branch: write
+mcp__github__create_issue: write
+mcp__github__create_or_update_file: write
+mcp__github__create_pull_request: write
+mcp__github__create_pull_request_review: write
+mcp__github__create_repository: write
+mcp__github__fork_repository: write
+mcp__github__push_files: write
+mcp__github__update_issue: write
+mcp__github__update_pull_request_branch: write
+mcp__github__merge_pull_request: merge
+
+# --- SaviaVaults MCP (opencode.json)
+mcp__savia-vaults__vault_diff: read_only
+mcp__savia-vaults__vault_domes: read_only
+mcp__savia-vaults__vault_files: read_only
+mcp__savia-vaults__vault_graph: read_only
+mcp__savia-vaults__vault_health: read_only
+mcp__savia-vaults__vault_introspect: read_only
+mcp__savia-vaults__vault_list: read_only
+mcp__savia-vaults__vault_log: read_only
+mcp__savia-vaults__vault_query: read_only
+mcp__savia-vaults__vault_rag: read_only
+mcp__savia-vaults__vault_rag_status: read_only
+mcp__savia-vaults__vault_read: read_only
+mcp__savia-vaults__vault_search: read_only
+mcp__savia-vaults__vault_stats: read_only
+mcp__savia-vaults__vault_tags: read_only
+mcp__savia-vaults__vault_wikilink_health: read_only
+mcp__savia-vaults__vault_index: write
+mcp__savia-vaults__vault_rag_sync: write
+mcp__savia-vaults__vault_write: write
+
+# --- Grafo de código (codebase-memory-mcp, codegraph)
+mcp__codebase-memory-mcp__check_index_coverage: read_only
+mcp__codebase-memory-mcp__detect_changes: read_only
+mcp__codebase-memory-mcp__get_architecture: read_only
+mcp__codebase-memory-mcp__get_code_snippet: read_only
+mcp__codebase-memory-mcp__get_graph_schema: read_only
+mcp__codebase-memory-mcp__index_status: read_only
+mcp__codebase-memory-mcp__list_projects: read_only
+mcp__codebase-memory-mcp__query_graph: read_only
+mcp__codebase-memory-mcp__search_code: read_only
+mcp__codebase-memory-mcp__search_graph: read_only
+mcp__codebase-memory-mcp__trace_path: read_only
+mcp__codebase-memory-mcp__delete_project: write
+mcp__codebase-memory-mcp__index_repository: write
+mcp__codebase-memory-mcp__ingest_traces: write
+mcp__codebase-memory-mcp__manage_adr: write
+mcp__codegraph__codegraph_explore: read_only
