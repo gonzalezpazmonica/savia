@@ -403,15 +403,19 @@ def _decide(raw: bytes, root: str, env, frontend: str, pin_fixed: bool, auto: bo
     if tool == "WebSearch" and not isinstance(args.get("query"), str):
         return _ask("Guard de efectos: WebSearch sin búsqueda legible. ¿Sigo?", tool, "invalid", "WebSearch sin búsqueda")
 
-    # 2. catálogos del árbol
+    # 2. catálogos del árbol. Ausente o ilegible no decide todavía: se consulta el remoto, porque un merge del
+    # remoto sigue siendo deny (revisión Codex #1525 P1-3: borrar el catálogo local rebajaba merge a ask).
+    tree_cat: dict[str, str] | None
     try:
         text = read_tree(root, CATALOG_PATH)
         if text is None:
             raise Unreadable("ausente")
         tree_cat = parse_catalog(text)
+        bad_tree = None
     except Unreadable as e:
-        return _ask(f"Guard de efectos: el catálogo {CATALOG_PATH} falta o es ilegible ({e}); no se puede clasificar {tool}. ¿Sigo?",
-                    tool, "invalid", "catálogo ilegible")
+        tree_cat = None
+        bad_tree = _ask(f"Guard de efectos: el catálogo {CATALOG_PATH} falta o es ilegible ({e}); no se puede clasificar {tool}. ¿Sigo?",
+                        tool, "invalid", "catálogo ilegible")
     try:
         htext = read_tree(root, HOSTS_PATH)
         tree_hosts = parse_hosts(htext) if htext is not None else set()
@@ -423,11 +427,13 @@ def _decide(raw: bytes, root: str, env, frontend: str, pin_fixed: bool, auto: bo
         tree_until = None
 
     # Atajo sin cambio de resultado: lo más estricto de un merge del árbol es merge.
-    if tree_cat.get(tool) == "merge":
+    if tree_cat is not None and tree_cat.get(tool) == "merge":
         return Verdict("deny", MERGE_REASON, {"tool": tool, "class": "merge", "decision": "deny", "summary": MERGE_SUMMARY})
 
     remote = remote_reader(remote_url(env))
     if remote is None:
+        if bad_tree is not None:
+            return bad_tree
         return _ask("Guard de efectos: no se pudo leer el catálogo de referencia del repositorio (sin red o sin respuesta), "
                     f"así que no se puede confirmar qué hace {tool}. ¿Sigo?", tool, "no_remote", "sin catálogo de referencia")
     try:
@@ -436,6 +442,11 @@ def _decide(raw: bytes, root: str, env, frontend: str, pin_fixed: bool, auto: bo
     except Unreadable:
         return _ask(f"Guard de efectos: el catálogo del main remoto es ilegible; no se puede clasificar {tool}. ¿Sigo?",
                     tool, "invalid", "catálogo remoto ilegible")
+    if bad_tree is not None:
+        # Sin catálogo local nada pasa: merge del remoto → deny; lo demás → ask.
+        if remote_cat.get(tool) == "merge":
+            return Verdict("deny", MERGE_REASON, {"tool": tool, "class": "merge", "decision": "deny", "summary": MERGE_SUMMARY})
+        return bad_tree
     try:
         rh = remote.get(HOSTS_PATH)
         remote_hosts = parse_hosts(rh) if rh is not None else set()

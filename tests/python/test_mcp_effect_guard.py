@@ -151,6 +151,22 @@ class GuardTest(unittest.TestCase):
                 with self.subTest(catalog=catalog, tool=tool):
                     self.assertEqual(self.run_guard(call(tool, args), tree=self.tree(catalog=catalog)).decision, "ask")
 
+    def test_codex_p1_3_missing_or_bad_tree_catalog_keeps_remote_merge_denied(self):
+        # Revisión Codex #1525 P1-3: borrar o corromper el catálogo local no puede rebajar un merge de deny a ask.
+        for catalog in (None, "invalid: broken\n", ""):
+            with self.subTest(catalog=catalog):
+                v = self.run_guard(call(MERGE), tree=self.tree(catalog=catalog))
+                self.assertEqual(v.decision, "deny")
+                self.assertIn("SE-343", v.reason)
+
+    def test_codex_p1_3_negative_missing_tree_catalog_still_asks_for_non_merge(self):
+        # Negativo: sin catálogo local, lo que no es merge en el remoto sigue preguntando (no pasa).
+        for tool in (GET, SEND):
+            with self.subTest(tool=tool):
+                self.assertEqual(self.run_guard(call(tool), tree=self.tree(catalog=None)).decision, "ask")
+        # y sin remoto tampoco pasa
+        self.assertEqual(self.run_guard(call(MERGE), tree=self.tree(catalog=None), rr=no_remote).decision, "ask")
+
     def test_tool_out_of_scope_not_decided(self):
         self.assertEqual(self.run_guard(call("Bash", {"command": "ls"})).decision, "pass")
 
