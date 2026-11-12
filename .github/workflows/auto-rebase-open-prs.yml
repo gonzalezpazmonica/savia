@@ -5,7 +5,8 @@ name: Auto-rebase open PRs after main merge
 # PRs show conflicts in the GitHub UI on files every branch rewrites.
 #
 # Fix: run the local resolver automatically on main push. Each open PR with a
-# real conflict (scripts/auto-rebase-targets.sh) is rebased, predictable conflicts (CHANGELOG.md and, for branches from before
+# real conflict (scripts/resolve-all-open-prs.sh --select-targets) is rebased,
+# predictable conflicts (CHANGELOG.md and, for branches from before
 # SE-501, the derived paths now removed from the index) are resolved via the
 # resolver script and pushed. No re-sign: the signature is no longer versioned.
 # Same logic as `scripts/resolve-all-open-prs.sh`, automated server-side.
@@ -108,8 +109,8 @@ jobs:
           # (2026-11-11: 4 batches × 7-8 branches). The selector re-polls
           # UNKNOWN and leaves untouched what is still unknown. Invalid input
           # → exit 2 → step fails, nothing is pushed.
-          targets=$(bash scripts/auto-rebase-targets.sh <<<"$prs") || {
-            echo "::error::auto-rebase-targets failed — no PR touched"
+          targets=$(bash scripts/resolve-all-open-prs.sh --select-targets <<<"$prs") || {
+            echo "::error::target selection failed — no PR touched"
             exit 1
           }
           if [[ -z "$targets" ]]; then

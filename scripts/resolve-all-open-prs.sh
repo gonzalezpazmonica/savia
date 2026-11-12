@@ -5,12 +5,98 @@
 #
 # Usage:
 #   resolve-all-open-prs.sh [--dry-run] [--no-push]
+#   resolve-all-open-prs.sh --select-targets < prs.json   (ver abajo)
 #
 # Requirements: gh, jq
 # Ref: SPEC-SE-012 signal-noise reduction — removes the "merging one PR
 # breaks all others" friction.
 
 set -uo pipefail
+
+# ── --select-targets: qué PR tienen conflicto REAL con main ────────────────
+# Lo usa .github/workflows/auto-rebase-open-prs.yml antes de tocar ninguna rama.
+# Causa (2026-11-11): justo tras cada push a main GitHub devuelve
+# mergeable=UNKNOWN / mergeStateStatus=UNKNOWN para todas las PR (cálculo
+# perezoso). El workflow trataba UNKNOWN como rebasable e integraba main en
+# TODAS las PR abiertas en cada avance de main.
+# Regla: objetivo solo con mergeable=CONFLICTING o mergeStateStatus=DIRTY.
+# UNKNOWN se re-consulta por rondas (`gh pr view`, que fuerza el cálculo); si
+# sigue UNKNOWN, NO se toca (lo recoge el siguiente push a main o una ejecución
+# manual de este script). Ante la duda, no se empuja.
+# Entrada: array JSON por stdin (formato `gh pr list --json number,headRefName,
+# mergeable,mergeStateStatus`). Salida: «<número> <rama>» por objetivo en
+# stdout; diagnóstico en stderr. Exit 0 = decisión tomada; 2 = entrada no
+# válida (fail-closed, sin objetivos).
+# Entorno: AUTO_REBASE_POLL_ROUNDS (6), AUTO_REBASE_POLL_SECONDS (10), GH_BIN (gh).
+select_targets() {
+  local ROUNDS="${AUTO_REBASE_POLL_ROUNDS:-6}"
+  local SLEEP_S="${AUTO_REBASE_POLL_SECONDS:-10}"
+  local GH_BIN="${GH_BIN:-gh}"
+  local input num branch m s n out round
+  local -A branch_of=() verdict=() last=()
+  local -a order=() pending=()
+
+  [[ "$ROUNDS" =~ ^[0-9]+$ ]] || { echo "resolve-all-open-prs --select-targets: AUTO_REBASE_POLL_ROUNDS no numérico" >&2; return 2; }
+  [[ "$SLEEP_S" =~ ^[0-9]+$ ]] || { echo "resolve-all-open-prs --select-targets: AUTO_REBASE_POLL_SECONDS no numérico" >&2; return 2; }
+
+  input=$(cat)
+  if ! jq -e 'type == "array" and all(.[]; (.number|type) == "number" and (.headRefName|type) == "string")' \
+       >/dev/null 2>&1 <<<"$input"; then
+    echo "resolve-all-open-prs --select-targets: entrada no válida (se esperaba array de PR de gh pr list)" >&2
+    return 2
+  fi
+
+  # Clasifica un par mergeable/state: conflict | clean | unknown | other
+  classify() {
+    local m="$1" s="$2"
+    if [[ "$m" == "CONFLICTING" || "$s" == "DIRTY" ]]; then echo conflict
+    elif [[ "$m" == "UNKNOWN" || "$s" == "UNKNOWN" || -z "$m" || -z "$s" ]]; then echo unknown
+    elif [[ "$m" == "MERGEABLE" && "$s" == "CLEAN" ]]; then echo clean
+    else echo other
+    fi
+  }
+
+  while read -r num branch m s; do
+    order+=("$num")
+    branch_of[$num]="$branch"
+    verdict[$num]=$(classify "$m" "$s")
+    last[$num]="$m/$s"
+  done < <(jq -r '.[] | "\(.number) \(.headRefName) \(.mergeable // "") \(.mergeStateStatus // "")"' <<<"$input")
+
+  round=0
+  while (( round < ROUNDS )); do
+    pending=()
+    for n in "${order[@]}"; do [[ "${verdict[$n]}" == unknown ]] && pending+=("$n"); done
+    (( ${#pending[@]} == 0 )) && break
+    round=$((round + 1))
+    sleep "$SLEEP_S"
+    for n in "${pending[@]}"; do
+      if out=$("$GH_BIN" pr view "$n" --json mergeable,mergeStateStatus \
+                 --jq '"\(.mergeable // "") \(.mergeStateStatus // "")"' 2>/dev/null); then
+        read -r m s <<<"$out"
+        verdict[$n]=$(classify "${m:-}" "${s:-}")
+        last[$n]="${m:-?}/${s:-?}"
+      fi
+      # Fallo de gh: se queda en unknown y se reintenta en la siguiente ronda.
+    done
+  done
+
+  for n in "${order[@]}"; do
+    case "${verdict[$n]}" in
+      conflict) echo "PR #$n (${branch_of[$n]}) ${last[$n]} → conflicto real, se integra main" >&2
+                printf '%s %s\n' "$n" "${branch_of[$n]}" ;;
+      clean)    echo "PR #$n ${last[$n]} → limpia, no se toca" >&2 ;;
+      unknown)  echo "PR #$n ${last[$n]} → mergeabilidad sin calcular tras $round rondas, no se toca" >&2 ;;
+      *)        echo "PR #$n ${last[$n]} → sin conflicto con main, no se toca" >&2 ;;
+    esac
+  done
+  return 0
+}
+
+if [[ "${1:-}" == "--select-targets" ]]; then
+  select_targets
+  exit $?
+fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"

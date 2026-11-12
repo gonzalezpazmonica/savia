@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests de scripts/auto-rebase-targets.sh y de su uso en
+# Tests de scripts/resolve-all-open-prs.sh --select-targets y de su uso en
 # .github/workflows/auto-rebase-open-prs.yml.
 #
 # Regresión del 2026-11-11: tras cada push a main GitHub devuelve UNKNOWN para
@@ -9,7 +9,7 @@
 
 bats_require_minimum_version 1.5.0
 
-SCRIPT="scripts/auto-rebase-targets.sh"
+SCRIPT="scripts/resolve-all-open-prs.sh"
 WF=".github/workflows/auto-rebase-open-prs.yml"
 
 setup() {
@@ -37,7 +37,7 @@ EOF
 
 teardown() { cd /; }
 
-targets() { bash "$SCRIPT" <<<"$1"; }
+targets() { bash "$SCRIPT" --select-targets <<<"$1"; }
 
 @test "script ejecutable y con set -uo pipefail" {
   [ -x "$SCRIPT" ]
@@ -155,5 +155,5 @@ print(next(s["run"] for s in w["jobs"]["rebase"]["steps"] if s.get("name")=="Reb
 @test "workflow: UNKNOWN ya no aparece como estado rebasable en el YAML" {
   run grep -nE '"\$state" != "UNKNOWN"' "$WF"
   [ "$status" -eq 1 ]
-  grep -qE 'bash scripts/auto-rebase-targets\.sh' "$WF"
+  grep -qE 'bash scripts/resolve-all-open-prs\.sh --select-targets' "$WF"
 }
