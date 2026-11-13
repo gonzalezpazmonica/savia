@@ -5,5 +5,5 @@
   "phase": "A",
   "title": "Hecho verificado: ningún trabajo se da por bueno por su propia palabra",
   "evidence": "docs/specs/SE-530-hecho-verificado.spec.md",
-  "note": "Decisión de la operadora el 2026-11-13: aplicar desde ya, sin semana de medición en sombra. Estados declarado / verificado / refutado; una comprobación propuesta por el ejecutor no cuenta hasta que la aprueba la persona. S1 mide y distingue en los avisos desde el primer día (tier 1-2; hipótesis H9 prerregistrada antes de medir), S2 regla en el recibo con fallo cerrado (tier 2), S3 evento job_verified en Pulse tras fusionar SE-518 (tier 3). Escenas pendientes de confirmar (SE-505); ningún slice arranca antes. Spec A de la fase M6 de Labs L39."
+  "note": "Decisión de la operadora el 2026-11-13: aplicar desde ya, sin semana de medición en sombra. Estados declarado / verificado / refutado; una comprobación propuesta por el ejecutor no cuenta hasta que la aprueba la persona. S1 mide y distingue en los avisos desde el primer día (tier 1-2; hipótesis H9 prerregistrada antes de medir), S2 regla en el recibo con fallo cerrado (tier 2), S3 evento job_verified en Pulse tras fusionar SE-518 (tier 3). Escenas pendientes de confirmar (SE-505); ningún slice arranca antes. Spec A de la fase M6 de Labs L39. Aprobación de la operadora 2026-11-13 pendiente de confirmar escenas."
 }
