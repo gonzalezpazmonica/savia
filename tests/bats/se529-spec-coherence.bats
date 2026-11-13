@@ -178,3 +178,51 @@ PY
   [ "$status" -eq 1 ]
   [[ "$output" == *"Q2 registrada"* ]]
 }
+
+@test "confirmación pendiente: spec que la marca respondida falla" {
+  mutate "$MS" "- respuesta sobre las escenas: pendiente." "- respuesta sobre las escenas: aprobada."
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"confirmación pendiente"* ]]
+}
+
+@test "Q1 borrada falla" {
+  mutate "$MS" "- **Q1.**" "- Q1 borrada."
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Q1 abierta"* ]]
+}
+
+@test "referencia con .. fuera de la raiz falla" {
+  mutate "$MS" "pre-compact-backup.sh\`, que es" "pre-compact-backup.sh:1\` y \`../../../../etc/hosts.json:1\`, que es"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fuera de la raíz"* ]]
+}
+
+@test "palabra española común no da falso positivo (armónica)" {
+  printf '\nUna melodía armónica y destilada.\n' >> "$MS"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 0 ]
+}
+
+@test "spec no UTF-8 sale 2, no traceback" {
+  printf '\xff\xfe\x00' > "$MS"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 2 ]
+}
+
+@test "término privado en el planning falla" {
+  R="$BATS_TEST_TMPDIR/root"; mkdir -p "$R/docs/propuestas/planning.d" "$R/CHANGELOG.d" "$R/docs/propuestas/LOG.d"
+  cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/.claude" "$R/" 2>/dev/null || true
+  cp "$REPO_ROOT/CHANGELOG.d/se529-compactacion.md" "$R/CHANGELOG.d/"
+  cp "$REPO_ROOT/docs/propuestas/LOG.d/SE-529-PROPOSED.md" "$R/docs/propuestas/LOG.d/"
+  cp "$PLAN" "$R/docs/propuestas/planning.d/SE-529.json"
+  cp -r "$REPO_ROOT/tests" "$R/"
+  python3 -I -c "
+import sys
+p=sys.argv[1]; open(p,'a').write('mac'+'book')" "$R/docs/propuestas/planning.d/SE-529.json"
+  run python3 -I "$CHECK" "$SPEC" "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-529.json"*"término no permitido"* ]]
+}

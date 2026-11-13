@@ -28,7 +28,7 @@ def main():
     root = sys.argv[2] if len(sys.argv) > 2 else os.getcwd()
     try:
         text = open(spec_path, encoding="utf-8").read()
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         print("no se puede leer: %s" % e, file=sys.stderr)
         return 2
 
@@ -46,7 +46,11 @@ def main():
     if len(refs) < 8:
         err("pocas referencias fichero:línea (%d < 8)" % len(refs))
     for path, a, b in refs:
-        full = os.path.join(root, path)
+        full = os.path.realpath(os.path.join(root, path))
+        real_root = os.path.realpath(root)
+        if os.path.isabs(path) or os.path.commonpath([real_root, full]) != real_root:
+            err("referencia fuera de la raíz del repo: %s" % path)
+            continue
         if not os.path.isfile(full):
             err("referencia a fichero inexistente: %s" % path)
             continue
@@ -69,7 +73,6 @@ def main():
 
     required = [
         ("escenas antes/después", "*Antes:*"),
-        ("confirmación pendiente", "respuesta: pendiente"),
         ("S0 fija parámetros antes de S1/S2", "antes de ver el resultado de S1/S2"),
         ("canal de reinyección medido", "S0.2 Canal de reinyección"),
         ("ruta no fiable", "realpath"),
@@ -95,17 +98,33 @@ def main():
         ("Q1 abierta", "- **Q1.**"),
         ("Q3 abierta", "- **Q3.**"),
     ]
+    # La confirmación debe seguir pendiente: línea de lista «respuesta ...: pendiente».
+    if not re.search(r"^- respuesta[^\n:]*: pendiente", text, re.M):
+        err("falta frase obligatoria (confirmación pendiente): - respuesta ...: pendiente")
     for name, phrase in required:
         if phrase not in text:
             err("falta frase obligatoria (%s): %s" % (name, phrase))
 
+    extras = [os.path.join(root, f) for f in (
+        "CHANGELOG.d/se529-compactacion.md",
+        "docs/propuestas/LOG.d/SE-529-PROPOSED.md",
+        "docs/propuestas/planning.d/SE-529.json")]
     # Confidencialidad del repo público
     # Los términos se parten para que este fichero no contenga los literales que busca.
     terms = ["mac" + "book", "accen" + "ture", "m[oó]" + "nica", r"\.sa" + "via/", "inten" + "sivo", "reconc" + "iliar", "des" + "til", "Savia" + "Labs"]
-    banned = re.compile("(" + "|".join(terms) + ")", re.I)
+    banned = re.compile(r"\b(" + "|".join(terms) + r")\b", re.I)
     for n, line in enumerate(text.splitlines(), 1):
         if banned.search(line):
             err("línea %d con término no permitido en repo público" % n)
+    # Los demás ficheros públicos de SE-529 (changelog, log, planning) también se escanean.
+    for extra in extras:
+        try:
+            lines = open(extra, encoding="utf-8").read().splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for n, line in enumerate(lines, 1):
+            if banned.search(line):
+                err("%s línea %d con término no permitido en repo público" % (os.path.basename(extra), n))
 
     for m in ERR:
         print(m, file=sys.stderr)
