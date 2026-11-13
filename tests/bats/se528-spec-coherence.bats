@@ -27,7 +27,7 @@ if "status: PROPOSED" not in f: errs.append("status no es PROPOSED")
 for sl in ("S1", "S2", "S3", "S4"):
     if not re.search(rf"^### {sl} — ", s, re.M): errs.append(f"falta el slice {sl}")
 # cada AC debe estar DEFINIDO (viñeta al inicio de línea), no solo mencionado
-for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2", "AC-2.3", "AC-2.4", "AC-2.5", "AC-2.6", "AC-2.7", "AC-2.8", "AC-2.9", "AC-2.10", "AC-2.11", "AC-2.12", "AC-3.1", "AC-3.2", "AC-3.3", "AC-3.4", "AC-3.5", "AC-4.1", "AC-4.2", "AC-4.3"):
+for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2", "AC-2.3", "AC-2.4", "AC-2.5", "AC-2.6", "AC-2.7", "AC-2.8", "AC-2.9", "AC-2.10", "AC-2.11", "AC-2.12", "AC-3.1", "AC-3.2", "AC-3.3", "AC-3.4", "AC-3.5", "AC-2.13", "AC-2.14", "AC-4.1", "AC-4.2", "AC-4.3", "AC-4.4", "AC-4.5"):
     if not re.search(rf"^- {re.escape(ac)} ", s, re.M): errs.append(f"falta {ac}")
 for sec in ("## Problema", "## Puerta de comprensión", "## Fuera de alcance", "## OpenCode Implementation Plan", "## Tier de riesgo"):
     if sec not in s: errs.append(f"falta la sección {sec}")
@@ -39,19 +39,59 @@ for stale in ("Decisiones abiertas", "Preguntas abiertas", "Deprecation", "14 d�
 for q, chosen in (("Q1", "sin transición"), ("Q2", "bucle local"), ("Q3", "pidan el token una vez")):
     ql = re.search(rf"^- {q}\. .*$", s, re.M)
     if ql and chosen not in ql.group(0): errs.append(f"{q} no describe lo elegido: " + chosen)
-# cobertura: cada término debe aparecer en las líneas de AC (viñetas "- AC-n.m") de su slice
+# Limitación asumida: es un test de FORMA (viñeta presente, en su slice, con texto sustancial y
+# términos clave); no prueba que cada AC sea verificable ni correcto.
+def section(n):
+    m = re.search(rf"^### S{n} — .*?(?=^### |^## )", s, re.M | re.S)
+    return m.group(0) if m else ""
+for m in re.finditer(r"^- (AC-(\d)\.\d+) (.*)$", s, re.M):
+    ident, n, body = m.group(1), m.group(2), m.group(3)
+    if len(body) < 40: errs.append(f"{ident} sin contenido sustancial")
+    if m.group(0) not in section(n): errs.append(f"{ident} fuera de su slice S{n}")
 def acs(n):
-    return "\n".join(l for l in s.splitlines() if re.match(rf"- AC-{n}\.\d+ ", l))
-for n, t in ((2, "401"), (2, "Allow-Credentials"), (2, "Origin"), (3, "clave no disponible"), (3, "no cambia")):
-    if t not in acs(n): errs.append(f"S{n} no cubre {t} en sus AC")
+    return "\n".join(l for l in section(n).splitlines() if re.match(rf"- AC-{n}\.\d+ ", l))
+for n, t_ in ((2, "401"), (2, "Allow-Credentials"), (2, "Origin"), (3, "clave no disponible"), (3, "no cambia"), (4, "sin sesión por cookie")):
+    if t_ not in acs(n): errs.append(f"S{n} no cubre {t_} en sus AC")
 # el orden S1 < S2 < S3 < S4
 pos = [s.find(f"### {x} — ") for x in ("S1", "S2", "S3", "S4")]
 if pos != sorted(pos): errs.append("slices fuera de orden")
-# spec pública: sin detalle explotable. Heurística mínima (lista negra); no sustituye a la revisión humana de seguridad.
-leak = r"ChatPage|FileViewer|grants\.ts|savia-bridge|auth\.ts|0\.0\.0\.0|v-html|innerHTML=|document\.cookie|onerror|self\.auth_token|Cadena:|\.(vue|ts|py|kt|md|json|tsx):L?[0-9]+|src/server|projects/savia-(vaults|web)/|composables|no_auth_mode|rotate\(|ENOENT|EBUSY|GrantKeyUnavailable|--no-auth|--host|\?token=|escucha por defecto|\b[0-9a-f]{9,40}\b"
-m = re.search(leak, s)
-if m: errs.append("detalle explotable en la spec pública: " + m.group(0))
 if errs: print("; ".join(errs)); sys.exit(1)
+PY
+  local rc=$?; [ "$rc" -eq 0 ] || return "$rc"
+  leak_scan "$1"
+}
+
+# leak_scan <ficheros...>: heurística GENÉRICA (formas, no nombres) de detalle operativo en ficheros públicos.
+# Es una lista negra: no sustituye a la revisión humana de seguridad ni garantiza ausencia de detalle.
+# Patrones específicos (nombres reales) solo en un fichero privado opcional: SE528_PRIVATE_PATTERNS.
+leak_scan() {
+  python3 -I - "$@" <<'PY'
+import os, re, sys
+generic = [
+    r"\b[\w./-]+\.(?:vue|ts|tsx|py|kt|rs|sh|js):L?[0-9]+",   # fichero:línea
+    r"(?<![\w-])(?!risk-tier\.py\b)[\w-]+\.(?:vue|ts|tsx|py|kt|rs)\b",                 # nombre de fichero de código
+    r"\b(?!scripts/risk-tier\.py)(?:src|projects|scripts)/[\w./-]+",                  # rutas de código
+    r"(?<![\w\"])[a-z]+_[a-z_]+\b(?![\w\"]*:)",               # identificadores snake_case (no claves YAML)
+    r"\b[a-z]+[A-Z]\w*\(",                                    # llamadas camelCase
+    r"\b\w+\(\)",                                            # llamadas con paréntesis
+    r"(?<![-\w])--[a-z][a-z-]+",                               # flags de línea de órdenes
+    r"[?&]\w+=",                                              # parámetros de consulta
+    r"\b(?!127\.0\.0\.1\b)\d{1,3}(?:\.\d{1,3}){3}\b",       # IPv4 distinta de bucle local
+    r"\b[0-9a-f]{9,40}\b",                                    # hashes
+    r"Cadena:",
+    r"sin sanear|legible desde|por defecto|autoarreglo|en la dirección",   # descripción del estado actual
+]
+pats = list(generic)
+pf = os.environ.get("SE528_PRIVATE_PATTERNS")
+if pf and os.path.isfile(pf):
+    pats += [l.strip() for l in open(pf, encoding="utf-8") if l.strip() and not l.startswith("#")]
+rx = re.compile("|".join(pats))
+bad = []
+for f in sys.argv[1:]:
+    txt = open(f, encoding="utf-8").read()
+    m = rx.search(txt)
+    if m: bad.append(f"{os.path.basename(f)}: {m.group(0)}")
+if bad: print("detalle explotable (heurística) en: " + "; ".join(bad)); sys.exit(1)
 PY
 }
 
@@ -205,34 +245,67 @@ PY3
   [[ "$output" == *"falta AC-2.11"* ]]
 }
 
-@test "negativo: un detalle de mecanica o de simbolo en la spec es fail" {
-  for t in "rotate()" "no_auth_mode" "src/server" "--no-auth" "?token=" "ENOENT"; do
+@test "negativo: formas genericas de detalle operativo en la spec son fail (cada una)" {
+  for x in "fn_algo()" "mod_x.py:12" "src/algo/x.ts" "una_variable_interna" "--bandera-x" "?clave=1" "10.0.0.5" "doThing(" "se pinta sin sanear" "legible desde el script"; do
     cp "$SPEC" "$MS"
-    printf '\nnota %s\n' "$t" >> "$MS"
+    printf '\nnota %s\n' "$x" >> "$MS"
     run check "$MS"
     [ "$status" -eq 1 ]
     [[ "$output" == *"detalle explotable"* ]]
   done
 }
 
-@test "negativo: un fichero:linea o un patron de codigo en la spec es fail" {
-  printf '\nver ChatPage.vue:111\n' >> "$MS"
-  run check "$MS"
-  [ "$status" -eq 1 ]
-  [[ "$output" == *"detalle explotable"* ]]
+@test "positivo: bucle local 127.0.0.1 y el helper previsto no disparan la heuristica" {
+  run leak_scan "$SPEC"
+  [ "$status" -eq 0 ]
 }
 
-@test "negativo: el valor de escucha por defecto en la spec es fail" {
-  printf '\nescucha en 0.0.0.0\n' >> "$MS"
-  run check "$MS"
+@test "el patron privado opcional tambien se aplica" {
+  printf 'palabraprivada\n' > "$BATS_TEST_TMPDIR/p.txt"
+  printf '\nnota palabraprivada\n' >> "$MS"
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/p.txt" run leak_scan "$MS"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"detalle explotable"* ]]
+  [[ "$output" == *"palabraprivada"* ]]
+  run leak_scan "$MS"
+  [ "$status" -eq 0 ]
 }
 
-@test "registros y changelog tampoco llevan detalle explotable (heuristica)" {
-  run grep -nE 'ChatPage|FileViewer|grants\.ts|savia-bridge|auth\.ts|0\.0\.0\.0|v-html|document\.cookie|onerror|src/server|no_auth_mode|rotate\(|ENOENT|--no-auth|\?token=|\.(vue|ts|py):[0-9]+' \
-    "$REPO_ROOT/docs/propuestas/planning.d/SE-528.json" \
+@test "negativo: un AC vacio o fuera de su slice es fail" {
+  mutate "$MS" "- AC-3.3 Caso positivo: sin fichero de clave se crea y se firma." "- AC-3.3 Vacio."
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AC-3.3 sin contenido sustancial"* ]]
+  cp "$SPEC" "$MS"
+  printf '\n- AC-1.9 %s\n' "AC colocado al final del documento fuera de su slice con texto suficiente" >> "$MS"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"AC-1.9 fuera de su slice S1"* ]]
+}
+
+@test "negativo: S4 sin cobertura del despliegue sin cookie es fail" {
+  python3 -I - "$MS" <<'PY4'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().split("\n")
+out = [l.replace("sin sesión por cookie", "otro caso") if l.startswith("- AC-4.") else l for l in lines]
+assert out != lines
+open(p, "w", encoding="utf-8").write("\n".join(out))
+PY4
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S4 no cubre sin sesión por cookie"* ]]
+}
+
+@test "registros y changelog pasan la misma heuristica generica" {
+  run leak_scan "$REPO_ROOT/docs/propuestas/planning.d/SE-528.json" \
     "$REPO_ROOT/docs/propuestas/LOG.d/SE-528-PROPOSED.md" \
     "$REPO_ROOT/CHANGELOG.d/se528-spec-seguridad.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "negativo: la heuristica detecta detalle en un registro" {
+  printf 'nota fn_interna() en mod_x.py:9\n' > "$BATS_TEST_TMPDIR/reg.md"
+  run leak_scan "$BATS_TEST_TMPDIR/reg.md"
   [ "$status" -eq 1 ]
+  [[ "$output" == *"reg.md"* ]]
 }
