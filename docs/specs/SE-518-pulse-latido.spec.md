@@ -353,7 +353,7 @@ Las doce están decididas por el operador. Cada una indica lo que rige.
 - **Sombra sin comparación** se convierte en reescritura con otro nombre. AC-20 es el control.
 - **Coste de revisión humana** en tier 4 (control y registro): es el cuello de botella; por eso S4 y el corte de S6 van después.
 - **Modo `observar` por defecto (D3).** Una instalación nueva no lanza nada hasta que el operador sube el modo; el coste es adopción más lenta. Mitigación: `pulse status` muestra qué haría y el operador sube a `proponer` o `actuar` cuando confía; el freno, el volante y los límites de efectos cerrados aplican en todos los modos.
-- **Si la organización no permite ni `observar`** (es el modo por defecto), cae el argumento de portabilidad y A (contratos sobre el bucle actual) puede bastar. S0 lo mide antes de invertir.
+- **Si la organización no permite instalar un servicio de usuario, ni siquiera en `observar`** (el modo por defecto), cae el argumento de portabilidad y A (contratos sobre el bucle actual) puede bastar. S0 lo mide antes de invertir.
 - **Desfase de versiones** entre Pulse y Soul: `schema_version` y pruebas de contrato en CI de ambos.
 - **La causa exacta de las pruebas en cola** (F8) no está confirmada; la política de relanzar una vez no depende de conocerla, pero S2 debe registrarla.
 
