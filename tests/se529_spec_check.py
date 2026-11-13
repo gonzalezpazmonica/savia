@@ -111,8 +111,10 @@ def main():
         "docs/propuestas/planning.d/SE-529.json")]
     # Confidencialidad del repo público
     # Los términos se parten para que este fichero no contenga los literales que busca.
-    terms = ["mac" + "book", "accen" + "ture", "m[oó]" + "nica", r"\.sa" + "via/", "inten" + "sivo", "reconc" + "iliar", "des" + "til", "Savia" + "Labs"]
-    banned = re.compile(r"\b(" + "|".join(terms) + r")\b", re.I)
+    # Alfanuméricos: frontera de palabra. Ruta (empieza en «.»): sin \b, que exigiría
+    # un carácter de palabra antes del punto y no casaría tras «/», «~/» o espacio.
+    terms = ["mac" + "book", "accen" + "ture", "m[oó]" + "nica", "inten" + "sivo", "reconc" + "iliar", "des" + "til", "Savia" + "Labs"]
+    banned = re.compile(r"(?<!\w)(?:" + "|".join(terms) + r")(?!\w)|(?<!\w)\.sa" + r"via/", re.I)
     for n, line in enumerate(text.splitlines(), 1):
         if banned.search(line):
             err("línea %d con término no permitido en repo público" % n)
@@ -120,7 +122,8 @@ def main():
     for extra in extras:
         try:
             lines = open(extra, encoding="utf-8").read().splitlines()
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as e:
+            err("%s ausente o ilegible, no se puede escanear: %s" % (os.path.basename(extra), type(e).__name__))
             continue
         for n, line in enumerate(lines, 1):
             if banned.search(line):

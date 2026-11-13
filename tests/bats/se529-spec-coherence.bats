@@ -226,3 +226,21 @@ p=sys.argv[1]; open(p,'a').write('mac'+'book')" "$R/docs/propuestas/planning.d/S
   [ "$status" -eq 1 ]
   [[ "$output" == *"SE-529.json"*"término no permitido"* ]]
 }
+
+@test "ruta privada de usuario en la spec falla (el ancla no la desactiva)" {
+  python3 -I -c "
+import sys
+open(sys.argv[1],'a').write('\nVer ~/.sa'+'via/x y \`/home/u/.sa'+'via/\` aqui.\n')" "$MS"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"término no permitido"* ]]
+}
+
+@test "fichero público ausente falla en vez de saltarse el escaneo" {
+  R="$BATS_TEST_TMPDIR/root2"; mkdir -p "$R/CHANGELOG.d"
+  cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/.claude" "$REPO_ROOT/tests" "$R/" 2>/dev/null || true
+  cp "$REPO_ROOT/CHANGELOG.d/se529-compactacion.md" "$R/CHANGELOG.d/"
+  run python3 -I "$CHECK" "$SPEC" "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SE-529.json ausente o ilegible"* ]]
+}
