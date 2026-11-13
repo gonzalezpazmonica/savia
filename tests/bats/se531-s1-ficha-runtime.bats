@@ -162,8 +162,9 @@ assert h.accept_exit({'rc_en_error':'no_fiable','rc_deteccion':lit}, 0, True, 't
   run python3 -I -c "
 import ast, sys
 t = ast.parse(open('$CHECK').read())
-bad = [n.names[0].name for n in ast.walk(t) if isinstance(n, ast.Import) and n.names[0].name in ('subprocess','os','shlex','ctypes')]
-bad += [n.module for n in ast.walk(t) if isinstance(n, ast.ImportFrom) and n.module in ('subprocess','os','shlex','ctypes')]
+P = ('subprocess','os','shlex','ctypes','importlib','runpy','pty')
+bad = [a.name for n in ast.walk(t) if isinstance(n, ast.Import) for a in n.names if a.name.split('.')[0] in P]
+bad += [n.module for n in ast.walk(t) if isinstance(n, ast.ImportFrom) and (n.module or '').split('.')[0] in P]
 bad += [n.func.id for n in ast.walk(t) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ('eval','exec','compile','__import__')]
 print(bad); sys.exit(1 if bad else 0)
 "
@@ -201,15 +202,48 @@ assert h.accept_exit(rt,0,True,'limpio')[0] is True
   [ "$status" -eq 0 ]
 }
 
-@test "detección mira la cola de la salida larga, no solo el primer MB" {
+@test "detección escanea la salida completa: error en cabeza, medio o cola; por encima del tope se rechaza" {
   run py "
 rt={'rc_en_error':'no_fiable','rc_deteccion':{'tipo':'literal','valor':'API error'}}
-out='x'*3000000 + 'API error'
-assert h.accept_exit(rt,0,True,out)[0] is False
-assert h.accept_exit(rt,0,True,'API error'+'x'*3000000)[0] is False
-assert h.accept_exit(rt,0,True,'x'*3000000)[0] is True
+rp={'rc_en_error':'no_fiable','rc_deteccion':{'tipo':'patron','valor':'^API err.r'}}
+x='x'*3000000
+assert h.accept_exit(rt,0,True,x+'API error')[0] is False
+assert h.accept_exit(rt,0,True,'API error'+x)[0] is False
+assert h.accept_exit(rt,0,True,x+'API error'+x)[0] is False   # medio: el truncado lo perdía
+assert h.accept_exit(rt,0,True,x)[0] is True
+assert h.accept_exit(rp,0,True,'API error'+x)[0] is False
+h.SCAN_MAX=1000
+assert h.accept_exit(rt,0,True,'x'*1001)[0] is False          # tope duro: inaplicable = rechazo
+assert h.accept_exit(rt,0,True,'x'*1000)[0] is True
 "
   [ "$status" -eq 0 ]
+}
+
+@test "accept_exit: rc no entero o booleano se rechaza; regla None o con rc fiable se rechaza" {
+  run py "
+rt={'rc_en_error':'no_fiable','rc_deteccion':{'tipo':'literal','valor':'API error'}}
+for rc in (0.0, False, True, '0', None, 1):
+    assert h.accept_exit(rt,rc,True,'ok')[0] is False, rc
+assert h.accept_exit(dict(rt,rc_deteccion=None),0,True,'ok')[0] is False
+assert h.accept_exit({'rc_en_error':'fiable','rc_deteccion':rt['rc_deteccion']},0,True,'ok')[0] is False
+assert h.accept_exit({'rc_en_error':'fiable'},0,False,'ok')[0] is True
+assert h.accept_exit(rt,0,True,'ok')[0] is True
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "clave de primer nivel desconocida (typo de usa) falla" {
+  sed -i 's/^ficha: codex/ficha: codex\nusas: [claude-code]/' "$D/codex.yaml"
+  run check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"codex.yaml: clave de primer nivel desconocida ['usas']"* ]]
+}
+
+@test "claves duplicadas en una ficha fallan" {
+  sed -i 's/^  rc_en_error: .*/&\n  rc_en_error: fiable/' "$D/codex.yaml"
+  run check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"codex.yaml: ilegible"*"clave duplicada 'rc_en_error'"* ]]
 }
 
 @test "informa_uso: \"no\" (texto) y no (booleano YAML 1.1) son válidos y equivalentes" {
@@ -217,7 +251,8 @@ assert h.accept_exit(rt,0,True,'x'*3000000)[0] is True
   sed -i 's/^  informa_uso: .*/  informa_uso: "no"/' "$D/opencode.yaml"
   run check
   [ "$status" -eq 1 ]
-  [[ "$output" == *"informa_uso: obligatorio para un dato medido"* ]]
+  [[ "$output" == *"codex: fuente.informa_uso: obligatorio para un dato medido"* ]]
+  [[ "$output" == *"opencode: fuente.informa_uso: obligatorio para un dato medido"* ]]
   [[ "$output" != *"valor no permitido"* ]]
   run py "assert h.effective({'informa_uso': False},'informa_uso')=='no' and h.effective({'informa_uso': True},'informa_uso')=='si' and h.reports_usage({'informa_uso': True})"
   [ "$status" -eq 0 ]

@@ -37,7 +37,8 @@ FIELDS = {
 ALLOWED_KEYS = set(FIELDS) | {"rc_deteccion", "fuente", "version_cli", "notas"}
 DET_MAX_LEN = 200
 DET_KINDS = ("literal", "patron")
-SCAN_MAX = 1_000_000  # cabeza y cola a partes iguales: los errores de API suelen salir al final
+SCAN_MAX = 64_000_000  # tope duro: por encima la regla es inaplicable (rechazo), nunca se trunca
+TOP_KEYS = {"ficha", "usa", "runtime"}
 # metacaracteres de shell/sustitución: se rechazan en rc_deteccion (AC-S1i)
 SHELL_META = re.compile(r"[;$`'\"|&<>\n\r\\]")
 # patrón acotado: solo literales, `.`, clases y ancla inicial; sin grupos ni cuantificadores
@@ -117,6 +118,23 @@ def validate_runtime(ficha, rt):
     return errs
 
 
+class _UniqueLoader(yaml.SafeLoader):
+    """safe_load que rechaza claves duplicadas (la última ganaría en silencio)."""
+
+
+def _no_dup_mapping(loader, node, deep=False):
+    seen = set()
+    for k, _ in node.value:
+        key = loader.construct_object(k, deep=True)
+        if key in seen:
+            raise yaml.YAMLError(f"clave duplicada {key!r}")
+        seen.add(key)
+    return yaml.SafeLoader.construct_mapping(loader, node, deep)
+
+
+_UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dup_mapping)
+
+
 def load_fichas(directory):
     fichas, errs = {}, []
     files = sorted(Path(directory).glob("*.yaml"))
@@ -126,12 +144,16 @@ def load_fichas(directory):
         errs.append(f"{directory}: sin fichas (*.yaml)")
     for f in files:
         try:
-            doc = yaml.safe_load(f.read_text(encoding="utf-8"))
+            doc = yaml.load(f.read_text(encoding="utf-8"), Loader=_UniqueLoader)  # noqa: S506 (SafeLoader)
         except (yaml.YAMLError, OSError, UnicodeError) as e:
             errs.append(f"{f.name}: ilegible: {e}")
             continue
         if not isinstance(doc, dict) or not isinstance(doc.get("ficha"), str) or not doc["ficha"]:
             errs.append(f"{f.name}: ficha: id obligatorio")
+            continue
+        unknown = sorted(str(k) for k in doc if k not in TOP_KEYS)
+        if unknown:
+            errs.append(f"{f.name}: clave de primer nivel desconocida {unknown} (permitidas: {sorted(TOP_KEYS)})")
             continue
         if doc["ficha"] != f.stem:
             errs.append(f"{f.name}: ficha: el id {doc['ficha']!r} no coincide con el nombre del fichero")
@@ -172,14 +194,11 @@ def _scan(det, output):
     if _check_deteccion("x", det) or not isinstance(output, str):
         return None
     if len(output) > SCAN_MAX:
-        half = SCAN_MAX // 2
-        text = output[:half] + "\n" + output[-half:]
-    else:
-        text = output
+        return None  # no se trunca (un error en el tramo omitido pasaría): se rechaza
     try:
         if det["tipo"] == "literal":
-            return det["valor"] in text
-        return re.search(det["valor"], text) is not None
+            return det["valor"] in output
+        return re.search(det["valor"], output) is not None
     except re.error:
         return None
 
@@ -194,13 +213,14 @@ def accept_exit(rt, rc, postcondition_ok, output=""):
     """(aceptado, motivo). Fail-closed: un 0 solo se acepta con ficha `fiable`
     o con la postcondición del trabajo cumplida (True explícito) y sin que una
     regla de detección presente la contradiga ni deje de poder aplicarse."""
-    if rc != 0 or isinstance(rc, bool):
-        return False, "rc distinto de 0"
+    if type(rc) is not int or rc != 0:
+        return False, "rc distinto de 0 (o no entero)"
+    if "rc_deteccion" in rt and effective(rt, "rc_en_error") == "fiable":
+        return False, "ficha incoherente: rc_deteccion con rc_en_error fiable"
     if effective(rt, "rc_en_error") == "fiable":
         return True, "rc 0 con runtime fiable"
-    det = rt.get("rc_deteccion")
-    if det is not None:
-        found = _scan(det, output)
+    if "rc_deteccion" in rt:  # presente pero None/vacía también se rechaza vía _scan
+        found = _scan(rt["rc_deteccion"], output)
         if found is None:
             return False, "regla de detección inaplicable (regla inválida o salida no es texto)"
         if found:
