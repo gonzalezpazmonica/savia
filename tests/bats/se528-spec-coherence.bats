@@ -23,7 +23,7 @@ errs = []
 fm = re.match(r"---\n(.*?)\n---\n", s, re.S)
 if not fm: sys.exit("sin front-matter")
 f = fm.group(1)
-if "status: PROPOSED" not in f: errs.append("status no es PROPOSED")
+if len(re.findall(r"^status: PROPOSED$", f, re.M)) != 1 or len(re.findall(r"^status:", f, re.M)) != 1: errs.append("status no es PROPOSED")
 for sl in ("S1", "S2", "S3", "S4"):
     if not re.search(rf"^### {sl} — ", s, re.M): errs.append(f"falta el slice {sl}")
 # cada AC debe estar DEFINIDO (viñeta al inicio de línea), no solo mencionado
@@ -89,7 +89,8 @@ generic = [
 pats = list(generic)
 pf = os.environ.get("SE528_PRIVATE_PATTERNS")
 if pf is not None:
-    # declarado: fail-closed si falta, está vacío o contiene un patrón inválido o que casa con todo
+    # declarado (también si está vacía: una variable definida pero vacía cuenta como declarada y falla cerrado)
+    # fail-closed si falta, está vacío o contiene un patrón inválido o que casa con todo
     try:
         lines = [l.strip() for l in open(pf, encoding="utf-8") if l.strip() and not l.startswith("#")]
     except OSError:
@@ -102,7 +103,10 @@ if pf is not None:
             sys.exit("patrón privado inválido en la línea %d" % i)
         if c.search(""): sys.exit("patrón privado que casa con todo (línea %d)" % i)
     pats += ["(?:%s)" % l for l in lines]
-rx = re.compile("|".join(pats))
+try:
+    rx = re.compile("|".join(pats))
+except re.error:
+    sys.exit("patrones privados incompatibles al combinarlos (¿flags en línea? usa grupos de flags locales)")
 bad = []
 for f in sys.argv[1:]:
     txt = open(f, encoding="utf-8").read()
@@ -159,6 +163,35 @@ PY
 @test "la spec real es coherente" {
   run check "$MS"
   [ "$status" -eq 0 ]
+}
+
+@test "negativo: status PROPOSED_X, con prefijo o duplicado es fail (regex anclada)" {
+  mutate "$MS" "status: PROPOSED" "status: PROPOSED_X"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es PROPOSED"* ]]
+  cp "$SPEC" "$MS"
+  mutate "$MS" "status: PROPOSED" "xstatus: PROPOSED"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  cp "$SPEC" "$MS"
+  mutate "$MS" "status: PROPOSED" $'status: PROPOSED\nstatus: PROPOSED'
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no es PROPOSED"* ]]
+}
+
+@test "negativo: patron privado con flag en linea da error controlado, sin traceback" {
+  printf '(?i)foo\nbar\n' > "$BATS_TEST_TMPDIR/f.txt"
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/f.txt" run leak_scan "$SPEC"
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"Traceback"* ]]
+}
+
+@test "negativo: variable de patrones privados declarada pero vacia falla cerrado" {
+  SE528_PRIVATE_PATTERNS="" run leak_scan "$SPEC"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ilegibles o inexistentes"* ]]
 }
 
 @test "negativo: status distinto de PROPOSED es fail" {
