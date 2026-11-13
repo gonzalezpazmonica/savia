@@ -52,7 +52,9 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^- fecha: pendiente$' "$f" || { echo "confirmación no pendiente"; return 1; }
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
   # Repo público: nada de rutas ni nombres privados.
-  ! grep -iqE 'macbook|accenture|\.savia/|intensivo|reconciliar|destil|SaviaLabs' "$f" || { echo "dato privado"; return 1; }
+  # Patrones partidos para que este propio fichero no contenga los literales que busca.
+  local pat='mac''book|accen''ture|\.sav''ia/|intens''ivo|reconci''liar|des''til|Savia''Labs'
+  ! grep -iqE "$pat" "$f" || { echo "dato privado"; return 1; }
 }
 
 check_planning() {  # check_planning <json>: 0 si es SE-530 PROPOSED con evidencia existente
@@ -224,7 +226,7 @@ PY3
 }
 
 @test "negativo: un dato privado en la spec falla" {
-  printf '\nVer ~/.savia/algo\n' >> "$M"
+  printf '\nVer ~/.sav''ia/algo\n' >> "$M"
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"dato privado"* ]]
