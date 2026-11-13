@@ -5,5 +5,5 @@
   "phase": "A",
   "title": "Tres arreglos de seguridad: web, puente y cúpulas",
   "evidence": "docs/specs/SE-528-seguridad-web-puente-cupulas.spec.md",
-  "note": "Auditoría interna 2026-11-13: saneado y sesión en la web, autenticación del puente y clave de grants. Cuatro slices S1-S4. Decisiones abiertas Q1-Q4. El detalle operativo es privado."
+  "note": "Auditoría interna 2026-11-13: saneado y sesión en la web, autenticación del puente y clave de grants. Cuatro slices S1-S4. Decisiones abiertas Q1-Q3. El detalle operativo es privado."
 }
