@@ -17,19 +17,27 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   ! grep -q '^### S6 — ' "$f" || { echo "slice de más"; return 1; }
   # Orden: el encabezado de S5 va después del de S4.
   local l4 l5
-  l4=$(grep -n '^### S4 — ' "$f" | cut -d: -f1); l5=$(grep -n '^### S5 — ' "$f" | cut -d: -f1)
+  l4=$(grep -n '^### S4 — ' "$f" | head -1 | cut -d: -f1); l5=$(grep -n '^### S5 — ' "$f" | head -1 | cut -d: -f1)
   [ "$l5" -gt "$l4" ] || { echo "S5 no es el último"; return 1; }
-  # Los cinco slices de la tabla D1 declaran tier 4.
+  # Los cinco slices de la tabla D1 declaran tier 4 en la última columna.
   local tiers
-  tiers=$(grep -cE '^\| S[1-5] \|.*\*\*4\*\*' "$f")
+  tiers=$(grep -cE '^\| S[1-5] \|.*\| \*\*4\*\* \|$' "$f")
   [ "$tiers" -eq 5 ] || { echo "tier 4 declarado en $tiers de 5 slices"; return 1; }
   grep -q 'No es una reducción de contexto' "$f" || { echo "falta aviso de contexto"; return 1; }
   grep -q 'S5 va el último' "$f" || { echo "falta S5 último"; return 1; }
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
 }
 
+check_planning() {  # check_planning <json>: 0 si es SE-527 PROPOSED y su evidencia existe
+  python3 -I -c "
+import json,os,sys
+d=json.load(open(sys.argv[1]))
+assert d['id']=='SE-527' and d['status']=='PROPOSED', d
+assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
+" "$1" "$REPO_ROOT"
+}
+
 setup() {
-  set -uo pipefail
   M="$BATS_TEST_TMPDIR/spec.md"; cp "$SPEC" "$M"
 }
 
@@ -63,31 +71,30 @@ PY
 }
 
 @test "negativo: S5 antes de S4 falla" {
-  mutate '### S5 — ' '### S9 — '
-  mutate '### S1 — ' '### S5 — '
+  mutate '### S4 — ' '### Sz — '
+  mutate '### S5 — ' '### S4 — '
+  mutate '### Sz — ' '### S5 — '
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"S5 no es el último"* ]]
 }
 
 @test "negativo: human_surface true falla" {
   mutate 'human_surface: false' 'human_surface: true'
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"human_surface"* ]]
 }
 
 @test "negativo: sin el aviso de que no recorta contexto falla" {
   mutate 'No es una reducción de contexto' 'recorta contexto'
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"falta aviso de contexto"* ]]
 }
 
 @test "planning: SE-527 PROPOSED apunta a la spec existente" {
-  run python3 -I -c "
-import json,os,sys
-d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-527' and d['status']=='PROPOSED', d
-assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
-" "$STATE" "$REPO_ROOT"
+  run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }
 
@@ -96,23 +103,32 @@ assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 import json,sys
 d=json.load(open(sys.argv[1])); d['evidence']='docs/specs/no-existe.md'
 json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
-  run python3 -I -c "
-import json,os,sys
-d=json.load(open(sys.argv[1]))
-assert os.path.exists(os.path.join(sys.argv[2], d['evidence']))
-" "$BATS_TEST_TMPDIR/s.json" "$REPO_ROOT"
+  run check_planning "$BATS_TEST_TMPDIR/s.json"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"no-existe.md"* ]]
+}
+
+@test "negativo: el estado de planning con otro status falla" {
+  python3 -I -c "
+import json,sys
+d=json.load(open(sys.argv[1])); d['status']='APPROVED'
+json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
+  run check_planning "$BATS_TEST_TMPDIR/s.json"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"APPROVED"* ]]
 }
 
 @test "edge: empty spec falla" {
   : > "$M"
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"status != PROPOSED"* ]]
 }
 
 @test "edge: nonexistent spec falla" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"status != PROPOSED"* ]]
 }
 
 @test "edge: boundary, solo 4 de 5 slices con tier 4 falla (zero tolerancia)" {
@@ -122,4 +138,18 @@ assert os.path.exists(os.path.join(sys.argv[2], d['evidence']))
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"tier 4 declarado en 4 de 5"* ]]
+}
+
+@test "negativo: un **4** en otra columna no cuenta como tier" {
+  mutate '| Bajo | **4** |' '| **4** | Bajo |'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"tier 4 declarado en 4 de 5"* ]]
+}
+
+@test "negativo: encabezado de slice duplicado no rompe el orden con error confuso" {
+  mutate '### S2 — ' '### S5 — '
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta slice S2"* ]]
 }
