@@ -1,0 +1,3 @@
+## 2026-11-12 SE-518 PROPOSED
+
+Pulse, el latido de la planta de trabajo: el antiguo bucle de reconciliación como componente público, determinista y por operador. Servicio de usuario (macOS launchd, Linux systemd --user), contratos con Soul (Pulse publica, Soul habla), clases de error, telemetría local, freno como ejecutor de SE-498 y volante que solo resta, instalaciones soberanas sin canal entre ellas. Escenas E1–E10 confirmadas (E3 y E8 modificadas después por D7 y D3, pendientes de reconfirmar en la revisión); prototipo S0 pendiente; doce decisiones registradas por la orquestadora como tomadas por el operador (D3 y D7 a comprobar en la revisión humana).

@@ -218,4 +218,5 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-514 [APPROVED] Atención humana: una sola cola de preguntas, con su porqué — evidencia: docs/specs/SE-514-atencion-humana-cola-unica.spec.md
 - SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md
 - SE-517 [APPROVED] Motor de Space con suscripción ChatGPT (OAuth) — evidencia: docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md
+- SE-518 [APPROVED] Pulse: el latido de la planta de trabajo — evidencia: docs/specs/SE-518-pulse-latido.spec.md
 - SE-531 [APPROVED] Ficha de harness ejecutable: capacidades del runtime y supervisión del proceso hijo — evidencia: docs/specs/SE-531-ficha-de-harness-ejecutable.spec.md
