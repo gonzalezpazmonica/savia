@@ -1,0 +1,3 @@
+## 2026-11-13 SE-527 PROPOSED
+
+Recorte de agentes sobrantes: 14 de 90 en cuatro slices (retirar sin uso, Coherence Court, digests, ayudantes de Court/tests/drift). Validación con el método de SE-511; ahorro de mantenimiento, no de contexto. Solo spec: ningún agente se toca. Sigue PROPOSED hasta que la operadora lo confirme en la PR #1543. Decisiones (respuestas por pregunta interactiva, registro de la orquestadora): Q1 alcance, luego acotado a S1-S4; Q2 S2 se hace ya, con una ejecución real de `/coherence-court`; Q3 (validación reducida de S5) superada: la operadora retira S5 entero porque los agentes por lenguaje son capacidad de reserva para proyectos de cliente y «sin uso en 90 días» no es señal válida para ellos. Los seis se quedan como están; neto −14 (90 → 76).
