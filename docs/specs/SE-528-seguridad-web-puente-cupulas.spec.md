@@ -13,7 +13,7 @@ timeline:
   - from: "2026-11-13"
     learned: "2026-11-13"
     value: "PROPOSED"
-    source: "worker del plan intensivo; petición de la operadora (tres arreglos en una spec)"
+    source: "petición de la operadora: tres arreglos en una spec"
 ---
 
 # SE-528 — Tres arreglos de seguridad: web, puente y cúpulas
