@@ -28,7 +28,10 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
 }
 
-setup() { M="$BATS_TEST_TMPDIR/spec.md"; cp "$SPEC" "$M"; }
+setup() {
+  set -uo pipefail
+  M="$BATS_TEST_TMPDIR/spec.md"; cp "$SPEC" "$M"
+}
 
 mutate() { python3 -I - "$M" "$1" "$2" <<'PY'
 import sys
@@ -99,4 +102,24 @@ d=json.load(open(sys.argv[1]))
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence']))
 " "$BATS_TEST_TMPDIR/s.json" "$REPO_ROOT"
   [ "$status" -ne 0 ]
+}
+
+@test "edge: empty spec falla" {
+  : > "$M"
+  run check "$M"
+  [ "$status" -ne 0 ]
+}
+
+@test "edge: nonexistent spec falla" {
+  run check "$BATS_TEST_TMPDIR/no-existe.md"
+  [ "$status" -ne 0 ]
+}
+
+@test "edge: boundary, solo 4 de 5 slices con tier 4 falla (zero tolerancia)" {
+  mutate '| Medio | **4** |
+| S4' '| Medio | **3** |
+| S4'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"tier 4 declarado en 4 de 5"* ]]
 }
