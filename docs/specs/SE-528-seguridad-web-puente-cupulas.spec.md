@@ -75,6 +75,9 @@ Este slice es el único dueño de todo el cambio de autenticación del puente; n
 - Modo sin TLS: no emite cookie de sesión; solo vale la cabecera. Se documenta como modo sin sesión por cookie.
 - Login desde un cliente que no es un navegador (sin `Origin`): permitido con token válido; solo se rechaza un `Origin` presente y ajeno a la lista.
 - Credenciales por un canal no admitido y por la cabecera a la vez: 401 (el canal no admitido se rechaza siempre, no se ignora).
+- Límite de intentos: la clave del límite es el cliente (dirección de origen), nunca global, para que un tercero no pueda bloquear al operador legítimo. Los intentos por un canal no admitido también cuentan.
+- Preflight y streaming: las peticiones `OPTIONS` con credenciales solo se aceptan de orígenes de la lista; las rutas de streaming usan la cabecera o la cookie de sesión como el resto.
+- Orden de entrega: S2 no se despliega sin S4 si el cliente web depende de un canal que S2 corta; se entregan coordinados o S4 antes de activar el corte (Q1).
 - Endpoint de estado de sesión: responde 200 si la cookie de sesión es válida y 401 si no, sin cuerpo con datos sensibles; es el contrato que usa el cliente (S4) para saber si la sesión sigue vigente sin leer la cookie.
 - Actualizar la documentación del cliente web para que describa solo los canales admitidos.
 
@@ -88,12 +91,15 @@ AC:
 - AC-2.7 Negativo: petición con cookie manipulada, caducada o tras logout devuelve 401.
 - AC-2.8 Test: cookie válida con `Origin` ajeno a la lista en una ruta que ejecuta agentes devuelve 403; con `Origin` permitido, 200 y `Access-Control-Allow-Credentials: true`; nunca se combina con `Access-Control-Allow-Origin: *`.
 - AC-2.9 Test: en modo abierto, una petición con `Origin` ajeno o `Host` que no es de bucle local devuelve 403.
-- AC-2.10 Negativo: el login con token inválido devuelve 401 y, superado el límite, 429.
+- AC-2.10 Negativo: el login con token inválido devuelve 401 y, superado el límite, 429; el límite es por cliente: otro cliente distinto sigue pudiendo iniciar sesión.
 - AC-2.11 Negativo: con cookie de sesión válida, una ruta que cambia estado sin `Origin` devuelve 403.
 - AC-2.12 Negativo: el login con `Origin` ajeno a la lista devuelve 403.
 - AC-2.13 Test: el login con token válido y sin `Origin` (cliente que no es un navegador) devuelve 200.
 - AC-2.14 Test, sin TLS: el login no emite cookie de sesión y la cabecera `Authorization` sigue devolviendo 200.
 - AC-2.15 Test: el endpoint de estado de sesión devuelve 200 con cookie válida y 401 con cookie ausente, manipulada, caducada o tras logout.
+- AC-2.16 Test: los intentos por un canal no admitido cuentan en el límite de intentos del cliente y superado el límite devuelven 429.
+- AC-2.17 Test: una petición `OPTIONS` con credenciales desde un origen de la lista devuelve las cabeceras CORS; desde un origen ajeno, ninguna cabecera de permiso.
+- AC-2.18 Test: una ruta de streaming responde 200 con cookie válida o cabecera válida y 401 sin credenciales.
 
 Reversión: revertir la PR; la cabecera `Authorization` no se retiró. Admitir de nuevo otro canal, si hiciera falta, es un cambio acotado y una decisión nueva de la operadora.
 
@@ -138,9 +144,9 @@ Reversión: revertir la PR; el puente sigue aceptando la cabecera.
 
 ## Plan por slices
 
-1. **S1** web, saneado (AC-1.1 a 1.5). 2. **S2** puente (AC-2.1 a 2.15). 3. **S3** cúpulas (AC-3.1 a 3.5). 4. **S4** web, sesión del cliente (AC-4.1 a 4.5).
+1. **S1** web, saneado (AC-1.1 a 1.5). 2. **S2** puente (AC-2.1 a 2.18). 3. **S3** cúpulas (AC-3.1 a 3.5). 4. **S4** web, sesión del cliente (AC-4.1 a 4.5).
 
-S1, S2 y S3 no dependen entre sí. S4 se entrega después de S2. Cada slice, una PR.
+S1, S2 y S3 no dependen entre sí. S4 se entrega después de S2 y coordinado con su corte (ver S2, orden de entrega). Cada slice, una PR.
 
 ## OpenCode Implementation Plan
 

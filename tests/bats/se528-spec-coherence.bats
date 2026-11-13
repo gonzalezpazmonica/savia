@@ -27,7 +27,7 @@ if "status: PROPOSED" not in f: errs.append("status no es PROPOSED")
 for sl in ("S1", "S2", "S3", "S4"):
     if not re.search(rf"^### {sl} — ", s, re.M): errs.append(f"falta el slice {sl}")
 # cada AC debe estar DEFINIDO (viñeta al inicio de línea), no solo mencionado
-for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2", "AC-2.3", "AC-2.4", "AC-2.5", "AC-2.6", "AC-2.7", "AC-2.8", "AC-2.9", "AC-2.10", "AC-2.11", "AC-2.12", "AC-3.1", "AC-3.2", "AC-3.3", "AC-3.4", "AC-3.5", "AC-2.13", "AC-2.14", "AC-2.15", "AC-4.1", "AC-4.2", "AC-4.3", "AC-4.4", "AC-4.5"):
+for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2", "AC-2.3", "AC-2.4", "AC-2.5", "AC-2.6", "AC-2.7", "AC-2.8", "AC-2.9", "AC-2.10", "AC-2.11", "AC-2.12", "AC-3.1", "AC-3.2", "AC-3.3", "AC-3.4", "AC-3.5", "AC-2.13", "AC-2.14", "AC-2.15", "AC-2.16", "AC-2.17", "AC-2.18", "AC-4.1", "AC-4.2", "AC-4.3", "AC-4.4", "AC-4.5"):
     if not re.search(rf"^- {re.escape(ac)} ", s, re.M): errs.append(f"falta {ac}")
 for sec in ("## Problema", "## Puerta de comprensión", "## Fuera de alcance", "## OpenCode Implementation Plan", "## Tier de riesgo"):
     if sec not in s: errs.append(f"falta la sección {sec}")
@@ -80,9 +80,9 @@ generic = [
     r"\b(?!127\.0\.0\.1\b)\d{1,3}(?:\.\d{1,3}){3}\b",       # IPv4 distinta de bucle local
     r"\b[0-9a-f]{9,40}\b",                                    # hashes
     r"Cadena:",
-    r"sin sanear|legible desde|por defecto|autoarreglo|en la dirección",   # descripción del estado actual
-    # revelación semántica del estado actual, umbrales y vectores (revisión #1544, P1)
-    r"DOMPurify|renderMarkdownSafe|\b\d+ bytes\b|nunca se sustituye|no rota\b|\bno 200\b|enlaces guardados|javascript:|manejador|se borra su código|canal retirado|ahora son visibles|deja de guardar",
+    r"autoarreglo",
+    # lenguaje de estado actual (genérico; los literales concretos van en SE528_PRIVATE_PATTERNS, no aquí)
+    r"\bhoy\b|actualmente|ahora mismo|a día de hoy|estado actual del|todavía no",
 ]
 pats = list(generic)
 pf = os.environ.get("SE528_PRIVATE_PATTERNS")
@@ -181,8 +181,7 @@ if d.get("id") != "SE-528": errs.append("id")
 if d.get("status") != key("status"): errs.append("status")
 if d.get("priority") != key("priority"): errs.append("priority")
 if d.get("phase") != key("phase"): errs.append("phase")
-if d.get("title") != title.split(":")[0].strip() and d.get("title") not in title and title.lower() not in d.get("title", "").lower():
-    errs.append("title")
+if d.get("title") != title: errs.append("title")
 if not str(d.get("evidence", "")).endswith("SE-528-seguridad-web-puente-cupulas.spec.md"): errs.append("evidence")
 if "SE-528 PROPOSED" not in l or "Q1" not in l: errs.append("LOG sin SE-528 PROPOSED / Q1")
 if errs: print("registro no coincide con la spec: " + ", ".join(errs)); sys.exit(1)
@@ -197,6 +196,11 @@ PY5
   run regs_match "$SPEC" "$P" "$L"; [ "$status" -eq 1 ]; [[ "$output" == *"priority"* ]]
   cp "$REPO_ROOT/docs/propuestas/planning.d/SE-528.json" "$P"
   sed -i 's/"title": "[^"]*"/"title": "Otro asunto"/' "$P"
+  run regs_match "$SPEC" "$P" "$L"; [ "$status" -eq 1 ]; [[ "$output" == *"title"* ]]
+  cp "$REPO_ROOT/docs/propuestas/planning.d/SE-528.json" "$P"
+  sed -i 's/"title": "[^"]*"/"title": "Tres"/' "$P"   # subcadena del título: debe fallar (igualdad exacta)
+  run regs_match "$SPEC" "$P" "$L"; [ "$status" -eq 1 ]; [[ "$output" == *"title"* ]]
+  sed -i 's/"title": "[^"]*"/"title": ""/' "$P"
   run regs_match "$SPEC" "$P" "$L"; [ "$status" -eq 1 ]; [[ "$output" == *"title"* ]]
   cp "$REPO_ROOT/docs/propuestas/planning.d/SE-528.json" "$P"; echo "nada" > "$L"
   run regs_match "$SPEC" "$P" "$L"; [ "$status" -eq 1 ]; [[ "$output" == *"LOG"* ]]
@@ -216,7 +220,7 @@ PY5
     printf '\nnota %s\n' "$t" >> "$MS"
     run check "$MS"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"resto de una decisión abierta: $t"* ]]
+    [[ "$output" == *"resto de una decisión abierta: $t"* ]] || return 1
   done
 }
 
@@ -297,16 +301,16 @@ PY3
 }
 
 @test "negativo: formas genericas de detalle operativo en la spec son fail (cada una)" {
-  for x in "fn_algo()" "mod_x.py:12" "src/algo/x.ts" "una_variable_interna" "--bandera-x" "?clave=1" "10.0.0.5" "doThing(" "se pinta sin sanear" "legible desde el script" "clave de 31 bytes" "nunca se sustituye" "DOMPurify" "renderMarkdownSafe" "javascript:" "enlaces guardados" "un error de lectura no rota" "devuelve 401, no 200" "canal retirado"; do
+  for x in "fn_algo()" "mod_x.py:12" "src/algo/x.ts" "una_variable_interna" "--bandera-x" "?clave=1" "10.0.0.5" "doThing(" "hoy el servidor falla así" "actualmente se acepta" "ahora mismo no valida" "hash deadbeef0123"; do
     cp "$SPEC" "$MS"
     printf '\nnota %s\n' "$x" >> "$MS"
     run check "$MS"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"detalle explotable"* ]]
+    [[ "$output" == *"detalle explotable"* ]] || return 1
   done
 }
 
-@test "positivo: bucle local 127.0.0.1 y el helper previsto no disparan la heuristica" {
+@test "positivo: bucle local 127.0.0.1 no dispara la heuristica" {
   run leak_scan "$SPEC"
   [ "$status" -eq 0 ]
 }
@@ -360,7 +364,7 @@ PY4
     printf '\nnota fn_interna() en mod_x.py:9\n' >> "$BATS_TEST_TMPDIR/reg-$(basename "$f")"
     run leak_scan "$BATS_TEST_TMPDIR/reg-$(basename "$f")"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"reg-$(basename "$f")"* ]]
+    [[ "$output" == *"reg-$(basename "$f")"* ]] || return 1
   done
 }
 
@@ -381,4 +385,14 @@ PY4
   run leak_scan "$BATS_TEST_TMPDIR/reg.md"
   [ "$status" -eq 1 ]
   [[ "$output" == *"reg.md"* ]]
+}
+
+@test "negativo: quitar AC-2.16, AC-2.17 o AC-2.18 (limite, preflight, streaming) es fail" {
+  for ac in AC-2.16 AC-2.17 AC-2.18; do
+    cp "$SPEC" "$MS"
+    mutate "$MS" "- $ac " "- AC-2.X "
+    run check "$MS"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"falta $ac"* ]] || return 1
+  done
 }
