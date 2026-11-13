@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P3
 developer_type: agent-single
 created: 2026-11-13
@@ -14,9 +14,13 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "worker autónomo; encargo de la orquestadora"
+  - from: "2026-11-13"
+    learned: "2026-11-13"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva; Q1-Q3 resueltas"
 ---
 
-# SE-527 — Recorte de agentes sobrantes (19 de 90, en cinco paquetes)
+# SE-527 — Recorte de agentes sobrantes (15 de 90 tras Q3, en cinco paquetes)
 
 > **Qué es y qué no es.** Es una propuesta de mantenimiento: menos ficheros, menos filas de routing, menos recuentos y menos tests anclados a agentes que casi seguro no se usan. **No es una reducción de contexto**: SE-511 ya recortó el contexto fijo por turno y este recorte no lo mueve de forma apreciable (ver «Problema»).
 
@@ -24,7 +28,7 @@ timeline:
 
 El catálogo tiene **90 agentes** en `.opencode/agents/` (fuente de verdad) y **75 espejos** en `.claude/agents/`. Una auditoría de uso y solape sobre los 90 da:
 
-- **Solo 15 agentes tienen una invocación real en 90 días.** 53 no tienen ninguna y siguen citados por algo vivo (comando, skill, script, regla, fila de routing); 22 no tienen ninguna y se pueden retirar o juntar con otro. Los 22 se reparten en 4 retiradas y 18 fusiones hacia 7 destinos, 3 de ellos nuevos: neto −19 (90 → 71).
+- **Solo 15 agentes tienen una invocación real en 90 días.** 53 no tienen ninguna y siguen citados por algo vivo (comando, skill, script, regla, fila de routing); 22 no tienen ninguna y se pueden retirar o juntar con otro. Los 22 se reparten en 4 retiradas y 18 fusiones hacia 7 destinos, 3 de ellos nuevos: neto −19 (90 → 71). Por la decisión Q3, S5 se limita a dos lenguajes y el neto aprobado es −15 (90 → 75).
 - **Los datos son cortos y eso limita lo que se puede afirmar.** Los registros de Claude Code solo llegan hasta el 3 de octubre (41 días, no 90); los de OpenCode cubren los 90. La telemetría propia no sirve: guarda el nombre del encargo, no el tipo de agente. Las ráfagas de los tribunales en `output/` son pruebas y no cuentan. Y **los jueces que lanza un orquestador por `Task` dentro de una sesión no dejan huella**: un cero en un juez significa «no consta», no «nunca corrió». Por eso la regla de la auditoría es conservadora (sin uso pero con referencia viva → revisar, nunca retirar) y esta spec solo propone lo que además tiene solape demostrado.
 - **El ahorro es de mantenimiento, no de contexto.** Las descripciones de los 75 agentes de Claude Code suman unos 17,7 k caracteres (≈4,4 k tokens). Los 13 recortables que tienen espejo allí pesan ≈3,7 k caracteres: **≈0,9 k tokens por sesión**, y solo en Claude Code. Los 4 retirados del paquete P1 existen solo en OpenCode y no cambian nada en Claude Code. Quien lea esta spec como «ahorro de tokens» la está leyendo mal.
 - **El beneficio real**: 22 ficheros de agente menos (más sus espejos), menos filas en `config/judge-routing.yaml`, menos recuentos «90» repartidos por README, `CLAUDE.md` y `docs/readme/`, menos tests anclados a nombres de agente y menos referencias que se pudren.
@@ -48,9 +52,9 @@ Un slice = un paquete = una PR. Se fusionan de uno en uno (nunca apiladas, ningu
 | S2 | P2 Coherence Court | `coherence-factual-judge`, `coherence-objectives-judge`, `coherence-scope-judge`, `coherence-premise-drift-judge` → nuevo `coherence-stage-judge` (4 modos) | −3 | Bajo-medio | **4** |
 | S3 | P3 digests | `pdf-digest`, `word-digest`, `pptx-digest`, `archive-digest` → nuevo `document-digest` (formato como parámetro) | −3 | Medio | **4** |
 | S4 | P4 ayudantes de Court, tests y drift | `fix-assigner` → `court-orchestrator`; `frontend-test-runner` → `test-runner`; `test-engineer` → `test-architect`; `reconciler` → `drift-auditor` | −4 | Medio | **4** |
-| S5 | P5 desarrolladores por lenguaje | `go-developer`, `java-developer`, `php-developer`, `ruby-developer`, `python-developer`, `typescript-developer` → nuevo `language-developer` (plantilla de `rust-developer` + language pack) | −5 | **Medio-alto** | **4** |
+| S5 | P5 desarrolladores por lenguaje | `go-developer`, `java-developer`, `php-developer`, `ruby-developer`, `python-developer`, `typescript-developer` → nuevo `language-developer` (plantilla de `rust-developer` + language pack); por Q3 solo `python` y `typescript` | −1 (era −5) | **Medio-alto** | **4** |
 
-Total −19: 90 → 71. Si solo se acepta S1, 90 → 86.
+Total −15 tras Q3: 90 → 75 (la auditoría proponía −19, 90 → 71). Si solo se acepta S1, 90 → 86.
 
 **Tier.** Calculado con `python3 scripts/risk-tier.py --diff <ficheros del slice>` sobre una muestra de ficheros de cada slice: sale **tier 4 («humano requerido», «path de gobernanza»)** siempre que el diff incluya un fichero de `.opencode/agents/`, y los cinco slices lo incluyen (la fuente de verdad del catálogo está ahí). Una muestra con solo espejos de `.claude/agents/` y documentación da tier 2 o 1; no sirve, porque ningún slice puede dejar de tocar `.opencode/agents/`. Consecuencia (SE-362): **cada PR de este recorte lleva revisión humana explícita de esa PR concreta y no entra en un merge-sprint por lotes de tier 1/2**. El tier real de cada PR se vuelve a calcular con su diff final y se escribe en su body.
 
@@ -141,10 +145,10 @@ Cuatro fusiones independientes en una PR, con una validación y una decisión GO
 - **Validación.** Corpus por origen: las tareas que hoy hace (ciclo de arreglos tras hallazgos del Court; ejecución de tests de frontend con cobertura bajo umbral; diseño de tests .NET; clasificación de contradicciones en evolución / auto-resolución / conflicto) más casos trampa de permiso (el destino no hace con el rol nuevo nada que el origen no hiciera: `fix-assigner` no escribe código de producción, `reconciler` no edita las fuentes que clasifica).
 - **Reversión.** `git revert` de la PR, o de la fusión parcial por separado si se partió en commits.
 
-### S5 — Desarrolladores por lenguaje (−5), el último
+### S5 — Desarrolladores por lenguaje (−1 tras Q3), el último
 
-- **Agentes.** `go`, `java`, `php`, `ruby`, `python` y `typescript` → `language-developer`.
-- **Referencias a actualizar** (cambia el enrutado por language pack): `docs/rules/domain/assignment-matrix.md`, `docs/rules/domain/language-packs.md`, `scripts/dag-gate-cost-checker.sh`, `scripts/hierarchical-orchestrator.py`, `scripts/dev-workflow-generate.sh`, `scripts/enterprise/daily-activation-plan.sh`, `.claude/commands/tool-catalog.md`, `.claude/commands/speckit.implement.md`, `docs/rules/domain/workflow-as-output.md`, `docs/rules/domain/hashline-edit-protocol.md`, `docs/agent-teams-sdd.md`, `docs/guia-incorporacion-lenguajes.md`, `docs/savia-models/{05-python,06-java,07-go}.md`, `.claude/agents/decision-trees/architect-decisions.md`, `opencode.json`, `tests/test-dev-workflow-generate.bats`, `tests/skill-routing/cases.yaml`, `tests/test-failure-pattern-memory.bats`, `tests/test-memory-feedback*`, catálogo, índices, recuentos (→ 71 si S1–S4 están).
+- **Agentes.** Por Q3, solo `python` y `typescript` pasan a `language-developer`. `go`, `java`, `php` y `ruby` quedan fuera de esta spec hasta que haya datos de uso.
+- **Referencias a actualizar** (cambia el enrutado por language pack): `docs/rules/domain/assignment-matrix.md`, `docs/rules/domain/language-packs.md`, `scripts/dag-gate-cost-checker.sh`, `scripts/hierarchical-orchestrator.py`, `scripts/dev-workflow-generate.sh`, `scripts/enterprise/daily-activation-plan.sh`, `.claude/commands/tool-catalog.md`, `.claude/commands/speckit.implement.md`, `docs/rules/domain/workflow-as-output.md`, `docs/rules/domain/hashline-edit-protocol.md`, `docs/agent-teams-sdd.md`, `docs/guia-incorporacion-lenguajes.md`, `docs/savia-models/{05-python,06-java,07-go}.md`, `.claude/agents/decision-trees/architect-decisions.md`, `opencode.json`, `tests/test-dev-workflow-generate.bats`, `tests/skill-routing/cases.yaml`, `tests/test-failure-pattern-memory.bats`, `tests/test-memory-feedback*`, catálogo, índices, recuentos (→ 75 si S1–S4 están, por Q3).
 - **Decisión de diseño que S5 resuelve y que esta spec no cierra**: cómo se carga el language pack (el agente lo lee en cada tarea o lo inyecta el orquestador) y qué hacer con las reglas por lenguaje que hoy viven en el cuerpo de cada agente. Se presenta con alternativas en la PR de S5, no se decide aquí.
 - **Validación.** D3 y D5 (las dos).
 - **Reversión.** `git revert`; es la que más recuentos y enrutado mueve, por eso S5 no se fusiona junto a ningún otro slice.
@@ -176,11 +180,13 @@ Cuatro fusiones independientes en una PR, con una validación y una decisión GO
 - Cambiar la política de permisos de los agentes o los umbrales de los gates.
 - Instrumentar la telemetría para registrar el tipo de agente (queda como propuesta aparte).
 
-## Preguntas abiertas para la operadora
+## Decisiones de la operadora (2026-11-13)
 
-- **Q1.** ¿Se aprueba el alcance completo S1–S5 o se empieza por S1 y se decide el resto con sus resultados? Recomendación: aprobar la spec completa y fusionar en orden, con S5 sujeto a su propia validación (D5).
-- **Q2.** ¿S2 (un tribunal) se hace ya, con una ejecución real de `/coherence-court` como evidencia, o espera a la repetición de la auditoría con 30 días más de datos? Recomendación: hacerlo, porque los cuatro jueces solo los cita su comando y sus cuatro filas son `on-demand`; pospone S2 sin afectar a los demás si prefieres esperar.
-- **Q3.** ¿Se acepta el coste de la validación con ejecución real de S5 (seis lenguajes × 3 tareas × 3 repeticiones × 2 modelos × 2 variantes = 216 ejecuciones con herramientas)? Si es excesivo, el recorte de S5 se reduce a los lenguajes que se prueben.
+Registro de la orquestadora de las respuestas a preguntas interactivas; no es texto literal.
+
+- **Q1. Resuelta:** alcance completo S1–S5, un slice por paquete, fusionados en orden y con S5 sujeto a su propia validación (D5).
+- **Q2. Resuelta:** S2 se hace ya, con una ejecución real de `/coherence-court` como evidencia. No espera a que se repita la auditoría.
+- **Q3. Resuelta, con validación reducida:** la validación real de D5 se hace solo con `python` y `typescript`: 2 lenguajes × 3 tareas × 3 repeticiones × 2 modelos × 2 variantes = 72 ejecuciones. Por la regla de D5 («un lenguaje que no se prueba no se fusiona»), S5 fusiona solo esos dos en `language-developer` (−1 neto). `go`, `java`, `php` y `ruby` se quedan como están hasta que la repetición de la auditoría aporte datos de uso. El recuento final pasa de 71 a 75 si S1–S4 están fusionadas.
 
 ## Riesgos
 
@@ -215,4 +221,4 @@ Cuatro fusiones independientes en una PR, con una validación y una decisión GO
 
 ## Aprobación
 
-Pendiente. Esta spec está en PROPOSED: no autoriza tocar ningún agente. Cada slice se implementa solo tras la aprobación de la spec y se fusiona con revisión humana de su PR (tier 4).
+Aprobada por la operadora el 2026-11-13 (pregunta interactiva). Q1–Q3 se resolvieron como figura en «Decisiones de la operadora». La aprobación se formaliza al fusionar esta PR. Cada slice se fusiona con revisión humana de su PR (tier 4).

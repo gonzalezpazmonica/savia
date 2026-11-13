@@ -9,7 +9,7 @@ STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-527.json"
 
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
-  grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
+  grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
   for n in 1 2 3 4 5; do
     grep -q "^### S$n — " "$f" || { echo "falta slice S$n"; return 1; }
@@ -28,11 +28,11 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-527 PROPOSED y su evidencia existe
+check_planning() {  # check_planning <json>: 0 si es SE-527 APPROVED y su evidencia existe
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-527' and d['status']=='PROPOSED', d
+assert d['id']=='SE-527' and d['status']=='APPROVED', d
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
 }
@@ -93,7 +93,7 @@ PY
   [[ "$output" == *"falta aviso de contexto"* ]]
 }
 
-@test "planning: SE-527 PROPOSED apunta a la spec existente" {
+@test "planning: SE-527 APPROVED apunta a la spec existente" {
   run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }
@@ -111,24 +111,24 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
 @test "negativo: el estado de planning con otro status falla" {
   python3 -I -c "
 import json,sys
-d=json.load(open(sys.argv[1])); d['status']='APPROVED'
+d=json.load(open(sys.argv[1])); d['status']='PROPOSED'
 json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   run check_planning "$BATS_TEST_TMPDIR/s.json"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"APPROVED"* ]]
+  [[ "$output" == *"PROPOSED"* ]]
 }
 
 @test "edge: empty spec falla" {
   : > "$M"
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "edge: nonexistent spec falla" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "edge: boundary, solo 4 de 5 slices con tier 4 falla (zero tolerancia)" {
