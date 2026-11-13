@@ -48,19 +48,19 @@ Cada runtime se comporta distinto y hoy esa diferencia vive en parches sueltos y
 
 ### D1 — La ficha es un dato con campos obligatorios y valores cerrados
 
-Cada runtime tiene un bloque `runtime` en su ficha. Falta un campo, o su valor no es uno de los permitidos, y el validador falla (error, no aviso). `no_medido` es un valor permitido para dejar constancia de que no se sabe, pero **los consumidores lo tratan como la opción más desconfiada** (D3), así que no es una vía de escape.
+Cada runtime tiene un bloque `runtime` en su ficha. Falta un campo, o su valor no es uno de los permitidos, y el validador falla (error, no aviso). `no_medido` es un valor permitido para dejar constancia de que no se sabe, pero **los consumidores lo tratan como la opción más desconfiada** (D3), así que no es una vía de escape. Concretamente, `no_medido` se lee siempre como: `aislamiento: ninguno`, `rc_en_error: no_fiable` (sin aceptar el código 0 sin la postcondición del trabajo), `senal_cuota: ninguna`, `informa_uso: no`, `reanudacion: no_soportada`, `limpieza: ninguna` y `flujo_llamadas: ninguno`.
 
 | Campo | Valores permitidos | Qué responde |
 |---|---|---|
 | `aislamiento` | `ninguno` · `sandbox_de_ordenes` · `proceso_confinado` · `no_medido` | Cómo se encierra al programa |
 | `rc_en_error` | `fiable` · `no_fiable` · `no_medido` | Si un fallo real se traduce en código de salida distinto de 0 |
-| `rc_deteccion` | texto corto con la regla; **obligatorio si `rc_en_error` es `no_fiable`**, prohibido si es `fiable` | Cómo se detecta el fallo cuando el código no sirve |
+| `rc_deteccion` | regla declarativa y acotada (un texto literal o un patrón de longitud máxima fijada por el esquema; **nunca** código ni una orden de shell); **obligatorio si `rc_en_error` es `no_fiable`**, prohibido si es `fiable` | Cómo se detecta el fallo cuando el código no sirve |
 | `senal_cuota` | `codigo_de_salida` · `campo_del_flujo` · `ninguna` · `no_medido` | Cómo avisa de que se acabó la cuota |
 | `informa_uso` | `si` · `no` · `no_medido` | Si informa de lo que gasta |
 | `reanudacion` | `por_sesion` · `no_soportada` · `no_medido` | Si se le puede preguntar en qué estado quedó una ejecución |
 | `limpieza` | `grupo_de_procesos` · `ninguna` · `no_medido` | Cómo se retira a sus descendientes al cortarlo |
 | `flujo_llamadas` | `json` · `ninguno` · `no_medido` | Si emite las llamadas a herramientas como eventos que se pueden vigilar |
-| `fuente` y `version_cli` | texto; **obligatorios por cada campo no `no_medido`** | De dónde sale el dato y con qué versión del programa se midió |
+| `fuente` y `version_cli` | texto; **obligatorios por cada dato distinto de `no_medido`**, uno de cada por dato; una ficha con todos los datos `no_medido` pasa sin ellos | De dónde sale el dato y con qué versión del programa se midió |
 
 Las reglas «si X entonces Y» (`rc_deteccion` solo con `no_fiable`; `fuente` y `version_cli` con cada dato medido) son de la misma familia que las del esquema de harness de kagent 1.0 (proyecto público, citado como inspiración; no se copia su esquema ni su texto).
 
@@ -68,13 +68,13 @@ Cobertura: **un runtime que alguna ficha usa y que no tiene bloque `runtime` es 
 
 ### D2 — Los parches por runtime se derivan de la ficha, no al revés
 
-El ajuste «OpenCode sale con 0 pero falló» pasa a ser `rc_en_error: no_fiable` más su `rc_deteccion`, y el invocador **lee** la ficha. Si un runtime tiene `no_fiable` sin regla de detección, el validador falla; si tiene `no_medido`, el invocador no acepta un código 0 sin la postcondición del trabajo (fail-closed). No se conserva ningún parche con el nombre de un runtime dentro del código del invocador.
+El ajuste «OpenCode sale con 0 pero falló» pasa a ser `rc_en_error: no_fiable` más su `rc_deteccion`, y el invocador **lee** la ficha. Si un runtime tiene `no_fiable` sin regla de detección, el validador falla; si tiene `no_medido`, el invocador no acepta un código 0 sin la postcondición del trabajo (fail-closed). `rc_deteccion` es un dato, no código: el invocador lo interpreta como literal o patrón acotado y jamás lo ejecuta ni lo pasa a un shell. No se conserva ningún parche con el nombre de un runtime dentro del código del invocador.
 
 ### D3 — Qué hace el supervisor con cada valor (S2)
 
 | Situación | Regla |
 |---|---|
-| Al vencer el tiempo | El hijo arranca en sesión propia. Se envía `SIGTERM` al grupo, se espera un plazo de gracia (por defecto 5 s, ajustable por ficha) y se envía `SIGKILL` al grupo. Con `limpieza: ninguna` o `no_medido` el supervisor lo registra en el recibo como «descendientes sin garantía» y **no** declara el trabajo limpio. |
+| Al vencer el tiempo | El hijo arranca en sesión propia. Se envía `SIGTERM` al grupo, se espera un plazo de gracia (por defecto 5 s, ajustable por ficha) y se envía `SIGKILL` al grupo; esto lo hace el supervisor siempre, sea cual sea la ficha. `limpieza` no desactiva el corte: declara **qué garantía hay sobre los descendientes**. Con `grupo_de_procesos` el supervisor verifica que no queda ninguno y lo registra; con `ninguna` o `no_medido` registra en el recibo «descendientes sin garantía» y **no** declara el trabajo limpio (un descendiente que se separó del grupo puede seguir vivo, D4). |
 | Misma llamada fallida repetida | Si `flujo_llamadas` es `json`: la misma herramienta con los mismos argumentos normalizados y el mismo error, N veces seguidas (por defecto N = 3, el umbral ya escrito en el fail-safe de Savia) cortan el turno con clase `limite_de_turno`. Un éxito entre medias, o argumentos distintos, reinician la cuenta. Si es `ninguno` o `no_medido`: el recibo dice «bucle no vigilado»; no se finge vigilancia. |
 | Relanzar | Solo si el recibo registra **cero efectos** y ningún efecto `ambiguous` (estados de SE-493), y como máximo una vez. Sin recibo, o con un campo ilegible: no se relanza. Un corte por `limite_de_turno` **nunca** se relanza ni se anota como fallo del proveedor. |
 | Reiniciar tras una caída | Con `reanudacion: por_sesion` se pregunta al programa qué pasó con la ejecución y se registra su respuesta. Con `no_soportada` o `no_medido` el estado es `ambiguous` y lo resuelve la reconciliación de SE-493 o la persona; **no se supone**. |
@@ -121,13 +121,15 @@ El tier de cada PR se calcula con `scripts/risk-tier.py` sobre su diff final; S2
 |---|---|---|
 | AC-S1a | La PR de S1 cita fichero y línea del invocador y de cada parche por runtime que sustituye, leídos en esa PR. | positivo |
 | AC-S1b | El validador falla si una ficha usa un runtime sin bloque `runtime`. | negativo |
-| AC-S1c | El validador falla por cada campo obligatorio ausente: un test por campo (los siete campos obligatorios de D1, más `fuente` y `version_cli`), cada uno sobre una copia con solo ese campo quitado. | negativo |
+| AC-S1c | El validador falla por cada campo obligatorio ausente: un test por campo (los siete campos obligatorios de D1), cada uno sobre una copia con solo ese campo quitado. `fuente` y `version_cli` se prueban en AC-S1e, porque solo son obligatorios por cada dato medido. | negativo |
 | AC-S1d | El validador falla con un valor fuera del conjunto permitido (p. ej. `aislamiento: casi`) y con `rc_en_error: no_fiable` sin `rc_deteccion`; también con `rc_deteccion` presente si `rc_en_error` es `fiable`. | negativo |
 | AC-S1e | Un dato distinto de `no_medido` sin `fuente` o sin `version_cli` falla. Con `no_medido` pasa y el validador lo cuenta en su resumen. | negativo / límite |
 | AC-S1f | Las fichas actuales migradas pasan el validador y cada hecho que estaba en texto de informe está en un campo (revisión con lista de «antes → después» en la PR). | positivo |
 | AC-S1g | El ajuste de OpenCode ya no está en el código con el nombre del runtime: el test lo prueba con un runtime ficticio `no_fiable`, y con el mismo runtime en `fiable` el invocador **no** fuerza el código (caso inverso). | negativo |
+| AC-S1h | Un dato `no_medido` en cualquier campo se lee como la opción desconfiada de D1: el consumidor de cada uno de los siete campos se prueba con `no_medido` y con el valor `fiable`/equivalente (caso inverso); con `rc_en_error: no_medido` un código 0 sin postcondición no se acepta. | negativo |
+| AC-S1i | `rc_deteccion` con metacaracteres de shell (`;`, `$(…)`, comillas) o por encima de la longitud máxima no se ejecuta ni se interpreta como orden: el validador lo rechaza o el invocador lo trata como literal, y el test lo prueba con una marca que no debe aparecer. | negativo |
 | AC-S2a | La PR de S2 trae la medición de huérfanos contra el invocador real y cada runtime real, con la regla de decisión de S2.1 escrita antes. | positivo |
-| AC-S2b | Un hijo que lanza un nieto dormido: tras el *timeout* no queda ningún proceso del grupo. Negativo: con `limpieza: ninguna` el test detecta el nieto vivo (y lo retira en el *teardown*). Con un nieto en sesión propia, el test confirma que escapa y el recibo lo dice (D4). | negativo |
+| AC-S2b | Un hijo que lanza un nieto dormido: tras el *timeout* no queda ningún proceso del grupo. Negativo: con un nieto que se separó del grupo (sesión propia), el test lo detecta vivo, lo retira en el *teardown* y el recibo dice «descendientes sin garantía» cuando `limpieza` es `ninguna` o `no_medido`, y no lo declara limpio (D4). | negativo |
 | AC-S2c | Un hijo que ignora `SIGTERM` muere por `SIGKILL` tras el plazo de gracia; el plazo es el configurado, con tolerancia declarada. | negativo / límite |
 | AC-S2d | La misma llamada con el mismo error N veces seguidas corta con `limite_de_turno`; N−1 veces no corta; el mismo error con argumentos distintos no corta; un éxito intercalado reinicia la cuenta. | límite |
 | AC-S2e | Un corte por `limite_de_turno` no se relanza ni se cuenta como fallo del proveedor. Con `flujo_llamadas: ninguno`, el recibo dice «bucle no vigilado». | negativo |
