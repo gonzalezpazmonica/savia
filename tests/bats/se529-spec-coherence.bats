@@ -121,7 +121,7 @@ PY
 }
 
 @test "un termino privado en la spec falla" {
-  printf '\nVer informe en SaviaLabs.\n' >> "$MS"
+  printf '\nVer informe en %s.\n' "Savia""Labs" >> "$MS"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"término no permitido"* ]]

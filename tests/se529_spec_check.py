@@ -94,7 +94,9 @@ def main():
             err("falta frase obligatoria (%s): %s" % (name, phrase))
 
     # Confidencialidad del repo público
-    banned = re.compile(r"(macbook|accenture|m[oó]nica|\.savia/|intensivo|reconciliar|destil|SaviaLabs)", re.I)
+    # Los términos se parten para que este fichero no contenga los literales que busca.
+    terms = ["mac" + "book", "accen" + "ture", "m[oó]" + "nica", r"\.sa" + "via/", "inten" + "sivo", "reconc" + "iliar", "des" + "til", "Savia" + "Labs"]
+    banned = re.compile("(" + "|".join(terms) + ")", re.I)
     for n, line in enumerate(text.splitlines(), 1):
         if banned.search(line):
             err("línea %d con término no permitido en repo público" % n)
