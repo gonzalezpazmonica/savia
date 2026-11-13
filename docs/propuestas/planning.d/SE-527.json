@@ -1,0 +1,9 @@
+{
+  "id": "SE-527",
+  "status": "PROPOSED",
+  "priority": "P3",
+  "phase": "A",
+  "title": "Recorte de agentes sobrantes (19 de 90, en cinco paquetes)",
+  "evidence": "docs/specs/SE-527-recorte-de-agentes-sobrantes.spec.md",
+  "note": "Pedida por la operadora el 2026-11-13 tras una auditoría de uso y solape. Cinco slices S1-S5 (P1 retirar 4, P2 Coherence Court -3, P3 digests -3, P4 ayudantes -4, P5 lenguajes -5), en serie, S5 el último con validación real por lenguaje. Validación con el método de SE-511 (A/B prerregistrado, regla verdict). Ahorro de mantenimiento, no de contexto (~0,9 k tokens solo en Claude Code). Todos los slices tier 4. Sin interfaz humana nueva. Preguntas abiertas Q1-Q3."
+}
