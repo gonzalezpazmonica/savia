@@ -3,6 +3,8 @@
 # sin interfaz humana, sin contradecir «ahorro de mantenimiento, no de contexto».
 # Cada comprobación se ejecuta también sobre una copia mutada y debe fallar.
 
+set -o pipefail  # las tuberías de check() fallan si falla cualquier etapa (fail-closed)
+
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 SPEC="$REPO_ROOT/docs/specs/SE-527-recorte-de-agentes-sobrantes.spec.md"
 STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-527.json"
