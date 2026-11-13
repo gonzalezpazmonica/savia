@@ -11,7 +11,7 @@ STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-531.json"
 
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1" n c last
-  grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
+  grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
   grep -q '^# SE-531 — Ficha de harness ejecutable' "$f" || { echo "título"; return 1; }
   for n in 1 2 3; do
@@ -50,11 +50,11 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   ! grep -inE "$priv" "$f" >/dev/null || { echo "texto privado"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-531 PROPOSED con evidencia existente
+check_planning() {  # check_planning <json>: 0 si es SE-531 APPROVED con evidencia existente
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-531' and d['status']=='PROPOSED', d
+assert d['id']=='SE-531' and d['status']=='APPROVED', d
 assert 'Ficha de harness' in d['title'], d['title']
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
@@ -79,11 +79,11 @@ PY
   [ "$status" -eq 0 ]
 }
 
-@test "negativo: status distinto de PROPOSED falla" {
-  mutate 'status: PROPOSED' 'status: APPROVED'
+@test "negativo: status distinto de APPROVED falla" {
+  mutate 'status: APPROVED' 'status: PROPOSED'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "negativo: human_surface true falla" {
@@ -195,7 +195,7 @@ PY2
   [[ "$output" == *"texto privado"* ]]
 }
 
-@test "planning: SE-531 PROPOSED apunta a la spec existente" {
+@test "planning: SE-531 APPROVED apunta a la spec existente" {
   run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }

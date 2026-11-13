@@ -1,8 +1,9 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P3
 developer_type: agent-single
 created: 2026-11-13
+approved_at: 2026-11-13
 author: Savia
 phase: A
 risk: L3
@@ -14,6 +15,10 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "worker autónomo; encargo de la orquestadora"
+  - from: "2026-11-13"
+    learned: "2026-11-13"
+    value: "APPROVED"
+    source: "operadora: pregunta interactiva 2026-11-13 hacia las 21:30 («Todas aprobadas con este mensaje»); registro de la orquestadora, no texto literal; se formaliza al fusionar la PR"
 ---
 
 # SE-531 — Ficha de harness ejecutable: capacidades del runtime y supervisión del proceso hijo
@@ -185,4 +190,4 @@ Lo que sí requiere a una persona es revisar cada PR de slice (S3 es tier 3: rev
 
 ## Aprobación
 
-**Pendiente de la operadora.** El estado pasa a APPROVED solo cuando la operadora lo confirme en esta PR; hasta entonces la spec es PROPOSED y no desbloquea ningún slice. S1 y S2 pueden empezar en paralelo con la spec A una vez aprobada; S3 espera a S1 y S2 y a una semana de uso real. Cada slice se fusiona con revisión humana de su PR.
+**Aprobada por la operadora** el 2026-11-13 por pregunta interactiva hacia las 21:30 («Todas aprobadas con este mensaje»; registro de la orquestadora, no texto literal). Se formaliza al fusionar la PR. S1 y S2 pueden empezar en paralelo con la spec A; S3 espera a S1 y S2 y a una semana de uso real. Cada slice se fusiona con revisión humana de su PR.
