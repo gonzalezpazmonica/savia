@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P3
 developer_type: agent-single
 created: 2026-11-13
@@ -14,6 +14,10 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "worker autónomo; encargo de la orquestadora (registro de la orquestadora de las decisiones de la operadora; no es texto literal)"
+  - from: "2026-11-13"
+    learned: "2026-11-13"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva; escenas y decisiones 6-9 confirmadas «Confirmo todo como está»"
 ---
 
 # SE-532 — Catálogo de agentes con esquema, referencias comprobadas y retirada explícita
@@ -197,7 +201,14 @@ Cuando SE-518 esté fusionada, Pulse puede emitir un evento que **informa y no a
 - **Slice S1 y S2 (la persona no ve nada nuevo).** Hoy, si alguien escribe mal una clave en la ficha de un agente o borra un agente que otra lista aún nombra, nadie se entera hasta que algo falla. Después, la revisión automática de cada PR lo para y dice qué fichero y qué línea. Quien pide cosas a Savia sigue pidiéndolas igual.
 - **Slice S3 (sí cambia lo que la persona puede ver).** Hoy, si los agentes que Savia usa en tu máquina se quedan atrás respecto al repositorio (por ejemplo tras actualizar sin regenerar), no hay aviso: lo notas cuando un agente se comporta distinto. Después, Pulse anota el desajuste y Savia, con su única voz (SE-518), puede incluirlo como un asunto más de su resumen, con los nombres de los agentes que difieren, y lo retira solo cuando vuelve a coincidir. **No añade pantallas ni botones**, no arregla nada por su cuenta y no interrumpe.
 
-Como S3 cambia algo que la persona ve, **no se pone en curso sin que la operadora confirme este texto** por pregunta interactiva (SE-505); esa confirmación no existe todavía y no se inventa aquí. Por eso la spec declara `human_surface: false` (S1 y S2 no tienen superficie, S3 solo emite un evento que la tarjeta ya sabe mostrar) y deja la confirmación de S3 como condición de arranque, no de aprobación del resto.
+Como S3 cambia algo que la persona ve, no se pone en curso sin que la operadora confirme este texto por pregunta interactiva (SE-505). **Esa confirmación existe desde el 2026-11-13** (abajo). La spec sigue declarando `human_surface: false` (S1 y S2 no tienen superficie y S3 solo emite un evento que la tarjeta ya sabe mostrar); la confirmación de S3 queda registrada como condición de arranque cumplida, no como cambio de superficie.
+
+**Texto del aviso de desajuste (S3), confirmado.** «Agentes desajustados con el repositorio: <nombre>, <nombre>. Se resolverá al regenerar las copias». Savia lo incluye como un asunto más de su resumen y lo retira sola cuando vuelve a coincidir. La especificación sigue sin fijar el texto del mensaje de error de S1 y S2 (nombra el fichero y la línea) ni cómo se ve cuando hay muchos agentes desajustados a la vez: se decide en S3 y no se inventa aquí.
+
+### Confirmación
+
+- fecha: 2026-11-13
+- respuesta: «Confirmo todo como está». Respuesta de la operadora, por pregunta interactiva, a las escenas de S1, S2 y S3 y a las decisiones 6 a 9 (abajo), con la opción recomendada en todas. Registro de la orquestadora.
 
 ## Fuera de alcance
 
@@ -208,11 +219,14 @@ Como S3 cambia algo que la persona ve, **no se pone en curso sin que la operador
 - Reescribir la allowlist de SE-253 o su guard.
 - Límites de delegación entre agentes: la línea no encadena agentes y primero hay que medir si existe alguna cadena sin cota.
 
-## Decisiones pendientes de la operadora
+## Decisiones de la operadora (2026-11-13)
 
-- **Q1. ¿`token_budget` obligatorio?** Recomendada: **no ahora**. Faltan 6 agentes y la spec no puede decidir el presupuesto de cada uno. Alternativa: obligatorio con 6 excepciones congeladas más.
-- **Q2. ¿S2 en tier 4?** Recomendada: **sí, aceptar el tier calculado**. Tocar la cabecera de los 12 agentes protegidos y su lista es gobernanza. Alternativa: dejar `protected-jobs.yaml` como fuente y que el validador solo compruebe que cada marca coincide (menos cambio, pero la lista sigue siendo a mano y duplicada).
-- **Q3. ¿SE-527 S1 consume `--retired`?** Recomendada: **sí**, en la PR de SE-527 y con tu confirmación; esta spec no toca la suya.
+Confirmadas por pregunta interactiva («Confirmo todo como está»), con la opción recomendada en todas. Registro de la orquestadora.
+
+6. **S2 (retirada de agentes) en tier 4**, revisada por la persona y sin fusión automática ni en lote (Q2): sí. Tocar la cabecera de los 12 agentes protegidos y su lista es gobernanza. Queda descartada la alternativa de dejar `protected-jobs.yaml` como fuente.
+7. **`token_budget` obligatorio** (Q1): **no ahora**. Faltan 6 agentes y la spec no puede decidir el presupuesto de cada uno.
+8. **El recorte de agentes (SE-527, primer paso) consume `--retired`** (Q3): sí, en la PR de SE-527 y con la confirmación de la persona; esta spec no toca la otra.
+9. **Texto del aviso de desajuste de catálogo (S3)**: el borrador, tal cual (ver «Puerta de comprensión»).
 
 ## Riesgos
 
@@ -247,4 +261,4 @@ Como S3 cambia algo que la persona ve, **no se pone en curso sin que la operador
 
 ## Aprobación
 
-**Pendiente de la operadora.** El orden de slices viene de sus respuestas por pregunta interactiva del 2026-11-13 (registro de la orquestadora, sin enlace verificable desde la PR). El estado pasa a APPROVED solo cuando ella lo confirme en esta PR con un comentario; hasta entonces la spec es PROPOSED y no desbloquea ningún slice. Cada slice se fusiona con revisión humana de su PR concreta (SE-362).
+**Aprobada por la operadora el 2026-11-13** por pregunta interactiva («Confirmo todo como está»), con las escenas y las decisiones 6 a 9. El orden de slices viene de sus respuestas del mismo día (registro de la orquestadora, sin enlace verificable desde la PR). Cada slice se fusiona con revisión humana de su PR concreta (SE-362); S2 es tier 4 y no entra en un lote de fusiones. S1 va antes de SE-527, S2 después y S3 tras fusionar SE-518. Se formaliza al fusionar (SE-488).

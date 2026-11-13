@@ -1,9 +1,10 @@
 {
   "id": "SE-532",
-  "status": "PROPOSED",
+  "status": "APPROVED",
   "priority": "P3",
   "phase": "A",
   "title": "Catálogo de agentes con esquema, referencias comprobadas y retirada explícita (3 slices)",
   "evidence": "docs/specs/SE-532-catalogo-de-agentes-con-esquema-y-retirada.spec.md",
-  "note": "Pedida por la operadora el 2026-11-13. Tres slices en este orden: S1 esquema de cabecera y referencias comprobadas con lista de excepciones congelada (tier 2, ANTES de SE-527, automatiza parte de su lista D2); S2 retirada explícita con lápida y lista de protegidos derivada de una marca de cabecera (pedida tier 3, calculada tier 4 por tocar .opencode/agents y protected-jobs.yaml; después de SE-527); S3 aviso de deriva del catálogo en Pulse (tier 2, después de SE-518). No duplica SE-253 (espejos): lo invoca. Solo spec: ningún agente ni configuración se toca. Pendiente de confirmación de la operadora para APPROVED; S3 además exige confirmar el antes y el después (SE-505). Aprobación de la operadora 2026-11-13 pendiente de confirmar escenas."
+  "note": "Pedida por la operadora el 2026-11-13. Tres slices en este orden: S1 esquema de cabecera y referencias comprobadas con lista de excepciones congelada (tier 2, ANTES de SE-527, automatiza parte de su lista D2); S2 retirada explícita con lápida y lista de protegidos derivada de una marca de cabecera (pedida tier 3, calculada tier 4 por tocar .opencode/agents y protected-jobs.yaml; después de SE-527); S3 aviso de deriva del catálogo en Pulse (tier 2, después de SE-518). No duplica SE-253 (espejos): lo invoca. Solo spec: ningún agente ni configuración se toca. Aprobada por la operadora el 2026-11-13 (pregunta interactiva); escenas y decisiones 6-9 confirmadas: S2 en tier 4 sin fusión en lote, presupuesto de contexto no obligatorio ahora, SE-527 usa --retired, texto del aviso de S3 confirmado.",
+  "approval": "operadora, pregunta interactiva 2026-11-13 («Confirmo todo como está»); se formaliza al fusionar (SE-488)"
 }

@@ -21,7 +21,7 @@ priv_re() {
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
   [ -s "$f" ] || { echo "spec vacía o inexistente"; return 1; }
-  grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
+  grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
   grep -q '^# SE-532 — ' "$f" || { echo "título"; return 1; }
   for n in 1 2 3; do
@@ -63,6 +63,14 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q 'No cambia ningún permiso' "$f" || { echo "falta aviso de permisos"; return 1; }
   grep -q 'Hoy no hay referencias colgantes' "$f" || { echo "falta medición de colgantes"; return 1; }
   grep -q '^## Puerta de comprensión$' "$f" || { echo "falta puerta de comprensión"; return 1; }
+  # Confirmación de la operadora: fecha real y respuesta literal entre «…», no vacía.
+  local conf
+  conf=$(awk '/^### Confirmación$/{s=1;next} /^##/{s=0} s' "$f")
+  printf '%s\n' "$conf" | grep -qE '^- fecha: 2026-11-1[3-9]$' || { echo "confirmación sin fecha"; return 1; }
+  printf '%s\n' "$conf" | grep -qE '^- respuesta: «[^»[:space:]][^»]*»' || { echo "confirmación sin respuesta literal"; return 1; }
+  grep -q '^## Decisiones de la operadora (2026-11-13)$' "$f" || { echo "faltan decisiones"; return 1; }
+  grep -q 'Agentes desajustados con el repositorio' "$f" || { echo "falta texto del aviso S3"; return 1; }
+  ! grep -q 'Pendiente de la operadora' "$f" || { echo "aprobación aún pendiente"; return 1; }
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
   # Repo público: nada privado ni de sesión.
   # El patrón se arma por trozos para que este fichero no contenga los literales que busca.
@@ -70,11 +78,11 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   ! grep -inE "$priv" "$f" || { echo "dato privado en la spec"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-532 PROPOSED, 3 slices y evidencia existente
+check_planning() {  # check_planning <json>: 0 si es SE-532 APPROVED, 3 slices y evidencia existente
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-532' and d['status']=='PROPOSED', d
+assert d['id']=='SE-532' and d['status']=='APPROVED', d
 assert 'SE-253' in d['note'] and 'S1' in d['note'] and 'S3' in d['note'], d['note']
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
@@ -198,11 +206,32 @@ PY2
   [[ "$output" == *"human_surface"* ]]
 }
 
-@test "negativo: status APPROVED sin confirmación de la operadora falla" {
-  mutate 'status: PROPOSED' 'status: APPROVED'
+@test "negativo: status PROPOSED falla" {
+  mutate 'status: APPROVED' 'status: PROPOSED'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
+}
+
+@test "negativo: confirmación sin fecha falla" {
+  mutate '- fecha: 2026-11-13' '- fecha: pendiente'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"confirmación sin fecha"* ]]
+}
+
+@test "negativo: confirmación con respuesta vacía falla" {
+  mutate '- respuesta: «Confirmo todo como está»' '- respuesta: «»'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"confirmación sin respuesta literal"* ]]
+}
+
+@test "negativo: sin el texto confirmado del aviso de S3 falla" {
+  mutate 'Agentes desajustados con el repositorio' 'Aviso sin texto'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta texto del aviso S3"* ]]
 }
 
 @test "negativo: una referencia a un dato privado falla" {
@@ -219,7 +248,7 @@ PY2
   [[ "$output" == *"dato privado"* ]]
 }
 
-@test "planning: SE-532 PROPOSED apunta a la spec existente" {
+@test "planning: SE-532 APPROVED apunta a la spec existente" {
   run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }
@@ -237,7 +266,7 @@ PY
 @test "negativo: el estado de planning con otro status falla" {
   python3 -I - "$STATE" "$BATS_TEST_TMPDIR/p.json" <<'PY'
 import json,sys
-d=json.load(open(sys.argv[1])); d['status']='APPROVED'
+d=json.load(open(sys.argv[1])); d['status']='PROPOSED'
 json.dump(d,open(sys.argv[2],'w'))
 PY
   run check_planning "$BATS_TEST_TMPDIR/p.json"
