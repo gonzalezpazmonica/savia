@@ -20,8 +20,10 @@ done_ok() {  # done_ok <job> <pr|-> [estado]
 }
 head_rec() { printf '{"head":"%s","pr":%s}\n' "$2" "$1" >> "$EV"; }
 chk() {  # chk <pr> <sha> <clase> <verificador> <ejecutor> <resultado> [extra-json-sin-llaves]
-  printf '{"pr":%s,"sha":"%s","clase":"%s","verificador":"%s","ejecutor":"%s","resultado":"%s"%s}\n' \
-    "$1" "$2" "$3" "$4" "$5" "$6" "${7:+,$7}" >> "$EV"
+  local pp=",\"propuesta_por\":\"$4\""  # el recolector fija propuesta_por = verificador salvo que el caso lo cambie
+  [[ "$7" == *propuesta_por* ]] && pp=""
+  printf '{"pr":%s,"sha":"%s","clase":"%s","verificador":"%s","ejecutor":"%s","resultado":"%s"%s%s}\n' \
+    "$1" "$2" "$3" "$4" "$5" "$6" "$pp" "${7:+,$7}" >> "$EV"
 }
 cls() { python3 "$HV" classify "$T/runs/$1/done" --evidence "$EV" "${@:2}"; }
 
@@ -101,7 +103,7 @@ cls() { python3 "$HV" classify "$T/runs/$1/done" --evidence "$EV" "${@:2}"; }
   [[ "${lines[0]}" == declarado:* ]]
 }
 
-@test "refutado: una revision distinta falla aunque otra apruebe; exit 1" {
+@test "refutado: un CI con pruebas de la base falla aunque una revision apruebe; exit 1" {
   done_ok j1 10; head_rec 10 $S1
   chk 10 $S1 revision revisora-a trabajador superada
   chk 10 $S1 ci ci-sistema trabajador fallida '"pruebas_base":5'
@@ -278,22 +280,48 @@ msr() { python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV" --until 2099
 
 # ---- AC-1.8 y regla ----
 
-@test "AC-1.8 el informe lleva el hash del prerregistro y coincide (sobrevive al squash)" {
+@test "AC-1.8 el informe lleva el hash del prerregistro y check-prereg lo da por bueno" {
   P="$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md"; M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
   [ -f "$P" ]
   [ -f "$M" ]
-  want="$(sed -n 's/^prerregistro-sha256: \([0-9a-f]\{64\}\)$/\1/p' "$M")"
-  [ "${#want}" -eq 64 ]
-  got="$(sha256sum "$P" | cut -d' ' -f1)"
-  [ "$got" = "$want" ]
+  run python3 "$HV" check-prereg "$P" "$M"
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == coincide:* ]]
 }
 
-@test "AC-1.8 negativo: un prerregistro editado despues de medir no coincide con el hash" {
+@test "AC-1.8 negativo: editar una definicion del prerregistro antes de «Desviaciones» rompe check-prereg" {
   P="$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md"; M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
-  want="$(sed -n 's/^prerregistro-sha256: \([0-9a-f]\{64\}\)$/\1/p' "$M")"
-  cp "$P" "$T/pre.md"; echo "umbral cambiado a posteriori" >> "$T/pre.md"
-  got="$(sha256sum "$T/pre.md" | cut -d' ' -f1)"
-  [ "$got" != "$want" ]
+  sed 's/^Una comprobación es independiente/Una comprobación (umbral cambiado a posteriori) es independiente/' "$P" > "$T/pre.md"
+  run cmp -s "$P" "$T/pre.md"
+  [ "$status" -ne 0 ]  # la edición se aplicó de verdad
+  run python3 "$HV" check-prereg "$T/pre.md" "$M"
+  [ "$status" -eq 1 ]
+  [[ "${lines[0]}" == "NO coincide"* ]]
+}
+
+@test "AC-1.8 negativo: alterar el hash declarado en el informe rompe check-prereg" {
+  P="$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md"; M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
+  sed -E "s/^(prerregistro-sha256: )[0-9a-f]{64}\$/\1$(printf '0%.0s' {1..64})/" "$M" > "$T/med.md"
+  run grep -c '^prerregistro-sha256: 0\{64\}$' "$T/med.md"
+  [ "$output" = "1" ]  # el hash declarado se alteró de verdad
+  run python3 "$HV" check-prereg "$P" "$T/med.md"
+  [ "$status" -eq 1 ]
+}
+
+@test "AC-1.8 la seccion Desviaciones puede crecer sin romper el hash (se escribe tras medir)" {
+  P="$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md"; M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
+  { cat "$P"; echo "4. Desviacion nueva escrita despues de medir."; } > "$T/pre.md"
+  run python3 "$HV" check-prereg "$T/pre.md" "$M"
+  [ "$status" -eq 0 ]
+}
+
+@test "AC-1.8 informe sin hash o prerregistro inexistente: salida 2, nunca coincide" {
+  M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
+  echo "sin hash" > "$T/med.md"
+  run python3 "$HV" check-prereg "$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md" "$T/med.md"
+  [ "$status" -eq 2 ]
+  run python3 "$HV" check-prereg "$T/no-existe.md" "$M"
+  [ "$status" -eq 2 ]
 }
 
 @test "regla D5 existe y prohibe «terminado» para declarado" {
@@ -398,4 +426,86 @@ sys.exit(m.main(['classify', '$T/runs/j1/done']))"
   printf '{"head":"%s","pr":true}\n' $S1 >> "$EV"
   run cls j1
   [[ "$output" == *"anomalia=head inválido"* ]]
+}
+
+# ---- hallazgos de la revisión de #1554 ----
+
+@test "marca que cita varias PR distintas: declarado aunque la primera este verificada" {
+  mkdir -p "$T/runs/x"
+  printf 'ESTADO: OK — https://github.com/org/propio/pull/10 y https://github.com/org/propio/pull/11\n' > "$T/runs/x/done"
+  head_rec 10 $S1; chk 10 $S1 revision revisora-a trabajador superada
+  run cls x --repo propio
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == declarado:*varias* ]]
+}
+
+@test "marca con la misma PR citada dos veces sigue contando (no es ambigua)" {
+  mkdir -p "$T/runs/x"
+  printf 'ESTADO: OK — https://github.com/org/propio/pull/10 (ver https://github.com/org/propio/pull/10)\n' > "$T/runs/x/done"
+  head_rec 10 $S1; chk 10 $S1 revision revisora-a trabajador superada
+  run cls x --repo propio
+  [[ "${lines[0]}" == verificado:* ]]
+}
+
+@test "la PR citada no es la que la evidencia asocia al job: declarado" {
+  done_ok jobA 10
+  printf '{"head":"%s","pr":10,"job":"jobB"}\n{"head":"%s","pr":20,"job":"jobA"}\n' $S1 $S1 >> "$EV"
+  chk 10 $S1 revision revisora-a trabajador superada
+  run cls jobA
+  [[ "${lines[0]}" == declarado:*"no es la que la evidencia asocia"* ]]
+}
+
+@test "la PR citada coincide con la del job en la evidencia: verificado" {
+  done_ok jobA 10
+  printf '{"head":"%s","pr":10,"job":"jobA"}\n' $S1 >> "$EV"
+  chk 10 $S1 revision revisora-a trabajador superada
+  run cls jobA
+  [[ "${lines[0]}" == verificado:* ]]
+}
+
+@test "--repo ignora mayusculas y con owner/repo distingue el propietario" {
+  mkdir -p "$T/runs/x"
+  printf 'ESTADO: OK — https://github.com/Org/Propio/pull/10\n' > "$T/runs/x/done"
+  head_rec 10 $S1; chk 10 $S1 revision revisora-a trabajador superada
+  run cls x --repo propio
+  [[ "${lines[0]}" == verificado:* ]]
+  run cls x --repo org/propio
+  [[ "${lines[0]}" == verificado:* ]]
+  run cls x --repo fork/propio
+  [[ "${lines[0]}" == declarado:*"otro repositorio"* ]]
+}
+
+@test "ESTADO: seguido de salto de linea y OK no es una marca valida" {
+  mkdir -p "$T/runs/x"
+  printf 'ESTADO:\nOK\n' > "$T/runs/x/done"
+  run cls x
+  [ "$status" -eq 2 ]
+}
+
+@test "D3 fail-closed: un registro de clase no mecanica sin propuesta_por no cuenta" {
+  done_ok j1 10; head_rec 10 $S1
+  printf '{"pr":10,"sha":"%s","clase":"persona","verificador":"alguien","ejecutor":"trabajador","resultado":"superada"}\n' $S1 >> "$EV"
+  run cls j1
+  [[ "${lines[0]}" == declarado:* ]]
+}
+
+@test "D3: una mecanica sin propuesta_por la recoge el recolector y cuenta" {
+  done_ok j1 10; head_rec 10 $S1
+  printf '{"pr":10,"sha":"%s","clase":"postcondicion","verificador":"recolector","ejecutor":"trabajador","resultado":"superada"}\n' $S1 >> "$EV"
+  run cls j1
+  [[ "${lines[0]}" == verificado:* ]]
+}
+
+@test "measure: --done-dir anidado con nombres de job repetidos falla con 2" {
+  mkdir -p "$T/runs/a/job" "$T/runs/b/job"
+  printf 'ESTADO: OK\n' > "$T/runs/a/job/done"; printf 'ESTADO: OK\n' > "$T/runs/b/job/done"
+  run python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV"
+  [ "$status" -eq 2 ]
+}
+
+@test "measure informa del numero de anomalias" {
+  done_ok j1 10; head_rec 10 $S1
+  chk 10 $S1 revision revisora-a trabajador superada '"estado":"verificado"'
+  run python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV"
+  [[ "$output" == *"anomalias: 1"* ]]
 }

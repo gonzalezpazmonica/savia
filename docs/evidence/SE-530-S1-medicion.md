@@ -1,8 +1,8 @@
 # SE-530 S1 — Medición de H9 (primera ejecución)
 
-Prerregistro: `docs/evidence/SE-530-S1-prerregistro.md` (AC-1.8: el hash de abajo ata esta medición al texto exacto del prerregistro; `tests/bats/hecho-verificado.bats` lo recalcula y falla si el prerregistro cambió después, también tras un squash).
+Prerregistro: `docs/evidence/SE-530-S1-prerregistro.md` (AC-1.8). El hash de abajo cubre el texto del prerregistro anterior a «## Desviaciones» (esa sección se escribe después de medir, por eso queda fuera). `python3 scripts/hecho-verificado.py check-prereg` lo recalcula y `tests/bats/hecho-verificado.bats` lo ejecuta: falla si las definiciones o el umbral cambian tras la medición, también tras un squash. Lo que el hash NO prueba es que el prerregistro fuera anterior a la medición: eso lo prueba el historial de commits (el prerregistro se commiteó antes que el informe). Es una garantía de integridad, no de orden.
 
-prerregistro-sha256: 2d6c5fa684aabc12f2e865e4be2e6a0e9672c5c656f1078fa5cf91bada795b18
+prerregistro-sha256: c338fed9524420d29bb766f760d05c377c83c9bc277b1ee929521619f9748e8e
 
 ## Resultado
 
@@ -47,6 +47,7 @@ python3 scripts/hecho-verificado.py measure --done-dir <marcas> --until 2026-11-
 - Qué dice y qué no dice el resultado: dice que, **con la evidencia que hoy se guarda**, 4 de cada 5 OK no tienen confirmación independiente registrada. No dice que 4 de cada 5 trabajos estén mal.
 - El SHA vigente es la cabeza de la PR en el momento de medir, no en el momento de la marca. Una revisión sobre un SHA que la PR ya sustituyó cuenta como «de un SHA anterior».
 - Los registros de revisión se identifican por número de PR. El registro es de este repositorio; las PR de otros repositorios se excluyen con `--repo`.
+- Los ficheros de entrada (`heads.jsonl`, `reviews.jsonl`) y las marcas no se versionan: el 81,9 % no es reproducible por un tercero desde este repositorio; solo es auditable por quien tenga el registro de revisiones y las marcas. Es una limitación de S1.
 - El directorio de marcas es vivo: una marca nueva dentro de la ventana cambia las cifras. Dos ejecuciones sobre los mismos ficheros dan la misma salida (AC-1.1); entre mi ejecución de prueba y la definitiva el recuento de no-OK pasó de 59 a 60 porque un trabajador cerró una marca.
 
 ## Consecuencia según el prerregistro

@@ -36,10 +36,11 @@ Un trabajo `declarado` se puede usar; lo que no se puede es llamarlo terminado.
 ## Uso
 
 ```
-python3 scripts/hecho-verificado.py classify <marca-de-fin> [--evidence F] [--reviews F] --repo <repo>
-python3 scripts/hecho-verificado.py measure --done-dir <dir> [--window 14] [--until AAAA-MM-DD] --repo <repo>
+python3 scripts/hecho-verificado.py classify <marca-de-fin> [--evidence F] [--reviews F] --repo <repo|owner/repo>
+python3 scripts/hecho-verificado.py measure --done-dir <dir> [--window 14] [--until AAAA-MM-DD] --repo <repo|owner/repo>
+python3 scripts/hecho-verificado.py check-prereg <prerregistro> <medicion>
 ```
 
 `classify`: estado en la primera línea de stdout; salida 0 verificado o declarado legible, 1 refutado, 2 marca ilegible (declarado por fallo cerrado). Prerregistro y medición: `docs/evidence/SE-530-S1-*.md`.
 
-`--repo` es necesario cuando la marca cita una URL de GitHub: sin él la marca es `declarado` (el número de PR solo identifica algo dentro de su repositorio). Un error interno sale con 2, nunca con 1. Una falla de la orquestadora o con verificador igual al ejecutor no refuta, pero impide `verificado`. Supuestos de S1: el recolector escribe `propuesta_por` (si falta, D3 no se exige) y `--done-dir` es plano (un directorio por trabajo, sin anidar); en S2 el recolector fija el campo y el job se identifica por ruta relativa.
+`--repo` (`repo` u `owner/repo`, sin distinguir mayúsculas) es necesario cuando la marca cita una URL de GitHub: sin él la marca es `declarado`. Una marca que cita varias PR distintas es `declarado` (la escribe el ejecutor; no se elige la que convenga), y si la evidencia asocia el job a una PR, la marca debe citar esa. Un error interno sale con 2, nunca con 1. `declarado` y `verificado` salen ambos con 0: quien consuma el resultado debe leer la primera línea, no `$?`. Una falla de la orquestadora o con verificador igual al ejecutor no refuta, pero impide `verificado`. D3 es fail-closed: un registro de clase no mecánica sin `propuesta_por` se toma como propuesto por el ejecutor y exige aprobación de la persona. Supuesto de S1: `--done-dir` es plano (`measure` rechaza nombres de job repetidos); en S2 el recolector fija `propuesta_por` y el job se identifica por ruta relativa.

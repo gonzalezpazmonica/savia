@@ -3,6 +3,7 @@
 
   classify <marca-de-fin> [--evidence F]... [--reviews F]... [--orchestrator IDS]
   measure --done-dir DIR [--window 14] [--until YYYY-MM-DD] [--evidence F]... [--reviews F]...
+  check-prereg <prerregistro> <medicion>   (AC-1.8: 0 coincide · 1 no coincide · 2 error)
 
 Salida de classify (el estado va siempre en la primera línea de stdout):
   0 verificado, o declarado con marca legible · 1 refutado · 2 marca ilegible, vacía o sin ESTADO:
@@ -10,10 +11,12 @@ Estado derivado en lectura (D1); nada se escribe. Ante dato ausente o ambiguo: d
 """
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import sys
+from collections import Counter
 
 ORCH_DEFAULT = "savia-orchestrator savia-orquestadora"  # misma lista que merge-sprint.sh
 MECANICAS = {"ci_base", "postcondicion"}
@@ -28,7 +31,7 @@ def orch_ids(arg):
 
 
 def parse_done(path):
-    """→ (estado, pr, motivo_error). estado None si la marca es ilegible."""
+    """→ (estado, pr, motivo_error); pr = (n, owner, repo) | 'multiple'. estado None si la marca es ilegible."""
     try:
         with open(path, "r", encoding="utf-8") as f:
             txt = f.read()
@@ -36,11 +39,19 @@ def parse_done(path):
         return None, None, "marca ilegible (%s)" % type(e).__name__
     if not txt.strip():
         return None, None, "marca vacía"
-    m = re.search(r"^ESTADO:\s*(OK|PARCIAL|FALLO)\b", txt, re.M)
+    m = re.search(r"^ESTADO:[ \t]*(OK|PARCIAL|FALLO)\b", txt, re.M)
     if not m:
         return None, None, "marca sin línea ESTADO: válida"
-    pr = re.search(r"github\.com/[^/\s]+/([^/\s]+)/pull/(\d+)", txt) or re.search(r"()/pull/(\d+)", txt)
-    return m.group(1), ((int(pr.group(2)), pr.group(1)) if pr else (None, "")), None
+    gh = re.findall(r"github\.com/([^/\s]+)/([^/\s]+)/pull/(\d+)", txt)
+    prs = {(o.lower(), r.lower(), int(n)) for o, r, n in gh}
+    otras = Counter(re.findall(r"/pull/(\d+)", txt)) - Counter(n for _, _, n in gh)  # URL sin github.com
+    prs |= {("", "", int(n)) for n in otras}
+    if len(prs) > 1:  # la marca la escribe el ejecutor: varias PR citadas = ambiguo, no se elige la que convenga
+        return m.group(1), "multiple", None
+    if not prs:
+        return m.group(1), (None, "", ""), None
+    o, r, n = next(iter(prs))
+    return m.group(1), (n, o, r), None
 
 
 def load_jsonl(path, anomalias):
@@ -74,19 +85,21 @@ def review_to_record(d, anomalias):
         anomalias.append("verdict desconocido %r ignorado" % (d["verdict"],))
         return None
     return {"pr": d["pr"], "sha": d["sha"], "clase": "revision", "verificador": d["reviewer"],
-            "ejecutor": d["author"], "resultado": res}
+            "ejecutor": d["author"], "resultado": res, "propuesta_por": d["reviewer"]}
 
 
 class Evidencia:
     def __init__(self, evidence, reviews):
         self.anom = []
-        self.heads, self.checks = {}, []
+        self.heads, self.checks, self.job_pr = {}, [], {}
         for p in evidence:
             for d in load_jsonl(p, self.anom):
                 if "head" in d:
                     k = self._key(d)
                     if k and isinstance(d["head"], str) and SHA_RE.match(d["head"]):
                         self.heads[k] = d["head"]  # el último registro manda
+                        if k[0] == "pr" and isinstance(d.get("job"), str):
+                            self.job_pr[d["job"]] = k[1]  # la PR de un trabajo la fija el recolector, no la marca
                     else:
                         self.anom.append("head inválido")
                 else:
@@ -112,14 +125,24 @@ class Evidencia:
         return head, recs
 
 
+def repo_ok(repo, owner, name):
+    """--repo admite «repo» u «owner/repo»; GitHub no distingue mayúsculas."""
+    want = repo.lower().split("/")
+    return name == want[-1] and (len(want) < 2 or owner == want[0])
+
+
 def evaluar(estado, prr, job, ev, orch, repo=None):
     """Deriva (estado_hv, motivo, clases_vistas, clases_independientes, anomalias, propia_falla)."""
     anom = list(ev.anom)
-    pr, repo_pr = prr
+    if prr == "multiple":
+        return "declarado", "la marca cita varias PR distintas: ambiguo, sin evidencia comparable", set(), set(), anom, False
+    pr, owner_pr, repo_pr = prr
     if pr is not None and repo_pr and not repo:  # sin --repo no se sabe de qué repositorio es el número
         return "declarado", "la marca cita el repositorio %s y no se indicó --repo: sin evidencia comparable" % repo_pr, set(), set(), anom, False
-    if repo and pr is not None and repo_pr != repo:  # los números de PR de otro repo no son los nuestros
+    if repo and pr is not None and not repo_ok(repo, owner_pr, repo_pr):  # los números de PR de otro repo no son los nuestros
         return "declarado", "PR de otro repositorio (%s): sin evidencia comparable" % (repo_pr or "desconocido"), set(), set(), anom, False
+    if pr is not None and ev.job_pr.get(job, pr) != pr:
+        return "declarado", "la PR citada (#%d) no es la que la evidencia asocia al trabajo (#%d)" % (pr, ev.job_pr[job]), set(), set(), anom, False
     head, recs = ev.para(pr, job)
     if estado != "OK":
         return "declarado", "el trabajador no declara OK (ESTADO: %s)" % estado, set(), set(), anom, False
@@ -150,11 +173,11 @@ def evaluar(estado, prr, job, ev, orch, repo=None):
             anom.append("registro sin ejecutor o verificador: no cuenta")
             continue
         indep = ver != ejec and (clase in MECANICAS or ver not in orch) and clase != "ci_propio"
-        # D3: si la comprobación la propuso alguien que no es el verificador (o el campo no es una
-        # cadena), exige aprobación de la persona. Un registro sin `propuesta_por` se toma como
-        # recogido por el recolector (supuesto de S1; en S2 el recolector fija el campo).
-        pp = r.get("propuesta_por")
-        if indep and "propuesta_por" in r and pp != ver:
+        # D3: si la comprobación la propuso alguien que no es el verificador, exige aprobación de la
+        # persona. Sin `propuesta_por` en una clase no mecánica no se sabe quién la propuso: se trata
+        # como propuesta del ejecutor (fail-closed). Las mecánicas las recoge el recolector.
+        pp = r.get("propuesta_por", None if clase not in MECANICAS else ver)
+        if indep and pp != ver:
             ap, h, ah = r.get("aprobada_por"), r.get("contenido_hash"), r.get("aprobada_hash")
             indep = (isinstance(ap, str) and ap != "" and ap != ejec and ap not in orch
                      and isinstance(h, str) and h != "" and ah == h)
@@ -214,6 +237,10 @@ def cmd_measure(a):
         if "done" in files:
             marcas.append(os.path.join(root, "done"))
     marcas.sort()
+    jobs = [job_de(p) for p in marcas]
+    if len(set(jobs)) != len(jobs):  # el job es el nombre del directorio: anidar mezclaría evidencia
+        print("measure: nombres de trabajo repetidos (--done-dir debe ser plano)", file=sys.stderr)
+        return 2
     if not marcas:
         print("measure: sin marcas en el directorio", file=sys.stderr)
         return 2
@@ -227,6 +254,7 @@ def cmd_measure(a):
     ev = Evidencia(a.evidence, a.reviews)
     orch = orch_ids(a.orchestrator)
     n_ok, por_estado, por_clase, ilegibles, no_ok = 0, {"verificado": 0, "declarado": 0, "refutado": 0}, {}, 0, 0
+    anoms = set()
     for p in marcas:
         if not desde <= fechas[p] <= hasta:
             continue
@@ -238,8 +266,9 @@ def cmd_measure(a):
             no_ok += 1
             continue
         n_ok += 1
-        st, _, vistas, indep_c, _, _ = evaluar(estado, pr, job_de(p), ev, orch, a.repo)
+        st, _, vistas, indep_c, an, _ = evaluar(estado, pr, job_de(p), ev, orch, a.repo)
         por_estado[st] += 1
+        anoms |= set(an)
         for c in vistas:  # ci_propio se informa siempre (nunca es independiente); el resto, solo si lo es
             if c != "ci_propio" and c not in indep_c:
                 continue
@@ -249,6 +278,7 @@ def cmd_measure(a):
     print("n_ok: %d" % n_ok)
     print("no_ok: %d" % no_ok)
     print("ilegibles: %d" % ilegibles)
+    print("anomalias: %d" % len(anoms))
     for s in ("verificado", "declarado", "refutado"):
         print("estado.%s: %d" % (s, por_estado[s]))
     print("clase.autodeclaracion: %d" % n_ok)
@@ -258,6 +288,29 @@ def cmd_measure(a):
     print("porcentaje: %s" % ("%d.%d" % divmod(sin * 1000 // n_ok, 10) if n_ok else "n/a"))
     print("H9: %s" % veredicto(n_ok, sin))
     return 0
+
+
+def prereg_hash(path):
+    """SHA-256 del prerregistro congelado: el texto anterior a «## Desviaciones» (esa sección se escribe tras medir)."""
+    with open(path, encoding="utf-8") as f:
+        txt = f.read()
+    m = re.search(r"^## Desviaciones$", txt, re.M)
+    return hashlib.sha256((txt[:m.start()] if m else txt).encode("utf-8")).hexdigest()
+
+
+def cmd_check_prereg(a):
+    try:
+        got = prereg_hash(a.prereg)
+        with open(a.medicion, encoding="utf-8") as f:
+            m = re.search(r"^prerregistro-sha256: ([0-9a-f]{64})$", f.read(), re.M)
+    except (OSError, UnicodeDecodeError) as e:
+        print("error: %s" % type(e).__name__, file=sys.stderr)
+        return 2
+    if not m:
+        print("error: el informe no declara prerregistro-sha256", file=sys.stderr)
+        return 2
+    print("%s: calculado %s, declarado %s" % ("coincide" if got == m.group(1) else "NO coincide", got, m.group(1)))
+    return 0 if got == m.group(1) else 1
 
 
 def main(argv=None):
@@ -275,9 +328,12 @@ def main(argv=None):
             s.add_argument("--done-dir", required=True)
             s.add_argument("--window", type=int, default=14)
             s.add_argument("--until")
+    s = sub.add_parser("check-prereg")
+    s.add_argument("prereg")
+    s.add_argument("medicion")
     a = ap.parse_args(argv)
     try:
-        return cmd_classify(a) if a.cmd == "classify" else cmd_measure(a)
+        return {"classify": cmd_classify, "measure": cmd_measure, "check-prereg": cmd_check_prereg}[a.cmd](a)
     except Exception as e:  # fail-closed: un error interno nunca es «refutado» (1)
         print("declarado: error interno (%s)" % type(e).__name__, file=sys.stderr)
         return 2
