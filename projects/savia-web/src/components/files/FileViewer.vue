@@ -49,9 +49,19 @@ async function onViewerClick(e: MouseEvent) {
   const btn = (e.target as HTMLElement | null)?.closest?.('.code-copy-btn') as HTMLElement | null
   if (!btn) return
   const code = btn.closest('.code-block-wrap')?.querySelector('code')?.textContent ?? ''
-  await navigator.clipboard.writeText(code)
+  // Sin portapapeles (contexto no seguro) o con permiso denegado: no se anuncia copiado.
+  if (!(await writeClipboard(code))) return
   btn.textContent = 'Copied!'
   setTimeout(() => { btn.textContent = 'Copy' }, 1500)
+}
+
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
 
 const frontmatter = computed(() => {
@@ -79,7 +89,7 @@ const markdownBody = computed(() => {
 const lines = computed(() => props.content.split('\n'))
 
 async function copyToClipboard() {
-  await navigator.clipboard.writeText(props.content)
+  if (!(await writeClipboard(props.content))) return
   copied.value = true
   setTimeout(() => { copied.value = false }, 1500)
 }

@@ -21,6 +21,13 @@ export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, c => ESC[c])
 }
 
+// Como escapeHtml, pero respeta las entidades ya escritas (`&amp;`, `&#39;`) igual que
+// el renderer `text` de marked: el texto se ve idéntico y no queda ningún `<` crudo.
+const TEXT_ESC = /[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g
+function escapeText(s: string): string {
+  return s.replace(TEXT_ESC, c => ESC[c])
+}
+
 const SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
 const SAFE_IMG_DATA = /^data:image\/(png|jpeg|gif|webp);base64,[a-zA-Z0-9+/=]+$/i
 
@@ -44,6 +51,14 @@ function build(opts: SafeMarkdownOptions): Marked {
       // HTML crudo (bloque o en línea): se muestra como texto.
       html({ text }: Tokens.HTML | Tokens.Tag) {
         return escapeHtml(text)
+      },
+      // Texto hoja: SIEMPRE escapado. Tras un tag en línea <pre>/<code>/<kbd>/<script>
+      // el lexer de marked marca los tokens `text` siguientes como `escaped: true` y el
+      // renderer por defecto los emite crudos (`x <pre> <img/src=x onerror=…>`). Aquí
+      // se ignora `escaped`: el único HTML de la salida lo emite este fichero.
+      text(this: { parser: { parseInline: (t: Tokens.Generic[]) => string } }, token: Tokens.Text | Tokens.Escape) {
+        if ('tokens' in token && token.tokens) return this.parser.parseInline(token.tokens)
+        return escapeText(token.text)
       },
       link(this: { parser: { parseInline: (t: Tokens.Generic[]) => string } }, { href, title, tokens }: Tokens.Link) {
         const inner = this.parser.parseInline(tokens)
@@ -79,16 +94,24 @@ function build(opts: SafeMarkdownOptions): Marked {
   return m
 }
 
-const cache = new Map<string, Marked>()
+type Highlight = NonNullable<SafeMarkdownOptions['highlight']>
+const NO_HIGHLIGHT = new Map<string, Marked>()
+// Una instancia por función `highlight` (identidad, no solo presencia): dos llamadores
+// con resaltadores distintos nunca comparten renderer. WeakMap: no retiene funciones.
+const BY_HIGHLIGHT = new WeakMap<Highlight, Map<string, Marked>>()
 
 /** Markdown → HTML seguro para v-html. Único punto de saneado de la web. */
 export function renderSafeMarkdown(text: string, opts: SafeMarkdownOptions = {}): string {
-  // El instante de `highlight` no entra en la clave: cada llamador usa siempre el mismo.
-  const key = `${opts.breaks ? 'b' : ''}${opts.highlight ? 'h' : ''}`
-  let m = cache.get(key)
+  let bucket = NO_HIGHLIGHT
+  if (opts.highlight) {
+    bucket = BY_HIGHLIGHT.get(opts.highlight) ?? new Map<string, Marked>()
+    BY_HIGHLIGHT.set(opts.highlight, bucket)
+  }
+  const key = opts.breaks ? 'b' : ''
+  let m = bucket.get(key)
   if (!m) {
     m = build(opts)
-    cache.set(key, m)
+    bucket.set(key, m)
   }
   return m.parse(text ?? '', { async: false }) as string
 }

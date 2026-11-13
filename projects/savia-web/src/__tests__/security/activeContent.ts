@@ -21,6 +21,13 @@ export const PAYLOADS: Record<string, string> = {
   htmlAnchorJs: '<a href="javascript:window.__pwned=1">x</a>',
   htmlOnclick: '<div onclick="window.__pwned=1">x</div>',
   fenceLangBreak: '```js"><img src=x onerror=window.__pwned=1>\ncode\n```',
+  // inRawBlock de marked: tras <pre>/<script>/<kbd>/<code> en línea, el texto sale
+  // marcado como escapado. `<img/src=…>` no es tag para CommonMark pero sí para el navegador.
+  rawBlockPre: 'x <pre> <img/src=x onerror=window.__pwned=1>',
+  rawBlockScript: 'x <script> <img/src=x onerror=window.__pwned=1>',
+  rawBlockKbdTable: '| a |\n|---|\n| <kbd> <img/src=x onerror=window.__pwned=1> |',
+  rawBlockCodeList: '- <code> <svg/onload=window.__pwned=1>',
+  rawBlockPreQuote: '> x **<pre>** <img/src=x onerror=window.__pwned=1>',
 }
 
 /** Devuelve la lista de motivos por los que el árbol contiene algo ejecutable. */

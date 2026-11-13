@@ -36,7 +36,28 @@ describe('safeMarkdown: punto único de saneado (SE-528 S1, AC-1.1/1.2/1.3)', ()
   it('esquemas ejecutables: el enlace queda como texto, sin <a>', () => {
     const html = renderSafeMarkdown('[a](javascript:alert(1)) [b](JaVaScRiPt:alert(1)) [c](vbscript:x) [d](data:text/html,<b>)')
     expect(html).not.toMatch(/<a /)
-    expect(html).toContain('a')
+    // el texto de cada enlace se conserva como texto plano
+    expect(html).toBe('<p>a b c d</p>\n')
+  })
+
+  it('texto tras un tag en línea <pre>/<script>/<kbd>/<code> sale escapado (inRawBlock)', () => {
+    for (const tag of ['pre', 'script', 'kbd', 'code']) {
+      const html = renderSafeMarkdown(`x <${tag}> <img/src=x onerror=alert(1)>`)
+      expect(html).toBe(`<p>x &lt;${tag}&gt; &lt;img/src=x onerror=alert(1)&gt;</p>\n`)
+    }
+  })
+
+  it('el texto conserva las entidades ya escritas y escapa el resto', () => {
+    expect(renderSafeMarkdown('a &amp; b &#39; < c')).toBe('<p>a &amp; b &#39; &lt; c</p>\n')
+  })
+
+  it('caché por función highlight: dos resaltadores distintos no se mezclan', () => {
+    const md = '```js\nx\n```'
+    const a = renderSafeMarkdown(md, { highlight: () => 'HL-A' })
+    const b = renderSafeMarkdown(md, { highlight: () => 'HL-B' })
+    expect(a).toContain('HL-A')
+    expect(b).toContain('HL-B')
+    expect(b).not.toContain('HL-A')
   })
 
   it('safeUrl: casos límite', () => {
