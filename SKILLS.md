@@ -84,6 +84,7 @@ To use a skill: read `<path>` and follow its instructions.
 | managed-content | `.opencode/skills/managed-content/SKILL.md` | Usar cuando se regeneran secciones auto-generadas en documentos con marcadores de seguridad. |
 | meeting-transcript-extract | `.opencode/skills/meeting-transcript-extract/SKILL.md` | Usar cuando se necesita extraer la transcripción de una reunión Teams desde el browser. |
 | memvid-backup | `.opencode/skills/memvid-backup/SKILL.md` | Usar cuando se crea un backup portable de la memoria externa de Savia. |
+| merge-plan | `.opencode/skills/merge-plan/SKILL.md` | Prepara el plan ordenado de un merge-sprint y lee sus choques previstos. Usar cuando se va a pedi... |
 | meta-reflection | `.opencode/skills/meta-reflection/SKILL.md` | Protocolo de las 4 meta-preguntas para cuestionar el encuadre de una tarea antes de ejecutarla. S... |
 | mobile-security-scanner | `.opencode/skills/mobile-security-scanner/SKILL.md` | Usar cuando se escanea un APK/AAB Android en busca de vulnerabilidades de seguridad. Integra con ... |
 | model-upgrade-audit | `.opencode/skills/model-upgrade-audit/SKILL.md` | Usar cuando hay un modelo nuevo disponible y se quiere detectar prompt debt en el workspace. |

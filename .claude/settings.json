@@ -501,6 +501,18 @@
         ]
       },
       {
+        "matcher": "mcp__.*|WebFetch|WebSearch",
+        "_comment": "SE-508 S1 guard previo de efectos MCP/WebFetch/WebSearch (DUAL_BINDING con savia-gates lib/mcp-effect-guard.ts)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.opencode/hooks/mcp-effect-guard.sh",
+            "timeout": 30,
+            "statusMessage": "Guard de efectos MCP y web (SE-508)..."
+          }
+        ]
+      },
+      {
         "matcher": ".*",
         "hooks": [
           {

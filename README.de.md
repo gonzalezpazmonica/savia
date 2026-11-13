@@ -16,7 +16,7 @@ lang: de
 
 **Savia ist eine agentische Meta-Orchestratorin für Forschung, Entwicklung und Innovation (FuE+I): Sie koordiniert spezialisierte Agenten und Harnesses, Forschungslinien, Kuppeln gesteuerten Wissens und Projekte, wobei die Autorität stets beim Menschen liegt. Open Source und souverän.**
 
-**567 Befehle · 90 Agenten · 139 Skills · 134 Hooks**
+**567 Befehle · 90 Agenten · 139 Skills · 135 Hooks**
 
 Savia orchestriert KI-gestützte FuE+I-Arbeit: Sie verteilt Aufgaben auf spezialisierte Harnesses (Ausführende, unabhängige Prüferinnen, externe Anbieter), trägt Forschungslinien, steuert Wissen in Kuppeln (Savia Vaults) und führt Projektmanagement als eine Fähigkeit unter mehreren. Sie integriert Gedächtnis, Sicherheit, ausführbare Richtlinien (policy-as-code), Nachvollziehbarkeit mit Receipts und Evaluation auf einer Architektur, die von Modell, Anbieter und Frontend unabhängig ist. Sie läuft lokal mit Daten- und Inferenzsouveränität, in 9 Sprachen.
 

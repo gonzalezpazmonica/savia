@@ -174,3 +174,17 @@ test("a hook at the project root does not pin the whole root", async () => {
   await writeFile(join(root, "guard.sh"), "exit 1\n")
   expect((await verifyPin(pin)).length).toBe(1)
 })
+
+test("SE-508: el catálogo de efectos y la lista de hosts entran en el pin; otro fichero de config/ no", async () => {
+  const root = await workspace()
+  await mkdir(join(root, "config"), { recursive: true })
+  await writeFile(join(root, "config/mcp-effect-catalog.yaml"), "mcp__x__y: write\n")
+  await writeFile(join(root, "config/otro.yaml"), "a: 1\n")
+  const pin = await capturePin(root, await loadHookMap(root))
+  expect(protectsPath(pin, root, "config/mcp-effect-catalog.yaml")).toBe(true)
+  // aún no existe: crearlo después también es un cambio
+  expect(protectsPath(pin, root, "config/webfetch-allow-hosts")).toBe(true)
+  expect(protectsPath(pin, root, "config/otro.yaml")).toBe(false)
+  await writeFile(join(root, "config/mcp-effect-catalog.yaml"), "mcp__x__y: read_only\n")
+  expect((await verifyPin(pin)).some((p) => p.endsWith("config/mcp-effect-catalog.yaml"))).toBe(true)
+})

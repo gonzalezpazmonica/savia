@@ -41,6 +41,9 @@ GOVERNANCE_EXACT = (
     # SE-343: raíz de confianza del grant de merge y quien lo verifica y lo usa.
     # Un PR que los cambie no se mergea sin la operadora (merge-sprint excluye tier 4).
     "config/operator-grant-signers", "scripts/operator-grant.sh", "scripts/push-pr.sh",
+    # SE-511 S2 (revisión de seguridad de #1527, P1-1): el bloque que se carga en cada turno con
+    # las reglas de autonomía y honestidad, y el generador que decide qué regiones entran en él.
+    "docs/rules/domain/savia-core.md", "scripts/generate-savia-core.py",
 )
 GOVERNANCE_PREFIXES = ("config/merge-sprint", ".opencode/", ".github/workflows/")
 # SE-510 D1: corpus de órdenes que ninguna guarda puede bloquear. Cada entrada es una exención:
