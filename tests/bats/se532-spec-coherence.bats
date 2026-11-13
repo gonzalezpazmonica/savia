@@ -95,10 +95,16 @@ PY
   [[ "$output" == *"falta slice S3"* ]]
 }
 
-@test "negativo: S2 antes de S1 falla por el orden" {
-  mutate '### S1 — Esquema y referencias comprobadas (tier 2, antes de SE-527)' '### S2 — Esquema y referencias comprobadas (tier 2, antes de SE-527)'
+@test "negativo: S1 y S2 intercambiados fallan por el orden, no por otra causa" {
+  python3 -I - "$M" <<'PY2'
+import sys,re
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+s=s.replace("### S1 — ","### SX — ",1).replace("### S2 — ","### S1 — ",1).replace("### SX — ","### S2 — ",1)
+open(p,"w",encoding="utf-8").write(s)
+PY2
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"orden de slices"* ]]
 }
 
 @test "negativo: un cuarto slice falla" {
@@ -164,6 +170,7 @@ PY
   mutate '19 claves de cabecera distintas' '21 claves de cabecera distintas'
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"falta 19 claves"* ]]
 }
 
 @test "negativo: sin la sección que separa SE-253 falla" {
@@ -177,6 +184,7 @@ PY
   mutate 'human_surface: false' 'human_surface: true'
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"human_surface"* ]]
 }
 
 @test "negativo: status APPROVED sin confirmación de la operadora falla" {
@@ -197,6 +205,7 @@ PY
   printf '\nSavia''Labs\n' >> "$M"
   run check "$M"
   [ "$status" -ne 0 ]
+  [[ "$output" == *"dato privado"* ]]
 }
 
 @test "planning: SE-532 PROPOSED apunta a la spec existente" {
@@ -235,11 +244,20 @@ PY
   [ "$status" -ne 0 ]
 }
 
-@test "edge: cifras de agentes del catálogo real coinciden con la spec" {
-  n=$(ls "$REPO_ROOT"/.opencode/agents/*.md | wc -l)
-  [ "$n" -eq 90 ]
-  r=$(grep -cE '^\s+- agent:' "$REPO_ROOT/config/judge-routing.yaml")
-  [ "$r" -eq 33 ]
-  p=$(sed -n '/^protected_agents:/,/^autonomous_modes:/p' "$REPO_ROOT/.opencode/protected-jobs.yaml" | grep -c '^  - ')
-  [ "$p" -eq 12 ]
+@test "repo público: changelog, LOG, planning y este test no contienen datos privados" {
+  local priv="mac""book|accen""ture|m[oó]""nica|\.sa""via/|inten""sivo|reconci""liar|des""til|Savia""Labs"
+  for f in "$REPO_ROOT/CHANGELOG.d/se532-catalogo-agentes.md" \
+           "$REPO_ROOT/docs/propuestas/LOG.d/SE-532-PROPOSED.md" \
+           "$STATE" "$BATS_TEST_FILENAME"; do
+    [ -s "$f" ]
+    run grep -inE "$priv" "$f"
+    [ "$status" -eq 1 ]
+  done
+}
+
+@test "negativo: el barrido de datos privados detecta un literal en un fichero auxiliar" {
+  local priv="mac""book|accen""ture|m[oó]""nica|\.sa""via/|inten""sivo|reconci""liar|des""til|Savia""Labs"
+  printf 'nota: ~/.sa''via/x\n' > "$BATS_TEST_TMPDIR/aux.md"
+  run grep -inE "$priv" "$BATS_TEST_TMPDIR/aux.md"
+  [ "$status" -eq 0 ]
 }

@@ -114,7 +114,7 @@ Además corre como pasos, sin reimplementarlos, `scripts/agents-catalog-sync.sh 
 `docs/agent-catalog-exceptions.txt`: una línea por incumplimiento conocido, con agente, regla, detalle, fecha de alta y motivo. Se genera una sola vez con `--freeze` en la PR de S1 y **solo puede encoger**:
 
 - Una excepción cuya violación ya no existe es **error por obsoleta** (mismo patrón que la baseline de `validate-agent-permissions.sh`).
-- Una excepción nueva respecto a `origin/main` es error. Si no se puede leer la versión de `origin/main` del fichero, el validador falla (fail-closed), salvo en la propia PR que lo crea.
+- Una excepción nueva respecto a `origin/main` es error. Si no se puede leer la versión de `origin/main` del fichero, el validador falla (fail-closed), salvo en la PR que crea el fichero, y eso solo cuando `git cat-file -e origin/main:<fichero>` confirma que el fichero no existe en la base (fichero ausente) y sí existe en `HEAD`. Un fallo de lectura de `origin/main` (fetch roto, ref inexistente) no cuenta como «fichero ausente» y falla.
 - Una excepción de un agente retirado es error: retirar un agente la quita en el mismo cambio (S2).
 - Un agente nuevo no puede entrar con excepciones.
 
