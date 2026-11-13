@@ -32,7 +32,7 @@ timeline:
 | Pieza | Dónde (verificado en main) | Qué cubre | Qué no cubre |
 |---|---|---|---|
 | Revisor independiente de una PR | `scripts/merge-sprint.sh:89` (`revisor no independiente`), `:29` (`is_orch`) | Un `VERDICT` solo se registra si revisor ≠ autor y el revisor no es la orquestadora | Solo existe para PRs que entran en un merge-sprint, no para cualquier trabajo |
-| Estado derivado en lectura | `scripts/savia-runs.sh:111-135` | Precedencias en un solo sitio, con traza del motivo | No distingue «declarado» de «verificado» |
+| Estado derivado en lectura | `scripts/savia-runs.sh:111-133` | Precedencias en un solo sitio, con traza del motivo | No distingue «declarado» de «verificado» |
 | Estado afirmado sin comprobar | `.claude/hooks/stop-dod-gate.sh:122-161` (DOD-004) | Bloquea la afirmación en el turno de la conversación | No sabe quién comprobó ni si era independiente |
 | Aprobación por la persona | `scripts/approval-receipt.py` (SE-488) | Artefacto de aprobación que un agente no puede producir por sí mismo | No está ligado a «este trabajo concreto» |
 | Verificador real por proyecto | `docs/specs/SE-503-real-verifier-per-project.spec.md` (PROPOSED) | Define cómo ejecutar una comprobación real en un proyecto | No dice quién la propone ni si cuenta como independiente |
@@ -100,7 +100,7 @@ Cada trabajo aparece con uno de tres estados y con **la razón**:
 | `verificado` | No hay refutación y existe al menos una comprobación **independiente** (D2), **aprobada** (D3), **superada** y **ligada al SHA vigente** del trabajo (D4). |
 | `declarado` | Todo lo demás, incluido: sin recibo, recibo ilegible, campo ausente, identidad del ejecutor desconocida, comprobación solo del ejecutor, comprobación de un SHA anterior. |
 
-Precedencia: `refutado` > `verificado` > `declarado`. Una comprobación que falla pesa más que cien que pasan: un trabajo con una revisora que aprueba y un CI de la base en rojo es `refutado`. **El estado se deriva siempre en lectura y nunca lo escribe el ejecutor** (mismo principio que `scripts/savia-runs.sh:107`): un recibo que traiga un campo de estado escrito por el trabajador se ignora y se anota como anomalía.
+Precedencia: `refutado` > `verificado` > `declarado`. Evidencia propia negativa: un test o CI del propio ejecutor en rojo no refuta (no es independiente), pero tampoco se calla: el trabajo sigue `declarado` y el aviso añade «la comprobación propia del ejecutor falla». Una comprobación que falla pesa más que cien que pasan: un trabajo con una revisora que aprueba y un CI de la base en rojo es `refutado`. **El estado se deriva siempre en lectura y nunca lo escribe el ejecutor** (mismo principio que `scripts/savia-runs.sh:107`): un recibo que traiga un campo de estado escrito por el trabajador se ignora y se anota como anomalía.
 
 ### D2 — Qué es independiente
 
@@ -177,8 +177,9 @@ La decisión de la operadora fue **aplicar desde ya**, así que S1 mide y aplica
   - **AC-1.3 (negativo)** Una marca `ESTADO: OK` sin PR, sin `VERDICT` y sin nada más cuenta como «declarado, sin verificar».
   - **AC-1.4 (negativo)** Un OK cuya única evidencia es un fichero que creó el propio trabajador cuenta como «declarado».
   - **AC-1.5 (negativo)** Un test añadido por el trabajador en su diff y en verde (`ci_propio`) **no** sube el trabajo a `verificado`.
-  - **AC-1.6 (límite)** Con n = 199 OK en la ventana el veredicto de H9 es «no concluyente»; con n = 200 y 9,9 % sin evidencia se refuta; con n = 200 y 10,0 % se confirma.
+  - **AC-1.6 (límite)** Con n = 199 OK en la ventana el veredicto de H9 es «no concluyente»; con n = 200 y 19 marcas sin evidencia independiente (9,5 %) se refuta; con n = 200 y 20 marcas (10,0 %, justo en el umbral) se confirma.
   - **AC-1.7 (fallo cerrado)** Marca de fin ilegible, vacía o sin `ESTADO:` da «declarado» con motivo y salida distinta de 0 de `classify`; nunca «verificado».
+  - **AC-1.7b (contrato de salida)** `classify` devuelve 0 para `verificado` y para `declarado` con recibo legible, 1 para `refutado` y 2 para recibo ilegible, vacío o sin `ESTADO:` (declarado por fallo cerrado). El estado se lee siempre de la salida estándar, no solo del código.
   - **AC-1.8** El prerregistro es ancestro del informe de medición (D6).
 
 ### S2 — Regla en el recibo del trabajador (tier 2)

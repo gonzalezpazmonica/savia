@@ -44,10 +44,11 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q 'SE-518' "$f" || { echo "falta SE-518"; return 1; }
   grep -q 'no en `main`' "$f" || { echo "falta aviso SE-518 fuera de main"; return 1; }
   # Puerta de comprensión: escenas, confirmación pendiente.
-  local escenas
-  escenas=$(grep -cE '^[1-6]\. \*\*' "$f")
-  [ "$escenas" -ge 5 ] || { echo "escenas: $escenas"; return 1; }
   grep -q '^### Escenas$' "$f" || { echo "falta Escenas"; return 1; }
+  local escenas
+  # Solo cuenta la sección «Escenas» (hasta el siguiente encabezado), no otras listas numeradas.
+  escenas=$(awk '/^### Escenas$/{s=1;next} /^##/{s=0} s && /^[1-6]\. \*\*/{n++} END{print n+0}' "$f")
+  [ "$escenas" -ge 5 ] || { echo "escenas: $escenas"; return 1; }
   grep -q '^### Confirmación$' "$f" || { echo "falta Confirmación"; return 1; }
   grep -q '^- fecha: pendiente$' "$f" || { echo "confirmación no pendiente"; return 1; }
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
@@ -209,6 +210,47 @@ PY3
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"falta Escenas"* ]]
+}
+
+@test "negativo: borrar las seis escenas conservando el encabezado falla" {
+  python3 -I - "$M" <<'PY3'
+import re,sys
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+n=re.sub(r'(?ms)(^### Escenas\n).*?(?=^### )',r'\1\n',s,count=1)
+assert n!=s
+open(p,"w",encoding="utf-8").write(n)
+PY3
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"escenas: 0"* ]]
+}
+
+@test "las citas fichero:línea de la spec existen en el repo" {
+  run python3 -I - "$SPEC" "$REPO_ROOT" <<'PY4'
+import re,sys,os
+spec,root=sys.argv[1:3]
+cites=re.findall(r'`(scripts/[\w./-]+\.sh):(\d+)(?:-(\d+))?`',open(spec,encoding="utf-8").read())
+assert cites, "sin citas"
+for f,a,b in cites:
+    p=os.path.join(root,f)
+    assert os.path.exists(p), f
+    n=sum(1 for _ in open(p,encoding="utf-8"))
+    assert int(b or a)<=n, (f,a,b,n)
+    assert int(a)<=int(b or a), (f,a,b)
+PY4
+  [ "$status" -eq 0 ]
+}
+
+@test "negativo: una cita a una línea inexistente falla" {
+  mutate 'scripts/merge-sprint.sh:89' 'scripts/merge-sprint.sh:99999'
+  run python3 -I - "$M" "$REPO_ROOT" <<'PY5'
+import re,sys,os
+spec,root=sys.argv[1:3]
+for f,a,b in re.findall(r'`(scripts/[\w./-]+\.sh):(\d+)(?:-(\d+))?`',open(spec,encoding="utf-8").read()):
+    n=sum(1 for _ in open(os.path.join(root,f),encoding="utf-8"))
+    if int(b or a)>n: sys.exit("fuera de rango")
+PY5
+  [ "$status" -ne 0 ]
 }
 
 @test "negativo: marcar la confirmación como hecha sin cita falla" {
