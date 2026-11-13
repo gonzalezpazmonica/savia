@@ -197,13 +197,52 @@ s=json.load(sys.stdin)['hooks']
 assert set(s)=={'PreCompact','PostCompact','SessionStart'}, s
 assert any(h['matcher']=='compact' for h in s['SessionStart'])
 "
-  run grep -l "ZMK-[0-9a-f]\{12\}" "$T/probe/hooks/post.sh"
+  # marcas conocidas: el valor se lee del fichero en tiempo de ejecución y no está en ningún script
+  mkdir -p "$T/probe/work"
+  M1="aaaaaaaaaaaa"; M2="bbbbbbbbbbbb"
+  python3 -I - "$REPO_ROOT/scripts/compaction-shape-probe.py" "$T/probe" "$M1" "$M2" <<'PY'
+import importlib.util, sys, os
+src, out, m1, m2 = sys.argv[1:5]
+spec = importlib.util.spec_from_file_location("probe", src); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+os.makedirs(out + "/hooks", exist_ok=True)
+open(out + "/m1", "w").write(m1 + "\n"); open(out + "/m2", "w").write(m2 + "\n")
+m.build(out, out + "/m1", out + "/m2")
+PY
+  run grep -rl -e "$M1" -e "$M2" "$T/probe/hooks" "$T/probe/settings.json"
   [ "$status" -ne 0 ]
-  run grep -q "ZMK-%s" "$T/probe/hooks/post.sh"
+  run bash "$T/probe/hooks/post.sh" </dev/null
   [ "$status" -eq 0 ]
+  [ "$output" = "ZMK-$M1" ]
+  run bash "$T/probe/hooks/sc.sh" </dev/null
+  [ "$output" = "ZMK-$M2" ]
+}
+
+@test "sonda: una ruta con comilla simple no inyecta órdenes en el hook" {
+  EVIL="$T/x'; touch $T/pwned; echo '"
+  run python3 -I "$REPO_ROOT/scripts/compaction-shape-probe.py" --dry-run --out "$EVIL"
+  [ "$status" -eq 0 ]
+  run bash "$EVIL/hooks/pre.sh" </dev/null
+  [ "$status" -eq 0 ]
+  [ ! -e "$T/pwned" ]
+  [ -e "$EVIL/shape.jsonl" ]
 }
 
 @test "sonda: rounds inválido falla (fail-closed)" {
   run python3 -I "$REPO_ROOT/scripts/compaction-shape-probe.py" --rounds 0 --dry-run --out "$T/probe"
   [ "$status" -ne 0 ]
+}
+
+@test "tipos de línea que parecen palabra corta pero no son del vocabulario: other" {
+  TP="$HOME/.claude/projects/p1/e.jsonl"
+  printf '{"type":"zqxjsentinel","subtype":"zqxjsub","message":{"content":[{"type":"zqxjblock"}]}}\n' > "$TP"
+  run bash -c "printf '%s' '{\"transcript_path\":\"$TP\"}' | SAVIA_COMPACT_SHAPE=1 python3 -I '$COL' --event PreCompact --frontend claude-code"
+  [ "$status" -eq 0 ]
+  run grep -qi "zqxj" "$SAVIA_COMPACT_SHAPE_LOG"
+  [ "$status" -ne 0 ]
+  run python3 -I -c "
+import json
+t=json.loads(open('$SAVIA_COMPACT_SHAPE_LOG').readline())['transcript']
+assert t['line_types']=={'other:other':1}, t
+"
+  [ "$status" -eq 0 ]
 }

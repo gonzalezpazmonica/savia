@@ -1,7 +1,7 @@
 # SE-529 S0 — forma de las cargas y línea base de compactación
 
 Fecha de medición: 2026-11-13. Solo cifras: ningún texto de conversación ni del almacén entra aquí.
-Herramientas: `scripts/compaction-shape-collector.py` (S0.1), `scripts/compaction-shape-probe.py` (S0.1/S0.2), `scripts/compaction-baseline-counts.py` (S0.3/S0.4). Tests: `tests/test-compaction-shape-collector.bats` (12), `tests/test-compaction-baseline-counts.bats` (6).
+Herramientas: `scripts/compaction-shape-collector.py` (S0.1), `scripts/compaction-shape-probe.py` (S0.1/S0.2), `scripts/compaction-baseline-counts.py` (S0.3/S0.4). Tests: `tests/test-compaction-shape-collector.bats` (12), `tests/test-compaction-baseline-counts.bats` (7).
 Frontends: Claude Code 2.1.322 (`claude -p`, modelo haiku), OpenCode 1.19.5 (servidor local, API de sesión, plugin desechable en un directorio temporal).
 
 ## Parámetros de S0.5 (fijados antes de cualquier código de S1/S2)

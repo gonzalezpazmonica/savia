@@ -3,7 +3,9 @@
 
 Opt-in: solo actúa con SAVIA_COMPACT_SHAPE=1. No se registra en settings.json.
 Registra FORMA y LONGITUDES, nunca texto: nombres de campo (solo si parecen
-identificadores), tipo, bytes, y para el transcript: existencia, base de la ruta
+identificadores; límite conocido: un identificador sin espacios puesto como clave
+llegaría al registro, por eso el registro es 0600 y las cargas reales tienen claves fijas),
+tipo, bytes, y para el transcript: existencia, base de la ruta
 (sin la ruta), recuentos por tipo de línea y tamaños. Siempre sale 0 y no imprime
 nada, para no alterar ni el contexto del modelo ni la compactación.
 
@@ -17,6 +19,15 @@ EVENTS = {"PreCompact", "PostCompact", "SessionStart", "experimental.session.com
 FRONTENDS = {"claude-code", "opencode"}
 KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]{0,39}$")
 ENUM_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+# Vocabulario cerrado de tipos de línea, subtipos y bloques de los frontends. Lo que no esté
+# aquí se registra como "other": una palabra corta controlada por el contenido no llega al registro.
+KNOWN_ENUMS = {
+    "user", "assistant", "system", "summary", "attachment", "progress", "queue-operation",
+    "file-history-snapshot", "last-prompt", "custom-title", "ai-title", "agent-name",
+    "permission-mode", "pr-link", "compact_boundary", "local_command", "informational",
+    "api_error", "stop_hook_summary", "turn_duration", "text", "thinking", "redacted_thinking",
+    "tool_use", "tool_result", "image", "document", "step-start", "step-finish", "reasoning",
+    "tool", "file", "patch", "agent", "subtask", "compaction"}
 MAX_STDIN = 4 * 1024 * 1024
 MAX_DEPTH = 6
 MAX_KEYS = 64
@@ -55,7 +66,7 @@ def shape(v, depth=0):
 
 
 def enum(v):
-    return v if isinstance(v, str) and ENUM_RE.match(v) else "other"
+    return v if isinstance(v, str) and ENUM_RE.match(v) and v in KNOWN_ENUMS else "other"
 
 
 def pctl(vals, p):

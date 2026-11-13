@@ -122,6 +122,10 @@ def s04(store, post_script, active):
     out["post_compaction_exit"] = None
     if post_script and os.path.isfile(post_script) and out["store_present"]:
         root = os.path.dirname(os.path.dirname(os.path.abspath(store)))
+        # post-compaction.sh lee <root>/output/.memory-store.jsonl: si el almacén no está ahí,
+        # el 0 que sale no mide nada y se declara.
+        out["post_compaction_root_valid"] = (
+            os.path.basename(os.path.dirname(os.path.abspath(store))) == "output")
         with tempfile.TemporaryDirectory() as home:
             env = {"PATH": os.environ.get("PATH", ""), "HOME": home, "PROJECT_ROOT": root,
                    "CLAUDE_PROJECT_DIR": home}

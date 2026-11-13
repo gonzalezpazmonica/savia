@@ -8,7 +8,7 @@ No toca settings.json: usa --settings con un fichero temporal. Cuesta tokens.
 
 Uso: compaction-shape-probe.py [--rounds N] [--model M] [--out DIR] [--dry-run]
 """
-import argparse, os, secrets, shutil, subprocess, sys, tempfile, uuid
+import argparse, os, shlex, secrets, shutil, subprocess, sys, tempfile, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COL = os.path.join(HERE, "compaction-shape-collector.py")
@@ -21,16 +21,16 @@ def build(out, m1, m2):
                               ("sc", "SessionStart", m2), ("ss", "SessionStart", None)):
         f = os.path.join(out, "hooks", name + ".sh")
         lines = ["#!/bin/bash",
-                 f"cat | SAVIA_COMPACT_SHAPE=1 SAVIA_COMPACT_SHAPE_LOG='{log}' python3 -I '{COL}' "
-                 f"--event {event} --frontend claude-code"]
+                 f"cat | SAVIA_COMPACT_SHAPE=1 SAVIA_COMPACT_SHAPE_LOG={shlex.quote(log)} "
+                 f"python3 -I {shlex.quote(COL)} --event {event} --frontend claude-code"]
         if mark:  # la marca se lee de un fichero: la orden del hook no la contiene
-            lines.append(f"printf 'ZMK-%s\\n' \"$(cat '{mark}')\"")
+            lines.append(f"printf 'ZMK-%s\\n' \"$(cat {shlex.quote(mark)})\"")
         with open(f, "w") as fh:
             fh.write("\n".join(lines) + "\n")
         os.chmod(f, 0o755)
         hooks[name] = f
     import json
-    cmd = lambda p: {"type": "command", "command": p}
+    cmd = lambda p: {"type": "command", "command": shlex.quote(p)}
     settings = {"hooks": {
         "PreCompact": [{"hooks": [cmd(hooks["pre"])]}],
         "PostCompact": [{"hooks": [cmd(hooks["post"])]}],

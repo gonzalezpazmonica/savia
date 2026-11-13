@@ -44,7 +44,11 @@ assert sorted(r['by_project'].values())==[1,2], r
 assert r['with_summary_line']==1, r
 assert r['session_hot_rows']==2, r
 assert r['tail_bytes_30_turns']['n']==3, r
-assert r['tail_bytes_30_turns']['p90']>0, r
+# valores exactos: alpha 1ª frontera = 30 vueltas (2850 B); 2ª = 3 vueltas + resumen + frontera
+# + 27 vueltas (3014 B); beta = 1 vuelta (81 B, menos de 30)
+tb=r['tail_bytes_30_turns']
+assert (tb['p50'],tb['p90'],tb['max'])==(2850,3014,3014), tb
+assert tb['boundaries_with_fewer_than_30_turns']==1, tb
 "
 }
 
@@ -81,6 +85,7 @@ import json,sys
 r=json.load(sys.stdin)['s04']
 assert r['post_compaction_stdout_bytes']>0, r
 assert r['post_compaction_exit']==0, r
+assert r['post_compaction_root_valid'] is True, r
 "
 }
 
@@ -103,5 +108,17 @@ assert r['s04']['entries']==0 and r['s04']['store_present'] is False, r
 import json,sys
 r=json.load(sys.stdin)['s04']
 assert r['entries']==31 and r['corrupt_lines']==1, r
+"
+}
+
+@test "S0.4: almacén fuera de <raíz>/output se declara (el 0 de post-compaction no mide nada)" {
+  mkdir -p "$T/otro"
+  cp "$T/ws/output/.memory-store.jsonl" "$T/otro/.memory-store.jsonl"
+  run python3 -I "$BASE" --transcripts-dir "$T/proj" --store "$T/otro/.memory-store.jsonl" --post-script "$REPO_ROOT/scripts/post-compaction.sh"
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -I -c "
+import json,sys
+r=json.load(sys.stdin)['s04']
+assert r['post_compaction_root_valid'] is False, r
 "
 }
