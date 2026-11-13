@@ -172,3 +172,18 @@ assert t['bytes_read']<=1048576, t
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
+
+@test "tipos de línea con guion (queue-operation) se registran con su nombre; con texto libre, como other" {
+  TP="$HOME/.claude/projects/p1/h.jsonl"
+  printf '%s\n' '{"type":"queue-operation"}' "{\"type\":\"hola $SENT con espacios\"}" > "$TP"
+  run bash -c "printf '%s' '{\"transcript_path\":\"$TP\"}' | SAVIA_COMPACT_SHAPE=1 python3 -I '$COL' --event PreCompact --frontend claude-code"
+  [ "$status" -eq 0 ]
+  run grep -q "$SENT" "$SAVIA_COMPACT_SHAPE_LOG"
+  [ "$status" -ne 0 ]
+  run python3 -I -c "
+import json
+t=json.loads(open('$SAVIA_COMPACT_SHAPE_LOG').readline())['transcript']
+assert t['line_types']=={'queue-operation':1,'other':1}, t
+"
+  [ "$status" -eq 0 ]
+}

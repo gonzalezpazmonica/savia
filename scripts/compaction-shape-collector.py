@@ -16,7 +16,7 @@ EVENTS = {"PreCompact", "PostCompact", "SessionStart", "experimental.session.com
           "session.compacted", "experimental.compaction.autocontinue"}
 FRONTENDS = {"claude-code", "opencode"}
 KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.:-]{0,39}$")
-ENUM_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+ENUM_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 MAX_STDIN = 4 * 1024 * 1024
 MAX_DEPTH = 6
 MAX_KEYS = 64
