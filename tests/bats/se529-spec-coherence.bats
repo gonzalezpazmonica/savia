@@ -68,18 +68,18 @@ PY
   [[ "$output" == *"falta AC-9"* ]]
 }
 
-@test "un AC marcado como cumplido en PROPOSED falla" {
+@test "un AC marcado como cumplido sin implementar falla" {
   mutate "$MS" "- [ ] **AC-4 " "- [x] **AC-4 "
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"marcado como cumplido"* ]]
 }
 
-@test "status distinto de APPROVED falla" {
-  mutate "$MS" "status: APPROVED" "status: PROPOSED"
+@test "status APPROVED con el prototipo sin confirmar falla" {
+  mutate "$MS" "status: PROPOSED" "status: APPROVED"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"status debe ser APPROVED"* ]]
+  [[ "$output" == *"status debe ser PROPOSED"* ]]
 }
 
 @test "sin la comprobacion de ruta (realpath) falla" {
@@ -134,11 +134,11 @@ PY
   [[ "$output" == *"falta la sección de S5"* ]]
 }
 
-@test "planning: SE-529 APPROVED con evidencia existente" {
+@test "planning: SE-529 PROPOSED con evidencia existente" {
   run python3 -I - "$PLAN" "$REPO_ROOT" <<'PY'
 import json, os, sys
 d = json.load(open(sys.argv[1]))
-assert d["id"] == "SE-529" and d["status"] == "APPROVED", d
+assert d["id"] == "SE-529" and d["status"] == "PROPOSED" and "approval" not in d, d
 assert os.path.isfile(os.path.join(sys.argv[2], d["evidence"])), d["evidence"]
 PY
   [ "$status" -eq 0 ]
@@ -180,7 +180,7 @@ PY
 }
 
 @test "confirmación del prototipo pendiente: spec que la marca respondida falla" {
-  mutate "$MS" "- respuesta: pendiente. S1 no se pone en curso" "- respuesta: aprobada. S1 no se pone en curso"
+  mutate "$MS" "- respuesta: pendiente. La spec no pasa a APPROVED ni S1 se pone en curso" "- respuesta: aprobada. La spec no pasa a APPROVED ni S1 se pone en curso"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
   [[ "$output" == *"confirmación del prototipo pendiente"* ]]
@@ -237,11 +237,10 @@ PY
 
 @test "término privado en el planning falla" {
   R="$BATS_TEST_TMPDIR/root"; mkdir -p "$R/docs/propuestas/planning.d" "$R/CHANGELOG.d" "$R/docs/propuestas/LOG.d"
-  cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/.claude" "$R/" 2>/dev/null || true
   cp "$REPO_ROOT/CHANGELOG.d/se529-compactacion.md" "$R/CHANGELOG.d/"
   cp "$REPO_ROOT/docs/propuestas/LOG.d/SE-529-PROPOSED.md" "$R/docs/propuestas/LOG.d/"
   cp "$PLAN" "$R/docs/propuestas/planning.d/SE-529.json"
-  cp -r "$REPO_ROOT/tests" "$R/"
+  cp "$REPO_ROOT/docs/propuestas/ROADMAP-CURRENT.md" "$R/docs/propuestas/"
   python3 -I -c "
 import sys
 p=sys.argv[1]; open(p,'a').write('mac'+'book')" "$R/docs/propuestas/planning.d/SE-529.json"
@@ -261,9 +260,31 @@ open(sys.argv[1],'a').write('\nVer ~/.sa'+'via/x y \`/home/u/.sa'+'via/\` aqui.\
 
 @test "fichero público ausente falla en vez de saltarse el escaneo" {
   R="$BATS_TEST_TMPDIR/root2"; mkdir -p "$R/CHANGELOG.d"
-  cp -r "$REPO_ROOT/scripts" "$REPO_ROOT/.claude" "$REPO_ROOT/tests" "$R/" 2>/dev/null || true
   cp "$REPO_ROOT/CHANGELOG.d/se529-compactacion.md" "$R/CHANGELOG.d/"
   run python3 -I "$CHECK" "$SPEC" "$R"
   [ "$status" -eq 1 ]
   [[ "$output" == *"SE-529.json ausente o ilegible"* ]]
+}
+
+@test "planning APPROVED con la spec en PROPOSED falla" {
+  R="$BATS_TEST_TMPDIR/root3"; mkdir -p "$R/docs/propuestas/planning.d" "$R/CHANGELOG.d" "$R/docs/propuestas/LOG.d"
+  cp "$REPO_ROOT/CHANGELOG.d/se529-compactacion.md" "$R/CHANGELOG.d/"
+  cp "$REPO_ROOT/docs/propuestas/LOG.d/SE-529-PROPOSED.md" "$R/docs/propuestas/LOG.d/"
+  cp "$REPO_ROOT/docs/propuestas/ROADMAP-CURRENT.md" "$R/docs/propuestas/"
+  sed 's/"status": "PROPOSED"/"status": "APPROVED"/' "$PLAN" > "$R/docs/propuestas/planning.d/SE-529.json"
+  run python3 -I "$CHECK" "$SPEC" "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"planning: SE-529 debe ser PROPOSED"* ]]
+}
+
+@test "roadmap con SE-529 APPROVED falla" {
+  R="$BATS_TEST_TMPDIR/root4"; mkdir -p "$R/docs/propuestas/planning.d" "$R/CHANGELOG.d" "$R/docs/propuestas/LOG.d"
+  cp "$REPO_ROOT/CHANGELOG.d/se529-compactacion.md" "$R/CHANGELOG.d/"
+  cp "$REPO_ROOT/docs/propuestas/LOG.d/SE-529-PROPOSED.md" "$R/docs/propuestas/LOG.d/"
+  cp "$PLAN" "$R/docs/propuestas/planning.d/SE-529.json"
+  cp "$REPO_ROOT/docs/propuestas/ROADMAP-CURRENT.md" "$R/docs/propuestas/"
+  printf -- '- SE-529 [APPROVED] x\n' >> "$R/docs/propuestas/ROADMAP-CURRENT.md"
+  run python3 -I "$CHECK" "$SPEC" "$R"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"roadmap: SE-529 figura APPROVED"* ]]
 }

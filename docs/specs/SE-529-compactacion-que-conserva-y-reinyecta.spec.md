@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: PROPOSED
 priority: P2
 developer_type: agent-single
 created: 2026-11-13
@@ -14,10 +14,6 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "worker de spec; encargo de la orquestadora"
-  - from: "2026-11-13"
-    learned: "2026-11-13"
-    value: "APPROVED"
-    source: "operadora, pregunta interactiva; escenas y decisiones 10-12 confirmadas «Confirmo todo como está»"
 ---
 
 # SE-529 — Compactación que conserva y reinyecta de verdad
@@ -80,17 +76,17 @@ Antes y después, en llano.
 ### Confirmación
 
 - fecha: 2026-11-13
-- respuesta: «Confirmo todo como está». Respuesta de la operadora, por pregunta interactiva, a las escenas y a las decisiones 10 a 12 de esta spec (Q1, Q3 y el texto del bloque de «Memoria tras compactar»), con la opción recomendada en todas. Registro de la orquestadora.
+- respuesta: «Confirmo todo como está». Respuesta de la operadora, por pregunta interactiva, a las escenas y a las decisiones 10 a 12 de esta spec (Q1, Q3 y el texto del bloque de «Memoria tras compactar»), con la opción recomendada en todas. Registro de la orquestadora, sin enlace verificable todavía: para pasar a APPROVED la aprobación debe constar en la PR (comentario o review de la operadora enlazado).
 - Q2 (2026-11-13, pregunta interactiva; registro de la orquestadora, no texto literal): la operadora acepta que, si OpenCode no entrega la conversación, el aviso explícito basta como paridad, por honesto: no se inventa nada y Claude Code guarda el resumen completo.
 
 ## Slice S0 — Medición y prototipo (primero, sin cambiar comportamiento)
 
-- prototipo: la lista de escenas anterior y el texto de los avisos de S1/S2 («Texto que verá la persona»), tal como los confirmó la operadora el 2026-11-13. No hay pantalla ni ejecutable aparte; la medición de S0 no cambia nada de lo que ve la persona.
+- prototipo: pendiente. No existe todavía un prototipo propio (pantalla o salida real del aviso) que la operadora haya visto; las escenas y el texto de los avisos son otro artefacto y no lo sustituyen.
 
 ### Confirmación del prototipo
 
 - fecha: pendiente
-- respuesta: pendiente. S1 no se pone en curso sin ella (SE-505). La confirmación del 2026-11-13 de arriba cubre las escenas y el texto de los avisos; la del prototipo se pide a la persona tras ver el aviso funcionando con datos reales, una vez medido en S0 qué llega al modelo.
+- respuesta: pendiente. La spec no pasa a APPROVED ni S1 se pone en curso sin ella (SE-505). La confirmación del 2026-11-13 de arriba cubre las escenas y el texto de los avisos; la del prototipo se pide a la persona tras ver el aviso funcionando con datos reales, una vez medido en S0 qué llega al modelo.
 
 El prototipo de esta spec es la lista de escenas anterior y el texto de los avisos de S1/S2 (ver «Texto que verá la persona»). S0 es la medición; su salida es `docs/evidence/SE-529-S0-forma-y-linea-base.md` más los fixtures de S3. Nada del contenido de una conversación entra en el repo.
 
@@ -151,9 +147,9 @@ Orden de entrega: S0 → S5 → S1 → S2 → S4; S3 (tests) acompaña a cada sl
 
 ## Criterios de aceptación
 
-- [ ] **AC-1 (S0 forma):** el informe `docs/evidence/SE-529-S0-forma-y-linea-base.md` tiene una fila por evento × frontend (6 filas) con «entregado / no entregado», campos, tamaño y si trae resumen. Una fila vacía o sin «no entregado» explícito hace fallar el comprobador. Caso negativo: una copia con una fila borrada falla.
+- [ ] **AC-1 (S0 forma):** el informe `docs/evidence/SE-529-S0-forma-y-linea-base.md` tiene una fila por evento × frontend (6 filas) con «entregado / no entregado», campos, tamaño y si trae resumen. Una fila vacía o sin «no entregado» explícito hará fallar el comprobador del informe (se escribe en S0; el actual comprueba solo esta spec). Caso negativo: una copia con una fila borrada falla.
 - [ ] **AC-2 (S0 canal):** el informe declara qué vía (PostCompact, SessionStart origen compact, o ninguna) hace llegar la marca al modelo, con el recuento de pruebas. Si ninguna, S2 queda bloqueado hasta la PR de `settings.json` (tier 4).
-- [ ] **AC-3 (S0 línea base):** ≥ 10 compactaciones de Claude Code contadas y, para OpenCode, ≥ 3 o la carencia declarada. Recuentos, nunca texto. El informe fija los tres parámetros de S0.5 antes de que exista código de S1/S2 (el comprobador verifica que la fecha del informe es anterior a la del primer commit de S1/S2).
+- [ ] **AC-3 (S0 línea base):** ≥ 10 compactaciones de Claude Code contadas y, para OpenCode, ≥ 3 o la carencia declarada. Recuentos, nunca texto. El informe fija los tres parámetros de S0.5 antes de que exista código de S1/S2 (el comprobador del informe, que se escribe en S0, verificará que la fecha del informe es anterior a la del primer commit de S1/S2; el actual no lo hace).
 - [ ] **AC-4 (S5):** entradas con bloque multilínea, dos bloques en una línea, mayúsculas mixtas y bloque sin cierre: ninguna deja contenido privado en el JSONL, en `session-hot.md` ni en la salida. Caso límite: bloque vacío. El test falla contra `scripts/memory-store.sh:62` actual.
 - [ ] **AC-5 (S1 positivo):** con un transcript sintético de 30 vueltas y 2 decisiones, `session-hot.md` contiene ambas y el aviso dice «2 elementos guardados» (o el N medido). Falla contra el hook actual (0 elementos).
 - [ ] **AC-6 (S1 negativos):** transcript ausente, vacío, ilegible, no JSON, o con `transcript_path` fuera de la carpeta del frontend (incluido un enlace simbólico que sale de ella): no escribe nada, no abre el fichero, sale 0, y el aviso explica el motivo. Las decisiones que solo aparecen en resultados de herramientas no se extraen.
@@ -231,4 +227,4 @@ Cerradas por la operadora el 2026-11-13 (pregunta interactiva, «Confirmo todo c
 
 ## Aprobación
 
-**Aprobada por la operadora el 2026-11-13** por pregunta interactiva («Confirmo todo como está»), con las escenas y las decisiones 10 a 12. Falta la confirmación del prototipo (S0): S1 no se pone en curso sin ella (SE-505). S0 no cambia comportamiento. Se formaliza al fusionar (SE-488).
+En PROPOSED. La operadora confirmó escenas y decisiones 10 a 12 el 2026-11-13 (registro de la orquestadora, sin enlace verificable). Pasa a APPROVED cuando la aprobación conste en la PR por una vía verificable y el prototipo de S0 esté confirmado (SE-505). Ningún slice empieza sin aprobación; S0 puede aprobarse sola (no cambia comportamiento).

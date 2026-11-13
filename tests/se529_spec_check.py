@@ -36,8 +36,10 @@ def main():
     if not fm:
         err("sin frontmatter")
     else:
-        if not re.search(r"^status:\s*APPROVED\s*$", fm.group(1), re.M):
-            err("frontmatter: status debe ser APPROVED")
+        # APPROVED exige una aprobación verificable y el prototipo confirmado (SE-505);
+        # mientras la confirmación del prototipo siga pendiente, el estado correcto es PROPOSED.
+        if not re.search(r"^status:\s*PROPOSED\s*$", fm.group(1), re.M):
+            err("frontmatter: status debe ser PROPOSED mientras el prototipo siga sin confirmar")
         if not re.search(r"^risk:\s*L2\s*$", fm.group(1), re.M):
             err("frontmatter: risk L2 (tier 2) ausente")
 
@@ -92,7 +94,7 @@ def main():
         ("nada de contenido real en el repo", "ningún fragmento de conversación real"),
         ("comprobado, no supuesto", "sin medir"),
         ("Q2 resuelta", "**Q2 (resuelta, 2026-11-13).**"),
-        ("Q2 registrada como registro de la orquestadora", "registro de la orquestadora"),
+        ("Q2 registrada como registro de la orquestadora", "registro de la orquestadora, no texto literal"),
         ("paridad por aviso explícito (Q2)", "ese aviso se acepta como paridad (Q2, resuelta)"),
         ("S1 sin fuente alternativa (Q2)", "no se busca una fuente alternativa"),
         ("Q1 resuelta", "- **Q1 (resuelta, 2026-11-13).**"),
@@ -109,6 +111,21 @@ def main():
     # La confirmación del prototipo sigue pendiente: S1 no arranca sin ella (SE-505).
     if not re.search(r"^- respuesta: pendiente", text, re.M):
         err("falta frase obligatoria (confirmación del prototipo pendiente): - respuesta: pendiente")
+    # Coherencia del estado en planning y roadmap (fuente: la spec, aquí PROPOSED).
+    plan_path = os.path.join(root, "docs/propuestas/planning.d/SE-529.json")
+    try:
+        import json
+        plan = json.load(open(plan_path, encoding="utf-8"))
+        if plan.get("status") != "PROPOSED" or "approval" in plan:
+            err("planning: SE-529 debe ser PROPOSED y sin campo approval")
+    except (OSError, ValueError, UnicodeDecodeError):
+        pass  # ausente o ilegible: lo comunica el escaneo de ficheros públicos
+    try:
+        road = open(os.path.join(root, "docs/propuestas/ROADMAP-CURRENT.md"), encoding="utf-8").read()
+        if re.search(r"^- SE-529 \[APPROVED\]", road, re.M):
+            err("roadmap: SE-529 figura APPROVED con la spec en PROPOSED")
+    except (OSError, UnicodeDecodeError):
+        err("ROADMAP-CURRENT.md ausente o ilegible, no se puede comprobar el estado")
     for name, phrase in required:
         if phrase not in text:
             err("falta frase obligatoria (%s): %s" % (name, phrase))
