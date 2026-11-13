@@ -187,3 +187,23 @@ assert t['line_types']=={'queue-operation':1,'other':1}, t
 "
   [ "$status" -eq 0 ]
 }
+
+@test "sonda: --dry-run genera ajustes temporales con 3 eventos y sin la marca en la orden" {
+  run python3 -I "$REPO_ROOT/scripts/compaction-shape-probe.py" --dry-run --out "$T/probe"
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -I -c "
+import json,sys
+s=json.load(sys.stdin)['hooks']
+assert set(s)=={'PreCompact','PostCompact','SessionStart'}, s
+assert any(h['matcher']=='compact' for h in s['SessionStart'])
+"
+  run grep -l "ZMK-[0-9a-f]\{12\}" "$T/probe/hooks/post.sh"
+  [ "$status" -ne 0 ]
+  run grep -q "ZMK-%s" "$T/probe/hooks/post.sh"
+  [ "$status" -eq 0 ]
+}
+
+@test "sonda: rounds inválido falla (fail-closed)" {
+  run python3 -I "$REPO_ROOT/scripts/compaction-shape-probe.py" --rounds 0 --dry-run --out "$T/probe"
+  [ "$status" -ne 0 ]
+}

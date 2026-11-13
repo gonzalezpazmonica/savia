@@ -1,7 +1,7 @@
 # SE-529 S0 — forma de las cargas y línea base de compactación
 
 Fecha de medición: 2026-11-13. Solo cifras: ningún texto de conversación ni del almacén entra aquí.
-Herramientas: `scripts/compaction-shape-collector.py` (S0.1), `scripts/compaction-shape-probe.sh` (S0.1/S0.2), `scripts/compaction-baseline-counts.py` (S0.3/S0.4). Tests: `tests/test-compaction-shape-collector.bats` (12), `tests/test-compaction-baseline-counts.bats` (6).
+Herramientas: `scripts/compaction-shape-collector.py` (S0.1), `scripts/compaction-shape-probe.py` (S0.1/S0.2), `scripts/compaction-baseline-counts.py` (S0.3/S0.4). Tests: `tests/test-compaction-shape-collector.bats` (12), `tests/test-compaction-baseline-counts.bats` (6).
 Frontends: Claude Code 2.1.322 (`claude -p`, modelo haiku), OpenCode 1.19.5 (servidor local, API de sesión, plugin desechable en un directorio temporal).
 
 ## Parámetros de S0.5 (fijados antes de cualquier código de S1/S2)
@@ -71,4 +71,4 @@ Compactaciones de Claude Code encontradas en transcripciones locales (3 131 sesi
 
 ## Recoger compactaciones reales los próximos días
 
-El colector es opt-in (`SAVIA_COMPACT_SHAPE=1`) y no está registrado en `settings.json`. Sin tocarlo, una sesión de Claude Code lo activa con `--settings <fichero-personal>` que registre `PreCompact`, `PostCompact` y `SessionStart` (origen compact) con la orden `python3 -I scripts/compaction-shape-collector.py --event <evento> --frontend claude-code` (lee la carga por stdin, no imprime nada, siempre sale 0). El registro va a `~/.local/state/savia/compact-shape.jsonl` (permisos 600) o a `SAVIA_COMPACT_SHAPE_LOG`. `scripts/compaction-shape-probe.sh --dry-run` imprime un fichero de ejemplo. Registrarlo de forma permanente en `settings.json` sería una PR aparte, tier 4.
+El colector es opt-in (`SAVIA_COMPACT_SHAPE=1`) y no está registrado en `settings.json`. Sin tocarlo, una sesión de Claude Code lo activa con `--settings <fichero-personal>` que registre `PreCompact`, `PostCompact` y `SessionStart` (origen compact) con la orden `python3 -I scripts/compaction-shape-collector.py --event <evento> --frontend claude-code` (lee la carga por stdin, no imprime nada, siempre sale 0). El registro va a `~/.local/state/savia/compact-shape.jsonl` (permisos 600) o a `SAVIA_COMPACT_SHAPE_LOG`. `scripts/compaction-shape-probe.py --dry-run` imprime un fichero de ejemplo. Registrarlo de forma permanente en `settings.json` sería una PR aparte, tier 4.
