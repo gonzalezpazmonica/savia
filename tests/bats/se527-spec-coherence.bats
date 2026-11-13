@@ -9,16 +9,23 @@ STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-527.json"
 
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
-  grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
+  grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
   for n in 1 2 3 4 5; do
     grep -q "^### S$n — " "$f" || { echo "falta slice S$n"; return 1; }
   done
   ! grep -q '^### S6 — ' "$f" || { echo "slice de más"; return 1; }
-  # Orden: el encabezado de S5 va después del de S4.
-  local l4 l5
-  l4=$(grep -n '^### S4 — ' "$f" | head -1 | cut -d: -f1); l5=$(grep -n '^### S5 — ' "$f" | head -1 | cut -d: -f1)
-  [ "$l5" -gt "$l4" ] || { echo "S5 no es el último"; return 1; }
+  # Orden: S5 es el último encabezado de slice (todos los anteriores van antes).
+  local last
+  last=$(grep -E '^### S[0-9] — ' "$f" | tail -1 | cut -c1-6)
+  [ "$last" = "### S5" ] || { echo "S5 no es el último"; return 1; }
+  # Cifras: los netos de la tabla D1 suman el total declarado y coinciden con el título y el planning.
+  local sum
+  sum=$(grep -E '^\| S[1-5] \|' "$f" | sed -E 's/.*\| −([0-9]+)( \(era −[0-9]+\))? \|.*/\1/' | paste -sd+ | bc)
+  [ "$sum" = "15" ] || { echo "suma de netos $sum != 15"; return 1; }
+  grep -q '^# SE-527 — .*(15 de 90 tras Q3' "$f" || { echo "título sin 15 de 90"; return 1; }
+  grep -q 'Total −15 tras Q3: 90 → 75' "$f" || { echo "falta total 90 → 75"; return 1; }
+  ! grep -q -- '−19 agentes' "$f" || { echo "queda −19 agentes"; return 1; }
   # Los cinco slices de la tabla D1 declaran tier 4 en la última columna.
   local tiers
   tiers=$(grep -cE '^\| S[1-5] \|.*\| \*\*4\*\* \|$' "$f")
@@ -28,11 +35,12 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-527 APPROVED y su evidencia existe
+check_planning() {  # check_planning <json>: 0 si es SE-527 PROPOSED, título 15 de 90 y evidencia existente
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-527' and d['status']=='APPROVED', d
+assert d['id']=='SE-527' and d['status']=='PROPOSED', d
+assert '15 de 90' in d['title'], d['title']
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
 }
@@ -71,9 +79,15 @@ PY
 }
 
 @test "negativo: S5 antes de S4 falla" {
-  mutate '### S4 — ' '### Sz — '
-  mutate '### S5 — ' '### S4 — '
-  mutate '### Sz — ' '### S5 — '
+  python3 -I - "$M" <<'PY2'
+import re,sys
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+parts=re.split(r'(?m)^(?=### S[0-9] — )',s)
+i4=[i for i,x in enumerate(parts) if x.startswith('### S4 — ')][0]
+i5=[i for i,x in enumerate(parts) if x.startswith('### S5 — ')][0]
+parts[i4],parts[i5]=parts[i5],parts[i4]
+open(p,"w",encoding="utf-8").write("".join(parts))
+PY2
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"S5 no es el último"* ]]
@@ -93,7 +107,7 @@ PY
   [[ "$output" == *"falta aviso de contexto"* ]]
 }
 
-@test "planning: SE-527 APPROVED apunta a la spec existente" {
+@test "planning: SE-527 PROPOSED apunta a la spec existente" {
   run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }
@@ -111,24 +125,24 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
 @test "negativo: el estado de planning con otro status falla" {
   python3 -I -c "
 import json,sys
-d=json.load(open(sys.argv[1])); d['status']='PROPOSED'
+d=json.load(open(sys.argv[1])); d['status']='DRAFT'
 json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   run check_planning "$BATS_TEST_TMPDIR/s.json"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"PROPOSED"* ]]
+  [[ "$output" == *"DRAFT"* ]]
 }
 
 @test "edge: empty spec falla" {
   : > "$M"
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != APPROVED"* ]]
+  [[ "$output" == *"status != PROPOSED"* ]]
 }
 
 @test "edge: nonexistent spec falla" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != APPROVED"* ]]
+  [[ "$output" == *"status != PROPOSED"* ]]
 }
 
 @test "edge: boundary, solo 4 de 5 slices con tier 4 falla (zero tolerancia)" {
@@ -152,4 +166,44 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"falta slice S2"* ]]
+}
+
+@test "negativo: status APPROVED en la spec falla (sin confirmación de la operadora)" {
+  mutate 'status: PROPOSED' 'status: APPROVED'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"status != PROPOSED"* ]]
+}
+
+@test "negativo: una cifra desfasada (suma de netos) falla" {
+  mutate '| −1 (era −5) |' '| −5 |'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"suma de netos"* ]]
+}
+
+@test "negativo: un −19 agentes residual falla" {
+  mutate '−15 agentes' '−19 agentes'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"queda −19 agentes"* ]]
+}
+
+@test "negativo: planning con título desfasado falla" {
+  python3 -I -c "
+import json,sys
+d=json.load(open(sys.argv[1])); d['title']=d['title'].replace('15 de 90','19 de 90')
+json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
+  run check_planning "$BATS_TEST_TMPDIR/s.json"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"19 de 90"* ]]
+}
+
+@test "negativo: planning APPROVED falla" {
+  python3 -I -c "
+import json,sys
+d=json.load(open(sys.argv[1])); d['status']='APPROVED'
+json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
+  run check_planning "$BATS_TEST_TMPDIR/s.json"
+  [ "$status" -ne 0 ]
 }

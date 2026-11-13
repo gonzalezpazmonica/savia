@@ -1,5 +1,5 @@
 ---
-status: APPROVED
+status: PROPOSED
 priority: P3
 developer_type: agent-single
 created: 2026-11-13
@@ -16,8 +16,8 @@ timeline:
     source: "worker autónomo; encargo de la orquestadora"
   - from: "2026-11-13"
     learned: "2026-11-13"
-    value: "APPROVED"
-    source: "operadora, pregunta interactiva; Q1-Q3 resueltas"
+    value: "PROPOSED"
+    source: "Q1-Q3 respondidas por la operadora (pregunta interactiva, registro de la orquestadora); el paso a APPROVED lo hace la orquestadora cuando la operadora lo confirme en esta PR"
 ---
 
 # SE-527 — Recorte de agentes sobrantes (15 de 90 tras Q3, en cinco paquetes)
@@ -93,15 +93,16 @@ Cada slice es una PR independiente y se revierte con `git revert` de su merge: r
 
 ### D5 — S5 es el de más riesgo y exige su propia validación, antes de fusionar
 
-Los seis desarrolladores por lenguaje comparten nivel L3 y las mismas seis herramientas, y entre pares coinciden entre el 40 y el 53 % de las líneas (plantilla compartida). Solo `rust-developer` tiene uso medido (73 invocaciones, casi todas en un único proyecto), y los otros cinco no tienen ninguna en la ventana. Eso justifica *proponer* la fusión, no justifica *hacerla* sin probar: un desarrollador genérico que lee un language pack puede escribir peor Go o Java que el específico, y una validación de texto no lo ve.
+Los seis desarrolladores por lenguaje (go, java, php, ruby, python, typescript) comparten nivel L3 y las mismas seis herramientas, y entre pares coinciden entre el 40 y el 53 % de las líneas (plantilla compartida). Solo `rust-developer` tiene uso medido (73 invocaciones, casi todas en un único proyecto), y los seis a fusionar no tienen ninguna en la ventana. Eso justifica *proponer* la fusión, no justifica *hacerla* sin probar: un desarrollador genérico que lee un language pack puede escribir peor Go o Java que el específico, y una validación de texto no lo ve.
 
 S5 queda condicionado a **las dos cosas**:
 
 1. La validación de texto de D3 con GO en ambos modelos.
-2. **Una validación con tareas reales por lenguaje**: por cada uno de los seis lenguajes, al menos 3 tareas de implementación con spec pequeña en un proyecto de andamiaje desechable (un repo temporal por lenguaje, creado por el arnés, nunca un proyecto real), ejecutadas con herramientas por `claude -p` en Sonnet y Haiku, 3 repeticiones. El comprobador es **el compilador y los tests del propio lenguaje** (no una regla léxica): una tarea pasa si compila, sus tests de aceptación pasan y no toca ficheros fuera del alcance. Se compara A (agente específico) contra B (`language-developer` + language pack) por lenguaje. **No puede haber un lenguaje en el que B pase menos tareas que A.** Un lenguaje que no cumple se queda fuera de la fusión (fusión parcial: los demás sí) y se anota por qué.
-3. Esta segunda validación tiene prerregistro propio, commiteado antes de la primera llamada, y su coste (llamadas y tokens) se estima y se anota en el body antes de lanzarla; no se lanza sin esa estimación.
+2. **Una validación con tareas reales por lenguaje**: por cada lenguaje que se vaya a fusionar (por Q3, solo `python` y `typescript`), al menos 3 tareas de implementación con spec pequeña en un proyecto de andamiaje desechable (un repo temporal por lenguaje, creado por el arnés, nunca un proyecto real), ejecutadas con herramientas por `claude -p` en Sonnet y Haiku, 3 repeticiones. El comprobador es **el compilador y los tests del propio lenguaje** (no una regla léxica): una tarea pasa si compila, sus tests de aceptación pasan y no toca ficheros fuera del alcance. Se compara A (agente específico) contra B (`language-developer` + language pack) por lenguaje. **No puede haber un lenguaje en el que B pase menos tareas que A.** Un lenguaje que no cumple se queda fuera de la fusión (fusión parcial: los demás sí) y se anota por qué.
+3. **Aislamiento.** El arnés ejecuta `claude -p` solo dentro del repo temporal, con `--allowedTools` acotado a edición y compilación/tests del lenguaje, sin red salvo la del gestor de paquetes que el lenguaje necesite, sin credenciales en el entorno y con tiempo máximo por tarea.
+4. Esta segunda validación tiene prerregistro propio, commiteado antes de la primera llamada, y su coste (llamadas y tokens) se estima y se anota en el body antes de lanzarla; no se lanza sin esa estimación.
 
-Además, antes de redactar `language-developer`: la plantilla sale de `rust-developer` por ser la más probada, pero esa evidencia es de un solo proyecto. Si la validación real no puede distinguir a A de B por falta de tareas (NO CONCLUYENTE), S5 **no se fusiona**: es preferible conservar seis ficheros que perder la calidad en cinco lenguajes sin saberlo.
+Además, antes de redactar `language-developer`: la plantilla sale de `rust-developer` por ser la más probada, pero esa evidencia es de un solo proyecto. Si la validación real no puede distinguir a A de B por falta de tareas (NO CONCLUYENTE), S5 **no se fusiona**: es preferible conservar los ficheros por lenguaje que perder calidad sin saberlo.
 
 Fuera de S5 (no entran, tienen guardarraíles propios): `dotnet-developer`, `frontend-developer`, `mobile-developer`, `terraform-developer` (nunca `apply`) y `rust-developer` (se queda como plantilla de partida; se decide al cerrar S5 si pasa a ser un modo del nuevo agente o sigue aparte).
 
@@ -157,12 +158,12 @@ Cuatro fusiones independientes en una PR, con una validación y una decisión GO
 
 | AC | Criterio | Tipo |
 |---|---|---|
-| AC-S0 | Tras cada slice, `git grep -w <nombre>` para cada agente retirado o fusionado no devuelve ninguna referencia viva (solo historia: `CHANGELOG*`, `docs/specs-archive/`, evidencias y esta spec). Un script del slice lo comprueba y falla si queda una; el caso negativo reintroduce un nombre y debe fallar. | negativo |
+| AC-S0 | Tras cada slice, `git grep -wF "<nombre>"` restringido a `.opencode/agents/<nombre>`, `subagent_type`, `agent: <nombre>` y listas de agentes (el patrón exacto se fija en el script de S1; la prosa que usa la palabra común, p. ej. «reconciler», no cuenta) para cada agente retirado o fusionado no devuelve ninguna referencia viva (solo historia: `CHANGELOG*`, `docs/specs-archive/`, evidencias y esta spec). Un script del slice lo comprueba y falla si queda una; el caso negativo reintroduce un nombre y debe fallar. | negativo |
 | AC-S1 | Recuento coherente: el número «N agentes» de `CLAUDE.md`, `README*`, `docs/readme*` y `docs/llms-full.txt` es igual al nº de ficheros de `.opencode/agents/*.md`, y `docs/rules/domain/agents-catalog.md` está al día (`agents-catalog-sync.sh --check` o equivalente). Un recuento desfasado falla. | negativo |
 | AC-S2 | Tests de estructura en verde (y `tests/bats/se527-spec-coherence.bats` para la propia spec: cinco slices, S5 último, tier 4, sin interfaz humana): `test-se253-agent-sync.bats`, `test-se273-s1-judge-routing.bats`, `judge-routing-verify.sh`, `validate-agent-permissions.sh` (sin par nuevo en la baseline), `sam.py check` FRESH, `capability-entropy.py --check` PASS, y los tests anclados que cada slice reescribe, cada uno demostrado capaz de fallar. | positivo / negativo |
 | AC-S3 | Validación B2 (D3): informe de cada slice con veredicto GO en Sonnet y en Haiku, prerregistro commiteado antes de la primera llamada, y sin regresión en las tareas del agente fusionado. Sin informe con GO la PR del slice sigue en borrador. NO CONCLUYENTE o REVERT: el agente concreto sale del slice. | negativo |
 | AC-S4 | Ningún slice sube un permiso: para cada fusión, nivel y herramientas del destino son iguales o menores que antes; el informe de cada PR lo lista. | negativo |
-| AC-S5 | S5 solo se fusiona con (a) S1–S4 fusionadas, (b) GO en D3 y (c) la validación real por lenguaje de D5 sin lenguaje en regresión. Los lenguajes sin cumplimiento se quedan fuera. | negativo |
+| AC-S5 | S5 solo se fusiona con (a) S1–S4 fusionadas, (b) GO en D3 y (c) la validación real por lenguaje de D5 (solo `python` y `typescript`, por Q3) sin lenguaje en regresión y con el aislamiento de D5.3. Los lenguajes sin cumplimiento se quedan fuera. | negativo |
 | AC-S6 | `CLAUDE.md` tocado: `tests/test-se511-s2-savia-core.bats` en verde y `scripts/context-fixed-measure.sh` no sube el total; las variantes congeladas de `tests/evals/se511-d4/variants/` quedan idénticas byte a byte. | negativo |
 | AC-S7 | Cada PR trae su tier calculado con `risk-tier.py` sobre su diff final (esperado 4) y la cifra de agentes antes y después. No se mide ni se anuncia ahorro de tokens fuera de lo medido por `context-fixed-measure.sh`. | positivo |
 | AC-S8 | Reversión probada: para cada slice, `git revert --no-commit` del merge sobre una copia limpia deja los tests de estructura y recuento en verde. | positivo |
@@ -194,7 +195,7 @@ Registro de la orquestadora de las respuestas a preguntas interactivas; no es te
 - **Un cero de uso que en realidad es «no consta».** Es el riesgo central de esta spec (límite 7 de la auditoría). Mitigación: solo se tocan agentes con solape demostrado, los jueces de tribunales se limitan a S2 y la reversión es barata.
 - **Dejar referencias colgantes.** Mitigación: AC-S0, un `grep -w` por nombre antes de abrir cada PR y un test de que ningún fichero versionado cita un agente inexistente.
 - **Mover una función a un agente protegido** (`fix-assigner` y `reconciler` pasan a `court-orchestrator` y `drift-auditor`, que figuran en `protected-jobs.yaml`). Mitigación: se dice en la PR; no se invoca desde bucles autónomos.
-- **Vender más de lo que es.** −19 agentes y ≈0,9 k tokens por sesión solo en Claude Code. Cada body de PR da las cifras medidas y no habla de ahorro de contexto.
+- **Vender más de lo que es.** −15 agentes y ≈0,9 k tokens por sesión solo en Claude Code. Cada body de PR da las cifras medidas y no habla de ahorro de contexto.
 - **Recuentos en `CLAUDE.md`.** Se carga en cada turno y es el fichero más sensible a cambios; mitigación: AC-S6.
 
 ## OpenCode Implementation Plan
@@ -221,4 +222,4 @@ Registro de la orquestadora de las respuestas a preguntas interactivas; no es te
 
 ## Aprobación
 
-Aprobada por la operadora el 2026-11-13 (pregunta interactiva). Q1–Q3 se resolvieron como figura en «Decisiones de la operadora». La aprobación se formaliza al fusionar esta PR. Cada slice se fusiona con revisión humana de su PR (tier 4).
+**Pendiente de la operadora.** Q1–Q3 se respondieron en pregunta interactiva el 2026-11-13 (registro de la orquestadora, sin enlace verificable desde la PR). El estado pasa a APPROVED solo cuando la operadora lo confirme en esta PR con un comentario; hasta entonces la spec es PROPOSED y no desbloquea ningún slice. Cada slice se fusiona con revisión humana de su PR (tier 4).
