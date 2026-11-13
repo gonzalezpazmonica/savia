@@ -32,11 +32,17 @@ for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2",
 for sec in ("## Problema", "## Puerta de comprensión", "## Fuera de alcance", "## OpenCode Implementation Plan", "## Tier de riesgo"):
     if sec not in s: errs.append(f"falta la sección {sec}")
 for q in ("Q1", "Q2", "Q3"):
-    if not re.search(rf"^- {q}\. ", s, re.M): errs.append(f"faltan decisiones abiertas ({q})")
+    if not re.search(rf"^- {q}\. ", s, re.M): errs.append(f"faltan decisiones de la operadora ({q})")
+if "**Decisiones de la operadora (2026-11-13)**" not in s: errs.append("falta el registro de decisiones de la operadora")
+for stale in ("Decisiones abiertas", "Preguntas abiertas", "Deprecation", "14 días", "fecha de corte", "según Q1", "según Q2", "según Q3"):
+    if stale in s: errs.append("resto de una decisión abierta: " + stale)
+for q, chosen in (("Q1", "sin transición"), ("Q2", "bucle local"), ("Q3", "pidan el token una vez")):
+    ql = re.search(rf"^- {q}\. .*$", s, re.M)
+    if ql and chosen not in ql.group(0): errs.append(f"{q} no describe lo elegido: " + chosen)
 # cobertura: cada término debe aparecer en las líneas de AC (viñetas "- AC-n.m") de su slice
 def acs(n):
     return "\n".join(l for l in s.splitlines() if re.match(rf"- AC-{n}\.\d+ ", l))
-for n, t in ((2, "Deprecation"), (2, "Allow-Credentials"), (2, "Origin"), (3, "clave no disponible"), (3, "no cambia")):
+for n, t in ((2, "401"), (2, "Allow-Credentials"), (2, "Origin"), (3, "clave no disponible"), (3, "no cambia")):
     if t not in acs(n): errs.append(f"S{n} no cubre {t} en sus AC")
 # el orden S1 < S2 < S3 < S4
 pos = [s.find(f"### {x} — ") for x in ("S1", "S2", "S3", "S4")]
@@ -106,11 +112,33 @@ PY2
   [ -f "$REPO_ROOT/docs/propuestas/LOG.d/SE-528-PROPOSED.md" ]
 }
 
-@test "negativo: missing decisiones abiertas Q1 es fail" {
+@test "negativo: missing decision Q1 de la operadora es fail" {
   mutate "$MS" "- Q1." "- Qx."
   run check "$MS"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"decisiones abiertas"* ]]
+  [[ "$output" == *"decisiones de la operadora (Q1)"* ]]
+}
+
+@test "negativo: reintroducir la transicion o las preguntas abiertas es fail" {
+  for t in "Deprecation" "14 días" "Decisiones abiertas" "fecha de corte" "según Q1"; do
+    cp "$SPEC" "$MS"
+    printf '\nnota %s\n' "$t" >> "$MS"
+    run check "$MS"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resto de una decisión abierta: $t"* ]]
+  done
+}
+
+@test "negativo: quitar el registro de decisiones o lo elegido es fail" {
+  mutate "$MS" "**Decisiones de la operadora (2026-11-13)**" "**Decisiones**"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta el registro de decisiones"* ]]
+  cp "$SPEC" "$MS"
+  mutate "$MS" "Corte inmediato del canal de credenciales retirado, sin transición" "Corte inmediato del canal de credenciales retirado, con transición"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Q1 no describe lo elegido: sin transición"* ]]
 }
 
 @test "edge: fichero vacio es fail por falta de front-matter" {

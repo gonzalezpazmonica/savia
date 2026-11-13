@@ -25,7 +25,7 @@ Una auditoría interna encontró tres frentes de endurecimiento independientes. 
 - **H1 — savia-web**: endurecer cómo se pinta el contenido y dónde vive la sesión del cliente.
 - **H2 — Puente**: endurecer la autenticación: canales de credenciales admitidos, comportamiento sin token configurado y protección frente a peticiones entre sitios.
 - **H3 — Cúpulas**: garantizar la integridad de la clave de firma de grants ante errores de lectura.
-- Clientes propios de un canal de credenciales que esta spec retira: ninguno en el repositorio. Los clientes fuera del repo no se pueden inventariar desde aquí; de ahí la decisión abierta Q1.
+- Clientes propios de un canal de credenciales que esta spec retira: ninguno en el repositorio. Los clientes fuera del repo no se pueden inventariar desde aquí; de ahí que el corte sea inmediato (Q1) y quede registrado en el aviso de la entrega.
 
 ## Riesgo y exposición
 
@@ -43,12 +43,12 @@ Solo el S2 cambia cómo se conecta una persona; el S1 y el S4 cambian dónde se 
 
 **Antes**: la persona entra en savia-web con la dirección del puente y su token (lo pega en el formulario de acceso) y la web lo gestiona ella misma.
 
-**Después**: la persona sigue pegando el token una sola vez en el formulario. El puente lo comprueba y, si es válido, le devuelve una sesión opaca (no es el token) que el navegador guarda sin que la página pueda leerla. La persona no ve diferencia en el uso diario. Cambios visibles, según las decisiones abiertas: (a) los accesos por un canal de credenciales no admitido devuelven «no autorizado» (Q1; con la recomendación, desde la entrega); (b) el arranque del puente sin autenticación solo es posible en la propia máquina y con el aviso bien visible (Q2); (c) las sesiones abiertas antes del cambio piden volver a pegar el token una vez (Q3).
+**Después**: la persona sigue pegando el token una sola vez en el formulario. El puente lo comprueba y, si es válido, le devuelve una sesión opaca (no es el token) que el navegador guarda sin que la página pueda leerla. La persona no ve diferencia en el uso diario. Cambios visibles, según las decisiones de la operadora: (a) los accesos por un canal de credenciales no admitido, por ejemplo un token en la dirección, devuelven «no autorizado» desde la entrega, sin periodo de transición (Q1); (b) el arranque del puente sin autenticación solo es posible en la propia máquina y con el aviso bien visible; en cualquier otra dirección se niega (Q2); (c) las sesiones web abiertas antes del cambio piden volver a pegar el token una vez (Q3).
 
-**Decisiones abiertas para la operadora** (cambian algo visible):
-- Q1. ¿Cuánto dura la transición del canal de credenciales retirado? Recomendación: corte inmediato, porque no hay cliente propio que lo use y una transición mantiene el hueco abierto. Alternativa: 14 días con aviso en el registro.
-- Q2. Arranque sin autenticación: ¿se elimina o se limita a la propia máquina? Propuesta: limitarlo (solo direcciones de bucle local); en cualquier otra, el arranque se niega.
-- Q3. ¿Se acepta que todas las sesiones web abiertas pidan el token de nuevo una vez? Propuesta: sí.
+**Decisiones de la operadora (2026-11-13)**. Registro de la orquestadora, no texto literal. La operadora respondió por pregunta interactiva y en las tres eligió la opción recomendada:
+- Q1. Corte inmediato del canal de credenciales retirado, sin transición: responde 401 desde la entrega. No hay cliente propio que lo use y una transición mantiene el hueco abierto.
+- Q2. El arranque sin autenticación se limita a direcciones de bucle local; en cualquier otra, el arranque se niega.
+- Q3. Se acepta que las sesiones web abiertas pidan el token una vez.
 
 ## Slices (S1, S2 y S3 independientes; S4 depende de S2)
 
@@ -71,15 +71,15 @@ Reversión: revertir la PR; no cambia contratos.
 Este slice es el único dueño de todo el cambio de autenticación del puente; ningún otro slice lo toca.
 - Endpoint de login: valida el token y emite `Set-Cookie` con una sesión opaca (identificador aleatorio de servidor, no el token), `HttpOnly; Secure; SameSite=Strict; Path=/`, con caducidad y un logout que la invalida. El endpoint de login limita los intentos fallidos como el resto de la autenticación.
 - La comprobación de autenticación acepta la cabecera `Authorization` o la cookie de sesión válida; una cookie manipulada, caducada o invalidada es 401.
-- Las credenciales solo se aceptan por la cabecera `Authorization` o la cookie de sesión; el canal retirado se rechaza. Transición (según Q1): se acepta con registro `SECURITY` y cabecera `Deprecation: true`; a la fecha de corte devuelve 401; después se borra el código.
+- Las credenciales solo se aceptan por la cabecera `Authorization` o la cookie de sesión; el canal retirado se rechaza con 401 desde la entrega, sin transición (Q1), y se borra su código.
 - Fallo cerrado: sin token configurado y sin el modo abierto explícito, 401 en toda ruta protegida. Un indicador propio, que solo activa la petición explícita del modo abierto, distingue «sin token por error» de «modo abierto pedido». Ese rechazo se registra con `SECURITY` y un mensaje que apunta a la configuración, pero no cuenta en el límite de intentos (si contara, un tercero podría agotar el límite y bloquear al operador legítimo, y se taparía la causa real).
-- Modo abierto (según Q2): solo si la dirección efectiva de escucha es de bucle local (`127.0.0.1`, `::1` o `localhost`); en cualquier otro caso el arranque se niega con un mensaje que indica cómo pedir la dirección local. Incluso en modo abierto el puente valida `Host` y `Origin` contra bucle local y la lista de orígenes permitidos, para que una página web abierta en el navegador local no pueda llamarlo.
+- Modo abierto (Q2): solo si la dirección efectiva de escucha es de bucle local (`127.0.0.1`, `::1` o `localhost`); en cualquier otro caso el arranque se niega con un mensaje que indica cómo pedir la dirección local. Incluso en modo abierto el puente valida `Host` y `Origin` contra bucle local y la lista de orígenes permitidos, para que una página web abierta en el navegador local no pueda llamarlo.
 - CSRF y CORS: con cookie de sesión, las rutas que cambian estado o ejecutan agentes, y el propio login, exigen `Origin` dentro de una lista de orígenes permitidos; una petición con cookie que cambia estado y no trae `Origin` es 403. `Access-Control-Allow-Credentials: true` solo para orígenes de esa lista, nunca junto a `Access-Control-Allow-Origin: *`. Restricción de despliegue: la cookie `SameSite=Strict` solo viaja si web y puente se sirven desde el mismo sitio; con hosts distintos no hay sesión por cookie y vale la cabecera.
 - Modo sin TLS: no recibe cookie `Secure`; se documenta como modo sin sesión por cookie.
 - Actualizar la documentación del cliente web que describa el canal retirado.
 
 AC:
-- AC-2.1 (condicionado a Q1) Test: una petición protegida por el canal retirado y sin cabecera devuelve 401 (corte inmediato, o tras la fecha de corte); solo si Q1 elige transición, durante ella devuelve 200 con `Deprecation: true` y una línea SECURITY en el registro.
+- AC-2.1 Test: una petición protegida por el canal retirado y sin cabecera devuelve 401 desde la entrega (Q1); no hay transición: ni respuesta 200 ni cabecera de obsolescencia en ningún caso.
 - AC-2.2 Test: `Authorization: Bearer <válido>` sigue devolviendo 200; token inválido, 401, y cuenta en el límite de intentos.
 - AC-2.3 Test de arranque: modo abierto cuya dirección efectiva de escucha no es de bucle local (explícita o no) sale con código distinto de 0 y no abre el puerto.
 - AC-2.4 Test de handler: sin token configurado y sin modo abierto, una petición protegida devuelve 401, no 200, queda registrada y no incrementa el contador de intentos fallidos.
@@ -92,7 +92,7 @@ AC:
 - AC-2.11 Negativo: con cookie de sesión válida, una ruta que cambia estado sin `Origin` devuelve 403.
 - AC-2.12 Negativo: el login con `Origin` ajeno a la lista devuelve 403.
 
-Reversión: revertir la PR; la cabecera `Authorization` no se retiró. Durante la transición, restaurar el canal retirado es un cambio acotado.
+Reversión: revertir la PR; la cabecera `Authorization` no se retiró. Restaurar el canal retirado, si hiciera falta, es un cambio acotado y una decisión nueva de la operadora.
 
 ### S3 — Cúpulas: integridad de la clave de firma (tier 3 por `risk-tier.py`)
 
@@ -127,7 +127,7 @@ Reversión: revertir la PR; el puente sigue aceptando la cabecera.
 ## Riesgos
 
 - S2 y S4 comparten el contrato de sesión: si divergen, la web no autentica. Mitigación: S2 es el único dueño del cambio del puente, se entrega antes que S4 y no retira la cabecera `Authorization`.
-- Clientes no inventariados que usan el canal retirado (enlaces guardados): mitigados por la decisión Q1 y el aviso en el registro.
+- Clientes no inventariados que usan el canal retirado (enlaces guardados): aceptados por la decisión Q1 (corte inmediato); el aviso queda en el registro de la entrega.
 - S3 convierte un autoarreglo silencioso en un fallo visible: es el comportamiento deseado.
 - Divulgación: esta spec es pública y los tres frentes siguen abiertos hasta que se entreguen S1-S4. Por eso no lleva detalle explotable; el detalle está en el registro privado.
 
@@ -176,4 +176,4 @@ Tier 3: revisión humana explícita de cada PR (SE-362).
 
 ## Aprobación
 
-Pendiente. La operadora decide Q1-Q3 (Q1 y Q2 condicionan AC-2.1 y AC-2.3) y aprueba la spec; no se implementa nada antes.
+Pendiente. Q1-Q3 están decididas (2026-11-13). La operadora aprueba la spec con un comentario en la PR; no se implementa nada antes.
