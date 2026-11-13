@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # SE-531 S1 — ficha de runtime: esquema, validador fail-closed y lectores.
-# Ref: docs/specs/SE-531-ficha-de-harness-ejecutable.spec.md (AC-S1b..S1i)
+# Ref: SE-531 S1 (AC-S1b..S1i)
 # Cada regla: caso positivo (fichas reales pasan) y negativo (copia mutada falla nombrando ficha y campo).
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
@@ -121,7 +121,7 @@ py() { python3 -I -c "import sys; sys.path.insert(0, '$REPO_ROOT/scripts'); impo
 }
 
 @test "AC-S1i: rc_deteccion con metacaracteres de shell o demasiado larga se rechaza" {
-  for v in 'a; touch /tmp/x' 'a $(touch /tmp/x)' 'a `id`' "it's" 'a | b'; do
+  for v in 'a; touch /tmp/x' 'a $(touch /tmp/x)' 'a `id`' "it's" 'a | b' 'a & b' 'a > b' 'a < b' 'a\\b' 'a\nb' 'a\rb'; do
     write_fake
     set_det "$v"
     run check
@@ -141,11 +141,100 @@ py() { python3 -I -c "import sys; sys.path.insert(0, '$REPO_ROOT/scripts'); impo
   [ "$status" -eq 0 ]
 }
 
-@test "AC-S1i: el lector no ejecuta rc_deteccion (marca no aparece)" {
+@test "AC-S1i: el lector no ejecuta nada: ni subprocess/os.system/eval/exec con reglas válidas" {
   M="$BATS_TEST_TMPDIR/marca"
-  run py "h.detect_failure({'tipo':'literal','valor':'x; touch $M'}, 'x; touch $M'); h.detect_failure({'tipo':'patron','valor':'\$(touch $M)'}, 'a')"
+  run py "
+import subprocess, os, builtins
+def boom(*a, **k): raise AssertionError('ejecución')
+for o, n in ((subprocess,'run'),(subprocess,'Popen'),(subprocess,'call'),(os,'system'),(os,'popen'),(builtins,'eval'),(builtins,'exec')):
+    setattr(o, n, boom)
+lit={'tipo':'literal','valor':'touch $M'}
+pat={'tipo':'patron','valor':'^touch .$M'}
+assert h.detect_failure(lit, 'x touch $M y') is True
+assert h.detect_failure(pat, 'touch /$M') is True
+assert h.accept_exit({'rc_en_error':'no_fiable','rc_deteccion':lit}, 0, True, 'touch $M')[0] is False
+"
   [ "$status" -eq 0 ]
   [ ! -e "$M" ]
+}
+
+@test "AC-S1i: el módulo no importa subprocess/os/shlex ni llama eval/exec/system" {
+  run python3 -I -c "
+import ast, sys
+t = ast.parse(open('$CHECK').read())
+bad = [n.names[0].name for n in ast.walk(t) if isinstance(n, ast.Import) and n.names[0].name in ('subprocess','os','shlex','ctypes')]
+bad += [n.module for n in ast.walk(t) if isinstance(n, ast.ImportFrom) and n.module in ('subprocess','os','shlex','ctypes')]
+bad += [n.func.id for n in ast.walk(t) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ('eval','exec','compile','__import__')]
+print(bad); sys.exit(1 if bad else 0)
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "ReDoS: patrón con grupos o cuantificadores se rechaza; patrón lineal pasa y es rápido" {
+  for v in '(a+)+b' 'a*' 'a+' 'a?' 'a{2}' '(ab)'; do
+    write_fake
+    python3 -I -c 'import sys; p=sys.argv[1]; t=open(p).read().replace("{tipo: literal, valor: \"API error\"}", "{tipo: patron, valor: \"%s\"}" % sys.argv[2]); open(p,"w").write(t)' "$D/fake.yaml" "$v"
+    run check
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"fake: rc_deteccion.valor: patrón con grupos o cuantificadores"* ]]
+  done
+  run py "
+import time
+rt={'rc_en_error':'no_fiable','rc_deteccion':{'tipo':'patron','valor':'^API [a-z]rror.'}}
+t=time.time(); r=h.accept_exit(rt,0,True,'a'*2000000); assert time.time()-t < 5, 'lento'
+assert r[0] is True
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "fail-closed: regla inaplicable (inválida, salida no texto, ReDoS) no acepta rc 0" {
+  run py "
+ok={'tipo':'literal','valor':'API error'}
+rt={'rc_en_error':'no_fiable','rc_deteccion':ok}
+assert h.accept_exit(rt,0,True,None)[0] is False
+assert h.accept_exit(rt,0,True,b'API error')[0] is False
+assert h.accept_exit(dict(rt,rc_deteccion={'tipo':'literal','valor':'a; b'}),0,True,'x')[0] is False
+assert h.accept_exit(dict(rt,rc_deteccion={'tipo':'patron','valor':'(a+)+b'}),0,True,'aaaa')[0] is False
+assert h.accept_exit(dict(rt,rc_deteccion='texto'),0,True,'x')[0] is False
+assert h.accept_exit(rt,0,True,'limpio')[0] is True
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "detección mira la cola de la salida larga, no solo el primer MB" {
+  run py "
+rt={'rc_en_error':'no_fiable','rc_deteccion':{'tipo':'literal','valor':'API error'}}
+out='x'*3000000 + 'API error'
+assert h.accept_exit(rt,0,True,out)[0] is False
+assert h.accept_exit(rt,0,True,'API error'+'x'*3000000)[0] is False
+assert h.accept_exit(rt,0,True,'x'*3000000)[0] is True
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "informa_uso: \"no\" (texto) y no (booleano YAML 1.1) son válidos y equivalentes" {
+  sed -i 's/^  informa_uso: .*/  informa_uso: no/' "$D/codex.yaml"
+  sed -i 's/^  informa_uso: .*/  informa_uso: "no"/' "$D/opencode.yaml"
+  run check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"informa_uso: obligatorio para un dato medido"* ]]
+  [[ "$output" != *"valor no permitido"* ]]
+  run py "assert h.effective({'informa_uso': False},'informa_uso')=='no' and h.effective({'informa_uso': True},'informa_uso')=='si' and h.reports_usage({'informa_uso': True})"
+  [ "$status" -eq 0 ]
+}
+
+@test "ficha: el id debe coincidir con el nombre del fichero" {
+  sed -i 's/^ficha: codex/ficha: yema/' "$D/codex.yaml"
+  run check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"codex.yaml: ficha: el id 'yema' no coincide"* ]]
+}
+
+@test "fichas con extensión .yml se rechazan (no se ignoran en silencio)" {
+  cp "$D/codex.yaml" "$D/otra.yml"
+  run check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"otra.yml: extensión .yml no admitida"* ]]
 }
 
 @test "AC-S1g: runtime ficticio no_fiable fuerza fallo con rc 0; fiable no lo fuerza" {

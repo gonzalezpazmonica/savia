@@ -9,8 +9,13 @@ Salida 0 = todas las fichas válidas; 1 = algún error (nombra ficha y campo);
 Una ficha es un YAML con: `ficha` (id), `usa` (lista opcional de runtimes que
 usa) y `runtime` (bloque con los campos de D1). `no_medido` es válido pero los
 lectores (`effective`, `accept_exit`, ...) lo leen como la opción desconfiada.
-`rc_deteccion` es un dato (literal o patrón acotado): nunca se ejecuta ni se
-pasa a un shell.
+`rc_deteccion` es un dato (literal o patrón acotado): este módulo nunca lo
+ejecuta ni lo pasa a un shell. La lista de bloqueo de metacaracteres es una
+defensa en profundidad, NO sustituye a pasar el valor entre comillas si un
+invocador futuro lo usara en una orden. Un `patron` es un subconjunto lineal de
+regex (literales, `.`, clases `[...]`, ancla `^`): sin grupos ni cuantificadores,
+para que ningún dato pueda colgar al invocador (ReDoS). Los valores `si`/`no`
+van entre comillas en YAML 1.1; se acepta también el booleano que PyYAML produce.
 """
 import re
 import sys
@@ -32,9 +37,11 @@ FIELDS = {
 ALLOWED_KEYS = set(FIELDS) | {"rc_deteccion", "fuente", "version_cli", "notas"}
 DET_MAX_LEN = 200
 DET_KINDS = ("literal", "patron")
-SCAN_MAX = 1_000_000
+SCAN_MAX = 1_000_000  # cabeza y cola a partes iguales: los errores de API suelen salir al final
 # metacaracteres de shell/sustitución: se rechazan en rc_deteccion (AC-S1i)
 SHELL_META = re.compile(r"[;$`'\"|&<>\n\r\\]")
+# patrón acotado: solo literales, `.`, clases y ancla inicial; sin grupos ni cuantificadores
+PATRON_PROHIBIDO = re.compile(r"[(){}*+?]")
 
 
 def _err(ficha, campo, msg):
@@ -55,6 +62,8 @@ def _check_deteccion(ficha, det):
     if SHELL_META.search(val):
         out.append(_err(ficha, "rc_deteccion.valor", "contiene metacaracteres de shell"))
     elif det["tipo"] == "patron":
+        if PATRON_PROHIBIDO.search(val):
+            return out + [_err(ficha, "rc_deteccion.valor", "patrón con grupos o cuantificadores no permitido (solo literales, '.', clases, '^')")]
         try:
             re.compile(val)
         except re.error as e:
@@ -62,10 +71,20 @@ def _check_deteccion(ficha, det):
     return out
 
 
+def _norm(v):
+    """YAML 1.1 lee `si`/`no` sin comillas como booleano: se normaliza a texto."""
+    if v is True:
+        return "si"
+    if v is False:
+        return "no"
+    return v
+
+
 def validate_runtime(ficha, rt):
     """Errores (lista de str) de un bloque runtime. Vacía = válido."""
     if not isinstance(rt, dict):
         return [_err(ficha, "runtime", "bloque ausente o no es un mapa")]
+    rt = {k: (_norm(v) if k in FIELDS else v) for k, v in rt.items()}
     errs = [_err(ficha, k, "campo desconocido") for k in rt if k not in ALLOWED_KEYS]
     measured = []
     for campo, (allowed, _) in FIELDS.items():
@@ -101,6 +120,8 @@ def validate_runtime(ficha, rt):
 def load_fichas(directory):
     fichas, errs = {}, []
     files = sorted(Path(directory).glob("*.yaml"))
+    for extra in sorted(Path(directory).glob("*.yml")):
+        errs.append(f"{extra.name}: extensión .yml no admitida, usa .yaml")
     if not files:
         errs.append(f"{directory}: sin fichas (*.yaml)")
     for f in files:
@@ -111,6 +132,9 @@ def load_fichas(directory):
             continue
         if not isinstance(doc, dict) or not isinstance(doc.get("ficha"), str) or not doc["ficha"]:
             errs.append(f"{f.name}: ficha: id obligatorio")
+            continue
+        if doc["ficha"] != f.stem:
+            errs.append(f"{f.name}: ficha: el id {doc['ficha']!r} no coincide con el nombre del fichero")
             continue
         if doc["ficha"] in fichas:
             errs.append(f"{f.name}: ficha: id duplicado {doc['ficha']!r}")
@@ -139,28 +163,48 @@ def validate_all(fichas):
 # --- lectores: aplican D1 (no_medido = opción desconfiada) -------------------
 
 def effective(rt, campo):
-    v = rt.get(campo, NM)
+    v = _norm(rt.get(campo, NM))
     return FIELDS[campo][1] if v == NM or v not in FIELDS[campo][0] else v
 
 
-def detect_failure(det, output):
-    """True si `output` cumple la regla. Dato puro: no ejecuta nada."""
+def _scan(det, output):
+    """True = fallo encontrado, False = limpio, None = la regla no se pudo aplicar."""
     if _check_deteccion("x", det) or not isinstance(output, str):
-        return False
-    text = output[:SCAN_MAX]
-    return det["valor"] in text if det["tipo"] == "literal" else re.search(det["valor"], text) is not None
+        return None
+    if len(output) > SCAN_MAX:
+        half = SCAN_MAX // 2
+        text = output[:half] + "\n" + output[-half:]
+    else:
+        text = output
+    try:
+        if det["tipo"] == "literal":
+            return det["valor"] in text
+        return re.search(det["valor"], text) is not None
+    except re.error:
+        return None
+
+
+def detect_failure(det, output):
+    """True si `output` cumple la regla. Dato puro: no ejecuta nada.
+    Una regla inaplicable cuenta como no cumplida aquí; `accept_exit` la rechaza."""
+    return _scan(det, output) is True
 
 
 def accept_exit(rt, rc, postcondition_ok, output=""):
     """(aceptado, motivo). Fail-closed: un 0 solo se acepta con ficha `fiable`
-    o con la postcondición del trabajo cumplida (True explícito)."""
-    if rc != 0:
+    o con la postcondición del trabajo cumplida (True explícito) y sin que una
+    regla de detección presente la contradiga ni deje de poder aplicarse."""
+    if rc != 0 or isinstance(rc, bool):
         return False, "rc distinto de 0"
     if effective(rt, "rc_en_error") == "fiable":
         return True, "rc 0 con runtime fiable"
     det = rt.get("rc_deteccion")
-    if det is not None and detect_failure(det, output):
-        return False, "rc 0 pero la regla de detección encontró fallo"
+    if det is not None:
+        found = _scan(det, output)
+        if found is None:
+            return False, "regla de detección inaplicable (regla inválida o salida no es texto)"
+        if found:
+            return False, "rc 0 pero la regla de detección encontró fallo"
     if postcondition_ok is True:
         return True, "rc 0 no fiable, postcondición cumplida"
     return False, "rc 0 no fiable sin postcondición cumplida"
