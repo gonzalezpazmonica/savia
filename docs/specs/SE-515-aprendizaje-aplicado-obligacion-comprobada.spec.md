@@ -131,6 +131,10 @@ Número de lecciones, veces recuperada, porcentaje de respuestas que citan una l
 
 APPROVED por la operadora el 2026-11-09 por pregunta interactiva («Savia Viva + tokens y efectos»), tras confirmar las escenas cuando la spec las exige. Se formaliza al fusionar la PR (SE-488). Cada slice sigue necesitando su propia aprobación según «Slices»; esta aprobación cubre la spec y S0.
 
+### Aprobación de S1
+
+S1 (recall trazado) APPROVED por la operadora el 2026-11-10 por pregunta interactiva. Respuesta literal: «Apruebo S1 (Recommended)». Esta aprobación cubre solo S1; S2–S4 siguen necesitando la suya.
+
 ## Enmienda propuesta 2026-11-10 (solape SE-516)
 
 > Propuesta externa SE-516 del 2026-11-09, evaluada como solape. No cambia el estado de esta spec; vale cuando la operadora fusione la PR.
