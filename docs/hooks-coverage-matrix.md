@@ -6,7 +6,7 @@
 
 | Total hooks | TS Guards | Git Hook mitigated | CI Job mitigated | NONE |
 |---|---|---|---|---|
-| 132 | 20 (15.2%) | 4 | 5 | 103 |
+| 133 | 20 (15.0%) | 4 | 5 | 104 |
 
 ## Bloqueantes sin cobertura ni mitigacion
 
@@ -14,8 +14,8 @@ Ninguno — AC-2.2 satisfecho.
 
 ## Cobertura real OpenCode
 
-- **TS Guards activos**: 20/132 (15.2%)
-- **Hooks sin cobertura TS**: 103 (78.0%)
+- **TS Guards activos**: 20/133 (15.0%)
+- **Hooks sin cobertura TS**: 104 (78.2%)
   - De los cuales son bloqueantes sin ninguna mitigacion: 0
   - Eventos no disponibles en OpenCode (degradacion aceptada): 36
 
@@ -110,6 +110,7 @@ Ninguno — AC-2.2 satisfecho.
 | PreToolUse | cognitive-debt-hypothesis-first.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PreToolUse | contract-test-guard.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PreToolUse | live-progress-hook.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
+| PreToolUse | mcp-effect-guard.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PreToolUse | output-effort-router.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PreToolUse | savia-budget-guard.sh | no | NONE | telemetria | degradacion_documentada: solo Claude Code |
 | PreToolUse | subagent-audience-filter.sh | si | TS_GUARD | telemetria | subagentAudienceFilter |

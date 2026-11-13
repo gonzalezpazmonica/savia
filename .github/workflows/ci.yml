@@ -371,6 +371,17 @@ jobs:
           python3 -m unittest tests/python/test_dome_guard.py
           bats tests/hooks/test-dome-guard.bats tests/hooks/test-dome-guard-parity.bats
 
+      # SE-508 S1: guard de efectos MCP/WebFetch/WebSearch, su paridad hook bash ↔ savia-gates y el binding de
+      # OpenCode. Sus suites viven fuera de tests/bats/ (ci-select-bats no las elige); SAVIA_REQUIRE_TS=1 hace
+      # que la paridad falle en vez de saltar si falta el runtime TS.
+      - name: MCP effect guard parity (SE-508)
+        env:
+          SAVIA_REQUIRE_TS: "1"
+        run: |
+          python3 -m unittest tests/python/test_mcp_effect_guard.py
+          bats tests/hooks/test-se508-mcp-effect-guard.bats tests/hooks/test-se508-mcp-guard-parity.bats
+          cd scripts/opencode-plugin/savia-gates && bun test __tests__/mcp-effect-guard.test.ts
+
       # PR #1399: the agent permission gate and its suites live in tests/*.bats, which
       # ci-select-bats never picks, so they run on every PR here.
       - name: Agent permission levels gate

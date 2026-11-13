@@ -107,16 +107,22 @@ def call(model, sp_text, msg):
         shutil.rmtree(d, ignore_errors=True)
 
 
-def run(models, reps, workers, raw_path, max_calls):
+def run(models, reps, workers, raw_path, max_calls, variant="B", only=None):
     cases = json.load(open(os.path.join(HERE, "corpus.json")))["cases"]
-    sp = {v: open(os.path.join(HERE, "variants", f"{v}.md"), encoding="utf-8").read() for v in "AB"}
+    if only:
+        # Un id inexistente (errata) no puede dejar la corrida en cero casos con exit 0 (revisión de #1527).
+        unknown = sorted(set(only) - {c["id"] for c in cases})
+        if unknown:
+            raise SystemExit(f"--cases con ids inexistentes en el corpus: {','.join(unknown)}")
+        cases = [c for c in cases if c["id"] in only]
+    sp = {v: open(os.path.join(HERE, "variants", f"{v}.md"), encoding="utf-8").read() for v in ("A", variant)}
     done = set()
     if os.path.exists(raw_path):
         for l in open(raw_path):
             r = json.loads(l)
             if r["status"] == "ok":
                 done.add((r["model"], r["variant"], r["case"], r["rep"]))
-    units = [(m, v, c["id"], c["msg"], k) for m in models for v in "AB" for c in cases for k in range(reps)]
+    units = [(m, v, c["id"], c["msg"], k) for m in models for v in ("A", variant) for c in cases for k in range(reps)]
     random.Random(SEED).shuffle(units)
     todo = [u for u in units if (u[0], u[1], u[2], u[4]) not in done]
     print(f"unidades {len(units)}, pendientes {len(todo)}", file=sys.stderr)
@@ -151,11 +157,12 @@ def boot(diffs_by_case, iters=B_ITERS, seed=SEED):
     return sum(vals) / n, means[int(0.025 * iters)], means[int(0.975 * iters) - 1]
 
 
-def analyze(raw_path, out_path):
+def analyze(raw_path, out_path, variant="B"):
     rows = [json.loads(l) for l in open(raw_path)]
     ok = {}
     for r in rows:
-        if r["status"] == "ok":
+        if r["status"] == "ok" and r["variant"] in ("A", variant):
+            r["variant"] = "A" if r["variant"] == "A" else "B"
             r["verdict"] = checks.check(r["case"], r["text"])  # se recalcula: checks.py es la fuente
             ok[(r["model"], r["variant"], r["case"], r["rep"])] = r
     models = sorted({k[0] for k in ok})
@@ -214,15 +221,17 @@ def main():
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--max-calls", type=int, default=400)
+    ap.add_argument("--variant", default="B", help="variante a comparar con A (B, B2)")
+    ap.add_argument("--cases", default=None, help="ids separados por coma (solo run)")
     ap.add_argument("--raw", default=os.path.join(HERE, "results", "raw.jsonl"))
     ap.add_argument("--out", default=os.path.join(HERE, "results", "summary.json"))
     a = ap.parse_args()
     if a.cmd == "build":
         build(a.base_ref, a.b_ref)
     elif a.cmd == "run":
-        run(a.models.split(","), a.reps, a.workers, a.raw, a.max_calls)
+        run(a.models.split(","), a.reps, a.workers, a.raw, a.max_calls, a.variant, a.cases.split(",") if a.cases else None)
     else:
-        analyze(a.raw, a.out)
+        analyze(a.raw, a.out, a.variant)
 
 
 if __name__ == "__main__":

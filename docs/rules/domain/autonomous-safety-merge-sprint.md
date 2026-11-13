@@ -23,11 +23,11 @@ agentes», no que haya leído el diff.
 
 1. `review-register`: cada revisión y cada veredicto de juez se registra en un registro encadenado,
    con espejo como comentario del PR.
-2. `plan`: un agente prepara un borrador de manifiesto. No es de confianza.
+2. `plan`: borrador de manifiesto, no de confianza. SE-500 S3: fija `order` y `collisions` y avisa «#A chocará con #B en f» (va en la pregunta).
 3. `render-question` y luego `grant`. `render-question` recalcula todo desde GitHub y `origin/main` y
    emite la pregunta con el manifiesto y su digest. La orquestadora la formula con AskUserQuestion y,
    tras la respuesta, ejecuta `grant`: registra pregunta y respuesta literales, sesión, hora y hash.
-4. `run`: un ejecutor determinista mergea en serie, del PR más antiguo al más nuevo.
+4. `run`: un ejecutor determinista mergea en serie, en el `order` congelado del manifiesto (SE-500 S3).
 5. `report`: genera un informe local.
 
 ## Grant

@@ -4,7 +4,7 @@
 #   review-register <pr> <informe>   registra una revisión (VERDICT: …) o un veredicto del juez (JUDGE: …, §2.7)
 #   plan                             manifiesto: PRs abiertos con revisión APPROVE sobre su head actual
 #   grant <manifest-digest>          emite el grant (regla «ask»: la operadora lo aprueba desde el frontend)
-#   run                              ejecuta el sprint del grant vigente, en serie y ascendente
+#   run                              ejecuta el sprint del grant vigente, en serie y en el orden del manifiesto (SE-500 S3)
 #   status | stop | revoke | report | verify-ledger
 #
 # Estado: ${MERGE_SPRINT_HOME:-$HOME/.savia/merge-sprint} (fuera del repo). Política: config/merge-sprint-policy.conf.
@@ -161,6 +161,48 @@ pr_refs() {  # pr_refs <pr> <H0> → ids SE-NNN referenciados (JSON) desde H0: c
   python3 "$RESOLVER" refs --repo "$GITROOT" --head "$2" --base-ref "origin/$BASE" --branch "$br" 2>/dev/null || echo '[]'
 }
 
+plan_order() {  # plan_order <prs-json> → {"order":[…],"collisions":[{pr,with,files}],"warnings":[…]} (SE-500 S3)
+  # Heurística por pares: git merge-tree entre los heads revisados, sin registros ni derivados (DERIVED_RE y D).
+  # No decide nada en run (resync y la equivalencia siguen decidiendo): solo ordena y avisa antes del grant.
+  # Orden: un conjunto sin choques entre sí por voraz (grado ascendente y luego número), después el resto ascendente.
+  python3 - "$GITROOT" "$1" "$DERIVED_RE" "$REGISTRY_RE" "$(printf '%s\n' "${DERIVED_PATHS[@]}")" <<'PY'
+import json, re, subprocess, sys
+root, prs, derived, registry, dlist = sys.argv[1:6]
+prs = sorted(json.loads(prs), key=lambda p: p["pr"])
+dpaths = [d for d in dlist.splitlines() if d]
+def admin(p):
+    return bool(re.search(derived, p) or re.search(registry, p)
+                or any(p.startswith(d) if d.endswith("/") else p == d for d in dpaths))
+def has(sha):
+    return subprocess.run(["git", "-C", root, "cat-file", "-e", sha + "^{commit}"], capture_output=True).returncode == 0
+nums = [p["pr"] for p in prs]
+adj = {n: set() for n in nums}
+collisions, warnings = [], []
+for i, a in enumerate(prs):
+    for b in prs[i + 1:]:
+        pair = "#%d y #%d" % (a["pr"], b["pr"])
+        if not (has(a["head"]) and has(b["head"])):
+            warnings.append(pair + ": colisión no calculable (head ausente del repo)"); continue
+        r = subprocess.run(["git", "-C", root, "merge-tree", "--write-tree", "--name-only", "--no-messages", a["head"], b["head"]],
+                           capture_output=True, text=True)
+        if r.returncode not in (0, 1):
+            warnings.append(pair + ": colisión no calculable (merge-tree falló)"); continue
+        conflict = sorted({f for f in r.stdout.splitlines()[1:] if f and not admin(f)}) if r.returncode == 1 else []
+        if conflict:
+            collisions.append({"pr": a["pr"], "with": b["pr"], "files": conflict})
+            adj[a["pr"]].add(b["pr"]); adj[b["pr"]].add(a["pr"])
+        overlap = sorted((set(a["files"]) & set(b["files"])) - set(conflict))
+        overlap = [f for f in overlap if not admin(f)]
+        if overlap:
+            warnings.append("#%d solapa con #%d en %s (sin conflicto previsto)" % (a["pr"], b["pr"], ", ".join(overlap)))
+chosen = []
+for n in sorted(nums, key=lambda n: (len(adj[n]), n)):
+    if not adj[n] & set(chosen): chosen.append(n)
+order = chosen + sorted(n for n in nums if n not in chosen)
+print(json.dumps({"order": order, "collisions": collisions, "warnings": warnings}, sort_keys=True))
+PY
+}
+
 cmd_plan() {
   verify_chain "$REG" || die "registro de revisiones manipulado" 4
   git -C "$GITROOT" fetch -q origin 2>/dev/null
@@ -211,12 +253,21 @@ cmd_plan() {
   fb=$(blob_on_main scripts/f5-state.sh) || die "sin scripts/f5-state.sh en origin/$BASE" 4   # decide reconciliar o merge_externo
   req=$(required_live)
   [[ -n "$req" ]] || die "la protección de $BASE no declara checks obligatorios" 4
-  python3 -c 'import json,sys; a=json.loads(sys.argv[1])[:int(sys.argv[2])]
+  # SE-500 S3: orden y colisiones previstas sobre las candidatas que entran (tras el máximo), en el digest.
+  local ord; ord=$(plan_order "$(python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1])[:int(sys.argv[2])]))' "$out" "$max_prs")") \
+    || die "no se pudo calcular el orden del plan" 4
+  python3 -c 'import json,sys; a=json.loads(sys.argv[1])[:int(sys.argv[2])]; o=json.loads(sys.argv[11])
 print(json.dumps({"repo":sys.argv[3],"base":sys.argv[4],"runner_blob":sys.argv[5],"classifier_blob":sys.argv[6],
- "f5_blob":sys.argv[8],"resolver_blob":sys.argv[9],"main_commit":sys.argv[10],"required_checks":sys.argv[7].splitlines(),"prs":a},sort_keys=True,separators=(",",":")))' \
-    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" "$fb" "$rsb" "$mc" > "$MANIFEST"
+ "f5_blob":sys.argv[8],"resolver_blob":sys.argv[9],"main_commit":sys.argv[10],"required_checks":sys.argv[7].splitlines(),"prs":a,
+ "order":o["order"],"collisions":o["collisions"]},sort_keys=True,separators=(",",":")))' \
+    "$out" "$max_prs" "$REPO" "$BASE" "$rb" "$cb" "$req" "$fb" "$rsb" "$mc" "$ord" > "$MANIFEST"
   chmod 600 "$MANIFEST"
   echo "manifiesto: $(python3 -c 'import json,sys; print(" ".join("#%d(t%d)"%(p["pr"],p["tier"]) for p in json.load(open(sys.argv[1]))["prs"]))' "$MANIFEST")"
+  # Avisos para la pregunta del grant: colisiones previstas, solapamientos sin conflicto y pares no calculables.
+  python3 -c 'import json,sys; o=json.loads(sys.argv[1])
+print("orden: " + " ".join("#%d" % n for n in o["order"]))
+for c in o["collisions"]: print("#%d chocará con #%d en %s" % (c["pr"], c["with"], ", ".join(c["files"])))
+for w in o["warnings"]: print(w)' "$ord"
   # refs sale de la rama (commits, .pr-summary.md, nombre): quien concede el grant ve qué iniciativas habilita.
   python3 -c 'import json,sys
 for p in json.load(open(sys.argv[1]))["prs"]:
@@ -841,8 +892,14 @@ cmd_run() {
   [[ "$(git hash-object "$RESOLVER")" == "$(mf resolver_blob 2>/dev/null)" ]] || anomaly blob_resolutor
   frozen_extract "$(mf main_commit 2>/dev/null)" run || anomaly codigo_congelado_ilegible
   check_required
+  # SE-500 S3: run sigue el `order` congelado (en el digest) y no reordena. Debe ser una permutación exacta de
+  # las PR del manifiesto; si falta, sobra, se repite (en order o en prs) o no es una lista de enteros, anomalía.
+  # Las PR que pasan a awaiting_judge salen de la primera pasada y van a la cola del juez (SE-433 §2.7).
   local entries; entries=$(python3 -c 'import json,sys
-for p in sorted(json.load(open(sys.argv[1]))["prs"],key=lambda p:p["pr"]): print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_repo"],p["reopens"])' "$MANIFEST") \
+d=json.load(open(sys.argv[1])); o=d["order"]; ns=[p["pr"] for p in d["prs"]]; by={p["pr"]:p for p in d["prs"]}
+# Se compara con la lista de PR, no con el dict: el dict perdería en silencio una entrada repetida.
+if not isinstance(o,list) or any(type(n) is not int for n in o) or len(o)!=len(set(o)) or sorted(o)!=sorted(ns): sys.exit(1)
+for n in o: p=by[n]; print(p["pr"],p["head"],p["tier"],p["base_ref"],p["head_repo"],p["reopens"])' "$MANIFEST") \
     || anomaly manifiesto_ilegible
   # D6: la etiqueta merge-sprint:<id> pausa el auto-rebase de los PRs del manifiesto mientras dura el run.
   local label="merge-sprint:${DIGEST:0:12}" pr head tier base hrepo reopens st

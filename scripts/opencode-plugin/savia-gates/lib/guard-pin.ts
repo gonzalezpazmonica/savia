@@ -35,6 +35,9 @@ export interface GuardPin {
 /** Ficheros que el entorno de los hooks carga desde el workspace (scripts/savia-env.sh). */
 const ENV_FILES = [".env", ".venv/bin/activate"]
 
+/** Datos de guards que viven fuera de los scripts (SE-508): editarlos con el pin fijado también bloquea. */
+export const PINNED_DATA_FILES = ["config/mcp-effect-catalog.yaml", "config/webfetch-allow-hosts"]
+
 async function sha(path: string): Promise<string | null> {
   try {
     return createHash("sha256").update(await readFile(path)).digest("hex")
@@ -108,7 +111,7 @@ export async function capturePin(root: string, hookMap: HookMap): Promise<GuardP
   const dirs = new Map<string, string[]>()
   const registry = canonical(join(root, ".claude/settings.json"))
   files.set(registry, await sha(registry))
-  for (const rel of ENV_FILES) {
+  for (const rel of [...ENV_FILES, ...PINNED_DATA_FILES]) {
     const p = canonical(join(root, rel))
     files.set(p, await sha(p))
   }
