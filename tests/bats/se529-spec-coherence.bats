@@ -1,0 +1,145 @@
+#!/usr/bin/env bats
+# SE-529 — coherencia de la spec de compactación.
+# Ref: docs/specs/SE-529-compactacion-que-conserva-y-reinyecta.spec.md
+# Comprobador: tests/se529_spec_check.py. Caso positivo (la spec real pasa) y casos
+# negativos (copias mutadas fallan con su motivo).
+
+REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
+SPEC="$REPO_ROOT/docs/specs/SE-529-compactacion-que-conserva-y-reinyecta.spec.md"
+CHECK="$REPO_ROOT/tests/se529_spec_check.py"
+PLAN="$REPO_ROOT/docs/propuestas/planning.d/SE-529.json"
+
+setup() {
+  MS="$BATS_TEST_TMPDIR/spec.md"
+  cp "$SPEC" "$MS"
+}
+
+# mutate <fichero> <viejo> <nuevo>: sustitución literal; falla si no encuentra el texto.
+mutate() {
+  python3 -I - "$1" "$2" "$3" <<'PY'
+import sys
+p, old, new = sys.argv[1:4]
+s = open(p, encoding="utf-8").read()
+if old not in s:
+    sys.exit("mutación sin efecto: " + old[:60])
+open(p, "w", encoding="utf-8").write(s.replace(old, new, 1))
+PY
+}
+
+@test "real: coherente" {
+  run python3 -I "$CHECK" "$SPEC" "$REPO_ROOT"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "uso: sin argumentos sale 2" {
+  run python3 -I "$CHECK"
+  [ "$status" -eq 2 ]
+}
+
+@test "fichero ausente sale 2" {
+  run python3 -I "$CHECK" /nonexistent/spec.md "$REPO_ROOT"
+  [ "$status" -eq 2 ]
+}
+
+@test "referencia a un fichero inexistente falla" {
+  python3 -I - "$MS" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(s.replace("tests/test-pre-compact-backup.bats", "tests/no-existe-compact.bats"))
+PY
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fichero inexistente"* ]]
+}
+
+@test "referencia fuera de rango falla" {
+  mutate "$MS" "pre-compact-backup.sh\`, que es" "pre-compact-backup.sh:9999\`, que es"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fuera de rango"* ]]
+}
+
+@test "falta un AC falla" {
+  mutate "$MS" "**AC-9 (S2 negativos):**" "**Otra cosa (S2 negativos):**"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta AC-9"* ]]
+}
+
+@test "un AC marcado como cumplido en PROPOSED falla" {
+  mutate "$MS" "- [ ] **AC-4 " "- [x] **AC-4 "
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"marcado como cumplido"* ]]
+}
+
+@test "status distinto de PROPOSED falla" {
+  mutate "$MS" "status: PROPOSED" "status: APPROVED"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"status debe ser PROPOSED"* ]]
+}
+
+@test "sin la comprobacion de ruta (realpath) falla" {
+  python3 -I - "$MS" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(s.replace("realpath", "ruta"))
+PY
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ruta no fiable"* ]]
+}
+
+@test "sin la salida honesta 'no confirmado' falla" {
+  python3 -I - "$MS" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(s.replace("no confirmado", "guardado"))
+PY
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"fail honesto"* ]]
+}
+
+@test "S4 sin la salida 'no aplicable' falla" {
+  mutate "$MS" "**no aplicable**" "aplicable"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S4 puede ser no aplicable"* ]]
+}
+
+@test "sin fijar parametros antes de S1/S2 falla" {
+  mutate "$MS" "antes de ver el resultado de S1/S2" "cuando convenga"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S0 fija parámetros"* ]]
+}
+
+@test "un termino privado en la spec falla" {
+  printf '\nVer informe en SaviaLabs.\n' >> "$MS"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"término no permitido"* ]]
+}
+
+@test "falta la seccion S5 falla" {
+  mutate "$MS" "### S5 — Redacción" "### Redacción"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta la sección de S5"* ]]
+}
+
+@test "planning: SE-529 PROPOSED con evidencia existente" {
+  run python3 -I - "$PLAN" "$REPO_ROOT" <<'PY'
+import json, os, sys
+d = json.load(open(sys.argv[1]))
+assert d["id"] == "SE-529" and d["status"] == "PROPOSED", d
+assert os.path.isfile(os.path.join(sys.argv[2], d["evidence"])), d["evidence"]
+PY
+  [ "$status" -eq 0 ]
+}
