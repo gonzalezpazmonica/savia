@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P2
 developer_type: agent-single
 created: 2026-11-13
@@ -14,6 +14,10 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "worker autónomo; encargo de la orquestadora"
+  - from: "2026-11-13"
+    learned: "2026-11-13"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva; escenas y decisiones 1-5 confirmadas «Confirmo todo como está»"
 ---
 
 # SE-530 — Hecho verificado: ningún trabajo se da por bueno por su propia palabra
@@ -41,9 +45,9 @@ timeline:
 
 **Conclusión.** Las piezas para comprobar de forma independiente existen sueltas. Falta (a) **el vocabulario** (declarado / verificado / refutado), (b) **la regla de independencia** aplicada a cualquier trabajo y no solo a las PRs de un merge-sprint, y (c) **el cruce** con la marca de fin del trabajador.
 
-## Puerta de comprensión (SE-505)
+## Lo que he entendido
 
-Esta spec cambia lo que la persona ve y lo que la orquestadora le dice. Por eso lleva escenas, antes y después en lenguaje llano y confirmación pendiente.
+Esta spec cambia lo que la persona ve y lo que la orquestadora le dice. Por eso lleva escenas, antes y después en lenguaje llano y la confirmación de la persona (2026-11-13).
 
 ### Qué ve la persona hoy
 
@@ -63,8 +67,9 @@ Cada trabajo aparece con uno de tres estados y con **la razón**:
 2. **Una revisora distinta lo confirma.** Una revisora que no es el trabajador ni la orquestadora registra su veredicto sobre el SHA exacto. El aviso pasa a: «Trabajo X: verificado por la revisora de corrección sobre `abc1234`». Si el trabajador sube un commit después, el veredicto ya no cuenta para el SHA nuevo y el trabajo vuelve a «declarado» con el motivo («la verificación es de un SHA anterior»).
 3. **El trabajador propone su propia prueba.** El trabajador añade un test y dice «con esto se comprueba». Ese test **no cuenta**: nació de quien se juzga. El aviso dice: «El trabajador propone esta comprobación. No cuenta hasta que la apruebes». Tú la apruebas o la rechazas por una pregunta; hasta entonces el trabajo sigue declarado.
 4. **Una prueba independiente falla.** El trabajador dijo OK y el CI de la base, o una revisora, dice HOLD. El aviso es: «Trabajo X: refutado. El trabajador dijo OK; falla `<comprobación>`». No se mezcla con los verificados ni se oculta entre los pendientes.
-5. **El resumen de la mañana.** La tarjeta cuenta tres cifras separadas: «N verificados, M declarados sin verificar, K refutados». Un trabajo declarado no se suma a los terminados. Tú ves de un vistazo cuánto del trabajo de la noche tiene confirmación.
-6. **Falta información.** El recibo del trabajo está incompleto, ilegible o no dice quién lo hizo. El estado es «declarado» y el aviso dice por qué. Nunca «verificado» por defecto.
+5. **El resumen de la mañana y la información que falta.**
+   - **El resumen.** La tarjeta cuenta tres cifras separadas: «N verificados, M declarados sin verificar, K refutados». Un trabajo declarado no se suma a los terminados. Tú ves de un vistazo cuánto del trabajo de la noche tiene confirmación. La tarjeta depende de S3 (SE-518, aún no fusionada): hasta entonces la distinción llega solo en los mensajes de Savia.
+   - **Falta información.** El recibo del trabajo está incompleto, ilegible o no dice quién lo hizo. El estado es «declarado» y el aviso dice por qué, con este texto confirmado: «Trabajo X: declarado. No se puede comprobar: el justificante no dice quién lo hizo». Nunca «verificado» por defecto.
 
 ### Palabras de la persona
 
@@ -87,8 +92,17 @@ Cada trabajo aparece con uno de tres estados y con **la razón**:
 
 ### Confirmación
 
+- fecha: 2026-11-13
+- respuesta: «Confirmo todo como está». Respuesta de la operadora, por pregunta interactiva, a las escenas y a las decisiones 1 a 5 de esta spec (ver «Decisiones de la operadora»), con la opción recomendada en todas. Registro de la orquestadora; el texto de las escenas confirmadas es el de esta sección. Las escenas 5 y 6 de la presentación se agrupan aquí en la 5 para cumplir el máximo de la puerta; su contenido no cambia.
+
+## Slice S0 — Prototipo navegable
+
+- prototipo: los avisos confirmados de las escenas 1 a 5 (declarado, verificado, refutado, aviso de comprobación propia, aviso de falta de información y las tres cifras del resumen de la mañana), escritos sobre datos de ejemplo y en el tono de Savia. Es texto, no una pantalla nueva: se enseña a la persona en una conversación o en un documento y se usa en su dispositivo. Por construir al arrancar S1; no se ha construido ni enseñado todavía.
+
+### Confirmación del prototipo
+
 - fecha: pendiente
-- respuesta: pendiente. Las escenas no se han enseñado todavía a la operadora; se le preguntarán antes de pedir la aprobación (SE-505). No hay confirmación que citar. Hasta entonces ningún slice arranca.
+- respuesta: pendiente. S1 no se pone en curso sin ella (SE-505).
 
 ## Qué decide esta spec
 
@@ -250,9 +264,11 @@ La decisión de la operadora fue **aplicar desde ya**, así que S1 mide y aplica
 
 ## Preguntas abiertas
 
-1. **¿`ci_propio` cuenta como verificación?** Recomendado: **no**. Un test que añade el trabajador mide lo que el trabajador entendió, no lo que se pidió. Alternativa: contarlo solo si una revisora distinta lo aprobó, que ya es la clase `revision`.
-2. **¿La confirmación de la persona se registra con la misma pregunta interactiva de siempre o con un artefacto aparte?** Recomendado: **la pregunta interactiva**, y que el artefacto de `scripts/approval-receipt.py` solo se use cuando la aprobación amplíe autoridad.
-3. **¿Qué pasa con los trabajos sin PR (informes, investigación)?** Recomendado: la persona o una revisora distinta son las únicas clases posibles; si ninguna actúa, el trabajo queda «declarado» y el aviso lo dice sin dramatizar.
+Las tres quedan cerradas con la opción recomendada, confirmada por la operadora el 2026-11-13 (pregunta interactiva).
+
+1. **¿`ci_propio` cuenta como verificación?** Cerrada: **no**. Un test que añade el trabajador mide lo que el trabajador entendió, no lo que se pidió. Solo cuenta si una revisora distinta lo aprobó, que ya es la clase `revision`.
+2. **¿La confirmación de la persona se registra con la misma pregunta interactiva de siempre o con un artefacto aparte?** Cerrada: **la pregunta interactiva**; el artefacto de `scripts/approval-receipt.py` solo se usa cuando la aprobación amplíe autoridad.
+3. **¿Qué pasa con los trabajos sin PR (informes, investigación)?** Cerrada: la persona o una revisora distinta son las únicas clases posibles; si ninguna actúa, el trabajo queda «declarado» y el aviso lo dice sin dramatizar.
 
 ## Decisiones de la operadora (2026-11-13)
 
@@ -261,6 +277,14 @@ Registro de la orquestadora de las respuestas a preguntas interactivas; no es te
 - Escribir las tres specs propuestas (A, B y C), empezando por esta (A) y por la de la ficha de harness (B). Entran en Labs L39 como fase M6.
 - **Aplicar desde ya.** No hay semana de medición en sombra antes de la regla. Por eso S1 mide y aplica a la vez.
 - Prerregistrar la hipótesis H9 en S1, antes de medir.
+
+Confirmadas el 2026-11-13 por pregunta interactiva («Confirmo todo como está»), con la opción recomendada en todas:
+
+1. **Texto de los avisos** de declarado, verificado y refutado (escenas 1 a 4): tal cual.
+2. **Aprobación de las pruebas que propone la trabajadora** (escena 3): pregunta interactiva, no justificante aparte.
+3. **Una prueba que añade la propia trabajadora no cuenta como verificación**; solo cuenta si la aprueba una revisora distinta (clase `revision`).
+4. **Trabajos sin propuesta de cambio** (informes, investigación): solo la persona o una revisora distinta pueden verificarlos; si ninguna actúa, quedan declarados.
+5. **Texto del aviso de «falta información»**: «Trabajo X: declarado. No se puede comprobar: el justificante no dice quién lo hizo».
 
 ## Riesgos
 
@@ -272,4 +296,4 @@ Registro de la orquestadora de las respuestas a preguntas interactivas; no es te
 
 ## Aprobación
 
-**Pendiente de la operadora.** El estado pasa a APPROVED solo cuando ella lo confirme en esta PR con un comentario, y las escenas se le habrán enseñado antes (SE-505). Hasta entonces la spec es PROPOSED y no desbloquea ningún slice. S3 espera además a SE-518.
+**Aprobada por la operadora el 2026-11-13** por pregunta interactiva («Confirmo todo como está»), con las escenas y las decisiones 1 a 5. Falta la confirmación del prototipo (S0): S1 no se pone en curso sin ella (SE-505). S3 espera además a SE-518 en `main`. Se formaliza al fusionar (SE-488).

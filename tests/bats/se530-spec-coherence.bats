@@ -11,7 +11,7 @@ STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-530.json"
 
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
-  grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
+  grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
   grep -q '^human_surface: true$' "$f" || { echo "human_surface"; return 1; }
   for n in 1 2 3; do
     grep -q "^### S$n — " "$f" || { echo "falta slice S$n"; return 1; }
@@ -44,13 +44,24 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q 'SE-518' "$f" || { echo "falta SE-518"; return 1; }
   grep -q 'no en `main`' "$f" || { echo "falta aviso SE-518 fuera de main"; return 1; }
   # Puerta de comprensión: escenas, confirmación pendiente.
+  grep -q '^## Lo que he entendido$' "$f" || { echo "falta Lo que he entendido"; return 1; }
   grep -q '^### Escenas$' "$f" || { echo "falta Escenas"; return 1; }
   local escenas
   # Solo cuenta la sección «Escenas» (hasta el siguiente encabezado), no otras listas numeradas.
   escenas=$(awk '/^### Escenas$/{s=1;next} /^##/{s=0} s && /^[1-6]\. \*\*/{n++} END{print n+0}' "$f")
-  [ "$escenas" -ge 5 ] || { echo "escenas: $escenas"; return 1; }
+  [ "$escenas" -ge 3 ] && [ "$escenas" -le 5 ] || { echo "escenas: $escenas"; return 1; }
   grep -q '^### Confirmación$' "$f" || { echo "falta Confirmación"; return 1; }
-  grep -q '^- fecha: pendiente$' "$f" || { echo "confirmación no pendiente"; return 1; }
+  # Confirmación de las escenas: fecha real y respuesta literal entre «…», no vacía ni «pendiente».
+  local conf
+  conf=$(awk '/^### Confirmación$/{s=1;next} /^##/{s=0} s' "$f")
+  printf '%s\n' "$conf" | grep -qE '^- fecha: 2026-11-1[3-9]$' || { echo "confirmación sin fecha"; return 1; }
+  printf '%s\n' "$conf" | grep -qE '^- respuesta: «[^»[:space:]][^»]*»' || { echo "confirmación sin respuesta literal"; return 1; }
+  grep -q '^## Slice S0 — Prototipo navegable$' "$f" || { echo "falta S0"; return 1; }
+  grep -qE '^- prototipo: [^[:space:]]' "$f" || { echo "falta prototipo"; return 1; }
+  # Decisiones 1-5 registradas y preguntas abiertas cerradas.
+  grep -q 'Confirmadas el 2026-11-13 por pregunta interactiva' "$f" || { echo "faltan decisiones confirmadas"; return 1; }
+  grep -q 'No se puede comprobar: el justificante no dice quién lo hizo' "$f" || { echo "falta aviso de falta de información"; return 1; }
+  ! grep -q 'Pendiente de la operadora' "$f" || { echo "aprobación aún pendiente"; return 1; }
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
   # Repo público: nada de rutas ni nombres privados.
   # Patrones partidos para que este propio fichero no contenga los literales que busca.
@@ -58,11 +69,11 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   ! grep -iqE "$pat" "$f" || { echo "dato privado"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-530 PROPOSED con evidencia existente
+check_planning() {  # check_planning <json>: 0 si es SE-530 APPROVED con evidencia existente
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
-assert d['id']=='SE-530' and d['status']=='PROPOSED', d
+assert d['id']=='SE-530' and d['status']=='APPROVED', d
 assert 'Hecho verificado' in d['title'], d['title']
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
@@ -87,11 +98,11 @@ PY
   [ "$status" -eq 0 ]
 }
 
-@test "negativo: status APPROVED sin confirmación falla" {
-  mutate 'status: PROPOSED' 'status: APPROVED'
+@test "negativo: status PROPOSED falla" {
+  mutate 'status: APPROVED' 'status: PROPOSED'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "negativo: S3 con tier 2 en lugar de 3 falla" {
@@ -253,11 +264,44 @@ PY5
   [ "$status" -ne 0 ]
 }
 
-@test "negativo: marcar la confirmación como hecha sin cita falla" {
-  mutate '- fecha: pendiente' '- fecha: 2026-11-13'
+@test "negativo: confirmación pendiente sin fecha falla" {
+  python3 -I - "$M" <<'PY2'
+import sys,re
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+n=s.count("- fecha: 2026-11-13\n- respuesta: «Confirmo")
+if n!=1: sys.exit("mutación sin efecto")
+open(p,"w",encoding="utf-8").write(s.replace("- fecha: 2026-11-13\n- respuesta: «Confirmo","- fecha: pendiente\n- respuesta: «Confirmo"))
+PY2
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"confirmación no pendiente"* ]]
+  [[ "$output" == *"confirmación sin fecha"* ]]
+}
+
+@test "negativo: confirmación con respuesta vacía falla" {
+  mutate '- respuesta: «Confirmo todo como está»' '- respuesta: «»'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"confirmación sin respuesta literal"* ]]
+}
+
+@test "negativo: sin slice S0 falla" {
+  mutate '## Slice S0 — Prototipo navegable' '## Slice cero'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta S0"* ]]
+}
+
+@test "negativo: más de cinco escenas falla (máximo de la puerta)" {
+  python3 -I - "$M" <<'PY3'
+import sys
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+a="5. **El resumen de la mañana y la información que falta.**"
+if a not in s: sys.exit("mutación sin efecto")
+open(p,"w",encoding="utf-8").write(s.replace(a,"5. **Otra.**\n\n6. **El resumen de la mañana y la información que falta.**"))
+PY3
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"escenas: 6"* ]]
 }
 
 @test "negativo: human_surface false falla (cambia lo que la persona ve)" {
@@ -278,16 +322,16 @@ PY5
   : > "$M"
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
 @test "edge: spec inexistente falla" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"status != PROPOSED"* ]]
+  [[ "$output" == *"status != APPROVED"* ]]
 }
 
-@test "planning: SE-530 PROPOSED apunta a la spec existente" {
+@test "planning: SE-530 APPROVED apunta a la spec existente" {
   run check_planning "$STATE"
   [ "$status" -eq 0 ]
 }
@@ -302,10 +346,10 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   [[ "$output" == *"no-existe.md"* ]]
 }
 
-@test "negativo: planning APPROVED falla" {
+@test "negativo: planning PROPOSED falla" {
   python3 -I -c "
 import json,sys
-d=json.load(open(sys.argv[1])); d['status']='APPROVED'
+d=json.load(open(sys.argv[1])); d['status']='PROPOSED'
 json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   run check_planning "$BATS_TEST_TMPDIR/s.json"
   [ "$status" -ne 0 ]
