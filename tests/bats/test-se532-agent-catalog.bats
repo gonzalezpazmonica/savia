@@ -41,9 +41,9 @@ set_base() {
 
 # ── Catálogo real ────────────────────────────────────────────────────────────
 @test "catálogo real: pasa con las excepciones congeladas y los dos pasos delegados" {
-  base=origin/main
-  git -C "$REPO_ROOT" rev-parse --verify -q "$base^{commit}" >/dev/null || base=HEAD
-  AGENT_CATALOG_BASE_REF="$base" run python3 "$VAL"
+  # Sin origin/main no hay base para «solo encoger»: no se cae a HEAD (sería un falso verde).
+  git -C "$REPO_ROOT" rev-parse --verify -q "origin/main^{commit}" >/dev/null || skip "sin origin/main"
+  AGENT_CATALOG_BASE_REF=origin/main run python3 "$VAL"
   [ "$status" -eq 0 ]
   [[ "$output" == *"errores: 0"* ]]
 }
@@ -228,7 +228,71 @@ set_base() {
   [ "$status" -eq 0 ]
 }
 
-# ── R10 / AC-6 ───────────────────────────────────────────────────────────────
+@test "R9: decision_tree con ../ o ruta absoluta falla aunque el fichero exista" {
+  printf '# fuera\n' > "$FX/config/arbol.md"
+  sed -i 's/^tools:/decision_tree: ..\/..\/config\/arbol.md\ntools:/' "$FX/.opencode/agents/alpha.md"
+  run_val
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R9 .opencode/agents/alpha.md"*"sale de .opencode/agents/"* ]]
+  sed -i "s#^decision_tree: .*#decision_tree: $FX/config/arbol.md#" "$FX/.opencode/agents/alpha.md"
+  run_val
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sale de .opencode/agents/"* ]]
+}
+
+@test "R9: decision-trees enlazado dentro del repo pasa; enlazado fuera del repo falla" {
+  rmdir "$FX/.opencode/agents/decision-trees"
+  mkdir -p "$FX/.claude/agents/decision-trees"
+  printf '# arbol\n' > "$FX/.claude/agents/decision-trees/alpha-decisions.md"
+  ln -s ../../.claude/agents/decision-trees "$FX/.opencode/agents/decision-trees"
+  sed -i 's/^tools:/decision_tree: decision-trees\/alpha-decisions.md\ntools:/' "$FX/.opencode/agents/alpha.md"
+  run_val
+  [ "$status" -eq 0 ]
+  OUT="$(mktemp -d)"
+  printf '# fuera\n' > "$OUT/alpha-decisions.md"
+  rm "$FX/.opencode/agents/decision-trees"
+  ln -s "$OUT" "$FX/.opencode/agents/decision-trees"
+  run_val
+  rm -rf "$OUT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R9 .opencode/agents/alpha.md"*"sale de .opencode/agents/"* ]]
+}
+
+@test "R1: clave no hashable en la cabecera es R1, no traceback" {
+  sed -i 's/^model_tier: mid/model_tier: mid\n? [a, b]\n: x/' "$FX/.opencode/agents/alpha.md"
+  run_val
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R1 .opencode/agents/alpha.md"* ]]
+  [[ "$output" != *"Traceback"* ]]
+}
+
+@test "R7: elemento no cadena en protected_agents es R7, no traceback" {
+  printf 'protected_agents:\n  - alpha\n  - [x, y]\n' > "$FX/.opencode/protected-jobs.yaml"
+  run_val
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R7 .opencode/protected-jobs.yaml"* ]]
+  [[ "$output" != *"Traceback"* ]]
+}
+
+@test "R6/R7: judges o protected_agents que no son lista fallan sin traceback" {
+  printf 'judges: 3\n' > "$FX/config/judge-routing.yaml"
+  printf 'protected_agents: 3\n' > "$FX/.opencode/protected-jobs.yaml"
+  run_val
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R6 config/judge-routing.yaml:1 judges no es una lista"* ]]
+  [[ "$output" == *"R7 .opencode/protected-jobs.yaml:1 protected_agents no es una lista"* ]]
+  [[ "$output" != *"Traceback"* ]]
+}
+
+@test "R8: contrato ilegible da un único error, sin «id None» duplicado" {
+  printf 'id: [agent.alpha\n' > "$FX/contracts/capabilities/agent.alpha.yaml"
+  run_val
+  [ "$status" -eq 1 ]
+  [ "$(grep -c '^ERROR R8 contracts/capabilities/agent.alpha.yaml' <<< "$output")" -eq 1 ]
+  [[ "$output" == *"YAML ilegible"* ]]
+}
+
+# ── R10 / AC-6───────────────────────────────────────────────────────────────
 @test "R10: agente retirado que aún tiene fichero falla (opencode y espejo)" {
   cp "$FX/.opencode/agents/beta.md" "$FX/.claude/agents/beta.md"
   run_val --retired beta
@@ -277,8 +341,15 @@ set_base() {
   mkdir -p "$FX/docs/specs-archive"
   printf 'subagent_type: beta\n' > "$FX/CHANGELOG.md"
   printf 'subagent_type: beta\n' > "$FX/docs/specs-archive/x.md"
+  # Dentro de un directorio escaneado: solo el filtro HISTORY lo excluye.
+  printf 'subagent_type: beta\n' > "$FX/docs/rules/CHANGELOG-agentes.md"
   run_val --retired beta
   [ "$status" -eq 0 ]
+  # Control: el mismo texto con otro nombre sí cuenta (el directorio se escanea).
+  mv "$FX/docs/rules/CHANGELOG-agentes.md" "$FX/docs/rules/agentes.md"
+  run_val --retired beta
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"R10 docs/rules/agentes.md:1"* ]]
 }
 
 @test "R10: metacaracteres de expresión regular se buscan como texto literal" {
@@ -465,17 +536,9 @@ set_base() {
   [[ "$output" == *"paso delegado ausente"* ]]
 }
 
-# ── AC-7 / selección de CI ───────────────────────────────────────────────────
-@test "AC-7: la PR no toca agentes, protegidos, routing ni ci.yml" {
-  base=origin/main
-  git -C "$REPO_ROOT" rev-parse --verify -q "$base^{commit}" >/dev/null || skip "sin origin/main para comparar"
-  changed=$(git -C "$REPO_ROOT" diff --name-only "$base"...HEAD)
-  [[ "$changed" != *".opencode/agents/"* ]]
-  [[ "$changed" != *".claude/agents/"* ]]
-  [[ "$changed" != *".opencode/protected-jobs.yaml"* ]]
-  [[ "$changed" != *"config/judge-routing.yaml"* ]]
-  [[ "$changed" != *".github/workflows/ci.yml"* ]]
-}
+# ── Selección de CI ─────────────────────────────────────────────────────────
+# AC-7 («la PR no toca agentes») es una propiedad del diff de esta PR, no una invariante del repo:
+# como test bats rompía toda PR futura que edite un agente. Se comprueba en el body de la PR.
 
 @test "selección de CI: cambiar un agente, el esquema, el routing, los protegidos o un contrato selecciona este test" {
   run python3 - "$REPO_ROOT/tests/bats/.deps-rules.yaml" <<'PY'

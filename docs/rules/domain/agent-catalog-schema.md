@@ -32,12 +32,17 @@ Cada error nombra fichero y línea. Corre en `scripts/validate-ci-local.sh` y en
 | R6 | Una fila de `config/judge-routing.yaml` cita un agente inexistente |
 | R7 | `protected_agents` de `.opencode/protected-jobs.yaml` cita un agente inexistente |
 | R8 | Un contrato `agent.<x>.yaml` sin agente `<x>` o con `id` distinto de `agent.<x>` |
-| R9 | `decision_tree` apunta a un fichero que no existe bajo `.opencode/agents/` |
+| R9 | `decision_tree` no existe, es absoluto, sale de `.opencode/agents/` con `../` o su destino real queda fuera del repo |
 | R10 | Con `--retired`: el agente aún tiene fichero o sigue citado (ver abajo) |
 
 Corre además, sin reimplementarlos, `agents-catalog-sync.sh --check` (SE-253) y
 `judge-routing-verify.sh` (SE-273). La coherencia nivel-herramientas sigue siendo de
 `validate-agent-permissions.sh`.
+
+**Lo que este validador no restringe.** El esquema acepta `permissionMode: bypassPermissions` y `hooks`
+de forma libre porque así está el catálogo hoy (dos agentes los usan). Un agente nuevo con esos valores
+pasa este validador; su control es la revisión humana y `validate-agent-permissions.sh`. Restringirlos
+queda para S2. Una excepción R1 (`cabecera`) oculta R2 a R5 de ese agente mientras siga ilegible.
 
 ## R10: qué cuenta como cita viva
 

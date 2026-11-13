@@ -227,9 +227,7 @@ check_generated_fresh() {
   wait
 }
 
-# ── SE-425: lockfiles versionados coherentes con su package.json (aviso) ──
-# Comparación estática de dependencias declaradas (sin red): `npm ci` en CI fallaría igual.
-LOCK_DIRS_DEFAULT='scripts projects/savia-vaults'
+# ── SE-532 S1: catálogo de agentes (bloquea; ~1 s, también en --quick) ──
 check_agent_catalog() {
   # SE-532 S1: esquema de cabecera y referencias cruzadas del catálogo (fail-closed).
   local out="$TMPDIR_CI/3-agent-catalog" g rc
@@ -241,6 +239,9 @@ check_agent_catalog() {
   fi
 }
 
+# ── SE-425: lockfiles versionados coherentes con su package.json (aviso) ──
+# Comparación estática de dependencias declaradas (sin red): `npm ci` en CI fallaría igual.
+LOCK_DIRS_DEFAULT='scripts projects/savia-vaults'
 check_lockfiles() {
   local i=0 dir
   for dir in ${SAVIA_LOCK_DIRS_FOR_TESTS:-$LOCK_DIRS_DEFAULT}; do

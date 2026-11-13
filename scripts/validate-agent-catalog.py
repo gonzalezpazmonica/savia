@@ -50,6 +50,11 @@ def _construct_mapping(loader, node, deep=False):
     seen = {}
     for knode, _ in node.value:
         key = loader.construct_object(knode, deep=deep)
+        try:
+            hash(key)
+        except TypeError:
+            raise yaml.constructor.ConstructorError(
+                None, None, "clave no hashable %r" % (key,), knode.start_mark)
         if key in seen:
             raise yaml.constructor.ConstructorError(
                 None, None, "clave duplicada %r" % (key,), knode.start_mark)
@@ -97,11 +102,14 @@ def parse_header(path):
         mark = getattr(exc, "problem_mark", None)
         ln = (mark.line + first) if mark else first
         return None, {}, "YAML inválido en línea %d: %s" % (ln, getattr(exc, "problem", exc))
+    except Exception as exc:  # forma inesperada: R1, nunca traceback (fail-closed)
+        return None, {}, "cabecera no procesable: %s: %s" % (type(exc).__name__, exc)
     if not isinstance(data, dict) or node is None:
         return None, {}, "cabecera vacía o no es un mapa"
     klines = {}
     for knode, _ in node.value:
-        klines[knode.value] = knode.start_mark.line + first
+        if isinstance(knode.value, str):
+            klines[knode.value] = knode.start_mark.line + first
     return data, klines, None
 
 
@@ -196,7 +204,15 @@ def check_headers(root, schema, rep):
             if prob:
                 rep.add("R2", rel, ln, "%s: %s" % (k, prob), name)
             if k == "decision_tree" and isinstance(v, str):
-                if not os.path.isfile(os.path.join(root, AGENTS_REL, v)):
+                # Léxico: bajo .opencode/agents/ (sin absolutas ni ../). Real: dentro del repo
+                # (decision-trees/ es un enlace versionado a .claude/agents/decision-trees).
+                lex = os.path.normpath(os.path.join(AGENTS_REL, v))
+                real_root = os.path.realpath(root)
+                target = os.path.realpath(os.path.join(root, lex))
+                if os.path.isabs(v) or not lex.startswith(AGENTS_REL + os.sep) \
+                        or os.path.commonpath([real_root, target]) != real_root:
+                    rep.add("R9", rel, ln, "decision_tree '%s' sale de %s/" % (v, AGENTS_REL), name)
+                elif not os.path.isfile(target):
                     rep.add("R9", rel, ln, "decision_tree '%s' no existe bajo %s/" % (v, AGENTS_REL), name)
     return agents
 
@@ -229,7 +245,11 @@ def check_refs(root, agents, rep):
     rel = "config/judge-routing.yaml"
     data = load_yaml(root, rel, rep, "R6")
     if isinstance(data, dict):
-        for row in data.get("judges") or []:
+        rows = data.get("judges") or []
+        if not isinstance(rows, list):
+            rep.add("R6", rel, line_of(os.path.join(root, rel), r"^judges:"), "judges no es una lista")
+            rows = []
+        for row in rows:
             a = row.get("agent") if isinstance(row, dict) else None
             if not isinstance(a, str) or a not in names:
                 rep.add("R6", rel, line_of(os.path.join(root, rel), r"agent:\s*%s\b" % re.escape(str(a))),
@@ -237,8 +257,13 @@ def check_refs(root, agents, rep):
     rel = ".opencode/protected-jobs.yaml"
     data = load_yaml(root, rel, rep, "R7")
     if isinstance(data, dict):
-        for a in data.get("protected_agents") or []:
-            if a not in names:
+        prot = data.get("protected_agents") or []
+        if not isinstance(prot, list):
+            rep.add("R7", rel, line_of(os.path.join(root, rel), r"^protected_agents:"),
+                    "protected_agents no es una lista")
+            prot = []
+        for a in prot:
+            if not isinstance(a, str) or a not in names:
                 rep.add("R7", rel, line_of(os.path.join(root, rel), r"^\s*-\s+%s\s*$" % re.escape(str(a))),
                         "protected_agents cita agente inexistente '%s'" % (a,))
     cdir = os.path.join(root, "contracts/capabilities")
@@ -250,7 +275,10 @@ def check_refs(root, agents, rep):
             x, crel = m.group(1), "contracts/capabilities/%s" % fn
             if x not in names:
                 rep.add("R8", crel, 1, "contrato sin agente '%s' en %s/" % (x, AGENTS_REL))
+            before = len(rep.errors)
             d = load_yaml(root, crel, rep, "R8")
+            if len(rep.errors) > before:
+                continue  # YAML ilegible ya reportado; no duplicar con «id None»
             cid = d.get("id") if isinstance(d, dict) else None
             if cid != "agent.%s" % x:
                 rep.add("R8", crel, line_of(os.path.join(root, crel), r"^id:"),
