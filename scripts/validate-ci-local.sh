@@ -230,6 +230,17 @@ check_generated_fresh() {
 # ── SE-425: lockfiles versionados coherentes con su package.json (aviso) ──
 # Comparación estática de dependencias declaradas (sin red): `npm ci` en CI fallaría igual.
 LOCK_DIRS_DEFAULT='scripts projects/savia-vaults'
+check_agent_catalog() {
+  # SE-532 S1: esquema de cabecera y referencias cruzadas del catálogo (fail-closed).
+  local out="$TMPDIR_CI/3-agent-catalog" g rc
+  g=$(python3 "$(dirname "${BASH_SOURCE[0]}")/validate-agent-catalog.py" 2>&1); rc=$?
+  if [[ $rc -eq 0 ]]; then
+    echo "PASS Catálogo de agentes: esquema y referencias (SE-532)" > "$out"
+  else
+    echo "FAIL Catálogo de agentes (exit $rc): $(grep -m1 -E '^(ERROR|agentes)' <<< "$g")" > "$out"
+  fi
+}
+
 check_lockfiles() {
   local i=0 dir
   for dir in ${SAVIA_LOCK_DIRS_FOR_TESTS:-$LOCK_DIRS_DEFAULT}; do
@@ -312,6 +323,7 @@ check_branch &
 check_coherence &
 check_file_sizes &
 check_frontmatter &
+check_agent_catalog &
 check_settings_json &
 check_changelog &
 check_generated_fresh &
