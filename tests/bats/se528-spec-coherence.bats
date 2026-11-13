@@ -88,14 +88,26 @@ generic = [
 ]
 pats = list(generic)
 pf = os.environ.get("SE528_PRIVATE_PATTERNS")
-if pf and os.path.isfile(pf):
-    pats += [l.strip() for l in open(pf, encoding="utf-8") if l.strip() and not l.startswith("#")]
+if pf is not None:
+    # declarado: fail-closed si falta, está vacío o contiene un patrón inválido o que casa con todo
+    try:
+        lines = [l.strip() for l in open(pf, encoding="utf-8") if l.strip() and not l.startswith("#")]
+    except OSError:
+        sys.exit("patrones privados declarados pero ilegibles o inexistentes")
+    if not lines: sys.exit("patrones privados declarados pero vacíos")
+    for i, l in enumerate(lines, 1):
+        try:
+            c = re.compile(l)
+        except re.error:
+            sys.exit("patrón privado inválido en la línea %d" % i)
+        if c.search(""): sys.exit("patrón privado que casa con todo (línea %d)" % i)
+    pats += ["(?:%s)" % l for l in lines]
 rx = re.compile("|".join(pats))
 bad = []
 for f in sys.argv[1:]:
     txt = open(f, encoding="utf-8").read()
-    m = rx.search(txt)
-    if m: bad.append(f"{os.path.basename(f)}: {m.group(0)}")
+    found = sorted({m.group(0) for m in rx.finditer(txt)})
+    if found: bad.append(f"{os.path.basename(f)}: {', '.join(found)}")
 if bad: print("detalle explotable (heurística) en: " + "; ".join(bad)); sys.exit(1)
 PY
 }
@@ -110,18 +122,38 @@ open(p, "w", encoding="utf-8").write(s.replace(old, new, 1))
 PY
 }
 
-@test "patrones privados: si se declaran deben existir y no estar vacios (verde sin ellos NO acredita confidencialidad)" {
-  if [ -z "${SE528_PRIVATE_PATTERNS:-}" ]; then
-    echo "# AVISO: SE528_PRIVATE_PATTERNS sin definir; solo corre la heuristica generica, no acredita ausencia de detalle" >&3
-    [ -f "$SPEC" ]
-  else
-    [ -s "$SE528_PRIVATE_PATTERNS" ]
+@test "patrones privados: sin fichero privado el escaneo de confidencialidad se SALTA (no acredita nada)" {
+  if [ -z "${SE528_PRIVATE_PATTERNS+x}" ]; then
+    skip "SE528_PRIVATE_PATTERNS sin definir: solo corre la heuristica generica; verde NO acredita ausencia de detalle"
   fi
+  run leak_scan "$SPEC"
+  [ "$status" -eq 0 ]
 }
 
-@test "negativo: patrones privados declarados pero inexistentes es fail" {
-  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/no-existe" run bash -c '[ -s "$SE528_PRIVATE_PATTERNS" ]'
-  [ "$status" -ne 0 ]
+@test "negativo: patrones privados declarados pero inexistentes, vacios o invalidos son fail (codigo real de leak_scan)" {
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/no-existe" run leak_scan "$SPEC"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ilegibles o inexistentes"* ]]
+  : > "$BATS_TEST_TMPDIR/vacio"
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/vacio" run leak_scan "$SPEC"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"vacíos"* ]]
+  printf 'a|\n' > "$BATS_TEST_TMPDIR/todo"
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/todo" run leak_scan "$SPEC"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"casa con todo"* ]]
+  printf '(\n' > "$BATS_TEST_TMPDIR/roto"
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/roto" run leak_scan "$SPEC"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"inválido"* ]]
+}
+
+@test "leak_scan informa de todas las coincidencias de un fichero, no solo la primera" {
+  printf 'uno foo_bar y luego baz_qux\n' > "$BATS_TEST_TMPDIR/dos.md"
+  run leak_scan "$BATS_TEST_TMPDIR/dos.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"foo_bar"* ]]
+  [[ "$output" == *"baz_qux"* ]]
 }
 
 @test "la spec real es coherente" {
