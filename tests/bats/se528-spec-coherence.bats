@@ -6,6 +6,7 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 SPEC="$REPO_ROOT/docs/specs/SE-528-seguridad-web-puente-cupulas.spec.md"
 
 setup() {
+  set -uo pipefail
   MS="$BATS_TEST_TMPDIR/spec.md"
   cp "$SPEC" "$MS"
 }
@@ -51,28 +52,28 @@ PY
   [ "$status" -eq 0 ]
 }
 
-@test "negativo: status distinto de PROPOSED falla" {
+@test "negativo: status distinto de PROPOSED es fail" {
   mutate "$MS" "status: PROPOSED" "status: APPROVED"
   run check "$MS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"no es PROPOSED"* ]]
 }
 
-@test "negativo: sin el AC del caso ENOENT/EBUSY falla" {
+@test "negativo: missing AC-3.1 (caso ENOENT/EBUSY) es fail" {
   mutate "$MS" "- AC-3.1 Test:" "- AC-3.X Test:"; sed -i "s/AC-3\.1/AC-3.X/g" "$MS"
   run check "$MS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"falta AC-3.1"* ]]
 }
 
-@test "negativo: sin el slice S2 falla" {
+@test "negativo: missing slice S2 es fail" {
   mutate "$MS" "### S2 — " "### Sx — "
   run check "$MS"
   [ "$status" -eq 1 ]
   [[ "$output" == *"falta el slice S2"* ]]
 }
 
-@test "negativo: slices fuera de orden fallan" {
+@test "negativo: slices fuera de orden es fail" {
   mutate "$MS" "### S1 — " "### S9 — "
   run check "$MS"
   [ "$status" -eq 1 ]
@@ -91,4 +92,23 @@ PY
   run python3 -I -c "import json,sys; d=json.load(open('$REPO_ROOT/docs/propuestas/planning.d/SE-528.json')); assert d['id']=='SE-528' and d['status']=='PROPOSED' and d['evidence'].endswith('SE-528-seguridad-web-puente-cupulas.spec.md')"
   [ "$status" -eq 0 ]
   [ -f "$REPO_ROOT/docs/propuestas/LOG.d/SE-528-PROPOSED.md" ]
+}
+
+@test "negativo: missing decisiones abiertas Q1 es fail" {
+  mutate "$MS" "- Q1." "- Qx."
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"decisiones abiertas"* ]]
+}
+
+@test "edge: fichero vacio es fail por falta de front-matter" {
+  : > "$MS"
+  run check "$MS"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"sin front-matter"* ]]
+}
+
+@test "edge: fichero nonexistent es fail, no pasa en silencio" {
+  run check "$BATS_TEST_TMPDIR/no-existe.md"
+  [ "$status" -ne 0 ]
 }
