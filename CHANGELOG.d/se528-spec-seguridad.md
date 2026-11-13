@@ -1,10 +1,8 @@
 ---
-version_bump: minor
+version_bump: patch
 section: Added
 ---
 
 ### Added
 
-- SE-528 (PROPOSED): spec de tres arreglos de seguridad (savia-web, puente, cúpulas) de una auditoría interna; solo spec.
-
-- SE-528: la spec pública deja de citar fichero:línea y la cadena de explotación; añade CSRF/CORS (AC-1.7) y aclara `--no-auth` local frente al fallo cerrado.
+- SE-528 (PROPOSED): spec de tres arreglos de seguridad (savia-web, puente, cúpulas) de una auditoría interna, en cuatro slices; solo spec, sin detalle explotable (queda en el registro privado).
