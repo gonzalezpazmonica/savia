@@ -5,5 +5,5 @@
   "phase": "A",
   "title": "Tres arreglos de seguridad: web, puente y cúpulas",
   "evidence": "docs/specs/SE-528-seguridad-web-puente-cupulas.spec.md",
-  "note": "Auditoría interna 2026-11-13. S1 savia-web: v-html sin sanear (ChatPage.vue:111, FileViewer.vue:200) y cookie de sesión escrita por JS; S2 puente: ?token= en la URL y fail-open sin token (solo con --no-auth); S3 cúpulas: grants.ts key() rota ante cualquier error, no solo ENOENT. Tiers: S1 3, S2 2, S3 3. Decisiones abiertas Q1-Q3 (transición de ?token=, --no-auth, sesiones abiertas)."
+  "note": "Auditoría interna 2026-11-13. S1 savia-web: v-html sin sanear y cookie de sesión escrita por JS; S2 puente: ?token= en la URL y fail-open sin token (solo con --no-auth); S3 cúpulas: grants.ts key() rota ante cualquier error, no solo ENOENT. Tiers: S1 3, S2 2, S3 3. Decisiones abiertas Q1-Q3 (transición de ?token=, --no-auth, sesiones abiertas)."
 }

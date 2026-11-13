@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# SE-528 — coherencia de la spec: front-matter, slices con AC, referencias vivas en main,
+# SE-528 — coherencia de la spec: front-matter, slices con AC, registros
 # y casos negativos sobre copias mutadas.
 
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
@@ -15,7 +15,10 @@ setup() {
 check() {
   python3 -I - "$1" <<'PY'
 import re, sys
-s = open(sys.argv[1], encoding="utf-8").read()
+try:
+    s = open(sys.argv[1], encoding="utf-8").read()
+except OSError as e:
+    sys.exit("no se puede leer la spec: " + e.__class__.__name__)
 errs = []
 fm = re.match(r"---\n(.*?)\n---\n", s, re.S)
 if not fm: sys.exit("sin front-matter")
@@ -23,7 +26,7 @@ f = fm.group(1)
 if "status: PROPOSED" not in f: errs.append("status no es PROPOSED")
 for sl in ("S1", "S2", "S3"):
     if not re.search(rf"^### {sl} — ", s, re.M): errs.append(f"falta el slice {sl}")
-for ac in ("AC-1.1", "AC-1.4", "AC-2.1", "AC-2.3", "AC-2.4", "AC-3.1", "AC-3.4"):
+for ac in ("AC-1.1", "AC-1.4", "AC-1.7", "AC-2.1", "AC-2.3", "AC-2.4", "AC-3.1", "AC-3.4"):
     if ac not in s: errs.append(f"falta {ac}")
 for t in ("onerror", "?token=", "EBUSY", "ENOENT", "--no-auth"):
     if t not in s: errs.append(f"falta cobertura de {t}")
@@ -74,22 +77,21 @@ PY
 }
 
 @test "negativo: slices fuera de orden es fail" {
-  mutate "$MS" "### S1 — " "### S9 — "
+  python3 -I - "$MS" <<'PY2'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s = s.replace("### S1 — ", "@@A@@", 1).replace("### S3 — ", "### S1 — ", 1).replace("@@A@@", "### S3 — ", 1)
+open(p, "w", encoding="utf-8").write(s)
+PY2
   run check "$MS"
   [ "$status" -eq 1 ]
-}
-
-@test "referencias vivas: las líneas citadas siguen existiendo en main" {
-  grep -q 'v-html="renderMd(msg.content)"' "$REPO_ROOT/projects/savia-web/src/pages/ChatPage.vue"
-  grep -q 'v-html="markdownBody"' "$REPO_ROOT/projects/savia-web/src/components/files/FileViewer.vue"
-  grep -q 'document.cookie = `${COOKIE_NAME}' "$REPO_ROOT/projects/savia-web/src/stores/auth.ts"
-  grep -q 'params.get("token"' "$REPO_ROOT/scripts/savia-bridge.py"
-  grep -q 'if not self.auth_token:' "$REPO_ROOT/scripts/savia-bridge.py"
-  grep -q 'return this.rotate();' "$REPO_ROOT/projects/savia-vaults/src/server/grants.ts"
+  [[ "$output" == *"fuera de orden"* ]]
+  [[ "$output" != *"falta el slice"* ]]
 }
 
 @test "planning.d y LOG.d de SE-528 existen y coinciden con la spec" {
-  run python3 -I -c "import json,sys; d=json.load(open('$REPO_ROOT/docs/propuestas/planning.d/SE-528.json')); assert d['id']=='SE-528' and d['status']=='PROPOSED' and d['evidence'].endswith('SE-528-seguridad-web-puente-cupulas.spec.md')"
+  run python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); assert d['id']=='SE-528' and d['status']=='PROPOSED' and d['evidence'].endswith('SE-528-seguridad-web-puente-cupulas.spec.md')" "$REPO_ROOT/docs/propuestas/planning.d/SE-528.json"
   [ "$status" -eq 0 ]
   [ -f "$REPO_ROOT/docs/propuestas/LOG.d/SE-528-PROPOSED.md" ]
 }
@@ -110,5 +112,21 @@ PY
 
 @test "edge: fichero nonexistent es fail, no pasa en silencio" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no se puede leer la spec"* ]]
+  [[ "$output" != *"Traceback"* ]]
+}
+
+@test "negativo: missing AC-1.7 (CSRF/CORS) es fail" {
+  sed -i "s/AC-1\.7/AC-1.X/g" "$MS"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"falta AC-1.7"* ]]
+}
+
+@test "la spec publica no cita fichero:linea ni la cadena de explotacion" {
+  run grep -nE '\.(vue|ts|py|kt):[0-9]+' "$SPEC"
+  [ "$status" -eq 1 ]
+  run grep -nE 'Cadena:' "$SPEC"
+  [ "$status" -eq 1 ]
 }
