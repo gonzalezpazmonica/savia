@@ -20,7 +20,7 @@ timeline:
 
 ## Problema (auditoría interna del 2026-11-13)
 
-Una auditoría interna encontró tres frentes de endurecimiento independientes. Esta spec es pública y los tres siguen sin entregar, así que fija solo requisitos objetivo: sin ficheros, funciones, símbolos, valores de configuración, umbrales ni estado actual de los componentes. El detalle operativo vive en el registro privado de la operadora; quien implemente lo recibe de ella (decisión de la revisión de la PR #1544).
+Una auditoría interna encontró tres frentes de endurecimiento independientes. Esta spec es pública, así que fija solo requisitos objetivo: sin ficheros, funciones, símbolos, valores de configuración, umbrales ni estado actual de los componentes. El detalle operativo vive en el registro privado de la operadora; quien implemente lo recibe de ella (decisión de la revisión de la PR #1544).
 
 - **H1 — savia-web**: endurecer el cliente web (contenido y sesión).
 - **H2 — Puente**: endurecer la autenticación del puente.
@@ -43,7 +43,7 @@ Solo el S2 y el S4 cambian cómo se conecta una persona.
 **Flujo**: la persona entra en savia-web con la dirección del puente y pega su token una sola vez en el formulario. El puente lo comprueba y, si es válido, le devuelve una sesión opaca (no es el token) que el navegador guarda sin que la página pueda leerla. La persona no ve diferencia en el uso diario. Comportamiento visible, según las decisiones de la operadora: (a) los accesos por un canal de credenciales no admitido devuelven «no autorizado» desde la entrega, sin periodo de transición (Q1); (b) el arranque del puente sin autenticación solo es posible en la propia máquina y con el aviso bien visible (Q2); (c) las sesiones web abiertas antes de la entrega piden volver a pegar el token una vez (Q3); (d) en un despliegue sin sesión por cookie (web y puente en sitios distintos, o sin TLS) el token vive solo en la memoria de la pestaña y la persona lo pega de nuevo al recargar. Esta decisión (d) la propone la orquestadora tras la revisión de la PR #1544 y queda pendiente de confirmación de la operadora al aprobar la spec.
 
 **Decisiones de la operadora (2026-11-13)**. Registro de la orquestadora, no texto literal. La operadora respondió por pregunta interactiva y en las tres eligió la opción recomendada:
-- Q1. Corte inmediato de todo canal de credenciales que no sea la cabecera ni la sesión, sin transición: responde 401 desde la entrega. Una transición alarga la exposición.
+- Q1. Corte inmediato de todo canal de credenciales que no sea la cabecera ni la sesión, sin transición: responde 401 desde la entrega.
 - Q2. El arranque sin autenticación se limita a direcciones de bucle local; en cualquier otra, el arranque se niega.
 - Q3. Se acepta que las sesiones web abiertas pidan el token una vez.
 
@@ -77,6 +77,8 @@ Este slice es el único dueño de todo el cambio de autenticación del puente; n
 - Credenciales por un canal no admitido y por la cabecera a la vez: 401 (el canal no admitido se rechaza siempre, no se ignora).
 - Límite de intentos: la clave del límite es el cliente (dirección de origen), nunca global, para que un tercero no pueda bloquear al operador legítimo. Los intentos por un canal no admitido también cuentan.
 - Preflight y streaming: las peticiones `OPTIONS` con credenciales solo se aceptan de orígenes de la lista; las rutas de streaming usan la cabecera o la cookie de sesión como el resto.
+- Cliente tras proxy inverso: la clave del límite es la dirección del par directo; solo se usa una cabecera de reenvío (`X-Forwarded-For`) si el par está en una lista explícita de proxies de confianza; en otro caso se ignora.
+- `Host`: se valida contra una lista de hosts permitidos también fuera del modo abierto.
 - Orden de entrega: S2 no se despliega sin S4 si el cliente web depende de un canal que S2 corta; se entregan coordinados o S4 antes de activar el corte (Q1).
 - Endpoint de estado de sesión: responde 200 si la cookie de sesión es válida y 401 si no, sin cuerpo con datos sensibles; es el contrato que usa el cliente (S4) para saber si la sesión sigue vigente sin leer la cookie.
 - Actualizar la documentación del cliente web para que describa solo los canales admitidos.
@@ -100,6 +102,9 @@ AC:
 - AC-2.16 Test: los intentos por un canal no admitido cuentan en el límite de intentos del cliente y superado el límite devuelven 429.
 - AC-2.17 Test: una petición `OPTIONS` con credenciales desde un origen de la lista devuelve las cabeceras CORS; desde un origen ajeno, ninguna cabecera de permiso.
 - AC-2.18 Test: una ruta de streaming responde 200 con cookie válida o cabecera válida y 401 sin credenciales.
+- AC-2.19 Test: con una cabecera de reenvío falsificada desde un par que no es proxy de confianza, el límite sigue aplicándose a la dirección del par; desde un proxy de confianza se aplica a la dirección reenviada.
+- AC-2.20 Negativo: fuera del modo abierto, una petición con `Host` fuera de la lista de hosts permitidos devuelve 403; con `Host` permitido, 200.
+- AC-2.21 Gate de orden S2/S4: la PR de S2 enlaza la PR de S4 (mergeada, o la activación coordinada del corte) en su cuerpo y la revisión humana de tier 3 (SE-362) lo comprueba antes de aprobar.
 
 Reversión: revertir la PR; la cabecera `Authorization` no se retiró. Admitir de nuevo otro canal, si hiciera falta, es un cambio acotado y una decisión nueva de la operadora.
 
@@ -140,11 +145,11 @@ Reversión: revertir la PR; el puente sigue aceptando la cabecera.
 
 - S2 y S4 comparten el contrato de sesión: si divergen, la web no autentica. Mitigación: S2 es el único dueño del cambio del puente, se entrega antes que S4 y no retira la cabecera `Authorization`; S4 conserva el camino por cabecera (en memoria) para los despliegues sin sesión por cookie.
 - Clientes externos no inventariados que usen credenciales fuera de la cabecera y la sesión: aceptado por la decisión Q1 (corte inmediato); el aviso queda en el registro de la entrega.
-- Divulgación: esta spec es pública y los tres frentes siguen abiertos hasta que se entreguen S1-S4. Por eso solo fija requisitos objetivo; el detalle está en el registro privado.
+- Divulgación: esta spec es pública. Por eso solo fija requisitos objetivo; el detalle está en el registro privado.
 
 ## Plan por slices
 
-1. **S1** web, saneado (AC-1.1 a 1.5). 2. **S2** puente (AC-2.1 a 2.18). 3. **S3** cúpulas (AC-3.1 a 3.5). 4. **S4** web, sesión del cliente (AC-4.1 a 4.5).
+1. **S1** web, saneado (AC-1.1 a 1.5). 2. **S2** puente (AC-2.1 a 2.21). 3. **S3** cúpulas (AC-3.1 a 3.5). 4. **S4** web, sesión del cliente (AC-4.1 a 4.5).
 
 S1, S2 y S3 no dependen entre sí. S4 se entrega después de S2 y coordinado con su corte (ver S2, orden de entrega). Cada slice, una PR.
 

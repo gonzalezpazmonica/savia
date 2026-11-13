@@ -27,7 +27,7 @@ if "status: PROPOSED" not in f: errs.append("status no es PROPOSED")
 for sl in ("S1", "S2", "S3", "S4"):
     if not re.search(rf"^### {sl} — ", s, re.M): errs.append(f"falta el slice {sl}")
 # cada AC debe estar DEFINIDO (viñeta al inicio de línea), no solo mencionado
-for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2", "AC-2.3", "AC-2.4", "AC-2.5", "AC-2.6", "AC-2.7", "AC-2.8", "AC-2.9", "AC-2.10", "AC-2.11", "AC-2.12", "AC-3.1", "AC-3.2", "AC-3.3", "AC-3.4", "AC-3.5", "AC-2.13", "AC-2.14", "AC-2.15", "AC-2.16", "AC-2.17", "AC-2.18", "AC-4.1", "AC-4.2", "AC-4.3", "AC-4.4", "AC-4.5"):
+for ac in ("AC-1.1", "AC-1.2", "AC-1.3", "AC-1.4", "AC-1.5", "AC-2.1", "AC-2.2", "AC-2.3", "AC-2.4", "AC-2.5", "AC-2.6", "AC-2.7", "AC-2.8", "AC-2.9", "AC-2.10", "AC-2.11", "AC-2.12", "AC-3.1", "AC-3.2", "AC-3.3", "AC-3.4", "AC-3.5", "AC-2.13", "AC-2.14", "AC-2.15", "AC-2.16", "AC-2.17", "AC-2.18", "AC-2.19", "AC-2.20", "AC-2.21", "AC-4.1", "AC-4.2", "AC-4.3", "AC-4.4", "AC-4.5"):
     if not re.search(rf"^- {re.escape(ac)} ", s, re.M): errs.append(f"falta {ac}")
 for sec in ("## Problema", "## Puerta de comprensión", "## Fuera de alcance", "## OpenCode Implementation Plan", "## Tier de riesgo"):
     if sec not in s: errs.append(f"falta la sección {sec}")
@@ -35,6 +35,8 @@ for q in ("Q1", "Q2", "Q3"):
     if not re.search(rf"^- {q}\. ", s, re.M): errs.append(f"faltan decisiones de la operadora ({q})")
 if "Condiciones de fusión: (1) revisión humana de confidencialidad" not in s: errs.append("faltan las condiciones de fusión (revisión humana de confidencialidad)")
 if "**Decisiones de la operadora (2026-11-13)**" not in s: errs.append("falta el registro de decisiones de la operadora")
+for live in ("siguen sin entregar", "siguen abiertos", "alarga la exposición"):
+    if live in s: errs.append("confirma exposicion viva: " + live)
 for stale in ("Decisiones abiertas", "Preguntas abiertas", "Deprecation", "14 días", "fecha de corte", "según Q1", "según Q2", "según Q3"):
     if stale in s: errs.append("resto de una decisión abierta: " + stale)
 for q, chosen in (("Q1", "sin transición"), ("Q2", "bucle local"), ("Q3", "pidan el token una vez")):
@@ -108,11 +110,18 @@ open(p, "w", encoding="utf-8").write(s.replace(old, new, 1))
 PY
 }
 
-@test "aviso visible si faltan los patrones privados (CI no los tiene)" {
+@test "patrones privados: si se declaran deben existir y no estar vacios (verde sin ellos NO acredita confidencialidad)" {
   if [ -z "${SE528_PRIVATE_PATTERNS:-}" ]; then
-    echo "# AVISO: SE528_PRIVATE_PATTERNS sin definir; solo corre la heuristica generica, no los nombres reales" >&3
+    echo "# AVISO: SE528_PRIVATE_PATTERNS sin definir; solo corre la heuristica generica, no acredita ausencia de detalle" >&3
+    [ -f "$SPEC" ]
+  else
+    [ -s "$SE528_PRIVATE_PATTERNS" ]
   fi
-  [ -f "$SPEC" ]
+}
+
+@test "negativo: patrones privados declarados pero inexistentes es fail" {
+  SE528_PRIVATE_PATTERNS="$BATS_TEST_TMPDIR/no-existe" run bash -c '[ -s "$SE528_PRIVATE_PATTERNS" ]'
+  [ "$status" -ne 0 ]
 }
 
 @test "la spec real es coherente" {
@@ -387,12 +396,20 @@ PY4
   [[ "$output" == *"reg.md"* ]]
 }
 
-@test "negativo: quitar AC-2.16, AC-2.17 o AC-2.18 (limite, preflight, streaming) es fail" {
-  for ac in AC-2.16 AC-2.17 AC-2.18; do
+@test "negativo: quitar AC-2.16 a AC-2.21 (limite, preflight, streaming, proxy, Host, orden) es fail" {
+  for ac in AC-2.16 AC-2.17 AC-2.18 AC-2.19 AC-2.20 AC-2.21; do
     cp "$SPEC" "$MS"
     mutate "$MS" "- $ac " "- AC-2.X "
     run check "$MS"
     [ "$status" -eq 1 ]
     [[ "$output" == *"falta $ac"* ]] || return 1
   done
+}
+
+@test "negativo: frase que confirma exposicion viva es fail" {
+  cp "$SPEC" "$MS"
+  mutate "$MS" "Esta spec es pública, así que" "Esta spec es pública y los tres siguen sin entregar, así que"
+  run check "$MS"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"confirma exposicion viva"* ]]
 }
