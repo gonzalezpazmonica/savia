@@ -1,6 +1,8 @@
 #!/usr/bin/env bats
 # SE-532 — coherencia de la spec: tres slices en orden (S1 antes de SE-527, S2 después, S3 al final),
 # tiers calculados, cifras del catálogo, relación con SE-253 sin duplicar y repo público limpio.
+# Aviso: las comprobaciones de texto (cifras, tiers, frases) fijan que la spec no cambie sin querer;
+# no verifican que las cifras del catálogo sean ciertas (eso lo medirá el validador de S1).
 # Cada comprobación se ejecuta también sobre una copia mutada y debe fallar.
 
 set -o pipefail  # las tuberías de check() fallan si falla cualquier etapa (fail-closed)
@@ -8,6 +10,13 @@ set -o pipefail  # las tuberías de check() fallan si falla cualquier etapa (fai
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 SPEC="$REPO_ROOT/docs/specs/SE-532-catalogo-de-agentes-con-esquema-y-retirada.spec.md"
 STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-532.json"
+
+# Patrón de datos privados: palabras del entorno de la operadora más formas genéricas (correo,
+# ruta de usuario, tokens). Armado por trozos para que este fichero no se dispare a sí mismo.
+priv_re() {
+  printf '%s' "mac""book|accen""ture|m[oó]""nica|\\.sa""via/|inten""sivo|reconci""liar|des""til|Savia""Labs" \
+    "|[A-Za-z0-9._-]+@[A-Za-z0-9-]+\\.[a-z]{2,}|/ho""me/[a-z]|gh""p_[A-Za-z0-9]{20,}|s""k-[A-Za-z0-9]{20,}"
+}
 
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
@@ -33,6 +42,8 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -qE '^\| S1 \|.*\*\*Antes de SE-527\*\*' "$f" || { echo "S1 no va antes de SE-527"; return 1; }
   grep -qE '^\| S2 \|.*Después de SE-527 \|' "$f" || { echo "S2 no va después de SE-527"; return 1; }
   grep -qE '^\| S3 \|.*Después de que SE-518 esté fusionada' "$f" || { echo "S3 no espera a SE-518"; return 1; }
+  # El tier 2 de S1 es una coincidencia medida (.json contiene .js): debe quedar dicho.
+  grep -q 'por una coincidencia' "$f" || { echo "falta el matiz del tier de S1"; return 1; }
   # Cifras verificadas en el catálogo.
   grep -q '19 claves de cabecera distintas' "$f" || { echo "falta 19 claves"; return 1; }
   grep -q '\*\*90 agentes\*\*' "$f" || { echo "falta 90 agentes"; return 1; }
@@ -55,7 +66,7 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
   # Repo público: nada privado ni de sesión.
   # El patrón se arma por trozos para que este fichero no contenga los literales que busca.
-  local priv="mac""book|accen""ture|m[oó]""nica|\.sa""via/|inten""sivo|reconci""liar|des""til|Savia""Labs"
+  local priv; priv=$(priv_re)
   ! grep -inE "$priv" "$f" || { echo "dato privado en la spec"; return 1; }
 }
 
@@ -245,7 +256,7 @@ PY
 }
 
 @test "repo público: changelog, LOG, planning y este test no contienen datos privados" {
-  local priv="mac""book|accen""ture|m[oó]""nica|\.sa""via/|inten""sivo|reconci""liar|des""til|Savia""Labs"
+  local priv; priv=$(priv_re)
   for f in "$REPO_ROOT/CHANGELOG.d/se532-catalogo-agentes.md" \
            "$REPO_ROOT/docs/propuestas/LOG.d/SE-532-PROPOSED.md" \
            "$STATE" "$BATS_TEST_FILENAME"; do
@@ -255,9 +266,32 @@ PY
   done
 }
 
-@test "negativo: el barrido de datos privados detecta un literal en un fichero auxiliar" {
-  local priv="mac""book|accen""ture|m[oó]""nica|\.sa""via/|inten""sivo|reconci""liar|des""til|Savia""Labs"
-  printf 'nota: ~/.sa''via/x\n' > "$BATS_TEST_TMPDIR/aux.md"
+@test "sanity: el patrón privado detecta un literal, un correo y una ruta de usuario" {
+  local priv; priv=$(priv_re)
+  local n=0 x
+  for x in '~/.sa''via/x' 'alguien@ejem''plo.org' '/ho''me/usuario/x' 'gh''p_abcdefghijklmnopqrstuvwx'; do
+    printf '%s\n' "$x" > "$BATS_TEST_TMPDIR/aux.md"
+    run grep -inE "$priv" "$BATS_TEST_TMPDIR/aux.md"
+    [ "$status" -eq 0 ] || { echo "no detecta: $x"; return 1; }
+    n=$((n+1))
+  done
+  [ "$n" -eq 4 ]
+  # Caso límite negativo: texto normal con guiones y arrobas de código no dispara.
+  printf 'risk-tier.py y el decorador @dataclass\n' > "$BATS_TEST_TMPDIR/aux.md"
   run grep -inE "$priv" "$BATS_TEST_TMPDIR/aux.md"
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 1 ]
+}
+
+@test "negativo: una ruta de usuario en la spec falla" {
+  printf '\nVer /ho''me/usuario/x\n' >> "$M"
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"dato privado"* ]]
+}
+
+@test "negativo: sin el matiz de la coincidencia del tier de S1 falla" {
+  mutate 'por una coincidencia' 'por diseño'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"matiz del tier de S1"* ]]
 }
