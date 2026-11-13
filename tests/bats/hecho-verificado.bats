@@ -278,24 +278,22 @@ msr() { python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV" --until 2099
 
 # ---- AC-1.8 y regla ----
 
-@test "AC-1.8 el prerregistro es ancestro (o igual) del informe de medicion" {
-  P=docs/evidence/SE-530-S1-prerregistro.md; M=docs/evidence/SE-530-S1-medicion.md
-  [ -f "$REPO_ROOT/$P" ]
-  [ -f "$REPO_ROOT/$M" ]
-  pc="$(git -C "$REPO_ROOT" log --diff-filter=A --format=%H -- "$P" | tail -1)"
-  mc="$(git -C "$REPO_ROOT" log --diff-filter=A --format=%H -- "$M" | tail -1)"
-  [ -n "$pc" ] && [ -n "$mc" ]
-  git -C "$REPO_ROOT" merge-base --is-ancestor "$pc" "$mc"
+@test "AC-1.8 el informe lleva el hash del prerregistro y coincide (sobrevive al squash)" {
+  P="$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md"; M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
+  [ -f "$P" ]
+  [ -f "$M" ]
+  want="$(sed -n 's/^prerregistro-sha256: \([0-9a-f]\{64\}\)$/\1/p' "$M")"
+  [ "${#want}" -eq 64 ]
+  got="$(sha256sum "$P" | cut -d' ' -f1)"
+  [ "$got" = "$want" ]
 }
 
-@test "AC-1.8 negativo: el informe NO es ancestro del prerregistro" {
-  P=docs/evidence/SE-530-S1-prerregistro.md; M=docs/evidence/SE-530-S1-medicion.md
-  pc="$(git -C "$REPO_ROOT" log --diff-filter=A --format=%H -- "$P" | tail -1)"
-  mc="$(git -C "$REPO_ROOT" log --diff-filter=A --format=%H -- "$M" | tail -1)"
-  [ -n "$pc" ] && [ -n "$mc" ]
-  [ "$pc" != "$mc" ] || skip "squash: mismo commit"
-  run git -C "$REPO_ROOT" merge-base --is-ancestor "$mc" "$pc"
-  [ "$status" -ne 0 ]
+@test "AC-1.8 negativo: un prerregistro editado despues de medir no coincide con el hash" {
+  P="$REPO_ROOT/docs/evidence/SE-530-S1-prerregistro.md"; M="$REPO_ROOT/docs/evidence/SE-530-S1-medicion.md"
+  want="$(sed -n 's/^prerregistro-sha256: \([0-9a-f]\{64\}\)$/\1/p' "$M")"
+  cp "$P" "$T/pre.md"; echo "umbral cambiado a posteriori" >> "$T/pre.md"
+  got="$(sha256sum "$T/pre.md" | cut -d' ' -f1)"
+  [ "$got" != "$want" ]
 }
 
 @test "regla D5 existe y prohibe «terminado» para declarado" {
@@ -310,11 +308,94 @@ msr() { python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV" --until 2099
   printf 'ESTADO: OK — https://github.com/org/otro/pull/10\n' > "$T/runs/x/done"
   head_rec 10 $S1
   chk 10 $S1 revision revisora-a trabajador superada
-  run cls x
+  run cls x --repo otro
   [[ "${lines[0]}" == verificado:* ]]
   run cls x --repo propio
   [[ "${lines[0]}" == declarado:*"otro repositorio (otro)"* ]]
   printf 'ESTADO: OK — https://github.com/org/propio/pull/10\n' > "$T/runs/x/done"
   run cls x --repo propio
   [[ "${lines[0]}" == verificado:* ]]
+}
+
+# ---- fallos de revision independiente (PR 1554) ----
+
+@test "tipos inesperados en aprobada_por (lista/dict) no rompen: declarado, nunca salida 1" {
+  done_ok j1 10; head_rec 10 $S1
+  chk 10 $S1 persona alguien trabajador superada '"propuesta_por":"trabajador","aprobada_por":["x"],"contenido_hash":"h","aprobada_hash":"h"'
+  run cls j1
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == declarado:* ]]
+  chk 10 $S1 persona alguien trabajador superada '"propuesta_por":"trabajador","aprobada_por":{"a":1},"contenido_hash":["h"],"aprobada_hash":["h"]'
+  run cls j1
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == declarado:* ]]
+}
+
+@test "un error interno devuelve 2 (ilegible), no 1 (refutado)" {
+  done_ok j1 10
+  run python3 -c "
+import sys, importlib.util
+sp = importlib.util.spec_from_file_location('hv', '$HV'); m = importlib.util.module_from_spec(sp); sp.loader.exec_module(m)
+m.cmd_classify = lambda a: 1/0
+sys.exit(m.main(['classify', '$T/runs/j1/done']))"
+  [ "$status" -eq 2 ]
+}
+
+@test "D3: propuesta_por distinta del ejecutor y sin aprobacion no cuenta" {
+  done_ok j1 10; head_rec 10 $S1
+  chk 10 $S1 persona alguien trabajador superada '"propuesta_por":"otro-alias"'
+  run cls j1
+  [[ "${lines[0]}" == declarado:* ]]
+  chk 10 $S1 persona alguien trabajador superada '"propuesta_por":"otro-alias","aprobada_por":"monica","contenido_hash":"h","aprobada_hash":"h"'
+  run cls j1
+  [[ "${lines[0]}" == verificado:* ]]
+}
+
+@test "verdict desconocido en el registro de revisiones no refuta: se anota y se ignora" {
+  done_ok j1 10; head_rec 10 $S1
+  printf '{"pr":10,"sha":"%s","reviewer":"revisora-a","author":"trabajador","verdict":"COMMENT"}\n' $S1 > "$T/rev.jsonl"
+  run python3 "$HV" classify "$T/runs/j1/done" --evidence "$EV" --reviews "$T/rev.jsonl"
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == declarado:* ]]
+  [[ "$output" == *"anomalia=verdict desconocido"* ]]
+  printf '{"pr":10,"sha":"%s","reviewer":"revisora-a","author":"trabajador","verdict":"HOLD"}\n' $S1 > "$T/rev.jsonl"
+  run python3 "$HV" classify "$T/runs/j1/done" --evidence "$EV" --reviews "$T/rev.jsonl"
+  [ "$status" -eq 1 ]
+}
+
+@test "una falla de la orquestadora no refuta pero impide verificar" {
+  done_ok j1 10; head_rec 10 $S1
+  chk 10 $S1 revision revisora-a trabajador superada
+  chk 10 $S1 revision savia-orquestadora trabajador fallida
+  run cls j1
+  [ "$status" -eq 0 ]
+  [[ "${lines[0]}" == declarado:*"no independiente"* ]]
+}
+
+@test "measure cuenta clase.revision solo si es independiente" {
+  done_ok j1 10; head_rec 10 $S1
+  chk 10 $S1 revision savia-orquestadora trabajador superada
+  run python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV"
+  [[ "$output" == *"clase.revision: 0"* ]]
+  chk 10 $S1 revision revisora-a trabajador superada
+  run python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV"
+  [[ "$output" == *"clase.revision: 1"* ]]
+}
+
+@test "marca que cita un repo sin --repo: declarado (fail-closed)" {
+  mkdir -p "$T/runs/x"
+  printf 'ESTADO: OK — https://github.com/org/otro/pull/10\n' > "$T/runs/x/done"
+  head_rec 10 $S1
+  chk 10 $S1 revision revisora-a trabajador superada
+  run cls x
+  [[ "${lines[0]}" == declarado:*"--repo"* ]]
+  run cls x --repo otro
+  [[ "${lines[0]}" == verificado:* ]]
+}
+
+@test "pr: true (bool) no se toma como PR 1" {
+  done_ok j1 -
+  printf '{"head":"%s","pr":true}\n' $S1 >> "$EV"
+  run cls j1
+  [[ "$output" == *"anomalia=head inválido"* ]]
 }

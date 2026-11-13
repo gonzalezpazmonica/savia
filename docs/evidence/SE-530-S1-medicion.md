@@ -1,6 +1,8 @@
 # SE-530 S1 — Medición de H9 (primera ejecución)
 
-Prerregistro: `docs/evidence/SE-530-S1-prerregistro.md` (commit anterior a este informe, comprobado por `tests/bats/hecho-verificado.bats`, AC-1.8).
+Prerregistro: `docs/evidence/SE-530-S1-prerregistro.md` (AC-1.8: el hash de abajo ata esta medición al texto exacto del prerregistro; `tests/bats/hecho-verificado.bats` lo recalcula y falla si el prerregistro cambió después, también tras un squash).
+
+prerregistro-sha256: 2d6c5fa684aabc12f2e865e4be2e6a0e9672c5c656f1078fa5cf91bada795b18
 
 ## Resultado
 

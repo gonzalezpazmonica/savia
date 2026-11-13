@@ -46,7 +46,8 @@ def parse_done(path):
 def load_jsonl(path, anomalias):
     out = []
     try:
-        lines = open(path, encoding="utf-8").read().splitlines()
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
     except (OSError, UnicodeDecodeError):
         anomalias.append("evidencia ilegible: %s" % os.path.basename(path))
         return out
@@ -55,19 +56,25 @@ def load_jsonl(path, anomalias):
             continue
         try:
             d = json.loads(l)
-            assert isinstance(d, dict)
+            if not isinstance(d, dict):
+                raise ValueError("no es un objeto")
             out.append(d)
-        except (ValueError, AssertionError):
+        except ValueError:
             anomalias.append("línea %d inválida en %s" % (i, os.path.basename(path)))
     return out
 
 
-def review_to_record(d):
-    """Adapta una línea del registro de revisiones de merge-sprint."""
+def review_to_record(d, anomalias):
+    """Adapta una línea del registro de revisiones de merge-sprint. APPROVE→superada, HOLD→fallida;
+    cualquier otro verdict es una anomalía y se ignora (un verdict basura no refuta)."""
     if not all(k in d for k in ("pr", "sha", "reviewer", "author", "verdict")):
         return None
+    res = {"APPROVE": "superada", "HOLD": "fallida"}.get(d["verdict"]) if isinstance(d["verdict"], str) else None
+    if res is None:
+        anomalias.append("verdict desconocido %r ignorado" % (d["verdict"],))
+        return None
     return {"pr": d["pr"], "sha": d["sha"], "clase": "revision", "verificador": d["reviewer"],
-            "ejecutor": d["author"], "resultado": "superada" if d["verdict"] == "APPROVE" else "fallida"}
+            "ejecutor": d["author"], "resultado": res}
 
 
 class Evidencia:
@@ -86,13 +93,13 @@ class Evidencia:
                     self.checks.append(d)
         for p in reviews:
             for d in load_jsonl(p, self.anom):
-                r = review_to_record(d)
+                r = review_to_record(d, self.anom)
                 if r:
                     self.checks.append(r)
 
     @staticmethod
     def _key(d):
-        if isinstance(d.get("pr"), int):
+        if isinstance(d.get("pr"), int) and not isinstance(d.get("pr"), bool):
             return ("pr", d["pr"])
         if isinstance(d.get("job"), str):
             return ("job", d["job"])
@@ -106,17 +113,19 @@ class Evidencia:
 
 
 def evaluar(estado, prr, job, ev, orch, repo=None):
-    """Deriva (estado_hv, motivo, clases_vistas, anomalias, propia_falla)."""
+    """Deriva (estado_hv, motivo, clases_vistas, clases_independientes, anomalias, propia_falla)."""
     anom = list(ev.anom)
     pr, repo_pr = prr
+    if pr is not None and repo_pr and not repo:  # sin --repo no se sabe de qué repositorio es el número
+        return "declarado", "la marca cita el repositorio %s y no se indicó --repo: sin evidencia comparable" % repo_pr, set(), set(), anom, False
     if repo and pr is not None and repo_pr != repo:  # los números de PR de otro repo no son los nuestros
-        return "declarado", "PR de otro repositorio (%s): sin evidencia comparable" % (repo_pr or "desconocido"), set(), anom, False
+        return "declarado", "PR de otro repositorio (%s): sin evidencia comparable" % (repo_pr or "desconocido"), set(), set(), anom, False
     head, recs = ev.para(pr, job)
     if estado != "OK":
-        return "declarado", "el trabajador no declara OK (ESTADO: %s)" % estado, set(), anom, False
+        return "declarado", "el trabajador no declara OK (ESTADO: %s)" % estado, set(), set(), anom, False
     if head is None:
-        return "declarado", "SHA vigente desconocido: ninguna comprobación cuenta", set(), anom, False
-    vistas, pasan, fallan, propia_falla, viejas = set(), [], [], False, 0
+        return "declarado", "SHA vigente desconocido: ninguna comprobación cuenta", set(), set(), anom, False
+    vistas, indeps, pasan, fallan, propia_falla, viejas, ajena_falla = set(), set(), [], [], False, 0, None
     for r in recs:
         for c in CAMPOS_ESTADO:
             if c in r:
@@ -141,26 +150,37 @@ def evaluar(estado, prr, job, ev, orch, repo=None):
             anom.append("registro sin ejecutor o verificador: no cuenta")
             continue
         indep = ver != ejec and (clase in MECANICAS or ver not in orch) and clase != "ci_propio"
-        if indep and r.get("propuesta_por") == ejec:  # D3
-            ap, h = r.get("aprobada_por"), r.get("contenido_hash")
-            indep = bool(ap) and ap != ejec and ap not in orch and bool(h) and r.get("aprobada_hash") == h
+        # D3: si la comprobación la propuso alguien que no es el verificador (o el campo no es una
+        # cadena), exige aprobación de la persona. Un registro sin `propuesta_por` se toma como
+        # recogido por el recolector (supuesto de S1; en S2 el recolector fija el campo).
+        pp = r.get("propuesta_por")
+        if indep and "propuesta_por" in r and pp != ver:
+            ap, h, ah = r.get("aprobada_por"), r.get("contenido_hash"), r.get("aprobada_hash")
+            indep = (isinstance(ap, str) and ap != "" and ap != ejec and ap not in orch
+                     and isinstance(h, str) and h != "" and ah == h)
         if not indep:
             if res == "fallida" and ver == ejec:
                 propia_falla = True
+            elif res == "fallida" and ajena_falla is None:
+                ajena_falla = (clase, ver)
             continue
+        indeps.add(clase)
         (pasan if res == "superada" else fallan).append((clase, ver))
     if fallan:
         c, v = fallan[0]
-        return "refutado", "falla %s de %s sobre %s" % (c, v, head[:8]), vistas, anom, propia_falla
+        return "refutado", "falla %s de %s sobre %s" % (c, v, head[:8]), vistas, indeps, anom, propia_falla
+    if pasan and ajena_falla:  # una falla no independiente no refuta, pero tampoco se calla: no se verifica
+        anom.append("falla no independiente de %s ignorada" % ajena_falla[1])
+        return "declarado", "hay una comprobación fallida no independiente (%s de %s): no se verifica" % ajena_falla, vistas, indeps, anom, propia_falla
     if pasan:
         c, v = pasan[0]
-        return "verificado", "%s de %s sobre %s" % (c, v, head[:8]), vistas, anom, propia_falla
+        return "verificado", "%s de %s sobre %s" % (c, v, head[:8]), vistas, indeps, anom, propia_falla
     motivo = "sin comprobación independiente sobre %s" % head[:8]
     if viejas:
         motivo += "; %d de un SHA anterior" % viejas
     if propia_falla:
         motivo += "; la comprobación propia del ejecutor falla"
-    return "declarado", motivo, vistas, anom, propia_falla
+    return "declarado", motivo, vistas, indeps, anom, propia_falla
 
 
 def job_de(path):
@@ -173,7 +193,7 @@ def cmd_classify(a):
         print("declarado: %s" % err)
         return 2
     ev = Evidencia(a.evidence, a.reviews)
-    st, motivo, vistas, anom, _ = evaluar(estado, pr, job_de(a.done), ev, orch_ids(a.orchestrator), a.repo)
+    st, motivo, vistas, _, anom, _ = evaluar(estado, pr, job_de(a.done), ev, orch_ids(a.orchestrator), a.repo)
     print("%s: %s" % (st, motivo))
     for c in sorted(vistas):
         print("clase=%s" % c)
@@ -218,9 +238,11 @@ def cmd_measure(a):
             no_ok += 1
             continue
         n_ok += 1
-        st, _, vistas, _, _ = evaluar(estado, pr, job_de(p), ev, orch, a.repo)
+        st, _, vistas, indep_c, _, _ = evaluar(estado, pr, job_de(p), ev, orch, a.repo)
         por_estado[st] += 1
-        for c in vistas:
+        for c in vistas:  # ci_propio se informa siempre (nunca es independiente); el resto, solo si lo es
+            if c != "ci_propio" and c not in indep_c:
+                continue
             por_clase[c] = por_clase.get(c, 0) + 1
     sin = por_estado["declarado"]
     print("ventana: %s .. %s (%d días)" % (desde, hasta, a.window))
@@ -254,7 +276,11 @@ def main(argv=None):
             s.add_argument("--window", type=int, default=14)
             s.add_argument("--until")
     a = ap.parse_args(argv)
-    return cmd_classify(a) if a.cmd == "classify" else cmd_measure(a)
+    try:
+        return cmd_classify(a) if a.cmd == "classify" else cmd_measure(a)
+    except Exception as e:  # fail-closed: un error interno nunca es «refutado» (1)
+        print("declarado: error interno (%s)" % type(e).__name__, file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
