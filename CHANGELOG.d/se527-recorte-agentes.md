@@ -5,4 +5,4 @@ section: Added
 
 ### Added
 
-- SE-527 (PROPOSED): recorte de 15 de 90 agentes (90 → 75) en cinco slices (P1 a P5), validación con el método de SE-511, S5 (lenguajes) el último, reducido a python y typescript por Q3 y con validación real por lenguaje. Ahorro de mantenimiento, no de contexto. Solo spec y test de coherencia; la aprobación espera la confirmación de la operadora.
+- SE-527 (PROPOSED): recorte de 14 de 90 agentes (90 → 76) en cuatro slices (P1 a P4), validación con el método de SE-511, S4 el último. Los desarrolladores por lenguaje quedan fuera de la spec (capacidad de reserva para proyectos de cliente). Ahorro de mantenimiento, no de contexto. Solo spec y test de coherencia; la aprobación espera la confirmación de la operadora.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# SE-527 — coherencia de la spec: cinco slices, S5 el último, tier 4 declarado,
+# SE-527 — coherencia de la spec: cuatro slices, S4 el último, neto 14, tier 4 declarado,
 # sin interfaz humana, sin contradecir «ahorro de mantenimiento, no de contexto».
 # Cada comprobación se ejecuta también sobre una copia mutada y debe fallar.
 
@@ -11,36 +11,42 @@ check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
   grep -q '^status: PROPOSED$' "$f" || { echo "status != PROPOSED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
-  for n in 1 2 3 4 5; do
+  for n in 1 2 3 4; do
     grep -q "^### S$n — " "$f" || { echo "falta slice S$n"; return 1; }
   done
-  ! grep -q '^### S6 — ' "$f" || { echo "slice de más"; return 1; }
-  # Orden: S5 es el último encabezado de slice (todos los anteriores van antes).
+  ! grep -q '^### S5 — ' "$f" || { echo "slice de más"; return 1; }
+  # Orden: S4 es el último encabezado de slice (todos los anteriores van antes).
   local last
   last=$(grep -E '^### S[0-9] — ' "$f" | tail -1 | cut -c1-6)
-  [ "$last" = "### S5" ] || { echo "S5 no es el último"; return 1; }
+  [ "$last" = "### S4" ] || { echo "S4 no es el último"; return 1; }
   # Cifras: los netos de la tabla D1 suman el total declarado y coinciden con el título y el planning.
   local sum
-  sum=$(grep -E '^\| S[1-5] \|' "$f" | sed -E 's/.*\| −([0-9]+)( \(era −[0-9]+\))? \|.*/\1/' | paste -sd+ | bc)
-  [ "$sum" = "15" ] || { echo "suma de netos $sum != 15"; return 1; }
-  grep -q '^# SE-527 — .*(15 de 90 tras Q3' "$f" || { echo "título sin 15 de 90"; return 1; }
-  grep -q 'Total −15 tras Q3: 90 → 75' "$f" || { echo "falta total 90 → 75"; return 1; }
-  ! grep -q -- '−19 agentes' "$f" || { echo "queda −19 agentes"; return 1; }
-  # Los cinco slices de la tabla D1 declaran tier 4 en la última columna.
+  sum=$(grep -E '^\| S[1-9] \|' "$f" | sed -E 's/.*\| −([0-9]+) \|[^|]*\|[^|]*\|$/\1/' | paste -sd+ | bc)
+  [ "$sum" = "14" ] || { echo "suma de netos $sum != 14"; return 1; }
+  grep -q '^# SE-527 — .*(14 de 90, en cuatro slices)' "$f" || { echo "título sin 14 de 90"; return 1; }
+  grep -q 'Total −14: 90 → 76' "$f" || { echo "falta total 90 → 76"; return 1; }
+  # Cifras antiguas: ninguna aparece (el 75 de espejos es otro dato y no cuenta).
+  local old
+  for old in '−19' '−15' '90 → 71' '90 → 75' '15 de 90' '19 de 90' 'cinco slices' 'cinco paquetes'; do
+    ! grep -q -- "$old" "$f" || { echo "queda cifra antigua: $old"; return 1; }
+  done
+  # Los cuatro slices de la tabla D1 declaran tier 4 en la última columna.
   local tiers
-  tiers=$(grep -cE '^\| S[1-5] \|.*\| \*\*4\*\* \|$' "$f")
-  [ "$tiers" -eq 5 ] || { echo "tier 4 declarado en $tiers de 5 slices"; return 1; }
+  tiers=$(grep -cE '^\| S[1-9] \|.*\| \*\*4\*\* \|$' "$f")
+  [ "$tiers" -eq 4 ] || { echo "tier 4 declarado en $tiers de 4 slices"; return 1; }
   grep -q 'No es una reducción de contexto' "$f" || { echo "falta aviso de contexto"; return 1; }
-  grep -q 'S5 va el último' "$f" || { echo "falta S5 último"; return 1; }
+  grep -q 'S4 va el último' "$f" || { echo "falta S4 último"; return 1; }
+  grep -q '^### D5 — Por qué S5 sale de la spec$' "$f" || { echo "falta D5 de S5 fuera"; return 1; }
+  grep -q '^- Los seis agentes por lenguaje (`go-developer`' "$f" || { echo "falta fuera de alcance de lenguajes"; return 1; }
   grep -q '^## OpenCode Implementation Plan$' "$f" || { echo "falta plan OpenCode"; return 1; }
 }
 
-check_planning() {  # check_planning <json>: 0 si es SE-527 PROPOSED, título 15 de 90 y evidencia existente
+check_planning() {  # check_planning <json>: 0 si es SE-527 PROPOSED, título 14 de 90 y evidencia existente
   python3 -I -c "
 import json,os,sys
 d=json.load(open(sys.argv[1]))
 assert d['id']=='SE-527' and d['status']=='PROPOSED', d
-assert '15 de 90' in d['title'], d['title']
+assert '14 de 90' in d['title'], d['title']
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
 }
@@ -68,7 +74,7 @@ PY
   mutate '| Bajo | **4** |' '| Bajo | **2** |'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"tier 4 declarado en 4 de 5"* ]]
+  [[ "$output" == *"tier 4 declarado en 3 de 4"* ]]
 }
 
 @test "negativo: faltar S3 falla" {
@@ -78,19 +84,19 @@ PY
   [[ "$output" == *"falta slice S3"* ]]
 }
 
-@test "negativo: S5 antes de S4 falla" {
+@test "negativo: S4 antes de S3 falla" {
   python3 -I - "$M" <<'PY2'
 import re,sys
 p=sys.argv[1]; s=open(p,encoding="utf-8").read()
 parts=re.split(r'(?m)^(?=### S[0-9] — )',s)
+i3=[i for i,x in enumerate(parts) if x.startswith('### S3 — ')][0]
 i4=[i for i,x in enumerate(parts) if x.startswith('### S4 — ')][0]
-i5=[i for i,x in enumerate(parts) if x.startswith('### S5 — ')][0]
-parts[i4],parts[i5]=parts[i5],parts[i4]
+parts[i3],parts[i4]=parts[i4],parts[i3]
 open(p,"w",encoding="utf-8").write("".join(parts))
 PY2
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"S5 no es el último"* ]]
+  [[ "$output" == *"S4 no es el último"* ]]
 }
 
 @test "negativo: human_surface true falla" {
@@ -145,27 +151,42 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   [[ "$output" == *"status != PROPOSED"* ]]
 }
 
-@test "edge: boundary, solo 4 de 5 slices con tier 4 falla (zero tolerancia)" {
+@test "edge: boundary, solo 3 de 4 slices con tier 4 falla (zero tolerancia)" {
   mutate '| Medio | **4** |
 | S4' '| Medio | **3** |
 | S4'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"tier 4 declarado en 4 de 5"* ]]
+  [[ "$output" == *"tier 4 declarado en 3 de 4"* ]]
 }
 
 @test "negativo: un **4** en otra columna no cuenta como tier" {
   mutate '| Bajo | **4** |' '| **4** | Bajo |'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"tier 4 declarado en 4 de 5"* ]]
+  [[ "$output" == *"tier 4 declarado en 3 de 4"* ]]
 }
 
 @test "negativo: encabezado de slice duplicado no rompe el orden con error confuso" {
-  mutate '### S2 — ' '### S5 — '
+  mutate '### S2 — ' '### S4 — '
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"falta slice S2"* ]]
+}
+
+@test "negativo: reintroducir un slice S5 falla" {
+  printf '\n### S5 — Desarrolladores por lenguaje\n' >> "$M"
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"slice de más"* ]]
+}
+
+@test "negativo: un S5 en la tabla D1 falla por tier/suma" {
+  mutate '| S4 | P4' '| S5 | P5 lenguajes | x | −1 | Medio-alto | **4** |
+| S4 | P4'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"suma de netos"* ]]
 }
 
 @test "negativo: status APPROVED en la spec falla (sin confirmación de la operadora)" {
@@ -176,23 +197,41 @@ json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
 }
 
 @test "negativo: una cifra desfasada (suma de netos) falla" {
-  mutate '| −1 (era −5) |' '| −5 |'
+  mutate '| −3 | Bajo-medio |' '| −5 | Bajo-medio |'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"suma de netos"* ]]
+  [[ "$output" == *"suma de netos 16 != 14"* ]]
 }
 
-@test "negativo: un −19 agentes residual falla" {
-  mutate '−15 agentes' '−19 agentes'
+@test "negativo: cada cifra antigua residual falla" {
+  local old
+  for old in '−19 agentes' '−15 agentes' 'pasa a 90 → 71' 'pasa a 90 → 75'; do
+    cp "$SPEC" "$M"
+    mutate 'Total −14: 90 → 76' "$old; Total −14: 90 → 76"
+    run check "$M"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"queda cifra antigua"* ]]
+  done
+}
+
+@test "negativo: faltar la sección de por qué S5 sale falla" {
+  mutate '### D5 — Por qué S5 sale de la spec' '### D5 — Otra cosa'
   run check "$M"
   [ "$status" -ne 0 ]
-  [[ "$output" == *"queda −19 agentes"* ]]
+  [[ "$output" == *"falta D5 de S5 fuera"* ]]
+}
+
+@test "negativo: faltar los agentes por lenguaje en fuera de alcance falla" {
+  mutate '- Los seis agentes por lenguaje (`go-developer`' '- Los agentes (`go-developer`'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"fuera de alcance de lenguajes"* ]]
 }
 
 @test "negativo: planning con título desfasado falla" {
   python3 -I -c "
 import json,sys
-d=json.load(open(sys.argv[1])); d['title']=d['title'].replace('15 de 90','19 de 90')
+d=json.load(open(sys.argv[1])); d['title']=d['title'].replace('14 de 90','19 de 90')
 json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
   run check_planning "$BATS_TEST_TMPDIR/s.json"
   [ "$status" -ne 0 ]
