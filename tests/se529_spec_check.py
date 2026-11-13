@@ -88,6 +88,12 @@ def main():
         ("sin cambiar el esquema", "No cambia el esquema del almacén"),
         ("nada de contenido real en el repo", "ningún fragmento de conversación real"),
         ("comprobado, no supuesto", "sin medir"),
+        ("Q2 resuelta", "**Q2 (resuelta, 2026-11-13).**"),
+        ("Q2 registrada como registro de la orquestadora", "registro de la orquestadora"),
+        ("paridad por aviso explícito (Q2)", "ese aviso se acepta como paridad (Q2, resuelta)"),
+        ("S1 sin fuente alternativa (Q2)", "no se busca una fuente alternativa"),
+        ("Q1 abierta", "- **Q1.**"),
+        ("Q3 abierta", "- **Q3.**"),
     ]
     for name, phrase in required:
         if phrase not in text:

@@ -143,3 +143,38 @@ assert os.path.isfile(os.path.join(sys.argv[2], d["evidence"])), d["evidence"]
 PY
   [ "$status" -eq 0 ]
 }
+
+@test "Q2 reabierta (sin marca de resuelta) falla" {
+  mutate "$MS" "**Q2 (resuelta, 2026-11-13).**" "**Q2.**"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Q2 resuelta"* ]]
+}
+
+@test "paridad sin aceptar el aviso explicito falla" {
+  mutate "$MS" "ese aviso se acepta como paridad (Q2, resuelta)" "se exige fuente alternativa"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"paridad por aviso explícito"* ]]
+}
+
+@test "S1 que exige fuente alternativa falla" {
+  mutate "$MS" "no se busca una fuente alternativa" "se busca una fuente alternativa"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S1 sin fuente alternativa"* ]]
+}
+
+@test "Q1 y Q3 deben seguir abiertas: Q3 borrada falla" {
+  mutate "$MS" "- **Q3.**" "- Q3 borrada."
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Q3 abierta"* ]]
+}
+
+@test "Q2 sin registro de la orquestadora (texto literal) falla" {
+  mutate "$MS" "registro de la orquestadora, no texto literal" "texto literal"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Q2 registrada"* ]]
+}

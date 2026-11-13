@@ -50,7 +50,7 @@ Cuando una sesión se compacta, Savia debería guardar lo que importa antes y de
 2. **No se pudo leer la conversación.** *Antes:* el aviso dice «N elementos extraídos» aunque no se haya leído nada. *Después:* si Savia no pudo abrir la conversación (fichero ausente, ilegible o fuera de la carpeta del frontend), lo dice una vez: «No he podido leer la conversación antes de compactar: <motivo>. Lo que sigue viene solo de lo que ya estaba guardado.» Nunca afirma haber guardado lo que no guardó.
 3. **Compactar dos veces seguidas.** *Antes:* no se archiva nada y no hay ni duplicado ni resumen. *Después:* el resumen de la sesión se guarda una sola vez; la segunda compactación con el mismo resumen no crea otra entrada.
 4. **Otro proyecto en el mismo almacén.** *Antes:* apuntes de un proyecto aparecen en la sesión de otro. *Después:* nunca cruzan.
-5. **Cambia de frontend.** Lo mismo en Claude Code y en OpenCode. Si OpenCode no entrega la conversación, el aviso del punto 2 lo dice en vez de callar.
+5. **Cambia de frontend.** Lo mismo en Claude Code y en OpenCode. Si OpenCode no entrega la conversación, el aviso del punto 2 lo dice en vez de callar, y eso basta como paridad (Q2, resuelta).
 
 ### Qué SÍ será
 
@@ -72,8 +72,9 @@ Cuando una sesión se compacta, Savia debería guardar lo que importa antes y de
 
 ### Confirmación
 
-- fecha: pendiente
-- respuesta: pendiente. Las escenas no se han enseñado todavía a la operadora; se le preguntarán antes de pedir la aprobación (SE-505). No hay confirmación que citar.
+- Q2 (2026-11-13, pregunta interactiva; registro de la orquestadora, no texto literal): la operadora acepta que, si OpenCode no entrega la conversación, el aviso explícito basta como paridad, por honesto: no se inventa nada y Claude Code guarda el resumen completo.
+- escenas: pendiente
+- respuesta sobre las escenas: pendiente. Las escenas no se han enseñado todavía a la operadora; se le preguntarán antes de pedir la aprobación (SE-505). No hay confirmación que citar.
 
 ## Slice S0 — Medición y prototipo (primero, sin cambiar comportamiento)
 
@@ -111,7 +112,7 @@ Orden de entrega: S0 → S5 → S1 → S2 → S4; S3 (tests) acompaña a cada sl
 - El hook toma `transcript_path` de la carga medida en S0, lo resuelve con `realpath` y lo abre **solo si** es un fichero regular, propiedad de la persona y dentro de la carpeta de datos del frontend; en cualquier otro caso no lo abre y lo dice. (La ruta llega por stdin y no es de fiar: sin esta comprobación el hook leería cualquier fichero.)
 - Lee como máximo el tope de S0.5 desde el final, parsea líneas JSON, descarta las que no son JSON, y considera **solo** turnos de la persona y del asistente en texto; no resultados de herramientas (pueden contener contenido de ficheros).
 - Extrae decisiones, correcciones y estado de tarea de esas vueltas (las mismas categorías que el hook actual, ahora sobre texto de conversación) y las pasa por S5 antes de escribir en `session-hot.md` (Tier B) o en el almacén (Tier C).
-- El aviso dice la verdad: «N elementos guardados» solo si N > 0 y se escribieron; si no se pudo leer o no había nada: el mensaje de la escena 2. Siempre exit 0 y dentro del timeout actual del hook (10 s).
+- El aviso dice la verdad: «N elementos guardados» solo si N > 0 y se escribieron; si no se pudo leer o no había nada: el mensaje de la escena 2. Si OpenCode no entrega la conversación, ese aviso es el comportamiento esperado y suficiente (Q2, resuelta): no se busca una fuente alternativa ni se bloquea S1 por ello. Siempre exit 0 y dentro del timeout actual del hook (10 s).
 
 ### S2 — Reinyección acotada
 
@@ -132,7 +133,7 @@ Orden de entrega: S0 → S5 → S1 → S2 → S4; S3 (tests) acompaña a cada sl
 - Fixtures **sintéticos** con la forma medida en S0 (campos, tipos, tamaños, formato de líneas), generados por un script versionado; ningún fragmento de conversación real.
 - Cada test nuevo se ejecuta antes contra el hook/script actual y debe fallar (SE-456); el informe de la PR guarda esa ejecución.
 - Los bats actuales de `pre-compact-backup` se mantienen, pero se completan: ya no se aceptan solo con códigos de salida para ninguna ruta nueva.
-- Paridad: la misma entrada normalizada pasa por la ruta Claude Code y por la de OpenCode y da el mismo resultado; donde OpenCode no entrega algo, el resultado esperado es el aviso explícito, no silencio.
+- Paridad (Q2, resuelta): la misma entrada normalizada pasa por la ruta Claude Code y por la de OpenCode y da el mismo resultado; donde OpenCode no entrega la conversación, el resultado esperado es el aviso explícito, no silencio, y eso cuenta como paridad.
 
 ## Criterios de aceptación
 
@@ -147,7 +148,7 @@ Orden de entrega: S0 → S5 → S1 → S2 → S4; S3 (tests) acompaña a cada sl
 - [ ] **AC-9 (S2 negativos):** almacén vacío o ausente: sale 0 sin texto de memoria; proyecto no determinable: ninguna entrada del almacén y aviso; ninguna entrada de otro proyecto en ningún caso; `session-hot.md` no se vacía si la emisión falla.
 - [ ] **AC-10 (`--max-bytes`):** `--max-bytes N` devuelve ≤ N bytes, corta en frontera de línea y de carácter UTF-8; con N menor que la primera línea devuelve vacío, sale 0 y avisa por stderr; sin la opción la salida es byte a byte la actual (comparación con salida guardada).
 - [ ] **AC-11 (S4):** dos compactaciones de la misma sesión con el mismo resumen producen una entrada; con resumen distinto, dos; guardado fallido: el aviso dice «no confirmado». Si S0.1 muestra que la carga no trae el resumen, este AC se marca «no aplicable» en la spec y en la PR, con la evidencia, y no se da por cumplido.
-- [ ] **AC-12 (paridad):** la misma batería de fixtures pasa por la ruta de Claude Code y por la de OpenCode con resultado normalizado igual, o con el aviso explícito declarado en S0.1 para la celda no entregada.
+- [ ] **AC-12 (paridad):** la misma batería de fixtures pasa por la ruta de Claude Code y por la de OpenCode con resultado normalizado igual, o con el aviso explícito declarado en S0.1 para la celda no entregada; ese aviso se acepta como paridad (Q2, resuelta) y no se exige fuente alternativa.
 - [ ] **AC-13 (no bloquea):** ante cualquier entrada (vacía, basura, enorme, binaria) los hooks de compactación salen 0 y no escriben fuera de `session-hot.md` y del almacén.
 - [ ] **AC-14 (honestidad):** el aviso «guardado/extraído» no aparece nunca con 0 elementos ni con un guardado no confirmado (test por cada rama).
 - [ ] **AC-15 (reversión):** cada slice se revierte con `git revert` de su PR sin migración de datos: el formato del almacén y de `session-hot.md` no cambia. Comprobado en cada PR aplicando el revert en un clon limpio y pasando los bats anteriores.
@@ -177,7 +178,7 @@ Si no pudo leer la conversación: `No he podido leer la conversación antes de c
 ## Preguntas abiertas para la operadora
 
 - **Q1.** ¿Qué es «fijada»? Hoy el almacén no tiene campo de fijado; la opción por defecto es `importance_tier` A. Si S0.4 la muestra demasiado amplia, hay que elegir entre un campo explícito nuevo (cambia el esquema, contradice «no cambia el esquema») o un umbral más estricto.
-- **Q2.** Si OpenCode no entrega la conversación, ¿se acepta el aviso explícito como paridad (recomendado: sí, es lo honesto) o se exige una fuente alternativa antes de aprobar S1?
+- **Q2 (resuelta, 2026-11-13).** Si OpenCode no entrega la conversación, el aviso explícito basta como paridad; no se exige fuente alternativa para aprobar S1. Registro de la orquestadora a partir de la respuesta interactiva de la operadora.
 - **Q3.** Si S0.2 dice que `PostCompact` no llega al modelo, ¿apruebas la PR de `settings.json` (tier 4) para pasar la reinyección a `SessionStart` origen `compact`?
 
 ## Riesgos
@@ -213,4 +214,4 @@ Si no pudo leer la conversación: `No he podido leer la conversación antes de c
 
 ## Aprobación
 
-Pendiente. En PROPOSED hasta que la operadora confirme las escenas y responda Q1-Q3. Ningún slice empieza sin su aprobación; S0 puede aprobarse sola (no cambia comportamiento).
+Pendiente. En PROPOSED hasta que la operadora confirme las escenas y responda Q1 y Q3 (Q2 resuelta). Ningún slice empieza sin su aprobación; S0 puede aprobarse sola (no cambia comportamiento).
