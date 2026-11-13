@@ -66,8 +66,36 @@ read_sustrate() {
     return
   fi
   local recall_out
-  recall_out=$(bash "$ROOT/scripts/learning-recall.sh" --query "$TASK" --mode shadow --json 2>/dev/null | python3 -c "import sys,json;print(int(json.load(sys.stdin).get('shadow_hits',0)))" 2>/dev/null || echo 0)
-  echo "  [leer] CRITERIO (+$recall_out shadow hits de SaviaLearning)"
+  if [[ "${SAVIA_LEARNING_APPLIED:-on}" == "off" ]]; then
+    recall_out=$(bash "$ROOT/scripts/learning-recall.sh" --query "$TASK" --mode shadow --json 2>/dev/null | python3 -c "import sys,json;print(int(json.load(sys.stdin).get('shadow_hits',0)))" 2>/dev/null || echo 0)
+    echo "  [leer] CRITERIO (+$recall_out shadow hits de SaviaLearning)"
+    return
+  fi
+  # SE-515 S1: recall efectivo; si no está disponible, se declara shadow y el motivo.
+  local rc
+  recall_out=$(bash "$ROOT/scripts/learning-recall.sh" --query "$TASK" --mode effective --json 2>/dev/null)
+  rc=$?
+  if (( rc == 0 )) && [[ -n "$recall_out" ]]; then
+    local ids
+    ids=$(python3 -c "import sys,json;print(','.join(h['criterion_id'] for h in json.load(sys.stdin)['effective_hits']))" <<<"$recall_out" 2>/dev/null) || ids="?"
+    echo "  [leer] recall=effective criterios=[${ids}]"
+    return
+  fi
+  # Exit 3 (sin cúpula o sin CLI) no depende del modo: repetir en shadow solo añadiría otra fila
+  # al log de recall con el mismo fallo. Ante otro error sí se intenta shadow (una fila por intento).
+  if (( rc == 3 )); then
+    echo "  [leer] recall=no disponible (sin cúpula o sin CLI); la decisión no usa criterios"
+    return
+  fi
+  local reason="error (exit $rc)"
+  recall_out=$(bash "$ROOT/scripts/learning-recall.sh" --query "$TASK" --mode shadow --json 2>/dev/null)
+  if [[ $? -eq 0 && -n "$recall_out" ]]; then
+    local hits
+    hits=$(python3 -c "import sys,json;print(int(json.load(sys.stdin).get('shadow_hits',0)))" <<<"$recall_out" 2>/dev/null || echo 0)
+    echo "  [leer] recall=shadow (declarado; efectivo no disponible: $reason) hits=$hits"
+  else
+    echo "  [leer] recall=no disponible ($reason); la decisión no usa criterios"
+  fi
 }
 
 # ── Fase 2: DECIDIR (heurística; el LLM es opcional) ─────────────────────────
@@ -122,7 +150,28 @@ measure() {
     echo "  [medir] L = f(p_consistent=$base_p, divergencia, ignorancia)"
     return
   fi
-  bash "$ROOT/scripts/learning-metric.sh" --p-consistent "$base_p" --divergence 0.2 --ignorance-resolved 0.1 2>/dev/null | tail -1
+  if [[ "${SAVIA_LEARNING_APPLIED:-on}" == "off" ]]; then
+    bash "$ROOT/scripts/learning-metric.sh" --p-consistent "$base_p" --divergence 0.2 --ignorance-resolved 0.1 2>/dev/null | tail -1
+    return
+  fi
+  # SE-515 S1 (AC-4): solo es «medido» si llegan los tres componentes medidos;
+  # con cualquier valor por defecto, la salida va marcada «no medido».
+  local div="${SAGI_L_DIVERGENCE:-}" ign="${SAGI_L_IGNORANCE_RESOLVED:-}" defaults=()
+  [[ -n "$P_CONSISTENT" ]] || defaults+=(p_consistent)
+  [[ -n "$div" ]] || { div=0.2; defaults+=(divergence); }
+  [[ -n "$ign" ]] || { ign=0.1; defaults+=(ignorance_resolved); }
+  local args=(--p-consistent "$base_p" --divergence "$div" --ignorance-resolved "$ign" --json) out L
+  (( ${#defaults[@]} == 0 )) && args+=(--measured)
+  out=$(bash "$ROOT/scripts/learning-metric.sh" "${args[@]}" 2>/dev/null) || { echo "  [medir] L no calculable (entrada inválida)"; return; }
+  # Refutación Codex (PR #1523): si la salida no se puede leer, no hay medida que declarar.
+  L=$(python3 -c "import sys,json;v=json.load(sys.stdin)['L'];assert isinstance(v,(int,float)) and not isinstance(v,bool);print(v)" <<<"$out" 2>/dev/null) \
+    || { echo "  [medir] L no calculable (salida de la métrica ilegible)"; return; }
+  if (( ${#defaults[@]} == 0 )); then
+    echo "  [medir] L=$L (medido)"
+  else
+    local IFS=,
+    echo "  [medir] L=$L (no medido: valores por defecto en ${defaults[*]})"
+  fi
 }
 
 # ── Fase 5: AJUSTAR autonomía por p_consistent (SCL-006) ─────────────────────

@@ -430,6 +430,13 @@ jobs:
           SAVIA_REQUIRE_TS: "1"
         run: bats tests/test-gate-result-contract.bats tests/test-gate-result-dual-binding.bats tests/test-gate-result-scanners.bats
 
+      # SE-515 S1: recall trazado (hook, guard de OpenCode, arnés P10). Sus suites viven en tests/*.bats y
+      # ci-select-bats no las elige; SAVIA_REQUIRE_TS=1 hace que los tests del guard fallen sin runtime TS.
+      - name: Recall trazado (SE-515 S1)
+        env:
+          SAVIA_REQUIRE_TS: "1"
+        run: bats tests/test-se515-s1-recall-trazado.bats tests/test-se515-s1-hook-trace.bats tests/test-scl-003-recall.bats
+
       - name: Generate BATS dependency map
         id: deps
         run: bash scripts/ci-bats-deps.sh --generate
