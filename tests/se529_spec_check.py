@@ -36,8 +36,8 @@ def main():
     if not fm:
         err("sin frontmatter")
     else:
-        if not re.search(r"^status:\s*PROPOSED\s*$", fm.group(1), re.M):
-            err("frontmatter: status debe ser PROPOSED")
+        if not re.search(r"^status:\s*APPROVED\s*$", fm.group(1), re.M):
+            err("frontmatter: status debe ser APPROVED")
         if not re.search(r"^risk:\s*L2\s*$", fm.group(1), re.M):
             err("frontmatter: risk L2 (tier 2) ausente")
 
@@ -64,7 +64,7 @@ def main():
         if not re.search(r"^- \[ \] \*\*AC-%d " % i, text, re.M):
             err("falta AC-%d" % i)
     if re.search(r"^- \[x\] \*\*AC-", text, re.M):
-        err("un AC marcado como cumplido en una spec PROPOSED")
+        err("un AC marcado como cumplido en una spec aún sin implementar")
 
     # Slices
     for s in ("S0", "S1", "S2", "S3", "S4", "S5"):
@@ -95,12 +95,20 @@ def main():
         ("Q2 registrada como registro de la orquestadora", "registro de la orquestadora"),
         ("paridad por aviso explícito (Q2)", "ese aviso se acepta como paridad (Q2, resuelta)"),
         ("S1 sin fuente alternativa (Q2)", "no se busca una fuente alternativa"),
-        ("Q1 abierta", "- **Q1.**"),
-        ("Q3 abierta", "- **Q3.**"),
+        ("Q1 resuelta", "- **Q1 (resuelta, 2026-11-13).**"),
+        ("Q3 resuelta", "- **Q3 (resuelta, 2026-11-13).**"),
+        ("S0 con prototipo", "- prototipo: "),
     ]
-    # La confirmación debe seguir pendiente: línea de lista «respuesta ...: pendiente».
-    if not re.search(r"^- respuesta[^\n:]*: pendiente", text, re.M):
-        err("falta frase obligatoria (confirmación pendiente): - respuesta ...: pendiente")
+    # Confirmación de las escenas: fecha real y respuesta literal entre «…», no vacía.
+    conf = re.search(r"^### Confirmación\n(.*?)(?=^#{1,3} )", text, re.M | re.S)
+    body = conf.group(1) if conf else ""
+    if not re.search(r"^- fecha: 2026-11-1[3-9]\s*$", body, re.M):
+        err("confirmación de las escenas sin fecha")
+    if not re.search(r"^- respuesta: «[^»\s][^»]*»", body, re.M):
+        err("confirmación de las escenas sin respuesta literal")
+    # La confirmación del prototipo sigue pendiente: S1 no arranca sin ella (SE-505).
+    if not re.search(r"^- respuesta: pendiente", text, re.M):
+        err("falta frase obligatoria (confirmación del prototipo pendiente): - respuesta: pendiente")
     for name, phrase in required:
         if phrase not in text:
             err("falta frase obligatoria (%s): %s" % (name, phrase))

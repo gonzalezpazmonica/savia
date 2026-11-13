@@ -75,11 +75,11 @@ PY
   [[ "$output" == *"marcado como cumplido"* ]]
 }
 
-@test "status distinto de PROPOSED falla" {
-  mutate "$MS" "status: PROPOSED" "status: APPROVED"
+@test "status distinto de APPROVED falla" {
+  mutate "$MS" "status: APPROVED" "status: PROPOSED"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"status debe ser PROPOSED"* ]]
+  [[ "$output" == *"status debe ser APPROVED"* ]]
 }
 
 @test "sin la comprobacion de ruta (realpath) falla" {
@@ -134,11 +134,11 @@ PY
   [[ "$output" == *"falta la sección de S5"* ]]
 }
 
-@test "planning: SE-529 PROPOSED con evidencia existente" {
+@test "planning: SE-529 APPROVED con evidencia existente" {
   run python3 -I - "$PLAN" "$REPO_ROOT" <<'PY'
 import json, os, sys
 d = json.load(open(sys.argv[1]))
-assert d["id"] == "SE-529" and d["status"] == "PROPOSED", d
+assert d["id"] == "SE-529" and d["status"] == "APPROVED", d
 assert os.path.isfile(os.path.join(sys.argv[2], d["evidence"])), d["evidence"]
 PY
   [ "$status" -eq 0 ]
@@ -165,11 +165,11 @@ PY
   [[ "$output" == *"S1 sin fuente alternativa"* ]]
 }
 
-@test "Q1 y Q3 deben seguir abiertas: Q3 borrada falla" {
-  mutate "$MS" "- **Q3.**" "- Q3 borrada."
+@test "Q3 debe constar resuelta: Q3 borrada falla" {
+  mutate "$MS" "- **Q3 (resuelta, 2026-11-13).**" "- Q3 borrada."
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"Q3 abierta"* ]]
+  [[ "$output" == *"Q3 resuelta"* ]]
 }
 
 @test "Q2 sin registro de la orquestadora (texto literal) falla" {
@@ -179,18 +179,41 @@ PY
   [[ "$output" == *"Q2 registrada"* ]]
 }
 
-@test "confirmación pendiente: spec que la marca respondida falla" {
-  mutate "$MS" "- respuesta sobre las escenas: pendiente." "- respuesta sobre las escenas: aprobada."
+@test "confirmación del prototipo pendiente: spec que la marca respondida falla" {
+  mutate "$MS" "- respuesta: pendiente. S1 no se pone en curso" "- respuesta: aprobada. S1 no se pone en curso"
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"confirmación pendiente"* ]]
+  [[ "$output" == *"confirmación del prototipo pendiente"* ]]
+}
+
+@test "confirmación de las escenas sin fecha falla" {
+  mutate "$MS" "- fecha: 2026-11-13
+- respuesta: «Confirmo" "- fecha: pendiente
+- respuesta: «Confirmo"
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"confirmación de las escenas sin fecha"* ]]
+}
+
+@test "confirmación de las escenas con respuesta vacía falla" {
+  mutate "$MS" "- respuesta: «Confirmo todo como está»." "- respuesta: «»."
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"sin respuesta literal"* ]]
+}
+
+@test "S0 sin la línea del prototipo falla" {
+  mutate "$MS" "- prototipo: " "- prototipado: "
+  run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"S0 con prototipo"* ]]
 }
 
 @test "Q1 borrada falla" {
-  mutate "$MS" "- **Q1.**" "- Q1 borrada."
+  mutate "$MS" "- **Q1 (resuelta, 2026-11-13).**" "- Q1 borrada."
   run python3 -I "$CHECK" "$MS" "$REPO_ROOT"
   [ "$status" -eq 1 ]
-  [[ "$output" == *"Q1 abierta"* ]]
+  [[ "$output" == *"Q1 resuelta"* ]]
 }
 
 @test "referencia con .. fuera de la raiz falla" {

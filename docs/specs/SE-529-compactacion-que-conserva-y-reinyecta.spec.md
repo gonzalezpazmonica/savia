@@ -1,5 +1,5 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P2
 developer_type: agent-single
 created: 2026-11-13
@@ -14,6 +14,10 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "worker de spec; encargo de la orquestadora"
+  - from: "2026-11-13"
+    learned: "2026-11-13"
+    value: "APPROVED"
+    source: "operadora, pregunta interactiva; escenas y decisiones 10-12 confirmadas «Confirmo todo como está»"
 ---
 
 # SE-529 — Compactación que conserva y reinyecta de verdad
@@ -44,9 +48,12 @@ Cuando una sesión se compacta, Savia debería guardar lo que importa antes y de
 
 ## Lo que he entendido
 
-### Escenas (antes y después, en llano)
+### Escenas
 
-1. **Compactación a media tarea.** *Antes:* llevas dos horas decidiendo con Savia cómo repartir un trabajo. Se compacta la sesión. Savia vuelve y te pregunta qué hacíais, o repite una pregunta que ya contestaste; o te muestra una lista de apuntes de otros proyectos cortados a mitad de frase. *Después:* tras compactar, Savia abre con un bloque corto: «Decidido en esta sesión: …», «Fijado en este proyecto: …». Solo de este proyecto, caben en media pantalla y están ordenados con lo fijado primero.
+Antes y después, en llano.
+
+
+1. **Compactación a media tarea.** *Antes:* llevas dos horas decidiendo con Savia cómo repartir un trabajo. Se compacta la sesión. Savia vuelve y te pregunta qué hacíais, o repite una pregunta que ya contestaste; o te muestra una lista de apuntes de otros proyectos cortados a mitad de frase. *Después:* tras compactar, Savia abre con un bloque corto, sin decoración y en tu idioma, con el texto confirmado de «Texto que verá la persona» (cabecera «Memoria tras compactar (proyecto: …)», línea «Fijado» y línea «Esta sesión»). Solo de este proyecto, cabe en media pantalla y lo fijado va primero. Si el almacén está vacío no se imprime nada (confirmado).
 2. **No se pudo leer la conversación.** *Antes:* el aviso dice «N elementos guardados» aunque no se haya leído nada. *Después:* si Savia no pudo abrir la conversación (fichero ausente, ilegible o fuera de la carpeta del frontend), lo dice una vez: «No he podido leer la conversación antes de compactar: <motivo>. Solo uso lo que ya estaba guardado.» Nunca afirma haber guardado lo que no guardó.
 3. **Compactar dos veces seguidas.** *Antes:* no se archiva nada y no hay ni duplicado ni resumen. *Después:* el resumen de la sesión se guarda una sola vez; la segunda compactación con el mismo resumen no crea otra entrada.
 4. **Otro proyecto en el mismo almacén.** *Antes:* apuntes de un proyecto aparecen en la sesión de otro. *Después:* nunca cruzan.
@@ -72,11 +79,18 @@ Cuando una sesión se compacta, Savia debería guardar lo que importa antes y de
 
 ### Confirmación
 
+- fecha: 2026-11-13
+- respuesta: «Confirmo todo como está». Respuesta de la operadora, por pregunta interactiva, a las escenas y a las decisiones 10 a 12 de esta spec (Q1, Q3 y el texto del bloque de «Memoria tras compactar»), con la opción recomendada en todas. Registro de la orquestadora.
 - Q2 (2026-11-13, pregunta interactiva; registro de la orquestadora, no texto literal): la operadora acepta que, si OpenCode no entrega la conversación, el aviso explícito basta como paridad, por honesto: no se inventa nada y Claude Code guarda el resumen completo.
-- escenas: pendiente
-- respuesta sobre las escenas: pendiente. Las escenas no se han enseñado todavía a la operadora; se le preguntarán antes de pedir la aprobación (SE-505). No hay confirmación que citar.
 
 ## Slice S0 — Medición y prototipo (primero, sin cambiar comportamiento)
+
+- prototipo: la lista de escenas anterior y el texto de los avisos de S1/S2 («Texto que verá la persona»), tal como los confirmó la operadora el 2026-11-13. No hay pantalla ni ejecutable aparte; la medición de S0 no cambia nada de lo que ve la persona.
+
+### Confirmación del prototipo
+
+- fecha: pendiente
+- respuesta: pendiente. S1 no se pone en curso sin ella (SE-505). La confirmación del 2026-11-13 de arriba cubre las escenas y el texto de los avisos; la del prototipo se pide a la persona tras ver el aviso funcionando con datos reales, una vez medido en S0 qué llega al modelo.
 
 El prototipo de esta spec es la lista de escenas anterior y el texto de los avisos de S1/S2 (ver «Texto que verá la persona»). S0 es la medición; su salida es `docs/evidence/SE-529-S0-forma-y-linea-base.md` más los fixtures de S3. Nada del contenido de una conversación entra en el repo.
 
@@ -177,9 +191,12 @@ Si no pudo leer la conversación: `No he podido leer la conversación antes de c
 
 ## Preguntas abiertas para la operadora
 
-- **Q1.** ¿Qué es «fijada»? Hoy el almacén no tiene campo de fijado; la opción por defecto es `importance_tier` A. Si S0.4 la muestra demasiado amplia, hay que elegir entre un campo explícito nuevo (cambia el esquema, contradice «no cambia el esquema») o un umbral más estricto.
+Cerradas por la operadora el 2026-11-13 (pregunta interactiva, «Confirmo todo como está»), con la opción recomendada. Registro de la orquestadora.
+
+- **Q1 (resuelta, 2026-11-13).** «Fijada» es `importance_tier` A mientras S0.4 muestre que A es ≤ 30 % del almacén; si no, se usa un umbral más estricto en lugar de un campo nuevo, para no tocar el esquema del almacén. Descartada la alternativa de un campo explícito nuevo.
 - **Q2 (resuelta, 2026-11-13).** Si OpenCode no entrega la conversación, el aviso explícito basta como paridad; no se exige fuente alternativa para aprobar S1. Registro de la orquestadora a partir de la respuesta interactiva de la operadora.
-- **Q3.** Si S0.2 dice que `PostCompact` no llega al modelo, ¿apruebas la PR de `settings.json` (tier 4) para pasar la reinyección a `SessionStart` origen `compact`?
+- **Q3 (resuelta, 2026-11-13).** Si S0.2 demuestra que `PostCompact` no llega al modelo, se aprueba la PR de `settings.json` (tier 4) para pasar la reinyección a `SessionStart` origen `compact`. Solo si la medición lo demuestra: si llega, no se toca nada. Esa PR es aparte, tier 4, con revisión humana y sin fusión en lote.
+- **Texto del bloque «Memoria tras compactar» (resuelta, 2026-11-13).** Tal cual figura en «Texto que verá la persona».
 
 ## Riesgos
 
@@ -214,4 +231,4 @@ Si no pudo leer la conversación: `No he podido leer la conversación antes de c
 
 ## Aprobación
 
-Pendiente. En PROPOSED hasta que la operadora confirme las escenas y responda Q1 y Q3 (Q2 resuelta). Ningún slice empieza sin su aprobación; S0 puede aprobarse sola (no cambia comportamiento).
+**Aprobada por la operadora el 2026-11-13** por pregunta interactiva («Confirmo todo como está»), con las escenas y las decisiones 10 a 12. Falta la confirmación del prototipo (S0): S1 no se pone en curso sin ella (SE-505). S0 no cambia comportamiento. Se formaliza al fusionar (SE-488).

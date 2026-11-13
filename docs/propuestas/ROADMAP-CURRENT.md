@@ -219,3 +219,4 @@ Integrada en main no significa graduada; delivery no sustituye completion y revi
 - SE-515 [APPROVED] Aprendizaje aplicado: de la lección recuperada a la obligación comprobada — evidencia: docs/specs/SE-515-aprendizaje-aplicado-obligacion-comprobada.spec.md
 - SE-517 [APPROVED] Motor de Space con suscripción ChatGPT (OAuth) — evidencia: docs/specs/SE-517-space-motor-suscripcion-chatgpt-oauth.spec.md
 - SE-518 [APPROVED] Pulse: el latido de la planta de trabajo — evidencia: docs/specs/SE-518-pulse-latido.spec.md
+- SE-529 [APPROVED] Compactación que conserva y reinyecta de verdad — evidencia: docs/specs/SE-529-compactacion-que-conserva-y-reinyecta.spec.md
