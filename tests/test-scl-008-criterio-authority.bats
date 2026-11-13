@@ -219,10 +219,15 @@ assert (d['effective_hits'], d['shadow_hits'], d['rejected_hits']) == ([], 0, 0)
   [ -z "$output" ]
 }
 
-@test "buscador que devuelve basura → resultado vacío con exit 0 (degradación)" {
+@test "buscador que devuelve basura → resultado vacío; exit 4 (error, SE-515 S1) y exit 0 con el interruptor off" {
   reset_vault
   printf '#!/usr/bin/env bash\necho "no es json"\n' > "$SCL_VAULT_CLI"
+  # SE-515 S1 (refutación Codex PR #1523): basura del buscador es un error distinguible de «sin aciertos».
   run recall_json
+  [ "$status" -eq 4 ]
+  echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 0, d"
+  # AC-16: con SAVIA_LEARNING_APPLIED=off, la degradación anterior intacta (exit 0, vacío).
+  SAVIA_LEARNING_APPLIED=off run recall_json
   [ "$status" -eq 0 ]
   echo "$output" | jq_py "assert d['effective_hits'] == [] and d['rejected_hits'] == 0, d"
 }

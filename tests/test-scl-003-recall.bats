@@ -58,7 +58,7 @@ teardown() {
   echo "$output" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['effective_hits'] == []; assert d['shadow_hits'] >= 1"
 }
 
-@test "AC-2: recall sin contexto relacionado no produce ruido (exit 0, 0 hits)" {
+@test "AC-2 zero hits: recall sin contexto relacionado no produce ruido (exit 0)" {
   run bash "$RECALL" --query "receta de paella valenciana" --top 3
   [ "$status" -eq 0 ]
   [[ "$output" != *"LP-"* ]]
@@ -127,7 +127,7 @@ activate_proposal() {
   echo "$output" | grep -q "Usage: learning-recall.sh"
 }
 
-@test "CLI: --top fuera de 1..20 → exit 2 (fronteras 0 y 21), 1 y 20 válidos" {
+@test "CLI boundary: --top fuera de 1..20 → exit 2 (0 y 21), 1 y 20 válidos" {
   run bash "$RECALL" --query x --top 0;  [ "$status" -eq 2 ]
   run bash "$RECALL" --query x --top 21; [ "$status" -eq 2 ]
   run bash "$RECALL" --query x --top abc; [ "$status" -eq 2 ]
@@ -173,6 +173,17 @@ a, b = (json.loads(l) for l in open(sys.argv[1]))
 assert (a['mode'], b['mode']) == ('shadow', 'effective'), (a, b)
 assert a['query_hash'] != b['query_hash'] and len(a['query_hash']) == 64
 assert re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', a['ts'])
+# SE-515 S1: la fila añade los criterios devueltos y el resultado de la consulta
+assert set(a) == {'ts','query_hash','mode','effective_hits','shadow_hits','rejected_hits','proposal_ids','returned_criteria','outcome'}, a
+assert a['outcome'] == 'ok' and a['returned_criteria'] == [], a
+PY
+}
+
+@test "log: con SAVIA_LEARNING_APPLIED=off la fila conserva el formato anterior (SE-515 AC-16)" {
+  SAVIA_LEARNING_APPLIED=off bash "$RECALL" --query "hook captura diagnostico" --mode shadow >/dev/null
+  python3 - "$TMPD/recall.jsonl" <<'PY'
+import json, sys
+(a,) = (json.loads(l) for l in open(sys.argv[1]))
 assert set(a) == {'ts','query_hash','mode','effective_hits','shadow_hits','rejected_hits','proposal_ids'}, a
 PY
 }
@@ -196,7 +207,7 @@ d = json.load(sys.stdin)
 assert d['query'] == 'hook captura diagnostico' and 'proposal_ids' not in d, d"
 }
 
-@test "log directory inexistente se crea (recall-log en ruta nueva)" {
+@test "log directory nonexistent: se crea (recall-log en ruta nueva)" {
   run bash "$RECALL" --query "algo" --recall-log "$TMPD/nuevo/dir/r.jsonl"
   [ "$status" -eq 0 ]
   [ -s "$TMPD/nuevo/dir/r.jsonl" ]
