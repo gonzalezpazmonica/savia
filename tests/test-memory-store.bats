@@ -196,6 +196,62 @@ field() { # field N CAMPO → valor del campo en la línea N del store
   if grep -q "secreto-123" "$(store)"; then false; fi
 }
 
+# --- Redacción de <private> multilínea y fail-closed (fix) ---
+redact() { # redact TEXTO → salida de redact_private con el texto tal cual (sin \n final añadido)
+  run bash -c 'source "$SCRIPT"; printf "%s" "$1" | redact_private' _ "$1"
+}
+
+@test "privacidad: bloque <private> multilínea se redacta entero" {
+  redact $'antes <private>linea-secreta-1\nlinea-secreta-2\nlinea-secreta-3</private> despues'
+  [ "$status" -eq 0 ]
+  [ "$output" = "antes [REDACTED] despues" ]
+}
+
+@test "privacidad: dos bloques en la misma entrada no se comen el texto intermedio (no codicioso)" {
+  redact $'a <private>s1</private> VISIBLE-MEDIO <private>s2\nlinea2</private> z'
+  [ "$output" = "a [REDACTED] VISIBLE-MEDIO [REDACTED] z" ]
+}
+
+@test "privacidad: <private> sin cierre redacta hasta el final (fail-closed)" {
+  redact $'publico <private>secreto sin cierre\nsegunda linea secreta'
+  [ "$output" = "publico [REDACTED]" ]
+  [[ "$output" != *secreto* ]]
+}
+
+@test "privacidad: bloques anidados no filtran el resto tras el primer cierre" {
+  redact 'x <private>a <private>b</private> RESTO-SECRETO</private> y'
+  [ "$output" = "x [REDACTED] y" ]
+  [[ "$output" != *RESTO-SECRETO* ]]
+}
+
+@test "privacidad: etiqueta en mayúsculas también se redacta" {
+  redact 'x <PRIVATE>clave</Private> y'
+  [ "$output" = "x [REDACTED] y" ]
+}
+
+@test "privacidad: </private> suelto sin apertura se conserva y no redacta nada" {
+  redact 'texto </private> mas texto'
+  [ "$output" = "texto </private> mas texto" ]
+}
+
+@test "privacidad: entrada sin bloques queda intacta (saltos de línea incluidos)" {
+  redact $'linea1\nlinea2 <b>html</b>\n'
+  [ "$output" = $'linea1\nlinea2 <b>html</b>' ]
+  printf 'a\nb\n' > "$TMPDIR_MS/in.txt"
+  export TMPDIR_MS
+  run bash -c 'source "$SCRIPT"; redact_private < "$TMPDIR_MS/in.txt" | cmp - "$TMPDIR_MS/in.txt"'
+  [ "$status" -eq 0 ]
+}
+
+@test "privacidad: lo guardado en disco no contiene el texto privado multilínea ni sin cierre" {
+  sv --type decision --title "PrivML" --content $'pub <private>PRIV-AAA\nPRIV-BBB</private> fin' >/dev/null
+  sv --type decision --title "PrivOpen" --content $'pub <private>PRIV-CCC\nPRIV-DDD' >/dev/null
+  grep -q "REDACTED" "$(store)"
+  [ "$(wc -l < "$(store)")" -eq 2 ]
+  if grep -qE "PRIV-(AAA|BBB|CCC|DDD)" "$(store)"; then false; fi
+  grep -q "pub " "$(store)"
+}
+
 @test "contenido: se trunca a 2000 caracteres (borde de tamaño)" {
   big=$(python3 -c "print('x' * 5000)")
   sv --type decision --title "Grande" --content "$big" >/dev/null
