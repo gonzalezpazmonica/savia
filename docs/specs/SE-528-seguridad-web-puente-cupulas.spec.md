@@ -159,6 +159,12 @@ Reversión: revertir la PR. Efecto en operación: un fichero de clave corrupto y
 
 Tier 3: revisión humana explícita de cada PR (SE-362).
 
+## Ficheros de esta spec
+
+- Prueba de coherencia: `tests/bats/se528-spec-coherence.bats`.
+- Registro: `docs/propuestas/planning.d/SE-528.json` y `docs/propuestas/LOG.d/SE-528-PROPOSED.md`.
+- Fragmento de changelog: `CHANGELOG.d/se528-spec-seguridad.md`.
+
 ## Aprobación
 
 Pendiente. La operadora decide Q1-Q3 y aprueba la spec; no se implementa nada antes.
