@@ -39,8 +39,8 @@ def parse_done(path):
     m = re.search(r"^ESTADO:\s*(OK|PARCIAL|FALLO)\b", txt, re.M)
     if not m:
         return None, None, "marca sin línea ESTADO: válida"
-    pr = re.search(r"/pull/(\d+)", txt)
-    return m.group(1), (int(pr.group(1)) if pr else None), None
+    pr = re.search(r"github\.com/[^/\s]+/([^/\s]+)/pull/(\d+)", txt) or re.search(r"()/pull/(\d+)", txt)
+    return m.group(1), ((int(pr.group(2)), pr.group(1)) if pr else (None, "")), None
 
 
 def load_jsonl(path, anomalias):
@@ -105,9 +105,12 @@ class Evidencia:
         return head, recs
 
 
-def evaluar(estado, pr, job, ev, orch):
+def evaluar(estado, prr, job, ev, orch, repo=None):
     """Deriva (estado_hv, motivo, clases_vistas, anomalias, propia_falla)."""
     anom = list(ev.anom)
+    pr, repo_pr = prr
+    if repo and pr is not None and repo_pr != repo:  # los números de PR de otro repo no son los nuestros
+        return "declarado", "PR de otro repositorio (%s): sin evidencia comparable" % (repo_pr or "desconocido"), set(), anom, False
     head, recs = ev.para(pr, job)
     if estado != "OK":
         return "declarado", "el trabajador no declara OK (ESTADO: %s)" % estado, set(), anom, False
@@ -170,7 +173,7 @@ def cmd_classify(a):
         print("declarado: %s" % err)
         return 2
     ev = Evidencia(a.evidence, a.reviews)
-    st, motivo, vistas, anom, _ = evaluar(estado, pr, job_de(a.done), ev, orch_ids(a.orchestrator))
+    st, motivo, vistas, anom, _ = evaluar(estado, pr, job_de(a.done), ev, orch_ids(a.orchestrator), a.repo)
     print("%s: %s" % (st, motivo))
     for c in sorted(vistas):
         print("clase=%s" % c)
@@ -215,7 +218,7 @@ def cmd_measure(a):
             no_ok += 1
             continue
         n_ok += 1
-        st, _, vistas, _, _ = evaluar(estado, pr, job_de(p), ev, orch)
+        st, _, vistas, _, _ = evaluar(estado, pr, job_de(p), ev, orch, a.repo)
         por_estado[st] += 1
         for c in vistas:
             por_clase[c] = por_clase.get(c, 0) + 1
@@ -243,6 +246,7 @@ def main(argv=None):
         s.add_argument("--evidence", action="append", default=[])
         s.add_argument("--reviews", action="append", default=[])
         s.add_argument("--orchestrator")
+        s.add_argument("--repo", help="solo las PR de este repositorio tienen evidencia; el resto, declarado")
         if name == "classify":
             s.add_argument("done")
         else:

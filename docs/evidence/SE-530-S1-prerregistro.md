@@ -48,4 +48,8 @@ Una comprobación es independiente si cumple las tres: (1) el verificador no es 
 
 ## Desviaciones
 
-(vacío; solo se escribe aquí después de la primera medición)
+Escritas después de la primera medición; las definiciones y el umbral de arriba no cambian.
+
+1. **Ejecución de prueba sin evidencia.** Antes de la medición definitiva se ejecutó `measure` sin ficheros de evidencia para ver el n (244 OK en la ventana). No se leyó ninguna cifra de H9 de esa ejecución, que da 100 % `declarado` por construcción.
+2. **Opción `--repo`.** Los números de PR de otros repositorios (labs, space) colisionan con los de este. Se añadió `--repo` para que solo las PR del repositorio reciban evidencia y se midió con ella. No cambia ninguna definición de clase ni el umbral; evita falsos `verificado` por coincidencia de número.
+3. **Marca de ventana.** La ventana usa la fecha de modificación de la marca de fin, que es lo que hay; una marca reescrita cambia de fecha.

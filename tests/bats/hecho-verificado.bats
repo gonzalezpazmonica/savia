@@ -304,3 +304,17 @@ msr() { python3 "$HV" measure --done-dir "$T/runs" --evidence "$EV" --until 2099
   grep -qiE 'no usa.*terminado' "$R"
   [ "$(wc -l < "$R")" -le 150 ]
 }
+
+@test "--repo: una PR de otro repositorio con el mismo numero no hereda evidencia" {
+  mkdir -p "$T/runs/x"
+  printf 'ESTADO: OK — https://github.com/org/otro/pull/10\n' > "$T/runs/x/done"
+  head_rec 10 $S1
+  chk 10 $S1 revision revisora-a trabajador superada
+  run cls x
+  [[ "${lines[0]}" == verificado:* ]]
+  run cls x --repo propio
+  [[ "${lines[0]}" == declarado:*"otro repositorio (otro)"* ]]
+  printf 'ESTADO: OK — https://github.com/org/propio/pull/10\n' > "$T/runs/x/done"
+  run cls x --repo propio
+  [[ "${lines[0]}" == verificado:* ]]
+}
