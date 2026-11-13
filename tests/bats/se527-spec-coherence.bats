@@ -12,6 +12,8 @@ STATE="$REPO_ROOT/docs/propuestas/planning.d/SE-527.json"
 check() {  # check <fichero>: devuelve 0 si la spec es coherente
   local f="$1"
   grep -q '^status: APPROVED$' "$f" || { echo "status != APPROVED"; return 1; }
+  grep -q '^approved_at: 2026-11-13$' "$f" || { echo "falta approved_at"; return 1; }
+  grep -qE '^    value: "APPROVED"$' "$f" || { echo "falta timeline APPROVED"; return 1; }
   grep -q '^human_surface: false$' "$f" || { echo "human_surface"; return 1; }
   for n in 1 2 3 4; do
     grep -q "^### S$n — " "$f" || { echo "falta slice S$n"; return 1; }
@@ -49,6 +51,7 @@ import json,os,sys
 d=json.load(open(sys.argv[1]))
 assert d['id']=='SE-527' and d['status']=='APPROVED', d
 assert '14 de 90' in d['title'], d['title']
+assert d.get('approval','').strip(), 'falta approval'
 assert os.path.exists(os.path.join(sys.argv[2], d['evidence'])), d['evidence']
 " "$1" "$REPO_ROOT"
 }
@@ -113,6 +116,30 @@ PY2
   run check "$M"
   [ "$status" -ne 0 ]
   [[ "$output" == *"falta aviso de contexto"* ]]
+}
+
+@test "negativo: sin approved_at falla" {
+  mutate 'approved_at: 2026-11-13' 'x_removed: 1'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta approved_at"* ]]
+}
+
+@test "negativo: sin entrada APPROVED en timeline falla" {
+  mutate '    value: "APPROVED"' '    value: "OTRO"'
+  run check "$M"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta timeline APPROVED"* ]]
+}
+
+@test "negativo: planning sin approval falla" {
+  python3 -I -c "
+import json,sys
+d=json.load(open(sys.argv[1])); d.pop('approval',None)
+json.dump(d,open(sys.argv[2],'w'))" "$STATE" "$BATS_TEST_TMPDIR/s.json"
+  run check_planning "$BATS_TEST_TMPDIR/s.json"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"falta approval"* ]]
 }
 
 @test "planning: SE-527 APPROVED apunta a la spec existente" {
