@@ -249,6 +249,25 @@ PY3
   neg "falta reversión"
 }
 
+@test "edge: boundary de slices, con cinco en vez de seis falla" {
+  python3 -I - "$M" <<'PY5'
+import sys
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+assert "### S5 — " in s
+open(p,"w",encoding="utf-8").write(s.replace("### S5 — ","### Sección — ",1))
+PY5
+  neg "orden o número de slices"
+}
+
+@test "edge: zero reversiones (ninguna) falla" {
+  python3 -I - "$M" <<'PY6'
+import sys
+p=sys.argv[1]; s=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(s.replace("- **Reversión.**","- **Vuelta atrás.**"))
+PY6
+  neg "falta reversión"
+}
+
 @test "negativo: una referencia a un dato privado falla" {
   printf '\nVer %s\n' "$(printf '%s/%s' 'inten''sivo' 'x')" >> "$M"
   neg "dato privado"
@@ -289,12 +308,12 @@ json.dump(d,open(sys.argv[2],'w'))
   [ "$status" -ne 0 ]
 }
 
-@test "edge: spec vacía falla" {
+@test "edge: empty spec (vacía) falla" {
   : > "$M"
   neg "spec vacía"
 }
 
-@test "edge: spec inexistente falla" {
+@test "edge: nonexistent spec (inexistente) falla" {
   run check "$BATS_TEST_TMPDIR/no-existe.md"
   [ "$status" -ne 0 ]
 }
