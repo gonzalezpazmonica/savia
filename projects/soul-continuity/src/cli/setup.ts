@@ -167,11 +167,18 @@ export async function runSetup(deps: CliDeps, sub: (argv: string[]) => Promise<n
 
   // 5. Emparejar el móvil
   say("5/5 Emparejar el móvil");
-  if (!yes(await ask("¿Emparejas el móvil ahora? Ten la app Savia Space abierta [S/n]: "))) {
-    say("Cuando quieras: soul pair. Siguiente paso después: conectar tus fuentes (docs/instalar.md, paso 3).");
-    return 0;
-  }
-  const code = await sub(["pair"]);
-  if (code === 0) say("Hecho. Siguiente paso: conectar tus fuentes (docs/instalar.md, paso 3).");
+  let code = 0;
+  if (yes(await ask("¿Emparejas el móvil ahora? Ten la app Savia Space abierta [S/n]: "))) {
+    code = await sub(["pair"]);
+    if (code !== 0) return code;
+  } else say("Cuando quieras: soul pair.");
+
+  // Conectar una fuente: lo mismo que `soul source add` (declaración y «s» incluidas). Intro no añade nada.
+  const fuente = (await ask("¿Quieres conectar una fuente ahora? (github, jira, azure-devops… / Intro para no): ")).trim().toLowerCase();
+  if (fuente) {
+    if (/^[a-z0-9][a-z0-9-]{0,40}$/.test(fuente)) await sub(["source", "add", fuente]);
+    else deps.err("Escribe solo el nombre de la fuente (por ejemplo github) o Intro para no. Más tarde: soul source add <fuente>");
+  } else say("Cuando quieras: soul source add <fuente> (github, jira, azure-devops, m365-mail…).");
+  say("Hecho. Siguiente paso: iniciar sesión en tus fuentes (docs/instalar.md, paso 4).");
   return code;
 }
