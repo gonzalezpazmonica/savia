@@ -31,14 +31,22 @@ soul setup           # perfil, VPN, comprobaciones, servicio de tu usuario y emp
 
 ## 1. Obtener Soul
 
-Copia la carpeta `projects/soul-continuity/` del repositorio en tu equipo, por ejemplo en `~/soul-continuity`. Desde ahí:
+**Sin git (lo normal en un Mac, donde git pide instalar herramientas de desarrollo):**
+
+1. En la página del repositorio de Savia pulsa **Code → Download ZIP**.
+2. Descomprime el ZIP (doble clic en el archivo descargado).
+3. Dentro, mueve la carpeta `projects/soul-continuity` a tu carpeta personal, por ejemplo como `~/soul-continuity`.
+
+Con git, si ya lo tienes: clona el repositorio y copia `projects/soul-continuity/` a `~/soul-continuity`.
+
+Desde la carpeta `~/soul-continuity`, en una terminal:
 
 ```bash
 bash install.sh
 soul help
 ```
 
-`install.sh` crea `~/.local/bin/soul` y te avisa si esa carpeta no está en tu `PATH`. No pisa una orden `soul` que no sea suya. Con `--download` baja el Node oficial aunque el tuyo ya sirva; `SOUL_NODE_MIRROR` apunta a un espejo de nodejs.org de tu organización. En Windows, crea un `.cmd` con `node %USERPROFILE%\soul-continuity\bin\soul.mjs %*`.
+`install.sh` crea `~/.local/bin/soul`. Si esa carpeta no está en tu `PATH`, te pregunta `[s/N]` si añade la línea `export PATH="$HOME/.local/bin:$PATH"` al fichero de arranque de tu shell (`~/.zshrc` en macOS, `~/.bashrc` si usas bash). Solo escribe si contestas «s» y hay una terminal delante; no la duplica si ya está. Con cualquier otra respuesta, sin terminal o con otro shell, solo te dice qué línea añadir. Después abre una terminal nueva. No pisa una orden `soul` que no sea suya. Con `--download` baja el Node oficial aunque el tuyo ya sirva; `SOUL_NODE_MIRROR` apunta a un espejo de nodejs.org de tu organización. En Windows, crea un `.cmd` con `node %USERPROFILE%\soul-continuity\bin\soul.mjs %*`.
 
 No hace falta `npm install` para usar la CLI ni la API, porque no tienen dependencias de ejecución. Solo el adaptador `web` necesita `playwright-core`, sin descargar navegadores:
 
