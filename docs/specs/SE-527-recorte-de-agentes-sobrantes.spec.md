@@ -1,8 +1,9 @@
 ---
-status: PROPOSED
+status: APPROVED
 priority: P3
 developer_type: agent-single
 created: 2026-11-13
+approved_at: 2026-11-13
 author: Savia
 phase: A
 risk: L4
@@ -18,6 +19,10 @@ timeline:
     learned: "2026-11-13"
     value: "PROPOSED"
     source: "Q1-Q3 respondidas y S5 retirada por la operadora (preguntas interactivas, registro de la orquestadora); el paso a APPROVED lo hace la orquestadora cuando la operadora lo confirme en esta PR"
+  - from: "2026-11-13"
+    learned: "2026-11-13"
+    value: "APPROVED"
+    source: "operadora: pregunta interactiva 2026-11-13 hacia las 21:30 («Todas aprobadas con este mensaje»); registro de la orquestadora, no texto literal; se formaliza al fusionar la PR"
 ---
 
 # SE-527 — Recorte de agentes sobrantes (14 de 90, en cuatro slices)
@@ -208,4 +213,4 @@ Registro de la orquestadora de las respuestas a preguntas interactivas; no es te
 
 ## Aprobación
 
-**Pendiente de la operadora.** Q1–Q3 y la retirada de S5 se respondieron en preguntas interactivas el 2026-11-13 (registro de la orquestadora, sin enlace verificable desde la PR). El estado pasa a APPROVED solo cuando la operadora lo confirme en esta PR con un comentario; hasta entonces la spec es PROPOSED y no desbloquea ningún slice. Cada slice se fusiona con revisión humana de su PR (tier 4).
+**Aprobada por la operadora** el 2026-11-13 por pregunta interactiva hacia las 21:30 («Todas aprobadas con este mensaje»; registro de la orquestadora, no texto literal). Q1–Q3 y la retirada de S5 se respondieron antes, también por pregunta interactiva el mismo día. Se formaliza al fusionar la PR. Cada slice se fusiona con revisión humana de su PR (tier 4).

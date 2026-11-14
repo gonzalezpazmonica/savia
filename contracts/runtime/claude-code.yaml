@@ -1,0 +1,11 @@
+# SE-531 S1 — ficha de runtime. Todo dato sin medir es no_medido (lectura desconfiada, D1).
+ficha: claude-code
+runtime:
+  aislamiento: no_medido
+  rc_en_error: no_medido
+  senal_cuota: no_medido
+  informa_uso: no_medido
+  reanudacion: no_medido
+  limpieza: no_medido
+  flujo_llamadas: no_medido
+  notas: "Sin medir en esta ficha. Existe la salida stream-json en la CLI, pero no se ha comprobado que emita las llamadas a herramientas."
