@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Lanzador de la CLI de Pulse (Python >= 3.9 estándar, sin dependencias).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 -I -c 'import sys; sys.path.insert(0, sys.argv.pop(1)); from pulse.cli import main; sys.exit(main())' "$here" "$@"
