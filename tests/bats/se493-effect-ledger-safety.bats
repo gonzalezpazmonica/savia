@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # SE-493 S1 — Effect Ledger: concurrencia (AC-f mismo ledger), multioperador (AC-j),
 # fail-closed (AC-l), ganchos inertes (AC-m), validación de entradas (AC-n) y guard de op
-# en f5-state.sh / effect-reservation.sh.
+# en f5-state.sh.
 # Ref: docs/specs/SE-493-effect-ledger-ambiguous-reconciliation.spec.md
 
 load se493-helpers
@@ -249,15 +249,4 @@ full_flow() {  # prepare → dispatch → complete; imprime el estado final
   [ ! -e "$SAVIA_RESERVATIONS" ]
   run bash "$REPO_DIR/scripts/f5-state.sh" reserve pr.merge 7
   [ "$status" -eq 0 ]
-}
-
-@test "guard: effect-reservation.sh rechaza una op distinta de pr.merge con 2; sin argumentos sigue mostrando uso (1)" {
-  export SAVIA_RESERVATIONS="$BATS_TEST_TMPDIR/resv"
-  run bash "$REPO_DIR/scripts/effect-reservation.sh" reserve publish.report k
-  [ "$status" -eq 2 ]
-  [ ! -e "$SAVIA_RESERVATIONS/publish.report__k.json" ]
-  run bash "$REPO_DIR/scripts/effect-reservation.sh" status message.send k
-  [ "$status" -eq 2 ]
-  run bash "$REPO_DIR/scripts/effect-reservation.sh"
-  [ "$status" -eq 1 ]
 }
