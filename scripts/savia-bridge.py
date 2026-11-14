@@ -54,6 +54,11 @@ Authentication (SE-528 S2):
     (?token=, ?access_token=, ...) responde 401 sin transición. Con cookie, las
     escrituras exigen Origin de la lista (--allowed-origin). Host contra
     --allowed-host. --no-auth solo en bucle local. Sin TLS no hay cookie.
+    La cookie (SameSite=Strict) solo se emite si el Origin del login es https
+    y del mismo host que el puente; entre sitios distintos la web usa el token
+    en memoria. Con sesión por cookie, fija --allowed-origin: sin lista, otra
+    página del mismo host (otro puerto) también sería un origen admitido.
+    GET /logs?type=server exige rol admin; el log nunca lleva el token completo.
 
 Configuration Files (created automatically):
     ~/.savia/bridge/bridge.log              General server logs
@@ -2038,7 +2043,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
 
     # SE-528 S2 — configuración de autenticación (la fija main()).
     open_mode = False
-    tls_enabled = True
+    tls_enabled = False  # main() lo fija; por defecto nunca se emite cookie Secure
     sessions = bridge_auth.SessionStore()
     allowed_hosts: frozenset = frozenset(bridge_auth.LOOPBACK_HOSTS)
     allow_local_ip_hosts = True
@@ -2054,7 +2059,9 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
         """Origin permitido, reconstruido (nunca el texto del cliente)."""
         origin = self.headers.get("Origin")
         if not self.open_mode and not self.allowed_origins:
-            return _allowed_cors_origin(origin or "")
+            # Política por defecto: bucle local (incluido ::1), red local y lima.
+            return _allowed_cors_origin(origin or "") or bridge_auth.origin_allowed(
+                origin, frozenset(), False)
         return bridge_auth.origin_allowed(origin, self.allowed_origins, self.open_mode)
 
     def _gate(self) -> bool:
@@ -2112,7 +2119,7 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             return False, 429, "rate_limited"
 
         header = self.headers.get("Authorization")
-        if header:
+        if header is not None:  # presente aunque vacía: nunca cae a la cookie
             token = bridge_auth.bearer_from_header(header)
             principal = self._principal_for_token(token) if token else None
             if principal is None:
@@ -2168,10 +2175,16 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             self._auth_logout()
             return True
         if path == "/auth/session" and self.command == "GET":
+            key = self._client_key()
+            if not _check_auth_rate_limit(key):
+                self._send_json({"error": "Too many failed authentication attempts"}, 429)
+                return True
             sid = bridge_auth.session_from_cookie_header(self.headers.get("Cookie"))
             if self.sessions.lookup(sid) is not None:
                 self._send_json({"authenticated": True})
             else:
+                if sid is not None:  # cookie presentada e inválida: cuenta
+                    _record_auth_failure(key)
                 self._send_json({"authenticated": False}, 401)
             return True
         return False
@@ -2192,17 +2205,29 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "Too many failed authentication attempts"}, 429)
             return
         token = bridge_auth.bearer_from_header(self.headers.get("Authorization"))
+        # Generación tomada ANTES de validar: una revocación en medio la cambia.
+        user_slug = _validate_user_token(token) if token else None
+        gen = self.sessions.generation(("user", user_slug)) if user_slug else None
         principal = self._principal_for_token(token) if token else None
         if principal is None:
             _record_auth_failure(key)
             self._send_json({"error": "Unauthorized", "reason": "invalid_credentials"}, 401)
             return
         role = _get_user_role(principal[1])
-        if not self.tls_enabled:
-            # Sin TLS no hay sesión por cookie: solo vale la cabecera.
+        origin = self.headers.get("Origin")
+        if not self.tls_enabled or (
+                origin and not bridge_auth.same_site_https(origin, self.headers.get("Host"))):
+            # Sin TLS, o web en otro sitio (SameSite=Strict no viajaría): no hay
+            # sesión por cookie, solo vale la cabecera con el token en memoria.
             self._send_json({"status": "ok", "session": "none", "role": role})
             return
-        sid = self.sessions.create(principal)
+        if principal[0] == "user" and gen is None:
+            gen = -1  # validado como persona sin generación previa: imposible
+        sid = self.sessions.create(principal, gen)
+        if sid is None:
+            log(f"Login raced with revocation for '{principal[1]}'", "SECURITY")
+            self._send_json({"error": "Unauthorized", "reason": "invalid_credentials"}, 401)
+            return
         self._send_json({"status": "ok", "session": "cookie", "role": role,
                          "expires_in": self.sessions.ttl},
                         extra_headers=[("Set-Cookie", bridge_auth.session_cookie(sid, self.sessions.ttl))])
@@ -2308,6 +2333,9 @@ class SaviaBridgeHandler(http.server.BaseHTTPRequestHandler):
             params = parse_qs(parsed.query)
             n = int(params.get("n", ["100"])[0])
             log_type = params.get("type", ["chat"])[0]
+            if log_type != "chat" and _get_user_role(self._auth_user) != "admin":
+                self._send_json({"error": "Admin access required"}, 403)
+                return
             target = CHAT_LOG_FILE if log_type == "chat" else LOG_FILE
             lines = []
             if target.exists():
@@ -3887,7 +3915,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"Port (default: {DEFAULT_PORT})")
     parser.add_argument("--host", type=str, default=DEFAULT_HOST, help=f"Host (default: {DEFAULT_HOST})")
     parser.add_argument("--auth-token", type=str, help="Auth token (auto-generated if not set)")
-    parser.add_argument("--no-auth", action="store_true", help="Disable authentication (not recommended)")
+    parser.add_argument("--no-auth", action="store_true", help="Sin autenticación (desaconsejado). Exige --host de bucle local "
+                             "(127.0.0.1, ::1 o localhost); con el host por defecto sale con código 2")
     parser.add_argument("--no-tls", action="store_true", help="Disable TLS (not recommended)")
     parser.add_argument("--system-prompt", type=str, help="Default system prompt")
     parser.add_argument("--cli-adapter", choices=("claude", "codex", "opencode"),
@@ -3907,6 +3936,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
                         help="IP de un proxy inverso de confianza: solo entonces se usa "
                              "X-Forwarded-For para el límite de intentos (repetible)")
     return parser
+
+
+def _token_hint(token: str) -> str:
+    """Prefijo reconocible del token, sin revelarlo (SE-528)."""
+    return f"{token[:4]}…" if token and len(token) > 8 else "…"
 
 
 def plan_listen_address(host: str, open_mode: bool) -> str:
@@ -3955,7 +3989,7 @@ def main():
         --port PORT              HTTPS port (default: 8922)
         --host HOST              Bind address (default: 0.0.0.0)
         --auth-token TOKEN       Bearer token (auto-generated if not provided)
-        --no-auth                Disable authentication (not recommended)
+        --no-auth                Sin autenticación; exige --host de bucle local (sale con 2 si no)
         --no-tls                 Run over HTTP instead of HTTPS (not recommended)
         --system-prompt PROMPT   Default system prompt for messages
         --cli-adapter NAME       Explicit CLI adapter; default: claude
@@ -3994,7 +4028,7 @@ def main():
         python3 savia-bridge.py                              # Default: HTTPS on 0.0.0.0:8922
         python3 savia-bridge.py --port 9000                  # Custom HTTPS port
         python3 savia-bridge.py --print-token                # Get auth token
-        python3 savia-bridge.py --no-auth --no-tls          # HTTP without auth (dev only)
+        python3 savia-bridge.py --no-auth --no-tls --host 127.0.0.1  # HTTP sin auth, solo bucle local (dev)
     """
     args = build_argument_parser().parse_args()
     listen_host = plan_listen_address(args.host, args.no_auth)
@@ -4097,7 +4131,8 @@ def main():
     else:
         log(f"TLS: DISABLED", "WARN")
     if token:
-        log(f"Auth token: {token}")
+        # Nunca el token completo en el log: /logs lo serviría (escalada a admin).
+        log(f"Auth token: {_token_hint(token)} (completo: --print-token)")
         log(f"Token stored in: {TOKEN_FILE}")
     log(f"")
     log(f"Log files:")

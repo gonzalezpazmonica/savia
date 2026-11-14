@@ -118,16 +118,35 @@ class SessionStore:
         self._ttl = ttl
         self._clock = clock
         self._items: dict[str, tuple[tuple[str, str | None], float]] = {}
+        self._gen: dict[str, int] = {}
         self._lock = threading.Lock()
 
     @property
     def ttl(self) -> int:
         return self._ttl
 
-    def create(self, principal: tuple[str, str | None]) -> str:
+    def generation(self, principal: tuple[str, str | None]) -> int:
+        """Generación de revocación de la persona; cambia en cada revoke_user."""
+        with self._lock:
+            return self._gen.get(principal[1], 0) if principal[0] == "user" else 0
+
+    def create(self, principal: tuple[str, str | None],
+               generation: int | None = None) -> str | None:
+        """Crea la sesión; None si la persona se revocó desde ``generation``.
+
+        El login toma la generación ANTES de validar el token: si una
+        revocación o rotación ocurre entre la validación y la creación, la
+        generación ya no coincide y no se emite sesión (sin carrera).
+        """
         sid = secrets.token_urlsafe(32)
         with self._lock:
-            self._items[sid] = (principal, self._clock() + self._ttl)
+            if generation is not None and principal[0] == "user" \
+                    and self._gen.get(principal[1], 0) != generation:
+                return None
+            now = self._clock()
+            for s in [s for s, (_p, e) in self._items.items() if now >= e]:
+                del self._items[s]  # purga de caducadas
+            self._items[sid] = (principal, now + self._ttl)
         return sid
 
     def lookup(self, sid: str | None) -> tuple[str, str | None] | None:
@@ -151,6 +170,7 @@ class SessionStore:
 
     def revoke_user(self, slug: str) -> int:
         with self._lock:
+            self._gen[slug] = self._gen.get(slug, 0) + 1
             dead = [s for s, (p, _e) in self._items.items() if p == ("user", slug)]
             for s in dead:
                 del self._items[s]
@@ -257,6 +277,22 @@ def origin_allowed(origin: str | None, explicit: frozenset[str],
     if host in LOOPBACK_HOSTS or _is_local_ip(host):
         return norm
     return None
+
+
+def same_site_https(origin: str | None, host_header: str | None) -> bool:
+    """True si el Origin es https y del mismo host que la cabecera Host.
+
+    La cookie es ``SameSite=Strict``: entre sitios distintos el navegador no la
+    envía. Sin lista de sufijos públicos se exige el mismo nombre de host
+    (conservador: ante la duda, modo memoria con el token en la pestaña).
+    """
+    norm = normalize_origin(origin)
+    if norm is None or not norm.startswith("https://"):
+        return False
+    o_host = urlparse(norm).hostname or ""
+    o_host = _norm_ip(o_host) or o_host
+    h_host = _hostname_of(host_header, _HOST_RE)
+    return bool(h_host) and o_host == h_host
 
 
 # --- Modo abierto (decisión Q2) ----------------------------------------------

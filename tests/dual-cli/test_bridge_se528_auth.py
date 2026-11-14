@@ -79,7 +79,8 @@ class BridgeServerCase(unittest.TestCase):
     def req(self, method, path, headers=None, body=None, source="127.0.0.1"):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10,
                                           source_address=(source, 0))
-        hdrs = {"Host": f"127.0.0.1:{self.port}"}
+        # Mismo nombre que GOOD_ORIGIN: la cookie solo se emite en el mismo sitio.
+        hdrs = {"Host": f"localhost:{self.port}"}
         hdrs.update(headers or {})
         data = json.dumps(body).encode() if body is not None else None
         if data is not None:
@@ -214,7 +215,7 @@ class OpenModeStartupTests(unittest.TestCase):
                 [sys.executable, str(ROOT / "scripts" / "savia-bridge.py"), "--no-auth",
                  "--no-tls", "--no-install-server", "--host", "0.0.0.0", "--port", str(port)],
                 env=env, capture_output=True, text=True, timeout=30)
-        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 2)
         self.assertIn("solo arranca en bucle local", r.stdout + r.stderr)
         with socket.socket() as c:
             self.assertNotEqual(c.connect_ex(("127.0.0.1", port)), 0)
@@ -300,13 +301,80 @@ class SessionCookieTests(BridgeServerCase):
         self.assertEqual(self.req("POST", "/chat", {**sse, **self.bearer()}, body)[0], 200)
         self.assertEqual(self.req("POST", "/chat", sse, body)[0], 401)
 
-    def test_revoking_user_token_kills_its_sessions(self):
+    def _user_env(self, slug="ana", tok="U" * 43):
+        users = Path(self.tmp.name) / "users"
+        (users / slug).mkdir(parents=True, exist_ok=True)
+        (users / slug / "token").write_text(tok)
+        for p in (patch.object(bridge, "USERS_DIR", users),
+                  patch.dict(bridge._user_token_cache, {tok: slug}, clear=True),
+                  # Las funciones de módulo usan el almacén de la clase base.
+                  patch.object(bridge.SaviaBridgeHandler, "sessions", self.H.sessions)):
+            p.start()
+            self.addCleanup(p.stop)
+        return tok
+
+    def test_revoke_and_rotate_functions_kill_user_sessions(self):
+        self._user_env()
         store = self.H.sessions
         sid = store.create(("user", "ana"))
         other = store.create(("user", "bea"))
-        store.revoke_user("ana")
+        self.assertTrue(bridge._revoke_user_token("ana"))
         self.assertIsNone(store.lookup(sid))
         self.assertEqual(store.lookup(other), ("user", "bea"))
+        sid2 = store.create(("user", "ana"))
+        self.assertIsNotNone(bridge._rotate_user_token("ana"))
+        self.assertIsNone(store.lookup(sid2))
+
+    def _login_racing(self, action):
+        tok = self._user_env()
+        real_role = bridge._get_user_role
+        fired = []
+
+        def role_then_revoke(slug):
+            # Revocación entre la validación del token y la creación de sesión.
+            if not fired:
+                fired.append(action("ana"))
+            return real_role(slug)
+
+        with patch.object(bridge, "_get_user_role", role_then_revoke):
+            status, h, _ = self.req("POST", "/auth/login",
+                                    {**self.bearer(tok), "Origin": GOOD_ORIGIN})
+        self.assertTrue(fired and fired[0])
+        return status, h
+
+    def test_login_racing_revocation_gets_no_session(self):
+        status, h = self._login_racing(bridge._revoke_user_token)
+        self.assertEqual(status, 401)
+        self.assertNotIn("set-cookie", h)
+        self.assertEqual(self.H.sessions._items, {})
+
+    def test_login_racing_rotation_gets_no_session(self):
+        status, h = self._login_racing(bridge._rotate_user_token)
+        self.assertEqual(status, 401)
+        self.assertNotIn("set-cookie", h)
+
+    def test_login_of_user_without_race_gets_cookie(self):
+        tok = self._user_env()
+        status, h, _ = self.req("POST", "/auth/login", {**self.bearer(tok), "Origin": GOOD_ORIGIN})
+        self.assertEqual(status, 200)
+        sid = h["set-cookie"].split(";", 1)[0].split("=", 1)[1]
+        self.assertEqual(self.H.sessions.lookup(sid), ("user", "ana"))
+
+    def test_empty_authorization_never_falls_back_to_cookie(self):
+        sid = self.login()
+        status, _, body = self.req("GET", "/sessions", {"Authorization": "", **self.cookie(sid)})
+        self.assertEqual(status, 401)
+        self.assertEqual(json.loads(body)["reason"], "invalid_credentials")
+        self.assertEqual(bridge._auth_failures["127.0.0.1"][0], 1)
+
+    def test_session_probe_counts_invalid_cookie_then_429(self):
+        for _ in range(bridge.RATE_LIMIT_MAX_FAILURES):
+            self.assertEqual(self.req("GET", "/auth/session", self.cookie("A" * 43))[0], 401)
+        self.assertEqual(self.req("GET", "/auth/session", self.cookie("A" * 43))[0], 429)
+
+    def test_session_probe_without_cookie_is_not_counted(self):
+        self.assertEqual(self.req("GET", "/auth/session")[0], 401)
+        self.assertNotIn("127.0.0.1", bridge._auth_failures)
 
     def test_deleted_user_token_and_session_stop_working(self):
         users = Path(self.tmp.name) / "users"
@@ -320,6 +388,94 @@ class SessionCookieTests(BridgeServerCase):
             self.assertEqual(st, 200)
             self.assertEqual(self.req("GET", "/sessions", self.bearer(user_tok))[0], 401)
             self.assertIsNone(self.H.sessions.lookup(sid))
+
+
+class CrossSiteAndDefaultOriginTests(BridgeServerCase):
+    """Sin --allowed-origin: política por defecto (bucle local y red local)."""
+    handler_attrs = {"allowed_origins": frozenset()}
+
+    def _login(self, origin, host=None):
+        h = {**self.bearer(), "Origin": origin}
+        if host:
+            h["Host"] = host
+        return self.req("POST", "/auth/login", h)
+
+    def test_cross_site_web_gets_memory_mode_not_cookie(self):
+        # Web en 127.0.0.1 y puente en localhost: sitios distintos.
+        status, h, body = self._login("https://127.0.0.1:5173")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["session"], "none")
+        self.assertNotIn("set-cookie", h)
+
+    def test_same_site_https_gets_cookie(self):
+        status, h, body = self._login("https://localhost:5173")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["session"], "cookie")
+        self.assertIn("set-cookie", h)
+
+    def test_same_host_over_http_origin_gets_no_cookie(self):
+        status, h, body = self._login("http://localhost:5173")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["session"], "none")
+        self.assertNotIn("set-cookie", h)
+
+    def test_ipv6_loopback_origin_is_allowed_by_default(self):
+        status, h, body = self._login("https://[::1]:5173", host=f"[::1]:{self.port}")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["session"], "cookie")
+
+    def test_foreign_origin_is_403_by_default(self):
+        self.assertEqual(self._login(EVIL_ORIGIN)[0], 403)
+
+    def test_same_site_unit(self):
+        self.assertTrue(bridge_auth.same_site_https("https://localhost:5173", "localhost:8922"))
+        self.assertTrue(bridge_auth.same_site_https("https://[::1]", "[::1]:8922"))
+        self.assertFalse(bridge_auth.same_site_https("https://127.0.0.1:5173", "localhost:8922"))
+        self.assertFalse(bridge_auth.same_site_https("http://localhost", "localhost:8922"))
+        self.assertFalse(bridge_auth.same_site_https("https://localhost", None))
+        self.assertFalse(bridge_auth.same_site_https("https://localhost\r\n", "localhost"))
+
+
+class SessionStoreUnitTests(unittest.TestCase):
+    def test_create_purges_expired_sessions(self):
+        now = [0.0]
+        store = bridge_auth.SessionStore(ttl=10, clock=lambda: now[0])
+        old = store.create(("master", None))
+        now[0] = 11
+        store.create(("master", None))
+        self.assertNotIn(old, store._items)
+        self.assertEqual(len(store._items), 1)
+
+    def test_create_refuses_stale_generation(self):
+        store = bridge_auth.SessionStore()
+        gen = store.generation(("user", "ana"))
+        store.revoke_user("ana")
+        self.assertIsNone(store.create(("user", "ana"), gen))
+        self.assertIsNotNone(store.create(("user", "ana"), store.generation(("user", "ana"))))
+        self.assertIsNotNone(store.create(("user", "bea"), store.generation(("user", "bea"))))
+
+    def test_handler_default_is_no_tls(self):
+        self.assertFalse(bridge.SaviaBridgeHandler.tls_enabled)
+
+
+class LogsAccessTests(BridgeServerCase):
+    def test_server_log_requires_admin_chat_log_does_not(self):
+        users = Path(self.tmp.name) / "users"
+        (users / "ana").mkdir(parents=True)
+        user_tok = "U" * 43
+        with patch.object(bridge, "USERS_DIR", users), \
+                patch.object(bridge, "LOG_FILE", Path(self.tmp.name) / "server.log"), \
+                patch.object(bridge, "CHAT_LOG_FILE", Path(self.tmp.name) / "chat.log"), \
+                patch.dict(bridge._user_token_cache, {user_tok: "ana"}, clear=True):
+            self.assertEqual(self.req("GET", "/logs?type=server", self.bearer(user_tok))[0], 403)
+            self.assertEqual(self.req("GET", "/logs?type=chat", self.bearer(user_tok))[0], 200)
+            self.assertEqual(self.req("GET", "/logs?type=server", self.bearer())[0], 200)
+
+    def test_token_hint_never_reveals_the_token(self):
+        hint = bridge._token_hint(TOKEN)
+        self.assertNotIn(TOKEN, hint)
+        self.assertLess(len(hint), 8)
+        self.assertEqual(bridge._token_hint(""), "…")
 
 
 class NoTlsTests(BridgeServerCase):
