@@ -255,3 +255,14 @@ merge: 19 hallazgos corregidos. La suite dual-cli pasa 165/165. La primera
 ejecución real (`session_canaries.py run --confirm-provider-cost`) requiere OK
 explícito de la operadora y valida el override de permisos. SE-396 sigue
 `IMPLEMENTING`.
+
+## H09 primer adaptador de ejecución real (Codex) — 2026-11-14
+
+`scripts/dual-cli/codex_executor.py` cumple los cinco puertos de `AdapterRegistry` y
+`scripts/dual-cli/codex_launch.py` es su punto de llamada. Capacidades leídas de
+`contracts/runtime/codex.yaml` (SE-531 D2; `no_medido` no concede ninguna: hoy solo
+`exec.run`); `succeeded` exige `harness_ficha.accept_exit` con una postcondición
+observada en el worktree, nunca el último mensaje de Codex; ejecutor caído o plazo
+vencido = `unknown`. Es UN adaptador: H09 sigue abierto (faltan el segundo adaptador
+real y la certificación operacional). Pruebas con Codex simulado más una ejecución
+real de comprobación. No pasa por el socket de `Runtime` (sin autoridad cableada).
