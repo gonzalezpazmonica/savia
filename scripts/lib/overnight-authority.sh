@@ -15,6 +15,11 @@
 # Fail-closed: "no se pudo comprobar" nunca es "autorizado". Cualquier salida distinta
 # de 0 del comprobador, o su ausencia, detiene las tareas nuevas.
 #
+# OVERNIGHT_GRANT_SCOPE solo admite scopes de esta skill (^autonomy:overnight[a-z0-9-]*$):
+# el grant de otra skill (p. ej. autonomy:code-improvement-loop) no autoriza la noche.
+# Un valor fuera del patrón (o con saltos de línea) es authority_invalid sin llamar al
+# comprobador, y nunca se copia tal cual al audit log.
+#
 # OVERNIGHT_REQUIRE_GRANT: sin la variable vale true. Solo el valor exacto "false"
 # desactiva el control (decisión explícita de la operadora en su configuración local);
 # cualquier otro valor ("0", "no", vacío…) lo deja activo.
@@ -29,11 +34,32 @@ authority_check_disabled() {
   [[ "${OVERNIGHT_REQUIRE_GRANT-true}" == "false" ]]
 }
 
+# Escribe el scope efectivo en stdout. Sale con 1 (y escribe "<rechazado>") si el
+# override no pertenece a esta skill.
+authority_scope() {
+  local scope="${OVERNIGHT_GRANT_SCOPE:-$OVERNIGHT_GRANT_SCOPE_DEFAULT}"
+  if [[ "$scope" =~ ^autonomy:overnight[a-z0-9-]*$ ]]; then
+    printf '%s' "$scope"
+  else
+    printf '<rechazado>'
+    return 1
+  fi
+}
+
+# 0 si se usa un scope distinto del de por defecto (válido o no): debe quedar rastro.
+authority_scope_overridden() {
+  [[ -n "${OVERNIGHT_GRANT_SCOPE:-}" && "$OVERNIGHT_GRANT_SCOPE" != "$OVERNIGHT_GRANT_SCOPE_DEFAULT" ]]
+}
+
 check_authority() {
   AUTHORITY_REASON=""
   authority_check_disabled && return 0
 
-  local scope="${OVERNIGHT_GRANT_SCOPE:-$OVERNIGHT_GRANT_SCOPE_DEFAULT}"
+  local scope
+  if ! scope="$(authority_scope)"; then
+    AUTHORITY_REASON="authority_invalid"
+    return 1
+  fi
   local grant_script="${SCRIPT_DIR:-}/operator-grant.sh"
 
   local rc=0

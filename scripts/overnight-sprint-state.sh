@@ -8,7 +8,7 @@ set -uo pipefail
 #   overnight-sprint-state.sh checkpoint --task-id <n> --status in_progress|done|failed --model <tier>
 #   overnight-sprint-state.sh complete   --task-id <n> [--pr <url>]
 #   overnight-sprint-state.sh fail       --task-id <n> --reason <str>
-#   overnight-sprint-state.sh suspend    --reason <str>   # pending → suspended (SE-472)
+#   overnight-sprint-state.sh suspend    --reason <str> [--task-id <n>]  # pending → suspended (SE-472)
 #   overnight-sprint-state.sh status     # summary JSON to stdout
 #   overnight-sprint-state.sh export     # emit results.tsv to stdout
 #   overnight-sprint-state.sh --self-test
@@ -341,15 +341,20 @@ PY
 }
 
 cmd_suspend() {
-  # SE-472: pending tasks → suspended (reason recorded). In-progress/done/failed untouched.
-  local reason=""
+  # SE-472: pending tasks → suspended (reason recorded). With --task-id, that task is
+  # suspended too whatever its status (used when the authority lapses before a model
+  # escalation of the task in progress). Done/failed tasks are never touched otherwise.
+  # Works with jq or, without it, with python3 (stdlib).
+  local reason="" task_id=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --reason) reason="$2"; shift 2 ;;
+      --reason) reason="${2:-}"; shift 2 ;;
+      --task-id) task_id="${2:-}"; shift 2 ;;
       *) _err "suspend: unknown arg: $1" ;;
     esac
   done
   [[ -n "$reason" ]] || _err "suspend: --reason required"
+  [[ -z "$task_id" || "$task_id" =~ ^[0-9]+$ ]] || _err "suspend: --task-id must be numeric"
 
   local sprint_id="${OVERNIGHT_SPRINT_ID:-}"
   local state_file
@@ -364,12 +369,27 @@ cmd_suspend() {
 
   local now
   now="$(_now)"
-  _jq_available || _err "suspend: jq required"
-  _update_state "$state_file" --arg now "$now" --arg reason "$reason" \
-    '(.tasks |= map(if .status == "pending"
-        then .status = "suspended" | .suspended_at = $now | .suspend_reason = $reason
-        else . end)) |
-     (.last_checkpoint = $now)'
+  if _jq_available; then
+    _update_state "$state_file" --arg now "$now" --arg reason "$reason" --arg tid "$task_id" \
+      '(.tasks |= map(if .status == "pending" or ($tid != "" and (.id | tostring) == $tid)
+          then .status = "suspended" | .suspended_at = $now | .suspend_reason = $reason
+          else . end)) |
+       (.last_checkpoint = $now)' || _err "suspend: state update failed"
+  else
+    python3 - "$state_file" "$now" "$reason" "$task_id" <<'PY2' || _err "suspend: state update failed"
+import json, os, sys, tempfile
+path, now, reason, tid = sys.argv[1:5]
+data = json.load(open(path))
+for t in data.get("tasks", []):
+    if t.get("status") == "pending" or (tid and str(t.get("id")) == tid):
+        t.update(status="suspended", suspended_at=now, suspend_reason=reason)
+data["last_checkpoint"] = now
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+os.replace(tmp, path)
+PY2
+  fi
   printf 'INFO: pending tasks suspended (%s)\n' "$reason" >&2
 }
 
@@ -537,7 +557,7 @@ Commands:
   checkpoint --task-id <n> --status in_progress|done|failed --model <tier>
   complete   --task-id <n> [--pr <url>]
   fail       --task-id <n> --reason <str>
-  suspend    --reason <authority_expired|authority_invalid|authority_missing>
+  suspend    --reason <authority_expired|authority_invalid|authority_missing> [--task-id <n>]
   status
   export
   --self-test

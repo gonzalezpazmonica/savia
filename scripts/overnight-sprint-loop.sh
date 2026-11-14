@@ -14,7 +14,11 @@ set -uo pipefail
 #   - Audit log: output/agent-runs/<sprint-id>-audit.log
 #   - stdlib-only bash; no external deps in the orchestrator
 #   - SE-472: before EACH task, check_authority (scripts/lib/overnight-authority.sh) verifies the
-#     operator grant; not valid → no new task starts, pending tasks → suspended (fail-closed)
+#     operator grant; not valid → no new task starts, pending tasks → suspended (fail-closed).
+#     It is checked again before each model escalation (a new agent launch).
+#     Exit code 4 = batch stopped for lack of authority (0 = batch finished normally).
+#     Suspended tasks are not resumed automatically: renew the grant and reset them to
+#     "pending" in state.json (or start a new sprint) before running the loop again.
 #   - The loop manages state only; actual agent execution is done by the caller hook
 #
 # Ref: SE-226, docs/rules/domain/autonomous-safety.md
@@ -111,6 +115,34 @@ for t in data.get('tasks', []):
         print(t.get('description', ''))
         break
 "
+  fi
+}
+
+# SE-472: exit code when the batch stops for lack of authority
+AUTHORITY_STOP_EXIT=4
+
+# SE-472: suspend pending tasks (and, optionally, the task in progress) after a failed
+# authority check. Sets AUTHORITY_SUSPENDED_N. The audit records what really happened:
+# if the state update fails, it says suspend_failed instead of claiming suspension.
+_authority_stop() {
+  local sprint_id="$1" pending_ids="$2" current_task="${3:-}"
+  local n
+  n="$(printf '%s\n' "$pending_ids" | grep -c .)"
+  [[ -n "$current_task" ]] && n=$(( n + 1 ))
+  local scope
+  scope="$(authority_scope)"
+  local -a extra=()
+  [[ -n "$current_task" ]] && extra=(--task-id "$current_task")
+  local err
+  if err="$(bash "$STATE_SCRIPT" suspend --reason "$AUTHORITY_REASON" "${extra[@]}" 2>&1 >/dev/null)"; then
+    AUTHORITY_SUSPENDED_N="$n"
+    _log "ABORT: $AUTHORITY_REASON — $n tarea(s) suspendida(s), no arranca ninguna nueva"
+    _audit "$sprint_id" "AUTHORITY_SUSPENDED reason=$AUTHORITY_REASON suspended=$n scope=$scope${current_task:+ task_in_progress=$current_task}"
+  else
+    AUTHORITY_SUSPENDED_N=0
+    _warn "ABORT: $AUTHORITY_REASON — no se pudo marcar suspended: ${err//$'\n'/ }"
+    _log "ABORT: $AUTHORITY_REASON — no arranca ninguna tarea nueva (estado sin actualizar)"
+    _audit "$sprint_id" "AUTHORITY_SUSPEND_FAILED reason=$AUTHORITY_REASON pending=$n scope=$scope"
   fi
 }
 
@@ -234,6 +266,9 @@ run_loop() {
   if authority_check_disabled; then
     _audit "$sprint_id" "grant-check disabled"
     _log "control de autoridad desactivado (decisión explícita de la operadora)"
+  elif authority_scope_overridden; then
+    _audit "$sprint_id" "grant-scope override scope=$(authority_scope)"
+    _log "scope de autoridad distinto del de por defecto: $(authority_scope)"
   fi
 
   local tasks_run=0
@@ -241,6 +276,7 @@ run_loop() {
   local tasks_failed=0
   local consecutive_failures=0
   local tasks_suspended=0
+  local authority_stopped=0
 
   while true; do
     # Check task budget
@@ -271,13 +307,10 @@ run_loop() {
     # revocada, ausente o ilegible = no arranca nada nuevo; las pendientes quedan
     # suspendidas con el motivo. La tarea en curso no se mata (ya terminó o agotó su time-box).
     if ! check_authority; then
-      local n_suspended
-      n_suspended="$(printf '%s\n' "$pending_ids" | grep -c .)"
-      _log "ABORT: $AUTHORITY_REASON — $n_suspended tarea(s) suspendida(s), no arranca ninguna nueva"
-      bash "$STATE_SCRIPT" suspend --reason "$AUTHORITY_REASON" >/dev/null 2>&1
-      _audit "$sprint_id" "AUTHORITY_SUSPENDED reason=$AUTHORITY_REASON suspended=$n_suspended scope=${OVERNIGHT_GRANT_SCOPE:-$OVERNIGHT_GRANT_SCOPE_DEFAULT}"
+      _authority_stop "$sprint_id" "$pending_ids"
       _audit "$sprint_id" "LOOP_STOP reason=$AUTHORITY_REASON tasks_run=$tasks_run done=$tasks_done failed=$tasks_failed"
-      tasks_suspended=$(( tasks_suspended + n_suspended ))
+      tasks_suspended=$(( tasks_suspended + AUTHORITY_SUSPENDED_N ))
+      authority_stopped=1
       break
     fi
 
@@ -296,8 +329,15 @@ run_loop() {
     local task_exit_code=0
     local used_model="fast"
 
+    local escalation_blocked=0
     for model_tier in "${MODEL_TIERS[@]}"; do
       used_model="$model_tier"
+
+      # SE-472: una escalada relanza el agente; sin autoridad vigente no se relanza.
+      if [[ "$model_tier" != "${MODEL_TIERS[0]}" ]] && ! check_authority; then
+        escalation_blocked=1
+        break
+      fi
 
       # Checkpoint BEFORE
       bash "$STATE_SCRIPT" checkpoint \
@@ -346,6 +386,16 @@ run_loop() {
       fi
     done
 
+    if [[ "$escalation_blocked" -eq 1 ]]; then
+      local rest_ids
+      rest_ids="$(_pending_tasks "$sprint_id" 2>/dev/null | grep -vx "$task_id" || true)"
+      _authority_stop "$sprint_id" "$rest_ids" "$task_id"
+      _audit "$sprint_id" "LOOP_STOP reason=$AUTHORITY_REASON tasks_run=$tasks_run done=$tasks_done failed=$tasks_failed escalation_of=$task_id"
+      tasks_suspended=$(( tasks_suspended + AUTHORITY_SUSPENDED_N ))
+      authority_stopped=1
+      break
+    fi
+
     # Checkpoint AFTER
     if [[ "$succeeded" -eq 1 ]]; then
       bash "$STATE_SCRIPT" complete --task-id "$task_id" >/dev/null 2>&1
@@ -373,12 +423,15 @@ run_loop() {
   _audit "$sprint_id" "LOOP_END started_at=$started_at ended_at=$ended_at done=$tasks_done failed=$tasks_failed"
 
   _log "Loop ended: done=$tasks_done failed=$tasks_failed"
-  authority_check_disabled && echo "control de autoridad desactivado"
   [[ "$tasks_suspended" -gt 0 ]] && echo "$tasks_suspended tareas suspendidas por vigencia"
   _coherence_gate "$sprint_id"
 
   # Final status summary to stdout
   bash "$STATE_SCRIPT" status 2>/dev/null || true
+
+  # SE-472: quien llama (cron, skill) distingue «lote completado» de «lote parado sin autoridad»
+  [[ "$authority_stopped" -eq 1 ]] && return "$AUTHORITY_STOP_EXIT"
+  return 0
 }
 
 # ── Entrypoint ───────────────────────────────────────────────────────────────
