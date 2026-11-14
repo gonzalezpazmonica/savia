@@ -44,6 +44,16 @@ Endpoints:
     GET    /files?path=X      List directory contents or file metadata (requires Bearer auth)
     GET    /files/content?path=X  Read file content (text only, max 500KB) (requires Bearer auth)
     GET    /openapi.json      OpenAPI 3.0 specification in YAML (no auth)
+    POST   /auth/login        Valida Authorization: Bearer y, con TLS, emite la sesión opaca (SE-528)
+    POST   /auth/logout       Invalida la sesión opaca (exige Origin permitido si hay cookie)
+    GET    /auth/session      200 si la cookie de sesión es válida, 401 si no
+
+Authentication (SE-528 S2):
+    Credenciales solo por la cabecera Authorization: Bearer <token> o por la
+    cookie de sesión HttpOnly savia_bridge_sid. Cualquier credencial en la URL
+    (?token=, ?access_token=, ...) responde 401 sin transición. Con cookie, las
+    escrituras exigen Origin de la lista (--allowed-origin). Host contra
+    --allowed-host. --no-auth solo en bucle local. Sin TLS no hay cookie.
 
 Configuration Files (created automatically):
     ~/.savia/bridge/bridge.log              General server logs
