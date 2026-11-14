@@ -21,9 +21,13 @@ def _origin_maps(store):
                 e = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if e.get("valid_to"):  # superseded: no cuenta (el grep de bash también las salta)
+                continue
             o = e.get("origin") or "untrusted"
-            if e.get("topic_key"): by_topic[e["topic_key"]] = o
-            if e.get("title"): by_title[e["title"]] = o
+            # Clave ambigua (varios orígenes): gana el de menor rango, nunca el último escrito.
+            for m, k in ((by_topic, e.get("topic_key")), (by_title, e.get("title"))):
+                if k and (k not in m or ORIGIN_RANK.get(o, 2) < ORIGIN_RANK.get(m[k], 2)):
+                    m[k] = o
     return by_topic, by_title
 
 
@@ -35,7 +39,9 @@ def filter_origin(results, store, min_origin):
     by_topic, by_title = _origin_maps(store)
     kept = []
     for r in results:
-        o = by_topic.get(r.get("topic_key", "")) or by_title.get(r.get("title", "")) or "untrusted"
+        cands = [m[k] for m, k in ((by_topic, r.get("topic_key", "")), (by_title, r.get("title", ""))) if k in m]
+        # Si topic y título resuelven distinto, el menor rango manda (fail-closed).
+        o = min(cands, key=lambda x: ORIGIN_RANK.get(x, 2)) if cands else "untrusted"
         if ORIGIN_RANK.get(o, 2) >= need:
             kept.append(r)
     return kept

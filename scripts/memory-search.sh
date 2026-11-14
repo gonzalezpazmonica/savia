@@ -7,18 +7,20 @@ set -uo pipefail
 cmd_search() {
     [[ ! -f "$STORE_FILE" ]] && { echo "Usage: search requires a store file" >&2; return 1; }
     local query= type_filter= since_date= mode="auto" include_expired=false
-    local sector_filter= include_superseded=false min_origin=
+    local sector_filter= include_superseded=false min_origin= min_origin_set=false
     while [[ $# -gt 0 ]]; do case "$1" in
         --type) type_filter="$2"; shift 2;; --since) since_date="$2"; shift 2;;
         --mode) mode="$2"; shift 2;; --include-expired) include_expired=true; shift;;
         --sector) sector_filter="$2"; shift 2;;
         --include-superseded) include_superseded=true; shift;;
-        --min-origin) min_origin="$2"; shift 2;;   # SE-352: owner|agent|untrusted
+        --min-origin) [[ $# -lt 2 ]] && { echo "Error: --min-origin requiere un valor." >&2; return 1; }
+            min_origin="$2"; min_origin_set=true; shift 2;;   # SE-352: owner|agent|untrusted|system
         *) query="$1"; shift;; esac
     done
     [[ -z "$query" ]] && { echo "Usage: search \"query\" [--type tipo] [--since DATE] [--mode hybrid|vector|graph|grep|auto]" >&2; return 1; }
 
     # SE-352: valor inválido = error (fail-closed), no se degrada a "sin filtro" ni a untrusted.
+    [[ "$min_origin_set" == "true" && -z "$min_origin" ]] && { echo "Error: --min-origin vacío (fail-closed)." >&2; return 1; }
     case "$min_origin" in ""|owner|agent|untrusted|system) ;;
         *) echo "Error: --min-origin '$min_origin' inválido. Válidos: owner|agent|untrusted|system." >&2; return 1;; esac
     local origin_args=(); [[ -n "$min_origin" ]] && origin_args=(--min-origin "$min_origin")
@@ -26,7 +28,7 @@ cmd_search() {
     # SPEC-035: Hybrid search (vector + graph + grep combined)
     if [[ "$mode" == "hybrid" || "$mode" == "auto" ]] && [[ -n "$MEMORY_PYTHON" ]]; then
         local hybrid_result
-        hybrid_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" search "$query" --top 10 --store "$STORE_FILE" --mode hybrid "${origin_args[@]}" 2>/dev/null) || true
+        hybrid_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" search "$query" --top 10 --store "$STORE_FILE" --mode hybrid ${origin_args[@]+"${origin_args[@]}"} 2>/dev/null) || true
         if [[ -n "$hybrid_result" ]] && echo "$hybrid_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if d.get('results') else 1)" 2>/dev/null; then
             echo "$hybrid_result" | "$MEMORY_PYTHON" -c "
 import sys, json
@@ -47,11 +49,12 @@ print(f'  (hybrid: {src.get(\"vector\",0)} vec + {src.get(\"graph\",0)} graph + 
         local idx_faiss="${STORE_FILE%.jsonl}-index.faiss"
         [[ -f "$idx_faiss" ]] && idx="$idx_faiss"
         if [[ -n "$MEMORY_PYTHON" && -f "$idx" ]]; then
-            local vec_result
+            local vec_result vec_filtered=false
             vec_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-vector.py" search "$query" --top 10 --store "$STORE_FILE" 2>/dev/null) || true
             # SE-352: mismo filtro que hybrid; si no puede aplicarse, el resultado se descarta (fail-closed).
             if [[ -n "$min_origin" && -n "$vec_result" ]]; then
                 vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-origin.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null) || vec_result=""
+                vec_filtered=true
             fi
             if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)" 2>/dev/null; then
                 echo "$vec_result" | "$MEMORY_PYTHON" -c "
@@ -64,6 +67,8 @@ for r in d['results']:
                 echo "  (vector search)" >&2; return
             fi
         fi
+        # Índice presente pero el filtro de origen lo dejó sin resultados: no es «índice ausente».
+        [[ "$mode" == "vector" && "${vec_filtered:-false}" == "true" ]] && { echo "No se encontraron resultados"; return 0; }
         [[ "$mode" == "vector" ]] && { echo "Vector index not available. Run: bash scripts/memory-store.sh rebuild-index"; return 1; }
     fi
 

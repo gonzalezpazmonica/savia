@@ -75,7 +75,7 @@ def _run_grep(query, top, store, df=None, dmod=None):
     return results[-top:]
 
 def _origin_mod():
-    # SE-352. Sin el módulo no se puede filtrar: la excepción sube y la búsqueda no devuelve nada.
+    # SE-352. Sin el módulo no se puede filtrar: la excepción sube, el proceso sale != 0 y sin salida.
     spec = importlib.util.spec_from_file_location("memory_origin", str(SCRIPTS / "memory-origin.py"))
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     return mod
