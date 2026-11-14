@@ -3,13 +3,13 @@
  *
  * Órdenes: status · q1…q4 · why <id> · correct <id> <resuelto|no-aplica|mio|no-mio> ·
  * mode <MODO> [--for 2h|--until ISO] · adapters · revoke <adaptador> · export [--out f] ·
- * uninstall [--yes] · stop [motivo] · resume · autostart install|uninstall [--dry-run] · bench · serve ·
+ * source add|list · uninstall [--yes] · stop [motivo] · resume · autostart install|uninstall [--dry-run] · bench · serve ·
  * setup · doctor · listen [<ip>…|--detect]
  *
  * AC-4d: si la invoca un frontend de agente (Claude Code, OpenCode u otro, por variable de
  * entorno o `--frontend`), las respuestas son de nivel `recuentos` salvo un proveedor aprobado
  * para N4 en la configuración local; cada llamada así queda en `audit.jsonl` (solo recuentos).
- * Por esa ruta no se exporta, no se desinstala, no se revoca y no se corrige.
+ * Por esa ruta no se exporta, no se desinstala, no se revoca, no se corrige ni se conecta una fuente.
  *
  * Códigos de salida: 0 bien · 1 error · 2 uso · 3 sin perfil · 4 rechazado al frontend · 5 detenido.
  */
@@ -36,6 +36,7 @@ import type { TokenSet } from "../adapters/oauth.ts";
 import { randomBytes } from "node:crypto";
 import { LoginUsage, PROFILE_NAME, initConfig, runLogin } from "./login.ts";
 import { type Interfaces, NO_VPN_HELP, type VpnAddress, checkSecretTool, describeVpn, detectVpn, missingAddress, onInterface, recognizedVpn } from "./host.ts";
+import { CONSENT_STATEMENT, SourceUsage, checkAdapter, declaration, defaultPurpose, isActive, nextStep, withSource } from "./source.ts";
 import { doctorChecks, formatChecks, hostProbe, runSetup } from "./setup.ts";
 
 export interface CliDeps {
@@ -91,6 +92,8 @@ const HELP = `Órdenes de soul (sin texto libre):
   correct <id> resuelto|no-aplica|mio|no-mio
   mode DISPONIBLE | FOCO|DESCANSO|FUERA (--for 2h | --until <ISO>)
   adapters                       estado de cada fuente
+  source add <adaptador> [--purpose "<texto>"] [--identity <valor>]   conecta una fuente: pide tu «s» como consentimiento
+  source list                    fuentes del perfil y su estado
   revoke <adaptador>             retira el consentimiento, borra su caché y su credencial
   export [--out <fichero>]       todo el estado local en JSON
   uninstall --yes                borra todo el estado, las credenciales y el arranque
@@ -108,7 +111,7 @@ interface Parsed { cmd: string; args: string[]; flags: Record<string, string | t
 function parse(argv: string[]): Parsed {
   const args: string[] = [];
   const flags: Record<string, string | true> = {};
-  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days", "--email", "--qr-png", "--listen"]);
+  const withValue = new Set(["--since", "--for", "--until", "--out", "--frontend", "--device", "--days", "--email", "--qr-png", "--listen", "--purpose", "--identity"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (withValue.has(a)) flags[a.slice(2)] = argv[++i] ?? "";
@@ -582,6 +585,59 @@ async function dispatch(p: Parsed, caller: Caller, deps: CliDeps, audited: { don
         for (const ip of ips) if (!onInterface(ip, h.ifaces)) { const c = await missingAddress(ip, h); deps.err(`aviso: ${c.message}${c.fix ? `\n  arreglo: ${c.fix}` : ""}`); }
         print(`Escucharé solo en: ${ips.join(", ")} (puerto ${cfg.api.port}). Si «soul serve» ya está en marcha, reinícialo.`, { listen: ips, port: cfg.api.port });
         return 0;
+      }
+
+      case "source": {
+        const sub = p.args[0];
+        const name = activeProfileName(cfg, deps.env);
+        const pr = cfg.profiles[name];
+        if (sub === "list") {
+          if (p.args.length > 1) throw new Exit(2, "source list");
+          const rows = pr.sources.map((s) => ({
+            adapter: s.adapter, purpose: s.purpose, state: s.consent?.revoked_at ? "revocada" : "activa",
+            enabled: cfg.connectors?.enabled.includes(s.adapter) ?? false, granted_at: s.consent?.granted_at ?? null,
+          }));
+          print(rows.map((r) => `${r.adapter}: ${r.state} — ${r.purpose}${r.enabled ? "" : " (adaptador sin activar en connectors.enabled)"}`).join("\n") || "Sin fuentes. Para conectar una: soul source add <adaptador>", { sources: rows });
+          return 0;
+        }
+        if (sub !== "add") throw new Exit(2, "source add <adaptador> [--purpose \"<texto>\"] [--identity <valor>] | source list");
+        if (p.args.length !== 2) throw new Exit(2, "source add <adaptador> [--purpose \"<texto>\"] [--identity <valor>]");
+        const adapter = p.args[1];
+        try {
+          checkAdapter(adapter);
+          if (typeof p.flags.purpose === "boolean" || typeof p.flags.identity === "boolean") throw new SourceUsage("--purpose y --identity llevan un valor");
+          if (isActive(cfg, name, adapter)) {
+            print(`${adapter} ya está activa en el perfil «${name}»: no hago nada. Para retirarla: soul revoke ${adapter}\n${nextStep(adapter)}`, { adapter, already_active: true });
+            return 0;
+          }
+          if (!deps.ask) {
+            throw new SourceUsage(p.flags.purpose === undefined
+              ? "sin terminal interactiva hay que dar --purpose \"<texto>\"; además el consentimiento lo das tú, en tu terminal"
+              : "conectar una fuente es un consentimiento: necesita una terminal interactiva para tu «s». Ejecútala tú");
+          }
+          let purpose = p.flags.purpose as string | undefined;
+          if (purpose === undefined) {
+            const proposed = defaultPurpose(adapter);
+            purpose = (await deps.ask(`¿Para qué quieres leer ${adapter}? [${proposed}]: `)).trim() || proposed;
+          }
+          const next = withSource(cfg, { adapter, profile: name, purpose, identity: p.flags.identity as string | undefined, now: deps.now() });
+          deps.err(declaration(adapter, purpose.trim()));
+          if (!/^[sS]$/.test((await deps.ask("¿Lo registras? Escribe «s» para consentir (cualquier otra cosa cancela): ")).trim())) {
+            deps.err("Cancelado: no he escrito nada.");
+            return 1;
+          }
+          saveConfig(deps.dataDir, next);
+          if (existsSync(join(deps.dataDir, "audit.jsonl"))) {
+            try {
+              appendJsonl(join(deps.dataDir, "audit.jsonl"), { at: deps.now(), frontend: null, provider: null, level: null, forced: null, cmd: `source add ${adapter}`, total: null, exit: 0 });
+            } catch (e) { deps.err(`aviso: no se pudo registrar la auditoría (${(e as Error).name})`); }
+          }
+          print(`Conectada ${adapter} en el perfil «${name}»: «${CONSENT_STATEMENT}» (${deps.now()}).\n${nextStep(adapter)}`, { adapter, profile: name, consent_at: deps.now() });
+          return 0;
+        } catch (e) {
+          if (e instanceof SourceUsage) throw new Exit(2, e.message);
+          throw e;
+        }
       }
 
       case "serve":

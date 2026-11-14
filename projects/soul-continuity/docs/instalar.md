@@ -59,11 +59,19 @@ soul status
 
 ## 3. Activar adaptadores
 
-Nada está activo por defecto. Para leer una fuente hacen falta tres cosas en `config.json`, y las tres las escribes tú:
+Nada está activo por defecto. Para leer una fuente hacen falta tres cosas: el adaptador en `connectors.enabled`, la fuente en tu perfil con propósito y consentimiento, y su sesión (paso 4).
 
-1. el adaptador en `connectors.enabled`;
-2. la fuente en tu perfil, con propósito y consentimiento;
-3. su sesión (paso 4).
+**Camino corto**: una orden escribe las dos primeras. La ejecutas tú, en tu terminal (un agente no puede: el consentimiento lo das tú).
+
+```bash
+soul source add github                     # pregunta para qué (Intro acepta lo propuesto), muestra la declaración y pide «s»
+soul source add jira --purpose "Mis incidencias" --identity mi-cuenta-id
+soul source list                           # fuentes del perfil y su estado
+```
+
+Al escribir «s» queda registrado «Activo esta fuente bajo mi responsabilidad» con la fecha y la hora. Con cualquier otra respuesta no se escribe nada. Vale para `github`, `jira`, `azure-devops`, `google-workspace` y `m365-*`; `web` tiene su propio flujo (abajo). `--identity` guarda tu usuario (GitHub, Jira, Azure DevOps) o un correo (Google y Microsoft 365). Si la fuente ya está activa, lo dice y no la duplica. Al terminar te dice la orden del paso siguiente: `soul login <adaptador>`. `soul setup` te ofrece esto al final. Para retirarla, `soul revoke <adaptador>`.
+
+**A mano**, si prefieres editar `config.json` (o necesitas `bases` y `oauth`, que esta orden no toca):
 
 ```json
 {
