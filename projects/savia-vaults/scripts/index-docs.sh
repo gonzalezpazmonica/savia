@@ -1,27 +1,64 @@
 #!/usr/bin/env bash
-# index-docs.sh — Index Savia documentation into a SaviaVault context dome
-# Creates a knowledge vault from the Savia workspace docs/ directory.
+# index-docs.sh — Sincroniza la documentación pública de Savia con la cúpula savia-docs.
+# Uso: index-docs.sh [repo_root] [vault_path] [--branch NOMBRE]
+#   repo_root   repo de Savia (defecto: $SAVIA_ROOT o el repo de este script)
+#   vault_path  cúpula destino (defecto: ${SAVIA_VAULTS_DIR:-$HOME/savia/vaults}/savia-docs)
+#   --branch    commitea en esa rama del repo de la cúpula, mediante un worktree temporal:
+#               la rama principal y el árbol vivo de la cúpula no se tocan.
+# Solo se copian ficheros VERSIONADOS de docs/ y de la raíz (a savia-docs solo va lo público);
+# lo retirado del origen se retira de docs/ y root/ en la cúpula. El commit lleva el trailer
+# `Source-Commit: <sha>`, que scripts/vaults-freshness.sh usa para medir el atraso.
 # Copyright (c) 2026 Savia. MIT License.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ROOT="${1:-$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_DIR/../..")}"
-SAVIA_ROOT="${SAVIA_ROOT:-$ROOT}"
-VAULT_PATH="${2:-${SAVIA_ROOT}/vaults/savia-docs}"
-DOCS_DIR="${SAVIA_ROOT}/docs"
 
-echo "==> Indexing Savia documentation into SaviaVaults dome"
-echo "    Source: $DOCS_DIR"
-echo "    Vault:  $VAULT_PATH"
+POS=(); BRANCH=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --branch) BRANCH="${2:-}"; [[ -n "$BRANCH" ]] || { echo "index-docs: --branch necesita un nombre" >&2; exit 2; }; shift 2 ;;
+    --help|-h) sed -n '2,11p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    *) POS+=("$1"); shift ;;
+  esac
+done
+DEFAULT_ROOT="$(git -C "$PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null || echo "$PROJECT_DIR/../..")"
+# El argumento explícito manda sobre el entorno (antes el entorno pisaba al argumento).
+SAVIA_ROOT="${POS[0]:-${SAVIA_ROOT:-$DEFAULT_ROOT}}"
+VAULT_PATH="${POS[1]:-${SAVIA_VAULTS_DIR:-$HOME/savia/vaults}/savia-docs}"
+
+if ! git -C "$SAVIA_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "index-docs: $SAVIA_ROOT no es un repo git; sin él no se sabe qué es público (fail-closed)" >&2
+  exit 1
+fi
+SOURCE_SHA="$(git -C "$SAVIA_ROOT" rev-parse HEAD 2>/dev/null)" || { echo "index-docs: el repo origen no tiene commits" >&2; exit 1; }
+ROOT_FILES=(CLAUDE.md SKILLS.md AGENTS.md README.md README.es.md CRITERIO.md CONSTITUCION.md)
+
+echo "==> Sincronizando documentación pública de Savia con la cúpula"
+echo "    Origen: $SAVIA_ROOT @ ${SOURCE_SHA:0:12}"
+echo "    Cúpula: $VAULT_PATH${BRANCH:+ (rama $BRANCH)}"
 echo ""
 
 # ── Init vault ──
 mkdir -p "$VAULT_PATH"
 if [[ ! -d "$VAULT_PATH/.git" ]]; then
-  cd "$VAULT_PATH" && git init && git config user.name "SaviaVaults" && git config user.email "vault@example.com"
+  git -C "$VAULT_PATH" init -q && git -C "$VAULT_PATH" config user.name "SaviaVaults" && git -C "$VAULT_PATH" config user.email "vault@example.com"
 fi
-cd "$VAULT_PATH"
+
+# ── Destino: la propia cúpula o un worktree temporal en la rama pedida ──
+TARGET="$VAULT_PATH"; WT=""
+cleanup() { [[ -n "$WT" ]] && { git -C "$VAULT_PATH" worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"; }; }
+if [[ -n "$BRANCH" ]]; then
+  WT="$(mktemp -d "${TMPDIR:-/tmp}/index-docs-wt.XXXXXX")"
+  trap cleanup EXIT
+  if git -C "$VAULT_PATH" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    git -C "$VAULT_PATH" worktree add -q --force "$WT" "$BRANCH" || { echo "index-docs: no se pudo abrir la rama $BRANCH" >&2; exit 1; }
+  else
+    git -C "$VAULT_PATH" worktree add -q -b "$BRANCH" "$WT" || { echo "index-docs: no se pudo crear la rama $BRANCH (¿la cúpula no tiene commits?)" >&2; exit 1; }
+  fi
+  TARGET="$WT"
+fi
+cd "$TARGET" || exit 1
 
 # ── INDEX.md (content map) ──
 cat > INDEX.md << 'INDEXEOF'
@@ -44,7 +81,7 @@ cat > INDEX.md << 'INDEXEOF'
 | Document | Description |
 |---|---|
 | critical-facts.md | Invariant workspace facts (SPEC-185) |
-| ROADMAP.md | Unified roadmap (v6.24.4, 245+ specs) |
+| ROADMAP.md | Unified roadmap |
 | STRUCTURE.md | Workspace directory layout |
 | STYLE-GUIDE.md | Writing and formatting conventions |
 | memory-system.md | Memory tier architecture (L0-L3) |
@@ -75,49 +112,77 @@ cat > MAP.md << 'MAPEOF'
 | Ubiquitous Language | rules/domain/ | glossary, domain, term, CONTEXT.md |
 MAPEOF
 
-# ── Index all docs ──
+# ── Copiar solo lo versionado (público) y retirar lo que ya no está ──
 INDEXED=0
 SKIPPED=0
+KEEP="$(mktemp)"
+EXT_RE='\.(md|yaml|yml|json|txt)$'
 
-index_file() {
-  local src="$1" rel="$2"
-  if [[ "$rel" =~ \.(md|yaml|yml|json|txt)$ ]]; then
-    local dst="$VAULT_PATH/$rel"
-    mkdir -p "$(dirname "$dst")"
-    cp "$src" "$dst"
+copy_one() {
+  local rel="$1"
+  if [[ "$rel" =~ $EXT_RE ]]; then
+    mkdir -p "$(dirname "$TARGET/$rel")"
+    cp "$SAVIA_ROOT/$rel" "$TARGET/$rel"
+    printf '%s\n' "$rel" >> "$KEEP"
     INDEXED=$((INDEXED + 1))
   else
     SKIPPED=$((SKIPPED + 1))
   fi
 }
 
-echo "    Copying documentation files..."
-while IFS= read -r -d '' file; do
-  rel="${file#$DOCS_DIR/}"
-  index_file "$file" "docs/$rel"
-done < <(find "$DOCS_DIR" -type f \( -name "*.md" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" -o -name "*.txt" \) \
-  ! -path "*/.git/*" ! -path "*/node_modules/*" \
-  -print0 2>/dev/null || true)
+echo "    Copiando documentación versionada..."
+while IFS= read -r -d '' f; do
+  [[ -f "$SAVIA_ROOT/$f" ]] && copy_one "$f"
+done < <(git -C "$SAVIA_ROOT" ls-files -z -- docs 2>/dev/null)
 
-# ── Also index key root-level docs ──
-echo "    Copying root-level documents..."
-for f in "$SAVIA_ROOT"/{CLAUDE.md,SKILLS.md,AGENTS.md,README.md,README.es.md,CRITERIO.md,CONSTITUCION.md}; do
-  if [[ -f "$f" ]]; then
-    rel="root/$(basename "$f")"
-    mkdir -p "$VAULT_PATH/root"
-    cp "$f" "$VAULT_PATH/$rel"
+echo "    Copiando documentos raíz versionados..."
+for f in "${ROOT_FILES[@]}"; do
+  if git -C "$SAVIA_ROOT" ls-files --error-unmatch -- "$f" >/dev/null 2>&1 && [[ -f "$SAVIA_ROOT/$f" ]]; then
+    mkdir -p "$TARGET/root"
+    cp "$SAVIA_ROOT/$f" "$TARGET/root/$f"
+    printf '%s\n' "root/$f" >> "$KEEP"
     INDEXED=$((INDEXED + 1))
   fi
 done
 
-# ── Git commit ──
-cd "$VAULT_PATH"
-git add -A 2>/dev/null || true
-git commit -m "index: Savia documentation snapshot ($(date +%Y-%m-%d))" 2>/dev/null || true
+REMOVED=0
+while IFS= read -r -d '' f; do
+  rel="${f#"$TARGET"/}"
+  if [[ "$rel" =~ $EXT_RE ]] && ! grep -Fxq -- "$rel" "$KEEP"; then
+    rm -f "$f"; REMOVED=$((REMOVED + 1))
+  fi
+done < <(find "$TARGET/docs" "$TARGET/root" -type f -print0 2>/dev/null)
+find "$TARGET/docs" "$TARGET/root" -type d -empty -delete 2>/dev/null || true
+rm -f "$KEEP"
+
+# ── Commit solo de lo gestionado, con el commit de origen como trailer ──
+git -C "$TARGET" add -A -- docs root INDEX.md MAP.md 2>/dev/null || true
+LAST_SRC="$(git -C "$TARGET" log -1 --grep='^index: Savia documentation snapshot' --format=%B 2>/dev/null | sed -n 's/^Source-Commit: //p' | head -1)"
+ALLOW_EMPTY=()
+if git -C "$TARGET" diff --cached --quiet; then
+  # Sin diferencias de contenido: solo se anota el nuevo origen si docs/ o la raíz cambiaron
+  # entre medias (p. ej. cambio y reversión), para que la frescura no quede atrasada.
+  if [[ -n "$LAST_SRC" && "$LAST_SRC" != "$SOURCE_SHA" ]] \
+     && git -C "$SAVIA_ROOT" cat-file -e "$LAST_SRC^{commit}" 2>/dev/null \
+     && [[ "$(git -C "$SAVIA_ROOT" rev-list --count "$LAST_SRC..$SOURCE_SHA" -- docs "${ROOT_FILES[@]}" 2>/dev/null)" -gt 0 ]]; then
+    ALLOW_EMPTY=(--allow-empty)
+  else
+    echo "    Sin cambios: la cúpula ya refleja el origen."
+  fi
+fi
+COMMITTED="no"
+if ! git -C "$TARGET" diff --cached --quiet || [[ ${#ALLOW_EMPTY[@]} -gt 0 ]]; then
+  if git -C "$TARGET" commit -q "${ALLOW_EMPTY[@]}" -m "index: Savia documentation snapshot ($(date +%Y-%m-%d))" -m "Source-Commit: $SOURCE_SHA"; then
+    COMMITTED="sí"
+  else
+    echo "index-docs: fallo al commitear en la cúpula (¿identidad git sin configurar?)" >&2
+    exit 1
+  fi
+fi
 
 echo ""
-echo "    Indexed: $INDEXED files"
-echo "    Skipped: $SKIPPED files"
-echo "    Vault:   $VAULT_PATH"
+echo "    Copiados: $INDEXED ficheros · retirados: $REMOVED · omitidos por tipo: $SKIPPED"
+echo "    Commit:   $COMMITTED${BRANCH:+ (rama $BRANCH)}"
+echo "    Cúpula:   $VAULT_PATH"
 echo ""
-echo "    Start server: cd $VAULT_PATH && savia-vaults serve --transport mcp"
+echo "    Reindexar el RAG: savia-vaults rag sync --dome savia-docs"
