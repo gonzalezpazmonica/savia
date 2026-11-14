@@ -1,0 +1,18 @@
+{
+ "A": {
+  "ref": "e61539b02",
+  "files": [
+   ".opencode/agents/tabular-analyst.md"
+  ],
+  "bytes": 1105,
+  "sha256": "f332882d17a4e2adf2c70882a25fd96b469d026c293b757e4789c23529cda607"
+ },
+ "B": {
+  "ref": "worktree",
+  "files": [
+   ".claude/skills/tabular-intelligence/SKILL.md"
+  ],
+  "bytes": 1313,
+  "sha256": "977188a0347e3069547d54cf1c8e2ebb7e7df07ff3cf5dc168f7d8ce83e53517"
+ }
+}

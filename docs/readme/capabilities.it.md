@@ -3,7 +3,7 @@
 | Area | Cosa fa |
 |---|---|
 | Gestione progetti | Sprint, burndown, capacita, daily, retro, KPI. Report in Excel e PowerPoint. Previsione Monte Carlo. Fatturazione. |
-| Spec-Driven Development | I task diventano spec eseguibili. 90 agenti implementano in 16 linguaggi (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in worktree isolati. Code review automatica + revisione umana obbligatoria. Compatibile con `github/spec-kit`. |
+| Spec-Driven Development | I task diventano spec eseguibili. 86 agenti implementano in 16 linguaggi (C#, TypeScript, Python, Java, Go, Rust, PHP, Ruby, Swift, Kotlin, Flutter, COBOL...) in worktree isolati. Code review automatica + revisione umana obbligatoria. Compatibile con `github/spec-kit`. |
 | Sicurezza | SAST contro OWASP Top 10, pipeline Red Team / Blue Team / Auditor, pentesting dinamico, SBOM, compliance settoriale (12 settori). Savia Shield: classificazione locale dei dati con LLM on-premise, mascheramento reversibile, firma crittografica dei PR. |
 | Code Review Court | 5 giudici specializzati (correctness, architecture, security, cognitive, spec) esaminano in parallelo con scoring 0-100 e gate di 400 LOC. |
 | Sovranita di inferenza | API Anthropic per default. Fallback automatico a Ollama locale (Gemma 4) in caso di errore di rete, HTTP 5xx, HTTP 429 o timeout. Circuit breaker integrato. |

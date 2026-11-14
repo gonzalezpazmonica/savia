@@ -1,0 +1,149 @@
+{
+ "seed": 20261110,
+ "iters": 10000,
+ "models": {
+  "haiku": {
+   "cumplimiento": {
+    "A": 1.0,
+    "B": 1.0,
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "casos": 4
+   },
+   "sobreactuacion": {
+    "A": 0.0,
+    "B": 0.0,
+    "diff": 0.0,
+    "ci95": [
+     0.0,
+     0.0
+    ],
+    "casos": 4
+   },
+   "tokens_entrada": {
+    "A": 1095,
+    "B": 1189,
+    "delta_pct": 8.6
+   },
+   "tokens_salida": {
+    "A": 245,
+    "B": 164,
+    "delta_pct": -32.9
+   },
+   "n_respuestas": {
+    "A": 24,
+    "B": 24
+   },
+   "por_caso": {
+    "G1-dispersion": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G2-mediana": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G3-cuartil": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G4-maximo": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "T1-media-atipico": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T2-dato-ausente": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T3-causalidad": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T4-muestra-corta": {
+     "A": 1.0,
+     "B": 1.0
+    }
+   },
+   "veredicto": "GO"
+  },
+  "sonnet": {
+   "cumplimiento": {
+    "A": 0.5,
+    "B": 0.9167,
+    "diff": 0.4167,
+    "ci95": [
+     0.0,
+     0.8333
+    ],
+    "casos": 4
+   },
+   "sobreactuacion": {
+    "A": 0.3333,
+    "B": 0.0,
+    "diff": -0.3333,
+    "ci95": [
+     -0.75,
+     0.0
+    ],
+    "casos": 4
+   },
+   "tokens_entrada": {
+    "A": 1074,
+    "B": 1168,
+    "delta_pct": 8.8
+   },
+   "tokens_salida": {
+    "A": 269,
+    "B": 212,
+    "delta_pct": -21.0
+   },
+   "n_respuestas": {
+    "A": 24,
+    "B": 24
+   },
+   "por_caso": {
+    "G1-dispersion": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G2-mediana": {
+     "A": 0.0,
+     "B": 0.0
+    },
+    "G3-cuartil": {
+     "A": 0.333,
+     "B": 0.0
+    },
+    "G4-maximo": {
+     "A": 1.0,
+     "B": 0.0
+    },
+    "T1-media-atipico": {
+     "A": 0.0,
+     "B": 1.0
+    },
+    "T2-dato-ausente": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T3-causalidad": {
+     "A": 1.0,
+     "B": 1.0
+    },
+    "T4-muestra-corta": {
+     "A": 0.0,
+     "B": 0.667
+    }
+   },
+   "veredicto": "GO"
+  }
+ },
+ "global": "GO"
+}

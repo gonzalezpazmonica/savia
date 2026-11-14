@@ -46,14 +46,21 @@ teardown() {
 # AC-1.4: Huerfanos resueltos
 # ═════════════════════════════════════════════════════════════════════════
 
-@test "AC-1.4: fiction-framing-judge is tombstoned (mode: disabled)" {
-  mode=$(grep -A10 "agent: fiction-framing-judge" "$ROUTING" | grep 'mode:' | head -1 | awk '{print $2}')
-  [ "$mode" = "disabled" ]
+@test "AC-1.4: tombstoned framing judges retired by SE-527 S1 (no row, no file)" {
+  for j in fiction-framing-judge structural-framing-judge; do
+    run grep -c "agent: $j" "$ROUTING"
+    [ "$output" = "0" ]
+    [ ! -e "$AGENTS_DIR/$j.md" ]
+  done
 }
 
-@test "AC-1.4: structural-framing-judge is tombstoned (mode: disabled)" {
-  mode=$(grep -A10 "agent: structural-framing-judge" "$ROUTING" | grep 'mode:' | head -1 | awk '{print $2}')
-  [ "$mode" = "disabled" ]
+@test "AC-1.4: a disabled row whose agent file is gone makes the parity check fail" {
+  cp -r "$REPO_ROOT/.opencode" "$ISO_ROOT/.opencode"
+  printf '\n  - agent: zz-retired-judge\n    mode: disabled\n    rationale: "left behind"\n' >> "$ISO_ROOT/config/judge-routing.yaml"
+  PROJECT_ROOT="$ISO_ROOT" run bash "$VERIFY"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"STALE ROW: zz-retired-judge"* ]]
+  [[ "$output" =~ Errors:[[:space:]]+1$'\n' ]]
 }
 
 # ═════════════════════════════════════════════════════════════════════════

@@ -25,7 +25,7 @@ Identidad del humano al volante + memoria auto persistida fuera del repo.
 
 ## Estructura
 
-`.claude/{agents(90), commands(571), profiles, hooks(127/135reg), rules/{domain,languages}, skills(140), settings.json}` · `docs/` · `projects/` · `scripts/` · `tests/`
+`.claude/{agents(86), commands(571), profiles, hooks(127/135reg), rules/{domain,languages}, skills(140), settings.json}` · `docs/` · `projects/` · `scripts/` · `tests/`
 
 ## Reglas Críticas (Rules 1-8, inline)
 
@@ -42,7 +42,7 @@ Reglas 1-3 y 7: gestión de proyectos; 4-6 y 8: transversales.
 
 ## Lazy Reference — bajo demanda
 
-Elegir skill, agente o regla para un intent: `docs/RESOLVER.md` + `docs/rules/domain/resolver-protocol.md`. Reglas 9-25 (secrets, infra, git, CI, UX, PII): `docs/rules/domain/critical-rules-extended.md`, la primera vez que toques git, infra o docs. Catálogo 90 agentes: `docs/rules/domain/agents-catalog.md`. Antes de cualquier PR: `docs/rules/domain/pr-natural-language-summary.md`. Spec que toca a una persona: `docs/rules/domain/comprehension-gate.md`. Dónde guardar datos N1-N4b: `docs/rules/domain/context-placement-confirmation.md`. Proyectos activos privados: `.claude/rules/pm-config.local.md`. Leer con `Read` y path exacto; NO usar `@import` (rompería el lazy).
+Elegir skill, agente o regla para un intent: `docs/RESOLVER.md` + `docs/rules/domain/resolver-protocol.md`. Reglas 9-25 (secrets, infra, git, CI, UX, PII): `docs/rules/domain/critical-rules-extended.md`, la primera vez que toques git, infra o docs. Catálogo 86 agentes: `docs/rules/domain/agents-catalog.md`. Antes de cualquier PR: `docs/rules/domain/pr-natural-language-summary.md`. Spec que toca a una persona: `docs/rules/domain/comprehension-gate.md`. Dónde guardar datos N1-N4b: `docs/rules/domain/context-placement-confirmation.md`. Proyectos activos privados: `.claude/rules/pm-config.local.md`. Leer con `Read` y path exacto; NO usar `@import` (rompería el lazy).
 
 Memoria: `bash scripts/memory-store.sh [recall|save|stats]`. Security review: `/security-review {spec}`.
 
