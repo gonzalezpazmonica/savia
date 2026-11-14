@@ -68,7 +68,7 @@ Ninguno — AC-2.2 satisfecho.
 | PostToolUse | speculative-pre-execute.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PostToolUse | twin-posttooluse.sh | no | NONE | warning | degradacion_documentada: solo Claude Code |
 | PostToolUseFailure | post-tool-failure-log.sh | no | NONE | telemetria | evento PostToolUseFailure no disponible en OpenCode — degradacion_documentada |
-| PreCompact | pre-compact-backup.sh | no | NONE | warning | evento PreCompact no disponible en OpenCode — degradacion_documentada |
+| PreCompact | pre-compact-backup.sh | no | NONE | telemetria | evento PreCompact no disponible en OpenCode — degradacion_documentada |
 | PreToolUse | acm-enforcement.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; ACM enforcement no portado — candidato SE-254 |
 | PreToolUse | action-review.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code |
 | PreToolUse | agent-dispatch-validate.sh | no | NONE | bloqueante | degradacion_documentada: solo Claude Code; agent dispatch sin gate en OpenCode — candidato SE-254 |

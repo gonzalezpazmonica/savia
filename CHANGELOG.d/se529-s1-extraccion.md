@@ -1,0 +1,1 @@
+- SE-529 S1: el hook de antes de compactar extrae de la conversación real (transcript_path), con lectura segura, solo turnos de texto y redacción de privados; el resumen permanente se guarda con procedencia (session-summary acepta --source/--origin) y el hook dice «no confirmado» si no se guardó.
