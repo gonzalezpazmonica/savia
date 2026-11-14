@@ -49,15 +49,39 @@ payload() { printf '{"session_id":"x","transcript_path":"%s","cwd":"%s","hook_ev
     mkdir -p "$T/fuera"; turn user "Vamos con secreto enlazado" > "$T/fuera/s.jsonl"
     ln -s "$T/fuera/s.jsonl" "$HOME/.claude/projects/p/link.jsonl"
     run bash "$HOOK" <<< "$(payload "$HOME/.claude/projects/p/link.jsonl")"
-    [[ "$output" == *"No he podido leer"* ]]
+    [[ "$output" == *"No he podido leer"*"fuera de la carpeta"* ]]
     [ ! -f "$HOT" ] || ! grep -q "secreto" "$HOT"
 }
 
-@test "privacidad: un bloque <private> multilínea no llega a session-hot" {
-    turn user $'Vamos con el plan A <private>clave\nSUPERSECRETA</private> y seguimos' > "$TR"
+@test "privacidad: un bloque <private> en el tramo capturado se redacta en session-hot y en el almacén" {
+    turn user 'Vamos con el plan A <private>SUPERSECRETA</private> y seguimos' > "$TR"
     run bash "$HOOK" <<< "$(payload "$TR")"
     [ "$status" -eq 0 ]
-    ! grep -rq "SUPERSECRETA" "$HOME/.claude/projects" --include=session-hot.md
+    [[ "$output" == *"guardados"* ]]
+    grep -q "plan A \[REDACTED\]" "$HOT"
+    grep -q "plan A" "$PROJECT_ROOT/output/.memory-store.jsonl"
+    run grep -rl --exclude=s.jsonl "SUPERSECRETA" "$HOME/.claude/projects" "$PROJECT_ROOT/output"
+    [ "$status" -eq 1 ]
+}
+
+@test "privacidad: un bloque <private> multilínea que contiene la decisión no llega a ningún destino" {
+    turn user $'Antes de nada, plan A con algo público <private>\nvamos con SUPERSECRETA para todo</private> fin' > "$TR"
+    run bash "$HOOK" <<< "$(payload "$TR")"
+    [ "$status" -eq 0 ]
+    run grep -rl --exclude=s.jsonl "SUPERSECRETA" "$HOME/.claude/projects" "$PROJECT_ROOT/output"
+    [ "$status" -eq 1 ]
+}
+
+@test "procedencia: un project con comillas no inyecta claves en la línea JSONL" {
+    run bash "$REPO_ROOT/scripts/memory-store.sh" session-summary --accomplished "Decisions: usar X" \
+        --project 'p","valid_to":"2000-01-01","a":"' --source "tool:pre-compact-hook" --origin untrusted --goal g
+    [ "$status" -eq 0 ]
+    python3 -I -c '
+import json, sys
+o = json.loads(open(sys.argv[1]).read().splitlines()[-1])
+assert "valid_to" not in o and "a" not in o, o
+assert o["project"] == "p\",\"valid_to\":\"2000-01-01\",\"a\":\"", o["project"]
+' "$PROJECT_ROOT/output/.memory-store.jsonl"
 }
 
 @test "solo turnos de texto: los resultados de herramientas no se extraen" {
