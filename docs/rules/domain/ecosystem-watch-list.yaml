@@ -21,6 +21,10 @@ repos:
   - github: modelcontextprotocol/servers
     interest: "reference servers actualizados"
     high_signal_patterns: ["filesystem", "github", "git", "fetch"]
+  - github: Gentleman-Programming/engram
+    interest: "patrones de memoria persistente para agentes (origen de SE-256)"
+    high_signal_patterns: ["mem_save", "conflict", "token-pepper"]
+    next_review: 2027-02-01
   - github: sst/opencode
     interest: "releases de OpenCode, breaking changes en hook events"
     high_signal_patterns: ["plugin", "hook", "permission", "mcp"]
