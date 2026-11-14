@@ -6,13 +6,13 @@
 # La sonda se prueba en Linux con escenarios simulados y con órdenes de macOS simuladas
 # (uname, python3, launchctl…); un Mac real queda fuera y el documento lo dice.
 # Ref: docs/specs/SE-518-pulse-latido.spec.md (slice S0)
-# Ref: docs/specs/assets/SE-518-s0-medidas.md
+# Ref: docs/specs/assets/prototipo-SE-518-medidas.md
 
 setup() {
   cd "$BATS_TEST_DIRNAME/.."
   SPEC="docs/specs/SE-518-pulse-latido.spec.md"
   PROTO="docs/specs/assets/SE-518-prototipo.html"
-  MED="docs/specs/assets/SE-518-s0-medidas.md"
+  MED="docs/specs/assets/prototipo-SE-518-medidas.md"
   PROBE="scripts/pulse-probe-macos.sh"
 }
 
