@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Cola de fusión de GitHub: los checks obligatorios («Validate workspace», «Lint Markdown», «BATS Hook
+  # Tests») tienen que informarse también sobre el commit de grupo, o la cola se queda parada. En merge_group
+  # no hay github.event.pull_request: la base sale de github.event.merge_group.base_sha (ver cada paso).
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -29,9 +34,10 @@ jobs:
       # La base se trae por SHA: no depende de que siga dentro de las 300 últimas de main. El runner sale
       # del árbol de la PR; sus cambios piden revisión de CODEOWNERS.
       - name: Compliance runner sobre el diff de la PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # merge_group: la base es el padre del commit de grupo; base..HEAD son los cambios que entran.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           bash .claude/compliance/runner.sh --range "$BASE_SHA..HEAD"
@@ -120,9 +126,12 @@ jobs:
       # HEAD es el commit de fusión base+PR: base..HEAD son exactamente los cambios de la PR.
       # El gate y la lista D salen de la BASE (una PR no puede vaciar la lista ni cambiar el gate).
       - name: Derived paths absent
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          # merge_group: la base es el padre del commit de grupo; base..HEAD son los cambios que entran.
+          # Con grupos en curso, base_sha puede ser un gh-readonly-queue/... con PR anteriores aún no fusionadas:
+          # el gate y la lista D salen entonces de esas PR, que solo llegan a main si su grupo pasa con el gate de main.
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
           X=$(mktemp -d); mkdir -p "$X/scripts"
           if git show "$BASE_SHA:scripts/derived.sh" > "$X/scripts/derived.sh" 2>/dev/null \
@@ -209,6 +218,8 @@ jobs:
 
   scope-creep:
     name: Scope Creep (report-only)
+    # Informe sobre la PR (lee pull_request.base.ref); no es obligatorio y en la cola no aporta nada.
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true  # SE-315 S3: report-only hasta calibración (AC-S3.2)
@@ -256,6 +267,8 @@ jobs:
 
   blast-radius:
     name: Blast-radius (report-only)
+    # Informe sobre la PR (lee pull_request.base.ref); no es obligatorio y en la cola no aporta nada.
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     continue-on-error: true  # SE-318 S3: report-only; aviso, nunca gate
@@ -445,9 +458,13 @@ jobs:
         id: select
         env:
           SAVIA_BATS_FULL_THRESHOLD_PCT: 50
+          # merge_group no tiene github.base_ref: la base es el padre del commit de grupo. Si ci-select-bats.sh
+          # termina con error, se ejecuta la suite completa. Ojo: si la base no existe (push a main) el script
+          # compara con HEAD~1 y devuelve un subconjunto con exit 0; en merge_group no pasa (base_sha es ancestro).
+          SELECT_BASE: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_sha || format('origin/{0}', github.base_ref) }}
         run: |
-          if bash scripts/ci-select-bats.sh --base "origin/${{ github.base_ref }}" 2>/dev/null; then
-            SELECTED="$(bash scripts/ci-select-bats.sh --base "origin/${{ github.base_ref }}" 2>/dev/null)"
+          if bash scripts/ci-select-bats.sh --base "$SELECT_BASE" 2>/dev/null; then
+            SELECTED="$(bash scripts/ci-select-bats.sh --base "$SELECT_BASE" 2>/dev/null)"
           else
             SELECTED="FULL"
           fi
@@ -652,7 +669,8 @@ jobs:
     if: |
       contains(toJson(github.event.commits.*.modified), '.claude/agents') ||
       contains(toJson(github.event.commits.*.modified), '.opencode/agents') ||
-      github.event_name == 'pull_request'
+      github.event_name == 'pull_request' ||
+      github.event_name == 'merge_group'
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
