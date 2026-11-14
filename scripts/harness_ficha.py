@@ -2,7 +2,10 @@
 """SE-531 S1 — ficha de runtime de harness: esquema, validador (fail-closed) y lectores.
 
 Uso:
-  python3 scripts/harness_ficha.py check [DIR]   # DIR por defecto: contracts/runtime
+  python3 scripts/harness_ficha.py check [DIR] [--versiones] [--binario FICHA=ORDEN]...
+DIR por defecto: contracts/runtime. `--versiones` (D4) ejecuta `ORDEN --version`
+(sin shell, 10 s de plazo; por defecto el id de la ficha)
+y AVISA, sin fallar, si la versión instalada difiere de la medida o no se puede leer.
 Salida 0 = todas las fichas válidas; 1 = algún error (nombra ficha y campo);
 2 = uso incorrecto o directorio ilegible.
 
@@ -267,10 +270,24 @@ def watches_calls(rt):
 
 
 def main(argv):
-    if len(argv) < 2 or argv[1] != "check" or len(argv) > 3:
+    args, versiones, binarios, i = [], False, {}, 2
+    while i < len(argv):
+        if argv[i] == "--versiones":
+            versiones = True
+        elif argv[i] == "--binario" and i + 1 < len(argv) and "=" in argv[i + 1] and argv[i + 1].split("=", 1)[1]:
+            k, v = argv[i + 1].split("=", 1)
+            binarios[k] = v
+            i += 1
+        elif argv[i].startswith("--"):
+            args = None
+            break
+        else:
+            args.append(argv[i])
+        i += 1
+    if len(argv) < 2 or argv[1] != "check" or args is None or len(args) > 1:
         print(__doc__.split("\n\n")[0], file=sys.stderr)
         return 2
-    directory = Path(argv[2]) if len(argv) == 3 else Path(__file__).resolve().parent.parent / "contracts" / "runtime"
+    directory = Path(args[0]) if args else Path(__file__).resolve().parent.parent / "contracts" / "runtime"
     if not directory.is_dir():
         print(f"{directory}: no es un directorio", file=sys.stderr)
         return 2
@@ -279,6 +296,12 @@ def main(argv):
     errs = load_errs + errs
     for e in errs:
         print(f"ERROR {e}")
+    if versiones:
+        # módulo aparte: es el único que ejecuta programas (`<orden> --version`) y nunca toca rc_deteccion
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from harness_ficha_version import version_warnings
+        for w in version_warnings(fichas, binarios):
+            print(w)
     print(f"fichas={len(fichas)} errores={len(errs)} no_medido={nm}")
     return 1 if errs else 0
 

@@ -4,8 +4,14 @@ runtime:
   aislamiento: no_medido
   rc_en_error: no_medido
   senal_cuota: no_medido
-  informa_uso: no_medido
+  informa_uso: si
   reanudacion: no_medido
   limpieza: no_medido
-  flujo_llamadas: no_medido
-  notas: "Sin medir en esta ficha. Existe la salida stream-json en la CLI, pero no se ha comprobado que emita las llamadas a herramientas."
+  flujo_llamadas: json
+  fuente:
+    informa_uso: "medición 2026-11-14: claude -p --output-format stream-json --verbose; el evento result trae usage y total_cost_usd"
+    flujo_llamadas: "medición 2026-11-14: la misma ejecución, con una orden Bash, emite un bloque tool_use dentro de un evento assistant"
+  version_cli:
+    informa_uso: "2.1.322"
+    flujo_llamadas: "2.1.322"
+  notas: "rc_en_error sin medir como fallo de API: con un modelo desconocido sale con 1 y result.is_error, pero un endpoint caído agotó el tiempo sin dar rc (inconcluso). senal_cuota: el flujo trae eventos rate_limit_event con estado allowed; no se observó uno de cuota agotada, así que no se declara."
