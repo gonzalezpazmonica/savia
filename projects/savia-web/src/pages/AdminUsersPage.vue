@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { bridgeInit } from '../utils/bridgeAuth'
 const { t } = useI18n()
 import { ref, onMounted } from 'vue'
 import { Shield, Plus, RefreshCw, Ban, Trash2, Copy } from 'lucide-vue-next'
@@ -50,19 +51,17 @@ async function revokeUser(slug: string) {
 
 async function deleteUser(slug: string) {
   try {
-    await fetch(`${auth.serverUrl}/users/${slug}`, {
-      method: 'DELETE', headers: { 'Authorization': `Bearer ${auth.token}` },
-    })
+    await fetch(`${auth.serverUrl}/users/${slug}`, bridgeInit(auth.token, { method: 'DELETE' }))
     await loadUsers()
   } catch {}
 }
 
 async function changeRole(slug: string, role: string) {
   try {
-    await fetch(`${auth.serverUrl}/users/${slug}`, {
-      method: 'PUT', headers: { 'Authorization': `Bearer ${auth.token}`, 'Content-Type': 'application/json' },
+    await fetch(`${auth.serverUrl}/users/${slug}`, bridgeInit(auth.token, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role }),
-    })
+    }))
     await loadUsers()
   } catch {}
 }

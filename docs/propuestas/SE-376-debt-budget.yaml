@@ -6,6 +6,12 @@ current_wave: 0            # 0 = baseline freeze (curation aún no ejecutada)
 # deuda: marcó 130 skills stable y añadió 121 tests de presencia (score 23; 5 más en #1100) que el
 # auditor contaba como tests. Con Calibrated = test certificado (>=80) la deuda real
 # es 128/137 tras #1142 (<= baseline 133). Los targets de cada wave no cambian (ratchet intacto).
+# 2026-11-14 (remedición, S03): auditor en vivo 140 skills, 23 Calibrated -> deuda 117/140
+# (122 al empezar la sesión; baseline wave 0 = 133, ratchet intacto). Entran 5 con prueba de
+# comportamiento verificada por mutación: adversarial-security, tech-research-agent,
+# parallel-dispatch, pentesting, attack-surface-mapper. Otras 9 ya contaban Calibrated por el
+# auditor y no estaban en el inventario; su discriminación no se ha re-verificado. Todo stable
+# queda pendiente del OK de la operadora al revisar la PR.
 waves:
   0: 133                   # baseline +1 2026-09-05 (social-linkedin nueva, no calibrada aun)
   1: 95                    # tras curation wave 1 (DELETE de stubs + REFACTOR rápidos)

@@ -3,14 +3,14 @@ import { ref, nextTick, watch, onMounted } from 'vue'
 import { useChatStore } from '../stores/chat'
 import { useSSE } from '../composables/useSSE'
 import { useAuthStore } from '../stores/auth'
-import { marked } from 'marked'
+import { renderSafeMarkdown } from '../utils/safeMarkdown'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-vue-next'
 import ChatSessionList from '../components/ChatSessionList.vue'
 import type { StreamEvent } from '../types/chat'
 
 function renderMd(text: string): string {
   if (!text) return '...'
-  return marked.parse(text, { gfm: true, breaks: true }) as string
+  return renderSafeMarkdown(text, { breaks: true })
 }
 
 const store = useChatStore()

@@ -52,7 +52,7 @@ $1"; }
 @test "fichas reales pasan y el resumen cuenta no_medido" {
   run check
   [ "$status" -eq 0 ]
-  [[ "$output" == *"fichas=4 errores=0 no_medido=28"* ]]
+  [[ "$output" == *"fichas=4 errores=0 no_medido=23"* ]]
 }
 
 @test "cuatro fichas esperadas existen" {
@@ -293,11 +293,11 @@ assert h.accept_exit(rt,0,True,'ok')[0] is True
 
 @test "informa_uso: no sin comillas y \"no\" son el mismo texto; yes/on/off/true no se aceptan" {
   sed -i 's/^  informa_uso: .*/  informa_uso: no/' "$D/codex.yaml"
-  sed -i 's/^  informa_uso: .*/  informa_uso: "no"/' "$D/opencode.yaml"
+  sed -i 's/^  informa_uso: .*/  informa_uso: "no"/' "$D/yema.yaml"
   run check
   [ "$status" -eq 1 ]
   [[ "$output" == *"codex: fuente.informa_uso: obligatorio para un dato medido"* ]]
-  [[ "$output" == *"opencode: fuente.informa_uso: obligatorio para un dato medido"* ]]
+  [[ "$output" == *"yema: fuente.informa_uso: obligatorio para un dato medido"* ]]
   [[ "$output" != *"valor no permitido"* ]]
   for v in yes on off true false; do
     cp "$REPO_ROOT"/contracts/runtime/*.yaml "$D/"
@@ -410,4 +410,115 @@ assert {c:h.effective(nm,c) for c in h.FIELDS}=={'aislamiento':'ninguno','rc_en_
   run check
   [ "$status" -eq 1 ]
   [[ "$output" == *"roto.yaml: ilegible"* ]]
+}
+
+# --- SE-531 S1b: fichas con datos medidos y aviso de versión (AC-S1f, D4) ---
+
+field() { python3 -I -c 'import sys,yaml; d=yaml.safe_load(open(sys.argv[1]))["runtime"]; print(d.get(sys.argv[2], "AUSENTE"))' "$REPO_ROOT/contracts/runtime/$1.yaml" "$2"; }
+
+@test "AC-S1f: claude-code mide uso y flujo de llamadas" {
+  [ "$(field claude-code informa_uso)" = "si" ]
+  [ "$(field claude-code flujo_llamadas)" = "json" ]
+}
+
+@test "AC-S1f: opencode deriva el parche del rc: no_fiable con su regla, uso y flujo medidos" {
+  [ "$(field opencode rc_en_error)" = "no_fiable" ]
+  [ "$(field opencode informa_uso)" = "si" ]
+  [ "$(field opencode flujo_llamadas)" = "json" ]
+  [[ "$(field opencode rc_deteccion)" == *"error"* ]]
+}
+
+@test "AC-S1f: la regla de opencode detecta el evento de error real y no un texto normal" {
+  run py '
+import yaml
+rt = yaml.safe_load(open("'"$REPO_ROOT"'/contracts/runtime/opencode.yaml"))["runtime"]
+err = "{\"type\":\"error\",\"error\":{\"name\":\"APIError\"}}\n"
+ok = "{\"type\":\"text\",\"part\":{\"text\":\"el error type es\"}}\n"
+assert h.accept_exit(rt, 0, True, err)[0] is False
+assert h.accept_exit(rt, 0, True, ok)[0] is True
+assert h.accept_exit(rt, 0, False, ok)[0] is False
+print("ok")'
+  [ "$status" -eq 0 ]
+}
+
+@test "AC-S1f: cada dato medido de las fichas reales trae version_cli con versión numérica" {
+  run py '
+import yaml, glob, re
+n = 0
+for f in glob.glob("'"$REPO_ROOT"'/contracts/runtime/*.yaml"):
+    rt = yaml.safe_load(open(f))["runtime"]
+    for k, v in rt.get("version_cli", {}).items():
+        assert re.fullmatch(r"\d+\.\d+\.\d+", v), (f, k, v)
+        n += 1
+assert n >= 6, n
+print(n)'
+  [ "$status" -eq 0 ]
+}
+
+# Carpeta propia con una sola ficha: un dato medido en la versión 1.2.3, y un "binario" falso
+mk_bin() { mkdir -p "$BATS_TEST_TMPDIR/bin"; printf '#!/bin/sh\necho "%s"\n' "$2" > "$BATS_TEST_TMPDIR/bin/$1"; chmod +x "$BATS_TEST_TMPDIR/bin/$1"; }
+only_fake() {
+  D="$BATS_TEST_TMPDIR/solo"; mkdir -p "$D"
+  cat > "$D/fakecli.yaml" <<YAML
+ficha: fakecli
+runtime:
+  aislamiento: no_medido
+  rc_en_error: no_medido
+  senal_cuota: no_medido
+  informa_uso: si
+  reanudacion: no_medido
+  limpieza: no_medido
+  flujo_llamadas: no_medido
+  fuente: {informa_uso: prueba}
+  version_cli: {informa_uso: "1.2.3"}
+YAML
+}
+vcheck() { env PATH="$BATS_TEST_TMPDIR/bin:/usr/bin:/bin" python3 -I "$CHECK" check "$D" "$@"; }
+
+@test "D4: versión instalada distinta de la medida avisa sin fallar" {
+  only_fake; mk_bin fakecli "fakecli 1.9.0"
+  run vcheck --versiones --binario fakecli=fakecli
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"AVISO fakecli"* ]]
+  [[ "$output" == *"1.9.0"* && "$output" == *"1.2.3"* ]]
+}
+
+@test "D4: versión instalada igual a la medida no avisa" {
+  only_fake; mk_bin fakecli "fakecli 1.2.3"
+  run vcheck --versiones --binario fakecli=fakecli
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"AVISO"* ]]
+}
+
+@test "D4: binario ausente o versión ilegible avisa (no da por buena la versión) y no falla" {
+  only_fake
+  run vcheck --versiones --binario fakecli=no-existe-fakecli
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"AVISO fakecli"* ]]
+  mk_bin fakecli "sin numero"
+  run vcheck --versiones --binario fakecli=fakecli
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"AVISO fakecli"* ]]
+}
+
+@test "D4: sin --versiones no se ejecuta ningún binario" {
+  only_fake; mk_bin fakecli "fakecli 9.9.9"
+  run vcheck --binario fakecli=fakecli
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"AVISO"* ]]
+}
+
+@test "D4: una ficha toda no_medido no pide versión" {
+  D="$BATS_TEST_TMPDIR/solo"; mkdir -p "$D"; cp "$REPO_ROOT/contracts/runtime/yema.yaml" "$D/"
+  run vcheck --versiones --binario yema=no-existe-yema
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"AVISO"* ]]
+}
+
+@test "D4: el aviso no oculta un error de validación (sigue fallando)" {
+  only_fake; mk_bin fakecli "fakecli 1.9.0"
+  python3 -I -c 'import sys; p=sys.argv[1]; t=open(p).read().replace("informa_uso: si","informa_uso: casi"); open(p,"w").write(t)' "$D/fakecli.yaml"
+  run vcheck --versiones --binario fakecli=fakecli
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"informa_uso"* ]]
 }

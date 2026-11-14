@@ -45,16 +45,29 @@ teardown() {
     [ "$status" -eq 0 ]
 }
 
+# SE-529 S1: la carga de PreCompact son metadatos; la conversación se lee de transcript_path.
+_pc_transcript() { # _pc_transcript <texto de la persona> → imprime la carga del hook
+    mkdir -p "$HOME/.claude/projects/p"
+    python3 -I -c 'import json,sys; print(json.dumps({"type":"user","message":{"content":[{"type":"text","text":sys.argv[1]}]}}))' "$1" > "$HOME/.claude/projects/p/s.jsonl"
+    printf '{"transcript_path":"%s","hook_event_name":"PreCompact"}' "$HOME/.claude/projects/p/s.jsonl"
+}
+
 @test "pre-compact: Tier B decisions written to session-hot.md" {
-    echo '{"text":"We decided to use Redis for caching"}' | bash "$HOOKS_DIR/pre-compact-backup.sh"
+    _pc_transcript "We decided to use Redis for caching" | bash "$HOOKS_DIR/pre-compact-backup.sh"
     [ -f "$SESSION_HOT" ]
     grep -qi "decid" "$SESSION_HOT"
 }
 
 @test "pre-compact: Tier B corrections written to session-hot.md" {
-    echo '{"text":"no not that, change to PostgreSQL instead"}' | bash "$HOOKS_DIR/pre-compact-backup.sh"
+    _pc_transcript "no not that, change to PostgreSQL instead" | bash "$HOOKS_DIR/pre-compact-backup.sh"
     [ -f "$SESSION_HOT" ]
     grep -qi "change to" "$SESSION_HOT" || grep -qi "not that" "$SESSION_HOT"
+}
+
+@test "pre-compact: text inside hook metadata is not treated as conversation (SE-529 S1)" {
+    run bash "$HOOKS_DIR/pre-compact-backup.sh" <<< '{"text":"We decided to use Redis for caching"}'
+    [ "$status" -eq 0 ]
+    [ ! -f "$SESSION_HOT" ] || ! grep -qi "redis" "$SESSION_HOT"
 }
 
 # ── POST-COMPACT: SESSION-HOT REINJECTION ──
@@ -67,7 +80,8 @@ teardown() {
     touch "$TMPDIR/output/.memory-store.jsonl"
     run bash "$SCRIPTS_DIR/post-compaction.sh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Session Continuity"* ]]
+    [[ "$output" == *"Esta sesión"* ]]
+    [[ "$output" == *"chose Redis for caching"* ]]
 }
 
 @test "post-compact: truncates session-hot.md after consumption" {
