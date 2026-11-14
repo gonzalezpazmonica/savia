@@ -1,4 +1,8 @@
 {
+  "auth": {
+    "legacyLink": "Este enlace usaba un acceso antiguo que ya no vale: el token ya no viaja en la dirección. Pégalo aquí una vez.",
+    "sessionExpired": "Tu sesión ha caducado o se cerró. Pega tu token otra vez."
+  },
   "common": {
     "save": "Guardar",
     "cancel": "Cancelar",

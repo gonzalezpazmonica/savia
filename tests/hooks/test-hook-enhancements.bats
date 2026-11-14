@@ -67,7 +67,8 @@ teardown() {
     touch "$TMPDIR/output/.memory-store.jsonl"
     run bash "$SCRIPTS_DIR/post-compaction.sh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Session Continuity"* ]]
+    [[ "$output" == *"Esta sesión"* ]]
+    [[ "$output" == *"chose Redis for caching"* ]]
 }
 
 @test "post-compact: truncates session-hot.md after consumption" {

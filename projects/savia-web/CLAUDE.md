@@ -15,7 +15,7 @@ ROUTING            = "Vue Router 4 (admin route guard)"
 I18N               = "vue-i18n 9 (ES default, EN included)"
 CHARTS             = "ECharts 5 + vue-echarts 7"
 MARKDOWN           = "marked (LinkedIn-style rendering in viewer + chat)"
-AUTH               = "Per-user tokens + roles (admin/user)"
+AUTH               = "Per-user tokens + roles (admin/user); SE-528: token solo en memoria o sesión opaca HttpOnly del puente; nunca en la URL ni en el almacenamiento del navegador"
 DEV_PORT           = 5173
 DEV_PROTOCOL       = "HTTPS (uses Bridge certs from ~/.savia/bridge/)"
 BRIDGE_DEFAULT_URL = "https://localhost:8922"
@@ -55,4 +55,4 @@ npm run test:coverage # Coverage report (threshold 80%)
 
 ## Bridge Endpoints
 
-`/auth/me` `/chat` `/sessions` `/projects` `/backlog` `/files` `/files/content` `/users` `/users/{slug}` `/users/{slug}/rotate-token` `/dashboard` `/reports/*`
+`/auth/login` `/auth/logout` `/auth/session` `/auth/me` `/chat` `/sessions` `/projects` `/backlog` `/files` `/files/content` `/users` `/users/{slug}` `/users/{slug}/rotate-token` `/dashboard` `/reports/*`
