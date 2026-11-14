@@ -1759,13 +1759,13 @@ piezas ya existen (captura, ledger, calibración, Labs, p_consistent): falta el 
 | SCL-009 | Descubrimiento automático de instancias federadas | IMPLEMENTED 2026-08-22 |
 | SCL-010 | Reconciliación de lecciones duplicadas/conflictivas | IMPLEMENTED 2026-08-22 |
 | SCL-011/012/013 | Orquestador SAGI + pruebas P1-P6 + e2e | IMPLEMENTED 2026-08-22/23 |
-| SE-334 S1-S4 | Telemetry Intelligence (fingerprint + incidentes) | IMPLEMENTED (PR #982 + cierre #998) |
+| SE-534 S1-S4 | Telemetry Intelligence (fingerprint + incidentes) | IMPLEMENTED (PR #982 + cierre #998) |
 
 ### Orden de ejecución recomendado
 
 ```text
 SCL-001 S1 (captura) → S2 (ciclo de vida + rollback) → S3 (métrica L) → S4 (agnosticismo)
-  → SCL-002..013 → SE-334  [TODOS IMPLEMENTADOS 2026-08-17..23]
+  → SCL-002..013 → SE-534  [TODOS IMPLEMENTADOS 2026-08-17..23]
   → Labs: L11 (SAGI) y L13 (metacognición) CERRADAS
   → Siguiente: L14 circuit-closing deuda estructural (SaviaLabs)
 ```
@@ -1784,7 +1784,7 @@ SCL-001 S1 (captura) → S2 (ciclo de vida + rollback) → S3 (métrica L) → S
 - SCL consume, no rehace: SE-255, SE-268 S4, SE-292 S6, SaviaVaults, Labs L1-L6.
 - Invariante: la CONSTITUCION y CRITERIO permanecen intocables por el bucle (CRIT-031);
   "la IA propone, el humano dispone".
-- **Estado 2026-08-23**: programa SCL completo (SCL-001..013 + SE-334) en main.
+- **Estado 2026-08-23**: programa SCL completo (SCL-001..013 + SE-534) en main.
   Labs: L1-L11 y L13 cerradas, L14 deuda estructural en curso, L12 voz abierta.
 
 ---
@@ -1803,12 +1803,12 @@ SCL-001 S1 (captura) → S2 (ciclo de vida + rollback) → S3 (métrica L) → S
 
 | Spec | Concepto origen | Esfuerzo | Por qué primero |
 |---|---|---|---|
-| SE-334 Telemetry Intelligence | superlog `packages/fingerprint` + `apps/worker` | 40h (4 slices) | Hoy cada error en `telemetry-events.jsonl` es un evento aislado: no se puede decir "este error apareció 47 veces". El fingerprint determinista (S1) es la base de agrupación, alertas e incidentes |
+| SE-534 Telemetry Intelligence | superlog `packages/fingerprint` + `apps/worker` | 40h (4 slices) | Hoy cada error en `telemetry-events.jsonl` es un evento aislado: no se puede decir "este error apareció 47 veces". El fingerprint determinista (S1) es la base de agrupación, alertas e incidentes |
 
 ### Orden de ejecución
 
 ```
-SE-334 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
+SE-534 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
   → S3 (grouping LLM, 8h, opt-in) → S4 (auto-remediación PR Draft, 8h, opcional)
 ```
 
@@ -1816,9 +1816,9 @@ SE-334 S1 (fingerprint determinista, 14h) → S2 (issues + alertas, 10h)
 
 | Spec | PR | Estado | Bloqueo |
 |---|---|---|---|
-| SE-334 | #982 (S1+S2) + #998 (cierre) | PROPOSED 2026-08-17 → **IMPLEMENTED 2026-08-22** | — |
+| SE-534 | #982 (S1+S2) + #998 (cierre) | PROPOSED 2026-08-17 → **IMPLEMENTED 2026-08-22** | — |
 
-> **Cierre 2026-08-23**: SE-334 implementado con fingerprint determinista,
+> **Cierre 2026-08-23**: SE-534 implementado con fingerprint determinista,
 > issues/alertas y captura SCL. La telemetría ya alimenta el bucle de
 > aprendizaje (SE-335/336 Turn-SDLC). Siguiente prioridad: L13 metacognición
 > (cierre) + L14 circuit-closing deuda estructural.

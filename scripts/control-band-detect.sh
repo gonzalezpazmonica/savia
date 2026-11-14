@@ -8,7 +8,7 @@
 #
 # Métricas soportadas (origen local):
 #   ci_test_failure_rate  → output/ci-duration/failures.jsonl (SE-361) o data/
-#   telemetry_anomaly     → output/telemetry-events.jsonl (SE-334)
+#   telemetry_anomaly     → output/telemetry-events.jsonl (SE-534)
 #   session_error_rate    → output/session-action-log.jsonl
 #
 # Salida JSON: {metric, sigma_level, breached, samples, window, mean, sd}
