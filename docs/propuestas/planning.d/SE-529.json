@@ -1,0 +1,9 @@
+{
+  "id": "SE-529",
+  "status": "PROPOSED",
+  "priority": "P2",
+  "phase": "A",
+  "title": "Compactación que conserva y reinyecta de verdad",
+  "evidence": "docs/specs/SE-529-compactacion-que-conserva-y-reinyecta.spec.md",
+  "note": "Encargo de la operadora del 2026-11-13: adoptar mejoras de compactación observadas en engram v3.7.1 (referencia pública, sin copiar código) y empezar por medir. El hook PreCompact busca decisiones con regex sobre la carga del hook (metadatos), no sobre la conversación; la reinyección lee las 20 últimas líneas del almacén sin filtro de proyecto ni tope. Slices: S0 medición (formas de carga, canal que llega al modelo, línea base), S5 redacción de privados multilínea, S1 extracción desde el transcript, S2 reinyección acotada con --max-bytes, S4 resumen guardado una vez (condicionado a S0), S3 tests con fixtures de la forma medida. Escenas y decisiones confirmadas por la operadora el 2026-11-13 (pregunta interactiva, «Confirmo todo como está»). Q1: fijada es importancia A si es ≤ 30 % del almacén, si no un umbral más estricto sin campo nuevo. Q2 (registro de la orquestadora): si OpenCode no entrega la conversación, el aviso explícito basta como paridad. Q3: PR aparte de nivel 4 sobre settings.json solo si S0.2 demuestra que el aviso no llega al modelo. Sigue PROPOSED: la confirmación de la operadora consta solo como registro de la orquestadora (sin enlace verificable) y el prototipo de S0 está sin confirmar (SE-505); APPROVED requiere aprobación verificable en la PR."
+}
