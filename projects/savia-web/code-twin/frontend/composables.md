@@ -30,5 +30,5 @@ status: STABLE
 
 **Returns**: `{ connect, disconnect, onMessage }`
 **Protocol**: EventSource to `baseUrl/events`
-**Auth**: appends `?token=<token>` to URL (Bearer not supported by EventSource)
+**Auth** (SE-528): `fetch` con cabecera `Authorization: Bearer` (solo si hay token en memoria) y `credentials: 'include'` para la sesión opaca del puente. Nunca credenciales en la URL: el puente responde 401
 **reconnect**: auto-reconnect on `onerror` with 3s backoff (max 5 attempts)

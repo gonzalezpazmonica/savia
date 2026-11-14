@@ -29,6 +29,7 @@ export function useSSE() {
     try {
       const res = await fetch(`${baseUrl()}/chat`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'text/event-stream',
@@ -74,6 +75,7 @@ export function useSSE() {
     try {
       await fetch(`${baseUrl()}/chat/permission`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...(auth.token ? { 'Authorization': `Bearer ${auth.token}` } : {})

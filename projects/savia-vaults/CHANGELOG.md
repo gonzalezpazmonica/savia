@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — 2026-11-14 · Clave de firma de autorizaciones estable (SE-528 S3)
+
+### Security
+- La clave de firma de las autorizaciones `svt1` solo se crea si no existe. Cualquier otro fallo
+  de lectura (permisos, fichero ocupado) o una clave de longitud inválida ya no la regenera en
+  silencio: se registra con `SECURITY` y el código del sistema, la clave no cambia, firmar y
+  verificar fallan cerrados y la API HTTP responde `503 KEY_UNAVAILABLE`. Regenerarla es una
+  decisión explícita de la persona.
+
 ## [Unreleased] — 2026-10-07 · Registro local de cúpulas fusionado con el base (SE-436 D30-2)
 
 ### Added
