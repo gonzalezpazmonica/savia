@@ -51,7 +51,7 @@ print(f'  (hybrid: {src.get(\"vector\",0)} vec + {src.get(\"graph\",0)} graph + 
             vec_result=$("$MEMORY_PYTHON" "$SCRIPT_DIR/memory-vector.py" search "$query" --top 10 --store "$STORE_FILE" 2>/dev/null) || true
             # SE-352: mismo filtro que hybrid; si no puede aplicarse, el resultado se descarta (fail-closed).
             if [[ -n "$min_origin" && -n "$vec_result" ]]; then
-                vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-hybrid.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null) || vec_result=""
+                vec_result=$(echo "$vec_result" | "$MEMORY_PYTHON" "$SCRIPT_DIR/memory-origin.py" filter --store "$STORE_FILE" --min-origin "$min_origin" 2>/dev/null) || vec_result=""
             fi
             if [[ -n "$vec_result" ]] && echo "$vec_result" | "$MEMORY_PYTHON" -c "import sys,json; d=json.load(sys.stdin); exit(0 if not d.get('fallback') and d.get('results') else 1)" 2>/dev/null; then
                 echo "$vec_result" | "$MEMORY_PYTHON" -c "

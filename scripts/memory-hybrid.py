@@ -74,32 +74,11 @@ def _run_grep(query, top, store, df=None, dmod=None):
             except json.JSONDecodeError: continue
     return results[-top:]
 
-# SE-352: clase de origen. Entrada sin origin o desconocida = untrusted (fail-safe).
-ORIGIN_RANK = {"owner": 4, "agent": 3, "untrusted": 2, "system": 1}
-
-def _origin_maps(store):
-    by_topic, by_title = {}, {}
-    if not os.path.exists(store): return by_topic, by_title
-    with open(store) as f:
-        for line in f:
-            try: e = json.loads(line)
-            except json.JSONDecodeError: continue
-            o = e.get("origin") or "untrusted"
-            if e.get("topic_key"): by_topic[e["topic_key"]] = o
-            if e.get("title"): by_title[e["title"]] = o
-    return by_topic, by_title
-
-def filter_origin(results, store, min_origin):
-    """Descarta resultados por debajo de min_origin. Sin min_origin no filtra.
-    Resultado cuyo origen no se puede resolver contra el almacén = untrusted."""
-    if not min_origin: return results
-    need = ORIGIN_RANK[min_origin]
-    by_topic, by_title = _origin_maps(store)
-    kept = []
-    for r in results:
-        o = by_topic.get(r.get("topic_key", "")) or by_title.get(r.get("title", "")) or "untrusted"
-        if ORIGIN_RANK.get(o, 2) >= need: kept.append(r)
-    return kept
+def _origin_mod():
+    # SE-352. Sin el módulo no se puede filtrar: la excepción sube y la búsqueda no devuelve nada.
+    spec = importlib.util.spec_from_file_location("memory_origin", str(SCRIPTS / "memory-origin.py"))
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    return mod
 
 def _dedup(vec, graph, grep, top):
     seen = {}
@@ -121,7 +100,9 @@ def cmd_search(query, top, store, mode, min_origin=None):
     if mode == "hybrid" and (vec or graph):
         grep = _run_grep(query, top, store, df, dmod)
     # SE-352: el filtro va antes de dedup/top para no perder candidatos válidos.
-    vec, graph, grep = (filter_origin(x, store, min_origin) for x in (vec, graph, grep))
+    if min_origin:
+        fo = _origin_mod().filter_origin
+        vec, graph, grep = (fo(x, store, min_origin) for x in (vec, graph, grep))
     results = _dedup(vec, graph, grep, top)
     if not results:
         print(json.dumps({"results": [], "mode": mode, "fallback": True})); return
@@ -146,16 +127,9 @@ if __name__ == "__main__":
     s = sub.add_parser("search"); s.add_argument("query")
     s.add_argument("--top", type=int, default=5); s.add_argument("--store", default=DEFAULT_STORE)
     s.add_argument("--mode", choices=["hybrid","vector","graph","naive"], default="hybrid")
-    s.add_argument("--min-origin", choices=list(ORIGIN_RANK), default=None)
-    f = sub.add_parser("filter"); f.add_argument("--store", default=DEFAULT_STORE)
-    f.add_argument("--min-origin", choices=list(ORIGIN_RANK), required=True)
+    s.add_argument("--min-origin", choices=["owner","agent","untrusted","system"], default=None)
     st = sub.add_parser("status"); st.add_argument("--store", default=DEFAULT_STORE)
     args = p.parse_args()
     if args.cmd == "search": cmd_search(args.query, args.top, args.store, args.mode, args.min_origin)
-    elif args.cmd == "filter":
-        import sys
-        d = json.load(sys.stdin)
-        d["results"] = filter_origin(d.get("results", []), args.store, args.min_origin)
-        print(json.dumps(d, ensure_ascii=False))
     elif args.cmd == "status": cmd_status(args.store)
     else: p.print_help()

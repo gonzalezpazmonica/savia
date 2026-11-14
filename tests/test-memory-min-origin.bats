@@ -11,7 +11,7 @@ setup() {
   export SAVIA_MEMORY_PYTHON="$(command -v python3)"
   mkdir -p "$T/output" "$T/scripts"
   cp "$REPO_ROOT"/scripts/memory-store.sh "$REPO_ROOT"/scripts/memory-search.sh \
-     "$REPO_ROOT"/scripts/memory-save.sh "$REPO_ROOT"/scripts/memory-hybrid.py \
+     "$REPO_ROOT"/scripts/memory-save.sh "$REPO_ROOT"/scripts/memory-hybrid.py "$REPO_ROOT"/scripts/memory-origin.py \
      "$REPO_ROOT"/scripts/memory-graph.py "$REPO_ROOT"/scripts/memory-domains.py "$T/scripts/"
   STORE="$T/output/.memory-store.jsonl"
   for o in owner agent untrusted system; do
@@ -110,6 +110,13 @@ only_owner() {
 }
 
 @test "filtro hybrid: resultado no resoluble contra el almacén cuenta como untrusted" {
-  run bash -c "echo '{\"results\":[{\"title\":\"fantasma\",\"topic_key\":\"x/y\"}]}' | python3 '$T/scripts/memory-hybrid.py' filter --store '$STORE' --min-origin agent"
+  run bash -c "echo '{\"results\":[{\"title\":\"fantasma\",\"topic_key\":\"x/y\"}]}' | python3 '$T/scripts/memory-origin.py' filter --store '$STORE' --min-origin agent"
   [[ "$output" == *'"results": []'* ]]
+}
+
+@test "fail-closed: sin el módulo de filtro, hybrid con --min-origin no devuelve untrusted" {
+  mv "$T/scripts/memory-origin.py" "$T/scripts/memory-origin.py.off"
+  run bash "$S" search zebra --mode hybrid --min-origin owner
+  [[ "$output" == *"zebra-owner"* ]]
+  local x; for x in agent untrusted system legacy; do [[ "$output" != *"zebra-$x"* ]]; done
 }
