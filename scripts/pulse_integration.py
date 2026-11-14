@@ -19,14 +19,17 @@ Uso:
   gh pr list --json number,mergeable,mergeStateStatus | pulse_integration.py plan --next N
   pulse_integration.py fingerprint --base origin/main --head HEAD [--repo DIR]
   pulse_integration.py reviewers --pr N --base origin/main --head SHA
-  pulse_integration.py reviewers-launched --pr N --base origin/main --head SHA
+  pulse_integration.py reviewers-launched --pr N --base origin/main --head SHA --huella H
   pulse_integration.py ci --pr N [--apply]
 `reviewers` solo decide; quien llama graba la huella con `reviewers-launched` DESPUÉS
 de confirmar que las revisoras se relanzaron (si el relanzamiento falla, no se graba
-y la siguiente pasada vuelve a relanzar).
+y la siguiente pasada vuelve a relanzar). `--head` es siempre un SHA completo (una rama
+podría moverse entre decidir y grabar) y `--huella` es la que devolvió `reviewers`: si
+la recalculada no coincide, no se graba nada (exit 2).
 Entorno: PULSE_LEDGER (ruta del ledger; por defecto bajo XDG_STATE_HOME), GH_BIN (gh).
 Exit: 0 decisión tomada; 1 huella no calculable (`fingerprint`, `reviewers-launched`;
-nada se graba); 2 entrada o entorno no válidos, u otra pasada en curso (sin efectos).
+nada se graba); 2 entrada o entorno no válidos, huella distinta de la decidida, u otra
+pasada en curso (sin efectos).
 
 Límites conocidos:
 - Huella: un cambio que solo reubica una línea entre dos vecinas idénticas a las de su
@@ -37,6 +40,7 @@ Límites conocidos:
   momento (la PR quedó cerrada).
 - La petición se anota en el ledger y se devuelve en la salida; entregarla a la persona
   es cosa de quien llama (S6).
+- `ci` solo actúa sobre PR abiertas: una PR cerrada a propósito nunca se reabre.
 - Ledger con una línea corrupta: no se actúa sobre ninguna PR hasta revisarlo a mano
   (fail-closed deliberado).
 """
@@ -217,6 +221,22 @@ def ledger_path(arg=None):
     return os.path.join(state, "savia", "pulse", "ledger.jsonl")
 
 
+def _open_private(path, flags):
+    """Abre un fichero del ledger solo para su dueño: directorio 0700 si lo crea Pulse,
+    sin seguir enlaces simbólicos y con el modo corregido a 0600 si ya existía."""
+    os.makedirs(os.path.dirname(path) or ".", mode=0o700, exist_ok=True)
+    try:
+        fd = os.open(path, flags | os.O_NOFOLLOW, 0o600)
+    except OSError as e:
+        raise Invalid("no se puede abrir %s sin seguir enlaces: %s" % (path, e.strerror))
+    try:
+        os.fchmod(fd, 0o600)
+    except OSError:
+        os.close(fd)
+        raise
+    return fd
+
+
 class Ledger:
     def __init__(self, path):
         self.path = path
@@ -225,6 +245,8 @@ class Ledger:
         if not os.path.exists(self.path):
             return []
         rows = []
+        if os.path.islink(self.path):
+            raise Invalid("el ledger es un enlace simbólico: no se actúa")
         with open(self.path, encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 if not line.strip():
@@ -242,8 +264,7 @@ class Ledger:
         row = {"schema_version": SCHEMA_VERSION, "ts": _iso(now), "kind": kind,
                "nivel": "N4"}
         row.update(fields)
-        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        fd = _open_private(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
         try:
             os.write(fd, (json.dumps(row, sort_keys=True) + "\n").encode())
             os.fsync(fd)
@@ -259,8 +280,7 @@ class Ledger:
     def lock(self):
         """Exclusión entre pasadas concurrentes durante leer → decidir → escribir.
         Si otra pasada lo tiene, no se espera ni se actúa (Invalid → exit 2)."""
-        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        fd = os.open(self.path + ".lock", os.O_WRONLY | os.O_CREAT, 0o600)
+        fd = _open_private(self.path + ".lock", os.O_WRONLY | os.O_CREAT)
         try:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -273,21 +293,34 @@ class Ledger:
 
 # ── 3. Cabeza sin pruebas ──────────────────────────────────────────────────
 
+# CheckRun.status y StatusContext.state. EXPECTED: check obligatorio que no ha
+# informado todavía (cuenta como en espera).
+_CI_WAITING = ("QUEUED", "PENDING", "WAITING", "REQUESTED", "EXPECTED")
+_CI_RUNNING = ("IN_PROGRESS",)
+_CI_DONE = ("COMPLETED", "SUCCESS", "FAILURE", "ERROR")
+
+
 def classify_head_ci(checks):
-    """sin_pruebas | en_cola | en_marcha | desconocido, desde statusCheckRollup."""
+    """sin_pruebas | en_cola | en_marcha | terminadas | desconocido.
+
+    Alguna en marcha → en_marcha. Si no, alguna en espera → en_cola, aunque otras ya
+    hayan terminado (un check rápido no tapa una cola atascada). Todas terminadas →
+    terminadas. Un valor no reconocido → desconocido (no se actúa).
+    """
     if checks is None or not isinstance(checks, list):
         return "desconocido"
     if not checks:
         return "sin_pruebas"
     if not all(isinstance(c, dict) for c in checks):
         return "desconocido"
-    # CheckRun: status; StatusContext: state (PENDING sin ejecutar = en cola).
     sts = [str(c.get("status") or c.get("state") or "").upper() for c in checks]
-    if any(s == "" for s in sts):
+    if any(s not in _CI_WAITING + _CI_RUNNING + _CI_DONE for s in sts):
         return "desconocido"
-    if all(s in ("QUEUED", "PENDING", "WAITING", "REQUESTED") for s in sts):
+    if any(s in _CI_RUNNING for s in sts):
+        return "en_marcha"
+    if any(s in _CI_WAITING for s in sts):
         return "en_cola"
-    return "en_marcha"
+    return "terminadas"
 
 
 def ci_step(ledger, pr, sha, state, committed_at, now, relaunch, apply=False,
@@ -310,11 +343,13 @@ def ci_step(ledger, pr, sha, state, committed_at, now, relaunch, apply=False,
 
     if state == "desconocido":
         return ("nada", "estado_desconocido")
-    if state == "en_marcha":
+    if state in ("en_marcha", "terminadas"):
         if relanz and not ledger.find("ci_arrancada", pr, sha):
             ledger.append("ci_arrancada", now, pr=pr, sha=sha, tras_relanzar=True,
                           intento_en=relanz[0]["ts"])
-        return ("nada", "en_marcha")
+        return ("nada", state)
+    if state not in ("sin_pruebas", "en_cola"):
+        return ("nada", "estado_desconocido")
 
     # Se cuenta desde la primera vez que Pulse vio esta cabeza. Un commit siempre es
     # anterior a que se vea su SHA, así que committedDate solo podría adelantar el
@@ -414,7 +449,13 @@ def _prev_fingerprint(led, pr):
     return prev
 
 
+def _require_sha(head):
+    if not isinstance(head, str) or not _SHA.match(head):
+        raise Invalid("--head debe ser un SHA completo (40 hex), no %r" % head)
+
+
 def _cmd_reviewers(a):
+    _require_sha(a.head)
     led = Ledger(ledger_path(a.ledger))
     cur = content_fingerprint(a.repo, a.base, a.head)
     action, why = reviewers_decision(_prev_fingerprint(led, a.pr), cur)
@@ -424,11 +465,16 @@ def _cmd_reviewers(a):
 
 def _cmd_reviewers_launched(a):
     """Graba la huella solo cuando quien llama confirma que las revisoras arrancaron."""
+    _require_sha(a.head)
     led = Ledger(ledger_path(a.ledger))
     cur = content_fingerprint(a.repo, a.base, a.head)
     if not cur:
         print("huella no calculable: no se graba", file=sys.stderr)
         return 1
+    if cur != a.huella:
+        # La base se movió o la huella no es la decidida: lo grabado no sería lo que
+        # vieron las revisoras. Sin huella grabada, la siguiente pasada relanza.
+        raise Invalid("la huella recalculada no coincide con la decidida: no se graba")
     with led.lock():
         led.append("huella_revisoras", _now(), pr=a.pr, sha=a.head, huella=cur)
     print(json.dumps({"pr": a.pr, "huella": cur}, sort_keys=True))
@@ -439,13 +485,21 @@ def _cmd_ci(a):
     led = Ledger(ledger_path(a.ledger))
     try:
         info = json.loads(_gh("pr", "view", str(a.pr), "--json",
-                              "headRefOid,statusCheckRollup,commits"))
+                              "state,headRefOid,statusCheckRollup,commits"))
+        pr_state = info["state"]
         sha = info["headRefOid"]
         commits = info.get("commits") or []
         cdate = (commits[-1].get("committedDate") if commits else None)
         committed = _parse(cdate) if cdate else None
     except (KeyError, ValueError, TypeError, IndexError):
         raise Invalid("respuesta de gh no interpretable: no se actúa")
+    if pr_state != "OPEN":
+        # Cerrada o fusionada: nada que relanzar, y reabrir resucitaría una PR que una
+        # persona cerró a propósito (`gh pr close` sale con 0 si ya estaba cerrada).
+        print(json.dumps({"pr": a.pr, "sha": sha, "estado": "pr_no_abierta",
+                          "action": "nada", "reason": "pr_no_abierta",
+                          "apply": bool(a.apply)}, sort_keys=True))
+        return 0
     checks = info.get("statusCheckRollup")
     state = classify_head_ci(checks)
     with led.lock():
@@ -480,6 +534,7 @@ def main(argv):
     p.add_argument("--pr", type=int, required=True)
     p.add_argument("--base", required=True)
     p.add_argument("--head", required=True)
+    p.add_argument("--huella", required=True)
     p.add_argument("--ledger")
     p.set_defaults(fn=_cmd_reviewers_launched)
     p = sub.add_parser("ci")
