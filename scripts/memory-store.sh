@@ -59,7 +59,26 @@ _ensure_embed_server() {
 export SAVIA_EMBED_URL
 
 # --- Shared utils ---
-redact_private() { sed 's/<private>.*<\/private>/[REDACTED]/g'; }
+# Redacta bloques <private>…</private> de stdin. Multilínea, no codicioso (dos bloques no se
+# comen el texto entre ellos), anidado con contador de profundidad, sin distinguir mayúsculas.
+# Fail-closed: un <private> sin cierre redacta hasta el final de la entrada (se guarda lo
+# público anterior en lugar de rechazar todo el guardado). Sin perl no se puede garantizar la
+# redacción: si hay marca <private> se descarta toda la entrada.
+redact_private() {
+    if command -v perl >/dev/null 2>&1; then
+        perl -0777 -pe '
+            my ($out, $d) = ("", 0);
+            for my $t (split /(<\/?private>)/i, $_, -1) {
+                if    ($t =~ m{^<private>$}i)  { $out .= "[REDACTED]" if $d == 0; $d++ }
+                elsif ($t =~ m{^</private>$}i) { if ($d > 0) { $d-- } else { $out .= $t } }
+                else                           { $out .= $t if $d == 0 }
+            }
+            $_ = $out;'
+    else
+        local all; all=$(cat; printf x); all=${all%x}
+        if [[ "${all,,}" == *"<private>"* ]]; then printf '[REDACTED]'; else printf '%s' "$all"; fi
+    fi
+}
 hash_content() { echo -n "$1" | sha256sum | cut -d' ' -f1; }
 iso8601_now() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 

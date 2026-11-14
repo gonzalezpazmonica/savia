@@ -4,6 +4,15 @@
 **Relacion:** extiende SE-255 (constitucion, libro de relacion, lealtad)
 **Branch:** agent/se256-engram-patterns
 **Estimacion:** 3h
+**Estado (2026-11-13):** IMPLEMENTED parcial. S1 ARCHIVED, S2 ARCHIVED, S3 implementado sin invocador.
+
+| Slice | Estado | Motivo |
+|---|---|---|
+| S1 save-nudge | ARCHIVED | Nunca se registro como hook; `memory-auto-capture` ya captura por ediciones. Script y tests retirados. |
+| S2 deteccion de conflictos | ARCHIVED | Lee `data/relacion/ledger.jsonl`, que ningun flujo escribe (`relacion-capture.sh` solo lo llaman sus tests). Sin consumidor. |
+| S3 verify-principal | IMPLEMENTED, sin invocador | CRITERIO CRIT-031 lo cita como enforcement y `config/hook-thresholds.yaml` lo lista como no modulable, pero ningun hook ni flujo lo ejecuta, y su comprobacion solo cuenta ficheros de sesion. Decision pendiente: cablearlo con una comprobacion real o corregir CRIT-031. No se toca aqui. |
+
+Los AC de S1 y S2 de abajo quedan como historicos: no se cumplen y no se van a cumplir.
 
 ---
 
