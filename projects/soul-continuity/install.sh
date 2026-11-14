@@ -111,10 +111,41 @@ else
   say "Orden creada: $W"
 fi
 
+PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+
+# Ofrece añadir PATH_LINE al fichero de arranque del shell de la persona (solo zsh o bash).
+# Solo escribe con un «s» explícito y en terminal interactiva. Idempotente. Compatible con bash 3.2.
+offer_path() {
+  local rc ans
+  case "$(basename "${SHELL:-}")" in
+    zsh) rc="$HOME/.zshrc" ;;
+    bash) rc="$HOME/.bashrc" ;;
+    *) return 1 ;;
+  esac
+  if [ -f "$rc" ] && grep -qxF "$PATH_LINE" "$rc"; then
+    say "$rc ya tiene la línea del PATH; abre una terminal nueva."
+    return 0
+  fi
+  [ -t 0 ] && [ -t 1 ] || return 1
+  printf '¿Añado %s a %s para que «soul» funcione en cada terminal nueva? [s/N] ' "$PATH_LINE" "$rc"
+  IFS= read -r ans || ans=""
+  case "$ans" in
+    s|S)
+      # Si el fichero no acaba en salto de línea, se añade uno para no pegar la línea a la anterior.
+      if [ -s "$rc" ] && [ -n "$(tail -c1 "$rc")" ]; then printf '\n' >> "$rc"; fi
+      printf '%s\n' "$PATH_LINE" >> "$rc"
+      say "Línea añadida a $rc. Abre una terminal nueva y escribe: soul help"
+      ;;
+    *) say "No he tocado $rc."; return 1 ;;
+  esac
+}
+
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) say "Aviso: $BIN_DIR no está en tu PATH. Añade esta línea a ~/.bashrc (o ~/.zshrc) y abre una terminal nueva:"
-     say "  export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  *) if ! offer_path; then
+       say "Aviso: $BIN_DIR no está en tu PATH. Añade esta línea a ~/.bashrc (o ~/.zshrc) y abre una terminal nueva:"
+       say "  $PATH_LINE"
+     fi ;;
 esac
 say ""
 say "Siguiente paso, en tu terminal: soul setup"
